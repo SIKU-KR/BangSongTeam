@@ -16,7 +16,7 @@
 
 ## 2. 세부 작업 체크리스트
 
-- [ ] **Task 1.1: pnpm 워크스페이스 및 모노레포 루트 구성**
+- [x] **Task 1.1: pnpm 워크스페이스 및 모노레포 루트 구성**
   - **대상 파일**: `pnpm-workspace.yaml`, `package.json`, `.gitignore`
   - **선행 조건**: 없음
   - **구현 내용**:
@@ -25,7 +25,7 @@
     - `.gitignore`에 `node_modules`, `dist`, `.wrangler`, `.dev.vars`, `.turbo` 등 제외 규칙 지정
   - **DoD (통과 기준)**: `pnpm install` 실행 시 에러 없이 `pnpm-lock.yaml` 파일이 정상 생성된다.
 
-- [ ] **Task 1.2: 공유 TypeScript 기본 설정 패키지 구성**
+- [x] **Task 1.2: 공유 TypeScript 기본 설정 패키지 구성**
   - **대상 파일**: `packages/config/typescript/package.json`, `packages/config/typescript/tsconfig.base.json`
   - **선행 조건**: Task 1.1
   - **구현 내용**:
@@ -33,7 +33,7 @@
     - `tsconfig.base.json`에 `strict: true`, `noImplicitAny: true`, `moduleResolution: "Bundler"`, `target: "ES2022"`, `skipLibCheck: true`, `declaration: true` 공통 컴파일러 옵션 명시
   - **DoD (통과 기준)**: 빈 tsconfig에서 `"extends": "@repo/typescript-config/tsconfig.base.json"` 참조 시 구문 에러가 발생하지 않는다.
 
-- [ ] **Task 1.3: 공유 ESLint 설정 및 DB 패키지 프론트엔드 격리 규칙 구성**
+- [x] **Task 1.3: 공유 ESLint 설정 및 DB 패키지 프론트엔드 격리 규칙 구성**
   - **대상 파일**: `packages/config/eslint/package.json`, `packages/config/eslint/index.js`
   - **선행 조건**: Task 1.1
   - **구현 내용**:
