@@ -1,0 +1,183 @@
+# AGENTS.md (docs/tasks)
+
+> **디렉토리 역할**: `docs/tasks/`는 예배 찬양 슬라이드 제작 및 송출 서비스(`prj-ppt`)의 마일스톤별 로드맵과 AI 코딩 에이전트가 단독으로 실행할 태스크 명세서를 관리하는 전용 제어 디렉토리이다.  
+> **상위 참조 문서**: 루트 [`/AGENTS.md`](file:///Users/peter/Dev/projects/prj-ppt/AGENTS.md), [`/docs/TECH_SPEC.md`](file:///Users/peter/Dev/projects/prj-ppt/docs/TECH_SPEC.md), [`/prd.md`](file:///Users/peter/Dev/projects/prj-ppt/prd.md)
+
+---
+
+## 1. 디렉토리 구조 및 네이밍 표준 (Directory & Naming Standards)
+
+모든 마일스톤과 태스크 문서는 다음 네이밍 규칙을 엄격히 준수하여 생성하고 관리한다.
+
+```text
+docs/tasks/
+├── AGENTS.md               # [본 문서] 마일스톤 및 태스크 작성/실행 가이드라인
+├── m0/                     # Milestone 0 디렉토리 (m<번호>/)
+│   ├── tasks_1.md          # 1단계 작업 묶음 (tasks_<번호>.md)
+│   ├── tasks_2.md          # 2단계 작업 묶음
+│   ├── tasks_3.md
+│   └── tasks_4.md
+├── m1/                     # Milestone 1 디렉토리
+│   ├── tasks_1.md
+│   ├── tasks_2.md
+│   ├── tasks_3.md
+│   └── tasks_4.md
+└── m<N>/                   # 향후 마일스톤 (m2, m3, m4, m5, m6, m7)
+```
+
+### 1.1 네이밍 및 관리 규칙
+1. **마일스톤 디렉토리**: 소문자 `m`과 마일스톤 번호로 구성한다 (`m0`, `m1`, `m2`, ..., `m7`).
+2. **태스크 파일**: `tasks_<번호>.md` 형식을 사용하며, 마일스톤 디렉토리 내부에서 1부터 순차적으로 증가한다 (`tasks_1.md`, `tasks_2.md`, ...).
+3. **중앙 인덱스 미사용 (No Central Index)**: 별도의 중앙 인덱스 파일(`README.md`, `tasks.md` 등)은 관리하지 않는다. 인간 관리자(Operator)가 에이전트에게 특정 마일스톤과 `tasks_n.md`를 직접 지정하여 작업을 배정한다.
+4. **로컬 마킹 원칙**: 작업이 완료되면 에이전트는 **오직 배정받은 해당 `tasks_n.md` 파일의 체크박스(`- [x]`)만 업데이트**한다.
+
+---
+
+## 2. 마일스톤 정의 기준 (Milestone Definition Rules)
+
+`prd.md` 8장의 마일스톤 정의 원칙을 준수하여 마일스톤을 설계한다:
+
+1. **선행 마일스톤 완료 원칙**: 각 마일스톤은 선행 마일스톤의 완료 기준을 100% 충족한 뒤에만 착수한다.
+2. **관찰 가능한 사실 기반 완료 기준 (Observable DoD)**:
+   - '진행률 90%', '대부분 구현됨'과 같은 모호한 표현을 절대 금지한다.
+   - '실제 예배에서 5곡 세트를 송출했다', '다른 계정에서 로그인해 덱을 가져왔다'처럼 **외부에서 관찰 가능한 명확한 사실**만으로 작성한다.
+3. **PRD 마일스톤 로드맵 매핑**:
+   - `M0`: 매일 배포할 수 있는 최소 골격 (모노레포, D1/R2 파이프라인, 배경 영상 10개)
+   - `M1`: 송출 코어 (3-Layer 스테이지, 전체화면 송출, 100ms 키패드 버퍼, 가사 분할)
+   - `M2`: 편집기 (15분 세트 구성, 곡별 스타일/배경, 멜론/벅스 검색 링크)
+   - `M3`: 계정 및 영속 저장 (Better Auth 카카오/네이버, 덱/콘티 D1 저장, 가사 버전 기여)
+   - `M4`: 오프라인 및 발표자 보기 (Presenter View, PWA Cache, 예배 준비 화면)
+   - `M5`: 공유 라이브러리 & AI 정규화 (덱 공개/포크, FTS5 검색, Qwen3.8 정규화)
+   - `M6`: 시드 가사 및 배경 콘텐츠 (CCM 100곡 검증 가사 잠금, 배경 영상 20개)
+   - `M7`: 공개 베타 및 운영 (오류 로깅, 약관, 외부 교회 실사용)
+
+---
+
+## 3. 태스크 작성 4대 규칙 (Task Authoring Rules)
+
+AI 코딩 에이전트가 단독으로 실행할 수 있도록 태스크를 설계할 때 아래 4대 규칙을 반드시 지켜야 한다:
+
+### 규칙 1: 1파일 또는 1개 밀접 모듈 단위 초미세 분할 (Granularity)
+- 1개의 태스크(`Task X.Y`)는 오직 **1개의 대상 파일**(또는 밀접한 구현체+단위 테스트 1쌍)만을 다룬다.
+- 거대한 기능을 한 번에 작성하도록 지시하지 않고, 스키마 $\rightarrow$ 단위 테스트 $\rightarrow$ 구현체 $\rightarrow$ UI 결합 단계로 잘게 쪼갠다.
+
+### 규칙 2: 엄격한 선행 의존성 순서 (Strict Dependency Order)
+반드시 다음 순서에 따라 태스크를 배치한다:
+1. `패키지 환경/설정` (package.json, tsconfig)
+2. `타입 및 Zod 스키마 정의` (`packages/shared/src/schemas/*`)
+3. `TDD 실패 테스트(Red) 작성` (`*.test.ts`)
+4. `핵심 비즈니스 로직 구현(Green)` (`*.ts`)
+5. `DB 스키마 및 마이그레이션` (`packages/db/src/schema/*`, `drizzle/*`)
+6. `보안 쿼리 헬퍼 구현` (`packages/db/src/queries/*`)
+7. `Worker API 엔드포인트` (`apps/web/worker/routes/*`)
+8. `프론트엔드 컴포넌트/훅` (`apps/web/src/*`)
+9. `라우트 결합 및 E2E 무결점 검증`
+
+### 규칙 3: 1줄 통과 기준 (1-Line Definition of Done)
+- 각 태스크마다 통과 기준(DoD)을 명확한 검증 명령어 또는 조건으로 **정확히 1줄**로 명시한다.
+- *예시*:
+  - `DoD (통과 기준)`: `pnpm --filter @repo/shared vitest run src/utils/lyrics.test.ts`가 100% 통과(Green)한다.
+  - `DoD (통과 기준)`: `pnpm --filter web exec tsc --noEmit`이 에러 없이 통과한다.
+
+### 규칙 4: 마크다운 체크박스 포맷 (`- [ ]`)
+- 모든 개별 태스크 항목은 `- [ ] **Task X.Y: ...**` 형태의 체크박스로 선언한다.
+- 에이전트가 작업을 완료하고 DoD를 통과하면 `- [x]`로 즉시 갱신한다.
+
+---
+
+## 4. Antigravity Goal 포맷 템플릿 (`tasks_n.md`)
+
+신규 `tasks_n.md` 문서를 작성할 때는 아래 구조 템플릿을 그대로 복제하여 사용한다:
+
+```markdown
+# Goal: [M<마일스톤>-<번호>] <단계 타이틀> (<모듈/패키지명>)
+
+> **마일스톤**: M<번호> (<마일스톤 명칭>)  
+> **태스크 번호**: `tasks_<번호>.md`  
+> **선행 조건**: `docs/tasks/m<X>/tasks_<Y>.md` 완료  
+> **목표**: <이 태스크 파일이 달성하고자 하는 구체적 엔지니어링 목표 요약>
+
+---
+
+## 1. 아키텍처 가드레일 & 준수 사항
+
+- <이 단계에서 반드시 지켜야 할 아키텍처 불변 원칙 (예: DB 격리, Single Source of Truth, RLS 부재 대응, 오프라인 보장 등)>
+
+---
+
+## 2. 세부 작업 체크리스트
+
+- [ ] **Task <번호>.1: <태스크 명칭>**
+  - **대상 파일**: `<정확한 상대 경로>`
+  - **선행 조건**: `<선행 태스크 ID 또는 없음>`
+  - **구현 내용**:
+    - <구체적인 구현 스펙 1>
+    - <구체적인 구현 스펙 2>
+  - **DoD (통과 기준)**: `<실행 가능한 단일 검증 명령어 및 통과 조건>`
+
+- [ ] **Task <번호>.2: <태스크 명칭>**
+  - ...
+
+---
+
+## 3. 검증 명령어
+
+```bash
+# 이 태스크 파일의 전체 검증 명령어
+<pnpm test 또는 typecheck 명령어>
+```
+```
+
+---
+
+## 5. 에이전트 실행 및 상태 갱신 프로토콜 (Agent Execution Protocol)
+
+인간 관리자(Operator)가 에이전트에게 특정 `tasks_n.md`를 지정하여 전달했을 때 따라야 하는 표준 워크플로우:
+
+```mermaid
+flowchart TD
+  Start["인간 관리자가 배정한 태스크 파일 로드 (tasks_n.md)"] --> PickTask["해당 파일 내 첫 번째 미완료 태스크 (- [ ]) 선택"]
+  PickTask --> CheckPrereq{"선행 조건 완료 확인"}
+  CheckPrereq -->|미완료| Block["선행 태스크 완료까지 대기/차단"]
+  CheckPrereq -->|충족| ExecTDD{"TDD 대상 여부?"}
+  ExecTDD -->|Yes| WriteTest["1. 테스트 작성 (*.test.ts) - Red 확인"]
+  WriteTest --> Implement["2. 구현체 작성 (*.ts, *.tsx) - Green 달성"]
+  ExecTDD -->|No| ImplementDirect["구현체 또는 설정 작성"]
+  Implement --> RunDoD["DoD 명시 검증 명령어 실행"]
+  ImplementDirect --> RunDoD
+  RunDoD --> PassDoD{"DoD 100% 통과?"}
+  PassDoD -->|실패| FixBug["원인 디버깅 및 코드 수정"]
+  FixBug --> RunDoD
+  PassDoD -->|성공| MarkDone["체크박스 갱신 (- [ ] -> - [x])"]
+  MarkDone --> MoreTasks{"문서 내 남은 태스크 있음?"}
+  MoreTasks -->|Yes| PickTask
+  MoreTasks -->|No| RunSuite["tasks_n.md 최종 검증 명령어 실행"]
+  RunSuite --> End["작업 완료 보고 후 사용자 지시 대기"]
+```
+
+### 5.1 단일 파일 체크박스 업데이트 규칙
+- **로컬 마킹 원칙**: 중앙 인덱스 파일은 존재하지 않으므로, 에이전트는 **오직 현재 배정받아 실행 중인 `tasks_n.md` 내부의 체크박스(`- [ ]` $\rightarrow$ `- [x]`)만 업데이트**한다.
+- **DoD 검증 후 즉시 마킹**: 에이전트는 코드 작성을 마친 직후 반드시 해당 태스크의 `DoD` 명령어를 셸에서 실행해야 한다.
+- 명령어 실행 결과가 100% 성공(Exit code 0, Green)일 때만 파일 수정 도구(`replace_file_content`)를 사용해 `- [ ]`를 `- [x]`로 변경한다.
+- 임의로 미리 체크박스를 변경하거나, 테스트 실패 상태에서 넘어가서는 안 된다.
+- 해당 `tasks_n.md` 파일의 모든 태스크가 완료되면, 임의로 다음 마일스톤이나 다른 파일을 열지 않고 인간 관리자에게 결과를 보고하고 다음 태스크 지시를 기다린다.
+
+### 5.2 작업 분할 시 주의사항
+- 한 번에 여러 태스크의 코드를 동시에 작성하지 않는다. 반드시 1개 태스크씩 순차적으로 구현하고 검증한다.
+- 작업 도중 새로운 서브 모듈이나 예외 처리가 필요해지면, 현재 `tasks_n.md` 문서에 신규 하위 태스크를 번호 매겨 추가한 뒤 순서대로 진행한다.
+
+---
+
+## 6. 아키텍처 필수 점검 체크리스트 (Non-Negotiables)
+
+에이전트가 태스크를 작성하거나 실행할 때 위반 시 즉각 롤백해야 하는 핵심 금지 사항:
+
+| 영역 | 위반 금지 규칙 | 올바른 처리 방법 |
+|---|---|---|
+| **의존성 경계** | `apps/web/src`에서 `packages/db`를 직접 import하는 행위 | 프론트엔드는 반드시 Hono RPC Client (`hc<AppType>`)를 통해서만 서버와 통신 |
+| **타입 정의** | TypeScript `interface`를 프론트/백엔드에 수동 중복 선언하는 행위 | `packages/shared/src/schemas/`의 Zod 스키마에서 `z.infer`로만 타입 유도 |
+| **D1 데이터베이스** | API 핸들러에서 raw `db.select().from(decks)`를 직접 호출하는 행위 | 반드시 `packages/db/src/queries/`의 스코프 헬퍼를 경유하여 `userId` 강제 |
+| **공개 덱 보안** | 공개 라이브러리 조회 시 비공개 덱이 유출되는 쿼리 | `where(eq(decks.visibility, 'public'))`를 쿼리 헬퍼 레벨에서 무조건 강제 |
+| **렌더링 엔진** | SlideStage를 Reveal.js나 HTML5 Canvas로 교체하는 행위 | 16:9 DOM 3-Layer (Video A/B, Black Overlay, Typography) 아키텍처 엄수 |
+| **오프라인 송출** | 송출 화면(`/present/*`) 실행 중에 외부 네트워크 fetch를 호출하는 행위 | Cache Storage 및 IndexedDB(`worship-offline-db`)에서만 데이터를 로컬 로드 |
+| **가사 정규화** | Workers AI 정규화 결과에 입력 버전에 없던 가사가 1줄이라도 포함되는 행위 | 환각 검증 알고리즘 실패 시 즉시 LLM 출력을 버리고 최다 득표 루트 버전으로 폴백 |
