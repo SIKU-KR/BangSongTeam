@@ -3,7 +3,9 @@
 ## 1. Project Overview
 
 ### 1.1 Purpose & Value Proposition
+
 A lightweight, web-first slide presentation and production tool designed specifically for church worship teams and media volunteers. It bridges the gap between complex software (ProPresenter, EasyWorship) and generic design tools (Canva, PowerPoint):
+
 - **Structured Lyric Editing**: Auto-splits lyrics by blank lines, sanitizes pasted text, and manages songs (decks) and setlists.
 - **Motion Background Loops**: Continuous, uninterrupted H.264 video loops streamed from Cloudflare R2 (zero egress fees) that seamlessly loop across slide transitions.
 - **Readability Controls**: Black opacity overlay (0–100%), pre-bundled Korean webfonts, typography controls, and 3×3 grid + draggable percentage-based text box positioning.
@@ -12,6 +14,7 @@ A lightweight, web-first slide presentation and production tool designed specifi
 - **Shared & Canonical Lyric Libraries**: Users can fork public decks and contribute lyrics; multi-version submissions are canonically normalized via Cloudflare Workers AI (Qwen3.8 27B) with strict hallucination verification.
 
 ### 1.2 Target Platform & Browser Support
+
 - **Primary / Officially Supported**: Desktop **Google Chrome** (macOS and Windows).
 - **Non-Chrome Browsers (Safari, Edge, Firefox, Whale) & Mobile**: Non-blocking warning banner displayed via User-Agent Client Hints check. No mobile editing/projection in MVP.
 
@@ -60,6 +63,7 @@ prj-ppt/
 ```
 
 ### 2.1 Dependency Rules & Boundaries
+
 1. **Unidirectional Flow**: `apps` → `packages`. Internal packages must never import code from `apps`.
 2. **Strict DB Isolation**: `packages/db` is **Worker-only**. The frontend (`apps/web/src`) MUST NEVER import `packages/db`. ESLint rules enforce this restriction.
 3. **Pure Shared Package**: `packages/shared` contains only pure TypeScript without browser- or runtime-specific APIs. It imports no other workspace packages.
@@ -68,34 +72,36 @@ prj-ppt/
 
 ## 3. Technology Stack & Key Dependencies
 
-| Category | Technology | Agent Usage Guidelines |
-|---|---|---|
-| **Monorepo Manager** | `pnpm` (v11+) | Use workspace filters (`--filter <name>`). Do not use npm or yarn. |
-| **Frontend Framework** | React 19 / 18 + React Router (Library Mode) | SPA with standard React Router. Do not use Next.js or TanStack Start. |
-| **API & Serverless** | Hono (`@hono/zod-validator`, `hono/client`) | Runs inside the same Cloudflare Worker at `/api/*`. |
-| **Database & ORM** | Cloudflare D1 (SQLite) + Drizzle ORM | SQLite with FTS5 trigram. Manage schemas with `drizzle-kit`. |
-| **File / Media Storage** | Cloudflare R2 | Background video loops & posters. Zero egress cost. |
-| **Authentication** | Better Auth (Kakao & Naver Social Providers) | Integrated with Drizzle D1 adapter. No password auth in MVP. |
-| **Styling & UI** | Tailwind CSS + shadcn/ui | Radix UI primitives + Tailwind styling. |
-| **Offline / PWA** | `vite-plugin-pwa` (Workbox) + `idb` | RangeRequestsPlugin for cached video streaming. IndexedDB for sets. |
-| **Canvas / Dragging** | `react-moveable` | Text box 3×3 anchor snapping, width handle, 5% margin constraints. |
-| **List Drag & Drop** | `@dnd-kit/sortable` | Reordering songs within a setlist. |
-| **Shortcuts & Input** | `tinykeys` | B (blackout), H (hide lyrics), arrow navigation, custom numeric buffer. |
-| **Fonts** | Pretendard & Fontsource (`@fontsource/*`) | Bundled via npm into local PWA assets. Never load from external CDNs. |
-| **AI / Normalization** | Cloudflare Workers AI (`@cf/qwen/qwen3.8-27b`) | Fixed model: Qwen3.8 27B, temperature 0, thinking mode off. |
-| **Async Tasks** | Cloudflare Queues | Enqueue lyric normalization jobs on new version registration. |
-| **Testing** | Vitest + `@cloudflare/vitest-pool-workers` | Run worker tests within real workerd execution environment. |
+| Category                 | Technology                                     | Agent Usage Guidelines                                                  |
+| ------------------------ | ---------------------------------------------- | ----------------------------------------------------------------------- |
+| **Monorepo Manager**     | `pnpm` (v11+)                                  | Use workspace filters (`--filter <name>`). Do not use npm or yarn.      |
+| **Frontend Framework**   | React 19 / 18 + React Router (Library Mode)    | SPA with standard React Router. Do not use Next.js or TanStack Start.   |
+| **API & Serverless**     | Hono (`@hono/zod-validator`, `hono/client`)    | Runs inside the same Cloudflare Worker at `/api/*`.                     |
+| **Database & ORM**       | Cloudflare D1 (SQLite) + Drizzle ORM           | SQLite with FTS5 trigram. Manage schemas with `drizzle-kit`.            |
+| **File / Media Storage** | Cloudflare R2                                  | Background video loops & posters. Zero egress cost.                     |
+| **Authentication**       | Better Auth (Kakao & Naver Social Providers)   | Integrated with Drizzle D1 adapter. No password auth in MVP.            |
+| **Styling & UI**         | Tailwind CSS + shadcn/ui                       | Radix UI primitives + Tailwind styling.                                 |
+| **Offline / PWA**        | `vite-plugin-pwa` (Workbox) + `idb`            | RangeRequestsPlugin for cached video streaming. IndexedDB for sets.     |
+| **Canvas / Dragging**    | `react-moveable`                               | Text box 3×3 anchor snapping, width handle, 5% margin constraints.      |
+| **List Drag & Drop**     | `@dnd-kit/sortable`                            | Reordering songs within a setlist.                                      |
+| **Shortcuts & Input**    | `tinykeys`                                     | B (blackout), H (hide lyrics), arrow navigation, custom numeric buffer. |
+| **Fonts**                | Pretendard & Fontsource (`@fontsource/*`)      | Bundled via npm into local PWA assets. Never load from external CDNs.   |
+| **AI / Normalization**   | Cloudflare Workers AI (`@cf/qwen/qwen3.8-27b`) | Fixed model: Qwen3.8 27B, temperature 0, thinking mode off.             |
+| **Async Tasks**          | Cloudflare Queues                              | Enqueue lyric normalization jobs on new version registration.           |
+| **Testing**              | Vitest + `@cloudflare/vitest-pool-workers`     | Run worker tests within real workerd execution environment.             |
 
 ---
 
 ## 4. Setup & Development Workflow
 
 ### 4.1 Prerequisites
+
 - Node.js >= 20 (Node v22+ or v26+ supported)
 - pnpm >= 9 (Recommended: 11.x)
 - Cloudflare Wrangler CLI (`pnpm add -D wrangler` or `pnpm dlx wrangler`)
 
 ### 4.2 Setup Commands
+
 ```bash
 # 1. Install all monorepo dependencies
 pnpm install
@@ -111,6 +117,7 @@ pnpm --filter @repo/db db:migrate:local
 ```
 
 ### 4.3 Development Commands
+
 ```bash
 # Start local development server (Vite + Cloudflare workerd bindings)
 pnpm dev
@@ -131,6 +138,7 @@ pnpm format
 ```
 
 ### 4.4 Database & Cloudflare Commands
+
 ```bash
 # Generate SQL migration from Drizzle schema
 pnpm --filter @repo/db db:generate
@@ -150,6 +158,7 @@ pnpm --filter @repo/db db:studio
 ## 5. Testing Instructions
 
 ### 5.1 Test Execution
+
 - **Run all tests**: `pnpm test`
 - **Run tests with watch mode**: `pnpm test:watch`
 - **Run a specific test file or suite**:
@@ -163,7 +172,9 @@ pnpm --filter @repo/db db:studio
   ```
 
 ### 5.2 Mandatory Test Coverage Areas
+
 When modifying core logic, agents must write or update tests for:
+
 1. **Lyric Split & Sanitization Rules** (`packages/shared/src/utils/lyrics.test.ts`):
    - Trimming whitespace and empty lines.
    - 4-line maximum per slide threshold; 2-line auto-splitting for long blocks.
@@ -185,18 +196,22 @@ When modifying core logic, agents must write or update tests for:
 ## 6. Core Technical Principles & Agent Guardrails
 
 ### 6.1 Type Safety & Single Source of Truth
+
 - **Zod First**: All domain models, API request payloads, and response contracts must be declared once in `packages/shared/src/schemas/`.
 - **Infer, Never Duplicate**: Types must be generated via `z.infer<typeof Schema>`. Do not declare separate manual TypeScript interfaces representing the same data.
 - **End-to-End Type Safety**: The web frontend communicates with the Hono API using `hono/client` (`hc<AppType>`). Never construct loose `fetch('/api/...')` calls with unverified types.
 - **JSON Column Validation**: In D1, columns like `decks.slides` and `decks.style` are stored as SQLite `TEXT` (JSON). Always validate them with their respective Zod schemas (`SlideSchema.array()`, `DeckStyleSchema`) upon parsing.
 
 ### 6.2 D1 Security & Multi-Tenancy (No Native RLS)
+
 - **Mandatory User Scoping**: D1 SQLite does not have Postgres-style Row-Level Security (RLS). Every mutation and private query MUST filter by `user_id` extracted from the verified Better Auth session.
 - **Centralized Query Helpers**: Write database operations inside `packages/db/src/queries/`. Do not assemble raw `db.select().from(decks)` inside API route handlers without passing through security-checked query helpers.
 - **Public Visibility Safeguard**: Public library queries must explicitly and unconditionally enforce `where(eq(decks.visibility, 'public'))` to ensure private decks are never leaked.
 
 ### 6.3 3-Layer Slide Stage Architecture
+
 Slides are rendered as DOM elements on a fixed **16:9 stage** scaled via CSS `transform: scale(...)` to match any display resolution without layout shift:
+
 1. **Layer 1: Background Video (`<video autoplay muted loop playsinline>`)**
    - Must persist and continue looping when advancing slides within the same song.
    - Next song background video should be preloaded to avoid black screen transitions.
@@ -206,23 +221,28 @@ Slides are rendered as DOM elements on a fixed **16:9 stage** scaled via CSS `tr
    - Webfonts loaded from local bundle (Pretendard / Noto Sans KR).
    - Text styling (font size, color, text-shadow for background contrast).
    - Positioned via percentage-based coordinates relative to the 16:9 stage to guarantee identical presentation across editing, preview, and dual-window modes.
-   - *Never replace this architecture with Reveal.js or canvas drawing.*
+   - _Never replace this architecture with Reveal.js or canvas drawing._
 
 ### 6.4 Presenter View Synchronization
+
 - Presenter view separates the Controller Window (operator UI with current/next slides, jump panel, timer) from the Audience Window (clean projection).
 - State synchronization (slide index, blackout, hide lyrics) is transmitted strictly via **`BroadcastChannel`** (`new BroadcastChannel('worship-projection')`).
 - Broadcast payloads must conform to `BroadcastMessageSchema` defined in `packages/shared`.
 - Window Management API is used to detect secondary displays and automatically trigger projection fullscreen on the external monitor.
 
 ### 6.5 Offline-First Worship Projection Guarantee
+
 Sunday worship services cannot tolerate network failures:
+
 - **PWA Service Worker**: Configured via `vite-plugin-pwa` with `RangeRequestsPlugin` so that MP4 videos streamed from Cache Storage support partial HTTP range playback.
 - **Pre-worship Cache**: Before presenting, the user accesses the "Worship Preparation" (예배 준비) screen, which downloads all setlist background MP4s and slides into Cache Storage / IndexedDB.
 - **Storage Persistence**: Call `navigator.storage.persist()` during preparation to prevent Chrome from evicting cached assets.
 - **Zero Live Requests**: During active projection mode, the app must execute zero fetch requests over the external network.
 
 ### 6.6 LLM Normalization & Verification Pipeline
+
 When multiple users submit raw lyrics for the same catalog song:
+
 1. **Execution Condition**: Triggered when $\ge 2$ root versions exist for a song.
 2. **Workers AI Binding**: Model `@cf/qwen/qwen3.8-27b` invoked with `temperature: 0` and reasoning/thinking turned off.
 3. **Strict Validation Rule**:
@@ -235,18 +255,21 @@ When multiple users submit raw lyrics for the same catalog song:
 ## 7. Code Style & Conventions
 
 ### 7.1 Language & TypeScript Rules
+
 - Strict mode is enabled (`strict: true`, `noImplicitAny: true`).
 - Use explicit return types on exported functions and API endpoints.
 - Favor standard async/await over raw promise chaining.
 - Use `const` declarations by default; avoid `let` unless mutating local accumulator state.
 
 ### 7.2 File & Directory Naming Conventions
+
 - React components: `PascalCase.tsx` (e.g., `SlideStage.tsx`, `PresenterControls.tsx`).
 - Utilities & hooks: `camelCase.ts` (e.g., `useBroadcastSync.ts`, `formatTime.ts`).
 - Zod schemas: `kebab-case.schema.ts` or grouped in `packages/shared/src/schemas/deck.ts`.
 - Database schema files: `packages/db/src/schema/<table-name>.ts`.
 
 ### 7.3 State Management & Data Fetching
+
 - **Client UI state**: React hooks (`useState`, `useReducer`, React Context where necessary).
 - **Server Cache & Data Synchronization**: TanStack Query (`@tanstack/react-query`).
 - Invalidate and refetch queries after mutations instead of maintaining manual client sync states.
@@ -272,6 +295,7 @@ Refer to `prd.md` Section 8 for complete criteria. When implementing features, a
 
 After all code changes, agent must commit and push to github.
 Before committing or submitting changes, ensure:
+
 1. `pnpm typecheck` passes with zero errors across all workspaces.
 2. `pnpm lint` passes with no ESLint violations.
 3. `pnpm test` runs green for all unit and integration tests.

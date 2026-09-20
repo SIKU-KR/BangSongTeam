@@ -16,7 +16,7 @@
 
 ## 2. 세부 작업 체크리스트
 
-- [ ] **Task 2.1: packages/shared 패키지 골격 및 tsconfig 설정**
+- [x] **Task 2.1: packages/shared 패키지 골격 및 tsconfig 설정**
   - **대상 파일**: `packages/shared/package.json`, `packages/shared/tsconfig.json`
   - **선행 조건**: `docs/tasks/m0/tasks_1.md`
   - **구현 내용**:
@@ -25,7 +25,7 @@
     - `package.json`의 `exports`에 `.` 및 서브경로 매핑 선언
   - **DoD (통과 기준)**: `pnpm --filter @repo/shared exec tsc --noEmit`이 에러 없이 통과한다.
 
-- [ ] **Task 2.2: 스타일 및 텍스트 박스 위치 Zod 스키마 정의**
+- [x] **Task 2.2: 스타일 및 텍스트 박스 위치 Zod 스키마 정의**
   - **대상 파일**: `packages/shared/src/schemas/style.ts`
   - **선행 조건**: Task 2.1
   - **구현 내용**:
@@ -35,7 +35,7 @@
     - `GridAnchorPreset`, `TextBoxPosition`, `DeckStyle` 타입 export
   - **DoD (통과 기준)**: `pnpm --filter @repo/shared exec tsc --noEmit`이 성공하고 `DeckStyleSchema.parse({})`가 TECH_SPEC에 정의된 기본값을 정확히 반환한다.
 
-- [ ] **Task 2.3: 슬라이드 스키마 정의 및 단위 테스트 작성**
+- [x] **Task 2.3: 슬라이드 스키마 정의 및 단위 테스트 작성**
   - **대상 파일**: `packages/shared/src/schemas/slide.ts`, `packages/shared/src/schemas/slide.test.ts`
   - **선행 조건**: Task 2.2
   - **구현 내용**:
@@ -43,7 +43,7 @@
     - `slide.test.ts`: 4줄 초과 시 파싱 거부 검증 및 기본 난수 ID 포맷 검증
   - **DoD (통과 기준)**: `pnpm --filter @repo/shared vitest run src/schemas/slide.test.ts`가 100% 통과한다.
 
-- [ ] **Task 2.4: 덱(Deck) 도메인 스키마 정의 (Clone-on-Add 스코프 반영)**
+- [x] **Task 2.4: 덱(Deck) 도메인 스키마 정의 (Clone-on-Add 스코프 반영)**
   - **대상 파일**: `packages/shared/src/schemas/deck.ts`
   - **선행 조건**: Task 2.3
   - **구현 내용**:
@@ -52,7 +52,7 @@
     - `DeckSchema`: `id`, `userId`, `catalogId`, `scope`, `setlistId`, `title`, `artist`, `lyricsRaw`, `slides(SlideSchema.array())`, `backgroundId`, `style(DeckStyleSchema)`, `visibility`, `forkedFrom`, `forkCount`, 타임스탬프
   - **DoD (통과 기준)**: `pnpm --filter @repo/shared exec tsc --noEmit`이 에러 없이 통과한다.
 
-- [ ] **Task 2.5: 콘티(Setlist) 도메인 스키마 정의**
+- [x] **Task 2.5: 콘티(Setlist) 도메인 스키마 정의**
   - **대상 파일**: `packages/shared/src/schemas/setlist.ts`
   - **선행 조건**: Task 2.4
   - **구현 내용**:
@@ -60,7 +60,7 @@
     - `SetlistSchema`: `id`, `userId`, `title`, `serviceDate(/^\d{4}-\d{2}-\d{2}$/)`, `items(SetlistItemSchema.array())`
   - **DoD (통과 기준)**: YYYY-MM-DD 정규식 유효성 및 SetlistItem 배열 파싱 검증이 정상 통과한다.
 
-- [ ] **Task 2.6: 배경 미디어 및 가사 카탈로그 스키마 정의**
+- [x] **Task 2.6: 배경 미디어 및 가사 카탈로그 스키마 정의**
   - **대상 파일**: `packages/shared/src/schemas/media.ts`, `packages/shared/src/schemas/catalog.ts`
   - **선행 조건**: Task 2.1
   - **구현 내용**:
@@ -69,7 +69,7 @@
     - `LyricCatalogSchema`: `id`, `title`, `artist`, `titleNorm`, `artistNorm`, `lyricsCanonical`, `versionCount`, `status`
   - **DoD (통과 기준)**: `pnpm --filter @repo/shared exec tsc --noEmit`이 에러 없이 통과한다.
 
-- [ ] **Task 2.7: BroadcastChannel 동기화 메시지 스키마 및 단위 테스트 작성**
+- [x] **Task 2.7: BroadcastChannel 동기화 메시지 스키마 및 단위 테스트 작성**
   - **대상 파일**: `packages/shared/src/schemas/broadcast.ts`, `packages/shared/src/schemas/broadcast.test.ts`
   - **선행 조건**: Task 2.1
   - **구현 내용**:
@@ -77,7 +77,7 @@
     - 단위 테스트: 각 메시지 타입별 유효 페이로드 및 잘못된 타입 수신 시 거부 검증
   - **DoD (통과 기준)**: `pnpm --filter @repo/shared vitest run src/schemas/broadcast.test.ts`가 100% 통과한다.
 
-- [ ] **Task 2.8: API 요청/응답 페이로드 스키마 정의**
+- [x] **Task 2.8: API 요청/응답 페이로드 스키마 정의**
   - **대상 파일**: `packages/shared/src/schemas/api.ts`
   - **선행 조건**: Task 2.4, Task 2.5, Task 2.6
   - **구현 내용**:
@@ -86,14 +86,14 @@
     - `SearchCatalogQuerySchema`, `SearchCatalogResponseSchema`
   - **DoD (통과 기준)**: `pnpm --filter @repo/shared exec tsc --noEmit`이 에러 없이 통과한다.
 
-- [ ] **Task 2.9: 가사 정제 및 슬라이드 분할 규칙 단위 테스트 작성 (TDD Red)**
+- [x] **Task 2.9: 가사 정제 및 슬라이드 분할 규칙 단위 테스트 작성 (TDD Red)**
   - **대상 파일**: `packages/shared/src/utils/lyrics.test.ts`
   - **선행 조건**: Task 2.3
   - **구현 내용**:
     - 테스트: 앞뒤/전각 공백 제거, 빈 줄 병합, 4줄 이하 유지, 4줄 초과 시 2줄 단위 분할, 슬라이드 순서 보존 검증
   - **DoD (통과 기준)**: `pnpm --filter @repo/shared vitest run src/utils/lyrics.test.ts` 실행 시 구현체가 없어 실패(Red)함을 확인한다.
 
-- [ ] **Task 2.10: 가사 정제 및 슬라이드 분할 유틸리티 구현 (TDD Green)**
+- [x] **Task 2.10: 가사 정제 및 슬라이드 분할 유틸리티 구현 (TDD Green)**
   - **대상 파일**: `packages/shared/src/utils/lyrics.ts`
   - **선행 조건**: Task 2.9
   - **구현 내용**:
@@ -102,7 +102,7 @@
     - `mergeSlidesToLyrics(slides: Slide[]): string`
   - **DoD (통과 기준)**: `pnpm --filter @repo/shared vitest run src/utils/lyrics.test.ts`가 100% 통과(Green)한다.
 
-- [ ] **Task 2.11: 공유 상수 선언 및 메인 배럴 엔트리포인트 완성**
+- [x] **Task 2.11: 공유 상수 선언 및 메인 배럴 엔트리포인트 완성**
   - **대상 파일**: `packages/shared/src/constants/index.ts`, `packages/shared/src/index.ts`
   - **선행 조건**: Task 2.2 ~ Task 2.10
   - **구현 내용**:

@@ -10,9 +10,11 @@
 ## 1. 개요 및 시스템 목적 (Overview & Architecture Principles)
 
 ### 1.1 시스템 목적
+
 본 시스템은 중소형 교회 미디어 봉사자가 찬양 가사와 무음 모션 루프 영상을 결합하여 가독성 높은 16:9 예배용 슬라이드를 15분 이내에 제작하고, 예배 중 인터넷 장애가 발생하더라도 **끊김·검은 화면 없이 100% 오프라인에서 무사고로 송출**할 수 있도록 지원하는 웹 기반 경량 프레젠테이션 플랫폼이다.
 
 ### 1.2 핵심 아키텍처 원칙
+
 1. **타입 단일 원천 (Single Source of Truth)**: 모든 도메인 모델, API 계약, 브로드캐스트 메시지, D1 JSON 컬럼 구조는 `packages/shared`의 **Zod 스키마**로 1회 선언하며, TypeScript 타입은 `z.infer`로만 추론한다. 수동 타입 복제는 금지한다.
 2. **단방향 의존성 및 패키지 격리**:
    - `apps` $\rightarrow$ `packages` 단방향 참조만 허용.
@@ -96,16 +98,22 @@ flowchart TB
 ### 3.1 슬라이드 및 스타일 기본 스키마 (`schemas/style.ts`, `schemas/slide.ts`)
 
 ```typescript
-import { z } from 'zod';
+import { z } from "zod";
 
 /**
  * 3x3 격자 앵커 프리셋
  */
 export const GridAnchorPresetSchema = z.enum([
-  'top-left',    'top-center',    'top-right',
-  'middle-left', 'middle-center', 'middle-right',
-  'bottom-left', 'bottom-center', 'bottom-right',
-  'custom'
+  "top-left",
+  "top-center",
+  "top-right",
+  "middle-left",
+  "middle-center",
+  "middle-right",
+  "bottom-left",
+  "bottom-center",
+  "bottom-right",
+  "custom",
 ]);
 export type GridAnchorPreset = z.infer<typeof GridAnchorPresetSchema>;
 
@@ -114,9 +122,9 @@ export type GridAnchorPreset = z.infer<typeof GridAnchorPresetSchema>;
  * 16:9 가상 스테이지(1920x1080) 기준 퍼센트 (0 ~ 100)
  */
 export const TextBoxPositionSchema = z.object({
-  anchor: GridAnchorPresetSchema.default('middle-center'),
-  xPercent: z.number().min(5).max(95).default(50),      // 앵커 X 좌표
-  yPercent: z.number().min(5).max(95).default(50),      // 앵커 Y 좌표
+  anchor: GridAnchorPresetSchema.default("middle-center"),
+  xPercent: z.number().min(5).max(95).default(50), // 앵커 X 좌표
+  yPercent: z.number().min(5).max(95).default(50), // 앵커 Y 좌표
   widthPercent: z.number().min(20).max(90).default(80), // 텍스트 박스 최대 가로폭
 });
 export type TextBoxPosition = z.infer<typeof TextBoxPositionSchema>;
@@ -127,27 +135,37 @@ export type TextBoxPosition = z.infer<typeof TextBoxPositionSchema>;
 export const DeckStyleSchema = z.object({
   // 오버레이 설정
   overlayOpacity: z.number().min(0).max(100).default(40), // 0 ~ 100%
-  overlayColor: z.string().regex(/^#([0-9a-fA-F]{3}){1,2}$/).default('#000000'),
+  overlayColor: z
+    .string()
+    .regex(/^#([0-9a-fA-F]{3}){1,2}$/)
+    .default("#000000"),
 
   // 폰트 및 텍스트 설정
-  fontFamily: z.enum([
-    'Pretendard',
-    'Noto Sans KR',
-    'Nanum Myeongjo',
-    'Gmarket Sans',
-    'KoPubWorld Batang'
-  ]).default('Pretendard'),
+  fontFamily: z
+    .enum([
+      "Pretendard",
+      "Noto Sans KR",
+      "Nanum Myeongjo",
+      "Gmarket Sans",
+      "KoPubWorld Batang",
+    ])
+    .default("Pretendard"),
   fontSizeVw: z.number().min(2).max(10).default(4.2), // 16:9 기준 상대 폰트 크기
-  fontColor: z.string().regex(/^#([0-9a-fA-F]{3}){1,2}$/).default('#FFFFFF'),
-  textAlign: z.enum(['left', 'center', 'right']).default('center'),
+  fontColor: z
+    .string()
+    .regex(/^#([0-9a-fA-F]{3}){1,2}$/)
+    .default("#FFFFFF"),
+  textAlign: z.enum(["left", "center", "right"]).default("center"),
   lineHeight: z.number().min(1.0).max(2.5).default(1.4),
 
   // 그림자 (가독성 핵심)
-  textShadowLevel: z.enum(['none', 'soft', 'medium', 'strong']).default('medium'),
+  textShadowLevel: z
+    .enum(["none", "soft", "medium", "strong"])
+    .default("medium"),
 
   // 텍스트 박스 위치
   position: TextBoxPositionSchema.default({
-    anchor: 'middle-center',
+    anchor: "middle-center",
     xPercent: 50,
     yPercent: 50,
     widthPercent: 80,
@@ -159,7 +177,10 @@ export type DeckStyle = z.infer<typeof DeckStyleSchema>;
  * 슬라이드 1장 데이터 (경량화 ID 및 최대 4줄 제약)
  */
 export const SlideSchema = z.object({
-  id: z.string().min(1).default(() => `s_${Math.random().toString(36).substring(2, 9)}`),
+  id: z
+    .string()
+    .min(1)
+    .default(() => `s_${Math.random().toString(36).substring(2, 9)}`),
   order: z.number().int().nonnegative(),
   lines: z.array(z.string().max(80)).max(4), // 슬라이드당 최대 4줄 제약 (PRD 4.2)
 });
@@ -169,32 +190,32 @@ export type Slide = z.infer<typeof SlideSchema>;
 ### 3.2 덱(Deck) 및 콘티(Setlist) 스키마 (`schemas/deck.ts`, `schemas/setlist.ts`)
 
 ```typescript
-import { z } from 'zod';
-import { SlideSchema } from './slide';
-import { DeckStyleSchema } from './style';
+import { z } from "zod";
+import { SlideSchema } from "./slide";
+import { DeckStyleSchema } from "./style";
 
-export const DeckVisibilitySchema = z.enum(['private', 'public']);
+export const DeckVisibilitySchema = z.enum(["private", "public"]);
 export type DeckVisibility = z.infer<typeof DeckVisibilitySchema>;
 
 /**
  * 덱 스코프: 라이브러리 마스터 덱 vs 콘티 복제 전용 덱
  */
-export const DeckScopeSchema = z.enum(['library', 'setlist']);
+export const DeckScopeSchema = z.enum(["library", "setlist"]);
 export type DeckScope = z.infer<typeof DeckScopeSchema>;
 
 export const DeckSchema = z.object({
   id: z.string().uuid(),
   userId: z.string().uuid(),
   catalogId: z.string().uuid().nullable().optional(),
-  scope: DeckScopeSchema.default('library'),       // 'library': 보관함 마스터, 'setlist': 콘티 전용 복제본
+  scope: DeckScopeSchema.default("library"), // 'library': 보관함 마스터, 'setlist': 콘티 전용 복제본
   setlistId: z.string().uuid().nullable().optional(), // scope='setlist'일 때 속한 콘티 ID
   title: z.string().min(1).max(100),
-  artist: z.string().max(100).default(''),
+  artist: z.string().max(100).default(""),
   lyricsRaw: z.string(),
   slides: z.array(SlideSchema),
   backgroundId: z.string().uuid().nullable(),
   style: DeckStyleSchema,
-  visibility: DeckVisibilitySchema.default('private'),
+  visibility: DeckVisibilitySchema.default("private"),
   forkedFrom: z.string().uuid().nullable().optional(), // 원본 덱 ID (Clone/Fork 출처 추적)
   forkCount: z.number().int().nonnegative().default(0),
   createdAt: z.string().datetime(),
@@ -229,28 +250,28 @@ export type Setlist = z.infer<typeof SetlistSchema>;
 export const BackgroundMediaSchema = z.object({
   id: z.string().uuid(),
   title: z.string().min(1).max(100),
-  r2Key: z.string(),             // R2 내 파일 경로 (mp4)
-  posterKey: z.string(),         // 썸네일 경로 (webp)
+  r2Key: z.string(), // R2 내 파일 경로 (mp4)
+  posterKey: z.string(), // 썸네일 경로 (webp)
   durationSec: z.number().positive(),
   license: z.string(),
-  tags: z.array(z.string()),     // ["잔잔한", "따뜻한"]
-  cdnUrl: z.string().url(),      // https://media.domain.com/loop_01.mp4
+  tags: z.array(z.string()), // ["잔잔한", "따뜻한"]
+  cdnUrl: z.string().url(), // https://media.domain.com/loop_01.mp4
   posterUrl: z.string().url(),
 });
 export type BackgroundMedia = z.infer<typeof BackgroundMediaSchema>;
 
-export const CatalogStatusSchema = z.enum(['single', 'normalized', 'locked']);
+export const CatalogStatusSchema = z.enum(["single", "normalized", "locked"]);
 export type CatalogStatus = z.infer<typeof CatalogStatusSchema>;
 
 export const LyricCatalogSchema = z.object({
   id: z.string().uuid(),
   title: z.string().min(1).max(100),
-  artist: z.string().max(100).default(''),
+  artist: z.string().max(100).default(""),
   titleNorm: z.string(),
   artistNorm: z.string(),
   lyricsCanonical: z.string(),
   versionCount: z.number().int().nonnegative().default(1),
-  status: CatalogStatusSchema.default('single'),
+  status: CatalogStatusSchema.default("single"),
   normalizedAt: z.string().datetime().nullable(),
 });
 export type LyricCatalog = z.infer<typeof LyricCatalogSchema>;
@@ -261,15 +282,15 @@ export type LyricCatalog = z.infer<typeof LyricCatalogSchema>;
 발표자 조작 창(Controller)과 송출 창(Audience Window)은 `new BroadcastChannel('worship-projection')`을 통해 동기화된다.
 
 ```typescript
-export const BroadcastMessageSchema = z.discriminatedUnion('type', [
+export const BroadcastMessageSchema = z.discriminatedUnion("type", [
   // 1. 송출 창 준비 완료 신호
   z.object({
-    type: z.literal('AUDIENCE_MOUNTED'),
+    type: z.literal("AUDIENCE_MOUNTED"),
     timestamp: z.number(),
   }),
   // 2. 조작 창에서 송출 창으로 전체 상태 주입 (스냅샷)
   z.object({
-    type: z.literal('SYNC_SNAPSHOT'),
+    type: z.literal("SYNC_SNAPSHOT"),
     timestamp: z.number(),
     payload: z.object({
       setlistId: z.string().uuid(),
@@ -281,7 +302,7 @@ export const BroadcastMessageSchema = z.discriminatedUnion('type', [
   }),
   // 3. 슬라이드 직접 이동
   z.object({
-    type: z.literal('NAVIGATE_SLIDE'),
+    type: z.literal("NAVIGATE_SLIDE"),
     timestamp: z.number(),
     payload: z.object({
       songIndex: z.number().int().nonnegative(),
@@ -290,7 +311,7 @@ export const BroadcastMessageSchema = z.discriminatedUnion('type', [
   }),
   // 4. 긴급 블랙아웃 토글
   z.object({
-    type: z.literal('SET_BLACKOUT'),
+    type: z.literal("SET_BLACKOUT"),
     timestamp: z.number(),
     payload: z.object({
       isBlackout: z.boolean(),
@@ -298,7 +319,7 @@ export const BroadcastMessageSchema = z.discriminatedUnion('type', [
   }),
   // 5. 가사 숨기기 (배경 유지)
   z.object({
-    type: z.literal('SET_LYRICS_HIDDEN'),
+    type: z.literal("SET_LYRICS_HIDDEN"),
     timestamp: z.number(),
     payload: z.object({
       isLyricsHidden: z.boolean(),
@@ -306,7 +327,7 @@ export const BroadcastMessageSchema = z.discriminatedUnion('type', [
   }),
   // 6. 하트비트 / 핑퐁
   z.object({
-    type: z.literal('HEARTBEAT'),
+    type: z.literal("HEARTBEAT"),
     timestamp: z.number(),
   }),
 ]);
@@ -324,6 +345,7 @@ Cloudflare D1(SQLite)을 영속성 엔진으로 사용하며, Drizzle ORM을 통
 소프트웨어 아키텍트 관점에서 D1 SQLite의 제약사항(분산 SQLite, 파일 크기 한계, RLS 부재)과 PRD의 비기능 제약(100ms 반응성, 무결점 오프라인)을 만족시키기 위해 다음 6가지 핵심 항목에 대한 비판적 검증과 스키마 최적화를 단행한다.
 
 #### 1. Clone-on-Add 방식의 정규화 최적화 (고아 데이터 방지 및 라이브러리 격리)
+
 - **문제점**: 콘티(Setlist)에 곡을 추가할 때 덱을 복제하면, `decks` 테이블에 수백 개의 복제 행이 누적된다.
   1. `userId`로 덱을 단순 조회하면 과거 콘티의 복제본들이 '내 라이브러리'에 중복 노출되어 UI가 오염된다.
   2. 콘티(`setlists`) 삭제 시 `setlist_items`는 지워지지만 복제된 `decks` 행은 참조가 끊긴 채 **영구 고아 데이터(Orphaned Row)**로 남아 D1 저장 공간을 낭비한다.
@@ -334,6 +356,7 @@ Cloudflare D1(SQLite)을 영속성 엔진으로 사용하며, Drizzle ORM을 통
   - 인덱스 `(user_id, scope)`를 구성하여 라이브러리 조회(`scope = 'library'`)의 인덱스 풀 스캔을 보장한다.
 
 #### 2. JSON TEXT 컬럼 반정규화(Pragmatic Denormalization)의 타당성
+
 - **검증**: `decks.slides`와 `decks.style`을 관계형 정규화(1NF)하여 별도의 `slides` 테이블로 분리할 것인가?
 - **결론**: **JSON TEXT 유지 (실용적 반정규화 채택)**.
   - 예배 송출 시 슬라이드는 개별 행으로 검색되지 않으며, 항상 곡 단위의 원자적(Atomic) 문서로 소비된다.
@@ -341,10 +364,12 @@ Cloudflare D1(SQLite)을 영속성 엔진으로 사용하며, Drizzle ORM을 통
   - 내부 무결성은 애플리케이션 계층에서 `SlideSchema.array()` 및 `DeckStyleSchema`로 100% 검증한다. 슬라이드 ID 또한 무거운 UUID 대신 경량 ID(`s_xxx`)를 채택하여 JSON 페이로드 크기를 절감한다.
 
 #### 3. Better Auth v1 공식 스키마 정규화 완결성
+
 - **검증**: Better Auth의 Drizzle D1 어댑터가 요구하는 필수 필드(`emailVerified`, `session.ipAddress`, `session.userAgent`, `account.scope`, `account.idToken`, `verification` 테이블)가 누락되면 인스턴스 초기화 시 런타임 스키마 에러가 발생한다.
 - **최적화 설계**: Better Auth v1 공식 규격의 컬럼과 테이블을 완벽히 매핑하여 인증 호환성을 보장한다.
 
 #### 4. `lyrics_versions` 1인 1표 정규화와 멱등적 업서트(Upsert)
+
 - **검증**: 동일 사용자가 가사를 교정하여 같은 곡을 다시 저장할 경우, `uniqueIndex(user_id, catalog_id)`에 의해 `SQLITE_CONSTRAINT_UNIQUE` 예외가 발생한다.
 - **최적화 설계**: 1인 1표 원칙(PRD 4.8)을 준수하되, `INSERT ... ON CONFLICT (user_id, catalog_id) DO UPDATE SET lyrics = excluded.lyrics, deck_id = excluded.deck_id, updated_at = unixepoch()` 업서트 쿼리를 강제한다.
 - `lyrics_catalog.version_count`는 SQLite 트리거를 통해 원자적으로 증감시켜 카운트 불일치를 원천 방지한다.
@@ -354,174 +379,254 @@ Cloudflare D1(SQLite)을 영속성 엔진으로 사용하며, Drizzle ORM을 통
 ### 4.1 테이블 명세 및 최적화된 Drizzle 스키마 정의 (`schema/*.ts`)
 
 ```typescript
-import { sqliteTable, text, integer, index, uniqueIndex } from 'drizzle-orm/sqlite-core';
-import { sql } from 'drizzle-orm';
+import {
+  sqliteTable,
+  text,
+  integer,
+  index,
+  uniqueIndex,
+} from "drizzle-orm/sqlite-core";
+import { sql } from "drizzle-orm";
 
 // ============================================================================
 // 1. Better Auth v1 공식 완결 스키마 (OAuth 카카오/네이버)
 // ============================================================================
-export const user = sqliteTable('user', {
-  id: text('id').primaryKey(),
-  name: text('name').notNull(),
-  email: text('email'), // 카카오 기본 권한 시 null 허용
-  emailVerified: integer('email_verified', { mode: 'boolean' }).notNull().default(false),
-  image: text('image'),
-  createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
-  updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull(),
+export const user = sqliteTable("user", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  email: text("email"), // 카카오 기본 권한 시 null 허용
+  emailVerified: integer("email_verified", { mode: "boolean" })
+    .notNull()
+    .default(false),
+  image: text("image"),
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
+  updatedAt: integer("updated_at", { mode: "timestamp" }).notNull(),
 });
 
-export const session = sqliteTable('session', {
-  id: text('id').primaryKey(),
-  userId: text('user_id').notNull().references(() => user.id, { onDelete: 'cascade' }),
-  token: text('token').notNull().unique(),
-  expiresAt: integer('expires_at', { mode: 'timestamp' }).notNull(),
-  ipAddress: text('ip_address'),
-  userAgent: text('user_agent'),
-  createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
-  updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull(),
+export const session = sqliteTable("session", {
+  id: text("id").primaryKey(),
+  userId: text("user_id")
+    .notNull()
+    .references(() => user.id, { onDelete: "cascade" }),
+  token: text("token").notNull().unique(),
+  expiresAt: integer("expires_at", { mode: "timestamp" }).notNull(),
+  ipAddress: text("ip_address"),
+  userAgent: text("user_agent"),
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
+  updatedAt: integer("updated_at", { mode: "timestamp" }).notNull(),
 });
 
-export const account = sqliteTable('account', {
-  id: text('id').primaryKey(),
-  userId: text('user_id').notNull().references(() => user.id, { onDelete: 'cascade' }),
-  accountId: text('account_id').notNull(),
-  providerId: text('provider_id').notNull(), // 'kakao' | 'naver'
-  accessToken: text('access_token'),
-  refreshToken: text('refresh_token'),
-  accessTokenExpiresAt: integer('access_token_expires_at', { mode: 'timestamp' }),
-  refreshTokenExpiresAt: integer('refresh_token_expires_at', { mode: 'timestamp' }),
-  scope: text('scope'),
-  idToken: text('id_token'),
-  password: text('password'),
-  createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
-  updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull(),
+export const account = sqliteTable("account", {
+  id: text("id").primaryKey(),
+  userId: text("user_id")
+    .notNull()
+    .references(() => user.id, { onDelete: "cascade" }),
+  accountId: text("account_id").notNull(),
+  providerId: text("provider_id").notNull(), // 'kakao' | 'naver'
+  accessToken: text("access_token"),
+  refreshToken: text("refresh_token"),
+  accessTokenExpiresAt: integer("access_token_expires_at", {
+    mode: "timestamp",
+  }),
+  refreshTokenExpiresAt: integer("refresh_token_expires_at", {
+    mode: "timestamp",
+  }),
+  scope: text("scope"),
+  idToken: text("id_token"),
+  password: text("password"),
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
+  updatedAt: integer("updated_at", { mode: "timestamp" }).notNull(),
 });
 
-export const verification = sqliteTable('verification', {
-  id: text('id').primaryKey(),
-  identifier: text('identifier').notNull(),
-  value: text('value').notNull(),
-  expiresAt: integer('expires_at', { mode: 'timestamp' }).notNull(),
-  createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
-  updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull(),
+export const verification = sqliteTable("verification", {
+  id: text("id").primaryKey(),
+  identifier: text("identifier").notNull(),
+  value: text("value").notNull(),
+  expiresAt: integer("expires_at", { mode: "timestamp" }).notNull(),
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
+  updatedAt: integer("updated_at", { mode: "timestamp" }).notNull(),
 });
 
 // ============================================================================
 // 2. 가사 카탈로그 및 버전 테이블 (LLM 정규화 파이프라인)
 // ============================================================================
-export const lyricsCatalog = sqliteTable('lyrics_catalog', {
-  id: text('id').primaryKey(),
-  title: text('title').notNull(),
-  artist: text('artist').default(''),
-  titleNorm: text('title_norm').notNull(), // 공백·특수문자 제거, 소문자
-  artistNorm: text('artist_norm').notNull(),
-  lyricsCanonical: text('lyrics_canonical').notNull(),
-  versionCount: integer('version_count').notNull().default(1),
-  status: text('status', { enum: ['single', 'normalized', 'locked'] }).notNull().default('single'),
-  normalizedAt: integer('normalized_at', { mode: 'timestamp' }),
-  createdAt: integer('created_at', { mode: 'timestamp' }).default(sql`(unixepoch())`),
-  updatedAt: integer('updated_at', { mode: 'timestamp' }).default(sql`(unixepoch())`),
-}, (t) => [
-  index('idx_lyrics_catalog_norm').on(t.titleNorm, t.artistNorm),
-  index('idx_lyrics_catalog_status').on(t.status),
-]);
+export const lyricsCatalog = sqliteTable(
+  "lyrics_catalog",
+  {
+    id: text("id").primaryKey(),
+    title: text("title").notNull(),
+    artist: text("artist").default(""),
+    titleNorm: text("title_norm").notNull(), // 공백·특수문자 제거, 소문자
+    artistNorm: text("artist_norm").notNull(),
+    lyricsCanonical: text("lyrics_canonical").notNull(),
+    versionCount: integer("version_count").notNull().default(1),
+    status: text("status", { enum: ["single", "normalized", "locked"] })
+      .notNull()
+      .default("single"),
+    normalizedAt: integer("normalized_at", { mode: "timestamp" }),
+    createdAt: integer("created_at", { mode: "timestamp" }).default(
+      sql`(unixepoch())`,
+    ),
+    updatedAt: integer("updated_at", { mode: "timestamp" }).default(
+      sql`(unixepoch())`,
+    ),
+  },
+  (t) => [
+    index("idx_lyrics_catalog_norm").on(t.titleNorm, t.artistNorm),
+    index("idx_lyrics_catalog_status").on(t.status),
+  ],
+);
 
-export const lyricsVersions = sqliteTable('lyrics_versions', {
-  id: text('id').primaryKey(),
-  catalogId: text('catalog_id').notNull().references(() => lyricsCatalog.id, { onDelete: 'cascade' }),
-  userId: text('user_id').notNull().references(() => user.id),
-  deckId: text('deck_id').notNull(), // 루트 덱 ID
-  lyrics: text('lyrics').notNull(),
-  source: text('source').default('user'),
-  createdAt: integer('created_at', { mode: 'timestamp' }).default(sql`(unixepoch())`),
-  updatedAt: integer('updated_at', { mode: 'timestamp' }).default(sql`(unixepoch())`),
-}, (t) => [
-  index('idx_lyrics_versions_catalog').on(t.catalogId),
-  // 1인 1표 보장을 위한 복합 고유 인덱스
-  uniqueIndex('idx_lyrics_versions_user_catalog').on(t.userId, t.catalogId),
-]);
+export const lyricsVersions = sqliteTable(
+  "lyrics_versions",
+  {
+    id: text("id").primaryKey(),
+    catalogId: text("catalog_id")
+      .notNull()
+      .references(() => lyricsCatalog.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id),
+    deckId: text("deck_id").notNull(), // 루트 덱 ID
+    lyrics: text("lyrics").notNull(),
+    source: text("source").default("user"),
+    createdAt: integer("created_at", { mode: "timestamp" }).default(
+      sql`(unixepoch())`,
+    ),
+    updatedAt: integer("updated_at", { mode: "timestamp" }).default(
+      sql`(unixepoch())`,
+    ),
+  },
+  (t) => [
+    index("idx_lyrics_versions_catalog").on(t.catalogId),
+    // 1인 1표 보장을 위한 복합 고유 인덱스
+    uniqueIndex("idx_lyrics_versions_user_catalog").on(t.userId, t.catalogId),
+  ],
+);
 
 // ============================================================================
 // 3. 배경 영상 메타데이터
 // ============================================================================
-export const backgrounds = sqliteTable('backgrounds', {
-  id: text('id').primaryKey(),
-  title: text('title').notNull(),
-  r2Key: text('r2_key').notNull(),
-  posterKey: text('poster_key').notNull(),
-  durationSec: integer('duration_sec').notNull(),
-  license: text('license').notNull(),
-  tags: text('tags').notNull(), // JSON TEXT: string[]
-  createdAt: integer('created_at', { mode: 'timestamp' }).default(sql`(unixepoch())`),
+export const backgrounds = sqliteTable("backgrounds", {
+  id: text("id").primaryKey(),
+  title: text("title").notNull(),
+  r2Key: text("r2_key").notNull(),
+  posterKey: text("poster_key").notNull(),
+  durationSec: integer("duration_sec").notNull(),
+  license: text("license").notNull(),
+  tags: text("tags").notNull(), // JSON TEXT: string[]
+  createdAt: integer("created_at", { mode: "timestamp" }).default(
+    sql`(unixepoch())`,
+  ),
 });
 
 // ============================================================================
 // 4. 덱 (Deck) - 찬양 1곡 단위 (라이브러리 마스터 vs 콘티 복제 격리)
 // ============================================================================
-export const decks = sqliteTable('decks', {
-  id: text('id').primaryKey(),
-  userId: text('user_id').notNull().references(() => user.id, { onDelete: 'cascade' }),
-  catalogId: text('catalog_id').references(() => lyricsCatalog.id, { onDelete: 'set null' }),
-  
-  // 스코프 격리 및 콘티 종속성
-  scope: text('scope', { enum: ['library', 'setlist'] }).notNull().default('library'),
-  setlistId: text('setlist_id').references(() => setlists.id, { onDelete: 'cascade' }),
-  
-  title: text('title').notNull(),
-  artist: text('artist').default(''),
-  lyricsRaw: text('lyrics_raw').notNull(),
-  slides: text('slides').notNull(), // JSON TEXT: Slide[]
-  backgroundId: text('background_id').references(() => backgrounds.id, { onDelete: 'set null' }),
-  style: text('style').notNull(),   // JSON TEXT: DeckStyle
-  
-  visibility: text('visibility', { enum: ['private', 'public'] }).notNull().default('private'),
-  forkedFrom: text('forked_from'),  // 원본 덱 ID (Clone-on-Add 또는 Fork 출처)
-  forkCount: integer('fork_count').notNull().default(0),
-  
-  createdAt: integer('created_at', { mode: 'timestamp' }).default(sql`(unixepoch())`),
-  updatedAt: integer('updated_at', { mode: 'timestamp' }).default(sql`(unixepoch())`),
-}, (t) => [
-  index('idx_decks_user_scope').on(t.userId, t.scope), // 내 보관함 필터링 최적화
-  index('idx_decks_setlist').on(t.setlistId),           // 세트 종속 덱 조회
-  index('idx_decks_visibility_forks').on(t.visibility, t.forkCount),
-  index('idx_decks_catalog').on(t.catalogId),
-]);
+export const decks = sqliteTable(
+  "decks",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    catalogId: text("catalog_id").references(() => lyricsCatalog.id, {
+      onDelete: "set null",
+    }),
+
+    // 스코프 격리 및 콘티 종속성
+    scope: text("scope", { enum: ["library", "setlist"] })
+      .notNull()
+      .default("library"),
+    setlistId: text("setlist_id").references(() => setlists.id, {
+      onDelete: "cascade",
+    }),
+
+    title: text("title").notNull(),
+    artist: text("artist").default(""),
+    lyricsRaw: text("lyrics_raw").notNull(),
+    slides: text("slides").notNull(), // JSON TEXT: Slide[]
+    backgroundId: text("background_id").references(() => backgrounds.id, {
+      onDelete: "set null",
+    }),
+    style: text("style").notNull(), // JSON TEXT: DeckStyle
+
+    visibility: text("visibility", { enum: ["private", "public"] })
+      .notNull()
+      .default("private"),
+    forkedFrom: text("forked_from"), // 원본 덱 ID (Clone-on-Add 또는 Fork 출처)
+    forkCount: integer("fork_count").notNull().default(0),
+
+    createdAt: integer("created_at", { mode: "timestamp" }).default(
+      sql`(unixepoch())`,
+    ),
+    updatedAt: integer("updated_at", { mode: "timestamp" }).default(
+      sql`(unixepoch())`,
+    ),
+  },
+  (t) => [
+    index("idx_decks_user_scope").on(t.userId, t.scope), // 내 보관함 필터링 최적화
+    index("idx_decks_setlist").on(t.setlistId), // 세트 종속 덱 조회
+    index("idx_decks_visibility_forks").on(t.visibility, t.forkCount),
+    index("idx_decks_catalog").on(t.catalogId),
+  ],
+);
 
 // ============================================================================
 // 5. 예배 콘티 (Setlist) 및 항목
 // ============================================================================
-export const setlists = sqliteTable('setlists', {
-  id: text('id').primaryKey(),
-  userId: text('user_id').notNull().references(() => user.id, { onDelete: 'cascade' }),
-  title: text('title').notNull(),
-  serviceDate: text('service_date').notNull(), // 'YYYY-MM-DD'
-  createdAt: integer('created_at', { mode: 'timestamp' }).default(sql`(unixepoch())`),
-  updatedAt: integer('updated_at', { mode: 'timestamp' }).default(sql`(unixepoch())`),
-}, (t) => [
-  index('idx_setlists_user_date').on(t.userId, t.serviceDate),
-]);
+export const setlists = sqliteTable(
+  "setlists",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    title: text("title").notNull(),
+    serviceDate: text("service_date").notNull(), // 'YYYY-MM-DD'
+    createdAt: integer("created_at", { mode: "timestamp" }).default(
+      sql`(unixepoch())`,
+    ),
+    updatedAt: integer("updated_at", { mode: "timestamp" }).default(
+      sql`(unixepoch())`,
+    ),
+  },
+  (t) => [index("idx_setlists_user_date").on(t.userId, t.serviceDate)],
+);
 
-export const setlistItems = sqliteTable('setlist_items', {
-  id: text('id').primaryKey(),
-  setlistId: text('setlist_id').notNull().references(() => setlists.id, { onDelete: 'cascade' }),
-  deckId: text('deck_id').notNull().references(() => decks.id, { onDelete: 'cascade' }),
-  order: integer('order').notNull(),
-}, (t) => [
-  index('idx_setlist_items_order').on(t.setlistId, t.order),
-  uniqueIndex('idx_setlist_items_unique').on(t.setlistId, t.deckId),
-]);
+export const setlistItems = sqliteTable(
+  "setlist_items",
+  {
+    id: text("id").primaryKey(),
+    setlistId: text("setlist_id")
+      .notNull()
+      .references(() => setlists.id, { onDelete: "cascade" }),
+    deckId: text("deck_id")
+      .notNull()
+      .references(() => decks.id, { onDelete: "cascade" }),
+    order: integer("order").notNull(),
+  },
+  (t) => [
+    index("idx_setlist_items_order").on(t.setlistId, t.order),
+    uniqueIndex("idx_setlist_items_unique").on(t.setlistId, t.deckId),
+  ],
+);
 
 // ============================================================================
 // 6. 오류 신고 및 저작권 요청
 // ============================================================================
-export const reports = sqliteTable('reports', {
-  id: text('id').primaryKey(),
-  userId: text('user_id').references(() => user.id),
-  targetType: text('target_type', { enum: ['deck', 'catalog'] }).notNull(),
-  targetId: text('target_id').notNull(),
-  reason: text('reason').notNull(),
-  status: text('status', { enum: ['pending', 'resolved', 'rejected'] }).default('pending'),
-  createdAt: integer('created_at', { mode: 'timestamp' }).default(sql`(unixepoch())`),
+export const reports = sqliteTable("reports", {
+  id: text("id").primaryKey(),
+  userId: text("user_id").references(() => user.id),
+  targetType: text("target_type", { enum: ["deck", "catalog"] }).notNull(),
+  targetId: text("target_id").notNull(),
+  reason: text("reason").notNull(),
+  status: text("status", { enum: ["pending", "resolved", "rejected"] }).default(
+    "pending",
+  ),
+  createdAt: integer("created_at", { mode: "timestamp" }).default(
+    sql`(unixepoch())`,
+  ),
 });
 ```
 
@@ -564,9 +669,9 @@ D1에는 Postgres RLS가 없으므로 애플리케이션 계층에서 `userId` �
 
 ```typescript
 // packages/db/src/queries/decks.ts
-import { eq, and, desc, sql } from 'drizzle-orm';
-import { db } from '../client';
-import { decks, decksFts, lyricsVersions, lyricsCatalog } from '../schema';
+import { eq, and, desc, sql } from "drizzle-orm";
+import { db } from "../client";
+import { decks, decksFts, lyricsVersions, lyricsCatalog } from "../schema";
 
 /**
  * FTS5 쿼리 새니타이저
@@ -574,11 +679,11 @@ import { decks, decksFts, lyricsVersions, lyricsCatalog } from '../schema';
  */
 export function sanitizeFts5Query(query: string): string {
   // 영문/한글/숫자/공백만 남기고 모든 특수기호 제거
-  const cleaned = query.replace(/[^\p{L}\p{N}\s]/gu, ' ').trim();
+  const cleaned = query.replace(/[^\p{L}\p{N}\s]/gu, " ").trim();
   const tokens = cleaned.split(/\s+/).filter(Boolean);
-  if (tokens.length === 0) return '';
+  if (tokens.length === 0) return "";
   // 각 토큰을 큰따옴표로 감싸 안전한 MATCH 구문 생성: "은혜로운" "찬양"
-  return tokens.map(t => `"${t}"`).join(' ');
+  return tokens.map((t) => `"${t}"`).join(" ");
 }
 
 export const deckQueries = {
@@ -587,10 +692,12 @@ export const deckQueries = {
     return db
       .select()
       .from(decks)
-      .where(and(
-        eq(decks.userId, userId),
-        eq(decks.scope, 'library') // 콘티용 복제 덱 필터링 (UI 오염 방지)
-      ))
+      .where(
+        and(
+          eq(decks.userId, userId),
+          eq(decks.scope, "library"), // 콘티용 복제 덱 필터링 (UI 오염 방지)
+        ),
+      )
       .orderBy(desc(decks.updatedAt));
   },
 
@@ -608,7 +715,7 @@ export const deckQueries = {
     const [result] = await db
       .select()
       .from(decks)
-      .where(and(eq(decks.id, deckId), eq(decks.visibility, 'public')));
+      .where(and(eq(decks.id, deckId), eq(decks.visibility, "public")));
     return result ?? null;
   },
 
@@ -626,10 +733,12 @@ export const deckQueries = {
         .select({ deck: decks })
         .from(decks)
         .innerJoin(decksFts, eq(decks.id, decksFts.deckId))
-        .where(and(
-          eq(decks.visibility, 'public'),
-          sql`decks_fts MATCH ${sanitizedFts}`
-        ))
+        .where(
+          and(
+            eq(decks.visibility, "public"),
+            sql`decks_fts MATCH ${sanitizedFts}`,
+          ),
+        )
         .orderBy(desc(decks.forkCount))
         .limit(limit);
     } else {
@@ -637,10 +746,12 @@ export const deckQueries = {
       return db
         .select()
         .from(decks)
-        .where(and(
-          eq(decks.visibility, 'public'),
-          sql`(${decks.title} LIKE ${`%${trimmed}%`} OR ${decks.artist} LIKE ${`%${trimmed}%`})`
-        ))
+        .where(
+          and(
+            eq(decks.visibility, "public"),
+            sql`(${decks.title} LIKE ${`%${trimmed}%`} OR ${decks.artist} LIKE ${`%${trimmed}%`})`,
+          ),
+        )
         .orderBy(desc(decks.forkCount))
         .limit(limit);
     }
@@ -661,7 +772,7 @@ export const deckQueries = {
         userId: params.userId,
         deckId: params.deckId,
         lyrics: params.lyrics,
-        source: 'user',
+        source: "user",
       })
       .onConflictDoUpdate({
         target: [lyricsVersions.userId, lyricsVersions.catalogId],
@@ -694,6 +805,7 @@ flowchart TD
 ```
 
 #### 레이어별 구현 규칙:
+
 1. **Layer 1: Background Video (무결점 전환)**:
    - 두 개의 `<video>` 태그(`Video-A`, `Video-B`)를 겹쳐 배치한다.
    - 곡이 유지되는 동안에는 동일 비디오 태그가 일시정지 없이 루프 재생된다.
@@ -717,27 +829,28 @@ flowchart TD
 ```mermaid
 stateDiagram-v2
   [*] --> IDLE
-  
+
   IDLE --> BUFFERING : Key 0-9 pressed
   BUFFERING --> BUFFERING : Key 0-9 or '.' pressed
   BUFFERING --> IDLE : Timeout 3000ms
   BUFFERING --> IDLE : Backspace (when buffer becomes empty)
-  
+
   BUFFERING --> EXECUTE_JUMP : Enter pressed
   EXECUTE_JUMP --> IDLE : Navigation executed & buffer cleared
-  
+
   IDLE --> TOGGLE_BLACKOUT : 'B' pressed
   TOGGLE_BLACKOUT --> IDLE
-  
+
   IDLE --> TOGGLE_LYRICS : 'H' pressed
   TOGGLE_LYRICS --> IDLE
-  
+
   IDLE --> NAV_STEP : ArrowRight / Space / PageDown (Next)
   IDLE --> NAV_STEP : ArrowLeft / PageUp (Prev)
   NAV_STEP --> IDLE
 ```
 
 #### 번호 파싱 알고리즘:
+
 - `N` + Enter $\rightarrow$ 현재 곡의 N번째 슬라이드로 점프 (`slideIndex = N - 1`).
 - `N.` + Enter $\rightarrow$ N번째 곡의 1번째 슬라이드로 점프 (`songIndex = N - 1, slideIndex = 0`).
 - `N.M` + Enter $\rightarrow$ N번째 곡의 M번째 슬라이드로 점프 (`songIndex = N - 1, slideIndex = M - 1`).
@@ -750,16 +863,18 @@ Chrome 공식 **Window Management API**를 활용한 다중 디스플레이 투�
 1. **디스플레이 감지 및 팝업 배치**:
    ```typescript
    async function openAudienceProjection(setlistId: string) {
-     if ('getScreenDetails' in window) {
+     if ("getScreenDetails" in window) {
        try {
          const screenDetails = await (window as any).getScreenDetails();
-         const secondaryScreen = screenDetails.screens.find((s: any) => s !== screenDetails.currentScreen);
+         const secondaryScreen = screenDetails.screens.find(
+           (s: any) => s !== screenDetails.currentScreen,
+         );
          if (secondaryScreen) {
            // 보조 모니터 위치로 송출 창 바로 팝업 오픈
            window.open(
              `/present/audience?setId=${setlistId}`,
-             'WorshipAudienceWindow',
-             `left=${secondaryScreen.availLeft},top=${secondaryScreen.availTop},width=${secondaryScreen.availWidth},height=${secondaryScreen.availHeight}`
+             "WorshipAudienceWindow",
+             `left=${secondaryScreen.availLeft},top=${secondaryScreen.availTop},width=${secondaryScreen.availWidth},height=${secondaryScreen.availHeight}`,
            );
            return;
          }
@@ -767,7 +882,11 @@ Chrome 공식 **Window Management API**를 활용한 다중 디스플레이 투�
          // 권한 거부 시 일반 팝업 폴백
        }
      }
-     window.open(`/present/audience?setId=${setlistId}`, 'WorshipAudienceWindow', 'width=1280,height=720');
+     window.open(
+       `/present/audience?setId=${setlistId}`,
+       "WorshipAudienceWindow",
+       "width=1280,height=720",
+     );
    }
    ```
 2. **BroadcastChannel 핸드셰이크 프로토콜**:
@@ -809,21 +928,21 @@ Chrome 공식 **Window Management API**를 활용한 다중 디스플레이 투�
 
    ```typescript
    // apps/web/src/lib/storage/db.ts
-   import { openDB, DBSchema } from 'idb';
-   import type { Setlist, Deck, BackgroundMedia } from '@repo/shared';
+   import { openDB, DBSchema } from "idb";
+   import type { Setlist, Deck, BackgroundMedia } from "@repo/shared";
 
    export interface WorshipOfflineDB extends DBSchema {
      // 1. 콘티 메타데이터 저장소
      setlists: {
        key: string; // setlistId (UUID)
        value: Setlist;
-       indexes: { 'by-date': string };
+       indexes: { "by-date": string };
      };
      // 2. 덱(곡) 상세 데이터 저장소 (슬라이드 및 스타일 포함)
      decks: {
        key: string; // deckId (UUID)
        value: Deck;
-       indexes: { 'by-setlist': string };
+       indexes: { "by-setlist": string };
      };
      // 3. 배경 미디어 메타데이터 저장소
      backgrounds: {
@@ -835,25 +954,27 @@ Chrome 공식 **Window Management API**를 활용한 다중 디스플레이 투�
        key: string; // setlistId
        value: {
          setlistId: string;
-         isReady: boolean;           // 모든 영상 및 덱 캐시 완료 여부
-         cachedVideos: string[];     // 캐시된 R2 CDN URL 목록
-         cachedAt: number;           // 캐시 시각 타임스탬프
-         storagePersisted: boolean;  // navigator.storage.persist() 성공 여부
+         isReady: boolean; // 모든 영상 및 덱 캐시 완료 여부
+         cachedVideos: string[]; // 캐시된 R2 CDN URL 목록
+         cachedAt: number; // 캐시 시각 타임스탬프
+         storagePersisted: boolean; // navigator.storage.persist() 성공 여부
        };
      };
    }
 
    export async function getOfflineDB() {
-     return openDB<WorshipOfflineDB>('worship-offline-db', 1, {
+     return openDB<WorshipOfflineDB>("worship-offline-db", 1, {
        upgrade(db) {
-         const setlistStore = db.createObjectStore('setlists', { keyPath: 'id' });
-         setlistStore.createIndex('by-date', 'serviceDate');
+         const setlistStore = db.createObjectStore("setlists", {
+           keyPath: "id",
+         });
+         setlistStore.createIndex("by-date", "serviceDate");
 
-         const deckStore = db.createObjectStore('decks', { keyPath: 'id' });
-         deckStore.createIndex('by-setlist', 'setlistId');
+         const deckStore = db.createObjectStore("decks", { keyPath: "id" });
+         deckStore.createIndex("by-setlist", "setlistId");
 
-         db.createObjectStore('backgrounds', { keyPath: 'id' });
-         db.createObjectStore('sync_meta', { keyPath: 'setlistId' });
+         db.createObjectStore("backgrounds", { keyPath: "id" });
+         db.createObjectStore("sync_meta", { keyPath: "setlistId" });
        },
      });
    }
@@ -901,6 +1022,7 @@ sequenceDiagram
 ### 6.2 프롬프트 엔지니어링 및 환각 검증 알고리즘
 
 #### Workers AI 호출 규격:
+
 - **모델**: `@cf/qwen/qwen3.8-27b`
 - **파라미터**: `temperature: 0`, `max_tokens: 2048`
 - **시스템 프롬프트**:
@@ -914,14 +1036,18 @@ sequenceDiagram
   ```
 
 #### 결정론적 검증(Deterministic Verification) 알고리즘:
+
 ```typescript
-export function verifyNormalization(canonical: string, inputVersions: string[]): boolean {
-  const normalizeLine = (l: string) => l.replace(/\s+/g, '').trim();
-  
+export function verifyNormalization(
+  canonical: string,
+  inputVersions: string[],
+): boolean {
+  const normalizeLine = (l: string) => l.replace(/\s+/g, "").trim();
+
   // 1. 모든 입력 버전의 유효 라인 집합(Set) 생성
   const validLinesPool = new Set<string>();
   for (const version of inputVersions) {
-    for (const line of version.split('\n')) {
+    for (const line of version.split("\n")) {
       const cleaned = normalizeLine(line);
       if (cleaned.length > 0) {
         validLinesPool.add(cleaned);
@@ -930,7 +1056,7 @@ export function verifyNormalization(canonical: string, inputVersions: string[]):
   }
 
   // 2. 생성된 정규화 가사의 모든 라인이 풀에 존재하는지 전수 검사
-  const canonicalLines = canonical.split('\n');
+  const canonicalLines = canonical.split("\n");
   for (const line of canonicalLines) {
     const cleaned = normalizeLine(line);
     if (cleaned.length === 0) continue; // 빈 줄은 허용
@@ -952,44 +1078,44 @@ export function verifyNormalization(canonical: string, inputVersions: string[]):
 
 ### 7.1 엔드포인트 요약표
 
-| 메서드 | 경로 | 설명 | 인증 필요 |
-|---|---|---|---|
-| `GET` | `/api/auth/*` | Better Auth 핸들러 (카카오/네이버) | No |
-| `GET` | `/api/decks` | 내 개인 라이브러리 덱 목록 조회 | Yes |
-| `POST` | `/api/decks` | 새 덱 생성 (세트 추가 시 Clone 포함) | Yes |
-| `GET` | `/api/decks/:id` | 덱 상세 조회 (소유자 또는 공개 덱) | Conditional |
-| `PUT` | `/api/decks/:id` | 덱 정보/슬라이드/스타일 수정 | Yes (소유자) |
-| `DELETE`| `/api/decks/:id` | 덱 삭제 | Yes (소유자) |
-| `POST` | `/api/decks/:id/fork`| 공개 덱 내 라이브러리로 복제 (Fork) | Yes |
-| `GET` | `/api/setlists` | 내 콘티(예배 세트) 목록 조회 | Yes |
-| `POST` | `/api/setlists` | 새 콘티 생성 | Yes |
-| `GET` | `/api/setlists/:id` | 콘티 상세 및 포함된 덱 전체 Hydration | Yes (소유자) |
-| `PUT` | `/api/setlists/:id` | 콘티 정보 및 곡 순서(`order`) 수정 | Yes (소유자) |
-| `DELETE`| `/api/setlists/:id` | 콘티 삭제 | Yes (소유자) |
-| `GET` | `/api/catalog/search` | 통합 검색 (공개 덱 및 가사 라이브러리) | No |
-| `GET` | `/api/backgrounds` | 서비스 기본 모션 배경 목록 조회 | No |
-| `POST` | `/api/reports` | 가사 오류 및 부적절 덱 신고 접수 | Yes |
+| 메서드   | 경로                  | 설명                                   | 인증 필요    |
+| -------- | --------------------- | -------------------------------------- | ------------ |
+| `GET`    | `/api/auth/*`         | Better Auth 핸들러 (카카오/네이버)     | No           |
+| `GET`    | `/api/decks`          | 내 개인 라이브러리 덱 목록 조회        | Yes          |
+| `POST`   | `/api/decks`          | 새 덱 생성 (세트 추가 시 Clone 포함)   | Yes          |
+| `GET`    | `/api/decks/:id`      | 덱 상세 조회 (소유자 또는 공개 덱)     | Conditional  |
+| `PUT`    | `/api/decks/:id`      | 덱 정보/슬라이드/스타일 수정           | Yes (소유자) |
+| `DELETE` | `/api/decks/:id`      | 덱 삭제                                | Yes (소유자) |
+| `POST`   | `/api/decks/:id/fork` | 공개 덱 내 라이브러리로 복제 (Fork)    | Yes          |
+| `GET`    | `/api/setlists`       | 내 콘티(예배 세트) 목록 조회           | Yes          |
+| `POST`   | `/api/setlists`       | 새 콘티 생성                           | Yes          |
+| `GET`    | `/api/setlists/:id`   | 콘티 상세 및 포함된 덱 전체 Hydration  | Yes (소유자) |
+| `PUT`    | `/api/setlists/:id`   | 콘티 정보 및 곡 순서(`order`) 수정     | Yes (소유자) |
+| `DELETE` | `/api/setlists/:id`   | 콘티 삭제                              | Yes (소유자) |
+| `GET`    | `/api/catalog/search` | 통합 검색 (공개 덱 및 가사 라이브러리) | No           |
+| `GET`    | `/api/backgrounds`    | 서비스 기본 모션 배경 목록 조회        | No           |
+| `POST`   | `/api/reports`        | 가사 오류 및 부적절 덱 신고 접수       | Yes          |
 
 ### 7.2 주요 API 요청/응답 페이로드 스키마 (`packages/shared/src/schemas/api.ts`)
 
 ```typescript
-import { z } from 'zod';
-import { DeckSchema, DeckStyleSchema } from './deck';
-import { SlideSchema } from './slide';
-import { SetlistSchema } from './setlist';
+import { z } from "zod";
+import { DeckSchema, DeckStyleSchema } from "./deck";
+import { SlideSchema } from "./slide";
+import { SetlistSchema } from "./setlist";
 
 // 1. 덱 생성 요청
 export const CreateDeckRequestSchema = z.object({
   title: z.string().min(1).max(100),
-  artist: z.string().max(100).default(''),
+  artist: z.string().max(100).default(""),
   lyricsRaw: z.string().min(1),
   slides: z.array(SlideSchema),
   backgroundId: z.string().uuid().nullable().optional(),
   style: DeckStyleSchema,
-  visibility: z.enum(['private', 'public']).default('private'),
+  visibility: z.enum(["private", "public"]).default("private"),
   catalogId: z.string().uuid().nullable().optional(),
   contributeToCatalog: z.boolean().default(true), // 가사 라이브러리 기여 여부
-  forkedFrom: z.string().uuid().optional(),        // Clone 시 원본 덱 ID
+  forkedFrom: z.string().uuid().optional(), // Clone 시 원본 덱 ID
 });
 export type CreateDeckRequest = z.infer<typeof CreateDeckRequestSchema>;
 
@@ -1006,12 +1132,16 @@ export type CreateSetlistRequest = z.infer<typeof CreateSetlistRequestSchema>;
 
 // 4. 세트 항목 순서 및 곡 변경 요청
 export const UpdateSetlistItemsRequestSchema = z.object({
-  items: z.array(z.object({
-    deckId: z.string().uuid(),
-    order: z.number().int().nonnegative(),
-  })),
+  items: z.array(
+    z.object({
+      deckId: z.string().uuid(),
+      order: z.number().int().nonnegative(),
+    }),
+  ),
 });
-export type UpdateSetlistItemsRequest = z.infer<typeof UpdateSetlistItemsRequestSchema>;
+export type UpdateSetlistItemsRequest = z.infer<
+  typeof UpdateSetlistItemsRequestSchema
+>;
 
 // 5. 통합 검색 쿼리 및 응답
 export const SearchCatalogQuerySchema = z.object({
@@ -1021,23 +1151,27 @@ export const SearchCatalogQuerySchema = z.object({
 export type SearchCatalogQuery = z.infer<typeof SearchCatalogQuerySchema>;
 
 export const SearchCatalogResponseSchema = z.object({
-  decks: z.array(z.object({
-    id: z.string().uuid(),
-    title: z.string(),
-    artist: z.string(),
-    forkCount: z.number(),
-    backgroundId: z.string().uuid().nullable(),
-    posterUrl: z.string().nullable(),
-    firstSlidePreview: z.array(z.string()), // 첫 슬라이드만 공개 (저작권 보호)
-  })),
-  catalogLyrics: z.array(z.object({
-    id: z.string().uuid(),
-    title: z.string(),
-    artist: z.string(),
-    versionCount: z.number(),
-    status: z.enum(['single', 'normalized', 'locked']),
-    twoLinesPreview: z.array(z.string()), // 첫 2줄만 공개
-  })),
+  decks: z.array(
+    z.object({
+      id: z.string().uuid(),
+      title: z.string(),
+      artist: z.string(),
+      forkCount: z.number(),
+      backgroundId: z.string().uuid().nullable(),
+      posterUrl: z.string().nullable(),
+      firstSlidePreview: z.array(z.string()), // 첫 슬라이드만 공개 (저작권 보호)
+    }),
+  ),
+  catalogLyrics: z.array(
+    z.object({
+      id: z.string().uuid(),
+      title: z.string(),
+      artist: z.string(),
+      versionCount: z.number(),
+      status: z.enum(["single", "normalized", "locked"]),
+      twoLinesPreview: z.array(z.string()), // 첫 2줄만 공개
+    }),
+  ),
 });
 export type SearchCatalogResponse = z.infer<typeof SearchCatalogResponseSchema>;
 ```
@@ -1047,10 +1181,12 @@ export type SearchCatalogResponse = z.infer<typeof SearchCatalogResponseSchema>;
 ## 8. 보안, 저작권 및 운영 고려사항 (Security & Operations)
 
 ### 8.1 비영리 저작권 보호 및 공개 범위 제한
+
 - **가사 전문 노출 차단**: 검색 결과 및 미인증 공유 카드에는 **첫 슬라이드 또는 첫 2줄만 노출**하고, 전문은 사용자가 로그인 후 본인 보관함으로 '가져오기(Fork)'한 경우에만 렌더링한다.
 - **게시 중단(Takedown) 절차**: 저작권자 요청 접수 시 `reports` 테이블을 통해 관리자가 즉각 해당 `decks.visibility = 'private'` 격리 및 카탈로그 삭제를 수행하는 운영 쿼리를 구비한다.
 
 ### 8.2 Better Auth 및 D1 세션 보안
+
 - Session Token은 `HttpOnly`, `SameSite=Lax`, `Secure` 쿠키로만 취급한다.
 - Hono 인증 미들웨어는 모든 보호된 엔드포인트에서 세션을 검증하고, 요청 Context에 `userId`를 주입하여 쿼리 헬퍼 외의 임의 데이터 접근을 차단한다.
 

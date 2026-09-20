@@ -26,6 +26,7 @@ docs/tasks/
 ```
 
 ### 1.1 네이밍 및 관리 규칙
+
 1. **마일스톤 디렉토리**: 소문자 `m`과 마일스톤 번호로 구성한다 (`m0`, `m1`, `m2`, ..., `m7`).
 2. **태스크 파일**: `tasks_<번호>.md` 형식을 사용하며, 마일스톤 디렉토리 내부에서 1부터 순차적으로 증가한다 (`tasks_1.md`, `tasks_2.md`, ...).
 3. **중앙 인덱스 미사용 (No Central Index)**: 별도의 중앙 인덱스 파일(`README.md`, `tasks.md` 등)은 관리하지 않는다. 인간 관리자(Operator)가 에이전트에게 특정 마일스톤과 `tasks_n.md`를 직접 지정하여 작업을 배정한다.
@@ -58,11 +59,14 @@ docs/tasks/
 AI 코딩 에이전트가 단독으로 실행할 수 있도록 태스크를 설계할 때 아래 4대 규칙을 반드시 지켜야 한다:
 
 ### 규칙 1: 1파일 또는 1개 밀접 모듈 단위 초미세 분할 (Granularity)
+
 - 1개의 태스크(`Task X.Y`)는 오직 **1개의 대상 파일**(또는 밀접한 구현체+단위 테스트 1쌍)만을 다룬다.
 - 거대한 기능을 한 번에 작성하도록 지시하지 않고, 스키마 $\rightarrow$ 단위 테스트 $\rightarrow$ 구현체 $\rightarrow$ UI 결합 단계로 잘게 쪼갠다.
 
 ### 규칙 2: 엄격한 선행 의존성 순서 (Strict Dependency Order)
+
 반드시 다음 순서에 따라 태스크를 배치한다:
+
 1. `패키지 환경/설정` (package.json, tsconfig)
 2. `타입 및 Zod 스키마 정의` (`packages/shared/src/schemas/*`)
 3. `TDD 실패 테스트(Red) 작성` (`*.test.ts`)
@@ -74,12 +78,14 @@ AI 코딩 에이전트가 단독으로 실행할 수 있도록 태스크를 설�
 9. `라우트 결합 및 E2E 무결점 검증`
 
 ### 규칙 3: 1줄 통과 기준 (1-Line Definition of Done)
+
 - 각 태스크마다 통과 기준(DoD)을 명확한 검증 명령어 또는 조건으로 **정확히 1줄**로 명시한다.
-- *예시*:
+- _예시_:
   - `DoD (통과 기준)`: `pnpm --filter @repo/shared vitest run src/utils/lyrics.test.ts`가 100% 통과(Green)한다.
   - `DoD (통과 기준)`: `pnpm --filter web exec tsc --noEmit`이 에러 없이 통과한다.
 
 ### 규칙 4: 마크다운 체크박스 포맷 (`- [ ]`)
+
 - 모든 개별 태스크 항목은 `- [ ] **Task X.Y: ...**` 형태의 체크박스로 선언한다.
 - 에이전트가 작업을 완료하고 DoD를 통과하면 `- [x]`로 즉시 갱신한다.
 
@@ -89,7 +95,7 @@ AI 코딩 에이전트가 단독으로 실행할 수 있도록 태스크를 설�
 
 신규 `tasks_n.md` 문서를 작성할 때는 아래 구조 템플릿을 그대로 복제하여 사용한다:
 
-```markdown
+````markdown
 # Goal: [M<마일스톤>-<번호>] <단계 타이틀> (<모듈/패키지명>)
 
 > **마일스톤**: M<번호> (<마일스톤 명칭>)  
@@ -126,7 +132,9 @@ AI 코딩 에이전트가 단독으로 실행할 수 있도록 태스크를 설�
 # 이 태스크 파일의 전체 검증 명령어
 <pnpm test 또는 typecheck 명령어>
 ```
-```
+````
+
+````
 
 ---
 
@@ -153,9 +161,10 @@ flowchart TD
   MoreTasks -->|Yes| PickTask
   MoreTasks -->|No| RunSuite["tasks_n.md 최종 검증 명령어 실행"]
   RunSuite --> End["작업 완료 보고 후 사용자 지시 대기"]
-```
+````
 
 ### 5.1 단일 파일 체크박스 업데이트 규칙
+
 - **로컬 마킹 원칙**: 중앙 인덱스 파일은 존재하지 않으므로, 에이전트는 **오직 현재 배정받아 실행 중인 `tasks_n.md` 내부의 체크박스(`- [ ]` $\rightarrow$ `- [x]`)만 업데이트**한다.
 - **DoD 검증 후 즉시 마킹**: 에이전트는 코드 작성을 마친 직후 반드시 해당 태스크의 `DoD` 명령어를 셸에서 실행해야 한다.
 - 명령어 실행 결과가 100% 성공(Exit code 0, Green)일 때만 파일 수정 도구(`replace_file_content`)를 사용해 `- [ ]`를 `- [x]`로 변경한다.
@@ -163,6 +172,7 @@ flowchart TD
 - 해당 `tasks_n.md` 파일의 모든 태스크가 완료되면, 임의로 다음 마일스톤이나 다른 파일을 열지 않고 인간 관리자에게 결과를 보고하고 다음 태스크 지시를 기다린다.
 
 ### 5.2 작업 분할 시 주의사항
+
 - 한 번에 여러 태스크의 코드를 동시에 작성하지 않는다. 반드시 1개 태스크씩 순차적으로 구현하고 검증한다.
 - 작업 도중 새로운 서브 모듈이나 예외 처리가 필요해지면, 현재 `tasks_n.md` 문서에 신규 하위 태스크를 번호 매겨 추가한 뒤 순서대로 진행한다.
 
@@ -172,12 +182,12 @@ flowchart TD
 
 에이전트가 태스크를 작성하거나 실행할 때 위반 시 즉각 롤백해야 하는 핵심 금지 사항:
 
-| 영역 | 위반 금지 규칙 | 올바른 처리 방법 |
-|---|---|---|
-| **의존성 경계** | `apps/web/src`에서 `packages/db`를 직접 import하는 행위 | 프론트엔드는 반드시 Hono RPC Client (`hc<AppType>`)를 통해서만 서버와 통신 |
-| **타입 정의** | TypeScript `interface`를 프론트/백엔드에 수동 중복 선언하는 행위 | `packages/shared/src/schemas/`의 Zod 스키마에서 `z.infer`로만 타입 유도 |
-| **D1 데이터베이스** | API 핸들러에서 raw `db.select().from(decks)`를 직접 호출하는 행위 | 반드시 `packages/db/src/queries/`의 스코프 헬퍼를 경유하여 `userId` 강제 |
-| **공개 덱 보안** | 공개 라이브러리 조회 시 비공개 덱이 유출되는 쿼리 | `where(eq(decks.visibility, 'public'))`를 쿼리 헬퍼 레벨에서 무조건 강제 |
-| **렌더링 엔진** | SlideStage를 Reveal.js나 HTML5 Canvas로 교체하는 행위 | 16:9 DOM 3-Layer (Video A/B, Black Overlay, Typography) 아키텍처 엄수 |
-| **오프라인 송출** | 송출 화면(`/present/*`) 실행 중에 외부 네트워크 fetch를 호출하는 행위 | Cache Storage 및 IndexedDB(`worship-offline-db`)에서만 데이터를 로컬 로드 |
-| **가사 정규화** | Workers AI 정규화 결과에 입력 버전에 없던 가사가 1줄이라도 포함되는 행위 | 환각 검증 알고리즘 실패 시 즉시 LLM 출력을 버리고 최다 득표 루트 버전으로 폴백 |
+| 영역                | 위반 금지 규칙                                                           | 올바른 처리 방법                                                               |
+| ------------------- | ------------------------------------------------------------------------ | ------------------------------------------------------------------------------ |
+| **의존성 경계**     | `apps/web/src`에서 `packages/db`를 직접 import하는 행위                  | 프론트엔드는 반드시 Hono RPC Client (`hc<AppType>`)를 통해서만 서버와 통신     |
+| **타입 정의**       | TypeScript `interface`를 프론트/백엔드에 수동 중복 선언하는 행위         | `packages/shared/src/schemas/`의 Zod 스키마에서 `z.infer`로만 타입 유도        |
+| **D1 데이터베이스** | API 핸들러에서 raw `db.select().from(decks)`를 직접 호출하는 행위        | 반드시 `packages/db/src/queries/`의 스코프 헬퍼를 경유하여 `userId` 강제       |
+| **공개 덱 보안**    | 공개 라이브러리 조회 시 비공개 덱이 유출되는 쿼리                        | `where(eq(decks.visibility, 'public'))`를 쿼리 헬퍼 레벨에서 무조건 강제       |
+| **렌더링 엔진**     | SlideStage를 Reveal.js나 HTML5 Canvas로 교체하는 행위                    | 16:9 DOM 3-Layer (Video A/B, Black Overlay, Typography) 아키텍처 엄수          |
+| **오프라인 송출**   | 송출 화면(`/present/*`) 실행 중에 외부 네트워크 fetch를 호출하는 행위    | Cache Storage 및 IndexedDB(`worship-offline-db`)에서만 데이터를 로컬 로드      |
+| **가사 정규화**     | Workers AI 정규화 결과에 입력 버전에 없던 가사가 1줄이라도 포함되는 행위 | 환각 검증 알고리즘 실패 시 즉시 LLM 출력을 버리고 최다 득표 루트 버전으로 폴백 |
