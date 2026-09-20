@@ -270,6 +270,7 @@ Refer to `prd.md` Section 8 for complete criteria. When implementing features, a
 
 ## 9. Pull Request & Verification Checklist
 
+After all code changes, agent must commit and push to github.
 Before committing or submitting changes, ensure:
 1. `pnpm typecheck` passes with zero errors across all workspaces.
 2. `pnpm lint` passes with no ESLint violations.
