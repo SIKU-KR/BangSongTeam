@@ -3,5 +3,9 @@ packages:
   - "packages/*"
   - "packages/config/*"
 
-onlyBuiltDependencies:
-  - esbuild
+minimumReleaseAgeExclude:
+  - "@cloudflare/workers-types@5.20260920.1"
+
+allowBuilds:
+  better-sqlite3: true
+  esbuild: true
