@@ -1,9 +1,28 @@
 import React from "react";
 import { render, screen, fireEvent, act } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, Routes, Route } from "react-router-dom";
 import { EditorRoute } from "./EditorRoute";
-import { resetPresentationStore } from "../features/presentation";
+import {
+  resetPresentationStore,
+  SEED_PRESENTATION_IDS,
+} from "../features/presentation";
+
+const DOC_ID = SEED_PRESENTATION_IDS[0];
+
+function renderEditor(path = `/editor/${DOC_ID}`) {
+  return render(
+    <MemoryRouter initialEntries={[path]}>
+      <Routes>
+        <Route path="/editor/:presentationId" element={<EditorRoute />} />
+        <Route
+          path="/presentations"
+          element={<div data-testid="presentations-stub" />}
+        />
+      </Routes>
+    </MemoryRouter>,
+  );
+}
 
 const mockNavigate = vi.fn();
 vi.mock("react-router-dom", async () => {
@@ -22,11 +41,7 @@ describe("EditorRoute (Canva / MiriCanvas Presentation Editor)", () => {
   });
 
   it("should render editor header, stage canvas, property panel, sidebar, and filmstrip", () => {
-    render(
-      <MemoryRouter>
-        <EditorRoute />
-      </MemoryRouter>,
-    );
+    renderEditor();
 
     // Header & Title
     expect(screen.getByTestId("editor-header")).toBeInTheDocument();
@@ -50,25 +65,17 @@ describe("EditorRoute (Canva / MiriCanvas Presentation Editor)", () => {
     expect(screen.getByTestId("slide-filmstrip")).toBeInTheDocument();
   });
 
-  it("should navigate to /present/fullscreen when present button is clicked", () => {
-    render(
-      <MemoryRouter>
-        <EditorRoute />
-      </MemoryRouter>,
-    );
+  it("should navigate to the presentation's fullscreen route when present button is clicked", () => {
+    renderEditor();
 
     const presentBtn = screen.getByTestId("header-present-btn");
     fireEvent.click(presentBtn);
 
-    expect(mockNavigate).toHaveBeenCalledWith("/present/fullscreen");
+    expect(mockNavigate).toHaveBeenCalledWith(`/present/${DOC_ID}/fullscreen`);
   });
 
   it("should switch active slide when clicking slide in filmstrip", () => {
-    render(
-      <MemoryRouter>
-        <EditorRoute />
-      </MemoryRouter>,
-    );
+    renderEditor();
 
     const secondSlideStrip = screen.getByTestId("slide-strip-item-1");
     fireEvent.click(secondSlideStrip);
@@ -80,11 +87,7 @@ describe("EditorRoute (Canva / MiriCanvas Presentation Editor)", () => {
   });
 
   it("should update slide lines when edited in property panel", () => {
-    render(
-      <MemoryRouter>
-        <EditorRoute />
-      </MemoryRouter>,
-    );
+    renderEditor();
 
     const textarea = screen.getByPlaceholderText(/슬라이드 가사를 입력하세요/);
     act(() => {
@@ -98,11 +101,7 @@ describe("EditorRoute (Canva / MiriCanvas Presentation Editor)", () => {
   });
 
   it("should toggle blackout test and lyrics hidden test", () => {
-    render(
-      <MemoryRouter>
-        <EditorRoute />
-      </MemoryRouter>,
-    );
+    renderEditor();
 
     const blackoutBtn = screen.getByTestId("test-blackout-btn");
     fireEvent.click(blackoutBtn);
@@ -114,11 +113,7 @@ describe("EditorRoute (Canva / MiriCanvas Presentation Editor)", () => {
   });
 
   it("should update typography and 3x3 position when controls are changed", () => {
-    render(
-      <MemoryRouter>
-        <EditorRoute />
-      </MemoryRouter>,
-    );
+    renderEditor();
 
     // Click 3x3 anchor bottom-center
     const bottomCenterAnchor = screen.getByTestId("grid-anchor-bottom-center");
@@ -133,11 +128,7 @@ describe("EditorRoute (Canva / MiriCanvas Presentation Editor)", () => {
   });
 
   it("should add a new slide when clicking add slide in filmstrip", () => {
-    render(
-      <MemoryRouter>
-        <EditorRoute />
-      </MemoryRouter>,
-    );
+    renderEditor();
 
     const addSlideBtn = screen.getByTestId("add-slide-filmstrip-btn");
     fireEvent.click(addSlideBtn);
@@ -147,11 +138,7 @@ describe("EditorRoute (Canva / MiriCanvas Presentation Editor)", () => {
   });
 
   it("should trigger undo and redo in header", () => {
-    render(
-      <MemoryRouter>
-        <EditorRoute />
-      </MemoryRouter>,
-    );
+    renderEditor();
 
     const undoBtn = screen.getByTestId("header-undo-btn");
     const redoBtn = screen.getByTestId("header-redo-btn");
@@ -182,11 +169,7 @@ describe("EditorRoute (Canva / MiriCanvas Presentation Editor)", () => {
   });
 
   it("should collapse and expand filmstrip", () => {
-    render(
-      <MemoryRouter>
-        <EditorRoute />
-      </MemoryRouter>,
-    );
+    renderEditor();
 
     const collapseBtn = screen.getByTestId("collapse-filmstrip-btn");
     fireEvent.click(collapseBtn);
@@ -200,11 +183,7 @@ describe("EditorRoute (Canva / MiriCanvas Presentation Editor)", () => {
   });
 
   it("should support canvas zoom controls", () => {
-    render(
-      <MemoryRouter>
-        <EditorRoute />
-      </MemoryRouter>,
-    );
+    renderEditor();
 
     expect(screen.getByText("100%")).toBeInTheDocument();
 
@@ -218,11 +197,7 @@ describe("EditorRoute (Canva / MiriCanvas Presentation Editor)", () => {
   });
 
   it("should support keyboard navigation shortcuts (Space, ArrowRight, ArrowLeft)", () => {
-    render(
-      <MemoryRouter>
-        <EditorRoute />
-      </MemoryRouter>,
-    );
+    renderEditor();
 
     // Initial slide: 은혜로다 slide 1
     expect(screen.getAllByText(/1 \/ 5/)[0]).toBeInTheDocument();
@@ -241,11 +216,7 @@ describe("EditorRoute (Canva / MiriCanvas Presentation Editor)", () => {
   });
 
   it("should collapse and expand song property panel", () => {
-    render(
-      <MemoryRouter>
-        <EditorRoute />
-      </MemoryRouter>,
-    );
+    renderEditor();
 
     const collapseBtn = screen.getByTestId("collapse-property-panel-btn");
     fireEvent.click(collapseBtn);
@@ -261,11 +232,7 @@ describe("EditorRoute (Canva / MiriCanvas Presentation Editor)", () => {
   });
 
   it("should open file menu and handle actions in EditorHeader", () => {
-    render(
-      <MemoryRouter>
-        <EditorRoute />
-      </MemoryRouter>,
-    );
+    renderEditor();
 
     const fileMenuBtn = screen.getByTestId("header-file-menu-btn");
     fireEvent.click(fileMenuBtn);
@@ -275,11 +242,7 @@ describe("EditorRoute (Canva / MiriCanvas Presentation Editor)", () => {
   });
 
   it("should maintain correct active slide index when deleting an earlier slide", () => {
-    render(
-      <MemoryRouter>
-        <EditorRoute />
-      </MemoryRouter>,
-    );
+    renderEditor();
 
     // Select slide 3 (index 2)
     const slide3 = screen.getByTestId("slide-strip-item-2");
@@ -292,5 +255,50 @@ describe("EditorRoute (Canva / MiriCanvas Presentation Editor)", () => {
 
     // Previously slide index was 2, after deleting index 0 it should now be index 1 (slide 2 of 4)
     expect(screen.getAllByText(/2 \/ 4/)[0]).toBeInTheDocument();
+  });
+
+  it("존재하지 않는 presentationId 는 /presentations 로 리다이렉트된다", () => {
+    renderEditor("/editor/99999999-9999-4999-8999-999999999999");
+
+    expect(screen.getByTestId("presentations-stub")).toBeInTheDocument();
+    expect(screen.queryByTestId("editor-route")).not.toBeInTheDocument();
+  });
+
+  it("다른 시드 문서를 id로 직접 열 수 있다", () => {
+    renderEditor(`/editor/${SEED_PRESENTATION_IDS[3]}`);
+
+    expect(screen.getByTestId("editor-route")).toBeInTheDocument();
+    expect(screen.getByText("수요 성령기도회")).toBeInTheDocument();
+  });
+
+  it("?song= 파라미터로 진입하면 해당 곡이 선택된다", () => {
+    renderEditor(`/editor/${DOC_ID}?song=2`);
+
+    // 3번째 곡 '시선'
+    expect(screen.getByTestId("editor-header")).toHaveTextContent("곡 3/5");
+    expect(screen.getAllByText("시선").length).toBeGreaterThan(0);
+  });
+
+  it("뒤로가기 버튼은 /presentations 로 이동한다", () => {
+    renderEditor();
+
+    fireEvent.click(screen.getByTestId("header-back-btn"));
+
+    expect(mockNavigate).toHaveBeenCalledWith("/presentations");
+  });
+
+  it("파일 메뉴의 새 프레젠테이션은 새 문서 URL로 이동한다", () => {
+    renderEditor();
+
+    act(() => {
+      fireEvent.click(screen.getByTestId("header-file-menu-btn"));
+    });
+    act(() => {
+      fireEvent.click(screen.getByText("새 프레젠테이션"));
+    });
+
+    expect(mockNavigate).toHaveBeenCalledWith(
+      expect.stringMatching(/^\/editor\/[0-9a-f-]{36}$/),
+    );
   });
 });

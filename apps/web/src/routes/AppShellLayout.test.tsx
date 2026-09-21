@@ -1,33 +1,52 @@
 import React from "react";
 import { render, screen, fireEvent, act } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { MemoryRouter } from "react-router-dom";
-import { HomeRoute } from "./index";
-import { resetPresentationStore } from "../features/presentation";
+import { MemoryRouter, Routes, Route } from "react-router-dom";
+import { AppShellLayout } from "./AppShellLayout";
+import { PresentationsRoute } from "./PresentationsRoute";
+import { LyricsRoute } from "./LyricsRoute";
+import { BackgroundsRoute } from "./BackgroundsRoute";
+import {
+  resetPresentationStore,
+  listPresentations,
+} from "../features/presentation";
 import * as chromeChecker from "../components/common/ChromeAlertBanner";
 
-const mockNavigate = vi.fn();
-vi.mock("react-router-dom", async () => {
-  const actual = await vi.importActual("react-router-dom");
-  return {
-    ...actual,
-    useNavigate: () => mockNavigate,
-  };
-});
+/**
+ * 전역 `vi.mock("react-router-dom", ... useNavigate)` 는 쓰지 않는다.
+ * 사이드바가 실제 navigate(path)로 <Outlet/>을 전환하므로 목이 있으면
+ * 탭 전환 자체가 일어나지 않는다. 대신 스텁 라우트로 이동을 관측한다.
+ */
+function renderShell(initialPath = "/presentations") {
+  return render(
+    <MemoryRouter initialEntries={[initialPath]}>
+      <Routes>
+        <Route element={<AppShellLayout />}>
+          <Route path="/presentations" element={<PresentationsRoute />} />
+          <Route path="/lyrics" element={<LyricsRoute />} />
+          <Route path="/backgrounds" element={<BackgroundsRoute />} />
+        </Route>
+        <Route
+          path="/present/:presentationId/fullscreen"
+          element={<div data-testid="fullscreen-stub" />}
+        />
+        <Route
+          path="/editor/:presentationId"
+          element={<div data-testid="editor-stub" />}
+        />
+      </Routes>
+    </MemoryRouter>,
+  );
+}
 
-describe("HomeRoute (Main Home Entry Screen)", () => {
+describe("AppShellLayout (공유 셸 + 중첩 라우트)", () => {
   beforeEach(() => {
     resetPresentationStore();
-    mockNavigate.mockClear();
     vi.restoreAllMocks();
   });
 
   it("should render ChromeAlertBanner, sidebar, and presentation card without global header", () => {
-    render(
-      <MemoryRouter>
-        <HomeRoute />
-      </MemoryRouter>,
-    );
+    renderShell();
 
     // Sidebar Title & Brand
     expect(screen.getByText("Worship Studio")).toBeInTheDocument();
@@ -44,7 +63,7 @@ describe("HomeRoute (Main Home Entry Screen)", () => {
       screen.queryByTestId("create-presentation-btn"),
     ).not.toBeInTheDocument();
 
-    // Home should show single unit presentation card and create card
+    // Home should show the presentation card and the create card
     expect(screen.getByTestId("presentation-card")).toBeInTheDocument();
     expect(screen.getByText("2026 주일 3부 예배")).toBeInTheDocument();
     expect(screen.getByText("5곡 세트")).toBeInTheDocument();
@@ -52,61 +71,46 @@ describe("HomeRoute (Main Home Entry Screen)", () => {
     expect(screen.getByText("새 프레젠테이션 생성")).toBeInTheDocument();
   });
 
-  it("should navigate to /present/fullscreen when card present button is clicked in Chrome", () => {
+  it("should navigate to the presentation's fullscreen route when card present button is clicked in Chrome", () => {
     vi.spyOn(chromeChecker, "isGoogleChromeBrowser").mockReturnValue(true);
 
-    render(
-      <MemoryRouter>
-        <HomeRoute />
-      </MemoryRouter>,
-    );
+    renderShell();
 
-    const startBtn = screen.getByTestId("card-present-btn");
-    fireEvent.click(startBtn);
+    fireEvent.click(screen.getByTestId("card-present-btn"));
 
-    expect(mockNavigate).toHaveBeenCalledWith("/present/fullscreen");
+    expect(screen.getByTestId("fullscreen-stub")).toBeInTheDocument();
   });
 
   it("should prompt confirm dialog when card present button is clicked in non-Chrome browser", () => {
     vi.spyOn(chromeChecker, "isGoogleChromeBrowser").mockReturnValue(false);
     const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(false);
 
-    render(
-      <MemoryRouter>
-        <HomeRoute />
-      </MemoryRouter>,
-    );
+    renderShell();
 
     const startBtn = screen.getByTestId("card-present-btn");
     fireEvent.click(startBtn);
 
     // Should prompt confirm and NOT navigate if cancelled
     expect(confirmSpy).toHaveBeenCalledTimes(1);
-    expect(mockNavigate).not.toHaveBeenCalled();
+    expect(screen.queryByTestId("fullscreen-stub")).not.toBeInTheDocument();
 
     // If confirmed:
     confirmSpy.mockReturnValue(true);
     fireEvent.click(startBtn);
-    expect(mockNavigate).toHaveBeenCalledWith("/present/fullscreen");
+    expect(screen.getByTestId("fullscreen-stub")).toBeInTheDocument();
   });
 
   it("should open QuickLyricPasteModal from song library and add new song into active presentation upon submission", () => {
-    render(
-      <MemoryRouter>
-        <HomeRoute />
-      </MemoryRouter>,
-    );
+    renderShell();
 
     // Initially 5 songs in presentation
     expect(screen.getByText("5곡 세트")).toBeInTheDocument();
 
     // Navigate to Song Library via sidebar
-    const songsNavBtn = screen.getByTestId("sidebar-nav-songs");
-    fireEvent.click(songsNavBtn);
+    fireEvent.click(screen.getByTestId("sidebar-nav-songs"));
 
     // Open modal from Song Library
-    const openBtn = screen.getByTestId("my-songs-quick-paste-btn");
-    fireEvent.click(openBtn);
+    fireEvent.click(screen.getByTestId("my-songs-quick-paste-btn"));
     expect(screen.getByText("빠른 가사 붙여넣기")).toBeInTheDocument();
 
     // Fill form
@@ -134,27 +138,20 @@ describe("HomeRoute (Main Home Entry Screen)", () => {
     // Modal closed
     expect(screen.queryByText("빠른 가사 붙여넣기")).not.toBeInTheDocument();
 
-    // Return to Home tab to see updated presentation
-    const homeNavBtn = screen.getByTestId("sidebar-nav-home");
-    fireEvent.click(homeNavBtn);
+    // Return to the dashboard to see the updated presentation
+    fireEvent.click(screen.getByTestId("sidebar-nav-home"));
 
-    // Presentation updated to 6 songs and new slide count displayed
+    // Presentation updated to 6 songs
     expect(screen.getByText("6곡 세트")).toBeInTheDocument();
   });
 
   it("should render updated sidebar navigation items without '내 프레젠테이션 보관함'", () => {
-    render(
-      <MemoryRouter>
-        <HomeRoute />
-      </MemoryRouter>,
-    );
+    renderShell();
 
-    // 사이드바 메뉴 확인
     expect(screen.getByTestId("sidebar-nav-home")).toBeInTheDocument();
     expect(screen.getByTestId("sidebar-nav-songs")).toBeInTheDocument();
     expect(screen.getByTestId("sidebar-nav-backgrounds")).toBeInTheDocument();
 
-    // '내 프레젠테이션 보관함'은 완전히 제거되어 화면에 없어야 함
     expect(
       screen.queryByText("내 프레젠테이션 보관함"),
     ).not.toBeInTheDocument();
@@ -165,60 +162,91 @@ describe("HomeRoute (Main Home Entry Screen)", () => {
   });
 
   it("should navigate to song library and background library via sidebar", () => {
-    render(
-      <MemoryRouter>
-        <HomeRoute />
-      </MemoryRouter>,
-    );
+    renderShell();
 
     // 1. 곡 라이브러리 클릭
-    const songsNavBtn = screen.getByTestId("sidebar-nav-songs");
-    fireEvent.click(songsNavBtn);
-
-    // 곡 라이브러리의 2단락 ("내가 등록한 곡", "유저가 등록한 곡") 표시 확인
+    fireEvent.click(screen.getByTestId("sidebar-nav-songs"));
     expect(screen.getByText("내가 등록한 곡")).toBeInTheDocument();
     expect(screen.getByText("유저가 등록한 곡")).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "곡 라이브러리" }),
+    ).toBeInTheDocument();
 
     // 2. 배경 라이브러리 클릭
-    const backgroundsNavBtn = screen.getByTestId("sidebar-nav-backgrounds");
-    fireEvent.click(backgroundsNavBtn);
-
-    // 배경 라이브러리의 2단락 ("내가 등록한 배경", "유저가 등록한 배경") 표시 확인
+    fireEvent.click(screen.getByTestId("sidebar-nav-backgrounds"));
     expect(screen.getByText("내가 등록한 배경")).toBeInTheDocument();
     expect(screen.getByText("유저가 등록한 배경")).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "배경 라이브러리" }),
+    ).toBeInTheDocument();
 
     // 3. 홈 클릭
-    const homeNavBtn = screen.getByTestId("sidebar-nav-home");
-    fireEvent.click(homeNavBtn);
-
-    // 홈의 프레젠테이션 카드 복귀 확인
+    fireEvent.click(screen.getByTestId("sidebar-nav-home"));
     expect(screen.getByTestId("presentation-card")).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "모든 프로젝트" }),
+    ).toBeInTheDocument();
+  });
+
+  it("경로 기반 활성 상태가 사이드바에 aria-current로 반영된다", () => {
+    renderShell("/lyrics");
+
+    expect(screen.getByTestId("sidebar-nav-songs")).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+    expect(screen.getByTestId("sidebar-nav-home")).not.toHaveAttribute(
+      "aria-current",
+    );
+  });
+
+  it("시드 문서 5개가 모두 목록에 나타난다", () => {
+    renderShell();
+
+    for (const presentation of listPresentations()) {
+      expect(screen.getAllByText(presentation.title).length).toBeGreaterThan(0);
+    }
+    expect(screen.getByText("5개 프로젝트")).toBeInTheDocument();
+  });
+
+  it("사이드바 CTA는 새 문서를 만들고 /editor/:presentationId 로 이동한다", () => {
+    renderShell();
+
+    act(() => {
+      fireEvent.click(screen.getByTestId("sidebar-create-presentation-btn"));
+    });
+
+    expect(screen.getByTestId("editor-stub")).toBeInTheDocument();
+    expect(listPresentations()).toHaveLength(6);
+  });
+
+  it("카드를 클릭하면 해당 문서의 에디터로 이동한다", () => {
+    renderShell();
+
+    act(() => {
+      // 썸네일과 카드 제목 두 곳에 나타나므로 첫 번째(카드 본체)를 클릭
+      fireEvent.click(screen.getAllByText("수요 성령기도회")[0]);
+    });
+
+    expect(screen.getByTestId("editor-stub")).toBeInTheDocument();
   });
 
   it("should render theme menu button at the bottom of the sidebar and toggle theme options", () => {
-    render(
-      <MemoryRouter>
-        <HomeRoute />
-      </MemoryRouter>,
-    );
+    renderShell();
 
-    // 사이드바 하단 테마 메뉴 버튼 확인
     const themeBtn = screen.getByTestId("theme-menu-button");
     expect(themeBtn).toBeInTheDocument();
 
-    // 클릭 시 드롭다운 열림 확인
     fireEvent.click(themeBtn);
     expect(screen.getByTestId("theme-menu-dropdown")).toBeInTheDocument();
     expect(screen.getByTestId("theme-option-light")).toBeInTheDocument();
     expect(screen.getByTestId("theme-option-dark")).toBeInTheDocument();
     expect(screen.getByTestId("theme-option-system")).toBeInTheDocument();
 
-    // 라이트 모드 선택
     act(() => {
       fireEvent.click(screen.getByTestId("theme-option-light"));
     });
 
-    // 드롭다운 닫힘 확인
     expect(screen.queryByTestId("theme-menu-dropdown")).not.toBeInTheDocument();
     expect(screen.getByText("라이트 모드")).toBeInTheDocument();
   });

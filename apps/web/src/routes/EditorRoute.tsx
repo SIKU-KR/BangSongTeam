@@ -1,7 +1,11 @@
-import React, { useState, useEffect } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import React, { useState, useEffect, useLayoutEffect } from "react";
 import {
-  useActivePresentation,
+  useNavigate,
+  useParams,
+  useSearchParams,
+  Navigate,
+} from "react-router-dom";
+import {
   updatePresentationTitle,
   updateSongStyle,
   updateSongBackground,
@@ -21,12 +25,29 @@ import {
   resetActivePresentation,
   createNewPresentation,
   launchPresentation,
+  usePresentationById,
+  openPresentation,
 } from "../features/presentation";
 import {
   getBackgroundMediaUrl,
   getBackgroundPosterUrl,
   DEFAULT_DECK_STYLE,
 } from "@repo/shared";
+import type { Presentation } from "@repo/shared";
+
+/**
+ * 문서를 찾지 못한 프레임에서 훅 본문이 안전하게 참조할 빈 폴백.
+ * (얼리 리턴을 모든 훅 뒤에 두기 위해 필요 — React 훅 규칙)
+ */
+const EMPTY_PRESENTATION: Presentation = {
+  id: "",
+  userId: "",
+  title: "",
+  serviceDate: "",
+  items: [],
+  createdAt: "",
+  updatedAt: "",
+};
 import { EditorHeader } from "../features/editor/EditorHeader";
 import { EditorSidebar } from "../features/editor/EditorSidebar";
 import { EditorStageCanvas } from "../features/editor/EditorStageCanvas";
@@ -44,9 +65,18 @@ import { QuickLyricPasteModal } from "../features/editor/QuickLyricPasteModal";
  */
 export function EditorRoute(): React.JSX.Element {
   const navigate = useNavigate();
+  const { presentationId } = useParams<{ presentationId: string }>();
   const [searchParams] = useSearchParams();
-  const presentation = useActivePresentation();
+  const found = usePresentationById(presentationId);
+  const presentation = found ?? EMPTY_PRESENTATION;
   const [isLyricModalOpen, setIsLyricModalOpen] = useState(false);
+
+  // 뮤테이터/undo·redo가 모두 활성 문서를 보므로 URL과 동기화한다.
+  // useEffect가 아닌 useLayoutEffect인 이유: 첫 커밋 시점에 activeId가 아직 이전
+  // 문서인 창이 생기면, 그 창에서 호출된 뮤테이터가 엉뚱한 문서를 편집하게 된다.
+  useLayoutEffect(() => {
+    if (presentationId) openPresentation(presentationId);
+  }, [presentationId]);
 
   const initialSongIndex = Math.min(
     Math.max(0, Number(searchParams.get("song") || 0)),
@@ -57,6 +87,14 @@ export function EditorRoute(): React.JSX.Element {
     useState<number>(initialSongIndex);
   const [activeSlideIndex, setActiveSlideIndex] = useState<number>(0);
   const [zoomLevel, setZoomLevel] = useState<number>(100);
+
+  // 마운트를 유지한 채 다른 문서로 전환되는 경우에도 선택 상태를 재설정한다
+  useEffect(() => {
+    const requested = Number(searchParams.get("song") || 0);
+    setActiveSongIndex(Number.isFinite(requested) ? Math.max(0, requested) : 0);
+    setActiveSlideIndex(0);
+    // searchParams는 의도적으로 제외한다 — 문서 전환 시에만 선택을 재설정한다
+  }, [presentationId]);
 
   // 현재 유효한 곡 및 슬라이드 계산
   const safeSongIndex = Math.min(
@@ -79,7 +117,7 @@ export function EditorRoute(): React.JSX.Element {
 
   // 슬라이드쇼 발표 핸들러
   const handlePresent = () => {
-    launchPresentation(navigate);
+    if (presentationId) launchPresentation(navigate, presentationId);
   };
 
   // 슬라이드 선택 핸들러
@@ -199,9 +237,12 @@ export function EditorRoute(): React.JSX.Element {
 
   // 새 프레젠테이션 만들기
   const handleNewPresentation = () => {
-    createNewPresentation("새 주일 예배 프레젠테이션");
+    const created = createNewPresentation("새 주일 예배 프레젠테이션");
     setActiveSongIndex(0);
     setActiveSlideIndex(0);
+    // 이동하지 않으면 위의 useLayoutEffect가 곧바로 옛 문서를 다시 열어
+    // 새 문서가 즉시 유실된다
+    navigate(`/editor/${created.id}`);
   };
 
   // 키보드 단축키 지원 (슬라이드 넘김, 실행 취소/다시 실행)
@@ -259,6 +300,9 @@ export function EditorRoute(): React.JSX.Element {
     currentSlides.length,
     presentation.items.length,
   ]);
+
+  // 얼리 리턴은 반드시 모든 훅 뒤에 (훅은 조건 없이 실행됨)
+  if (!found) return <Navigate to="/presentations" replace />;
 
   return (
     <div

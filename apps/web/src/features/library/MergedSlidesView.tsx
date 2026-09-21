@@ -1,77 +1,107 @@
 import React, { useState, useRef } from "react";
-import { useNavigate } from "react-router-dom";
 import type { Presentation } from "@repo/shared";
 import { hangulIncludes } from "@repo/shared";
 import { PresentationCard } from "../presentation/PresentationCard";
-import { launchPresentation } from "../presentation";
 import { isGoogleChromeBrowser } from "../../components/common/ChromeAlertBanner";
 
 export interface MergedSlidesViewProps {
-  presentation: Presentation;
+  presentations: Presentation[];
+  /** 카드 클릭 -> /editor/:presentationId */
+  onOpenPresentation: (id: string) => void;
+  /** 발표 버튼 -> /present/:presentationId/fullscreen */
+  onStartPresentation: (id: string) => void;
   onCreateNewPresentation: () => void;
   searchQuery?: string;
   viewMode?: "grid" | "list";
   sortOrder?: "recent" | "name" | "slides";
 }
 
-interface AdditionalRecentItem {
-  id: string;
-  title: string;
-  subtitle: string;
-  songsCount: number;
-  slidesCount: number;
-  editedAgo: string;
+/** 카드 장식(배지 글자/색, 썸네일 그라데이션)은 도메인이 아니라 표현이므로 팔레트로 분리 */
+interface CardDecor {
   badgeLetter: string;
   badgeBg: string;
   bgGradient: string;
 }
 
-const ADDITIONAL_RECENT_ITEMS: AdditionalRecentItem[] = [
+const CARD_DECOR: CardDecor[] = [
   {
-    id: "recent-item-2",
-    title: "청년부 금요 찬양 집회",
-    subtitle: "시간을 뚫고, 밤이나 낮이나 외 2곡",
-    songsCount: 4,
-    slidesCount: 19,
-    editedAgo: "3일 전 편집함",
     badgeLetter: "Y",
     badgeBg: "bg-indigo-950 text-indigo-400 border-indigo-800",
     bgGradient: "from-indigo-900/60 via-purple-900/40 to-black",
   },
   {
-    id: "recent-item-3",
-    title: "부활절 감사예배 특별 프레젠테이션",
-    subtitle: "꽃들도, 주의 이름 높이며 외 5곡",
-    songsCount: 7,
-    slidesCount: 28,
-    editedAgo: "1주일 전 편집함",
     badgeLetter: "E",
     badgeBg: "bg-amber-950 text-amber-400 border-amber-800",
     bgGradient: "from-amber-900/60 via-orange-950/40 to-black",
   },
   {
-    id: "recent-item-4",
-    title: "수요 성령기도회 프레젠테이션",
-    subtitle: "주 은혜임을, 은혜로다 외 1곡",
-    songsCount: 3,
-    slidesCount: 14,
-    editedAgo: "2주일 전 편집함",
     badgeLetter: "W",
     badgeBg: "bg-teal-950 text-teal-400 border-teal-800",
     bgGradient: "from-teal-900/60 via-emerald-950/40 to-black",
   },
   {
-    id: "recent-item-5",
-    title: "주일 1·2부 연합예배",
-    subtitle: "시선, 예수 늘 함께 계시네 외 2곡",
-    songsCount: 4,
-    slidesCount: 20,
-    editedAgo: "3주일 전 편집함",
     badgeLetter: "M",
     badgeBg: "bg-blue-950 text-blue-400 border-blue-800",
     bgGradient: "from-blue-900/60 via-sky-950/40 to-black",
   },
 ];
+
+/** 카드/행 렌더링에 필요한 파생 표시 데이터 */
+interface PresentationCardModel extends CardDecor {
+  presentation: Presentation;
+  id: string;
+  title: string;
+  /** "시선, 주 품에 외 2곡" */
+  subtitle: string;
+  songsCount: number;
+  slidesCount: number;
+  /** "3일 전 편집함" */
+  editedAgo: string;
+}
+
+function countSlides(presentation: Presentation): number {
+  return presentation.items.reduce(
+    (sum, item) => sum + (item.deck?.slides.length ?? 0),
+    0,
+  );
+}
+
+function buildSubtitle(presentation: Presentation): string {
+  const titles = presentation.items
+    .map((item) => item.deck?.title)
+    .filter((title): title is string => Boolean(title));
+  if (titles.length === 0) return "아직 등록된 찬양이 없습니다";
+  const head = titles.slice(0, 2).join(", ");
+  const restCount = titles.length - 2;
+  return restCount > 0 ? `${head} 외 ${restCount}곡` : head;
+}
+
+function formatEditedAgo(updatedAt: string): string {
+  const updated = new Date(updatedAt).getTime();
+  if (Number.isNaN(updated)) return "최근 편집됨";
+  const days = Math.floor((Date.now() - updated) / (1000 * 60 * 60 * 24));
+  if (days <= 0) return "오늘 편집함";
+  if (days === 1) return "어제 편집함";
+  if (days < 7) return `${days}일 전 편집함`;
+  if (days < 30) return `${Math.floor(days / 7)}주일 전 편집함`;
+  return `${Math.floor(days / 30)}개월 전 편집함`;
+}
+
+function toCardModel(
+  presentation: Presentation,
+  index: number,
+): PresentationCardModel {
+  return {
+    ...CARD_DECOR[index % CARD_DECOR.length],
+    presentation,
+    id: presentation.id,
+    title: presentation.title,
+    subtitle: buildSubtitle(presentation),
+    songsCount: presentation.items.length,
+    slidesCount: countSlides(presentation),
+    editedAgo: formatEditedAgo(presentation.updatedAt),
+  };
+}
 
 const FOLDERS_DATA = [
   { id: "f-1", name: "2026 주일 대예배", count: 12, color: "text-emerald-400" },
@@ -97,29 +127,26 @@ const FOLDERS_DATA = [
  * - 하단: "⌵ 모든 프레젠테이션 & 템플릿" (그리드 / 리스트 뷰 모드 지원)
  */
 export function MergedSlidesView({
-  presentation,
+  presentations,
+  onOpenPresentation,
+  onStartPresentation,
   onCreateNewPresentation,
   searchQuery = "",
   viewMode = "grid",
   sortOrder = "recent",
 }: MergedSlidesViewProps): React.JSX.Element {
-  const navigate = useNavigate();
   const recentScrollRef = useRef<HTMLDivElement>(null);
   const [isFoldersOpen, setIsFoldersOpen] = useState<boolean>(true);
   const [isAllProjectsOpen, setIsAllProjectsOpen] = useState<boolean>(true);
 
-  const handleStartPresentation = (): void => {
+  const handleStartPresentation = (id: string): void => {
     if (!isGoogleChromeBrowser()) {
       const proceed = window.confirm(
         "이 서비스는 Google Chrome에 최적화되어 있습니다. 예배 송출은 Chrome에서 진행하는 것을 권장합니다.\n\n계속 진행하시겠습니까?",
       );
       if (!proceed) return;
     }
-    launchPresentation(navigate);
-  };
-
-  const handleOpenEditor = (): void => {
-    navigate("/editor");
+    onStartPresentation(id);
   };
 
   const handleScrollRight = (): void => {
@@ -136,11 +163,11 @@ export function MergedSlidesView({
 
   // 검색어 필터링 (es-hangul 초성/자모 분해/스마트 한글 검색 지원)
   const query = searchQuery.trim();
-  const isMatch =
-    !query ||
-    hangulIncludes(presentation.title, query) ||
-    presentation.items.some((item) => {
-      const deck = item.deck;
+  const filtered = presentations.filter((item) => {
+    if (!query) return true;
+    if (hangulIncludes(item.title, query)) return true;
+    return item.items.some((entry) => {
+      const deck = entry.deck;
       if (!deck) return false;
       return (
         hangulIncludes(deck.title, query) ||
@@ -148,25 +175,18 @@ export function MergedSlidesView({
         hangulIncludes(deck.lyricsRaw, query)
       );
     });
-
-  const filteredRecentItems = ADDITIONAL_RECENT_ITEMS.filter((item) => {
-    if (!query) return true;
-    return (
-      hangulIncludes(item.title, query) || hangulIncludes(item.subtitle, query)
-    );
   });
 
-  const sortedRecentItems = [...filteredRecentItems].sort((a, b) => {
-    if (sortOrder === "name") {
-      return a.title.localeCompare(b.title);
-    }
-    if (sortOrder === "slides") {
-      return b.slidesCount - a.slidesCount;
-    }
-    return 0;
+  const sorted = [...filtered].sort((a, b) => {
+    if (sortOrder === "name") return a.title.localeCompare(b.title);
+    if (sortOrder === "slides") return countSlides(b) - countSlides(a);
+    return b.updatedAt.localeCompare(a.updatedAt);
   });
 
-  if (!isMatch && filteredRecentItems.length === 0) {
+  const cards = sorted.map(toCardModel);
+  const [primaryCard, ...restCards] = cards;
+
+  if (cards.length === 0) {
     return (
       <div className="py-20 text-center flex flex-col items-center justify-center gap-3 bg-zinc-900/30 border border-zinc-800/80 rounded-2xl">
         <div className="w-12 h-12 rounded-full bg-zinc-800/60 flex items-center justify-center text-zinc-500 mb-1">
@@ -237,22 +257,22 @@ export function MergedSlidesView({
             style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
           >
             {/* 1) 현재 활성 프레젠테이션 카드 (테스트 ID 및 단일 프레젠테이션 보존) */}
-            {isMatch && (
+            {primaryCard && (
               <div className="w-[300px] sm:w-[320px] shrink-0">
                 <PresentationCard
-                  presentation={presentation}
-                  onPresent={handleStartPresentation}
-                  onEdit={handleOpenEditor}
+                  presentation={primaryCard.presentation}
+                  onPresent={() => handleStartPresentation(primaryCard.id)}
+                  onEdit={() => onOpenPresentation(primaryCard.id)}
                   className="h-full"
                 />
               </div>
             )}
 
             {/* 2) Canva 스타일의 추가 최근 프로젝트 카드들 */}
-            {sortedRecentItems.map((item) => (
+            {restCards.map((item) => (
               <div
                 key={item.id}
-                onClick={handleOpenEditor}
+                onClick={() => onOpenPresentation(item.id)}
                 className="group w-[300px] sm:w-[320px] shrink-0 flex flex-col bg-white dark:bg-zinc-900/60 hover:bg-zinc-50 dark:hover:bg-zinc-900/90 border border-zinc-200 dark:border-zinc-800/80 hover:border-zinc-300 dark:hover:border-zinc-700 rounded-2xl overflow-hidden transition-all duration-200 shadow-sm hover:shadow-md dark:shadow-none dark:hover:shadow-lg dark:hover:shadow-black/50 hover:-translate-y-0.5 cursor-pointer"
               >
                 {/* 16:9 썸네일 영역 */}
@@ -290,7 +310,7 @@ export function MergedSlidesView({
                       type="button"
                       onClick={(e) => {
                         e.stopPropagation();
-                        handleStartPresentation();
+                        handleStartPresentation(item.id);
                       }}
                       className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold shadow-md flex items-center gap-1.5 cursor-pointer"
                     >
@@ -306,7 +326,7 @@ export function MergedSlidesView({
                       type="button"
                       onClick={(e) => {
                         e.stopPropagation();
-                        handleOpenEditor();
+                        onOpenPresentation(item.id);
                       }}
                       className="px-3.5 py-1.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-100 text-xs font-medium border border-zinc-600/50 shadow-md flex items-center gap-1.5 cursor-pointer"
                     >
@@ -398,8 +418,8 @@ export function MergedSlidesView({
             {FOLDERS_DATA.map((folder) => (
               <div
                 key={folder.id}
-                onClick={handleOpenEditor}
-                className="group flex items-center gap-3 p-3.5 rounded-xl bg-white dark:bg-zinc-900/50 hover:bg-zinc-50 dark:hover:bg-zinc-900 border border-zinc-200 dark:border-zinc-800/80 hover:border-zinc-300 dark:hover:border-zinc-700 cursor-pointer transition-all shadow-sm hover:shadow-md"
+                title="폴더 기능 준비 중"
+                className="group flex items-center gap-3 p-3.5 rounded-xl bg-white dark:bg-zinc-900/50 hover:bg-zinc-50 dark:hover:bg-zinc-900 border border-zinc-200 dark:border-zinc-800/80 hover:border-zinc-300 dark:hover:border-zinc-700 cursor-default transition-all shadow-sm hover:shadow-md"
               >
                 <div className="w-10 h-10 rounded-xl bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
                   <svg
@@ -559,68 +579,72 @@ export function MergedSlidesView({
                   </thead>
                   <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800/60">
                     {/* 1) 주 프레젠테이션 행 */}
-                    <tr
-                      onClick={handleOpenEditor}
-                      className="hover:bg-zinc-50 dark:hover:bg-zinc-800/50 cursor-pointer transition-colors"
-                    >
-                      <td className="py-3 px-4 flex items-center gap-3">
-                        <div className="w-10 h-6 bg-emerald-100 dark:bg-emerald-950 rounded border border-emerald-300 dark:border-emerald-800/80 flex items-center justify-center text-[10px] text-emerald-700 dark:text-emerald-400 font-bold shrink-0">
-                          16:9
-                        </div>
-                        <div className="min-w-0">
-                          <span className="font-semibold text-zinc-900 dark:text-white truncate block">
-                            {presentation.title}
+                    {primaryCard && (
+                      <tr
+                        onClick={() =>
+                          primaryCard && onOpenPresentation(primaryCard.id)
+                        }
+                        className="hover:bg-zinc-50 dark:hover:bg-zinc-800/50 cursor-pointer transition-colors"
+                      >
+                        <td className="py-3 px-4 flex items-center gap-3">
+                          <div className="w-10 h-6 bg-emerald-100 dark:bg-emerald-950 rounded border border-emerald-300 dark:border-emerald-800/80 flex items-center justify-center text-[10px] text-emerald-700 dark:text-emerald-400 font-bold shrink-0">
+                            16:9
+                          </div>
+                          <div className="min-w-0">
+                            <span className="font-semibold text-zinc-900 dark:text-white truncate block">
+                              {primaryCard?.title}
+                            </span>
+                            <span className="text-[11px] text-zinc-500 truncate block">
+                              {primaryCard?.subtitle}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="py-3 px-4 hidden sm:table-cell text-zinc-500 dark:text-zinc-400">
+                          나 (주일 찬양팀)
+                        </td>
+                        <td className="py-3 px-4 hidden md:table-cell text-zinc-400 dark:text-zinc-500">
+                          {primaryCard?.editedAgo}
+                        </td>
+                        <td className="py-3 px-4">
+                          <span className="px-2 py-0.5 rounded-full text-[10px] bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-700">
+                            {primaryCard?.songsCount}곡 ·{" "}
+                            {primaryCard?.slidesCount}슬라이드
                           </span>
-                          <span className="text-[11px] text-zinc-500 truncate block">
-                            {presentation.items
-                              .map((i) => i.deck?.title)
-                              .filter(Boolean)
-                              .join(", ")}
-                          </span>
-                        </div>
-                      </td>
-                      <td className="py-3 px-4 hidden sm:table-cell text-zinc-500 dark:text-zinc-400">
-                        나 (주일 찬양팀)
-                      </td>
-                      <td className="py-3 px-4 hidden md:table-cell text-zinc-400 dark:text-zinc-500">
-                        최근 편집됨
-                      </td>
-                      <td className="py-3 px-4">
-                        <span className="px-2 py-0.5 rounded-full text-[10px] bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-700">
-                          {presentation.items.length}곡 · 23슬라이드
-                        </span>
-                      </td>
-                      <td className="py-3 px-4 text-right">
-                        <div className="flex items-center justify-end gap-1.5">
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleStartPresentation();
-                            }}
-                            className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold shadow-sm cursor-pointer transition-colors"
-                          >
-                            발표
-                          </button>
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleOpenEditor();
-                            }}
-                            className="px-2.5 py-1 rounded-lg bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-200 text-xs font-medium cursor-pointer transition-colors"
-                          >
-                            편집
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
+                        </td>
+                        <td className="py-3 px-4 text-right">
+                          <div className="flex items-center justify-end gap-1.5">
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (primaryCard)
+                                  handleStartPresentation(primaryCard.id);
+                              }}
+                              className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold shadow-sm cursor-pointer transition-colors"
+                            >
+                              발표
+                            </button>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (primaryCard)
+                                  onOpenPresentation(primaryCard.id);
+                              }}
+                              className="px-2.5 py-1 rounded-lg bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-200 text-xs font-medium cursor-pointer transition-colors"
+                            >
+                              편집
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
 
                     {/* 2) 추가 최근 항목 행들 */}
-                    {sortedRecentItems.map((item) => (
+                    {restCards.map((item) => (
                       <tr
                         key={item.id}
-                        onClick={handleOpenEditor}
+                        onClick={() => onOpenPresentation(item.id)}
                         className="hover:bg-zinc-50 dark:hover:bg-zinc-800/50 cursor-pointer transition-colors"
                       >
                         <td className="py-3 px-4 flex items-center gap-3">
@@ -653,7 +677,7 @@ export function MergedSlidesView({
                               type="button"
                               onClick={(e) => {
                                 e.stopPropagation();
-                                handleStartPresentation();
+                                handleStartPresentation(item.id);
                               }}
                               className="px-2.5 py-1 rounded-lg bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300 text-[11px] cursor-pointer transition-colors"
                             >
@@ -663,7 +687,7 @@ export function MergedSlidesView({
                               type="button"
                               onClick={(e) => {
                                 e.stopPropagation();
-                                handleOpenEditor();
+                                onOpenPresentation(item.id);
                               }}
                               className="px-2.5 py-1 rounded-lg bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-200 text-[11px] cursor-pointer transition-colors"
                             >

@@ -18,6 +18,8 @@ export interface SongLibraryViewProps {
   onAddDeckToPresentation: (deck: Deck) => void;
   onDuplicateSong: (index: number) => void;
   onRemoveSong: (index: number) => void;
+  /** 곡 카드의 '편집' -> /editor/:presentationId?song=<index> */
+  onOpenSong?: (songIndex?: number) => void;
   searchQuery?: string;
 }
 
@@ -32,6 +34,7 @@ export function SongLibraryView({
   onAddDeckToPresentation,
   onDuplicateSong,
   onRemoveSong,
+  onOpenSong,
   searchQuery = "",
 }: SongLibraryViewProps): React.JSX.Element {
   const navigate = useNavigate();
@@ -64,15 +67,11 @@ export function SongLibraryView({
   });
 
   const handleStartPresentation = (): void => {
-    launchPresentation(navigate);
+    launchPresentation(navigate, presentation.id);
   };
 
   const handleOpenEditor = (songIndex?: number): void => {
-    if (songIndex !== undefined) {
-      navigate(`/editor?song=${songIndex}`);
-    } else {
-      navigate("/editor");
-    }
+    onOpenSong?.(songIndex);
   };
 
   const handleAddCommunitySong = (deck: Deck): void => {

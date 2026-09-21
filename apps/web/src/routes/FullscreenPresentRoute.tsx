@@ -1,13 +1,31 @@
-import React, { useState, useCallback, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import React, {
+  useState,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+} from "react";
+import { useNavigate, useParams, Navigate } from "react-router-dom";
 import {
   DEFAULT_DECK_STYLE,
   getBackgroundMediaUrl,
   getBackgroundPosterUrl,
 } from "@repo/shared";
+import type { Presentation } from "@repo/shared";
 import { SlideStage } from "../components/stage/SlideStage";
+
+/** 문서를 찾지 못한 프레임에서 훅 본문이 참조할 빈 폴백 */
+const EMPTY_PRESENTATION: Presentation = {
+  id: "",
+  userId: "",
+  title: "",
+  serviceDate: "",
+  items: [],
+  createdAt: "",
+  updatedAt: "",
+};
 import {
-  useActivePresentation,
+  usePresentationById,
+  openPresentation,
   useNavigationBuffer,
   usePresentationShortcuts,
   enterFullscreen,
@@ -23,7 +41,14 @@ import {
  */
 export function FullscreenPresentRoute(): React.JSX.Element {
   const navigate = useNavigate();
-  const presentation = useActivePresentation();
+  const { presentationId } = useParams<{ presentationId: string }>();
+  const found = usePresentationById(presentationId);
+  const presentation = found ?? EMPTY_PRESENTATION;
+
+  // 에디터와 동일하게 활성 문서를 URL과 동기화 (뮤테이터/undo가 activeId를 봄)
+  useLayoutEffect(() => {
+    if (presentationId) openPresentation(presentationId);
+  }, [presentationId]);
 
   const [currentSongIndex, setCurrentSongIndex] = useState<number>(0);
   const [currentSlideIndex, setCurrentSlideIndex] = useState<number>(0);
@@ -84,7 +109,7 @@ export function FullscreenPresentRoute(): React.JSX.Element {
 
   const handleExit = useCallback(async () => {
     await exitFullscreen().catch(() => {});
-    navigate("/");
+    navigate("/presentations");
   }, [navigate]);
 
   usePresentationShortcuts({
@@ -121,6 +146,9 @@ export function FullscreenPresentRoute(): React.JSX.Element {
       document.removeEventListener("fullscreenchange", handleFullscreenChange);
     };
   }, [handleExit]);
+
+  // 얼리 리턴은 반드시 모든 훅 뒤에
+  if (!found) return <Navigate to="/presentations" replace />;
 
   return (
     <div

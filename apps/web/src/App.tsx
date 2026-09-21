@@ -1,28 +1,46 @@
 import React from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { ThemeProvider } from "./features/theme";
-import { HomeRoute } from "./routes";
-import { FullscreenPresentRoute } from "./routes/FullscreenPresentRoute";
-import { EditorRoute } from "./routes/EditorRoute";
+import {
+  AppShellLayout,
+  LandingRoute,
+  PresentationsRoute,
+  LyricsRoute,
+  BackgroundsRoute,
+  EditorRoute,
+  FullscreenPresentRoute,
+} from "./routes";
 
 /**
  * App 최상위 라우팅 컴포넌트 (React Router Library Mode)
- * - `/` : 메인 홈 진입 화면 (Canva/MiriCanvas 스타일 프레젠테이션 목록 및 템플릿)
- * - `/editor` : Canva/MiriCanvas 스타일 프레젠테이션 편집기
- * - `/present/fullscreen` : 청중용 단독 전체화면 송출 페이지
+ * - `/`                              : 랜딩 페이지 (준비 중)
+ * - `/presentations`                 : 프레젠테이션 대시보드 (AppShell)
+ * - `/lyrics`                        : 곡 라이브러리 (AppShell)
+ * - `/backgrounds`                   : 배경 라이브러리 (AppShell)
+ * - `/editor/:presentationId`        : 프레젠테이션 단위 편집기
+ * - `/present/:presentationId/fullscreen` : 청중용 단독 전체화면 송출
  */
 export function App(): React.JSX.Element {
   return (
     <ThemeProvider>
       <BrowserRouter>
         <Routes>
-          <Route path="/" element={<HomeRoute />} />
-          <Route path="/editor" element={<EditorRoute />} />
+          <Route path="/" element={<LandingRoute />} />
+
+          {/* 공유 셸(사이드바 + 히어로 헤더) 아래 중첩 라우트.
+              path 없는 레이아웃 라우트라 자식들은 절대 경로를 그대로 유지한다. */}
+          <Route element={<AppShellLayout />}>
+            <Route path="/presentations" element={<PresentationsRoute />} />
+            <Route path="/lyrics" element={<LyricsRoute />} />
+            <Route path="/backgrounds" element={<BackgroundsRoute />} />
+          </Route>
+
+          <Route path="/editor/:presentationId" element={<EditorRoute />} />
           <Route
-            path="/present/fullscreen"
+            path="/present/:presentationId/fullscreen"
             element={<FullscreenPresentRoute />}
           />
-          <Route path="*" element={<Navigate to="/" replace />} />
+          <Route path="*" element={<Navigate to="/presentations" replace />} />
         </Routes>
       </BrowserRouter>
     </ThemeProvider>

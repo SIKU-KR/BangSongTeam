@@ -4,6 +4,10 @@ node_modules/
 
 # Build outputs
 dist/
+# wrangler assets.directory 는 존재해야 하므로 플레이스홀더만 추적한다
+!apps/web/dist/
+!apps/web/dist/client/
+!apps/web/dist/client/.gitkeep
 build/
 out/
 .next/
@@ -42,3 +46,4 @@ Thumbs.db
 .vscode/
 .idea/
 *.sublime-workspace
+.claude/

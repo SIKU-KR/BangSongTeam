@@ -1,10 +1,32 @@
 import React from "react";
 import { render, screen, fireEvent, act } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, Routes, Route } from "react-router-dom";
 import { FullscreenPresentRoute } from "./FullscreenPresentRoute";
 
-import { resetPresentationStore } from "../features/presentation";
+import {
+  resetPresentationStore,
+  SEED_PRESENTATION_IDS,
+} from "../features/presentation";
+
+const DOC_ID = SEED_PRESENTATION_IDS[0];
+
+function renderPresent(path = `/present/${DOC_ID}/fullscreen`) {
+  return render(
+    <MemoryRouter initialEntries={[path]}>
+      <Routes>
+        <Route
+          path="/present/:presentationId/fullscreen"
+          element={<FullscreenPresentRoute />}
+        />
+        <Route
+          path="/presentations"
+          element={<div data-testid="presentations-stub" />}
+        />
+      </Routes>
+    </MemoryRouter>,
+  );
+}
 
 function dispatchKey(key: string, code?: string, shiftKey = false): void {
   window.dispatchEvent(
@@ -28,11 +50,7 @@ describe("FullscreenPresentRoute", () => {
   });
 
   it("should render the first song's first slide lyrics without external network requests", () => {
-    render(
-      <MemoryRouter>
-        <FullscreenPresentRoute />
-      </MemoryRouter>,
-    );
+    renderPresent();
 
     // Song 1 (은혜로다) Slide 1 lyrics
     expect(screen.getByText("시작됐네 우리 주님의 능력이")).toBeInTheDocument();
@@ -45,11 +63,7 @@ describe("FullscreenPresentRoute", () => {
   });
 
   it("should NOT display any numeric navigation buffer text on the audience stage", () => {
-    const { container } = render(
-      <MemoryRouter>
-        <FullscreenPresentRoute />
-      </MemoryRouter>,
-    );
+    const { container } = renderPresent();
 
     // Type digits into the buffer
     act(() => {
@@ -63,11 +77,7 @@ describe("FullscreenPresentRoute", () => {
   });
 
   it("should advance to next slide and next song using arrow keys", () => {
-    render(
-      <MemoryRouter>
-        <FullscreenPresentRoute />
-      </MemoryRouter>,
-    );
+    renderPresent();
 
     // Slide 1 of Song 1
     expect(screen.getByText("시작됐네 우리 주님의 능력이")).toBeInTheDocument();
@@ -104,11 +114,7 @@ describe("FullscreenPresentRoute", () => {
   });
 
   it("should navigate backwards using ArrowLeft across song boundaries", () => {
-    render(
-      <MemoryRouter>
-        <FullscreenPresentRoute />
-      </MemoryRouter>,
-    );
+    renderPresent();
 
     // Jump to Song 2 (주 품에) Slide 1: "2" then "." then "Enter"
     act(() => {
@@ -127,11 +133,7 @@ describe("FullscreenPresentRoute", () => {
   });
 
   it("should toggle blackout on 'b' key press", () => {
-    render(
-      <MemoryRouter>
-        <FullscreenPresentRoute />
-      </MemoryRouter>,
-    );
+    renderPresent();
 
     const overlay = screen.getByTestId("overlay-layer");
     expect(overlay).toHaveStyle({ opacity: 0.4 });
@@ -150,11 +152,7 @@ describe("FullscreenPresentRoute", () => {
   });
 
   it("should toggle lyrics hide on 'h' key press", () => {
-    render(
-      <MemoryRouter>
-        <FullscreenPresentRoute />
-      </MemoryRouter>,
-    );
+    renderPresent();
 
     const textLayer = screen.getByTestId("text-layer-container");
     expect(textLayer).toHaveStyle({ opacity: 1 });
@@ -173,11 +171,7 @@ describe("FullscreenPresentRoute", () => {
   });
 
   it("should jump to specific song and slide via numeric keypad shortcuts", () => {
-    render(
-      <MemoryRouter>
-        <FullscreenPresentRoute />
-      </MemoryRouter>,
-    );
+    renderPresent();
 
     // Jump to Song 4, Slide 3 (꽃들도): "4.3 Enter"
     act(() => {
@@ -203,11 +197,7 @@ describe("FullscreenPresentRoute", () => {
       writable: true,
     });
 
-    render(
-      <MemoryRouter>
-        <FullscreenPresentRoute />
-      </MemoryRouter>,
-    );
+    renderPresent();
 
     // Auto-fullscreen attempted on mount
     expect(requestFullscreenMock).toHaveBeenCalledWith(
@@ -233,11 +223,7 @@ describe("FullscreenPresentRoute", () => {
       writable: true,
     });
 
-    render(
-      <MemoryRouter>
-        <FullscreenPresentRoute />
-      </MemoryRouter>,
-    );
+    renderPresent();
 
     const exitBtn = screen.getByTestId("exit-present-btn");
     await act(async () => {
@@ -254,11 +240,7 @@ describe("FullscreenPresentRoute", () => {
       configurable: true,
     });
 
-    render(
-      <MemoryRouter>
-        <FullscreenPresentRoute />
-      </MemoryRouter>,
-    );
+    renderPresent();
 
     // Simulate active fullscreen entered
     await act(async () => {
@@ -277,11 +259,7 @@ describe("FullscreenPresentRoute", () => {
   });
 
   it("should supply motion background video URL and preload next song video", () => {
-    render(
-      <MemoryRouter>
-        <FullscreenPresentRoute />
-      </MemoryRouter>,
-    );
+    renderPresent();
 
     // Initial Song 1 (은혜로다) background should be warm_light_flow.mp4
     const videoSlotA = screen.getByTestId("video-slot-a");
@@ -296,5 +274,25 @@ describe("FullscreenPresentRoute", () => {
       "src",
       "/api/media/loops/calm_lake_waves.mp4",
     );
+  });
+
+  it("존재하지 않는 presentationId 는 /presentations 로 리다이렉트된다", () => {
+    renderPresent("/present/99999999-9999-4999-8999-999999999999/fullscreen");
+
+    expect(screen.getByTestId("presentations-stub")).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("fullscreen-present-route"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("URL의 문서를 송출한다 (활성 문서가 아니라)", () => {
+    // 2번째 시드 문서는 mockDecks[2]('시선')로 시작한다
+    renderPresent(`/present/${SEED_PRESENTATION_IDS[1]}/fullscreen`);
+
+    expect(screen.getByTestId("fullscreen-present-route")).toBeInTheDocument();
+    // 1번 문서의 첫 곡('은혜로다') 가사가 나오면 안 된다
+    expect(
+      screen.queryByText("시작됐네 우리 주님의 능력이"),
+    ).not.toBeInTheDocument();
   });
 });

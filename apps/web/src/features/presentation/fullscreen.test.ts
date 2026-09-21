@@ -123,7 +123,7 @@ describe("fullscreen utilities", () => {
   });
 
   describe("launchPresentation", () => {
-    it("should enter fullscreen and navigate to target path", async () => {
+    it("should enter fullscreen and navigate to the presentation's fullscreen path", async () => {
       const requestFullscreenMock = vi.fn().mockResolvedValue(undefined);
       Object.defineProperty(document, "fullscreenElement", {
         value: null,
@@ -136,10 +136,30 @@ describe("fullscreen utilities", () => {
       });
       const navigateMock = vi.fn();
 
-      await launchPresentation(navigateMock);
+      await launchPresentation(navigateMock, "pres-123");
 
       expect(requestFullscreenMock).toHaveBeenCalled();
-      expect(navigateMock).toHaveBeenCalledWith("/present/fullscreen");
+      expect(navigateMock).toHaveBeenCalledWith("/present/pres-123/fullscreen");
+    });
+
+    it("should request fullscreen before navigating (user activation)", () => {
+      const calls: string[] = [];
+      Object.defineProperty(document, "fullscreenElement", {
+        value: null,
+        configurable: true,
+      });
+      Object.defineProperty(document.documentElement, "requestFullscreen", {
+        value: vi.fn(() => {
+          calls.push("fullscreen");
+          return Promise.resolve();
+        }),
+        configurable: true,
+        writable: true,
+      });
+
+      launchPresentation(() => calls.push("navigate"), "pres-456");
+
+      expect(calls).toEqual(["fullscreen", "navigate"]);
     });
   });
 });
