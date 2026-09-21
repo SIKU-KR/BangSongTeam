@@ -16,7 +16,7 @@
 
 ## 2. 세부 작업 체크리스트
 
-- [ ] **Task 3.1: M1 검증용 5곡 인메모리 세트리스트 Mock 데이터 작성**
+- [x] **Task 3.1: M1 검증용 5곡 인메모리 세트리스트 Mock 데이터 작성**
   - **대상 파일**: `apps/web/src/features/presentation/mockSetlist.ts`
   - **선행 조건**: `docs/tasks/m1/tasks_2.md`
   - **구현 내용**:
@@ -25,7 +25,7 @@
     - `@repo/shared`의 `SetlistSchema.parse`를 통한 스키마 정합성 사전 검증
   - **DoD (통과 기준)**: `pnpm --filter web exec tsc --noEmit`이 통과하고 Mock 세트 파싱이 에러 없이 완료된다.
 
-- [ ] **Task 3.2: 빠른 가사 붙여넣기 및 실시간 분할 모달 UI 구현**
+- [x] **Task 3.2: 빠른 가사 붙여넣기 및 실시간 분할 모달 UI 구현**
   - **대상 파일**: `apps/web/src/features/editor/QuickLyricPasteModal.tsx`
   - **선행 조건**: Task 3.1
   - **구현 내용**:
@@ -34,7 +34,7 @@
     - '세트에 추가' 버튼 클릭 시 인메모리 덱 생성 및 세트에 삽입
   - **DoD (통과 기준)**: `pnpm --filter web exec tsc --noEmit`이 통과하고 텍스트 변경 시 슬라이드 분할 카드가 즉각 업데이트된다.
 
-- [ ] **Task 3.3: 멜론/벅스 가사 검색 새 탭 링크 컴포넌트 구현**
+- [x] **Task 3.3: 멜론/벅스 가사 검색 새 탭 링크 컴포넌트 구현**
   - **대상 파일**: `apps/web/src/features/editor/ExternalSearchLinks.tsx`
   - **선행 조건**: Task 3.2
   - **구현 내용**:
