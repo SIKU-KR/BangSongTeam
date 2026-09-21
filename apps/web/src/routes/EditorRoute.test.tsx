@@ -145,4 +145,75 @@ describe("EditorRoute (Canva / MiriCanvas Presentation Editor)", () => {
     // 은혜로다 initially has 5 slides, now should have 6
     expect(screen.getByTestId("slide-strip-item-5")).toBeInTheDocument();
   });
+
+  it("should trigger undo and redo in header", () => {
+    render(
+      <MemoryRouter>
+        <EditorRoute />
+      </MemoryRouter>,
+    );
+
+    const undoBtn = screen.getByTestId("header-undo-btn");
+    const redoBtn = screen.getByTestId("header-redo-btn");
+
+    // Initially can't undo/redo
+    expect(undoBtn).toBeDisabled();
+    expect(redoBtn).toBeDisabled();
+
+    // Modify title
+    const titleBtn = screen.getByTitle("클릭하여 제목 수정");
+    fireEvent.click(titleBtn);
+    const input = screen.getByDisplayValue("2026 주일 3부 예배");
+    fireEvent.change(input, { target: { value: "새로운 예배 제목" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+
+    // Now undo is enabled
+    expect(screen.getByText("새로운 예배 제목")).toBeInTheDocument();
+    expect(undoBtn).not.toBeDisabled();
+
+    // Click undo
+    fireEvent.click(undoBtn);
+    expect(screen.getByText("2026 주일 3부 예배")).toBeInTheDocument();
+    expect(redoBtn).not.toBeDisabled();
+
+    // Click redo
+    fireEvent.click(redoBtn);
+    expect(screen.getByText("새로운 예배 제목")).toBeInTheDocument();
+  });
+
+  it("should collapse and expand filmstrip", () => {
+    render(
+      <MemoryRouter>
+        <EditorRoute />
+      </MemoryRouter>,
+    );
+
+    const collapseBtn = screen.getByTestId("collapse-filmstrip-btn");
+    fireEvent.click(collapseBtn);
+
+    expect(screen.getByTestId("slide-filmstrip-collapsed")).toBeInTheDocument();
+
+    const expandBtn = screen.getByTestId("expand-filmstrip-btn");
+    fireEvent.click(expandBtn);
+
+    expect(screen.getByTestId("slide-filmstrip")).toBeInTheDocument();
+  });
+
+  it("should support canvas zoom controls", () => {
+    render(
+      <MemoryRouter>
+        <EditorRoute />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByText("100%")).toBeInTheDocument();
+
+    const zoomInBtn = screen.getByTitle("캔버스 확대");
+    fireEvent.click(zoomInBtn);
+    expect(screen.getByText("115%")).toBeInTheDocument();
+
+    const zoomOutBtn = screen.getByTitle("캔버스 축소");
+    fireEvent.click(zoomOutBtn);
+    expect(screen.getByText("100%")).toBeInTheDocument();
+  });
 });

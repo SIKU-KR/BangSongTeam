@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import type { Slide, DeckStyle } from "@repo/shared";
 import { SlideStage } from "../../components/stage/SlideStage";
 
@@ -9,6 +9,7 @@ export interface SlideFilmstripProps {
   onAddSlide: () => void;
   onDuplicateSlide?: (index: number) => void;
   onDeleteSlide?: (index: number) => void;
+  onReorderSlide?: (fromIndex: number, toIndex: number) => void;
   songStyle?: DeckStyle;
   backgroundUrl?: string;
   posterUrl?: string;
@@ -18,11 +19,13 @@ export interface SlideFilmstripProps {
 }
 
 /**
- * Canva 스타일 하단 슬라이드 썸네일 스트립 (Filmstrip)
- * - 슬라이드 가로 스크롤 카드 스트립
+ * Canva 스타일 하단 슬라이드 썸네일 스트립 (Filmstrip / Page Tray)
+ * - 슬라이드 가로 스크롤 카드 스트립 (Zoom 연동 크기 조절)
  * - 활성 슬라이드 하이라이트 (Emerald Ring)
+ * - 슬라이드 순서 변경 (◀ / ▶)
  * - 슬라이드 번호 및 가사 텍스트 요약
  * - 슬라이드 추가(+), 복제, 삭제 기능
+ * - 페이지 숨기기 / 표시 접기/펼치기 토글
  */
 export function SlideFilmstrip({
   slides,
@@ -31,6 +34,7 @@ export function SlideFilmstrip({
   onAddSlide,
   onDuplicateSlide,
   onDeleteSlide,
+  onReorderSlide,
   songStyle,
   backgroundUrl,
   posterUrl,
@@ -38,6 +42,35 @@ export function SlideFilmstrip({
   onZoomChange,
   className = "",
 }: SlideFilmstripProps): React.JSX.Element {
+  const [isCollapsed, setIsCollapsed] = useState(false);
+
+  const thumbWidth = Math.max(96, Math.min(240, Math.round(148 * (zoomLevel / 100))));
+  const thumbHeight = Math.max(54, Math.min(135, Math.round(83 * (zoomLevel / 100))));
+
+  if (isCollapsed) {
+    return (
+      <div
+        data-testid="slide-filmstrip-collapsed"
+        className={`h-9 bg-zinc-950 border-t border-zinc-800/80 px-4 flex items-center justify-between select-none ${className}`}
+      >
+        <span className="text-xs text-zinc-400 font-medium">
+          슬라이드 ({slides.length}장) · 선택 #{activeSlideIndex + 1}
+        </span>
+        <button
+          type="button"
+          data-testid="expand-filmstrip-btn"
+          onClick={() => setIsCollapsed(false)}
+          className="px-2.5 py-1 rounded text-xs bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-zinc-300 hover:text-white flex items-center gap-1 cursor-pointer transition-colors"
+        >
+          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+          </svg>
+          <span>페이지 표시</span>
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div
       data-testid="slide-filmstrip"
@@ -50,7 +83,7 @@ export function SlideFilmstrip({
             슬라이드 스트립 ({slides.length}장)
           </span>
           <span className="text-[11px] text-zinc-500 font-mono">
-            선택: {activeSlideIndex + 1} / {slides.length}
+            선택: {slides.length > 0 ? activeSlideIndex + 1 : 0} / {slides.length}
           </span>
         </div>
 
@@ -76,6 +109,19 @@ export function SlideFilmstrip({
               </button>
             </div>
           )}
+
+          {/* 접기 토글 */}
+          <button
+            type="button"
+            data-testid="collapse-filmstrip-btn"
+            onClick={() => setIsCollapsed(true)}
+            className="p-1 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 rounded transition-colors cursor-pointer"
+            title="페이지 트레이 숨기기"
+          >
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
         </div>
       </div>
 
@@ -95,7 +141,7 @@ export function SlideFilmstrip({
                   ? "ring-2 ring-emerald-500 shadow-lg shadow-emerald-950/60"
                   : "hover:ring-1 hover:ring-zinc-600 opacity-80 hover:opacity-100"
               }`}
-              style={{ width: "148px", height: "83px" }}
+              style={{ width: `${thumbWidth}px`, height: `${thumbHeight}px` }}
             >
               {/* 16:9 축소 슬라이드 프리뷰 */}
               <div className="w-full h-full bg-black relative overflow-hidden pointer-events-none">
@@ -104,6 +150,7 @@ export function SlideFilmstrip({
                   style={songStyle}
                   backgroundUrl={backgroundUrl}
                   posterUrl={posterUrl}
+                  containerDimensions={{ width: thumbWidth, height: thumbHeight }}
                 />
               </div>
 
@@ -117,8 +164,36 @@ export function SlideFilmstrip({
                 {previewText}
               </div>
 
-              {/* 호버 액션: 복제/삭제 */}
+              {/* 호버 액션: 순서 변경 / 복제 / 삭제 */}
               <div className="absolute top-1 right-1 z-20 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity bg-black/80 p-0.5 rounded border border-zinc-700">
+                {onReorderSlide && (
+                  <>
+                    <button
+                      type="button"
+                      disabled={index === 0}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onReorderSlide(index, index - 1);
+                      }}
+                      className="p-0.5 text-zinc-400 hover:text-white disabled:opacity-20 rounded transition-colors cursor-pointer text-[10px]"
+                      title="앞으로 이동"
+                    >
+                      ◀
+                    </button>
+                    <button
+                      type="button"
+                      disabled={index === slides.length - 1}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onReorderSlide(index, index + 1);
+                      }}
+                      className="p-0.5 text-zinc-400 hover:text-white disabled:opacity-20 rounded transition-colors cursor-pointer text-[10px]"
+                      title="뒤로 이동"
+                    >
+                      ▶
+                    </button>
+                  </>
+                )}
                 {onDuplicateSlide && (
                   <button
                     type="button"
@@ -182,7 +257,7 @@ export function SlideFilmstrip({
           data-testid="add-slide-filmstrip-btn"
           onClick={onAddSlide}
           className="flex flex-col items-center justify-center rounded-lg border-2 border-dashed border-zinc-800 hover:border-emerald-500/70 hover:bg-zinc-900/50 text-zinc-500 hover:text-emerald-400 transition-colors shrink-0 cursor-pointer"
-          style={{ width: "148px", height: "83px" }}
+          style={{ width: `${thumbWidth}px`, height: `${thumbHeight}px` }}
           title="새 슬라이드 추가"
         >
           <svg

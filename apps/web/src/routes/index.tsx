@@ -9,6 +9,9 @@ import {
   useActiveSetlist,
   addDeckToSetlist,
   removeSongFromSetlist,
+  duplicateSongInSetlist,
+  createNewSetlist,
+  resetActiveSetlist,
 } from "../features/presentation";
 import { PresentationCard } from "../features/presentation/PresentationCard";
 import type { Deck } from "@repo/shared";
@@ -19,10 +22,10 @@ type FilterTab = "all" | "setlists" | "songs";
 /**
  * Canva / MiriCanvas 스타일 프레젠테이션 대시보드 (피피티 리스트 페이지)
  * - 상단: 글로벌 네비게이션 헤더 (브랜드 로고, 검색 바, 새 프레젠테이션 만들기 CTA)
- * - 상단 템플릿/추천 바: M1 송출 시작, 가사 빠른 입력, 빈 16:9 프레젠테이션
+ * - 상단 템플릿/추천 바: M1 송출 시작, 가사 빠른 입력, 빈 16:9 프레젠테이션, 기본 세트 복원
  * - 필터 & 뷰 모드 전환: 그리드 뷰 (16:9 슬라이드 카드) / 리스트 뷰
  * - 16:9 슬라이드쇼 썸네일 그리드: 실제 SlideStage를 축소 렌더링하여 프레젠테이션 시각적 정체성 복원
- * - 호버 액션: 즉각 슬라이드쇼 발표 및 /editor 편집기 진입
+ * - 호버 액션: 즉각 슬라이드쇼 발표, 복제, 삭제 및 /editor 편집기 진입
  */
 export function HomeRoute(): React.JSX.Element {
   const navigate = useNavigate();
@@ -50,6 +53,15 @@ export function HomeRoute(): React.JSX.Element {
     } else {
       navigate("/editor");
     }
+  };
+
+  const handleCreateNewPresentation = (): void => {
+    createNewSetlist("새 주일 예배 프레젠테이션");
+    navigate("/editor");
+  };
+
+  const handleResetDefaultSet = (): void => {
+    resetActiveSetlist();
   };
 
   const handleAddToSet = (newDeck: Deck): void => {
@@ -152,7 +164,8 @@ export function HomeRoute(): React.JSX.Element {
 
           <button
             type="button"
-            onClick={() => handleOpenEditor()}
+            data-testid="create-presentation-btn"
+            onClick={handleCreateNewPresentation}
             className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-xs font-bold text-white transition-all shadow-md shadow-emerald-950/50 hover:shadow-emerald-900/60 flex items-center gap-1.5 cursor-pointer"
           >
             <svg
@@ -299,11 +312,11 @@ export function HomeRoute(): React.JSX.Element {
                 </div>
               </div>
 
-              <div className="mt-4">
+              <div className="mt-4 flex items-center gap-2">
                 <button
                   type="button"
                   onClick={() => setIsQuickPasteOpen(true)}
-                  className="w-full py-2.5 px-4 bg-zinc-800 hover:bg-zinc-700 text-white text-xs font-semibold rounded-lg transition-colors flex items-center justify-center gap-2 cursor-pointer border border-zinc-700/80"
+                  className="flex-1 py-2.5 px-4 bg-zinc-800 hover:bg-zinc-700 text-white text-xs font-semibold rounded-lg transition-colors flex items-center justify-center gap-2 cursor-pointer border border-zinc-700/80"
                 >
                   <svg
                     className="w-4 h-4"
@@ -319,6 +332,15 @@ export function HomeRoute(): React.JSX.Element {
                     />
                   </svg>
                   <span>가사 입력 열기</span>
+                </button>
+                <button
+                  type="button"
+                  data-testid="create-blank-set-btn"
+                  onClick={handleCreateNewPresentation}
+                  className="py-2.5 px-3 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-white text-xs font-medium rounded-lg border border-zinc-800 transition-colors cursor-pointer"
+                  title="새 빈 콘티 생성"
+                >
+                  빈 콘티
                 </button>
               </div>
             </div>
@@ -341,8 +363,18 @@ export function HomeRoute(): React.JSX.Element {
               </p>
             </div>
 
-            {/* 필터 탭 & 뷰 스위처 */}
+            {/* 필터 탭 & 뷰 스위처 & 기본 세트 복원 */}
             <div className="flex items-center gap-2">
+              <button
+                type="button"
+                data-testid="restore-default-set-btn"
+                onClick={handleResetDefaultSet}
+                className="hidden lg:inline-flex px-2.5 py-1 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-400 hover:text-zinc-200 text-xs font-medium cursor-pointer transition-colors"
+                title="기본 5곡 검증 세트로 복원"
+              >
+                기본 5곡 복원
+              </button>
+
               <div className="flex items-center bg-zinc-900 p-1 rounded-lg border border-zinc-800 text-xs">
                 <button
                   type="button"
@@ -433,6 +465,28 @@ export function HomeRoute(): React.JSX.Element {
             </div>
           </div>
 
+          {/* 검색 결과 없음 빈 상태 */}
+          {filteredItems.length === 0 && searchQuery && (
+            <div className="py-16 text-center flex flex-col items-center justify-center gap-3 bg-zinc-900/30 border border-zinc-800/80 rounded-2xl">
+              <div className="w-12 h-12 rounded-xl bg-zinc-800/80 flex items-center justify-center text-zinc-500">
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+              </div>
+              <p className="text-sm font-semibold text-zinc-300">
+                "{searchQuery}"에 일치하는 찬양 곡이 없습니다.
+              </p>
+              <button
+                type="button"
+                data-testid="clear-search-btn"
+                onClick={() => setSearchQuery("")}
+                className="px-3.5 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-xs font-medium text-emerald-400 border border-zinc-700 cursor-pointer transition-colors"
+              >
+                검색어 지우기
+              </button>
+            </div>
+          )}
+
           {/* 5. 프레젠테이션 그리드 뷰 (16:9 슬라이드 카드 렌더링) */}
           {viewMode === "grid" ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -442,6 +496,7 @@ export function HomeRoute(): React.JSX.Element {
                   setlist={setlist}
                   onPresent={handleStartPresentation}
                   onEdit={() => handleOpenEditor()}
+                  onDuplicate={() => duplicateSongInSetlist(0)}
                   className="border-emerald-500/40 bg-zinc-900/90"
                 />
               )}
@@ -458,6 +513,7 @@ export function HomeRoute(): React.JSX.Element {
                       deck={deck}
                       onPresent={handleStartPresentation}
                       onEdit={() => handleOpenEditor(index)}
+                      onDuplicate={() => duplicateSongInSetlist(index)}
                       onDelete={() => removeSongFromSetlist(index)}
                     />
                   );
@@ -513,10 +569,19 @@ export function HomeRoute(): React.JSX.Element {
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-3 shrink-0">
+                  <div className="flex items-center gap-2.5 shrink-0">
                     <span className="text-xs text-zinc-400 font-mono bg-zinc-800/80 px-2.5 py-1 rounded">
                       {item.deck?.slides.length ?? 0} 슬라이드
                     </span>
+
+                    <button
+                      type="button"
+                      onClick={() => duplicateSongInSetlist(index)}
+                      className="px-2.5 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-xs text-zinc-300 hover:text-white transition-colors cursor-pointer"
+                      title="곡 복제"
+                    >
+                      복제
+                    </button>
 
                     <button
                       type="button"

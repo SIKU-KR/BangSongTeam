@@ -19,6 +19,12 @@ import {
   duplicateSlide,
   reorderSongs,
   removeSongFromSetlist,
+  duplicateSongInSetlist,
+  reorderSlides,
+  undo,
+  redo,
+  canUndo,
+  canRedo,
 } from "./setlistStore";
 
 describe("setlistStore (In-memory reactive setlist)", () => {
@@ -201,5 +207,67 @@ describe("setlistStore (In-memory reactive setlist)", () => {
     });
     expect(result.current.items).toHaveLength(4);
     expect(result.current.items[0].deck?.title).toBe(firstSongTitle);
+  });
+
+  it("should duplicate a song within setlist", () => {
+    const { result } = renderHook(() => useActiveSetlist());
+    const initialSongCount = result.current.items.length;
+
+    act(() => {
+      duplicateSongInSetlist(0);
+    });
+
+    expect(result.current.items).toHaveLength(initialSongCount + 1);
+    expect(result.current.items[1].deck?.title).toBe("은혜로다 (사본)");
+    expect(result.current.items[1].deck?.slides).toHaveLength(
+      result.current.items[0].deck?.slides.length ?? 0,
+    );
+  });
+
+  it("should reorder slides within a song", () => {
+    const { result } = renderHook(() => useActiveSetlist());
+    const originalSlide0 = result.current.items[0].deck?.slides[0].lines[0];
+    const originalSlide1 = result.current.items[0].deck?.slides[1].lines[0];
+
+    act(() => {
+      reorderSlides(0, 0, 1);
+    });
+
+    expect(result.current.items[0].deck?.slides[0].lines[0]).toBe(
+      originalSlide1,
+    );
+    expect(result.current.items[0].deck?.slides[1].lines[0]).toBe(
+      originalSlide0,
+    );
+  });
+
+  it("should support undo and redo", () => {
+    const { result } = renderHook(() => useActiveSetlist());
+    expect(canUndo()).toBe(false);
+    expect(canRedo()).toBe(false);
+
+    // Make an edit
+    act(() => {
+      updateSetlistTitle("수정된 제목");
+    });
+    expect(result.current.title).toBe("수정된 제목");
+    expect(canUndo()).toBe(true);
+    expect(canRedo()).toBe(false);
+
+    // Undo edit
+    act(() => {
+      undo();
+    });
+    expect(result.current.title).toBe("2026 주일 3부 예배");
+    expect(canUndo()).toBe(false);
+    expect(canRedo()).toBe(true);
+
+    // Redo edit
+    act(() => {
+      redo();
+    });
+    expect(result.current.title).toBe("수정된 제목");
+    expect(canUndo()).toBe(true);
+    expect(canRedo()).toBe(false);
   });
 });

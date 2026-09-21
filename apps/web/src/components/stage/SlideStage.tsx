@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useRef, useState, useEffect } from "react";
 import type { Slide, DeckStyle } from "@repo/shared";
 import { DEFAULT_DECK_STYLE } from "@repo/shared";
 import {
@@ -36,7 +36,7 @@ export interface SlideStageProps {
  * - Layer 1 (z-0): VideoLayer (Dual Video A/B 교차 루프)
  * - Layer 2 (z-10): OverlayLayer (Blackout & Opacity)
  * - Layer 3 (z-20): TextLayer (Typography & Safe Margin)
- * - useStageScale을 통해 어떤 해상도/비율에서도 왜곡 없이 화면 중앙에 scale
+ * - useStageScale을 통해 어떤 해상도/비율/컨테이너에서도 왜곡 없이 화면 중앙에 scale
  */
 export function SlideStage({
   slide,
@@ -49,10 +49,59 @@ export function SlideStage({
   containerDimensions,
   className = "",
 }: SlideStageProps): React.JSX.Element {
-  const { scale, translateX, translateY } = useStageScale(containerDimensions);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [measuredSize, setMeasuredSize] = useState<{
+    width: number;
+    height: number;
+  } | null>(null);
+
+  useEffect(() => {
+    if (containerDimensions?.width && containerDimensions?.height) {
+      return;
+    }
+    const elem = containerRef.current;
+    if (!elem) return;
+
+    const checkSize = () => {
+      if (elem.clientWidth > 0 && elem.clientHeight > 0) {
+        setMeasuredSize((prev) => {
+          if (
+            prev?.width === elem.clientWidth &&
+            prev?.height === elem.clientHeight
+          ) {
+            return prev;
+          }
+          return { width: elem.clientWidth, height: elem.clientHeight };
+        });
+      }
+    };
+
+    checkSize();
+
+    if (typeof ResizeObserver !== "undefined") {
+      const observer = new ResizeObserver((entries) => {
+        for (const entry of entries) {
+          const { width, height } = entry.contentRect;
+          if (width > 0 && height > 0) {
+            setMeasuredSize({ width, height });
+          }
+        }
+      });
+      observer.observe(elem);
+      return () => observer.disconnect();
+    }
+  }, [containerDimensions?.width, containerDimensions?.height]);
+
+  const effectiveDimensions =
+    containerDimensions?.width && containerDimensions?.height
+      ? containerDimensions
+      : (measuredSize ?? undefined);
+
+  const { scale, translateX, translateY } = useStageScale(effectiveDimensions);
 
   return (
     <div
+      ref={containerRef}
       data-testid="slide-stage-viewport"
       className={`relative w-full h-full overflow-hidden bg-black select-none ${className}`}
     >

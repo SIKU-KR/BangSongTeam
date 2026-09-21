@@ -12,6 +12,13 @@ import {
   reorderSongs,
   removeSongFromSetlist,
   addDeckToSetlist,
+  duplicateSongInSetlist,
+  reorderSlides,
+  undo,
+  redo,
+  canUndo,
+  canRedo,
+  resetActiveSetlist,
 } from "../features/presentation";
 import {
   getBackgroundMediaUrl,
@@ -23,19 +30,21 @@ import { EditorSidebar } from "../features/editor/EditorSidebar";
 import { EditorStageCanvas } from "../features/editor/EditorStageCanvas";
 import { SlideFilmstrip } from "../features/editor/SlideFilmstrip";
 import { SongPropertyPanel } from "../features/editor/SongPropertyPanel";
+import { QuickLyricPasteModal } from "../features/editor/QuickLyricPasteModal";
 
 /**
  * Canva / MiriCanvas 스타일 통합 프레젠테이션 편집기 라우트
- * - 상단: EditorHeader (제목 인라인 수정, 슬라이드쇼 발표 CTA)
- * - 좌측: EditorSidebar (콘티 곡 목록, 슬라이드 썸네일 탐색)
- * - 중앙: EditorStageCanvas (16:9 프레젠테이션 스테이지 & 리허설 암전/숨김 토글)
+ * - 상단: EditorHeader (제목 인라인 수정, 실행 취소/다시 실행, 슬라이드쇼 발표 CTA)
+ * - 좌측: EditorSidebar (Canva 스타일 아이콘 레일 + 콘티 곡, 슬라이드, 가사, 모션 배경, 스타일 테마 드로어)
+ * - 중앙: EditorStageCanvas (16:9 캔버스 스테이지 & 줌 컨트롤 & 리허설 암전/숨김 & 빈 상태 방어)
  * - 우측: SongPropertyPanel (모션 배경 10종, 오버레이, 타이포그래피, 3×3 그리드, 슬라이드 가사 직접 수정)
- * - 하단: SlideFilmstrip (가로 슬라이드 스트립, 썸네일 점프, 슬라이드 추가/복제/삭제)
+ * - 하단: SlideFilmstrip (가로 슬라이드 스트립, 슬라이드 순서 변경 ◀/▶, 접기/펼치기 토글)
  */
 export function EditorRoute(): React.JSX.Element {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const setlist = useActiveSetlist();
+  const [isLyricModalOpen, setIsLyricModalOpen] = useState(false);
 
   const initialSongIndex = Math.min(
     Math.max(0, Number(searchParams.get("song") || 0)),
@@ -48,11 +57,18 @@ export function EditorRoute(): React.JSX.Element {
   const [zoomLevel, setZoomLevel] = useState<number>(100);
 
   // 현재 유효한 곡 및 슬라이드 계산
-  const currentItem = setlist.items[activeSongIndex] ?? setlist.items[0];
+  const safeSongIndex = Math.min(
+    Math.max(0, activeSongIndex),
+    Math.max(0, setlist.items.length - 1),
+  );
+  const currentItem = setlist.items[safeSongIndex] ?? setlist.items[0];
   const currentSong = currentItem?.deck;
   const currentSlides = currentSong?.slides ?? [];
-  const currentSlide =
-    currentSlides[activeSlideIndex] ?? currentSlides[0] ?? null;
+  const safeSlideIndex = Math.min(
+    Math.max(0, activeSlideIndex),
+    Math.max(0, currentSlides.length - 1),
+  );
+  const currentSlide = currentSlides[safeSlideIndex] ?? null;
   const currentStyle = currentSong?.style ?? DEFAULT_DECK_STYLE;
 
   const backgroundUrl = getBackgroundMediaUrl(currentSong?.backgroundId);
@@ -94,26 +110,34 @@ export function EditorRoute(): React.JSX.Element {
   // 슬라이드 추가
   const handleAddSlide = () => {
     addSlideToSong(
-      activeSongIndex,
+      safeSongIndex,
       ["새 가사 줄을 입력하세요"],
-      activeSlideIndex,
+      safeSlideIndex,
     );
     setActiveSlideIndex((prev) => prev + 1);
   };
 
   // 슬라이드 복제
   const handleDuplicateSlide = (idx: number) => {
-    duplicateSlide(activeSongIndex, idx);
+    duplicateSlide(safeSongIndex, idx);
     setActiveSlideIndex(idx + 1);
   };
 
   // 슬라이드 삭제
   const handleDeleteSlide = (idx: number) => {
     if (currentSlides.length <= 1) return;
-    removeSlideFromSong(activeSongIndex, idx);
+    removeSlideFromSong(safeSongIndex, idx);
     setActiveSlideIndex((prev) =>
       Math.max(0, Math.min(prev, currentSlides.length - 2)),
     );
+  };
+
+  // 슬라이드 순서 재정렬
+  const handleReorderSlide = (from: number, to: number) => {
+    reorderSlides(safeSongIndex, from, to);
+    if (activeSlideIndex === from) {
+      setActiveSlideIndex(to);
+    }
   };
 
   // 곡 선택
@@ -122,12 +146,46 @@ export function EditorRoute(): React.JSX.Element {
     setActiveSlideIndex(0);
   };
 
+  // 곡 순서 재정렬
+  const handleReorderSong = (from: number, to: number) => {
+    reorderSongs(from, to);
+    if (activeSongIndex === from) {
+      setActiveSongIndex(to);
+    } else if (from < activeSongIndex && to >= activeSongIndex) {
+      setActiveSongIndex((prev) => prev - 1);
+    } else if (from > activeSongIndex && to <= activeSongIndex) {
+      setActiveSongIndex((prev) => prev + 1);
+    }
+  };
+
+  // 곡 복제
+  const handleDuplicateSong = (idx: number) => {
+    duplicateSongInSetlist(idx);
+    setActiveSongIndex(idx + 1);
+    setActiveSlideIndex(0);
+  };
+
   // 곡 삭제
   const handleDeleteSong = (idx: number) => {
     removeSongFromSetlist(idx);
-    setActiveSongIndex((prev) =>
-      Math.max(0, Math.min(prev, setlist.items.length - 2)),
-    );
+    const newCount = setlist.items.length - 1;
+    if (newCount <= 0) {
+      setActiveSongIndex(0);
+      setActiveSlideIndex(0);
+      return;
+    }
+    if (idx === activeSongIndex) {
+      setActiveSongIndex((prev) => Math.min(prev, newCount - 1));
+      setActiveSlideIndex(0);
+    } else if (idx < activeSongIndex) {
+      setActiveSongIndex((prev) => prev - 1);
+    }
+  };
+
+  // 기본 세트 복원
+  const handleResetSetlist = () => {
+    resetActiveSetlist();
+    setActiveSongIndex(0);
     setActiveSlideIndex(0);
   };
 
@@ -141,26 +199,35 @@ export function EditorRoute(): React.JSX.Element {
         title={setlist.title}
         onUpdateTitle={(newTitle) => updateSetlistTitle(newTitle)}
         onPresent={handlePresent}
-        currentSongIndex={activeSongIndex}
+        currentSongIndex={safeSongIndex}
         totalSongs={setlist.items.length}
-        currentSlideIndex={activeSlideIndex}
+        currentSlideIndex={safeSlideIndex}
         totalSlides={currentSlides.length}
+        onUndo={undo}
+        onRedo={redo}
+        canUndo={canUndo()}
+        canRedo={canRedo()}
       />
 
       {/* 2. 본문 3패널 레이아웃 */}
       <div className="flex-1 flex overflow-hidden">
-        {/* 좌측 패널: 곡 목록 & 슬라이드 목록 탐색 */}
+        {/* 좌측 패널: Canva 스타일 아이콘 레일 & 드로어 탐색 */}
         <EditorSidebar
           items={setlist.items}
-          activeSongIndex={activeSongIndex}
-          activeSlideIndex={activeSlideIndex}
+          activeSongIndex={safeSongIndex}
+          activeSlideIndex={safeSlideIndex}
           onSelectSong={handleSelectSong}
           onSelectSlide={handleSelectSlide}
-          onReorderSong={(from, to) => reorderSongs(from, to)}
+          onReorderSong={handleReorderSong}
           onDeleteSong={handleDeleteSong}
+          onDuplicateSong={handleDuplicateSong}
           onAddSong={(deck) => addDeckToSetlist(deck)}
           onAddSlide={handleAddSlide}
           onDeleteSlide={handleDeleteSlide}
+          onDuplicateSlide={handleDuplicateSlide}
+          onReorderSlide={handleReorderSlide}
+          onUpdateBackground={(bgId) => updateSongBackground(safeSongIndex, bgId)}
+          onUpdateStyle={(styleUpdate) => updateSongStyle(safeSongIndex, styleUpdate)}
         />
 
         {/* 중앙: 16:9 슬라이드 스테이지 캔버스 */}
@@ -170,11 +237,15 @@ export function EditorRoute(): React.JSX.Element {
           backgroundUrl={backgroundUrl}
           posterUrl={posterUrl}
           songTitle={currentSong?.title}
-          slideIndex={activeSlideIndex}
+          slideIndex={safeSlideIndex}
           totalSlides={currentSlides.length}
           onPrevSlide={handlePrevSlide}
           onNextSlide={handleNextSlide}
           onPresent={handlePresent}
+          zoomLevel={zoomLevel}
+          onZoomChange={setZoomLevel}
+          onResetSetlist={handleResetSetlist}
+          onOpenLyricModal={() => setIsLyricModalOpen(true)}
         />
 
         {/* 우측 패널: 디자인 & 속성 인스펙터 */}
@@ -183,13 +254,13 @@ export function EditorRoute(): React.JSX.Element {
           backgroundId={currentSong?.backgroundId}
           activeSlide={currentSlide}
           onUpdateStyle={(styleUpdate) =>
-            updateSongStyle(activeSongIndex, styleUpdate)
+            updateSongStyle(safeSongIndex, styleUpdate)
           }
           onUpdateBackground={(bgId) =>
-            updateSongBackground(activeSongIndex, bgId)
+            updateSongBackground(safeSongIndex, bgId)
           }
           onUpdateSlideLines={(lines) =>
-            updateSlideLines(activeSongIndex, activeSlideIndex, lines)
+            updateSlideLines(safeSongIndex, safeSlideIndex, lines)
           }
         />
       </div>
@@ -197,19 +268,29 @@ export function EditorRoute(): React.JSX.Element {
       {/* 3. 하단 Canva 스타일 슬라이드 필름스트립 */}
       <SlideFilmstrip
         slides={currentSlides}
-        activeSlideIndex={activeSlideIndex}
+        activeSlideIndex={safeSlideIndex}
         onSelectSlide={handleSelectSlide}
         onAddSlide={handleAddSlide}
         onDuplicateSlide={handleDuplicateSlide}
         onDeleteSlide={handleDeleteSlide}
+        onReorderSlide={handleReorderSlide}
         songStyle={currentStyle}
         backgroundUrl={backgroundUrl}
         posterUrl={posterUrl}
-        zoomLevel={zoomLevel}
-        onZoomChange={setZoomLevel}
+      />
+
+      {/* 가사 빠른 입력 모달 */}
+      <QuickLyricPasteModal
+        isOpen={isLyricModalOpen}
+        onClose={() => setIsLyricModalOpen(false)}
+        onAddToSet={(newDeck) => {
+          addDeckToSetlist(newDeck);
+          setIsLyricModalOpen(false);
+        }}
       />
     </div>
   );
 }
 
 export default EditorRoute;
+

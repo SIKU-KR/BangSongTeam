@@ -28,6 +28,12 @@ export {
   duplicateSlide,
   reorderSongs,
   removeSongFromSetlist,
+  duplicateSongInSetlist,
+  reorderSlides,
+  undo,
+  redo,
+  canUndo,
+  canRedo,
 } from "./setlistStore";
 
 export {

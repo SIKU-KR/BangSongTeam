@@ -9,6 +9,10 @@ export interface EditorHeaderProps {
   totalSongs: number;
   currentSlideIndex: number;
   totalSlides: number;
+  onUndo?: () => void;
+  onRedo?: () => void;
+  canUndo?: boolean;
+  canRedo?: boolean;
   className?: string;
 }
 
@@ -16,6 +20,7 @@ export interface EditorHeaderProps {
  * Canva / MiriCanvas 스타일 편집기 상단 네비게이션 헤더
  * - 뒤로가기 링크
  * - 세트 제목 인라인 편집
+ * - 실행 취소(Undo) / 다시 실행(Redo)
  * - 자동 저장 상태 표시기
  * - 슬라이드 카운터
  * - 슬라이드쇼 발표(전체화면) CTA 버튼
@@ -28,6 +33,10 @@ export function EditorHeader({
   totalSongs,
   currentSlideIndex,
   totalSlides,
+  onUndo,
+  onRedo,
+  canUndo = false,
+  canRedo = false,
   className = "",
 }: EditorHeaderProps): React.JSX.Element {
   const navigate = useNavigate();
@@ -49,7 +58,7 @@ export function EditorHeader({
       data-testid="editor-header"
       className={`h-14 bg-zinc-950 border-b border-zinc-800/80 px-4 flex items-center justify-between select-none text-zinc-100 ${className}`}
     >
-      {/* 1. 좌측: 뒤로가기 & 세트 제목 */}
+      {/* 1. 좌측: 뒤로가기 & 세트 제목 & 실행취소/다시실행 */}
       <div className="flex items-center gap-3 min-w-0">
         <button
           type="button"
@@ -127,17 +136,53 @@ export function EditorHeader({
             자동 저장됨
           </span>
         </div>
+
+        {/* Undo / Redo */}
+        {(onUndo || onRedo) && (
+          <div className="hidden sm:flex items-center gap-0.5 border-l border-zinc-800 pl-2">
+            <button
+              type="button"
+              data-testid="header-undo-btn"
+              disabled={!canUndo}
+              onClick={onUndo}
+              className="p-1.5 rounded text-zinc-400 hover:text-white disabled:opacity-25 transition-colors cursor-pointer"
+              title="실행 취소 (Undo)"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a5 5 0 015 5v2M3 10l6-6M3 10l6 6" />
+              </svg>
+            </button>
+            <button
+              type="button"
+              data-testid="header-redo-btn"
+              disabled={!canRedo}
+              onClick={onRedo}
+              className="p-1.5 rounded text-zinc-400 hover:text-white disabled:opacity-25 transition-colors cursor-pointer"
+              title="다시 실행 (Redo)"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 10H11a5 5 0 00-5 5v2M21 10l-6-6M21 10l-6 6" />
+              </svg>
+            </button>
+          </div>
+        )}
       </div>
 
       {/* 2. 중앙: 슬라이드 위치 표시기 */}
       <div className="hidden lg:flex items-center gap-2 px-3 py-1 rounded-full bg-zinc-900/80 border border-zinc-800 text-xs text-zinc-300 font-mono">
-        <span>
-          곡 {currentSongIndex + 1}/{totalSongs}
-        </span>
-        <span className="text-zinc-600">·</span>
-        <span>
-          슬라이드 {currentSlideIndex + 1}/{totalSlides}
-        </span>
+        {totalSongs > 0 ? (
+          <>
+            <span>
+              곡 {currentSongIndex + 1}/{totalSongs}
+            </span>
+            <span className="text-zinc-600">·</span>
+            <span>
+              슬라이드 {currentSlideIndex + 1}/{totalSlides}
+            </span>
+          </>
+        ) : (
+          <span>곡 없음 · 0개 슬라이드</span>
+        )}
       </div>
 
       {/* 3. 우측: 단축키 안내 및 슬라이드쇼 발표 버튼 */}
@@ -195,8 +240,9 @@ export function EditorHeader({
         <button
           type="button"
           data-testid="header-present-btn"
+          disabled={totalSongs === 0}
           onClick={onPresent}
-          className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs transition-all shadow-md shadow-emerald-950/50 hover:shadow-emerald-900/60 flex items-center gap-1.5 cursor-pointer"
+          className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold text-xs transition-all shadow-md shadow-emerald-950/50 hover:shadow-emerald-900/60 flex items-center gap-1.5 cursor-pointer"
         >
           <svg className="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24">
             <path d="M8 5v14l11-7z" />
