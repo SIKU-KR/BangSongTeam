@@ -150,9 +150,6 @@ export function HomeRoute(): React.JSX.Element {
 
           {/* 메인 사이드바 메뉴 (Canva 캡슐형 Pill 활성 인디케이터, 메뉴는 사용자 요청대로 유지) */}
           <div className="space-y-1">
-            <span className="px-3 text-[11px] font-semibold text-zinc-500 uppercase tracking-wider block mb-2">
-              메뉴
-            </span>
             <nav className="space-y-1">
               {/* 1) 홈 (모든 프로젝트) */}
               <button
