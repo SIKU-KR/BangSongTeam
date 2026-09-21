@@ -135,4 +135,29 @@ describe("QuickLyricPasteModal (Task 3.2)", () => {
 
     expect(handleClose).toHaveBeenCalledTimes(1);
   });
+
+  it("곡 제목을 입력하면 모달 내 멜론/벅스 검색 링크가 실시간으로 연동되어야 한다", () => {
+    render(
+      <QuickLyricPasteModal
+        isOpen={true}
+        onClose={vi.fn()}
+        onAddToSet={vi.fn()}
+      />,
+    );
+
+    const titleInput = screen.getByPlaceholderText(/곡 제목/);
+    fireEvent.change(titleInput, { target: { value: "시선" } });
+
+    const melonLink = screen.getByRole("link", { name: /멜론/ });
+    const bugsLink = screen.getByRole("link", { name: /벅스/ });
+
+    expect(melonLink).toHaveAttribute(
+      "href",
+      "https://www.melon.com/search/total/index.htm?q=%EC%8B%9C%EC%84%A0",
+    );
+    expect(bugsLink).toHaveAttribute(
+      "href",
+      "https://music.bugs.co.kr/search/integrated?q=%EC%8B%9C%EC%84%A0",
+    );
+  });
 });

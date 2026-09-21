@@ -6,6 +6,7 @@ import {
   Slide,
   splitLyricsIntoSlides,
 } from "@repo/shared";
+import { ExternalSearchLinks } from "./ExternalSearchLinks";
 
 export interface QuickLyricPasteModalProps {
   isOpen: boolean;
@@ -143,11 +144,13 @@ export function QuickLyricPasteModal({
             </div>
 
             {/* External Search Links Slot */}
-            {renderSearchLinks && (
-              <div className="pt-1">
-                {renderSearchLinks(title)}
-              </div>
-            )}
+            <div className="pt-1">
+              {renderSearchLinks ? (
+                renderSearchLinks(title)
+              ) : (
+                <ExternalSearchLinks title={title} />
+              )}
+            </div>
 
             <div className="flex-1 flex flex-col min-h-[220px]">
               <label
