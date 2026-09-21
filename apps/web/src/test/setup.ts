@@ -1,4 +1,6 @@
 import "@testing-library/jest-dom/vitest";
+// jsdom에는 IndexedDB가 없다. 영속성 계층 테스트를 위해 폴리필을 주입한다.
+import "fake-indexeddb/auto";
 
 const store: Record<string, string> = {};
 const mockLocalStorage = {

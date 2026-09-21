@@ -6,6 +6,13 @@
 > **목표**: 브라우저 메모리에만 존재하는 프레젠테이션 상태를 IndexedDB에 영속화하여, 새로고침·탭 종료·브라우저 재시작 후에도 작업이 그대로 복원되게 한다
 > **완료 기준 (DoD)**: 브라우저를 완전히 종료한 뒤 다시 열어도 5곡 세트가 그대로 남아 있고, 그 세트로 주일 예배 1회를 송출한다
 
+> **구현 현황 (2026-09-21)**
+>
+> - Phase M3A-1·2·3을 모두 구현했다. 설계와 달라진 부분은 아래 각 태스크에 적어 두었다.
+> - 문서 원안에 없던 **Task 1.6(구 localStorage 보관함 마이그레이션)** 과 **Task 2.5(곡 보관함 저장소 이관)** 를 추가했다. 커밋 0f68563이 곡 보관함을 localStorage에 넣으면서 저장 경로가 둘로 갈라졌기 때문이다.
+> - 커스텀 배경 업로드의 로컬 보관(원안 Task 1.1의 '배경 라이브러리' 언급)은 업로드 기능 자체가 미구현이라 이번 범위에서 제외했다.
+> - **남은 것은 실사용 검증뿐이다** — Chrome에서 세트를 만들고 브라우저를 완전히 종료한 뒤 복원되는지, 그리고 그 세트로 주일 예배를 송출하는지.
+
 ---
 
 ## 1. 아키텍처 가드레일 & 준수 사항
@@ -24,7 +31,7 @@
 
 ### Phase M3A-1: 저장소 계층 (TDD)
 
-- [ ] **Task 1.1: idb 및 테스트용 fake-indexeddb 설치**
+- [x] **Task 1.1: idb 및 테스트용 fake-indexeddb 설치**
   - **대상 파일**: `apps/web/package.json`
   - **선행 조건**: 없음
   - **구현 내용**:
@@ -32,7 +39,7 @@
     - `fake-indexeddb`를 devDependencies에 추가하고 `apps/web/src/test/setup.ts`에서 로드해 jsdom 환경에 IndexedDB를 제공
   - **DoD (통과 기준)**: `pnpm --filter web exec tsc --noEmit`이 에러 없이 통과한다.
 
-- [ ] **Task 1.2: 오프라인 DB 오픈 유틸리티 단위 테스트 작성 (TDD Red)**
+- [x] **Task 1.2: 오프라인 DB 오픈 유틸리티 단위 테스트 작성 (TDD Red)**
   - **대상 파일**: `apps/web/src/lib/storage/db.test.ts`
   - **선행 조건**: Task 1.1
   - **구현 내용**:
@@ -42,7 +49,7 @@
     - 테스트 4: IndexedDB를 사용할 수 없는 환경에서 예외를 던지되 원인을 식별 가능한 에러 타입으로 감싼다
   - **DoD (통과 기준)**: `pnpm --filter web vitest run src/lib/storage/db.test.ts`가 Red(구현 부재로 실패)를 명확히 보고한다.
 
-- [ ] **Task 1.3: 오프라인 DB 오픈 유틸리티 구현 (TDD Green)**
+- [x] **Task 1.3: 오프라인 DB 오픈 유틸리티 구현 (TDD Green)**
   - **대상 파일**: `apps/web/src/lib/storage/db.ts`
   - **선행 조건**: Task 1.2
   - **구현 내용**:
@@ -51,7 +58,7 @@
     - 사용 불가 환경을 위한 `isPersistenceAvailable()` 노출
   - **DoD (통과 기준)**: `pnpm --filter web vitest run src/lib/storage/db.test.ts`가 100% 통과(Green)한다.
 
-- [ ] **Task 1.4: 프레젠테이션 리포지토리 단위 테스트 작성 (TDD Red)**
+- [x] **Task 1.4: 프레젠테이션 리포지토리 단위 테스트 작성 (TDD Red)**
   - **대상 파일**: `apps/web/src/lib/storage/presentationRepository.test.ts`
   - **선행 조건**: Task 1.3
   - **구현 내용**:
@@ -62,7 +69,7 @@
     - 테스트 5: 빈 저장소에서 `loadAllPresentations()`는 빈 배열을 반환한다 (에러 아님)
   - **DoD (통과 기준)**: `pnpm --filter web vitest run src/lib/storage/presentationRepository.test.ts`가 Red를 명확히 보고한다.
 
-- [ ] **Task 1.5: 프레젠테이션 리포지토리 구현 (TDD Green)**
+- [x] **Task 1.5: 프레젠테이션 리포지토리 구현 (TDD Green)**
   - **대상 파일**: `apps/web/src/lib/storage/presentationRepository.ts`
   - **선행 조건**: Task 1.4
   - **구현 내용**:
@@ -71,9 +78,18 @@
     - 문서 단위 전체 교체(put)로 기록해 마지막 쓰기 유실 시에도 직전 저장본이 남게 한다
   - **DoD (통과 기준)**: `pnpm --filter web vitest run src/lib/storage/presentationRepository.test.ts`가 100% 통과(Green)한다.
 
+- [x] **Task 1.6: 구 localStorage 보관함 마이그레이션 (문서 원안에 없던 추가 태스크)**
+  - **대상 파일**: `apps/web/src/lib/storage/songRepository.ts`
+  - **선행 조건**: Task 1.5
+  - **구현 내용**:
+    - 커밋 0f68563이 만든 `worship_user_songs_v1` 키를 부팅 시 1회 IndexedDB로 이관
+    - 항목별 `DeckSchema.safeParse`로 유효한 곡만 이관. 배열 전체를 한 번에 파싱하지 않는다 (이전 구현의 전체 소실 경로 제거)
+    - 원본 JSON은 삭제하지 않고 `worship_user_songs_v1__migrated_backup`으로 이동해 손상 항목까지 복구 가능하게 남긴다
+  - **DoD (통과 기준)**: `pnpm --filter web vitest run src/lib/storage/songRepository.test.ts`가 100% 통과(Green)한다.
+
 ### Phase M3A-2: 스토어 연동
 
-- [ ] **Task 2.1: presentationStore 영속성 연동 테스트 작성 (TDD Red)**
+- [x] **Task 2.1: presentationStore 영속성 연동 테스트 작성 (TDD Red)**
   - **대상 파일**: `apps/web/src/features/presentation/presentationStore.persistence.test.ts`
   - **선행 조건**: Task 1.5
   - **구현 내용**:
@@ -84,7 +100,7 @@
     - 테스트 5: undo/redo 히스토리는 저장 대상이 아니다
   - **DoD (통과 기준)**: `pnpm --filter web vitest run src/features/presentation/presentationStore.persistence.test.ts`가 Red를 명확히 보고한다.
 
-- [ ] **Task 2.2: presentationStore 영속성 연동 구현 (TDD Green)**
+- [x] **Task 2.2: presentationStore 영속성 연동 구현 (TDD Green)**
   - **대상 파일**: `apps/web/src/features/presentation/presentationStore.ts`
   - **선행 조건**: Task 2.1
   - **구현 내용**:
@@ -92,16 +108,18 @@
     - `hydrateFromStorage()` 추가 — `createSeedState()`는 '저장소가 비어 있을 때의 초기값'으로 격하
     - `flushPendingWrites()`, `persistenceError` 구독 훅(`usePersistenceError`) 노출
   - **DoD (통과 기준)**: `pnpm --filter web vitest run src/features/presentation`이 100% 통과(Green)한다.
+  - **구현 메모**: 저장 스케줄러를 `emitChange()` 한 곳에 걸었다. 모든 뮤테이터가 이 함수로 끝나므로 뮤테이터마다 저장 호출을 흩뿌릴 필요가 없다. `persistenceError`는 스토어가 아니라 `lib/storage/persistenceStatus.ts`에 두어 곡 보관함과 공유한다.
 
-- [ ] **Task 2.3: 앱 부팅 하이드레이션 게이트 및 언로드 flush 연결**
+- [x] **Task 2.3: 앱 부팅 하이드레이션 게이트 및 언로드 flush 연결**
   - **대상 파일**: `apps/web/src/App.tsx`
   - **선행 조건**: Task 2.2
   - **구현 내용**:
     - 라우터 렌더 전에 `hydrateFromStorage()`를 1회 실행하고, 완료 전까지 초기 로딩 화면을 보여준다 (시드 데이터가 잠깐 보였다가 교체되는 깜빡임 금지)
     - `visibilitychange`(hidden)와 `pagehide`에서 `flushPendingWrites()` 호출
   - **DoD (통과 기준)**: `pnpm --filter web vitest run src/App.test.tsx`가 100% 통과(Green)한다.
+  - **구현 메모**: 하이드레이션 게이트가 생기면서 `App.test.tsx`의 단언이 동기 `getBy*`에서 `await findBy*`로 바뀌었다.
 
-- [ ] **Task 2.4: 저장 실패 경고 배너 컴포넌트 구현**
+- [x] **Task 2.4: 저장 실패 경고 배너 컴포넌트 구현**
   - **대상 파일**: `apps/web/src/components/common/StorageWarningBanner.tsx`
   - **선행 조건**: Task 2.2
   - **구현 내용**:
@@ -110,9 +128,18 @@
     - 편집기 화면 상단에 상시 노출하며 닫을 수 없게 한다 (`ChromeAlertBanner`와 달리 dismiss 금지)
   - **DoD (통과 기준)**: `pnpm --filter web vitest run src/components/common/StorageWarningBanner.test.tsx`가 100% 통과(Green)한다.
 
+- [x] **Task 2.5: 곡 보관함 저장소 이관 (문서 원안에 없던 추가 태스크)**
+  - **대상 파일**: `apps/web/src/features/editor/songLibraryStore.ts`
+  - **선행 조건**: Task 1.6
+  - **구현 내용**:
+    - localStorage 직접 접근을 걷어내고 `songRepository`를 통해 IndexedDB에 저장
+    - 공개 API(`getUserSongs`/`saveSongToLibrary`/`deleteUserSong`/`useAvailableSongs`)는 유지해 호출부를 건드리지 않는다
+    - 저장 실패는 삼키지 않고 `reportPersistenceError`로 올린다
+  - **DoD (통과 기준)**: `pnpm --filter web vitest run src/features/editor/songLibraryStore.test.ts`가 100% 통과(Green)한다.
+
 ### Phase M3A-3: 통합 검증
 
-- [ ] **Task 3.1: 영속성 왕복(Round-trip) 통합 테스트 작성 및 통과**
+- [x] **Task 3.1: 영속성 왕복(Round-trip) 통합 테스트 작성 및 통과**
   - **대상 파일**: `apps/web/src/features/presentation/persistenceRoundtrip.test.tsx`
   - **선행 조건**: Task 2.4
   - **구현 내용**:
@@ -120,13 +147,14 @@
     - 송출 라우트가 하이드레이션된 데이터로 첫 슬라이드를 렌더링하는 것까지 확인
   - **DoD (통과 기준)**: `pnpm --filter web vitest run src/features/presentation/persistenceRoundtrip.test.tsx`가 100% 통과(Green)한다.
 
-- [ ] **Task 3.2: M3-A 모노레포 전체 품질 검증**
+- [x] **Task 3.2: M3-A 모노레포 전체 품질 검증**
   - **대상 파일**: 전체 워크스페이스
   - **선행 조건**: Task 3.1
   - **구현 내용**:
     - `pnpm typecheck` / `pnpm lint` / `pnpm test` 전부 Green
     - 수동 확인: Chrome에서 세트 편집 → 탭 완전 종료 → 재접속 시 동일 세트 복원
   - **DoD (통과 기준)**: `pnpm typecheck && pnpm lint && pnpm test`가 에러 없이 성공(Exit code 0)한다.
+  - **구현 메모**: 명령 검증은 통과했다 (테스트 369개 / 54파일 Green). **수동 확인(브라우저 완전 종료 후 복원)과 주일 예배 송출은 아직 남아 있다.**
 
 ---
 

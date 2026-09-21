@@ -2,14 +2,9 @@ import React from "react";
 import { describe, it, expect, vi } from "vitest";
 import { render, screen, fireEvent, act } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
-import {
-  MergedSlidesView,
-  SongLibraryView,
-  BackgroundLibraryView,
-} from "./index";
+import { MergedSlidesView, BackgroundLibraryView } from "./index";
 import { mockPresentation } from "../presentation/mockPresentation";
 import { SEED_PRESENTATIONS } from "../presentation/mockPresentations";
-import { COMMUNITY_SONGS } from "./mockCommunityData";
 
 describe("Library Views", () => {
   describe("MergedSlidesView (프레젠테이션 1개 단위 뷰)", () => {
@@ -80,46 +75,6 @@ describe("Library Views", () => {
     });
   });
 
-  describe("SongLibraryView (곡 라이브러리: 2단락 구성)", () => {
-    it("renders both '내가 등록한 곡' and '유저가 등록한 곡' sections", () => {
-      const handleAddDeckToPresentation = vi.fn();
-      const handleDuplicateSong = vi.fn();
-      const handleRemoveSong = vi.fn();
-
-      render(
-        <MemoryRouter>
-          <SongLibraryView
-            presentation={mockPresentation}
-            onOpenQuickPaste={vi.fn()}
-            onAddDeckToPresentation={handleAddDeckToPresentation}
-            onDuplicateSong={handleDuplicateSong}
-            onRemoveSong={handleRemoveSong}
-          />
-        </MemoryRouter>,
-      );
-
-      // 단락 1: 내가 등록한 곡
-      expect(screen.getByText("내가 등록한 곡")).toBeInTheDocument();
-      expect(screen.getByText("은혜로다")).toBeInTheDocument();
-      expect(screen.getByText("주 품에")).toBeInTheDocument();
-
-      // 단락 2: 유저가 등록한 곡
-      expect(screen.getByText("유저가 등록한 곡")).toBeInTheDocument();
-      expect(screen.getByText("시간을 뚫고")).toBeInTheDocument();
-      expect(screen.getByText("예수 늘 함께 계시네")).toBeInTheDocument();
-
-      // 커뮤니티 곡 '내 프레젠테이션에 추가' 클릭
-      const targetCommunityDeck = COMMUNITY_SONGS[0];
-      const addBtn = screen.getByTestId(
-        `add-community-song-${targetCommunityDeck.id}`,
-      );
-      fireEvent.click(addBtn);
-      expect(handleAddDeckToPresentation).toHaveBeenCalledWith(
-        targetCommunityDeck,
-      );
-    });
-  });
-
   describe("BackgroundLibraryView (배경 라이브러리: 2단락 구성)", () => {
     it("renders both '내가 등록한 배경' and '유저가 등록한 배경' sections", () => {
       const handleApply = vi.fn();
@@ -180,44 +135,6 @@ describe("Library Views", () => {
 
       // '본당' 태그를 가진 '우리 교회 본당 배경 01' 매칭 확인
       expect(screen.getByText("우리 교회 본당 배경 01")).toBeInTheDocument();
-    });
-  });
-
-  describe("es-hangul Korean Search Integration", () => {
-    it("filters songs by Korean choseong (초성 검색)", () => {
-      render(
-        <MemoryRouter>
-          <SongLibraryView
-            presentation={mockPresentation}
-            onOpenQuickPaste={vi.fn()}
-            onAddDeckToPresentation={vi.fn()}
-            onDuplicateSong={vi.fn()}
-            onRemoveSong={vi.fn()}
-            searchQuery="ㅇㅎㄹㄷ" // '은혜로다' 초성
-          />
-        </MemoryRouter>,
-      );
-
-      expect(screen.getByText("은혜로다")).toBeInTheDocument();
-      expect(screen.queryByText("주 품에")).not.toBeInTheDocument();
-    });
-
-    it("filters songs by disassembled typing (실시간 미완성 자모 검색)", () => {
-      render(
-        <MemoryRouter>
-          <SongLibraryView
-            presentation={mockPresentation}
-            onOpenQuickPaste={vi.fn()}
-            onAddDeckToPresentation={vi.fn()}
-            onDuplicateSong={vi.fn()}
-            onRemoveSong={vi.fn()}
-            searchQuery="시ㅅ" // '시선' 타이핑 중
-          />
-        </MemoryRouter>,
-      );
-
-      expect(screen.getByText("시선")).toBeInTheDocument();
-      expect(screen.queryByText("주 품에")).not.toBeInTheDocument();
     });
   });
 });

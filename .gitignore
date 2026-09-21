@@ -4,9 +4,13 @@ node_modules/
 
 # Build outputs
 dist/
-# wrangler assets.directory 는 존재해야 하므로 플레이스홀더만 추적한다
+# wrangler assets.directory 는 존재해야 하므로 플레이스홀더만 추적한다.
+# dist/ 로 디렉토리를 통째로 무시하면 하위 예외가 먹지 않으므로,
+# 경로를 한 단계씩 열고 내용물만 다시 무시한다.
 !apps/web/dist/
+apps/web/dist/*
 !apps/web/dist/client/
+apps/web/dist/client/*
 !apps/web/dist/client/.gitkeep
 build/
 out/

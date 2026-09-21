@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import type { Deck } from "@repo/shared";
 import { ChromeAlertBanner } from "../components/common/ChromeAlertBanner";
+import { StorageWarningBanner } from "../components/common/StorageWarningBanner";
 import { AppSidebar } from "../components/layout/AppSidebar";
 import { AppHeroHeader } from "../components/layout/AppHeroHeader";
 import { QuickLyricPasteModal } from "../features/editor";
@@ -77,6 +78,9 @@ export function AppShellLayout(): React.JSX.Element {
       <div className="flex-1 h-full flex flex-col min-w-0 overflow-y-auto overflow-x-hidden">
         {/* Chrome 권장 안내 배너 */}
         <ChromeAlertBanner />
+
+        {/* 저장 실패 경고 (닫을 수 없음) */}
+        <StorageWarningBanner />
 
         <AppHeroHeader
           title={meta.title}

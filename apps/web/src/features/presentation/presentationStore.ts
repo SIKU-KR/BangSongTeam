@@ -1,6 +1,13 @@
 import { useSyncExternalStore } from "react";
 import type { Deck, Presentation, PresentationItem } from "@repo/shared";
 import { INITIAL_BACKGROUNDS } from "@repo/shared";
+import {
+  savePresentation,
+  loadAllPresentations,
+  deletePresentation,
+  reportPersistenceError,
+  clearPersistenceError,
+} from "../../lib/storage";
 import { SEED_PRESENTATIONS, SEED_USER_ID } from "./mockPresentations";
 
 /** 멀티 문서 컬렉션 상태 */
@@ -112,7 +119,127 @@ export function redo(): boolean {
   return true;
 }
 
+// ----------------------------------------------------------------------------
+// IndexedDB 영속성 (TECH_SPEC §5.5 Phase 2)
+//
+// 모든 뮤테이터가 emitChange()로 끝나므로 저장 스케줄링도 여기 한 곳에서만 한다.
+// 컴포넌트가 저장소를 직접 부르지 않는다.
+// ----------------------------------------------------------------------------
+
+const PERSIST_DEBOUNCE_MS = 300;
+
+/** 하이드레이션 전에는 저장하지 않는다 (시드가 저장본을 덮어쓰는 것을 막는다) */
+let persistenceEnabled = false;
+let pendingIds = new Set<string>();
+let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+let inFlight: Promise<void> = Promise.resolve();
+
+async function writeDocuments(ids: string[]): Promise<void> {
+  let failed = false;
+  for (const id of ids) {
+    const doc = state.byId[id];
+    if (!doc) continue;
+    try {
+      await savePresentation(doc);
+    } catch (err) {
+      failed = true;
+      reportPersistenceError(err);
+    }
+  }
+  if (!failed && ids.length > 0) {
+    clearPersistenceError();
+  }
+}
+
+function runPendingWrites(): void {
+  if (debounceTimer) {
+    clearTimeout(debounceTimer);
+    debounceTimer = null;
+  }
+  if (pendingIds.size === 0) return;
+
+  const ids = [...pendingIds];
+  pendingIds = new Set();
+  inFlight = inFlight.then(() => writeDocuments(ids));
+}
+
+function schedulePersist(): void {
+  if (!persistenceEnabled) return;
+  pendingIds.add(state.activeId);
+  if (debounceTimer) clearTimeout(debounceTimer);
+  debounceTimer = setTimeout(runPendingWrites, PERSIST_DEBOUNCE_MS);
+}
+
+/**
+ * 대기 중인 쓰기를 즉시 시작하고 완료를 기다린다.
+ *
+ * IndexedDB는 비동기라 언로드 시점의 완료를 보장할 수 없다. 그래서 보장 대신
+ * 디바운스를 300ms로 짧게 유지하고, 창이 숨겨질 때 타이머를 앞당기는 방식을 쓴다.
+ */
+export async function flushPendingWrites(): Promise<void> {
+  runPendingWrites();
+  await inFlight;
+}
+
+/**
+ * 저장본으로 컬렉션을 복원한다. 비어 있을 때만 시드 데이터를 쓴다.
+ * 앱 부팅 시 1회 호출하며, 완료 전까지 라우터를 렌더하지 않는다.
+ */
+export async function hydrateFromStorage(): Promise<void> {
+  persistenceEnabled = false;
+  try {
+    const { valid } = await loadAllPresentations();
+    if (valid.length > 0) {
+      const sorted = [...valid].sort((a, b) =>
+        a.createdAt.localeCompare(b.createdAt),
+      );
+      state = {
+        byId: Object.fromEntries(sorted.map((doc) => [doc.id, doc])),
+        order: sorted.map((doc) => doc.id),
+        activeId: sorted[0].id,
+      };
+      listSnapshot = buildListSnapshot(state);
+      histories.clear();
+      emitChange();
+      persistenceEnabled = true;
+      clearPersistenceError();
+      return;
+    }
+
+    // 저장소가 비어 있는 첫 방문: 현재(시드) 상태를 그대로 기록해 둔다
+    persistenceEnabled = true;
+    for (const id of state.order) pendingIds.add(id);
+    await flushPendingWrites();
+    clearPersistenceError();
+  } catch (err) {
+    // 저장소를 못 쓰는 환경이어도 편집 자체는 계속 가능해야 한다
+    persistenceEnabled = false;
+    reportPersistenceError(err);
+  }
+}
+
+/** 저장소에서 문서를 지운다 (메모리 상태 제거는 호출자 책임) */
+export async function removePersistedPresentation(id: string): Promise<void> {
+  try {
+    await deletePresentation(id);
+  } catch (err) {
+    reportPersistenceError(err);
+  }
+}
+
+/** 테스트 격리 전용: 저장 스케줄러 상태를 비운다 */
+export function resetPersistenceForTests(): void {
+  persistenceEnabled = false;
+  pendingIds = new Set();
+  if (debounceTimer) {
+    clearTimeout(debounceTimer);
+    debounceTimer = null;
+  }
+  inFlight = Promise.resolve();
+}
+
 function emitChange(): void {
+  schedulePersist();
   for (const listener of listeners) {
     listener();
   }
@@ -163,6 +290,7 @@ export function addDeckToPresentation(deck: Deck): PresentationItem {
  * 테스트 격리 전용: 컬렉션 전체를 시드 상태로 되돌리고 모든 히스토리를 비운다.
  */
 export function resetPresentationStore(): void {
+  resetPersistenceForTests();
   histories.clear();
   state = createSeedState();
   listSnapshot = buildListSnapshot(state);

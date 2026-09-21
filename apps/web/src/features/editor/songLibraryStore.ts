@@ -1,9 +1,21 @@
 import { useSyncExternalStore } from "react";
 import type { Deck } from "@repo/shared";
-import { DeckSchema, DEFAULT_DECK_STYLE, splitLyricsIntoSlides } from "@repo/shared";
+import {
+  DeckSchema,
+  DEFAULT_DECK_STYLE,
+  splitLyricsIntoSlides,
+} from "@repo/shared";
+import {
+  saveSong,
+  deleteSong,
+  loadAllSongs,
+  clearAllSongs,
+  migrateLegacySongs,
+  reportPersistenceError,
+  clearPersistenceError,
+} from "../../lib/storage";
 import { COMMUNITY_SONGS } from "../library/mockCommunityData";
 
-const STORAGE_KEY = "worship_user_songs_v1";
 const GUEST_USER_ID = "00000000-0000-4000-8000-000000000001";
 
 export interface AvailableSongItem {
@@ -11,43 +23,12 @@ export interface AvailableSongItem {
   source: "mine" | "community";
 }
 
-let userSongsCache: Deck[] = loadUserSongs();
+/**
+ * 보관함 곡은 IndexedDB(`worship-offline-db`의 decks 스토어)에 저장한다.
+ * 이 캐시는 동기 렌더를 위한 읽기 전용 사본이며, 원천은 항상 저장소다.
+ */
+let userSongsCache: Deck[] = [];
 const listeners = new Set<() => void>();
-
-function safeLocalStorageGet(): string | null {
-  try {
-    if (typeof window !== "undefined" && window.localStorage) {
-      return window.localStorage.getItem(STORAGE_KEY);
-    }
-  } catch {
-    // Ignore storage exceptions (sandboxed, private mode, etc.)
-  }
-  return null;
-}
-
-function safeLocalStorageSet(value: string): void {
-  try {
-    if (typeof window !== "undefined" && window.localStorage) {
-      window.localStorage.setItem(STORAGE_KEY, value);
-    }
-  } catch {
-    // Ignore storage exceptions
-  }
-}
-
-function loadUserSongs(): Deck[] {
-  const raw = safeLocalStorageGet();
-  if (!raw) return [];
-  try {
-    const parsed = JSON.parse(raw);
-    if (Array.isArray(parsed)) {
-      return parsed.map((item) => DeckSchema.parse(item));
-    }
-  } catch (err) {
-    console.error("Failed to load user songs from localStorage:", err);
-  }
-  return [];
-}
 
 function emitChange(): void {
   for (const listener of listeners) {
@@ -55,25 +36,36 @@ function emitChange(): void {
   }
 }
 
-/**
- * 사용자가 등록한 곡 목록 반환
- */
+/** 사용자가 등록한 곡 목록 반환 */
 export function getUserSongs(): Deck[] {
   return userSongsCache;
 }
 
 /**
- * 신규 찬양곡을 사용자 로컬 보관함에 저장
+ * 저장소에서 보관함을 읽어 메모리 캐시를 채운다.
+ * 구 localStorage 보관함이 남아 있으면 먼저 이관한다.
  */
-export function saveSongToLibrary(
-  songInput: {
-    id?: string;
-    title: string;
-    artist?: string;
-    lyricsRaw: string;
-    backgroundId?: string | null;
-  },
-): Deck {
+export async function hydrateSongLibrary(): Promise<void> {
+  try {
+    await migrateLegacySongs();
+    const { valid } = await loadAllSongs();
+    userSongsCache = valid;
+    emitChange();
+    clearPersistenceError();
+  } catch (err) {
+    // 저장소를 못 쓰는 환경에서도 곡 추가 자체는 동작해야 한다 (세션 한정)
+    reportPersistenceError(err);
+  }
+}
+
+/** 신규 찬양곡을 사용자 보관함에 저장 */
+export function saveSongToLibrary(songInput: {
+  id?: string;
+  title: string;
+  artist?: string;
+  lyricsRaw: string;
+  backgroundId?: string | null;
+}): Deck {
   const now = new Date().toISOString();
   const slides = splitLyricsIntoSlides(songInput.lyricsRaw);
 
@@ -108,37 +100,41 @@ export function saveSongToLibrary(
     userSongsCache = [newDeck, ...userSongsCache];
   }
 
-  safeLocalStorageSet(JSON.stringify(userSongsCache));
   emitChange();
+  void persist(() => saveSong(newDeck));
   return newDeck;
 }
 
-/**
- * 사용자가 등록한 곡 삭제
- */
+/** 사용자가 등록한 곡 삭제 */
 export function deleteUserSong(id: string): void {
   userSongsCache = userSongsCache.filter((d) => d.id !== id);
-  safeLocalStorageSet(JSON.stringify(userSongsCache));
   emitChange();
+  void persist(() => deleteSong(id));
 }
 
-/**
- * 테스트 격리용 초기화
- */
-export function resetSongLibraryStore(): void {
-  userSongsCache = [];
+/** 저장 실패를 삼키지 않고 경고 상태로 올린다 */
+async function persist(operation: () => Promise<void>): Promise<void> {
   try {
-    if (typeof window !== "undefined" && window.localStorage) {
-      window.localStorage.removeItem(STORAGE_KEY);
-    }
-  } catch {
-    // Ignore
+    await operation();
+    clearPersistenceError();
+  } catch (err) {
+    reportPersistenceError(err);
   }
+}
+
+/** 테스트 격리용 초기화 */
+export async function resetSongLibraryStore(): Promise<void> {
+  userSongsCache = [];
   emitChange();
+  try {
+    await clearAllSongs();
+  } catch {
+    // 저장소를 쓸 수 없는 환경에서는 메모리 초기화만으로 충분하다
+  }
 }
 
 let cachedAvailableSongs: AvailableSongItem[] = [];
-let cachedUserSongsRef: Deck[] = [];
+let cachedUserSongsRef: Deck[] | null = null;
 
 function buildAvailableSongs(userSongs: Deck[]): AvailableSongItem[] {
   const mine: AvailableSongItem[] = userSongs.map((deck) => ({
@@ -151,7 +147,8 @@ function buildAvailableSongs(userSongs: Deck[]): AvailableSongItem[] {
   );
 
   const community: AvailableSongItem[] = COMMUNITY_SONGS.filter(
-    (cs) => !userSongTitles.has(`${cs.title.trim()}__${(cs.artist ?? "").trim()}`),
+    (cs) =>
+      !userSongTitles.has(`${cs.title.trim()}__${(cs.artist ?? "").trim()}`),
   ).map((deck) => ({
     deck,
     source: "community" as const,
@@ -160,9 +157,7 @@ function buildAvailableSongs(userSongs: Deck[]): AvailableSongItem[] {
   return [...mine, ...community];
 }
 
-/**
- * 사용 가능한 전체 곡 목록 (내 보관함 + 공유 찬양)
- */
+/** 사용 가능한 전체 곡 목록 (내 보관함 + 공유 찬양) */
 export function getAvailableSongs(): AvailableSongItem[] {
   if (cachedUserSongsRef !== userSongsCache) {
     cachedUserSongsRef = userSongsCache;
@@ -178,9 +173,7 @@ function subscribe(callback: () => void): () => void {
   };
 }
 
-/**
- * 컴포넌트에서 반응형으로 전체 곡 목록을 구독하는 React Hook
- */
+/** 컴포넌트에서 반응형으로 전체 곡 목록을 구독하는 React Hook */
 export function useAvailableSongs(): AvailableSongItem[] {
   return useSyncExternalStore(subscribe, getAvailableSongs, getAvailableSongs);
 }

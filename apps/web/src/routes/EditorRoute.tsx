@@ -50,6 +50,7 @@ const EMPTY_PRESENTATION: Presentation = {
 };
 import { EditorHeader } from "../features/editor/EditorHeader";
 import { EditorSidebar } from "../features/editor/EditorSidebar";
+import { StorageWarningBanner } from "../components/common/StorageWarningBanner";
 import { EditorStageCanvas } from "../features/editor/EditorStageCanvas";
 import { SlideFilmstrip } from "../features/editor/SlideFilmstrip";
 import { SongPropertyPanel } from "../features/editor/SongPropertyPanel";
@@ -309,6 +310,9 @@ export function EditorRoute(): React.JSX.Element {
       data-testid="editor-route"
       className="flex flex-col h-screen w-screen bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 overflow-hidden select-none"
     >
+      {/* 저장 실패 경고 (닫을 수 없음) */}
+      <StorageWarningBanner />
+
       {/* 1. 상단 Canva / MiriCanvas 스타일 헤더 */}
       <EditorHeader
         title={presentation.title}
@@ -339,11 +343,7 @@ export function EditorRoute(): React.JSX.Element {
           onReorderSong={handleReorderSong}
           onDeleteSong={handleDeleteSong}
           onDuplicateSong={handleDuplicateSong}
-          onAddSong={(deck) => {
-            addDeckToPresentation(deck);
-            setActiveSongIndex(presentation.items.length);
-            setActiveSlideIndex(0);
-          }}
+          onOpenSongPicker={() => setIsLyricModalOpen(true)}
           onAddSlide={handleAddSlide}
           onDeleteSlide={handleDeleteSlide}
           onDuplicateSlide={handleDuplicateSlide}

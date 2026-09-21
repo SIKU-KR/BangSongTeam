@@ -50,6 +50,10 @@ export {
   redo,
   canUndo,
   canRedo,
+  hydrateFromStorage,
+  flushPendingWrites,
+  removePersistedPresentation,
+  resetPersistenceForTests,
 } from "./presentationStore";
 
 export {

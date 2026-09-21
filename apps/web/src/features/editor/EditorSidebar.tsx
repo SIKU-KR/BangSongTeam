@@ -1,10 +1,6 @@
 import React, { useState } from "react";
 import type { Deck, PresentationItem } from "@repo/shared";
-import {
-  INITIAL_BACKGROUNDS,
-  getBackgroundPosterUrl,
-} from "@repo/shared";
-import { SongPickerModal } from "./SongPickerModal";
+import { INITIAL_BACKGROUNDS, getBackgroundPosterUrl } from "@repo/shared";
 import { ThemeMenuButton } from "../../components/common/ThemeMenuButton";
 import { SortableItem, SortableList, slideSortableId } from "./SortableList";
 
@@ -17,7 +13,8 @@ export interface EditorSidebarProps {
   onReorderSong: (fromIndex: number, toIndex: number) => void;
   onDeleteSong: (index: number) => void;
   onDuplicateSong?: (index: number) => void;
-  onAddSong: (newDeck: Deck) => void;
+  /** 곡 추가 모달 열기. 모달 자체는 EditorRoute가 단독으로 마운트한다 */
+  onOpenSongPicker: () => void;
   onAddSlide: () => void;
   onDeleteSlide: (index: number) => void;
   onDuplicateSlide?: (index: number) => void;
@@ -106,7 +103,7 @@ export function EditorSidebar({
   onReorderSong,
   onDeleteSong,
   onDuplicateSong,
-  onAddSong,
+  onOpenSongPicker,
   onAddSlide,
   onDeleteSlide,
   onDuplicateSlide,
@@ -117,7 +114,6 @@ export function EditorSidebar({
 }: EditorSidebarProps): React.JSX.Element {
   const [activeTab, setActiveTab] = useState<TabType>("songs");
   const [isDrawerOpen, setIsDrawerOpen] = useState(true);
-  const [isSongPickerOpen, setIsSongPickerOpen] = useState(false);
 
   const currentSong = items[activeSongIndex]?.deck;
   const currentSlides = currentSong?.slides ?? [];
@@ -422,7 +418,7 @@ export function EditorSidebar({
                 <button
                   type="button"
                   data-testid="sidebar-add-song-btn"
-                  onClick={() => setIsSongPickerOpen(true)}
+                  onClick={onOpenSongPicker}
                   className="w-full py-2 px-3 rounded-lg bg-zinc-100 dark:bg-zinc-900 hover:bg-zinc-200 dark:hover:bg-zinc-800 border border-zinc-200 dark:border-zinc-700/80 hover:border-emerald-500/50 text-xs font-semibold text-zinc-800 dark:text-zinc-200 dark:hover:text-white transition-all flex items-center justify-center gap-2 cursor-pointer shadow-sm dark:shadow-none"
                 >
                   <svg
@@ -639,16 +635,6 @@ export function EditorSidebar({
           )}
         </div>
       )}
-
-      {/* 2-Pane 통합 찬양곡 선택/추가 모달 */}
-      <SongPickerModal
-        isOpen={isSongPickerOpen}
-        onClose={() => setIsSongPickerOpen(false)}
-        onSelectSong={(newDeck) => {
-          onAddSong(newDeck);
-          setIsSongPickerOpen(false);
-        }}
-      />
     </aside>
   );
 }
