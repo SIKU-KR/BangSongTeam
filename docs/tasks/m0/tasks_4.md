@@ -20,10 +20,9 @@
   - **대상 파일**: `apps/web/wrangler.jsonc`, `apps/web/package.json`
   - **선행 조건**: `docs/tasks/m0/tasks_3.md`
   - **구현 내용**:
-    - `wrangler.jsonc`에 D1 (`DB`), R2 (`MEDIA_BUCKET`), AI, Queue 바인딩 정의
-    - `apps/web/package.json`에 `hono`, `@hono/zod-validator`, `@repo/shared`, `@repo/db` 의존성 추가
-    - `wrangler types` 생성 스크립트 등록
-  - **DoD (통과 기준)**: `pnpm --filter web exec wrangler types` 실행 시 `worker-configuration.d.ts`가 정상 생성된다.
+    - `wrangler.jsonc`에 `main: "worker/index.ts"`, D1 (`DB`), R2 (`MEDIA_BUCKET`), AI, Queue 바인딩 정의
+    - `apps/web/package.json`에 `hono`, `@hono/zod-validator`, `@repo/shared`, `@repo/db` 의존성 및 `dev`, `deploy`, `types` 스크립트 추가
+  - **DoD (통과 기준)**: `pnpm --filter web exec wrangler types` 실행 시 `worker-configuration.d.ts`가 정상 생성되고 `wrangler deploy --dry-run`이 성공한다.
 
 - [x] **Task 4.2: 로컬 Miniflare 개발용 환경 변수 템플릿 작성**
   - **대상 파일**: `apps/web/.dev.vars.example`
@@ -50,7 +49,7 @@
   - **DoD (통과 기준)**: `pnpm --filter web exec tsc --noEmit`이 통과하고 backgrounds 라우트가 정상 동작한다.
 
 - [x] **Task 4.5: 초기 10개 모션 루프 영상 D1 시드 스크립트 작성**
-  - **대상 파일**: `packages/db/src/seed/backgrounds.ts`
+  - **대상 파일**: `packages/db/src/seed/backgrounds.ts`, `packages/db/src/seed/seed.sql`
   - **선행 조건**: Task 3.11, Task 4.4
   - **구현 내용**:
     - PRD M0 규격에 맞는 10개 기본 모션 비디오 메타데이터(분위기: 잔잔한/밝은/웅장한, 주조색: 따뜻한/차가운/어두운) 정의

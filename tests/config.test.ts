@@ -25,18 +25,23 @@ describe("Task 4.1: Cloudflare Worker 프로젝트 설정 및 Wrangler 바인딩
     expect(allDeps).toHaveProperty("@repo/shared");
     expect(allDeps).toHaveProperty("@repo/db");
 
-    // wrangler types script
+    // scripts
+    expect(pkg.scripts).toHaveProperty("dev");
+    expect(pkg.scripts).toHaveProperty("deploy");
     expect(pkg.scripts).toHaveProperty("types");
     expect(pkg.scripts.types).toContain("wrangler types");
   });
 
-  it("apps/web/wrangler.jsonc exists and defines D1, R2, AI, and Queue bindings", () => {
+  it("apps/web/wrangler.jsonc exists and defines main entrypoint, D1, R2, AI, and Queue bindings", () => {
     expect(fs.existsSync(wranglerJsoncPath)).toBe(true);
 
     const content = fs.readFileSync(wranglerJsoncPath, "utf-8");
     // Strip single-line comments for JSON parsing
     const cleanJson = content.replace(/\/\/.*$/gm, "");
     const config = JSON.parse(cleanJson);
+
+    // main entrypoint
+    expect(config.main).toBe("worker/index.ts");
 
     // D1 binding DB
     expect(config.d1_databases).toBeDefined();
