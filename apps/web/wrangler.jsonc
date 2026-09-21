@@ -1,6 +1,6 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "web",
+  "name": "prj-ppt-web",
   "main": "worker/index.ts",
   "compatibility_date": "2025-02-14",
   "compatibility_flags": ["nodejs_compat"],
@@ -8,7 +8,7 @@
     {
       "binding": "DB",
       "database_name": "prj-ppt-db",
-      "database_id": "local-db",
+      "database_id": "99ce1495-f402-4983-9012-6f86150c8537",
       "migrations_dir": "../../packages/db/drizzle"
     }
   ],
