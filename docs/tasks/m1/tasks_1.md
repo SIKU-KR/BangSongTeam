@@ -17,7 +17,7 @@
 
 ## 2. 세부 작업 체크리스트
 
-- [ ] **Task 1.1: Vite SPA 프론트엔드 빌드 및 Tailwind CSS 구성**
+- [x] **Task 1.1: Vite SPA 프론트엔드 빌드 및 Tailwind CSS 구성**
   - **대상 파일**: `apps/web/vite.config.ts`, `apps/web/index.html`, `apps/web/tailwind.config.js`
   - **선행 조건**: `docs/tasks/m0/tasks_4.md`
   - **구현 내용**:
@@ -25,7 +25,7 @@
     - Tailwind CSS 유틸리티 및 16:9 스테이지 캔버스 CSS 테마 설정
   - **DoD (통과 기준)**: `pnpm --filter web build` 실행 시 번들링 에러 없이 `dist/` 빌드가 완료된다.
 
-- [ ] **Task 1.2: Pretendard 로컬 웹폰트 번들링 및 글로벌 스타일 구성**
+- [x] **Task 1.2: Pretendard 로컬 웹폰트 번들링 및 글로벌 스타일 구성**
   - **대상 파일**: `apps/web/src/index.css`, `apps/web/src/main.tsx`
   - **선행 조건**: Task 1.1
   - **구현 내용**:
@@ -34,7 +34,7 @@
     - 안티앨리어싱 및 텍스트 렌더링 최적화 속성(`-webkit-font-smoothing: antialiased`) 설정
   - **DoD (통과 기준)**: 브라우저 로드 시 네트워크 탭에 외부 폰트 요청 없이 Pretendard가 즉각 렌더링된다.
 
-- [ ] **Task 1.3: 비-Chrome 브라우저 접속 감지 및 경고 배너 컴포넌트 구현**
+- [x] **Task 1.3: 비-Chrome 브라우저 접속 감지 및 경고 배너 컴포넌트 구현**
   - **대상 파일**: `apps/web/src/components/common/ChromeAlertBanner.tsx`
   - **선행 조건**: Task 1.1
   - **구현 내용**:
@@ -43,7 +43,7 @@
     - 배너 닫기 클릭 시 `localStorage`에 상태를 저장하여 재노출 방지
   - **DoD (통과 기준)**: 비-Chrome 에이전트 Mock 테스트 시 배너가 표시되고 닫기 동작이 정상 작동한다.
 
-- [ ] **Task 1.4: 16:9 가상 스테이지 반응형 스케일러 훅 구현 및 테스트**
+- [x] **Task 1.4: 16:9 가상 스테이지 반응형 스케일러 훅 구현 및 테스트**
   - **대상 파일**: `apps/web/src/hooks/useStageScale.ts`, `apps/web/src/hooks/useStageScale.test.ts`
   - **선행 조건**: Task 1.1
   - **구현 내용**:
@@ -52,7 +52,7 @@
     - 단위 테스트: 1280x720, 1920x1080, 2560x1440 등 다양한 해상도에서 올바른 scale 계산 검증
   - **DoD (통과 기준)**: `pnpm --filter web vitest run src/hooks/useStageScale.test.ts`가 100% 통과한다.
 
-- [ ] **Task 1.5: 3-Layer Stage Layer 3 - Typography & Text Box 컴포넌트 구현**
+- [x] **Task 1.5: 3-Layer Stage Layer 3 - Typography & Text Box 컴포넌트 구현**
   - **대상 파일**: `apps/web/src/components/stage/TextLayer.tsx`
   - **선행 조건**: Task 1.4
   - **구현 내용**:
@@ -65,7 +65,7 @@
     - `isLyricsHidden` 활성화 시 텍스트 레이어 opacity 0 처리
   - **DoD (통과 기준)**: `pnpm --filter web exec tsc --noEmit`이 통과하고 앵커별 DOM transform 스타일이 정확히 적용된다.
 
-- [ ] **Task 1.6: 3-Layer Stage Layer 2 - Black Overlay 컴포넌트 구현**
+- [x] **Task 1.6: 3-Layer Stage Layer 2 - Black Overlay 컴포넌트 구현**
   - **대상 파일**: `apps/web/src/components/stage/OverlayLayer.tsx`
   - **선행 조건**: Task 1.4
   - **구현 내용**:
@@ -74,7 +74,7 @@
     - `isBlackout` 활성화 시 즉시 `opacity: 1`을 강제하여 무대 전체 암전
   - **DoD (통과 기준)**: `pnpm --filter web exec tsc --noEmit`이 통과하고 blackout prop 변경 시 전체가 암전된다.
 
-- [ ] **Task 1.7: 3-Layer Stage Layer 1 - 무결점 전환 Dual Video A/B 교차 루프 컴포넌트 구현**
+- [x] **Task 1.7: 3-Layer Stage Layer 1 - 무결점 전환 Dual Video A/B 교차 루프 컴포넌트 구현**
   - **대상 파일**: `apps/web/src/components/stage/VideoLayer.tsx`
   - **선행 조건**: Task 1.4
   - **구현 내용**:
@@ -83,7 +83,7 @@
     - 다음 곡 비디오 사전 로드(`preload="auto"`) 및 곡 전환 시 0.2s 크로스페이드 트랜지션 실행
   - **DoD (통과 기준)**: `pnpm --filter web exec tsc --noEmit`이 통과하고 비디오 소스 교체 시 크로스페이드 상태 머신이 정상 동작한다.
 
-- [ ] **Task 1.8: 3-Layer SlideStage 통합 컴포넌트 완성**
+- [x] **Task 1.8: 3-Layer SlideStage 통합 컴포넌트 완성**
   - **대상 파일**: `apps/web/src/components/stage/SlideStage.tsx`
   - **선행 조건**: Task 1.5, Task 1.6, Task 1.7
   - **구현 내용**:
