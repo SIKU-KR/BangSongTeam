@@ -142,5 +142,54 @@ describe("Library Views", () => {
 
       expect(screen.getByText("새벽기도 배경")).toBeInTheDocument();
     });
+
+    it("supports es-hangul choseong search for backgrounds", () => {
+      render(
+        <BackgroundLibraryView
+          searchQuery="ㅂㄷ" // '본당' 초성
+        />,
+      );
+
+      // '본당' 태그를 가진 '우리 교회 본당 배경 01' 매칭 확인
+      expect(screen.getByText("우리 교회 본당 배경 01")).toBeInTheDocument();
+    });
+  });
+
+  describe("es-hangul Korean Search Integration", () => {
+    it("filters songs by Korean choseong (초성 검색)", () => {
+      render(
+        <MemoryRouter>
+          <SongLibraryView
+            setlist={mockSetlist}
+            onOpenQuickPaste={vi.fn()}
+            onAddDeckToSetlist={vi.fn()}
+            onDuplicateSong={vi.fn()}
+            onRemoveSong={vi.fn()}
+            searchQuery="ㅇㅎㄹㄷ" // '은혜로다' 초성
+          />
+        </MemoryRouter>,
+      );
+
+      expect(screen.getByText("은혜로다")).toBeInTheDocument();
+      expect(screen.queryByText("주 품에")).not.toBeInTheDocument();
+    });
+
+    it("filters songs by disassembled typing (실시간 미완성 자모 검색)", () => {
+      render(
+        <MemoryRouter>
+          <SongLibraryView
+            setlist={mockSetlist}
+            onOpenQuickPaste={vi.fn()}
+            onAddDeckToSetlist={vi.fn()}
+            onDuplicateSong={vi.fn()}
+            onRemoveSong={vi.fn()}
+            searchQuery="시ㅅ" // '시선' 타이핑 중
+          />
+        </MemoryRouter>,
+      );
+
+      expect(screen.getByText("시선")).toBeInTheDocument();
+      expect(screen.queryByText("주 품에")).not.toBeInTheDocument();
+    });
   });
 });

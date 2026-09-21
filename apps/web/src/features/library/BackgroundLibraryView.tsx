@@ -3,6 +3,7 @@ import {
   INITIAL_BACKGROUNDS,
   getBackgroundMediaUrl,
   getBackgroundPosterUrl,
+  hangulIncludes,
 } from "@repo/shared";
 import {
   INITIAL_MY_BACKGROUNDS,
@@ -45,24 +46,26 @@ export function BackgroundLibraryView({
   const [hoveredId, setHoveredId] = useState<string | null>(null);
   const [appliedBgId, setAppliedBgId] = useState<string | null>(null);
 
-  const query = searchQuery.trim().toLowerCase();
+  const query = searchQuery.trim();
 
-  // 내가 등록한 배경 필터링
+  // 내가 등록한 배경 필터링 (es-hangul 초성/자모 검색 지원)
   const filteredMyBackgrounds = myBackgrounds.filter((bg) => {
     if (!query) return true;
-    const titleMatch = bg.title.toLowerCase().includes(query);
-    const tagMatch = bg.tags.some((t) => t.toLowerCase().includes(query));
-    return titleMatch || tagMatch;
+    return (
+      hangulIncludes(bg.title, query) ||
+      bg.tags.some((t) => hangulIncludes(t, query))
+    );
   });
 
-  // 유저가 등록한 배경(공개 루프) 필터링
+  // 유저가 등록한 배경(공개 루프) 필터링 (es-hangul 초성/자모 검색 지원)
   const filteredCommunityBackgrounds = INITIAL_BACKGROUNDS.filter((bg) => {
     const matchesTag = activeTag === "전체" || bg.tags.includes(activeTag);
     if (!matchesTag) return false;
     if (!query) return true;
-    const titleMatch = bg.title.toLowerCase().includes(query);
-    const tagMatch = bg.tags.some((t) => t.toLowerCase().includes(query));
-    return titleMatch || tagMatch;
+    return (
+      hangulIncludes(bg.title, query) ||
+      bg.tags.some((t) => hangulIncludes(t, query))
+    );
   });
 
   const handleApply = (bgId: string): void => {

@@ -16,6 +16,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "es-hangul": "^2.4.0",
     "zod": "^3.24.2"
   },
   "devDependencies": {

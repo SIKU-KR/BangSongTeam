@@ -5,6 +5,7 @@ import {
   getBackgroundMediaUrl,
   getBackgroundPosterUrl,
   DEFAULT_DECK_STYLE,
+  hangulIncludes,
 } from "@repo/shared";
 import { PresentationCard } from "../presentation/PresentationCard";
 import { SlideStage } from "../../components/stage/SlideStage";
@@ -36,8 +37,8 @@ export function SongLibraryView({
   const [previewDeck, setPreviewDeck] = useState<Deck | null>(null);
   const [addedDeckId, setAddedDeckId] = useState<string | null>(null);
 
-  // 검색어 필터링
-  const query = searchQuery.trim().toLowerCase();
+  // 검색어 필터링 (es-hangul 초성/자모 분해/스마트 한글 검색 지원)
+  const query = searchQuery.trim();
 
   const mySongs = setlist.items
     .map((item, index) => ({ item, index }))
@@ -45,18 +46,20 @@ export function SongLibraryView({
       if (!query) return true;
       const deck = item.deck;
       if (!deck) return false;
-      const titleMatch = deck.title.toLowerCase().includes(query);
-      const artistMatch = (deck.artist ?? "").toLowerCase().includes(query);
-      const lyricsMatch = (deck.lyricsRaw ?? "").toLowerCase().includes(query);
-      return titleMatch || artistMatch || lyricsMatch;
+      return (
+        hangulIncludes(deck.title, query) ||
+        hangulIncludes(deck.artist, query) ||
+        hangulIncludes(deck.lyricsRaw, query)
+      );
     });
 
   const communitySongs = COMMUNITY_SONGS.filter((deck) => {
     if (!query) return true;
-    const titleMatch = deck.title.toLowerCase().includes(query);
-    const artistMatch = (deck.artist ?? "").toLowerCase().includes(query);
-    const lyricsMatch = (deck.lyricsRaw ?? "").toLowerCase().includes(query);
-    return titleMatch || artistMatch || lyricsMatch;
+    return (
+      hangulIncludes(deck.title, query) ||
+      hangulIncludes(deck.artist, query) ||
+      hangulIncludes(deck.lyricsRaw, query)
+    );
   });
 
   const handleStartPresentation = (): void => {

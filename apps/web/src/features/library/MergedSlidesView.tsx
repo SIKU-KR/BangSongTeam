@@ -1,6 +1,7 @@
 import React, { useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import type { Setlist } from "@repo/shared";
+import { hangulIncludes } from "@repo/shared";
 import { PresentationCard } from "../presentation/PresentationCard";
 import { isGoogleChromeBrowser } from "../../components/common/ChromeAlertBanner";
 
@@ -122,26 +123,26 @@ export function MergedSlidesView({
     }
   };
 
-  // 검색어 필터링 (제목 또는 포함된 곡/가사 검색)
-  const query = searchQuery.trim().toLowerCase();
+  // 검색어 필터링 (es-hangul 초성/자모 분해/스마트 한글 검색 지원)
+  const query = searchQuery.trim();
   const isMatch =
     !query ||
-    setlist.title.toLowerCase().includes(query) ||
+    hangulIncludes(setlist.title, query) ||
     setlist.items.some((item) => {
       const deck = item.deck;
       if (!deck) return false;
       return (
-        deck.title.toLowerCase().includes(query) ||
-        (deck.artist ?? "").toLowerCase().includes(query) ||
-        (deck.lyricsRaw ?? "").toLowerCase().includes(query)
+        hangulIncludes(deck.title, query) ||
+        hangulIncludes(deck.artist, query) ||
+        hangulIncludes(deck.lyricsRaw, query)
       );
     });
 
   const filteredRecentItems = ADDITIONAL_RECENT_ITEMS.filter((item) => {
     if (!query) return true;
     return (
-      item.title.toLowerCase().includes(query) ||
-      item.subtitle.toLowerCase().includes(query)
+      hangulIncludes(item.title, query) ||
+      hangulIncludes(item.subtitle, query)
     );
   });
 
