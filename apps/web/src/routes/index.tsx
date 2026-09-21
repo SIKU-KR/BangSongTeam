@@ -95,11 +95,8 @@ export function HomeRoute(): React.JSX.Element {
               </svg>
             </div>
             <div>
-              <span className="text-sm font-bold tracking-tight text-white flex items-center gap-1.5">
+              <span className="text-sm font-bold tracking-tight text-white">
                 Worship Studio
-                <span className="text-[10px] px-1.5 py-0.2 rounded bg-emerald-950 text-emerald-400 border border-emerald-800 font-mono">
-                  M1 Ready
-                </span>
               </span>
               <p className="text-[10px] text-zinc-500">
                 16:9 프레젠테이션 대시보드
@@ -214,17 +211,6 @@ export function HomeRoute(): React.JSX.Element {
             </button>
           </nav>
         </div>
-
-        {/* 사이드바 하단 오프라인 상태 카드 */}
-        <div className="p-3 rounded-xl bg-zinc-900/70 border border-zinc-800/80 text-[11px] space-y-1.5">
-          <div className="flex items-center gap-1.5 text-emerald-400 font-semibold">
-            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-            <span>Zero-Network Ready</span>
-          </div>
-          <p className="text-zinc-500 text-[10px] leading-tight">
-            PWA 캐시 &amp; IndexedDB 연동으로 주일 예배 중 네트워크 단절 시에도 무중단 송출됩니다.
-          </p>
-        </div>
       </aside>
 
       {/* 2. 메인 컨텐츠 영역 */}
@@ -242,11 +228,8 @@ export function HomeRoute(): React.JSX.Element {
               </svg>
             </div>
             <div>
-              <span className="text-base font-bold tracking-tight text-white flex items-center gap-1.5">
+              <span className="text-base font-bold tracking-tight text-white">
                 Worship Slide
-                <span className="text-[10px] px-1.5 py-0.2 rounded bg-emerald-950 text-emerald-400 border border-emerald-800 font-mono">
-                  M1 Ready
-                </span>
               </span>
               <p className="text-[11px] text-zinc-400 hidden sm:block">
                 교회 예배팀을 위한 웹 슬라이드 & 프레젠테이션 스튜디오
