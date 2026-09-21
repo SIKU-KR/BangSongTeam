@@ -8,7 +8,7 @@ export type { Slide } from "../schemas/slide";
 
 export type { DeckVisibility, DeckScope, Deck } from "../schemas/deck";
 
-export type { SetlistItem, Setlist } from "../schemas/setlist";
+export type { PresentationItem, Presentation } from "../schemas/presentation";
 
 export type { BackgroundMedia } from "../schemas/media";
 
@@ -19,8 +19,8 @@ export type { BroadcastMessage } from "../schemas/broadcast";
 export type {
   CreateDeckRequest,
   UpdateDeckRequest,
-  CreateSetlistRequest,
-  UpdateSetlistItemsRequest,
+  CreatePresentationRequest,
+  UpdatePresentationItemsRequest,
   SearchCatalogQuery,
   SearchCatalogResponse,
 } from "../schemas/api";

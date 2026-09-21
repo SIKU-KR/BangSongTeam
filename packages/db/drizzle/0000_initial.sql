@@ -94,7 +94,7 @@ CREATE TABLE `decks` (
 	`user_id` text NOT NULL,
 	`catalog_id` text,
 	`scope` text DEFAULT 'library' NOT NULL,
-	`setlist_id` text,
+	`presentation_id` text,
 	`title` text NOT NULL,
 	`artist` text DEFAULT '',
 	`lyrics_raw` text NOT NULL,
@@ -108,26 +108,26 @@ CREATE TABLE `decks` (
 	`updated_at` integer DEFAULT (unixepoch()),
 	FOREIGN KEY (`user_id`) REFERENCES `user`(`id`) ON UPDATE no action ON DELETE cascade,
 	FOREIGN KEY (`catalog_id`) REFERENCES `lyrics_catalog`(`id`) ON UPDATE no action ON DELETE set null,
-	FOREIGN KEY (`setlist_id`) REFERENCES `setlists`(`id`) ON UPDATE no action ON DELETE cascade,
+	FOREIGN KEY (`presentation_id`) REFERENCES `presentations`(`id`) ON UPDATE no action ON DELETE cascade,
 	FOREIGN KEY (`background_id`) REFERENCES `backgrounds`(`id`) ON UPDATE no action ON DELETE set null
 );
 --> statement-breakpoint
 CREATE INDEX `idx_decks_user_scope` ON `decks` (`user_id`,`scope`);--> statement-breakpoint
-CREATE INDEX `idx_decks_setlist` ON `decks` (`setlist_id`);--> statement-breakpoint
+CREATE INDEX `idx_decks_presentation` ON `decks` (`presentation_id`);--> statement-breakpoint
 CREATE INDEX `idx_decks_visibility_forks` ON `decks` (`visibility`,`fork_count`);--> statement-breakpoint
 CREATE INDEX `idx_decks_catalog` ON `decks` (`catalog_id`);--> statement-breakpoint
-CREATE TABLE `setlist_items` (
+CREATE TABLE `presentation_items` (
 	`id` text PRIMARY KEY NOT NULL,
-	`setlist_id` text NOT NULL,
+	`presentation_id` text NOT NULL,
 	`deck_id` text NOT NULL,
 	`order` integer NOT NULL,
-	FOREIGN KEY (`setlist_id`) REFERENCES `setlists`(`id`) ON UPDATE no action ON DELETE cascade,
+	FOREIGN KEY (`presentation_id`) REFERENCES `presentations`(`id`) ON UPDATE no action ON DELETE cascade,
 	FOREIGN KEY (`deck_id`) REFERENCES `decks`(`id`) ON UPDATE no action ON DELETE cascade
 );
 --> statement-breakpoint
-CREATE INDEX `idx_setlist_items_order` ON `setlist_items` (`setlist_id`,`order`);--> statement-breakpoint
-CREATE UNIQUE INDEX `idx_setlist_items_unique` ON `setlist_items` (`setlist_id`,`deck_id`);--> statement-breakpoint
-CREATE TABLE `setlists` (
+CREATE INDEX `idx_presentation_items_order` ON `presentation_items` (`presentation_id`,`order`);--> statement-breakpoint
+CREATE UNIQUE INDEX `idx_presentation_items_unique` ON `presentation_items` (`presentation_id`,`deck_id`);--> statement-breakpoint
+CREATE TABLE `presentations` (
 	`id` text PRIMARY KEY NOT NULL,
 	`user_id` text NOT NULL,
 	`title` text NOT NULL,
@@ -137,7 +137,7 @@ CREATE TABLE `setlists` (
 	FOREIGN KEY (`user_id`) REFERENCES `user`(`id`) ON UPDATE no action ON DELETE cascade
 );
 --> statement-breakpoint
-CREATE INDEX `idx_setlists_user_date` ON `setlists` (`user_id`,`service_date`);--> statement-breakpoint
+CREATE INDEX `idx_presentations_user_date` ON `presentations` (`user_id`,`service_date`);--> statement-breakpoint
 CREATE TABLE `reports` (
 	`id` text PRIMARY KEY NOT NULL,
 	`user_id` text,

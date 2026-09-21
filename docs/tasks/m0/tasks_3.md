@@ -9,9 +9,9 @@
 
 ## 1. 아키텍처 가드레일 & 준수 사항
 
-- **D1 보안 및 스코핑 (No RLS)**: D1 SQLite는 RLS가 없으므로 모든 덱/콘티 조회 및 수정 쿼리는 반드시 `userId` 일치 여부를 강제하는 `packages/db/src/queries/` 헬퍼를 통해 수행한다.
+- **D1 보안 및 스코핑 (No RLS)**: D1 SQLite는 RLS가 없으므로 모든 덱/프레젠테이션 조회 및 수정 쿼리는 반드시 `userId` 일치 여부를 강제하는 `packages/db/src/queries/` 헬퍼를 통해 수행한다.
 - **공개 덱 유출 차단**: 공개 덱 조회는 `where(eq(decks.visibility, 'public'))`를 조건으로 무조건 강제한다.
-- **Clone-on-Add 격리**: 콘티 추가 덱은 `scope = 'setlist'`, `setlist_id = id`로 저장되고, 사용자 라이브러리는 `scope = 'library'`로만 조회하여 고아 데이터 및 라이브러리 오염을 원천 차단한다.
+- **Clone-on-Add 격리**: 프레젠테이션 추가 덱은 `scope = 'presentation'`, `presentation_id = id`로 저장되고, 사용자 라이브러리는 `scope = 'library'`로만 조회하여 고아 데이터 및 라이브러리 오염을 원천 차단한다.
 
 ---
 
@@ -54,16 +54,16 @@
   - **대상 파일**: `packages/db/src/schema/decks.ts`
   - **선행 조건**: Task 3.3, Task 3.4
   - **구현 내용**:
-    - `decks`: `id`, `userId(FK cascade)`, `catalogId(FK set null)`, `scope('library'|'setlist')`, `setlistId(FK cascade)`, `title`, `artist`, `lyricsRaw`, `slides(JSON TEXT)`, `backgroundId(FK set null)`, `style(JSON TEXT)`, `visibility`, `forkedFrom`, `forkCount`
-    - 인덱스: `idx_decks_user_scope(userId, scope)`, `idx_decks_setlist(setlistId)`, `idx_decks_visibility_forks(visibility, forkCount)`
+    - `decks`: `id`, `userId(FK cascade)`, `catalogId(FK set null)`, `scope('library'|'presentation')`, `presentationId(FK cascade)`, `title`, `artist`, `lyricsRaw`, `slides(JSON TEXT)`, `backgroundId(FK set null)`, `style(JSON TEXT)`, `visibility`, `forkedFrom`, `forkCount`
+    - 인덱스: `idx_decks_user_scope(userId, scope)`, `idx_decks_presentation(presentationId)`, `idx_decks_visibility_forks(visibility, forkCount)`
   - **DoD (통과 기준)**: `pnpm --filter @repo/db exec tsc --noEmit`이 에러 없이 통과한다.
 
-- [x] **Task 3.6: 콘티(Setlist) 및 신고(Report) 테이블 스키마 선언**
-  - **대상 파일**: `packages/db/src/schema/setlists.ts`, `packages/db/src/schema/reports.ts`
+- [x] **Task 3.6: 프레젠테이션(Presentation) 및 신고(Report) 테이블 스키마 선언**
+  - **대상 파일**: `packages/db/src/schema/presentations.ts`, `packages/db/src/schema/reports.ts`
   - **선행 조건**: Task 3.5
   - **구현 내용**:
-    - `setlists`: `id`, `userId(FK cascade)`, `title`, `serviceDate`, 타임스탬프, 인덱스(`idx_setlists_user_date`)
-    - `setlistItems`: `id`, `setlistId(FK cascade)`, `deckId(FK cascade)`, `order`, 복합 고유 인덱스(`uniqueIndex.on(setlistId, deckId)`)
+    - `presentations`: `id`, `userId(FK cascade)`, `title`, `serviceDate`, 타임스탬프, 인덱스(`idx_presentations_user_date`)
+    - `presentationItems`: `id`, `presentationId(FK cascade)`, `deckId(FK cascade)`, `order`, 복합 고유 인덱스(`uniqueIndex.on(presentationId, deckId)`)
     - `reports`: `id`, `userId(FK)`, `targetType('deck'|'catalog')`, `targetId`, `reason`, `status`
   - **DoD (통과 기준)**: `pnpm --filter @repo/db exec tsc --noEmit`이 에러 없이 통과한다.
 
@@ -103,12 +103,12 @@
     - `upsertLyricVersion(...)`: 1인 1표 멱등적 업서트
   - **DoD (통과 기준)**: `pnpm --filter @repo/db vitest run src/queries/decks.test.ts`가 100% 통과(Green)한다.
 
-- [x] **Task 3.11: 콘티 쿼리 헬퍼 구현 및 DB 패키지 엔트리포인트 완성**
-  - **대상 파일**: `packages/db/src/queries/setlists.ts`, `packages/db/src/index.ts`
+- [x] **Task 3.11: 프레젠테이션 쿼리 헬퍼 구현 및 DB 패키지 엔트리포인트 완성**
+  - **대상 파일**: `packages/db/src/queries/presentations.ts`, `packages/db/src/index.ts`
   - **선행 조건**: Task 3.10
   - **구현 내용**:
-    - `getSetlistWithDecks(setlistId, userId)`: 세트와 속한 덱 목록 원자적 조회
-    - `createSetlistWithClonedDecks(...)`: 콘티에 곡 추가 시 `scope='setlist'`, `setlistId=id`로 덱을 복제 생성하는 트랜잭션 헬퍼
+    - `getPresentationWithDecks(presentationId, userId)`: 세트와 속한 덱 목록 원자적 조회
+    - `createPresentationWithClonedDecks(...)`: 프레젠테이션에 곡 추가 시 `scope='presentation'`, `presentationId=id`로 덱을 복제 생성하는 트랜잭션 헬퍼
     - `packages/db/src/index.ts`에서 클라이언트 팩토리, 스키마, 쿼리 헬퍼 export
   - **DoD (통과 기준)**: `pnpm --filter @repo/db typecheck && pnpm --filter @repo/db test`가 모두 성공한다.
 

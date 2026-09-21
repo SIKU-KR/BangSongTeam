@@ -1,6 +1,6 @@
 import {
-  Setlist,
-  SetlistSchema,
+  Presentation,
+  PresentationSchema,
   Deck,
   DeckSchema,
   DEFAULT_DECK_STYLE,
@@ -9,7 +9,7 @@ import {
 } from "@repo/shared";
 
 const MOCK_USER_ID = "00000000-0000-4000-8000-000000000001";
-const MOCK_SETLIST_ID = "10000000-0000-4000-8000-000000000001";
+const MOCK_PRESENTATION_ID = "10000000-0000-4000-8000-000000000001";
 const CREATED_AT = "2026-09-20T00:00:00.000Z";
 
 interface SongMockInput {
@@ -159,8 +159,8 @@ function buildMockDeck(def: SongMockInput): Deck {
     id: def.deckId,
     userId: MOCK_USER_ID,
     catalogId: null,
-    scope: "setlist" as const,
-    setlistId: MOCK_SETLIST_ID,
+    scope: "presentation" as const,
+    presentationId: MOCK_PRESENTATION_ID,
     title: def.title,
     artist: def.artist,
     lyricsRaw: mergeSlidesToLyrics(slides),
@@ -179,14 +179,14 @@ function buildMockDeck(def: SongMockInput): Deck {
 
 export const mockDecks: Deck[] = SONG_DEFINITIONS.map(buildMockDeck);
 
-export const mockSetlist: Setlist = SetlistSchema.parse({
-  id: MOCK_SETLIST_ID,
+export const mockPresentation: Presentation = PresentationSchema.parse({
+  id: MOCK_PRESENTATION_ID,
   userId: MOCK_USER_ID,
   title: "2026 주일 3부 예배",
   serviceDate: "2026-09-20",
   items: SONG_DEFINITIONS.map((def, idx) => ({
     id: def.itemId,
-    setlistId: MOCK_SETLIST_ID,
+    presentationId: MOCK_PRESENTATION_ID,
     deckId: def.deckId,
     order: idx,
     deck: mockDecks[idx],

@@ -17,12 +17,12 @@
 ## 2. 세부 작업 체크리스트
 
 - [x] **Task 3.1: M1 검증용 5곡 인메모리 세트리스트 Mock 데이터 작성**
-  - **대상 파일**: `apps/web/src/features/presentation/mockSetlist.ts`
+  - **대상 파일**: `apps/web/src/features/presentation/mockPresentation.ts`
   - **선행 조건**: `docs/tasks/m1/tasks_2.md`
   - **구현 내용**:
     - 주일 예배 실전 송출 검증용 대표 5곡 찬양(예: 은혜로다, 주 품에, 시선, 꽃들도, 주의 이름 높이며) 덱 데이터 작성
     - 각 곡별 3~5개 슬라이드 분할 및 모션 배경 매핑
-    - `@repo/shared`의 `SetlistSchema.parse`를 통한 스키마 정합성 사전 검증
+    - `@repo/shared`의 `PresentationSchema.parse`를 통한 스키마 정합성 사전 검증
   - **DoD (통과 기준)**: `pnpm --filter web exec tsc --noEmit`이 통과하고 Mock 세트 파싱이 에러 없이 완료된다.
 
 - [x] **Task 3.2: 빠른 가사 붙여넣기 및 실시간 분할 모달 UI 구현**

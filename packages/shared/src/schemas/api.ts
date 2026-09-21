@@ -22,14 +22,16 @@ export const UpdateDeckRequestSchema = CreateDeckRequestSchema.partial();
 export type UpdateDeckRequest = z.infer<typeof UpdateDeckRequestSchema>;
 
 // 3. 세트 생성 요청
-export const CreateSetlistRequestSchema = z.object({
+export const CreatePresentationRequestSchema = z.object({
   title: z.string().min(1).max(100),
   serviceDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
 });
-export type CreateSetlistRequest = z.infer<typeof CreateSetlistRequestSchema>;
+export type CreatePresentationRequest = z.infer<
+  typeof CreatePresentationRequestSchema
+>;
 
 // 4. 세트 항목 순서 및 곡 변경 요청
-export const UpdateSetlistItemsRequestSchema = z.object({
+export const UpdatePresentationItemsRequestSchema = z.object({
   items: z.array(
     z.object({
       deckId: z.string().uuid(),
@@ -37,8 +39,8 @@ export const UpdateSetlistItemsRequestSchema = z.object({
     }),
   ),
 });
-export type UpdateSetlistItemsRequest = z.infer<
-  typeof UpdateSetlistItemsRequestSchema
+export type UpdatePresentationItemsRequest = z.infer<
+  typeof UpdatePresentationItemsRequestSchema
 >;
 
 // 5. 통합 검색 쿼리 및 응답

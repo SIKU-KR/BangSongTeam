@@ -3,10 +3,10 @@ import { sql } from "drizzle-orm";
 import { user } from "./auth";
 import { lyricsCatalog } from "./lyrics";
 import { backgrounds } from "./media";
-import { setlists } from "./setlists";
+import { presentations } from "./presentations";
 
 // ============================================================================
-// 덱 (Deck) - 찬양 1곡 단위 (라이브러리 마스터 vs 콘티 복제 격리)
+// 덱 (Deck) - 찬양 1곡 단위 (라이브러리 마스터 vs 프레젠테이션 복제 격리)
 // ============================================================================
 export const decks = sqliteTable(
   "decks",
@@ -19,11 +19,11 @@ export const decks = sqliteTable(
       onDelete: "set null",
     }),
 
-    // 스코프 격리 및 콘티 종속성
-    scope: text("scope", { enum: ["library", "setlist"] })
+    // 스코프 격리 및 프레젠테이션 종속성
+    scope: text("scope", { enum: ["library", "presentation"] })
       .notNull()
       .default("library"),
-    setlistId: text("setlist_id").references(() => setlists.id, {
+    presentationId: text("presentation_id").references(() => presentations.id, {
       onDelete: "cascade",
     }),
 
@@ -51,7 +51,7 @@ export const decks = sqliteTable(
   },
   (t) => [
     index("idx_decks_user_scope").on(t.userId, t.scope), // 내 보관함 필터링 최적화
-    index("idx_decks_setlist").on(t.setlistId), // 세트 종속 덱 조회
+    index("idx_decks_presentation").on(t.presentationId), // 세트 종속 덱 조회
     index("idx_decks_visibility_forks").on(t.visibility, t.forkCount),
     index("idx_decks_catalog").on(t.catalogId),
   ],

@@ -132,7 +132,7 @@ function buildCommunityDeck(def: CommunitySongDef): Deck {
     userId: COMMUNITY_USER_ID,
     catalogId: null,
     scope: "library" as const,
-    setlistId: null,
+    presentationId: null,
     title: def.title,
     artist: def.artist,
     lyricsRaw: mergeSlidesToLyrics(slides),

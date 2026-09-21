@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import type { Deck, Setlist } from "@repo/shared";
+import type { Deck, Presentation } from "@repo/shared";
 import {
   getBackgroundMediaUrl,
   getBackgroundPosterUrl,
@@ -13,9 +13,9 @@ import { SlideStage } from "../../components/stage/SlideStage";
 import { COMMUNITY_SONGS } from "./mockCommunityData";
 
 export interface SongLibraryViewProps {
-  setlist: Setlist;
+  presentation: Presentation;
   onOpenQuickPaste: () => void;
-  onAddDeckToSetlist: (deck: Deck) => void;
+  onAddDeckToPresentation: (deck: Deck) => void;
   onDuplicateSong: (index: number) => void;
   onRemoveSong: (index: number) => void;
   searchQuery?: string;
@@ -27,9 +27,9 @@ export interface SongLibraryViewProps {
  * - 단락 2: 유저가 등록한 곡 (Community Songs)
  */
 export function SongLibraryView({
-  setlist,
+  presentation,
   onOpenQuickPaste,
-  onAddDeckToSetlist,
+  onAddDeckToPresentation,
   onDuplicateSong,
   onRemoveSong,
   searchQuery = "",
@@ -41,7 +41,7 @@ export function SongLibraryView({
   // 검색어 필터링 (es-hangul 초성/자모 분해/스마트 한글 검색 지원)
   const query = searchQuery.trim();
 
-  const mySongs = setlist.items
+  const mySongs = presentation.items
     .map((item, index) => ({ item, index }))
     .filter(({ item }) => {
       if (!query) return true;
@@ -76,7 +76,7 @@ export function SongLibraryView({
   };
 
   const handleAddCommunitySong = (deck: Deck): void => {
-    onAddDeckToSetlist(deck);
+    onAddDeckToPresentation(deck);
     setAddedDeckId(deck.id);
     setTimeout(() => {
       setAddedDeckId(null);
@@ -101,8 +101,8 @@ export function SongLibraryView({
               </span>
             </div>
             <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
-              현재 콘티에 등록되어 있거나 직접 가사를 입력하여 생성한 찬양
-              슬라이드 덱입니다.
+              현재 프레젠테이션에 등록되어 있거나 직접 가사를 입력하여 생성한
+              찬양 슬라이드 덱입니다.
             </p>
           </div>
 
@@ -212,7 +212,7 @@ export function SongLibraryView({
             </div>
             <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
               다른 사역자 및 유저들이 등록하고 검증한 인기 찬양 슬라이드
-              덱입니다. 원클릭으로 내 콘티에 추가할 수 있습니다.
+              덱입니다. 원클릭으로 내 프레젠테이션에 추가할 수 있습니다.
             </p>
           </div>
         </div>
@@ -330,7 +330,7 @@ export function SongLibraryView({
                                 d="M12 4v16m8-8H4"
                               />
                             </svg>
-                            <span>내 콘티에 추가</span>
+                            <span>내 프레젠테이션에 추가</span>
                           </>
                         )}
                       </button>
@@ -357,9 +357,9 @@ export function SongLibraryView({
                           ? "bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800"
                           : "bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-indigo-700 dark:text-indigo-300 hover:text-indigo-800 dark:hover:text-white border border-zinc-200 dark:border-zinc-700/80"
                       }`}
-                      title="내 콘티에 바로 추가"
+                      title="내 프레젠테이션에 바로 추가"
                     >
-                      {isAdded ? "추가됨 ✓" : "+ 콘티 추가"}
+                      {isAdded ? "추가됨 ✓" : "+ 프레젠테이션 추가"}
                     </button>
                   </div>
                 </div>
@@ -445,7 +445,7 @@ export function SongLibraryView({
                 }}
                 className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-xs font-bold text-white shadow-sm cursor-pointer transition-colors"
               >
-                내 콘티에 추가하기
+                내 프레젠테이션에 추가하기
               </button>
             </div>
           </div>

@@ -7,7 +7,7 @@ import {
 } from "@repo/shared";
 import { SlideStage } from "../components/stage/SlideStage";
 import {
-  useActiveSetlist,
+  useActivePresentation,
   useNavigationBuffer,
   usePresentationShortcuts,
   enterFullscreen,
@@ -23,14 +23,14 @@ import {
  */
 export function FullscreenPresentRoute(): React.JSX.Element {
   const navigate = useNavigate();
-  const setlist = useActiveSetlist();
+  const presentation = useActivePresentation();
 
   const [currentSongIndex, setCurrentSongIndex] = useState<number>(0);
   const [currentSlideIndex, setCurrentSlideIndex] = useState<number>(0);
   const [isBlackout, setIsBlackout] = useState<boolean>(false);
   const [isLyricsHidden, setIsLyricsHidden] = useState<boolean>(false);
 
-  const songs = setlist.items;
+  const songs = presentation.items;
   const currentSong = songs[currentSongIndex]?.deck;
   const currentSlide = currentSong?.slides[currentSlideIndex] ?? null;
   const currentStyle = currentSong?.style ?? DEFAULT_DECK_STYLE;

@@ -4,11 +4,11 @@ import { ChromeAlertBanner } from "../components/common/ChromeAlertBanner";
 import { ThemeMenuButton } from "../components/common/ThemeMenuButton";
 import { QuickLyricPasteModal } from "../features/editor";
 import {
-  useActiveSetlist,
-  addDeckToSetlist,
-  removeSongFromSetlist,
-  duplicateSongInSetlist,
-  createNewSetlist,
+  useActivePresentation,
+  addDeckToPresentation,
+  removeSongFromPresentation,
+  duplicateSongInPresentation,
+  createNewPresentation,
   updateSongBackground,
 } from "../features/presentation";
 import {
@@ -41,7 +41,7 @@ export function HomeRoute(): React.JSX.Element {
       ? currentTabParam
       : "home";
 
-  const setlist = useActiveSetlist();
+  const presentation = useActivePresentation();
   const [isQuickPasteOpen, setIsQuickPasteOpen] = useState<boolean>(false);
 
   // Canva 스타일 검색 및 필터 상태
@@ -68,17 +68,17 @@ export function HomeRoute(): React.JSX.Element {
   };
 
   const handleCreateNewPresentation = (): void => {
-    createNewSetlist("새 주일 예배 프레젠테이션");
+    createNewPresentation("새 주일 예배 프레젠테이션");
     navigate("/editor");
   };
 
   const handleAddToSet = (newDeck: Deck): void => {
-    addDeckToSetlist(newDeck);
+    addDeckToPresentation(newDeck);
     setIsQuickPasteOpen(false);
   };
 
   const handleApplyBackground = (bgId: string): void => {
-    if (setlist.items.length > 0) {
+    if (presentation.items.length > 0) {
       updateSongBackground(0, bgId);
     }
   };
@@ -558,7 +558,8 @@ export function HomeRoute(): React.JSX.Element {
         {/* ── Canva 액션 툴바: 우측 상단 정렬(↑↓), 그리드/리스트 뷰 전환(:: / ☰), 빠른 추가(+) ── */}
         <div className="max-w-7xl w-full mx-auto px-6 sm:px-8 pt-6 pb-2 flex items-center justify-between">
           <div className="text-xs text-zinc-500">
-            {activeMenu === "home" && `${setlist.items.length}개 찬양 포함됨`}
+            {activeMenu === "home" &&
+              `${presentation.items.length}개 찬양 포함됨`}
           </div>
 
           <div className="flex items-center gap-2">
@@ -667,7 +668,7 @@ export function HomeRoute(): React.JSX.Element {
           {activeMenu === "home" ? (
             /* 홈: Canva 스타일 "최근" 수평 캐러셀 + "폴더" 아코디언 + "모든 프레젠테이션" */
             <MergedSlidesView
-              setlist={setlist}
+              presentation={presentation}
               onCreateNewPresentation={handleCreateNewPresentation}
               searchQuery={searchQuery}
               viewMode={viewMode}
@@ -676,11 +677,11 @@ export function HomeRoute(): React.JSX.Element {
           ) : activeMenu === "songs" ? (
             /* 곡 라이브러리: 내가 등록한 곡 / 유저가 등록한 곡 2단락 */
             <SongLibraryView
-              setlist={setlist}
+              presentation={presentation}
               onOpenQuickPaste={() => setIsQuickPasteOpen(true)}
-              onAddDeckToSetlist={handleAddToSet}
-              onDuplicateSong={duplicateSongInSetlist}
-              onRemoveSong={removeSongFromSetlist}
+              onAddDeckToPresentation={handleAddToSet}
+              onDuplicateSong={duplicateSongInPresentation}
+              onRemoveSong={removeSongFromPresentation}
               searchQuery={searchQuery}
             />
           ) : (

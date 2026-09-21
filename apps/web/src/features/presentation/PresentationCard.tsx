@@ -1,5 +1,5 @@
 import React from "react";
-import type { Deck, Setlist } from "@repo/shared";
+import type { Deck, Presentation } from "@repo/shared";
 import {
   getBackgroundMediaUrl,
   getBackgroundPosterUrl,
@@ -10,7 +10,7 @@ import { SlideStage } from "../../components/stage/SlideStage";
 export interface PresentationCardProps {
   /** 단일 덱 또는 세트리스트 */
   deck?: Deck | null;
-  setlist?: Setlist | null;
+  presentation?: Presentation | null;
   /** 발표(슬라이드쇼) 클릭 핸들러 */
   onPresent: () => void;
   /** 편집 클릭 핸들러 */
@@ -31,7 +31,7 @@ export interface PresentationCardProps {
  */
 export function PresentationCard({
   deck,
-  setlist,
+  presentation,
   onPresent,
   onEdit,
   onDuplicate,
@@ -39,27 +39,27 @@ export function PresentationCard({
   className = "",
 }: PresentationCardProps): React.JSX.Element {
   // 덱 또는 세트리스트 대표 정보 추출
-  const isSetlist = Boolean(setlist);
-  const title = setlist?.title ?? deck?.title ?? "제목 없는 프레젠테이션";
-  const artistOrSummary = isSetlist
-    ? setlist?.items
+  const isPresentation = Boolean(presentation);
+  const title = presentation?.title ?? deck?.title ?? "제목 없는 프레젠테이션";
+  const artistOrSummary = isPresentation
+    ? presentation?.items
         .map((i) => i.deck?.title)
         .filter(Boolean)
         .slice(0, 3)
         .join(", ") +
-      (setlist && setlist.items.length > 3
-        ? ` 외 ${setlist.items.length - 3}곡`
+      (presentation && presentation.items.length > 3
+        ? ` 외 ${presentation.items.length - 3}곡`
         : "")
     : deck?.artist || "찬양 곡";
 
-  const totalSlides = isSetlist
-    ? (setlist?.items.reduce(
+  const totalSlides = isPresentation
+    ? (presentation?.items.reduce(
         (sum, item) => sum + (item.deck?.slides.length ?? 0),
         0,
       ) ?? 0)
     : (deck?.slides.length ?? 0);
 
-  const leadDeck = isSetlist ? setlist?.items[0]?.deck : deck;
+  const leadDeck = isPresentation ? presentation?.items[0]?.deck : deck;
   const rawLeadSlide = leadDeck?.slides[0] ?? null;
   // 썸네일 내부 텍스트에 zero-width space를 부여하여 카드 타이틀과 시각적/접근성 구분
   const leadSlide = rawLeadSlide
@@ -98,9 +98,9 @@ export function PresentationCard({
           <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-black/70 backdrop-blur-md text-emerald-400 border border-emerald-500/30">
             16:9
           </span>
-          {isSetlist && (
+          {isPresentation && (
             <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-indigo-950/80 backdrop-blur-md text-indigo-300 border border-indigo-700/40">
-              {setlist?.items.length}곡 세트
+              {presentation?.items.length}곡 세트
             </span>
           )}
         </div>
@@ -171,13 +171,18 @@ export function PresentationCard({
             {/* Canva 스타일의 작은 아이콘/아바타 + 최근 수정 텍스트 */}
             <div className="flex items-center gap-1.5 text-[11px] text-zinc-500 dark:text-zinc-400 mt-1">
               <span className="w-4 h-4 rounded flex items-center justify-center bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-400 border border-emerald-300 dark:border-emerald-800/80 text-[9px] font-bold shrink-0">
-                {isSetlist ? "W" : "S"}
+                {isPresentation ? "W" : "S"}
               </span>
               <span className="truncate">
-                {artistOrSummary || (isSetlist ? "콘티 세트" : "찬양 곡")}
+                {artistOrSummary ||
+                  (isPresentation ? "프레젠테이션 세트" : "찬양 곡")}
               </span>
-              <span className="text-zinc-300 dark:text-zinc-600 shrink-0">•</span>
-              <span className="text-zinc-400 dark:text-zinc-400 shrink-0">최근 편집됨</span>
+              <span className="text-zinc-300 dark:text-zinc-600 shrink-0">
+                •
+              </span>
+              <span className="text-zinc-400 dark:text-zinc-400 shrink-0">
+                최근 편집됨
+              </span>
             </div>
           </div>
 

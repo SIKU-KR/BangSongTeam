@@ -4,7 +4,7 @@ import { DeckSchema, DeckScopeSchema, DeckVisibilitySchema } from "./deck";
 describe("DeckSchema", () => {
   it("validates DeckScopeSchema options", () => {
     expect(DeckScopeSchema.parse("library")).toBe("library");
-    expect(DeckScopeSchema.parse("setlist")).toBe("setlist");
+    expect(DeckScopeSchema.parse("presentation")).toBe("presentation");
     expect(() => DeckScopeSchema.parse("other")).toThrow();
   });
 
@@ -40,16 +40,16 @@ describe("DeckSchema", () => {
     expect(parsed.slides[0].id).toMatch(/^s_/);
   });
 
-  it("allows setlist scope and setlistId", () => {
-    const setlistDeck = {
+  it("allows presentation scope and presentationId", () => {
+    const presentationDeck = {
       ...sampleDeck,
-      scope: "setlist" as const,
-      setlistId: "c0eebc99-9c0b-4ef8-bb6d-6bb9bd380a33",
+      scope: "presentation" as const,
+      presentationId: "c0eebc99-9c0b-4ef8-bb6d-6bb9bd380a33",
       forkedFrom: "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11",
     };
-    const parsed = DeckSchema.parse(setlistDeck);
-    expect(parsed.scope).toBe("setlist");
-    expect(parsed.setlistId).toBe("c0eebc99-9c0b-4ef8-bb6d-6bb9bd380a33");
+    const parsed = DeckSchema.parse(presentationDeck);
+    expect(parsed.scope).toBe("presentation");
+    expect(parsed.presentationId).toBe("c0eebc99-9c0b-4ef8-bb6d-6bb9bd380a33");
     expect(parsed.forkedFrom).toBe("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11");
   });
 

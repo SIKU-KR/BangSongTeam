@@ -7,7 +7,7 @@ import {
   SongLibraryView,
   BackgroundLibraryView,
 } from "./index";
-import { mockSetlist } from "../presentation/mockSetlist";
+import { mockPresentation } from "../presentation/mockPresentation";
 import { COMMUNITY_SONGS } from "./mockCommunityData";
 
 describe("Library Views", () => {
@@ -18,7 +18,7 @@ describe("Library Views", () => {
       render(
         <MemoryRouter>
           <MergedSlidesView
-            setlist={mockSetlist}
+            presentation={mockPresentation}
             onCreateNewPresentation={handleCreateNew}
           />
         </MemoryRouter>,
@@ -34,11 +34,11 @@ describe("Library Views", () => {
       expect(screen.getByText("새 프레젠테이션 생성")).toBeInTheDocument();
     });
 
-    it("displays empty search message when query does not match setlist", () => {
+    it("displays empty search message when query does not match presentation", () => {
       render(
         <MemoryRouter>
           <MergedSlidesView
-            setlist={mockSetlist}
+            presentation={mockPresentation}
             onCreateNewPresentation={vi.fn()}
             searchQuery="전혀일치하지않는검색어"
           />
@@ -55,16 +55,16 @@ describe("Library Views", () => {
 
   describe("SongLibraryView (곡 라이브러리: 2단락 구성)", () => {
     it("renders both '내가 등록한 곡' and '유저가 등록한 곡' sections", () => {
-      const handleAddDeckToSetlist = vi.fn();
+      const handleAddDeckToPresentation = vi.fn();
       const handleDuplicateSong = vi.fn();
       const handleRemoveSong = vi.fn();
 
       render(
         <MemoryRouter>
           <SongLibraryView
-            setlist={mockSetlist}
+            presentation={mockPresentation}
             onOpenQuickPaste={vi.fn()}
-            onAddDeckToSetlist={handleAddDeckToSetlist}
+            onAddDeckToPresentation={handleAddDeckToPresentation}
             onDuplicateSong={handleDuplicateSong}
             onRemoveSong={handleRemoveSong}
           />
@@ -81,13 +81,15 @@ describe("Library Views", () => {
       expect(screen.getByText("시간을 뚫고")).toBeInTheDocument();
       expect(screen.getByText("예수 늘 함께 계시네")).toBeInTheDocument();
 
-      // 커뮤니티 곡 '내 콘티에 추가' 클릭
+      // 커뮤니티 곡 '내 프레젠테이션에 추가' 클릭
       const targetCommunityDeck = COMMUNITY_SONGS[0];
       const addBtn = screen.getByTestId(
         `add-community-song-${targetCommunityDeck.id}`,
       );
       fireEvent.click(addBtn);
-      expect(handleAddDeckToSetlist).toHaveBeenCalledWith(targetCommunityDeck);
+      expect(handleAddDeckToPresentation).toHaveBeenCalledWith(
+        targetCommunityDeck,
+      );
     });
   });
 
@@ -159,9 +161,9 @@ describe("Library Views", () => {
       render(
         <MemoryRouter>
           <SongLibraryView
-            setlist={mockSetlist}
+            presentation={mockPresentation}
             onOpenQuickPaste={vi.fn()}
-            onAddDeckToSetlist={vi.fn()}
+            onAddDeckToPresentation={vi.fn()}
             onDuplicateSong={vi.fn()}
             onRemoveSong={vi.fn()}
             searchQuery="ㅇㅎㄹㄷ" // '은혜로다' 초성
@@ -177,9 +179,9 @@ describe("Library Views", () => {
       render(
         <MemoryRouter>
           <SongLibraryView
-            setlist={mockSetlist}
+            presentation={mockPresentation}
             onOpenQuickPaste={vi.fn()}
-            onAddDeckToSetlist={vi.fn()}
+            onAddDeckToPresentation={vi.fn()}
             onDuplicateSong={vi.fn()}
             onRemoveSong={vi.fn()}
             searchQuery="시ㅅ" // '시선' 타이핑 중

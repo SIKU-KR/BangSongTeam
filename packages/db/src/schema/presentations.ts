@@ -10,10 +10,10 @@ import { user } from "./auth";
 import { decks } from "./decks";
 
 // ============================================================================
-// 예배 콘티 (Setlist) 및 항목
+// 예배 프레젠테이션 (Presentation) 및 항목
 // ============================================================================
-export const setlists = sqliteTable(
-  "setlists",
+export const presentations = sqliteTable(
+  "presentations",
   {
     id: text("id").primaryKey(),
     userId: text("user_id")
@@ -28,28 +28,28 @@ export const setlists = sqliteTable(
       sql`(unixepoch())`,
     ),
   },
-  (t) => [index("idx_setlists_user_date").on(t.userId, t.serviceDate)],
+  (t) => [index("idx_presentations_user_date").on(t.userId, t.serviceDate)],
 );
 
-export const setlistItems = sqliteTable(
-  "setlist_items",
+export const presentationItems = sqliteTable(
+  "presentation_items",
   {
     id: text("id").primaryKey(),
-    setlistId: text("setlist_id")
+    presentationId: text("presentation_id")
       .notNull()
-      .references(() => setlists.id, { onDelete: "cascade" }),
+      .references(() => presentations.id, { onDelete: "cascade" }),
     deckId: text("deck_id")
       .notNull()
       .references(() => decks.id, { onDelete: "cascade" }),
     order: integer("order").notNull(),
   },
   (t) => [
-    index("idx_setlist_items_order").on(t.setlistId, t.order),
-    uniqueIndex("idx_setlist_items_unique").on(t.setlistId, t.deckId),
+    index("idx_presentation_items_order").on(t.presentationId, t.order),
+    uniqueIndex("idx_presentation_items_unique").on(t.presentationId, t.deckId),
   ],
 );
 
-export type Setlist = typeof setlists.$inferSelect;
-export type NewSetlist = typeof setlists.$inferInsert;
-export type SetlistItem = typeof setlistItems.$inferSelect;
-export type NewSetlistItem = typeof setlistItems.$inferInsert;
+export type Presentation = typeof presentations.$inferSelect;
+export type NewPresentation = typeof presentations.$inferInsert;
+export type PresentationItem = typeof presentationItems.$inferSelect;
+export type NewPresentationItem = typeof presentationItems.$inferInsert;

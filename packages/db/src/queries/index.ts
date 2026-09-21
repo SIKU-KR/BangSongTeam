@@ -1,3 +1,3 @@
 export * from "./decks";
-export * from "./setlists";
+export * from "./presentations";
 export * from "./backgrounds";

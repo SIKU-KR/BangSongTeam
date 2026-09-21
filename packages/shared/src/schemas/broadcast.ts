@@ -11,7 +11,7 @@ export const BroadcastMessageSchema = z.discriminatedUnion("type", [
     type: z.literal("SYNC_SNAPSHOT"),
     timestamp: z.number(),
     payload: z.object({
-      setlistId: z.string().uuid(),
+      presentationId: z.string().uuid(),
       currentSongIndex: z.number().int().nonnegative(),
       currentSlideIndex: z.number().int().nonnegative(),
       isBlackout: z.boolean(),

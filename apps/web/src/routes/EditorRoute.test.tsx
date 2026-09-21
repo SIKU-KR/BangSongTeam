@@ -3,7 +3,7 @@ import { render, screen, fireEvent, act } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { MemoryRouter } from "react-router-dom";
 import { EditorRoute } from "./EditorRoute";
-import { resetActiveSetlist } from "../features/presentation";
+import { resetActivePresentation } from "../features/presentation";
 
 const mockNavigate = vi.fn();
 vi.mock("react-router-dom", async () => {
@@ -16,7 +16,7 @@ vi.mock("react-router-dom", async () => {
 
 describe("EditorRoute (Canva / MiriCanvas Presentation Editor)", () => {
   beforeEach(() => {
-    resetActiveSetlist();
+    resetActivePresentation();
     mockNavigate.mockClear();
     vi.restoreAllMocks();
   });

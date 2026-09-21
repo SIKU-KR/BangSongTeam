@@ -1,13 +1,13 @@
 import React, { useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import type { Setlist } from "@repo/shared";
+import type { Presentation } from "@repo/shared";
 import { hangulIncludes } from "@repo/shared";
 import { PresentationCard } from "../presentation/PresentationCard";
 import { launchPresentation } from "../presentation";
 import { isGoogleChromeBrowser } from "../../components/common/ChromeAlertBanner";
 
 export interface MergedSlidesViewProps {
-  setlist: Setlist;
+  presentation: Presentation;
   onCreateNewPresentation: () => void;
   searchQuery?: string;
   viewMode?: "grid" | "list";
@@ -40,7 +40,7 @@ const ADDITIONAL_RECENT_ITEMS: AdditionalRecentItem[] = [
   },
   {
     id: "recent-item-3",
-    title: "부활절 감사예배 특별 콘티",
+    title: "부활절 감사예배 특별 프레젠테이션",
     subtitle: "꽃들도, 주의 이름 높이며 외 5곡",
     songsCount: 7,
     slidesCount: 28,
@@ -51,7 +51,7 @@ const ADDITIONAL_RECENT_ITEMS: AdditionalRecentItem[] = [
   },
   {
     id: "recent-item-4",
-    title: "수요 성령기도회 콘티",
+    title: "수요 성령기도회 프레젠테이션",
     subtitle: "주 은혜임을, 은혜로다 외 1곡",
     songsCount: 3,
     slidesCount: 14,
@@ -75,7 +75,12 @@ const ADDITIONAL_RECENT_ITEMS: AdditionalRecentItem[] = [
 
 const FOLDERS_DATA = [
   { id: "f-1", name: "2026 주일 대예배", count: 12, color: "text-emerald-400" },
-  { id: "f-2", name: "청년부 찬양 콘티", count: 8, color: "text-indigo-400" },
+  {
+    id: "f-2",
+    name: "청년부 찬양 프레젠테이션",
+    count: 8,
+    color: "text-indigo-400",
+  },
   { id: "f-3", name: "수요·금요 기도회", count: 15, color: "text-sky-400" },
   {
     id: "f-4",
@@ -92,7 +97,7 @@ const FOLDERS_DATA = [
  * - 하단: "⌵ 모든 프레젠테이션 & 템플릿" (그리드 / 리스트 뷰 모드 지원)
  */
 export function MergedSlidesView({
-  setlist,
+  presentation,
   onCreateNewPresentation,
   searchQuery = "",
   viewMode = "grid",
@@ -133,8 +138,8 @@ export function MergedSlidesView({
   const query = searchQuery.trim();
   const isMatch =
     !query ||
-    hangulIncludes(setlist.title, query) ||
-    setlist.items.some((item) => {
+    hangulIncludes(presentation.title, query) ||
+    presentation.items.some((item) => {
       const deck = item.deck;
       if (!deck) return false;
       return (
@@ -196,7 +201,9 @@ export function MergedSlidesView({
           ─────────────────────────────────────────────────────────── */}
       <section className="space-y-4">
         <div className="flex items-center justify-between">
-          <h2 className="text-xl font-bold text-zinc-900 dark:text-white tracking-tight">최근</h2>
+          <h2 className="text-xl font-bold text-zinc-900 dark:text-white tracking-tight">
+            최근
+          </h2>
         </div>
 
         {/* 캐러셀 컨테이너 */}
@@ -233,7 +240,7 @@ export function MergedSlidesView({
             {isMatch && (
               <div className="w-[300px] sm:w-[320px] shrink-0">
                 <PresentationCard
-                  setlist={setlist}
+                  presentation={presentation}
                   onPresent={handleStartPresentation}
                   onEdit={handleOpenEditor}
                   className="h-full"
@@ -320,7 +327,9 @@ export function MergedSlidesView({
                       {item.badgeLetter}
                     </span>
                     <span className="truncate">{item.subtitle}</span>
-                    <span className="text-zinc-300 dark:text-zinc-600 shrink-0">•</span>
+                    <span className="text-zinc-300 dark:text-zinc-600 shrink-0">
+                      •
+                    </span>
                     <span className="text-zinc-400 dark:text-zinc-400 shrink-0">
                       {item.editedAgo}
                     </span>
@@ -560,10 +569,10 @@ export function MergedSlidesView({
                         </div>
                         <div className="min-w-0">
                           <span className="font-semibold text-zinc-900 dark:text-white truncate block">
-                            {setlist.title}
+                            {presentation.title}
                           </span>
                           <span className="text-[11px] text-zinc-500 truncate block">
-                            {setlist.items
+                            {presentation.items
                               .map((i) => i.deck?.title)
                               .filter(Boolean)
                               .join(", ")}
@@ -578,7 +587,7 @@ export function MergedSlidesView({
                       </td>
                       <td className="py-3 px-4">
                         <span className="px-2 py-0.5 rounded-full text-[10px] bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-700">
-                          {setlist.items.length}곡 · 23슬라이드
+                          {presentation.items.length}곡 · 23슬라이드
                         </span>
                       </td>
                       <td className="py-3 px-4 text-right">

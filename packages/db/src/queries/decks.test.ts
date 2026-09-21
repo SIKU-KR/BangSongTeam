@@ -86,12 +86,12 @@ describe("D1 Scoped Deck Queries", () => {
         visibility: "private",
       });
 
-      // User A setlist cloned deck (must be excluded from library view)
+      // User A presentation cloned deck (must be excluded from library view)
       await db.insert(decks).values({
         id: "d2",
         userId: userAId,
-        scope: "setlist",
-        title: "User A Setlist Deck",
+        scope: "presentation",
+        title: "User A Presentation Deck",
         lyricsRaw: "가사",
         slides: "[]",
         style: "{}",

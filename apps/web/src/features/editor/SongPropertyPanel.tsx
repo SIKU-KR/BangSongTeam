@@ -294,7 +294,9 @@ export function SongPropertyPanel({
 
           {/* 텍스트 정렬 */}
           <div className="space-y-1">
-            <span className="text-[11px] text-zinc-600 dark:text-zinc-400">텍스트 정렬</span>
+            <span className="text-[11px] text-zinc-600 dark:text-zinc-400">
+              텍스트 정렬
+            </span>
             <div className="grid grid-cols-3 gap-1 bg-zinc-100 dark:bg-zinc-900 p-1 rounded-lg border border-zinc-200 dark:border-zinc-800">
               {(["left", "center", "right"] as const).map((align) => (
                 <button
@@ -342,7 +344,9 @@ export function SongPropertyPanel({
 
           {/* 폰트 색상 프리셋 */}
           <div className="space-y-1">
-            <span className="text-[11px] text-zinc-600 dark:text-zinc-400">글자 색상</span>
+            <span className="text-[11px] text-zinc-600 dark:text-zinc-400">
+              글자 색상
+            </span>
             <div className="flex items-center gap-1.5">
               {PRESET_COLORS.map((col) => (
                 <button

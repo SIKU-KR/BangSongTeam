@@ -17,7 +17,7 @@ describe("BroadcastMessageSchema", () => {
       type: "SYNC_SNAPSHOT",
       timestamp,
       payload: {
-        setlistId: "e0eebc99-9c0b-4ef8-bb6d-6bb9bd380a55",
+        presentationId: "e0eebc99-9c0b-4ef8-bb6d-6bb9bd380a55",
         currentSongIndex: 1,
         currentSlideIndex: 3,
         isBlackout: false,
@@ -95,7 +95,7 @@ describe("BroadcastMessageSchema", () => {
         type: "SYNC_SNAPSHOT",
         timestamp,
         payload: {
-          setlistId: "not-a-uuid",
+          presentationId: "not-a-uuid",
           currentSongIndex: 0,
           currentSlideIndex: 0,
           isBlackout: false,

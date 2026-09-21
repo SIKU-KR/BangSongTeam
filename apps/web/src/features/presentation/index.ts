@@ -9,16 +9,16 @@ export {
   type UsePresentationShortcutsOptions,
 } from "./usePresentationShortcuts";
 
-export { mockSetlist, mockDecks } from "./mockSetlist";
+export { mockPresentation, mockDecks } from "./mockPresentation";
 
 export {
-  getActiveSetlist,
-  setActiveSetlist,
-  createNewSetlist,
-  addDeckToSetlist,
-  resetActiveSetlist,
-  useActiveSetlist,
-  updateSetlistTitle,
+  getActivePresentation,
+  setActivePresentation,
+  createNewPresentation,
+  addDeckToPresentation,
+  resetActivePresentation,
+  useActivePresentation,
+  updatePresentationTitle,
   updateSongInfo,
   updateSongStyle,
   updateSongBackground,
@@ -27,14 +27,14 @@ export {
   removeSlideFromSong,
   duplicateSlide,
   reorderSongs,
-  removeSongFromSetlist,
-  duplicateSongInSetlist,
+  removeSongFromPresentation,
+  duplicateSongInPresentation,
   reorderSlides,
   undo,
   redo,
   canUndo,
   canRedo,
-} from "./setlistStore";
+} from "./presentationStore";
 
 export {
   PresentationCard,

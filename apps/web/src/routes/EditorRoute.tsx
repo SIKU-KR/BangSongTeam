@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import {
-  useActiveSetlist,
-  updateSetlistTitle,
+  useActivePresentation,
+  updatePresentationTitle,
   updateSongStyle,
   updateSongBackground,
   updateSlideLines,
@@ -10,16 +10,16 @@ import {
   removeSlideFromSong,
   duplicateSlide,
   reorderSongs,
-  removeSongFromSetlist,
-  addDeckToSetlist,
-  duplicateSongInSetlist,
+  removeSongFromPresentation,
+  addDeckToPresentation,
+  duplicateSongInPresentation,
   reorderSlides,
   undo,
   redo,
   canUndo,
   canRedo,
-  resetActiveSetlist,
-  createNewSetlist,
+  resetActivePresentation,
+  createNewPresentation,
   launchPresentation,
 } from "../features/presentation";
 import {
@@ -37,7 +37,7 @@ import { QuickLyricPasteModal } from "../features/editor/QuickLyricPasteModal";
 /**
  * Canva / MiriCanvas 스타일 통합 프레젠테이션 편집기 라우트
  * - 상단: EditorHeader (제목 인라인 수정, 실행 취소/다시 실행, 슬라이드쇼 발표 CTA)
- * - 좌측: EditorSidebar (Canva 스타일 아이콘 레일 + 콘티 곡, 슬라이드, 가사, 모션 배경, 스타일 테마 드로어)
+ * - 좌측: EditorSidebar (Canva 스타일 아이콘 레일 + 프레젠테이션 곡, 슬라이드, 가사, 모션 배경, 스타일 테마 드로어)
  * - 중앙: EditorStageCanvas (16:9 캔버스 스테이지 & 줌 컨트롤 & 리허설 암전/숨김 & 빈 상태 방어)
  * - 우측: SongPropertyPanel (모션 배경 10종, 오버레이, 타이포그래피, 3×3 그리드, 슬라이드 가사 직접 수정)
  * - 하단: SlideFilmstrip (가로 슬라이드 스트립, 슬라이드 순서 변경 ◀/▶, 접기/펼치기 토글)
@@ -45,12 +45,12 @@ import { QuickLyricPasteModal } from "../features/editor/QuickLyricPasteModal";
 export function EditorRoute(): React.JSX.Element {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const setlist = useActiveSetlist();
+  const presentation = useActivePresentation();
   const [isLyricModalOpen, setIsLyricModalOpen] = useState(false);
 
   const initialSongIndex = Math.min(
     Math.max(0, Number(searchParams.get("song") || 0)),
-    Math.max(0, setlist.items.length - 1),
+    Math.max(0, presentation.items.length - 1),
   );
 
   const [activeSongIndex, setActiveSongIndex] =
@@ -61,9 +61,10 @@ export function EditorRoute(): React.JSX.Element {
   // 현재 유효한 곡 및 슬라이드 계산
   const safeSongIndex = Math.min(
     Math.max(0, activeSongIndex),
-    Math.max(0, setlist.items.length - 1),
+    Math.max(0, presentation.items.length - 1),
   );
-  const currentItem = setlist.items[safeSongIndex] ?? setlist.items[0];
+  const currentItem =
+    presentation.items[safeSongIndex] ?? presentation.items[0];
   const currentSong = currentItem?.deck;
   const currentSlides = currentSong?.slides ?? [];
   const safeSlideIndex = Math.min(
@@ -94,7 +95,8 @@ export function EditorRoute(): React.JSX.Element {
       setActiveSlideIndex((prev) => prev - 1);
     } else if (activeSongIndex > 0) {
       const prevSongIdx = activeSongIndex - 1;
-      const prevSlides = setlist.items[prevSongIdx]?.deck?.slides.length ?? 1;
+      const prevSlides =
+        presentation.items[prevSongIdx]?.deck?.slides.length ?? 1;
       setActiveSongIndex(prevSongIdx);
       setActiveSlideIndex(prevSlides - 1);
     }
@@ -103,7 +105,7 @@ export function EditorRoute(): React.JSX.Element {
   const handleNextSlide = () => {
     if (activeSlideIndex < currentSlides.length - 1) {
       setActiveSlideIndex((prev) => prev + 1);
-    } else if (activeSongIndex < setlist.items.length - 1) {
+    } else if (activeSongIndex < presentation.items.length - 1) {
       setActiveSongIndex((prev) => prev + 1);
       setActiveSlideIndex(0);
     }
@@ -166,15 +168,15 @@ export function EditorRoute(): React.JSX.Element {
 
   // 곡 복제
   const handleDuplicateSong = (idx: number) => {
-    duplicateSongInSetlist(idx);
+    duplicateSongInPresentation(idx);
     setActiveSongIndex(idx + 1);
     setActiveSlideIndex(0);
   };
 
   // 곡 삭제
   const handleDeleteSong = (idx: number) => {
-    removeSongFromSetlist(idx);
-    const newCount = setlist.items.length - 1;
+    removeSongFromPresentation(idx);
+    const newCount = presentation.items.length - 1;
     if (newCount <= 0) {
       setActiveSongIndex(0);
       setActiveSlideIndex(0);
@@ -189,15 +191,15 @@ export function EditorRoute(): React.JSX.Element {
   };
 
   // 기본 세트 복원
-  const handleResetSetlist = () => {
-    resetActiveSetlist();
+  const handleResetPresentation = () => {
+    resetActivePresentation();
     setActiveSongIndex(0);
     setActiveSlideIndex(0);
   };
 
   // 새 프레젠테이션 만들기
   const handleNewPresentation = () => {
-    createNewSetlist("새 주일 예배 프레젠테이션");
+    createNewPresentation("새 주일 예배 프레젠테이션");
     setActiveSongIndex(0);
     setActiveSlideIndex(0);
   };
@@ -255,7 +257,7 @@ export function EditorRoute(): React.JSX.Element {
     activeSlideIndex,
     activeSongIndex,
     currentSlides.length,
-    setlist.items.length,
+    presentation.items.length,
   ]);
 
   return (
@@ -265,11 +267,11 @@ export function EditorRoute(): React.JSX.Element {
     >
       {/* 1. 상단 Canva / MiriCanvas 스타일 헤더 */}
       <EditorHeader
-        title={setlist.title}
-        onUpdateTitle={(newTitle) => updateSetlistTitle(newTitle)}
+        title={presentation.title}
+        onUpdateTitle={(newTitle) => updatePresentationTitle(newTitle)}
         onPresent={handlePresent}
         currentSongIndex={safeSongIndex}
-        totalSongs={setlist.items.length}
+        totalSongs={presentation.items.length}
         currentSlideIndex={safeSlideIndex}
         totalSlides={currentSlides.length}
         onUndo={undo}
@@ -278,14 +280,14 @@ export function EditorRoute(): React.JSX.Element {
         canRedo={canRedo()}
         onNewPresentation={handleNewPresentation}
         onOpenLyricModal={() => setIsLyricModalOpen(true)}
-        onResetSetlist={handleResetSetlist}
+        onResetPresentation={handleResetPresentation}
       />
 
       {/* 2. 본문 3패널 레이아웃 */}
       <div className="flex-1 flex overflow-hidden">
         {/* 좌측 패널: Canva 스타일 아이콘 레일 & 드로어 탐색 */}
         <EditorSidebar
-          items={setlist.items}
+          items={presentation.items}
           activeSongIndex={safeSongIndex}
           activeSlideIndex={safeSlideIndex}
           onSelectSong={handleSelectSong}
@@ -294,8 +296,8 @@ export function EditorRoute(): React.JSX.Element {
           onDeleteSong={handleDeleteSong}
           onDuplicateSong={handleDuplicateSong}
           onAddSong={(deck) => {
-            addDeckToSetlist(deck);
-            setActiveSongIndex(setlist.items.length);
+            addDeckToPresentation(deck);
+            setActiveSongIndex(presentation.items.length);
             setActiveSlideIndex(0);
           }}
           onAddSlide={handleAddSlide}
@@ -324,7 +326,7 @@ export function EditorRoute(): React.JSX.Element {
           onPresent={handlePresent}
           zoomLevel={zoomLevel}
           onZoomChange={setZoomLevel}
-          onResetSetlist={handleResetSetlist}
+          onResetPresentation={handleResetPresentation}
           onOpenLyricModal={() => setIsLyricModalOpen(true)}
         />
 
@@ -364,8 +366,8 @@ export function EditorRoute(): React.JSX.Element {
         isOpen={isLyricModalOpen}
         onClose={() => setIsLyricModalOpen(false)}
         onAddToSet={(newDeck) => {
-          addDeckToSetlist(newDeck);
-          setActiveSongIndex(setlist.items.length);
+          addDeckToPresentation(newDeck);
+          setActiveSongIndex(presentation.items.length);
           setActiveSlideIndex(0);
           setIsLyricModalOpen(false);
         }}

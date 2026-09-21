@@ -47,18 +47,18 @@
   - **대상 파일**: `packages/shared/src/schemas/deck.ts`
   - **선행 조건**: Task 2.3
   - **구현 내용**:
-    - `DeckScopeSchema`: `'library' | 'setlist'`
+    - `DeckScopeSchema`: `'library' | 'presentation'`
     - `DeckVisibilitySchema`: `'private' | 'public'`
-    - `DeckSchema`: `id`, `userId`, `catalogId`, `scope`, `setlistId`, `title`, `artist`, `lyricsRaw`, `slides(SlideSchema.array())`, `backgroundId`, `style(DeckStyleSchema)`, `visibility`, `forkedFrom`, `forkCount`, 타임스탬프
+    - `DeckSchema`: `id`, `userId`, `catalogId`, `scope`, `presentationId`, `title`, `artist`, `lyricsRaw`, `slides(SlideSchema.array())`, `backgroundId`, `style(DeckStyleSchema)`, `visibility`, `forkedFrom`, `forkCount`, 타임스탬프
   - **DoD (통과 기준)**: `pnpm --filter @repo/shared exec tsc --noEmit`이 에러 없이 통과한다.
 
-- [x] **Task 2.5: 콘티(Setlist) 도메인 스키마 정의**
-  - **대상 파일**: `packages/shared/src/schemas/setlist.ts`
+- [x] **Task 2.5: 프레젠테이션(Presentation) 도메인 스키마 정의**
+  - **대상 파일**: `packages/shared/src/schemas/presentation.ts`
   - **선행 조건**: Task 2.4
   - **구현 내용**:
-    - `SetlistItemSchema`: `id`, `setlistId`, `deckId`, `order`, `deck(DeckSchema.optional())`
-    - `SetlistSchema`: `id`, `userId`, `title`, `serviceDate(/^\d{4}-\d{2}-\d{2}$/)`, `items(SetlistItemSchema.array())`
-  - **DoD (통과 기준)**: YYYY-MM-DD 정규식 유효성 및 SetlistItem 배열 파싱 검증이 정상 통과한다.
+    - `PresentationItemSchema`: `id`, `presentationId`, `deckId`, `order`, `deck(DeckSchema.optional())`
+    - `PresentationSchema`: `id`, `userId`, `title`, `serviceDate(/^\d{4}-\d{2}-\d{2}$/)`, `items(PresentationItemSchema.array())`
+  - **DoD (통과 기준)**: YYYY-MM-DD 정규식 유효성 및 PresentationItem 배열 파싱 검증이 정상 통과한다.
 
 - [x] **Task 2.6: 배경 미디어 및 가사 카탈로그 스키마 정의**
   - **대상 파일**: `packages/shared/src/schemas/media.ts`, `packages/shared/src/schemas/catalog.ts`
@@ -82,7 +82,7 @@
   - **선행 조건**: Task 2.4, Task 2.5, Task 2.6
   - **구현 내용**:
     - `CreateDeckRequestSchema`, `UpdateDeckRequestSchema`
-    - `CreateSetlistRequestSchema`, `UpdateSetlistItemsRequestSchema`
+    - `CreatePresentationRequestSchema`, `UpdatePresentationItemsRequestSchema`
     - `SearchCatalogQuerySchema`, `SearchCatalogResponseSchema`
   - **DoD (통과 기준)**: `pnpm --filter @repo/shared exec tsc --noEmit`이 에러 없이 통과한다.
 

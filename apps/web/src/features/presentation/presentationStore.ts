@@ -1,14 +1,14 @@
 import { useSyncExternalStore } from "react";
-import type { Deck, Setlist, SetlistItem } from "@repo/shared";
+import type { Deck, Presentation, PresentationItem } from "@repo/shared";
 import { INITIAL_BACKGROUNDS } from "@repo/shared";
-import { mockSetlist } from "./mockSetlist";
+import { mockPresentation } from "./mockPresentation";
 
 // 깊은 복사 헬퍼로 초기 상태 격리
-function cloneMockSetlist(): Setlist {
-  return JSON.parse(JSON.stringify(mockSetlist)) as Setlist;
+function cloneMockPresentation(): Presentation {
+  return JSON.parse(JSON.stringify(mockPresentation)) as Presentation;
 }
 
-let activeSetlist: Setlist = cloneMockSetlist();
+let activePresentation: Presentation = cloneMockPresentation();
 const listeners = new Set<() => void>();
 
 const undoStack: string[] = [];
@@ -16,7 +16,7 @@ const redoStack: string[] = [];
 const MAX_HISTORY = 25;
 
 function pushHistory(): void {
-  undoStack.push(JSON.stringify(activeSetlist));
+  undoStack.push(JSON.stringify(activePresentation));
   if (undoStack.length > MAX_HISTORY) {
     undoStack.shift();
   }
@@ -35,8 +35,8 @@ export function undo(): boolean {
   if (undoStack.length === 0) return false;
   const prevSerialized = undoStack.pop();
   if (!prevSerialized) return false;
-  redoStack.push(JSON.stringify(activeSetlist));
-  activeSetlist = JSON.parse(prevSerialized) as Setlist;
+  redoStack.push(JSON.stringify(activePresentation));
+  activePresentation = JSON.parse(prevSerialized) as Presentation;
   emitChange();
   return true;
 }
@@ -45,8 +45,8 @@ export function redo(): boolean {
   if (redoStack.length === 0) return false;
   const nextSerialized = redoStack.pop();
   if (!nextSerialized) return false;
-  undoStack.push(JSON.stringify(activeSetlist));
-  activeSetlist = JSON.parse(nextSerialized) as Setlist;
+  undoStack.push(JSON.stringify(activePresentation));
+  activePresentation = JSON.parse(nextSerialized) as Presentation;
   emitChange();
   return true;
 }
@@ -60,16 +60,16 @@ function emitChange(): void {
 /**
  * 현재 활성 세트리스트 반환
  */
-export function getActiveSetlist(): Setlist {
-  return activeSetlist;
+export function getActivePresentation(): Presentation {
+  return activePresentation;
 }
 
 /**
  * 인메모리 세트리스트에 신규 덱을 추가하고 모든 구독자에게 알림 (M1 실시간 연동)
  */
-export function addDeckToSetlist(deck: Deck): SetlistItem {
+export function addDeckToPresentation(deck: Deck): PresentationItem {
   pushHistory();
-  const currentCount = activeSetlist.items.length;
+  const currentCount = activePresentation.items.length;
   // backgroundId가 없으면 10개 초기 배경 중 순환 할당
   const assignedBackgroundId =
     deck.backgroundId ||
@@ -80,17 +80,17 @@ export function addDeckToSetlist(deck: Deck): SetlistItem {
     backgroundId: assignedBackgroundId,
   };
 
-  const newItem: SetlistItem = {
+  const newItem: PresentationItem = {
     id: crypto.randomUUID(),
-    setlistId: activeSetlist.id,
+    presentationId: activePresentation.id,
     deckId: resolvedDeck.id,
     order: currentCount,
     deck: resolvedDeck,
   };
 
-  activeSetlist = {
-    ...activeSetlist,
-    items: [...activeSetlist.items, newItem],
+  activePresentation = {
+    ...activePresentation,
+    items: [...activePresentation.items, newItem],
     updatedAt: new Date().toISOString(),
   };
 
@@ -101,20 +101,20 @@ export function addDeckToSetlist(deck: Deck): SetlistItem {
 /**
  * 테스트 격리 및 리셋을 위한 함수
  */
-export function resetActiveSetlist(): void {
+export function resetActivePresentation(): void {
   undoStack.length = 0;
   redoStack.length = 0;
-  activeSetlist = cloneMockSetlist();
+  activePresentation = cloneMockPresentation();
   emitChange();
 }
 
 /**
  * 활성 세트리스트 전체 교체
  */
-export function setActiveSetlist(newSetlist: Setlist): void {
+export function setActivePresentation(newPresentation: Presentation): void {
   pushHistory();
-  activeSetlist = {
-    ...newSetlist,
+  activePresentation = {
+    ...newPresentation,
     updatedAt: new Date().toISOString(),
   };
   emitChange();
@@ -123,29 +123,29 @@ export function setActiveSetlist(newSetlist: Setlist): void {
 /**
  * 신규 빈 세트리스트 생성
  */
-export function createNewSetlist(title = "새 프레젠테이션 (콘티)"): Setlist {
+export function createNewPresentation(title = "새 프레젠테이션"): Presentation {
   pushHistory();
-  const newSetlist: Setlist = {
+  const newPresentation: Presentation = {
     id: crypto.randomUUID(),
-    userId: activeSetlist.userId || "user_local",
+    userId: activePresentation.userId || "user_local",
     title,
     serviceDate: new Date().toISOString().slice(0, 10),
     items: [],
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   };
-  activeSetlist = newSetlist;
+  activePresentation = newPresentation;
   emitChange();
-  return newSetlist;
+  return newPresentation;
 }
 
 /**
  * 세트리스트 제목 변경
  */
-export function updateSetlistTitle(title: string): void {
+export function updatePresentationTitle(title: string): void {
   pushHistory();
-  activeSetlist = {
-    ...activeSetlist,
+  activePresentation = {
+    ...activePresentation,
     title,
     updatedAt: new Date().toISOString(),
   };
@@ -160,7 +160,7 @@ export function updateSongInfo(
   title: string,
   artist?: string,
 ): void {
-  const item = activeSetlist.items[songIndex];
+  const item = activePresentation.items[songIndex];
   if (!item || !item.deck) return;
 
   pushHistory();
@@ -172,11 +172,11 @@ export function updateSongInfo(
     updatedAt: new Date().toISOString(),
   };
 
-  const updatedItems = [...activeSetlist.items];
+  const updatedItems = [...activePresentation.items];
   updatedItems[songIndex] = { ...item, deck: updatedDeck };
 
-  activeSetlist = {
-    ...activeSetlist,
+  activePresentation = {
+    ...activePresentation,
     items: updatedItems,
     updatedAt: new Date().toISOString(),
   };
@@ -190,7 +190,7 @@ export function updateSongStyle(
   songIndex: number,
   styleUpdate: Partial<Deck["style"]>,
 ): void {
-  const item = activeSetlist.items[songIndex];
+  const item = activePresentation.items[songIndex];
   if (!item || !item.deck) return;
 
   pushHistory();
@@ -208,11 +208,11 @@ export function updateSongStyle(
     updatedAt: new Date().toISOString(),
   };
 
-  const updatedItems = [...activeSetlist.items];
+  const updatedItems = [...activePresentation.items];
   updatedItems[songIndex] = { ...item, deck: updatedDeck };
 
-  activeSetlist = {
-    ...activeSetlist,
+  activePresentation = {
+    ...activePresentation,
     items: updatedItems,
     updatedAt: new Date().toISOString(),
   };
@@ -226,7 +226,7 @@ export function updateSongBackground(
   songIndex: number,
   backgroundId: string,
 ): void {
-  const item = activeSetlist.items[songIndex];
+  const item = activePresentation.items[songIndex];
   if (!item || !item.deck) return;
 
   pushHistory();
@@ -237,11 +237,11 @@ export function updateSongBackground(
     updatedAt: new Date().toISOString(),
   };
 
-  const updatedItems = [...activeSetlist.items];
+  const updatedItems = [...activePresentation.items];
   updatedItems[songIndex] = { ...item, deck: updatedDeck };
 
-  activeSetlist = {
-    ...activeSetlist,
+  activePresentation = {
+    ...activePresentation,
     items: updatedItems,
     updatedAt: new Date().toISOString(),
   };
@@ -256,7 +256,7 @@ export function updateSlideLines(
   slideIndex: number,
   lines: string[],
 ): void {
-  const item = activeSetlist.items[songIndex];
+  const item = activePresentation.items[songIndex];
   if (!item || !item.deck) return;
 
   const slides = [...item.deck.slides];
@@ -275,11 +275,11 @@ export function updateSlideLines(
     updatedAt: new Date().toISOString(),
   };
 
-  const updatedItems = [...activeSetlist.items];
+  const updatedItems = [...activePresentation.items];
   updatedItems[songIndex] = { ...item, deck: updatedDeck };
 
-  activeSetlist = {
-    ...activeSetlist,
+  activePresentation = {
+    ...activePresentation,
     items: updatedItems,
     updatedAt: new Date().toISOString(),
   };
@@ -294,7 +294,7 @@ export function addSlideToSong(
   lines: string[] = ["새 슬라이드 가사를 입력하세요"],
   afterIndex?: number,
 ): void {
-  const item = activeSetlist.items[songIndex];
+  const item = activePresentation.items[songIndex];
   if (!item || !item.deck) return;
 
   pushHistory();
@@ -319,11 +319,11 @@ export function addSlideToSong(
     updatedAt: new Date().toISOString(),
   };
 
-  const updatedItems = [...activeSetlist.items];
+  const updatedItems = [...activePresentation.items];
   updatedItems[songIndex] = { ...item, deck: updatedDeck };
 
-  activeSetlist = {
-    ...activeSetlist,
+  activePresentation = {
+    ...activePresentation,
     items: updatedItems,
     updatedAt: new Date().toISOString(),
   };
@@ -337,7 +337,7 @@ export function removeSlideFromSong(
   songIndex: number,
   slideIndex: number,
 ): void {
-  const item = activeSetlist.items[songIndex];
+  const item = activePresentation.items[songIndex];
   if (!item || !item.deck || item.deck.slides.length <= 1) return;
 
   pushHistory();
@@ -351,11 +351,11 @@ export function removeSlideFromSong(
     updatedAt: new Date().toISOString(),
   };
 
-  const updatedItems = [...activeSetlist.items];
+  const updatedItems = [...activePresentation.items];
   updatedItems[songIndex] = { ...item, deck: updatedDeck };
 
-  activeSetlist = {
-    ...activeSetlist,
+  activePresentation = {
+    ...activePresentation,
     items: updatedItems,
     updatedAt: new Date().toISOString(),
   };
@@ -366,7 +366,7 @@ export function removeSlideFromSong(
  * 슬라이드 복제
  */
 export function duplicateSlide(songIndex: number, slideIndex: number): void {
-  const item = activeSetlist.items[songIndex];
+  const item = activePresentation.items[songIndex];
   if (!item || !item.deck || !item.deck.slides[slideIndex]) return;
 
   const targetSlide = item.deck.slides[slideIndex];
@@ -379,9 +379,9 @@ export function duplicateSlide(songIndex: number, slideIndex: number): void {
 export function reorderSongs(fromIndex: number, toIndex: number): void {
   if (
     fromIndex < 0 ||
-    fromIndex >= activeSetlist.items.length ||
+    fromIndex >= activePresentation.items.length ||
     toIndex < 0 ||
-    toIndex >= activeSetlist.items.length ||
+    toIndex >= activePresentation.items.length ||
     fromIndex === toIndex
   ) {
     return;
@@ -389,7 +389,7 @@ export function reorderSongs(fromIndex: number, toIndex: number): void {
 
   pushHistory();
 
-  const items = [...activeSetlist.items];
+  const items = [...activePresentation.items];
   const [movedItem] = items.splice(fromIndex, 1);
   items.splice(toIndex, 0, movedItem);
 
@@ -398,8 +398,8 @@ export function reorderSongs(fromIndex: number, toIndex: number): void {
     order: idx,
   }));
 
-  activeSetlist = {
-    ...activeSetlist,
+  activePresentation = {
+    ...activePresentation,
     items: reorderedItems,
     updatedAt: new Date().toISOString(),
   };
@@ -409,19 +409,21 @@ export function reorderSongs(fromIndex: number, toIndex: number): void {
 /**
  * 곡 삭제
  */
-export function removeSongFromSetlist(songIndex: number): void {
-  if (songIndex < 0 || songIndex >= activeSetlist.items.length) return;
+export function removeSongFromPresentation(songIndex: number): void {
+  if (songIndex < 0 || songIndex >= activePresentation.items.length) return;
 
   pushHistory();
 
-  const filtered = activeSetlist.items.filter((_, idx) => idx !== songIndex);
+  const filtered = activePresentation.items.filter(
+    (_, idx) => idx !== songIndex,
+  );
   const reorderedItems = filtered.map((item, idx) => ({
     ...item,
     order: idx,
   }));
 
-  activeSetlist = {
-    ...activeSetlist,
+  activePresentation = {
+    ...activePresentation,
     items: reorderedItems,
     updatedAt: new Date().toISOString(),
   };
@@ -431,8 +433,8 @@ export function removeSongFromSetlist(songIndex: number): void {
 /**
  * 세트리스트 내 곡 복제
  */
-export function duplicateSongInSetlist(songIndex: number): Deck | null {
-  const item = activeSetlist.items[songIndex];
+export function duplicateSongInPresentation(songIndex: number): Deck | null {
+  const item = activePresentation.items[songIndex];
   if (!item || !item.deck) return null;
 
   pushHistory();
@@ -446,20 +448,20 @@ export function duplicateSongInSetlist(songIndex: number): Deck | null {
     updatedAt: new Date().toISOString(),
   };
 
-  const newItem: SetlistItem = {
+  const newItem: PresentationItem = {
     id: crypto.randomUUID(),
-    setlistId: activeSetlist.id,
+    presentationId: activePresentation.id,
     deckId: clonedDeck.id,
     order: songIndex + 1,
     deck: clonedDeck,
   };
 
-  const updatedItems = [...activeSetlist.items];
+  const updatedItems = [...activePresentation.items];
   updatedItems.splice(songIndex + 1, 0, newItem);
   const reorderedItems = updatedItems.map((it, idx) => ({ ...it, order: idx }));
 
-  activeSetlist = {
-    ...activeSetlist,
+  activePresentation = {
+    ...activePresentation,
     items: reorderedItems,
     updatedAt: new Date().toISOString(),
   };
@@ -475,7 +477,7 @@ export function reorderSlides(
   fromSlideIndex: number,
   toSlideIndex: number,
 ): void {
-  const item = activeSetlist.items[songIndex];
+  const item = activePresentation.items[songIndex];
   if (!item || !item.deck) return;
   const slides = [...item.deck.slides];
   if (
@@ -501,11 +503,11 @@ export function reorderSlides(
     updatedAt: new Date().toISOString(),
   };
 
-  const updatedItems = [...activeSetlist.items];
+  const updatedItems = [...activePresentation.items];
   updatedItems[songIndex] = { ...item, deck: updatedDeck };
 
-  activeSetlist = {
-    ...activeSetlist,
+  activePresentation = {
+    ...activePresentation,
     items: updatedItems,
     updatedAt: new Date().toISOString(),
   };
@@ -522,6 +524,10 @@ function subscribe(listener: () => void): () => void {
 /**
  * React 컴포넌트에서 활성 세트리스트를 반응형으로 구독하는 훅
  */
-export function useActiveSetlist(): Setlist {
-  return useSyncExternalStore(subscribe, getActiveSetlist, getActiveSetlist);
+export function useActivePresentation(): Presentation {
+  return useSyncExternalStore(
+    subscribe,
+    getActivePresentation,
+    getActivePresentation,
+  );
 }

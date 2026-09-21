@@ -37,7 +37,9 @@ export function ExternalSearchLinks({
 
   return (
     <div className={`flex items-center gap-2 text-xs ${className}`}>
-      <span className="text-zinc-500 dark:text-zinc-400 font-medium">가사 검색:</span>
+      <span className="text-zinc-500 dark:text-zinc-400 font-medium">
+        가사 검색:
+      </span>
 
       {/* Melon Link */}
       <a

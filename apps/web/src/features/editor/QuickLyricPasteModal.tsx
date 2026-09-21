@@ -58,8 +58,8 @@ export function QuickLyricPasteModal({
       id: crypto.randomUUID(),
       userId: GUEST_USER_ID,
       catalogId: null,
-      scope: "setlist",
-      setlistId: null,
+      scope: "presentation",
+      presentationId: null,
       title: title.trim(),
       artist: artist.trim(),
       lyricsRaw,
@@ -88,7 +88,10 @@ export function QuickLyricPasteModal({
         {/* Modal Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50/80 dark:bg-zinc-900/80">
           <div>
-            <h2 id="modal-title" className="text-lg font-bold text-zinc-900 dark:text-white">
+            <h2
+              id="modal-title"
+              className="text-lg font-bold text-zinc-900 dark:text-white"
+            >
               빠른 가사 붙여넣기
             </h2>
             <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
@@ -115,7 +118,8 @@ export function QuickLyricPasteModal({
                 htmlFor="song-title-input"
                 className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300 mb-1"
               >
-                곡 제목 <span className="text-red-500 dark:text-red-400">*</span>
+                곡 제목{" "}
+                <span className="text-red-500 dark:text-red-400">*</span>
               </label>
               <input
                 id="song-title-input"
@@ -158,7 +162,8 @@ export function QuickLyricPasteModal({
                 htmlFor="song-lyrics-textarea"
                 className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300 mb-1"
               >
-                가사 원문 <span className="text-red-500 dark:text-red-400">*</span>
+                가사 원문{" "}
+                <span className="text-red-500 dark:text-red-400">*</span>
               </label>
               <textarea
                 id="song-lyrics-textarea"

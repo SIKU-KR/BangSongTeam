@@ -2,7 +2,7 @@ import React from "react";
 import { render, screen, fireEvent } from "@testing-library/react";
 import { describe, it, expect, vi } from "vitest";
 import { PresentationCard } from "./PresentationCard";
-import { mockDecks, mockSetlist } from "./mockSetlist";
+import { mockDecks, mockPresentation } from "./mockPresentation";
 
 describe("PresentationCard", () => {
   it("should render 16:9 badge, title, and slide count for a single deck", () => {
@@ -38,13 +38,13 @@ describe("PresentationCard", () => {
     expect(onEdit).toHaveBeenCalledTimes(1);
   });
 
-  it("should render setlist summary when setlist prop is passed", () => {
+  it("should render presentation summary when presentation prop is passed", () => {
     const onPresent = vi.fn();
     const onEdit = vi.fn();
 
     render(
       <PresentationCard
-        setlist={mockSetlist}
+        presentation={mockPresentation}
         onPresent={onPresent}
         onEdit={onEdit}
       />,

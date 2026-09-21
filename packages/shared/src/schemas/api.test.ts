@@ -2,8 +2,8 @@ import { describe, it, expect } from "vitest";
 import {
   CreateDeckRequestSchema,
   UpdateDeckRequestSchema,
-  CreateSetlistRequestSchema,
-  UpdateSetlistItemsRequestSchema,
+  CreatePresentationRequestSchema,
+  UpdatePresentationItemsRequestSchema,
   SearchCatalogQuerySchema,
   SearchCatalogResponseSchema,
 } from "./api";
@@ -31,22 +31,22 @@ describe("API Schemas", () => {
     expect(parsed.lyricsRaw).toBeUndefined();
   });
 
-  it("validates CreateSetlistRequestSchema", () => {
+  it("validates CreatePresentationRequestSchema", () => {
     const valid = {
-      title: "주일 찬양 콘티",
+      title: "주일 찬양 프레젠테이션",
       serviceDate: "2026-09-27",
     };
-    expect(CreateSetlistRequestSchema.parse(valid)).toEqual(valid);
+    expect(CreatePresentationRequestSchema.parse(valid)).toEqual(valid);
   });
 
-  it("validates UpdateSetlistItemsRequestSchema", () => {
+  it("validates UpdatePresentationItemsRequestSchema", () => {
     const valid = {
       items: [
         { deckId: "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11", order: 0 },
         { deckId: "b0eebc99-9c0b-4ef8-bb6d-6bb9bd380a22", order: 1 },
       ],
     };
-    expect(UpdateSetlistItemsRequestSchema.parse(valid)).toEqual(valid);
+    expect(UpdatePresentationItemsRequestSchema.parse(valid)).toEqual(valid);
   });
 
   it("validates SearchCatalogQuerySchema and coerces limit", () => {

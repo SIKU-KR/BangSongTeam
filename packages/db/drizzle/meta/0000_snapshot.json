@@ -610,8 +610,8 @@
           "autoincrement": false,
           "default": "'library'"
         },
-        "setlist_id": {
-          "name": "setlist_id",
+        "presentation_id": {
+          "name": "presentation_id",
           "type": "text",
           "primaryKey": false,
           "notNull": false,
@@ -706,9 +706,9 @@
           "columns": ["user_id", "scope"],
           "isUnique": false
         },
-        "idx_decks_setlist": {
-          "name": "idx_decks_setlist",
-          "columns": ["setlist_id"],
+        "idx_decks_presentation": {
+          "name": "idx_decks_presentation",
+          "columns": ["presentation_id"],
           "isUnique": false
         },
         "idx_decks_visibility_forks": {
@@ -741,11 +741,11 @@
           "onDelete": "set null",
           "onUpdate": "no action"
         },
-        "decks_setlist_id_setlists_id_fk": {
-          "name": "decks_setlist_id_setlists_id_fk",
+        "decks_presentation_id_presentations_id_fk": {
+          "name": "decks_presentation_id_presentations_id_fk",
           "tableFrom": "decks",
-          "tableTo": "setlists",
-          "columnsFrom": ["setlist_id"],
+          "tableTo": "presentations",
+          "columnsFrom": ["presentation_id"],
           "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
@@ -795,8 +795,8 @@
       "uniqueConstraints": {},
       "checkConstraints": {}
     },
-    "setlist_items": {
-      "name": "setlist_items",
+    "presentation_items": {
+      "name": "presentation_items",
       "columns": {
         "id": {
           "name": "id",
@@ -805,8 +805,8 @@
           "notNull": true,
           "autoincrement": false
         },
-        "setlist_id": {
-          "name": "setlist_id",
+        "presentation_id": {
+          "name": "presentation_id",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
@@ -828,30 +828,30 @@
         }
       },
       "indexes": {
-        "idx_setlist_items_order": {
-          "name": "idx_setlist_items_order",
-          "columns": ["setlist_id", "order"],
+        "idx_presentation_items_order": {
+          "name": "idx_presentation_items_order",
+          "columns": ["presentation_id", "order"],
           "isUnique": false
         },
-        "idx_setlist_items_unique": {
-          "name": "idx_setlist_items_unique",
-          "columns": ["setlist_id", "deck_id"],
+        "idx_presentation_items_unique": {
+          "name": "idx_presentation_items_unique",
+          "columns": ["presentation_id", "deck_id"],
           "isUnique": true
         }
       },
       "foreignKeys": {
-        "setlist_items_setlist_id_setlists_id_fk": {
-          "name": "setlist_items_setlist_id_setlists_id_fk",
-          "tableFrom": "setlist_items",
-          "tableTo": "setlists",
-          "columnsFrom": ["setlist_id"],
+        "presentation_items_presentation_id_presentations_id_fk": {
+          "name": "presentation_items_presentation_id_presentations_id_fk",
+          "tableFrom": "presentation_items",
+          "tableTo": "presentations",
+          "columnsFrom": ["presentation_id"],
           "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
-        "setlist_items_deck_id_decks_id_fk": {
-          "name": "setlist_items_deck_id_decks_id_fk",
-          "tableFrom": "setlist_items",
+        "presentation_items_deck_id_decks_id_fk": {
+          "name": "presentation_items_deck_id_decks_id_fk",
+          "tableFrom": "presentation_items",
           "tableTo": "decks",
           "columnsFrom": ["deck_id"],
           "columnsTo": ["id"],
@@ -863,8 +863,8 @@
       "uniqueConstraints": {},
       "checkConstraints": {}
     },
-    "setlists": {
-      "name": "setlists",
+    "presentations": {
+      "name": "presentations",
       "columns": {
         "id": {
           "name": "id",
@@ -912,16 +912,16 @@
         }
       },
       "indexes": {
-        "idx_setlists_user_date": {
-          "name": "idx_setlists_user_date",
+        "idx_presentations_user_date": {
+          "name": "idx_presentations_user_date",
           "columns": ["user_id", "service_date"],
           "isUnique": false
         }
       },
       "foreignKeys": {
-        "setlists_user_id_user_id_fk": {
-          "name": "setlists_user_id_user_id_fk",
-          "tableFrom": "setlists",
+        "presentations_user_id_user_id_fk": {
+          "name": "presentations_user_id_user_id_fk",
+          "tableFrom": "presentations",
           "tableTo": "user",
           "columnsFrom": ["user_id"],
           "columnsTo": ["id"],

@@ -1,4 +1,4 @@
-# Tasks: [M2] 세트 편집기 (Setlist Editor)
+# Tasks: [M2] 세트 편집기 (Presentation Editor)
 
 > **마일스톤**: M2 (편집기)  
 > **상위 문서**: [`prd.md`](./prd.md), [`AGENTS.md`](./AGENTS.md), [`docs/tasks/AGENTS.md`](./docs/tasks/AGENTS.md)  
@@ -10,7 +10,7 @@
 ## 1. 아키텍처 가드레일 & 준수 사항
 
 1. **DOM 3-Layer 렌더링 엔진 불변성**: 편집기 미리보기에서도 `SlideStage`의 3-Layer(Layer 1: Video, Layer 2: Black Overlay, Layer 3: Typography) 구조를 100% 동일하게 재사용하며, 캔버스(Canvas)나 외부 슬라이드 프레임워크(Reveal.js 등)로 대체하지 않는다.
-2. **단일 원천 상태(Single Source of Truth)**: 곡(Deck)과 세트(Setlist)의 데이터 모델 및 스타일은 `@repo/shared`의 Zod 스키마(`DeckStyleSchema`, `SlideSchema`, `SetlistSchema`)를 엄격히 준수하며 수동 interface를 중복 생성하지 않는다.
+2. **단일 원천 상태(Single Source of Truth)**: 곡(Deck)과 세트(Presentation)의 데이터 모델 및 스타일은 `@repo/shared`의 Zod 스키마(`DeckStyleSchema`, `SlideSchema`, `PresentationSchema`)를 엄격히 준수하며 수동 interface를 중복 생성하지 않는다.
 3. **5% 안전 여백 및 기준점 성장 규칙**:
    - 텍스트 박스는 화면 가장자리 5% 안쪽(`SAFE_MARGIN_PERCENT`: 5% ~ 95%)에서만 이동 가능하다.
    - 박스 높이는 가사 줄 수에 맞춰 기준점(Anchor)에서 자연스럽게 자란다 (`bottom-*`은 위로, `middle-*`은 상하 대칭으로, `top-*`은 아래로 성장).
@@ -55,7 +55,7 @@
   - **DoD (통과 기준)**: `pnpm --filter @repo/shared vitest run src/utils/overflow.test.ts`가 100% 통과(Green)한다.
 
 - [ ] **Task 1.4: 세트 편집기 상태 머신 리듀서 단위 테스트 작성 (TDD Red)**
-  - **대상 파일**: `apps/web/src/features/editor/useSetlistEditor.test.ts`
+  - **대상 파일**: `apps/web/src/features/editor/usePresentationEditor.test.ts`
   - **선행 조건**: Task 1.3
   - **구현 내용**:
     - 테스트 케이스 1: 곡 선택(`selectSong`), 슬라이드 선택(`selectSlide`) 인덱스 상태 갱신
@@ -63,16 +63,16 @@
     - 테스트 케이스 3: 곡 추가(`addSong`) 및 곡 삭제(`removeSong`) 동작
     - 테스트 케이스 4: 곡 스타일 부분 변경(`updateSongStyle`) 및 기본값 복원(`resetSongStyle`)
     - 테스트 케이스 5: 슬라이드 분할(`splitSlide`), 다음 슬라이드와 합치기(`mergeSlideWithNext`), 슬라이드 추가/삭제
-  - **DoD (통과 기준)**: `pnpm --filter web vitest run src/features/editor/useSetlistEditor.test.ts` 실행 시 구현체가 없어 실패(Red)함을 확인한다.
+  - **DoD (통과 기준)**: `pnpm --filter web vitest run src/features/editor/usePresentationEditor.test.ts` 실행 시 구현체가 없어 실패(Red)함을 확인한다.
 
 - [ ] **Task 1.5: 세트 편집기 상태 관리 훅 구현 (TDD Green)**
-  - **대상 파일**: `apps/web/src/features/editor/useSetlistEditor.ts`
+  - **대상 파일**: `apps/web/src/features/editor/usePresentationEditor.ts`
   - **선행 조건**: Task 1.4
   - **구현 내용**:
-    - `useReducer` 기반 세트 편집기 상태 관리 (`setlist`, `selectedSongIndex`, `selectedSlideIndex`, `isDirty`)
-    - mockSetlist 또는 신규 빈 세트리스트를 초기값으로 주입 가능한 팩토리 제공
+    - `useReducer` 기반 세트 편집기 상태 관리 (`presentation`, `selectedSongIndex`, `selectedSlideIndex`, `isDirty`)
+    - mockPresentation 또는 신규 빈 세트리스트를 초기값으로 주입 가능한 팩토리 제공
     - 불변성을 보장하는 액션 디스패처 인터페이스 노출
-  - **DoD (통과 기준)**: `pnpm --filter web vitest run src/features/editor/useSetlistEditor.test.ts`가 100% 통과(Green)한다.
+  - **DoD (통과 기준)**: `pnpm --filter web vitest run src/features/editor/usePresentationEditor.test.ts`가 100% 통과(Green)한다.
 
 ---
 
@@ -216,7 +216,7 @@
   - **대상 파일**: `apps/web/src/features/editor/EditorHeader.tsx`
   - **선행 조건**: Task 1.5
   - **구현 내용**:
-    - 세트 제목 인라인 텍스트 편집 (예: '새 예배 콘티')
+    - 세트 제목 인라인 텍스트 편집 (예: '새 예배 프레젠테이션')
     - '새 곡 추가' 버튼 (클릭 시 `AddSongModal` 열기)
     - '전체화면 송출' 버튼 (클릭 시 현재 세트 데이터를 가지고 `/present/fullscreen`으로 이동)
     - '홈으로' 나가기 링크
@@ -226,13 +226,13 @@
   - **대상 파일**: `apps/web/src/routes/FullscreenPresentRoute.tsx`
   - **선행 조건**: Task 5.1
   - **구현 내용**:
-    - React Router `useLocation().state?.setlist` 또는 `localStorage`의 편집된 세트 데이터를 우선 로드
-    - 전달받은 세트 데이터가 없으면 기존 `mockSetlist`로 우아하게 폴백
+    - React Router `useLocation().state?.presentation` 또는 `localStorage`의 편집된 세트 데이터를 우선 로드
+    - 전달받은 세트 데이터가 없으면 기존 `mockPresentation`로 우아하게 폴백
     - 편집기에서 설정한 곡별 배경, 오버레이, 폰트, 텍스트 박스 위치가 전체화면에서 100% 동일하게 반영
   - **DoD (통과 기준)**: `pnpm --filter web exec tsc --noEmit`이 통과하고 편집기에서 구성한 세트가 전체화면으로 송출된다.
 
 - [ ] **Task 5.3: 세트 편집기 전체 화면 라우트 컴포넌트 구현**
-  - **대상 파일**: `apps/web/src/routes/SetlistEditorRoute.tsx`
+  - **대상 파일**: `apps/web/src/routes/PresentationEditorRoute.tsx`
   - **선행 조건**: Task 2.2, Task 2.5, Task 3.3, Task 4.4, Task 5.1
   - **구현 내용**:
     - 3패널 레이아웃 구성:
@@ -241,15 +241,15 @@
       - 중앙 상단: `EditorStagePreview` (16:9 인터랙티브 조작 스테이지)
       - 중앙 하단: `SlideStripPanel` (슬라이드 썸네일 스트립)
       - 우측: `SongPropertyPanel` (곡별 속성 제어 패널)
-    - `useSetlistEditor` 훅으로 전체 상태 바인딩 및 변경사항 실시간 반영
+    - `usePresentationEditor` 훅으로 전체 상태 바인딩 및 변경사항 실시간 반영
   - **DoD (통과 기준)**: `pnpm --filter web exec tsc --noEmit`이 통과하고 브라우저 렌더링 시 3패널 레이아웃이 완벽히 표시된다.
 
 - [ ] **Task 5.4: 라우팅 등록 및 메인 홈 화면 세트 편집기 진입 카드 추가**
   - **대상 파일**: `apps/web/src/App.tsx`, `apps/web/src/routes/index.tsx`
   - **선행 조건**: Task 5.3
   - **구현 내용**:
-    - `App.tsx`에 `/editor` 라우트 등록 (`SetlistEditorRoute`)
-    - `index.tsx` 메인 홈 화면에 '세트 편집기 (15분 콘티 구성)' 카드 추가 및 `/editor` 링크 연결
+    - `App.tsx`에 `/editor` 라우트 등록 (`PresentationEditorRoute`)
+    - `index.tsx` 메인 홈 화면에 '세트 편집기 (15분 프레젠테이션 구성)' 카드 추가 및 `/editor` 링크 연결
     - 기존 '가사 빠른 입력' 및 'M1 송출 시작하기' 카드와 조화롭게 레이아웃 배치
   - **DoD (통과 기준)**: `pnpm --filter web exec tsc --noEmit`이 통과하고 홈 화면에서 `/editor` 진입 및 전체 화면 구성이 가능하다.
 
@@ -279,7 +279,7 @@
 pnpm --filter @repo/shared vitest run src/utils/overflow.test.ts
 
 # 2. 세트 편집기 상태 머신 테스트
-pnpm --filter web vitest run src/features/editor/useSetlistEditor.test.ts
+pnpm --filter web vitest run src/features/editor/usePresentationEditor.test.ts
 
 # 3. 슬라이드 수동 분할/합치기 테스트
 pnpm --filter web vitest run src/features/editor/manualLyricSplit.test.ts

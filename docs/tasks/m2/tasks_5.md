@@ -21,7 +21,7 @@
   - **대상 파일**: `apps/web/src/features/editor/EditorHeader.tsx`
   - **선행 조건**: `docs/tasks/m2/tasks_4.md`
   - **구현 내용**:
-    - 세트 제목 인라인 텍스트 편집 (예: '새 예배 콘티')
+    - 세트 제목 인라인 텍스트 편집 (예: '새 예배 프레젠테이션')
     - '새 곡 추가' 버튼 (클릭 시 `AddSongModal` 열기)
     - '전체화면 송출' 버튼 (클릭 시 현재 세트 데이터를 가지고 `/present/fullscreen`으로 이동)
     - '홈으로' 나가기 링크
@@ -31,13 +31,13 @@
   - **대상 파일**: `apps/web/src/routes/FullscreenPresentRoute.tsx`
   - **선행 조건**: Task 5.1
   - **구현 내용**:
-    - React Router `useLocation().state?.setlist` 또는 `localStorage`의 편집된 세트 데이터를 우선 로드
-    - 전달받은 세트 데이터가 없으면 기존 `mockSetlist`로 우아하게 폴백
+    - React Router `useLocation().state?.presentation` 또는 `localStorage`의 편집된 세트 데이터를 우선 로드
+    - 전달받은 세트 데이터가 없으면 기존 `mockPresentation`로 우아하게 폴백
     - 편집기에서 설정한 곡별 배경, 오버레이, 폰트, 텍스트 박스 위치가 전체화면에서 100% 동일하게 반영
   - **DoD (통과 기준)**: `pnpm --filter web exec tsc --noEmit`이 통과하고 편집기에서 구성한 세트가 전체화면으로 송출된다.
 
 - [ ] **Task 5.3: 세트 편집기 전체 화면 라우트 컴포넌트 구현**
-  - **대상 파일**: `apps/web/src/routes/SetlistEditorRoute.tsx`
+  - **대상 파일**: `apps/web/src/routes/PresentationEditorRoute.tsx`
   - **선행 조건**: Task 5.1, Task 5.2
   - **구현 내용**:
     - 3패널 레이아웃 구성:
@@ -46,15 +46,15 @@
       - 중앙 상단: `EditorStagePreview` (16:9 인터랙티브 조작 스테이지)
       - 중앙 하단: `SlideStripPanel` (슬라이드 썸네일 스트립)
       - 우측: `SongPropertyPanel` (곡별 속성 제어 패널)
-    - `useSetlistEditor` 훅으로 전체 상태 바인딩 및 변경사항 실시간 반영
+    - `usePresentationEditor` 훅으로 전체 상태 바인딩 및 변경사항 실시간 반영
   - **DoD (통과 기준)**: `pnpm --filter web exec tsc --noEmit`이 통과하고 브라우저 렌더링 시 3패널 레이아웃이 완벽히 표시된다.
 
 - [ ] **Task 5.4: 라우팅 등록 및 메인 홈 화면 세트 편집기 진입 카드 추가**
   - **대상 파일**: `apps/web/src/App.tsx`, `apps/web/src/routes/index.tsx`
   - **선행 조건**: Task 5.3
   - **구현 내용**:
-    - `App.tsx`에 `/editor` 라우트 등록 (`SetlistEditorRoute`)
-    - `index.tsx` 메인 홈 화면에 '세트 편집기 (15분 콘티 구성)' 카드 추가 및 `/editor` 링크 연결
+    - `App.tsx`에 `/editor` 라우트 등록 (`PresentationEditorRoute`)
+    - `index.tsx` 메인 홈 화면에 '세트 편집기 (15분 프레젠테이션 구성)' 카드 추가 및 `/editor` 링크 연결
     - 기존 '가사 빠른 입력' 및 'M1 송출 시작하기' 카드와 조화롭게 레이아웃 배치
   - **DoD (통과 기준)**: `pnpm --filter web exec tsc --noEmit`이 통과하고 홈 화면에서 `/editor` 진입 및 전체 화면 구성이 가능하다.
 

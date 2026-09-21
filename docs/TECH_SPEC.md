@@ -25,8 +25,8 @@
    - PWA Service Worker (`RangeRequestsPlugin`)와 `IndexedDB`를 통해 영상 및 세트 데이터를 완전히 로컬화한다.
 4. **100ms 이내 결정론적 렌더링 (3-Layer DOM Architecture)**:
    - 캔버스나 무거운 프레임워크(Reveal.js) 대신, 브라우저 가속 DOM 3레이어(Video, Overlay, Text)를 사용하여 프레임 드랍 없이 슬라이드를 즉시 교체한다.
-5. **콘티 간 독립성 보장 (Clone-on-Add)**:
-   - 세트에 곡 추가 시 원본 덱을 세트 전용 덱으로 복제(Clone)하여 저장함으로써, 특정 주일의 수정 사항이 과거 콘티나 개인 라이브러리 원본을 오염시키지 않는다.
+5. **프레젠테이션 간 독립성 보장 (Clone-on-Add)**:
+   - 세트에 곡 추가 시 원본 덱을 세트 전용 덱으로 복제(Clone)하여 저장함으로써, 특정 주일의 수정 사항이 과거 프레젠테이션나 개인 라이브러리 원본을 오염시키지 않는다.
 
 ---
 
@@ -38,7 +38,7 @@
 flowchart TB
   subgraph Client["Client Browser (Google Chrome Dedicated)"]
     subgraph FrontendSPA["React SPA (apps/web/src)"]
-      UI["Editor / Setlist UI (shadcn/ui + Tailwind)"]
+      UI["Editor / Presentation UI (shadcn/ui + Tailwind)"]
       StageRenderer["3-Layer Slide Stage"]
       DualWinController["Presenter Controller"]
       AudienceDisplay["Audience Projection View"]
@@ -182,7 +182,7 @@ export const SlideSchema = z.object({
 export type Slide = z.infer<typeof SlideSchema>;
 ```
 
-### 3.2 덱(Deck) 및 콘티(Setlist) 스키마 (`schemas/deck.ts`, `schemas/setlist.ts`)
+### 3.2 덱(Deck) 및 프레젠테이션(Presentation) 스키마 (`schemas/deck.ts`, `schemas/presentation.ts`)
 
 ```typescript
 import { z } from "zod";
@@ -193,17 +193,17 @@ export const DeckVisibilitySchema = z.enum(["private", "public"]);
 export type DeckVisibility = z.infer<typeof DeckVisibilitySchema>;
 
 /**
- * 덱 스코프: 라이브러리 마스터 덱 vs 콘티 복제 전용 덱
+ * 덱 스코프: 라이브러리 마스터 덱 vs 프레젠테이션 복제 전용 덱
  */
-export const DeckScopeSchema = z.enum(["library", "setlist"]);
+export const DeckScopeSchema = z.enum(["library", "presentation"]);
 export type DeckScope = z.infer<typeof DeckScopeSchema>;
 
 export const DeckSchema = z.object({
   id: z.string().uuid(),
   userId: z.string().uuid(),
   catalogId: z.string().uuid().nullable().optional(),
-  scope: DeckScopeSchema.default("library"), // 'library': 보관함 마스터, 'setlist': 콘티 전용 복제본
-  setlistId: z.string().uuid().nullable().optional(), // scope='setlist'일 때 속한 콘티 ID
+  scope: DeckScopeSchema.default("library"), // 'library': 보관함 마스터, 'presentation': 프레젠테이션 전용 복제본
+  presentationId: z.string().uuid().nullable().optional(), // scope='presentation'일 때 속한 프레젠테이션 ID
   title: z.string().min(1).max(100),
   artist: z.string().max(100).default(""),
   lyricsRaw: z.string(),
@@ -218,25 +218,25 @@ export const DeckSchema = z.object({
 });
 export type Deck = z.infer<typeof DeckSchema>;
 
-export const SetlistItemSchema = z.object({
+export const PresentationItemSchema = z.object({
   id: z.string().uuid(),
-  setlistId: z.string().uuid(),
+  presentationId: z.string().uuid(),
   deckId: z.string().uuid(),
   order: z.number().int().nonnegative(),
   deck: DeckSchema.optional(), // Hydrated relation
 });
-export type SetlistItem = z.infer<typeof SetlistItemSchema>;
+export type PresentationItem = z.infer<typeof PresentationItemSchema>;
 
-export const SetlistSchema = z.object({
+export const PresentationSchema = z.object({
   id: z.string().uuid(),
   userId: z.string().uuid(),
   title: z.string().min(1).max(100),
   serviceDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), // YYYY-MM-DD
-  items: z.array(SetlistItemSchema).default([]),
+  items: z.array(PresentationItemSchema).default([]),
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),
 });
-export type Setlist = z.infer<typeof SetlistSchema>;
+export type Presentation = z.infer<typeof PresentationSchema>;
 ```
 
 ### 3.3 배경 미디어 및 가사 카탈로그 스키마 (`schemas/media.ts`, `schemas/catalog.ts`)
@@ -288,7 +288,7 @@ export const BroadcastMessageSchema = z.discriminatedUnion("type", [
     type: z.literal("SYNC_SNAPSHOT"),
     timestamp: z.number(),
     payload: z.object({
-      setlistId: z.string().uuid(),
+      presentationId: z.string().uuid(),
       currentSongIndex: z.number().int().nonnegative(),
       currentSlideIndex: z.number().int().nonnegative(),
       isBlackout: z.boolean(),
@@ -341,13 +341,13 @@ Cloudflare D1(SQLite)을 영속성 엔진으로 사용하며, Drizzle ORM을 통
 
 #### 1. Clone-on-Add 방식의 정규화 최적화 (고아 데이터 방지 및 라이브러리 격리)
 
-- **문제점**: 콘티(Setlist)에 곡을 추가할 때 덱을 복제하면, `decks` 테이블에 수백 개의 복제 행이 누적된다.
-  1. `userId`로 덱을 단순 조회하면 과거 콘티의 복제본들이 '내 라이브러리'에 중복 노출되어 UI가 오염된다.
-  2. 콘티(`setlists`) 삭제 시 `setlist_items`는 지워지지만 복제된 `decks` 행은 참조가 끊긴 채 **영구 고아 데이터(Orphaned Row)**로 남아 D1 저장 공간을 낭비한다.
+- **문제점**: 프레젠테이션(Presentation)에 곡을 추가할 때 덱을 복제하면, `decks` 테이블에 수백 개의 복제 행이 누적된다.
+  1. `userId`로 덱을 단순 조회하면 과거 프레젠테이션의 복제본들이 '내 라이브러리'에 중복 노출되어 UI가 오염된다.
+  2. 프레젠테이션(`presentations`) 삭제 시 `presentation_items`는 지워지지만 복제된 `decks` 행은 참조가 끊긴 채 **영구 고아 데이터(Orphaned Row)**로 남아 D1 저장 공간을 낭비한다.
 - **최적화 설계**:
-  - `decks` 테이블에 `scope: 'library' | 'setlist'`와 `setlist_id` 외래키를 추가한다.
-  - 라이브러리 덱은 `scope = 'library', setlist_id = null`로 유지되고, 세트 복제본은 `scope = 'setlist', setlist_id = setlist.id`로 명확히 격리된다.
-  - `setlist_id`에 `ON DELETE CASCADE`를 설정하여 콘티 삭제 시 종속된 복제 덱들이 데이터베이스 엔진 레벨에서 원자적으로 함께 삭제되도록 무결성을 보장한다.
+  - `decks` 테이블에 `scope: 'library' | 'presentation'`와 `presentation_id` 외래키를 추가한다.
+  - 라이브러리 덱은 `scope = 'library', presentation_id = null`로 유지되고, 세트 복제본은 `scope = 'presentation', presentation_id = presentation.id`로 명확히 격리된다.
+  - `presentation_id`에 `ON DELETE CASCADE`를 설정하여 프레젠테이션 삭제 시 종속된 복제 덱들이 데이터베이스 엔진 레벨에서 원자적으로 함께 삭제되도록 무결성을 보장한다.
   - 인덱스 `(user_id, scope)`를 구성하여 라이브러리 조회(`scope = 'library'`)의 인덱스 풀 스캔을 보장한다.
 
 #### 2. JSON TEXT 컬럼 반정규화(Pragmatic Denormalization)의 타당성
@@ -355,7 +355,7 @@ Cloudflare D1(SQLite)을 영속성 엔진으로 사용하며, Drizzle ORM을 통
 - **검증**: `decks.slides`와 `decks.style`을 관계형 정규화(1NF)하여 별도의 `slides` 테이블로 분리할 것인가?
 - **결론**: **JSON TEXT 유지 (실용적 반정규화 채택)**.
   - 예배 송출 시 슬라이드는 개별 행으로 검색되지 않으며, 항상 곡 단위의 원자적(Atomic) 문서로 소비된다.
-  - 1개 콘티(5곡 × 평균 15슬라이드 = 75행)를 로드할 때 RDB 조인(JOIN) 연산을 발생시키는 대신, 단일 SELECT 쿼리로 100ms 이내에 즉각 응답하는 것이 PRD의 성능 목표(6.2)에 부합한다.
+  - 1개 프레젠테이션(5곡 × 평균 15슬라이드 = 75행)를 로드할 때 RDB 조인(JOIN) 연산을 발생시키는 대신, 단일 SELECT 쿼리로 100ms 이내에 즉각 응답하는 것이 PRD의 성능 목표(6.2)에 부합한다.
   - 내부 무결성은 애플리케이션 계층에서 `SlideSchema.array()` 및 `DeckStyleSchema`로 100% 검증한다. 슬라이드 ID 또한 무거운 UUID 대신 경량 ID(`s_xxx`)를 채택하여 JSON 페이로드 크기를 절감한다.
 
 #### 3. Better Auth v1 공식 스키마 정규화 완결성
@@ -516,7 +516,7 @@ export const backgrounds = sqliteTable("backgrounds", {
 });
 
 // ============================================================================
-// 4. 덱 (Deck) - 찬양 1곡 단위 (라이브러리 마스터 vs 콘티 복제 격리)
+// 4. 덱 (Deck) - 찬양 1곡 단위 (라이브러리 마스터 vs 프레젠테이션 복제 격리)
 // ============================================================================
 export const decks = sqliteTable(
   "decks",
@@ -529,11 +529,11 @@ export const decks = sqliteTable(
       onDelete: "set null",
     }),
 
-    // 스코프 격리 및 콘티 종속성
-    scope: text("scope", { enum: ["library", "setlist"] })
+    // 스코프 격리 및 프레젠테이션 종속성
+    scope: text("scope", { enum: ["library", "presentation"] })
       .notNull()
       .default("library"),
-    setlistId: text("setlist_id").references(() => setlists.id, {
+    presentationId: text("presentation_id").references(() => presentations.id, {
       onDelete: "cascade",
     }),
 
@@ -561,17 +561,17 @@ export const decks = sqliteTable(
   },
   (t) => [
     index("idx_decks_user_scope").on(t.userId, t.scope), // 내 보관함 필터링 최적화
-    index("idx_decks_setlist").on(t.setlistId), // 세트 종속 덱 조회
+    index("idx_decks_presentation").on(t.presentationId), // 세트 종속 덱 조회
     index("idx_decks_visibility_forks").on(t.visibility, t.forkCount),
     index("idx_decks_catalog").on(t.catalogId),
   ],
 );
 
 // ============================================================================
-// 5. 예배 콘티 (Setlist) 및 항목
+// 5. 예배 프레젠테이션 (Presentation) 및 항목
 // ============================================================================
-export const setlists = sqliteTable(
-  "setlists",
+export const presentations = sqliteTable(
+  "presentations",
   {
     id: text("id").primaryKey(),
     userId: text("user_id")
@@ -586,24 +586,24 @@ export const setlists = sqliteTable(
       sql`(unixepoch())`,
     ),
   },
-  (t) => [index("idx_setlists_user_date").on(t.userId, t.serviceDate)],
+  (t) => [index("idx_presentations_user_date").on(t.userId, t.serviceDate)],
 );
 
-export const setlistItems = sqliteTable(
-  "setlist_items",
+export const presentationItems = sqliteTable(
+  "presentation_items",
   {
     id: text("id").primaryKey(),
-    setlistId: text("setlist_id")
+    presentationId: text("presentation_id")
       .notNull()
-      .references(() => setlists.id, { onDelete: "cascade" }),
+      .references(() => presentations.id, { onDelete: "cascade" }),
     deckId: text("deck_id")
       .notNull()
       .references(() => decks.id, { onDelete: "cascade" }),
     order: integer("order").notNull(),
   },
   (t) => [
-    index("idx_setlist_items_order").on(t.setlistId, t.order),
-    uniqueIndex("idx_setlist_items_unique").on(t.setlistId, t.deckId),
+    index("idx_presentation_items_order").on(t.presentationId, t.order),
+    uniqueIndex("idx_presentation_items_unique").on(t.presentationId, t.deckId),
   ],
 );
 
@@ -682,7 +682,7 @@ export function sanitizeFts5Query(query: string): string {
 }
 
 export const deckQueries = {
-  // 1. 사용자 본인 소유 '내 라이브러리' 마스터 덱 목록 조회 (콘티 복제본 제외)
+  // 1. 사용자 본인 소유 '내 라이브러리' 마스터 덱 목록 조회 (프레젠테이션 복제본 제외)
   async getMyLibraryDecks(userId: string) {
     return db
       .select()
@@ -690,7 +690,7 @@ export const deckQueries = {
       .where(
         and(
           eq(decks.userId, userId),
-          eq(decks.scope, "library"), // 콘티용 복제 덱 필터링 (UI 오염 방지)
+          eq(decks.scope, "library"), // 프레젠테이션용 복제 덱 필터링 (UI 오염 방지)
         ),
       )
       .orderBy(desc(decks.updatedAt));
@@ -857,7 +857,7 @@ Chrome 공식 **Window Management API**를 활용한 다중 디스플레이 투�
 
 1. **디스플레이 감지 및 팝업 배치**:
    ```typescript
-   async function openAudienceProjection(setlistId: string) {
+   async function openAudienceProjection(presentationId: string) {
      if ("getScreenDetails" in window) {
        try {
          const screenDetails = await (window as any).getScreenDetails();
@@ -867,7 +867,7 @@ Chrome 공식 **Window Management API**를 활용한 다중 디스플레이 투�
          if (secondaryScreen) {
            // 보조 모니터 위치로 송출 창 바로 팝업 오픈
            window.open(
-             `/present/audience?setId=${setlistId}`,
+             `/present/audience?setId=${presentationId}`,
              "WorshipAudienceWindow",
              `left=${secondaryScreen.availLeft},top=${secondaryScreen.availTop},width=${secondaryScreen.availWidth},height=${secondaryScreen.availHeight}`,
            );
@@ -878,7 +878,7 @@ Chrome 공식 **Window Management API**를 활용한 다중 디스플레이 투�
        }
      }
      window.open(
-       `/present/audience?setId=${setlistId}`,
+       `/present/audience?setId=${presentationId}`,
        "WorshipAudienceWindow",
        "width=1280,height=720",
      );
@@ -887,7 +887,7 @@ Chrome 공식 **Window Management API**를 활용한 다중 디스플레이 투�
 2. **BroadcastChannel 핸드셰이크 프로토콜**:
    - 송출 창 마운트 $\rightarrow$ `AUDIENCE_MOUNTED` 전송
    - 조작 창 수신 $\rightarrow$ 즉시 `SYNC_SNAPSHOT` (현재 곡/슬라이드 인덱스, 블랙아웃 여부) 회신
-   - 송출 창은 IndexedDB에서 `setlistId`를 로컬 로드한 뒤 스냅샷 인덱스로 즉각 렌더링.
+   - 송출 창은 IndexedDB에서 `presentationId`를 로컬 로드한 뒤 스냅샷 인덱스로 즉각 렌더링.
 
 ### 5.4 오프라인-퍼스트 미디어 캐싱 (R2 CDN + Service Worker)
 
@@ -924,20 +924,20 @@ Chrome 공식 **Window Management API**를 활용한 다중 디스플레이 투�
    ```typescript
    // apps/web/src/lib/storage/db.ts
    import { openDB, DBSchema } from "idb";
-   import type { Setlist, Deck, BackgroundMedia } from "@repo/shared";
+   import type { Presentation, Deck, BackgroundMedia } from "@repo/shared";
 
    export interface WorshipOfflineDB extends DBSchema {
-     // 1. 콘티 메타데이터 저장소
-     setlists: {
-       key: string; // setlistId (UUID)
-       value: Setlist;
+     // 1. 프레젠테이션 메타데이터 저장소
+     presentations: {
+       key: string; // presentationId (UUID)
+       value: Presentation;
        indexes: { "by-date": string };
      };
      // 2. 덱(곡) 상세 데이터 저장소 (슬라이드 및 스타일 포함)
      decks: {
        key: string; // deckId (UUID)
        value: Deck;
-       indexes: { "by-setlist": string };
+       indexes: { "by-presentation": string };
      };
      // 3. 배경 미디어 메타데이터 저장소
      backgrounds: {
@@ -946,9 +946,9 @@ Chrome 공식 **Window Management API**를 활용한 다중 디스플레이 투�
      };
      // 4. 오프라인 캐시 상태 관리 저장소
      sync_meta: {
-       key: string; // setlistId
+       key: string; // presentationId
        value: {
-         setlistId: string;
+         presentationId: string;
          isReady: boolean; // 모든 영상 및 덱 캐시 완료 여부
          cachedVideos: string[]; // 캐시된 R2 CDN URL 목록
          cachedAt: number; // 캐시 시각 타임스탬프
@@ -960,23 +960,23 @@ Chrome 공식 **Window Management API**를 활용한 다중 디스플레이 투�
    export async function getOfflineDB() {
      return openDB<WorshipOfflineDB>("worship-offline-db", 1, {
        upgrade(db) {
-         const setlistStore = db.createObjectStore("setlists", {
+         const presentationStore = db.createObjectStore("presentations", {
            keyPath: "id",
          });
-         setlistStore.createIndex("by-date", "serviceDate");
+         presentationStore.createIndex("by-date", "serviceDate");
 
          const deckStore = db.createObjectStore("decks", { keyPath: "id" });
-         deckStore.createIndex("by-setlist", "setlistId");
+         deckStore.createIndex("by-presentation", "presentationId");
 
          db.createObjectStore("backgrounds", { keyPath: "id" });
-         db.createObjectStore("sync_meta", { keyPath: "setlistId" });
+         db.createObjectStore("sync_meta", { keyPath: "presentationId" });
        },
      });
    }
    ```
 
    - **송출 모드 실행 원칙 (Zero-Fetch Invariant)**:
-     - 전체화면 송출 및 발표자 보기 컴포넌트는 오직 `getOfflineDB()`의 `decks` 및 `setlists` 스토어와 Cache Storage에서만 데이터를 조회한다.
+     - 전체화면 송출 및 발표자 보기 컴포넌트는 오직 `getOfflineDB()`의 `decks` 및 `presentations` 스토어와 Cache Storage에서만 데이터를 조회한다.
      - 예배 송출 중 네트워크 연결이 끊겨도 화면 멈춤이나 오류가 0건임을 수학적으로 보장한다.
 
 ---
@@ -1073,23 +1073,23 @@ export function verifyNormalization(
 
 ### 7.1 엔드포인트 요약표
 
-| 메서드   | 경로                  | 설명                                   | 인증 필요    |
-| -------- | --------------------- | -------------------------------------- | ------------ |
-| `GET`    | `/api/auth/*`         | Better Auth 핸들러 (카카오/네이버)     | No           |
-| `GET`    | `/api/decks`          | 내 개인 라이브러리 덱 목록 조회        | Yes          |
-| `POST`   | `/api/decks`          | 새 덱 생성 (세트 추가 시 Clone 포함)   | Yes          |
-| `GET`    | `/api/decks/:id`      | 덱 상세 조회 (소유자 또는 공개 덱)     | Conditional  |
-| `PUT`    | `/api/decks/:id`      | 덱 정보/슬라이드/스타일 수정           | Yes (소유자) |
-| `DELETE` | `/api/decks/:id`      | 덱 삭제                                | Yes (소유자) |
-| `POST`   | `/api/decks/:id/fork` | 공개 덱 내 라이브러리로 복제 (Fork)    | Yes          |
-| `GET`    | `/api/setlists`       | 내 콘티(예배 세트) 목록 조회           | Yes          |
-| `POST`   | `/api/setlists`       | 새 콘티 생성                           | Yes          |
-| `GET`    | `/api/setlists/:id`   | 콘티 상세 및 포함된 덱 전체 Hydration  | Yes (소유자) |
-| `PUT`    | `/api/setlists/:id`   | 콘티 정보 및 곡 순서(`order`) 수정     | Yes (소유자) |
-| `DELETE` | `/api/setlists/:id`   | 콘티 삭제                              | Yes (소유자) |
-| `GET`    | `/api/catalog/search` | 통합 검색 (공개 덱 및 가사 라이브러리) | No           |
-| `GET`    | `/api/backgrounds`    | 서비스 기본 모션 배경 목록 조회        | No           |
-| `POST`   | `/api/reports`        | 가사 오류 및 부적절 덱 신고 접수       | Yes          |
+| 메서드   | 경로                     | 설명                                          | 인증 필요    |
+| -------- | ------------------------ | --------------------------------------------- | ------------ |
+| `GET`    | `/api/auth/*`            | Better Auth 핸들러 (카카오/네이버)            | No           |
+| `GET`    | `/api/decks`             | 내 개인 라이브러리 덱 목록 조회               | Yes          |
+| `POST`   | `/api/decks`             | 새 덱 생성 (세트 추가 시 Clone 포함)          | Yes          |
+| `GET`    | `/api/decks/:id`         | 덱 상세 조회 (소유자 또는 공개 덱)            | Conditional  |
+| `PUT`    | `/api/decks/:id`         | 덱 정보/슬라이드/스타일 수정                  | Yes (소유자) |
+| `DELETE` | `/api/decks/:id`         | 덱 삭제                                       | Yes (소유자) |
+| `POST`   | `/api/decks/:id/fork`    | 공개 덱 내 라이브러리로 복제 (Fork)           | Yes          |
+| `GET`    | `/api/presentations`     | 내 프레젠테이션(예배 세트) 목록 조회          | Yes          |
+| `POST`   | `/api/presentations`     | 새 프레젠테이션 생성                          | Yes          |
+| `GET`    | `/api/presentations/:id` | 프레젠테이션 상세 및 포함된 덱 전체 Hydration | Yes (소유자) |
+| `PUT`    | `/api/presentations/:id` | 프레젠테이션 정보 및 곡 순서(`order`) 수정    | Yes (소유자) |
+| `DELETE` | `/api/presentations/:id` | 프레젠테이션 삭제                             | Yes (소유자) |
+| `GET`    | `/api/catalog/search`    | 통합 검색 (공개 덱 및 가사 라이브러리)        | No           |
+| `GET`    | `/api/backgrounds`       | 서비스 기본 모션 배경 목록 조회               | No           |
+| `POST`   | `/api/reports`           | 가사 오류 및 부적절 덱 신고 접수              | Yes          |
 
 ### 7.2 주요 API 요청/응답 페이로드 스키마 (`packages/shared/src/schemas/api.ts`)
 
@@ -1097,7 +1097,7 @@ export function verifyNormalization(
 import { z } from "zod";
 import { DeckSchema, DeckStyleSchema } from "./deck";
 import { SlideSchema } from "./slide";
-import { SetlistSchema } from "./setlist";
+import { PresentationSchema } from "./presentation";
 
 // 1. 덱 생성 요청
 export const CreateDeckRequestSchema = z.object({
@@ -1119,14 +1119,16 @@ export const UpdateDeckRequestSchema = CreateDeckRequestSchema.partial();
 export type UpdateDeckRequest = z.infer<typeof UpdateDeckRequestSchema>;
 
 // 3. 세트 생성 요청
-export const CreateSetlistRequestSchema = z.object({
+export const CreatePresentationRequestSchema = z.object({
   title: z.string().min(1).max(100),
   serviceDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
 });
-export type CreateSetlistRequest = z.infer<typeof CreateSetlistRequestSchema>;
+export type CreatePresentationRequest = z.infer<
+  typeof CreatePresentationRequestSchema
+>;
 
 // 4. 세트 항목 순서 및 곡 변경 요청
-export const UpdateSetlistItemsRequestSchema = z.object({
+export const UpdatePresentationItemsRequestSchema = z.object({
   items: z.array(
     z.object({
       deckId: z.string().uuid(),
@@ -1134,8 +1136,8 @@ export const UpdateSetlistItemsRequestSchema = z.object({
     }),
   ),
 });
-export type UpdateSetlistItemsRequest = z.infer<
-  typeof UpdateSetlistItemsRequestSchema
+export type UpdatePresentationItemsRequest = z.infer<
+  typeof UpdatePresentationItemsRequestSchema
 >;
 
 // 5. 통합 검색 쿼리 및 응답
@@ -1189,6 +1191,6 @@ export type SearchCatalogResponse = z.infer<typeof SearchCatalogResponseSchema>;
 
 ## 9. 결론 및 구현 준비 상태 (Architectural Sign-off)
 
-본 명세서는 PRD의 전 기능 요건 및 사전 질문을 통해 확정된 아키텍처 결정 사항(콘티 덱 복제 정책, 비로그인 메모리 세션, Chrome Window Management 기반 듀얼 윈도우 동기화, R2 커스텀 도메인 직통 스트리밍)을 완벽히 반영하여 작성되었다.
+본 명세서는 PRD의 전 기능 요건 및 사전 질문을 통해 확정된 아키텍처 결정 사항(프레젠테이션 덱 복제 정책, 비로그인 메모리 세션, Chrome Window Management 기반 듀얼 윈도우 동기화, R2 커스텀 도메인 직통 스트리밍)을 완벽히 반영하여 작성되었다.
 
 이를 바탕으로 `packages/shared` $\rightarrow$ `packages/db` $\rightarrow$ `apps/web` 순으로 M0 및 M1 개발을 즉시 착수할 수 있다.

@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import type { Deck, SetlistItem } from "@repo/shared";
+import type { Deck, PresentationItem } from "@repo/shared";
 import {
   INITIAL_BACKGROUNDS,
   getBackgroundPosterUrl,
@@ -10,7 +10,7 @@ import { QuickLyricPasteModal } from "./QuickLyricPasteModal";
 import { ThemeMenuButton } from "../../components/common/ThemeMenuButton";
 
 export interface EditorSidebarProps {
-  items: SetlistItem[];
+  items: PresentationItem[];
   activeSongIndex: number;
   activeSlideIndex: number;
   onSelectSong: (index: number) => void;
@@ -95,7 +95,7 @@ const STYLE_PRESETS: {
 
 /**
  * Canva / MiriCanvas 스타일 좌측 슬라이드 & 곡 탐색 패널
- * - 좌측 아이콘 레일 (콘티 곡, 슬라이드, 가사 입력, 모션 배경, 디자인 스타일)
+ * - 좌측 아이콘 레일 (프레젠테이션 곡, 슬라이드, 가사 입력, 모션 배경, 디자인 스타일)
  * - 슬라이드 드로어 패널 (접기/펼치기 가능)
  */
 export function EditorSidebar({
@@ -143,8 +143,8 @@ export function EditorSidebar({
       id: `deck_${crypto.randomUUID().slice(0, 8)}`,
       userId: currentSong?.userId || "user_local",
       catalogId: null,
-      scope: "setlist",
-      setlistId: null,
+      scope: "presentation",
+      presentationId: null,
       title: inlineLyricTitle.trim(),
       artist: "찬양 곡",
       lyricsRaw: inlineLyricText.trim(),
@@ -176,7 +176,7 @@ export function EditorSidebar({
       {/* 1. Canva 스타일 슬림 아이콘 레일 (Icon Rail) */}
       <div className="w-16 bg-white dark:bg-zinc-950 border-r border-zinc-200 dark:border-zinc-800/80 flex flex-col items-center justify-between py-3 shrink-0">
         <div className="flex flex-col items-center gap-2 w-full px-1">
-          {/* 콘티 곡 버튼 */}
+          {/* 프레젠테이션 곡 버튼 */}
           <button
             type="button"
             data-testid="tab-songs-btn"
@@ -186,7 +186,7 @@ export function EditorSidebar({
                 ? "bg-zinc-100 dark:bg-zinc-800 text-emerald-600 dark:text-emerald-400 font-bold shadow-sm dark:shadow"
                 : "text-zinc-500 hover:text-zinc-800 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:text-zinc-200 dark:hover:bg-zinc-900/80"
             }`}
-            title="콘티 곡 목록"
+            title="프레젠테이션 곡 목록"
           >
             <svg
               className="w-4 h-4"
@@ -201,7 +201,7 @@ export function EditorSidebar({
                 d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3"
               />
             </svg>
-            <span>콘티 ({items.length})</span>
+            <span>프레젠테이션 ({items.length})</span>
           </button>
 
           {/* 슬라이드 썸네일 버튼 */}
@@ -355,7 +355,7 @@ export function EditorSidebar({
           <div className="p-3.5 border-b border-zinc-200 dark:border-zinc-800/80 flex items-center justify-between">
             <h3 className="text-xs font-bold text-zinc-900 dark:text-white flex items-center gap-1.5">
               {activeTab === "songs" && (
-                <span>콘티 곡 목록 ({items.length})</span>
+                <span>프레젠테이션 곡 목록 ({items.length})</span>
               )}
               {activeTab === "slides" && (
                 <span>현재 곡 슬라이드 ({currentSlides.length})</span>
@@ -374,7 +374,7 @@ export function EditorSidebar({
             </button>
           </div>
 
-          {/* 탭 1: 콘티 곡 목록 */}
+          {/* 탭 1: 프레젠테이션 곡 목록 */}
           {activeTab === "songs" && (
             <div className="flex-1 overflow-y-auto p-3 flex flex-col justify-between">
               <div className="space-y-1.5">
@@ -639,7 +639,9 @@ export function EditorSidebar({
               <div className="space-y-1 flex-1 flex flex-col">
                 <div className="flex justify-between text-[11px] text-zinc-500 dark:text-zinc-400">
                   <span className="font-semibold">가사 원문</span>
-                  <span className="text-zinc-400 dark:text-zinc-500">빈 줄 = 슬라이드 구분</span>
+                  <span className="text-zinc-400 dark:text-zinc-500">
+                    빈 줄 = 슬라이드 구분
+                  </span>
                 </div>
                 <textarea
                   required

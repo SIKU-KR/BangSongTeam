@@ -3,7 +3,7 @@ import { render, screen, fireEvent, act } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { MemoryRouter } from "react-router-dom";
 import { HomeRoute } from "./index";
-import { resetActiveSetlist } from "../features/presentation";
+import { resetActivePresentation } from "../features/presentation";
 import * as chromeChecker from "../components/common/ChromeAlertBanner";
 
 const mockNavigate = vi.fn();
@@ -17,7 +17,7 @@ vi.mock("react-router-dom", async () => {
 
 describe("HomeRoute (Main Home Entry Screen)", () => {
   beforeEach(() => {
-    resetActiveSetlist();
+    resetActivePresentation();
     mockNavigate.mockClear();
     vi.restoreAllMocks();
   });
@@ -90,14 +90,14 @@ describe("HomeRoute (Main Home Entry Screen)", () => {
     expect(mockNavigate).toHaveBeenCalledWith("/present/fullscreen");
   });
 
-  it("should open QuickLyricPasteModal from song library and add new song into active setlist upon submission", () => {
+  it("should open QuickLyricPasteModal from song library and add new song into active presentation upon submission", () => {
     render(
       <MemoryRouter>
         <HomeRoute />
       </MemoryRouter>,
     );
 
-    // Initially 5 songs in setlist
+    // Initially 5 songs in presentation
     expect(screen.getByText("5곡 세트")).toBeInTheDocument();
 
     // Navigate to Song Library via sidebar
@@ -134,15 +134,15 @@ describe("HomeRoute (Main Home Entry Screen)", () => {
     // Modal closed
     expect(screen.queryByText("빠른 가사 붙여넣기")).not.toBeInTheDocument();
 
-    // Return to Home tab to see updated setlist
+    // Return to Home tab to see updated presentation
     const homeNavBtn = screen.getByTestId("sidebar-nav-home");
     fireEvent.click(homeNavBtn);
 
-    // Setlist updated to 6 songs and new slide count displayed
+    // Presentation updated to 6 songs and new slide count displayed
     expect(screen.getByText("6곡 세트")).toBeInTheDocument();
   });
 
-  it("should render updated sidebar navigation items without '내 콘티 보관함'", () => {
+  it("should render updated sidebar navigation items without '내 프레젠테이션 보관함'", () => {
     render(
       <MemoryRouter>
         <HomeRoute />
@@ -154,8 +154,10 @@ describe("HomeRoute (Main Home Entry Screen)", () => {
     expect(screen.getByTestId("sidebar-nav-songs")).toBeInTheDocument();
     expect(screen.getByTestId("sidebar-nav-backgrounds")).toBeInTheDocument();
 
-    // '내 콘티 보관함'은 완전히 제거되어 화면에 없어야 함
-    expect(screen.queryByText("내 콘티 보관함")).not.toBeInTheDocument();
+    // '내 프레젠테이션 보관함'은 완전히 제거되어 화면에 없어야 함
+    expect(
+      screen.queryByText("내 프레젠테이션 보관함"),
+    ).not.toBeInTheDocument();
 
     expect(
       screen.getByTestId("sidebar-create-presentation-btn"),

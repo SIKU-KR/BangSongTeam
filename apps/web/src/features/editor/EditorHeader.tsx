@@ -15,7 +15,7 @@ export interface EditorHeaderProps {
   canRedo?: boolean;
   onNewPresentation?: () => void;
   onOpenLyricModal?: () => void;
-  onResetSetlist?: () => void;
+  onResetPresentation?: () => void;
   className?: string;
 }
 
@@ -42,7 +42,7 @@ export function EditorHeader({
   canRedo = false,
   onNewPresentation,
   onOpenLyricModal,
-  onResetSetlist,
+  onResetPresentation,
   className = "",
 }: EditorHeaderProps): React.JSX.Element {
   const navigate = useNavigate();
@@ -166,12 +166,12 @@ export function EditorHeader({
                   <span>가사 빠른 입력</span>
                 </button>
               )}
-              {onResetSetlist && (
+              {onResetPresentation && (
                 <button
                   type="button"
                   onClick={() => {
                     setShowFileMenu(false);
-                    onResetSetlist();
+                    onResetPresentation();
                   }}
                   className="w-full px-3 py-2 text-left text-zinc-700 hover:text-zinc-900 dark:text-zinc-300 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800 flex items-center gap-2 cursor-pointer"
                 >
@@ -363,19 +363,27 @@ export function EditorHeader({
                 발표 송출 단축키
               </div>
               <div className="flex justify-between text-zinc-700 dark:text-zinc-300">
-                <span className="text-zinc-500 dark:text-zinc-400">다음/이전 슬라이드</span>
+                <span className="text-zinc-500 dark:text-zinc-400">
+                  다음/이전 슬라이드
+                </span>
                 <span>Space, ▶ / ◀</span>
               </div>
               <div className="flex justify-between text-zinc-700 dark:text-zinc-300">
-                <span className="text-zinc-500 dark:text-zinc-400">암전 (Blackout)</span>
+                <span className="text-zinc-500 dark:text-zinc-400">
+                  암전 (Blackout)
+                </span>
                 <span>B</span>
               </div>
               <div className="flex justify-between text-zinc-700 dark:text-zinc-300">
-                <span className="text-zinc-500 dark:text-zinc-400">가사 숨김</span>
+                <span className="text-zinc-500 dark:text-zinc-400">
+                  가사 숨김
+                </span>
                 <span>H</span>
               </div>
               <div className="flex justify-between text-zinc-700 dark:text-zinc-300">
-                <span className="text-zinc-500 dark:text-zinc-400">곡/슬라이드 점프</span>
+                <span className="text-zinc-500 dark:text-zinc-400">
+                  곡/슬라이드 점프
+                </span>
                 <span>N.M + Enter</span>
               </div>
             </div>

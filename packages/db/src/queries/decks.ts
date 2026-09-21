@@ -19,7 +19,7 @@ export function sanitizeFts5Query(query: string): string {
 }
 
 /**
- * 1. 사용자 본인 소유 '내 라이브러리' 마스터 덱 목록 조회 (콘티 복제본 제외)
+ * 1. 사용자 본인 소유 '내 라이브러리' 마스터 덱 목록 조회 (프레젠테이션 복제본 제외)
  */
 export async function getMyLibraryDecks(
   db: DbInstance,
@@ -31,7 +31,7 @@ export async function getMyLibraryDecks(
     .where(
       and(
         eq(decks.userId, userId),
-        eq(decks.scope, "library"), // 콘티용 복제 덱 필터링 (UI 오염 방지)
+        eq(decks.scope, "library"), // 프레젠테이션용 복제 덱 필터링 (UI 오염 방지)
       ),
     )
     .orderBy(desc(decks.updatedAt));

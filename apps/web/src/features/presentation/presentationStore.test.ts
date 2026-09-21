@@ -6,11 +6,11 @@ import {
   INITIAL_BACKGROUNDS,
 } from "@repo/shared";
 import {
-  getActiveSetlist,
-  addDeckToSetlist,
-  resetActiveSetlist,
-  useActiveSetlist,
-  updateSetlistTitle,
+  getActivePresentation,
+  addDeckToPresentation,
+  resetActivePresentation,
+  useActivePresentation,
+  updatePresentationTitle,
   updateSongStyle,
   updateSongBackground,
   updateSlideLines,
@@ -18,33 +18,33 @@ import {
   removeSlideFromSong,
   duplicateSlide,
   reorderSongs,
-  removeSongFromSetlist,
-  duplicateSongInSetlist,
+  removeSongFromPresentation,
+  duplicateSongInPresentation,
   reorderSlides,
   undo,
   redo,
   canUndo,
   canRedo,
-} from "./setlistStore";
+} from "./presentationStore";
 
-describe("setlistStore (In-memory reactive setlist)", () => {
+describe("presentationStore (In-memory reactive presentation)", () => {
   beforeEach(() => {
-    resetActiveSetlist();
+    resetActivePresentation();
   });
 
   it("should initialize with the 5 mock songs", () => {
-    const setlist = getActiveSetlist();
-    expect(setlist.items).toHaveLength(5);
-    expect(setlist.items[0].deck?.title).toBe("은혜로다");
+    const presentation = getActivePresentation();
+    expect(presentation.items).toHaveLength(5);
+    expect(presentation.items[0].deck?.title).toBe("은혜로다");
   });
 
-  it("should append a new deck to the setlist and assign a default background if missing", () => {
+  it("should append a new deck to the presentation and assign a default background if missing", () => {
     const newDeck = DeckSchema.parse({
       id: "90000000-0000-4000-8000-000000000001",
       userId: "00000000-0000-4000-8000-000000000001",
       catalogId: null,
-      scope: "setlist",
-      setlistId: null,
+      scope: "presentation",
+      presentationId: null,
       title: "아침 안개 눈 앞 가리듯",
       artist: "CCM",
       lyricsRaw: "아침 안개 눈 앞 가리듯",
@@ -64,7 +64,7 @@ describe("setlistStore (In-memory reactive setlist)", () => {
       updatedAt: "2026-09-20T00:00:00.000Z",
     });
 
-    const item = addDeckToSetlist(newDeck);
+    const item = addDeckToPresentation(newDeck);
     expect(item.order).toBe(5);
     expect(item.deck?.title).toBe("아침 안개 눈 앞 가리듯");
     // Should automatically assign a valid background from INITIAL_BACKGROUNDS
@@ -72,20 +72,20 @@ describe("setlistStore (In-memory reactive setlist)", () => {
       INITIAL_BACKGROUNDS[5 % INITIAL_BACKGROUNDS.length].id,
     );
 
-    const updated = getActiveSetlist();
+    const updated = getActivePresentation();
     expect(updated.items).toHaveLength(6);
   });
 
-  it("should notify useActiveSetlist hook subscribers on addDeckToSetlist", () => {
-    const { result } = renderHook(() => useActiveSetlist());
+  it("should notify useActivePresentation hook subscribers on addDeckToPresentation", () => {
+    const { result } = renderHook(() => useActivePresentation());
     expect(result.current.items).toHaveLength(5);
 
     const newDeck = DeckSchema.parse({
       id: "90000000-0000-4000-8000-000000000002",
       userId: "00000000-0000-4000-8000-000000000001",
       catalogId: null,
-      scope: "setlist",
-      setlistId: null,
+      scope: "presentation",
+      presentationId: null,
       title: "새 노래로",
       artist: "찬양",
       lyricsRaw: "새 노래로 주 찬양해",
@@ -106,7 +106,7 @@ describe("setlistStore (In-memory reactive setlist)", () => {
     });
 
     act(() => {
-      addDeckToSetlist(newDeck);
+      addDeckToPresentation(newDeck);
     });
 
     expect(result.current.items).toHaveLength(6);
@@ -116,16 +116,16 @@ describe("setlistStore (In-memory reactive setlist)", () => {
     );
   });
 
-  it("should update setlist title and notify subscribers", () => {
-    const { result } = renderHook(() => useActiveSetlist());
+  it("should update presentation title and notify subscribers", () => {
+    const { result } = renderHook(() => useActivePresentation());
     act(() => {
-      updateSetlistTitle("2026 청년부 금요 찬양");
+      updatePresentationTitle("2026 청년부 금요 찬양");
     });
     expect(result.current.title).toBe("2026 청년부 금요 찬양");
   });
 
   it("should update song style and background", () => {
-    const { result } = renderHook(() => useActiveSetlist());
+    const { result } = renderHook(() => useActivePresentation());
     act(() => {
       updateSongStyle(0, {
         overlayOpacity: 70,
@@ -148,7 +148,7 @@ describe("setlistStore (In-memory reactive setlist)", () => {
   });
 
   it("should manage slides (update, add, duplicate, remove)", () => {
-    const { result } = renderHook(() => useActiveSetlist());
+    const { result } = renderHook(() => useActivePresentation());
     const initialSlideCount = result.current.items[0].deck?.slides.length ?? 0;
 
     // Update lines
@@ -192,7 +192,7 @@ describe("setlistStore (In-memory reactive setlist)", () => {
   });
 
   it("should reorder and remove songs", () => {
-    const { result } = renderHook(() => useActiveSetlist());
+    const { result } = renderHook(() => useActivePresentation());
     const firstSongTitle = result.current.items[0].deck?.title;
     const secondSongTitle = result.current.items[1].deck?.title;
 
@@ -203,18 +203,18 @@ describe("setlistStore (In-memory reactive setlist)", () => {
     expect(result.current.items[1].deck?.title).toBe(firstSongTitle);
 
     act(() => {
-      removeSongFromSetlist(0);
+      removeSongFromPresentation(0);
     });
     expect(result.current.items).toHaveLength(4);
     expect(result.current.items[0].deck?.title).toBe(firstSongTitle);
   });
 
-  it("should duplicate a song within setlist", () => {
-    const { result } = renderHook(() => useActiveSetlist());
+  it("should duplicate a song within presentation", () => {
+    const { result } = renderHook(() => useActivePresentation());
     const initialSongCount = result.current.items.length;
 
     act(() => {
-      duplicateSongInSetlist(0);
+      duplicateSongInPresentation(0);
     });
 
     expect(result.current.items).toHaveLength(initialSongCount + 1);
@@ -225,7 +225,7 @@ describe("setlistStore (In-memory reactive setlist)", () => {
   });
 
   it("should reorder slides within a song", () => {
-    const { result } = renderHook(() => useActiveSetlist());
+    const { result } = renderHook(() => useActivePresentation());
     const originalSlide0 = result.current.items[0].deck?.slides[0].lines[0];
     const originalSlide1 = result.current.items[0].deck?.slides[1].lines[0];
 
@@ -242,13 +242,13 @@ describe("setlistStore (In-memory reactive setlist)", () => {
   });
 
   it("should support undo and redo", () => {
-    const { result } = renderHook(() => useActiveSetlist());
+    const { result } = renderHook(() => useActivePresentation());
     expect(canUndo()).toBe(false);
     expect(canRedo()).toBe(false);
 
     // Make an edit
     act(() => {
-      updateSetlistTitle("수정된 제목");
+      updatePresentationTitle("수정된 제목");
     });
     expect(result.current.title).toBe("수정된 제목");
     expect(canUndo()).toBe(true);
