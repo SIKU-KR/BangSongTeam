@@ -16,7 +16,7 @@
 
 ## 2. 세부 작업 체크리스트
 
-- [ ] **Task 4.1: 청중용 단독 전체화면 송출 페이지 구현**
+- [x] **Task 4.1: 청중용 단독 전체화면 송출 페이지 구현**
   - **대상 파일**: `apps/web/src/routes/FullscreenPresentRoute.tsx`
   - **선행 조건**: `docs/tasks/m1/tasks_3.md`
   - **구현 내용**:
@@ -27,7 +27,7 @@
     - 송출 중 네트워크 요청 0건 검증 (Zero-Fetch Invariant)
   - **DoD (통과 기준)**: `pnpm --filter web exec tsc --noEmit`이 통과하고 전체화면 전환 및 방향키/키패드 점프가 화면 왜곡 없이 동작한다.
 
-- [ ] **Task 4.2: React Router 라우팅 등록 및 메인 홈 진입 화면 구현**
+- [x] **Task 4.2: React Router 라우팅 등록 및 메인 홈 진입 화면 구현**
   - **대상 파일**: `apps/web/src/routes/index.tsx`, `apps/web/src/App.tsx`
   - **선행 조건**: Task 4.1
   - **구현 내용**:
@@ -36,7 +36,7 @@
     - 버튼 클릭 시 `/present/fullscreen`으로 전환
   - **DoD (통과 기준)**: 브라우저에서 `/` 접속 시 홈 화면이 뜨고, 송출 버튼 클릭 시 `/present/fullscreen`으로 전환된다.
 
-- [ ] **Task 4.3: M0 & M1 전체 모노레포 무결점 통합 검증**
+- [x] **Task 4.3: M0 & M1 전체 모노레포 무결점 통합 검증**
   - **대상 파일**: `package.json` (전체 검증 파이프라인)
   - **선행 조건**: Task 4.1, Task 4.2
   - **구현 내용**:
