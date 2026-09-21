@@ -186,25 +186,6 @@ export function resetActivePresentation(): void {
 }
 
 /**
- * 프레젠테이션을 컬렉션에 upsert 하고 활성 문서로 지정
- */
-export function setActivePresentation(newPresentation: Presentation): void {
-  const next: Presentation = {
-    ...newPresentation,
-    updatedAt: new Date().toISOString(),
-  };
-  state = {
-    byId: { ...state.byId, [next.id]: next },
-    order: state.order.includes(next.id)
-      ? state.order
-      : [...state.order, next.id],
-    activeId: next.id,
-  };
-  listSnapshot = buildListSnapshot(state);
-  emitChange();
-}
-
-/**
  * 신규 빈 프레젠테이션을 컬렉션에 추가하고 활성 문서로 전환한다.
  * 기존 문서는 보존된다 (멀티 문서 전환).
  *
@@ -277,37 +258,6 @@ export function updatePresentationTitle(title: string): void {
   writeActive({
     ...readActive(),
     title,
-    updatedAt: new Date().toISOString(),
-  });
-  emitChange();
-}
-
-/**
- * 곡(Deck) 메타 정보(제목, 아티스트) 변경
- */
-export function updateSongInfo(
-  songIndex: number,
-  title: string,
-  artist?: string,
-): void {
-  const item = readActive().items[songIndex];
-  if (!item || !item.deck) return;
-
-  pushHistory();
-
-  const updatedDeck: Deck = {
-    ...item.deck,
-    title,
-    artist: artist !== undefined ? artist : item.deck.artist,
-    updatedAt: new Date().toISOString(),
-  };
-
-  const updatedItems = [...readActive().items];
-  updatedItems[songIndex] = { ...item, deck: updatedDeck };
-
-  writeActive({
-    ...readActive(),
-    items: updatedItems,
     updatedAt: new Date().toISOString(),
   });
   emitChange();

@@ -109,16 +109,3 @@ export async function seedBackgrounds(db: DbInstance): Promise<number> {
   }
   return initialBackgrounds.length;
 }
-
-/**
- * Wrangler D1 CLI 실행용 시드 SQL 생성
- */
-export function generateSeedSql(): string {
-  const values = initialBackgrounds.map((bg) => {
-    const escTitle = bg.title.replace(/'/g, "''");
-    const escTags = bg.tags.replace(/'/g, "''");
-    const escLicense = bg.license.replace(/'/g, "''");
-    return `('${bg.id}', '${escTitle}', '${bg.r2Key}', '${bg.posterKey}', ${bg.durationSec}, '${escLicense}', '${escTags}')`;
-  });
-  return `INSERT OR IGNORE INTO backgrounds (id, title, r2_key, poster_key, duration_sec, license, tags) VALUES\n${values.join(",\n")};\n`;
-}

@@ -24,7 +24,6 @@ export {
 
 export {
   getActivePresentation,
-  setActivePresentation,
   createNewPresentation,
   addDeckToPresentation,
   resetActivePresentation,
@@ -37,7 +36,6 @@ export {
   usePresentationList,
   usePresentationById,
   updatePresentationTitle,
-  updateSongInfo,
   updateSongStyle,
   updateSongBackground,
   updateSlideLines,
