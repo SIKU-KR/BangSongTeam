@@ -23,11 +23,6 @@ export function MergedSlidesView({
 }: MergedSlidesViewProps): React.JSX.Element {
   const navigate = useNavigate();
 
-  const totalSlides = setlist.items.reduce(
-    (sum, item) => sum + (item.deck?.slides.length ?? 0),
-    0,
-  );
-
   const handleStartPresentation = (): void => {
     if (!isGoogleChromeBrowser()) {
       const proceed = window.confirm(
@@ -59,38 +54,6 @@ export function MergedSlidesView({
 
   return (
     <div className="space-y-6">
-      {/* 섹션 상단 툴바 */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-zinc-800/80">
-        <div>
-          <div className="flex items-center gap-2.5">
-            <span className="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
-            <h2 className="text-xl font-bold text-white tracking-tight">
-              프레젠테이션
-            </h2>
-            <span className="text-xs px-2.5 py-0.5 rounded-full bg-emerald-950 text-emerald-400 border border-emerald-800 font-mono font-medium">
-              1개 프레젠테이션 덱
-            </span>
-          </div>
-          <p className="text-xs text-zinc-400 mt-0.5">
-            예배 일자: {setlist.serviceDate} · 전체 {setlist.items.length}곡(총 {totalSlides}개 슬라이드)이 순서대로 구성된 16:9 와이드스크린 덱입니다.
-          </p>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            data-testid="merged-start-present-btn"
-            onClick={handleStartPresentation}
-            className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-lg shadow-emerald-950/50 hover:shadow-emerald-900/60 flex items-center gap-1.5 cursor-pointer transition-all active:scale-95"
-          >
-            <svg className="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24">
-              <path d="M8 5v14l11-7z" />
-            </svg>
-            <span>전체화면 발표</span>
-          </button>
-        </div>
-      </div>
-
       {/* 본문: 프레젠테이션 1개 단위 카드 그리드 */}
       {!isMatch ? (
         <div className="py-16 text-center flex flex-col items-center justify-center gap-3 bg-zinc-900/30 border border-zinc-800/80 rounded-2xl">

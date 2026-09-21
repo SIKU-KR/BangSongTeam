@@ -24,18 +24,13 @@ describe("Library Views", () => {
         </MemoryRouter>,
       );
 
-      // 섹션 헤더
-      expect(screen.getByText("프레젠테이션")).toBeInTheDocument();
-      expect(screen.getByText("1개 프레젠테이션 덱")).toBeInTheDocument();
-
       // 프레젠테이션 1개 단위 카드
       expect(screen.getByTestId("presentation-card")).toBeInTheDocument();
       expect(screen.getByText("2026 주일 3부 예배")).toBeInTheDocument();
       expect(screen.getByText("5곡 세트")).toBeInTheDocument();
       expect(screen.getByText("23 슬라이드")).toBeInTheDocument();
 
-      // 버튼 동작 및 새 프레젠테이션 카드
-      expect(screen.getByTestId("merged-start-present-btn")).toBeInTheDocument();
+      // 새 프레젠테이션 카드
       expect(screen.getByText("새 프레젠테이션 생성")).toBeInTheDocument();
     });
 
