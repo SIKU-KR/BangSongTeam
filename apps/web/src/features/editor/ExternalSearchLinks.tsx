@@ -37,7 +37,7 @@ export function ExternalSearchLinks({
 
   return (
     <div className={`flex items-center gap-2 text-xs ${className}`}>
-      <span className="text-zinc-400 font-medium">가사 검색:</span>
+      <span className="text-zinc-500 dark:text-zinc-400 font-medium">가사 검색:</span>
 
       {/* Melon Link */}
       <a
@@ -51,8 +51,8 @@ export function ExternalSearchLinks({
         }}
         className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-md border text-xs font-medium transition-all ${
           hasQuery
-            ? "border-emerald-700/60 bg-emerald-950/40 text-emerald-300 hover:bg-emerald-900/50 hover:border-emerald-600 cursor-pointer"
-            : "border-zinc-800 bg-zinc-900 text-zinc-600 cursor-not-allowed pointer-events-none"
+            ? "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 hover:border-emerald-300 dark:border-emerald-700/60 dark:bg-emerald-950/40 dark:text-emerald-300 dark:hover:bg-emerald-900/50 dark:hover:border-emerald-600 cursor-pointer"
+            : "border-zinc-200 bg-zinc-100 text-zinc-400 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-600 cursor-not-allowed pointer-events-none"
         }`}
         title={
           hasQuery ? `멜론에서 '${trimmed}' 검색` : "곡 제목을 먼저 입력하세요"
@@ -75,8 +75,8 @@ export function ExternalSearchLinks({
         }}
         className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-md border text-xs font-medium transition-all ${
           hasQuery
-            ? "border-orange-700/60 bg-orange-950/40 text-orange-300 hover:bg-orange-900/50 hover:border-orange-600 cursor-pointer"
-            : "border-zinc-800 bg-zinc-900 text-zinc-600 cursor-not-allowed pointer-events-none"
+            ? "border-orange-200 bg-orange-50 text-orange-700 hover:bg-orange-100 hover:border-orange-300 dark:border-orange-700/60 dark:bg-orange-950/40 dark:text-orange-300 dark:hover:bg-orange-900/50 dark:hover:border-orange-600 cursor-pointer"
+            : "border-zinc-200 bg-zinc-100 text-zinc-400 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-600 cursor-not-allowed pointer-events-none"
         }`}
         title={
           hasQuery ? `벅스에서 '${trimmed}' 검색` : "곡 제목을 먼저 입력하세요"

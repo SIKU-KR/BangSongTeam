@@ -53,20 +53,20 @@ export function EditorStageCanvas({
     return (
       <div
         data-testid="editor-stage-canvas"
-        className={`relative flex-1 bg-zinc-900/60 overflow-hidden flex flex-col items-center justify-center p-6 select-none ${className}`}
+        className={`relative flex-1 bg-zinc-100 dark:bg-zinc-900/60 overflow-hidden flex flex-col items-center justify-center p-6 select-none ${className}`}
       >
-        <div className="w-full max-w-xl p-8 rounded-2xl bg-zinc-950/80 border border-zinc-800 text-center flex flex-col items-center gap-4 shadow-2xl">
-          <div className="w-16 h-16 rounded-2xl bg-zinc-900 border border-zinc-700/60 flex items-center justify-center text-emerald-400">
+        <div className="w-full max-w-xl p-8 rounded-2xl bg-white dark:bg-zinc-950/80 border border-zinc-200 dark:border-zinc-800 text-center flex flex-col items-center gap-4 shadow-xl dark:shadow-2xl">
+          <div className="w-16 h-16 rounded-2xl bg-zinc-100 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700/60 flex items-center justify-center text-emerald-600 dark:text-emerald-400">
             <svg className="w-8 h-8 fill-current" viewBox="0 0 24 24">
               <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-5 14H7v-2h7v2zm3-4H7v-2h10v2zm0-4H7V7h10v2z" />
             </svg>
           </div>
 
           <div>
-            <h3 className="text-lg font-bold text-white">
+            <h3 className="text-lg font-bold text-zinc-900 dark:text-white">
               등록된 찬양 곡 또는 슬라이드가 없습니다
             </h3>
-            <p className="text-xs text-zinc-400 mt-1 max-w-md">
+            <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1 max-w-md">
               새 찬양 가사를 빠른 입력으로 추가하거나, 기본 찬양 콘티를 불러와
               프레젠테이션 제작을 시작하세요.
             </p>
@@ -77,7 +77,7 @@ export function EditorStageCanvas({
               <button
                 type="button"
                 onClick={onOpenLyricModal}
-                className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-lg shadow-emerald-950/50 transition-colors flex items-center gap-1.5 cursor-pointer"
+                className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-sm dark:shadow-lg dark:shadow-emerald-950/50 transition-colors flex items-center gap-1.5 cursor-pointer"
               >
                 <svg
                   className="w-4 h-4"
@@ -100,7 +100,7 @@ export function EditorStageCanvas({
               <button
                 type="button"
                 onClick={onResetSetlist}
-                className="px-4 py-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 hover:text-white border border-zinc-700 font-medium text-xs transition-colors cursor-pointer"
+                className="px-4 py-2 rounded-lg bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-800 dark:text-zinc-200 dark:hover:text-white border border-zinc-200 dark:border-zinc-700 font-medium text-xs transition-colors cursor-pointer"
               >
                 기본 5곡 세트 불러오기
               </button>
@@ -116,19 +116,19 @@ export function EditorStageCanvas({
   return (
     <div
       data-testid="editor-stage-canvas"
-      className={`relative flex-1 bg-zinc-900/60 overflow-hidden flex flex-col items-center justify-between p-6 select-none ${className}`}
+      className={`relative flex-1 bg-zinc-100 dark:bg-zinc-900/60 overflow-hidden flex flex-col items-center justify-between p-6 select-none ${className}`}
     >
       {/* 캔버스 상단 안내 바 */}
-      <div className="w-full max-w-4xl mb-2 flex items-center justify-between text-xs text-zinc-400 shrink-0">
+      <div className="w-full max-w-4xl mb-2 flex items-center justify-between text-xs text-zinc-500 dark:text-zinc-400 shrink-0">
         <div className="flex items-center gap-2">
-          <span className="font-semibold text-zinc-200">{songTitle}</span>
-          <span className="px-2 py-0.5 rounded bg-zinc-800 text-[11px] font-mono text-zinc-300">
+          <span className="font-semibold text-zinc-800 dark:text-zinc-200">{songTitle}</span>
+          <span className="px-2 py-0.5 rounded bg-zinc-200 dark:bg-zinc-800 text-[11px] font-mono text-zinc-700 dark:text-zinc-300">
             {slideIndex + 1} / {totalSlides}
           </span>
         </div>
 
         <div className="flex items-center gap-2">
-          <span className="text-[11px] font-mono text-zinc-500">
+          <span className="text-[11px] font-mono text-zinc-400 dark:text-zinc-500">
             16:9 와이드스크린 (1920 × 1080)
           </span>
         </div>
@@ -137,7 +137,7 @@ export function EditorStageCanvas({
       {/* 중앙: 16:9 슬라이드 스테이지 컨테이너 (Zoom Scale 적용) */}
       <div className="flex-1 w-full flex items-center justify-center overflow-hidden py-2">
         <div
-          className="relative w-full max-w-4xl aspect-video rounded-xl overflow-hidden shadow-2xl shadow-black ring-1 ring-zinc-800 bg-black group transition-transform duration-150"
+          className="relative w-full max-w-4xl aspect-video rounded-xl overflow-hidden shadow-xl ring-1 ring-zinc-300 dark:shadow-2xl dark:shadow-black dark:ring-zinc-800 bg-black group transition-transform duration-150"
           style={{
             transform: `scale(${zoomScale})`,
             transformOrigin: "center center",
@@ -211,12 +211,12 @@ export function EditorStageCanvas({
             onClick={() => setIsBlackout((prev) => !prev)}
             className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1.5 border cursor-pointer ${
               isBlackout
-                ? "bg-zinc-800 text-amber-400 border-amber-500/50 shadow"
-                : "bg-zinc-950/80 text-zinc-400 border-zinc-800 hover:text-white"
+                ? "bg-amber-50 dark:bg-zinc-800 text-amber-600 dark:text-amber-400 border-amber-500/50 shadow-sm dark:shadow"
+                : "bg-white dark:bg-zinc-950/80 text-zinc-500 dark:text-zinc-400 border-zinc-200 dark:border-zinc-800 hover:text-zinc-900 dark:hover:text-white"
             }`}
           >
             <span
-              className={`w-2 h-2 rounded-full ${isBlackout ? "bg-amber-400 animate-pulse" : "bg-zinc-600"}`}
+              className={`w-2 h-2 rounded-full ${isBlackout ? "bg-amber-400 animate-pulse" : "bg-zinc-300 dark:bg-zinc-600"}`}
             />
             <span>암전(B) {isBlackout ? "해제" : "테스트"}</span>
           </button>
@@ -228,12 +228,12 @@ export function EditorStageCanvas({
             onClick={() => setIsLyricsHidden((prev) => !prev)}
             className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1.5 border cursor-pointer ${
               isLyricsHidden
-                ? "bg-zinc-800 text-sky-400 border-sky-500/50 shadow"
-                : "bg-zinc-950/80 text-zinc-400 border-zinc-800 hover:text-white"
+                ? "bg-sky-50 dark:bg-zinc-800 text-sky-600 dark:text-sky-400 border-sky-500/50 shadow-sm dark:shadow"
+                : "bg-white dark:bg-zinc-950/80 text-zinc-500 dark:text-zinc-400 border-zinc-200 dark:border-zinc-800 hover:text-zinc-900 dark:hover:text-white"
             }`}
           >
             <span
-              className={`w-2 h-2 rounded-full ${isLyricsHidden ? "bg-sky-400 animate-pulse" : "bg-zinc-600"}`}
+              className={`w-2 h-2 rounded-full ${isLyricsHidden ? "bg-sky-400 animate-pulse" : "bg-zinc-300 dark:bg-zinc-600"}`}
             />
             <span>가사숨김(H) {isLyricsHidden ? "해제" : "테스트"}</span>
           </button>
@@ -241,22 +241,22 @@ export function EditorStageCanvas({
 
         {/* 줌 컨트롤 */}
         {onZoomChange && (
-          <div className="hidden sm:flex items-center gap-1 bg-zinc-950/90 border border-zinc-800 rounded-lg px-2 py-1 text-xs text-zinc-400">
+          <div className="hidden sm:flex items-center gap-1 bg-white dark:bg-zinc-950/90 border border-zinc-200 dark:border-zinc-800 rounded-lg px-2 py-1 text-xs text-zinc-500 dark:text-zinc-400">
             <button
               type="button"
               onClick={() => onZoomChange(Math.max(50, zoomLevel - 15))}
-              className="hover:text-white px-1 font-bold cursor-pointer"
+              className="hover:text-zinc-900 dark:hover:text-white px-1 font-bold cursor-pointer"
               title="캔버스 축소"
             >
               -
             </button>
-            <span className="w-12 text-center font-mono text-zinc-200">
+            <span className="w-12 text-center font-mono text-zinc-800 dark:text-zinc-200">
               {zoomLevel}%
             </span>
             <button
               type="button"
               onClick={() => onZoomChange(Math.min(150, zoomLevel + 15))}
-              className="hover:text-white px-1 font-bold cursor-pointer"
+              className="hover:text-zinc-900 dark:hover:text-white px-1 font-bold cursor-pointer"
               title="캔버스 확대"
             >
               +
@@ -264,7 +264,7 @@ export function EditorStageCanvas({
             <button
               type="button"
               onClick={() => onZoomChange(100)}
-              className="ml-1 pl-1.5 border-l border-zinc-800 text-[11px] text-zinc-500 hover:text-zinc-200 cursor-pointer"
+              className="ml-1 pl-1.5 border-l border-zinc-200 dark:border-zinc-800 text-[11px] text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-200 cursor-pointer"
               title="100% 원본 맞춤"
             >
               맞춤
@@ -277,10 +277,10 @@ export function EditorStageCanvas({
           type="button"
           data-testid="canvas-present-cta"
           onClick={onPresent}
-          className="px-3.5 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-xs font-medium text-zinc-200 hover:text-white border border-zinc-700 flex items-center gap-1.5 transition-colors cursor-pointer"
+          className="px-3.5 py-1.5 rounded-lg bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-xs font-medium text-zinc-800 dark:text-zinc-200 dark:hover:text-white border border-zinc-200 dark:border-zinc-700 flex items-center gap-1.5 transition-colors cursor-pointer"
         >
           <svg
-            className="w-3.5 h-3.5 text-emerald-400"
+            className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400"
             fill="currentColor"
             viewBox="0 0 24 24"
           >

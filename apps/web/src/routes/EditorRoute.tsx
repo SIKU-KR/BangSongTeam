@@ -261,7 +261,7 @@ export function EditorRoute(): React.JSX.Element {
   return (
     <div
       data-testid="editor-route"
-      className="flex flex-col h-screen w-screen bg-zinc-950 text-zinc-100 overflow-hidden select-none"
+      className="flex flex-col h-screen w-screen bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 overflow-hidden select-none"
     >
       {/* 1. 상단 Canva / MiriCanvas 스타일 헤더 */}
       <EditorHeader

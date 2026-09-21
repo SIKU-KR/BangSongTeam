@@ -63,7 +63,7 @@ export function EditorHeader({
   return (
     <header
       data-testid="editor-header"
-      className={`h-14 bg-zinc-950 border-b border-zinc-800/80 px-4 flex items-center justify-between select-none text-zinc-100 ${className}`}
+      className={`h-14 bg-white dark:bg-zinc-950 border-b border-zinc-200 dark:border-zinc-800/80 px-4 flex items-center justify-between select-none text-zinc-900 dark:text-zinc-100 ${className}`}
     >
       {/* 1. 좌측: 뒤로가기 & 세트 제목 & 실행취소/다시실행 */}
       <div className="flex items-center gap-3 min-w-0">
@@ -71,7 +71,7 @@ export function EditorHeader({
           type="button"
           data-testid="header-back-btn"
           onClick={() => navigate("/")}
-          className="p-1.5 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors flex items-center gap-1 text-xs cursor-pointer"
+          className="p-1.5 rounded-lg text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors flex items-center gap-1 text-xs cursor-pointer"
           title="프레젠테이션 목록으로 돌아가기"
         >
           <svg
@@ -96,11 +96,11 @@ export function EditorHeader({
             type="button"
             data-testid="header-file-menu-btn"
             onClick={() => setShowFileMenu((prev) => !prev)}
-            className="px-2 py-1 rounded text-xs text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors flex items-center gap-1 cursor-pointer font-medium"
+            className="px-2 py-1 rounded text-xs text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors flex items-center gap-1 cursor-pointer font-medium"
           >
             <span>파일</span>
             <svg
-              className="w-3 h-3 text-zinc-500"
+              className="w-3 h-3 text-zinc-400 dark:text-zinc-500"
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
@@ -115,7 +115,7 @@ export function EditorHeader({
           </button>
 
           {showFileMenu && (
-            <div className="absolute left-0 top-9 z-50 w-52 py-1.5 bg-zinc-900 border border-zinc-800 rounded-xl shadow-2xl text-xs space-y-0.5 font-sans">
+            <div className="absolute left-0 top-9 z-50 w-52 py-1.5 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-lg dark:shadow-2xl text-xs space-y-0.5 font-sans">
               {onNewPresentation && (
                 <button
                   type="button"
@@ -123,10 +123,10 @@ export function EditorHeader({
                     setShowFileMenu(false);
                     onNewPresentation();
                   }}
-                  className="w-full px-3 py-2 text-left text-zinc-300 hover:text-white hover:bg-zinc-800 flex items-center gap-2 cursor-pointer"
+                  className="w-full px-3 py-2 text-left text-zinc-700 hover:text-zinc-900 dark:text-zinc-300 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800 flex items-center gap-2 cursor-pointer"
                 >
                   <svg
-                    className="w-3.5 h-3.5 text-emerald-400"
+                    className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400"
                     fill="none"
                     stroke="currentColor"
                     viewBox="0 0 24 24"
@@ -148,7 +148,7 @@ export function EditorHeader({
                     setShowFileMenu(false);
                     onOpenLyricModal();
                   }}
-                  className="w-full px-3 py-2 text-left text-zinc-300 hover:text-white hover:bg-zinc-800 flex items-center gap-2 cursor-pointer"
+                  className="w-full px-3 py-2 text-left text-zinc-700 hover:text-zinc-900 dark:text-zinc-300 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800 flex items-center gap-2 cursor-pointer"
                 >
                   <svg
                     className="w-3.5 h-3.5 text-indigo-400"
@@ -173,10 +173,10 @@ export function EditorHeader({
                     setShowFileMenu(false);
                     onResetSetlist();
                   }}
-                  className="w-full px-3 py-2 text-left text-zinc-300 hover:text-white hover:bg-zinc-800 flex items-center gap-2 cursor-pointer"
+                  className="w-full px-3 py-2 text-left text-zinc-700 hover:text-zinc-900 dark:text-zinc-300 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800 flex items-center gap-2 cursor-pointer"
                 >
                   <svg
-                    className="w-3.5 h-3.5 text-zinc-400"
+                    className="w-3.5 h-3.5 text-zinc-500 dark:text-zinc-400"
                     fill="none"
                     stroke="currentColor"
                     viewBox="0 0 24 24"
@@ -191,14 +191,14 @@ export function EditorHeader({
                   <span>기본 5곡 세트 복원</span>
                 </button>
               )}
-              <div className="my-1 border-t border-zinc-800" />
+              <div className="my-1 border-t border-zinc-200 dark:border-zinc-800" />
               <button
                 type="button"
                 onClick={() => {
                   setShowFileMenu(false);
                   onPresent();
                 }}
-                className="w-full px-3 py-2 text-left text-emerald-400 hover:bg-emerald-950/40 flex items-center gap-2 cursor-pointer font-medium"
+                className="w-full px-3 py-2 text-left text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 flex items-center gap-2 cursor-pointer font-medium"
               >
                 <svg className="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24">
                   <path d="M8 5v14l11-7z" />
@@ -209,7 +209,7 @@ export function EditorHeader({
           )}
         </div>
 
-        <div className="h-4 w-px bg-zinc-800" />
+        <div className="h-4 w-px bg-zinc-200 dark:bg-zinc-800" />
 
         {/* 인라인 제목 편집 */}
         <div className="flex items-center gap-2 min-w-0">
@@ -227,7 +227,7 @@ export function EditorHeader({
                   setTempTitle(title);
                 }
               }}
-              className="bg-zinc-900 border border-emerald-500 rounded px-2 py-0.5 text-sm font-semibold text-white focus:outline-none"
+              className="bg-white dark:bg-zinc-900 border border-emerald-500 rounded px-2 py-0.5 text-sm font-semibold text-zinc-900 dark:text-white focus:outline-none"
             />
           ) : (
             <button
@@ -236,12 +236,12 @@ export function EditorHeader({
                 setTempTitle(title);
                 setIsEditingTitle(true);
               }}
-              className="text-sm font-bold text-white hover:text-emerald-400 transition-colors truncate max-w-xs sm:max-w-md flex items-center gap-1.5 cursor-pointer text-left"
+              className="text-sm font-bold text-zinc-900 dark:text-white hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors truncate max-w-xs sm:max-w-md flex items-center gap-1.5 cursor-pointer text-left"
               title="클릭하여 제목 수정"
             >
               <span className="truncate">{title}</span>
               <svg
-                className="w-3.5 h-3.5 text-zinc-500 shrink-0"
+                className="w-3.5 h-3.5 text-zinc-400 dark:text-zinc-500 shrink-0"
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"
@@ -257,7 +257,7 @@ export function EditorHeader({
           )}
 
           {/* 저장 상태 */}
-          <span className="hidden md:inline-flex items-center gap-1 text-[11px] text-zinc-500 font-medium">
+          <span className="hidden md:inline-flex items-center gap-1 text-[11px] text-zinc-500 dark:text-zinc-400 font-medium">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
             자동 저장됨
           </span>
@@ -265,13 +265,13 @@ export function EditorHeader({
 
         {/* Undo / Redo */}
         {(onUndo || onRedo) && (
-          <div className="hidden sm:flex items-center gap-0.5 border-l border-zinc-800 pl-2">
+          <div className="hidden sm:flex items-center gap-0.5 border-l border-zinc-200 dark:border-zinc-800 pl-2">
             <button
               type="button"
               data-testid="header-undo-btn"
               disabled={!canUndo}
               onClick={onUndo}
-              className="p-1.5 rounded text-zinc-400 hover:text-white disabled:opacity-25 transition-colors cursor-pointer"
+              className="p-1.5 rounded text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800 disabled:opacity-25 transition-colors cursor-pointer"
               title="실행 취소 (Undo)"
             >
               <svg
@@ -293,7 +293,7 @@ export function EditorHeader({
               data-testid="header-redo-btn"
               disabled={!canRedo}
               onClick={onRedo}
-              className="p-1.5 rounded text-zinc-400 hover:text-white disabled:opacity-25 transition-colors cursor-pointer"
+              className="p-1.5 rounded text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800 disabled:opacity-25 transition-colors cursor-pointer"
               title="다시 실행 (Redo)"
             >
               <svg
@@ -315,13 +315,13 @@ export function EditorHeader({
       </div>
 
       {/* 2. 중앙: 슬라이드 위치 표시기 */}
-      <div className="hidden lg:flex items-center gap-2 px-3 py-1 rounded-full bg-zinc-900/80 border border-zinc-800 text-xs text-zinc-300 font-mono">
+      <div className="hidden lg:flex items-center gap-2 px-3 py-1 rounded-full bg-zinc-100 dark:bg-zinc-900/80 border border-zinc-200 dark:border-zinc-800 text-xs text-zinc-700 dark:text-zinc-300 font-mono">
         {totalSongs > 0 ? (
           <>
             <span>
               곡 {currentSongIndex + 1}/{totalSongs}
             </span>
-            <span className="text-zinc-600">·</span>
+            <span className="text-zinc-400 dark:text-zinc-600">·</span>
             <span>
               슬라이드 {currentSlideIndex + 1}/{totalSlides}
             </span>
@@ -338,7 +338,7 @@ export function EditorHeader({
           <button
             type="button"
             onClick={() => setShowShortcuts((prev) => !prev)}
-            className="p-1.5 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors text-xs flex items-center gap-1 cursor-pointer"
+            className="p-1.5 rounded-lg text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors text-xs flex items-center gap-1 cursor-pointer"
             title="송출 단축키 안내"
           >
             <svg
@@ -358,24 +358,24 @@ export function EditorHeader({
           </button>
 
           {showShortcuts && (
-            <div className="absolute right-0 top-10 z-50 w-64 p-3 bg-zinc-900 border border-zinc-700 rounded-xl shadow-2xl text-xs space-y-2 font-mono">
-              <div className="font-bold text-white font-sans text-xs pb-1 border-b border-zinc-800">
+            <div className="absolute right-0 top-10 z-50 w-64 p-3 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl shadow-lg dark:shadow-2xl text-xs space-y-2 font-mono">
+              <div className="font-bold text-zinc-900 dark:text-white font-sans text-xs pb-1 border-b border-zinc-200 dark:border-zinc-800">
                 발표 송출 단축키
               </div>
-              <div className="flex justify-between text-zinc-300">
-                <span className="text-zinc-500">다음/이전 슬라이드</span>
+              <div className="flex justify-between text-zinc-700 dark:text-zinc-300">
+                <span className="text-zinc-500 dark:text-zinc-400">다음/이전 슬라이드</span>
                 <span>Space, ▶ / ◀</span>
               </div>
-              <div className="flex justify-between text-zinc-300">
-                <span className="text-zinc-500">암전 (Blackout)</span>
+              <div className="flex justify-between text-zinc-700 dark:text-zinc-300">
+                <span className="text-zinc-500 dark:text-zinc-400">암전 (Blackout)</span>
                 <span>B</span>
               </div>
-              <div className="flex justify-between text-zinc-300">
-                <span className="text-zinc-500">가사 숨김</span>
+              <div className="flex justify-between text-zinc-700 dark:text-zinc-300">
+                <span className="text-zinc-500 dark:text-zinc-400">가사 숨김</span>
                 <span>H</span>
               </div>
-              <div className="flex justify-between text-zinc-300">
-                <span className="text-zinc-500">곡/슬라이드 점프</span>
+              <div className="flex justify-between text-zinc-700 dark:text-zinc-300">
+                <span className="text-zinc-500 dark:text-zinc-400">곡/슬라이드 점프</span>
                 <span>N.M + Enter</span>
               </div>
             </div>
@@ -388,7 +388,7 @@ export function EditorHeader({
           data-testid="header-present-btn"
           disabled={totalSongs === 0}
           onClick={onPresent}
-          className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold text-xs transition-all shadow-md shadow-emerald-950/50 hover:shadow-emerald-900/60 flex items-center gap-1.5 cursor-pointer"
+          className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold text-xs transition-all shadow-sm dark:shadow-md dark:shadow-emerald-950/50 dark:hover:shadow-emerald-900/60 flex items-center gap-1.5 cursor-pointer"
         >
           <svg className="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24">
             <path d="M8 5v14l11-7z" />
