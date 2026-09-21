@@ -1,9 +1,6 @@
 import React, { useState, useMemo, useEffect } from "react";
 import type { Deck } from "@repo/shared";
-import {
-  hangulIncludes,
-  splitLyricsIntoSlides,
-} from "@repo/shared";
+import { hangulIncludes, splitLyricsIntoSlides } from "@repo/shared";
 import { ExternalSearchLinks } from "./ExternalSearchLinks";
 import {
   useAvailableSongs,
@@ -73,11 +70,11 @@ export function SongPickerModal({
       if (!q) return true;
 
       const deck = item.deck;
-      return (
-        hangulIncludes(deck.title, q) ||
-        hangulIncludes(deck.artist ?? "", q) ||
-        hangulIncludes(deck.lyricsRaw ?? "", q)
-      );
+      const matchesMeta =
+        hangulIncludes(deck.title, q) || hangulIncludes(deck.artist ?? "", q);
+
+      // 곡 제목·아티스트 또는 가사 본문으로 검색
+      return matchesMeta || hangulIncludes(deck.lyricsRaw ?? "", q);
     });
   }, [availableSongs, searchQuery, filter]);
 
@@ -92,7 +89,11 @@ export function SongPickerModal({
 
   // 선택 유효성 보정
   useEffect(() => {
-    if (filteredSongs.length > 0 && (!selectedSongItem || !filteredSongs.some(s => s.deck.id === selectedSongId))) {
+    if (
+      filteredSongs.length > 0 &&
+      (!selectedSongItem ||
+        !filteredSongs.some((s) => s.deck.id === selectedSongId))
+    ) {
       setSelectedSongId(filteredSongs[0].deck.id);
     }
   }, [filteredSongs, selectedSongId, selectedSongItem]);
@@ -143,10 +144,10 @@ export function SongPickerModal({
     onClose();
   };
 
-  // 원문 가사 줄 및 분할선 렌더링을 위한 파싱
-  const rawLines = selectedSongItem?.deck.lyricsRaw
-    ? selectedSongItem.deck.lyricsRaw.split("\n")
-    : [];
+  // 원문 가사 줄 및 분할선 렌더링을 위한 파싱 (내 곡 및 공유 찬양 모두 전문 표시)
+  const rawLines = !selectedSongItem
+    ? []
+    : selectedSongItem.deck.lyricsRaw.split("\n");
 
   return (
     <div
@@ -173,7 +174,8 @@ export function SongPickerModal({
               </span>
             </div>
             <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
-              보관된 찬양 가사를 검색하여 세트에 추가하거나, 새 가사를 직접 입력할 수 있습니다.
+              보관된 찬양 가사를 검색하여 세트에 추가하거나, 새 가사를 직접
+              입력할 수 있습니다.
             </p>
           </div>
 
@@ -296,7 +298,9 @@ export function SongPickerModal({
                       : "bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800/80 hover:bg-emerald-100 dark:hover:bg-emerald-900/60"
                   }`}
                 >
-                  <span>{mode === "create" ? "← 목록 보기" : "+ 새 가사 입력"}</span>
+                  <span>
+                    {mode === "create" ? "← 목록 보기" : "+ 새 가사 입력"}
+                  </span>
                 </button>
               </div>
             </div>
@@ -361,7 +365,9 @@ export function SongPickerModal({
                       </div>
 
                       <div className="flex items-center justify-between gap-2 text-[11px] text-zinc-500 dark:text-zinc-400">
-                        <span className="truncate">{deck.artist || "아티스트 미상"}</span>
+                        <span className="truncate">
+                          {deck.artist || "아티스트 미상"}
+                        </span>
                       </div>
 
                       {firstSnippet && (
@@ -388,7 +394,8 @@ export function SongPickerModal({
                     새 찬양 가사 직접 입력
                   </h3>
                   <p className="text-xs text-zinc-500 mt-0.5">
-                    가사를 입력하면 빈 줄(엔터 2번) 기준으로 슬라이드가 자동 분할됩니다. (슬라이드당 최대 4줄)
+                    가사를 입력하면 빈 줄(엔터 2번) 기준으로 슬라이드가 자동
+                    분할됩니다. (슬라이드당 최대 4줄)
                   </p>
                 </div>
 
@@ -431,7 +438,8 @@ export function SongPickerModal({
                 <div className="flex-1 flex flex-col min-h-[220px]">
                   <div className="flex items-center justify-between mb-1.5">
                     <label className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">
-                      가사 원문 붙여넣기 <span className="text-rose-500">*</span>
+                      가사 원문 붙여넣기{" "}
+                      <span className="text-rose-500">*</span>
                     </label>
                     {previewSlides.length > 0 && (
                       <span className="text-xs font-mono font-medium text-emerald-600 dark:text-emerald-400">
@@ -484,11 +492,14 @@ export function SongPickerModal({
                             : "bg-indigo-100 text-indigo-800 dark:bg-indigo-950 dark:text-indigo-300"
                         }`}
                       >
-                        {selectedSongItem.source === "mine" ? "내 보관함" : "공유 찬양"}
+                        {selectedSongItem.source === "mine"
+                          ? "내 보관함"
+                          : "공유 찬양"}
                       </span>
                     </div>
                     <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
-                      {selectedSongItem.deck.artist || "아티스트 미상"} · 총 {selectedSongItem.deck.slides.length}개 슬라이드(소절)
+                      {selectedSongItem.deck.artist || "아티스트 미상"} · 총{" "}
+                      {selectedSongItem.deck.slides.length}개 슬라이드(소절)
                     </p>
                   </div>
 
@@ -533,6 +544,7 @@ export function SongPickerModal({
                         </div>
                       );
                     })}
+
                   </div>
                 </div>
 
@@ -541,7 +553,9 @@ export function SongPickerModal({
                   <button
                     type="button"
                     data-testid="song-picker-copy-lyrics-btn"
-                    onClick={() => handleCopyLyrics(selectedSongItem.deck.lyricsRaw)}
+                    onClick={() =>
+                      handleCopyLyrics(selectedSongItem.deck.lyricsRaw)
+                    }
                     className="px-3 py-2 rounded-xl border border-zinc-300 dark:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-800 text-xs font-medium text-zinc-700 dark:text-zinc-300 flex items-center gap-1.5 transition-colors cursor-pointer"
                   >
                     <svg
@@ -557,7 +571,9 @@ export function SongPickerModal({
                         d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
                       />
                     </svg>
-                    <span>{copied ? "가사 복사됨 ✓" : "가사 텍스트 복사"}</span>
+                    <span>
+                      {copied ? "가사 복사됨 ✓" : "가사 텍스트 복사"}
+                    </span>
                   </button>
 
                   <div className="flex items-center gap-2.5">

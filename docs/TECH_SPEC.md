@@ -1,7 +1,7 @@
 # 기술 디자인 명세서 (Technical Specification)
 
-**문서 버전:** 1.1.0  
-**최종 갱신:** 2026-09-21 (구현 현황 반영)  
+**문서 버전:** 1.2.0  
+**최종 갱신:** 2026-09-21 (로컬 영속성 구현 반영)  
 **작성자:** Senior Software Architect  
 **대상 서비스:** 교회 찬양 슬라이드 제작 및 송출 서비스 (`prj-ppt`)  
 **문서 상태:** Approved Design Spec — 일부 항목은 실제 구현과 맞추어 개정됨 (§2.2 구현 현황 참조)
@@ -9,9 +9,15 @@
 > **1.1.0 개정 요약**
 >
 > 1. 배경 미디어 전송을 R2 커스텀 도메인 직통에서 **Worker 프록시(`/api/media/*`)** 로 정정했다 (§2.1, §5.4).
-> 2. **클라이언트 영속성 3단계(인메모리 → IndexedDB → 서버 동기화)** 를 명시했다. 현재는 1단계이며 다음 작업이 2단계다 (§5.5).
+> 2. **클라이언트 영속성 3단계(인메모리 → IndexedDB → 서버 동기화)** 를 명시했다 (§5.5).
 > 3. 사용자 커스텀 배경 업로드(PRD 4.3)를 데이터 모델과 API 계약에 반영했다 (§4.1, §7.1).
 > 4. 각 구성 요소의 구현 여부를 §2.2 표로 명시했다. 설계만 있고 코드가 없는 항목을 구분한다.
+>
+> **1.2.0 개정 요약**
+>
+> 1. 클라이언트 영속성 **Phase 2(IndexedDB)를 구현**했다. §2.2·§5.5 상태를 갱신했다.
+> 2. `decks` 스토어의 실제 역할(보관함 곡 전용)과 `by-presentation` 인덱스를 두지 않은 이유를 §5.4-4에 명시했다.
+> 3. 구 localStorage 보관함(`worship_user_songs_v1`) 마이그레이션 규칙을 §5.5에 추가했다.
 
 ---
 
@@ -100,23 +106,24 @@ flowchart TB
 
 본 명세의 항목 중 실제 코드가 있는 것과 설계만 있는 것을 구분한다. 이 표를 갱신하지 않은 채 "스펙에 있으니 구현되어 있다"고 가정하지 않는다.
 
-| 구성 요소                                     | 상태       | 비고                                                                                      |
-| --------------------------------------------- | ---------- | ----------------------------------------------------------------------------------------- |
-| `packages/shared` Zod 스키마 (§3)             | 구현       | Deck·Slide·Style·Presentation·Broadcast·API 전부 존재                                     |
-| `packages/db` Drizzle 스키마·마이그레이션(§4) | 구현       | 0000_initial, 0001_fts5 적용됨                                                            |
-| 스코프 쿼리 헬퍼 (§4.3)                       | 부분       | decks·presentations·backgrounds 헬퍼 존재. 실제 호출부는 `/api/backgrounds` 하나뿐        |
-| 3-Layer Slide Stage (§5.1)                    | 구현       | `components/stage/*` — 편집기와 송출이 동일 컴포넌트 사용                                 |
-| 입력 버퍼 엔진·단축키 (§5.2)                  | 구현       | `useNavigationBuffer`, `usePresentationShortcuts` (tinykeys)                              |
-| 세트 편집기 (PRD 4.4)                         | 부분       | 속성 패널·드래그·리사이즈·스트립 구현. 넘침 경고와 커서 기준 분할·합치기 미구현           |
-| 미디어 프록시 `/api/media/*` (§5.4)           | 구현       | HTTP Range 지원                                                                           |
-| **클라이언트 영속성 (§5.5)**                  | **미구현** | `presentationStore`는 모듈 메모리. 새로고침 시 전부 소실. **다음 작업(M3-A)**             |
-| Hono RPC 클라이언트 (`hc<AppType>`)           | 미구현     | `apps/web/src`에 `fetch` 호출이 0건. 배경 목록도 `INITIAL_BACKGROUNDS` 상수를 직접 읽는다 |
-| Better Auth (§4.1 auth 테이블)                | 스키마만   | 테이블·컬럼만 있고 런타임 연동 없음                                                       |
-| 발표자 보기·BroadcastChannel (§5.3)           | 스키마만   | `BroadcastMessageSchema`만 존재. 사용처 없음                                              |
-| PWA·Cache Storage·IndexedDB (§5.4)            | 미구현     | vite-plugin-pwa·idb 미설치                                                                |
-| Workers AI 가사 정규화 (§6)                   | 미구현     | `verifyNormalization` 검증 함수만 구현됨                                                  |
-| 공유·가사 라이브러리 API (§7)                 | 미구현     | 화면은 샘플 데이터로 선행 구현                                                            |
-| 사용자 커스텀 배경 업로드 (PRD 4.3)           | 미구현     | 배경 라이브러리 화면에 안내만 있음                                                        |
+| 구성 요소                                     | 상태     | 비고                                                                                       |
+| --------------------------------------------- | -------- | ------------------------------------------------------------------------------------------ |
+| `packages/shared` Zod 스키마 (§3)             | 구현     | Deck·Slide·Style·Presentation·Broadcast·API 전부 존재                                      |
+| `packages/db` Drizzle 스키마·마이그레이션(§4) | 구현     | 0000_initial, 0001_fts5 적용됨                                                             |
+| 스코프 쿼리 헬퍼 (§4.3)                       | 부분     | decks·presentations·backgrounds 헬퍼 존재. 실제 호출부는 `/api/backgrounds` 하나뿐         |
+| 3-Layer Slide Stage (§5.1)                    | 구현     | `components/stage/*` — 편집기와 송출이 동일 컴포넌트 사용                                  |
+| 입력 버퍼 엔진·단축키 (§5.2)                  | 구현     | `useNavigationBuffer`, `usePresentationShortcuts` (tinykeys)                               |
+| 세트 편집기 (PRD 4.4)                         | 부분     | 속성 패널·드래그·리사이즈·스트립 구현. 넘침 경고와 커서 기준 분할·합치기 미구현            |
+| 미디어 프록시 `/api/media/*` (§5.4)           | 구현     | HTTP Range 지원                                                                            |
+| **클라이언트 영속성 (§5.5)**                  | **구현** | IndexedDB Phase 2 완료. `presentationStore`·`songLibraryStore`가 문서 단위로 저장·복원한다 |
+| Hono RPC 클라이언트 (`hc<AppType>`)           | 미구현   | `apps/web/src`에 `fetch` 호출이 0건. 배경 목록도 `INITIAL_BACKGROUNDS` 상수를 직접 읽는다  |
+| Better Auth (§4.1 auth 테이블)                | 스키마만 | 테이블·컬럼만 있고 런타임 연동 없음                                                        |
+| 발표자 보기·BroadcastChannel (§5.3)           | 스키마만 | `BroadcastMessageSchema`만 존재. 사용처 없음                                               |
+| PWA·Cache Storage (§5.4)                      | 미구현   | vite-plugin-pwa 미설치. IndexedDB(`idb`)는 도입 완료                                       |
+| Workers AI 가사 정규화 (§6)                   | 미구현   | `verifyNormalization` 검증 함수만 구현됨                                                   |
+| 공유·가사 라이브러리 API (§7)                 | 미구현   | 화면은 샘플 데이터로 선행 구현                                                             |
+| 사용자 커스텀 배경 업로드 (PRD 4.3)           | 미구현   | 배경 라이브러리 화면에 안내만 있음                                                         |
+| 저장 실패 경고 배너                           | 구현     | `StorageWarningBanner` — 용량 초과와 저장소 차단을 구분, 닫을 수 없음                      |
 
 ---
 
@@ -984,7 +991,7 @@ Chrome 공식 **Window Management API**를 활용한 다중 디스플레이 투�
    - 세트에 포함된 모든 배경 영상 URL을 `fetch(url, { mode: 'cors' })`로 사전 호출하여 Service Worker 캐시 스토리지에 100% 다운로드.
    - 전체 다운로드 완료 검증 후 UI에 `오프라인 송출 가능 (Ready for Offline)` 배지 활성화.
 
-4. **클라이언트 IndexedDB 스키마 명세 (`worship-offline-db`, Version 1)** — _미구현, M3-A에서 도입_:
+4. **클라이언트 IndexedDB 스키마 명세 (`worship-offline-db`, Version 1)** — _구현 완료 (`apps/web/src/lib/storage/db.ts`)_:
    오프라인 송출 보장을 위해 클라이언트는 `idb` 라이브러리를 통해 다음 객체 저장소(Object Stores)를 관리한다. 이 스토어는 오프라인 송출뿐 아니라 **평상시 편집 데이터의 1차 원천**이기도 하다 (§5.5).
 
    ```typescript
@@ -999,11 +1006,15 @@ Chrome 공식 **Window Management API**를 활용한 다중 디스플레이 투�
        value: Presentation;
        indexes: { "by-date": string };
      };
-     // 2. 덱(곡) 상세 데이터 저장소 (슬라이드 및 스타일 포함)
+     // 2. 보관함 곡 저장소 (슬라이드 및 스타일 포함)
+     //
+     // 프레젠테이션에 속한 덱은 presentation.items[].deck 에 임베드된 채로
+     // 프레젠테이션 문서와 함께 저장된다 (§4.0-2의 JSON 반정규화와 같은 이유:
+     // 송출 시 세트는 항상 통째로 소비되므로 단일 읽기가 조인보다 빠르다).
+     // 따라서 이 스토어에는 scope='library' 곡만 들어가고 by-presentation 인덱스는 두지 않는다.
      decks: {
        key: string; // deckId (UUID)
        value: Deck;
-       indexes: { "by-presentation": string };
      };
      // 3. 배경 미디어 메타데이터 저장소
      backgrounds: {
@@ -1049,23 +1060,32 @@ Chrome 공식 **Window Management API**를 활용한 다중 디스플레이 투�
 
 이 서비스는 "서버에 저장하고 필요할 때 받아온다"가 아니라 **"로컬에 저장하고 서버와 동기화한다"** 는 순서로 간다. 예배 당일 네트워크를 신뢰할 수 없기 때문이고, 로그인 없이도 곧바로 써 볼 수 있어야 하기 때문이다. 따라서 저장 계층을 세 단계로 나누어 도입한다.
 
-| 단계                             | 원천                                          | 상태          | 실패 시 사용자가 잃는 것      |
-| -------------------------------- | --------------------------------------------- | ------------- | ----------------------------- |
-| **Phase 1 — 인메모리**           | 모듈 스코프 `presentationStore`               | **현재**      | 새로고침·탭 종료 시 작업 전부 |
-| **Phase 2 — IndexedDB (M3-A)**   | `worship-offline-db`, 스토어가 단일 원천      | **다음 작업** | 브라우저 데이터 삭제 시에만   |
-| **Phase 3 — 서버 동기화 (M3-B)** | D1이 정본, IndexedDB가 로컬 캐시 겸 작업 사본 | 대기          | 없음 (기기 간 복구 가능)      |
+| 단계                             | 원천                                          | 상태      | 실패 시 사용자가 잃는 것      |
+| -------------------------------- | --------------------------------------------- | --------- | ----------------------------- |
+| **Phase 1 — 인메모리**           | 모듈 스코프 `presentationStore`               | 종료      | 새로고침·탭 종료 시 작업 전부 |
+| **Phase 2 — IndexedDB (M3-A)**   | `worship-offline-db`, 스토어가 단일 원천      | **현재**  | 브라우저 데이터 삭제 시에만   |
+| **Phase 3 — 서버 동기화 (M3-B)** | D1이 정본, IndexedDB가 로컬 캐시 겸 작업 사본 | 다음 작업 | 없음 (기기 간 복구 가능)      |
 
-**Phase 2 설계 규칙 (M3-A):**
+**Phase 2 설계 규칙 (M3-A, 구현 완료):**
 
 1. **스토어가 단일 원천이다.** `presentationStore`의 모든 뮤테이터는 상태 교체 직후 해당 문서 하나만 IndexedDB `presentations`/`decks` 스토어에 기록한다. 전체 컬렉션을 매번 직렬화하지 않는다.
 2. **쓰기는 디바운스(≈300ms)하되, 창이 숨겨지거나 종료될 때 대기 중인 쓰기를 즉시 시작한다.** `visibilitychange`(hidden)와 `pagehide`에서 타이머를 앞당겨 트랜잭션을 연다. IndexedDB는 비동기라 언로드 시점의 완료를 보장할 수 없으므로, 보장 대신 **디바운스 간격을 짧게 유지**하는 것으로 손실 창을 최소화한다. 마지막 쓰기가 유실되어도 직전 저장본이 남도록 문서 단위 전체 교체(put)로 기록한다.
-3. **부팅 순서:** IndexedDB에서 문서 목록을 로드 → 있으면 그것으로 스토어를 초기화 → 없을 때만 샘플 시드를 넣는다. 현재의 `createSeedState()`는 "저장소가 비어 있을 때의 초기값"으로 격하된다.
+3. **부팅 순서:** IndexedDB에서 문서 목록을 로드 → 있으면 그것으로 스토어를 초기화 → 없을 때만 샘플 시드를 넣는다. `createSeedState()`는 "저장소가 비어 있을 때의 초기값"으로 격하되었고, 하이드레이션이 끝나기 전에는 라우터를 렌더하지 않는다(시드가 한 프레임 보였다가 교체되면 그 사이 편집이 저장본을 덮어쓴다).
 4. **쓰기 실패를 삼키지 않는다.** 용량 초과(`QuotaExceededError`)나 시크릿 모드로 IndexedDB를 못 쓰면 편집기 상단에 '이 브라우저에 저장할 수 없습니다' 배너를 띄운다. 조용히 인메모리로 폴백하면 사용자는 저장된 줄 알고 예배 당일에 잃는다.
 5. **스키마 버전:** `openDB(..., version)`의 upgrade 경로를 처음부터 유지한다. 스토어 구조가 바뀌면 버전을 올리고 마이그레이션을 쓴다. 저장된 문서는 읽을 때 `PresentationSchema.safeParse`로 검증하고, 실패한 문서는 버리지 말고 격리 보관한 뒤 사용자에게 알린다.
 6. **Undo/Redo 히스토리는 저장하지 않는다.** 세션 한정 상태이며 직렬화 비용이 크다.
-7. **커스텀 배경(PRD 4.3)의 로컬 보관:** Phase 2에서는 업로드 파일을 Blob으로 IndexedDB에 두고 `blob:` URL로 재생한다. Phase 3에서 R2 업로드로 승격한다.
+7. **커스텀 배경(PRD 4.3)의 로컬 보관:** 업로드 기능 구현 시 파일을 Blob으로 IndexedDB에 두고 `blob:` URL로 재생한다. Phase 3에서 R2 업로드로 승격한다. (업로드 자체가 아직 미구현이라 이 규칙은 대기 중이다.)
 
-**Zero-Fetch 불변식과의 관계:** 송출 라우트(`/present/*`)는 Phase 2 이후 IndexedDB와 Cache Storage만 읽는다. Phase 1인 현재는 메모리만 읽으므로 불변식 자체는 이미 성립하지만, **송출 직전 새로고침 한 번에 세트가 사라진다**는 더 큰 위험이 남아 있다. 이것이 M3-A를 M3-B보다 앞에 둔 이유다.
+**구 localStorage 보관함 마이그레이션:**
+
+0f68563에서 곡 보관함을 localStorage(`worship_user_songs_v1`)에 저장한 적이 있다. 부팅 시 1회 IndexedDB로 이관한다.
+
+- 항목별 `DeckSchema.safeParse`로 읽어 유효한 곡만 옮긴다. **배열 전체를 한 번에 파싱하지 않는다** — 이전 구현이 그렇게 해서, 항목 하나만 깨져도 보관함 전체를 못 읽고 다음 저장이 빈 배열로 덮어쓰는 데이터 손실 경로가 있었다.
+- 원본 JSON은 지우지 않고 `worship_user_songs_v1__migrated_backup`으로 옮긴다. 옮기지 못한 손상 항목도 그 안에 남아 복구할 수 있다.
+
+**구현 위치:** `apps/web/src/lib/storage/`(`db.ts`, `presentationRepository.ts`, `songRepository.ts`, `persistenceStatus.ts`), 스토어 연동은 `features/presentation/presentationStore.ts`·`features/editor/songLibraryStore.ts`, 부팅 게이트는 `App.tsx`, 경고 배너는 `components/common/StorageWarningBanner.tsx`.
+
+**Zero-Fetch 불변식과의 관계:** 송출 라우트(`/present/*`)는 하이드레이션된 메모리 상태만 읽고, 그 상태의 원천은 IndexedDB다. 남은 네트워크 의존은 배경 영상(`/api/media/*`) 하나이며, M4에서 Cache Storage로 덮으면 불변식이 완성된다.
 
 ---
 
@@ -1273,7 +1293,8 @@ export type SearchCatalogResponse = z.infer<typeof SearchCatalogResponseSchema>;
 
 ### 8.1 비영리 저작권 보호 및 공개 범위 제한
 
-- **가사 전문 노출 차단**: 검색 결과 및 미인증 공유 카드에는 **첫 슬라이드 또는 첫 2줄만 노출**하고, 전문은 사용자가 로그인 후 본인 보관함으로 '가져오기(Fork)'한 경우에만 렌더링한다.
+- **공개 웹 카탈로그 가사 전문 노출 차단**: 로그인하지 않은 외부 사용자가 접근하는 공개 웹 카탈로그 검색 결과(`GET /api/catalog/search`) 및 미인증 공유 카드에는 **첫 슬라이드 또는 첫 2줄만 노출**(`firstSlidePreview`)하여 가사 크롤링 및 공중송신권 분쟁을 방지한다.
+- **편집기 내부 곡 추가 모달(SongPickerModal)**: 예배 봉사자가 찬양 버전(절, 브릿지)을 확인하고 빠른 선곡을 할 수 있도록, 편집기 내부 곡 선택 시에는 공유 곡도 가사 전문 미리보기, 가사 본문 검색, 텍스트 복사를 정상 제공한다 (세트 추가 시 어차피 에디터로 임포트되므로).
 - **게시 중단(Takedown) 절차**: 저작권자 요청 접수 시 `reports` 테이블을 통해 관리자가 즉각 해당 `decks.visibility = 'private'` 격리 및 카탈로그 삭제를 수행하는 운영 쿼리를 구비한다.
 
 ### 8.2 Better Auth 및 D1 세션 보안
