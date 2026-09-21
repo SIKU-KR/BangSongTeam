@@ -1,6 +1,9 @@
 import React, { useState } from "react";
-import type { Slide, DeckStyle } from "@repo/shared";
+import type { Slide, DeckStyle, TextBoxPosition } from "@repo/shared";
+import { DEFAULT_DECK_STYLE } from "@repo/shared";
 import { SlideStage } from "../../components/stage/SlideStage";
+import { TextBoxMoveable } from "./TextBoxMoveable";
+import type { SnapGuides } from "./textBoxDrag";
 
 export interface EditorStageCanvasProps {
   slide?: Slide | null;
@@ -17,6 +20,8 @@ export interface EditorStageCanvasProps {
   onZoomChange?: (zoom: number) => void;
   onResetPresentation?: () => void;
   onOpenLyricModal?: () => void;
+  /** 텍스트 박스를 직접 조작(드래그/리사이즈)해 스타일을 바꿀 때 호출 */
+  onUpdateStyle?: (update: Partial<DeckStyle>) => void;
   className?: string;
 }
 
@@ -43,10 +48,29 @@ export function EditorStageCanvas({
   onZoomChange,
   onResetPresentation,
   onOpenLyricModal,
+  onUpdateStyle,
   className = "",
 }: EditorStageCanvasProps): React.JSX.Element {
   const [isBlackout, setIsBlackout] = useState(false);
   const [isLyricsHidden, setIsLyricsHidden] = useState(false);
+  // 텍스트 박스 직접 조작 (react-moveable)
+  const [textBoxEl, setTextBoxEl] = useState<HTMLDivElement | null>(null);
+  const [draft, setDraft] = useState<{
+    position: TextBoxPosition;
+    guides: SnapGuides;
+  } | null>(null);
+
+  const baseStyle = style ?? DEFAULT_DECK_STYLE;
+  const effectiveStyle = draft
+    ? { ...baseStyle, position: draft.position }
+    : baseStyle;
+  const canEditTextBox =
+    !!onUpdateStyle &&
+    !!slide &&
+    slide.lines.length > 0 &&
+    !isBlackout &&
+    !isLyricsHidden;
+  const refreshKey = JSON.stringify([effectiveStyle, slide?.lines, zoomLevel]);
 
   // 빈 상태 (등록된 곡 또는 슬라이드가 없을 때)
   if (!slide || totalSlides === 0) {
@@ -147,12 +171,40 @@ export function EditorStageCanvas({
         >
           <SlideStage
             slide={slide}
-            style={style}
+            style={effectiveStyle}
             backgroundUrl={backgroundUrl}
             posterUrl={posterUrl}
             isBlackout={isBlackout}
             isLyricsHidden={isLyricsHidden}
+            textBoxRef={setTextBoxEl}
+            isTextInteracting={draft !== null}
           />
+
+          {/* 텍스트 박스 조작: 중앙선 스냅 가이드 */}
+          {draft?.guides.vertical && (
+            <div
+              data-testid="snap-guide-vertical"
+              className="absolute inset-y-0 left-1/2 w-px bg-emerald-400/80 pointer-events-none z-30"
+            />
+          )}
+          {draft?.guides.horizontal && (
+            <div
+              data-testid="snap-guide-horizontal"
+              className="absolute inset-x-0 top-1/2 h-px bg-emerald-400/80 pointer-events-none z-30"
+            />
+          )}
+
+          {/* 텍스트 박스 조작: 드래그 이동 / 좌우 폭 리사이즈 */}
+          {canEditTextBox && (
+            <TextBoxMoveable
+              target={textBoxEl}
+              refreshKey={refreshKey}
+              onPreview={(position, guides) =>
+                setDraft(position ? { position, guides } : null)
+              }
+              onCommit={(position) => onUpdateStyle?.({ position })}
+            />
+          )}
 
           {/* 좌우 슬라이드 넘김 호버 화살표 */}
           <button

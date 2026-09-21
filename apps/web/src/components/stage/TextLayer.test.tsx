@@ -120,4 +120,25 @@ describe("TextLayer Component", () => {
     render(<TextLayer slide={null} style={defaultStyle} />);
     expect(screen.getByTestId("text-layer-box")).toBeInTheDocument();
   });
+  it("should expose the text box element through boxRef", () => {
+    const ref = React.createRef<HTMLDivElement>();
+    render(<TextLayer slide={sampleSlide} style={defaultStyle} boxRef={ref} />);
+    expect(ref.current).toBe(screen.getByTestId("text-layer-box"));
+  });
+
+  it("should disable position transitions while interacting", () => {
+    const { rerender } = render(
+      <TextLayer slide={sampleSlide} style={defaultStyle} />,
+    );
+    expect(screen.getByTestId("text-layer-box").className).toContain(
+      "transition-all",
+    );
+
+    rerender(
+      <TextLayer slide={sampleSlide} style={defaultStyle} isInteracting />,
+    );
+    expect(screen.getByTestId("text-layer-box").className).not.toContain(
+      "transition-all",
+    );
+  });
 });

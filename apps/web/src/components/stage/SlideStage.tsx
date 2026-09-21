@@ -25,6 +25,10 @@ export interface SlideStageProps {
   isBlackout?: boolean;
   /** 가사 숨김 여부 (H 단축키) */
   isLyricsHidden?: boolean;
+  /** 텍스트 박스 DOM 참조 (편집기 Moveable 타깃용) */
+  textBoxRef?: React.Ref<HTMLDivElement>;
+  /** 텍스트 박스 드래그/리사이즈 진행 중 여부 */
+  isTextInteracting?: boolean;
   /** 컨테이너 커스텀 크기 (선택적) */
   containerDimensions?: { width?: number; height?: number };
   className?: string;
@@ -46,6 +50,8 @@ export function SlideStage({
   posterUrl,
   isBlackout = false,
   isLyricsHidden = false,
+  textBoxRef,
+  isTextInteracting = false,
   containerDimensions,
   className = "",
 }: SlideStageProps): React.JSX.Element {
@@ -136,6 +142,8 @@ export function SlideStage({
           slide={slide}
           style={style}
           isLyricsHidden={isLyricsHidden}
+          boxRef={textBoxRef}
+          isInteracting={isTextInteracting}
         />
       </div>
     </div>

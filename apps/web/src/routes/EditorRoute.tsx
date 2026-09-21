@@ -372,6 +372,9 @@ export function EditorRoute(): React.JSX.Element {
           onZoomChange={setZoomLevel}
           onResetPresentation={handleResetPresentation}
           onOpenLyricModal={() => setIsLyricModalOpen(true)}
+          onUpdateStyle={(styleUpdate) =>
+            updateSongStyle(safeSongIndex, styleUpdate)
+          }
         />
 
         {/* 우측 패널: 디자인 & 속성 인스펙터 */}

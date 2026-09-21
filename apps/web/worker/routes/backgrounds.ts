@@ -1,6 +1,12 @@
 import { Hono } from "hono";
+import { zValidator } from "@hono/zod-validator";
 import { createD1Client, getBackgrounds } from "@repo/db";
-import type { BackgroundMedia } from "@repo/shared";
+import {
+  BackgroundsQuerySchema,
+  hangulIncludes,
+  type BackgroundMedia,
+  type BackgroundsQuery,
+} from "@repo/shared";
 import type { AppEnv } from "../types";
 
 /**
@@ -20,39 +26,57 @@ export function buildMediaUrls(
   };
 }
 
-const backgroundsRoute = new Hono<AppEnv>().get("/", async (c) => {
-  const db = createD1Client(c.env.DB);
-  const rows = await getBackgrounds(db);
+/**
+ * 제목(초성/자모 검색 지원)·태그·개수 필터를 순서대로 적용한다.
+ */
+export function filterBackgrounds(
+  list: BackgroundMedia[],
+  { q, tag, limit }: BackgroundsQuery,
+): BackgroundMedia[] {
+  let result = list;
+  if (q) result = result.filter((bg) => hangulIncludes(bg.title, q));
+  if (tag) result = result.filter((bg) => bg.tags.includes(tag));
+  return limit ? result.slice(0, limit) : result;
+}
 
-  const mediaList: BackgroundMedia[] = rows.map((row) => {
-    const { cdnUrl, posterUrl } = buildMediaUrls(
-      row.r2Key,
-      row.posterKey,
-      c.env.R2_PUBLIC_DOMAIN,
-    );
+const backgroundsRoute = new Hono<AppEnv>().get(
+  "/",
+  zValidator("query", BackgroundsQuerySchema),
+  async (c) => {
+    const query = c.req.valid("query");
+    const db = createD1Client(c.env.DB);
+    const rows = await getBackgrounds(db);
 
-    let parsedTags: string[] = [];
-    try {
-      parsedTags = JSON.parse(row.tags);
-    } catch {
-      parsedTags = [];
-    }
+    const mediaList: BackgroundMedia[] = rows.map((row) => {
+      const { cdnUrl, posterUrl } = buildMediaUrls(
+        row.r2Key,
+        row.posterKey,
+        c.env.R2_PUBLIC_DOMAIN,
+      );
 
-    return {
-      id: row.id,
-      title: row.title,
-      r2Key: row.r2Key,
-      posterKey: row.posterKey,
-      durationSec: row.durationSec,
-      license: row.license,
-      tags: parsedTags,
-      cdnUrl,
-      posterUrl,
-    };
-  });
+      let parsedTags: string[] = [];
+      try {
+        parsedTags = JSON.parse(row.tags);
+      } catch {
+        parsedTags = [];
+      }
 
-  return c.json(mediaList, 200);
-});
+      return {
+        id: row.id,
+        title: row.title,
+        r2Key: row.r2Key,
+        posterKey: row.posterKey,
+        durationSec: row.durationSec,
+        license: row.license,
+        tags: parsedTags,
+        cdnUrl,
+        posterUrl,
+      };
+    });
+
+    return c.json(filterBackgrounds(mediaList, query), 200);
+  },
+);
 
 export { backgroundsRoute };
 export default backgroundsRoute;

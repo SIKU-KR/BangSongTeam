@@ -8,6 +8,7 @@ import {
   getBackgroundPosterUrl,
 } from "@repo/shared";
 import { BackgroundPickerModal } from "./BackgroundPickerModal";
+import { ColorPickerField } from "./ColorPickerField";
 
 export interface SongPropertyPanelProps {
   style: DeckStyle;
@@ -362,11 +363,10 @@ export function SongPropertyPanel({
                   title={col.label}
                 />
               ))}
-              <input
-                type="text"
+              <ColorPickerField
+                className="ml-auto"
                 value={style.fontColor}
-                onChange={(e) => onUpdateStyle({ fontColor: e.target.value })}
-                className="w-20 ml-auto bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded px-2 py-1 text-[11px] font-mono text-zinc-700 dark:text-zinc-300 uppercase"
+                onCommit={(hex) => onUpdateStyle({ fontColor: hex })}
               />
             </div>
           </div>

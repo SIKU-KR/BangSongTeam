@@ -6,6 +6,10 @@ export interface TextLayerProps {
   slide?: Slide | null;
   style: DeckStyle;
   isLyricsHidden?: boolean;
+  /** 텍스트 박스 DOM 참조 (편집기에서 Moveable 타깃으로 사용) */
+  boxRef?: React.Ref<HTMLDivElement>;
+  /** 드래그/리사이즈 중에는 위치 transition을 꺼서 포인터를 지연 없이 따라가게 한다 */
+  isInteracting?: boolean;
   className?: string;
 }
 
@@ -17,6 +21,8 @@ export function TextLayer({
   slide,
   style,
   isLyricsHidden = false,
+  boxRef,
+  isInteracting = false,
   className = "",
 }: TextLayerProps): React.JSX.Element {
   const {
@@ -53,8 +59,11 @@ export function TextLayer({
       }}
     >
       <div
+        ref={boxRef}
         data-testid="text-layer-box"
-        className="absolute transition-all duration-100 ease-out flex flex-col justify-center"
+        className={`absolute flex flex-col justify-center ${
+          isInteracting ? "" : "transition-all duration-100 ease-out"
+        }`}
         style={{
           left: `${position.xPercent}%`,
           top: `${position.yPercent}%`,

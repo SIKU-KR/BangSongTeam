@@ -22,6 +22,12 @@ describe("Global Styles & Local Pretendard Webfont Configuration", () => {
     expect(cssContent).toMatch(/-webkit-font-smoothing:\s*antialiased/);
   });
 
+  it("should bundle Fontsource Korean webfonts locally for SUPPORTED_FONTS", () => {
+    const cssContent = fs.readFileSync(cssPath, "utf-8");
+    expect(cssContent).toMatch(/@fontsource\/noto-sans-kr/);
+    expect(cssContent).toMatch(/@fontsource\/nanum-myeongjo/);
+  });
+
   it("should import index.css in main.tsx", () => {
     const mainContent = fs.readFileSync(mainPath, "utf-8");
     expect(mainContent).toMatch(/import\s+['"].\/index\.css['"]/);

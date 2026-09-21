@@ -8,6 +8,7 @@ import {
 } from "@repo/shared";
 import { QuickLyricPasteModal } from "./QuickLyricPasteModal";
 import { ThemeMenuButton } from "../../components/common/ThemeMenuButton";
+import { SortableItem, SortableList, slideSortableId } from "./SortableList";
 
 export interface EditorSidebarProps {
   items: PresentationItem[];
@@ -377,105 +378,111 @@ export function EditorSidebar({
           {/* 탭 1: 프레젠테이션 곡 목록 */}
           {activeTab === "songs" && (
             <div className="flex-1 overflow-y-auto p-3 flex flex-col justify-between">
-              <div className="space-y-1.5">
-                {items.map((item, index) => {
-                  const isActive = index === activeSongIndex;
-                  const deck = item.deck;
-                  const title = deck?.title || "제목 없음";
-                  const artist = deck?.artist || "";
-                  const slideCount = deck?.slides.length ?? 0;
+              <SortableList
+                ids={items.map((item) => item.id)}
+                onReorder={onReorderSong}
+              >
+                <div className="space-y-1.5">
+                  {items.map((item, index) => {
+                    const isActive = index === activeSongIndex;
+                    const deck = item.deck;
+                    const title = deck?.title || "제목 없음";
+                    const artist = deck?.artist || "";
+                    const slideCount = deck?.slides.length ?? 0;
 
-                  return (
-                    <div
-                      key={item.id}
-                      data-testid={`sidebar-song-item-${index}`}
-                      onClick={() => onSelectSong(index)}
-                      className={`group relative p-2.5 rounded-xl border flex items-center justify-between gap-2 cursor-pointer transition-all ${
-                        isActive
-                          ? "bg-emerald-50/60 dark:bg-zinc-900 border-emerald-500/70 shadow-sm dark:shadow-md ring-1 ring-emerald-500/30"
-                          : "bg-zinc-50 dark:bg-zinc-900/40 border-zinc-200 dark:border-zinc-800/80 hover:border-zinc-300 dark:hover:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-900/80"
-                      }`}
-                    >
-                      <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                        <span
-                          className={`w-6 h-6 rounded-lg flex items-center justify-center text-xs font-mono font-bold shrink-0 ${
-                            isActive
-                              ? "bg-emerald-600 text-white"
-                              : "bg-zinc-200 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 group-hover:text-zinc-900 dark:group-hover:text-zinc-200"
-                          }`}
-                        >
-                          {index + 1}
-                        </span>
-                        <div className="min-w-0 flex-1">
-                          <div className="text-xs font-semibold text-zinc-900 dark:text-zinc-100 truncate">
-                            {title}
-                          </div>
-                          <div className="text-[11px] text-zinc-500 dark:text-zinc-400 truncate flex items-center gap-1.5">
-                            {artist && <span>{artist}</span>}
-                            <span className="text-[10px] text-zinc-400 dark:text-zinc-500 font-mono">
-                              {slideCount}장
-                            </span>
+                    return (
+                      <SortableItem
+                        key={item.id}
+                        sortableId={item.id}
+                        data-testid={`sidebar-song-item-${index}`}
+                        onClick={() => onSelectSong(index)}
+                        className={`group relative p-2.5 rounded-xl border flex items-center justify-between gap-2 cursor-pointer transition-all ${
+                          isActive
+                            ? "bg-emerald-50/60 dark:bg-zinc-900 border-emerald-500/70 shadow-sm dark:shadow-md ring-1 ring-emerald-500/30"
+                            : "bg-zinc-50 dark:bg-zinc-900/40 border-zinc-200 dark:border-zinc-800/80 hover:border-zinc-300 dark:hover:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-900/80"
+                        }`}
+                      >
+                        <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                          <span
+                            className={`w-6 h-6 rounded-lg flex items-center justify-center text-xs font-mono font-bold shrink-0 ${
+                              isActive
+                                ? "bg-emerald-600 text-white"
+                                : "bg-zinc-200 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 group-hover:text-zinc-900 dark:group-hover:text-zinc-200"
+                            }`}
+                          >
+                            {index + 1}
+                          </span>
+                          <div className="min-w-0 flex-1">
+                            <div className="text-xs font-semibold text-zinc-900 dark:text-zinc-100 truncate">
+                              {title}
+                            </div>
+                            <div className="text-[11px] text-zinc-500 dark:text-zinc-400 truncate flex items-center gap-1.5">
+                              {artist && <span>{artist}</span>}
+                              <span className="text-[10px] text-zinc-400 dark:text-zinc-500 font-mono">
+                                {slideCount}장
+                              </span>
+                            </div>
                           </div>
                         </div>
-                      </div>
 
-                      {/* 순서 이동 & 복제 & 삭제 버튼 */}
-                      <div className="flex items-center gap-0.5 shrink-0 opacity-80 group-hover:opacity-100">
-                        <button
-                          type="button"
-                          disabled={index === 0}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onReorderSong(index, index - 1);
-                          }}
-                          className="p-1 rounded text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white disabled:opacity-20 cursor-pointer"
-                          title="위로 이동"
-                        >
-                          ▲
-                        </button>
-                        <button
-                          type="button"
-                          disabled={index === items.length - 1}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onReorderSong(index, index + 1);
-                          }}
-                          className="p-1 rounded text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white disabled:opacity-20 cursor-pointer"
-                          title="아래로 이동"
-                        >
-                          ▼
-                        </button>
-                        {onDuplicateSong && (
+                        {/* 순서 이동 & 복제 & 삭제 버튼 */}
+                        <div className="flex items-center gap-0.5 shrink-0 opacity-80 group-hover:opacity-100">
                           <button
                             type="button"
+                            disabled={index === 0}
                             onClick={(e) => {
                               e.stopPropagation();
-                              onDuplicateSong(index);
+                              onReorderSong(index, index - 1);
                             }}
-                            className="p-1 rounded text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200 cursor-pointer"
-                            title="곡 복제"
+                            className="p-1 rounded text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white disabled:opacity-20 cursor-pointer"
+                            title="위로 이동"
                           >
-                            ⧉
+                            ▲
                           </button>
-                        )}
-                        {items.length > 1 && (
                           <button
                             type="button"
+                            disabled={index === items.length - 1}
                             onClick={(e) => {
                               e.stopPropagation();
-                              onDeleteSong(index);
+                              onReorderSong(index, index + 1);
                             }}
-                            className="p-1 rounded text-zinc-400 hover:text-red-500 dark:text-zinc-500 dark:hover:text-red-400 cursor-pointer"
-                            title="곡 삭제"
+                            className="p-1 rounded text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white disabled:opacity-20 cursor-pointer"
+                            title="아래로 이동"
                           >
-                            ✕
+                            ▼
                           </button>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
+                          {onDuplicateSong && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onDuplicateSong(index);
+                              }}
+                              className="p-1 rounded text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200 cursor-pointer"
+                              title="곡 복제"
+                            >
+                              ⧉
+                            </button>
+                          )}
+                          {items.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onDeleteSong(index);
+                              }}
+                              className="p-1 rounded text-zinc-400 hover:text-red-500 dark:text-zinc-500 dark:hover:text-red-400 cursor-pointer"
+                              title="곡 삭제"
+                            >
+                              ✕
+                            </button>
+                          )}
+                        </div>
+                      </SortableItem>
+                    );
+                  })}
+                </div>
+              </SortableList>
 
               {/* 새 곡 추가 버튼 */}
               <div className="pt-3 border-t border-zinc-200 dark:border-zinc-800/80 mt-2">
@@ -507,102 +514,108 @@ export function EditorSidebar({
           {/* 탭 2: 슬라이드 목록 */}
           {activeTab === "slides" && (
             <div className="flex-1 overflow-y-auto p-3 flex flex-col justify-between">
-              <div className="space-y-2">
-                {currentSlides.map((slide, index) => {
-                  const isActive = index === activeSlideIndex;
-                  const textPreview = slide.lines[0] || "(빈 슬라이드)";
+              <SortableList
+                ids={currentSlides.map(slideSortableId)}
+                onReorder={(from, to) => onReorderSlide?.(from, to)}
+              >
+                <div className="space-y-2">
+                  {currentSlides.map((slide, index) => {
+                    const isActive = index === activeSlideIndex;
+                    const textPreview = slide.lines[0] || "(빈 슬라이드)";
 
-                  return (
-                    <div
-                      key={slide.id || index}
-                      data-testid={`sidebar-slide-item-${index}`}
-                      onClick={() => onSelectSlide(index)}
-                      className={`group relative p-2 rounded-lg border cursor-pointer transition-all flex items-center justify-between gap-2 ${
-                        isActive
-                          ? "bg-emerald-50/60 dark:bg-zinc-900 border-emerald-500 ring-1 ring-emerald-500/30"
-                          : "bg-zinc-50 dark:bg-zinc-900/40 border-zinc-200 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-900"
-                      }`}
-                    >
-                      <div className="flex items-center gap-2 min-w-0 flex-1">
-                        <span
-                          className={`w-5 h-5 rounded flex items-center justify-center text-xs font-mono font-bold shrink-0 ${
-                            isActive
-                              ? "bg-emerald-600 text-white"
-                              : "bg-zinc-200 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400"
-                          }`}
-                        >
-                          {index + 1}
-                        </span>
-                        <div className="min-w-0 flex-1">
-                          <p className="text-xs text-zinc-800 dark:text-zinc-200 truncate">
-                            {textPreview}
-                          </p>
-                          <p className="text-[10px] text-zinc-400 dark:text-zinc-500 truncate">
-                            {slide.lines.length}줄
-                          </p>
+                    return (
+                      <SortableItem
+                        key={slideSortableId(slide, index)}
+                        sortableId={slideSortableId(slide, index)}
+                        data-testid={`sidebar-slide-item-${index}`}
+                        onClick={() => onSelectSlide(index)}
+                        className={`group relative p-2 rounded-lg border cursor-pointer transition-all flex items-center justify-between gap-2 ${
+                          isActive
+                            ? "bg-emerald-50/60 dark:bg-zinc-900 border-emerald-500 ring-1 ring-emerald-500/30"
+                            : "bg-zinc-50 dark:bg-zinc-900/40 border-zinc-200 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-900"
+                        }`}
+                      >
+                        <div className="flex items-center gap-2 min-w-0 flex-1">
+                          <span
+                            className={`w-5 h-5 rounded flex items-center justify-center text-xs font-mono font-bold shrink-0 ${
+                              isActive
+                                ? "bg-emerald-600 text-white"
+                                : "bg-zinc-200 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400"
+                            }`}
+                          >
+                            {index + 1}
+                          </span>
+                          <div className="min-w-0 flex-1">
+                            <p className="text-xs text-zinc-800 dark:text-zinc-200 truncate">
+                              {textPreview}
+                            </p>
+                            <p className="text-[10px] text-zinc-400 dark:text-zinc-500 truncate">
+                              {slide.lines.length}줄
+                            </p>
+                          </div>
                         </div>
-                      </div>
 
-                      <div className="flex items-center gap-0.5 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-                        {onReorderSlide && (
-                          <>
+                        <div className="flex items-center gap-0.5 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                          {onReorderSlide && (
+                            <>
+                              <button
+                                type="button"
+                                disabled={index === 0}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  onReorderSlide(index, index - 1);
+                                }}
+                                className="p-0.5 text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white disabled:opacity-20 cursor-pointer text-[10px]"
+                                title="앞으로"
+                              >
+                                ▲
+                              </button>
+                              <button
+                                type="button"
+                                disabled={index === currentSlides.length - 1}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  onReorderSlide(index, index + 1);
+                                }}
+                                className="p-0.5 text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white disabled:opacity-20 cursor-pointer text-[10px]"
+                                title="뒤로"
+                              >
+                                ▼
+                              </button>
+                            </>
+                          )}
+                          {onDuplicateSlide && (
                             <button
                               type="button"
-                              disabled={index === 0}
                               onClick={(e) => {
                                 e.stopPropagation();
-                                onReorderSlide(index, index - 1);
+                                onDuplicateSlide(index);
                               }}
-                              className="p-0.5 text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white disabled:opacity-20 cursor-pointer text-[10px]"
-                              title="앞으로"
+                              className="p-0.5 text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white cursor-pointer"
+                              title="슬라이드 복제"
                             >
-                              ▲
+                              ⧉
                             </button>
+                          )}
+                          {currentSlides.length > 1 && (
                             <button
                               type="button"
-                              disabled={index === currentSlides.length - 1}
                               onClick={(e) => {
                                 e.stopPropagation();
-                                onReorderSlide(index, index + 1);
+                                onDeleteSlide(index);
                               }}
-                              className="p-0.5 text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white disabled:opacity-20 cursor-pointer text-[10px]"
-                              title="뒤로"
+                              className="p-0.5 text-zinc-400 hover:text-red-500 dark:text-zinc-500 dark:hover:text-red-400 cursor-pointer"
+                              title="슬라이드 삭제"
                             >
-                              ▼
+                              ✕
                             </button>
-                          </>
-                        )}
-                        {onDuplicateSlide && (
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              onDuplicateSlide(index);
-                            }}
-                            className="p-0.5 text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white cursor-pointer"
-                            title="슬라이드 복제"
-                          >
-                            ⧉
-                          </button>
-                        )}
-                        {currentSlides.length > 1 && (
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              onDeleteSlide(index);
-                            }}
-                            className="p-0.5 text-zinc-400 hover:text-red-500 dark:text-zinc-500 dark:hover:text-red-400 cursor-pointer"
-                            title="슬라이드 삭제"
-                          >
-                            ✕
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
+                          )}
+                        </div>
+                      </SortableItem>
+                    );
+                  })}
+                </div>
+              </SortableList>
 
               <div className="pt-3 border-t border-zinc-200 dark:border-zinc-800 mt-2">
                 <button

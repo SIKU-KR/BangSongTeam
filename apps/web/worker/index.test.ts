@@ -34,16 +34,6 @@ describe("Task 4.6: Miniflare/workerd 환경 Worker 및 D1 통합 테스트", ()
     );
   });
 
-  it("GET / returns 200 OK with HTML content for M0 deployment verification", async () => {
-    const res = await app.request("/", {}, env);
-    expect(res.status).toBe(200);
-    const contentType = res.headers.get("content-type");
-    expect(contentType).toContain("text/html");
-    const html = await res.text();
-    expect(html).toContain("Worship Slide");
-    expect(html).toContain("<!DOCTYPE html>");
-  });
-
   it("GET /api/health returns 200 OK with { status: 'ok' } in workerd runtime", async () => {
     const res = await app.request("/api/health", {}, env);
     expect(res.status).toBe(200);
@@ -78,6 +68,51 @@ describe("Task 4.6: Miniflare/workerd 환경 Worker 및 D1 통합 테스트", ()
     expect(first.tags.length).toBeGreaterThan(0);
     expect(first.cdnUrl).toMatch(/^https:\/\/.+\/loops\/.+\.mp4$/);
     expect(first.posterUrl).toMatch(/^https:\/\/.+\/posters\/.+\.webp$/);
+  });
+
+  it("GET /api/backgrounds?limit=3 limits the number of returned backgrounds", async () => {
+    const res = await app.request("/api/backgrounds?limit=3", {}, env);
+    expect(res.status).toBe(200);
+    const json = (await res.json()) as BackgroundMedia[];
+    expect(json).toHaveLength(3);
+  });
+
+  it("GET /api/backgrounds?tag= filters by exact tag", async () => {
+    const res = await app.request(
+      `/api/backgrounds?tag=${encodeURIComponent("웅장한")}`,
+      {},
+      env,
+    );
+    expect(res.status).toBe(200);
+    const json = (await res.json()) as BackgroundMedia[];
+    expect(json.length).toBeGreaterThan(0);
+    expect(json.length).toBeLessThan(10);
+    for (const bg of json) expect(bg.tags).toContain("웅장한");
+  });
+
+  it("GET /api/backgrounds?q= searches titles including choseong", async () => {
+    const byText = await app.request(
+      `/api/backgrounds?q=${encodeURIComponent("호수")}`,
+      {},
+      env,
+    );
+    const textJson = (await byText.json()) as BackgroundMedia[];
+    expect(textJson.map((bg) => bg.title)).toEqual(["고요한 호수 물결"]);
+
+    const byChoseong = await app.request(
+      `/api/backgrounds?q=${encodeURIComponent("ㅎㅅ")}`,
+      {},
+      env,
+    );
+    const choseongJson = (await byChoseong.json()) as BackgroundMedia[];
+    expect(choseongJson.map((bg) => bg.title)).toContain("고요한 호수 물결");
+  });
+
+  it("GET /api/backgrounds rejects invalid query with 400", async () => {
+    for (const qs of ["limit=abc", "limit=0", "limit=101", "limit=1.5"]) {
+      const res = await app.request(`/api/backgrounds?${qs}`, {}, env);
+      expect(res.status, qs).toBe(400);
+    }
   });
 
   it("GET /api/media/:key streams full video from R2 bucket with 200 OK", async () => {

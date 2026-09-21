@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import type { Slide, DeckStyle } from "@repo/shared";
 import { SlideStage } from "../../components/stage/SlideStage";
+import { SortableItem, SortableList, slideSortableId } from "./SortableList";
 
 export interface SlideFilmstripProps {
   slides: Slide[];
@@ -154,132 +155,139 @@ export function SlideFilmstrip({
 
       {/* 슬라이드 가로 스크롤 카드 목록 */}
       <div className="flex-1 overflow-x-auto overflow-y-hidden px-4 py-2 flex items-center gap-3 scrollbar-thin">
-        {slides.map((slide, index) => {
-          const isActive = index === activeSlideIndex;
-          const previewText = slide.lines[0] || "(빈 슬라이드)";
+        <SortableList
+          orientation="horizontal"
+          ids={slides.map(slideSortableId)}
+          onReorder={(from, to) => onReorderSlide?.(from, to)}
+        >
+          {slides.map((slide, index) => {
+            const isActive = index === activeSlideIndex;
+            const previewText = slide.lines[0] || "(빈 슬라이드)";
 
-          return (
-            <div
-              key={slide.id || index}
-              data-testid={`slide-strip-item-${index}`}
-              onClick={() => onSelectSlide(index)}
-              className={`group relative flex flex-col shrink-0 rounded-lg overflow-hidden cursor-pointer transition-all duration-150 ${
-                isActive
-                  ? "ring-2 ring-emerald-500 shadow-md dark:shadow-lg dark:shadow-emerald-950/60"
-                  : "hover:ring-1 hover:ring-zinc-300 dark:hover:ring-zinc-600 opacity-80 hover:opacity-100"
-              }`}
-              style={{ width: `${thumbWidth}px`, height: `${thumbHeight}px` }}
-            >
-              {/* 16:9 축소 슬라이드 프리뷰 */}
-              <div className="w-full h-full bg-black relative overflow-hidden pointer-events-none">
-                <SlideStage
-                  slide={slide}
-                  style={songStyle}
-                  backgroundUrl={backgroundUrl}
-                  posterUrl={posterUrl}
-                  containerDimensions={{
-                    width: thumbWidth,
-                    height: thumbHeight,
-                  }}
-                />
-              </div>
+            return (
+              <SortableItem
+                key={slideSortableId(slide, index)}
+                sortableId={slideSortableId(slide, index)}
+                data-testid={`slide-strip-item-${index}`}
+                onClick={() => onSelectSlide(index)}
+                className={`group relative flex flex-col shrink-0 rounded-lg overflow-hidden cursor-pointer transition-all duration-150 ${
+                  isActive
+                    ? "ring-2 ring-emerald-500 shadow-md dark:shadow-lg dark:shadow-emerald-950/60"
+                    : "hover:ring-1 hover:ring-zinc-300 dark:hover:ring-zinc-600 opacity-80 hover:opacity-100"
+                }`}
+                style={{ width: `${thumbWidth}px`, height: `${thumbHeight}px` }}
+              >
+                {/* 16:9 축소 슬라이드 프리뷰 */}
+                <div className="w-full h-full bg-black relative overflow-hidden pointer-events-none">
+                  <SlideStage
+                    slide={slide}
+                    style={songStyle}
+                    backgroundUrl={backgroundUrl}
+                    posterUrl={posterUrl}
+                    containerDimensions={{
+                      width: thumbWidth,
+                      height: thumbHeight,
+                    }}
+                  />
+                </div>
 
-              {/* 번호 배지 */}
-              <div className="absolute top-1 left-1 z-20 px-1.5 py-0.2 rounded text-[10px] font-mono font-bold bg-black/80 text-white border border-white/15">
-                {index + 1}
-              </div>
+                {/* 번호 배지 */}
+                <div className="absolute top-1 left-1 z-20 px-1.5 py-0.2 rounded text-[10px] font-mono font-bold bg-black/80 text-white border border-white/15">
+                  {index + 1}
+                </div>
 
-              {/* 하단 가사 텍스트 요약 툴팁형태 */}
-              <div className="absolute bottom-0 inset-x-0 bg-black/75 px-1.5 py-0.5 text-[9px] text-zinc-300 truncate pointer-events-none">
-                {previewText}
-              </div>
+                {/* 하단 가사 텍스트 요약 툴팁형태 */}
+                <div className="absolute bottom-0 inset-x-0 bg-black/75 px-1.5 py-0.5 text-[9px] text-zinc-300 truncate pointer-events-none">
+                  {previewText}
+                </div>
 
-              {/* 호버 액션: 순서 변경 / 복제 / 삭제 */}
-              <div className="absolute top-1 right-1 z-20 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity bg-black/80 p-0.5 rounded border border-white/15">
-                {onReorderSlide && (
-                  <>
+                {/* 호버 액션: 순서 변경 / 복제 / 삭제 */}
+                <div className="absolute top-1 right-1 z-20 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity bg-black/80 p-0.5 rounded border border-white/15">
+                  {onReorderSlide && (
+                    <>
+                      <button
+                        type="button"
+                        disabled={index === 0}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onReorderSlide(index, index - 1);
+                        }}
+                        className="p-0.5 text-zinc-400 hover:text-white disabled:opacity-20 rounded transition-colors cursor-pointer text-[10px]"
+                        title="앞으로 이동"
+                      >
+                        ◀
+                      </button>
+                      <button
+                        type="button"
+                        disabled={index === slides.length - 1}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onReorderSlide(index, index + 1);
+                        }}
+                        className="p-0.5 text-zinc-400 hover:text-white disabled:opacity-20 rounded transition-colors cursor-pointer text-[10px]"
+                        title="뒤로 이동"
+                      >
+                        ▶
+                      </button>
+                    </>
+                  )}
+                  {onDuplicateSlide && (
                     <button
                       type="button"
-                      disabled={index === 0}
+                      data-testid={`duplicate-slide-btn-${index}`}
                       onClick={(e) => {
                         e.stopPropagation();
-                        onReorderSlide(index, index - 1);
+                        onDuplicateSlide(index);
                       }}
-                      className="p-0.5 text-zinc-400 hover:text-white disabled:opacity-20 rounded transition-colors cursor-pointer text-[10px]"
-                      title="앞으로 이동"
+                      className="p-0.5 text-zinc-400 hover:text-white hover:bg-zinc-700 rounded transition-colors cursor-pointer"
+                      title="슬라이드 복제"
                     >
-                      ◀
+                      <svg
+                        className="w-3 h-3"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
+                        />
+                      </svg>
                     </button>
+                  )}
+                  {onDeleteSlide && slides.length > 1 && (
                     <button
                       type="button"
-                      disabled={index === slides.length - 1}
+                      data-testid={`delete-slide-btn-${index}`}
                       onClick={(e) => {
                         e.stopPropagation();
-                        onReorderSlide(index, index + 1);
+                        onDeleteSlide(index);
                       }}
-                      className="p-0.5 text-zinc-400 hover:text-white disabled:opacity-20 rounded transition-colors cursor-pointer text-[10px]"
-                      title="뒤로 이동"
+                      className="p-0.5 text-zinc-400 hover:text-red-400 hover:bg-zinc-700 rounded transition-colors cursor-pointer"
+                      title="슬라이드 삭제"
                     >
-                      ▶
+                      <svg
+                        className="w-3 h-3"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                        />
+                      </svg>
                     </button>
-                  </>
-                )}
-                {onDuplicateSlide && (
-                  <button
-                    type="button"
-                    data-testid={`duplicate-slide-btn-${index}`}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onDuplicateSlide(index);
-                    }}
-                    className="p-0.5 text-zinc-400 hover:text-white hover:bg-zinc-700 rounded transition-colors cursor-pointer"
-                    title="슬라이드 복제"
-                  >
-                    <svg
-                      className="w-3 h-3"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
-                      />
-                    </svg>
-                  </button>
-                )}
-                {onDeleteSlide && slides.length > 1 && (
-                  <button
-                    type="button"
-                    data-testid={`delete-slide-btn-${index}`}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onDeleteSlide(index);
-                    }}
-                    className="p-0.5 text-zinc-400 hover:text-red-400 hover:bg-zinc-700 rounded transition-colors cursor-pointer"
-                    title="슬라이드 삭제"
-                  >
-                    <svg
-                      className="w-3 h-3"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-                      />
-                    </svg>
-                  </button>
-                )}
-              </div>
-            </div>
-          );
-        })}
+                  )}
+                </div>
+              </SortableItem>
+            );
+          })}
+        </SortableList>
 
         {/* 새 슬라이드 추가 버튼 */}
         <button
