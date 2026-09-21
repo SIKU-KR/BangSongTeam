@@ -22,35 +22,33 @@ describe("HomeRoute (Main Home Entry Screen)", () => {
     vi.restoreAllMocks();
   });
 
-  it("should render ChromeAlertBanner, title, and action buttons with merged slides view", () => {
+  it("should render ChromeAlertBanner, sidebar, and presentation card without global header", () => {
     render(
       <MemoryRouter>
         <HomeRoute />
       </MemoryRouter>,
     );
 
-    // Title & Brand
-    expect(screen.getByText(/Worship Slide/i)).toBeInTheDocument();
+    // Sidebar Title & Brand
+    expect(screen.getByText("Worship Studio")).toBeInTheDocument();
 
     // Recommendation shelf should not be present
     expect(screen.queryByText("추천 및 빠른 시작")).not.toBeInTheDocument();
 
-    // Start Presentation button in global header
-    expect(screen.getByTestId("start-present-btn")).toBeInTheDocument();
-    expect(screen.getByText("송출 시작하기")).toBeInTheDocument();
+    // Header buttons should be completely removed
+    expect(screen.queryByTestId("start-present-btn")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("open-quick-paste-btn")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("create-presentation-btn")).not.toBeInTheDocument();
 
-    // Quick Lyric Paste Button
-    expect(screen.getByText("가사 빠른 입력")).toBeInTheDocument();
-    expect(screen.getByTestId("open-quick-paste-btn")).toBeInTheDocument();
-
-    // Home should show single unit presentation card
+    // Home should show single unit presentation card and create card
     expect(screen.getByTestId("presentation-card")).toBeInTheDocument();
     expect(screen.getByText("2026 주일 3부 예배")).toBeInTheDocument();
     expect(screen.getByText("5곡 세트")).toBeInTheDocument();
     expect(screen.getByText("23 슬라이드")).toBeInTheDocument();
+    expect(screen.getByText("새 프레젠테이션 생성")).toBeInTheDocument();
   });
 
-  it("should navigate to /present/fullscreen when start presentation button is clicked in Chrome", () => {
+  it("should navigate to /present/fullscreen when card present button is clicked in Chrome", () => {
     vi.spyOn(chromeChecker, "isGoogleChromeBrowser").mockReturnValue(true);
 
     render(
@@ -59,13 +57,13 @@ describe("HomeRoute (Main Home Entry Screen)", () => {
       </MemoryRouter>,
     );
 
-    const startBtn = screen.getByTestId("start-present-btn");
+    const startBtn = screen.getByTestId("card-present-btn");
     fireEvent.click(startBtn);
 
     expect(mockNavigate).toHaveBeenCalledWith("/present/fullscreen");
   });
 
-  it("should prompt confirm dialog when start presentation button is clicked in non-Chrome browser", () => {
+  it("should prompt confirm dialog when card present button is clicked in non-Chrome browser", () => {
     vi.spyOn(chromeChecker, "isGoogleChromeBrowser").mockReturnValue(false);
     const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(false);
 
@@ -75,7 +73,7 @@ describe("HomeRoute (Main Home Entry Screen)", () => {
       </MemoryRouter>,
     );
 
-    const startBtn = screen.getByTestId("start-present-btn");
+    const startBtn = screen.getByTestId("card-present-btn");
     fireEvent.click(startBtn);
 
     // Should prompt confirm and NOT navigate if cancelled
@@ -88,7 +86,7 @@ describe("HomeRoute (Main Home Entry Screen)", () => {
     expect(mockNavigate).toHaveBeenCalledWith("/present/fullscreen");
   });
 
-  it("should open QuickLyricPasteModal and add new song into active setlist upon submission", () => {
+  it("should open QuickLyricPasteModal from song library and add new song into active setlist upon submission", () => {
     render(
       <MemoryRouter>
         <HomeRoute />
@@ -98,8 +96,12 @@ describe("HomeRoute (Main Home Entry Screen)", () => {
     // Initially 5 songs in setlist
     expect(screen.getByText("5곡 세트")).toBeInTheDocument();
 
-    // Open modal
-    const openBtn = screen.getByTestId("open-quick-paste-btn");
+    // Navigate to Song Library via sidebar
+    const songsNavBtn = screen.getByTestId("sidebar-nav-songs");
+    fireEvent.click(songsNavBtn);
+
+    // Open modal from Song Library
+    const openBtn = screen.getByTestId("my-songs-quick-paste-btn");
     fireEvent.click(openBtn);
     expect(screen.getByText("빠른 가사 붙여넣기")).toBeInTheDocument();
 
@@ -127,6 +129,10 @@ describe("HomeRoute (Main Home Entry Screen)", () => {
 
     // Modal closed
     expect(screen.queryByText("빠른 가사 붙여넣기")).not.toBeInTheDocument();
+
+    // Return to Home tab to see updated setlist
+    const homeNavBtn = screen.getByTestId("sidebar-nav-home");
+    fireEvent.click(homeNavBtn);
 
     // Setlist updated to 6 songs and new slide count displayed
     expect(screen.getByText("6곡 세트")).toBeInTheDocument();

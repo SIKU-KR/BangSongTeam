@@ -8,8 +8,8 @@ describe("App Route Integration", () => {
     window.history.pushState({}, "Home", "/");
     render(<App />);
 
-    expect(screen.getByText(/Worship Slide/i)).toBeInTheDocument();
-    expect(screen.getByTestId("start-present-btn")).toBeInTheDocument();
+    expect(screen.getByText("Worship Studio")).toBeInTheDocument();
+    expect(screen.getByTestId("presentation-card")).toBeInTheDocument();
   });
 
   it("should render FullscreenPresentRoute when navigating to '/present/fullscreen'", () => {
