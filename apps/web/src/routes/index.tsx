@@ -27,9 +27,8 @@ type SortOption = "recent" | "title" | "slides";
 
 /**
  * Canva / MiriCanvas 스타일 프레젠테이션 대시보드 (피피티 리스트 페이지)
- * - 좌측: Canva 스타일 고정 내비게이션 사이드바 (홈, 내 콘티, 찬양 템플릿, 배경 루프, PWA 오프라인 상태)
- * - 상단: 글로벌 네비게이션 헤더 (브랜드 로고, 검색 바, 새 프레젠테이션 만들기 CTA)
- * - 상단 템플릿/추천 바: M1 송출 시작, 가사 빠른 입력, 빈 16:9 프레젠테이션, 기본 세트 복원
+ * - 좌측: 고정 내비게이션 사이드바 (홈, 내 콘티, 찬양 템플릿, 배경 루프, PWA 오프라인 상태)
+ * - 상단: 글로벌 네비게이션 헤더 (브랜드 로고, 검색 바, 가사 빠른 입력, 새 프레젠테이션, 송출 시작 CTA)
  * - 필터 & 정렬 & 뷰 모드 전환: 그리드 뷰 (16:9 슬라이드 카드) / 리스트 뷰 (16:9 미니 썸네일 탑재)
  * - 16:9 슬라이드쇼 썸네일 그리드: 실제 SlideStage를 축소 렌더링하여 프레젠테이션 시각적 정체성 복원
  * - 호버 액션: 즉각 슬라이드쇼 발표, 복제, 삭제 및 /editor 편집기 진입
@@ -296,7 +295,7 @@ export function HomeRoute(): React.JSX.Element {
               type="button"
               data-testid="create-presentation-btn"
               onClick={handleCreateNewPresentation}
-              className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-xs font-bold text-white transition-all shadow-md shadow-emerald-950/50 hover:shadow-emerald-900/60 flex items-center gap-1.5 cursor-pointer"
+              className="px-3.5 py-2 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-700/80 text-xs font-semibold text-zinc-200 hover:text-white transition-all shadow-sm flex items-center gap-1.5 cursor-pointer"
             >
               <svg
                 className="w-4 h-4"
@@ -313,169 +312,23 @@ export function HomeRoute(): React.JSX.Element {
               </svg>
               <span>새 프레젠테이션</span>
             </button>
+
+            <button
+              type="button"
+              data-testid="start-present-btn"
+              onClick={handleStartPresentation}
+              className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-xs font-bold text-white transition-all shadow-md shadow-emerald-950/50 hover:shadow-emerald-900/60 flex items-center gap-1.5 cursor-pointer"
+            >
+              <svg className="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24">
+                <path d="M8 5v14l11-7z" />
+              </svg>
+              <span>송출 시작하기</span>
+            </button>
           </div>
         </header>
 
         {/* 본문 컨텐츠 영역 */}
-        <main className="flex-1 max-w-7xl w-full mx-auto px-6 py-8 flex flex-col gap-10">
-          {/* Canva 스타일 퀵 스타트 추천 배너 / 쉘프 */}
-          <section className="space-y-3">
-            <h2 className="text-xs font-semibold uppercase tracking-wider text-zinc-400 flex items-center gap-1.5">
-              <span>추천 및 빠른 시작</span>
-            </h2>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {/* 카드 1: M1 송출 시작하기 */}
-              <div className="bg-gradient-to-br from-zinc-900 via-zinc-900 to-emerald-950/40 border border-zinc-800/90 hover:border-emerald-500/50 transition-all rounded-2xl p-5 flex flex-col justify-between shadow-xl">
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <div className="w-9 h-9 rounded-lg bg-emerald-900/50 border border-emerald-700/50 flex items-center justify-center text-emerald-400">
-                      <svg className="w-5 h-5 fill-current" viewBox="0 0 24 24">
-                        <path d="M8 5v14l11-7z" />
-                      </svg>
-                    </div>
-                    <span className="text-[11px] font-mono text-emerald-400 bg-emerald-950/80 px-2 py-0.5 rounded border border-emerald-800/60">
-                      Zero-Network Ready
-                    </span>
-                  </div>
-
-                  <div>
-                    <h3 className="text-lg font-bold text-white">
-                      M1 송출 시작하기 (5곡 세트)
-                    </h3>
-                    <p className="text-xs text-zinc-400 mt-1 leading-relaxed">
-                      검증용 5곡 세트리스트(은혜로다, 주 품에, 시선, 꽃들도, 주의
-                      이름 높이며)를 전체화면 슬라이드쇼로 즉시 송출합니다.
-                    </p>
-                  </div>
-
-                  {/* 단축키 힌트 배지 */}
-                  <div className="bg-black/50 rounded-lg p-2 text-[11px] text-zinc-400 flex flex-wrap items-center justify-between gap-2 font-mono border border-zinc-800/80">
-                    <span>Space/화살표: 넘김</span>
-                    <span>B: 암전</span>
-                    <span>H: 숨김</span>
-                    <span>N.M: 점프</span>
-                  </div>
-                </div>
-
-                <div className="mt-4 flex items-center gap-2">
-                  <button
-                    type="button"
-                    data-testid="start-present-btn"
-                    onClick={handleStartPresentation}
-                    className="flex-1 py-2.5 px-4 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-lg transition-colors flex items-center justify-center gap-2 shadow-lg shadow-emerald-950/60 cursor-pointer"
-                  >
-                    <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24">
-                      <path d="M8 5v14l11-7z" />
-                    </svg>
-                    <span>송출 시작하기</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleOpenEditor()}
-                    className="py-2.5 px-3 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 hover:text-white text-xs font-medium rounded-lg border border-zinc-700 transition-colors flex items-center gap-1.5 cursor-pointer"
-                    title="세트 편집기 열기"
-                  >
-                    <svg
-                      className="w-3.5 h-3.5"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
-                      />
-                    </svg>
-                    <span>편집</span>
-                  </button>
-                </div>
-              </div>
-
-              {/* 카드 2: 가사 빠른 입력 템플릿 */}
-              <div className="bg-gradient-to-br from-zinc-900 via-zinc-900 to-indigo-950/30 border border-zinc-800/90 hover:border-indigo-500/50 transition-all rounded-2xl p-5 flex flex-col justify-between shadow-xl">
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <div className="w-9 h-9 rounded-lg bg-indigo-900/50 border border-indigo-700/50 flex items-center justify-center text-indigo-400">
-                      <svg
-                        className="w-5 h-5"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-                        />
-                      </svg>
-                    </div>
-                    <span className="text-[11px] font-mono text-indigo-300 bg-indigo-950/80 px-2 py-0.5 rounded border border-indigo-800/60">
-                      Auto 16:9 Split
-                    </span>
-                  </div>
-
-                  <div>
-                    <h3 className="text-lg font-bold text-white">
-                      가사 빠른 입력 & 자동 분할
-                    </h3>
-                    <p className="text-xs text-zinc-400 mt-1 leading-relaxed">
-                      복사한 가사를 붙여넣으면 빈 줄 기준 슬라이드 자동 분할과
-                      멜론/벅스 검색 링크를 통해 손쉽게 새 프레젠테이션을
-                      완성합니다.
-                    </p>
-                  </div>
-
-                  <div className="flex flex-wrap gap-1.5 pt-1">
-                    <span className="px-2 py-0.5 rounded bg-zinc-800 text-zinc-300 text-[11px]">
-                      빈 줄 분할
-                    </span>
-                    <span className="px-2 py-0.5 rounded bg-zinc-800 text-zinc-300 text-[11px]">
-                      4줄 초과 자동 정제
-                    </span>
-                    <span className="px-2 py-0.5 rounded bg-zinc-800 text-zinc-300 text-[11px]">
-                      멜론/벅스 검색
-                    </span>
-                  </div>
-                </div>
-
-                <div className="mt-4 flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setIsQuickPasteOpen(true)}
-                    className="flex-1 py-2.5 px-4 bg-zinc-800 hover:bg-zinc-700 text-white text-xs font-semibold rounded-lg transition-colors flex items-center justify-center gap-2 cursor-pointer border border-zinc-700/80"
-                  >
-                    <svg
-                      className="w-4 h-4"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M12 4v16m8-8H4"
-                      />
-                    </svg>
-                    <span>가사 입력 열기</span>
-                  </button>
-                  <button
-                    type="button"
-                    data-testid="create-blank-set-btn"
-                    onClick={handleCreateNewPresentation}
-                    className="py-2.5 px-3 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-white text-xs font-medium rounded-lg border border-zinc-800 transition-colors cursor-pointer"
-                    title="새 빈 콘티 생성"
-                  >
-                    빈 콘티
-                  </button>
-                </div>
-              </div>
-            </div>
-          </section>
+        <main className="flex-1 max-w-7xl w-full mx-auto px-6 py-8 flex flex-col gap-8">
 
           {/* 4. Canva / MiriCanvas 시그니처: 16:9 프레젠테이션 리스트 섹션 */}
           <section className="space-y-4">

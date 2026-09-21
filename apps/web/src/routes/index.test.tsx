@@ -22,7 +22,7 @@ describe("HomeRoute (Main Home Entry Screen)", () => {
     vi.restoreAllMocks();
   });
 
-  it("should render ChromeAlertBanner, title, and M1 cards", () => {
+  it("should render ChromeAlertBanner, title, and action buttons without recommendation shelf", () => {
     render(
       <MemoryRouter>
         <HomeRoute />
@@ -32,11 +32,14 @@ describe("HomeRoute (Main Home Entry Screen)", () => {
     // Title & Brand
     expect(screen.getByText(/Worship Slide/i)).toBeInTheDocument();
 
-    // M1 Presentation Card & Button
-    expect(screen.getByText(/M1 송출 시작하기/i)).toBeInTheDocument();
-    expect(screen.getByTestId("start-present-btn")).toBeInTheDocument();
+    // Recommendation shelf should be completely removed
+    expect(screen.queryByText("추천 및 빠른 시작")).not.toBeInTheDocument();
 
-    // Quick Lyric Paste Card & Button
+    // Start Presentation button in global header
+    expect(screen.getByTestId("start-present-btn")).toBeInTheDocument();
+    expect(screen.getByText("송출 시작하기")).toBeInTheDocument();
+
+    // Quick Lyric Paste Button
     expect(screen.getByText("가사 빠른 입력")).toBeInTheDocument();
     expect(screen.getByTestId("open-quick-paste-btn")).toBeInTheDocument();
 

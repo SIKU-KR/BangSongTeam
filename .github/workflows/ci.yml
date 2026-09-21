@@ -39,5 +39,8 @@ jobs:
       - name: Test
         run: pnpm test
 
+      - name: Build web app
+        run: pnpm --filter web build
+
       - name: Verify Worker Deployment (Dry Run)
         run: pnpm --filter web exec wrangler deploy --dry-run
