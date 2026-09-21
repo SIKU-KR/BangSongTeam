@@ -37,7 +37,7 @@ prj-ppt/
 │       │   ├── routes/        # Hono sub-routers (auth, decks, setlists, catalog, AI)
 │       │   ├── middleware/    # Auth session extraction, D1/R2 context bindings
 │       │   └── index.ts       # Worker entry point mounting Hono and asset handlers
-│       ├── wrangler.jsonc     # Cloudflare Worker configuration (D1, R2, AI, Queues)
+│       ├── wrangler.jsonc     # Cloudflare Worker configuration (D1, R2, AI)
 │       └── vite.config.ts     # Vite config integrating @cloudflare/vite-plugin & vite-plugin-pwa
 ├── packages/
 │   ├── shared/                # Universal domain schemas, API contracts, constants (Pure TS)
@@ -87,7 +87,6 @@ prj-ppt/
 | **Shortcuts & Input**    | `tinykeys`                                     | B (blackout), H (hide lyrics), arrow navigation, custom numeric buffer. |
 | **Fonts**                | Pretendard & Fontsource (`@fontsource/*`)      | Bundled via npm into local PWA assets. Never load from external CDNs.   |
 | **AI / Normalization**   | Cloudflare Workers AI (`@cf/qwen/qwen3.8-27b`) | Fixed model: Qwen3.8 27B, temperature 0, thinking mode off.             |
-| **Async Tasks**          | Cloudflare Queues                              | Enqueue lyric normalization jobs on new version registration.           |
 | **Testing**              | Vitest + `@cloudflare/vitest-pool-workers`     | Run worker tests within real workerd execution environment.             |
 
 ---

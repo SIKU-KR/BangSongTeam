@@ -62,7 +62,6 @@ flowchart TB
     subgraph EdgeWorker["Cloudflare Worker (apps/web/worker)"]
       HonoAPI["Hono REST API (/api/*)"]
       AuthMiddleware["Better Auth Session Guard"]
-      QueueConsumer["Normalization Queue Consumer"]
     end
 
     subgraph StorageServices["Storage & Data"]
@@ -71,8 +70,7 @@ flowchart TB
       R2Domain["R2 Custom Domain (media.domain.com)"]
     end
 
-    subgraph AsyncAndAI["Async & AI Engine"]
-      CFQueues["Cloudflare Queues (lyric-normalization)"]
+    subgraph AIEngine["AI Engine"]
       WorkersAI["Cloudflare Workers AI (@cf/qwen/qwen3.8-27b)"]
     end
   end
@@ -80,10 +78,7 @@ flowchart TB
   UI -->|Hono RPC (/api/*)| HonoAPI
   HonoAPI --> AuthMiddleware
   AuthMiddleware --> D1DB
-  HonoAPI --> CFQueues
-  CFQueues --> QueueConsumer
-  QueueConsumer --> WorkersAI
-  QueueConsumer --> D1DB
+  HonoAPI --> WorkersAI
 
   R2Media -.->|Public CDN Edge| R2Domain
   BrowserStorage <-->|HTTP Range Partial Get| R2Domain
@@ -988,7 +983,9 @@ Chrome 공식 **Window Management API**를 활용한 다중 디스플레이 투�
 
 ## 6. 가사 정규화 및 Workers AI 파이프라인 명세
 
-### 6.1 비동기 정규화 큐 파이프라인 (Cloudflare Queues)
+### 6.1 가사 정규화 파이프라인
+
+정규화는 `ctx.waitUntil()`로 응답 반환 이후에 실행한다. 사용자 요청 흐름을 막지 않으면서도 별도 큐 인프라가 필요 없다.
 
 ```mermaid
 sequenceDiagram
@@ -996,26 +993,24 @@ sequenceDiagram
   actor User as User (Deck Editor)
   participant API as Hono Worker API
   participant D1 as Cloudflare D1
-  participant Queue as Cloudflare Queues
   participant WorkerAI as Workers AI (Qwen3.8 27B)
 
   User->>API: POST /api/decks (가사 기여 체크 ON)
   API->>D1: Save Deck & Insert lyrics_versions (Root Version)
   API->>D1: SELECT count(*) FROM lyrics_versions WHERE catalog_id = ?
-  alt versionCount >= 2 AND status != 'locked'
-    API->>Queue: Enqueue { catalogId, triggerUserId }
-  end
   API-->>User: 201 Created
 
-  Queue->>API: Process Queue Message
-  API->>D1: Fetch all lyrics_versions for catalogId
-  API->>WorkerAI: Run Normalization Prompt (temperature: 0, thinking: off)
-  WorkerAI-->>API: Normalized Lyrics Candidate
-  API->>API: Execute Strict Line Verification Algorithm
-  alt Verification PASSED
-    API->>D1: UPDATE lyrics_catalog SET lyrics_canonical = candidate, status = 'normalized'
-  else Verification FAILED (Hallucination detected)
-    API->>D1: Fallback: Set lyrics_canonical = popular_root
+  alt versionCount >= 2 AND status != 'locked'
+    Note over API: ctx.waitUntil() — 응답 반환 후 백그라운드 실행
+    API->>D1: Fetch all lyrics_versions for catalogId
+    API->>WorkerAI: Run Normalization Prompt (temperature: 0, thinking: off)
+    WorkerAI-->>API: Normalized Lyrics Candidate
+    API->>API: Execute Strict Line Verification Algorithm
+    alt Verification PASSED
+      API->>D1: UPDATE lyrics_catalog SET lyrics_canonical = candidate, status = 'normalized'
+    else Verification FAILED (Hallucination detected)
+      API->>D1: Fallback: Set lyrics_canonical = popular_root
+    end
   end
 ```
 

@@ -32,7 +32,7 @@ describe("Task 4.1: Cloudflare Worker 프로젝트 설정 및 Wrangler 바인딩
     expect(pkg.scripts.types).toContain("wrangler types");
   });
 
-  it("apps/web/wrangler.jsonc exists and defines main entrypoint, D1, R2, AI, and Queue bindings", () => {
+  it("apps/web/wrangler.jsonc exists and defines main entrypoint, D1, R2, and AI bindings", () => {
     expect(fs.existsSync(wranglerJsoncPath)).toBe(true);
 
     const content = fs.readFileSync(wranglerJsoncPath, "utf-8");
@@ -60,15 +60,6 @@ describe("Task 4.1: Cloudflare Worker 프로젝트 설정 및 Wrangler 바인딩
     // AI binding
     expect(config.ai).toBeDefined();
     expect(config.ai.binding).toBe("AI");
-
-    // Queue binding
-    expect(config.queues).toBeDefined();
-    expect(config.queues.producers).toBeDefined();
-    const queueProducer = config.queues.producers.find(
-      (q: { binding: string }) =>
-        q.binding === "QUEUE" || q.binding === "LYRIC_NORMALIZATION_QUEUE",
-    );
-    expect(queueProducer).toBeDefined();
   });
 
   it("worker-configuration.d.ts is generated and includes required bindings", () => {

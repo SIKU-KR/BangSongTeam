@@ -20,7 +20,7 @@
   - **대상 파일**: `apps/web/wrangler.jsonc`, `apps/web/package.json`
   - **선행 조건**: `docs/tasks/m0/tasks_3.md`
   - **구현 내용**:
-    - `wrangler.jsonc`에 `main: "worker/index.ts"`, D1 (`DB`), R2 (`MEDIA_BUCKET`), AI, Queue 바인딩 정의
+    - `wrangler.jsonc`에 `main: "worker/index.ts"`, D1 (`DB`), R2 (`MEDIA_BUCKET`), AI 바인딩 정의
     - `apps/web/package.json`에 `hono`, `@hono/zod-validator`, `@repo/shared`, `@repo/db` 의존성 및 `dev`, `deploy`, `types` 스크립트 추가
   - **DoD (통과 기준)**: `pnpm --filter web exec wrangler types` 실행 시 `worker-configuration.d.ts`가 정상 생성되고 `wrangler deploy --dry-run`이 성공한다.
 

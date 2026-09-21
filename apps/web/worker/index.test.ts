@@ -9,7 +9,6 @@ declare module "cloudflare:test" {
     DB: D1Database;
     MEDIA_BUCKET: R2Bucket;
     AI: Ai;
-    QUEUE: Queue;
     R2_PUBLIC_DOMAIN?: string;
   }
 }

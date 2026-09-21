@@ -20,13 +20,5 @@
   ],
   "ai": {
     "binding": "AI"
-  },
-  "queues": {
-    "producers": [
-      {
-        "binding": "QUEUE",
-        "queue": "lyric-normalization"
-      }
-    ]
   }
 }
