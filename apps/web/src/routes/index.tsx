@@ -257,18 +257,6 @@ export function HomeRoute(): React.JSX.Element {
 
         {/* ── Canva Signature Hero Banner: 앰비언트 글로우, 대형 타이틀, 중앙 검색창, 필터 칩 ── */}
         <header className="relative bg-gradient-to-b from-indigo-950/20 via-zinc-950/40 to-zinc-950 pt-10 pb-8 px-6 sm:px-10 border-b border-zinc-900/80">
-          {/* 상단 우측 빠른 생성 액션 (Canva '업그레이드/새 디자인' 위치) */}
-          <div className="absolute top-6 right-6 sm:right-10 flex items-center gap-2">
-            <button
-              type="button"
-              onClick={handleCreateNewPresentation}
-              className="px-3.5 py-1.5 rounded-full bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 hover:border-zinc-700 text-xs font-semibold text-zinc-200 flex items-center gap-1.5 cursor-pointer transition-all shadow-sm"
-            >
-              <span className="text-amber-400">👑</span>
-              <span>새 프레젠테이션</span>
-            </button>
-          </div>
-
           <div className="max-w-4xl mx-auto flex flex-col items-center text-center space-y-6">
             {/* 1) 대형 중앙 볼드 타이틀 */}
             <h1 className="text-3xl sm:text-4xl font-extrabold text-white tracking-tight">
