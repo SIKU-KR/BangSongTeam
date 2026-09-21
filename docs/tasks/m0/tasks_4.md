@@ -16,7 +16,7 @@
 
 ## 2. 세부 작업 체크리스트
 
-- [ ] **Task 4.1: Cloudflare Worker 프로젝트 설정 및 Wrangler 바인딩 구성**
+- [x] **Task 4.1: Cloudflare Worker 프로젝트 설정 및 Wrangler 바인딩 구성**
   - **대상 파일**: `apps/web/wrangler.jsonc`, `apps/web/package.json`
   - **선행 조건**: `docs/tasks/m0/tasks_3.md`
   - **구현 내용**:

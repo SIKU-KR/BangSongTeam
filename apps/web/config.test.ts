@@ -1,0 +1,76 @@
+import { describe, it, expect } from "vitest";
+import * as fs from "node:fs";
+import * as path from "node:path";
+
+describe("Task 4.1: Cloudflare Worker 프로젝트 설정 및 Wrangler 바인딩 구성", () => {
+  const webDir = path.resolve(__dirname);
+  const packageJsonPath = path.join(webDir, "package.json");
+  const wranglerJsoncPath = path.join(webDir, "wrangler.jsonc");
+  const workerConfigDtsPath = path.join(webDir, "worker-configuration.d.ts");
+
+  it("apps/web/package.json exists and contains required dependencies and scripts", () => {
+    expect(fs.existsSync(packageJsonPath)).toBe(true);
+
+    const pkg = JSON.parse(fs.readFileSync(packageJsonPath, "utf-8"));
+    expect(pkg.name).toBe("web");
+
+    // Required dependencies
+    const allDeps = {
+      ...pkg.dependencies,
+      ...pkg.devDependencies,
+    };
+    expect(allDeps).toHaveProperty("hono");
+    expect(allDeps).toHaveProperty("@hono/zod-validator");
+    expect(allDeps).toHaveProperty("@repo/shared");
+    expect(allDeps).toHaveProperty("@repo/db");
+
+    // wrangler types script
+    expect(pkg.scripts).toHaveProperty("types");
+    expect(pkg.scripts.types).toContain("wrangler types");
+  });
+
+  it("apps/web/wrangler.jsonc exists and defines D1, R2, AI, and Queue bindings", () => {
+    expect(fs.existsSync(wranglerJsoncPath)).toBe(true);
+
+    const content = fs.readFileSync(wranglerJsoncPath, "utf-8");
+    // Strip single-line comments for JSON parsing
+    const cleanJson = content.replace(/\/\/.*$/gm, "");
+    const config = JSON.parse(cleanJson);
+
+    // D1 binding DB
+    expect(config.d1_databases).toBeDefined();
+    const d1Db = config.d1_databases.find(
+      (d: { binding: string }) => d.binding === "DB",
+    );
+    expect(d1Db).toBeDefined();
+
+    // R2 binding MEDIA_BUCKET
+    expect(config.r2_buckets).toBeDefined();
+    const r2Bucket = config.r2_buckets.find(
+      (b: { binding: string }) => b.binding === "MEDIA_BUCKET",
+    );
+    expect(r2Bucket).toBeDefined();
+
+    // AI binding
+    expect(config.ai).toBeDefined();
+    expect(config.ai.binding).toBe("AI");
+
+    // Queue binding
+    expect(config.queues).toBeDefined();
+    expect(config.queues.producers).toBeDefined();
+    const queueProducer = config.queues.producers.find(
+      (q: { binding: string }) =>
+        q.binding === "QUEUE" || q.binding === "LYRIC_NORMALIZATION_QUEUE",
+    );
+    expect(queueProducer).toBeDefined();
+  });
+
+  it("worker-configuration.d.ts is generated and includes required bindings", () => {
+    expect(fs.existsSync(workerConfigDtsPath)).toBe(true);
+
+    const dtsContent = fs.readFileSync(workerConfigDtsPath, "utf-8");
+    expect(dtsContent).toContain("DB: D1Database");
+    expect(dtsContent).toContain("MEDIA_BUCKET: R2Bucket");
+    expect(dtsContent).toContain("AI: Ai");
+  });
+});

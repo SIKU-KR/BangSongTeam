@@ -1,0 +1,7 @@
+{
+  "extends": "@repo/typescript-config/tsconfig.base.json",
+  "compilerOptions": {
+    "types": ["@cloudflare/workers-types"]
+  },
+  "include": ["worker/**/*", "src/**/*", "*.ts", "*.d.ts"]
+}

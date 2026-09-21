@@ -17,6 +17,7 @@ module.exports = tseslint.config(
       "**/.wrangler/**",
       "**/coverage/**",
       "**/.turbo/**",
+      "**/worker-configuration.d.ts",
     ],
   },
   // 2. JavaScript recommended rules

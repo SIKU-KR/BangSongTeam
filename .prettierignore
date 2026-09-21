@@ -7,3 +7,4 @@ out/
 .turbo/
 pnpm-lock.yaml
 coverage/
+worker-configuration.d.ts
