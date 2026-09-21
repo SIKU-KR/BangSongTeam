@@ -172,9 +172,9 @@ export function BackgroundLibraryView({
                   data-testid={`my-bg-card-${bg.id}`}
                   onMouseEnter={() => setHoveredId(bg.id)}
                   onMouseLeave={() => setHoveredId(null)}
-                  className="group relative flex flex-col bg-zinc-900/70 border border-zinc-800/80 hover:border-emerald-500/50 rounded-xl overflow-hidden transition-all duration-200 shadow-md"
+                  className="group relative flex flex-col bg-zinc-900/60 hover:bg-zinc-900/90 border border-zinc-800/80 hover:border-zinc-700 rounded-2xl overflow-hidden transition-all duration-200 hover:shadow-xl hover:shadow-black/40 hover:-translate-y-0.5"
                 >
-                  <div className="relative aspect-video w-full bg-black overflow-hidden select-none">
+                  <div className="relative aspect-video w-full bg-black overflow-hidden select-none rounded-t-2xl">
                     {isHovered ? (
                       <video
                         src={bg.mediaUrl}
@@ -307,9 +307,9 @@ export function BackgroundLibraryView({
                   data-testid={`community-bg-card-${bg.id}`}
                   onMouseEnter={() => setHoveredId(bg.id)}
                   onMouseLeave={() => setHoveredId(null)}
-                  className="group relative flex flex-col bg-zinc-900/70 border border-zinc-800/80 hover:border-sky-500/50 rounded-xl overflow-hidden transition-all duration-200 shadow-md"
+                  className="group relative flex flex-col bg-zinc-900/60 hover:bg-zinc-900/90 border border-zinc-800/80 hover:border-zinc-700 rounded-2xl overflow-hidden transition-all duration-200 hover:shadow-xl hover:shadow-black/40 hover:-translate-y-0.5"
                 >
-                  <div className="relative aspect-video w-full bg-black overflow-hidden select-none">
+                  <div className="relative aspect-video w-full bg-black overflow-hidden select-none rounded-t-2xl">
                     {isHovered && videoUrl ? (
                       <video
                         src={videoUrl}

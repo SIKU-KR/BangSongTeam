@@ -85,12 +85,12 @@ export function SongLibraryView({
           단락 1: 내가 등록한 곡 (My Songs)
           ─────────────────────────────────────────────── */}
       <section className="space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-zinc-800/80">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-zinc-900">
           <div>
             <div className="flex items-center gap-2.5">
               <span className="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
-              <h2 className="text-xl font-bold text-white tracking-tight">
-                내가 등록한 곡
+              <h2 className="text-xl font-bold text-white tracking-tight flex items-center gap-2">
+                <span>내가 등록한 곡</span>
               </h2>
               <span className="text-xs px-2.5 py-0.5 rounded-full bg-emerald-950 text-emerald-400 border border-emerald-800 font-mono font-medium">
                 {mySongs.length}곡
@@ -229,11 +229,11 @@ export function SongLibraryView({
                 <div
                   key={deck.id}
                   data-testid={`community-song-card-${deck.id}`}
-                  className="group relative flex flex-col bg-zinc-900/70 border border-zinc-800/80 hover:border-indigo-500/50 rounded-xl overflow-hidden transition-all duration-200 hover:shadow-xl hover:shadow-indigo-950/20"
+                  className="group relative flex flex-col bg-zinc-900/60 hover:bg-zinc-900/90 border border-zinc-800/80 hover:border-zinc-700 rounded-2xl overflow-hidden transition-all duration-200 hover:shadow-xl hover:shadow-black/40 hover:-translate-y-0.5"
                 >
                   {/* 16:9 슬라이드 썸네일 */}
                   <div
-                    className="relative aspect-video w-full bg-black overflow-hidden select-none cursor-pointer"
+                    className="relative aspect-video w-full bg-black overflow-hidden select-none cursor-pointer rounded-t-2xl"
                     onClick={() => setPreviewDeck(deck)}
                   >
                     <div className="w-full h-full pointer-events-none">
