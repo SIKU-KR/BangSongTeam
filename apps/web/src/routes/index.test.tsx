@@ -43,8 +43,8 @@ describe("HomeRoute (Main Home Entry Screen)", () => {
     expect(screen.getByText("가사 빠른 입력")).toBeInTheDocument();
     expect(screen.getByTestId("open-quick-paste-btn")).toBeInTheDocument();
 
-    // Home should show "통합 슬라이드 프레젠테이션" and single unit presentation card
-    expect(screen.getByText("통합 슬라이드 프레젠테이션")).toBeInTheDocument();
+    // Home should show "프레젠테이션" and single unit presentation card
+    expect(screen.getByText("프레젠테이션")).toBeInTheDocument();
     expect(screen.getByText("1개 프레젠테이션 덱")).toBeInTheDocument();
     expect(screen.getByText("5곡 세트")).toBeInTheDocument();
     expect(screen.getByText("23 슬라이드")).toBeInTheDocument();
@@ -179,7 +179,7 @@ describe("HomeRoute (Main Home Entry Screen)", () => {
     const homeNavBtn = screen.getByTestId("sidebar-nav-home");
     fireEvent.click(homeNavBtn);
 
-    // 홈의 "통합 슬라이드 프레젠테이션" 복귀 확인
-    expect(screen.getByText("통합 슬라이드 프레젠테이션")).toBeInTheDocument();
+    // 홈의 "프레젠테이션" 복귀 확인
+    expect(screen.getByText("프레젠테이션")).toBeInTheDocument();
   });
 });

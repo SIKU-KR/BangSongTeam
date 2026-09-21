@@ -276,7 +276,7 @@ export function HomeRoute(): React.JSX.Element {
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder={
                   activeMenu === "home"
-                    ? "합쳐진 슬라이드 가사, 곡 검색..."
+                    ? "프레젠테이션 제목, 곡, 가사 검색..."
                     : activeMenu === "songs"
                       ? "곡 제목, 아티스트, 가사 검색..."
                       : "배경 제목, 분위기 태그 검색..."
@@ -387,10 +387,9 @@ export function HomeRoute(): React.JSX.Element {
         {/* 본문 컨텐츠 영역 */}
         <main className="flex-1 max-w-7xl w-full mx-auto px-6 py-8">
           {activeMenu === "home" ? (
-            /* 홈: 통합슬라이드 1개 단위 카드만 남도록 */
+            /* 홈: 프레젠테이션 1개 단위 카드만 남도록 */
             <MergedSlidesView
               setlist={setlist}
-              onOpenQuickPaste={() => setIsQuickPasteOpen(true)}
               onCreateNewPresentation={handleCreateNewPresentation}
               searchQuery={searchQuery}
             />
