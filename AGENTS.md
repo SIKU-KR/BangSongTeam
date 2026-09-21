@@ -302,3 +302,4 @@ Before committing or submitting changes, ensure:
 4. No imports from `packages/db` exist inside `apps/web/src`.
 5. All new D1 queries enforce `user_id` authentication checks (or explicit `visibility = 'public'`).
 6. All new API endpoints have corresponding Zod validation in `packages/shared`.
+7. For frontend/UI changes, verify actual rendering and runtime behavior in Google Chrome (via local dev server or headless Chrome).
