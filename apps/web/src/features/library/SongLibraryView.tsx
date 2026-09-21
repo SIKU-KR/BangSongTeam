@@ -8,6 +8,7 @@ import {
   hangulIncludes,
 } from "@repo/shared";
 import { PresentationCard } from "../presentation/PresentationCard";
+import { launchPresentation } from "../presentation";
 import { SlideStage } from "../../components/stage/SlideStage";
 import { COMMUNITY_SONGS } from "./mockCommunityData";
 
@@ -63,7 +64,7 @@ export function SongLibraryView({
   });
 
   const handleStartPresentation = (): void => {
-    navigate("/present/fullscreen");
+    launchPresentation(navigate);
   };
 
   const handleOpenEditor = (songIndex?: number): void => {
@@ -100,7 +101,8 @@ export function SongLibraryView({
               </span>
             </div>
             <p className="text-xs text-zinc-400 mt-0.5">
-              현재 콘티에 등록되어 있거나 직접 가사를 입력하여 생성한 찬양 슬라이드 덱입니다.
+              현재 콘티에 등록되어 있거나 직접 가사를 입력하여 생성한 찬양
+              슬라이드 덱입니다.
             </p>
           </div>
 
@@ -209,7 +211,8 @@ export function SongLibraryView({
               </span>
             </div>
             <p className="text-xs text-zinc-400 mt-0.5">
-              다른 사역자 및 유저들이 등록하고 검증한 인기 찬양 슬라이드 덱입니다. 원클릭으로 내 콘티에 추가할 수 있습니다.
+              다른 사역자 및 유저들이 등록하고 검증한 인기 찬양 슬라이드
+              덱입니다. 원클릭으로 내 콘티에 추가할 수 있습니다.
             </p>
           </div>
         </div>
@@ -260,7 +263,10 @@ export function SongLibraryView({
 
                     <div className="absolute top-2.5 right-2.5 z-30 pointer-events-none">
                       <span className="px-1.5 py-0.5 rounded text-[10px] text-zinc-400 bg-black/80 flex items-center gap-1">
-                        <svg className="w-3 h-3 fill-current text-indigo-400" viewBox="0 0 24 24">
+                        <svg
+                          className="w-3 h-3 fill-current text-indigo-400"
+                          viewBox="0 0 24 24"
+                        >
                           <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
                         </svg>
                         <span>{deck.forkCount}</span>
@@ -294,15 +300,35 @@ export function SongLibraryView({
                       >
                         {isAdded ? (
                           <>
-                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                            <svg
+                              className="w-3.5 h-3.5"
+                              fill="none"
+                              stroke="currentColor"
+                              viewBox="0 0 24 24"
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M5 13l4 4L19 7"
+                              />
                             </svg>
                             <span>추가 완료!</span>
                           </>
                         ) : (
                           <>
-                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                            <svg
+                              className="w-3.5 h-3.5"
+                              fill="none"
+                              stroke="currentColor"
+                              viewBox="0 0 24 24"
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M12 4v16m8-8H4"
+                              />
                             </svg>
                             <span>내 콘티에 추가</span>
                           </>
@@ -369,8 +395,18 @@ export function SongLibraryView({
                 onClick={() => setPreviewDeck(null)}
                 className="p-1.5 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800 cursor-pointer"
               >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                <svg
+                  className="w-5 h-5"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M6 18L18 6M6 6l12 12"
+                  />
                 </svg>
               </button>
             </div>

@@ -46,7 +46,9 @@ describe("Library Views", () => {
       );
 
       expect(
-        screen.getByText(/"전혀일치하지않는검색어"에 일치하는 프레젠테이션이 없습니다./),
+        screen.getByText(
+          /"전혀일치하지않는검색어"에 일치하는 프레젠테이션이 없습니다./,
+        ),
       ).toBeInTheDocument();
     });
   });
@@ -94,9 +96,7 @@ describe("Library Views", () => {
       const handleApply = vi.fn();
 
       render(
-        <BackgroundLibraryView
-          onApplyBackgroundToCurrentSet={handleApply}
-        />,
+        <BackgroundLibraryView onApplyBackgroundToCurrentSet={handleApply} />,
       );
 
       // 단락 1: 내가 등록한 배경
@@ -130,9 +130,8 @@ describe("Library Views", () => {
 
       expect(screen.getByText("새 배경 영상 등록")).toBeInTheDocument();
 
-      const titleInput = screen.getByPlaceholderText(
-        "예: 우리 교회 메인 비디오 루프",
-      );
+      const titleInput =
+        screen.getByPlaceholderText("예: 우리 교회 메인 비디오 루프");
       fireEvent.change(titleInput, { target: { value: "새벽기도 배경" } });
 
       const submitBtn = screen.getByRole("button", { name: "등록하기" });

@@ -1,5 +1,6 @@
 import React from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { ThemeProvider } from "./features/theme";
 import { HomeRoute } from "./routes";
 import { FullscreenPresentRoute } from "./routes/FullscreenPresentRoute";
 import { EditorRoute } from "./routes/EditorRoute";
@@ -12,17 +13,19 @@ import { EditorRoute } from "./routes/EditorRoute";
  */
 export function App(): React.JSX.Element {
   return (
-    <BrowserRouter>
-      <Routes>
-        <Route path="/" element={<HomeRoute />} />
-        <Route path="/editor" element={<EditorRoute />} />
-        <Route
-          path="/present/fullscreen"
-          element={<FullscreenPresentRoute />}
-        />
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
-    </BrowserRouter>
+    <ThemeProvider>
+      <BrowserRouter>
+        <Routes>
+          <Route path="/" element={<HomeRoute />} />
+          <Route path="/editor" element={<EditorRoute />} />
+          <Route
+            path="/present/fullscreen"
+            element={<FullscreenPresentRoute />}
+          />
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </BrowserRouter>
+    </ThemeProvider>
   );
 }
 

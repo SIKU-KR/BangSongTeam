@@ -195,7 +195,7 @@ describe("FullscreenPresentRoute", () => {
     ).toBeInTheDocument();
   });
 
-  it("should trigger Fullscreen API when fullscreen button is clicked", async () => {
+  it("should attempt auto-fullscreen on mount and display prompt banner when windowed", async () => {
     const requestFullscreenMock = vi.fn().mockResolvedValue(undefined);
     Object.defineProperty(document.documentElement, "requestFullscreen", {
       value: requestFullscreenMock,
@@ -209,12 +209,55 @@ describe("FullscreenPresentRoute", () => {
       </MemoryRouter>,
     );
 
+    // Auto-fullscreen attempted on mount
+    expect(requestFullscreenMock).toHaveBeenCalledWith(
+      expect.objectContaining({ navigationUI: "hide" }),
+    );
+
+    // Since jsdom document.fullscreenElement is falsy by default, prompt banner is shown
+    const promptBanner = screen.getByTestId("fullscreen-prompt-banner");
+    expect(promptBanner).toBeInTheDocument();
+    expect(
+      screen.getByText(/화면을 클릭하면 전체화면으로 전환됩니다/),
+    ).toBeInTheDocument();
+
+    // Clicking prompt banner should request fullscreen again
+    await act(async () => {
+      fireEvent.click(promptBanner);
+    });
+    expect(requestFullscreenMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("should trigger Fullscreen API when fullscreen button is clicked or 'f' key is pressed", async () => {
+    const requestFullscreenMock = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(document.documentElement, "requestFullscreen", {
+      value: requestFullscreenMock,
+      configurable: true,
+      writable: true,
+    });
+
+    render(
+      <MemoryRouter>
+        <FullscreenPresentRoute />
+      </MemoryRouter>,
+    );
+
+    // Reset initial mount call count for clean testing
+    requestFullscreenMock.mockClear();
+
     const fullscreenBtn = screen.getByTestId("fullscreen-toggle-btn");
     await act(async () => {
       fireEvent.click(fullscreenBtn);
     });
 
     expect(requestFullscreenMock).toHaveBeenCalledTimes(1);
+
+    // Press 'f' key to toggle fullscreen
+    act(() => {
+      dispatchKey("f", "KeyF");
+    });
+
+    expect(requestFullscreenMock).toHaveBeenCalledTimes(2);
   });
 
   it("should supply motion background video URL and preload next song video", () => {

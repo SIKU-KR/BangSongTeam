@@ -20,6 +20,7 @@ import {
   canRedo,
   resetActiveSetlist,
   createNewSetlist,
+  launchPresentation,
 } from "../features/presentation";
 import {
   getBackgroundMediaUrl,
@@ -77,7 +78,7 @@ export function EditorRoute(): React.JSX.Element {
 
   // 슬라이드쇼 발표 핸들러
   const handlePresent = () => {
-    navigate("/present/fullscreen");
+    launchPresentation(navigate);
   };
 
   // 슬라이드 선택 핸들러
@@ -110,11 +111,7 @@ export function EditorRoute(): React.JSX.Element {
 
   // 슬라이드 추가
   const handleAddSlide = () => {
-    addSlideToSong(
-      safeSongIndex,
-      ["새 가사 줄을 입력하세요"],
-      safeSlideIndex,
-    );
+    addSlideToSong(safeSongIndex, ["새 가사 줄을 입력하세요"], safeSlideIndex);
     setActiveSlideIndex((prev) => prev + 1);
   };
 
@@ -305,8 +302,12 @@ export function EditorRoute(): React.JSX.Element {
           onDeleteSlide={handleDeleteSlide}
           onDuplicateSlide={handleDuplicateSlide}
           onReorderSlide={handleReorderSlide}
-          onUpdateBackground={(bgId) => updateSongBackground(safeSongIndex, bgId)}
-          onUpdateStyle={(styleUpdate) => updateSongStyle(safeSongIndex, styleUpdate)}
+          onUpdateBackground={(bgId) =>
+            updateSongBackground(safeSongIndex, bgId)
+          }
+          onUpdateStyle={(styleUpdate) =>
+            updateSongStyle(safeSongIndex, styleUpdate)
+          }
         />
 
         {/* 중앙: 16:9 슬라이드 스테이지 캔버스 */}
@@ -374,4 +375,3 @@ export function EditorRoute(): React.JSX.Element {
 }
 
 export default EditorRoute;
-

@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import type { Setlist } from "@repo/shared";
 import { hangulIncludes } from "@repo/shared";
 import { PresentationCard } from "../presentation/PresentationCard";
+import { launchPresentation } from "../presentation";
 import { isGoogleChromeBrowser } from "../../components/common/ChromeAlertBanner";
 
 export interface MergedSlidesViewProps {
@@ -76,7 +77,12 @@ const FOLDERS_DATA = [
   { id: "f-1", name: "2026 주일 대예배", count: 12, color: "text-emerald-400" },
   { id: "f-2", name: "청년부 찬양 콘티", count: 8, color: "text-indigo-400" },
   { id: "f-3", name: "수요·금요 기도회", count: 15, color: "text-sky-400" },
-  { id: "f-4", name: "부활절·성탄절 특별 행사", count: 4, color: "text-amber-400" },
+  {
+    id: "f-4",
+    name: "부활절·성탄절 특별 행사",
+    count: 4,
+    color: "text-amber-400",
+  },
 ];
 
 /**
@@ -104,7 +110,7 @@ export function MergedSlidesView({
       );
       if (!proceed) return;
     }
-    navigate("/present/fullscreen");
+    launchPresentation(navigate);
   };
 
   const handleOpenEditor = (): void => {
@@ -141,8 +147,7 @@ export function MergedSlidesView({
   const filteredRecentItems = ADDITIONAL_RECENT_ITEMS.filter((item) => {
     if (!query) return true;
     return (
-      hangulIncludes(item.title, query) ||
-      hangulIncludes(item.subtitle, query)
+      hangulIncludes(item.title, query) || hangulIncludes(item.subtitle, query)
     );
   });
 
@@ -160,8 +165,18 @@ export function MergedSlidesView({
     return (
       <div className="py-20 text-center flex flex-col items-center justify-center gap-3 bg-zinc-900/30 border border-zinc-800/80 rounded-2xl">
         <div className="w-12 h-12 rounded-full bg-zinc-800/60 flex items-center justify-center text-zinc-500 mb-1">
-          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+          <svg
+            className="w-6 h-6"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={1.5}
+              d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+            />
           </svg>
         </div>
         <p className="text-sm font-semibold text-zinc-300">
@@ -193,8 +208,18 @@ export function MergedSlidesView({
             aria-label="이전 항목 보기"
             className="absolute -left-3 top-1/2 -translate-y-1/2 z-30 w-10 h-10 rounded-full bg-zinc-900/90 hover:bg-zinc-800 text-white shadow-xl shadow-black/60 flex items-center justify-center border border-zinc-700 cursor-pointer transition-all opacity-0 group-hover/carousel:opacity-100 hover:scale-105 active:scale-95"
           >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M15 19l-7-7 7-7" />
+            <svg
+              className="w-5 h-5"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2.5}
+                d="M15 19l-7-7 7-7"
+              />
             </svg>
           </button>
 
@@ -262,7 +287,10 @@ export function MergedSlidesView({
                       }}
                       className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold shadow-lg flex items-center gap-1.5 cursor-pointer"
                     >
-                      <svg className="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24">
+                      <svg
+                        className="w-3.5 h-3.5 fill-current"
+                        viewBox="0 0 24 24"
+                      >
                         <path d="M8 5v14l11-7z" />
                       </svg>
                       <span>발표</span>
@@ -293,7 +321,9 @@ export function MergedSlidesView({
                     </span>
                     <span className="truncate">{item.subtitle}</span>
                     <span className="text-zinc-600 shrink-0">•</span>
-                    <span className="text-zinc-400 shrink-0">{item.editedAgo}</span>
+                    <span className="text-zinc-400 shrink-0">
+                      {item.editedAgo}
+                    </span>
                   </div>
                 </div>
               </div>
@@ -307,8 +337,18 @@ export function MergedSlidesView({
             aria-label="다음 최근 항목 보기"
             className="absolute -right-3 top-1/2 -translate-y-1/2 z-30 w-10 h-10 rounded-full bg-zinc-900/90 hover:bg-zinc-800 text-white shadow-xl shadow-black/60 flex items-center justify-center border border-zinc-700 cursor-pointer transition-all hover:scale-110 active:scale-95"
           >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7" />
+            <svg
+              className="w-5 h-5"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2.5}
+                d="M9 5l7 7-7 7"
+              />
             </svg>
           </button>
         </div>
@@ -331,7 +371,12 @@ export function MergedSlidesView({
             stroke="currentColor"
             viewBox="0 0 24 24"
           >
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 9l-7 7-7-7" />
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2.5}
+              d="M19 9l-7 7-7-7"
+            />
           </svg>
           <span>폴더</span>
           <span className="text-xs font-normal text-zinc-500 ml-1">
@@ -348,7 +393,11 @@ export function MergedSlidesView({
                 className="group flex items-center gap-3 p-3.5 rounded-xl bg-zinc-900/50 hover:bg-zinc-900 border border-zinc-800/80 hover:border-zinc-700 cursor-pointer transition-all hover:shadow-md"
               >
                 <div className="w-10 h-10 rounded-xl bg-zinc-800 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
-                  <svg className={`w-5 h-5 ${folder.color}`} fill="currentColor" viewBox="0 0 24 24">
+                  <svg
+                    className={`w-5 h-5 ${folder.color}`}
+                    fill="currentColor"
+                    viewBox="0 0 24 24"
+                  >
                     <path d="M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z" />
                   </svg>
                 </div>
@@ -383,7 +432,12 @@ export function MergedSlidesView({
             stroke="currentColor"
             viewBox="0 0 24 24"
           >
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 9l-7 7-7-7" />
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2.5}
+              d="M19 9l-7 7-7-7"
+            />
           </svg>
           <span>모든 프레젠테이션 및 템플릿</span>
         </button>
@@ -399,8 +453,18 @@ export function MergedSlidesView({
                   className="group border-2 border-dashed border-zinc-800 hover:border-emerald-500/60 rounded-2xl flex flex-col items-center justify-center p-8 min-h-[220px] cursor-pointer transition-all bg-zinc-950/40 hover:bg-zinc-900/30"
                 >
                   <div className="w-12 h-12 rounded-full bg-zinc-900 group-hover:bg-emerald-950/60 border border-zinc-700/80 group-hover:border-emerald-500/50 flex items-center justify-center text-zinc-400 group-hover:text-emerald-400 transition-colors mb-3">
-                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                    <svg
+                      className="w-6 h-6"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M12 4v16m8-8H4"
+                      />
                     </svg>
                   </div>
                   <span className="text-sm font-semibold text-zinc-300 group-hover:text-white transition-colors">
@@ -499,7 +563,10 @@ export function MergedSlidesView({
                             {setlist.title}
                           </span>
                           <span className="text-[11px] text-zinc-500 truncate block">
-                            {setlist.items.map((i) => i.deck?.title).filter(Boolean).join(", ")}
+                            {setlist.items
+                              .map((i) => i.deck?.title)
+                              .filter(Boolean)
+                              .join(", ")}
                           </span>
                         </div>
                       </td>

@@ -37,8 +37,12 @@ describe("HomeRoute (Main Home Entry Screen)", () => {
 
     // Header buttons should be completely removed
     expect(screen.queryByTestId("start-present-btn")).not.toBeInTheDocument();
-    expect(screen.queryByTestId("open-quick-paste-btn")).not.toBeInTheDocument();
-    expect(screen.queryByTestId("create-presentation-btn")).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("open-quick-paste-btn"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("create-presentation-btn"),
+    ).not.toBeInTheDocument();
 
     // Home should show single unit presentation card and create card
     expect(screen.getByTestId("presentation-card")).toBeInTheDocument();
@@ -187,5 +191,33 @@ describe("HomeRoute (Main Home Entry Screen)", () => {
 
     // 홈의 프레젠테이션 카드 복귀 확인
     expect(screen.getByTestId("presentation-card")).toBeInTheDocument();
+  });
+
+  it("should render theme menu button at the bottom of the sidebar and toggle theme options", () => {
+    render(
+      <MemoryRouter>
+        <HomeRoute />
+      </MemoryRouter>,
+    );
+
+    // 사이드바 하단 테마 메뉴 버튼 확인
+    const themeBtn = screen.getByTestId("theme-menu-button");
+    expect(themeBtn).toBeInTheDocument();
+
+    // 클릭 시 드롭다운 열림 확인
+    fireEvent.click(themeBtn);
+    expect(screen.getByTestId("theme-menu-dropdown")).toBeInTheDocument();
+    expect(screen.getByTestId("theme-option-light")).toBeInTheDocument();
+    expect(screen.getByTestId("theme-option-dark")).toBeInTheDocument();
+    expect(screen.getByTestId("theme-option-system")).toBeInTheDocument();
+
+    // 라이트 모드 선택
+    act(() => {
+      fireEvent.click(screen.getByTestId("theme-option-light"));
+    });
+
+    // 드롭다운 닫힘 확인
+    expect(screen.queryByTestId("theme-menu-dropdown")).not.toBeInTheDocument();
+    expect(screen.getByText("라이트 모드")).toBeInTheDocument();
   });
 });

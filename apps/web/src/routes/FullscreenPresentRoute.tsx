@@ -10,6 +10,8 @@ import {
   useActiveSetlist,
   useNavigationBuffer,
   usePresentationShortcuts,
+  enterFullscreen,
+  exitFullscreen,
 } from "../features/presentation";
 
 /**
@@ -81,17 +83,31 @@ export function FullscreenPresentRoute(): React.JSX.Element {
     onJump: handleJump,
   });
 
+  const toggleFullscreen = useCallback(async () => {
+    if (!document.fullscreenElement) {
+      await enterFullscreen();
+    } else {
+      await exitFullscreen();
+    }
+  }, []);
+
   usePresentationShortcuts({
     onNext: handleNext,
     onPrev: handlePrev,
     onToggleBlackout: () => setIsBlackout((prev) => !prev),
     onToggleLyrics: () => setIsLyricsHidden((prev) => !prev),
+    onToggleFullscreen: toggleFullscreen,
     navigationBuffer: navBuffer,
     enabled: true,
   });
 
-  // Fullscreen 상태 모니터링
+  // Fullscreen 상태 모니터링 및 마운트 시 자동 전체화면 시도
   useEffect(() => {
+    // 자동 전체화면 진입 시도 (PWA 환경 또는 자동 전체화면 권한이 허용된 브라우저 환경)
+    if (!document.fullscreenElement) {
+      enterFullscreen().catch(() => {});
+    }
+
     const handleFullscreenChange = () => {
       setIsFullscreen(Boolean(document.fullscreenElement));
     };
@@ -102,25 +118,19 @@ export function FullscreenPresentRoute(): React.JSX.Element {
     };
   }, []);
 
-  const toggleFullscreen = useCallback(async () => {
-    try {
-      if (!document.fullscreenElement) {
-        if (document.documentElement.requestFullscreen) {
-          await document.documentElement.requestFullscreen();
-        }
-      } else {
-        if (document.exitFullscreen) {
-          await document.exitFullscreen();
-        }
-      }
-    } catch {
-      // Fullscreen API may be blocked without user gesture in some contexts
-    }
-  }, []);
+  const handleExit = useCallback(async () => {
+    await exitFullscreen().catch(() => {});
+    navigate("/");
+  }, [navigate]);
 
   return (
     <div
       data-testid="fullscreen-present-route"
+      onClick={() => {
+        if (!isFullscreen) {
+          toggleFullscreen();
+        }
+      }}
       className="relative w-screen h-screen overflow-hidden bg-black select-none group"
     >
       {/* 3-Layer Slide Stage: 청중 화면 렌더링 (버퍼 텍스트나 조작 UI 일절 포함 안 됨) */}
@@ -134,22 +144,58 @@ export function FullscreenPresentRoute(): React.JSX.Element {
         isLyricsHidden={isLyricsHidden}
       />
 
+      {/* 전체화면이 아닐 때 나타나는 클릭-투-전체화면 안내 배너 */}
+      {!isFullscreen && (
+        <div
+          data-testid="fullscreen-prompt-banner"
+          onClick={(e) => {
+            e.stopPropagation();
+            toggleFullscreen();
+          }}
+          className="absolute bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 px-4 py-2 bg-zinc-950/90 hover:bg-zinc-900 text-zinc-100 border border-emerald-500/40 rounded-full shadow-2xl backdrop-blur-md cursor-pointer transition-all hover:scale-105 select-none animate-pulse"
+        >
+          <svg
+            className="w-4 h-4 text-emerald-400 shrink-0"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3" />
+          </svg>
+          <span className="text-xs font-medium">
+            화면을 클릭하면 전체화면으로 전환됩니다
+          </span>
+          <span className="text-[10px] bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded-full font-semibold">
+            F 키로 전환
+          </span>
+        </div>
+      )}
+
       {/* 마우스 호버 시에만 나타나는 우측 상단 최소 제어 도구 (청중 방해 방지) */}
       <div className="absolute top-4 right-4 z-50 flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity duration-300 bg-zinc-900/80 backdrop-blur-sm border border-zinc-700/60 rounded-lg px-3 py-1.5 shadow-lg">
         <button
           type="button"
           data-testid="fullscreen-toggle-btn"
-          onClick={toggleFullscreen}
-          className="text-xs text-zinc-200 hover:text-white px-2 py-1 rounded bg-zinc-800 hover:bg-zinc-700 transition-colors"
-          title="전체화면 전환/해제"
+          onClick={(e) => {
+            e.stopPropagation();
+            toggleFullscreen();
+          }}
+          className="text-xs text-zinc-200 hover:text-white px-2 py-1 rounded bg-zinc-800 hover:bg-zinc-700 transition-colors cursor-pointer"
+          title="전체화면 전환/해제 (F)"
         >
           {isFullscreen ? "전체화면 종료" : "전체화면"}
         </button>
         <button
           type="button"
           data-testid="exit-present-btn"
-          onClick={() => navigate("/")}
-          className="text-xs text-zinc-300 hover:text-white px-2 py-1 rounded hover:bg-zinc-800 transition-colors"
+          onClick={(e) => {
+            e.stopPropagation();
+            handleExit();
+          }}
+          className="text-xs text-zinc-300 hover:text-white px-2 py-1 rounded hover:bg-zinc-800 transition-colors cursor-pointer"
           title="메인 홈으로 이동"
         >
           나가기

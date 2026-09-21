@@ -7,6 +7,7 @@ import {
   DEFAULT_DECK_STYLE,
 } from "@repo/shared";
 import { QuickLyricPasteModal } from "./QuickLyricPasteModal";
+import { ThemeMenuButton } from "../../components/common/ThemeMenuButton";
 
 export interface EditorSidebarProps {
   items: SetlistItem[];
@@ -187,7 +188,12 @@ export function EditorSidebar({
             }`}
             title="콘티 곡 목록"
           >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg
+              className="w-4 h-4"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
               <path
                 strokeLinecap="round"
                 strokeLinejoin="round"
@@ -210,7 +216,12 @@ export function EditorSidebar({
             }`}
             title="슬라이드 탐색"
           >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg
+              className="w-4 h-4"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
               <path
                 strokeLinecap="round"
                 strokeLinejoin="round"
@@ -233,7 +244,12 @@ export function EditorSidebar({
             }`}
             title="가사 빠른 입력"
           >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg
+              className="w-4 h-4"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
               <path
                 strokeLinecap="round"
                 strokeLinejoin="round"
@@ -256,7 +272,12 @@ export function EditorSidebar({
             }`}
             title="모션 배경 루프 라이브러리"
           >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg
+              className="w-4 h-4"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
               <path
                 strokeLinecap="round"
                 strokeLinejoin="round"
@@ -279,7 +300,12 @@ export function EditorSidebar({
             }`}
             title="테마 스타일 프리셋"
           >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg
+              className="w-4 h-4"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
               <path
                 strokeLinecap="round"
                 strokeLinejoin="round"
@@ -291,23 +317,35 @@ export function EditorSidebar({
           </button>
         </div>
 
-        {/* 하단 드로어 접기/펼치기 토글 버튼 */}
-        <button
-          type="button"
-          data-testid="collapse-sidebar-drawer-btn"
-          onClick={() => setIsDrawerOpen((prev) => !prev)}
-          className="p-2 rounded-lg text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900 transition-colors cursor-pointer"
-          title={isDrawerOpen ? "패널 접기" : "패널 펼치기"}
-        >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d={isDrawerOpen ? "M11 19l-7-7 7-7m8 14l-7-7 7-7" : "M13 5l7 7-7 7M5 5l7 7-7 7"}
-            />
-          </svg>
-        </button>
+        {/* 하단 드로어 접기/펼치기 토글 버튼 & 테마 전환 버튼 */}
+        <div className="flex flex-col items-center gap-1.5 w-full px-1">
+          <ThemeMenuButton variant="compact" direction="up" />
+          <button
+            type="button"
+            data-testid="collapse-sidebar-drawer-btn"
+            onClick={() => setIsDrawerOpen((prev) => !prev)}
+            className="p-2 rounded-lg text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900 transition-colors cursor-pointer"
+            title={isDrawerOpen ? "패널 접기" : "패널 펼치기"}
+          >
+            <svg
+              className="w-4 h-4"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d={
+                  isDrawerOpen
+                    ? "M11 19l-7-7 7-7m8 14l-7-7 7-7"
+                    : "M13 5l7 7-7 7M5 5l7 7-7 7"
+                }
+              />
+            </svg>
+          </button>
+        </div>
       </div>
 
       {/* 2. 드로어 본문 패널 (Drawer Panel) */}
@@ -316,8 +354,12 @@ export function EditorSidebar({
           {/* 드로어 상단 헤더 */}
           <div className="p-3.5 border-b border-zinc-800/80 flex items-center justify-between">
             <h3 className="text-xs font-bold text-white flex items-center gap-1.5">
-              {activeTab === "songs" && <span>콘티 곡 목록 ({items.length})</span>}
-              {activeTab === "slides" && <span>현재 곡 슬라이드 ({currentSlides.length})</span>}
+              {activeTab === "songs" && (
+                <span>콘티 곡 목록 ({items.length})</span>
+              )}
+              {activeTab === "slides" && (
+                <span>현재 곡 슬라이드 ({currentSlides.length})</span>
+              )}
               {activeTab === "lyrics" && <span>가사 빠른 추가</span>}
               {activeTab === "backgrounds" && <span>모션 비디오 루프</span>}
               {activeTab === "styles" && <span>디자인 테마 프리셋</span>}
@@ -581,7 +623,9 @@ export function EditorSidebar({
               className="flex-1 overflow-y-auto p-3 flex flex-col gap-3"
             >
               <div className="space-y-1">
-                <label className="text-[11px] font-semibold text-zinc-400">곡 제목</label>
+                <label className="text-[11px] font-semibold text-zinc-400">
+                  곡 제목
+                </label>
                 <input
                   type="text"
                   required

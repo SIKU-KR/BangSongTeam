@@ -19,6 +19,10 @@ export interface UsePresentationShortcutsOptions {
    */
   onToggleLyrics?: () => void;
   /**
+   * 전체화면 토글 (f, F)
+   */
+  onToggleFullscreen?: () => void;
+  /**
    * 숫자 키패드 및 버퍼 조작 키(0-9, ., Enter, Backspace) 처리 핸들러
    */
   handleKey?: (key: string) => void;
@@ -50,6 +54,7 @@ export function usePresentationShortcuts({
   onPrev,
   onToggleBlackout,
   onToggleLyrics,
+  onToggleFullscreen,
   handleKey,
   navigationBuffer,
   enabled = true,
@@ -62,6 +67,7 @@ export function usePresentationShortcuts({
     onPrev,
     onToggleBlackout,
     onToggleLyrics,
+    onToggleFullscreen,
     handleKey: activeHandleKey,
   });
 
@@ -70,6 +76,7 @@ export function usePresentationShortcuts({
     onPrev,
     onToggleBlackout,
     onToggleLyrics,
+    onToggleFullscreen,
     handleKey: activeHandleKey,
   };
 
@@ -139,6 +146,22 @@ export function usePresentationShortcuts({
       "Shift+H": (event) => {
         event.preventDefault();
         callbacksRef.current.onToggleLyrics?.();
+      },
+      f: (event) => {
+        event.preventDefault();
+        callbacksRef.current.onToggleFullscreen?.();
+      },
+      "Shift+f": (event) => {
+        event.preventDefault();
+        callbacksRef.current.onToggleFullscreen?.();
+      },
+      F: (event) => {
+        event.preventDefault();
+        callbacksRef.current.onToggleFullscreen?.();
+      },
+      "Shift+F": (event) => {
+        event.preventDefault();
+        callbacksRef.current.onToggleFullscreen?.();
       },
 
       // 3. 네비게이션 버퍼 점(.) 및 제어 키

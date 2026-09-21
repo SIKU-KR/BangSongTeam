@@ -40,3 +40,10 @@ export {
   PresentationCard,
   type PresentationCardProps,
 } from "./PresentationCard";
+
+export {
+  enterFullscreen,
+  exitFullscreen,
+  launchPresentation,
+  type ChromeFullscreenOptions,
+} from "./fullscreen";

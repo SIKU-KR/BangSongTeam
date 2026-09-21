@@ -120,7 +120,8 @@ export function BackgroundLibraryView({
               </span>
             </div>
             <p className="text-xs text-zinc-400 mt-0.5">
-              교회 본당 환경에 맞춰 직접 업로드하거나 등록한 커스텀 영상/이미지 배경입니다.
+              교회 본당 환경에 맞춰 직접 업로드하거나 등록한 커스텀 영상/이미지
+              배경입니다.
             </p>
           </div>
 
@@ -239,8 +240,18 @@ export function BackgroundLibraryView({
               className="group border-2 border-dashed border-zinc-800 hover:border-emerald-500/60 rounded-xl flex flex-col items-center justify-center p-6 min-h-[170px] cursor-pointer transition-all bg-zinc-950/40 hover:bg-zinc-900/30"
             >
               <div className="w-10 h-10 rounded-full bg-zinc-900 group-hover:bg-emerald-950/60 border border-zinc-700/80 group-hover:border-emerald-500/50 flex items-center justify-center text-zinc-400 group-hover:text-emerald-400 transition-colors mb-2">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                <svg
+                  className="w-5 h-5"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M12 4v16m8-8H4"
+                  />
                 </svg>
               </div>
               <span className="text-xs font-semibold text-zinc-300 group-hover:text-white transition-colors">
@@ -267,7 +278,8 @@ export function BackgroundLibraryView({
               </span>
             </div>
             <p className="text-xs text-zinc-400 mt-0.5">
-              사역팀에서 가장 많이 활용되는 무음 H.264 고화질 비디오 루프입니다. 마우스를 올리면 미리보기가 재생됩니다.
+              사역팀에서 가장 많이 활용되는 무음 H.264 고화질 비디오 루프입니다.
+              마우스를 올리면 미리보기가 재생됩니다.
             </p>
           </div>
 
@@ -359,15 +371,35 @@ export function BackgroundLibraryView({
                       >
                         {isApplied ? (
                           <>
-                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                            <svg
+                              className="w-3.5 h-3.5"
+                              fill="none"
+                              stroke="currentColor"
+                              viewBox="0 0 24 24"
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M5 13l4 4L19 7"
+                              />
                             </svg>
                             <span>적용 완료!</span>
                           </>
                         ) : (
                           <>
-                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                            <svg
+                              className="w-3.5 h-3.5"
+                              fill="none"
+                              stroke="currentColor"
+                              viewBox="0 0 24 24"
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M5 13l4 4L19 7"
+                              />
                             </svg>
                             <span>현재 곡에 적용</span>
                           </>
@@ -423,8 +455,18 @@ export function BackgroundLibraryView({
                 onClick={() => setIsRegisterOpen(false)}
                 className="p-1 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800 cursor-pointer"
               >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                <svg
+                  className="w-5 h-5"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M6 18L18 6M6 6l12 12"
+                  />
                 </svg>
               </button>
             </div>

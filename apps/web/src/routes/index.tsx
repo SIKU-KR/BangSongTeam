@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { ChromeAlertBanner } from "../components/common/ChromeAlertBanner";
+import { ThemeMenuButton } from "../components/common/ThemeMenuButton";
 import { QuickLyricPasteModal } from "../features/editor";
 import {
   useActiveSetlist,
@@ -82,7 +83,9 @@ export function HomeRoute(): React.JSX.Element {
     }
   };
 
-  const toggleDropdown = (name: "type" | "category" | "owner" | "sort"): void => {
+  const toggleDropdown = (
+    name: "type" | "category" | "owner" | "sort",
+  ): void => {
     setOpenDropdown((prev) => (prev === name ? null : name));
   };
 
@@ -102,11 +105,11 @@ export function HomeRoute(): React.JSX.Element {
         : "배경 영상, 이미지, 분위기 태그를 검색해 보세요";
 
   return (
-    <div className="h-screen w-full bg-zinc-950 text-zinc-100 flex overflow-hidden">
+    <div className="h-screen w-full bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 flex overflow-hidden">
       {/* ───────────────────────────────────────────────────────────
           1. 좌측 내비게이션 사이드바 (Canva Projects Sidebar Style)
           ─────────────────────────────────────────────────────────── */}
-      <aside className="w-64 h-full bg-zinc-950 border-r border-zinc-900 hidden lg:flex flex-col justify-between p-4 shrink-0 overflow-y-auto">
+      <aside className="w-64 h-full bg-white dark:bg-zinc-950 border-r border-zinc-200 dark:border-zinc-900 hidden lg:flex flex-col justify-between p-4 shrink-0 overflow-y-auto">
         <div className="space-y-6">
           {/* 브랜드 로고 & 워크스페이스 */}
           <div className="flex items-center gap-3 px-2 pt-1">
@@ -116,7 +119,7 @@ export function HomeRoute(): React.JSX.Element {
               </svg>
             </div>
             <div>
-              <span className="text-base font-extrabold tracking-tight text-white flex items-center gap-1.5">
+              <span className="text-base font-extrabold tracking-tight text-zinc-900 dark:text-white flex items-center gap-1.5">
                 Worship Studio
               </span>
               <p className="text-[10px] text-zinc-500 font-medium">
@@ -158,17 +161,29 @@ export function HomeRoute(): React.JSX.Element {
                 onClick={() => handleSelectMenu("home")}
                 className={`w-full px-3.5 py-2.5 rounded-xl text-xs font-medium flex items-center gap-3 transition-all cursor-pointer ${
                   activeMenu === "home"
-                    ? "bg-zinc-800/90 text-white font-semibold shadow-sm border border-zinc-700/60"
-                    : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900/60"
+                    ? "bg-zinc-100 dark:bg-zinc-800/90 text-zinc-900 dark:text-white font-semibold shadow-sm border border-zinc-300 dark:border-zinc-700/60"
+                    : "text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-900/60"
                 }`}
               >
                 <div
                   className={`w-5 h-5 flex items-center justify-center ${
-                    activeMenu === "home" ? "text-emerald-400" : "text-zinc-400"
+                    activeMenu === "home"
+                      ? "text-emerald-500 dark:text-emerald-400"
+                      : "text-zinc-400"
                   }`}
                 >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+                  <svg
+                    className="w-4 h-4"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"
+                    />
                   </svg>
                 </div>
                 <span>홈 (모든 프로젝트)</span>
@@ -181,16 +196,23 @@ export function HomeRoute(): React.JSX.Element {
                 onClick={() => handleSelectMenu("songs")}
                 className={`w-full px-3.5 py-2.5 rounded-xl text-xs font-medium flex items-center gap-3 transition-all cursor-pointer ${
                   activeMenu === "songs"
-                    ? "bg-zinc-800/90 text-white font-semibold shadow-sm border border-zinc-700/60"
-                    : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900/60"
+                    ? "bg-zinc-100 dark:bg-zinc-800/90 text-zinc-900 dark:text-white font-semibold shadow-sm border border-zinc-300 dark:border-zinc-700/60"
+                    : "text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-900/60"
                 }`}
               >
                 <div
                   className={`w-5 h-5 flex items-center justify-center ${
-                    activeMenu === "songs" ? "text-pink-400" : "text-zinc-400"
+                    activeMenu === "songs"
+                      ? "text-pink-500 dark:text-pink-400"
+                      : "text-zinc-400"
                   }`}
                 >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg
+                    className="w-4 h-4"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
                     <path
                       strokeLinecap="round"
                       strokeLinejoin="round"
@@ -209,16 +231,23 @@ export function HomeRoute(): React.JSX.Element {
                 onClick={() => handleSelectMenu("backgrounds")}
                 className={`w-full px-3.5 py-2.5 rounded-xl text-xs font-medium flex items-center gap-3 transition-all cursor-pointer ${
                   activeMenu === "backgrounds"
-                    ? "bg-zinc-800/90 text-white font-semibold shadow-sm border border-zinc-700/60"
-                    : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900/60"
+                    ? "bg-zinc-100 dark:bg-zinc-800/90 text-zinc-900 dark:text-white font-semibold shadow-sm border border-zinc-300 dark:border-zinc-700/60"
+                    : "text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-900/60"
                 }`}
               >
                 <div
                   className={`w-5 h-5 flex items-center justify-center ${
-                    activeMenu === "backgrounds" ? "text-sky-400" : "text-zinc-400"
+                    activeMenu === "backgrounds"
+                      ? "text-sky-500 dark:text-sky-400"
+                      : "text-zinc-400"
                   }`}
                 >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg
+                    className="w-4 h-4"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
                     <path
                       strokeLinecap="round"
                       strokeLinejoin="round"
@@ -233,14 +262,24 @@ export function HomeRoute(): React.JSX.Element {
           </div>
         </div>
 
-        {/* 좌측 하단 사용자 프로필 (Canva 아바타 스타일) */}
-        <div className="p-3 rounded-2xl bg-zinc-900/60 border border-zinc-900 flex items-center gap-3">
-          <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-emerald-700 to-teal-500 flex items-center justify-center text-white text-xs font-bold shrink-0">
-            WS
-          </div>
-          <div className="min-w-0 flex-1">
-            <p className="text-xs font-bold text-zinc-200 truncate">주일 찬양팀</p>
-            <p className="text-[10px] text-zinc-500 truncate">로컬 오프라인 모드</p>
+        {/* 좌측 하단 영역: 테마 전환 메뉴 + 사용자 프로필 */}
+        <div className="space-y-3 pt-3 border-t border-zinc-200 dark:border-zinc-900">
+          {/* 사이드바 하단 라이트/다크/시스템 설정 전환 메뉴버튼 */}
+          <ThemeMenuButton />
+
+          {/* 좌측 하단 사용자 프로필 (Canva 아바타 스타일) */}
+          <div className="p-3 rounded-2xl bg-zinc-100/90 dark:bg-zinc-900/60 border border-zinc-200 dark:border-zinc-900 flex items-center gap-3">
+            <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-emerald-700 to-teal-500 flex items-center justify-center text-white text-xs font-bold shrink-0">
+              WS
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-xs font-bold text-zinc-800 dark:text-zinc-200 truncate">
+                주일 찬양팀
+              </p>
+              <p className="text-[10px] text-zinc-500 truncate">
+                로컬 오프라인 모드
+              </p>
+            </div>
           </div>
         </div>
       </aside>
@@ -253,16 +292,16 @@ export function HomeRoute(): React.JSX.Element {
         <ChromeAlertBanner />
 
         {/* ── Canva Signature Hero Banner: 앰비언트 글로우, 대형 타이틀, 중앙 검색창, 필터 칩 ── */}
-        <header className="relative bg-gradient-to-b from-indigo-950/20 via-zinc-950/40 to-zinc-950 pt-10 pb-8 px-6 sm:px-10 border-b border-zinc-900/80">
+        <header className="relative bg-gradient-to-b from-indigo-50/60 via-zinc-50/40 to-zinc-50 dark:from-indigo-950/20 dark:via-zinc-950/40 dark:to-zinc-950 pt-10 pb-8 px-6 sm:px-10 border-b border-zinc-200 dark:border-zinc-900/80">
           <div className="max-w-4xl mx-auto flex flex-col items-center text-center space-y-6">
             {/* 1) 대형 중앙 볼드 타이틀 */}
-            <h1 className="text-3xl sm:text-4xl font-extrabold text-white tracking-tight">
+            <h1 className="text-3xl sm:text-4xl font-extrabold text-zinc-900 dark:text-white tracking-tight">
               {pageTitle}
             </h1>
 
             {/* 2) Canva 스타일 대형 중앙 검색창 (Pill/Rounded-full) */}
             <div className="w-full max-w-2xl relative">
-              <div className="w-full rounded-2xl sm:rounded-full bg-zinc-900/90 border border-zinc-700/80 hover:border-zinc-600 focus-within:border-emerald-500 focus-within:ring-2 focus-within:ring-emerald-500/20 shadow-xl px-4 py-3 sm:py-3.5 flex items-center gap-3 transition-all">
+              <div className="w-full rounded-2xl sm:rounded-full bg-white dark:bg-zinc-900/90 border border-zinc-300 dark:border-zinc-700/80 hover:border-zinc-400 dark:hover:border-zinc-600 focus-within:border-emerald-500 focus-within:ring-2 focus-within:ring-emerald-500/20 shadow-xl px-4 py-3 sm:py-3.5 flex items-center gap-3 transition-all">
                 <svg
                   className="w-5 h-5 text-zinc-400 shrink-0 ml-1"
                   fill="none"
@@ -281,16 +320,26 @@ export function HomeRoute(): React.JSX.Element {
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   placeholder={searchPlaceholder}
-                  className="w-full bg-transparent text-sm text-zinc-100 placeholder-zinc-500 focus:outline-none"
+                  className="w-full bg-transparent text-sm text-zinc-900 dark:text-zinc-100 placeholder-zinc-400 dark:placeholder-zinc-500 focus:outline-none"
                 />
                 {searchQuery && (
                   <button
                     type="button"
                     onClick={() => setSearchQuery("")}
-                    className="p-1 rounded-full hover:bg-zinc-800 text-zinc-400 hover:text-white cursor-pointer"
+                    className="p-1 rounded-full hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-400 hover:text-zinc-700 dark:hover:text-white cursor-pointer"
                   >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    <svg
+                      className="w-4 h-4"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M6 18L18 6M6 6l12 12"
+                      />
                     </svg>
                   </button>
                 )}
@@ -306,30 +355,42 @@ export function HomeRoute(): React.JSX.Element {
                   onClick={() => toggleDropdown("type")}
                   className={`px-3.5 py-1.5 rounded-full text-xs font-medium border flex items-center gap-1.5 transition-all cursor-pointer ${
                     typeFilter !== "전체"
-                      ? "bg-zinc-800 border-emerald-500 text-emerald-400 font-semibold"
-                      : "bg-zinc-900/80 border-zinc-800 hover:border-zinc-700 text-zinc-300"
+                      ? "bg-emerald-50 dark:bg-zinc-800 border-emerald-500 text-emerald-700 dark:text-emerald-400 font-semibold"
+                      : "bg-white dark:bg-zinc-900/80 border-zinc-300 dark:border-zinc-800 hover:border-zinc-400 dark:hover:border-zinc-700 text-zinc-700 dark:text-zinc-300"
                   }`}
                 >
                   <span>유형: {typeFilter}</span>
-                  <svg className="w-3.5 h-3.5 text-zinc-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  <svg
+                    className="w-3.5 h-3.5 text-zinc-400"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M19 9l-7 7-7-7"
+                    />
                   </svg>
                 </button>
                 {openDropdown === "type" && (
-                  <div className="absolute top-full left-0 mt-2 w-36 bg-zinc-900 border border-zinc-800 rounded-xl shadow-2xl z-50 py-1.5">
-                    {["전체", "프레젠테이션", "단일 곡", "배경 루프"].map((opt) => (
-                      <button
-                        key={opt}
-                        type="button"
-                        onClick={() => {
-                          setTypeFilter(opt);
-                          setOpenDropdown(null);
-                        }}
-                        className="w-full text-left px-3 py-1.5 text-xs hover:bg-zinc-800 text-zinc-300 hover:text-white"
-                      >
-                        {opt}
-                      </button>
-                    ))}
+                  <div className="absolute top-full left-0 mt-2 w-36 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-2xl z-50 py-1.5">
+                    {["전체", "프레젠테이션", "단일 곡", "배경 루프"].map(
+                      (opt) => (
+                        <button
+                          key={opt}
+                          type="button"
+                          onClick={() => {
+                            setTypeFilter(opt);
+                            setOpenDropdown(null);
+                          }}
+                          className="w-full text-left px-3 py-1.5 text-xs hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white"
+                        >
+                          {opt}
+                        </button>
+                      ),
+                    )}
                   </div>
                 )}
               </div>
@@ -341,30 +402,42 @@ export function HomeRoute(): React.JSX.Element {
                   onClick={() => toggleDropdown("category")}
                   className={`px-3.5 py-1.5 rounded-full text-xs font-medium border flex items-center gap-1.5 transition-all cursor-pointer ${
                     categoryFilter !== "전체"
-                      ? "bg-zinc-800 border-indigo-500 text-indigo-300 font-semibold"
-                      : "bg-zinc-900/80 border-zinc-800 hover:border-zinc-700 text-zinc-300"
+                      ? "bg-indigo-50 dark:bg-zinc-800 border-indigo-500 text-indigo-700 dark:text-indigo-300 font-semibold"
+                      : "bg-white dark:bg-zinc-900/80 border-zinc-300 dark:border-zinc-800 hover:border-zinc-400 dark:hover:border-zinc-700 text-zinc-700 dark:text-zinc-300"
                   }`}
                 >
                   <span>카테고리: {categoryFilter}</span>
-                  <svg className="w-3.5 h-3.5 text-zinc-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  <svg
+                    className="w-3.5 h-3.5 text-zinc-400"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M19 9l-7 7-7-7"
+                    />
                   </svg>
                 </button>
                 {openDropdown === "category" && (
-                  <div className="absolute top-full left-0 mt-2 w-36 bg-zinc-900 border border-zinc-800 rounded-xl shadow-2xl z-50 py-1.5">
-                    {["전체", "잔잔한", "밝은", "웅장한", "따뜻한"].map((opt) => (
-                      <button
-                        key={opt}
-                        type="button"
-                        onClick={() => {
-                          setCategoryFilter(opt);
-                          setOpenDropdown(null);
-                        }}
-                        className="w-full text-left px-3 py-1.5 text-xs hover:bg-zinc-800 text-zinc-300 hover:text-white"
-                      >
-                        {opt}
-                      </button>
-                    ))}
+                  <div className="absolute top-full left-0 mt-2 w-36 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-2xl z-50 py-1.5">
+                    {["전체", "잔잔한", "밝은", "웅장한", "따뜻한"].map(
+                      (opt) => (
+                        <button
+                          key={opt}
+                          type="button"
+                          onClick={() => {
+                            setCategoryFilter(opt);
+                            setOpenDropdown(null);
+                          }}
+                          className="w-full text-left px-3 py-1.5 text-xs hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white"
+                        >
+                          {opt}
+                        </button>
+                      ),
+                    )}
                   </div>
                 )}
               </div>
@@ -376,17 +449,27 @@ export function HomeRoute(): React.JSX.Element {
                   onClick={() => toggleDropdown("owner")}
                   className={`px-3.5 py-1.5 rounded-full text-xs font-medium border flex items-center gap-1.5 transition-all cursor-pointer ${
                     ownerFilter !== "전체"
-                      ? "bg-zinc-800 border-teal-500 text-teal-300 font-semibold"
-                      : "bg-zinc-900/80 border-zinc-800 hover:border-zinc-700 text-zinc-300"
+                      ? "bg-teal-50 dark:bg-zinc-800 border-teal-500 text-teal-700 dark:text-teal-300 font-semibold"
+                      : "bg-white dark:bg-zinc-900/80 border-zinc-300 dark:border-zinc-800 hover:border-zinc-400 dark:hover:border-zinc-700 text-zinc-700 dark:text-zinc-300"
                   }`}
                 >
                   <span>소유자: {ownerFilter}</span>
-                  <svg className="w-3.5 h-3.5 text-zinc-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  <svg
+                    className="w-3.5 h-3.5 text-zinc-400"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M19 9l-7 7-7-7"
+                    />
                   </svg>
                 </button>
                 {openDropdown === "owner" && (
-                  <div className="absolute top-full left-0 mt-2 w-36 bg-zinc-900 border border-zinc-800 rounded-xl shadow-2xl z-50 py-1.5">
+                  <div className="absolute top-full left-0 mt-2 w-36 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-2xl z-50 py-1.5">
                     {["전체", "내가 만든 항목", "공유된 항목"].map((opt) => (
                       <button
                         key={opt}
@@ -395,7 +478,7 @@ export function HomeRoute(): React.JSX.Element {
                           setOwnerFilter(opt);
                           setOpenDropdown(null);
                         }}
-                        className="w-full text-left px-3 py-1.5 text-xs hover:bg-zinc-800 text-zinc-300 hover:text-white"
+                        className="w-full text-left px-3 py-1.5 text-xs hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white"
                       >
                         {opt}
                       </button>
@@ -409,7 +492,7 @@ export function HomeRoute(): React.JSX.Element {
                 <button
                   type="button"
                   onClick={() => toggleDropdown("sort")}
-                  className="px-3.5 py-1.5 rounded-full text-xs font-medium border bg-zinc-900/80 border-zinc-800 hover:border-zinc-700 text-zinc-300 flex items-center gap-1.5 transition-all cursor-pointer"
+                  className="px-3.5 py-1.5 rounded-full text-xs font-medium border bg-white dark:bg-zinc-900/80 border-zinc-300 dark:border-zinc-800 hover:border-zinc-400 dark:hover:border-zinc-700 text-zinc-700 dark:text-zinc-300 flex items-center gap-1.5 transition-all cursor-pointer"
                 >
                   <span>
                     정렬:{" "}
@@ -419,19 +502,29 @@ export function HomeRoute(): React.JSX.Element {
                         ? "이름순"
                         : "슬라이드 수"}
                   </span>
-                  <svg className="w-3.5 h-3.5 text-zinc-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  <svg
+                    className="w-3.5 h-3.5 text-zinc-400"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M19 9l-7 7-7-7"
+                    />
                   </svg>
                 </button>
                 {openDropdown === "sort" && (
-                  <div className="absolute top-full left-0 mt-2 w-36 bg-zinc-900 border border-zinc-800 rounded-xl shadow-2xl z-50 py-1.5">
+                  <div className="absolute top-full left-0 mt-2 w-36 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-2xl z-50 py-1.5">
                     <button
                       type="button"
                       onClick={() => {
                         setSortOrder("recent");
                         setOpenDropdown(null);
                       }}
-                      className="w-full text-left px-3 py-1.5 text-xs hover:bg-zinc-800 text-zinc-300 hover:text-white"
+                      className="w-full text-left px-3 py-1.5 text-xs hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white"
                     >
                       수정된 날짜순
                     </button>
@@ -441,7 +534,7 @@ export function HomeRoute(): React.JSX.Element {
                         setSortOrder("name");
                         setOpenDropdown(null);
                       }}
-                      className="w-full text-left px-3 py-1.5 text-xs hover:bg-zinc-800 text-zinc-300 hover:text-white"
+                      className="w-full text-left px-3 py-1.5 text-xs hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white"
                     >
                       이름순
                     </button>
@@ -451,7 +544,7 @@ export function HomeRoute(): React.JSX.Element {
                         setSortOrder("slides");
                         setOpenDropdown(null);
                       }}
-                      className="w-full text-left px-3 py-1.5 text-xs hover:bg-zinc-800 text-zinc-300 hover:text-white"
+                      className="w-full text-left px-3 py-1.5 text-xs hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white"
                     >
                       슬라이드 많은순
                     </button>
@@ -476,27 +569,41 @@ export function HomeRoute(): React.JSX.Element {
                 setSortOrder((prev) => (prev === "recent" ? "name" : "recent"))
               }
               title="정렬 기준 전환"
-              className="p-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 hover:border-zinc-700 text-zinc-400 hover:text-white transition-colors cursor-pointer"
+              className="p-2 rounded-xl bg-white dark:bg-zinc-900 hover:bg-zinc-100 dark:hover:bg-zinc-800 border border-zinc-200 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700 text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white transition-colors cursor-pointer"
             >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
+              <svg
+                className="w-4 h-4"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4"
+                />
               </svg>
             </button>
 
             {/* 2) 뷰 모드 토글: 그리드 (::) / 리스트 (☰) */}
-            <div className="flex items-center p-0.5 rounded-xl bg-zinc-900 border border-zinc-800">
+            <div className="flex items-center p-0.5 rounded-xl bg-zinc-100 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800">
               <button
                 type="button"
                 onClick={() => setViewMode("grid")}
                 title="그리드 뷰"
                 className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
                   viewMode === "grid"
-                    ? "bg-zinc-800 text-white shadow-sm"
-                    : "text-zinc-500 hover:text-zinc-300"
+                    ? "bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-sm"
+                    : "text-zinc-400 hover:text-zinc-700 dark:text-zinc-500 dark:hover:text-zinc-300"
                 }`}
               >
                 {/* 4칸 그리드 아이콘 (::) */}
-                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                <svg
+                  className="w-4 h-4"
+                  fill="currentColor"
+                  viewBox="0 0 24 24"
+                >
                   <path d="M4 4h7v7H4V4zm9 0h7v7h-7V4zm-9 9h7v7H4v-7zm9 0h7v7h-7v-7z" />
                 </svg>
               </button>
@@ -506,13 +613,23 @@ export function HomeRoute(): React.JSX.Element {
                 title="리스트 뷰"
                 className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
                   viewMode === "list"
-                    ? "bg-zinc-800 text-white shadow-sm"
-                    : "text-zinc-500 hover:text-zinc-300"
+                    ? "bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-sm"
+                    : "text-zinc-400 hover:text-zinc-700 dark:text-zinc-500 dark:hover:text-zinc-300"
                 }`}
               >
                 {/* 리스트 아이콘 (☰) */}
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+                <svg
+                  className="w-4 h-4"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M4 6h16M4 12h16M4 18h16"
+                  />
                 </svg>
               </button>
             </div>
@@ -528,8 +645,18 @@ export function HomeRoute(): React.JSX.Element {
               title="새 항목 추가"
               className="w-8 h-8 rounded-full bg-emerald-600 hover:bg-emerald-500 text-white flex items-center justify-center shadow-md shadow-emerald-950/40 hover:scale-105 active:scale-95 transition-all cursor-pointer"
             >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" />
+              <svg
+                className="w-4 h-4"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2.5}
+                  d="M12 4v16m8-8H4"
+                />
               </svg>
             </button>
           </div>

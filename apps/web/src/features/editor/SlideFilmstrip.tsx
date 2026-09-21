@@ -44,8 +44,14 @@ export function SlideFilmstrip({
 }: SlideFilmstripProps): React.JSX.Element {
   const [isCollapsed, setIsCollapsed] = useState(false);
 
-  const thumbWidth = Math.max(96, Math.min(240, Math.round(148 * (zoomLevel / 100))));
-  const thumbHeight = Math.max(54, Math.min(135, Math.round(83 * (zoomLevel / 100))));
+  const thumbWidth = Math.max(
+    96,
+    Math.min(240, Math.round(148 * (zoomLevel / 100))),
+  );
+  const thumbHeight = Math.max(
+    54,
+    Math.min(135, Math.round(83 * (zoomLevel / 100))),
+  );
 
   if (isCollapsed) {
     return (
@@ -62,8 +68,18 @@ export function SlideFilmstrip({
           onClick={() => setIsCollapsed(false)}
           className="px-2.5 py-1 rounded text-xs bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-zinc-300 hover:text-white flex items-center gap-1 cursor-pointer transition-colors"
         >
-          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+          <svg
+            className="w-3.5 h-3.5"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M5 15l7-7 7 7"
+            />
           </svg>
           <span>페이지 표시</span>
         </button>
@@ -83,7 +99,8 @@ export function SlideFilmstrip({
             슬라이드 스트립 ({slides.length}장)
           </span>
           <span className="text-[11px] text-zinc-500 font-mono">
-            선택: {slides.length > 0 ? activeSlideIndex + 1 : 0} / {slides.length}
+            선택: {slides.length > 0 ? activeSlideIndex + 1 : 0} /{" "}
+            {slides.length}
           </span>
         </div>
 
@@ -118,8 +135,18 @@ export function SlideFilmstrip({
             className="p-1 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 rounded transition-colors cursor-pointer"
             title="페이지 트레이 숨기기"
           >
-            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            <svg
+              className="w-3.5 h-3.5"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M19 9l-7 7-7-7"
+              />
             </svg>
           </button>
         </div>
@@ -150,7 +177,10 @@ export function SlideFilmstrip({
                   style={songStyle}
                   backgroundUrl={backgroundUrl}
                   posterUrl={posterUrl}
-                  containerDimensions={{ width: thumbWidth, height: thumbHeight }}
+                  containerDimensions={{
+                    width: thumbWidth,
+                    height: thumbHeight,
+                  }}
                 />
               </div>
 

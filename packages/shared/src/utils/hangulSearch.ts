@@ -54,7 +54,8 @@ export function hangulIncludes(
     const convertedHangul = convertQwertyToHangul(cleanQuery);
     if (convertedHangul && convertedHangul !== cleanQuery) {
       if (cleanTarget.includes(convertedHangul)) return true;
-      if (targetDisassembled.includes(disassemble(convertedHangul))) return true;
+      if (targetDisassembled.includes(disassemble(convertedHangul)))
+        return true;
       if (targetChoseong.includes(convertedHangul)) return true;
     }
   } catch {
