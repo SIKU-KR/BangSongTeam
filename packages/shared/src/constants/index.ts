@@ -112,3 +112,6 @@ export const SAFE_MARGIN_PERCENT = {
   MIN_WIDTH: 20,
   MAX_WIDTH: 90,
 } as const;
+
+export * from "./backgrounds";
+

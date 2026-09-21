@@ -4,6 +4,8 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { MemoryRouter } from "react-router-dom";
 import { FullscreenPresentRoute } from "./FullscreenPresentRoute";
 
+import { resetActiveSetlist } from "../features/presentation";
+
 function dispatchKey(key: string, code?: string, shiftKey = false): void {
   window.dispatchEvent(
     new KeyboardEvent("keydown", {
@@ -17,8 +19,10 @@ function dispatchKey(key: string, code?: string, shiftKey = false): void {
 
 describe("FullscreenPresentRoute", () => {
   beforeEach(() => {
+    resetActiveSetlist();
     vi.spyOn(globalThis, "fetch");
   });
+
 
   afterEach(() => {
     vi.restoreAllMocks();
@@ -207,4 +211,27 @@ describe("FullscreenPresentRoute", () => {
 
     expect(requestFullscreenMock).toHaveBeenCalledTimes(1);
   });
+
+  it("should supply motion background video URL and preload next song video", () => {
+    render(
+      <MemoryRouter>
+        <FullscreenPresentRoute />
+      </MemoryRouter>,
+    );
+
+    // Initial Song 1 (은혜로다) background should be warm_light_flow.mp4
+    const videoSlotA = screen.getByTestId("video-slot-a");
+    expect(videoSlotA).toHaveAttribute(
+      "src",
+      "/api/media/loops/warm_light_flow.mp4",
+    );
+
+    // Next Song 2 (주 품에) background should be preloaded as calm_lake_waves.mp4
+    const preloadVideo = screen.getByTestId("video-preload");
+    expect(preloadVideo).toHaveAttribute(
+      "src",
+      "/api/media/loops/calm_lake_waves.mp4",
+    );
+  });
 });
+

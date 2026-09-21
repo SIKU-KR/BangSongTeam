@@ -1,22 +1,27 @@
 import React, { useState, useCallback, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { DEFAULT_DECK_STYLE } from "@repo/shared";
+import {
+  DEFAULT_DECK_STYLE,
+  getBackgroundMediaUrl,
+  getBackgroundPosterUrl,
+} from "@repo/shared";
 import { SlideStage } from "../components/stage/SlideStage";
 import {
-  mockSetlist,
+  useActiveSetlist,
   useNavigationBuffer,
   usePresentationShortcuts,
 } from "../features/presentation";
 
 /**
  * M1 청중용 단독 전체화면 송출 라우트
- * - 인메모리 5곡 세트리스트 데이터를 기반으로 완전 오프라인(Zero-Fetch)으로 동작
+ * - 인메모리 5곡+ 세트리스트 데이터를 기반으로 완전 오프라인(Zero-Fetch)으로 동작
  * - 3-Layer SlideStage (비디오 루프, 암전/오버레이, 가사 타이포그래피) 송출
  * - 청중 화면에 불필요한 번호 버퍼나 조작 UI를 일절 표시하지 않는 무결점 송출 보장
  * - 키보드(방향키, Space, PgUp/PgDn, B, H, 숫자 키패드 점프) 및 발표자 리모컨 지원
  */
 export function FullscreenPresentRoute(): React.JSX.Element {
   const navigate = useNavigate();
+  const setlist = useActiveSetlist();
 
   const [currentSongIndex, setCurrentSongIndex] = useState<number>(0);
   const [currentSlideIndex, setCurrentSlideIndex] = useState<number>(0);
@@ -24,10 +29,17 @@ export function FullscreenPresentRoute(): React.JSX.Element {
   const [isLyricsHidden, setIsLyricsHidden] = useState<boolean>(false);
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
 
-  const songs = mockSetlist.items;
+  const songs = setlist.items;
   const currentSong = songs[currentSongIndex]?.deck;
   const currentSlide = currentSong?.slides[currentSlideIndex] ?? null;
   const currentStyle = currentSong?.style ?? DEFAULT_DECK_STYLE;
+
+  // 배경 영상 및 다음 곡 사전 로드 URL 계산
+  const currentBackgroundUrl = getBackgroundMediaUrl(currentSong?.backgroundId);
+  const currentPosterUrl = getBackgroundPosterUrl(currentSong?.backgroundId);
+  const nextSong = songs[currentSongIndex + 1]?.deck;
+  const nextBackgroundUrl = getBackgroundMediaUrl(nextSong?.backgroundId);
+
 
   // 다음 슬라이드로 이동 (곡 경계 자동 전환)
   const handleNext = useCallback(() => {
@@ -116,9 +128,13 @@ export function FullscreenPresentRoute(): React.JSX.Element {
       <SlideStage
         slide={currentSlide}
         style={currentStyle}
+        backgroundUrl={currentBackgroundUrl}
+        nextBackgroundUrl={nextBackgroundUrl}
+        posterUrl={currentPosterUrl}
         isBlackout={isBlackout}
         isLyricsHidden={isLyricsHidden}
       />
+
 
       {/* 마우스 호버 시에만 나타나는 우측 상단 최소 제어 도구 (청중 방해 방지) */}
       <div className="absolute top-4 right-4 z-50 flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity duration-300 bg-zinc-900/80 backdrop-blur-sm border border-zinc-700/60 rounded-lg px-3 py-1.5 shadow-lg">

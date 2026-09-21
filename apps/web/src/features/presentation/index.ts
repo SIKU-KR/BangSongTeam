@@ -10,3 +10,11 @@ export {
 } from "./usePresentationShortcuts";
 
 export { mockSetlist, mockDecks } from "./mockSetlist";
+
+export {
+  getActiveSetlist,
+  addDeckToSetlist,
+  resetActiveSetlist,
+  useActiveSetlist,
+} from "./setlistStore";
+

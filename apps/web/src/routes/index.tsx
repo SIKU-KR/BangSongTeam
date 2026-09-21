@@ -1,19 +1,45 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ChromeAlertBanner } from "../components/common/ChromeAlertBanner";
+import {
+  ChromeAlertBanner,
+  isGoogleChromeBrowser,
+} from "../components/common/ChromeAlertBanner";
 import { QuickLyricPasteModal } from "../features/editor";
-import { mockSetlist } from "../features/presentation";
+import {
+  useActiveSetlist,
+  addDeckToSetlist,
+} from "../features/presentation";
+import type { Deck } from "@repo/shared";
 
 /**
  * M1 메인 홈 진입 화면 (HomeRoute)
  * - 상단: Chrome 브라우저 환경 권장 알림 배너
- * - M1 송출 시작하기 (5곡 세트) 카드: /present/fullscreen 으로 즉시 전환
- * - 가사 빠른 입력 카드: 찬양 가사 붙여넣기 모달(실시간 분할 & 멜론/벅스 검색 링크) 실행
- * - 검증용 5곡 세트리스트 구성 안내
+ * - M1 송출 시작하기 (5곡+ 세트) 카드: /present/fullscreen 으로 즉시 전환 (비-Chrome 진입 시 확인 창)
+ * - 가사 빠른 입력 카드: 찬양 가사 붙여넣기 모달(실시간 분할 & 멜론/벅스 검색 링크) 실행 -> 인메모리 세트 즉시 추가
+ * - 검증용 세트리스트 구성 실시간 연동
  */
 export function HomeRoute(): React.JSX.Element {
   const navigate = useNavigate();
+  const setlist = useActiveSetlist();
   const [isQuickPasteOpen, setIsQuickPasteOpen] = useState<boolean>(false);
+
+  const handleStartPresentation = (): void => {
+    if (!isGoogleChromeBrowser()) {
+      const proceed = window.confirm(
+        "이 서비스는 Google Chrome에 최적화되어 있습니다. 예배 송출은 Chrome에서 진행하는 것을 권장합니다.\n\n계속 진행하시겠습니까?",
+      );
+      if (!proceed) {
+        return;
+      }
+    }
+    navigate("/present/fullscreen");
+  };
+
+  const handleAddToSet = (newDeck: Deck): void => {
+    addDeckToSetlist(newDeck);
+    setIsQuickPasteOpen(false);
+  };
+
 
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col">
@@ -102,7 +128,7 @@ export function HomeRoute(): React.JSX.Element {
             <button
               type="button"
               data-testid="start-present-btn"
-              onClick={() => navigate("/present/fullscreen")}
+              onClick={handleStartPresentation}
               className="mt-6 w-full py-3 px-4 bg-emerald-600 hover:bg-emerald-500 text-white font-medium rounded-lg transition-colors flex items-center justify-center gap-2 shadow-lg shadow-emerald-950/50 cursor-pointer"
             >
               <span>송출 시작하기</span>
@@ -192,20 +218,20 @@ export function HomeRoute(): React.JSX.Element {
           </div>
         </div>
 
-        {/* 3. 오늘 예배 세트리스트 5곡 미리보기 */}
+        {/* 3. 오늘 예배 세트리스트 미리보기 (실시간 연동) */}
         <section className="bg-zinc-900/50 border border-zinc-800/70 rounded-xl p-6">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-base font-semibold text-white flex items-center gap-2">
               <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
-              {mockSetlist.title} ({mockSetlist.items.length}곡 준비 완료)
+              {setlist.title} ({setlist.items.length}곡 준비 완료)
             </h3>
             <span className="text-xs text-zinc-500 font-mono">
-              예배 일자: {mockSetlist.serviceDate}
+              예배 일자: {setlist.serviceDate}
             </span>
           </div>
 
           <div className="divide-y divide-zinc-800/60">
-            {mockSetlist.items.map((item, index) => (
+            {setlist.items.map((item, index) => (
               <div
                 key={item.id}
                 className="py-3 flex items-center justify-between text-sm"
@@ -238,8 +264,9 @@ export function HomeRoute(): React.JSX.Element {
       <QuickLyricPasteModal
         isOpen={isQuickPasteOpen}
         onClose={() => setIsQuickPasteOpen(false)}
-        onAddToSet={() => setIsQuickPasteOpen(false)}
+        onAddToSet={handleAddToSet}
       />
+
     </div>
   );
 }
