@@ -3,7 +3,8 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 
 describe("Task 4.1: Cloudflare Worker 프로젝트 설정 및 Wrangler 바인딩 구성", () => {
-  const webDir = path.resolve(__dirname);
+  const rootDir = path.resolve(__dirname, "..");
+  const webDir = path.join(rootDir, "apps/web");
   const packageJsonPath = path.join(webDir, "package.json");
   const wranglerJsoncPath = path.join(webDir, "wrangler.jsonc");
   const workerConfigDtsPath = path.join(webDir, "worker-configuration.d.ts");
@@ -72,5 +73,30 @@ describe("Task 4.1: Cloudflare Worker 프로젝트 설정 및 Wrangler 바인딩
     expect(dtsContent).toContain("DB: D1Database");
     expect(dtsContent).toContain("MEDIA_BUCKET: R2Bucket");
     expect(dtsContent).toContain("AI: Ai");
+  });
+});
+
+describe("Task 4.2: 로컬 Miniflare 개발용 환경 변수 템플릿 작성", () => {
+  const rootDir = path.resolve(__dirname, "..");
+  const webDir = path.join(rootDir, "apps/web");
+  const devVarsExamplePath = path.join(webDir, ".dev.vars.example");
+
+  it(".dev.vars.example exists and contains all required environment variables", () => {
+    expect(fs.existsSync(devVarsExamplePath)).toBe(true);
+
+    const content = fs.readFileSync(devVarsExamplePath, "utf-8");
+    const requiredKeys = [
+      "BETTER_AUTH_SECRET",
+      "BETTER_AUTH_URL",
+      "KAKAO_CLIENT_ID",
+      "KAKAO_CLIENT_SECRET",
+      "NAVER_CLIENT_ID",
+      "NAVER_CLIENT_SECRET",
+      "R2_PUBLIC_DOMAIN",
+    ];
+
+    for (const key of requiredKeys) {
+      expect(content).toMatch(new RegExp(`^${key}=`, "m"));
+    }
   });
 });

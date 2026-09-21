@@ -1,0 +1,12 @@
+# Better Auth Settings
+BETTER_AUTH_SECRET=local-development-secret-key-at-least-32-chars-long
+BETTER_AUTH_URL=http://localhost:5173
+
+# OAuth Providers
+KAKAO_CLIENT_ID=mock_kakao_client_id
+KAKAO_CLIENT_SECRET=mock_kakao_client_secret
+NAVER_CLIENT_ID=mock_naver_client_id
+NAVER_CLIENT_SECRET=mock_naver_client_secret
+
+# Cloudflare R2 Public CDN Domain
+R2_PUBLIC_DOMAIN=media.worship-slide.com

@@ -7,11 +7,15 @@
     ".": "./src/index.ts",
     "./schema": "./src/schema/index.ts",
     "./queries": "./src/queries/index.ts",
-    "./client": "./src/client.ts"
+    "./client": "./src/client.ts",
+    "./seed": "./src/seed/backgrounds.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
     "db:generate": "drizzle-kit generate",
+    "db:migrate:local": "wrangler d1 migrations apply DB --local --config ../../apps/web/wrangler.jsonc",
+    "db:migrate:prod": "wrangler d1 migrations apply DB --remote --config ../../apps/web/wrangler.jsonc",
+    "seed:local": "wrangler d1 execute DB --local --config ../../apps/web/wrangler.jsonc --file=./drizzle/seed.sql",
     "test": "vitest run",
     "test:watch": "vitest"
   },
@@ -25,6 +29,7 @@
     "better-sqlite3": "^13.0.3",
     "drizzle-kit": "^0.31.10",
     "typescript": "^5.7.3",
-    "vitest": "^3.0.7"
+    "vitest": "^3.0.7",
+    "wrangler": "^4.135.0"
   }
 }

@@ -25,14 +25,14 @@
     - `wrangler types` 생성 스크립트 등록
   - **DoD (통과 기준)**: `pnpm --filter web exec wrangler types` 실행 시 `worker-configuration.d.ts`가 정상 생성된다.
 
-- [ ] **Task 4.2: 로컬 Miniflare 개발용 환경 변수 템플릿 작성**
+- [x] **Task 4.2: 로컬 Miniflare 개발용 환경 변수 템플릿 작성**
   - **대상 파일**: `apps/web/.dev.vars.example`
   - **선행 조건**: Task 4.1
   - **구현 내용**:
     - `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, `KAKAO_CLIENT_ID`, `KAKAO_CLIENT_SECRET`, `NAVER_CLIENT_ID`, `NAVER_CLIENT_SECRET`, `R2_PUBLIC_DOMAIN` 항목 명시
   - **DoD (통과 기준)**: `cp apps/web/.dev.vars.example apps/web/.dev.vars` 실행 시 누락된 필수 키가 없다.
 
-- [ ] **Task 4.3: Hono Worker 엔트리포인트 및 기본 미들웨어 구현**
+- [x] **Task 4.3: Hono Worker 엔트리포인트 및 기본 미들웨어 구현**
   - **대상 파일**: `apps/web/worker/index.ts`, `apps/web/worker/types.ts`
   - **선행 조건**: Task 4.1
   - **구현 내용**:
@@ -40,7 +40,7 @@
     - `apps/web/worker/index.ts`: Hono 인스턴스 생성, `/api/health` 헬스체크 라우트, 글로벌 에러 핸들러 및 404 폴백 정의
   - **DoD (통과 기준)**: Worker 로컬 실행 시 `GET /api/health`가 `{ "status": "ok" }`를 200 OK로 반환한다.
 
-- [ ] **Task 4.4: 모션 배경 메타데이터 조회 Hono 라우트 구현**
+- [x] **Task 4.4: 모션 배경 메타데이터 조회 Hono 라우트 구현**
   - **대상 파일**: `apps/web/worker/routes/backgrounds.ts`
   - **선행 조건**: Task 4.3
   - **구현 내용**:
@@ -49,7 +49,7 @@
     - 메인 Hono 인스턴스에 라우트 마운트
   - **DoD (통과 기준)**: `pnpm --filter web exec tsc --noEmit`이 통과하고 backgrounds 라우트가 정상 동작한다.
 
-- [ ] **Task 4.5: 초기 10개 모션 루프 영상 D1 시드 스크립트 작성**
+- [x] **Task 4.5: 초기 10개 모션 루프 영상 D1 시드 스크립트 작성**
   - **대상 파일**: `packages/db/src/seed/backgrounds.ts`
   - **선행 조건**: Task 3.11, Task 4.4
   - **구현 내용**:
@@ -57,7 +57,7 @@
     - D1 SQLite 로컬 및 원격에 삽입 가능한 시드 함수 작성
   - **DoD (통과 기준)**: 시드 스크립트 실행 후 D1 `backgrounds` 테이블 레코드 수가 10건이 된다.
 
-- [ ] **Task 4.6: Miniflare/workerd 환경 Worker 및 D1 통합 테스트 작성**
+- [x] **Task 4.6: Miniflare/workerd 환경 Worker 및 D1 통합 테스트 작성**
   - **대상 파일**: `apps/web/worker/index.test.ts`
   - **선행 조건**: Task 4.3, Task 4.4, Task 4.5
   - **구현 내용**:
