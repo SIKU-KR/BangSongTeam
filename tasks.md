@@ -70,7 +70,7 @@
   - **선행 조건**: Task 1.4
   - **구현 내용**:
     - `useReducer` 기반 세트 편집기 상태 관리 (`presentation`, `selectedSongIndex`, `selectedSlideIndex`, `isDirty`)
-    - mockPresentation 또는 신규 빈 세트리스트를 초기값으로 주입 가능한 팩토리 제공
+    - mockPresentation 또는 신규 빈 프레젠테이션을 초기값으로 주입 가능한 팩토리 제공
     - 불변성을 보장하는 액션 디스패처 인터페이스 노출
   - **DoD (통과 기준)**: `pnpm --filter web vitest run src/features/editor/usePresentationEditor.test.ts`가 100% 통과(Green)한다.
 

@@ -9,7 +9,18 @@ export {
   type UsePresentationShortcutsOptions,
 } from "./usePresentationShortcuts";
 
-export { mockPresentation, mockDecks } from "./mockPresentation";
+export {
+  mockPresentation,
+  mockDecks,
+  MOCK_PRESENTATION_ID,
+  MOCK_USER_ID,
+} from "./mockPresentation";
+
+export {
+  SEED_PRESENTATIONS,
+  SEED_PRESENTATION_IDS,
+  SEED_USER_ID,
+} from "./mockPresentations";
 
 export {
   getActivePresentation,
@@ -17,7 +28,14 @@ export {
   createNewPresentation,
   addDeckToPresentation,
   resetActivePresentation,
+  resetPresentationStore,
   useActivePresentation,
+  getPresentationById,
+  listPresentations,
+  getActivePresentationId,
+  openPresentation,
+  usePresentationList,
+  usePresentationById,
   updatePresentationTitle,
   updateSongInfo,
   updateSongStyle,

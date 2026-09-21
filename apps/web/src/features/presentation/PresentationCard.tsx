@@ -8,7 +8,7 @@ import {
 import { SlideStage } from "../../components/stage/SlideStage";
 
 export interface PresentationCardProps {
-  /** 단일 덱 또는 세트리스트 */
+  /** 단일 덱 또는 프레젠테이션 */
   deck?: Deck | null;
   presentation?: Presentation | null;
   /** 발표(슬라이드쇼) 클릭 핸들러 */
@@ -38,7 +38,7 @@ export function PresentationCard({
   onDelete,
   className = "",
 }: PresentationCardProps): React.JSX.Element {
-  // 덱 또는 세트리스트 대표 정보 추출
+  // 덱 또는 프레젠테이션 대표 정보 추출
   const isPresentation = Boolean(presentation);
   const title = presentation?.title ?? deck?.title ?? "제목 없는 프레젠테이션";
   const artistOrSummary = isPresentation

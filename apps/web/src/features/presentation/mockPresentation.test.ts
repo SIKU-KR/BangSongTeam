@@ -3,7 +3,7 @@ import { PresentationSchema } from "@repo/shared";
 import { mockPresentation } from "./mockPresentation";
 
 describe("mockPresentation (Task 3.1)", () => {
-  it("PresentationSchema.parse를 통과하고 유효한 세트리스트 스키마를 만족해야 한다", () => {
+  it("PresentationSchema.parse를 통과하고 유효한 프레젠테이션 스키마를 만족해야 한다", () => {
     const parsed = PresentationSchema.parse(mockPresentation);
     expect(parsed.id).toBeDefined();
     expect(parsed.title).toBe("2026 주일 3부 예배");

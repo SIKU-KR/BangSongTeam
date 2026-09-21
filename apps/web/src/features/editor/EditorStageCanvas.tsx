@@ -67,7 +67,7 @@ export function EditorStageCanvas({
               등록된 찬양 곡 또는 슬라이드가 없습니다
             </h3>
             <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1 max-w-md">
-              새 찬양 가사를 빠른 입력으로 추가하거나, 기본 찬양 프레젠테이션를
+              새 찬양 가사를 빠른 입력으로 추가하거나, 기본 찬양 프레젠테이션을
               불러와 프레젠테이션 제작을 시작하세요.
             </p>
           </div>

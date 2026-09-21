@@ -558,7 +558,7 @@ export function MergedSlidesView({
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800/60">
-                    {/* 1) 주 세트리스트 행 */}
+                    {/* 1) 주 프레젠테이션 행 */}
                     <tr
                       onClick={handleOpenEditor}
                       className="hover:bg-zinc-50 dark:hover:bg-zinc-800/50 cursor-pointer transition-colors"

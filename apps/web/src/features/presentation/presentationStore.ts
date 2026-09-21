@@ -1,52 +1,113 @@
 import { useSyncExternalStore } from "react";
 import type { Deck, Presentation, PresentationItem } from "@repo/shared";
 import { INITIAL_BACKGROUNDS } from "@repo/shared";
-import { mockPresentation } from "./mockPresentation";
+import { SEED_PRESENTATIONS, SEED_USER_ID } from "./mockPresentations";
 
-// 깊은 복사 헬퍼로 초기 상태 격리
-function cloneMockPresentation(): Presentation {
-  return JSON.parse(JSON.stringify(mockPresentation)) as Presentation;
+/** 멀티 문서 컬렉션 상태 */
+interface PresentationStoreState {
+  /** 문서 id -> 프레젠테이션 */
+  byId: Record<string, Presentation>;
+  /** 표시 순서 (생성 순서 유지, 정렬은 읽는 쪽에서 수행) */
+  order: string[];
+  /** 현재 열려 있는 문서 id */
+  activeId: string;
 }
 
-let activePresentation: Presentation = cloneMockPresentation();
+function createSeedState(): PresentationStoreState {
+  const seeds = SEED_PRESENTATIONS.map(
+    (seed) => JSON.parse(JSON.stringify(seed)) as Presentation,
+  );
+  return {
+    byId: Object.fromEntries(seeds.map((seed) => [seed.id, seed])),
+    order: seeds.map((seed) => seed.id),
+    activeId: seeds[0].id,
+  };
+}
+
+function buildListSnapshot(s: PresentationStoreState): Presentation[] {
+  return s.order.map((id) => s.byId[id]).filter(Boolean);
+}
+
+let state: PresentationStoreState = createSeedState();
+/**
+ * listPresentations()가 매 호출마다 새 배열을 만들면 useSyncExternalStore가
+ * "getSnapshot should be cached" 무한 루프로 터지므로, state 교체 시에만 재계산한다.
+ */
+let listSnapshot: Presentation[] = buildListSnapshot(state);
 const listeners = new Set<() => void>();
 
-const undoStack: string[] = [];
-const redoStack: string[] = [];
+/** 활성 문서 읽기 (내부 전용) */
+function readActive(): Presentation {
+  return state.byId[state.activeId];
+}
+
+/**
+ * 활성 문서 교체 — emit은 호출자(각 뮤테이터 말미의 emitChange)가 수행한다.
+ * 기존 뮤테이터의 pushHistory / early-return 순서를 그대로 보존하기 위함.
+ */
+function writeActive(next: Presentation): void {
+  state = {
+    ...state,
+    byId: { ...state.byId, [state.activeId]: next },
+  };
+  listSnapshot = buildListSnapshot(state);
+}
+
+// ----------------------------------------------------------------------------
+// 문서별 Undo/Redo 히스토리
+// 전역 스택을 쓰면 "문서 A 편집 -> B로 이동 -> Cmd+Z" 시 A의 스냅샷이 B 슬롯에
+// 덮어써지므로, 문서가 주소 가능해진 이상 히스토리도 문서에 종속시킨다.
+// ----------------------------------------------------------------------------
+interface DocumentHistory {
+  undo: string[];
+  redo: string[];
+}
+
+const histories = new Map<string, DocumentHistory>();
 const MAX_HISTORY = 25;
 
-function pushHistory(): void {
-  undoStack.push(JSON.stringify(activePresentation));
-  if (undoStack.length > MAX_HISTORY) {
-    undoStack.shift();
+function historyFor(id: string): DocumentHistory {
+  let history = histories.get(id);
+  if (!history) {
+    history = { undo: [], redo: [] };
+    histories.set(id, history);
   }
-  redoStack.length = 0;
+  return history;
+}
+
+function pushHistory(): void {
+  const history = historyFor(state.activeId);
+  history.undo.push(JSON.stringify(readActive()));
+  if (history.undo.length > MAX_HISTORY) {
+    history.undo.shift();
+  }
+  history.redo.length = 0;
 }
 
 export function canUndo(): boolean {
-  return undoStack.length > 0;
+  return (histories.get(state.activeId)?.undo.length ?? 0) > 0;
 }
 
 export function canRedo(): boolean {
-  return redoStack.length > 0;
+  return (histories.get(state.activeId)?.redo.length ?? 0) > 0;
 }
 
 export function undo(): boolean {
-  if (undoStack.length === 0) return false;
-  const prevSerialized = undoStack.pop();
+  const history = historyFor(state.activeId);
+  const prevSerialized = history.undo.pop();
   if (!prevSerialized) return false;
-  redoStack.push(JSON.stringify(activePresentation));
-  activePresentation = JSON.parse(prevSerialized) as Presentation;
+  history.redo.push(JSON.stringify(readActive()));
+  writeActive(JSON.parse(prevSerialized) as Presentation);
   emitChange();
   return true;
 }
 
 export function redo(): boolean {
-  if (redoStack.length === 0) return false;
-  const nextSerialized = redoStack.pop();
+  const history = historyFor(state.activeId);
+  const nextSerialized = history.redo.pop();
   if (!nextSerialized) return false;
-  undoStack.push(JSON.stringify(activePresentation));
-  activePresentation = JSON.parse(nextSerialized) as Presentation;
+  history.undo.push(JSON.stringify(readActive()));
+  writeActive(JSON.parse(nextSerialized) as Presentation);
   emitChange();
   return true;
 }
@@ -58,18 +119,18 @@ function emitChange(): void {
 }
 
 /**
- * 현재 활성 세트리스트 반환
+ * 현재 활성 프레젠테이션 반환
  */
 export function getActivePresentation(): Presentation {
-  return activePresentation;
+  return readActive();
 }
 
 /**
- * 인메모리 세트리스트에 신규 덱을 추가하고 모든 구독자에게 알림 (M1 실시간 연동)
+ * 인메모리 프레젠테이션에 신규 덱을 추가하고 모든 구독자에게 알림 (M1 실시간 연동)
  */
 export function addDeckToPresentation(deck: Deck): PresentationItem {
   pushHistory();
-  const currentCount = activePresentation.items.length;
+  const currentCount = readActive().items.length;
   // backgroundId가 없으면 10개 초기 배경 중 순환 할당
   const assignedBackgroundId =
     deck.backgroundId ||
@@ -82,73 +143,142 @@ export function addDeckToPresentation(deck: Deck): PresentationItem {
 
   const newItem: PresentationItem = {
     id: crypto.randomUUID(),
-    presentationId: activePresentation.id,
+    presentationId: readActive().id,
     deckId: resolvedDeck.id,
     order: currentCount,
     deck: resolvedDeck,
   };
 
-  activePresentation = {
-    ...activePresentation,
-    items: [...activePresentation.items, newItem],
+  writeActive({
+    ...readActive(),
+    items: [...readActive().items, newItem],
     updatedAt: new Date().toISOString(),
-  };
+  });
 
   emitChange();
   return newItem;
 }
 
 /**
- * 테스트 격리 및 리셋을 위한 함수
+ * 테스트 격리 전용: 컬렉션 전체를 시드 상태로 되돌리고 모든 히스토리를 비운다.
  */
-export function resetActivePresentation(): void {
-  undoStack.length = 0;
-  redoStack.length = 0;
-  activePresentation = cloneMockPresentation();
+export function resetPresentationStore(): void {
+  histories.clear();
+  state = createSeedState();
+  listSnapshot = buildListSnapshot(state);
   emitChange();
 }
 
 /**
- * 활성 세트리스트 전체 교체
+ * 현재 활성 문서만 시드 내용으로 복원 (에디터 '기본 찬양 세트 복원' 메뉴).
+ * 시드가 아닌 사용자 생성 문서라면 빈 프레젠테이션으로 초기화한다.
+ * 컬렉션 전체를 날리지 않으므로 URL의 presentationId가 고아가 되지 않는다.
+ */
+export function resetActivePresentation(): void {
+  const id = state.activeId;
+  const seed = SEED_PRESENTATIONS.find((candidate) => candidate.id === id);
+  const restored: Presentation = seed
+    ? (JSON.parse(JSON.stringify(seed)) as Presentation)
+    : { ...readActive(), items: [], updatedAt: new Date().toISOString() };
+  histories.delete(id);
+  writeActive(restored);
+  emitChange();
+}
+
+/**
+ * 프레젠테이션을 컬렉션에 upsert 하고 활성 문서로 지정
  */
 export function setActivePresentation(newPresentation: Presentation): void {
-  pushHistory();
-  activePresentation = {
+  const next: Presentation = {
     ...newPresentation,
     updatedAt: new Date().toISOString(),
   };
+  state = {
+    byId: { ...state.byId, [next.id]: next },
+    order: state.order.includes(next.id)
+      ? state.order
+      : [...state.order, next.id],
+    activeId: next.id,
+  };
+  listSnapshot = buildListSnapshot(state);
   emitChange();
 }
 
 /**
- * 신규 빈 세트리스트 생성
+ * 신규 빈 프레젠테이션을 컬렉션에 추가하고 활성 문서로 전환한다.
+ * 기존 문서는 보존된다 (멀티 문서 전환).
+ *
+ * pushHistory()를 호출하지 않는 것은 의도적이다 — 문서 추가는 "현재 문서의 편집"이
+ * 아니므로, 기록하면 canUndo()가 허위로 true가 되어 유령 undo가 생긴다.
+ *
+ * 호출자는 반환된 id로 /editor/:presentationId 로 이동해야 한다.
  */
 export function createNewPresentation(title = "새 프레젠테이션"): Presentation {
-  pushHistory();
-  const newPresentation: Presentation = {
+  const now = new Date().toISOString();
+  const created: Presentation = {
     id: crypto.randomUUID(),
-    userId: activePresentation.userId || "user_local",
+    userId: readActive()?.userId || SEED_USER_ID,
     title,
-    serviceDate: new Date().toISOString().slice(0, 10),
+    serviceDate: now.slice(0, 10),
     items: [],
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
+    createdAt: now,
+    updatedAt: now,
   };
-  activePresentation = newPresentation;
+  state = {
+    byId: { ...state.byId, [created.id]: created },
+    order: [...state.order, created.id],
+    activeId: created.id,
+  };
+  listSnapshot = buildListSnapshot(state);
   emitChange();
-  return newPresentation;
+  return created;
 }
 
 /**
- * 세트리스트 제목 변경
+ * id로 프레젠테이션 조회 (없으면 undefined)
+ */
+export function getPresentationById(
+  id: string | undefined,
+): Presentation | undefined {
+  return id ? state.byId[id] : undefined;
+}
+
+/**
+ * 전체 프레젠테이션 목록 (캐시된 안정적 스냅샷)
+ */
+export function listPresentations(): Presentation[] {
+  return listSnapshot;
+}
+
+/**
+ * 현재 활성 문서 id
+ */
+export function getActivePresentationId(): string {
+  return state.activeId;
+}
+
+/**
+ * 활성 문서를 전환한다. 존재하지 않는 id면 아무것도 바꾸지 않고 false를 반환.
+ */
+export function openPresentation(id: string): boolean {
+  if (!state.byId[id]) return false;
+  if (state.activeId === id) return true;
+  state = { ...state, activeId: id };
+  listSnapshot = buildListSnapshot(state);
+  emitChange();
+  return true;
+}
+
+/**
+ * 프레젠테이션 제목 변경
  */
 export function updatePresentationTitle(title: string): void {
   pushHistory();
-  activePresentation = {
-    ...activePresentation,
+  writeActive({
+    ...readActive(),
     title,
     updatedAt: new Date().toISOString(),
-  };
+  });
   emitChange();
 }
 
@@ -160,7 +290,7 @@ export function updateSongInfo(
   title: string,
   artist?: string,
 ): void {
-  const item = activePresentation.items[songIndex];
+  const item = readActive().items[songIndex];
   if (!item || !item.deck) return;
 
   pushHistory();
@@ -172,14 +302,14 @@ export function updateSongInfo(
     updatedAt: new Date().toISOString(),
   };
 
-  const updatedItems = [...activePresentation.items];
+  const updatedItems = [...readActive().items];
   updatedItems[songIndex] = { ...item, deck: updatedDeck };
 
-  activePresentation = {
-    ...activePresentation,
+  writeActive({
+    ...readActive(),
     items: updatedItems,
     updatedAt: new Date().toISOString(),
-  };
+  });
   emitChange();
 }
 
@@ -190,7 +320,7 @@ export function updateSongStyle(
   songIndex: number,
   styleUpdate: Partial<Deck["style"]>,
 ): void {
-  const item = activePresentation.items[songIndex];
+  const item = readActive().items[songIndex];
   if (!item || !item.deck) return;
 
   pushHistory();
@@ -208,14 +338,14 @@ export function updateSongStyle(
     updatedAt: new Date().toISOString(),
   };
 
-  const updatedItems = [...activePresentation.items];
+  const updatedItems = [...readActive().items];
   updatedItems[songIndex] = { ...item, deck: updatedDeck };
 
-  activePresentation = {
-    ...activePresentation,
+  writeActive({
+    ...readActive(),
     items: updatedItems,
     updatedAt: new Date().toISOString(),
-  };
+  });
   emitChange();
 }
 
@@ -226,7 +356,7 @@ export function updateSongBackground(
   songIndex: number,
   backgroundId: string,
 ): void {
-  const item = activePresentation.items[songIndex];
+  const item = readActive().items[songIndex];
   if (!item || !item.deck) return;
 
   pushHistory();
@@ -237,14 +367,14 @@ export function updateSongBackground(
     updatedAt: new Date().toISOString(),
   };
 
-  const updatedItems = [...activePresentation.items];
+  const updatedItems = [...readActive().items];
   updatedItems[songIndex] = { ...item, deck: updatedDeck };
 
-  activePresentation = {
-    ...activePresentation,
+  writeActive({
+    ...readActive(),
     items: updatedItems,
     updatedAt: new Date().toISOString(),
-  };
+  });
   emitChange();
 }
 
@@ -256,7 +386,7 @@ export function updateSlideLines(
   slideIndex: number,
   lines: string[],
 ): void {
-  const item = activePresentation.items[songIndex];
+  const item = readActive().items[songIndex];
   if (!item || !item.deck) return;
 
   const slides = [...item.deck.slides];
@@ -275,14 +405,14 @@ export function updateSlideLines(
     updatedAt: new Date().toISOString(),
   };
 
-  const updatedItems = [...activePresentation.items];
+  const updatedItems = [...readActive().items];
   updatedItems[songIndex] = { ...item, deck: updatedDeck };
 
-  activePresentation = {
-    ...activePresentation,
+  writeActive({
+    ...readActive(),
     items: updatedItems,
     updatedAt: new Date().toISOString(),
-  };
+  });
   emitChange();
 }
 
@@ -294,7 +424,7 @@ export function addSlideToSong(
   lines: string[] = ["새 슬라이드 가사를 입력하세요"],
   afterIndex?: number,
 ): void {
-  const item = activePresentation.items[songIndex];
+  const item = readActive().items[songIndex];
   if (!item || !item.deck) return;
 
   pushHistory();
@@ -319,14 +449,14 @@ export function addSlideToSong(
     updatedAt: new Date().toISOString(),
   };
 
-  const updatedItems = [...activePresentation.items];
+  const updatedItems = [...readActive().items];
   updatedItems[songIndex] = { ...item, deck: updatedDeck };
 
-  activePresentation = {
-    ...activePresentation,
+  writeActive({
+    ...readActive(),
     items: updatedItems,
     updatedAt: new Date().toISOString(),
-  };
+  });
   emitChange();
 }
 
@@ -337,7 +467,7 @@ export function removeSlideFromSong(
   songIndex: number,
   slideIndex: number,
 ): void {
-  const item = activePresentation.items[songIndex];
+  const item = readActive().items[songIndex];
   if (!item || !item.deck || item.deck.slides.length <= 1) return;
 
   pushHistory();
@@ -351,14 +481,14 @@ export function removeSlideFromSong(
     updatedAt: new Date().toISOString(),
   };
 
-  const updatedItems = [...activePresentation.items];
+  const updatedItems = [...readActive().items];
   updatedItems[songIndex] = { ...item, deck: updatedDeck };
 
-  activePresentation = {
-    ...activePresentation,
+  writeActive({
+    ...readActive(),
     items: updatedItems,
     updatedAt: new Date().toISOString(),
-  };
+  });
   emitChange();
 }
 
@@ -366,7 +496,7 @@ export function removeSlideFromSong(
  * 슬라이드 복제
  */
 export function duplicateSlide(songIndex: number, slideIndex: number): void {
-  const item = activePresentation.items[songIndex];
+  const item = readActive().items[songIndex];
   if (!item || !item.deck || !item.deck.slides[slideIndex]) return;
 
   const targetSlide = item.deck.slides[slideIndex];
@@ -379,9 +509,9 @@ export function duplicateSlide(songIndex: number, slideIndex: number): void {
 export function reorderSongs(fromIndex: number, toIndex: number): void {
   if (
     fromIndex < 0 ||
-    fromIndex >= activePresentation.items.length ||
+    fromIndex >= readActive().items.length ||
     toIndex < 0 ||
-    toIndex >= activePresentation.items.length ||
+    toIndex >= readActive().items.length ||
     fromIndex === toIndex
   ) {
     return;
@@ -389,7 +519,7 @@ export function reorderSongs(fromIndex: number, toIndex: number): void {
 
   pushHistory();
 
-  const items = [...activePresentation.items];
+  const items = [...readActive().items];
   const [movedItem] = items.splice(fromIndex, 1);
   items.splice(toIndex, 0, movedItem);
 
@@ -398,11 +528,11 @@ export function reorderSongs(fromIndex: number, toIndex: number): void {
     order: idx,
   }));
 
-  activePresentation = {
-    ...activePresentation,
+  writeActive({
+    ...readActive(),
     items: reorderedItems,
     updatedAt: new Date().toISOString(),
-  };
+  });
   emitChange();
 }
 
@@ -410,31 +540,29 @@ export function reorderSongs(fromIndex: number, toIndex: number): void {
  * 곡 삭제
  */
 export function removeSongFromPresentation(songIndex: number): void {
-  if (songIndex < 0 || songIndex >= activePresentation.items.length) return;
+  if (songIndex < 0 || songIndex >= readActive().items.length) return;
 
   pushHistory();
 
-  const filtered = activePresentation.items.filter(
-    (_, idx) => idx !== songIndex,
-  );
+  const filtered = readActive().items.filter((_, idx) => idx !== songIndex);
   const reorderedItems = filtered.map((item, idx) => ({
     ...item,
     order: idx,
   }));
 
-  activePresentation = {
-    ...activePresentation,
+  writeActive({
+    ...readActive(),
     items: reorderedItems,
     updatedAt: new Date().toISOString(),
-  };
+  });
   emitChange();
 }
 
 /**
- * 세트리스트 내 곡 복제
+ * 프레젠테이션 내 곡 복제
  */
 export function duplicateSongInPresentation(songIndex: number): Deck | null {
-  const item = activePresentation.items[songIndex];
+  const item = readActive().items[songIndex];
   if (!item || !item.deck) return null;
 
   pushHistory();
@@ -450,21 +578,21 @@ export function duplicateSongInPresentation(songIndex: number): Deck | null {
 
   const newItem: PresentationItem = {
     id: crypto.randomUUID(),
-    presentationId: activePresentation.id,
+    presentationId: readActive().id,
     deckId: clonedDeck.id,
     order: songIndex + 1,
     deck: clonedDeck,
   };
 
-  const updatedItems = [...activePresentation.items];
+  const updatedItems = [...readActive().items];
   updatedItems.splice(songIndex + 1, 0, newItem);
   const reorderedItems = updatedItems.map((it, idx) => ({ ...it, order: idx }));
 
-  activePresentation = {
-    ...activePresentation,
+  writeActive({
+    ...readActive(),
     items: reorderedItems,
     updatedAt: new Date().toISOString(),
-  };
+  });
   emitChange();
   return clonedDeck;
 }
@@ -477,7 +605,7 @@ export function reorderSlides(
   fromSlideIndex: number,
   toSlideIndex: number,
 ): void {
-  const item = activePresentation.items[songIndex];
+  const item = readActive().items[songIndex];
   if (!item || !item.deck) return;
   const slides = [...item.deck.slides];
   if (
@@ -503,14 +631,14 @@ export function reorderSlides(
     updatedAt: new Date().toISOString(),
   };
 
-  const updatedItems = [...activePresentation.items];
+  const updatedItems = [...readActive().items];
   updatedItems[songIndex] = { ...item, deck: updatedDeck };
 
-  activePresentation = {
-    ...activePresentation,
+  writeActive({
+    ...readActive(),
     items: updatedItems,
     updatedAt: new Date().toISOString(),
-  };
+  });
   emitChange();
 }
 
@@ -522,7 +650,7 @@ function subscribe(listener: () => void): () => void {
 }
 
 /**
- * React 컴포넌트에서 활성 세트리스트를 반응형으로 구독하는 훅
+ * React 컴포넌트에서 활성 프레젠테이션을 반응형으로 구독하는 훅
  */
 export function useActivePresentation(): Presentation {
   return useSyncExternalStore(
@@ -530,4 +658,23 @@ export function useActivePresentation(): Presentation {
     getActivePresentation,
     getActivePresentation,
   );
+}
+
+/**
+ * 전체 프레젠테이션 목록을 반응형으로 구독하는 훅 (홈 대시보드용)
+ */
+export function usePresentationList(): Presentation[] {
+  return useSyncExternalStore(subscribe, listPresentations, listPresentations);
+}
+
+/**
+ * 특정 id의 프레젠테이션을 반응형으로 구독하는 훅 (/editor/:presentationId 용).
+ * 활성 문서가 아니라 URL의 id를 직접 읽으므로 첫 프레임부터 올바른 문서가 렌더된다.
+ */
+export function usePresentationById(
+  id: string | undefined,
+): Presentation | undefined {
+  const getSnapshot = (): Presentation | undefined =>
+    id ? state.byId[id] : undefined;
+  return useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
 }

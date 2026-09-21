@@ -4,7 +4,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { MemoryRouter } from "react-router-dom";
 import { FullscreenPresentRoute } from "./FullscreenPresentRoute";
 
-import { resetActivePresentation } from "../features/presentation";
+import { resetPresentationStore } from "../features/presentation";
 
 function dispatchKey(key: string, code?: string, shiftKey = false): void {
   window.dispatchEvent(
@@ -19,7 +19,7 @@ function dispatchKey(key: string, code?: string, shiftKey = false): void {
 
 describe("FullscreenPresentRoute", () => {
   beforeEach(() => {
-    resetActivePresentation();
+    resetPresentationStore();
     vi.spyOn(globalThis, "fetch");
   });
 

@@ -3,7 +3,7 @@ import { render, screen, fireEvent, act } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { MemoryRouter } from "react-router-dom";
 import { HomeRoute } from "./index";
-import { resetActivePresentation } from "../features/presentation";
+import { resetPresentationStore } from "../features/presentation";
 import * as chromeChecker from "../components/common/ChromeAlertBanner";
 
 const mockNavigate = vi.fn();
@@ -17,7 +17,7 @@ vi.mock("react-router-dom", async () => {
 
 describe("HomeRoute (Main Home Entry Screen)", () => {
   beforeEach(() => {
-    resetActivePresentation();
+    resetPresentationStore();
     mockNavigate.mockClear();
     vi.restoreAllMocks();
   });
