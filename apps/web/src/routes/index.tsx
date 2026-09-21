@@ -102,11 +102,11 @@ export function HomeRoute(): React.JSX.Element {
         : "배경 영상, 이미지, 분위기 태그를 검색해 보세요";
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-zinc-100 flex select-none">
+    <div className="h-screen w-full bg-zinc-950 text-zinc-100 flex overflow-hidden">
       {/* ───────────────────────────────────────────────────────────
           1. 좌측 내비게이션 사이드바 (Canva Projects Sidebar Style)
           ─────────────────────────────────────────────────────────── */}
-      <aside className="w-64 bg-zinc-950 border-r border-zinc-900 hidden lg:flex flex-col justify-between p-4 shrink-0">
+      <aside className="w-64 h-full bg-zinc-950 border-r border-zinc-900 hidden lg:flex flex-col justify-between p-4 shrink-0 overflow-y-auto">
         <div className="space-y-6">
           {/* 브랜드 로고 & 워크스페이스 */}
           <div className="flex items-center gap-3 px-2 pt-1">
@@ -248,7 +248,7 @@ export function HomeRoute(): React.JSX.Element {
       {/* ───────────────────────────────────────────────────────────
           2. 메인 컨텐츠 영역 (Canva Projects Main Area)
           ─────────────────────────────────────────────────────────── */}
-      <div className="flex-1 flex flex-col min-w-0 overflow-y-auto">
+      <div className="flex-1 h-full flex flex-col min-w-0 overflow-y-auto overflow-x-hidden">
         {/* Chrome 최적화 권장 알림 배너 */}
         <ChromeAlertBanner />
 
