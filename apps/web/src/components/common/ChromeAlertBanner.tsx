@@ -12,7 +12,8 @@ export function isGoogleChromeBrowser(): boolean {
   }
 
   // 1. Try User-Agent Client Hints (Modern Chromium)
-  const uaData = (navigator as unknown as { userAgentData?: NavigatorUAData }).userAgentData;
+  const uaData = (navigator as unknown as { userAgentData?: NavigatorUAData })
+    .userAgentData;
   if (uaData && Array.isArray(uaData.brands)) {
     const brandNames = uaData.brands.map((b) => b.brand.toLowerCase());
     const isOtherChromium = brandNames.some(
@@ -91,7 +92,9 @@ export function ChromeAlertBanner(): React.JSX.Element | null {
           ⚠️
         </span>
         <span>
-          안정적인 예배 슬라이드 송출을 위해 <strong>Google Chrome</strong> 데스크톱 브라우저 사용을 권장합니다. (Safari, Edge, Whale 등에서는 일부 기능이 제한될 수 있습니다.)
+          안정적인 예배 슬라이드 송출을 위해 <strong>Google Chrome</strong>{" "}
+          데스크톱 브라우저 사용을 권장합니다. (Safari, Edge, Whale 등에서는
+          일부 기능이 제한될 수 있습니다.)
         </span>
       </div>
       <button

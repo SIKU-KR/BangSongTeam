@@ -19,18 +19,28 @@ export function TextLayer({
   isLyricsHidden = false,
   className = "",
 }: TextLayerProps): React.JSX.Element {
-  const { position, fontFamily, fontSizeVw, fontColor, textAlign, lineHeight, textShadowLevel } = style;
+  const {
+    position,
+    fontFamily,
+    fontSizeVw,
+    fontColor,
+    textAlign,
+    lineHeight,
+    textShadowLevel,
+  } = style;
 
   // 앵커별 CSS transform (top: 0, middle: -50%, bottom: -100%)
   const transform =
-    GRID_ANCHOR_TRANSFORMS[position.anchor as Exclude<GridAnchorPreset, "custom">] ??
-    "translate(-50%, -50%)";
+    GRID_ANCHOR_TRANSFORMS[
+      position.anchor as Exclude<GridAnchorPreset, "custom">
+    ] ?? "translate(-50%, -50%)";
 
   // 1920px 기준 절대 폰트 크기 계산 (1vw of 1920 = 19.2px)
   const fontSizePx = fontSizeVw * 19.2;
 
   // 텍스트 그림자 프리셋 적용
-  const textShadow = TEXT_SHADOW_PRESETS[textShadowLevel] ?? TEXT_SHADOW_PRESETS.medium;
+  const textShadow =
+    TEXT_SHADOW_PRESETS[textShadowLevel] ?? TEXT_SHADOW_PRESETS.medium;
 
   const lines = slide?.lines ?? [];
 

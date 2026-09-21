@@ -94,14 +94,22 @@ describe("TextLayer Component", () => {
 
   it("should hide lyrics (opacity: 0) when isLyricsHidden is true", () => {
     const { rerender } = render(
-      <TextLayer slide={sampleSlide} style={defaultStyle} isLyricsHidden={false} />,
+      <TextLayer
+        slide={sampleSlide}
+        style={defaultStyle}
+        isLyricsHidden={false}
+      />,
     );
     expect(screen.getByTestId("text-layer-container")).toHaveStyle({
       opacity: "1",
     });
 
     rerender(
-      <TextLayer slide={sampleSlide} style={defaultStyle} isLyricsHidden={true} />,
+      <TextLayer
+        slide={sampleSlide}
+        style={defaultStyle}
+        isLyricsHidden={true}
+      />,
     );
     expect(screen.getByTestId("text-layer-container")).toHaveStyle({
       opacity: "0",

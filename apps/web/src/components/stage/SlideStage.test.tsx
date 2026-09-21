@@ -7,7 +7,9 @@ import type { Slide, DeckStyle } from "@repo/shared";
 
 describe("SlideStage Integration Component", () => {
   beforeEach(() => {
-    window.HTMLMediaElement.prototype.play = vi.fn().mockResolvedValue(undefined);
+    window.HTMLMediaElement.prototype.play = vi
+      .fn()
+      .mockResolvedValue(undefined);
     window.HTMLMediaElement.prototype.pause = vi.fn();
     window.innerWidth = 1920;
     window.innerHeight = 1080;
@@ -47,7 +49,9 @@ describe("SlideStage Integration Component", () => {
     expect(screen.getByTestId("overlay-layer")).toBeInTheDocument();
     // Layer 3: Text
     expect(screen.getByTestId("text-layer-container")).toBeInTheDocument();
-    expect(screen.getByText("꽃들도 구름도 바람도 넓은 바다도")).toBeInTheDocument();
+    expect(
+      screen.getByText("꽃들도 구름도 바람도 넓은 바다도"),
+    ).toBeInTheDocument();
   });
 
   it("should apply scale transform calculated for current resolution", () => {
@@ -106,10 +110,14 @@ describe("SlideStage Integration Component", () => {
     const { rerender } = render(
       <SlideStage slide={mockSlide} style={mockStyle} />,
     );
-    expect(screen.getByText("꽃들도 구름도 바람도 넓은 바다도")).toBeInTheDocument();
+    expect(
+      screen.getByText("꽃들도 구름도 바람도 넓은 바다도"),
+    ).toBeInTheDocument();
 
     rerender(<SlideStage slide={nextSlide} style={mockStyle} />);
-    expect(screen.getByText("하늘을 울리며 노래하는 바다여")).toBeInTheDocument();
+    expect(
+      screen.getByText("하늘을 울리며 노래하는 바다여"),
+    ).toBeInTheDocument();
     expect(
       screen.queryByText("꽃들도 구름도 바람도 넓은 바다도"),
     ).not.toBeInTheDocument();

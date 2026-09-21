@@ -6,7 +6,9 @@ import { VideoLayer } from "./VideoLayer";
 describe("VideoLayer Component (Dual Video A/B Crossfade Loop)", () => {
   beforeEach(() => {
     // Mock HTMLMediaElement play/pause in jsdom
-    window.HTMLMediaElement.prototype.play = vi.fn().mockResolvedValue(undefined);
+    window.HTMLMediaElement.prototype.play = vi
+      .fn()
+      .mockResolvedValue(undefined);
     window.HTMLMediaElement.prototype.pause = vi.fn();
   });
 
@@ -39,7 +41,10 @@ describe("VideoLayer Component (Dual Video A/B Crossfade Loop)", () => {
 
     expect(videoA).toHaveStyle({ opacity: "1" });
     expect(videoB).toHaveStyle({ opacity: "0" });
-    expect(videoA).toHaveAttribute("src", "https://media.example.com/loop1.mp4");
+    expect(videoA).toHaveAttribute(
+      "src",
+      "https://media.example.com/loop1.mp4",
+    );
   });
 
   it("should maintain continuous loop without changing source when same src is passed on rerender", () => {
@@ -48,12 +53,18 @@ describe("VideoLayer Component (Dual Video A/B Crossfade Loop)", () => {
     );
 
     const videoA = screen.getByTestId("video-slot-a");
-    expect(videoA).toHaveAttribute("src", "https://media.example.com/loop1.mp4");
+    expect(videoA).toHaveAttribute(
+      "src",
+      "https://media.example.com/loop1.mp4",
+    );
 
     // Rerender with same src (e.g. slide change within same song)
     rerender(<VideoLayer src="https://media.example.com/loop1.mp4" />);
 
-    expect(videoA).toHaveAttribute("src", "https://media.example.com/loop1.mp4");
+    expect(videoA).toHaveAttribute(
+      "src",
+      "https://media.example.com/loop1.mp4",
+    );
     expect(videoA).toHaveStyle({ opacity: "1" });
   });
 
@@ -74,7 +85,10 @@ describe("VideoLayer Component (Dual Video A/B Crossfade Loop)", () => {
     });
 
     // Slot B now receives new src and is faded in (opacity: 1), Slot A fades out (opacity: 0)
-    expect(videoB).toHaveAttribute("src", "https://media.example.com/loop2.mp4");
+    expect(videoB).toHaveAttribute(
+      "src",
+      "https://media.example.com/loop2.mp4",
+    );
     expect(videoB).toHaveStyle({ opacity: "1" });
     expect(videoA).toHaveStyle({ opacity: "0" });
   });

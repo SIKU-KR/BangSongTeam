@@ -25,7 +25,9 @@ describe("OverlayLayer Component", () => {
   });
 
   it("should force opacity to 1 (total blackout) when isBlackout is true", () => {
-    const { rerender } = render(<OverlayLayer opacity={20} isBlackout={false} />);
+    const { rerender } = render(
+      <OverlayLayer opacity={20} isBlackout={false} />,
+    );
     expect(screen.getByTestId("overlay-layer")).toHaveStyle({
       opacity: "0.2",
     });
