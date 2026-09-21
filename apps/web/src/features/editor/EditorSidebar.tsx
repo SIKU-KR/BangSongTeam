@@ -3,10 +3,8 @@ import type { Deck, PresentationItem } from "@repo/shared";
 import {
   INITIAL_BACKGROUNDS,
   getBackgroundPosterUrl,
-  splitLyricsIntoSlides,
-  DEFAULT_DECK_STYLE,
 } from "@repo/shared";
-import { QuickLyricPasteModal } from "./QuickLyricPasteModal";
+import { SongPickerModal } from "./SongPickerModal";
 import { ThemeMenuButton } from "../../components/common/ThemeMenuButton";
 import { SortableItem, SortableList, slideSortableId } from "./SortableList";
 
@@ -29,7 +27,7 @@ export interface EditorSidebarProps {
   className?: string;
 }
 
-type TabType = "songs" | "slides" | "lyrics" | "backgrounds" | "styles";
+type TabType = "songs" | "slides" | "backgrounds" | "styles";
 
 const STYLE_PRESETS: {
   name: string;
@@ -119,9 +117,7 @@ export function EditorSidebar({
 }: EditorSidebarProps): React.JSX.Element {
   const [activeTab, setActiveTab] = useState<TabType>("songs");
   const [isDrawerOpen, setIsDrawerOpen] = useState(true);
-  const [isQuickPasteOpen, setIsQuickPasteOpen] = useState(false);
-  const [inlineLyricTitle, setInlineLyricTitle] = useState("");
-  const [inlineLyricText, setInlineLyricText] = useState("");
+  const [isSongPickerOpen, setIsSongPickerOpen] = useState(false);
 
   const currentSong = items[activeSongIndex]?.deck;
   const currentSlides = currentSong?.slides ?? [];
@@ -133,40 +129,6 @@ export function EditorSidebar({
       setActiveTab(tab);
       setIsDrawerOpen(true);
     }
-  };
-
-  const handleInlineLyricSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!inlineLyricTitle.trim() || !inlineLyricText.trim()) return;
-
-    const parsedSlides = splitLyricsIntoSlides(inlineLyricText);
-    const newDeck: Deck = {
-      id: `deck_${crypto.randomUUID().slice(0, 8)}`,
-      userId: currentSong?.userId || "user_local",
-      catalogId: null,
-      scope: "presentation",
-      presentationId: null,
-      title: inlineLyricTitle.trim(),
-      artist: "찬양 곡",
-      lyricsRaw: inlineLyricText.trim(),
-      slides: parsedSlides,
-      backgroundId: currentSong?.backgroundId ?? INITIAL_BACKGROUNDS[0].id,
-      style: currentSong?.style ?? {
-        ...DEFAULT_DECK_STYLE,
-        fontSizeVw: 4.5,
-        overlayOpacity: 50,
-      },
-      visibility: "private",
-      forkedFrom: null,
-      forkCount: 0,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-
-    onAddSong(newDeck);
-    setInlineLyricTitle("");
-    setInlineLyricText("");
-    setActiveTab("songs");
   };
 
   return (
@@ -231,34 +193,6 @@ export function EditorSidebar({
               />
             </svg>
             <span>슬라이드</span>
-          </button>
-
-          {/* 가사 입력 탭 */}
-          <button
-            type="button"
-            data-testid="tab-lyrics-btn"
-            onClick={() => handleTabClick("lyrics")}
-            className={`w-full py-2 flex flex-col items-center gap-1 rounded-xl text-[10px] font-medium transition-colors cursor-pointer ${
-              activeTab === "lyrics" && isDrawerOpen
-                ? "bg-zinc-100 dark:bg-zinc-800 text-indigo-600 dark:text-indigo-400 font-bold shadow-sm dark:shadow"
-                : "text-zinc-500 hover:text-zinc-800 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:text-zinc-200 dark:hover:bg-zinc-900/80"
-            }`}
-            title="가사 빠른 입력"
-          >
-            <svg
-              className="w-4 h-4"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
-              />
-            </svg>
-            <span>가사</span>
           </button>
 
           {/* 모션 배경 탭 */}
@@ -361,7 +295,6 @@ export function EditorSidebar({
               {activeTab === "slides" && (
                 <span>현재 곡 슬라이드 ({currentSlides.length})</span>
               )}
-              {activeTab === "lyrics" && <span>가사 빠른 추가</span>}
               {activeTab === "backgrounds" && <span>모션 비디오 루프</span>}
               {activeTab === "styles" && <span>디자인 테마 프리셋</span>}
             </h3>
@@ -489,7 +422,7 @@ export function EditorSidebar({
                 <button
                   type="button"
                   data-testid="sidebar-add-song-btn"
-                  onClick={() => setIsQuickPasteOpen(true)}
+                  onClick={() => setIsSongPickerOpen(true)}
                   className="w-full py-2 px-3 rounded-lg bg-zinc-100 dark:bg-zinc-900 hover:bg-zinc-200 dark:hover:bg-zinc-800 border border-zinc-200 dark:border-zinc-700/80 hover:border-emerald-500/50 text-xs font-semibold text-zinc-800 dark:text-zinc-200 dark:hover:text-white transition-all flex items-center justify-center gap-2 cursor-pointer shadow-sm dark:shadow-none"
                 >
                   <svg
@@ -505,7 +438,7 @@ export function EditorSidebar({
                       d="M12 4v16m8-8H4"
                     />
                   </svg>
-                  <span>가사 붙여넣기로 새 곡 추가</span>
+                  <span>찬양곡 추가</span>
                 </button>
               </div>
             </div>
@@ -629,53 +562,7 @@ export function EditorSidebar({
             </div>
           )}
 
-          {/* 탭 3: 가사 빠른 입력 */}
-          {activeTab === "lyrics" && (
-            <form
-              onSubmit={handleInlineLyricSubmit}
-              className="flex-1 overflow-y-auto p-3 flex flex-col gap-3"
-            >
-              <div className="space-y-1">
-                <label className="text-[11px] font-semibold text-zinc-600 dark:text-zinc-400">
-                  곡 제목
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="예: 은혜로다"
-                  value={inlineLyricTitle}
-                  onChange={(e) => setInlineLyricTitle(e.target.value)}
-                  className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg px-2.5 py-1.5 text-xs text-zinc-900 dark:text-white placeholder-zinc-400 dark:placeholder-zinc-500 focus:outline-none focus:border-emerald-500"
-                />
-              </div>
-
-              <div className="space-y-1 flex-1 flex flex-col">
-                <div className="flex justify-between text-[11px] text-zinc-500 dark:text-zinc-400">
-                  <span className="font-semibold">가사 원문</span>
-                  <span className="text-zinc-400 dark:text-zinc-500">
-                    빈 줄 = 슬라이드 구분
-                  </span>
-                </div>
-                <textarea
-                  required
-                  rows={8}
-                  placeholder="가사를 붙여넣으세요...&#10;&#10;빈 줄로 슬라이드가 자동 분할됩니다."
-                  value={inlineLyricText}
-                  onChange={(e) => setInlineLyricText(e.target.value)}
-                  className="w-full flex-1 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg p-2.5 text-xs text-zinc-900 dark:text-zinc-200 placeholder-zinc-400 dark:placeholder-zinc-500 focus:outline-none focus:border-emerald-500 resize-none font-sans"
-                />
-              </div>
-
-              <button
-                type="submit"
-                className="w-full py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-lg shadow-sm dark:shadow-md transition-colors cursor-pointer"
-              >
-                새 곡으로 세트에 추가
-              </button>
-            </form>
-          )}
-
-          {/* 탭 4: 모션 배경 */}
+          {/* 탭 3: 모션 배경 */}
           {activeTab === "backgrounds" && (
             <div className="flex-1 overflow-y-auto p-3 space-y-2">
               <p className="text-[11px] text-zinc-500 dark:text-zinc-400 pb-1 border-b border-zinc-200 dark:border-zinc-900">
@@ -753,13 +640,13 @@ export function EditorSidebar({
         </div>
       )}
 
-      {/* 가사 빠른 입력 모달 */}
-      <QuickLyricPasteModal
-        isOpen={isQuickPasteOpen}
-        onClose={() => setIsQuickPasteOpen(false)}
-        onAddToSet={(newDeck) => {
+      {/* 2-Pane 통합 찬양곡 선택/추가 모달 */}
+      <SongPickerModal
+        isOpen={isSongPickerOpen}
+        onClose={() => setIsSongPickerOpen(false)}
+        onSelectSong={(newDeck) => {
           onAddSong(newDeck);
-          setIsQuickPasteOpen(false);
+          setIsSongPickerOpen(false);
         }}
       />
     </aside>

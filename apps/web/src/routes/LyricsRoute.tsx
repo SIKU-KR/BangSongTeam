@@ -1,37 +1,11 @@
 import React from "react";
-import { useNavigate } from "react-router-dom";
-import { SongLibraryView } from "../features/library";
-import {
-  duplicateSongInPresentation,
-  removeSongFromPresentation,
-  useActivePresentation,
-} from "../features/presentation";
-import { useAppShell } from "./appShellContext";
+import { Navigate } from "react-router-dom";
 
 /**
- * `/lyrics` — 곡 라이브러리 (내가 등록한 곡 / 유저가 등록한 곡)
- * 곡 추가·삭제는 "현재 작업 중인 프레젠테이션"을 대상으로 하므로 활성 문서를 읽는다.
+ * `/lyrics` — 레거시 경로 리다이렉트
+ * 곡 라이브러리는 에디터 내부의 2-Pane 통합 곡 선택 모달(SongPickerModal)로 일원화되었으므로
+ * `/presentations`로 리다이렉트합니다.
  */
 export function LyricsRoute(): React.JSX.Element {
-  const navigate = useNavigate();
-  const presentation = useActivePresentation();
-  const { searchQuery, onOpenQuickPaste, onAddDeckToPresentation } =
-    useAppShell();
-
-  const handleOpenSong = (songIndex?: number): void => {
-    const suffix = songIndex === undefined ? "" : `?song=${songIndex}`;
-    navigate(`/editor/${presentation.id}${suffix}`);
-  };
-
-  return (
-    <SongLibraryView
-      presentation={presentation}
-      onOpenQuickPaste={onOpenQuickPaste}
-      onAddDeckToPresentation={onAddDeckToPresentation}
-      onDuplicateSong={duplicateSongInPresentation}
-      onRemoveSong={removeSongFromPresentation}
-      onOpenSong={handleOpenSong}
-      searchQuery={searchQuery}
-    />
-  );
+  return <Navigate to="/presentations" replace />;
 }

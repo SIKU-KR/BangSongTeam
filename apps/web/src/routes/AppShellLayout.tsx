@@ -26,10 +26,6 @@ const SHELL_PAGE_META: Record<string, ShellPageMeta> = {
     title: "모든 프로젝트",
     placeholder: "디자인, 폴더, 찬양 가사, 곡을 검색해 보세요",
   },
-  "/lyrics": {
-    title: "곡 라이브러리",
-    placeholder: "찬양 제목, 가사, 아티스트를 검색해 보세요",
-  },
   "/backgrounds": {
     title: "배경 라이브러리",
     placeholder: "배경 영상, 이미지, 분위기 태그를 검색해 보세요",
@@ -96,11 +92,7 @@ export function AppShellLayout(): React.JSX.Element {
               ? `${presentations.length}개 프로젝트`
               : ""
           }
-          onQuickAdd={
-            pathname === "/lyrics"
-              ? () => setIsQuickPasteOpen(true)
-              : handleCreateNewPresentation
-          }
+          onQuickAdd={handleCreateNewPresentation}
         />
 
         {/* ── 메인 본문 영역 ── */}

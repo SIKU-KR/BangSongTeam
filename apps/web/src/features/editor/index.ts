@@ -4,6 +4,13 @@ export {
 } from "./QuickLyricPasteModal";
 
 export {
+  SongPickerModal,
+  type SongPickerModalProps,
+} from "./SongPickerModal";
+
+export * from "./songLibraryStore";
+
+export {
   ExternalSearchLinks,
   type ExternalSearchLinksProps,
   getMelonSearchUrl,

@@ -53,7 +53,7 @@ import { EditorSidebar } from "../features/editor/EditorSidebar";
 import { EditorStageCanvas } from "../features/editor/EditorStageCanvas";
 import { SlideFilmstrip } from "../features/editor/SlideFilmstrip";
 import { SongPropertyPanel } from "../features/editor/SongPropertyPanel";
-import { QuickLyricPasteModal } from "../features/editor/QuickLyricPasteModal";
+import { SongPickerModal } from "../features/editor/SongPickerModal";
 
 /**
  * Canva / MiriCanvas 스타일 통합 프레젠테이션 편집기 라우트
@@ -408,11 +408,11 @@ export function EditorRoute(): React.JSX.Element {
         posterUrl={posterUrl}
       />
 
-      {/* 가사 빠른 입력 모달 */}
-      <QuickLyricPasteModal
+      {/* 2-Pane 통합 찬양곡 선택/추가 모달 */}
+      <SongPickerModal
         isOpen={isLyricModalOpen}
         onClose={() => setIsLyricModalOpen(false)}
-        onAddToSet={(newDeck) => {
+        onSelectSong={(newDeck) => {
           addDeckToPresentation(newDeck);
           setActiveSongIndex(presentation.items.length);
           setActiveSlideIndex(0);

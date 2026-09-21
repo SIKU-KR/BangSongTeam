@@ -34,11 +34,11 @@ describe("App Route Integration", () => {
     expect(screen.getByTestId("presentation-card")).toBeInTheDocument();
   });
 
-  it("should render the song library at '/lyrics'", () => {
+  it("should redirect '/lyrics' to '/presentations'", () => {
     renderAt("/lyrics");
 
-    expect(screen.getByText("내가 등록한 곡")).toBeInTheDocument();
-    expect(screen.getByText("유저가 등록한 곡")).toBeInTheDocument();
+    expect(screen.getByText("Worship Studio")).toBeInTheDocument();
+    expect(screen.getByTestId("presentation-card")).toBeInTheDocument();
   });
 
   it("should render the background library at '/backgrounds'", () => {

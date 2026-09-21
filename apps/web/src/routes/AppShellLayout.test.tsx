@@ -100,57 +100,12 @@ describe("AppShellLayout (공유 셸 + 중첩 라우트)", () => {
     expect(screen.getByTestId("fullscreen-stub")).toBeInTheDocument();
   });
 
-  it("should open QuickLyricPasteModal from song library and add new song into active presentation upon submission", () => {
-    renderShell();
-
-    // Initially 5 songs in presentation
-    expect(screen.getByText("5곡 세트")).toBeInTheDocument();
-
-    // Navigate to Song Library via sidebar
-    fireEvent.click(screen.getByTestId("sidebar-nav-songs"));
-
-    // Open modal from Song Library
-    fireEvent.click(screen.getByTestId("my-songs-quick-paste-btn"));
-    expect(screen.getByText("빠른 가사 붙여넣기")).toBeInTheDocument();
-
-    // Fill form
-    const titleInput = screen.getByLabelText(/곡 제목/);
-    const lyricsInput = screen.getByLabelText(/가사 원문/);
-
-    act(() => {
-      fireEvent.change(titleInput, {
-        target: { value: "아침 안개 눈 앞 가리듯" },
-      });
-      fireEvent.change(lyricsInput, {
-        target: {
-          value:
-            "아침 안개 눈 앞 가리듯\n나의 눈물 앞 가릴 때\n\n임마누엘 주 찬양하리",
-        },
-      });
-    });
-
-    // Click "세트에 추가"
-    const addBtn = screen.getByRole("button", { name: "세트에 추가" });
-    act(() => {
-      fireEvent.click(addBtn);
-    });
-
-    // Modal closed
-    expect(screen.queryByText("빠른 가사 붙여넣기")).not.toBeInTheDocument();
-
-    // Return to the dashboard to see the updated presentation
-    fireEvent.click(screen.getByTestId("sidebar-nav-home"));
-
-    // Presentation updated to 6 songs
-    expect(screen.getByText("6곡 세트")).toBeInTheDocument();
-  });
-
-  it("should render updated sidebar navigation items without '내 프레젠테이션 보관함'", () => {
+  it("should render updated sidebar navigation items without '내 프레젠테이션 보관함' or '곡 라이브러리'", () => {
     renderShell();
 
     expect(screen.getByTestId("sidebar-nav-home")).toBeInTheDocument();
-    expect(screen.getByTestId("sidebar-nav-songs")).toBeInTheDocument();
     expect(screen.getByTestId("sidebar-nav-backgrounds")).toBeInTheDocument();
+    expect(screen.queryByTestId("sidebar-nav-songs")).not.toBeInTheDocument();
 
     expect(
       screen.queryByText("내 프레젠테이션 보관함"),
@@ -161,18 +116,10 @@ describe("AppShellLayout (공유 셸 + 중첩 라우트)", () => {
     ).toBeInTheDocument();
   });
 
-  it("should navigate to song library and background library via sidebar", () => {
+  it("should navigate to background library and home via sidebar", () => {
     renderShell();
 
-    // 1. 곡 라이브러리 클릭
-    fireEvent.click(screen.getByTestId("sidebar-nav-songs"));
-    expect(screen.getByText("내가 등록한 곡")).toBeInTheDocument();
-    expect(screen.getByText("유저가 등록한 곡")).toBeInTheDocument();
-    expect(
-      screen.getByRole("heading", { name: "곡 라이브러리" }),
-    ).toBeInTheDocument();
-
-    // 2. 배경 라이브러리 클릭
+    // 1. 배경 라이브러리 클릭
     fireEvent.click(screen.getByTestId("sidebar-nav-backgrounds"));
     expect(screen.getByText("내가 등록한 배경")).toBeInTheDocument();
     expect(screen.getByText("유저가 등록한 배경")).toBeInTheDocument();
@@ -180,7 +127,7 @@ describe("AppShellLayout (공유 셸 + 중첩 라우트)", () => {
       screen.getByRole("heading", { name: "배경 라이브러리" }),
     ).toBeInTheDocument();
 
-    // 3. 홈 클릭
+    // 2. 홈 클릭
     fireEvent.click(screen.getByTestId("sidebar-nav-home"));
     expect(screen.getByTestId("presentation-card")).toBeInTheDocument();
     expect(
@@ -189,9 +136,9 @@ describe("AppShellLayout (공유 셸 + 중첩 라우트)", () => {
   });
 
   it("경로 기반 활성 상태가 사이드바에 aria-current로 반영된다", () => {
-    renderShell("/lyrics");
+    renderShell("/backgrounds");
 
-    expect(screen.getByTestId("sidebar-nav-songs")).toHaveAttribute(
+    expect(screen.getByTestId("sidebar-nav-backgrounds")).toHaveAttribute(
       "aria-current",
       "page",
     );
