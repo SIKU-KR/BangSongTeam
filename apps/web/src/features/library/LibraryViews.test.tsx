@@ -11,59 +11,52 @@ import { mockSetlist } from "../presentation/mockSetlist";
 import { COMMUNITY_SONGS } from "./mockCommunityData";
 
 describe("Library Views", () => {
-  describe("MergedSlidesView (합쳐진 슬라이드 단독 뷰)", () => {
-    it("renders merged slides overview header with total counts and slides", () => {
+  describe("MergedSlidesView (통합슬라이드 1개 단위 뷰)", () => {
+    it("renders merged slide deck presentation card as single unit", () => {
       const handleOpenQuickPaste = vi.fn();
+      const handleCreateNew = vi.fn();
 
       render(
         <MemoryRouter>
           <MergedSlidesView
             setlist={mockSetlist}
             onOpenQuickPaste={handleOpenQuickPaste}
+            onCreateNewPresentation={handleCreateNew}
           />
         </MemoryRouter>,
       );
 
-      // 헤더 정보
-      expect(screen.getByText("통합 슬라이드")).toBeInTheDocument();
+      // 섹션 헤더
+      expect(screen.getByText("통합 슬라이드 프레젠테이션")).toBeInTheDocument();
+      expect(screen.getByText("1개 프레젠테이션 덱")).toBeInTheDocument();
+
+      // 통합 슬라이드 1개 단위 카드
+      expect(screen.getByTestId("presentation-card")).toBeInTheDocument();
       expect(screen.getByText("2026 주일 3부 예배")).toBeInTheDocument();
-      expect(screen.getByText("5곡 구성")).toBeInTheDocument();
-      expect(screen.getByText(/총 23개 슬라이드/)).toBeInTheDocument();
-
-      // 합쳐진 슬라이드 목록 타이틀
-      expect(screen.getByText("합쳐진 슬라이드 전체 목록")).toBeInTheDocument();
-
-      // 첫 번째 슬라이드 카드 확인 (#1)
-      expect(screen.getByTestId("merged-slide-card-1")).toBeInTheDocument();
-      expect(
-        screen.getByText("시작됐네 우리 주님의 능력이 / 나의 삶을 다스리고 새롭게 하네"),
-      ).toBeInTheDocument();
+      expect(screen.getByText("5곡 세트")).toBeInTheDocument();
+      expect(screen.getByText("23 슬라이드")).toBeInTheDocument();
 
       // 버튼 동작
-      const addBtn = screen.getByTestId("merged-open-quick-paste-btn");
-      fireEvent.click(addBtn);
-      expect(handleOpenQuickPaste).toHaveBeenCalled();
+      expect(screen.getByTestId("merged-start-present-btn")).toBeInTheDocument();
+      expect(screen.getByText("통합 슬라이드에 곡 추가")).toBeInTheDocument();
+      expect(screen.getByText("새 통합 프레젠테이션 생성")).toBeInTheDocument();
     });
 
-    it("filters merged slides by lyrics search query", () => {
+    it("displays empty search message when query does not match setlist", () => {
       render(
         <MemoryRouter>
           <MergedSlidesView
             setlist={mockSetlist}
             onOpenQuickPaste={vi.fn()}
-            searchQuery="꽃들도"
+            onCreateNewPresentation={vi.fn()}
+            searchQuery="전혀일치하지않는검색어"
           />
         </MemoryRouter>,
       );
 
-      // '꽃들도' 곡의 슬라이드만 필터링되어 나타나야 함
       expect(
-        screen.getAllByText(/꽃들도 구름도 바람도/).length,
-      ).toBeGreaterThan(0);
-      // '은혜로다' 가사는 없어야 함
-      expect(
-        screen.queryByText(/시작됐네 우리 주님의 능력이/),
-      ).not.toBeInTheDocument();
+        screen.getByText(/"전혀일치하지않는검색어"에 일치하는 통합 프레젠테이션이 없습니다./),
+      ).toBeInTheDocument();
     });
   });
 

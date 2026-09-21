@@ -43,10 +43,11 @@ describe("HomeRoute (Main Home Entry Screen)", () => {
     expect(screen.getByText("가사 빠른 입력")).toBeInTheDocument();
     expect(screen.getByTestId("open-quick-paste-btn")).toBeInTheDocument();
 
-    // Home should show "통합 슬라이드" and merged slides
-    expect(screen.getByText("통합 슬라이드")).toBeInTheDocument();
-    expect(screen.getByText("합쳐진 슬라이드 전체 목록")).toBeInTheDocument();
-    expect(screen.getByText(/총 23개 슬라이드/)).toBeInTheDocument();
+    // Home should show "통합 슬라이드 프레젠테이션" and single unit presentation card
+    expect(screen.getByText("통합 슬라이드 프레젠테이션")).toBeInTheDocument();
+    expect(screen.getByText("1개 프레젠테이션 덱")).toBeInTheDocument();
+    expect(screen.getByText("5곡 세트")).toBeInTheDocument();
+    expect(screen.getByText("23 슬라이드")).toBeInTheDocument();
   });
 
   it("should navigate to /present/fullscreen when start presentation button is clicked in Chrome", () => {
@@ -95,7 +96,7 @@ describe("HomeRoute (Main Home Entry Screen)", () => {
     );
 
     // Initially 5 songs in setlist
-    expect(screen.getByText("5곡 구성")).toBeInTheDocument();
+    expect(screen.getByText("5곡 세트")).toBeInTheDocument();
 
     // Open modal
     const openBtn = screen.getByTestId("open-quick-paste-btn");
@@ -128,7 +129,7 @@ describe("HomeRoute (Main Home Entry Screen)", () => {
     expect(screen.queryByText("빠른 가사 붙여넣기")).not.toBeInTheDocument();
 
     // Setlist updated to 6 songs and new slide count displayed
-    expect(screen.getByText("6곡 구성")).toBeInTheDocument();
+    expect(screen.getByText("6곡 세트")).toBeInTheDocument();
   });
 
   it("should render updated sidebar navigation items without '내 콘티 보관함'", () => {
@@ -178,7 +179,7 @@ describe("HomeRoute (Main Home Entry Screen)", () => {
     const homeNavBtn = screen.getByTestId("sidebar-nav-home");
     fireEvent.click(homeNavBtn);
 
-    // 홈의 "합쳐진 슬라이드 전체 목록" 복귀 확인
-    expect(screen.getByText("합쳐진 슬라이드 전체 목록")).toBeInTheDocument();
+    // 홈의 "통합 슬라이드 프레젠테이션" 복귀 확인
+    expect(screen.getByText("통합 슬라이드 프레젠테이션")).toBeInTheDocument();
   });
 });
