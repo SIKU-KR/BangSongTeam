@@ -5,6 +5,11 @@
 > **선행 조건**: `docs/tasks/m2/tasks_2.md` 완료  
 > **목표**: `react-moveable`을 통한 16:9 텍스트 박스 실시간 드래그/폭 리사이즈 및 5% 안전 여백·중앙 스냅 가이드라인을 구현하고, 하단 슬라이드 스트립 패널을 완성한다.
 
+> **구현 현황 (2026-09-21 재검토)**
+>
+> - 3개 태스크 모두 구현 완료: `TextBoxMoveable.tsx`, `EditorStageCanvas.tsx`, `SlideFilmstrip.tsx`.
+> - 드래그·리사이즈 계산은 `textBoxDrag.ts`로 분리되어 단위 테스트가 있다.
+
 ---
 
 ## 1. 아키텍처 가드레일 & 준수 사항
@@ -17,7 +22,7 @@
 
 ## 2. 세부 작업 체크리스트
 
-- [ ] **Task 3.1: react-moveable 기반 텍스트 박스 조작 오버레이 컴포넌트 구현**
+- [x] **Task 3.1: react-moveable 기반 텍스트 박스 조작 오버레이 컴포넌트 구현**
   - **대상 파일**: `apps/web/src/features/editor/MoveableTextBox.tsx`
   - **선행 조건**: `docs/tasks/m2/tasks_2.md`
   - **구현 내용**:
@@ -28,7 +33,7 @@
     - 가로·세로 중앙선(50%) 스냅 가이드라인 실시간 감지 및 표시
   - **DoD (통과 기준)**: `pnpm --filter web exec tsc --noEmit`이 통과하고 텍스트 박스 드래그 및 폭 조절 시 퍼센트 좌표가 계산된다.
 
-- [ ] **Task 3.2: 16:9 편집 미리보기 인터랙티브 스테이지 컴포넌트 구현**
+- [x] **Task 3.2: 16:9 편집 미리보기 인터랙티브 스테이지 컴포넌트 구현**
   - **대상 파일**: `apps/web/src/features/editor/EditorStagePreview.tsx`
   - **선행 조건**: Task 3.1
   - **구현 내용**:
@@ -37,7 +42,7 @@
     - 현재 선택된 슬라이드의 가사 및 곡 스타일(폰트, 크기, 오버레이, 그림자) 1:1 실시간 반영
   - **DoD (통과 기준)**: `pnpm --filter web exec tsc --noEmit`이 통과하고 스테이지 위에서 텍스트 조작 및 경고가 올바르게 렌더링된다.
 
-- [ ] **Task 3.3: 하단 슬라이드 썸네일 스트립 컴포넌트 구현**
+- [x] **Task 3.3: 하단 슬라이드 썸네일 스트립 컴포넌트 구현**
   - **대상 파일**: `apps/web/src/features/editor/SlideStripPanel.tsx`
   - **선행 조건**: Task 3.2
   - **구현 내용**:

@@ -5,6 +5,12 @@
 > **선행 조건**: `docs/tasks/m1/tasks_4.md` 완료  
 > **목표**: 15분 세트 구성을 위한 기반 라이브러리(`react-moveable`, `@dnd-kit`, `react-colorful`, 번들 폰트)를 셋업하고, 텍스트 넘침(Overflow) 감지 유틸리티와 편집기 상태 머신(`usePresentationEditor`)을 TDD로 구축한다.
 
+> **구현 현황 (2026-09-21 재검토)**
+>
+> - Task 1.4·1.5는 설계와 다른 형태로 구현되었다. `useReducer` 기반 `usePresentationEditor` 대신 **`apps/web/src/features/presentation/presentationStore.ts`** (`useSyncExternalStore` 기반 외부 스토어 + 문서별 undo/redo)로 구현했고 테스트는 `presentationStore.test.ts`에 있다. 편집기·송출 라우트가 같은 스토어를 공유해야 해서 훅 지역 상태보다 외부 스토어가 맞다. 완료로 인정한다.
+> - 단, 1.4에 명시된 `splitSlide`·`mergeSlideWithNext` 액션은 아직 없다. Task 2.3·2.4에서 함께 구현한다.
+> - **잔여: Task 1.2·1.3 (넘침 감지 유틸)** — PRD 4.2·4.4의 경고 아이콘이 여기에 달린다.
+
 ---
 
 ## 1. 아키텍처 가드레일 & 준수 사항
@@ -17,7 +23,7 @@
 
 ## 2. 세부 작업 체크리스트
 
-- [ ] **Task 1.1: M2 필수 라이브러리 설치 및 웹폰트 번들 추가**
+- [x] **Task 1.1: M2 필수 라이브러리 설치 및 웹폰트 번들 추가**
   - **대상 파일**: `apps/web/package.json`, `apps/web/src/index.css`
   - **선행 조건**: `docs/tasks/m1/tasks_4.md`
   - **구현 내용**:
@@ -47,7 +53,7 @@
     - 곡 내 최다 줄 슬라이드 스테이지 이탈 여부 계산 함수 구현 및 shared 패키지 export
   - **DoD (통과 기준)**: `pnpm --filter @repo/shared vitest run src/utils/overflow.test.ts`가 100% 통과(Green)한다.
 
-- [ ] **Task 1.4: 세트 편집기 상태 머신 리듀서 단위 테스트 작성 (TDD Red)**
+- [x] **Task 1.4: 세트 편집기 상태 머신 리듀서 단위 테스트 작성 (TDD Red)**
   - **대상 파일**: `apps/web/src/features/editor/usePresentationEditor.test.ts`
   - **선행 조건**: Task 1.3
   - **구현 내용**:
@@ -58,7 +64,7 @@
     - 테스트 케이스 5: 슬라이드 분할(`splitSlide`), 다음 슬라이드와 합치기(`mergeSlideWithNext`), 슬라이드 추가/삭제
   - **DoD (통과 기준)**: `pnpm --filter web vitest run src/features/editor/usePresentationEditor.test.ts` 실행 시 구현체가 없어 실패(Red)함을 확인한다.
 
-- [ ] **Task 1.5: 세트 편집기 상태 관리 훅 구현 (TDD Green)**
+- [x] **Task 1.5: 세트 편집기 상태 관리 훅 구현 (TDD Green)**
   - **대상 파일**: `apps/web/src/features/editor/usePresentationEditor.ts`
   - **선행 조건**: Task 1.4
   - **구현 내용**:

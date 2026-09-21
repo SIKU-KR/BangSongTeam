@@ -5,6 +5,12 @@
 > **선행 조건**: `docs/tasks/m2/tasks_3.md` 완료  
 > **목표**: 호버 영상 미리보기를 지원하는 사전 주입 배경 모달과, 검정 오버레이·타이포그래피·색상 피커·3×3 격자 위치 프리셋을 조작하는 우측 통합 곡 속성 패널을 구현한다.
 
+> **구현 현황 (2026-09-21 재검토)**
+>
+> - 4개 태스크 모두 구현 완료: `BackgroundPickerModal.tsx`, `ColorPickerField.tsx`, 그리고 타이포·그림자·3×3 앵커·폭 컨트롤을 모두 담은 `SongPropertyPanel.tsx`.
+> - 속성 패널에 넘침 경고 표시만 비어 있다 (`tasks_1.md`의 Task 1.2·1.3 완료 후 연결).
+> - 배경 목록은 아직 `/api/backgrounds`가 아니라 `@repo/shared`의 `INITIAL_BACKGROUNDS` 상수를 읽는다 (TECH_SPEC §7.1 각주).
+
 ---
 
 ## 1. 아키텍처 가드레일 & 준수 사항
@@ -16,7 +22,7 @@
 
 ## 2. 세부 작업 체크리스트
 
-- [ ] **Task 4.1: 사전 주입 루프 배경 영상 선택 모달 컴포넌트 구현**
+- [x] **Task 4.1: 사전 주입 루프 배경 영상 선택 모달 컴포넌트 구현**
   - **대상 파일**: `apps/web/src/features/editor/BackgroundPickerModal.tsx`
   - **선행 조건**: `docs/tasks/m2/tasks_3.md`
   - **구현 내용**:
@@ -26,7 +32,7 @@
     - 배경 클릭 선택 시 `updateSongBackground` 호출 및 모달 닫기
   - **DoD (통과 기준)**: `pnpm --filter web exec tsc --noEmit`이 통과하고 호버 재생 및 배경 선택 콜백이 정상 작동한다.
 
-- [ ] **Task 4.2: 타이포그래피 및 가독성 오버레이 컨트롤 컴포넌트 구현**
+- [x] **Task 4.2: 타이포그래피 및 가독성 오버레이 컨트롤 컴포넌트 구현**
   - **대상 파일**: `apps/web/src/features/editor/TypographyControls.tsx`
   - **선행 조건**: Task 4.1
   - **구현 내용**:
@@ -38,7 +44,7 @@
     - 텍스트 색상 선택: `react-colorful` 팝오버 및 프리셋 색상 스와치 버튼
   - **DoD (통과 기준)**: `pnpm --filter web exec tsc --noEmit`이 통과하고 각 컨트롤 값 변경 시 `updateSongStyle`이 호출된다.
 
-- [ ] **Task 4.3: 3×3 격자 앵커 프리셋 및 폭 조절 컨트롤 컴포넌트 구현**
+- [x] **Task 4.3: 3×3 격자 앵커 프리셋 및 폭 조절 컨트롤 컴포넌트 구현**
   - **대상 파일**: `apps/web/src/features/editor/PositionControls.tsx`
   - **선행 조건**: Task 4.2
   - **구현 내용**:
@@ -48,7 +54,7 @@
     - '기본값으로 되돌리기' 버튼 클릭 시 `resetSongStyle` 호출하여 `DEFAULT_DECK_STYLE`로 복원
   - **DoD (통과 기준)**: `pnpm --filter web exec tsc --noEmit`이 통과하고 3×3 격자 클릭 시 좌표가 즉각 갱신된다.
 
-- [ ] **Task 4.4: 우측 통합 곡 속성 패널(Property Panel) 컴포넌트 완성**
+- [x] **Task 4.4: 우측 통합 곡 속성 패널(Property Panel) 컴포넌트 완성**
   - **대상 파일**: `apps/web/src/features/editor/SongPropertyPanel.tsx`
   - **선행 조건**: Task 4.1, Task 4.2, Task 4.3
   - **구현 내용**:

@@ -1,9 +1,17 @@
 # 기술 디자인 명세서 (Technical Specification)
 
-**문서 버전:** 1.0.0  
+**문서 버전:** 1.1.0  
+**최종 갱신:** 2026-09-21 (구현 현황 반영)  
 **작성자:** Senior Software Architect  
 **대상 서비스:** 교회 찬양 슬라이드 제작 및 송출 서비스 (`prj-ppt`)  
-**문서 상태:** Approved Design Spec (아키텍처 및 데이터 모델 확정)
+**문서 상태:** Approved Design Spec — 일부 항목은 실제 구현과 맞추어 개정됨 (§2.2 구현 현황 참조)
+
+> **1.1.0 개정 요약**
+>
+> 1. 배경 미디어 전송을 R2 커스텀 도메인 직통에서 **Worker 프록시(`/api/media/*`)** 로 정정했다 (§2.1, §5.4).
+> 2. **클라이언트 영속성 3단계(인메모리 → IndexedDB → 서버 동기화)** 를 명시했다. 현재는 1단계이며 다음 작업이 2단계다 (§5.5).
+> 3. 사용자 커스텀 배경 업로드(PRD 4.3)를 데이터 모델과 API 계약에 반영했다 (§4.1, §7.1).
+> 4. 각 구성 요소의 구현 여부를 §2.2 표로 명시했다. 설계만 있고 코드가 없는 항목을 구분한다.
 
 ---
 
@@ -20,7 +28,8 @@
    - `apps` $\rightarrow$ `packages` 단방향 참조만 허용.
    - `packages/db`는 Worker 전용 패키지로, 프론트엔드(`apps/web/src`)에서의 임포트는 ESLint로 차단한다.
    - 프론트엔드와 백엔드는 Hono RPC Client (`hc<AppType>`)를 통해서만 타입 안전하게 통신한다.
-3. **무결점 오프라인 송출 (Zero-Network Presentation)**:
+3. **로컬 우선 영속성과 무결점 오프라인 송출 (Local-First & Zero-Network Presentation)**:
+   - 사용자의 작업은 서버가 아니라 **브라우저 로컬 저장소를 1차 원천**으로 삼는다. 로그인은 기기 간 동기화와 공유를 위한 것이지 편집의 전제 조건이 아니다 (§5.5).
    - 예배 중 송출 화면은 외부 네트워크 요청을 절대 발생시키지 않는다.
    - PWA Service Worker (`RangeRequestsPlugin`)와 `IndexedDB`를 통해 영상 및 세트 데이터를 완전히 로컬화한다.
 4. **100ms 이내 결정론적 렌더링 (3-Layer DOM Architecture)**:
@@ -66,8 +75,7 @@ flowchart TB
 
     subgraph StorageServices["Storage & Data"]
       D1DB[("Cloudflare D1 (SQLite + FTS5)")]
-      R2Media[("Cloudflare R2 Bucket (Loop Videos)")]
-      R2Domain["R2 Custom Domain (media.domain.com)"]
+      R2Media[("Cloudflare R2 Bucket (Loop Videos + User Uploads)")]
     end
 
     subgraph AIEngine["AI Engine"]
@@ -80,9 +88,35 @@ flowchart TB
   AuthMiddleware --> D1DB
   HonoAPI --> WorkersAI
 
-  R2Media -.->|Public CDN Edge| R2Domain
-  BrowserStorage <-->|HTTP Range Partial Get| R2Domain
+  MediaProxy["Media Proxy (/api/media/* · HTTP Range)"]
+  HonoAPI --> MediaProxy
+  MediaProxy --> R2Media
+  BrowserStorage <-->|HTTP Range Partial Get (same-origin)| MediaProxy
 ```
+
+배경 영상은 R2 커스텀 도메인 직통이 아니라 **같은 Worker의 `/api/media/*` 프록시**를 통해 전달한다. 동일 출처이므로 R2 CORS 설정이 필요 없고, Service Worker 캐시 규칙도 자체 오리진 경로 하나로 끝난다. 대신 영상 트래픽이 Worker 요청 수·CPU 시간에 계상되므로, 사용량이 커지면 커스텀 도메인 직통으로 되돌리는 선택지를 남겨 둔다. 그때 바뀌는 것은 URL 생성 헬퍼(`getBackgroundMediaUrl`)와 Workbox `urlPattern` 두 곳뿐이다.
+
+### 2.2 구현 현황 스냅샷 (2026-09-21)
+
+본 명세의 항목 중 실제 코드가 있는 것과 설계만 있는 것을 구분한다. 이 표를 갱신하지 않은 채 "스펙에 있으니 구현되어 있다"고 가정하지 않는다.
+
+| 구성 요소                                     | 상태       | 비고                                                                                      |
+| --------------------------------------------- | ---------- | ----------------------------------------------------------------------------------------- |
+| `packages/shared` Zod 스키마 (§3)             | 구현       | Deck·Slide·Style·Presentation·Broadcast·API 전부 존재                                     |
+| `packages/db` Drizzle 스키마·마이그레이션(§4) | 구현       | 0000_initial, 0001_fts5 적용됨                                                            |
+| 스코프 쿼리 헬퍼 (§4.3)                       | 부분       | decks·presentations·backgrounds 헬퍼 존재. 실제 호출부는 `/api/backgrounds` 하나뿐        |
+| 3-Layer Slide Stage (§5.1)                    | 구현       | `components/stage/*` — 편집기와 송출이 동일 컴포넌트 사용                                 |
+| 입력 버퍼 엔진·단축키 (§5.2)                  | 구현       | `useNavigationBuffer`, `usePresentationShortcuts` (tinykeys)                              |
+| 세트 편집기 (PRD 4.4)                         | 부분       | 속성 패널·드래그·리사이즈·스트립 구현. 넘침 경고와 커서 기준 분할·합치기 미구현           |
+| 미디어 프록시 `/api/media/*` (§5.4)           | 구현       | HTTP Range 지원                                                                           |
+| **클라이언트 영속성 (§5.5)**                  | **미구현** | `presentationStore`는 모듈 메모리. 새로고침 시 전부 소실. **다음 작업(M3-A)**             |
+| Hono RPC 클라이언트 (`hc<AppType>`)           | 미구현     | `apps/web/src`에 `fetch` 호출이 0건. 배경 목록도 `INITIAL_BACKGROUNDS` 상수를 직접 읽는다 |
+| Better Auth (§4.1 auth 테이블)                | 스키마만   | 테이블·컬럼만 있고 런타임 연동 없음                                                       |
+| 발표자 보기·BroadcastChannel (§5.3)           | 스키마만   | `BroadcastMessageSchema`만 존재. 사용처 없음                                              |
+| PWA·Cache Storage·IndexedDB (§5.4)            | 미구현     | vite-plugin-pwa·idb 미설치                                                                |
+| Workers AI 가사 정규화 (§6)                   | 미구현     | `verifyNormalization` 검증 함수만 구현됨                                                  |
+| 공유·가사 라이브러리 API (§7)                 | 미구현     | 화면은 샘플 데이터로 선행 구현                                                            |
+| 사용자 커스텀 배경 업로드 (PRD 4.3)           | 미구현     | 배경 라이브러리 화면에 안내만 있음                                                        |
 
 ---
 
@@ -369,6 +403,15 @@ Cloudflare D1(SQLite)을 영속성 엔진으로 사용하며, Drizzle ORM을 통
 - **최적화 설계**: 1인 1표 원칙(PRD 4.8)을 준수하되, `INSERT ... ON CONFLICT (user_id, catalog_id) DO UPDATE SET lyrics = excluded.lyrics, deck_id = excluded.deck_id, updated_at = unixepoch()` 업서트 쿼리를 강제한다.
 - `lyrics_catalog.version_count`는 SQLite 트리거를 통해 원자적으로 증감시켜 카운트 불일치를 원천 방지한다.
 
+#### 5. 사용자 커스텀 배경의 노출 격리 (PRD 4.3)
+
+- **문제점**: 커스텀 배경을 `backgrounds`에 함께 넣으면, 배경 목록 API가 남의 업로드까지 뿌리거나 공개 덱이 남의 배경을 참조하게 된다.
+- **설계**: `source`/`owner_user_id`로 구분하고 쿼리 헬퍼에서 강제한다.
+  - 배경 목록 조회는 `source = 'service' OR owner_user_id = :userId` 조건을 헬퍼 안에 고정한다. 라우트에서 임의 조건을 조립하지 않는다.
+  - 공개 덱 조회·포크 시 `backgroundId`가 `source = 'user'` 배경을 가리키면 서비스 기본 배경 id로 치환해 내보낸다. 남의 업로드가 공개 경로로 새는 것을 원천 차단한다.
+  - 계정 삭제 시 `owner_user_id` CASCADE로 메타데이터가 지워지고, R2 객체는 같은 트랜잭션 뒤 정리 작업에서 제거한다.
+- **용량 한도**: 업로드 전 `SELECT SUM(size_bytes) WHERE owner_user_id = ?`로 300MB 한도를 검사한다 (PRD 6.3).
+
 ---
 
 ### 4.1 테이블 명세 및 최적화된 Drizzle 스키마 정의 (`schema/*.ts`)
@@ -502,18 +545,39 @@ export const lyricsVersions = sqliteTable(
 // ============================================================================
 // 3. 배경 영상 메타데이터
 // ============================================================================
-export const backgrounds = sqliteTable("backgrounds", {
-  id: text("id").primaryKey(),
-  title: text("title").notNull(),
-  r2Key: text("r2_key").notNull(),
-  posterKey: text("poster_key").notNull(),
-  durationSec: integer("duration_sec").notNull(),
-  license: text("license").notNull(),
-  tags: text("tags").notNull(), // JSON TEXT: string[]
-  createdAt: integer("created_at", { mode: "timestamp" }).default(
-    sql`(unixepoch())`,
-  ),
-});
+export const backgrounds = sqliteTable(
+  "backgrounds",
+  {
+    id: text("id").primaryKey(),
+    title: text("title").notNull(),
+    r2Key: text("r2_key").notNull(),
+    posterKey: text("poster_key").notNull(),
+    durationSec: integer("duration_sec").notNull(),
+    license: text("license").notNull(),
+    tags: text("tags").notNull(), // JSON TEXT: string[]
+
+    // 사용자 커스텀 배경 (PRD 4.3) — 사전 주입 배경과 한 테이블에서 관리
+    source: text("source", { enum: ["service", "user"] })
+      .notNull()
+      .default("service"),
+    ownerUserId: text("owner_user_id").references(() => user.id, {
+      onDelete: "cascade",
+    }), // source='user'일 때만 채워진다
+    kind: text("kind", { enum: ["video", "image"] })
+      .notNull()
+      .default("video"),
+    sizeBytes: integer("size_bytes").notNull().default(0), // 계정당 300MB 한도 집계용
+
+    createdAt: integer("created_at", { mode: "timestamp" }).default(
+      sql`(unixepoch())`,
+    ),
+  },
+  (t) => [
+    // 사전 주입 목록 조회(source='service')와 내 업로드 조회를 각각 인덱스로 받는다
+    index("idx_backgrounds_source").on(t.source),
+    index("idx_backgrounds_owner").on(t.ownerUserId),
+  ],
+);
 
 // ============================================================================
 // 4. 덱 (Deck) - 찬양 1곡 단위 (라이브러리 마스터 vs 프레젠테이션 복제 격리)
@@ -891,17 +955,19 @@ Chrome 공식 **Window Management API**를 활용한 다중 디스플레이 투�
 
 ### 5.4 오프라인-퍼스트 미디어 캐싱 (R2 CDN + Service Worker)
 
-배경 영상의 완전 오프라인 재생을 위해 Cloudflare R2 Custom Domain과 Workbox RangeRequests를 연동한다.
+배경 영상의 완전 오프라인 재생을 위해 Worker 미디어 프록시와 Workbox RangeRequests를 연동한다.
 
-1. **R2 버킷 CORS 설정**:
-   - `AllowedOrigins`: `["https://app.worship-slide.com", "http://localhost:5173"]`
-   - `AllowedHeaders`: `["Range", "Authorization"]`
-   - `ExposeHeaders`: `["Content-Range", "Accept-Ranges", "Content-Length"]`
+1. **미디어 전송 경로 (동일 출처 프록시)**:
+   - 클라이언트는 `/api/media/<r2Key>`로 요청하고, Worker가 R2 객체를 `Range` 헤더와 함께 중계한다 (`apps/web/worker/routes/media.ts`).
+   - **R2 CORS 설정은 필요 없다.** 앱과 미디어가 같은 오리진이므로 프리플라이트가 발생하지 않는다.
+   - Worker 응답은 `Accept-Ranges: bytes`, `Content-Range`, `Content-Length`를 그대로 전달하고, 불변 자산이므로 `Cache-Control: public, max-age=31536000, immutable`을 붙인다.
+   - 이 결정의 대가는 영상 트래픽이 Worker 요청 수에 계상된다는 것이다. 월 사용량이 무료 티어를 위협하면 커스텀 도메인 직통으로 전환하고, 그때 `getBackgroundMediaUrl`의 base URL과 아래 `urlPattern`만 교체한다.
 2. **Workbox RangeRequests 캐싱 구성 (`vite.config.ts`)**:
    ```typescript
    // vite-plugin-pwa runtimeCaching
    {
-     urlPattern: /^https:\/\/media\.worship-slide\.com\/.*\.mp4$/,
+     urlPattern: ({ url, sameOrigin }) =>
+       sameOrigin && url.pathname.startsWith('/api/media/'),
      handler: 'CacheFirst',
      options: {
        cacheName: 'worship-videos-cache',
@@ -918,8 +984,8 @@ Chrome 공식 **Window Management API**를 활용한 다중 디스플레이 투�
    - 세트에 포함된 모든 배경 영상 URL을 `fetch(url, { mode: 'cors' })`로 사전 호출하여 Service Worker 캐시 스토리지에 100% 다운로드.
    - 전체 다운로드 완료 검증 후 UI에 `오프라인 송출 가능 (Ready for Offline)` 배지 활성화.
 
-4. **클라이언트 IndexedDB 스키마 명세 (`worship-offline-db`, Version 1)**:
-   오프라인 송출 보장을 위해 클라이언트는 `idb` 라이브러리를 통해 다음 객체 저장소(Object Stores)를 관리한다.
+4. **클라이언트 IndexedDB 스키마 명세 (`worship-offline-db`, Version 1)** — _미구현, M3-A에서 도입_:
+   오프라인 송출 보장을 위해 클라이언트는 `idb` 라이브러리를 통해 다음 객체 저장소(Object Stores)를 관리한다. 이 스토어는 오프라인 송출뿐 아니라 **평상시 편집 데이터의 1차 원천**이기도 하다 (§5.5).
 
    ```typescript
    // apps/web/src/lib/storage/db.ts
@@ -978,6 +1044,28 @@ Chrome 공식 **Window Management API**를 활용한 다중 디스플레이 투�
    - **송출 모드 실행 원칙 (Zero-Fetch Invariant)**:
      - 전체화면 송출 및 발표자 보기 컴포넌트는 오직 `getOfflineDB()`의 `decks` 및 `presentations` 스토어와 Cache Storage에서만 데이터를 조회한다.
      - 예배 송출 중 네트워크 연결이 끊겨도 화면 멈춤이나 오류가 0건임을 수학적으로 보장한다.
+
+### 5.5 클라이언트 영속성 3단계 (Persistence Phases)
+
+이 서비스는 "서버에 저장하고 필요할 때 받아온다"가 아니라 **"로컬에 저장하고 서버와 동기화한다"** 는 순서로 간다. 예배 당일 네트워크를 신뢰할 수 없기 때문이고, 로그인 없이도 곧바로 써 볼 수 있어야 하기 때문이다. 따라서 저장 계층을 세 단계로 나누어 도입한다.
+
+| 단계                             | 원천                                          | 상태          | 실패 시 사용자가 잃는 것      |
+| -------------------------------- | --------------------------------------------- | ------------- | ----------------------------- |
+| **Phase 1 — 인메모리**           | 모듈 스코프 `presentationStore`               | **현재**      | 새로고침·탭 종료 시 작업 전부 |
+| **Phase 2 — IndexedDB (M3-A)**   | `worship-offline-db`, 스토어가 단일 원천      | **다음 작업** | 브라우저 데이터 삭제 시에만   |
+| **Phase 3 — 서버 동기화 (M3-B)** | D1이 정본, IndexedDB가 로컬 캐시 겸 작업 사본 | 대기          | 없음 (기기 간 복구 가능)      |
+
+**Phase 2 설계 규칙 (M3-A):**
+
+1. **스토어가 단일 원천이다.** `presentationStore`의 모든 뮤테이터는 상태 교체 직후 해당 문서 하나만 IndexedDB `presentations`/`decks` 스토어에 기록한다. 전체 컬렉션을 매번 직렬화하지 않는다.
+2. **쓰기는 디바운스(≈300ms)하되, 창이 숨겨지거나 종료될 때 대기 중인 쓰기를 즉시 시작한다.** `visibilitychange`(hidden)와 `pagehide`에서 타이머를 앞당겨 트랜잭션을 연다. IndexedDB는 비동기라 언로드 시점의 완료를 보장할 수 없으므로, 보장 대신 **디바운스 간격을 짧게 유지**하는 것으로 손실 창을 최소화한다. 마지막 쓰기가 유실되어도 직전 저장본이 남도록 문서 단위 전체 교체(put)로 기록한다.
+3. **부팅 순서:** IndexedDB에서 문서 목록을 로드 → 있으면 그것으로 스토어를 초기화 → 없을 때만 샘플 시드를 넣는다. 현재의 `createSeedState()`는 "저장소가 비어 있을 때의 초기값"으로 격하된다.
+4. **쓰기 실패를 삼키지 않는다.** 용량 초과(`QuotaExceededError`)나 시크릿 모드로 IndexedDB를 못 쓰면 편집기 상단에 '이 브라우저에 저장할 수 없습니다' 배너를 띄운다. 조용히 인메모리로 폴백하면 사용자는 저장된 줄 알고 예배 당일에 잃는다.
+5. **스키마 버전:** `openDB(..., version)`의 upgrade 경로를 처음부터 유지한다. 스토어 구조가 바뀌면 버전을 올리고 마이그레이션을 쓴다. 저장된 문서는 읽을 때 `PresentationSchema.safeParse`로 검증하고, 실패한 문서는 버리지 말고 격리 보관한 뒤 사용자에게 알린다.
+6. **Undo/Redo 히스토리는 저장하지 않는다.** 세션 한정 상태이며 직렬화 비용이 크다.
+7. **커스텀 배경(PRD 4.3)의 로컬 보관:** Phase 2에서는 업로드 파일을 Blob으로 IndexedDB에 두고 `blob:` URL로 재생한다. Phase 3에서 R2 업로드로 승격한다.
+
+**Zero-Fetch 불변식과의 관계:** 송출 라우트(`/present/*`)는 Phase 2 이후 IndexedDB와 Cache Storage만 읽는다. Phase 1인 현재는 메모리만 읽으므로 불변식 자체는 이미 성립하지만, **송출 직전 새로고침 한 번에 세트가 사라진다**는 더 큰 위험이 남아 있다. 이것이 M3-A를 M3-B보다 앞에 둔 이유다.
 
 ---
 
@@ -1073,23 +1161,29 @@ export function verifyNormalization(
 
 ### 7.1 엔드포인트 요약표
 
-| 메서드   | 경로                     | 설명                                          | 인증 필요    |
-| -------- | ------------------------ | --------------------------------------------- | ------------ |
-| `GET`    | `/api/auth/*`            | Better Auth 핸들러 (카카오/네이버)            | No           |
-| `GET`    | `/api/decks`             | 내 개인 라이브러리 덱 목록 조회               | Yes          |
-| `POST`   | `/api/decks`             | 새 덱 생성 (세트 추가 시 Clone 포함)          | Yes          |
-| `GET`    | `/api/decks/:id`         | 덱 상세 조회 (소유자 또는 공개 덱)            | Conditional  |
-| `PUT`    | `/api/decks/:id`         | 덱 정보/슬라이드/스타일 수정                  | Yes (소유자) |
-| `DELETE` | `/api/decks/:id`         | 덱 삭제                                       | Yes (소유자) |
-| `POST`   | `/api/decks/:id/fork`    | 공개 덱 내 라이브러리로 복제 (Fork)           | Yes          |
-| `GET`    | `/api/presentations`     | 내 프레젠테이션(예배 세트) 목록 조회          | Yes          |
-| `POST`   | `/api/presentations`     | 새 프레젠테이션 생성                          | Yes          |
-| `GET`    | `/api/presentations/:id` | 프레젠테이션 상세 및 포함된 덱 전체 Hydration | Yes (소유자) |
-| `PUT`    | `/api/presentations/:id` | 프레젠테이션 정보 및 곡 순서(`order`) 수정    | Yes (소유자) |
-| `DELETE` | `/api/presentations/:id` | 프레젠테이션 삭제                             | Yes (소유자) |
-| `GET`    | `/api/catalog/search`    | 통합 검색 (공개 덱 및 가사 라이브러리)        | No           |
-| `GET`    | `/api/backgrounds`       | 서비스 기본 모션 배경 목록 조회               | No           |
-| `POST`   | `/api/reports`           | 가사 오류 및 부적절 덱 신고 접수              | Yes          |
+| 메서드   | 경로                           | 설명                                          | 인증 필요    | 상태   |
+| -------- | ------------------------------ | --------------------------------------------- | ------------ | ------ |
+| `GET`    | `/api/health`                  | 헬스 체크                                     | No           | 구현   |
+| `GET`    | `/api/media/*`                 | R2 배경 미디어 프록시 (HTTP Range)            | No           | 구현   |
+| `GET`    | `/api/backgrounds`             | 서비스 기본 모션 배경 목록 조회               | No           | 구현\* |
+| `GET`    | `/api/auth/*`                  | Better Auth 핸들러 (카카오/네이버)            | No           | 미구현 |
+| `GET`    | `/api/decks`                   | 내 개인 라이브러리 덱 목록 조회               | Yes          | 미구현 |
+| `POST`   | `/api/decks`                   | 새 덱 생성 (세트 추가 시 Clone 포함)          | Yes          | 미구현 |
+| `GET`    | `/api/decks/:id`               | 덱 상세 조회 (소유자 또는 공개 덱)            | Conditional  | 미구현 |
+| `PUT`    | `/api/decks/:id`               | 덱 정보/슬라이드/스타일 수정                  | Yes (소유자) | 미구현 |
+| `DELETE` | `/api/decks/:id`               | 덱 삭제                                       | Yes (소유자) | 미구현 |
+| `POST`   | `/api/decks/:id/fork`          | 공개 덱 내 라이브러리로 복제 (Fork)           | Yes          | 미구현 |
+| `GET`    | `/api/presentations`           | 내 프레젠테이션(예배 세트) 목록 조회          | Yes          | 미구현 |
+| `POST`   | `/api/presentations`           | 새 프레젠테이션 생성                          | Yes          | 미구현 |
+| `GET`    | `/api/presentations/:id`       | 프레젠테이션 상세 및 포함된 덱 전체 Hydration | Yes (소유자) | 미구현 |
+| `PUT`    | `/api/presentations/:id`       | 프레젠테이션 정보 및 곡 순서(`order`) 수정    | Yes (소유자) | 미구현 |
+| `DELETE` | `/api/presentations/:id`       | 프레젠테이션 삭제                             | Yes (소유자) | 미구현 |
+| `POST`   | `/api/backgrounds/uploads`     | 커스텀 배경 업로드 (용량·포맷 검사, R2 저장)  | Yes          | 미구현 |
+| `DELETE` | `/api/backgrounds/uploads/:id` | 내 커스텀 배경 삭제 (R2 객체 포함)            | Yes (소유자) | 미구현 |
+| `GET`    | `/api/catalog/search`          | 통합 검색 (공개 덱 및 가사 라이브러리)        | No           | 미구현 |
+| `POST`   | `/api/reports`                 | 가사 오류 및 부적절 덱 신고 접수              | Yes          | 미구현 |
+
+\* `/api/backgrounds`는 Worker에 구현되어 있으나 **프론트엔드가 아직 호출하지 않는다.** 현재 클라이언트는 `@repo/shared`의 `INITIAL_BACKGROUNDS` 상수를 직접 읽는다. M3-B에서 Hono RPC 클라이언트를 도입하면서 이 경로로 일원화한다. 그 전까지 배경 메타데이터의 사실상 원천은 상수 파일이며, D1 시드와 값이 어긋나지 않도록 둘 중 하나만 고쳐서는 안 된다.
 
 ### 7.2 주요 API 요청/응답 페이로드 스키마 (`packages/shared/src/schemas/api.ts`)
 
@@ -1191,6 +1285,8 @@ export type SearchCatalogResponse = z.infer<typeof SearchCatalogResponseSchema>;
 
 ## 9. 결론 및 구현 준비 상태 (Architectural Sign-off)
 
-본 명세서는 PRD의 전 기능 요건 및 사전 질문을 통해 확정된 아키텍처 결정 사항(프레젠테이션 덱 복제 정책, 비로그인 메모리 세션, Chrome Window Management 기반 듀얼 윈도우 동기화, R2 커스텀 도메인 직통 스트리밍)을 완벽히 반영하여 작성되었다.
+본 명세서는 PRD의 기능 요건과 확정된 아키텍처 결정 사항(프레젠테이션 덱 복제 정책, 로컬 우선 영속성, Chrome Window Management 기반 듀얼 윈도우 동기화, Worker 미디어 프록시 스트리밍)을 반영한다. 1.1.0 개정에서는 설계와 실제 코드가 어긋난 지점을 실제 구현 쪽으로 정정했다.
 
-이를 바탕으로 `packages/shared` $\rightarrow$ `packages/db` $\rightarrow$ `apps/web` 순으로 M0 및 M1 개발을 즉시 착수할 수 있다.
+**현재 위치와 다음 단계 (2026-09-21):** M0·M1 코드와 M2 편집기의 대부분이 구현되어 있고, 막혀 있는 것은 영속성이다. 다음 작업은 §5.5 Phase 2(IndexedDB 로컬 영속성, M3-A)이며, 이것이 끝나야 M1·M2의 완료 기준인 '실제 주일 예배 송출'을 검증할 수 있다. 그 다음이 Hono RPC 클라이언트와 계정·서버 저장(M3-B)이다.
+
+**이 문서를 읽는 에이전트에게:** §2.2 구현 현황 표를 먼저 확인한다. 설계가 기술되어 있다고 해서 코드가 존재한다고 가정하지 않는다. 구현이 스펙과 달라지면 코드를 되돌리기 전에 이 문서를 먼저 갱신할지 판단한다 — 실제 운영에서 더 나은 선택이라면 스펙이 코드를 따라간다.

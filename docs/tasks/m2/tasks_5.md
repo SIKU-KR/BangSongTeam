@@ -5,6 +5,13 @@
 > **선행 조건**: `docs/tasks/m2/tasks_4.md` 완료  
 > **목표**: 3패널 세트 편집기 전체 라우트를 완성하고, 편집된 세트 데이터를 전체화면 송출 뷰로 연결하여 "처음 써 보는 봉사자 1명이 5곡 세트를 15분 안에 구성"하는 M2 완료 기준을 종합 검증한다.
 
+> **구현 현황 (2026-09-21 재검토)**
+>
+> - Task 5.1~5.4 구현 완료: `EditorHeader.tsx`, `EditorRoute.tsx`, `FullscreenPresentRoute.tsx`, `App.tsx` 라우팅(`/editor/:presentationId`, `/present/:presentationId/fullscreen`).
+> - Task 5.6의 검증 명령(`pnpm typecheck && pnpm lint && pnpm test`)은 현재 **통과한다** (테스트 324개 / 파일 46개 Green). 다만 선행 태스크 5.5와 '봉사자 1명이 15분 안에 5곡 구성' 실사용 확인이 남아 체크하지 않는다.
+> - **잔여: Task 5.5 (15분 워크플로 통합 테스트)**, 그리고 M2 완료 선언을 위한 실사용 검증.
+> - 실사용 검증은 저장 기능(M3-A 로컬 영속성)이 붙은 뒤에 한다. 지금은 새로고침 한 번에 세트가 사라져 15분 측정이 무의미하다.
+
 ---
 
 ## 1. 아키텍처 가드레일 & 준수 사항
@@ -17,7 +24,7 @@
 
 ## 2. 세부 작업 체크리스트
 
-- [ ] **Task 5.1: 세트 편집기 상단 헤더 바 컴포넌트 구현**
+- [x] **Task 5.1: 세트 편집기 상단 헤더 바 컴포넌트 구현**
   - **대상 파일**: `apps/web/src/features/editor/EditorHeader.tsx`
   - **선행 조건**: `docs/tasks/m2/tasks_4.md`
   - **구현 내용**:
@@ -27,7 +34,7 @@
     - '홈으로' 나가기 링크
   - **DoD (통과 기준)**: `pnpm --filter web exec tsc --noEmit`이 통과하고 버튼 클릭 시 올바른 이벤트 및 네비게이션이 실행된다.
 
-- [ ] **Task 5.2: 전체화면 송출 라우트(`FullscreenPresentRoute`)의 세트 주입 연동**
+- [x] **Task 5.2: 전체화면 송출 라우트(`FullscreenPresentRoute`)의 세트 주입 연동**
   - **대상 파일**: `apps/web/src/routes/FullscreenPresentRoute.tsx`
   - **선행 조건**: Task 5.1
   - **구현 내용**:
@@ -36,7 +43,7 @@
     - 편집기에서 설정한 곡별 배경, 오버레이, 폰트, 텍스트 박스 위치가 전체화면에서 100% 동일하게 반영
   - **DoD (통과 기준)**: `pnpm --filter web exec tsc --noEmit`이 통과하고 편집기에서 구성한 세트가 전체화면으로 송출된다.
 
-- [ ] **Task 5.3: 세트 편집기 전체 화면 라우트 컴포넌트 구현**
+- [x] **Task 5.3: 세트 편집기 전체 화면 라우트 컴포넌트 구현**
   - **대상 파일**: `apps/web/src/routes/PresentationEditorRoute.tsx`
   - **선행 조건**: Task 5.1, Task 5.2
   - **구현 내용**:
@@ -49,7 +56,7 @@
     - `usePresentationEditor` 훅으로 전체 상태 바인딩 및 변경사항 실시간 반영
   - **DoD (통과 기준)**: `pnpm --filter web exec tsc --noEmit`이 통과하고 브라우저 렌더링 시 3패널 레이아웃이 완벽히 표시된다.
 
-- [ ] **Task 5.4: 라우팅 등록 및 메인 홈 화면 세트 편집기 진입 카드 추가**
+- [x] **Task 5.4: 라우팅 등록 및 메인 홈 화면 세트 편집기 진입 카드 추가**
   - **대상 파일**: `apps/web/src/App.tsx`, `apps/web/src/routes/index.tsx`
   - **선행 조건**: Task 5.3
   - **구현 내용**:

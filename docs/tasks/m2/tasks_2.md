@@ -5,6 +5,12 @@
 > **선행 조건**: `docs/tasks/m2/tasks_1.md` 완료  
 > **목표**: `@dnd-kit`을 활용한 곡 목록 드래그 정렬 패널과, 슬라이드 수동 분할(커서 위치 나누기) 및 합치기 기능이 포함된 세트 곡 추가 모달을 구현한다.
 
+> **구현 현황 (2026-09-21 재검토)**
+>
+> - Task 2.1은 `SortableList.tsx`, Task 2.2는 `EditorSidebar.tsx`(곡·슬라이드·가사·배경 4개 탭 드로어)로 구현되었다.
+> - Task 2.5는 `AddSongModal.tsx` 대신 **`QuickLyricPasteModal.tsx`** 로 구현되었다(제목·아티스트 입력, `ExternalSearchLinks`, 실시간 분할 프리뷰, 세트 추가). 다만 프리뷰에서의 수동 나누기·합치기는 Task 2.4에 의존하므로 아직 없다.
+> - **잔여: Task 2.3·2.4 (커서 위치 기준 슬라이드 나누기·합치기)** — PRD 4.2의 수동 편집 요건.
+
 ---
 
 ## 1. 아키텍처 가드레일 & 준수 사항
@@ -16,7 +22,7 @@
 
 ## 2. 세부 작업 체크리스트
 
-- [ ] **Task 2.1: 드래그 앤 드롭 정렬 가능한 곡 리스트 아이템 컴포넌트 구현**
+- [x] **Task 2.1: 드래그 앤 드롭 정렬 가능한 곡 리스트 아이템 컴포넌트 구현**
   - **대상 파일**: `apps/web/src/features/editor/SongListItem.tsx`
   - **선행 조건**: `docs/tasks/m2/tasks_1.md`
   - **구현 내용**:
@@ -26,7 +32,7 @@
     - 선택 활성화(Active) 하이라이트 스타일 및 곡 삭제(`onDelete`) 버튼 제공
   - **DoD (통과 기준)**: `pnpm --filter web exec tsc --noEmit`이 통과하고 곡 카드 렌더링 및 클릭/삭제 이벤트가 정상 동작한다.
 
-- [ ] **Task 2.2: 좌측 곡 목록 및 드래그 정렬 패널 컴포넌트 구현**
+- [x] **Task 2.2: 좌측 곡 목록 및 드래그 정렬 패널 컴포넌트 구현**
   - **대상 파일**: `apps/web/src/features/editor/SongListPanel.tsx`
   - **선행 조건**: Task 2.1
   - **구현 내용**:
@@ -54,7 +60,7 @@
     - 4줄 초과 시 경고 배지 및 줄 수 표시
   - **DoD (통과 기준)**: `pnpm --filter web vitest run src/features/editor/manualLyricSplit.test.ts`가 100% 통과(Green)한다.
 
-- [ ] **Task 2.5: 세트 곡 추가 및 가사 편집 통합 모달 구현**
+- [x] **Task 2.5: 세트 곡 추가 및 가사 편집 통합 모달 구현**
   - **대상 파일**: `apps/web/src/features/editor/AddSongModal.tsx`
   - **선행 조건**: Task 2.4
   - **구현 내용**:
