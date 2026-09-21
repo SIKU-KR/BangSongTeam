@@ -195,7 +195,7 @@ describe("FullscreenPresentRoute", () => {
     ).toBeInTheDocument();
   });
 
-  it("should attempt auto-fullscreen on mount and display prompt banner when windowed", async () => {
+  it("should attempt auto-fullscreen on mount with navigationUI: 'hide' and contain zero windowed banners", async () => {
     const requestFullscreenMock = vi.fn().mockResolvedValue(undefined);
     Object.defineProperty(document.documentElement, "requestFullscreen", {
       value: requestFullscreenMock,
@@ -214,24 +214,21 @@ describe("FullscreenPresentRoute", () => {
       expect.objectContaining({ navigationUI: "hide" }),
     );
 
-    // Since jsdom document.fullscreenElement is falsy by default, prompt banner is shown
-    const promptBanner = screen.getByTestId("fullscreen-prompt-banner");
-    expect(promptBanner).toBeInTheDocument();
-    expect(
-      screen.getByText(/화면을 클릭하면 전체화면으로 전환됩니다/),
-    ).toBeInTheDocument();
-
-    // Clicking prompt banner should request fullscreen again
-    await act(async () => {
-      fireEvent.click(promptBanner);
-    });
-    expect(requestFullscreenMock).toHaveBeenCalledTimes(2);
+    // No windowed presentation banners or toggles exist
+    expect(screen.queryByTestId("fullscreen-prompt-banner")).toBeNull();
+    expect(screen.queryByTestId("fullscreen-toggle-btn")).toBeNull();
+    expect(screen.getByTestId("exit-present-btn")).toBeInTheDocument();
   });
 
-  it("should trigger Fullscreen API when fullscreen button is clicked or 'f' key is pressed", async () => {
-    const requestFullscreenMock = vi.fn().mockResolvedValue(undefined);
-    Object.defineProperty(document.documentElement, "requestFullscreen", {
-      value: requestFullscreenMock,
+  it("should exit presentation and trigger exitFullscreen when exit button is clicked", async () => {
+    const exitFullscreenMock = vi.fn().mockResolvedValue(undefined);
+    const mockDiv = document.createElement("div");
+    Object.defineProperty(document, "fullscreenElement", {
+      value: mockDiv,
+      configurable: true,
+    });
+    Object.defineProperty(document, "exitFullscreen", {
+      value: exitFullscreenMock,
       configurable: true,
       writable: true,
     });
@@ -242,22 +239,41 @@ describe("FullscreenPresentRoute", () => {
       </MemoryRouter>,
     );
 
-    // Reset initial mount call count for clean testing
-    requestFullscreenMock.mockClear();
-
-    const fullscreenBtn = screen.getByTestId("fullscreen-toggle-btn");
+    const exitBtn = screen.getByTestId("exit-present-btn");
     await act(async () => {
-      fireEvent.click(fullscreenBtn);
+      fireEvent.click(exitBtn);
     });
 
-    expect(requestFullscreenMock).toHaveBeenCalledTimes(1);
+    expect(exitFullscreenMock).toHaveBeenCalled();
+  });
 
-    // Press 'f' key to toggle fullscreen
-    act(() => {
-      dispatchKey("f", "KeyF");
+  it("should automatically exit presentation when fullscreen is exited via fullscreenchange event (Esc)", async () => {
+    const mockDiv = document.createElement("div");
+    Object.defineProperty(document, "fullscreenElement", {
+      value: mockDiv,
+      configurable: true,
     });
 
-    expect(requestFullscreenMock).toHaveBeenCalledTimes(2);
+    render(
+      <MemoryRouter>
+        <FullscreenPresentRoute />
+      </MemoryRouter>,
+    );
+
+    // Simulate active fullscreen entered
+    await act(async () => {
+      document.dispatchEvent(new Event("fullscreenchange"));
+    });
+
+    // Now simulate exiting fullscreen (e.g. Esc pressed by user)
+    Object.defineProperty(document, "fullscreenElement", {
+      value: null,
+      configurable: true,
+    });
+
+    await act(async () => {
+      document.dispatchEvent(new Event("fullscreenchange"));
+    });
   });
 
   it("should supply motion background video URL and preload next song video", () => {

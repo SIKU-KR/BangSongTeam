@@ -76,7 +76,7 @@ export function PresentationCard({
   return (
     <div
       data-testid="presentation-card"
-      className={`group relative flex flex-col bg-zinc-900/60 hover:bg-zinc-900/90 border border-zinc-800/80 hover:border-zinc-700 rounded-2xl overflow-hidden transition-all duration-200 hover:shadow-xl hover:shadow-black/40 hover:-translate-y-0.5 ${className}`}
+      className={`group relative flex flex-col bg-white dark:bg-zinc-900/60 hover:bg-zinc-50 dark:hover:bg-zinc-900/90 border border-zinc-200 dark:border-zinc-800/80 hover:border-zinc-300 dark:hover:border-zinc-700 rounded-2xl overflow-hidden transition-all duration-200 shadow-sm hover:shadow-xl hover:shadow-zinc-300/40 dark:hover:shadow-black/40 hover:-translate-y-0.5 ${className}`}
     >
       {/* 1. 16:9 슬라이드 썸네일 스테이지 영역 */}
       <div
@@ -158,26 +158,26 @@ export function PresentationCard({
       </div>
 
       {/* 2. 하단 정보 영역 (Canva Projects 카드 메타데이터 스타일) */}
-      <div className="p-3.5 flex flex-col justify-between gap-1.5">
+      <div className="p-3.5 flex flex-col justify-between gap-1.5 bg-white dark:bg-zinc-900/60">
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0 flex-1">
             <h3
               onClick={onEdit}
-              className="text-xs sm:text-sm font-semibold text-zinc-100 hover:text-emerald-400 transition-colors truncate cursor-pointer"
+              className="text-xs sm:text-sm font-semibold text-zinc-900 dark:text-zinc-100 hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors truncate cursor-pointer"
               title={title}
             >
               {title}
             </h3>
             {/* Canva 스타일의 작은 아이콘/아바타 + 최근 수정 텍스트 */}
-            <div className="flex items-center gap-1.5 text-[11px] text-zinc-400 mt-1">
-              <span className="w-4 h-4 rounded flex items-center justify-center bg-emerald-950 text-emerald-400 border border-emerald-800/80 text-[9px] font-bold shrink-0">
+            <div className="flex items-center gap-1.5 text-[11px] text-zinc-500 dark:text-zinc-400 mt-1">
+              <span className="w-4 h-4 rounded flex items-center justify-center bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-400 border border-emerald-300 dark:border-emerald-800/80 text-[9px] font-bold shrink-0">
                 {isSetlist ? "W" : "S"}
               </span>
               <span className="truncate">
                 {artistOrSummary || (isSetlist ? "콘티 세트" : "찬양 곡")}
               </span>
-              <span className="text-zinc-600 shrink-0">•</span>
-              <span className="text-zinc-400 shrink-0">최근 편집됨</span>
+              <span className="text-zinc-300 dark:text-zinc-600 shrink-0">•</span>
+              <span className="text-zinc-400 dark:text-zinc-400 shrink-0">최근 편집됨</span>
             </div>
           </div>
 
@@ -191,7 +191,7 @@ export function PresentationCard({
                   e.stopPropagation();
                   onDuplicate();
                 }}
-                className="p-1 rounded-lg text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800/60 transition-colors cursor-pointer"
+                className="p-1 rounded-lg text-zinc-400 dark:text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800/60 transition-colors cursor-pointer"
                 title="복제"
               >
                 <svg
@@ -217,7 +217,7 @@ export function PresentationCard({
                   e.stopPropagation();
                   onDelete();
                 }}
-                className="p-1 rounded-lg text-zinc-500 hover:text-red-400 hover:bg-zinc-800/60 transition-colors cursor-pointer"
+                className="p-1 rounded-lg text-zinc-400 dark:text-zinc-500 hover:text-red-500 hover:bg-zinc-100 dark:hover:bg-zinc-800/60 transition-colors cursor-pointer"
                 title="삭제"
               >
                 <svg

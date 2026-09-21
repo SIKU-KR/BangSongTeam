@@ -75,14 +75,14 @@ export function enterFullscreen(
     };
 
     if (element.requestFullscreen) {
-      return element
-        .requestFullscreen(fullscreenOptions)
+      return Promise.resolve(element.requestFullscreen(fullscreenOptions))
         .then(() => true)
         .catch((error) => {
           // screen 옵션으로 실패했을 경우 기본 navigationUI: 'hide'로 재시도
           if (fullscreenOptions.screen) {
-            return element
-              .requestFullscreen({ navigationUI: "hide" })
+            return Promise.resolve(
+              element.requestFullscreen({ navigationUI: "hide" }),
+            )
               .then(() => true)
               .catch((fallbackError) => {
                 console.warn("Fullscreen fallback failed:", fallbackError);
@@ -113,8 +113,7 @@ export function exitFullscreen(): Promise<boolean> {
 
   try {
     if (document.exitFullscreen) {
-      return document
-        .exitFullscreen()
+      return Promise.resolve(document.exitFullscreen())
         .then(() => true)
         .catch((error) => {
           console.warn("Exit fullscreen failed:", error);

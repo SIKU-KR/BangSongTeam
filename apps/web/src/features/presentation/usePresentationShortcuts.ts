@@ -19,9 +19,9 @@ export interface UsePresentationShortcutsOptions {
    */
   onToggleLyrics?: () => void;
   /**
-   * 전체화면 토글 (f, F)
+   * 프레젠테이션 송출 종료 (Escape)
    */
-  onToggleFullscreen?: () => void;
+  onExit?: () => void;
   /**
    * 숫자 키패드 및 버퍼 조작 키(0-9, ., Enter, Backspace) 처리 핸들러
    */
@@ -54,7 +54,7 @@ export function usePresentationShortcuts({
   onPrev,
   onToggleBlackout,
   onToggleLyrics,
-  onToggleFullscreen,
+  onExit,
   handleKey,
   navigationBuffer,
   enabled = true,
@@ -67,7 +67,7 @@ export function usePresentationShortcuts({
     onPrev,
     onToggleBlackout,
     onToggleLyrics,
-    onToggleFullscreen,
+    onExit,
     handleKey: activeHandleKey,
   });
 
@@ -76,7 +76,7 @@ export function usePresentationShortcuts({
     onPrev,
     onToggleBlackout,
     onToggleLyrics,
-    onToggleFullscreen,
+    onExit,
     handleKey: activeHandleKey,
   };
 
@@ -147,21 +147,11 @@ export function usePresentationShortcuts({
         event.preventDefault();
         callbacksRef.current.onToggleLyrics?.();
       },
-      f: (event) => {
+
+      // 3. 송출 종료 (Esc)
+      Escape: (event) => {
         event.preventDefault();
-        callbacksRef.current.onToggleFullscreen?.();
-      },
-      "Shift+f": (event) => {
-        event.preventDefault();
-        callbacksRef.current.onToggleFullscreen?.();
-      },
-      F: (event) => {
-        event.preventDefault();
-        callbacksRef.current.onToggleFullscreen?.();
-      },
-      "Shift+F": (event) => {
-        event.preventDefault();
-        callbacksRef.current.onToggleFullscreen?.();
+        callbacksRef.current.onExit?.();
       },
 
       // 3. 네비게이션 버퍼 점(.) 및 제어 키

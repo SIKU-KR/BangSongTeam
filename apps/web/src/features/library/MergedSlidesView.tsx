@@ -196,7 +196,7 @@ export function MergedSlidesView({
           ─────────────────────────────────────────────────────────── */}
       <section className="space-y-4">
         <div className="flex items-center justify-between">
-          <h2 className="text-xl font-bold text-white tracking-tight">최근</h2>
+          <h2 className="text-xl font-bold text-zinc-900 dark:text-white tracking-tight">최근</h2>
         </div>
 
         {/* 캐러셀 컨테이너 */}
@@ -206,7 +206,7 @@ export function MergedSlidesView({
             type="button"
             onClick={handleScrollLeft}
             aria-label="이전 항목 보기"
-            className="absolute -left-3 top-1/2 -translate-y-1/2 z-30 w-10 h-10 rounded-full bg-zinc-900/90 hover:bg-zinc-800 text-white shadow-xl shadow-black/60 flex items-center justify-center border border-zinc-700 cursor-pointer transition-all opacity-0 group-hover/carousel:opacity-100 hover:scale-105 active:scale-95"
+            className="absolute -left-3 top-1/2 -translate-y-1/2 z-30 w-10 h-10 rounded-full bg-white/95 dark:bg-zinc-900/90 hover:bg-white dark:hover:bg-zinc-800 text-zinc-700 dark:text-white shadow-xl shadow-zinc-300/40 dark:shadow-black/60 flex items-center justify-center border border-zinc-200 dark:border-zinc-700 cursor-pointer transition-all opacity-0 group-hover/carousel:opacity-100 hover:scale-105 active:scale-95"
           >
             <svg
               className="w-5 h-5"
@@ -236,7 +236,7 @@ export function MergedSlidesView({
                   setlist={setlist}
                   onPresent={handleStartPresentation}
                   onEdit={handleOpenEditor}
-                  className="border-zinc-800 bg-zinc-900/80 shadow-md h-full"
+                  className="h-full"
                 />
               </div>
             )}
@@ -246,7 +246,7 @@ export function MergedSlidesView({
               <div
                 key={item.id}
                 onClick={handleOpenEditor}
-                className="group w-[300px] sm:w-[320px] shrink-0 flex flex-col bg-zinc-900/60 hover:bg-zinc-900/90 border border-zinc-800/80 hover:border-zinc-700 rounded-2xl overflow-hidden transition-all duration-200 hover:shadow-xl hover:shadow-black/40 hover:-translate-y-0.5 cursor-pointer"
+                className="group w-[300px] sm:w-[320px] shrink-0 flex flex-col bg-white dark:bg-zinc-900/60 hover:bg-zinc-50 dark:hover:bg-zinc-900/90 border border-zinc-200 dark:border-zinc-800/80 hover:border-zinc-300 dark:hover:border-zinc-700 rounded-2xl overflow-hidden transition-all duration-200 shadow-sm hover:shadow-xl hover:shadow-zinc-300/40 dark:hover:shadow-black/40 hover:-translate-y-0.5 cursor-pointer"
               >
                 {/* 16:9 썸네일 영역 */}
                 <div className="relative w-full aspect-video bg-zinc-950 overflow-hidden rounded-t-2xl">
@@ -309,19 +309,19 @@ export function MergedSlidesView({
                 </div>
 
                 {/* 하단 메타데이터 */}
-                <div className="p-3.5 flex flex-col justify-between gap-1.5">
-                  <h3 className="text-xs sm:text-sm font-semibold text-zinc-100 truncate">
+                <div className="p-3.5 flex flex-col justify-between gap-1.5 bg-white dark:bg-zinc-900/60">
+                  <h3 className="text-xs sm:text-sm font-semibold text-zinc-900 dark:text-zinc-100 truncate">
                     {item.title}
                   </h3>
-                  <div className="flex items-center gap-1.5 text-[11px] text-zinc-400">
+                  <div className="flex items-center gap-1.5 text-[11px] text-zinc-500 dark:text-zinc-400">
                     <span
                       className={`w-4 h-4 rounded flex items-center justify-center text-[9px] font-bold border shrink-0 ${item.badgeBg}`}
                     >
                       {item.badgeLetter}
                     </span>
                     <span className="truncate">{item.subtitle}</span>
-                    <span className="text-zinc-600 shrink-0">•</span>
-                    <span className="text-zinc-400 shrink-0">
+                    <span className="text-zinc-300 dark:text-zinc-600 shrink-0">•</span>
+                    <span className="text-zinc-400 dark:text-zinc-400 shrink-0">
                       {item.editedAgo}
                     </span>
                   </div>
@@ -335,7 +335,7 @@ export function MergedSlidesView({
             type="button"
             onClick={handleScrollRight}
             aria-label="다음 최근 항목 보기"
-            className="absolute -right-3 top-1/2 -translate-y-1/2 z-30 w-10 h-10 rounded-full bg-zinc-900/90 hover:bg-zinc-800 text-white shadow-xl shadow-black/60 flex items-center justify-center border border-zinc-700 cursor-pointer transition-all hover:scale-110 active:scale-95"
+            className="absolute -right-3 top-1/2 -translate-y-1/2 z-30 w-10 h-10 rounded-full bg-white/95 dark:bg-zinc-900/90 hover:bg-white dark:hover:bg-zinc-800 text-zinc-700 dark:text-white shadow-xl shadow-zinc-300/40 dark:shadow-black/60 flex items-center justify-center border border-zinc-200 dark:border-zinc-700 cursor-pointer transition-all hover:scale-110 active:scale-95"
           >
             <svg
               className="w-5 h-5"
@@ -361,10 +361,10 @@ export function MergedSlidesView({
         <button
           type="button"
           onClick={() => setIsFoldersOpen(!isFoldersOpen)}
-          className="flex items-center gap-2 text-lg font-bold text-white hover:text-zinc-300 transition-colors cursor-pointer group"
+          className="flex items-center gap-2 text-lg font-bold text-zinc-900 dark:text-white hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors cursor-pointer group"
         >
           <svg
-            className={`w-5 h-5 text-zinc-400 group-hover:text-white transition-transform duration-200 ${
+            className={`w-5 h-5 text-zinc-400 group-hover:text-zinc-700 dark:group-hover:text-white transition-transform duration-200 ${
               isFoldersOpen ? "rotate-0" : "-rotate-90"
             }`}
             fill="none"
@@ -390,9 +390,9 @@ export function MergedSlidesView({
               <div
                 key={folder.id}
                 onClick={handleOpenEditor}
-                className="group flex items-center gap-3 p-3.5 rounded-xl bg-zinc-900/50 hover:bg-zinc-900 border border-zinc-800/80 hover:border-zinc-700 cursor-pointer transition-all hover:shadow-md"
+                className="group flex items-center gap-3 p-3.5 rounded-xl bg-white dark:bg-zinc-900/50 hover:bg-zinc-50 dark:hover:bg-zinc-900 border border-zinc-200 dark:border-zinc-800/80 hover:border-zinc-300 dark:hover:border-zinc-700 cursor-pointer transition-all shadow-sm hover:shadow-md"
               >
-                <div className="w-10 h-10 rounded-xl bg-zinc-800 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                <div className="w-10 h-10 rounded-xl bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
                   <svg
                     className={`w-5 h-5 ${folder.color}`}
                     fill="currentColor"
@@ -402,7 +402,7 @@ export function MergedSlidesView({
                   </svg>
                 </div>
                 <div className="min-w-0 flex-1">
-                  <p className="text-xs font-semibold text-zinc-200 group-hover:text-white truncate">
+                  <p className="text-xs font-semibold text-zinc-900 dark:text-zinc-200 group-hover:text-emerald-600 dark:group-hover:text-white truncate">
                     {folder.name}
                   </p>
                   <p className="text-[11px] text-zinc-500 mt-0.5">
@@ -422,10 +422,10 @@ export function MergedSlidesView({
         <button
           type="button"
           onClick={() => setIsAllProjectsOpen(!isAllProjectsOpen)}
-          className="flex items-center gap-2 text-lg font-bold text-white hover:text-zinc-300 transition-colors cursor-pointer group"
+          className="flex items-center gap-2 text-lg font-bold text-zinc-900 dark:text-white hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors cursor-pointer group"
         >
           <svg
-            className={`w-5 h-5 text-zinc-400 group-hover:text-white transition-transform duration-200 ${
+            className={`w-5 h-5 text-zinc-400 group-hover:text-zinc-700 dark:group-hover:text-white transition-transform duration-200 ${
               isAllProjectsOpen ? "rotate-0" : "-rotate-90"
             }`}
             fill="none"
@@ -450,9 +450,9 @@ export function MergedSlidesView({
                 {/* 1) 새 프레젠테이션 생성 점선 카드 */}
                 <div
                   onClick={onCreateNewPresentation}
-                  className="group border-2 border-dashed border-zinc-800 hover:border-emerald-500/60 rounded-2xl flex flex-col items-center justify-center p-8 min-h-[220px] cursor-pointer transition-all bg-zinc-950/40 hover:bg-zinc-900/30"
+                  className="group border-2 border-dashed border-zinc-300 dark:border-zinc-800 hover:border-emerald-500 dark:hover:border-emerald-500/60 rounded-2xl flex flex-col items-center justify-center p-8 min-h-[220px] cursor-pointer transition-all bg-white dark:bg-zinc-950/40 hover:bg-emerald-50/40 dark:hover:bg-zinc-900/30 shadow-sm hover:shadow-md"
                 >
-                  <div className="w-12 h-12 rounded-full bg-zinc-900 group-hover:bg-emerald-950/60 border border-zinc-700/80 group-hover:border-emerald-500/50 flex items-center justify-center text-zinc-400 group-hover:text-emerald-400 transition-colors mb-3">
+                  <div className="w-12 h-12 rounded-full bg-zinc-100 dark:bg-zinc-900 group-hover:bg-emerald-100 dark:group-hover:bg-emerald-950/60 border border-zinc-200 dark:border-zinc-700/80 group-hover:border-emerald-400 dark:group-hover:border-emerald-500/50 flex items-center justify-center text-zinc-500 dark:text-zinc-400 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors mb-3">
                     <svg
                       className="w-6 h-6"
                       fill="none"
@@ -467,7 +467,7 @@ export function MergedSlidesView({
                       />
                     </svg>
                   </div>
-                  <span className="text-sm font-semibold text-zinc-300 group-hover:text-white transition-colors">
+                  <span className="text-sm font-semibold text-zinc-800 dark:text-zinc-300 group-hover:text-emerald-700 dark:group-hover:text-white transition-colors">
                     새 프레젠테이션 생성
                   </span>
                   <span className="text-xs text-zinc-500 mt-1">
@@ -478,7 +478,7 @@ export function MergedSlidesView({
                 {/* 2) 추천 예배 템플릿 카드 1 */}
                 <div
                   onClick={onCreateNewPresentation}
-                  className="group relative flex flex-col bg-zinc-900/50 hover:bg-zinc-900/80 border border-zinc-800/80 hover:border-zinc-700 rounded-2xl overflow-hidden transition-all duration-200 hover:shadow-xl hover:-translate-y-0.5 cursor-pointer"
+                  className="group relative flex flex-col bg-white dark:bg-zinc-900/50 hover:bg-zinc-50 dark:hover:bg-zinc-900/80 border border-zinc-200 dark:border-zinc-800/80 hover:border-zinc-300 dark:hover:border-zinc-700 rounded-2xl overflow-hidden transition-all duration-200 shadow-sm hover:shadow-xl hover:shadow-zinc-300/40 dark:hover:shadow-black/40 hover:-translate-y-0.5 cursor-pointer"
                 >
                   <div className="relative w-full aspect-video bg-zinc-950 flex items-center justify-center overflow-hidden">
                     <div className="w-full h-full bg-gradient-to-tr from-emerald-950 via-zinc-900 to-teal-950/40 flex flex-col items-center justify-center p-4 text-center">
@@ -495,8 +495,8 @@ export function MergedSlidesView({
                       </span>
                     </div>
                   </div>
-                  <div className="p-3.5">
-                    <h3 className="text-xs sm:text-sm font-semibold text-zinc-200">
+                  <div className="p-3.5 bg-white dark:bg-zinc-900/50">
+                    <h3 className="text-xs sm:text-sm font-semibold text-zinc-900 dark:text-zinc-200">
                       주일 1·2·3부 표준 예배 템플릿
                     </h3>
                     <p className="text-[11px] text-zinc-500 mt-0.5">
@@ -508,7 +508,7 @@ export function MergedSlidesView({
                 {/* 3) 추천 예배 템플릿 카드 2 */}
                 <div
                   onClick={onCreateNewPresentation}
-                  className="group relative flex flex-col bg-zinc-900/50 hover:bg-zinc-900/80 border border-zinc-800/80 hover:border-zinc-700 rounded-2xl overflow-hidden transition-all duration-200 hover:shadow-xl hover:-translate-y-0.5 cursor-pointer"
+                  className="group relative flex flex-col bg-white dark:bg-zinc-900/50 hover:bg-zinc-50 dark:hover:bg-zinc-900/80 border border-zinc-200 dark:border-zinc-800/80 hover:border-zinc-300 dark:hover:border-zinc-700 rounded-2xl overflow-hidden transition-all duration-200 shadow-sm hover:shadow-xl hover:shadow-zinc-300/40 dark:hover:shadow-black/40 hover:-translate-y-0.5 cursor-pointer"
                 >
                   <div className="relative w-full aspect-video bg-zinc-950 flex items-center justify-center overflow-hidden">
                     <div className="w-full h-full bg-gradient-to-tr from-indigo-950 via-zinc-900 to-purple-950/40 flex flex-col items-center justify-center p-4 text-center">
@@ -525,8 +525,8 @@ export function MergedSlidesView({
                       </span>
                     </div>
                   </div>
-                  <div className="p-3.5">
-                    <h3 className="text-xs sm:text-sm font-semibold text-zinc-200">
+                  <div className="p-3.5 bg-white dark:bg-zinc-900/50">
+                    <h3 className="text-xs sm:text-sm font-semibold text-zinc-900 dark:text-zinc-200">
                       청년·금요 찬양 집회 템플릿
                     </h3>
                     <p className="text-[11px] text-zinc-500 mt-0.5">
@@ -537,9 +537,9 @@ export function MergedSlidesView({
               </div>
             ) : (
               /* 리스트 뷰 모드 (Canva 스타일 깔끔한 테이블 행 목록) */
-              <div className="border border-zinc-800/80 rounded-2xl overflow-hidden bg-zinc-900/40 animate-in fade-in duration-200">
-                <table className="w-full text-left text-xs text-zinc-300">
-                  <thead className="bg-zinc-900/90 text-[11px] text-zinc-500 font-semibold border-b border-zinc-800 uppercase tracking-wider">
+              <div className="border border-zinc-200 dark:border-zinc-800/80 rounded-2xl overflow-hidden bg-white dark:bg-zinc-900/40 shadow-sm animate-in fade-in duration-200">
+                <table className="w-full text-left text-xs text-zinc-700 dark:text-zinc-300">
+                  <thead className="bg-zinc-50 dark:bg-zinc-900/90 text-[11px] text-zinc-600 dark:text-zinc-500 font-semibold border-b border-zinc-200 dark:border-zinc-800 uppercase tracking-wider">
                     <tr>
                       <th className="py-3 px-4">이름</th>
                       <th className="py-3 px-4 hidden sm:table-cell">소유자</th>
@@ -548,18 +548,18 @@ export function MergedSlidesView({
                       <th className="py-3 px-4 text-right">작업</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-zinc-800/60">
+                  <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800/60">
                     {/* 1) 주 세트리스트 행 */}
                     <tr
                       onClick={handleOpenEditor}
-                      className="hover:bg-zinc-800/50 cursor-pointer transition-colors"
+                      className="hover:bg-zinc-50 dark:hover:bg-zinc-800/50 cursor-pointer transition-colors"
                     >
                       <td className="py-3 px-4 flex items-center gap-3">
-                        <div className="w-10 h-6 bg-emerald-950 rounded border border-emerald-800/80 flex items-center justify-center text-[10px] text-emerald-400 font-bold shrink-0">
+                        <div className="w-10 h-6 bg-emerald-100 dark:bg-emerald-950 rounded border border-emerald-300 dark:border-emerald-800/80 flex items-center justify-center text-[10px] text-emerald-700 dark:text-emerald-400 font-bold shrink-0">
                           16:9
                         </div>
                         <div className="min-w-0">
-                          <span className="font-semibold text-white truncate block">
+                          <span className="font-semibold text-zinc-900 dark:text-white truncate block">
                             {setlist.title}
                           </span>
                           <span className="text-[11px] text-zinc-500 truncate block">
@@ -570,14 +570,14 @@ export function MergedSlidesView({
                           </span>
                         </div>
                       </td>
-                      <td className="py-3 px-4 hidden sm:table-cell text-zinc-400">
+                      <td className="py-3 px-4 hidden sm:table-cell text-zinc-500 dark:text-zinc-400">
                         나 (주일 찬양팀)
                       </td>
-                      <td className="py-3 px-4 hidden md:table-cell text-zinc-500">
+                      <td className="py-3 px-4 hidden md:table-cell text-zinc-400 dark:text-zinc-500">
                         최근 편집됨
                       </td>
                       <td className="py-3 px-4">
-                        <span className="px-2 py-0.5 rounded-full text-[10px] bg-zinc-800 text-zinc-300">
+                        <span className="px-2 py-0.5 rounded-full text-[10px] bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-700">
                           {setlist.items.length}곡 · 23슬라이드
                         </span>
                       </td>
@@ -589,7 +589,7 @@ export function MergedSlidesView({
                               e.stopPropagation();
                               handleStartPresentation();
                             }}
-                            className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-semibold cursor-pointer"
+                            className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold shadow-sm cursor-pointer transition-colors"
                           >
                             발표
                           </button>
@@ -599,7 +599,7 @@ export function MergedSlidesView({
                               e.stopPropagation();
                               handleOpenEditor();
                             }}
-                            className="px-2.5 py-1 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-[11px] cursor-pointer"
+                            className="px-2.5 py-1 rounded-lg bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-200 text-xs font-medium cursor-pointer transition-colors"
                           >
                             편집
                           </button>
@@ -612,14 +612,14 @@ export function MergedSlidesView({
                       <tr
                         key={item.id}
                         onClick={handleOpenEditor}
-                        className="hover:bg-zinc-800/50 cursor-pointer transition-colors"
+                        className="hover:bg-zinc-50 dark:hover:bg-zinc-800/50 cursor-pointer transition-colors"
                       >
                         <td className="py-3 px-4 flex items-center gap-3">
-                          <div className="w-10 h-6 bg-zinc-800 rounded border border-zinc-700 flex items-center justify-center text-[10px] text-zinc-400 font-bold shrink-0">
+                          <div className="w-10 h-6 bg-zinc-100 dark:bg-zinc-800 rounded border border-zinc-200 dark:border-zinc-700 flex items-center justify-center text-[10px] text-zinc-600 dark:text-zinc-400 font-bold shrink-0">
                             16:9
                           </div>
                           <div className="min-w-0">
-                            <span className="font-semibold text-white truncate block">
+                            <span className="font-semibold text-zinc-900 dark:text-white truncate block">
                               {item.title}
                             </span>
                             <span className="text-[11px] text-zinc-500 truncate block">
@@ -627,14 +627,14 @@ export function MergedSlidesView({
                             </span>
                           </div>
                         </td>
-                        <td className="py-3 px-4 hidden sm:table-cell text-zinc-400">
+                        <td className="py-3 px-4 hidden sm:table-cell text-zinc-500 dark:text-zinc-400">
                           찬양사역팀
                         </td>
-                        <td className="py-3 px-4 hidden md:table-cell text-zinc-500">
+                        <td className="py-3 px-4 hidden md:table-cell text-zinc-400 dark:text-zinc-500">
                           {item.editedAgo}
                         </td>
                         <td className="py-3 px-4">
-                          <span className="px-2 py-0.5 rounded-full text-[10px] bg-zinc-800 text-zinc-300">
+                          <span className="px-2 py-0.5 rounded-full text-[10px] bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-700">
                             {item.songsCount}곡 · {item.slidesCount}슬라이드
                           </span>
                         </td>
@@ -646,7 +646,7 @@ export function MergedSlidesView({
                                 e.stopPropagation();
                                 handleStartPresentation();
                               }}
-                              className="px-2.5 py-1 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-[11px] cursor-pointer"
+                              className="px-2.5 py-1 rounded-lg bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300 text-[11px] cursor-pointer transition-colors"
                             >
                               발표
                             </button>
@@ -656,7 +656,7 @@ export function MergedSlidesView({
                                 e.stopPropagation();
                                 handleOpenEditor();
                               }}
-                              className="px-2.5 py-1 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-[11px] cursor-pointer"
+                              className="px-2.5 py-1 rounded-lg bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-200 text-[11px] cursor-pointer transition-colors"
                             >
                               편집
                             </button>
