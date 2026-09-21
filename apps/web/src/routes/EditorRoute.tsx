@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   useActiveSetlist,
@@ -19,6 +19,7 @@ import {
   canUndo,
   canRedo,
   resetActiveSetlist,
+  createNewSetlist,
 } from "../features/presentation";
 import {
   getBackgroundMediaUrl,
@@ -127,9 +128,13 @@ export function EditorRoute(): React.JSX.Element {
   const handleDeleteSlide = (idx: number) => {
     if (currentSlides.length <= 1) return;
     removeSlideFromSong(safeSongIndex, idx);
-    setActiveSlideIndex((prev) =>
-      Math.max(0, Math.min(prev, currentSlides.length - 2)),
-    );
+    if (idx === activeSlideIndex) {
+      setActiveSlideIndex((prev) =>
+        Math.max(0, Math.min(prev, currentSlides.length - 2)),
+      );
+    } else if (idx < activeSlideIndex) {
+      setActiveSlideIndex((prev) => prev - 1);
+    }
   };
 
   // 슬라이드 순서 재정렬
@@ -137,6 +142,10 @@ export function EditorRoute(): React.JSX.Element {
     reorderSlides(safeSongIndex, from, to);
     if (activeSlideIndex === from) {
       setActiveSlideIndex(to);
+    } else if (from < activeSlideIndex && to >= activeSlideIndex) {
+      setActiveSlideIndex((prev) => prev - 1);
+    } else if (from > activeSlideIndex && to <= activeSlideIndex) {
+      setActiveSlideIndex((prev) => prev + 1);
     }
   };
 
@@ -189,6 +198,69 @@ export function EditorRoute(): React.JSX.Element {
     setActiveSlideIndex(0);
   };
 
+  // 새 프레젠테이션 만들기
+  const handleNewPresentation = () => {
+    createNewSetlist("새 주일 예배 프레젠테이션");
+    setActiveSongIndex(0);
+    setActiveSlideIndex(0);
+  };
+
+  // 키보드 단축키 지원 (슬라이드 넘김, 실행 취소/다시 실행)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const activeElement = document.activeElement;
+      const isInputActive =
+        activeElement instanceof HTMLInputElement ||
+        activeElement instanceof HTMLTextAreaElement ||
+        (activeElement as HTMLElement)?.isContentEditable;
+
+      const isMod = e.metaKey || e.ctrlKey;
+      if (isMod && (e.key === "z" || e.key === "Z")) {
+        if (e.shiftKey) {
+          if (canRedo()) {
+            e.preventDefault();
+            redo();
+          }
+        } else {
+          if (canUndo()) {
+            e.preventDefault();
+            undo();
+          }
+        }
+        return;
+      }
+      if (isMod && (e.key === "y" || e.key === "Y")) {
+        if (canRedo()) {
+          e.preventDefault();
+          redo();
+        }
+        return;
+      }
+
+      if (isInputActive) return;
+
+      if (e.key === "ArrowLeft" || e.key === "ArrowUp") {
+        e.preventDefault();
+        handlePrevSlide();
+      } else if (
+        e.key === "ArrowRight" ||
+        e.key === "ArrowDown" ||
+        e.key === " "
+      ) {
+        e.preventDefault();
+        handleNextSlide();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [
+    activeSlideIndex,
+    activeSongIndex,
+    currentSlides.length,
+    setlist.items.length,
+  ]);
+
   return (
     <div
       data-testid="editor-route"
@@ -207,6 +279,9 @@ export function EditorRoute(): React.JSX.Element {
         onRedo={redo}
         canUndo={canUndo()}
         canRedo={canRedo()}
+        onNewPresentation={handleNewPresentation}
+        onOpenLyricModal={() => setIsLyricModalOpen(true)}
+        onResetSetlist={handleResetSetlist}
       />
 
       {/* 2. 본문 3패널 레이아웃 */}
@@ -221,7 +296,11 @@ export function EditorRoute(): React.JSX.Element {
           onReorderSong={handleReorderSong}
           onDeleteSong={handleDeleteSong}
           onDuplicateSong={handleDuplicateSong}
-          onAddSong={(deck) => addDeckToSetlist(deck)}
+          onAddSong={(deck) => {
+            addDeckToSetlist(deck);
+            setActiveSongIndex(setlist.items.length);
+            setActiveSlideIndex(0);
+          }}
           onAddSlide={handleAddSlide}
           onDeleteSlide={handleDeleteSlide}
           onDuplicateSlide={handleDuplicateSlide}
@@ -285,6 +364,8 @@ export function EditorRoute(): React.JSX.Element {
         onClose={() => setIsLyricModalOpen(false)}
         onAddToSet={(newDeck) => {
           addDeckToSetlist(newDeck);
+          setActiveSongIndex(setlist.items.length);
+          setActiveSlideIndex(0);
           setIsLyricModalOpen(false);
         }}
       />

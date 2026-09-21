@@ -60,30 +60,23 @@ export function calculateStageScale(
 export function useStageScale(
   options?: UseStageScaleOptions,
 ): StageScaleResult {
-  const getDimensions = (): { width: number; height: number } => {
-    if (options?.width !== undefined && options?.height !== undefined) {
-      return { width: options.width, height: options.height };
-    }
+  const [windowDimensions, setWindowDimensions] = useState(() => {
     if (typeof window !== "undefined") {
       return { width: window.innerWidth, height: window.innerHeight };
     }
     return { width: VIRTUAL_STAGE_WIDTH, height: VIRTUAL_STAGE_HEIGHT };
-  };
-
-  const [scaleResult, setScaleResult] = useState<StageScaleResult>(() => {
-    const dim = getDimensions();
-    return calculateStageScale(dim.width, dim.height);
   });
 
   useEffect(() => {
     if (options?.width !== undefined && options?.height !== undefined) {
-      setScaleResult(calculateStageScale(options.width, options.height));
       return;
     }
 
     const handleResize = (): void => {
-      const dim = getDimensions();
-      setScaleResult(calculateStageScale(dim.width, dim.height));
+      setWindowDimensions({
+        width: window.innerWidth,
+        height: window.innerHeight,
+      });
     };
 
     handleResize();
@@ -94,5 +87,8 @@ export function useStageScale(
     };
   }, [options?.width, options?.height]);
 
-  return scaleResult;
+  const targetWidth = options?.width ?? windowDimensions.width;
+  const targetHeight = options?.height ?? windowDimensions.height;
+
+  return calculateStageScale(targetWidth, targetHeight);
 }

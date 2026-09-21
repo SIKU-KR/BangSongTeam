@@ -64,6 +64,7 @@ export function SongPropertyPanel({
   className = "",
 }: SongPropertyPanelProps): React.JSX.Element {
   const [isBgModalOpen, setIsBgModalOpen] = useState(false);
+  const [isCollapsed, setIsCollapsed] = useState(false);
 
   const currentBg =
     INITIAL_BACKGROUNDS.find((b) => b.id === backgroundId) ||
@@ -87,6 +88,30 @@ export function SongPropertyPanel({
     onUpdateStyle(DEFAULT_DECK_STYLE);
   };
 
+  if (isCollapsed) {
+    return (
+      <aside
+        data-testid="song-property-panel-collapsed"
+        className={`w-12 bg-zinc-950 border-l border-zinc-800/80 flex flex-col items-center py-4 text-zinc-400 select-none ${className}`}
+      >
+        <button
+          type="button"
+          data-testid="expand-property-panel-btn"
+          onClick={() => setIsCollapsed(false)}
+          className="p-2 rounded-lg hover:bg-zinc-800 text-zinc-400 hover:text-white transition-colors cursor-pointer"
+          title="속성 패널 펼치기"
+        >
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+          </svg>
+        </button>
+        <span className="mt-4 text-[11px] font-medium [writing-mode:vertical-lr] tracking-widest text-zinc-500">
+          디자인 속성
+        </span>
+      </aside>
+    );
+  }
+
   return (
     <aside
       data-testid="song-property-panel"
@@ -109,14 +134,27 @@ export function SongPropertyPanel({
           </svg>
           <span>슬라이드 디자인 & 속성</span>
         </h3>
-        <button
-          type="button"
-          onClick={handleResetStyle}
-          className="text-[11px] text-zinc-500 hover:text-zinc-300 underline cursor-pointer"
-          title="기본값으로 복원"
-        >
-          초기화
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={handleResetStyle}
+            className="text-[11px] text-zinc-500 hover:text-zinc-300 underline cursor-pointer"
+            title="기본값으로 복원"
+          >
+            초기화
+          </button>
+          <button
+            type="button"
+            data-testid="collapse-property-panel-btn"
+            onClick={() => setIsCollapsed(true)}
+            className="p-1 rounded text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800 transition-colors cursor-pointer"
+            title="속성 패널 접기"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            </svg>
+          </button>
+        </div>
       </div>
 
       <div className="p-4 flex flex-col gap-6">

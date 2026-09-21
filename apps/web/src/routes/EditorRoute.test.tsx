@@ -216,4 +216,81 @@ describe("EditorRoute (Canva / MiriCanvas Presentation Editor)", () => {
     fireEvent.click(zoomOutBtn);
     expect(screen.getByText("100%")).toBeInTheDocument();
   });
+
+  it("should support keyboard navigation shortcuts (Space, ArrowRight, ArrowLeft)", () => {
+    render(
+      <MemoryRouter>
+        <EditorRoute />
+      </MemoryRouter>,
+    );
+
+    // Initial slide: 은혜로다 slide 1
+    expect(screen.getAllByText(/1 \/ 5/)[0]).toBeInTheDocument();
+
+    // Press ArrowRight -> moves to slide 2
+    fireEvent.keyDown(window, { key: "ArrowRight" });
+    expect(screen.getAllByText(/2 \/ 5/)[0]).toBeInTheDocument();
+
+    // Press Space -> moves to slide 3
+    fireEvent.keyDown(window, { key: " " });
+    expect(screen.getAllByText(/3 \/ 5/)[0]).toBeInTheDocument();
+
+    // Press ArrowLeft -> moves back to slide 2
+    fireEvent.keyDown(window, { key: "ArrowLeft" });
+    expect(screen.getAllByText(/2 \/ 5/)[0]).toBeInTheDocument();
+  });
+
+  it("should collapse and expand song property panel", () => {
+    render(
+      <MemoryRouter>
+        <EditorRoute />
+      </MemoryRouter>,
+    );
+
+    const collapseBtn = screen.getByTestId("collapse-property-panel-btn");
+    fireEvent.click(collapseBtn);
+
+    expect(
+      screen.getByTestId("song-property-panel-collapsed"),
+    ).toBeInTheDocument();
+
+    const expandBtn = screen.getByTestId("expand-property-panel-btn");
+    fireEvent.click(expandBtn);
+
+    expect(screen.getByTestId("song-property-panel")).toBeInTheDocument();
+  });
+
+  it("should open file menu and handle actions in EditorHeader", () => {
+    render(
+      <MemoryRouter>
+        <EditorRoute />
+      </MemoryRouter>,
+    );
+
+    const fileMenuBtn = screen.getByTestId("header-file-menu-btn");
+    fireEvent.click(fileMenuBtn);
+
+    expect(screen.getByText("새 프레젠테이션")).toBeInTheDocument();
+    expect(screen.getByText("기본 5곡 세트 복원")).toBeInTheDocument();
+  });
+
+  it("should maintain correct active slide index when deleting an earlier slide", () => {
+    render(
+      <MemoryRouter>
+        <EditorRoute />
+      </MemoryRouter>,
+    );
+
+    // Select slide 3 (index 2)
+    const slide3 = screen.getByTestId("slide-strip-item-2");
+    fireEvent.click(slide3);
+    expect(screen.getAllByText(/3 \/ 5/)[0]).toBeInTheDocument();
+
+    // Delete slide 1 (index 0)
+    const deleteSlide0Btn = screen.getByTestId("delete-slide-btn-0");
+    fireEvent.click(deleteSlide0Btn);
+
+    // Previously slide index was 2, after deleting index 0 it should now be index 1 (slide 2 of 4)
+    expect(screen.getAllByText(/2 \/ 4/)[0]).toBeInTheDocument();
+  });
 });

@@ -130,4 +130,43 @@ describe("HomeRoute (Main Home Entry Screen)", () => {
     expect(screen.getByText(/6곡 준비 완료/)).toBeInTheDocument();
     expect(screen.getByText("아침 안개 눈 앞 가리듯")).toBeInTheDocument();
   });
+
+  it("should render Canva sidebar navigation items and offline badge", () => {
+    render(
+      <MemoryRouter>
+        <HomeRoute />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByText("홈 (대시보드)")).toBeInTheDocument();
+    expect(screen.getByText("내 콘티 보관함")).toBeInTheDocument();
+    expect(screen.getByText("찬양 곡 라이브러리")).toBeInTheDocument();
+    expect(screen.getByText("모션 배경 루프 (10종)")).toBeInTheDocument();
+    expect(
+      screen.getByTestId("sidebar-create-presentation-btn"),
+    ).toBeInTheDocument();
+  });
+
+  it("should switch between grid view and list view with 16:9 thumbnails", () => {
+    render(
+      <MemoryRouter>
+        <HomeRoute />
+      </MemoryRouter>,
+    );
+
+    // Click list view button
+    const listViewBtn = screen.getByTitle("목록 뷰 (16:9 미니 프리뷰)");
+    fireEvent.click(listViewBtn);
+
+    // List view should show 16:9 badge inside thumbnails
+    expect(screen.getAllByText("16:9").length).toBeGreaterThan(0);
+
+    // Switch back to grid view
+    const gridViewBtn = screen.getByTitle("그리드 뷰 (16:9 슬라이드 카드)");
+    fireEvent.click(gridViewBtn);
+
+    expect(screen.getAllByTestId("presentation-card").length).toBeGreaterThan(
+      0,
+    );
+  });
 });

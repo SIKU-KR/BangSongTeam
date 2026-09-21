@@ -13,12 +13,15 @@ export interface EditorHeaderProps {
   onRedo?: () => void;
   canUndo?: boolean;
   canRedo?: boolean;
+  onNewPresentation?: () => void;
+  onOpenLyricModal?: () => void;
+  onResetSetlist?: () => void;
   className?: string;
 }
 
 /**
  * Canva / MiriCanvas 스타일 편집기 상단 네비게이션 헤더
- * - 뒤로가기 링크
+ * - 뒤로가기 링크 및 파일(File) 메뉴
  * - 세트 제목 인라인 편집
  * - 실행 취소(Undo) / 다시 실행(Redo)
  * - 자동 저장 상태 표시기
@@ -37,12 +40,16 @@ export function EditorHeader({
   onRedo,
   canUndo = false,
   canRedo = false,
+  onNewPresentation,
+  onOpenLyricModal,
+  onResetSetlist,
   className = "",
 }: EditorHeaderProps): React.JSX.Element {
   const navigate = useNavigate();
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [tempTitle, setTempTitle] = useState(title);
   const [showShortcuts, setShowShortcuts] = useState(false);
+  const [showFileMenu, setShowFileMenu] = useState(false);
 
   const handleTitleSubmit = () => {
     setIsEditingTitle(false);
@@ -82,6 +89,85 @@ export function EditorHeader({
           </svg>
           <span className="hidden sm:inline">홈</span>
         </button>
+
+        {/* Canva 스타일 파일 메뉴 */}
+        <div className="relative">
+          <button
+            type="button"
+            data-testid="header-file-menu-btn"
+            onClick={() => setShowFileMenu((prev) => !prev)}
+            className="px-2 py-1 rounded text-xs text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors flex items-center gap-1 cursor-pointer font-medium"
+          >
+            <span>파일</span>
+            <svg className="w-3 h-3 text-zinc-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+
+          {showFileMenu && (
+            <div className="absolute left-0 top-9 z-50 w-52 py-1.5 bg-zinc-900 border border-zinc-800 rounded-xl shadow-2xl text-xs space-y-0.5 font-sans">
+              {onNewPresentation && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowFileMenu(false);
+                    onNewPresentation();
+                  }}
+                  className="w-full px-3 py-2 text-left text-zinc-300 hover:text-white hover:bg-zinc-800 flex items-center gap-2 cursor-pointer"
+                >
+                  <svg className="w-3.5 h-3.5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                  </svg>
+                  <span>새 프레젠테이션</span>
+                </button>
+              )}
+              {onOpenLyricModal && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowFileMenu(false);
+                    onOpenLyricModal();
+                  }}
+                  className="w-full px-3 py-2 text-left text-zinc-300 hover:text-white hover:bg-zinc-800 flex items-center gap-2 cursor-pointer"
+                >
+                  <svg className="w-3.5 h-3.5 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                  <span>가사 빠른 입력</span>
+                </button>
+              )}
+              {onResetSetlist && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowFileMenu(false);
+                    onResetSetlist();
+                  }}
+                  className="w-full px-3 py-2 text-left text-zinc-300 hover:text-white hover:bg-zinc-800 flex items-center gap-2 cursor-pointer"
+                >
+                  <svg className="w-3.5 h-3.5 text-zinc-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                  <span>기본 5곡 세트 복원</span>
+                </button>
+              )}
+              <div className="my-1 border-t border-zinc-800" />
+              <button
+                type="button"
+                onClick={() => {
+                  setShowFileMenu(false);
+                  onPresent();
+                }}
+                className="w-full px-3 py-2 text-left text-emerald-400 hover:bg-emerald-950/40 flex items-center gap-2 cursor-pointer font-medium"
+              >
+                <svg className="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24">
+                  <path d="M8 5v14l11-7z" />
+                </svg>
+                <span>슬라이드쇼 발표</span>
+              </button>
+            </div>
+          )}
+        </div>
 
         <div className="h-4 w-px bg-zinc-800" />
 
