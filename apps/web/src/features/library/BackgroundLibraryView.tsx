@@ -108,18 +108,18 @@ export function BackgroundLibraryView({
           단락 1: 내가 등록한 배경 (My Backgrounds)
           ─────────────────────────────────────────────── */}
       <section className="space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-zinc-800/80">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-zinc-200 dark:border-zinc-800/80">
           <div>
             <div className="flex items-center gap-2.5">
               <span className="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
-              <h2 className="text-xl font-bold text-white tracking-tight">
+              <h2 className="text-xl font-bold text-zinc-900 dark:text-white tracking-tight">
                 내가 등록한 배경
               </h2>
-              <span className="text-xs px-2.5 py-0.5 rounded-full bg-emerald-950 text-emerald-400 border border-emerald-800 font-mono font-medium">
+              <span className="text-xs px-2.5 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 font-mono font-medium">
                 {filteredMyBackgrounds.length}개 배경
               </span>
             </div>
-            <p className="text-xs text-zinc-400 mt-0.5">
+            <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
               교회 본당 환경에 맞춰 직접 업로드하거나 등록한 커스텀 영상/이미지
               배경입니다.
             </p>
@@ -149,8 +149,8 @@ export function BackgroundLibraryView({
         </div>
 
         {filteredMyBackgrounds.length === 0 ? (
-          <div className="py-12 text-center flex flex-col items-center justify-center gap-3 bg-zinc-900/40 border border-zinc-800 rounded-xl">
-            <p className="text-sm font-semibold text-zinc-300">
+          <div className="py-12 text-center flex flex-col items-center justify-center gap-3 bg-white dark:bg-zinc-900/40 border border-zinc-200 dark:border-zinc-800 rounded-xl">
+            <p className="text-sm font-semibold text-zinc-700 dark:text-zinc-300">
               {query
                 ? `"${searchQuery}"에 일치하는 등록 배경이 없습니다.`
                 : "등록된 커스텀 배경이 없습니다."}
@@ -159,7 +159,7 @@ export function BackgroundLibraryView({
               <button
                 type="button"
                 onClick={() => setIsRegisterOpen(true)}
-                className="px-3.5 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-emerald-400 text-xs font-medium cursor-pointer transition-colors"
+                className="px-3.5 py-1.5 rounded-lg bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-emerald-600 dark:text-emerald-400 text-xs font-medium cursor-pointer transition-colors"
               >
                 교회 맞춤 배경 등록하기
               </button>
@@ -176,7 +176,7 @@ export function BackgroundLibraryView({
                   data-testid={`my-bg-card-${bg.id}`}
                   onMouseEnter={() => setHoveredId(bg.id)}
                   onMouseLeave={() => setHoveredId(null)}
-                  className="group relative flex flex-col bg-zinc-900/60 hover:bg-zinc-900/90 border border-zinc-800/80 hover:border-zinc-700 rounded-2xl overflow-hidden transition-all duration-200 hover:shadow-xl hover:shadow-black/40 hover:-translate-y-0.5"
+                  className="group relative flex flex-col bg-white dark:bg-zinc-900/60 hover:bg-zinc-50 dark:hover:bg-zinc-900/90 border border-zinc-200 dark:border-zinc-800/80 hover:border-zinc-300 dark:hover:border-zinc-700 rounded-2xl overflow-hidden transition-all duration-200 shadow-sm dark:shadow-none hover:shadow-xl dark:hover:shadow-black/40 hover:-translate-y-0.5"
                 >
                   <div className="relative aspect-video w-full bg-black overflow-hidden select-none rounded-t-2xl">
                     {isHovered ? (
@@ -217,16 +217,16 @@ export function BackgroundLibraryView({
                     </div>
                   </div>
 
-                  <div className="p-3 bg-zinc-900/90 border-t border-zinc-800/80 flex items-center justify-between gap-2">
+                  <div className="p-3 bg-white dark:bg-zinc-900/90 border-t border-zinc-100 dark:border-zinc-800/80 flex items-center justify-between gap-2">
                     <div className="min-w-0">
-                      <h4 className="text-xs font-bold text-white truncate">
+                      <h4 className="text-xs font-bold text-zinc-900 dark:text-white truncate">
                         {bg.title}
                       </h4>
-                      <p className="text-[11px] text-zinc-500 truncate mt-0.5">
+                      <p className="text-[11px] text-zinc-500 dark:text-zinc-400 truncate mt-0.5">
                         {bg.tags.join(", ")}
                       </p>
                     </div>
-                    <span className="text-[10px] font-mono text-zinc-500 uppercase px-1.5 py-0.5 rounded bg-zinc-800">
+                    <span className="text-[10px] font-mono text-zinc-600 dark:text-zinc-400 uppercase px-1.5 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700">
                       {bg.type}
                     </span>
                   </div>
@@ -237,9 +237,9 @@ export function BackgroundLibraryView({
             {/* 새 배경 추가 점선 카드 */}
             <div
               onClick={() => setIsRegisterOpen(true)}
-              className="group border-2 border-dashed border-zinc-800 hover:border-emerald-500/60 rounded-xl flex flex-col items-center justify-center p-6 min-h-[170px] cursor-pointer transition-all bg-zinc-950/40 hover:bg-zinc-900/30"
+              className="group border-2 border-dashed border-zinc-300 dark:border-zinc-800 hover:border-emerald-500/60 rounded-xl flex flex-col items-center justify-center p-6 min-h-[170px] cursor-pointer transition-all bg-white dark:bg-zinc-950/40 hover:bg-zinc-50 dark:hover:bg-zinc-900/30"
             >
-              <div className="w-10 h-10 rounded-full bg-zinc-900 group-hover:bg-emerald-950/60 border border-zinc-700/80 group-hover:border-emerald-500/50 flex items-center justify-center text-zinc-400 group-hover:text-emerald-400 transition-colors mb-2">
+              <div className="w-10 h-10 rounded-full bg-zinc-100 dark:bg-zinc-900 group-hover:bg-emerald-50 dark:group-hover:bg-emerald-950/60 border border-zinc-300 dark:border-zinc-700/80 group-hover:border-emerald-500/50 flex items-center justify-center text-zinc-500 dark:text-zinc-400 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors mb-2">
                 <svg
                   className="w-5 h-5"
                   fill="none"
@@ -254,7 +254,7 @@ export function BackgroundLibraryView({
                   />
                 </svg>
               </div>
-              <span className="text-xs font-semibold text-zinc-300 group-hover:text-white transition-colors">
+              <span className="text-xs font-semibold text-zinc-800 dark:text-zinc-300 group-hover:text-zinc-900 dark:group-hover:text-white transition-colors">
                 새 배경 영상/이미지 등록
               </span>
             </div>
@@ -266,18 +266,18 @@ export function BackgroundLibraryView({
           단락 2: 유저가 등록한 배경 (Community / Public Loops)
           ─────────────────────────────────────────────── */}
       <section className="space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-zinc-800/80">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-zinc-200 dark:border-zinc-800/80">
           <div>
             <div className="flex items-center gap-2.5">
               <span className="w-2.5 h-2.5 rounded-full bg-sky-500"></span>
-              <h2 className="text-xl font-bold text-white tracking-tight">
+              <h2 className="text-xl font-bold text-zinc-900 dark:text-white tracking-tight">
                 유저가 등록한 배경
               </h2>
-              <span className="text-xs px-2.5 py-0.5 rounded-full bg-sky-950 text-sky-400 border border-sky-800 font-mono font-medium">
+              <span className="text-xs px-2.5 py-0.5 rounded-full bg-sky-50 dark:bg-sky-950 text-sky-700 dark:text-sky-400 border border-sky-200 dark:border-sky-800 font-mono font-medium">
                 10종 고화질 모션 루프
               </span>
             </div>
-            <p className="text-xs text-zinc-400 mt-0.5">
+            <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
               사역팀에서 가장 많이 활용되는 무음 H.264 고화질 비디오 루프입니다.
               마우스를 올리면 미리보기가 재생됩니다.
             </p>
@@ -293,7 +293,7 @@ export function BackgroundLibraryView({
                 className={`px-2.5 py-1 rounded-full text-xs font-medium transition-all shrink-0 cursor-pointer ${
                   activeTag === tag
                     ? "bg-sky-600 text-white shadow-md shadow-sky-950/40"
-                    : "bg-zinc-800/80 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800"
+                    : "bg-zinc-100 dark:bg-zinc-800/80 text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200 hover:bg-zinc-200 dark:hover:bg-zinc-800 border border-zinc-200/60 dark:border-transparent"
                 }`}
               >
                 {tag}
@@ -303,8 +303,8 @@ export function BackgroundLibraryView({
         </div>
 
         {filteredCommunityBackgrounds.length === 0 ? (
-          <div className="py-12 text-center flex flex-col items-center justify-center gap-2 bg-zinc-900/40 border border-zinc-800 rounded-xl">
-            <p className="text-sm font-semibold text-zinc-300">
+          <div className="py-12 text-center flex flex-col items-center justify-center gap-2 bg-white dark:bg-zinc-900/40 border border-zinc-200 dark:border-zinc-800 rounded-xl">
+            <p className="text-sm font-semibold text-zinc-700 dark:text-zinc-300">
               "{searchQuery}"에 일치하는 배경이 없습니다.
             </p>
           </div>
@@ -322,7 +322,7 @@ export function BackgroundLibraryView({
                   data-testid={`community-bg-card-${bg.id}`}
                   onMouseEnter={() => setHoveredId(bg.id)}
                   onMouseLeave={() => setHoveredId(null)}
-                  className="group relative flex flex-col bg-zinc-900/60 hover:bg-zinc-900/90 border border-zinc-800/80 hover:border-zinc-700 rounded-2xl overflow-hidden transition-all duration-200 hover:shadow-xl hover:shadow-black/40 hover:-translate-y-0.5"
+                  className="group relative flex flex-col bg-white dark:bg-zinc-900/60 hover:bg-zinc-50 dark:hover:bg-zinc-900/90 border border-zinc-200 dark:border-zinc-800/80 hover:border-zinc-300 dark:hover:border-zinc-700 rounded-2xl overflow-hidden transition-all duration-200 shadow-sm dark:shadow-none hover:shadow-xl dark:hover:shadow-black/40 hover:-translate-y-0.5"
                 >
                   <div className="relative aspect-video w-full bg-black overflow-hidden select-none rounded-t-2xl">
                     {isHovered && videoUrl ? (
@@ -408,12 +408,12 @@ export function BackgroundLibraryView({
                     </div>
                   </div>
 
-                  <div className="p-3 bg-zinc-900/90 border-t border-zinc-800/80 flex items-center justify-between gap-2">
+                  <div className="p-3 bg-white dark:bg-zinc-900/90 border-t border-zinc-100 dark:border-zinc-800/80 flex items-center justify-between gap-2">
                     <div className="min-w-0">
-                      <h4 className="text-xs font-bold text-white truncate">
+                      <h4 className="text-xs font-bold text-zinc-900 dark:text-white truncate">
                         {bg.title}
                       </h4>
-                      <p className="text-[11px] text-zinc-500 truncate mt-0.5">
+                      <p className="text-[11px] text-zinc-500 dark:text-zinc-400 truncate mt-0.5">
                         {bg.tags.join(" · ")}
                       </p>
                     </div>
@@ -424,8 +424,8 @@ export function BackgroundLibraryView({
                       onClick={() => handleApply(bg.id)}
                       className={`px-2 py-1 rounded-lg text-[11px] font-medium transition-all shrink-0 cursor-pointer ${
                         isApplied
-                          ? "bg-emerald-950 text-emerald-400 border border-emerald-800"
-                          : "bg-zinc-800 hover:bg-zinc-700 text-sky-300 hover:text-white border border-zinc-700/80"
+                          ? "bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800"
+                          : "bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-sky-700 dark:text-sky-300 hover:text-sky-800 dark:hover:text-white border border-zinc-200 dark:border-zinc-700/80"
                       }`}
                     >
                       {isApplied ? "적용됨 ✓" : "적용"}
@@ -445,15 +445,15 @@ export function BackgroundLibraryView({
           aria-modal="true"
           className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in"
         >
-          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-md p-6 shadow-2xl space-y-5 text-zinc-100">
+          <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl w-full max-w-md p-6 shadow-2xl space-y-5 text-zinc-900 dark:text-zinc-100">
             <div className="flex items-center justify-between">
-              <h3 className="text-base font-bold text-white flex items-center gap-2">
+              <h3 className="text-base font-bold text-zinc-900 dark:text-white flex items-center gap-2">
                 <span>새 배경 영상 등록</span>
               </h3>
               <button
                 type="button"
                 onClick={() => setIsRegisterOpen(false)}
-                className="p-1 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800 cursor-pointer"
+                className="p-1 rounded-lg text-zinc-500 hover:text-zinc-800 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:text-white dark:hover:bg-zinc-800 cursor-pointer transition-colors"
               >
                 <svg
                   className="w-5 h-5"
@@ -473,7 +473,7 @@ export function BackgroundLibraryView({
 
             <form onSubmit={handleRegisterBackground} className="space-y-4">
               <div>
-                <label className="block text-xs font-semibold text-zinc-300 mb-1">
+                <label className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300 mb-1">
                   배경 제목 *
                 </label>
                 <input
@@ -482,12 +482,12 @@ export function BackgroundLibraryView({
                   placeholder="예: 우리 교회 메인 비디오 루프"
                   value={newTitle}
                   onChange={(e) => setNewTitle(e.target.value)}
-                  className="w-full bg-zinc-950 border border-zinc-800 focus:border-emerald-500 rounded-xl px-3.5 py-2 text-xs text-zinc-100 placeholder-zinc-500 focus:outline-none transition-colors"
+                  className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 focus:border-emerald-500 rounded-xl px-3.5 py-2 text-xs text-zinc-900 dark:text-zinc-100 placeholder-zinc-400 dark:placeholder-zinc-500 focus:outline-none transition-colors"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-zinc-300 mb-1">
+                <label className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300 mb-1">
                   미디어 URL (선택)
                 </label>
                 <input
@@ -495,18 +495,18 @@ export function BackgroundLibraryView({
                   placeholder="비디오/이미지 URL (비워두면 기본 루프 적용)"
                   value={newMediaUrl}
                   onChange={(e) => setNewMediaUrl(e.target.value)}
-                  className="w-full bg-zinc-950 border border-zinc-800 focus:border-emerald-500 rounded-xl px-3.5 py-2 text-xs text-zinc-100 placeholder-zinc-500 focus:outline-none transition-colors"
+                  className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 focus:border-emerald-500 rounded-xl px-3.5 py-2 text-xs text-zinc-900 dark:text-zinc-100 placeholder-zinc-400 dark:placeholder-zinc-500 focus:outline-none transition-colors"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-zinc-300 mb-1">
+                <label className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300 mb-1">
                   분위기 태그
                 </label>
                 <select
                   value={newTag}
                   onChange={(e) => setNewTag(e.target.value)}
-                  className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-200 focus:outline-none focus:border-emerald-500"
+                  className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-900 dark:text-zinc-200 focus:outline-none focus:border-emerald-500"
                 >
                   <option value="잔잔한">잔잔한</option>
                   <option value="밝은">밝은</option>
@@ -519,13 +519,13 @@ export function BackgroundLibraryView({
                 <button
                   type="button"
                   onClick={() => setIsRegisterOpen(false)}
-                  className="px-4 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-xs font-medium text-zinc-300 cursor-pointer"
+                  className="px-4 py-2 rounded-xl bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-xs font-medium text-zinc-700 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-700 cursor-pointer transition-colors"
                 >
                   취소
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-xs font-bold text-white shadow-md cursor-pointer"
+                  className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-xs font-bold text-white shadow-md cursor-pointer transition-colors"
                 >
                   등록하기
                 </button>

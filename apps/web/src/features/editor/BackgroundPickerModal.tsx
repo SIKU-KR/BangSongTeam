@@ -51,20 +51,20 @@ export function BackgroundPickerModal({
       aria-labelledby="background-picker-title"
       className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200"
     >
-      <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-4xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden text-zinc-100">
+      <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl w-full max-w-4xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden text-zinc-900 dark:text-zinc-100">
         {/* 모달 헤더 */}
-        <div className="px-6 py-4 border-b border-zinc-800 flex items-center justify-between">
+        <div className="px-6 py-4 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between">
           <div>
             <h2
               id="background-picker-title"
-              className="text-lg font-bold text-white flex items-center gap-2"
+              className="text-lg font-bold text-zinc-900 dark:text-white flex items-center gap-2"
             >
               <span>모션 배경 라이브러리</span>
-              <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-950 text-emerald-400 border border-emerald-800">
+              <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800">
                 10종 고화질 루프
               </span>
             </h2>
-            <p className="text-xs text-zinc-400 mt-0.5">
+            <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
               찬양 분위기에 어울리는 무음 H.264 모션 비디오 루프를 선택하세요.
             </p>
           </div>
@@ -73,7 +73,7 @@ export function BackgroundPickerModal({
             type="button"
             data-testid="close-bg-modal-btn"
             onClick={onClose}
-            className="p-1.5 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors cursor-pointer"
+            className="p-1.5 rounded-lg text-zinc-500 hover:text-zinc-800 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:text-white dark:hover:bg-zinc-800 transition-colors cursor-pointer"
             title="닫기"
           >
             <svg
@@ -93,7 +93,7 @@ export function BackgroundPickerModal({
         </div>
 
         {/* 태그 필터 탭 */}
-        <div className="px-6 py-3 border-b border-zinc-800/80 bg-zinc-950/40 flex items-center gap-1.5 overflow-x-auto">
+        <div className="px-6 py-3 border-b border-zinc-200 dark:border-zinc-800/80 bg-zinc-50 dark:bg-zinc-950/40 flex items-center gap-1.5 overflow-x-auto">
           {FILTER_TAGS.map((tag) => (
             <button
               key={tag}
@@ -102,7 +102,7 @@ export function BackgroundPickerModal({
               className={`px-3 py-1 rounded-full text-xs font-medium transition-all shrink-0 cursor-pointer ${
                 activeTag === tag
                   ? "bg-emerald-600 text-white shadow-md shadow-emerald-950/40"
-                  : "bg-zinc-800/70 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800"
+                  : "bg-zinc-200/80 dark:bg-zinc-800/70 text-zinc-700 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200 hover:bg-zinc-300 dark:hover:bg-zinc-800"
               }`}
             >
               {tag}
@@ -130,8 +130,8 @@ export function BackgroundPickerModal({
                 onMouseLeave={() => setHoveredId(null)}
                 className={`group relative flex flex-col rounded-xl overflow-hidden border cursor-pointer transition-all duration-200 ${
                   isSelected
-                    ? "border-emerald-500 ring-2 ring-emerald-500/30 bg-zinc-800"
-                    : "border-zinc-800 hover:border-zinc-600 bg-zinc-900/60"
+                    ? "border-emerald-500 ring-2 ring-emerald-500/30 bg-emerald-50/50 dark:bg-zinc-800"
+                    : "border-zinc-200 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-600 bg-white dark:bg-zinc-900/60 shadow-sm dark:shadow-none"
                 }`}
               >
                 {/* 16:9 썸네일 */}
@@ -184,14 +184,14 @@ export function BackgroundPickerModal({
 
                 {/* 메타 정보 */}
                 <div className="p-2.5 flex flex-col gap-1">
-                  <span className="text-xs font-semibold text-zinc-200 truncate group-hover:text-emerald-400 transition-colors">
+                  <span className="text-xs font-semibold text-zinc-900 dark:text-zinc-200 truncate group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
                     {bg.title}
                   </span>
                   <div className="flex flex-wrap gap-1">
                     {bg.tags.map((t) => (
                       <span
                         key={t}
-                        className="text-[10px] px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-400"
+                        className="text-[10px] px-1.5 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 border border-zinc-200/60 dark:border-zinc-700/60"
                       >
                         {t}
                       </span>
@@ -204,12 +204,12 @@ export function BackgroundPickerModal({
         </div>
 
         {/* 푸터 */}
-        <div className="px-6 py-3 border-t border-zinc-800 bg-zinc-950/40 flex items-center justify-between text-xs text-zinc-500">
+        <div className="px-6 py-3 border-t border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950/40 flex items-center justify-between text-xs text-zinc-500 dark:text-zinc-400">
           <span>무손실 H.264 비디오 스트리밍 (Cloudflare R2)</span>
           <button
             type="button"
             onClick={onClose}
-            className="px-4 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 transition-colors cursor-pointer"
+            className="px-4 py-1.5 rounded-lg bg-zinc-200 dark:bg-zinc-800 hover:bg-zinc-300 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300 transition-colors cursor-pointer"
           >
             닫기
           </button>
