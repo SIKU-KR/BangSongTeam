@@ -113,7 +113,7 @@ export function HomeRoute(): React.JSX.Element {
         <div className="space-y-6">
           {/* 브랜드 로고 & 워크스페이스 */}
           <div className="flex items-center gap-3 px-2 pt-1">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-emerald-500 via-teal-400 to-indigo-500 flex items-center justify-center text-white shadow-lg shadow-emerald-950/40">
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-emerald-500 via-teal-400 to-indigo-500 flex items-center justify-center text-white shadow-sm dark:shadow-emerald-950/40">
               <svg className="w-5 h-5 fill-current" viewBox="0 0 24 24">
                 <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-5 14H7v-2h7v2zm3-4H7v-2h10v2zm0-4H7V7h10v2z" />
               </svg>
@@ -133,7 +133,7 @@ export function HomeRoute(): React.JSX.Element {
             type="button"
             data-testid="sidebar-create-presentation-btn"
             onClick={handleCreateNewPresentation}
-            className="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-500 hover:from-emerald-500 hover:to-teal-400 text-white font-bold text-xs shadow-lg shadow-emerald-950/50 flex items-center justify-center gap-2 cursor-pointer transition-all hover:scale-[1.02] active:scale-[0.98]"
+            className="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-500 hover:from-emerald-500 hover:to-teal-400 text-white font-bold text-xs shadow-sm hover:shadow-md hover:shadow-emerald-600/20 dark:shadow-emerald-950/50 flex items-center justify-center gap-2 cursor-pointer transition-all hover:scale-[1.02] active:scale-[0.98]"
           >
             <svg
               className="w-4 h-4"
@@ -301,7 +301,7 @@ export function HomeRoute(): React.JSX.Element {
 
             {/* 2) Canva 스타일 대형 중앙 검색창 (Pill/Rounded-full) */}
             <div className="w-full max-w-2xl relative">
-              <div className="w-full rounded-2xl sm:rounded-full bg-white dark:bg-zinc-900/90 border border-zinc-300 dark:border-zinc-700/80 hover:border-zinc-400 dark:hover:border-zinc-600 focus-within:border-emerald-500 focus-within:ring-2 focus-within:ring-emerald-500/20 shadow-xl px-4 py-3 sm:py-3.5 flex items-center gap-3 transition-all">
+              <div className="w-full rounded-2xl sm:rounded-full bg-white dark:bg-zinc-900/90 border border-zinc-200 dark:border-zinc-700/80 hover:border-zinc-300 dark:hover:border-zinc-600 focus-within:border-emerald-500 focus-within:ring-2 focus-within:ring-emerald-500/20 shadow-sm hover:shadow focus-within:shadow-md px-4 py-3 sm:py-3.5 flex items-center gap-3 transition-all">
                 <svg
                   className="w-5 h-5 text-zinc-400 shrink-0 ml-1"
                   fill="none"
@@ -375,7 +375,7 @@ export function HomeRoute(): React.JSX.Element {
                   </svg>
                 </button>
                 {openDropdown === "type" && (
-                  <div className="absolute top-full left-0 mt-2 w-36 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-2xl z-50 py-1.5">
+                  <div className="absolute top-full left-0 mt-2 w-36 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-lg dark:shadow-2xl z-50 py-1.5">
                     {["전체", "프레젠테이션", "단일 곡", "배경 루프"].map(
                       (opt) => (
                         <button
@@ -422,7 +422,7 @@ export function HomeRoute(): React.JSX.Element {
                   </svg>
                 </button>
                 {openDropdown === "category" && (
-                  <div className="absolute top-full left-0 mt-2 w-36 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-2xl z-50 py-1.5">
+                  <div className="absolute top-full left-0 mt-2 w-36 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-lg dark:shadow-2xl z-50 py-1.5">
                     {["전체", "잔잔한", "밝은", "웅장한", "따뜻한"].map(
                       (opt) => (
                         <button
@@ -469,7 +469,7 @@ export function HomeRoute(): React.JSX.Element {
                   </svg>
                 </button>
                 {openDropdown === "owner" && (
-                  <div className="absolute top-full left-0 mt-2 w-36 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-2xl z-50 py-1.5">
+                  <div className="absolute top-full left-0 mt-2 w-36 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-lg dark:shadow-2xl z-50 py-1.5">
                     {["전체", "내가 만든 항목", "공유된 항목"].map((opt) => (
                       <button
                         key={opt}
@@ -517,7 +517,7 @@ export function HomeRoute(): React.JSX.Element {
                   </svg>
                 </button>
                 {openDropdown === "sort" && (
-                  <div className="absolute top-full left-0 mt-2 w-36 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-2xl z-50 py-1.5">
+                  <div className="absolute top-full left-0 mt-2 w-36 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-lg dark:shadow-2xl z-50 py-1.5">
                     <button
                       type="button"
                       onClick={() => {
@@ -643,7 +643,7 @@ export function HomeRoute(): React.JSX.Element {
                   : handleCreateNewPresentation
               }
               title="새 항목 추가"
-              className="w-8 h-8 rounded-full bg-emerald-600 hover:bg-emerald-500 text-white flex items-center justify-center shadow-md shadow-emerald-950/40 hover:scale-105 active:scale-95 transition-all cursor-pointer"
+              className="w-8 h-8 rounded-full bg-emerald-600 hover:bg-emerald-500 text-white flex items-center justify-center shadow-sm hover:shadow dark:shadow-emerald-950/40 hover:scale-105 active:scale-95 transition-all cursor-pointer"
             >
               <svg
                 className="w-4 h-4"

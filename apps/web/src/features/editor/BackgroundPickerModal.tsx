@@ -51,7 +51,7 @@ export function BackgroundPickerModal({
       aria-labelledby="background-picker-title"
       className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200"
     >
-      <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl w-full max-w-4xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden text-zinc-900 dark:text-zinc-100">
+      <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl w-full max-w-4xl max-h-[90vh] flex flex-col shadow-xl dark:shadow-2xl overflow-hidden text-zinc-900 dark:text-zinc-100">
         {/* 모달 헤더 */}
         <div className="px-6 py-4 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between">
           <div>
@@ -101,7 +101,7 @@ export function BackgroundPickerModal({
               onClick={() => setActiveTag(tag)}
               className={`px-3 py-1 rounded-full text-xs font-medium transition-all shrink-0 cursor-pointer ${
                 activeTag === tag
-                  ? "bg-emerald-600 text-white shadow-md shadow-emerald-950/40"
+                  ? "bg-emerald-600 text-white shadow-sm dark:shadow-emerald-950/40"
                   : "bg-zinc-200/80 dark:bg-zinc-800/70 text-zinc-700 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200 hover:bg-zinc-300 dark:hover:bg-zinc-800"
               }`}
             >

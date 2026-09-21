@@ -76,7 +76,7 @@ export function PresentationCard({
   return (
     <div
       data-testid="presentation-card"
-      className={`group relative flex flex-col bg-white dark:bg-zinc-900/60 hover:bg-zinc-50 dark:hover:bg-zinc-900/90 border border-zinc-200 dark:border-zinc-800/80 hover:border-zinc-300 dark:hover:border-zinc-700 rounded-2xl overflow-hidden transition-all duration-200 shadow-sm hover:shadow-xl hover:shadow-zinc-300/40 dark:hover:shadow-black/40 hover:-translate-y-0.5 ${className}`}
+      className={`group relative flex flex-col bg-white dark:bg-zinc-900/60 hover:bg-zinc-50 dark:hover:bg-zinc-900/90 border border-zinc-200 dark:border-zinc-800/80 hover:border-zinc-300 dark:hover:border-zinc-700 rounded-2xl overflow-hidden transition-all duration-200 shadow-sm hover:shadow-md dark:shadow-none dark:hover:shadow-lg dark:hover:shadow-black/50 hover:-translate-y-0.5 ${className}`}
     >
       {/* 1. 16:9 슬라이드 썸네일 스테이지 영역 */}
       <div
@@ -120,7 +120,7 @@ export function PresentationCard({
               e.stopPropagation();
               onPresent();
             }}
-            className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold shadow-lg shadow-emerald-950/50 flex items-center gap-1.5 transition-transform hover:scale-105 active:scale-95 cursor-pointer"
+            className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold shadow-md flex items-center gap-1.5 transition-transform hover:scale-105 active:scale-95 cursor-pointer"
             title="슬라이드쇼 전체화면 시작"
           >
             <svg className="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24">
@@ -136,7 +136,7 @@ export function PresentationCard({
               e.stopPropagation();
               onEdit();
             }}
-            className="px-3.5 py-1.5 rounded-xl bg-zinc-800/90 hover:bg-zinc-700 text-zinc-100 text-xs font-medium border border-zinc-600/50 shadow-lg flex items-center gap-1.5 transition-transform hover:scale-105 active:scale-95 cursor-pointer"
+            className="px-3.5 py-1.5 rounded-xl bg-zinc-800/90 hover:bg-zinc-700 text-zinc-100 text-xs font-medium border border-zinc-600/50 shadow-md flex items-center gap-1.5 transition-transform hover:scale-105 active:scale-95 cursor-pointer"
             title="편집기 열기"
           >
             <svg

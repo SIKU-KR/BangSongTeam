@@ -110,7 +110,7 @@ export function SongLibraryView({
             type="button"
             data-testid="my-songs-quick-paste-btn"
             onClick={onOpenQuickPaste}
-            className="px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-bold shadow-lg shadow-emerald-950/40 flex items-center gap-1.5 cursor-pointer self-start sm:self-auto transition-all"
+            className="px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-bold shadow-sm hover:shadow-md hover:shadow-emerald-600/20 dark:shadow-emerald-950/40 flex items-center gap-1.5 cursor-pointer self-start sm:self-auto transition-all"
           >
             <svg
               className="w-4 h-4"
@@ -235,7 +235,7 @@ export function SongLibraryView({
                 <div
                   key={deck.id}
                   data-testid={`community-song-card-${deck.id}`}
-                  className="group relative flex flex-col bg-white dark:bg-zinc-900/60 hover:bg-zinc-50 dark:hover:bg-zinc-900/90 border border-zinc-200 dark:border-zinc-800/80 hover:border-zinc-300 dark:hover:border-zinc-700 rounded-2xl overflow-hidden transition-all duration-200 shadow-sm dark:shadow-none hover:shadow-xl dark:hover:shadow-black/40 hover:-translate-y-0.5"
+                  className="group relative flex flex-col bg-white dark:bg-zinc-900/60 hover:bg-zinc-50 dark:hover:bg-zinc-900/90 border border-zinc-200 dark:border-zinc-800/80 hover:border-zinc-300 dark:hover:border-zinc-700 rounded-2xl overflow-hidden transition-all duration-200 shadow-sm hover:shadow-md dark:shadow-none dark:hover:shadow-lg dark:hover:shadow-black/50 hover:-translate-y-0.5"
                 >
                   {/* 16:9 슬라이드 썸네일 */}
                   <div
@@ -281,7 +281,7 @@ export function SongLibraryView({
                           e.stopPropagation();
                           setPreviewDeck(deck);
                         }}
-                        className="px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-white text-xs font-medium border border-zinc-600 cursor-pointer shadow-md transition-transform active:scale-95"
+                        className="px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-white text-xs font-medium border border-zinc-600 cursor-pointer shadow-sm transition-transform active:scale-95"
                       >
                         가사 미리보기
                       </button>
@@ -292,7 +292,7 @@ export function SongLibraryView({
                           e.stopPropagation();
                           handleAddCommunitySong(deck);
                         }}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-semibold shadow-md transition-all active:scale-95 flex items-center gap-1 cursor-pointer ${
+                        className={`px-3 py-1.5 rounded-lg text-xs font-semibold shadow-sm transition-all active:scale-95 flex items-center gap-1 cursor-pointer ${
                           isAdded
                             ? "bg-emerald-600 text-white"
                             : "bg-indigo-600 hover:bg-indigo-500 text-white"
@@ -376,7 +376,7 @@ export function SongLibraryView({
           aria-modal="true"
           className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in"
         >
-          <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl w-full max-w-2xl max-h-[85vh] flex flex-col shadow-2xl overflow-hidden text-zinc-900 dark:text-zinc-100">
+          <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl w-full max-w-2xl max-h-[85vh] flex flex-col shadow-xl dark:shadow-2xl overflow-hidden text-zinc-900 dark:text-zinc-100">
             <div className="px-6 py-4 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between">
               <div>
                 <h3 className="text-base font-bold text-zinc-900 dark:text-white flex items-center gap-2">
@@ -443,7 +443,7 @@ export function SongLibraryView({
                   handleAddCommunitySong(previewDeck);
                   setPreviewDeck(null);
                 }}
-                className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-xs font-bold text-white shadow-md cursor-pointer transition-colors"
+                className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-xs font-bold text-white shadow-sm cursor-pointer transition-colors"
               >
                 내 콘티에 추가하기
               </button>

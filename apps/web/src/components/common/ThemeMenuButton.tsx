@@ -206,7 +206,7 @@ export function ThemeMenuButton({
           data-testid="theme-menu-dropdown"
           className={`absolute ${dropdownPositionClass} left-0 ${
             variant === "compact" ? "w-52" : "w-full"
-          } bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-2xl p-1.5 z-50 animate-in fade-in zoom-in-95 duration-100`}
+          } bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-xl dark:shadow-2xl p-1.5 z-50 animate-in fade-in zoom-in-95 duration-100`}
         >
           <div className="px-2.5 py-1.5 border-b border-zinc-100 dark:border-zinc-800/80 mb-1">
             <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-500">

@@ -206,7 +206,7 @@ export function MergedSlidesView({
             type="button"
             onClick={handleScrollLeft}
             aria-label="이전 항목 보기"
-            className="absolute -left-3 top-1/2 -translate-y-1/2 z-30 w-10 h-10 rounded-full bg-white/95 dark:bg-zinc-900/90 hover:bg-white dark:hover:bg-zinc-800 text-zinc-700 dark:text-white shadow-xl shadow-zinc-300/40 dark:shadow-black/60 flex items-center justify-center border border-zinc-200 dark:border-zinc-700 cursor-pointer transition-all opacity-0 group-hover/carousel:opacity-100 hover:scale-105 active:scale-95"
+            className="absolute -left-3 top-1/2 -translate-y-1/2 z-30 w-10 h-10 rounded-full bg-white/95 dark:bg-zinc-900/90 hover:bg-white dark:hover:bg-zinc-800 text-zinc-700 dark:text-white shadow-md hover:shadow-lg dark:shadow-black/60 flex items-center justify-center border border-zinc-200 dark:border-zinc-700 cursor-pointer transition-all opacity-0 group-hover/carousel:opacity-100 hover:scale-105 active:scale-95"
           >
             <svg
               className="w-5 h-5"
@@ -246,7 +246,7 @@ export function MergedSlidesView({
               <div
                 key={item.id}
                 onClick={handleOpenEditor}
-                className="group w-[300px] sm:w-[320px] shrink-0 flex flex-col bg-white dark:bg-zinc-900/60 hover:bg-zinc-50 dark:hover:bg-zinc-900/90 border border-zinc-200 dark:border-zinc-800/80 hover:border-zinc-300 dark:hover:border-zinc-700 rounded-2xl overflow-hidden transition-all duration-200 shadow-sm hover:shadow-xl hover:shadow-zinc-300/40 dark:hover:shadow-black/40 hover:-translate-y-0.5 cursor-pointer"
+                className="group w-[300px] sm:w-[320px] shrink-0 flex flex-col bg-white dark:bg-zinc-900/60 hover:bg-zinc-50 dark:hover:bg-zinc-900/90 border border-zinc-200 dark:border-zinc-800/80 hover:border-zinc-300 dark:hover:border-zinc-700 rounded-2xl overflow-hidden transition-all duration-200 shadow-sm hover:shadow-md dark:shadow-none dark:hover:shadow-lg dark:hover:shadow-black/50 hover:-translate-y-0.5 cursor-pointer"
               >
                 {/* 16:9 썸네일 영역 */}
                 <div className="relative w-full aspect-video bg-zinc-950 overflow-hidden rounded-t-2xl">
@@ -285,7 +285,7 @@ export function MergedSlidesView({
                         e.stopPropagation();
                         handleStartPresentation();
                       }}
-                      className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold shadow-lg flex items-center gap-1.5 cursor-pointer"
+                      className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold shadow-md flex items-center gap-1.5 cursor-pointer"
                     >
                       <svg
                         className="w-3.5 h-3.5 fill-current"
@@ -301,7 +301,7 @@ export function MergedSlidesView({
                         e.stopPropagation();
                         handleOpenEditor();
                       }}
-                      className="px-3.5 py-1.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-100 text-xs font-medium border border-zinc-600/50 shadow-lg flex items-center gap-1.5 cursor-pointer"
+                      className="px-3.5 py-1.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-100 text-xs font-medium border border-zinc-600/50 shadow-md flex items-center gap-1.5 cursor-pointer"
                     >
                       <span>편집</span>
                     </button>
@@ -335,7 +335,7 @@ export function MergedSlidesView({
             type="button"
             onClick={handleScrollRight}
             aria-label="다음 최근 항목 보기"
-            className="absolute -right-3 top-1/2 -translate-y-1/2 z-30 w-10 h-10 rounded-full bg-white/95 dark:bg-zinc-900/90 hover:bg-white dark:hover:bg-zinc-800 text-zinc-700 dark:text-white shadow-xl shadow-zinc-300/40 dark:shadow-black/60 flex items-center justify-center border border-zinc-200 dark:border-zinc-700 cursor-pointer transition-all hover:scale-110 active:scale-95"
+            className="absolute -right-3 top-1/2 -translate-y-1/2 z-30 w-10 h-10 rounded-full bg-white/95 dark:bg-zinc-900/90 hover:bg-white dark:hover:bg-zinc-800 text-zinc-700 dark:text-white shadow-md hover:shadow-lg dark:shadow-black/60 flex items-center justify-center border border-zinc-200 dark:border-zinc-700 cursor-pointer transition-all hover:scale-110 active:scale-95"
           >
             <svg
               className="w-5 h-5"
@@ -478,7 +478,7 @@ export function MergedSlidesView({
                 {/* 2) 추천 예배 템플릿 카드 1 */}
                 <div
                   onClick={onCreateNewPresentation}
-                  className="group relative flex flex-col bg-white dark:bg-zinc-900/50 hover:bg-zinc-50 dark:hover:bg-zinc-900/80 border border-zinc-200 dark:border-zinc-800/80 hover:border-zinc-300 dark:hover:border-zinc-700 rounded-2xl overflow-hidden transition-all duration-200 shadow-sm hover:shadow-xl hover:shadow-zinc-300/40 dark:hover:shadow-black/40 hover:-translate-y-0.5 cursor-pointer"
+                  className="group relative flex flex-col bg-white dark:bg-zinc-900/50 hover:bg-zinc-50 dark:hover:bg-zinc-900/80 border border-zinc-200 dark:border-zinc-800/80 hover:border-zinc-300 dark:hover:border-zinc-700 rounded-2xl overflow-hidden transition-all duration-200 shadow-sm hover:shadow-md dark:shadow-none dark:hover:shadow-lg dark:hover:shadow-black/50 hover:-translate-y-0.5 cursor-pointer"
                 >
                   <div className="relative w-full aspect-video bg-zinc-950 flex items-center justify-center overflow-hidden">
                     <div className="w-full h-full bg-gradient-to-tr from-emerald-950 via-zinc-900 to-teal-950/40 flex flex-col items-center justify-center p-4 text-center">
@@ -508,7 +508,7 @@ export function MergedSlidesView({
                 {/* 3) 추천 예배 템플릿 카드 2 */}
                 <div
                   onClick={onCreateNewPresentation}
-                  className="group relative flex flex-col bg-white dark:bg-zinc-900/50 hover:bg-zinc-50 dark:hover:bg-zinc-900/80 border border-zinc-200 dark:border-zinc-800/80 hover:border-zinc-300 dark:hover:border-zinc-700 rounded-2xl overflow-hidden transition-all duration-200 shadow-sm hover:shadow-xl hover:shadow-zinc-300/40 dark:hover:shadow-black/40 hover:-translate-y-0.5 cursor-pointer"
+                  className="group relative flex flex-col bg-white dark:bg-zinc-900/50 hover:bg-zinc-50 dark:hover:bg-zinc-900/80 border border-zinc-200 dark:border-zinc-800/80 hover:border-zinc-300 dark:hover:border-zinc-700 rounded-2xl overflow-hidden transition-all duration-200 shadow-sm hover:shadow-md dark:shadow-none dark:hover:shadow-lg dark:hover:shadow-black/50 hover:-translate-y-0.5 cursor-pointer"
                 >
                   <div className="relative w-full aspect-video bg-zinc-950 flex items-center justify-center overflow-hidden">
                     <div className="w-full h-full bg-gradient-to-tr from-indigo-950 via-zinc-900 to-purple-950/40 flex flex-col items-center justify-center p-4 text-center">
