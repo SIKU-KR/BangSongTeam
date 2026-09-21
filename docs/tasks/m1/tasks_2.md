@@ -16,7 +16,7 @@
 
 ## 2. 세부 작업 체크리스트
 
-- [ ] **Task 2.1: 숫자 키패드 입력 버퍼 상태 머신 단위 테스트 작성 (TDD Red)**
+- [x] **Task 2.1: 숫자 키패드 입력 버퍼 상태 머신 단위 테스트 작성 (TDD Red)**
   - **대상 파일**: `apps/web/src/features/presentation/navigationBuffer.test.ts`
   - **선행 조건**: `docs/tasks/m1/tasks_1.md`
   - **구현 내용**:
@@ -28,7 +28,7 @@
     - 테스트 케이스 6: 인덱스 초과 등 유효하지 않은 입력 시 점프 콜백 미발생 및 버퍼 클리어
   - **DoD (통과 기준)**: `pnpm --filter web vitest run src/features/presentation/navigationBuffer.test.ts` 실행 시 구현체가 없어 실패(Red)함을 확인한다.
 
-- [ ] **Task 2.2: 숫자 키패드 입력 버퍼 훅 구현 (TDD Green)**
+- [x] **Task 2.2: 숫자 키패드 입력 버퍼 훅 구현 (TDD Green)**
   - **대상 파일**: `apps/web/src/features/presentation/useNavigationBuffer.ts`
   - **선행 조건**: Task 2.1
   - **구현 내용**:
@@ -37,7 +37,7 @@
     - `onJump: (songIndex: number, slideIndex: number) => void` 콜백 호출
   - **DoD (통과 기준)**: `pnpm --filter web vitest run src/features/presentation/navigationBuffer.test.ts`가 100% 통과(Green)한다.
 
-- [ ] **Task 2.3: 송출 키보드 및 리모컨 단축키 이벤트 훅 구현**
+- [x] **Task 2.3: 송출 키보드 및 리모컨 단축키 이벤트 훅 구현**
   - **대상 파일**: `apps/web/src/features/presentation/usePresentationShortcuts.ts`
   - **선행 조건**: Task 2.2
   - **구현 내용**:
