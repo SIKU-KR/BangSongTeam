@@ -22,7 +22,7 @@ describe("HomeRoute (Main Home Entry Screen)", () => {
     vi.restoreAllMocks();
   });
 
-  it("should render ChromeAlertBanner, title, and action buttons without recommendation shelf", () => {
+  it("should render ChromeAlertBanner, title, and action buttons with merged slides view", () => {
     render(
       <MemoryRouter>
         <HomeRoute />
@@ -32,7 +32,7 @@ describe("HomeRoute (Main Home Entry Screen)", () => {
     // Title & Brand
     expect(screen.getByText(/Worship Slide/i)).toBeInTheDocument();
 
-    // Recommendation shelf should be completely removed
+    // Recommendation shelf should not be present
     expect(screen.queryByText("추천 및 빠른 시작")).not.toBeInTheDocument();
 
     // Start Presentation button in global header
@@ -43,12 +43,10 @@ describe("HomeRoute (Main Home Entry Screen)", () => {
     expect(screen.getByText("가사 빠른 입력")).toBeInTheDocument();
     expect(screen.getByTestId("open-quick-paste-btn")).toBeInTheDocument();
 
-    // 5-Song Setlist Overview
-    expect(screen.getByText("은혜로다")).toBeInTheDocument();
-    expect(screen.getByText("주 품에")).toBeInTheDocument();
-    expect(screen.getByText("시선")).toBeInTheDocument();
-    expect(screen.getByText("꽃들도")).toBeInTheDocument();
-    expect(screen.getByText("주의 이름 높이며")).toBeInTheDocument();
+    // Home should show "통합 슬라이드" and merged slides
+    expect(screen.getByText("통합 슬라이드")).toBeInTheDocument();
+    expect(screen.getByText("합쳐진 슬라이드 전체 목록")).toBeInTheDocument();
+    expect(screen.getByText(/총 23개 슬라이드/)).toBeInTheDocument();
   });
 
   it("should navigate to /present/fullscreen when start presentation button is clicked in Chrome", () => {
@@ -96,8 +94,8 @@ describe("HomeRoute (Main Home Entry Screen)", () => {
       </MemoryRouter>,
     );
 
-    // Initially 5 songs
-    expect(screen.getByText(/5곡 준비 완료/)).toBeInTheDocument();
+    // Initially 5 songs in setlist
+    expect(screen.getByText("5곡 구성")).toBeInTheDocument();
 
     // Open modal
     const openBtn = screen.getByTestId("open-quick-paste-btn");
@@ -129,47 +127,58 @@ describe("HomeRoute (Main Home Entry Screen)", () => {
     // Modal closed
     expect(screen.queryByText("빠른 가사 붙여넣기")).not.toBeInTheDocument();
 
-    // Setlist updated to 6 songs and new title displayed!
-    expect(screen.getByText(/6곡 준비 완료/)).toBeInTheDocument();
-    expect(screen.getByText("아침 안개 눈 앞 가리듯")).toBeInTheDocument();
+    // Setlist updated to 6 songs and new slide count displayed
+    expect(screen.getByText("6곡 구성")).toBeInTheDocument();
   });
 
-  it("should render Canva sidebar navigation items and offline badge", () => {
+  it("should render updated sidebar navigation items without '내 콘티 보관함'", () => {
     render(
       <MemoryRouter>
         <HomeRoute />
       </MemoryRouter>,
     );
 
-    expect(screen.getByText("홈 (대시보드)")).toBeInTheDocument();
-    expect(screen.getByText("내 콘티 보관함")).toBeInTheDocument();
-    expect(screen.getByText("찬양 곡 라이브러리")).toBeInTheDocument();
-    expect(screen.getByText("모션 배경 루프 (10종)")).toBeInTheDocument();
+    // 사이드바 메뉴 확인
+    expect(screen.getByTestId("sidebar-nav-home")).toBeInTheDocument();
+    expect(screen.getByTestId("sidebar-nav-songs")).toBeInTheDocument();
+    expect(screen.getByTestId("sidebar-nav-backgrounds")).toBeInTheDocument();
+
+    // '내 콘티 보관함'은 완전히 제거되어 화면에 없어야 함
+    expect(screen.queryByText("내 콘티 보관함")).not.toBeInTheDocument();
+
     expect(
       screen.getByTestId("sidebar-create-presentation-btn"),
     ).toBeInTheDocument();
   });
 
-  it("should switch between grid view and list view with 16:9 thumbnails", () => {
+  it("should navigate to song library and background library via sidebar", () => {
     render(
       <MemoryRouter>
         <HomeRoute />
       </MemoryRouter>,
     );
 
-    // Click list view button
-    const listViewBtn = screen.getByTitle("목록 뷰 (16:9 미니 프리뷰)");
-    fireEvent.click(listViewBtn);
+    // 1. 곡 라이브러리 클릭
+    const songsNavBtn = screen.getByTestId("sidebar-nav-songs");
+    fireEvent.click(songsNavBtn);
 
-    // List view should show 16:9 badge inside thumbnails
-    expect(screen.getAllByText("16:9").length).toBeGreaterThan(0);
+    // 곡 라이브러리의 2단락 ("내가 등록한 곡", "유저가 등록한 곡") 표시 확인
+    expect(screen.getByText("내가 등록한 곡")).toBeInTheDocument();
+    expect(screen.getByText("유저가 등록한 곡")).toBeInTheDocument();
 
-    // Switch back to grid view
-    const gridViewBtn = screen.getByTitle("그리드 뷰 (16:9 슬라이드 카드)");
-    fireEvent.click(gridViewBtn);
+    // 2. 배경 라이브러리 클릭
+    const backgroundsNavBtn = screen.getByTestId("sidebar-nav-backgrounds");
+    fireEvent.click(backgroundsNavBtn);
 
-    expect(screen.getAllByTestId("presentation-card").length).toBeGreaterThan(
-      0,
-    );
+    // 배경 라이브러리의 2단락 ("내가 등록한 배경", "유저가 등록한 배경") 표시 확인
+    expect(screen.getByText("내가 등록한 배경")).toBeInTheDocument();
+    expect(screen.getByText("유저가 등록한 배경")).toBeInTheDocument();
+
+    // 3. 홈 클릭
+    const homeNavBtn = screen.getByTestId("sidebar-nav-home");
+    fireEvent.click(homeNavBtn);
+
+    // 홈의 "합쳐진 슬라이드 전체 목록" 복귀 확인
+    expect(screen.getByText("합쳐진 슬라이드 전체 목록")).toBeInTheDocument();
   });
 });

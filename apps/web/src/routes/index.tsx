@@ -1,5 +1,5 @@
-import React, { useState, useMemo } from "react";
-import { useNavigate } from "react-router-dom";
+import React, { useState } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   ChromeAlertBanner,
   isGoogleChromeBrowser,
@@ -11,36 +11,48 @@ import {
   removeSongFromSetlist,
   duplicateSongInSetlist,
   createNewSetlist,
-  resetActiveSetlist,
+  updateSongBackground,
 } from "../features/presentation";
-import { PresentationCard } from "../features/presentation/PresentationCard";
-import { SlideStage } from "../components/stage/SlideStage";
 import {
-  getBackgroundPosterUrl,
-  getBackgroundMediaUrl,
-} from "@repo/shared";
+  MergedSlidesView,
+  SongLibraryView,
+  BackgroundLibraryView,
+} from "../features/library";
 import type { Deck } from "@repo/shared";
 
-type ViewMode = "grid" | "list";
-type FilterTab = "all" | "setlists" | "songs";
-type SortOption = "recent" | "title" | "slides";
+export type NavMenu = "home" | "songs" | "backgrounds";
 
 /**
- * Canva / MiriCanvas 스타일 프레젠테이션 대시보드 (피피티 리스트 페이지)
- * - 좌측: 고정 내비게이션 사이드바 (홈, 내 콘티, 찬양 템플릿, 배경 루프, PWA 오프라인 상태)
- * - 상단: 글로벌 네비게이션 헤더 (브랜드 로고, 검색 바, 가사 빠른 입력, 새 프레젠테이션, 송출 시작 CTA)
- * - 필터 & 정렬 & 뷰 모드 전환: 그리드 뷰 (16:9 슬라이드 카드) / 리스트 뷰 (16:9 미니 썸네일 탑재)
- * - 16:9 슬라이드쇼 썸네일 그리드: 실제 SlideStage를 축소 렌더링하여 프레젠테이션 시각적 정체성 복원
- * - 호버 액션: 즉각 슬라이드쇼 발표, 복제, 삭제 및 /editor 편집기 진입
+ * 프레젠테이션 대시보드 (메인 화면)
+ * - 좌측: 고정 내비게이션 사이드바 (홈, 곡 라이브러리, 배경 라이브러리, PWA 오프라인 상태)
+ *   * '내 콘티 보관함'은 제거됨
+ * - 상단: 글로벌 네비게이션 헤더 (브랜드 로고, 통합 검색, 가사 빠른 입력, 새 프레젠테이션, 송출 시작 CTA)
+ * - 메인 뷰:
+ *   1) 홈 ("home"): 모든 곡이 하나로 이어진 "합쳐진 슬라이드"만 단독 렌더링
+ *   2) 곡 라이브러리 ("songs"): 곡 단위 슬라이드 관리 (내가 등록한 곡 / 유저가 등록한 곡 2단락)
+ *   3) 배경 라이브러리 ("backgrounds"): 배경 관리 (내가 등록한 배경 / 유저가 등록한 배경 2단락)
  */
 export function HomeRoute(): React.JSX.Element {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const currentTabParam = searchParams.get("tab");
+  const activeMenu: NavMenu =
+    currentTabParam === "songs" || currentTabParam === "backgrounds"
+      ? currentTabParam
+      : "home";
+
   const setlist = useActiveSetlist();
   const [isQuickPasteOpen, setIsQuickPasteOpen] = useState<boolean>(false);
   const [searchQuery, setSearchQuery] = useState<string>("");
-  const [activeTab, setActiveTab] = useState<FilterTab>("all");
-  const [viewMode, setViewMode] = useState<ViewMode>("grid");
-  const [sortBy, setSortBy] = useState<SortOption>("recent");
+
+  const handleSelectMenu = (menu: NavMenu): void => {
+    if (menu === "home") {
+      searchParams.delete("tab");
+      setSearchParams(searchParams);
+    } else {
+      setSearchParams({ tab: menu });
+    }
+  };
 
   const handleStartPresentation = (): void => {
     if (!isGoogleChromeBrowser()) {
@@ -54,21 +66,9 @@ export function HomeRoute(): React.JSX.Element {
     navigate("/present/fullscreen");
   };
 
-  const handleOpenEditor = (songIndex?: number): void => {
-    if (songIndex !== undefined) {
-      navigate(`/editor?song=${songIndex}`);
-    } else {
-      navigate("/editor");
-    }
-  };
-
   const handleCreateNewPresentation = (): void => {
     createNewSetlist("새 주일 예배 프레젠테이션");
     navigate("/editor");
-  };
-
-  const handleResetDefaultSet = (): void => {
-    resetActiveSetlist();
   };
 
   const handleAddToSet = (newDeck: Deck): void => {
@@ -76,37 +76,15 @@ export function HomeRoute(): React.JSX.Element {
     setIsQuickPasteOpen(false);
   };
 
-  // 검색 및 탭 필터링 & 정렬
-  const filteredAndSortedItems = useMemo(() => {
-    const filtered = setlist.items.filter((item) => {
-      const titleMatch = (item.deck?.title ?? "")
-        .toLowerCase()
-        .includes(searchQuery.toLowerCase());
-      const artistMatch = (item.deck?.artist ?? "")
-        .toLowerCase()
-        .includes(searchQuery.toLowerCase());
-      const lyricsMatch = (item.deck?.lyricsRaw ?? "")
-        .toLowerCase()
-        .includes(searchQuery.toLowerCase());
-      return titleMatch || artistMatch || lyricsMatch;
-    });
-
-    if (sortBy === "title") {
-      filtered.sort((a, b) =>
-        (a.deck?.title ?? "").localeCompare(b.deck?.title ?? "", "ko"),
-      );
-    } else if (sortBy === "slides") {
-      filtered.sort(
-        (a, b) => (b.deck?.slides.length ?? 0) - (a.deck?.slides.length ?? 0),
-      );
+  const handleApplyBackground = (bgId: string): void => {
+    if (setlist.items.length > 0) {
+      updateSongBackground(0, bgId);
     }
-
-    return filtered;
-  }, [setlist.items, searchQuery, sortBy]);
+  };
 
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100 flex select-none">
-      {/* 1. Canva / MiriCanvas 스타일 좌측 내비게이션 사이드바 (Sidebar) */}
+      {/* 1. 좌측 내비게이션 사이드바 (Sidebar) */}
       <aside className="w-60 bg-zinc-950 border-r border-zinc-800/80 hidden lg:flex flex-col justify-between p-4 shrink-0">
         <div className="space-y-6">
           {/* 브랜드 로고 */}
@@ -136,68 +114,103 @@ export function HomeRoute(): React.JSX.Element {
             onClick={handleCreateNewPresentation}
             className="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs shadow-lg shadow-emerald-950/50 flex items-center justify-center gap-2 cursor-pointer transition-all"
           >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            <svg
+              className="w-4 h-4"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M12 4v16m8-8H4"
+              />
             </svg>
             <span>새 프레젠테이션</span>
           </button>
 
-          {/* 메뉴 아이템 */}
-          <nav className="space-y-1">
+          {/* 메인 사이드바 내비게이션 (내 콘티 보관함 제거, 곡/배경 라이브러리 구성) */}
+          <nav className="space-y-1.5">
+            {/* 1) 홈 (합쳐진 슬라이드) */}
             <button
               type="button"
-              onClick={() => setActiveTab("all")}
-              className={`w-full px-3 py-2 rounded-xl text-xs font-medium flex items-center gap-3 transition-colors cursor-pointer ${
-                activeTab === "all"
-                  ? "bg-zinc-800 text-white font-semibold"
+              data-testid="sidebar-nav-home"
+              onClick={() => handleSelectMenu("home")}
+              className={`w-full px-3.5 py-2.5 rounded-xl text-xs font-medium flex items-center gap-3 transition-colors cursor-pointer ${
+                activeMenu === "home"
+                  ? "bg-zinc-800 text-white font-semibold shadow-sm"
                   : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900/60"
               }`}
             >
-              <svg className="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+              <svg
+                className="w-4 h-4 text-emerald-400"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"
+                />
               </svg>
-              <span>홈 (대시보드)</span>
+              <span>홈</span>
             </button>
 
+            {/* 2) 곡 라이브러리 */}
             <button
               type="button"
-              onClick={() => setActiveTab("setlists")}
-              className={`w-full px-3 py-2 rounded-xl text-xs font-medium flex items-center gap-3 transition-colors cursor-pointer ${
-                activeTab === "setlists"
-                  ? "bg-zinc-800 text-white font-semibold"
+              data-testid="sidebar-nav-songs"
+              onClick={() => handleSelectMenu("songs")}
+              className={`w-full px-3.5 py-2.5 rounded-xl text-xs font-medium flex items-center gap-3 transition-colors cursor-pointer ${
+                activeMenu === "songs"
+                  ? "bg-zinc-800 text-white font-semibold shadow-sm"
                   : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900/60"
               }`}
             >
-              <svg className="w-4 h-4 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+              <svg
+                className="w-4 h-4 text-pink-400"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3"
+                />
               </svg>
-              <span>내 콘티 보관함</span>
+              <span>곡 라이브러리</span>
             </button>
 
+            {/* 3) 배경 라이브러리 */}
             <button
               type="button"
-              onClick={() => setActiveTab("songs")}
-              className={`w-full px-3 py-2 rounded-xl text-xs font-medium flex items-center gap-3 transition-colors cursor-pointer ${
-                activeTab === "songs"
-                  ? "bg-zinc-800 text-white font-semibold"
+              data-testid="sidebar-nav-backgrounds"
+              onClick={() => handleSelectMenu("backgrounds")}
+              className={`w-full px-3.5 py-2.5 rounded-xl text-xs font-medium flex items-center gap-3 transition-colors cursor-pointer ${
+                activeMenu === "backgrounds"
+                  ? "bg-zinc-800 text-white font-semibold shadow-sm"
                   : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900/60"
               }`}
             >
-              <svg className="w-4 h-4 text-pink-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
+              <svg
+                className="w-4 h-4 text-sky-400"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"
+                />
               </svg>
-              <span>찬양 곡 라이브러리</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => handleOpenEditor()}
-              className="w-full px-3 py-2 rounded-xl text-xs font-medium flex items-center gap-3 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900/60 transition-colors cursor-pointer"
-            >
-              <svg className="w-4 h-4 text-sky-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
-              </svg>
-              <span>모션 배경 루프 (10종)</span>
+              <span>배경 라이브러리</span>
             </button>
           </nav>
         </div>
@@ -219,9 +232,9 @@ export function HomeRoute(): React.JSX.Element {
         {/* Chrome 최적화 권장 알림 배너 */}
         <ChromeAlertBanner />
 
-        {/* Canva / MiriCanvas 스타일 상단 글로벌 네비게이션 헤더 */}
+        {/* 상단 글로벌 네비게이션 헤더 */}
         <header className="sticky top-0 z-40 bg-zinc-950/90 backdrop-blur-md border-b border-zinc-800/80 px-6 py-3.5 flex items-center justify-between gap-4">
-          {/* 브랜드 로고 */}
+          {/* 브랜드 로고 (모바일) */}
           <div className="flex items-center gap-3 shrink-0">
             <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-400 flex items-center justify-center text-white shadow-lg shadow-emerald-950/50 lg:hidden">
               <svg className="w-5 h-5 fill-current" viewBox="0 0 24 24">
@@ -261,10 +274,53 @@ export function HomeRoute(): React.JSX.Element {
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="프레젠테이션, 곡 제목, 가사 검색..."
+                placeholder={
+                  activeMenu === "home"
+                    ? "합쳐진 슬라이드 가사, 곡 검색..."
+                    : activeMenu === "songs"
+                      ? "곡 제목, 아티스트, 가사 검색..."
+                      : "배경 제목, 분위기 태그 검색..."
+                }
                 className="w-full bg-zinc-900 border border-zinc-800 focus:border-emerald-500 rounded-full pl-9 pr-4 py-1.5 text-xs text-zinc-200 placeholder-zinc-500 focus:outline-none transition-colors"
               />
             </div>
+          </div>
+
+          {/* 모바일 탭 스위처 */}
+          <div className="flex lg:hidden items-center bg-zinc-900 p-1 rounded-lg border border-zinc-800 text-xs">
+            <button
+              type="button"
+              onClick={() => handleSelectMenu("home")}
+              className={`px-2.5 py-1 rounded-md transition-colors ${
+                activeMenu === "home"
+                  ? "bg-zinc-800 text-white font-semibold"
+                  : "text-zinc-400"
+              }`}
+            >
+              홈
+            </button>
+            <button
+              type="button"
+              onClick={() => handleSelectMenu("songs")}
+              className={`px-2.5 py-1 rounded-md transition-colors ${
+                activeMenu === "songs"
+                  ? "bg-zinc-800 text-white font-semibold"
+                  : "text-zinc-400"
+              }`}
+            >
+              곡
+            </button>
+            <button
+              type="button"
+              onClick={() => handleSelectMenu("backgrounds")}
+              className={`px-2.5 py-1 rounded-md transition-colors ${
+                activeMenu === "backgrounds"
+                  ? "bg-zinc-800 text-white font-semibold"
+                  : "text-zinc-400"
+              }`}
+            >
+              배경
+            </button>
           </div>
 
           {/* 우측 상단 액션 버튼 */}
@@ -288,14 +344,15 @@ export function HomeRoute(): React.JSX.Element {
                   d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
                 />
               </svg>
-              <span>가사 빠른 입력</span>
+              <span className="hidden sm:inline">가사 빠른 입력</span>
+              <span className="sm:hidden">가사입력</span>
             </button>
 
             <button
               type="button"
               data-testid="create-presentation-btn"
               onClick={handleCreateNewPresentation}
-              className="px-3.5 py-2 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-700/80 text-xs font-semibold text-zinc-200 hover:text-white transition-all shadow-sm flex items-center gap-1.5 cursor-pointer"
+              className="hidden sm:flex px-3.5 py-2 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-700/80 text-xs font-semibold text-zinc-200 hover:text-white transition-all shadow-sm items-center gap-1.5 cursor-pointer"
             >
               <svg
                 className="w-4 h-4"
@@ -328,311 +385,31 @@ export function HomeRoute(): React.JSX.Element {
         </header>
 
         {/* 본문 컨텐츠 영역 */}
-        <main className="flex-1 max-w-7xl w-full mx-auto px-6 py-8 flex flex-col gap-8">
-
-          {/* 4. Canva / MiriCanvas 시그니처: 16:9 프레젠테이션 리스트 섹션 */}
-          <section className="space-y-4">
-            {/* 섹션 상단 필터 & 뷰 모드 툴바 */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-zinc-800/80">
-              <div>
-                <h2 className="text-xl font-bold text-white flex items-center gap-2.5">
-                  <span>{setlist.title}</span>
-                  <span className="text-xs px-2.5 py-0.5 rounded-full bg-emerald-950 text-emerald-400 border border-emerald-800 font-normal">
-                    {setlist.items.length}곡 준비 완료
-                  </span>
-                </h2>
-                <p className="text-xs text-zinc-400 mt-0.5">
-                  예배 일자: {setlist.serviceDate} · 16:9 와이드스크린 슬라이드 덱
-                </p>
-              </div>
-
-              {/* 필터 탭 & 정렬 & 뷰 스위처 & 기본 세트 복원 */}
-              <div className="flex flex-wrap items-center gap-2">
-                <button
-                  type="button"
-                  data-testid="restore-default-set-btn"
-                  onClick={handleResetDefaultSet}
-                  className="hidden lg:inline-flex px-2.5 py-1 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-400 hover:text-zinc-200 text-xs font-medium cursor-pointer transition-colors"
-                  title="기본 5곡 검증 세트로 복원"
-                >
-                  기본 5곡 복원
-                </button>
-
-                {/* 정렬 드롭다운 */}
-                <select
-                  value={sortBy}
-                  onChange={(e) => setSortBy(e.target.value as SortOption)}
-                  className="bg-zinc-900 border border-zinc-800 text-zinc-300 text-xs rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-emerald-500 cursor-pointer"
-                  title="정렬 기준"
-                >
-                  <option value="recent">최근 순서</option>
-                  <option value="title">가나다순</option>
-                  <option value="slides">슬라이드 많은 순</option>
-                </select>
-
-                <div className="flex items-center bg-zinc-900 p-1 rounded-lg border border-zinc-800 text-xs">
-                  <button
-                    type="button"
-                    onClick={() => setActiveTab("all")}
-                    className={`px-3 py-1 rounded-md transition-colors cursor-pointer ${
-                      activeTab === "all"
-                        ? "bg-zinc-800 text-white font-semibold shadow"
-                        : "text-zinc-400 hover:text-zinc-200"
-                    }`}
-                  >
-                    전체
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setActiveTab("setlists")}
-                    className={`px-3 py-1 rounded-md transition-colors cursor-pointer ${
-                      activeTab === "setlists"
-                        ? "bg-zinc-800 text-white font-semibold shadow"
-                        : "text-zinc-400 hover:text-zinc-200"
-                    }`}
-                  >
-                    콘티 세트
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setActiveTab("songs")}
-                    className={`px-3 py-1 rounded-md transition-colors cursor-pointer ${
-                      activeTab === "songs"
-                        ? "bg-zinc-800 text-white font-semibold shadow"
-                        : "text-zinc-400 hover:text-zinc-200"
-                    }`}
-                  >
-                    찬양 곡
-                  </button>
-                </div>
-
-                {/* 그리드/리스트 뷰 전환 */}
-                <div className="flex items-center bg-zinc-900 p-1 rounded-lg border border-zinc-800 text-zinc-400">
-                  <button
-                    type="button"
-                    onClick={() => setViewMode("grid")}
-                    className={`p-1.5 rounded transition-colors cursor-pointer ${
-                      viewMode === "grid"
-                        ? "bg-zinc-800 text-white"
-                        : "hover:text-zinc-200"
-                    }`}
-                    title="그리드 뷰 (16:9 슬라이드 카드)"
-                  >
-                    <svg
-                      className="w-4 h-4"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"
-                      />
-                    </svg>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setViewMode("list")}
-                    className={`p-1.5 rounded transition-colors cursor-pointer ${
-                      viewMode === "list"
-                        ? "bg-zinc-800 text-white"
-                        : "hover:text-zinc-200"
-                    }`}
-                    title="목록 뷰 (16:9 미니 프리뷰)"
-                  >
-                    <svg
-                      className="w-4 h-4"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M4 6h16M4 12h16M4 18h16"
-                      />
-                    </svg>
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            {/* 검색 결과 없음 빈 상태 */}
-            {filteredAndSortedItems.length === 0 && searchQuery && (
-              <div className="py-16 text-center flex flex-col items-center justify-center gap-3 bg-zinc-900/30 border border-zinc-800/80 rounded-2xl">
-                <div className="w-12 h-12 rounded-xl bg-zinc-800/80 flex items-center justify-center text-zinc-500">
-                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                  </svg>
-                </div>
-                <p className="text-sm font-semibold text-zinc-300">
-                  "{searchQuery}"에 일치하는 찬양 곡이 없습니다.
-                </p>
-                <button
-                  type="button"
-                  data-testid="clear-search-btn"
-                  onClick={() => setSearchQuery("")}
-                  className="px-3.5 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-xs font-medium text-emerald-400 border border-zinc-700 cursor-pointer transition-colors"
-                >
-                  검색어 지우기
-                </button>
-              </div>
-            )}
-
-            {/* 5. 프레젠테이션 그리드 뷰 (16:9 슬라이드 카드 렌더링) */}
-            {viewMode === "grid" ? (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-                {/* 대표 세트리스트 카드 (activeTab이 'songs'가 아닐 때) */}
-                {activeTab !== "songs" && (
-                  <PresentationCard
-                    setlist={setlist}
-                    onPresent={handleStartPresentation}
-                    onEdit={() => handleOpenEditor()}
-                    onDuplicate={() => duplicateSongInSetlist(0)}
-                    className="border-emerald-500/40 bg-zinc-900/90"
-                  />
-                )}
-
-                {/* 개별 곡 16:9 슬라이드 카드들 */}
-                {activeTab !== "setlists" &&
-                  filteredAndSortedItems.map((item, index) => {
-                    const deck = item.deck;
-                    if (!deck) return null;
-
-                    return (
-                      <PresentationCard
-                        key={item.id}
-                        deck={deck}
-                        onPresent={handleStartPresentation}
-                        onEdit={() => handleOpenEditor(index)}
-                        onDuplicate={() => duplicateSongInSetlist(index)}
-                        onDelete={() => removeSongFromSetlist(index)}
-                      />
-                    );
-                  })}
-
-                {/* 새 슬라이드 추가 점선 카드 */}
-                <div
-                  onClick={() => setIsQuickPasteOpen(true)}
-                  className="group border-2 border-dashed border-zinc-800 hover:border-emerald-500/60 rounded-xl flex flex-col items-center justify-center p-8 min-h-[260px] cursor-pointer transition-all bg-zinc-950/40 hover:bg-zinc-900/30"
-                >
-                  <div className="w-12 h-12 rounded-full bg-zinc-900 group-hover:bg-emerald-950/60 border border-zinc-700/80 group-hover:border-emerald-500/50 flex items-center justify-center text-zinc-400 group-hover:text-emerald-400 transition-colors mb-3">
-                    <svg
-                      className="w-6 h-6"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M12 4v16m8-8H4"
-                      />
-                    </svg>
-                  </div>
-                  <span className="text-sm font-semibold text-zinc-300 group-hover:text-white transition-colors">
-                    새 찬양 슬라이드 추가
-                  </span>
-                  <span className="text-xs text-zinc-500 mt-1">
-                    가사 복사 & 붙여넣기
-                  </span>
-                </div>
-              </div>
-            ) : (
-              /* 6. 목록 뷰 (16:9 미니 프리뷰 썸네일 탑재) */
-              <div className="bg-zinc-900/50 border border-zinc-800/80 rounded-xl overflow-hidden divide-y divide-zinc-800/60">
-                {filteredAndSortedItems.map((item, index) => {
-                  const deck = item.deck;
-                  const leadSlide = deck?.slides[0] ?? null;
-                  const bgId = deck?.backgroundId;
-                  const bgUrl = getBackgroundMediaUrl(bgId);
-                  const poster = getBackgroundPosterUrl(bgId);
-
-                  return (
-                    <div
-                      key={item.id}
-                      className="p-3.5 flex items-center justify-between gap-4 hover:bg-zinc-900/80 transition-colors group"
-                    >
-                      <div className="flex items-center gap-3.5 min-w-0">
-                        <span className="w-6 h-6 rounded-lg bg-zinc-800 text-zinc-400 flex items-center justify-center text-xs font-mono font-bold shrink-0">
-                          {index + 1}
-                        </span>
-
-                        {/* 16:9 미니 슬라이드쇼 프리뷰 썸네일 */}
-                        <div
-                          onClick={() => handleOpenEditor(index)}
-                          className="w-24 aspect-video bg-black rounded-lg overflow-hidden relative shrink-0 border border-zinc-800 group-hover:border-emerald-500/50 cursor-pointer shadow"
-                        >
-                          <div className="w-full h-full pointer-events-none">
-                            <SlideStage
-                              slide={leadSlide}
-                              style={deck?.style}
-                              backgroundUrl={bgUrl}
-                              posterUrl={poster}
-                              containerDimensions={{ width: 96, height: 54 }}
-                            />
-                          </div>
-                          <div className="absolute top-0.5 right-0.5 px-1 py-0.2 rounded bg-black/80 text-[9px] font-mono text-emerald-400">
-                            16:9
-                          </div>
-                        </div>
-
-                        <div className="min-w-0">
-                          <div
-                            onClick={() => handleOpenEditor(index)}
-                            className="text-sm font-semibold text-white hover:text-emerald-400 transition-colors truncate cursor-pointer"
-                          >
-                            {deck?.title ?? "제목 없음"}
-                          </div>
-                          <div className="text-xs text-zinc-400 truncate flex items-center gap-2">
-                            <span>{deck?.artist || "찬양 곡"}</span>
-                            <span className="text-zinc-600">·</span>
-                            <span className="font-mono text-zinc-500">
-                              {deck?.slides.length ?? 0} 슬라이드
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="flex items-center gap-2 shrink-0">
-                        <button
-                          type="button"
-                          onClick={() => duplicateSongInSetlist(index)}
-                          className="px-2.5 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-xs text-zinc-300 hover:text-white transition-colors cursor-pointer"
-                          title="곡 복제"
-                        >
-                          복제
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() => handleOpenEditor(index)}
-                          className="px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-xs text-zinc-200 hover:text-white transition-colors cursor-pointer"
-                        >
-                          편집
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={handleStartPresentation}
-                          className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-xs font-semibold text-white transition-colors cursor-pointer flex items-center gap-1.5 shadow-sm"
-                        >
-                          <svg className="w-3 h-3 fill-current" viewBox="0 0 24 24">
-                            <path d="M8 5v14l11-7z" />
-                          </svg>
-                          <span>발표</span>
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </section>
+        <main className="flex-1 max-w-7xl w-full mx-auto px-6 py-8">
+          {activeMenu === "home" ? (
+            /* 홈: 합쳐진 슬라이드만 남도록 */
+            <MergedSlidesView
+              setlist={setlist}
+              onOpenQuickPaste={() => setIsQuickPasteOpen(true)}
+              searchQuery={searchQuery}
+            />
+          ) : activeMenu === "songs" ? (
+            /* 곡 라이브러리: 내가 등록한 곡 / 유저가 등록한 곡 2단락 */
+            <SongLibraryView
+              setlist={setlist}
+              onOpenQuickPaste={() => setIsQuickPasteOpen(true)}
+              onAddDeckToSetlist={handleAddToSet}
+              onDuplicateSong={duplicateSongInSetlist}
+              onRemoveSong={removeSongFromSetlist}
+              searchQuery={searchQuery}
+            />
+          ) : (
+            /* 배경 라이브러리: 내가 등록한 배경 / 유저가 등록한 배경 2단락 */
+            <BackgroundLibraryView
+              onApplyBackgroundToCurrentSet={handleApplyBackground}
+              searchQuery={searchQuery}
+            />
+          )}
         </main>
       </div>
 
