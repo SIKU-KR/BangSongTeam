@@ -54,7 +54,9 @@ export function ExternalSearchLinks({
             ? "border-emerald-700/60 bg-emerald-950/40 text-emerald-300 hover:bg-emerald-900/50 hover:border-emerald-600 cursor-pointer"
             : "border-zinc-800 bg-zinc-900 text-zinc-600 cursor-not-allowed pointer-events-none"
         }`}
-        title={hasQuery ? `멜론에서 '${trimmed}' 검색` : "곡 제목을 먼저 입력하세요"}
+        title={
+          hasQuery ? `멜론에서 '${trimmed}' 검색` : "곡 제목을 먼저 입력하세요"
+        }
       >
         <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
         멜론에서 찾기
@@ -76,7 +78,9 @@ export function ExternalSearchLinks({
             ? "border-orange-700/60 bg-orange-950/40 text-orange-300 hover:bg-orange-900/50 hover:border-orange-600 cursor-pointer"
             : "border-zinc-800 bg-zinc-900 text-zinc-600 cursor-not-allowed pointer-events-none"
         }`}
-        title={hasQuery ? `벅스에서 '${trimmed}' 검색` : "곡 제목을 먼저 입력하세요"}
+        title={
+          hasQuery ? `벅스에서 '${trimmed}' 검색` : "곡 제목을 먼저 입력하세요"
+        }
       >
         <span className="w-1.5 h-1.5 rounded-full bg-orange-500" />
         벅스에서 찾기

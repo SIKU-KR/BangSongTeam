@@ -41,18 +41,12 @@ describe("ExternalSearchLinks (Task 3.3)", () => {
       expect(melonLink).toBeInTheDocument();
       expect(melonLink).toHaveAttribute("target", "_blank");
       expect(melonLink).toHaveAttribute("rel", "noopener noreferrer");
-      expect(melonLink).toHaveAttribute(
-        "href",
-        getMelonSearchUrl("꽃들도"),
-      );
+      expect(melonLink).toHaveAttribute("href", getMelonSearchUrl("꽃들도"));
 
       expect(bugsLink).toBeInTheDocument();
       expect(bugsLink).toHaveAttribute("target", "_blank");
       expect(bugsLink).toHaveAttribute("rel", "noopener noreferrer");
-      expect(bugsLink).toHaveAttribute(
-        "href",
-        getBugsSearchUrl("꽃들도"),
-      );
+      expect(bugsLink).toHaveAttribute("href", getBugsSearchUrl("꽃들도"));
     });
 
     it("곡 제목이 비어있거나 공백일 때는 링크가 비활성화 상태(aria-disabled=true)여야 한다", () => {

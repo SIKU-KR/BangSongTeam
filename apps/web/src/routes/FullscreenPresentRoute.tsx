@@ -40,7 +40,6 @@ export function FullscreenPresentRoute(): React.JSX.Element {
   const nextSong = songs[currentSongIndex + 1]?.deck;
   const nextBackgroundUrl = getBackgroundMediaUrl(nextSong?.backgroundId);
 
-
   // 다음 슬라이드로 이동 (곡 경계 자동 전환)
   const handleNext = useCallback(() => {
     if (!currentSong) return;
@@ -134,7 +133,6 @@ export function FullscreenPresentRoute(): React.JSX.Element {
         isBlackout={isBlackout}
         isLyricsHidden={isLyricsHidden}
       />
-
 
       {/* 마우스 호버 시에만 나타나는 우측 상단 최소 제어 도구 (청중 방해 방지) */}
       <div className="absolute top-4 right-4 z-50 flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity duration-300 bg-zinc-900/80 backdrop-blur-sm border border-zinc-700/60 rounded-lg px-3 py-1.5 shadow-lg">

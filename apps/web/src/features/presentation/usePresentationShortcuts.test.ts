@@ -24,7 +24,11 @@ describe("usePresentationShortcuts Hook", () => {
     );
 
     window.dispatchEvent(
-      new KeyboardEvent("keydown", { key: "ArrowRight", code: "ArrowRight", bubbles: true }),
+      new KeyboardEvent("keydown", {
+        key: "ArrowRight",
+        code: "ArrowRight",
+        bubbles: true,
+      }),
     );
     expect(onNext).toHaveBeenCalledTimes(1);
 
@@ -34,7 +38,11 @@ describe("usePresentationShortcuts Hook", () => {
     expect(onNext).toHaveBeenCalledTimes(2);
 
     window.dispatchEvent(
-      new KeyboardEvent("keydown", { key: "PageDown", code: "PageDown", bubbles: true }),
+      new KeyboardEvent("keydown", {
+        key: "PageDown",
+        code: "PageDown",
+        bubbles: true,
+      }),
     );
     expect(onNext).toHaveBeenCalledTimes(3);
 
@@ -53,12 +61,20 @@ describe("usePresentationShortcuts Hook", () => {
     );
 
     window.dispatchEvent(
-      new KeyboardEvent("keydown", { key: "ArrowLeft", code: "ArrowLeft", bubbles: true }),
+      new KeyboardEvent("keydown", {
+        key: "ArrowLeft",
+        code: "ArrowLeft",
+        bubbles: true,
+      }),
     );
     expect(onPrev).toHaveBeenCalledTimes(1);
 
     window.dispatchEvent(
-      new KeyboardEvent("keydown", { key: "PageUp", code: "PageUp", bubbles: true }),
+      new KeyboardEvent("keydown", {
+        key: "PageUp",
+        code: "PageUp",
+        bubbles: true,
+      }),
     );
     expect(onPrev).toHaveBeenCalledTimes(2);
 
@@ -144,12 +160,20 @@ describe("usePresentationShortcuts Hook", () => {
     expect(handleKey).toHaveBeenCalledWith("4");
 
     window.dispatchEvent(
-      new KeyboardEvent("keydown", { key: "Enter", code: "Enter", bubbles: true }),
+      new KeyboardEvent("keydown", {
+        key: "Enter",
+        code: "Enter",
+        bubbles: true,
+      }),
     );
     expect(handleKey).toHaveBeenCalledWith("Enter");
 
     window.dispatchEvent(
-      new KeyboardEvent("keydown", { key: "Backspace", code: "Backspace", bubbles: true }),
+      new KeyboardEvent("keydown", {
+        key: "Backspace",
+        code: "Backspace",
+        bubbles: true,
+      }),
     );
     expect(handleKey).toHaveBeenCalledWith("Backspace");
   });
@@ -186,7 +210,11 @@ describe("usePresentationShortcuts Hook", () => {
     );
 
     window.dispatchEvent(
-      new KeyboardEvent("keydown", { key: "ArrowRight", code: "ArrowRight", bubbles: true }),
+      new KeyboardEvent("keydown", {
+        key: "ArrowRight",
+        code: "ArrowRight",
+        bubbles: true,
+      }),
     );
     window.dispatchEvent(
       new KeyboardEvent("keydown", { key: "1", code: "Digit1", bubbles: true }),
@@ -205,14 +233,22 @@ describe("usePresentationShortcuts Hook", () => {
     );
 
     window.dispatchEvent(
-      new KeyboardEvent("keydown", { key: "ArrowRight", code: "ArrowRight", bubbles: true }),
+      new KeyboardEvent("keydown", {
+        key: "ArrowRight",
+        code: "ArrowRight",
+        bubbles: true,
+      }),
     );
     expect(onNext).toHaveBeenCalledTimes(1);
 
     unmount();
 
     window.dispatchEvent(
-      new KeyboardEvent("keydown", { key: "ArrowRight", code: "ArrowRight", bubbles: true }),
+      new KeyboardEvent("keydown", {
+        key: "ArrowRight",
+        code: "ArrowRight",
+        bubbles: true,
+      }),
     );
     expect(onNext).toHaveBeenCalledTimes(1);
   });
@@ -271,16 +307,32 @@ describe("usePresentationShortcuts Hook", () => {
     // Press '2', '.', '4', 'Enter' within act
     act(() => {
       window.dispatchEvent(
-        new KeyboardEvent("keydown", { key: "2", code: "Digit2", bubbles: true }),
+        new KeyboardEvent("keydown", {
+          key: "2",
+          code: "Digit2",
+          bubbles: true,
+        }),
       );
       window.dispatchEvent(
-        new KeyboardEvent("keydown", { key: ".", code: "Period", bubbles: true }),
+        new KeyboardEvent("keydown", {
+          key: ".",
+          code: "Period",
+          bubbles: true,
+        }),
       );
       window.dispatchEvent(
-        new KeyboardEvent("keydown", { key: "4", code: "Digit4", bubbles: true }),
+        new KeyboardEvent("keydown", {
+          key: "4",
+          code: "Digit4",
+          bubbles: true,
+        }),
       );
       window.dispatchEvent(
-        new KeyboardEvent("keydown", { key: "Enter", code: "Enter", bubbles: true }),
+        new KeyboardEvent("keydown", {
+          key: "Enter",
+          code: "Enter",
+          bubbles: true,
+        }),
       );
     });
 
@@ -288,5 +340,3 @@ describe("usePresentationShortcuts Hook", () => {
     expect(onJump).toHaveBeenCalledWith(1, 3);
   });
 });
-
-

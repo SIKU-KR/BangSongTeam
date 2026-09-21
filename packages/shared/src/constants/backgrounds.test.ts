@@ -23,7 +23,10 @@ describe("Background Constants & Helpers", () => {
 
   it("should support custom baseUrl", () => {
     const first = INITIAL_BACKGROUNDS[0];
-    const mediaUrl = getBackgroundMediaUrl(first.id, "https://media.worship-slide.com");
+    const mediaUrl = getBackgroundMediaUrl(
+      first.id,
+      "https://media.worship-slide.com",
+    );
     expect(mediaUrl).toBe(`https://media.worship-slide.com/${first.r2Key}`);
   });
 

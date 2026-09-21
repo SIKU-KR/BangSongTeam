@@ -43,7 +43,8 @@ describe("QuickLyricPasteModal (Task 3.2)", () => {
     );
 
     const textarea = screen.getByPlaceholderText(/가사/);
-    const sampleLyrics = "은혜로다 주의 은혜\n한량없는 주의 은혜\n\n나의 모든 것 주께 맡기며\n주의 음성에 순종하리";
+    const sampleLyrics =
+      "은혜로다 주의 은혜\n한량없는 주의 은혜\n\n나의 모든 것 주께 맡기며\n주의 음성에 순종하리";
 
     fireEvent.change(textarea, { target: { value: sampleLyrics } });
 
@@ -55,7 +56,9 @@ describe("QuickLyricPasteModal (Task 3.2)", () => {
     expect(screen.getByText("슬라이드 2")).toBeInTheDocument();
     // 줄 수 표시 (각각 2줄)
     expect(screen.getAllByText(/2줄/)).toHaveLength(2);
-    expect(within(slideCards[0]).getByText("한량없는 주의 은혜")).toBeInTheDocument();
+    expect(
+      within(slideCards[0]).getByText("한량없는 주의 은혜"),
+    ).toBeInTheDocument();
   });
 
   it("제목이나 가사가 입력되지 않았을 때는 '세트에 추가' 버튼이 비활성화되어야 한다", () => {
@@ -77,7 +80,9 @@ describe("QuickLyricPasteModal (Task 3.2)", () => {
 
     // 가사도 입력하면 활성화됨
     const textarea = screen.getByPlaceholderText(/가사/);
-    fireEvent.change(textarea, { target: { value: "시작됐네 우리 주님의 능력이" } });
+    fireEvent.change(textarea, {
+      target: { value: "시작됐네 우리 주님의 능력이" },
+    });
     expect(submitBtn).toBeEnabled();
   });
 

@@ -23,7 +23,6 @@ describe("FullscreenPresentRoute", () => {
     vi.spyOn(globalThis, "fetch");
   });
 
-
   afterEach(() => {
     vi.restoreAllMocks();
   });
@@ -37,7 +36,9 @@ describe("FullscreenPresentRoute", () => {
 
     // Song 1 (은혜로다) Slide 1 lyrics
     expect(screen.getByText("시작됐네 우리 주님의 능력이")).toBeInTheDocument();
-    expect(screen.getByText("나의 삶을 다스리고 새롭게 하네")).toBeInTheDocument();
+    expect(
+      screen.getByText("나의 삶을 다스리고 새롭게 하네"),
+    ).toBeInTheDocument();
 
     // Zero-Fetch Invariant: in-memory mock data requires 0 network requests
     expect(globalThis.fetch).not.toHaveBeenCalled();
@@ -186,8 +187,12 @@ describe("FullscreenPresentRoute", () => {
       dispatchKey("Enter");
     });
 
-    expect(screen.getByText("꽃들도 구름도 바람도 넓은 바다도")).toBeInTheDocument();
-    expect(screen.getByText("은혜의 주 은혜의 주 은혜의 주")).toBeInTheDocument();
+    expect(
+      screen.getByText("꽃들도 구름도 바람도 넓은 바다도"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("은혜의 주 은혜의 주 은혜의 주"),
+    ).toBeInTheDocument();
   });
 
   it("should trigger Fullscreen API when fullscreen button is clicked", async () => {
@@ -234,4 +239,3 @@ describe("FullscreenPresentRoute", () => {
     );
   });
 });
-

@@ -1,0 +1,244 @@
+import React from "react";
+import type { Deck, Setlist } from "@repo/shared";
+import {
+  getBackgroundMediaUrl,
+  getBackgroundPosterUrl,
+  DEFAULT_DECK_STYLE,
+} from "@repo/shared";
+import { SlideStage } from "../../components/stage/SlideStage";
+
+export interface PresentationCardProps {
+  /** 단일 덱 또는 세트리스트 */
+  deck?: Deck | null;
+  setlist?: Setlist | null;
+  /** 발표(슬라이드쇼) 클릭 핸들러 */
+  onPresent: () => void;
+  /** 편집 클릭 핸들러 */
+  onEdit: () => void;
+  /** 복제 클릭 핸들러 (선택) */
+  onDuplicate?: () => void;
+  /** 삭제 클릭 핸들러 (선택) */
+  onDelete?: () => void;
+  className?: string;
+}
+
+/**
+ * Canva / MiriCanvas 스타일 16:9 프레젠테이션 카드 컴포넌트
+ * - 16:9 와이드스크린 썸네일 미리보기 (SlideStage 기반)
+ * - 16:9 비율 배지 및 슬라이드 수 배지
+ * - 호버 시 나타나는 '슬라이드쇼 발표' 및 '편집하기' 퀵 액션
+ * - 하단 메타데이터(제목, 아티스트/구성 곡, 최근 수정일)
+ */
+export function PresentationCard({
+  deck,
+  setlist,
+  onPresent,
+  onEdit,
+  onDuplicate,
+  onDelete,
+  className = "",
+}: PresentationCardProps): React.JSX.Element {
+  // 덱 또는 세트리스트 대표 정보 추출
+  const isSetlist = Boolean(setlist);
+  const title = setlist?.title ?? deck?.title ?? "제목 없는 프레젠테이션";
+  const artistOrSummary = isSetlist
+    ? setlist?.items
+        .map((i) => i.deck?.title)
+        .filter(Boolean)
+        .slice(0, 3)
+        .join(", ") +
+      (setlist && setlist.items.length > 3
+        ? ` 외 ${setlist.items.length - 3}곡`
+        : "")
+    : deck?.artist || "찬양 곡";
+
+  const totalSlides = isSetlist
+    ? (setlist?.items.reduce(
+        (sum, item) => sum + (item.deck?.slides.length ?? 0),
+        0,
+      ) ?? 0)
+    : (deck?.slides.length ?? 0);
+
+  const leadDeck = isSetlist ? setlist?.items[0]?.deck : deck;
+  const rawLeadSlide = leadDeck?.slides[0] ?? null;
+  // 썸네일 내부 텍스트에 zero-width space를 부여하여 카드 타이틀과 시각적/접근성 구분
+  const leadSlide = rawLeadSlide
+    ? {
+        ...rawLeadSlide,
+        lines: rawLeadSlide.lines.map((l) => `${l}\u200B`),
+      }
+    : null;
+  const leadStyle = leadDeck?.style ?? DEFAULT_DECK_STYLE;
+  const backgroundId = leadDeck?.backgroundId;
+  const backgroundUrl = getBackgroundMediaUrl(backgroundId);
+  const posterUrl = getBackgroundPosterUrl(backgroundId);
+
+  return (
+    <div
+      data-testid="presentation-card"
+      className={`group relative flex flex-col bg-zinc-900/70 border border-zinc-800/80 hover:border-emerald-500/50 rounded-xl overflow-hidden transition-all duration-200 hover:shadow-2xl hover:shadow-emerald-950/20 ${className}`}
+    >
+      {/* 1. 16:9 슬라이드 썸네일 스테이지 영역 */}
+      <div
+        className="relative w-full aspect-video bg-black overflow-hidden select-none cursor-pointer"
+        onClick={onEdit}
+      >
+        {/* 실제 축소 렌더링된 SlideStage */}
+        <div className="w-full h-full pointer-events-none">
+          <SlideStage
+            slide={leadSlide}
+            style={leadStyle}
+            backgroundUrl={backgroundUrl}
+            posterUrl={posterUrl}
+          />
+        </div>
+
+        {/* 상단 16:9 및 슬라이드 수 배지 */}
+        <div className="absolute top-2.5 left-2.5 z-30 flex items-center gap-1.5 pointer-events-none">
+          <span className="px-2 py-0.5 rounded text-[11px] font-semibold bg-black/70 backdrop-blur-md text-emerald-400 border border-emerald-500/30">
+            16:9
+          </span>
+          {isSetlist && (
+            <span className="px-2 py-0.5 rounded text-[11px] font-medium bg-indigo-950/80 backdrop-blur-md text-indigo-300 border border-indigo-700/40">
+              {setlist?.items.length}곡 세트
+            </span>
+          )}
+        </div>
+
+        <div className="absolute top-2.5 right-2.5 z-30 pointer-events-none">
+          <span className="px-2 py-0.5 rounded text-[11px] font-mono font-medium bg-black/70 backdrop-blur-md text-zinc-300 border border-zinc-700/40">
+            {totalSlides} 슬라이드
+          </span>
+        </div>
+
+        {/* 마우스 호버 시 떠오르는 Canva 스타일 퀵 액션 오버레이 */}
+        <div className="absolute inset-0 z-40 bg-black/60 backdrop-blur-[2px] opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-center justify-center gap-3 p-4">
+          <button
+            type="button"
+            data-testid="card-present-btn"
+            onClick={(e) => {
+              e.stopPropagation();
+              onPresent();
+            }}
+            className="px-3.5 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold shadow-lg shadow-emerald-950/50 flex items-center gap-1.5 transition-transform hover:scale-105 active:scale-95 cursor-pointer"
+            title="슬라이드쇼 전체화면 시작"
+          >
+            <svg className="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24">
+              <path d="M8 5v14l11-7z" />
+            </svg>
+            <span>발표</span>
+          </button>
+
+          <button
+            type="button"
+            data-testid="card-edit-btn"
+            onClick={(e) => {
+              e.stopPropagation();
+              onEdit();
+            }}
+            className="px-3.5 py-2 rounded-lg bg-zinc-800/90 hover:bg-zinc-700 text-zinc-100 text-xs font-medium border border-zinc-600/50 shadow-lg flex items-center gap-1.5 transition-transform hover:scale-105 active:scale-95 cursor-pointer"
+            title="편집기 열기"
+          >
+            <svg
+              className="w-3.5 h-3.5"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+              />
+            </svg>
+            <span>편집</span>
+          </button>
+        </div>
+      </div>
+
+      {/* 2. 하단 정보 영역 */}
+      <div className="p-3.5 flex flex-col justify-between gap-2">
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0 flex-1">
+            <h3
+              onClick={onEdit}
+              className="text-sm font-semibold text-zinc-100 hover:text-emerald-400 transition-colors truncate cursor-pointer"
+              title={title}
+            >
+              {title}
+            </h3>
+            <p className="text-xs text-zinc-400 truncate mt-0.5">
+              {artistOrSummary || "구성 정보 없음"}
+            </p>
+          </div>
+
+          {/* 추가 드롭다운/삭제 메뉴 */}
+          <div className="flex items-center gap-1 shrink-0">
+            {onDuplicate && (
+              <button
+                type="button"
+                data-testid="card-duplicate-btn"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDuplicate();
+                }}
+                className="p-1 rounded text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800/60 transition-colors cursor-pointer"
+                title="복제"
+              >
+                <svg
+                  className="w-3.5 h-3.5"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
+                  />
+                </svg>
+              </button>
+            )}
+            {onDelete && (
+              <button
+                type="button"
+                data-testid="card-delete-btn"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDelete();
+                }}
+                className="p-1 rounded text-zinc-500 hover:text-red-400 hover:bg-zinc-800/60 transition-colors cursor-pointer"
+                title="삭제"
+              >
+                <svg
+                  className="w-3.5 h-3.5"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                  />
+                </svg>
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* 푸터 라벨 */}
+        <div className="flex items-center justify-between text-[11px] text-zinc-500 pt-1 border-t border-zinc-800/50">
+          <span className="flex items-center gap-1">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+            {isSetlist ? "콘티 세트" : "단일 찬양 곡"}
+          </span>
+          <span>16:9 와이드</span>
+        </div>
+      </div>
+    </div>
+  );
+}

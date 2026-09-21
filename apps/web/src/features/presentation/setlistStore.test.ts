@@ -1,11 +1,24 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { renderHook, act } from "@testing-library/react";
-import { DeckSchema, DEFAULT_DECK_STYLE, INITIAL_BACKGROUNDS } from "@repo/shared";
+import {
+  DeckSchema,
+  DEFAULT_DECK_STYLE,
+  INITIAL_BACKGROUNDS,
+} from "@repo/shared";
 import {
   getActiveSetlist,
   addDeckToSetlist,
   resetActiveSetlist,
   useActiveSetlist,
+  updateSetlistTitle,
+  updateSongStyle,
+  updateSongBackground,
+  updateSlideLines,
+  addSlideToSong,
+  removeSlideFromSong,
+  duplicateSlide,
+  reorderSongs,
+  removeSongFromSetlist,
 } from "./setlistStore";
 
 describe("setlistStore (In-memory reactive setlist)", () => {
@@ -49,7 +62,9 @@ describe("setlistStore (In-memory reactive setlist)", () => {
     expect(item.order).toBe(5);
     expect(item.deck?.title).toBe("아침 안개 눈 앞 가리듯");
     // Should automatically assign a valid background from INITIAL_BACKGROUNDS
-    expect(item.deck?.backgroundId).toBe(INITIAL_BACKGROUNDS[5 % INITIAL_BACKGROUNDS.length].id);
+    expect(item.deck?.backgroundId).toBe(
+      INITIAL_BACKGROUNDS[5 % INITIAL_BACKGROUNDS.length].id,
+    );
 
     const updated = getActiveSetlist();
     expect(updated.items).toHaveLength(6);
@@ -90,6 +105,101 @@ describe("setlistStore (In-memory reactive setlist)", () => {
 
     expect(result.current.items).toHaveLength(6);
     expect(result.current.items[5].deck?.title).toBe("새 노래로");
-    expect(result.current.items[5].deck?.backgroundId).toBe(INITIAL_BACKGROUNDS[2].id);
+    expect(result.current.items[5].deck?.backgroundId).toBe(
+      INITIAL_BACKGROUNDS[2].id,
+    );
+  });
+
+  it("should update setlist title and notify subscribers", () => {
+    const { result } = renderHook(() => useActiveSetlist());
+    act(() => {
+      updateSetlistTitle("2026 청년부 금요 찬양");
+    });
+    expect(result.current.title).toBe("2026 청년부 금요 찬양");
+  });
+
+  it("should update song style and background", () => {
+    const { result } = renderHook(() => useActiveSetlist());
+    act(() => {
+      updateSongStyle(0, {
+        overlayOpacity: 70,
+        fontFamily: "Noto Sans KR",
+        position: {
+          anchor: "bottom-center",
+          xPercent: 50,
+          yPercent: 90,
+          widthPercent: 85,
+        },
+      });
+      updateSongBackground(0, INITIAL_BACKGROUNDS[3].id);
+    });
+
+    const song = result.current.items[0].deck;
+    expect(song?.style.overlayOpacity).toBe(70);
+    expect(song?.style.fontFamily).toBe("Noto Sans KR");
+    expect(song?.style.position.anchor).toBe("bottom-center");
+    expect(song?.backgroundId).toBe(INITIAL_BACKGROUNDS[3].id);
+  });
+
+  it("should manage slides (update, add, duplicate, remove)", () => {
+    const { result } = renderHook(() => useActiveSetlist());
+    const initialSlideCount = result.current.items[0].deck?.slides.length ?? 0;
+
+    // Update lines
+    act(() => {
+      updateSlideLines(0, 0, ["첫 번째 줄 수정", "두 번째 줄 수정"]);
+    });
+    expect(result.current.items[0].deck?.slides[0].lines).toEqual([
+      "첫 번째 줄 수정",
+      "두 번째 줄 수정",
+    ]);
+
+    // Add slide
+    act(() => {
+      addSlideToSong(0, ["새로운 슬라이드"], 0);
+    });
+    expect(result.current.items[0].deck?.slides.length).toBe(
+      initialSlideCount + 1,
+    );
+    expect(result.current.items[0].deck?.slides[1].lines).toEqual([
+      "새로운 슬라이드",
+    ]);
+
+    // Duplicate slide
+    act(() => {
+      duplicateSlide(0, 1);
+    });
+    expect(result.current.items[0].deck?.slides.length).toBe(
+      initialSlideCount + 2,
+    );
+    expect(result.current.items[0].deck?.slides[2].lines).toEqual([
+      "새로운 슬라이드",
+    ]);
+
+    // Remove slide
+    act(() => {
+      removeSlideFromSong(0, 2);
+    });
+    expect(result.current.items[0].deck?.slides.length).toBe(
+      initialSlideCount + 1,
+    );
+  });
+
+  it("should reorder and remove songs", () => {
+    const { result } = renderHook(() => useActiveSetlist());
+    const firstSongTitle = result.current.items[0].deck?.title;
+    const secondSongTitle = result.current.items[1].deck?.title;
+
+    act(() => {
+      reorderSongs(0, 1);
+    });
+    expect(result.current.items[0].deck?.title).toBe(secondSongTitle);
+    expect(result.current.items[1].deck?.title).toBe(firstSongTitle);
+
+    act(() => {
+      removeSongFromSetlist(0);
+    });
+    expect(result.current.items).toHaveLength(4);
+    expect(result.current.items[0].deck?.title).toBe(firstSongTitle);
   });
 });

@@ -135,7 +135,12 @@ export function useNavigationBuffer({
             }
             const songNum = parseInt(parts[0], 10);
             const slideNum = parseInt(parts[1], 10);
-            if (isNaN(songNum) || isNaN(slideNum) || songNum <= 0 || slideNum <= 0) {
+            if (
+              isNaN(songNum) ||
+              isNaN(slideNum) ||
+              songNum <= 0 ||
+              slideNum <= 0
+            ) {
               onInvalidJump?.(raw);
               return;
             }
@@ -154,7 +159,10 @@ export function useNavigationBuffer({
         }
 
         // 인덱스 범위 유효성 검증
-        if (songCount !== undefined && (targetSongIndex < 0 || targetSongIndex >= songCount)) {
+        if (
+          songCount !== undefined &&
+          (targetSongIndex < 0 || targetSongIndex >= songCount)
+        ) {
           onInvalidJump?.(raw);
           return;
         }

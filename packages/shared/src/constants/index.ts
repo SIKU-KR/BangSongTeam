@@ -114,4 +114,3 @@ export const SAFE_MARGIN_PERCENT = {
 } as const;
 
 export * from "./backgrounds";
-

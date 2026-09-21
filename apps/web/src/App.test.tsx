@@ -19,4 +19,12 @@ describe("App Route Integration", () => {
     expect(screen.getByTestId("fullscreen-present-route")).toBeInTheDocument();
     expect(screen.getByText("시작됐네 우리 주님의 능력이")).toBeInTheDocument();
   });
+
+  it("should render EditorRoute when navigating to '/editor'", () => {
+    window.history.pushState({}, "Editor", "/editor");
+    render(<App />);
+
+    expect(screen.getByTestId("editor-route")).toBeInTheDocument();
+    expect(screen.getByTestId("editor-stage-canvas")).toBeInTheDocument();
+  });
 });

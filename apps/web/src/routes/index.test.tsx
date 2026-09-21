@@ -63,7 +63,6 @@ describe("HomeRoute (Main Home Entry Screen)", () => {
     expect(mockNavigate).toHaveBeenCalledWith("/present/fullscreen");
   });
 
-
   it("should prompt confirm dialog when start presentation button is clicked in non-Chrome browser", () => {
     vi.spyOn(chromeChecker, "isGoogleChromeBrowser").mockReturnValue(false);
     const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(false);
@@ -107,9 +106,14 @@ describe("HomeRoute (Main Home Entry Screen)", () => {
     const lyricsInput = screen.getByLabelText(/가사 원문/);
 
     act(() => {
-      fireEvent.change(titleInput, { target: { value: "아침 안개 눈 앞 가리듯" } });
+      fireEvent.change(titleInput, {
+        target: { value: "아침 안개 눈 앞 가리듯" },
+      });
       fireEvent.change(lyricsInput, {
-        target: { value: "아침 안개 눈 앞 가리듯\n나의 눈물 앞 가릴 때\n\n임마누엘 주 찬양하리" },
+        target: {
+          value:
+            "아침 안개 눈 앞 가리듯\n나의 눈물 앞 가릴 때\n\n임마누엘 주 찬양하리",
+        },
       });
     });
 
@@ -127,4 +131,3 @@ describe("HomeRoute (Main Home Entry Screen)", () => {
     expect(screen.getByText("아침 안개 눈 앞 가리듯")).toBeInTheDocument();
   });
 });
-

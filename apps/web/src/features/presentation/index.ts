@@ -13,8 +13,24 @@ export { mockSetlist, mockDecks } from "./mockSetlist";
 
 export {
   getActiveSetlist,
+  setActiveSetlist,
+  createNewSetlist,
   addDeckToSetlist,
   resetActiveSetlist,
   useActiveSetlist,
+  updateSetlistTitle,
+  updateSongInfo,
+  updateSongStyle,
+  updateSongBackground,
+  updateSlideLines,
+  addSlideToSong,
+  removeSlideFromSong,
+  duplicateSlide,
+  reorderSongs,
+  removeSongFromSetlist,
 } from "./setlistStore";
 
+export {
+  PresentationCard,
+  type PresentationCardProps,
+} from "./PresentationCard";
