@@ -1060,11 +1060,11 @@ Chrome 공식 **Window Management API**를 활용한 다중 디스플레이 투�
 
 이 서비스는 "서버에 저장하고 필요할 때 받아온다"가 아니라 **"로컬에 저장하고 서버와 동기화한다"** 는 순서로 간다. 예배 당일 네트워크를 신뢰할 수 없기 때문이고, 로그인 없이도 곧바로 써 볼 수 있어야 하기 때문이다. 따라서 저장 계층을 세 단계로 나누어 도입한다.
 
-| 단계                             | 원천                                          | 상태      | 실패 시 사용자가 잃는 것      |
-| -------------------------------- | --------------------------------------------- | --------- | ----------------------------- |
-| **Phase 1 — 인메모리**           | 모듈 스코프 `presentationStore`               | 종료      | 새로고침·탭 종료 시 작업 전부 |
-| **Phase 2 — IndexedDB (M3-A)**   | `worship-offline-db`, 스토어가 단일 원천      | **현재**  | 브라우저 데이터 삭제 시에만   |
-| **Phase 3 — 서버 동기화 (M3-B)** | D1이 정본, IndexedDB가 로컬 캐시 겸 작업 사본 | 다음 작업 | 없음 (기기 간 복구 가능)      |
+| 단계                             | 원천                                     | 상태     | 실패 시 사용자가 잃는 것      |
+| -------------------------------- | ---------------------------------------- | -------- | ----------------------------- |
+| **Phase 1 — 인메모리**           | 모듈 스코프 `presentationStore`          | 종료     | 새로고침·탭 종료 시 작업 전부 |
+| **Phase 2 — IndexedDB (M3-A)**   | `worship-offline-db`, 스토어가 단일 원천 | 완료     | 브라우저 데이터 삭제 시에만   |
+| **Phase 3 — 서버 동기화 (M3-B)** | 로컬이 작업 사본, D1이 기기 간 정본      | **현재** | 없음 (기기 간 복구 가능)      |
 
 **Phase 2 설계 규칙 (M3-A, 구현 완료):**
 
@@ -1076,6 +1076,19 @@ Chrome 공식 **Window Management API**를 활용한 다중 디스플레이 투�
 6. **Undo/Redo 히스토리는 저장하지 않는다.** 세션 한정 상태이며 직렬화 비용이 크다.
 7. **커스텀 배경(PRD 4.3)의 로컬 보관:** 업로드 기능 구현 시 파일을 Blob으로 IndexedDB에 두고 `blob:` URL로 재생한다. Phase 3에서 R2 업로드로 승격한다. (업로드 자체가 아직 미구현이라 이 규칙은 대기 중이다.)
 
+**Phase 3 설계 규칙 (M3-B, 구현 완료):**
+
+1. **로컬이 먼저다.** 편집은 지금처럼 IndexedDB에 먼저 쓰고 서버 반영은 뒤에 붙인다. 서버 push 큐와 in-flight 체인을 IndexedDB 저장과 **완전히 분리**한다 — 느린 네트워크가 로컬 저장을 막으면 안 된다. 디바운스는 로컬 300ms, 서버 2s로 다르게 잡는다.
+2. **문서 단위 LWW.** 서버와 로컬이 다르면 `updatedAt`이 늦은 쪽 문서를 통째로 택한다. 필드 단위로 섞으면 곡 순서는 서버 것, 스타일은 로컬 것이 되어 사용자가 만든 적 없는 세트가 나온다.
+3. **로컬에만 있는 문서는 '아직 안 올라감'이다.** '서버에 없음'으로 보고 지우면 작업이 사라진다. 유지한 뒤 올린다. (tombstone이 없으므로 명시적 삭제는 아직 범위 밖이다.)
+4. **클라이언트가 만든 id를 서버가 그대로 보존한다.** 서버가 id를 새로 발급하면 같은 세트가 기기마다 다른 문서가 되어 동기화가 병합이 아니라 중복 생성이 된다.
+5. **오프라인은 실패가 아니다.** 네트워크에 닿지 못하는 것은 정상 경로다. 빨간 배너를 띄우지 않고 '오프라인 · 로컬 저장됨'으로 표시한다. 예배 중에 경고가 뜨면 그게 사고다.
+6. **부팅 동기화는 렌더를 막지 않는다.** 로컬 하이드레이션이 끝나면 곧바로 화면을 그리고 서버 병합은 백그라운드로 붙인다. 서버에서 받은 문서는 로컬에도 적어 둬야 다음 부팅에 네트워크 없이 열린다.
+7. **세션도 오프라인에서 살아야 한다.** 세션 쿠키는 httpOnly라 JS가 못 읽는다. 마지막으로 확인된 세션을 `auth_session` 스토어(v2)에 캐시하고 부팅 시 그것으로 로그인 게이트를 통과시킨다. 서버 재검증은 백그라운드이며, **'서버가 세션 없다고 답함'과 '서버에 닿지 못함'을 반드시 구분한다** — 뭉뚱그리면 네트워크가 끊기는 순간 로그아웃되어 송출이 멈춘다.
+8. **D1에는 RLS가 없다.** 모든 방어가 쿼리 헬퍼의 `userId` 조건 하나에 달려 있다. 요청 본문의 `userId`는 신뢰하지 않고 세션 값으로 덮어쓴다. 교차 사용자 격리는 라우트 레벨 통합 테스트로 고정한다.
+
+**구현 위치(Phase 3):** `apps/web/src/lib/sync/`(`syncStatus.ts`, `presentationSync.ts`, `syncScheduler.ts`, `mergeDocuments.ts`, `bootSync.ts`), 인증은 `apps/web/src/lib/auth/`와 `apps/web/worker/lib/auth.ts`·`worker/middleware/auth.ts`, 서버 라우트는 `apps/web/worker/routes/{presentations,decks}.ts`, 행↔DTO 변환은 `packages/db/src/queries/mappers.ts`.
+
 **구 localStorage 보관함 마이그레이션:**
 
 0f68563에서 곡 보관함을 localStorage(`worship_user_songs_v1`)에 저장한 적이 있다. 부팅 시 1회 IndexedDB로 이관한다.
@@ -1085,7 +1098,7 @@ Chrome 공식 **Window Management API**를 활용한 다중 디스플레이 투�
 
 **구현 위치:** `apps/web/src/lib/storage/`(`db.ts`, `presentationRepository.ts`, `songRepository.ts`, `persistenceStatus.ts`), 스토어 연동은 `features/presentation/presentationStore.ts`·`features/editor/songLibraryStore.ts`, 부팅 게이트는 `App.tsx`, 경고 배너는 `components/common/StorageWarningBanner.tsx`.
 
-**Zero-Fetch 불변식과의 관계:** 송출 라우트(`/present/*`)는 하이드레이션된 메모리 상태만 읽고, 그 상태의 원천은 IndexedDB다. 남은 네트워크 의존은 배경 영상(`/api/media/*`) 하나이며, M4에서 Cache Storage로 덮으면 불변식이 완성된다.
+**Zero-Fetch 불변식과의 관계:** 송출 라우트(`/present/*`)는 하이드레이션된 메모리 상태만 읽고, 그 상태의 원천은 IndexedDB다. 동기화와 세션 재검증은 편집 화면에서만 돈다. 남은 네트워크 의존은 배경 영상(`/api/media/*`) 하나이며, M4에서 Cache Storage로 덮으면 불변식이 완성된다.
 
 ---
 

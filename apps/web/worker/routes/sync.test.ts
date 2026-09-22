@@ -18,6 +18,7 @@ import {
   upsertDeck,
   deleteDeckScoped,
   toSharedDeck,
+  seedBackgrounds,
 } from "@repo/db";
 import { user } from "@repo/db";
 import type { AppEnv } from "../types";
@@ -189,6 +190,9 @@ describe("동기화 라우트 교차 사용자 격리", () => {
       { id: USER_A, name: "A", createdAt: new Date(), updatedAt: new Date() },
       { id: USER_B, name: "B", createdAt: new Date(), updatedAt: new Date() },
     ]);
+    // decks.background_id가 backgrounds를 참조한다. 파일 실행 순서에 기대지
+    // 않도록 여기서 직접 시드한다 (멱등).
+    await seedBackgrounds(db);
     currentUser = USER_A;
   });
 
@@ -344,5 +348,146 @@ describe("동기화 라우트 교차 사용자 격리", () => {
     ).json()) as { presentations: PresentationDocument[] };
     expect(aBody.presentations).toHaveLength(1);
     expect(aBody.presentations[0].userId).toBe(USER_A);
+  });
+  describe("2-기기 왕복 (M3-B 완료 기준)", () => {
+    /** 5곡짜리 실제 예배 세트 */
+    function makeServiceSet(userId: string): PresentationDocument {
+      const titles = [
+        "시간을 뚫고",
+        "은혜로다",
+        "주 품에",
+        "소원",
+        "밤이나 낮이나",
+      ];
+      const presentationId = "10000000-0000-4000-8000-0000000000bb";
+
+      return PresentationDocumentSchema.parse({
+        id: presentationId,
+        userId,
+        title: "주일 1·2부 연합예배",
+        serviceDate: "2026-09-27",
+        items: titles.map((title, index) => {
+          const deckId = `c0000000-0000-4000-8000-00000000c${index}0${index}`;
+          return {
+            id: `30000000-0000-4000-8000-00000000c${index}0${index}`,
+            presentationId,
+            deckId,
+            order: index,
+            deck: {
+              id: deckId,
+              userId,
+              catalogId: null,
+              scope: "presentation",
+              presentationId,
+              title,
+              artist: "테스트",
+              lyricsRaw: `${title} 1절\n\n${title} 2절`,
+              slides: [
+                { id: `s_${index}_1`, order: 0, lines: [`${title} 1절`] },
+                { id: `s_${index}_2`, order: 1, lines: [`${title} 2절`] },
+              ],
+              backgroundId: `b0000000-0000-0000-0000-00000000000${index + 1}`,
+              style: {
+                ...DEFAULT_DECK_STYLE,
+                overlayOpacity: 40 + index * 5,
+                fontSizeVw: 4 + index * 0.2,
+              },
+              visibility: "private",
+              forkedFrom: null,
+              forkCount: 0,
+              createdAt: "2026-09-20T00:00:00.000Z",
+              updatedAt: "2026-09-21T00:00:00.000Z",
+            },
+          };
+        }),
+        createdAt: "2026-09-20T00:00:00.000Z",
+        updatedAt: "2026-09-21T00:00:00.000Z",
+      });
+    }
+
+    it("A 기기에서 만든 5곡 세트를 B 기기에서 그대로 받는다", async () => {
+      // M3-B 완료 기준: '다른 PC에서 로그인해 같은 세트를 그대로 송출'.
+      // 여기서는 서버 왕복까지 고정하고, 실제 2대 PC 확인은 사람이 한다.
+      const original = makeServiceSet(USER_A);
+
+      const put = await app.request(
+        `/api/presentations/${original.id}`,
+        json(original),
+        env,
+      );
+      expect(put.status).toBe(200);
+
+      // B 기기 = 같은 계정, 로컬 저장소가 빈 상태에서 받아 오는 것과 같다
+      const res = await app.request("/api/presentations", {}, env);
+      const { presentations } = (await res.json()) as {
+        presentations: PresentationDocument[];
+      };
+
+      expect(presentations).toHaveLength(1);
+      const restored = presentations[0];
+
+      expect(restored.title).toBe("주일 1·2부 연합예배");
+      expect(restored.serviceDate).toBe("2026-09-27");
+      expect(restored.items).toHaveLength(5);
+
+      // 곡 순서
+      expect(restored.items.map((item) => item.deck.title)).toEqual(
+        original.items.map((item) => item.deck.title),
+      );
+      // 곡별 스타일
+      expect(
+        restored.items.map((item) => item.deck.style.overlayOpacity),
+      ).toEqual(original.items.map((item) => item.deck.style.overlayOpacity));
+      // 곡별 배경
+      expect(restored.items.map((item) => item.deck.backgroundId)).toEqual(
+        original.items.map((item) => item.deck.backgroundId),
+      );
+      // 송출에 필요한 슬라이드 내용
+      expect(restored.items[0].deck.slides[0].lines).toEqual([
+        "시간을 뚫고 1절",
+      ]);
+      // 클라이언트가 만든 id가 보존되어야 동기화가 중복 생성이 되지 않는다
+      expect(restored.items.map((item) => item.deck.id)).toEqual(
+        original.items.map((item) => item.deck.id),
+      );
+    });
+
+    it("A 기기에서 곡 순서를 바꾸면 B 기기도 같은 순서를 받는다", async () => {
+      const original = makeServiceSet(USER_A);
+      await app.request(
+        `/api/presentations/${original.id}`,
+        json(original),
+        env,
+      );
+
+      // 1번과 5번 곡을 맞바꾼다
+      const reordered = {
+        ...original,
+        items: [...original.items]
+          .reverse()
+          .map((item, index) => ({ ...item, order: index })),
+        updatedAt: "2026-09-22T00:00:00.000Z",
+      };
+      await app.request(
+        `/api/presentations/${original.id}`,
+        json(reordered),
+        env,
+      );
+
+      const res = await app.request("/api/presentations", {}, env);
+      const { presentations } = (await res.json()) as {
+        presentations: PresentationDocument[];
+      };
+
+      expect(presentations[0].items.map((item) => item.deck.title)).toEqual([
+        "밤이나 낮이나",
+        "소원",
+        "주 품에",
+        "은혜로다",
+        "시간을 뚫고",
+      ]);
+      // 곡 수가 늘어나면 안 된다 (교체지 추가가 아니다)
+      expect(presentations[0].items).toHaveLength(5);
+    });
   });
 });

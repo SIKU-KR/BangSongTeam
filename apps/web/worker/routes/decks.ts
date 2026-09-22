@@ -7,6 +7,7 @@ import {
   upsertDeck,
   deleteDeckScoped,
   toSharedDeck,
+  contributeLyrics,
 } from "@repo/db";
 import type { AppEnv } from "../types";
 import { requireAuth } from "../middleware/auth";
@@ -38,7 +39,26 @@ const decksRoute = new Hono<AppEnv>()
       return c.json({ error: "이 곡에 접근할 수 없습니다" }, 403);
     }
 
-    return c.json({ ok: true as const }, 200);
+    // 가사 기여는 선택이다. 실패해도 덱 저장 자체를 되돌리지 않는다 —
+    // 공용 카탈로그는 부가 기능이고, 여기서 500을 내면 사용자는 자기 곡이
+    // 저장되지 않았다고 이해한다.
+    let contributed = false;
+    if (c.req.query("contribute") === "true" && deck.lyricsRaw.trim()) {
+      try {
+        await contributeLyrics(db, {
+          userId,
+          deckId: deck.id,
+          title: deck.title,
+          artist: deck.artist,
+          lyrics: deck.lyricsRaw,
+        });
+        contributed = true;
+      } catch (err) {
+        console.error("가사 기여 실패:", err);
+      }
+    }
+
+    return c.json({ ok: true as const, contributed }, 200);
   })
   .delete("/:id", async (c) => {
     const db = createD1Client(c.env.DB);
