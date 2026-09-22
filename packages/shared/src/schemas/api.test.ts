@@ -6,7 +6,13 @@ import {
   UpdatePresentationItemsRequestSchema,
   SearchCatalogQuerySchema,
   SearchCatalogResponseSchema,
+  PresentationDocumentSchema,
+  PresentationListResponseSchema,
+  DeckListResponseSchema,
+  ApiErrorSchema,
 } from "./api";
+import { DeckStyleSchema } from "./style";
+import { PresentationSchema } from "./presentation";
 
 describe("API Schemas", () => {
   it("validates CreateDeckRequestSchema with default values", () => {
@@ -86,5 +92,75 @@ describe("API Schemas", () => {
       ],
     };
     expect(SearchCatalogResponseSchema.parse(response)).toEqual(response);
+  });
+  describe("동기화 문서 계약 (M3-B)", () => {
+    const deck = {
+      id: "c0000000-0000-4000-8000-000000000001",
+      userId: "00000000-0000-4000-8000-000000000001",
+      catalogId: null,
+      scope: "presentation" as const,
+      presentationId: "10000000-0000-4000-8000-000000000001",
+      title: "은혜로다",
+      artist: "예수전도단",
+      lyricsRaw: "시작됐네",
+      slides: [{ id: "s1", order: 0, lines: ["시작됐네"] }],
+      backgroundId: "b0000000-0000-0000-0000-000000000001",
+      style: DeckStyleSchema.parse({}),
+      visibility: "private" as const,
+      forkedFrom: null,
+      forkCount: 0,
+      createdAt: "2026-09-22T00:00:00.000Z",
+      updatedAt: "2026-09-22T00:00:00.000Z",
+    };
+
+    const document = {
+      id: "10000000-0000-4000-8000-000000000001",
+      userId: "00000000-0000-4000-8000-000000000001",
+      title: "주일 1부 예배",
+      serviceDate: "2026-09-27",
+      items: [
+        {
+          id: "30000000-0000-4000-8000-000000000001",
+          presentationId: "10000000-0000-4000-8000-000000000001",
+          deckId: deck.id,
+          order: 0,
+          deck,
+        },
+      ],
+      createdAt: "2026-09-22T00:00:00.000Z",
+      updatedAt: "2026-09-22T00:00:00.000Z",
+    };
+
+    it("덱이 임베드된 문서를 통과시킨다", () => {
+      expect(PresentationDocumentSchema.parse(document)).toEqual(document);
+    });
+
+    it("덱이 빠진 항목은 거부한다", () => {
+      // PresentationSchema는 items[].deck이 optional이라 통과시킨다.
+      // 동기화 경로에서 그걸 허용하면 곡 없는 세트로 서버를 덮어쓴다.
+      const withoutDeck = {
+        ...document,
+        items: [{ ...document.items[0], deck: undefined }],
+      };
+      expect(PresentationDocumentSchema.safeParse(withoutDeck).success).toBe(
+        false,
+      );
+      expect(PresentationSchema.safeParse(withoutDeck).success).toBe(true);
+    });
+
+    it("목록 응답 봉투를 검증한다", () => {
+      const listed = { presentations: [document] };
+      expect(PresentationListResponseSchema.parse(listed)).toEqual(listed);
+      expect(DeckListResponseSchema.parse({ decks: [deck] })).toEqual({
+        decks: [deck],
+      });
+    });
+
+    it("오류 본문을 검증한다", () => {
+      expect(ApiErrorSchema.parse({ error: "로그인이 필요합니다" })).toEqual({
+        error: "로그인이 필요합니다",
+      });
+      expect(ApiErrorSchema.safeParse({}).success).toBe(false);
+    });
   });
 });

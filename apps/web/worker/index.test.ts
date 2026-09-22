@@ -181,4 +181,36 @@ describe("Task 4.6: Miniflare/workerd 환경 Worker 및 D1 통합 테스트", ()
       );
     });
   });
+  describe("동기화 라우트 마운트 (/api/presentations, /api/decks)", () => {
+    it("세션 없이 접근하면 401이다 (404가 아니다)", async () => {
+      // 404면 라우트가 안 붙은 것이고, 200이면 인증이 안 걸린 것이다.
+      // 실제 마운트된 앱에서 requireAuth가 살아 있는지 여기서만 확인할 수 있다.
+      for (const path of ["/api/presentations", "/api/decks"]) {
+        const res = await app.request(path, {}, env);
+        expect(res.status, path).toBe(401);
+      }
+    });
+
+    it("쓰기·삭제도 세션 없이는 401이다", async () => {
+      const id = "10000000-0000-4000-8000-0000000000ff";
+
+      const put = await app.request(
+        `/api/presentations/${id}`,
+        {
+          method: "PUT",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({}),
+        },
+        env,
+      );
+      expect(put.status).toBe(401);
+
+      const del = await app.request(
+        `/api/decks/${id}`,
+        { method: "DELETE" },
+        env,
+      );
+      expect(del.status).toBe(401);
+    });
+  });
 });

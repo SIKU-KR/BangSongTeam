@@ -57,6 +57,9 @@ export default defineWorkersProject({
       workers: {
         wrangler: { configPath: "./wrangler.jsonc" },
         isolatedStorage: false,
+        // 스토리지를 공유하므로 파일을 병렬로 돌리면 서로의 D1 상태를 밟는다
+        // (sync.test.ts는 beforeEach에서 테이블을 비운다).
+        singleWorker: true,
         remoteBindings: false,
         miniflare: {
           compatibilityFlags: ["nodejs_compat"],

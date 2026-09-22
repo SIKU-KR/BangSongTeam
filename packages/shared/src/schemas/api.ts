@@ -1,6 +1,8 @@
 import { z } from "zod";
 import { DeckStyleSchema } from "./style";
 import { SlideSchema } from "./slide";
+import { DeckSchema } from "./deck";
+import { PresentationSchema, PresentationItemSchema } from "./presentation";
 
 // 1. 덱 생성 요청
 export const CreateDeckRequestSchema = z.object({
@@ -74,3 +76,47 @@ export const SearchCatalogResponseSchema = z.object({
   ),
 });
 export type SearchCatalogResponse = z.infer<typeof SearchCatalogResponseSchema>;
+
+// ============================================================================
+// 동기화용 문서 계약 (M3-B)
+//
+// 로컬 IndexedDB는 덱을 임베드한 비정규화 문서 1건을 저장하고, D1은
+// presentations / presentation_items / decks 3테이블로 정규화해 저장한다.
+// 그 둘이 주고받는 모양이 아래 문서 스키마다.
+// ============================================================================
+
+/**
+ * 완전히 하이드레이션된 프레젠테이션 문서.
+ *
+ * `PresentationSchema`의 `items[].deck`은 optional이라 '덱이 빠진 문서'도
+ * 통과한다. 동기화 경로에서는 덱이 없으면 곡 없는 세트를 덮어쓰는 사고가
+ * 나므로 여기서 필수로 좁힌다.
+ */
+export const PresentationDocumentSchema = PresentationSchema.extend({
+  items: z.array(
+    PresentationItemSchema.extend({
+      deck: DeckSchema,
+    }),
+  ),
+});
+export type PresentationDocument = z.infer<typeof PresentationDocumentSchema>;
+
+/** 오류 응답 본문 */
+export const ApiErrorSchema = z.object({
+  error: z.string(),
+});
+export type ApiError = z.infer<typeof ApiErrorSchema>;
+
+/** 내 프레젠테이션 전체 목록 */
+export const PresentationListResponseSchema = z.object({
+  presentations: z.array(PresentationDocumentSchema),
+});
+export type PresentationListResponse = z.infer<
+  typeof PresentationListResponseSchema
+>;
+
+/** 내 보관함 곡 전체 목록 */
+export const DeckListResponseSchema = z.object({
+  decks: z.array(DeckSchema),
+});
+export type DeckListResponse = z.infer<typeof DeckListResponseSchema>;

@@ -1,5 +1,7 @@
 import { eq, and, desc, sql } from "drizzle-orm";
+import type { Deck as SharedDeck } from "@repo/shared";
 import { decks, decksFts, lyricsVersions, type Deck } from "../schema";
+import { toDeckRow } from "./mappers";
 
 // Type-flexible SQLite database interface (supports Cloudflare D1 Drizzle client & SQLite test instances)
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -145,6 +147,52 @@ export async function upsertLyricVersion(
     });
 }
 
+/**
+ * 덱 업서트 (소유자 강제).
+ *
+ * D1에는 RLS가 없으므로 `userId`는 세션에서 온 값을 받아 행에 그대로 박는다.
+ * 이미 있는 덱이면 소유자가 일치할 때만 갱신한다. 일치하지 않으면 조용히
+ * 무시하지 않고 false를 돌려 호출자가 403을 내릴 수 있게 한다.
+ */
+export async function upsertDeck(
+  db: DbInstance,
+  userId: string,
+  deck: SharedDeck,
+): Promise<boolean> {
+  const [existing] = await db
+    .select({ userId: decks.userId })
+    .from(decks)
+    .where(eq(decks.id, deck.id));
+
+  if (existing && existing.userId !== userId) return false;
+
+  const row = toDeckRow({ ...deck, userId });
+
+  if (existing) {
+    await db.update(decks).set(row).where(eq(decks.id, deck.id));
+  } else {
+    await db.insert(decks).values(row);
+  }
+  return true;
+}
+
+/** 본인 소유 덱 삭제 */
+export async function deleteDeckScoped(
+  db: DbInstance,
+  deckId: string,
+  userId: string,
+): Promise<boolean> {
+  const [owned] = await db
+    .select({ id: decks.id })
+    .from(decks)
+    .where(and(eq(decks.id, deckId), eq(decks.userId, userId)));
+
+  if (!owned) return false;
+
+  await db.delete(decks).where(eq(decks.id, deckId));
+  return true;
+}
+
 export function createDeckQueries(db: DbInstance) {
   return {
     getMyLibraryDecks: (userId: string) => getMyLibraryDecks(db, userId),
@@ -155,6 +203,10 @@ export function createDeckQueries(db: DbInstance) {
       searchPublicDecks(db, query, limit),
     upsertLyricVersion: (params: Parameters<typeof upsertLyricVersion>[1]) =>
       upsertLyricVersion(db, params),
+    upsertDeck: (userId: string, deck: SharedDeck) =>
+      upsertDeck(db, userId, deck),
+    deleteDeckScoped: (deckId: string, userId: string) =>
+      deleteDeckScoped(db, deckId, userId),
   };
 }
 
@@ -165,5 +217,7 @@ export const deckQueries = {
   getPublicById,
   searchPublicDecks,
   upsertLyricVersion,
+  upsertDeck,
+  deleteDeckScoped,
   createDeckQueries,
 };

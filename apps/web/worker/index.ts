@@ -3,6 +3,8 @@ import type { AppEnv } from "./types";
 import { createAuth, AUTH_BASE_PATH } from "./lib/auth";
 import { backgroundsRoute } from "./routes/backgrounds";
 import { mediaRoute } from "./routes/media";
+import { presentationsRoute } from "./routes/presentations";
+import { decksRoute } from "./routes/decks";
 
 const app = new Hono<AppEnv>()
   // Global error handler
@@ -36,6 +38,9 @@ const app = new Hono<AppEnv>()
   .on(["GET", "POST"], `${AUTH_BASE_PATH}/*`, (c) => {
     return createAuth(c.env).handler(c.req.raw);
   })
+  // 계정 데이터 동기화 (로그인 필수)
+  .route("/api/presentations", presentationsRoute)
+  .route("/api/decks", decksRoute)
   // Background media routes
   .route("/api/backgrounds", backgroundsRoute)
   // R2 media streaming routes (HTTP Range partial content)

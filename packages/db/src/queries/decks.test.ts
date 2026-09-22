@@ -8,8 +8,12 @@ import {
   getPublicById,
   searchPublicDecks,
   upsertLyricVersion,
+  upsertDeck,
+  deleteDeckScoped,
 } from "./decks";
 import { user, lyricsCatalog, lyricsVersions, decks } from "../schema";
+import { DEFAULT_DECK_STYLE, DeckSchema, type Deck } from "@repo/shared";
+import { toSharedDeck } from "./mappers";
 
 describe("FTS5 Query Sanitizer (sanitizeFts5Query)", () => {
   it("should wrap alphanumeric and Korean words in double quotes", () => {
@@ -268,5 +272,112 @@ describe("D1 Scoped Deck Queries", () => {
       expect(versions[0].lyrics).toBe("수정된 가사 버전");
       expect(versions[0].deckId).toBe("deck-2");
     });
+  });
+});
+
+describe("덱 쓰기 헬퍼 (M3-B 보관함 동기화)", () => {
+  let db: ReturnType<typeof createTestDb>["db"];
+
+  const ownerId = "00000000-0000-4000-8000-000000000001";
+  const strangerId = "00000000-0000-4000-8000-000000000002";
+  const DECK_ID = "c0000000-0000-4000-8000-000000000001";
+
+  function makeDeck(userId: string, overrides: Partial<Deck> = {}): Deck {
+    return DeckSchema.parse({
+      id: DECK_ID,
+      userId,
+      catalogId: null,
+      scope: "library",
+      presentationId: null,
+      title: "은혜로다",
+      artist: "예수전도단",
+      lyricsRaw: "시작됐네",
+      slides: [{ id: "s1", order: 0, lines: ["시작됐네"] }],
+      backgroundId: null,
+      style: { ...DEFAULT_DECK_STYLE, fontSizeVw: 5.5 },
+      visibility: "private",
+      forkedFrom: null,
+      forkCount: 0,
+      createdAt: "2026-09-20T00:00:00.000Z",
+      updatedAt: "2026-09-21T00:00:00.000Z",
+      ...overrides,
+    });
+  }
+
+  async function readDeck(id: string): Promise<Deck> {
+    const [row] = await db.select().from(decks).where(eq(decks.id, id));
+    return toSharedDeck(row);
+  }
+
+  beforeEach(async () => {
+    db = createTestDb().db;
+    await db.insert(user).values([
+      {
+        id: ownerId,
+        name: "주인",
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+      {
+        id: strangerId,
+        name: "남",
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    ]);
+  });
+
+  it("새 덱을 삽입하고 슬라이드·스타일을 보존한다", async () => {
+    expect(await upsertDeck(db, ownerId, makeDeck(ownerId))).toBe(true);
+
+    const saved = await readDeck(DECK_ID);
+    expect(saved.title).toBe("은혜로다");
+    expect(saved.slides[0].lines).toEqual(["시작됐네"]);
+    expect(saved.style.fontSizeVw).toBe(5.5);
+  });
+
+  it("같은 id로 다시 저장하면 갱신된다 (중복 삽입 아님)", async () => {
+    await upsertDeck(db, ownerId, makeDeck(ownerId));
+    await upsertDeck(
+      db,
+      ownerId,
+      makeDeck(ownerId, { title: "은혜로다 (수정)" }),
+    );
+
+    const rows = await db.select().from(decks).where(eq(decks.id, DECK_ID));
+    expect(rows).toHaveLength(1);
+    expect((await readDeck(DECK_ID)).title).toBe("은혜로다 (수정)");
+  });
+
+  it("본문의 userId를 믿지 않고 세션 소유자로 강제한다", async () => {
+    await upsertDeck(db, ownerId, makeDeck(strangerId));
+    expect((await readDeck(DECK_ID)).userId).toBe(ownerId);
+  });
+
+  it("남의 덱은 덮어쓰지 못한다", async () => {
+    await upsertDeck(db, ownerId, makeDeck(ownerId));
+
+    expect(
+      await upsertDeck(db, strangerId, makeDeck(strangerId, { title: "탈취" })),
+    ).toBe(false);
+    expect((await readDeck(DECK_ID)).title).toBe("은혜로다");
+  });
+
+  it("삭제는 소유자에게만 허용된다", async () => {
+    await upsertDeck(db, ownerId, makeDeck(ownerId));
+
+    expect(await deleteDeckScoped(db, DECK_ID, strangerId)).toBe(false);
+    expect(
+      await db.select().from(decks).where(eq(decks.id, DECK_ID)),
+    ).toHaveLength(1);
+
+    expect(await deleteDeckScoped(db, DECK_ID, ownerId)).toBe(true);
+    expect(
+      await db.select().from(decks).where(eq(decks.id, DECK_ID)),
+    ).toHaveLength(0);
+  });
+
+  it("없는 덱 삭제는 false를 돌린다", async () => {
+    expect(await deleteDeckScoped(db, DECK_ID, ownerId)).toBe(false);
   });
 });
