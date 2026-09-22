@@ -139,9 +139,7 @@ describe("WorshipReadyRoute", () => {
     renderReady();
 
     await waitFor(() =>
-      expect(
-        screen.getByTestId("storage-persist-warning"),
-      ).toBeInTheDocument(),
+      expect(screen.getByTestId("storage-persist-warning")).toBeInTheDocument(),
     );
   });
 
@@ -166,8 +164,6 @@ describe("WorshipReadyRoute", () => {
   it("없는 세트는 대시보드로 되돌린다", async () => {
     renderReady("/present/99999999-9999-4999-8999-999999999999/ready");
 
-    expect(
-      await screen.findByTestId("presentations-stub"),
-    ).toBeInTheDocument();
+    expect(await screen.findByTestId("presentations-stub")).toBeInTheDocument();
   });
 });

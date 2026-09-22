@@ -22,7 +22,7 @@ import {
   redo,
   canUndo,
   canRedo,
-  resetActivePresentation,
+  loadSampleSongsIntoActivePresentation,
   createNewPresentation,
   launchPreparation,
   usePresentationById,
@@ -229,9 +229,9 @@ export function EditorRoute(): React.JSX.Element {
     }
   };
 
-  // 기본 세트 복원
-  const handleResetPresentation = () => {
-    resetActivePresentation();
+  // 기본 5곡 샘플 세트 불러오기 (빈 편집기에서 무엇을 눌러야 할지 보여 주는 경로)
+  const handleLoadSampleSongs = () => {
+    loadSampleSongsIntoActivePresentation();
     setActiveSongIndex(0);
     setActiveSlideIndex(0);
   };
@@ -328,7 +328,7 @@ export function EditorRoute(): React.JSX.Element {
         canRedo={canRedo()}
         onNewPresentation={handleNewPresentation}
         onOpenLyricModal={() => setIsLyricModalOpen(true)}
-        onResetPresentation={handleResetPresentation}
+        onLoadSampleSongs={handleLoadSampleSongs}
       />
 
       {/* 2. 본문 3패널 레이아웃 */}
@@ -370,7 +370,7 @@ export function EditorRoute(): React.JSX.Element {
           onPresent={handlePresent}
           zoomLevel={zoomLevel}
           onZoomChange={setZoomLevel}
-          onResetPresentation={handleResetPresentation}
+          onLoadSampleSongs={handleLoadSampleSongs}
           onOpenLyricModal={() => setIsLyricModalOpen(true)}
           onUpdateStyle={(styleUpdate) =>
             updateSongStyle(safeSongIndex, styleUpdate)

@@ -85,7 +85,10 @@ export function useProjectionChannel(
       } satisfies BroadcastMessage);
 
       const silence = Date.now() - lastSeenRef.current;
-      if (lastSeenRef.current === 0 || silence > PROJECTION_SYNC.AUDIENCE_TIMEOUT_MS) {
+      if (
+        lastSeenRef.current === 0 ||
+        silence > PROJECTION_SYNC.AUDIENCE_TIMEOUT_MS
+      ) {
         setPeerState("disconnected");
       }
     }, PROJECTION_SYNC.HEARTBEAT_INTERVAL_MS);

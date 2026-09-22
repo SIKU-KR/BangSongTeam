@@ -1,6 +1,12 @@
 import React from "react";
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { render, screen, fireEvent, act, waitFor } from "@testing-library/react";
+import {
+  render,
+  screen,
+  fireEvent,
+  act,
+  waitFor,
+} from "@testing-library/react";
 import { MemoryRouter, Routes, Route } from "react-router-dom";
 import { PROJECTION_CHANNEL_NAME } from "@repo/shared";
 import {
@@ -207,9 +213,7 @@ describe("PresenterControlRoute", () => {
     await flush();
 
     expect(screen.getByTestId("presenter-control-route")).toBeInTheDocument();
-    expect(
-      screen.queryByTestId("presentations-stub"),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByTestId("presentations-stub")).not.toBeInTheDocument();
   });
 
   it("종료 버튼이 청중 창을 닫고 대시보드로 돌아간다", async () => {
@@ -223,9 +227,7 @@ describe("PresenterControlRoute", () => {
     fireEvent.click(screen.getByTestId("presenter-exit-btn"));
 
     expect(close).toHaveBeenCalled();
-    expect(
-      await screen.findByTestId("presentations-stub"),
-    ).toBeInTheDocument();
+    expect(await screen.findByTestId("presentations-stub")).toBeInTheDocument();
   });
 
   it("송출 창 연결 상태를 보여 준다", async () => {
@@ -253,8 +255,6 @@ describe("PresenterControlRoute", () => {
   it("없는 세트는 대시보드로 되돌린다", async () => {
     renderControl("/present/99999999-9999-4999-8999-999999999999/control");
 
-    expect(
-      await screen.findByTestId("presentations-stub"),
-    ).toBeInTheDocument();
+    expect(await screen.findByTestId("presentations-stub")).toBeInTheDocument();
   });
 });

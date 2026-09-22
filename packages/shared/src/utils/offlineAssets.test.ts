@@ -13,10 +13,7 @@ const USER_ID = "00000000-0000-4000-8000-000000000001";
 const PRESENTATION_ID = "10000000-0000-4000-8000-000000000001";
 const NOW = "2026-09-22T00:00:00.000Z";
 
-function makeDeck(
-  index: number,
-  overrides: Partial<Deck> = {},
-): Deck {
+function makeDeck(index: number, overrides: Partial<Deck> = {}): Deck {
   return {
     id: `20000000-0000-4000-8000-00000000000${index}`,
     userId: USER_ID,
@@ -155,7 +152,9 @@ describe("collectUniqueMediaUrls", () => {
   });
 
   it("배경이 없으면 받을 것이 없다", () => {
-    const presentation = makePresentation([makeDeck(1, { backgroundId: null })]);
+    const presentation = makePresentation([
+      makeDeck(1, { backgroundId: null }),
+    ]);
 
     expect(
       collectUniqueMediaUrls(collectPresentationMediaAssets(presentation)),
@@ -166,11 +165,15 @@ describe("collectUniqueMediaUrls", () => {
 describe("collectPresentationFonts", () => {
   it("세트가 쓰는 글꼴만 중복 없이 돌려준다", () => {
     const presentation = makePresentation([
-      makeDeck(1, { style: { ...DEFAULT_DECK_STYLE, fontFamily: "Pretendard" } }),
+      makeDeck(1, {
+        style: { ...DEFAULT_DECK_STYLE, fontFamily: "Pretendard" },
+      }),
       makeDeck(2, {
         style: { ...DEFAULT_DECK_STYLE, fontFamily: "Noto Sans KR" },
       }),
-      makeDeck(3, { style: { ...DEFAULT_DECK_STYLE, fontFamily: "Pretendard" } }),
+      makeDeck(3, {
+        style: { ...DEFAULT_DECK_STYLE, fontFamily: "Pretendard" },
+      }),
     ]);
 
     expect(collectPresentationFonts(presentation)).toEqual([

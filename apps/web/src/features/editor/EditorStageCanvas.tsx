@@ -18,7 +18,7 @@ export interface EditorStageCanvasProps {
   onPresent: () => void;
   zoomLevel?: number;
   onZoomChange?: (zoom: number) => void;
-  onResetPresentation?: () => void;
+  onLoadSampleSongs?: () => void;
   onOpenLyricModal?: () => void;
   /** 텍스트 박스를 직접 조작(드래그/리사이즈)해 스타일을 바꿀 때 호출 */
   onUpdateStyle?: (update: Partial<DeckStyle>) => void;
@@ -46,7 +46,7 @@ export function EditorStageCanvas({
   onPresent,
   zoomLevel = 100,
   onZoomChange,
-  onResetPresentation,
+  onLoadSampleSongs,
   onOpenLyricModal,
   onUpdateStyle,
   className = "",
@@ -120,10 +120,10 @@ export function EditorStageCanvas({
               </button>
             )}
 
-            {onResetPresentation && (
+            {onLoadSampleSongs && (
               <button
                 type="button"
-                onClick={onResetPresentation}
+                onClick={onLoadSampleSongs}
                 className="px-4 py-2 rounded-lg bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-800 dark:text-zinc-200 dark:hover:text-white border border-zinc-200 dark:border-zinc-700 font-medium text-xs transition-colors cursor-pointer"
               >
                 기본 5곡 세트 불러오기

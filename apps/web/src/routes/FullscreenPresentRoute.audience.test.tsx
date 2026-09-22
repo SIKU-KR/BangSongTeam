@@ -1,11 +1,14 @@
 import React from "react";
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { render, screen, fireEvent, act, waitFor } from "@testing-library/react";
-import { MemoryRouter, Routes, Route } from "react-router-dom";
 import {
-  PROJECTION_CHANNEL_NAME,
-  type BroadcastMessage,
-} from "@repo/shared";
+  render,
+  screen,
+  fireEvent,
+  act,
+  waitFor,
+} from "@testing-library/react";
+import { MemoryRouter, Routes, Route } from "react-router-dom";
+import { PROJECTION_CHANNEL_NAME, type BroadcastMessage } from "@repo/shared";
 import {
   __loadDocumentsForTests,
   resetPresentationStore,
@@ -177,9 +180,7 @@ describe("FullscreenPresentRoute — 청중 모드 (?audience=1)", () => {
       await new Promise((resolve) => setTimeout(resolve, 0));
     });
 
-    expect(
-      screen.queryByTestId("presentations-stub"),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByTestId("presentations-stub")).not.toBeInTheDocument();
     expect(screen.getByTestId("fullscreen-present-route")).toBeInTheDocument();
   });
 
@@ -190,8 +191,6 @@ describe("FullscreenPresentRoute — 청중 모드 (?audience=1)", () => {
     fireEvent.click(screen.getByTestId("exit-present-btn"));
 
     await waitFor(() => expect(closeSpy).toHaveBeenCalled());
-    expect(
-      screen.queryByTestId("presentations-stub"),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByTestId("presentations-stub")).not.toBeInTheDocument();
   });
 });

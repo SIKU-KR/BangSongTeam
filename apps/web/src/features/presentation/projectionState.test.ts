@@ -134,10 +134,16 @@ describe("조회 헬퍼", () => {
 
   it("같은 위치를 판별한다", () => {
     expect(
-      isSamePosition({ songIndex: 1, slideIndex: 2 }, { songIndex: 1, slideIndex: 2 }),
+      isSamePosition(
+        { songIndex: 1, slideIndex: 2 },
+        { songIndex: 1, slideIndex: 2 },
+      ),
     ).toBe(true);
     expect(
-      isSamePosition({ songIndex: 1, slideIndex: 2 }, { songIndex: 1, slideIndex: 3 }),
+      isSamePosition(
+        { songIndex: 1, slideIndex: 2 },
+        { songIndex: 1, slideIndex: 3 },
+      ),
     ).toBe(false);
   });
 });

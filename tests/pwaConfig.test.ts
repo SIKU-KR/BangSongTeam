@@ -8,10 +8,7 @@ import * as path from "node:path";
  * 채운 캐시를 Service Worker가 못 읽는다 — 그 어긋남을 여기서 막는다.
  */
 describe("M4-1: PWA 설정과 공용 상수 정합성", () => {
-  const viteConfigPath = path.resolve(
-    __dirname,
-    "../apps/web/vite.config.ts",
-  );
+  const viteConfigPath = path.resolve(__dirname, "../apps/web/vite.config.ts");
   const config = fs.readFileSync(viteConfigPath, "utf-8");
 
   // 루트 워크스페이스는 @repo/shared를 의존하지 않으므로 소스에서 직접 읽는다.
@@ -54,11 +51,7 @@ describe("M4-1: PWA 설정과 공용 상수 정합성", () => {
 
   it("PWA 아이콘 파일이 실제로 존재한다", () => {
     const iconsDir = path.resolve(__dirname, "../apps/web/public/icons");
-    for (const file of [
-      "icon-192.png",
-      "icon-512.png",
-      "maskable-512.png",
-    ]) {
+    for (const file of ["icon-192.png", "icon-512.png", "maskable-512.png"]) {
       expect(fs.existsSync(path.join(iconsDir, file))).toBe(true);
     }
   });

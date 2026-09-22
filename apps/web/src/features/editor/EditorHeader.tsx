@@ -17,7 +17,7 @@ export interface EditorHeaderProps {
   canRedo?: boolean;
   onNewPresentation?: () => void;
   onOpenLyricModal?: () => void;
-  onResetPresentation?: () => void;
+  onLoadSampleSongs?: () => void;
   className?: string;
 }
 
@@ -84,7 +84,7 @@ export function EditorHeader({
   canRedo = false,
   onNewPresentation,
   onOpenLyricModal,
-  onResetPresentation,
+  onLoadSampleSongs,
   className = "",
 }: EditorHeaderProps): React.JSX.Element {
   const navigate = useNavigate();
@@ -208,12 +208,12 @@ export function EditorHeader({
                   <span>가사 빠른 입력</span>
                 </button>
               )}
-              {onResetPresentation && (
+              {onLoadSampleSongs && (
                 <button
                   type="button"
                   onClick={() => {
                     setShowFileMenu(false);
-                    onResetPresentation();
+                    onLoadSampleSongs();
                   }}
                   className="w-full px-3 py-2 text-left text-zinc-700 hover:text-zinc-900 dark:text-zinc-300 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800 flex items-center gap-2 cursor-pointer"
                 >
@@ -230,7 +230,7 @@ export function EditorHeader({
                       d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
                     />
                   </svg>
-                  <span>기본 5곡 세트 복원</span>
+                  <span>기본 5곡 세트 불러오기</span>
                 </button>
               )}
               <div className="my-1 border-t border-zinc-200 dark:border-zinc-800" />

@@ -245,7 +245,7 @@ describe("EditorRoute (Canva / MiriCanvas Presentation Editor)", () => {
     fireEvent.click(fileMenuBtn);
 
     expect(screen.getByText("새 프레젠테이션")).toBeInTheDocument();
-    expect(screen.getByText("기본 5곡 세트 복원")).toBeInTheDocument();
+    expect(screen.getByText("기본 5곡 세트 불러오기")).toBeInTheDocument();
   });
 
   it("should maintain correct active slide index when deleting an earlier slide", () => {
@@ -307,5 +307,53 @@ describe("EditorRoute (Canva / MiriCanvas Presentation Editor)", () => {
     expect(mockNavigate).toHaveBeenCalledWith(
       expect.stringMatching(/^\/editor\/[0-9a-f-]{36}$/),
     );
+  });
+
+  /**
+   * 빈 편집기 화면은 처음 쓰는 봉사자가 가장 먼저 만나는 화면인데 테스트가 하나도
+   * 없었다. 그 사이 '기본 5곡 세트 불러오기' 버튼이 곡을 넣는 게 아니라 세트를
+   * **비우고** 있었는데도 아무도 눈치채지 못했다.
+   */
+  describe("빈 편집기 화면", () => {
+    const EMPTY_DOC = {
+      ...SEED_PRESENTATIONS[0],
+      id: "1f000000-0000-4000-8000-0000000000ff",
+      title: "빈 세트",
+      items: [],
+    };
+
+    function renderEmptyEditor() {
+      resetPresentationStore();
+      __loadDocumentsForTests([EMPTY_DOC]);
+      return renderEditor(`/editor/${EMPTY_DOC.id}`);
+    }
+
+    it("곡이 없으면 안내와 두 버튼을 보여 준다", () => {
+      renderEmptyEditor();
+
+      expect(
+        screen.getByText("등록된 찬양 곡 또는 슬라이드가 없습니다"),
+      ).toBeInTheDocument();
+      expect(screen.getByText("기본 5곡 세트 불러오기")).toBeInTheDocument();
+      expect(
+        screen.getByText("가사 붙여넣기로 새 곡 추가"),
+      ).toBeInTheDocument();
+    });
+
+    it("'기본 5곡 세트 불러오기'가 라벨대로 5곡을 채운다", () => {
+      renderEmptyEditor();
+
+      act(() => {
+        fireEvent.click(screen.getByText("기본 5곡 세트 불러오기"));
+      });
+
+      // 라벨과 반대로 세트를 비우던 버그의 회귀 방지선이다.
+      expect(
+        screen.queryByText("등록된 찬양 곡 또는 슬라이드가 없습니다"),
+      ).not.toBeInTheDocument();
+      expect(screen.getAllByText("은혜로다").length).toBeGreaterThan(0);
+      // 5곡이 실제로 들어왔는지 (첫 곡의 슬라이드 스트립이 살아난다)
+      expect(screen.getByTestId("slide-filmstrip")).toBeInTheDocument();
+    });
   });
 });

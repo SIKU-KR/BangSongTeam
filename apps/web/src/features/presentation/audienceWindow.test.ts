@@ -12,7 +12,9 @@ beforeEach(() => {
   vi.useFakeTimers();
   moveTo = vi.fn();
   resizeTo = vi.fn();
-  openSpy.mockReset().mockReturnValue({ moveTo, resizeTo } as unknown as Window);
+  openSpy
+    .mockReset()
+    .mockReturnValue({ moveTo, resizeTo } as unknown as Window);
   window.open = openSpy as unknown as typeof window.open;
 });
 

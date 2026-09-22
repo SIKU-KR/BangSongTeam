@@ -119,7 +119,7 @@ flowchart TB
 | Hono RPC 클라이언트 (`hc<AppType>`)           | 미구현   | `apps/web/src`에 `fetch` 호출이 0건. 배경 목록도 `INITIAL_BACKGROUNDS` 상수를 직접 읽는다  |
 | Better Auth (§4.1 auth 테이블)                | 스키마만 | 테이블·컬럼만 있고 런타임 연동 없음                                                        |
 | 발표자 보기·BroadcastChannel (§5.3)           | 구현     | 조작 창 `/present/:id/control`, 청중 창 `?audience=1`. 핸드셰이크·하트비트 동작 (M4)       |
-| PWA·Cache Storage (§5.4)                      | 구현     | vite-plugin-pwa(generateSW) + RangeRequests. 예배 준비 화면이 배경을 미리 받는다 (M4)     |
+| PWA·Cache Storage (§5.4)                      | 구현     | vite-plugin-pwa(generateSW) + RangeRequests. 예배 준비 화면이 배경을 미리 받는다 (M4)      |
 | Workers AI 가사 정규화 (§6)                   | 미구현   | `verifyNormalization` 검증 함수만 구현됨                                                   |
 | 공유·가사 라이브러리 API (§7)                 | 미구현   | 화면은 샘플 데이터로 선행 구현                                                             |
 | 사용자 커스텀 배경 업로드 (PRD 4.3)           | 미구현   | 배경 라이브러리 화면에 안내만 있음                                                         |
@@ -390,6 +390,7 @@ Cloudflare D1(SQLite)을 영속성 엔진으로 사용하며, Drizzle ORM을 통
   - 라이브러리 덱은 `scope = 'library', presentation_id = null`로 유지되고, 세트 복제본은 `scope = 'presentation', presentation_id = presentation.id`로 명확히 격리된다.
   - `presentation_id`에 `ON DELETE CASCADE`를 설정하여 프레젠테이션 삭제 시 종속된 복제 덱들이 데이터베이스 엔진 레벨에서 원자적으로 함께 삭제되도록 무결성을 보장한다.
   - 인덱스 `(user_id, scope)`를 구성하여 라이브러리 조회(`scope = 'library'`)의 인덱스 풀 스캔을 보장한다.
+- **구현 상태 (2026-09-22)**: 클라이언트의 `addDeckToPresentation`이 곡을 담을 때 항상 새 uuid·세션 `userId`·`scope: 'presentation'`·활성 문서 `presentationId`로 복제한다. 그전까지는 복제 없이 원본 덱을 그대로 넣어, 같은 공유 곡을 두 번 담으면 `decks` 기본키와 `presentation_items`의 `unique(presentation_id, deck_id)`를 동시에 위반해 **세트 전체가 서버에 저장되지 않았다.** 그 시절 저장된 중복 문서는 하이드레이션에서 새 id를 발급해 복구한다.
 
 #### 2. JSON TEXT 컬럼 반정규화(Pragmatic Denormalization)의 타당성
 
@@ -696,6 +697,14 @@ export const reports = sqliteTable("reports", {
 });
 ```
 
+### 4.1.1 사전 주입 배경 시드 마이그레이션 (`drizzle/0002_seed_backgrounds.sql`)
+
+`decks.background_id`는 `backgrounds`를 참조하는 외래키이고 **D1은 외래키를 기본으로 강제한다.** 배경 10건을 별도 스크립트로 넣게 두면 아무도 실행하지 않아 테이블이 빈 채로 남고, 곡에 배경이 붙는 순간 `db.batch()` 전체가 롤백되어 동기화가 500으로 죽는다(2026-09-22 실제 발생). 그래서 시드를 마이그레이션으로 둔다 — 로컬과 운영이 같은 명령으로 반드시 함께 채워진다.
+
+값의 정본은 `packages/shared`의 `INITIAL_BACKGROUNDS` 하나이며, `packages/db/src/seed/backgrounds.ts`는 그것을 파생시키고, 정적 SQL인 마이그레이션은 `backgrounds.test.ts`가 상수와 대조해 갈라지지 못하게 막는다.
+
+추가로 서버는 모르는 `backgroundId`를 `null`로 낮춰 받는다(`nullifyUnknownBackgrounds`). 배경은 장식이고 가사는 봉사자의 작업물이므로, 배경 하나 때문에 세트 전체를 잃게 두지 않는다.
+
 ### 4.2 FTS5 Trigram 검색 가상 테이블 마이그레이션 (`drizzle/0001_fts5.sql`)
 
 공개 덱 및 가사 라이브러리 고속 검색을 위해 SQLite FTS5 Trigram 인덱스를 생성한다.
@@ -928,11 +937,11 @@ Chrome 공식 **Window Management API**를 활용한 다중 디스플레이 투�
 
 **경로** (PRD 5 화면 목록이 정본이다):
 
-| 창 | 경로 | 역할 |
-| --- | --- | --- |
-| 조작 창 (Controller) | `/present/:presentationId/control` | 현재·다음 슬라이드, 곡 점프, 블랙아웃·가사 숨기기, 타이머. 상태의 단일 원천 |
-| 송출 창 (Audience) | `/present/:presentationId/fullscreen?audience=1` | 청중용 전체화면. 조작 창의 지시만 따른다 |
-| 단독 송출 | `/present/:presentationId/fullscreen` | 한 화면에서 조작과 송출을 겸한다 (M1부터의 경로, 동작 불변) |
+| 창                   | 경로                                             | 역할                                                                        |
+| -------------------- | ------------------------------------------------ | --------------------------------------------------------------------------- |
+| 조작 창 (Controller) | `/present/:presentationId/control`               | 현재·다음 슬라이드, 곡 점프, 블랙아웃·가사 숨기기, 타이머. 상태의 단일 원천 |
+| 송출 창 (Audience)   | `/present/:presentationId/fullscreen?audience=1` | 청중용 전체화면. 조작 창의 지시만 따른다                                    |
+| 단독 송출            | `/present/:presentationId/fullscreen`            | 한 화면에서 조작과 송출을 겸한다 (M1부터의 경로, 동작 불변)                 |
 
 1. **창을 먼저 열고, 그 다음 화면을 찾는다** (`features/presentation/audienceWindow.ts`):
 
@@ -1000,13 +1009,14 @@ Chrome 공식 **Window Management API**를 활용한 다중 디스플레이 투�
    - `navigator.storage.persist()`를 호출하여 브라우저의 Storage Eviction을 방지.
    - 세트에 포함된 모든 배경 영상·포스터 URL을 `fetch(url)`로 사전 호출해 Cache Storage에 100% 다운로드한다. **동일 출처 프록시이므로 `mode`를 지정하지 않는다** (5.4-1의 결정과 `mode: 'cors'`는 서로 어긋난다).
    - **Service Worker 활성화를 기다리지 않는다.** 첫 방문에서는 SW가 아직 activate되지 않아 `fetch`가 가로채이지 않으므로, 받은 응답을 `cache.put`으로 직접 `MEDIA_CACHE_NAME`에 넣는다. Workbox CacheFirst가 같은 캐시를 읽으므로 송출 때 그대로 재생된다.
-   - **Range 헤더 없이 전체 응답을 받는다.** RangeRequestsPlugin은 캐시된 *전체* 응답을 잘라 206을 만든다. 부분 응답을 넣어 두면 영상이 중간에 끊긴다.
+   - **Range 헤더 없이 전체 응답을 받는다.** RangeRequestsPlugin은 캐시된 _전체_ 응답을 잘라 206을 만든다. 부분 응답을 넣어 두면 영상이 중간에 끊긴다.
    - 결과는 `sync_meta`에 **병합(read-modify-write)** 으로 기록한다. 같은 레코드에 서버 동기화 필드가 들어 있어 통째로 put하면 준비 한 번에 그것이 날아간다.
    - 전체 다운로드 완료 검증 후 UI에 `오프라인 송출 가능 (Ready for Offline)` 배지 활성화.
 
 4. **클라이언트 IndexedDB 스키마 명세 (`worship-offline-db`, Version 2)** — _구현 완료 (`apps/web/src/lib/storage/db.ts`)_:
+
    > v2에서 오프라인 세션 캐시 `auth_session` 스토어가 추가되었고(M3-B), `sync_meta`에 서버 동기화 필드(`serverUpdatedAt`·`dirty`·`lastSyncedAt`)가 함께 들어간다. `decks`에는 `by-presentation` 인덱스를 두지 않는다(프레젠테이션 덱은 문서에 임베드된다). 아래 코드는 원안이며 실제 구현이 정본이다.
-   오프라인 송출 보장을 위해 클라이언트는 `idb` 라이브러리를 통해 다음 객체 저장소(Object Stores)를 관리한다. 이 스토어는 오프라인 송출뿐 아니라 **평상시 편집 데이터의 1차 원천**이기도 하다 (§5.5).
+   > 오프라인 송출 보장을 위해 클라이언트는 `idb` 라이브러리를 통해 다음 객체 저장소(Object Stores)를 관리한다. 이 스토어는 오프라인 송출뿐 아니라 **평상시 편집 데이터의 1차 원천**이기도 하다 (§5.5).
 
    ```typescript
    // apps/web/src/lib/storage/db.ts

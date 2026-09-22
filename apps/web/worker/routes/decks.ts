@@ -34,9 +34,16 @@ const decksRoute = new Hono<AppEnv>()
     }
 
     const db = createD1Client(c.env.DB);
-    const saved = await upsertDeck(db, userId, deck);
-    if (!saved) {
-      return c.json({ error: "이 곡에 접근할 수 없습니다" }, 403);
+
+    // 프레젠테이션 저장과 같은 이유로 DB 오류를 그대로 흘리지 않는다.
+    try {
+      const saved = await upsertDeck(db, userId, deck);
+      if (!saved) {
+        return c.json({ error: "이 곡에 접근할 수 없습니다" }, 403);
+      }
+    } catch (error) {
+      console.error("deck upsert failed", { deckId: deck.id, error });
+      return c.json({ error: "곡을 저장하지 못했습니다" }, 500);
     }
 
     // 가사 기여는 선택이다. 실패해도 덱 저장 자체를 되돌리지 않는다 —

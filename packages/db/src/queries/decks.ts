@@ -2,6 +2,7 @@ import { eq, and, desc, sql } from "drizzle-orm";
 import type { Deck as SharedDeck } from "@repo/shared";
 import { decks, decksFts, lyricsVersions, type Deck } from "../schema";
 import { toDeckRow } from "./mappers";
+import { nullifyUnknownBackgrounds } from "./backgrounds";
 
 // Type-flexible SQLite database interface (supports Cloudflare D1 Drizzle client & SQLite test instances)
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -166,7 +167,11 @@ export async function upsertDeck(
 
   if (existing && existing.userId !== userId) return false;
 
-  const row = toDeckRow({ ...deck, userId });
+  // 프레젠테이션 업서트와 같은 이유로 모르는 배경은 '배경 없음'으로 낮춰 받는다.
+  // 배경 id 하나 때문에 곡 저장 자체가 실패하면 안 된다.
+  const [row] = await nullifyUnknownBackgrounds(db, [
+    toDeckRow({ ...deck, userId }),
+  ]);
 
   if (existing) {
     await db.update(decks).set(row).where(eq(decks.id, deck.id));

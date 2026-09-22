@@ -15,6 +15,13 @@
       "when": 1789922374622,
       "tag": "0001_fts5",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1789922374623,
+      "tag": "0002_seed_backgrounds",
+      "breakpoints": true
     }
   ]
 }

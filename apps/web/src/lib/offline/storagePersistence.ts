@@ -9,10 +9,7 @@
  * 처음 쓰는 사용자는 거부될 수 있다. 준비 화면이 경고로 알린다.
  */
 
-export type StoragePersistenceState =
-  | "persisted"
-  | "denied"
-  | "unsupported";
+export type StoragePersistenceState = "persisted" | "denied" | "unsupported";
 
 export interface StorageEstimate {
   usageBytes: number;
@@ -68,7 +65,10 @@ export async function checkPersistentStorage(): Promise<StoragePersistenceState>
 
 /** 저장소 사용량·할당량 (준비 화면의 용량 표시용) */
 export async function estimateStorageUsage(): Promise<StorageEstimate | null> {
-  if (!hasStorageManager() || typeof navigator.storage.estimate !== "function") {
+  if (
+    !hasStorageManager() ||
+    typeof navigator.storage.estimate !== "function"
+  ) {
     return null;
   }
   try {

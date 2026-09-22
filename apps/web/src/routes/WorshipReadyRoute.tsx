@@ -164,8 +164,8 @@ export function WorshipReadyRoute(): React.JSX.Element {
                 data-testid="cache-failed-warning"
                 className="text-xs text-red-600 dark:text-red-400"
               >
-                {failedCount}개 자산을 받지 못했습니다. 네트워크를 확인한 뒤 다시
-                시도해 주세요.
+                {failedCount}개 자산을 받지 못했습니다. 네트워크를 확인한 뒤
+                다시 시도해 주세요.
               </p>
               <button
                 type="button"
@@ -183,16 +183,19 @@ export function WorshipReadyRoute(): React.JSX.Element {
               data-testid="storage-persist-warning"
               className="mt-3 text-xs text-amber-600 dark:text-amber-400"
             >
-              브라우저가 영구 저장소를 허용하지 않았습니다. 저장 공간이 부족해지면
-              받아 둔 배경이 지워질 수 있으니, 예배 직전에 이 화면을 한 번 더 열어
-              주세요.
+              브라우저가 영구 저장소를 허용하지 않았습니다. 저장 공간이
+              부족해지면 받아 둔 배경이 지워질 수 있으니, 예배 직전에 이 화면을
+              한 번 더 열어 주세요.
             </p>
           )}
         </section>
 
         {/* 곡별 캐시 상태 */}
         <section className="mt-6 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 overflow-hidden">
-          <ul data-testid="prep-song-list" className="divide-y divide-zinc-100 dark:divide-zinc-800">
+          <ul
+            data-testid="prep-song-list"
+            className="divide-y divide-zinc-100 dark:divide-zinc-800"
+          >
             {prep.assets.map((asset) => {
               const status = statusOf(asset, prep.items);
               return (
@@ -228,8 +231,9 @@ export function WorshipReadyRoute(): React.JSX.Element {
               data-testid="present-anyway-notice"
               className="text-xs text-zinc-500 dark:text-zinc-400"
             >
-              아직 준비가 끝나지 않았습니다. 지금 송출하면 배경 영상을 네트워크에서
-              가져오므로, 연결이 끊기면 배경이 검게 나올 수 있습니다.
+              아직 준비가 끝나지 않았습니다. 지금 송출하면 배경 영상을
+              네트워크에서 가져오므로, 연결이 끊기면 배경이 검게 나올 수
+              있습니다.
             </p>
           )}
 

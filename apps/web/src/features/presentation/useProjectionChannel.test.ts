@@ -108,10 +108,9 @@ describe("useProjectionChannel", () => {
     const past = Date.now() + PROJECTION_SYNC.AUDIENCE_TIMEOUT_MS + 1000;
     vi.spyOn(Date, "now").mockReturnValue(past);
 
-    await waitFor(
-      () => expect(result.current.peerState).toBe("disconnected"),
-      { timeout: PROJECTION_SYNC.HEARTBEAT_INTERVAL_MS * 3 },
-    );
+    await waitFor(() => expect(result.current.peerState).toBe("disconnected"), {
+      timeout: PROJECTION_SYNC.HEARTBEAT_INTERVAL_MS * 3,
+    });
   });
 
   it("주기적으로 하트비트를 보낸다", async () => {

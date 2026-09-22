@@ -137,10 +137,7 @@ export async function cacheMediaUrls(
       const headers = new Headers(response.headers);
       headers.set("content-length", String(buffer.byteLength));
 
-      await cache.put(
-        item.url,
-        new Response(buffer, { status: 200, headers }),
-      );
+      await cache.put(item.url, new Response(buffer, { status: 200, headers }));
 
       item.status = "done";
       item.bytes = buffer.byteLength;

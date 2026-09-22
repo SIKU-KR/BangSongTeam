@@ -92,19 +92,19 @@ pnpm --filter web build && ls -la apps/web/dist/client/sw.js
 
 `pnpm --filter web dev`로 API를, 빌드 산출물(`dist/client`)을 정적 서버로 띄워 Service Worker까지 살린 상태에서 확인했다.
 
-| 항목 | 결과 |
-| --- | --- |
-| Service Worker 등록·활성 | `sw.js` active, 앱 셸 프리캐시 8건 |
-| 예배 준비 화면 | 5곡 전부 '준비 완료', '오프라인 송출 가능' 배지, 총 1.0MB |
-| Cache Storage | `worship-videos-cache` 10건(영상 5 + 포스터 5) |
-| `sync_meta` | `isReady: true`, `cachedVideos: 10`, `cachedAt` 기록됨 |
-| 재방문 | `/api/media` 요청 0건 (이미 캐시된 것은 다시 받지 않는다) |
+| 항목                      | 결과                                                                                                    |
+| ------------------------- | ------------------------------------------------------------------------------------------------------- |
+| Service Worker 등록·활성  | `sw.js` active, 앱 셸 프리캐시 8건                                                                      |
+| 예배 준비 화면            | 5곡 전부 '준비 완료', '오프라인 송출 가능' 배지, 총 1.0MB                                               |
+| Cache Storage             | `worship-videos-cache` 10건(영상 5 + 포스터 5)                                                          |
+| `sync_meta`               | `isReady: true`, `cachedVideos: 10`, `cachedAt` 기록됨                                                  |
+| 재방문                    | `/api/media` 요청 0건 (이미 캐시된 것은 다시 받지 않는다)                                               |
 | **네트워크 차단 후 송출** | 오프라인 상태에서 `/present/:id/fullscreen` 새로고침 성공, 배경 MP4가 캐시에서 200, **5곡 끝까지 완주** |
-| 발표자 보기 | 송출 창 열림·연결 표시, 3회 넘김·곡 점프·블랙아웃·`1.2`+Enter 점프가 모두 청중 창에 즉시 반영 |
-| 없는 번호 | 조작 창에만 '없는 번호입니다: 9.9'가 뜨고 2초 뒤 사라짐 |
-| 청중 창 키보드 | 방향키를 눌러도 움직이지 않음 |
-| 송출 종료 | 청중 창이 닫히고 조작 창은 `/presentations`로 |
-| 미디어 헤더 | `cache-control: public, max-age=31536000, immutable`, Range 요청에 206 + `content-range` |
+| 발표자 보기               | 송출 창 열림·연결 표시, 3회 넘김·곡 점프·블랙아웃·`1.2`+Enter 점프가 모두 청중 창에 즉시 반영           |
+| 없는 번호                 | 조작 창에만 '없는 번호입니다: 9.9'가 뜨고 2초 뒤 사라짐                                                 |
+| 청중 창 키보드            | 방향키를 눌러도 움직이지 않음                                                                           |
+| 송출 종료                 | 청중 창이 닫히고 조작 창은 `/presentations`로                                                           |
+| 미디어 헤더               | `cache-control: public, max-age=31536000, immutable`, Range 요청에 206 + `content-range`                |
 
 ### 4.2 검증 중 만난 환경 문제 (코드 결함 아님)
 
@@ -112,9 +112,23 @@ pnpm --filter web build && ls -la apps/web/dist/client/sw.js
 
 ---
 
-## 5. 검증 중 발견한 M4 범위 밖 결함
+## 5. 검증 중 발견한 M4 범위 밖 결함 (2026-09-22 수정 완료)
 
-고치지 않았다. M4 작업을 넓히는 대신 사실만 남긴다.
+M4 검증에서 찾아 보고만 했던 2건을 사용자 요청으로 모두 고쳤다. 조사해 보니 두 번째 결함은 원인이 하나 더 있었다.
 
-1. **서버 동기화가 500으로 실패한다.** 세트를 저장할 때 Worker가 `D1_ERROR: FOREIGN KEY constraint failed`를 던진다. `pushDeck`을 아무도 호출하지 않아 `presentation_items.deck_id`가 가리킬 덱 행이 서버에 없는 것으로 보인다(M3-B 범위). 로컬 저장은 정상이라 편집·송출에는 영향이 없지만, **기기 간 동기화는 실제로는 동작하지 않는 상태다.**
-2. **'기본 5곡 세트 불러오기' 버튼이 세트를 비운다.** 핸들러가 `resetActivePresentation()`이라 곡을 넣는 게 아니라 `items`를 비운다. 라벨과 동작이 반대다(M2 범위).
+1. **서버 동기화 500 — 진짜 원인은 `decks.background_id` 외래키였다.** 배경 10건이 클라이언트 상수·`seed.sql`·`seed/backgrounds.ts` 세 군데에 정의만 되어 있고 **D1에 넣는 경로가 없었다.** D1은 외래키를 기본으로 강제하므로 곡에 배경이 붙는 순간 `db.batch()` 전체가 롤백됐다. 마이그레이션 `0002_seed_backgrounds.sql`로 옮겨 `db:migrate:local`·`db:migrate:prod`가 반드시 함께 채우게 했고, 정의는 `@repo/shared` 하나에서 파생시켰다. 모르는 배경 id는 세트를 날리는 대신 `null`로 낮춰 받는다.
+2. **같은 곡을 두 번 담으면 동기화가 깨지는 두 번째 폭탄** — `addDeckToPresentation`이 덱을 복제하지 않아 `deck.id`가 겹쳤고, 서버에서 `decks` 기본키와 `presentation_items` 유니크 제약을 동시에 위반했다. TECH_SPEC §4.0-1의 Clone-on-Add를 실제로 구현했다. 이미 중복 id로 저장된 문서는 하이드레이션에서 복구한다.
+3. **'기본 5곡 세트 불러오기' 버튼이 세트를 비우던 문제** — 라벨대로 샘플 5곡을 채우게 고쳤다. '세트 비우기'는 UI에서 없앴다(사용자 결정). 빈 편집기 화면은 테스트가 하나도 없어서 이 역전이 드러나지 않았으므로, 그 화면을 덮는 테스트를 추가했다.
+4. **`pnpm dev`가 `CLOUDFLARE_API_TOKEN` 없이는 뜨지 않던 문제** — 원격 바인딩을 기본으로 끄고 `CF_REMOTE_BINDINGS=true`일 때만 켠다.
+
+### 5.1 수정 후 실검증 (헤드리스 Chrome, 2026-09-22)
+
+| 항목                                | 결과                                                                               |
+| ----------------------------------- | ---------------------------------------------------------------------------------- |
+| `pnpm --filter web dev` (토큰 없음) | 정상 기동                                                                          |
+| '기본 5곡 세트 불러오기'            | 곡 목록 (0) → (5)                                                                  |
+| 배경 붙은 5곡 세트 동기화           | **동기화됨**, Worker 로그 `FOREIGN KEY` **0건**                                    |
+| 같은 곡 3회 추가                    | 덱 id 3개 모두 다름, `scope: presentation`, `presentationId` 일치, 서버에 3곡 저장 |
+| 배경 변경 후 동기화                 | 동기화됨, 서버에 바뀐 `backgroundId` 반영                                          |
+| **로컬 IndexedDB 삭제 후 재접속**   | **서버에서 세트가 곡까지 그대로 복원 — M3-B 완료 기준을 처음으로 실증**            |
+| M4 회귀 (예배 준비·발표자 보기)     | '오프라인 송출 가능' 배지, 송출 창 연결·동기화 모두 정상                           |

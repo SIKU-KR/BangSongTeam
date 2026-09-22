@@ -33,11 +33,7 @@ import {
  */
 
 export type WorshipPrepPhase =
-  | "checking"
-  | "preparing"
-  | "ready"
-  | "incomplete"
-  | "unsupported";
+  "checking" | "preparing" | "ready" | "incomplete" | "unsupported";
 
 export interface WorshipPrepState {
   phase: WorshipPrepPhase;

@@ -95,7 +95,9 @@ export function PresenterControlRoute(): React.JSX.Element {
     [presentation.id],
   );
 
-  const { post, peerState } = useProjectionChannel({ onMessage: handleMessage });
+  const { post, peerState } = useProjectionChannel({
+    onMessage: handleMessage,
+  });
 
   // handleMessage가 post보다 먼저 정의되므로 ref를 거쳐 참조한다.
   const postRef = useRef(post);
