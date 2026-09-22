@@ -1,5 +1,7 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { usePersistenceError } from "../../lib/storage";
+import { useSyncStatus } from "../../lib/sync";
 
 export interface EditorHeaderProps {
   title: string;
@@ -28,6 +30,46 @@ export interface EditorHeaderProps {
  * - 슬라이드 카운터
  * - 슬라이드쇼 발표(전체화면) CTA 버튼
  */
+/**
+ * 저장·동기화 상태 표시.
+ *
+ * 예전에는 데이터 바인딩이 전혀 없는 정적 초록 점 + '자동 저장됨'이었다.
+ * 저장이 실패하는 중에도 '저장됨'이라고 말하는 표시는 없느니만 못하다.
+ */
+function SaveStatusIndicator(): React.JSX.Element {
+  const persistenceError = usePersistenceError();
+  const { status } = useSyncStatus();
+
+  const { dotClass, label } = (() => {
+    if (persistenceError) {
+      return { dotClass: "bg-red-500", label: "저장 실패" };
+    }
+    switch (status) {
+      case "syncing":
+        return { dotClass: "bg-amber-500", label: "동기화 중…" };
+      case "synced":
+        return { dotClass: "bg-emerald-500", label: "동기화됨" };
+      case "offline":
+        // 오프라인은 실패가 아니다. 이 브라우저에는 저장되어 있다.
+        return { dotClass: "bg-zinc-400", label: "오프라인 · 로컬 저장됨" };
+      case "error":
+        return { dotClass: "bg-red-500", label: "동기화 실패" };
+      default:
+        return { dotClass: "bg-emerald-500", label: "자동 저장됨" };
+    }
+  })();
+
+  return (
+    <span
+      data-testid="save-status"
+      className="hidden md:inline-flex items-center gap-1 text-[11px] text-zinc-500 dark:text-zinc-400 font-medium"
+    >
+      <span className={`w-1.5 h-1.5 rounded-full ${dotClass}`}></span>
+      {label}
+    </span>
+  );
+}
+
 export function EditorHeader({
   title,
   onUpdateTitle,
@@ -256,11 +298,8 @@ export function EditorHeader({
             </button>
           )}
 
-          {/* 저장 상태 */}
-          <span className="hidden md:inline-flex items-center gap-1 text-[11px] text-zinc-500 dark:text-zinc-400 font-medium">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-            자동 저장됨
-          </span>
+          {/* 저장·동기화 상태 */}
+          <SaveStatusIndicator />
         </div>
 
         {/* Undo / Redo */}

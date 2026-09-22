@@ -7,6 +7,7 @@ import {
 } from "./features/presentation";
 import { hydrateSongLibrary } from "./features/editor";
 import { hydrateSession, useSession } from "./lib/auth";
+import { runBootSync, flushPendingSync } from "./lib/sync";
 import { LoginRoute } from "./routes/LoginRoute";
 import {
   AppShellLayout,
@@ -40,6 +41,12 @@ function useHydration(): boolean {
         await Promise.all([hydrateFromStorage(), hydrateSongLibrary()]);
       }
       if (!cancelled) setIsHydrated(true);
+
+      // 서버 병합은 화면을 그린 뒤 백그라운드로 돌린다. 네트워크가 느린
+      // 교회에서 첫 화면이 그만큼 늦어지면 안 된다.
+      if (session.status === "authenticated") {
+        void runBootSync();
+      }
     })();
     return () => {
       cancelled = true;
@@ -51,6 +58,7 @@ function useHydration(): boolean {
   useEffect(() => {
     const flush = (): void => {
       void flushPendingWrites();
+      void flushPendingSync();
     };
     const onVisibilityChange = (): void => {
       if (document.visibilityState === "hidden") flush();

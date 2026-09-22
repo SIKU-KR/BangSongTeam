@@ -10,6 +10,7 @@ import {
   reportCorruptedRecords,
 } from "../../lib/storage";
 import { getCurrentUserId } from "../../lib/auth/sessionStore";
+import { scheduleDocumentPush } from "../../lib/sync/syncScheduler";
 
 /** 멀티 문서 컬렉션 상태 */
 interface PresentationStoreState {
@@ -258,6 +259,25 @@ export function resetPersistenceForTests(): void {
 }
 
 /**
+ * 서버에서 받아 병합한 문서 목록을 스토어에 반영한다.
+ *
+ * 활성 문서는 가능하면 유지한다. 동기화가 돌았다고 사용자가 보던 세트가
+ * 바뀌면 편집 중에 화면이 튄다.
+ */
+export function applyServerDocuments(documents: Presentation[]): void {
+  const previousActive = state.activeId;
+  state = {
+    byId: Object.fromEntries(documents.map((doc) => [doc.id, doc])),
+    order: documents.map((doc) => doc.id),
+    activeId: documents.some((doc) => doc.id === previousActive)
+      ? previousActive
+      : (documents[0]?.id ?? ""),
+  };
+  listSnapshot = buildListSnapshot(state);
+  for (const listener of listeners) listener();
+}
+
+/**
  * 테스트 전용: 문서를 메모리에 직접 싣는다.
  *
  * 부팅 시 샘플 자동 생성이 사라지면서, 데이터가 필요한 테스트는 스스로
@@ -280,9 +300,21 @@ export function __loadDocumentsForTests(documents: Presentation[]): void {
 
 function emitChange(): void {
   schedulePersist();
+  scheduleServerPush();
   for (const listener of listeners) {
     listener();
   }
+}
+
+/**
+ * 서버 push 예약.
+ *
+ * 로컬 저장(`schedulePersist`)과 나란히 두되 큐는 완전히 분리되어 있다.
+ * 느린 네트워크가 IndexedDB 쓰기를 막으면 안 된다.
+ */
+function scheduleServerPush(): void {
+  const active = state.byId[state.activeId];
+  if (active) scheduleDocumentPush(active);
 }
 
 /**

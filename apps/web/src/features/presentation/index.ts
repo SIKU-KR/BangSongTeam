@@ -29,6 +29,7 @@ export {
   resetActivePresentation,
   resetPresentationStore,
   __loadDocumentsForTests,
+  applyServerDocuments,
   useActivePresentation,
   getPresentationById,
   listPresentations,
