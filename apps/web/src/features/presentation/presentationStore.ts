@@ -7,6 +7,7 @@ import {
   deletePresentation,
   reportPersistenceError,
   clearPersistenceError,
+  reportCorruptedRecords,
 } from "../../lib/storage";
 import { SEED_PRESENTATIONS, SEED_USER_ID } from "./mockPresentations";
 
@@ -188,7 +189,8 @@ export async function flushPendingWrites(): Promise<void> {
 export async function hydrateFromStorage(): Promise<void> {
   persistenceEnabled = false;
   try {
-    const { valid } = await loadAllPresentations();
+    const { valid, corrupted } = await loadAllPresentations();
+    reportCorruptedRecords(corrupted);
     if (valid.length > 0) {
       const sorted = [...valid].sort((a, b) =>
         a.createdAt.localeCompare(b.createdAt),
@@ -648,7 +650,9 @@ export function duplicateSongInPresentation(songIndex: number): Deck | null {
   const originalDeck = item.deck;
   const clonedDeck: Deck = {
     ...JSON.parse(JSON.stringify(originalDeck)),
-    id: `deck_${crypto.randomUUID().slice(0, 8)}`,
+    // DeckSchema.id는 uuid다. 접두사를 붙인 짧은 id를 쓰면 저장은 되지만
+    // 다음 부팅의 safeParse에서 프레젠테이션 문서 전체가 격리된다.
+    id: crypto.randomUUID(),
     title: `${originalDeck.title} (사본)`,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),

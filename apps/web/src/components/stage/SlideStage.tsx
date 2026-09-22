@@ -138,10 +138,12 @@ export function SlideStage({
         />
 
         {/* Layer 3: Typography & Text Box */}
+        {/* 블랙아웃은 '화면 검게 하기'(PRD 4.x)다. 오버레이만 불투명하게 만들면
+            텍스트 레이어(z-20)가 오버레이(z-10) 위에 남아 가사가 계속 보인다. */}
         <TextLayer
           slide={slide}
           style={style}
-          isLyricsHidden={isLyricsHidden}
+          isLyricsHidden={isLyricsHidden || isBlackout}
           boxRef={textBoxRef}
           isInteracting={isTextInteracting}
         />

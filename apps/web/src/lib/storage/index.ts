@@ -33,6 +33,10 @@ export {
   clearPersistenceError,
   getPersistenceError,
   usePersistenceError,
+  reportCorruptedRecords,
+  clearCorruptedRecords,
+  getCorruptedRecords,
+  useCorruptedRecords,
   type PersistenceError,
   type PersistenceErrorKind,
 } from "./persistenceStatus";

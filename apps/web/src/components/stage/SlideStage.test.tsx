@@ -84,6 +84,19 @@ describe("SlideStage Integration Component", () => {
     });
   });
 
+  it("블랙아웃은 가사까지 함께 가린다 (PRD 4.x 화면 검게 하기)", () => {
+    // 오버레이(z-10)만 불투명하게 만들면 텍스트 레이어(z-20)가 그 위에 남아
+    // 운영자가 B를 눌러도 가사가 그대로 보인다. 블랙아웃은 '화면을 검게'다.
+    render(
+      <SlideStage slide={mockSlide} style={mockStyle} isBlackout={true} />,
+    );
+
+    expect(screen.getByTestId("overlay-layer")).toHaveStyle({ opacity: "1" });
+    expect(screen.getByTestId("text-layer-container")).toHaveStyle({
+      opacity: "0",
+    });
+  });
+
   it("should propagate isLyricsHidden prop to TextLayer", () => {
     const { rerender } = render(
       <SlideStage slide={mockSlide} style={mockStyle} isLyricsHidden={false} />,

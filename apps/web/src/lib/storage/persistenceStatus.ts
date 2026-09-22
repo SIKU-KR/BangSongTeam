@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from "react";
 import { PersistenceUnavailableError } from "./db";
+import type { CorruptedRecord } from "./presentationRepository";
 
 export type PersistenceErrorKind = "unavailable" | "quota" | "unknown";
 
@@ -17,6 +18,17 @@ const MESSAGES: Record<PersistenceErrorKind, string> = {
 };
 
 let current: PersistenceError | null = null;
+
+/**
+ * 스키마 검증에 실패해 격리된 저장본.
+ *
+ * 저장 실패(`current`)와 슬롯을 나눈 이유: 격리는 '다음 저장이 성공하면 해소되는
+ * 상태'가 아니다. 저장이 다시 잘 되더라도 열지 못한 문서는 그대로 남아 있으므로
+ * `clearPersistenceError()`에 휩쓸려 사라지면 안 된다.
+ */
+const NO_CORRUPTED: readonly CorruptedRecord[] = Object.freeze([]);
+let corrupted: readonly CorruptedRecord[] = NO_CORRUPTED;
+
 const listeners = new Set<() => void>();
 
 function emit(): void {
@@ -69,5 +81,49 @@ export function usePersistenceError(): PersistenceError | null {
     subscribe,
     getPersistenceError,
     getPersistenceError,
+  );
+}
+
+/**
+ * 읽지 못하고 격리한 저장본을 알린다 (삭제하지 않는다).
+ *
+ * 교체가 아니라 id 기준 누적이다. 프레젠테이션 하이드레이션과 곡 보관함
+ * 하이드레이션이 부팅 시 동시에 돌기 때문에, 나중에 끝난 쪽이 먼저 끝난 쪽의
+ * 보고를 지워 버리면 안 된다.
+ */
+export function reportCorruptedRecords(
+  records: readonly CorruptedRecord[],
+): void {
+  if (records.length === 0) return;
+
+  const merged = [...corrupted];
+  const seen = new Set(merged.map((record) => record.id));
+  for (const record of records) {
+    if (seen.has(record.id)) continue;
+    seen.add(record.id);
+    merged.push(record);
+  }
+  if (merged.length === corrupted.length) return;
+
+  corrupted = merged;
+  emit();
+}
+
+export function clearCorruptedRecords(): void {
+  if (corrupted.length === 0) return;
+  corrupted = NO_CORRUPTED;
+  emit();
+}
+
+export function getCorruptedRecords(): readonly CorruptedRecord[] {
+  return corrupted;
+}
+
+/** 격리된 저장본을 반응형으로 구독한다 (경고 배너용) */
+export function useCorruptedRecords(): readonly CorruptedRecord[] {
+  return useSyncExternalStore(
+    subscribe,
+    getCorruptedRecords,
+    getCorruptedRecords,
   );
 }

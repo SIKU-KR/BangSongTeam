@@ -214,7 +214,9 @@ describe("SongPickerModal", () => {
         target: { value: "우리 없는 하늘을" },
       });
 
-      expect(screen.getAllByText("시간을 뚫고").length).toBeGreaterThanOrEqual(1);
+      expect(screen.getAllByText("시간을 뚫고").length).toBeGreaterThanOrEqual(
+        1,
+      );
     });
   });
 });

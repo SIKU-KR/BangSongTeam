@@ -6,12 +6,16 @@
 > **목표**: 브라우저 메모리에만 존재하는 프레젠테이션 상태를 IndexedDB에 영속화하여, 새로고침·탭 종료·브라우저 재시작 후에도 작업이 그대로 복원되게 한다
 > **완료 기준 (DoD)**: 브라우저를 완전히 종료한 뒤 다시 열어도 5곡 세트가 그대로 남아 있고, 그 세트로 주일 예배 1회를 송출한다
 
-> **구현 현황 (2026-09-21)**
+> **구현 현황 (2026-09-22 갱신)**
 >
 > - Phase M3A-1·2·3을 모두 구현했다. 설계와 달라진 부분은 아래 각 태스크에 적어 두었다.
 > - 문서 원안에 없던 **Task 1.6(구 localStorage 보관함 마이그레이션)** 과 **Task 2.5(곡 보관함 저장소 이관)** 를 추가했다. 커밋 0f68563이 곡 보관함을 localStorage에 넣으면서 저장 경로가 둘로 갈라졌기 때문이다.
 > - 커스텀 배경 업로드의 로컬 보관(원안 Task 1.1의 '배경 라이브러리' 언급)은 업로드 기능 자체가 미구현이라 이번 범위에서 제외했다.
-> - **남은 것은 실사용 검증뿐이다** — Chrome에서 세트를 만들고 브라우저를 완전히 종료한 뒤 복원되는지, 그리고 그 세트로 주일 예배를 송출하는지.
+> - **실사용 검증을 수행했고, 데이터 손실 결함 1건과 송출 결함 1건을 찾아 고쳤다.** §5.2에 따라 Task 3.3·3.4를 추가했다.
+>   - Chrome 실사용 경로: 새 세트 생성 → 공유 곡 5곡 추가 → 곡 복제 → 오버레이 75%·글자색 변경 → 새로고침 → 6곡이 스타일·배경까지 그대로 복원. IndexedDB `worship-offline-db`를 직접 열어 저장본도 확인했다.
+>   - 송출 경로: `/present/:id/fullscreen`이 하이드레이션된 데이터로 첫 슬라이드를 렌더하고, `→`·`N.M`+Enter 점프·`B`·`H`가 모두 동작한다.
+> - **남은 것은 운영자의 최종 확인뿐이다** — 브라우저를 완전히 종료한 뒤 복원되는지, 그리고 그 세트로 주일 예배를 1회 송출하는지.
+> - 참고(코드 결함 아님): 로컬 R2 버킷이 비어 있어 `/api/media/*` 배경 영상이 404다. 송출 화면은 검은 배경으로 폴백한다.
 
 ---
 
@@ -154,7 +158,35 @@
     - `pnpm typecheck` / `pnpm lint` / `pnpm test` 전부 Green
     - 수동 확인: Chrome에서 세트 편집 → 탭 완전 종료 → 재접속 시 동일 세트 복원
   - **DoD (통과 기준)**: `pnpm typecheck && pnpm lint && pnpm test`가 에러 없이 성공(Exit code 0)한다.
-  - **구현 메모**: 명령 검증은 통과했다 (테스트 369개 / 54파일 Green). **수동 확인(브라우저 완전 종료 후 복원)과 주일 예배 송출은 아직 남아 있다.**
+  - **구현 메모**: 명령 검증을 통과했다. 실사용 검증에서 결함 2건을 찾아 Task 3.3·3.4로 고쳤고, 그 회귀 테스트를 포함해 현재 **테스트 374개 / 54파일 Green**이다. 운영자의 최종 확인(브라우저 완전 종료 후 복원, 주일 예배 1회 송출)만 남았다.
+
+- [x] **Task 3.3: 곡 복제 시 덱 id가 스키마를 어겨 세트 전체가 사라지는 결함 수정 (실사용 검증 중 발견)**
+  - **대상 파일**: `apps/web/src/features/presentation/presentationStore.ts`
+  - **선행 조건**: Task 3.2
+  - **구현 내용**:
+    - `duplicateSongInPresentation`이 복제 덱 id를 `deck_${8자}`로 만들었다. `DeckSchema.id`와 `PresentationItemSchema.deckId`는 `z.string().uuid()`라 저장은 되지만 다음 부팅의 `PresentationSchema.safeParse`가 실패한다
+    - 그 결과 **곡을 한 번이라도 복제한 프레젠테이션은 문서 전체가 `corrupted`로 격리되어 목록에서 통째로 사라졌다.** 저장된 줄 알고 예배 당일에 잃는 바로 그 경로다
+    - id를 `crypto.randomUUID()`로 바꾸고, 왕복 회귀 테스트를 `persistenceRoundtrip.test.ts`에 추가했다
+  - **DoD (통과 기준)**: `pnpm --filter web vitest run src/features/presentation/persistenceRoundtrip.test.ts`가 100% 통과(Green)한다.
+
+- [x] **Task 3.4: 블랙아웃이 가사를 가리지 못하는 결함 수정 (실사용 검증 중 발견)**
+  - **대상 파일**: `apps/web/src/components/stage/SlideStage.tsx`
+  - **선행 조건**: Task 3.3
+  - **구현 내용**:
+    - `OverlayLayer`(z-10)만 불투명도 1로 올리고 `TextLayer`(z-20)는 그대로 둬서, 운영자가 `B`를 눌러도 검은 화면 위에 가사가 계속 보였다. PRD 144줄의 '화면 검게 하기'가 성립하지 않는다
+    - `SlideStage`가 `TextLayer`에 `isLyricsHidden || isBlackout`을 넘기도록 고쳤다. 레이어 책임은 그대로 두고 결합만 바로잡는다
+    - 브라우저에서 `B` 입력 시 오버레이 0.4→1, 텍스트 1→0으로 바뀌는 것을 확인했다
+  - **DoD (통과 기준)**: `pnpm --filter web vitest run src/components/stage/SlideStage.test.tsx`가 100% 통과(Green)한다.
+
+- [x] **Task 3.5: 격리된 저장본을 사용자에게 알리기 (TECH_SPEC §5.5 규칙 5 미이행분)**
+  - **대상 파일**: `apps/web/src/lib/storage/persistenceStatus.ts`
+  - **선행 조건**: Task 3.2
+  - **구현 내용**:
+    - `hydrateFromStorage()`가 `loadAllPresentations()`의 `corrupted`를 버리고 있어, 규칙 5의 '격리 보관한 뒤 사용자에게 알린다' 중 뒷부분이 빠져 있었다
+    - 저장 실패(`current`)와 슬롯을 분리했다. 격리는 다음 저장이 성공해도 해소되지 않으므로 `clearPersistenceError()`에 휩쓸리면 안 된다
+    - 프레젠테이션·곡 보관함 하이드레이션이 부팅 시 동시에 돌기 때문에 교체가 아니라 id 기준 누적으로 보고한다
+    - `StorageWarningBanner`에 별도 배너(호박색)로 노출한다
+  - **DoD (통과 기준)**: `pnpm --filter web vitest run src/components/common/StorageWarningBanner.test.tsx`가 100% 통과(Green)한다.
 
 ---
 

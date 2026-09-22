@@ -13,6 +13,7 @@ import {
   migrateLegacySongs,
   reportPersistenceError,
   clearPersistenceError,
+  reportCorruptedRecords,
 } from "../../lib/storage";
 import { COMMUNITY_SONGS } from "../library/mockCommunityData";
 
@@ -48,7 +49,8 @@ export function getUserSongs(): Deck[] {
 export async function hydrateSongLibrary(): Promise<void> {
   try {
     await migrateLegacySongs();
-    const { valid } = await loadAllSongs();
+    const { valid, corrupted } = await loadAllSongs();
+    reportCorruptedRecords(corrupted);
     userSongsCache = valid;
     emitChange();
     clearPersistenceError();
