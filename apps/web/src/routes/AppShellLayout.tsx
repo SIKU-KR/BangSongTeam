@@ -3,6 +3,7 @@ import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import type { Deck } from "@repo/shared";
 import { ChromeAlertBanner } from "../components/common/ChromeAlertBanner";
 import { StorageWarningBanner } from "../components/common/StorageWarningBanner";
+import { AppUpdateBanner } from "../components/common/AppUpdateBanner";
 import { AppSidebar } from "../components/layout/AppSidebar";
 import { AppHeroHeader } from "../components/layout/AppHeroHeader";
 import { QuickLyricPasteModal } from "../features/editor";
@@ -81,6 +82,7 @@ export function AppShellLayout(): React.JSX.Element {
 
         {/* 저장 실패 경고 (닫을 수 없음) */}
         <StorageWarningBanner />
+        <AppUpdateBanner />
 
         <AppHeroHeader
           title={meta.title}
