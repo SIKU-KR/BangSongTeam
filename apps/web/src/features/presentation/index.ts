@@ -70,3 +70,22 @@ export {
   launchPreparation,
   type ChromeFullscreenOptions,
 } from "./fullscreen";
+
+export {
+  nextPosition,
+  prevPosition,
+  clampPosition,
+  getSlideAt,
+  getSongSlideCounts,
+  isSamePosition,
+  peekNext,
+  INITIAL_POSITION,
+  type ProjectionPosition,
+} from "./projectionState";
+
+export {
+  useProjectionChannel,
+  type UseProjectionChannelOptions,
+  type UseProjectionChannelReturn,
+  type ProjectionPeerState,
+} from "./useProjectionChannel";

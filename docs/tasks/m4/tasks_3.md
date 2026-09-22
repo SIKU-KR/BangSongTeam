@@ -6,6 +6,14 @@
 > **목표**: 곡 경계를 넘나드는 송출 위치 계산을 순수 함수로 뽑고, 조작 창 ↔ 송출 창을 잇는 `worship-projection` 채널 계층을 만들어 기존 전체화면 라우트를 청중 창으로도 쓸 수 있게 한다
 > **완료 기준 (DoD)**: `?audience=1`로 연 전체화면 창이 자체 키보드 입력 없이 BroadcastChannel 메시지만으로 슬라이드·블랙아웃·가사 숨기기를 따라간다
 
+> **구현 현황 (2026-09-22)**
+>
+> - Task 3.1~3.4 완료. 전체 **631개 / 82파일 Green**.
+> - 단독 모드 회귀는 기존 `FullscreenPresentRoute.test.tsx` 13개가 그대로 통과하는 것으로 확인했다. 청중 모드는 `FullscreenPresentRoute.audience.test.tsx`를 새로 만들었다.
+> - **청중 모드에서 종료 버튼은 `window.close()`다.** 조작 창이 연 팝업이라 `/presentations`로 되돌리면 빈 팝업이 남는다.
+> - `useProjectionChannel`은 수신 메시지를 `BroadcastMessageSchema.safeParse`로 거른다. 옛 버전이 열려 있는 탭이 보낸 메시지로 송출이 깨지지 않게 하기 위한 것이고, 테스트로 고정했다.
+> - 들어온 인덱스는 항상 `clampPosition`을 거친다. 두 창이 서로 다른 세트를 들고 있을 때(한쪽만 편집 후 새로고침) 범위를 벗어난 값이 오면 청중 화면이 비어 버리기 때문이다.
+
 ---
 
 ## 1. 아키텍처 가드레일 & 준수 사항
@@ -21,7 +29,7 @@
 
 ## 2. 세부 작업 체크리스트
 
-- [ ] **Task 3.1: 송출 위치 계산 순수 함수 (TDD)**
+- [x] **Task 3.1: 송출 위치 계산 순수 함수 (TDD)**
   - **대상 파일**: `apps/web/src/features/presentation/projectionState.ts`
   - **선행 조건**: 없음
   - **구현 내용**:
@@ -32,7 +40,7 @@
     - `FullscreenPresentRoute`의 기존 동작과 100% 같은 결과를 내야 한다
   - **DoD (통과 기준)**: `pnpm exec vitest run apps/web/src/features/presentation/projectionState.test.ts`가 100% 통과(Green)한다.
 
-- [ ] **Task 3.2: BroadcastChannel 동기화 훅 (TDD)**
+- [x] **Task 3.2: BroadcastChannel 동기화 훅 (TDD)**
   - **대상 파일**: `apps/web/src/features/presentation/useProjectionChannel.ts`
   - **선행 조건**: `tasks_1.md` Task 1.2 (`PROJECTION_CHANNEL_NAME`)
   - **구현 내용**:
@@ -42,7 +50,7 @@
     - `BroadcastChannel`이 없는 환경에서도 throw하지 않고 no-op으로 동작
   - **DoD (통과 기준)**: `pnpm exec vitest run apps/web/src/features/presentation/useProjectionChannel.test.ts`가 100% 통과(Green)한다.
 
-- [ ] **Task 3.3: 전체화면 송출 라우트를 순수 함수 기반으로 리팩터링**
+- [x] **Task 3.3: 전체화면 송출 라우트를 순수 함수 기반으로 리팩터링**
   - **대상 파일**: `apps/web/src/routes/FullscreenPresentRoute.tsx`
   - **선행 조건**: Task 3.1
   - **구현 내용**:
@@ -50,7 +58,7 @@
     - 단독 모드의 외부 동작(키보드, 번호 점프, 블랙아웃, 가사 숨기기, 자동 종료)은 그대로 유지
   - **DoD (통과 기준)**: `pnpm exec vitest run apps/web/src/routes/FullscreenPresentRoute.test.tsx`가 100% 통과(Green)한다.
 
-- [ ] **Task 3.4: 청중 모드(`?audience=1`) 추가**
+- [x] **Task 3.4: 청중 모드(`?audience=1`) 추가**
   - **대상 파일**: `apps/web/src/routes/FullscreenPresentRoute.tsx`
   - **선행 조건**: Task 3.2, 3.3
   - **구현 내용**:
