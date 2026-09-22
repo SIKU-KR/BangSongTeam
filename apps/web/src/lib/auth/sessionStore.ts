@@ -150,6 +150,43 @@ export async function signInWithProvider(
   });
 }
 
+/**
+ * 개발자 로그인 (OAuth 연결 전까지의 기본 경로, localhost 전용).
+ *
+ * 서버가 진짜 Better Auth 세션 쿠키를 내려 주므로, 로그인 이후 동작은
+ * OAuth와 완전히 같다.
+ */
+export async function signInAsDeveloper(email?: string): Promise<void> {
+  const response = await fetch("/api/dev-login", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify(email ? { email } : {}),
+  });
+
+  if (!response.ok) {
+    throw new Error("개발자 로그인에 실패했습니다");
+  }
+
+  // 쿠키가 생겼으니 서버에서 세션을 읽어 상태를 채운다.
+  await revalidateSession();
+}
+
+/** 로그인 화면이 무엇을 그릴지 서버에 묻는다 */
+export async function fetchAuthConfig(): Promise<{
+  providers: SocialProvider[];
+  devLogin: boolean;
+}> {
+  const response = await fetch("/api/auth-config", {
+    credentials: "include",
+  });
+  if (!response.ok) throw new Error("로그인 설정을 읽지 못했습니다");
+  return (await response.json()) as {
+    providers: SocialProvider[];
+    devLogin: boolean;
+  };
+}
+
 export async function signOut(): Promise<void> {
   try {
     await authClient.signOut();

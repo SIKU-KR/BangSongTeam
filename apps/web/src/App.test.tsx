@@ -1,5 +1,5 @@
 import React from "react";
-import { render, screen } from "@testing-library/react";
+import { render, screen, act } from "@testing-library/react";
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { App } from "./App";
 import {
@@ -144,5 +144,22 @@ describe("App Route Integration", () => {
 
     expect(await screen.findByText("Worship Studio")).toBeInTheDocument();
     expect(screen.queryByTestId("presentation-card")).not.toBeInTheDocument();
+  });
+
+  it("게이트를 통과한 뒤 로그인해도 스토어를 싣는다", async () => {
+    // 부팅 시점에는 미인증이었다가 나중에 로그인하는 경로(개발자 로그인,
+    // OAuth 콜백 복귀). 부트스트랩을 부팅 때 한 번만 돌리면 방금 로그인한
+    // 사용자는 새로고침 전까지 서버에 아무것도 올라가지 않는다.
+    signOutForTests();
+    renderAt("/presentations");
+
+    await screen.findByRole("button", { name: /카카오로 시작하기/ });
+
+    await act(async () => {
+      signInAsTestUser();
+      await Promise.resolve();
+    });
+
+    expect(await screen.findByTestId("presentation-card")).toBeInTheDocument();
   });
 });

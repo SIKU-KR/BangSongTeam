@@ -149,7 +149,8 @@ describe("Task 4.6: Miniflare/workerd 환경 Worker 및 D1 통합 테스트", ()
       expect(res.status).toBeLessThan(500);
     });
 
-    it("소셜 로그인 엔드포인트가 라우팅된다 (404가 아니다)", async () => {
+    it("자격증명이 설정된 프로바이더는 인가 URL을 돌려준다", async () => {
+      // .dev.vars의 로컬 설정에 기대지 않도록 자격증명을 직접 넘긴다.
       const res = await app.request(
         "/api/auth/sign-in/social",
         {
@@ -157,12 +158,32 @@ describe("Task 4.6: Miniflare/workerd 환경 Worker 및 D1 통합 테스트", ()
           headers: { "content-type": "application/json" },
           body: JSON.stringify({ provider: "kakao", callbackURL: "/" }),
         },
-        env,
+        {
+          ...env,
+          KAKAO_CLIENT_ID: "test-client-id",
+          KAKAO_CLIENT_SECRET: "test-client-secret",
+        },
       );
 
-      // 자격증명이 플레이스홀더라 성공까지는 못 가지만,
-      // Hono가 Better Auth로 넘겼다면 404는 아니다.
-      expect(res.status).not.toBe(404);
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as { url: string };
+      expect(body.url).toContain("kauth.kakao.com");
+      expect(body.url).toContain("api%2Fauth%2Fcallback%2Fkakao");
+    });
+
+    it("자격증명이 없는 프로바이더는 404다", async () => {
+      // 빈 문자열로 OAuth를 열어 두면 설정 실수가 런타임까지 숨는다.
+      const res = await app.request(
+        "/api/auth/sign-in/social",
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ provider: "kakao", callbackURL: "/" }),
+        },
+        { ...env, KAKAO_CLIENT_ID: "", KAKAO_CLIENT_SECRET: "" },
+      );
+
+      expect(res.status).toBe(404);
     });
 
     it("인증 경로는 Hono의 전역 404가 아니라 Better Auth가 처리한다", async () => {

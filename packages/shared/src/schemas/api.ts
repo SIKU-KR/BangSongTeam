@@ -120,3 +120,22 @@ export const DeckListResponseSchema = z.object({
   decks: z.array(DeckSchema),
 });
 export type DeckListResponse = z.infer<typeof DeckListResponseSchema>;
+
+// ============================================================================
+// 개발자 로그인 (OAuth 연결 전까지의 임시 경로, localhost 전용)
+// ============================================================================
+
+export const DevLoginRequestSchema = z.object({
+  /** 계정을 바꿔 가며 교차 사용자 격리를 확인할 수 있게 한다 */
+  email: z.string().email().optional(),
+  name: z.string().min(1).max(50).optional(),
+});
+export type DevLoginRequest = z.infer<typeof DevLoginRequestSchema>;
+
+/** 로그인 화면이 무엇을 그릴지 정하는 근거 */
+export const AuthConfigResponseSchema = z.object({
+  /** 실제로 자격증명이 설정된 소셜 프로바이더만 담는다 */
+  providers: z.array(z.enum(["kakao", "naver"])),
+  devLogin: z.boolean(),
+});
+export type AuthConfigResponse = z.infer<typeof AuthConfigResponseSchema>;

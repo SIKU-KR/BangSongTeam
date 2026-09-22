@@ -2,11 +2,23 @@
 BETTER_AUTH_SECRET=local-development-secret-key-at-least-32-chars-long
 BETTER_AUTH_URL=http://localhost:5173
 
+# 개발자 로그인 (OAuth 연결 전까지의 기본 로그인 경로)
+#
+# !! 운영 시크릿에 절대 넣지 말 것 !!
+# 이 값이 운영에 살아 있으면 누구나 아무 계정으로 로그인할 수 있다.
+# 안전장치가 하나 더 있다(요청 호스트가 localhost일 때만 동작). 그래도
+# 운영에 넣지 않는 것이 1차 방어선이다.
+DEV_LOGIN_ENABLED=true
+
 # OAuth Providers
-KAKAO_CLIENT_ID=mock_kakao_client_id
-KAKAO_CLIENT_SECRET=mock_kakao_client_secret
-NAVER_CLIENT_ID=mock_naver_client_id
-NAVER_CLIENT_SECRET=mock_naver_client_secret
+#
+# 도메인 구입 후 카카오·네이버 개발자 콘솔에서 앱을 등록하고 채운다.
+# Redirect URI: https://<도메인>/api/auth/callback/kakao , .../naver
+# 비워 두면 해당 프로바이더는 등록되지 않고 로그인 화면에도 나오지 않는다.
+KAKAO_CLIENT_ID=
+KAKAO_CLIENT_SECRET=
+NAVER_CLIENT_ID=
+NAVER_CLIENT_SECRET=
 
 # Cloudflare R2 Public CDN Domain
 R2_PUBLIC_DOMAIN=media.worship-slide.com

@@ -66,6 +66,37 @@ export function generateUserId(): string {
   return crypto.randomUUID();
 }
 
+/**
+ * 개발자 로그인이 살아 있는지.
+ *
+ * **이중 방어다.** 이 경로가 운영에 열려 있으면 누구나 아무 계정으로 로그인할
+ * 수 있다.
+ *
+ * 1. `DEV_LOGIN_ENABLED=true` 명시적 플래그 — 기본은 꺼짐
+ * 2. 요청 호스트가 localhost — 플래그가 실수로 운영 시크릿에 들어가도
+ *    실제 도메인에서는 여전히 죽는다
+ */
+export function isDevLoginEnabled(
+  env: Bindings,
+  requestUrl: string | URL,
+): boolean {
+  if (env.DEV_LOGIN_ENABLED !== "true") return false;
+
+  let hostname: string;
+  try {
+    hostname = new URL(requestUrl).hostname;
+  } catch {
+    return false;
+  }
+
+  return (
+    hostname === "localhost" ||
+    hostname === "127.0.0.1" ||
+    hostname === "[::1]" ||
+    hostname === "::1"
+  );
+}
+
 /** 자격증명이 실제로 채워져 있는지 (빈 문자열·공백은 미설정으로 본다) */
 export function hasCredentials(
   clientId: string | undefined,
@@ -110,6 +141,20 @@ export function buildNaverUser(profile: NaverProfileLike): MappedSocialUser {
   };
 }
 
+/** 실제로 자격증명이 설정된 소셜 프로바이더 */
+export function configuredSocialProviders(
+  env: Bindings,
+): Array<"kakao" | "naver"> {
+  const providers: Array<"kakao" | "naver"> = [];
+  if (hasCredentials(env.KAKAO_CLIENT_ID, env.KAKAO_CLIENT_SECRET)) {
+    providers.push("kakao");
+  }
+  if (hasCredentials(env.NAVER_CLIENT_ID, env.NAVER_CLIENT_SECRET)) {
+    providers.push("naver");
+  }
+  return providers;
+}
+
 function buildAuth(env: Bindings) {
   const db = createD1Client(env.DB);
 
@@ -141,7 +186,11 @@ function buildAuth(env: Bindings) {
       schema: { user, session, account, verification },
     }),
     // 비밀번호 로그인은 MVP 범위 밖이다 (PRD 4.6: 소셜 로그인만).
-    emailAndPassword: { enabled: false },
+    //
+    // 예외: 개발자 로그인이 이 엔드포인트를 쓴다. 플래그가 꺼져 있으면
+    // better-auth가 비밀번호 엔드포인트 자체를 만들지 않으므로, 라우트 가드가
+    // 뚫리더라도 로그인할 방법이 없다 (방어선 3겹).
+    emailAndPassword: { enabled: env.DEV_LOGIN_ENABLED === "true" },
     // 텔레메트리 모듈이 node:os를 import해 workerd에서 로드에 실패한다.
     // Worker에서 외부로 사용 통계를 보낼 이유도 없다.
     telemetry: { enabled: false },

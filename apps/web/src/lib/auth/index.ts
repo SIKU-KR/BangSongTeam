@@ -13,6 +13,8 @@ export {
   hydrateSession,
   revalidateSession,
   signInWithProvider,
+  signInAsDeveloper,
+  fetchAuthConfig,
   signOut,
   useSession,
   getSessionState,

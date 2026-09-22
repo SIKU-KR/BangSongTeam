@@ -5,6 +5,7 @@ import { backgroundsRoute } from "./routes/backgrounds";
 import { mediaRoute } from "./routes/media";
 import { presentationsRoute } from "./routes/presentations";
 import { decksRoute } from "./routes/decks";
+import { devLoginRoute } from "./routes/devLogin";
 
 const app = new Hono<AppEnv>()
   // Global error handler
@@ -38,6 +39,8 @@ const app = new Hono<AppEnv>()
   .on(["GET", "POST"], `${AUTH_BASE_PATH}/*`, (c) => {
     return createAuth(c.env).handler(c.req.raw);
   })
+  // 개발자 로그인 및 로그인 화면 설정 (localhost 전용)
+  .route("/api", devLoginRoute)
   // 계정 데이터 동기화 (로그인 필수)
   .route("/api/presentations", presentationsRoute)
   .route("/api/decks", decksRoute)
