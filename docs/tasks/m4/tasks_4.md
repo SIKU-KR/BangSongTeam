@@ -6,6 +6,15 @@
 > **목표**: 현재·다음 슬라이드, 곡 점프, 블랙아웃·가사 숨기기, 타이머를 갖춘 조작 창을 만들고, Window Management API로 보조 모니터에 청중 창을 띄운다
 > **완료 기준 (DoD)**: 조작 창에서 슬라이드를 넘기면 별도 창의 청중 화면이 즉시 따라오고, 보조 모니터가 있으면 그 화면 위치로 창이 열린다
 
+> **구현 현황 (2026-09-22)**
+>
+> - Task 4.1~4.6 완료. 전체 **670개 / 87파일 Green**.
+> - **죽은 코드 `checkScreenDetails()`를 제거했다.** 권한이 이미 granted일 때만 화면을 읽어 호출부가 하나도 없었고, 그래서 `enterFullscreen`의 `screen` 옵션 분기도 영원히 닿지 않는 코드였다. `openAudienceWindow()`가 `getScreenDetails()`를 직접 불러 권한을 요청한다.
+> - **타이머 정의**: PRD에 '타이머' 한 줄만 있어 **경과 시간(mm:ss) + 현재 시각(HH:MM)** 으로 정했다. 경과는 멈춤·리셋이 되고, 현재 시각은 항상 흐른다.
+> - `PresenterControlBar`는 상태를 갖지 않는 표시 전용이라 단독 테스트 대신 라우트 통합 테스트로 덮었다. DoD를 그에 맞게 고쳤다.
+> - jsdom에 `scrollIntoView`가 없어 점프 패널의 자동 스크롤을 옵셔널 호출로 바꿨다. 없다고 조작 창이 죽으면 안 된다.
+> - **보조 모니터 실검증은 남아 있다.** 이 환경에는 디스플레이가 하나도 없어 폴백 경로만 확인된다.
+
 ---
 
 ## 1. 아키텍처 가드레일 & 준수 사항
@@ -21,7 +30,7 @@
 
 ## 2. 세부 작업 체크리스트
 
-- [ ] **Task 4.1: 청중 창 오프너 및 Window Management 연동 (TDD)**
+- [x] **Task 4.1: 청중 창 오프너 및 Window Management 연동 (TDD)**
   - **대상 파일**: `apps/web/src/features/presentation/audienceWindow.ts`
   - **선행 조건**: `tasks_3.md` Task 3.4
   - **구현 내용**:
@@ -31,7 +40,7 @@
     - 결과를 `{ status: "secondary" | "fallback" | "blocked" | "unsupported", window, message }`로 돌려준다
   - **DoD (통과 기준)**: `pnpm exec vitest run apps/web/src/features/presentation/audienceWindow.test.ts`가 100% 통과(Green)한다.
 
-- [ ] **Task 4.2: 송출 경과 타이머 훅 (TDD)**
+- [x] **Task 4.2: 송출 경과 타이머 훅 (TDD)**
   - **대상 파일**: `apps/web/src/features/presentation/useElapsedTimer.ts`
   - **선행 조건**: 없음
   - **구현 내용**:
@@ -39,7 +48,7 @@
     - `start`/`pause`/`reset` 제공, 1초 간격 갱신, 언마운트 시 타이머 정리
   - **DoD (통과 기준)**: `pnpm exec vitest run apps/web/src/features/presentation/useElapsedTimer.test.ts`가 100% 통과(Green)한다.
 
-- [ ] **Task 4.3: 현재·다음 슬라이드 미리보기 패널**
+- [x] **Task 4.3: 현재·다음 슬라이드 미리보기 패널**
   - **대상 파일**: `apps/web/src/features/presentation/PresenterPreviewPanel.tsx`
   - **선행 조건**: `tasks_3.md` Task 3.1
   - **구현 내용**:
@@ -48,7 +57,7 @@
     - 세트 마지막이면 '마지막 슬라이드' 표시
   - **DoD (통과 기준)**: `pnpm exec vitest run apps/web/src/features/presentation/PresenterPreviewPanel.test.tsx`가 100% 통과(Green)한다.
 
-- [ ] **Task 4.4: 곡·슬라이드 점프 패널**
+- [x] **Task 4.4: 곡·슬라이드 점프 패널**
   - **대상 파일**: `apps/web/src/features/presentation/PresenterJumpPanel.tsx`
   - **선행 조건**: Task 4.3
   - **구현 내용**:
@@ -57,7 +66,7 @@
     - 세트가 길어도 현재 곡이 보이도록 스크롤을 따라가게 한다
   - **DoD (통과 기준)**: `pnpm exec vitest run apps/web/src/features/presentation/PresenterJumpPanel.test.tsx`가 100% 통과(Green)한다.
 
-- [ ] **Task 4.5: 조작 바 (블랙아웃·가사 숨기기·타이머·창 제어)**
+- [x] **Task 4.5: 조작 바 (블랙아웃·가사 숨기기·타이머·창 제어)**
   - **대상 파일**: `apps/web/src/features/presentation/PresenterControlBar.tsx`
   - **선행 조건**: Task 4.1, 4.2
   - **구현 내용**:
@@ -65,9 +74,9 @@
     - 경과 시간·현재 시각, 청중 창 연결 상태 배지
     - 「송출 창 열기」/「다시 연결」, 「송출 종료」 버튼
     - 입력 중인 번호(`4.2_`)와 '없는 번호' 2초 토스트
-  - **DoD (통과 기준)**: `pnpm exec vitest run apps/web/src/features/presentation/PresenterControlBar.test.tsx`가 100% 통과(Green)한다.
+  - **DoD (통과 기준)**: `pnpm exec vitest run apps/web/src/routes/PresenterControlRoute.test.tsx`의 블랙아웃·버퍼·연결 상태 케이스가 100% 통과(Green)한다.
 
-- [ ] **Task 4.6: 발표자 보기 라우트 결합**
+- [x] **Task 4.6: 발표자 보기 라우트 결합**
   - **대상 파일**: `apps/web/src/routes/PresenterControlRoute.tsx`, `apps/web/src/App.tsx`
   - **선행 조건**: Task 4.3~4.5
   - **구현 내용**:

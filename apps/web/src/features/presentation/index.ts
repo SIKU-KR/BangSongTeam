@@ -89,3 +89,31 @@ export {
   type UseProjectionChannelReturn,
   type ProjectionPeerState,
 } from "./useProjectionChannel";
+
+export {
+  openAudienceWindow,
+  buildAudienceUrl,
+  type AudienceWindowResult,
+  type AudienceWindowStatus,
+} from "./audienceWindow";
+
+export {
+  useElapsedTimer,
+  formatElapsed,
+  type UseElapsedTimerReturn,
+} from "./useElapsedTimer";
+
+export {
+  PresenterPreviewPanel,
+  type PresenterPreviewPanelProps,
+} from "./PresenterPreviewPanel";
+
+export {
+  PresenterJumpPanel,
+  type PresenterJumpPanelProps,
+} from "./PresenterJumpPanel";
+
+export {
+  PresenterControlBar,
+  type PresenterControlBarProps,
+} from "./PresenterControlBar";
