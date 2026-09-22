@@ -5,13 +5,19 @@ const PRESENTATION_ID = "10000000-0000-4000-8000-000000000001";
 
 const openSpy = vi.fn();
 const originalOpen = window.open;
+let moveTo: ReturnType<typeof vi.fn>;
+let resizeTo: ReturnType<typeof vi.fn>;
 
 beforeEach(() => {
-  openSpy.mockReset().mockReturnValue({} as Window);
+  vi.useFakeTimers();
+  moveTo = vi.fn();
+  resizeTo = vi.fn();
+  openSpy.mockReset().mockReturnValue({ moveTo, resizeTo } as unknown as Window);
   window.open = openSpy as unknown as typeof window.open;
 });
 
 afterEach(() => {
+  vi.useRealTimers();
   window.open = originalOpen;
   // @ts-expect-error 테스트에서 주입한 API를 되돌린다
   delete window.getScreenDetails;
@@ -35,7 +41,7 @@ describe("buildAudienceUrl", () => {
 });
 
 describe("openAudienceWindow", () => {
-  it("보조 모니터가 있으면 그 좌표로 연다", async () => {
+  it("먼저 창을 열고 그 다음 보조 모니터로 옮긴다", async () => {
     const current = { availLeft: 0, availTop: 0 };
     const secondary = {
       availLeft: 1920,
@@ -48,14 +54,37 @@ describe("openAudienceWindow", () => {
     const result = await openAudienceWindow(PRESENTATION_ID);
 
     expect(result.status).toBe("secondary");
+    // 화면 목록을 기다린 뒤에 열면 권한 프롬프트가 떠 있는 동안 창이 아예
+    // 열리지 않는다. 항상 기본 크기로 먼저 열고 나중에 옮긴다.
     expect(openSpy).toHaveBeenCalledWith(
       buildAudienceUrl(PRESENTATION_ID),
       "WorshipAudienceWindow",
-      "left=1920,top=0,width=1280,height=720",
+      "width=1280,height=720",
     );
+    expect(moveTo).toHaveBeenCalledWith(1920, 0);
+    expect(resizeTo).toHaveBeenCalledWith(1280, 720);
   });
 
-  it("모니터가 하나면 일반 팝업으로 열고 안내를 돌려준다", async () => {
+  it("권한 프롬프트에 응답하지 않아도 창은 이미 열려 있다", async () => {
+    // getScreenDetails()는 프롬프트가 떠 있는 동안 resolve하지 않는다.
+    Object.defineProperty(window, "getScreenDetails", {
+      value: () => new Promise(() => {}),
+      configurable: true,
+      writable: true,
+    });
+
+    const promise = openAudienceWindow(PRESENTATION_ID);
+    // 창은 await 이전에 이미 열렸어야 한다.
+    expect(openSpy).toHaveBeenCalledTimes(1);
+
+    await vi.advanceTimersByTimeAsync(9000);
+    const result = await promise;
+
+    expect(result.status).toBe("fallback");
+    expect(result.window).not.toBeNull();
+  });
+
+  it("모니터가 하나면 옮기지 않고 안내를 돌려준다", async () => {
     const current = { availLeft: 0, availTop: 0 };
     withScreens({ screens: [current], currentScreen: current });
 
@@ -63,11 +92,7 @@ describe("openAudienceWindow", () => {
 
     expect(result.status).toBe("fallback");
     expect(result.message).toContain("프로젝터 화면으로 옮긴 뒤");
-    expect(openSpy).toHaveBeenCalledWith(
-      expect.any(String),
-      "WorshipAudienceWindow",
-      "width=1280,height=720",
-    );
+    expect(moveTo).not.toHaveBeenCalled();
   });
 
   it("권한을 거부해도 막다른 길이 되지 않는다", async () => {

@@ -41,6 +41,15 @@ interface ScreenDetailsLike {
 
 const FALLBACK_FEATURES = "width=1280,height=720";
 
+/**
+ * 화면 권한 응답을 기다리는 한도.
+ *
+ * `getScreenDetails()`는 권한 프롬프트가 떠 있는 동안 **resolve하지 않는다**.
+ * 조작자가 프롬프트를 무시하면 영원히 매달린다. 창은 이미 열려 있으므로,
+ * 여기서 끊고 '창을 프로젝터로 옮기세요' 안내로 넘어간다.
+ */
+const SCREEN_PERMISSION_TIMEOUT_MS = 8000;
+
 const MESSAGES: Record<AudienceWindowStatus, string> = {
   secondary: "보조 모니터에 송출 창을 열었습니다.",
   fallback:
@@ -83,34 +92,59 @@ async function findSecondaryScreen(): Promise<ScreenLike | null> {
   }
 }
 
-function featuresFor(screen: ScreenLike): string {
-  return [
-    `left=${screen.availLeft ?? 0}`,
-    `top=${screen.availTop ?? 0}`,
-    `width=${screen.availWidth ?? 1280}`,
-    `height=${screen.availHeight ?? 720}`,
-  ].join(",");
+/** 이미 열린 창을 보조 모니터 위치·크기로 옮긴다 */
+function placeOnScreen(target: Window, screen: ScreenLike): boolean {
+  try {
+    target.moveTo(screen.availLeft ?? 0, screen.availTop ?? 0);
+    target.resizeTo(screen.availWidth ?? 1280, screen.availHeight ?? 720);
+    return true;
+  } catch {
+    // 창이 이미 닫혔거나 브라우저가 이동을 거부한 경우.
+    return false;
+  }
 }
 
 /**
  * 청중 송출 창을 연다. 같은 창 이름을 쓰므로 이미 열려 있으면 그 창을 재사용한다.
+ *
+ * **순서가 중요하다: 먼저 열고, 그 다음 화면을 찾는다.**
+ * 화면 목록을 먼저 물으면 두 가지가 한꺼번에 깨진다 — 권한 프롬프트가 떠 있는
+ * 동안 `getScreenDetails()`가 resolve하지 않아 창이 아예 열리지 않고, 설령
+ * 응답하더라도 그 사이 사용자 제스처가 만료돼 팝업 차단에 걸린다. 2026-09-22
+ * 실제 Chrome 검증에서 송출 창이 끝내 열리지 않는 것으로 드러난 결함이다.
  */
 export async function openAudienceWindow(
   presentationId: string,
 ): Promise<AudienceWindowResult> {
   const url = buildAudienceUrl(presentationId);
-  const secondary = await findSecondaryScreen();
 
-  const opened = window.open(
-    url,
-    AUDIENCE_WINDOW_NAME,
-    secondary ? featuresFor(secondary) : FALLBACK_FEATURES,
-  );
-
+  // 1) 클릭 제스처 안에서 동기적으로 연다.
+  const opened = window.open(url, AUDIENCE_WINDOW_NAME, FALLBACK_FEATURES);
   if (!opened) {
     return { status: "blocked", window: null, message: MESSAGES.blocked };
   }
 
-  const status: AudienceWindowStatus = secondary ? "secondary" : "fallback";
-  return { status, window: opened, message: MESSAGES[status] };
+  // 2) 그 다음 보조 모니터를 찾아 옮긴다. 응답이 늦어도 창은 이미 떠 있다.
+  const pending = findSecondaryScreen();
+  const timedOut = Symbol("timeout");
+  const raced = await Promise.race([
+    pending,
+    new Promise<typeof timedOut>((resolve) =>
+      setTimeout(() => resolve(timedOut), SCREEN_PERMISSION_TIMEOUT_MS),
+    ),
+  ]);
+
+  if (raced === timedOut) {
+    // 늦게 허용하더라도 창은 옮겨 준다.
+    void pending.then((screen) => {
+      if (screen) placeOnScreen(opened, screen);
+    });
+    return { status: "fallback", window: opened, message: MESSAGES.fallback };
+  }
+
+  if (raced && placeOnScreen(opened, raced)) {
+    return { status: "secondary", window: opened, message: MESSAGES.secondary };
+  }
+
+  return { status: "fallback", window: opened, message: MESSAGES.fallback };
 }

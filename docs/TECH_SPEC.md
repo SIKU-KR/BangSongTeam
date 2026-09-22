@@ -35,7 +35,7 @@
    - `packages/db`는 Worker 전용 패키지로, 프론트엔드(`apps/web/src`)에서의 임포트는 ESLint로 차단한다.
    - 프론트엔드와 백엔드는 Hono RPC Client (`hc<AppType>`)를 통해서만 타입 안전하게 통신한다.
 3. **로컬 우선 영속성과 무결점 오프라인 송출 (Local-First & Zero-Network Presentation)**:
-   - 사용자의 작업은 서버가 아니라 **브라우저 로컬 저장소를 1차 원천**으로 삼는다. 로그인은 기기 간 동기화와 공유를 위한 것이지 편집의 전제 조건이 아니다 (§5.5).
+   - 사용자의 작업은 서버가 아니라 **브라우저 로컬 저장소를 1차 원천**으로 삼는다 (§5.5). 로그인은 2026-09-22 결정으로 **편집의 전제 조건**이 되었으나, 세션을 IndexedDB에 캐시해 네트워크가 끊겨도 게이트를 통과한다 — 로그인 때문에 예배 당일 송출이 멈추지 않는다.
    - 예배 중 송출 화면은 외부 네트워크 요청을 절대 발생시키지 않는다.
    - PWA Service Worker (`RangeRequestsPlugin`)와 `IndexedDB`를 통해 영상 및 세트 데이터를 완전히 로컬화한다.
 4. **100ms 이내 결정론적 렌더링 (3-Layer DOM Architecture)**:
@@ -118,8 +118,8 @@ flowchart TB
 | **클라이언트 영속성 (§5.5)**                  | **구현** | IndexedDB Phase 2 완료. `presentationStore`·`songLibraryStore`가 문서 단위로 저장·복원한다 |
 | Hono RPC 클라이언트 (`hc<AppType>`)           | 미구현   | `apps/web/src`에 `fetch` 호출이 0건. 배경 목록도 `INITIAL_BACKGROUNDS` 상수를 직접 읽는다  |
 | Better Auth (§4.1 auth 테이블)                | 스키마만 | 테이블·컬럼만 있고 런타임 연동 없음                                                        |
-| 발표자 보기·BroadcastChannel (§5.3)           | 스키마만 | `BroadcastMessageSchema`만 존재. 사용처 없음                                               |
-| PWA·Cache Storage (§5.4)                      | 미구현   | vite-plugin-pwa 미설치. IndexedDB(`idb`)는 도입 완료                                       |
+| 발표자 보기·BroadcastChannel (§5.3)           | 구현     | 조작 창 `/present/:id/control`, 청중 창 `?audience=1`. 핸드셰이크·하트비트 동작 (M4)       |
+| PWA·Cache Storage (§5.4)                      | 구현     | vite-plugin-pwa(generateSW) + RangeRequests. 예배 준비 화면이 배경을 미리 받는다 (M4)     |
 | Workers AI 가사 정규화 (§6)                   | 미구현   | `verifyNormalization` 검증 함수만 구현됨                                                   |
 | 공유·가사 라이브러리 API (§7)                 | 미구현   | 화면은 샘플 데이터로 선행 구현                                                             |
 | 사용자 커스텀 배경 업로드 (PRD 4.3)           | 미구현   | 배경 라이브러리 화면에 안내만 있음                                                         |
@@ -924,41 +924,44 @@ stateDiagram-v2
 
 ### 5.3 발표자 보기 및 Chrome Window Management 연동
 
-Chrome 공식 **Window Management API**를 활용한 다중 디스플레이 투영 아키텍처:
+Chrome 공식 **Window Management API**를 활용한 다중 디스플레이 투영 아키텍처 (M4 구현 완료).
 
-1. **디스플레이 감지 및 팝업 배치**:
+**경로** (PRD 5 화면 목록이 정본이다):
+
+| 창 | 경로 | 역할 |
+| --- | --- | --- |
+| 조작 창 (Controller) | `/present/:presentationId/control` | 현재·다음 슬라이드, 곡 점프, 블랙아웃·가사 숨기기, 타이머. 상태의 단일 원천 |
+| 송출 창 (Audience) | `/present/:presentationId/fullscreen?audience=1` | 청중용 전체화면. 조작 창의 지시만 따른다 |
+| 단독 송출 | `/present/:presentationId/fullscreen` | 한 화면에서 조작과 송출을 겸한다 (M1부터의 경로, 동작 불변) |
+
+1. **창을 먼저 열고, 그 다음 화면을 찾는다** (`features/presentation/audienceWindow.ts`):
+
    ```typescript
-   async function openAudienceProjection(presentationId: string) {
-     if ("getScreenDetails" in window) {
-       try {
-         const screenDetails = await (window as any).getScreenDetails();
-         const secondaryScreen = screenDetails.screens.find(
-           (s: any) => s !== screenDetails.currentScreen,
-         );
-         if (secondaryScreen) {
-           // 보조 모니터 위치로 송출 창 바로 팝업 오픈
-           window.open(
-             `/present/audience?setId=${presentationId}`,
-             "WorshipAudienceWindow",
-             `left=${secondaryScreen.availLeft},top=${secondaryScreen.availTop},width=${secondaryScreen.availWidth},height=${secondaryScreen.availHeight}`,
-           );
-           return;
-         }
-       } catch (err) {
-         // 권한 거부 시 일반 팝업 폴백
-       }
-     }
-     window.open(
-       `/present/audience?setId=${presentationId}`,
-       "WorshipAudienceWindow",
-       "width=1280,height=720",
-     );
+   export async function openAudienceWindow(presentationId: string) {
+     // 1) 클릭 제스처 안에서 동기적으로 연다.
+     const opened = window.open(url, AUDIENCE_WINDOW_NAME, "width=1280,height=720");
+     if (!opened) return { status: "blocked", ... };
+
+     // 2) 그 다음 보조 모니터를 찾아 moveTo/resizeTo로 옮긴다.
+     const secondary = await findSecondaryScreen(); // 8초 타임아웃
+     if (secondary) { opened.moveTo(...); opened.resizeTo(...); }
    }
    ```
+
+   **순서를 뒤집으면 안 된다.** 화면 목록을 먼저 물으면 두 가지가 한꺼번에 깨진다 — `getScreenDetails()`는 권한 프롬프트가 떠 있는 동안 resolve하지 않아 창이 아예 열리지 않고, 설령 응답하더라도 그 사이 사용자 제스처가 만료돼 팝업 차단에 걸린다. 2026-09-22 실제 Chrome 검증에서 송출 창이 끝내 열리지 않는 것으로 드러난 결함이다.
+
+   권한을 거부했거나 모니터가 하나면 창은 그대로 두고 '이 창을 프로젝터 화면으로 옮긴 뒤 클릭하면 전체화면이 됩니다' 안내를 띄운다 (PRD 7.3).
+
 2. **BroadcastChannel 핸드셰이크 프로토콜**:
    - 송출 창 마운트 $\rightarrow$ `AUDIENCE_MOUNTED` 전송
    - 조작 창 수신 $\rightarrow$ 즉시 `SYNC_SNAPSHOT` (현재 곡/슬라이드 인덱스, 블랙아웃 여부) 회신
-   - 송출 창은 IndexedDB에서 `presentationId`를 로컬 로드한 뒤 스냅샷 인덱스로 즉각 렌더링.
+   - 송출 창은 IndexedDB에서 하이드레이션된 상태로 렌더하고 스냅샷 인덱스만 적용한다.
+   - 수신 메시지는 반드시 `BroadcastMessageSchema.safeParse`를 통과한 것만 반영하고, 인덱스는 `clampPosition`으로 방어한다. 옛 버전이 열려 있는 탭이 보낸 메시지나 다른 세트의 인덱스로 청중 화면이 비면 안 된다.
+
+3. **청중 창의 예외 동작**:
+   - 자체 키보드 입력을 받지 않는다 (상태의 단일 원천은 조작 창).
+   - 전체화면이 풀려도 라우트를 떠나지 않는다. 창을 프로젝터로 옮기는 동안 전체화면이 풀리는데, 단독 모드처럼 종료해 버리면 송출이 끊긴다.
+   - 송출 종료는 조작 창의 종료 버튼으로만 한다 (PRD 5). 조작 창이 종료되면 청중 창도 함께 닫는다.
 
 ### 5.4 오프라인-퍼스트 미디어 캐싱 (R2 CDN + Service Worker)
 
@@ -970,28 +973,39 @@ Chrome 공식 **Window Management API**를 활용한 다중 디스플레이 투�
    - Worker 응답은 `Accept-Ranges: bytes`, `Content-Range`, `Content-Length`를 그대로 전달하고, 불변 자산이므로 `Cache-Control: public, max-age=31536000, immutable`을 붙인다.
    - 이 결정의 대가는 영상 트래픽이 Worker 요청 수에 계상된다는 것이다. 월 사용량이 무료 티어를 위협하면 커스텀 도메인 직통으로 전환하고, 그때 `getBackgroundMediaUrl`의 base URL과 아래 `urlPattern`만 교체한다.
 2. **Workbox RangeRequests 캐싱 구성 (`vite.config.ts`)**:
+
+   `generateSW` 전략을 쓴다. 설정이 직렬화되므로 **함수형 `urlPattern`과 `new RangeRequestsPlugin()` 같은 플러그인 인스턴스는 쓸 수 없다**(그 형태는 `injectManifest` 전용이다). 선언형 등가 옵션으로 쓴다:
+
    ```typescript
-   // vite-plugin-pwa runtimeCaching
+   // vite-plugin-pwa workbox.runtimeCaching
    {
-     urlPattern: ({ url, sameOrigin }) =>
-       sameOrigin && url.pathname.startsWith('/api/media/'),
+     urlPattern: /\/api\/media\/.*/i,
      handler: 'CacheFirst',
      options: {
-       cacheName: 'worship-videos-cache',
-       plugins: [
-         new RangeRequestsPlugin(), // HTTP 206 Partial Content 비디오 스트리밍 캐시 지원
-         new CacheableResponsePlugin({ statuses: [200, 206] }),
-         new ExpirationPlugin({ maxEntries: 30, maxAgeSeconds: 30 * 24 * 60 * 60 }),
-       ],
+       cacheName: MEDIA_CACHE_NAME,                  // '@repo/shared' 상수
+       rangeRequests: true,                          // = RangeRequestsPlugin
+       cacheableResponse: { statuses: [200, 206] },
+       expiration: { maxEntries: 30, maxAgeSeconds: 30 * 24 * 60 * 60 },
      },
    }
    ```
+
+   **폰트는 프리캐시하지 않는다.** Pretendard 정적 9종과 Noto Sans KR의 유니코드 서브셋 수백 개가 모두 빌드 산출물에 있어, `globPatterns`에 `woff2`를 넣으면 프리캐시가 884개·33MB가 된다. 앱 셸만 프리캐시(12개·1.2MB)하고 폰트는 `worship-fonts-cache` 런타임 캐시(CacheFirst, 1년)로 실제 쓰인 서브셋만 담는다. 세트가 쓰는 글꼴은 예배 준비 화면이 `document.fonts.load()`로 미리 데운다.
+
+   `navigateFallback: 'index.html'`이 없으면 네트워크가 끊긴 상태에서 `/present/...`를 새로고침할 때 앱 자체가 뜨지 않는다. `/api/*`는 폴백에서 제외한다.
+
+   `registerType`은 `'prompt'`다. `autoUpdate`는 배포가 나간 순간 송출 중인 창을 새로고침할 수 있다. 갱신 안내는 편집 화면에서만 띄우고 `/present/*`에서는 렌더하지 않는다.
+
 3. **예배 준비(Preparation) 큐 & 영속 저장소 요청**:
    - `navigator.storage.persist()`를 호출하여 브라우저의 Storage Eviction을 방지.
-   - 세트에 포함된 모든 배경 영상 URL을 `fetch(url, { mode: 'cors' })`로 사전 호출하여 Service Worker 캐시 스토리지에 100% 다운로드.
+   - 세트에 포함된 모든 배경 영상·포스터 URL을 `fetch(url)`로 사전 호출해 Cache Storage에 100% 다운로드한다. **동일 출처 프록시이므로 `mode`를 지정하지 않는다** (5.4-1의 결정과 `mode: 'cors'`는 서로 어긋난다).
+   - **Service Worker 활성화를 기다리지 않는다.** 첫 방문에서는 SW가 아직 activate되지 않아 `fetch`가 가로채이지 않으므로, 받은 응답을 `cache.put`으로 직접 `MEDIA_CACHE_NAME`에 넣는다. Workbox CacheFirst가 같은 캐시를 읽으므로 송출 때 그대로 재생된다.
+   - **Range 헤더 없이 전체 응답을 받는다.** RangeRequestsPlugin은 캐시된 *전체* 응답을 잘라 206을 만든다. 부분 응답을 넣어 두면 영상이 중간에 끊긴다.
+   - 결과는 `sync_meta`에 **병합(read-modify-write)** 으로 기록한다. 같은 레코드에 서버 동기화 필드가 들어 있어 통째로 put하면 준비 한 번에 그것이 날아간다.
    - 전체 다운로드 완료 검증 후 UI에 `오프라인 송출 가능 (Ready for Offline)` 배지 활성화.
 
-4. **클라이언트 IndexedDB 스키마 명세 (`worship-offline-db`, Version 1)** — _구현 완료 (`apps/web/src/lib/storage/db.ts`)_:
+4. **클라이언트 IndexedDB 스키마 명세 (`worship-offline-db`, Version 2)** — _구현 완료 (`apps/web/src/lib/storage/db.ts`)_:
+   > v2에서 오프라인 세션 캐시 `auth_session` 스토어가 추가되었고(M3-B), `sync_meta`에 서버 동기화 필드(`serverUpdatedAt`·`dirty`·`lastSyncedAt`)가 함께 들어간다. `decks`에는 `by-presentation` 인덱스를 두지 않는다(프레젠테이션 덱은 문서에 임베드된다). 아래 코드는 원안이며 실제 구현이 정본이다.
    오프라인 송출 보장을 위해 클라이언트는 `idb` 라이브러리를 통해 다음 객체 저장소(Object Stores)를 관리한다. 이 스토어는 오프라인 송출뿐 아니라 **평상시 편집 데이터의 1차 원천**이기도 하다 (§5.5).
 
    ```typescript
@@ -1035,7 +1049,7 @@ Chrome 공식 **Window Management API**를 활용한 다중 디스플레이 투�
    }
 
    export async function getOfflineDB() {
-     return openDB<WorshipOfflineDB>("worship-offline-db", 1, {
+     return openDB<WorshipOfflineDB>("worship-offline-db", OFFLINE_DB_VERSION, {
        upgrade(db) {
          const presentationStore = db.createObjectStore("presentations", {
            keyPath: "id",

@@ -6,6 +6,16 @@
 > **목표**: '송출 중 네트워크 요청 0건'을 테스트로 고정하고, M4 구현과 어긋나게 된 PRD·TECH_SPEC·AGENTS 문서를 코드에 맞춘다
 > **완료 기준 (DoD)**: 송출 라우트를 마운트해도 `fetch`가 한 번도 호출되지 않고, 문서의 M4 관련 서술이 실제 구현과 일치한다
 
+> **구현 현황 (2026-09-22)**
+>
+> - Task 5.1~5.4 완료. 전체 **674개 / 88파일 Green**.
+> - **헤드리스 Chrome 실검증에서 결함 2건을 찾아 고쳤다** (§4에 절차 기록).
+>   1. **송출 창이 아예 열리지 않았다** — `openAudienceWindow()`가 `getScreenDetails()`를 먼저 await했는데, 이 API는 권한 프롬프트가 떠 있는 동안 resolve하지 않는다. 조작자가 프롬프트를 무시하면 영원히 매달린다. 창을 먼저 열고 그 다음 화면을 찾아 `moveTo`/`resizeTo`로 옮기도록 순서를 뒤집었다(`tasks_4.md` Task 4.1).
+>   2. **조작 창의 '다음' 미리보기가 조작 바를 덮었다** — `aspect-video`가 창 높이보다 큰 높이를 강제해 블랙아웃·가사 숨기기 버튼이 눌리지 않았다. 상자를 채우고 16:9는 `SlideStage`의 레터박스에 맡기도록 고쳤다(`tasks_4.md` Task 4.3).
+> - **M4 완료 기준의 절반을 실제로 확인했다**: 빌드본을 서빙하고 Service Worker를 활성화한 뒤 DevTools 오프라인 상태에서 `/present/:id/fullscreen`을 새로고침해도 앱이 뜨고(navigateFallback), 배경 MP4가 캐시에서 200으로 나오며, 5곡 세트를 끝까지 넘겼다.
+> - **보조 모니터 확인은 남아 있다.** 이 환경에는 디스플레이가 없어 폴백 경로만 검증된다.
+> - 검증 중 M4 범위 밖 결함 2건을 발견했다(§5).
+
 ---
 
 ## 1. 아키텍처 가드레일 & 준수 사항
@@ -18,7 +28,7 @@
 
 ## 2. 세부 작업 체크리스트
 
-- [ ] **Task 5.1: 송출 라우트 Zero-Fetch 회귀 테스트**
+- [x] **Task 5.1: 송출 라우트 Zero-Fetch 회귀 테스트**
   - **대상 파일**: `apps/web/src/routes/zeroFetch.test.tsx`
   - **선행 조건**: `tasks_4.md` 완료
   - **구현 내용**:
@@ -27,7 +37,7 @@
     - 배경 `<video src>`는 브라우저가 가져가는 것이므로 jsdom에서는 호출되지 않는다. 이 테스트가 막는 것은 **앱 코드가 직접 부르는 fetch**다
   - **DoD (통과 기준)**: `pnpm exec vitest run apps/web/src/routes/zeroFetch.test.tsx`가 100% 통과(Green)한다.
 
-- [ ] **Task 5.2: TECH_SPEC 정정**
+- [x] **Task 5.2: TECH_SPEC 정정**
   - **대상 파일**: `docs/TECH_SPEC.md`
   - **선행 조건**: Task 5.1
   - **구현 내용**:
@@ -39,7 +49,7 @@
     - §1.2-3: '로그인은 편집의 전제 조건이 아니다' → 2026-09-22 결정(로그인 게이트)에 맞춰 정정
   - **DoD (통과 기준)**: `grep -n "present/audience" docs/TECH_SPEC.md`가 0건을 돌려준다.
 
-- [ ] **Task 5.3: PRD 현황 갱신**
+- [x] **Task 5.3: PRD 현황 갱신**
   - **대상 파일**: `prd.md`
   - **선행 조건**: Task 5.2
   - **구현 내용**:
@@ -48,7 +58,7 @@
     - §8 로드맵 표의 M4 행 상태 갱신
   - **DoD (통과 기준)**: `grep -n "M4 오프라인" prd.md`의 상태 열이 '대기'가 아니다.
 
-- [ ] **Task 5.4: 태스크 가이드 현재 위치 갱신 및 운영자 검증 절차**
+- [x] **Task 5.4: 태스크 가이드 현재 위치 갱신 및 운영자 검증 절차**
   - **대상 파일**: `docs/tasks/AGENTS.md`, `docs/tasks/m4/tasks_5.md`
   - **선행 조건**: Task 5.3
   - **구현 내용**:
@@ -76,4 +86,35 @@ pnpm --filter web build && ls -la apps/web/dist/client/sw.js
 3. **영구 저장소** — 준비 화면에서 영구 저장소 요청이 승인되는지(Chrome은 사용 이력에 따라 자동 승인/거부한다), 거부 시 경고가 보이는지 확인한다.
 4. **브라우저 완전 종료 후 재현** — 브라우저를 껐다 켠 뒤 오프라인 상태로 같은 세트를 송출해 캐시가 살아 있는지 확인한다.
 
-> 로컬 개발 환경에서는 R2 버킷이 비어 있어 `/api/media/*`가 404다(`m3/tasks_1.md`에 기록된 기존 사실). 준비 화면은 이 경우 실패 상태로 표시한다. 실검증은 실제 영상이 있는 환경에서 해야 한다.
+> 로컬 개발 환경에서는 R2 버킷이 비어 있어 `/api/media/*`가 404다(`m3/tasks_1.md`에 기록된 기존 사실). 준비 화면은 이 경우 실패 상태로 표시한다. 검증하려면 `wrangler r2 object put prj-ppt-media/loops/<key>.mp4 --file=<더미> --local --persist-to=.wrangler/state`로 로컬 버킷을 채우면 된다.
+
+### 4.1 2026-09-22에 실제로 확인한 것 (헤드리스 Chrome)
+
+`pnpm --filter web dev`로 API를, 빌드 산출물(`dist/client`)을 정적 서버로 띄워 Service Worker까지 살린 상태에서 확인했다.
+
+| 항목 | 결과 |
+| --- | --- |
+| Service Worker 등록·활성 | `sw.js` active, 앱 셸 프리캐시 8건 |
+| 예배 준비 화면 | 5곡 전부 '준비 완료', '오프라인 송출 가능' 배지, 총 1.0MB |
+| Cache Storage | `worship-videos-cache` 10건(영상 5 + 포스터 5) |
+| `sync_meta` | `isReady: true`, `cachedVideos: 10`, `cachedAt` 기록됨 |
+| 재방문 | `/api/media` 요청 0건 (이미 캐시된 것은 다시 받지 않는다) |
+| **네트워크 차단 후 송출** | 오프라인 상태에서 `/present/:id/fullscreen` 새로고침 성공, 배경 MP4가 캐시에서 200, **5곡 끝까지 완주** |
+| 발표자 보기 | 송출 창 열림·연결 표시, 3회 넘김·곡 점프·블랙아웃·`1.2`+Enter 점프가 모두 청중 창에 즉시 반영 |
+| 없는 번호 | 조작 창에만 '없는 번호입니다: 9.9'가 뜨고 2초 뒤 사라짐 |
+| 청중 창 키보드 | 방향키를 눌러도 움직이지 않음 |
+| 송출 종료 | 청중 창이 닫히고 조작 창은 `/presentations`로 |
+| 미디어 헤더 | `cache-control: public, max-age=31536000, immutable`, Range 요청에 206 + `content-range` |
+
+### 4.2 검증 중 만난 환경 문제 (코드 결함 아님)
+
+- `pnpm --filter web dev`가 `CLOUDFLARE_API_TOKEN` 없이는 뜨지 않는다. AI 바인딩 때문에 원격 바인딩 인증을 요구한다. 검증에서는 `cloudflare({ remoteBindings: false })`로 임시 설정을 만들어 우회했다. 로컬 개발을 자주 한다면 이 옵션을 기본으로 둘지 검토할 만하다(테스트 설정은 이미 `remoteBindings: false`다).
+
+---
+
+## 5. 검증 중 발견한 M4 범위 밖 결함
+
+고치지 않았다. M4 작업을 넓히는 대신 사실만 남긴다.
+
+1. **서버 동기화가 500으로 실패한다.** 세트를 저장할 때 Worker가 `D1_ERROR: FOREIGN KEY constraint failed`를 던진다. `pushDeck`을 아무도 호출하지 않아 `presentation_items.deck_id`가 가리킬 덱 행이 서버에 없는 것으로 보인다(M3-B 범위). 로컬 저장은 정상이라 편집·송출에는 영향이 없지만, **기기 간 동기화는 실제로는 동작하지 않는 상태다.**
+2. **'기본 5곡 세트 불러오기' 버튼이 세트를 비운다.** 핸들러가 `resetActivePresentation()`이라 곡을 넣는 게 아니라 `items`를 비운다. 라벨과 동작이 반대다(M2 범위).
