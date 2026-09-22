@@ -4,27 +4,16 @@ import { createD1Client, seedBackgrounds } from "@repo/db";
 import type { BackgroundMedia } from "@repo/shared";
 import app from "./index";
 
-declare module "cloudflare:test" {
-  interface ProvidedEnv {
-    DB: D1Database;
-    MEDIA_BUCKET: R2Bucket;
-    AI: Ai;
-    R2_PUBLIC_DOMAIN?: string;
-  }
-}
-
 describe("Task 4.6: Miniflare/workerd 환경 Worker 및 D1 통합 테스트", () => {
   beforeAll(async () => {
-    // 1. D1 SQLite 테이블 생성 (workerd 런타임 내 인메모리 D1 인스턴스)
-    await env.DB.exec(
-      "CREATE TABLE IF NOT EXISTS backgrounds (id TEXT PRIMARY KEY NOT NULL, title TEXT NOT NULL, r2_key TEXT NOT NULL, poster_key TEXT NOT NULL, duration_sec INTEGER NOT NULL, license TEXT NOT NULL, tags TEXT NOT NULL, created_at INTEGER DEFAULT (unixepoch()));",
-    );
+    // 테이블은 worker/test/setup.ts가 실제 마이그레이션으로 만든다.
+    // 여기서는 데이터만 채운다.
 
-    // 2. 초기 10개 모션 루프 영상 데이터 시드
+    // 1. 초기 10개 모션 루프 영상 데이터 시드
     const db = createD1Client(env.DB);
     await seedBackgrounds(db);
 
-    // 3. R2 버킷에 테스트 모션 비디오 객체 적재
+    // 2. R2 버킷에 테스트 모션 비디오 객체 적재
     await env.MEDIA_BUCKET.put(
       "loops/warm_light_flow.mp4",
       new Uint8Array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9]),
@@ -149,5 +138,47 @@ describe("Task 4.6: Miniflare/workerd 환경 Worker 및 D1 통합 테스트", ()
     expect(res.status).toBe(404);
     const json = await res.json();
     expect(json).toEqual({ error: "Media not found" });
+  });
+
+  describe("Better Auth 마운트 (/api/auth/*)", () => {
+    it("세션이 없어도 get-session이 500이 아니라 정상 응답을 준다", async () => {
+      // 미로그인은 정상 상태다. 여기서 500이 나면 부팅 시 세션 확인이
+      // 에러 배너를 띄우게 된다.
+      const res = await app.request("/api/auth/get-session", {}, env);
+
+      expect(res.status).toBeLessThan(500);
+    });
+
+    it("소셜 로그인 엔드포인트가 라우팅된다 (404가 아니다)", async () => {
+      const res = await app.request(
+        "/api/auth/sign-in/social",
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ provider: "kakao", callbackURL: "/" }),
+        },
+        env,
+      );
+
+      // 자격증명이 플레이스홀더라 성공까지는 못 가지만,
+      // Hono가 Better Auth로 넘겼다면 404는 아니다.
+      expect(res.status).not.toBe(404);
+    });
+
+    it("인증 경로는 Hono의 전역 404가 아니라 Better Auth가 처리한다", async () => {
+      const unknownAuth = await app.request(
+        "/api/auth/nonexistent-endpoint",
+        {},
+        env,
+      );
+      const unknownApi = await app.request("/api/nonexistent", {}, env);
+
+      // 둘 다 404지만, 인증 경로는 Better Auth 핸들러까지 들어갔으므로
+      // Hono의 전역 notFound 본문({ error: "Not Found" })이 아니다.
+      expect(await unknownApi.json()).toEqual({ error: "Not Found" });
+      expect(await unknownAuth.text()).not.toBe(
+        JSON.stringify({ error: "Not Found" }),
+      );
+    });
   });
 });
