@@ -1,4 +1,9 @@
 import React from "react";
+import {
+  __loadDocumentsForTests,
+  SEED_PRESENTATIONS,
+} from "../features/presentation";
+import { signInAsTestUser } from "../test/sessionFixture";
 import { render, screen, fireEvent, act } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { MemoryRouter, Routes, Route } from "react-router-dom";
@@ -41,7 +46,9 @@ function dispatchKey(key: string, code?: string, shiftKey = false): void {
 
 describe("FullscreenPresentRoute", () => {
   beforeEach(() => {
+    signInAsTestUser();
     resetPresentationStore();
+    __loadDocumentsForTests(SEED_PRESENTATIONS);
     vi.spyOn(globalThis, "fetch");
   });
 

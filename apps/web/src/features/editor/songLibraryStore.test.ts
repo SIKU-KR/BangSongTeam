@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { signInAsTestUser } from "../../test/sessionFixture";
 import { DEFAULT_DECK_STYLE } from "@repo/shared";
 import {
   closeOfflineDB,
@@ -29,6 +30,7 @@ describe("songLibraryStore", () => {
   beforeEach(async () => {
     localStorage.clear();
     await resetDatabase();
+    signInAsTestUser();
     await resetSongLibraryStore();
   });
 

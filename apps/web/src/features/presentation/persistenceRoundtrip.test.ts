@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { signInAsTestUser } from "../../test/sessionFixture";
 import {
   DEFAULT_DECK_STYLE,
   INITIAL_BACKGROUNDS,
@@ -68,6 +69,7 @@ describe("영속성 왕복 (편집 → 저장 → 새 탭 복원)", () => {
   beforeEach(async () => {
     localStorage.clear();
     await resetDatabase();
+    signInAsTestUser();
     resetPresentationStore();
   });
 

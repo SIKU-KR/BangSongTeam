@@ -1,4 +1,9 @@
 import React from "react";
+import {
+  __loadDocumentsForTests,
+  SEED_PRESENTATIONS,
+} from "../features/presentation";
+import { signInAsTestUser } from "../test/sessionFixture";
 import { render, screen, fireEvent, act } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { MemoryRouter, Routes, Route } from "react-router-dom";
@@ -35,7 +40,9 @@ vi.mock("react-router-dom", async () => {
 
 describe("EditorRoute (Canva / MiriCanvas Presentation Editor)", () => {
   beforeEach(() => {
+    signInAsTestUser();
     resetPresentationStore();
+    __loadDocumentsForTests(SEED_PRESENTATIONS);
     mockNavigate.mockClear();
     vi.restoreAllMocks();
   });

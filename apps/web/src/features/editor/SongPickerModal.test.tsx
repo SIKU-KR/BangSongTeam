@@ -1,4 +1,5 @@
 import React from "react";
+import { signInAsTestUser } from "../../test/sessionFixture";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import { closeOfflineDB, OFFLINE_DB_NAME } from "../../lib/storage";
@@ -19,6 +20,7 @@ describe("SongPickerModal", () => {
       req.onerror = () => resolve();
       req.onblocked = () => resolve();
     });
+    signInAsTestUser();
     await resetSongLibraryStore();
   });
 

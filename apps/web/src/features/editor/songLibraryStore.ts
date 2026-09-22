@@ -16,8 +16,10 @@ import {
   reportCorruptedRecords,
 } from "../../lib/storage";
 import { COMMUNITY_SONGS } from "../library/mockCommunityData";
+import { getCurrentUserId } from "../../lib/auth/sessionStore";
 
-const GUEST_USER_ID = "00000000-0000-4000-8000-000000000001";
+// 보관함 곡의 소유자는 세션 사용자다. 예전 게스트 상수는 제거했다
+// (로그인이 편집의 전제 조건이 되었다 — 2026-09-22 결정).
 
 export interface AvailableSongItem {
   deck: Deck;
@@ -47,11 +49,15 @@ export function getUserSongs(): Deck[] {
  * 구 localStorage 보관함이 남아 있으면 먼저 이관한다.
  */
 export async function hydrateSongLibrary(): Promise<void> {
+  const userId = getCurrentUserId();
   try {
     await migrateLegacySongs();
     const { valid, corrupted } = await loadAllSongs();
     reportCorruptedRecords(corrupted);
-    userSongsCache = valid;
+    // 세션 사용자의 곡만 싣는다 (한 브라우저에서 계정을 바꿔도 격리된다).
+    userSongsCache = userId
+      ? valid.filter((deck) => deck.userId === userId)
+      : [];
     emitChange();
     clearPersistenceError();
   } catch (err) {
@@ -68,12 +74,20 @@ export function saveSongToLibrary(songInput: {
   lyricsRaw: string;
   backgroundId?: string | null;
 }): Deck {
+  const userId = getCurrentUserId();
+  if (!userId) {
+    // 로그인이 편집의 전제 조건이므로 여기 도달하면 게이트가 새는 것이다.
+    // 빈 userId로 저장하면 DeckSchema(uuid)에서 터지거나, 더 나쁘게는
+    // 아무에게도 안 보이는 곡이 저장된다.
+    throw new Error("로그인이 필요합니다");
+  }
+
   const now = new Date().toISOString();
   const slides = splitLyricsIntoSlides(songInput.lyricsRaw);
 
   const newDeck: Deck = DeckSchema.parse({
     id: songInput.id ?? crypto.randomUUID(),
-    userId: GUEST_USER_ID,
+    userId,
     catalogId: null,
     scope: "library",
     presentationId: null,

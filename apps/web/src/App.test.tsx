@@ -7,6 +7,11 @@ import {
   SEED_PRESENTATION_IDS,
 } from "./features/presentation";
 import { closeOfflineDB, OFFLINE_DB_NAME } from "./lib/storage";
+import {
+  signInAsTestUser,
+  signOutForTests,
+  seedPresentationsIntoStorage,
+} from "./test/sessionFixture";
 
 const DOC_ID = SEED_PRESENTATION_IDS[0];
 
@@ -26,9 +31,17 @@ describe("App Route Integration", () => {
       req.onblocked = () => resolve();
     });
     resetPresentationStore();
+
+    // 로그인이 편집의 전제 조건이므로 라우트 테스트는 세션부터 만든다.
+    // 부팅 시 샘플을 자동 생성하지 않으니 데이터도 직접 심는다.
+    signInAsTestUser();
+    await seedPresentationsIntoStorage();
   });
 
-  afterEach(closeOfflineDB);
+  afterEach(() => {
+    signOutForTests();
+    closeOfflineDB();
+  });
 
   it("should render the landing placeholder at '/'", async () => {
     renderAt("/");
@@ -96,5 +109,40 @@ describe("App Route Integration", () => {
 
     expect(screen.queryByTestId("editor-route")).not.toBeInTheDocument();
     expect(await screen.findByTestId("presentation-card")).toBeInTheDocument();
+  });
+
+  it("미로그인이면 어떤 경로로 들어와도 로그인 화면만 보인다", async () => {
+    signOutForTests();
+
+    renderAt("/presentations");
+
+    expect(
+      await screen.findByRole("button", { name: /카카오로 시작하기/ }),
+    ).toBeInTheDocument();
+    expect(screen.queryByTestId("presentation-card")).not.toBeInTheDocument();
+  });
+
+  it("미로그인이면 송출 경로도 막는다", async () => {
+    signOutForTests();
+
+    renderAt(`/present/${DOC_ID}/fullscreen`);
+
+    expect(
+      await screen.findByRole("button", { name: /카카오로 시작하기/ }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("fullscreen-present-route"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("다른 계정으로 로그인하면 남의 세트가 보이지 않는다", async () => {
+    // 한 브라우저를 여러 사람이 쓸 수 있다. 로컬 저장본은 남겨 두되
+    // 세션 사용자의 문서만 싣는다.
+    signInAsTestUser("99999999-9999-4999-8999-999999999999");
+
+    renderAt("/presentations");
+
+    expect(await screen.findByText("Worship Studio")).toBeInTheDocument();
+    expect(screen.queryByTestId("presentation-card")).not.toBeInTheDocument();
   });
 });

@@ -6,6 +6,8 @@ import {
   flushPendingWrites,
 } from "./features/presentation";
 import { hydrateSongLibrary } from "./features/editor";
+import { hydrateSession, useSession } from "./lib/auth";
+import { LoginRoute } from "./routes/LoginRoute";
 import {
   AppShellLayout,
   LandingRoute,
@@ -28,7 +30,15 @@ function useHydration(): boolean {
   useEffect(() => {
     let cancelled = false;
     void (async () => {
-      await Promise.all([hydrateFromStorage(), hydrateSongLibrary()]);
+      // 세션을 먼저 확정한 다음 스토어를 싣는다. 두 하이드레이션 모두
+      // 세션 사용자로 문서를 거르므로 순서가 뒤집히면 빈 목록이 나온다.
+      //
+      // hydrateSession()은 캐시가 있으면 서버를 기다리지 않는다.
+      // 예배 당일 네트워크가 끊겨도 여기서 멈추면 안 된다.
+      const session = await hydrateSession();
+      if (session.status === "authenticated") {
+        await Promise.all([hydrateFromStorage(), hydrateSongLibrary()]);
+      }
       if (!cancelled) setIsHydrated(true);
     })();
     return () => {
@@ -67,6 +77,7 @@ function useHydration(): boolean {
  */
 export function App(): React.JSX.Element {
   const isHydrated = useHydration();
+  const session = useSession();
 
   if (!isHydrated) {
     return (
@@ -77,6 +88,16 @@ export function App(): React.JSX.Element {
         >
           저장된 프레젠테이션을 불러오는 중…
         </div>
+      </ThemeProvider>
+    );
+  }
+
+  // 로그인은 편집의 전제 조건이다 (2026-09-22 결정). 미인증이면 어떤
+  // 경로로 들어와도 로그인 화면만 보인다.
+  if (session.status !== "authenticated") {
+    return (
+      <ThemeProvider>
+        <LoginRoute />
       </ThemeProvider>
     );
   }

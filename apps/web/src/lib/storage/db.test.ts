@@ -30,6 +30,7 @@ describe("worship-offline-db", () => {
     expect(db.name).toBe(OFFLINE_DB_NAME);
     expect(db.version).toBe(OFFLINE_DB_VERSION);
     expect([...db.objectStoreNames].sort()).toEqual([
+      "auth_session",
       "backgrounds",
       "decks",
       "presentations",

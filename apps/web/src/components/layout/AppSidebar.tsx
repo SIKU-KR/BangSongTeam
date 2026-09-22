@@ -1,6 +1,7 @@
-import React from "react";
+import React, { useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { ThemeMenuButton } from "../common/ThemeMenuButton";
+import { useSession, signOut } from "../../lib/auth";
 
 export interface AppSidebarProps {
   onCreateNewPresentation: () => void;
@@ -43,6 +44,60 @@ const NAV_ITEMS: NavItem[] = [
  * - 브랜드 블록, 새 프레젠테이션 CTA, 경로 기반 메뉴 3종, 테마 전환, 프로필 카드
  * - 활성 상태는 `useLocation().pathname` 에서 파생되며 `aria-current="page"` 로도 노출된다
  */
+/**
+ * 로그인한 사용자와 로그아웃.
+ *
+ * 예전에는 '주일 찬양팀 / 로컬 오프라인 모드'라고 적힌 정적 아바타였다.
+ */
+function AccountCard(): React.JSX.Element {
+  const session = useSession();
+  const [signingOut, setSigningOut] = useState(false);
+
+  const name = session.user?.name ?? "사용자";
+  const initials = name.slice(0, 2);
+
+  const handleSignOut = async (): Promise<void> => {
+    setSigningOut(true);
+    try {
+      await signOut();
+    } finally {
+      setSigningOut(false);
+    }
+  };
+
+  return (
+    <div
+      data-testid="account-card"
+      className="p-3 rounded-2xl bg-zinc-100/90 dark:bg-zinc-900/60 border border-zinc-200 dark:border-zinc-900 flex items-center gap-3"
+    >
+      {session.user?.image ? (
+        <img
+          src={session.user.image}
+          alt=""
+          className="w-9 h-9 rounded-full object-cover shrink-0"
+        />
+      ) : (
+        <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-emerald-700 to-teal-500 flex items-center justify-center text-white text-xs font-bold shrink-0">
+          {initials}
+        </div>
+      )}
+      <div className="min-w-0 flex-1">
+        <p className="text-xs font-bold text-zinc-800 dark:text-zinc-200 truncate">
+          {name}
+        </p>
+        <button
+          type="button"
+          disabled={signingOut}
+          onClick={() => void handleSignOut()}
+          className="text-[10px] text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 transition-colors disabled:opacity-60"
+        >
+          {signingOut ? "로그아웃 중…" : "로그아웃"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export function AppSidebar({
   onCreateNewPresentation,
 }: AppSidebarProps): React.JSX.Element {
@@ -146,19 +201,7 @@ export function AppSidebar({
         <ThemeMenuButton />
 
         {/* 좌측 하단 사용자 프로필 (Canva 아바타 스타일) */}
-        <div className="p-3 rounded-2xl bg-zinc-100/90 dark:bg-zinc-900/60 border border-zinc-200 dark:border-zinc-900 flex items-center gap-3">
-          <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-emerald-700 to-teal-500 flex items-center justify-center text-white text-xs font-bold shrink-0">
-            WS
-          </div>
-          <div className="min-w-0 flex-1">
-            <p className="text-xs font-bold text-zinc-800 dark:text-zinc-200 truncate">
-              주일 찬양팀
-            </p>
-            <p className="text-[10px] text-zinc-500 truncate">
-              로컬 오프라인 모드
-            </p>
-          </div>
-        </div>
+        <AccountCard />
       </div>
     </aside>
   );

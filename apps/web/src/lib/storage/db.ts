@@ -2,7 +2,12 @@ import { openDB, type DBSchema, type IDBPDatabase } from "idb";
 import type { BackgroundMedia, Deck, Presentation } from "@repo/shared";
 
 export const OFFLINE_DB_NAME = "worship-offline-db";
-export const OFFLINE_DB_VERSION = 1;
+/**
+ * v2: 오프라인 세션 캐시(`auth_session`)를 추가했다.
+ * httpOnly 쿠키는 JS가 못 읽으므로, 네트워크 없이 로그인 게이트를 통과시키려면
+ * 마지막으로 확인된 세션을 따로 들고 있어야 한다.
+ */
+export const OFFLINE_DB_VERSION = 2;
 
 /**
  * IndexedDB를 쓸 수 없는 환경(시크릿 모드, 저장소 차단 등)을 호출자가 식별할 수 있게
@@ -41,12 +46,38 @@ export interface WorshipOfflineDB extends DBSchema {
     key: string;
     value: {
       presentationId: string;
-      isReady: boolean;
-      cachedVideos: string[];
-      cachedAt: number;
-      storagePersisted: boolean;
+      /** 서버가 마지막으로 알려준 수정 시각 (ISO) — LWW 비교 기준 */
+      serverUpdatedAt?: string;
+      /** 로컬 변경이 아직 서버에 올라가지 않았는지 */
+      dirty?: boolean;
+      lastSyncedAt?: number;
+      isReady?: boolean;
+      cachedVideos?: string[];
+      cachedAt?: number;
+      storagePersisted?: boolean;
     };
   };
+  auth_session: {
+    key: string;
+    value: CachedSession;
+  };
+}
+
+/**
+ * 마지막으로 서버가 확인해 준 세션.
+ *
+ * 예배 당일 네트워크가 끊겨도 송출이 되어야 하므로, 부팅 시 서버에 묻지 않고
+ * 이 값으로 먼저 게이트를 통과시킨다 (재검증은 백그라운드).
+ */
+export interface CachedSession {
+  /** 단일 레코드 고정 키 */
+  id: "current";
+  userId: string;
+  name: string;
+  image?: string | null;
+  /** epoch ms. 지난 세션은 통과시키지 않는다 */
+  expiresAt: number;
+  cachedAt: number;
 }
 
 let dbPromise: Promise<IDBPDatabase<WorshipOfflineDB>> | null = null;
@@ -86,6 +117,9 @@ export function getOfflineDB(): Promise<IDBPDatabase<WorshipOfflineDB>> {
         }
         if (!db.objectStoreNames.contains("sync_meta")) {
           db.createObjectStore("sync_meta", { keyPath: "presentationId" });
+        }
+        if (!db.objectStoreNames.contains("auth_session")) {
+          db.createObjectStore("auth_session", { keyPath: "id" });
         }
       },
     }).catch((err) => {

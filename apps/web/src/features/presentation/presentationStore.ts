@@ -9,7 +9,7 @@ import {
   clearPersistenceError,
   reportCorruptedRecords,
 } from "../../lib/storage";
-import { SEED_PRESENTATIONS, SEED_USER_ID } from "./mockPresentations";
+import { getCurrentUserId } from "../../lib/auth/sessionStore";
 
 /** 멀티 문서 컬렉션 상태 */
 interface PresentationStoreState {
@@ -21,22 +21,36 @@ interface PresentationStoreState {
   activeId: string;
 }
 
-function createSeedState(): PresentationStoreState {
-  const seeds = SEED_PRESENTATIONS.map(
-    (seed) => JSON.parse(JSON.stringify(seed)) as Presentation,
-  );
-  return {
-    byId: Object.fromEntries(seeds.map((seed) => [seed.id, seed])),
-    order: seeds.map((seed) => seed.id),
-    activeId: seeds[0].id,
-  };
+/**
+ * 빈 컬렉션.
+ *
+ * 예전에는 샘플 5개를 깔고 시작했다. 계정이 생긴 뒤로는 그러면 안 된다 —
+ * 샘플이 사용자 데이터로 서버에 올라가 다른 기기에서 '내가 안 만든 세트'로
+ * 보인다. 첫 로그인 사용자는 빈 대시보드에서 시작한다.
+ */
+function createEmptyState(): PresentationStoreState {
+  return { byId: {}, order: [], activeId: "" };
 }
+
+/**
+ * 문서가 하나도 없을 때 읽기용으로 돌려주는 자리표시자.
+ * 저장 대상이 아니다 (id가 비어 있어 스케줄러가 걸러낸다).
+ */
+const EMPTY_PRESENTATION: Presentation = Object.freeze({
+  id: "",
+  userId: "",
+  title: "",
+  serviceDate: new Date().toISOString().slice(0, 10),
+  items: [],
+  createdAt: new Date(0).toISOString(),
+  updatedAt: new Date(0).toISOString(),
+}) as Presentation;
 
 function buildListSnapshot(s: PresentationStoreState): Presentation[] {
   return s.order.map((id) => s.byId[id]).filter(Boolean);
 }
 
-let state: PresentationStoreState = createSeedState();
+let state: PresentationStoreState = createEmptyState();
 /**
  * listPresentations()가 매 호출마다 새 배열을 만들면 useSyncExternalStore가
  * "getSnapshot should be cached" 무한 루프로 터지므로, state 교체 시에만 재계산한다.
@@ -44,9 +58,9 @@ let state: PresentationStoreState = createSeedState();
 let listSnapshot: Presentation[] = buildListSnapshot(state);
 const listeners = new Set<() => void>();
 
-/** 활성 문서 읽기 (내부 전용) */
+/** 활성 문서 읽기 (내부 전용). 컬렉션이 비면 자리표시자를 돌려준다. */
 function readActive(): Presentation {
-  return state.byId[state.activeId];
+  return state.byId[state.activeId] ?? EMPTY_PRESENTATION;
 }
 
 /**
@@ -166,6 +180,7 @@ function runPendingWrites(): void {
 
 function schedulePersist(): void {
   if (!persistenceEnabled) return;
+  if (!state.activeId) return; // 빈 컬렉션 — 저장할 문서가 없다
   pendingIds.add(state.activeId);
   if (debounceTimer) clearTimeout(debounceTimer);
   debounceTimer = setTimeout(runPendingWrites, PERSIST_DEBOUNCE_MS);
@@ -183,35 +198,37 @@ export async function flushPendingWrites(): Promise<void> {
 }
 
 /**
- * 저장본으로 컬렉션을 복원한다. 비어 있을 때만 시드 데이터를 쓴다.
- * 앱 부팅 시 1회 호출하며, 완료 전까지 라우터를 렌더하지 않는다.
+ * 저장본으로 컬렉션을 복원한다.
+ *
+ * **세션 사용자의 문서만 싣는다.** 한 브라우저를 여러 사람이 쓰거나 계정을
+ * 바꿨을 때 남의 세트가 보이면 안 된다. 로그아웃해도 로컬 저장본 자체는
+ * 지우지 않으므로, 다시 로그인하면 그대로 돌아온다.
+ *
+ * 앱 부팅 시 세션이 정해진 뒤에 1회 호출하며, 완료 전까지 라우터를 렌더하지 않는다.
  */
 export async function hydrateFromStorage(): Promise<void> {
   persistenceEnabled = false;
+  const userId = getCurrentUserId();
+
   try {
     const { valid, corrupted } = await loadAllPresentations();
     reportCorruptedRecords(corrupted);
-    if (valid.length > 0) {
-      const sorted = [...valid].sort((a, b) =>
-        a.createdAt.localeCompare(b.createdAt),
-      );
-      state = {
-        byId: Object.fromEntries(sorted.map((doc) => [doc.id, doc])),
-        order: sorted.map((doc) => doc.id),
-        activeId: sorted[0].id,
-      };
-      listSnapshot = buildListSnapshot(state);
-      histories.clear();
-      emitChange();
-      persistenceEnabled = true;
-      clearPersistenceError();
-      return;
-    }
 
-    // 저장소가 비어 있는 첫 방문: 현재(시드) 상태를 그대로 기록해 둔다
+    const mine = userId ? valid.filter((doc) => doc.userId === userId) : [];
+    const sorted = [...mine].sort((a, b) =>
+      a.createdAt.localeCompare(b.createdAt),
+    );
+
+    state = {
+      byId: Object.fromEntries(sorted.map((doc) => [doc.id, doc])),
+      order: sorted.map((doc) => doc.id),
+      activeId: sorted[0]?.id ?? "",
+    };
+    listSnapshot = buildListSnapshot(state);
+    histories.clear();
+    emitChange();
+
     persistenceEnabled = true;
-    for (const id of state.order) pendingIds.add(id);
-    await flushPendingWrites();
     clearPersistenceError();
   } catch (err) {
     // 저장소를 못 쓰는 환경이어도 편집 자체는 계속 가능해야 한다
@@ -238,6 +255,27 @@ export function resetPersistenceForTests(): void {
     debounceTimer = null;
   }
   inFlight = Promise.resolve();
+}
+
+/**
+ * 테스트 전용: 문서를 메모리에 직접 싣는다.
+ *
+ * 부팅 시 샘플 자동 생성이 사라지면서, 데이터가 필요한 테스트는 스스로
+ * 상태를 만들어야 한다. 저장은 하지 않는다 (저장까지 원하면 저장소에 심고
+ * hydrateFromStorage()를 부른다).
+ */
+export function __loadDocumentsForTests(documents: Presentation[]): void {
+  const copies = documents.map(
+    (doc) => JSON.parse(JSON.stringify(doc)) as Presentation,
+  );
+  state = {
+    byId: Object.fromEntries(copies.map((doc) => [doc.id, doc])),
+    order: copies.map((doc) => doc.id),
+    activeId: copies[0]?.id ?? "",
+  };
+  listSnapshot = buildListSnapshot(state);
+  histories.clear();
+  for (const listener of listeners) listener();
 }
 
 function emitChange(): void {
@@ -294,24 +332,27 @@ export function addDeckToPresentation(deck: Deck): PresentationItem {
 export function resetPresentationStore(): void {
   resetPersistenceForTests();
   histories.clear();
-  state = createSeedState();
+  state = createEmptyState();
   listSnapshot = buildListSnapshot(state);
   emitChange();
 }
 
 /**
- * 현재 활성 문서만 시드 내용으로 복원 (에디터 '기본 찬양 세트 복원' 메뉴).
- * 시드가 아닌 사용자 생성 문서라면 빈 프레젠테이션으로 초기화한다.
+ * 현재 활성 문서의 곡을 모두 비운다 (에디터 '세트 비우기' 메뉴).
+ *
+ * 예전에는 시드 샘플로 되돌렸지만, 계정 기반으로 바뀌면서 시드 자체가
+ * 사라졌다. 사용자가 만든 적 없는 곡이 복원되면 그게 더 이상하다.
  * 컬렉션 전체를 날리지 않으므로 URL의 presentationId가 고아가 되지 않는다.
  */
 export function resetActivePresentation(): void {
   const id = state.activeId;
-  const seed = SEED_PRESENTATIONS.find((candidate) => candidate.id === id);
-  const restored: Presentation = seed
-    ? (JSON.parse(JSON.stringify(seed)) as Presentation)
-    : { ...readActive(), items: [], updatedAt: new Date().toISOString() };
+  if (!id) return;
   histories.delete(id);
-  writeActive(restored);
+  writeActive({
+    ...readActive(),
+    items: [],
+    updatedAt: new Date().toISOString(),
+  });
   emitChange();
 }
 
@@ -328,7 +369,7 @@ export function createNewPresentation(title = "새 프레젠테이션"): Present
   const now = new Date().toISOString();
   const created: Presentation = {
     id: crypto.randomUUID(),
-    userId: readActive()?.userId || SEED_USER_ID,
+    userId: getCurrentUserId() ?? readActive().userId,
     title,
     serviceDate: now.slice(0, 10),
     items: [],

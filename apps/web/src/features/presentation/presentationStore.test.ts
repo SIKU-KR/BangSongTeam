@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach } from "vitest";
+import { signInAsTestUser } from "../../test/sessionFixture";
 import { renderHook, act } from "@testing-library/react";
 import {
   DeckSchema,
@@ -6,11 +7,12 @@ import {
   INITIAL_BACKGROUNDS,
   PresentationSchema,
 } from "@repo/shared";
-import { SEED_PRESENTATION_IDS } from "./mockPresentations";
+import { SEED_PRESENTATION_IDS, SEED_PRESENTATIONS } from "./mockPresentations";
 import {
   getActivePresentation,
   addDeckToPresentation,
   resetPresentationStore,
+  __loadDocumentsForTests,
   resetActivePresentation,
   useActivePresentation,
   createNewPresentation,
@@ -39,7 +41,10 @@ import {
 
 describe("presentationStore (In-memory reactive presentation)", () => {
   beforeEach(() => {
+    signInAsTestUser();
     resetPresentationStore();
+    // 부팅 시 샘플 자동 생성이 사라져(계정 기반 전환) 테스트가 직접 싣는다.
+    __loadDocumentsForTests(SEED_PRESENTATIONS);
   });
 
   it("should initialize with the 5 mock songs", () => {
@@ -284,7 +289,10 @@ describe("presentationStore (In-memory reactive presentation)", () => {
 
 describe("멀티 문서 컬렉션", () => {
   beforeEach(() => {
+    signInAsTestUser();
     resetPresentationStore();
+    // 부팅 시 샘플 자동 생성이 사라져(계정 기반 전환) 테스트가 직접 싣는다.
+    __loadDocumentsForTests(SEED_PRESENTATIONS);
   });
 
   it("시드 5개 문서로 초기화되고 첫 번째가 활성 문서다", () => {
@@ -386,7 +394,9 @@ describe("문서별 Undo/Redo 격리", () => {
   const [docA, docB] = SEED_PRESENTATION_IDS;
 
   beforeEach(() => {
+    signInAsTestUser();
     resetPresentationStore();
+    __loadDocumentsForTests(SEED_PRESENTATIONS);
   });
 
   it("다른 문서로 전환하면 그 문서의 히스토리를 본다", () => {
@@ -435,7 +445,9 @@ describe("문서별 Undo/Redo 격리", () => {
     expect(canRedo()).toBe(false);
   });
 
-  it("resetActivePresentation은 활성 문서만 되돌린다", () => {
+  it("resetActivePresentation은 활성 문서의 곡만 비운다", () => {
+    // 계정 기반으로 바뀌면서 시드 복원이 아니라 '세트 비우기'가 되었다.
+    // 사용자가 만든 적 없는 곡이 복원되면 그게 더 이상하다.
     act(() => {
       openPresentation(docB);
       updatePresentationTitle("B 수정");
@@ -444,8 +456,11 @@ describe("문서별 Undo/Redo 격리", () => {
       resetActivePresentation();
     });
 
-    expect(getPresentationById(docA)?.title).toBe("2026 주일 3부 예배");
+    expect(getPresentationById(docA)?.items).toHaveLength(0);
+    expect(getPresentationById(docA)?.title).toBe("A 수정");
+    // 다른 문서는 손대지 않는다
     expect(getPresentationById(docB)?.title).toBe("B 수정");
+    expect(getPresentationById(docB)?.items.length).toBeGreaterThan(0);
     expect(listPresentations()).toHaveLength(5);
     expect(canUndo()).toBe(false);
   });

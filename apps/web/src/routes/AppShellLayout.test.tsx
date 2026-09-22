@@ -1,4 +1,9 @@
 import React from "react";
+import {
+  __loadDocumentsForTests,
+  SEED_PRESENTATIONS,
+} from "../features/presentation";
+import { signInAsTestUser } from "../test/sessionFixture";
 import { render, screen, fireEvent, act } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { MemoryRouter, Routes, Route } from "react-router-dom";
@@ -41,7 +46,9 @@ function renderShell(initialPath = "/presentations") {
 
 describe("AppShellLayout (공유 셸 + 중첩 라우트)", () => {
   beforeEach(() => {
+    signInAsTestUser();
     resetPresentationStore();
+    __loadDocumentsForTests(SEED_PRESENTATIONS);
     vi.restoreAllMocks();
   });
 

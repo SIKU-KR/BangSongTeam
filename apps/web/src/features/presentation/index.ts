@@ -28,6 +28,7 @@ export {
   addDeckToPresentation,
   resetActivePresentation,
   resetPresentationStore,
+  __loadDocumentsForTests,
   useActivePresentation,
   getPresentationById,
   listPresentations,
