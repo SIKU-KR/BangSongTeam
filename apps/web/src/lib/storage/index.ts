@@ -40,3 +40,11 @@ export {
   type PersistenceError,
   type PersistenceErrorKind,
 } from "./persistenceStatus";
+
+export {
+  saveOfflineStatus,
+  loadOfflineStatus,
+  clearOfflineStatus,
+  type OfflineStatus,
+  type OfflineStatusPatch,
+} from "./offlineStatusRepository";

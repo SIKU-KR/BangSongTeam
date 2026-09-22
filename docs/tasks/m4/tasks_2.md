@@ -6,6 +6,15 @@
 > **목표**: 송출 전에 세트의 배경 영상을 Cache Storage로 100% 내려받고, 영구 저장소를 요청하고, 곡별 상태와 '오프라인 송출 가능' 배지를 보여주는 준비 화면을 만든다
 > **완료 기준 (DoD)**: 준비 화면에서 다운로드를 마치면 '오프라인 송출 가능' 배지가 켜지고, 네트워크를 끊어도 그 세트의 배경 영상이 재생된다
 
+> **구현 현황 (2026-09-22)**
+>
+> - Task 2.1~2.8 완료. 전체 **595개 / 79파일 Green**.
+> - **원안에 없던 Task 2.8(글꼴 사전 로드)을 추가했다.** `tasks_1.md`에서 폰트를 프리캐시에서 뺀 결과, 세트 글꼴의 오프라인 보장이 준비 화면 책임으로 넘어왔기 때문이다.
+> - **설계에서 바뀐 것 — '지금 바로 송출' 버튼을 따로 두지 않았다.** 송출 버튼 두 개(발표자 보기·단독 전체화면)를 항상 활성 상태로 두고, 준비가 끝나지 않았을 때 그 위에 경고 문구를 띄운다. 같은 일을 하는 버튼을 셋으로 늘리면 조작자가 예배 직전에 어느 것을 눌러야 할지 헷갈린다.
+> - 준비 화면은 진입 즉시 자동으로 다운로드를 시작한다(`autoStart`). 이미 캐시에 있으면 받지 않고 곧바로 '오프라인 송출 가능'으로 뜬다.
+> - jsdom에 Cache Storage가 없어 `src/test/fakeCacheStorage.ts` 대역을 만들어 `setup.ts`에서 깐다. IndexedDB(`fake-indexeddb`)와 같은 자리다.
+> - **실검증은 남아 있다.** 로컬 R2 버킷이 비어 있어 `/api/media/*`가 404라 이 환경에서는 실패 경로만 확인할 수 있다.
+
 ---
 
 ## 1. 아키텍처 가드레일 & 준수 사항
@@ -21,7 +30,7 @@
 
 ## 2. 세부 작업 체크리스트
 
-- [ ] **Task 2.1: 세트 미디어 자산 수집 유틸리티 (TDD)**
+- [x] **Task 2.1: 세트 미디어 자산 수집 유틸리티 (TDD)**
   - **대상 파일**: `packages/shared/src/utils/offlineAssets.ts`
   - **선행 조건**: `tasks_1.md` Task 1.2
   - **구현 내용**:
@@ -31,7 +40,7 @@
     - 배경이 없거나 알 수 없는 id인 곡은 URL 없이 표시만 남긴다(다운로드 대상에서 제외)
   - **DoD (통과 기준)**: `pnpm exec vitest run packages/shared/src/utils/offlineAssets.test.ts`가 100% 통과(Green)한다.
 
-- [ ] **Task 2.2: 오프라인 캐시 상태 저장소 (TDD)**
+- [x] **Task 2.2: 오프라인 캐시 상태 저장소 (TDD)**
   - **대상 파일**: `apps/web/src/lib/storage/offlineStatusRepository.ts`
   - **선행 조건**: Task 2.1
   - **구현 내용**:
@@ -41,7 +50,7 @@
     - 실패는 `reportPersistenceError`로 올린다 (기존 `persistenceStatus.ts` 재사용)
   - **DoD (통과 기준)**: `pnpm exec vitest run apps/web/src/lib/storage/offlineStatusRepository.test.ts`가 100% 통과(Green)한다.
 
-- [ ] **Task 2.3: Cache Storage 미디어 다운로더 (TDD)**
+- [x] **Task 2.3: Cache Storage 미디어 다운로더 (TDD)**
   - **대상 파일**: `apps/web/src/lib/offline/mediaCache.ts`
   - **선행 조건**: Task 2.2
   - **구현 내용**:
@@ -53,7 +62,7 @@
     - jsdom에는 CacheStorage가 없으므로 `apps/web/src/test/setup.ts`에 최소 fake CacheStorage를 추가한다
   - **DoD (통과 기준)**: `pnpm exec vitest run apps/web/src/lib/offline/mediaCache.test.ts`가 100% 통과(Green)한다.
 
-- [ ] **Task 2.4: 영구 저장소 요청 래퍼 (TDD)**
+- [x] **Task 2.4: 영구 저장소 요청 래퍼 (TDD)**
   - **대상 파일**: `apps/web/src/lib/offline/storagePersistence.ts`
   - **선행 조건**: 없음
   - **구현 내용**:
@@ -62,7 +71,7 @@
     - 거부(`false`)는 예외가 아니라 상태다. 준비 화면이 경고를 띄운다 (PRD §6.1)
   - **DoD (통과 기준)**: `pnpm exec vitest run apps/web/src/lib/offline/storagePersistence.test.ts`가 100% 통과(Green)한다.
 
-- [ ] **Task 2.5: 예배 준비 오케스트레이션 훅 (TDD)**
+- [x] **Task 2.5: 예배 준비 오케스트레이션 훅 (TDD)**
   - **대상 파일**: `apps/web/src/features/offline/useWorshipPrep.ts`
   - **선행 조건**: Task 2.1~2.4
   - **구현 내용**:
@@ -71,7 +80,7 @@
     - 언마운트 시 진행 중 다운로드를 `AbortController`로 취소한다
   - **DoD (통과 기준)**: `pnpm exec vitest run apps/web/src/features/offline/useWorshipPrep.test.ts`가 100% 통과(Green)한다.
 
-- [ ] **Task 2.6: 예배 준비 화면 라우트**
+- [x] **Task 2.6: 예배 준비 화면 라우트**
   - **대상 파일**: `apps/web/src/routes/WorshipReadyRoute.tsx`
   - **선행 조건**: Task 2.5
   - **구현 내용**:
@@ -83,7 +92,7 @@
     - 전체화면 진입은 **버튼 클릭 제스처 안에서 동기적으로** 호출한다 (`fullscreen.ts`의 기존 주의사항)
   - **DoD (통과 기준)**: `pnpm exec vitest run apps/web/src/routes/WorshipReadyRoute.test.tsx`가 100% 통과(Green)한다.
 
-- [ ] **Task 2.7: 송출 진입점을 준비 화면으로 전환**
+- [x] **Task 2.7: 송출 진입점을 준비 화면으로 전환**
   - **대상 파일**: `apps/web/src/features/presentation/fullscreen.ts`, `apps/web/src/routes/PresentationsRoute.tsx`, `apps/web/src/routes/EditorRoute.tsx`, `apps/web/src/App.tsx`
   - **선행 조건**: Task 2.6
   - **구현 내용**:
@@ -91,6 +100,15 @@
     - 기존 `launchPresentation`(즉시 전체화면)은 준비 화면의 버튼용으로 남긴다
     - `App.tsx`에 `/present/:presentationId/ready` 라우트 등록
   - **DoD (통과 기준)**: `pnpm exec vitest run apps/web/src/routes`가 100% 통과(Green)한다.
+
+- [x] **Task 2.8: 세트 글꼴 사전 로드 (문서 원안에 없던 추가 태스크)**
+  - **대상 파일**: `apps/web/src/lib/offline/fontWarmup.ts`
+  - **선행 조건**: Task 2.5
+  - **구현 내용**:
+    - `tasks_1.md`에서 폰트를 프리캐시 대상에서 뺐다(전체 33MB). 그래서 세트가 쓰는 글꼴이 오프라인에서 자동으로 보장되지 않는다
+    - 준비 단계에서 세트 가사에 실제로 쓰인 글자를 모아 `document.fonts.load()`를 부른다. 그러면 필요한 유니코드 서브셋만 요청되어 `worship-fonts-cache`에 들어간다
+    - 실패는 무시한다. 글꼴 워밍 실패로 준비 자체가 막히면 안 된다
+  - **DoD (통과 기준)**: `pnpm exec vitest run packages/shared/src/utils/offlineAssets.test.ts`의 `collectPresentationFonts` 케이스가 통과한다.
 
 ---
 

@@ -24,7 +24,7 @@ import {
   canRedo,
   resetActivePresentation,
   createNewPresentation,
-  launchPresentation,
+  launchPreparation,
   usePresentationById,
   openPresentation,
 } from "../features/presentation";
@@ -118,7 +118,7 @@ export function EditorRoute(): React.JSX.Element {
 
   // 슬라이드쇼 발표 핸들러
   const handlePresent = () => {
-    if (presentationId) launchPresentation(navigate, presentationId);
+    if (presentationId) launchPreparation(navigate, presentationId);
   };
 
   // 슬라이드 선택 핸들러

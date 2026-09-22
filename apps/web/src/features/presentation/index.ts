@@ -67,5 +67,6 @@ export {
   enterFullscreen,
   exitFullscreen,
   launchPresentation,
+  launchPreparation,
   type ChromeFullscreenOptions,
 } from "./fullscreen";
