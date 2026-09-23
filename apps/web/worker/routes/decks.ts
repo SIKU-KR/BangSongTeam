@@ -13,7 +13,9 @@ import {
   forkPublicDeck,
 } from "@repo/db";
 import type { AppEnv } from "../types";
-import { resolveRequireAuth, type AppDeps } from "../deps";
+import { resolveModelRunner, resolveRequireAuth, type AppDeps } from "../deps";
+import { normalizeCatalog } from "../lib/normalization";
+import { runInBackground } from "../lib/background";
 
 /**
  * 곡 보관함(scope: 'library') 동기화 API.
@@ -77,6 +79,15 @@ export function createDecksRoute(deps: AppDeps = {}) {
             contributed = true;
             // 기여가 덱을 카탈로그에 묶었다. 응답 덱에 반영해 편집기가 바로 안다.
             saved = { ...saved, catalogId: result.catalogId };
+
+            // 서로 다른 사용자의 루트 버전이 2개 이상이면 대표 가사를 다시 만든다
+            // (PRD 4.8 정규화 시점). 같은 가사를 다시 저장한 것뿐이면 부르지 않는다.
+            if (result.changed && result.versionCount >= 2 && !result.locked) {
+              const runner = resolveModelRunner(deps, c.env);
+              runInBackground(c, `normalize catalog ${result.catalogId}`, () =>
+                normalizeCatalog(db, result.catalogId, runner),
+              );
+            }
           } catch (err) {
             console.error("가사 기여 실패:", err);
           }

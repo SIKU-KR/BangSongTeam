@@ -5,6 +5,11 @@ export interface Bindings {
   DB: D1Database;
   MEDIA_BUCKET: R2Bucket;
   AI: Ai;
+  /**
+   * Workers AI 호출을 거칠 AI Gateway id (선택). 설정하면 호출 로그·요청 제한·
+   * 월 비용 상한을 Gateway에서 관리한다 (PRD 9장 LLM 호출 비용).
+   */
+  AI_GATEWAY_ID?: string;
   R2_PUBLIC_DOMAIN?: string;
   BETTER_AUTH_SECRET?: string;
   BETTER_AUTH_URL?: string;

@@ -1,9 +1,14 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { env } from "cloudflare:test";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import {
+  env,
+  createExecutionContext,
+  waitOnExecutionContext,
+} from "cloudflare:test";
 import { DEFAULT_DECK_STYLE, DeckSchema, type Deck } from "@repo/shared";
 import { createD1Client, user, lyricsCatalog, lyricsVersions } from "@repo/db";
 import { createApp } from "../index";
 import type { SessionReader } from "../middleware/auth";
+import type { ModelRunner } from "../lib/normalization";
 
 /**
  * 덱 저장 시 가사 기여 경로 검증 (M5-2: 덱 플래그 + 서버 판정).
@@ -185,5 +190,98 @@ describe("덱 저장 시 가사 기여", () => {
     const res = await put(makeDeck(DECK_A, USER_A, "   "));
 
     expect(await res.json()).toMatchObject({ contributed: false });
+  });
+
+  describe("기여 뒤 백그라운드 정규화 (M5-4)", () => {
+    let modelCalls = 0;
+    let modelText = "";
+    const runner: ModelRunner = vi.fn(async () => {
+      modelCalls += 1;
+      return { text: modelText, finishReason: "stop" };
+    });
+    const aiApp = createApp({
+      readSession: fakeSession,
+      modelRunner: () => runner,
+    });
+
+    /** 응답 뒤 `waitUntil`로 넘긴 작업이 끝날 때까지 기다린다 */
+    async function putAndWait(deck: Deck) {
+      const ctx = createExecutionContext();
+      const res = await aiApp.request(
+        `/api/decks/${deck.id}`,
+        {
+          method: "PUT",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(deck),
+        },
+        env,
+        ctx,
+      );
+      await waitOnExecutionContext(ctx);
+      return res;
+    }
+
+    async function catalogRow() {
+      return env.DB.prepare(
+        "SELECT status, canonical_source, lyrics_canonical, version_count FROM lyrics_catalog",
+      ).first<{
+        status: string;
+        canonical_source: string;
+        lyrics_canonical: string;
+        version_count: number;
+      }>();
+    }
+
+    beforeEach(() => {
+      modelCalls = 0;
+      modelText = "";
+    });
+
+    it("does not call the model for the first root version", async () => {
+      await putAndWait(makeDeck(DECK_A, USER_A, "주의 은혜 아래"));
+      expect(modelCalls).toBe(0);
+      expect((await catalogRow())?.status).toBe("single");
+    });
+
+    it("normalizes after a second user's root version arrives", async () => {
+      await putAndWait(makeDeck(DECK_A, USER_A, "주의 은혜 아래 나 거하며"));
+      modelText = "주의 은혜 아래 나 거하며";
+
+      currentUser = USER_B;
+      const res = await putAndWait(
+        makeDeck(DECK_B, USER_B, "주의 은혜아래 나 거하며"),
+      );
+      expect(res.status).toBe(200);
+      expect(modelCalls).toBe(1);
+      expect(await catalogRow()).toMatchObject({
+        status: "normalized",
+        canonical_source: "llm",
+        lyrics_canonical: "주의 은혜 아래 나 거하며",
+        version_count: 2,
+      });
+    });
+
+    it("does not call the model again when the same lyrics are saved again", async () => {
+      await putAndWait(makeDeck(DECK_A, USER_A, "주의 은혜 아래 나 거하며"));
+      modelText = "주의 은혜 아래 나 거하며";
+      currentUser = USER_B;
+      const deck = makeDeck(DECK_B, USER_B, "주의 은혜아래 나 거하며");
+      await putAndWait(deck);
+      await putAndWait({ ...deck, updatedAt: "2026-09-22T00:00:00.000Z" });
+      expect(modelCalls).toBe(1);
+    });
+
+    it("falls back to the popular root when the model invents a line", async () => {
+      await putAndWait(makeDeck(DECK_A, USER_A, "주의 은혜 아래 나 거하며"));
+      modelText = "주의 은혜 아래 나 거하며\n원곡에 없는 가사";
+      currentUser = USER_B;
+      await putAndWait(makeDeck(DECK_B, USER_B, "주의 은혜아래 나 거하며"));
+
+      expect(await catalogRow()).toMatchObject({
+        status: "normalized",
+        canonical_source: "popular_root",
+        lyrics_canonical: "주의 은혜 아래 나 거하며",
+      });
+    });
   });
 });

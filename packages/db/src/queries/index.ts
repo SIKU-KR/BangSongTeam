@@ -8,3 +8,4 @@ export * from "./search";
 export * from "./publicScope";
 export * from "./sharing";
 export * from "./reports";
+export * from "./normalization";
