@@ -18,9 +18,9 @@ import {
   upsertDeck,
   deleteDeckScoped,
   toSharedDeck,
-  seedBackgrounds,
 } from "@repo/db";
-import { user } from "@repo/db";
+import { user, backgrounds } from "@repo/db";
+import { INITIAL_BACKGROUNDS } from "@repo/shared";
 import type { AppEnv } from "../types";
 import { createRequireAuth, type SessionReader } from "../middleware/auth";
 
@@ -190,9 +190,10 @@ describe("동기화 라우트 교차 사용자 격리", () => {
       { id: USER_A, name: "A", createdAt: new Date(), updatedAt: new Date() },
       { id: USER_B, name: "B", createdAt: new Date(), updatedAt: new Date() },
     ]);
-    // decks.background_id가 backgrounds를 참조한다. 파일 실행 순서에 기대지
-    // 않도록 여기서 직접 시드한다 (멱등).
-    await seedBackgrounds(db);
+    // 배경은 더 이상 여기서 시드하지 않는다. `0002_seed_backgrounds.sql`
+    // 마이그레이션이 채우므로, 시드하지 않고도 통과하는 것 자체가 회귀 방지선이다
+    // (그 마이그레이션이 없던 시절 운영 D1의 backgrounds가 비어 있어
+    //  decks.background_id 외래키 위반으로 동기화가 500으로 죽었다).
     currentUser = USER_A;
   });
 
@@ -488,6 +489,102 @@ describe("동기화 라우트 교차 사용자 격리", () => {
       ]);
       // 곡 수가 늘어나면 안 된다 (교체지 추가가 아니다)
       expect(presentations[0].items).toHaveLength(5);
+    });
+  });
+
+  /**
+   * 배경 외래키 회귀.
+   *
+   * `decks.background_id`는 `backgrounds`를 참조하고 D1은 외래키를 기본으로 강제한다.
+   * 운영 D1에 배경 10건을 넣는 경로가 아예 없어서, 곡에 배경이 붙는 순간
+   * `db.batch()` 전체가 롤백되고 동기화가 500으로 죽었다. 로컬 저장은 멀쩡했기 때문에
+   * 편집·송출은 되는데 기기 간 동기화만 조용히 실패하는 상태였다.
+   */
+  describe("배경 외래키 (동기화 500 회귀)", () => {
+    it("사전 주입 배경은 마이그레이션으로 이미 들어가 있다", async () => {
+      const db = createD1Client(env.DB);
+      const rows = await db.select({ id: backgrounds.id }).from(backgrounds);
+
+      expect(rows).toHaveLength(INITIAL_BACKGROUNDS.length);
+      // 클라이언트가 실제로 찍는 id가 서버에 있어야 한다.
+      expect(rows.map((row) => row.id)).toContain(INITIAL_BACKGROUNDS[0].id);
+    });
+
+    it("배경이 붙은 세트를 저장해도 500이 나지 않는다", async () => {
+      const doc = makeDoc(USER_A);
+      doc.items[0].deck.backgroundId = INITIAL_BACKGROUNDS[0].id;
+
+      const put = await app.request(
+        `/api/presentations/${DOC_ID}`,
+        json(doc),
+        env,
+      );
+
+      expect(put.status).toBe(200);
+
+      const res = await app.request("/api/presentations", {}, env);
+      const body = (await res.json()) as {
+        presentations: PresentationDocument[];
+      };
+      expect(body.presentations[0].items[0].deck.backgroundId).toBe(
+        INITIAL_BACKGROUNDS[0].id,
+      );
+    });
+
+    it("서버가 모르는 배경 id는 세트를 날리는 대신 '배경 없음'으로 낮춘다", async () => {
+      const unknown = "b9999999-9999-4999-8999-999999999999";
+      const doc = makeDoc(USER_A);
+      doc.items[0].deck.backgroundId = unknown;
+
+      const put = await app.request(
+        `/api/presentations/${DOC_ID}`,
+        json(doc),
+        env,
+      );
+
+      // 배경 하나 때문에 가사까지 통째로 잃으면 안 된다.
+      expect(put.status).toBe(200);
+
+      const res = await app.request("/api/presentations", {}, env);
+      const body = (await res.json()) as {
+        presentations: PresentationDocument[];
+      };
+      expect(body.presentations[0].items[0].deck.backgroundId).toBeNull();
+      // 작업물(가사·스타일)은 그대로 살아 있어야 한다.
+      expect(body.presentations[0].items[0].deck.slides[0].lines).toEqual([
+        "시작됐네",
+      ]);
+      expect(body.presentations[0].items[0].deck.style.overlayOpacity).toBe(65);
+    });
+
+    it("곡마다 배경이 다른 5곡 세트도 그대로 저장된다", async () => {
+      const doc = makeDoc(USER_A);
+      doc.items = INITIAL_BACKGROUNDS.slice(0, 5).map((background, index) => ({
+        id: `30000000-0000-4000-8000-00000000000${index + 1}`,
+        presentationId: DOC_ID,
+        deckId: `c0000000-0000-4000-8000-00000000000${index + 1}`,
+        order: index,
+        deck: makeDeck(USER_A, {
+          id: `c0000000-0000-4000-8000-00000000000${index + 1}`,
+          title: `${index + 1}번째 곡`,
+          backgroundId: background.id,
+        }),
+      }));
+
+      const put = await app.request(
+        `/api/presentations/${DOC_ID}`,
+        json(doc),
+        env,
+      );
+      expect(put.status).toBe(200);
+
+      const res = await app.request("/api/presentations", {}, env);
+      const body = (await res.json()) as {
+        presentations: PresentationDocument[];
+      };
+      expect(
+        body.presentations[0].items.map((item) => item.deck.backgroundId),
+      ).toEqual(INITIAL_BACKGROUNDS.slice(0, 5).map((bg) => bg.id));
     });
   });
 });

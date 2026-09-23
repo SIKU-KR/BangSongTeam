@@ -5,6 +5,9 @@ import type { AppEnv } from "../types";
  * R2 바인딩 기반 미디어 스트리밍 라우트 (HTTP Range 및 Partial Content 지원)
  * 로컬 개발(Miniflare) 및 커스텀 도메인 미연결 환경에서도 R2 비디오 직접 재생 보장
  */
+/** 1년 만료 + immutable. 배경 영상 키는 내용이 바뀌면 키 자체가 바뀐다. */
+const IMMUTABLE_MEDIA_CACHE_CONTROL = "public, max-age=31536000, immutable";
+
 export const mediaRoute = new Hono<AppEnv>().get("/*", async (c) => {
   const key = c.req.path.replace(/^\/api\/media\/?/, "");
   if (!key) {
@@ -26,6 +29,10 @@ export const mediaRoute = new Hono<AppEnv>().get("/*", async (c) => {
   object.writeHttpMetadata(headers);
   headers.set("etag", object.httpEtag);
   headers.set("accept-ranges", "bytes");
+  // R2 키는 불변 자산이다. Service Worker(CacheFirst)와 브라우저 HTTP 캐시가
+  // 재검증 없이 재사용할 수 있어야 예배 중 네트워크 요청이 0건이 된다
+  // (TECH_SPEC 5.4-1).
+  headers.set("cache-control", IMMUTABLE_MEDIA_CACHE_CONTROL);
 
   // Partial Content (206) 처리 (클라이언트가 Range 헤더를 전송한 경우)
   if (rangeHeader && "range" in object && object.range) {

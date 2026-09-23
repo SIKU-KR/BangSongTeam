@@ -11,6 +11,7 @@ import {
 } from "../../lib/storage";
 import { getCurrentUserId } from "../../lib/auth/sessionStore";
 import { scheduleDocumentPush } from "../../lib/sync/syncScheduler";
+import { mockDecks } from "./mockPresentation";
 
 /** 멀티 문서 컬렉션 상태 */
 interface PresentationStoreState {
@@ -207,6 +208,55 @@ export async function flushPendingWrites(): Promise<void> {
  *
  * 앱 부팅 시 세션이 정해진 뒤에 1회 호출하며, 완료 전까지 라우터를 렌더하지 않는다.
  */
+/**
+ * 한 문서 안에서 `deck.id`가 겹치는 저장본을 복구한다.
+ *
+ * Clone-on-Add가 없던 시절(같은 공유 곡을 두 번 추가한 경우) 만들어진 문서는
+ * `deck.id`가 중복이라 서버에서 기본키·유니크 제약을 동시에 위반한다. 고쳐 놓지
+ * 않으면 그 사용자의 세트는 **영원히** 동기화되지 않는다. 뒤에 온 중복본에 새 id를
+ * 발급하고 `item.deckId`를 맞춘다 (곡을 지우지 않는다 — 봉사자가 일부러 같은 곡을
+ * 두 번 넣었을 수 있다).
+ */
+function repairDuplicateDeckIds(documents: Presentation[]): {
+  documents: Presentation[];
+  repairedIds: string[];
+} {
+  const repairedIds: string[] = [];
+
+  const repaired = documents.map((doc) => {
+    const seen = new Set<string>();
+    let changed = false;
+
+    const items = doc.items.map((item) => {
+      const deck = item.deck;
+      if (!deck) return item;
+
+      if (!seen.has(deck.id)) {
+        seen.add(deck.id);
+        // deckId와 deck.id가 어긋난 저장본도 여기서 맞춘다.
+        if (item.deckId === deck.id) return item;
+        changed = true;
+        return { ...item, deckId: deck.id };
+      }
+
+      changed = true;
+      const newId = crypto.randomUUID();
+      seen.add(newId);
+      return {
+        ...item,
+        deckId: newId,
+        deck: { ...deck, id: newId, forkedFrom: deck.forkedFrom ?? deck.id },
+      };
+    });
+
+    if (!changed) return doc;
+    repairedIds.push(doc.id);
+    return { ...doc, items };
+  });
+
+  return { documents: repaired, repairedIds };
+}
+
 export async function hydrateFromStorage(): Promise<void> {
   persistenceEnabled = false;
   const userId = getCurrentUserId();
@@ -219,11 +269,12 @@ export async function hydrateFromStorage(): Promise<void> {
     const sorted = [...mine].sort((a, b) =>
       a.createdAt.localeCompare(b.createdAt),
     );
+    const { documents, repairedIds } = repairDuplicateDeckIds(sorted);
 
     state = {
-      byId: Object.fromEntries(sorted.map((doc) => [doc.id, doc])),
-      order: sorted.map((doc) => doc.id),
-      activeId: sorted[0]?.id ?? "",
+      byId: Object.fromEntries(documents.map((doc) => [doc.id, doc])),
+      order: documents.map((doc) => doc.id),
+      activeId: documents[0]?.id ?? "",
     };
     listSnapshot = buildListSnapshot(state);
     histories.clear();
@@ -231,6 +282,13 @@ export async function hydrateFromStorage(): Promise<void> {
 
     persistenceEnabled = true;
     clearPersistenceError();
+
+    // 복구본은 저장소에도 바로 써 둔다. 다음 부팅마다 같은 복구를 반복하지 않고,
+    // 서버 동기화가 그 순간부터 통과한다.
+    for (const id of repairedIds) {
+      const repaired = state.byId[id];
+      if (repaired) await savePresentation(repaired).catch(() => {});
+    }
   } catch (err) {
     // 저장소를 못 쓰는 환경이어도 편집 자체는 계속 가능해야 한다
     persistenceEnabled = false;
@@ -325,24 +383,56 @@ export function getActivePresentation(): Presentation {
 }
 
 /**
- * 인메모리 프레젠테이션에 신규 덱을 추가하고 모든 구독자에게 알림 (M1 실시간 연동)
+ * 보관함·공유 곡을 이 프레젠테이션 전용 복제본으로 만든다 (Clone-on-Add).
+ *
+ * TECH_SPEC §4.0-1이 정한 모델이다. 예전에는 복제 없이 원본 덱을 그대로 넣었는데,
+ * 그 결과 두 가지가 깨졌다.
+ *
+ * 1. **같은 곡을 두 번 넣으면 서버 저장이 통째로 실패한다.** `deck.id`가 같은 항목이
+ *    두 개 생겨 `decks` 기본키와 `presentation_items`의 `unique(presentation_id, deck_id)`를
+ *    동시에 위반한다.
+ * 2. 세트 안의 덱이 공유 곡 주인의 `userId`와 `scope: "library"`를 그대로 달고 있어,
+ *    보관함과 세트 복제본의 격리가 로컬에서만 무너져 있었다.
+ *
+ * 짧은 id를 쓰면 저장은 되지만 다음 부팅 `safeParse`에서 문서 전체가 격리되므로
+ * 반드시 uuid를 쓴다 (`duplicateSongInPresentation`과 같은 이유).
+ */
+function cloneDeckForPresentation(deck: Deck, presentationId: string): Deck {
+  const now = new Date().toISOString();
+  return {
+    ...(JSON.parse(JSON.stringify(deck)) as Deck),
+    id: crypto.randomUUID(),
+    userId: getCurrentUserId() ?? deck.userId,
+    scope: "presentation",
+    presentationId,
+    // 원본을 가리켜 두면 나중에 '어느 공유 곡에서 왔는지'를 추적할 수 있다.
+    forkedFrom: deck.forkedFrom ?? deck.id,
+    createdAt: now,
+    updatedAt: now,
+  };
+}
+
+/**
+ * 인메모리 프레젠테이션에 신규 덱을 추가하고 모든 구독자에게 알림 (M1 실시간 연동).
+ * 덱은 항상 이 세트 전용 복제본으로 들어간다 (Clone-on-Add).
  */
 export function addDeckToPresentation(deck: Deck): PresentationItem {
   pushHistory();
-  const currentCount = readActive().items.length;
+  const active = readActive();
+  const currentCount = active.items.length;
   // backgroundId가 없으면 10개 초기 배경 중 순환 할당
   const assignedBackgroundId =
     deck.backgroundId ||
     INITIAL_BACKGROUNDS[currentCount % INITIAL_BACKGROUNDS.length].id;
 
   const resolvedDeck: Deck = {
-    ...deck,
+    ...cloneDeckForPresentation(deck, active.id),
     backgroundId: assignedBackgroundId,
   };
 
   const newItem: PresentationItem = {
     id: crypto.randomUUID(),
-    presentationId: readActive().id,
+    presentationId: active.id,
     deckId: resolvedDeck.id,
     order: currentCount,
     deck: resolvedDeck,
@@ -370,22 +460,19 @@ export function resetPresentationStore(): void {
 }
 
 /**
- * 현재 활성 문서의 곡을 모두 비운다 (에디터 '세트 비우기' 메뉴).
+ * 기본 5곡 샘플 세트를 활성 문서에 불러온다 (에디터 '기본 5곡 세트 불러오기').
  *
- * 예전에는 시드 샘플로 되돌렸지만, 계정 기반으로 바뀌면서 시드 자체가
- * 사라졌다. 사용자가 만든 적 없는 곡이 복원되면 그게 더 이상하다.
- * 컬렉션 전체를 날리지 않으므로 URL의 presentationId가 고아가 되지 않는다.
+ * 예전에는 같은 자리의 버튼이 `resetActivePresentation()`을 불러 **세트를 비웠다** —
+ * 라벨과 정반대였다. 처음 쓰는 봉사자가 빈 화면에서 뭘 눌러야 할지 알기 위한
+ * 버튼이므로, 라벨대로 샘플을 채우는 쪽으로 맞췄다.
+ *
+ * 샘플 덱은 `MOCK_USER_ID`와 `MOCK_PRESENTATION_ID`를 물고 있다. 복제 없이 넣으면
+ * 남의 소유로 저장되고, 두 번 누르면 `deck.id`가 겹쳐 서버 저장이 깨진다.
+ * 그래서 일반 곡 추가와 똑같이 Clone-on-Add 경로를 탄다.
  */
-export function resetActivePresentation(): void {
-  const id = state.activeId;
-  if (!id) return;
-  histories.delete(id);
-  writeActive({
-    ...readActive(),
-    items: [],
-    updatedAt: new Date().toISOString(),
-  });
-  emitChange();
+export function loadSampleSongsIntoActivePresentation(): PresentationItem[] {
+  if (!state.activeId) return [];
+  return mockDecks.map((deck) => addDeckToPresentation(deck));
 }
 
 /**

@@ -2,7 +2,7 @@ import React from "react";
 import { useNavigate } from "react-router-dom";
 import { MergedSlidesView } from "../features/library";
 import {
-  launchPresentation,
+  launchPreparation,
   usePresentationList,
 } from "../features/presentation";
 import { useAppShell } from "./appShellContext";
@@ -22,7 +22,7 @@ export function PresentationsRoute(): React.JSX.Element {
 
   // 카드에서 바로 송출: 경로에 id가 실리므로 활성 문서와 어긋날 일이 없다
   const handleStartPresentation = (id: string): void => {
-    launchPresentation(navigate, id);
+    launchPreparation(navigate, id);
   };
 
   return (

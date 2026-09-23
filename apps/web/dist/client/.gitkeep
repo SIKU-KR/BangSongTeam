@@ -1,5 +1,0 @@
-# wrangler.jsonc 의 assets.directory 가 가리키는 경로.
-# 실제 내용은 `vite build` 가 채우며(dist/ 는 gitignore 대상), 이 파일은
-# 디렉터리 자체가 항상 존재하도록 유지하기 위한 것이다 —
-# wrangler 가 설정 파싱 시점에 경로 존재를 요구하므로, 없으면 Workers 테스트 풀이
-# "assets.directory does not exist" 로 실패한다.

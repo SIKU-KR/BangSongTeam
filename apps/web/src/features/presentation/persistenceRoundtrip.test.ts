@@ -5,7 +5,11 @@ import {
   INITIAL_BACKGROUNDS,
   type Deck,
 } from "@repo/shared";
-import { closeOfflineDB, OFFLINE_DB_NAME } from "../../lib/storage";
+import {
+  closeOfflineDB,
+  OFFLINE_DB_NAME,
+  savePresentation,
+} from "../../lib/storage";
 import {
   hydrateFromStorage,
   flushPendingWrites,
@@ -174,5 +178,69 @@ describe("영속성 왕복 (편집 → 저장 → 새 탭 복원)", () => {
     expect(restored).toBeDefined();
     expect(restored?.items).toHaveLength(2);
     expect(restored?.items[1].deck?.title).toBe("은혜로다 (사본)");
+  });
+
+  it("같은 곡을 두 번 담아도 덱 id가 겹치지 않는다 (Clone-on-Add)", async () => {
+    await hydrateFromStorage();
+
+    const created = createNewPresentation("중복 곡 세트");
+    openPresentation(created.id);
+    const shared = makeDeck("은혜로다");
+    addDeckToPresentation(shared);
+    addDeckToPresentation(shared);
+
+    const items = getPresentationById(created.id)?.items ?? [];
+    expect(items).toHaveLength(2);
+    // 겹치면 서버에서 decks 기본키와 presentation_items 유니크 제약을 동시에
+    // 위반해 이 세트는 영원히 동기화되지 않는다.
+    expect(items[0].deck?.id).not.toBe(items[1].deck?.id);
+    expect(items[0].deckId).toBe(items[0].deck?.id);
+    expect(items[1].deckId).toBe(items[1].deck?.id);
+    // 보관함 원본은 건드리지 않는다.
+    expect(shared.scope).toBe("library");
+    expect(items[0].deck?.scope).toBe("presentation");
+    expect(items[0].deck?.presentationId).toBe(created.id);
+  });
+
+  it("예전에 저장된 중복 덱 id 문서를 하이드레이션에서 복구한다", async () => {
+    await hydrateFromStorage();
+
+    // Clone-on-Add가 없던 시절 만들어진 저장본을 흉내 낸다.
+    const created = createNewPresentation("옛 중복 세트");
+    openPresentation(created.id);
+    addDeckToPresentation(makeDeck("은혜로다"));
+    addDeckToPresentation(makeDeck("주 품에"));
+    await flushPendingWrites();
+
+    const broken = getPresentationById(created.id)!;
+    const duplicatedId = broken.items[0].deck!.id;
+    await savePresentation({
+      ...broken,
+      items: broken.items.map((item, index) =>
+        index === 1
+          ? {
+              ...item,
+              deckId: duplicatedId,
+              deck: { ...item.deck!, id: duplicatedId },
+            }
+          : item,
+      ),
+    });
+
+    resetPresentationStore();
+    await hydrateFromStorage();
+
+    const repaired = getPresentationById(created.id);
+    expect(repaired?.items).toHaveLength(2);
+    // 곡을 지우지 않고 id만 새로 발급한다.
+    expect(repaired?.items[0].deck?.id).not.toBe(repaired?.items[1].deck?.id);
+    expect(repaired?.items[1].deckId).toBe(repaired?.items[1].deck?.id);
+    expect(repaired?.items[1].deck?.title).toBe("주 품에");
+
+    // 복구본이 저장소에도 반영되어, 다음 부팅에 같은 복구를 되풀이하지 않는다.
+    resetPresentationStore();
+    await hydrateFromStorage();
+    const again = getPresentationById(created.id);
+    expect(again?.items[0].deck?.id).not.toBe(again?.items[1].deck?.id);
   });
 });

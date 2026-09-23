@@ -7,6 +7,7 @@ import {
   splitLyricsIntoSlides,
 } from "@repo/shared";
 import { ExternalSearchLinks } from "./ExternalSearchLinks";
+import { getCurrentUserId } from "../../lib/auth";
 
 export interface QuickLyricPasteModalProps {
   isOpen: boolean;
@@ -17,8 +18,6 @@ export interface QuickLyricPasteModalProps {
   initialLyrics?: string;
   renderSearchLinks?: (title: string) => React.ReactNode;
 }
-
-const GUEST_USER_ID = "00000000-0000-4000-8000-000000000001";
 
 export function QuickLyricPasteModal({
   isOpen,
@@ -53,10 +52,17 @@ export function QuickLyricPasteModal({
   const handleAdd = (): void => {
     if (!isValid) return;
 
+    // 로그인이 편집의 전제 조건이 된 뒤(2026-09-22)에도 게스트 uuid가 하드코딩으로
+    // 남아 있었다. 곡의 주인은 항상 세션 사용자다. 세션이 없으면 임의의 uuid를
+    // 만들어 넣지 않는다 — 사용자 데이터에 존재하지 않는 소유자가 박힌다.
+    // 로그인 게이트 때문에 실제로는 닿지 않는 경로다.
+    const userId = getCurrentUserId();
+    if (!userId) return;
+
     const now = new Date().toISOString();
     const newDeck = DeckSchema.parse({
       id: crypto.randomUUID(),
-      userId: GUEST_USER_ID,
+      userId,
       catalogId: null,
       scope: "presentation",
       presentationId: null,

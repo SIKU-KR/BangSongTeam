@@ -36,9 +36,22 @@ const presentationsRoute = new Hono<AppEnv>()
     }
 
     const db = createD1Client(c.env.DB);
-    const saved = await upsertPresentationDocument(db, userId, document);
-    if (!saved) {
-      return c.json({ error: "이 프레젠테이션에 접근할 수 없습니다" }, 403);
+
+    // DB 오류를 그냥 던지면 raw D1_ERROR가 500 본문으로 새어 나가고, 클라이언트는
+    // '서버가 요청을 거절했습니다 (500)'만 보게 된다. 원인을 서버 로그에 남기고
+    // 사용자에게는 무엇이 안 됐는지 읽을 수 있는 문장을 준다.
+    try {
+      const saved = await upsertPresentationDocument(db, userId, document);
+      if (!saved) {
+        return c.json({ error: "이 프레젠테이션에 접근할 수 없습니다" }, 403);
+      }
+    } catch (error) {
+      console.error("presentation upsert failed", {
+        presentationId: document.id,
+        songCount: document.items.length,
+        error,
+      });
+      return c.json({ error: "프레젠테이션을 저장하지 못했습니다" }, 500);
     }
 
     return c.json({ ok: true as const }, 200);

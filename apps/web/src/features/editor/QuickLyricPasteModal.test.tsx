@@ -1,10 +1,17 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, within } from "@testing-library/react";
 import React from "react";
 import { QuickLyricPasteModal } from "./QuickLyricPasteModal";
 import { DeckSchema } from "@repo/shared";
+import { signInAsTestUser } from "../../test/sessionFixture";
+import { SEED_USER_ID } from "../presentation";
 
 describe("QuickLyricPasteModal (Task 3.2)", () => {
+  // 곡의 주인은 세션 사용자다. 로그인 없이는 곡을 만들 수 없다.
+  beforeEach(() => {
+    signInAsTestUser();
+  });
+
   it("isOpen이 false이면 모달이 렌더링되지 않아야 한다", () => {
     const { container } = render(
       <QuickLyricPasteModal
@@ -116,6 +123,8 @@ describe("QuickLyricPasteModal (Task 3.2)", () => {
 
     // DeckSchema 정합성 검증
     expect(() => DeckSchema.parse(createdDeck)).not.toThrow();
+    // 하드코딩된 게스트 uuid가 아니라 세션 사용자가 주인이어야 한다.
+    expect(createdDeck.userId).toBe(SEED_USER_ID);
     expect(createdDeck.title).toBe("은혜로다");
     expect(createdDeck.artist).toBe("손경민");
     expect(createdDeck.slides).toHaveLength(1);

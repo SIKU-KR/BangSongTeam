@@ -1,19 +1,14 @@
 import { describe, it, expect, beforeAll } from "vitest";
 import { env } from "cloudflare:test";
-import { createD1Client, seedBackgrounds } from "@repo/db";
 import type { BackgroundMedia } from "@repo/shared";
 import app from "./index";
 
 describe("Task 4.6: Miniflare/workerd 환경 Worker 및 D1 통합 테스트", () => {
   beforeAll(async () => {
-    // 테이블은 worker/test/setup.ts가 실제 마이그레이션으로 만든다.
-    // 여기서는 데이터만 채운다.
+    // 테이블과 사전 주입 배경 10건 모두 worker/test/setup.ts가 실제
+    // 마이그레이션(0000~0002)으로 만든다. 여기서는 R2만 채운다.
 
-    // 1. 초기 10개 모션 루프 영상 데이터 시드
-    const db = createD1Client(env.DB);
-    await seedBackgrounds(db);
-
-    // 2. R2 버킷에 테스트 모션 비디오 객체 적재
+    // R2 버킷에 테스트 모션 비디오 객체 적재
     await env.MEDIA_BUCKET.put(
       "loops/warm_light_flow.mp4",
       new Uint8Array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9]),

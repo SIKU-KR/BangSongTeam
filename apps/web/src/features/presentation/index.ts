@@ -26,7 +26,7 @@ export {
   getActivePresentation,
   createNewPresentation,
   addDeckToPresentation,
-  resetActivePresentation,
+  loadSampleSongsIntoActivePresentation,
   resetPresentationStore,
   __loadDocumentsForTests,
   applyServerDocuments,
@@ -67,5 +67,53 @@ export {
   enterFullscreen,
   exitFullscreen,
   launchPresentation,
+  launchPreparation,
   type ChromeFullscreenOptions,
 } from "./fullscreen";
+
+export {
+  nextPosition,
+  prevPosition,
+  clampPosition,
+  getSlideAt,
+  getSongSlideCounts,
+  isSamePosition,
+  peekNext,
+  INITIAL_POSITION,
+  type ProjectionPosition,
+} from "./projectionState";
+
+export {
+  useProjectionChannel,
+  type UseProjectionChannelOptions,
+  type UseProjectionChannelReturn,
+  type ProjectionPeerState,
+} from "./useProjectionChannel";
+
+export {
+  openAudienceWindow,
+  buildAudienceUrl,
+  type AudienceWindowResult,
+  type AudienceWindowStatus,
+} from "./audienceWindow";
+
+export {
+  useElapsedTimer,
+  formatElapsed,
+  type UseElapsedTimerReturn,
+} from "./useElapsedTimer";
+
+export {
+  PresenterPreviewPanel,
+  type PresenterPreviewPanelProps,
+} from "./PresenterPreviewPanel";
+
+export {
+  PresenterJumpPanel,
+  type PresenterJumpPanelProps,
+} from "./PresenterJumpPanel";
+
+export {
+  PresenterControlBar,
+  type PresenterControlBarProps,
+} from "./PresenterControlBar";

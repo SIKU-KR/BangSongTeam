@@ -7,13 +7,17 @@ import {
   INITIAL_BACKGROUNDS,
   PresentationSchema,
 } from "@repo/shared";
-import { SEED_PRESENTATION_IDS, SEED_PRESENTATIONS } from "./mockPresentations";
+import {
+  SEED_PRESENTATION_IDS,
+  SEED_PRESENTATIONS,
+  SEED_USER_ID,
+} from "./mockPresentations";
 import {
   getActivePresentation,
   addDeckToPresentation,
   resetPresentationStore,
   __loadDocumentsForTests,
-  resetActivePresentation,
+  loadSampleSongsIntoActivePresentation,
   useActivePresentation,
   createNewPresentation,
   getActivePresentationId,
@@ -445,23 +449,53 @@ describe("문서별 Undo/Redo 격리", () => {
     expect(canRedo()).toBe(false);
   });
 
-  it("resetActivePresentation은 활성 문서의 곡만 비운다", () => {
-    // 계정 기반으로 바뀌면서 시드 복원이 아니라 '세트 비우기'가 되었다.
-    // 사용자가 만든 적 없는 곡이 복원되면 그게 더 이상하다.
+  it("loadSampleSongsIntoActivePresentation은 활성 문서에만 5곡을 채운다", () => {
     act(() => {
       openPresentation(docB);
       updatePresentationTitle("B 수정");
-      openPresentation(docA);
-      updatePresentationTitle("A 수정");
-      resetActivePresentation();
+      const created = createNewPresentation("빈 세트");
+      openPresentation(created.id);
+      loadSampleSongsIntoActivePresentation();
     });
 
-    expect(getPresentationById(docA)?.items).toHaveLength(0);
-    expect(getPresentationById(docA)?.title).toBe("A 수정");
+    const loaded = getActivePresentation();
+    expect(loaded.items).toHaveLength(5);
+    expect(loaded.title).toBe("빈 세트");
     // 다른 문서는 손대지 않는다
     expect(getPresentationById(docB)?.title).toBe("B 수정");
-    expect(getPresentationById(docB)?.items.length).toBeGreaterThan(0);
-    expect(listPresentations()).toHaveLength(5);
-    expect(canUndo()).toBe(false);
+  });
+
+  it("샘플 세트를 두 번 불러도 덱 id가 겹치지 않는다", () => {
+    // 겹치면 서버에서 decks 기본키와 presentation_items 유니크 제약을 동시에
+    // 위반해 세트 전체가 저장되지 않는다.
+    act(() => {
+      const created = createNewPresentation("두 번 불러오기");
+      openPresentation(created.id);
+      loadSampleSongsIntoActivePresentation();
+      loadSampleSongsIntoActivePresentation();
+    });
+
+    const items = getActivePresentation().items;
+    expect(items).toHaveLength(10);
+    const deckIds = items.map((item) => item.deck?.id);
+    expect(new Set(deckIds).size).toBe(10);
+  });
+
+  it("샘플 곡은 세션 사용자 소유의 세트 전용 복제본으로 들어간다", () => {
+    act(() => {
+      const created = createNewPresentation("소유권 확인");
+      openPresentation(created.id);
+      loadSampleSongsIntoActivePresentation();
+    });
+
+    const active = getActivePresentation();
+    for (const item of active.items) {
+      // 샘플 덱은 MOCK_USER_ID와 MOCK_PRESENTATION_ID를 물고 있다.
+      // 복제 없이 넣으면 남의 소유로 서버에 올라간다.
+      expect(item.deck?.userId).toBe(SEED_USER_ID);
+      expect(item.deck?.scope).toBe("presentation");
+      expect(item.deck?.presentationId).toBe(active.id);
+      expect(item.deckId).toBe(item.deck?.id);
+    }
   });
 });
