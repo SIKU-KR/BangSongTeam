@@ -7,7 +7,6 @@ import { describeApiError } from "../../lib/api/request";
 import { PublishDialog } from "./PublishDialog";
 import { ReportDialog } from "./ReportDialog";
 import {
-  canContributeFromSong,
   hasUnpublishedChanges,
   publishSong,
   unpublishSong,
@@ -36,8 +35,7 @@ export function SongSharePanel({
   const [isReportOpen, setIsReportOpen] = useState(false);
 
   const publish = useMutation({
-    mutationFn: (options: { contributeToCatalog: boolean }) =>
-      publishSong(songIndex, options),
+    mutationFn: () => publishSong(songIndex),
     onSuccess: () => setIsPublishOpen(false),
   });
   const update = useMutation({
@@ -53,13 +51,9 @@ export function SongSharePanel({
   const busy = publish.isPending || update.isPending || unpublish.isPending;
   const error = update.error ?? unpublish.error;
 
-  // 교정 제안을 받을 원본: 포크본이면 가져온 공개 덱, 대표 가사로 만든 곡이면 그 곡
-  const correctionTarget =
-    master?.origin === "fork" && master.forkedFrom
-      ? { type: "deck" as const, id: master.forkedFrom }
-      : (master?.origin ?? song.origin) === "catalog" && song.catalogId
-        ? { type: "catalog" as const, id: song.catalogId }
-        : null;
+  // 교정 제안을 받을 원본: 포크본이면 가져온 공개 덱
+  const correctionTargetId =
+    master?.origin === "fork" && master.forkedFrom ? master.forkedFrom : null;
   const authorName = master?.forkedFromAuthorName ?? song.forkedFromAuthorName;
 
   return (
@@ -93,7 +87,7 @@ export function SongSharePanel({
           >
             원작: {authorName}
           </span>
-          {correctionTarget && (
+          {correctionTargetId && (
             <button
               type="button"
               data-testid="song-share-correction-btn"
@@ -170,20 +164,18 @@ export function SongSharePanel({
         isOpen={isPublishOpen}
         songTitle={song.title}
         overwritesLibraryCopy={!!master}
-        canContribute={canContributeFromSong(song, master)}
-        defaultContribute={master?.contributeToCatalog ?? false}
         isPending={publish.isPending}
         error={publish.error ? describeApiError(publish.error) : null}
-        onConfirm={(options) => publish.mutate(options)}
+        onConfirm={() => publish.mutate()}
         onCancel={() => setIsPublishOpen(false)}
       />
 
-      {correctionTarget && isReportOpen && (
+      {correctionTargetId && isReportOpen && (
         <ReportDialog
           isOpen
           onClose={() => setIsReportOpen(false)}
-          targetType={correctionTarget.type}
-          targetId={correctionTarget.id}
+          targetType="deck"
+          targetId={correctionTargetId}
           targetTitle={song.title}
           defaultReason="correction"
         />

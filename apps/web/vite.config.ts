@@ -27,11 +27,9 @@ const MEDIA_URL_PREFIX = "/api/media/";
 export default defineConfig({
   plugins: [
     react(),
-    // 원격 바인딩은 기본으로 끈다. 켜 두면 AI 바인딩 때문에 `pnpm dev`가
-    // `CLOUDFLARE_API_TOKEN`을 요구하며 아예 뜨지 않는다 — 토큰이 없는 사람은
-    // 로컬 개발을 시작조차 못 한다. 테스트 설정도 이미 remoteBindings: false이므로
-    // 개발·테스트 동작이 같아진다.
-    // 대가: 로컬에서 Workers AI 바인딩은 동작하지 않는다(M5 가사 정규화 전까지 미사용).
+    // 원격 바인딩은 기본으로 끈다. 켜 두면 `pnpm dev`가 `CLOUDFLARE_API_TOKEN`을
+    // 요구할 수 있어 토큰이 없는 사람은 로컬 개발을 시작하지 못한다. 테스트 설정도
+    // remoteBindings: false이므로 개발·테스트 동작이 같아진다.
     // 원격 리소스를 붙여야 하면 CF_REMOTE_BINDINGS=true로 실행한다.
     cloudflare({ remoteBindings: process.env.CF_REMOTE_BINDINGS === "true" }),
     VitePWA({

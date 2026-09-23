@@ -13,7 +13,6 @@ import type {
 import {
   fetchPublicDeck,
   forkPublicDeck,
-  importCatalogLyrics,
   searchCatalog,
   submitReport,
   updateDeckVisibility,
@@ -43,7 +42,7 @@ export function useDebouncedValue<T>(value: T, delayMs: number): T {
 }
 
 /**
- * 공유 라이브러리·가사 라이브러리 통합 검색 (PRD 4.7·4.8).
+ * 공유 라이브러리 검색 (PRD 4.7).
  * 타이핑 중에는 이전 결과를 유지해 목록이 깜박이지 않게 한다.
  */
 export function useCatalogSearch(query: string, options: { enabled: boolean }) {
@@ -77,16 +76,6 @@ export function useForkDeck() {
       upsertLibraryDeck(deck, { push: false });
       // 가져간 횟수가 바뀌었다
       void queryClient.invalidateQueries({ queryKey: catalogKeys.all });
-    },
-  });
-}
-
-/** 가사 라이브러리의 대표 가사로 내 보관함에 곡을 만든다 */
-export function useImportCatalogLyrics() {
-  return useMutation({
-    mutationFn: importCatalogLyrics,
-    onSuccess: ({ deck }) => {
-      upsertLibraryDeck(deck, { push: false });
     },
   });
 }

@@ -1,18 +1,8 @@
 import React, { useEffect, useMemo, useState } from "react";
-import type {
-  CatalogCandidate,
-  CatalogLyricSummary,
-  Deck,
-  PublicDeckSummary,
-} from "@repo/shared";
+import type { Deck, PublicDeckSummary } from "@repo/shared";
 import { hangulIncludes } from "@repo/shared";
 import { saveSongToLibrary, useUserSongs } from "./songLibraryStore";
-import {
-  useCatalogSearch,
-  useForkDeck,
-  useImportCatalogLyrics,
-} from "../../lib/api/catalogQueries";
-import { fetchCatalogCandidates } from "../../lib/api/catalogApi";
+import { useCatalogSearch, useForkDeck } from "../../lib/api/catalogQueries";
 import { describeApiError } from "../../lib/api/request";
 import { useIsOnline } from "../../hooks/useIsOnline";
 import { ReportDialog } from "../sharing/ReportDialog";
@@ -21,15 +11,9 @@ import {
   type CreateSongValues,
 } from "./songPicker/CreateSongForm";
 import {
-  CatalogCandidateChooser,
-  needsCandidateChoice,
-} from "./songPicker/CatalogCandidateChooser";
-import {
-  CatalogLyricPreview,
   MyDeckPreview,
   SharedDeckPreview,
 } from "./songPicker/SongPickerPreview";
-import { CatalogStatusBadge } from "./songPicker/CatalogStatusBadge";
 
 export interface SongPickerModalProps {
   isOpen: boolean;
@@ -38,15 +22,15 @@ export interface SongPickerModalProps {
   initialSearch?: string;
 }
 
-type FilterType = "all" | "mine" | "shared" | "catalog";
-type Mode = "browse" | "create" | "identify";
+type FilterType = "all" | "mine" | "shared";
+type Mode = "browse" | "create";
 
 /**
  * 곡 추가 모달의 목록 항목.
  *
  * - `mine`: 내 보관함 (IndexedDB, 오프라인에서도 보인다)
- * - `shared`: 공유 라이브러리의 공개 덱 (서버 검색, PRD 4.7)
- * - `catalog`: 가사 라이브러리의 대표 가사 (서버 검색, PRD 4.8)
+ * - `shared`: 공유 라이브러리의 공개 덱 (서버 검색, PRD 4.7). 같은 곡도 공개한
+ *   사람마다 따로 보이고, 가져간 횟수순으로 정렬된다
  */
 type PickerEntry =
   | { kind: "mine"; key: string; deck: Deck }
@@ -55,18 +39,7 @@ type PickerEntry =
       key: string;
       summary: PublicDeckSummary;
       ownedCopy?: Deck;
-    }
-  | {
-      kind: "catalog";
-      key: string;
-      summary: CatalogLyricSummary;
-      ownedCopy?: Deck;
     };
-
-interface PendingCreate {
-  values: CreateSongValues;
-  candidates: CatalogCandidate[];
-}
 
 const FILTERS: { id: FilterType; label: string; active: string }[] = [
   {
@@ -76,15 +49,13 @@ const FILTERS: { id: FilterType; label: string; active: string }[] = [
   },
   { id: "mine", label: "내 곡", active: "bg-emerald-600 text-white" },
   { id: "shared", label: "공유 곡", active: "bg-indigo-600 text-white" },
-  { id: "catalog", label: "가사 라이브러리", active: "bg-sky-600 text-white" },
 ];
 
 /**
  * 2-Pane 곡 추가 모달.
  *
- * 좌측은 내 곡 + 공유 곡 + 가사 라이브러리의 통합 목록, 우측은 미리보기 또는
- * 직접 등록 폼이다. 공유 곡은 가져오기(fork)로, 가사 라이브러리는 대표 가사
- * 가져오기로 내 보관함에 먼저 넣은 뒤 세트에 담는다 (M5).
+ * 좌측은 내 곡 + 공유 곡의 통합 목록, 우측은 미리보기 또는 직접 등록 폼이다.
+ * 공유 곡은 가져오기(fork)로 내 보관함에 먼저 넣은 뒤 세트에 담는다 (M5).
  */
 export function SongPickerModal({
   isOpen,
@@ -100,12 +71,7 @@ export function SongPickerModal({
   const [mode, setMode] = useState<Mode>("browse");
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
-  const [pendingCreate, setPendingCreate] = useState<PendingCreate | null>(
-    null,
-  );
-  const [isIdentifying, setIsIdentifying] = useState(false);
   const [reportTarget, setReportTarget] = useState<{
-    type: "deck" | "catalog";
     id: string;
     title: string;
   } | null>(null);
@@ -114,7 +80,6 @@ export function SongPickerModal({
     enabled: isOpen && isOnline,
   });
   const fork = useForkDeck();
-  const importLyrics = useImportCatalogLyrics();
 
   useEffect(() => {
     if (isOpen) {
@@ -159,21 +124,9 @@ export function SongPickerModal({
         ),
       }));
 
-    const catalog: PickerEntry[] = (search.data?.catalogLyrics ?? []).map(
-      (summary) => ({
-        kind: "catalog",
-        key: `catalog:${summary.id}`,
-        summary,
-        ownedCopy: mySongs.find(
-          (deck) => deck.origin === "catalog" && deck.catalogId === summary.id,
-        ),
-      }),
-    );
-
     if (filter === "mine") return mine;
     if (filter === "shared") return shared;
-    if (filter === "catalog") return catalog;
-    return [...mine, ...shared, ...catalog];
+    return [...mine, ...shared];
   }, [mySongs, search.data, searchQuery, filter]);
 
   const selected =
@@ -192,15 +145,10 @@ export function SongPickerModal({
     try {
       if (selected.kind === "mine") {
         addDeck(selected.deck);
-      } else if (selected.kind === "shared") {
-        addDeck(
-          selected.ownedCopy ??
-            (await fork.mutateAsync(selected.summary.id)).deck,
-        );
       } else {
         addDeck(
           selected.ownedCopy ??
-            (await importLyrics.mutateAsync(selected.summary.id)).deck,
+            (await fork.mutateAsync(selected.summary.id)).deck,
         );
       }
     } catch (err) {
@@ -208,54 +156,21 @@ export function SongPickerModal({
     }
   };
 
-  const createAndAdd = (
-    values: CreateSongValues,
-    catalogId: string | null,
-  ): void => {
+  // 직접 등록한 곡은 보관함에 저장하고 바로 세트에 담는다. 같은 곡이 이미
+  // 공유돼 있어도 묶지 않는다 — 공유 라이브러리는 곡마다 여러 버전을 허용한다.
+  const handleCreateSubmit = (values: CreateSongValues): void => {
     const saved = saveSongToLibrary({
       title: values.title,
       artist: values.artist,
       lyricsRaw: values.lyricsRaw,
-      contributeToCatalog: values.contributeToCatalog,
-      catalogId,
     });
-    setPendingCreate(null);
     setMode("browse");
     addDeck(saved);
   };
 
-  // 직접 등록: 기여할 곡이면 같은 제목의 곡이 가사 라이브러리에 있는지 먼저 묻는다
-  // (PRD 4.8 곡 식별). 오프라인이거나 조회가 실패하면 묻지 않고 저장한다 —
-  // 서버가 정규화 키로 같은 곡을 찾아 묶는다.
-  const handleCreateSubmit = async (
-    values: CreateSongValues,
-  ): Promise<void> => {
-    if (!values.contributeToCatalog || !isOnline) {
-      createAndAdd(values, null);
-      return;
-    }
-    setIsIdentifying(true);
-    let candidates: CatalogCandidate[] = [];
-    try {
-      candidates = await fetchCatalogCandidates(values.title, values.artist);
-    } catch {
-      candidates = [];
-    } finally {
-      setIsIdentifying(false);
-    }
-
-    if (needsCandidateChoice(candidates)) {
-      setPendingCreate({ values, candidates });
-      setMode("identify");
-      return;
-    }
-    createAndAdd(values, candidates[0]?.id ?? null);
-  };
-
   const serverUnavailable = !isOnline || (search.isError && !search.data);
-  const sharedCount =
-    (search.data?.decks.length ?? 0) + (search.data?.catalogLyrics.length ?? 0);
-  const isAdding = fork.isPending || importLyrics.isPending;
+  const sharedCount = search.data?.decks.length ?? 0;
+  const isAdding = fork.isPending;
 
   return (
     <div
@@ -405,21 +320,11 @@ export function SongPickerModal({
 
           {/* 우측: 미리보기 또는 직접 등록 */}
           <div className="flex-1 flex flex-col min-w-0 bg-zinc-50/60 dark:bg-zinc-950/40">
-            {mode === "identify" && pendingCreate ? (
-              <CatalogCandidateChooser
-                title={pendingCreate.values.title}
-                candidates={pendingCreate.candidates}
-                onBack={() => setMode("create")}
-                onChoose={(catalogId) =>
-                  createAndAdd(pendingCreate.values, catalogId)
-                }
-              />
-            ) : mode === "create" ? (
+            {mode === "create" ? (
               <CreateSongForm
                 initialTitle={searchQuery.trim()}
-                isSubmitting={isIdentifying}
                 onCancel={() => setMode("browse")}
-                onSubmit={(values) => void handleCreateSubmit(values)}
+                onSubmit={handleCreateSubmit}
               />
             ) : !selected ? (
               <div className="flex-1 flex items-center justify-center text-zinc-400 text-xs">
@@ -431,7 +336,7 @@ export function SongPickerModal({
                 onAdd={() => void handleAddSelected()}
                 onClose={onClose}
               />
-            ) : selected.kind === "shared" ? (
+            ) : (
               <SharedDeckPreview
                 summary={selected.summary}
                 ownedCopy={selected.ownedCopy}
@@ -441,23 +346,6 @@ export function SongPickerModal({
                 onClose={onClose}
                 onReport={() =>
                   setReportTarget({
-                    type: "deck",
-                    id: selected.summary.id,
-                    title: selected.summary.title,
-                  })
-                }
-              />
-            ) : (
-              <CatalogLyricPreview
-                summary={selected.summary}
-                ownedCopy={selected.ownedCopy}
-                isAdding={isAdding}
-                error={actionError}
-                onAdd={() => void handleAddSelected()}
-                onClose={onClose}
-                onReport={() =>
-                  setReportTarget({
-                    type: "catalog",
                     id: selected.summary.id,
                     title: selected.summary.title,
                   })
@@ -472,7 +360,7 @@ export function SongPickerModal({
         <ReportDialog
           isOpen
           onClose={() => setReportTarget(null)}
-          targetType={reportTarget.type}
+          targetType="deck"
           targetId={reportTarget.id}
           targetTitle={reportTarget.title}
         />
@@ -499,9 +387,7 @@ function EntryRow({
       ? entry.deck.slides[0]?.lines.filter(Boolean).join(" ") ||
         entry.deck.lyricsRaw.split("\n").filter(Boolean)[0] ||
         ""
-      : entry.kind === "shared"
-        ? entry.summary.firstSlidePreview.join(" ")
-        : entry.summary.twoLinesPreview.join(" ");
+      : entry.summary.firstSlidePreview.join(" ");
 
   return (
     <div
@@ -528,18 +414,10 @@ function EntryRow({
               {entry.ownedCopy ? "보관함에 있음" : "공유"}
             </span>
           )}
-          {entry.kind === "catalog" && (
-            <CatalogStatusBadge
-              status={entry.summary.status}
-              versionCount={entry.summary.versionCount}
-            />
-          )}
           <span className="text-[10px] text-zinc-400 font-mono">
             {entry.kind === "mine"
               ? `${entry.deck.slides.length}슬라이드`
-              : entry.kind === "shared"
-                ? `${entry.summary.forkCount}회 가져감`
-                : "가사"}
+              : `${entry.summary.forkCount}회 가져감`}
           </span>
         </div>
       </div>

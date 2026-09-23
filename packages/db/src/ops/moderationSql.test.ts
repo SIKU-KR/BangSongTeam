@@ -6,8 +6,6 @@ const A = "00000000-0000-4000-8000-00000000000a";
 const B = "00000000-0000-4000-8000-00000000000b";
 const DECK = "c0000000-0000-4000-8000-000000000001";
 const FORK = "c0000000-0000-4000-8000-000000000002";
-const CAT = "d0000000-0000-4000-8000-000000000001";
-const CAT2 = "d0000000-0000-4000-8000-000000000002";
 
 /**
  * 운영 SQL을 실제 마이그레이션 스키마에 대해 실행한다.
@@ -32,19 +30,13 @@ describe("운영 SQL (moderation runbook)", () => {
       `INSERT INTO user (id, name, created_at, updated_at) VALUES ('${A}', 'A', 0, 0), ('${B}', 'B', 0, 0)`,
     );
     s.exec(
-      `INSERT INTO lyrics_catalog (id, title, artist, title_norm, artist_norm, lyrics_canonical, version_count, status) VALUES ('${CAT}', '시선', '', '시선', '', '원래 가사', 2, 'normalized')`,
-    );
-    s.exec(
-      `INSERT INTO decks (id, user_id, title, lyrics_raw, slides, style, visibility, published_at, catalog_id) VALUES ('${DECK}', '${A}', '시선', '가사', '[]', '{}', 'public', 1, '${CAT}')`,
+      `INSERT INTO decks (id, user_id, title, lyrics_raw, slides, style, visibility, published_at) VALUES ('${DECK}', '${A}', '시선', '가사', '[]', '{}', 'public', 1)`,
     );
     s.exec(
       `INSERT INTO decks (id, user_id, title, lyrics_raw, slides, style, visibility, forked_from, origin, published_at) VALUES ('${FORK}', '${B}', '시선', '가사', '[]', '{}', 'public', '${DECK}', 'fork', 1)`,
     );
     s.exec(
-      `INSERT INTO lyrics_versions (id, catalog_id, user_id, deck_id, lyrics) VALUES ('v1', '${CAT}', '${A}', '${DECK}', 'A 가사'), ('v2', '${CAT}', '${B}', 'deck-b', 'B 가사')`,
-    );
-    s.exec(
-      `INSERT INTO reports (id, user_id, target_type, target_id, reason) VALUES ('r1', '${B}', 'deck', '${DECK}', 'copyright'), ('r2', '${A}', 'catalog', '${CAT}', 'lyrics_error')`,
+      `INSERT INTO reports (id, user_id, target_type, target_id, reason) VALUES ('r1', '${B}', 'deck', '${DECK}', 'copyright'), ('r2', '${A}', 'deck', '${FORK}', 'lyrics_error')`,
     );
   });
 
@@ -101,82 +93,5 @@ describe("운영 SQL (moderation runbook)", () => {
     );
     run("RESOLVE_REPORT", { report_id: "r1", note: "처리" });
     expect(all("LIST_PENDING_REPORTS")).toHaveLength(0);
-  });
-
-  it("locks an operator-edited canonical and unlocks it again", () => {
-    run("LOCK_CATALOG", { catalog_id: CAT, lyrics: "운영자가 고친 가사" });
-    expect(
-      one(
-        "SELECT lyrics_canonical, status, canonical_source FROM lyrics_catalog WHERE id = ?",
-        CAT,
-      ),
-    ).toEqual({
-      lyrics_canonical: "운영자가 고친 가사",
-      status: "locked",
-      canonical_source: "operator",
-    });
-
-    run("UNLOCK_CATALOG", { catalog_id: CAT });
-    expect(
-      one(
-        "SELECT status, lyrics_canonical FROM lyrics_catalog WHERE id = ?",
-        CAT,
-      ),
-    ).toEqual({
-      status: "normalized",
-      lyrics_canonical: "운영자가 고친 가사",
-    });
-  });
-
-  it("splits a wrongly merged song into a separate catalog", () => {
-    expect(all("LIST_CATALOG_VERSIONS", { catalog_id: CAT })).toHaveLength(2);
-
-    run("CREATE_CATALOG", {
-      catalog_id: CAT2,
-      title: "시선 (다른 곡)",
-      artist: "",
-      title_norm: "시선다른곡",
-      artist_norm: "",
-      lyrics: "B 가사",
-    });
-    run("MOVE_VERSION_DECK_TO_CATALOG", {
-      version_id: "v1",
-      to_catalog_id: CAT2,
-    });
-    run("MOVE_VERSION_TO_CATALOG", { version_id: "v1", to_catalog_id: CAT2 });
-    run("RECOUNT_CATALOG", { catalog_id: CAT });
-    run("RECOUNT_CATALOG", { catalog_id: CAT2 });
-
-    expect(
-      one("SELECT version_count FROM lyrics_catalog WHERE id = ?", CAT)
-        .version_count,
-    ).toBe(1);
-    expect(
-      one("SELECT version_count FROM lyrics_catalog WHERE id = ?", CAT2)
-        .version_count,
-    ).toBe(1);
-    expect(
-      one("SELECT catalog_id FROM decks WHERE id = ?", DECK).catalog_id,
-    ).toBe(CAT2);
-    // 새 카탈로그는 가사 라이브러리 검색에도 잡힌다 (FTS 트리거)
-    expect(
-      one(
-        "SELECT count(*) AS n FROM lyrics_catalog_fts WHERE catalog_id = ?",
-        CAT2,
-      ).n,
-    ).toBe(1);
-  });
-
-  it("deletes a catalog with its versions", () => {
-    testDb.sqlite.pragma("foreign_keys = ON");
-    run("DELETE_CATALOG", { catalog_id: CAT });
-    expect(
-      one("SELECT count(*) AS n FROM lyrics_versions WHERE catalog_id = ?", CAT)
-        .n,
-    ).toBe(0);
-    // 사용자의 덱은 남고 연결만 끊긴다
-    expect(
-      one("SELECT catalog_id FROM decks WHERE id = ?", DECK).catalog_id,
-    ).toBeNull();
   });
 });

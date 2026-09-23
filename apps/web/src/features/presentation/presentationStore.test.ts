@@ -62,7 +62,6 @@ describe("presentationStore (In-memory reactive presentation)", () => {
     const newDeck = DeckSchema.parse({
       id: "90000000-0000-4000-8000-000000000001",
       userId: "00000000-0000-4000-8000-000000000001",
-      catalogId: null,
       scope: "presentation",
       presentationId: null,
       title: "아침 안개 눈 앞 가리듯",
@@ -103,7 +102,6 @@ describe("presentationStore (In-memory reactive presentation)", () => {
     const newDeck = DeckSchema.parse({
       id: "90000000-0000-4000-8000-000000000002",
       userId: "00000000-0000-4000-8000-000000000001",
-      catalogId: null,
       scope: "presentation",
       presentationId: null,
       title: "새 노래로",
@@ -499,7 +497,6 @@ describe("문서별 Undo/Redo 격리", () => {
         forkedFrom: "90000000-0000-4000-8000-0000000000bb",
         forkedFromAuthorName: "원작자",
         publishedAt: "2026-09-22T00:00:00.000Z",
-        contributeToCatalog: true,
         createdAt: "2026-09-20T00:00:00.000Z",
         updatedAt: "2026-09-20T00:00:00.000Z",
       });
@@ -510,7 +507,6 @@ describe("문서별 Undo/Redo 격리", () => {
         visibility: "private",
         forkCount: 0,
         publishedAt: null,
-        contributeToCatalog: false,
         forkedFrom: "90000000-0000-4000-8000-0000000000aa",
         // 원작 표시는 그대로 물려받는다
         forkedFromAuthorName: "원작자",

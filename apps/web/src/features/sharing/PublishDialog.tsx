@@ -5,12 +5,9 @@ export interface PublishDialogProps {
   songTitle: string;
   /** 보관함 원본이 이미 있어 그 내용이 세트 곡 내용으로 바뀐다 */
   overwritesLibraryCopy: boolean;
-  /** 가사 라이브러리 루트 버전이 될 수 있는 곡인가 (포크본·대표 가사 곡은 아니다) */
-  canContribute: boolean;
-  defaultContribute: boolean;
   isPending: boolean;
   error: string | null;
-  onConfirm: (options: { contributeToCatalog: boolean }) => void;
+  onConfirm: () => void;
   onCancel: () => void;
 }
 
@@ -24,15 +21,12 @@ export function PublishDialog({
   isOpen,
   songTitle,
   overwritesLibraryCopy,
-  canContribute,
-  defaultContribute,
   isPending,
   error,
   onConfirm,
   onCancel,
 }: PublishDialogProps): React.JSX.Element | null {
   const [accepted, setAccepted] = useState(false);
-  const [contribute, setContribute] = useState(defaultContribute);
 
   if (!isOpen) return null;
 
@@ -86,24 +80,6 @@ export function PublishDialog({
           <span className="font-semibold">위 내용을 확인했습니다</span>
         </label>
 
-        {canContribute && (
-          <label className="flex items-start gap-2 text-xs cursor-pointer">
-            <input
-              type="checkbox"
-              data-testid="publish-contribute-checkbox"
-              checked={contribute}
-              onChange={(e) => setContribute(e.target.checked)}
-              className="mt-0.5 accent-emerald-600"
-            />
-            <span>
-              <span className="font-semibold">가사 라이브러리에도 기여</span>
-              <span className="block text-zinc-500">
-                같은 곡을 등록한 사람들의 가사를 모아 대표 가사를 만듭니다.
-              </span>
-            </span>
-          </label>
-        )}
-
         {error && (
           <p role="alert" className="text-xs text-rose-600">
             {error}
@@ -122,9 +98,7 @@ export function PublishDialog({
             type="button"
             data-testid="publish-confirm-btn"
             disabled={!accepted || isPending}
-            onClick={() =>
-              onConfirm({ contributeToCatalog: canContribute && contribute })
-            }
+            onClick={onConfirm}
             className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-xs font-semibold cursor-pointer"
           >
             {isPending ? "공개하는 중…" : "공개하기"}

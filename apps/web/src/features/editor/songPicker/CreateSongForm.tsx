@@ -6,31 +6,26 @@ export interface CreateSongValues {
   title: string;
   artist: string;
   lyricsRaw: string;
-  contributeToCatalog: boolean;
 }
 
 export interface CreateSongFormProps {
   initialTitle?: string;
-  isSubmitting?: boolean;
   onCancel: () => void;
   onSubmit: (values: CreateSongValues) => void;
 }
 
 /**
  * 새 찬양 가사 직접 입력 폼 (PRD 4.1).
- * 빈 줄 기준 분할을 실시간으로 보여 주고, 가사 라이브러리 기여 여부를 받는다.
+ * 빈 줄 기준 분할을 실시간으로 보여 준다.
  */
 export function CreateSongForm({
   initialTitle = "",
-  isSubmitting = false,
   onCancel,
   onSubmit,
 }: CreateSongFormProps): React.JSX.Element {
   const [title, setTitle] = useState(initialTitle);
   const [artist, setArtist] = useState("");
   const [lyrics, setLyrics] = useState("");
-  // '가사 라이브러리에 기여' — 기본 켜짐 (PRD 4.8). 끄면 개인 보관함에만 저장된다.
-  const [contributeToCatalog, setContributeToCatalog] = useState(true);
 
   const previewSlides = useMemo(
     () => (lyrics.trim() ? splitLyricsIntoSlides(lyrics) : []),
@@ -106,23 +101,6 @@ export function CreateSongForm({
         />
       </div>
 
-      <label className="flex items-start gap-2 text-xs text-zinc-700 dark:text-zinc-300 cursor-pointer">
-        <input
-          type="checkbox"
-          data-testid="song-picker-create-contribute-checkbox"
-          checked={contributeToCatalog}
-          onChange={(e) => setContributeToCatalog(e.target.checked)}
-          className="mt-0.5 accent-emerald-600"
-        />
-        <span>
-          <span className="font-semibold">가사 라이브러리에 기여</span>
-          <span className="block text-zinc-500">
-            같은 곡을 등록한 사람들의 가사를 모아 대표 가사를 만듭니다. 끄면 내
-            보관함에만 저장됩니다.
-          </span>
-        </span>
-      </label>
-
       <div className="pt-2 flex items-center justify-end gap-2.5">
         <button
           type="button"
@@ -134,22 +112,17 @@ export function CreateSongForm({
         <button
           type="button"
           data-testid="song-picker-create-submit-btn"
-          disabled={!isValid || isSubmitting}
+          disabled={!isValid}
           onClick={() =>
             onSubmit({
               title: title.trim(),
               artist: artist.trim(),
               lyricsRaw: lyrics,
-              contributeToCatalog,
             })
           }
           className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-xs font-bold shadow-sm transition-colors flex items-center gap-1.5 cursor-pointer"
         >
-          <span>
-            {isSubmitting
-              ? "같은 곡을 찾는 중…"
-              : "보관함에 저장하고 프레젠테이션에 추가"}
-          </span>
+          <span>보관함에 저장하고 프레젠테이션에 추가</span>
         </button>
       </div>
     </div>

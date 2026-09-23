@@ -36,6 +36,13 @@
       "when": 1790130100864,
       "tag": "0004_m5_fts",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1790160527119,
+      "tag": "0005_remove_catalog",
+      "breakpoints": true
     }
   ]
 }

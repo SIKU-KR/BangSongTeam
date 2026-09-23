@@ -83,16 +83,11 @@ flowchart TB
       D1DB[("Cloudflare D1 (SQLite + FTS5)")]
       R2Media[("Cloudflare R2 Bucket (Loop Videos + User Uploads)")]
     end
-
-    subgraph AIEngine["AI Engine"]
-      WorkersAI["Cloudflare Workers AI (@cf/qwen/qwen3.8-27b)"]
-    end
   end
 
   UI -->|Hono RPC (/api/*)| HonoAPI
   HonoAPI --> AuthMiddleware
   AuthMiddleware --> D1DB
-  HonoAPI --> WorkersAI
 
   MediaProxy["Media Proxy (/api/media/* · HTTP Range)"]
   HonoAPI --> MediaProxy
@@ -109,8 +104,8 @@ flowchart TB
 | 구성 요소                                     | 상태   | 비고                                                                                                             |
 | --------------------------------------------- | ------ | ---------------------------------------------------------------------------------------------------------------- |
 | `packages/shared` Zod 스키마 (§3)             | 구현   | Deck·Slide·Style·Presentation·Broadcast·API·공유 라이브러리(`library.ts`) 계약                                   |
-| `packages/db` Drizzle 스키마·마이그레이션(§4) | 구현   | 0000_initial, 0001_fts5, 0002_seed_backgrounds, 0003_m5_sharing, 0004_m5_fts                                     |
-| 스코프 쿼리 헬퍼 (§4.3)                       | 구현   | decks·presentations·lyrics·search·sharing·reports·normalization. 공개 조건은 `publicDeckCondition()` 한 곳       |
+| `packages/db` Drizzle 스키마·마이그레이션(§4) | 구현   | 0000_initial, 0001_fts5, 0002_seed_backgrounds, 0003_m5_sharing, 0004_m5_fts, 0005_remove_catalog                |
+| 스코프 쿼리 헬퍼 (§4.3)                       | 구현   | decks·presentations·search·sharing·reports. 공개 조건은 `publicDeckCondition()` 한 곳                            |
 | 3-Layer Slide Stage (§5.1)                    | 구현   | `components/stage/*` — 편집기와 송출이 동일 컴포넌트 사용                                                        |
 | 입력 버퍼 엔진·단축키 (§5.2)                  | 구현   | `useNavigationBuffer`, `usePresentationShortcuts` (tinykeys)                                                     |
 | 세트 편집기 (PRD 4.4)                         | 부분   | 넘침 경고와 커서 기준 분할·합치기 미구현 (M2 잔여). 속성 패널 '공유' 섹션 구현 (M5)                              |
@@ -121,8 +116,8 @@ flowchart TB
 | 발표자 보기·BroadcastChannel (§5.3)           | 구현   | 조작 창 `/present/:id/control`, 청중 창 `?audience=1` (M4)                                                       |
 | PWA·Cache Storage (§5.4)                      | 구현   | vite-plugin-pwa(generateSW) + RangeRequests (M4)                                                                 |
 | TanStack Query (서버 캐시)                    | 구현   | 곡 추가 모달의 공유 검색·상세·가져오기, 공개 전환, 신고에만 쓴다. 송출 화면 import는 ESLint가 막는다 (M5-5)      |
-| Workers AI 가사 정규화 (§6)                   | 구현   | Qwen3.8 27B, 검증 실패·오류 시 최다 등록 버전. 실모델 확인은 운영 런북 §6 (M5-4)                                 |
-| 공유·가사 라이브러리 API (§7)                 | 구현   | 공개 전환·검색·상세·가져오기·후보·대표 가사 가져오기·신고 (M5-3)                                                 |
+| 가사 라이브러리·LLM 정규화 (§6)               | 제거   | MVP 범위에서 제외 (2026-09-23). 테이블은 `0005_remove_catalog`로 지웠다                                          |
+| 공유 라이브러리 API (§7)                      | 구현   | 공개 전환·검색(가져간 횟수순 게시판)·상세·가져오기·신고 (M5-3)                                                   |
 | 운영자 도구                                   | 구현   | 관리자 화면 없음. `docs/ops/moderation-runbook.md`의 SQL (`packages/db/src/ops/moderationSql.ts`가 정본)         |
 | 사용자 커스텀 배경 업로드 (PRD 4.3)           | 미구현 | 배경 라이브러리 화면에 안내만 있음                                                                               |
 | 저장 실패 경고 배너                           | 구현   | `StorageWarningBanner` — 용량 초과와 저장소 차단을 구분, 닫을 수 없음                                            |
@@ -244,7 +239,6 @@ export type DeckScope = z.infer<typeof DeckScopeSchema>;
 export const DeckSchema = z.object({
   id: z.string().uuid(),
   userId: z.string().uuid(),
-  catalogId: z.string().uuid().nullable().optional(),
   scope: DeckScopeSchema.default("library"), // 'library': 보관함 마스터, 'presentation': 프레젠테이션 전용 복제본
   presentationId: z.string().uuid().nullable().optional(), // scope='presentation'일 때 속한 프레젠테이션 ID
   title: z.string().min(1).max(100),
@@ -282,7 +276,7 @@ export const PresentationSchema = z.object({
 export type Presentation = z.infer<typeof PresentationSchema>;
 ```
 
-### 3.3 배경 미디어 및 가사 카탈로그 스키마 (`schemas/media.ts`, `schemas/catalog.ts`)
+### 3.3 배경 미디어 스키마 (`schemas/media.ts`)
 
 ```typescript
 export const BackgroundMediaSchema = z.object({
@@ -297,22 +291,6 @@ export const BackgroundMediaSchema = z.object({
   posterUrl: z.string().url(),
 });
 export type BackgroundMedia = z.infer<typeof BackgroundMediaSchema>;
-
-export const CatalogStatusSchema = z.enum(["single", "normalized", "locked"]);
-export type CatalogStatus = z.infer<typeof CatalogStatusSchema>;
-
-export const LyricCatalogSchema = z.object({
-  id: z.string().uuid(),
-  title: z.string().min(1).max(100),
-  artist: z.string().max(100).default(""),
-  titleNorm: z.string(),
-  artistNorm: z.string(),
-  lyricsCanonical: z.string(),
-  versionCount: z.number().int().nonnegative().default(1),
-  status: CatalogStatusSchema.default("single"),
-  normalizedAt: z.string().datetime().nullable(),
-});
-export type LyricCatalog = z.infer<typeof LyricCatalogSchema>;
 ```
 
 ### 3.4 BroadcastChannel 동기화 프로토콜 (`schemas/broadcast.ts`)
@@ -407,13 +385,7 @@ Cloudflare D1(SQLite)을 영속성 엔진으로 사용하며, Drizzle ORM을 통
 - **검증**: Better Auth의 Drizzle D1 어댑터가 요구하는 필수 필드(`emailVerified`, `session.ipAddress`, `session.userAgent`, `account.scope`, `account.idToken`, `verification` 테이블)가 누락되면 인스턴스 초기화 시 런타임 스키마 에러가 발생한다.
 - **최적화 설계**: Better Auth v1 공식 규격의 컬럼과 테이블을 완벽히 매핑하여 인증 호환성을 보장한다.
 
-#### 4. `lyrics_versions` 1인 1표 정규화와 멱등적 업서트(Upsert)
-
-- **검증**: 동일 사용자가 가사를 교정하여 같은 곡을 다시 저장할 경우, `uniqueIndex(user_id, catalog_id)`에 의해 `SQLITE_CONSTRAINT_UNIQUE` 예외가 발생한다.
-- **최적화 설계**: 1인 1표 원칙(PRD 4.8)을 준수하되, `INSERT ... ON CONFLICT (user_id, catalog_id) DO UPDATE SET lyrics = excluded.lyrics, deck_id = excluded.deck_id, updated_at = unixepoch()` 업서트 쿼리를 강제한다.
-- `lyrics_catalog.version_count`는 SQLite 트리거를 통해 원자적으로 증감시켜 카운트 불일치를 원천 방지한다.
-
-#### 5. 사용자 커스텀 배경의 노출 격리 (PRD 4.3)
+#### 4. 사용자 커스텀 배경의 노출 격리 (PRD 4.3)
 
 - **문제점**: 커스텀 배경을 `backgrounds`에 함께 넣으면, 배경 목록 API가 남의 업로드까지 뿌리거나 공개 덱이 남의 배경을 참조하게 된다.
 - **설계**: `source`/`owner_user_id`로 구분하고 쿼리 헬퍼에서 강제한다.
@@ -496,63 +468,6 @@ export const verification = sqliteTable("verification", {
 });
 
 // ============================================================================
-// 2. 가사 카탈로그 및 버전 테이블 (LLM 정규화 파이프라인)
-// ============================================================================
-export const lyricsCatalog = sqliteTable(
-  "lyrics_catalog",
-  {
-    id: text("id").primaryKey(),
-    title: text("title").notNull(),
-    artist: text("artist").default(""),
-    titleNorm: text("title_norm").notNull(), // 공백·특수문자 제거, 소문자
-    artistNorm: text("artist_norm").notNull(),
-    lyricsCanonical: text("lyrics_canonical").notNull(),
-    versionCount: integer("version_count").notNull().default(1),
-    status: text("status", { enum: ["single", "normalized", "locked"] })
-      .notNull()
-      .default("single"),
-    normalizedAt: integer("normalized_at", { mode: "timestamp" }),
-    createdAt: integer("created_at", { mode: "timestamp" }).default(
-      sql`(unixepoch())`,
-    ),
-    updatedAt: integer("updated_at", { mode: "timestamp" }).default(
-      sql`(unixepoch())`,
-    ),
-  },
-  (t) => [
-    index("idx_lyrics_catalog_norm").on(t.titleNorm, t.artistNorm),
-    index("idx_lyrics_catalog_status").on(t.status),
-  ],
-);
-
-export const lyricsVersions = sqliteTable(
-  "lyrics_versions",
-  {
-    id: text("id").primaryKey(),
-    catalogId: text("catalog_id")
-      .notNull()
-      .references(() => lyricsCatalog.id, { onDelete: "cascade" }),
-    userId: text("user_id")
-      .notNull()
-      .references(() => user.id),
-    deckId: text("deck_id").notNull(), // 루트 덱 ID
-    lyrics: text("lyrics").notNull(),
-    source: text("source").default("user"),
-    createdAt: integer("created_at", { mode: "timestamp" }).default(
-      sql`(unixepoch())`,
-    ),
-    updatedAt: integer("updated_at", { mode: "timestamp" }).default(
-      sql`(unixepoch())`,
-    ),
-  },
-  (t) => [
-    index("idx_lyrics_versions_catalog").on(t.catalogId),
-    // 1인 1표 보장을 위한 복합 고유 인덱스
-    uniqueIndex("idx_lyrics_versions_user_catalog").on(t.userId, t.catalogId),
-  ],
-);
-
-// ============================================================================
 // 3. 배경 영상 메타데이터
 // ============================================================================
 export const backgrounds = sqliteTable(
@@ -599,9 +514,6 @@ export const decks = sqliteTable(
     userId: text("user_id")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
-    catalogId: text("catalog_id").references(() => lyricsCatalog.id, {
-      onDelete: "set null",
-    }),
 
     // 스코프 격리 및 프레젠테이션 종속성
     scope: text("scope", { enum: ["library", "presentation"] })
@@ -637,7 +549,6 @@ export const decks = sqliteTable(
     index("idx_decks_user_scope").on(t.userId, t.scope), // 내 보관함 필터링 최적화
     index("idx_decks_presentation").on(t.presentationId), // 세트 종속 덱 조회
     index("idx_decks_visibility_forks").on(t.visibility, t.forkCount),
-    index("idx_decks_catalog").on(t.catalogId),
   ],
 );
 
@@ -687,7 +598,7 @@ export const presentationItems = sqliteTable(
 export const reports = sqliteTable("reports", {
   id: text("id").primaryKey(),
   userId: text("user_id").references(() => user.id),
-  targetType: text("target_type", { enum: ["deck", "catalog"] }).notNull(),
+  targetType: text("target_type", { enum: ["deck"] }).notNull(),
   targetId: text("target_id").notNull(),
   reason: text("reason").notNull(),
   status: text("status", { enum: ["pending", "resolved", "rejected"] }).default(
@@ -709,13 +620,12 @@ export const reports = sqliteTable("reports", {
 
 ### 4.2 FTS5 Trigram 검색 가상 테이블 (`drizzle/0004_m5_fts.sql`)
 
-공개 덱과 가사 라이브러리 검색용 FTS5 Trigram 인덱스다. M5에서 `0001_fts5.sql`의 테이블·트리거를 걷어내고 다시 만들었다.
+공개 덱 검색용 FTS5 Trigram 인덱스다. M5에서 `0001_fts5.sql`의 테이블·트리거를 걷어내고 다시 만들었다. `0005_remove_catalog.sql`은 `decks`를 다시 만들면서(DROP TABLE이 트리거를 함께 지운다) 같은 트리거를 다시 걸고 `decks_fts`를 새로 채운다.
 
 - **색인 조건 = 공개 조건**: `scope = 'library' AND visibility = 'public' AND takedown_at IS NULL`. 0001은 `visibility`만 봐서, 공개 샘플 곡을 세트에 담은 복제본까지 공개 검색에 섞였다. 이 조건은 쿼리 헬퍼의 `publicDeckCondition()`과 같다. 둘 중 하나만 바꾸지 않는다.
 - **가사 본문도 색인한다** (`decks_fts.lyrics`). 곡 추가 모달이 공유 곡도 가사로 찾는다 (PRD 4.7 괄호 문단).
 - **갱신 트리거는 하나**: '빼고 → 넣기'를 한 트리거 안에서 한다. 둘로 나누면 SQLite가 나중에 만든 트리거를 먼저 실행해 방금 넣은 행을 지운다.
 - **색인 대상이었던 행에만 FTS를 건드린다**: 세트 동기화는 덱을 매번 지우고 다시 넣는다. 조건 없는 트리거는 곡마다 FTS를 훑는다. `rowid` 연결은 쓰지 않는다 (TEXT 기본키 테이블의 rowid는 VACUUM에서 바뀔 수 있다).
-- `lyrics_catalog_fts(catalog_id, title, artist)` — 가사 라이브러리 제목·아티스트 검색.
 - drizzle-kit이 `decks_fts`를 일반 테이블로 알고 있어 `db:generate`가 FTS 테이블에 `ALTER`를 만든다. 생성된 마이그레이션에서 `_fts` 문장은 지우고 FTS는 커스텀 마이그레이션에서만 다룬다.
 
 검색 헬퍼(`queries/search.ts`)는 검색어를 **토큰 단위로** 나눈다. 3자 이상 토큰은 `MATCH`, 2자 이하 토큰은 `LIKE '%t%' ESCAPE '\'`로 보내고 모두 AND로 묶는다. 문자열 전체 길이로 분기하면 "주 은혜로"처럼 짧은 토큰이 섞인 검색이 `MATCH`로 가서 아무것도 찾지 못한다. 빈 검색어는 가져간 횟수순 둘러보기다.
@@ -728,15 +638,13 @@ D1에는 Postgres RLS가 없으므로 애플리케이션 계층에서 `userId` �
 >
 > - **서버 소유 공유 필드**: `upsertDeck`은 `visibility`·`forkCount`·`origin`·`forkedFrom`·`forkedFromAuthorName`·`publishedAt`·`takedownAt`을 기존 행 값으로 유지하고, 새 행이면 비공개·0회·`origin='user'`로 만든다. `scope='library'`를 강제한다. 세트 문서(`fromPresentationDocument`)는 복제본을 항상 비공개·0회로 쓴다. 이 값을 바꾸는 경로는 공개 전환(`setDeckVisibility`)·가져오기(`forkPublicDeck`)·게시 중단(운영 런북)뿐이다.
 > - **공개 조건 `publicDeckCondition()`** (`queries/publicScope.ts`): 보관함 덱 + 공개 + 게시 중단 아님. 검색·상세·가져오기·신고가 모두 이 조건을 쓴다.
-> - **루트 버전 판정 `shouldContribute(deck)`**: `scope='library' AND origin='user' AND contributeToCatalog`. 포크본·대표 가사로 만든 곡은 버전으로 세지 않는다 (PRD 4.8).
-> - **외래키 방어**: 모르는 `catalogId`는 `nullifyUnknownCatalogs`가 `null`로 낮춘다 (`nullifyUnknownBackgrounds`와 같은 이유).
 > - 검색 헬퍼는 `queries/search.ts`로 옮겼다 (§4.2).
 
 ```typescript
 // packages/db/src/queries/decks.ts
 import { eq, and, desc, sql } from "drizzle-orm";
 import { db } from "../client";
-import { decks, decksFts, lyricsVersions, lyricsCatalog } from "../schema";
+import { decks, decksFts } from "../schema";
 
 /**
  * FTS5 쿼리 새니타이저
@@ -820,33 +728,6 @@ export const deckQueries = {
         .orderBy(desc(decks.forkCount))
         .limit(limit);
     }
-  },
-
-  // 5. 가사 버전 1인 1표 멱등적 업서트 (Upsert)
-  async upsertLyricVersion(params: {
-    catalogId: string;
-    userId: string;
-    deckId: string;
-    lyrics: string;
-  }) {
-    return db
-      .insert(lyricsVersions)
-      .values({
-        id: crypto.randomUUID(),
-        catalogId: params.catalogId,
-        userId: params.userId,
-        deckId: params.deckId,
-        lyrics: params.lyrics,
-        source: "user",
-      })
-      .onConflictDoUpdate({
-        target: [lyricsVersions.userId, lyricsVersions.catalogId],
-        set: {
-          lyrics: params.lyrics,
-          deckId: params.deckId,
-          updatedAt: sql`(unixepoch())`,
-        },
-      });
   },
 };
 ```
@@ -1116,98 +997,14 @@ Chrome 공식 **Window Management API**를 활용한 다중 디스플레이 투�
 
 ---
 
-## 6. 가사 정규화 및 Workers AI 파이프라인 명세
+## 6. 가사 정규화 및 Workers AI 파이프라인 — MVP 제외
 
-### 6.1 가사 정규화 파이프라인
+**2026-09-23 결정으로 MVP에서 제거했다.** 곡 단위 가사 라이브러리(`lyrics_catalog`·`lyrics_versions`), 서버측 가사 기여, 곡 식별 후보, 대표 가사 가져오기, Workers AI(Qwen3.8 27B) 정규화와 환각 검증, 운영자 잠금이 모두 빠졌다. `wrangler.jsonc`에 `ai` 바인딩도 없다.
 
-정규화는 `ctx.waitUntil()`로 응답 반환 이후에 실행한다. 사용자 요청 흐름을 막지 않으면서도 별도 큐 인프라가 필요 없다.
-
-> **구현 메모 (M5-4, 2026-09-23)**
->
-> - 기여는 `POST /api/decks`가 아니라 보관함 동기화 `PUT /api/decks/:id`에서 일어난다. 저장된 덱이 루트 버전(`shouldContribute`)이면 기여하고, 버전이 **새로 생겼거나 바뀌었고**(`changed`) 2개 이상이며 잠기지 않았을 때만 정규화를 예약한다. 같은 가사를 다시 저장해도 모델을 부르지 않는다.
-> - 호출: `ai.run('@cf/qwen/qwen3.8-27b', { messages, temperature: 0, max_tokens, chat_template_kwargs: { enable_thinking: false } })`. `AI_GATEWAY_ID`가 있으면 AI Gateway를 거친다.
-> - 출력에서 `<think>`·코드펜스를 걷어낸다. **예외·빈 출력·`finish_reason: 'length'`·검증 실패·지나치게 짧은 출력(가장 짧은 입력의 80% 미만)은 모두 최다 등록 버전으로 떨어진다.** 최다 등록 버전은 공백만 다른 버전을 같은 버전으로 세고, 동률이면 먼저 등록된 쪽이다.
-> - 쓰기는 compare-and-set이다: `status != 'locked'`이고 시작 시점의 `updated_at`·`version_count`가 그대로일 때만. 모델을 기다리는 사이 새 버전이 들어오면 쓰지 않는다(그 버전이 다음 정규화를 부른다).
-> - 누가 대표 가사를 만들었는지는 `lyrics_catalog.canonical_source`(`user`·`llm`·`popular_root`·`operator`)에 남는다.
-> - 실제 Qwen 확인(사고 모드 끄기, 출력 형식)은 운영 런북 §6의 원격 스모크 절차로 한다. 로컬·테스트는 원격 바인딩을 끄므로 모델이 가짜이거나, 로컬 개발 서버에서는 호출이 실패해 폴백 경로가 돈다.
-
-```mermaid
-sequenceDiagram
-  autonumber
-  actor User as User (Deck Editor)
-  participant API as Hono Worker API
-  participant D1 as Cloudflare D1
-  participant WorkerAI as Workers AI (Qwen3.8 27B)
-
-  User->>API: POST /api/decks (가사 기여 체크 ON)
-  API->>D1: Save Deck & Insert lyrics_versions (Root Version)
-  API->>D1: SELECT count(*) FROM lyrics_versions WHERE catalog_id = ?
-  API-->>User: 201 Created
-
-  alt versionCount >= 2 AND status != 'locked'
-    Note over API: ctx.waitUntil() — 응답 반환 후 백그라운드 실행
-    API->>D1: Fetch all lyrics_versions for catalogId
-    API->>WorkerAI: Run Normalization Prompt (temperature: 0, thinking: off)
-    WorkerAI-->>API: Normalized Lyrics Candidate
-    API->>API: Execute Strict Line Verification Algorithm
-    alt Verification PASSED
-      API->>D1: UPDATE lyrics_catalog SET lyrics_canonical = candidate, status = 'normalized'
-    else Verification FAILED (Hallucination detected)
-      API->>D1: Fallback: Set lyrics_canonical = popular_root
-    end
-  end
-```
-
-### 6.2 프롬프트 엔지니어링 및 환각 검증 알고리즘
-
-#### Workers AI 호출 규격:
-
-- **모델**: `@cf/qwen/qwen3.8-27b`
-- **파라미터**: `temperature: 0`, `max_tokens: 2048`
-- **시스템 프롬프트**:
-  ```text
-  You are an expert lyric editor for Korean church worship songs.
-  Given multiple user-submitted versions of lyrics for the same song:
-  1. Produce a single canonical lyric version.
-  2. Follow majority voting for verse order, punctuation, and typos.
-  3. Standardize blank lines between verses.
-  4. CRITICAL: DO NOT invent, generate, or summarize ANY lyrics. Every single line in your output must match an existing line in the input versions.
-  ```
-
-#### 결정론적 검증(Deterministic Verification) 알고리즘:
-
-```typescript
-export function verifyNormalization(
-  canonical: string,
-  inputVersions: string[],
-): boolean {
-  const normalizeLine = (l: string) => l.replace(/\s+/g, "").trim();
-
-  // 1. 모든 입력 버전의 유효 라인 집합(Set) 생성
-  const validLinesPool = new Set<string>();
-  for (const version of inputVersions) {
-    for (const line of version.split("\n")) {
-      const cleaned = normalizeLine(line);
-      if (cleaned.length > 0) {
-        validLinesPool.add(cleaned);
-      }
-    }
-  }
-
-  // 2. 생성된 정규화 가사의 모든 라인이 풀에 존재하는지 전수 검사
-  const canonicalLines = canonical.split("\n");
-  for (const line of canonicalLines) {
-    const cleaned = normalizeLine(line);
-    if (cleaned.length === 0) continue; // 빈 줄은 허용
-    if (!validLinesPool.has(cleaned)) {
-      // 입력에 없던 가사가 1줄이라도 생성되었을 경우 즉시 거부 (환각 감지)
-      return false;
-    }
-  }
-
-  return true;
-}
-```
+- 공유 라이브러리는 **게시판 모델**이다. 같은 곡을 여러 사람이 공개하면 합치지 않고 각각 보여 주며, `fork_count DESC, updated_at DESC`로 정렬한다 (`searchPublicDecks`).
+- 스키마 제거는 `drizzle/0005_remove_catalog.sql`이 한다. `decks.catalog_id`가 `lyrics_catalog`를 참조하는 외래키라 `DROP COLUMN`이 안 되어 `decks`를 다시 만든다. D1은 마이그레이션 안에서 `PRAGMA foreign_keys=OFF`를 무시하므로, 그대로 `DROP TABLE decks`를 하면 `presentation_items`가 CASCADE로 지워진다. 그래서 `presentation_items`를 백업했다가 되돌리고, `defer_foreign_keys`로 일시적 위반만 커밋까지 미룬다.
+- 로컬 IndexedDB에 남은 `origin: 'catalog'` 덱은 `DeckSchema`가 `'user'`로 읽는다.
+- 되살릴 때의 설계(프롬프트, 검증 알고리즘, compare-and-set 쓰기)는 `docs/tasks/m5/tasks_4.md`에 이력으로 남아 있다.
 
 ---
 
@@ -1217,28 +1014,26 @@ export function verifyNormalization(
 
 ### 7.1 엔드포인트 요약표 (2026-09-23)
 
-| 메서드   | 경로                             | 설명                                                     | 인증 필요    | 상태   |
-| -------- | -------------------------------- | -------------------------------------------------------- | ------------ | ------ |
-| `GET`    | `/api/health`                    | 헬스 체크                                                | No           | 구현   |
-| `GET`    | `/api/media/*`                   | R2 배경 미디어 프록시 (HTTP Range)                       | No           | 구현   |
-| `GET`    | `/api/backgrounds`               | 서비스 기본 모션 배경 목록 조회                          | No           | 구현   |
-| `GET`    | `/api/auth/*`                    | Better Auth 핸들러 (카카오/네이버)                       | No           | 구현   |
-| `POST`   | `/api/dev-login`                 | 개발자 로그인 (localhost + `DEV_LOGIN_ENABLED`)          | No           | 구현   |
-| `GET`    | `/api/presentations`             | 내 프레젠테이션 문서 전체 (덱 임베드)                    | Yes          | 구현   |
-| `PUT`    | `/api/presentations/:id`         | 프레젠테이션 문서 단위 업서트 (복제본은 항상 비공개)     | Yes (소유자) | 구현   |
-| `DELETE` | `/api/presentations/:id`         | 프레젠테이션 삭제                                        | Yes (소유자) | 구현   |
-| `GET`    | `/api/decks`                     | 내 보관함 곡 전체                                        | Yes          | 구현   |
-| `PUT`    | `/api/decks/:id`                 | 보관함 곡 업서트 + 루트 버전이면 가사 기여 + 정규화 예약 | Yes (소유자) | 구현   |
-| `DELETE` | `/api/decks/:id`                 | 보관함 곡 삭제                                           | Yes (소유자) | 구현   |
-| `PATCH`  | `/api/decks/:id/visibility`      | 공개 전환 (공개 시 `acceptedCopyrightNotice: true` 필수) | Yes (소유자) | 구현   |
-| `POST`   | `/api/decks/:id/fork`            | 공개 덱 가져오기 (멱등, 비공개 포크)                     | Yes          | 구현   |
-| `GET`    | `/api/catalog/search`            | 공개 덱·가사 라이브러리 통합 검색 (미리보기만)           | No           | 구현   |
-| `GET`    | `/api/catalog/decks/:id`         | 공개 덱 전문                                             | Yes          | 구현   |
-| `GET`    | `/api/catalog/candidates`        | '이 곡이 맞나요?' 후보                                   | Yes          | 구현   |
-| `POST`   | `/api/catalog/lyrics/:id/import` | 대표 가사로 보관함 곡 만들기 (멱등)                      | Yes          | 구현   |
-| `POST`   | `/api/reports`                   | 신고·교정 제안 (공개 덱·등록자 있는 곡만)                | Yes          | 구현   |
-| `POST`   | `/api/backgrounds/uploads`       | 커스텀 배경 업로드 (용량·포맷 검사, R2 저장)             | Yes          | 미구현 |
-| `DELETE` | `/api/backgrounds/uploads/:id`   | 내 커스텀 배경 삭제 (R2 객체 포함)                       | Yes (소유자) | 미구현 |
+| 메서드   | 경로                           | 설명                                                     | 인증 필요    | 상태   |
+| -------- | ------------------------------ | -------------------------------------------------------- | ------------ | ------ |
+| `GET`    | `/api/health`                  | 헬스 체크                                                | No           | 구현   |
+| `GET`    | `/api/media/*`                 | R2 배경 미디어 프록시 (HTTP Range)                       | No           | 구현   |
+| `GET`    | `/api/backgrounds`             | 서비스 기본 모션 배경 목록 조회                          | No           | 구현   |
+| `GET`    | `/api/auth/*`                  | Better Auth 핸들러 (카카오/네이버)                       | No           | 구현   |
+| `POST`   | `/api/dev-login`               | 개발자 로그인 (localhost + `DEV_LOGIN_ENABLED`)          | No           | 구현   |
+| `GET`    | `/api/presentations`           | 내 프레젠테이션 문서 전체 (덱 임베드)                    | Yes          | 구현   |
+| `PUT`    | `/api/presentations/:id`       | 프레젠테이션 문서 단위 업서트 (복제본은 항상 비공개)     | Yes (소유자) | 구현   |
+| `DELETE` | `/api/presentations/:id`       | 프레젠테이션 삭제                                        | Yes (소유자) | 구현   |
+| `GET`    | `/api/decks`                   | 내 보관함 곡 전체                                        | Yes          | 구현   |
+| `PUT`    | `/api/decks/:id`               | 보관함 곡 업서트 (공유 필드는 서버 값 유지)              | Yes (소유자) | 구현   |
+| `DELETE` | `/api/decks/:id`               | 보관함 곡 삭제                                           | Yes (소유자) | 구현   |
+| `PATCH`  | `/api/decks/:id/visibility`    | 공개 전환 (공개 시 `acceptedCopyrightNotice: true` 필수) | Yes (소유자) | 구현   |
+| `POST`   | `/api/decks/:id/fork`          | 공개 덱 가져오기 (멱등, 비공개 포크)                     | Yes          | 구현   |
+| `GET`    | `/api/catalog/search`          | 공개 덱 검색 (가져간 횟수순, 미리보기만)                 | No           | 구현   |
+| `GET`    | `/api/catalog/decks/:id`       | 공개 덱 전문                                             | Yes          | 구현   |
+| `POST`   | `/api/reports`                 | 신고·교정 제안 (공개 덱만)                               | Yes          | 구현   |
+| `POST`   | `/api/backgrounds/uploads`     | 커스텀 배경 업로드 (용량·포맷 검사, R2 저장)             | Yes          | 미구현 |
+| `DELETE` | `/api/backgrounds/uploads/:id` | 내 커스텀 배경 삭제 (R2 객체 포함)                       | Yes (소유자) | 미구현 |
 
 설계 당시의 `POST /api/decks`(생성)·`GET /api/decks/:id`·`GET /api/presentations/:id`는 두지 않았다. 로컬 우선 동기화가 문서 단위 `PUT`으로 생성과 수정을 함께 하고, 조회는 목록 한 번으로 충분하다.
 
@@ -1259,8 +1054,6 @@ export const CreateDeckRequestSchema = z.object({
   backgroundId: z.string().uuid().nullable().optional(),
   style: DeckStyleSchema,
   visibility: z.enum(["private", "public"]).default("private"),
-  catalogId: z.string().uuid().nullable().optional(),
-  contributeToCatalog: z.boolean().default(true), // 가사 라이브러리 기여 여부
   forkedFrom: z.string().uuid().optional(), // Clone 시 원본 덱 ID
 });
 export type CreateDeckRequest = z.infer<typeof CreateDeckRequestSchema>;
@@ -1291,8 +1084,8 @@ export type UpdatePresentationItemsRequest = z.infer<
   typeof UpdatePresentationItemsRequestSchema
 >;
 
-// 5. 통합 검색 쿼리 및 응답
-// (M5 구현: 응답 항목은 `schemas/library.ts`의 PublicDeckSummarySchema·CatalogLyricSummarySchema.
+// 5. 공개 덱 검색 쿼리 및 응답
+// (M5 구현: 응답 항목은 `schemas/library.ts`의 PublicDeckSummarySchema.
 //  빈 q는 인기순 둘러보기. 아래는 설계 당시의 모양이다.)
 export const SearchCatalogQuerySchema = z.object({
   q: z.string().min(1).max(50),
@@ -1312,16 +1105,6 @@ export const SearchCatalogResponseSchema = z.object({
       firstSlidePreview: z.array(z.string()), // 첫 슬라이드만 공개 (저작권 보호)
     }),
   ),
-  catalogLyrics: z.array(
-    z.object({
-      id: z.string().uuid(),
-      title: z.string(),
-      artist: z.string(),
-      versionCount: z.number(),
-      status: z.enum(["single", "normalized", "locked"]),
-      twoLinesPreview: z.array(z.string()), // 첫 2줄만 공개
-    }),
-  ),
 });
 export type SearchCatalogResponse = z.infer<typeof SearchCatalogResponseSchema>;
 ```
@@ -1332,9 +1115,9 @@ export type SearchCatalogResponse = z.infer<typeof SearchCatalogResponseSchema>;
 
 ### 8.1 비영리 저작권 보호 및 공개 범위 제한
 
-- **공개 웹 카탈로그 가사 전문 노출 차단**: 로그인하지 않은 외부 사용자가 접근하는 공개 웹 카탈로그 검색 결과(`GET /api/catalog/search`) 및 미인증 공유 카드에는 **첫 슬라이드 또는 첫 2줄만 노출**(`firstSlidePreview`)하여 가사 크롤링 및 공중송신권 분쟁을 방지한다.
+- **공개 웹 카탈로그 가사 전문 노출 차단**: 로그인하지 않은 외부 사용자가 접근하는 공개 웹 카탈로그 검색 결과(`GET /api/catalog/search`) 및 미인증 공유 카드에는 **첫 슬라이드만 노출**(`firstSlidePreview`)하여 가사 크롤링 및 공중송신권 분쟁을 방지한다.
 - **편집기 내부 곡 추가 모달(SongPickerModal)**: 예배 봉사자가 찬양 버전(절, 브릿지)을 확인하고 빠른 선곡을 할 수 있도록, 편집기 내부 곡 선택 시에는 공유 곡도 가사 전문 미리보기, 가사 본문 검색, 텍스트 복사를 정상 제공한다 (세트 추가 시 어차피 에디터로 임포트되므로).
-- **게시 중단(Takedown) 절차**: 저작권자 요청 접수 시 운영자가 `docs/ops/moderation-runbook.md`의 SQL로 해당 덱을 비공개로 내리고 `takedown_at`을 남긴다(소유자가 다시 공개할 수 없다). 가져가 다시 공개한 사본도 찾아 내리고, 필요하면 카탈로그를 삭제한다. SQL 정본은 `packages/db/src/ops/moderationSql.ts`이며 테스트가 실제 스키마에 대해 실행해 본다.
+- **게시 중단(Takedown) 절차**: 저작권자 요청 접수 시 운영자가 `docs/ops/moderation-runbook.md`의 SQL로 해당 덱을 비공개로 내리고 `takedown_at`을 남긴다(소유자가 다시 공개할 수 없다). 가져가 다시 공개한 사본도 찾아 내린다. SQL 정본은 `packages/db/src/ops/moderationSql.ts`이며 테스트가 실제 스키마에 대해 실행해 본다.
 - **공개 동의**: 공개 전환 요청은 `acceptedCopyrightNotice: true` 리터럴이어야 통과한다. 동의한 시각이 `decks.published_at`이다.
 
 ### 8.2 Better Auth 및 D1 세션 보안
@@ -1348,7 +1131,7 @@ export type SearchCatalogResponse = z.infer<typeof SearchCatalogResponseSchema>;
 
 본 명세서는 PRD의 기능 요건과 확정된 아키텍처 결정 사항(프레젠테이션 덱 복제 정책, 로컬 우선 영속성, Chrome Window Management 기반 듀얼 윈도우 동기화, Worker 미디어 프록시 스트리밍)을 반영한다. 1.1.0 개정에서는 설계와 실제 코드가 어긋난 지점을 실제 구현 쪽으로 정정했다.
 
-**현재 위치 (2026-09-23):** M5(공유·가사 라이브러리) 코드 완료. 두 계정으로 공개 → 검색 → 가져오기 → 무수정 송출, 같은 곡 두 번 등록 → 정규화(로컬은 폴백)까지 브라우저와 worker E2E로 확인했다. 실제 Qwen 원격 확인과 운영 D1 마이그레이션(`0003`·`0004`)은 운영자 몫이다.
+**현재 위치 (2026-09-23):** M5(공유 라이브러리) 코드 완료. 두 계정으로 공개 → 검색 → 가져오기 → 무수정 송출을 브라우저와 worker E2E로 확인했다. 가사 라이브러리와 LLM 정규화는 MVP에서 제거했다(§6). 운영 D1 마이그레이션(`0003`·`0004`·`0005`)은 운영자 몫이다.
 
 **이전 기록 (2026-09-21):** M0·M1 코드와 M2 편집기의 대부분이 구현되어 있고, 막혀 있는 것은 영속성이다. 다음 작업은 §5.5 Phase 2(IndexedDB 로컬 영속성, M3-A)이며, 이것이 끝나야 M1·M2의 완료 기준인 '실제 주일 예배 송출'을 검증할 수 있다. 그 다음이 Hono RPC 클라이언트와 계정·서버 저장(M3-B)이다.
 

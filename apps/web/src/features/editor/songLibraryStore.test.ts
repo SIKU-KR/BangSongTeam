@@ -119,7 +119,6 @@ describe("songLibraryStore", () => {
     const legacyDeck = (title: string) => ({
       id: crypto.randomUUID(),
       userId: "00000000-0000-4000-8000-000000000001",
-      catalogId: null,
       scope: "library",
       presentationId: null,
       title,
@@ -163,28 +162,16 @@ describe("songLibraryStore", () => {
       setDeckSyncEnabled(true);
     });
 
-    it("새 곡은 기여 기본 켜짐·루트로 저장되고 서버 push가 예약된다", async () => {
+    it("새 곡은 직접 만든 곡으로 저장되고 서버 push가 예약된다", async () => {
       const saved = saveSongToLibrary({
         title: "소원",
         lyricsRaw: "삶의 작은 일에도",
       });
-      expect(saved.contributeToCatalog).toBe(true);
       expect(saved.origin).toBe("user");
 
       await flushDeckSync();
       expect(push).toHaveBeenCalledTimes(1);
       expect(push.mock.calls[0][0].id).toBe(saved.id);
-    });
-
-    it("기여를 끄고 후보 카탈로그를 고를 수 있다", () => {
-      const saved = saveSongToLibrary({
-        title: "소원",
-        lyricsRaw: "삶의 작은 일에도",
-        contributeToCatalog: false,
-        catalogId: "d0000000-0000-4000-8000-000000000001",
-      });
-      expect(saved.contributeToCatalog).toBe(false);
-      expect(saved.catalogId).toBe("d0000000-0000-4000-8000-000000000001");
     });
 
     it("삭제하면 서버 삭제가 예약된다", async () => {
@@ -215,13 +202,11 @@ describe("songLibraryStore", () => {
         title: "늦게 도착한 옛 제목",
         visibility: "public",
         forkCount: 5,
-        catalogId: "d0000000-0000-4000-8000-000000000001",
       });
       expect(getLibraryDeck(saved.id)).toMatchObject({
         title: "로컬 제목",
         visibility: "public",
         forkCount: 5,
-        catalogId: "d0000000-0000-4000-8000-000000000001",
       });
     });
 

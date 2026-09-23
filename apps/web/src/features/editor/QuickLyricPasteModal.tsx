@@ -63,7 +63,6 @@ export function QuickLyricPasteModal({
     const newDeck = DeckSchema.parse({
       id: crypto.randomUUID(),
       userId,
-      catalogId: null,
       scope: "presentation",
       presentationId: null,
       title: title.trim(),

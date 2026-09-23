@@ -1,11 +1,5 @@
-import { and, desc, eq, gt, sql, type SQL } from "drizzle-orm";
-import {
-  decks,
-  lyricsCatalog,
-  user,
-  type Deck,
-  type LyricsCatalog,
-} from "../schema";
+import { and, desc, eq, sql, type SQL } from "drizzle-orm";
+import { decks, user, type Deck } from "../schema";
 import { publicDeckCondition } from "./publicScope";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -128,44 +122,4 @@ export async function searchPublicDecks(
     .limit(limit);
 
   return rows;
-}
-
-/**
- * 가사 라이브러리 검색 — 곡 제목·아티스트.
- *
- * 곡 단위로 대표 가사가 하나씩이므로 공개/비공개 구분이 없다. 노출 범위(첫 2줄)는
- * 응답 매퍼에서 자른다. 등록자가 많은 곡 먼저 보인다.
- */
-export async function searchCatalog(
-  db: DbInstance,
-  query: string,
-  limit = 20,
-): Promise<LyricsCatalog[]> {
-  const plan = planSearch(query);
-  if (plan.kind === "nothing") return [];
-
-  // 등록자가 0명인 곡은 첫 기여가 중간에 실패해 남은 빈 껍데기다 (D1에는 트랜잭션이 없다)
-  const conditions: SQL[] = [gt(lyricsCatalog.versionCount, 0)];
-  if (plan.kind === "search") {
-    if (plan.match) {
-      conditions.push(
-        sql`${lyricsCatalog.id} IN (SELECT catalog_id FROM lyrics_catalog_fts WHERE lyrics_catalog_fts MATCH ${plan.match})`,
-      );
-    }
-    for (const pattern of plan.likePatterns) {
-      conditions.push(
-        likeAny(
-          [sql`${lyricsCatalog.title}`, sql`${lyricsCatalog.artist}`],
-          pattern,
-        ),
-      );
-    }
-  }
-
-  return db
-    .select()
-    .from(lyricsCatalog)
-    .where(and(...conditions))
-    .orderBy(desc(lyricsCatalog.versionCount), desc(lyricsCatalog.updatedAt))
-    .limit(limit);
 }

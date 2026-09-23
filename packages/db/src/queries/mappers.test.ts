@@ -22,7 +22,6 @@ function makeSharedDeck(overrides: Partial<SharedDeck> = {}): SharedDeck {
   return DeckSchema.parse({
     id: DECK_ID,
     userId: USER_ID,
-    catalogId: null,
     scope: "presentation",
     presentationId: PRESENTATION_ID,
     title: "은혜로다",
@@ -37,7 +36,6 @@ function makeSharedDeck(overrides: Partial<SharedDeck> = {}): SharedDeck {
     visibility: "private",
     forkedFrom: null,
     forkCount: 0,
-    contributeToCatalog: false,
     origin: "user",
     forkedFromAuthorName: null,
     publishedAt: null,
@@ -120,7 +118,6 @@ describe("행 ↔ DTO 매퍼", () => {
         presentationId: null,
         visibility: "public",
         forkCount: 7,
-        contributeToCatalog: true,
         origin: "fork",
         forkedFrom: "c0000000-0000-4000-8000-000000000009",
         forkedFromAuthorName: "김찬양",
@@ -135,12 +132,10 @@ describe("행 ↔ DTO 매퍼", () => {
     it("M5 이전 행은 공유 필드를 안전한 기본값으로 읽는다", () => {
       const row = {
         ...toDeckRow(makeSharedDeck()),
-        contributeToCatalog: undefined,
         origin: undefined,
         publishedAt: undefined,
       };
       const deck = toSharedDeck(row);
-      expect(deck.contributeToCatalog).toBe(false);
       expect(deck.origin).toBe("user");
       expect(deck.publishedAt).toBeNull();
     });
@@ -186,13 +181,12 @@ describe("행 ↔ DTO 매퍼", () => {
       expect(decks[0].presentationId).toBe(PRESENTATION_ID);
     });
 
-    it("세트 복제본은 공개·가져간 횟수·게시 기록·기여를 강제로 끈다", () => {
+    it("세트 복제본은 공개·가져간 횟수·게시 기록을 강제로 끈다", () => {
       // 공개 곡을 세트에 담은 복제본이 공개 검색에 섞이던 누출 경로 (M5-1 배경)
       const doc = makeDocument();
       doc.items[0].deck = makeSharedDeck({
         visibility: "public",
         forkCount: 999,
-        contributeToCatalog: true,
         publishedAt: "2026-09-22T00:00:00.000Z",
         forkedFrom: "c0000000-0000-4000-8000-000000000009",
         forkedFromAuthorName: "김찬양",
@@ -201,7 +195,6 @@ describe("행 ↔ DTO 매퍼", () => {
       const { decks } = fromPresentationDocument(doc);
       expect(decks[0].visibility).toBe("private");
       expect(decks[0].forkCount).toBe(0);
-      expect(decks[0].contributeToCatalog).toBe(false);
       expect(decks[0].publishedAt).toBeNull();
       // 편집기가 쓰는 출처 정보는 그대로 둔다
       expect(decks[0].forkedFrom).toBe("c0000000-0000-4000-8000-000000000009");

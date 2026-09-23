@@ -158,7 +158,6 @@ function buildMockDeck(def: SongMockInput): Deck {
   const rawDeck = {
     id: def.deckId,
     userId: MOCK_USER_ID,
-    catalogId: null,
     scope: "presentation" as const,
     presentationId: MOCK_PRESENTATION_ID,
     title: def.title,

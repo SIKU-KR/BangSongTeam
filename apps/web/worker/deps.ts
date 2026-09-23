@@ -1,5 +1,3 @@
-import type { Bindings } from "./types";
-import { createWorkersAiRunner, type ModelRunner } from "./lib/normalization";
 import {
   createRequireAuth,
   readSessionFromBetterAuth,
@@ -16,16 +14,8 @@ import {
 export interface AppDeps {
   /** 요청의 세션 사용자를 읽는다. 기본값은 Better Auth */
   readSession?: SessionReader;
-  /** 가사 정규화 모델 호출. 기본값은 Workers AI 바인딩 */
-  modelRunner?: (env: Bindings) => ModelRunner;
 }
 
 export function resolveRequireAuth(deps: AppDeps) {
   return createRequireAuth(deps.readSession ?? readSessionFromBetterAuth);
-}
-
-export function resolveModelRunner(deps: AppDeps, env: Bindings): ModelRunner {
-  return deps.modelRunner
-    ? deps.modelRunner(env)
-    : createWorkersAiRunner(env.AI, env.AI_GATEWAY_ID);
 }

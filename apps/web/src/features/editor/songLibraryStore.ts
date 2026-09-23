@@ -88,10 +88,6 @@ export function saveSongToLibrary(songInput: {
   artist?: string;
   lyricsRaw: string;
   backgroundId?: string | null;
-  /** '가사 라이브러리에 기여' 체크박스 (PRD 4.8, 기본 켜짐) */
-  contributeToCatalog?: boolean;
-  /** '이 곡이 맞나요?'에서 고른 가사 라이브러리 곡 */
-  catalogId?: string | null;
 }): Deck {
   const userId = getCurrentUserId();
   if (!userId) {
@@ -107,7 +103,6 @@ export function saveSongToLibrary(songInput: {
   const newDeck: Deck = DeckSchema.parse({
     id: songInput.id ?? crypto.randomUUID(),
     userId,
-    catalogId: songInput.catalogId ?? null,
     scope: "library",
     presentationId: null,
     title: songInput.title.trim(),
@@ -119,9 +114,8 @@ export function saveSongToLibrary(songInput: {
     visibility: "private",
     forkedFrom: null,
     forkCount: 0,
-    // 직접 붙여넣어 만든 곡이다. 서버도 새 행을 'user'로 만든다 (루트 버전 후보).
+    // 직접 붙여넣어 만든 곡이다. 서버도 새 행을 'user'로 만든다.
     origin: "user",
-    contributeToCatalog: songInput.contributeToCatalog ?? true,
     createdAt: now,
     updatedAt: now,
   });

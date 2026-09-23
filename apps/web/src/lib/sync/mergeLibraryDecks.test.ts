@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { DEFAULT_DECK_STYLE, DeckSchema, type Deck } from "@repo/shared";
-import { mergeLibraryDecks, withServerFields } from "./mergeLibraryDecks";
+import { mergeLibraryDecks } from "./mergeLibraryDecks";
 
 const USER = "00000000-0000-4000-8000-000000000001";
 
@@ -54,7 +54,6 @@ describe("mergeLibraryDecks", () => {
           visibility: "private",
           forkCount: 0,
           origin: "user",
-          catalogId: null,
         }),
       ],
       [
@@ -66,7 +65,6 @@ describe("mergeLibraryDecks", () => {
           forkedFrom: B,
           forkedFromAuthorName: "원작자",
           publishedAt: "2026-09-22T00:00:00.000Z",
-          catalogId: "d0000000-0000-4000-8000-000000000001",
         }),
       ],
     );
@@ -78,7 +76,6 @@ describe("mergeLibraryDecks", () => {
       forkedFrom: B,
       forkedFromAuthorName: "원작자",
       publishedAt: "2026-09-22T00:00:00.000Z",
-      catalogId: "d0000000-0000-4000-8000-000000000001",
     });
     expect(needsPush).toEqual([A]);
   });
@@ -89,16 +86,5 @@ describe("mergeLibraryDecks", () => {
       [deck(B, { updatedAt: "2026-09-25T00:00:00.000Z" })],
     );
     expect(decks.map((d) => d.id)).toEqual([B, A]);
-  });
-});
-
-describe("withServerFields", () => {
-  it("does not drop a local catalog link when the server has none yet", () => {
-    const local = deck(A, {
-      catalogId: "d0000000-0000-4000-8000-000000000001",
-    });
-    expect(withServerFields(local, deck(A)).catalogId).toBe(
-      "d0000000-0000-4000-8000-000000000001",
-    );
   });
 });

@@ -39,7 +39,6 @@ function makeDeck(title: string): Deck {
   return {
     id: crypto.randomUUID(),
     userId: "00000000-0000-4000-8000-000000000001",
-    catalogId: null,
     scope: "library",
     presentationId: null,
     title,

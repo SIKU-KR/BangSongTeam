@@ -1,7 +1,6 @@
 import { sqliteTable, text, integer, index } from "drizzle-orm/sqlite-core";
 import { sql } from "drizzle-orm";
 import { user } from "./auth";
-import { lyricsCatalog } from "./lyrics";
 import { backgrounds } from "./media";
 import { presentations } from "./presentations";
 
@@ -15,9 +14,6 @@ export const decks = sqliteTable(
     userId: text("user_id")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
-    catalogId: text("catalog_id").references(() => lyricsCatalog.id, {
-      onDelete: "set null",
-    }),
 
     // 스코프 격리 및 프레젠테이션 종속성
     scope: text("scope", { enum: ["library", "presentation"] })
@@ -45,11 +41,8 @@ export const decks = sqliteTable(
     forkedFrom: text("forked_from"),
     forkCount: integer("fork_count").notNull().default(0),
 
-    // ---- M5 공유 필드 (contribute_to_catalog 외에는 서버 소유) ----
-    contributeToCatalog: integer("contribute_to_catalog", { mode: "boolean" })
-      .notNull()
-      .default(false),
-    origin: text("origin", { enum: ["user", "fork", "catalog"] })
+    // ---- M5 공유 필드 (모두 서버 소유) ----
+    origin: text("origin", { enum: ["user", "fork"] })
       .notNull()
       .default("user"),
     forkedFromAuthorName: text("forked_from_author_name"),
@@ -67,7 +60,6 @@ export const decks = sqliteTable(
     index("idx_decks_user_scope").on(t.userId, t.scope), // 내 보관함 필터링 최적화
     index("idx_decks_presentation").on(t.presentationId), // 세트 종속 덱 조회
     index("idx_decks_visibility_forks").on(t.visibility, t.forkCount),
-    index("idx_decks_catalog").on(t.catalogId),
     index("idx_decks_forked_from").on(t.userId, t.forkedFrom), // 포크 멱등성 조회
   ],
 );

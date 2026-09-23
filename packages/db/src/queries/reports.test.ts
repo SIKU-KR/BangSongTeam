@@ -1,13 +1,12 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { createTestDb, type TestDbResult } from "../test-utils";
-import { decks, lyricsCatalog, reports, user } from "../schema";
+import { decks, reports, user } from "../schema";
 import { createReport } from "./reports";
 
 const A = "00000000-0000-4000-8000-00000000000a";
 const B = "00000000-0000-4000-8000-00000000000b";
 const PUB = "c0000000-0000-4000-8000-000000000001";
 const PRIV = "c0000000-0000-4000-8000-000000000002";
-const CAT = "d0000000-0000-4000-8000-000000000001";
 
 describe("createReport", () => {
   let testDb: TestDbResult;
@@ -31,14 +30,6 @@ describe("createReport", () => {
       { ...base, id: PUB, visibility: "public" },
       { ...base, id: PRIV },
     ]);
-    await db.insert(lyricsCatalog).values({
-      id: CAT,
-      title: "곡",
-      titleNorm: "곡",
-      artistNorm: "",
-      lyricsCanonical: "가사",
-      versionCount: 1,
-    });
   });
 
   afterEach(() => testDb.sqlite.close());
@@ -62,28 +53,12 @@ describe("createReport", () => {
     });
   });
 
-  it("accepts catalog reports and manual correction suggestions", async () => {
-    expect(
-      (
-        await createReport(db, B, {
-          targetType: "catalog",
-          targetId: CAT,
-          reason: "correction",
-        })
-      ).status,
-    ).toBe("ok");
-  });
-
   it("does not accept reports on private or unknown targets", async () => {
     for (const input of [
       { targetType: "deck" as const, targetId: PRIV },
       {
         targetType: "deck" as const,
         targetId: "c0000000-0000-4000-8000-00000000dead",
-      },
-      {
-        targetType: "catalog" as const,
-        targetId: "d0000000-0000-4000-8000-00000000dead",
       },
     ]) {
       expect(

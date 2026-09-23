@@ -116,8 +116,8 @@ export async function pullPresentations(): Promise<PresentationDocument[]> {
 /**
  * 보관함 곡 1건을 서버에 올리고 서버가 확정한 덱을 돌려받는다.
  *
- * 공유 필드(공개 여부·가져간 횟수·출처)와 기여가 붙인 `catalogId`는 서버가
- * 정하므로, 호출자는 응답 덱을 로컬에 반영해야 한다.
+ * 공유 필드(공개 여부·가져간 횟수·출처)는 서버가 정하므로, 호출자는 응답 덱을
+ * 로컬에 반영해야 한다.
  */
 export async function pushDeck(deck: Deck): Promise<Deck> {
   const body = await send<{ deck: Deck }>(() =>

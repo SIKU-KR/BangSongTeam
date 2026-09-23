@@ -7,15 +7,11 @@ import {
   upsertDeck,
   deleteDeckScoped,
   toSharedDeck,
-  contributeLyrics,
-  shouldContribute,
   setDeckVisibility,
   forkPublicDeck,
 } from "@repo/db";
 import type { AppEnv } from "../types";
-import { resolveModelRunner, resolveRequireAuth, type AppDeps } from "../deps";
-import { normalizeCatalog } from "../lib/normalization";
-import { runInBackground } from "../lib/background";
+import { resolveRequireAuth, type AppDeps } from "../deps";
 
 /**
  * 곡 보관함(scope: 'library') 동기화 API.
@@ -59,42 +55,8 @@ export function createDecksRoute(deps: AppDeps = {}) {
           return c.json({ error: "곡을 저장하지 못했습니다" }, 500);
         }
 
-        // 가사 기여는 선택이다. 실패해도 덱 저장 자체를 되돌리지 않는다 —
-        // 공용 카탈로그는 부가 기능이고, 여기서 500을 내면 사용자는 자기 곡이
-        // 저장되지 않았다고 이해한다.
-        //
-        // 루트 버전 판정은 서버에 저장된 덱으로 한다. `origin`은 서버 소유라
-        // 클라이언트가 포크본을 루트로 둔갑시킬 수 없다 (PRD 4.8).
-        let contributed = false;
-        if (shouldContribute(saved)) {
-          try {
-            const result = await contributeLyrics(db, {
-              userId,
-              deckId: saved.id,
-              title: saved.title,
-              artist: saved.artist,
-              lyrics: saved.lyricsRaw,
-              preferredCatalogId: deck.catalogId ?? null,
-            });
-            contributed = true;
-            // 기여가 덱을 카탈로그에 묶었다. 응답 덱에 반영해 편집기가 바로 안다.
-            saved = { ...saved, catalogId: result.catalogId };
-
-            // 서로 다른 사용자의 루트 버전이 2개 이상이면 대표 가사를 다시 만든다
-            // (PRD 4.8 정규화 시점). 같은 가사를 다시 저장한 것뿐이면 부르지 않는다.
-            if (result.changed && result.versionCount >= 2 && !result.locked) {
-              const runner = resolveModelRunner(deps, c.env);
-              runInBackground(c, `normalize catalog ${result.catalogId}`, () =>
-                normalizeCatalog(db, result.catalogId, runner),
-              );
-            }
-          } catch (err) {
-            console.error("가사 기여 실패:", err);
-          }
-        }
-
         // 서버가 확정한 공유 필드(공개 여부·가져간 횟수 등)를 클라이언트가 반영한다
-        return c.json({ ok: true as const, deck: saved, contributed }, 200);
+        return c.json({ ok: true as const, deck: saved }, 200);
       })
       // 공개 전환 (PRD 4.7 공유 선택). 공개하려면 저작권 안내 동의가 `true`여야 한다.
       .patch(

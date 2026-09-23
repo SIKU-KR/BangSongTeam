@@ -1,25 +1,12 @@
-import { and, desc, eq, gt, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import {
-  DEFAULT_DECK_STYLE,
-  buildCatalogKey,
   firstSlidePreview,
-  splitLyricsIntoSlides,
-  twoLinesPreview,
-  type CatalogCandidate,
-  type CatalogLyricSummary,
   type Deck as SharedDeck,
   type DeckVisibility,
   type PublicDeckDetail,
   type PublicDeckSummary,
 } from "@repo/shared";
-import {
-  decks,
-  lyricsCatalog,
-  user,
-  type Deck,
-  type LyricsCatalog,
-  type NewDeck,
-} from "../schema";
+import { decks, user, type Deck, type NewDeck } from "../schema";
 import { toDeckRow, toSharedDeck } from "./mappers";
 import { publicDeckCondition } from "./publicScope";
 
@@ -27,15 +14,11 @@ import { publicDeckCondition } from "./publicScope";
 type DbInstance = any;
 
 // ============================================================================
-// 공개 응답 모양 (PRD 4.7·4.8)
+// 공개 응답 모양 (PRD 4.7)
 //
 // DB 행을 그대로 내보내지 않는다. `userId`처럼 남에게 보일 이유가 없는 값을
 // 여기서 떨어뜨리고, 공개 검색에는 미리보기만 남긴다.
 // ============================================================================
-
-function toIsoOrNull(value: Date | null | undefined): string | null {
-  return value instanceof Date ? value.toISOString() : null;
-}
 
 /** 공개 검색 카드: 첫 슬라이드만 */
 export function toPublicDeckSummary(
@@ -51,7 +34,6 @@ export function toPublicDeckSummary(
     forkedFromAuthorName: deck.forkedFromAuthorName ?? null,
     forkCount: deck.forkCount,
     backgroundId: deck.backgroundId,
-    catalogId: deck.catalogId ?? null,
     firstSlidePreview: firstSlidePreview(deck.slides),
     slideCount: deck.slides.length,
     updatedAt: deck.updatedAt,
@@ -69,20 +51,6 @@ export function toPublicDeckDetail(
     lyricsRaw: deck.lyricsRaw,
     slides: deck.slides,
     style: deck.style,
-  };
-}
-
-/** 가사 라이브러리 검색 결과: 첫 2줄만 */
-export function toCatalogLyricSummary(row: LyricsCatalog): CatalogLyricSummary {
-  return {
-    id: row.id,
-    title: row.title,
-    artist: row.artist ?? "",
-    versionCount: row.versionCount,
-    status: row.status,
-    canonicalSource: row.canonicalSource ?? "user",
-    normalizedAt: toIsoOrNull(row.normalizedAt),
-    twoLinesPreview: twoLinesPreview(row.lyricsCanonical),
   };
 }
 
@@ -176,7 +144,7 @@ export type ForkResult =
  * 공개 덱을 내 보관함으로 가져온다 (fork).
  *
  * - 원본은 바뀌지 않는다. 복제본에 `forked_from`과 원작자 이름을 남긴다
- * - 복제본은 비공개이고 가사 라이브러리 루트 버전이 아니다 (`origin='fork'`)
+ * - 복제본은 비공개이고 `origin='fork'`다
  * - 같은 덱을 다시 가져오면 이전 포크를 돌려주고 가져간 횟수를 올리지 않는다
  * - 내 덱이면 그대로 돌려준다 (내가 공개한 곡을 내 세트에 담는 경우)
  *
@@ -227,7 +195,6 @@ export async function forkPublicDeck(
     forkedFromAuthorName: source.authorName,
     forkCount: 0,
     origin: "fork",
-    contributeToCatalog: false,
     publishedAt: null,
     takedownAt: null,
     createdAt: now,
@@ -252,115 +219,4 @@ export async function forkPublicDeck(
     .from(decks)
     .where(eq(decks.id, forkRow.id as string));
   return { status: "ok", deck: toSharedDeck(saved), alreadyOwned: false };
-}
-
-// ============================================================================
-// 가사 라이브러리 (PRD 4.8)
-// ============================================================================
-
-export type ImportCatalogResult =
-  | { status: "ok"; deck: SharedDeck; alreadyOwned: boolean }
-  | { status: "not_found" };
-
-/**
- * 가사 라이브러리의 대표 가사로 내 보관함에 새 곡을 만든다.
- *
- * 대표 가사를 가져온 곡은 루트 버전이 아니다 (`origin='catalog'`, 기여 끔).
- * 가져온 사람이 한 표를 더하면 대표 가사가 스스로를 지지하는 셈이 된다.
- * 같은 곡을 다시 가져오면 이전에 만든 곡을 돌려준다.
- */
-export async function importCatalogLyrics(
-  db: DbInstance,
-  userId: string,
-  catalogId: string,
-): Promise<ImportCatalogResult> {
-  const [catalog]: LyricsCatalog[] = await db
-    .select()
-    .from(lyricsCatalog)
-    .where(
-      and(eq(lyricsCatalog.id, catalogId), gt(lyricsCatalog.versionCount, 0)),
-    );
-  if (!catalog) return { status: "not_found" };
-
-  const [existing]: Deck[] = await db
-    .select()
-    .from(decks)
-    .where(
-      and(
-        eq(decks.userId, userId),
-        eq(decks.catalogId, catalogId),
-        eq(decks.origin, "catalog"),
-        eq(decks.scope, "library"),
-      ),
-    );
-  if (existing) {
-    return { status: "ok", deck: toSharedDeck(existing), alreadyOwned: true };
-  }
-
-  const now = new Date().toISOString();
-  const row = toDeckRow({
-    id: crypto.randomUUID(),
-    userId,
-    catalogId,
-    scope: "library",
-    presentationId: null,
-    title: catalog.title,
-    artist: catalog.artist ?? "",
-    lyricsRaw: catalog.lyricsCanonical,
-    slides: splitLyricsIntoSlides(catalog.lyricsCanonical),
-    backgroundId: null,
-    style: { ...DEFAULT_DECK_STYLE },
-    visibility: "private",
-    forkedFrom: null,
-    forkedFromAuthorName: null,
-    forkCount: 0,
-    origin: "catalog",
-    contributeToCatalog: false,
-    publishedAt: null,
-    takedownAt: null,
-    createdAt: now,
-    updatedAt: now,
-  });
-  await db.insert(decks).values(row);
-
-  const [saved]: Deck[] = await db
-    .select()
-    .from(decks)
-    .where(eq(decks.id, row.id as string));
-  return { status: "ok", deck: toSharedDeck(saved), alreadyOwned: false };
-}
-
-/**
- * '이 곡이 맞나요?' 후보 (PRD 4.8 곡 식별).
- *
- * 제목 정규화 키가 같은 곡을 모은다. 아티스트까지 같으면 `exact` — 그대로 두면
- * 기여가 이 곡에 묶인다. 아티스트 표기만 다른 후보가 있으면 사용자가 고른다.
- */
-export async function getCatalogCandidates(
-  db: DbInstance,
-  title: string,
-  artist: string,
-  limit = 5,
-): Promise<CatalogCandidate[]> {
-  const { titleNorm, artistNorm } = buildCatalogKey(title, artist);
-  if (!titleNorm) return [];
-
-  const rows: LyricsCatalog[] = await db
-    .select()
-    .from(lyricsCatalog)
-    .where(
-      and(
-        eq(lyricsCatalog.titleNorm, titleNorm),
-        gt(lyricsCatalog.versionCount, 0),
-      ),
-    )
-    .orderBy(desc(lyricsCatalog.versionCount));
-
-  return rows
-    .map((row) => ({
-      ...toCatalogLyricSummary(row),
-      exact: row.artistNorm === artistNorm,
-    }))
-    .sort((a, b) => Number(b.exact) - Number(a.exact))
-    .slice(0, limit);
 }

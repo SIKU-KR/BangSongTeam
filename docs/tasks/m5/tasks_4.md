@@ -1,5 +1,7 @@
 # Goal: [M5-4] LLM 가사 정규화 파이프라인 (packages/shared, packages/db, worker)
 
+> **2026-09-23 범위 변경**: 이 태스크의 산출물은 **전부 제거됐다**. LLM 가사 정규화와 가사 라이브러리는 MVP 범위에서 빠졌다 (`packages/db/drizzle/0005_remove_catalog.sql`). 이 문서는 이력으로만 남긴다.
+
 > **마일스톤**: M5 (공유·가사 라이브러리)
 > **태스크 번호**: `tasks_4.md`
 > **선행 조건**: `docs/tasks/m5/tasks_2.md` 완료 (서버측 기여, `changed` 신호)

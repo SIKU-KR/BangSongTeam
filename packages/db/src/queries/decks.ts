@@ -1,9 +1,8 @@
-import { eq, and, desc, sql } from "drizzle-orm";
+import { eq, and, desc } from "drizzle-orm";
 import type { Deck as SharedDeck } from "@repo/shared";
-import { decks, lyricsVersions, type Deck, type NewDeck } from "../schema";
+import { decks, type Deck, type NewDeck } from "../schema";
 import { toDeckRow, toSharedDeck } from "./mappers";
 import { nullifyUnknownBackgrounds } from "./backgrounds";
-import { nullifyUnknownCatalogs } from "./catalogRefs";
 import { publicDeckCondition } from "./publicScope";
 import { sanitizeFts5Query, searchPublicDecks } from "./search";
 
@@ -60,44 +59,11 @@ export async function getPublicById(
 }
 
 /**
- * 5. 가사 버전 1인 1표 멱등적 업서트 (Upsert)
- */
-export async function upsertLyricVersion(
-  db: DbInstance,
-  params: {
-    catalogId: string;
-    userId: string;
-    deckId: string;
-    lyrics: string;
-    source?: string;
-  },
-) {
-  return db
-    .insert(lyricsVersions)
-    .values({
-      id: crypto.randomUUID(),
-      catalogId: params.catalogId,
-      userId: params.userId,
-      deckId: params.deckId,
-      lyrics: params.lyrics,
-      source: params.source ?? "user",
-    })
-    .onConflictDoUpdate({
-      target: [lyricsVersions.userId, lyricsVersions.catalogId],
-      set: {
-        lyrics: params.lyrics,
-        deckId: params.deckId,
-        updatedAt: sql`(unixepoch())`,
-      },
-    });
-}
-
-/**
  * 동기화 PUT이 바꿀 수 없는 서버 소유 필드 (M5).
  *
  * 공개 전환(`setDeckVisibility`)·가져오기(`forkPublicDeck`)·게시 중단(운영 런북)만
  * 이 값을 바꾼다. 클라이언트가 보낸 값을 믿으면 `forkCount`를 부풀려 인기순을
- * 조작하거나, 동의 없이 공개하거나, 포크본을 루트 버전으로 둔갑시킬 수 있다.
+ * 조작하거나, 동의 없이 공개하거나, 포크본을 직접 만든 곡으로 둔갑시킬 수 있다.
  */
 const SERVER_OWNED_DECK_FIELDS = [
   "visibility",
@@ -160,18 +126,11 @@ export async function upsertDeck(
       )
     : NEW_DECK_SERVER_FIELDS;
 
-  // 카탈로그 연결은 기여 경로(서버)가 채운다. 클라이언트가 아직 모르는 채로
-  // null을 보내도 서버가 붙여 둔 연결을 끊지 않는다.
-  const catalogId = clientRow.catalogId ?? existing?.catalogId ?? null;
-
-  // 프레젠테이션 업서트와 같은 이유로 모르는 배경·카탈로그는 null로 낮춰 받는다.
+  // 프레젠테이션 업서트와 같은 이유로 모르는 배경은 null로 낮춰 받는다.
   // 참조 id 하나 때문에 곡 저장 자체가 실패하면 안 된다.
-  const [row] = await nullifyUnknownCatalogs(
-    db,
-    await nullifyUnknownBackgrounds(db, [
-      { ...clientRow, ...serverFields, catalogId },
-    ]),
-  );
+  const [row] = await nullifyUnknownBackgrounds(db, [
+    { ...clientRow, ...serverFields },
+  ]);
 
   if (existing) {
     await db.update(decks).set(row).where(eq(decks.id, deck.id));
@@ -211,8 +170,6 @@ export function createDeckQueries(db: DbInstance) {
     getPublicById: (deckId: string) => getPublicById(db, deckId),
     searchPublicDecks: (query: string, limit = 20) =>
       searchPublicDecks(db, query, limit),
-    upsertLyricVersion: (params: Parameters<typeof upsertLyricVersion>[1]) =>
-      upsertLyricVersion(db, params),
     upsertDeck: (userId: string, deck: SharedDeck) =>
       upsertDeck(db, userId, deck),
     deleteDeckScoped: (deckId: string, userId: string) =>
@@ -226,7 +183,6 @@ export const deckQueries = {
   getByIdScoped,
   getPublicById,
   searchPublicDecks,
-  upsertLyricVersion,
   upsertDeck,
   deleteDeckScoped,
   createDeckQueries,

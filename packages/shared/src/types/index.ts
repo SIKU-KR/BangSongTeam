@@ -12,8 +12,6 @@ export type { PresentationItem, Presentation } from "../schemas/presentation";
 
 export type { BackgroundMedia } from "../schemas/media";
 
-export type { CatalogStatus, LyricCatalog } from "../schemas/catalog";
-
 export type { BroadcastMessage } from "../schemas/broadcast";
 
 export type {

@@ -1,14 +1,11 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { eq } from "drizzle-orm";
 import { createTestDb, type TestDbResult } from "../test-utils";
-import { decks, lyricsCatalog, user, type NewDeck } from "../schema";
+import { decks, user, type NewDeck } from "../schema";
 import {
   forkPublicDeck,
-  getCatalogCandidates,
   getPublicDeckDetail,
-  importCatalogLyrics,
   setDeckVisibility,
-  toCatalogLyricSummary,
   toPublicDeckSummary,
 } from "./sharing";
 
@@ -149,7 +146,6 @@ describe("공유 쿼리 헬퍼", () => {
         forkedFromAuthorName: "김찬양",
         forkCount: 0,
         origin: "fork",
-        contributeToCatalog: false,
         title: "은혜로다",
       });
       expect(result.deck.id).not.toBe(DECK);
@@ -193,107 +189,6 @@ describe("공유 쿼리 헬퍼", () => {
       expect((await readRow(result.deck.id)).forkedFromAuthorName).toBe(
         "김찬양",
       );
-    });
-  });
-
-  describe("가사 라이브러리", () => {
-    const CAT = "d0000000-0000-4000-8000-000000000001";
-
-    beforeEach(async () => {
-      await db.insert(lyricsCatalog).values([
-        {
-          id: CAT,
-          title: "은혜로다",
-          artist: "예수전도단",
-          titleNorm: "은혜로다",
-          artistNorm: "예수전도단",
-          lyricsCanonical: "첫 줄\n둘째 줄\n\n셋째 줄",
-          versionCount: 2,
-          status: "normalized",
-          canonicalSource: "llm",
-        },
-        {
-          id: "d0000000-0000-4000-8000-000000000002",
-          title: "은혜로다",
-          artist: "YWAM",
-          titleNorm: "은혜로다",
-          artistNorm: "ywam",
-          lyricsCanonical: "다른 가사",
-          versionCount: 5,
-        },
-        {
-          id: "d0000000-0000-4000-8000-000000000003",
-          title: "은혜로다",
-          artist: "빈 껍데기",
-          titleNorm: "은혜로다",
-          artistNorm: "빈껍데기",
-          lyricsCanonical: "",
-          versionCount: 0,
-        },
-      ]);
-    });
-
-    it("summarises catalog rows with a two-line preview", async () => {
-      const [catalog] = await db
-        .select()
-        .from(lyricsCatalog)
-        .where(eq(lyricsCatalog.id, CAT));
-      expect(toCatalogLyricSummary(catalog)).toMatchObject({
-        status: "normalized",
-        canonicalSource: "llm",
-        versionCount: 2,
-        twoLinesPreview: ["첫 줄", "둘째 줄"],
-      });
-    });
-
-    it("imports canonical lyrics as a non-root library deck, idempotently", async () => {
-      const first = await importCatalogLyrics(db, B, CAT);
-      if (first.status !== "ok") throw new Error();
-      expect(first.deck).toMatchObject({
-        userId: B,
-        catalogId: CAT,
-        origin: "catalog",
-        contributeToCatalog: false,
-        visibility: "private",
-        title: "은혜로다",
-      });
-      expect(first.deck.slides.map((s) => s.lines)).toEqual([
-        ["첫 줄", "둘째 줄"],
-        ["셋째 줄"],
-      ]);
-
-      const second = await importCatalogLyrics(db, B, CAT);
-      if (second.status !== "ok") throw new Error();
-      expect(second.alreadyOwned).toBe(true);
-      expect(second.deck.id).toBe(first.deck.id);
-    });
-
-    it("does not import unknown or empty catalogs", async () => {
-      expect(
-        (
-          await importCatalogLyrics(
-            db,
-            B,
-            "d0000000-0000-4000-8000-000000000003",
-          )
-        ).status,
-      ).toBe("not_found");
-      expect((await importCatalogLyrics(db, B, "nope")).status).toBe(
-        "not_found",
-      );
-    });
-
-    it("lists candidates with the same title, exact artist match first", async () => {
-      const candidates = await getCatalogCandidates(
-        db,
-        "은혜 로다",
-        "예수전도단",
-      );
-      expect(candidates.map((c) => [c.artist, c.exact])).toEqual([
-        ["예수전도단", true],
-        ["YWAM", false],
-      ]);
-      expect(await getCatalogCandidates(db, "없는 곡", "")).toEqual([]);
     });
   });
 });

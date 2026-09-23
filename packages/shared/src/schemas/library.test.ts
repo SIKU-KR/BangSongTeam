@@ -1,6 +1,5 @@
 import { describe, it, expect } from "vitest";
 import {
-  CatalogCandidatesQuerySchema,
   CreateReportRequestSchema,
   PublicDeckDetailSchema,
   VisibilityUpdateRequestSchema,
@@ -45,7 +44,6 @@ describe("PublicDeckDetailSchema", () => {
       forkedFromAuthorName: null,
       forkCount: 3,
       backgroundId: null,
-      catalogId: null,
       firstSlidePreview: ["첫 줄"],
       slideCount: 1,
       updatedAt: "2026-09-23T00:00:00.000Z",
@@ -57,16 +55,6 @@ describe("PublicDeckDetailSchema", () => {
     expect(parsed.slides).toHaveLength(1);
     expect(parsed.style.fontFamily).toBe("Pretendard");
     expect(parsed).not.toHaveProperty("userId");
-  });
-});
-
-describe("CatalogCandidatesQuerySchema", () => {
-  it("trims input and defaults the artist to empty", () => {
-    expect(CatalogCandidatesQuerySchema.parse({ title: " 시선 " })).toEqual({
-      title: "시선",
-      artist: "",
-    });
-    expect(() => CatalogCandidatesQuerySchema.parse({ title: "  " })).toThrow();
   });
 });
 

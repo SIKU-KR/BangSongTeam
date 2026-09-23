@@ -5,11 +5,10 @@ import {
   getMyLibraryDecks,
   getByIdScoped,
   getPublicById,
-  upsertLyricVersion,
   upsertDeck,
   deleteDeckScoped,
 } from "./decks";
-import { user, lyricsCatalog, lyricsVersions, decks } from "../schema";
+import { user, decks } from "../schema";
 import { DEFAULT_DECK_STYLE, DeckSchema, type Deck } from "@repo/shared";
 import { toSharedDeck } from "./mappers";
 
@@ -18,7 +17,6 @@ describe("D1 Scoped Deck Queries", () => {
 
   const userAId = "00000000-0000-0000-0000-000000000001";
   const userBId = "00000000-0000-0000-0000-000000000002";
-  const catalogId = "10000000-0000-0000-0000-000000000001";
 
   beforeEach(async () => {
     const testDb = createTestDb();
@@ -39,18 +37,6 @@ describe("D1 Scoped Deck Queries", () => {
         updatedAt: new Date(),
       },
     ]);
-
-    // Seed catalog
-    await db.insert(lyricsCatalog).values({
-      id: catalogId,
-      title: "은혜로다",
-      artist: "예수전도단",
-      titleNorm: "은혜로다",
-      artistNorm: "예수전도단",
-      lyricsCanonical: "시작됐네 우리 주님의 능력이",
-      versionCount: 1,
-      status: "single",
-    });
   });
 
   describe("getMyLibraryDecks", () => {
@@ -177,34 +163,6 @@ describe("D1 Scoped Deck Queries", () => {
       expect(await getPublicById(db, "down-deck")).toBeNull();
     });
   });
-
-  describe("upsertLyricVersion", () => {
-    it("should idempotently insert and update a user lyric version (1 person 1 vote)", async () => {
-      await upsertLyricVersion(db, {
-        catalogId,
-        userId: userAId,
-        deckId: "deck-1",
-        lyrics: "초기 가사 버전",
-      });
-
-      // Upsert again with revised lyrics
-      await upsertLyricVersion(db, {
-        catalogId,
-        userId: userAId,
-        deckId: "deck-2",
-        lyrics: "수정된 가사 버전",
-      });
-
-      const versions = await db
-        .select()
-        .from(lyricsVersions)
-        .where(eq(lyricsVersions.userId, userAId));
-
-      expect(versions).toHaveLength(1);
-      expect(versions[0].lyrics).toBe("수정된 가사 버전");
-      expect(versions[0].deckId).toBe("deck-2");
-    });
-  });
 });
 
 describe("덱 쓰기 헬퍼 (M3-B 보관함 동기화)", () => {
@@ -218,7 +176,6 @@ describe("덱 쓰기 헬퍼 (M3-B 보관함 동기화)", () => {
     return DeckSchema.parse({
       id: DECK_ID,
       userId,
-      catalogId: null,
       scope: "library",
       presentationId: null,
       title: "은혜로다",
@@ -303,14 +260,14 @@ describe("덱 쓰기 헬퍼 (M3-B 보관함 동기화)", () => {
   });
 
   describe("서버 소유 공유 필드 (M5)", () => {
-    it("새 덱은 클라이언트가 무엇을 보내든 비공개·0회·루트로 저장된다", async () => {
+    it("새 덱은 클라이언트가 무엇을 보내든 비공개·0회·직접 만든 곡으로 저장된다", async () => {
       const saved = await upsertDeck(
         db,
         ownerId,
         makeDeck(ownerId, {
           visibility: "public",
           forkCount: 999,
-          origin: "catalog",
+          origin: "fork",
           forkedFrom: "c0000000-0000-4000-8000-000000000099",
           forkedFromAuthorName: "사칭",
           publishedAt: "2026-09-22T00:00:00.000Z",
@@ -376,45 +333,6 @@ describe("덱 쓰기 헬퍼 (M3-B 보관함 동기화)", () => {
       );
       expect(saved?.scope).toBe("library");
       expect(saved?.presentationId).toBeNull();
-    });
-
-    it("기여 여부는 클라이언트가 정한다", async () => {
-      const saved = await upsertDeck(
-        db,
-        ownerId,
-        makeDeck(ownerId, { contributeToCatalog: true }),
-      );
-      expect(saved?.contributeToCatalog).toBe(true);
-    });
-
-    it("서버가 붙인 카탈로그 연결을 클라이언트의 null이 끊지 않고, 모르는 id는 떨군다", async () => {
-      const catalogId = "d0000000-0000-4000-8000-000000000001";
-      await db.insert(lyricsCatalog).values({
-        id: catalogId,
-        title: "은혜로다",
-        artist: "예수전도단",
-        titleNorm: "은혜로다",
-        artistNorm: "예수전도단",
-        lyricsCanonical: "시작됐네",
-      });
-      await upsertDeck(db, ownerId, makeDeck(ownerId, { catalogId }));
-      expect(
-        (await upsertDeck(db, ownerId, makeDeck(ownerId, { catalogId: null })))
-          ?.catalogId,
-      ).toBe(catalogId);
-
-      await db.delete(decks);
-      expect(
-        (
-          await upsertDeck(
-            db,
-            ownerId,
-            makeDeck(ownerId, {
-              catalogId: "d0000000-0000-4000-8000-00000000dead",
-            }),
-          )
-        )?.catalogId,
-      ).toBeNull();
     });
   });
 

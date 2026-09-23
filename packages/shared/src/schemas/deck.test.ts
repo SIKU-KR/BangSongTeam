@@ -48,14 +48,12 @@ describe("DeckSchema", () => {
   it("parses old payloads without M5 sharing fields", () => {
     const parsed = DeckSchema.parse(sampleDeck);
     expect(parsed.origin).toBeUndefined();
-    expect(parsed.contributeToCatalog).toBeUndefined();
     expect(parsed.publishedAt).toBeUndefined();
   });
 
   it("accepts M5 sharing fields", () => {
     const parsed = DeckSchema.parse({
       ...sampleDeck,
-      contributeToCatalog: true,
       origin: "fork",
       forkedFromAuthorName: "김찬양",
       publishedAt: "2026-09-23T00:00:00.000Z",
@@ -63,10 +61,23 @@ describe("DeckSchema", () => {
     });
     expect(parsed.origin).toBe("fork");
     expect(parsed.forkedFromAuthorName).toBe("김찬양");
-    expect(DeckOriginSchema.options).toEqual(["user", "fork", "catalog"]);
+    expect(DeckOriginSchema.options).toEqual(["user", "fork"]);
     expect(() =>
       DeckSchema.parse({ ...sampleDeck, origin: "crawl" }),
     ).toThrow();
+  });
+
+  it("reads legacy lyric-library decks as user decks", () => {
+    // 가사 라이브러리(MVP에서 제거)로 만든 곡이 로컬 IndexedDB에 남아 있을 수 있다
+    const parsed = DeckSchema.parse({
+      ...sampleDeck,
+      origin: "catalog",
+      catalogId: "d0000000-0000-4000-8000-000000000001",
+      contributeToCatalog: true,
+    });
+    expect(parsed.origin).toBe("user");
+    expect(parsed).not.toHaveProperty("catalogId");
+    expect(parsed).not.toHaveProperty("contributeToCatalog");
   });
 
   it("allows presentation scope and presentationId", () => {

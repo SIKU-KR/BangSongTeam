@@ -13,7 +13,7 @@ import { createApp } from "../index";
 import type { SessionReader } from "../middleware/auth";
 
 /**
- * 공유 라이브러리·가사 라이브러리 경로 통합 검증 (M5-3).
+ * 공유 라이브러리 경로 통합 검증 (M5-3).
  *
  * 실제 라우트(`createApp`)에 세션 리더만 주입한다. D1에는 RLS가 없으므로
  * "남의 비공개 곡은 어떤 경로로도 보이지 않는다"를 라우트 레벨에서 고정한다.
@@ -50,7 +50,6 @@ function deck(id: string, overrides: Partial<Deck> = {}): Deck {
     ],
     backgroundId: null,
     style: { ...DEFAULT_DECK_STYLE, overlayOpacity: 70 },
-    contributeToCatalog: false,
     createdAt: "2026-09-20T00:00:00.000Z",
     updatedAt: "2026-09-21T00:00:00.000Z",
     ...overrides,
@@ -91,8 +90,6 @@ describe("공유 라이브러리 API", () => {
       "presentation_items",
       "decks",
       "presentations",
-      "lyrics_versions",
-      "lyrics_catalog",
     ]) {
       await env.DB.exec(`DELETE FROM ${table}`);
     }
@@ -263,7 +260,6 @@ describe("공유 라이브러리 API", () => {
         forkedFrom: PUB,
         forkedFromAuthorName: "김찬양",
         origin: "fork",
-        contributeToCatalog: false,
       });
       // 슬라이드·스타일을 수정 없이 그대로 가져온다 (송출 동일성)
       expect(body.deck.slides.map((s) => s.lines)).toEqual([
@@ -317,63 +313,6 @@ describe("공유 라이브러리 API", () => {
         deck(PUB, { userId: B, title: "탈취" }),
       );
       expect(res.status).toBe(403);
-    });
-  });
-
-  describe("가사 라이브러리", () => {
-    beforeEach(async () => {
-      currentUser = A;
-      await request(
-        "PUT",
-        `/api/decks/${PUB}`,
-        deck(PUB, { contributeToCatalog: true }),
-      );
-    });
-
-    it("lists contributed songs in search with a two-line preview", async () => {
-      const [song] = (await search("은혜로다")).catalogLyrics;
-      expect(song).toMatchObject({
-        title: "은혜로다 주의 은혜",
-        versionCount: 1,
-        status: "single",
-        twoLinesPreview: [
-          "시작됐네 우리 주님의 능력이",
-          "나의 삶을 다스리시네",
-        ],
-      });
-    });
-
-    it("offers identification candidates and imports canonical lyrics", async () => {
-      currentUser = B;
-      const cand = await request(
-        "GET",
-        `/api/catalog/candidates?title=${encodeURIComponent("은혜로다 주의은혜")}&artist=YWAM`,
-      );
-      const { candidates } = (await cand.json()) as {
-        candidates: { id: string; exact: boolean }[];
-      };
-      expect(candidates).toHaveLength(1);
-      expect(candidates[0].exact).toBe(false);
-
-      const res = await request(
-        "POST",
-        `/api/catalog/lyrics/${candidates[0].id}/import`,
-      );
-      expect(res.status).toBe(200);
-      const { deck: imported } = (await res.json()) as { deck: Deck };
-      expect(imported).toMatchObject({
-        userId: B,
-        origin: "catalog",
-        contributeToCatalog: false,
-        catalogId: candidates[0].id,
-      });
-    });
-
-    it("requires a session for candidates and import", async () => {
-      currentUser = null;
-      expect(
-        (await request("GET", "/api/catalog/candidates?title=은혜로다")).status,
-      ).toBe(401);
     });
   });
 

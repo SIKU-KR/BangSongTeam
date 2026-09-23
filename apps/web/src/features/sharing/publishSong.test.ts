@@ -25,8 +25,6 @@ import {
   saveSongToLibrary,
 } from "../editor/songLibraryStore";
 import {
-  buildPublishedDeck,
-  canContributeFromSong,
   hasUnpublishedChanges,
   publishSong,
   resolveLibraryMaster,
@@ -80,7 +78,7 @@ describe("편집기 '공유' — 보관함 원본 공개", () => {
     updateSongStyle(index, { overlayOpacity: 85 });
 
     const deps = fakeDeps();
-    const published = await publishSong(index, {}, deps);
+    const published = await publishSong(index, deps);
 
     const pushed = deps.push.mock.calls[0][0] as Deck;
     expect(pushed.id).toBe(master.id);
@@ -114,14 +112,13 @@ describe("편집기 '공유' — 보관함 원본 공개", () => {
     const index = getActivePresentation().items.length - 1;
 
     const deps = fakeDeps();
-    await publishSong(index, { contributeToCatalog: true }, deps);
+    await publishSong(index, deps);
 
     const created = getUserSongs()[0];
     expect(created).toMatchObject({
       scope: "library",
       title: "붙여넣은 곡",
       origin: "user",
-      contributeToCatalog: true,
       visibility: "public",
     });
     expect(getActivePresentation().items[index].deck?.forkedFrom).toBe(
@@ -138,7 +135,7 @@ describe("편집기 '공유' — 보관함 원본 공개", () => {
     const deps = fakeDeps();
     deps.push.mockRejectedValueOnce(new Error("offline"));
 
-    await expect(publishSong(index, {}, deps)).rejects.toThrow("offline");
+    await expect(publishSong(index, deps)).rejects.toThrow("offline");
     expect(deps.setVisibility).not.toHaveBeenCalled();
     expect(getLibraryDeck(master.id)?.visibility).toBe("private");
   });
@@ -146,7 +143,7 @@ describe("편집기 '공유' — 보관함 원본 공개", () => {
   it("unpublishes the master", async () => {
     const { index, master } = addLibrarySong();
     const deps = fakeDeps();
-    await publishSong(index, {}, deps);
+    await publishSong(index, deps);
     await unpublishSong(master.id, deps);
     expect(getLibraryDeck(master.id)?.visibility).toBe("private");
   });
@@ -158,28 +155,5 @@ describe("편집기 '공유' — 보관함 원본 공개", () => {
 
     updateSongStyle(index, { fontSizeVw: 6 });
     expect(hasUnpublishedChanges(song(), master)).toBe(true);
-  });
-
-  it("never contributes forks or catalog imports as root versions", () => {
-    const base = DeckSchema.parse({
-      id: "90000000-0000-4000-8000-0000000000ee",
-      userId: SEED_USER_ID,
-      scope: "presentation",
-      title: "포크 곡",
-      lyricsRaw: "가사",
-      slides: [{ id: "s1", order: 0, lines: ["가사"] }],
-      backgroundId: null,
-      style: DEFAULT_DECK_STYLE,
-      origin: "fork",
-      createdAt: "2026-09-20T00:00:00.000Z",
-      updatedAt: "2026-09-20T00:00:00.000Z",
-    });
-    expect(canContributeFromSong(base)).toBe(false);
-    expect(
-      buildPublishedDeck(base, undefined, { contributeToCatalog: true })
-        .contributeToCatalog,
-    ).toBe(false);
-    expect(canContributeFromSong({ ...base, origin: "catalog" })).toBe(false);
-    expect(canContributeFromSong({ ...base, origin: undefined })).toBe(true);
   });
 });

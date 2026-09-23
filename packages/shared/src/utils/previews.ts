@@ -1,5 +1,4 @@
 import type { Slide } from "../schemas/slide";
-import { sanitizeLyricLine } from "./lyrics";
 
 /**
  * 공개 검색 카드의 첫 슬라이드 미리보기 (PRD 4.7, TECH_SPEC §8.1).
@@ -13,16 +12,4 @@ export function firstSlidePreview(slides: Slide[]): string[] {
     slide.order < min.order ? slide : min,
   );
   return [...first.lines];
-}
-
-/**
- * 가사 라이브러리 검색 결과의 첫 2줄 미리보기 (PRD 4.8 노출 범위).
- * 빈 줄과 앞뒤 공백은 건너뛴다.
- */
-export function twoLinesPreview(text: string): string[] {
-  return text
-    .split(/\r?\n/)
-    .map(sanitizeLyricLine)
-    .filter((line) => line.length > 0)
-    .slice(0, 2);
 }

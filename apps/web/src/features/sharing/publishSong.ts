@@ -51,32 +51,15 @@ function contentOf(song: Deck) {
   };
 }
 
-/**
- * 세트 곡을 가사 라이브러리 루트 버전 후보로 볼 수 있는가.
- * 포크본·대표 가사로 만든 곡은 루트가 아니다 (PRD 4.8).
- */
-export function canContributeFromSong(song: Deck, master?: Deck): boolean {
-  const origin = master?.origin ?? song.origin ?? "user";
-  return origin === "user";
-}
-
 /** 세트 곡 내용을 반영한 보관함 덱 (원본이 없으면 새로 만든다) */
-export function buildPublishedDeck(
-  song: Deck,
-  master: Deck | undefined,
-  options: { contributeToCatalog?: boolean } = {},
-): Deck {
+export function buildPublishedDeck(song: Deck, master: Deck | undefined): Deck {
   const now = new Date().toISOString();
   const content = contentOf(song);
-  const contribute =
-    canContributeFromSong(song, master) &&
-    (options.contributeToCatalog ?? master?.contributeToCatalog ?? false);
 
   if (master) {
     return DeckSchema.parse({
       ...master,
       ...content,
-      contributeToCatalog: contribute,
       updatedAt: now,
     });
   }
@@ -84,7 +67,6 @@ export function buildPublishedDeck(
   return DeckSchema.parse({
     id: crypto.randomUUID(),
     userId: song.userId,
-    catalogId: song.catalogId ?? null,
     scope: "library",
     presentationId: null,
     ...content,
@@ -93,7 +75,6 @@ export function buildPublishedDeck(
     forkedFromAuthorName: song.forkedFromAuthorName ?? null,
     forkCount: 0,
     origin: "user",
-    contributeToCatalog: contribute,
     createdAt: now,
     updatedAt: now,
   });
@@ -133,14 +114,10 @@ function songAt(songIndex: number): Deck {
 }
 
 /** 세트 곡 내용을 보관함 원본에 반영하고 서버에 올린다 */
-async function syncMaster(
-  songIndex: number,
-  options: { contributeToCatalog?: boolean },
-  deps: PublishDeps,
-): Promise<Deck> {
+async function syncMaster(songIndex: number, deps: PublishDeps): Promise<Deck> {
   const song = songAt(songIndex);
   const master = resolveLibraryMaster(song);
-  const next = buildPublishedDeck(song, master, options);
+  const next = buildPublishedDeck(song, master);
 
   upsertLibraryDeck(next, { push: false });
   // 보관함 원본이 없던 곡(붙여넣기로 바로 담은 곡 등)은 새 원본에 연결해 둔다.
@@ -159,10 +136,9 @@ async function syncMaster(
  */
 export async function publishSong(
   songIndex: number,
-  options: { contributeToCatalog?: boolean } = {},
   deps: PublishDeps = defaultDeps,
 ): Promise<Deck> {
-  const saved = await syncMaster(songIndex, options, deps);
+  const saved = await syncMaster(songIndex, deps);
   const published = await deps.setVisibility(saved.id, {
     visibility: "public",
     acceptedCopyrightNotice: true,
@@ -176,7 +152,7 @@ export async function updatePublishedSong(
   songIndex: number,
   deps: PublishDeps = defaultDeps,
 ): Promise<Deck> {
-  return syncMaster(songIndex, {}, deps);
+  return syncMaster(songIndex, deps);
 }
 
 /** 공개를 거둔다. 이미 가져간 사본은 남는다 (PRD 4.7) */

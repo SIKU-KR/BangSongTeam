@@ -3,7 +3,7 @@ import { DeckStyleSchema } from "./style";
 import { SlideSchema } from "./slide";
 import { DeckSchema } from "./deck";
 import { PresentationSchema, PresentationItemSchema } from "./presentation";
-import { CatalogLyricSummarySchema, PublicDeckSummarySchema } from "./library";
+import { PublicDeckSummarySchema } from "./library";
 
 // 1. 덱 생성 요청
 export const CreateDeckRequestSchema = z.object({
@@ -14,8 +14,6 @@ export const CreateDeckRequestSchema = z.object({
   backgroundId: z.string().uuid().nullable().optional(),
   style: DeckStyleSchema,
   visibility: z.enum(["private", "public"]).default("private"),
-  catalogId: z.string().uuid().nullable().optional(),
-  contributeToCatalog: z.boolean().default(true), // 가사 라이브러리 기여 여부
   forkedFrom: z.string().uuid().optional(), // Clone 시 원본 덱 ID
 });
 export type CreateDeckRequest = z.infer<typeof CreateDeckRequestSchema>;
@@ -46,10 +44,10 @@ export type UpdatePresentationItemsRequest = z.infer<
   typeof UpdatePresentationItemsRequestSchema
 >;
 
-// 5. 통합 검색 쿼리 및 응답 (M5)
+// 5. 공유 라이브러리(공개 덱) 검색 쿼리 및 응답 (M5)
 //
 // 로그인 없이 열리는 공개 경로다. 그래서 응답은 로그인 여부와 무관하게
-// 미리보기(첫 슬라이드 / 첫 2줄)만 담는다. 전문은 로그인 후 상세 조회로만 준다.
+// 미리보기(첫 슬라이드)만 담는다. 전문은 로그인 후 상세 조회로만 준다.
 export const SearchCatalogQuerySchema = z.object({
   /** 빈 문자열이면 가져간 횟수순 '둘러보기' */
   q: z.string().trim().max(50).default(""),
@@ -59,7 +57,6 @@ export type SearchCatalogQuery = z.infer<typeof SearchCatalogQuerySchema>;
 
 export const SearchCatalogResponseSchema = z.object({
   decks: z.array(PublicDeckSummarySchema),
-  catalogLyrics: z.array(CatalogLyricSummarySchema),
 });
 export type SearchCatalogResponse = z.infer<typeof SearchCatalogResponseSchema>;
 

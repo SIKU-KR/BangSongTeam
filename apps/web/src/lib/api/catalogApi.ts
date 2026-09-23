@@ -1,16 +1,12 @@
 import {
-  CatalogCandidatesResponseSchema,
   CreateReportResponseSchema,
   DeckMutationResponseSchema,
   ForkDeckResponseSchema,
-  ImportCatalogResponseSchema,
   PublicDeckDetailSchema,
   SearchCatalogResponseSchema,
-  type CatalogCandidate,
   type CreateReportRequest,
   type Deck,
   type ForkDeckResponse,
-  type ImportCatalogResponse,
   type PublicDeckDetail,
   type SearchCatalogResponse,
   type VisibilityUpdateRequest,
@@ -19,13 +15,13 @@ import { api } from "./client";
 import { callApi } from "./request";
 
 // ============================================================================
-// 공유 라이브러리·가사 라이브러리 API (M5, PRD 4.7·4.8)
+// 공유 라이브러리 API (M5, PRD 4.7)
 //
 // 응답은 공유 스키마로 다시 검증한다. 서버와 클라이언트 배포가 어긋난 순간
 // 모양이 틀린 데이터가 스토어·IndexedDB로 흘러 들어가지 않게 한다.
 // ============================================================================
 
-/** 공개 덱·가사 라이브러리 통합 검색. 빈 검색어는 가져간 횟수순 둘러보기 */
+/** 공개 덱 검색. 빈 검색어는 가져간 횟수순 둘러보기 */
 export async function searchCatalog(
   q: string,
   limit = 20,
@@ -44,33 +40,12 @@ export async function fetchPublicDeck(id: string): Promise<PublicDeckDetail> {
   return PublicDeckDetailSchema.parse(body.deck);
 }
 
-/** '이 곡이 맞나요?' 후보 (PRD 4.8 곡 식별) */
-export async function fetchCatalogCandidates(
-  title: string,
-  artist: string,
-): Promise<CatalogCandidate[]> {
-  const body = await callApi(() =>
-    api.api.catalog.candidates.$get({ query: { title, artist } }),
-  );
-  return CatalogCandidatesResponseSchema.parse(body).candidates;
-}
-
 /** 공개 덱을 내 보관함으로 가져온다 (fork) */
 export async function forkPublicDeck(id: string): Promise<ForkDeckResponse> {
   const body = await callApi(() =>
     api.api.decks[":id"].fork.$post({ param: { id } }),
   );
   return ForkDeckResponseSchema.parse(body);
-}
-
-/** 가사 라이브러리의 대표 가사로 내 보관함에 곡을 만든다 */
-export async function importCatalogLyrics(
-  id: string,
-): Promise<ImportCatalogResponse> {
-  const body = await callApi(() =>
-    api.api.catalog.lyrics[":id"].import.$post({ param: { id } }),
-  );
-  return ImportCatalogResponseSchema.parse(body);
 }
 
 /** 내 보관함 곡의 공개 여부를 바꾼다 */

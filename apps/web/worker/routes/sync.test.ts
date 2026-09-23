@@ -40,7 +40,6 @@ function makeDeck(userId: string, overrides: Partial<Deck> = {}): Deck {
   return DeckSchema.parse({
     id: DECK_ID,
     userId,
-    catalogId: null,
     scope: "presentation",
     presentationId: DOC_ID,
     title: "은혜로다",
@@ -344,7 +343,6 @@ describe("동기화 라우트 교차 사용자 격리", () => {
             deck: {
               id: deckId,
               userId,
-              catalogId: null,
               scope: "presentation",
               presentationId,
               title,

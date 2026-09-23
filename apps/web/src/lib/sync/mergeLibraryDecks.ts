@@ -30,8 +30,6 @@ export function withServerFields(local: Deck, server: Deck): Deck {
     // 키마다 타입이 달라 제네릭 대입이 좁혀지지 않는다
     (next as Record<string, unknown>)[key] = server[key];
   }
-  // 카탈로그 연결은 서버의 기여 경로가 채운다. 서버가 붙였으면 서버 것을 쓴다.
-  if (server.catalogId) next.catalogId = server.catalogId;
   return next;
 }
 

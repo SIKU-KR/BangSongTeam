@@ -1,13 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { eq } from "drizzle-orm";
 import { createTestDb, type TestDbResult } from "../test-utils";
-import { decks, lyricsCatalog, user, type NewDeck } from "../schema";
-import {
-  planSearch,
-  sanitizeFts5Query,
-  searchCatalog,
-  searchPublicDecks,
-} from "./search";
+import { decks, user, type NewDeck } from "../schema";
+import { planSearch, sanitizeFts5Query, searchPublicDecks } from "./search";
 
 const USER_A = "00000000-0000-4000-8000-000000000001";
 const USER_B = "00000000-0000-4000-8000-000000000002";
@@ -231,68 +226,5 @@ describe("searchPublicDecks", () => {
       .prepare("SELECT deck_id FROM decks_fts ORDER BY deck_id")
       .all() as { deck_id: string }[];
     expect(rows.map((r) => r.deck_id)).toEqual(["s1", "s2", "s4"]);
-  });
-});
-
-describe("searchCatalog", () => {
-  let testDb: TestDbResult;
-  let db: TestDbResult["db"];
-
-  beforeEach(async () => {
-    testDb = createTestDb();
-    db = testDb.db;
-    await db.insert(lyricsCatalog).values([
-      {
-        id: "c1",
-        title: "은혜로다",
-        artist: "예수전도단",
-        titleNorm: "은혜로다",
-        artistNorm: "예수전도단",
-        lyricsCanonical: "시작됐네",
-        versionCount: 3,
-      },
-      {
-        id: "c2",
-        title: "시선",
-        artist: "위러브",
-        titleNorm: "시선",
-        artistNorm: "위러브",
-        lyricsCanonical: "내 모든 시선",
-        versionCount: 5,
-      },
-    ]);
-  });
-
-  afterEach(() => {
-    testDb.sqlite.close();
-  });
-
-  it("matches titles and artists (MATCH and LIKE)", async () => {
-    expect((await searchCatalog(db, "예수전도단")).map((r) => r.id)).toEqual([
-      "c1",
-    ]);
-    expect((await searchCatalog(db, "시선")).map((r) => r.id)).toEqual(["c2"]);
-  });
-
-  it("does not search the lyrics body", async () => {
-    expect(await searchCatalog(db, "시작됐네")).toEqual([]);
-  });
-
-  it("browses by version count on an empty query", async () => {
-    expect((await searchCatalog(db, "")).map((r) => r.id)).toEqual([
-      "c2",
-      "c1",
-    ]);
-  });
-
-  it("keeps the FTS index in sync with title edits", async () => {
-    await db
-      .update(lyricsCatalog)
-      .set({ title: "주의 은혜라" })
-      .where(eq(lyricsCatalog.id, "c1"));
-    expect(await searchCatalog(db, "은혜로다")).toEqual([]);
-    expect((await searchCatalog(db, "은혜라")).map((r) => r.id)).toEqual([
-      "c1",
-    ]);
   });
 });

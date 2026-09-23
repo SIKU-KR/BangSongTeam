@@ -9,14 +9,12 @@ import {
   DeckSchema,
   PresentationDocumentSchema,
   SearchCatalogResponseSchema,
-  verifyNormalization,
   type Deck,
   type PresentationDocument,
 } from "@repo/shared";
 import { createD1Client, user } from "@repo/db";
 import { createApp } from "../index";
 import type { SessionReader } from "../middleware/auth";
-import type { ModelRunner } from "../lib/normalization";
 
 /**
  * M5 완료 기준 (PRD 8장) 두 가지를 실제 라우트로 끝까지 따라간다.
@@ -24,8 +22,8 @@ import type { ModelRunner } from "../lib/normalization";
  * (a) 다른 계정으로 공개 덱을 검색해 가져온 뒤 수정 없이 송출한다
  *     — 송출은 로컬 IndexedDB에서 도므로, 여기서는 '가져온 곡이 담긴 세트가
  *       서버에서 원본과 같은 슬라이드·스타일로 돌아온다'까지 본다
- * (b) 같은 곡을 2개 계정이 등록했을 때 정규화 결과가 검증(4.8)을 통과한다
- *     — 모델은 가짜다. 실제 Qwen 확인은 운영 런북 §6
+ * (b) 같은 곡을 2개 계정이 공개하면 합치지 않고 둘 다 보이며, 가져간 횟수순으로
+ *     정렬된다 (공유 라이브러리는 게시판처럼 운영한다)
  */
 const A = "aaaaaaaa-6666-4000-8000-000000000001";
 const B = "bbbbbbbb-6666-4000-8000-000000000002";
@@ -34,13 +32,8 @@ const B_DECK = "c0000000-6666-4000-8000-00000000000b";
 const B_SET = "10000000-6666-4000-8000-00000000000b";
 
 let currentUser = A;
-let modelText = "";
 const readSession: SessionReader = async () => ({ userId: currentUser });
-const modelRunner = (): ModelRunner => async () => ({
-  text: modelText,
-  finishReason: "stop",
-});
-const app = createApp({ readSession, modelRunner });
+const app = createApp({ readSession });
 
 async function call(method: string, path: string, body?: unknown) {
   const ctx = createExecutionContext();
@@ -54,7 +47,6 @@ async function call(method: string, path: string, body?: unknown) {
     env,
     ctx,
   );
-  // 응답 뒤 백그라운드 작업(정규화)까지 끝난 상태에서 다음 단계를 본다
   await waitOnExecutionContext(ctx);
   return res;
 }
@@ -88,7 +80,6 @@ function librarySong(
     })),
     backgroundId: null,
     style: { ...DEFAULT_DECK_STYLE, overlayOpacity: 65, fontSizeVw: 5.1 },
-    contributeToCatalog: false,
     createdAt: "2026-09-20T00:00:00.000Z",
     updatedAt: "2026-09-21T00:00:00.000Z",
     ...overrides,
@@ -102,8 +93,6 @@ describe("M5 완료 기준 — 2계정 E2E", () => {
       "presentation_items",
       "decks",
       "presentations",
-      "lyrics_versions",
-      "lyrics_catalog",
     ]) {
       await env.DB.exec(`DELETE FROM ${table}`);
     }
@@ -125,7 +114,6 @@ describe("M5 완료 기준 — 2계정 E2E", () => {
         },
       ]);
     currentUser = A;
-    modelText = "";
   });
 
   it("(a) B가 A의 공개 덱을 검색·가져와 세트에 담으면 원본 그대로 돌아온다", async () => {
@@ -214,74 +202,38 @@ describe("M5 완료 기준 — 2계정 E2E", () => {
     expect(after.decks[0].forkCount).toBe(1);
   });
 
-  it("(b) 두 계정이 같은 곡을 등록하면 정규화 결과가 검증을 통과한다", async () => {
-    const bLyrics = A_LYRICS.replace("은혜 아래", "은혜아래").replace(
-      "사랑 안에",
-      "사랑안에",
-    );
+  it("(b) 같은 곡을 두 계정이 공개하면 둘 다 보이고 가져간 횟수순으로 정렬된다", async () => {
+    const publish = async (id: string, deck: Deck) => {
+      expect((await call("PUT", `/api/decks/${id}`, deck)).status).toBe(200);
+      expect(
+        (
+          await call("PATCH", `/api/decks/${id}/visibility`, {
+            visibility: "public",
+            acceptedCopyrightNotice: true,
+          })
+        ).status,
+      ).toBe(200);
+    };
+    const searchIds = async () =>
+      SearchCatalogResponseSchema.parse(
+        await (await call("GET", "/api/catalog/search?q=은혜로다")).json(),
+      ).decks.map((d) => d.id);
 
-    await call(
-      "PUT",
-      `/api/decks/${A_DECK}`,
-      librarySong(A_DECK, A, A_LYRICS, { contributeToCatalog: true }),
-    );
+    await publish(A_DECK, librarySong(A_DECK, A, A_LYRICS));
     currentUser = B;
-    modelText = A_LYRICS; // 모델이 띄어쓰기를 다수·정본 쪽으로 맞췄다
-    await call(
-      "PUT",
-      `/api/decks/${B_DECK}`,
-      librarySong(B_DECK, B, bLyrics, { contributeToCatalog: true }),
+    // B는 띄어쓰기가 다른 버전을 더 늦게 올렸다. 합치지 않고 따로 보인다.
+    await publish(
+      B_DECK,
+      librarySong(B_DECK, B, A_LYRICS.replace("은혜 아래", "은혜아래"), {
+        updatedAt: "2026-09-22T00:00:00.000Z",
+      }),
     );
 
-    const catalog = await env.DB.prepare(
-      "SELECT id, status, canonical_source, lyrics_canonical, version_count FROM lyrics_catalog",
-    ).first<{
-      id: string;
-      status: string;
-      canonical_source: string;
-      lyrics_canonical: string;
-      version_count: number;
-    }>();
-    expect(catalog).toMatchObject({
-      status: "normalized",
-      canonical_source: "llm",
-      version_count: 2,
-    });
-    expect(
-      verifyNormalization(catalog!.lyrics_canonical, [A_LYRICS, bLyrics]),
-    ).toBe(true);
+    // 가져간 횟수가 같으면 최근 수정순
+    expect(await searchIds()).toEqual([B_DECK, A_DECK]);
 
-    // 검색 결과에 '정규화됨 · 2명 등록'의 근거가 실린다
-    const search = SearchCatalogResponseSchema.parse(
-      await (await call("GET", "/api/catalog/search?q=은혜로다")).json(),
-    );
-    expect(search.catalogLyrics[0]).toMatchObject({
-      status: "normalized",
-      versionCount: 2,
-    });
-  });
-
-  it("(b') 모델이 가사를 지어내면 버리고 최다 등록 버전을 쓴다", async () => {
-    await call(
-      "PUT",
-      `/api/decks/${A_DECK}`,
-      librarySong(A_DECK, A, A_LYRICS, { contributeToCatalog: true }),
-    );
-    currentUser = B;
-    modelText = `${A_LYRICS}\n영원히 주를 찬양하리`; // 입력에 없는 줄
-    await call(
-      "PUT",
-      `/api/decks/${B_DECK}`,
-      librarySong(B_DECK, B, A_LYRICS, { contributeToCatalog: true }),
-    );
-
-    const catalog = await env.DB.prepare(
-      "SELECT canonical_source, lyrics_canonical FROM lyrics_catalog",
-    ).first<{ canonical_source: string; lyrics_canonical: string }>();
-    expect(catalog?.canonical_source).toBe("popular_root");
-    expect(catalog?.lyrics_canonical).not.toContain("영원히 주를 찬양하리");
-    expect(verifyNormalization(catalog!.lyrics_canonical, [A_LYRICS])).toBe(
-      true,
-    );
+    // B가 A의 버전을 가져가면 A가 앞선다
+    expect((await call("POST", `/api/decks/${A_DECK}/fork`)).status).toBe(200);
+    expect(await searchIds()).toEqual([A_DECK, B_DECK]);
   });
 });

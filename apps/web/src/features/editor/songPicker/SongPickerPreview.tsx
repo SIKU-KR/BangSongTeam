@@ -1,21 +1,15 @@
 import React, { useState } from "react";
-import type {
-  CatalogLyricSummary,
-  Deck,
-  PublicDeckSummary,
-} from "@repo/shared";
+import type { Deck, PublicDeckSummary } from "@repo/shared";
 import { ExternalSearchLinks } from "../ExternalSearchLinks";
 import { LyricsViewer } from "./LyricsViewer";
-import { CatalogStatusBadge } from "./CatalogStatusBadge";
 import { usePublicDeck } from "../../../lib/api/catalogQueries";
 import { describeApiError } from "../../../lib/api/request";
 
 // ============================================================================
-// 곡 추가 모달 우측 미리보기 (PRD 4.7 괄호 문단, 4.8 노출 범위)
+// 곡 추가 모달 우측 미리보기 (PRD 4.7 괄호 문단)
 //
 // - 내 곡: 전문
 // - 공유 곡: 로그인 사용자에게 전문 (예배 준비자가 버전·구성을 확인하도록)
-// - 가사 라이브러리: 첫 2줄만. 전문은 가져온 곡에서 본다
 // ============================================================================
 
 interface ActionBarProps {
@@ -227,67 +221,6 @@ export function SharedDeckPreview({
             : ownedCopy
               ? "보관함의 이 곡을 프레젠테이션에 추가"
               : "가져와서 프레젠테이션에 추가"
-        }
-        addDisabled={isAdding}
-        onAdd={onAdd}
-        onClose={onClose}
-        onReport={onReport}
-        error={error}
-      />
-    </div>
-  );
-}
-
-export function CatalogLyricPreview({
-  summary,
-  ownedCopy,
-  isAdding,
-  error,
-  onAdd,
-  onClose,
-  onReport,
-}: {
-  summary: CatalogLyricSummary;
-  ownedCopy?: Deck;
-  isAdding: boolean;
-  error: string | null;
-  onAdd: () => void;
-  onClose: () => void;
-  onReport: () => void;
-}): React.JSX.Element {
-  return (
-    <div className="flex-1 flex flex-col min-h-0">
-      <PreviewHeader
-        title={summary.title}
-        badge={
-          <CatalogStatusBadge
-            status={summary.status}
-            versionCount={summary.versionCount}
-          />
-        }
-        meta={<>{summary.artist || "아티스트 미상"} · 가사 라이브러리</>}
-      />
-      <div className="flex-1 overflow-y-auto p-5 text-xs space-y-3">
-        <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-4 space-y-1">
-          {summary.twoLinesPreview.map((line, i) => (
-            <p key={i} className="text-zinc-800 dark:text-zinc-200">
-              {line}
-            </p>
-          ))}
-          <p className="text-zinc-400">…</p>
-        </div>
-        <p className="text-zinc-500">
-          가사 라이브러리는 첫 2줄만 미리 보여 줍니다. 가져오면 대표 가사 전문이
-          슬라이드로 나뉘어 내 보관함에 들어갑니다.
-        </p>
-      </div>
-      <ActionBar
-        addLabel={
-          isAdding
-            ? "가져오는 중…"
-            : ownedCopy
-              ? "보관함의 이 곡을 프레젠테이션에 추가"
-              : "가사 가져와서 프레젠테이션에 추가"
         }
         addDisabled={isAdding}
         onAdd={onAdd}

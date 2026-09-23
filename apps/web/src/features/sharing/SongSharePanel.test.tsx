@@ -34,7 +34,7 @@ describe("SongSharePanel (편집기 '공유')", () => {
 
     api = installFakeApi({
       "PUT /api/decks/*": ({ body }) => ({
-        body: { ok: true, deck: body, contributed: false },
+        body: { ok: true, deck: body },
       }),
       "PATCH /api/decks/*/visibility": ({ url, body }) => {
         const id = url.pathname.split("/")[3];
@@ -158,7 +158,6 @@ describe("SongSharePanel (편집기 '공유')", () => {
         origin: "fork",
         forkedFrom: source,
         forkedFromAuthorName: "김찬양",
-        contributeToCatalog: false,
       },
       { push: false },
     );
@@ -184,11 +183,9 @@ describe("SongSharePanel (편집기 '공유')", () => {
     });
   });
 
-  it("hides the contribute option for forked songs", () => {
-    const fork = saveSongToLibrary({ title: "가져온 곡", lyricsRaw: "가사" });
-    upsertLibraryDeck({ ...fork, origin: "fork" }, { push: false });
-    addDeckToPresentation(getLibraryDeck(fork.id)!);
-    renderPanel(getActivePresentation().items.length - 1);
+  it("does not offer a lyric-library contribution option", () => {
+    const { index } = addSong();
+    renderPanel(index);
 
     fireEvent.click(screen.getByTestId("song-share-publish-btn"));
     expect(

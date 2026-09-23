@@ -1,13 +1,7 @@
 import React from "react";
 import { signInAsTestUser } from "../../test/sessionFixture";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import {
-  render,
-  screen,
-  fireEvent,
-  waitFor,
-  act,
-} from "@testing-library/react";
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { DEFAULT_DECK_STYLE, type Deck } from "@repo/shared";
 import { closeOfflineDB, OFFLINE_DB_NAME } from "../../lib/storage";
 import { withQueryClient } from "../../test/queryClientFixture";
@@ -21,7 +15,6 @@ import {
 } from "./songLibraryStore";
 
 const SHARED_ID = "c0000000-5555-4000-8000-000000000001";
-const CATALOG_ID = "d0000000-5555-4000-8000-000000000001";
 const FORK_ID = "c0000000-5555-4000-8000-0000000000f0";
 const NOW = "2026-09-23T00:00:00.000Z";
 
@@ -36,28 +29,15 @@ const sharedSummary = {
   forkedFromAuthorName: null,
   forkCount: 42,
   backgroundId: null,
-  catalogId: null,
   firstSlidePreview: ["당신은 시간을 뚫고", "이 땅 가운데 오셨네"],
   slideCount: 2,
   updatedAt: NOW,
-};
-
-const catalogSummary = {
-  id: CATALOG_ID,
-  title: "은혜로다",
-  artist: "예수전도단",
-  versionCount: 3,
-  status: "normalized",
-  canonicalSource: "llm",
-  normalizedAt: NOW,
-  twoLinesPreview: ["시작됐네 우리 주님의 능력이", "나의 삶을 다스리시네"],
 };
 
 function forkedDeck(): Deck {
   return {
     id: FORK_ID,
     userId: SEED_USER_ID,
-    catalogId: null,
     scope: "library",
     presentationId: null,
     title: "시간을 뚫고",
@@ -82,7 +62,6 @@ function forkedDeck(): Deck {
     forkedFromAuthorName: "김찬양",
     forkCount: 0,
     origin: "fork",
-    contributeToCatalog: false,
     publishedAt: null,
     takedownAt: null,
     createdAt: NOW,
@@ -94,7 +73,6 @@ describe("SongPickerModal", () => {
   const onSelectSongMock = vi.fn();
   const onCloseMock = vi.fn();
   let api: FakeApi;
-  let candidates: unknown[] = [];
 
   function installServer(options: { offline?: boolean } = {}) {
     api = installFakeApi(
@@ -107,7 +85,6 @@ describe("SongPickerModal", () => {
               decks: match("시간을 뚫고 당신은 우리 없는 하늘을")
                 ? [sharedSummary]
                 : [],
-              catalogLyrics: match("은혜로다") ? [catalogSummary] : [],
             },
           };
         },
@@ -124,21 +101,6 @@ describe("SongPickerModal", () => {
         "POST /api/decks/*/fork": () => ({
           body: { deck: forkedDeck(), alreadyOwned: false },
         }),
-        "POST /api/catalog/lyrics/*/import": () => ({
-          body: {
-            deck: {
-              ...forkedDeck(),
-              id: "c0000000-5555-4000-8000-0000000000c0",
-              title: "은혜로다",
-              forkedFrom: null,
-              forkedFromAuthorName: null,
-              origin: "catalog",
-              catalogId: CATALOG_ID,
-            },
-            alreadyOwned: false,
-          },
-        }),
-        "GET /api/catalog/candidates": () => ({ body: { candidates } }),
         "POST /api/reports": () => ({
           status: 201,
           body: { id: "e0000000-5555-4000-8000-000000000001" },
@@ -172,7 +134,6 @@ describe("SongPickerModal", () => {
     });
     signInAsTestUser();
     await resetSongLibraryStore();
-    candidates = [];
     installServer();
   });
 
@@ -203,7 +164,7 @@ describe("SongPickerModal", () => {
     expect(container.firstChild).toBeNull();
   });
 
-  it("내 곡과 서버의 공유 곡·가사 라이브러리를 함께 보여 준다", async () => {
+  it("내 곡과 서버의 공유 곡을 함께 보여 준다", async () => {
     seedMySong();
     renderPicker();
 
@@ -212,11 +173,11 @@ describe("SongPickerModal", () => {
     expect(
       await screen.findByTestId(`song-item-${SHARED_ID}`),
     ).toBeInTheDocument();
-    expect(screen.getByTestId(`song-item-${CATALOG_ID}`)).toBeInTheDocument();
     expect(screen.getByText("42회 가져감")).toBeInTheDocument();
-    expect(screen.getAllByText("정규화됨 · 3명 등록").length).toBeGreaterThan(
-      0,
-    );
+    // 가사 라이브러리 탭은 없다 (MVP에서 제거)
+    expect(
+      screen.queryByTestId("song-picker-filter-catalog"),
+    ).not.toBeInTheDocument();
     // 샘플 데이터가 아니라 서버를 부른다
     expect(api.calls.some((c) => c.path === "/api/catalog/search")).toBe(true);
   });
@@ -313,7 +274,7 @@ describe("SongPickerModal", () => {
       api.restore();
       api = installFakeApi({
         "GET /api/catalog/search": () => ({
-          body: { decks: [sharedSummary], catalogLyrics: [] },
+          body: { decks: [sharedSummary] },
         }),
         "GET /api/catalog/decks/*": () => ({
           status: 404,
@@ -349,24 +310,6 @@ describe("SongPickerModal", () => {
         targetType: "deck",
         targetId: SHARED_ID,
         reason: "copyright",
-      });
-    });
-  });
-
-  describe("가사 라이브러리 (PRD 4.8)", () => {
-    it("첫 2줄과 상태만 보여 주고, 가져오면 대표 가사로 보관함 곡을 만든다", async () => {
-      renderPicker();
-      fireEvent.click(await screen.findByTestId(`song-item-${CATALOG_ID}`));
-
-      expect(
-        screen.getByText("시작됐네 우리 주님의 능력이"),
-      ).toBeInTheDocument();
-      fireEvent.click(screen.getByTestId("song-picker-add-btn"));
-
-      await waitFor(() => expect(onSelectSongMock).toHaveBeenCalledTimes(1));
-      expect(onSelectSongMock.mock.calls[0][0]).toMatchObject({
-        origin: "catalog",
-        catalogId: CATALOG_ID,
       });
     });
   });
@@ -413,7 +356,7 @@ describe("SongPickerModal", () => {
       });
     }
 
-    it("새 곡을 저장하고 세트에 추가한다 (기여 기본 켜짐)", async () => {
+    it("새 곡을 저장하고 세트에 추가한다", async () => {
       renderPicker();
       fillCreateForm();
       fireEvent.click(screen.getByTestId("song-picker-create-submit-btn"));
@@ -423,70 +366,25 @@ describe("SongPickerModal", () => {
       expect(added).toMatchObject({
         title: "새로운 찬양",
         artist: "사명자",
-        contributeToCatalog: true,
-        catalogId: null,
       });
       expect(added.slides).toHaveLength(2);
     });
 
-    it("'가사 라이브러리에 기여'를 끄면 곡 식별을 묻지 않고 개인 보관함에만 저장한다", async () => {
+    it("같은 제목의 공유 곡이 있어도 묻지 않고 바로 저장한다", async () => {
       renderPicker();
-      fillCreateForm();
-      const checkbox = screen.getByTestId(
-        "song-picker-create-contribute-checkbox",
-      );
-      expect(checkbox).toBeChecked();
-      fireEvent.click(checkbox);
+      fillCreateForm("시간을 뚫고");
       fireEvent.click(screen.getByTestId("song-picker-create-submit-btn"));
 
       await waitFor(() => expect(onSelectSongMock).toHaveBeenCalledTimes(1));
-      expect(onSelectSongMock.mock.calls[0][0].contributeToCatalog).toBe(false);
-      expect(api.calls.some((c) => c.path === "/api/catalog/candidates")).toBe(
-        false,
-      );
-    });
-
-    it("같은 제목의 다른 표기가 있으면 '이 곡이 맞나요?'로 고르게 한다", async () => {
-      candidates = [{ ...catalogSummary, artist: "YWAM", exact: false }];
-      renderPicker();
-      fillCreateForm("은혜로다");
-      fireEvent.click(screen.getByTestId("song-picker-create-submit-btn"));
-
-      expect(
-        await screen.findByTestId("catalog-candidate-chooser"),
-      ).toBeInTheDocument();
-      expect(screen.getByText("이 곡이 맞나요?")).toBeInTheDocument();
-
-      fireEvent.click(screen.getByTestId(`catalog-candidate-${CATALOG_ID}`));
-      fireEvent.click(screen.getByTestId("catalog-candidate-confirm-btn"));
-
-      expect(onSelectSongMock.mock.calls[0][0].catalogId).toBe(CATALOG_ID);
-    });
-
-    it("다른 곡이라고 고르면 카탈로그 연결 없이 저장한다", async () => {
-      candidates = [{ ...catalogSummary, artist: "YWAM", exact: false }];
-      renderPicker();
-      fillCreateForm("은혜로다");
-      fireEvent.click(screen.getByTestId("song-picker-create-submit-btn"));
-
-      fireEvent.click(await screen.findByTestId("catalog-candidate-new"));
-      fireEvent.click(screen.getByTestId("catalog-candidate-confirm-btn"));
-      expect(onSelectSongMock.mock.calls[0][0].catalogId).toBeNull();
-    });
-
-    it("제목·아티스트가 같은 곡이 하나뿐이면 묻지 않고 그 곡에 묶는다", async () => {
-      candidates = [{ ...catalogSummary, exact: true }];
-      renderPicker();
-      fillCreateForm("은혜로다");
-      await act(async () => {
-        fireEvent.click(screen.getByTestId("song-picker-create-submit-btn"));
+      expect(onSelectSongMock.mock.calls[0][0]).toMatchObject({
+        title: "시간을 뚫고",
+        origin: "user",
       });
-
-      await waitFor(() => expect(onSelectSongMock).toHaveBeenCalledTimes(1));
+      expect(getUserSongs()).toHaveLength(1);
+      // 곡 식별·가사 라이브러리 API는 더 이상 없다
       expect(
-        screen.queryByTestId("catalog-candidate-chooser"),
-      ).not.toBeInTheDocument();
-      expect(onSelectSongMock.mock.calls[0][0].catalogId).toBe(CATALOG_ID);
+        api.calls.some((c) => c.path.startsWith("/api/catalog/candidates")),
+      ).toBe(false);
     });
   });
 });

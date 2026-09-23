@@ -25,7 +25,6 @@ describe("API Schemas", () => {
     const parsed = CreateDeckRequestSchema.parse(valid);
     expect(parsed.artist).toBe("");
     expect(parsed.visibility).toBe("private");
-    expect(parsed.contributeToCatalog).toBe(true);
   });
 
   it("validates UpdateDeckRequestSchema as partial", () => {
@@ -83,25 +82,9 @@ describe("API Schemas", () => {
           forkedFromAuthorName: null,
           forkCount: 42,
           backgroundId: null,
-          catalogId: null,
           firstSlidePreview: ["시작됐네 우리 주님의 능력이"],
           slideCount: 6,
           updatedAt: "2026-09-23T00:00:00.000Z",
-        },
-      ],
-      catalogLyrics: [
-        {
-          id: "b0eebc99-9c0b-4ef8-bb6d-6bb9bd380a22",
-          title: "은혜로다",
-          artist: "예수전도단",
-          versionCount: 3,
-          status: "normalized" as const,
-          canonicalSource: "llm" as const,
-          normalizedAt: "2026-09-23T00:00:00.000Z",
-          twoLinesPreview: [
-            "시작됐네 우리 주님의 능력이",
-            "나의 삶을 다스리시네",
-          ],
         },
       ],
     };
@@ -119,7 +102,6 @@ describe("API Schemas", () => {
           forkedFromAuthorName: null,
           forkCount: 0,
           backgroundId: null,
-          catalogId: null,
           firstSlidePreview: [],
           slideCount: 0,
           updatedAt: "2026-09-23T00:00:00.000Z",
@@ -128,7 +110,6 @@ describe("API Schemas", () => {
           lyricsRaw: "전문",
         },
       ],
-      catalogLyrics: [],
     });
     expect(parsed.decks[0]).not.toHaveProperty("userId");
     expect(parsed.decks[0]).not.toHaveProperty("lyricsRaw");
@@ -137,7 +118,6 @@ describe("API Schemas", () => {
     const deck = {
       id: "c0000000-0000-4000-8000-000000000001",
       userId: "00000000-0000-4000-8000-000000000001",
-      catalogId: null,
       scope: "presentation" as const,
       presentationId: "10000000-0000-4000-8000-000000000001",
       title: "은혜로다",

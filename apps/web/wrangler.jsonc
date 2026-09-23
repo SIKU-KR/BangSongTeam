@@ -25,8 +25,5 @@
       "binding": "MEDIA_BUCKET",
       "bucket_name": "prj-ppt-media"
     }
-  ],
-  "ai": {
-    "binding": "AI"
-  }
+  ]
 }

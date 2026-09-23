@@ -1,6 +1,6 @@
-import { and, eq, gt } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import type { CreateReportRequest } from "@repo/shared";
-import { decks, lyricsCatalog, reports } from "../schema";
+import { decks, reports } from "../schema";
 import { publicDeckCondition } from "./publicScope";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -24,24 +24,11 @@ export async function createReport(
   userId: string,
   input: CreateReportRequest,
 ): Promise<CreateReportResult> {
-  if (input.targetType === "deck") {
-    const [target] = await db
-      .select({ id: decks.id })
-      .from(decks)
-      .where(and(eq(decks.id, input.targetId), publicDeckCondition()));
-    if (!target) return { status: "not_found" };
-  } else {
-    const [target] = await db
-      .select({ id: lyricsCatalog.id })
-      .from(lyricsCatalog)
-      .where(
-        and(
-          eq(lyricsCatalog.id, input.targetId),
-          gt(lyricsCatalog.versionCount, 0),
-        ),
-      );
-    if (!target) return { status: "not_found" };
-  }
+  const [target] = await db
+    .select({ id: decks.id })
+    .from(decks)
+    .where(and(eq(decks.id, input.targetId), publicDeckCondition()));
+  if (!target) return { status: "not_found" };
 
   const [pending] = await db
     .select({ id: reports.id })

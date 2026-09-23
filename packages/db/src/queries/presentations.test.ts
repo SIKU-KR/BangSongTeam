@@ -252,7 +252,6 @@ describe("D1 Presentation Queries & Clone-on-Add Isolation", () => {
             deck: {
               id: deckId,
               userId,
-              catalogId: null,
               scope: "presentation",
               presentationId: DOC_ID,
               title: "은혜로다",

@@ -10,7 +10,7 @@ export const reports = sqliteTable(
   {
     id: text("id").primaryKey(),
     userId: text("user_id").references(() => user.id),
-    targetType: text("target_type", { enum: ["deck", "catalog"] }).notNull(),
+    targetType: text("target_type", { enum: ["deck"] }).notNull(),
     targetId: text("target_id").notNull(),
     // lyrics_error | inappropriate | copyright | correction
     reason: text("reason").notNull(),

@@ -414,7 +414,6 @@ function cloneDeckForPresentation(deck: Deck, presentationId: string): Deck {
     visibility: "private",
     forkCount: 0,
     publishedAt: null,
-    contributeToCatalog: false,
     createdAt: now,
     updatedAt: now,
   };

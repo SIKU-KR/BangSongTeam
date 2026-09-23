@@ -32,7 +32,7 @@ describe("Task 4.1: Cloudflare Worker 프로젝트 설정 및 Wrangler 바인딩
     expect(pkg.scripts.types).toContain("wrangler types");
   });
 
-  it("apps/web/wrangler.jsonc exists and defines main entrypoint, D1, R2, and AI bindings", () => {
+  it("apps/web/wrangler.jsonc exists and defines main entrypoint, D1 and R2 bindings", () => {
     expect(fs.existsSync(wranglerJsoncPath)).toBe(true);
 
     const content = fs.readFileSync(wranglerJsoncPath, "utf-8");
@@ -57,9 +57,8 @@ describe("Task 4.1: Cloudflare Worker 프로젝트 설정 및 Wrangler 바인딩
     );
     expect(r2Bucket).toBeDefined();
 
-    // AI binding
-    expect(config.ai).toBeDefined();
-    expect(config.ai.binding).toBe("AI");
+    // Workers AI(LLM 가사 정규화)는 MVP에서 뺐다
+    expect(config.ai).toBeUndefined();
   });
 
   it("worker-configuration.d.ts is generated and includes required bindings", () => {
@@ -68,7 +67,7 @@ describe("Task 4.1: Cloudflare Worker 프로젝트 설정 및 Wrangler 바인딩
     const dtsContent = fs.readFileSync(workerConfigDtsPath, "utf-8");
     expect(dtsContent).toContain("DB: D1Database");
     expect(dtsContent).toContain("MEDIA_BUCKET: R2Bucket");
-    expect(dtsContent).toContain("AI: Ai");
+    expect(dtsContent).not.toContain("AI: Ai");
   });
 });
 
