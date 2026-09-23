@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { env } from "cloudflare:test";
 import { DEFAULT_DECK_STYLE, DeckSchema, type Deck } from "@repo/shared";
 import { createD1Client, user, lyricsCatalog, lyricsVersions } from "@repo/db";
@@ -76,6 +76,11 @@ describe("덱 저장 시 가사 기여", () => {
       { id: USER_B, name: "B", createdAt: new Date(), updatedAt: new Date() },
     ]);
     currentUser = USER_A;
+  });
+
+  // D1은 테스트 파일 간에 공유된다. 실패 주입 트리거가 다른 파일로 새지 않게 한다.
+  afterEach(async () => {
+    await env.DB.exec("DROP TRIGGER IF EXISTS test_fail_versions");
   });
 
   it("기여를 켠 보관함 곡은 카탈로그에 루트 버전을 남기고 덱을 카탈로그에 묶는다", async () => {

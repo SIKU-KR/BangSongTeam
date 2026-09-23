@@ -6,3 +6,5 @@ export * from "./backgrounds";
 export * from "./catalogRefs";
 export * from "./search";
 export * from "./publicScope";
+export * from "./sharing";
+export * from "./reports";
