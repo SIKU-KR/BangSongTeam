@@ -102,28 +102,30 @@ flowchart TB
 
 배경 영상은 R2 커스텀 도메인 직통이 아니라 **같은 Worker의 `/api/media/*` 프록시**를 통해 전달한다. 동일 출처이므로 R2 CORS 설정이 필요 없고, Service Worker 캐시 규칙도 자체 오리진 경로 하나로 끝난다. 대신 영상 트래픽이 Worker 요청 수·CPU 시간에 계상되므로, 사용량이 커지면 커스텀 도메인 직통으로 되돌리는 선택지를 남겨 둔다. 그때 바뀌는 것은 URL 생성 헬퍼(`getBackgroundMediaUrl`)와 Workbox `urlPattern` 두 곳뿐이다.
 
-### 2.2 구현 현황 스냅샷 (2026-09-21)
+### 2.2 구현 현황 스냅샷 (2026-09-23)
 
 본 명세의 항목 중 실제 코드가 있는 것과 설계만 있는 것을 구분한다. 이 표를 갱신하지 않은 채 "스펙에 있으니 구현되어 있다"고 가정하지 않는다.
 
-| 구성 요소                                     | 상태     | 비고                                                                                       |
-| --------------------------------------------- | -------- | ------------------------------------------------------------------------------------------ |
-| `packages/shared` Zod 스키마 (§3)             | 구현     | Deck·Slide·Style·Presentation·Broadcast·API 전부 존재                                      |
-| `packages/db` Drizzle 스키마·마이그레이션(§4) | 구현     | 0000_initial, 0001_fts5 적용됨                                                             |
-| 스코프 쿼리 헬퍼 (§4.3)                       | 부분     | decks·presentations·backgrounds 헬퍼 존재. 실제 호출부는 `/api/backgrounds` 하나뿐         |
-| 3-Layer Slide Stage (§5.1)                    | 구현     | `components/stage/*` — 편집기와 송출이 동일 컴포넌트 사용                                  |
-| 입력 버퍼 엔진·단축키 (§5.2)                  | 구현     | `useNavigationBuffer`, `usePresentationShortcuts` (tinykeys)                               |
-| 세트 편집기 (PRD 4.4)                         | 부분     | 속성 패널·드래그·리사이즈·스트립 구현. 넘침 경고와 커서 기준 분할·합치기 미구현            |
-| 미디어 프록시 `/api/media/*` (§5.4)           | 구현     | HTTP Range 지원                                                                            |
-| **클라이언트 영속성 (§5.5)**                  | **구현** | IndexedDB Phase 2 완료. `presentationStore`·`songLibraryStore`가 문서 단위로 저장·복원한다 |
-| Hono RPC 클라이언트 (`hc<AppType>`)           | 미구현   | `apps/web/src`에 `fetch` 호출이 0건. 배경 목록도 `INITIAL_BACKGROUNDS` 상수를 직접 읽는다  |
-| Better Auth (§4.1 auth 테이블)                | 스키마만 | 테이블·컬럼만 있고 런타임 연동 없음                                                        |
-| 발표자 보기·BroadcastChannel (§5.3)           | 구현     | 조작 창 `/present/:id/control`, 청중 창 `?audience=1`. 핸드셰이크·하트비트 동작 (M4)       |
-| PWA·Cache Storage (§5.4)                      | 구현     | vite-plugin-pwa(generateSW) + RangeRequests. 예배 준비 화면이 배경을 미리 받는다 (M4)      |
-| Workers AI 가사 정규화 (§6)                   | 미구현   | `verifyNormalization` 검증 함수만 구현됨                                                   |
-| 공유·가사 라이브러리 API (§7)                 | 미구현   | 화면은 샘플 데이터로 선행 구현                                                             |
-| 사용자 커스텀 배경 업로드 (PRD 4.3)           | 미구현   | 배경 라이브러리 화면에 안내만 있음                                                         |
-| 저장 실패 경고 배너                           | 구현     | `StorageWarningBanner` — 용량 초과와 저장소 차단을 구분, 닫을 수 없음                      |
+| 구성 요소                                     | 상태   | 비고                                                                                                             |
+| --------------------------------------------- | ------ | ---------------------------------------------------------------------------------------------------------------- |
+| `packages/shared` Zod 스키마 (§3)             | 구현   | Deck·Slide·Style·Presentation·Broadcast·API·공유 라이브러리(`library.ts`) 계약                                   |
+| `packages/db` Drizzle 스키마·마이그레이션(§4) | 구현   | 0000_initial, 0001_fts5, 0002_seed_backgrounds, 0003_m5_sharing, 0004_m5_fts                                     |
+| 스코프 쿼리 헬퍼 (§4.3)                       | 구현   | decks·presentations·lyrics·search·sharing·reports·normalization. 공개 조건은 `publicDeckCondition()` 한 곳       |
+| 3-Layer Slide Stage (§5.1)                    | 구현   | `components/stage/*` — 편집기와 송출이 동일 컴포넌트 사용                                                        |
+| 입력 버퍼 엔진·단축키 (§5.2)                  | 구현   | `useNavigationBuffer`, `usePresentationShortcuts` (tinykeys)                                                     |
+| 세트 편집기 (PRD 4.4)                         | 부분   | 넘침 경고와 커서 기준 분할·합치기 미구현 (M2 잔여). 속성 패널 '공유' 섹션 구현 (M5)                              |
+| 미디어 프록시 `/api/media/*` (§5.4)           | 구현   | HTTP Range 지원                                                                                                  |
+| 클라이언트 영속성 (§5.5)                      | 구현   | IndexedDB가 1차 원천. 프레젠테이션과 **보관함 곡** 모두 서버와 동기화 (보관함은 M5-2에서 연결)                   |
+| Hono RPC 클라이언트 (`hc<AppType>`)           | 구현   | `AppType = ReturnType<typeof createApp>`. 라우트는 팩토리(`createApp(deps)`)라 테스트가 실제 라우트를 마운트한다 |
+| Better Auth (§4.1 auth 테이블)                | 구현   | 카카오·네이버 + localhost 전용 개발자 로그인. 실제 OAuth 자격증명 확인은 대기                                    |
+| 발표자 보기·BroadcastChannel (§5.3)           | 구현   | 조작 창 `/present/:id/control`, 청중 창 `?audience=1` (M4)                                                       |
+| PWA·Cache Storage (§5.4)                      | 구현   | vite-plugin-pwa(generateSW) + RangeRequests (M4)                                                                 |
+| TanStack Query (서버 캐시)                    | 구현   | 곡 추가 모달의 공유 검색·상세·가져오기, 공개 전환, 신고에만 쓴다. 송출 화면 import는 ESLint가 막는다 (M5-5)      |
+| Workers AI 가사 정규화 (§6)                   | 구현   | Qwen3.8 27B, 검증 실패·오류 시 최다 등록 버전. 실모델 확인은 운영 런북 §6 (M5-4)                                 |
+| 공유·가사 라이브러리 API (§7)                 | 구현   | 공개 전환·검색·상세·가져오기·후보·대표 가사 가져오기·신고 (M5-3)                                                 |
+| 운영자 도구                                   | 구현   | 관리자 화면 없음. `docs/ops/moderation-runbook.md`의 SQL (`packages/db/src/ops/moderationSql.ts`가 정본)         |
+| 사용자 커스텀 배경 업로드 (PRD 4.3)           | 미구현 | 배경 라이브러리 화면에 안내만 있음                                                                               |
+| 저장 실패 경고 배너                           | 구현   | `StorageWarningBanner` — 용량 초과와 저장소 차단을 구분, 닫을 수 없음                                            |
 
 ---
 
@@ -705,42 +707,30 @@ export const reports = sqliteTable("reports", {
 
 추가로 서버는 모르는 `backgroundId`를 `null`로 낮춰 받는다(`nullifyUnknownBackgrounds`). 배경은 장식이고 가사는 봉사자의 작업물이므로, 배경 하나 때문에 세트 전체를 잃게 두지 않는다.
 
-### 4.2 FTS5 Trigram 검색 가상 테이블 마이그레이션 (`drizzle/0001_fts5.sql`)
+### 4.2 FTS5 Trigram 검색 가상 테이블 (`drizzle/0004_m5_fts.sql`)
 
-공개 덱 및 가사 라이브러리 고속 검색을 위해 SQLite FTS5 Trigram 인덱스를 생성한다.
+공개 덱과 가사 라이브러리 검색용 FTS5 Trigram 인덱스다. M5에서 `0001_fts5.sql`의 테이블·트리거를 걷어내고 다시 만들었다.
 
-```sql
--- FTS5 Trigram 검색 인덱스 (Deck용)
-CREATE VIRTUAL TABLE IF NOT EXISTS decks_fts USING fts5(
-  deck_id UNINDEXED,
-  title,
-  artist,
-  tokenize='trigram'
-);
+- **색인 조건 = 공개 조건**: `scope = 'library' AND visibility = 'public' AND takedown_at IS NULL`. 0001은 `visibility`만 봐서, 공개 샘플 곡을 세트에 담은 복제본까지 공개 검색에 섞였다. 이 조건은 쿼리 헬퍼의 `publicDeckCondition()`과 같다. 둘 중 하나만 바꾸지 않는다.
+- **가사 본문도 색인한다** (`decks_fts.lyrics`). 곡 추가 모달이 공유 곡도 가사로 찾는다 (PRD 4.7 괄호 문단).
+- **갱신 트리거는 하나**: '빼고 → 넣기'를 한 트리거 안에서 한다. 둘로 나누면 SQLite가 나중에 만든 트리거를 먼저 실행해 방금 넣은 행을 지운다.
+- **색인 대상이었던 행에만 FTS를 건드린다**: 세트 동기화는 덱을 매번 지우고 다시 넣는다. 조건 없는 트리거는 곡마다 FTS를 훑는다. `rowid` 연결은 쓰지 않는다 (TEXT 기본키 테이블의 rowid는 VACUUM에서 바뀔 수 있다).
+- `lyrics_catalog_fts(catalog_id, title, artist)` — 가사 라이브러리 제목·아티스트 검색.
+- drizzle-kit이 `decks_fts`를 일반 테이블로 알고 있어 `db:generate`가 FTS 테이블에 `ALTER`를 만든다. 생성된 마이그레이션에서 `_fts` 문장은 지우고 FTS는 커스텀 마이그레이션에서만 다룬다.
 
--- Trigram 동기화 트리거
-CREATE TRIGGER IF NOT EXISTS trg_decks_insert AFTER INSERT ON decks
-WHEN new.visibility = 'public'
-BEGIN
-  INSERT INTO decks_fts (deck_id, title, artist) VALUES (new.id, new.title, new.artist);
-END;
-
-CREATE TRIGGER IF NOT EXISTS trg_decks_update AFTER UPDATE ON decks
-BEGIN
-  DELETE FROM decks_fts WHERE deck_id = old.id;
-  INSERT INTO decks_fts (deck_id, title, artist)
-  SELECT new.id, new.title, new.artist WHERE new.visibility = 'public';
-END;
-
-CREATE TRIGGER IF NOT EXISTS trg_decks_delete AFTER DELETE ON decks
-BEGIN
-  DELETE FROM decks_fts WHERE deck_id = old.id;
-END;
-```
+검색 헬퍼(`queries/search.ts`)는 검색어를 **토큰 단위로** 나눈다. 3자 이상 토큰은 `MATCH`, 2자 이하 토큰은 `LIKE '%t%' ESCAPE '\'`로 보내고 모두 AND로 묶는다. 문자열 전체 길이로 분기하면 "주 은혜로"처럼 짧은 토큰이 섞인 검색이 `MATCH`로 가서 아무것도 찾지 못한다. 빈 검색어는 가져간 횟수순 둘러보기다.
 
 ### 4.3 D1 보안 가드레일: 중앙 집중식 스코프 쿼리 헬퍼 (`queries/*.ts`)
 
 D1에는 Postgres RLS가 없으므로 애플리케이션 계층에서 `userId` 및 `visibility`를 엄격히 강제한다.
+
+> **M5 구현 메모 (2026-09-23)** — 아래 코드는 설계 당시의 모양이다. 실제 헬퍼와 다른 점:
+>
+> - **서버 소유 공유 필드**: `upsertDeck`은 `visibility`·`forkCount`·`origin`·`forkedFrom`·`forkedFromAuthorName`·`publishedAt`·`takedownAt`을 기존 행 값으로 유지하고, 새 행이면 비공개·0회·`origin='user'`로 만든다. `scope='library'`를 강제한다. 세트 문서(`fromPresentationDocument`)는 복제본을 항상 비공개·0회로 쓴다. 이 값을 바꾸는 경로는 공개 전환(`setDeckVisibility`)·가져오기(`forkPublicDeck`)·게시 중단(운영 런북)뿐이다.
+> - **공개 조건 `publicDeckCondition()`** (`queries/publicScope.ts`): 보관함 덱 + 공개 + 게시 중단 아님. 검색·상세·가져오기·신고가 모두 이 조건을 쓴다.
+> - **루트 버전 판정 `shouldContribute(deck)`**: `scope='library' AND origin='user' AND contributeToCatalog`. 포크본·대표 가사로 만든 곡은 버전으로 세지 않는다 (PRD 4.8).
+> - **외래키 방어**: 모르는 `catalogId`는 `nullifyUnknownCatalogs`가 `null`로 낮춘다 (`nullifyUnknownBackgrounds`와 같은 이유).
+> - 검색 헬퍼는 `queries/search.ts`로 옮겼다 (§4.2).
 
 ```typescript
 // packages/db/src/queries/decks.ts
@@ -1132,6 +1122,15 @@ Chrome 공식 **Window Management API**를 활용한 다중 디스플레이 투�
 
 정규화는 `ctx.waitUntil()`로 응답 반환 이후에 실행한다. 사용자 요청 흐름을 막지 않으면서도 별도 큐 인프라가 필요 없다.
 
+> **구현 메모 (M5-4, 2026-09-23)**
+>
+> - 기여는 `POST /api/decks`가 아니라 보관함 동기화 `PUT /api/decks/:id`에서 일어난다. 저장된 덱이 루트 버전(`shouldContribute`)이면 기여하고, 버전이 **새로 생겼거나 바뀌었고**(`changed`) 2개 이상이며 잠기지 않았을 때만 정규화를 예약한다. 같은 가사를 다시 저장해도 모델을 부르지 않는다.
+> - 호출: `ai.run('@cf/qwen/qwen3.8-27b', { messages, temperature: 0, max_tokens, chat_template_kwargs: { enable_thinking: false } })`. `AI_GATEWAY_ID`가 있으면 AI Gateway를 거친다.
+> - 출력에서 `<think>`·코드펜스를 걷어낸다. **예외·빈 출력·`finish_reason: 'length'`·검증 실패·지나치게 짧은 출력(가장 짧은 입력의 80% 미만)은 모두 최다 등록 버전으로 떨어진다.** 최다 등록 버전은 공백만 다른 버전을 같은 버전으로 세고, 동률이면 먼저 등록된 쪽이다.
+> - 쓰기는 compare-and-set이다: `status != 'locked'`이고 시작 시점의 `updated_at`·`version_count`가 그대로일 때만. 모델을 기다리는 사이 새 버전이 들어오면 쓰지 않는다(그 버전이 다음 정규화를 부른다).
+> - 누가 대표 가사를 만들었는지는 `lyrics_catalog.canonical_source`(`user`·`llm`·`popular_root`·`operator`)에 남는다.
+> - 실제 Qwen 확인(사고 모드 끄기, 출력 형식)은 운영 런북 §6의 원격 스모크 절차로 한다. 로컬·테스트는 원격 바인딩을 끄므로 모델이 가짜이거나, 로컬 개발 서버에서는 호출이 실패해 폴백 경로가 돈다.
+
 ```mermaid
 sequenceDiagram
   autonumber
@@ -1216,31 +1215,32 @@ export function verifyNormalization(
 
 모든 API는 `/api/*` 하위에 위치하며, Hono RPC를 통해 완전한 엔드투엔드 타입 안전성을 제공한다.
 
-### 7.1 엔드포인트 요약표
+### 7.1 엔드포인트 요약표 (2026-09-23)
 
-| 메서드   | 경로                           | 설명                                          | 인증 필요    | 상태   |
-| -------- | ------------------------------ | --------------------------------------------- | ------------ | ------ |
-| `GET`    | `/api/health`                  | 헬스 체크                                     | No           | 구현   |
-| `GET`    | `/api/media/*`                 | R2 배경 미디어 프록시 (HTTP Range)            | No           | 구현   |
-| `GET`    | `/api/backgrounds`             | 서비스 기본 모션 배경 목록 조회               | No           | 구현\* |
-| `GET`    | `/api/auth/*`                  | Better Auth 핸들러 (카카오/네이버)            | No           | 미구현 |
-| `GET`    | `/api/decks`                   | 내 개인 라이브러리 덱 목록 조회               | Yes          | 미구현 |
-| `POST`   | `/api/decks`                   | 새 덱 생성 (세트 추가 시 Clone 포함)          | Yes          | 미구현 |
-| `GET`    | `/api/decks/:id`               | 덱 상세 조회 (소유자 또는 공개 덱)            | Conditional  | 미구현 |
-| `PUT`    | `/api/decks/:id`               | 덱 정보/슬라이드/스타일 수정                  | Yes (소유자) | 미구현 |
-| `DELETE` | `/api/decks/:id`               | 덱 삭제                                       | Yes (소유자) | 미구현 |
-| `POST`   | `/api/decks/:id/fork`          | 공개 덱 내 라이브러리로 복제 (Fork)           | Yes          | 미구현 |
-| `GET`    | `/api/presentations`           | 내 프레젠테이션(예배 세트) 목록 조회          | Yes          | 미구현 |
-| `POST`   | `/api/presentations`           | 새 프레젠테이션 생성                          | Yes          | 미구현 |
-| `GET`    | `/api/presentations/:id`       | 프레젠테이션 상세 및 포함된 덱 전체 Hydration | Yes (소유자) | 미구현 |
-| `PUT`    | `/api/presentations/:id`       | 프레젠테이션 정보 및 곡 순서(`order`) 수정    | Yes (소유자) | 미구현 |
-| `DELETE` | `/api/presentations/:id`       | 프레젠테이션 삭제                             | Yes (소유자) | 미구현 |
-| `POST`   | `/api/backgrounds/uploads`     | 커스텀 배경 업로드 (용량·포맷 검사, R2 저장)  | Yes          | 미구현 |
-| `DELETE` | `/api/backgrounds/uploads/:id` | 내 커스텀 배경 삭제 (R2 객체 포함)            | Yes (소유자) | 미구현 |
-| `GET`    | `/api/catalog/search`          | 통합 검색 (공개 덱 및 가사 라이브러리)        | No           | 미구현 |
-| `POST`   | `/api/reports`                 | 가사 오류 및 부적절 덱 신고 접수              | Yes          | 미구현 |
+| 메서드   | 경로                             | 설명                                                     | 인증 필요    | 상태   |
+| -------- | -------------------------------- | -------------------------------------------------------- | ------------ | ------ |
+| `GET`    | `/api/health`                    | 헬스 체크                                                | No           | 구현   |
+| `GET`    | `/api/media/*`                   | R2 배경 미디어 프록시 (HTTP Range)                       | No           | 구현   |
+| `GET`    | `/api/backgrounds`               | 서비스 기본 모션 배경 목록 조회                          | No           | 구현   |
+| `GET`    | `/api/auth/*`                    | Better Auth 핸들러 (카카오/네이버)                       | No           | 구현   |
+| `POST`   | `/api/dev-login`                 | 개발자 로그인 (localhost + `DEV_LOGIN_ENABLED`)          | No           | 구현   |
+| `GET`    | `/api/presentations`             | 내 프레젠테이션 문서 전체 (덱 임베드)                    | Yes          | 구현   |
+| `PUT`    | `/api/presentations/:id`         | 프레젠테이션 문서 단위 업서트 (복제본은 항상 비공개)     | Yes (소유자) | 구현   |
+| `DELETE` | `/api/presentations/:id`         | 프레젠테이션 삭제                                        | Yes (소유자) | 구현   |
+| `GET`    | `/api/decks`                     | 내 보관함 곡 전체                                        | Yes          | 구현   |
+| `PUT`    | `/api/decks/:id`                 | 보관함 곡 업서트 + 루트 버전이면 가사 기여 + 정규화 예약 | Yes (소유자) | 구현   |
+| `DELETE` | `/api/decks/:id`                 | 보관함 곡 삭제                                           | Yes (소유자) | 구현   |
+| `PATCH`  | `/api/decks/:id/visibility`      | 공개 전환 (공개 시 `acceptedCopyrightNotice: true` 필수) | Yes (소유자) | 구현   |
+| `POST`   | `/api/decks/:id/fork`            | 공개 덱 가져오기 (멱등, 비공개 포크)                     | Yes          | 구현   |
+| `GET`    | `/api/catalog/search`            | 공개 덱·가사 라이브러리 통합 검색 (미리보기만)           | No           | 구현   |
+| `GET`    | `/api/catalog/decks/:id`         | 공개 덱 전문                                             | Yes          | 구현   |
+| `GET`    | `/api/catalog/candidates`        | '이 곡이 맞나요?' 후보                                   | Yes          | 구현   |
+| `POST`   | `/api/catalog/lyrics/:id/import` | 대표 가사로 보관함 곡 만들기 (멱등)                      | Yes          | 구현   |
+| `POST`   | `/api/reports`                   | 신고·교정 제안 (공개 덱·등록자 있는 곡만)                | Yes          | 구현   |
+| `POST`   | `/api/backgrounds/uploads`       | 커스텀 배경 업로드 (용량·포맷 검사, R2 저장)             | Yes          | 미구현 |
+| `DELETE` | `/api/backgrounds/uploads/:id`   | 내 커스텀 배경 삭제 (R2 객체 포함)                       | Yes (소유자) | 미구현 |
 
-\* `/api/backgrounds`는 Worker에 구현되어 있으나 **프론트엔드가 아직 호출하지 않는다.** 현재 클라이언트는 `@repo/shared`의 `INITIAL_BACKGROUNDS` 상수를 직접 읽는다. M3-B에서 Hono RPC 클라이언트를 도입하면서 이 경로로 일원화한다. 그 전까지 배경 메타데이터의 사실상 원천은 상수 파일이며, D1 시드와 값이 어긋나지 않도록 둘 중 하나만 고쳐서는 안 된다.
+설계 당시의 `POST /api/decks`(생성)·`GET /api/decks/:id`·`GET /api/presentations/:id`는 두지 않았다. 로컬 우선 동기화가 문서 단위 `PUT`으로 생성과 수정을 함께 하고, 조회는 목록 한 번으로 충분하다.
 
 ### 7.2 주요 API 요청/응답 페이로드 스키마 (`packages/shared/src/schemas/api.ts`)
 
@@ -1292,6 +1292,8 @@ export type UpdatePresentationItemsRequest = z.infer<
 >;
 
 // 5. 통합 검색 쿼리 및 응답
+// (M5 구현: 응답 항목은 `schemas/library.ts`의 PublicDeckSummarySchema·CatalogLyricSummarySchema.
+//  빈 q는 인기순 둘러보기. 아래는 설계 당시의 모양이다.)
 export const SearchCatalogQuerySchema = z.object({
   q: z.string().min(1).max(50),
   limit: z.coerce.number().int().min(1).max(50).default(20),
@@ -1332,7 +1334,8 @@ export type SearchCatalogResponse = z.infer<typeof SearchCatalogResponseSchema>;
 
 - **공개 웹 카탈로그 가사 전문 노출 차단**: 로그인하지 않은 외부 사용자가 접근하는 공개 웹 카탈로그 검색 결과(`GET /api/catalog/search`) 및 미인증 공유 카드에는 **첫 슬라이드 또는 첫 2줄만 노출**(`firstSlidePreview`)하여 가사 크롤링 및 공중송신권 분쟁을 방지한다.
 - **편집기 내부 곡 추가 모달(SongPickerModal)**: 예배 봉사자가 찬양 버전(절, 브릿지)을 확인하고 빠른 선곡을 할 수 있도록, 편집기 내부 곡 선택 시에는 공유 곡도 가사 전문 미리보기, 가사 본문 검색, 텍스트 복사를 정상 제공한다 (세트 추가 시 어차피 에디터로 임포트되므로).
-- **게시 중단(Takedown) 절차**: 저작권자 요청 접수 시 `reports` 테이블을 통해 관리자가 즉각 해당 `decks.visibility = 'private'` 격리 및 카탈로그 삭제를 수행하는 운영 쿼리를 구비한다.
+- **게시 중단(Takedown) 절차**: 저작권자 요청 접수 시 운영자가 `docs/ops/moderation-runbook.md`의 SQL로 해당 덱을 비공개로 내리고 `takedown_at`을 남긴다(소유자가 다시 공개할 수 없다). 가져가 다시 공개한 사본도 찾아 내리고, 필요하면 카탈로그를 삭제한다. SQL 정본은 `packages/db/src/ops/moderationSql.ts`이며 테스트가 실제 스키마에 대해 실행해 본다.
+- **공개 동의**: 공개 전환 요청은 `acceptedCopyrightNotice: true` 리터럴이어야 통과한다. 동의한 시각이 `decks.published_at`이다.
 
 ### 8.2 Better Auth 및 D1 세션 보안
 
@@ -1345,6 +1348,8 @@ export type SearchCatalogResponse = z.infer<typeof SearchCatalogResponseSchema>;
 
 본 명세서는 PRD의 기능 요건과 확정된 아키텍처 결정 사항(프레젠테이션 덱 복제 정책, 로컬 우선 영속성, Chrome Window Management 기반 듀얼 윈도우 동기화, Worker 미디어 프록시 스트리밍)을 반영한다. 1.1.0 개정에서는 설계와 실제 코드가 어긋난 지점을 실제 구현 쪽으로 정정했다.
 
-**현재 위치와 다음 단계 (2026-09-21):** M0·M1 코드와 M2 편집기의 대부분이 구현되어 있고, 막혀 있는 것은 영속성이다. 다음 작업은 §5.5 Phase 2(IndexedDB 로컬 영속성, M3-A)이며, 이것이 끝나야 M1·M2의 완료 기준인 '실제 주일 예배 송출'을 검증할 수 있다. 그 다음이 Hono RPC 클라이언트와 계정·서버 저장(M3-B)이다.
+**현재 위치 (2026-09-23):** M5(공유·가사 라이브러리) 코드 완료. 두 계정으로 공개 → 검색 → 가져오기 → 무수정 송출, 같은 곡 두 번 등록 → 정규화(로컬은 폴백)까지 브라우저와 worker E2E로 확인했다. 실제 Qwen 원격 확인과 운영 D1 마이그레이션(`0003`·`0004`)은 운영자 몫이다.
+
+**이전 기록 (2026-09-21):** M0·M1 코드와 M2 편집기의 대부분이 구현되어 있고, 막혀 있는 것은 영속성이다. 다음 작업은 §5.5 Phase 2(IndexedDB 로컬 영속성, M3-A)이며, 이것이 끝나야 M1·M2의 완료 기준인 '실제 주일 예배 송출'을 검증할 수 있다. 그 다음이 Hono RPC 클라이언트와 계정·서버 저장(M3-B)이다.
 
 **이 문서를 읽는 에이전트에게:** §2.2 구현 현황 표를 먼저 확인한다. 설계가 기술되어 있다고 해서 코드가 존재한다고 가정하지 않는다. 구현이 스펙과 달라지면 코드를 되돌리기 전에 이 문서를 먼저 갱신할지 판단한다 — 실제 운영에서 더 나은 선택이라면 스펙이 코드를 따라간다.

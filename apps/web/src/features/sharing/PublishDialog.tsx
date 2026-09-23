@@ -69,8 +69,8 @@ export function PublishDialog({
           </li>
           {overwritesLibraryCopy && (
             <li className="text-amber-700 dark:text-amber-400">
-              내 보관함의 &lsquo;{songTitle}&rsquo;이 지금 세트의 내용으로
-              바뀝니다.
+              내 보관함에 있는 이 곡(&lsquo;{songTitle}&rsquo;)의 내용이 지금
+              세트의 내용으로 바뀝니다.
             </li>
           )}
         </ul>
