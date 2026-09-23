@@ -329,6 +329,59 @@ describe("동기화 라우트 교차 사용자 격리", () => {
     expect(aList.decks[0].title).toBe("은혜로다");
   });
 
+  it("세트 복제본은 공개로 보내도 비공개로 저장되고 검색 인덱스에 들어가지 않는다 (M5-1)", async () => {
+    const doc = makeDoc(USER_A);
+    doc.items[0].deck = makeDeck(USER_A, {
+      visibility: "public",
+      forkCount: 999,
+      publishedAt: "2026-09-22T00:00:00.000Z",
+    });
+    expect(
+      (await app.request(`/api/presentations/${DOC_ID}`, json(doc), env))
+        .status,
+    ).toBe(200);
+
+    const row = await env.DB.prepare(
+      "SELECT visibility, fork_count, published_at FROM decks WHERE id = ?",
+    )
+      .bind(DECK_ID)
+      .first<{
+        visibility: string;
+        fork_count: number;
+        published_at: number | null;
+      }>();
+    expect(row).toEqual({
+      visibility: "private",
+      fork_count: 0,
+      published_at: null,
+    });
+
+    const indexed = await env.DB.prepare(
+      "SELECT count(*) AS n FROM decks_fts WHERE deck_id = ?",
+    )
+      .bind(DECK_ID)
+      .first<{ n: number }>();
+    expect(indexed?.n).toBe(0);
+  });
+
+  it("보관함 PUT으로는 공개·가져간 횟수를 바꿀 수 없다 (M5-1)", async () => {
+    const libraryDeck = makeDeck(USER_A, {
+      id: LIB_DECK_ID,
+      scope: "library",
+      presentationId: null,
+      visibility: "public",
+      forkCount: 999,
+    });
+    await app.request(`/api/decks/${LIB_DECK_ID}`, json(libraryDeck), env);
+
+    const row = await env.DB.prepare(
+      "SELECT visibility, fork_count FROM decks WHERE id = ?",
+    )
+      .bind(LIB_DECK_ID)
+      .first<{ visibility: string; fork_count: number }>();
+    expect(row).toEqual({ visibility: "private", fork_count: 0 });
+  });
+
   it("본문의 userId를 믿지 않는다", async () => {
     // A 세션으로 B 소유라고 주장하는 문서를 밀어 넣어도 A 것이 된다.
     await app.request(

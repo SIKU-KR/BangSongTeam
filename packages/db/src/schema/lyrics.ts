@@ -25,6 +25,12 @@ export const lyricsCatalog = sqliteTable(
       .notNull()
       .default("single"),
     normalizedAt: integer("normalized_at", { mode: "timestamp" }),
+    // 대표 가사를 누가 만들었는지 (user | llm | popular_root | operator)
+    canonicalSource: text("canonical_source", {
+      enum: ["user", "llm", "popular_root", "operator"],
+    })
+      .notNull()
+      .default("user"),
     createdAt: integer("created_at", { mode: "timestamp" }).default(
       sql`(unixepoch())`,
     ),
@@ -33,7 +39,8 @@ export const lyricsCatalog = sqliteTable(
     ),
   },
   (t) => [
-    index("idx_lyrics_catalog_norm").on(t.titleNorm, t.artistNorm),
+    // 곡 식별 키. unique로 두어 동시에 들어온 첫 기여가 카탈로그를 둘로 만들지 않게 한다
+    uniqueIndex("idx_lyrics_catalog_norm").on(t.titleNorm, t.artistNorm),
     index("idx_lyrics_catalog_status").on(t.status),
   ],
 );
@@ -64,6 +71,13 @@ export const lyricsVersions = sqliteTable(
     uniqueIndex("idx_lyrics_versions_user_catalog").on(t.userId, t.catalogId),
   ],
 );
+
+// FTS5 가상 테이블 참조용 (DDL은 `0004_m5_fts.sql`)
+export const lyricsCatalogFts = sqliteTable("lyrics_catalog_fts", {
+  catalogId: text("catalog_id").notNull(),
+  title: text("title").notNull(),
+  artist: text("artist").notNull(),
+});
 
 export type LyricsCatalog = typeof lyricsCatalog.$inferSelect;
 export type NewLyricsCatalog = typeof lyricsCatalog.$inferInsert;

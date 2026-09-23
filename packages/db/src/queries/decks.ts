@@ -1,25 +1,15 @@
 import { eq, and, desc, sql } from "drizzle-orm";
 import type { Deck as SharedDeck } from "@repo/shared";
-import { decks, decksFts, lyricsVersions, type Deck } from "../schema";
-import { toDeckRow } from "./mappers";
+import { decks, lyricsVersions, type Deck, type NewDeck } from "../schema";
+import { toDeckRow, toSharedDeck } from "./mappers";
 import { nullifyUnknownBackgrounds } from "./backgrounds";
+import { nullifyUnknownCatalogs } from "./catalogRefs";
+import { publicDeckCondition } from "./publicScope";
+import { sanitizeFts5Query, searchPublicDecks } from "./search";
 
 // Type-flexible SQLite database interface (supports Cloudflare D1 Drizzle client & SQLite test instances)
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type DbInstance = any;
-
-/**
- * FTS5 쿼리 새니타이저
- * 특수문자 및 FTS5 제어 연산자(AND, OR, NOT, NEAR, *, (), ") 주입 공격 방지
- */
-export function sanitizeFts5Query(query: string): string {
-  // 영문/한글/숫자/공백만 남기고 모든 특수기호 제거
-  const cleaned = query.replace(/[^\p{L}\p{N}\s]/gu, " ").trim();
-  const tokens = cleaned.split(/\s+/).filter(Boolean);
-  if (tokens.length === 0) return "";
-  // 각 토큰을 큰따옴표로 감싸 안전한 MATCH 구문 생성: "은혜로운" "찬양"
-  return tokens.map((t) => `"${t}"`).join(" ");
-}
 
 /**
  * 1. 사용자 본인 소유 '내 라이브러리' 마스터 덱 목록 조회 (프레젠테이션 복제본 제외)
@@ -65,54 +55,8 @@ export async function getPublicById(
   const [result] = await db
     .select()
     .from(decks)
-    .where(and(eq(decks.id, deckId), eq(decks.visibility, "public")));
+    .where(and(eq(decks.id, deckId), publicDeckCondition()));
   return result ?? null;
-}
-
-/**
- * 4. FTS5 Trigram + LIKE 하이브리드 고속 검색 (새니타이징 적용)
- */
-export async function searchPublicDecks(
-  db: DbInstance,
-  query: string,
-  limit = 20,
-): Promise<Deck[]> {
-  const trimmed = query.trim();
-  if (!trimmed) return [];
-
-  if (trimmed.length >= 3) {
-    const sanitizedFts = sanitizeFts5Query(trimmed);
-    if (!sanitizedFts) return [];
-
-    // 3자 이상: FTS5 Trigram MATCH 쿼리
-    const rows = await db
-      .select({ deck: decks })
-      .from(decks)
-      .innerJoin(decksFts, eq(decks.id, decksFts.deckId))
-      .where(
-        and(
-          eq(decks.visibility, "public"),
-          sql`decks_fts MATCH ${sanitizedFts}`,
-        ),
-      )
-      .orderBy(desc(decks.forkCount))
-      .limit(limit);
-
-    return rows.map((r: { deck: Deck }) => r.deck);
-  } else {
-    // 2자 이하: LIKE 쿼리 안전 폴백
-    return db
-      .select()
-      .from(decks)
-      .where(
-        and(
-          eq(decks.visibility, "public"),
-          sql`(${decks.title} LIKE ${`%${trimmed}%`} OR ${decks.artist} LIKE ${`%${trimmed}%`})`,
-        ),
-      )
-      .orderBy(desc(decks.forkCount))
-      .limit(limit);
-  }
 }
 
 /**
@@ -149,36 +93,97 @@ export async function upsertLyricVersion(
 }
 
 /**
- * 덱 업서트 (소유자 강제).
+ * 동기화 PUT이 바꿀 수 없는 서버 소유 필드 (M5).
+ *
+ * 공개 전환(`setDeckVisibility`)·가져오기(`forkPublicDeck`)·게시 중단(운영 런북)만
+ * 이 값을 바꾼다. 클라이언트가 보낸 값을 믿으면 `forkCount`를 부풀려 인기순을
+ * 조작하거나, 동의 없이 공개하거나, 포크본을 루트 버전으로 둔갑시킬 수 있다.
+ */
+const SERVER_OWNED_DECK_FIELDS = [
+  "visibility",
+  "forkCount",
+  "origin",
+  "forkedFrom",
+  "forkedFromAuthorName",
+  "publishedAt",
+  "takedownAt",
+] as const satisfies ReadonlyArray<keyof NewDeck>;
+
+/** 새 보관함 덱의 서버 소유 필드 기본값 */
+const NEW_DECK_SERVER_FIELDS: Pick<
+  NewDeck,
+  (typeof SERVER_OWNED_DECK_FIELDS)[number]
+> = {
+  visibility: "private",
+  forkCount: 0,
+  origin: "user",
+  forkedFrom: null,
+  forkedFromAuthorName: null,
+  publishedAt: null,
+  takedownAt: null,
+};
+
+/**
+ * 보관함 덱 업서트 (소유자 강제).
  *
  * D1에는 RLS가 없으므로 `userId`는 세션에서 온 값을 받아 행에 그대로 박는다.
  * 이미 있는 덱이면 소유자가 일치할 때만 갱신한다. 일치하지 않으면 조용히
- * 무시하지 않고 false를 돌려 호출자가 403을 내릴 수 있게 한다.
+ * 무시하지 않고 null을 돌려 호출자가 403을 내릴 수 있게 한다.
+ *
+ * 이 경로는 보관함(`scope='library'`) 전용이다. 세트 복제본은 프레젠테이션
+ * 문서로만 저장한다. 공유 필드는 서버 값을 유지한다 (`SERVER_OWNED_DECK_FIELDS`).
+ *
+ * @returns 저장된 덱. 남의 덱이면 null
  */
 export async function upsertDeck(
   db: DbInstance,
   userId: string,
   deck: SharedDeck,
-): Promise<boolean> {
-  const [existing] = await db
-    .select({ userId: decks.userId })
+): Promise<SharedDeck | null> {
+  const [existing]: Deck[] = await db
+    .select()
     .from(decks)
     .where(eq(decks.id, deck.id));
 
-  if (existing && existing.userId !== userId) return false;
+  if (existing && existing.userId !== userId) return null;
 
-  // 프레젠테이션 업서트와 같은 이유로 모르는 배경은 '배경 없음'으로 낮춰 받는다.
-  // 배경 id 하나 때문에 곡 저장 자체가 실패하면 안 된다.
-  const [row] = await nullifyUnknownBackgrounds(db, [
-    toDeckRow({ ...deck, userId }),
-  ]);
+  const clientRow = toDeckRow({
+    ...deck,
+    userId,
+    scope: "library",
+    presentationId: null,
+  });
+
+  const serverFields = existing
+    ? Object.fromEntries(
+        SERVER_OWNED_DECK_FIELDS.map((key) => [key, existing[key]]),
+      )
+    : NEW_DECK_SERVER_FIELDS;
+
+  // 카탈로그 연결은 기여 경로(서버)가 채운다. 클라이언트가 아직 모르는 채로
+  // null을 보내도 서버가 붙여 둔 연결을 끊지 않는다.
+  const catalogId = clientRow.catalogId ?? existing?.catalogId ?? null;
+
+  // 프레젠테이션 업서트와 같은 이유로 모르는 배경·카탈로그는 null로 낮춰 받는다.
+  // 참조 id 하나 때문에 곡 저장 자체가 실패하면 안 된다.
+  const [row] = await nullifyUnknownCatalogs(
+    db,
+    await nullifyUnknownBackgrounds(db, [
+      { ...clientRow, ...serverFields, catalogId },
+    ]),
+  );
 
   if (existing) {
     await db.update(decks).set(row).where(eq(decks.id, deck.id));
   } else {
     await db.insert(decks).values(row);
   }
-  return true;
+
+  const [saved]: Deck[] = await db
+    .select()
+    .from(decks)
+    .where(eq(decks.id, deck.id));
+  return toSharedDeck(saved);
 }
 
 /** 본인 소유 덱 삭제 */

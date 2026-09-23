@@ -39,8 +39,22 @@ export const decks = sqliteTable(
     visibility: text("visibility", { enum: ["private", "public"] })
       .notNull()
       .default("private"),
-    forkedFrom: text("forked_from"), // 원본 덱 ID (Clone-on-Add 또는 Fork 출처)
+    // 출처 (M5):
+    // - scope='library': 포크 원본 공개 덱 ID. 서버만 쓴다 (`POST /api/decks/:id/fork`)
+    // - scope='presentation': 복제해 온 보관함 덱 ID (편집기 '공유'가 원본을 찾는 근거)
+    forkedFrom: text("forked_from"),
     forkCount: integer("fork_count").notNull().default(0),
+
+    // ---- M5 공유 필드 (contribute_to_catalog 외에는 서버 소유) ----
+    contributeToCatalog: integer("contribute_to_catalog", { mode: "boolean" })
+      .notNull()
+      .default(false),
+    origin: text("origin", { enum: ["user", "fork", "catalog"] })
+      .notNull()
+      .default("user"),
+    forkedFromAuthorName: text("forked_from_author_name"),
+    publishedAt: integer("published_at", { mode: "timestamp" }),
+    takedownAt: integer("takedown_at", { mode: "timestamp" }),
 
     createdAt: integer("created_at", { mode: "timestamp" }).default(
       sql`(unixepoch())`,
@@ -54,14 +68,20 @@ export const decks = sqliteTable(
     index("idx_decks_presentation").on(t.presentationId), // 세트 종속 덱 조회
     index("idx_decks_visibility_forks").on(t.visibility, t.forkCount),
     index("idx_decks_catalog").on(t.catalogId),
+    index("idx_decks_forked_from").on(t.userId, t.forkedFrom), // 포크 멱등성 조회
   ],
 );
 
-// FTS5 가상 테이블을 Drizzle 쿼리 빌더에서 참조하기 위한 테이블 정의
+// FTS5 가상 테이블을 Drizzle 쿼리 빌더에서 참조하기 위한 테이블 정의.
+//
+// 실제 DDL(가상 테이블·트리거)은 손으로 쓴 커스텀 마이그레이션(`0001_fts5`,
+// `0004_m5_fts`)에만 있다. drizzle-kit이 이 정의로 만든 `*_fts` DDL은 생성된
+// 마이그레이션에서 지운다 (docs/tasks/m5/tasks_1.md 가드레일 4).
 export const decksFts = sqliteTable("decks_fts", {
   deckId: text("deck_id").notNull(),
   title: text("title").notNull(),
   artist: text("artist").notNull(),
+  lyrics: text("lyrics").notNull(),
 });
 
 export type Deck = typeof decks.$inferSelect;

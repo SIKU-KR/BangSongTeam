@@ -1,0 +1,298 @@
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { eq } from "drizzle-orm";
+import { createTestDb, type TestDbResult } from "../test-utils";
+import { decks, lyricsCatalog, user, type NewDeck } from "../schema";
+import {
+  planSearch,
+  sanitizeFts5Query,
+  searchCatalog,
+  searchPublicDecks,
+} from "./search";
+
+const USER_A = "00000000-0000-4000-8000-000000000001";
+const USER_B = "00000000-0000-4000-8000-000000000002";
+
+function deckRow(overrides: Partial<NewDeck> & { id: string }): NewDeck {
+  return {
+    userId: USER_A,
+    title: "제목",
+    artist: "",
+    lyricsRaw: "가사",
+    slides: "[]",
+    style: "{}",
+    visibility: "public",
+    scope: "library",
+    ...overrides,
+  };
+}
+
+describe("sanitizeFts5Query", () => {
+  it("wraps words in double quotes", () => {
+    expect(sanitizeFts5Query("은혜로운 찬양")).toBe('"은혜로운" "찬양"');
+    expect(sanitizeFts5Query("10000 Reasons")).toBe('"10000" "Reasons"');
+  });
+
+  it("strips FTS5 operators and injection attempts", () => {
+    expect(sanitizeFts5Query('은혜* AND OR NOT "찬양"')).toBe(
+      '"은혜" "AND" "OR" "NOT" "찬양"',
+    );
+    expect(sanitizeFts5Query("찬양 (곡: 1) ^ $ @ # !")).toBe('"찬양" "곡" "1"');
+    expect(sanitizeFts5Query("!@#$%^&*()")).toBe("");
+  });
+});
+
+describe("planSearch", () => {
+  it("browses by popularity for an empty query", () => {
+    expect(planSearch("")).toEqual({ kind: "browse" });
+    expect(planSearch("   ")).toEqual({ kind: "browse" });
+  });
+
+  it("returns nothing when only symbols remain", () => {
+    expect(planSearch("%%")).toEqual({ kind: "nothing" });
+    expect(planSearch('"*"')).toEqual({ kind: "nothing" });
+  });
+
+  it("sends 3+ character tokens to MATCH (FTS5 trigram)", () => {
+    expect(planSearch("은혜로운")).toEqual({
+      kind: "search",
+      match: '"은혜로운"',
+      likePatterns: [],
+    });
+  });
+
+  it("sends ≤2 character tokens to LIKE", () => {
+    expect(planSearch("은혜")).toEqual({
+      kind: "search",
+      match: null,
+      likePatterns: ["%은혜%"],
+    });
+  });
+
+  it("splits mixed queries by token instead of by total length", () => {
+    // 전체 길이(4)로 분기하면 1글자 토큰이 MATCH로 가서 아무것도 못 찾는다
+    expect(planSearch("주 은혜로")).toEqual({
+      kind: "search",
+      match: '"은혜로"',
+      likePatterns: ["%주%"],
+    });
+  });
+});
+
+describe("searchPublicDecks", () => {
+  let testDb: TestDbResult;
+  let db: TestDbResult["db"];
+
+  beforeEach(async () => {
+    testDb = createTestDb();
+    db = testDb.db;
+    await db.insert(user).values([
+      {
+        id: USER_A,
+        name: "김찬양",
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+      {
+        id: USER_B,
+        name: "이예배",
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    ]);
+    await db.insert(decks).values([
+      deckRow({
+        id: "s1",
+        title: "은혜로운 주의 사랑",
+        artist: "어노인팅",
+        forkCount: 10,
+      }),
+      deckRow({
+        id: "s2",
+        title: "주의 은혜로",
+        artist: "마커스",
+        forkCount: 50,
+        userId: USER_B,
+      }),
+      deckRow({
+        id: "s3",
+        title: "은혜 비공개곡",
+        visibility: "private",
+        forkCount: 99,
+      }),
+      deckRow({
+        id: "s4",
+        title: "꽃들도",
+        artist: "JWorship",
+        forkCount: 20,
+        lyricsRaw: "이 곳에 오셔서 은혜를 베푸소서",
+      }),
+      // 세트 복제본은 공개로 저장되어 있어도 검색되면 안 된다 (M5-1 누출 경로)
+      deckRow({
+        id: "s5",
+        title: "은혜 세트 복제본",
+        scope: "presentation",
+        forkCount: 80,
+      }),
+      // 운영자가 게시를 중단한 덱
+      deckRow({
+        id: "s6",
+        title: "은혜 게시 중단",
+        forkCount: 70,
+        takedownAt: new Date(),
+      }),
+    ]);
+  });
+
+  afterEach(() => {
+    testDb.sqlite.close();
+  });
+
+  const ids = (rows: { deck: { id: string } }[]) => rows.map((r) => r.deck.id);
+
+  it("uses FTS5 MATCH for queries of 3+ characters", async () => {
+    expect(ids(await searchPublicDecks(db, "은혜로운"))).toEqual(["s1"]);
+  });
+
+  it("uses LIKE for short queries, sorted by fork count", async () => {
+    expect(ids(await searchPublicDecks(db, "은혜"))).toEqual([
+      "s2",
+      "s4",
+      "s1",
+    ]);
+  });
+
+  it("searches lyrics as well as title and artist", async () => {
+    expect(ids(await searchPublicDecks(db, "베푸소서"))).toEqual(["s4"]);
+  });
+
+  it("ANDs MATCH and LIKE tokens", async () => {
+    expect(ids(await searchPublicDecks(db, "주의 마커스"))).toEqual(["s2"]);
+    expect(ids(await searchPublicDecks(db, "사랑 마커스"))).toEqual([]);
+  });
+
+  it("never returns private decks, presentation clones or taken-down decks", async () => {
+    const all = ids(await searchPublicDecks(db, ""));
+    for (const hidden of ["s3", "s5", "s6"]) {
+      expect(all).not.toContain(hidden);
+      expect(ids(await searchPublicDecks(db, "은혜"))).not.toContain(hidden);
+      expect(ids(await searchPublicDecks(db, "은혜로운"))).not.toContain(
+        hidden,
+      );
+    }
+  });
+
+  it("browses public decks by popularity on an empty query", async () => {
+    expect(ids(await searchPublicDecks(db, ""))).toEqual(["s2", "s4", "s1"]);
+    expect(ids(await searchPublicDecks(db, "", 1))).toEqual(["s2"]);
+  });
+
+  it("returns the author's display name", async () => {
+    const [row] = await searchPublicDecks(db, "마커스");
+    expect(row.authorName).toBe("이예배");
+  });
+
+  it("treats wildcard and FTS syntax as literals", async () => {
+    expect(await searchPublicDecks(db, "%")).toEqual([]);
+    expect(await searchPublicDecks(db, "_")).toEqual([]);
+    expect(await searchPublicDecks(db, '" OR 1=1 --')).toEqual([]);
+    expect(ids(await searchPublicDecks(db, "은혜* (")).sort()).toEqual([
+      "s1",
+      "s2",
+      "s4",
+    ]);
+  });
+
+  it("follows visibility changes through the FTS triggers", async () => {
+    await db
+      .update(decks)
+      .set({ visibility: "private" })
+      .where(eq(decks.id, "s1"));
+    expect(ids(await searchPublicDecks(db, "은혜로운"))).toEqual([]);
+
+    await db
+      .update(decks)
+      .set({ visibility: "public" })
+      .where(eq(decks.id, "s1"));
+    expect(ids(await searchPublicDecks(db, "은혜로운"))).toEqual(["s1"]);
+
+    await db
+      .update(decks)
+      .set({ title: "새 제목입니다" })
+      .where(eq(decks.id, "s1"));
+    expect(ids(await searchPublicDecks(db, "은혜로운"))).toEqual([]);
+    expect(ids(await searchPublicDecks(db, "새 제목입니다"))).toEqual(["s1"]);
+
+    await db.delete(decks).where(eq(decks.id, "s1"));
+    expect(ids(await searchPublicDecks(db, "새 제목입니다"))).toEqual([]);
+  });
+
+  it("does not index presentation clones via the FTS triggers", async () => {
+    const rows = testDb.sqlite
+      .prepare("SELECT deck_id FROM decks_fts ORDER BY deck_id")
+      .all() as { deck_id: string }[];
+    expect(rows.map((r) => r.deck_id)).toEqual(["s1", "s2", "s4"]);
+  });
+});
+
+describe("searchCatalog", () => {
+  let testDb: TestDbResult;
+  let db: TestDbResult["db"];
+
+  beforeEach(async () => {
+    testDb = createTestDb();
+    db = testDb.db;
+    await db.insert(lyricsCatalog).values([
+      {
+        id: "c1",
+        title: "은혜로다",
+        artist: "예수전도단",
+        titleNorm: "은혜로다",
+        artistNorm: "예수전도단",
+        lyricsCanonical: "시작됐네",
+        versionCount: 3,
+      },
+      {
+        id: "c2",
+        title: "시선",
+        artist: "위러브",
+        titleNorm: "시선",
+        artistNorm: "위러브",
+        lyricsCanonical: "내 모든 시선",
+        versionCount: 5,
+      },
+    ]);
+  });
+
+  afterEach(() => {
+    testDb.sqlite.close();
+  });
+
+  it("matches titles and artists (MATCH and LIKE)", async () => {
+    expect((await searchCatalog(db, "예수전도단")).map((r) => r.id)).toEqual([
+      "c1",
+    ]);
+    expect((await searchCatalog(db, "시선")).map((r) => r.id)).toEqual(["c2"]);
+  });
+
+  it("does not search the lyrics body", async () => {
+    expect(await searchCatalog(db, "시작됐네")).toEqual([]);
+  });
+
+  it("browses by version count on an empty query", async () => {
+    expect((await searchCatalog(db, "")).map((r) => r.id)).toEqual([
+      "c2",
+      "c1",
+    ]);
+  });
+
+  it("keeps the FTS index in sync with title edits", async () => {
+    await db
+      .update(lyricsCatalog)
+      .set({ title: "주의 은혜라" })
+      .where(eq(lyricsCatalog.id, "c1"));
+    expect(await searchCatalog(db, "은혜로다")).toEqual([]);
+    expect((await searchCatalog(db, "은혜라")).map((r) => r.id)).toEqual([
+      "c1",
+    ]);
+  });
+});

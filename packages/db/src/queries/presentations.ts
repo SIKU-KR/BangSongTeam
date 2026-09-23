@@ -9,6 +9,7 @@ import {
 } from "../schema";
 import { fromPresentationDocument, toPresentationDocument } from "./mappers";
 import { nullifyUnknownBackgrounds } from "./backgrounds";
+import { nullifyUnknownCatalogs } from "./catalogRefs";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type DbInstance = any;
@@ -238,7 +239,10 @@ export async function upsertPresentationDocument(
     userId,
   });
 
-  const deckRows = await nullifyUnknownBackgrounds(db, rawDeckRows);
+  const deckRows = await nullifyUnknownCatalogs(
+    db,
+    await nullifyUnknownBackgrounds(db, rawDeckRows),
+  );
 
   const statements = [
     // 이 프레젠테이션에 속한 기존 항목·덱을 걷어낸다.

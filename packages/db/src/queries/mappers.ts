@@ -65,6 +65,15 @@ function toIso(value: Date | number | null | undefined): string {
   return new Date(0).toISOString();
 }
 
+function toIsoOrNull(value: Date | number | null | undefined): string | null {
+  if (value === null || value === undefined) return null;
+  return toIso(value);
+}
+
+function toDateOrNull(iso: string | null | undefined): Date | null {
+  return iso ? toDate(iso) : null;
+}
+
 function toDate(iso: string): Date {
   const date = new Date(iso);
   return Number.isNaN(date.getTime()) ? new Date(0) : date;
@@ -87,6 +96,11 @@ export function toSharedDeck(row: DeckRow | NewDeck): SharedDeck {
     visibility: (row.visibility ?? "private") as SharedDeck["visibility"],
     forkedFrom: row.forkedFrom ?? null,
     forkCount: row.forkCount ?? 0,
+    contributeToCatalog: row.contributeToCatalog ?? false,
+    origin: (row.origin ?? "user") as NonNullable<SharedDeck["origin"]>,
+    forkedFromAuthorName: row.forkedFromAuthorName ?? null,
+    publishedAt: toIsoOrNull(row.publishedAt),
+    takedownAt: toIsoOrNull(row.takedownAt),
     createdAt: toIso(row.createdAt),
     updatedAt: toIso(row.updatedAt),
   };
@@ -109,6 +123,11 @@ export function toDeckRow(deck: SharedDeck): NewDeck {
     visibility: deck.visibility,
     forkedFrom: deck.forkedFrom ?? null,
     forkCount: deck.forkCount,
+    contributeToCatalog: deck.contributeToCatalog ?? false,
+    origin: deck.origin ?? "user",
+    forkedFromAuthorName: deck.forkedFromAuthorName ?? null,
+    publishedAt: toDateOrNull(deck.publishedAt),
+    takedownAt: toDateOrNull(deck.takedownAt),
     createdAt: toDate(deck.createdAt),
     updatedAt: toDate(deck.updatedAt),
   };
@@ -151,6 +170,11 @@ export interface DecomposedDocument {
  * 항목의 `userId`·`scope`·`presentationId`는 문서 헤더 기준으로 덮어쓴다.
  * 본문이 보내온 값을 그대로 믿으면 남의 계정으로 문서를 심거나, 보관함 덱을
  * 프레젠테이션 덱으로 둔갑시킬 수 있다.
+ *
+ * 세트 복제본은 공유 대상이 아니다 (M5). 공개·가져간 횟수·게시 기록·기여 여부를
+ * 강제로 끈다 — 그러지 않으면 공개 곡을 세트에 담은 복제본이 공개 검색에 섞인다.
+ * `forkedFrom`(복제해 온 보관함 덱)과 `forkedFromAuthorName`(원작 표시)은 편집기가
+ * 쓰는 값이라 그대로 둔다.
  */
 export function fromPresentationDocument(
   doc: PresentationDocument,
@@ -178,6 +202,11 @@ export function fromPresentationDocument(
         userId: doc.userId,
         scope: "presentation",
         presentationId: doc.id,
+        visibility: "private",
+        forkCount: 0,
+        contributeToCatalog: false,
+        publishedAt: null,
+        takedownAt: null,
       }),
     ),
   };

@@ -57,11 +57,19 @@ describe("API Schemas", () => {
 
   it("validates SearchCatalogQuerySchema and coerces limit", () => {
     const parsed = SearchCatalogQuerySchema.parse({
-      q: "은혜",
+      q: " 은혜 ",
       limit: "15",
     });
     expect(parsed.q).toBe("은혜");
     expect(parsed.limit).toBe(15);
+  });
+
+  it("allows an empty query for browsing by popularity", () => {
+    expect(SearchCatalogQuerySchema.parse({}).q).toBe("");
+    expect(SearchCatalogQuerySchema.parse({ q: "" }).limit).toBe(20);
+    expect(() =>
+      SearchCatalogQuerySchema.parse({ q: "가".repeat(51) }),
+    ).toThrow();
   });
 
   it("validates SearchCatalogResponseSchema", () => {
@@ -71,10 +79,14 @@ describe("API Schemas", () => {
           id: "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11",
           title: "은혜로다",
           artist: "예수전도단",
+          authorName: "김찬양",
+          forkedFromAuthorName: null,
           forkCount: 42,
           backgroundId: null,
-          posterUrl: null,
+          catalogId: null,
           firstSlidePreview: ["시작됐네 우리 주님의 능력이"],
+          slideCount: 6,
+          updatedAt: "2026-09-23T00:00:00.000Z",
         },
       ],
       catalogLyrics: [
@@ -84,6 +96,8 @@ describe("API Schemas", () => {
           artist: "예수전도단",
           versionCount: 3,
           status: "normalized" as const,
+          canonicalSource: "llm" as const,
+          normalizedAt: "2026-09-23T00:00:00.000Z",
           twoLinesPreview: [
             "시작됐네 우리 주님의 능력이",
             "나의 삶을 다스리시네",
@@ -92,6 +106,32 @@ describe("API Schemas", () => {
       ],
     };
     expect(SearchCatalogResponseSchema.parse(response)).toEqual(response);
+  });
+
+  it("does not leak full lyrics or owner ids through the public search shape", () => {
+    const parsed = SearchCatalogResponseSchema.parse({
+      decks: [
+        {
+          id: "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11",
+          title: "은혜로다",
+          artist: "",
+          authorName: "김찬양",
+          forkedFromAuthorName: null,
+          forkCount: 0,
+          backgroundId: null,
+          catalogId: null,
+          firstSlidePreview: [],
+          slideCount: 0,
+          updatedAt: "2026-09-23T00:00:00.000Z",
+          // 아래 두 값은 스키마가 걸러내야 한다
+          userId: "00000000-0000-4000-8000-000000000001",
+          lyricsRaw: "전문",
+        },
+      ],
+      catalogLyrics: [],
+    });
+    expect(parsed.decks[0]).not.toHaveProperty("userId");
+    expect(parsed.decks[0]).not.toHaveProperty("lyricsRaw");
   });
   describe("동기화 문서 계약 (M3-B)", () => {
     const deck = {

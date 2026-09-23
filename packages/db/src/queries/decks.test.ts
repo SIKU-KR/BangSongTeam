@@ -2,11 +2,9 @@ import { describe, it, expect, beforeEach } from "vitest";
 import { eq } from "drizzle-orm";
 import { createTestDb } from "../test-utils";
 import {
-  sanitizeFts5Query,
   getMyLibraryDecks,
   getByIdScoped,
   getPublicById,
-  searchPublicDecks,
   upsertLyricVersion,
   upsertDeck,
   deleteDeckScoped,
@@ -14,27 +12,6 @@ import {
 import { user, lyricsCatalog, lyricsVersions, decks } from "../schema";
 import { DEFAULT_DECK_STYLE, DeckSchema, type Deck } from "@repo/shared";
 import { toSharedDeck } from "./mappers";
-
-describe("FTS5 Query Sanitizer (sanitizeFts5Query)", () => {
-  it("should wrap alphanumeric and Korean words in double quotes", () => {
-    expect(sanitizeFts5Query("은혜로운 찬양")).toBe('"은혜로운" "찬양"');
-    expect(sanitizeFts5Query("Lord I Lift")).toBe('"Lord" "I" "Lift"');
-    expect(sanitizeFts5Query("10000 Reasons")).toBe('"10000" "Reasons"');
-  });
-
-  it("should strip special characters, FTS5 syntax operators, and injection attempts", () => {
-    expect(sanitizeFts5Query('은혜* AND OR NOT "찬양"')).toBe(
-      '"은혜" "AND" "OR" "NOT" "찬양"',
-    );
-    expect(sanitizeFts5Query("찬양 (곡: 1) ^ $ @ # !")).toBe('"찬양" "곡" "1"');
-  });
-
-  it("should return empty string for empty or whitespace-only inputs", () => {
-    expect(sanitizeFts5Query("")).toBe("");
-    expect(sanitizeFts5Query("   ")).toBe("");
-    expect(sanitizeFts5Query("!@#$%^&*()")).toBe("");
-  });
-});
 
 describe("D1 Scoped Deck Queries", () => {
   let db: ReturnType<typeof createTestDb>["db"];
@@ -172,77 +149,32 @@ describe("D1 Scoped Deck Queries", () => {
       const privResult = await getPublicById(db, "priv-deck");
       expect(privResult).toBeNull();
     });
-  });
 
-  describe("searchPublicDecks", () => {
-    beforeEach(async () => {
+    it("rejects public presentation clones and taken-down decks", async () => {
       await db.insert(decks).values([
         {
-          id: "s1",
+          id: "clone-deck",
           userId: userAId,
-          title: "은혜로운 주의 사랑",
-          artist: "어노인팅",
-          lyricsRaw: "가사 1",
+          scope: "presentation",
+          title: "세트 복제본",
+          lyricsRaw: "가사",
           slides: "[]",
           style: "{}",
           visibility: "public",
-          forkCount: 10,
         },
         {
-          id: "s2",
+          id: "down-deck",
           userId: userAId,
-          title: "주의 은혜로",
-          artist: "마커스",
-          lyricsRaw: "가사 2",
+          title: "게시 중단",
+          lyricsRaw: "가사",
           slides: "[]",
           style: "{}",
           visibility: "public",
-          forkCount: 50,
-        },
-        {
-          id: "s3",
-          userId: userAId,
-          title: "은혜 비공개곡",
-          artist: "비공개",
-          lyricsRaw: "가사 3",
-          slides: "[]",
-          style: "{}",
-          visibility: "private",
-          forkCount: 99,
-        },
-        {
-          id: "s4",
-          userId: userAId,
-          title: "꽃들도",
-          artist: "JWorship",
-          lyricsRaw: "가사 4",
-          slides: "[]",
-          style: "{}",
-          visibility: "public",
-          forkCount: 20,
+          takedownAt: new Date(),
         },
       ]);
-    });
-
-    it("should search using FTS5 Trigram MATCH when query length >= 3", async () => {
-      const results = await searchPublicDecks(db, "은혜로운");
-      expect(results).toHaveLength(1);
-      expect(results[0].id).toBe("s1");
-    });
-
-    it("should search using LIKE fallback when query length <= 2", async () => {
-      const results = await searchPublicDecks(db, "은혜");
-      expect(results).toHaveLength(2);
-      // Sorted by forkCount desc
-      expect(results[0].id).toBe("s2"); // forkCount: 50
-      expect(results[1].id).toBe("s1"); // forkCount: 10
-      // Must not include s3 (private)
-      expect(results.some((r) => r.id === "s3")).toBe(false);
-    });
-
-    it("should return empty array for empty query", async () => {
-      expect(await searchPublicDecks(db, "")).toEqual([]);
-      expect(await searchPublicDecks(db, "   ")).toEqual([]);
+      expect(await getPublicById(db, "clone-deck")).toBeNull();
+      expect(await getPublicById(db, "down-deck")).toBeNull();
     });
   });
 
@@ -328,7 +260,7 @@ describe("덱 쓰기 헬퍼 (M3-B 보관함 동기화)", () => {
   });
 
   it("새 덱을 삽입하고 슬라이드·스타일을 보존한다", async () => {
-    expect(await upsertDeck(db, ownerId, makeDeck(ownerId))).toBe(true);
+    expect(await upsertDeck(db, ownerId, makeDeck(ownerId))).not.toBeNull();
 
     const saved = await readDeck(DECK_ID);
     expect(saved.title).toBe("은혜로다");
@@ -359,8 +291,131 @@ describe("덱 쓰기 헬퍼 (M3-B 보관함 동기화)", () => {
 
     expect(
       await upsertDeck(db, strangerId, makeDeck(strangerId, { title: "탈취" })),
-    ).toBe(false);
+    ).toBeNull();
     expect((await readDeck(DECK_ID)).title).toBe("은혜로다");
+  });
+
+  it("저장된 덱을 돌려준다", async () => {
+    const saved = await upsertDeck(db, ownerId, makeDeck(ownerId));
+    expect(saved?.id).toBe(DECK_ID);
+    expect(saved?.userId).toBe(ownerId);
+    expect(saved?.origin).toBe("user");
+  });
+
+  describe("서버 소유 공유 필드 (M5)", () => {
+    it("새 덱은 클라이언트가 무엇을 보내든 비공개·0회·루트로 저장된다", async () => {
+      const saved = await upsertDeck(
+        db,
+        ownerId,
+        makeDeck(ownerId, {
+          visibility: "public",
+          forkCount: 999,
+          origin: "catalog",
+          forkedFrom: "c0000000-0000-4000-8000-000000000099",
+          forkedFromAuthorName: "사칭",
+          publishedAt: "2026-09-22T00:00:00.000Z",
+        }),
+      );
+      expect(saved).toMatchObject({
+        visibility: "private",
+        forkCount: 0,
+        origin: "user",
+        forkedFrom: null,
+        forkedFromAuthorName: null,
+        publishedAt: null,
+        takedownAt: null,
+      });
+    });
+
+    it("기존 덱을 갱신해도 서버 값이 유지된다", async () => {
+      await upsertDeck(db, ownerId, makeDeck(ownerId));
+      const publishedAt = new Date("2026-09-22T00:00:00.000Z");
+      await db
+        .update(decks)
+        .set({
+          visibility: "public",
+          forkCount: 3,
+          origin: "fork",
+          forkedFrom: "c0000000-0000-4000-8000-000000000099",
+          forkedFromAuthorName: "원작자",
+          publishedAt,
+        })
+        .where(eq(decks.id, DECK_ID));
+
+      const saved = await upsertDeck(
+        db,
+        ownerId,
+        makeDeck(ownerId, {
+          title: "제목만 바꿈",
+          visibility: "private",
+          forkCount: 999,
+          origin: "user",
+          forkedFrom: null,
+          publishedAt: null,
+        }),
+      );
+      expect(saved).toMatchObject({
+        title: "제목만 바꿈",
+        visibility: "public",
+        forkCount: 3,
+        origin: "fork",
+        forkedFrom: "c0000000-0000-4000-8000-000000000099",
+        forkedFromAuthorName: "원작자",
+        publishedAt: publishedAt.toISOString(),
+      });
+    });
+
+    it("보관함 경로로 세트 복제본을 만들 수 없다", async () => {
+      const saved = await upsertDeck(
+        db,
+        ownerId,
+        makeDeck(ownerId, {
+          scope: "presentation",
+          presentationId: "10000000-0000-4000-8000-000000000001",
+        }),
+      );
+      expect(saved?.scope).toBe("library");
+      expect(saved?.presentationId).toBeNull();
+    });
+
+    it("기여 여부는 클라이언트가 정한다", async () => {
+      const saved = await upsertDeck(
+        db,
+        ownerId,
+        makeDeck(ownerId, { contributeToCatalog: true }),
+      );
+      expect(saved?.contributeToCatalog).toBe(true);
+    });
+
+    it("서버가 붙인 카탈로그 연결을 클라이언트의 null이 끊지 않고, 모르는 id는 떨군다", async () => {
+      const catalogId = "d0000000-0000-4000-8000-000000000001";
+      await db.insert(lyricsCatalog).values({
+        id: catalogId,
+        title: "은혜로다",
+        artist: "예수전도단",
+        titleNorm: "은혜로다",
+        artistNorm: "예수전도단",
+        lyricsCanonical: "시작됐네",
+      });
+      await upsertDeck(db, ownerId, makeDeck(ownerId, { catalogId }));
+      expect(
+        (await upsertDeck(db, ownerId, makeDeck(ownerId, { catalogId: null })))
+          ?.catalogId,
+      ).toBe(catalogId);
+
+      await db.delete(decks);
+      expect(
+        (
+          await upsertDeck(
+            db,
+            ownerId,
+            makeDeck(ownerId, {
+              catalogId: "d0000000-0000-4000-8000-00000000dead",
+            }),
+          )
+        )?.catalogId,
+      ).toBeNull();
+    });
   });
 
   it("삭제는 소유자에게만 허용된다", async () => {

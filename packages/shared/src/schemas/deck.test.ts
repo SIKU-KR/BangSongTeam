@@ -1,5 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { DeckSchema, DeckScopeSchema, DeckVisibilitySchema } from "./deck";
+import {
+  DeckOriginSchema,
+  DeckSchema,
+  DeckScopeSchema,
+  DeckVisibilitySchema,
+} from "./deck";
 
 describe("DeckSchema", () => {
   it("validates DeckScopeSchema options", () => {
@@ -38,6 +43,30 @@ describe("DeckSchema", () => {
     expect(parsed.forkCount).toBe(0);
     expect(parsed.style.fontFamily).toBe("Pretendard");
     expect(parsed.slides[0].id).toMatch(/^s_/);
+  });
+
+  it("parses old payloads without M5 sharing fields", () => {
+    const parsed = DeckSchema.parse(sampleDeck);
+    expect(parsed.origin).toBeUndefined();
+    expect(parsed.contributeToCatalog).toBeUndefined();
+    expect(parsed.publishedAt).toBeUndefined();
+  });
+
+  it("accepts M5 sharing fields", () => {
+    const parsed = DeckSchema.parse({
+      ...sampleDeck,
+      contributeToCatalog: true,
+      origin: "fork",
+      forkedFromAuthorName: "김찬양",
+      publishedAt: "2026-09-23T00:00:00.000Z",
+      takedownAt: null,
+    });
+    expect(parsed.origin).toBe("fork");
+    expect(parsed.forkedFromAuthorName).toBe("김찬양");
+    expect(DeckOriginSchema.options).toEqual(["user", "fork", "catalog"]);
+    expect(() =>
+      DeckSchema.parse({ ...sampleDeck, origin: "crawl" }),
+    ).toThrow();
   });
 
   it("allows presentation scope and presentationId", () => {

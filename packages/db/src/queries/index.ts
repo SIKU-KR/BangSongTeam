@@ -3,3 +3,6 @@ export * from "./decks";
 export * from "./lyrics";
 export * from "./presentations";
 export * from "./backgrounds";
+export * from "./catalogRefs";
+export * from "./search";
+export * from "./publicScope";

@@ -3,6 +3,7 @@ import { DeckStyleSchema } from "./style";
 import { SlideSchema } from "./slide";
 import { DeckSchema } from "./deck";
 import { PresentationSchema, PresentationItemSchema } from "./presentation";
+import { CatalogLyricSummarySchema, PublicDeckSummarySchema } from "./library";
 
 // 1. 덱 생성 요청
 export const CreateDeckRequestSchema = z.object({
@@ -45,35 +46,20 @@ export type UpdatePresentationItemsRequest = z.infer<
   typeof UpdatePresentationItemsRequestSchema
 >;
 
-// 5. 통합 검색 쿼리 및 응답
+// 5. 통합 검색 쿼리 및 응답 (M5)
+//
+// 로그인 없이 열리는 공개 경로다. 그래서 응답은 로그인 여부와 무관하게
+// 미리보기(첫 슬라이드 / 첫 2줄)만 담는다. 전문은 로그인 후 상세 조회로만 준다.
 export const SearchCatalogQuerySchema = z.object({
-  q: z.string().min(1).max(50),
+  /** 빈 문자열이면 가져간 횟수순 '둘러보기' */
+  q: z.string().trim().max(50).default(""),
   limit: z.coerce.number().int().min(1).max(50).default(20),
 });
 export type SearchCatalogQuery = z.infer<typeof SearchCatalogQuerySchema>;
 
 export const SearchCatalogResponseSchema = z.object({
-  decks: z.array(
-    z.object({
-      id: z.string().uuid(),
-      title: z.string(),
-      artist: z.string(),
-      forkCount: z.number(),
-      backgroundId: z.string().uuid().nullable(),
-      posterUrl: z.string().nullable(),
-      firstSlidePreview: z.array(z.string()), // 첫 슬라이드만 공개 (저작권 보호)
-    }),
-  ),
-  catalogLyrics: z.array(
-    z.object({
-      id: z.string().uuid(),
-      title: z.string(),
-      artist: z.string(),
-      versionCount: z.number(),
-      status: z.enum(["single", "normalized", "locked"]),
-      twoLinesPreview: z.array(z.string()), // 첫 2줄만 공개
-    }),
-  ),
+  decks: z.array(PublicDeckSummarySchema),
+  catalogLyrics: z.array(CatalogLyricSummarySchema),
 });
 export type SearchCatalogResponse = z.infer<typeof SearchCatalogResponseSchema>;
 

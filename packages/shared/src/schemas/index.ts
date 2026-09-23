@@ -5,4 +5,5 @@ export * from "./presentation";
 export * from "./media";
 export * from "./catalog";
 export * from "./broadcast";
+export * from "./library";
 export * from "./api";
