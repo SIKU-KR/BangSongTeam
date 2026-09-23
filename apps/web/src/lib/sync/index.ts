@@ -11,6 +11,8 @@ export {
   pullPresentations,
   pushDeck,
   pullDecks,
+  deleteDeckRemote,
+  ServerRejectedError,
   toSyncableDocument,
   SessionExpiredError,
   OfflineError,
@@ -23,4 +25,19 @@ export {
   __setPusherForTests,
 } from "./syncScheduler";
 export { mergeDocuments, type MergeResult } from "./mergeDocuments";
-export { runBootSync } from "./bootSync";
+export { runBootSync, shouldRunBootSync } from "./bootSync";
+export {
+  scheduleDeckPush,
+  scheduleDeckDelete,
+  pushDeckNow,
+  flushDeckSync,
+  setDeckSyncEnabled,
+  setServerDeckListener,
+  __setDeckTransportForTests,
+  __resetDeckSyncForTests,
+} from "./deckSync";
+export {
+  mergeLibraryDecks,
+  withServerFields,
+  type LibraryMergeResult,
+} from "./mergeLibraryDecks";

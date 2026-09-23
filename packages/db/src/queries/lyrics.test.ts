@@ -1,8 +1,9 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { eq } from "drizzle-orm";
 import { createTestDb } from "../test-utils";
-import { user, lyricsCatalog, lyricsVersions } from "../schema";
-import { contributeLyrics } from "./lyrics";
+import { DEFAULT_DECK_STYLE, DeckSchema, type Deck } from "@repo/shared";
+import { user, lyricsCatalog, lyricsVersions, decks } from "../schema";
+import { contributeLyrics, shouldContribute } from "./lyrics";
 
 describe("가사 카탈로그 기여", () => {
   let db: ReturnType<typeof createTestDb>["db"];
@@ -176,5 +177,146 @@ describe("가사 카탈로그 기여", () => {
     });
 
     expect(a.catalogId).not.toBe(b.catalogId);
+  });
+
+  describe("M5 확장", () => {
+    const base = {
+      userId: userA,
+      deckId: "deck-1",
+      title: "은혜로다",
+      artist: "예수전도단",
+      lyrics: "시작됐네",
+    };
+
+    it("버전이 새로 생기거나 가사가 바뀌었을 때만 changed다", async () => {
+      expect((await contributeLyrics(db, base)).changed).toBe(true);
+      expect((await contributeLyrics(db, base)).changed).toBe(false);
+      expect(
+        (await contributeLyrics(db, { ...base, lyrics: "고친 가사" })).changed,
+      ).toBe(true);
+    });
+
+    it("등록 1명인 곡은 등록자가 고친 가사를 대표 가사로 따라간다", async () => {
+      const { catalogId } = await contributeLyrics(db, base);
+      await contributeLyrics(db, { ...base, lyrics: "고친 가사" });
+      const [catalog] = await db
+        .select()
+        .from(lyricsCatalog)
+        .where(eq(lyricsCatalog.id, catalogId));
+      expect(catalog.lyricsCanonical).toBe("고친 가사");
+      expect(catalog.canonicalSource).toBe("user");
+    });
+
+    it("사용자가 고른 후보 카탈로그로 묶는다 (아티스트 표기가 달라도)", async () => {
+      const first = await contributeLyrics(db, base);
+      const second = await contributeLyrics(db, {
+        ...base,
+        userId: userB,
+        deckId: "deck-2",
+        artist: "YWAM",
+        preferredCatalogId: first.catalogId,
+      });
+      expect(second.catalogId).toBe(first.catalogId);
+      expect(second.versionCount).toBe(2);
+    });
+
+    it("제목이 다른 곡을 후보로 골라도 그 곡으로는 묶지 않는다", async () => {
+      const other = await contributeLyrics(db, {
+        ...base,
+        title: "소원",
+        artist: "한웅재",
+      });
+      const mine = await contributeLyrics(db, {
+        ...base,
+        userId: userB,
+        deckId: "deck-2",
+        preferredCatalogId: other.catalogId,
+      });
+      expect(mine.catalogId).not.toBe(other.catalogId);
+    });
+
+    it("존재하지 않는 후보 id는 무시하고 정규화 키로 찾는다", async () => {
+      const first = await contributeLyrics(db, base);
+      const second = await contributeLyrics(db, {
+        ...base,
+        userId: userB,
+        deckId: "deck-2",
+        preferredCatalogId: "d0000000-0000-4000-8000-00000000dead",
+      });
+      expect(second.catalogId).toBe(first.catalogId);
+    });
+
+    it("덱의 제목이 바뀌어 다른 곡이 되면 옛 곡에서 표를 거둔다", async () => {
+      const old = await contributeLyrics(db, base);
+      await contributeLyrics(db, { ...base, userId: userB, deckId: "deck-2" });
+
+      const moved = await contributeLyrics(db, {
+        ...base,
+        title: "은혜로다 (Live)",
+      });
+      expect(moved.catalogId).not.toBe(old.catalogId);
+
+      const [oldCatalog] = await db
+        .select()
+        .from(lyricsCatalog)
+        .where(eq(lyricsCatalog.id, old.catalogId));
+      expect(oldCatalog.versionCount).toBe(1);
+      const versions = await db
+        .select()
+        .from(lyricsVersions)
+        .where(eq(lyricsVersions.catalogId, old.catalogId));
+      expect(versions.map((v) => v.userId)).toEqual([userB]);
+    });
+
+    it("덱에 카탈로그 연결을 되써 준다 (소유자 범위)", async () => {
+      const deckId = "c0000000-0000-4000-8000-000000000001";
+      await db.insert(decks).values({
+        id: deckId,
+        userId: userA,
+        title: "은혜로다",
+        lyricsRaw: "시작됐네",
+        slides: "[]",
+        style: "{}",
+      });
+      const { catalogId } = await contributeLyrics(db, { ...base, deckId });
+      const [row] = await db.select().from(decks).where(eq(decks.id, deckId));
+      expect(row.catalogId).toBe(catalogId);
+    });
+  });
+});
+
+describe("shouldContribute (루트 버전 판정)", () => {
+  function deck(overrides: Partial<Deck> = {}): Deck {
+    return DeckSchema.parse({
+      id: "c0000000-0000-4000-8000-000000000001",
+      userId: "00000000-0000-4000-8000-000000000001",
+      scope: "library",
+      title: "은혜로다",
+      lyricsRaw: "시작됐네",
+      slides: [],
+      backgroundId: null,
+      style: DEFAULT_DECK_STYLE,
+      origin: "user",
+      contributeToCatalog: true,
+      createdAt: "2026-09-20T00:00:00.000Z",
+      updatedAt: "2026-09-21T00:00:00.000Z",
+      ...overrides,
+    });
+  }
+
+  it("직접 등록한 보관함 곡이 기여를 켰으면 루트다", () => {
+    expect(shouldContribute(deck())).toBe(true);
+    expect(shouldContribute(deck({ origin: undefined }))).toBe(true);
+  });
+
+  it("포크본·대표 가사로 만든 덱·세트 복제본·기여 끔·빈 가사는 루트가 아니다", () => {
+    expect(shouldContribute(deck({ origin: "fork" }))).toBe(false);
+    expect(shouldContribute(deck({ origin: "catalog" }))).toBe(false);
+    expect(shouldContribute(deck({ scope: "presentation" }))).toBe(false);
+    expect(shouldContribute(deck({ contributeToCatalog: false }))).toBe(false);
+    expect(shouldContribute(deck({ contributeToCatalog: undefined }))).toBe(
+      false,
+    );
+    expect(shouldContribute(deck({ lyricsRaw: "  \n " }))).toBe(false);
   });
 });

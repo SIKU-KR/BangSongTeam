@@ -5,12 +5,37 @@ import {
 import { savePresentation } from "../storage";
 import { mergeDocuments } from "./mergeDocuments";
 import {
+  getUserSongs,
+  applyServerLibraryDecks,
+  applyServerDeckFields,
+} from "../../features/editor/songLibraryStore";
+import { mergeLibraryDecks } from "./mergeLibraryDecks";
+import {
   pullPresentations,
   pushPresentation,
+  pullDecks,
   OfflineError,
 } from "./presentationSync";
 import { setSyncStatus } from "./syncStatus";
 import { setSyncEnabled } from "./syncScheduler";
+import {
+  setDeckSyncEnabled,
+  setServerDeckListener,
+  pushDeckNow,
+} from "./deckSync";
+
+/**
+ * 송출 화면(청중 전체화면·발표자 보기 조작 창)에서는 부팅 동기화를 돌리지 않는다.
+ *
+ * 발표자 보기가 `window.open`으로 연 청중 창은 새 문서라 부팅 경로를 처음부터
+ * 다시 탄다. 여기서 서버와 맞추면 송출 중 네트워크 요청 0건(M4-5 Zero-Fetch)이
+ * 깨진다. 예배 준비(`/ready`)는 온라인 단계이므로 그대로 동기화한다.
+ */
+const PROJECTION_ROUTE = /^\/present\/[^/]+\/(fullscreen|control)\/?$/;
+
+export function shouldRunBootSync(pathname: string): boolean {
+  return !PROJECTION_ROUTE.test(pathname);
+}
 
 /**
  * 부팅 시 서버와 한 번 맞춘다.
@@ -23,6 +48,8 @@ import { setSyncEnabled } from "./syncScheduler";
  */
 export async function runBootSync(): Promise<void> {
   setSyncEnabled(true);
+  setDeckSyncEnabled(true);
+  setServerDeckListener(applyServerDeckFields);
 
   let serverDocuments;
   try {
@@ -66,5 +93,33 @@ export async function runBootSync(): Promise<void> {
     }
   }
 
-  setSyncStatus(offline ? "offline" : "synced");
+  // 보관함 곡 (M5-2). 공유·가져오기는 보관함 덱이 서버에 있어야 성립한다.
+  const deckOffline = await syncLibraryDecks();
+
+  setSyncStatus(offline || deckOffline ? "offline" : "synced");
+}
+
+/** @returns 오프라인이었는지 */
+async function syncLibraryDecks(): Promise<boolean> {
+  let serverDecks;
+  try {
+    serverDecks = await pullDecks();
+  } catch (err) {
+    return err instanceof OfflineError;
+  }
+
+  const { decks, needsPush } = mergeLibraryDecks(getUserSongs(), serverDecks);
+  await applyServerLibraryDecks(decks);
+
+  let offline = false;
+  for (const id of needsPush) {
+    const deck = decks.find((candidate) => candidate.id === id);
+    if (!deck) continue;
+    try {
+      await pushDeckNow(deck);
+    } catch (err) {
+      if (err instanceof OfflineError) offline = true;
+    }
+  }
+  return offline;
 }

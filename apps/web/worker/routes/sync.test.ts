@@ -1,7 +1,5 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { env } from "cloudflare:test";
-import { Hono } from "hono";
-import { zValidator } from "@hono/zod-validator";
 import {
   DEFAULT_DECK_STYLE,
   DeckSchema,
@@ -9,20 +7,11 @@ import {
   type Deck,
   type PresentationDocument,
 } from "@repo/shared";
-import {
-  createD1Client,
-  getPresentationDocumentsByUserId,
-  upsertPresentationDocument,
-  deletePresentation,
-  getMyLibraryDecks,
-  upsertDeck,
-  deleteDeckScoped,
-  toSharedDeck,
-} from "@repo/db";
+import { createD1Client } from "@repo/db";
 import { user, backgrounds } from "@repo/db";
 import { INITIAL_BACKGROUNDS } from "@repo/shared";
-import type { AppEnv } from "../types";
-import { createRequireAuth, type SessionReader } from "../middleware/auth";
+import { createApp } from "../index";
+import type { SessionReader } from "../middleware/auth";
 
 /**
  * 동기화 라우트의 교차 사용자 격리 검증.
@@ -32,7 +21,7 @@ import { createRequireAuth, type SessionReader } from "../middleware/auth";
  * 라우트 레벨에서 고정해 둔다.
  *
  * 실제 세션 발급(OAuth 왕복)은 여기서 재현할 수 없으므로 세션 리더만
- * 주입하고, 그 아래 경로는 프로덕션과 동일한 라우트 구현을 그대로 쓴다.
+ * 주입하고(`createApp({ readSession })`), 그 아래는 프로덕션 라우트를 그대로 쓴다.
  */
 
 const USER_A = "aaaaaaaa-0000-4000-8000-000000000001";
@@ -42,82 +31,6 @@ let currentUser: string | null = USER_A;
 
 const fakeSession: SessionReader = async () =>
   currentUser ? { userId: currentUser } : null;
-
-/** 프로덕션 라우트와 같은 핸들러에 가짜 세션만 끼운 앱 */
-function buildApp() {
-  const requireAuth = createRequireAuth(fakeSession);
-
-  const presentations = new Hono<AppEnv>()
-    .use("*", requireAuth)
-    .get("/", async (c) => {
-      const db = createD1Client(c.env.DB);
-      return c.json(
-        {
-          presentations: await getPresentationDocumentsByUserId(
-            db,
-            c.get("userId") as string,
-          ),
-        },
-        200,
-      );
-    })
-    .put("/:id", zValidator("json", PresentationDocumentSchema), async (c) => {
-      const db = createD1Client(c.env.DB);
-      const saved = await upsertPresentationDocument(
-        db,
-        c.get("userId") as string,
-        c.req.valid("json"),
-      );
-      return saved
-        ? c.json({ ok: true as const }, 200)
-        : c.json({ error: "forbidden" }, 403);
-    })
-    .delete("/:id", async (c) => {
-      const db = createD1Client(c.env.DB);
-      const removed = await deletePresentation(
-        db,
-        c.req.param("id"),
-        c.get("userId") as string,
-      );
-      return removed
-        ? c.json({ ok: true as const }, 200)
-        : c.json({ error: "not found" }, 404);
-    });
-
-  const decksApi = new Hono<AppEnv>()
-    .use("*", requireAuth)
-    .get("/", async (c) => {
-      const db = createD1Client(c.env.DB);
-      const rows = await getMyLibraryDecks(db, c.get("userId") as string);
-      return c.json({ decks: rows.map(toSharedDeck) }, 200);
-    })
-    .put("/:id", zValidator("json", DeckSchema), async (c) => {
-      const db = createD1Client(c.env.DB);
-      const saved = await upsertDeck(
-        db,
-        c.get("userId") as string,
-        c.req.valid("json"),
-      );
-      return saved
-        ? c.json({ ok: true as const }, 200)
-        : c.json({ error: "forbidden" }, 403);
-    })
-    .delete("/:id", async (c) => {
-      const db = createD1Client(c.env.DB);
-      const removed = await deleteDeckScoped(
-        db,
-        c.req.param("id"),
-        c.get("userId") as string,
-      );
-      return removed
-        ? c.json({ ok: true as const }, 200)
-        : c.json({ error: "not found" }, 404);
-    });
-
-  return new Hono<AppEnv>()
-    .route("/api/presentations", presentations)
-    .route("/api/decks", decksApi);
-}
 
 const DOC_ID = "10000000-0000-4000-8000-0000000000aa";
 const DECK_ID = "c0000000-0000-4000-8000-0000000000aa";
@@ -165,7 +78,8 @@ function makeDoc(userId: string): PresentationDocument {
   });
 }
 
-const app = buildApp();
+/** 실제 라우트에 가짜 세션만 끼운 앱 */
+const app = createApp({ readSession: fakeSession });
 
 function json(body: unknown) {
   return {

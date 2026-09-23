@@ -1,4 +1,4 @@
-import { and, desc, eq, sql, type SQL } from "drizzle-orm";
+import { and, desc, eq, gt, sql, type SQL } from "drizzle-orm";
 import {
   decks,
   lyricsCatalog,
@@ -144,7 +144,8 @@ export async function searchCatalog(
   const plan = planSearch(query);
   if (plan.kind === "nothing") return [];
 
-  const conditions: SQL[] = [];
+  // 등록자가 0명인 곡은 첫 기여가 중간에 실패해 남은 빈 껍데기다 (D1에는 트랜잭션이 없다)
+  const conditions: SQL[] = [gt(lyricsCatalog.versionCount, 0)];
   if (plan.kind === "search") {
     if (plan.match) {
       conditions.push(
@@ -164,7 +165,7 @@ export async function searchCatalog(
   return db
     .select()
     .from(lyricsCatalog)
-    .where(conditions.length > 0 ? and(...conditions) : undefined)
+    .where(and(...conditions))
     .orderBy(desc(lyricsCatalog.versionCount), desc(lyricsCatalog.updatedAt))
     .limit(limit);
 }

@@ -36,6 +36,8 @@ export function SongPickerModal({
   const [newTitle, setNewTitle] = useState("");
   const [newArtist, setNewArtist] = useState("");
   const [newLyrics, setNewLyrics] = useState("");
+  // '가사 라이브러리에 기여' — 기본 켜짐 (PRD 4.8). 끄면 개인 보관함에만 저장된다.
+  const [contributeToCatalog, setContributeToCatalog] = useState(true);
 
   useEffect(() => {
     if (isOpen) {
@@ -135,12 +137,14 @@ export function SongPickerModal({
       title: newTitle.trim(),
       artist: newArtist.trim(),
       lyricsRaw: newLyrics,
+      contributeToCatalog,
     });
     onSelectSong(saved);
     // 폼 초기화 후 닫기
     setNewTitle("");
     setNewArtist("");
     setNewLyrics("");
+    setContributeToCatalog(true);
     onClose();
   };
 
@@ -455,6 +459,25 @@ export function SongPickerModal({
                     className="flex-1 w-full p-4 text-xs font-mono leading-relaxed bg-white dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 rounded-xl text-zinc-900 dark:text-white placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-none"
                   />
                 </div>
+
+                <label className="flex items-start gap-2 text-xs text-zinc-700 dark:text-zinc-300 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    data-testid="song-picker-create-contribute-checkbox"
+                    checked={contributeToCatalog}
+                    onChange={(e) => setContributeToCatalog(e.target.checked)}
+                    className="mt-0.5 accent-emerald-600"
+                  />
+                  <span>
+                    <span className="font-semibold">
+                      가사 라이브러리에 기여
+                    </span>
+                    <span className="block text-zinc-500">
+                      같은 곡을 등록한 사람들의 가사를 모아 대표 가사를
+                      만듭니다. 끄면 내 보관함에만 저장됩니다.
+                    </span>
+                  </span>
+                </label>
 
                 <div className="pt-2 flex items-center justify-end gap-2.5">
                   <button

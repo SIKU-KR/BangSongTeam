@@ -151,7 +151,36 @@ describe("SongPickerModal", () => {
     expect(addedSong.title).toBe("새로운 찬양");
     expect(addedSong.artist).toBe("사명자");
     expect(addedSong.slides.length).toBe(2);
+    // '가사 라이브러리에 기여'는 기본 켜짐이다 (PRD 4.8)
+    expect(addedSong.contributeToCatalog).toBe(true);
     expect(onCloseMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("'가사 라이브러리에 기여'를 끄면 개인 보관함에만 저장한다", () => {
+    render(
+      <SongPickerModal
+        isOpen={true}
+        onClose={onCloseMock}
+        onSelectSong={onSelectSongMock}
+      />,
+    );
+    fireEvent.click(screen.getByTestId("song-picker-switch-create-btn"));
+
+    const checkbox = screen.getByTestId(
+      "song-picker-create-contribute-checkbox",
+    );
+    expect(checkbox).toBeChecked();
+    fireEvent.click(checkbox);
+
+    fireEvent.change(screen.getByTestId("song-picker-create-title-input"), {
+      target: { value: "개인 곡" },
+    });
+    fireEvent.change(screen.getByTestId("song-picker-create-lyrics-input"), {
+      target: { value: "한 줄" },
+    });
+    fireEvent.click(screen.getByTestId("song-picker-create-submit-btn"));
+
+    expect(onSelectSongMock.mock.calls[0][0].contributeToCatalog).toBe(false);
   });
 
   describe("공유 찬양 가사 전문 노출 및 검색 (에디터 내 전면 제공)", () => {

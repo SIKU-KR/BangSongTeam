@@ -7,7 +7,12 @@ import {
 } from "./features/presentation";
 import { hydrateSongLibrary } from "./features/editor";
 import { hydrateSession, useSession } from "./lib/auth";
-import { runBootSync, flushPendingSync } from "./lib/sync";
+import {
+  runBootSync,
+  shouldRunBootSync,
+  flushPendingSync,
+  flushDeckSync,
+} from "./lib/sync";
 import { LoginRoute } from "./routes/LoginRoute";
 import {
   AppShellLayout,
@@ -66,7 +71,10 @@ function useHydration(): boolean {
 
       // 서버 병합은 화면을 그린 뒤 백그라운드로 돌린다. 네트워크가 느린
       // 교회에서 첫 화면이 그만큼 늦어지면 안 된다.
-      void runBootSync();
+      //
+      // 송출 화면으로 바로 열린 창(발표자 보기의 청중 창 등)에서는 돌리지 않는다.
+      // 동기화가 꺼진 채로 남으므로 그 창에서는 서버 push도 일어나지 않는다.
+      if (shouldRunBootSync(window.location.pathname)) void runBootSync();
     })();
     return () => {
       cancelled = true;
@@ -79,6 +87,7 @@ function useHydration(): boolean {
     const flush = (): void => {
       void flushPendingWrites();
       void flushPendingSync();
+      void flushDeckSync();
     };
     const onVisibilityChange = (): void => {
       if (document.visibilityState === "hidden") flush();

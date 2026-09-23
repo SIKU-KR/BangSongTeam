@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { signInAsTestUser } from "../../test/sessionFixture";
 import { DEFAULT_DECK_STYLE } from "@repo/shared";
 import {
@@ -14,7 +14,17 @@ import {
   resetSongLibraryStore,
   getAvailableSongs,
   hydrateSongLibrary,
+  upsertLibraryDeck,
+  applyServerDeckFields,
+  applyServerLibraryDecks,
+  getLibraryDeck,
 } from "./songLibraryStore";
+import {
+  flushDeckSync,
+  setDeckSyncEnabled,
+  __setDeckTransportForTests,
+  __resetDeckSyncForTests,
+} from "../../lib/sync/deckSync";
 
 async function resetDatabase(): Promise<void> {
   closeOfflineDB();
@@ -34,7 +44,10 @@ describe("songLibraryStore", () => {
     await resetSongLibraryStore();
   });
 
-  afterEach(closeOfflineDB);
+  afterEach(() => {
+    closeOfflineDB();
+    __resetDeckSyncForTests();
+  });
 
   it("새로운 곡을 저장하고 내 곡 목록에서 조회할 수 있어야 한다", () => {
     expect(getUserSongs()).toEqual([]);
@@ -142,5 +155,88 @@ describe("songLibraryStore", () => {
     // 원본은 지우지 않고 백업 키로 남긴다 (손상 항목 복구 가능)
     expect(localStorage.getItem(LEGACY_SONGS_KEY)).toBeNull();
     expect(localStorage.getItem(LEGACY_SONGS_BACKUP_KEY)).not.toBeNull();
+  });
+
+  describe("서버 동기화 (M5-2)", () => {
+    let push: ReturnType<typeof vi.fn>;
+    let remove: ReturnType<typeof vi.fn>;
+
+    beforeEach(() => {
+      push = vi.fn(async (deck) => deck);
+      remove = vi.fn(async () => {});
+      __setDeckTransportForTests({ push, remove });
+      setDeckSyncEnabled(true);
+    });
+
+    it("새 곡은 기여 기본 켜짐·루트로 저장되고 서버 push가 예약된다", async () => {
+      const saved = saveSongToLibrary({
+        title: "소원",
+        lyricsRaw: "삶의 작은 일에도",
+      });
+      expect(saved.contributeToCatalog).toBe(true);
+      expect(saved.origin).toBe("user");
+
+      await flushDeckSync();
+      expect(push).toHaveBeenCalledTimes(1);
+      expect(push.mock.calls[0][0].id).toBe(saved.id);
+    });
+
+    it("기여를 끄고 후보 카탈로그를 고를 수 있다", () => {
+      const saved = saveSongToLibrary({
+        title: "소원",
+        lyricsRaw: "삶의 작은 일에도",
+        contributeToCatalog: false,
+        catalogId: "d0000000-0000-4000-8000-000000000001",
+      });
+      expect(saved.contributeToCatalog).toBe(false);
+      expect(saved.catalogId).toBe("d0000000-0000-4000-8000-000000000001");
+    });
+
+    it("삭제하면 서버 삭제가 예약된다", async () => {
+      const saved = saveSongToLibrary({ title: "삭제", lyricsRaw: "가사" });
+      deleteUserSong(saved.id);
+      await flushDeckSync();
+      expect(remove).toHaveBeenCalledWith(saved.id);
+    });
+
+    it("upsertLibraryDeck은 push 여부를 고를 수 있다", async () => {
+      const saved = saveSongToLibrary({ title: "원본", lyricsRaw: "가사" });
+      await flushDeckSync();
+      push.mockClear();
+
+      upsertLibraryDeck({ ...saved, title: "가져온 곡" }, { push: false });
+      await flushDeckSync();
+      expect(push).not.toHaveBeenCalled();
+      expect(getLibraryDeck(saved.id)?.title).toBe("가져온 곡");
+    });
+
+    it("서버가 확정한 공유 필드만 입히고 내용은 로컬을 지킨다", () => {
+      const saved = saveSongToLibrary({
+        title: "로컬 제목",
+        lyricsRaw: "가사",
+      });
+      applyServerDeckFields({
+        ...saved,
+        title: "늦게 도착한 옛 제목",
+        visibility: "public",
+        forkCount: 5,
+        catalogId: "d0000000-0000-4000-8000-000000000001",
+      });
+      expect(getLibraryDeck(saved.id)).toMatchObject({
+        title: "로컬 제목",
+        visibility: "public",
+        forkCount: 5,
+        catalogId: "d0000000-0000-4000-8000-000000000001",
+      });
+    });
+
+    it("부팅 병합 결과로 보관함을 교체하고 로컬에 남긴다", async () => {
+      const saved = saveSongToLibrary({ title: "기존", lyricsRaw: "가사" });
+      await applyServerLibraryDecks([{ ...saved, title: "서버에서 받은 곡" }]);
+      expect(getUserSongs().map((d) => d.title)).toEqual(["서버에서 받은 곡"]);
+
+      await hydrateSongLibrary();
+      expect(getUserSongs().map((d) => d.title)).toEqual(["서버에서 받은 곡"]);
+    });
   });
 });
