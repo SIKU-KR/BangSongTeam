@@ -405,11 +405,47 @@ function cloneDeckForPresentation(deck: Deck, presentationId: string): Deck {
     userId: getCurrentUserId() ?? deck.userId,
     scope: "presentation",
     presentationId,
-    // 원본을 가리켜 두면 나중에 '어느 공유 곡에서 왔는지'를 추적할 수 있다.
-    forkedFrom: deck.forkedFrom ?? deck.id,
+    // 세트 복제본의 `forkedFrom`은 '복제해 온 보관함 덱'이다 (M5). 편집기 '공유'가
+    // 이 값으로 보관함 원본을 찾아 그 원본을 공개한다. 세트에서 세트로 옮긴 덱이면
+    // 원래 가리키던 보관함 덱을 그대로 물려받는다.
+    forkedFrom: deck.scope === "library" ? deck.id : (deck.forkedFrom ?? null),
+    // 세트 복제본은 공유 대상이 아니다. 공개 곡을 담아도 복제본은 비공개다
+    // (서버도 강제한다 — M5-1).
+    visibility: "private",
+    forkCount: 0,
+    publishedAt: null,
+    contributeToCatalog: false,
     createdAt: now,
     updatedAt: now,
   };
+}
+
+/**
+ * 세트 곡을 보관함 덱에 연결한다 (M5 공유).
+ *
+ * 붙여넣기로 바로 세트에 넣은 곡처럼 보관함 원본이 없던 곡을 공개하면, 편집기가
+ * 새 보관함 덱을 만들고 이 함수로 연결한다. 다음 공개·'공개본 업데이트'는 같은
+ * 원본을 갱신한다. 내용은 바꾸지 않으므로 되돌리기 기록을 남기지 않는다.
+ */
+export function linkSongToLibraryDeck(
+  songIndex: number,
+  libraryDeckId: string,
+): void {
+  const item = readActive().items[songIndex];
+  if (!item || !item.deck) return;
+  if (item.deck.forkedFrom === libraryDeckId) return;
+
+  const updatedItems = [...readActive().items];
+  updatedItems[songIndex] = {
+    ...item,
+    deck: { ...item.deck, forkedFrom: libraryDeckId },
+  };
+  writeActive({
+    ...readActive(),
+    items: updatedItems,
+    updatedAt: new Date().toISOString(),
+  });
+  emitChange();
 }
 
 /**

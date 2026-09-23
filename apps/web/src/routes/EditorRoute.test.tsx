@@ -4,6 +4,7 @@ import {
   SEED_PRESENTATIONS,
 } from "../features/presentation";
 import { signInAsTestUser } from "../test/sessionFixture";
+import { withQueryClient } from "../test/queryClientFixture";
 import { render, screen, fireEvent, act } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { MemoryRouter, Routes, Route } from "react-router-dom";
@@ -17,15 +18,17 @@ const DOC_ID = SEED_PRESENTATION_IDS[0];
 
 function renderEditor(path = `/editor/${DOC_ID}`) {
   return render(
-    <MemoryRouter initialEntries={[path]}>
-      <Routes>
-        <Route path="/editor/:presentationId" element={<EditorRoute />} />
-        <Route
-          path="/presentations"
-          element={<div data-testid="presentations-stub" />}
-        />
-      </Routes>
-    </MemoryRouter>,
+    withQueryClient(
+      <MemoryRouter initialEntries={[path]}>
+        <Routes>
+          <Route path="/editor/:presentationId" element={<EditorRoute />} />
+          <Route
+            path="/presentations"
+            element={<div data-testid="presentations-stub" />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    ),
   );
 }
 

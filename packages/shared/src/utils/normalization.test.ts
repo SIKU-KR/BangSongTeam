@@ -37,6 +37,13 @@ describe("pickPopularRoot", () => {
     ).toBe("먼저");
   });
 
+  it("is deterministic when whitespace variants were registered at the same time", () => {
+    const at = "2026-09-01T00:00:00Z";
+    const a = { lyrics: "주의 은혜아래", createdAt: at };
+    const b = { lyrics: "주의 은혜 아래", createdAt: at };
+    expect(pickPopularRoot([a, b])).toBe(pickPopularRoot([b, a]));
+  });
+
   it("returns null without versions", () => {
     expect(pickPopularRoot([])).toBeNull();
   });

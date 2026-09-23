@@ -13,6 +13,7 @@ import {
   SEED_USER_ID,
 } from "./mockPresentations";
 import {
+  linkSongToLibraryDeck,
   getActivePresentation,
   addDeckToPresentation,
   resetPresentationStore,
@@ -479,6 +480,69 @@ describe("문서별 Undo/Redo 격리", () => {
     expect(items).toHaveLength(10);
     const deckIds = items.map((item) => item.deck?.id);
     expect(new Set(deckIds).size).toBe(10);
+  });
+
+  describe("공유 필드와 보관함 연결 (M5)", () => {
+    const libraryDeck = () =>
+      DeckSchema.parse({
+        id: "90000000-0000-4000-8000-0000000000aa",
+        userId: SEED_USER_ID,
+        scope: "library",
+        title: "공개된 보관함 곡",
+        lyricsRaw: "가사",
+        slides: [{ id: "s1", order: 0, lines: ["가사"] }],
+        backgroundId: INITIAL_BACKGROUNDS[0].id,
+        style: DEFAULT_DECK_STYLE,
+        visibility: "public",
+        forkCount: 42,
+        origin: "fork",
+        forkedFrom: "90000000-0000-4000-8000-0000000000bb",
+        forkedFromAuthorName: "원작자",
+        publishedAt: "2026-09-22T00:00:00.000Z",
+        contributeToCatalog: true,
+        createdAt: "2026-09-20T00:00:00.000Z",
+        updatedAt: "2026-09-20T00:00:00.000Z",
+      });
+
+    it("세트 복제본은 비공개이고 복제해 온 보관함 덱을 가리킨다", () => {
+      const item = addDeckToPresentation(libraryDeck());
+      expect(item.deck).toMatchObject({
+        visibility: "private",
+        forkCount: 0,
+        publishedAt: null,
+        contributeToCatalog: false,
+        forkedFrom: "90000000-0000-4000-8000-0000000000aa",
+        // 원작 표시는 그대로 물려받는다
+        forkedFromAuthorName: "원작자",
+      });
+    });
+
+    it("세트 덱을 다시 담으면 원래의 보관함 덱을 물려받는다", () => {
+      const first = addDeckToPresentation(libraryDeck());
+      const second = addDeckToPresentation(first.deck!);
+      expect(second.deck?.forkedFrom).toBe(
+        "90000000-0000-4000-8000-0000000000aa",
+      );
+    });
+
+    it("보관함 원본이 없는 세트 곡은 연결하지 않고, 나중에 연결할 수 있다", () => {
+      const pasted = DeckSchema.parse({
+        ...libraryDeck(),
+        id: "90000000-0000-4000-8000-0000000000cc",
+        scope: "presentation",
+        forkedFrom: null,
+      });
+      const item = addDeckToPresentation(pasted);
+      expect(item.deck?.forkedFrom).toBeNull();
+
+      const index = getActivePresentation().items.length - 1;
+      act(() => {
+        linkSongToLibraryDeck(index, "90000000-0000-4000-8000-0000000000dd");
+      });
+      expect(getActivePresentation().items[index].deck?.forkedFrom).toBe(
+        "90000000-0000-4000-8000-0000000000dd",
+      );
+    });
   });
 
   it("샘플 곡은 세션 사용자 소유의 세트 전용 복제본으로 들어간다", () => {

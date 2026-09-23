@@ -15,18 +15,12 @@ import {
   clearPersistenceError,
   reportCorruptedRecords,
 } from "../../lib/storage";
-import { COMMUNITY_SONGS } from "../library/mockCommunityData";
 import { getCurrentUserId } from "../../lib/auth/sessionStore";
 import { scheduleDeckPush, scheduleDeckDelete } from "../../lib/sync/deckSync";
 import { withServerFields } from "../../lib/sync/mergeLibraryDecks";
 
 // 보관함 곡의 소유자는 세션 사용자다. 예전 게스트 상수는 제거했다
 // (로그인이 편집의 전제 조건이 되었다 — 2026-09-22 결정).
-
-export interface AvailableSongItem {
-  deck: Deck;
-  source: "mine" | "community";
-}
 
 /**
  * 보관함 곡은 IndexedDB(`worship-offline-db`의 decks 스토어)에 저장한다.
@@ -214,39 +208,6 @@ export async function resetSongLibraryStore(): Promise<void> {
   }
 }
 
-let cachedAvailableSongs: AvailableSongItem[] = [];
-let cachedUserSongsRef: Deck[] | null = null;
-
-function buildAvailableSongs(userSongs: Deck[]): AvailableSongItem[] {
-  const mine: AvailableSongItem[] = userSongs.map((deck) => ({
-    deck,
-    source: "mine" as const,
-  }));
-
-  const userSongTitles = new Set(
-    userSongs.map((s) => `${s.title.trim()}__${(s.artist ?? "").trim()}`),
-  );
-
-  const community: AvailableSongItem[] = COMMUNITY_SONGS.filter(
-    (cs) =>
-      !userSongTitles.has(`${cs.title.trim()}__${(cs.artist ?? "").trim()}`),
-  ).map((deck) => ({
-    deck,
-    source: "community" as const,
-  }));
-
-  return [...mine, ...community];
-}
-
-/** 사용 가능한 전체 곡 목록 (내 보관함 + 공유 찬양) */
-export function getAvailableSongs(): AvailableSongItem[] {
-  if (cachedUserSongsRef !== userSongsCache) {
-    cachedUserSongsRef = userSongsCache;
-    cachedAvailableSongs = buildAvailableSongs(userSongsCache);
-  }
-  return cachedAvailableSongs;
-}
-
 function subscribe(callback: () => void): () => void {
   listeners.add(callback);
   return () => {
@@ -254,7 +215,21 @@ function subscribe(callback: () => void): () => void {
   };
 }
 
-/** 컴포넌트에서 반응형으로 전체 곡 목록을 구독하는 React Hook */
-export function useAvailableSongs(): AvailableSongItem[] {
-  return useSyncExternalStore(subscribe, getAvailableSongs, getAvailableSongs);
+/**
+ * 내 보관함 곡 목록을 구독한다.
+ *
+ * 공유 곡은 여기 섞지 않는다 (M5). 공유 라이브러리는 서버 검색 결과이고,
+ * 곡 추가 모달이 따로 불러와 보여 준다.
+ */
+export function useUserSongs(): Deck[] {
+  return useSyncExternalStore(subscribe, getUserSongs, getUserSongs);
+}
+
+/** 보관함 곡 1건을 구독한다 (편집기 '공유' 패널의 공개 상태) */
+export function useLibraryDeck(
+  id: string | null | undefined,
+): Deck | undefined {
+  const find = (): Deck | undefined =>
+    id ? userSongsCache.find((deck) => deck.id === id) : undefined;
+  return useSyncExternalStore(subscribe, find, find);
 }

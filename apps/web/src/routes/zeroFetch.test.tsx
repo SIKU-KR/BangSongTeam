@@ -9,6 +9,7 @@ import {
   SEED_PRESENTATION_IDS,
 } from "../features/presentation";
 import { signInAsTestUser } from "../test/sessionFixture";
+import { withQueryClient } from "../test/queryClientFixture";
 import { FullscreenPresentRoute } from "./FullscreenPresentRoute";
 import { PresenterControlRoute } from "./PresenterControlRoute";
 
@@ -115,6 +116,28 @@ describe("송출 라우트 Zero-Fetch 불변식", () => {
     fireEvent.click(screen.getByTestId("presenter-next-btn"));
     fireEvent.click(screen.getByTestId("presenter-lyrics-btn"));
     fireEvent.click(screen.getByTestId("presenter-jump-slide-1-1"));
+
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it("앱처럼 서버 캐시 공급자(QueryClient) 안에 있어도 fetch를 부르지 않는다 (M5)", () => {
+    // App은 로그인 뒤 모든 라우트를 QueryClientProvider로 감싼다. 공급자는 스스로
+    // 요청하지 않고, 송출 화면은 서버 캐시 훅을 import하지 않는다(ESLint 가드).
+    render(
+      withQueryClient(
+        <MemoryRouter initialEntries={[`/present/${DOC_ID}/control`]}>
+          <Routes>
+            <Route
+              path="/present/:presentationId/control"
+              element={<PresenterControlRoute />}
+            />
+          </Routes>
+        </MemoryRouter>,
+      ),
+    );
+    act(() => {
+      dispatchKey("ArrowRight");
+    });
 
     expect(fetchSpy).not.toHaveBeenCalled();
   });

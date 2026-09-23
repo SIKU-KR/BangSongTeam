@@ -21,6 +21,7 @@
     "@hono/zod-validator": "^0.4.3",
     "@repo/db": "workspace:*",
     "@repo/shared": "workspace:*",
+    "@tanstack/react-query": "^5.103.2",
     "better-auth": "^1.7.5",
     "hono": "^4.7.2",
     "idb": "^8.0.3",

@@ -7,6 +7,8 @@ import {
 } from "./features/presentation";
 import { hydrateSongLibrary } from "./features/editor";
 import { hydrateSession, useSession } from "./lib/auth";
+import { QueryClientProvider } from "@tanstack/react-query";
+import { createAppQueryClient } from "./lib/api/queryClient";
 import {
   runBootSync,
   shouldRunBootSync,
@@ -147,35 +149,58 @@ export function App(): React.JSX.Element {
 
   return (
     <ThemeProvider>
-      <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<LandingRoute />} />
+      <AuthedProviders>
+        <BrowserRouter>
+          <Routes>
+            <Route path="/" element={<LandingRoute />} />
 
-          {/* 공유 셸(사이드바 + 히어로 헤더) 아래 중첩 라우트.
+            {/* 공유 셸(사이드바 + 히어로 헤더) 아래 중첩 라우트.
               path 없는 레이아웃 라우트라 자식들은 절대 경로를 그대로 유지한다. */}
-          <Route element={<AppShellLayout />}>
-            <Route path="/presentations" element={<PresentationsRoute />} />
-            <Route path="/lyrics" element={<LyricsRoute />} />
-            <Route path="/backgrounds" element={<BackgroundsRoute />} />
-          </Route>
+            <Route element={<AppShellLayout />}>
+              <Route path="/presentations" element={<PresentationsRoute />} />
+              <Route path="/lyrics" element={<LyricsRoute />} />
+              <Route path="/backgrounds" element={<BackgroundsRoute />} />
+            </Route>
 
-          <Route path="/editor/:presentationId" element={<EditorRoute />} />
-          <Route
-            path="/present/:presentationId/ready"
-            element={<WorshipReadyRoute />}
-          />
-          <Route
-            path="/present/:presentationId/control"
-            element={<PresenterControlRoute />}
-          />
-          <Route
-            path="/present/:presentationId/fullscreen"
-            element={<FullscreenPresentRoute />}
-          />
-          <Route path="*" element={<Navigate to="/presentations" replace />} />
-        </Routes>
-      </BrowserRouter>
+            <Route path="/editor/:presentationId" element={<EditorRoute />} />
+            <Route
+              path="/present/:presentationId/ready"
+              element={<WorshipReadyRoute />}
+            />
+            <Route
+              path="/present/:presentationId/control"
+              element={<PresenterControlRoute />}
+            />
+            <Route
+              path="/present/:presentationId/fullscreen"
+              element={<FullscreenPresentRoute />}
+            />
+            <Route
+              path="*"
+              element={<Navigate to="/presentations" replace />}
+            />
+          </Routes>
+        </BrowserRouter>
+      </AuthedProviders>
     </ThemeProvider>
+  );
+}
+
+/**
+ * 로그인 뒤에만 필요한 공급자.
+ *
+ * QueryClient는 스스로 요청하지 않는다. 훅(곡 추가 모달의 공유 라이브러리 검색 등)이
+ * 쓸 때만 요청이 나간다. 송출 화면은 그 훅을 import하지 않으므로(ESLint 가드)
+ * 이 공급자가 있어도 Zero-Fetch는 유지된다.
+ */
+function AuthedProviders({
+  children,
+}: {
+  children: React.ReactNode;
+}): React.JSX.Element {
+  const [queryClient] = useState(createAppQueryClient);
+  return (
+    <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
   );
 }
 

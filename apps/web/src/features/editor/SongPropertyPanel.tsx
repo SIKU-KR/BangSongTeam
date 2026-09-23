@@ -17,6 +17,8 @@ export interface SongPropertyPanelProps {
   onUpdateStyle: (update: Partial<DeckStyle>) => void;
   onUpdateBackground: (bgId: string) => void;
   onUpdateSlideLines?: (lines: string[]) => void;
+  /** 패널 맨 아래에 붙일 곡 단위 섹션 (편집기 '공유') */
+  footer?: React.ReactNode;
   className?: string;
 }
 
@@ -62,6 +64,7 @@ export function SongPropertyPanel({
   onUpdateStyle,
   onUpdateBackground,
   onUpdateSlideLines,
+  footer,
   className = "",
 }: SongPropertyPanelProps): React.JSX.Element {
   const [isBgModalOpen, setIsBgModalOpen] = useState(false);
@@ -459,6 +462,8 @@ export function SongPropertyPanel({
             />
           </section>
         )}
+
+        {footer}
       </div>
 
       {/* 모션 배경 선택 모달 */}

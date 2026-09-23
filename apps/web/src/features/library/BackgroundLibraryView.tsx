@@ -8,7 +8,7 @@ import {
 import {
   INITIAL_MY_BACKGROUNDS,
   type CustomBackgroundItem,
-} from "./mockCommunityData";
+} from "./mockCustomBackgrounds";
 
 export interface BackgroundLibraryViewProps {
   onApplyBackgroundToCurrentSet?: (backgroundId: string) => void;

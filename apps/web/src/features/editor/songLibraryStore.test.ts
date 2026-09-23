@@ -12,7 +12,6 @@ import {
   saveSongToLibrary,
   deleteUserSong,
   resetSongLibraryStore,
-  getAvailableSongs,
   hydrateSongLibrary,
   upsertLibraryDeck,
   applyServerDeckFields,
@@ -68,10 +67,8 @@ describe("songLibraryStore", () => {
     expect(userSongs[0].title).toBe("꽃들도");
   });
 
-  it("getAvailableSongs()는 내 곡과 커뮤니티 곡을 함께 제공해야 한다", () => {
-    const initialAvailable = getAvailableSongs();
-    expect(initialAvailable.length).toBeGreaterThan(0);
-    expect(initialAvailable.every((s) => s.source === "community")).toBe(true);
+  it("보관함에는 내 곡만 있다 (공유 곡은 서버 검색으로 따로 본다)", () => {
+    expect(getUserSongs()).toEqual([]);
 
     saveSongToLibrary({
       title: "은혜 아래 있네",
@@ -79,9 +76,7 @@ describe("songLibraryStore", () => {
       lyricsRaw: "주의 은혜 아래 나 거하며",
     });
 
-    const updated = getAvailableSongs();
-    expect(updated[0].deck.title).toBe("은혜 아래 있네");
-    expect(updated[0].source).toBe("mine");
+    expect(getUserSongs().map((d) => d.title)).toEqual(["은혜 아래 있네"]);
   });
 
   it("저장된 곡을 삭제할 수 있어야 한다", () => {

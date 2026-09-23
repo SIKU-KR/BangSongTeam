@@ -55,6 +55,7 @@ import { EditorStageCanvas } from "../features/editor/EditorStageCanvas";
 import { SlideFilmstrip } from "../features/editor/SlideFilmstrip";
 import { SongPropertyPanel } from "../features/editor/SongPropertyPanel";
 import { SongPickerModal } from "../features/editor/SongPickerModal";
+import { SongSharePanel } from "../features/sharing/SongSharePanel";
 
 /**
  * Canva / MiriCanvas 스타일 통합 프레젠테이션 편집기 라우트
@@ -390,6 +391,11 @@ export function EditorRoute(): React.JSX.Element {
           }
           onUpdateSlideLines={(lines) =>
             updateSlideLines(safeSongIndex, safeSlideIndex, lines)
+          }
+          footer={
+            currentSong ? (
+              <SongSharePanel songIndex={safeSongIndex} song={currentSong} />
+            ) : null
           }
         />
       </div>

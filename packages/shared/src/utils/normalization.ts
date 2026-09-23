@@ -71,7 +71,12 @@ export function pickPopularRoot(versions: RootVersion[]): string | null {
       groups.set(key, { count: 1, earliest: at, lyrics: version.lyrics });
     } else {
       group.count += 1;
-      if (at < group.earliest) {
+      // 같은 그룹(공백만 다른 버전) 안에서도 대표를 결정론적으로 고른다:
+      // 먼저 등록된 쪽, 같은 초에 등록됐으면 문자열 순서로.
+      if (
+        at < group.earliest ||
+        (at === group.earliest && version.lyrics < group.lyrics)
+      ) {
         group.earliest = at;
         group.lyrics = version.lyrics;
       }
