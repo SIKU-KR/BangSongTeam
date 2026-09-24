@@ -19,7 +19,6 @@ export interface EditorStageCanvasProps {
   onPresent: () => void;
   zoomLevel?: number;
   onZoomChange?: (zoom: number) => void;
-  onLoadSampleSongs?: () => void;
   onOpenLyricModal?: () => void;
   onUpdateStyle?: (update: Partial<DeckStyle>) => void;
   className?: string;
@@ -40,7 +39,6 @@ export function EditorStageCanvas({
   onPresent,
   zoomLevel = 100,
   onZoomChange,
-  onLoadSampleSongs,
   onOpenLyricModal,
   onUpdateStyle,
   className = "",
@@ -83,8 +81,8 @@ export function EditorStageCanvas({
               등록된 찬양 곡 또는 슬라이드가 없습니다
             </h3>
             <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1 max-w-md">
-              새 찬양 가사를 빠른 입력으로 추가하거나, 기본 찬양 프레젠테이션을
-              불러와 프레젠테이션 제작을 시작하세요.
+              새 찬양 가사를 빠른 입력으로 추가하여 프레젠테이션 제작을
+              시작하세요.
             </p>
           </div>
 
@@ -109,16 +107,6 @@ export function EditorStageCanvas({
                   />
                 </svg>
                 <span>가사 붙여넣기로 새 곡 추가</span>
-              </button>
-            )}
-
-            {onLoadSampleSongs && (
-              <button
-                type="button"
-                onClick={onLoadSampleSongs}
-                className="px-4 py-2 rounded-lg bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-800 dark:text-zinc-200 dark:hover:text-white border border-zinc-200 dark:border-zinc-700 font-medium text-xs transition-colors cursor-pointer"
-              >
-                기본 5곡 세트 불러오기
               </button>
             )}
           </div>

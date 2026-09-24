@@ -18,7 +18,6 @@ export interface EditorHeaderProps {
   canRedo?: boolean;
   onNewPresentation?: () => void;
   onOpenLyricModal?: () => void;
-  onLoadSampleSongs?: () => void;
   backPath?: string;
   className?: string;
 }
@@ -73,7 +72,6 @@ export function EditorHeader({
   canRedo = false,
   onNewPresentation,
   onOpenLyricModal,
-  onLoadSampleSongs,
   backPath = "/presentations",
   className = "",
 }: EditorHeaderProps): React.JSX.Element {
@@ -256,32 +254,6 @@ export function EditorHeader({
                     />
                   </svg>
                   <span>가사 빠른 입력</span>
-                </button>
-              )}
-              {onLoadSampleSongs && (
-                <button
-                  type="button"
-                  role="menuitem"
-                  onClick={() => {
-                    setShowFileMenu(false);
-                    onLoadSampleSongs();
-                  }}
-                  className="w-full px-3 py-2 text-left text-zinc-700 hover:text-zinc-900 dark:text-zinc-300 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800 flex items-center gap-2 cursor-pointer"
-                >
-                  <svg
-                    className="w-3.5 h-3.5 text-zinc-500 dark:text-zinc-400"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-                    />
-                  </svg>
-                  <span>기본 5곡 세트 불러오기</span>
                 </button>
               )}
               <div className="my-1 border-t border-zinc-200 dark:border-zinc-800" />

@@ -220,7 +220,9 @@ describe("EditorRoute (PowerPoint식 프레젠테이션 편집기)", () => {
     fireEvent.click(fileMenuBtn);
 
     expect(screen.getByText("새 프레젠테이션")).toBeInTheDocument();
-    expect(screen.getByText("기본 5곡 세트 불러오기")).toBeInTheDocument();
+    expect(
+      screen.queryByText("기본 5곡 세트 불러오기"),
+    ).not.toBeInTheDocument();
   });
 
   it("should maintain correct active slide index when deleting an earlier slide", () => {
@@ -480,31 +482,18 @@ describe("EditorRoute (PowerPoint식 프레젠테이션 편집기)", () => {
       return renderEditor(`/editor/${EMPTY_DOC.id}`);
     }
 
-    it("곡이 없으면 안내와 두 버튼을 보여 준다", () => {
+    it("곡이 없으면 안내와 새 곡 추가 버튼을 보여 준다", () => {
       renderEmptyEditor();
 
       expect(
         screen.getByText("등록된 찬양 곡 또는 슬라이드가 없습니다"),
       ).toBeInTheDocument();
-      expect(screen.getByText("기본 5곡 세트 불러오기")).toBeInTheDocument();
+      expect(
+        screen.queryByText("기본 5곡 세트 불러오기"),
+      ).not.toBeInTheDocument();
       expect(
         screen.getByText("가사 붙여넣기로 새 곡 추가"),
       ).toBeInTheDocument();
-    });
-
-    it("'기본 5곡 세트 불러오기'가 라벨대로 5곡을 채운다", () => {
-      renderEmptyEditor();
-
-      act(() => {
-        fireEvent.click(screen.getByText("기본 5곡 세트 불러오기"));
-      });
-
-      expect(
-        screen.queryByText("등록된 찬양 곡 또는 슬라이드가 없습니다"),
-      ).not.toBeInTheDocument();
-      expect(screen.getAllByText("은혜로다").length).toBeGreaterThan(0);
-      expect(screen.getByTestId("slide-thumb-0")).toBeInTheDocument();
-      expect(screen.getByTestId("song-section-4")).toBeInTheDocument();
     });
   });
 });

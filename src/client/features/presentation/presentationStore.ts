@@ -15,7 +15,6 @@ import {
   cancelDocumentPush,
 } from "../../lib/sync/syncScheduler";
 import { getServiceBackgrounds } from "../backgrounds/backgroundCatalog";
-import { mockDecks } from "./mockPresentation";
 
 interface PresentationStoreState {
   byId: Record<string, Presentation>;
@@ -417,17 +416,6 @@ export function resetPresentationStore(): void {
   state = createEmptyState();
   listSnapshot = buildListSnapshot(state);
   emitChange();
-}
-
-/**
- * 예전에는 같은 버튼이 `resetActivePresentation()`을 불러 세트를 비웠다 — 라벨과
- * 정반대였다. 샘플 덱은 `MOCK_USER_ID`/`MOCK_PRESENTATION_ID`를 물고 있어 복제 없이
- * 넣으면 소유권이 꼬이고, 두 번 누르면 `deck.id`가 겹쳐 저장이 깨지므로 일반 곡
- * 추가와 같은 Clone-on-Add 경로를 탄다.
- */
-export function loadSampleSongsIntoActivePresentation(): PresentationItem[] {
-  if (!state.activeId) return [];
-  return mockDecks.map((deck) => addDeckToPresentation(deck));
 }
 
 /**
