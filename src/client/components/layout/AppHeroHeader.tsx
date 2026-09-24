@@ -1,13 +1,11 @@
 import React, { useState } from "react";
-import type { SortOrder, ViewMode } from "../../routes/appShellContext";
+import type { SortOrder } from "../../routes/appShellContext";
 
 export interface AppHeroHeaderProps {
   title: string;
   searchPlaceholder: string;
   searchQuery: string;
   onSearchQueryChange: (value: string) => void;
-  viewMode: ViewMode;
-  onViewModeChange: (mode: ViewMode) => void;
   sortOrder: SortOrder;
   onSortOrderChange: (order: SortOrder) => void;
   itemCountLabel: string;
@@ -18,14 +16,12 @@ export interface AppHeroHeaderProps {
 
 type DropdownName = "type" | "category" | "owner" | "sort";
 
-/** 검색, 필터 및 뷰 모드 전환을 제공하는 히어로 헤더와 툴바 */
+/** 검색, 필터 및 정렬을 제공하는 히어로 헤더와 툴바 */
 export function AppHeroHeader({
   title,
   searchPlaceholder,
   searchQuery,
   onSearchQueryChange,
-  viewMode,
-  onViewModeChange,
   sortOrder,
   onSortOrderChange,
   itemCountLabel,
@@ -328,47 +324,6 @@ export function AppHeroHeader({
               />
             </svg>
           </button>
-
-          <div className="flex items-center p-0.5 rounded-xl bg-zinc-100 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800">
-            <button
-              type="button"
-              onClick={() => onViewModeChange("grid")}
-              title="그리드 뷰"
-              className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
-                viewMode === "grid"
-                  ? "bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-sm"
-                  : "text-zinc-400 hover:text-zinc-700 dark:text-zinc-500 dark:hover:text-zinc-300"
-              }`}
-            >
-              <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M4 4h7v7H4V4zm9 0h7v7h-7V4zm-9 9h7v7H4v-7zm9 0h7v7h-7v-7z" />
-              </svg>
-            </button>
-            <button
-              type="button"
-              onClick={() => onViewModeChange("list")}
-              title="리스트 뷰"
-              className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
-                viewMode === "list"
-                  ? "bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-sm"
-                  : "text-zinc-400 hover:text-zinc-700 dark:text-zinc-500 dark:hover:text-zinc-300"
-              }`}
-            >
-              <svg
-                className="w-4 h-4"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M4 6h16M4 12h16M4 18h16"
-                />
-              </svg>
-            </button>
-          </div>
 
           {quickAddSlot ?? (
             <button

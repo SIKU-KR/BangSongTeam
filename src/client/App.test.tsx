@@ -44,7 +44,7 @@ describe("App Route Integration", () => {
     renderAt("/");
 
     expect(await screen.findByTestId("landing-route")).toBeInTheDocument();
-    expect(screen.queryByTestId("presentation-card")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("presentation-row")).not.toBeInTheDocument();
   });
 
   it("should render the dashboard at '/presentations'", async () => {
@@ -52,7 +52,7 @@ describe("App Route Integration", () => {
 
     expect(await screen.findByText("Worship Studio")).toBeInTheDocument();
     expect(
-      (await screen.findAllByTestId("presentation-card")).length,
+      (await screen.findAllByTestId("presentation-row")).length,
     ).toBeGreaterThan(0);
   });
 
@@ -61,7 +61,7 @@ describe("App Route Integration", () => {
 
     expect(await screen.findByText("Worship Studio")).toBeInTheDocument();
     expect(
-      (await screen.findAllByTestId("presentation-card")).length,
+      (await screen.findAllByTestId("presentation-row")).length,
     ).toBeGreaterThan(0);
   });
 
@@ -97,7 +97,7 @@ describe("App Route Integration", () => {
 
     expect(screen.queryByTestId("editor-route")).not.toBeInTheDocument();
     expect(
-      (await screen.findAllByTestId("presentation-card")).length,
+      (await screen.findAllByTestId("presentation-row")).length,
     ).toBeGreaterThan(0);
   });
 
@@ -105,7 +105,7 @@ describe("App Route Integration", () => {
     renderAt("/definitely-not-a-route");
 
     expect(
-      (await screen.findAllByTestId("presentation-card")).length,
+      (await screen.findAllByTestId("presentation-row")).length,
     ).toBeGreaterThan(0);
   });
 
@@ -114,7 +114,7 @@ describe("App Route Integration", () => {
 
     expect(screen.queryByTestId("editor-route")).not.toBeInTheDocument();
     expect(
-      (await screen.findAllByTestId("presentation-card")).length,
+      (await screen.findAllByTestId("presentation-row")).length,
     ).toBeGreaterThan(0);
   });
 
@@ -126,7 +126,7 @@ describe("App Route Integration", () => {
     expect(
       await screen.findByRole("button", { name: /카카오로 시작하기/ }),
     ).toBeInTheDocument();
-    expect(screen.queryByTestId("presentation-card")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("presentation-row")).not.toBeInTheDocument();
   });
 
   it("미로그인이면 송출 경로도 막는다", async () => {
@@ -148,7 +148,7 @@ describe("App Route Integration", () => {
     renderAt("/presentations");
 
     expect(await screen.findByText("Worship Studio")).toBeInTheDocument();
-    expect(screen.queryByTestId("presentation-card")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("presentation-row")).not.toBeInTheDocument();
   });
 
   it("게이트를 통과한 뒤 로그인해도 스토어를 싣는다", async () => {
@@ -163,7 +163,7 @@ describe("App Route Integration", () => {
     });
 
     expect(
-      (await screen.findAllByTestId("presentation-card")).length,
+      (await screen.findAllByTestId("presentation-row")).length,
     ).toBeGreaterThan(0);
   });
 });

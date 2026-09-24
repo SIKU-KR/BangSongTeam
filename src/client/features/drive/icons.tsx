@@ -68,7 +68,7 @@ export function Icon({
   );
 }
 
-/** 채워진 폴더 아이콘 (카드·트리의 폴더 표시) */
+/** 채워진 폴더 아이콘 (목록·트리의 폴더 표시) */
 export function FolderGlyph({
   className = "w-5 h-5",
 }: {
