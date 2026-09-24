@@ -1,6 +1,7 @@
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "@better-auth/drizzle-adapter";
 import { createD1Client, user, session, account, verification } from "@repo/db";
+import { createId } from "@repo/shared";
 import type { Bindings } from "../types";
 
 /**
@@ -59,11 +60,11 @@ export interface NaverProfileLike {
  * 사용자 id 생성기.
  *
  * Better Auth 기본 id는 32자 nanoid인데 `@repo/shared`의 `DeckSchema.userId`와
- * `PresentationSchema.userId`가 `z.string().uuid()`다. 스키마를 느슨하게 푸는
- * 대신 id 쪽을 UUID로 맞춘다 (단일 원천 유지).
+ * `PresentationSchema.userId`는 `IdSchema`(21자 NanoID)다. 스키마를 느슨하게 푸는
+ * 대신 id 쪽을 공용 `createId()`로 맞춘다 (단일 원천 유지).
  */
 export function generateUserId(): string {
-  return crypto.randomUUID();
+  return createId();
 }
 
 /**

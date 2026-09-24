@@ -36,7 +36,7 @@ describe("requireAuth 미들웨어", () => {
   it("세션이 있으면 userId를 컨텍스트에 넣고 핸들러를 실행한다", async () => {
     const handler = vi.fn();
     const app = buildApp(
-      async () => ({ userId: "8f14e45f-ceea-4e0a-9f2b-1a2b3c4d5e6f" }),
+      async () => ({ userId: "8f14e45fc1a2b3c4d5e6f" }),
       handler,
     );
 
@@ -44,7 +44,7 @@ describe("requireAuth 미들웨어", () => {
 
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({
-      userId: "8f14e45f-ceea-4e0a-9f2b-1a2b3c4d5e6f",
+      userId: "8f14e45fc1a2b3c4d5e6f",
     });
     expect(handler).toHaveBeenCalledTimes(1);
   });
@@ -65,7 +65,7 @@ describe("requireAuth 미들웨어", () => {
 
   it("세션 리더에 요청 헤더를 그대로 넘긴다", async () => {
     const readSession = vi.fn<SessionReader>(async () => ({
-      userId: "8f14e45f-ceea-4e0a-9f2b-1a2b3c4d5e6f",
+      userId: "8f14e45fc1a2b3c4d5e6f",
     }));
     const app = buildApp(readSession);
 

@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach } from "vitest";
 import { env } from "cloudflare:test";
 import app from "../index";
 import type { Bindings } from "../types";
+import { ID_PATTERN } from "@repo/shared";
 import { isDevLoginEnabled } from "../lib/auth";
 
 /**
@@ -113,15 +114,13 @@ describe("개발자 로그인 라우트", () => {
     expect(users.results).toHaveLength(1);
   });
 
-  it("개발자 계정 id는 UUID다 (DeckSchema.userId를 통과해야 한다)", async () => {
+  it("개발자 계정 id는 21자 NanoID다 (DeckSchema.userId를 통과해야 한다)", async () => {
     await post("/api/dev-login", {}, withDevLogin(true));
 
     const users = await env.DB.prepare(
       "SELECT id FROM user WHERE email = 'dev@worship.local'",
     ).all();
-    expect(users.results[0].id).toMatch(
-      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
-    );
+    expect(users.results[0].id).toMatch(ID_PATTERN);
   });
 
   it("이메일을 바꾸면 다른 계정이 된다 (교차 사용자 확인용)", async () => {

@@ -10,14 +10,14 @@ import {
  * 멀티 문서 시드 데이터 (목 데이터 전용)
  * - `mockPresentation`(5곡 23슬라이드)에 더해, 홈 대시보드가 여러 문서를 보여줄 수 있도록
  *   기존 `mockDecks`를 조합해 4개의 프레젠테이션을 파생시킨다.
- * - 각 시드는 자신만의 덱/아이템 UUID를 갖는다 (문서 간 id 중복 없음).
+ * - 각 시드는 자신만의 덱/아이템 id를 갖는다 (문서 간 id 중복 없음).
  * - D1 연동 시에는 이 파일 전체가 실제 쿼리로 대체된다.
  */
 
 export const SEED_USER_ID = MOCK_USER_ID;
 
 interface SeedPresentationInput {
-  /** 시드 번호 (2..5) — 파생 UUID의 두 번째 nibble로 사용 */
+  /** 시드 번호 (2..5) — 파생 id의 두 번째 글자로 사용 */
   seq: number;
   title: string;
   /** 'YYYY-MM-DD' */
@@ -53,13 +53,13 @@ const SEED_DEFINITIONS: SeedPresentationInput[] = [
   },
 ];
 
-/** `{prefix}{seq}000000-0000-4000-8000-{n}` 형태의 결정적 UUID 생성 */
-function seedUuid(prefix: string, seq: number, n: number): string {
-  return `${prefix}${seq}000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
+/** `{prefix}{seq}{n을 19자리로 0 채움}` 형태의 결정적 21자 id 생성 (`IdSchema` 통과) */
+function seedId(prefix: string, seq: number, n: number): string {
+  return `${prefix}${seq}${String(n).padStart(19, "0")}`;
 }
 
 function buildSeedPresentation(def: SeedPresentationInput): Presentation {
-  const presentationId = seedUuid("1", def.seq, 1);
+  const presentationId = seedId("1", def.seq, 1);
   // 홈 "최근" 정렬이 의미를 갖도록 예배일과 동일한 날짜를 수정 시각으로 사용
   const timestamp = `${def.serviceDate}T00:00:00.000Z`;
 
@@ -67,14 +67,14 @@ function buildSeedPresentation(def: SeedPresentationInput): Presentation {
     const source = mockDecks[deckIdx];
     const deck: Deck = {
       ...(JSON.parse(JSON.stringify(source)) as Deck),
-      id: seedUuid("2", def.seq, order + 1),
+      id: seedId("2", def.seq, order + 1),
       presentationId,
       createdAt: timestamp,
       updatedAt: timestamp,
     };
 
     return {
-      id: seedUuid("3", def.seq, order + 1),
+      id: seedId("3", def.seq, order + 1),
       presentationId,
       deckId: deck.id,
       order,

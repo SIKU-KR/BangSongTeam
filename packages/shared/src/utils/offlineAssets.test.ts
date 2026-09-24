@@ -9,13 +9,13 @@ import { DEFAULT_DECK_STYLE } from "../constants";
 import type { Presentation, PresentationItem } from "../schemas/presentation";
 import type { Deck } from "../schemas/deck";
 
-const USER_ID = "00000000-0000-4000-8000-000000000001";
-const PRESENTATION_ID = "10000000-0000-4000-8000-000000000001";
+const USER_ID = "00000000x000000000001";
+const PRESENTATION_ID = "100000000000000000001";
 const NOW = "2026-09-22T00:00:00.000Z";
 
 function makeDeck(index: number, overrides: Partial<Deck> = {}): Deck {
   return {
-    id: `20000000-0000-4000-8000-00000000000${index}`,
+    id: `20000000000000000000${index}`,
     userId: USER_ID,
     scope: "presentation",
     presentationId: PRESENTATION_ID,
@@ -35,9 +35,9 @@ function makeDeck(index: number, overrides: Partial<Deck> = {}): Deck {
 
 function makePresentation(decks: (Deck | undefined)[]): Presentation {
   const items: PresentationItem[] = decks.map((deck, index) => ({
-    id: `30000000-0000-4000-8000-00000000000${index + 1}`,
+    id: `30000000000000000000${index + 1}`,
     presentationId: PRESENTATION_ID,
-    deckId: deck?.id ?? `20000000-0000-4000-8000-00000000009${index}`,
+    deckId: deck?.id ?? `20000000000000000009${index}`,
     order: index,
     deck,
   }));
@@ -96,7 +96,7 @@ describe("collectPresentationMediaAssets", () => {
   });
 
   it("알 수 없는 배경 id는 URL 없이 표시만 남긴다", () => {
-    const unknown = "b9999999-9999-4999-8999-999999999999";
+    const unknown = "b99999999999999999999";
     const presentation = makePresentation([
       makeDeck(1, { backgroundId: unknown }),
     ]);

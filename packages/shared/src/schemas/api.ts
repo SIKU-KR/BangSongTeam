@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { IdSchema } from "./id";
 import { DeckStyleSchema } from "./style";
 import { SlideSchema } from "./slide";
 import { DeckSchema } from "./deck";
@@ -11,10 +12,10 @@ export const CreateDeckRequestSchema = z.object({
   artist: z.string().max(100).default(""),
   lyricsRaw: z.string().min(1),
   slides: z.array(SlideSchema),
-  backgroundId: z.string().uuid().nullable().optional(),
+  backgroundId: IdSchema.nullable().optional(),
   style: DeckStyleSchema,
   visibility: z.enum(["private", "public"]).default("private"),
-  forkedFrom: z.string().uuid().optional(), // Clone 시 원본 덱 ID
+  forkedFrom: IdSchema.optional(), // Clone 시 원본 덱 ID
 });
 export type CreateDeckRequest = z.infer<typeof CreateDeckRequestSchema>;
 
@@ -35,7 +36,7 @@ export type CreatePresentationRequest = z.infer<
 export const UpdatePresentationItemsRequestSchema = z.object({
   items: z.array(
     z.object({
-      deckId: z.string().uuid(),
+      deckId: IdSchema,
       order: z.number().int().nonnegative(),
     }),
   ),

@@ -52,7 +52,7 @@ describe("SongSharePanel (편집기 '공유')", () => {
       },
       "POST /api/reports": () => ({
         status: 201,
-        body: { id: "e0000000-6666-4000-8000-000000000001" },
+        body: { id: "e00000006000000000001" },
       }),
     });
   });
@@ -150,7 +150,7 @@ describe("SongSharePanel (편집기 '공유')", () => {
   });
 
   it("credits the original author and sends manual correction suggestions", async () => {
-    const source = "c0000000-6666-4000-8000-0000000000aa";
+    const source = "c000000060000000000aa";
     const fork = saveSongToLibrary({ title: "가져온 곡", lyricsRaw: "가사" });
     upsertLibraryDeck(
       {

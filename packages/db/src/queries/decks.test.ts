@@ -15,8 +15,8 @@ import { toSharedDeck } from "./mappers";
 describe("D1 Scoped Deck Queries", () => {
   let db: ReturnType<typeof createTestDb>["db"];
 
-  const userAId = "00000000-0000-0000-0000-000000000001";
-  const userBId = "00000000-0000-0000-0000-000000000002";
+  const userAId = "000000000000000000001";
+  const userBId = "000000000000000000002";
 
   beforeEach(async () => {
     const testDb = createTestDb();
@@ -168,9 +168,9 @@ describe("D1 Scoped Deck Queries", () => {
 describe("덱 쓰기 헬퍼 (M3-B 보관함 동기화)", () => {
   let db: ReturnType<typeof createTestDb>["db"];
 
-  const ownerId = "00000000-0000-4000-8000-000000000001";
-  const strangerId = "00000000-0000-4000-8000-000000000002";
-  const DECK_ID = "c0000000-0000-4000-8000-000000000001";
+  const ownerId = "00000000x000000000001";
+  const strangerId = "00000000x000000000002";
+  const DECK_ID = "c00000000000000000001";
 
   function makeDeck(userId: string, overrides: Partial<Deck> = {}): Deck {
     return DeckSchema.parse({
@@ -268,7 +268,7 @@ describe("덱 쓰기 헬퍼 (M3-B 보관함 동기화)", () => {
           visibility: "public",
           forkCount: 999,
           origin: "fork",
-          forkedFrom: "c0000000-0000-4000-8000-000000000099",
+          forkedFrom: "c00000000000000000099",
           forkedFromAuthorName: "사칭",
           publishedAt: "2026-09-22T00:00:00.000Z",
         }),
@@ -293,7 +293,7 @@ describe("덱 쓰기 헬퍼 (M3-B 보관함 동기화)", () => {
           visibility: "public",
           forkCount: 3,
           origin: "fork",
-          forkedFrom: "c0000000-0000-4000-8000-000000000099",
+          forkedFrom: "c00000000000000000099",
           forkedFromAuthorName: "원작자",
           publishedAt,
         })
@@ -316,7 +316,7 @@ describe("덱 쓰기 헬퍼 (M3-B 보관함 동기화)", () => {
         visibility: "public",
         forkCount: 3,
         origin: "fork",
-        forkedFrom: "c0000000-0000-4000-8000-000000000099",
+        forkedFrom: "c00000000000000000099",
         forkedFromAuthorName: "원작자",
         publishedAt: publishedAt.toISOString(),
       });
@@ -328,7 +328,7 @@ describe("덱 쓰기 헬퍼 (M3-B 보관함 동기화)", () => {
         ownerId,
         makeDeck(ownerId, {
           scope: "presentation",
-          presentationId: "10000000-0000-4000-8000-000000000001",
+          presentationId: "100000000000000000001",
         }),
       );
       expect(saved?.scope).toBe("library");

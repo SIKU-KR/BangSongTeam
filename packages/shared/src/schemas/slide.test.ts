@@ -17,7 +17,7 @@ describe("SlideSchema", () => {
       order: 1,
       lines: ["참 아름다워라"],
     });
-    expect(parsed.id).toMatch(/^s_[a-z0-9]+$/);
+    expect(parsed.id).toMatch(/^s_[A-Za-z0-9_-]{10}$/);
     expect(parsed.order).toBe(1);
     expect(parsed.lines).toEqual(["참 아름다워라"]);
   });

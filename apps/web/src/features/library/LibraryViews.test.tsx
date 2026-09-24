@@ -98,12 +98,10 @@ describe("Library Views", () => {
 
       // 배경 적용 클릭
       const applyBtn = screen.getByTestId(
-        "apply-community-bg-b0000000-0000-0000-0000-000000000001",
+        "apply-community-bg-mJIToShuKOc3FsbZIihi6",
       );
       fireEvent.click(applyBtn);
-      expect(handleApply).toHaveBeenCalledWith(
-        "b0000000-0000-0000-0000-000000000001",
-      );
+      expect(handleApply).toHaveBeenCalledWith("mJIToShuKOc3FsbZIihi6");
     });
 
     it("can register a new custom background", () => {

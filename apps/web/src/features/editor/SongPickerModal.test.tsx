@@ -14,8 +14,8 @@ import {
   saveSongToLibrary,
 } from "./songLibraryStore";
 
-const SHARED_ID = "c0000000-5555-4000-8000-000000000001";
-const FORK_ID = "c0000000-5555-4000-8000-0000000000f0";
+const SHARED_ID = "c00000005000000000001";
+const FORK_ID = "c000000050000000000f0";
 const NOW = "2026-09-23T00:00:00.000Z";
 
 const SHARED_LYRICS =
@@ -103,7 +103,7 @@ describe("SongPickerModal", () => {
         }),
         "POST /api/reports": () => ({
           status: 201,
-          body: { id: "e0000000-5555-4000-8000-000000000001" },
+          body: { id: "e00000005000000000001" },
         }),
       },
       options,

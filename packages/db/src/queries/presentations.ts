@@ -1,5 +1,5 @@
 import { eq, and, asc, desc, inArray } from "drizzle-orm";
-import type { PresentationDocument } from "@repo/shared";
+import { createId, type PresentationDocument } from "@repo/shared";
 import {
   presentations,
   presentationItems,
@@ -97,7 +97,7 @@ export async function createPresentationWithClonedDecks(
     sourceDeckIds: string[];
   },
 ): Promise<PresentationWithDecks> {
-  const presentationId = crypto.randomUUID();
+  const presentationId = createId();
 
   // 1. 프레젠테이션 헤더 삽입
   await db.insert(presentations).values({
@@ -128,7 +128,7 @@ export async function createPresentationWithClonedDecks(
       throw new Error(`Source deck with id '${sourceId}' not found.`);
     }
 
-    const clonedDeckId = crypto.randomUUID();
+    const clonedDeckId = createId();
     const clonedDeckValues = {
       id: clonedDeckId,
       userId: params.userId,
@@ -147,7 +147,7 @@ export async function createPresentationWithClonedDecks(
 
     await db.insert(decks).values(clonedDeckValues);
 
-    const itemId = crypto.randomUUID();
+    const itemId = createId();
     await db.insert(presentationItems).values({
       id: itemId,
       presentationId: presentationId,

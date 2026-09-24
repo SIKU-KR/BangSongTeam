@@ -9,9 +9,9 @@ import {
   toPublicDeckSummary,
 } from "./sharing";
 
-const A = "00000000-0000-4000-8000-00000000000a";
-const B = "00000000-0000-4000-8000-00000000000b";
-const DECK = "c0000000-0000-4000-8000-000000000001";
+const A = "00000000000000000000a";
+const B = "00000000000000000000b";
+const DECK = "c00000000000000000001";
 
 const SLIDES = JSON.stringify([
   { id: "s2", order: 1, lines: ["둘째 슬라이드"] },

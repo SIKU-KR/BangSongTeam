@@ -3,10 +3,10 @@ import { createTestDb, type TestDbResult } from "../test-utils";
 import { decks, reports, user } from "../schema";
 import { createReport } from "./reports";
 
-const A = "00000000-0000-4000-8000-00000000000a";
-const B = "00000000-0000-4000-8000-00000000000b";
-const PUB = "c0000000-0000-4000-8000-000000000001";
-const PRIV = "c0000000-0000-4000-8000-000000000002";
+const A = "00000000000000000000a";
+const B = "00000000000000000000b";
+const PUB = "c00000000000000000001";
+const PRIV = "c00000000000000000002";
 
 describe("createReport", () => {
   let testDb: TestDbResult;
@@ -58,7 +58,7 @@ describe("createReport", () => {
       { targetType: "deck" as const, targetId: PRIV },
       {
         targetType: "deck" as const,
-        targetId: "c0000000-0000-4000-8000-00000000dead",
+        targetId: "c0000000000000000dead",
       },
     ]) {
       expect(

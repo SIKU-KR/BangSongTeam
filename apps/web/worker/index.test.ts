@@ -208,7 +208,7 @@ describe("Task 4.6: Miniflare/workerd 환경 Worker 및 D1 통합 테스트", ()
     });
 
     it("쓰기·삭제도 세션 없이는 401이다", async () => {
-      const id = "10000000-0000-4000-8000-0000000000ff";
+      const id = "1000000000000000000ff";
 
       const put = await app.request(
         `/api/presentations/${id}`,

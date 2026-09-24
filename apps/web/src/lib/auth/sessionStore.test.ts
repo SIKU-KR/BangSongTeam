@@ -12,7 +12,7 @@ import {
 } from "./sessionStore";
 
 const HOUR = 60 * 60 * 1000;
-const USER_ID = "8f14e45f-ceea-4e0a-9f2b-1a2b3c4d5e6f";
+const USER_ID = "8f14e45fc1a2b3c4d5e6f";
 
 function makeUser(overrides = {}) {
   return {
@@ -145,7 +145,7 @@ describe("세션 스토어", () => {
       __setSessionFetcherForTests(async () => makeUser());
       await hydrateSession();
 
-      const other = "bbbbbbbb-ceea-4e0a-9f2b-1a2b3c4d5e6f";
+      const other = "bbbbbbbbc1a2b3c4d5e6f";
       __setSessionFetcherForTests(async () =>
         makeUser({ userId: other, name: "다른 봉사자" }),
       );

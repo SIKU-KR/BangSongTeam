@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { IdSchema } from "./id";
 import { SlideSchema } from "./slide";
 import { DeckStyleSchema } from "./style";
 
@@ -32,18 +33,18 @@ const LegacyDeckOriginSchema = z.preprocess(
 );
 
 export const DeckSchema = z.object({
-  id: z.string().uuid(),
-  userId: z.string().uuid(),
+  id: IdSchema,
+  userId: IdSchema,
   scope: DeckScopeSchema.default("library"), // 'library': 보관함 마스터, 'presentation': 프레젠테이션 전용 복제본
-  presentationId: z.string().uuid().nullable().optional(), // scope='presentation'일 때 속한 프레젠테이션 ID
+  presentationId: IdSchema.nullable().optional(), // scope='presentation'일 때 속한 프레젠테이션 ID
   title: z.string().min(1).max(100),
   artist: z.string().max(100).default(""),
   lyricsRaw: z.string(),
   slides: z.array(SlideSchema),
-  backgroundId: z.string().uuid().nullable(),
+  backgroundId: IdSchema.nullable(),
   style: DeckStyleSchema,
   visibility: DeckVisibilitySchema.default("private"),
-  forkedFrom: z.string().uuid().nullable().optional(), // 원본 덱 ID (Clone/Fork 출처 추적)
+  forkedFrom: IdSchema.nullable().optional(), // 원본 덱 ID (Clone/Fork 출처 추적)
   forkCount: z.number().int().nonnegative().default(0),
 
   // ---- M5 공유 필드 ----

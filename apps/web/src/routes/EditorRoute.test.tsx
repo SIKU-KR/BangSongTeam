@@ -258,7 +258,7 @@ describe("EditorRoute (PowerPoint식 프레젠테이션 편집기)", () => {
   });
 
   it("존재하지 않는 presentationId 는 /presentations 로 리다이렉트된다", () => {
-    renderEditor("/editor/99999999-9999-4999-8999-999999999999");
+    renderEditor("/editor/999999999999999999999");
 
     expect(screen.getByTestId("presentations-stub")).toBeInTheDocument();
     expect(screen.queryByTestId("editor-route")).not.toBeInTheDocument();
@@ -301,7 +301,7 @@ describe("EditorRoute (PowerPoint식 프레젠테이션 편집기)", () => {
     });
 
     expect(mockNavigate).toHaveBeenCalledWith(
-      expect.stringMatching(/^\/editor\/[0-9a-f-]{36}$/),
+      expect.stringMatching(/^\/editor\/[A-Za-z0-9_-]{21}$/),
     );
   });
 
@@ -454,7 +454,7 @@ describe("EditorRoute (PowerPoint식 프레젠테이션 편집기)", () => {
   describe("빈 편집기 화면", () => {
     const EMPTY_DOC = {
       ...SEED_PRESENTATIONS[0],
-      id: "1f000000-0000-4000-8000-0000000000ff",
+      id: "1f00000000000000000ff",
       title: "빈 세트",
       items: [],
     };

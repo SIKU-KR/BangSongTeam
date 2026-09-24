@@ -47,8 +47,8 @@ describe("API Schemas", () => {
   it("validates UpdatePresentationItemsRequestSchema", () => {
     const valid = {
       items: [
-        { deckId: "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11", order: 0 },
-        { deckId: "b0eebc99-9c0b-4ef8-bb6d-6bb9bd380a22", order: 1 },
+        { deckId: "a0eebc9996bb9bd380a11", order: 0 },
+        { deckId: "b0eebc9996bb9bd380a22", order: 1 },
       ],
     };
     expect(UpdatePresentationItemsRequestSchema.parse(valid)).toEqual(valid);
@@ -75,7 +75,7 @@ describe("API Schemas", () => {
     const response = {
       decks: [
         {
-          id: "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11",
+          id: "a0eebc9996bb9bd380a11",
           title: "은혜로다",
           artist: "예수전도단",
           authorName: "김찬양",
@@ -95,7 +95,7 @@ describe("API Schemas", () => {
     const parsed = SearchCatalogResponseSchema.parse({
       decks: [
         {
-          id: "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11",
+          id: "a0eebc9996bb9bd380a11",
           title: "은혜로다",
           artist: "",
           authorName: "김찬양",
@@ -106,7 +106,7 @@ describe("API Schemas", () => {
           slideCount: 0,
           updatedAt: "2026-09-23T00:00:00.000Z",
           // 아래 두 값은 스키마가 걸러내야 한다
-          userId: "00000000-0000-4000-8000-000000000001",
+          userId: "00000000x000000000001",
           lyricsRaw: "전문",
         },
       ],
@@ -116,15 +116,15 @@ describe("API Schemas", () => {
   });
   describe("동기화 문서 계약 (M3-B)", () => {
     const deck = {
-      id: "c0000000-0000-4000-8000-000000000001",
-      userId: "00000000-0000-4000-8000-000000000001",
+      id: "c00000000000000000001",
+      userId: "00000000x000000000001",
       scope: "presentation" as const,
-      presentationId: "10000000-0000-4000-8000-000000000001",
+      presentationId: "100000000000000000001",
       title: "은혜로다",
       artist: "예수전도단",
       lyricsRaw: "시작됐네",
       slides: [{ id: "s1", order: 0, lines: ["시작됐네"] }],
-      backgroundId: "b0000000-0000-0000-0000-000000000001",
+      backgroundId: "mJIToShuKOc3FsbZIihi6",
       style: DeckStyleSchema.parse({}),
       visibility: "private" as const,
       forkedFrom: null,
@@ -134,14 +134,14 @@ describe("API Schemas", () => {
     };
 
     const document = {
-      id: "10000000-0000-4000-8000-000000000001",
-      userId: "00000000-0000-4000-8000-000000000001",
+      id: "100000000000000000001",
+      userId: "00000000x000000000001",
       title: "주일 1부 예배",
       serviceDate: "2026-09-27",
       items: [
         {
-          id: "30000000-0000-4000-8000-000000000001",
-          presentationId: "10000000-0000-4000-8000-000000000001",
+          id: "300000000000000000001",
+          presentationId: "100000000000000000001",
           deckId: deck.id,
           order: 0,
           deck,

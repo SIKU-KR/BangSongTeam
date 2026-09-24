@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from "react";
-import type { Deck } from "@repo/shared";
+import { createId, type Deck } from "@repo/shared";
 import {
   DeckSchema,
   DEFAULT_DECK_STYLE,
@@ -92,7 +92,7 @@ export function saveSongToLibrary(songInput: {
   const userId = getCurrentUserId();
   if (!userId) {
     // 로그인이 편집의 전제 조건이므로 여기 도달하면 게이트가 새는 것이다.
-    // 빈 userId로 저장하면 DeckSchema(uuid)에서 터지거나, 더 나쁘게는
+    // 빈 userId로 저장하면 DeckSchema(IdSchema)에서 터지거나, 더 나쁘게는
     // 아무에게도 안 보이는 곡이 저장된다.
     throw new Error("로그인이 필요합니다");
   }
@@ -101,7 +101,7 @@ export function saveSongToLibrary(songInput: {
   const slides = splitLyricsIntoSlides(songInput.lyricsRaw);
 
   const newDeck: Deck = DeckSchema.parse({
-    id: songInput.id ?? crypto.randomUUID(),
+    id: songInput.id ?? createId(),
     userId,
     scope: "library",
     presentationId: null,
