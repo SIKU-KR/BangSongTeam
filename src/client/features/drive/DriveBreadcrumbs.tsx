@@ -48,6 +48,7 @@ function Crumb({
 /**
  * 드라이브 경로 (`내 드라이브 › 2026 › 주일 ▾`).
  * 경로 조각마다 드롭 대상이고, 마지막 ▾에서 현재 폴더를 다룬다.
+ * 휴지통에서는 `내 드라이브 › 휴지통`만 보이고 ▾ 메뉴가 없다.
  */
 export function DriveBreadcrumbs(): React.JSX.Element {
   const navigate = useNavigate();
@@ -92,6 +93,35 @@ export function DriveBreadcrumbs(): React.JSX.Element {
         ];
       })()
     : [];
+
+  if (drive.isTrashView) {
+    return (
+      <nav
+        aria-label="드라이브 경로"
+        data-testid="drive-breadcrumbs"
+        className="flex items-center min-w-0 text-base font-bold tracking-tight"
+      >
+        <Crumb
+          folderId={null}
+          label={ROOT_LABEL}
+          isCurrent={false}
+          onNavigate={() => navigate(drivePath(null))}
+        />
+        <Icon
+          name="chevronRight"
+          className="w-4 h-4 text-zinc-400 shrink-0"
+          strokeWidth={2.5}
+        />
+        <span
+          data-testid="crumb-trash"
+          aria-current="page"
+          className="px-2 py-1 text-zinc-900 dark:text-white"
+        >
+          휴지통
+        </span>
+      </nav>
+    );
+  }
 
   return (
     <nav

@@ -61,7 +61,7 @@ export function canDropOn(
   );
 }
 
-/** 드롭 대상 (폴더 카드·브레드크럼·사이드바 트리·휴지통). */
+/** 드롭 대상 (폴더 행·브레드크럼·사이드바 내 드라이브·휴지통 폴더). */
 export function useDriveDroppable(
   id: string,
   target: DropTarget,
