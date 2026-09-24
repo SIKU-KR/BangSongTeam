@@ -1,9 +1,5 @@
 import { describe, it, expect, afterEach, vi } from "vitest";
-import {
-  requestPersistentStorage,
-  checkPersistentStorage,
-  estimateStorageUsage,
-} from "./storagePersistence";
+import { requestPersistentStorage } from "./storagePersistence";
 
 const original = Object.getOwnPropertyDescriptor(navigator, "storage");
 
@@ -66,34 +62,5 @@ describe("requestPersistentStorage", () => {
     });
 
     expect(await requestPersistentStorage()).toBe("unsupported");
-  });
-});
-
-describe("checkPersistentStorage", () => {
-  it("요청 없이 현재 상태만 읽는다", async () => {
-    const persist = vi.fn(async () => true);
-    setStorage({ persisted: async () => false, persist });
-
-    expect(await checkPersistentStorage()).toBe("denied");
-    expect(persist).not.toHaveBeenCalled();
-  });
-});
-
-describe("estimateStorageUsage", () => {
-  it("사용량과 할당량을 돌려준다", async () => {
-    setStorage({
-      estimate: async () => ({ usage: 1024, quota: 4096 }),
-    });
-
-    expect(await estimateStorageUsage()).toEqual({
-      usageBytes: 1024,
-      quotaBytes: 4096,
-    });
-  });
-
-  it("지원하지 않으면 null이다", async () => {
-    setStorage(undefined);
-
-    expect(await estimateStorageUsage()).toBeNull();
   });
 });

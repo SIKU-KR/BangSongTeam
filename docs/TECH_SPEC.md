@@ -36,8 +36,8 @@
    - 프론트엔드와 백엔드는 Hono RPC Client (`hc<AppType>`)를 통해서만 타입 안전하게 통신한다.
 3. **로컬 우선 영속성과 무결점 오프라인 송출 (Local-First & Zero-Network Presentation)**:
    - 사용자의 작업은 서버가 아니라 **브라우저 로컬 저장소를 1차 원천**으로 삼는다 (§5.5). 로그인은 2026-09-22 결정으로 **편집의 전제 조건**이 되었으나, 세션을 IndexedDB에 캐시해 네트워크가 끊겨도 게이트를 통과한다 — 로그인 때문에 예배 당일 송출이 멈추지 않는다.
-   - 예배 중 송출 화면은 외부 네트워크 요청을 절대 발생시키지 않는다.
-   - PWA Service Worker (`RangeRequestsPlugin`)와 `IndexedDB`를 통해 영상 및 세트 데이터를 완전히 로컬화한다.
+   - 예배 중 송출 화면은 API·데이터 요청을 절대 발생시키지 않는다. 네트워크를 쓰는 것은 영상 재생과 배경 백그라운드 캐시뿐이다 (§5.4-3).
+   - PWA Service Worker (`RangeRequestsPlugin`)와 `IndexedDB`를 통해 영상 및 세트 데이터를 로컬화한다. 배경 영상은 편집·송출 중에 조용히 캐시된다 (예배 준비 화면은 2026-09-24에 제거).
 4. **100ms 이내 결정론적 렌더링 (3-Layer DOM Architecture)**:
    - 캔버스나 무거운 프레임워크(Reveal.js) 대신, 브라우저 가속 DOM 3레이어(Video, Overlay, Text)를 사용하여 프레임 드랍 없이 슬라이드를 즉시 교체한다.
 5. **프레젠테이션 간 독립성 보장 (Clone-on-Add)**:
@@ -775,25 +775,27 @@ stateDiagram-v2
      options: {
        cacheName: MEDIA_CACHE_NAME,                  // '@repo/shared' 상수
        rangeRequests: true,                          // = RangeRequestsPlugin
-       cacheableResponse: { statuses: [200, 206] },
+       cacheableResponse: { statuses: [200] },      // Cache API는 206을 저장하지 못한다
        expiration: { maxEntries: 30, maxAgeSeconds: 30 * 24 * 60 * 60 },
      },
    }
    ```
 
-   **폰트는 프리캐시하지 않는다.** Pretendard 정적 9종과 Noto Sans KR의 유니코드 서브셋 수백 개가 모두 빌드 산출물에 있어, `globPatterns`에 `woff2`를 넣으면 프리캐시가 884개·33MB가 된다. 앱 셸만 프리캐시(12개·1.2MB)하고 폰트는 `worship-fonts-cache` 런타임 캐시(CacheFirst, 1년)로 실제 쓰인 서브셋만 담는다. 세트가 쓰는 글꼴은 예배 준비 화면이 `document.fonts.load()`로 미리 데운다.
+   **폰트는 프리캐시하지 않는다.** Pretendard 정적 9종과 Noto Sans KR의 유니코드 서브셋 수백 개가 모두 빌드 산출물에 있어, `globPatterns`에 `woff2`를 넣으면 프리캐시가 884개·33MB가 된다. 앱 셸만 프리캐시(12개·1.2MB)하고 폰트는 `worship-fonts-cache` 런타임 캐시(CacheFirst, 1년)로 실제 쓰인 서브셋만 담는다. 세트가 쓰는 글꼴은 편집기·송출 화면이 세트를 열 때 백그라운드 캐시가 `document.fonts.load()`로 데운다.
 
    `navigateFallback: 'index.html'`이 없으면 네트워크가 끊긴 상태에서 `/present/...`를 새로고침할 때 앱 자체가 뜨지 않는다. `/api/*`는 폴백에서 제외한다.
 
    `registerType`은 `'prompt'`다. `autoUpdate`는 배포가 나간 순간 송출 중인 창을 새로고침할 수 있다. 갱신 안내는 편집 화면에서만 띄우고 `/present/*`에서는 렌더하지 않는다.
 
-3. **예배 준비(Preparation) 큐 & 영속 저장소 요청**:
-   - `navigator.storage.persist()`를 호출하여 브라우저의 Storage Eviction을 방지.
-   - 세트에 포함된 모든 배경 영상·포스터 URL을 `fetch(url)`로 사전 호출해 Cache Storage에 100% 다운로드한다. **동일 출처 프록시이므로 `mode`를 지정하지 않는다** (5.4-1의 결정과 `mode: 'cors'`는 서로 어긋난다).
+3. **편집·송출 중 백그라운드 캐시 & 영속 저장소 요청** (2026-09-24 개정):
+
+   > 송출 전 '예배 준비' 화면(`/present/:id/ready`)이 세트의 배경을 미리 받고 '오프라인 송출 가능' 배지를 띄우던 설계는 2026-09-24에 제거됐다. 송출 버튼은 곧바로 전체화면으로 들어간다. 제품 결정 없이 다운로드 관문을 다시 넣지 않는다.
+   - 편집기(`/editor/:id`)와 송출 화면(`/present/:id/fullscreen`)이 `useBackgroundAutoCache(presentation)`(`apps/web/src/features/offline/`)를 부른다. 세트가 열리거나 배경이 바뀌면 3초 뒤(`AUTO_CACHE_DELAY_MS`) 세트의 배경 영상·포스터 URL(중복 제거, `collectPresentationMediaAssets`·`collectUniqueMediaUrls`)을 `scheduleMediaCaching`에 넘기고, 같은 때 가사에 쓰인 글꼴을 데운다. 지연은 편집기에서 배경을 이것저것 눌러 볼 때마다 받지 않게 하고, 송출 직후에는 화면의 영상이 먼저 대역폭을 쓰게 하기 위한 것이다. `online` 이벤트가 오면 곧바로 다시 큐에 넣는다.
+   - `scheduleMediaCaching`(`apps/web/src/lib/offline/mediaCache.ts`)은 **모듈 단위 싱글턴 큐**다. 한 번에 하나씩 순차로 받고, 이미 `cache.match`되는 항목은 건너뛰며, 같은 URL을 겹쳐 받지 않는다. 라우트가 다시 마운트돼도(편집기 → 송출) 받던 것을 이어 받는다. 오프라인(`navigator.onLine === false`)이면 아무것도 하지 않는다. 실패는 알리지 않고 다음 호출에서 다시 시도한다. **진행률·배지·경고·기록은 없다.**
+   - 처음 캐시를 시작할 때 `navigator.storage.persist()`를 한 번 조용히 부른다. 거부돼도 캐시는 담는다.
+   - **동일 출처 프록시이므로 `mode`를 지정하지 않는다** (5.4-1의 결정과 `mode: 'cors'`는 서로 어긋난다).
    - **Service Worker 활성화를 기다리지 않는다.** 첫 방문에서는 SW가 아직 activate되지 않아 `fetch`가 가로채이지 않으므로, 받은 응답을 `cache.put`으로 직접 `MEDIA_CACHE_NAME`에 넣는다. Workbox CacheFirst가 같은 캐시를 읽으므로 송출 때 그대로 재생된다.
-   - **Range 헤더 없이 전체 응답을 받는다.** RangeRequestsPlugin은 캐시된 _전체_ 응답을 잘라 206을 만든다. 부분 응답을 넣어 두면 영상이 중간에 끊긴다.
-   - 결과는 `sync_meta`에 **병합(read-modify-write)** 으로 기록한다. 같은 레코드에 서버 동기화 필드가 들어 있어 통째로 put하면 준비 한 번에 그것이 날아간다.
-   - 전체 다운로드 완료 검증 후 UI에 `오프라인 송출 가능 (Ready for Offline)` 배지 활성화.
+   - **Range 헤더 없이 전체 응답(200)을 받아 스트림째 넣는다.** RangeRequestsPlugin은 캐시된 _전체_ 응답을 잘라 206을 만든다. 206은 Cache API가 저장하지도 못한다. 본문을 `arrayBuffer`로 읽지 않으므로 편집·송출 중 20MB를 메모리에 올리지 않는다.
 
 4. **클라이언트 IndexedDB 스키마 명세 (`worship-offline-db`, Version 2)** — _구현 완료 (`apps/web/src/lib/storage/db.ts`)_:
 
@@ -827,15 +829,16 @@ stateDiagram-v2
        key: string; // backgroundId (UUID)
        value: BackgroundMedia;
      };
-     // 4. 오프라인 캐시 상태 관리 저장소
+     // 4. 서버 동기화 메타데이터 저장소 (M3-B)
+     //    예배 준비 화면이 쓰던 캐시 상태 필드(isReady·cachedVideos·cachedAt·
+     //    storagePersisted)는 2026-09-24에 화면과 함께 제거됐다.
      sync_meta: {
        key: string; // presentationId
        value: {
          presentationId: string;
-         isReady: boolean; // 모든 영상 및 덱 캐시 완료 여부
-         cachedVideos: string[]; // 캐시된 R2 CDN URL 목록
-         cachedAt: number; // 캐시 시각 타임스탬프
-         storagePersisted: boolean; // navigator.storage.persist() 성공 여부
+         serverUpdatedAt?: string; // 서버가 마지막으로 알려준 수정 시각 (LWW 기준)
+         dirty?: boolean; // 로컬 변경이 아직 서버에 올라가지 않았는지
+         lastSyncedAt?: number;
        };
      };
    }
@@ -859,8 +862,8 @@ stateDiagram-v2
    ```
 
    - **송출 모드 실행 원칙 (Zero-Fetch Invariant)**:
-     - 전체화면 송출 컴포넌트는 오직 `getOfflineDB()`의 `decks` 및 `presentations` 스토어와 Cache Storage에서만 데이터를 조회한다.
-     - 예배 송출 중 네트워크 연결이 끊겨도 화면 멈춤이나 오류가 0건임을 수학적으로 보장한다.
+     - 전체화면 송출 컴포넌트는 오직 `getOfflineDB()`의 `decks` 및 `presentations` 스토어(하이드레이션된 메모리 상태)와 Cache Storage에서만 데이터를 조회한다. API·데이터 요청은 0건이다 (ESLint 가드 + `zeroFetch.test.tsx`).
+     - 허용되는 네트워크 사용은 `<video>` 재생과 5.4-3의 배경 백그라운드 캐시(`/api/media/*` GET)뿐이다. 둘 다 실패해도 송출은 멈추지 않는다. 캐시된 배경은 네트워크 없이 재생되고, 캐시되지 않은 배경은 포스터·검은 배경으로 남는다.
 
 ### 5.5 클라이언트 영속성 3단계 (Persistence Phases)
 
@@ -904,7 +907,7 @@ stateDiagram-v2
 
 **구현 위치:** `apps/web/src/lib/storage/`(`db.ts`, `presentationRepository.ts`, `songRepository.ts`, `persistenceStatus.ts`), 스토어 연동은 `features/presentation/presentationStore.ts`·`features/editor/songLibraryStore.ts`, 부팅 게이트는 `App.tsx`, 경고 배너는 `components/common/StorageWarningBanner.tsx`.
 
-**Zero-Fetch 불변식과의 관계:** 송출 라우트(`/present/*`)는 하이드레이션된 메모리 상태만 읽고, 그 상태의 원천은 IndexedDB다. 동기화와 세션 재검증은 편집 화면에서만 돈다. 남은 네트워크 의존은 배경 영상(`/api/media/*`) 하나이며, M4에서 Cache Storage로 덮으면 불변식이 완성된다.
+**Zero-Fetch 불변식과의 관계:** 송출 라우트(`/present/*`)는 하이드레이션된 메모리 상태만 읽고, 그 상태의 원천은 IndexedDB다. 동기화와 세션 재검증은 편집 화면에서만 돈다. 남은 네트워크 의존은 배경 영상(`/api/media/*`) 하나이며, 편집·송출 중 백그라운드 캐시(5.4-3)가 Cache Storage로 덮는다.
 
 ---
 

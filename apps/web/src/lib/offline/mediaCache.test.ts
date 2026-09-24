@@ -3,30 +3,43 @@ import { MEDIA_CACHE_NAME } from "@repo/shared";
 import { resetFakeCacheStorage } from "../../test/fakeCacheStorage";
 import {
   cacheMediaUrls,
-  getCachedUrls,
-  evictMediaUrls,
+  scheduleMediaCaching,
   isCacheStorageAvailable,
-  type MediaCacheItem,
+  __resetMediaCachingForTests,
+  __waitForMediaCachingForTests,
 } from "./mediaCache";
 
 const VIDEO = "/api/media/loops/warm_light_flow.mp4";
 const POSTER = "/api/media/posters/warm_light_flow.webp";
+const OTHER = "/api/media/loops/ocean_wave.mp4";
 
-function bodyOf(size: number): ArrayBuffer {
-  return new ArrayBuffer(size);
-}
-
-function okResponse(size: number): Response {
-  return new Response(bodyOf(size), {
+function okResponse(size = 16): Response {
+  return new Response(new ArrayBuffer(size), {
     status: 200,
     headers: { "content-type": "video/mp4" },
   });
+}
+
+function mockFetch(
+  impl: (url: string) => Promise<Response> = async () => okResponse(),
+) {
+  const fetchMock = vi.fn(async (input: RequestInfo | URL) =>
+    impl(String(input)),
+  );
+  globalThis.fetch = fetchMock as unknown as typeof fetch;
+  return fetchMock;
+}
+
+async function isCached(url: string): Promise<boolean> {
+  const cache = await caches.open(MEDIA_CACHE_NAME);
+  return (await cache.match(url)) !== undefined;
 }
 
 const originalFetch = globalThis.fetch;
 
 beforeEach(() => {
   resetFakeCacheStorage();
+  __resetMediaCachingForTests();
 });
 
 afterEach(() => {
@@ -36,26 +49,22 @@ afterEach(() => {
 
 describe("cacheMediaUrls", () => {
   it("요청한 URL을 모두 받아 캐시에 넣는다", async () => {
-    globalThis.fetch = vi.fn(async () => okResponse(1024)) as typeof fetch;
+    mockFetch();
 
     const result = await cacheMediaUrls([VIDEO, POSTER]);
 
-    expect(result.isComplete).toBe(true);
-    expect(result.cachedUrls).toEqual([VIDEO, POSTER]);
-    expect(result.totalBytes).toBe(2048);
-
-    const cache = await caches.open(MEDIA_CACHE_NAME);
-    expect(await cache.match(VIDEO)).toBeDefined();
-    expect(await cache.match(POSTER)).toBeDefined();
+    expect(result).toEqual({ cachedUrls: [VIDEO, POSTER], failedUrls: [] });
+    expect(await isCached(VIDEO)).toBe(true);
+    expect(await isCached(POSTER)).toBe(true);
   });
 
   it("Range 헤더 없이 전체 응답을 받는다", async () => {
-    const fetchMock = vi.fn<typeof fetch>(async () => okResponse(16));
-    globalThis.fetch = fetchMock;
+    const fetchMock = mockFetch();
 
     await cacheMediaUrls([VIDEO]);
 
-    const init = fetchMock.mock.calls[0][1];
+    const init = (fetchMock.mock.calls[0] as unknown[])[1] as
+      RequestInit | undefined;
     // 부분 응답을 캐시에 넣으면 RangeRequestsPlugin이 영상을 중간에 끊는다.
     expect(init?.headers).toBeUndefined();
     // 동일 출처이므로 mode를 지정하지 않는다.
@@ -64,108 +73,156 @@ describe("cacheMediaUrls", () => {
 
   it("이미 캐시에 있으면 다시 받지 않는다", async () => {
     const cache = await caches.open(MEDIA_CACHE_NAME);
-    await cache.put(
-      VIDEO,
-      new Response(bodyOf(64), {
-        status: 200,
-        headers: { "content-length": "64" },
-      }),
-    );
-    const fetchMock = vi.fn(async () => okResponse(1024));
-    globalThis.fetch = fetchMock as unknown as typeof fetch;
+    await cache.put(VIDEO, okResponse());
+    const fetchMock = mockFetch();
 
     const result = await cacheMediaUrls([VIDEO]);
 
     expect(fetchMock).not.toHaveBeenCalled();
-    expect(result.isComplete).toBe(true);
-    expect(result.totalBytes).toBe(64);
+    expect(result.cachedUrls).toEqual([VIDEO]);
   });
 
   it("한 항목이 실패해도 나머지를 계속 받는다", async () => {
-    globalThis.fetch = vi.fn(async (input: RequestInfo | URL) => {
-      if (String(input) === VIDEO) return new Response(null, { status: 404 });
-      return okResponse(512);
-    }) as unknown as typeof fetch;
+    mockFetch(async (url) =>
+      url === VIDEO ? new Response(null, { status: 404 }) : okResponse(),
+    );
 
     const result = await cacheMediaUrls([VIDEO, POSTER]);
 
-    expect(result.isComplete).toBe(false);
-    expect(result.items[0]).toMatchObject({
-      status: "failed",
-      reason: "network",
-    });
-    expect(result.items[1].status).toBe("done");
-    expect(result.cachedUrls).toEqual([POSTER]);
+    expect(result).toEqual({ cachedUrls: [POSTER], failedUrls: [VIDEO] });
+    expect(await isCached(VIDEO)).toBe(false);
   });
 
-  it("용량 초과를 네트워크 실패와 구분한다", async () => {
-    globalThis.fetch = vi.fn(async () => okResponse(1024)) as typeof fetch;
+  it("부분 응답(206)은 캐시에 넣지 않는다", async () => {
+    mockFetch(async () => new Response(new ArrayBuffer(4), { status: 206 }));
+
+    const result = await cacheMediaUrls([VIDEO]);
+
+    expect(result.failedUrls).toEqual([VIDEO]);
+    expect(await isCached(VIDEO)).toBe(false);
+  });
+
+  it("네트워크 오류나 용량 초과는 실패로 삼키고 던지지 않는다", async () => {
+    mockFetch(async (url) => {
+      if (url === VIDEO) throw new TypeError("Failed to fetch");
+      return okResponse();
+    });
     const cache = await caches.open(MEDIA_CACHE_NAME);
     vi.spyOn(cache, "put").mockRejectedValue(
       new DOMException("quota", "QuotaExceededError"),
     );
 
-    const result = await cacheMediaUrls([VIDEO]);
+    const result = await cacheMediaUrls([VIDEO, POSTER]);
 
-    expect(result.items[0]).toMatchObject({
-      status: "failed",
-      reason: "quota",
-    });
-  });
-
-  it("진행 상황을 단계별로 보고한다", async () => {
-    globalThis.fetch = vi.fn(async () => okResponse(10)) as typeof fetch;
-    const snapshots: MediaCacheItem[][] = [];
-
-    await cacheMediaUrls([VIDEO], {
-      onProgress: (items) => snapshots.push(items),
-    });
-
-    const statuses = snapshots.map((items) => items[0].status);
-    expect(statuses).toContain("pending");
-    expect(statuses).toContain("downloading");
-    expect(statuses[statuses.length - 1]).toBe("done");
-  });
-
-  it("중단 신호를 받으면 남은 항목을 받지 않는다", async () => {
-    const controller = new AbortController();
-    const fetchMock = vi.fn(async () => {
-      controller.abort();
-      return okResponse(10);
-    });
-    globalThis.fetch = fetchMock as unknown as typeof fetch;
-
-    await cacheMediaUrls([VIDEO, POSTER], { signal: controller.signal });
-
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-  });
-
-  it("받을 것이 없으면 완료로 보지 않는다", async () => {
-    const result = await cacheMediaUrls([]);
-
-    expect(result.isComplete).toBe(false);
-    expect(result.totalBytes).toBe(0);
+    expect(result).toEqual({ cachedUrls: [], failedUrls: [VIDEO, POSTER] });
   });
 });
 
-describe("getCachedUrls / evictMediaUrls", () => {
-  it("캐시에 있는 URL만 골라낸다", async () => {
-    const cache = await caches.open(MEDIA_CACHE_NAME);
-    await cache.put(VIDEO, new Response(bodyOf(8), { status: 200 }));
+describe("scheduleMediaCaching", () => {
+  it("큐에 넣은 URL을 백그라운드로 받아 캐시에 넣는다", async () => {
+    mockFetch();
 
-    const cached = await getCachedUrls([VIDEO, POSTER]);
+    scheduleMediaCaching([VIDEO, POSTER]);
+    await __waitForMediaCachingForTests();
 
-    expect(cached.has(VIDEO)).toBe(true);
-    expect(cached.has(POSTER)).toBe(false);
+    expect(await isCached(VIDEO)).toBe(true);
+    expect(await isCached(POSTER)).toBe(true);
   });
 
-  it("캐시된 항목을 지운다", async () => {
-    globalThis.fetch = vi.fn(async () => okResponse(8)) as typeof fetch;
-    await cacheMediaUrls([VIDEO]);
+  it("한 번에 하나씩 순차로 받는다", async () => {
+    let inFlight = 0;
+    let maxInFlight = 0;
+    mockFetch(async () => {
+      inFlight += 1;
+      maxInFlight = Math.max(maxInFlight, inFlight);
+      await new Promise((resolve) => setTimeout(resolve, 1));
+      inFlight -= 1;
+      return okResponse();
+    });
 
-    await evictMediaUrls([VIDEO]);
+    scheduleMediaCaching([VIDEO, POSTER, OTHER]);
+    await __waitForMediaCachingForTests();
 
-    expect((await getCachedUrls([VIDEO])).size).toBe(0);
+    expect(maxInFlight).toBe(1);
+  });
+
+  it("받는 도중 같은 URL을 다시 넣어도 한 번만 받는다", async () => {
+    const fetchMock = mockFetch();
+
+    // 편집기 → 송출로 넘어가며 라우트가 다시 마운트되는 상황
+    scheduleMediaCaching([VIDEO, POSTER]);
+    scheduleMediaCaching([VIDEO, POSTER]);
+    await __waitForMediaCachingForTests();
+    scheduleMediaCaching([VIDEO, POSTER]);
+    await __waitForMediaCachingForTests();
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("받는 도중 새로 넣은 URL도 이어서 받는다", async () => {
+    mockFetch();
+
+    scheduleMediaCaching([VIDEO]);
+    scheduleMediaCaching([OTHER]);
+    await __waitForMediaCachingForTests();
+
+    expect(await isCached(VIDEO)).toBe(true);
+    expect(await isCached(OTHER)).toBe(true);
+  });
+
+  it("실패한 URL은 다음 호출에서 다시 시도한다", async () => {
+    let attempts = 0;
+    const fetchMock = mockFetch(async () => {
+      attempts += 1;
+      if (attempts === 1) throw new TypeError("Failed to fetch");
+      return okResponse();
+    });
+
+    scheduleMediaCaching([VIDEO]);
+    await __waitForMediaCachingForTests();
+    expect(await isCached(VIDEO)).toBe(false);
+
+    scheduleMediaCaching([VIDEO]);
+    await __waitForMediaCachingForTests();
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(await isCached(VIDEO)).toBe(true);
+  });
+
+  it("오프라인이면 아무것도 받지 않는다", async () => {
+    vi.spyOn(navigator, "onLine", "get").mockReturnValue(false);
+    const fetchMock = mockFetch();
+
+    scheduleMediaCaching([VIDEO]);
+    await __waitForMediaCachingForTests();
+
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("처음 시작할 때 한 번만 영구 저장소를 요청한다", async () => {
+    mockFetch();
+    const persist = vi.fn(async () => true);
+    const original = Object.getOwnPropertyDescriptor(navigator, "storage");
+    Object.defineProperty(navigator, "storage", {
+      value: { persisted: async () => false, persist },
+      configurable: true,
+    });
+
+    try {
+      scheduleMediaCaching([VIDEO]);
+      await __waitForMediaCachingForTests();
+      scheduleMediaCaching([OTHER]);
+      await __waitForMediaCachingForTests();
+    } finally {
+      if (original) {
+        Object.defineProperty(navigator, "storage", original);
+      } else {
+        // @ts-expect-error 테스트에서 주입한 속성을 되돌린다
+        delete navigator.storage;
+      }
+    }
+
+    expect(persist).toHaveBeenCalledTimes(1);
   });
 });
 

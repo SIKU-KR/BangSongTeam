@@ -49,10 +49,9 @@ describe("shouldRunBootSync", () => {
     expect(shouldRunBootSync("/present/abc/fullscreen/")).toBe(false);
   });
 
-  it("runs on editing screens and the worship prep screen", () => {
+  it("runs on editing screens", () => {
     expect(shouldRunBootSync("/presentations")).toBe(true);
     expect(shouldRunBootSync("/editor/abc")).toBe(true);
-    expect(shouldRunBootSync("/present/abc/ready")).toBe(true);
   });
 });
 

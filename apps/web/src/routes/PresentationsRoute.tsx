@@ -2,7 +2,7 @@ import React from "react";
 import { useNavigate } from "react-router-dom";
 import { MergedSlidesView } from "../features/library";
 import {
-  launchPreparation,
+  launchPresentation,
   usePresentationList,
 } from "../features/presentation";
 import { useAppShell } from "./appShellContext";
@@ -20,9 +20,10 @@ export function PresentationsRoute(): React.JSX.Element {
     navigate(`/editor/${id}`);
   };
 
-  // 카드에서 바로 송출: 경로에 id가 실리므로 활성 문서와 어긋날 일이 없다
+  // 카드에서 바로 송출: 경로에 id가 실리므로 활성 문서와 어긋날 일이 없다.
+  // 클릭 핸들러 안에서 동기로 불러야 Chrome이 전체화면을 허용한다.
   const handleStartPresentation = (id: string): void => {
-    launchPreparation(navigate, id);
+    launchPresentation(navigate, id);
   };
 
   return (

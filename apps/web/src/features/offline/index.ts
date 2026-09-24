@@ -1,6 +1,4 @@
 export {
-  useWorshipPrep,
-  type WorshipPrep,
-  type WorshipPrepState,
-  type WorshipPrepPhase,
-} from "./useWorshipPrep";
+  useBackgroundAutoCache,
+  AUTO_CACHE_DELAY_MS,
+} from "./useBackgroundAutoCache";

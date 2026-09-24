@@ -8,8 +8,8 @@
 
 /**
  * Workbox 런타임 캐시 이름.
- * `vite.config.ts`의 runtimeCaching.cacheName과 예배 준비 화면의
- * `caches.open()`이 반드시 같은 값을 써야 한다.
+ * `vite.config.ts`의 runtimeCaching.cacheName과 백그라운드 캐시
+ * (`apps/web/src/lib/offline/mediaCache.ts`)의 `caches.open()`이 반드시 같은 값을 써야 한다.
  */
 export const MEDIA_CACHE_NAME = "worship-videos-cache";
 

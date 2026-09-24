@@ -51,10 +51,6 @@ export interface WorshipOfflineDB extends DBSchema {
       /** 로컬 변경이 아직 서버에 올라가지 않았는지 */
       dirty?: boolean;
       lastSyncedAt?: number;
-      isReady?: boolean;
-      cachedVideos?: string[];
-      cachedAt?: number;
-      storagePersisted?: boolean;
     };
   };
   auth_session: {

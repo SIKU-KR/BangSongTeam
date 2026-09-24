@@ -5,9 +5,9 @@ import { collectPresentationFonts, type Presentation } from "@repo/shared";
  *
  * 번들 폰트 전체(Pretendard 9종 + Noto Sans KR 유니코드 서브셋 수백 개)는 33MB라
  * 프리캐시할 수 없다. 대신 Service Worker가 `worship-fonts-cache`로 실제 요청된
- * 서브셋만 담는데, 그 요청은 해당 글자가 화면에 그려질 때 발생한다. 준비 단계에서
- * 가사 글자를 직접 지정해 `document.fonts.load`를 부르면, 송출 때 쓸 서브셋이
- * 미리 캐시에 들어간다.
+ * 서브셋만 담는데, 그 요청은 해당 글자가 화면에 그려질 때 발생한다. 세트를 열었을
+ * 때 가사 글자를 직접 지정해 `document.fonts.load`를 부르면, 아직 화면에 그려지지
+ * 않은 곡의 서브셋까지 캐시에 들어간다.
  */
 
 /** 이 세트에서 실제로 쓰이는 글자들(중복 제거)을 뽑는다 */

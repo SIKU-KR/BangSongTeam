@@ -24,7 +24,7 @@ import {
   canRedo,
   loadSampleSongsIntoActivePresentation,
   createNewPresentation,
-  launchPreparation,
+  launchPresentation,
   usePresentationById,
   openPresentation,
 } from "../features/presentation";
@@ -56,6 +56,7 @@ import { SlideFilmstrip } from "../features/editor/SlideFilmstrip";
 import { SongPropertyPanel } from "../features/editor/SongPropertyPanel";
 import { SongPickerModal } from "../features/editor/SongPickerModal";
 import { SongSharePanel } from "../features/sharing/SongSharePanel";
+import { useBackgroundAutoCache } from "../features/offline";
 
 /**
  * Canva / MiriCanvas 스타일 통합 프레젠테이션 편집기 라우트
@@ -79,6 +80,9 @@ export function EditorRoute(): React.JSX.Element {
   useLayoutEffect(() => {
     if (presentationId) openPresentation(presentationId);
   }, [presentationId]);
+
+  // 편집하는 동안 이 세트의 배경을 조용히 캐시에 담아 둔다 (예배 준비 화면 대체).
+  useBackgroundAutoCache(found ?? null);
 
   const initialSongIndex = Math.min(
     Math.max(0, Number(searchParams.get("song") || 0)),
@@ -117,9 +121,9 @@ export function EditorRoute(): React.JSX.Element {
   const backgroundUrl = getBackgroundMediaUrl(currentSong?.backgroundId);
   const posterUrl = getBackgroundPosterUrl(currentSong?.backgroundId);
 
-  // 슬라이드쇼 발표 핸들러
+  // 슬라이드쇼 발표 핸들러 (클릭 제스처 안에서 곧바로 전체화면 송출)
   const handlePresent = () => {
-    if (presentationId) launchPreparation(navigate, presentationId);
+    if (presentationId) launchPresentation(navigate, presentationId);
   };
 
   // 슬라이드 선택 핸들러

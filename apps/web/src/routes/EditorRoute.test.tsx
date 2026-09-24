@@ -75,13 +75,13 @@ describe("EditorRoute (Canva / MiriCanvas Presentation Editor)", () => {
     expect(screen.getByTestId("slide-filmstrip")).toBeInTheDocument();
   });
 
-  it("should navigate to the worship preparation screen when present button is clicked", () => {
+  it("should go straight to fullscreen projection when present button is clicked", () => {
     renderEditor();
 
     const presentBtn = screen.getByTestId("header-present-btn");
     fireEvent.click(presentBtn);
 
-    expect(mockNavigate).toHaveBeenCalledWith(`/present/${DOC_ID}/ready`);
+    expect(mockNavigate).toHaveBeenCalledWith(`/present/${DOC_ID}/fullscreen`);
   });
 
   it("should switch active slide when clicking slide in filmstrip", () => {
