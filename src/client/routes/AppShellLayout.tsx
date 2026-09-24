@@ -65,7 +65,6 @@ function AppShellFrame(): React.JSX.Element {
 
   const meta = metaFor(pathname);
   const onDrive = isDrivePath(pathname);
-  const onTrash = pathname === "/presentations/trash";
   const onBackgrounds = pathname.startsWith("/backgrounds");
 
   const handleCreateNewPresentation = (): void => {
@@ -102,15 +101,7 @@ function AppShellFrame(): React.JSX.Element {
           sortOrder={sortOrder}
           onSortOrderChange={setSortOrder}
           itemCountLabel=""
-          toolbarStart={
-            onTrash ? (
-              <span className="px-2 text-base font-bold tracking-tight text-zinc-900 dark:text-white">
-                휴지통
-              </span>
-            ) : onDrive ? (
-              <DriveBreadcrumbs />
-            ) : undefined
-          }
+          toolbarStart={onDrive ? <DriveBreadcrumbs /> : undefined}
           quickAddSlot={
             onDrive ? (
               <NewMenuButton variant="fab" testId="toolbar-new-btn" />

@@ -225,3 +225,97 @@ export function DriveListRow({
     </div>
   );
 }
+
+/**
+ * 내 드라이브 루트 맨 위에 고정된 휴지통 폴더.
+ *
+ * 실제 폴더가 아니라 휴지통 화면으로 가는 입구라서 선택·이름 바꾸기·이동·삭제가
+ * 없다. 목록(listbox) 밖에 두어 전체 선택과 Delete 대상에서도 빠진다.
+ * 항목을 끌어다 놓으면 휴지통으로 옮긴다.
+ */
+export function TrashFolderRow({
+  count,
+  onOpen,
+  onMenu,
+}: {
+  count: number;
+  onOpen: () => void;
+  onMenu: (anchor: { x: number; y: number }) => void;
+}): React.JSX.Element {
+  const { setNodeRef, isDropTarget } = useDriveDroppable("item:trash-folder", {
+    kind: "trash",
+  });
+  const stateClass = isDropTarget
+    ? "bg-rose-50 dark:bg-rose-950/40 outline outline-2 -outline-offset-2 outline-rose-500"
+    : "hover:bg-zinc-50 dark:hover:bg-zinc-800/50";
+
+  return (
+    <div
+      ref={setNodeRef}
+      role="button"
+      aria-label="휴지통 (고정 폴더)"
+      tabIndex={0}
+      data-testid="drive-trash-folder"
+      onClick={(event) => event.stopPropagation()}
+      onDoubleClick={onOpen}
+      onKeyDown={(event) => {
+        if (event.key !== "Enter") return;
+        event.preventDefault();
+        event.stopPropagation();
+        onOpen();
+      }}
+      onContextMenu={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        onMenu({ x: event.clientX, y: event.clientY });
+      }}
+      className={`${LIST_COLUMNS} py-2.5 text-xs text-zinc-700 dark:text-zinc-300 cursor-pointer select-none transition-colors outline-none border-b last:border-b-0 border-zinc-200 dark:border-zinc-800/60 focus-visible:bg-zinc-100 dark:focus-visible:bg-zinc-800 ${stateClass}`}
+    >
+      <div className="flex items-center gap-3 min-w-0">
+        <span
+          data-testid="row-icon-trash"
+          className="flex shrink-0 text-rose-500 dark:text-rose-400"
+        >
+          <Icon name="trash" className="w-5 h-5" />
+        </span>
+        <div className="min-w-0">
+          <span className="font-semibold text-zinc-900 dark:text-white truncate block">
+            휴지통
+          </span>
+          <span className="text-[11px] text-zinc-500 truncate block">
+            삭제한 항목은 영구 삭제 전까지 복원할 수 있습니다
+          </span>
+        </div>
+      </div>
+      <span className="hidden sm:block text-zinc-500 dark:text-zinc-400">
+        나
+      </span>
+      <span className="hidden md:block text-zinc-400 dark:text-zinc-500">
+        -
+      </span>
+      <span className="min-w-0">
+        <span
+          data-testid="trash-folder-count"
+          className="inline-block max-w-full truncate align-middle px-2 py-0.5 rounded-full text-[10px] bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-700"
+        >
+          {`항목 ${count}개`}
+        </span>
+      </span>
+      <div className="flex items-center justify-end gap-1.5">
+        <RowButton
+          testId="trash-folder-open-btn"
+          label="열기"
+          title="휴지통 열기"
+          onSelect={onOpen}
+        />
+        <MoreButton
+          label="휴지통"
+          onMore={(event) => {
+            const rect = event.currentTarget.getBoundingClientRect();
+            onMenu({ x: rect.right - 200, y: rect.bottom + 4 });
+          }}
+        />
+      </div>
+    </div>
+  );
+}

@@ -4,7 +4,7 @@ import { usePresentationList } from "../presentation";
 import { useAppShell } from "../../routes/appShellContext";
 import { useFolderIndex } from "./folderStore";
 import { useDrive } from "./driveContext";
-import { openItem, startPresentation } from "./driveActions";
+import { TRASH_PATH, openItem, startPresentation } from "./driveActions";
 import {
   listFolderContents,
   listTrash,
@@ -16,6 +16,7 @@ import {
 import {
   DriveListHeader,
   DriveListRow,
+  TrashFolderRow,
   type DriveItemHandlers,
 } from "./DriveItems";
 import { PopoverMenu, type MenuAction } from "./PopoverMenu";
@@ -49,7 +50,7 @@ function isTypingTarget(target: EventTarget | null): boolean {
  *
  * 폴더와 파일을 한 목록에 섞어 보여 준다. 섹션을 나누지 않는다.
  * - 클릭: 선택 · Ctrl/⌘+클릭: 추가·해제 · Shift+클릭: 범위 · 더블클릭: 열기
- * - 우클릭·⋮: 메뉴 · 끌어서 폴더·경로·사이드바 트리·휴지통에 놓기
+ * - 우클릭·⋮: 메뉴 · 끌어서 폴더·경로·고정된 휴지통 폴더에 놓기
  * - Esc, ⌘/Ctrl+A, Enter, F2, Delete
  */
 export function DriveBrowser({
@@ -72,6 +73,12 @@ export function DriveBrowser({
     return listFolderContents(index, presentations, folderId, sortOrder);
   }, [isTrash, index, presentations, query, sortOrder, folderId]);
 
+  const showTrashFolder = !isTrash && folderId === null && !query;
+  const trashCount = useMemo(
+    () => (showTrashFolder ? listTrash(index, presentations).length : 0),
+    [showTrashFolder, index, presentations],
+  );
+
   const keys = useMemo(() => items.map((item) => item.key), [items]);
   const selectedItems = items.filter((item) => drive.selection.has(item.key));
 
@@ -90,6 +97,26 @@ export function DriveBrowser({
     },
     [isTrash, drive, navigate],
   );
+
+  const trashFolderActions: MenuAction[] = [
+    {
+      key: "open",
+      label: "열기",
+      icon: "open",
+      testId: "action-open",
+      onSelect: () => navigate(TRASH_PATH),
+    },
+    {
+      key: "empty-trash",
+      label: "휴지통 비우기",
+      icon: "trash",
+      danger: true,
+      separated: true,
+      disabled: trashCount === 0,
+      testId: "action-empty-trash",
+      onSelect: () => drive.requestEmptyTrash(),
+    },
+  ];
 
   const actionsFor = (targets: DriveItem[]): MenuAction[] => {
     const refs = targets.map(toRef);
@@ -302,32 +329,44 @@ export function DriveBrowser({
         )}
       </div>
 
-      {items.length === 0 ? (
-        <EmptyState mode={mode} query={query} />
-      ) : (
+      {(items.length > 0 || showTrashFolder) && (
         <div className="border border-zinc-200 dark:border-zinc-800/80 rounded-2xl overflow-hidden bg-white dark:bg-zinc-900/40 shadow-sm">
           <DriveListHeader dateLabel={isTrash ? "삭제일" : "수정일"} />
-          <div
-            role="listbox"
-            aria-multiselectable="true"
-            aria-label={isTrash ? "휴지통" : "폴더와 프레젠테이션"}
-            className="divide-y divide-zinc-200 dark:divide-zinc-800/60"
-          >
-            {items.map((item) => (
-              <DriveListRow
-                key={item.key}
-                item={item}
-                date={
-                  isTrash
-                    ? (trashedAtOf(item) ?? item.updatedAt)
-                    : item.updatedAt
-                }
-                handlers={handlersFor(item)}
-              />
-            ))}
-          </div>
+          {showTrashFolder && (
+            <TrashFolderRow
+              count={trashCount}
+              onOpen={() => navigate(TRASH_PATH)}
+              onMenu={(anchor) => {
+                drive.clearSelection();
+                setMenu({ anchor, actions: trashFolderActions });
+              }}
+            />
+          )}
+          {items.length > 0 && (
+            <div
+              role="listbox"
+              aria-multiselectable="true"
+              aria-label={isTrash ? "휴지통" : "폴더와 프레젠테이션"}
+              className="divide-y divide-zinc-200 dark:divide-zinc-800/60"
+            >
+              {items.map((item) => (
+                <DriveListRow
+                  key={item.key}
+                  item={item}
+                  date={
+                    isTrash
+                      ? (trashedAtOf(item) ?? item.updatedAt)
+                      : item.updatedAt
+                  }
+                  handlers={handlersFor(item)}
+                />
+              ))}
+            </div>
+          )}
         </div>
       )}
+
+      {items.length === 0 && <EmptyState mode={mode} query={query} />}
 
       {menu && (
         <PopoverMenu

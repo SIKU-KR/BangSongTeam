@@ -97,7 +97,7 @@ function describeCount(refs: readonly DriveItemRef[]): string {
 /**
  * 드라이브 상태 공급자 (홈 셸 전체를 감싼다).
  *
- * 사이드바 폴더 트리, 헤더 브레드크럼, 본문 그리드가 같은 선택·드래그 상태를
+ * 사이드바, 헤더 브레드크럼, 본문 목록이 같은 선택·드래그 상태를
  * 봐야 하므로 셸 한 곳에 둔다. 대화 상자와 알림(실행 취소)도 여기서 띄운다.
  */
 export function DriveProvider({
