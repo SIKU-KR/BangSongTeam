@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { usePersistenceError } from "../../lib/storage";
 import { useSyncStatus } from "../../lib/sync";
@@ -82,6 +82,60 @@ export function EditorHeader({
   const [tempTitle, setTempTitle] = useState(title);
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [showFileMenu, setShowFileMenu] = useState(false);
+  const fileMenuRef = useRef<HTMLDivElement>(null);
+  const shortcutsRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!showFileMenu) return;
+
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        fileMenuRef.current &&
+        !fileMenuRef.current.contains(event.target as Node)
+      ) {
+        setShowFileMenu(false);
+      }
+    };
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setShowFileMenu(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [showFileMenu]);
+
+  useEffect(() => {
+    if (!showShortcuts) return;
+
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        shortcutsRef.current &&
+        !shortcutsRef.current.contains(event.target as Node)
+      ) {
+        setShowShortcuts(false);
+      }
+    };
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setShowShortcuts(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [showShortcuts]);
 
   const handleTitleSubmit = () => {
     setIsEditingTitle(false);
@@ -121,10 +175,12 @@ export function EditorHeader({
           <span className="hidden sm:inline">홈</span>
         </button>
 
-        <div className="relative">
+        <div ref={fileMenuRef} className="relative">
           <button
             type="button"
             data-testid="header-file-menu-btn"
+            aria-haspopup="menu"
+            aria-expanded={showFileMenu}
             onClick={() => setShowFileMenu((prev) => !prev)}
             className="px-2 py-1 rounded text-xs text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors flex items-center gap-1 cursor-pointer font-medium"
           >
@@ -145,10 +201,15 @@ export function EditorHeader({
           </button>
 
           {showFileMenu && (
-            <div className="absolute left-0 top-9 z-50 w-52 py-1.5 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-lg dark:shadow-2xl text-xs space-y-0.5 font-sans">
+            <div
+              role="menu"
+              data-testid="header-file-menu-dropdown"
+              className="absolute left-0 top-9 z-50 w-52 py-1.5 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-lg dark:shadow-2xl text-xs space-y-0.5 font-sans"
+            >
               {onNewPresentation && (
                 <button
                   type="button"
+                  role="menuitem"
                   onClick={() => {
                     setShowFileMenu(false);
                     onNewPresentation();
@@ -174,6 +235,7 @@ export function EditorHeader({
               {onOpenLyricModal && (
                 <button
                   type="button"
+                  role="menuitem"
                   onClick={() => {
                     setShowFileMenu(false);
                     onOpenLyricModal();
@@ -199,6 +261,7 @@ export function EditorHeader({
               {onLoadSampleSongs && (
                 <button
                   type="button"
+                  role="menuitem"
                   onClick={() => {
                     setShowFileMenu(false);
                     onLoadSampleSongs();
@@ -224,6 +287,7 @@ export function EditorHeader({
               <div className="my-1 border-t border-zinc-200 dark:border-zinc-800" />
               <button
                 type="button"
+                role="menuitem"
                 onClick={() => {
                   setShowFileMenu(false);
                   onPresent();
@@ -355,9 +419,11 @@ export function EditorHeader({
       </div>
 
       <div className="flex items-center gap-2 shrink-0">
-        <div className="relative">
+        <div ref={shortcutsRef} className="relative">
           <button
             type="button"
+            data-testid="header-shortcuts-btn"
+            aria-expanded={showShortcuts}
             onClick={() => setShowShortcuts((prev) => !prev)}
             className="p-1.5 rounded-lg text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors text-xs flex items-center gap-1 cursor-pointer"
             title="송출 단축키 안내"

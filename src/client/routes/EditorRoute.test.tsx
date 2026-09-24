@@ -282,6 +282,55 @@ describe("EditorRoute (PowerPoint식 프레젠테이션 편집기)", () => {
     );
   });
 
+  it("파일 메뉴는 ESC 키로 닫힌다", () => {
+    renderEditor();
+
+    act(() => {
+      fireEvent.click(screen.getByTestId("header-file-menu-btn"));
+    });
+    expect(screen.getByTestId("header-file-menu-dropdown")).toBeInTheDocument();
+
+    act(() => {
+      fireEvent.keyDown(document, { key: "Escape" });
+    });
+    expect(
+      screen.queryByTestId("header-file-menu-dropdown"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("파일 메뉴는 바깥 클릭으로 닫힌다", () => {
+    renderEditor();
+
+    act(() => {
+      fireEvent.click(screen.getByTestId("header-file-menu-btn"));
+    });
+    expect(screen.getByTestId("header-file-menu-dropdown")).toBeInTheDocument();
+
+    act(() => {
+      fireEvent.mouseDown(document.body);
+    });
+    expect(
+      screen.queryByTestId("header-file-menu-dropdown"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("파일 메뉴는 버튼을 다시 누르면 닫힌다", () => {
+    renderEditor();
+
+    const fileBtn = screen.getByTestId("header-file-menu-btn");
+    act(() => {
+      fireEvent.click(fileBtn);
+    });
+    expect(screen.getByTestId("header-file-menu-dropdown")).toBeInTheDocument();
+
+    act(() => {
+      fireEvent.click(fileBtn);
+    });
+    expect(
+      screen.queryByTestId("header-file-menu-dropdown"),
+    ).not.toBeInTheDocument();
+  });
+
   describe("PPT식 썸네일 창 & 연속 슬라이드 번호", () => {
     it("번호는 곡이 바뀌어도 1로 돌아가지 않고 이어진다", () => {
       renderEditor();
