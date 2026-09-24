@@ -93,3 +93,22 @@ describe("로컬 개발용 환경 변수 템플릿", () => {
     expect(content).not.toMatch(/^R2_PUBLIC_DOMAIN=/m);
   });
 });
+
+describe("GitHub Actions CI/CD 워크플로우 설정", () => {
+  it("ci-cd.yml이 앱 기능 외 파일 변경 시 검증을 건너뛰도록 구성된다", () => {
+    const workflowPath = path.join(rootDir, ".github/workflows/ci-cd.yml");
+    const content = fs.readFileSync(workflowPath, "utf-8");
+
+    expect(content).toContain("name: CI/CD");
+    expect(content).toContain("paths-ignore:");
+    expect(content).toContain("docs/**");
+    expect(content).toContain("**.md");
+    expect(content).toContain(".gitignore");
+    expect(content).toContain(".prettierignore");
+    expect(content).toContain(".dev.vars.example");
+    expect(content).toContain("dorny/paths-filter");
+    expect(content).toContain("Typecheck, Lint & Test");
+    expect(content).toContain("Migrate D1 & Deploy Worker");
+  });
+});
+
