@@ -62,10 +62,10 @@ describe("Task 4.5: 초기 10개 모션 루프 영상 D1 시드", () => {
  * 실패한다 — 실제로 그렇게 동기화가 500으로 죽고 있었다. 정적 SQL은 상수에서
  * 파생시킬 수 없으므로 여기서 대조한다.
  */
-describe("0007_seed_backgrounds_nanoid 마이그레이션과 공용 상수 정합성", () => {
+describe("0001_initial 배경 시드와 공용 상수 정합성", () => {
   const migrationPath = path.resolve(
     __dirname,
-    "../../drizzle/0007_seed_backgrounds_nanoid.sql",
+    "../../drizzle/0001_initial.sql",
   );
   const sql = fs.readFileSync(migrationPath, "utf-8");
 
@@ -120,8 +120,6 @@ describe("0007_seed_backgrounds_nanoid 마이그레이션과 공용 상수 정�
       ),
     ) as { entries: { idx: number; tag: string }[] };
 
-    expect(journal.entries.map((e) => e.tag)).toContain(
-      "0007_seed_backgrounds_nanoid",
-    );
+    expect(journal.entries.map((e) => e.tag)).toContain("0001_initial");
   });
 });

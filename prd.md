@@ -348,7 +348,7 @@ Vite 기반 React SPA와 Hono API를 하나의 Cloudflare Worker로 배포하고
 | presentation\_items    | id, presentation\_id, deck\_id, order                                                                                                                | 세트에 들어간 덱 순서                                                                              |
 | reports                | id, target\_type, target\_id, reason, status                                                                                                         | 가사 오류·저작권·부적절 콘텐츠 신고                                                                |
 
-가사 라이브러리 테이블(`lyrics_catalog`·`lyrics_versions`)은 MVP에서 제거했다 (4.8, 마이그레이션 `0005_remove_catalog`).
+가사 라이브러리 테이블(`lyrics_catalog`·`lyrics_versions`)은 MVP에서 제거했다 (4.8).
 
 `decks.style`에는 오버레이 불투명도, 폰트, 크기, 그림자, 정렬, 텍스트 박스 위치(anchor 프리셋, x·y·폭 %)를 담는다. 모두 곡(덱) 단위 값이다.
 

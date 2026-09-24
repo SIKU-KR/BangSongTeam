@@ -66,9 +66,8 @@ export const decks = sqliteTable(
 
 // FTS5 가상 테이블을 Drizzle 쿼리 빌더에서 참조하기 위한 테이블 정의.
 //
-// 실제 DDL(가상 테이블·트리거)은 손으로 쓴 커스텀 마이그레이션(`0001_fts5`,
-// `0004_m5_fts`)에만 있다. drizzle-kit이 이 정의로 만든 `*_fts` DDL은 생성된
-// 마이그레이션에서 지운다 (docs/tasks/m5/tasks_1.md 가드레일 4).
+// 실제 DDL(가상 테이블·트리거)은 마이그레이션(`0001_initial`)에 손으로 덧붙였다.
+// drizzle-kit이 이 정의로 만든 `*_fts` DDL은 생성된 마이그레이션에서 지운다 (docs/tasks/m5/tasks_1.md 가드레일 4).
 export const decksFts = sqliteTable("decks_fts", {
   deckId: text("deck_id").notNull(),
   title: text("title").notNull(),

@@ -14,12 +14,6 @@ export interface TestDbResult {
   db: BetterSQLite3Database<typeof schema>;
 }
 
-/** 테스트가 배경을 직접 넣으므로 시드 마이그레이션은 건너뛴다 */
-const SKIPPED_MIGRATIONS = new Set([
-  "0002_seed_backgrounds.sql",
-  "0007_seed_backgrounds_nanoid.sql",
-]);
-
 /**
  * 모든 마이그레이션(FTS5 가상 테이블·트리거 포함)을 적용한 인메모리 SQLite를 만든다.
  *
@@ -33,7 +27,6 @@ export function createTestDb(): TestDbResult {
   const files = fs
     .readdirSync(dir)
     .filter((name) => /^\d{4}_.*\.sql$/.test(name))
-    .filter((name) => !SKIPPED_MIGRATIONS.has(name))
     .sort();
 
   for (const file of files) {
@@ -42,6 +35,8 @@ export function createTestDb(): TestDbResult {
       if (stmt.trim()) sqlite.exec(stmt);
     }
   }
+  // 테스트가 배경을 직접 넣으므로 `0001_initial`이 시드한 배경 10건은 비운다
+  sqlite.exec("DELETE FROM backgrounds");
 
   const db = drizzle(sqlite, { schema });
   return { sqlite, db };

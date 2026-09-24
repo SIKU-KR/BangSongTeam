@@ -9,7 +9,7 @@ import { decks } from "../schema";
  * - 공개로 전환된 것만
  * - 운영자가 게시를 중단하지 않은 것만
  *
- * `0004_m5_fts.sql`의 FTS 트리거 조건과 같다. 둘 중 하나만 바꾸지 않는다.
+ * `drizzle/0001_initial.sql`의 FTS 트리거 조건과 같다. 둘 중 하나만 바꾸지 않는다.
  */
 export function publicDeckCondition() {
   return and(
