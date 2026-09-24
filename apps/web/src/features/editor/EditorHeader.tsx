@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { usePersistenceError } from "../../lib/storage";
 import { useSyncStatus } from "../../lib/sync";
+import { ThemeMenuButton } from "../../components/common/ThemeMenuButton";
 
 export interface EditorHeaderProps {
   title: string;
@@ -9,8 +10,10 @@ export interface EditorHeaderProps {
   onPresent: () => void;
   currentSongIndex: number;
   totalSongs: number;
-  currentSlideIndex: number;
-  totalSlides: number;
+  /** 세트 전체에서 1부터 이어지는 현재 슬라이드 번호 (곡이 바뀌어도 이어진다) */
+  currentSlideNumber: number;
+  /** 세트 전체 슬라이드 수 */
+  totalSlideCount: number;
   onUndo?: () => void;
   onRedo?: () => void;
   canUndo?: boolean;
@@ -22,12 +25,13 @@ export interface EditorHeaderProps {
 }
 
 /**
- * Canva / MiriCanvas 스타일 편집기 상단 네비게이션 헤더
+ * 편집기 상단 네비게이션 헤더
  * - 뒤로가기 링크 및 파일(File) 메뉴
  * - 세트 제목 인라인 편집
  * - 실행 취소(Undo) / 다시 실행(Redo)
  * - 자동 저장 상태 표시기
- * - 슬라이드 카운터
+ * - 슬라이드 카운터 (세트 전체 연속 번호)
+ * - 라이트·다크 테마 전환
  * - 슬라이드쇼 발표(전체화면) CTA 버튼
  */
 /**
@@ -76,8 +80,8 @@ export function EditorHeader({
   onPresent,
   currentSongIndex,
   totalSongs,
-  currentSlideIndex,
-  totalSlides,
+  currentSlideNumber,
+  totalSlideCount,
   onUndo,
   onRedo,
   canUndo = false,
@@ -362,7 +366,7 @@ export function EditorHeader({
             </span>
             <span className="text-zinc-400 dark:text-zinc-600">·</span>
             <span>
-              슬라이드 {currentSlideIndex + 1}/{totalSlides}
+              슬라이드 {currentSlideNumber}/{totalSlideCount}
             </span>
           </>
         ) : (
@@ -429,7 +433,10 @@ export function EditorHeader({
           )}
         </div>
 
-        {/* Canva 스타일 발표 CTA 버튼 */}
+        {/* 라이트·다크 테마 전환 */}
+        <ThemeMenuButton variant="compact" direction="down" align="right" />
+
+        {/* 슬라이드쇼 발표 CTA 버튼 */}
         <button
           type="button"
           data-testid="header-present-btn"

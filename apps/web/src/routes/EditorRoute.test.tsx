@@ -41,7 +41,7 @@ vi.mock("react-router-dom", async () => {
   };
 });
 
-describe("EditorRoute (Canva / MiriCanvas Presentation Editor)", () => {
+describe("EditorRoute (PowerPoint식 프레젠테이션 편집기)", () => {
   beforeEach(() => {
     signInAsTestUser();
     resetPresentationStore();
@@ -50,7 +50,7 @@ describe("EditorRoute (Canva / MiriCanvas Presentation Editor)", () => {
     vi.restoreAllMocks();
   });
 
-  it("should render editor header, stage canvas, property panel, sidebar, and filmstrip", () => {
+  it("should render editor header, stage canvas, property panel, and slide thumbnail pane", () => {
     renderEditor();
 
     // Header & Title
@@ -63,16 +63,16 @@ describe("EditorRoute (Canva / MiriCanvas Presentation Editor)", () => {
       screen.getByText("16:9 와이드스크린 (1920 × 1080)"),
     ).toBeInTheDocument();
 
-    // Sidebar & Songs
-    expect(screen.getByTestId("editor-sidebar")).toBeInTheDocument();
-    expect(screen.getAllByText("은혜로다")[0]).toBeInTheDocument();
+    // PPT식 좌측 썸네일 창 & 곡 구역
+    expect(screen.getByTestId("slide-thumbnail-pane")).toBeInTheDocument();
+    expect(screen.getByTestId("song-section-0")).toHaveTextContent("은혜로다");
 
     // Properties panel
     expect(screen.getByTestId("song-property-panel")).toBeInTheDocument();
     expect(screen.getByText("슬라이드 디자인 & 속성")).toBeInTheDocument();
 
-    // Filmstrip
-    expect(screen.getByTestId("slide-filmstrip")).toBeInTheDocument();
+    // 하단 슬라이드 스트립은 없다
+    expect(screen.queryByTestId("slide-filmstrip")).not.toBeInTheDocument();
   });
 
   it("should navigate to the worship preparation screen when present button is clicked", () => {
@@ -84,11 +84,10 @@ describe("EditorRoute (Canva / MiriCanvas Presentation Editor)", () => {
     expect(mockNavigate).toHaveBeenCalledWith(`/present/${DOC_ID}/ready`);
   });
 
-  it("should switch active slide when clicking slide in filmstrip", () => {
+  it("should switch active slide when clicking a slide thumbnail", () => {
     renderEditor();
 
-    const secondSlideStrip = screen.getByTestId("slide-strip-item-1");
-    fireEvent.click(secondSlideStrip);
+    fireEvent.click(screen.getByTestId("slide-thumb-1"));
 
     // Text of second slide of 은혜로다 should now be in the canvas/property panel
     expect(
@@ -137,14 +136,20 @@ describe("EditorRoute (Canva / MiriCanvas Presentation Editor)", () => {
     expect(screen.getByText("75%")).toBeInTheDocument();
   });
 
-  it("should add a new slide when clicking add slide in filmstrip", () => {
+  it("should add a new slide after the current slide", () => {
     renderEditor();
 
-    const addSlideBtn = screen.getByTestId("add-slide-filmstrip-btn");
-    fireEvent.click(addSlideBtn);
+    // 세트 전체 23장
+    expect(screen.queryByTestId("slide-thumb-23")).not.toBeInTheDocument();
 
-    // 은혜로다 initially has 5 slides, now should have 6
-    expect(screen.getByTestId("slide-strip-item-5")).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId("add-slide-btn"));
+
+    // 24장이 되고, 새 슬라이드(1곡 2번째)가 선택된다
+    expect(screen.getByTestId("slide-thumb-23")).toBeInTheDocument();
+    expect(screen.getByTestId("song-section-0")).toHaveTextContent("6장");
+    expect(screen.getByTestId("editor-header")).toHaveTextContent(
+      "슬라이드 2/24",
+    );
   });
 
   it("should trigger undo and redo in header", () => {
@@ -178,20 +183,6 @@ describe("EditorRoute (Canva / MiriCanvas Presentation Editor)", () => {
     expect(screen.getByText("새로운 예배 제목")).toBeInTheDocument();
   });
 
-  it("should collapse and expand filmstrip", () => {
-    renderEditor();
-
-    const collapseBtn = screen.getByTestId("collapse-filmstrip-btn");
-    fireEvent.click(collapseBtn);
-
-    expect(screen.getByTestId("slide-filmstrip-collapsed")).toBeInTheDocument();
-
-    const expandBtn = screen.getByTestId("expand-filmstrip-btn");
-    fireEvent.click(expandBtn);
-
-    expect(screen.getByTestId("slide-filmstrip")).toBeInTheDocument();
-  });
-
   it("should support canvas zoom controls", () => {
     renderEditor();
 
@@ -209,20 +200,20 @@ describe("EditorRoute (Canva / MiriCanvas Presentation Editor)", () => {
   it("should support keyboard navigation shortcuts (Space, ArrowRight, ArrowLeft)", () => {
     renderEditor();
 
-    // Initial slide: 은혜로다 slide 1
-    expect(screen.getAllByText(/1 \/ 5/)[0]).toBeInTheDocument();
+    // Initial slide: 세트 전체 23장 중 1번
+    expect(screen.getByText("1 / 23")).toBeInTheDocument();
 
     // Press ArrowRight -> moves to slide 2
     fireEvent.keyDown(window, { key: "ArrowRight" });
-    expect(screen.getAllByText(/2 \/ 5/)[0]).toBeInTheDocument();
+    expect(screen.getByText("2 / 23")).toBeInTheDocument();
 
     // Press Space -> moves to slide 3
     fireEvent.keyDown(window, { key: " " });
-    expect(screen.getAllByText(/3 \/ 5/)[0]).toBeInTheDocument();
+    expect(screen.getByText("3 / 23")).toBeInTheDocument();
 
     // Press ArrowLeft -> moves back to slide 2
     fireEvent.keyDown(window, { key: "ArrowLeft" });
-    expect(screen.getAllByText(/2 \/ 5/)[0]).toBeInTheDocument();
+    expect(screen.getByText("2 / 23")).toBeInTheDocument();
   });
 
   it("should collapse and expand song property panel", () => {
@@ -255,16 +246,15 @@ describe("EditorRoute (Canva / MiriCanvas Presentation Editor)", () => {
     renderEditor();
 
     // Select slide 3 (index 2)
-    const slide3 = screen.getByTestId("slide-strip-item-2");
-    fireEvent.click(slide3);
-    expect(screen.getAllByText(/3 \/ 5/)[0]).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId("slide-thumb-2"));
+    expect(screen.getByText("3 / 23")).toBeInTheDocument();
 
     // Delete slide 1 (index 0)
-    const deleteSlide0Btn = screen.getByTestId("delete-slide-btn-0");
-    fireEvent.click(deleteSlide0Btn);
+    fireEvent.click(screen.getByTestId("delete-slide-btn-0"));
 
-    // Previously slide index was 2, after deleting index 0 it should now be index 1 (slide 2 of 4)
-    expect(screen.getAllByText(/2 \/ 4/)[0]).toBeInTheDocument();
+    // 같은 슬라이드가 계속 선택된 채로 번호만 당겨진다 (3 → 2, 전체 22장)
+    expect(screen.getByText("2 / 22")).toBeInTheDocument();
+    expect(screen.getByDisplayValue(/은혜로다 주의 은혜/)).toBeInTheDocument();
   });
 
   it("존재하지 않는 presentationId 는 /presentations 로 리다이렉트된다", () => {
@@ -284,8 +274,11 @@ describe("EditorRoute (Canva / MiriCanvas Presentation Editor)", () => {
   it("?song= 파라미터로 진입하면 해당 곡이 선택된다", () => {
     renderEditor(`/editor/${DOC_ID}?song=2`);
 
-    // 3번째 곡 '시선'
+    // 3번째 곡 '시선' — 1곡 5장 + 2곡 4장 다음이므로 10번 슬라이드
     expect(screen.getByTestId("editor-header")).toHaveTextContent("곡 3/5");
+    expect(screen.getByTestId("editor-header")).toHaveTextContent(
+      "슬라이드 10/23",
+    );
     expect(screen.getAllByText("시선").length).toBeGreaterThan(0);
   });
 
@@ -310,6 +303,147 @@ describe("EditorRoute (Canva / MiriCanvas Presentation Editor)", () => {
     expect(mockNavigate).toHaveBeenCalledWith(
       expect.stringMatching(/^\/editor\/[0-9a-f-]{36}$/),
     );
+  });
+
+  describe("PPT식 썸네일 창 & 연속 슬라이드 번호", () => {
+    it("번호는 곡이 바뀌어도 1로 돌아가지 않고 이어진다", () => {
+      renderEditor();
+
+      // 1곡(은혜로다) 5장 → 2곡(주 품에) 첫 장은 6번
+      expect(screen.getByTestId("slide-thumb-4")).toHaveTextContent("5");
+      expect(screen.getByTestId("slide-thumb-5")).toHaveTextContent("6");
+      expect(screen.getByTestId("slide-thumb-22")).toHaveTextContent("23");
+
+      fireEvent.click(screen.getByTestId("slide-thumb-5"));
+
+      const header = screen.getByTestId("editor-header");
+      expect(header).toHaveTextContent("곡 2/5");
+      expect(header).toHaveTextContent("슬라이드 6/23");
+      expect(screen.getByText("6 / 23")).toBeInTheDocument();
+      expect(screen.getByDisplayValue(/주 품에 품으소서/)).toBeInTheDocument();
+    });
+
+    it("방향키로 곡 경계를 넘어도 번호가 이어진다", () => {
+      renderEditor();
+
+      fireEvent.click(screen.getByTestId("slide-thumb-4"));
+      expect(screen.getByText("5 / 23")).toBeInTheDocument();
+
+      fireEvent.keyDown(window, { key: "ArrowRight" });
+      expect(screen.getByText("6 / 23")).toBeInTheDocument();
+      expect(screen.getByTestId("editor-header")).toHaveTextContent("곡 2/5");
+
+      fireEvent.keyDown(window, { key: "ArrowLeft" });
+      expect(screen.getByText("5 / 23")).toBeInTheDocument();
+      expect(screen.getByTestId("editor-header")).toHaveTextContent("곡 1/5");
+    });
+
+    it("캔버스 이전/다음 버튼은 곡이 아니라 세트의 처음/끝에서만 꺼진다", () => {
+      renderEditor();
+
+      expect(screen.getByTestId("canvas-prev-btn")).toBeDisabled();
+
+      // 1곡의 마지막 장에서도 다음 버튼이 켜져 있다
+      fireEvent.click(screen.getByTestId("slide-thumb-4"));
+      const nextBtn = screen.getByTestId("canvas-next-btn");
+      expect(nextBtn).not.toBeDisabled();
+      fireEvent.click(nextBtn);
+      expect(screen.getByText("6 / 23")).toBeInTheDocument();
+
+      fireEvent.click(screen.getByTestId("slide-thumb-22"));
+      expect(screen.getByTestId("canvas-next-btn")).toBeDisabled();
+    });
+
+    it("구역 헤더를 누르면 그 곡의 첫 슬라이드가 선택된다", () => {
+      renderEditor();
+
+      fireEvent.click(screen.getByTestId("song-section-title-2"));
+
+      expect(screen.getByTestId("editor-header")).toHaveTextContent(
+        "슬라이드 10/23",
+      );
+    });
+
+    it("구역 메뉴로 곡을 아래로 옮기면 선택도 따라간다", () => {
+      renderEditor();
+
+      fireEvent.click(screen.getByTestId("song-section-menu-btn-0"));
+      fireEvent.click(screen.getByRole("menuitem", { name: "아래로 이동" }));
+
+      expect(screen.getByTestId("song-section-0")).toHaveTextContent("주 품에");
+      expect(screen.getByTestId("song-section-1")).toHaveTextContent(
+        "은혜로다",
+      );
+      // 은혜로다가 2번째 곡이 되었고 (주 품에 4장 다음) 5번 슬라이드부터 시작
+      const header = screen.getByTestId("editor-header");
+      expect(header).toHaveTextContent("곡 2/5");
+      expect(header).toHaveTextContent("슬라이드 5/23");
+      expect(screen.queryByTestId("song-section-menu")).not.toBeInTheDocument();
+    });
+
+    it("구역 메뉴로 곡을 복제·삭제할 수 있다", () => {
+      renderEditor();
+
+      fireEvent.click(screen.getByTestId("song-section-menu-btn-0"));
+      fireEvent.click(screen.getByRole("menuitem", { name: "곡 복제" }));
+
+      expect(screen.getByTestId("song-section-1")).toHaveTextContent(
+        "은혜로다 (사본)",
+      );
+      expect(screen.getByTestId("editor-header")).toHaveTextContent("곡 2/6");
+
+      fireEvent.click(screen.getByTestId("song-section-menu-btn-1"));
+      fireEvent.click(screen.getByRole("menuitem", { name: "곡 삭제" }));
+
+      expect(screen.queryByText("은혜로다 (사본)")).not.toBeInTheDocument();
+      expect(screen.getByTestId("editor-header")).toHaveTextContent("곡 2/5");
+    });
+
+    it("우클릭으로 구역 메뉴가 열리고 Esc로 닫힌다", () => {
+      renderEditor();
+
+      fireEvent.contextMenu(screen.getByTestId("song-section-3"));
+      expect(screen.getByTestId("song-section-menu")).toBeInTheDocument();
+
+      fireEvent.keyDown(document, { key: "Escape" });
+      expect(screen.queryByTestId("song-section-menu")).not.toBeInTheDocument();
+    });
+
+    it("구역을 접으면 그 곡의 썸네일만 숨고 번호는 그대로다", () => {
+      renderEditor();
+
+      fireEvent.click(screen.getByTestId("song-section-toggle-1"));
+
+      // 2곡(6~9번) 숨김, 3곡 첫 장은 여전히 10번
+      expect(screen.queryByTestId("slide-thumb-5")).not.toBeInTheDocument();
+      expect(screen.getByTestId("slide-thumb-9")).toHaveTextContent("10");
+
+      fireEvent.click(screen.getByTestId("song-section-toggle-1"));
+      expect(screen.getByTestId("slide-thumb-5")).toBeInTheDocument();
+    });
+
+    it("다른 곡의 슬라이드를 지워도 현재 선택은 그대로다", () => {
+      renderEditor();
+
+      fireEvent.click(screen.getByTestId("slide-thumb-1"));
+      // 2곡의 첫 슬라이드(6번) 삭제
+      fireEvent.click(screen.getByTestId("delete-slide-btn-5"));
+
+      expect(screen.getByText("2 / 22")).toBeInTheDocument();
+      expect(screen.getByTestId("editor-header")).toHaveTextContent("곡 1/5");
+    });
+
+    it("우측 패널의 테마 프리셋이 현재 곡 스타일에 적용된다", () => {
+      renderEditor();
+
+      expect(screen.getByText("40%")).toBeInTheDocument();
+
+      fireEvent.click(screen.getByTestId("style-preset-2"));
+
+      // 선샤인 웜: Gmarket Sans · 오버레이 50%
+      expect(screen.getByDisplayValue("Gmarket Sans")).toBeInTheDocument();
+      expect(screen.getByText("50%")).toBeInTheDocument();
+    });
   });
 
   /**
@@ -355,8 +489,9 @@ describe("EditorRoute (Canva / MiriCanvas Presentation Editor)", () => {
         screen.queryByText("등록된 찬양 곡 또는 슬라이드가 없습니다"),
       ).not.toBeInTheDocument();
       expect(screen.getAllByText("은혜로다").length).toBeGreaterThan(0);
-      // 5곡이 실제로 들어왔는지 (첫 곡의 슬라이드 스트립이 살아난다)
-      expect(screen.getByTestId("slide-filmstrip")).toBeInTheDocument();
+      // 5곡이 실제로 들어왔는지 (썸네일 창에 5개 구역이 생긴다)
+      expect(screen.getByTestId("slide-thumb-0")).toBeInTheDocument();
+      expect(screen.getByTestId("song-section-4")).toBeInTheDocument();
     });
   });
 });
