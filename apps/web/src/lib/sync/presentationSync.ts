@@ -1,7 +1,12 @@
 import {
   DeckSchema,
+  FolderDeleteResponseSchema,
+  FolderSchema,
   PresentationDocumentSchema,
   type Deck,
+  type Folder,
+  type FolderDeleteResponse,
+  type FolderListResponse,
   type Presentation,
   type PresentationDocument,
 } from "@repo/shared";
@@ -140,4 +145,53 @@ export async function deleteDeckRemote(id: string): Promise<void> {
 export async function pullDecks(): Promise<Deck[]> {
   const body = await send<{ decks: Deck[] }>(() => api.api.decks.$get());
   return body.decks;
+}
+
+/**
+ * 프레젠테이션 1건을 서버에서 영구 삭제한다 (휴지통 비우기).
+ * 이미 없으면(404 — 한 번도 안 올라간 문서) 성공으로 본다.
+ */
+export async function deletePresentationRemote(id: string): Promise<void> {
+  try {
+    await send(() => api.api.presentations[":id"].$delete({ param: { id } }));
+  } catch (err) {
+    if (err instanceof ServerRejectedError && err.status === 404) return;
+    throw err;
+  }
+}
+
+/** 내 드라이브 폴더 전체와 영구 삭제 기록을 서버에서 받아 온다 */
+export async function pullFolders(): Promise<FolderListResponse> {
+  return send<FolderListResponse>(() => api.api.folders.$get());
+}
+
+/**
+ * 폴더 1건을 서버에 올리고 서버가 확정한 폴더를 돌려받는다.
+ * 서버는 없는 부모·사이클을 루트로 보정하므로 호출자는 응답을 반영해야 한다.
+ */
+export async function pushFolder(folder: Folder): Promise<Folder> {
+  const body = await send<{ folder: Folder }>(() =>
+    api.api.folders[":id"].$put({ param: { id: folder.id }, json: folder }),
+  );
+  return FolderSchema.parse(body.folder);
+}
+
+/**
+ * 폴더를 하위 폴더·프레젠테이션과 함께 서버에서 영구 삭제한다.
+ * 이미 없으면(404 — 한 번도 안 올라간 폴더) 지운 것이 없는 성공으로 본다.
+ */
+export async function deleteFolderRemote(
+  id: string,
+): Promise<FolderDeleteResponse> {
+  try {
+    const body = await send<unknown>(() =>
+      api.api.folders[":id"].$delete({ param: { id } }),
+    );
+    return FolderDeleteResponseSchema.parse(body);
+  } catch (err) {
+    if (err instanceof ServerRejectedError && err.status === 404) {
+      return { ok: true, deletedFolderIds: [], deletedPresentationIds: [] };
+    }
+    throw err;
+  }
 }

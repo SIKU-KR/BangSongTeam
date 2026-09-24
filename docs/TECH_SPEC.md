@@ -98,26 +98,26 @@ flowchart TB
 
 본 명세의 항목 중 실제 코드가 있는 것과 설계만 있는 것을 구분한다. 이 표를 갱신하지 않은 채 "스펙에 있으니 구현되어 있다"고 가정하지 않는다.
 
-| 구성 요소                                     | 상태   | 비고                                                                                                                                               |
-| --------------------------------------------- | ------ | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `packages/shared` Zod 스키마 (§3)             | 구현   | Deck·Slide·Style·Presentation·API·공유 라이브러리(`library.ts`) 계약                                                                               |
-| `packages/db` Drizzle 스키마·마이그레이션(§4) | 구현   | 0000_initial, 0001_fts5, 0002_seed_backgrounds, 0003_m5_sharing, 0004_m5_fts, 0005_remove_catalog, 0006_nanoid_reset, 0007_seed_backgrounds_nanoid |
-| 스코프 쿼리 헬퍼 (§4.3)                       | 구현   | decks·presentations·search·sharing·reports. 공개 조건은 `publicDeckCondition()` 한 곳                                                              |
-| 3-Layer Slide Stage (§5.1)                    | 구현   | `components/stage/*` — 편집기와 송출이 동일 컴포넌트 사용                                                                                          |
-| 입력 버퍼 엔진·단축키 (§5.2)                  | 구현   | `useNavigationBuffer`, `usePresentationShortcuts` (tinykeys)                                                                                       |
-| 세트 편집기 (PRD 4.4)                         | 부분   | 넘침 경고와 커서 기준 분할·합치기 미구현 (M2 잔여). 속성 패널 '공유' 섹션 구현 (M5)                                                                |
-| 미디어 프록시 `/api/media/*` (§5.4)           | 구현   | HTTP Range 지원                                                                                                                                    |
-| 클라이언트 영속성 (§5.5)                      | 구현   | IndexedDB가 1차 원천. 프레젠테이션과 **보관함 곡** 모두 서버와 동기화 (보관함은 M5-2에서 연결)                                                     |
-| Hono RPC 클라이언트 (`hc<AppType>`)           | 구현   | `AppType = ReturnType<typeof createApp>`. 라우트는 팩토리(`createApp(deps)`)라 테스트가 실제 라우트를 마운트한다                                   |
-| Better Auth (§4.1 auth 테이블)                | 구현   | 카카오·네이버 + localhost 전용 개발자 로그인. 실제 OAuth 자격증명 확인은 대기                                                                      |
-| 발표자 보기·BroadcastChannel (§5.3)           | 제거   | MVP 범위에서 제외 (2026-09-24). 송출은 전체화면 `/present/:id/fullscreen` 한 가지                                                                  |
-| PWA·Cache Storage (§5.4)                      | 구현   | vite-plugin-pwa(generateSW) + RangeRequests (M4)                                                                                                   |
-| TanStack Query (서버 캐시)                    | 구현   | 곡 추가 모달의 공유 검색·상세·가져오기, 공개 전환, 신고에만 쓴다. 송출 화면 import는 ESLint가 막는다 (M5-5)                                        |
-| 가사 라이브러리·LLM 정규화 (§6)               | 제거   | MVP 범위에서 제외 (2026-09-23). 테이블은 `0005_remove_catalog`로 지웠다                                                                            |
-| 공유 라이브러리 API (§7)                      | 구현   | 공개 전환·검색(가져간 횟수순 게시판)·상세·가져오기·신고 (M5-3)                                                                                     |
-| 운영자 도구                                   | 구현   | 관리자 화면 없음. `docs/ops/moderation-runbook.md`의 SQL (`packages/db/src/ops/moderationSql.ts`가 정본)                                           |
-| 사용자 커스텀 배경 업로드 (PRD 4.3)           | 미구현 | 배경 라이브러리 화면에 안내만 있음                                                                                                                 |
-| 저장 실패 경고 배너                           | 구현   | `StorageWarningBanner` — 용량 초과와 저장소 차단을 구분, 닫을 수 없음                                                                              |
+| 구성 요소                                     | 상태   | 비고                                                                                                                                                                   |
+| --------------------------------------------- | ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `packages/shared` Zod 스키마 (§3)             | 구현   | Deck·Slide·Style·Presentation·API·공유 라이브러리(`library.ts`) 계약                                                                                                   |
+| `packages/db` Drizzle 스키마·마이그레이션(§4) | 구현   | 0000_initial, 0001_fts5, 0002_seed_backgrounds, 0003_m5_sharing, 0004_m5_fts, 0005_remove_catalog, 0006_nanoid_reset, 0007_seed_backgrounds_nanoid, 0008_drive_folders |
+| 스코프 쿼리 헬퍼 (§4.3)                       | 구현   | decks·presentations·search·sharing·reports. 공개 조건은 `publicDeckCondition()` 한 곳                                                                                  |
+| 3-Layer Slide Stage (§5.1)                    | 구현   | `components/stage/*` — 편집기와 송출이 동일 컴포넌트 사용                                                                                                              |
+| 입력 버퍼 엔진·단축키 (§5.2)                  | 구현   | `useNavigationBuffer`, `usePresentationShortcuts` (tinykeys)                                                                                                           |
+| 세트 편집기 (PRD 4.4)                         | 부분   | 넘침 경고와 커서 기준 분할·합치기 미구현 (M2 잔여). 속성 패널 '공유' 섹션 구현 (M5)                                                                                    |
+| 미디어 프록시 `/api/media/*` (§5.4)           | 구현   | HTTP Range 지원                                                                                                                                                        |
+| 클라이언트 영속성 (§5.5)                      | 구현   | IndexedDB가 1차 원천. 프레젠테이션과 **보관함 곡** 모두 서버와 동기화 (보관함은 M5-2에서 연결)                                                                         |
+| Hono RPC 클라이언트 (`hc<AppType>`)           | 구현   | `AppType = ReturnType<typeof createApp>`. 라우트는 팩토리(`createApp(deps)`)라 테스트가 실제 라우트를 마운트한다                                                       |
+| Better Auth (§4.1 auth 테이블)                | 구현   | 카카오·네이버 + localhost 전용 개발자 로그인. 실제 OAuth 자격증명 확인은 대기                                                                                          |
+| 발표자 보기·BroadcastChannel (§5.3)           | 제거   | MVP 범위에서 제외 (2026-09-24). 송출은 전체화면 `/present/:id/fullscreen` 한 가지                                                                                      |
+| PWA·Cache Storage (§5.4)                      | 구현   | vite-plugin-pwa(generateSW) + RangeRequests (M4)                                                                                                                       |
+| TanStack Query (서버 캐시)                    | 구현   | 곡 추가 모달의 공유 검색·상세·가져오기, 공개 전환, 신고에만 쓴다. 송출 화면 import는 ESLint가 막는다 (M5-5)                                                            |
+| 가사 라이브러리·LLM 정규화 (§6)               | 제거   | MVP 범위에서 제외 (2026-09-23). 테이블은 `0005_remove_catalog`로 지웠다                                                                                                |
+| 공유 라이브러리 API (§7)                      | 구현   | 공개 전환·검색(가져간 횟수순 게시판)·상세·가져오기·신고 (M5-3)                                                                                                         |
+| 운영자 도구                                   | 구현   | 관리자 화면 없음. `docs/ops/moderation-runbook.md`의 SQL (`packages/db/src/ops/moderationSql.ts`가 정본)                                                               |
+| 사용자 커스텀 배경 업로드 (PRD 4.3)           | 미구현 | 배경 라이브러리 화면에 안내만 있음                                                                                                                                     |
+| 저장 실패 경고 배너                           | 구현   | `StorageWarningBanner` — 용량 초과와 저장소 차단을 구분, 닫을 수 없음                                                                                                  |
 
 ---
 
@@ -942,7 +942,10 @@ stateDiagram-v2
 | `POST`   | `/api/dev-login`               | 개발자 로그인 (localhost + `DEV_LOGIN_ENABLED`)          | No           | 구현   |
 | `GET`    | `/api/presentations`           | 내 프레젠테이션 문서 전체 (덱 임베드)                    | Yes          | 구현   |
 | `PUT`    | `/api/presentations/:id`       | 프레젠테이션 문서 단위 업서트 (복제본은 항상 비공개)     | Yes (소유자) | 구현   |
-| `DELETE` | `/api/presentations/:id`       | 프레젠테이션 삭제                                        | Yes (소유자) | 구현   |
+| `DELETE` | `/api/presentations/:id`       | 프레젠테이션 영구 삭제 (삭제 기록을 남긴다)              | Yes (소유자) | 구현   |
+| `GET`    | `/api/folders`                 | 내 드라이브 폴더 전체 + 영구 삭제 기록(tombstone)        | Yes          | 구현   |
+| `PUT`    | `/api/folders/:id`             | 폴더 업서트 (없는 부모·사이클은 루트로 보정해 반환)      | Yes (소유자) | 구현   |
+| `DELETE` | `/api/folders/:id`             | 폴더 영구 삭제 (하위 폴더·프레젠테이션 포함)             | Yes (소유자) | 구현   |
 | `GET`    | `/api/decks`                   | 내 보관함 곡 전체                                        | Yes          | 구현   |
 | `PUT`    | `/api/decks/:id`               | 보관함 곡 업서트 (공유 필드는 서버 값 유지)              | Yes (소유자) | 구현   |
 | `DELETE` | `/api/decks/:id`               | 보관함 곡 삭제                                           | Yes (소유자) | 구현   |
@@ -1052,7 +1055,7 @@ export type SearchCatalogResponse = z.infer<typeof SearchCatalogResponseSchema>;
 
 **2026-09-24:** 발표자 보기를 제거했다(§3.4, §5.3). 송출은 전체화면 한 가지다.
 
-**2026-09-24:** 엔터티 id를 UUID에서 NanoID(21자)로 바꿨다(§3 머리말). 옛 UUID 데이터는 호환하지 않는다. 운영자는 Worker 배포 **전에** 운영 D1에 `0006_nanoid_reset`·`0007_seed_backgrounds_nanoid`를 적용해야 한다(§4.1.1). 0006은 D1의 사용자 데이터를 모두 지운다.
+**2026-09-24:** 엔터티 id를 UUID에서 NanoID(21자)로 바꿨다(§3 머리말). 옛 UUID 데이터는 호환하지 않는다. 운영자는 Worker 배포 **전에** 운영 D1에 `0006_nanoid_reset`·`0007_seed_backgrounds_nanoid`를 적용해야 한다(§4.1.1). 0006은 D1의 사용자 데이터를 모두 지운다. 드라이브 폴더(`0008_drive_folders`: `folders`·`drive_tombstones` 테이블, `presentations.folder_id`·`trashed_at`)도 같은 배포에서 0006·0007 다음에 적용한다.
 
 **현재 위치 (2026-09-23):** M5(공유 라이브러리) 코드 완료. 두 계정으로 공개 → 검색 → 가져오기 → 무수정 송출을 브라우저와 worker E2E로 확인했다. 가사 라이브러리와 LLM 정규화는 MVP에서 제거했다(§6). 운영 D1 마이그레이션(`0003`·`0004`·`0005`)은 운영자 몫이다.
 

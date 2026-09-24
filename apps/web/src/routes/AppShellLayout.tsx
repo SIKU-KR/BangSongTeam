@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Outlet, useLocation, useNavigate } from "react-router-dom";
+import { Outlet, useLocation } from "react-router-dom";
 import type { Deck } from "@repo/shared";
 import { ChromeAlertBanner } from "../components/common/ChromeAlertBanner";
 import { StorageWarningBanner } from "../components/common/StorageWarningBanner";
@@ -7,11 +7,13 @@ import { AppUpdateBanner } from "../components/common/AppUpdateBanner";
 import { AppSidebar } from "../components/layout/AppSidebar";
 import { AppHeroHeader } from "../components/layout/AppHeroHeader";
 import { QuickLyricPasteModal } from "../features/editor";
+import { addDeckToPresentation } from "../features/presentation";
 import {
-  addDeckToPresentation,
-  createNewPresentation,
-  usePresentationList,
-} from "../features/presentation";
+  DriveBreadcrumbs,
+  DriveProvider,
+  NewMenuButton,
+  useDrive,
+} from "../features/drive";
 import type {
   AppShellContextValue,
   SortOrder,
@@ -23,38 +25,62 @@ interface ShellPageMeta {
   placeholder: string;
 }
 
-const SHELL_PAGE_META: Record<string, ShellPageMeta> = {
-  "/presentations": {
-    title: "모든 프로젝트",
-    placeholder: "디자인, 폴더, 찬양 가사, 곡을 검색해 보세요",
-  },
-  "/backgrounds": {
-    title: "배경 라이브러리",
-    placeholder: "배경 영상, 이미지, 분위기 태그를 검색해 보세요",
-  },
+const TRASH_META: ShellPageMeta = {
+  title: "휴지통",
+  placeholder: "휴지통에서 폴더, 프레젠테이션을 검색해 보세요",
+};
+const DRIVE_META: ShellPageMeta = {
+  title: "내 드라이브",
+  placeholder: "폴더, 프레젠테이션, 찬양 가사, 곡을 검색해 보세요",
+};
+const BACKGROUNDS_META: ShellPageMeta = {
+  title: "배경 라이브러리",
+  placeholder: "배경 영상, 이미지, 분위기 태그를 검색해 보세요",
 };
 
+function metaFor(pathname: string): ShellPageMeta {
+  if (pathname === "/presentations/trash") return TRASH_META;
+  if (pathname.startsWith("/backgrounds")) return BACKGROUNDS_META;
+  return DRIVE_META;
+}
+
+function isDrivePath(pathname: string): boolean {
+  return (
+    pathname === "/presentations" || pathname.startsWith("/presentations/")
+  );
+}
+
 /**
- * `/presentations`, `/lyrics`, `/backgrounds` 가 공유하는 애플리케이션 셸 레이아웃
- * - 좌측 `AppSidebar`, 상단 `AppHeroHeader`, 본문 `<Outlet/>`
+ * `/presentations`(드라이브), `/lyrics`, `/backgrounds` 가 공유하는 애플리케이션 셸 레이아웃
+ * - 좌측 `AppSidebar`(폴더 트리), 상단 `AppHeroHeader`(경로·툴바), 본문 `<Outlet/>`
  * - 검색/뷰모드/정렬 상태와 가사 빠른 입력 모달을 소유하고 컨텍스트로 내려준다
- *   (툴바의 + 버튼과 곡 라이브러리의 버튼이 같은 모달을 열기 때문에 소유자는 하나여야 한다)
+ * - `DriveProvider`가 셸 전체를 감싼다. 사이드바 트리·경로·본문 그리드가 같은
+ *   선택·드래그 상태를 공유해야 하기 때문이다.
  */
 export function AppShellLayout(): React.JSX.Element {
-  const navigate = useNavigate();
+  return (
+    <DriveProvider>
+      <AppShellFrame />
+    </DriveProvider>
+  );
+}
+
+function AppShellFrame(): React.JSX.Element {
   const { pathname } = useLocation();
-  const presentations = usePresentationList();
+  const drive = useDrive();
 
   const [isQuickPasteOpen, setIsQuickPasteOpen] = useState<boolean>(false);
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [viewMode, setViewMode] = useState<ViewMode>("grid");
   const [sortOrder, setSortOrder] = useState<SortOrder>("recent");
 
-  const meta = SHELL_PAGE_META[pathname] ?? SHELL_PAGE_META["/presentations"];
+  const meta = metaFor(pathname);
+  const onDrive = isDrivePath(pathname);
+  const onTrash = pathname === "/presentations/trash";
 
+  // 지금 보고 있는 폴더에 만든다 (드라이브 밖에서는 루트)
   const handleCreateNewPresentation = (): void => {
-    const created = createNewPresentation("새 주일 예배 프레젠테이션");
-    navigate(`/editor/${created.id}`);
+    drive.createPresentationIn(drive.currentFolderId);
   };
 
   const handleAddDeckToPresentation = (newDeck: Deck): void => {
@@ -74,7 +100,7 @@ export function AppShellLayout(): React.JSX.Element {
 
   return (
     <div className="h-screen w-full bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 flex overflow-hidden">
-      <AppSidebar onCreateNewPresentation={handleCreateNewPresentation} />
+      <AppSidebar />
 
       <div className="flex-1 h-full flex flex-col min-w-0 overflow-y-auto overflow-x-hidden">
         {/* Chrome 권장 안내 배너 */}
@@ -93,16 +119,26 @@ export function AppShellLayout(): React.JSX.Element {
           onViewModeChange={setViewMode}
           sortOrder={sortOrder}
           onSortOrderChange={setSortOrder}
-          itemCountLabel={
-            pathname === "/presentations"
-              ? `${presentations.length}개 프로젝트`
-              : ""
+          itemCountLabel=""
+          toolbarStart={
+            onTrash ? (
+              <span className="px-2 text-base font-bold tracking-tight text-zinc-900 dark:text-white">
+                휴지통
+              </span>
+            ) : onDrive ? (
+              <DriveBreadcrumbs />
+            ) : undefined
+          }
+          quickAddSlot={
+            onDrive ? (
+              <NewMenuButton variant="fab" testId="toolbar-new-btn" />
+            ) : undefined
           }
           onQuickAdd={handleCreateNewPresentation}
         />
 
         {/* ── 메인 본문 영역 ── */}
-        <main className="flex-1 max-w-7xl w-full mx-auto px-6 sm:px-8 py-6">
+        <main className="flex-1 max-w-7xl w-full mx-auto px-6 sm:px-8 py-4">
           <Outlet context={context} />
         </main>
       </div>

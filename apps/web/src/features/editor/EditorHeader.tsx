@@ -21,6 +21,8 @@ export interface EditorHeaderProps {
   onNewPresentation?: () => void;
   onOpenLyricModal?: () => void;
   onLoadSampleSongs?: () => void;
+  /** 뒤로가기 목적지 (드라이브에서 이 세트가 들어 있는 폴더) */
+  backPath?: string;
   className?: string;
 }
 
@@ -89,6 +91,7 @@ export function EditorHeader({
   onNewPresentation,
   onOpenLyricModal,
   onLoadSampleSongs,
+  backPath = "/presentations",
   className = "",
 }: EditorHeaderProps): React.JSX.Element {
   const navigate = useNavigate();
@@ -116,7 +119,7 @@ export function EditorHeader({
         <button
           type="button"
           data-testid="header-back-btn"
-          onClick={() => navigate("/presentations")}
+          onClick={() => navigate(backPath)}
           className="p-1.5 rounded-lg text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors flex items-center gap-1 text-xs cursor-pointer"
           title="프레젠테이션 목록으로 돌아가기"
         >

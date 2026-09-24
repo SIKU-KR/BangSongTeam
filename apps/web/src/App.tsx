@@ -6,6 +6,7 @@ import {
   flushPendingWrites,
 } from "./features/presentation";
 import { hydrateSongLibrary } from "./features/editor";
+import { hydrateFoldersFromStorage } from "./features/drive";
 import { hydrateSession, useSession } from "./lib/auth";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { createAppQueryClient } from "./lib/api/queryClient";
@@ -14,12 +15,14 @@ import {
   shouldRunBootSync,
   flushPendingSync,
   flushDeckSync,
+  flushFolderSync,
 } from "./lib/sync";
 import { LoginRoute } from "./routes/LoginRoute";
 import {
   AppShellLayout,
   LandingRoute,
   PresentationsRoute,
+  TrashRoute,
   LyricsRoute,
   BackgroundsRoute,
   EditorRoute,
@@ -64,8 +67,12 @@ function useHydration(): boolean {
 
     let cancelled = false;
     void (async () => {
-      // 두 하이드레이션 모두 세션 사용자로 문서를 거르므로 세션이 먼저다.
-      await Promise.all([hydrateFromStorage(), hydrateSongLibrary()]);
+      // 하이드레이션은 모두 세션 사용자로 문서를 거르므로 세션이 먼저다.
+      await Promise.all([
+        hydrateFromStorage(),
+        hydrateSongLibrary(),
+        hydrateFoldersFromStorage(),
+      ]);
       if (cancelled) return;
       setBootstrappedUserId(userId);
 
@@ -86,6 +93,7 @@ function useHydration(): boolean {
   useEffect(() => {
     const flush = (): void => {
       void flushPendingWrites();
+      void flushFolderSync();
       void flushPendingSync();
       void flushDeckSync();
     };
@@ -110,7 +118,9 @@ function useHydration(): boolean {
 /**
  * App 최상위 라우팅 컴포넌트 (React Router Library Mode)
  * - `/`                              : 랜딩 페이지 (준비 중)
- * - `/presentations`                 : 프레젠테이션 대시보드 (AppShell)
+ * - `/presentations`                 : 내 드라이브 (폴더·프레젠테이션, AppShell)
+ * - `/presentations/folders/:id`     : 드라이브 폴더
+ * - `/presentations/trash`           : 휴지통
  * - `/lyrics`                        : 레거시 경로 → `/presentations` 리다이렉트
  * - `/backgrounds`                   : 배경 라이브러리 (AppShell)
  * - `/editor/:presentationId`        : 프레젠테이션 단위 편집기
@@ -154,6 +164,11 @@ export function App(): React.JSX.Element {
               path 없는 레이아웃 라우트라 자식들은 절대 경로를 그대로 유지한다. */}
             <Route element={<AppShellLayout />}>
               <Route path="/presentations" element={<PresentationsRoute />} />
+              <Route
+                path="/presentations/folders/:folderId"
+                element={<PresentationsRoute />}
+              />
+              <Route path="/presentations/trash" element={<TrashRoute />} />
               <Route path="/lyrics" element={<LyricsRoute />} />
               <Route path="/backgrounds" element={<BackgroundsRoute />} />
             </Route>

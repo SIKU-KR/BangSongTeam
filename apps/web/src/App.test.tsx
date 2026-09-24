@@ -54,14 +54,18 @@ describe("App Route Integration", () => {
     renderAt("/presentations");
 
     expect(await screen.findByText("Worship Studio")).toBeInTheDocument();
-    expect(await screen.findByTestId("presentation-card")).toBeInTheDocument();
+    expect(
+      (await screen.findAllByTestId("presentation-card")).length,
+    ).toBeGreaterThan(0);
   });
 
   it("should redirect '/lyrics' to '/presentations'", async () => {
     renderAt("/lyrics");
 
     expect(await screen.findByText("Worship Studio")).toBeInTheDocument();
-    expect(await screen.findByTestId("presentation-card")).toBeInTheDocument();
+    expect(
+      (await screen.findAllByTestId("presentation-card")).length,
+    ).toBeGreaterThan(0);
   });
 
   it("should render the background library at '/backgrounds'", async () => {
@@ -95,20 +99,26 @@ describe("App Route Integration", () => {
     renderAt("/editor/999999999999999999999");
 
     expect(screen.queryByTestId("editor-route")).not.toBeInTheDocument();
-    expect(await screen.findByTestId("presentation-card")).toBeInTheDocument();
+    expect(
+      (await screen.findAllByTestId("presentation-card")).length,
+    ).toBeGreaterThan(0);
   });
 
   it("should redirect an unknown path to /presentations", async () => {
     renderAt("/definitely-not-a-route");
 
-    expect(await screen.findByTestId("presentation-card")).toBeInTheDocument();
+    expect(
+      (await screen.findAllByTestId("presentation-card")).length,
+    ).toBeGreaterThan(0);
   });
 
   it("should redirect the legacy '/editor' path (no id) to /presentations", async () => {
     renderAt("/editor");
 
     expect(screen.queryByTestId("editor-route")).not.toBeInTheDocument();
-    expect(await screen.findByTestId("presentation-card")).toBeInTheDocument();
+    expect(
+      (await screen.findAllByTestId("presentation-card")).length,
+    ).toBeGreaterThan(0);
   });
 
   it("미로그인이면 어떤 경로로 들어와도 로그인 화면만 보인다", async () => {
@@ -160,6 +170,8 @@ describe("App Route Integration", () => {
       await Promise.resolve();
     });
 
-    expect(await screen.findByTestId("presentation-card")).toBeInTheDocument();
+    expect(
+      (await screen.findAllByTestId("presentation-card")).length,
+    ).toBeGreaterThan(0);
   });
 });

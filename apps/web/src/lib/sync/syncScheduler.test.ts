@@ -9,6 +9,12 @@ import {
 } from "./syncScheduler";
 import { getSyncStatus, __resetSyncStatusForTests } from "./syncStatus";
 import { OfflineError } from "./presentationSync";
+import {
+  scheduleFolderPush,
+  setFolderSyncEnabled,
+  __resetFolderSyncForTests,
+  __setFolderPusherForTests,
+} from "./folderSync";
 
 const USER = "00000000x000000000001";
 
@@ -112,5 +118,37 @@ describe("서버 push 스케줄러", () => {
   it("빈 큐를 flush해도 상태를 건드리지 않는다", async () => {
     await flushPendingSync();
     expect(getSyncStatus()).toBe("idle");
+  });
+
+  it("새 폴더를 세트보다 먼저 올린다 (폴더 큐를 먼저 비운다)", async () => {
+    __resetFolderSyncForTests();
+    const order: string[] = [];
+    __setFolderPusherForTests(async (folder) => {
+      order.push(`folder:${folder.id}`);
+      return folder;
+    });
+    push.mockImplementation(async (document) => {
+      order.push(`doc:${document.id}`);
+      return true;
+    });
+    setFolderSyncEnabled(true);
+
+    scheduleFolderPush({
+      id: "f00000000000000000001",
+      userId: USER,
+      parentId: null,
+      name: "새 폴더",
+      trashedAt: null,
+      createdAt: "2026-09-22T00:00:00.000Z",
+      updatedAt: "2026-09-22T00:00:00.000Z",
+    });
+    scheduleDocumentPush({
+      ...doc("a"),
+      folderId: "f00000000000000000001",
+    });
+    await flushPendingSync();
+
+    expect(order).toEqual(["folder:f00000000000000000001", "doc:a"]);
+    __resetFolderSyncForTests();
   });
 });

@@ -34,6 +34,7 @@ describe("worship-offline-db", () => {
       "auth_session",
       "backgrounds",
       "decks",
+      "folders",
       "presentations",
       "sync_meta",
     ]);
@@ -115,5 +116,30 @@ describe("worship-offline-db", () => {
 
     const reopened = await getOfflineDB();
     expect(await reopened.count("sync_meta")).toBe(1);
+  });
+
+  it("v3(NanoID) DB를 v4로 올리면 레코드를 지우지 않고 folders 스토어만 더한다", async () => {
+    const v3 = await openDB(OFFLINE_DB_NAME, 3, {
+      upgrade(db) {
+        db.createObjectStore("presentations", { keyPath: "id" }).createIndex(
+          "by-date",
+          "serviceDate",
+        );
+        db.createObjectStore("decks", { keyPath: "id" });
+        db.createObjectStore("backgrounds", { keyPath: "id" });
+        db.createObjectStore("sync_meta", { keyPath: "presentationId" });
+        db.createObjectStore("auth_session", { keyPath: "id" });
+      },
+    });
+    await v3.put("presentations", {
+      id: "p0000000000000000000a",
+      serviceDate: "2026-09-27",
+    });
+    v3.close();
+
+    const db = await getOfflineDB();
+    expect(db.version).toBe(OFFLINE_DB_VERSION);
+    expect([...db.objectStoreNames]).toContain("folders");
+    expect(await db.count("presentations")).toBe(1);
   });
 });

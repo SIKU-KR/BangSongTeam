@@ -57,6 +57,13 @@
       "when": 1790231214101,
       "tag": "0007_seed_backgrounds_nanoid",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1790233344548,
+      "tag": "0008_drive_folders",
+      "breakpoints": true
     }
   ]
 }

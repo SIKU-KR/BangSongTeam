@@ -1,5 +1,5 @@
 import { openDB, type DBSchema, type IDBPDatabase } from "idb";
-import type { BackgroundMedia, Deck, Presentation } from "@repo/shared";
+import type { BackgroundMedia, Deck, Folder, Presentation } from "@repo/shared";
 
 export const OFFLINE_DB_NAME = "worship-offline-db";
 /**
@@ -11,8 +11,11 @@ export const OFFLINE_DB_NAME = "worship-offline-db";
  * `IdSchema`를 통과하지 못해 부팅마다 '손상'으로 격리되고 동기화 PUT도 400으로
  * 실패하므로, 업그레이드 시 모든 스토어를 비운다. 서버 D1도 같은 시점에
  * `0006_nanoid_reset`으로 비워지므로 되살릴 원본은 없다.
+ *
+ * v4: 드라이브 폴더(`folders`)를 추가했다. 홈의 폴더 트리도 프레젠테이션처럼
+ * 네트워크 없이 열려야 한다.
  */
-export const OFFLINE_DB_VERSION = 3;
+export const OFFLINE_DB_VERSION = 4;
 
 /** 이 버전보다 오래된 DB의 레코드는 UUID id를 가진다 */
 const FIRST_NANOID_DB_VERSION = 3;
@@ -45,6 +48,10 @@ export interface WorshipOfflineDB extends DBSchema {
   decks: {
     key: string;
     value: Deck;
+  };
+  folders: {
+    key: string;
+    value: Folder;
   };
   backgrounds: {
     key: string;
@@ -120,6 +127,9 @@ export function getOfflineDB(): Promise<IDBPDatabase<WorshipOfflineDB>> {
         }
         if (!db.objectStoreNames.contains("decks")) {
           db.createObjectStore("decks", { keyPath: "id" });
+        }
+        if (!db.objectStoreNames.contains("folders")) {
+          db.createObjectStore("folders", { keyPath: "id" });
         }
         if (!db.objectStoreNames.contains("backgrounds")) {
           db.createObjectStore("backgrounds", { keyPath: "id" });

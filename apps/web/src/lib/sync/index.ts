@@ -12,6 +12,10 @@ export {
   pushDeck,
   pullDecks,
   deleteDeckRemote,
+  pullFolders,
+  pushFolder,
+  deleteFolderRemote,
+  deletePresentationRemote,
   ServerRejectedError,
   toSyncableDocument,
   SessionExpiredError,
@@ -19,6 +23,7 @@ export {
 } from "./presentationSync";
 export {
   scheduleDocumentPush,
+  cancelDocumentPush,
   flushPendingSync,
   setSyncEnabled,
   __resetSyncSchedulerForTests,
@@ -41,3 +46,14 @@ export {
   withServerFields,
   type LibraryMergeResult,
 } from "./mergeLibraryDecks";
+export {
+  scheduleFolderPush,
+  cancelFolderPush,
+  pushFolderNow,
+  flushFolderSync,
+  setFolderSyncEnabled,
+  setServerFolderListener,
+  __setFolderPusherForTests,
+  __resetFolderSyncForTests,
+} from "./folderSync";
+export { mergeFolders, type FolderMergeResult } from "./mergeFolders";

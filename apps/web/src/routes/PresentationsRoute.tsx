@@ -1,40 +1,25 @@
 import React from "react";
-import { useNavigate } from "react-router-dom";
-import { MergedSlidesView } from "../features/library";
+import { Navigate, useParams } from "react-router-dom";
 import {
-  launchPresentation,
-  usePresentationList,
-} from "../features/presentation";
-import { useAppShell } from "./appShellContext";
+  DriveBrowser,
+  isFolderAvailable,
+  useFolderIndex,
+} from "../features/drive";
 
 /**
- * `/presentations` — Canva Projects 스타일 '모든 프로젝트' 대시보드
+ * `/presentations` — 내 드라이브 (루트)
+ * `/presentations/folders/:folderId` — 폴더 안
+ *
+ * 폴더와 프레젠테이션을 구글 드라이브처럼 한 목록에 보여 준다. 없거나 휴지통에
+ * 들어간 폴더 주소로 오면(다른 기기에서 지웠거나 옛 링크) 루트로 보낸다.
  */
 export function PresentationsRoute(): React.JSX.Element {
-  const navigate = useNavigate();
-  const presentations = usePresentationList();
-  const { searchQuery, viewMode, sortOrder, onCreateNewPresentation } =
-    useAppShell();
+  const { folderId } = useParams<{ folderId?: string }>();
+  // 폴더 트리가 바뀌면 다시 판단한다 (방금 이 폴더를 휴지통에 넣은 경우 등)
+  useFolderIndex();
 
-  const handleOpenPresentation = (id: string): void => {
-    navigate(`/editor/${id}`);
-  };
-
-  // 카드에서 바로 송출: 경로에 id가 실리므로 활성 문서와 어긋날 일이 없다.
-  // 클릭 핸들러 안에서 동기로 불러야 Chrome이 전체화면을 허용한다.
-  const handleStartPresentation = (id: string): void => {
-    launchPresentation(navigate, id);
-  };
-
-  return (
-    <MergedSlidesView
-      presentations={presentations}
-      onOpenPresentation={handleOpenPresentation}
-      onStartPresentation={handleStartPresentation}
-      onCreateNewPresentation={onCreateNewPresentation}
-      searchQuery={searchQuery}
-      viewMode={viewMode}
-      sortOrder={sortOrder}
-    />
-  );
+  if (folderId && !isFolderAvailable(folderId)) {
+    return <Navigate to="/presentations" replace />;
+  }
+  return <DriveBrowser mode="drive" folderId={folderId ?? null} />;
 }

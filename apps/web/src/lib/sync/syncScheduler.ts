@@ -1,6 +1,7 @@
 import type { Presentation } from "@repo/shared";
 import { pushPresentation, OfflineError } from "./presentationSync";
 import { setSyncStatus } from "./syncStatus";
+import { flushFolderSync } from "./folderSync";
 
 /**
  * 서버 push 스케줄러.
@@ -42,6 +43,10 @@ function clearPending(): void {
 
 async function pushAll(documents: Presentation[]): Promise<void> {
   if (documents.length === 0) return;
+
+  // 폴더가 먼저 서버에 있어야 한다. 새 폴더로 옮긴 세트가 먼저 도착하면 서버가
+  // `folderId`를 루트로 보정하고, 다음 부팅 병합에서 그 값이 이긴다.
+  await flushFolderSync();
 
   setSyncStatus("syncing");
   let offline = false;
@@ -95,6 +100,14 @@ export function scheduleDocumentPush(document: Presentation): void {
   pending.set(document.id, document);
   if (timer) clearTimeout(timer);
   timer = setTimeout(run, SYNC_DEBOUNCE_MS);
+}
+
+/**
+ * 대기 중인 push 1건을 취소한다 (영구 삭제한 문서).
+ * 이미 나간 요청은 되돌릴 수 없으므로 호출자는 `flushPendingSync()`로 기다린다.
+ */
+export function cancelDocumentPush(id: string): void {
+  pending.delete(id);
 }
 
 /** 대기 중인 push를 즉시 시작하고 완료를 기다린다 */

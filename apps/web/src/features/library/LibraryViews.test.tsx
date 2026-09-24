@@ -1,80 +1,9 @@
 import React from "react";
 import { describe, it, expect, vi } from "vitest";
 import { render, screen, fireEvent, act } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
-import { MergedSlidesView, BackgroundLibraryView } from "./index";
-import { mockPresentation } from "../presentation/mockPresentation";
-import { SEED_PRESENTATIONS } from "../presentation/mockPresentations";
+import { BackgroundLibraryView } from "./index";
 
 describe("Library Views", () => {
-  describe("MergedSlidesView (프레젠테이션 1개 단위 뷰)", () => {
-    it("renders slide deck presentation card as single unit", () => {
-      const handleCreateNew = vi.fn();
-
-      render(
-        <MemoryRouter>
-          <MergedSlidesView
-            presentations={[mockPresentation]}
-            onOpenPresentation={vi.fn()}
-            onStartPresentation={vi.fn()}
-            onCreateNewPresentation={handleCreateNew}
-          />
-        </MemoryRouter>,
-      );
-
-      // 프레젠테이션 1개 단위 카드
-      expect(screen.getByTestId("presentation-card")).toBeInTheDocument();
-      expect(screen.getByText("2026 주일 3부 예배")).toBeInTheDocument();
-      expect(screen.getByText("5곡 세트")).toBeInTheDocument();
-      expect(screen.getByText("23 슬라이드")).toBeInTheDocument();
-
-      // 새 프레젠테이션 카드
-      expect(screen.getByText("새 프레젠테이션 생성")).toBeInTheDocument();
-    });
-
-    it("여러 프레젠테이션을 렌더하고 클릭 시 해당 id로 onOpenPresentation을 호출한다", async () => {
-      const handleOpen = vi.fn();
-
-      render(
-        <MemoryRouter>
-          <MergedSlidesView
-            presentations={SEED_PRESENTATIONS}
-            onOpenPresentation={handleOpen}
-            onStartPresentation={vi.fn()}
-            onCreateNewPresentation={vi.fn()}
-          />
-        </MemoryRouter>,
-      );
-
-      // 두 번째 시드 문서(기본 recent 정렬에서 mockPresentation 다음)
-      const second = SEED_PRESENTATIONS[1];
-      const cards = screen.getAllByText(second.title);
-      fireEvent.click(cards[0]);
-
-      expect(handleOpen).toHaveBeenCalledWith(second.id);
-    });
-
-    it("displays empty search message when query does not match presentation", () => {
-      render(
-        <MemoryRouter>
-          <MergedSlidesView
-            presentations={[mockPresentation]}
-            onOpenPresentation={vi.fn()}
-            onStartPresentation={vi.fn()}
-            onCreateNewPresentation={vi.fn()}
-            searchQuery="전혀일치하지않는검색어"
-          />
-        </MemoryRouter>,
-      );
-
-      expect(
-        screen.getByText(
-          /"전혀일치하지않는검색어"에 일치하는 프레젠테이션이 없습니다./,
-        ),
-      ).toBeInTheDocument();
-    });
-  });
-
   describe("BackgroundLibraryView (배경 라이브러리: 2단락 구성)", () => {
     it("renders both '내가 등록한 배경' and '유저가 등록한 배경' sections", () => {
       const handleApply = vi.fn();
