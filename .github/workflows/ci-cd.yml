@@ -34,18 +34,26 @@ jobs:
     outputs:
       app: ${{ steps.filter.outputs.app }}
     steps:
-      - uses: dorny/paths-filter@v3
+      - uses: dorny/paths-filter@v4
         id: filter
         with:
-          predicate-quantifier: "some-with-excludes"
           filters: |
             app:
-              - "**"
-              - "!**.md"
-              - "!docs/**"
-              - "!.gitignore"
-              - "!.prettierignore"
-              - "!.dev.vars.example"
+              - 'src/**'
+              - 'public/**'
+              - 'migrations/**'
+              - 'config/**'
+              - 'tests/**'
+              - 'index.html'
+              - 'package.json'
+              - 'pnpm-lock.yaml'
+              - 'pnpm-workspace.yaml'
+              - 'tsconfig.json'
+              - 'vite.config.ts'
+              - 'vitest.config.ts'
+              - 'wrangler.jsonc'
+              - 'eslint.config.mjs'
+              - '.github/workflows/ci-cd.yml'
 
   verify:
     name: Typecheck, Lint & Test
