@@ -103,7 +103,10 @@ jobs:
   deploy:
     name: Migrate D1 & Deploy Worker
     needs: verify
-    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    # `changes` is skipped on push, and the implicit success() also looks at
+    # skipped ancestors, so without always() this job never runs on main.
+    # https://github.com/actions/runner/issues/2205
+    if: always() && needs.verify.result == 'success' && github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 15
 

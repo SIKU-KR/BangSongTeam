@@ -110,5 +110,14 @@ describe("GitHub Actions CI/CD 워크플로우 설정", () => {
     expect(content).toContain("Typecheck, Lint & Test");
     expect(content).toContain("Migrate D1 & Deploy Worker");
   });
-});
 
+  it("changes 잡이 건너뛰어진 main push에서도 배포 잡이 실행된다", () => {
+    const workflowPath = path.join(rootDir, ".github/workflows/ci-cd.yml");
+    const content = fs.readFileSync(workflowPath, "utf-8");
+    const deployJob = content.slice(content.indexOf("\n  deploy:"));
+
+    expect(deployJob).toMatch(
+      /if: always\(\) && needs\.verify\.result == 'success'/,
+    );
+  });
+});
