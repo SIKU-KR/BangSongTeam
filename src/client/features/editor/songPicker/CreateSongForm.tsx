@@ -40,7 +40,7 @@ export function CreateSongForm({
         </h3>
         <p className="text-xs text-zinc-500 mt-0.5">
           가사를 입력하면 빈 줄(엔터 2번) 기준으로 슬라이드가 자동 분할됩니다.
-          (슬라이드당 최대 4줄)
+          빈 줄이 없으면 2줄씩 자동 분할됩니다. (슬라이드당 최대 4줄)
         </p>
       </div>
 

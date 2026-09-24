@@ -97,8 +97,8 @@ export function QuickLyricPasteModal({
               빠른 가사 붙여넣기
             </h2>
             <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
-              가사를 붙여넣으면 빈 줄 기준으로 슬라이드가 자동 분할됩니다. (최대
-              4줄 제한)
+              가사를 붙여넣으면 빈 줄 기준으로 슬라이드가 자동 분할됩니다. 빈
+              줄이 없으면 2줄씩 자동 분할됩니다. (슬라이드당 최대 4줄)
             </p>
           </div>
           <button

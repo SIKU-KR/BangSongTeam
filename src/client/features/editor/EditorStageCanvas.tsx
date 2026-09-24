@@ -258,7 +258,7 @@ export function EditorStageCanvas({
             <span
               className={`w-2 h-2 rounded-full ${isBlackout ? "bg-amber-400 animate-pulse" : "bg-zinc-300 dark:bg-zinc-600"}`}
             />
-            <span>암전(B) {isBlackout ? "해제" : "테스트"}</span>
+            <span>암전(B) {isBlackout ? "해제" : "미리보기"}</span>
           </button>
 
           <button
@@ -274,7 +274,7 @@ export function EditorStageCanvas({
             <span
               className={`w-2 h-2 rounded-full ${isLyricsHidden ? "bg-sky-400 animate-pulse" : "bg-zinc-300 dark:bg-zinc-600"}`}
             />
-            <span>가사숨김(H) {isLyricsHidden ? "해제" : "테스트"}</span>
+            <span>가사 숨김(H) {isLyricsHidden ? "해제" : "미리보기"}</span>
           </button>
         </div>
 

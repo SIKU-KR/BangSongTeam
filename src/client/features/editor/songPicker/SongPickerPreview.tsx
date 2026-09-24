@@ -142,8 +142,7 @@ export function MyDeckPreview({
         badge={MINE_BADGE}
         meta={
           <>
-            {deck.artist || "아티스트 미상"} · 총 {deck.slides.length}개
-            슬라이드(소절)
+            {`${deck.artist || "아티스트 미상"} · 총 ${deck.slides.length}개 슬라이드`}
             {deck.forkedFromAuthorName &&
               ` · 원작: ${deck.forkedFromAuthorName}`}
           </>
@@ -195,8 +194,7 @@ export function SharedDeckPreview({
         }
         meta={
           <>
-            {summary.artist || "아티스트 미상"} · 총 {summary.slideCount}개
-            슬라이드 · 공유: {summary.authorName} · {summary.forkCount}회 가져감
+            {`${summary.artist || "아티스트 미상"} · 총 ${summary.slideCount}개 슬라이드 · 공유: ${summary.authorName} · ${summary.forkCount}회 가져감`}
           </>
         }
       />

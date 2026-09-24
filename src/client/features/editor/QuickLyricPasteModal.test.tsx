@@ -59,7 +59,7 @@ describe("QuickLyricPasteModal", () => {
 
     expect(screen.getByText("슬라이드 1")).toBeInTheDocument();
     expect(screen.getByText("슬라이드 2")).toBeInTheDocument();
-    expect(screen.getAllByText(/2줄/)).toHaveLength(2);
+    expect(screen.getAllByText("2줄")).toHaveLength(2);
     expect(
       within(slideCards[0]).getByText("한량없는 주의 은혜"),
     ).toBeInTheDocument();

@@ -74,7 +74,10 @@ describe("SongPickerModal", () => {
   const onCloseMock = vi.fn();
   let api: FakeApi;
 
-  function installServer(options: { offline?: boolean } = {}) {
+  function installServer(
+    options: { offline?: boolean; sharedDecks?: (typeof sharedSummary)[] } = {},
+  ) {
+    const list = options.sharedDecks ?? [sharedSummary];
     api = installFakeApi(
       {
         "GET /api/catalog/search": ({ url }) => {
@@ -82,9 +85,7 @@ describe("SongPickerModal", () => {
           const match = (text: string) => !q || text.includes(q);
           return {
             body: {
-              decks: match("시간을 뚫고 당신은 우리 없는 하늘을")
-                ? [sharedSummary]
-                : [],
+              decks: match("시간을 뚫고 당신은 우리 없는 하늘을") ? list : [],
             },
           };
         },
@@ -380,6 +381,38 @@ describe("SongPickerModal", () => {
       expect(
         api.calls.some((c) => c.path.startsWith("/api/catalog/candidates")),
       ).toBe(false);
+    });
+  });
+
+  describe("빈 상태 및 수량 표기", () => {
+    it("공유 곡 탭에서 공유 곡이 없을 때 검색 전 문구를 표시한다", async () => {
+      api.restore();
+      installServer({ sharedDecks: [] });
+      renderPicker();
+
+      fireEvent.click(screen.getByTestId("song-picker-filter-shared"));
+      expect(
+        await screen.findByText("아직 공유된 찬양곡이 없습니다."),
+      ).toBeInTheDocument();
+    });
+
+    it("검색 결과가 없을 때는 '일치하는 찬양곡이 없습니다.'를 표시한다", async () => {
+      renderPicker();
+      fireEvent.change(screen.getByTestId("song-picker-search-input"), {
+        target: { value: "존재하지않는찬양" },
+      });
+
+      expect(
+        await screen.findByText("일치하는 찬양곡이 없습니다."),
+      ).toBeInTheDocument();
+    });
+
+    it("내 보관함 곡 미리보기에 '총 N개 슬라이드'로 표기한다", () => {
+      seedMySong();
+      renderPicker();
+
+      expect(screen.getByText(/총 2개 슬라이드/)).toBeInTheDocument();
+      expect(screen.queryByText(/소절/)).not.toBeInTheDocument();
     });
   });
 });
