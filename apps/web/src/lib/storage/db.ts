@@ -6,8 +6,16 @@ export const OFFLINE_DB_NAME = "worship-offline-db";
  * v2: 오프라인 세션 캐시(`auth_session`)를 추가했다.
  * httpOnly 쿠키는 JS가 못 읽으므로, 네트워크 없이 로그인 게이트를 통과시키려면
  * 마지막으로 확인된 세션을 따로 들고 있어야 한다.
+ *
+ * v3: 엔터티 id를 UUID에서 NanoID로 바꿨다 (2026-09-24). 옛 UUID 레코드는
+ * `IdSchema`를 통과하지 못해 부팅마다 '손상'으로 격리되고 동기화 PUT도 400으로
+ * 실패하므로, 업그레이드 시 모든 스토어를 비운다. 서버 D1도 같은 시점에
+ * `0006_nanoid_reset`으로 비워지므로 되살릴 원본은 없다.
  */
-export const OFFLINE_DB_VERSION = 2;
+export const OFFLINE_DB_VERSION = 3;
+
+/** 이 버전보다 오래된 DB의 레코드는 UUID id를 가진다 */
+const FIRST_NANOID_DB_VERSION = 3;
 
 /**
  * IndexedDB를 쓸 수 없는 환경(시크릿 모드, 저장소 차단 등)을 호출자가 식별할 수 있게
@@ -98,7 +106,12 @@ export function getOfflineDB(): Promise<IDBPDatabase<WorshipOfflineDB>> {
 
   if (!dbPromise) {
     dbPromise = openDB<WorshipOfflineDB>(OFFLINE_DB_NAME, OFFLINE_DB_VERSION, {
-      upgrade(db) {
+      upgrade(db, oldVersion, _newVersion, transaction) {
+        if (oldVersion > 0 && oldVersion < FIRST_NANOID_DB_VERSION) {
+          for (const name of db.objectStoreNames) {
+            void transaction.objectStore(name).clear();
+          }
+        }
         if (!db.objectStoreNames.contains("presentations")) {
           const presentationStore = db.createObjectStore("presentations", {
             keyPath: "id",

@@ -52,6 +52,18 @@ module.exports = tseslint.config(
         ...globals.es2022,
       },
     },
+    rules: {
+      // 엔터티 id는 NanoID 하나로 통일한다 (IdSchema가 UUID를 거부한다).
+      "no-restricted-properties": [
+        "error",
+        {
+          object: "crypto",
+          property: "randomUUID",
+          message:
+            "엔터티 id는 @repo/shared의 createId()(NanoID)로 만드세요. UUID는 IdSchema를 통과하지 못합니다.",
+        },
+      ],
+    },
   },
   // 6. Architecture Guardrail: Strict DB Isolation
   // packages/db is Worker-only. The frontend (apps/web/src) MUST NEVER import packages/db.

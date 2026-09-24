@@ -1,5 +1,6 @@
 import { and, eq, sql } from "drizzle-orm";
 import {
+  createId,
   firstSlidePreview,
   type Deck as SharedDeck,
   type DeckVisibility,
@@ -186,7 +187,7 @@ export async function forkPublicDeck(
   const now = new Date().toISOString();
   const forkRow: NewDeck = toDeckRow({
     ...original,
-    id: crypto.randomUUID(),
+    id: createId(),
     userId,
     scope: "library",
     presentationId: null,

@@ -1,5 +1,5 @@
 import { and, eq } from "drizzle-orm";
-import type { CreateReportRequest } from "@repo/shared";
+import { createId, type CreateReportRequest } from "@repo/shared";
 import { decks, reports } from "../schema";
 import { publicDeckCondition } from "./publicScope";
 
@@ -43,7 +43,7 @@ export async function createReport(
     );
   if (pending) return { status: "duplicate" };
 
-  const id = crypto.randomUUID();
+  const id = createId();
   await db.insert(reports).values({
     id,
     userId,

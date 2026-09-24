@@ -2,10 +2,10 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { createTestDb, type TestDbResult } from "../test-utils";
 import { MODERATION_SQL } from "./moderationSql";
 
-const A = "00000000-0000-4000-8000-00000000000a";
-const B = "00000000-0000-4000-8000-00000000000b";
-const DECK = "c0000000-0000-4000-8000-000000000001";
-const FORK = "c0000000-0000-4000-8000-000000000002";
+const A = "00000000000000000000a";
+const B = "00000000000000000000b";
+const DECK = "c00000000000000000001";
+const FORK = "c00000000000000000002";
 
 /**
  * 운영 SQL을 실제 마이그레이션 스키마에 대해 실행한다.

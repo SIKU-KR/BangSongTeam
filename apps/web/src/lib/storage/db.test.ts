@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { openDB } from "idb";
 import {
   getOfflineDB,
   isPersistenceAvailable,
@@ -65,5 +66,54 @@ describe("worship-offline-db", () => {
 
   it("IndexedDB가 있으면 사용 가능으로 보고한다", () => {
     expect(isPersistenceAvailable()).toBe(true);
+  });
+
+  it("v2(UUID 시절) DB를 열면 모든 스토어를 비운다 (v3 NanoID 전환)", async () => {
+    const legacy = await openDB(OFFLINE_DB_NAME, 2, {
+      upgrade(db) {
+        db.createObjectStore("presentations", { keyPath: "id" }).createIndex(
+          "by-date",
+          "serviceDate",
+        );
+        db.createObjectStore("decks", { keyPath: "id" });
+        db.createObjectStore("backgrounds", { keyPath: "id" });
+        db.createObjectStore("sync_meta", { keyPath: "presentationId" });
+        db.createObjectStore("auth_session", { keyPath: "id" });
+      },
+    });
+    const legacyId = "10000000-0000-4000-8000-000000000001";
+    await legacy.put("presentations", {
+      id: legacyId,
+      serviceDate: "2026-09-27",
+    });
+    await legacy.put("decks", { id: "c0000000-0000-4000-8000-000000000001" });
+    await legacy.put("backgrounds", {
+      id: "b0000000-0000-0000-0000-000000000001",
+    });
+    await legacy.put("sync_meta", { presentationId: legacyId, dirty: true });
+    await legacy.put("auth_session", {
+      id: "current",
+      userId: "8f14e45f-ceea-4e0a-9f2b-1a2b3c4d5e6f",
+    });
+    legacy.close();
+
+    const db = await getOfflineDB();
+
+    expect(db.version).toBe(OFFLINE_DB_VERSION);
+    for (const name of db.objectStoreNames) {
+      expect(await db.count(name), `${name}가 비어 있어야 한다`).toBe(0);
+    }
+    expect(db.transaction("presentations").store.indexNames).toContain(
+      "by-date",
+    );
+  });
+
+  it("이미 v3인 DB는 다시 열어도 레코드를 지우지 않는다", async () => {
+    const first = await getOfflineDB();
+    await first.put("sync_meta", { presentationId: "100000000000000000001" });
+    closeOfflineDB();
+
+    const reopened = await getOfflineDB();
+    expect(await reopened.count("sync_meta")).toBe(1);
   });
 });

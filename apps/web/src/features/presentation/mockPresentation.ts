@@ -8,8 +8,8 @@ import {
   Slide,
 } from "@repo/shared";
 
-export const MOCK_USER_ID = "00000000-0000-4000-8000-000000000001";
-export const MOCK_PRESENTATION_ID = "10000000-0000-4000-8000-000000000001";
+export const MOCK_USER_ID = "00000000x000000000001";
+export const MOCK_PRESENTATION_ID = "100000000000000000001";
 const CREATED_AT = "2026-09-20T00:00:00.000Z";
 
 interface SongMockInput {
@@ -24,12 +24,12 @@ interface SongMockInput {
 
 const SONG_DEFINITIONS: SongMockInput[] = [
   {
-    deckId: "20000000-0000-4000-8000-000000000001",
-    itemId: "30000000-0000-4000-8000-000000000001",
+    deckId: "200000000000000000001",
+    itemId: "300000000000000000001",
     order: 0,
     title: "은혜로다",
     artist: "손경민",
-    backgroundId: "b0000000-0000-0000-0000-000000000001",
+    backgroundId: "mJIToShuKOc3FsbZIihi6",
     slideLines: [
       ["시작됐네 우리 주님의 능력이", "나의 삶을 다스리고 새롭게 하네"],
       ["주의 사랑을 주의 선하심을", "주의 은혜를 바라보는 자에게"],
@@ -49,12 +49,12 @@ const SONG_DEFINITIONS: SongMockInput[] = [
     ],
   },
   {
-    deckId: "20000000-0000-4000-8000-000000000002",
-    itemId: "30000000-0000-4000-8000-000000000002",
+    deckId: "200000000000000000002",
+    itemId: "300000000000000000002",
     order: 1,
     title: "주 품에",
     artist: "Hillsong Worship",
-    backgroundId: "b0000000-0000-0000-0000-000000000002",
+    backgroundId: "VYMY2lcaf-sSYd8Z1kSmS",
     slideLines: [
       ["주 품에 품으소서", "능력의 팔로 덮으소서"],
       [
@@ -73,12 +73,12 @@ const SONG_DEFINITIONS: SongMockInput[] = [
     ],
   },
   {
-    deckId: "20000000-0000-4000-8000-000000000003",
-    itemId: "30000000-0000-4000-8000-000000000003",
+    deckId: "200000000000000000003",
+    itemId: "300000000000000000003",
     order: 2,
     title: "시선",
     artist: "김명선",
-    backgroundId: "b0000000-0000-0000-0000-000000000003",
+    backgroundId: "Z3pQ9LTe8iF6c1WabFlqw",
     slideLines: [
       ["내게로부터 눈을 들어 주를 보기 시작할 때", "주의 일을 보겠네"],
       ["내 작은 마음 돌이키사 하늘의 꿈꾸게 하네", "주님을 볼 때"],
@@ -98,12 +98,12 @@ const SONG_DEFINITIONS: SongMockInput[] = [
     ],
   },
   {
-    deckId: "20000000-0000-4000-8000-000000000004",
-    itemId: "30000000-0000-4000-8000-000000000004",
+    deckId: "200000000000000000004",
+    itemId: "300000000000000000004",
     order: 3,
     title: "꽃들도",
     artist: "JWorship",
-    backgroundId: "b0000000-0000-0000-0000-000000000004",
+    backgroundId: "8UCf1VBmP1pMgdSQ0cUCp",
     slideLines: [
       ["이곳에 생명 샘 솟아나", "눈물 골짝 지나갈 때에"],
       ["머잖아 열매 맺히고", "웃음소리 넘쳐나리라"],
@@ -123,12 +123,12 @@ const SONG_DEFINITIONS: SongMockInput[] = [
     ],
   },
   {
-    deckId: "20000000-0000-4000-8000-000000000005",
-    itemId: "30000000-0000-4000-8000-000000000005",
+    deckId: "200000000000000000005",
+    itemId: "300000000000000000005",
     order: 4,
     title: "주의 이름 높이며",
     artist: "Rick Founds",
-    backgroundId: "b0000000-0000-0000-0000-000000000005",
+    backgroundId: "9Za1L0TVfQscdGPYbnYBf",
     slideLines: [
       [
         "주의 이름 높이며",

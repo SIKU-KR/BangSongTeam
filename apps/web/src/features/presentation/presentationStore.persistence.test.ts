@@ -98,7 +98,7 @@ describe("presentationStore 영속성", () => {
     const mine = createNewPresentation("내 세트");
     await flushPendingWrites();
 
-    signInAsTestUser("99999999-9999-4999-8999-999999999999");
+    signInAsTestUser("999999999999999999999");
     resetPresentationStore();
     await hydrateFromStorage();
 

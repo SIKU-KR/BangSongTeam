@@ -27,7 +27,7 @@ vi.mock("./presentationSync", async (importOriginal) => {
 
 function serverDeck(overrides: Partial<Deck> = {}): Deck {
   return DeckSchema.parse({
-    id: "c0000000-0000-4000-8000-0000000000ff",
+    id: "c000000000000000000ff",
     userId: TEST_USER_ID,
     scope: "library",
     title: "다른 PC에서 만든 곡",

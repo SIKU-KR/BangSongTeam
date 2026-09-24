@@ -21,8 +21,8 @@ import { getMyLibraryDecks } from "./decks";
 describe("D1 Presentation Queries & Clone-on-Add Isolation", () => {
   let db: ReturnType<typeof createTestDb>["db"];
 
-  const userAId = "00000000-0000-0000-0000-000000000001";
-  const userBId = "00000000-0000-0000-0000-000000000002";
+  const userAId = "000000000000000000001";
+  const userBId = "000000000000000000002";
 
   let sourceDeck1Id: string;
   let sourceDeck2Id: string;
@@ -231,13 +231,13 @@ describe("D1 Presentation Queries & Clone-on-Add Isolation", () => {
     });
   });
   describe("문서 단위 업서트 (M3-B 동기화)", () => {
-    const DOC_ID = "10000000-0000-4000-8000-000000000001";
+    const DOC_ID = "100000000000000000001";
 
     function makeDoc(
       userId: string,
       overrides: Partial<PresentationDocument> = {},
     ): PresentationDocument {
-      const deckId = "c0000000-0000-4000-8000-000000000001";
+      const deckId = "c00000000000000000001";
       return PresentationDocumentSchema.parse({
         id: DOC_ID,
         userId,
@@ -245,7 +245,7 @@ describe("D1 Presentation Queries & Clone-on-Add Isolation", () => {
         serviceDate: "2026-09-27",
         items: [
           {
-            id: "30000000-0000-4000-8000-000000000001",
+            id: "300000000000000000001",
             presentationId: DOC_ID,
             deckId,
             order: 0,
@@ -293,9 +293,7 @@ describe("D1 Presentation Queries & Clone-on-Add Isolation", () => {
       const [restored] = await getPresentationDocumentsByUserId(db, userAId);
 
       expect(restored.id).toBe(DOC_ID);
-      expect(restored.items[0].deck.id).toBe(
-        "c0000000-0000-4000-8000-000000000001",
-      );
+      expect(restored.items[0].deck.id).toBe("c00000000000000000001");
     });
 
     it("두 번 저장해도 문서가 중복되지 않는다 (멱등)", async () => {

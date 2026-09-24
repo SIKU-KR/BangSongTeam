@@ -24,17 +24,17 @@ import type { SessionReader } from "../middleware/auth";
  * 주입하고(`createApp({ readSession })`), 그 아래는 프로덕션 라우트를 그대로 쓴다.
  */
 
-const USER_A = "aaaaaaaa-0000-4000-8000-000000000001";
-const USER_B = "bbbbbbbb-0000-4000-8000-000000000002";
+const USER_A = "aaaaaaaa0000000000001";
+const USER_B = "bbbbbbbb0000000000002";
 
 let currentUser: string | null = USER_A;
 
 const fakeSession: SessionReader = async () =>
   currentUser ? { userId: currentUser } : null;
 
-const DOC_ID = "10000000-0000-4000-8000-0000000000aa";
-const DECK_ID = "c0000000-0000-4000-8000-0000000000aa";
-const LIB_DECK_ID = "c0000000-0000-4000-8000-0000000000bb";
+const DOC_ID = "1000000000000000000aa";
+const DECK_ID = "c000000000000000000aa";
+const LIB_DECK_ID = "c000000000000000000bb";
 
 function makeDeck(userId: string, overrides: Partial<Deck> = {}): Deck {
   return DeckSchema.parse({
@@ -65,7 +65,7 @@ function makeDoc(userId: string): PresentationDocument {
     serviceDate: "2026-09-27",
     items: [
       {
-        id: "30000000-0000-4000-8000-0000000000aa",
+        id: "3000000000000000000aa",
         presentationId: DOC_ID,
         deckId: DECK_ID,
         order: 0,
@@ -103,7 +103,7 @@ describe("동기화 라우트 교차 사용자 격리", () => {
       { id: USER_A, name: "A", createdAt: new Date(), updatedAt: new Date() },
       { id: USER_B, name: "B", createdAt: new Date(), updatedAt: new Date() },
     ]);
-    // 배경은 더 이상 여기서 시드하지 않는다. `0002_seed_backgrounds.sql`
+    // 배경은 더 이상 여기서 시드하지 않는다. `0007_seed_backgrounds_nanoid.sql`
     // 마이그레이션이 채우므로, 시드하지 않고도 통과하는 것 자체가 회귀 방지선이다
     // (그 마이그레이션이 없던 시절 운영 D1의 backgrounds가 비어 있어
     //  decks.background_id 외래키 위반으로 동기화가 500으로 죽었다).
@@ -326,7 +326,7 @@ describe("동기화 라우트 교차 사용자 격리", () => {
         "소원",
         "밤이나 낮이나",
       ];
-      const presentationId = "10000000-0000-4000-8000-0000000000bb";
+      const presentationId = "1000000000000000000bb";
 
       return PresentationDocumentSchema.parse({
         id: presentationId,
@@ -334,9 +334,9 @@ describe("동기화 라우트 교차 사용자 격리", () => {
         title: "주일 1·2부 연합예배",
         serviceDate: "2026-09-27",
         items: titles.map((title, index) => {
-          const deckId = `c0000000-0000-4000-8000-00000000c${index}0${index}`;
+          const deckId = `c0000000000000000c${index}0${index}`;
           return {
-            id: `30000000-0000-4000-8000-00000000c${index}0${index}`,
+            id: `30000000000000000c${index}0${index}`,
             presentationId,
             deckId,
             order: index,
@@ -352,7 +352,7 @@ describe("동기화 라우트 교차 사용자 격리", () => {
                 { id: `s_${index}_1`, order: 0, lines: [`${title} 1절`] },
                 { id: `s_${index}_2`, order: 1, lines: [`${title} 2절`] },
               ],
-              backgroundId: `b0000000-0000-0000-0000-00000000000${index + 1}`,
+              backgroundId: INITIAL_BACKGROUNDS[index].id,
               style: {
                 ...DEFAULT_DECK_STYLE,
                 overlayOpacity: 40 + index * 5,
@@ -497,7 +497,7 @@ describe("동기화 라우트 교차 사용자 격리", () => {
     });
 
     it("서버가 모르는 배경 id는 세트를 날리는 대신 '배경 없음'으로 낮춘다", async () => {
-      const unknown = "b9999999-9999-4999-8999-999999999999";
+      const unknown = "b99999999999999999999";
       const doc = makeDoc(USER_A);
       doc.items[0].deck.backgroundId = unknown;
 
@@ -525,12 +525,12 @@ describe("동기화 라우트 교차 사용자 격리", () => {
     it("곡마다 배경이 다른 5곡 세트도 그대로 저장된다", async () => {
       const doc = makeDoc(USER_A);
       doc.items = INITIAL_BACKGROUNDS.slice(0, 5).map((background, index) => ({
-        id: `30000000-0000-4000-8000-00000000000${index + 1}`,
+        id: `30000000000000000000${index + 1}`,
         presentationId: DOC_ID,
-        deckId: `c0000000-0000-4000-8000-00000000000${index + 1}`,
+        deckId: `c0000000000000000000${index + 1}`,
         order: index,
         deck: makeDeck(USER_A, {
-          id: `c0000000-0000-4000-8000-00000000000${index + 1}`,
+          id: `c0000000000000000000${index + 1}`,
           title: `${index + 1}번째 곡`,
           backgroundId: background.id,
         }),

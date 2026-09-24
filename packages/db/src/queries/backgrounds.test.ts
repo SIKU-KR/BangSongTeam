@@ -19,7 +19,7 @@ describe("backgrounds query helper", () => {
     expect(emptyResult).toEqual([]);
 
     await testDb.db.insert(backgrounds).values({
-      id: "a0000000-0000-0000-0000-000000000001",
+      id: "a00000000000000000001",
       title: "잔잔한 물결",
       r2Key: "loops/gentle-waves.mp4",
       posterKey: "posters/gentle-waves.webp",

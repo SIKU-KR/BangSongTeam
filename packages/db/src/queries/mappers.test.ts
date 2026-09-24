@@ -13,10 +13,10 @@ import {
   fromPresentationDocument,
 } from "./mappers";
 
-const USER_ID = "00000000-0000-4000-8000-000000000001";
-const PRESENTATION_ID = "10000000-0000-4000-8000-000000000001";
-const DECK_ID = "c0000000-0000-4000-8000-000000000001";
-const ITEM_ID = "30000000-0000-4000-8000-000000000001";
+const USER_ID = "00000000x000000000001";
+const PRESENTATION_ID = "100000000000000000001";
+const DECK_ID = "c00000000000000000001";
+const ITEM_ID = "300000000000000000001";
 
 function makeSharedDeck(overrides: Partial<SharedDeck> = {}): SharedDeck {
   return DeckSchema.parse({
@@ -31,7 +31,7 @@ function makeSharedDeck(overrides: Partial<SharedDeck> = {}): SharedDeck {
       { id: "s1", order: 0, lines: ["시작됐네"] },
       { id: "s2", order: 1, lines: ["나의 삶을"] },
     ],
-    backgroundId: "b0000000-0000-0000-0000-000000000001",
+    backgroundId: "mJIToShuKOc3FsbZIihi6",
     style: { ...DEFAULT_DECK_STYLE, overlayOpacity: 75 },
     visibility: "private",
     forkedFrom: null,
@@ -119,7 +119,7 @@ describe("행 ↔ DTO 매퍼", () => {
         visibility: "public",
         forkCount: 7,
         origin: "fork",
-        forkedFrom: "c0000000-0000-4000-8000-000000000009",
+        forkedFrom: "c00000000000000000009",
         forkedFromAuthorName: "김찬양",
         publishedAt: "2026-09-22T00:00:00.000Z",
         takedownAt: "2026-09-23T00:00:00.000Z",
@@ -166,9 +166,9 @@ describe("행 ↔ DTO 매퍼", () => {
     it("분해 시 항목과 덱에 프레젠테이션 소유자를 강제한다", () => {
       // 본문의 userId를 믿으면 남의 계정으로 문서를 심을 수 있다.
       const doc = makeDocument();
-      doc.userId = "99999999-9999-4999-8999-999999999999";
+      doc.userId = "999999999999999999999";
       const { decks } = fromPresentationDocument(doc);
-      expect(decks[0].userId).toBe("99999999-9999-4999-8999-999999999999");
+      expect(decks[0].userId).toBe("999999999999999999999");
     });
 
     it("분해한 덱은 scope와 presentationId가 고정된다", () => {
@@ -188,7 +188,7 @@ describe("행 ↔ DTO 매퍼", () => {
         visibility: "public",
         forkCount: 999,
         publishedAt: "2026-09-22T00:00:00.000Z",
-        forkedFrom: "c0000000-0000-4000-8000-000000000009",
+        forkedFrom: "c00000000000000000009",
         forkedFromAuthorName: "김찬양",
       });
 
@@ -197,7 +197,7 @@ describe("행 ↔ DTO 매퍼", () => {
       expect(decks[0].forkCount).toBe(0);
       expect(decks[0].publishedAt).toBeNull();
       // 편집기가 쓰는 출처 정보는 그대로 둔다
-      expect(decks[0].forkedFrom).toBe("c0000000-0000-4000-8000-000000000009");
+      expect(decks[0].forkedFrom).toBe("c00000000000000000009");
       expect(decks[0].forkedFromAuthorName).toBe("김찬양");
     });
 
@@ -205,10 +205,10 @@ describe("행 ↔ DTO 매퍼", () => {
       const doc = makeDocument();
       const second = {
         ...doc.items[0],
-        id: "30000000-0000-4000-8000-000000000002",
-        deckId: "c0000000-0000-4000-8000-000000000002",
+        id: "300000000000000000002",
+        deckId: "c00000000000000000002",
         order: 5,
-        deck: makeSharedDeck({ id: "c0000000-0000-4000-8000-000000000002" }),
+        deck: makeSharedDeck({ id: "c00000000000000000002" }),
       };
       doc.items = [second, doc.items[0]];
 

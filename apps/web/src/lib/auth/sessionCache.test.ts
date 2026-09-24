@@ -24,14 +24,14 @@ describe("오프라인 세션 캐시", () => {
 
   it("저장한 세션을 그대로 되읽는다", async () => {
     await saveCachedSession({
-      userId: "8f14e45f-ceea-4e0a-9f2b-1a2b3c4d5e6f",
+      userId: "8f14e45fc1a2b3c4d5e6f",
       name: "봉사자",
       image: "https://img.example.com/a.png",
       expiresAt: Date.now() + HOUR,
     });
 
     const cached = await loadCachedSession();
-    expect(cached?.userId).toBe("8f14e45f-ceea-4e0a-9f2b-1a2b3c4d5e6f");
+    expect(cached?.userId).toBe("8f14e45fc1a2b3c4d5e6f");
     expect(cached?.name).toBe("봉사자");
     expect(cached?.image).toBe("https://img.example.com/a.png");
   });
@@ -44,7 +44,7 @@ describe("오프라인 세션 캐시", () => {
     // 만료된 세션으로 게이트를 열면 화면은 로그인 상태인데 서버 요청마다
     // 401이 나는 어정쩡한 상태가 된다.
     await saveCachedSession({
-      userId: "8f14e45f-ceea-4e0a-9f2b-1a2b3c4d5e6f",
+      userId: "8f14e45fc1a2b3c4d5e6f",
       name: "봉사자",
       expiresAt: Date.now() - 1000,
     });
@@ -55,24 +55,22 @@ describe("오프라인 세션 캐시", () => {
 
   it("단일 레코드만 유지한다 (계정을 바꿔도 하나)", async () => {
     await saveCachedSession({
-      userId: "aaaaaaaa-ceea-4e0a-9f2b-1a2b3c4d5e6f",
+      userId: "aaaaaaaac1a2b3c4d5e6f",
       name: "A",
       expiresAt: Date.now() + HOUR,
     });
     await saveCachedSession({
-      userId: "bbbbbbbb-ceea-4e0a-9f2b-1a2b3c4d5e6f",
+      userId: "bbbbbbbbc1a2b3c4d5e6f",
       name: "B",
       expiresAt: Date.now() + HOUR,
     });
 
-    expect((await loadCachedSession())?.userId).toBe(
-      "bbbbbbbb-ceea-4e0a-9f2b-1a2b3c4d5e6f",
-    );
+    expect((await loadCachedSession())?.userId).toBe("bbbbbbbbc1a2b3c4d5e6f");
   });
 
   it("로그아웃하면 캐시를 비운다", async () => {
     await saveCachedSession({
-      userId: "8f14e45f-ceea-4e0a-9f2b-1a2b3c4d5e6f",
+      userId: "8f14e45fc1a2b3c4d5e6f",
       name: "봉사자",
       expiresAt: Date.now() + HOUR,
     });

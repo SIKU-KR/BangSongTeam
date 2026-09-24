@@ -1,7 +1,8 @@
 import { z } from "zod";
+import { IdSchema } from "./id";
 
 export const BackgroundMediaSchema = z.object({
-  id: z.string().uuid(),
+  id: IdSchema,
   title: z.string().min(1).max(100),
   r2Key: z.string(), // R2 내 파일 경로 (mp4)
   posterKey: z.string(), // 썸네일 경로 (webp)

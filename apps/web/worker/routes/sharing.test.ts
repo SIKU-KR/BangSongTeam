@@ -18,12 +18,12 @@ import type { SessionReader } from "../middleware/auth";
  * 실제 라우트(`createApp`)에 세션 리더만 주입한다. D1에는 RLS가 없으므로
  * "남의 비공개 곡은 어떤 경로로도 보이지 않는다"를 라우트 레벨에서 고정한다.
  */
-const A = "aaaaaaaa-3333-4000-8000-000000000001";
-const B = "bbbbbbbb-3333-4000-8000-000000000002";
-const PUB = "c0000000-3333-4000-8000-000000000001";
-const PRIV = "c0000000-3333-4000-8000-000000000002";
-const SET_ID = "10000000-3333-4000-8000-000000000001";
-const CLONE = "c0000000-3333-4000-8000-000000000003";
+const A = "aaaaaaaa3000000000001";
+const B = "bbbbbbbb3000000000002";
+const PUB = "c00000003000000000001";
+const PRIV = "c00000003000000000002";
+const SET_ID = "100000003000000000001";
+const CLONE = "c00000003000000000003";
 
 let currentUser: string | null = A;
 const fakeSession: SessionReader = async () =>
@@ -184,7 +184,7 @@ describe("공유 라이브러리 API", () => {
         serviceDate: "2026-09-27",
         items: [
           {
-            id: "30000000-3333-4000-8000-000000000001",
+            id: "300000003000000000001",
             presentationId: SET_ID,
             deckId: CLONE,
             order: 0,

@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from "react";
 import type { Deck, Presentation, PresentationItem } from "@repo/shared";
-import { INITIAL_BACKGROUNDS } from "@repo/shared";
+import { createId, createSlideId, INITIAL_BACKGROUNDS } from "@repo/shared";
 import {
   savePresentation,
   loadAllPresentations,
@@ -240,7 +240,7 @@ function repairDuplicateDeckIds(documents: Presentation[]): {
       }
 
       changed = true;
-      const newId = crypto.randomUUID();
+      const newId = createId();
       seen.add(newId);
       return {
         ...item,
@@ -395,13 +395,13 @@ export function getActivePresentation(): Presentation {
  *    보관함과 세트 복제본의 격리가 로컬에서만 무너져 있었다.
  *
  * 짧은 id를 쓰면 저장은 되지만 다음 부팅 `safeParse`에서 문서 전체가 격리되므로
- * 반드시 uuid를 쓴다 (`duplicateSongInPresentation`과 같은 이유).
+ * 반드시 `createId()`를 쓴다 (`duplicateSongInPresentation`과 같은 이유).
  */
 function cloneDeckForPresentation(deck: Deck, presentationId: string): Deck {
   const now = new Date().toISOString();
   return {
     ...(JSON.parse(JSON.stringify(deck)) as Deck),
-    id: crypto.randomUUID(),
+    id: createId(),
     userId: getCurrentUserId() ?? deck.userId,
     scope: "presentation",
     presentationId,
@@ -466,7 +466,7 @@ export function addDeckToPresentation(deck: Deck): PresentationItem {
   };
 
   const newItem: PresentationItem = {
-    id: crypto.randomUUID(),
+    id: createId(),
     presentationId: active.id,
     deckId: resolvedDeck.id,
     order: currentCount,
@@ -522,7 +522,7 @@ export function loadSampleSongsIntoActivePresentation(): PresentationItem[] {
 export function createNewPresentation(title = "새 프레젠테이션"): Presentation {
   const now = new Date().toISOString();
   const created: Presentation = {
-    id: crypto.randomUUID(),
+    id: createId(),
     userId: getCurrentUserId() ?? readActive().userId,
     title,
     serviceDate: now.slice(0, 10),
@@ -708,7 +708,7 @@ export function addSlideToSong(
   const insertAt = afterIndex !== undefined ? afterIndex + 1 : slides.length;
 
   const newSlide = {
-    id: `slide_${crypto.randomUUID().slice(0, 8)}`,
+    id: createSlideId(),
     order: insertAt,
     lines,
   };
@@ -845,16 +845,16 @@ export function duplicateSongInPresentation(songIndex: number): Deck | null {
   const originalDeck = item.deck;
   const clonedDeck: Deck = {
     ...JSON.parse(JSON.stringify(originalDeck)),
-    // DeckSchema.id는 uuid다. 접두사를 붙인 짧은 id를 쓰면 저장은 되지만
+    // DeckSchema.id는 21자 NanoID다. 접두사를 붙인 짧은 id를 쓰면 저장은 되지만
     // 다음 부팅의 safeParse에서 프레젠테이션 문서 전체가 격리된다.
-    id: crypto.randomUUID(),
+    id: createId(),
     title: `${originalDeck.title} (사본)`,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   };
 
   const newItem: PresentationItem = {
-    id: crypto.randomUUID(),
+    id: createId(),
     presentationId: readActive().id,
     deckId: clonedDeck.id,
     order: songIndex + 1,

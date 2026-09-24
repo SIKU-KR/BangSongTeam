@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { PresentationSchema } from "@repo/shared";
+import { ID_PATTERN, PresentationSchema } from "@repo/shared";
 import { mockPresentation } from "./mockPresentation";
 
 describe("mockPresentation (Task 3.1)", () => {
@@ -48,9 +48,7 @@ describe("mockPresentation (Task 3.1)", () => {
   it("모든 덱은 모션 배경 ID 및 유효한 스타일을 가져야 한다", () => {
     for (const item of mockPresentation.items) {
       const deck = item.deck;
-      expect(deck?.backgroundId).toMatch(
-        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
-      );
+      expect(deck?.backgroundId).toMatch(ID_PATTERN);
       expect(deck?.style).toBeDefined();
       expect(deck?.style.fontFamily).toBe("Pretendard");
     }

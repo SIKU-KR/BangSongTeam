@@ -4,8 +4,8 @@ import { createTestDb, type TestDbResult } from "../test-utils";
 import { decks, user, type NewDeck } from "../schema";
 import { planSearch, sanitizeFts5Query, searchPublicDecks } from "./search";
 
-const USER_A = "00000000-0000-4000-8000-000000000001";
-const USER_B = "00000000-0000-4000-8000-000000000002";
+const USER_A = "00000000x000000000001";
+const USER_B = "00000000x000000000002";
 
 function deckRow(overrides: Partial<NewDeck> & { id: string }): NewDeck {
   return {

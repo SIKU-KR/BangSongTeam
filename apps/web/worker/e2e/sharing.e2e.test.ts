@@ -25,11 +25,11 @@ import type { SessionReader } from "../middleware/auth";
  * (b) 같은 곡을 2개 계정이 공개하면 합치지 않고 둘 다 보이며, 가져간 횟수순으로
  *     정렬된다 (공유 라이브러리는 게시판처럼 운영한다)
  */
-const A = "aaaaaaaa-6666-4000-8000-000000000001";
-const B = "bbbbbbbb-6666-4000-8000-000000000002";
-const A_DECK = "c0000000-6666-4000-8000-00000000000a";
-const B_DECK = "c0000000-6666-4000-8000-00000000000b";
-const B_SET = "10000000-6666-4000-8000-00000000000b";
+const A = "aaaaaaaa6000000000001";
+const B = "bbbbbbbb6000000000002";
+const A_DECK = "c0000000600000000000a";
+const B_DECK = "c0000000600000000000b";
+const B_SET = "10000000600000000000b";
 
 let currentUser = A;
 const readSession: SessionReader = async () => ({ userId: currentUser });
@@ -153,7 +153,7 @@ describe("M5 완료 기준 — 2계정 E2E", () => {
     // B: 편집기가 하듯 세트 전용 복제본으로 담아 저장한다 (수정 없음)
     const clone: Deck = {
       ...fork,
-      id: "c0000000-6666-4000-8000-0000000000c1",
+      id: "c000000060000000000c1",
       scope: "presentation",
       presentationId: B_SET,
       forkedFrom: fork.id,
@@ -167,7 +167,7 @@ describe("M5 완료 기준 — 2계정 E2E", () => {
       serviceDate: "2026-09-27",
       items: [
         {
-          id: "30000000-6666-4000-8000-000000000001",
+          id: "300000006000000000001",
           presentationId: B_SET,
           deckId: clone.id,
           order: 0,

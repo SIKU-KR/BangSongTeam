@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { INITIAL_BACKGROUNDS } from "@repo/shared";
+import { ID_PATTERN, INITIAL_BACKGROUNDS } from "@repo/shared";
 import { createTestDb, type TestDbResult } from "../test-utils";
 import { backgrounds } from "../schema";
 import { initialBackgrounds, seedBackgrounds } from "./backgrounds";
@@ -20,13 +20,11 @@ describe("Task 4.5: 초기 10개 모션 루프 영상 D1 시드", () => {
   it("initialBackgrounds defines exactly 10 valid motion video presets covering required tags", () => {
     expect(initialBackgrounds).toHaveLength(10);
 
-    const uuidRegex =
-      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
     const validMoods = new Set(["잔잔한", "밝은", "웅장한"]);
     const validColors = new Set(["따뜻한", "차가운", "어두운"]);
 
     for (const bg of initialBackgrounds) {
-      expect(bg.id).toMatch(uuidRegex);
+      expect(bg.id).toMatch(ID_PATTERN);
       expect(bg.title).toBeTruthy();
       expect(bg.r2Key).toMatch(/^loops\/.+\.mp4$/);
       expect(bg.posterKey).toMatch(/^posters\/.+\.webp$/);
@@ -64,10 +62,10 @@ describe("Task 4.5: 초기 10개 모션 루프 영상 D1 시드", () => {
  * 실패한다 — 실제로 그렇게 동기화가 500으로 죽고 있었다. 정적 SQL은 상수에서
  * 파생시킬 수 없으므로 여기서 대조한다.
  */
-describe("0002_seed_backgrounds 마이그레이션과 공용 상수 정합성", () => {
+describe("0007_seed_backgrounds_nanoid 마이그레이션과 공용 상수 정합성", () => {
   const migrationPath = path.resolve(
     __dirname,
-    "../../drizzle/0002_seed_backgrounds.sql",
+    "../../drizzle/0007_seed_backgrounds_nanoid.sql",
   );
   const sql = fs.readFileSync(migrationPath, "utf-8");
 
@@ -123,7 +121,7 @@ describe("0002_seed_backgrounds 마이그레이션과 공용 상수 정합성", 
     ) as { entries: { idx: number; tag: string }[] };
 
     expect(journal.entries.map((e) => e.tag)).toContain(
-      "0002_seed_backgrounds",
+      "0007_seed_backgrounds_nanoid",
     );
   });
 });

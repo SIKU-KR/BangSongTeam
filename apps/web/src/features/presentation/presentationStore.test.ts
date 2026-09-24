@@ -60,8 +60,8 @@ describe("presentationStore (In-memory reactive presentation)", () => {
 
   it("should append a new deck to the presentation and assign a default background if missing", () => {
     const newDeck = DeckSchema.parse({
-      id: "90000000-0000-4000-8000-000000000001",
-      userId: "00000000-0000-4000-8000-000000000001",
+      id: "900000000000000000001",
+      userId: "00000000x000000000001",
       scope: "presentation",
       presentationId: null,
       title: "아침 안개 눈 앞 가리듯",
@@ -100,8 +100,8 @@ describe("presentationStore (In-memory reactive presentation)", () => {
     expect(result.current.items).toHaveLength(5);
 
     const newDeck = DeckSchema.parse({
-      id: "90000000-0000-4000-8000-000000000002",
-      userId: "00000000-0000-4000-8000-000000000001",
+      id: "900000000000000000002",
+      userId: "00000000x000000000001",
       scope: "presentation",
       presentationId: null,
       title: "새 노래로",
@@ -362,7 +362,7 @@ describe("멀티 문서 컬렉션", () => {
     );
   });
 
-  it("createNewPresentation의 userId는 스키마가 요구하는 uuid 형식이다", () => {
+  it("createNewPresentation의 id는 스키마가 요구하는 NanoID 형식이다", () => {
     const created = createNewPresentation();
     expect(() => PresentationSchema.parse(created)).not.toThrow();
   });
@@ -483,7 +483,7 @@ describe("문서별 Undo/Redo 격리", () => {
   describe("공유 필드와 보관함 연결 (M5)", () => {
     const libraryDeck = () =>
       DeckSchema.parse({
-        id: "90000000-0000-4000-8000-0000000000aa",
+        id: "9000000000000000000aa",
         userId: SEED_USER_ID,
         scope: "library",
         title: "공개된 보관함 곡",
@@ -494,7 +494,7 @@ describe("문서별 Undo/Redo 격리", () => {
         visibility: "public",
         forkCount: 42,
         origin: "fork",
-        forkedFrom: "90000000-0000-4000-8000-0000000000bb",
+        forkedFrom: "9000000000000000000bb",
         forkedFromAuthorName: "원작자",
         publishedAt: "2026-09-22T00:00:00.000Z",
         createdAt: "2026-09-20T00:00:00.000Z",
@@ -507,7 +507,7 @@ describe("문서별 Undo/Redo 격리", () => {
         visibility: "private",
         forkCount: 0,
         publishedAt: null,
-        forkedFrom: "90000000-0000-4000-8000-0000000000aa",
+        forkedFrom: "9000000000000000000aa",
         // 원작 표시는 그대로 물려받는다
         forkedFromAuthorName: "원작자",
       });
@@ -516,15 +516,13 @@ describe("문서별 Undo/Redo 격리", () => {
     it("세트 덱을 다시 담으면 원래의 보관함 덱을 물려받는다", () => {
       const first = addDeckToPresentation(libraryDeck());
       const second = addDeckToPresentation(first.deck!);
-      expect(second.deck?.forkedFrom).toBe(
-        "90000000-0000-4000-8000-0000000000aa",
-      );
+      expect(second.deck?.forkedFrom).toBe("9000000000000000000aa");
     });
 
     it("보관함 원본이 없는 세트 곡은 연결하지 않고, 나중에 연결할 수 있다", () => {
       const pasted = DeckSchema.parse({
         ...libraryDeck(),
-        id: "90000000-0000-4000-8000-0000000000cc",
+        id: "9000000000000000000cc",
         scope: "presentation",
         forkedFrom: null,
       });
@@ -533,10 +531,10 @@ describe("문서별 Undo/Redo 격리", () => {
 
       const index = getActivePresentation().items.length - 1;
       act(() => {
-        linkSongToLibraryDeck(index, "90000000-0000-4000-8000-0000000000dd");
+        linkSongToLibraryDeck(index, "9000000000000000000dd");
       });
       expect(getActivePresentation().items[index].deck?.forkedFrom).toBe(
-        "90000000-0000-4000-8000-0000000000dd",
+        "9000000000000000000dd",
       );
     });
   });

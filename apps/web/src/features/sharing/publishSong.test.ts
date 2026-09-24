@@ -97,7 +97,7 @@ describe("편집기 '공유' — 보관함 원본 공개", () => {
 
   it("creates and links a new library master for a pasted set song", async () => {
     const pasted = DeckSchema.parse({
-      id: "90000000-0000-4000-8000-0000000000cc",
+      id: "9000000000000000000cc",
       userId: SEED_USER_ID,
       scope: "presentation",
       title: "붙여넣은 곡",

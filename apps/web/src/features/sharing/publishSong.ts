@@ -1,4 +1,5 @@
 import {
+  createId,
   DeckSchema,
   mergeSlidesToLyrics,
   type Deck,
@@ -65,7 +66,7 @@ export function buildPublishedDeck(song: Deck, master: Deck | undefined): Deck {
   }
 
   return DeckSchema.parse({
-    id: crypto.randomUUID(),
+    id: createId(),
     userId: song.userId,
     scope: "library",
     presentationId: null,

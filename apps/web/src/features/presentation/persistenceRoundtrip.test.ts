@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { signInAsTestUser } from "../../test/sessionFixture";
 import {
+  createId,
   DEFAULT_DECK_STYLE,
   INITIAL_BACKGROUNDS,
   type Deck,
@@ -37,8 +38,8 @@ const SONG_TITLES = [
 function makeDeck(title: string): Deck {
   const now = new Date().toISOString();
   return {
-    id: crypto.randomUUID(),
-    userId: "00000000-0000-4000-8000-000000000001",
+    id: createId(),
+    userId: "00000000x000000000001",
     scope: "library",
     presentationId: null,
     title,
@@ -168,7 +169,7 @@ describe("영속성 왕복 (편집 → 저장 → 새 탭 복원)", () => {
     expect(getPresentationById(created.id)?.items).toHaveLength(2);
     await flushPendingWrites();
 
-    // 복제 덱 id가 스키마(uuid)를 어기면 문서 전체가 corrupted로 격리되어
+    // 복제 덱 id가 스키마(IdSchema)를 어기면 문서 전체가 corrupted로 격리되어
     // 목록에서 통째로 사라진다. 저장은 됐는데 다음에 못 여는 최악의 경로다.
     resetPresentationStore();
     await hydrateFromStorage();

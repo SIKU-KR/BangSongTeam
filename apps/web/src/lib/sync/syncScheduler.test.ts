@@ -10,7 +10,7 @@ import {
 import { getSyncStatus, __resetSyncStatusForTests } from "./syncStatus";
 import { OfflineError } from "./presentationSync";
 
-const USER = "00000000-0000-4000-8000-000000000001";
+const USER = "00000000x000000000001";
 
 function doc(id: string, title = "세트"): Presentation {
   return {

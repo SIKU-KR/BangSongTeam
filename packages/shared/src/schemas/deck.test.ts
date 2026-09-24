@@ -19,8 +19,8 @@ describe("DeckSchema", () => {
     expect(() => DeckVisibilitySchema.parse("other")).toThrow();
   });
   const sampleDeck = {
-    id: "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11",
-    userId: "b0eebc99-9c0b-4ef8-bb6d-6bb9bd380a22",
+    id: "a0eebc9996bb9bd380a11",
+    userId: "b0eebc9996bb9bd380a22",
     title: "은혜로다",
     artist: "예수전도단",
     lyricsRaw: "시작됐네 우리 주님의 능력이\n나의 삶을 다스리시네",
@@ -72,7 +72,7 @@ describe("DeckSchema", () => {
     const parsed = DeckSchema.parse({
       ...sampleDeck,
       origin: "catalog",
-      catalogId: "d0000000-0000-4000-8000-000000000001",
+      catalogId: "d00000000000000000001",
       contributeToCatalog: true,
     });
     expect(parsed.origin).toBe("user");
@@ -84,20 +84,28 @@ describe("DeckSchema", () => {
     const presentationDeck = {
       ...sampleDeck,
       scope: "presentation" as const,
-      presentationId: "c0eebc99-9c0b-4ef8-bb6d-6bb9bd380a33",
-      forkedFrom: "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11",
+      presentationId: "c0eebc9996bb9bd380a33",
+      forkedFrom: "a0eebc9996bb9bd380a11",
     };
     const parsed = DeckSchema.parse(presentationDeck);
     expect(parsed.scope).toBe("presentation");
-    expect(parsed.presentationId).toBe("c0eebc99-9c0b-4ef8-bb6d-6bb9bd380a33");
-    expect(parsed.forkedFrom).toBe("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11");
+    expect(parsed.presentationId).toBe("c0eebc9996bb9bd380a33");
+    expect(parsed.forkedFrom).toBe("a0eebc9996bb9bd380a11");
   });
 
-  it("rejects invalid UUIDs or dates", () => {
+  it("rejects invalid ids (including legacy UUIDs) or dates", () => {
     expect(() =>
       DeckSchema.parse({
         ...sampleDeck,
         id: "invalid-id",
+      }),
+    ).toThrow();
+
+    // 2026-09-24부터 UUID는 호환하지 않는다
+    expect(() =>
+      DeckSchema.parse({
+        ...sampleDeck,
+        id: "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11",
       }),
     ).toThrow();
 
