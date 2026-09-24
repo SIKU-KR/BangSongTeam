@@ -91,7 +91,11 @@ const followCursor: Modifier = ({
 const NEW_PRESENTATION_TITLE = "새 주일 예배 프레젠테이션";
 
 function describeCount(refs: readonly DriveItemRef[]): string {
-  return refs.length === 1 ? `‘${itemName(refs[0])}’` : `${refs.length}개 항목`;
+  if (refs.length === 1) {
+    const name = itemName(refs[0]).trim();
+    if (name) return `‘${name}’`;
+  }
+  return `${refs.length}개 항목`;
 }
 
 /**
@@ -228,6 +232,11 @@ export function DriveProvider({
   );
 
   const runDeleteForever = async (refs: DriveItemRef[]): Promise<void> => {
+    if (refs.length === 0) {
+      setDialog(null);
+      return;
+    }
+    const label = describeCount(refs);
     setIsDeleting(true);
     try {
       await deleteItemsForever(refs);
@@ -235,7 +244,7 @@ export function DriveProvider({
       setDialog(null);
       showToast(
         refs.length === 1
-          ? `${withObjectParticle(describeCount(refs))} 영구 삭제했습니다`
+          ? `${withObjectParticle(label)} 영구 삭제했습니다`
           : `${refs.length}개 항목을 영구 삭제했습니다`,
       );
     } catch (err) {

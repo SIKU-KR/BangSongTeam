@@ -24,6 +24,7 @@ import { LyricsRoute } from "./LyricsRoute";
 import { BackgroundsRoute } from "./BackgroundsRoute";
 import * as chromeChecker from "../components/common/ChromeAlertBanner";
 import { withQueryClient } from "../test/queryClientFixture";
+import { installFakeApi } from "../test/fakeApi";
 
 function renderShell(initialPath = "/presentations") {
   return render(
@@ -378,6 +379,108 @@ describe("AppShellLayout (드라이브형 홈)", () => {
 
     expect(getPresentationById(target.id)?.trashedAt).toBeNull();
     expect(screen.getByText("휴지통이 비어 있습니다")).toBeInTheDocument();
+  });
+
+  it("휴지통에서 항목을 영구 삭제하면 토스트에 항목 제목과 올바른 조사가 표시된다", async () => {
+    const fake = installFakeApi({
+      "DELETE /api/presentations/*": () => ({
+        status: 200,
+        body: { ok: true },
+      }),
+    });
+    try {
+      const target = {
+        ...SEED_PRESENTATIONS[0],
+        title: "테스트 프레젠테이션 (사본)",
+        trashedAt: "2026-09-20T12:00:00.000Z",
+      };
+      __loadDocumentsForTests([target, ...SEED_PRESENTATIONS.slice(1)]);
+      renderShell("/presentations/trash");
+
+      fireEvent.contextMenu(card("테스트 프레젠테이션 \\(사본\\)"));
+      fireEvent.click(screen.getByTestId("action-delete-forever"));
+
+      expect(screen.getByTestId("drive-confirm-dialog")).toBeInTheDocument();
+      await act(async () => {
+        fireEvent.click(screen.getByTestId("drive-confirm-btn"));
+      });
+
+      expect(getPresentationById(target.id)).toBeUndefined();
+      expect(await screen.findByTestId("drive-toast")).toHaveTextContent(
+        "‘테스트 프레젠테이션 (사본)’을 영구 삭제했습니다",
+      );
+    } finally {
+      fake.restore();
+    }
+  });
+
+  it("휴지통에서 받침 없는 항목을 영구 삭제하면 '를' 조사가 표시된다", async () => {
+    const fake = installFakeApi({
+      "DELETE /api/presentations/*": () => ({
+        status: 200,
+        body: { ok: true },
+      }),
+    });
+    try {
+      const target = {
+        ...SEED_PRESENTATIONS[0],
+        title: "주일 콘티",
+        trashedAt: "2026-09-20T12:00:00.000Z",
+      };
+      __loadDocumentsForTests([target, ...SEED_PRESENTATIONS.slice(1)]);
+      renderShell("/presentations/trash");
+
+      fireEvent.contextMenu(card("주일 콘티"));
+      fireEvent.click(screen.getByTestId("action-delete-forever"));
+
+      await act(async () => {
+        fireEvent.click(screen.getByTestId("drive-confirm-btn"));
+      });
+
+      expect(getPresentationById(target.id)).toBeUndefined();
+      expect(await screen.findByTestId("drive-toast")).toHaveTextContent(
+        "‘주일 콘티’를 영구 삭제했습니다",
+      );
+    } finally {
+      fake.restore();
+    }
+  });
+
+  it("휴지통에서 폴더를 영구 삭제하면 폴더 이름과 조사가 토스트에 표시된다", async () => {
+    const fake = installFakeApi({
+      "DELETE /api/folders/*": () => ({
+        status: 200,
+        body: {
+          ok: true,
+          deletedFolderIds: [WORSHIP],
+          deletedPresentationIds: [],
+        },
+      }),
+    });
+    try {
+      __loadFoldersForTests([
+        {
+          ...folder(WORSHIP, "2026 주일 대예배"),
+          trashedAt: "2026-09-20T12:00:00.000Z",
+        },
+      ]);
+      __loadDocumentsForTests([]);
+      renderShell("/presentations/trash");
+
+      fireEvent.contextMenu(card("폴더 2026 주일 대예배"));
+      fireEvent.click(screen.getByTestId("action-delete-forever"));
+
+      await act(async () => {
+        fireEvent.click(screen.getByTestId("drive-confirm-btn"));
+      });
+
+      expect(getFolders().find((f) => f.id === WORSHIP)).toBeUndefined();
+      expect(await screen.findByTestId("drive-toast")).toHaveTextContent(
+        "‘2026 주일 대예배’를 영구 삭제했습니다",
+      );
+    } finally {
+      fake.restore();
+    }
   });
 
   it("휴지통의 날짜 칸은 삭제일을 보여 준다", () => {
