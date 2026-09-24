@@ -3,9 +3,8 @@ import type { PresentationItem, Slide } from "@repo/shared";
 /**
  * 송출 위치 계산 (순수 함수).
  *
- * 단독 전체화면·조작 창·청중 창 셋이 같은 규칙으로 움직여야 한다. 라우트 안에
- * 두면 같은 로직이 세 벌이 되고, 한쪽만 고친 순간 조작 창과 청중 화면이 다른
- * 슬라이드를 가리킨다.
+ * 라우트 안에 두면 키보드 이동·번호 점프가 각자 경계 규칙을 갖게 된다.
+ * 한곳에 모아 곡 경계·세트 끝 처리를 한 벌로 유지하고 단위 테스트로 고정한다.
  */
 
 export interface ProjectionPosition {
@@ -24,11 +23,6 @@ function slideCountOf(songs: Songs, songIndex: number): number {
   return songs[songIndex]?.deck?.slides.length ?? 0;
 }
 
-/** 곡별 슬라이드 수 (번호 점프 검증·조작 창 목록용) */
-export function getSongSlideCounts(songs: Songs): number[] {
-  return songs.map((_, index) => slideCountOf(songs, index));
-}
-
 /** 현재 위치의 슬라이드. 없으면 null */
 export function getSlideAt(
   position: ProjectionPosition,
@@ -40,8 +34,8 @@ export function getSlideAt(
 /**
  * 범위를 벗어난 위치를 안전한 값으로 되돌린다.
  *
- * 브로드캐스트로 들어온 인덱스를 그대로 믿으면, 조작 창과 청중 창이 서로 다른
- * 세트를 들고 있을 때(한쪽만 편집 후 새로고침) 빈 화면이 뜬다.
+ * 번호 점프로 들어온 인덱스를 그대로 쓰면 없는 곡·슬라이드를 가리켜 청중
+ * 화면이 비어 버린다.
  */
 export function clampPosition(
   position: ProjectionPosition,
@@ -104,24 +98,4 @@ export function prevPosition(
     };
   }
   return current;
-}
-
-/** 두 위치가 같은 슬라이드를 가리키는지 */
-export function isSamePosition(
-  a: ProjectionPosition,
-  b: ProjectionPosition,
-): boolean {
-  return a.songIndex === b.songIndex && a.slideIndex === b.slideIndex;
-}
-
-/**
- * 조작 창의 '다음 슬라이드' 미리보기용.
- * 세트 마지막이면 null (더 보여 줄 것이 없다).
- */
-export function peekNext(
-  position: ProjectionPosition,
-  songs: Songs,
-): ProjectionPosition | null {
-  const next = nextPosition(position, songs);
-  return isSamePosition(next, clampPosition(position, songs)) ? null : next;
 }

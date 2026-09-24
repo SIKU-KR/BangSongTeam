@@ -2,20 +2,15 @@
  * Chrome 공식 Fullscreen API 유틸리티
  *
  * - Fullscreen API: `element.requestFullscreen({ navigationUI: 'hide' })`
- * - 보조 모니터 감지와 청중 창 배치는 `audienceWindow.ts`가 맡는다. 여기 있던
- *   `checkScreenDetails()`는 권한이 이미 granted일 때만 화면을 읽어 호출부가
- *   없는 죽은 코드였고, M4에서 `openAudienceWindow()`로 대체했다.
  */
 
 export interface ChromeFullscreenOptions extends FullscreenOptions {
   navigationUI?: "auto" | "hide" | "show";
-  screen?: unknown;
 }
 
 /**
  * Chrome 공식 Fullscreen API를 활용하여 전체화면을 요청합니다.
  * - navigationUI: 'hide' 옵션을 전달하여 주소창 및 브라우저 컨트롤을 숨깁니다.
- * - Chrome Window Management API(다중 디스플레이)가 확인된 경우 보조 화면(프로젝터 등)을 타겟팅합니다.
  * - 브라우저의 사용자 제스처(User Activation) 유효성을 보장하기 위해 requestFullscreen을 동기적으로 즉시 호출합니다.
  */
 export function enterFullscreen(
@@ -42,17 +37,6 @@ export function enterFullscreen(
       return Promise.resolve(element.requestFullscreen(fullscreenOptions))
         .then(() => true)
         .catch((error) => {
-          // screen 옵션으로 실패했을 경우 기본 navigationUI: 'hide'로 재시도
-          if (fullscreenOptions.screen) {
-            return Promise.resolve(
-              element.requestFullscreen({ navigationUI: "hide" }),
-            )
-              .then(() => true)
-              .catch((fallbackError) => {
-                console.warn("Fullscreen fallback failed:", fallbackError);
-                return false;
-              });
-          }
           console.warn(
             "Fullscreen request was not permitted or blocked:",
             error,

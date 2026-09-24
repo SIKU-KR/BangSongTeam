@@ -46,7 +46,6 @@ function serverDeck(overrides: Partial<Deck> = {}): Deck {
 describe("shouldRunBootSync", () => {
   it("skips projection windows to keep Zero-Fetch", () => {
     expect(shouldRunBootSync("/present/abc/fullscreen")).toBe(false);
-    expect(shouldRunBootSync("/present/abc/control")).toBe(false);
     expect(shouldRunBootSync("/present/abc/fullscreen/")).toBe(false);
   });
 

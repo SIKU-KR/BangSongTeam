@@ -5,9 +5,6 @@ import {
   prevPosition,
   clampPosition,
   getSlideAt,
-  getSongSlideCounts,
-  isSamePosition,
-  peekNext,
   INITIAL_POSITION,
 } from "./projectionState";
 
@@ -126,37 +123,5 @@ describe("조회 헬퍼", () => {
 
   it("없는 위치는 null이다", () => {
     expect(getSlideAt({ songIndex: 9, slideIndex: 9 }, SONGS)).toBeNull();
-  });
-
-  it("곡별 슬라이드 수를 센다", () => {
-    expect(getSongSlideCounts(SONGS)).toEqual([3, 2, 4]);
-  });
-
-  it("같은 위치를 판별한다", () => {
-    expect(
-      isSamePosition(
-        { songIndex: 1, slideIndex: 2 },
-        { songIndex: 1, slideIndex: 2 },
-      ),
-    ).toBe(true);
-    expect(
-      isSamePosition(
-        { songIndex: 1, slideIndex: 2 },
-        { songIndex: 1, slideIndex: 3 },
-      ),
-    ).toBe(false);
-  });
-});
-
-describe("peekNext", () => {
-  it("다음 위치를 미리 알려 준다", () => {
-    expect(peekNext({ songIndex: 0, slideIndex: 2 }, SONGS)).toEqual({
-      songIndex: 1,
-      slideIndex: 0,
-    });
-  });
-
-  it("세트 마지막에서는 null이다", () => {
-    expect(peekNext({ songIndex: 2, slideIndex: 3 }, SONGS)).toBeNull();
   });
 });

@@ -6,7 +6,6 @@ export { BackgroundsRoute } from "./BackgroundsRoute";
 export { EditorRoute } from "./EditorRoute";
 export { FullscreenPresentRoute } from "./FullscreenPresentRoute";
 export { WorshipReadyRoute } from "./WorshipReadyRoute";
-export { PresenterControlRoute } from "./PresenterControlRoute";
 
 export {
   useAppShell,
