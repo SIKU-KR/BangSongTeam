@@ -23,6 +23,30 @@ function slideCountOf(songs: Songs, songIndex: number): number {
   return songs[songIndex]?.deck?.slides.length ?? 0;
 }
 
+/** 세트 전체 슬라이드 수 (번호 점프의 상한) */
+export function getTotalSlideCount(songs: Songs): number {
+  return songs.reduce((sum, _, index) => sum + slideCountOf(songs, index), 0);
+}
+
+/**
+ * 세트 전체에서 1부터 이어지는 슬라이드 번호(PPT식) → 곡·슬라이드 위치.
+ * 범위 밖이면 null. 슬라이드가 0장인 곡은 번호를 차지하지 않고 건너뛴다.
+ */
+export function positionOfSlideNumber(
+  slideNumber: number,
+  songs: Songs,
+): ProjectionPosition | null {
+  if (!Number.isInteger(slideNumber) || slideNumber < 1) return null;
+
+  let remaining = slideNumber - 1;
+  for (let songIndex = 0; songIndex < songs.length; songIndex++) {
+    const count = slideCountOf(songs, songIndex);
+    if (remaining < count) return { songIndex, slideIndex: remaining };
+    remaining -= count;
+  }
+  return null;
+}
+
 /** 현재 위치의 슬라이드. 없으면 null */
 export function getSlideAt(
   position: ProjectionPosition,

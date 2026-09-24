@@ -178,9 +178,8 @@ When modifying core logic, agents must write or update tests for:
    - 4-line maximum per slide threshold; 2-line auto-splitting for long blocks.
    - Preserving song order and structure.
 2. **Numeric Keypad Navigation Buffer** (`apps/web/src/features/presentation/navigationBuffer.test.ts`):
-   - `N` + Enter (slide N of current song).
-   - `N.` + Enter (song N, slide 1).
-   - `N.M` + Enter (song N, slide M).
+   - `N` + Enter (slide N of the whole presentation, numbered 1..total across songs like PowerPoint; the `N.`/`N.M` song.slide syntax was removed on 2026-09-24).
+   - Out-of-range numbers (`0`, `> total`) are rejected via `onInvalidJump`.
    - 3-second timeout buffer expiration and backspace handling.
 3. **FTS5 Trigram & LIKE Search Fallback** (`packages/db/src/queries/search.test.ts`):
    - Queries with $\ge 3$ characters use `MATCH`.

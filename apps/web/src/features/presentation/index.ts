@@ -77,6 +77,8 @@ export {
   prevPosition,
   clampPosition,
   getSlideAt,
+  getTotalSlideCount,
+  positionOfSlideNumber,
   INITIAL_POSITION,
   type ProjectionPosition,
 } from "./projectionState";

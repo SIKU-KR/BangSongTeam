@@ -123,10 +123,9 @@ describe("FullscreenPresentRoute", () => {
   it("should navigate backwards using ArrowLeft across song boundaries", () => {
     renderPresent();
 
-    // Jump to Song 2 (주 품에) Slide 1: "2" then "." then "Enter"
+    // Jump to Song 2 (주 품에) Slide 1 = slide number 6 (Song 1 has 5 slides)
     act(() => {
-      dispatchKey("2", "Digit2");
-      dispatchKey(".", "Period");
+      dispatchKey("6", "Digit6");
       dispatchKey("Enter");
     });
 
@@ -177,14 +176,13 @@ describe("FullscreenPresentRoute", () => {
     expect(textLayer).toHaveStyle({ opacity: 1 });
   });
 
-  it("should jump to specific song and slide via numeric keypad shortcuts", () => {
+  it("should jump to a slide by its presentation-wide number via numeric keypad shortcuts", () => {
     renderPresent();
 
-    // Jump to Song 4, Slide 3 (꽃들도): "4.3 Enter"
+    // Song 4, Slide 3 (꽃들도) = slide number 17 (5 + 4 + 5 + 3): "17 Enter"
     act(() => {
-      dispatchKey("4", "Digit4");
-      dispatchKey(".", "Period");
-      dispatchKey("3", "Digit3");
+      dispatchKey("1", "Digit1");
+      dispatchKey("7", "Digit7");
       dispatchKey("Enter");
     });
 

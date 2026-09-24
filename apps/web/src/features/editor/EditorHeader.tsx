@@ -421,9 +421,9 @@ export function EditorHeader({
               </div>
               <div className="flex justify-between text-zinc-700 dark:text-zinc-300">
                 <span className="text-zinc-500 dark:text-zinc-400">
-                  곡/슬라이드 점프
+                  슬라이드 번호 이동
                 </span>
-                <span>N.M + Enter</span>
+                <span>번호 + Enter</span>
               </div>
             </div>
           )}
