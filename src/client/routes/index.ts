@@ -10,6 +10,5 @@ export { FullscreenPresentRoute } from "./FullscreenPresentRoute";
 export {
   useAppShell,
   type AppShellContextValue,
-  type ViewMode,
   type SortOrder,
 } from "./appShellContext";

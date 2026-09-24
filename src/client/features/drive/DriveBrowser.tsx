@@ -9,13 +9,13 @@ import {
   listFolderContents,
   listTrash,
   searchDrive,
+  trashedAtOf,
   type DriveItem,
   type DriveItemRef,
 } from "./driveModel";
 import {
+  DriveListHeader,
   DriveListRow,
-  FileCard,
-  FolderCard,
   type DriveItemHandlers,
 } from "./DriveItems";
 import { PopoverMenu, type MenuAction } from "./PopoverMenu";
@@ -47,7 +47,7 @@ function isTypingTarget(target: EventTarget | null): boolean {
 /**
  * 드라이브 본문 (폴더 내용 / 검색 결과 / 휴지통).
  *
- * 폴더와 파일을 한 그리드(또는 한 표)에 섞어 보여 준다. 섹션을 나누지 않는다.
+ * 폴더와 파일을 한 목록에 섞어 보여 준다. 섹션을 나누지 않는다.
  * - 클릭: 선택 · Ctrl/⌘+클릭: 추가·해제 · Shift+클릭: 범위 · 더블클릭: 열기
  * - 우클릭·⋮: 메뉴 · 끌어서 폴더·경로·사이드바 트리·휴지통에 놓기
  * - Esc, ⌘/Ctrl+A, Enter, F2, Delete
@@ -57,7 +57,7 @@ export function DriveBrowser({
   folderId = null,
 }: DriveBrowserProps): React.JSX.Element {
   const navigate = useNavigate();
-  const { searchQuery, viewMode, sortOrder } = useAppShell();
+  const { searchQuery, sortOrder } = useAppShell();
   const presentations = usePresentationList();
   const index = useFolderIndex();
   const drive = useDrive();
@@ -304,51 +304,28 @@ export function DriveBrowser({
 
       {items.length === 0 ? (
         <EmptyState mode={mode} query={query} />
-      ) : viewMode === "grid" ? (
-        <div
-          role="listbox"
-          aria-multiselectable="true"
-          aria-label={isTrash ? "휴지통" : "폴더와 프레젠테이션"}
-          className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-6"
-        >
-          {items.map((item) =>
-            item.kind === "folder" ? (
-              <FolderCard
-                key={item.key}
-                item={item}
-                handlers={handlersFor(item)}
-              />
-            ) : (
-              <FileCard
-                key={item.key}
-                item={item}
-                handlers={handlersFor(item)}
-              />
-            ),
-          )}
-        </div>
       ) : (
         <div className="border border-zinc-200 dark:border-zinc-800/80 rounded-2xl overflow-hidden bg-white dark:bg-zinc-900/40 shadow-sm">
-          <table className="w-full text-left text-xs text-zinc-700 dark:text-zinc-300">
-            <thead className="bg-zinc-50 dark:bg-zinc-900/90 text-[11px] text-zinc-600 dark:text-zinc-500 font-semibold border-b border-zinc-200 dark:border-zinc-800 uppercase tracking-wider">
-              <tr>
-                <th className="py-3 px-4">이름</th>
-                <th className="py-3 px-4 hidden sm:table-cell">소유자</th>
-                <th className="py-3 px-4 hidden md:table-cell">수정일</th>
-                <th className="py-3 px-4">구성</th>
-                <th className="py-3 px-4 text-right">작업</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800/60">
-              {items.map((item) => (
-                <DriveListRow
-                  key={item.key}
-                  item={item}
-                  handlers={handlersFor(item)}
-                />
-              ))}
-            </tbody>
-          </table>
+          <DriveListHeader dateLabel={isTrash ? "삭제일" : "수정일"} />
+          <div
+            role="listbox"
+            aria-multiselectable="true"
+            aria-label={isTrash ? "휴지통" : "폴더와 프레젠테이션"}
+            className="divide-y divide-zinc-200 dark:divide-zinc-800/60"
+          >
+            {items.map((item) => (
+              <DriveListRow
+                key={item.key}
+                item={item}
+                date={
+                  isTrash
+                    ? (trashedAtOf(item) ?? item.updatedAt)
+                    : item.updatedAt
+                }
+                handlers={handlersFor(item)}
+              />
+            ))}
+          </div>
         </div>
       )}
 
