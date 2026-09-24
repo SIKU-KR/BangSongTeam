@@ -21,6 +21,23 @@ describe("Miniflare/workerd 환경 Worker 및 D1 통합 테스트", () => {
     expect(json).toEqual({ status: "ok" });
   });
 
+  it("처리되지 않은 오류는 내부 메시지를 숨기고 500을 준다", async () => {
+    const brokenBucket = {
+      get: async () => {
+        throw new Error("R2 internal: prj-ppt-media unreachable");
+      },
+    } as unknown as R2Bucket;
+
+    const res = await app.request(
+      "/api/media/loops/warm_light_flow.mp4",
+      {},
+      { ...env, MEDIA_BUCKET: brokenBucket },
+    );
+
+    expect(res.status).toBe(500);
+    expect(await res.json()).toEqual({ error: "Internal Server Error" });
+  });
+
   it("GET /api/unknown-path returns 404 in workerd runtime", async () => {
     const res = await app.request("/api/unknown-path", {}, env);
     expect(res.status).toBe(404);
