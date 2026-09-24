@@ -85,11 +85,11 @@ describe("로컬 개발용 환경 변수 템플릿", () => {
       "KAKAO_CLIENT_SECRET",
       "NAVER_CLIENT_ID",
       "NAVER_CLIENT_SECRET",
-      "R2_PUBLIC_DOMAIN",
     ];
 
     for (const key of requiredKeys) {
       expect(content).toMatch(new RegExp(`^${key}=`, "m"));
     }
+    expect(content).not.toMatch(/^R2_PUBLIC_DOMAIN=/m);
   });
 });

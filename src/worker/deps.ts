@@ -1,4 +1,5 @@
 import {
+  createOptionalSession,
   createRequireAuth,
   readSessionFromBetterAuth,
   type SessionReader,
@@ -17,4 +18,8 @@ export interface AppDeps {
 
 export function resolveRequireAuth(deps: AppDeps) {
   return createRequireAuth(deps.readSession ?? readSessionFromBetterAuth);
+}
+
+export function resolveOptionalSession(deps: AppDeps) {
+  return createOptionalSession(deps.readSession ?? readSessionFromBetterAuth);
 }

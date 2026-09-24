@@ -8,10 +8,14 @@ import {
   type PresentationDocument,
 } from "#shared";
 import { createD1Client } from "#db";
-import { user, backgrounds } from "#db";
-import { INITIAL_BACKGROUNDS } from "#shared";
+import { user } from "#db";
 import { createApp } from "../index";
 import type { SessionReader } from "../middleware/auth";
+import {
+  insertUserBackgroundRow,
+  resetBackgrounds,
+  serviceBackgroundId,
+} from "../test/backgrounds";
 
 const USER_A = "aaaaaaaa0000000000001";
 const USER_B = "bbbbbbbb0000000000002";
@@ -299,6 +303,10 @@ describe("동기화 라우트 교차 사용자 격리", () => {
     expect(aBody.presentations[0].userId).toBe(USER_A);
   });
   describe("2-기기 왕복", () => {
+    beforeEach(async () => {
+      await resetBackgrounds(5);
+    });
+
     function makeServiceSet(userId: string): PresentationDocument {
       const titles = [
         "시간을 뚫고",
@@ -333,7 +341,7 @@ describe("동기화 라우트 교차 사용자 격리", () => {
                 { id: `s_${index}_1`, order: 0, lines: [`${title} 1절`] },
                 { id: `s_${index}_2`, order: 1, lines: [`${title} 2절`] },
               ],
-              backgroundId: INITIAL_BACKGROUNDS[index].id,
+              backgroundId: serviceBackgroundId(index + 1),
               style: {
                 ...DEFAULT_DECK_STYLE,
                 overlayOpacity: 40 + index * 5,
@@ -429,17 +437,17 @@ describe("동기화 라우트 교차 사용자 격리", () => {
   });
 
   describe("배경 외래키 (동기화 500 회귀)", () => {
-    it("사전 주입 배경은 마이그레이션으로 이미 들어가 있다", async () => {
-      const db = createD1Client(env.DB);
-      const rows = await db.select({ id: backgrounds.id }).from(backgrounds);
+    const OTHERS_BACKGROUND = "othr00000000000000001";
+    let serviceIds: string[] = [];
 
-      expect(rows).toHaveLength(INITIAL_BACKGROUNDS.length);
-      expect(rows.map((row) => row.id)).toContain(INITIAL_BACKGROUNDS[0].id);
+    beforeEach(async () => {
+      serviceIds = await resetBackgrounds(5);
+      await insertUserBackgroundRow(USER_B, OTHERS_BACKGROUND);
     });
 
     it("배경이 붙은 세트를 저장해도 500이 나지 않는다", async () => {
       const doc = makeDoc(USER_A);
-      doc.items[0].deck.backgroundId = INITIAL_BACKGROUNDS[0].id;
+      doc.items[0].deck.backgroundId = serviceIds[0];
 
       const put = await app.request(
         `/api/presentations/${DOC_ID}`,
@@ -454,7 +462,7 @@ describe("동기화 라우트 교차 사용자 격리", () => {
         presentations: PresentationDocument[];
       };
       expect(body.presentations[0].items[0].deck.backgroundId).toBe(
-        INITIAL_BACKGROUNDS[0].id,
+        serviceIds[0],
       );
     });
 
@@ -484,7 +492,7 @@ describe("동기화 라우트 교차 사용자 격리", () => {
 
     it("곡마다 배경이 다른 5곡 세트도 그대로 저장된다", async () => {
       const doc = makeDoc(USER_A);
-      doc.items = INITIAL_BACKGROUNDS.slice(0, 5).map((background, index) => ({
+      doc.items = serviceIds.map((backgroundId, index) => ({
         id: `30000000000000000000${index + 1}`,
         presentationId: DOC_ID,
         deckId: `c0000000000000000000${index + 1}`,
@@ -492,7 +500,7 @@ describe("동기화 라우트 교차 사용자 격리", () => {
         deck: makeDeck(USER_A, {
           id: `c0000000000000000000${index + 1}`,
           title: `${index + 1}번째 곡`,
-          backgroundId: background.id,
+          backgroundId,
         }),
       }));
 
@@ -509,7 +517,25 @@ describe("동기화 라우트 교차 사용자 격리", () => {
       };
       expect(
         body.presentations[0].items.map((item) => item.deck.backgroundId),
-      ).toEqual(INITIAL_BACKGROUNDS.slice(0, 5).map((bg) => bg.id));
+      ).toEqual(serviceIds);
+    });
+
+    it("남의 커스텀 배경 id는 내 세트에 걸리지 않는다", async () => {
+      const doc = makeDoc(USER_A);
+      doc.items[0].deck.backgroundId = OTHERS_BACKGROUND;
+
+      const put = await app.request(
+        `/api/presentations/${DOC_ID}`,
+        json(doc),
+        env,
+      );
+      expect(put.status).toBe(200);
+
+      const res = await app.request("/api/presentations", {}, env);
+      const body = (await res.json()) as {
+        presentations: PresentationDocument[];
+      };
+      expect(body.presentations[0].items[0].deck.backgroundId).toBeNull();
     });
   });
 });

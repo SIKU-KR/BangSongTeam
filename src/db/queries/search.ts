@@ -1,6 +1,7 @@
 import { and, desc, eq, sql, type SQL } from "drizzle-orm";
 import { decks, user, type Deck } from "../schema";
 import { publicDeckCondition } from "./publicScope";
+import { maskNonServiceBackgrounds } from "./backgrounds";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type DbInstance = any;
@@ -79,7 +80,7 @@ export interface PublicDeckSearchRow {
  * 공개 덱 검색 — 제목·아티스트·가사 본문 (FTS5 trigram + LIKE 하이브리드).
  *
  * 공개 조건(`publicDeckCondition`)은 이 함수 안에 고정되어 있다. 결과는 가져간
- * 횟수순, 동률이면 최근 수정순이다.
+ * 횟수순, 동률이면 최근 수정순이다. 작성자의 커스텀 배경은 떼어 낸다.
  */
 export async function searchPublicDecks(
   db: DbInstance,
@@ -114,5 +115,9 @@ export async function searchPublicDecks(
     .orderBy(desc(decks.forkCount), desc(decks.updatedAt))
     .limit(limit);
 
-  return rows;
+  const masked = await maskNonServiceBackgrounds(
+    db,
+    rows.map((row) => row.deck),
+  );
+  return rows.map((row, index) => ({ ...row, deck: masked[index] }));
 }

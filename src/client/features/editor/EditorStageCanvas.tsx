@@ -9,6 +9,7 @@ export interface EditorStageCanvasProps {
   slide?: Slide | null;
   style?: DeckStyle;
   backgroundUrl?: string;
+  backgroundImageUrl?: string;
   posterUrl?: string;
   songTitle?: string;
   slideNumber: number;
@@ -29,6 +30,7 @@ export function EditorStageCanvas({
   slide,
   style,
   backgroundUrl,
+  backgroundImageUrl,
   posterUrl,
   songTitle = "곡 제목",
   slideNumber,
@@ -161,6 +163,7 @@ export function EditorStageCanvas({
             slide={slide}
             style={effectiveStyle}
             backgroundUrl={backgroundUrl}
+            backgroundImageUrl={backgroundImageUrl}
             posterUrl={posterUrl}
             isBlackout={isBlackout}
             isLyricsHidden={isLyricsHidden}

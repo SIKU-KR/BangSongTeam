@@ -1,7 +1,7 @@
 # 기술 디자인 명세서 (Technical Specification)
 
-**문서 버전:** 1.2.0  
-**최종 갱신:** 2026-09-21 (로컬 영속성 구현 반영)  
+**문서 버전:** 1.3.0  
+**최종 갱신:** 2026-09-24 (배경 라이브러리·커스텀 배경 업로드 반영)  
 **작성자:** Senior Software Architect  
 **대상 서비스:** 교회 찬양 슬라이드 제작 및 송출 서비스 (`prj-ppt`)  
 **문서 상태:** Approved Design Spec — 일부 항목은 실제 구현과 맞추어 개정됨 (§2.2 구현 현황 참조)
@@ -18,6 +18,12 @@
 > 1. 클라이언트 영속성 **Phase 2(IndexedDB)를 구현**했다. §2.2·§5.5 상태를 갱신했다.
 > 2. `decks` 스토어의 실제 역할(보관함 곡 전용)과 `by-presentation` 인덱스를 두지 않은 이유를 §5.4-4에 명시했다.
 > 3. 구 localStorage 보관함(`worship_user_songs_v1`) 마이그레이션 규칙을 §5.5에 추가했다.
+>
+> **1.3.0 개정 요약 (2026-09-24, 배경 라이브러리)**
+>
+> 1. `0001_initial`에서 배경 시드 10건을 뺐다. R2에 파일이 없는 행이 깨진 배경을 그렸다. 사전 주입 배경은 R2 업로드 뒤 운영 런북으로 등록한다 (§4.1.1).
+> 2. `backgrounds`에 `source`·`owner_user_id`·`kind`·`size_bytes`를 넣고 커스텀 배경 업로드·삭제 API를 구현했다 (§3.3, §4.0-4, §7.1).
+> 3. 클라이언트는 배경을 상수가 아니라 **로컬 배경 카탈로그**(IndexedDB `backgrounds` 스토어 + `/api/backgrounds`)로 해석한다. 송출 화면은 로컬 사본만 읽는다 (§5.4-4).
 
 ---
 
@@ -92,32 +98,32 @@ flowchart TB
   BrowserStorage <-->|HTTP Range Partial Get (same-origin)| MediaProxy
 ```
 
-배경 영상은 R2 커스텀 도메인 직통이 아니라 **같은 Worker의 `/api/media/*` 프록시**를 통해 전달한다. 동일 출처이므로 R2 CORS 설정이 필요 없고, Service Worker 캐시 규칙도 자체 오리진 경로 하나로 끝난다. 대신 영상 트래픽이 Worker 요청 수·CPU 시간에 계상되므로, 사용량이 커지면 커스텀 도메인 직통으로 되돌리는 선택지를 남겨 둔다. 그때 바뀌는 것은 URL 생성 헬퍼(`getBackgroundMediaUrl`)와 Workbox `urlPattern` 두 곳뿐이다.
+배경 영상은 R2 커스텀 도메인 직통이 아니라 **같은 Worker의 `/api/media/*` 프록시**를 통해 전달한다. 동일 출처이므로 R2 CORS 설정이 필요 없고, Service Worker 캐시 규칙도 자체 오리진 경로 하나로 끝난다. 대신 영상 트래픽이 Worker 요청 수·CPU 시간에 계상되므로, 사용량이 커지면 커스텀 도메인 직통으로 되돌리는 선택지를 남겨 둔다. 그때 바뀌는 것은 URL 생성 헬퍼(`mediaUrlForKey`·`MEDIA_URL_PREFIX`)와 Workbox `urlPattern` 두 곳뿐이다.
 
 ### 2.2 구현 현황 스냅샷 (2026-09-24)
 
 본 명세의 항목 중 실제 코드가 있는 것과 설계만 있는 것을 구분한다. 이 표를 갱신하지 않은 채 "스펙에 있으니 구현되어 있다"고 가정하지 않는다.
 
-| 구성 요소                                 | 상태   | 비고                                                                                                             |
-| ----------------------------------------- | ------ | ---------------------------------------------------------------------------------------------------------------- |
-| `src/shared` Zod 스키마 (§3)              | 구현   | Deck·Slide·Style·Presentation·API·공유 라이브러리(`library.ts`) 계약                                             |
-| `src/db` Drizzle 스키마·`migrations/`(§4) | 구현   | `0001_initial` 하나. 첫 배포 전 0000~0008을 합쳤다 (2026-09-24). 다음 마이그레이션은 0002부터                    |
-| 스코프 쿼리 헬퍼 (§4.3)                   | 구현   | decks·presentations·search·sharing·reports. 공개 조건은 `publicDeckCondition()` 한 곳                            |
-| 3-Layer Slide Stage (§5.1)                | 구현   | `components/stage/*` — 편집기와 송출이 동일 컴포넌트 사용                                                        |
-| 입력 버퍼 엔진·단축키 (§5.2)              | 구현   | `useNavigationBuffer`, `usePresentationShortcuts` (tinykeys)                                                     |
-| 세트 편집기 (PRD 4.4)                     | 부분   | 넘침 경고와 커서 기준 분할·합치기 미구현 (M2 잔여). 속성 패널 '공유' 섹션 구현 (M5)                              |
-| 미디어 프록시 `/api/media/*` (§5.4)       | 구현   | HTTP Range 지원                                                                                                  |
-| 클라이언트 영속성 (§5.5)                  | 구현   | IndexedDB가 1차 원천. 프레젠테이션과 **보관함 곡** 모두 서버와 동기화 (보관함은 M5-2에서 연결)                   |
-| Hono RPC 클라이언트 (`hc<AppType>`)       | 구현   | `AppType = ReturnType<typeof createApp>`. 라우트는 팩토리(`createApp(deps)`)라 테스트가 실제 라우트를 마운트한다 |
-| Better Auth (§4.1 auth 테이블)            | 구현   | 카카오·네이버 + localhost 전용 개발자 로그인. 실제 OAuth 자격증명 확인은 대기                                    |
-| 발표자 보기·BroadcastChannel (§5.3)       | 제거   | MVP 범위에서 제외 (2026-09-24). 송출은 전체화면 `/present/:id/fullscreen` 한 가지                                |
-| PWA·Cache Storage (§5.4)                  | 구현   | vite-plugin-pwa(generateSW) + RangeRequests (M4)                                                                 |
-| TanStack Query (서버 캐시)                | 구현   | 곡 추가 모달의 공유 검색·상세·가져오기, 공개 전환, 신고에만 쓴다. 송출 화면 import는 ESLint가 막는다 (M5-5)      |
-| 가사 라이브러리·LLM 정규화 (§6)           | 제거   | MVP 범위에서 제외 (2026-09-23). 테이블은 스키마에서 지웠다                                                       |
-| 공유 라이브러리 API (§7)                  | 구현   | 공개 전환·검색(가져간 횟수순 게시판)·상세·가져오기·신고 (M5-3)                                                   |
-| 운영자 도구                               | 구현   | 관리자 화면 없음. `docs/ops/moderation-runbook.md`의 SQL (`src/db/ops/moderationSql.ts`가 정본)                  |
-| 사용자 커스텀 배경 업로드 (PRD 4.3)       | 미구현 | 배경 라이브러리 화면에 안내만 있음                                                                               |
-| 저장 실패 경고 배너                       | 구현   | `StorageWarningBanner` — 용량 초과와 저장소 차단을 구분, 닫을 수 없음                                            |
+| 구성 요소                                 | 상태 | 비고                                                                                                             |
+| ----------------------------------------- | ---- | ---------------------------------------------------------------------------------------------------------------- |
+| `src/shared` Zod 스키마 (§3)              | 구현 | Deck·Slide·Style·Presentation·API·공유 라이브러리(`library.ts`) 계약                                             |
+| `src/db` Drizzle 스키마·`migrations/`(§4) | 구현 | `0001_initial` 하나. 첫 배포 전 0000~0008을 합쳤다 (2026-09-24). 다음 마이그레이션은 0002부터                    |
+| 스코프 쿼리 헬퍼 (§4.3)                   | 구현 | decks·presentations·search·sharing·reports. 공개 조건은 `publicDeckCondition()` 한 곳                            |
+| 3-Layer Slide Stage (§5.1)                | 구현 | `components/stage/*` — 편집기와 송출이 동일 컴포넌트 사용                                                        |
+| 입력 버퍼 엔진·단축키 (§5.2)              | 구현 | `useNavigationBuffer`, `usePresentationShortcuts` (tinykeys)                                                     |
+| 세트 편집기 (PRD 4.4)                     | 부분 | 넘침 경고와 커서 기준 분할·합치기 미구현 (M2 잔여). 속성 패널 '공유' 섹션 구현 (M5)                              |
+| 미디어 프록시 `/api/media/*` (§5.4)       | 구현 | HTTP Range 지원                                                                                                  |
+| 클라이언트 영속성 (§5.5)                  | 구현 | IndexedDB가 1차 원천. 프레젠테이션과 **보관함 곡** 모두 서버와 동기화 (보관함은 M5-2에서 연결)                   |
+| Hono RPC 클라이언트 (`hc<AppType>`)       | 구현 | `AppType = ReturnType<typeof createApp>`. 라우트는 팩토리(`createApp(deps)`)라 테스트가 실제 라우트를 마운트한다 |
+| Better Auth (§4.1 auth 테이블)            | 구현 | 카카오·네이버 + localhost 전용 개발자 로그인. 실제 OAuth 자격증명 확인은 대기                                    |
+| 발표자 보기·BroadcastChannel (§5.3)       | 제거 | MVP 범위에서 제외 (2026-09-24). 송출은 전체화면 `/present/:id/fullscreen` 한 가지                                |
+| PWA·Cache Storage (§5.4)                  | 구현 | vite-plugin-pwa(generateSW) + RangeRequests (M4)                                                                 |
+| TanStack Query (서버 캐시)                | 구현 | 곡 추가 모달의 공유 검색·상세·가져오기, 공개 전환, 신고에만 쓴다. 송출 화면 import는 ESLint가 막는다 (M5-5)      |
+| 가사 라이브러리·LLM 정규화 (§6)           | 제거 | MVP 범위에서 제외 (2026-09-23). 테이블은 스키마에서 지웠다                                                       |
+| 공유 라이브러리 API (§7)                  | 구현 | 공개 전환·검색(가져간 횟수순 게시판)·상세·가져오기·신고 (M5-3)                                                   |
+| 운영자 도구                               | 구현 | 관리자 화면 없음. `docs/ops/moderation-runbook.md`의 SQL (`src/db/ops/moderationSql.ts`가 정본)                  |
+| 사용자 커스텀 배경 업로드 (PRD 4.3)       | 구현 | 배경 라이브러리에서 올리기·지우기 (MP4·JPEG·PNG·WebP, 30MB/300MB, 권리 확인). 공개·포크 경로에서는 배경 없음     |
+| 저장 실패 경고 배너                       | 구현 | `StorageWarningBanner` — 용량 초과와 저장소 차단을 구분, 닫을 수 없음                                            |
 
 ---
 
@@ -282,16 +288,22 @@ export type Presentation = z.infer<typeof PresentationSchema>;
 export const BackgroundMediaSchema = z.object({
   id: IdSchema,
   title: z.string().min(1).max(100),
-  r2Key: z.string(), // R2 내 파일 경로 (mp4)
-  posterKey: z.string(), // 썸네일 경로 (webp)
-  durationSec: z.number().positive(),
+  source: z.enum(["service", "user"]), // 사전 주입 / 사용자 업로드
+  kind: z.enum(["video", "image"]),
+  mediaUrl: z.string().startsWith(MEDIA_URL_PREFIX), // /api/media/<r2Key>
+  posterUrl: z.string().startsWith(MEDIA_URL_PREFIX), // 이미지는 mediaUrl과 같다
+  durationSec: z.number().int().nonnegative(), // 이미지는 0
+  sizeBytes: z.number().int().nonnegative(),
   license: z.string(),
-  tags: z.array(z.string()), // ["잔잔한", "따뜻한"]
-  cdnUrl: z.string().url(), // https://media.domain.com/loop_01.mp4
-  posterUrl: z.string().url(),
+  tags: BackgroundTagsSchema, // ["잔잔한", "따뜻한"]
+  createdAt: z.string().datetime(),
 });
-export type BackgroundMedia = z.infer<typeof BackgroundMediaSchema>;
 ```
+
+- URL은 동일 출처 프록시 상대 경로다. 커스텀 도메인 절대 URL(`cdnUrl`)과 `R2_PUBLIC_DOMAIN`은 쓰지 않아 제거했다.
+- 목록 응답은 `BackgroundListResponseSchema` (`{ backgrounds, usage }`, 비로그인이면 `usage: null`)다.
+- 업로드 폼은 `BackgroundUploadFormSchema`(multipart: `file`, 영상이면 필수인 `poster`, `title`, `tags` JSON, `durationSec`, `acceptedRightsNotice: "true"`)다. 크기·선언 MIME은 스키마가, 실제 형식(파일 앞부분 바이트)은 Worker가 `sniffBackgroundMimeType`으로 확인한다.
+- 한도와 형식은 `constants/backgrounds.ts`의 `BACKGROUND_UPLOAD_LIMITS` 하나를 클라이언트 사전 검사와 Worker가 함께 본다.
 
 ### 3.4 BroadcastChannel 동기화 프로토콜 — 제거
 
@@ -337,8 +349,10 @@ Cloudflare D1(SQLite)을 영속성 엔진으로 사용하며, Drizzle ORM을 통
 - **문제점**: 커스텀 배경을 `backgrounds`에 함께 넣으면, 배경 목록 API가 남의 업로드까지 뿌리거나 공개 덱이 남의 배경을 참조하게 된다.
 - **설계**: `source`/`owner_user_id`로 구분하고 쿼리 헬퍼에서 강제한다.
   - 배경 목록 조회는 `source = 'service' OR owner_user_id = :userId` 조건을 헬퍼 안에 고정한다. 라우트에서 임의 조건을 조립하지 않는다.
-  - 공개 덱 조회·포크 시 `backgroundId`가 `source = 'user'` 배경을 가리키면 서비스 기본 배경 id로 치환해 내보낸다. 남의 업로드가 공개 경로로 새는 것을 원천 차단한다.
-  - 계정 삭제 시 `owner_user_id` CASCADE로 메타데이터가 지워지고, R2 객체는 같은 트랜잭션 뒤 정리 작업에서 제거한다.
+  - 공개 덱 검색·상세·포크 시 `backgroundId`가 `source = 'user'` 배경을 가리키면 `null`(배경 없음)로 내보낸다 (`maskNonServiceBackgrounds`). 사전 주입 배경이 반드시 있다는 보장이 없어 '기본 배경으로 대체'하지 않는다. 남의 업로드가 공개 경로로 새는 것을 원천 차단한다.
+  - 동기화(`PUT /api/decks/:id`, `PUT /api/presentations/:id`)로 들어온 `backgroundId`도 '이 사용자가 쓸 수 있는 배경'(사전 주입 + 본인 업로드)이 아니면 `null`로 낮춘다 (`nullifyUnknownBackgrounds(db, userId, rows)`).
+  - 계정 삭제 시 `owner_user_id` CASCADE로 메타데이터가 지워진다. R2 객체 정리는 계정 삭제 기능과 함께 붙인다 (계정 삭제는 아직 없다).
+  - 미디어 프록시(`/api/media/*`)는 업로드 객체도 인증 없이 서빙한다. 키(`uploads/<userId>/<NanoID>.*`)는 추측할 수 없고 목록 API가 소유자에게만 알려 준다. 세션을 검사하면 송출 중 세션이 만료되는 순간 배경이 꺼진다.
 - **용량 한도**: 업로드 전 `SELECT SUM(size_bytes) WHERE owner_user_id = ?`로 300MB 한도를 검사한다 (PRD 6.3).
 
 ---
@@ -557,17 +571,17 @@ export const reports = sqliteTable("reports", {
 });
 ```
 
-### 4.1.1 사전 주입 배경 시드 마이그레이션 (`drizzle/0001_initial.sql`)
+### 4.1.1 배경 행은 마이그레이션에 넣지 않는다 (`migrations/0001_initial.sql`)
 
-`decks.background_id`는 `backgrounds`를 참조하는 외래키이고 **D1은 외래키를 기본으로 강제한다.** 배경 10건을 별도 스크립트로 넣게 두면 아무도 실행하지 않아 테이블이 빈 채로 남고, 곡에 배경이 붙는 순간 `db.batch()` 전체가 롤백되어 동기화가 500으로 죽는다(2026-09-22 실제 발생). 그래서 시드를 마이그레이션으로 둔다 — 로컬과 운영이 같은 명령으로 반드시 함께 채워진다.
+첫 배포 전인 2026-09-24에 UUID 시드·NanoID 초기화·NanoID 재시드를 포함한 0000~0008을 `0001_initial.sql` 하나로 합쳤다. 저널 idx를 1로 두어 다음 `db:generate`는 0002부터 번호를 매긴다. 옛 0000~0008을 적용한 D1(로컬 `.wrangler` 상태 포함)은 새로 만들어야 한다.
 
-시드는 초기 마이그레이션 `0001_initial.sql` 끝에 NanoID로 들어 있다. 첫 배포 전인 2026-09-24에 UUID 시드·NanoID 초기화·NanoID 재시드를 포함한 0000~0008을 이 파일 하나로 합쳤다. 저널 idx를 1로 두어 다음 `db:generate`는 0002부터 번호를 매긴다. 옛 0000~0008을 적용한 D1(로컬 `.wrangler` 상태 포함)은 새로 만들어야 한다.
+같은 날 `0001`을 한 번 더 고쳤다. 사전 주입 배경 시드 10건을 빼고 `backgrounds`에 `source`·`owner_user_id`·`kind`·`size_bytes`와 인덱스 둘을 넣었다. 시드가 가리키던 `loops/*.mp4`·`posters/*.webp`는 R2에 올라간 적이 없어, 편집기·송출이 404 배경을 그렸다. 고치기 전 `0001`을 적용한 D1도 새로 만든다.
 
-값의 정본은 `src/shared`의 `INITIAL_BACKGROUNDS` 하나이며, `src/db/seed/backgrounds.ts`는 그것을 파생시키고, 정적 SQL인 마이그레이션은 `backgrounds.test.ts`가 상수와 대조해 갈라지지 못하게 막는다.
+- **배경 행은 R2 객체가 올라간 뒤에만 만든다.** 사전 주입 배경은 `docs/ops/background-runbook.md` 절차(R2 `object put` → D1 `INSERT`)로 등록한다. 문장의 정본은 `src/db/ops/backgroundSql.ts`이고, `backgroundSql.test.ts`가 실제 스키마에 대해 실행하며 `runbook.test.ts`가 문서와 대조한다. `tests/migrations.test.ts`는 `0001`에 배경 `INSERT`가 다시 들어오지 못하게 막는다.
+- 사용자 커스텀 배경은 업로드 API가 R2에 먼저 쓰고 D1 행을 나중에 만든다. 행 삽입이 실패하면 올린 객체를 지운다.
+- 서버는 이 사용자가 쓸 수 없는 `backgroundId`를 `null`로 낮춰 받는다(`nullifyUnknownBackgrounds`). `decks.background_id` 외래키를 D1이 강제하므로, 모르는 id 하나가 `db.batch()` 전체를 롤백시켜 세트를 통째로 잃는 사고(2026-09-22 실제 발생)를 막는다. 배경은 장식이고 가사는 봉사자의 작업물이다.
 
-추가로 서버는 모르는 `backgroundId`를 `null`로 낮춰 받는다(`nullifyUnknownBackgrounds`). 배경은 장식이고 가사는 봉사자의 작업물이므로, 배경 하나 때문에 세트 전체를 잃게 두지 않는다.
-
-### 4.2 FTS5 Trigram 검색 가상 테이블 (`drizzle/0001_initial.sql`)
+### 4.2 FTS5 Trigram 검색 가상 테이블 (`migrations/0001_initial.sql`)
 
 공개 덱 검색용 FTS5 Trigram 인덱스다. drizzle-kit 생성본 뒤에 가상 테이블과 트리거를 손으로 덧붙였다.
 
@@ -767,7 +781,7 @@ stateDiagram-v2
    - 클라이언트는 `/api/media/<r2Key>`로 요청하고, Worker가 R2 객체를 `Range` 헤더와 함께 중계한다 (`src/worker/routes/media.ts`).
    - **R2 CORS 설정은 필요 없다.** 앱과 미디어가 같은 오리진이므로 프리플라이트가 발생하지 않는다.
    - Worker 응답은 `Accept-Ranges: bytes`, `Content-Range`, `Content-Length`를 그대로 전달하고, 불변 자산이므로 `Cache-Control: public, max-age=31536000, immutable`을 붙인다.
-   - 이 결정의 대가는 영상 트래픽이 Worker 요청 수에 계상된다는 것이다. 월 사용량이 무료 티어를 위협하면 커스텀 도메인 직통으로 전환하고, 그때 `getBackgroundMediaUrl`의 base URL과 아래 `urlPattern`만 교체한다.
+   - 이 결정의 대가는 영상 트래픽이 Worker 요청 수에 계상된다는 것이다. 월 사용량이 무료 티어를 위협하면 커스텀 도메인 직통으로 전환하고, 그때 `mediaUrlForKey`(`MEDIA_URL_PREFIX`)와 아래 `urlPattern`만 교체한다.
 2. **Workbox RangeRequests 캐싱 구성 (`vite.config.ts`)**:
 
    `generateSW` 전략을 쓴다. 설정이 직렬화되므로 **함수형 `urlPattern`과 `new RangeRequestsPlugin()` 같은 플러그인 인스턴스는 쓸 수 없다**(그 형태는 `injectManifest` 전용이다). 선언형 등가 옵션으로 쓴다:
@@ -829,10 +843,11 @@ stateDiagram-v2
        key: string; // deckId (NanoID)
        value: Deck;
      };
-     // 3. 배경 미디어 메타데이터 저장소
+     // 3. 배경 카탈로그 로컬 사본 (송출 화면이 배경 id → URL을 서버 없이 해석)
+     //    cachedFor: 목록을 받은 계정. 커스텀 배경은 그 계정에게만 되살린다
      backgrounds: {
        key: string; // backgroundId (NanoID)
-       value: BackgroundMedia;
+       value: BackgroundMedia & { cachedFor: string | null };
      };
      // 4. 서버 동기화 메타데이터 저장소 (M3-B)
      //    예배 준비 화면이 쓰던 캐시 상태 필드(isReady·cachedVideos·cachedAt·
@@ -888,7 +903,7 @@ stateDiagram-v2
 4. **쓰기 실패를 삼키지 않는다.** 용량 초과(`QuotaExceededError`)나 시크릿 모드로 IndexedDB를 못 쓰면 편집기 상단에 '이 브라우저에 저장할 수 없습니다' 배너를 띄운다. 조용히 인메모리로 폴백하면 사용자는 저장된 줄 알고 예배 당일에 잃는다.
 5. **스키마 버전:** `openDB(..., version)`의 upgrade 경로를 처음부터 유지한다. 스토어 구조가 바뀌면 버전을 올리고 마이그레이션을 쓴다. 저장된 문서는 읽을 때 `PresentationSchema.safeParse`로 검증하고, 실패한 문서는 버리지 말고 격리 보관한 뒤 사용자에게 알린다.
 6. **Undo/Redo 히스토리는 저장하지 않는다.** 세션 한정 상태이며 직렬화 비용이 크다.
-7. **커스텀 배경(PRD 4.3)의 로컬 보관:** 업로드 기능 구현 시 파일을 Blob으로 IndexedDB에 두고 `blob:` URL로 재생한다. Phase 3에서 R2 업로드로 승격한다. (업로드 자체가 아직 미구현이라 이 규칙은 대기 중이다.)
+7. **배경 카탈로그:** 배경 id를 URL로 바꾸는 표는 `features/backgrounds/backgroundCatalog.ts`의 메모리 스토어다. 부팅 때 IndexedDB `backgrounds` 스토어에서 채우고(`hydrateBackgroundCatalog`), 부팅 동기화·배경 라이브러리·배경 선택 창이 `/api/backgrounds`로 새로 받아 통째로 바꾼다(`refreshBackgroundCatalog`). 송출 화면은 로컬 사본만 읽는다. 커스텀 배경 파일은 IndexedDB Blob이 아니라 R2에 두고, 곡에 지정되면 다른 배경처럼 Cache Storage에 받아 둔다(5.4-3).
 
 **Phase 3 설계 규칙 (M3-B, 구현 완료):**
 
@@ -933,29 +948,29 @@ stateDiagram-v2
 
 ### 7.1 엔드포인트 요약표 (2026-09-23)
 
-| 메서드   | 경로                           | 설명                                                     | 인증 필요    | 상태   |
-| -------- | ------------------------------ | -------------------------------------------------------- | ------------ | ------ |
-| `GET`    | `/api/health`                  | 헬스 체크                                                | No           | 구현   |
-| `GET`    | `/api/media/*`                 | R2 배경 미디어 프록시 (HTTP Range)                       | No           | 구현   |
-| `GET`    | `/api/backgrounds`             | 서비스 기본 모션 배경 목록 조회                          | No           | 구현   |
-| `GET`    | `/api/auth/*`                  | Better Auth 핸들러 (카카오/네이버)                       | No           | 구현   |
-| `POST`   | `/api/dev-login`               | 개발자 로그인 (localhost + `DEV_LOGIN_ENABLED`)          | No           | 구현   |
-| `GET`    | `/api/presentations`           | 내 프레젠테이션 문서 전체 (덱 임베드)                    | Yes          | 구현   |
-| `PUT`    | `/api/presentations/:id`       | 프레젠테이션 문서 단위 업서트 (복제본은 항상 비공개)     | Yes (소유자) | 구현   |
-| `DELETE` | `/api/presentations/:id`       | 프레젠테이션 영구 삭제 (삭제 기록을 남긴다)              | Yes (소유자) | 구현   |
-| `GET`    | `/api/folders`                 | 내 드라이브 폴더 전체 + 영구 삭제 기록(tombstone)        | Yes          | 구현   |
-| `PUT`    | `/api/folders/:id`             | 폴더 업서트 (없는 부모·사이클은 루트로 보정해 반환)      | Yes (소유자) | 구현   |
-| `DELETE` | `/api/folders/:id`             | 폴더 영구 삭제 (하위 폴더·프레젠테이션 포함)             | Yes (소유자) | 구현   |
-| `GET`    | `/api/decks`                   | 내 보관함 곡 전체                                        | Yes          | 구현   |
-| `PUT`    | `/api/decks/:id`               | 보관함 곡 업서트 (공유 필드는 서버 값 유지)              | Yes (소유자) | 구현   |
-| `DELETE` | `/api/decks/:id`               | 보관함 곡 삭제                                           | Yes (소유자) | 구현   |
-| `PATCH`  | `/api/decks/:id/visibility`    | 공개 전환 (공개 시 `acceptedCopyrightNotice: true` 필수) | Yes (소유자) | 구현   |
-| `POST`   | `/api/decks/:id/fork`          | 공개 덱 가져오기 (멱등, 비공개 포크)                     | Yes          | 구현   |
-| `GET`    | `/api/catalog/search`          | 공개 덱 검색 (가져간 횟수순, 미리보기만)                 | No           | 구현   |
-| `GET`    | `/api/catalog/decks/:id`       | 공개 덱 전문                                             | Yes          | 구현   |
-| `POST`   | `/api/reports`                 | 신고·교정 제안 (공개 덱만)                               | Yes          | 구현   |
-| `POST`   | `/api/backgrounds/uploads`     | 커스텀 배경 업로드 (용량·포맷 검사, R2 저장)             | Yes          | 미구현 |
-| `DELETE` | `/api/backgrounds/uploads/:id` | 내 커스텀 배경 삭제 (R2 객체 포함)                       | Yes (소유자) | 미구현 |
+| 메서드   | 경로                           | 설명                                                     | 인증 필요    | 상태 |
+| -------- | ------------------------------ | -------------------------------------------------------- | ------------ | ---- |
+| `GET`    | `/api/health`                  | 헬스 체크                                                | No           | 구현 |
+| `GET`    | `/api/media/*`                 | R2 배경 미디어 프록시 (HTTP Range)                       | No           | 구현 |
+| `GET`    | `/api/backgrounds`             | 배경 목록 (사전 주입 + 로그인 시 내 업로드·사용량)       | 선택         | 구현 |
+| `GET`    | `/api/auth/*`                  | Better Auth 핸들러 (카카오/네이버)                       | No           | 구현 |
+| `POST`   | `/api/dev-login`               | 개발자 로그인 (localhost + `DEV_LOGIN_ENABLED`)          | No           | 구현 |
+| `GET`    | `/api/presentations`           | 내 프레젠테이션 문서 전체 (덱 임베드)                    | Yes          | 구현 |
+| `PUT`    | `/api/presentations/:id`       | 프레젠테이션 문서 단위 업서트 (복제본은 항상 비공개)     | Yes (소유자) | 구현 |
+| `DELETE` | `/api/presentations/:id`       | 프레젠테이션 영구 삭제 (삭제 기록을 남긴다)              | Yes (소유자) | 구현 |
+| `GET`    | `/api/folders`                 | 내 드라이브 폴더 전체 + 영구 삭제 기록(tombstone)        | Yes          | 구현 |
+| `PUT`    | `/api/folders/:id`             | 폴더 업서트 (없는 부모·사이클은 루트로 보정해 반환)      | Yes (소유자) | 구현 |
+| `DELETE` | `/api/folders/:id`             | 폴더 영구 삭제 (하위 폴더·프레젠테이션 포함)             | Yes (소유자) | 구현 |
+| `GET`    | `/api/decks`                   | 내 보관함 곡 전체                                        | Yes          | 구현 |
+| `PUT`    | `/api/decks/:id`               | 보관함 곡 업서트 (공유 필드는 서버 값 유지)              | Yes (소유자) | 구현 |
+| `DELETE` | `/api/decks/:id`               | 보관함 곡 삭제                                           | Yes (소유자) | 구현 |
+| `PATCH`  | `/api/decks/:id/visibility`    | 공개 전환 (공개 시 `acceptedCopyrightNotice: true` 필수) | Yes (소유자) | 구현 |
+| `POST`   | `/api/decks/:id/fork`          | 공개 덱 가져오기 (멱등, 비공개 포크)                     | Yes          | 구현 |
+| `GET`    | `/api/catalog/search`          | 공개 덱 검색 (가져간 횟수순, 미리보기만)                 | No           | 구현 |
+| `GET`    | `/api/catalog/decks/:id`       | 공개 덱 전문                                             | Yes          | 구현 |
+| `POST`   | `/api/reports`                 | 신고·교정 제안 (공개 덱만)                               | Yes          | 구현 |
+| `POST`   | `/api/backgrounds/uploads`     | 커스텀 배경 업로드 (용량·포맷 검사, R2 저장)             | Yes          | 구현 |
+| `DELETE` | `/api/backgrounds/uploads/:id` | 내 커스텀 배경 삭제 (R2 객체 포함)                       | Yes (소유자) | 구현 |
 
 설계 당시의 `POST /api/decks`(생성)·`GET /api/decks/:id`·`GET /api/presentations/:id`는 두지 않았다. 로컬 우선 동기화가 문서 단위 `PUT`으로 생성과 수정을 함께 하고, 조회는 목록 한 번으로 충분하다.
 

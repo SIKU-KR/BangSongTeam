@@ -14,6 +14,8 @@ export interface SlideStageProps {
   slide?: Slide | null;
   style?: DeckStyle;
   backgroundUrl?: string;
+  /** 이미지 배경. 영상 레이어는 비운 채로 두고 그 위에 정지 이미지를 그린다 */
+  backgroundImageUrl?: string;
   nextBackgroundUrl?: string;
   posterUrl?: string;
   isBlackout?: boolean;
@@ -30,6 +32,7 @@ export function SlideStage({
   slide,
   style = DEFAULT_DECK_STYLE,
   backgroundUrl,
+  backgroundImageUrl,
   nextBackgroundUrl,
   posterUrl,
   isBlackout = false,
@@ -123,11 +126,22 @@ export function SlideStage({
             )}
           </div>
         ) : (
-          <VideoLayer
-            src={backgroundUrl}
-            nextSrc={nextBackgroundUrl}
-            posterUrl={posterUrl}
-          />
+          <>
+            <VideoLayer
+              src={backgroundImageUrl ? undefined : backgroundUrl}
+              nextSrc={nextBackgroundUrl}
+              posterUrl={posterUrl}
+            />
+            {backgroundImageUrl && (
+              <img
+                data-testid="image-background-layer"
+                src={backgroundImageUrl}
+                alt=""
+                draggable={false}
+                className="absolute inset-0 w-full h-full object-cover z-0 select-none pointer-events-none"
+              />
+            )}
+          </>
         )}
 
         <OverlayLayer

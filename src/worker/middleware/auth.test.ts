@@ -1,12 +1,15 @@
 import { describe, it, expect, vi } from "vitest";
 import { Hono } from "hono";
-import { createRequireAuth, type SessionReader } from "./auth";
+import {
+  createOptionalSession,
+  createRequireAuth,
+  type SessionReader,
+} from "./auth";
 import type { AppEnv, Bindings } from "../types";
 
 const TEST_ENV = {
   DB: {} as D1Database,
   MEDIA_BUCKET: {} as R2Bucket,
-  AI: {} as Ai,
 } as Bindings;
 
 function buildApp(readSession: SessionReader, onHandler = vi.fn()) {
@@ -75,5 +78,40 @@ describe("requireAuth 미들웨어", () => {
     expect(readSession).toHaveBeenCalledTimes(1);
     const passed = readSession.mock.calls[0][0];
     expect(passed.headers.get("cookie")).toBe("better-auth.session_token=abc");
+  });
+});
+
+describe("optionalSession 미들웨어", () => {
+  function buildOptionalApp(readSession: SessionReader) {
+    return new Hono<AppEnv>().get(
+      "/open",
+      createOptionalSession(readSession),
+      (c) => c.json({ userId: c.get("userId") ?? null }, 200),
+    );
+  }
+
+  it("세션이 있으면 userId를 채운다", async () => {
+    const app = buildOptionalApp(async () => ({
+      userId: "8f14e45fc1a2b3c4d5e6f",
+    }));
+    const res = await app.request("/open", {}, TEST_ENV);
+    expect(await res.json()).toEqual({ userId: "8f14e45fc1a2b3c4d5e6f" });
+  });
+
+  it("세션이 없거나 조회가 실패해도 비로그인으로 통과시킨다", async () => {
+    for (const readSession of [
+      async () => null,
+      async () => {
+        throw new Error("session store unavailable");
+      },
+    ] satisfies SessionReader[]) {
+      const res = await buildOptionalApp(readSession).request(
+        "/open",
+        {},
+        TEST_ENV,
+      );
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({ userId: null });
+    }
   });
 });

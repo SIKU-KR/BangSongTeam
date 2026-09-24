@@ -4,7 +4,6 @@
 export interface Bindings {
   DB: D1Database;
   MEDIA_BUCKET: R2Bucket;
-  R2_PUBLIC_DOMAIN?: string;
   BETTER_AUTH_SECRET?: string;
   BETTER_AUTH_URL?: string;
   KAKAO_CLIENT_ID?: string;

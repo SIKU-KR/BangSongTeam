@@ -11,6 +11,7 @@ import {
 import { createD1Client, user } from "#db";
 import { createApp } from "../index";
 import type { SessionReader } from "../middleware/auth";
+import { insertUserBackgroundRow, resetBackgrounds } from "../test/backgrounds";
 
 const A = "aaaaaaaa3000000000001";
 const B = "bbbbbbbb3000000000002";
@@ -304,6 +305,61 @@ describe("공유 라이브러리 API", () => {
         deck(PUB, { userId: B, title: "탈취" }),
       );
       expect(res.status).toBe(403);
+    });
+  });
+
+  describe("커스텀 배경은 공개 경로로 새지 않는다", () => {
+    const MY_UPLOAD = "upld00000000000000001";
+    let serviceId = "";
+
+    beforeEach(async () => {
+      [serviceId] = await resetBackgrounds(1);
+      await insertUserBackgroundRow(A, MY_UPLOAD);
+    });
+
+    async function publishWithBackground(backgroundId: string): Promise<void> {
+      currentUser = A;
+      await request("PUT", `/api/decks/${PUB}`, deck(PUB, { backgroundId }));
+      expect((await publish(PUB)).status).toBe(200);
+    }
+
+    it("작성자의 업로드는 검색·상세·포크에서 배경 없음이 되고 원본은 그대로다", async () => {
+      await publishWithBackground(MY_UPLOAD);
+
+      const [card] = (await search("은혜로다")).decks;
+      expect(card.backgroundId).toBeNull();
+
+      currentUser = B;
+      const detail = (await (
+        await request("GET", `/api/catalog/decks/${PUB}`)
+      ).json()) as { deck: { backgroundId: string | null } };
+      expect(detail.deck.backgroundId).toBeNull();
+
+      const fork = (await (
+        await request("POST", `/api/decks/${PUB}/fork`)
+      ).json()) as { deck: Deck };
+      expect(fork.deck.backgroundId).toBeNull();
+
+      currentUser = A;
+      const mine = (await (await request("GET", "/api/decks")).json()) as {
+        decks: Deck[];
+      };
+      expect(mine.decks.find((d) => d.id === PUB)?.backgroundId).toBe(
+        MY_UPLOAD,
+      );
+    });
+
+    it("사전 주입 배경은 공개 경로와 포크에 그대로 따라간다", async () => {
+      await publishWithBackground(serviceId);
+
+      const [card] = (await search("은혜로다")).decks;
+      expect(card.backgroundId).toBe(serviceId);
+
+      currentUser = B;
+      const fork = (await (
+        await request("POST", `/api/decks/${PUB}/fork`)
+      ).json()) as { deck: Deck };
+      expect(fork.deck.backgroundId).toBe(serviceId);
     });
   });
 

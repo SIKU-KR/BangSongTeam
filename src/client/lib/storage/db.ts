@@ -30,7 +30,7 @@ export interface WorshipOfflineDB extends DBSchema {
   };
   backgrounds: {
     key: string;
-    value: BackgroundMedia;
+    value: StoredBackground;
   };
   sync_meta: {
     key: string;
@@ -46,6 +46,12 @@ export interface WorshipOfflineDB extends DBSchema {
     value: CachedSession;
   };
 }
+
+/**
+ * 로컬 배경 카탈로그 행. 교회 컴퓨터는 봉사자 여럿이 같이 쓰므로, 내가 올린 배경이
+ * 다음 사람의 라이브러리에 보이지 않게 어느 계정으로 받은 목록인지 함께 적는다.
+ */
+export type StoredBackground = BackgroundMedia & { cachedFor: string | null };
 
 export interface CachedSession {
   id: "current";

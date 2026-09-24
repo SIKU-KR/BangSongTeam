@@ -18,7 +18,6 @@ interface SongMockInput {
   order: number;
   title: string;
   artist: string;
-  backgroundId: string;
   slideLines: string[][];
 }
 
@@ -29,7 +28,6 @@ const SONG_DEFINITIONS: SongMockInput[] = [
     order: 0,
     title: "은혜로다",
     artist: "손경민",
-    backgroundId: "mJIToShuKOc3FsbZIihi6",
     slideLines: [
       ["시작됐네 우리 주님의 능력이", "나의 삶을 다스리고 새롭게 하네"],
       ["주의 사랑을 주의 선하심을", "주의 은혜를 바라보는 자에게"],
@@ -54,7 +52,6 @@ const SONG_DEFINITIONS: SongMockInput[] = [
     order: 1,
     title: "주 품에",
     artist: "Hillsong Worship",
-    backgroundId: "VYMY2lcaf-sSYd8Z1kSmS",
     slideLines: [
       ["주 품에 품으소서", "능력의 팔로 덮으소서"],
       [
@@ -78,7 +75,6 @@ const SONG_DEFINITIONS: SongMockInput[] = [
     order: 2,
     title: "시선",
     artist: "김명선",
-    backgroundId: "Z3pQ9LTe8iF6c1WabFlqw",
     slideLines: [
       ["내게로부터 눈을 들어 주를 보기 시작할 때", "주의 일을 보겠네"],
       ["내 작은 마음 돌이키사 하늘의 꿈꾸게 하네", "주님을 볼 때"],
@@ -103,7 +99,6 @@ const SONG_DEFINITIONS: SongMockInput[] = [
     order: 3,
     title: "꽃들도",
     artist: "JWorship",
-    backgroundId: "8UCf1VBmP1pMgdSQ0cUCp",
     slideLines: [
       ["이곳에 생명 샘 솟아나", "눈물 골짝 지나갈 때에"],
       ["머잖아 열매 맺히고", "웃음소리 넘쳐나리라"],
@@ -128,7 +123,6 @@ const SONG_DEFINITIONS: SongMockInput[] = [
     order: 4,
     title: "주의 이름 높이며",
     artist: "Rick Founds",
-    backgroundId: "9Za1L0TVfQscdGPYbnYBf",
     slideLines: [
       [
         "주의 이름 높이며",
@@ -164,7 +158,7 @@ function buildMockDeck(def: SongMockInput): Deck {
     artist: def.artist,
     lyricsRaw: mergeSlidesToLyrics(slides),
     slides,
-    backgroundId: def.backgroundId,
+    backgroundId: null,
     style: DEFAULT_DECK_STYLE,
     visibility: "private" as const,
     forkedFrom: null,

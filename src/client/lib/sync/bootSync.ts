@@ -37,6 +37,7 @@ import {
   setServerDeckListener,
   pushDeckNow,
 } from "./deckSync";
+import { refreshBackgroundCatalog } from "./backgroundSync";
 
 const PROJECTION_ROUTE = /^\/present\/[^/]+\/fullscreen\/?$/;
 
@@ -63,6 +64,7 @@ export async function runBootSync(): Promise<void> {
   setServerDeckListener(applyServerDeckFields);
   setFolderSyncEnabled(true);
   setServerFolderListener(applyServerFolder);
+  void refreshBackgroundCatalog();
 
   let serverDocuments;
   let tombstones: DriveTombstones;

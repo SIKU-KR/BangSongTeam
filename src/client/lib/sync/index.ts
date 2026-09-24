@@ -31,6 +31,7 @@ export {
 } from "./syncScheduler";
 export { mergeDocuments, type MergeResult } from "./mergeDocuments";
 export { runBootSync, shouldRunBootSync } from "./bootSync";
+export { refreshBackgroundCatalog } from "./backgroundSync";
 export {
   scheduleDeckPush,
   scheduleDeckDelete,

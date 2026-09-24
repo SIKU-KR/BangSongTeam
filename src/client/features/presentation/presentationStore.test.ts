@@ -1,12 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { signInAsTestUser } from "../../test/sessionFixture";
 import { renderHook, act } from "@testing-library/react";
-import {
-  DeckSchema,
-  DEFAULT_DECK_STYLE,
-  INITIAL_BACKGROUNDS,
-  PresentationSchema,
-} from "#shared";
+import { DeckSchema, DEFAULT_DECK_STYLE, PresentationSchema } from "#shared";
 import {
   SEED_PRESENTATION_IDS,
   SEED_PRESENTATIONS,
@@ -43,12 +38,24 @@ import {
   canUndo,
   canRedo,
 } from "./presentationStore";
+import {
+  resetBackgroundCatalogForTests,
+  setBackgroundCatalogForTests,
+} from "../backgrounds/backgroundCatalog";
+import {
+  makeBackground,
+  TEST_SERVICE_BACKGROUNDS,
+} from "../../test/backgroundFixture";
 
 describe("presentationStore (In-memory reactive presentation)", () => {
   beforeEach(() => {
     signInAsTestUser();
     resetPresentationStore();
     __loadDocumentsForTests(SEED_PRESENTATIONS);
+    setBackgroundCatalogForTests([
+      ...TEST_SERVICE_BACKGROUNDS,
+      makeBackground(9, { source: "user" }),
+    ]);
   });
 
   it("should initialize with the 5 mock songs", () => {
@@ -86,11 +93,33 @@ describe("presentationStore (In-memory reactive presentation)", () => {
     expect(item.order).toBe(5);
     expect(item.deck?.title).toBe("아침 안개 눈 앞 가리듯");
     expect(item.deck?.backgroundId).toBe(
-      INITIAL_BACKGROUNDS[5 % INITIAL_BACKGROUNDS.length].id,
+      TEST_SERVICE_BACKGROUNDS[5 % TEST_SERVICE_BACKGROUNDS.length].id,
     );
 
     const updated = getActivePresentation();
     expect(updated.items).toHaveLength(6);
+  });
+
+  it("기본 제공 배경이 없으면 배경 없이 곡을 넣고, 내 배경은 자동 배정에 쓰지 않는다", () => {
+    setBackgroundCatalogForTests([makeBackground(9, { source: "user" })]);
+    const item = addDeckToPresentation(
+      DeckSchema.parse({
+        id: "900000000000000000003",
+        userId: "00000000x000000000001",
+        scope: "presentation",
+        presentationId: null,
+        title: "배경 없는 곡",
+        artist: "",
+        lyricsRaw: "가사",
+        slides: [{ id: "s-1", order: 0, lines: ["가사"] }],
+        backgroundId: null,
+        style: DEFAULT_DECK_STYLE,
+        createdAt: "2026-09-20T00:00:00.000Z",
+        updatedAt: "2026-09-20T00:00:00.000Z",
+      }),
+    );
+    expect(item.deck?.backgroundId).toBeNull();
+    resetBackgroundCatalogForTests();
   });
 
   it("should notify useActivePresentation hook subscribers on addDeckToPresentation", () => {
@@ -112,7 +141,7 @@ describe("presentationStore (In-memory reactive presentation)", () => {
           lines: ["새 노래로 주 찬양해"],
         },
       ],
-      backgroundId: INITIAL_BACKGROUNDS[2].id,
+      backgroundId: TEST_SERVICE_BACKGROUNDS[2].id,
       style: DEFAULT_DECK_STYLE,
       visibility: "private",
       forkedFrom: null,
@@ -128,7 +157,7 @@ describe("presentationStore (In-memory reactive presentation)", () => {
     expect(result.current.items).toHaveLength(6);
     expect(result.current.items[5].deck?.title).toBe("새 노래로");
     expect(result.current.items[5].deck?.backgroundId).toBe(
-      INITIAL_BACKGROUNDS[2].id,
+      TEST_SERVICE_BACKGROUNDS[2].id,
     );
   });
 
@@ -153,14 +182,19 @@ describe("presentationStore (In-memory reactive presentation)", () => {
           widthPercent: 85,
         },
       });
-      updateSongBackground(0, INITIAL_BACKGROUNDS[3].id);
+      updateSongBackground(0, TEST_SERVICE_BACKGROUNDS[3].id);
     });
 
     const song = result.current.items[0].deck;
     expect(song?.style.overlayOpacity).toBe(70);
     expect(song?.style.fontFamily).toBe("Noto Sans KR");
     expect(song?.style.position.anchor).toBe("bottom-center");
-    expect(song?.backgroundId).toBe(INITIAL_BACKGROUNDS[3].id);
+    expect(song?.backgroundId).toBe(TEST_SERVICE_BACKGROUNDS[3].id);
+
+    act(() => {
+      updateSongBackground(0, null);
+    });
+    expect(result.current.items[0].deck?.backgroundId).toBeNull();
   });
 
   it("should manage slides (update, add, duplicate, remove)", () => {
@@ -472,7 +506,7 @@ describe("문서별 Undo/Redo 격리", () => {
         title: "공개된 보관함 곡",
         lyricsRaw: "가사",
         slides: [{ id: "s1", order: 0, lines: ["가사"] }],
-        backgroundId: INITIAL_BACKGROUNDS[0].id,
+        backgroundId: TEST_SERVICE_BACKGROUNDS[0].id,
         style: DEFAULT_DECK_STYLE,
         visibility: "public",
         forkCount: 42,

@@ -104,4 +104,28 @@ describe("VideoLayer Component (Dual Video A/B Crossfade Loop)", () => {
     );
     expect(preloadVideo).toHaveAttribute("preload", "auto");
   });
+
+  it("배경이 없는 곡으로 넘어가면 재생 중이던 영상을 비우고, 다음 영상은 검은 화면에서 들어온다", () => {
+    const { rerender } = render(
+      <VideoLayer src="https://media.example.com/loop1.mp4" />,
+    );
+
+    rerender(<VideoLayer src={undefined} />);
+
+    const videoA = screen.getByTestId("video-slot-a");
+    const videoB = screen.getByTestId("video-slot-b");
+    expect(videoA).not.toHaveAttribute("src");
+    expect(videoA).toHaveStyle({ opacity: "0" });
+    expect(videoB).toHaveStyle({ opacity: "0" });
+
+    act(() => {
+      rerender(<VideoLayer src="https://media.example.com/loop2.mp4" />);
+    });
+
+    expect(screen.getByTestId("video-slot-b")).toHaveAttribute(
+      "src",
+      "https://media.example.com/loop2.mp4",
+    );
+    expect(screen.getByTestId("video-slot-b")).toHaveStyle({ opacity: "1" });
+  });
 });

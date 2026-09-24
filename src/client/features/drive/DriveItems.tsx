@@ -1,6 +1,7 @@
 import React from "react";
 import type { Presentation } from "#shared";
-import { DEFAULT_DECK_STYLE, getBackgroundPosterUrl } from "#shared";
+import { DEFAULT_DECK_STYLE } from "#shared";
+import { useBackground } from "../backgrounds/backgroundCatalog";
 import { SlideStage } from "../../components/stage/SlideStage";
 import { useDriveDraggable, useDriveDroppable } from "./driveContext";
 import {
@@ -105,6 +106,7 @@ export function PresentationThumbnail({
   children?: React.ReactNode;
 }): React.JSX.Element {
   const leadDeck = presentation.items[0]?.deck;
+  const leadBackground = useBackground(leadDeck?.backgroundId);
   const rawLeadSlide = leadDeck?.slides[0] ?? null;
   const leadSlide = rawLeadSlide
     ? { ...rawLeadSlide, lines: rawLeadSlide.lines.map((l) => `${l}\u200B`) }
@@ -120,7 +122,7 @@ export function PresentationThumbnail({
         <SlideStage
           slide={leadSlide}
           style={leadDeck?.style ?? DEFAULT_DECK_STYLE}
-          posterUrl={getBackgroundPosterUrl(leadDeck?.backgroundId)}
+          posterUrl={leadBackground?.posterUrl}
           staticBackground
         />
       </div>

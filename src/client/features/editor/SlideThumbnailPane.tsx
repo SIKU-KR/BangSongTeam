@@ -1,6 +1,9 @@
 import React, { useEffect, useRef, useState } from "react";
 import type { PresentationItem } from "#shared";
-import { getBackgroundPosterUrl } from "#shared";
+import {
+  getBackgroundById,
+  useBackgroundCatalog,
+} from "../backgrounds/backgroundCatalog";
 import { SlideStage } from "../../components/stage/SlideStage";
 import { SortableItem, SortableList, slideSortableId } from "./SortableList";
 
@@ -43,6 +46,7 @@ export function SlideThumbnailPane({
   onOpenSongPicker,
   className = "",
 }: SlideThumbnailPaneProps): React.JSX.Element {
+  useBackgroundCatalog();
   const [collapsedIds, setCollapsedIds] = useState<ReadonlySet<string>>(
     () => new Set(),
   );
@@ -163,7 +167,7 @@ export function SlideThumbnailPane({
           const isActiveSong = songIndex === activeSongIndex;
           const isCollapsed = collapsedIds.has(item.id);
           const isMenuOpen = menuSongIndex === songIndex;
-          const posterUrl = getBackgroundPosterUrl(deck?.backgroundId);
+          const posterUrl = getBackgroundById(deck?.backgroundId)?.posterUrl;
 
           return (
             <section key={item.id} className="mb-2">

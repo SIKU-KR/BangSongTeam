@@ -35,7 +35,6 @@ export function createTestDb(): TestDbResult {
       if (stmt.trim()) sqlite.exec(stmt);
     }
   }
-  sqlite.exec("DELETE FROM backgrounds");
 
   const db = drizzle(sqlite, { schema });
   return { sqlite, db };

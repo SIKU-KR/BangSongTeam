@@ -35,11 +35,7 @@ import {
   INITIAL_POSITION,
   type ProjectionPosition,
 } from "../features/presentation";
-import {
-  getBackgroundMediaUrl,
-  getBackgroundPosterUrl,
-  DEFAULT_DECK_STYLE,
-} from "#shared";
+import { DEFAULT_DECK_STYLE } from "#shared";
 import type { Presentation } from "#shared";
 import { EditorHeader } from "../features/editor/EditorHeader";
 import { drivePath } from "../features/drive";
@@ -50,6 +46,10 @@ import { SongPropertyPanel } from "../features/editor/SongPropertyPanel";
 import { SongPickerModal } from "../features/editor/SongPickerModal";
 import { SongSharePanel } from "../features/sharing/SongSharePanel";
 import { useBackgroundAutoCache } from "../features/offline";
+import {
+  resolveBackgroundLayers,
+  useBackground,
+} from "../features/backgrounds";
 
 const EMPTY_PRESENTATION: Presentation = {
   id: "",
@@ -115,8 +115,9 @@ export function EditorRoute(): React.JSX.Element {
   const totalSlideCount = getTotalSlideCount(songs);
   const currentSlideNumber = slideNumberOfPosition(position, songs);
 
-  const backgroundUrl = getBackgroundMediaUrl(currentSong?.backgroundId);
-  const posterUrl = getBackgroundPosterUrl(currentSong?.backgroundId);
+  const background = resolveBackgroundLayers(
+    useBackground(currentSong?.backgroundId),
+  );
 
   const handlePresent = () => {
     if (presentationId) launchPresentation(navigate, presentationId);
@@ -320,8 +321,9 @@ export function EditorRoute(): React.JSX.Element {
         <EditorStageCanvas
           slide={currentSlide}
           style={currentStyle}
-          backgroundUrl={backgroundUrl}
-          posterUrl={posterUrl}
+          backgroundUrl={background.videoUrl}
+          backgroundImageUrl={background.imageUrl}
+          posterUrl={background.posterUrl}
           songTitle={currentSong?.title}
           slideNumber={currentSlideNumber}
           totalSlideCount={totalSlideCount}
@@ -344,8 +346,8 @@ export function EditorRoute(): React.JSX.Element {
           onUpdateStyle={(styleUpdate) =>
             updateSongStyle(safeSongIndex, styleUpdate)
           }
-          onUpdateBackground={(bgId) =>
-            updateSongBackground(safeSongIndex, bgId)
+          onUpdateBackground={(backgroundId) =>
+            updateSongBackground(safeSongIndex, backgroundId)
           }
           onUpdateSlideLines={(lines) =>
             updateSlideLines(safeSongIndex, safeSlideIndex, lines)

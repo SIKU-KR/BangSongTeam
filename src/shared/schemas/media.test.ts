@@ -1,46 +1,137 @@
 import { describe, it, expect } from "vitest";
-import { BackgroundMediaSchema, BackgroundsQuerySchema } from "./media";
+import {
+  BackgroundListResponseSchema,
+  BackgroundMediaSchema,
+  BackgroundUploadFormSchema,
+} from "./media";
 
-describe("Media Schemas", () => {
-  it("parses BackgroundMediaSchema correctly", () => {
-    const valid = {
-      id: "a0eebc9996bb9bd380a11",
-      title: "Warm Loop 01",
-      r2Key: "videos/warm_01.mp4",
-      posterKey: "posters/warm_01.webp",
-      durationSec: 30,
-      license: "CC0",
-      tags: ["잔잔한", "따뜻한"],
-      cdnUrl: "https://media.domain.com/videos/warm_01.mp4",
-      posterUrl: "https://media.domain.com/posters/warm_01.webp",
-    };
-    expect(BackgroundMediaSchema.parse(valid)).toEqual(valid);
+const VALID_BACKGROUND = {
+  id: "a0eebc9996bb9bd380a11",
+  title: "Warm Loop 01",
+  source: "service",
+  kind: "video",
+  mediaUrl: "/api/media/loops/warm_01.mp4",
+  posterUrl: "/api/media/posters/warm_01.webp",
+  durationSec: 30,
+  sizeBytes: 12_000_000,
+  license: "CC0",
+  tags: ["잔잔한", "따뜻한"],
+  createdAt: "2026-09-24T00:00:00.000Z",
+};
+
+function file(bytes: number, type: string, name = "a"): File {
+  return new File([new Uint8Array(bytes)], name, { type });
+}
+
+function uploadForm(overrides: Record<string, unknown> = {}) {
+  return {
+    file: file(10, "video/mp4", "loop.mp4"),
+    poster: file(10, "image/webp", "poster.webp"),
+    title: "본당 배경",
+    tags: JSON.stringify(["잔잔한"]),
+    durationSec: "12",
+    acceptedRightsNotice: "true",
+    ...overrides,
+  };
+}
+
+describe("BackgroundMediaSchema", () => {
+  it("동일 출처 미디어 프록시 URL을 가진 배경을 받는다", () => {
+    expect(BackgroundMediaSchema.parse(VALID_BACKGROUND)).toEqual(
+      VALID_BACKGROUND,
+    );
+  });
+
+  it("커스텀 도메인 절대 URL은 받지 않는다", () => {
+    expect(() =>
+      BackgroundMediaSchema.parse({
+        ...VALID_BACKGROUND,
+        mediaUrl: "https://media.example.com/loops/warm_01.mp4",
+      }),
+    ).toThrow();
+  });
+
+  it("알 수 없는 출처나 종류는 거절한다", () => {
+    expect(() =>
+      BackgroundMediaSchema.parse({ ...VALID_BACKGROUND, source: "catalog" }),
+    ).toThrow();
+    expect(() =>
+      BackgroundMediaSchema.parse({ ...VALID_BACKGROUND, kind: "gif" }),
+    ).toThrow();
   });
 });
 
-describe("BackgroundsQuerySchema", () => {
-  it("모든 파라미터가 선택 사항이다", () => {
-    expect(BackgroundsQuerySchema.parse({})).toEqual({});
-  });
-
-  it("limit 문자열을 숫자로 변환한다", () => {
-    expect(BackgroundsQuerySchema.parse({ limit: "5" }).limit).toBe(5);
-  });
-
-  it("limit은 1~100 정수만 허용한다", () => {
-    expect(() => BackgroundsQuerySchema.parse({ limit: "0" })).toThrow();
-    expect(() => BackgroundsQuerySchema.parse({ limit: "101" })).toThrow();
-    expect(() => BackgroundsQuerySchema.parse({ limit: "abc" })).toThrow();
-    expect(() => BackgroundsQuerySchema.parse({ limit: "1.5" })).toThrow();
-  });
-
-  it("q와 tag는 앞뒤 공백을 제거하고 길이를 제한한다", () => {
+describe("BackgroundListResponseSchema", () => {
+  it("비로그인 응답은 사용량이 null이다", () => {
     expect(
-      BackgroundsQuerySchema.parse({ q: "  호수 ", tag: " 잔잔한 " }),
-    ).toEqual({ q: "호수", tag: "잔잔한" });
-    expect(() => BackgroundsQuerySchema.parse({ q: "a".repeat(51) })).toThrow();
-    expect(() =>
-      BackgroundsQuerySchema.parse({ tag: "a".repeat(31) }),
-    ).toThrow();
+      BackgroundListResponseSchema.parse({
+        backgrounds: [VALID_BACKGROUND],
+        usage: null,
+      }).usage,
+    ).toBeNull();
+  });
+});
+
+describe("BackgroundUploadFormSchema", () => {
+  it("태그 JSON과 길이 문자열을 풀어서 받는다", () => {
+    const parsed = BackgroundUploadFormSchema.parse(uploadForm());
+    expect(parsed.tags).toEqual(["잔잔한"]);
+    expect(parsed.durationSec).toBe(12);
+    expect(parsed.title).toBe("본당 배경");
+  });
+
+  it("태그와 길이는 생략할 수 있다", () => {
+    const parsed = BackgroundUploadFormSchema.parse(
+      uploadForm({ tags: undefined, durationSec: undefined }),
+    );
+    expect(parsed.tags).toEqual([]);
+    expect(parsed.durationSec).toBe(0);
+  });
+
+  it("권리 확인에 동의하지 않으면 거절한다", () => {
+    const result = BackgroundUploadFormSchema.safeParse(
+      uploadForm({ acceptedRightsNotice: "false" }),
+    );
+    expect(result.success).toBe(false);
+  });
+
+  it("허용하지 않는 형식은 거절한다", () => {
+    const result = BackgroundUploadFormSchema.safeParse(
+      uploadForm({ file: file(10, "image/gif", "a.gif"), poster: undefined }),
+    );
+    expect(result.success).toBe(false);
+  });
+
+  it("30MB를 넘는 파일은 거절한다", () => {
+    const result = BackgroundUploadFormSchema.safeParse(
+      uploadForm({ file: file(30 * 1024 * 1024 + 1, "video/mp4") }),
+    );
+    expect(result.success).toBe(false);
+  });
+
+  it("영상은 포스터가 없으면 거절하고 이미지는 포스터 없이 받는다", () => {
+    expect(
+      BackgroundUploadFormSchema.safeParse(uploadForm({ poster: undefined }))
+        .success,
+    ).toBe(false);
+    expect(
+      BackgroundUploadFormSchema.safeParse(
+        uploadForm({ file: file(10, "image/png", "a.png"), poster: undefined }),
+      ).success,
+    ).toBe(true);
+  });
+
+  it("태그는 6개까지만 받는다", () => {
+    const result = BackgroundUploadFormSchema.safeParse(
+      uploadForm({ tags: JSON.stringify(["a", "b", "c", "d", "e", "f", "g"]) }),
+    );
+    expect(result.success).toBe(false);
+  });
+
+  it("빈 제목은 거절한다", () => {
+    expect(
+      BackgroundUploadFormSchema.safeParse(uploadForm({ title: "   " }))
+        .success,
+    ).toBe(false);
   });
 });
