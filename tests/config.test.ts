@@ -40,7 +40,7 @@ describe("Cloudflare Worker 프로젝트 설정과 Wrangler 바인딩", () => {
 
   it("wrangler.jsonc가 Worker 진입점, D1·R2 바인딩, 마이그레이션 경로를 정의한다", () => {
     const content = fs.readFileSync(wranglerJsoncPath, "utf-8");
-    const cleanJson = content.replace(/\/\/.*$/gm, "");
+    const cleanJson = content.replace(/^\s*\/\/.*$/gm, "");
     const config = JSON.parse(cleanJson);
 
     expect(config.main).toBe("src/worker/index.ts");

@@ -23,7 +23,7 @@ export function createApp(deps: AppDeps = {}) {
       console.error("Worker Error:", err);
       return c.json(
         {
-          error: err.message || "Internal Server Error",
+          error: "Internal Server Error",
         },
         500,
       );
