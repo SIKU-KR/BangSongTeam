@@ -34,6 +34,10 @@ export async function resetBackgrounds(serviceCount = 0): Promise<string[]> {
   return ids;
 }
 
+/**
+ * 마이그레이션 `0002` 이전의 사용자 업로드 행. 앱은 이 행을 어떤 경로로도 내보내지
+ * 않아야 한다 (운영 D1에 남아 있을 경우를 대비한 회귀 검사용).
+ */
 export async function insertUserBackgroundRow(
   ownerUserId: string,
   id: string,

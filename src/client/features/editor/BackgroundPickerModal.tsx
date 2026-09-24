@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
-import type { BackgroundMedia, BackgroundSource } from "#shared";
+import type { BackgroundMedia } from "#shared";
 import { BackgroundPreview, useBackgroundCatalog } from "../backgrounds";
 import { refreshBackgroundCatalog } from "../../lib/sync/backgroundSync";
 
@@ -12,11 +11,6 @@ export interface BackgroundPickerModalProps {
 }
 
 const ALL_TAGS = "전체";
-
-const TABS: { source: BackgroundSource; label: string }[] = [
-  { source: "service", label: "기본 제공" },
-  { source: "user", label: "내 배경" },
-];
 
 function CheckBadge(): React.JSX.Element {
   return (
@@ -92,7 +86,7 @@ function PickerTile({
 }
 
 /**
- * 곡 배경 선택 창. 기본 제공 배경과 내가 올린 배경 중에서 고르거나 배경을 뺀다.
+ * 곡 배경 선택 창. 배경 갤러리에서 태그로 걸러 고르거나 배경을 뺀다.
  * 고르는 즉시 편집 미리보기에 반영되고 창이 닫힌다.
  */
 export function BackgroundPickerModal(
@@ -107,23 +101,18 @@ function PickerDialog({
   onSelect,
 }: BackgroundPickerModalProps): React.JSX.Element {
   const catalog = useBackgroundCatalog();
-  const [tab, setTab] = useState<BackgroundSource>(
-    () =>
-      catalog.backgrounds.find((bg) => bg.id === selectedBackgroundId)
-        ?.source ?? "service",
-  );
   const [activeTag, setActiveTag] = useState<string>(ALL_TAGS);
 
   useEffect(() => {
     void refreshBackgroundCatalog();
   }, []);
 
-  const inTab = catalog.backgrounds.filter((bg) => bg.source === tab);
-  const tags = [...new Set(inTab.flatMap((bg) => bg.tags))];
+  const all = catalog.backgrounds;
+  const tags = [...new Set(all.flatMap((bg) => bg.tags))];
   const visible =
     activeTag === ALL_TAGS
-      ? inTab
-      : inTab.filter((bg) => bg.tags.includes(activeTag));
+      ? all
+      : all.filter((bg) => bg.tags.includes(activeTag));
 
   const pick = (backgroundId: string | null): void => {
     onSelect(backgroundId);
@@ -172,32 +161,8 @@ function PickerDialog({
           </button>
         </div>
 
-        <div className="px-6 py-3 border-b border-zinc-200 dark:border-zinc-800/80 bg-zinc-50 dark:bg-zinc-950/40 flex flex-wrap items-center gap-3">
-          <div
-            role="tablist"
-            className="flex rounded-lg bg-zinc-200/70 dark:bg-zinc-800 p-0.5"
-          >
-            {TABS.map(({ source, label }) => (
-              <button
-                key={source}
-                type="button"
-                role="tab"
-                aria-selected={tab === source}
-                onClick={() => {
-                  setTab(source);
-                  setActiveTag(ALL_TAGS);
-                }}
-                className={`px-3 py-1 rounded-md text-xs font-semibold cursor-pointer ${
-                  tab === source
-                    ? "bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white shadow-sm"
-                    : "text-zinc-600 dark:text-zinc-400"
-                }`}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-          {tags.length > 0 && (
+        {tags.length > 0 && (
+          <div className="px-6 py-3 border-b border-zinc-200 dark:border-zinc-800/80 bg-zinc-50 dark:bg-zinc-950/40 flex flex-wrap items-center gap-3">
             <div className="flex items-center gap-1.5 overflow-x-auto">
               {[ALL_TAGS, ...tags].map((tag) => (
                 <button
@@ -215,8 +180,8 @@ function PickerDialog({
                 </button>
               ))}
             </div>
-          )}
-        </div>
+          </div>
+        )}
 
         <div className="flex-1 overflow-y-auto p-6 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 content-start">
           <button
@@ -246,21 +211,9 @@ function PickerDialog({
             />
           ))}
 
-          {inTab.length === 0 && (
-            <div className="col-span-full py-8 text-center text-xs text-zinc-500 dark:text-zinc-400 space-y-2">
-              {tab === "service" ? (
-                <p>아직 제공되는 기본 배경이 없습니다.</p>
-              ) : (
-                <>
-                  <p>아직 올린 배경이 없습니다.</p>
-                  <Link
-                    to="/backgrounds"
-                    className="inline-block text-emerald-600 dark:text-emerald-400 font-semibold hover:underline"
-                  >
-                    배경 라이브러리에서 올리기
-                  </Link>
-                </>
-              )}
+          {all.length === 0 && (
+            <div className="col-span-full py-8 text-center text-xs text-zinc-500 dark:text-zinc-400">
+              <p>아직 등록된 배경이 없습니다.</p>
             </div>
           )}
         </div>

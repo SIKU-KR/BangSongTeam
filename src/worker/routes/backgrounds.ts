@@ -7,19 +7,20 @@ import {
   createId,
   isBackgroundImageMimeType,
   isBackgroundVideoMimeType,
+  serviceBackgroundKeys,
   sniffBackgroundMimeType,
-  userBackgroundKeys,
   type BackgroundImageMimeType,
   type BackgroundMimeType,
 } from "#shared";
 import {
   createD1Client,
-  deleteUserBackground,
-  getBackgroundUsage,
-  insertUserBackground,
-  listVisibleBackgrounds,
+  deleteServiceBackground,
+  insertServiceBackground,
+  listBackgrounds,
 } from "#db";
 import type { AppEnv } from "../types";
+import { isAdminUser } from "../lib/auth";
+import { requireAdmin } from "../middleware/auth";
 import {
   resolveOptionalSession,
   resolveRequireAuth,
@@ -38,14 +39,14 @@ function sameKind(declared: string, actual: BackgroundMimeType): boolean {
 }
 
 /**
- * 배경 라이브러리 API.
+ * 배경 갤러리 API.
  *
- * 목록은 로그인 없이 열리고(사전 주입 배경), 로그인하면 내 업로드와 저장 공간
- * 사용량이 더해진다. 업로드·삭제는 소유자 본인만 한다. 남의 커스텀 배경은 어떤
- * 경로로도 보이지 않는다 (쿼리 헬퍼가 범위를 고정한다).
+ * 목록은 로그인 없이 열리고 모두에게 같다(기본 제공 배경). 올리기·지우기는
+ * 관리자(`ADMIN_USER_IDS`)만 하고, 올린 배경은 곧바로 기본 제공 배경이 된다.
  *
  * 업로드는 R2에 먼저 쓰고 D1 행을 나중에 만든다. 반대 순서면 파일 없는 행이 생겨
  * 편집기·송출이 깨진 배경을 그린다. 행 삽입이 실패하면 올린 객체를 지운다.
+ * 삭제는 거꾸로 행을 먼저 지우고 R2 객체를 나중에 지운다.
  */
 export function createBackgroundsRoute(deps: AppDeps = {}) {
   const requireAuth = resolveRequireAuth(deps);
@@ -53,19 +54,16 @@ export function createBackgroundsRoute(deps: AppDeps = {}) {
 
   return new Hono<AppEnv>()
     .get("/", optionalSession, async (c) => {
-      const userId = c.get("userId") ?? null;
-      const db = createD1Client(c.env.DB);
-      const [backgrounds, usage] = await Promise.all([
-        listVisibleBackgrounds(db, userId),
-        userId ? getBackgroundUsage(db, userId) : Promise.resolve(null),
-      ]);
+      const backgrounds = await listBackgrounds(createD1Client(c.env.DB));
+      const canManage = isAdminUser(c.env, c.get("userId"));
 
       c.header("cache-control", "private, no-cache");
-      return c.json({ backgrounds, usage }, 200);
+      return c.json({ backgrounds, canManage }, 200);
     })
     .post(
       "/uploads",
       requireAuth,
+      requireAdmin,
       zValidator("form", BackgroundUploadFormSchema, (result, c) => {
         if (!result.success) {
           return c.json(
@@ -79,7 +77,6 @@ export function createBackgroundsRoute(deps: AppDeps = {}) {
         }
       }),
       async (c) => {
-        const userId = c.get("userId") as string;
         const form = c.req.valid("form");
 
         const mediaMime = await sniff(form.file);
@@ -105,21 +102,8 @@ export function createBackgroundsRoute(deps: AppDeps = {}) {
         const poster = kind === "video" ? form.poster : undefined;
 
         const db = createD1Client(c.env.DB);
-        const addedBytes = form.file.size + (poster?.size ?? 0);
-        const usage = await getBackgroundUsage(db, userId);
-        if (usage.usedBytes + addedBytes > usage.limitBytes) {
-          return c.json(
-            {
-              error:
-                "저장 공간(300MB)을 넘습니다. 쓰지 않는 배경을 지운 뒤 다시 올려 주세요",
-            },
-            413,
-          );
-        }
-
         const id = createId();
-        const { mediaKey, posterKey } = userBackgroundKeys(
-          userId,
+        const { mediaKey, posterKey } = serviceBackgroundKeys(
           id,
           mediaMime,
           posterMime,
@@ -137,13 +121,14 @@ export function createBackgroundsRoute(deps: AppDeps = {}) {
 
         let background;
         try {
-          background = await insertUserBackground(db, userId, {
+          background = await insertServiceBackground(db, {
             id,
             title: form.title,
+            license: form.license,
             kind,
             mediaKey,
             posterKey,
-            sizeBytes: addedBytes,
+            sizeBytes: form.file.size + (poster?.size ?? 0),
             durationSec: kind === "video" ? form.durationSec : 0,
             tags: form.tags,
           });
@@ -152,26 +137,17 @@ export function createBackgroundsRoute(deps: AppDeps = {}) {
           throw error;
         }
 
-        return c.json(
-          {
-            background,
-            usage: { ...usage, usedBytes: usage.usedBytes + addedBytes },
-          },
-          201,
-        );
+        return c.json({ background }, 201);
       },
     )
     .delete(
       "/uploads/:id",
       requireAuth,
+      requireAdmin,
       zValidator("param", BackgroundIdParamSchema),
       async (c) => {
-        const userId = c.get("userId") as string;
-        const db = createD1Client(c.env.DB);
-
-        const keys = await deleteUserBackground(
-          db,
-          userId,
+        const keys = await deleteServiceBackground(
+          createD1Client(c.env.DB),
           c.req.valid("param").id,
         );
         if (!keys) {
@@ -186,10 +162,7 @@ export function createBackgroundsRoute(deps: AppDeps = {}) {
           console.error("background object delete failed", { keys, error });
         }
 
-        return c.json(
-          { ok: true as const, usage: await getBackgroundUsage(db, userId) },
-          200,
-        );
+        return c.json({ ok: true as const }, 200);
       },
     );
 }

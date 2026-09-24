@@ -40,18 +40,14 @@ export const BackgroundMediaSchema = z.object({
 });
 export type BackgroundMedia = z.infer<typeof BackgroundMediaSchema>;
 
-export const BackgroundStorageUsageSchema = z.object({
-  usedBytes: z.number().int().nonnegative(),
-  limitBytes: z.number().int().positive(),
-});
-export type BackgroundStorageUsage = z.infer<
-  typeof BackgroundStorageUsageSchema
->;
-
-/** 로그인하지 않았으면 사전 주입 배경만 오고 `usage`는 null이다 */
+/**
+ * 배경 목록 응답. 모든 배경이 한 갤러리에 모두에게 똑같이 보인다.
+ * `canManage`는 이 요청의 세션이 관리자(`ADMIN_USER_IDS`)일 때만 true이고,
+ * 화면은 이 값으로 올리기·삭제 버튼을 보여 줄지 정한다 (권한 검사는 서버가 한다).
+ */
 export const BackgroundListResponseSchema = z.object({
   backgrounds: z.array(BackgroundMediaSchema),
-  usage: BackgroundStorageUsageSchema.nullable(),
+  canManage: z.boolean(),
 });
 export type BackgroundListResponse = z.infer<
   typeof BackgroundListResponseSchema
@@ -89,7 +85,7 @@ const TagsFieldSchema = z
   });
 
 /**
- * 커스텀 배경 업로드 폼 (multipart).
+ * 관리자 배경 업로드 폼 (multipart). 올린 배경은 곧바로 기본 제공 배경이 된다.
  *
  * 선언된 MIME만 검사한다. 파일 앞부분 바이트로 실제 형식을 확인하는 것은
  * Worker가 맡는다 (`sniffBackgroundMimeType`). 영상은 첫 화면 포스터를 함께
@@ -104,6 +100,11 @@ export const BackgroundUploadFormSchema = z
       .trim()
       .min(1, "배경 제목을 입력해 주세요")
       .max(BACKGROUND_UPLOAD_LIMITS.maxTitleLength),
+    license: z
+      .string()
+      .trim()
+      .min(1, "출처와 라이선스를 적어 주세요")
+      .max(BACKGROUND_UPLOAD_LIMITS.maxLicenseLength),
     tags: TagsFieldSchema,
     durationSec: z
       .string()
@@ -115,7 +116,7 @@ export const BackgroundUploadFormSchema = z
       ),
     acceptedRightsNotice: z.literal("true", {
       errorMap: () => ({
-        message: "권리를 가졌거나 사용 허락을 받은 파일인지 확인해 주세요",
+        message: "모든 사용자에게 배포해도 되는 라이선스인지 확인해 주세요",
       }),
     }),
   })
@@ -172,7 +173,6 @@ export const BackgroundIdParamSchema = z.object({ id: IdSchema });
 
 export const BackgroundUploadResponseSchema = z.object({
   background: BackgroundMediaSchema,
-  usage: BackgroundStorageUsageSchema,
 });
 export type BackgroundUploadResponse = z.infer<
   typeof BackgroundUploadResponseSchema
@@ -180,7 +180,6 @@ export type BackgroundUploadResponse = z.infer<
 
 export const BackgroundDeleteResponseSchema = z.object({
   ok: z.literal(true),
-  usage: BackgroundStorageUsageSchema,
 });
 export type BackgroundDeleteResponse = z.infer<
   typeof BackgroundDeleteResponseSchema

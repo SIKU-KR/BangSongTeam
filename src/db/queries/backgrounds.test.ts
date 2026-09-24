@@ -1,23 +1,17 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { BACKGROUND_UPLOAD_LIMITS } from "#shared";
 import { createTestDb, type TestDbResult } from "../test-utils";
 import { backgrounds, user, type NewBackground } from "../schema";
 import {
-  deleteUserBackground,
-  getBackgroundUsage,
-  insertUserBackground,
-  listVisibleBackgrounds,
-  maskNonServiceBackgrounds,
+  deleteServiceBackground,
+  insertServiceBackground,
+  listBackgrounds,
   nullifyUnknownBackgrounds,
 } from "./backgrounds";
 
-const ME = "user00000000000000001";
-const OTHER = "user00000000000000002";
+const LEGACY_OWNER = "user00000000000000001";
 const SERVICE_A = "svc000000000000000001";
 const SERVICE_B = "svc000000000000000002";
-const MINE_OLD = "mine00000000000000001";
-const MINE_NEW = "mine00000000000000002";
-const OTHERS = "other0000000000000001";
+const LEGACY_UPLOAD = "legacy000000000000001";
 
 function row(
   overrides: Partial<NewBackground> & { id: string },
@@ -38,42 +32,21 @@ describe("배경 쿼리 헬퍼", () => {
 
   beforeEach(async () => {
     testDb = createTestDb();
-    await testDb.db.insert(user).values(
-      [ME, OTHER].map((id) => ({
-        id,
-        name: id,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      })),
-    );
+    await testDb.db.insert(user).values({
+      id: LEGACY_OWNER,
+      name: LEGACY_OWNER,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
     await testDb.db.insert(backgrounds).values([
       row({ id: SERVICE_B, title: "호수" }),
       row({ id: SERVICE_A, title: "노을" }),
       row({
-        id: MINE_OLD,
-        title: "본당 1",
+        id: LEGACY_UPLOAD,
+        title: "예전 업로드",
         source: "user",
-        ownerUserId: ME,
-        sizeBytes: 1000,
-        createdAt: new Date("2026-09-01T00:00:00Z"),
-      }),
-      row({
-        id: MINE_NEW,
-        title: "본당 2",
-        source: "user",
-        ownerUserId: ME,
-        kind: "image",
-        r2Key: `uploads/${ME}/${MINE_NEW}.png`,
-        posterKey: `uploads/${ME}/${MINE_NEW}.png`,
-        sizeBytes: 500,
-        createdAt: new Date("2026-09-20T00:00:00Z"),
-      }),
-      row({
-        id: OTHERS,
-        title: "남의 배경",
-        source: "user",
-        ownerUserId: OTHER,
-        sizeBytes: 9000,
+        ownerUserId: LEGACY_OWNER,
+        r2Key: `uploads/${LEGACY_OWNER}/${LEGACY_UPLOAD}.mp4`,
       }),
     ]);
   });
@@ -82,30 +55,18 @@ describe("배경 쿼리 헬퍼", () => {
     testDb.sqlite.close();
   });
 
-  describe("listVisibleBackgrounds", () => {
-    it("비로그인은 사전 주입 배경만 제목순으로 본다", async () => {
-      const list = await listVisibleBackgrounds(testDb.db, null);
+  describe("listBackgrounds", () => {
+    it("기본 제공 배경을 제목순으로 주고 예전 사용자 업로드는 뺀다", async () => {
+      const list = await listBackgrounds(testDb.db);
       expect(list.map((bg) => bg.id)).toEqual([SERVICE_A, SERVICE_B]);
     });
 
-    it("로그인하면 사전 주입 배경 뒤에 내 업로드가 최신순으로 붙고 남의 업로드는 빠진다", async () => {
-      const list = await listVisibleBackgrounds(testDb.db, ME);
-      expect(list.map((bg) => bg.id)).toEqual([
-        SERVICE_A,
-        SERVICE_B,
-        MINE_NEW,
-        MINE_OLD,
-      ]);
-    });
-
     it("R2 키를 미디어 프록시 URL로 바꿔 돌려준다", async () => {
-      const list = await listVisibleBackgrounds(testDb.db, ME);
-      const image = list.find((bg) => bg.id === MINE_NEW);
-      expect(image).toMatchObject({
-        kind: "image",
-        source: "user",
-        mediaUrl: `/api/media/uploads/${ME}/${MINE_NEW}.png`,
-        posterUrl: `/api/media/uploads/${ME}/${MINE_NEW}.png`,
+      const list = await listBackgrounds(testDb.db);
+      expect(list.find((bg) => bg.id === SERVICE_A)).toMatchObject({
+        source: "service",
+        mediaUrl: `/api/media/loops/${SERVICE_A}.mp4`,
+        posterUrl: `/api/media/posters/${SERVICE_A}.webp`,
         tags: ["잔잔한"],
       });
     });
@@ -114,85 +75,70 @@ describe("배경 쿼리 헬퍼", () => {
       await testDb.db
         .insert(backgrounds)
         .values(row({ id: "svc000000000000000003", tags: "{broken" }));
-      const list = await listVisibleBackgrounds(testDb.db, null);
+      const list = await listBackgrounds(testDb.db);
       expect(
         list.find((bg) => bg.id === "svc000000000000000003")?.tags,
       ).toEqual([]);
     });
   });
 
-  it("getBackgroundUsage는 내 업로드 크기만 더한다", async () => {
-    expect(await getBackgroundUsage(testDb.db, ME)).toEqual({
-      usedBytes: 1500,
-      limitBytes: BACKGROUND_UPLOAD_LIMITS.maxAccountBytes,
-    });
-    expect((await getBackgroundUsage(testDb.db, OTHER)).usedBytes).toBe(9000);
-  });
-
-  it("insertUserBackground는 소유자와 출처를 서버가 정해 넣는다", async () => {
-    const created = await insertUserBackground(testDb.db, ME, {
-      id: "mine00000000000000003",
+  it("insertServiceBackground는 관리자 업로드를 기본 제공 배경으로 넣는다", async () => {
+    const created = await insertServiceBackground(testDb.db, {
+      id: "svc000000000000000004",
       title: "성탄 배경",
-      kind: "video",
-      mediaKey: `uploads/${ME}/mine00000000000000003.mp4`,
-      posterKey: `uploads/${ME}/mine00000000000000003.poster.webp`,
+      license: "Pexels License — 홍길동",
+      kind: "image",
+      mediaKey: "stills/svc000000000000000004.png",
+      posterKey: "stills/svc000000000000000004.png",
       sizeBytes: 2048,
-      durationSec: 12,
+      durationSec: 0,
       tags: ["밝은"],
     });
 
     expect(created).toMatchObject({
-      source: "user",
-      kind: "video",
+      source: "service",
+      kind: "image",
+      license: "Pexels License — 홍길동",
+      mediaUrl: "/api/media/stills/svc000000000000000004.png",
       sizeBytes: 2048,
-      durationSec: 12,
       tags: ["밝은"],
     });
-    expect((await getBackgroundUsage(testDb.db, ME)).usedBytes).toBe(3548);
+    const list = await listBackgrounds(testDb.db);
+    expect(list.map((bg) => bg.id)).toContain("svc000000000000000004");
   });
 
-  describe("deleteUserBackground", () => {
-    it("내 업로드를 지우고 R2 키를 돌려준다", async () => {
-      const keys = await deleteUserBackground(testDb.db, ME, MINE_OLD);
-      expect(keys).toEqual({
-        mediaKey: `loops/${MINE_OLD}.mp4`,
-        posterKey: `posters/${MINE_OLD}.webp`,
+  describe("deleteServiceBackground", () => {
+    it("기본 제공 배경을 지우고 R2 키를 돌려준다", async () => {
+      expect(await deleteServiceBackground(testDb.db, SERVICE_A)).toEqual({
+        mediaKey: `loops/${SERVICE_A}.mp4`,
+        posterKey: `posters/${SERVICE_A}.webp`,
       });
-      const list = await listVisibleBackgrounds(testDb.db, ME);
-      expect(list.map((bg) => bg.id)).not.toContain(MINE_OLD);
+      const list = await listBackgrounds(testDb.db);
+      expect(list.map((bg) => bg.id)).toEqual([SERVICE_B]);
     });
 
-    it("남의 업로드와 사전 주입 배경은 지우지 못한다", async () => {
-      expect(await deleteUserBackground(testDb.db, ME, OTHERS)).toBeNull();
-      expect(await deleteUserBackground(testDb.db, ME, SERVICE_A)).toBeNull();
-      const all = await testDb.db.select().from(backgrounds);
-      expect(all).toHaveLength(5);
+    it("없는 배경이나 예전 사용자 업로드는 null이다", async () => {
+      expect(
+        await deleteServiceBackground(testDb.db, "gone00000000000000001"),
+      ).toBeNull();
+      expect(
+        await deleteServiceBackground(testDb.db, LEGACY_UPLOAD),
+      ).toBeNull();
     });
   });
 
-  it("nullifyUnknownBackgrounds는 모르는 id와 남의 업로드를 배경 없음으로 낮춘다", async () => {
-    const rows = await nullifyUnknownBackgrounds(testDb.db, ME, [
+  it("nullifyUnknownBackgrounds는 모르는 id와 예전 사용자 업로드를 배경 없음으로 낮춘다", async () => {
+    const rows = await nullifyUnknownBackgrounds(testDb.db, [
       { id: "1", backgroundId: SERVICE_A },
-      { id: "2", backgroundId: MINE_NEW },
-      { id: "3", backgroundId: OTHERS },
-      { id: "4", backgroundId: "gone00000000000000001" },
-      { id: "5", backgroundId: null },
+      { id: "2", backgroundId: LEGACY_UPLOAD },
+      { id: "3", backgroundId: "gone00000000000000001" },
+      { id: "4", backgroundId: null },
     ]);
     expect(rows.map((r) => r.backgroundId)).toEqual([
       SERVICE_A,
-      MINE_NEW,
       null,
       null,
       null,
     ]);
-  });
-
-  it("maskNonServiceBackgrounds는 공개 경로에서 커스텀 배경을 떼어 낸다", async () => {
-    const rows = await maskNonServiceBackgrounds(testDb.db, [
-      { backgroundId: SERVICE_B },
-      { backgroundId: MINE_OLD },
-      { backgroundId: OTHERS },
-    ]);
-    expect(rows.map((r) => r.backgroundId)).toEqual([SERVICE_B, null, null]);
   });
 });

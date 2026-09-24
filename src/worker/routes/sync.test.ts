@@ -520,7 +520,7 @@ describe("동기화 라우트 교차 사용자 격리", () => {
       ).toEqual(serviceIds);
     });
 
-    it("남의 커스텀 배경 id는 내 세트에 걸리지 않는다", async () => {
+    it("예전 사용자 업로드 id는 세트에 걸리지 않는다", async () => {
       const doc = makeDoc(USER_A);
       doc.items[0].deck.backgroundId = OTHERS_BACKGROUND;
 

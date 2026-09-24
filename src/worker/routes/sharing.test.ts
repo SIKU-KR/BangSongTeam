@@ -308,13 +308,13 @@ describe("공유 라이브러리 API", () => {
     });
   });
 
-  describe("커스텀 배경은 공개 경로로 새지 않는다", () => {
-    const MY_UPLOAD = "upld00000000000000001";
+  describe("공개 경로의 배경", () => {
+    const LEGACY_UPLOAD = "upld00000000000000001";
     let serviceId = "";
 
     beforeEach(async () => {
       [serviceId] = await resetBackgrounds(1);
-      await insertUserBackgroundRow(A, MY_UPLOAD);
+      await insertUserBackgroundRow(A, LEGACY_UPLOAD);
     });
 
     async function publishWithBackground(backgroundId: string): Promise<void> {
@@ -323,8 +323,8 @@ describe("공유 라이브러리 API", () => {
       expect((await publish(PUB)).status).toBe(200);
     }
 
-    it("작성자의 업로드는 검색·상세·포크에서 배경 없음이 되고 원본은 그대로다", async () => {
-      await publishWithBackground(MY_UPLOAD);
+    it("예전 사용자 업로드는 저장·검색·상세·포크 모두에서 배경 없음이다", async () => {
+      await publishWithBackground(LEGACY_UPLOAD);
 
       const [card] = (await search("은혜로다")).decks;
       expect(card.backgroundId).toBeNull();
@@ -344,9 +344,7 @@ describe("공유 라이브러리 API", () => {
       const mine = (await (await request("GET", "/api/decks")).json()) as {
         decks: Deck[];
       };
-      expect(mine.decks.find((d) => d.id === PUB)?.backgroundId).toBe(
-        MY_UPLOAD,
-      );
+      expect(mine.decks.find((d) => d.id === PUB)?.backgroundId).toBeNull();
     });
 
     it("사전 주입 배경은 공개 경로와 포크에 그대로 따라간다", async () => {

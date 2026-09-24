@@ -47,7 +47,7 @@ const originalFetch = globalThis.fetch;
 beforeEach(() => {
   signInAsTestUser();
   resetPresentationStore();
-  setBackgroundCatalogForTests(TEST_SERVICE_BACKGROUNDS, null, "local");
+  setBackgroundCatalogForTests(TEST_SERVICE_BACKGROUNDS, false, "local");
   __loadDocumentsForTests(
     SEED_PRESENTATIONS.map((presentation) =>
       withBackgrounds(

@@ -7,10 +7,9 @@ const IMMUTABLE_MEDIA_CACHE_CONTROL = "public, max-age=31536000, immutable";
  * R2 바인딩 기반 미디어 스트리밍 라우트 (HTTP Range 및 Partial Content 지원).
  * 로컬 개발(Miniflare) 및 커스텀 도메인 미연결 환경에서도 R2 비디오 직접 재생 보장.
  *
- * 사용자 커스텀 배경(`uploads/<userId>/<NanoID>.*`)도 인증 없이 서빙한다. 키에
- * 21자 NanoID가 들어가 추측할 수 없고, 목록 API가 소유자에게만 키를 알려 준다.
- * 여기서 세션을 검사하면 송출 중 세션이 만료되는 순간 배경이 꺼진다 — 예배 화면이
- * 검게 되는 쪽이 더 큰 사고다.
+ * 배경은 모두 누구에게나 보이는 기본 제공 배경이라 인증 없이 서빙한다. 여기서
+ * 세션을 검사하면 송출 중 세션이 만료되는 순간 배경이 꺼진다 — 예배 화면이 검게
+ * 되는 쪽이 더 큰 사고다.
  */
 export const mediaRoute = new Hono<AppEnv>().get("/*", async (c) => {
   const key = c.req.path.replace(/^\/api\/media\/?/, "");

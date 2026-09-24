@@ -163,7 +163,7 @@ describe("AppShellLayout (드라이브형 홈)", () => {
     expect(screen.getByTestId("fullscreen-stub")).toBeInTheDocument();
   });
 
-  it("사이드바: 내 드라이브·휴지통·배경 라이브러리, aria-current", () => {
+  it("사이드바: 내 드라이브·휴지통·배경 갤러리, aria-current", () => {
     renderShell();
 
     expect(screen.getByTestId("sidebar-nav-home")).toHaveAttribute(
@@ -172,10 +172,10 @@ describe("AppShellLayout (드라이브형 홈)", () => {
     );
 
     fireEvent.click(screen.getByTestId("sidebar-nav-backgrounds"));
-    expect(screen.getByText("내가 올린 배경")).toBeInTheDocument();
+    expect(screen.getByText("모든 배경")).toBeInTheDocument();
     expect(screen.queryByText("유형: 전체")).not.toBeInTheDocument();
     expect(
-      screen.getByRole("heading", { name: "배경 라이브러리" }),
+      screen.getByRole("heading", { name: "배경 갤러리" }),
     ).toBeInTheDocument();
     expect(screen.getByTestId("sidebar-nav-home")).not.toHaveAttribute(
       "aria-current",

@@ -1,9 +1,5 @@
 import React, { useEffect, useState } from "react";
-import {
-  BACKGROUND_TAGS,
-  BACKGROUND_UPLOAD_LIMITS,
-  type BackgroundStorageUsage,
-} from "#shared";
+import { BACKGROUND_TAGS, BACKGROUND_UPLOAD_LIMITS } from "#shared";
 import { useUploadBackground } from "../../lib/api/backgroundQueries";
 import { describeApiError } from "../../lib/api/request";
 import {
@@ -15,7 +11,6 @@ import {
 
 export interface BackgroundUploadDialogProps {
   isOpen: boolean;
-  usage: BackgroundStorageUsage | null;
   onClose: () => void;
 }
 
@@ -50,18 +45,18 @@ function useObjectUrl(file: File | undefined): string | undefined {
 }
 
 /**
- * 커스텀 배경 올리기.
+ * 관리자 배경 올리기. 올린 배경은 곧바로 모든 사용자의 기본 제공 배경이 된다.
  *
- * 브라우저에서 먼저 열어 보고(재생 가능 여부·해상도·길이, 영상은 포스터 생성) 권리
- * 확인 동의를 받은 뒤에만 올린다.
+ * 브라우저에서 먼저 열어 보고(재생 가능 여부·해상도·길이, 영상은 포스터 생성)
+ * 출처·라이선스를 적고 재배포 가능 여부를 확인한 뒤에만 올린다.
  */
 export function BackgroundUploadDialog({
   isOpen,
-  usage,
   onClose,
 }: BackgroundUploadDialogProps): React.JSX.Element | null {
   const [selection, setSelection] = useState<Selection>({ status: "empty" });
   const [title, setTitle] = useState("");
+  const [license, setLicense] = useState("");
   const [tags, setTags] = useState<string[]>([]);
   const [acceptedRights, setAcceptedRights] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
@@ -78,6 +73,7 @@ export function BackgroundUploadDialog({
   const reset = (): void => {
     setSelection({ status: "empty" });
     setTitle("");
+    setLicense("");
     setTags([]);
     setAcceptedRights(false);
     upload.reset();
@@ -91,7 +87,7 @@ export function BackgroundUploadDialog({
 
   const selectFile = async (file: File): Promise<void> => {
     upload.reset();
-    const problem = checkBackgroundFile(file, usage);
+    const problem = checkBackgroundFile(file);
     if (problem) {
       setSelection({ status: "invalid", message: problem });
       return;
@@ -100,16 +96,7 @@ export function BackgroundUploadDialog({
     setTitle((current) => current || titleFromFileName(file.name));
     try {
       const probed = await probeBackgroundFile(file);
-      const posterBytes = probed.poster?.size ?? 0;
-      const posterProblem =
-        usage && usage.usedBytes + file.size + posterBytes > usage.limitBytes
-          ? "저장 공간이 부족합니다. 쓰지 않는 배경을 지운 뒤 다시 올려 주세요"
-          : null;
-      setSelection(
-        posterProblem
-          ? { status: "invalid", message: posterProblem }
-          : { status: "ready", file, probed },
-      );
+      setSelection({ status: "ready", file, probed });
     } catch (err) {
       setSelection({
         status: "invalid",
@@ -129,6 +116,7 @@ export function BackgroundUploadDialog({
   const canSubmit =
     selection.status === "ready" &&
     title.trim().length > 0 &&
+    license.trim().length > 0 &&
     acceptedRights &&
     !upload.isPending;
 
@@ -140,6 +128,7 @@ export function BackgroundUploadDialog({
         file: selection.file,
         poster: selection.probed.poster,
         title: title.trim(),
+        license: license.trim(),
         tags,
         durationSec: selection.probed.durationSec,
       });
@@ -165,12 +154,12 @@ export function BackgroundUploadDialog({
         <div className="flex items-start justify-between gap-3">
           <div>
             <h3 id="bg-upload-title" className="text-base font-bold">
-              내 배경 올리기
+              배경 올리기
             </h3>
             <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
               MP4(H.264) 영상이나 JPEG·PNG·WebP 이미지, 파일당{" "}
               {formatBytes(BACKGROUND_UPLOAD_LIMITS.maxFileBytes)}까지. 올린
-              배경은 나만 쓸 수 있습니다.
+              배경은 모든 사용자에게 기본 제공 배경으로 보입니다.
             </p>
           </div>
           <button
@@ -293,6 +282,25 @@ export function BackgroundUploadDialog({
         </div>
 
         <div>
+          <label
+            htmlFor="bg-upload-license-input"
+            className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300 mb-1"
+          >
+            출처·라이선스
+          </label>
+          <input
+            id="bg-upload-license-input"
+            type="text"
+            data-testid="bg-upload-license-input"
+            value={license}
+            maxLength={BACKGROUND_UPLOAD_LIMITS.maxLicenseLength}
+            placeholder="예: Pexels License — 작가명, 자체 제작 (CC0)"
+            onChange={(e) => setLicense(e.target.value)}
+            className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 focus:border-emerald-500 rounded-xl px-3.5 py-2 text-xs focus:outline-none"
+          />
+        </div>
+
+        <div>
           <span className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300 mb-1.5">
             분위기 태그 (선택)
           </span>
@@ -328,9 +336,9 @@ export function BackgroundUploadDialog({
           />
           <span>
             <span className="font-semibold">
-              내가 권리를 가졌거나 사용 허락을 받은 파일입니다.
+              모든 사용자에게 배포해도 되는 라이선스를 확인했습니다.
             </span>{" "}
-            권리 침해 신고가 들어오면 운영자가 내릴 수 있습니다.
+            확인되지 않은 파일은 올리지 않습니다.
           </span>
         </label>
 

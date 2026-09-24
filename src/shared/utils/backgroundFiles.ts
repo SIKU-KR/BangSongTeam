@@ -51,23 +51,25 @@ function backgroundFileExtension(mime: BackgroundMimeType): string {
 }
 
 /**
- * 사용자 업로드의 R2 키.
+ * 관리자가 앱에서 올린 기본 제공 배경의 R2 키.
  *
- * 21자 NanoID가 들어가 URL을 추측할 수 없다. 미디어 프록시는 인증 없이
- * 서빙하므로 이 키 자체가 접근 통제다 (`src/worker/routes/media.ts`).
+ * 운영 런북으로 등록하는 배경과 같은 접두사(`loops/`, `posters/`)를 쓴다. 이미지
+ * 배경은 `stills/`에 두고 원본을 포스터로 함께 쓴다. 21자 NanoID가 들어가 같은
+ * 제목의 배경을 올려도 키가 겹치지 않는다.
  */
-export function userBackgroundKeys(
-  userId: string,
+export function serviceBackgroundKeys(
   backgroundId: string,
   mediaMime: BackgroundMimeType,
   posterMime: BackgroundImageMimeType | null,
 ): { mediaKey: string; posterKey: string } {
-  const base = `uploads/${userId}/${backgroundId}`;
-  const mediaKey = `${base}.${backgroundFileExtension(mediaMime)}`;
-  return {
-    mediaKey,
-    posterKey: posterMime
-      ? `${base}.poster.${backgroundFileExtension(posterMime)}`
-      : mediaKey,
-  };
+  if (mediaMime === "video/mp4") {
+    return {
+      mediaKey: `loops/${backgroundId}.mp4`,
+      posterKey: posterMime
+        ? `posters/${backgroundId}.${backgroundFileExtension(posterMime)}`
+        : `loops/${backgroundId}.mp4`,
+    };
+  }
+  const mediaKey = `stills/${backgroundId}.${backgroundFileExtension(mediaMime)}`;
+  return { mediaKey, posterKey: mediaKey };
 }

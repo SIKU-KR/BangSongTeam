@@ -173,10 +173,9 @@ describe("useBackgroundAutoCache", () => {
 
   it("방금 올린 배경이 카탈로그에 들어오면 그 배경도 받는다", () => {
     const upload = makeBackground(7, {
-      source: "user",
       kind: "image",
-      mediaUrl: "/api/media/uploads/u/bg7.png",
-      posterUrl: "/api/media/uploads/u/bg7.png",
+      mediaUrl: "/api/media/stills/bg7.png",
+      posterUrl: "/api/media/stills/bg7.png",
     });
     renderHook(() => useBackgroundAutoCache(withBackground(upload.id)));
     act(() => {
@@ -192,7 +191,7 @@ describe("useBackgroundAutoCache", () => {
     });
 
     expect(scheduleMediaCaching).toHaveBeenLastCalledWith([
-      "/api/media/uploads/u/bg7.png",
+      "/api/media/stills/bg7.png",
     ]);
   });
 

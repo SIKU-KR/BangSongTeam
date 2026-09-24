@@ -10,7 +10,7 @@ import {
 import { decks, user, type Deck, type NewDeck } from "../schema";
 import { toDeckRow, toSharedDeck } from "./mappers";
 import { publicDeckCondition } from "./publicScope";
-import { maskNonServiceBackgrounds } from "./backgrounds";
+import { nullifyUnknownBackgrounds } from "./backgrounds";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type DbInstance = any;
@@ -113,7 +113,7 @@ export async function getPublicDeckDetail(
 ): Promise<PublicDeckDetail | null> {
   const row = await selectPublicDeckWithAuthor(db, deckId);
   if (!row) return null;
-  const [deck] = await maskNonServiceBackgrounds(db, [row.deck]);
+  const [deck] = await nullifyUnknownBackgrounds(db, [row.deck]);
   return toPublicDeckDetail(deck, row.authorName);
 }
 
@@ -164,7 +164,7 @@ export async function forkPublicDeck(
     return { status: "ok", deck: toSharedDeck(existing), alreadyOwned: true };
   }
 
-  const [publicSource] = await maskNonServiceBackgrounds(db, [source.deck]);
+  const [publicSource] = await nullifyUnknownBackgrounds(db, [source.deck]);
   const original = toSharedDeck(publicSource);
   const now = new Date().toISOString();
   const forkRow: NewDeck = toDeckRow({

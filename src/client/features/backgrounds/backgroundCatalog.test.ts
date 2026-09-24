@@ -1,12 +1,13 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { renderHook, act } from "@testing-library/react";
-import { signInAsTestUser, signOutForTests } from "../../test/sessionFixture";
+import { signInAsTestUser } from "../../test/sessionFixture";
 import { makeBackground } from "../../test/backgroundFixture";
 import { getOfflineDB } from "../../lib/storage";
 import {
   addUploadedBackground,
   applyServerBackgroundCatalog,
   getBackgroundById,
+  getBackgroundCatalog,
   getServiceBackgrounds,
   hydrateBackgroundCatalog,
   removeUploadedBackground,
@@ -16,10 +17,8 @@ import {
 } from "./backgroundCatalog";
 
 const USER_A = "userA0000000000000001";
-const USER_B = "userB0000000000000002";
-const SERVICE = makeBackground(1);
-const MINE = makeBackground(2, { source: "user" });
-const USAGE = { usedBytes: MINE.sizeBytes, limitBytes: 300 * 1024 * 1024 };
+const SERVICE = makeBackground(1, { title: "나 배경" });
+const UPLOADED = makeBackground(2, { title: "가 배경" });
 
 async function clearStoredBackgrounds(): Promise<void> {
   const db = await getOfflineDB();
@@ -34,52 +33,47 @@ describe("배경 카탈로그", () => {
   });
 
   it("서버 목록을 IndexedDB에 남겨 두고 다음 부팅(송출 화면)에서 서버 없이 되살린다", async () => {
-    await applyServerBackgroundCatalog([SERVICE, MINE], USAGE);
+    await applyServerBackgroundCatalog([UPLOADED, SERVICE], true);
     resetBackgroundCatalogForTests();
     expect(getBackgroundById(SERVICE.id)).toBeUndefined();
 
     await hydrateBackgroundCatalog();
 
     expect(getBackgroundById(SERVICE.id)).toEqual(SERVICE);
-    expect(getBackgroundById(MINE.id)).toEqual(MINE);
-    expect(getServiceBackgrounds()).toEqual([SERVICE]);
+    expect(getServiceBackgrounds()).toEqual([UPLOADED, SERVICE]);
   });
 
-  it("같은 컴퓨터를 쓰는 다른 봉사자에게는 내가 올린 배경을 되살리지 않는다", async () => {
-    await applyServerBackgroundCatalog([SERVICE, MINE], USAGE);
+  it("관리 권한은 서버 응답에서만 오고 로컬 사본으로는 켜지지 않는다", async () => {
+    await applyServerBackgroundCatalog([SERVICE], true);
+    expect(getBackgroundCatalog().canManage).toBe(true);
 
-    signInAsTestUser(USER_B);
     await hydrateBackgroundCatalog();
-    expect(getBackgroundById(SERVICE.id)).toEqual(SERVICE);
-    expect(getBackgroundById(MINE.id)).toBeUndefined();
-
-    signOutForTests();
-    await hydrateBackgroundCatalog();
-    expect(getBackgroundById(MINE.id)).toBeUndefined();
+    expect(getBackgroundCatalog().canManage).toBe(false);
   });
 
   it("서버 목록으로 바꾸면 지워진 배경이 로컬에 남지 않는다", async () => {
-    await applyServerBackgroundCatalog([SERVICE, MINE], USAGE);
-    await applyServerBackgroundCatalog([SERVICE], null);
+    await applyServerBackgroundCatalog([UPLOADED, SERVICE], false);
+    await applyServerBackgroundCatalog([SERVICE], false);
     resetBackgroundCatalogForTests();
 
     await hydrateBackgroundCatalog();
 
-    expect(getBackgroundById(MINE.id)).toBeUndefined();
+    expect(getBackgroundById(UPLOADED.id)).toBeUndefined();
   });
 
-  it("올리고 지운 배경을 구독자에게 곧바로 알린다", async () => {
-    await applyServerBackgroundCatalog([SERVICE], null);
-    const { result } = renderHook(() => useBackground(MINE.id));
+  it("올린 배경을 제목순으로 끼워 넣고, 올리고 지운 배경을 구독자에게 곧바로 알린다", async () => {
+    await applyServerBackgroundCatalog([SERVICE], true);
+    const { result } = renderHook(() => useBackground(UPLOADED.id));
     expect(result.current).toBeUndefined();
 
     await act(async () => {
-      await addUploadedBackground(MINE, USAGE);
+      await addUploadedBackground(UPLOADED);
     });
-    expect(result.current).toEqual(MINE);
+    expect(result.current).toEqual(UPLOADED);
+    expect(getBackgroundCatalog().backgrounds).toEqual([UPLOADED, SERVICE]);
 
     await act(async () => {
-      await removeUploadedBackground(MINE.id, { ...USAGE, usedBytes: 0 });
+      await removeUploadedBackground(UPLOADED.id);
     });
     expect(result.current).toBeUndefined();
   });
@@ -91,8 +85,8 @@ describe("배경 카탈로그", () => {
     });
     const image = makeBackground(3, {
       kind: "image",
-      mediaUrl: "/api/media/uploads/u/3.png",
-      posterUrl: "/api/media/uploads/u/3.png",
+      mediaUrl: "/api/media/stills/3.png",
+      posterUrl: "/api/media/stills/3.png",
     });
     expect(resolveBackgroundLayers(image)).toEqual({
       imageUrl: image.mediaUrl,

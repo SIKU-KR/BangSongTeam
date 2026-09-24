@@ -39,7 +39,7 @@ const TRASH_ITEM: NavItem = {
 const BACKGROUNDS_ITEM: NavItem = {
   testId: "sidebar-nav-backgrounds",
   path: "/backgrounds",
-  label: "배경 라이브러리",
+  label: "배경 갤러리",
   accent: "text-sky-500 dark:text-sky-400",
   iconPath:
     "M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z",

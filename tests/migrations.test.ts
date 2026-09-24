@@ -32,15 +32,40 @@ describe("0001_initial 마이그레이션", () => {
     expect(initialSql).toContain("CREATE INDEX `idx_backgrounds_owner`");
   });
 
-  it("저널은 0001_initial 한 건이다 (다음 생성은 0002부터)", () => {
+  it("저널은 0001_initial, 0002_drop_user_backgrounds 순서다 (다음 생성은 0003부터)", () => {
     const journal = JSON.parse(
       fs.readFileSync(path.join(migrationsDir, "meta/_journal.json"), "utf-8"),
     ) as { entries: { idx: number; tag: string }[] };
     expect(journal.entries).toEqual([
       expect.objectContaining({ idx: 1, tag: "0001_initial" }),
+      expect.objectContaining({ idx: 2, tag: "0002_drop_user_backgrounds" }),
     ]);
     expect(
       fs.readdirSync(migrationsDir).filter((name) => name.endsWith(".sql")),
-    ).toEqual(["0001_initial.sql"]);
+    ).toEqual(["0001_initial.sql", "0002_drop_user_backgrounds.sql"]);
+  });
+});
+
+describe("0002_drop_user_backgrounds 마이그레이션", () => {
+  const sql = fs.readFileSync(
+    path.join(migrationsDir, "0002_drop_user_backgrounds.sql"),
+    "utf-8",
+  );
+  const statements = sql
+    .split("\n")
+    .filter((line) => !line.startsWith("--"))
+    .join("\n");
+
+  it("사용자 업로드 행만 지운다", () => {
+    expect(statements.trim()).toBe(
+      "DELETE FROM `backgrounds` WHERE `source` = 'user';",
+    );
+  });
+
+  it("부모 테이블을 내리거나 다시 만들지 않는다 (자식 행 연쇄 삭제 방지)", () => {
+    expect(statements).not.toMatch(/DROP\s+TABLE|CREATE\s+TABLE|RENAME/i);
+    expect(statements).not.toMatch(
+      /INSERT\s+(OR\s+\w+\s+)?INTO\s+`?backgrounds`?/i,
+    );
   });
 });
