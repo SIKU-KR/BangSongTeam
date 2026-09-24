@@ -33,7 +33,7 @@ export default tseslint.config(
       "**/dist/**",
       "**/.wrangler/**",
       "**/coverage/**",
-      "worker-configuration.d.ts",
+      "**/worker-configuration.d.ts",
     ],
   },
   js.configs.recommended,
