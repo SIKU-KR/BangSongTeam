@@ -17,8 +17,8 @@ import type { SessionReader } from "../middleware/auth";
  * D1(workerd)에서 폴더 트리 저장·보정·영구 삭제와 `folder_id` 외래키를 확인한다.
  */
 
-const USER_A = "aaaaaaaa-0000-4000-8000-0000000000f1";
-const USER_B = "bbbbbbbb-0000-4000-8000-0000000000f2";
+const USER_A = "aaaaaaaa00000000000f1";
+const USER_B = "bbbbbbbb00000000000f2";
 
 let currentUser: string | null = USER_A;
 const fakeSession: SessionReader = async () =>
@@ -27,14 +27,14 @@ const fakeSession: SessionReader = async () =>
 const app = createApp({ readSession: fakeSession });
 
 let seq = 0;
-function uuid(): string {
+function nextId(): string {
   seq += 1;
-  return `f1000000-0000-4000-8000-${String(seq).padStart(12, "0")}`;
+  return `f10000000${String(seq).padStart(12, "0")}`;
 }
 
 function makeFolder(overrides: Partial<Folder> = {}): Folder {
   return {
-    id: uuid(),
+    id: nextId(),
     userId: USER_A,
     parentId: null,
     name: "2026 주일",
@@ -46,8 +46,8 @@ function makeFolder(overrides: Partial<Folder> = {}): Folder {
 }
 
 function makeDoc(folderId: string | null): PresentationDocument {
-  const id = uuid();
-  const deckId = uuid();
+  const id = nextId();
+  const deckId = nextId();
   return PresentationDocumentSchema.parse({
     id,
     userId: USER_A,
@@ -56,7 +56,7 @@ function makeDoc(folderId: string | null): PresentationDocument {
     folderId,
     items: [
       {
-        id: uuid(),
+        id: nextId(),
         presentationId: id,
         deckId,
         order: 0,
@@ -155,7 +155,7 @@ describe("드라이브 폴더 API", () => {
   it("경로와 본문 id가 다르면 400, 스키마 위반이면 400", async () => {
     const folder = makeFolder();
     const mismatch = await app.request(
-      `/api/folders/${uuid()}`,
+      `/api/folders/${nextId()}`,
       put(folder),
       env,
     );

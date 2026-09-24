@@ -6,6 +6,8 @@
 --    지운다 (0005에서 겪은 일).
 -- 2. drizzle-kit이 ADD COLUMN의 `ON DELETE SET NULL`을 빠뜨린다. 폴더가 어떤
 --    경로로 사라지든 파일은 루트로 떨어져야 하므로 직접 적는다.
+--
+-- 배포 순서: 0006·0007(NanoID 초기화) 다음에 적용한다.
 CREATE TABLE `drive_tombstones` (
 	`item_id` text PRIMARY KEY NOT NULL,
 	`user_id` text NOT NULL,

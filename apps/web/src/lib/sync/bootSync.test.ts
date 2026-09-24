@@ -57,7 +57,7 @@ vi.mock("./presentationSync", async (importOriginal) => {
 
 function serverDeck(overrides: Partial<Deck> = {}): Deck {
   return DeckSchema.parse({
-    id: "c0000000-0000-4000-8000-0000000000ff",
+    id: "c000000000000000000ff",
     userId: TEST_USER_ID,
     scope: "library",
     title: "다른 PC에서 만든 곡",
@@ -79,10 +79,9 @@ describe("shouldRunBootSync", () => {
     expect(shouldRunBootSync("/present/abc/fullscreen/")).toBe(false);
   });
 
-  it("runs on editing screens and the worship prep screen", () => {
+  it("runs on editing screens", () => {
     expect(shouldRunBootSync("/presentations")).toBe(true);
     expect(shouldRunBootSync("/editor/abc")).toBe(true);
-    expect(shouldRunBootSync("/present/abc/ready")).toBe(true);
   });
 });
 
@@ -153,9 +152,9 @@ function presentation(id: string): Presentation {
   };
 }
 
-const PARENT = "a0000000-0000-4000-8000-000000000001";
-const CHILD = "b0000000-0000-4000-8000-000000000002";
-const DOC = "d0000000-0000-4000-8000-000000000003";
+const PARENT = "a00000000000000000001";
+const CHILD = "b00000000000000000002";
+const DOC = "d00000000000000000003";
 
 describe("runBootSync — drive folders", () => {
   let pushFolder: ReturnType<typeof vi.fn<(f: Folder) => Promise<Folder>>>;

@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect } from "react";
 import {
+  createId,
   Deck,
   DeckSchema,
   DEFAULT_DECK_STYLE,
@@ -52,8 +53,8 @@ export function QuickLyricPasteModal({
   const handleAdd = (): void => {
     if (!isValid) return;
 
-    // 로그인이 편집의 전제 조건이 된 뒤(2026-09-22)에도 게스트 uuid가 하드코딩으로
-    // 남아 있었다. 곡의 주인은 항상 세션 사용자다. 세션이 없으면 임의의 uuid를
+    // 로그인이 편집의 전제 조건이 된 뒤(2026-09-22)에도 게스트 id가 하드코딩으로
+    // 남아 있었다. 곡의 주인은 항상 세션 사용자다. 세션이 없으면 임의의 id를
     // 만들어 넣지 않는다 — 사용자 데이터에 존재하지 않는 소유자가 박힌다.
     // 로그인 게이트 때문에 실제로는 닿지 않는 경로다.
     const userId = getCurrentUserId();
@@ -61,7 +62,7 @@ export function QuickLyricPasteModal({
 
     const now = new Date().toISOString();
     const newDeck = DeckSchema.parse({
-      id: crypto.randomUUID(),
+      id: createId(),
       userId,
       scope: "presentation",
       presentationId: null,

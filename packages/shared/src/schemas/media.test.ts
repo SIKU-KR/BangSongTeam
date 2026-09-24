@@ -4,7 +4,7 @@ import { BackgroundMediaSchema, BackgroundsQuerySchema } from "./media";
 describe("Media Schemas", () => {
   it("parses BackgroundMediaSchema correctly", () => {
     const valid = {
-      id: "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11",
+      id: "a0eebc9996bb9bd380a11",
       title: "Warm Loop 01",
       r2Key: "videos/warm_01.mp4",
       posterKey: "posters/warm_01.webp",

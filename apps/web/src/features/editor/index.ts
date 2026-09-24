@@ -21,14 +21,15 @@ export {
 
 export { EditorHeader, type EditorHeaderProps } from "./EditorHeader";
 
-export { EditorSidebar, type EditorSidebarProps } from "./EditorSidebar";
+export {
+  SlideThumbnailPane,
+  type SlideThumbnailPaneProps,
+} from "./SlideThumbnailPane";
 
 export {
   EditorStageCanvas,
   type EditorStageCanvasProps,
 } from "./EditorStageCanvas";
-
-export { SlideFilmstrip, type SlideFilmstripProps } from "./SlideFilmstrip";
 
 export {
   SongPropertyPanel,

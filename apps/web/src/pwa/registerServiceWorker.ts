@@ -94,7 +94,7 @@ export function registerServiceWorker(
     },
     onRegisterError: () => {
       // 등록 실패는 치명적이지 않다. 온라인이면 앱은 그대로 동작하고,
-      // 오프라인 보장만 없어진다. 준비 화면이 캐시 실패로 그 사실을 알린다.
+      // 캐시된 배경을 네트워크 없이 재생하는 경로만 없어진다.
       registered = false;
     },
   });

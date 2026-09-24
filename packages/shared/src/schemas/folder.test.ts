@@ -3,8 +3,8 @@ import { FolderSchema, FolderDeleteResponseSchema } from "./folder";
 import { PresentationSchema } from "./presentation";
 
 const FOLDER = {
-  id: "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11",
-  userId: "b0eebc99-9c0b-4ef8-bb6d-6bb9bd380a22",
+  id: "a0eebc99d6bb9bd380a11",
+  userId: "b0eebc99d6bb9bd380a22",
   parentId: null,
   name: "2026 주일 대예배",
   trashedAt: null,
@@ -17,7 +17,7 @@ describe("FolderSchema", () => {
     expect(FolderSchema.parse(FOLDER)).toEqual(FOLDER);
     const child = {
       ...FOLDER,
-      id: "c0eebc99-9c0b-4ef8-bb6d-6bb9bd380a33",
+      id: "c0eebc99d6bb9bd380a33",
       parentId: FOLDER.id,
     };
     expect(FolderSchema.parse(child).parentId).toBe(FOLDER.id);
@@ -53,7 +53,7 @@ describe("FolderSchema", () => {
 
 describe("PresentationSchema 드라이브 필드", () => {
   const base = {
-    id: "e0eebc99-9c0b-4ef8-bb6d-6bb9bd380a55",
+    id: "e0eebc99d6bb9bd380a55",
     userId: FOLDER.userId,
     title: "주일 예배",
     serviceDate: "2026-09-27",

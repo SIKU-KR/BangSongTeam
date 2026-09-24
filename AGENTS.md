@@ -10,7 +10,7 @@ A lightweight, web-first slide presentation and production tool designed specifi
 - **Motion Background Loops**: Continuous, uninterrupted H.264 video loops streamed from Cloudflare R2 (zero egress fees) that seamlessly loop across slide transitions.
 - **Readability Controls**: Black opacity overlay (0–100%), pre-bundled Korean webfonts, typography controls, and 3×3 grid + draggable percentage-based text box positioning.
 - **Fullscreen Projection**: A single fullscreen audience view operated from the same window (keyboard, clicker, numeric jump, blackout, hide lyrics).
-- **Offline-First Projection**: PWA with Service Worker (Workbox RangeRequestsPlugin) + Cache Storage/IndexedDB to guarantee zero network dependency and zero black-screen risk during Sunday worship.
+- **Resilient Projection**: PWA with Service Worker (Workbox RangeRequestsPlugin) + Cache Storage/IndexedDB. While a presentation is open in the editor or on screen, its backgrounds are silently cached in the background so projection keeps playing if the network drops.
 - **Shared Library**: Users publish decks to a board-style public library and fork others' decks. The same song can be published by many users; the list is ordered by use count (forks).
 
 ### 1.2 Target Platform & Browser Support
@@ -193,6 +193,7 @@ When modifying core logic, agents must write or update tests for:
 
 - **Zod First**: All domain models, API request payloads, and response contracts must be declared once in `packages/shared/src/schemas/`.
 - **Infer, Never Duplicate**: Types must be generated via `z.infer<typeof Schema>`. Do not declare separate manual TypeScript interfaces representing the same data.
+- **NanoID Entity IDs**: Every entity id (user, session, deck, presentation, item, report, background, folder) is a 21-char NanoID created with `createId()` and validated with `IdSchema` (both from `@repo/shared`). UUIDs were dropped on 2026-09-24 with no backward compatibility (`0006_nanoid_reset` wiped D1 user data; IndexedDB v3 clears local stores). Never use `crypto.randomUUID()` (ESLint enforces). Slide ids stay short local ids from `createSlideId()`.
 - **End-to-End Type Safety**: The web frontend communicates with the Hono API using `hono/client` (`hc<AppType>`). Never construct loose `fetch('/api/...')` calls with unverified types.
 - **JSON Column Validation**: In D1, columns like `decks.slides` and `decks.style` are stored as SQLite `TEXT` (JSON). Always validate them with their respective Zod schemas (`SlideSchema.array()`, `DeckStyleSchema`) upon parsing.
 
@@ -222,14 +223,15 @@ Slides are rendered as DOM elements on a fixed **16:9 stage** scaled via CSS `tr
 - Projection is **fullscreen only** (`/present/:presentationId/fullscreen`): the operator drives it from the same window with the keyboard or a clicker.
 - **No Presenter View**: The split controller/audience window mode (`/present/:id/control`, `?audience=1`, `BroadcastChannel` sync, `BroadcastMessageSchema`, Window Management API placement, elapsed timer) was removed on 2026-09-24. Do not reintroduce it without a product decision.
 
-### 6.5 Offline-First Worship Projection Guarantee
+### 6.5 Resilient Worship Projection (Silent Background Cache)
 
-Sunday worship services cannot tolerate network failures:
+Sunday worship services cannot tolerate network failures, but caching must never get in the operator's way:
 
-- **PWA Service Worker**: Configured via `vite-plugin-pwa` with `RangeRequestsPlugin` so that MP4 videos streamed from Cache Storage support partial HTTP range playback.
-- **Pre-worship Cache**: Before presenting, the user accesses the "Worship Preparation" (예배 준비) screen, which downloads all presentation background MP4s and slides into Cache Storage / IndexedDB.
-- **Storage Persistence**: Call `navigator.storage.persist()` during preparation to prevent Chrome from evicting cached assets.
-- **Zero Live Requests**: During active projection mode, the app must execute zero fetch requests over the external network.
+- **PWA Service Worker**: Configured via `vite-plugin-pwa` with `RangeRequestsPlugin` so that MP4 videos streamed from Cache Storage support partial HTTP range playback. The media route caches only full `200` responses (the Cache API cannot store `206`).
+- **Silent Background Cache**: Whenever a presentation is open in the editor (`/editor/:id`) or on screen (`/present/:id/fullscreen`) and the browser is online, `useBackgroundAutoCache` (`apps/web/src/features/offline/`) queues the set's background MP4s and posters into `worship-videos-cache` (one at a time, 3s after the set opens or a background changes, skipping what is already cached) and warms the lyric fonts. There is no progress UI, badge or warning; failures are retried on the next opportunity (`online` event, next open). Presentation documents are already in IndexedDB.
+- **No Worship Preparation Screen**: The pre-projection download screen (`/present/:id/ready`, `useWorshipPrep`, the "오프라인 송출 가능" badge, cache status in `sync_meta`) was removed on 2026-09-24. Present buttons go straight to fullscreen. Do not reintroduce a download gate without a product decision.
+- **Storage Persistence**: `navigator.storage.persist()` is requested silently once when background caching first starts; a denial is not surfaced.
+- **Zero Data Requests**: During projection the app makes zero API/data requests (no TanStack Query, no `lib/api`; enforced by ESLint and `zeroFetch.test.tsx`). The only network activity allowed is `<video>` playback and background caching of same-origin media under `/api/media/`.
 
 ### 6.6 Shared Library (Board Model)
 
@@ -272,7 +274,7 @@ Refer to `prd.md` Section 8 for complete criteria. When implementing features, a
 - **M2 (Editor)**: Presentation editor, song background/overlay/font/position controls, Melon/Bugs search links.
   - Terminology: the `Setlist` domain type was renamed to `Presentation` in M2 (`Setlist`→`Presentation`, `setlistId`→`presentationId`, D1 tables `setlists`/`setlist_items`→`presentations`/`presentation_items`, deck scope value `'setlist'`→`'presentation'`). Older task notes under `docs/tasks/` were updated in place.
 - **M3 (Accounts & Storage)**: Kakao/Naver login (Better Auth), deck/presentation persistence, lyric versioning.
-- **M4 (Offline & Worship Prep)**: PWA video cache, worship prep screen, persistent storage. Presenter view shipped in M4 but was removed from the product (2026-09-24).
+- **M4 (Offline & Worship Prep)**: PWA video cache, persistent storage. Presenter view and the worship prep screen shipped in M4 but were removed from the product (2026-09-24); backgrounds are now cached silently while editing or presenting.
 - **M5 (Sharing)**: Public deck publish/fork, FTS5 search over public decks (board model, sorted by fork count). LLM normalization and the lyrics catalog were dropped from the MVP (2026-09-23).
 - **M6 (Seed Content)**: Top 100 CCM seed decks, 20 motion backgrounds.
 - **M7 (Public Beta)**: Error logging, terms of service, production deployment.

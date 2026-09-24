@@ -135,4 +135,31 @@ describe("SlideStage Integration Component", () => {
       screen.queryByText("꽃들도 구름도 바람도 넓은 바다도"),
     ).not.toBeInTheDocument();
   });
+
+  it("staticBackground이면 영상 없이 포스터 이미지로 Layer 1을 그린다 (썸네일)", () => {
+    const { container } = render(
+      <SlideStage
+        slide={mockSlide}
+        style={mockStyle}
+        posterUrl="/api/media/poster1.jpg"
+        staticBackground
+        containerDimensions={{ width: 176, height: 99 }}
+      />,
+    );
+
+    expect(container.querySelector("video")).toBeNull();
+    expect(
+      screen.queryByTestId("video-layer-container"),
+    ).not.toBeInTheDocument();
+    const layer = screen.getByTestId("static-background-layer");
+    expect(layer.querySelector("img")).toHaveAttribute(
+      "src",
+      "/api/media/poster1.jpg",
+    );
+    // Layer 2·3은 그대로
+    expect(screen.getByTestId("overlay-layer")).toBeInTheDocument();
+    expect(
+      screen.getByText("꽃들도 구름도 바람도 넓은 바다도"),
+    ).toBeInTheDocument();
+  });
 });

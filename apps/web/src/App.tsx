@@ -27,7 +27,6 @@ import {
   BackgroundsRoute,
   EditorRoute,
   FullscreenPresentRoute,
-  WorshipReadyRoute,
 } from "./routes";
 
 /**
@@ -125,7 +124,6 @@ function useHydration(): boolean {
  * - `/lyrics`                        : 레거시 경로 → `/presentations` 리다이렉트
  * - `/backgrounds`                   : 배경 라이브러리 (AppShell)
  * - `/editor/:presentationId`        : 프레젠테이션 단위 편집기
- * - `/present/:presentationId/ready`      : 예배 준비 (오프라인 캐시)
  * - `/present/:presentationId/fullscreen` : 청중용 전체화면 송출
  */
 export function App(): React.JSX.Element {
@@ -176,10 +174,6 @@ export function App(): React.JSX.Element {
             </Route>
 
             <Route path="/editor/:presentationId" element={<EditorRoute />} />
-            <Route
-              path="/present/:presentationId/ready"
-              element={<WorshipReadyRoute />}
-            />
             <Route
               path="/present/:presentationId/fullscreen"
               element={<FullscreenPresentRoute />}

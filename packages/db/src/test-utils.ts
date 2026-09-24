@@ -15,7 +15,10 @@ export interface TestDbResult {
 }
 
 /** 테스트가 배경을 직접 넣으므로 시드 마이그레이션은 건너뛴다 */
-const SKIPPED_MIGRATIONS = new Set(["0002_seed_backgrounds.sql"]);
+const SKIPPED_MIGRATIONS = new Set([
+  "0002_seed_backgrounds.sql",
+  "0007_seed_backgrounds_nanoid.sql",
+]);
 
 /**
  * 모든 마이그레이션(FTS5 가상 테이블·트리거 포함)을 적용한 인메모리 SQLite를 만든다.

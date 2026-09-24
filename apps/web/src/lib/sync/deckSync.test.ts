@@ -13,8 +13,8 @@ import {
 import { OfflineError } from "./presentationSync";
 import { getSyncStatus, __resetSyncStatusForTests } from "./syncStatus";
 
-const USER = "00000000-0000-4000-8000-000000000001";
-const A = "c0000000-0000-4000-8000-00000000000a";
+const USER = "00000000x000000000001";
+const A = "c0000000000000000000a";
 
 function deck(title = "은혜로다"): Deck {
   return DeckSchema.parse({

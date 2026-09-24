@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from "react";
 import {
   buildFolderIndex,
+  createId,
   folderNameKey,
   isFolderTrashed,
   resolveUniqueName,
@@ -120,7 +121,7 @@ export function createFolder(
   const parent = resolveTargetParent(parentId);
   const timestamp = now();
   const folder: Folder = {
-    id: crypto.randomUUID(),
+    id: createId(),
     userId: getCurrentUserId() ?? "",
     parentId: parent,
     name: resolveUniqueName(

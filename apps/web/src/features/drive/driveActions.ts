@@ -12,7 +12,7 @@ import {
   restorePresentation,
   duplicatePresentation,
   removePresentationsLocally,
-  launchPreparation,
+  launchPresentation,
 } from "../presentation";
 import { isGoogleChromeBrowser } from "../../components/common/ChromeAlertBanner";
 import {
@@ -56,8 +56,11 @@ export function openItem(ref: DriveItemRef, navigate: Navigate): void {
 }
 
 /**
- * 예배 준비 화면으로 보낸다. Chrome이 아니면 먼저 묻는다 (송출은 Chrome 권장).
- * @returns 실제로 이동했는지
+ * 곧바로 전체화면 송출로 들어간다. Chrome이 아니면 먼저 묻는다 (송출은 Chrome 권장).
+ *
+ * 클릭 핸들러 안에서 동기로 불러야 Chrome이 전체화면을 허용한다 — 이 함수와
+ * 호출 경로 사이에 await를 끼우지 않는다.
+ * @returns 실제로 송출을 시작했는지
  */
 export function startPresentation(id: string, navigate: Navigate): boolean {
   if (!isGoogleChromeBrowser()) {
@@ -66,7 +69,7 @@ export function startPresentation(id: string, navigate: Navigate): boolean {
     );
     if (!proceed) return false;
   }
-  launchPreparation(navigate, id);
+  launchPresentation(navigate, id);
   return true;
 }
 

@@ -4,6 +4,8 @@ export type {
   DeckStyle,
 } from "../schemas/style";
 
+export type { Id } from "../schemas/id";
+
 export type { Slide } from "../schemas/slide";
 
 export type { DeckVisibility, DeckScope, Deck } from "../schemas/deck";

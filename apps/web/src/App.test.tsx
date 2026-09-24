@@ -96,7 +96,7 @@ describe("App Route Integration", () => {
   });
 
   it("should redirect an unknown presentationId to /presentations", async () => {
-    renderAt("/editor/99999999-9999-4999-8999-999999999999");
+    renderAt("/editor/999999999999999999999");
 
     expect(screen.queryByTestId("editor-route")).not.toBeInTheDocument();
     expect(
@@ -148,7 +148,7 @@ describe("App Route Integration", () => {
   it("다른 계정으로 로그인하면 남의 세트가 보이지 않는다", async () => {
     // 한 브라우저를 여러 사람이 쓸 수 있다. 로컬 저장본은 남겨 두되
     // 세션 사용자의 문서만 싣는다.
-    signInAsTestUser("99999999-9999-4999-8999-999999999999");
+    signInAsTestUser("999999999999999999999");
 
     renderAt("/presentations");
 

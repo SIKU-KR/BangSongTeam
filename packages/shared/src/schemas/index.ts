@@ -1,3 +1,4 @@
+export * from "./id";
 export * from "./style";
 export * from "./slide";
 export * from "./deck";

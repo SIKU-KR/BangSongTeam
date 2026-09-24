@@ -2,10 +2,10 @@ import { describe, it, expect } from "vitest";
 import type { Folder } from "@repo/shared";
 import { mergeFolders } from "./mergeFolders";
 
-const USER = "00000000-0000-4000-8000-000000000001";
-const A = "a0000000-0000-4000-8000-000000000001";
-const B = "b0000000-0000-4000-8000-000000000002";
-const C = "c0000000-0000-4000-8000-000000000003";
+const USER = "000000000000000000001";
+const A = "a00000000000000000001";
+const B = "b00000000000000000002";
+const C = "c00000000000000000003";
 
 function folder(id: string, overrides: Partial<Folder> = {}): Folder {
   return {

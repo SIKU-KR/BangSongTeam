@@ -81,7 +81,11 @@ const TOAST_DURATION_MS = 6000;
  * DragOverlay는 기본적으로 끌기 시작한 카드의 왼쪽 위에 놓인다. 카드는 크고 칩은
  * 작아서, 사이드바 트리처럼 멀리 끌면 칩이 포인터와 떨어져 화면 밖으로 나간다.
  */
-const followCursor: Modifier = ({ activatorEvent, activeNodeRect, transform }) => {
+const followCursor: Modifier = ({
+  activatorEvent,
+  activeNodeRect,
+  transform,
+}) => {
   const origin = activatorEvent ? getEventCoordinates(activatorEvent) : null;
   if (!origin || !activeNodeRect) return transform;
   return {

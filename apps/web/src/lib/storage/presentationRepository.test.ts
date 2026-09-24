@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import type { Presentation } from "@repo/shared";
+import { createId, type Presentation } from "@repo/shared";
 import {
   getOfflineDB,
   closeOfflineDB,
@@ -16,8 +16,8 @@ import {
 function makePresentation(overrides: Partial<Presentation> = {}): Presentation {
   const now = new Date().toISOString();
   return {
-    id: crypto.randomUUID(),
-    userId: "00000000-0000-4000-8000-000000000001",
+    id: createId(),
+    userId: "00000000x000000000001",
     title: "테스트 프레젠테이션",
     serviceDate: "2026-09-27",
     items: [],

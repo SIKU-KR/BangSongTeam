@@ -16,7 +16,7 @@ import {
   __setFolderPusherForTests,
 } from "./folderSync";
 
-const USER = "00000000-0000-4000-8000-000000000001";
+const USER = "00000000x000000000001";
 
 function doc(id: string, title = "세트"): Presentation {
   return {
@@ -134,7 +134,7 @@ describe("서버 push 스케줄러", () => {
     setFolderSyncEnabled(true);
 
     scheduleFolderPush({
-      id: "f0000000-0000-4000-8000-000000000001",
+      id: "f00000000000000000001",
       userId: USER,
       parentId: null,
       name: "새 폴더",
@@ -144,14 +144,11 @@ describe("서버 push 스케줄러", () => {
     });
     scheduleDocumentPush({
       ...doc("a"),
-      folderId: "f0000000-0000-4000-8000-000000000001",
+      folderId: "f00000000000000000001",
     });
     await flushPendingSync();
 
-    expect(order).toEqual([
-      "folder:f0000000-0000-4000-8000-000000000001",
-      "doc:a",
-    ]);
+    expect(order).toEqual(["folder:f00000000000000000001", "doc:a"]);
     __resetFolderSyncForTests();
   });
 });

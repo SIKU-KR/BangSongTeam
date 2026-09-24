@@ -11,8 +11,10 @@ export interface EditorStageCanvasProps {
   backgroundUrl?: string;
   posterUrl?: string;
   songTitle?: string;
-  slideIndex: number;
-  totalSlides: number;
+  /** 세트 전체에서 1부터 이어지는 슬라이드 번호 (곡이 바뀌어도 이어진다) */
+  slideNumber: number;
+  /** 세트 전체 슬라이드 수 */
+  totalSlideCount: number;
   onPrevSlide: () => void;
   onNextSlide: () => void;
   onPresent: () => void;
@@ -30,7 +32,7 @@ export interface EditorStageCanvasProps {
  * - 16:9 비율 유지 프레젠테이션 스테이지 (Drop shadow & Framed & Zoom Scale)
  * - 슬라이드 없음 / 빈 세트 예외 상태(Empty State) 완벽 방어
  * - 리허설 모드 (암전 테스트, 가사 숨김 테스트)
- * - 슬라이드 넘김(이전/다음) 인터랙티브 버튼
+ * - 슬라이드 넘김(이전/다음) 인터랙티브 버튼 (곡 경계를 넘어 세트 처음/끝까지)
  * - 캔버스 줌 레벨 조절 (- / + / 100% 맞춤)
  */
 export function EditorStageCanvas({
@@ -39,8 +41,8 @@ export function EditorStageCanvas({
   backgroundUrl,
   posterUrl,
   songTitle = "곡 제목",
-  slideIndex,
-  totalSlides,
+  slideNumber,
+  totalSlideCount,
   onPrevSlide,
   onNextSlide,
   onPresent,
@@ -73,7 +75,7 @@ export function EditorStageCanvas({
   const refreshKey = JSON.stringify([effectiveStyle, slide?.lines, zoomLevel]);
 
   // 빈 상태 (등록된 곡 또는 슬라이드가 없을 때)
-  if (!slide || totalSlides === 0) {
+  if (!slide || totalSlideCount === 0) {
     return (
       <div
         data-testid="editor-stage-canvas"
@@ -149,7 +151,7 @@ export function EditorStageCanvas({
             {songTitle}
           </span>
           <span className="px-2 py-0.5 rounded bg-zinc-200 dark:bg-zinc-800 text-[11px] font-mono text-zinc-700 dark:text-zinc-300">
-            {slideIndex + 1} / {totalSlides}
+            {slideNumber} / {totalSlideCount}
           </span>
         </div>
 
@@ -210,7 +212,7 @@ export function EditorStageCanvas({
           <button
             type="button"
             data-testid="canvas-prev-btn"
-            disabled={slideIndex <= 0}
+            disabled={slideNumber <= 1}
             onClick={onPrevSlide}
             className="absolute left-3 top-1/2 -translate-y-1/2 z-40 w-10 h-10 rounded-full bg-black/60 hover:bg-black/80 text-white flex items-center justify-center backdrop-blur-sm border border-white/10 opacity-0 group-hover:opacity-100 transition-opacity disabled:opacity-0 cursor-pointer shadow-lg"
             title="이전 슬라이드 (◀)"
@@ -233,7 +235,7 @@ export function EditorStageCanvas({
           <button
             type="button"
             data-testid="canvas-next-btn"
-            disabled={slideIndex >= totalSlides - 1}
+            disabled={slideNumber >= totalSlideCount}
             onClick={onNextSlide}
             className="absolute right-3 top-1/2 -translate-y-1/2 z-40 w-10 h-10 rounded-full bg-black/60 hover:bg-black/80 text-white flex items-center justify-center backdrop-blur-sm border border-white/10 opacity-0 group-hover:opacity-100 transition-opacity disabled:opacity-0 cursor-pointer shadow-lg"
             title="다음 슬라이드 (▶)"

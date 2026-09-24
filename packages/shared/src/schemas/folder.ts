@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { IdSchema } from "./id";
 
 /**
  * 드라이브 폴더 (홈 `/presentations`).
@@ -8,9 +9,9 @@ import { z } from "zod";
  * 자기 `trashedAt`과 상관없이 함께 가려진다 (조상 기준 판정, `folderTree.ts`).
  */
 export const FolderSchema = z.object({
-  id: z.string().uuid(),
-  userId: z.string().uuid(),
-  parentId: z.string().uuid().nullable(),
+  id: IdSchema,
+  userId: IdSchema,
+  parentId: IdSchema.nullable(),
   name: z.string().trim().min(1).max(100),
   trashedAt: z.string().datetime().nullable(),
   createdAt: z.string().datetime(),
@@ -25,8 +26,8 @@ export type Folder = z.infer<typeof FolderSchema>;
  * 올린다. 이 목록에 있는 id는 다른 기기에서 영구 삭제된 것이므로 로컬에서도 지운다.
  */
 export const DriveTombstonesSchema = z.object({
-  folderIds: z.array(z.string().uuid()),
-  presentationIds: z.array(z.string().uuid()),
+  folderIds: z.array(IdSchema),
+  presentationIds: z.array(IdSchema),
 });
 export type DriveTombstones = z.infer<typeof DriveTombstonesSchema>;
 
@@ -51,7 +52,7 @@ export type FolderUpsertResponse = z.infer<typeof FolderUpsertResponseSchema>;
 /** 폴더 영구 삭제 응답 — 함께 지워진 하위 폴더·프레젠테이션 id */
 export const FolderDeleteResponseSchema = z.object({
   ok: z.literal(true),
-  deletedFolderIds: z.array(z.string().uuid()),
-  deletedPresentationIds: z.array(z.string().uuid()),
+  deletedFolderIds: z.array(IdSchema),
+  deletedPresentationIds: z.array(IdSchema),
 });
 export type FolderDeleteResponse = z.infer<typeof FolderDeleteResponseSchema>;

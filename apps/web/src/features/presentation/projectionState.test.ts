@@ -7,6 +7,7 @@ import {
   getSlideAt,
   getTotalSlideCount,
   positionOfSlideNumber,
+  slideNumberOfPosition,
   INITIAL_POSITION,
 } from "./projectionState";
 
@@ -182,5 +183,49 @@ describe("세트 전체 슬라이드 번호 (PPT식)", () => {
         positionOfSlideNumber(n + 1, SONGS),
       );
     }
+  });
+
+  it("위치를 번호로 바꾼다 (positionOfSlideNumber의 역함수)", () => {
+    expect(slideNumberOfPosition({ songIndex: 0, slideIndex: 0 }, SONGS)).toBe(
+      1,
+    );
+    expect(slideNumberOfPosition({ songIndex: 0, slideIndex: 2 }, SONGS)).toBe(
+      3,
+    );
+    // 곡이 바뀌어도 1로 돌아가지 않는다
+    expect(slideNumberOfPosition({ songIndex: 1, slideIndex: 0 }, SONGS)).toBe(
+      4,
+    );
+    expect(slideNumberOfPosition({ songIndex: 2, slideIndex: 3 }, SONGS)).toBe(
+      9,
+    );
+
+    const total = getTotalSlideCount(SONGS);
+    for (let n = 1; n <= total; n++) {
+      expect(
+        slideNumberOfPosition(positionOfSlideNumber(n, SONGS)!, SONGS),
+      ).toBe(n);
+    }
+  });
+
+  it("범위 밖 위치는 clamp한 뒤 번호를 매긴다", () => {
+    expect(slideNumberOfPosition({ songIndex: 1, slideIndex: 99 }, SONGS)).toBe(
+      5,
+    );
+    expect(slideNumberOfPosition({ songIndex: 99, slideIndex: 0 }, SONGS)).toBe(
+      6,
+    );
+  });
+
+  it("0장인 곡은 번호를 차지하지 않고, 그 곡 위치 자체는 0이다", () => {
+    const withEmpty = makeSongs([2, 0, 3]);
+
+    expect(
+      slideNumberOfPosition({ songIndex: 2, slideIndex: 0 }, withEmpty),
+    ).toBe(3);
+    expect(
+      slideNumberOfPosition({ songIndex: 1, slideIndex: 0 }, withEmpty),
+    ).toBe(0);
+    expect(slideNumberOfPosition(INITIAL_POSITION, [])).toBe(0);
   });
 });

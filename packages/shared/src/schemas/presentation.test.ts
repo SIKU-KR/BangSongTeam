@@ -3,15 +3,15 @@ import { PresentationSchema, PresentationItemSchema } from "./presentation";
 
 describe("PresentationSchema", () => {
   const sampleItem = {
-    id: "d0eebc99-9c0b-4ef8-bb6d-6bb9bd380a44",
-    presentationId: "e0eebc99-9c0b-4ef8-bb6d-6bb9bd380a55",
-    deckId: "f0eebc99-9c0b-4ef8-bb6d-6bb9bd380a66",
+    id: "d0eebc9996bb9bd380a44",
+    presentationId: "e0eebc9996bb9bd380a55",
+    deckId: "f0eebc9996bb9bd380a66",
     order: 0,
   };
 
   const samplePresentation = {
-    id: "e0eebc99-9c0b-4ef8-bb6d-6bb9bd380a55",
-    userId: "b0eebc99-9c0b-4ef8-bb6d-6bb9bd380a22",
+    id: "e0eebc9996bb9bd380a55",
+    userId: "b0eebc9996bb9bd380a22",
     title: "2026-09-27 주일 3부 예배",
     serviceDate: "2026-09-27",
     items: [sampleItem],

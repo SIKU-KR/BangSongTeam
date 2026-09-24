@@ -13,7 +13,7 @@ import {
   withObjectParticle,
 } from "./driveModel";
 
-const USER = "00000000-0000-4000-8000-000000000001";
+const USER = "000000000000000000001";
 
 function folder(
   id: string,

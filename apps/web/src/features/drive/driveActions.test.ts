@@ -46,9 +46,9 @@ vi.mock("../../lib/sync", async (importOriginal) => {
 
 const { OfflineError } = await import("../../lib/sync/presentationSync");
 
-const ROOT = "a0000000-0000-4000-8000-000000000001";
-const CHILD = "b0000000-0000-4000-8000-000000000002";
-const OTHER = "c0000000-0000-4000-8000-000000000003";
+const ROOT = "a00000000000000000001";
+const CHILD = "b00000000000000000002";
+const OTHER = "c00000000000000000003";
 
 function folder(id: string, parentId: string | null = null): Folder {
   return {

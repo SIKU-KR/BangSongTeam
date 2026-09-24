@@ -8,6 +8,7 @@
 > **구현 현황 (2026-09-21 재검토)**
 >
 > - 3개 태스크 모두 구현 완료: `TextBoxMoveable.tsx`, `EditorStageCanvas.tsx`, `SlideFilmstrip.tsx`.
+> - **2026-09-24**: 하단 `SlideFilmstrip.tsx`는 삭제되었다. 슬라이드 탐색·추가·복제·삭제·정렬은 좌측 PPT식 `SlideThumbnailPane.tsx`가 맡고, 편집기의 슬라이드 번호는 세트 전체에서 1부터 이어진다(송출 번호와 동일).
 > - 드래그·리사이즈 계산은 `textBoxDrag.ts`로 분리되어 단위 테스트가 있다.
 
 ---

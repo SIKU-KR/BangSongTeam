@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { DEFAULT_DECK_STYLE, type Deck } from "@repo/shared";
+import { createId, DEFAULT_DECK_STYLE, type Deck } from "@repo/shared";
 import {
   getOfflineDB,
   closeOfflineDB,
@@ -19,8 +19,8 @@ import {
 function makeDeck(overrides: Partial<Deck> = {}): Deck {
   const now = new Date().toISOString();
   return {
-    id: crypto.randomUUID(),
-    userId: "00000000-0000-4000-8000-000000000001",
+    id: createId(),
+    userId: "00000000x000000000001",
     scope: "library",
     presentationId: null,
     title: "은혜",

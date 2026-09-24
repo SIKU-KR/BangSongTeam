@@ -282,7 +282,7 @@ describe("FullscreenPresentRoute", () => {
   });
 
   it("존재하지 않는 presentationId 는 /presentations 로 리다이렉트된다", () => {
-    renderPresent("/present/99999999-9999-4999-8999-999999999999/fullscreen");
+    renderPresent("/present/999999999999999999999/fullscreen");
 
     expect(screen.getByTestId("presentations-stub")).toBeInTheDocument();
     expect(

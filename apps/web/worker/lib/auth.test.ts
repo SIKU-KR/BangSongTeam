@@ -35,9 +35,9 @@ describe("worker auth 인스턴스", () => {
     expect(AUTH_BASE_PATH).toBe("/api/auth");
   });
 
-  it("사용자 id를 UUID로 만든다 (@repo/shared의 z.string().uuid() 통과)", () => {
+  it("사용자 id를 21자 NanoID로 만든다 (@repo/shared의 IdSchema 통과)", () => {
     // Better Auth 기본 id는 32자 nanoid다. 그대로 두면 DeckSchema.userId가
-    // 전부 실패하므로 UUID를 강제해야 한다.
+    // 전부 실패하므로 공용 createId()(21자)를 강제해야 한다.
     for (let i = 0; i < 20; i++) {
       expect(UserIdSchema.safeParse(generateUserId()).success).toBe(true);
     }

@@ -5,7 +5,7 @@ import {
   VisibilityUpdateRequestSchema,
 } from "./library";
 
-const ID = "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11";
+const ID = "a0eebc9996bb9bd380a11";
 
 describe("VisibilityUpdateRequestSchema", () => {
   it("requires the copyright notice consent to be literally true when publishing", () => {
@@ -50,7 +50,7 @@ describe("PublicDeckDetailSchema", () => {
       lyricsRaw: "첫 줄",
       slides: [{ order: 0, lines: ["첫 줄"] }],
       style: {},
-      userId: "00000000-0000-4000-8000-000000000001",
+      userId: "00000000x000000000001",
     });
     expect(parsed.slides).toHaveLength(1);
     expect(parsed.style.fontFamily).toBe("Pretendard");

@@ -47,8 +47,22 @@
     {
       "idx": 6,
       "version": "6",
-      "when": 1790231211453,
-      "tag": "0006_drive_folders",
+      "when": 1790231212556,
+      "tag": "0006_nanoid_reset",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1790231214101,
+      "tag": "0007_seed_backgrounds_nanoid",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1790233344548,
+      "tag": "0008_drive_folders",
       "breakpoints": true
     }
   ]

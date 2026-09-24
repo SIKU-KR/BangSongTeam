@@ -44,8 +44,8 @@ function renderShell(initialPath = "/presentations") {
           <Route path="/backgrounds" element={<BackgroundsRoute />} />
         </Route>
         <Route
-          path="/present/:presentationId/ready"
-          element={<div data-testid="ready-stub" />}
+          path="/present/:presentationId/fullscreen"
+          element={<div data-testid="fullscreen-stub" />}
         />
         <Route
           path="/editor/:presentationId"
@@ -56,8 +56,8 @@ function renderShell(initialPath = "/presentations") {
   );
 }
 
-const WORSHIP = "a0000000-0000-4000-8000-000000000001";
-const YOUTH = "b0000000-0000-4000-8000-000000000002";
+const WORSHIP = "a00000000000000000001";
+const YOUTH = "b00000000000000000002";
 
 function folder(
   id: string,
@@ -119,12 +119,12 @@ describe("AppShellLayout (드라이브형 홈)", () => {
     expect(screen.getAllByText("5곡 세트").length).toBeGreaterThan(0);
   });
 
-  it("카드의 발표 버튼은 Chrome에서 예배 준비 화면으로 간다", () => {
+  it("카드의 발표 버튼은 Chrome에서 곧바로 전체화면 송출로 간다", () => {
     vi.spyOn(chromeChecker, "isGoogleChromeBrowser").mockReturnValue(true);
     renderShell();
 
     fireEvent.click(screen.getAllByTestId("card-present-btn")[0]);
-    expect(screen.getByTestId("ready-stub")).toBeInTheDocument();
+    expect(screen.getByTestId("fullscreen-stub")).toBeInTheDocument();
   });
 
   it("Chrome이 아니면 발표 전에 확인을 받는다", () => {
@@ -135,11 +135,11 @@ describe("AppShellLayout (드라이브형 홈)", () => {
     const startBtn = screen.getAllByTestId("card-present-btn")[0];
     fireEvent.click(startBtn);
     expect(confirmSpy).toHaveBeenCalledTimes(1);
-    expect(screen.queryByTestId("ready-stub")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("fullscreen-stub")).not.toBeInTheDocument();
 
     confirmSpy.mockReturnValue(true);
     fireEvent.click(startBtn);
-    expect(screen.getByTestId("ready-stub")).toBeInTheDocument();
+    expect(screen.getByTestId("fullscreen-stub")).toBeInTheDocument();
   });
 
   it("사이드바: 내 드라이브·휴지통·배경 라이브러리, aria-current", () => {
@@ -382,7 +382,7 @@ describe("AppShellLayout (드라이브형 홈)", () => {
   });
 
   it("없거나 휴지통에 있는 폴더 주소는 루트로 보낸다", () => {
-    renderShell("/presentations/folders/c0000000-0000-4000-8000-000000000009");
+    renderShell("/presentations/folders/c00000000000000000009");
     expect(screen.getByTestId(`crumb-root`)).toHaveAttribute(
       "aria-current",
       "page",

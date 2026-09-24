@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { signInAsTestUser } from "../../test/sessionFixture";
-import { DEFAULT_DECK_STYLE } from "@repo/shared";
+import { createId, DEFAULT_DECK_STYLE } from "@repo/shared";
 import {
   closeOfflineDB,
   OFFLINE_DB_NAME,
@@ -117,8 +117,8 @@ describe("songLibraryStore", () => {
   it("구 localStorage 보관함을 IndexedDB로 이관하고, 손상 항목이 있어도 나머지를 살린다", async () => {
     // 이전 구현이 남긴 형식. 3개 중 1개가 손상된 상태.
     const legacyDeck = (title: string) => ({
-      id: crypto.randomUUID(),
-      userId: "00000000-0000-4000-8000-000000000001",
+      id: createId(),
+      userId: "00000000x000000000001",
       scope: "library",
       presentationId: null,
       title,

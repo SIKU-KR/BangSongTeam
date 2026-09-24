@@ -189,7 +189,7 @@ describe("folderStore", () => {
       await hydrateFoldersFromStorage();
       expect(getFolders()).toEqual([mine]);
 
-      signInAsTestUser("99999999-9999-4999-8999-999999999999");
+      signInAsTestUser("999999999999999999999");
       await hydrateFoldersFromStorage();
       expect(getFolders()).toEqual([]);
     });
@@ -234,7 +234,7 @@ describe("folderStore", () => {
       await flushFolderWrites();
       const goneId = getFolders()[0].id;
 
-      const kept = "a0000000-0000-4000-8000-00000000000c";
+      const kept = "a0000000000000000000c";
       await applyServerFolders([folder(kept)], [goneId]);
       expect(getFolders().map((f) => f.id)).toEqual([kept]);
 

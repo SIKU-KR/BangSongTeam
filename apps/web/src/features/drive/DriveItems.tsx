@@ -129,7 +129,7 @@ export function PresentationThumbnail({
           slide={leadSlide}
           style={leadDeck?.style ?? DEFAULT_DECK_STYLE}
           posterUrl={getBackgroundPosterUrl(leadDeck?.backgroundId)}
-          posterOnly
+          staticBackground
         />
       </div>
 
@@ -251,7 +251,7 @@ export function FileCard({
               }}
               onDoubleClick={(event) => event.stopPropagation()}
               className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold shadow-md flex items-center gap-1.5 transition-transform hover:scale-105 active:scale-95 cursor-pointer"
-              title="예배 준비 후 송출"
+              title="전체화면 송출"
             >
               <Icon name="play" className="w-3.5 h-3.5" />
               <span>발표</span>

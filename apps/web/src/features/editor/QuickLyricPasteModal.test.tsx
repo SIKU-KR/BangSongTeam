@@ -123,7 +123,7 @@ describe("QuickLyricPasteModal (Task 3.2)", () => {
 
     // DeckSchema 정합성 검증
     expect(() => DeckSchema.parse(createdDeck)).not.toThrow();
-    // 하드코딩된 게스트 uuid가 아니라 세션 사용자가 주인이어야 한다.
+    // 하드코딩된 게스트 id가 아니라 세션 사용자가 주인이어야 한다.
     expect(createdDeck.userId).toBe(SEED_USER_ID);
     expect(createdDeck.title).toBe("은혜로다");
     expect(createdDeck.artist).toBe("손경민");

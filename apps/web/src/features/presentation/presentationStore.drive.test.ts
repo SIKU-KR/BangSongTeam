@@ -28,8 +28,8 @@ import {
   setSyncEnabled,
 } from "../../lib/sync/syncScheduler";
 
-const FOLDER = "f0000000-0000-4000-8000-000000000001";
-const OTHER = "f0000000-0000-4000-8000-000000000002";
+const FOLDER = "f00000000000000000001";
+const OTHER = "f00000000000000000002";
 
 describe("presentationStore 드라이브 조작", () => {
   beforeEach(() => {

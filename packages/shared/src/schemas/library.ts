@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { IdSchema } from "./id";
 import { DeckSchema } from "./deck";
 import { SlideSchema } from "./slide";
 import { DeckStyleSchema } from "./style";
@@ -46,7 +47,7 @@ export type DeckMutationResponse = z.infer<typeof DeckMutationResponseSchema>;
  * 가사 전문이 새지 않게 하는 저작권 보호 장치다 (TECH_SPEC §8.1).
  */
 export const PublicDeckSummarySchema = z.object({
-  id: z.string().uuid(),
+  id: IdSchema,
   title: z.string(),
   artist: z.string(),
   /** 공개한 사람의 표시 이름 */
@@ -54,7 +55,7 @@ export const PublicDeckSummarySchema = z.object({
   /** 이 덱 자체가 포크본이면 그 원작자 */
   forkedFromAuthorName: z.string().nullable(),
   forkCount: z.number().int().nonnegative(),
-  backgroundId: z.string().uuid().nullable(),
+  backgroundId: IdSchema.nullable(),
   firstSlidePreview: z.array(z.string()),
   slideCount: z.number().int().nonnegative(),
   updatedAt: z.string().datetime(),
@@ -109,13 +110,13 @@ export type ReportTargetType = z.infer<typeof ReportTargetTypeSchema>;
 
 export const CreateReportRequestSchema = z.object({
   targetType: ReportTargetTypeSchema,
-  targetId: z.string().uuid(),
+  targetId: IdSchema,
   reason: ReportReasonSchema,
   details: z.string().trim().max(500).optional(),
 });
 export type CreateReportRequest = z.infer<typeof CreateReportRequestSchema>;
 
 export const CreateReportResponseSchema = z.object({
-  id: z.string().uuid(),
+  id: IdSchema,
 });
 export type CreateReportResponse = z.infer<typeof CreateReportResponseSchema>;

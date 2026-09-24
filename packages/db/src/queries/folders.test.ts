@@ -21,18 +21,18 @@ import {
   upsertPresentationDocument,
 } from "./presentations";
 
-const USER_A = "00000000-0000-4000-8000-00000000000a";
-const USER_B = "00000000-0000-4000-8000-00000000000b";
+const USER_A = "00000000000000000000a";
+const USER_B = "00000000000000000000b";
 
 let seq = 0;
-function uuid(): string {
+function nextId(): string {
   seq += 1;
-  return `f0000000-0000-4000-8000-${String(seq).padStart(12, "0")}`;
+  return `f00000000${String(seq).padStart(12, "0")}`;
 }
 
 function makeFolder(userId: string, overrides: Partial<Folder> = {}): Folder {
   return {
-    id: uuid(),
+    id: nextId(),
     userId,
     parentId: null,
     name: "폴더",
@@ -47,8 +47,8 @@ function makeDoc(
   userId: string,
   overrides: Partial<PresentationDocument> = {},
 ): PresentationDocument {
-  const id = overrides.id ?? uuid();
-  const deckId = uuid();
+  const id = overrides.id ?? nextId();
+  const deckId = nextId();
   return PresentationDocumentSchema.parse({
     id,
     userId,
@@ -56,7 +56,7 @@ function makeDoc(
     serviceDate: "2026-09-27",
     items: [
       {
-        id: uuid(),
+        id: nextId(),
         presentationId: id,
         deckId,
         order: 0,
@@ -148,7 +148,7 @@ describe("드라이브 폴더 쿼리", () => {
       const orphan = await upsertFolder(
         db,
         USER_A,
-        makeFolder(USER_A, { parentId: uuid() }),
+        makeFolder(USER_A, { parentId: nextId() }),
       );
       const intruder = await upsertFolder(
         db,
@@ -229,7 +229,7 @@ describe("드라이브 폴더 쿼리", () => {
       );
 
       expect(await deleteFolderTree(db, USER_A, theirs.id)).toBeNull();
-      expect(await deleteFolderTree(db, USER_A, uuid())).toBeNull();
+      expect(await deleteFolderTree(db, USER_A, nextId())).toBeNull();
       expect(await getFoldersByUserId(db, USER_B)).toHaveLength(1);
       expect(await db.select().from(presentations)).toHaveLength(1);
     });
@@ -293,7 +293,7 @@ describe("드라이브 폴더 쿼리", () => {
       await upsertPresentationDocument(
         db,
         USER_A,
-        makeDoc(USER_A, { folderId: uuid() }),
+        makeDoc(USER_A, { folderId: nextId() }),
       );
 
       const docs = await getPresentationDocumentsByUserId(db, USER_A);

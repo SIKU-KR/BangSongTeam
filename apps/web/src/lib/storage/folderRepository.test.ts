@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import type { Folder } from "@repo/shared";
+import { createId, type Folder } from "@repo/shared";
 import { getOfflineDB, closeOfflineDB, OFFLINE_DB_NAME } from "./db";
 import {
   saveFolder,
@@ -12,8 +12,8 @@ import {
 function makeFolder(overrides: Partial<Folder> = {}): Folder {
   const now = new Date().toISOString();
   return {
-    id: crypto.randomUUID(),
-    userId: "00000000-0000-4000-8000-000000000001",
+    id: createId(),
+    userId: "000000000000000000001",
     parentId: null,
     name: "2026 주일",
     trashedAt: null,

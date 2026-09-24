@@ -11,10 +11,10 @@ import {
 import { OfflineError } from "./presentationSync";
 import { getSyncStatus, __resetSyncStatusForTests } from "./syncStatus";
 
-const USER = "00000000-0000-4000-8000-000000000001";
-const PARENT = "a0000000-0000-4000-8000-000000000001";
-const CHILD = "b0000000-0000-4000-8000-000000000002";
-const GRANDCHILD = "c0000000-0000-4000-8000-000000000003";
+const USER = "000000000000000000001";
+const PARENT = "a00000000000000000001";
+const CHILD = "b00000000000000000002";
+const GRANDCHILD = "c00000000000000000003";
 
 function folder(id: string, parentId: string | null, name = "폴더"): Folder {
   return {

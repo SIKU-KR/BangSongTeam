@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { DEFAULT_DECK_STYLE, DeckSchema, type Deck } from "@repo/shared";
 import { mergeLibraryDecks } from "./mergeLibraryDecks";
 
-const USER = "00000000-0000-4000-8000-000000000001";
+const USER = "00000000x000000000001";
 
 function deck(id: string, overrides: Partial<Deck> = {}): Deck {
   return DeckSchema.parse({
@@ -20,8 +20,8 @@ function deck(id: string, overrides: Partial<Deck> = {}): Deck {
   });
 }
 
-const A = "c0000000-0000-4000-8000-00000000000a";
-const B = "c0000000-0000-4000-8000-00000000000b";
+const A = "c0000000000000000000a";
+const B = "c0000000000000000000b";
 
 describe("mergeLibraryDecks", () => {
   it("keeps local-only decks and schedules them for upload", () => {
