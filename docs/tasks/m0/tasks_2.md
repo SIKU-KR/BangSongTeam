@@ -72,6 +72,7 @@
   - **DoD (통과 기준)**: `pnpm --filter @repo/shared exec tsc --noEmit`이 에러 없이 통과한다.
 
 - [x] **Task 2.7: BroadcastChannel 동기화 메시지 스키마 및 단위 테스트 작성**
+  - > **2026-09-24**: 발표자 보기 제거와 함께 `broadcast.ts`와 테스트를 삭제했다. 이력으로만 남긴다.
   - **대상 파일**: `packages/shared/src/schemas/broadcast.ts`, `packages/shared/src/schemas/broadcast.test.ts`
   - **선행 조건**: Task 2.1
   - **구현 내용**:

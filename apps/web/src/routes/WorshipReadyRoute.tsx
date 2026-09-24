@@ -64,14 +64,9 @@ export function WorshipReadyRoute(): React.JSX.Element {
   const prep = useWorshipPrep(presentation ?? null);
 
   // 전체화면은 클릭 제스처 안에서 동기적으로 요청해야 Chrome이 허용한다.
-  const handleSoloPresent = useCallback(() => {
+  const handlePresent = useCallback(() => {
     if (!presentationId) return;
     launchPresentation(navigate, presentationId);
-  }, [navigate, presentationId]);
-
-  const handlePresenterView = useCallback(() => {
-    if (!presentationId) return;
-    navigate(`/present/${presentationId}/control`);
   }, [navigate, presentationId]);
 
   if (!presentation) return <Navigate to="/presentations" replace />;
@@ -240,19 +235,11 @@ export function WorshipReadyRoute(): React.JSX.Element {
           <div className="flex flex-wrap gap-3">
             <button
               type="button"
-              data-testid="start-presenter-btn"
-              onClick={handlePresenterView}
+              data-testid="start-solo-btn"
+              onClick={handlePresent}
               className="px-4 py-2.5 rounded-lg bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 text-sm font-semibold hover:opacity-90 transition-opacity cursor-pointer"
             >
-              발표자 보기로 송출
-            </button>
-            <button
-              type="button"
-              data-testid="start-solo-btn"
-              onClick={handleSoloPresent}
-              className="px-4 py-2.5 rounded-lg border border-zinc-300 dark:border-zinc-700 text-sm font-semibold hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
-            >
-              단독 전체화면 송출
+              전체화면 송출
             </button>
           </div>
         </section>

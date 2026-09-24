@@ -24,10 +24,6 @@ function renderReady(path = `/present/${DOC_ID}/ready`) {
           element={<WorshipReadyRoute />}
         />
         <Route
-          path="/present/:presentationId/control"
-          element={<div data-testid="control-stub" />}
-        />
-        <Route
           path="/present/:presentationId/fullscreen"
           element={<div data-testid="fullscreen-stub" />}
         />
@@ -123,7 +119,6 @@ describe("WorshipReadyRoute", () => {
       expect(screen.getByTestId("present-anyway-notice")).toBeInTheDocument(),
     );
     expect(screen.getByTestId("start-solo-btn")).toBeEnabled();
-    expect(screen.getByTestId("start-presenter-btn")).toBeEnabled();
   });
 
   it("영구 저장소가 거부되면 경고를 띄운다", async () => {
@@ -143,16 +138,7 @@ describe("WorshipReadyRoute", () => {
     );
   });
 
-  it("발표자 보기 버튼이 조작 창 경로로 이동한다", async () => {
-    renderReady();
-    await screen.findAllByTestId("prep-song-row");
-
-    fireEvent.click(screen.getByTestId("start-presenter-btn"));
-
-    expect(await screen.findByTestId("control-stub")).toBeInTheDocument();
-  });
-
-  it("단독 전체화면 버튼이 송출 경로로 이동한다", async () => {
+  it("전체화면 송출 버튼이 송출 경로로 이동한다", async () => {
     renderReady();
     await screen.findAllByTestId("prep-song-row");
 

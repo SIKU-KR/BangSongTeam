@@ -25,7 +25,6 @@ import {
   EditorRoute,
   FullscreenPresentRoute,
   WorshipReadyRoute,
-  PresenterControlRoute,
 } from "./routes";
 
 /**
@@ -74,7 +73,7 @@ function useHydration(): boolean {
       // 서버 병합은 화면을 그린 뒤 백그라운드로 돌린다. 네트워크가 느린
       // 교회에서 첫 화면이 그만큼 늦어지면 안 된다.
       //
-      // 송출 화면으로 바로 열린 창(발표자 보기의 청중 창 등)에서는 돌리지 않는다.
+      // 송출 화면으로 바로 열린 창(새로고침한 전체화면 송출 등)에서는 돌리지 않는다.
       // 동기화가 꺼진 채로 남으므로 그 창에서는 서버 push도 일어나지 않는다.
       if (shouldRunBootSync(window.location.pathname)) void runBootSync();
     })();
@@ -117,8 +116,7 @@ function useHydration(): boolean {
  * - `/backgrounds`                   : 배경 라이브러리 (AppShell)
  * - `/editor/:presentationId`        : 프레젠테이션 단위 편집기
  * - `/present/:presentationId/ready`      : 예배 준비 (오프라인 캐시)
- * - `/present/:presentationId/control`    : 발표자 보기 (조작 창)
- * - `/present/:presentationId/fullscreen` : 청중용 전체화면 송출 (`?audience=1`이면 조작 창을 따름)
+ * - `/present/:presentationId/fullscreen` : 청중용 전체화면 송출
  */
 export function App(): React.JSX.Element {
   const isHydrated = useHydration();
@@ -166,10 +164,6 @@ export function App(): React.JSX.Element {
             <Route
               path="/present/:presentationId/ready"
               element={<WorshipReadyRoute />}
-            />
-            <Route
-              path="/present/:presentationId/control"
-              element={<PresenterControlRoute />}
             />
             <Route
               path="/present/:presentationId/fullscreen"
