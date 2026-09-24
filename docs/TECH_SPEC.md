@@ -98,26 +98,26 @@ flowchart TB
 
 본 명세의 항목 중 실제 코드가 있는 것과 설계만 있는 것을 구분한다. 이 표를 갱신하지 않은 채 "스펙에 있으니 구현되어 있다"고 가정하지 않는다.
 
-| 구성 요소                                     | 상태   | 비고                                                                                                                                                                   |
-| --------------------------------------------- | ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `packages/shared` Zod 스키마 (§3)             | 구현   | Deck·Slide·Style·Presentation·API·공유 라이브러리(`library.ts`) 계약                                                                                                   |
-| `packages/db` Drizzle 스키마·마이그레이션(§4) | 구현   | 0000_initial, 0001_fts5, 0002_seed_backgrounds, 0003_m5_sharing, 0004_m5_fts, 0005_remove_catalog, 0006_nanoid_reset, 0007_seed_backgrounds_nanoid, 0008_drive_folders |
-| 스코프 쿼리 헬퍼 (§4.3)                       | 구현   | decks·presentations·search·sharing·reports. 공개 조건은 `publicDeckCondition()` 한 곳                                                                                  |
-| 3-Layer Slide Stage (§5.1)                    | 구현   | `components/stage/*` — 편집기와 송출이 동일 컴포넌트 사용                                                                                                              |
-| 입력 버퍼 엔진·단축키 (§5.2)                  | 구현   | `useNavigationBuffer`, `usePresentationShortcuts` (tinykeys)                                                                                                           |
-| 세트 편집기 (PRD 4.4)                         | 부분   | 넘침 경고와 커서 기준 분할·합치기 미구현 (M2 잔여). 속성 패널 '공유' 섹션 구현 (M5)                                                                                    |
-| 미디어 프록시 `/api/media/*` (§5.4)           | 구현   | HTTP Range 지원                                                                                                                                                        |
-| 클라이언트 영속성 (§5.5)                      | 구현   | IndexedDB가 1차 원천. 프레젠테이션과 **보관함 곡** 모두 서버와 동기화 (보관함은 M5-2에서 연결)                                                                         |
-| Hono RPC 클라이언트 (`hc<AppType>`)           | 구현   | `AppType = ReturnType<typeof createApp>`. 라우트는 팩토리(`createApp(deps)`)라 테스트가 실제 라우트를 마운트한다                                                       |
-| Better Auth (§4.1 auth 테이블)                | 구현   | 카카오·네이버 + localhost 전용 개발자 로그인. 실제 OAuth 자격증명 확인은 대기                                                                                          |
-| 발표자 보기·BroadcastChannel (§5.3)           | 제거   | MVP 범위에서 제외 (2026-09-24). 송출은 전체화면 `/present/:id/fullscreen` 한 가지                                                                                      |
-| PWA·Cache Storage (§5.4)                      | 구현   | vite-plugin-pwa(generateSW) + RangeRequests (M4)                                                                                                                       |
-| TanStack Query (서버 캐시)                    | 구현   | 곡 추가 모달의 공유 검색·상세·가져오기, 공개 전환, 신고에만 쓴다. 송출 화면 import는 ESLint가 막는다 (M5-5)                                                            |
-| 가사 라이브러리·LLM 정규화 (§6)               | 제거   | MVP 범위에서 제외 (2026-09-23). 테이블은 `0005_remove_catalog`로 지웠다                                                                                                |
-| 공유 라이브러리 API (§7)                      | 구현   | 공개 전환·검색(가져간 횟수순 게시판)·상세·가져오기·신고 (M5-3)                                                                                                         |
-| 운영자 도구                                   | 구현   | 관리자 화면 없음. `docs/ops/moderation-runbook.md`의 SQL (`packages/db/src/ops/moderationSql.ts`가 정본)                                                               |
-| 사용자 커스텀 배경 업로드 (PRD 4.3)           | 미구현 | 배경 라이브러리 화면에 안내만 있음                                                                                                                                     |
-| 저장 실패 경고 배너                           | 구현   | `StorageWarningBanner` — 용량 초과와 저장소 차단을 구분, 닫을 수 없음                                                                                                  |
+| 구성 요소                                     | 상태   | 비고                                                                                                             |
+| --------------------------------------------- | ------ | ---------------------------------------------------------------------------------------------------------------- |
+| `packages/shared` Zod 스키마 (§3)             | 구현   | Deck·Slide·Style·Presentation·API·공유 라이브러리(`library.ts`) 계약                                             |
+| `packages/db` Drizzle 스키마·마이그레이션(§4) | 구현   | `0001_initial` 하나. 첫 배포 전 0000~0008을 합쳤다 (2026-09-24). 다음 마이그레이션은 0002부터                    |
+| 스코프 쿼리 헬퍼 (§4.3)                       | 구현   | decks·presentations·search·sharing·reports. 공개 조건은 `publicDeckCondition()` 한 곳                            |
+| 3-Layer Slide Stage (§5.1)                    | 구현   | `components/stage/*` — 편집기와 송출이 동일 컴포넌트 사용                                                        |
+| 입력 버퍼 엔진·단축키 (§5.2)                  | 구현   | `useNavigationBuffer`, `usePresentationShortcuts` (tinykeys)                                                     |
+| 세트 편집기 (PRD 4.4)                         | 부분   | 넘침 경고와 커서 기준 분할·합치기 미구현 (M2 잔여). 속성 패널 '공유' 섹션 구현 (M5)                              |
+| 미디어 프록시 `/api/media/*` (§5.4)           | 구현   | HTTP Range 지원                                                                                                  |
+| 클라이언트 영속성 (§5.5)                      | 구현   | IndexedDB가 1차 원천. 프레젠테이션과 **보관함 곡** 모두 서버와 동기화 (보관함은 M5-2에서 연결)                   |
+| Hono RPC 클라이언트 (`hc<AppType>`)           | 구현   | `AppType = ReturnType<typeof createApp>`. 라우트는 팩토리(`createApp(deps)`)라 테스트가 실제 라우트를 마운트한다 |
+| Better Auth (§4.1 auth 테이블)                | 구현   | 카카오·네이버 + localhost 전용 개발자 로그인. 실제 OAuth 자격증명 확인은 대기                                    |
+| 발표자 보기·BroadcastChannel (§5.3)           | 제거   | MVP 범위에서 제외 (2026-09-24). 송출은 전체화면 `/present/:id/fullscreen` 한 가지                                |
+| PWA·Cache Storage (§5.4)                      | 구현   | vite-plugin-pwa(generateSW) + RangeRequests (M4)                                                                 |
+| TanStack Query (서버 캐시)                    | 구현   | 곡 추가 모달의 공유 검색·상세·가져오기, 공개 전환, 신고에만 쓴다. 송출 화면 import는 ESLint가 막는다 (M5-5)      |
+| 가사 라이브러리·LLM 정규화 (§6)               | 제거   | MVP 범위에서 제외 (2026-09-23). 테이블은 스키마에서 지웠다                                                       |
+| 공유 라이브러리 API (§7)                      | 구현   | 공개 전환·검색(가져간 횟수순 게시판)·상세·가져오기·신고 (M5-3)                                                   |
+| 운영자 도구                                   | 구현   | 관리자 화면 없음. `docs/ops/moderation-runbook.md`의 SQL (`packages/db/src/ops/moderationSql.ts`가 정본)         |
+| 사용자 커스텀 배경 업로드 (PRD 4.3)           | 미구현 | 배경 라이브러리 화면에 안내만 있음                                                                               |
+| 저장 실패 경고 배너                           | 구현   | `StorageWarningBanner` — 용량 초과와 저장소 차단을 구분, 닫을 수 없음                                            |
 
 ---
 
@@ -125,7 +125,7 @@ flowchart TB
 
 `packages/shared`는 브라우저와 Cloudflare Worker 양쪽에서 실행되는 순수 TypeScript 패키지이다.
 
-**엔터티 id (2026-09-24, UUID → NanoID):** 사용자·세션·덱·프레젠테이션·항목·신고·배경 id는 모두 21자 NanoID(`[A-Za-z0-9_-]{21}`)다. 형식은 `schemas/id.ts`의 `IdSchema` 하나로 검증하고, 새 id는 `utils/id.ts`의 `createId()`로만 만든다 (Worker의 Better Auth `generateId`, D1 쿼리 헬퍼, 클라이언트 스토어 모두). `crypto.randomUUID()`는 ESLint(`no-restricted-properties`)가 막는다. 옛 UUID는 호환하지 않는다: 스키마가 거부하고, D1은 `0006_nanoid_reset`이, 로컬 IndexedDB는 v3 업그레이드가 비운다(§4.1.1, §5.4-4).
+**엔터티 id (2026-09-24, UUID → NanoID):** 사용자·세션·덱·프레젠테이션·항목·신고·배경 id는 모두 21자 NanoID(`[A-Za-z0-9_-]{21}`)다. 형식은 `schemas/id.ts`의 `IdSchema` 하나로 검증하고, 새 id는 `utils/id.ts`의 `createId()`로만 만든다 (Worker의 Better Auth `generateId`, D1 쿼리 헬퍼, 클라이언트 스토어 모두). `crypto.randomUUID()`는 ESLint(`no-restricted-properties`)가 막는다. 옛 UUID는 호환하지 않는다: 스키마가 거부하고, 로컬 IndexedDB는 v3 업그레이드가 비운다(§5.4-4). D1은 첫 배포 전이라 `0001_initial` 하나로 새로 만든다(§4.1.1).
 
 ### 3.1 슬라이드 및 스타일 기본 스키마 (`schemas/style.ts`, `schemas/slide.ts`)
 
@@ -557,25 +557,25 @@ export const reports = sqliteTable("reports", {
 });
 ```
 
-### 4.1.1 사전 주입 배경 시드 마이그레이션 (`drizzle/0007_seed_backgrounds_nanoid.sql`)
+### 4.1.1 사전 주입 배경 시드 마이그레이션 (`drizzle/0001_initial.sql`)
 
 `decks.background_id`는 `backgrounds`를 참조하는 외래키이고 **D1은 외래키를 기본으로 강제한다.** 배경 10건을 별도 스크립트로 넣게 두면 아무도 실행하지 않아 테이블이 빈 채로 남고, 곡에 배경이 붙는 순간 `db.batch()` 전체가 롤백되어 동기화가 500으로 죽는다(2026-09-22 실제 발생). 그래서 시드를 마이그레이션으로 둔다 — 로컬과 운영이 같은 명령으로 반드시 함께 채워진다.
 
-처음 시드는 `0002_seed_backgrounds.sql`이 UUID id로 넣었다. 2026-09-24 NanoID 전환에서 `0006_nanoid_reset.sql`이 UUID 시절의 사용자 데이터(`user`·`session`·`account`·`verification`·`presentations`·`presentation_items`·`decks`·`decks_fts`·`reports`)와 UUID 배경을 모두 지우고, `0007_seed_backgrounds_nanoid.sql`이 같은 영상 10건을 NanoID로 다시 넣는다. 0002는 이미 적용된 이력이라 고치지 않는다. **배포 순서: 운영 D1에 0006·0007을 먼저 적용한 뒤 Worker를 배포한다.** 반대로 하면 새 Worker가 옛 UUID 행을 읽다가 `IdSchema` 검증에 실패한다.
+시드는 초기 마이그레이션 `0001_initial.sql` 끝에 NanoID로 들어 있다. 첫 배포 전인 2026-09-24에 UUID 시드·NanoID 초기화·NanoID 재시드를 포함한 0000~0008을 이 파일 하나로 합쳤다. 저널 idx를 1로 두어 다음 `db:generate`는 0002부터 번호를 매긴다. 옛 0000~0008을 적용한 D1(로컬 `.wrangler` 상태 포함)은 새로 만들어야 한다.
 
 값의 정본은 `packages/shared`의 `INITIAL_BACKGROUNDS` 하나이며, `packages/db/src/seed/backgrounds.ts`는 그것을 파생시키고, 정적 SQL인 마이그레이션은 `backgrounds.test.ts`가 상수와 대조해 갈라지지 못하게 막는다.
 
 추가로 서버는 모르는 `backgroundId`를 `null`로 낮춰 받는다(`nullifyUnknownBackgrounds`). 배경은 장식이고 가사는 봉사자의 작업물이므로, 배경 하나 때문에 세트 전체를 잃게 두지 않는다.
 
-### 4.2 FTS5 Trigram 검색 가상 테이블 (`drizzle/0004_m5_fts.sql`)
+### 4.2 FTS5 Trigram 검색 가상 테이블 (`drizzle/0001_initial.sql`)
 
-공개 덱 검색용 FTS5 Trigram 인덱스다. M5에서 `0001_fts5.sql`의 테이블·트리거를 걷어내고 다시 만들었다. `0005_remove_catalog.sql`은 `decks`를 다시 만들면서(DROP TABLE이 트리거를 함께 지운다) 같은 트리거를 다시 걸고 `decks_fts`를 새로 채운다.
+공개 덱 검색용 FTS5 Trigram 인덱스다. drizzle-kit 생성본 뒤에 가상 테이블과 트리거를 손으로 덧붙였다.
 
-- **색인 조건 = 공개 조건**: `scope = 'library' AND visibility = 'public' AND takedown_at IS NULL`. 0001은 `visibility`만 봐서, 공개 샘플 곡을 세트에 담은 복제본까지 공개 검색에 섞였다. 이 조건은 쿼리 헬퍼의 `publicDeckCondition()`과 같다. 둘 중 하나만 바꾸지 않는다.
+- **색인 조건 = 공개 조건**: `scope = 'library' AND visibility = 'public' AND takedown_at IS NULL`. M5 이전에는 `visibility`만 봐서, 공개 샘플 곡을 세트에 담은 복제본까지 공개 검색에 섞였다. 이 조건은 쿼리 헬퍼의 `publicDeckCondition()`과 같다. 둘 중 하나만 바꾸지 않는다.
 - **가사 본문도 색인한다** (`decks_fts.lyrics`). 곡 추가 모달이 공유 곡도 가사로 찾는다 (PRD 4.7 괄호 문단).
 - **갱신 트리거는 하나**: '빼고 → 넣기'를 한 트리거 안에서 한다. 둘로 나누면 SQLite가 나중에 만든 트리거를 먼저 실행해 방금 넣은 행을 지운다.
 - **색인 대상이었던 행에만 FTS를 건드린다**: 세트 동기화는 덱을 매번 지우고 다시 넣는다. 조건 없는 트리거는 곡마다 FTS를 훑는다. `rowid` 연결은 쓰지 않는다 (TEXT 기본키 테이블의 rowid는 VACUUM에서 바뀔 수 있다).
-- drizzle-kit이 `decks_fts`를 일반 테이블로 알고 있어 `db:generate`가 FTS 테이블에 `ALTER`를 만든다. 생성된 마이그레이션에서 `_fts` 문장은 지우고 FTS는 커스텀 마이그레이션에서만 다룬다.
+- drizzle-kit이 `decks_fts`를 일반 테이블로 알고 있어 `db:generate`가 FTS 테이블에 `ALTER`를 만든다. 생성된 마이그레이션에서 `_fts` 문장은 지우고 FTS는 손으로 쓴 SQL로만 다룬다.
 
 검색 헬퍼(`queries/search.ts`)는 검색어를 **토큰 단위로** 나눈다. 3자 이상 토큰은 `MATCH`, 2자 이하 토큰은 `LIKE '%t%' ESCAPE '\'`로 보내고 모두 AND로 묶는다. 문자열 전체 길이로 분기하면 "주 은혜로"처럼 짧은 토큰이 섞인 검색이 `MATCH`로 가서 아무것도 찾지 못한다. 빈 검색어는 가져간 횟수순 둘러보기다.
 
@@ -921,7 +921,7 @@ stateDiagram-v2
 **2026-09-23 결정으로 MVP에서 제거했다.** 곡 단위 가사 라이브러리(`lyrics_catalog`·`lyrics_versions`), 서버측 가사 기여, 곡 식별 후보, 대표 가사 가져오기, Workers AI(Qwen3.8 27B) 정규화와 환각 검증, 운영자 잠금이 모두 빠졌다. `wrangler.jsonc`에 `ai` 바인딩도 없다.
 
 - 공유 라이브러리는 **게시판 모델**이다. 같은 곡을 여러 사람이 공개하면 합치지 않고 각각 보여 주며, `fork_count DESC, updated_at DESC`로 정렬한다 (`searchPublicDecks`).
-- 스키마 제거는 `drizzle/0005_remove_catalog.sql`이 한다. `decks.catalog_id`가 `lyrics_catalog`를 참조하는 외래키라 `DROP COLUMN`이 안 되어 `decks`를 다시 만든다. D1은 마이그레이션 안에서 `PRAGMA foreign_keys=OFF`를 무시하므로, 그대로 `DROP TABLE decks`를 하면 `presentation_items`가 CASCADE로 지워진다. 그래서 `presentation_items`를 백업했다가 되돌리고, `defer_foreign_keys`로 일시적 위반만 커밋까지 미룬다.
+- 테이블과 `decks.catalog_id`는 스키마에서 지웠고, 첫 배포 전 합친 `0001_initial`은 처음부터 만들지 않는다. 제거할 때 배운 점: D1은 마이그레이션 안에서 `PRAGMA foreign_keys=OFF`를 무시하므로, 부모 테이블을 다시 만들면(`DROP TABLE decks`) `presentation_items`가 CASCADE로 지워진다. 테이블은 `ALTER TABLE ADD COLUMN`으로만 넓힌다.
 - 로컬 IndexedDB에 남은 `origin: 'catalog'` 덱은 `DeckSchema`가 `'user'`로 읽는다.
 - 되살릴 때의 설계(프롬프트, 검증 알고리즘, compare-and-set 쓰기)는 `docs/tasks/m5/tasks_4.md`에 이력으로 남아 있다.
 
@@ -1055,7 +1055,9 @@ export type SearchCatalogResponse = z.infer<typeof SearchCatalogResponseSchema>;
 
 **2026-09-24:** 발표자 보기를 제거했다(§3.4, §5.3). 송출은 전체화면 한 가지다.
 
-**2026-09-24:** 엔터티 id를 UUID에서 NanoID(21자)로 바꿨다(§3 머리말). 옛 UUID 데이터는 호환하지 않는다. 운영자는 Worker 배포 **전에** 운영 D1에 `0006_nanoid_reset`·`0007_seed_backgrounds_nanoid`를 적용해야 한다(§4.1.1). 0006은 D1의 사용자 데이터를 모두 지운다. 드라이브 폴더(`0008_drive_folders`: `folders`·`drive_tombstones` 테이블, `presentations.folder_id`·`trashed_at`)도 같은 배포에서 0006·0007 다음에 적용한다.
+**2026-09-24:** 엔터티 id를 UUID에서 NanoID(21자)로 바꿨다(§3 머리말). 옛 UUID 데이터는 호환하지 않는다. 드라이브 폴더(`folders`·`drive_tombstones` 테이블, `presentations.folder_id`·`trashed_at`)를 추가했다.
+
+**2026-09-24:** 첫 배포 전이라 마이그레이션 0000~0008을 `0001_initial` 하나로 합쳤다(§4.1.1). 옛 마이그레이션을 적용한 로컬·운영 D1은 새로 만든 뒤 `db:migrate:*`로 `0001_initial`을 적용한다.
 
 **현재 위치 (2026-09-23):** M5(공유 라이브러리) 코드 완료. 두 계정으로 공개 → 검색 → 가져오기 → 무수정 송출을 브라우저와 worker E2E로 확인했다. 가사 라이브러리와 LLM 정규화는 MVP에서 제거했다(§6). 운영 D1 마이그레이션(`0003`·`0004`·`0005`)은 운영자 몫이다.
 

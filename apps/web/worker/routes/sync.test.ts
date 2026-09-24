@@ -103,7 +103,7 @@ describe("동기화 라우트 교차 사용자 격리", () => {
       { id: USER_A, name: "A", createdAt: new Date(), updatedAt: new Date() },
       { id: USER_B, name: "B", createdAt: new Date(), updatedAt: new Date() },
     ]);
-    // 배경은 더 이상 여기서 시드하지 않는다. `0007_seed_backgrounds_nanoid.sql`
+    // 배경은 더 이상 여기서 시드하지 않는다. `0001_initial.sql`
     // 마이그레이션이 채우므로, 시드하지 않고도 통과하는 것 자체가 회귀 방지선이다
     // (그 마이그레이션이 없던 시절 운영 D1의 backgrounds가 비어 있어
     //  decks.background_id 외래키 위반으로 동기화가 500으로 죽었다).

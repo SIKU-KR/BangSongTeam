@@ -20,7 +20,7 @@ export async function getBackgrounds(db: DbInstance): Promise<Background[]> {
  * 때문에 작업 전체를 잃는 쪽이 훨씬 나쁘므로, 모르는 배경은 '배경 없음'으로 낮춰 받고
  * 나머지는 저장한다.
  *
- * 사전 주입 배경 10건은 마이그레이션(`0002_seed_backgrounds.sql`)이 넣으므로 정상 경로에서
+ * 사전 주입 배경 10건은 마이그레이션(`0001_initial.sql`)이 넣으므로 정상 경로에서
  * 이 함수가 무언가를 떨굴 일은 없다. 아직 서버에 없는 id(사용자 커스텀 배경, PRD 4.3)가
  * 흘러들어올 때를 위한 안전망이다.
  */

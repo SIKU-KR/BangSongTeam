@@ -151,6 +151,10 @@ pnpm --filter @repo/db db:migrate:prod
 pnpm --filter @repo/db db:studio
 ```
 
+- **Single initial migration**: Before the first deploy, all migrations were squashed into `packages/db/drizzle/0001_initial.sql` (2026-09-24). Its journal entry has `idx: 1`, so the next `db:generate` emits `0002_*`. A D1 database that applied the old `0000`–`0008` files must be recreated.
+- **Hand-written SQL**: The FTS5 `decks_fts` virtual table, its triggers and the background seed are appended by hand to the generated SQL. drizzle-kit knows `decks_fts` as a plain table, so delete any generated `*_fts` DDL.
+- **Never recreate a parent table**: D1 ignores `PRAGMA foreign_keys=OFF` inside migrations, so `DROP TABLE` on a parent (e.g. `decks`, `presentations`) cascades deletes into child rows. Widen tables with `ALTER TABLE ... ADD COLUMN` (and write `ON DELETE SET NULL` by hand; drizzle-kit drops it on `ADD COLUMN`).
+
 ---
 
 ## 5. Testing Instructions
@@ -193,7 +197,7 @@ When modifying core logic, agents must write or update tests for:
 
 - **Zod First**: All domain models, API request payloads, and response contracts must be declared once in `packages/shared/src/schemas/`.
 - **Infer, Never Duplicate**: Types must be generated via `z.infer<typeof Schema>`. Do not declare separate manual TypeScript interfaces representing the same data.
-- **NanoID Entity IDs**: Every entity id (user, session, deck, presentation, item, report, background, folder) is a 21-char NanoID created with `createId()` and validated with `IdSchema` (both from `@repo/shared`). UUIDs were dropped on 2026-09-24 with no backward compatibility (`0006_nanoid_reset` wiped D1 user data; IndexedDB v3 clears local stores). Never use `crypto.randomUUID()` (ESLint enforces). Slide ids stay short local ids from `createSlideId()`.
+- **NanoID Entity IDs**: Every entity id (user, session, deck, presentation, item, report, background, folder) is a 21-char NanoID created with `createId()` and validated with `IdSchema` (both from `@repo/shared`). UUIDs were dropped on 2026-09-24 with no backward compatibility (IndexedDB v3 clears local stores; D1 is rebuilt from the squashed `0001_initial` migration). Never use `crypto.randomUUID()` (ESLint enforces). Slide ids stay short local ids from `createSlideId()`.
 - **End-to-End Type Safety**: The web frontend communicates with the Hono API using `hono/client` (`hc<AppType>`). Never construct loose `fetch('/api/...')` calls with unverified types.
 - **JSON Column Validation**: In D1, columns like `decks.slides` and `decks.style` are stored as SQLite `TEXT` (JSON). Always validate them with their respective Zod schemas (`SlideSchema.array()`, `DeckStyleSchema`) upon parsing.
 

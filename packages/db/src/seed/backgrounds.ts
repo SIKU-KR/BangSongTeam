@@ -12,7 +12,7 @@ type DbInstance = any;
  * 한 곳만 고치면 클라이언트가 만드는 `backgroundId`와 D1의 `backgrounds` 행이
  * 어긋나고, 그 순간 `decks.background_id` 외래키 때문에 동기화가 통째로 깨진다.
  *
- * 남은 사본은 마이그레이션 `drizzle/0007_seed_backgrounds_nanoid.sql` 하나뿐이며(정적 SQL이라
+ * 남은 사본은 마이그레이션 `drizzle/0001_initial.sql`의 시드 하나뿐이며(정적 SQL이라
  * 파생시킬 수 없다), `backgrounds.test.ts`가 둘을 대조해 갈라지지 못하게 막는다.
  */
 export const initialBackgrounds: NewBackground[] = INITIAL_BACKGROUNDS.map(
@@ -31,7 +31,7 @@ export const initialBackgrounds: NewBackground[] = INITIAL_BACKGROUNDS.map(
 /**
  * 모션 루프 영상 메타데이터 10건을 D1 SQLite 데이터베이스에 시드 (멱등적 실행 보장).
  *
- * 운영·로컬 D1은 마이그레이션(`0007_seed_backgrounds_nanoid.sql`)이 채운다. 이 함수는
+ * 운영·로컬 D1은 마이그레이션(`0001_initial.sql`)이 채운다. 이 함수는
  * 마이그레이션을 적용하지 않는 테스트 DB(better-sqlite3)용 경로다.
  */
 export async function seedBackgrounds(db: DbInstance): Promise<number> {
