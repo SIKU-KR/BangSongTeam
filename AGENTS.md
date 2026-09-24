@@ -313,6 +313,7 @@ Refer to `docs/prd.md` Section 8 for complete criteria. When implementing featur
 ## 9. Pull Request & Verification Checklist
 
 After all code changes, agent must commit and push to github.
+`main` is protected by a repository ruleset: direct pushes, force pushes and deletion are blocked, and changes land only through a pull request that is **squash-merged** after the `Typecheck, Lint & Test` check passes (no approval required). Push a branch and open a PR; never merge with `--admin` or disable the ruleset to get around a red check.
 Before committing or submitting changes, ensure:
 
 1. `pnpm typecheck` passes with zero errors.
