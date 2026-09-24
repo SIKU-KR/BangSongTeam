@@ -4,9 +4,6 @@ import { user } from "./auth";
 import { backgrounds } from "./media";
 import { presentations } from "./presentations";
 
-// ============================================================================
-// 덱 (Deck) - 찬양 1곡 단위 (라이브러리 마스터 vs 프레젠테이션 복제 격리)
-// ============================================================================
 export const decks = sqliteTable(
   "decks",
   {
@@ -15,7 +12,6 @@ export const decks = sqliteTable(
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
 
-    // 스코프 격리 및 프레젠테이션 종속성
     scope: text("scope", { enum: ["library", "presentation"] })
       .notNull()
       .default("library"),
@@ -26,22 +22,18 @@ export const decks = sqliteTable(
     title: text("title").notNull(),
     artist: text("artist").default(""),
     lyricsRaw: text("lyrics_raw").notNull(),
-    slides: text("slides").notNull(), // JSON TEXT: Slide[]
+    slides: text("slides").notNull(),
     backgroundId: text("background_id").references(() => backgrounds.id, {
       onDelete: "set null",
     }),
-    style: text("style").notNull(), // JSON TEXT: DeckStyle
+    style: text("style").notNull(),
 
     visibility: text("visibility", { enum: ["private", "public"] })
       .notNull()
       .default("private"),
-    // 출처 (M5):
-    // - scope='library': 포크 원본 공개 덱 ID. 서버만 쓴다 (`POST /api/decks/:id/fork`)
-    // - scope='presentation': 복제해 온 보관함 덱 ID (편집기 '공유'가 원본을 찾는 근거)
     forkedFrom: text("forked_from"),
     forkCount: integer("fork_count").notNull().default(0),
 
-    // ---- M5 공유 필드 (모두 서버 소유) ----
     origin: text("origin", { enum: ["user", "fork"] })
       .notNull()
       .default("user"),
@@ -57,17 +49,17 @@ export const decks = sqliteTable(
     ),
   },
   (t) => [
-    index("idx_decks_user_scope").on(t.userId, t.scope), // 내 보관함 필터링 최적화
-    index("idx_decks_presentation").on(t.presentationId), // 세트 종속 덱 조회
+    index("idx_decks_user_scope").on(t.userId, t.scope),
+    index("idx_decks_presentation").on(t.presentationId),
     index("idx_decks_visibility_forks").on(t.visibility, t.forkCount),
-    index("idx_decks_forked_from").on(t.userId, t.forkedFrom), // 포크 멱등성 조회
+    index("idx_decks_forked_from").on(t.userId, t.forkedFrom),
   ],
 );
 
-// FTS5 가상 테이블을 Drizzle 쿼리 빌더에서 참조하기 위한 테이블 정의.
-//
-// 실제 DDL(가상 테이블·트리거)은 마이그레이션(`0001_initial`)에 손으로 덧붙였다.
-// drizzle-kit이 이 정의로 만든 `*_fts` DDL은 생성된 마이그레이션에서 지운다 (docs/tasks/m5/tasks_1.md 가드레일 4).
+/**
+ * FTS5 가상 테이블을 Drizzle 쿼리 빌더에서 참조하기 위한 테이블 정의.
+ * 실제 DDL은 마이그레이션(0001_initial)에 수기로 관리된다.
+ */
 export const decksFts = sqliteTable("decks_fts", {
   deckId: text("deck_id").notNull(),
   title: text("title").notNull(),

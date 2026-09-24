@@ -7,7 +7,7 @@ import {
   getBugsSearchUrl,
 } from "./ExternalSearchLinks";
 
-describe("ExternalSearchLinks (Task 3.3)", () => {
+describe("ExternalSearchLinks", () => {
   describe("URL 빌더 유틸리티 함수", () => {
     it("getMelonSearchUrl은 곡 제목을 올바르게 인코딩한 멜론 검색 URL을 반환해야 한다", () => {
       const url = getMelonSearchUrl("은혜로다");

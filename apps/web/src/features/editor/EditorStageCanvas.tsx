@@ -11,9 +11,7 @@ export interface EditorStageCanvasProps {
   backgroundUrl?: string;
   posterUrl?: string;
   songTitle?: string;
-  /** 세트 전체에서 1부터 이어지는 슬라이드 번호 (곡이 바뀌어도 이어진다) */
   slideNumber: number;
-  /** 세트 전체 슬라이드 수 */
   totalSlideCount: number;
   onPrevSlide: () => void;
   onNextSlide: () => void;
@@ -22,19 +20,11 @@ export interface EditorStageCanvasProps {
   onZoomChange?: (zoom: number) => void;
   onLoadSampleSongs?: () => void;
   onOpenLyricModal?: () => void;
-  /** 텍스트 박스를 직접 조작(드래그/리사이즈)해 스타일을 바꿀 때 호출 */
   onUpdateStyle?: (update: Partial<DeckStyle>) => void;
   className?: string;
 }
 
-/**
- * Canva / MiriCanvas 스타일 중앙 16:9 슬라이드 캔버스 작업 공간
- * - 16:9 비율 유지 프레젠테이션 스테이지 (Drop shadow & Framed & Zoom Scale)
- * - 슬라이드 없음 / 빈 세트 예외 상태(Empty State) 완벽 방어
- * - 리허설 모드 (암전 테스트, 가사 숨김 테스트)
- * - 슬라이드 넘김(이전/다음) 인터랙티브 버튼 (곡 경계를 넘어 세트 처음/끝까지)
- * - 캔버스 줌 레벨 조절 (- / + / 100% 맞춤)
- */
+/** 슬라이드 편집 캔버스 작업 공간 컴포넌트. */
 export function EditorStageCanvas({
   slide,
   style,
@@ -55,7 +45,6 @@ export function EditorStageCanvas({
 }: EditorStageCanvasProps): React.JSX.Element {
   const [isBlackout, setIsBlackout] = useState(false);
   const [isLyricsHidden, setIsLyricsHidden] = useState(false);
-  // 텍스트 박스 직접 조작 (react-moveable)
   const [textBoxEl, setTextBoxEl] = useState<HTMLDivElement | null>(null);
   const [draft, setDraft] = useState<{
     position: TextBoxPosition;
@@ -74,7 +63,6 @@ export function EditorStageCanvas({
     !isLyricsHidden;
   const refreshKey = JSON.stringify([effectiveStyle, slide?.lines, zoomLevel]);
 
-  // 빈 상태 (등록된 곡 또는 슬라이드가 없을 때)
   if (!slide || totalSlideCount === 0) {
     return (
       <div
@@ -144,7 +132,6 @@ export function EditorStageCanvas({
       data-testid="editor-stage-canvas"
       className={`relative flex-1 bg-zinc-100 dark:bg-zinc-900/60 overflow-hidden flex flex-col items-center justify-between p-6 select-none ${className}`}
     >
-      {/* 캔버스 상단 안내 바 */}
       <div className="w-full max-w-4xl mb-2 flex items-center justify-between text-xs text-zinc-500 dark:text-zinc-400 shrink-0">
         <div className="flex items-center gap-2">
           <span className="font-semibold text-zinc-800 dark:text-zinc-200">
@@ -162,7 +149,6 @@ export function EditorStageCanvas({
         </div>
       </div>
 
-      {/* 중앙: 16:9 슬라이드 스테이지 컨테이너 (Zoom Scale 적용) */}
       <div className="flex-1 w-full flex items-center justify-center overflow-hidden py-2">
         <div
           className="relative w-full max-w-4xl aspect-video rounded-xl overflow-hidden shadow-xl ring-1 ring-zinc-300 dark:shadow-2xl dark:shadow-black dark:ring-zinc-800 bg-black group transition-transform duration-150"
@@ -182,7 +168,6 @@ export function EditorStageCanvas({
             isTextInteracting={draft !== null}
           />
 
-          {/* 텍스트 박스 조작: 중앙선 스냅 가이드 */}
           {draft?.guides.vertical && (
             <div
               data-testid="snap-guide-vertical"
@@ -196,7 +181,6 @@ export function EditorStageCanvas({
             />
           )}
 
-          {/* 텍스트 박스 조작: 드래그 이동 / 좌우 폭 리사이즈 */}
           {canEditTextBox && (
             <TextBoxMoveable
               target={textBoxEl}
@@ -208,7 +192,6 @@ export function EditorStageCanvas({
             />
           )}
 
-          {/* 좌우 슬라이드 넘김 호버 화살표 */}
           <button
             type="button"
             data-testid="canvas-prev-btn"
@@ -257,10 +240,8 @@ export function EditorStageCanvas({
         </div>
       </div>
 
-      {/* 캔버스 하단 리허설 및 줌/송출 도구 */}
       <div className="w-full max-w-4xl mt-2 flex items-center justify-between shrink-0">
         <div className="flex items-center gap-2">
-          {/* 암전 테스트 토글 */}
           <button
             type="button"
             data-testid="test-blackout-btn"
@@ -277,7 +258,6 @@ export function EditorStageCanvas({
             <span>암전(B) {isBlackout ? "해제" : "테스트"}</span>
           </button>
 
-          {/* 가사 숨김 테스트 토글 */}
           <button
             type="button"
             data-testid="test-lyrics-btn"
@@ -295,7 +275,6 @@ export function EditorStageCanvas({
           </button>
         </div>
 
-        {/* 줌 컨트롤 */}
         {onZoomChange && (
           <div className="hidden sm:flex items-center gap-1 bg-white dark:bg-zinc-950/90 border border-zinc-200 dark:border-zinc-800 rounded-lg px-2 py-1 text-xs text-zinc-500 dark:text-zinc-400">
             <button
@@ -328,7 +307,6 @@ export function EditorStageCanvas({
           </div>
         )}
 
-        {/* 전체화면 바로보기 */}
         <button
           type="button"
           data-testid="canvas-present-cta"

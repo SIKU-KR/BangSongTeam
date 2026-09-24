@@ -7,6 +7,6 @@ import { createSlideId } from "../utils/id";
 export const SlideSchema = z.object({
   id: z.string().min(1).default(createSlideId),
   order: z.number().int().nonnegative(),
-  lines: z.array(z.string().max(80)).max(4), // 슬라이드당 최대 4줄 제약 (PRD 4.2)
+  lines: z.array(z.string().max(80)).max(4),
 });
 export type Slide = z.infer<typeof SlideSchema>;

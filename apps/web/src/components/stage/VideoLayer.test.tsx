@@ -5,7 +5,6 @@ import { VideoLayer } from "./VideoLayer";
 
 describe("VideoLayer Component (Dual Video A/B Crossfade Loop)", () => {
   beforeEach(() => {
-    // Mock HTMLMediaElement play/pause in jsdom
     window.HTMLMediaElement.prototype.play = vi
       .fn()
       .mockResolvedValue(undefined);
@@ -21,7 +20,6 @@ describe("VideoLayer Component (Dual Video A/B Crossfade Loop)", () => {
     expect(videoA).toBeInTheDocument();
     expect(videoB).toBeInTheDocument();
 
-    // Required attributes
     expect(videoA.autoplay).toBe(true);
     expect(videoA.muted).toBe(true);
     expect(videoA.loop).toBe(true);
@@ -58,7 +56,6 @@ describe("VideoLayer Component (Dual Video A/B Crossfade Loop)", () => {
       "https://media.example.com/loop1.mp4",
     );
 
-    // Rerender with same src (e.g. slide change within same song)
     rerender(<VideoLayer src="https://media.example.com/loop1.mp4" />);
 
     expect(videoA).toHaveAttribute(
@@ -79,12 +76,10 @@ describe("VideoLayer Component (Dual Video A/B Crossfade Loop)", () => {
     expect(videoA).toHaveStyle({ opacity: "1" });
     expect(videoB).toHaveStyle({ opacity: "0" });
 
-    // Change video src (song transition)
     act(() => {
       rerender(<VideoLayer src="https://media.example.com/loop2.mp4" />);
     });
 
-    // Slot B now receives new src and is faded in (opacity: 1), Slot A fades out (opacity: 0)
     expect(videoB).toHaveAttribute(
       "src",
       "https://media.example.com/loop2.mp4",

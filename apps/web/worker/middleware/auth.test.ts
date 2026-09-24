@@ -9,7 +9,6 @@ const TEST_ENV = {
   AI: {} as Ai,
 } as Bindings;
 
-/** requireAuth 뒤에 붙어 userId를 그대로 돌려주는 최소 앱 */
 function buildApp(readSession: SessionReader, onHandler = vi.fn()) {
   return new Hono<AppEnv>().get(
     "/protected",
@@ -50,8 +49,6 @@ describe("requireAuth 미들웨어", () => {
   });
 
   it("세션 조회가 예외를 던지면 500이 아니라 401로 처리한다", async () => {
-    // 만료·손상된 쿠키는 '서버 오류'가 아니라 '로그인 안 됨'이다.
-    // 500으로 새면 클라이언트가 재로그인 대신 재시도 루프를 돈다.
     const handler = vi.fn();
     const app = buildApp(async () => {
       throw new Error("session store unavailable");

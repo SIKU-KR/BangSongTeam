@@ -18,13 +18,7 @@ export interface SongSharePanelProps {
   song: Deck;
 }
 
-/**
- * 편집기 속성 패널의 '공유' 섹션 (PRD 5장 덱 공유 설정).
- *
- * 공유 단위는 곡의 보관함 원본이다. 이 세트의 곡 내용을 원본에 반영해 공개하고,
- * 공개 상태·가져간 횟수·원작자를 보여 준다. 서버에 닿아야 하는 동작이라
- * 오프라인에서는 버튼을 막는다.
- */
+/** 편집기 속성 패널의 곡 공유 설정 컴포넌트. */
 export function SongSharePanel({
   songIndex,
   song,
@@ -51,7 +45,6 @@ export function SongSharePanel({
   const busy = publish.isPending || update.isPending || unpublish.isPending;
   const error = update.error ?? unpublish.error;
 
-  // 교정 제안을 받을 원본: 포크본이면 가져온 공개 덱
   const correctionTargetId =
     master?.origin === "fork" && master.forkedFrom ? master.forkedFrom : null;
   const authorName = master?.forkedFromAuthorName ?? song.forkedFromAuthorName;

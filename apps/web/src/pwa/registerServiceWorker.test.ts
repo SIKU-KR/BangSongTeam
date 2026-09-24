@@ -48,7 +48,6 @@ describe("registerServiceWorker", () => {
     hooks().onNeedRefresh?.();
 
     expect(getServiceWorkerState().needRefresh).toBe(true);
-    // 사용자가 버튼을 누르기 전까지는 적용 함수가 호출되면 안 된다.
     expect(apply).not.toHaveBeenCalled();
   });
 
@@ -84,7 +83,7 @@ describe("registerServiceWorker", () => {
       navigator,
       "serviceWorker",
     );
-    // @ts-expect-error 런타임에서 지원되지 않는 환경을 흉내 낸다
+    // @ts-expect-error
     delete navigator.serviceWorker;
 
     const { registrar, calls } = makeRegistrar();

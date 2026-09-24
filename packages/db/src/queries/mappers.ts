@@ -29,7 +29,6 @@ import type {
  * 라우트마다 `JSON.parse`를 흩뿌리면 한쪽만 고쳐져 조용히 어긋난다.
  */
 
-/** 저장본이 깨져 있어도 목록 전체가 죽지 않도록 복구한다 */
 function parseSlides(raw: string | null | undefined): Slide[] {
   if (!raw) return [];
   let parsed: unknown;
@@ -40,8 +39,6 @@ function parseSlides(raw: string | null | undefined): Slide[] {
   }
   if (!Array.isArray(parsed)) return [];
 
-  // 항목 단위로 검증한다. 배열 전체를 한 번에 파싱하면 슬라이드 하나가
-  // 깨졌을 때 그 곡의 가사가 통째로 사라진다.
   const slides: Slide[] = [];
   for (const candidate of parsed) {
     const result = SlideSchema.safeParse(candidate);
@@ -63,8 +60,6 @@ function parseStyle(raw: string | null | undefined): DeckStyle {
 function toIso(value: Date | number | null | undefined): string {
   if (value instanceof Date) return value.toISOString();
   if (typeof value === "number") return new Date(value * 1000).toISOString();
-  // created_at/updated_at은 DB 기본값이라 Drizzle 타입상 null이 가능하다.
-  // 여기서 던지면 행 한 건 때문에 전체 응답이 죽는다.
   return new Date(0).toISOString();
 }
 
@@ -172,7 +167,7 @@ export interface DecomposedDocument {
  * 본문이 보내온 값을 그대로 믿으면 남의 계정으로 문서를 심거나, 보관함 덱을
  * 프레젠테이션 덱으로 둔갑시킬 수 있다.
  *
- * 세트 복제본은 공유 대상이 아니다 (M5). 공개·가져간 횟수·게시 기록·기여 여부를
+ * 세트 복제본은 공유 대상이 아니다. 공개·가져간 횟수·게시 기록·기여 여부를
  * 강제로 끈다 — 그러지 않으면 공개 곡을 세트에 담은 복제본이 공개 검색에 섞인다.
  * `forkedFrom`(복제해 온 보관함 덱)과 `forkedFromAuthorName`(원작 표시)은 편집기가
  * 쓰는 값이라 그대로 둔다.
@@ -188,7 +183,6 @@ export function fromPresentationDocument(
       userId: doc.userId,
       title: doc.title,
       serviceDate: doc.serviceDate,
-      // 필드가 없으면(구버전 클라이언트) 행에도 넣지 않는다. 업서트가 기존 값을 유지한다.
       ...(doc.folderId === undefined ? {} : { folderId: doc.folderId }),
       ...(doc.trashedAt === undefined
         ? {}

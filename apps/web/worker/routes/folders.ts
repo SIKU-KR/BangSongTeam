@@ -51,7 +51,6 @@ export function createFoldersRoute(deps: AppDeps = {}) {
         return c.json({ error: "폴더를 저장하지 못했습니다" }, 500);
       }
 
-      // 부모 보정(루트로 이동)이 있었을 수 있으므로 확정본을 돌려준다.
       return c.json({ folder: saved }, 200);
     })
     .delete("/:id", async (c) => {

@@ -6,7 +6,7 @@ import type { AppEnv } from "../types";
 import { resolveRequireAuth, type AppDeps } from "../deps";
 
 /**
- * 신고 접수 (PRD 4.7 신고). 처리는 운영 런북이 한다 — 관리자 화면은 두지 않는다.
+ * 신고 접수. 처리는 운영 런북이 한다 — 관리자 화면은 두지 않는다.
  */
 export function createReportsRoute(deps: AppDeps = {}) {
   return new Hono<AppEnv>()

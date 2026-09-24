@@ -31,16 +31,12 @@ export function createPresentationsRoute(deps: AppDeps = {}) {
       const userId = c.get("userId") as string;
       const document = c.req.valid("json");
 
-      // 경로와 본문이 어긋나면 어느 문서를 쓰는지 모호해진다.
       if (document.id !== c.req.param("id")) {
         return c.json({ error: "문서 id가 경로와 일치하지 않습니다" }, 400);
       }
 
       const db = createD1Client(c.env.DB);
 
-      // DB 오류를 그냥 던지면 raw D1_ERROR가 500 본문으로 새어 나가고, 클라이언트는
-      // '서버가 요청을 거절했습니다 (500)'만 보게 된다. 원인을 서버 로그에 남기고
-      // 사용자에게는 무엇이 안 됐는지 읽을 수 있는 문장을 준다.
       try {
         const saved = await upsertPresentationDocument(db, userId, document);
         if (!saved) {

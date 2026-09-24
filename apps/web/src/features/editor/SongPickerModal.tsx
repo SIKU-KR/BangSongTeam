@@ -25,13 +25,6 @@ export interface SongPickerModalProps {
 type FilterType = "all" | "mine" | "shared";
 type Mode = "browse" | "create";
 
-/**
- * 곡 추가 모달의 목록 항목.
- *
- * - `mine`: 내 보관함 (IndexedDB, 오프라인에서도 보인다)
- * - `shared`: 공유 라이브러리의 공개 덱 (서버 검색, PRD 4.7). 같은 곡도 공개한
- *   사람마다 따로 보이고, 가져간 횟수순으로 정렬된다
- */
 type PickerEntry =
   | { kind: "mine"; key: string; deck: Deck }
   | {
@@ -52,10 +45,7 @@ const FILTERS: { id: FilterType; label: string; active: string }[] = [
 ];
 
 /**
- * 2-Pane 곡 추가 모달.
- *
- * 좌측은 내 곡 + 공유 곡의 통합 목록, 우측은 미리보기 또는 직접 등록 폼이다.
- * 공유 곡은 가져오기(fork)로 내 보관함에 먼저 넣은 뒤 세트에 담는다 (M5).
+ * 찬양곡 선택 모달.
  */
 export function SongPickerModal({
   isOpen,
@@ -89,7 +79,6 @@ export function SongPickerModal({
     }
   }, [isOpen, initialSearch]);
 
-  // ESC 키로 닫기
   useEffect(() => {
     if (!isOpen) return;
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -113,7 +102,6 @@ export function SongPickerModal({
 
     const myIds = new Set(mySongs.map((deck) => deck.id));
     const shared: PickerEntry[] = (search.data?.decks ?? [])
-      // 내가 공개한 곡은 이미 '내 곡'에 있다
       .filter((summary) => !myIds.has(summary.id))
       .map((summary) => ({
         kind: "shared",
@@ -156,8 +144,6 @@ export function SongPickerModal({
     }
   };
 
-  // 직접 등록한 곡은 보관함에 저장하고 바로 세트에 담는다. 같은 곡이 이미
-  // 공유돼 있어도 묶지 않는다 — 공유 라이브러리는 곡마다 여러 버전을 허용한다.
   const handleCreateSubmit = (values: CreateSongValues): void => {
     const saved = saveSongToLibrary({
       title: values.title,
@@ -181,7 +167,6 @@ export function SongPickerModal({
       className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200"
     >
       <div className="relative flex flex-col w-full max-w-5xl h-[88vh] max-h-[850px] bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-2xl overflow-hidden text-zinc-900 dark:text-zinc-100">
-        {/* 헤더 */}
         <div className="px-6 py-4 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between shrink-0">
           <div>
             <div className="flex items-center gap-2">
@@ -212,7 +197,6 @@ export function SongPickerModal({
         </div>
 
         <div className="flex-1 flex flex-col md:flex-row min-h-0 overflow-hidden">
-          {/* 좌측: 검색과 목록 */}
           <div className="w-full md:w-5/12 lg:w-4/12 flex flex-col border-b md:border-b-0 md:border-r border-zinc-200 dark:border-zinc-800 shrink-0 bg-white dark:bg-zinc-900">
             <div className="p-3.5 space-y-2.5 border-b border-zinc-200 dark:border-zinc-800 shrink-0">
               <div className="relative">
@@ -318,7 +302,6 @@ export function SongPickerModal({
             </div>
           </div>
 
-          {/* 우측: 미리보기 또는 직접 등록 */}
           <div className="flex-1 flex flex-col min-w-0 bg-zinc-50/60 dark:bg-zinc-950/40">
             {mode === "create" ? (
               <CreateSongForm

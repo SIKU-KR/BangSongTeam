@@ -19,12 +19,6 @@ function folder(
   return { id, parentId, trashedAt };
 }
 
-// 루트
-// ├─ a
-// │  ├─ b
-// │  │  └─ c
-// │  └─ d
-// └─ e
 const TREE = [
   folder("c", "b"),
   folder("a", null),
@@ -165,7 +159,7 @@ describe("sortFoldersParentFirst", () => {
   });
 
   it("일부만 정렬할 때도 전체 트리 기준 깊이를 쓴다", () => {
-    const subset = [TREE[0], TREE[2]]; // c, b
+    const subset = [TREE[0], TREE[2]];
     expect(sortFoldersParentFirst(subset, TREE).map((f) => f.id)).toEqual([
       "b",
       "c",

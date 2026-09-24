@@ -64,7 +64,6 @@ describe("planSearch", () => {
   });
 
   it("splits mixed queries by token instead of by total length", () => {
-    // 전체 길이(4)로 분기하면 1글자 토큰이 MATCH로 가서 아무것도 못 찾는다
     expect(planSearch("주 은혜로")).toEqual({
       kind: "search",
       match: '"은혜로"',
@@ -121,14 +120,12 @@ describe("searchPublicDecks", () => {
         forkCount: 20,
         lyricsRaw: "이 곳에 오셔서 은혜를 베푸소서",
       }),
-      // 세트 복제본은 공개로 저장되어 있어도 검색되면 안 된다 (M5-1 누출 경로)
       deckRow({
         id: "s5",
         title: "은혜 세트 복제본",
         scope: "presentation",
         forkCount: 80,
       }),
-      // 운영자가 게시를 중단한 덱
       deckRow({
         id: "s6",
         title: "은혜 게시 중단",

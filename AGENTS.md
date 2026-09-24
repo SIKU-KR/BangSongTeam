@@ -267,6 +267,25 @@ Sunday worship services cannot tolerate network failures, but caching must never
 - **Server Cache & Data Synchronization**: TanStack Query (`@tanstack/react-query`).
 - Invalidate and refetch queries after mutations instead of maintaining manual client sync states.
 
+### 7.4 Code Documentation & Comments (Code as Single Source of Truth)
+
+1. **Code is the Absolute Truth (SoT)**:
+   - Type definitions, function signatures, variable names, and control flow must express the logic. Do not write comments explaining What/How that code already conveys.
+   - **Prevent Comment Rot**: Comments quickly become obsolete and deceptive. Retain only non-obvious intent, architectural rationale, or hidden constraints (Why).
+2. **Zero Inline Comments**:
+   - No inline comments (`// ...`, `/* ... */`) inside functions, conditionals, loops, JSX, or tests.
+   - **Strictly Prohibited**:
+     - Logic restatements (`// 사용자 조회`, `// null 체크`, `// 에러 반환`).
+     - Step numbering / thought logs (`// 1단계: 파싱`, `// Step 1:`, `// 1. 헤더 삽입`).
+     - Milestone / PRD / Task tags (`// M1`, `// M5 공유 필드`, `// Task 4.5`, `// PRD 4.7`).
+     - TODOs, debug code snippets, and commented-out dead code.
+   - **Sole Exception**: Workarounds for third-party library bugs or platform constraints that cannot be inferred from code alone (must include issue number or reference link).
+3. **Strict & Minimal TSDoc**:
+   - Write TSDoc only on exported modules, interfaces, and functions.
+   - **Why over What**: Describe business rationale, domain edge cases, and architectural constraints—never implementation steps.
+   - **Side Effects & Invariants**: Document network I/O, database transactions/locks, idempotency, or security scoping requirements.
+   - **No Type Echoing**: Do not repeat parameter names or types. Omit `@param` and `@returns` entirely unless describing explicit business validation rules (e.g. `ISO-8601 format`, `positive integer`).
+
 ---
 
 ## 8. Development Milestones Reference
@@ -297,3 +316,5 @@ Before committing or submitting changes, ensure:
 5. All new D1 queries enforce `user_id` authentication checks (or explicit `visibility = 'public'`).
 6. All new API endpoints have corresponding Zod validation in `packages/shared`.
 7. For frontend/UI changes, verify actual rendering and runtime behavior in Google Chrome (via local dev server or headless Chrome).
+8. Zero unnecessary inline comments and redundant TSDoc tags; code serves as the Single Source of Truth (SoT).
+9. No milestone/task references (`M1`–`M7`, `PRD`, `Task X`) in code comments or test descriptions.

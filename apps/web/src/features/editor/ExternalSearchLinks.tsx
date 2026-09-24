@@ -6,24 +6,18 @@ export interface ExternalSearchLinksProps {
   className?: string;
 }
 
-/**
- * 멜론 통합 검색 URL 생성
- */
+/** 멜론 통합 검색 URL 생성. */
 export function getMelonSearchUrl(title: string): string {
   return `https://www.melon.com/search/total/index.htm?q=${encodeURIComponent(title.trim())}`;
 }
 
-/**
- * 벅스 통합 검색 URL 생성
- */
+/** 벅스 통합 검색 URL 생성. */
 export function getBugsSearchUrl(title: string): string {
   return `https://music.bugs.co.kr/search/integrated?q=${encodeURIComponent(title.trim())}`;
 }
 
 /**
- * 곡 제목을 기반으로 멜론/벅스 가사 검색 결과 페이지를 새 탭으로 열어주는 링크 컴포넌트
- * - 저작권 법적 안전성 준수: 서비스가 직접 크롤링하지 않고 사용자가 새 탭에서 확인하도록 유도 (PRD 4.1)
- * - target="_blank" rel="noopener noreferrer" 속성 준수
+ * 곡 제목을 기반으로 멜론/벅스 가사 검색 결과 페이지를 새 탭으로 여는 링크 컴포넌트.
  */
 export function ExternalSearchLinks({
   title,
@@ -41,7 +35,6 @@ export function ExternalSearchLinks({
         가사 검색:
       </span>
 
-      {/* Melon Link */}
       <a
         role="link"
         href={hasQuery ? melonUrl : undefined}
@@ -65,7 +58,6 @@ export function ExternalSearchLinks({
         <span className="text-[10px] opacity-70">↗</span>
       </a>
 
-      {/* Bugs Link */}
       <a
         role="link"
         href={hasQuery ? bugsUrl : undefined}

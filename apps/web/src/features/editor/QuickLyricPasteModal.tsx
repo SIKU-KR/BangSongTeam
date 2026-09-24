@@ -20,6 +20,7 @@ export interface QuickLyricPasteModalProps {
   renderSearchLinks?: (title: string) => React.ReactNode;
 }
 
+/** 빠른 가사 붙여넣기로 새 곡을 세트에 추가하는 모달. */
 export function QuickLyricPasteModal({
   isOpen,
   onClose,
@@ -53,10 +54,6 @@ export function QuickLyricPasteModal({
   const handleAdd = (): void => {
     if (!isValid) return;
 
-    // 로그인이 편집의 전제 조건이 된 뒤(2026-09-22)에도 게스트 id가 하드코딩으로
-    // 남아 있었다. 곡의 주인은 항상 세션 사용자다. 세션이 없으면 임의의 id를
-    // 만들어 넣지 않는다 — 사용자 데이터에 존재하지 않는 소유자가 박힌다.
-    // 로그인 게이트 때문에 실제로는 닿지 않는 경로다.
     const userId = getCurrentUserId();
     if (!userId) return;
 
@@ -91,7 +88,6 @@ export function QuickLyricPasteModal({
       className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-in fade-in duration-200"
     >
       <div className="relative flex flex-col w-full max-w-4xl max-h-[90vh] bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-xl dark:shadow-2xl text-zinc-900 dark:text-zinc-100 overflow-hidden">
-        {/* Modal Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50/80 dark:bg-zinc-900/80">
           <div>
             <h2
@@ -115,9 +111,7 @@ export function QuickLyricPasteModal({
           </button>
         </div>
 
-        {/* Modal Body */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-6 overflow-y-auto">
-          {/* Left Column: Form Inputs */}
           <div className="flex flex-col gap-4">
             <div>
               <label
@@ -154,7 +148,6 @@ export function QuickLyricPasteModal({
               />
             </div>
 
-            {/* External Search Links Slot */}
             <div className="pt-1">
               {renderSearchLinks ? (
                 renderSearchLinks(title)
@@ -181,7 +174,6 @@ export function QuickLyricPasteModal({
             </div>
           </div>
 
-          {/* Right Column: Real-time Slide Cards Preview */}
           <div className="flex flex-col bg-zinc-50 dark:bg-zinc-950/60 border border-zinc-200 dark:border-zinc-800 rounded-lg p-4 overflow-hidden">
             <div className="flex items-center justify-between pb-3 mb-3 border-b border-zinc-200 dark:border-zinc-800">
               <span className="text-xs font-semibold uppercase tracking-wider text-zinc-600 dark:text-zinc-400">
@@ -229,7 +221,6 @@ export function QuickLyricPasteModal({
           </div>
         </div>
 
-        {/* Modal Footer */}
         <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-zinc-200 dark:border-zinc-800 bg-zinc-50/80 dark:bg-zinc-900/80">
           <button
             type="button"

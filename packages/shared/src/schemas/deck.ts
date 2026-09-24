@@ -35,8 +35,8 @@ const LegacyDeckOriginSchema = z.preprocess(
 export const DeckSchema = z.object({
   id: IdSchema,
   userId: IdSchema,
-  scope: DeckScopeSchema.default("library"), // 'library': 보관함 마스터, 'presentation': 프레젠테이션 전용 복제본
-  presentationId: IdSchema.nullable().optional(), // scope='presentation'일 때 속한 프레젠테이션 ID
+  scope: DeckScopeSchema.default("library"),
+  presentationId: IdSchema.nullable().optional(),
   title: z.string().min(1).max(100),
   artist: z.string().max(100).default(""),
   lyricsRaw: z.string(),
@@ -44,21 +44,12 @@ export const DeckSchema = z.object({
   backgroundId: IdSchema.nullable(),
   style: DeckStyleSchema,
   visibility: DeckVisibilitySchema.default("private"),
-  forkedFrom: IdSchema.nullable().optional(), // 원본 덱 ID (Clone/Fork 출처 추적)
+  forkedFrom: IdSchema.nullable().optional(),
   forkCount: z.number().int().nonnegative().default(0),
 
-  // ---- M5 공유 필드 ----
-  // 모두 optional이다. `.default()`를 걸면 z.infer 출력 타입에서 필수가 되어
-  // 기존 Deck 리터럴이 전부 깨진다. 없으면 '해당 없음'으로 읽는다.
-  //
-  // 모두 서버 소유이며 동기화 PUT으로는 바뀌지 않는다 (공개 전환·포크·게시 중단
-  // 전용 경로에서만).
   origin: LegacyDeckOriginSchema.optional(),
-  /** 포크 시점에 서버가 남긴 원작자 이름. 원본이 지워져도 '원작: X'를 보여 준다 */
   forkedFromAuthorName: z.string().max(100).nullable().optional(),
-  /** 공개 전 저작권 안내에 동의하고 공개한 시각 */
   publishedAt: z.string().datetime().nullable().optional(),
-  /** 운영자가 게시를 중단한 시각. 값이 있으면 다시 공개할 수 없다 */
   takedownAt: z.string().datetime().nullable().optional(),
 
   createdAt: z.string().datetime(),

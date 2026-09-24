@@ -98,7 +98,6 @@ describe("songLibraryStore", () => {
       lyricsRaw: "한 줄\n\n두 줄",
     });
 
-    // 새 탭 시뮬레이션: 메모리 캐시만 비우고 저장소에서 다시 읽는다
     await hydrateSongLibrary();
     expect(getUserSongs().map((d) => d.title)).toContain("다시 불러올 곡");
   });
@@ -115,7 +114,6 @@ describe("songLibraryStore", () => {
   });
 
   it("구 localStorage 보관함을 IndexedDB로 이관하고, 손상 항목이 있어도 나머지를 살린다", async () => {
-    // 이전 구현이 남긴 형식. 3개 중 1개가 손상된 상태.
     const legacyDeck = (title: string) => ({
       id: createId(),
       userId: "00000000x000000000001",
@@ -146,12 +144,11 @@ describe("songLibraryStore", () => {
     const titles = getUserSongs().map((d) => d.title);
     expect(titles).toContain("레거시 곡 A");
     expect(titles).toContain("레거시 곡 B");
-    // 원본은 지우지 않고 백업 키로 남긴다 (손상 항목 복구 가능)
     expect(localStorage.getItem(LEGACY_SONGS_KEY)).toBeNull();
     expect(localStorage.getItem(LEGACY_SONGS_BACKUP_KEY)).not.toBeNull();
   });
 
-  describe("서버 동기화 (M5-2)", () => {
+  describe("서버 동기화", () => {
     let push: ReturnType<typeof vi.fn>;
     let remove: ReturnType<typeof vi.fn>;
 

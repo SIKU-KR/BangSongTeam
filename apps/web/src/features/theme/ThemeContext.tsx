@@ -10,11 +10,7 @@ export interface ThemeContextValue {
 
 const THEME_STORAGE_KEY = "worship-theme";
 
-/**
- * Chrome 공식 Web Platform API (CSS prefers-color-scheme Media Query):
- * window.matchMedia("(prefers-color-scheme: dark)")를 호출하여
- * Chrome 브라우저 및 OS 시스템 테마 설정을 정확하게 가져옵니다.
- */
+/** 시스템 prefers-color-scheme 설정을 조회한다. */
 export function getSystemTheme(): "light" | "dark" {
   if (
     typeof window === "undefined" ||
@@ -22,7 +18,6 @@ export function getSystemTheme(): "light" | "dark" {
   ) {
     return "dark";
   }
-  // Chrome 공식 API: prefers-color-scheme 미디어 쿼리 조회
   return window.matchMedia("(prefers-color-scheme: dark)").matches
     ? "dark"
     : "light";
@@ -38,7 +33,6 @@ export function getStoredTheme(): ThemeMode {
       return stored;
     }
   } catch {
-    // localStorage 제한 환경 방어
   }
   return "system";
 }
@@ -65,7 +59,6 @@ export function applyThemeToDOM(resolved: "light" | "dark"): void {
   root.style.colorScheme = resolved;
 }
 
-// Chrome 공식 API: prefers-color-scheme 변경 이벤트 리스너 등록
 if (typeof window !== "undefined" && typeof window.matchMedia === "function") {
   const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
   const handleSystemThemeChange = () => {
@@ -89,7 +82,6 @@ export function setTheme(newTheme: ThemeMode): void {
       window.localStorage.setItem(THEME_STORAGE_KEY, newTheme);
     }
   } catch {
-    // localStorage 예외 방어
   }
   const resolved = newTheme === "system" ? getSystemTheme() : newTheme;
   applyThemeToDOM(resolved);

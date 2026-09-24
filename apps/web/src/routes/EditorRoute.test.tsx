@@ -53,25 +53,20 @@ describe("EditorRoute (PowerPoint식 프레젠테이션 편집기)", () => {
   it("should render editor header, stage canvas, property panel, and slide thumbnail pane", () => {
     renderEditor();
 
-    // Header & Title
     expect(screen.getByTestId("editor-header")).toBeInTheDocument();
     expect(screen.getByText("2026 주일 3부 예배")).toBeInTheDocument();
 
-    // Stage canvas
     expect(screen.getByTestId("editor-stage-canvas")).toBeInTheDocument();
     expect(
       screen.getByText("16:9 와이드스크린 (1920 × 1080)"),
     ).toBeInTheDocument();
 
-    // PPT식 좌측 썸네일 창 & 곡 구역
     expect(screen.getByTestId("slide-thumbnail-pane")).toBeInTheDocument();
     expect(screen.getByTestId("song-section-0")).toHaveTextContent("은혜로다");
 
-    // Properties panel
     expect(screen.getByTestId("song-property-panel")).toBeInTheDocument();
     expect(screen.getByText("슬라이드 디자인 & 속성")).toBeInTheDocument();
 
-    // 하단 슬라이드 스트립은 없다
     expect(screen.queryByTestId("slide-filmstrip")).not.toBeInTheDocument();
   });
 
@@ -89,7 +84,6 @@ describe("EditorRoute (PowerPoint식 프레젠테이션 편집기)", () => {
 
     fireEvent.click(screen.getByTestId("slide-thumb-1"));
 
-    // Text of second slide of 은혜로다 should now be in the canvas/property panel
     expect(
       screen.getByDisplayValue(/주의 사랑을 주의 선하심을/),
     ).toBeInTheDocument();
@@ -124,11 +118,9 @@ describe("EditorRoute (PowerPoint식 프레젠테이션 편집기)", () => {
   it("should update typography and 3x3 position when controls are changed", () => {
     renderEditor();
 
-    // Click 3x3 anchor bottom-center
     const bottomCenterAnchor = screen.getByTestId("grid-anchor-bottom-center");
     fireEvent.click(bottomCenterAnchor);
 
-    // Overlay slider to 75%
     const opacitySlider = screen.getByLabelText("검정 오버레이 불투명도");
     act(() => {
       fireEvent.change(opacitySlider, { target: { value: "75" } });
@@ -139,12 +131,10 @@ describe("EditorRoute (PowerPoint식 프레젠테이션 편집기)", () => {
   it("should add a new slide after the current slide", () => {
     renderEditor();
 
-    // 세트 전체 23장
     expect(screen.queryByTestId("slide-thumb-23")).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByTestId("add-slide-btn"));
 
-    // 24장이 되고, 새 슬라이드(1곡 2번째)가 선택된다
     expect(screen.getByTestId("slide-thumb-23")).toBeInTheDocument();
     expect(screen.getByTestId("song-section-0")).toHaveTextContent("6장");
     expect(screen.getByTestId("editor-header")).toHaveTextContent(
@@ -158,27 +148,22 @@ describe("EditorRoute (PowerPoint식 프레젠테이션 편집기)", () => {
     const undoBtn = screen.getByTestId("header-undo-btn");
     const redoBtn = screen.getByTestId("header-redo-btn");
 
-    // Initially can't undo/redo
     expect(undoBtn).toBeDisabled();
     expect(redoBtn).toBeDisabled();
 
-    // Modify title
     const titleBtn = screen.getByTitle("클릭하여 제목 수정");
     fireEvent.click(titleBtn);
     const input = screen.getByDisplayValue("2026 주일 3부 예배");
     fireEvent.change(input, { target: { value: "새로운 예배 제목" } });
     fireEvent.keyDown(input, { key: "Enter" });
 
-    // Now undo is enabled
     expect(screen.getByText("새로운 예배 제목")).toBeInTheDocument();
     expect(undoBtn).not.toBeDisabled();
 
-    // Click undo
     fireEvent.click(undoBtn);
     expect(screen.getByText("2026 주일 3부 예배")).toBeInTheDocument();
     expect(redoBtn).not.toBeDisabled();
 
-    // Click redo
     fireEvent.click(redoBtn);
     expect(screen.getByText("새로운 예배 제목")).toBeInTheDocument();
   });
@@ -200,18 +185,14 @@ describe("EditorRoute (PowerPoint식 프레젠테이션 편집기)", () => {
   it("should support keyboard navigation shortcuts (Space, ArrowRight, ArrowLeft)", () => {
     renderEditor();
 
-    // Initial slide: 세트 전체 23장 중 1번
     expect(screen.getByText("1 / 23")).toBeInTheDocument();
 
-    // Press ArrowRight -> moves to slide 2
     fireEvent.keyDown(window, { key: "ArrowRight" });
     expect(screen.getByText("2 / 23")).toBeInTheDocument();
 
-    // Press Space -> moves to slide 3
     fireEvent.keyDown(window, { key: " " });
     expect(screen.getByText("3 / 23")).toBeInTheDocument();
 
-    // Press ArrowLeft -> moves back to slide 2
     fireEvent.keyDown(window, { key: "ArrowLeft" });
     expect(screen.getByText("2 / 23")).toBeInTheDocument();
   });
@@ -245,14 +226,11 @@ describe("EditorRoute (PowerPoint식 프레젠테이션 편집기)", () => {
   it("should maintain correct active slide index when deleting an earlier slide", () => {
     renderEditor();
 
-    // Select slide 3 (index 2)
     fireEvent.click(screen.getByTestId("slide-thumb-2"));
     expect(screen.getByText("3 / 23")).toBeInTheDocument();
 
-    // Delete slide 1 (index 0)
     fireEvent.click(screen.getByTestId("delete-slide-btn-0"));
 
-    // 같은 슬라이드가 계속 선택된 채로 번호만 당겨진다 (3 → 2, 전체 22장)
     expect(screen.getByText("2 / 22")).toBeInTheDocument();
     expect(screen.getByDisplayValue(/은혜로다 주의 은혜/)).toBeInTheDocument();
   });
@@ -274,7 +252,6 @@ describe("EditorRoute (PowerPoint식 프레젠테이션 편집기)", () => {
   it("?song= 파라미터로 진입하면 해당 곡이 선택된다", () => {
     renderEditor(`/editor/${DOC_ID}?song=2`);
 
-    // 3번째 곡 '시선' — 1곡 5장 + 2곡 4장 다음이므로 10번 슬라이드
     expect(screen.getByTestId("editor-header")).toHaveTextContent("곡 3/5");
     expect(screen.getByTestId("editor-header")).toHaveTextContent(
       "슬라이드 10/23",
@@ -309,7 +286,6 @@ describe("EditorRoute (PowerPoint식 프레젠테이션 편집기)", () => {
     it("번호는 곡이 바뀌어도 1로 돌아가지 않고 이어진다", () => {
       renderEditor();
 
-      // 1곡(은혜로다) 5장 → 2곡(주 품에) 첫 장은 6번
       expect(screen.getByTestId("slide-thumb-4")).toHaveTextContent("5");
       expect(screen.getByTestId("slide-thumb-5")).toHaveTextContent("6");
       expect(screen.getByTestId("slide-thumb-22")).toHaveTextContent("23");
@@ -343,7 +319,6 @@ describe("EditorRoute (PowerPoint식 프레젠테이션 편집기)", () => {
 
       expect(screen.getByTestId("canvas-prev-btn")).toBeDisabled();
 
-      // 1곡의 마지막 장에서도 다음 버튼이 켜져 있다
       fireEvent.click(screen.getByTestId("slide-thumb-4"));
       const nextBtn = screen.getByTestId("canvas-next-btn");
       expect(nextBtn).not.toBeDisabled();
@@ -374,7 +349,6 @@ describe("EditorRoute (PowerPoint식 프레젠테이션 편집기)", () => {
       expect(screen.getByTestId("song-section-1")).toHaveTextContent(
         "은혜로다",
       );
-      // 은혜로다가 2번째 곡이 되었고 (주 품에 4장 다음) 5번 슬라이드부터 시작
       const header = screen.getByTestId("editor-header");
       expect(header).toHaveTextContent("곡 2/5");
       expect(header).toHaveTextContent("슬라이드 5/23");
@@ -414,7 +388,6 @@ describe("EditorRoute (PowerPoint식 프레젠테이션 편집기)", () => {
 
       fireEvent.click(screen.getByTestId("song-section-toggle-1"));
 
-      // 2곡(6~9번) 숨김, 3곡 첫 장은 여전히 10번
       expect(screen.queryByTestId("slide-thumb-5")).not.toBeInTheDocument();
       expect(screen.getByTestId("slide-thumb-9")).toHaveTextContent("10");
 
@@ -426,7 +399,6 @@ describe("EditorRoute (PowerPoint식 프레젠테이션 편집기)", () => {
       renderEditor();
 
       fireEvent.click(screen.getByTestId("slide-thumb-1"));
-      // 2곡의 첫 슬라이드(6번) 삭제
       fireEvent.click(screen.getByTestId("delete-slide-btn-5"));
 
       expect(screen.getByText("2 / 22")).toBeInTheDocument();
@@ -440,17 +412,11 @@ describe("EditorRoute (PowerPoint식 프레젠테이션 편집기)", () => {
 
       fireEvent.click(screen.getByTestId("style-preset-2"));
 
-      // 선샤인 웜: Gmarket Sans · 오버레이 50%
       expect(screen.getByDisplayValue("Gmarket Sans")).toBeInTheDocument();
       expect(screen.getByText("50%")).toBeInTheDocument();
     });
   });
 
-  /**
-   * 빈 편집기 화면은 처음 쓰는 봉사자가 가장 먼저 만나는 화면인데 테스트가 하나도
-   * 없었다. 그 사이 '기본 5곡 세트 불러오기' 버튼이 곡을 넣는 게 아니라 세트를
-   * **비우고** 있었는데도 아무도 눈치채지 못했다.
-   */
   describe("빈 편집기 화면", () => {
     const EMPTY_DOC = {
       ...SEED_PRESENTATIONS[0],
@@ -484,12 +450,10 @@ describe("EditorRoute (PowerPoint식 프레젠테이션 편집기)", () => {
         fireEvent.click(screen.getByText("기본 5곡 세트 불러오기"));
       });
 
-      // 라벨과 반대로 세트를 비우던 버그의 회귀 방지선이다.
       expect(
         screen.queryByText("등록된 찬양 곡 또는 슬라이드가 없습니다"),
       ).not.toBeInTheDocument();
       expect(screen.getAllByText("은혜로다").length).toBeGreaterThan(0);
-      // 5곡이 실제로 들어왔는지 (썸네일 창에 5개 구역이 생긴다)
       expect(screen.getByTestId("slide-thumb-0")).toBeInTheDocument();
       expect(screen.getByTestId("song-section-4")).toBeInTheDocument();
     });

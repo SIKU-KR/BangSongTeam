@@ -50,13 +50,7 @@ function isDrivePath(pathname: string): boolean {
   );
 }
 
-/**
- * `/presentations`(드라이브), `/lyrics`, `/backgrounds` 가 공유하는 애플리케이션 셸 레이아웃
- * - 좌측 `AppSidebar`(폴더 트리), 상단 `AppHeroHeader`(경로·툴바), 본문 `<Outlet/>`
- * - 검색/뷰모드/정렬 상태와 가사 빠른 입력 모달을 소유하고 컨텍스트로 내려준다
- * - `DriveProvider`가 셸 전체를 감싼다. 사이드바 트리·경로·본문 그리드가 같은
- *   선택·드래그 상태를 공유해야 하기 때문이다.
- */
+/** 사이드바, 헤더 및 공통 툴바를 제공하는 셸 레이아웃 */
 export function AppShellLayout(): React.JSX.Element {
   return (
     <DriveProvider>
@@ -78,7 +72,6 @@ function AppShellFrame(): React.JSX.Element {
   const onDrive = isDrivePath(pathname);
   const onTrash = pathname === "/presentations/trash";
 
-  // 지금 보고 있는 폴더에 만든다 (드라이브 밖에서는 루트)
   const handleCreateNewPresentation = (): void => {
     drive.createPresentationIn(drive.currentFolderId);
   };
@@ -88,7 +81,6 @@ function AppShellFrame(): React.JSX.Element {
     setIsQuickPasteOpen(false);
   };
 
-  // 명시적 타입 주석으로 필드 누락이 구조적 타이핑에 묻히지 않게 한다
   const context: AppShellContextValue = {
     searchQuery,
     viewMode,
@@ -103,10 +95,7 @@ function AppShellFrame(): React.JSX.Element {
       <AppSidebar />
 
       <div className="flex-1 h-full flex flex-col min-w-0 overflow-y-auto overflow-x-hidden">
-        {/* Chrome 권장 안내 배너 */}
         <ChromeAlertBanner />
-
-        {/* 저장 실패 경고 (닫을 수 없음) */}
         <StorageWarningBanner />
         <AppUpdateBanner />
 
@@ -137,13 +126,11 @@ function AppShellFrame(): React.JSX.Element {
           onQuickAdd={handleCreateNewPresentation}
         />
 
-        {/* ── 메인 본문 영역 ── */}
         <main className="flex-1 max-w-7xl w-full mx-auto px-6 sm:px-8 py-4">
           <Outlet context={context} />
         </main>
       </div>
 
-      {/* 가사 빠른 입력 모달 */}
       <QuickLyricPasteModal
         isOpen={isQuickPasteOpen}
         onClose={() => setIsQuickPasteOpen(false)}

@@ -8,7 +8,6 @@ import {
   type SlideThumbnailPaneProps,
 } from "./SlideThumbnailPane";
 
-/** slideCounts로 간단한 세트를 만든다 */
 function makeItems(slideCounts: number[]): PresentationItem[] {
   return slideCounts.map(
     (count, songIndex) =>
@@ -57,7 +56,6 @@ describe("SlideThumbnailPane (PPT식 썸네일 창)", () => {
   it("세트 전체 슬라이드를 1부터 이어지는 번호로 보여 준다", () => {
     renderPane();
 
-    // [3, 1, 2] → 1곡 1~3, 2곡 4, 3곡 5~6
     expect(screen.getByTestId("slide-thumb-0")).toHaveTextContent("1");
     expect(screen.getByTestId("slide-thumb-3")).toHaveTextContent("4");
     expect(screen.getByTestId("slide-thumb-4")).toHaveTextContent("5");
@@ -107,7 +105,6 @@ describe("SlideThumbnailPane (PPT식 썸네일 창)", () => {
     fireEvent.click(screen.getByTestId("delete-slide-btn-1"));
     expect(props.onDeleteSlide).toHaveBeenCalledWith(0, 1);
 
-    // 2곡은 1장뿐 → 삭제 불가 (곡 삭제는 구역 메뉴에서)
     expect(screen.queryByTestId("delete-slide-btn-3")).not.toBeInTheDocument();
     expect(screen.getByTestId("duplicate-slide-btn-3")).toBeInTheDocument();
   });
@@ -117,7 +114,6 @@ describe("SlideThumbnailPane (PPT식 썸네일 창)", () => {
 
     fireEvent.click(screen.getByTestId("song-section-menu-btn-0"));
     expect(screen.getByTestId("song-section-menu")).toBeInTheDocument();
-    // 첫 곡은 위로 이동 불가
     expect(screen.getByRole("menuitem", { name: "위로 이동" })).toBeDisabled();
 
     fireEvent.mouseDown(document.body);

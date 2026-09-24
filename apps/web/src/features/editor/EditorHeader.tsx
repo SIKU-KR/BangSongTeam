@@ -10,9 +10,7 @@ export interface EditorHeaderProps {
   onPresent: () => void;
   currentSongIndex: number;
   totalSongs: number;
-  /** 세트 전체에서 1부터 이어지는 현재 슬라이드 번호 (곡이 바뀌어도 이어진다) */
   currentSlideNumber: number;
-  /** 세트 전체 슬라이드 수 */
   totalSlideCount: number;
   onUndo?: () => void;
   onRedo?: () => void;
@@ -21,27 +19,10 @@ export interface EditorHeaderProps {
   onNewPresentation?: () => void;
   onOpenLyricModal?: () => void;
   onLoadSampleSongs?: () => void;
-  /** 뒤로가기 목적지 (드라이브에서 이 세트가 들어 있는 폴더) */
   backPath?: string;
   className?: string;
 }
 
-/**
- * 편집기 상단 네비게이션 헤더
- * - 뒤로가기 링크 및 파일(File) 메뉴
- * - 세트 제목 인라인 편집
- * - 실행 취소(Undo) / 다시 실행(Redo)
- * - 자동 저장 상태 표시기
- * - 슬라이드 카운터 (세트 전체 연속 번호)
- * - 라이트·다크 테마 전환
- * - 슬라이드쇼 발표(전체화면) CTA 버튼
- */
-/**
- * 저장·동기화 상태 표시.
- *
- * 예전에는 데이터 바인딩이 전혀 없는 정적 초록 점 + '자동 저장됨'이었다.
- * 저장이 실패하는 중에도 '저장됨'이라고 말하는 표시는 없느니만 못하다.
- */
 function SaveStatusIndicator(): React.JSX.Element {
   const persistenceError = usePersistenceError();
   const { status } = useSyncStatus();
@@ -56,7 +37,6 @@ function SaveStatusIndicator(): React.JSX.Element {
       case "synced":
         return { dotClass: "bg-emerald-500", label: "동기화됨" };
       case "offline":
-        // 오프라인은 실패가 아니다. 이 브라우저에는 저장되어 있다.
         return { dotClass: "bg-zinc-400", label: "오프라인 · 로컬 저장됨" };
       case "error":
         return { dotClass: "bg-red-500", label: "동기화 실패" };
@@ -76,6 +56,9 @@ function SaveStatusIndicator(): React.JSX.Element {
   );
 }
 
+/**
+ * 편집기 상단 네비게이션 헤더.
+ */
 export function EditorHeader({
   title,
   onUpdateTitle,
@@ -114,7 +97,6 @@ export function EditorHeader({
       data-testid="editor-header"
       className={`h-14 bg-white dark:bg-zinc-950 border-b border-zinc-200 dark:border-zinc-800/80 px-4 flex items-center justify-between select-none text-zinc-900 dark:text-zinc-100 ${className}`}
     >
-      {/* 1. 좌측: 뒤로가기 & 세트 제목 & 실행취소/다시실행 */}
       <div className="flex items-center gap-3 min-w-0">
         <button
           type="button"
@@ -139,7 +121,6 @@ export function EditorHeader({
           <span className="hidden sm:inline">홈</span>
         </button>
 
-        {/* Canva 스타일 파일 메뉴 */}
         <div className="relative">
           <button
             type="button"
@@ -260,7 +241,6 @@ export function EditorHeader({
 
         <div className="h-4 w-px bg-zinc-200 dark:bg-zinc-800" />
 
-        {/* 인라인 제목 편집 */}
         <div className="flex items-center gap-2 min-w-0">
           {isEditingTitle ? (
             <input
@@ -305,11 +285,9 @@ export function EditorHeader({
             </button>
           )}
 
-          {/* 저장·동기화 상태 */}
           <SaveStatusIndicator />
         </div>
 
-        {/* Undo / Redo */}
         {(onUndo || onRedo) && (
           <div className="hidden sm:flex items-center gap-0.5 border-l border-zinc-200 dark:border-zinc-800 pl-2">
             <button
@@ -360,7 +338,6 @@ export function EditorHeader({
         )}
       </div>
 
-      {/* 2. 중앙: 슬라이드 위치 표시기 */}
       <div className="hidden lg:flex items-center gap-2 px-3 py-1 rounded-full bg-zinc-100 dark:bg-zinc-900/80 border border-zinc-200 dark:border-zinc-800 text-xs text-zinc-700 dark:text-zinc-300 font-mono">
         {totalSongs > 0 ? (
           <>
@@ -377,9 +354,7 @@ export function EditorHeader({
         )}
       </div>
 
-      {/* 3. 우측: 단축키 안내 및 슬라이드쇼 발표 버튼 */}
       <div className="flex items-center gap-2 shrink-0">
-        {/* 단축키 토글 */}
         <div className="relative">
           <button
             type="button"
@@ -436,10 +411,8 @@ export function EditorHeader({
           )}
         </div>
 
-        {/* 라이트·다크 테마 전환 */}
         <ThemeMenuButton variant="compact" direction="down" align="right" />
 
-        {/* 슬라이드쇼 발표 CTA 버튼 */}
         <button
           type="button"
           data-testid="header-present-btn"

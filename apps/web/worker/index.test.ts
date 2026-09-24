@@ -3,12 +3,8 @@ import { env } from "cloudflare:test";
 import type { BackgroundMedia } from "@repo/shared";
 import app from "./index";
 
-describe("Task 4.6: Miniflare/workerd 환경 Worker 및 D1 통합 테스트", () => {
+describe("Miniflare/workerd 환경 Worker 및 D1 통합 테스트", () => {
   beforeAll(async () => {
-    // 테이블과 사전 주입 배경 10건 모두 worker/test/setup.ts가 실제
-    // 마이그레이션(0000~0002)으로 만든다. 여기서는 R2만 채운다.
-
-    // R2 버킷에 테스트 모션 비디오 객체 적재
     await env.MEDIA_BUCKET.put(
       "loops/warm_light_flow.mp4",
       new Uint8Array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9]),
@@ -40,7 +36,6 @@ describe("Task 4.6: Miniflare/workerd 환경 Worker 및 D1 통합 테스트", ()
     expect(json).toBeInstanceOf(Array);
     expect(json).toHaveLength(10);
 
-    // Verify first background item has correct URLs and properties
     const first = json[0];
     expect(first).toHaveProperty("id");
     expect(first).toHaveProperty("title");
@@ -137,15 +132,12 @@ describe("Task 4.6: Miniflare/workerd 환경 Worker 및 D1 통합 테스트", ()
 
   describe("Better Auth 마운트 (/api/auth/*)", () => {
     it("세션이 없어도 get-session이 500이 아니라 정상 응답을 준다", async () => {
-      // 미로그인은 정상 상태다. 여기서 500이 나면 부팅 시 세션 확인이
-      // 에러 배너를 띄우게 된다.
       const res = await app.request("/api/auth/get-session", {}, env);
 
       expect(res.status).toBeLessThan(500);
     });
 
     it("자격증명이 설정된 프로바이더는 인가 URL을 돌려준다", async () => {
-      // .dev.vars의 로컬 설정에 기대지 않도록 자격증명을 직접 넘긴다.
       const res = await app.request(
         "/api/auth/sign-in/social",
         {
@@ -167,7 +159,6 @@ describe("Task 4.6: Miniflare/workerd 환경 Worker 및 D1 통합 테스트", ()
     });
 
     it("자격증명이 없는 프로바이더는 404다", async () => {
-      // 빈 문자열로 OAuth를 열어 두면 설정 실수가 런타임까지 숨는다.
       const res = await app.request(
         "/api/auth/sign-in/social",
         {
@@ -189,8 +180,6 @@ describe("Task 4.6: Miniflare/workerd 환경 Worker 및 D1 통합 테스트", ()
       );
       const unknownApi = await app.request("/api/nonexistent", {}, env);
 
-      // 둘 다 404지만, 인증 경로는 Better Auth 핸들러까지 들어갔으므로
-      // Hono의 전역 notFound 본문({ error: "Not Found" })이 아니다.
       expect(await unknownApi.json()).toEqual({ error: "Not Found" });
       expect(await unknownAuth.text()).not.toBe(
         JSON.stringify({ error: "Not Found" }),
@@ -199,8 +188,6 @@ describe("Task 4.6: Miniflare/workerd 환경 Worker 및 D1 통합 테스트", ()
   });
   describe("동기화 라우트 마운트 (/api/presentations, /api/decks)", () => {
     it("세션 없이 접근하면 401이다 (404가 아니다)", async () => {
-      // 404면 라우트가 안 붙은 것이고, 200이면 인증이 안 걸린 것이다.
-      // 실제 마운트된 앱에서 requireAuth가 살아 있는지 여기서만 확인할 수 있다.
       for (const path of ["/api/presentations", "/api/decks"]) {
         const res = await app.request(path, {}, env);
         expect(res.status, path).toBe(401);

@@ -32,12 +32,6 @@ export const GRID_ANCHOR_PRESET_COORDINATES: Record<
 
 /**
  * 3x3 앵커 기준 CSS transform 오프셋 정의
- * - top-*: 아래로 자람 (translateY: 0)
- * - middle-*: 상하 대칭으로 자람 (translateY: -50%)
- * - bottom-*: 위로 자람 (translateY: -100%)
- * - *-left: 오른쪽으로 자람 (translateX: 0)
- * - *-center: 좌우 대칭으로 자람 (translateX: -50%)
- * - *-right: 왼쪽으로 자람 (translateX: -100%)
  */
 export const GRID_ANCHOR_TRANSFORMS: Record<
   Exclude<GridAnchorPreset, "custom">,

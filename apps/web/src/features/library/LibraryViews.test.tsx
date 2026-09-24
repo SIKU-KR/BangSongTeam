@@ -12,20 +12,16 @@ describe("Library Views", () => {
         <BackgroundLibraryView onApplyBackgroundToCurrentSet={handleApply} />,
       );
 
-      // 단락 1: 내가 등록한 배경
       expect(screen.getByText("내가 등록한 배경")).toBeInTheDocument();
       expect(screen.getByText("우리 교회 본당 배경 01")).toBeInTheDocument();
 
-      // 단락 2: 유저가 등록한 배경
       expect(screen.getByText("유저가 등록한 배경")).toBeInTheDocument();
       expect(screen.getByText("은은한 빛의 흐름")).toBeInTheDocument();
       expect(screen.getByText("고요한 호수 물결")).toBeInTheDocument();
 
-      // 태그 필터 동작
       const warmFilter = screen.getByRole("button", { name: "따뜻한" });
       fireEvent.click(warmFilter);
 
-      // 배경 적용 클릭
       const applyBtn = screen.getByTestId(
         "apply-community-bg-mJIToShuKOc3FsbZIihi6",
       );
@@ -56,11 +52,10 @@ describe("Library Views", () => {
     it("supports es-hangul choseong search for backgrounds", () => {
       render(
         <BackgroundLibraryView
-          searchQuery="ㅂㄷ" // '본당' 초성
+          searchQuery="ㅂㄷ"
         />,
       );
 
-      // '본당' 태그를 가진 '우리 교회 본당 배경 01' 매칭 확인
       expect(screen.getByText("우리 교회 본당 배경 01")).toBeInTheDocument();
     });
   });

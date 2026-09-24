@@ -35,15 +35,12 @@ export function createDecksRoute(deps: AppDeps = {}) {
         if (deck.id !== c.req.param("id")) {
           return c.json({ error: "덱 id가 경로와 일치하지 않습니다" }, 400);
         }
-        // 세트 복제본은 프레젠테이션 문서로만 저장한다. 이 경로로 들어오면
-        // 보관함 덱으로 둔갑하거나 반대로 세트 덱이 보관함 목록을 오염시킨다.
         if (deck.scope !== "library") {
           return c.json({ error: "보관함 곡만 저장할 수 있습니다" }, 400);
         }
 
         const db = createD1Client(c.env.DB);
 
-        // 프레젠테이션 저장과 같은 이유로 DB 오류를 그대로 흘리지 않는다.
         let saved;
         try {
           saved = await upsertDeck(db, userId, deck);
@@ -55,10 +52,8 @@ export function createDecksRoute(deps: AppDeps = {}) {
           return c.json({ error: "곡을 저장하지 못했습니다" }, 500);
         }
 
-        // 서버가 확정한 공유 필드(공개 여부·가져간 횟수 등)를 클라이언트가 반영한다
         return c.json({ ok: true as const, deck: saved }, 200);
       })
-      // 공개 전환 (PRD 4.7 공유 선택). 공개하려면 저작권 안내 동의가 `true`여야 한다.
       .patch(
         "/:id/visibility",
         zValidator("json", VisibilityUpdateRequestSchema),
@@ -98,7 +93,6 @@ export function createDecksRoute(deps: AppDeps = {}) {
           }
         },
       )
-      // 공개 덱 가져오기 (PRD 4.7). 원본은 바뀌지 않고 내 보관함에 비공개 복제본이 생긴다.
       .post("/:id/fork", async (c) => {
         const db = createD1Client(c.env.DB);
         const result = await forkPublicDeck(

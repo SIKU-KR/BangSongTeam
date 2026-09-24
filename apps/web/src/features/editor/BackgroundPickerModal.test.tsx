@@ -32,7 +32,6 @@ describe("BackgroundPickerModal", () => {
     expect(screen.getByText("모션 배경 라이브러리")).toBeInTheDocument();
     expect(screen.getByText("은은한 빛의 흐름")).toBeInTheDocument();
 
-    // Click second background
     const secondBg = INITIAL_BACKGROUNDS[1];
     const item = screen.getByTestId(`bg-item-${secondBg.id}`);
     fireEvent.click(item);
@@ -53,7 +52,6 @@ describe("BackgroundPickerModal", () => {
     const warmFilter = screen.getByRole("button", { name: "따뜻한" });
     fireEvent.click(warmFilter);
 
-    // Warm tag backgrounds should be present
     expect(screen.getByText("은은한 빛의 흐름")).toBeInTheDocument();
   });
 });

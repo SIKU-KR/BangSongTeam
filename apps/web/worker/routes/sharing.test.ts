@@ -12,12 +12,6 @@ import { createD1Client, user } from "@repo/db";
 import { createApp } from "../index";
 import type { SessionReader } from "../middleware/auth";
 
-/**
- * 공유 라이브러리 경로 통합 검증 (M5-3).
- *
- * 실제 라우트(`createApp`)에 세션 리더만 주입한다. D1에는 RLS가 없으므로
- * "남의 비공개 곡은 어떤 경로로도 보이지 않는다"를 라우트 레벨에서 고정한다.
- */
 const A = "aaaaaaaa3000000000001";
 const B = "bbbbbbbb3000000000002";
 const PUB = "c00000003000000000001";
@@ -148,7 +142,7 @@ describe("공유 라이브러리 API", () => {
     });
   });
 
-  describe("검색·상세·가져오기 (PRD 8 M5 완료 기준 a의 서버 경로)", () => {
+  describe("검색·상세·가져오기", () => {
     beforeEach(async () => {
       await publish(PUB);
     });
@@ -169,14 +163,12 @@ describe("공유 라이브러리 API", () => {
         ],
         slideCount: 2,
       });
-      // 공개 경로로 전문과 소유자 id가 새지 않는다
       expect(card).not.toHaveProperty("lyricsRaw");
       expect(card).not.toHaveProperty("slides");
       expect(card).not.toHaveProperty("userId");
     });
 
     it("never exposes private decks, presentation clones or taken-down decks", async () => {
-      // 세트 복제본을 공개로 실어 보낸다 (M5-1 누출 경로)
       const doc = PresentationDocumentSchema.parse({
         id: SET_ID,
         userId: A,
@@ -261,7 +253,6 @@ describe("공유 라이브러리 API", () => {
         forkedFromAuthorName: "김찬양",
         origin: "fork",
       });
-      // 슬라이드·스타일을 수정 없이 그대로 가져온다 (송출 동일성)
       expect(body.deck.slides.map((s) => s.lines)).toEqual([
         ["시작됐네 우리 주님의 능력이", "나의 삶을 다스리시네"],
         ["둘째 슬라이드"],

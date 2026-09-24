@@ -6,12 +6,12 @@ interface NavigatorUAData {
   platform: string;
 }
 
+/** Google Chrome 데스크톱 브라우저 여부를 확인한다 */
 export function isGoogleChromeBrowser(): boolean {
   if (typeof window === "undefined" || typeof navigator === "undefined") {
     return true;
   }
 
-  // 1. Try User-Agent Client Hints (Modern Chromium)
   const uaData = (navigator as unknown as { userAgentData?: NavigatorUAData })
     .userAgentData;
   if (uaData && Array.isArray(uaData.brands)) {
@@ -30,7 +30,6 @@ export function isGoogleChromeBrowser(): boolean {
     return brandNames.some((name) => name.includes("google chrome"));
   }
 
-  // 2. Fallback to navigator.userAgent string
   const ua = navigator.userAgent;
   const isOther =
     ua.includes("Edg/") ||
@@ -43,17 +42,16 @@ export function isGoogleChromeBrowser(): boolean {
     return false;
   }
 
-  // Safari check (Safari has 'Safari' but NOT 'Chrome')
   if (ua.includes("Safari/") && !ua.includes("Chrome/")) {
     return false;
   }
 
-  // Pure Chrome contains 'Chrome/' and not other browser identifiers
   return ua.includes("Chrome/");
 }
 
 const STORAGE_KEY = "dismiss_chrome_warning";
 
+/** 비 Chrome 브라우저 경고 배너 */
 export function ChromeAlertBanner(): React.JSX.Element | null {
   const [isVisible, setIsVisible] = useState<boolean>(false);
 
@@ -63,16 +61,16 @@ export function ChromeAlertBanner(): React.JSX.Element | null {
       if (!isDismissed && !isGoogleChromeBrowser()) {
         setIsVisible(true);
       }
-    } catch {
-      // Ignore localStorage access restrictions
+    } catch (error) {
+      void error;
     }
   }, []);
 
   const handleDismiss = (): void => {
     try {
       localStorage.setItem(STORAGE_KEY, "true");
-    } catch {
-      // Ignore
+    } catch (error) {
+      void error;
     }
     setIsVisible(false);
   };

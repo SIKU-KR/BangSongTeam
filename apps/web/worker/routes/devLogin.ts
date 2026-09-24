@@ -30,12 +30,6 @@ const DEV_PASSWORD = "worship-dev-password-0000";
 const DEFAULT_DEV_EMAIL = "dev@worship.local";
 
 const devLoginRoute = new Hono<AppEnv>()
-  /**
-   * 로그인 화면이 무엇을 그릴지 정하는 근거.
-   *
-   * 플레이스홀더 자격증명으로 소셜 버튼을 띄우면 누를 때마다 인가 서버가
-   * 거절한다. 실제 설정된 것만 알려 준다.
-   */
   .get("/auth-config", (c) => {
     return c.json(
       {
@@ -46,7 +40,6 @@ const devLoginRoute = new Hono<AppEnv>()
     );
   })
   .post("/dev-login", zValidator("json", DevLoginRequestSchema), async (c) => {
-    // 비활성 상태에서는 존재 자체를 드러내지 않는다.
     if (!isDevLoginEnabled(c.env, c.req.url)) {
       return c.json({ error: "Not Found" }, 404);
     }
@@ -55,10 +48,6 @@ const devLoginRoute = new Hono<AppEnv>()
     const auth = createAuth(c.env);
     const credentials = { email, password: DEV_PASSWORD };
 
-    // 이미 있는 계정이면 로그인, 없으면 만든다.
-    //
-    // `asResponse: true`는 실패해도 던지지 않고 4xx Response를 돌려준다.
-    // 상태 코드를 봐야 '계정 없음'을 알 수 있다.
     const signIn = await auth.api
       .signInEmail({ body: credentials, asResponse: true })
       .catch(() => null);

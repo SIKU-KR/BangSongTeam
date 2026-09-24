@@ -86,7 +86,6 @@ export async function upsertFolder(
   const saved: SharedFolder = { ...folder, userId, parentId };
   const row = toFolderRow(saved);
 
-  // 영구 삭제 뒤 다른 기기가 같은 폴더를 다시 저장했다 — 되살린다.
   await clearTombstone(db, userId, folder.id);
 
   if (existing) {
@@ -179,10 +178,6 @@ export async function deleteFolderTree(
   return { folderIds, presentationIds };
 }
 
-// ----------------------------------------------------------------------------
-// 영구 삭제 기록 (tombstone)
-// ----------------------------------------------------------------------------
-
 /** 본인이 영구 삭제한 폴더·프레젠테이션 id (다른 기기의 부팅 병합용) */
 export async function getDriveTombstones(
   db: DbInstance,
@@ -204,7 +199,6 @@ export async function getDriveTombstones(
   };
 }
 
-/** 행 하나에 바인딩 4개. D1의 100개 제한 안에 들도록 20행씩 넣는다 */
 const TOMBSTONES_PER_STATEMENT = 20;
 
 /** 영구 삭제 기록을 남기는 문장들 (호출자가 batch에 넣는다) */

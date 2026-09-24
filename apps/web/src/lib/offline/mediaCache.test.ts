@@ -65,9 +65,7 @@ describe("cacheMediaUrls", () => {
 
     const init = (fetchMock.mock.calls[0] as unknown[])[1] as
       RequestInit | undefined;
-    // 부분 응답을 캐시에 넣으면 RangeRequestsPlugin이 영상을 중간에 끊는다.
     expect(init?.headers).toBeUndefined();
-    // 동일 출처이므로 mode를 지정하지 않는다.
     expect(init?.mode).toBeUndefined();
   });
 
@@ -149,7 +147,6 @@ describe("scheduleMediaCaching", () => {
   it("받는 도중 같은 URL을 다시 넣어도 한 번만 받는다", async () => {
     const fetchMock = mockFetch();
 
-    // 편집기 → 송출로 넘어가며 라우트가 다시 마운트되는 상황
     scheduleMediaCaching([VIDEO, POSTER]);
     scheduleMediaCaching([VIDEO, POSTER]);
     await __waitForMediaCachingForTests();

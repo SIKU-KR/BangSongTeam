@@ -25,11 +25,7 @@ const FILTER_TAGS = [
   "어두운",
 ] as const;
 
-/**
- * '배경 라이브러리' 화면 컴포넌트
- * - 단락 1: 내가 등록한 배경 (My Backgrounds)
- * - 단락 2: 유저가 등록한 배경 (Community / Public Loops)
- */
+/** 배경 라이브러리 화면 컴포넌트. */
 export function BackgroundLibraryView({
   onApplyBackgroundToCurrentSet,
   searchQuery = "",
@@ -48,7 +44,6 @@ export function BackgroundLibraryView({
 
   const query = searchQuery.trim();
 
-  // 내가 등록한 배경 필터링 (es-hangul 초성/자모 검색 지원)
   const filteredMyBackgrounds = myBackgrounds.filter((bg) => {
     if (!query) return true;
     return (
@@ -57,7 +52,6 @@ export function BackgroundLibraryView({
     );
   });
 
-  // 유저가 등록한 배경(공개 루프) 필터링 (es-hangul 초성/자모 검색 지원)
   const filteredCommunityBackgrounds = INITIAL_BACKGROUNDS.filter((bg) => {
     const matchesTag = activeTag === "전체" || bg.tags.includes(activeTag);
     if (!matchesTag) return false;
@@ -104,9 +98,6 @@ export function BackgroundLibraryView({
 
   return (
     <div className="space-y-10">
-      {/* ───────────────────────────────────────────────
-          단락 1: 내가 등록한 배경 (My Backgrounds)
-          ─────────────────────────────────────────────── */}
       <section className="space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-zinc-200 dark:border-zinc-800/80">
           <div>
@@ -234,7 +225,6 @@ export function BackgroundLibraryView({
               );
             })}
 
-            {/* 새 배경 추가 점선 카드 */}
             <div
               onClick={() => setIsRegisterOpen(true)}
               className="group border-2 border-dashed border-zinc-300 dark:border-zinc-800 hover:border-emerald-500/60 rounded-xl flex flex-col items-center justify-center p-6 min-h-[170px] cursor-pointer transition-all bg-white dark:bg-zinc-950/40 hover:bg-zinc-50 dark:hover:bg-zinc-900/30"
@@ -262,9 +252,6 @@ export function BackgroundLibraryView({
         )}
       </section>
 
-      {/* ───────────────────────────────────────────────
-          단락 2: 유저가 등록한 배경 (Community / Public Loops)
-          ─────────────────────────────────────────────── */}
       <section className="space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-zinc-200 dark:border-zinc-800/80">
           <div>
@@ -283,7 +270,6 @@ export function BackgroundLibraryView({
             </p>
           </div>
 
-          {/* 태그 필터 버튼 그룹 */}
           <div className="flex items-center gap-1.5 overflow-x-auto self-start sm:self-auto py-1">
             {FILTER_TAGS.map((tag) => (
               <button
@@ -358,7 +344,6 @@ export function BackgroundLibraryView({
                       </span>
                     </div>
 
-                    {/* 호버 오버레이 */}
                     <div className="absolute inset-0 z-40 bg-black/60 backdrop-blur-[2px] opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-center justify-center gap-2 p-3">
                       <button
                         type="button"
@@ -438,7 +423,6 @@ export function BackgroundLibraryView({
         )}
       </section>
 
-      {/* 새 배경 등록 모달 */}
       {isRegisterOpen && (
         <div
           role="dialog"

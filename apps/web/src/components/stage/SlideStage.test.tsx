@@ -35,7 +35,6 @@ describe("SlideStage Integration Component", () => {
       />,
     );
 
-    // 1920x1080 virtual stage
     const virtualStage = screen.getByTestId("virtual-slide-stage");
     expect(virtualStage).toBeInTheDocument();
     expect(virtualStage).toHaveStyle({
@@ -43,11 +42,8 @@ describe("SlideStage Integration Component", () => {
       height: "1080px",
     });
 
-    // Layer 1: Video
     expect(screen.getByTestId("video-layer-container")).toBeInTheDocument();
-    // Layer 2: Overlay
     expect(screen.getByTestId("overlay-layer")).toBeInTheDocument();
-    // Layer 3: Text
     expect(screen.getByTestId("text-layer-container")).toBeInTheDocument();
     expect(
       screen.getByText("꽃들도 구름도 바람도 넓은 바다도"),
@@ -55,7 +51,6 @@ describe("SlideStage Integration Component", () => {
   });
 
   it("should apply scale transform calculated for current resolution", () => {
-    // 1280x720 container override -> scale = 2/3 (0.666667)
     render(
       <SlideStage
         slide={mockSlide}
@@ -84,9 +79,7 @@ describe("SlideStage Integration Component", () => {
     });
   });
 
-  it("블랙아웃은 가사까지 함께 가린다 (PRD 4.x 화면 검게 하기)", () => {
-    // 오버레이(z-10)만 불투명하게 만들면 텍스트 레이어(z-20)가 그 위에 남아
-    // 운영자가 B를 눌러도 가사가 그대로 보인다. 블랙아웃은 '화면을 검게'다.
+  it("블랙아웃은 가사까지 함께 가린다", () => {
     render(
       <SlideStage slide={mockSlide} style={mockStyle} isBlackout={true} />,
     );
@@ -156,7 +149,6 @@ describe("SlideStage Integration Component", () => {
       "src",
       "/api/media/poster1.jpg",
     );
-    // Layer 2·3은 그대로
     expect(screen.getByTestId("overlay-layer")).toBeInTheDocument();
     expect(
       screen.getByText("꽃들도 구름도 바람도 넓은 바다도"),

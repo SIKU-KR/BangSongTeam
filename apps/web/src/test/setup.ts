@@ -1,7 +1,5 @@
 import "@testing-library/jest-dom/vitest";
-// jsdom에는 IndexedDB가 없다. 영속성 계층 테스트를 위해 폴리필을 주입한다.
 import "fake-indexeddb/auto";
-// jsdom에는 Cache Storage도 없다. 오프라인 미디어 캐시 계층용 대역을 깐다.
 import { installFakeCacheStorage } from "./fakeCacheStorage";
 
 installFakeCacheStorage();

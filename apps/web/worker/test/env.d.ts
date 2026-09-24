@@ -18,7 +18,6 @@ declare module "cloudflare:test" {
     KAKAO_CLIENT_SECRET?: string;
     NAVER_CLIENT_ID?: string;
     NAVER_CLIENT_SECRET?: string;
-    /** vitest.config.ts가 packages/db/drizzle에서 읽어 주입한다 */
     TEST_MIGRATIONS: D1Migration[];
   }
 }

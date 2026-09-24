@@ -45,7 +45,6 @@ describe("LoginRoute", () => {
     expect(
       await screen.findByRole("button", { name: /카카오로 시작하기/ }),
     ).toBeInTheDocument();
-    // 플레이스홀더 자격증명으로 버튼을 띄우면 누를 때마다 거절당한다.
     expect(
       screen.queryByRole("button", { name: /네이버로 시작하기/ }),
     ).not.toBeInTheDocument();
@@ -116,7 +115,6 @@ describe("LoginRoute", () => {
     });
 
     it("이메일을 넣으면 그 계정으로 로그인한다", async () => {
-      // 교차 사용자 격리를 손으로 확인하려면 계정이 둘 이상 필요하다.
       render(<LoginRoute />);
 
       fireEvent.change(await screen.findByLabelText("개발자 계정 이메일"), {

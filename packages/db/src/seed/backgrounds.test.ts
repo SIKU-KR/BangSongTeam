@@ -6,7 +6,7 @@ import { createTestDb, type TestDbResult } from "../test-utils";
 import { backgrounds } from "../schema";
 import { initialBackgrounds, seedBackgrounds } from "./backgrounds";
 
-describe("Task 4.5: 초기 10개 모션 루프 영상 D1 시드", () => {
+describe("초기 10개 모션 루프 영상 D1 시드", () => {
   let testDb: TestDbResult;
 
   beforeEach(() => {
@@ -38,14 +38,12 @@ describe("Task 4.5: 초기 10개 모션 루프 영상 D1 시드", () => {
   });
 
   it("seedBackgrounds inserts 10 records idempotently", async () => {
-    // 1st run
     const count1 = await seedBackgrounds(testDb.db);
     expect(count1).toBe(10);
 
     const rows1 = await testDb.db.select().from(backgrounds);
     expect(rows1).toHaveLength(10);
 
-    // 2nd run (idempotent)
     const count2 = await seedBackgrounds(testDb.db);
     expect(count2).toBe(10);
 
@@ -54,14 +52,6 @@ describe("Task 4.5: 초기 10개 모션 루프 영상 D1 시드", () => {
   });
 });
 
-/**
- * 배경 데이터가 갈라지는 것을 막는 가드.
- *
- * 클라이언트는 `INITIAL_BACKGROUNDS`의 id로 `decks.background_id`를 채우고, D1에는
- * 마이그레이션이 넣은 행만 있다. 둘이 어긋나면 외래키 위반으로 세트 저장이 통째로
- * 실패한다 — 실제로 그렇게 동기화가 500으로 죽고 있었다. 정적 SQL은 상수에서
- * 파생시킬 수 없으므로 여기서 대조한다.
- */
 describe("0001_initial 배경 시드와 공용 상수 정합성", () => {
   const migrationPath = path.resolve(
     __dirname,

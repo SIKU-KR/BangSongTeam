@@ -2,7 +2,6 @@ import React, { useState } from "react";
 import type { SortOrder, ViewMode } from "../../routes/appShellContext";
 
 export interface AppHeroHeaderProps {
-  /** 페이지 대형 타이틀 */
   title: string;
   searchPlaceholder: string;
   searchQuery: string;
@@ -11,26 +10,15 @@ export interface AppHeroHeaderProps {
   onViewModeChange: (mode: ViewMode) => void;
   sortOrder: SortOrder;
   onSortOrderChange: (order: SortOrder) => void;
-  /** 툴바 좌측 카운트 문구 (빈 문자열이면 표시 안 함) */
   itemCountLabel: string;
-  /** 원형 (+) 빠른 추가 버튼 동작 — 경로에 따라 달라진다 */
   onQuickAdd: () => void;
-  /** 툴바 왼쪽 (드라이브 경로 등). 있으면 카운트 문구 대신 보인다 */
   toolbarStart?: React.ReactNode;
-  /** 원형 (+) 버튼 대신 넣을 요소 (드라이브의 '새로 만들기' 메뉴) */
   quickAddSlot?: React.ReactNode;
 }
 
 type DropdownName = "type" | "category" | "owner" | "sort";
 
-/**
- * Canva Projects 스타일 히어로 헤더 + 액션 툴바
- * - 은은한 앰비언트 글로우, 중앙 대형 타이틀, 대형 검색창, 드롭다운 필터 칩
- * - 우측 툴바: 정렬(↑↓), 그리드(::)/리스트(☰) 모드 토글, 원형 빠른 추가(+)
- *
- * 타입/카테고리/소유자 필터 칩은 아직 본문 필터링에 연결되지 않은 표시 전용이므로
- * 셸 컨텍스트를 오염시키지 않도록 이 컴포넌트의 로컬 상태로 둔다.
- */
+/** 검색, 필터 및 뷰 모드 전환을 제공하는 히어로 헤더와 툴바 */
 export function AppHeroHeader({
   title,
   searchPlaceholder,
@@ -58,12 +46,10 @@ export function AppHeroHeader({
     <>
       <header className="relative bg-gradient-to-b from-indigo-50/60 via-zinc-50/40 to-zinc-50 dark:from-indigo-950/20 dark:via-zinc-950/40 dark:to-zinc-950 pt-10 pb-8 px-6 sm:px-10 border-b border-zinc-200 dark:border-zinc-900/80">
         <div className="max-w-4xl mx-auto flex flex-col items-center text-center space-y-6">
-          {/* 1) 대형 중앙 볼드 타이틀 */}
           <h1 className="text-3xl sm:text-4xl font-extrabold text-zinc-900 dark:text-white tracking-tight">
             {title}
           </h1>
 
-          {/* 2) Canva 스타일 대형 중앙 검색창 (Pill/Rounded-full) */}
           <div className="w-full max-w-2xl relative">
             <div className="w-full rounded-2xl sm:rounded-full bg-white dark:bg-zinc-900/90 border border-zinc-200 dark:border-zinc-700/80 hover:border-zinc-300 dark:hover:border-zinc-600 focus-within:border-emerald-500 focus-within:ring-2 focus-within:ring-emerald-500/20 shadow-sm hover:shadow focus-within:shadow-md px-4 py-3 sm:py-3.5 flex items-center gap-3 transition-all">
               <svg
@@ -110,9 +96,7 @@ export function AppHeroHeader({
             </div>
           </div>
 
-          {/* 3) 검색창 하단 둥근 드롭다운 필터 칩 그룹 (Canva Projects 필터 스타일) */}
           <div className="flex flex-wrap items-center justify-center gap-2 pt-1 relative">
-            {/* 필터 1: 유형 ⌵ */}
             <div className="relative">
               <button
                 type="button"
@@ -159,7 +143,6 @@ export function AppHeroHeader({
               )}
             </div>
 
-            {/* 필터 2: 카테고리 ⌵ */}
             <div className="relative">
               <button
                 type="button"
@@ -204,7 +187,6 @@ export function AppHeroHeader({
               )}
             </div>
 
-            {/* 필터 3: 소유자 ⌵ */}
             <div className="relative">
               <button
                 type="button"
@@ -249,7 +231,6 @@ export function AppHeroHeader({
               )}
             </div>
 
-            {/* 필터 4: 수정된 날짜 / 정렬 ⌵ */}
             <div className="relative">
               <button
                 type="button"
@@ -317,7 +298,6 @@ export function AppHeroHeader({
         </div>
       </header>
 
-      {/* ── Canva 액션 툴바: 우측 상단 정렬(↑↓), 그리드/리스트 뷰 전환(:: / ☰), 빠른 추가(+) ── */}
       <div className="max-w-7xl w-full mx-auto px-6 sm:px-8 pt-6 pb-2 flex items-center justify-between gap-4">
         <div className="min-w-0 flex-1">
           {toolbarStart ?? (
@@ -326,7 +306,6 @@ export function AppHeroHeader({
         </div>
 
         <div className="flex items-center gap-2 shrink-0">
-          {/* 1) 정렬 순서 토글 버튼 (↑↓) */}
           <button
             type="button"
             onClick={() =>
@@ -350,7 +329,6 @@ export function AppHeroHeader({
             </svg>
           </button>
 
-          {/* 2) 뷰 모드 토글: 그리드 (::) / 리스트 (☰) */}
           <div className="flex items-center p-0.5 rounded-xl bg-zinc-100 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800">
             <button
               type="button"
@@ -362,7 +340,6 @@ export function AppHeroHeader({
                   : "text-zinc-400 hover:text-zinc-700 dark:text-zinc-500 dark:hover:text-zinc-300"
               }`}
             >
-              {/* 4칸 그리드 아이콘 (::) */}
               <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
                 <path d="M4 4h7v7H4V4zm9 0h7v7h-7V4zm-9 9h7v7H4v-7zm9 0h7v7h-7v-7z" />
               </svg>
@@ -377,7 +354,6 @@ export function AppHeroHeader({
                   : "text-zinc-400 hover:text-zinc-700 dark:text-zinc-500 dark:hover:text-zinc-300"
               }`}
             >
-              {/* 리스트 아이콘 (☰) */}
               <svg
                 className="w-4 h-4"
                 fill="none"
@@ -394,7 +370,6 @@ export function AppHeroHeader({
             </button>
           </div>
 
-          {/* 3) 원형 빠른 추가 버튼 (+) */}
           {quickAddSlot ?? (
             <button
               type="button"

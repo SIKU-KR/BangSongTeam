@@ -3,7 +3,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render } from "@testing-library/react";
 import { TextBoxMoveable } from "./TextBoxMoveable";
 
-// jsdom에는 레이아웃·transition이 없으므로 Moveable은 updateRect만 노출하는 대역으로 바꾼다
 const updateRect = vi.hoisted(() => vi.fn());
 vi.mock("react-moveable", async () => {
   const { forwardRef, useImperativeHandle } = await import("react");
@@ -67,7 +66,6 @@ describe("TextBoxMoveable", () => {
     flushFrame();
     expect(updateRect).toHaveBeenCalledTimes(2);
 
-    // transition이 끝난 프레임에서 최종 위치로 한 번 더 맞추고 멈춘다
     isAnimating = false;
     flushFrame();
     expect(updateRect).toHaveBeenCalledTimes(3);

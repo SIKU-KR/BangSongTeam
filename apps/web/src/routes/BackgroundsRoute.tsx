@@ -6,9 +6,7 @@ import {
 } from "../features/presentation";
 import { useAppShell } from "./appShellContext";
 
-/**
- * `/backgrounds` — 배경 라이브러리 (내가 등록한 배경 / 유저가 등록한 배경)
- */
+/** 배경 라이브러리 라우트 */
 export function BackgroundsRoute(): React.JSX.Element {
   const presentation = useActivePresentation();
   const { searchQuery } = useAppShell();

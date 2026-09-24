@@ -88,8 +88,6 @@ describe("행 ↔ DTO 매퍼", () => {
     });
 
     it("타임스탬프가 비어 있어도 유효한 덱을 만든다", () => {
-      // created_at/updated_at은 DB 기본값(unixepoch())이라 Drizzle 타입상 null이 가능하다.
-      // 여기서 던지면 목록 조회 한 건 때문에 전체 응답이 죽는다.
       const row = {
         ...toDeckRow(makeSharedDeck()),
         createdAt: null,
@@ -112,7 +110,7 @@ describe("행 ↔ DTO 매퍼", () => {
       expect(deck.style).toEqual(DEFAULT_DECK_STYLE);
     });
 
-    it("M5 공유 필드를 왕복한다", () => {
+    it("공유 필드를 왕복한다", () => {
       const original = makeSharedDeck({
         scope: "library",
         presentationId: null,
@@ -129,7 +127,7 @@ describe("행 ↔ DTO 매퍼", () => {
       expect(toSharedDeck(row)).toEqual(original);
     });
 
-    it("M5 이전 행은 공유 필드를 안전한 기본값으로 읽는다", () => {
+    it("공유 필드가 없는 행은 안전한 기본값으로 읽는다", () => {
       const row = {
         ...toDeckRow(makeSharedDeck()),
         origin: undefined,
@@ -160,7 +158,6 @@ describe("행 ↔ DTO 매퍼", () => {
         presentation,
         items.map((item, i) => ({ item, deck: decks[i] })),
       );
-      // 드라이브 필드가 없던 문서는 서버에서 '루트, 휴지통 아님'으로 명시되어 돌아온다.
       expect(restored).toEqual({ ...doc, folderId: null, trashedAt: null });
     });
 
@@ -185,7 +182,6 @@ describe("행 ↔ DTO 매퍼", () => {
     });
 
     it("분해 시 항목과 덱에 프레젠테이션 소유자를 강제한다", () => {
-      // 본문의 userId를 믿으면 남의 계정으로 문서를 심을 수 있다.
       const doc = makeDocument();
       doc.userId = "999999999999999999999";
       const { decks } = fromPresentationDocument(doc);
@@ -203,7 +199,6 @@ describe("행 ↔ DTO 매퍼", () => {
     });
 
     it("세트 복제본은 공개·가져간 횟수·게시 기록을 강제로 끈다", () => {
-      // 공개 곡을 세트에 담은 복제본이 공개 검색에 섞이던 누출 경로 (M5-1 배경)
       const doc = makeDocument();
       doc.items[0].deck = makeSharedDeck({
         visibility: "public",
@@ -217,7 +212,6 @@ describe("행 ↔ DTO 매퍼", () => {
       expect(decks[0].visibility).toBe("private");
       expect(decks[0].forkCount).toBe(0);
       expect(decks[0].publishedAt).toBeNull();
-      // 편집기가 쓰는 출처 정보는 그대로 둔다
       expect(decks[0].forkedFrom).toBe("c00000000000000000009");
       expect(decks[0].forkedFromAuthorName).toBe("김찬양");
     });

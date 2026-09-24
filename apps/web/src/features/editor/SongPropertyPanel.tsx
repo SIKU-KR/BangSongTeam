@@ -17,7 +17,6 @@ export interface SongPropertyPanelProps {
   onUpdateStyle: (update: Partial<DeckStyle>) => void;
   onUpdateBackground: (bgId: string) => void;
   onUpdateSlideLines?: (lines: string[]) => void;
-  /** 패널 맨 아래에 붙일 곡 단위 섹션 (편집기 '공유') */
   footer?: React.ReactNode;
   className?: string;
 }
@@ -42,7 +41,6 @@ const GRID_PRESETS: GridAnchorPreset[] = [
   "bottom-right",
 ];
 
-/** 1-클릭 테마 프리셋 (폰트·글자색·그림자·오버레이 묶음) */
 const STYLE_PRESETS: {
   name: string;
   desc: string;
@@ -113,15 +111,7 @@ const SHADOW_LEVELS = [
   { id: "strong", label: "강함" },
 ] as const;
 
-/**
- * Canva / MiriCanvas 스타일 속성 인스펙터 패널
- * - 모션 배경 선택
- * - 1-클릭 테마 프리셋
- * - 검정 오버레이 불투명도 조절
- * - 타이포그래피 (폰트, 크기, 정렬, 색상, 그림자)
- * - 3×3 격자 위치 및 가로 폭 조절
- * - 현재 슬라이드 가사 즉각 수정
- */
+/** 곡 스타일과 속성을 편집하는 인스펙터 패널 컴포넌트. */
 export function SongPropertyPanel({
   style = DEFAULT_DECK_STYLE,
   backgroundId,
@@ -247,7 +237,6 @@ export function SongPropertyPanel({
       </div>
 
       <div className="p-4 flex flex-col gap-6">
-        {/* 1. 모션 배경 섹션 */}
         <section className="space-y-2.5">
           <label className="text-xs font-semibold text-zinc-600 dark:text-zinc-400 uppercase tracking-wider flex items-center justify-between">
             <span>모션 루프 배경</span>
@@ -282,7 +271,6 @@ export function SongPropertyPanel({
           </div>
         </section>
 
-        {/* 1-1. 테마 프리셋 */}
         <section className="space-y-2">
           <label className="text-xs font-semibold text-zinc-600 dark:text-zinc-400 uppercase tracking-wider block">
             테마 프리셋
@@ -314,7 +302,6 @@ export function SongPropertyPanel({
           </div>
         </section>
 
-        {/* 2. 가독성 오버레이 (검정 불투명도) */}
         <section className="space-y-2">
           <div className="flex items-center justify-between text-xs">
             <span className="font-semibold text-zinc-600 dark:text-zinc-400 uppercase tracking-wider">
@@ -343,13 +330,11 @@ export function SongPropertyPanel({
           </div>
         </section>
 
-        {/* 3. 타이포그래피 */}
         <section className="space-y-3 pt-2 border-t border-zinc-200 dark:border-zinc-900">
           <label className="text-xs font-semibold text-zinc-600 dark:text-zinc-400 uppercase tracking-wider block">
             타이포그래피
           </label>
 
-          {/* 폰트 선택 */}
           <div className="space-y-1">
             <span className="text-[11px] text-zinc-600 dark:text-zinc-400">
               웹폰트 (오프라인 번들)
@@ -371,7 +356,6 @@ export function SongPropertyPanel({
             </select>
           </div>
 
-          {/* 폰트 크기 */}
           <div className="space-y-1">
             <div className="flex justify-between text-[11px] text-zinc-600 dark:text-zinc-400">
               <span>글자 크기</span>
@@ -393,7 +377,6 @@ export function SongPropertyPanel({
             />
           </div>
 
-          {/* 텍스트 정렬 */}
           <div className="space-y-1">
             <span className="text-[11px] text-zinc-600 dark:text-zinc-400">
               텍스트 정렬
@@ -420,7 +403,6 @@ export function SongPropertyPanel({
             </div>
           </div>
 
-          {/* 텍스트 그림자 */}
           <div className="space-y-1">
             <span className="text-[11px] text-zinc-600 dark:text-zinc-400">
               텍스트 그림자 (가독성 강화)
@@ -443,7 +425,6 @@ export function SongPropertyPanel({
             </div>
           </div>
 
-          {/* 폰트 색상 프리셋 */}
           <div className="space-y-1">
             <span className="text-[11px] text-zinc-600 dark:text-zinc-400">
               글자 색상
@@ -472,7 +453,6 @@ export function SongPropertyPanel({
           </div>
         </section>
 
-        {/* 4. 3×3 격자 위치 프리셋 & 박스 폭 */}
         <section className="space-y-3 pt-2 border-t border-zinc-200 dark:border-zinc-900">
           <label className="text-xs font-semibold text-zinc-600 dark:text-zinc-400 uppercase tracking-wider block">
             위치 및 크기
@@ -536,7 +516,6 @@ export function SongPropertyPanel({
           </div>
         </section>
 
-        {/* 5. 활성 슬라이드 가사 즉각 편집 */}
         {activeSlide && onUpdateSlideLines && (
           <section className="space-y-2 pt-2 border-t border-zinc-200 dark:border-zinc-900">
             <div className="flex items-center justify-between">
@@ -563,7 +542,6 @@ export function SongPropertyPanel({
         {footer}
       </div>
 
-      {/* 모션 배경 선택 모달 */}
       <BackgroundPickerModal
         isOpen={isBgModalOpen}
         onClose={() => setIsBgModalOpen(false)}

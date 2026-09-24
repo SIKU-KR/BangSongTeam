@@ -4,7 +4,6 @@ import { getBackgroundMediaUrl, INITIAL_BACKGROUNDS } from "./backgrounds";
 
 describe("projection constants", () => {
   it("Workbox 런타임 캐시와 백그라운드 캐시가 같은 캐시 이름을 쓴다", () => {
-    // vite.config.ts의 runtimeCaching.cacheName과 반드시 동일해야 한다.
     expect(MEDIA_CACHE_NAME).toBe("worship-videos-cache");
   });
 

@@ -5,17 +5,7 @@ import type { Bindings } from "../types";
 import { ID_PATTERN } from "@repo/shared";
 import { isDevLoginEnabled } from "../lib/auth";
 
-/**
- * 개발자 로그인 가드 검증.
- *
- * 이 경로가 운영에 살아 있으면 누구나 아무 계정으로 로그인할 수 있다.
- * 기본이 '꺼짐'이라는 것과, 플래그가 있어도 실제 도메인에서는 죽는다는 것을
- * 테스트로 고정한다.
- */
-
 function withDevLogin(enabled: boolean): Bindings {
-  // .dev.vars가 테스트 env로 들어오므로 소셜 자격증명을 명시적으로 비운다.
-  // 그러지 않으면 '설정된 프로바이더' 단언이 로컬 설정에 따라 흔들린다.
   return {
     ...env,
     DEV_LOGIN_ENABLED: enabled ? "true" : undefined,
@@ -55,7 +45,6 @@ describe("개발자 로그인 가드", () => {
   });
 
   it("플래그가 있어도 실제 도메인에서는 죽는다", () => {
-    // 플래그가 실수로 운영 시크릿에 들어가도 이 방어선이 남는다.
     for (const host of [
       "https://worship-slide.com/api/dev-login",
       "https://prj-ppt-web.workers.dev/api/dev-login",

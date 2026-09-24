@@ -4,19 +4,9 @@ import { DeckSchema } from "./deck";
 import { SlideSchema } from "./slide";
 import { DeckStyleSchema } from "./style";
 
-// ============================================================================
-// 공유 라이브러리 API 계약 (M5, PRD 4.7)
-//
-// 공개 경로로 나가는 구조는 DB 행이나 내부 Deck DTO를 그대로 쓰지 않는다.
-// `userId`처럼 남에게 보일 이유가 없는 값이 새지 않도록 여기서 모양을 따로 정한다.
-// ============================================================================
-
 /**
  * 덱 공개 설정 변경.
- *
- * 공개로 돌릴 때는 저작권 안내 동의가 반드시 `true` 리터럴이어야 한다.
- * 불리언 필드로 두면 `false`를 보내도 스키마를 통과해 '동의 없이 공개'가
- * 가능해진다 (PRD 4.7, 9장 '공개 시 안내 동의').
+ * 공개 설정 시 저작권 안내 동의(true)가 필수이다.
  */
 export const VisibilityUpdateRequestSchema = z.discriminatedUnion(
   "visibility",
@@ -87,16 +77,6 @@ export const ForkDeckResponseSchema = z.object({
 });
 export type ForkDeckResponse = z.infer<typeof ForkDeckResponseSchema>;
 
-// ---------------------------------------------------------------------------
-// 신고 (PRD 4.7 신고, 9장 게시 중단 절차)
-// ---------------------------------------------------------------------------
-
-/**
- * - `lyrics_error`: 가사 오류
- * - `inappropriate`: 부적절한 콘텐츠
- * - `copyright`: 저작권자 게시 중단 요청
- * - `correction`: 가져간 사용자의 교정 제안
- */
 export const ReportReasonSchema = z.enum([
   "lyrics_error",
   "inappropriate",

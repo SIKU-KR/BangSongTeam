@@ -76,7 +76,6 @@ describe("createReport", () => {
     };
     expect((await createReport(db, B, input)).status).toBe("ok");
     expect((await createReport(db, B, input)).status).toBe("duplicate");
-    // 다른 사람은 따로 신고할 수 있다
     expect((await createReport(db, A, input)).status).toBe("ok");
   });
 });

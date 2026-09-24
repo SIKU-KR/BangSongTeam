@@ -24,7 +24,6 @@ vi.mock("../../lib/offline", () => ({
 
 const BASE = SEED_PRESENTATIONS[0];
 
-/** 모든 곡의 배경을 한 가지로 바꾼 세트 */
 function withBackground(backgroundId: string): Presentation {
   return {
     ...BASE,

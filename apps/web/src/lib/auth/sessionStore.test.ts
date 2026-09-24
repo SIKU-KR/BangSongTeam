@@ -34,7 +34,6 @@ async function resetDatabase(): Promise<void> {
   });
 }
 
-/** 서버에 닿지 못한 상황 (오프라인) */
 const offlineFetcher: SessionFetcher = async () => {
   throw new Error("network down");
 };
@@ -79,7 +78,6 @@ describe("세션 스토어", () => {
       });
       __setSessionFetcherForTests(() => pending);
 
-      // 서버 응답이 아직 안 왔는데도 인증 상태여야 한다.
       await hydrateSession();
       expect(getSessionState().status).toBe("authenticated");
 
@@ -87,7 +85,6 @@ describe("세션 스토어", () => {
     });
 
     it("오프라인이고 캐시가 있으면 인증 상태를 유지한다", async () => {
-      // 예배 당일 네트워크가 끊겼을 때 송출이 되어야 한다.
       await saveCachedSession(makeUser());
       __setSessionFetcherForTests(offlineFetcher);
 
@@ -130,7 +127,6 @@ describe("세션 스토어", () => {
     });
 
     it("네트워크 실패는 상태를 건드리지 않는다", async () => {
-      // 이것이 오프라인 송출을 지탱하는 규칙이다.
       __setSessionFetcherForTests(async () => makeUser());
       await hydrateSession();
 
@@ -161,7 +157,6 @@ describe("세션 스토어", () => {
       __setSessionFetcherForTests(fetcher);
 
       await hydrateSession();
-      // 백그라운드 호출이 큐에서 빠져나갈 틈을 준다
       await new Promise((resolve) => setTimeout(resolve, 0));
 
       expect(fetcher).toHaveBeenCalled();

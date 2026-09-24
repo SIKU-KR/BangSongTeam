@@ -1,10 +1,7 @@
 import React from "react";
 import { useNavigate } from "react-router-dom";
 
-/**
- * `/` 랜딩 페이지 — Canva 스타일 랜딩이 들어올 자리.
- * 현재는 대시보드 진입 동선만 제공하는 플레이스홀더다.
- */
+/** 랜딩 페이지 플레이스홀더 라우트 */
 export function LandingRoute(): React.JSX.Element {
   const navigate = useNavigate();
 

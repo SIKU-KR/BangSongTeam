@@ -22,7 +22,6 @@ function renderAt(path: string) {
 
 describe("App Route Integration", () => {
   beforeEach(async () => {
-    // 멀티 문서 스토어는 모듈 전역이므로 테스트 간 격리가 필요하다
     closeOfflineDB();
     await new Promise<void>((resolve) => {
       const req = indexedDB.deleteDatabase(OFFLINE_DB_NAME);
@@ -32,8 +31,6 @@ describe("App Route Integration", () => {
     });
     resetPresentationStore();
 
-    // 로그인이 편집의 전제 조건이므로 라우트 테스트는 세션부터 만든다.
-    // 부팅 시 샘플을 자동 생성하지 않으니 데이터도 직접 심는다.
     signInAsTestUser();
     await seedPresentationsIntoStorage();
   });
@@ -146,8 +143,6 @@ describe("App Route Integration", () => {
   });
 
   it("다른 계정으로 로그인하면 남의 세트가 보이지 않는다", async () => {
-    // 한 브라우저를 여러 사람이 쓸 수 있다. 로컬 저장본은 남겨 두되
-    // 세션 사용자의 문서만 싣는다.
     signInAsTestUser("999999999999999999999");
 
     renderAt("/presentations");
@@ -157,9 +152,6 @@ describe("App Route Integration", () => {
   });
 
   it("게이트를 통과한 뒤 로그인해도 스토어를 싣는다", async () => {
-    // 부팅 시점에는 미인증이었다가 나중에 로그인하는 경로(개발자 로그인,
-    // OAuth 콜백 복귀). 부트스트랩을 부팅 때 한 번만 돌리면 방금 로그인한
-    // 사용자는 새로고침 전까지 서버에 아무것도 올라가지 않는다.
     signOutForTests();
     renderAt("/presentations");
 

@@ -36,10 +36,7 @@ export interface ReportDialogProps {
   defaultReason?: ReportReason;
 }
 
-/**
- * 신고·교정 제안 대화상자 (PRD 4.7 신고, 4.8 교정).
- * 접수된 신고는 운영자가 런북으로 처리한다.
- */
+/** 신고·교정 제안 대화상자. */
 export function ReportDialog({
   isOpen,
   onClose,

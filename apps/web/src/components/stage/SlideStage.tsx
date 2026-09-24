@@ -11,42 +11,21 @@ import { OverlayLayer } from "./OverlayLayer";
 import { TextLayer } from "./TextLayer";
 
 export interface SlideStageProps {
-  /** 현재 슬라이드 데이터 (ID, order, lines) */
   slide?: Slide | null;
-  /** 곡 단위 타이포그래피 & 스타일 */
   style?: DeckStyle;
-  /** 현재 배경 영상 URL */
   backgroundUrl?: string;
-  /** 다음 곡 배경 영상 URL (사전 로드용) */
   nextBackgroundUrl?: string;
-  /** 포스터 이미지 URL */
   posterUrl?: string;
-  /** 전체 화면 암전 여부 (B 단축키) */
   isBlackout?: boolean;
-  /** 가사 숨김 여부 (H 단축키) */
   isLyricsHidden?: boolean;
-  /** 텍스트 박스 DOM 참조 (편집기 Moveable 타깃용) */
   textBoxRef?: React.Ref<HTMLDivElement>;
-  /** 텍스트 박스 드래그/리사이즈 진행 중 여부 */
   isTextInteracting?: boolean;
-  /** 컨테이너 커스텀 크기 (선택적) */
   containerDimensions?: { width?: number; height?: number };
-  /**
-   * Layer 1을 영상 대신 포스터 이미지로 그린다 (편집기 썸네일용).
-   * 썸네일 수십 장이 각자 `<video autoplay>`를 띄우지 않게 한다.
-   */
   staticBackground?: boolean;
   className?: string;
 }
 
-/**
- * 3-Layer SlideStage 통합 컴포넌트
- * - 16:9 가상 스테이지(1920x1080) 위에서 DOM 3-Layer로 슬라이드를 렌더링
- * - Layer 1 (z-0): VideoLayer (Dual Video A/B 교차 루프)
- * - Layer 2 (z-10): OverlayLayer (Blackout & Opacity)
- * - Layer 3 (z-20): TextLayer (Typography & Safe Margin)
- * - useStageScale을 통해 어떤 해상도/비율/컨테이너에서도 왜곡 없이 화면 중앙에 scale
- */
+/** 16:9 가상 스테이지 위에서 3-Layer로 슬라이드를 렌더링하는 컴포넌트 */
 export function SlideStage({
   slide,
   style = DEFAULT_DECK_STYLE,
@@ -129,7 +108,6 @@ export function SlideStage({
           transformOrigin: "0 0",
         }}
       >
-        {/* Layer 1: Motion Background Loop (Dual Video A/B) — 썸네일은 정지 포스터 */}
         {staticBackground ? (
           <div
             data-testid="static-background-layer"
@@ -152,16 +130,12 @@ export function SlideStage({
           />
         )}
 
-        {/* Layer 2: Readability Black Overlay & Blackout */}
         <OverlayLayer
           opacity={style.overlayOpacity}
           color={style.overlayColor}
           isBlackout={isBlackout}
         />
 
-        {/* Layer 3: Typography & Text Box */}
-        {/* 블랙아웃은 '화면 검게 하기'(PRD 4.x)다. 오버레이만 불투명하게 만들면
-            텍스트 레이어(z-20)가 오버레이(z-10) 위에 남아 가사가 계속 보인다. */}
         <TextLayer
           slide={slide}
           style={style}

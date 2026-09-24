@@ -12,10 +12,7 @@ export function sanitizeLyricLine(line: string): string {
 
 /**
  * 가사 원본 텍스트를 슬라이드 목록으로 분할한다. (PRD 4.1, 4.2)
- * - 빈 줄을 기준으로 블록을 구분한다.
- * - 블록당 최대 4줄까지는 단일 슬라이드로 유지한다.
- * - 빈 줄 없이 4줄을 초과하는 블록은 2줄 단위로 자동 분할한다.
- * - 슬라이드 순서(order: 0, 1, 2...)와 경량 고유 ID를 부여한다.
+ * 최대 4줄까지 단일 슬라이드를 유지하고, 4줄 초과 블록은 2줄 단위로 분할한다.
  */
 export function splitLyricsIntoSlides(rawText: string): Slide[] {
   const rawLines = rawText.split(/\r?\n/);
@@ -49,7 +46,6 @@ export function splitLyricsIntoSlides(rawText: string): Slide[] {
         }),
       );
     } else {
-      // 4줄 초과 시 2줄 단위로 분할
       for (let i = 0; i < block.length; i += 2) {
         const chunk = block.slice(i, i + 2);
         slides.push(

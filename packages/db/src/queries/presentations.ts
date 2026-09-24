@@ -31,10 +31,7 @@ export interface PresentationWithDecks extends Presentation {
   items: HydratedPresentationItem[];
 }
 
-/**
- * 1. 프레젠테이션(Presentation) 및 속한 덱 목록 원자적 조회
- * RLS 부재 대응: presentation.userId 일치 여부를 필수 검증
- */
+/** 프레젠테이션 및 속한 덱 목록 조회 (사용자 소유 검증) */
 export async function getPresentationWithDecks(
   db: DbInstance,
   presentationId: string,
@@ -76,9 +73,7 @@ export async function getPresentationWithDecks(
   };
 }
 
-/**
- * 2. 사용자 소유 프레젠테이션 목록 조회
- */
+/** 사용자 소유 프레젠테이션 목록 조회 */
 export async function getPresentationsByUserId(
   db: DbInstance,
   userId: string,
@@ -90,10 +85,7 @@ export async function getPresentationsByUserId(
     .orderBy(desc(presentations.serviceDate), desc(presentations.createdAt));
 }
 
-/**
- * 3. Clone-on-Add 프레젠테이션 생성 헬퍼
- * 원본 덱을 복제하여 `scope = 'presentation'`, `presentationId = presentation.id`, `forkedFrom = 원본ID`로 격리 저장
- */
+/** 원본 덱을 복제하여 프레젠테이션 생성 */
 export async function createPresentationWithClonedDecks(
   db: DbInstance,
   params: {
@@ -105,7 +97,6 @@ export async function createPresentationWithClonedDecks(
 ): Promise<PresentationWithDecks> {
   const presentationId = createId();
 
-  // 1. 프레젠테이션 헤더 삽입
   await db.insert(presentations).values({
     id: presentationId,
     userId: params.userId,
@@ -115,7 +106,6 @@ export async function createPresentationWithClonedDecks(
 
   const clonedItems: HydratedPresentationItem[] = [];
 
-  // 2. 원본 덱들을 로드하여 Clone-on-Add 복제본 생성
   for (let order = 0; order < params.sourceDeckIds.length; order++) {
     const sourceId = params.sourceDeckIds[order];
     const [sourceDeck] = await db
@@ -123,8 +113,6 @@ export async function createPresentationWithClonedDecks(
       .from(decks)
       .where(eq(decks.id, sourceId));
 
-    // 소유자이거나 공개된 덱만 복제한다. id만 알면 남의 비공개 덱을
-    // 복제할 수 있었던 경로를 막는다 (D1에는 RLS가 없다).
     const canClone =
       sourceDeck &&
       (sourceDeck.userId === params.userId ||
@@ -146,7 +134,7 @@ export async function createPresentationWithClonedDecks(
       slides: sourceDeck.slides,
       backgroundId: sourceDeck.backgroundId,
       style: sourceDeck.style,
-      visibility: "private" as const, // 프레젠테이션 복제본은 무조건 비공개
+      visibility: "private" as const,
       forkedFrom: sourceDeck.id,
       forkCount: 0,
     };
@@ -186,9 +174,7 @@ export async function createPresentationWithClonedDecks(
   };
 }
 
-/**
- * 4. 프레젠테이션 삭제 헬퍼 (ON DELETE CASCADE로 종속 복제 덱 및 아이템 자동 정리)
- */
+/** 프레젠테이션 삭제 */
 export async function deletePresentation(
   db: DbInstance,
   presentationId: string,
@@ -206,7 +192,6 @@ export async function deletePresentation(
 
   if (!owned) return false;
 
-  // 다른 기기의 부팅 병합이 되살리지 않도록 영구 삭제 기록을 함께 남긴다.
   await runStatements(db, [
     db.delete(presentations).where(eq(presentations.id, presentationId)),
     ...tombstoneStatements(db, userId, "presentation", [presentationId]),
@@ -238,9 +223,6 @@ export async function upsertPresentationDocument(
 
   if (existing && existing.userId !== userId) return false;
 
-  // 드라이브 배치: 필드가 아예 없으면(구버전 클라이언트) 기존 값을 건드리지 않는다.
-  // 남의 폴더나 사라진 폴더를 가리키면 루트로 보정한다 — 문서를 거절하면
-  // 그 기기의 세트가 영영 올라가지 않는다.
   const folderId =
     doc.folderId === undefined
       ? undefined
@@ -258,11 +240,9 @@ export async function upsertPresentationDocument(
 
   const deckRows = await nullifyUnknownBackgrounds(db, rawDeckRows);
 
-  // 영구 삭제 뒤 다른 기기가 같은 문서를 다시 저장했다 — 되살린다.
   await clearTombstone(db, userId, doc.id);
 
   const statements = [
-    // 이 프레젠테이션에 속한 기존 항목·덱을 걷어낸다.
     db
       .delete(presentationItems)
       .where(eq(presentationItems.presentationId, doc.id)),
@@ -312,9 +292,6 @@ export async function updatePresentation(
   if (patch.title !== undefined) values.title = patch.title;
   if (patch.serviceDate !== undefined) values.serviceDate = patch.serviceDate;
 
-  // rowsAffected에 기대지 않고 소유권을 먼저 확인한다. D1은 rowsAffected를
-  // 주지만 테스트용 better-sqlite3 클라이언트는 주지 않아, `?? 1` 폴백이
-  // 남의 문서 수정 시도까지 '성공'으로 보고한다.
   const [owned] = await db
     .select({ id: presentations.id })
     .from(presentations)

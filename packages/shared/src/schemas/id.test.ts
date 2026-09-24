@@ -22,8 +22,8 @@ describe("IdSchema", () => {
 
   it("길이가 21자가 아니면 거부한다", () => {
     expect(IdSchema.safeParse("").success).toBe(false);
-    expect(IdSchema.safeParse("V1StGXR8_Z5jdHi6B-my").success).toBe(false); // 20자
-    expect(IdSchema.safeParse("V1StGXR8_Z5jdHi6B-myTT").success).toBe(false); // 22자
+    expect(IdSchema.safeParse("V1StGXR8_Z5jdHi6B-my").success).toBe(false);
+    expect(IdSchema.safeParse("V1StGXR8_Z5jdHi6B-myTT").success).toBe(false);
   });
 
   it("URL-safe 알파벳 밖의 문자는 거부한다", () => {

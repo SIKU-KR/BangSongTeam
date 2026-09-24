@@ -11,10 +11,6 @@ export interface Bindings {
   KAKAO_CLIENT_SECRET?: string;
   NAVER_CLIENT_ID?: string;
   NAVER_CLIENT_SECRET?: string;
-  /**
-   * 개발자 로그인 스위치. 로컬에서만 "true"로 둔다.
-   * **운영 시크릿에 절대 넣지 않는다** — 누구나 아무 계정으로 로그인하게 된다.
-   */
   DEV_LOGIN_ENABLED?: string;
 }
 

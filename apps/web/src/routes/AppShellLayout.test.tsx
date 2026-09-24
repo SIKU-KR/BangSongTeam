@@ -24,11 +24,6 @@ import { LyricsRoute } from "./LyricsRoute";
 import { BackgroundsRoute } from "./BackgroundsRoute";
 import * as chromeChecker from "../components/common/ChromeAlertBanner";
 
-/**
- * 전역 `vi.mock("react-router-dom", ... useNavigate)` 는 쓰지 않는다.
- * 사이드바가 실제 navigate(path)로 <Outlet/>을 전환하므로 목이 있으면
- * 탭 전환 자체가 일어나지 않는다. 대신 스텁 라우트로 이동을 관측한다.
- */
 function renderShell(initialPath = "/presentations") {
   return render(
     <MemoryRouter initialEntries={[initialPath]}>
@@ -75,7 +70,6 @@ function folder(
   };
 }
 
-/** 카드(그리드 항목) 찾기 */
 function card(name: string): HTMLElement {
   return screen.getByRole("option", { name: new RegExp(name) });
 }
@@ -101,7 +95,6 @@ describe("AppShellLayout (드라이브형 홈)", () => {
 
     const listbox = screen.getByRole("listbox");
     const options = within(listbox).getAllByRole("option");
-    // 폴더가 앞에 온다
     expect(options[0]).toHaveAccessibleName("폴더 2026 주일 대예배");
     expect(options).toHaveLength(1 + SEED_PRESENTATIONS.length);
 
@@ -114,7 +107,6 @@ describe("AppShellLayout (드라이브형 홈)", () => {
       "폴더 1개 · 프레젠테이션 5개",
     );
 
-    // 카드 디자인(16:9 썸네일·배지)은 유지된다
     expect(screen.getByText("23 슬라이드")).toBeInTheDocument();
     expect(screen.getAllByText("5곡 세트").length).toBeGreaterThan(0);
   });
@@ -208,11 +200,9 @@ describe("AppShellLayout (드라이브형 홈)", () => {
     fireEvent.click(options[3], { shiftKey: true });
     expect(screen.getByTestId("selection-bar")).toHaveTextContent("4개 선택됨");
 
-    // 빈 곳을 누르면 해제
     fireEvent.click(screen.getByTestId("drive-view"));
     expect(screen.queryByTestId("selection-bar")).not.toBeInTheDocument();
 
-    // 더블클릭하면 편집기
     act(() => {
       fireEvent.doubleClick(card(first.title));
     });
@@ -230,14 +220,12 @@ describe("AppShellLayout (드라이브형 홈)", () => {
     act(() => {
       fireEvent.doubleClick(card("폴더 2026 주일 대예배"));
     });
-    // 폴더 안: 하위 폴더만 있고 루트의 세트는 없다
     expect(card("폴더 청년부")).toBeInTheDocument();
     expect(screen.queryAllByTestId("presentation-card")).toHaveLength(0);
     expect(screen.getByTestId(`crumb-${WORSHIP}`)).toHaveAttribute(
       "aria-current",
       "page",
     );
-    // 사이드바 트리에도 현재 폴더가 표시된다
     expect(
       within(screen.getByTestId("sidebar-folder-tree")).getByText(
         "2026 주일 대예배",
@@ -256,7 +244,6 @@ describe("AppShellLayout (드라이브형 홈)", () => {
     fireEvent.click(screen.getByTestId("new-menu-folder"));
 
     const input = screen.getByTestId("drive-name-input");
-    // 겹치지 않게 번호를 붙여 미리 채운다
     expect(input).toHaveValue("새 폴더 (2)");
 
     fireEvent.change(input, { target: { value: "새 폴더" } });
@@ -311,14 +298,11 @@ describe("AppShellLayout (드라이브형 홈)", () => {
     fireEvent.click(screen.getByTestId("action-move"));
 
     const dialog = screen.getByTestId("drive-move-dialog");
-    // 자기 자신은 고를 수 없다
     const self = within(dialog).getByTestId(`picker-node-${WORSHIP}`);
     expect(
       within(self).getByRole("button", { name: "2026 주일 대예배" }),
     ).toBeDisabled();
-    // 루트는 고를 수 있다
     fireEvent.click(within(dialog).getByTestId("picker-node-root"));
-    // 이미 루트에 있으므로 옮길 것이 없다
     expect(screen.getByTestId("drive-move-confirm")).toBeDisabled();
   });
 
@@ -351,10 +335,8 @@ describe("AppShellLayout (드라이브형 홈)", () => {
     fireEvent.click(screen.getByTestId("action-trash"));
 
     fireEvent.click(screen.getByTestId("sidebar-nav-trash"));
-    // 휴지통에는 폴더 한 줄만 보인다
     expect(screen.getAllByRole("option")).toHaveLength(1);
 
-    // 검색에서도 빠진다
     fireEvent.click(screen.getByTestId("sidebar-nav-home"));
     fireEvent.change(
       screen.getByPlaceholderText(/폴더, 프레젠테이션, 찬양 가사/),

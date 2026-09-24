@@ -22,7 +22,6 @@ describe("D1 Scoped Deck Queries", () => {
     const testDb = createTestDb();
     db = testDb.db;
 
-    // Seed test users
     await db.insert(user).values([
       {
         id: userAId,
@@ -41,7 +40,6 @@ describe("D1 Scoped Deck Queries", () => {
 
   describe("getMyLibraryDecks", () => {
     it("should return only library decks belonging to the user", async () => {
-      // User A master library deck
       await db.insert(decks).values({
         id: "d1",
         userId: userAId,
@@ -53,7 +51,6 @@ describe("D1 Scoped Deck Queries", () => {
         visibility: "private",
       });
 
-      // User A presentation cloned deck (must be excluded from library view)
       await db.insert(decks).values({
         id: "d2",
         userId: userAId,
@@ -65,7 +62,6 @@ describe("D1 Scoped Deck Queries", () => {
         visibility: "private",
       });
 
-      // User B library deck
       await db.insert(decks).values({
         id: "d3",
         userId: userBId,
@@ -165,7 +161,7 @@ describe("D1 Scoped Deck Queries", () => {
   });
 });
 
-describe("덱 쓰기 헬퍼 (M3-B 보관함 동기화)", () => {
+describe("덱 쓰기 헬퍼 (보관함 동기화)", () => {
   let db: ReturnType<typeof createTestDb>["db"];
 
   const ownerId = "00000000x000000000001";
@@ -259,7 +255,7 @@ describe("덱 쓰기 헬퍼 (M3-B 보관함 동기화)", () => {
     expect(saved?.origin).toBe("user");
   });
 
-  describe("서버 소유 공유 필드 (M5)", () => {
+  describe("서버 소유 공유 필드", () => {
     it("새 덱은 클라이언트가 무엇을 보내든 비공개·0회·직접 만든 곡으로 저장된다", async () => {
       const saved = await upsertDeck(
         db,

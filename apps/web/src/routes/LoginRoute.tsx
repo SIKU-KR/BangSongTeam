@@ -12,15 +12,7 @@ interface AuthConfig {
   devLogin: boolean;
 }
 
-/**
- * 로그인 화면.
- *
- * 로그인은 편집의 전제 조건이다 (2026-09-22 결정). 미인증 상태에서는
- * 어떤 경로로 들어와도 이 화면만 보인다.
- *
- * 어떤 로그인 수단을 그릴지는 **서버가 정한다.** 플레이스홀더 자격증명으로
- * 소셜 버튼을 띄우면 누를 때마다 인가 서버가 거절한다.
- */
+/** 로그인 화면 라우트 */
 export function LoginRoute(): React.JSX.Element {
   const [config, setConfig] = useState<AuthConfig | null>(null);
   const [pending, setPending] = useState<string | null>(null);
@@ -34,7 +26,6 @@ export function LoginRoute(): React.JSX.Element {
         const next = await fetchAuthConfig();
         if (!cancelled) setConfig(next);
       } catch {
-        // 설정을 못 읽어도 화면은 떠야 한다. 소셜 버튼만 보여 준다.
         if (!cancelled) {
           setConfig({
             providers: SOCIAL_PROVIDERS.map((p) => p.id),

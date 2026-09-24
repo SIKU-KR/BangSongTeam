@@ -1,11 +1,7 @@
 import React from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
-/**
- * 테스트용 QueryClient. 재시도를 끄고 캐시를 테스트마다 새로 만든다.
- * 앱 설정(`createAppQueryClient`)의 `networkMode: 'online'`은 jsdom의
- * `navigator.onLine`을 따르므로 그대로 둔다.
- */
+/** 테스트용 QueryClient */
 export function createTestQueryClient(): QueryClient {
   return new QueryClient({
     defaultOptions: {

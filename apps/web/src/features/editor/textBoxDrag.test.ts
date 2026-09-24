@@ -53,7 +53,7 @@ describe("computeDragRect", () => {
   const start: PercentRect = { left: 20, top: 30, width: 40, height: 10 };
 
   it("포인터 이동량(px)을 스테이지 %로 환산해 박스를 이동한다", () => {
-    const r = computeDragRect(start, 96, 54, stage); // +10%, +10%
+    const r = computeDragRect(start, 96, 54, stage);
     expect(r).toMatchObject({ left: 30, top: 40, width: 40, height: 10 });
   });
 });
@@ -89,12 +89,12 @@ describe("computeResizeRect", () => {
   const start: PercentRect = { left: 20, top: 40, width: 40, height: 10 };
 
   it("동쪽 핸들: 왼쪽 가장자리를 고정하고 폭만 변경한다", () => {
-    const r = computeResizeRect(start, 1, 96, stage); // +10%
+    const r = computeResizeRect(start, 1, 96, stage);
     expect(r).toMatchObject({ left: 20, width: 50, top: 40, height: 10 });
   });
 
   it("서쪽 핸들: 오른쪽 가장자리를 고정하고 폭과 left를 변경한다", () => {
-    const r = computeResizeRect(start, -1, -96, stage); // 왼쪽으로 10% 확장
+    const r = computeResizeRect(start, -1, -96, stage);
     expect(r.left).toBeCloseTo(10);
     expect(r.width).toBeCloseTo(50);
     expect(r.left + r.width).toBeCloseTo(60);

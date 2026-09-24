@@ -5,13 +5,6 @@ import { LyricsViewer } from "./LyricsViewer";
 import { usePublicDeck } from "../../../lib/api/catalogQueries";
 import { describeApiError } from "../../../lib/api/request";
 
-// ============================================================================
-// 곡 추가 모달 우측 미리보기 (PRD 4.7 괄호 문단)
-//
-// - 내 곡: 전문
-// - 공유 곡: 로그인 사용자에게 전문 (예배 준비자가 버전·구성을 확인하도록)
-// ============================================================================
-
 interface ActionBarProps {
   copyText?: string;
   addLabel: string;
@@ -36,8 +29,8 @@ function ActionBar({
   const copy = async (): Promise<void> => {
     try {
       await navigator.clipboard.writeText(copyText ?? "");
-    } catch {
-      // 클립보드 권한이 없어도 버튼 반응은 준다
+    } catch (error) {
+      void error;
     }
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
@@ -130,6 +123,9 @@ const MINE_BADGE = (
   </span>
 );
 
+/**
+ * 내 보관함 곡 미리보기.
+ */
 export function MyDeckPreview({
   deck,
   onAdd,
@@ -166,6 +162,9 @@ export function MyDeckPreview({
   );
 }
 
+/**
+ * 공유 곡 미리보기.
+ */
 export function SharedDeckPreview({
   summary,
   ownedCopy,
@@ -176,7 +175,6 @@ export function SharedDeckPreview({
   onReport,
 }: {
   summary: PublicDeckSummary;
-  /** 이미 가져온 적이 있으면 내 보관함의 그 곡 */
   ownedCopy?: Deck;
   isAdding: boolean;
   error: string | null;

@@ -6,17 +6,12 @@ export interface TextLayerProps {
   slide?: Slide | null;
   style: DeckStyle;
   isLyricsHidden?: boolean;
-  /** 텍스트 박스 DOM 참조 (편집기에서 Moveable 타깃으로 사용) */
   boxRef?: React.Ref<HTMLDivElement>;
-  /** 드래그/리사이즈 중에는 위치 transition을 꺼서 포인터를 지연 없이 따라가게 한다 */
   isInteracting?: boolean;
   className?: string;
 }
 
-/**
- * 3-Layer Stage Layer 3: 가독성 보장 텍스트 및 타이포그래피 레이어
- * 1920x1080 고정 가상 스테이지 좌표계 기준 퍼센트 위치와 앵커 성장을 적용한다.
- */
+/** 1920x1080 고정 가상 스테이지 기준 텍스트 및 타이포그래피 레이어 */
 export function TextLayer({
   slide,
   style,
@@ -35,16 +30,13 @@ export function TextLayer({
     textShadowLevel,
   } = style;
 
-  // 앵커별 CSS transform (top: 0, middle: -50%, bottom: -100%)
   const transform =
     GRID_ANCHOR_TRANSFORMS[
       position.anchor as Exclude<GridAnchorPreset, "custom">
     ] ?? "translate(-50%, -50%)";
 
-  // 1920px 기준 절대 폰트 크기 계산 (1vw of 1920 = 19.2px)
   const fontSizePx = fontSizeVw * 19.2;
 
-  // 텍스트 그림자 프리셋 적용
   const textShadow =
     TEXT_SHADOW_PRESETS[textShadowLevel] ?? TEXT_SHADOW_PRESETS.medium;
 

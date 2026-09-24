@@ -28,19 +28,17 @@ describe("useStageScale and calculateStageScale", () => {
     });
 
     it("should center with pillarbox (translateX > 0) when width is wider than 16:9", () => {
-      // 2000x1080 is wider than 1920x1080
       const result = calculateStageScale(2000, 1080);
       expect(result.scale).toBe(1);
-      expect(result.translateX).toBe(40); // (2000 - 1920) / 2
+      expect(result.translateX).toBe(40);
       expect(result.translateY).toBe(0);
     });
 
     it("should center with letterbox (translateY > 0) when height is taller than 16:9", () => {
-      // 1920x1200 is taller than 1920x1080
       const result = calculateStageScale(1920, 1200);
       expect(result.scale).toBe(1);
       expect(result.translateX).toBe(0);
-      expect(result.translateY).toBe(60); // (1200 - 1080) / 2
+      expect(result.translateY).toBe(60);
     });
 
     it("should handle 0 or negative dimensions gracefully", () => {

@@ -15,10 +15,6 @@ export interface FakeApi {
 
 /**
  * Hono RPC 클라이언트가 부르는 `fetch`를 가짜 서버로 바꾼다.
- *
- * `routes`의 키는 `"GET /api/catalog/search"`처럼 메서드와 경로다 (쿼리 문자열 제외).
- * 경로의 `:id` 자리는 `*`로 쓴다 (`"POST /api/decks/*\/fork"`).
- * 등록되지 않은 경로는 404를 돌려주고, `offline: true`면 모든 요청이 네트워크 오류로 끝난다.
  */
 export function installFakeApi(
   routes: Record<string, FakeRoute>,

@@ -35,7 +35,6 @@ export function createTestDb(): TestDbResult {
       if (stmt.trim()) sqlite.exec(stmt);
     }
   }
-  // 테스트가 배경을 직접 넣으므로 `0001_initial`이 시드한 배경 10건은 비운다
   sqlite.exec("DELETE FROM backgrounds");
 
   const db = drizzle(sqlite, { schema });

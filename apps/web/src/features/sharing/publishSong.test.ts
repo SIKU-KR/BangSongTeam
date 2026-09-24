@@ -83,7 +83,6 @@ describe("편집기 '공유' — 보관함 원본 공개", () => {
     const pushed = deps.push.mock.calls[0][0] as Deck;
     expect(pushed.id).toBe(master.id);
     expect(pushed.slides[0].lines).toEqual(["세트에서 고친 첫 줄"]);
-    // 슬라이드에서 가사 원문을 다시 만든다
     expect(pushed.lyricsRaw).toBe("세트에서 고친 첫 줄\n\n둘째 슬라이드");
     expect(pushed.style.overlayOpacity).toBe(85);
 
@@ -125,7 +124,6 @@ describe("편집기 '공유' — 보관함 원본 공개", () => {
       created.id,
     );
 
-    // 두 번째 공개는 같은 원본을 고친다 (새 덱을 또 만들지 않는다)
     await updatePublishedSong(index, deps);
     expect(getUserSongs()).toHaveLength(1);
   });

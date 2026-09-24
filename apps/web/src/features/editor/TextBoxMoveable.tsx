@@ -18,41 +18,23 @@ import {
 } from "./textBoxDrag";
 
 export interface TextBoxMoveableProps {
-  /** TextLayer의 텍스트 박스 DOM (Moveable 타깃) */
   target: HTMLElement | null;
-  /** 타깃 위치/크기에 영향을 주는 값이 바뀌면 컨트롤 박스를 다시 맞춘다 */
   refreshKey: string;
-  /** 드래그/리사이즈 중 실시간 미리보기 (null이면 미리보기 종료) */
   onPreview: (position: TextBoxPosition | null, guides: SnapGuides) => void;
-  /** 제스처가 끝났을 때 1회 호출 — 스토어 히스토리는 이 시점에만 쌓는다 */
   onCommit: (position: TextBoxPosition) => void;
 }
 
 interface GestureState {
-  /** 제스처 시작 시점의 박스 (스테이지 %) */
   rect: PercentRect;
   startX: number;
   startY: number;
-  /** 1: 동쪽 핸들, -1: 서쪽 핸들, 0: 이동 */
   direction: 1 | -1 | 0;
-  /** 마지막으로 계산된 박스 */
   last: PercentRect | null;
 }
 
 const NO_GUIDES: SnapGuides = { vertical: false, horizontal: false };
 
-/**
- * 편집 캔버스 전용 텍스트 박스 조작 레이어 (react-moveable)
- * - 본문 드래그: 이동 + 중앙선 스냅 + 5% 안전 여백 제한
- * - 좌/우 핸들: 폭 조절 (20~90%)
- *
- * TextLayer가 앵커별 transform을 인라인으로 쓰기 때문에 Moveable이 target의 style을
- * 직접 바꾸지 않게 하고, 포인터 이동량을 스테이지 % 좌표로 환산해 상위 상태로 올린다.
- * 놓는 순간 custom 앵커 위치로 한 번만 커밋한다.
- *
- * `container` prop은 지정하지 않는다. 스케일된 조상 안에서는 지정 시 컨트롤 박스
- * 오프셋이 이중으로 계산되어, 기본값(컨트롤 박스의 offsetParent)을 쓴다.
- */
+/** 편집 캔버스 전용 텍스트 박스 조작 컴포넌트. */
 export function TextBoxMoveable({
   target,
   refreshKey,
@@ -62,17 +44,10 @@ export function TextBoxMoveable({
   const moveableRef = useRef<Moveable>(null);
   const gestureRef = useRef<GestureState | null>(null);
 
-  // 위치/스타일이 바뀌면 컨트롤 박스를 타깃에 다시 맞춘다.
-  // Moveable은 첫 렌더에서 controlBox ref가 없어 visibility: hidden으로 그리므로,
-  // setState(3번째 인자)로 재렌더를 강제해야 컨트롤 박스가 나타난다.
   useEffect(() => {
     moveableRef.current?.updateRect("", true, true);
   }, [refreshKey, target]);
 
-  // TextLayer 박스는 위치가 바뀔 때 transition으로 움직이므로, 위 effect는 곡 전환·
-  // 그리드 프리셋처럼 스타일이 바뀐 직후 아직 이전 자리에 있는 박스를 잰다.
-  // useResizeObserver는 크기 변화만 잡으니, transition이 도는 동안 매 프레임 다시
-  // 맞춰 컨트롤 박스가 텍스트를 따라가게 한다.
   useEffect(() => {
     if (!target) return;
     let frame = 0;
@@ -94,7 +69,6 @@ export function TextBoxMoveable({
 
   if (!target) return null;
 
-  // TextLayer 컨테이너(absolute inset-0)가 1920x1080 스테이지 전체를 덮는다
   const getStageRect = (): DOMRect | null =>
     (target.offsetParent as HTMLElement | null)?.getBoundingClientRect() ??
     null;

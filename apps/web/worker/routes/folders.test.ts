@@ -10,13 +10,6 @@ import { createD1Client, user } from "@repo/db";
 import { createApp } from "../index";
 import type { SessionReader } from "../middleware/auth";
 
-/**
- * 드라이브 폴더 API.
- *
- * 쿼리 헬퍼 테스트(better-sqlite3)는 외래키를 강제하지 않는다. 여기서는 실제
- * D1(workerd)에서 폴더 트리 저장·보정·영구 삭제와 `folder_id` 외래키를 확인한다.
- */
-
 const USER_A = "aaaaaaaa00000000000f1";
 const USER_B = "bbbbbbbb00000000000f2";
 
@@ -228,7 +221,6 @@ describe("드라이브 폴더 API", () => {
 
     const after = await listFolderBody();
     expect(after.folders.map((f) => f.id)).toEqual([keep.id]);
-    // 다른 기기의 부팅 병합이 되살리지 않도록 영구 삭제 기록을 돌려준다
     expect(after.tombstones.folderIds.sort()).toEqual(
       [root.id, child.id].sort(),
     );
@@ -244,7 +236,6 @@ describe("드라이브 폴더 API", () => {
     const doc = makeDoc(folder.id);
     await app.request(`/api/presentations/${doc.id}`, put(doc), env);
 
-    // 영구 삭제 경로를 거치지 않고 행만 지워진 상황 (운영 SQL 등)
     await env.DB.prepare("DELETE FROM folders WHERE id = ?")
       .bind(folder.id)
       .run();

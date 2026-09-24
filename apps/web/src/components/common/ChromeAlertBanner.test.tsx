@@ -10,7 +10,6 @@ describe("ChromeAlertBanner Component", () => {
   });
 
   it("should display the banner when accessed via non-Chrome browser (e.g. Safari)", () => {
-    // Mock Safari User-Agent
     Object.defineProperty(navigator, "userAgentData", {
       value: undefined,
       configurable: true,
@@ -27,7 +26,6 @@ describe("ChromeAlertBanner Component", () => {
   });
 
   it("should display the banner when accessed via Microsoft Edge via userAgentData", () => {
-    // Mock Edge User-Agent Data
     Object.defineProperty(navigator, "userAgentData", {
       value: {
         brands: [
@@ -43,7 +41,6 @@ describe("ChromeAlertBanner Component", () => {
   });
 
   it("should NOT display the banner when accessed via Google Chrome", () => {
-    // Mock Google Chrome User-Agent Data
     Object.defineProperty(navigator, "userAgentData", {
       value: {
         brands: [
@@ -59,7 +56,6 @@ describe("ChromeAlertBanner Component", () => {
   });
 
   it("should hide the banner and persist dismissal to localStorage when close button is clicked", () => {
-    // Non-Chrome agent
     Object.defineProperty(navigator, "userAgentData", {
       value: undefined,
       configurable: true,

@@ -4,7 +4,6 @@ import { useTheme, type ThemeMode } from "../../features/theme";
 export interface ThemeMenuButtonProps {
   variant?: "full" | "compact";
   direction?: "up" | "down";
-  /** 드롭다운을 버튼의 왼쪽/오른쪽 끝에 맞춘다 (화면 오른쪽에 둘 때 "right") */
   align?: "left" | "right";
   className?: string;
 }
@@ -81,6 +80,7 @@ const THEME_OPTIONS: ThemeOption[] = [
   },
 ];
 
+/** 테마 모드 전환 메뉴 버튼 */
 export function ThemeMenuButton({
   variant = "full",
   direction = "up",
@@ -94,7 +94,6 @@ export function ThemeMenuButton({
   const currentOption =
     THEME_OPTIONS.find((opt) => opt.mode === theme) ?? THEME_OPTIONS[2];
 
-  // 외부 클릭 시 드롭다운 닫기
   useEffect(() => {
     if (!isOpen) return;
 
@@ -131,7 +130,6 @@ export function ThemeMenuButton({
 
   return (
     <div ref={containerRef} className={`relative select-none ${className}`}>
-      {/* ── 테마 전환 트리거 버튼 ── */}
       {variant === "compact" ? (
         <button
           type="button"
@@ -167,7 +165,6 @@ export function ThemeMenuButton({
             </div>
           </div>
 
-          {/* 화살표 인디케이터 (열리는 방향에 맞춰 표시) */}
           <div className="text-zinc-400 dark:text-zinc-500 shrink-0">
             {direction === "up" ? (
               <svg
@@ -202,7 +199,6 @@ export function ThemeMenuButton({
         </button>
       )}
 
-      {/* ── 드롭다운 / 팝오버 메뉴 ── */}
       {isOpen && (
         <div
           role="menu"

@@ -2,9 +2,6 @@ import { sqliteTable, text, integer, index } from "drizzle-orm/sqlite-core";
 import { sql } from "drizzle-orm";
 import { user } from "./auth";
 
-// ============================================================================
-// 오류 신고 및 저작권 요청
-// ============================================================================
 export const reports = sqliteTable(
   "reports",
   {
@@ -12,7 +9,6 @@ export const reports = sqliteTable(
     userId: text("user_id").references(() => user.id),
     targetType: text("target_type", { enum: ["deck"] }).notNull(),
     targetId: text("target_id").notNull(),
-    // lyrics_error | inappropriate | copyright | correction
     reason: text("reason").notNull(),
     details: text("details"),
     status: text("status", { enum: ["pending", "resolved", "rejected"] })
@@ -25,7 +21,7 @@ export const reports = sqliteTable(
     ),
   },
   (t) => [
-    index("idx_reports_status_created").on(t.status, t.createdAt), // 운영자 대기열
+    index("idx_reports_status_created").on(t.status, t.createdAt),
     index("idx_reports_target").on(t.targetType, t.targetId),
   ],
 );

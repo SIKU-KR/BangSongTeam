@@ -68,7 +68,6 @@ describe("DeckSchema", () => {
   });
 
   it("reads legacy lyric-library decks as user decks", () => {
-    // 가사 라이브러리(MVP에서 제거)로 만든 곡이 로컬 IndexedDB에 남아 있을 수 있다
     const parsed = DeckSchema.parse({
       ...sampleDeck,
       origin: "catalog",
@@ -101,7 +100,6 @@ describe("DeckSchema", () => {
       }),
     ).toThrow();
 
-    // 2026-09-24부터 UUID는 호환하지 않는다
     expect(() =>
       DeckSchema.parse({
         ...sampleDeck,

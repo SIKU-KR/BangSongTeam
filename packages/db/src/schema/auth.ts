@@ -1,12 +1,9 @@
 import { sqliteTable, text, integer } from "drizzle-orm/sqlite-core";
 
-// ============================================================================
-// Better Auth v1 공식 완결 스키마 (OAuth 카카오/네이버)
-// ============================================================================
 export const user = sqliteTable("user", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
-  email: text("email"), // 카카오 기본 권한 시 null 허용
+  email: text("email"),
   emailVerified: integer("email_verified", { mode: "boolean" })
     .notNull()
     .default(false),
@@ -34,7 +31,7 @@ export const account = sqliteTable("account", {
     .notNull()
     .references(() => user.id, { onDelete: "cascade" }),
   accountId: text("account_id").notNull(),
-  providerId: text("provider_id").notNull(), // 'kakao' | 'naver'
+  providerId: text("provider_id").notNull(),
   accessToken: text("access_token"),
   refreshToken: text("refresh_token"),
   accessTokenExpiresAt: integer("access_token_expires_at", {

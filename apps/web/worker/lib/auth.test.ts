@@ -13,7 +13,6 @@ import {
 } from "./auth";
 import type { Bindings } from "../types";
 
-/** 실제 제약을 그대로 쓴다 — 별도 정규식을 새로 쓰면 원천이 둘로 갈라진다 */
 const UserIdSchema = DeckSchema.shape.userId;
 
 function makeEnv(overrides: Partial<Bindings> = {}): Bindings {
@@ -36,8 +35,6 @@ describe("worker auth 인스턴스", () => {
   });
 
   it("사용자 id를 21자 NanoID로 만든다 (@repo/shared의 IdSchema 통과)", () => {
-    // Better Auth 기본 id는 32자 nanoid다. 그대로 두면 DeckSchema.userId가
-    // 전부 실패하므로 공용 createId()(21자)를 강제해야 한다.
     for (let i = 0; i < 20; i++) {
       expect(UserIdSchema.safeParse(generateUserId()).success).toBe(true);
     }
@@ -48,7 +45,6 @@ describe("worker auth 인스턴스", () => {
   });
 
   it("자격증명이 비었으면 프로바이더를 등록하지 않는다", () => {
-    // 빈 문자열로 OAuth 프로바이더를 열어 두면 설정 실수가 런타임까지 숨는다.
     expect(hasCredentials(undefined, undefined)).toBe(false);
     expect(hasCredentials("", "secret")).toBe(false);
     expect(hasCredentials("id", "  ")).toBe(false);
@@ -74,8 +70,6 @@ describe("worker auth 인스턴스", () => {
     });
 
     it("이메일이 없으면 합성 이메일로 폴백한다", () => {
-      // account_email은 비즈 앱 심사를 통과해야 내려온다. 이메일이 없다고
-      // 가입이 실패하면 카카오 로그인 자체가 막힌다.
       const profile: KakaoProfileLike = {
         id: 98765,
         kakao_account: { profile: { nickname: "봉사자" } },
@@ -131,8 +125,6 @@ describe("worker auth 인스턴스", () => {
     });
 
     it("자격증명이 없어도 인스턴스 생성 자체는 실패하지 않는다", () => {
-      // 로그인은 불가능하되 서버가 부팅은 되어야 한다. 배경 영상 같은
-      // 비인증 라우트까지 같이 죽으면 안 된다.
       const auth = createAuth(
         makeEnv({
           KAKAO_CLIENT_ID: undefined,

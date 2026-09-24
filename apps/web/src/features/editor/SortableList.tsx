@@ -23,10 +23,7 @@ export interface ReorderMove {
   to: number;
 }
 
-/**
- * dnd-kit의 active/over 아이디를 배열 인덱스 이동(from → to)으로 변환한다.
- * 이동이 없거나 아이디를 찾을 수 없으면 null.
- */
+/** active/over 아이디를 배열 인덱스 이동으로 변환한다. */
 export function resolveReorder(
   ids: readonly string[],
   activeId: string,
@@ -39,9 +36,7 @@ export function resolveReorder(
   return { from, to };
 }
 
-/**
- * 슬라이드의 정렬용 아이디. id가 비어 있는 슬라이드는 인덱스로 대체한다.
- */
+/** 슬라이드의 정렬용 고유 아이디를 생성한다. */
 export function slideSortableId(slide: Slide, index: number): string {
   return slide.id || `slide-${index}`;
 }
@@ -53,11 +48,7 @@ export interface SortableListProps {
   children: React.ReactNode;
 }
 
-/**
- * 곡 목록 / 슬라이드 썸네일 창 공용 드래그 정렬 컨테이너.
- * - 5px 이동 후에만 드래그를 시작해 카드 클릭(선택)과 충돌하지 않는다
- * - 키보드(Space + 방향키) 정렬 지원
- */
+/** 드래그 앤 드롭 정렬 목록 컨테이너 컴포넌트. */
 export function SortableList({
   ids,
   onReorder,
@@ -107,9 +98,7 @@ export interface SortableItemProps extends Omit<
   sortableId: string;
 }
 
-/**
- * SortableList 내부의 드래그 가능한 카드. 나머지 div 속성은 그대로 전달한다.
- */
+/** SortableList 내부의 드래그 가능한 카드 컴포넌트. */
 export function SortableItem({
   sortableId,
   style,

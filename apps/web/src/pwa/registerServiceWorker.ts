@@ -9,9 +9,7 @@ import { registerSW } from "virtual:pwa-register";
  * 중이라는 사실만 알리고, 적용 시점은 사용자가 편집 화면에서 고른다.
  */
 export interface ServiceWorkerState {
-  /** 새 버전이 설치되어 적용을 기다리는 중 */
   needRefresh: boolean;
-  /** 앱 셸 캐시가 끝나 오프라인으로 열 수 있는 상태 */
   offlineReady: boolean;
 }
 
@@ -70,16 +68,11 @@ export async function applyServiceWorkerUpdate(): Promise<void> {
   await applyUpdate(true);
 }
 
-/**
- * Service Worker를 등록한다. 두 번 호출해도 한 번만 등록한다.
- *
- * @param registrar 테스트에서 가상 모듈 대신 주입하는 등록기
- */
+/** Service Worker를 등록한다. */
 export function registerServiceWorker(
   registrar: ServiceWorkerRegistrar = registerSW,
 ): void {
   if (registered) return;
-  // jsdom·SSR처럼 Service Worker가 없는 환경에서는 조용히 넘어간다.
   if (typeof navigator === "undefined" || !("serviceWorker" in navigator)) {
     return;
   }
@@ -93,8 +86,6 @@ export function registerServiceWorker(
       setState({ ...state, offlineReady: true });
     },
     onRegisterError: () => {
-      // 등록 실패는 치명적이지 않다. 온라인이면 앱은 그대로 동작하고,
-      // 캐시된 배경을 네트워크 없이 재생하는 경로만 없어진다.
       registered = false;
     },
   });

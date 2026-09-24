@@ -7,10 +7,6 @@ const B = "00000000000000000000b";
 const DECK = "c00000000000000000001";
 const FORK = "c00000000000000000002";
 
-/**
- * 운영 SQL을 실제 마이그레이션 스키마에 대해 실행한다.
- * 컬럼 이름이 바뀌면 런북이 운영 중에 깨지기 전에 여기서 깨진다.
- */
 describe("운영 SQL (moderation runbook)", () => {
   let testDb: TestDbResult;
   const run = (key: keyof typeof MODERATION_SQL, params: object = {}) =>
@@ -64,7 +60,6 @@ describe("운영 SQL (moderation runbook)", () => {
       one("SELECT count(*) AS n FROM decks_fts WHERE deck_id = ?", DECK).n,
     ).toBe(0);
 
-    // 가져가 다시 공개한 사본을 찾는다
     expect(
       all("LIST_PUBLIC_DESCENDANTS", { deck_id: DECK }).map((r) => r.id),
     ).toEqual([FORK]);

@@ -13,17 +13,6 @@ import { INITIAL_BACKGROUNDS } from "@repo/shared";
 import { createApp } from "../index";
 import type { SessionReader } from "../middleware/auth";
 
-/**
- * 동기화 라우트의 교차 사용자 격리 검증.
- *
- * D1에는 Postgres식 RLS가 없다. 모든 방어가 쿼리 헬퍼의 userId 조건 하나에
- * 달려 있으므로, "A가 저장한 것을 B가 못 읽고 못 고치고 못 지운다"를
- * 라우트 레벨에서 고정해 둔다.
- *
- * 실제 세션 발급(OAuth 왕복)은 여기서 재현할 수 없으므로 세션 리더만
- * 주입하고(`createApp({ readSession })`), 그 아래는 프로덕션 라우트를 그대로 쓴다.
- */
-
 const USER_A = "aaaaaaaa0000000000001";
 const USER_B = "bbbbbbbb0000000000002";
 
@@ -77,7 +66,6 @@ function makeDoc(userId: string): PresentationDocument {
   });
 }
 
-/** 실제 라우트에 가짜 세션만 끼운 앱 */
 const app = createApp({ readSession: fakeSession });
 
 function json(body: unknown) {
@@ -91,7 +79,6 @@ function json(body: unknown) {
 describe("동기화 라우트 교차 사용자 격리", () => {
   beforeEach(async () => {
     const db = createD1Client(env.DB);
-    // 테스트 간 상태가 남지 않게 정리한다 (isolatedStorage: false).
     await env.DB.exec("DELETE FROM presentation_items");
     await env.DB.exec("DELETE FROM decks");
     await env.DB.exec("DELETE FROM presentations");
@@ -103,10 +90,6 @@ describe("동기화 라우트 교차 사용자 격리", () => {
       { id: USER_A, name: "A", createdAt: new Date(), updatedAt: new Date() },
       { id: USER_B, name: "B", createdAt: new Date(), updatedAt: new Date() },
     ]);
-    // 배경은 더 이상 여기서 시드하지 않는다. `0001_initial.sql`
-    // 마이그레이션이 채우므로, 시드하지 않고도 통과하는 것 자체가 회귀 방지선이다
-    // (그 마이그레이션이 없던 시절 운영 D1의 backgrounds가 비어 있어
-    //  decks.background_id 외래키 위반으로 동기화가 500으로 죽었다).
     currentUser = USER_A;
   });
 
@@ -242,7 +225,7 @@ describe("동기화 라우트 교차 사용자 격리", () => {
     expect(aList.decks[0].title).toBe("은혜로다");
   });
 
-  it("세트 복제본은 공개로 보내도 비공개로 저장되고 검색 인덱스에 들어가지 않는다 (M5-1)", async () => {
+  it("세트 복제본은 공개로 보내도 비공개로 저장되고 검색 인덱스에 들어가지 않는다", async () => {
     const doc = makeDoc(USER_A);
     doc.items[0].deck = makeDeck(USER_A, {
       visibility: "public",
@@ -277,7 +260,7 @@ describe("동기화 라우트 교차 사용자 격리", () => {
     expect(indexed?.n).toBe(0);
   });
 
-  it("보관함 PUT으로는 공개·가져간 횟수를 바꿀 수 없다 (M5-1)", async () => {
+  it("보관함 PUT으로는 공개·가져간 횟수를 바꿀 수 없다", async () => {
     const libraryDeck = makeDeck(USER_A, {
       id: LIB_DECK_ID,
       scope: "library",
@@ -296,7 +279,6 @@ describe("동기화 라우트 교차 사용자 격리", () => {
   });
 
   it("본문의 userId를 믿지 않는다", async () => {
-    // A 세션으로 B 소유라고 주장하는 문서를 밀어 넣어도 A 것이 된다.
     await app.request(
       `/api/presentations/${DOC_ID}`,
       json(makeDoc(USER_B)),
@@ -316,8 +298,7 @@ describe("동기화 라우트 교차 사용자 격리", () => {
     expect(aBody.presentations).toHaveLength(1);
     expect(aBody.presentations[0].userId).toBe(USER_A);
   });
-  describe("2-기기 왕복 (M3-B 완료 기준)", () => {
-    /** 5곡짜리 실제 예배 세트 */
+  describe("2-기기 왕복", () => {
     function makeServiceSet(userId: string): PresentationDocument {
       const titles = [
         "시간을 뚫고",
@@ -372,8 +353,6 @@ describe("동기화 라우트 교차 사용자 격리", () => {
     }
 
     it("A 기기에서 만든 5곡 세트를 B 기기에서 그대로 받는다", async () => {
-      // M3-B 완료 기준: '다른 PC에서 로그인해 같은 세트를 그대로 송출'.
-      // 여기서는 서버 왕복까지 고정하고, 실제 2대 PC 확인은 사람이 한다.
       const original = makeServiceSet(USER_A);
 
       const put = await app.request(
@@ -383,7 +362,6 @@ describe("동기화 라우트 교차 사용자 격리", () => {
       );
       expect(put.status).toBe(200);
 
-      // B 기기 = 같은 계정, 로컬 저장소가 빈 상태에서 받아 오는 것과 같다
       const res = await app.request("/api/presentations", {}, env);
       const { presentations } = (await res.json()) as {
         presentations: PresentationDocument[];
@@ -396,23 +374,18 @@ describe("동기화 라우트 교차 사용자 격리", () => {
       expect(restored.serviceDate).toBe("2026-09-27");
       expect(restored.items).toHaveLength(5);
 
-      // 곡 순서
       expect(restored.items.map((item) => item.deck.title)).toEqual(
         original.items.map((item) => item.deck.title),
       );
-      // 곡별 스타일
       expect(
         restored.items.map((item) => item.deck.style.overlayOpacity),
       ).toEqual(original.items.map((item) => item.deck.style.overlayOpacity));
-      // 곡별 배경
       expect(restored.items.map((item) => item.deck.backgroundId)).toEqual(
         original.items.map((item) => item.deck.backgroundId),
       );
-      // 송출에 필요한 슬라이드 내용
       expect(restored.items[0].deck.slides[0].lines).toEqual([
         "시간을 뚫고 1절",
       ]);
-      // 클라이언트가 만든 id가 보존되어야 동기화가 중복 생성이 되지 않는다
       expect(restored.items.map((item) => item.deck.id)).toEqual(
         original.items.map((item) => item.deck.id),
       );
@@ -426,7 +399,6 @@ describe("동기화 라우트 교차 사용자 격리", () => {
         env,
       );
 
-      // 1번과 5번 곡을 맞바꾼다
       const reordered = {
         ...original,
         items: [...original.items]
@@ -452,26 +424,16 @@ describe("동기화 라우트 교차 사용자 격리", () => {
         "은혜로다",
         "시간을 뚫고",
       ]);
-      // 곡 수가 늘어나면 안 된다 (교체지 추가가 아니다)
       expect(presentations[0].items).toHaveLength(5);
     });
   });
 
-  /**
-   * 배경 외래키 회귀.
-   *
-   * `decks.background_id`는 `backgrounds`를 참조하고 D1은 외래키를 기본으로 강제한다.
-   * 운영 D1에 배경 10건을 넣는 경로가 아예 없어서, 곡에 배경이 붙는 순간
-   * `db.batch()` 전체가 롤백되고 동기화가 500으로 죽었다. 로컬 저장은 멀쩡했기 때문에
-   * 편집·송출은 되는데 기기 간 동기화만 조용히 실패하는 상태였다.
-   */
   describe("배경 외래키 (동기화 500 회귀)", () => {
     it("사전 주입 배경은 마이그레이션으로 이미 들어가 있다", async () => {
       const db = createD1Client(env.DB);
       const rows = await db.select({ id: backgrounds.id }).from(backgrounds);
 
       expect(rows).toHaveLength(INITIAL_BACKGROUNDS.length);
-      // 클라이언트가 실제로 찍는 id가 서버에 있어야 한다.
       expect(rows.map((row) => row.id)).toContain(INITIAL_BACKGROUNDS[0].id);
     });
 
@@ -507,7 +469,6 @@ describe("동기화 라우트 교차 사용자 격리", () => {
         env,
       );
 
-      // 배경 하나 때문에 가사까지 통째로 잃으면 안 된다.
       expect(put.status).toBe(200);
 
       const res = await app.request("/api/presentations", {}, env);
@@ -515,7 +476,6 @@ describe("동기화 라우트 교차 사용자 격리", () => {
         presentations: PresentationDocument[];
       };
       expect(body.presentations[0].items[0].deck.backgroundId).toBeNull();
-      // 작업물(가사·스타일)은 그대로 살아 있어야 한다.
       expect(body.presentations[0].items[0].deck.slides[0].lines).toEqual([
         "시작됐네",
       ]);

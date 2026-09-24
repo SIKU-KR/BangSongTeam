@@ -1,8 +1,7 @@
 import React from "react";
 
 /**
- * 가사 원문 뷰어: 줄 번호와 빈 줄 기준 슬라이드 분할선을 보여 준다.
- * 곡 추가 모달이 내 곡·공유 곡 전문을 같은 모양으로 그린다.
+ * 가사 원문 뷰어.
  */
 export function LyricsViewer({
   lyrics,

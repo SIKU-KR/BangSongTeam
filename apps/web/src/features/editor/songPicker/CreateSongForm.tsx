@@ -15,8 +15,7 @@ export interface CreateSongFormProps {
 }
 
 /**
- * 새 찬양 가사 직접 입력 폼 (PRD 4.1).
- * 빈 줄 기준 분할을 실시간으로 보여 준다.
+ * 새 찬양 가사 직접 입력 폼.
  */
 export function CreateSongForm({
   initialTitle = "",

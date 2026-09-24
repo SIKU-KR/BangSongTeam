@@ -9,30 +9,20 @@ describe("hangulIncludes (es-hangul search)", () => {
   });
 
   it("should match Korean choseong (초성 검색)", () => {
-    // 'ㅇㅎㄹㄷ' -> '은혜로다'
     expect(hangulIncludes("은혜로다", "ㅇㅎ")).toBe(true);
     expect(hangulIncludes("은혜로다", "ㅇㅎㄹㄷ")).toBe(true);
-
-    // 'ㅅㅅ' -> '시선'
     expect(hangulIncludes("시선", "ㅅㅅ")).toBe(true);
-
-    // 'ㄲㄷㄷ' -> '꽃들도'
     expect(hangulIncludes("꽃들도", "ㄲㄷㄷ")).toBe(true);
-
-    // 'ㅅㄱㅁ' -> '손경민'
     expect(hangulIncludes("손경민", "ㅅㄱㅁ")).toBe(true);
   });
 
   it("should match choseong with or without spaces", () => {
-    // '시간을 뚫고' vs 'ㅅㄱㅇ ㄸㄱ' and 'ㅅㄱㅇㄸㄱ'
     expect(hangulIncludes("시간을 뚫고", "ㅅㄱㅇ ㄸㄱ")).toBe(true);
     expect(hangulIncludes("시간을 뚫고", "ㅅㄱㅇㄸㄱ")).toBe(true);
   });
 
   it("should match disassembled partial syllables (미완성 자모 실시간 검색)", () => {
-    // '은ㅎ' -> '은혜'
     expect(hangulIncludes("은혜로다", "은ㅎ")).toBe(true);
-    // '시ㅅ' -> '시선'
     expect(hangulIncludes("시선", "시ㅅ")).toBe(true);
   });
 

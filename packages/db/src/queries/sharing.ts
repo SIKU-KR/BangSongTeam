@@ -14,13 +14,6 @@ import { publicDeckCondition } from "./publicScope";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type DbInstance = any;
 
-// ============================================================================
-// 공개 응답 모양 (PRD 4.7)
-//
-// DB 행을 그대로 내보내지 않는다. `userId`처럼 남에게 보일 이유가 없는 값을
-// 여기서 떨어뜨리고, 공개 검색에는 미리보기만 남긴다.
-// ============================================================================
-
 /** 공개 검색 카드: 첫 슬라이드만 */
 export function toPublicDeckSummary(
   row: Deck,
@@ -55,27 +48,15 @@ export function toPublicDeckDetail(
   };
 }
 
-// ============================================================================
-// 공개 전환 (PRD 4.7 공유 선택)
-// ============================================================================
-
 export type SetVisibilityResult =
   | { status: "ok"; deck: SharedDeck }
-  /** 없거나 남의 덱 (둘을 구분하지 않는다 — 남의 비공개 덱 존재 여부가 새지 않게) */
   | { status: "not_found" }
-  /** 세트 복제본은 공유 단위가 아니다 */
   | { status: "not_library" }
-  /** 운영자가 게시를 중단한 덱은 다시 공개할 수 없다 */
   | { status: "taken_down" }
-  /** 슬라이드가 없는 곡은 공개하지 않는다 */
   | { status: "empty" };
 
 /**
- * 내 보관함 덱의 공개 여부를 바꾼다.
- *
- * 공개로 돌릴 때 `published_at`을 남긴다. 이것이 '공개 전 저작권 안내에 동의했다'는
- * 기록이다 (동의 자체는 요청 스키마가 `true` 리터럴로 강제한다).
- * 비공개로 돌려도 이미 가져간 포크는 그대로 남는다 (PRD 4.7 비공개 전환·삭제).
+ * 보관함 덱의 공개 여부를 변경한다.
  */
 export async function setDeckVisibility(
   db: DbInstance,
@@ -111,10 +92,6 @@ export async function setDeckVisibility(
     .where(eq(decks.id, deckId));
   return { status: "ok", deck: toSharedDeck(saved) };
 }
-
-// ============================================================================
-// 공개 덱 조회·가져오기 (PRD 4.7 검색·가져오기)
-// ============================================================================
 
 async function selectPublicDeckWithAuthor(
   db: DbInstance,

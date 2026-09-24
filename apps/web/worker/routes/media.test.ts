@@ -4,13 +4,6 @@ import { Hono } from "hono";
 import type { AppEnv } from "../types";
 import { mediaRoute } from "./media";
 
-/**
- * 미디어 프록시 응답 헤더 검증.
- *
- * 배경 영상은 불변 자산이므로 캐시 헤더가 붙어야 하고(TECH_SPEC 5.4-1),
- * Service Worker가 Range 재생을 캐시에서 만들어 내려면 206 경로도
- * 같은 규칙을 따라야 한다.
- */
 const app = new Hono<AppEnv>().route("/api/media", mediaRoute);
 
 const KEY = "loops/test_loop.mp4";

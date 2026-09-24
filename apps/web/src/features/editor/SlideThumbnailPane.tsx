@@ -12,7 +12,6 @@ export interface SlideThumbnailPaneProps {
   activeSongIndex: number;
   activeSlideIndex: number;
   onSelectSlide: (songIndex: number, slideIndex: number) => void;
-  /** 현재 슬라이드 뒤에 새 슬라이드 추가 */
   onAddSlide: () => void;
   onDuplicateSlide: (songIndex: number, slideIndex: number) => void;
   onDeleteSlide: (songIndex: number, slideIndex: number) => void;
@@ -24,18 +23,11 @@ export interface SlideThumbnailPaneProps {
   onReorderSong: (fromIndex: number, toIndex: number) => void;
   onDuplicateSong: (songIndex: number) => void;
   onDeleteSong: (songIndex: number) => void;
-  /** 곡 추가 모달 열기. 모달 자체는 EditorRoute가 단독으로 마운트한다 */
   onOpenSongPicker: () => void;
   className?: string;
 }
 
-/**
- * PowerPoint식 좌측 슬라이드 썸네일 창
- * - 프레젠테이션 전체 슬라이드를 한 목록으로 보여 준다
- * - 번호는 세트 전체에서 1부터 이어진다 (곡이 바뀌어도 1로 돌아가지 않음, 송출 번호와 동일)
- * - 곡은 PPT의 구역(section)처럼 헤더로 묶는다. 곡 단위 동작은 헤더의 ⋯ / 우클릭 메뉴에 둔다
- * - 곡 안에서 슬라이드를 드래그해 순서를 바꾼다
- */
+/** 프레젠테이션 슬라이드 썸네일 목록 창 컴포넌트. */
 export function SlideThumbnailPane({
   items,
   activeSongIndex,
@@ -60,7 +52,6 @@ export function SlideThumbnailPane({
 
   const activeItemId = items[activeSongIndex]?.id;
 
-  // 곡마다 첫 슬라이드의 전체 인덱스 (0부터). 번호는 곡이 바뀌어도 이어진다.
   const firstIndexes: number[] = [];
   let totalSlides = 0;
   for (const item of items) {
@@ -68,7 +59,6 @@ export function SlideThumbnailPane({
     totalSlides += item.deck?.slides.length ?? 0;
   }
 
-  // 선택이 접힌 곡으로 옮겨 가면 그 곡을 펼친다 (선택 슬라이드가 숨으면 안 된다)
   useEffect(() => {
     if (!activeItemId) return;
     setCollapsedIds((prev) => {
@@ -79,12 +69,10 @@ export function SlideThumbnailPane({
     });
   }, [activeItemId]);
 
-  // 방향키로 선택이 바뀌어도 선택 썸네일이 창 안에 보이게 한다
   useEffect(() => {
     activeThumbRef.current?.scrollIntoView?.({ block: "nearest" });
   }, [activeSongIndex, activeSlideIndex]);
 
-  // 곡 메뉴: 바깥 클릭 / Esc로 닫기
   useEffect(() => {
     if (menuSongIndex === null) return;
 
@@ -127,7 +115,6 @@ export function SlideThumbnailPane({
       data-testid="slide-thumbnail-pane"
       className={`w-64 shrink-0 bg-white dark:bg-zinc-950 border-r border-zinc-200 dark:border-zinc-800/80 flex flex-col select-none ${className}`}
     >
-      {/* 상단 툴바: 전체 장수 & 새 슬라이드 */}
       <div className="h-11 px-3 flex items-center justify-between border-b border-zinc-200 dark:border-zinc-800/80 shrink-0">
         <span className="text-xs font-bold text-zinc-900 dark:text-white">
           슬라이드{" "}
@@ -160,7 +147,6 @@ export function SlideThumbnailPane({
         </button>
       </div>
 
-      {/* 슬라이드 목록 (곡 = 구역) */}
       <div className="flex-1 overflow-y-auto px-3 py-2">
         {items.length === 0 && (
           <p className="px-1 py-6 text-center text-xs text-zinc-500 dark:text-zinc-400">
@@ -181,7 +167,6 @@ export function SlideThumbnailPane({
 
           return (
             <section key={item.id} className="mb-2">
-              {/* 구역 헤더 */}
               <div
                 data-testid={`song-section-${songIndex}`}
                 onContextMenu={(e) => {
@@ -232,7 +217,6 @@ export function SlideThumbnailPane({
                   </span>
                 </button>
 
-                {/* 곡 메뉴 (⋯ / 우클릭) */}
                 <div
                   ref={isMenuOpen ? menuContainerRef : undefined}
                   className="relative shrink-0"
@@ -310,7 +294,6 @@ export function SlideThumbnailPane({
                 </div>
               </div>
 
-              {/* 구역 슬라이드 썸네일 */}
               {!isCollapsed && (
                 <SortableList
                   ids={slides.map(slideSortableId)}
@@ -364,7 +347,6 @@ export function SlideThumbnailPane({
                               />
                             </div>
 
-                            {/* 호버 액션: 복제 / 삭제 */}
                             <div className="absolute top-1 right-1 z-30 flex items-center gap-0.5 p-0.5 rounded bg-black/75 border border-white/15 opacity-0 group-hover:opacity-100 transition-opacity">
                               <button
                                 type="button"
@@ -429,7 +411,6 @@ export function SlideThumbnailPane({
         })}
       </div>
 
-      {/* 하단: 찬양곡 추가 */}
       <div className="p-3 border-t border-zinc-200 dark:border-zinc-800/80 shrink-0">
         <button
           type="button"

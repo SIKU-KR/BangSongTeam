@@ -3,9 +3,7 @@ import { HexColorPicker } from "react-colorful";
 
 const HEX_PATTERN = /^#([0-9a-fA-F]{3}){1,2}$/;
 
-/**
- * DeckStyleSchema의 색상 정규식과 동일한 검증 (#RGB / #RRGGBB)
- */
+/** 유효한 hex 색상값인지 검증한다 (#RGB 또는 #RRGGBB). */
 export function isValidHex(value: string): boolean {
   return HEX_PATTERN.test(value);
 }
@@ -16,11 +14,7 @@ export interface ColorPickerFieldProps {
   className?: string;
 }
 
-/**
- * hex 입력 + react-colorful 팝오버 컬러피커.
- * 스토어의 updateSongStyle은 호출마다 히스토리를 쌓으므로, 드래그·타이핑 중에는
- * 로컬 draft만 갱신하고 손을 뗄 때(pointerup/keyup/blur/Enter)에만 1회 커밋한다.
- */
+/** hex 입력과 팝오버 컬러피커 컴포넌트. */
 export function ColorPickerField({
   value,
   onCommit,
@@ -31,7 +25,6 @@ export function ColorPickerField({
   const [pickerColor, setPickerColor] = useState(value);
   const rootRef = useRef<HTMLDivElement>(null);
 
-  // 외부(프리셋 스와치, 곡 전환, Undo)에서 값이 바뀌면 표시값 동기화
   useEffect(() => {
     setText(value);
     setPickerColor(value);

@@ -6,8 +6,7 @@ import { DeckSchema } from "@repo/shared";
 import { signInAsTestUser } from "../../test/sessionFixture";
 import { SEED_USER_ID } from "../presentation";
 
-describe("QuickLyricPasteModal (Task 3.2)", () => {
-  // 곡의 주인은 세션 사용자다. 로그인 없이는 곡을 만들 수 없다.
+describe("QuickLyricPasteModal", () => {
   beforeEach(() => {
     signInAsTestUser();
   });
@@ -55,13 +54,11 @@ describe("QuickLyricPasteModal (Task 3.2)", () => {
 
     fireEvent.change(textarea, { target: { value: sampleLyrics } });
 
-    // 2개의 슬라이드 카드가 표시되어야 함
     const slideCards = screen.getAllByTestId("slide-preview-card");
     expect(slideCards).toHaveLength(2);
 
     expect(screen.getByText("슬라이드 1")).toBeInTheDocument();
     expect(screen.getByText("슬라이드 2")).toBeInTheDocument();
-    // 줄 수 표시 (각각 2줄)
     expect(screen.getAllByText(/2줄/)).toHaveLength(2);
     expect(
       within(slideCards[0]).getByText("한량없는 주의 은혜"),
@@ -80,12 +77,10 @@ describe("QuickLyricPasteModal (Task 3.2)", () => {
     const submitBtn = screen.getByRole("button", { name: "세트에 추가" });
     expect(submitBtn).toBeDisabled();
 
-    // 제목만 입력한 경우
     const titleInput = screen.getByPlaceholderText(/곡 제목/);
     fireEvent.change(titleInput, { target: { value: "은혜로다" } });
     expect(submitBtn).toBeDisabled();
 
-    // 가사도 입력하면 활성화됨
     const textarea = screen.getByPlaceholderText(/가사/);
     fireEvent.change(textarea, {
       target: { value: "시작됐네 우리 주님의 능력이" },
@@ -121,9 +116,7 @@ describe("QuickLyricPasteModal (Task 3.2)", () => {
     expect(handleAddToSet).toHaveBeenCalledTimes(1);
     const createdDeck = handleAddToSet.mock.calls[0][0];
 
-    // DeckSchema 정합성 검증
     expect(() => DeckSchema.parse(createdDeck)).not.toThrow();
-    // 하드코딩된 게스트 id가 아니라 세션 사용자가 주인이어야 한다.
     expect(createdDeck.userId).toBe(SEED_USER_ID);
     expect(createdDeck.title).toBe("은혜로다");
     expect(createdDeck.artist).toBe("손경민");

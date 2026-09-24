@@ -186,14 +186,7 @@ function buildAuth(env: Bindings) {
       provider: "sqlite",
       schema: { user, session, account, verification },
     }),
-    // 비밀번호 로그인은 MVP 범위 밖이다 (PRD 4.6: 소셜 로그인만).
-    //
-    // 예외: 개발자 로그인이 이 엔드포인트를 쓴다. 플래그가 꺼져 있으면
-    // better-auth가 비밀번호 엔드포인트 자체를 만들지 않으므로, 라우트 가드가
-    // 뚫리더라도 로그인할 방법이 없다 (방어선 3겹).
     emailAndPassword: { enabled: env.DEV_LOGIN_ENABLED === "true" },
-    // 텔레메트리 모듈이 node:os를 import해 workerd에서 로드에 실패한다.
-    // Worker에서 외부로 사용 통계를 보낼 이유도 없다.
     telemetry: { enabled: false },
     socialProviders,
     advanced: {
@@ -204,22 +197,11 @@ function buildAuth(env: Bindings) {
   });
 }
 
-/**
- * betterAuth()는 전달한 옵션 리터럴로 좁혀진 타입을 돌려준다.
- * `ReturnType<typeof betterAuth>`(제네릭 기본값)로 적으면 대입이 되지 않으므로
- * 실제 팩토리에서 추론한다.
- */
 type AuthInstance = ReturnType<typeof buildAuth>;
 
-/**
- * isolate 내 인스턴스 캐시.
- *
- * Worker는 요청마다 `env`를 받으므로 모듈 스코프 싱글턴을 만들 수 없다.
- * 대신 같은 `env` 객체에 대해서는 인스턴스를 재사용한다. 요청마다 D1 어댑터를
- * 새로 엮으면 비용이 그대로 응답 지연이 된다.
- */
 const instances = new WeakMap<Bindings, AuthInstance>();
 
+/** Better Auth 인스턴스 생성 또는 캐시 조회 */
 export function createAuth(env: Bindings): AuthInstance {
   const cached = instances.get(env);
   if (cached) return cached;

@@ -25,7 +25,6 @@ describe("ColorPickerField", () => {
 
     fireEvent.blur(input);
     expect(onCommit).not.toHaveBeenCalled();
-    // blur 시 마지막 유효 값으로 복원
     expect(input).toHaveValue("#FFFFFF");
   });
 

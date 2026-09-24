@@ -1,10 +1,3 @@
-/**
- * jsdom용 최소 Cache Storage 대역.
- *
- * jsdom에는 Cache Storage가 없다. 오프라인 캐시 계층은 브라우저에서만 의미가
- * 있지만, '무엇을 언제 넣고 무엇을 이미 있다고 보는가'는 우리 코드의 판단이라
- * 테스트로 고정할 값어치가 있다. 요청 키는 URL 문자열로만 다룬다.
- */
 class FakeCache {
   private entries = new Map<string, Response>();
 
@@ -31,7 +24,6 @@ class FakeCache {
     return [...this.entries.keys()].map((url) => ({ url }) as Request);
   }
 
-  /** 테스트에서 넣어 둔 항목 수를 확인하기 위한 보조 */
   get size(): number {
     return this.entries.size;
   }

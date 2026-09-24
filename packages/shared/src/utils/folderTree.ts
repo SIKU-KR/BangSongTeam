@@ -37,14 +37,12 @@ export function buildFolderIndex<T extends FolderLink>(
   for (const start of byId.values()) {
     if (parentOf.has(start.id)) continue;
 
-    // 루트나 이미 풀린 폴더에 닿을 때까지 위로 올라간다.
     const path: string[] = [];
     const onPath = new Set<string>();
     let cursor: string | null = start.id;
 
     while (cursor !== null && !parentOf.has(cursor)) {
       if (onPath.has(cursor)) {
-        // 사이클: 경로에서 cursor부터 끝까지가 고리다. 전부 루트로 끊는다.
         for (const member of path.slice(path.indexOf(cursor))) {
           parentOf.set(member, null);
           cycleMembers.add(member);
@@ -57,14 +55,12 @@ export function buildFolderIndex<T extends FolderLink>(
 
       const parentId = node.parentId;
       if (parentId === null || !byId.has(parentId)) {
-        // 루트이거나 부모가 사라진 고아
         parentOf.set(cursor, null);
         break;
       }
       cursor = parentId;
     }
 
-    // 나머지는 선언된 부모가 유효하다 (사슬이 루트나 풀린 폴더로 끝났다).
     for (const id of path) {
       if (!parentOf.has(id)) {
         parentOf.set(id, (byId.get(id) as T).parentId);

@@ -12,7 +12,6 @@ import {
  * 팩토리에 주입해 실제 라우트를 그대로 검증한다.
  */
 export interface AppDeps {
-  /** 요청의 세션 사용자를 읽는다. 기본값은 Better Auth */
   readSession?: SessionReader;
 }
 

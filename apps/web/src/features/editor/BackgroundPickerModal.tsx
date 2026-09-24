@@ -22,12 +22,7 @@ const FILTER_TAGS = [
   "어두운",
 ] as const;
 
-/**
- * 모션 배경 영상 선택 모달 컴포넌트
- * - 사전 주입된 R2 기반 루프 비디오 10종 그리드 렌더링
- * - 태그 필터 (전체, 분위기, 색감)
- * - 현재 선택된 배경 하이라이트
- */
+/** 배경 영상 선택 모달 컴포넌트. */
 export function BackgroundPickerModal({
   isOpen,
   onClose,
@@ -52,7 +47,6 @@ export function BackgroundPickerModal({
       className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200"
     >
       <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl w-full max-w-4xl max-h-[90vh] flex flex-col shadow-xl dark:shadow-2xl overflow-hidden text-zinc-900 dark:text-zinc-100">
-        {/* 모달 헤더 */}
         <div className="px-6 py-4 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between">
           <div>
             <h2
@@ -92,7 +86,6 @@ export function BackgroundPickerModal({
           </button>
         </div>
 
-        {/* 태그 필터 탭 */}
         <div className="px-6 py-3 border-b border-zinc-200 dark:border-zinc-800/80 bg-zinc-50 dark:bg-zinc-950/40 flex items-center gap-1.5 overflow-x-auto">
           {FILTER_TAGS.map((tag) => (
             <button
@@ -110,7 +103,6 @@ export function BackgroundPickerModal({
           ))}
         </div>
 
-        {/* 배경 그리드 */}
         <div className="flex-1 overflow-y-auto p-6 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
           {filteredBackgrounds.map((bg) => {
             const isSelected = bg.id === selectedBackgroundId;
@@ -134,7 +126,6 @@ export function BackgroundPickerModal({
                     : "border-zinc-200 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-600 bg-white dark:bg-zinc-900/60 shadow-sm dark:shadow-none"
                 }`}
               >
-                {/* 16:9 썸네일 */}
                 <div className="relative aspect-video w-full bg-black overflow-hidden">
                   {isHovered && videoUrl ? (
                     <video
@@ -157,7 +148,6 @@ export function BackgroundPickerModal({
                     </div>
                   )}
 
-                  {/* 선택 표시 */}
                   {isSelected && (
                     <div className="absolute top-2 right-2 w-5 h-5 rounded-full bg-emerald-500 text-white flex items-center justify-center shadow-lg">
                       <svg
@@ -176,13 +166,11 @@ export function BackgroundPickerModal({
                     </div>
                   )}
 
-                  {/* 재생 길이 배지 */}
                   <span className="absolute bottom-1.5 right-1.5 px-1.5 py-0.5 rounded text-[10px] font-mono bg-black/70 text-zinc-300 backdrop-blur-sm">
                     {bg.durationSec}s
                   </span>
                 </div>
 
-                {/* 메타 정보 */}
                 <div className="p-2.5 flex flex-col gap-1">
                   <span className="text-xs font-semibold text-zinc-900 dark:text-zinc-200 truncate group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
                     {bg.title}
@@ -203,7 +191,6 @@ export function BackgroundPickerModal({
           })}
         </div>
 
-        {/* 푸터 */}
         <div className="px-6 py-3 border-t border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950/40 flex items-center justify-between text-xs text-zinc-500 dark:text-zinc-400">
           <span>무손실 H.264 비디오 스트리밍 (Cloudflare R2)</span>
           <button

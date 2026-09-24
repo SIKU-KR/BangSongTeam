@@ -105,7 +105,6 @@ describe("API Schemas", () => {
           firstSlidePreview: [],
           slideCount: 0,
           updatedAt: "2026-09-23T00:00:00.000Z",
-          // 아래 두 값은 스키마가 걸러내야 한다
           userId: "00000000x000000000001",
           lyricsRaw: "전문",
         },
@@ -156,8 +155,6 @@ describe("API Schemas", () => {
     });
 
     it("덱이 빠진 항목은 거부한다", () => {
-      // PresentationSchema는 items[].deck이 optional이라 통과시킨다.
-      // 동기화 경로에서 그걸 허용하면 곡 없는 세트로 서버를 덮어쓴다.
       const withoutDeck = {
         ...document,
         items: [{ ...document.items[0], deck: undefined }],

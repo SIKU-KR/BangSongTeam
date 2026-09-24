@@ -32,14 +32,12 @@ describe("ThemeMenuButton", () => {
 
     const button = screen.getByTestId("theme-menu-button");
 
-    // Open dropdown
     fireEvent.click(button);
     expect(screen.getByTestId("theme-menu-dropdown")).toBeInTheDocument();
     expect(screen.getByTestId("theme-option-light")).toBeInTheDocument();
     expect(screen.getByTestId("theme-option-dark")).toBeInTheDocument();
     expect(screen.getByTestId("theme-option-system")).toBeInTheDocument();
 
-    // Close dropdown on click again
     fireEvent.click(button);
     expect(screen.queryByTestId("theme-menu-dropdown")).not.toBeInTheDocument();
   });
@@ -54,21 +52,17 @@ describe("ThemeMenuButton", () => {
     const button = screen.getByTestId("theme-menu-button");
     fireEvent.click(button);
 
-    // Click '라이트 모드'
     const lightOption = screen.getByTestId("theme-option-light");
     act(() => {
       fireEvent.click(lightOption);
     });
 
-    // Dropdown should close
     expect(screen.queryByTestId("theme-menu-dropdown")).not.toBeInTheDocument();
 
-    // Button label should update
     expect(screen.getByText("라이트 모드")).toBeInTheDocument();
     expect(window.localStorage.getItem("worship-theme")).toBe("light");
     expect(document.documentElement.classList.contains("light")).toBe(true);
 
-    // Now switch to '시스템 설정'
     fireEvent.click(button);
     const systemOption = screen.getByTestId("theme-option-system");
     act(() => {
@@ -94,7 +88,6 @@ describe("ThemeMenuButton", () => {
     fireEvent.click(button);
     expect(screen.getByTestId("theme-menu-dropdown")).toBeInTheDocument();
 
-    // Click outside
     fireEvent.mouseDown(screen.getByTestId("outside-area"));
     expect(screen.queryByTestId("theme-menu-dropdown")).not.toBeInTheDocument();
   });
@@ -110,7 +103,6 @@ describe("ThemeMenuButton", () => {
     fireEvent.click(button);
     expect(screen.getByTestId("theme-menu-dropdown")).toBeInTheDocument();
 
-    // Press Escape
     fireEvent.keyDown(document, { key: "Escape" });
     expect(screen.queryByTestId("theme-menu-dropdown")).not.toBeInTheDocument();
   });

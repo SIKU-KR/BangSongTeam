@@ -14,7 +14,6 @@ describe("Lyric Processing Utilities", () => {
     });
 
     it("trims unicode special whitespace (full-width space, non-breaking space)", () => {
-      // \u3000: full-width space, \u00A0: non-breaking space, \uFEFF: zero-width non-breaking space
       const input = "\u3000\u00A0 주의 사랑이 목마름 채우고 \u3000 ";
       expect(sanitizeLyricLine(input)).toBe("주의 사랑이 목마름 채우고");
     });
@@ -75,7 +74,6 @@ describe("Lyric Processing Utilities", () => {
     });
 
     it("auto-splits blocks exceeding 4 lines into 2-line slides (PRD 4.2)", () => {
-      // 5 lines should split into 2 + 2 + 1
       const fiveLines = `1줄
 2줄
 3줄
@@ -90,7 +88,6 @@ describe("Lyric Processing Utilities", () => {
       expect(slides5[2].lines).toEqual(["5줄"]);
       expect(slides5[2].order).toBe(2);
 
-      // 6 lines should split into 2 + 2 + 2
       const sixLines = `1줄\n2줄\n3줄\n4줄\n5줄\n6줄`;
       const slides6 = splitLyricsIntoSlides(sixLines);
       expect(slides6).toHaveLength(3);
@@ -98,7 +95,6 @@ describe("Lyric Processing Utilities", () => {
       expect(slides6[1].lines).toEqual(["3줄", "4줄"]);
       expect(slides6[2].lines).toEqual(["5줄", "6줄"]);
 
-      // 8 lines should split into 2 + 2 + 2 + 2
       const eightLines = `L1\nL2\nL3\nL4\nL5\nL6\nL7\nL8`;
       const slides8 = splitLyricsIntoSlides(eightLines);
       expect(slides8).toHaveLength(4);
@@ -119,10 +115,6 @@ describe("Lyric Processing Utilities", () => {
 마지막 1줄
 `;
       const slides = splitLyricsIntoSlides(mixed);
-      // Block 1 (2 lines) -> 1 slide
-      // Block 2 (5 lines) -> 3 slides (2 + 2 + 1)
-      // Block 3 (1 line)  -> 1 slide
-      // Total: 5 slides
       expect(slides).toHaveLength(5);
       expect(slides.map((s) => s.order)).toEqual([0, 1, 2, 3, 4]);
       expect(slides[0].lines).toEqual(["정상 1줄", "정상 2줄"]);

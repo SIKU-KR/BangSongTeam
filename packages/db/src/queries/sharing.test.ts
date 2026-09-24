@@ -107,7 +107,6 @@ describe("공유 쿼리 헬퍼", () => {
       expect((await setDeckVisibility(db, A, "empty", "public")).status).toBe(
         "empty",
       );
-      // 게시 중단된 덱도 비공개로 돌리는 것은 된다
       expect((await setDeckVisibility(db, A, "down", "private")).status).toBe(
         "ok",
       );

@@ -10,9 +10,6 @@ import { user } from "./auth";
 import { decks } from "./decks";
 import { folders } from "./folders";
 
-// ============================================================================
-// 예배 프레젠테이션 (Presentation) 및 항목
-// ============================================================================
 export const presentations = sqliteTable(
   "presentations",
   {
@@ -21,9 +18,7 @@ export const presentations = sqliteTable(
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
     title: text("title").notNull(),
-    serviceDate: text("service_date").notNull(), // 'YYYY-MM-DD'
-    // 드라이브 배치. 폴더가 어떤 경로로 사라지든 파일은 루트로 떨어지고 지워지지
-    // 않는다 (영구 삭제는 `deleteFolderTree`가 명시적으로 한다).
+    serviceDate: text("service_date").notNull(),
     folderId: text("folder_id").references(() => folders.id, {
       onDelete: "set null",
     }),

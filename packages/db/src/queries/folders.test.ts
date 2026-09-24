@@ -166,7 +166,6 @@ describe("드라이브 폴더 쿼리", () => {
       await upsertFolder(db, USER_A, a);
       await upsertFolder(db, USER_A, b);
 
-      // 다른 기기에서 a를 b 아래로 옮겼다 → a→b→a 사이클
       const saved = await upsertFolder(db, USER_A, { ...a, parentId: b.id });
       expect(saved?.parentId).toBeNull();
 
@@ -206,7 +205,6 @@ describe("드라이브 폴더 쿼리", () => {
         [inSibling.id, atRoot.id].sort(),
       );
 
-      // 고아 덱·항목이 남지 않는다
       const orphanDecks = await db
         .select()
         .from(decks)
@@ -266,7 +264,6 @@ describe("드라이브 폴더 쿼리", () => {
       });
       await upsertPresentationDocument(db, USER_A, doc);
 
-      // 구버전 클라이언트는 드라이브 필드를 아예 보내지 않는다
       const legacy: PresentationDocument = {
         ...doc,
         title: "구버전에서 고친 제목",

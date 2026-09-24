@@ -142,7 +142,6 @@ describe("SongPickerModal", () => {
     closeOfflineDB();
   });
 
-  /** 내 보관함 곡 1개를 만든다 */
   function seedMySong(title = "내가 만든 찬양") {
     return saveSongToLibrary({
       title,
@@ -174,11 +173,9 @@ describe("SongPickerModal", () => {
       await screen.findByTestId(`song-item-${SHARED_ID}`),
     ).toBeInTheDocument();
     expect(screen.getByText("42회 가져감")).toBeInTheDocument();
-    // 가사 라이브러리 탭은 없다 (MVP에서 제거)
     expect(
       screen.queryByTestId("song-picker-filter-catalog"),
     ).not.toBeInTheDocument();
-    // 샘플 데이터가 아니라 서버를 부른다
     expect(api.calls.some((c) => c.path === "/api/catalog/search")).toBe(true);
   });
 
@@ -221,7 +218,7 @@ describe("SongPickerModal", () => {
     expect(screen.getByText("넷째 줄")).toBeInTheDocument();
   });
 
-  describe("공유 곡 (PRD 4.7)", () => {
+  describe("공유 곡", () => {
     it("로그인 사용자에게 가사 전문을 미리 보여 준다", async () => {
       renderPicker();
       fireEvent.click(await screen.findByTestId(`song-item-${SHARED_ID}`));
@@ -257,7 +254,6 @@ describe("SongPickerModal", () => {
     });
 
     it("이미 가져온 곡은 다시 가져오지 않고 보관함의 사본을 쓴다", async () => {
-      // 이전에 가져온 포크가 보관함에 있다
       const { upsertLibraryDeck } = await import("./songLibraryStore");
       upsertLibraryDeck(forkedDeck(), { push: false });
       renderPicker();
@@ -381,7 +377,6 @@ describe("SongPickerModal", () => {
         origin: "user",
       });
       expect(getUserSongs()).toHaveLength(1);
-      // 곡 식별·가사 라이브러리 API는 더 이상 없다
       expect(
         api.calls.some((c) => c.path.startsWith("/api/catalog/candidates")),
       ).toBe(false);

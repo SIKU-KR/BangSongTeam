@@ -88,7 +88,6 @@ describe("SongSharePanel (편집기 '공유')", () => {
     const confirm = screen.getByTestId("publish-confirm-btn");
     expect(confirm).toBeDisabled();
     expect(screen.getByText(/CCLI/)).toBeInTheDocument();
-    // 보관함 원본이 세트 내용으로 바뀐다는 안내
     expect(screen.getByText(/세트의 내용으로 바뀝니다/)).toBeInTheDocument();
 
     fireEvent.click(screen.getByTestId("publish-accept-checkbox"));
@@ -106,7 +105,6 @@ describe("SongSharePanel (편집기 '공유')", () => {
       visibility: "public",
       acceptedCopyrightNotice: true,
     });
-    // 공개 전에 원본을 먼저 올린다
     const putIndex = api.calls.findIndex((c) => c.method === "PUT");
     expect(putIndex).toBeGreaterThanOrEqual(0);
     expect(putIndex).toBeLessThan(api.calls.indexOf(patch!));

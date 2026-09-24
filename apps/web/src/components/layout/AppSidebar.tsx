@@ -13,11 +13,9 @@ import {
 } from "../../features/drive";
 
 interface NavItem {
-  /** 경로 개편 전 이름을 유지한다 (기존 테스트가 이 id로 사이드바를 찾는다) */
   testId: string;
   path: string;
   label: string;
-  /** 활성 상태일 때의 아이콘 강조 색 */
   accent: string;
   iconPath: string;
 }
@@ -58,10 +56,6 @@ const NAV_IDLE =
 const NAV_DROP =
   "ring-2 ring-emerald-500/70 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-200 border-transparent";
 
-/**
- * 사이드바 메뉴 버튼. `drop`이 있으면 항목을 끌어다 놓을 수 있다
- * (내 드라이브 = 루트로 옮기기, 휴지통 = 버리기).
- */
 function NavButton({
   item,
   active,
@@ -113,11 +107,6 @@ function NavButton({
   );
 }
 
-/**
- * 로그인한 사용자와 로그아웃.
- *
- * 예전에는 '주일 찬양팀 / 로컬 오프라인 모드'라고 적힌 정적 아바타였다.
- */
 function AccountCard(): React.JSX.Element {
   const session = useSession();
   const [signingOut, setSigningOut] = useState(false);
@@ -167,12 +156,7 @@ function AccountCard(): React.JSX.Element {
   );
 }
 
-/**
- * 좌측 내비게이션 사이드바 (드라이브형)
- * - 브랜드 블록, '새로 만들기'(새 폴더·새 프레젠테이션), 내 드라이브 + 폴더 트리,
- *   휴지통, 배경 라이브러리, 테마 전환, 계정
- * - 활성 상태는 `useLocation().pathname` 에서 파생되며 `aria-current="page"` 로도 노출된다
- */
+/** 좌측 내비게이션 사이드바 */
 export function AppSidebar(): React.JSX.Element {
   const navigate = useNavigate();
   const { pathname } = useLocation();
@@ -186,7 +170,6 @@ export function AppSidebar(): React.JSX.Element {
   return (
     <aside className="w-64 h-full bg-white dark:bg-zinc-950 border-r border-zinc-200 dark:border-zinc-900 hidden lg:flex flex-col justify-between p-4 shrink-0 overflow-y-auto">
       <div className="space-y-6">
-        {/* 브랜드 로고 & 워크스페이스 */}
         <div className="flex items-center gap-3 px-2 pt-1">
           <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-emerald-500 via-teal-400 to-indigo-500 flex items-center justify-center text-white shadow-sm dark:shadow-emerald-950/40">
             <svg className="w-5 h-5 fill-current" viewBox="0 0 24 24">
@@ -203,7 +186,6 @@ export function AppSidebar(): React.JSX.Element {
           </div>
         </div>
 
-        {/* 드라이브 '+ 신규' 메뉴 (새 폴더 / 새 프레젠테이션) */}
         <NewMenuButton
           variant="sidebar"
           testId="sidebar-create-presentation-btn"
@@ -239,12 +221,8 @@ export function AppSidebar(): React.JSX.Element {
         </nav>
       </div>
 
-      {/* 좌측 하단 영역: 테마 전환 메뉴 + 사용자 프로필 */}
       <div className="space-y-3 pt-3 border-t border-zinc-200 dark:border-zinc-900">
-        {/* 사이드바 하단 라이트/다크/시스템 설정 전환 메뉴버튼 */}
         <ThemeMenuButton />
-
-        {/* 좌측 하단 사용자 프로필 (Canva 아바타 스타일) */}
         <AccountCard />
       </div>
     </aside>

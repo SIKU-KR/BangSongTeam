@@ -12,10 +12,7 @@ export interface PublishDialogProps {
 }
 
 /**
- * 공개 전 저작권 안내와 동의 (PRD 4.7 공유 선택, 6.6, 9장 '공개 시 안내 동의').
- *
- * 동의 체크 없이는 공개 버튼이 눌리지 않는다. 서버도 동의가 `true` 리터럴이
- * 아니면 거절한다.
+ * 공개 전 저작권 안내와 동의 대화상자.
  */
 export function PublishDialog({
   isOpen,
