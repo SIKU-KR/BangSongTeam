@@ -7,7 +7,10 @@ const rootDir = path.resolve(__dirname, "..");
 describe("Cloudflare Worker 프로젝트 설정과 Wrangler 바인딩", () => {
   const packageJsonPath = path.join(rootDir, "package.json");
   const wranglerJsoncPath = path.join(rootDir, "wrangler.jsonc");
-  const workerConfigDtsPath = path.join(rootDir, "worker-configuration.d.ts");
+  const workerConfigDtsPath = path.join(
+    rootDir,
+    "src/worker/worker-configuration.d.ts",
+  );
 
   it("package.json이 필수 의존성·스크립트와 레이어 import 별칭을 갖는다", () => {
     const pkg = JSON.parse(fs.readFileSync(packageJsonPath, "utf-8"));

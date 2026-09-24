@@ -15,5 +15,5 @@
     "isolatedModules": true,
     "noEmit": true
   },
-  "include": ["src", "tests", "*.ts", "*.d.ts"]
+  "include": ["src", "tests", "config", "*.ts"]
 }

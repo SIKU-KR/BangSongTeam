@@ -2,6 +2,9 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import { cloudflare } from "@cloudflare/vite-plugin";
 import { VitePWA } from "vite-plugin-pwa";
+import tailwindcss from "tailwindcss";
+import autoprefixer from "autoprefixer";
+import path from "node:path";
 import {
   MEDIA_CACHE_NAME,
   MEDIA_URL_PREFIX,
@@ -105,5 +108,15 @@ export default defineConfig({
       },
     }),
   ],
+  css: {
+    postcss: {
+      plugins: [
+        tailwindcss({
+          config: path.resolve(__dirname, "config/tailwind.config.js"),
+        }),
+        autoprefixer(),
+      ],
+    },
+  },
   build: { outDir: "dist" },
 });

@@ -12,7 +12,7 @@
     "dev": "vite",
     "build": "vite build",
     "deploy": "wrangler deploy",
-    "types": "wrangler types",
+    "types": "wrangler types src/worker/worker-configuration.d.ts",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
@@ -20,7 +20,7 @@
     "format:check": "prettier --check \"**/*.{ts,tsx,js,jsx,json,md,yaml,yml}\"",
     "test": "vitest run",
     "test:watch": "vitest",
-    "db:generate": "drizzle-kit generate",
+    "db:generate": "drizzle-kit generate --config config/drizzle.config.ts",
     "db:migrate:local": "wrangler d1 migrations apply DB --local",
     "db:migrate:prod": "wrangler d1 migrations apply DB --remote"
   },
