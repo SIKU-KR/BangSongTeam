@@ -22,7 +22,6 @@ import {
   redo,
   canUndo,
   canRedo,
-  loadSampleSongsIntoActivePresentation,
   createNewPresentation,
   launchPresentation,
   usePresentationById,
@@ -209,12 +208,6 @@ export function EditorRoute(): React.JSX.Element {
     }
   };
 
-  const handleLoadSampleSongs = () => {
-    loadSampleSongsIntoActivePresentation();
-    setActiveSongIndex(0);
-    setActiveSlideIndex(0);
-  };
-
   const handleNewPresentation = () => {
     const created = createNewPresentation(
       "새 주일 예배 프레젠테이션",
@@ -298,7 +291,6 @@ export function EditorRoute(): React.JSX.Element {
         canRedo={canRedo()}
         onNewPresentation={handleNewPresentation}
         onOpenLyricModal={() => setIsLyricModalOpen(true)}
-        onLoadSampleSongs={handleLoadSampleSongs}
         backPath={drivePath(presentation.folderId)}
       />
 
@@ -332,7 +324,6 @@ export function EditorRoute(): React.JSX.Element {
           onPresent={handlePresent}
           zoomLevel={zoomLevel}
           onZoomChange={setZoomLevel}
-          onLoadSampleSongs={handleLoadSampleSongs}
           onOpenLyricModal={() => setIsLyricModalOpen(true)}
           onUpdateStyle={(styleUpdate) =>
             updateSongStyle(safeSongIndex, styleUpdate)

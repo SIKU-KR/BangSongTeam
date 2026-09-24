@@ -13,7 +13,6 @@ import {
   addDeckToPresentation,
   resetPresentationStore,
   __loadDocumentsForTests,
-  loadSampleSongsIntoActivePresentation,
   useActivePresentation,
   createNewPresentation,
   getActivePresentationId,
@@ -462,35 +461,6 @@ describe("문서별 Undo/Redo 격리", () => {
     expect(canRedo()).toBe(false);
   });
 
-  it("loadSampleSongsIntoActivePresentation은 활성 문서에만 5곡을 채운다", () => {
-    act(() => {
-      openPresentation(docB);
-      updatePresentationTitle("B 수정");
-      const created = createNewPresentation("빈 세트");
-      openPresentation(created.id);
-      loadSampleSongsIntoActivePresentation();
-    });
-
-    const loaded = getActivePresentation();
-    expect(loaded.items).toHaveLength(5);
-    expect(loaded.title).toBe("빈 세트");
-    expect(getPresentationById(docB)?.title).toBe("B 수정");
-  });
-
-  it("샘플 세트를 두 번 불러도 덱 id가 겹치지 않는다", () => {
-    act(() => {
-      const created = createNewPresentation("두 번 불러오기");
-      openPresentation(created.id);
-      loadSampleSongsIntoActivePresentation();
-      loadSampleSongsIntoActivePresentation();
-    });
-
-    const items = getActivePresentation().items;
-    expect(items).toHaveLength(10);
-    const deckIds = items.map((item) => item.deck?.id);
-    expect(new Set(deckIds).size).toBe(10);
-  });
-
   describe("공유 필드와 보관함 연결", () => {
     const libraryDeck = () =>
       DeckSchema.parse({
@@ -547,21 +517,5 @@ describe("문서별 Undo/Redo 격리", () => {
         "9000000000000000000dd",
       );
     });
-  });
-
-  it("샘플 곡은 세션 사용자 소유의 세트 전용 복제본으로 들어간다", () => {
-    act(() => {
-      const created = createNewPresentation("소유권 확인");
-      openPresentation(created.id);
-      loadSampleSongsIntoActivePresentation();
-    });
-
-    const active = getActivePresentation();
-    for (const item of active.items) {
-      expect(item.deck?.userId).toBe(SEED_USER_ID);
-      expect(item.deck?.scope).toBe("presentation");
-      expect(item.deck?.presentationId).toBe(active.id);
-      expect(item.deckId).toBe(item.deck?.id);
-    }
   });
 });
