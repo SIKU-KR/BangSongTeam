@@ -3,7 +3,14 @@ import {
   readD1Migrations,
 } from "@cloudflare/vitest-pool-workers/config";
 import path from "node:path";
+import { mkdirSync } from "node:fs";
 import { createRequire } from "node:module";
+
+// wrangler는 설정을 읽을 때 assets.directory(./dist/client)가 존재해야 하고, 없으면
+// 워커 테스트 풀이 "assets directory does not exist"로 뜨지 못한다. 내용은
+// `vite build`가 채우지만 테스트는 빌드 전(CI, 새 클론)에도 돌아야 하므로 빈
+// 디렉터리를 만들어 둔다. (.gitkeep은 vite build가 outDir을 비울 때 지워진다)
+mkdirSync(path.resolve(__dirname, "dist/client"), { recursive: true });
 
 // 손으로 쓴 CREATE TABLE 문자열 대신 실제 마이그레이션을 테스트 D1에 적용한다.
 // 설정 시점(Node)에 읽어 바인딩으로 넘기고, workerd 안에서는 setup이 적용한다.
