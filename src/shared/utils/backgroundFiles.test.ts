@@ -1,5 +1,8 @@
 import { describe, it, expect } from "vitest";
-import { sniffBackgroundMimeType, userBackgroundKeys } from "./backgroundFiles";
+import {
+  sniffBackgroundMimeType,
+  serviceBackgroundKeys,
+} from "./backgroundFiles";
 
 function bytes(...values: number[]): Uint8Array {
   return new Uint8Array(values);
@@ -37,20 +40,18 @@ describe("sniffBackgroundMimeType", () => {
   });
 });
 
-describe("userBackgroundKeys", () => {
-  it("사용자와 배경 id 아래에 영상과 포스터를 나란히 둔다", () => {
-    expect(
-      userBackgroundKeys("user-1", "bg-1", "video/mp4", "image/webp"),
-    ).toEqual({
-      mediaKey: "uploads/user-1/bg-1.mp4",
-      posterKey: "uploads/user-1/bg-1.poster.webp",
+describe("serviceBackgroundKeys", () => {
+  it("영상은 loops/, 포스터는 posters/ 아래에 배경 id로 둔다", () => {
+    expect(serviceBackgroundKeys("bg-1", "video/mp4", "image/webp")).toEqual({
+      mediaKey: "loops/bg-1.mp4",
+      posterKey: "posters/bg-1.webp",
     });
   });
 
-  it("이미지는 원본을 포스터로 함께 쓴다", () => {
-    expect(userBackgroundKeys("user-1", "bg-1", "image/png", null)).toEqual({
-      mediaKey: "uploads/user-1/bg-1.png",
-      posterKey: "uploads/user-1/bg-1.png",
+  it("이미지는 stills/ 아래에 두고 원본을 포스터로 함께 쓴다", () => {
+    expect(serviceBackgroundKeys("bg-1", "image/png", null)).toEqual({
+      mediaKey: "stills/bg-1.png",
+      posterKey: "stills/bg-1.png",
     });
   });
 });

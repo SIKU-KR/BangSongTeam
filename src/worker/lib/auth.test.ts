@@ -6,6 +6,7 @@ import {
   buildNaverUser,
   hasCredentials,
   generateUserId,
+  isAdminUser,
   AUTH_BASE_PATH,
   SYNTHETIC_EMAIL_DOMAIN,
   type KakaoProfileLike,
@@ -134,6 +135,21 @@ describe("worker auth 인스턴스", () => {
         }),
       );
       expect(typeof auth.handler).toBe("function");
+    });
+  });
+
+  describe("isAdminUser", () => {
+    it("ADMIN_USER_IDS에 적힌 user id만 관리자로 본다", () => {
+      const env = makeEnv({ ADMIN_USER_IDS: " admin-1, admin-2\nadmin-3 " });
+      expect(isAdminUser(env, "admin-1")).toBe(true);
+      expect(isAdminUser(env, "admin-3")).toBe(true);
+      expect(isAdminUser(env, "admin")).toBe(false);
+      expect(isAdminUser(env, undefined)).toBe(false);
+    });
+
+    it("목록이 비어 있으면 관리자가 없다", () => {
+      expect(isAdminUser(makeEnv(), "admin-1")).toBe(false);
+      expect(isAdminUser(makeEnv({ ADMIN_USER_IDS: " , " }), "")).toBe(false);
     });
   });
 });

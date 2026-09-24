@@ -1,11 +1,10 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { createTestDb, type TestDbResult } from "../test-utils";
-import { listVisibleBackgrounds } from "../queries/backgrounds";
+import { listBackgrounds } from "../queries/backgrounds";
 import { BACKGROUND_SQL } from "./backgroundSql";
 
 const OWNER = "00000000000000000000a";
 const SERVICE = "svc000000000000000001";
-const UPLOAD = "upl000000000000000001";
 const DECK = "c00000000000000000001";
 
 describe("운영 SQL (background runbook)", () => {
@@ -35,6 +34,9 @@ describe("운영 SQL (background runbook)", () => {
     testDb.sqlite.exec(
       `INSERT INTO user (id, name, created_at, updated_at) VALUES ('${OWNER}', 'A', 0, 0)`,
     );
+    testDb.sqlite.exec(
+      `UPDATE user SET email = 'admin@example.com' WHERE id = '${OWNER}'`,
+    );
   });
 
   afterEach(() => testDb.sqlite.close());
@@ -42,7 +44,7 @@ describe("운영 SQL (background runbook)", () => {
   it("등록한 사전 주입 배경이 앱의 배경 목록에 그대로 나온다", async () => {
     register();
 
-    const [listed] = await listVisibleBackgrounds(testDb.db, null);
+    const [listed] = await listBackgrounds(testDb.db);
     expect(listed).toMatchObject({
       id: SERVICE,
       source: "service",
@@ -73,19 +75,9 @@ describe("운영 SQL (background runbook)", () => {
     expect(deck.background_id).toBeNull();
   });
 
-  it("사용자 업로드를 계정별로 집계하고 게시 중단하면 지울 R2 키를 돌려준다", () => {
-    testDb.sqlite.exec(
-      `INSERT INTO backgrounds (id, title, r2_key, poster_key, duration_sec, license, tags, source, owner_user_id, kind, size_bytes) VALUES ('${UPLOAD}', '업로드', 'uploads/${OWNER}/${UPLOAD}.mp4', 'uploads/${OWNER}/${UPLOAD}.poster.webp', 10, '사용자', '[]', 'user', '${OWNER}', 'video', 4096)`,
-    );
-
-    expect(all("LIST_USER_STORAGE")).toEqual([
-      { owner_user_id: OWNER, files: 1, bytes: 4096 },
-    ]);
-    expect(all("TAKEDOWN_USER_BACKGROUND", { background_id: UPLOAD })).toEqual([
-      {
-        r2_key: `uploads/${OWNER}/${UPLOAD}.mp4`,
-        poster_key: `uploads/${OWNER}/${UPLOAD}.poster.webp`,
-      },
-    ]);
+  it("관리자로 지정할 계정의 id를 이메일로 찾는다", () => {
+    expect(
+      all("FIND_USER_ID_BY_EMAIL", { email: "admin@example.com" }),
+    ).toEqual([{ id: OWNER, name: "A", email: "admin@example.com" }]);
   });
 });

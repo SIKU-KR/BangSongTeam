@@ -238,7 +238,6 @@ export function SongPropertyPanel({
             <span>곡 배경</span>
             {currentBg && (
               <span className="text-[10px] text-zinc-500 dark:text-zinc-400 normal-case">
-                {currentBg.source === "user" ? "내 배경" : "기본 제공"} ·{" "}
                 {currentBg.kind === "video" ? "영상" : "이미지"}
               </span>
             )}

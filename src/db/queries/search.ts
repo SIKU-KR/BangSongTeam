@@ -1,7 +1,7 @@
 import { and, desc, eq, sql, type SQL } from "drizzle-orm";
 import { decks, user, type Deck } from "../schema";
 import { publicDeckCondition } from "./publicScope";
-import { maskNonServiceBackgrounds } from "./backgrounds";
+import { nullifyUnknownBackgrounds } from "./backgrounds";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type DbInstance = any;
@@ -115,7 +115,7 @@ export async function searchPublicDecks(
     .orderBy(desc(decks.forkCount), desc(decks.updatedAt))
     .limit(limit);
 
-  const masked = await maskNonServiceBackgrounds(
+  const masked = await nullifyUnknownBackgrounds(
     db,
     rows.map((row) => row.deck),
   );

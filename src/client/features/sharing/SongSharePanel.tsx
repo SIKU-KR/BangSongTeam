@@ -2,7 +2,6 @@ import React, { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import type { Deck } from "#shared";
 import { useLibraryDeck } from "../editor/songLibraryStore";
-import { useBackground } from "../backgrounds/backgroundCatalog";
 import { useIsOnline } from "../../hooks/useIsOnline";
 import { describeApiError } from "../../lib/api/request";
 import { PublishDialog } from "./PublishDialog";
@@ -26,7 +25,6 @@ export function SongSharePanel({
 }: SongSharePanelProps): React.JSX.Element {
   const isOnline = useIsOnline();
   const master = useLibraryDeck(song.forkedFrom);
-  const background = useBackground(song.backgroundId);
   const [isPublishOpen, setIsPublishOpen] = useState(false);
   const [isReportOpen, setIsReportOpen] = useState(false);
 
@@ -159,7 +157,6 @@ export function SongSharePanel({
         isOpen={isPublishOpen}
         songTitle={song.title}
         overwritesLibraryCopy={!!master}
-        usesPrivateBackground={background?.source === "user"}
         isPending={publish.isPending}
         error={publish.error ? describeApiError(publish.error) : null}
         onConfirm={() => publish.mutate()}

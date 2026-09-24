@@ -238,7 +238,7 @@ export async function upsertPresentationDocument(
     ...(folderId === undefined ? {} : { folderId }),
   });
 
-  const deckRows = await nullifyUnknownBackgrounds(db, userId, rawDeckRows);
+  const deckRows = await nullifyUnknownBackgrounds(db, rawDeckRows);
 
   await clearTombstone(db, userId, doc.id);
 

@@ -3,7 +3,6 @@ import { hangulIncludes, type BackgroundMedia } from "#shared";
 import {
   BackgroundPreview,
   BackgroundUploadDialog,
-  formatBytes,
   useBackgroundCatalog,
 } from "../backgrounds";
 import { useDeleteBackground } from "../../lib/api/backgroundQueries";
@@ -48,14 +47,7 @@ function BackgroundCard({
             {background.title}
           </h4>
           <p className="text-[11px] text-zinc-500 dark:text-zinc-400 truncate mt-0.5">
-            {[
-              ...background.tags,
-              background.source === "user"
-                ? formatBytes(background.sizeBytes)
-                : null,
-            ]
-              .filter(Boolean)
-              .join(" · ") || "태그 없음"}
+            {background.tags.join(" · ") || "태그 없음"}
           </p>
         </div>
         {action}
@@ -111,7 +103,8 @@ function EmptyState({
 }
 
 /**
- * 배경 라이브러리: 사전 주입 배경을 둘러보고, 내 배경을 올리고 지운다.
+ * 배경 갤러리: 모든 배경을 한 격자에 보여 주고 태그와 상단 검색으로 거른다.
+ * 관리자(서버가 `canManage`로 알림)에게만 올리기·삭제가 보인다.
  *
  * 곡에 배경을 입히는 것은 편집기의 배경 선택 창에서 한다. 이 화면에는 '지금 편집 중인
  * 곡'이라는 맥락이 없기 때문이다.
@@ -133,23 +126,16 @@ export function BackgroundLibraryView({
   }, []);
 
   const query = searchQuery.trim();
-  const service = catalog.backgrounds.filter((bg) => bg.source === "service");
-  const mine = catalog.backgrounds.filter((bg) => bg.source === "user");
-
-  const serviceTags = [...new Set(service.flatMap((bg) => bg.tags))];
-
-  const visibleService = service.filter(
+  const all = catalog.backgrounds;
+  const tags = [...new Set(all.flatMap((bg) => bg.tags))];
+  const visible = all.filter(
     (bg) =>
       (activeTag === ALL_TAGS || bg.tags.includes(activeTag)) &&
       matchesQuery(bg, query),
   );
-  const visibleMine = mine.filter((bg) => matchesQuery(bg, query));
 
-  const canManage = isOnline && catalog.status !== "offline";
-  const usage = catalog.usage;
-  const usagePercent = usage
-    ? Math.min(100, Math.round((usage.usedBytes / usage.limitBytes) * 100))
-    : 0;
+  const isOffline = !isOnline || catalog.status === "offline";
+  const canManage = catalog.canManage && !isOffline;
 
   const confirmDelete = async (): Promise<void> => {
     if (!pendingDelete) return;
@@ -162,25 +148,24 @@ export function BackgroundLibraryView({
   };
 
   return (
-    <div className="space-y-10">
-      {!canManage && (
+    <div className="space-y-6">
+      {isOffline && (
         <div
           role="status"
           className="px-4 py-2.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900 text-xs text-amber-800 dark:text-amber-300"
         >
-          오프라인이라 저장해 둔 목록을 보여 줍니다. 배경을 올리거나 지우려면
-          인터넷에 연결해 주세요.
+          오프라인이라 저장해 둔 목록을 보여 줍니다.
         </div>
       )}
 
       <section className="space-y-4">
         <SectionHeader
-          dotClassName="bg-emerald-500"
-          title="내가 올린 배경"
-          count={mine.length}
-          description="본당 환경이나 절기에 맞춰 직접 올린 영상·이미지입니다. 나만 쓸 수 있고, 곡을 공유해도 다른 사람에게는 보이지 않습니다."
+          dotClassName="bg-sky-500"
+          title="모든 배경"
+          count={all.length}
+          description="라이선스를 확인해 올린 무음 루프 영상과 이미지입니다. 마우스를 올리면 미리보기가 재생됩니다."
         >
-          <div className="flex flex-col items-start sm:items-end gap-2">
+          {catalog.canManage && (
             <button
               type="button"
               data-testid="open-bg-upload-btn"
@@ -190,105 +175,65 @@ export function BackgroundLibraryView({
             >
               배경 올리기
             </button>
-            {usage && (
-              <div data-testid="bg-storage-usage" className="w-48">
-                <div className="h-1.5 rounded-full bg-zinc-200 dark:bg-zinc-800 overflow-hidden">
-                  <div
-                    className={`h-full ${usagePercent >= 90 ? "bg-red-500" : "bg-emerald-500"}`}
-                    style={{ width: `${usagePercent}%` }}
-                  />
-                </div>
-                <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-1 text-right">
-                  {formatBytes(usage.usedBytes)} /{" "}
-                  {formatBytes(usage.limitBytes)} 사용
-                </p>
-              </div>
-            )}
-          </div>
+          )}
         </SectionHeader>
 
-        {visibleMine.length === 0 ? (
+        {tags.length > 0 && (
+          <div
+            data-testid="bg-tag-filter"
+            className="flex items-center gap-1.5 overflow-x-auto py-1"
+          >
+            {[ALL_TAGS, ...tags].map((tag) => (
+              <button
+                key={tag}
+                type="button"
+                aria-pressed={activeTag === tag}
+                onClick={() => setActiveTag(tag)}
+                className={`px-2.5 py-1 rounded-full text-xs font-medium shrink-0 cursor-pointer transition-colors ${
+                  activeTag === tag
+                    ? "bg-sky-600 text-white"
+                    : "bg-zinc-100 dark:bg-zinc-800/80 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-800"
+                }`}
+              >
+                {tag}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {visible.length === 0 ? (
           <EmptyState>
-            {query ? (
-              <p>&ldquo;{searchQuery}&rdquo;에 맞는 내 배경이 없습니다.</p>
+            {all.length === 0 ? (
+              <p>아직 등록된 배경이 없습니다.</p>
+            ) : query ? (
+              <p>&ldquo;{searchQuery}&rdquo;에 맞는 배경이 없습니다.</p>
             ) : (
-              <>
-                <p className="font-semibold text-zinc-700 dark:text-zinc-300">
-                  아직 올린 배경이 없습니다.
-                </p>
-                <p className="text-xs">
-                  MP4 영상이나 JPEG·PNG·WebP 이미지를 파일당 30MB, 모두 합쳐
-                  300MB까지 올릴 수 있습니다.
-                </p>
-              </>
+              <p>조건에 맞는 배경이 없습니다.</p>
             )}
           </EmptyState>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
-            {visibleMine.map((bg) => (
+            {visible.map((bg) => (
               <BackgroundCard
                 key={bg.id}
                 background={bg}
                 action={
-                  <button
-                    type="button"
-                    data-testid={`delete-bg-${bg.id}`}
-                    disabled={!canManage}
-                    onClick={() => {
-                      deleteBackground.reset();
-                      setPendingDelete(bg);
-                    }}
-                    className="px-2 py-1 rounded-lg text-[11px] font-medium shrink-0 cursor-pointer text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40 disabled:opacity-40 disabled:cursor-not-allowed"
-                  >
-                    삭제
-                  </button>
+                  catalog.canManage ? (
+                    <button
+                      type="button"
+                      data-testid={`delete-bg-${bg.id}`}
+                      disabled={!canManage}
+                      onClick={() => {
+                        deleteBackground.reset();
+                        setPendingDelete(bg);
+                      }}
+                      className="px-2 py-1 rounded-lg text-[11px] font-medium shrink-0 cursor-pointer text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40 disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      삭제
+                    </button>
+                  ) : undefined
                 }
               />
-            ))}
-          </div>
-        )}
-      </section>
-
-      <section className="space-y-4">
-        <SectionHeader
-          dotClassName="bg-sky-500"
-          title="기본 제공 배경"
-          count={service.length}
-          description="서비스가 라이선스를 확인해 올린 무음 루프 영상입니다. 마우스를 올리면 미리보기가 재생됩니다."
-        >
-          {serviceTags.length > 0 && (
-            <div className="flex items-center gap-1.5 overflow-x-auto py-1">
-              {[ALL_TAGS, ...serviceTags].map((tag) => (
-                <button
-                  key={tag}
-                  type="button"
-                  aria-pressed={activeTag === tag}
-                  onClick={() => setActiveTag(tag)}
-                  className={`px-2.5 py-1 rounded-full text-xs font-medium shrink-0 cursor-pointer transition-colors ${
-                    activeTag === tag
-                      ? "bg-sky-600 text-white"
-                      : "bg-zinc-100 dark:bg-zinc-800/80 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-800"
-                  }`}
-                >
-                  {tag}
-                </button>
-              ))}
-            </div>
-          )}
-        </SectionHeader>
-
-        {visibleService.length === 0 ? (
-          <EmptyState>
-            {service.length === 0 ? (
-              <p>아직 제공되는 기본 배경이 없습니다.</p>
-            ) : (
-              <p>조건에 맞는 기본 배경이 없습니다.</p>
-            )}
-          </EmptyState>
-        ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
-            {visibleService.map((bg) => (
-              <BackgroundCard key={bg.id} background={bg} />
             ))}
           </div>
         )}
@@ -301,10 +246,8 @@ export function BackgroundLibraryView({
 
       <BackgroundUploadDialog
         isOpen={isUploadOpen}
-        usage={usage}
         onClose={() => setIsUploadOpen(false)}
       />
-
       {pendingDelete && (
         <div
           role="dialog"
@@ -323,8 +266,8 @@ export function BackgroundLibraryView({
               </p>
             </div>
             <p className="text-xs text-zinc-700 dark:text-zinc-300">
-              이 배경을 쓰는 곡은 배경 없음이 됩니다. 지운 파일은 되살릴 수
-              없습니다.
+              이 배경을 쓰는 모든 사용자의 곡이 배경 없음이 됩니다. 지운 파일은
+              되살릴 수 없습니다.
             </p>
             {deleteBackground.error && (
               <p

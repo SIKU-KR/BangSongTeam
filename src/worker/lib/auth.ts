@@ -131,6 +131,22 @@ export function isEmailSignupAllowed(env: Bindings, email: string): boolean {
   );
 }
 
+/**
+ * 배경 갤러리 관리자(`ADMIN_USER_IDS` 시크릿, 쉼표로 구분한 user id)인지.
+ *
+ * 이메일이 아니라 user id로 가린다. 카카오 이메일과 비밀번호 계정 이메일은
+ * 검증되지 않아 남이 같은 주소로 가입할 수 있다. 목록이 비어 있으면 관리자가 없다.
+ */
+export function isAdminUser(
+  env: Bindings,
+  userId: string | undefined,
+): boolean {
+  if (!userId) return false;
+  return (env.ADMIN_USER_IDS ?? "")
+    .split(/[\s,]+/)
+    .some((id) => id.length > 0 && id === userId);
+}
+
 /** 자격증명이 실제로 채워져 있는지 (빈 문자열·공백은 미설정으로 본다) */
 export function hasCredentials(
   clientId: string | undefined,

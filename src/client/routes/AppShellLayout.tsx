@@ -30,7 +30,7 @@ const DRIVE_META: ShellPageMeta = {
   placeholder: "폴더, 프레젠테이션, 찬양 가사, 곡을 검색해 보세요",
 };
 const BACKGROUNDS_META: ShellPageMeta = {
-  title: "배경 라이브러리",
+  title: "배경 갤러리",
   placeholder: "배경 영상, 이미지, 분위기 태그를 검색해 보세요",
 };
 

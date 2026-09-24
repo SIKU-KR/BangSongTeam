@@ -19,12 +19,11 @@ const { refreshBackgroundCatalog } = vi.hoisted(() => ({
 vi.mock("../../lib/sync/backgroundSync", () => ({ refreshBackgroundCatalog }));
 
 const WARM = makeBackground(6, { title: "따뜻한 노을", tags: ["따뜻한"] });
-const MINE = makeBackground(7, {
+const STILL = makeBackground(7, {
   title: "본당 이미지",
-  source: "user",
   kind: "image",
-  mediaUrl: "/api/media/uploads/u/7.png",
-  posterUrl: "/api/media/uploads/u/7.png",
+  mediaUrl: "/api/media/stills/7.png",
+  posterUrl: "/api/media/stills/7.png",
 });
 
 function renderPicker(
@@ -48,7 +47,7 @@ function renderPicker(
 describe("BackgroundPickerModal", () => {
   beforeEach(() => {
     refreshBackgroundCatalog.mockClear();
-    setBackgroundCatalogForTests([...TEST_SERVICE_BACKGROUNDS, WARM, MINE]);
+    setBackgroundCatalogForTests([...TEST_SERVICE_BACKGROUNDS, WARM, STILL]);
   });
 
   it("닫혀 있으면 아무것도 그리지 않는다", () => {
@@ -100,37 +99,29 @@ describe("BackgroundPickerModal", () => {
     expect(screen.queryByText(TEST_SERVICE_BACKGROUNDS[0].title)).toBeNull();
   });
 
-  it("내 배경 탭에서 올린 배경을 고르고, 내 배경이 지정된 곡은 그 탭으로 열린다", () => {
-    const { onSelect } = renderPicker({ selectedBackgroundId: MINE.id });
+  it("탭 없이 모든 배경을 한 격자에 보여 주고 영상·이미지를 함께 고른다", () => {
+    const { onSelect } = renderPicker({ selectedBackgroundId: STILL.id });
 
-    expect(screen.getByRole("tab", { name: "내 배경" })).toHaveAttribute(
-      "aria-selected",
+    expect(screen.queryByRole("tab")).toBeNull();
+    expect(screen.getByText("본당 이미지")).toBeInTheDocument();
+    expect(
+      screen.getByText(TEST_SERVICE_BACKGROUNDS[0].title),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId(`bg-item-${STILL.id}`)).toHaveAttribute(
+      "aria-pressed",
       "true",
     );
-    expect(screen.getByText("본당 이미지")).toBeInTheDocument();
-    expect(screen.getByText("이미지")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByTestId(`bg-item-${MINE.id}`));
-    expect(onSelect).toHaveBeenCalledWith(MINE.id);
+    fireEvent.click(screen.getByTestId(`bg-item-${WARM.id}`));
+    expect(onSelect).toHaveBeenCalledWith(WARM.id);
   });
 
-  it("올린 배경이 없으면 배경 라이브러리로 안내한다", () => {
-    setBackgroundCatalogForTests(TEST_SERVICE_BACKGROUNDS);
-    renderPicker();
-
-    fireEvent.click(screen.getByRole("tab", { name: "내 배경" }));
-
-    expect(
-      screen.getByRole("link", { name: "배경 라이브러리에서 올리기" }),
-    ).toHaveAttribute("href", "/backgrounds");
-  });
-
-  it("기본 제공 배경이 하나도 없으면 빈 상태를 보여 준다", () => {
+  it("배경이 하나도 없으면 빈 상태를 보여 준다", () => {
     resetBackgroundCatalogForTests();
     renderPicker();
 
     expect(
-      screen.getByText("아직 제공되는 기본 배경이 없습니다."),
+      screen.getByText("아직 등록된 배경이 없습니다."),
     ).toBeInTheDocument();
     expect(screen.getByTestId("bg-item-none")).toBeInTheDocument();
   });

@@ -18,17 +18,19 @@ export interface BackgroundUploadInput {
   file: File;
   poster?: File;
   title: string;
+  license: string;
   tags: string[];
   durationSec: number;
 }
 
-/** 권리 확인 동의는 호출하는 화면이 받은 뒤에만 부른다 */
+/** 관리자 전용. 라이선스 확인 동의는 호출하는 화면이 받은 뒤에만 부른다 */
 export async function uploadBackground(
   input: BackgroundUploadInput,
 ): Promise<BackgroundUploadResponse> {
   const form = {
     file: input.file,
     title: input.title,
+    license: input.license,
     tags: JSON.stringify(input.tags),
     durationSec: String(Math.max(0, Math.round(input.durationSec))),
     acceptedRightsNotice: "true" as const,
@@ -38,7 +40,7 @@ export async function uploadBackground(
   return BackgroundUploadResponseSchema.parse(body);
 }
 
-export async function deleteUserBackground(
+export async function deleteBackground(
   id: string,
 ): Promise<BackgroundDeleteResponse> {
   const body = await callApi(() =>

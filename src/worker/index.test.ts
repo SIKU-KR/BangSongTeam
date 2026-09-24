@@ -45,13 +45,13 @@ describe("Miniflare/workerd 환경 Worker 및 D1 통합 테스트", () => {
     expect(json).toHaveProperty("error");
   });
 
-  it("GET /api/backgrounds는 비로그인에게 사전 주입 배경만 주고 사용량은 null이다", async () => {
+  it("GET /api/backgrounds는 비로그인에게 기본 제공 배경을 주고 관리 권한은 없다", async () => {
     const res = await app.request("/api/backgrounds", {}, env);
     expect(res.status).toBe(200);
     expect(res.headers.get("cache-control")).toBe("private, no-cache");
 
     const json = (await res.json()) as BackgroundListResponse;
-    expect(json.usage).toBeNull();
+    expect(json.canManage).toBe(false);
     expect(json.backgrounds.every((bg) => bg.source === "service")).toBe(true);
   });
 

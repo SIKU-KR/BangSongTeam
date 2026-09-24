@@ -28,6 +28,7 @@ function uploadForm(overrides: Record<string, unknown> = {}) {
     file: file(10, "video/mp4", "loop.mp4"),
     poster: file(10, "image/webp", "poster.webp"),
     title: "본당 배경",
+    license: "Pexels License — 홍길동",
     tags: JSON.stringify(["잔잔한"]),
     durationSec: "12",
     acceptedRightsNotice: "true",
@@ -62,13 +63,19 @@ describe("BackgroundMediaSchema", () => {
 });
 
 describe("BackgroundListResponseSchema", () => {
-  it("비로그인 응답은 사용량이 null이다", () => {
+  it("관리 권한 여부를 함께 받는다", () => {
     expect(
       BackgroundListResponseSchema.parse({
         backgrounds: [VALID_BACKGROUND],
-        usage: null,
-      }).usage,
-    ).toBeNull();
+        canManage: false,
+      }).canManage,
+    ).toBe(false);
+  });
+
+  it("관리 권한 여부가 빠지면 거절한다", () => {
+    expect(() =>
+      BackgroundListResponseSchema.parse({ backgrounds: [], usage: null }),
+    ).toThrow();
   });
 });
 
@@ -88,7 +95,14 @@ describe("BackgroundUploadFormSchema", () => {
     expect(parsed.durationSec).toBe(0);
   });
 
-  it("권리 확인에 동의하지 않으면 거절한다", () => {
+  it("출처·라이선스가 비어 있으면 거절한다", () => {
+    expect(
+      BackgroundUploadFormSchema.safeParse(uploadForm({ license: "  " }))
+        .success,
+    ).toBe(false);
+  });
+
+  it("라이선스 확인에 동의하지 않으면 거절한다", () => {
     const result = BackgroundUploadFormSchema.safeParse(
       uploadForm({ acceptedRightsNotice: "false" }),
     );

@@ -103,7 +103,7 @@ export async function upsertDeck(
       )
     : NEW_DECK_SERVER_FIELDS;
 
-  const [row] = await nullifyUnknownBackgrounds(db, userId, [
+  const [row] = await nullifyUnknownBackgrounds(db, [
     { ...clientRow, ...serverFields },
   ]);
 

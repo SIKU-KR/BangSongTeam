@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from "react";
-import type { BackgroundMedia, BackgroundStorageUsage } from "#shared";
+import type { BackgroundMedia } from "#shared";
 import {
   deleteBackgroundRecord,
   loadAllBackgrounds,
@@ -17,7 +17,8 @@ export type BackgroundCatalogStatus = "local" | "synced" | "offline" | "error";
 
 export interface BackgroundCatalogSnapshot {
   backgrounds: BackgroundMedia[];
-  usage: BackgroundStorageUsage | null;
+  /** 서버가 이 세션을 관리자로 알렸는지. 올리기·삭제 버튼만 가린다 */
+  canManage: boolean;
   status: BackgroundCatalogStatus;
 }
 
@@ -30,9 +31,16 @@ export interface BackgroundLayers {
 
 const EMPTY: BackgroundCatalogSnapshot = {
   backgrounds: [],
-  usage: null,
+  canManage: false,
   status: "local",
 };
+
+/** 서버 목록(`ORDER BY title`, SQLite 바이너리 비교)과 같은 순서 */
+function byTitle(backgrounds: BackgroundMedia[]): BackgroundMedia[] {
+  return [...backgrounds].sort((a, b) =>
+    a.title < b.title ? -1 : a.title > b.title ? 1 : 0,
+  );
+}
 
 let snapshot: BackgroundCatalogSnapshot = EMPTY;
 let byId = new Map<string, BackgroundMedia>();
@@ -65,15 +73,19 @@ export async function hydrateBackgroundCatalog(): Promise<void> {
   } catch (error) {
     void error;
   }
-  setSnapshot({ backgrounds, usage: null, status: "local" });
+  setSnapshot({
+    backgrounds: byTitle(backgrounds),
+    canManage: false,
+    status: "local",
+  });
 }
 
 /** 서버가 준 목록으로 통째로 바꾼다 (지워진 배경이 남지 않게) */
 export async function applyServerBackgroundCatalog(
   backgrounds: BackgroundMedia[],
-  usage: BackgroundStorageUsage | null,
+  canManage: boolean,
 ): Promise<void> {
-  setSnapshot({ backgrounds, usage, status: "synced" });
+  setSnapshot({ backgrounds, canManage, status: "synced" });
   await persist(() => replaceAllBackgrounds(backgrounds, getCurrentUserId()));
 }
 
@@ -84,31 +96,24 @@ export function markBackgroundCatalogStatus(
   setSnapshot({ ...snapshot, status });
 }
 
-/** 방금 올린 배경을 목록 맨 앞(내 배경 중 최신)에 넣는다 */
+/** 관리자가 방금 올린 배경을 갤러리에 제목순으로 끼워 넣는다 */
 export async function addUploadedBackground(
   background: BackgroundMedia,
-  usage: BackgroundStorageUsage,
 ): Promise<void> {
-  const service = snapshot.backgrounds.filter((bg) => bg.source === "service");
-  const mine = snapshot.backgrounds.filter(
-    (bg) => bg.source === "user" && bg.id !== background.id,
-  );
   setSnapshot({
     ...snapshot,
-    backgrounds: [...service, background, ...mine],
-    usage,
+    backgrounds: byTitle([
+      ...snapshot.backgrounds.filter((bg) => bg.id !== background.id),
+      background,
+    ]),
   });
   await persist(() => saveBackground(background, getCurrentUserId()));
 }
 
-export async function removeUploadedBackground(
-  id: string,
-  usage: BackgroundStorageUsage,
-): Promise<void> {
+export async function removeUploadedBackground(id: string): Promise<void> {
   setSnapshot({
     ...snapshot,
     backgrounds: snapshot.backgrounds.filter((bg) => bg.id !== id),
-    usage,
   });
   await persist(() => deleteBackgroundRecord(id));
 }
@@ -162,10 +167,10 @@ export function useBackground(
 /** 테스트 격리용. 저장소는 건드리지 않는다 */
 export function setBackgroundCatalogForTests(
   backgrounds: BackgroundMedia[],
-  usage: BackgroundStorageUsage | null = null,
+  canManage = false,
   status: BackgroundCatalogStatus = "synced",
 ): void {
-  setSnapshot({ backgrounds, usage, status });
+  setSnapshot({ backgrounds, canManage, status });
 }
 
 export function resetBackgroundCatalogForTests(): void {

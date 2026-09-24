@@ -1,12 +1,9 @@
 # 운영 런북: 배경 라이브러리
 
-> **대상**: 서비스 운영자 (관리자 화면은 두지 않는다)
+> **대상**: 서비스 운영자. 평소 등록·삭제는 앱의 배경 화면에서 관리자 계정으로 한다 (3장). 이 런북의 SQL은 대량 등록·복구·관리자 지정에 쓴다.
 > **정본**: 아래 SQL은 `src/db/ops/backgroundSql.ts`에 정의되어 있고, `backgroundSql.test.ts`가 실제 마이그레이션 스키마에 대해 실행해 본다. `runbook.test.ts`가 이 문서에 글자 그대로 실려 있는지 확인하므로, **문장을 고칠 때는 두 곳을 함께 고친다.**
 
-배경은 두 종류다.
-
-- **사전 주입 배경** (`source='service'`): 운영자가 이 런북으로 등록한다. 누구에게나 보이고, 공개 덱과 포크에도 따라간다.
-- **사용자 커스텀 배경** (`source='user'`): 사용자가 배경 라이브러리 화면에서 직접 올린다. 소유자 본인만 쓰고, 공개 덱·포크에서는 '배경 없음'으로 보인다.
+배경은 모두 **기본 제공 배경**(`source='service'`)이다. 누구에게나 한 갤러리로 보이고, 공개 덱과 포크에도 따라간다. 사용자 업로드는 없다. 예전 사용자 업로드 행(`source='user'`)은 마이그레이션 `0002_drop_user_backgrounds`가 지웠다.
 
 첫 마이그레이션(`0001_initial`)은 배경 행을 넣지 않는다. 예전에는 R2에 없는 파일을 가리키는 시드 10건이 들어가 편집기·송출이 깨진 배경을 그렸다. **배경 행은 R2 객체가 올라간 뒤에만 만든다.**
 
@@ -104,33 +101,38 @@ pnpm dlx wrangler r2 object delete prj-ppt-media/loops/warm_light_flow.mp4 --rem
 pnpm dlx wrangler r2 object delete prj-ppt-media/posters/warm_light_flow.webp --remote
 ```
 
-## 3. 사용자 커스텀 배경
+## 3. 앱에서 올리고 지우기 (관리자)
 
-사용자는 앱에서 직접 올리고 지운다 (파일 30MB·계정 300MB, 권리 확인 동의 필수). R2 키는 `uploads/<userId>/<배경 id>.*`다. 운영자가 할 일은 저장 용량을 살피고, 신고가 들어오면 게시 중단하는 것뿐이다.
+`ADMIN_USER_IDS` 시크릿에 적힌 계정은 앱의 배경 화면에 '배경 올리기'와 카드별 '삭제'가 보인다. 올린 배경은 곧바로 기본 제공 배경이 되어 모든 사용자에게 보인다 (파일당 30MB, 계정 한도 없음). 영상은 브라우저가 첫 화면으로 포스터를 만들어 함께 올리고, R2 키는 `loops/<id>.mp4`·`posters/<id>.*`, 이미지는 `stills/<id>.*`다. 올릴 때는 1장처럼 R2 → D1, 지울 때는 2장처럼 D1 → R2 순서로 서버가 처리한다.
 
-계정별 사용량:
+### 3-1. 관리자 지정
 
-```sql
--- LIST_USER_STORAGE
-SELECT owner_user_id, count(*) AS files, SUM(size_bytes) AS bytes FROM backgrounds WHERE source = 'user' GROUP BY owner_user_id ORDER BY bytes DESC;
-```
-
-권리 침해·부적절한 업로드의 게시 중단 (PRD 4.3). 행을 지우고, 돌려받은 두 키로 R2 객체도 지운다 (이미지는 두 키가 같다).
+관리자는 이메일이 아니라 user id로 지정한다 (이메일은 검증되지 않아 남이 같은 주소로 가입할 수 있다). 관리자로 쓸 계정으로 한 번 로그인한 뒤 id를 찾는다.
 
 ```sql
--- TAKEDOWN_USER_BACKGROUND
-DELETE FROM backgrounds WHERE id = :background_id AND source = 'user' RETURNING r2_key, poster_key;
+-- FIND_USER_ID_BY_EMAIL
+SELECT id, name, email FROM user WHERE email = :email;
 ```
+
+찾은 id를 쉼표로 이어 시크릿에 넣는다. 로컬은 `.dev.vars`의 `ADMIN_USER_IDS`에 넣는다.
 
 ```bash
-pnpm dlx wrangler r2 object delete prj-ppt-media/<r2_key> --remote
-pnpm dlx wrangler r2 object delete prj-ppt-media/<poster_key> --remote
+printf '<user id>,<user id>' | pnpm exec wrangler secret put ADMIN_USER_IDS
+pnpm exec wrangler secret delete ADMIN_USER_IDS   # 관리자 없음 (갤러리는 읽기 전용)
+```
+
+### 3-2. 예전 사용자 업로드 파일
+
+`0002` 마이그레이션은 D1 행만 지운다. R2의 `uploads/` 아래에 파일이 남아 있으면 지운다. 앱은 이 파일을 더 이상 가리키지 않는다.
+
+```bash
+pnpm dlx wrangler r2 object delete prj-ppt-media/uploads/<userId>/<배경 id>.mp4 --remote
 ```
 
 ## 4. 로컬 개발 환경
 
 로컬 D1과 R2는 `.wrangler/state/`에 있다. 새로 받은 코드는 비어 있다.
 
-- 커스텀 배경은 앱에서 개발자 로그인 후 배경 라이브러리에서 올리면 된다.
+- 개발자 로그인 계정의 id를 `.dev.vars`의 `ADMIN_USER_IDS`에 넣으면 배경 화면에서 바로 올릴 수 있다 (3-1).
 - 사전 주입 배경을 확인하려면 1-2·1-3을 `--local`로 실행한다.
 - `0001_initial.sql`이 바뀌면(첫 배포 전 스키마 정리) 이미 적용된 로컬 DB에는 다시 적용되지 않는다. `.wrangler/state/v3/d1`을 지우고 `pnpm db:migrate:local`을 다시 돌린다.

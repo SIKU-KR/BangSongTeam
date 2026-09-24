@@ -111,7 +111,7 @@ pnpm vitest run -t "slide split"
 - The FTS5 table `decks_fts` and its triggers are hand-written SQL. Delete any `*_fts` DDL that drizzle-kit generates.
 - Never drop or recreate a parent table (`decks`, `presentations`, ...). D1 ignores `PRAGMA foreign_keys=OFF` in migrations, so the drop cascades deletes into child rows. Use `ALTER TABLE ... ADD COLUMN`, and write `ON DELETE SET NULL` by hand because drizzle-kit drops it.
 - CI applies migrations before the deploy, so the previous release briefly runs on the new schema. Keep changes additive, and drop or rename a column only after the code stops using it.
-- Never insert `backgrounds` rows in a migration: a row without its R2 objects renders as a broken background. Service backgrounds are added with `docs/ops/background-runbook.md`, and user uploads go through `POST /api/backgrounds/uploads`.
+- Never insert `backgrounds` rows in a migration: a row without its R2 objects renders as a broken background. Backgrounds are added by admins in the app (`POST /api/backgrounds/uploads`, gated by the `ADMIN_USER_IDS` secret) or with `docs/ops/background-runbook.md`. Users can't upload backgrounds; every background is a shared `source='service'` row shown in one gallery.
 
 ### Projection and offline
 

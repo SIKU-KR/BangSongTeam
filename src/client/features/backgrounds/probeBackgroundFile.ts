@@ -3,7 +3,6 @@ import {
   isBackgroundImageMimeType,
   isBackgroundVideoMimeType,
   type BackgroundKind,
-  type BackgroundStorageUsage,
 } from "#shared";
 
 export interface ProbedBackgroundFile {
@@ -27,13 +26,10 @@ export function formatBytes(bytes: number): string {
 }
 
 /**
- * 올리기 전에 형식·크기·남은 용량을 확인한다. 통과하면 null.
+ * 올리기 전에 형식·크기를 확인한다. 통과하면 null.
  * 서버도 같은 한도로 다시 검사하지만, 30MB를 다 올린 뒤에 거절당하지 않게 한다.
  */
-export function checkBackgroundFile(
-  file: File,
-  usage: BackgroundStorageUsage | null,
-): string | null {
+export function checkBackgroundFile(file: File): string | null {
   if (
     !isBackgroundVideoMimeType(file.type) &&
     !isBackgroundImageMimeType(file.type)
@@ -42,9 +38,6 @@ export function checkBackgroundFile(
   }
   if (file.size > BACKGROUND_UPLOAD_LIMITS.maxFileBytes) {
     return `파일 하나는 ${formatBytes(BACKGROUND_UPLOAD_LIMITS.maxFileBytes)} 이하만 올릴 수 있습니다 (지금 ${formatBytes(file.size)})`;
-  }
-  if (usage && usage.usedBytes + file.size > usage.limitBytes) {
-    return `저장 공간이 부족합니다 (남은 공간 ${formatBytes(Math.max(0, usage.limitBytes - usage.usedBytes))}). 쓰지 않는 배경을 지운 뒤 다시 올려 주세요`;
   }
   return null;
 }

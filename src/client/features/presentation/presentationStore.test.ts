@@ -42,20 +42,14 @@ import {
   resetBackgroundCatalogForTests,
   setBackgroundCatalogForTests,
 } from "../backgrounds/backgroundCatalog";
-import {
-  makeBackground,
-  TEST_SERVICE_BACKGROUNDS,
-} from "../../test/backgroundFixture";
+import { TEST_SERVICE_BACKGROUNDS } from "../../test/backgroundFixture";
 
 describe("presentationStore (In-memory reactive presentation)", () => {
   beforeEach(() => {
     signInAsTestUser();
     resetPresentationStore();
     __loadDocumentsForTests(SEED_PRESENTATIONS);
-    setBackgroundCatalogForTests([
-      ...TEST_SERVICE_BACKGROUNDS,
-      makeBackground(9, { source: "user" }),
-    ]);
+    setBackgroundCatalogForTests(TEST_SERVICE_BACKGROUNDS);
   });
 
   it("should initialize with the 5 mock songs", () => {
@@ -100,8 +94,8 @@ describe("presentationStore (In-memory reactive presentation)", () => {
     expect(updated.items).toHaveLength(6);
   });
 
-  it("기본 제공 배경이 없으면 배경 없이 곡을 넣고, 내 배경은 자동 배정에 쓰지 않는다", () => {
-    setBackgroundCatalogForTests([makeBackground(9, { source: "user" })]);
+  it("기본 제공 배경이 없으면 배경 없이 곡을 넣는다", () => {
+    setBackgroundCatalogForTests([]);
     const item = addDeckToPresentation(
       DeckSchema.parse({
         id: "900000000000000000003",

@@ -17,6 +17,13 @@ DEV_LOGIN_ENABLED=true
 # (docs/ops/deploy-runbook.md 2장). 예: EMAIL_SIGNUP_ALLOWLIST=me@example.com,team@example.com
 EMAIL_SIGNUP_ALLOWLIST=
 
+# 배경 갤러리 관리자 (쉼표로 구분한 user id)
+#
+# 여기 적힌 계정만 배경 화면에서 배경을 올리고 지울 수 있다. 이메일은 검증되지 않아
+# user id로 지정한다. 개발자 로그인 계정의 id는 로그인 후 D1 `user` 테이블에서
+# 찾는다 (docs/ops/background-runbook.md 3-1). 비워 두면 관리자가 없다.
+ADMIN_USER_IDS=
+
 # OAuth Providers
 #
 # 도메인 구입 후 카카오·네이버 개발자 콘솔에서 앱을 등록하고 채운다.

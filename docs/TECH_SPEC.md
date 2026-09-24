@@ -1,7 +1,7 @@
 # 기술 디자인 명세서 (Technical Specification)
 
-**문서 버전:** 1.3.0  
-**최종 갱신:** 2026-09-24 (배경 라이브러리·커스텀 배경 업로드 반영)  
+**문서 버전:** 1.4.0  
+**최종 갱신:** 2026-09-24 (사용자 배경 업로드 제거, 관리자 업로드·통합 갤러리)  
 **작성자:** Senior Software Architect  
 **대상 서비스:** 교회 찬양 슬라이드 제작 및 송출 서비스 (`prj-ppt`)  
 **문서 상태:** Approved Design Spec — 일부 항목은 실제 구현과 맞추어 개정됨 (§2.2 구현 현황 참조)
@@ -24,6 +24,12 @@
 > 1. `0001_initial`에서 배경 시드 10건을 뺐다. R2에 파일이 없는 행이 깨진 배경을 그렸다. 사전 주입 배경은 R2 업로드 뒤 운영 런북으로 등록한다 (§4.1.1).
 > 2. `backgrounds`에 `source`·`owner_user_id`·`kind`·`size_bytes`를 넣고 커스텀 배경 업로드·삭제 API를 구현했다 (§3.3, §4.0-4, §7.1).
 > 3. 클라이언트는 배경을 상수가 아니라 **로컬 배경 카탈로그**(IndexedDB `backgrounds` 스토어 + `/api/backgrounds`)로 해석한다. 송출 화면은 로컬 사본만 읽는다 (§5.4-4).
+>
+> **1.4.0 개정 요약 (2026-09-24, 배경 갤러리)**
+>
+> 1. 사용자 배경 업로드와 계정 300MB 한도를 없앴다. 배경은 모두 기본 제공 배경(`source='service'`)이고 한 갤러리로 모두에게 보인다 (§4.0-4).
+> 2. 업로드·삭제 API는 관리자(`ADMIN_USER_IDS` 시크릿의 user id)만 쓴다. 목록 응답은 `{ backgrounds, canManage }`다 (§7.1).
+> 3. `0002_drop_user_backgrounds`가 예전 사용자 업로드 행을 지운다. 컬럼은 남긴다 (§4.1.1).
 
 ---
 
@@ -122,7 +128,7 @@ flowchart TB
 | 가사 라이브러리·LLM 정규화 (§6)           | 제거 | MVP 범위에서 제외 (2026-09-23). 테이블은 스키마에서 지웠다                                                       |
 | 공유 라이브러리 API (§7)                  | 구현 | 공개 전환·검색(가져간 횟수순 게시판)·상세·가져오기·신고 (M5-3)                                                   |
 | 운영자 도구                               | 구현 | 관리자 화면 없음. `docs/ops/moderation-runbook.md`의 SQL (`src/db/ops/moderationSql.ts`가 정본)                  |
-| 사용자 커스텀 배경 업로드 (PRD 4.3)       | 구현 | 배경 라이브러리에서 올리기·지우기 (MP4·JPEG·PNG·WebP, 30MB/300MB, 권리 확인). 공개·포크 경로에서는 배경 없음     |
+| 관리자 배경 업로드 (PRD 4.3)              | 구현 | 배경 갤러리에서 관리자만 올리기·지우기 (MP4·JPEG·PNG·WebP, 파일당 30MB, 출처·라이선스 입력). 사용자 업로드 없음  |
 | 저장 실패 경고 배너                       | 구현 | `StorageWarningBanner` — 용량 초과와 저장소 차단을 구분, 닫을 수 없음                                            |
 
 ---
@@ -288,7 +294,7 @@ export type Presentation = z.infer<typeof PresentationSchema>;
 export const BackgroundMediaSchema = z.object({
   id: IdSchema,
   title: z.string().min(1).max(100),
-  source: z.enum(["service", "user"]), // 사전 주입 / 사용자 업로드
+  source: z.enum(["service", "user"]), // 앱은 service만 내보낸다 ('user'는 없앤 업로드의 흔적)
   kind: z.enum(["video", "image"]),
   mediaUrl: z.string().startsWith(MEDIA_URL_PREFIX), // /api/media/<r2Key>
   posterUrl: z.string().startsWith(MEDIA_URL_PREFIX), // 이미지는 mediaUrl과 같다
@@ -301,8 +307,8 @@ export const BackgroundMediaSchema = z.object({
 ```
 
 - URL은 동일 출처 프록시 상대 경로다. 커스텀 도메인 절대 URL(`cdnUrl`)과 `R2_PUBLIC_DOMAIN`은 쓰지 않아 제거했다.
-- 목록 응답은 `BackgroundListResponseSchema` (`{ backgrounds, usage }`, 비로그인이면 `usage: null`)다.
-- 업로드 폼은 `BackgroundUploadFormSchema`(multipart: `file`, 영상이면 필수인 `poster`, `title`, `tags` JSON, `durationSec`, `acceptedRightsNotice: "true"`)다. 크기·선언 MIME은 스키마가, 실제 형식(파일 앞부분 바이트)은 Worker가 `sniffBackgroundMimeType`으로 확인한다.
+- 목록 응답은 `BackgroundListResponseSchema` (`{ backgrounds, canManage }`, 관리자일 때만 `canManage: true`)다.
+- 업로드 폼(관리자 전용)은 `BackgroundUploadFormSchema`(multipart: `file`, 영상이면 필수인 `poster`, `title`, `license`, `tags` JSON, `durationSec`, `acceptedRightsNotice: "true"`)다. 크기·선언 MIME은 스키마가, 실제 형식(파일 앞부분 바이트)은 Worker가 `sniffBackgroundMimeType`으로 확인한다.
 - 한도와 형식은 `constants/backgrounds.ts`의 `BACKGROUND_UPLOAD_LIMITS` 하나를 클라이언트 사전 검사와 Worker가 함께 본다.
 
 ### 3.4 BroadcastChannel 동기화 프로토콜 — 제거
@@ -344,16 +350,14 @@ Cloudflare D1(SQLite)을 영속성 엔진으로 사용하며, Drizzle ORM을 통
 - **검증**: Better Auth의 Drizzle D1 어댑터가 요구하는 필수 필드(`emailVerified`, `session.ipAddress`, `session.userAgent`, `account.scope`, `account.idToken`, `verification` 테이블)가 누락되면 인스턴스 초기화 시 런타임 스키마 에러가 발생한다.
 - **최적화 설계**: Better Auth v1 공식 규격의 컬럼과 테이블을 완벽히 매핑하여 인증 호환성을 보장한다.
 
-#### 4. 사용자 커스텀 배경의 노출 격리 (PRD 4.3)
+#### 4. 배경 갤러리와 관리자 업로드 (PRD 4.3, 2026-09-24 개정)
 
-- **문제점**: 커스텀 배경을 `backgrounds`에 함께 넣으면, 배경 목록 API가 남의 업로드까지 뿌리거나 공개 덱이 남의 배경을 참조하게 된다.
-- **설계**: `source`/`owner_user_id`로 구분하고 쿼리 헬퍼에서 강제한다.
-  - 배경 목록 조회는 `source = 'service' OR owner_user_id = :userId` 조건을 헬퍼 안에 고정한다. 라우트에서 임의 조건을 조립하지 않는다.
-  - 공개 덱 검색·상세·포크 시 `backgroundId`가 `source = 'user'` 배경을 가리키면 `null`(배경 없음)로 내보낸다 (`maskNonServiceBackgrounds`). 사전 주입 배경이 반드시 있다는 보장이 없어 '기본 배경으로 대체'하지 않는다. 남의 업로드가 공개 경로로 새는 것을 원천 차단한다.
-  - 동기화(`PUT /api/decks/:id`, `PUT /api/presentations/:id`)로 들어온 `backgroundId`도 '이 사용자가 쓸 수 있는 배경'(사전 주입 + 본인 업로드)이 아니면 `null`로 낮춘다 (`nullifyUnknownBackgrounds(db, userId, rows)`).
-  - 계정 삭제 시 `owner_user_id` CASCADE로 메타데이터가 지워진다. R2 객체 정리는 계정 삭제 기능과 함께 붙인다 (계정 삭제는 아직 없다).
-  - 미디어 프록시(`/api/media/*`)는 업로드 객체도 인증 없이 서빙한다. 키(`uploads/<userId>/<NanoID>.*`)는 추측할 수 없고 목록 API가 소유자에게만 알려 준다. 세션을 검사하면 송출 중 세션이 만료되는 순간 배경이 꺼진다.
-- **용량 한도**: 업로드 전 `SELECT SUM(size_bytes) WHERE owner_user_id = ?`로 300MB 한도를 검사한다 (PRD 6.3).
+- **설계**: 배경은 모두 기본 제공 배경(`source='service'`)이다. 목록은 누구에게나 같고(`listBackgrounds`), 공개 덱·포크에도 배경이 따라간다.
+  - 업로드·삭제는 `requireAuth` 뒤의 `requireAdmin`이 막는다. 관리자는 `ADMIN_USER_IDS` 시크릿의 user id로 가린다. 카카오·비밀번호 계정의 이메일은 검증되지 않아 이메일로는 가리지 않는다.
+  - 목록 응답의 `canManage`는 화면에서 버튼을 보일지 정하는 데만 쓴다. 권한 검사는 서버가 한다.
+  - 동기화(`PUT /api/decks/:id`, `PUT /api/presentations/:id`)와 공개 경로(검색·상세·포크)는 기본 제공 배경이 아닌 `backgroundId`를 `null`로 낮춘다 (`nullifyUnknownBackgrounds(db, rows)`). 예전 사용자 업로드 행이 남아 있어도 어떤 경로로도 나가지 않는다.
+  - 미디어 프록시(`/api/media/*`)는 인증 없이 서빙한다. 세션을 검사하면 송출 중 세션이 만료되는 순간 배경이 꺼진다.
+- **용량 한도**: 계정별 총량 한도는 없다. 파일당 30MB는 Worker가 요청 본문을 한 번에 받기 때문에 남긴다 (PRD 6.3).
 
 ---
 
@@ -442,7 +446,7 @@ export const backgrounds = sqliteTable(
     license: text("license").notNull(),
     tags: text("tags").notNull(), // JSON TEXT: string[]
 
-    // 사용자 커스텀 배경 (PRD 4.3) — 사전 주입 배경과 한 테이블에서 관리
+    // 없앤 사용자 업로드의 흔적 (행은 0002에서 삭제, 컬럼은 부모 테이블 재생성을 피하려고 남김)
     source: text("source", { enum: ["service", "user"] })
       .notNull()
       .default("service"),
@@ -452,7 +456,7 @@ export const backgrounds = sqliteTable(
     kind: text("kind", { enum: ["video", "image"] })
       .notNull()
       .default("video"),
-    sizeBytes: integer("size_bytes").notNull().default(0), // 계정당 300MB 한도 집계용
+    sizeBytes: integer("size_bytes").notNull().default(0), // 영상 + 포스터 크기
 
     createdAt: integer("created_at", { mode: "timestamp" }).default(
       sql`(unixepoch())`,
@@ -578,8 +582,9 @@ export const reports = sqliteTable("reports", {
 같은 날 `0001`을 한 번 더 고쳤다. 사전 주입 배경 시드 10건을 빼고 `backgrounds`에 `source`·`owner_user_id`·`kind`·`size_bytes`와 인덱스 둘을 넣었다. 시드가 가리키던 `loops/*.mp4`·`posters/*.webp`는 R2에 올라간 적이 없어, 편집기·송출이 404 배경을 그렸다. 고치기 전 `0001`을 적용한 D1도 새로 만든다.
 
 - **배경 행은 R2 객체가 올라간 뒤에만 만든다.** 사전 주입 배경은 `docs/ops/background-runbook.md` 절차(R2 `object put` → D1 `INSERT`)로 등록한다. 문장의 정본은 `src/db/ops/backgroundSql.ts`이고, `backgroundSql.test.ts`가 실제 스키마에 대해 실행하며 `runbook.test.ts`가 문서와 대조한다. `tests/migrations.test.ts`는 `0001`에 배경 `INSERT`가 다시 들어오지 못하게 막는다.
-- 사용자 커스텀 배경은 업로드 API가 R2에 먼저 쓰고 D1 행을 나중에 만든다. 행 삽입이 실패하면 올린 객체를 지운다.
-- 서버는 이 사용자가 쓸 수 없는 `backgroundId`를 `null`로 낮춰 받는다(`nullifyUnknownBackgrounds`). `decks.background_id` 외래키를 D1이 강제하므로, 모르는 id 하나가 `db.batch()` 전체를 롤백시켜 세트를 통째로 잃는 사고(2026-09-22 실제 발생)를 막는다. 배경은 장식이고 가사는 봉사자의 작업물이다.
+- 관리자 앱 업로드는 R2에 먼저 쓰고 D1 행을 나중에 만든다. 행 삽입이 실패하면 올린 객체를 지운다.
+- `0002_drop_user_backgrounds`는 `DELETE FROM backgrounds WHERE source = 'user'` 한 문장이다. `backgrounds`는 `decks`의 부모 테이블이라 다시 만들지 않고, `owner_user_id`는 외래키라 `DROP COLUMN`이 되지 않아 컬럼은 남긴다.
+- 서버는 기본 제공 배경이 아닌 `backgroundId`를 `null`로 낮춰 받는다(`nullifyUnknownBackgrounds`). `decks.background_id` 외래키를 D1이 강제하므로, 모르는 id 하나가 `db.batch()` 전체를 롤백시켜 세트를 통째로 잃는 사고(2026-09-22 실제 발생)를 막는다. 배경은 장식이고 가사는 봉사자의 작업물이다.
 
 ### 4.2 FTS5 Trigram 검색 가상 테이블 (`migrations/0001_initial.sql`)
 
@@ -844,7 +849,7 @@ stateDiagram-v2
        value: Deck;
      };
      // 3. 배경 카탈로그 로컬 사본 (송출 화면이 배경 id → URL을 서버 없이 해석)
-     //    cachedFor: 목록을 받은 계정. 커스텀 배경은 그 계정에게만 되살린다
+     //    cachedFor: 목록을 받은 계정 (예전 사용자 업로드를 남에게 되살리지 않던 흔적)
      backgrounds: {
        key: string; // backgroundId (NanoID)
        value: BackgroundMedia & { cachedFor: string | null };
@@ -903,7 +908,7 @@ stateDiagram-v2
 4. **쓰기 실패를 삼키지 않는다.** 용량 초과(`QuotaExceededError`)나 시크릿 모드로 IndexedDB를 못 쓰면 편집기 상단에 '이 브라우저에 저장할 수 없습니다' 배너를 띄운다. 조용히 인메모리로 폴백하면 사용자는 저장된 줄 알고 예배 당일에 잃는다.
 5. **스키마 버전:** `openDB(..., version)`의 upgrade 경로를 처음부터 유지한다. 스토어 구조가 바뀌면 버전을 올리고 마이그레이션을 쓴다. 저장된 문서는 읽을 때 `PresentationSchema.safeParse`로 검증하고, 실패한 문서는 버리지 말고 격리 보관한 뒤 사용자에게 알린다.
 6. **Undo/Redo 히스토리는 저장하지 않는다.** 세션 한정 상태이며 직렬화 비용이 크다.
-7. **배경 카탈로그:** 배경 id를 URL로 바꾸는 표는 `features/backgrounds/backgroundCatalog.ts`의 메모리 스토어다. 부팅 때 IndexedDB `backgrounds` 스토어에서 채우고(`hydrateBackgroundCatalog`), 부팅 동기화·배경 라이브러리·배경 선택 창이 `/api/backgrounds`로 새로 받아 통째로 바꾼다(`refreshBackgroundCatalog`). 송출 화면은 로컬 사본만 읽는다. 커스텀 배경 파일은 IndexedDB Blob이 아니라 R2에 두고, 곡에 지정되면 다른 배경처럼 Cache Storage에 받아 둔다(5.4-3).
+7. **배경 카탈로그:** 배경 id를 URL로 바꾸는 표는 `features/backgrounds/backgroundCatalog.ts`의 메모리 스토어다. 부팅 때 IndexedDB `backgrounds` 스토어에서 채우고(`hydrateBackgroundCatalog`), 부팅 동기화·배경 갤러리·배경 선택 창이 `/api/backgrounds`로 새로 받아 통째로 바꾼다(`refreshBackgroundCatalog`). 송출 화면은 로컬 사본만 읽는다. 배경 파일은 IndexedDB Blob이 아니라 R2에 두고, 곡에 지정되면 Cache Storage에 받아 둔다(5.4-3).
 
 **Phase 3 설계 규칙 (M3-B, 구현 완료):**
 
@@ -952,7 +957,7 @@ stateDiagram-v2
 | -------- | ------------------------------ | -------------------------------------------------------- | ------------ | ---- |
 | `GET`    | `/api/health`                  | 헬스 체크                                                | No           | 구현 |
 | `GET`    | `/api/media/*`                 | R2 배경 미디어 프록시 (HTTP Range)                       | No           | 구현 |
-| `GET`    | `/api/backgrounds`             | 배경 목록 (사전 주입 + 로그인 시 내 업로드·사용량)       | 선택         | 구현 |
+| `GET`    | `/api/backgrounds`             | 배경 목록 (모두에게 같음) + 관리 권한 여부 `canManage`   | 선택         | 구현 |
 | `GET`    | `/api/auth/*`                  | Better Auth 핸들러 (카카오/네이버)                       | No           | 구현 |
 | `POST`   | `/api/dev-login`               | 개발자 로그인 (localhost + `DEV_LOGIN_ENABLED`)          | No           | 구현 |
 | `GET`    | `/api/presentations`           | 내 프레젠테이션 문서 전체 (덱 임베드)                    | Yes          | 구현 |
@@ -969,8 +974,8 @@ stateDiagram-v2
 | `GET`    | `/api/catalog/search`          | 공개 덱 검색 (가져간 횟수순, 미리보기만)                 | No           | 구현 |
 | `GET`    | `/api/catalog/decks/:id`       | 공개 덱 전문                                             | Yes          | 구현 |
 | `POST`   | `/api/reports`                 | 신고·교정 제안 (공개 덱만)                               | Yes          | 구현 |
-| `POST`   | `/api/backgrounds/uploads`     | 커스텀 배경 업로드 (용량·포맷 검사, R2 저장)             | Yes          | 구현 |
-| `DELETE` | `/api/backgrounds/uploads/:id` | 내 커스텀 배경 삭제 (R2 객체 포함)                       | Yes (소유자) | 구현 |
+| `POST`   | `/api/backgrounds/uploads`     | 배경 업로드 (크기·포맷 검사, R2 저장, 기본 제공 배경)    | Yes (관리자) | 구현 |
+| `DELETE` | `/api/backgrounds/uploads/:id` | 배경 삭제 (D1 행 → R2 객체)                              | Yes (관리자) | 구현 |
 
 설계 당시의 `POST /api/decks`(생성)·`GET /api/decks/:id`·`GET /api/presentations/:id`는 두지 않았다. 로컬 우선 동기화가 문서 단위 `PUT`으로 생성과 수정을 함께 하고, 조회는 목록 한 번으로 충분하다.
 
