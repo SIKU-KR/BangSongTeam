@@ -551,4 +551,37 @@ describe("AppShellLayout (드라이브형 홈)", () => {
     expect(screen.queryByTestId("theme-menu-dropdown")).not.toBeInTheDocument();
     expect(screen.getByText("라이트 모드")).toBeInTheDocument();
   });
+
+  it("정렬 컨트롤은 드롭다운 하나만 제공되고 기준을 변경할 수 있다", () => {
+    renderShell();
+
+    expect(screen.queryByTitle("정렬 기준 전환")).toBeNull();
+
+    const sortButton = screen.getByTestId("drive-sort-dropdown");
+    expect(sortButton).toHaveTextContent("정렬: 수정된 날짜");
+
+    const initialRows = screen.getAllByTestId("presentation-row");
+    expect(initialRows[1]).toHaveTextContent("청년부 금요 찬양 집회");
+
+    fireEvent.click(sortButton);
+    expect(screen.getByTestId("drive-sort-menu")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId("sort-option-name"));
+    expect(screen.queryByTestId("drive-sort-menu")).toBeNull();
+    expect(sortButton).toHaveTextContent("정렬: 이름순");
+
+    const nameRows = screen.getAllByTestId("presentation-row");
+    expect(nameRows[1]).toHaveTextContent("부활절 감사예배 특별 순서");
+
+    fireEvent.click(sortButton);
+    fireEvent.click(screen.getByTestId("sort-option-slides"));
+    expect(sortButton).toHaveTextContent("정렬: 슬라이드 많은순");
+
+    fireEvent.click(sortButton);
+    fireEvent.click(screen.getByTestId("sort-option-recent"));
+    expect(sortButton).toHaveTextContent("정렬: 수정된 날짜");
+
+    const recentRows = screen.getAllByTestId("presentation-row");
+    expect(recentRows[1]).toHaveTextContent("청년부 금요 찬양 집회");
+  });
 });
