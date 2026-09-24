@@ -12,6 +12,7 @@ import {
 } from "@repo/shared";
 import type { Presentation } from "@repo/shared";
 import { SlideStage } from "../components/stage/SlideStage";
+import { useBackgroundAutoCache } from "../features/offline";
 
 /** 문서를 찾지 못한 프레임에서 훅 본문이 참조할 빈 폴백 */
 const EMPTY_PRESENTATION: Presentation = {
@@ -46,7 +47,8 @@ import {
  * 전체화면이 풀리면 송출을 끝낸다. 청중 화면에는 조작 UI나 번호 버퍼를 일절
  * 표시하지 않는다.
  * 데이터는 하이드레이션된 메모리 상태(원천은 IndexedDB)에서만 읽으므로
- * 송출 중 네트워크 요청이 0건이다.
+ * 송출 중 API·데이터 요청은 0건이다. 네트워크를 쓰는 것은 `<video>` 재생과,
+ * 아직 캐시에 없는 배경을 조용히 받아 두는 백그라운드 캐시뿐이다.
  */
 export function FullscreenPresentRoute(): React.JSX.Element {
   const navigate = useNavigate();
@@ -59,6 +61,9 @@ export function FullscreenPresentRoute(): React.JSX.Element {
   useLayoutEffect(() => {
     if (presentationId) openPresentation(presentationId);
   }, [presentationId]);
+
+  // 송출 중에도 온라인이면 이 세트의 배경을 캐시에 담아 둔다 (끊겨도 이어서 재생).
+  useBackgroundAutoCache(found ?? null);
 
   const [position, setPosition] =
     useState<ProjectionPosition>(INITIAL_POSITION);

@@ -4,8 +4,8 @@ import * as path from "node:path";
 
 /**
  * Vite 설정 로더는 워크스페이스 TS 패키지를 import할 수 없어 vite.config.ts가
- * 캐시 이름과 미디어 경로를 복제해 갖고 있다. 값이 갈라지면 예배 준비 화면이
- * 채운 캐시를 Service Worker가 못 읽는다 — 그 어긋남을 여기서 막는다.
+ * 캐시 이름과 미디어 경로를 복제해 갖고 있다. 값이 갈라지면 편집·송출 중
+ * 백그라운드 캐시가 채운 캐시를 Service Worker가 못 읽는다 — 그 어긋남을 여기서 막는다.
  */
 describe("M4-1: PWA 설정과 공용 상수 정합성", () => {
   const viteConfigPath = path.resolve(__dirname, "../apps/web/vite.config.ts");
@@ -37,7 +37,9 @@ describe("M4-1: PWA 설정과 공용 상수 정합성", () => {
   it("미디어 런타임 캐시가 CacheFirst + Range 지원으로 설정되어 있다", () => {
     expect(config).toContain('handler: "CacheFirst"');
     expect(config).toContain("rangeRequests: true");
-    expect(config).toContain("statuses: [200, 206]");
+    // Cache API는 206을 저장하지 못한다. 전체 응답만 담아 두고 잘라서 재생한다.
+    expect(config).toContain("statuses: [200] }");
+    expect(config).not.toContain("206]");
   });
 
   it("오프라인 새로고침을 위한 navigateFallback이 있고 /api는 제외된다", () => {

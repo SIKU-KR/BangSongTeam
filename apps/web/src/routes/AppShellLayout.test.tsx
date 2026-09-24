@@ -32,8 +32,8 @@ function renderShell(initialPath = "/presentations") {
           <Route path="/backgrounds" element={<BackgroundsRoute />} />
         </Route>
         <Route
-          path="/present/:presentationId/ready"
-          element={<div data-testid="ready-stub" />}
+          path="/present/:presentationId/fullscreen"
+          element={<div data-testid="fullscreen-stub" />}
         />
         <Route
           path="/editor/:presentationId"
@@ -78,14 +78,14 @@ describe("AppShellLayout (공유 셸 + 중첩 라우트)", () => {
     expect(screen.getByText("새 프레젠테이션 생성")).toBeInTheDocument();
   });
 
-  it("should navigate to the worship preparation screen when card present button is clicked in Chrome", () => {
+  it("should go straight to fullscreen projection when card present button is clicked in Chrome", () => {
     vi.spyOn(chromeChecker, "isGoogleChromeBrowser").mockReturnValue(true);
 
     renderShell();
 
     fireEvent.click(screen.getByTestId("card-present-btn"));
 
-    expect(screen.getByTestId("ready-stub")).toBeInTheDocument();
+    expect(screen.getByTestId("fullscreen-stub")).toBeInTheDocument();
   });
 
   it("should prompt confirm dialog when card present button is clicked in non-Chrome browser", () => {
@@ -99,12 +99,12 @@ describe("AppShellLayout (공유 셸 + 중첩 라우트)", () => {
 
     // Should prompt confirm and NOT navigate if cancelled
     expect(confirmSpy).toHaveBeenCalledTimes(1);
-    expect(screen.queryByTestId("ready-stub")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("fullscreen-stub")).not.toBeInTheDocument();
 
     // If confirmed:
     confirmSpy.mockReturnValue(true);
     fireEvent.click(startBtn);
-    expect(screen.getByTestId("ready-stub")).toBeInTheDocument();
+    expect(screen.getByTestId("fullscreen-stub")).toBeInTheDocument();
   });
 
   it("should render updated sidebar navigation items without '내 프레젠테이션 보관함' or '곡 라이브러리'", () => {

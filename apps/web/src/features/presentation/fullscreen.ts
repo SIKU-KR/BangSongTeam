@@ -98,22 +98,3 @@ export function launchPresentation(
   // 라우트 전환
   navigate(`/present/${presentationId}/fullscreen`);
 }
-
-/**
- * 예배 준비 화면으로 보낸다 (송출 진입의 권장 관문).
- *
- * 대시보드·편집기의 '송출' 버튼은 곧바로 전체화면으로 들어가지 않고 여기를
- * 거친다. 배경 영상을 미리 받아 두지 않으면 예배당 네트워크가 끊기는 순간
- * 배경이 검게 나오기 때문이다. 준비가 끝나지 않아도 그 화면에서 바로 송출할 수
- * 있으므로 관문이 막다른 길이 되지는 않는다.
- *
- * 전체화면을 여기서 요청하지 않는 이유: 준비 화면은 전체화면이 아니고,
- * Chrome은 사용자 제스처 없이 전체화면을 허용하지 않는다. 전체화면 진입은
- * 준비 화면의 송출 버튼 클릭에서 일어난다.
- */
-export function launchPreparation(
-  navigate: (to: string) => void,
-  presentationId: string,
-): void {
-  navigate(`/present/${presentationId}/ready`);
-}

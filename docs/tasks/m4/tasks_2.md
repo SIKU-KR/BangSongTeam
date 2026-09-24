@@ -2,6 +2,8 @@
 
 > **2026-09-24 범위 변경**: 발표자 보기(조작 창·청중 창·BroadcastChannel 동기화)는 MVP에서 제거됐다. 송출은 전체화면 `/present/:id/fullscreen` 한 가지다. 이 문서의 발표자 보기 관련 부분은 이력으로 남긴다.
 
+> **2026-09-24 범위 변경 (2)**: 예배 준비 화면(`/present/:id/ready`, `useWorshipPrep`, `offlineStatusRepository`, '오프라인 송출 가능' 배지)은 제거됐다. 송출 버튼은 곧바로 전체화면으로 들어가고, 배경은 편집·송출 중에 `useBackgroundAutoCache`가 UI 없이 조용히 캐시한다 (TECH_SPEC §5.4-3). 이 문서는 이력으로 남긴다.
+
 > **마일스톤**: M4 (오프라인 및 발표자 보기)
 > **태스크 번호**: `tasks_2.md`
 > **선행 조건**: `docs/tasks/m4/tasks_1.md` 완료 (Service Worker·미디어 캐시 규칙)

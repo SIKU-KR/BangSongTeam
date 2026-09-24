@@ -1,41 +1,28 @@
 import { MEDIA_CACHE_NAME } from "@repo/shared";
+import { requestPersistentStorage } from "./storagePersistence";
 
 /**
- * 배경 영상·포스터를 Cache Storage에 미리 담는 계층 (PRD 6.1, TECH_SPEC 5.4-3).
+ * 배경 영상·포스터를 Cache Storage에 조용히 담는 계층 (PRD 6.1, TECH_SPEC 5.4-3).
+ *
+ * 예배 준비 화면(송출 전 미리받기)은 2026-09-24에 제거됐다. 대신 편집기나 송출
+ * 화면에 세트가 열려 있고 온라인이면 그 세트의 배경을 뒤에서 하나씩 받아 둔다.
+ * 진행률도 경고도 없다. 받을 수 있으면 받고, 못 받으면 다음 기회에 다시 받는다.
+ * 캐시에 들어간 파일은 Workbox의 CacheFirst가 같은 `MEDIA_CACHE_NAME`에서 읽어
+ * 네트워크 없이 재생한다.
  *
  * **Service Worker가 활성화되기를 기다리지 않는다.** 첫 방문에서는 SW가 아직
- * activate되지 않아 fetch가 가로채이지 않는다. 그 타이밍에 의존하면 '준비를
- * 눌렀는데 아무것도 안 받아진' 상태로 예배에 들어가게 된다. 그래서 응답을 받아
- * 직접 `cache.put`으로 넣는다. Workbox의 CacheFirst가 같은 `MEDIA_CACHE_NAME`을
- * 읽으므로 송출 때는 그대로 재생된다.
+ * activate되지 않아 fetch가 가로채이지 않는다. 그래서 응답을 받아 직접
+ * `cache.put`으로 넣는다.
  *
  * **Range 요청을 쓰지 않는다.** RangeRequestsPlugin은 캐시에 있는 *전체* 응답을
- * 잘라 206을 만든다. 부분 응답을 넣어 두면 영상이 중간에 끊긴다.
+ * 잘라 206을 만든다. Cache API는 206을 저장하지도 못한다.
  */
 
-export type MediaCacheStatus = "pending" | "downloading" | "done" | "failed";
-
-export type MediaCacheFailure = "quota" | "network" | "unsupported";
-
-export interface MediaCacheItem {
-  url: string;
-  status: MediaCacheStatus;
-  /** 받은 바이트 수 (총 캐시 용량 표시용 — PRD 6.3) */
-  bytes: number;
-  reason?: MediaCacheFailure;
-}
-
 export interface MediaCacheResult {
-  items: MediaCacheItem[];
+  /** 캐시에 들어 있는 URL (방금 받았거나 이미 있던 것) */
   cachedUrls: string[];
-  totalBytes: number;
-  /** 요청한 URL이 하나도 빠짐없이 캐시에 들어갔는지 */
-  isComplete: boolean;
-}
-
-export interface CacheMediaOptions {
-  onProgress?: (items: MediaCacheItem[]) => void;
-  signal?: AbortSignal;
+  /** 받지 못한 URL */
+  failedUrls: string[];
 }
 
 /** 이 브라우저에서 Cache Storage를 쓸 수 있는지 */
@@ -47,125 +34,108 @@ export function isCacheStorageAvailable(): boolean {
   }
 }
 
-function classifyFailure(err: unknown): MediaCacheFailure {
-  if (err instanceof DOMException && err.name === "QuotaExceededError") {
-    return "quota";
-  }
-  if (err instanceof Error && err.name === "QuotaExceededError") return "quota";
-  return "network";
-}
-
-/** 이미 캐시에 들어 있는 URL 집합 */
-export async function getCachedUrls(
-  urls: readonly string[],
-): Promise<Set<string>> {
-  const cached = new Set<string>();
-  if (!isCacheStorageAvailable()) return cached;
-
-  const cache = await caches.open(MEDIA_CACHE_NAME);
-  for (const url of urls) {
-    const hit = await cache.match(url);
-    if (hit) cached.add(url);
-  }
-  return cached;
+function isOffline(): boolean {
+  return typeof navigator !== "undefined" && navigator.onLine === false;
 }
 
 /**
  * URL 목록을 순차적으로 받아 캐시에 넣는다.
  *
- * 순차로 도는 이유: 교회 네트워크에서 20MB 영상 다섯 개를 동시에 당기면
- * 전부 느려지고 진행률도 의미가 없어진다. 실패는 그 항목만 표시하고 멈추지
- * 않는다 — 한 곡의 배경이 없다고 나머지 준비까지 버릴 이유가 없다.
+ * 순차로 도는 이유: 교회 네트워크에서 20MB 영상 여러 개를 동시에 당기면
+ * 화면에 나오는 영상까지 느려진다. 실패는 그 항목만 건너뛰고 멈추지 않는다.
  */
 export async function cacheMediaUrls(
   urls: readonly string[],
-  options: CacheMediaOptions = {},
 ): Promise<MediaCacheResult> {
-  const { onProgress, signal } = options;
-
-  const items: MediaCacheItem[] = urls.map((url) => ({
-    url,
-    status: "pending",
-    bytes: 0,
-  }));
-
-  const report = (): void => onProgress?.(items.map((item) => ({ ...item })));
+  const cachedUrls: string[] = [];
+  const failedUrls: string[] = [];
 
   if (!isCacheStorageAvailable()) {
-    for (const item of items) {
-      item.status = "failed";
-      item.reason = "unsupported";
-    }
-    report();
-    return {
-      items,
-      cachedUrls: [],
-      totalBytes: 0,
-      isComplete: urls.length === 0,
-    };
+    return { cachedUrls, failedUrls: [...urls] };
   }
 
   const cache = await caches.open(MEDIA_CACHE_NAME);
-  const cachedUrls: string[] = [];
-  report();
 
-  for (const item of items) {
-    if (signal?.aborted) break;
-
-    // 이미 받아 둔 것은 다시 받지 않는다 (재방문·부분 실패 후 재시도).
-    const existing = await cache.match(item.url);
-    if (existing) {
-      item.status = "done";
-      item.bytes = Number(existing.headers.get("content-length") ?? 0);
-      cachedUrls.push(item.url);
-      report();
+  for (const url of urls) {
+    // 이미 받아 둔 것은 다시 받지 않는다.
+    if (await cache.match(url)) {
+      cachedUrls.push(url);
       continue;
     }
 
-    item.status = "downloading";
-    report();
-
     try {
       // 동일 출처 프록시이므로 mode를 지정하지 않는다 (TECH_SPEC 5.4-1).
-      const response = await fetch(item.url, { signal });
-      if (!response.ok) {
+      const response = await fetch(url);
+      if (response.status !== 200) {
         throw new Error(`HTTP ${response.status}`);
       }
-
-      // 전체 본문을 읽어 바이트 수를 확정하고, 같은 내용으로 캐시에 넣는다.
-      const buffer = await response.arrayBuffer();
-      const headers = new Headers(response.headers);
-      headers.set("content-length", String(buffer.byteLength));
-
-      await cache.put(item.url, new Response(buffer, { status: 200, headers }));
-
-      item.status = "done";
-      item.bytes = buffer.byteLength;
-      cachedUrls.push(item.url);
-    } catch (err) {
-      if (signal?.aborted) break;
-      item.status = "failed";
-      item.reason = classifyFailure(err);
+      // 본문을 메모리에 올리지 않고 스트림째 넣는다. 편집·송출 중에 20MB를
+      // 통째로 들고 있을 이유가 없다.
+      await cache.put(url, response);
+      cachedUrls.push(url);
+    } catch {
+      failedUrls.push(url);
     }
-    report();
   }
 
-  const totalBytes = items.reduce((sum, item) => sum + item.bytes, 0);
-
-  return {
-    items,
-    cachedUrls,
-    totalBytes,
-    isComplete:
-      items.length > 0 && items.every((item) => item.status === "done"),
-  };
+  return { cachedUrls, failedUrls };
 }
 
-/** 세트 준비를 다시 하기 위해 캐시된 항목을 지운다 */
-export async function evictMediaUrls(urls: readonly string[]): Promise<void> {
-  if (!isCacheStorageAvailable()) return;
-  const cache = await caches.open(MEDIA_CACHE_NAME);
-  for (const url of urls) {
-    await cache.delete(url);
+const pending = new Set<string>();
+let draining: Promise<void> | null = null;
+let persistenceRequested = false;
+
+async function drainQueue(): Promise<void> {
+  if (!persistenceRequested) {
+    persistenceRequested = true;
+    // 결과는 쓰지 않는다. 거부돼도 캐시는 담고, 브라우저가 지우면 다음에 다시 담는다.
+    await requestPersistentStorage();
   }
+
+  // 한 번에 하나씩 꺼낸다. 받는 도중 새로 들어온 URL도 같은 줄에 선다.
+  while (pending.size > 0 && !isOffline()) {
+    const [url] = pending;
+    pending.delete(url);
+    try {
+      await cacheMediaUrls([url]);
+    } catch {
+      // 캐시를 열지 못하는 환경 등. 조용히 넘어가고 다음 기회에 다시 시도한다.
+    }
+  }
+}
+
+function startDrain(): void {
+  if (draining) return;
+  draining = drainQueue()
+    .catch(() => undefined)
+    .finally(() => {
+      draining = null;
+      // 루프가 끝난 직후 끼어든 URL이 있으면 이어서 받는다.
+      if (pending.size > 0 && !isOffline()) startDrain();
+    });
+}
+
+/**
+ * URL을 백그라운드 캐시 큐에 넣는다. 결과를 기다리지 않는다.
+ *
+ * 모듈 단위 싱글턴이라 라우트가 다시 마운트돼도 같은 파일을 겹쳐 받지 않고,
+ * 편집기에서 송출로 넘어가도 받던 것을 이어 받는다. 오프라인이거나 Cache
+ * Storage가 없으면 아무것도 하지 않는다. 실패한 URL은 다음 호출에서 다시 시도된다.
+ */
+export function scheduleMediaCaching(urls: readonly string[]): void {
+  if (urls.length === 0 || isOffline() || !isCacheStorageAvailable()) return;
+  for (const url of urls) pending.add(url);
+  startDrain();
+}
+
+/** 테스트 전용: 큐가 빌 때까지 기다린다 */
+export async function __waitForMediaCachingForTests(): Promise<void> {
+  while (draining) await draining;
+}
+
+/** 테스트 전용 초기화 */
+export function __resetMediaCachingForTests(): void {
+  pending.clear();
+  draining = null;
+  persistenceRequested = false;
 }
