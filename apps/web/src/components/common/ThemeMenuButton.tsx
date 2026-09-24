@@ -4,6 +4,8 @@ import { useTheme, type ThemeMode } from "../../features/theme";
 export interface ThemeMenuButtonProps {
   variant?: "full" | "compact";
   direction?: "up" | "down";
+  /** 드롭다운을 버튼의 왼쪽/오른쪽 끝에 맞춘다 (화면 오른쪽에 둘 때 "right") */
+  align?: "left" | "right";
   className?: string;
 }
 
@@ -82,6 +84,7 @@ const THEME_OPTIONS: ThemeOption[] = [
 export function ThemeMenuButton({
   variant = "full",
   direction = "up",
+  align = "left",
   className = "",
 }: ThemeMenuButtonProps): React.JSX.Element {
   const { theme, setTheme } = useTheme();
@@ -204,7 +207,7 @@ export function ThemeMenuButton({
         <div
           role="menu"
           data-testid="theme-menu-dropdown"
-          className={`absolute ${dropdownPositionClass} left-0 ${
+          className={`absolute ${dropdownPositionClass} ${align === "right" ? "right-0" : "left-0"} ${
             variant === "compact" ? "w-52" : "w-full"
           } bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-xl dark:shadow-2xl p-1.5 z-50 animate-in fade-in zoom-in-95 duration-100`}
         >

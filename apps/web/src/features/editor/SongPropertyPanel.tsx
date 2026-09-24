@@ -42,6 +42,70 @@ const GRID_PRESETS: GridAnchorPreset[] = [
   "bottom-right",
 ];
 
+/** 1-클릭 테마 프리셋 (폰트·글자색·그림자·오버레이 묶음) */
+const STYLE_PRESETS: {
+  name: string;
+  desc: string;
+  badge: string;
+  style: Partial<DeckStyle>;
+}[] = [
+  {
+    name: "클래식 워십",
+    desc: "Pretendard · 화이트 · 은은한 그림자",
+    badge: "기본",
+    style: {
+      fontFamily: "Pretendard",
+      fontColor: "#FFFFFF",
+      textShadowLevel: "soft",
+      overlayOpacity: 45,
+    },
+  },
+  {
+    name: "다크 모던",
+    desc: "Noto Sans KR · 민트 · 보통 그림자",
+    badge: "모던",
+    style: {
+      fontFamily: "Noto Sans KR",
+      fontColor: "#A7F3D0",
+      textShadowLevel: "medium",
+      overlayOpacity: 60,
+    },
+  },
+  {
+    name: "선샤인 웜",
+    desc: "Gmarket Sans · 옐로우 · 강한 그림자",
+    badge: "따뜻함",
+    style: {
+      fontFamily: "Gmarket Sans",
+      fontColor: "#FEF08A",
+      textShadowLevel: "strong",
+      overlayOpacity: 50,
+    },
+  },
+  {
+    name: "오션 블루",
+    desc: "Pretendard · 스카이 · 은은한 그림자",
+    badge: "청량함",
+    style: {
+      fontFamily: "Pretendard",
+      fontColor: "#BAE6FD",
+      textShadowLevel: "soft",
+      overlayOpacity: 40,
+    },
+  },
+  {
+    name: "감성 고운바탕",
+    desc: "KoPubWorld Batang · 핑크 · 소프트",
+    badge: "명조",
+    style: {
+      fontFamily: "KoPubWorld Batang",
+      fontColor: "#FBCFE8",
+      textShadowLevel: "soft",
+      overlayOpacity: 50,
+    },
+  },
+];
+
 const SHADOW_LEVELS = [
   { id: "none", label: "없음" },
   { id: "soft", label: "은은함" },
@@ -52,6 +116,7 @@ const SHADOW_LEVELS = [
 /**
  * Canva / MiriCanvas 스타일 속성 인스펙터 패널
  * - 모션 배경 선택
+ * - 1-클릭 테마 프리셋
  * - 검정 오버레이 불투명도 조절
  * - 타이포그래피 (폰트, 크기, 정렬, 색상, 그림자)
  * - 3×3 격자 위치 및 가로 폭 조절
@@ -214,6 +279,38 @@ export function SongPropertyPanel({
             <div className="absolute bottom-1.5 left-2 z-10 text-[11px] font-medium text-white drop-shadow">
               {currentBg.title}
             </div>
+          </div>
+        </section>
+
+        {/* 1-1. 테마 프리셋 */}
+        <section className="space-y-2">
+          <label className="text-xs font-semibold text-zinc-600 dark:text-zinc-400 uppercase tracking-wider block">
+            테마 프리셋
+          </label>
+          <div className="grid grid-cols-5 gap-1.5">
+            {STYLE_PRESETS.map((preset, index) => (
+              <button
+                key={preset.name}
+                type="button"
+                data-testid={`style-preset-${index}`}
+                onClick={() => onUpdateStyle(preset.style)}
+                className="group flex flex-col items-center gap-1 cursor-pointer"
+                title={`${preset.name} · ${preset.desc}`}
+              >
+                <span
+                  className="w-full aspect-square rounded-lg bg-zinc-900 border border-zinc-200 dark:border-zinc-800 group-hover:ring-2 group-hover:ring-emerald-500/60 flex items-center justify-center text-base font-bold transition-shadow"
+                  style={{
+                    color: preset.style.fontColor,
+                    fontFamily: preset.style.fontFamily,
+                  }}
+                >
+                  가
+                </span>
+                <span className="text-[10px] text-zinc-500 dark:text-zinc-400 truncate max-w-full">
+                  {preset.badge}
+                </span>
+              </button>
+            ))}
           </div>
         </section>
 

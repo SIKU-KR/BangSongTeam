@@ -31,6 +31,11 @@ export interface SlideStageProps {
   isTextInteracting?: boolean;
   /** 컨테이너 커스텀 크기 (선택적) */
   containerDimensions?: { width?: number; height?: number };
+  /**
+   * Layer 1을 영상 대신 포스터 이미지로 그린다 (편집기 썸네일용).
+   * 썸네일 수십 장이 각자 `<video autoplay>`를 띄우지 않게 한다.
+   */
+  staticBackground?: boolean;
   className?: string;
 }
 
@@ -53,6 +58,7 @@ export function SlideStage({
   textBoxRef,
   isTextInteracting = false,
   containerDimensions,
+  staticBackground = false,
   className = "",
 }: SlideStageProps): React.JSX.Element {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -123,12 +129,28 @@ export function SlideStage({
           transformOrigin: "0 0",
         }}
       >
-        {/* Layer 1: Motion Background Loop (Dual Video A/B) */}
-        <VideoLayer
-          src={backgroundUrl}
-          nextSrc={nextBackgroundUrl}
-          posterUrl={posterUrl}
-        />
+        {/* Layer 1: Motion Background Loop (Dual Video A/B) — 썸네일은 정지 포스터 */}
+        {staticBackground ? (
+          <div
+            data-testid="static-background-layer"
+            className="absolute inset-0 overflow-hidden bg-black z-0 select-none pointer-events-none"
+          >
+            {posterUrl && (
+              <img
+                src={posterUrl}
+                alt=""
+                draggable={false}
+                className="absolute inset-0 w-full h-full object-cover"
+              />
+            )}
+          </div>
+        ) : (
+          <VideoLayer
+            src={backgroundUrl}
+            nextSrc={nextBackgroundUrl}
+            posterUrl={posterUrl}
+          />
+        )}
 
         {/* Layer 2: Readability Black Overlay & Blackout */}
         <OverlayLayer

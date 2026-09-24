@@ -78,6 +78,7 @@ export {
   getSlideAt,
   getTotalSlideCount,
   positionOfSlideNumber,
+  slideNumberOfPosition,
   INITIAL_POSITION,
   type ProjectionPosition,
 } from "./projectionState";

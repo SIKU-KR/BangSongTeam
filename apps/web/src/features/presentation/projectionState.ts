@@ -47,6 +47,26 @@ export function positionOfSlideNumber(
   return null;
 }
 
+/**
+ * 곡·슬라이드 위치 → 세트 전체에서 1부터 이어지는 슬라이드 번호.
+ * `positionOfSlideNumber`의 역함수다. 곡이 바뀌어도 번호는 1로 돌아가지 않는다.
+ * 범위 밖 위치는 clamp한 뒤 계산한다. 그 위치에 슬라이드가 없으면(빈 세트,
+ * 0장인 곡) 0.
+ */
+export function slideNumberOfPosition(
+  position: ProjectionPosition,
+  songs: Songs,
+): number {
+  const current = clampPosition(position, songs);
+  if (slideCountOf(songs, current.songIndex) === 0) return 0;
+
+  let before = 0;
+  for (let songIndex = 0; songIndex < current.songIndex; songIndex++) {
+    before += slideCountOf(songs, songIndex);
+  }
+  return before + current.slideIndex + 1;
+}
+
 /** 현재 위치의 슬라이드. 없으면 null */
 export function getSlideAt(
   position: ProjectionPosition,
