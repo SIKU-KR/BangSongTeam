@@ -69,6 +69,29 @@ export function TextBoxMoveable({
     moveableRef.current?.updateRect("", true, true);
   }, [refreshKey, target]);
 
+  // TextLayer 박스는 위치가 바뀔 때 transition으로 움직이므로, 위 effect는 곡 전환·
+  // 그리드 프리셋처럼 스타일이 바뀐 직후 아직 이전 자리에 있는 박스를 잰다.
+  // useResizeObserver는 크기 변화만 잡으니, transition이 도는 동안 매 프레임 다시
+  // 맞춰 컨트롤 박스가 텍스트를 따라가게 한다.
+  useEffect(() => {
+    if (!target) return;
+    let frame = 0;
+    const follow = () => {
+      moveableRef.current?.updateRect("", true, true);
+      frame =
+        target.getAnimations().length > 0 ? requestAnimationFrame(follow) : 0;
+    };
+    const sync = () => {
+      if (!frame) frame = requestAnimationFrame(follow);
+    };
+    const events = ["transitionrun", "transitionend", "transitioncancel"];
+    events.forEach((type) => target.addEventListener(type, sync));
+    return () => {
+      events.forEach((type) => target.removeEventListener(type, sync));
+      cancelAnimationFrame(frame);
+    };
+  }, [target]);
+
   if (!target) return null;
 
   // TextLayer 컨테이너(absolute inset-0)가 1920x1080 스테이지 전체를 덮는다
