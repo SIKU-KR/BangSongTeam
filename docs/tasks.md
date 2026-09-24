@@ -1,7 +1,7 @@
 # Tasks: [M2] 세트 편집기 (Presentation Editor)
 
 > **마일스톤**: M2 (편집기)  
-> **상위 문서**: [`prd.md`](./prd.md), [`AGENTS.md`](./AGENTS.md), [`docs/tasks/AGENTS.md`](./docs/tasks/AGENTS.md)  
+> **상위 문서**: [`docs/prd.md`](./prd.md), [`AGENTS.md`](../AGENTS.md), [`docs/tasks/AGENTS.md`](./tasks/AGENTS.md)  
 > **목표**: 준비 시간 15분 목표 달성을 위한 세트 편집기(곡 목록 드래그 정렬, 16:9 인터랙티브 텍스트 박스 조작, 슬라이드 스트립, 곡별 배경·오버레이·타이포그래피·3×3 위치 속성 제어, 멜론/벅스 검색 링크) 구축  
 > **완료 기준 (DoD)**: 처음 써 보는 봉사자 1명이 도움 없이 5곡 세트를 15분 안에 구성할 수 있는 무결점 인터페이스 완성
 

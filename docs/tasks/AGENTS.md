@@ -1,7 +1,7 @@
 # AGENTS.md (docs/tasks)
 
 > **디렉토리 역할**: `docs/tasks/`는 예배 찬양 슬라이드 제작 및 송출 서비스(`prj-ppt`)의 마일스톤별 로드맵과 AI 코딩 에이전트가 단독으로 실행할 태스크 명세서를 관리하는 전용 제어 디렉토리이다.  
-> **상위 참조 문서**: 루트 [`/AGENTS.md`](file:///Users/peter/Dev/projects/prj-ppt/AGENTS.md), [`/docs/TECH_SPEC.md`](file:///Users/peter/Dev/projects/prj-ppt/docs/TECH_SPEC.md), [`/prd.md`](file:///Users/peter/Dev/projects/prj-ppt/prd.md)
+> **상위 참조 문서**: 루트 [`/AGENTS.md`](../../AGENTS.md), [`/docs/TECH_SPEC.md`](../TECH_SPEC.md), [`/docs/prd.md`](../prd.md)
 
 ---
 
@@ -36,7 +36,7 @@ docs/tasks/
 
 ## 2. 마일스톤 정의 기준 (Milestone Definition Rules)
 
-`prd.md` 8장의 마일스톤 정의 원칙을 준수하여 마일스톤을 설계한다:
+`docs/prd.md` 8장의 마일스톤 정의 원칙을 준수하여 마일스톤을 설계한다:
 
 1. **선행 마일스톤 완료 원칙**: 각 마일스톤은 선행 마일스톤의 완료 기준을 100% 충족한 뒤에만 **완료로 선언**한다. 화면을 먼저 만들어 보는 선행 구현은 막지 않되, 완료 기준을 충족하기 전까지 완료로 세지 않는다 (PRD 8장 규칙 1).
 2. **관찰 가능한 사실 기반 완료 기준 (Observable DoD)**:
