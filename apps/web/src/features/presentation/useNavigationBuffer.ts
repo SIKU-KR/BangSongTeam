@@ -12,7 +12,7 @@ export interface UseNavigationBufferOptions {
    */
   onJump: (slideNumber: number) => void;
   /**
-   * 유효하지 않은 입력으로 점프 실패 시 호출되는 콜백 (예: 발표자 뷰 알림 표시)
+   * 유효하지 않은 입력으로 점프 실패 시 호출되는 콜백 (예: 조작자용 알림 표시)
    */
   onInvalidJump?: (buffer: string) => void;
   /**

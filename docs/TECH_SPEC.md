@@ -55,8 +55,7 @@ flowchart TB
     subgraph FrontendSPA["React SPA (apps/web/src)"]
       UI["Editor / Presentation UI (shadcn/ui + Tailwind)"]
       StageRenderer["3-Layer Slide Stage"]
-      DualWinController["Presenter Controller"]
-      AudienceDisplay["Audience Projection View"]
+      AudienceDisplay["Fullscreen Projection View"]
       InputBuffer["Numeric Keypad Buffer Engine"]
     end
 
@@ -66,9 +65,7 @@ flowchart TB
       IDB[("IndexedDB (idb: Active Sets & Decks)")]
     end
 
-    BC[("BroadcastChannel ('worship-projection')")]
-    DualWinController <-->|IPC Sync| BC
-    BC <-->|IPC Sync| AudienceDisplay
+    AudienceDisplay --> StageRenderer
     StageRenderer <--> IDB
     SW <--> CacheStorage
   end
@@ -97,13 +94,13 @@ flowchart TB
 
 배경 영상은 R2 커스텀 도메인 직통이 아니라 **같은 Worker의 `/api/media/*` 프록시**를 통해 전달한다. 동일 출처이므로 R2 CORS 설정이 필요 없고, Service Worker 캐시 규칙도 자체 오리진 경로 하나로 끝난다. 대신 영상 트래픽이 Worker 요청 수·CPU 시간에 계상되므로, 사용량이 커지면 커스텀 도메인 직통으로 되돌리는 선택지를 남겨 둔다. 그때 바뀌는 것은 URL 생성 헬퍼(`getBackgroundMediaUrl`)와 Workbox `urlPattern` 두 곳뿐이다.
 
-### 2.2 구현 현황 스냅샷 (2026-09-23)
+### 2.2 구현 현황 스냅샷 (2026-09-24)
 
 본 명세의 항목 중 실제 코드가 있는 것과 설계만 있는 것을 구분한다. 이 표를 갱신하지 않은 채 "스펙에 있으니 구현되어 있다"고 가정하지 않는다.
 
 | 구성 요소                                     | 상태   | 비고                                                                                                             |
 | --------------------------------------------- | ------ | ---------------------------------------------------------------------------------------------------------------- |
-| `packages/shared` Zod 스키마 (§3)             | 구현   | Deck·Slide·Style·Presentation·Broadcast·API·공유 라이브러리(`library.ts`) 계약                                   |
+| `packages/shared` Zod 스키마 (§3)             | 구현   | Deck·Slide·Style·Presentation·API·공유 라이브러리(`library.ts`) 계약                                             |
 | `packages/db` Drizzle 스키마·마이그레이션(§4) | 구현   | 0000_initial, 0001_fts5, 0002_seed_backgrounds, 0003_m5_sharing, 0004_m5_fts, 0005_remove_catalog                |
 | 스코프 쿼리 헬퍼 (§4.3)                       | 구현   | decks·presentations·search·sharing·reports. 공개 조건은 `publicDeckCondition()` 한 곳                            |
 | 3-Layer Slide Stage (§5.1)                    | 구현   | `components/stage/*` — 편집기와 송출이 동일 컴포넌트 사용                                                        |
@@ -113,7 +110,7 @@ flowchart TB
 | 클라이언트 영속성 (§5.5)                      | 구현   | IndexedDB가 1차 원천. 프레젠테이션과 **보관함 곡** 모두 서버와 동기화 (보관함은 M5-2에서 연결)                   |
 | Hono RPC 클라이언트 (`hc<AppType>`)           | 구현   | `AppType = ReturnType<typeof createApp>`. 라우트는 팩토리(`createApp(deps)`)라 테스트가 실제 라우트를 마운트한다 |
 | Better Auth (§4.1 auth 테이블)                | 구현   | 카카오·네이버 + localhost 전용 개발자 로그인. 실제 OAuth 자격증명 확인은 대기                                    |
-| 발표자 보기·BroadcastChannel (§5.3)           | 구현   | 조작 창 `/present/:id/control`, 청중 창 `?audience=1` (M4)                                                       |
+| 발표자 보기·BroadcastChannel (§5.3)           | 제거   | MVP 범위에서 제외 (2026-09-24). 송출은 전체화면 `/present/:id/fullscreen` 한 가지                                |
 | PWA·Cache Storage (§5.4)                      | 구현   | vite-plugin-pwa(generateSW) + RangeRequests (M4)                                                                 |
 | TanStack Query (서버 캐시)                    | 구현   | 곡 추가 모달의 공유 검색·상세·가져오기, 공개 전환, 신고에만 쓴다. 송출 화면 import는 ESLint가 막는다 (M5-5)      |
 | 가사 라이브러리·LLM 정규화 (§6)               | 제거   | MVP 범위에서 제외 (2026-09-23). 테이블은 `0005_remove_catalog`로 지웠다                                          |
@@ -293,62 +290,9 @@ export const BackgroundMediaSchema = z.object({
 export type BackgroundMedia = z.infer<typeof BackgroundMediaSchema>;
 ```
 
-### 3.4 BroadcastChannel 동기화 프로토콜 (`schemas/broadcast.ts`)
+### 3.4 BroadcastChannel 동기화 프로토콜 — 제거
 
-발표자 조작 창(Controller)과 송출 창(Audience Window)은 `new BroadcastChannel('worship-projection')`을 통해 동기화된다.
-
-```typescript
-export const BroadcastMessageSchema = z.discriminatedUnion("type", [
-  // 1. 송출 창 준비 완료 신호
-  z.object({
-    type: z.literal("AUDIENCE_MOUNTED"),
-    timestamp: z.number(),
-  }),
-  // 2. 조작 창에서 송출 창으로 전체 상태 주입 (스냅샷)
-  z.object({
-    type: z.literal("SYNC_SNAPSHOT"),
-    timestamp: z.number(),
-    payload: z.object({
-      presentationId: z.string().uuid(),
-      currentSongIndex: z.number().int().nonnegative(),
-      currentSlideIndex: z.number().int().nonnegative(),
-      isBlackout: z.boolean(),
-      isLyricsHidden: z.boolean(),
-    }),
-  }),
-  // 3. 슬라이드 직접 이동
-  z.object({
-    type: z.literal("NAVIGATE_SLIDE"),
-    timestamp: z.number(),
-    payload: z.object({
-      songIndex: z.number().int().nonnegative(),
-      slideIndex: z.number().int().nonnegative(),
-    }),
-  }),
-  // 4. 긴급 블랙아웃 토글
-  z.object({
-    type: z.literal("SET_BLACKOUT"),
-    timestamp: z.number(),
-    payload: z.object({
-      isBlackout: z.boolean(),
-    }),
-  }),
-  // 5. 가사 숨기기 (배경 유지)
-  z.object({
-    type: z.literal("SET_LYRICS_HIDDEN"),
-    timestamp: z.number(),
-    payload: z.object({
-      isLyricsHidden: z.boolean(),
-    }),
-  }),
-  // 6. 하트비트 / 핑퐁
-  z.object({
-    type: z.literal("HEARTBEAT"),
-    timestamp: z.number(),
-  }),
-]);
-export type BroadcastMessage = z.infer<typeof BroadcastMessageSchema>;
-```
+**2026-09-24 결정으로 발표자 보기와 함께 제거했다.** `schemas/broadcast.ts`(`BroadcastMessageSchema`)와 `PROJECTION_CHANNEL_NAME`·`PROJECTION_SYNC`·`AUDIENCE_*` 상수가 없다. 송출은 한 창에서 하므로 창 사이 동기화 계약이 필요 없다.
 
 ---
 
@@ -798,50 +742,17 @@ stateDiagram-v2
 #### 번호 파싱 알고리즘:
 
 - `N` + Enter $\rightarrow$ 세트 전체에서 N번째 슬라이드로 점프 (PPT식, `1 ≤ N ≤ 전체 장수`). 번호는 곡 경계를 넘어 이어지고, 슬라이드가 0장인 곡은 번호를 차지하지 않는다.
-- 번호 ↔ 위치 변환은 `projectionState.ts`의 `positionOfSlideNumber` / `slideNumberOf`가 맡는다. 위치 상태와 BroadcastChannel 메시지는 계속 `{songIndex, slideIndex}`를 쓴다 (곡 경계에서 배경 영상을 유지하려면 곡 인덱스가 필요하다).
+- 번호 → 위치 변환은 `projectionState.ts`의 `positionOfSlideNumber`가 맡는다. 위치 상태는 계속 `{songIndex, slideIndex}`를 쓴다 (곡 경계에서 배경 영상을 유지하려면 곡 인덱스가 필요하다).
 - `.`는 버퍼에 쌓지 않는다 (2026-09-24, 곡.슬라이드 `N.`/`N.M` 입력 폐지).
-- 유효하지 않은 인덱스인 경우: 명령을 무시하고 조작 창에만 2초간 경고 토스트 노출, 청중 송출 창에는 아무것도 띄우지 않음.
+- 유효하지 않은 인덱스인 경우: 명령을 무시하고 버퍼를 비운다. 청중 화면에는 아무것도 띄우지 않는다.
 
-### 5.3 발표자 보기 및 Chrome Window Management 연동
+### 5.3 발표자 보기 및 Chrome Window Management 연동 — 제거
 
-Chrome 공식 **Window Management API**를 활용한 다중 디스플레이 투영 아키텍처 (M4 구현 완료).
+**2026-09-24 결정으로 제거했다.** M4에서 구현했던 조작 창(`/present/:id/control`), `window.open`으로 여는 청중 창(`/fullscreen?audience=1`), BroadcastChannel 핸드셰이크, Window Management API 보조 모니터 배치, 경과 시간 타이머가 모두 빠졌다.
 
-**경로** (PRD 5 화면 목록이 정본이다):
-
-| 창                   | 경로                                             | 역할                                                                        |
-| -------------------- | ------------------------------------------------ | --------------------------------------------------------------------------- |
-| 조작 창 (Controller) | `/present/:presentationId/control`               | 현재·다음 슬라이드, 곡 점프, 블랙아웃·가사 숨기기, 타이머. 상태의 단일 원천 |
-| 송출 창 (Audience)   | `/present/:presentationId/fullscreen?audience=1` | 청중용 전체화면. 조작 창의 지시만 따른다                                    |
-| 단독 송출            | `/present/:presentationId/fullscreen`            | 한 화면에서 조작과 송출을 겸한다 (M1부터의 경로, 동작 불변)                 |
-
-1. **창을 먼저 열고, 그 다음 화면을 찾는다** (`features/presentation/audienceWindow.ts`):
-
-   ```typescript
-   export async function openAudienceWindow(presentationId: string) {
-     // 1) 클릭 제스처 안에서 동기적으로 연다.
-     const opened = window.open(url, AUDIENCE_WINDOW_NAME, "width=1280,height=720");
-     if (!opened) return { status: "blocked", ... };
-
-     // 2) 그 다음 보조 모니터를 찾아 moveTo/resizeTo로 옮긴다.
-     const secondary = await findSecondaryScreen(); // 8초 타임아웃
-     if (secondary) { opened.moveTo(...); opened.resizeTo(...); }
-   }
-   ```
-
-   **순서를 뒤집으면 안 된다.** 화면 목록을 먼저 물으면 두 가지가 한꺼번에 깨진다 — `getScreenDetails()`는 권한 프롬프트가 떠 있는 동안 resolve하지 않아 창이 아예 열리지 않고, 설령 응답하더라도 그 사이 사용자 제스처가 만료돼 팝업 차단에 걸린다. 2026-09-22 실제 Chrome 검증에서 송출 창이 끝내 열리지 않는 것으로 드러난 결함이다.
-
-   권한을 거부했거나 모니터가 하나면 창은 그대로 두고 '이 창을 프로젝터 화면으로 옮긴 뒤 클릭하면 전체화면이 됩니다' 안내를 띄운다 (PRD 7.3).
-
-2. **BroadcastChannel 핸드셰이크 프로토콜**:
-   - 송출 창 마운트 $\rightarrow$ `AUDIENCE_MOUNTED` 전송
-   - 조작 창 수신 $\rightarrow$ 즉시 `SYNC_SNAPSHOT` (현재 곡/슬라이드 인덱스, 블랙아웃 여부) 회신
-   - 송출 창은 IndexedDB에서 하이드레이션된 상태로 렌더하고 스냅샷 인덱스만 적용한다.
-   - 수신 메시지는 반드시 `BroadcastMessageSchema.safeParse`를 통과한 것만 반영하고, 인덱스는 `clampPosition`으로 방어한다. 옛 버전이 열려 있는 탭이 보낸 메시지나 다른 세트의 인덱스로 청중 화면이 비면 안 된다.
-
-3. **청중 창의 예외 동작**:
-   - 자체 키보드 입력을 받지 않는다 (상태의 단일 원천은 조작 창).
-   - 전체화면이 풀려도 라우트를 떠나지 않는다. 창을 프로젝터로 옮기는 동안 전체화면이 풀리는데, 단독 모드처럼 종료해 버리면 송출이 끊긴다.
-   - 송출 종료는 조작 창의 종료 버튼으로만 한다 (PRD 5). 조작 창이 종료되면 청중 창도 함께 닫는다.
+- 송출은 단독 전체화면 `/present/:presentationId/fullscreen` 한 가지다. 한 창에서 키보드·리모컨·번호 점프로 조작하고, 전체화면이 풀리면(Esc) 송출을 끝낸다.
+- 옛 `/control` 주소는 라우트가 없어 `/presentations`로 되돌아간다.
+- 제품 결정 없이 다시 넣지 않는다.
 
 ### 5.4 오프라인-퍼스트 미디어 캐싱 (R2 CDN + Service Worker)
 
@@ -948,7 +859,7 @@ Chrome 공식 **Window Management API**를 활용한 다중 디스플레이 투�
    ```
 
    - **송출 모드 실행 원칙 (Zero-Fetch Invariant)**:
-     - 전체화면 송출 및 발표자 보기 컴포넌트는 오직 `getOfflineDB()`의 `decks` 및 `presentations` 스토어와 Cache Storage에서만 데이터를 조회한다.
+     - 전체화면 송출 컴포넌트는 오직 `getOfflineDB()`의 `decks` 및 `presentations` 스토어와 Cache Storage에서만 데이터를 조회한다.
      - 예배 송출 중 네트워크 연결이 끊겨도 화면 멈춤이나 오류가 0건임을 수학적으로 보장한다.
 
 ### 5.5 클라이언트 영속성 3단계 (Persistence Phases)
@@ -1129,7 +1040,9 @@ export type SearchCatalogResponse = z.infer<typeof SearchCatalogResponseSchema>;
 
 ## 9. 결론 및 구현 준비 상태 (Architectural Sign-off)
 
-본 명세서는 PRD의 기능 요건과 확정된 아키텍처 결정 사항(프레젠테이션 덱 복제 정책, 로컬 우선 영속성, Chrome Window Management 기반 듀얼 윈도우 동기화, Worker 미디어 프록시 스트리밍)을 반영한다. 1.1.0 개정에서는 설계와 실제 코드가 어긋난 지점을 실제 구현 쪽으로 정정했다.
+본 명세서는 PRD의 기능 요건과 확정된 아키텍처 결정 사항(프레젠테이션 덱 복제 정책, 로컬 우선 영속성, Worker 미디어 프록시 스트리밍)을 반영한다. 1.1.0 개정에서는 설계와 실제 코드가 어긋난 지점을 실제 구현 쪽으로 정정했다.
+
+**2026-09-24:** 발표자 보기를 제거했다(§3.4, §5.3). 송출은 전체화면 한 가지다.
 
 **현재 위치 (2026-09-23):** M5(공유 라이브러리) 코드 완료. 두 계정으로 공개 → 검색 → 가져오기 → 무수정 송출을 브라우저와 worker E2E로 확인했다. 가사 라이브러리와 LLM 정규화는 MVP에서 제거했다(§6). 운영 D1 마이그레이션(`0003`·`0004`·`0005`)은 운영자 몫이다.
 

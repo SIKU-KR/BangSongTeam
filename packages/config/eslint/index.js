@@ -92,7 +92,7 @@ module.exports = tseslint.config(
     },
   },
   // 7. Architecture Guardrail: Zero-Fetch Projection (M4-5, M5-5)
-  // 송출 화면(전체화면·발표자 보기)과 그 화면이 쓰는 스테이지·송출 모듈은 서버 캐시
+  // 송출 화면(전체화면)과 그 화면이 쓰는 스테이지·송출 모듈은 서버 캐시
   // 계층(TanStack Query)과 API 클라이언트를 직접 import하지 않는다. 송출 중 네트워크
   // 요청 0건 불변식을 import 수준에서 막는다.
   //
@@ -101,17 +101,14 @@ module.exports = tseslint.config(
   {
     files: [
       "**/apps/web/src/routes/FullscreenPresentRoute.tsx",
-      "**/apps/web/src/routes/PresenterControlRoute.tsx",
       "**/apps/web/src/features/presentation/**/*.{ts,tsx}",
       "**/apps/web/src/components/stage/**/*.{ts,tsx}",
       "apps/web/src/routes/FullscreenPresentRoute.tsx",
-      "apps/web/src/routes/PresenterControlRoute.tsx",
       "apps/web/src/features/presentation/**/*.{ts,tsx}",
       "apps/web/src/components/stage/**/*.{ts,tsx}",
       ...(process.cwd().includes("apps/web")
         ? [
             "src/routes/FullscreenPresentRoute.tsx",
-            "src/routes/PresenterControlRoute.tsx",
             "src/features/presentation/**/*.{ts,tsx}",
             "src/components/stage/**/*.{ts,tsx}",
           ]

@@ -1,5 +1,7 @@
 # Goal: [M4-1] PWA 및 배경 영상 오프라인 캐시 기반 (Service Worker + Workbox)
 
+> **2026-09-24 범위 변경**: 발표자 보기(조작 창·청중 창·BroadcastChannel 동기화)는 MVP에서 제거됐다. 송출은 전체화면 `/present/:id/fullscreen` 한 가지다. 이 문서의 발표자 보기 관련 부분은 이력으로 남긴다.
+
 > **마일스톤**: M4 (오프라인 및 발표자 보기)
 > **태스크 번호**: `tasks_1.md`
 > **선행 조건**: `docs/tasks/m3/tasks_7.md` 완료 (계정·서버 저장, 개발자 로그인)

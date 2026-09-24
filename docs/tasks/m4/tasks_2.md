@@ -1,5 +1,7 @@
 # Goal: [M4-2] 예배 준비 화면 및 영구 저장소 (Worship Preparation)
 
+> **2026-09-24 범위 변경**: 발표자 보기(조작 창·청중 창·BroadcastChannel 동기화)는 MVP에서 제거됐다. 송출은 전체화면 `/present/:id/fullscreen` 한 가지다. 이 문서의 발표자 보기 관련 부분은 이력으로 남긴다.
+
 > **마일스톤**: M4 (오프라인 및 발표자 보기)
 > **태스크 번호**: `tasks_2.md`
 > **선행 조건**: `docs/tasks/m4/tasks_1.md` 완료 (Service Worker·미디어 캐시 규칙)

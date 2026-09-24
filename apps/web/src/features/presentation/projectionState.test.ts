@@ -5,12 +5,8 @@ import {
   prevPosition,
   clampPosition,
   getSlideAt,
-  getSongSlideCounts,
   getTotalSlideCount,
-  slideNumberOf,
   positionOfSlideNumber,
-  isSamePosition,
-  peekNext,
   INITIAL_POSITION,
 } from "./projectionState";
 
@@ -130,38 +126,6 @@ describe("조회 헬퍼", () => {
   it("없는 위치는 null이다", () => {
     expect(getSlideAt({ songIndex: 9, slideIndex: 9 }, SONGS)).toBeNull();
   });
-
-  it("곡별 슬라이드 수를 센다", () => {
-    expect(getSongSlideCounts(SONGS)).toEqual([3, 2, 4]);
-  });
-
-  it("같은 위치를 판별한다", () => {
-    expect(
-      isSamePosition(
-        { songIndex: 1, slideIndex: 2 },
-        { songIndex: 1, slideIndex: 2 },
-      ),
-    ).toBe(true);
-    expect(
-      isSamePosition(
-        { songIndex: 1, slideIndex: 2 },
-        { songIndex: 1, slideIndex: 3 },
-      ),
-    ).toBe(false);
-  });
-});
-
-describe("peekNext", () => {
-  it("다음 위치를 미리 알려 준다", () => {
-    expect(peekNext({ songIndex: 0, slideIndex: 2 }, SONGS)).toEqual({
-      songIndex: 1,
-      slideIndex: 0,
-    });
-  });
-
-  it("세트 마지막에서는 null이다", () => {
-    expect(peekNext({ songIndex: 2, slideIndex: 3 }, SONGS)).toBeNull();
-  });
 });
 
 describe("세트 전체 슬라이드 번호 (PPT식)", () => {
@@ -170,19 +134,6 @@ describe("세트 전체 슬라이드 번호 (PPT식)", () => {
   it("전체 슬라이드 수를 센다", () => {
     expect(getTotalSlideCount(SONGS)).toBe(9);
     expect(getTotalSlideCount([])).toBe(0);
-  });
-
-  it("곡 경계를 넘어 1부터 이어서 번호를 매긴다", () => {
-    expect(slideNumberOf({ songIndex: 0, slideIndex: 0 }, SONGS)).toBe(1);
-    expect(slideNumberOf({ songIndex: 0, slideIndex: 2 }, SONGS)).toBe(3);
-    expect(slideNumberOf({ songIndex: 1, slideIndex: 0 }, SONGS)).toBe(4);
-    expect(slideNumberOf({ songIndex: 2, slideIndex: 3 }, SONGS)).toBe(9);
-  });
-
-  it("슬라이드가 없는 자리는 번호가 없다", () => {
-    expect(slideNumberOf({ songIndex: 0, slideIndex: 5 }, SONGS)).toBeNull();
-    expect(slideNumberOf({ songIndex: 9, slideIndex: 0 }, SONGS)).toBeNull();
-    expect(slideNumberOf(INITIAL_POSITION, [])).toBeNull();
   });
 
   it("번호를 곡·슬라이드 위치로 바꾼다", () => {
@@ -220,17 +171,16 @@ describe("세트 전체 슬라이드 번호 (PPT식)", () => {
       songIndex: 2,
       slideIndex: 0,
     });
-    expect(slideNumberOf({ songIndex: 2, slideIndex: 0 }, withEmpty)).toBe(3);
-    expect(
-      slideNumberOf({ songIndex: 1, slideIndex: 0 }, withEmpty),
-    ).toBeNull();
   });
 
-  it("번호 → 위치 → 번호가 왕복한다", () => {
-    for (let n = 1; n <= getTotalSlideCount(SONGS); n++) {
+  it("번호 순서는 → 키로 넘기는 순서와 같다 (곡 경계에서 1로 돌아가지 않는다)", () => {
+    const total = getTotalSlideCount(SONGS);
+    for (let n = 1; n < total; n++) {
       const position = positionOfSlideNumber(n, SONGS);
       expect(position).not.toBeNull();
-      expect(slideNumberOf(position!, SONGS)).toBe(n);
+      expect(nextPosition(position!, SONGS)).toEqual(
+        positionOfSlideNumber(n + 1, SONGS),
+      );
     }
   });
 });

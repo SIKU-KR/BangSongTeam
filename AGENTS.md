@@ -9,7 +9,7 @@ A lightweight, web-first slide presentation and production tool designed specifi
 - **Structured Lyric Editing**: Auto-splits lyrics by blank lines, sanitizes pasted text, and manages songs (decks) and presentations.
 - **Motion Background Loops**: Continuous, uninterrupted H.264 video loops streamed from Cloudflare R2 (zero egress fees) that seamlessly loop across slide transitions.
 - **Readability Controls**: Black opacity overlay (0–100%), pre-bundled Korean webfonts, typography controls, and 3×3 grid + draggable percentage-based text box positioning.
-- **Dual Projection Modes**: Fullscreen audience view and split Presenter View (controller window + audience window synced offline via `BroadcastChannel`).
+- **Fullscreen Projection**: A single fullscreen audience view operated from the same window (keyboard, clicker, numeric jump, blackout, hide lyrics).
 - **Offline-First Projection**: PWA with Service Worker (Workbox RangeRequestsPlugin) + Cache Storage/IndexedDB to guarantee zero network dependency and zero black-screen risk during Sunday worship.
 - **Shared Library**: Users publish decks to a board-style public library and fork others' decks. The same song can be published by many users; the list is ordered by use count (forks).
 
@@ -31,7 +31,7 @@ prj-ppt/
 │       ├── src/               # React SPA (Vite + React Router library mode + shadcn/ui)
 │       │   ├── components/    # Reusable UI & slide rendering components
 │       │   ├── features/      # Feature modules (editor, presentation, library)
-│       │   ├── hooks/         # Custom hooks (broadcast, keyboard shortcuts, PWA cache)
+│       │   ├── hooks/         # Custom hooks (keyboard shortcuts, PWA cache)
 │       │   └── routes/        # Client-side routes (SPA)
 │       ├── worker/            # Cloudflare Worker entrypoint (Hono API routes at /api/*)
 │       │   ├── routes/        # Hono sub-routers (auth, decks, presentations, catalog search, reports)
@@ -42,7 +42,7 @@ prj-ppt/
 ├── packages/
 │   ├── shared/                # Universal domain schemas, API contracts, constants (Pure TS)
 │   │   ├── src/
-│   │   │   ├── schemas/       # Zod schemas (Deck, Slide, Style, Presentation, BroadcastMessage)
+│   │   │   ├── schemas/       # Zod schemas (Deck, Slide, Style, Presentation, Library, API)
 │   │   │   ├── types/         # Types inferred from Zod schemas
 │   │   │   └── constants/     # Style defaults, keyboard shortcuts, grid presets
 │   │   └── package.json
@@ -214,15 +214,13 @@ Slides are rendered as DOM elements on a fixed **16:9 stage** scaled via CSS `tr
 3. **Layer 3: Typography & Text Box Layer**
    - Webfonts loaded from local bundle (Pretendard / Noto Sans KR).
    - Text styling (font size, color, text-shadow for background contrast).
-   - Positioned via percentage-based coordinates relative to the 16:9 stage to guarantee identical presentation across editing, preview, and dual-window modes.
+   - Positioned via percentage-based coordinates relative to the 16:9 stage to guarantee identical presentation across editing, preview, and fullscreen projection.
    - _Never replace this architecture with Reveal.js or canvas drawing._
 
-### 6.4 Presenter View Synchronization
+### 6.4 Single Projection Mode
 
-- Presenter view separates the Controller Window (operator UI with current/next slides, jump panel, timer) from the Audience Window (clean projection).
-- State synchronization (slide index, blackout, hide lyrics) is transmitted strictly via **`BroadcastChannel`** (`new BroadcastChannel('worship-projection')`).
-- Broadcast payloads must conform to `BroadcastMessageSchema` defined in `packages/shared`.
-- Window Management API is used to detect secondary displays and automatically trigger projection fullscreen on the external monitor.
+- Projection is **fullscreen only** (`/present/:presentationId/fullscreen`): the operator drives it from the same window with the keyboard or a clicker.
+- **No Presenter View**: The split controller/audience window mode (`/present/:id/control`, `?audience=1`, `BroadcastChannel` sync, `BroadcastMessageSchema`, Window Management API placement, elapsed timer) was removed on 2026-09-24. Do not reintroduce it without a product decision.
 
 ### 6.5 Offline-First Worship Projection Guarantee
 
@@ -252,8 +250,8 @@ Sunday worship services cannot tolerate network failures:
 
 ### 7.2 File & Directory Naming Conventions
 
-- React components: `PascalCase.tsx` (e.g., `SlideStage.tsx`, `PresenterControls.tsx`).
-- Utilities & hooks: `camelCase.ts` (e.g., `useBroadcastSync.ts`, `formatTime.ts`).
+- React components: `PascalCase.tsx` (e.g., `SlideStage.tsx`, `PresentationCard.tsx`).
+- Utilities & hooks: `camelCase.ts` (e.g., `useNavigationBuffer.ts`, `formatTime.ts`).
 - Zod schemas: `kebab-case.schema.ts` or grouped in `packages/shared/src/schemas/deck.ts`.
 - Database schema files: `packages/db/src/schema/<table-name>.ts`.
 
@@ -274,7 +272,7 @@ Refer to `prd.md` Section 8 for complete criteria. When implementing features, a
 - **M2 (Editor)**: Presentation editor, song background/overlay/font/position controls, Melon/Bugs search links.
   - Terminology: the `Setlist` domain type was renamed to `Presentation` in M2 (`Setlist`→`Presentation`, `setlistId`→`presentationId`, D1 tables `setlists`/`setlist_items`→`presentations`/`presentation_items`, deck scope value `'setlist'`→`'presentation'`). Older task notes under `docs/tasks/` were updated in place.
 - **M3 (Accounts & Storage)**: Kakao/Naver login (Better Auth), deck/presentation persistence, lyric versioning.
-- **M4 (Offline & Presenter View)**: Presenter view, PWA video cache, worship prep screen, persistent storage.
+- **M4 (Offline & Worship Prep)**: PWA video cache, worship prep screen, persistent storage. Presenter view shipped in M4 but was removed from the product (2026-09-24).
 - **M5 (Sharing)**: Public deck publish/fork, FTS5 search over public decks (board model, sorted by fork count). LLM normalization and the lyrics catalog were dropped from the MVP (2026-09-23).
 - **M6 (Seed Content)**: Top 100 CCM seed decks, 20 motion backgrounds.
 - **M7 (Public Beta)**: Error logging, terms of service, production deployment.

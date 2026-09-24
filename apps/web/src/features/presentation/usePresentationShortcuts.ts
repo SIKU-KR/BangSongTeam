@@ -42,7 +42,7 @@ export interface UsePresentationShortcutsOptions {
 
 /**
  * 프레젠테이션 송출 모드 키보드 및 리모컨 단축키 이벤트 훅
- * - tinykeys 라이브러리를 사용하여 키보드/발표자 리모컨 단축키 바인딩
+ * - tinykeys 라이브러리를 사용하여 키보드/무선 리모컨(클리커) 단축키 바인딩
  * - ArrowRight / Space / PageDown -> 다음 슬라이드
  * - ArrowLeft / PageUp -> 이전 슬라이드
  * - 'b', 'B' -> 블랙아웃 토글
