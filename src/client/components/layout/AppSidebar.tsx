@@ -5,7 +5,6 @@ import { useSession, signOut } from "../../lib/auth";
 import {
   DRIVE_ROOT_PATH,
   NewMenuButton,
-  TRASH_PATH,
   drivePath,
   useDriveDroppable,
 } from "../../features/drive";
@@ -25,15 +24,6 @@ const DRIVE_ITEM: NavItem = {
   accent: "text-emerald-500 dark:text-emerald-400",
   iconPath:
     "M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z",
-};
-
-const TRASH_ITEM: NavItem = {
-  testId: "sidebar-nav-trash",
-  path: TRASH_PATH,
-  label: "휴지통",
-  accent: "text-rose-500 dark:text-rose-400",
-  iconPath:
-    "M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16",
 };
 
 const BACKGROUNDS_ITEM: NavItem = {
@@ -160,8 +150,7 @@ export function AppSidebar(): React.JSX.Element {
   const { pathname } = useLocation();
 
   const isDrive =
-    pathname === DRIVE_ROOT_PATH ||
-    pathname.startsWith(`${DRIVE_ROOT_PATH}/folders/`);
+    pathname === DRIVE_ROOT_PATH || pathname.startsWith(`${DRIVE_ROOT_PATH}/`);
   const isBackgrounds =
     pathname === BACKGROUNDS_ITEM.path ||
     pathname.startsWith(`${BACKGROUNDS_ITEM.path}/`);
@@ -196,12 +185,6 @@ export function AppSidebar(): React.JSX.Element {
             active={isDrive}
             onClick={() => navigate(drivePath(null))}
             drop={{ kind: "folder", folderId: null }}
-          />
-          <NavButton
-            item={TRASH_ITEM}
-            active={pathname === TRASH_ITEM.path}
-            onClick={() => navigate(TRASH_ITEM.path)}
-            drop={{ kind: "trash" }}
           />
           <NavButton
             item={BACKGROUNDS_ITEM}

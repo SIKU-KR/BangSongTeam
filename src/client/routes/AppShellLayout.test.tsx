@@ -77,6 +77,12 @@ function card(name: string): HTMLElement {
   return screen.getByRole("option", { name: new RegExp(name) });
 }
 
+function openTrashFolder(): void {
+  act(() => {
+    fireEvent.doubleClick(screen.getByTestId("drive-trash-folder"));
+  });
+}
+
 describe("AppShellLayout (드라이브형 홈)", () => {
   beforeEach(() => {
     signInAsTestUser();
@@ -129,7 +135,7 @@ describe("AppShellLayout (드라이브형 홈)", () => {
     expect(screen.queryByTitle("리스트 뷰")).toBeNull();
     expect(screen.getAllByTestId("presentation-row")).toHaveLength(5);
 
-    fireEvent.click(screen.getByTestId("sidebar-nav-trash"));
+    openTrashFolder();
     expect(screen.queryByTitle("그리드 뷰")).toBeNull();
   });
 
@@ -163,7 +169,7 @@ describe("AppShellLayout (드라이브형 홈)", () => {
     expect(screen.getByTestId("fullscreen-stub")).toBeInTheDocument();
   });
 
-  it("사이드바: 내 드라이브·휴지통·배경 라이브러리, aria-current", () => {
+  it("사이드바: 내 드라이브·배경 라이브러리만 있고 휴지통은 없다", () => {
     renderShell();
 
     expect(screen.getByTestId("sidebar-nav-home")).toHaveAttribute(
@@ -181,9 +187,21 @@ describe("AppShellLayout (드라이브형 홈)", () => {
       "aria-current",
     );
 
-    fireEvent.click(screen.getByTestId("sidebar-nav-trash"));
+    expect(screen.queryByTestId("sidebar-nav-trash")).toBeNull();
+    expect(
+      within(screen.getByRole("navigation", { name: "주 메뉴" })).queryByText(
+        "휴지통",
+      ),
+    ).toBeNull();
+
+    fireEvent.click(screen.getByTestId("sidebar-nav-home"));
+    openTrashFolder();
     expect(screen.getByRole("heading", { name: "휴지통" })).toBeInTheDocument();
     expect(screen.getByText("휴지통이 비어 있습니다")).toBeInTheDocument();
+    expect(screen.getByTestId("sidebar-nav-home")).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
 
     fireEvent.click(screen.getByTestId("sidebar-nav-home"));
     expect(screen.getAllByTestId("presentation-row")).toHaveLength(5);
@@ -350,7 +368,7 @@ describe("AppShellLayout (드라이브형 홈)", () => {
     expect(getPresentationById(target.id)?.trashedAt).toBeTruthy();
     expect(screen.getAllByTestId("presentation-row")).toHaveLength(4);
 
-    fireEvent.click(screen.getByTestId("sidebar-nav-trash"));
+    openTrashFolder();
     const trashed = card(target.title);
     expect(trashed).toHaveAttribute("data-testid", "presentation-row");
     expect(within(trashed).queryByTestId("row-present-btn")).toBeNull();
@@ -387,7 +405,7 @@ describe("AppShellLayout (드라이브형 홈)", () => {
     fireEvent.contextMenu(card("폴더 2026 주일 대예배"));
     fireEvent.click(screen.getByTestId("action-trash"));
 
-    fireEvent.click(screen.getByTestId("sidebar-nav-trash"));
+    openTrashFolder();
     expect(screen.getAllByRole("option")).toHaveLength(1);
 
     fireEvent.click(screen.getByTestId("sidebar-nav-home"));
@@ -423,6 +441,101 @@ describe("AppShellLayout (드라이브형 홈)", () => {
       "page",
     );
     expect(screen.getAllByTestId("presentation-row")).toHaveLength(5);
+  });
+
+  it("휴지통은 내 드라이브 루트 맨 위에 고정된 폴더로 보인다", () => {
+    __loadFoldersForTests([folder(WORSHIP, "가나다")]);
+    renderShell();
+
+    const trashRow = screen.getByTestId("drive-trash-folder");
+    expect(trashRow).toHaveAccessibleName("휴지통 (고정 폴더)");
+    expect(
+      within(trashRow).getByTestId("trash-folder-count"),
+    ).toHaveTextContent("항목 0개");
+    expect(
+      trashRow.compareDocumentPosition(screen.getByRole("listbox")) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(screen.getAllByRole("option")).toHaveLength(
+      1 + SEED_PRESENTATIONS.length,
+    );
+    expect(screen.getByTestId("drive-summary")).toHaveTextContent(
+      "폴더 1개 · 프레젠테이션 5개",
+    );
+
+    fireEvent.keyDown(window, { key: "a", ctrlKey: true });
+    expect(screen.getByTestId("selection-bar")).toHaveTextContent(
+      `${1 + SEED_PRESENTATIONS.length}개 선택됨`,
+    );
+  });
+
+  it("휴지통 폴더는 폴더 안과 검색 결과에는 나오지 않는다", () => {
+    __loadFoldersForTests([folder(WORSHIP, "2026 주일 대예배")]);
+    renderShell(`/presentations/folders/${WORSHIP}`);
+    expect(screen.queryByTestId("drive-trash-folder")).toBeNull();
+
+    fireEvent.click(screen.getByTestId("crumb-root"));
+    expect(screen.getByTestId("drive-trash-folder")).toBeInTheDocument();
+
+    fireEvent.change(
+      screen.getByPlaceholderText(/폴더, 프레젠테이션, 찬양 가사/),
+      { target: { value: "휴지통" } },
+    );
+    expect(screen.queryByTestId("drive-trash-folder")).toBeNull();
+  });
+
+  it("휴지통 폴더는 이름 바꾸기·이동·삭제할 수 없고 열기·비우기만 된다", () => {
+    const trashed = {
+      ...SEED_PRESENTATIONS[0],
+      trashedAt: "2026-09-20T12:00:00.000Z",
+    };
+    __loadDocumentsForTests([trashed, ...SEED_PRESENTATIONS.slice(1)]);
+    renderShell();
+
+    const trashRow = screen.getByTestId("drive-trash-folder");
+    expect(
+      within(trashRow).getByTestId("trash-folder-count"),
+    ).toHaveTextContent("항목 1개");
+
+    fireEvent.contextMenu(trashRow);
+    expect(screen.getByTestId("action-open")).toBeInTheDocument();
+    expect(screen.getByTestId("action-empty-trash")).toBeEnabled();
+    expect(screen.queryByTestId("action-rename")).toBeNull();
+    expect(screen.queryByTestId("action-move")).toBeNull();
+    expect(screen.queryByTestId("action-trash")).toBeNull();
+    expect(screen.queryByTestId("new-menu-folder")).toBeNull();
+
+    fireEvent.click(screen.getByTestId("action-open"));
+    expect(screen.getByRole("heading", { name: "휴지통" })).toBeInTheDocument();
+    expect(card(trashed.title)).toBeInTheDocument();
+  });
+
+  it("휴지통의 경로는 내 드라이브 › 휴지통이고 ▾ 메뉴가 없다", () => {
+    renderShell("/presentations/trash");
+
+    expect(screen.getByTestId("crumb-trash")).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+    expect(screen.getByTestId("crumb-root")).not.toHaveAttribute(
+      "aria-current",
+    );
+    expect(screen.queryByTestId("breadcrumb-menu-btn")).toBeNull();
+
+    fireEvent.click(screen.getByTestId("crumb-root"));
+    expect(screen.getByTestId("drive-trash-folder")).toBeInTheDocument();
+    expect(screen.getAllByTestId("presentation-row")).toHaveLength(5);
+  });
+
+  it("루트가 비어 있어도 휴지통 폴더와 빈 상태가 함께 보인다", () => {
+    __loadDocumentsForTests([]);
+    renderShell();
+
+    expect(screen.getByTestId("drive-trash-folder")).toBeInTheDocument();
+    expect(screen.getByTestId("drive-empty")).toHaveTextContent(
+      "아직 프레젠테이션이 없습니다",
+    );
+    expect(screen.queryByRole("listbox")).toBeNull();
   });
 
   it("사이드바 테마 메뉴", () => {
