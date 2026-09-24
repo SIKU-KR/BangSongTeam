@@ -49,7 +49,6 @@ function doc(
   };
 }
 
-// 루트: [2026(a) ⊃ 주일(b)], 청년부(c, 휴지통), 세트 x(루트), y(a 안), z(b 안), w(휴지통), v(c 안)
 const FOLDERS = [
   folder("a", "2026", { updatedAt: "2026-09-22T00:00:00.000Z" }),
   folder("b", "주일", { parentId: "a" }),
@@ -70,7 +69,7 @@ describe("listFolderContents", () => {
     const items = listFolderContents(index, DOCS, null, "name");
     expect(items.map((i) => i.key)).toEqual([
       "folder:a",
-      "file:orphan", // 사라진 폴더를 가리키면 루트에 보인다
+      "file:orphan",
       "file:x",
     ]);
   });
@@ -89,8 +88,8 @@ describe("listFolderContents", () => {
 
   it("폴더 '항목 N개'는 휴지통을 빼고 센다", () => {
     const counts = buildChildCounts(index, DOCS);
-    expect(counts.get("a")).toBe(2); // b + y
-    expect(counts.get("b")).toBe(1); // z
+    expect(counts.get("a")).toBe(2);
+    expect(counts.get("b")).toBe(1);
   });
 });
 
@@ -116,7 +115,6 @@ describe("searchDrive", () => {
 describe("listTrash", () => {
   it("직접 버린 항목 중 조상이 휴지통에 없는 것만, 최근에 버린 순", () => {
     const items = listTrash(index, DOCS);
-    // v는 휴지통 폴더(c) 안에 있으므로 c와 함께 한 줄로 보인다
     expect(items.map((i) => i.key)).toEqual(["folder:c", "file:w"]);
   });
 

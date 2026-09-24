@@ -2,16 +2,6 @@ import type { Deck } from "@repo/shared";
 import { pushDeck, deleteDeckRemote, OfflineError } from "./presentationSync";
 import { setSyncStatus } from "./syncStatus";
 
-/**
- * 보관함 곡 서버 push 큐 (M5-2).
- *
- * 프레젠테이션 스케줄러(`syncScheduler`)와 같은 원칙이다. IndexedDB 저장이 먼저
- * 끝나고, 서버 push는 디바운스를 두고 뒤따른다. 느린 네트워크가 로컬 저장을
- * 막지 않는다.
- *
- * 서버는 공유 필드와 카탈로그 연결을 확정해 돌려준다. 그 덱은
- * `setServerDeckListener`로 등록한 곳(곡 보관함 스토어)이 받아 반영한다.
- */
 const DECK_SYNC_DEBOUNCE_MS = 2000;
 
 type DeckPusher = (deck: Deck) => Promise<Deck>;
@@ -34,7 +24,6 @@ export function setDeckSyncEnabled(next: boolean): void {
   if (!next) clearPending();
 }
 
-/** 서버가 확정한 덱을 받을 곳을 등록한다 */
 export function setServerDeckListener(next: ServerDeckListener | null): void {
   listener = next;
 }
@@ -65,7 +54,6 @@ async function runOps(ops: PendingOp[]): Promise<void> {
     } catch (err) {
       if (err instanceof OfflineError) {
         offline = true;
-        // 그사이 더 새로운 작업이 예약됐으면 그것을 살린다
         const key = op.kind === "push" ? op.deck.id : op.id;
         if (!pending.has(key)) pending.set(key, op);
       } else {
@@ -98,12 +86,12 @@ function schedule(key: string, op: PendingOp): void {
   timer = setTimeout(run, DECK_SYNC_DEBOUNCE_MS);
 }
 
-/** 곡 1건을 push 큐에 넣는다. 같은 곡을 연달아 고치면 마지막 것만 올린다 */
+/** 같은 곡을 연달아 고치면 마지막 것만 올린다 */
 export function scheduleDeckPush(deck: Deck): void {
   schedule(deck.id, { kind: "push", deck });
 }
 
-/** 곡 1건의 서버 삭제를 예약한다. 대기 중인 push는 버린다 */
+/** 대기 중인 push는 버린다 */
 export function scheduleDeckDelete(id: string): void {
   schedule(id, { kind: "delete", id });
 }
@@ -116,7 +104,6 @@ export function scheduleDeckDelete(id: string): void {
  */
 export async function pushDeckNow(deck: Deck): Promise<Deck> {
   pending.delete(deck.id);
-  // 앞서 나간 같은 곡의 push가 늦게 도착해 이번 것을 덮지 않도록 줄을 선다
   await inFlight;
   const saved = await pusher(deck);
   listener?.(saved);
@@ -124,13 +111,11 @@ export async function pushDeckNow(deck: Deck): Promise<Deck> {
   return saved;
 }
 
-/** 대기 중인 작업을 즉시 시작하고 완료를 기다린다 */
 export function flushDeckSync(): Promise<void> {
   run();
   return inFlight;
 }
 
-/** 테스트 전용: 전송 함수를 갈아 끼운다 */
 export function __setDeckTransportForTests(next: {
   push?: DeckPusher;
   remove?: DeckDeleter;
@@ -139,7 +124,6 @@ export function __setDeckTransportForTests(next: {
   deleter = next.remove ?? deleteDeckRemote;
 }
 
-/** 테스트 전용 */
 export function __resetDeckSyncForTests(): void {
   enabled = false;
   pusher = pushDeck;

@@ -28,7 +28,7 @@ describe("동기화 상태", () => {
 
   it("스냅샷은 상태가 바뀔 때만 새로 만든다 (useSyncExternalStore 요구사항)", () => {
     const first = getSyncSnapshot();
-    setSyncStatus("idle"); // 같은 값 — 변화 없음
+    setSyncStatus("idle");
     expect(getSyncSnapshot()).toBe(first);
 
     setSyncStatus("offline");
@@ -36,7 +36,6 @@ describe("동기화 상태", () => {
   });
 
   it("오프라인은 error와 구분된다", () => {
-    // 오프라인은 실패가 아니라 정상 경로다. 배너를 띄우면 안 된다.
     setSyncStatus("offline");
     expect(getSyncStatus()).toBe("offline");
     expect(getSyncStatus()).not.toBe("error");

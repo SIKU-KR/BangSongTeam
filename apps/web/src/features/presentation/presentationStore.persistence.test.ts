@@ -46,7 +46,6 @@ describe("presentationStore 영속성", () => {
 
   it("편집하면 활성 문서가 저장된다", async () => {
     await hydrateFromStorage();
-    // 부팅 시 샘플 자동 생성이 사라져 저장소가 비어 있다.
     const before = createNewPresentation("임시").id;
 
     updatePresentationTitle("저장 확인용 제목");
@@ -73,7 +72,6 @@ describe("presentationStore 영속성", () => {
     updatePresentationTitle("복원 대상");
     await flushPendingWrites();
 
-    // 새 탭 시뮬레이션: 메모리 상태를 버리고 다시 하이드레이션
     resetPresentationStore();
     await hydrateFromStorage();
 
@@ -82,8 +80,6 @@ describe("presentationStore 영속성", () => {
   });
 
   it("빈 저장소에서 샘플을 자동 생성하지 않는다", async () => {
-    // 계정 기반으로 바뀌면서 부팅 시드가 사라졌다. 샘플을 깔면 그게
-    // 사용자 데이터로 서버에 올라가 다른 기기에서 '내가 안 만든 세트'가 된다.
     await hydrateFromStorage();
 
     expect(listPresentations()).toHaveLength(0);
@@ -103,7 +99,6 @@ describe("presentationStore 영속성", () => {
     await hydrateFromStorage();
 
     expect(listPresentations().map((p) => p.id)).not.toContain(mine.id);
-    // 저장본 자체는 남아 있다 (다시 로그인하면 돌아온다)
     const { valid } = await loadAllPresentations();
     expect(valid.map((p) => p.id)).toContain(mine.id);
   });
@@ -118,7 +113,6 @@ describe("presentationStore 영속성", () => {
     resetPresentationStore();
     await hydrateFromStorage();
 
-    // 복원 직후에는 되돌릴 이력이 없어야 한다
     expect(canUndo()).toBe(false);
     expect(undo()).toBe(false);
   });
@@ -152,7 +146,6 @@ describe("presentationStore 영속성", () => {
     await flushPendingWrites();
 
     expect(getPersistenceError()?.kind).toBe("unavailable");
-    // 저장은 실패해도 메모리 상태는 정상적으로 갱신된다
     expect(getActivePresentation().title).toBe("저장 실패 상황");
   });
 });

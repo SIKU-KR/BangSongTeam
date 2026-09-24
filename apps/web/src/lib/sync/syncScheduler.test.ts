@@ -69,13 +69,10 @@ describe("서버 push 스케줄러", () => {
     await flushPendingSync();
 
     expect(push).toHaveBeenCalledTimes(1);
-    // 마지막 값이 올라가야 한다
     expect(push.mock.calls[0][0].title).toBe("3");
   });
 
   it("비활성 문서 변경도 큐에 남는다", async () => {
-    // 기존 IndexedDB 스케줄러는 activeId만 넣는다. 그 제약을 물려받으면
-    // 비활성 문서 변경이 영영 안 올라간다.
     scheduleDocumentPush(doc("a"));
     scheduleDocumentPush(doc("b"));
     await flushPendingSync();
@@ -100,7 +97,6 @@ describe("서버 push 스케줄러", () => {
 
     expect(getSyncStatus()).toBe("offline");
 
-    // 다시 온라인이 되면 그대로 올라가야 한다
     push.mockResolvedValue(true);
     await flushPendingSync();
     expect(getSyncStatus()).toBe("synced");

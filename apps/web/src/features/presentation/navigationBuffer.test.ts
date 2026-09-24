@@ -125,7 +125,6 @@ describe("useNavigationBuffer Hook", () => {
     });
     expect(result.current.buffer).toBe("");
 
-    // Additional Backspace when empty doesn't error
     act(() => {
       result.current.handleKey("Backspace");
     });
@@ -147,13 +146,11 @@ describe("useNavigationBuffer Hook", () => {
     });
     expect(result.current.buffer).toBe("2");
 
-    // Advance 2999ms -> buffer should still be "2"
     act(() => {
       vi.advanceTimersByTime(2999);
     });
     expect(result.current.buffer).toBe("2");
 
-    // Advance remaining 1ms -> total 3000ms -> buffer cleared
     act(() => {
       vi.advanceTimersByTime(1);
     });
@@ -174,25 +171,21 @@ describe("useNavigationBuffer Hook", () => {
       result.current.handleKey("1");
     });
 
-    // Advance 2000ms
     act(() => {
       vi.advanceTimersByTime(2000);
     });
     expect(result.current.buffer).toBe("1");
 
-    // New key resets timer
     act(() => {
       result.current.handleKey("2");
     });
     expect(result.current.buffer).toBe("12");
 
-    // Advance 2000ms (total 4000ms from start, but only 2000ms since last key)
     act(() => {
       vi.advanceTimersByTime(2000);
     });
     expect(result.current.buffer).toBe("12");
 
-    // Advance another 1000ms -> clears
     act(() => {
       vi.advanceTimersByTime(1000);
     });
@@ -210,7 +203,6 @@ describe("useNavigationBuffer Hook", () => {
       }),
     );
 
-    // 1. Beyond the last slide: 6 when only 5 slides exist
     act(() => {
       result.current.handleKey("6");
       result.current.handleKey("Enter");
@@ -219,7 +211,6 @@ describe("useNavigationBuffer Hook", () => {
     expect(onInvalidJump).toHaveBeenCalledWith("6");
     expect(result.current.buffer).toBe("");
 
-    // 2. Slide number 0 (1-based numbering required)
     act(() => {
       result.current.handleKey("0");
       result.current.handleKey("Enter");
@@ -228,7 +219,6 @@ describe("useNavigationBuffer Hook", () => {
     expect(onInvalidJump).toHaveBeenCalledWith("0");
     expect(result.current.buffer).toBe("");
 
-    // 3. Empty buffer + Enter -> should do nothing
     act(() => {
       result.current.handleKey("Enter");
     });

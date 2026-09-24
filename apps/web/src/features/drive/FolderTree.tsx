@@ -38,8 +38,8 @@ function saveExpanded(expanded: Set<string>): void {
       EXPANDED_STORAGE_KEY,
       JSON.stringify([...expanded]),
     );
-  } catch {
-    // 저장이 막힌 환경이어도 트리는 동작한다 (펼침 상태만 기억하지 못한다)
+  } catch (error) {
+    void error;
   }
 }
 
@@ -84,14 +84,12 @@ export function useTreeExpansion(
 }
 
 export interface FolderTreeProps {
-  /** `nav`: 사이드바 (클릭하면 이동, 드롭 대상). `picker`: 이동 대화 상자 */
   mode: "nav" | "picker";
   selectedId: string | null | undefined;
   onSelect: (folderId: string) => void;
   expanded: Set<string>;
   onToggle: (folderId: string) => void;
   isDisabled?: (folderId: string) => boolean;
-  /** 루트 한 단계 아래부터 들여 쓴다 */
   baseDepth?: number;
 }
 

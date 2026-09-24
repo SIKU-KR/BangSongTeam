@@ -14,7 +14,7 @@
 export const MEDIA_CACHE_NAME = "worship-videos-cache";
 
 /**
- * 배경 영상·포스터를 중계하는 동일 출처 프록시 경로 접두사 (TECH_SPEC 5.4-1).
+ * 배경 영상·포스터를 중계하는 동일 출처 프록시 경로 접두사.
  * R2 커스텀 도메인 직통으로 바꾸게 되면 이 값과 `getBackgroundMediaUrl`의
  * baseUrl 두 곳만 바뀐다.
  */

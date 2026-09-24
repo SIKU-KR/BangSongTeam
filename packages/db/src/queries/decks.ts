@@ -19,12 +19,7 @@ export async function getMyLibraryDecks(
   return db
     .select()
     .from(decks)
-    .where(
-      and(
-        eq(decks.userId, userId),
-        eq(decks.scope, "library"),
-      ),
-    )
+    .where(and(eq(decks.userId, userId), eq(decks.scope, "library")))
     .orderBy(desc(decks.updatedAt));
 }
 

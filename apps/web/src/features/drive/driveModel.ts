@@ -25,18 +25,15 @@ export interface DriveItemRef {
 }
 
 interface DriveItemBase extends DriveItemRef {
-  /** 선택·드래그 식별자 (`folder:<id>` / `file:<id>`) */
   key: string;
   name: string;
   updatedAt: string;
-  /** 검색 결과에서 항목이 있는 위치 ("내 드라이브 › 2026") */
   location?: string;
 }
 
 export interface DriveFolderItem extends DriveItemBase {
   kind: "folder";
   folder: Folder;
-  /** 휴지통에 없는 하위 폴더 + 프레젠테이션 수 */
   childCount: number;
 }
 
@@ -62,10 +59,6 @@ export function parseItemKey(key: string): DriveItemRef {
     id: key.slice(separator + 1),
   };
 }
-
-// ----------------------------------------------------------------------------
-// 프레젠테이션 표시값
-// ----------------------------------------------------------------------------
 
 export function countSlides(presentation: Presentation): number {
   return presentation.items.reduce(
@@ -106,10 +99,6 @@ export function formatDate(iso: string): string {
   if (Number.isNaN(date.getTime())) return "-";
   return `${date.getFullYear()}. ${date.getMonth() + 1}. ${date.getDate()}.`;
 }
-
-// ----------------------------------------------------------------------------
-// 트리 판정
-// ----------------------------------------------------------------------------
 
 /** 프레젠테이션이 실제로 놓인 폴더 (사라진 폴더를 가리키면 루트) */
 export function presentationFolderId(
@@ -160,10 +149,6 @@ export function formatLocation(
   ].join(" › ");
 }
 
-// ----------------------------------------------------------------------------
-// 목록
-// ----------------------------------------------------------------------------
-
 function toFolderItem(
   folder: Folder,
   counts: Map<string, number>,
@@ -211,7 +196,6 @@ function compareItems(sortOrder: SortOrder) {
   };
 }
 
-/** 폴더를 앞에, 각각 정렬 기준대로 (슬라이드 수는 파일에만 의미가 있다) */
 function sortItems(items: DriveItem[], sortOrder: SortOrder): DriveItem[] {
   const compare = compareItems(sortOrder);
   const folders = items.filter((item) => item.kind === "folder").sort(compare);
@@ -368,14 +352,9 @@ export function canDropInto(
   );
 }
 
-// ----------------------------------------------------------------------------
-// 조사 (알림 문장)
-// ----------------------------------------------------------------------------
-
 const HANGUL_START = 0xac00;
 const HANGUL_END = 0xd7a3;
 
-/** 마지막 글자의 받침. 한글이 아니면 null (조사를 둘 다 적는다) */
 function finalConsonant(text: string): number | null {
   const trimmed = text.replace(/[’'"」』)\]\s]+$/u, "");
   const code = trimmed.charCodeAt(trimmed.length - 1);

@@ -7,16 +7,13 @@ import {
 } from "./sessionCache";
 import { authClient, type SocialProvider } from "./authClient";
 
-/** 세션 상태 구분 */
 export type SessionStatus = "loading" | "authenticated" | "unauthenticated";
 
-/** 세션 상태 객체 */
 export interface SessionState {
   status: SessionStatus;
   user: SessionUser | null;
 }
 
-/** 서버 세션 조회 함수 규약 */
 export type SessionFetcher = () => Promise<SessionUser | null>;
 
 const fetchFromServer: SessionFetcher = async () => {
@@ -55,17 +52,14 @@ function subscribe(listener: () => void): () => void {
   };
 }
 
-/** 현재 세션 상태 동기 조회 */
 export function getSessionState(): SessionState {
   return state;
 }
 
-/** 세션 상태 구독 훅 */
 export function useSession(): SessionState {
   return useSyncExternalStore(subscribe, getSessionState, getSessionState);
 }
 
-/** 현재 로그인한 사용자 id (미인증이면 null) */
 export function getCurrentUserId(): string | null {
   return state.user?.userId ?? null;
 }
@@ -100,7 +94,6 @@ export async function hydrateSession(): Promise<SessionState> {
   return state;
 }
 
-/** 서버와 세션 상태 동기화 */
 export async function revalidateSession(): Promise<void> {
   let user: SessionUser | null;
   try {
@@ -119,7 +112,6 @@ export async function revalidateSession(): Promise<void> {
   setState({ status: "unauthenticated", user: null });
 }
 
-/** 소셜 로그인 시작 */
 export async function signInWithProvider(
   provider: SocialProvider,
 ): Promise<void> {
@@ -129,7 +121,6 @@ export async function signInWithProvider(
   });
 }
 
-/** 개발자 전용 간이 로그인 */
 export async function signInAsDeveloper(email?: string): Promise<void> {
   const response = await fetch("/api/dev-login", {
     method: "POST",
@@ -145,7 +136,6 @@ export async function signInAsDeveloper(email?: string): Promise<void> {
   await revalidateSession();
 }
 
-/** 서버에서 지원하는 로그인 제공자 및 개발자 로그인 설정 조회 */
 export async function fetchAuthConfig(): Promise<{
   providers: SocialProvider[];
   devLogin: boolean;
@@ -160,7 +150,6 @@ export async function fetchAuthConfig(): Promise<{
   };
 }
 
-/** 로그아웃 수행 */
 export async function signOut(): Promise<void> {
   try {
     await authClient.signOut();
@@ -173,23 +162,23 @@ export async function signOut(): Promise<void> {
 async function persist(user: SessionUser): Promise<void> {
   try {
     await saveCachedSession(user);
-  } catch {
+  } catch (error) {
+    void error;
   }
 }
 
 async function forget(): Promise<void> {
   try {
     await clearCachedSession();
-  } catch {
+  } catch (error) {
+    void error;
   }
 }
 
-/** 테스트 전용: 세션 조회기 주입 */
 export function __setSessionFetcherForTests(next: SessionFetcher | null): void {
   fetcher = next ?? fetchFromServer;
 }
 
-/** 테스트 전용: 세션 상태 직접 설정 */
 export function __setSessionForTests(user: SessionUser | null): void {
   setState(
     user
@@ -198,7 +187,6 @@ export function __setSessionForTests(user: SessionUser | null): void {
   );
 }
 
-/** 테스트 전용: 스토어 상태 초기화 */
 export function __resetSessionForTests(): void {
   fetcher = fetchFromServer;
   setState({ status: "loading", user: null });

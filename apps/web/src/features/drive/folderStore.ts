@@ -56,7 +56,6 @@ function queueWrite(write: () => Promise<void>): void {
   });
 }
 
-/** 바뀐 폴더를 반영하고 저장·push를 예약한다 */
 function commit(changed: Folder[]): void {
   const byId = new Map(folders.map((folder) => [folder.id, folder]));
   for (const folder of changed) byId.set(folder.id, folder);
@@ -71,10 +70,6 @@ function commit(changed: Folder[]): void {
 function now(): string {
   return new Date().toISOString();
 }
-
-// ----------------------------------------------------------------------------
-// 조회
-// ----------------------------------------------------------------------------
 
 export function getFolders(): Folder[] {
   return folders;
@@ -94,21 +89,15 @@ export function isFolderAvailable(id: string | null | undefined): boolean {
   return index.byId.has(id) && !isFolderTrashed(index, id);
 }
 
-/** 같은 위치(유효 부모 기준)에서 이름을 차지하고 있는 폴더들 */
 function siblingNames(parentId: string | null, excludeId?: string): string[] {
   return (index.childrenOf.get(parentId) ?? [])
     .filter((folder) => folder.id !== excludeId && !folder.trashedAt)
     .map((folder) => folder.name);
 }
 
-/** 옮겨 갈 수 있는 부모인지 (루트이거나, 있고 휴지통에 없는 폴더) */
 function resolveTargetParent(parentId: string | null): string | null {
   return parentId !== null && isFolderAvailable(parentId) ? parentId : null;
 }
-
-// ----------------------------------------------------------------------------
-// 조작
-// ----------------------------------------------------------------------------
 
 /**
  * 새 폴더. 같은 위치에 같은 이름이 있으면 번호를 붙인다 ("새 폴더 (2)").
@@ -230,10 +219,6 @@ export function restoreFolder(id: string): void {
   ]);
 }
 
-// ----------------------------------------------------------------------------
-// 영속성·동기화
-// ----------------------------------------------------------------------------
-
 /** 저장본으로 폴더를 복원한다. 세션 사용자의 폴더만 싣는다 */
 export async function hydrateFoldersFromStorage(): Promise<void> {
   const userId = getCurrentUserId();
@@ -295,7 +280,6 @@ export async function removeFoldersLocally(
 ): Promise<void> {
   if (ids.length === 0) return;
   const removed = new Set(ids);
-  // 늦게 나간 push가 서버에서 폴더를 되살리면 안 된다
   for (const id of removed) cancelFolderPush(id);
   setFolders(folders.filter((folder) => !removed.has(folder.id)));
   queueWrite(() => deleteFolders(ids));
@@ -317,10 +301,6 @@ export function resetFolderStore(): void {
 export function __loadFoldersForTests(next: Folder[]): void {
   setFolders(next.map((folder) => ({ ...folder })));
 }
-
-// ----------------------------------------------------------------------------
-// React
-// ----------------------------------------------------------------------------
 
 function subscribe(listener: () => void): () => void {
   listeners.add(listener);

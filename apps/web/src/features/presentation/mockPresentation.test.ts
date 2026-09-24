@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { ID_PATTERN, PresentationSchema } from "@repo/shared";
 import { mockPresentation } from "./mockPresentation";
 
-describe("mockPresentation (Task 3.1)", () => {
+describe("mockPresentation", () => {
   it("PresentationSchema.parse를 통과하고 유효한 프레젠테이션 스키마를 만족해야 한다", () => {
     const parsed = PresentationSchema.parse(mockPresentation);
     expect(parsed.id).toBeDefined();

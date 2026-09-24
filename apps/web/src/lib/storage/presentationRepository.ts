@@ -1,10 +1,7 @@
 import { PresentationSchema, type Presentation } from "@repo/shared";
 import { getOfflineDB } from "./db";
 
-/**
- * 스키마 검증에 실패한 저장본. 삭제하지 않고 그대로 두어 복구 가능성을 남긴다
- * (TECH_SPEC §5.5 Phase 2 규칙 5).
- */
+/** 스키마 검증에 실패한 저장본. 삭제하지 않고 그대로 두어 복구 가능성을 남긴다 */
 export interface CorruptedRecord {
   id: string;
   reason: string;
@@ -28,10 +25,7 @@ export async function savePresentation(
   await db.put("presentations", presentation);
 }
 
-/**
- * 저장된 모든 프레젠테이션을 읽는다.
- * 항목별로 검증해 한 건이 깨져도 나머지는 살린다.
- */
+/** 항목별로 검증해 한 건이 깨져도 나머지는 살린다 */
 export async function loadAllPresentations(): Promise<
   LoadResult<Presentation>
 > {
@@ -59,7 +53,7 @@ export async function loadAllPresentations(): Promise<
   return { valid, corrupted };
 }
 
-/** 프레젠테이션 문서 1건 삭제 (임베드된 덱도 문서와 함께 사라진다) */
+/** 임베드된 덱도 문서와 함께 사라진다 */
 export async function deletePresentation(id: string): Promise<void> {
   const db = await getOfflineDB();
   await db.delete("presentations", id);

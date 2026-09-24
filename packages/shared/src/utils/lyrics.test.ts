@@ -73,7 +73,7 @@ describe("Lyric Processing Utilities", () => {
       expect(slides[0].lines).toHaveLength(4);
     });
 
-    it("auto-splits blocks exceeding 4 lines into 2-line slides (PRD 4.2)", () => {
+    it("auto-splits blocks exceeding 4 lines into 2-line slides", () => {
       const fiveLines = `1줄
 2줄
 3줄

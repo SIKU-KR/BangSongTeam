@@ -75,12 +75,6 @@ interface ToastState {
 
 const TOAST_DURATION_MS = 6000;
 
-/**
- * 드래그 칩을 포인터 오른쪽 아래에 붙인다.
- *
- * DragOverlay는 기본적으로 끌기 시작한 카드의 왼쪽 위에 놓인다. 카드는 크고 칩은
- * 작아서, 사이드바 트리처럼 멀리 끌면 칩이 포인터와 떨어져 화면 밖으로 나간다.
- */
 const followCursor: Modifier = ({
   activatorEvent,
   activeNodeRect,
@@ -127,7 +121,6 @@ export function DriveProvider({
   const [toast, setToast] = useState<ToastState | null>(null);
   const toastSeq = useRef(0);
 
-  // 다른 폴더로 가면 선택을 비운다 (보이지 않는 항목이 선택된 채 남지 않게)
   useEffect(() => {
     setSelectionState(new Set());
     setAnchorKey(null);
@@ -257,11 +250,6 @@ export function DriveProvider({
     }
   };
 
-  // ---------------------------------------------------------------------------
-  // 드래그 앤 드롭
-  // ---------------------------------------------------------------------------
-
-  // 5px 넘게 움직여야 드래그로 본다. 그래야 클릭(선택)·더블클릭(열기)이 산다.
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
   );
@@ -449,7 +437,6 @@ function NewFolderDialog({
   onClose: () => void;
   onCreated: (id: string) => void;
 }): React.JSX.Element {
-  // 같은 위치에 '새 폴더'가 있으면 번호를 붙인 이름을 미리 채운다
   const [initialValue] = useState(() => {
     const index = getFolderIndex();
     const siblings = (index.childrenOf.get(parentId) ?? [])

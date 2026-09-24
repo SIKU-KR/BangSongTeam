@@ -47,4 +47,3 @@ export function useBackgroundAutoCache(
     return () => window.removeEventListener("online", handleOnline);
   }, []);
 }
-

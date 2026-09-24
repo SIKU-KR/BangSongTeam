@@ -22,35 +22,33 @@ const SEARCH_CACHE_SECONDS = 30;
 export function createCatalogRoute(deps: AppDeps = {}) {
   const requireAuth = resolveRequireAuth(deps);
 
-  return (
-    new Hono<AppEnv>()
-      .get(
-        "/search",
-        zValidator("query", SearchCatalogQuerySchema),
-        async (c) => {
-          const { q, limit } = c.req.valid("query");
-          const db = createD1Client(c.env.DB);
-
-          const deckRows = await searchPublicDecks(db, q, limit);
-
-          c.header("cache-control", `public, max-age=${SEARCH_CACHE_SECONDS}`);
-          return c.json(
-            {
-              decks: deckRows.map((row) =>
-                toPublicDeckSummary(row.deck, row.authorName),
-              ),
-            },
-            200,
-          );
-        },
-      )
-      .get("/decks/:id", requireAuth, async (c) => {
+  return new Hono<AppEnv>()
+    .get(
+      "/search",
+      zValidator("query", SearchCatalogQuerySchema),
+      async (c) => {
+        const { q, limit } = c.req.valid("query");
         const db = createD1Client(c.env.DB);
-        const detail = await getPublicDeckDetail(db, c.req.param("id"));
-        if (!detail) {
-          return c.json({ error: "공개된 곡을 찾을 수 없습니다" }, 404);
-        }
-        return c.json({ deck: detail }, 200);
-      })
-  );
+
+        const deckRows = await searchPublicDecks(db, q, limit);
+
+        c.header("cache-control", `public, max-age=${SEARCH_CACHE_SECONDS}`);
+        return c.json(
+          {
+            decks: deckRows.map((row) =>
+              toPublicDeckSummary(row.deck, row.authorName),
+            ),
+          },
+          200,
+        );
+      },
+    )
+    .get("/decks/:id", requireAuth, async (c) => {
+      const db = createD1Client(c.env.DB);
+      const detail = await getPublicDeckDetail(db, c.req.param("id"));
+      if (!detail) {
+        return c.json({ error: "공개된 곡을 찾을 수 없습니다" }, 404);
+      }
+      return c.json({ deck: detail }, 200);
+    });
 }

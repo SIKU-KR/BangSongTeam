@@ -1,9 +1,7 @@
 import { buildFolderIndex, type Folder } from "@repo/shared";
 
 export interface FolderMergeResult {
-  /** 병합된 폴더 목록 (생성 순) */
   folders: Folder[];
-  /** 서버에 올려야 하는 폴더 id (로컬이 더 최신이거나 서버에 없음) */
   needsPush: string[];
 }
 
@@ -26,13 +24,11 @@ export function mergeFolders(
   for (const localFolder of local) {
     const serverFolder = serverById.get(localFolder.id);
     if (!serverFolder || localFolder.updatedAt > serverFolder.updatedAt) {
-      // 서버에 없으면 아직 안 올라간 폴더다. 지우지 않고 올린다.
       byId.set(localFolder.id, localFolder);
       localWins.add(localFolder.id);
     }
   }
 
-  // 사이클에 걸린 로컬 승자를 서버본으로 되돌린다. 되돌릴 것이 없으면 끝.
   for (;;) {
     const { cycleMembers } = buildFolderIndex([...byId.values()]);
     const revertable = [...cycleMembers].filter(

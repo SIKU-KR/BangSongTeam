@@ -11,8 +11,7 @@ export function createId(): string {
 }
 
 /**
- * 슬라이드 id. 덱 안에서만 쓰이는 로컬 id라 JSON 페이로드를 줄이려고
- * 짧게 만든다 (TECH_SPEC §4.0 경량 `s_` id).
+ * 슬라이드 id. 덱 안에서만 쓰이는 로컬 id라 JSON 페이로드를 줄이려고 짧게 만든다 (`s_` 접두사 id).
  */
 export function createSlideId(): string {
   return `s_${nanoid(10)}`;

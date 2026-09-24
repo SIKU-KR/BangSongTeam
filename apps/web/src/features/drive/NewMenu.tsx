@@ -3,7 +3,6 @@ import { useDrive } from "./driveContext";
 import { PopoverMenu, type MenuAction } from "./PopoverMenu";
 import { Icon } from "./icons";
 
-/** 새 폴더·새 프레젠테이션 메뉴 항목 (지금 보고 있는 폴더에 만든다) */
 export function useNewItemActions(): MenuAction[] {
   const drive = useDrive();
   const target = drive.isTrashView ? null : drive.currentFolderId;

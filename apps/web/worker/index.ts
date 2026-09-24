@@ -18,40 +18,38 @@ import type { AppDeps } from "./deps";
  * 검증한다. 프로덕션은 기본 의존성으로 만든 `app`을 쓴다.
  */
 export function createApp(deps: AppDeps = {}) {
-  return (
-    new Hono<AppEnv>()
-      .onError((err, c) => {
-        console.error("Worker Error:", err);
-        return c.json(
-          {
-            error: err.message || "Internal Server Error",
-          },
-          500,
-        );
-      })
-      .notFound((c) => {
-        return c.json(
-          {
-            error: "Not Found",
-          },
-          404,
-        );
-      })
-      .get("/api/health", (c) => {
-        return c.json({ status: "ok" as const }, 200);
-      })
-      .on(["GET", "POST"], `${AUTH_BASE_PATH}/*`, (c) => {
-        return createAuth(c.env).handler(c.req.raw);
-      })
-      .route("/api", devLoginRoute)
-      .route("/api/presentations", createPresentationsRoute(deps))
-      .route("/api/folders", createFoldersRoute(deps))
-      .route("/api/decks", createDecksRoute(deps))
-      .route("/api/catalog", createCatalogRoute(deps))
-      .route("/api/reports", createReportsRoute(deps))
-      .route("/api/backgrounds", backgroundsRoute)
-      .route("/api/media", mediaRoute)
-  );
+  return new Hono<AppEnv>()
+    .onError((err, c) => {
+      console.error("Worker Error:", err);
+      return c.json(
+        {
+          error: err.message || "Internal Server Error",
+        },
+        500,
+      );
+    })
+    .notFound((c) => {
+      return c.json(
+        {
+          error: "Not Found",
+        },
+        404,
+      );
+    })
+    .get("/api/health", (c) => {
+      return c.json({ status: "ok" as const }, 200);
+    })
+    .on(["GET", "POST"], `${AUTH_BASE_PATH}/*`, (c) => {
+      return createAuth(c.env).handler(c.req.raw);
+    })
+    .route("/api", devLoginRoute)
+    .route("/api/presentations", createPresentationsRoute(deps))
+    .route("/api/folders", createFoldersRoute(deps))
+    .route("/api/decks", createDecksRoute(deps))
+    .route("/api/catalog", createCatalogRoute(deps))
+    .route("/api/reports", createReportsRoute(deps))
+    .route("/api/backgrounds", backgroundsRoute)
+    .route("/api/media", mediaRoute);
 }
 
 export type AppType = ReturnType<typeof createApp>;

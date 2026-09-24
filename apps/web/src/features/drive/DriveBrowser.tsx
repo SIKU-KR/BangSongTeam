@@ -24,7 +24,6 @@ import { FolderGlyph, Icon, type IconName } from "./icons";
 
 export interface DriveBrowserProps {
   mode: "drive" | "trash";
-  /** drive 모드에서 보고 있는 폴더 (`null` = 내 드라이브 루트) */
   folderId?: string | null;
 }
 
@@ -75,10 +74,6 @@ export function DriveBrowser({
 
   const keys = useMemo(() => items.map((item) => item.key), [items]);
   const selectedItems = items.filter((item) => drive.selection.has(item.key));
-
-  // ---------------------------------------------------------------------------
-  // 항목 동작
-  // ---------------------------------------------------------------------------
 
   const present = useCallback(
     (id: string) => startPresentation(id, navigate),
@@ -177,7 +172,6 @@ export function DriveBrowser({
     return actions;
   };
 
-  /** 메뉴·선택 막대가 다룰 대상: 누른 항목이 선택에 있으면 선택 전체 */
   const targetsFor = (item: DriveItem): DriveItem[] => {
     if (drive.selection.has(item.key)) return selectedItems;
     drive.setSelection([item.key], item.key);
@@ -229,10 +223,6 @@ export function DriveBrowser({
         : undefined,
   });
 
-  // ---------------------------------------------------------------------------
-  // 키보드
-  // ---------------------------------------------------------------------------
-
   useEffect(() => {
     const handleKey = (event: KeyboardEvent): void => {
       if (drive.dialogOpen || menu || isTypingTarget(event.target)) return;
@@ -260,10 +250,6 @@ export function DriveBrowser({
     return () => window.removeEventListener("keydown", handleKey);
   }, [drive, menu, items, keys, isTrash, open]);
 
-  // ---------------------------------------------------------------------------
-  // 렌더
-  // ---------------------------------------------------------------------------
-
   const folderCount = items.filter((item) => item.kind === "folder").length;
   const fileCount = items.length - folderCount;
 
@@ -282,8 +268,6 @@ export function DriveBrowser({
         });
       }}
     >
-      {/* 선택 막대와 요약은 같은 자리를 번갈아 쓴다. 높이를 고정해 선택해도
-          그리드가 밀리지 않는다 (밀리면 더블클릭이 다른 항목에 떨어진다). */}
       <div className="h-11 flex items-center">
         {selectedItems.length > 0 ? (
           <SelectionBar

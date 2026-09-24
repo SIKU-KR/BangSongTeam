@@ -37,7 +37,6 @@ async function resetDatabase(): Promise<void> {
   });
 }
 
-/** 스키마를 위반하는 원시 레코드를 스토어에 직접 심는다 */
 async function seedRawRecord(record: unknown): Promise<void> {
   const db = await getOfflineDB();
   const tx = db.transaction("presentations", "readwrite");
@@ -92,7 +91,6 @@ describe("presentationRepository", () => {
     expect(first.corrupted).toHaveLength(1);
     expect(first.corrupted[0].id).toBe("broken-1");
 
-    // 재조회해도 손상 레코드가 여전히 남아 있어야 한다 (복구 가능성 보존)
     const second = await loadAllPresentations();
     expect(second.corrupted).toHaveLength(1);
     expect(second.valid).toHaveLength(1);

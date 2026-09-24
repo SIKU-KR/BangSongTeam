@@ -34,7 +34,7 @@ export type DeckMutationResponse = z.infer<typeof DeckMutationResponseSchema>;
  * 공개 덱 검색 결과 카드.
  *
  * 로그인 여부와 무관하게 첫 슬라이드만 담는다. 비로그인 공개 카탈로그에서
- * 가사 전문이 새지 않게 하는 저작권 보호 장치다 (TECH_SPEC §8.1).
+ * 가사 전문이 새지 않게 하는 저작권 보호 장치다.
  */
 export const PublicDeckSummarySchema = z.object({
   id: IdSchema,
@@ -55,8 +55,7 @@ export type PublicDeckSummary = z.infer<typeof PublicDeckSummarySchema>;
 /**
  * 공개 덱 상세 (로그인 필요).
  *
- * 편집기 곡 추가 모달이 찬양 버전·구성을 확인할 수 있게 가사 전문을 준다
- * (PRD 4.7 괄호 문단).
+ * 편집기 곡 추가 모달이 찬양 버전·구성을 확인할 수 있게 가사 전문을 준다.
  */
 export const PublicDeckDetailSchema = PublicDeckSummarySchema.extend({
   lyricsRaw: z.string(),

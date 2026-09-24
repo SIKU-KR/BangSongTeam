@@ -125,7 +125,6 @@ describe("driveActions", () => {
     });
 
     it("서버가 폴더 소속으로 몰랐던 로컬 세트도 서버에서 지운다", async () => {
-      // 서버 응답에 세트가 없다 (한 번도 안 올라갔거나 서버에서는 다른 곳에 있다)
       await deleteItemsForever([{ kind: "folder", id: ROOT }]);
 
       expect(sync.deletePresentationRemote).toHaveBeenCalledWith(

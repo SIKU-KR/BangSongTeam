@@ -10,7 +10,6 @@ export interface ThemeContextValue {
 
 const THEME_STORAGE_KEY = "worship-theme";
 
-/** 시스템 prefers-color-scheme 설정을 조회한다. */
 export function getSystemTheme(): "light" | "dark" {
   if (
     typeof window === "undefined" ||
@@ -32,7 +31,8 @@ export function getStoredTheme(): ThemeMode {
     if (stored === "light" || stored === "dark" || stored === "system") {
       return stored;
     }
-  } catch {
+  } catch (error) {
+    void error;
   }
   return "system";
 }
@@ -81,7 +81,8 @@ export function setTheme(newTheme: ThemeMode): void {
     if (typeof window !== "undefined") {
       window.localStorage.setItem(THEME_STORAGE_KEY, newTheme);
     }
-  } catch {
+  } catch (error) {
+    void error;
   }
   const resolved = newTheme === "system" ? getSystemTheme() : newTheme;
   applyThemeToDOM(resolved);

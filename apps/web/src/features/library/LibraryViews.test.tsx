@@ -50,11 +50,7 @@ describe("Library Views", () => {
     });
 
     it("supports es-hangul choseong search for backgrounds", () => {
-      render(
-        <BackgroundLibraryView
-          searchQuery="ㅂㄷ"
-        />,
-      );
+      render(<BackgroundLibraryView searchQuery="ㅂㄷ" />);
 
       expect(screen.getByText("우리 교회 본당 배경 01")).toBeInTheDocument();
     });

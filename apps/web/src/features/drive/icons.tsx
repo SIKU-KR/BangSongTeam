@@ -1,9 +1,5 @@
 import React from "react";
 
-/**
- * 드라이브 화면 아이콘. 저장소의 다른 화면과 같이 Heroicons v1 outline 경로를
- * 인라인 SVG로 쓴다 (아이콘 라이브러리를 들이지 않는다).
- */
 const PATHS = {
   folder:
     "M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z",

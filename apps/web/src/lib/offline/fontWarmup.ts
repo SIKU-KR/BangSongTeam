@@ -14,7 +14,6 @@ function sampleTextOf(presentation: Presentation): string {
   return [...chars].join("");
 }
 
-/** 프레젠테이션에 사용되는 웹폰트를 브라우저 캐시에 사전 로드 */
 export async function warmPresentationFonts(
   presentation: Presentation,
 ): Promise<void> {

@@ -4,16 +4,14 @@ import type { LoadResult, CorruptedRecord } from "./presentationRepository";
 
 /** 0f68563 이전에 쓰던 localStorage 키 */
 export const LEGACY_SONGS_KEY = "worship_user_songs_v1";
-/** 마이그레이션 후 원본을 보존해 두는 키 */
 export const LEGACY_SONGS_BACKUP_KEY = "worship_user_songs_v1__migrated_backup";
 
-/** 보관함 곡(Deck, scope: 'library') 1건 저장 — 전체 교체(put) */
 export async function saveSong(deck: Deck): Promise<void> {
   const db = await getOfflineDB();
   await db.put("decks", deck);
 }
 
-/** 보관함 곡 전체 조회. 항목별 검증으로 한 건이 깨져도 나머지는 살린다 */
+/** 항목별 검증으로 한 건이 깨져도 나머지는 살린다 */
 export async function loadAllSongs(): Promise<LoadResult<Deck>> {
   const db = await getOfflineDB();
   const rows = await db.getAll("decks");
@@ -39,7 +37,6 @@ export async function loadAllSongs(): Promise<LoadResult<Deck>> {
   return { valid, corrupted };
 }
 
-/** 보관함 곡 1건 삭제 */
 export async function deleteSong(id: string): Promise<void> {
   const db = await getOfflineDB();
   await db.delete("decks", id);
@@ -68,8 +65,8 @@ function moveLegacyToBackup(raw: string): void {
   try {
     localStorage.setItem(LEGACY_SONGS_BACKUP_KEY, raw);
     localStorage.removeItem(LEGACY_SONGS_KEY);
-  } catch {
-    // 백업 저장에 실패하면 원본을 지우지 않는다 (다음 부팅에서 재시도)
+  } catch (error) {
+    void error;
   }
 }
 
@@ -87,7 +84,6 @@ export async function migrateLegacySongs(): Promise<MigrationResult> {
   try {
     parsed = JSON.parse(raw);
   } catch {
-    // JSON 자체가 깨졌으면 손댈 수 없다. 백업만 남기고 넘어간다.
     moveLegacyToBackup(raw);
     return { migrated: 0, skipped: 0 };
   }

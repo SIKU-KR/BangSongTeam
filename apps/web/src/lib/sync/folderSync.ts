@@ -2,19 +2,6 @@ import { sortFoldersParentFirst, type Folder } from "@repo/shared";
 import { pushFolder, OfflineError } from "./presentationSync";
 import { setSyncStatus } from "./syncStatus";
 
-/**
- * 드라이브 폴더 서버 push 큐.
- *
- * 곡 보관함 큐(`deckSync`)와 같은 원칙이다. IndexedDB 저장이 먼저 끝나고, 서버
- * push는 디바운스를 두고 뒤따른다.
- *
- * 한 번에 여러 폴더를 올릴 때는 **부모부터** 올린다. 서버는 모르는 부모를
- * 루트로 보정하므로, '새 폴더 → 그 안에 새 폴더'를 자식부터 올리면 자식이
- * 루트로 튄다.
- *
- * 영구 삭제는 이 큐를 타지 않는다. 오프라인에서 지운 뒤 부팅 병합이 서버본을
- * 되살리지 않도록, 서버 삭제가 성공해야만 로컬에서도 지운다 (`driveActions`).
- */
 const FOLDER_SYNC_DEBOUNCE_MS = 2000;
 
 type FolderPusher = (folder: Folder) => Promise<Folder>;
@@ -62,7 +49,6 @@ async function pushAll(folders: Folder[]): Promise<void> {
     } catch (err) {
       if (err instanceof OfflineError) {
         offline = true;
-        // 그사이 더 새로운 변경이 예약됐으면 그것을 살린다
         if (!pending.has(folder.id)) pending.set(folder.id, folder);
       } else {
         failed = true;
@@ -87,7 +73,7 @@ function run(): void {
   inFlight = inFlight.then(() => pushAll(folders));
 }
 
-/** 폴더 1건을 push 큐에 넣는다. 같은 폴더를 연달아 고치면 마지막 것만 올린다 */
+/** 같은 폴더를 연달아 고치면 마지막 것만 올린다 */
 export function scheduleFolderPush(folder: Folder): void {
   if (!enabled) return;
   pending.set(folder.id, folder);
@@ -95,7 +81,7 @@ export function scheduleFolderPush(folder: Folder): void {
   timer = setTimeout(run, FOLDER_SYNC_DEBOUNCE_MS);
 }
 
-/** 대기 중인 push 1건을 취소한다 (영구 삭제한 폴더) */
+/** 영구 삭제한 폴더의 대기 중인 push를 취소한다 */
 export function cancelFolderPush(id: string): void {
   pending.delete(id);
 }
@@ -123,12 +109,10 @@ export function flushFolderSync(): Promise<void> {
   return inFlight;
 }
 
-/** 테스트 전용: 전송 함수를 갈아 끼운다 */
 export function __setFolderPusherForTests(next: FolderPusher | null): void {
   pusher = next ?? pushFolder;
 }
 
-/** 테스트 전용 */
 export function __resetFolderSyncForTests(): void {
   enabled = false;
   pusher = pushFolder;

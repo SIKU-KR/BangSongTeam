@@ -85,7 +85,7 @@ describe("shouldRunBootSync", () => {
   });
 });
 
-describe("runBootSync — library decks (M5-2)", () => {
+describe("runBootSync — library decks", () => {
   let push: ReturnType<typeof vi.fn>;
 
   beforeEach(async () => {
@@ -111,8 +111,7 @@ describe("runBootSync — library decks (M5-2)", () => {
     expect(getUserSongs()[0].forkCount).toBe(2);
   });
 
-  it("uploads local-only decks (first sign-in after M5)", async () => {
-    // 부팅 전 로컬에만 있던 곡. 동기화가 꺼져 있어 예약 push는 없다.
+  it("uploads local-only decks on first sign-in", async () => {
     const local = saveSongToLibrary({ title: "로컬 곡", lyricsRaw: "가사" });
     await runBootSync();
     expect(push).toHaveBeenCalledTimes(1);

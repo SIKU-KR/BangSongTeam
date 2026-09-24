@@ -10,10 +10,6 @@ import { itemName, parentOf } from "./driveActions";
 import { FolderTree, useTreeExpansion } from "./FolderTree";
 import { FolderGlyph } from "./icons";
 
-/**
- * 드라이브 대화 상자 (새 폴더·이름 바꾸기·이동·영구 삭제 확인).
- * 저장소의 다른 대화 상자(`PublishDialog`)와 같은 손수 만든 `role="dialog"` 패턴이다.
- */
 function DialogShell({
   title,
   testId,
@@ -73,7 +69,6 @@ function DialogButtons({
   disabled?: boolean;
   danger?: boolean;
   confirmTestId: string;
-  /** 없으면 submit 버튼 (폼 안) */
   onConfirm?: () => void;
 }): React.JSX.Element {
   return (
@@ -106,7 +101,6 @@ export interface NameDialogProps {
   title: string;
   initialValue: string;
   confirmLabel: string;
-  /** 문제가 있으면 보여 줄 문장, 없으면 null */
   validate: (name: string) => string | null;
   onSubmit: (name: string) => void;
   onCancel: () => void;

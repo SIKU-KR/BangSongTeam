@@ -13,7 +13,7 @@ export const DeckScopeSchema = z.enum(["library", "presentation"]);
 export type DeckScope = z.infer<typeof DeckScopeSchema>;
 
 /**
- * 덱이 처음 어떻게 생겼는지 (M5, PRD 4.7).
+ * 덱이 처음 어떻게 생겼는지.
  *
  * - `user`: 사용자가 직접 붙여넣어 만든 곡
  * - `fork`: 공유 라이브러리의 공개 덱을 가져온 것

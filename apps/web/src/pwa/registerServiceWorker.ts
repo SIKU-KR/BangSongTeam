@@ -68,7 +68,6 @@ export async function applyServiceWorkerUpdate(): Promise<void> {
   await applyUpdate(true);
 }
 
-/** Service Worker를 등록한다. */
 export function registerServiceWorker(
   registrar: ServiceWorkerRegistrar = registerSW,
 ): void {
@@ -91,7 +90,6 @@ export function registerServiceWorker(
   });
 }
 
-/** 테스트 전용 초기화 */
 export function __resetServiceWorkerStateForTests(): void {
   state = INITIAL;
   applyUpdate = null;

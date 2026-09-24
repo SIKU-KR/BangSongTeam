@@ -90,13 +90,11 @@ describe("usePresentationShortcuts Hook", () => {
       }),
     );
 
-    // Lowercase 'b'
     window.dispatchEvent(
       new KeyboardEvent("keydown", { key: "b", code: "KeyB", bubbles: true }),
     );
     expect(onToggleBlackout).toHaveBeenCalledTimes(1);
 
-    // Uppercase 'B' (with Shift)
     window.dispatchEvent(
       new KeyboardEvent("keydown", {
         key: "B",
@@ -117,13 +115,11 @@ describe("usePresentationShortcuts Hook", () => {
       }),
     );
 
-    // Lowercase 'h'
     window.dispatchEvent(
       new KeyboardEvent("keydown", { key: "h", code: "KeyH", bubbles: true }),
     );
     expect(onToggleLyrics).toHaveBeenCalledTimes(1);
 
-    // Uppercase 'H' (with Shift)
     window.dispatchEvent(
       new KeyboardEvent("keydown", {
         key: "H",
@@ -297,7 +293,6 @@ describe("usePresentationShortcuts Hook", () => {
       return nav;
     });
 
-    // Press '1', '2', 'Enter' within act -> presentation-wide slide 12
     act(() => {
       for (const [key, code] of [
         ["1", "Digit1"],

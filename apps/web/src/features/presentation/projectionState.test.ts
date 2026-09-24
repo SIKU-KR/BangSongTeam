@@ -11,7 +11,6 @@ import {
   INITIAL_POSITION,
 } from "./projectionState";
 
-/** slideCounts로 간단한 세트를 만든다 */
 function makeSongs(slideCounts: number[]): PresentationItem[] {
   return slideCounts.map(
     (count, songIndex) =>
@@ -130,8 +129,6 @@ describe("조회 헬퍼", () => {
 });
 
 describe("세트 전체 슬라이드 번호 (PPT식)", () => {
-  // SONGS = [3, 2, 4] → 1곡: 1~3, 2곡: 4~5, 3곡: 6~9
-
   it("전체 슬라이드 수를 센다", () => {
     expect(getTotalSlideCount(SONGS)).toBe(9);
     expect(getTotalSlideCount([])).toBe(0);
@@ -192,7 +189,6 @@ describe("세트 전체 슬라이드 번호 (PPT식)", () => {
     expect(slideNumberOfPosition({ songIndex: 0, slideIndex: 2 }, SONGS)).toBe(
       3,
     );
-    // 곡이 바뀌어도 1로 돌아가지 않는다
     expect(slideNumberOfPosition({ songIndex: 1, slideIndex: 0 }, SONGS)).toBe(
       4,
     );

@@ -11,7 +11,7 @@ export function sanitizeLyricLine(line: string): string {
 }
 
 /**
- * 가사 원본 텍스트를 슬라이드 목록으로 분할한다. (PRD 4.1, 4.2)
+ * 가사 원본 텍스트를 슬라이드 목록으로 분할한다.
  * 최대 4줄까지 단일 슬라이드를 유지하고, 4줄 초과 블록은 2줄 단위로 분할한다.
  */
 export function splitLyricsIntoSlides(rawText: string): Slide[] {

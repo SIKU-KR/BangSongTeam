@@ -83,7 +83,7 @@ describe("registerServiceWorker", () => {
       navigator,
       "serviceWorker",
     );
-    // @ts-expect-error
+    // @ts-expect-error navigator.serviceWorker is read-only in the DOM types
     delete navigator.serviceWorker;
 
     const { registrar, calls } = makeRegistrar();

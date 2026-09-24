@@ -38,14 +38,12 @@ import {
   pushDeckNow,
 } from "./deckSync";
 
-/**
- * 송출 화면(청중 전체화면)에서는 부팅 동기화를 돌리지 않는다.
- *
- * 송출 중 새로고침하면 부팅 경로를 처음부터 다시 탄다. 여기서 서버와 맞추면
- * 송출 중 API·데이터 요청 0건(M4-5 Zero-Fetch)이 깨진다.
- */
 const PROJECTION_ROUTE = /^\/present\/[^/]+\/fullscreen\/?$/;
 
+/**
+ * 송출 중 새로고침하면 부팅 경로를 처음부터 다시 탄다. 여기서 서버와 맞추면
+ * 송출 중 API·데이터 요청 0건이 깨지므로, 송출 화면에서는 부팅 동기화를 돌리지 않는다.
+ */
 export function shouldRunBootSync(pathname: string): boolean {
   return !PROJECTION_ROUTE.test(pathname);
 }
@@ -66,8 +64,6 @@ export async function runBootSync(): Promise<void> {
   setFolderSyncEnabled(true);
   setServerFolderListener(applyServerFolder);
 
-  // 폴더를 먼저 맞춘다. 세트가 가리키는 폴더가 서버에 먼저 있어야 한다 — 없으면
-  // 서버가 `folderId`를 루트로 보정한다. 폴더를 못 맞췄으면 세트도 올리지 않는다.
   let serverDocuments;
   let tombstones: DriveTombstones;
   let folderOffline: boolean;
@@ -86,7 +82,6 @@ export async function runBootSync(): Promise<void> {
     return;
   }
 
-  // 다른 기기에서 영구 삭제한 세트는 '아직 안 올라간 문서'가 아니다. 되살리지 않는다.
   const deletedIds = new Set(tombstones.presentationIds);
   const local = listPresentations();
   const { documents, needsPush } = mergeDocuments(
@@ -99,17 +94,14 @@ export async function runBootSync(): Promise<void> {
     if (deletedIds.has(doc.id)) await removePersistedPresentation(doc.id);
   }
 
-  // 서버에서 받은 문서를 로컬에도 적어 둔다. 다음 부팅에서 네트워크가
-  // 없어도 그대로 열려야 한다 (오프라인 송출).
   for (const document of documents) {
     try {
       await savePresentation(document);
-    } catch {
-      // 로컬 저장 실패는 persistenceStatus가 따로 알린다
+    } catch (error) {
+      void error;
     }
   }
 
-  // 로컬이 더 최신이거나 서버에 없던 문서를 올린다 (첫 로그인 업로드 경로)
   let offline = false;
   for (const id of needsPush) {
     const document = documents.find((doc) => doc.id === id);
@@ -121,16 +113,11 @@ export async function runBootSync(): Promise<void> {
     }
   }
 
-  // 보관함 곡 (M5-2). 공유·가져오기는 보관함 덱이 서버에 있어야 성립한다.
   const deckOffline = await syncLibraryDecks();
 
   setSyncStatus(offline || deckOffline || folderOffline ? "offline" : "synced");
 }
 
-/**
- * 폴더 병합 → 반영·저장 → 로컬이 더 최신인 폴더를 부모부터 올린다.
- * @returns 오프라인이었는지
- */
 async function syncFolders(
   serverFolders: Parameters<typeof mergeFolders>[1],
   tombstones: DriveTombstones,
@@ -161,7 +148,6 @@ async function syncFolders(
   return offline;
 }
 
-/** @returns 오프라인이었는지 */
 async function syncLibraryDecks(): Promise<boolean> {
   let serverDecks;
   try {

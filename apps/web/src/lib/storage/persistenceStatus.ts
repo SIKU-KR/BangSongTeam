@@ -19,13 +19,6 @@ const MESSAGES: Record<PersistenceErrorKind, string> = {
 
 let current: PersistenceError | null = null;
 
-/**
- * 스키마 검증에 실패해 격리된 저장본.
- *
- * 저장 실패(`current`)와 슬롯을 나눈 이유: 격리는 '다음 저장이 성공하면 해소되는
- * 상태'가 아니다. 저장이 다시 잘 되더라도 열지 못한 문서는 그대로 남아 있으므로
- * `clearPersistenceError()`에 휩쓸려 사라지면 안 된다.
- */
 const NO_CORRUPTED: readonly CorruptedRecord[] = Object.freeze([]);
 let corrupted: readonly CorruptedRecord[] = NO_CORRUPTED;
 
@@ -47,7 +40,7 @@ function classify(err: unknown): PersistenceErrorKind {
 /**
  * 저장 실패를 전역 상태로 올린다.
  *
- * 조용히 삼키지 않는 것이 핵심이다 (TECH_SPEC §5.5 Phase 2 규칙 4).
+ * 조용히 삼키지 않는 것이 핵심이다.
  * 사용자가 저장된 줄 알고 예배 당일에 잃는 것이 최악의 시나리오다.
  */
 export function reportPersistenceError(err: unknown): void {
@@ -57,7 +50,6 @@ export function reportPersistenceError(err: unknown): void {
   emit();
 }
 
-/** 저장이 다시 성공했을 때 경고를 내린다 */
 export function clearPersistenceError(): void {
   if (!current) return;
   current = null;

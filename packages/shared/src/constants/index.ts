@@ -70,7 +70,7 @@ export const DEFAULT_TEXT_BOX_POSITION: TextBoxPosition = {
 };
 
 /**
- * 기본 덱 스타일 상수 (TECH_SPEC 기본값과 일치)
+ * 기본 덱 스타일 상수
  */
 export const DEFAULT_DECK_STYLE = {
   overlayOpacity: 40,
@@ -85,7 +85,7 @@ export const DEFAULT_DECK_STYLE = {
 };
 
 /**
- * 프레젠테이션 송출 단축키 정의 (PRD 5 / 4.5)
+ * 프레젠테이션 송출 단축키 정의
  */
 export const PRESENTATION_SHORTCUTS = {
   NEXT_SLIDE: ["ArrowRight", "Space", "PageDown"],

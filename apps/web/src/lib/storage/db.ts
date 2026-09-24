@@ -6,7 +6,6 @@ export const OFFLINE_DB_VERSION = 4;
 
 const FIRST_NANOID_DB_VERSION = 3;
 
-/** IndexedDB 미지원 또는 접근 불가 시 발생하는 에러 */
 export class PersistenceUnavailableError extends Error {
   constructor(cause?: unknown) {
     super("이 브라우저에서 IndexedDB를 사용할 수 없습니다");
@@ -15,7 +14,6 @@ export class PersistenceUnavailableError extends Error {
   }
 }
 
-/** 오프라인 IndexedDB 스키마 */
 export interface WorshipOfflineDB extends DBSchema {
   presentations: {
     key: string;
@@ -49,7 +47,6 @@ export interface WorshipOfflineDB extends DBSchema {
   };
 }
 
-/** IndexedDB에 보관되는 인증 세션 레코드 */
 export interface CachedSession {
   id: "current";
   userId: string;
@@ -61,7 +58,6 @@ export interface CachedSession {
 
 let dbPromise: Promise<IDBPDatabase<WorshipOfflineDB>> | null = null;
 
-/** 현재 브라우저 환경에서 IndexedDB 사용 가능 여부 확인 */
 export function isPersistenceAvailable(): boolean {
   try {
     return typeof indexedDB !== "undefined" && indexedDB !== null;
@@ -70,7 +66,6 @@ export function isPersistenceAvailable(): boolean {
   }
 }
 
-/** 오프라인 IndexedDB 인스턴스 조회 */
 export function getOfflineDB(): Promise<IDBPDatabase<WorshipOfflineDB>> {
   if (!isPersistenceAvailable()) {
     return Promise.reject(new PersistenceUnavailableError());
@@ -115,7 +110,6 @@ export function getOfflineDB(): Promise<IDBPDatabase<WorshipOfflineDB>> {
   return dbPromise;
 }
 
-/** IndexedDB 커넥션 종료 및 싱글턴 초기화 */
 export function closeOfflineDB(): void {
   const pending = dbPromise;
   dbPromise = null;

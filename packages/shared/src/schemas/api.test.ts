@@ -113,7 +113,7 @@ describe("API Schemas", () => {
     expect(parsed.decks[0]).not.toHaveProperty("userId");
     expect(parsed.decks[0]).not.toHaveProperty("lyricsRaw");
   });
-  describe("동기화 문서 계약 (M3-B)", () => {
+  describe("동기화 문서 계약", () => {
     const deck = {
       id: "c00000000000000000001",
       userId: "00000000x000000000001",

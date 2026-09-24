@@ -4,10 +4,6 @@ import {
   SessionExpiredError,
 } from "../sync/presentationSync";
 
-/**
- * Hono RPC 응답을 구조적으로만 받는다 (`ClientResponse`는 workers-types의
- * `Response`와 다른 타입이다).
- */
 interface RpcResponse {
   status: number;
   ok: boolean;
@@ -41,15 +37,14 @@ export async function callApi<T>(
     try {
       const body = (await response.json()) as { error?: unknown };
       if (typeof body?.error === "string") message = body.error;
-    } catch {
-      // 본문이 JSON이 아니면 상태 코드만으로 알린다
+    } catch (error) {
+      void error;
     }
     throw new ServerRejectedError(response.status, message);
   }
   return (await response.json()) as T;
 }
 
-/** 사용자에게 보여 줄 오류 문장 */
 export function describeApiError(err: unknown): string {
   if (err instanceof OfflineError)
     return "오프라인이라 서버에 연결할 수 없습니다";

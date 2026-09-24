@@ -7,14 +7,7 @@ import { useSyncExternalStore } from "react";
  * 작업이 사라질 수 있다는 경고지만, 오프라인은 정상 동작이다. 둘을 한 곳에
  * 담으면 예배 중에 빨간 배너가 뜬다.
  */
-export type SyncStatus =
-  | "idle"
-  | "syncing"
-  | "synced"
-  /** 네트워크에 닿지 못함 — 실패가 아니라 정상 경로다 */
-  | "offline"
-  /** 서버가 거절함 (권한·검증 실패 등) */
-  | "error";
+export type SyncStatus = "idle" | "syncing" | "synced" | "offline" | "error";
 
 let status: SyncStatus = "idle";
 let lastSyncedAt: number | null = null;
@@ -59,7 +52,6 @@ export function useSyncStatus(): SyncSnapshot {
   return useSyncExternalStore(subscribe, getSyncSnapshot, getSyncSnapshot);
 }
 
-/** 테스트 전용 */
 export function __resetSyncStatusForTests(): void {
   status = "idle";
   lastSyncedAt = null;

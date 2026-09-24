@@ -59,7 +59,6 @@ describe("presentationStore 드라이브 조작", () => {
     expect(doc?.folderId).toBe(FOLDER);
     expect(doc?.title).toBe("바뀐 이름");
     expect(doc!.updatedAt > target.updatedAt).toBe(true);
-    // 활성 문서는 그대로다
     expect(getActivePresentationId()).toBe(SEED_PRESENTATIONS[0].id);
   });
 
@@ -115,7 +114,6 @@ describe("presentationStore 드라이브 조작", () => {
       expect(sourceDeckIds.has(item.deck?.id)).toBe(false);
       expect(item.deck?.presentationId).toBe(copy!.id);
     }
-    // 서버가 받을 수 있는 문서다 (uuid 등)
     expect(PresentationDocumentSchema.safeParse(copy).success).toBe(true);
     expect(listPresentations()).toHaveLength(SEED_PRESENTATIONS.length + 1);
   });

@@ -61,7 +61,7 @@ describe("Style Schemas", () => {
   });
 
   describe("DeckStyleSchema", () => {
-    it("returns exact defaults defined in TECH_SPEC when parsing empty object", () => {
+    it("returns exact defaults when parsing empty object", () => {
       const parsed = DeckStyleSchema.parse({});
       expect(parsed).toEqual({
         overlayOpacity: 40,

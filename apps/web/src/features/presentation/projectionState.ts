@@ -1,12 +1,5 @@
 import type { PresentationItem, Slide } from "@repo/shared";
 
-/**
- * 송출 위치 계산 (순수 함수).
- *
- * 라우트 안에 두면 키보드 이동·번호 점프가 각자 경계 규칙을 갖게 된다.
- * 한곳에 모아 곡 경계·세트 끝 처리를 한 벌로 유지하고 단위 테스트로 고정한다.
- */
-
 export interface ProjectionPosition {
   songIndex: number;
   slideIndex: number;
@@ -67,7 +60,6 @@ export function slideNumberOfPosition(
   return before + current.slideIndex + 1;
 }
 
-/** 현재 위치의 슬라이드. 없으면 null */
 export function getSlideAt(
   position: ProjectionPosition,
   songs: Songs,
@@ -76,8 +68,6 @@ export function getSlideAt(
 }
 
 /**
- * 범위를 벗어난 위치를 안전한 값으로 되돌린다.
- *
  * 번호 점프로 들어온 인덱스를 그대로 쓰면 없는 곡·슬라이드를 가리켜 청중
  * 화면이 비어 버린다.
  */

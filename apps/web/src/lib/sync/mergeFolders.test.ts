@@ -61,7 +61,6 @@ describe("mergeFolders", () => {
   });
 
   it("합치면 사이클이 되는 로컬 이동은 서버본으로 되돌린다", () => {
-    // 서버: B가 A 안에 있다. 이 기기(오프라인)에서는 A를 B 안으로 옮겼다.
     const server = [folder(A), folder(B, { parentId: A })];
     const local = [
       folder(A, { parentId: B, updatedAt: "2026-09-23T00:00:00.000Z" }),

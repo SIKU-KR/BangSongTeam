@@ -123,7 +123,6 @@ describe("songRepository", () => {
       const { valid } = await loadAllSongs();
       expect(valid.map((d) => d.title).sort()).toEqual(["곡 A", "곡 B"]);
 
-      // 원본은 지우지 않고 백업으로 옮긴다 — 손상 항목도 복구 가능해야 한다
       expect(localStorage.getItem(LEGACY_SONGS_KEY)).toBeNull();
       const backup = localStorage.getItem(LEGACY_SONGS_BACKUP_KEY);
       expect(backup).not.toBeNull();

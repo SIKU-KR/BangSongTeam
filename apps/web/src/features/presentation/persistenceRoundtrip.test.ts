@@ -82,14 +82,12 @@ describe("영속성 왕복 (편집 → 저장 → 새 탭 복원)", () => {
   it("5곡 세트의 곡 순서·스타일·배경이 재시작 후에도 그대로 복원된다", async () => {
     await hydrateFromStorage();
 
-    // 1. 새 세트를 만들고 5곡을 넣는다
     const created = createNewPresentation("주일 1부 예배");
     openPresentation(created.id);
     for (const title of SONG_TITLES) {
       addDeckToPresentation(makeDeck(title));
     }
 
-    // 2. 제목·스타일·배경을 바꾸고 곡 순서를 뒤집는다
     updatePresentationTitle("주일 1부 예배 (최종)");
     updateSongStyle(0, { overlayOpacity: 75, fontSizeVw: 5.5 });
     const targetBackgroundId = INITIAL_BACKGROUNDS[3].id;
@@ -99,10 +97,8 @@ describe("영속성 왕복 (편집 → 저장 → 새 탭 복원)", () => {
     const expected = getPresentationById(created.id);
     expect(expected?.items).toHaveLength(5);
 
-    // 3. 창을 닫기 전 대기 중인 쓰기를 비운다
     await flushPendingWrites();
 
-    // 4. 새 탭 시뮬레이션: 메모리를 버리고 저장소에서 복원
     resetPresentationStore();
     await hydrateFromStorage();
 
@@ -169,8 +165,6 @@ describe("영속성 왕복 (편집 → 저장 → 새 탭 복원)", () => {
     expect(getPresentationById(created.id)?.items).toHaveLength(2);
     await flushPendingWrites();
 
-    // 복제 덱 id가 스키마(IdSchema)를 어기면 문서 전체가 corrupted로 격리되어
-    // 목록에서 통째로 사라진다. 저장은 됐는데 다음에 못 여는 최악의 경로다.
     resetPresentationStore();
     await hydrateFromStorage();
 
@@ -191,12 +185,9 @@ describe("영속성 왕복 (편집 → 저장 → 새 탭 복원)", () => {
 
     const items = getPresentationById(created.id)?.items ?? [];
     expect(items).toHaveLength(2);
-    // 겹치면 서버에서 decks 기본키와 presentation_items 유니크 제약을 동시에
-    // 위반해 이 세트는 영원히 동기화되지 않는다.
     expect(items[0].deck?.id).not.toBe(items[1].deck?.id);
     expect(items[0].deckId).toBe(items[0].deck?.id);
     expect(items[1].deckId).toBe(items[1].deck?.id);
-    // 보관함 원본은 건드리지 않는다.
     expect(shared.scope).toBe("library");
     expect(items[0].deck?.scope).toBe("presentation");
     expect(items[0].deck?.presentationId).toBe(created.id);
@@ -205,7 +196,6 @@ describe("영속성 왕복 (편집 → 저장 → 새 탭 복원)", () => {
   it("예전에 저장된 중복 덱 id 문서를 하이드레이션에서 복구한다", async () => {
     await hydrateFromStorage();
 
-    // Clone-on-Add가 없던 시절 만들어진 저장본을 흉내 낸다.
     const created = createNewPresentation("옛 중복 세트");
     openPresentation(created.id);
     addDeckToPresentation(makeDeck("은혜로다"));
@@ -232,12 +222,10 @@ describe("영속성 왕복 (편집 → 저장 → 새 탭 복원)", () => {
 
     const repaired = getPresentationById(created.id);
     expect(repaired?.items).toHaveLength(2);
-    // 곡을 지우지 않고 id만 새로 발급한다.
     expect(repaired?.items[0].deck?.id).not.toBe(repaired?.items[1].deck?.id);
     expect(repaired?.items[1].deckId).toBe(repaired?.items[1].deck?.id);
     expect(repaired?.items[1].deck?.title).toBe("주 품에");
 
-    // 복구본이 저장소에도 반영되어, 다음 부팅에 같은 복구를 되풀이하지 않는다.
     resetPresentationStore();
     await hydrateFromStorage();
     const again = getPresentationById(created.id);

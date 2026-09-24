@@ -13,10 +13,8 @@ import {
 } from "./driveModel";
 import { FolderGlyph, Icon } from "./icons";
 
-/** 목록이 항목에 넘기는 상호작용 (선택·열기·메뉴) */
 export interface DriveItemHandlers {
   selected: boolean;
-  /** 휴지통에서는 끌 수 없고 폴더에 놓을 수도 없다 */
   interactive: boolean;
   onClick: (event: React.MouseEvent) => void;
   onDoubleClick: () => void;
@@ -26,7 +24,6 @@ export interface DriveItemHandlers {
   onEdit?: () => void;
 }
 
-/** 드래그 대상 + (폴더면) 드롭 대상을 한 요소에 건다 */
 function useItemDnd(
   item: DriveItem,
   interactive: boolean,
@@ -94,10 +91,6 @@ function MoreButton({
   );
 }
 
-// ----------------------------------------------------------------------------
-// 썸네일
-// ----------------------------------------------------------------------------
-
 /**
  * 프레젠테이션 16:9 썸네일 (첫 곡 첫 슬라이드를 실제 스테이지로 축소 렌더).
  *
@@ -113,7 +106,6 @@ export function PresentationThumbnail({
 }): React.JSX.Element {
   const leadDeck = presentation.items[0]?.deck;
   const rawLeadSlide = leadDeck?.slides[0] ?? null;
-  // 썸네일 텍스트에 zero-width space를 붙여 카드 제목과 접근성 이름이 겹치지 않게 한다
   const leadSlide = rawLeadSlide
     ? { ...rawLeadSlide, lines: rawLeadSlide.lines.map((l) => `${l}\u200B`) }
     : null;
@@ -150,10 +142,6 @@ export function PresentationThumbnail({
     </div>
   );
 }
-
-// ----------------------------------------------------------------------------
-// 그리드 카드
-// ----------------------------------------------------------------------------
 
 export function FolderCard({
   item,
@@ -298,10 +286,6 @@ export function FileCard({
     </div>
   );
 }
-
-// ----------------------------------------------------------------------------
-// 리스트 행
-// ----------------------------------------------------------------------------
 
 export function DriveListRow({
   item,

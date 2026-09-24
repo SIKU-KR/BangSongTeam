@@ -56,10 +56,6 @@ export function toSyncableDocument(
   return result.success ? result.data : null;
 }
 
-/**
- * Hono RPC는 `ClientResponse`를 돌려준다. workers-types의 `Response`와는
- * 다른 타입이라 구조적으로만 받는다 (상태·본문만 쓰면 충분하다).
- */
 interface RpcResponse {
   status: number;
   ok: boolean;
@@ -85,8 +81,8 @@ export async function send<T>(request: () => Promise<RpcResponse>): Promise<T> {
     try {
       const body = (await response.json()) as { error?: unknown };
       if (typeof body?.error === "string") message = body.error;
-    } catch {
-      // 본문이 JSON이 아니면 상태 코드만으로 알린다
+    } catch (error) {
+      void error;
     }
     throw new ServerRejectedError(response.status, message);
   }
@@ -94,7 +90,6 @@ export async function send<T>(request: () => Promise<RpcResponse>): Promise<T> {
   return (await response.json()) as T;
 }
 
-/** 프레젠테이션 문서 1건을 서버에 올린다 */
 export async function pushPresentation(
   presentation: Presentation,
 ): Promise<boolean> {
@@ -110,7 +105,6 @@ export async function pushPresentation(
   return true;
 }
 
-/** 내 프레젠테이션 전체를 서버에서 받아 온다 */
 export async function pullPresentations(): Promise<PresentationDocument[]> {
   const body = await send<{ presentations: PresentationDocument[] }>(() =>
     api.api.presentations.$get(),
@@ -131,7 +125,7 @@ export async function pushDeck(deck: Deck): Promise<Deck> {
   return DeckSchema.parse(body.deck);
 }
 
-/** 보관함 곡 1건을 서버에서 지운다. 이미 없으면(404) 성공으로 본다 */
+/** 이미 없으면(404) 성공으로 본다 */
 export async function deleteDeckRemote(id: string): Promise<void> {
   try {
     await send(() => api.api.decks[":id"].$delete({ param: { id } }));
@@ -141,16 +135,12 @@ export async function deleteDeckRemote(id: string): Promise<void> {
   }
 }
 
-/** 내 보관함 곡 전체를 서버에서 받아 온다 */
 export async function pullDecks(): Promise<Deck[]> {
   const body = await send<{ decks: Deck[] }>(() => api.api.decks.$get());
   return body.decks;
 }
 
-/**
- * 프레젠테이션 1건을 서버에서 영구 삭제한다 (휴지통 비우기).
- * 이미 없으면(404 — 한 번도 안 올라간 문서) 성공으로 본다.
- */
+/** 이미 없으면(404 — 한 번도 안 올라간 문서) 성공으로 본다 */
 export async function deletePresentationRemote(id: string): Promise<void> {
   try {
     await send(() => api.api.presentations[":id"].$delete({ param: { id } }));
@@ -160,7 +150,6 @@ export async function deletePresentationRemote(id: string): Promise<void> {
   }
 }
 
-/** 내 드라이브 폴더 전체와 영구 삭제 기록을 서버에서 받아 온다 */
 export async function pullFolders(): Promise<FolderListResponse> {
   return send<FolderListResponse>(() => api.api.folders.$get());
 }

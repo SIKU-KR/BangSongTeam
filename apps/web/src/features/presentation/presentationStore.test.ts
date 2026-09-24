@@ -48,7 +48,6 @@ describe("presentationStore (In-memory reactive presentation)", () => {
   beforeEach(() => {
     signInAsTestUser();
     resetPresentationStore();
-    // 부팅 시 샘플 자동 생성이 사라져(계정 기반 전환) 테스트가 직접 싣는다.
     __loadDocumentsForTests(SEED_PRESENTATIONS);
   });
 
@@ -86,7 +85,6 @@ describe("presentationStore (In-memory reactive presentation)", () => {
     const item = addDeckToPresentation(newDeck);
     expect(item.order).toBe(5);
     expect(item.deck?.title).toBe("아침 안개 눈 앞 가리듯");
-    // Should automatically assign a valid background from INITIAL_BACKGROUNDS
     expect(item.deck?.backgroundId).toBe(
       INITIAL_BACKGROUNDS[5 % INITIAL_BACKGROUNDS.length].id,
     );
@@ -169,7 +167,6 @@ describe("presentationStore (In-memory reactive presentation)", () => {
     const { result } = renderHook(() => useActivePresentation());
     const initialSlideCount = result.current.items[0].deck?.slides.length ?? 0;
 
-    // Update lines
     act(() => {
       updateSlideLines(0, 0, ["첫 번째 줄 수정", "두 번째 줄 수정"]);
     });
@@ -178,7 +175,6 @@ describe("presentationStore (In-memory reactive presentation)", () => {
       "두 번째 줄 수정",
     ]);
 
-    // Add slide
     act(() => {
       addSlideToSong(0, ["새로운 슬라이드"], 0);
     });
@@ -189,7 +185,6 @@ describe("presentationStore (In-memory reactive presentation)", () => {
       "새로운 슬라이드",
     ]);
 
-    // Duplicate slide
     act(() => {
       duplicateSlide(0, 1);
     });
@@ -200,7 +195,6 @@ describe("presentationStore (In-memory reactive presentation)", () => {
       "새로운 슬라이드",
     ]);
 
-    // Remove slide
     act(() => {
       removeSlideFromSong(0, 2);
     });
@@ -264,7 +258,6 @@ describe("presentationStore (In-memory reactive presentation)", () => {
     expect(canUndo()).toBe(false);
     expect(canRedo()).toBe(false);
 
-    // Make an edit
     act(() => {
       updatePresentationTitle("수정된 제목");
     });
@@ -272,7 +265,6 @@ describe("presentationStore (In-memory reactive presentation)", () => {
     expect(canUndo()).toBe(true);
     expect(canRedo()).toBe(false);
 
-    // Undo edit
     act(() => {
       undo();
     });
@@ -280,7 +272,6 @@ describe("presentationStore (In-memory reactive presentation)", () => {
     expect(canUndo()).toBe(false);
     expect(canRedo()).toBe(true);
 
-    // Redo edit
     act(() => {
       redo();
     });
@@ -294,7 +285,6 @@ describe("멀티 문서 컬렉션", () => {
   beforeEach(() => {
     signInAsTestUser();
     resetPresentationStore();
-    // 부팅 시 샘플 자동 생성이 사라져(계정 기반 전환) 테스트가 직접 싣는다.
     __loadDocumentsForTests(SEED_PRESENTATIONS);
   });
 
@@ -313,7 +303,6 @@ describe("멀티 문서 컬렉션", () => {
   });
 
   it("listPresentations는 상태가 바뀌지 않으면 동일한 배열 참조를 반환한다", () => {
-    // useSyncExternalStore의 getSnapshot 캐싱 요구사항 (무한 루프 방지)
     expect(listPresentations()).toBe(listPresentations());
   });
 
@@ -356,7 +345,6 @@ describe("멀티 문서 컬렉션", () => {
     expect(listPresentations()).toHaveLength(6);
     expect(created.items).toEqual([]);
     expect(getActivePresentationId()).toBe(created.id);
-    // 이전 문서가 그대로 살아 있어야 한다
     expect(getPresentationById(SEED_PRESENTATION_IDS[0])?.items).toHaveLength(
       5,
     );
@@ -412,7 +400,6 @@ describe("문서별 Undo/Redo 격리", () => {
     act(() => {
       openPresentation(docB);
     });
-    // B는 아직 편집된 적이 없다
     expect(canUndo()).toBe(false);
     expect(canRedo()).toBe(false);
 
@@ -435,7 +422,6 @@ describe("문서별 Undo/Redo 격리", () => {
     });
 
     expect(getPresentationById(docA)?.title).toBe("2026 주일 3부 예배");
-    // B는 자기 편집 결과를 그대로 유지한다
     expect(getPresentationById(docB)?.title).toBe("B 수정");
     expect(getPresentationById(docB)?.title).not.toBe(originalB);
   });
@@ -460,13 +446,10 @@ describe("문서별 Undo/Redo 격리", () => {
     const loaded = getActivePresentation();
     expect(loaded.items).toHaveLength(5);
     expect(loaded.title).toBe("빈 세트");
-    // 다른 문서는 손대지 않는다
     expect(getPresentationById(docB)?.title).toBe("B 수정");
   });
 
   it("샘플 세트를 두 번 불러도 덱 id가 겹치지 않는다", () => {
-    // 겹치면 서버에서 decks 기본키와 presentation_items 유니크 제약을 동시에
-    // 위반해 세트 전체가 저장되지 않는다.
     act(() => {
       const created = createNewPresentation("두 번 불러오기");
       openPresentation(created.id);
@@ -480,7 +463,7 @@ describe("문서별 Undo/Redo 격리", () => {
     expect(new Set(deckIds).size).toBe(10);
   });
 
-  describe("공유 필드와 보관함 연결 (M5)", () => {
+  describe("공유 필드와 보관함 연결", () => {
     const libraryDeck = () =>
       DeckSchema.parse({
         id: "9000000000000000000aa",
@@ -508,7 +491,6 @@ describe("문서별 Undo/Redo 격리", () => {
         forkCount: 0,
         publishedAt: null,
         forkedFrom: "9000000000000000000aa",
-        // 원작 표시는 그대로 물려받는다
         forkedFromAuthorName: "원작자",
       });
     });
@@ -548,8 +530,6 @@ describe("문서별 Undo/Redo 격리", () => {
 
     const active = getActivePresentation();
     for (const item of active.items) {
-      // 샘플 덱은 MOCK_USER_ID와 MOCK_PRESENTATION_ID를 물고 있다.
-      // 복제 없이 넣으면 남의 소유로 서버에 올라간다.
       expect(item.deck?.userId).toBe(SEED_USER_ID);
       expect(item.deck?.scope).toBe("presentation");
       expect(item.deck?.presentationId).toBe(active.id);

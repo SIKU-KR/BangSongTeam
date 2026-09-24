@@ -50,7 +50,6 @@ export function drivePath(folderId: string | null | undefined): string {
 
 type Navigate = (to: string) => void;
 
-/** 폴더는 들어가고, 프레젠테이션은 편집기로 연다 */
 export function openItem(ref: DriveItemRef, navigate: Navigate): void {
   navigate(ref.kind === "folder" ? drivePath(ref.id) : `/editor/${ref.id}`);
 }
@@ -60,7 +59,6 @@ export function openItem(ref: DriveItemRef, navigate: Navigate): void {
  *
  * 클릭 핸들러 안에서 동기로 불러야 Chrome이 전체화면을 허용한다 — 이 함수와
  * 호출 경로 사이에 await를 끼우지 않는다.
- * @returns 실제로 송출을 시작했는지
  */
 export function startPresentation(id: string, navigate: Navigate): boolean {
   if (!isGoogleChromeBrowser()) {
@@ -73,7 +71,6 @@ export function startPresentation(id: string, navigate: Navigate): boolean {
   return true;
 }
 
-/** 항목이 지금 놓인 폴더 (`null` = 루트) */
 export function parentOf(ref: DriveItemRef): string | null {
   const index = getFolderIndex();
   if (ref.kind === "folder") return index.parentOf.get(ref.id) ?? null;
@@ -96,13 +93,10 @@ export function renameItem(
 }
 
 export interface MoveOutcome {
-  /** 실제로 옮긴 항목과 원래 위치 (실행 취소용) */
   moved: Array<{ ref: DriveItemRef; from: string | null }>;
-  /** 옮기지 못한 이유 (사이클 등) */
   errors: string[];
 }
 
-/** 여러 항목을 한 폴더로 옮긴다 (`null` = 루트) */
 export function moveItems(
   refs: readonly DriveItemRef[],
   targetFolderId: string | null,
@@ -130,7 +124,6 @@ export function moveItems(
   return outcome;
 }
 
-/** 이동 실행 취소: 원래 위치로 돌려놓는다 (그사이 사라진 폴더면 루트) */
 export function undoMove(outcome: MoveOutcome): void {
   for (const { ref, from } of outcome.moved) {
     const target = from !== null && isFolderAvailable(from) ? from : null;
@@ -139,7 +132,7 @@ export function undoMove(outcome: MoveOutcome): void {
   }
 }
 
-/** 휴지통으로. 폴더를 버리면 안의 항목은 폴더와 함께 가려진다 */
+/** 폴더를 버리면 안의 항목도 폴더와 함께 가려진다 (folderStore가 처리) */
 export function trashItems(refs: readonly DriveItemRef[]): DriveItemRef[] {
   for (const ref of refs) {
     if (ref.kind === "folder") trashFolder(ref.id);
@@ -148,7 +141,6 @@ export function trashItems(refs: readonly DriveItemRef[]): DriveItemRef[] {
   return [...refs];
 }
 
-/** 휴지통에서 복원. 원래 폴더가 없거나 휴지통에 있으면 루트로 */
 export function restoreItems(refs: readonly DriveItemRef[]): void {
   for (const ref of refs) {
     if (ref.kind === "folder") {
@@ -160,7 +152,7 @@ export function restoreItems(refs: readonly DriveItemRef[]): void {
   }
 }
 
-/** 사본 만들기 (프레젠테이션만. 폴더 사본은 드라이브와 같이 지원하지 않는다) */
+/** 폴더 사본은 지원하지 않는다 (프레젠테이션만 복제) */
 export function duplicateItems(refs: readonly DriveItemRef[]): Presentation[] {
   return refs
     .filter((ref) => ref.kind === "file")
@@ -168,7 +160,6 @@ export function duplicateItems(refs: readonly DriveItemRef[]): Presentation[] {
     .filter((copy): copy is Presentation => copy !== null);
 }
 
-/** 영구 삭제 실패를 사용자에게 보여 줄 문장으로 감싼다 */
 export class DriveActionError extends Error {
   constructor(message: string, cause?: unknown) {
     super(message);
@@ -210,7 +201,6 @@ export async function deleteItemsForever(
 
       const result = await deleteFolderRemote(ref.id);
 
-      // 서버가 이 폴더 소속으로 몰랐던 세트(한 번도 안 올라간 것 등)도 지운다.
       const deletedOnServer = new Set(result.deletedPresentationIds);
       for (const id of localFiles) {
         if (!deletedOnServer.has(id)) await deletePresentationRemote(id);

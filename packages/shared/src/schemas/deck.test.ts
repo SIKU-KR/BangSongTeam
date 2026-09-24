@@ -45,13 +45,13 @@ describe("DeckSchema", () => {
     expect(parsed.slides[0].id).toMatch(/^s_/);
   });
 
-  it("parses old payloads without M5 sharing fields", () => {
+  it("parses old payloads without sharing fields", () => {
     const parsed = DeckSchema.parse(sampleDeck);
     expect(parsed.origin).toBeUndefined();
     expect(parsed.publishedAt).toBeUndefined();
   });
 
-  it("accepts M5 sharing fields", () => {
+  it("accepts sharing fields", () => {
     const parsed = DeckSchema.parse({
       ...sampleDeck,
       origin: "fork",

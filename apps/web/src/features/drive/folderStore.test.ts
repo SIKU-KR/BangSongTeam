@@ -58,7 +58,6 @@ describe("folderStore", () => {
   });
 
   afterEach(async () => {
-    // 앞 테스트의 저장이 다음 테스트의 새 DB에 떨어지지 않게 끝까지 기다린다
     await flushFolderWrites();
     __resetFolderSyncForTests();
     closeOfflineDB();

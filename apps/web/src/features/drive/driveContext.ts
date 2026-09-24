@@ -4,7 +4,6 @@ import { getFolderIndex } from "./folderStore";
 import { canDropInto, type DriveItemRef } from "./driveModel";
 import { parentOf } from "./driveActions";
 
-/** 드래그한 항목을 놓을 수 있는 곳 */
 export type DropTarget =
   { kind: "folder"; folderId: string | null } | { kind: "trash" };
 
@@ -14,20 +13,15 @@ export interface ToastAction {
 }
 
 export interface DriveContextValue {
-  /** 지금 보고 있는 폴더 (`null` = 루트 또는 드라이브가 아닌 화면) */
   currentFolderId: string | null;
   isTrashView: boolean;
 
-  /** 선택된 항목 키 (`folder:<id>` / `file:<id>`) */
   selection: ReadonlySet<string>;
-  /** Shift+클릭 범위 선택의 기준 */
   anchorKey: string | null;
   setSelection: (keys: readonly string[], anchor?: string | null) => void;
   clearSelection: () => void;
 
-  /** 끌고 있는 항목 (없으면 null) */
   activeDrag: readonly DriveItemRef[] | null;
-  /** 대화 상자가 열려 있는지 (단축키를 막는다) */
   dialogOpen: boolean;
 
   requestNewFolder: (parentId: string | null) => void;
@@ -67,10 +61,7 @@ export function canDropOn(
   );
 }
 
-/**
- * 드롭 대상 (폴더 카드·브레드크럼·사이드바 트리·휴지통).
- * `isDropTarget`은 지금 끌고 있는 항목을 여기 놓을 수 있고 포인터가 올라와 있을 때.
- */
+/** 드롭 대상 (폴더 카드·브레드크럼·사이드바 트리·휴지통). */
 export function useDriveDroppable(
   id: string,
   target: DropTarget,
@@ -81,8 +72,6 @@ export function useDriveDroppable(
 } {
   const { activeDrag } = useDrive();
   const allowed = !disabled && canDropOn(activeDrag, target);
-  // 드래그 도중에 활성 여부를 바꾸면 dnd-kit이 다시 측정해야 한다. 대상은 늘
-  // 켜 두고, 놓을 수 있는지는 강조와 드롭 처리에서 가린다.
   const { setNodeRef, isOver } = useDroppable({ id, data: target, disabled });
   return { setNodeRef, isDropTarget: allowed && isOver };
 }

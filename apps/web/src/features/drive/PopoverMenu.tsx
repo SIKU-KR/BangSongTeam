@@ -8,19 +8,16 @@ export interface MenuAction {
   onSelect: () => void;
   danger?: boolean;
   disabled?: boolean;
-  /** 이 항목 앞에 구분선 */
   separated?: boolean;
   testId?: string;
 }
 
 export interface PopoverMenuProps {
-  /** 화면 좌표 (우클릭 위치나 버튼 아래) */
   anchor: { x: number; y: number };
   actions: MenuAction[];
   onClose: () => void;
   label?: string;
   testId?: string;
-  /** 메뉴를 연 버튼. 이 버튼을 누르면 버튼 쪽에서 닫도록 바깥 클릭으로 치지 않는다 */
   triggerRef?: React.RefObject<HTMLElement | null>;
 }
 
@@ -93,7 +90,6 @@ export function PopoverMenu({
       data-testid={testId}
       style={{ left: position.x, top: position.y }}
       onContextMenu={(event) => event.preventDefault()}
-      // 메뉴는 목록 안에서 렌더된다. 클릭이 목록 배경까지 올라가 선택을 지우면 안 된다.
       onClick={(event) => event.stopPropagation()}
       onDoubleClick={(event) => event.stopPropagation()}
       className="fixed z-[80] min-w-[200px] py-1.5 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-lg dark:shadow-2xl"

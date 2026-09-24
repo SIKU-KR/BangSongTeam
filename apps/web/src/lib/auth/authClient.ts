@@ -1,13 +1,11 @@
 import { createAuthClient } from "better-auth/react";
 
-/** Better Auth 클라이언트 */
 export const authClient = createAuthClient({
   basePath: "/api/auth",
 });
 
 export type SocialProvider = "kakao" | "naver";
 
-/** 지원 소셜 로그인 제공자 목록 */
 export const SOCIAL_PROVIDERS: Array<{
   id: SocialProvider;
   label: string;
