@@ -219,7 +219,7 @@ export function MoveDialog({
   const index = useFolderIndex();
   const origin = refs.length > 0 ? parentOf(refs[0]) : null;
   const [target, setTarget] = useState<string | null>(origin);
-  const { expanded, toggle } = useTreeExpansion(target, false);
+  const { expanded, toggle } = useTreeExpansion(target);
 
   const isAllowed = (folderId: string | null): boolean =>
     canDropInto(index, refs, folderId);
@@ -257,7 +257,6 @@ export function MoveDialog({
           <span>{ROOT_LABEL}</span>
         </button>
         <FolderTree
-          mode="picker"
           selectedId={target}
           onSelect={setTarget}
           expanded={expanded}

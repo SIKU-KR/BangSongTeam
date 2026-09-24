@@ -3,13 +3,11 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { ThemeMenuButton } from "../common/ThemeMenuButton";
 import { useSession, signOut } from "../../lib/auth";
 import {
-  FolderTree,
+  DRIVE_ROOT_PATH,
   NewMenuButton,
   TRASH_PATH,
   drivePath,
-  useDrive,
   useDriveDroppable,
-  useTreeExpansion,
 } from "../../features/drive";
 
 interface NavItem {
@@ -22,7 +20,7 @@ interface NavItem {
 
 const DRIVE_ITEM: NavItem = {
   testId: "sidebar-nav-home",
-  path: "/presentations",
+  path: DRIVE_ROOT_PATH,
   label: "내 드라이브",
   accent: "text-emerald-500 dark:text-emerald-400",
   iconPath:
@@ -160,9 +158,10 @@ function AccountCard(): React.JSX.Element {
 export function AppSidebar(): React.JSX.Element {
   const navigate = useNavigate();
   const { pathname } = useLocation();
-  const drive = useDrive();
-  const { expanded, toggle } = useTreeExpansion(drive.currentFolderId, true);
 
+  const isDrive =
+    pathname === DRIVE_ROOT_PATH ||
+    pathname.startsWith(`${DRIVE_ROOT_PATH}/folders/`);
   const isBackgrounds =
     pathname === BACKGROUNDS_ITEM.path ||
     pathname.startsWith(`${BACKGROUNDS_ITEM.path}/`);
@@ -194,19 +193,10 @@ export function AppSidebar(): React.JSX.Element {
         <nav className="space-y-1" aria-label="주 메뉴">
           <NavButton
             item={DRIVE_ITEM}
-            active={pathname === DRIVE_ITEM.path}
+            active={isDrive}
             onClick={() => navigate(drivePath(null))}
             drop={{ kind: "folder", folderId: null }}
           />
-          <div data-testid="sidebar-folder-tree" className="pl-3">
-            <FolderTree
-              mode="nav"
-              selectedId={drive.currentFolderId}
-              onSelect={(folderId) => navigate(drivePath(folderId))}
-              expanded={expanded}
-              onToggle={toggle}
-            />
-          </div>
           <NavButton
             item={TRASH_ITEM}
             active={pathname === TRASH_ITEM.path}

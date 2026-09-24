@@ -2,7 +2,6 @@ import React, { useEffect, useState } from "react";
 import type { Folder, FolderIndex } from "#shared";
 import { getFolderPath } from "#shared";
 import { useFolderIndex } from "./folderStore";
-import { useDriveDroppable } from "./driveContext";
 import { FolderGlyph, Icon } from "./icons";
 
 const collator = new Intl.Collator("ko", { numeric: true });
@@ -16,45 +15,13 @@ function visibleChildren(
     .sort((a, b) => collator.compare(a.name, b.name));
 }
 
-const EXPANDED_STORAGE_KEY = "drive.tree.expanded";
-
-function loadExpanded(): Set<string> {
-  try {
-    const raw = window.localStorage.getItem(EXPANDED_STORAGE_KEY);
-    const parsed: unknown = raw ? JSON.parse(raw) : [];
-    return new Set(
-      Array.isArray(parsed)
-        ? parsed.filter((id): id is string => typeof id === "string")
-        : [],
-    );
-  } catch {
-    return new Set();
-  }
-}
-
-function saveExpanded(expanded: Set<string>): void {
-  try {
-    window.localStorage.setItem(
-      EXPANDED_STORAGE_KEY,
-      JSON.stringify([...expanded]),
-    );
-  } catch (error) {
-    void error;
-  }
-}
-
-/**
- * 펼침 상태. 선택된 폴더의 조상은 자동으로 펼친다.
- * 사이드바는 브라우저에 기억하고, 이동 대화 상자는 그때만 쓴다.
- */
-export function useTreeExpansion(
-  selectedId: string | null | undefined,
-  persist: boolean,
-): { expanded: Set<string>; toggle: (id: string) => void } {
+/** 펼침 상태. 선택된 폴더의 조상은 자동으로 펼친다. */
+export function useTreeExpansion(selectedId: string | null | undefined): {
+  expanded: Set<string>;
+  toggle: (id: string) => void;
+} {
   const index = useFolderIndex();
-  const [expanded, setExpanded] = useState<Set<string>>(() =>
-    persist ? loadExpanded() : new Set(),
-  );
+  const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
 
   useEffect(() => {
     if (!selectedId) return;
@@ -65,17 +32,15 @@ export function useTreeExpansion(
       if (ancestors.every((id) => prev.has(id))) return prev;
       const next = new Set(prev);
       for (const id of ancestors) next.add(id);
-      if (persist) saveExpanded(next);
       return next;
     });
-  }, [index, selectedId, persist]);
+  }, [index, selectedId]);
 
   const toggle = (id: string): void => {
     setExpanded((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
       else next.add(id);
-      if (persist) saveExpanded(next);
       return next;
     });
   };
@@ -84,7 +49,6 @@ export function useTreeExpansion(
 }
 
 export interface FolderTreeProps {
-  mode: "nav" | "picker";
   selectedId: string | null | undefined;
   onSelect: (folderId: string) => void;
   expanded: Set<string>;
@@ -93,7 +57,7 @@ export interface FolderTreeProps {
   baseDepth?: number;
 }
 
-/** 폴더 트리 (휴지통에 있는 폴더는 보이지 않는다) */
+/** 이동 대화 상자의 폴더 트리 (휴지통에 있는 폴더는 보이지 않는다) */
 export function FolderTree(props: FolderTreeProps): React.JSX.Element | null {
   const index = useFolderIndex();
   const roots = visibleChildren(index, null);
@@ -117,7 +81,6 @@ function FolderTreeNode({
   folder,
   depth,
   index,
-  mode,
   selectedId,
   onSelect,
   expanded,
@@ -132,19 +95,10 @@ function FolderTreeNode({
   const isExpanded = expanded.has(folder.id);
   const isSelected = selectedId === folder.id;
   const disabled = isDisabled?.(folder.id) ?? false;
-  const { setNodeRef, isDropTarget } = useDriveDroppable(
-    `tree:${folder.id}`,
-    { kind: "folder", folderId: folder.id },
-    mode !== "nav",
-  );
 
-  const stateClass = isDropTarget
-    ? "ring-2 ring-emerald-500/70 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-200"
-    : isSelected
-      ? mode === "nav"
-        ? "bg-zinc-100 dark:bg-zinc-800/90 text-zinc-900 dark:text-white font-semibold"
-        : "bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-200 font-semibold"
-      : "text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-900/60";
+  const stateClass = isSelected
+    ? "bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-200 font-semibold"
+    : "text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-900/60";
 
   return (
     <li
@@ -153,8 +107,7 @@ function FolderTreeNode({
       aria-selected={isSelected}
     >
       <div
-        ref={setNodeRef}
-        data-testid={`${mode === "nav" ? "tree" : "picker"}-node-${folder.id}`}
+        data-testid={`picker-node-${folder.id}`}
         className={`group w-full rounded-lg flex items-center gap-1 pr-2 transition-colors ${stateClass} ${
           disabled ? "opacity-40" : ""
         }`}
@@ -180,7 +133,6 @@ function FolderTreeNode({
         <button
           type="button"
           disabled={disabled}
-          aria-current={mode === "nav" && isSelected ? "page" : undefined}
           onClick={() => onSelect(folder.id)}
           title={folder.name}
           className="flex-1 min-w-0 py-1.5 flex items-center gap-2 text-left text-xs cursor-pointer disabled:cursor-not-allowed"
@@ -203,7 +155,6 @@ function FolderTreeNode({
               folder={child}
               depth={depth + 1}
               index={index}
-              mode={mode}
               selectedId={selectedId}
               onSelect={onSelect}
               expanded={expanded}

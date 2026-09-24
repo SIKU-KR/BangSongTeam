@@ -256,11 +256,15 @@ describe("AppShellLayout (드라이브형 홈)", () => {
       "aria-current",
       "page",
     );
+    expect(screen.getByTestId("sidebar-nav-home")).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
     expect(
-      within(screen.getByTestId("sidebar-folder-tree")).getByText(
+      within(screen.getByRole("navigation", { name: "주 메뉴" })).queryByText(
         "2026 주일 대예배",
       ),
-    ).toBeInTheDocument();
+    ).toBeNull();
 
     fireEvent.click(screen.getByTestId("crumb-root"));
     expect(screen.getAllByTestId("presentation-row")).toHaveLength(5);
