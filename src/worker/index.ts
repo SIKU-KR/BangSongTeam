@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import type { AppEnv } from "./types";
 import { createAuth, AUTH_BASE_PATH } from "./lib/auth";
-import { backgroundsRoute } from "./routes/backgrounds";
+import { createBackgroundsRoute } from "./routes/backgrounds";
 import { mediaRoute } from "./routes/media";
 import { createPresentationsRoute } from "./routes/presentations";
 import { createFoldersRoute } from "./routes/folders";
@@ -48,7 +48,7 @@ export function createApp(deps: AppDeps = {}) {
     .route("/api/decks", createDecksRoute(deps))
     .route("/api/catalog", createCatalogRoute(deps))
     .route("/api/reports", createReportsRoute(deps))
-    .route("/api/backgrounds", backgroundsRoute)
+    .route("/api/backgrounds", createBackgroundsRoute(deps))
     .route("/api/media", mediaRoute);
 }
 

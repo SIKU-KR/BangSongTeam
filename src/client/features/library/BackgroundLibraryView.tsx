@@ -1,520 +1,358 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
+import { hangulIncludes, type BackgroundMedia } from "#shared";
 import {
-  INITIAL_BACKGROUNDS,
-  getBackgroundMediaUrl,
-  getBackgroundPosterUrl,
-  hangulIncludes,
-} from "#shared";
-import {
-  INITIAL_MY_BACKGROUNDS,
-  type CustomBackgroundItem,
-} from "./mockCustomBackgrounds";
+  BackgroundPreview,
+  BackgroundUploadDialog,
+  formatBytes,
+  useBackgroundCatalog,
+} from "../backgrounds";
+import { useDeleteBackground } from "../../lib/api/backgroundQueries";
+import { describeApiError } from "../../lib/api/request";
+import { refreshBackgroundCatalog } from "../../lib/sync/backgroundSync";
+import { useIsOnline } from "../../hooks/useIsOnline";
 
 export interface BackgroundLibraryViewProps {
-  onApplyBackgroundToCurrentSet?: (backgroundId: string) => void;
   searchQuery?: string;
 }
 
-const FILTER_TAGS = [
-  "전체",
-  "잔잔한",
-  "밝은",
-  "웅장한",
-  "따뜻한",
-  "차가운",
-  "어두운",
-] as const;
+const ALL_TAGS = "전체";
 
-/** 배경 라이브러리 화면 컴포넌트. */
+function matchesQuery(bg: BackgroundMedia, query: string): boolean {
+  if (!query) return true;
+  return (
+    hangulIncludes(bg.title, query) ||
+    bg.tags.some((tag) => hangulIncludes(tag, query))
+  );
+}
+
+function BackgroundCard({
+  background,
+  action,
+}: {
+  background: BackgroundMedia;
+  action?: React.ReactNode;
+}): React.JSX.Element {
+  const [hovered, setHovered] = useState(false);
+
+  return (
+    <div
+      data-testid={`bg-card-${background.id}`}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      className="flex flex-col bg-white dark:bg-zinc-900/60 border border-zinc-200 dark:border-zinc-800/80 hover:border-zinc-300 dark:hover:border-zinc-700 rounded-2xl overflow-hidden transition-all shadow-sm hover:shadow-md dark:shadow-none"
+    >
+      <BackgroundPreview background={background} playing={hovered} />
+      <div className="p-3 border-t border-zinc-100 dark:border-zinc-800/80 flex items-center justify-between gap-2">
+        <div className="min-w-0">
+          <h4 className="text-xs font-bold text-zinc-900 dark:text-white truncate">
+            {background.title}
+          </h4>
+          <p className="text-[11px] text-zinc-500 dark:text-zinc-400 truncate mt-0.5">
+            {[
+              ...background.tags,
+              background.source === "user"
+                ? formatBytes(background.sizeBytes)
+                : null,
+            ]
+              .filter(Boolean)
+              .join(" · ") || "태그 없음"}
+          </p>
+        </div>
+        {action}
+      </div>
+    </div>
+  );
+}
+
+function SectionHeader({
+  dotClassName,
+  title,
+  count,
+  description,
+  children,
+}: {
+  dotClassName: string;
+  title: string;
+  count: number;
+  description: string;
+  children?: React.ReactNode;
+}): React.JSX.Element {
+  return (
+    <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3 pb-3 border-b border-zinc-200 dark:border-zinc-800/80">
+      <div>
+        <div className="flex items-center gap-2.5">
+          <span className={`w-2.5 h-2.5 rounded-full ${dotClassName}`} />
+          <h2 className="text-xl font-bold text-zinc-900 dark:text-white tracking-tight">
+            {title}
+          </h2>
+          <span className="text-xs px-2.5 py-0.5 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 font-mono">
+            {count}개
+          </span>
+        </div>
+        <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">
+          {description}
+        </p>
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function EmptyState({
+  children,
+}: {
+  children: React.ReactNode;
+}): React.JSX.Element {
+  return (
+    <div className="py-12 px-4 text-center flex flex-col items-center justify-center gap-3 bg-white dark:bg-zinc-900/40 border border-zinc-200 dark:border-zinc-800 rounded-xl text-sm text-zinc-600 dark:text-zinc-400">
+      {children}
+    </div>
+  );
+}
+
+/**
+ * 배경 라이브러리: 사전 주입 배경을 둘러보고, 내 배경을 올리고 지운다.
+ *
+ * 곡에 배경을 입히는 것은 편집기의 배경 선택 창에서 한다. 이 화면에는 '지금 편집 중인
+ * 곡'이라는 맥락이 없기 때문이다.
+ */
 export function BackgroundLibraryView({
-  onApplyBackgroundToCurrentSet,
   searchQuery = "",
 }: BackgroundLibraryViewProps): React.JSX.Element {
-  const [myBackgrounds, setMyBackgrounds] = useState<CustomBackgroundItem[]>(
-    INITIAL_MY_BACKGROUNDS,
+  const catalog = useBackgroundCatalog();
+  const isOnline = useIsOnline();
+  const deleteBackground = useDeleteBackground();
+  const [activeTag, setActiveTag] = useState<string>(ALL_TAGS);
+  const [isUploadOpen, setIsUploadOpen] = useState(false);
+  const [pendingDelete, setPendingDelete] = useState<BackgroundMedia | null>(
+    null,
   );
-  const [isRegisterOpen, setIsRegisterOpen] = useState<boolean>(false);
-  const [newTitle, setNewTitle] = useState<string>("");
-  const [newMediaUrl, setNewMediaUrl] = useState<string>("");
-  const [newTag, setNewTag] = useState<string>("잔잔한");
 
-  const [activeTag, setActiveTag] = useState<string>("전체");
-  const [hoveredId, setHoveredId] = useState<string | null>(null);
-  const [appliedBgId, setAppliedBgId] = useState<string | null>(null);
+  useEffect(() => {
+    void refreshBackgroundCatalog();
+  }, []);
 
   const query = searchQuery.trim();
+  const service = catalog.backgrounds.filter((bg) => bg.source === "service");
+  const mine = catalog.backgrounds.filter((bg) => bg.source === "user");
 
-  const filteredMyBackgrounds = myBackgrounds.filter((bg) => {
-    if (!query) return true;
-    return (
-      hangulIncludes(bg.title, query) ||
-      bg.tags.some((t) => hangulIncludes(t, query))
-    );
-  });
+  const serviceTags = [...new Set(service.flatMap((bg) => bg.tags))];
 
-  const filteredCommunityBackgrounds = INITIAL_BACKGROUNDS.filter((bg) => {
-    const matchesTag = activeTag === "전체" || bg.tags.includes(activeTag);
-    if (!matchesTag) return false;
-    if (!query) return true;
-    return (
-      hangulIncludes(bg.title, query) ||
-      bg.tags.some((t) => hangulIncludes(t, query))
-    );
-  });
+  const visibleService = service.filter(
+    (bg) =>
+      (activeTag === ALL_TAGS || bg.tags.includes(activeTag)) &&
+      matchesQuery(bg, query),
+  );
+  const visibleMine = mine.filter((bg) => matchesQuery(bg, query));
 
-  const handleApply = (bgId: string): void => {
-    if (onApplyBackgroundToCurrentSet) {
-      onApplyBackgroundToCurrentSet(bgId);
+  const canManage = isOnline && catalog.status !== "offline";
+  const usage = catalog.usage;
+  const usagePercent = usage
+    ? Math.min(100, Math.round((usage.usedBytes / usage.limitBytes) * 100))
+    : 0;
+
+  const confirmDelete = async (): Promise<void> => {
+    if (!pendingDelete) return;
+    try {
+      await deleteBackground.mutateAsync(pendingDelete.id);
+      setPendingDelete(null);
+    } catch (error) {
+      void error;
     }
-    setAppliedBgId(bgId);
-    setTimeout(() => {
-      setAppliedBgId(null);
-    }, 2000);
-  };
-
-  const handleRegisterBackground = (e: React.FormEvent): void => {
-    e.preventDefault();
-    if (!newTitle.trim()) return;
-
-    const newItem: CustomBackgroundItem = {
-      id: `my-bg-${Date.now()}`,
-      title: newTitle.trim(),
-      mediaUrl: newMediaUrl.trim() || "/api/media/loops/warm_light_flow.mp4",
-      posterUrl: "/api/media/posters/warm_light_flow.webp",
-      type: "video",
-      createdAt: new Date().toISOString(),
-      tags: [newTag],
-    };
-
-    setMyBackgrounds((prev) => [newItem, ...prev]);
-    setNewTitle("");
-    setNewMediaUrl("");
-    setIsRegisterOpen(false);
-  };
-
-  const handleDeleteMyBackground = (id: string): void => {
-    setMyBackgrounds((prev) => prev.filter((bg) => bg.id !== id));
   };
 
   return (
     <div className="space-y-10">
-      <section className="space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-zinc-200 dark:border-zinc-800/80">
-          <div>
-            <div className="flex items-center gap-2.5">
-              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
-              <h2 className="text-xl font-bold text-zinc-900 dark:text-white tracking-tight">
-                내가 등록한 배경
-              </h2>
-              <span className="text-xs px-2.5 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 font-mono font-medium">
-                {filteredMyBackgrounds.length}개 배경
-              </span>
-            </div>
-            <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
-              교회 본당 환경에 맞춰 직접 업로드하거나 등록한 커스텀 영상/이미지
-              배경입니다.
-            </p>
-          </div>
-
-          <button
-            type="button"
-            data-testid="register-custom-bg-btn"
-            onClick={() => setIsRegisterOpen(true)}
-            className="px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-bold shadow-sm hover:shadow-md hover:shadow-emerald-600/20 dark:shadow-emerald-950/40 flex items-center gap-1.5 cursor-pointer self-start sm:self-auto transition-all"
-          >
-            <svg
-              className="w-4 h-4"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M12 4v16m8-8H4"
-              />
-            </svg>
-            <span>새 배경 등록하기</span>
-          </button>
+      {!canManage && (
+        <div
+          role="status"
+          className="px-4 py-2.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900 text-xs text-amber-800 dark:text-amber-300"
+        >
+          오프라인이라 저장해 둔 목록을 보여 줍니다. 배경을 올리거나 지우려면
+          인터넷에 연결해 주세요.
         </div>
+      )}
 
-        {filteredMyBackgrounds.length === 0 ? (
-          <div className="py-12 text-center flex flex-col items-center justify-center gap-3 bg-white dark:bg-zinc-900/40 border border-zinc-200 dark:border-zinc-800 rounded-xl">
-            <p className="text-sm font-semibold text-zinc-700 dark:text-zinc-300">
-              {query
-                ? `"${searchQuery}"에 일치하는 등록 배경이 없습니다.`
-                : "등록된 커스텀 배경이 없습니다."}
-            </p>
-            {!query && (
-              <button
-                type="button"
-                onClick={() => setIsRegisterOpen(true)}
-                className="px-3.5 py-1.5 rounded-lg bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-emerald-600 dark:text-emerald-400 text-xs font-medium cursor-pointer transition-colors"
-              >
-                교회 맞춤 배경 등록하기
-              </button>
+      <section className="space-y-4">
+        <SectionHeader
+          dotClassName="bg-emerald-500"
+          title="내가 올린 배경"
+          count={mine.length}
+          description="본당 환경이나 절기에 맞춰 직접 올린 영상·이미지입니다. 나만 쓸 수 있고, 곡을 공유해도 다른 사람에게는 보이지 않습니다."
+        >
+          <div className="flex flex-col items-start sm:items-end gap-2">
+            <button
+              type="button"
+              data-testid="open-bg-upload-btn"
+              disabled={!canManage}
+              onClick={() => setIsUploadOpen(true)}
+              className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-sm cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              배경 올리기
+            </button>
+            {usage && (
+              <div data-testid="bg-storage-usage" className="w-48">
+                <div className="h-1.5 rounded-full bg-zinc-200 dark:bg-zinc-800 overflow-hidden">
+                  <div
+                    className={`h-full ${usagePercent >= 90 ? "bg-red-500" : "bg-emerald-500"}`}
+                    style={{ width: `${usagePercent}%` }}
+                  />
+                </div>
+                <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-1 text-right">
+                  {formatBytes(usage.usedBytes)} /{" "}
+                  {formatBytes(usage.limitBytes)} 사용
+                </p>
+              </div>
             )}
           </div>
+        </SectionHeader>
+
+        {visibleMine.length === 0 ? (
+          <EmptyState>
+            {query ? (
+              <p>&ldquo;{searchQuery}&rdquo;에 맞는 내 배경이 없습니다.</p>
+            ) : (
+              <>
+                <p className="font-semibold text-zinc-700 dark:text-zinc-300">
+                  아직 올린 배경이 없습니다.
+                </p>
+                <p className="text-xs">
+                  MP4 영상이나 JPEG·PNG·WebP 이미지를 파일당 30MB, 모두 합쳐
+                  300MB까지 올릴 수 있습니다.
+                </p>
+              </>
+            )}
+          </EmptyState>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
-            {filteredMyBackgrounds.map((bg) => {
-              const isHovered = hoveredId === bg.id;
-
-              return (
-                <div
-                  key={bg.id}
-                  data-testid={`my-bg-card-${bg.id}`}
-                  onMouseEnter={() => setHoveredId(bg.id)}
-                  onMouseLeave={() => setHoveredId(null)}
-                  className="group relative flex flex-col bg-white dark:bg-zinc-900/60 hover:bg-zinc-50 dark:hover:bg-zinc-900/90 border border-zinc-200 dark:border-zinc-800/80 hover:border-zinc-300 dark:hover:border-zinc-700 rounded-2xl overflow-hidden transition-all duration-200 shadow-sm hover:shadow-md dark:shadow-none dark:hover:shadow-lg dark:hover:shadow-black/50 hover:-translate-y-0.5"
-                >
-                  <div className="relative aspect-video w-full bg-black overflow-hidden select-none rounded-t-2xl">
-                    {isHovered ? (
-                      <video
-                        src={bg.mediaUrl}
-                        autoPlay
-                        muted
-                        loop
-                        playsInline
-                        className="w-full h-full object-cover"
-                      />
-                    ) : bg.posterUrl ? (
-                      <img
-                        src={bg.posterUrl}
-                        alt={bg.title}
-                        className="w-full h-full object-cover"
-                      />
-                    ) : (
-                      <div className="w-full h-full bg-zinc-900 flex items-center justify-center text-zinc-600 text-xs">
-                        미리보기 없음
-                      </div>
-                    )}
-
-                    <div className="absolute top-2 left-2 z-30">
-                      <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-black/80 backdrop-blur-md text-emerald-400 border border-emerald-500/30">
-                        내 배경
-                      </span>
-                    </div>
-
-                    <div className="absolute inset-0 z-40 bg-black/60 backdrop-blur-[2px] opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-center justify-center gap-2 p-3">
-                      <button
-                        type="button"
-                        onClick={() => handleDeleteMyBackground(bg.id)}
-                        className="px-2.5 py-1.5 rounded-lg bg-red-950/80 hover:bg-red-900 text-red-300 text-xs font-medium border border-red-800/80 cursor-pointer shadow-md"
-                      >
-                        삭제
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="p-3 bg-white dark:bg-zinc-900/90 border-t border-zinc-100 dark:border-zinc-800/80 flex items-center justify-between gap-2">
-                    <div className="min-w-0">
-                      <h4 className="text-xs font-bold text-zinc-900 dark:text-white truncate">
-                        {bg.title}
-                      </h4>
-                      <p className="text-[11px] text-zinc-500 dark:text-zinc-400 truncate mt-0.5">
-                        {bg.tags.join(", ")}
-                      </p>
-                    </div>
-                    <span className="text-[10px] font-mono text-zinc-600 dark:text-zinc-400 uppercase px-1.5 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700">
-                      {bg.type}
-                    </span>
-                  </div>
-                </div>
-              );
-            })}
-
-            <div
-              onClick={() => setIsRegisterOpen(true)}
-              className="group border-2 border-dashed border-zinc-300 dark:border-zinc-800 hover:border-emerald-500/60 rounded-xl flex flex-col items-center justify-center p-6 min-h-[170px] cursor-pointer transition-all bg-white dark:bg-zinc-950/40 hover:bg-zinc-50 dark:hover:bg-zinc-900/30"
-            >
-              <div className="w-10 h-10 rounded-full bg-zinc-100 dark:bg-zinc-900 group-hover:bg-emerald-50 dark:group-hover:bg-emerald-950/60 border border-zinc-300 dark:border-zinc-700/80 group-hover:border-emerald-500/50 flex items-center justify-center text-zinc-500 dark:text-zinc-400 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors mb-2">
-                <svg
-                  className="w-5 h-5"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M12 4v16m8-8H4"
-                  />
-                </svg>
-              </div>
-              <span className="text-xs font-semibold text-zinc-800 dark:text-zinc-300 group-hover:text-zinc-900 dark:group-hover:text-white transition-colors">
-                새 배경 영상/이미지 등록
-              </span>
-            </div>
+            {visibleMine.map((bg) => (
+              <BackgroundCard
+                key={bg.id}
+                background={bg}
+                action={
+                  <button
+                    type="button"
+                    data-testid={`delete-bg-${bg.id}`}
+                    disabled={!canManage}
+                    onClick={() => {
+                      deleteBackground.reset();
+                      setPendingDelete(bg);
+                    }}
+                    className="px-2 py-1 rounded-lg text-[11px] font-medium shrink-0 cursor-pointer text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40 disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    삭제
+                  </button>
+                }
+              />
+            ))}
           </div>
         )}
       </section>
 
       <section className="space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-zinc-200 dark:border-zinc-800/80">
-          <div>
-            <div className="flex items-center gap-2.5">
-              <span className="w-2.5 h-2.5 rounded-full bg-sky-500"></span>
-              <h2 className="text-xl font-bold text-zinc-900 dark:text-white tracking-tight">
-                유저가 등록한 배경
-              </h2>
-              <span className="text-xs px-2.5 py-0.5 rounded-full bg-sky-50 dark:bg-sky-950 text-sky-700 dark:text-sky-400 border border-sky-200 dark:border-sky-800 font-mono font-medium">
-                10종 고화질 모션 루프
-              </span>
+        <SectionHeader
+          dotClassName="bg-sky-500"
+          title="기본 제공 배경"
+          count={service.length}
+          description="서비스가 라이선스를 확인해 올린 무음 루프 영상입니다. 마우스를 올리면 미리보기가 재생됩니다."
+        >
+          {serviceTags.length > 0 && (
+            <div className="flex items-center gap-1.5 overflow-x-auto py-1">
+              {[ALL_TAGS, ...serviceTags].map((tag) => (
+                <button
+                  key={tag}
+                  type="button"
+                  aria-pressed={activeTag === tag}
+                  onClick={() => setActiveTag(tag)}
+                  className={`px-2.5 py-1 rounded-full text-xs font-medium shrink-0 cursor-pointer transition-colors ${
+                    activeTag === tag
+                      ? "bg-sky-600 text-white"
+                      : "bg-zinc-100 dark:bg-zinc-800/80 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-800"
+                  }`}
+                >
+                  {tag}
+                </button>
+              ))}
             </div>
-            <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
-              사역팀에서 가장 많이 활용되는 무음 H.264 고화질 비디오 루프입니다.
-              마우스를 올리면 미리보기가 재생됩니다.
-            </p>
-          </div>
+          )}
+        </SectionHeader>
 
-          <div className="flex items-center gap-1.5 overflow-x-auto self-start sm:self-auto py-1">
-            {FILTER_TAGS.map((tag) => (
-              <button
-                key={tag}
-                type="button"
-                onClick={() => setActiveTag(tag)}
-                className={`px-2.5 py-1 rounded-full text-xs font-medium transition-all shrink-0 cursor-pointer ${
-                  activeTag === tag
-                    ? "bg-sky-600 text-white shadow-sm dark:shadow-sky-950/40"
-                    : "bg-zinc-100 dark:bg-zinc-800/80 text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200 hover:bg-zinc-200 dark:hover:bg-zinc-800 border border-zinc-200/60 dark:border-transparent"
-                }`}
-              >
-                {tag}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {filteredCommunityBackgrounds.length === 0 ? (
-          <div className="py-12 text-center flex flex-col items-center justify-center gap-2 bg-white dark:bg-zinc-900/40 border border-zinc-200 dark:border-zinc-800 rounded-xl">
-            <p className="text-sm font-semibold text-zinc-700 dark:text-zinc-300">
-              "{searchQuery}"에 일치하는 배경이 없습니다.
-            </p>
-          </div>
+        {visibleService.length === 0 ? (
+          <EmptyState>
+            {service.length === 0 ? (
+              <p>아직 제공되는 기본 배경이 없습니다.</p>
+            ) : (
+              <p>조건에 맞는 기본 배경이 없습니다.</p>
+            )}
+          </EmptyState>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
-            {filteredCommunityBackgrounds.map((bg) => {
-              const videoUrl = getBackgroundMediaUrl(bg.id);
-              const posterUrl = getBackgroundPosterUrl(bg.id);
-              const isHovered = hoveredId === bg.id;
-              const isApplied = appliedBgId === bg.id;
-
-              return (
-                <div
-                  key={bg.id}
-                  data-testid={`community-bg-card-${bg.id}`}
-                  onMouseEnter={() => setHoveredId(bg.id)}
-                  onMouseLeave={() => setHoveredId(null)}
-                  className="group relative flex flex-col bg-white dark:bg-zinc-900/60 hover:bg-zinc-50 dark:hover:bg-zinc-900/90 border border-zinc-200 dark:border-zinc-800/80 hover:border-zinc-300 dark:hover:border-zinc-700 rounded-2xl overflow-hidden transition-all duration-200 shadow-sm hover:shadow-md dark:shadow-none dark:hover:shadow-lg dark:hover:shadow-black/50 hover:-translate-y-0.5"
-                >
-                  <div className="relative aspect-video w-full bg-black overflow-hidden select-none rounded-t-2xl">
-                    {isHovered && videoUrl ? (
-                      <video
-                        src={videoUrl}
-                        autoPlay
-                        muted
-                        loop
-                        playsInline
-                        className="w-full h-full object-cover"
-                      />
-                    ) : posterUrl ? (
-                      <img
-                        src={posterUrl}
-                        alt={bg.title}
-                        className="w-full h-full object-cover"
-                      />
-                    ) : (
-                      <div className="w-full h-full bg-zinc-900 flex items-center justify-center text-zinc-600 text-xs">
-                        포스터 없음
-                      </div>
-                    )}
-
-                    <div className="absolute top-2 left-2 z-30">
-                      <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-black/80 backdrop-blur-md text-sky-400 border border-sky-500/30">
-                        {bg.tags[0] ?? "루프"}
-                      </span>
-                    </div>
-
-                    <div className="absolute top-2 right-2 z-30">
-                      <span className="px-1.5 py-0.5 rounded text-[10px] font-mono text-zinc-300 bg-black/80">
-                        {bg.durationSec}s
-                      </span>
-                    </div>
-
-                    <div className="absolute inset-0 z-40 bg-black/60 backdrop-blur-[2px] opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-center justify-center gap-2 p-3">
-                      <button
-                        type="button"
-                        onClick={() => handleApply(bg.id)}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-semibold shadow-sm transition-all active:scale-95 cursor-pointer flex items-center gap-1 ${
-                          isApplied
-                            ? "bg-emerald-600 text-white"
-                            : "bg-sky-600 hover:bg-sky-500 text-white"
-                        }`}
-                      >
-                        {isApplied ? (
-                          <>
-                            <svg
-                              className="w-3.5 h-3.5"
-                              fill="none"
-                              stroke="currentColor"
-                              viewBox="0 0 24 24"
-                            >
-                              <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                strokeWidth={2}
-                                d="M5 13l4 4L19 7"
-                              />
-                            </svg>
-                            <span>적용 완료!</span>
-                          </>
-                        ) : (
-                          <>
-                            <svg
-                              className="w-3.5 h-3.5"
-                              fill="none"
-                              stroke="currentColor"
-                              viewBox="0 0 24 24"
-                            >
-                              <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                strokeWidth={2}
-                                d="M5 13l4 4L19 7"
-                              />
-                            </svg>
-                            <span>현재 곡에 적용</span>
-                          </>
-                        )}
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="p-3 bg-white dark:bg-zinc-900/90 border-t border-zinc-100 dark:border-zinc-800/80 flex items-center justify-between gap-2">
-                    <div className="min-w-0">
-                      <h4 className="text-xs font-bold text-zinc-900 dark:text-white truncate">
-                        {bg.title}
-                      </h4>
-                      <p className="text-[11px] text-zinc-500 dark:text-zinc-400 truncate mt-0.5">
-                        {bg.tags.join(" · ")}
-                      </p>
-                    </div>
-
-                    <button
-                      type="button"
-                      data-testid={`apply-community-bg-${bg.id}`}
-                      onClick={() => handleApply(bg.id)}
-                      className={`px-2 py-1 rounded-lg text-[11px] font-medium transition-all shrink-0 cursor-pointer ${
-                        isApplied
-                          ? "bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800"
-                          : "bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-sky-700 dark:text-sky-300 hover:text-sky-800 dark:hover:text-white border border-zinc-200 dark:border-zinc-700/80"
-                      }`}
-                    >
-                      {isApplied ? "적용됨 ✓" : "적용"}
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
+            {visibleService.map((bg) => (
+              <BackgroundCard key={bg.id} background={bg} />
+            ))}
           </div>
         )}
       </section>
 
-      {isRegisterOpen && (
+      <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
+        곡에 배경을 입히려면 편집기의 곡 속성 패널에서 &lsquo;배경 변경&rsquo;을
+        누르세요.
+      </p>
+
+      <BackgroundUploadDialog
+        isOpen={isUploadOpen}
+        usage={usage}
+        onClose={() => setIsUploadOpen(false)}
+      />
+
+      {pendingDelete && (
         <div
           role="dialog"
           aria-modal="true"
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in"
+          aria-labelledby="bg-delete-title"
+          data-testid="bg-delete-dialog"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70"
         >
-          <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl w-full max-w-md p-6 shadow-xl dark:shadow-2xl space-y-5 text-zinc-900 dark:text-zinc-100">
-            <div className="flex items-center justify-between">
-              <h3 className="text-base font-bold text-zinc-900 dark:text-white flex items-center gap-2">
-                <span>새 배경 영상 등록</span>
+          <div className="w-full max-w-sm bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-5 space-y-4 shadow-2xl text-zinc-900 dark:text-zinc-100">
+            <div>
+              <h3 id="bg-delete-title" className="text-sm font-bold">
+                배경 삭제
               </h3>
+              <p className="text-xs text-zinc-500 mt-0.5 truncate">
+                {pendingDelete.title}
+              </p>
+            </div>
+            <p className="text-xs text-zinc-700 dark:text-zinc-300">
+              이 배경을 쓰는 곡은 배경 없음이 됩니다. 지운 파일은 되살릴 수
+              없습니다.
+            </p>
+            {deleteBackground.error && (
+              <p
+                role="alert"
+                className="text-xs text-red-600 dark:text-red-400"
+              >
+                {describeApiError(deleteBackground.error)}
+              </p>
+            )}
+            <div className="flex justify-end gap-2">
               <button
                 type="button"
-                onClick={() => setIsRegisterOpen(false)}
-                className="p-1 rounded-lg text-zinc-500 hover:text-zinc-800 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:text-white dark:hover:bg-zinc-800 cursor-pointer transition-colors"
+                disabled={deleteBackground.isPending}
+                onClick={() => setPendingDelete(null)}
+                className="px-3.5 py-1.5 rounded-lg bg-zinc-100 dark:bg-zinc-800 text-xs cursor-pointer disabled:opacity-50"
               >
-                <svg
-                  className="w-5 h-5"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M6 18L18 6M6 6l12 12"
-                  />
-                </svg>
+                취소
+              </button>
+              <button
+                type="button"
+                data-testid="confirm-delete-bg"
+                disabled={deleteBackground.isPending}
+                onClick={() => void confirmDelete()}
+                className="px-3.5 py-1.5 rounded-lg bg-red-600 hover:bg-red-500 text-white text-xs font-bold cursor-pointer disabled:opacity-50"
+              >
+                {deleteBackground.isPending ? "지우는 중…" : "삭제"}
               </button>
             </div>
-
-            <form onSubmit={handleRegisterBackground} className="space-y-4">
-              <div>
-                <label className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300 mb-1">
-                  배경 제목 *
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="예: 우리 교회 메인 비디오 루프"
-                  value={newTitle}
-                  onChange={(e) => setNewTitle(e.target.value)}
-                  className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 focus:border-emerald-500 rounded-xl px-3.5 py-2 text-xs text-zinc-900 dark:text-zinc-100 placeholder-zinc-400 dark:placeholder-zinc-500 focus:outline-none transition-colors"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300 mb-1">
-                  미디어 URL (선택)
-                </label>
-                <input
-                  type="text"
-                  placeholder="비디오/이미지 URL (비워두면 기본 루프 적용)"
-                  value={newMediaUrl}
-                  onChange={(e) => setNewMediaUrl(e.target.value)}
-                  className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 focus:border-emerald-500 rounded-xl px-3.5 py-2 text-xs text-zinc-900 dark:text-zinc-100 placeholder-zinc-400 dark:placeholder-zinc-500 focus:outline-none transition-colors"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300 mb-1">
-                  분위기 태그
-                </label>
-                <select
-                  value={newTag}
-                  onChange={(e) => setNewTag(e.target.value)}
-                  className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-900 dark:text-zinc-200 focus:outline-none focus:border-emerald-500"
-                >
-                  <option value="잔잔한">잔잔한</option>
-                  <option value="밝은">밝은</option>
-                  <option value="웅장한">웅장한</option>
-                  <option value="따뜻한">따뜻한</option>
-                </select>
-              </div>
-
-              <div className="flex items-center justify-end gap-2.5 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setIsRegisterOpen(false)}
-                  className="px-4 py-2 rounded-xl bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-xs font-medium text-zinc-700 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-700 cursor-pointer transition-colors"
-                >
-                  취소
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-xs font-bold text-white shadow-sm cursor-pointer transition-colors"
-                >
-                  등록하기
-                </button>
-              </div>
-            </form>
           </div>
         </div>
       )}

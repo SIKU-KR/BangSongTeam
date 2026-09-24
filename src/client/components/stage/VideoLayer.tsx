@@ -7,7 +7,12 @@ export interface VideoLayerProps {
   className?: string;
 }
 
-/** A/B 교차 루프를 지원하는 배경 비디오 레이어 */
+/**
+ * A/B 교차 루프를 지원하는 배경 비디오 레이어.
+ *
+ * `src`가 사라지면(배경 없음·이미지 배경 곡으로 넘어감) 재생 중이던 슬롯을 비운다.
+ * 비우지 않으면 앞 곡의 영상이 다음 곡 뒤에서 계속 보인다.
+ */
 export function VideoLayer({
   src,
   nextSrc,
@@ -30,6 +35,8 @@ export function VideoLayer({
     currentSrcRef.current = src;
 
     if (!src) {
+      if (activeSlot === "A") setSrcA(undefined);
+      else setSrcB(undefined);
       return;
     }
 

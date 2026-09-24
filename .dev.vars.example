@@ -19,6 +19,3 @@ KAKAO_CLIENT_ID=
 KAKAO_CLIENT_SECRET=
 NAVER_CLIENT_ID=
 NAVER_CLIENT_SECRET=
-
-# Cloudflare R2 Public CDN Domain
-R2_PUBLIC_DOMAIN=media.worship-slide.com

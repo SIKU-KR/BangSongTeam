@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll } from "vitest";
 import { env } from "cloudflare:test";
-import type { BackgroundMedia } from "#shared";
+import type { BackgroundListResponse } from "#shared";
 import app from "./index";
 
 describe("Miniflare/workerd 환경 Worker 및 D1 통합 테스트", () => {
@@ -28,70 +28,14 @@ describe("Miniflare/workerd 환경 Worker 및 D1 통합 테스트", () => {
     expect(json).toHaveProperty("error");
   });
 
-  it("GET /api/backgrounds returns 200 with 10 seeded motion backgrounds from workerd D1", async () => {
+  it("GET /api/backgrounds는 비로그인에게 사전 주입 배경만 주고 사용량은 null이다", async () => {
     const res = await app.request("/api/backgrounds", {}, env);
     expect(res.status).toBe(200);
+    expect(res.headers.get("cache-control")).toBe("private, no-cache");
 
-    const json = (await res.json()) as BackgroundMedia[];
-    expect(json).toBeInstanceOf(Array);
-    expect(json).toHaveLength(10);
-
-    const first = json[0];
-    expect(first).toHaveProperty("id");
-    expect(first).toHaveProperty("title");
-    expect(first).toHaveProperty("r2Key");
-    expect(first).toHaveProperty("posterKey");
-    expect(first).toHaveProperty("durationSec");
-    expect(first).toHaveProperty("license");
-    expect(first.tags).toBeInstanceOf(Array);
-    expect(first.tags.length).toBeGreaterThan(0);
-    expect(first.cdnUrl).toMatch(/^https:\/\/.+\/loops\/.+\.mp4$/);
-    expect(first.posterUrl).toMatch(/^https:\/\/.+\/posters\/.+\.webp$/);
-  });
-
-  it("GET /api/backgrounds?limit=3 limits the number of returned backgrounds", async () => {
-    const res = await app.request("/api/backgrounds?limit=3", {}, env);
-    expect(res.status).toBe(200);
-    const json = (await res.json()) as BackgroundMedia[];
-    expect(json).toHaveLength(3);
-  });
-
-  it("GET /api/backgrounds?tag= filters by exact tag", async () => {
-    const res = await app.request(
-      `/api/backgrounds?tag=${encodeURIComponent("웅장한")}`,
-      {},
-      env,
-    );
-    expect(res.status).toBe(200);
-    const json = (await res.json()) as BackgroundMedia[];
-    expect(json.length).toBeGreaterThan(0);
-    expect(json.length).toBeLessThan(10);
-    for (const bg of json) expect(bg.tags).toContain("웅장한");
-  });
-
-  it("GET /api/backgrounds?q= searches titles including choseong", async () => {
-    const byText = await app.request(
-      `/api/backgrounds?q=${encodeURIComponent("호수")}`,
-      {},
-      env,
-    );
-    const textJson = (await byText.json()) as BackgroundMedia[];
-    expect(textJson.map((bg) => bg.title)).toEqual(["고요한 호수 물결"]);
-
-    const byChoseong = await app.request(
-      `/api/backgrounds?q=${encodeURIComponent("ㅎㅅ")}`,
-      {},
-      env,
-    );
-    const choseongJson = (await byChoseong.json()) as BackgroundMedia[];
-    expect(choseongJson.map((bg) => bg.title)).toContain("고요한 호수 물결");
-  });
-
-  it("GET /api/backgrounds rejects invalid query with 400", async () => {
-    for (const qs of ["limit=abc", "limit=0", "limit=101", "limit=1.5"]) {
-      const res = await app.request(`/api/backgrounds?${qs}`, {}, env);
-      expect(res.status, qs).toBe(400);
-    }
+    const json = (await res.json()) as BackgroundListResponse;
+    expect(json.usage).toBeNull();
+    expect(json.backgrounds.every((bg) => bg.source === "service")).toBe(true);
   });
 
   it("GET /api/media/:key streams full video from R2 bucket with 200 OK", async () => {

@@ -14,7 +14,11 @@ export type { PresentationItem, Presentation } from "../schemas/presentation";
 
 export type { Folder } from "../schemas/folder";
 
-export type { BackgroundMedia } from "../schemas/media";
+export type {
+  BackgroundMedia,
+  BackgroundKind,
+  BackgroundSource,
+} from "../schemas/media";
 
 export type {
   CreateDeckRequest,

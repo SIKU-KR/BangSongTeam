@@ -1,41 +1,50 @@
 import { describe, it, expect } from "vitest";
 import {
-  INITIAL_BACKGROUNDS,
-  DEFAULT_BACKGROUND_ID,
-  getBackgroundMediaUrl,
-  getBackgroundPosterUrl,
+  BACKGROUND_TAGS,
+  BACKGROUND_UPLOAD_LIMITS,
+  isBackgroundImageMimeType,
+  isBackgroundVideoMimeType,
+  mediaUrlForKey,
 } from "./backgrounds";
+import { MEDIA_URL_PREFIX } from "./projection";
 
-describe("Background Constants & Helpers", () => {
-  it("should have exactly 10 initial background definitions", () => {
-    expect(INITIAL_BACKGROUNDS).toHaveLength(10);
-    expect(DEFAULT_BACKGROUND_ID).toBe(INITIAL_BACKGROUNDS[0].id);
+describe("mediaUrlForKey", () => {
+  it("R2 키를 동일 출처 미디어 프록시 경로로 바꾼다", () => {
+    expect(mediaUrlForKey("loops/warm.mp4")).toBe("/api/media/loops/warm.mp4");
   });
 
-  it("should generate correct media URL and poster URL", () => {
-    const first = INITIAL_BACKGROUNDS[0];
-    const mediaUrl = getBackgroundMediaUrl(first.id);
-    const posterUrl = getBackgroundPosterUrl(first.id);
-
-    expect(mediaUrl).toBe(`/api/media/${first.r2Key}`);
-    expect(posterUrl).toBe(`/api/media/${first.posterKey}`);
-  });
-
-  it("should support custom baseUrl", () => {
-    const first = INITIAL_BACKGROUNDS[0];
-    const mediaUrl = getBackgroundMediaUrl(
-      first.id,
-      "https://media.worship-slide.com",
+  it("키 앞의 슬래시를 겹치지 않게 떼어 낸다", () => {
+    expect(mediaUrlForKey("/uploads/u/a.png")).toBe(
+      "/api/media/uploads/u/a.png",
     );
-    expect(mediaUrl).toBe(`https://media.worship-slide.com/${first.r2Key}`);
   });
 
-  it("should return undefined for null, undefined, or unknown backgroundId", () => {
-    expect(getBackgroundMediaUrl(null)).toBeUndefined();
-    expect(getBackgroundMediaUrl(undefined)).toBeUndefined();
-    expect(getBackgroundMediaUrl("unknown-id")).toBeUndefined();
-    expect(getBackgroundPosterUrl(null)).toBeUndefined();
-    expect(getBackgroundPosterUrl(undefined)).toBeUndefined();
-    expect(getBackgroundPosterUrl("unknown-id")).toBeUndefined();
+  it("미디어 캐시 규칙이 보는 접두사로 시작한다", () => {
+    expect(mediaUrlForKey("x.webp").startsWith(MEDIA_URL_PREFIX)).toBe(true);
+  });
+});
+
+describe("배경 업로드 한도와 형식", () => {
+  it("파일 하나 30MB, 계정 전체 300MB로 묶는다", () => {
+    expect(BACKGROUND_UPLOAD_LIMITS.maxFileBytes).toBe(30 * 1024 * 1024);
+    expect(BACKGROUND_UPLOAD_LIMITS.maxAccountBytes).toBe(300 * 1024 * 1024);
+  });
+
+  it("영상은 MP4만, 이미지는 JPEG·PNG·WebP만 받는다", () => {
+    expect(isBackgroundVideoMimeType("video/mp4")).toBe(true);
+    expect(isBackgroundVideoMimeType("video/webm")).toBe(false);
+    expect(isBackgroundImageMimeType("image/png")).toBe(true);
+    expect(isBackgroundImageMimeType("image/gif")).toBe(false);
+  });
+
+  it("태그 선택지는 분위기 3종과 주조색 3종이다", () => {
+    expect(BACKGROUND_TAGS).toEqual([
+      "잔잔한",
+      "밝은",
+      "웅장한",
+      "따뜻한",
+      "차가운",
+      "어두운",
+    ]);
   });
 });

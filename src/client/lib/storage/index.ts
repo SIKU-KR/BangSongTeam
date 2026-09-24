@@ -37,6 +37,13 @@ export {
 } from "./songRepository";
 
 export {
+  loadAllBackgrounds,
+  replaceAllBackgrounds,
+  saveBackground,
+  deleteBackgroundRecord,
+} from "./backgroundRepository";
+
+export {
   reportPersistenceError,
   clearPersistenceError,
   getPersistenceError,

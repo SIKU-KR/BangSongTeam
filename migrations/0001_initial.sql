@@ -1,9 +1,12 @@
 -- 초기 스키마 (첫 배포 전 0000~0008을 하나로 합쳤다, 2026-09-24).
 --
--- drizzle-kit 생성본(테이블·인덱스)에 손으로 쓴 두 부분을 덧붙였다.
--- 1. 공개 덱 검색용 FTS5 가상 테이블과 동기화 트리거. drizzle-kit은 `decks_fts`를
---    일반 테이블로 알고 있으므로 생성된 `CREATE TABLE decks_fts`는 지운다.
--- 2. 사전 주입 배경 시드 10건.
+-- drizzle-kit 생성본(테이블·인덱스)에 공개 덱 검색용 FTS5 가상 테이블과 동기화
+-- 트리거를 손으로 덧붙였다. drizzle-kit은 `decks_fts`를 일반 테이블로 알고 있으므로
+-- 생성된 `CREATE TABLE decks_fts`는 지운다.
+--
+-- 배경 행은 넣지 않는다. R2에 파일이 없는 배경 행은 편집기·송출에서 깨진 배경이
+-- 되므로, 사전 주입 배경은 R2 업로드 뒤 `docs/ops/background-runbook.md` 절차로
+-- 등록한다.
 --
 -- 저널 idx를 1로 두어 다음 `db:generate`가 0002부터 번호를 매기게 했다.
 CREATE TABLE `account` (
@@ -63,9 +66,16 @@ CREATE TABLE `backgrounds` (
 	`duration_sec` integer NOT NULL,
 	`license` text NOT NULL,
 	`tags` text NOT NULL,
-	`created_at` integer DEFAULT (unixepoch())
+	`source` text DEFAULT 'service' NOT NULL,
+	`owner_user_id` text,
+	`kind` text DEFAULT 'video' NOT NULL,
+	`size_bytes` integer DEFAULT 0 NOT NULL,
+	`created_at` integer DEFAULT (unixepoch()),
+	FOREIGN KEY (`owner_user_id`) REFERENCES `user`(`id`) ON UPDATE no action ON DELETE cascade
 );
 --> statement-breakpoint
+CREATE INDEX `idx_backgrounds_source` ON `backgrounds` (`source`);--> statement-breakpoint
+CREATE INDEX `idx_backgrounds_owner` ON `backgrounds` (`owner_user_id`);--> statement-breakpoint
 CREATE TABLE `decks` (
 	`id` text PRIMARY KEY NOT NULL,
 	`user_id` text NOT NULL,
@@ -166,7 +176,7 @@ CREATE INDEX `idx_reports_target` ON `reports` (`target_type`,`target_id`);
 --
 -- 색인 대상은 '보관함 덱 + 공개 + 게시 중단 아님'이다. 세트에 담긴 복제본
 -- (scope='presentation')은 공개 검색에 나오지 않는다. 조건은
--- `src/queries/publicScope.ts`의 publicDeckCondition()과 같다. 둘 중 하나만 바꾸지 않는다.
+-- `src/db/queries/publicScope.ts`의 publicDeckCondition()과 같다. 둘 중 하나만 바꾸지 않는다.
 CREATE VIRTUAL TABLE IF NOT EXISTS decks_fts USING fts5(
   deck_id UNINDEXED,
   title,
@@ -202,25 +212,3 @@ WHEN old.scope = 'library' AND old.visibility = 'public' AND old.takedown_at IS 
 BEGIN
   DELETE FROM decks_fts WHERE deck_id = old.id;
 END;
---> statement-breakpoint
-
--- 사전 주입 모션 루프 배경 10건 (PRD 6.3 / M0 산출물).
---
--- 이 행들이 없으면 `decks.background_id` 외래키 때문에 배경이 붙은 곡을 저장할 수
--- 없다. D1은 SQLite와 달리 외래키를 기본으로 강제하므로 배치 전체가 롤백되고
--- 동기화가 500으로 죽는다. 그래서 시드를 별도 스크립트가 아니라 마이그레이션으로
--- 둔다 — 로컬과 운영이 같은 명령(`db:migrate:local` / `db:migrate:prod`)으로 함께 채워진다.
---
--- 값의 정본은 `src/shared/constants/backgrounds.ts`의 INITIAL_BACKGROUNDS다.
--- 두 곳이 갈라지지 않도록 `src/db/seed/backgrounds.test.ts`가 대조한다.
-INSERT OR IGNORE INTO backgrounds (id, title, r2_key, poster_key, duration_sec, license, tags) VALUES
-  ('mJIToShuKOc3FsbZIihi6', '은은한 빛의 흐름', 'loops/warm_light_flow.mp4', 'posters/warm_light_flow.webp', 20, 'Service Original (CC0)', '["잔잔한","따뜻한"]'),
-  ('VYMY2lcaf-sSYd8Z1kSmS', '고요한 호수 물결', 'loops/calm_lake_waves.mp4', 'posters/calm_lake_waves.webp', 24, 'Service Original (CC0)', '["잔잔한","차가운"]'),
-  ('Z3pQ9LTe8iF6c1WabFlqw', '깊은 밤의 별빛', 'loops/night_starlight.mp4', 'posters/night_starlight.webp', 30, 'Service Original (CC0)', '["잔잔한","어두운"]'),
-  ('8UCf1VBmP1pMgdSQ0cUCp', '아침 햇살의 광채', 'loops/morning_sunlight.mp4', 'posters/morning_sunlight.webp', 18, 'Service Original (CC0)', '["밝은","따뜻한"]'),
-  ('9Za1L0TVfQscdGPYbnYBf', '푸른 하늘 구름', 'loops/blue_sky_clouds.mp4', 'posters/blue_sky_clouds.webp', 22, 'Service Original (CC0)', '["밝은","차가운"]'),
-  ('rQReeyGx9wxCVNvKgWpNd', '새벽 미명의 안개', 'loops/dawn_mist.mp4', 'posters/dawn_mist.webp', 25, 'Service Original (CC0)', '["밝은","어두운"]'),
-  ('AuLU_pxDZUXM3B6zeXfnR', '타오르는 영광의 불꽃', 'loops/glory_fire.mp4', 'posters/glory_fire.webp', 16, 'Service Original (CC0)', '["웅장한","따뜻한"]'),
-  ('4EoK1yX6-2zKmjWDiONlL', '장엄한 푸른 파도', 'loops/majestic_ocean.mp4', 'posters/majestic_ocean.webp', 20, 'Service Original (CC0)', '["웅장한","차가운"]'),
-  ('qkBIjmJg_eb2xSGRnHtqP', '광활한 은하수 공간', 'loops/cosmic_galaxy.mp4', 'posters/cosmic_galaxy.webp', 30, 'Service Original (CC0)', '["웅장한","어두운"]'),
-  ('my-K4dh_hYkfUCJEXkopI', '찬란한 빛의 기둥', 'loops/radiant_pillars.mp4', 'posters/radiant_pillars.webp', 22, 'Service Original (CC0)', '["웅장한","따뜻한"]');

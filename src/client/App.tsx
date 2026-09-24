@@ -7,6 +7,7 @@ import {
 } from "./features/presentation";
 import { hydrateSongLibrary } from "./features/editor";
 import { hydrateFoldersFromStorage } from "./features/drive";
+import { hydrateBackgroundCatalog } from "./features/backgrounds";
 import { hydrateSession, useSession } from "./lib/auth";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { createAppQueryClient } from "./lib/api/queryClient";
@@ -58,6 +59,7 @@ function useHydration(): boolean {
         hydrateFromStorage(),
         hydrateSongLibrary(),
         hydrateFoldersFromStorage(),
+        hydrateBackgroundCatalog(),
       ]);
       if (cancelled) return;
       setBootstrappedUserId(userId);

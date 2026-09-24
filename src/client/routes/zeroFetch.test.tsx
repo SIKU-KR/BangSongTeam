@@ -15,6 +15,14 @@ import {
   __waitForMediaCachingForTests,
 } from "../lib/offline/mediaCache";
 import { resetFakeCacheStorage } from "../test/fakeCacheStorage";
+import {
+  TEST_SERVICE_BACKGROUNDS,
+  withBackgrounds,
+} from "../test/backgroundFixture";
+import {
+  resetBackgroundCatalogForTests,
+  setBackgroundCatalogForTests,
+} from "../features/backgrounds/backgroundCatalog";
 import { signInAsTestUser } from "../test/sessionFixture";
 import { withQueryClient } from "../test/queryClientFixture";
 import { FullscreenPresentRoute } from "./FullscreenPresentRoute";
@@ -39,7 +47,15 @@ const originalFetch = globalThis.fetch;
 beforeEach(() => {
   signInAsTestUser();
   resetPresentationStore();
-  __loadDocumentsForTests(SEED_PRESENTATIONS);
+  setBackgroundCatalogForTests(TEST_SERVICE_BACKGROUNDS, null, "local");
+  __loadDocumentsForTests(
+    SEED_PRESENTATIONS.map((presentation) =>
+      withBackgrounds(
+        presentation,
+        TEST_SERVICE_BACKGROUNDS.map((bg) => bg.id),
+      ),
+    ),
+  );
   resetFakeCacheStorage();
   __resetMediaCachingForTests();
 
@@ -57,6 +73,7 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.useRealTimers();
+  resetBackgroundCatalogForTests();
   globalThis.fetch = originalFetch;
   vi.restoreAllMocks();
 });

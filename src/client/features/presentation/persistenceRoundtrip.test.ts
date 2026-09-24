@@ -1,11 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { signInAsTestUser } from "../../test/sessionFixture";
-import {
-  createId,
-  DEFAULT_DECK_STYLE,
-  INITIAL_BACKGROUNDS,
-  type Deck,
-} from "#shared";
+import { createId, DEFAULT_DECK_STYLE, type Deck } from "#shared";
 import {
   closeOfflineDB,
   OFFLINE_DB_NAME,
@@ -90,7 +85,7 @@ describe("영속성 왕복 (편집 → 저장 → 새 탭 복원)", () => {
 
     updatePresentationTitle("주일 1부 예배 (최종)");
     updateSongStyle(0, { overlayOpacity: 75, fontSizeVw: 5.5 });
-    const targetBackgroundId = INITIAL_BACKGROUNDS[3].id;
+    const targetBackgroundId = "bg0000000000000000004";
     updateSongBackground(1, targetBackgroundId);
     reorderSongs(0, 4);
 

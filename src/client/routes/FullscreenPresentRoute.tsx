@@ -5,14 +5,14 @@ import React, {
   useLayoutEffect,
 } from "react";
 import { useNavigate, useParams, Navigate } from "react-router-dom";
-import {
-  DEFAULT_DECK_STYLE,
-  getBackgroundMediaUrl,
-  getBackgroundPosterUrl,
-} from "#shared";
+import { DEFAULT_DECK_STYLE } from "#shared";
 import type { Presentation } from "#shared";
 import { SlideStage } from "../components/stage/SlideStage";
 import { useBackgroundAutoCache } from "../features/offline";
+import {
+  resolveBackgroundLayers,
+  useBackground,
+} from "../features/backgrounds/backgroundCatalog";
 
 const EMPTY_PRESENTATION: Presentation = {
   id: "",
@@ -63,10 +63,13 @@ export function FullscreenPresentRoute(): React.JSX.Element {
   const currentSlide = getSlideAt(position, songs);
   const currentStyle = currentSong?.style ?? DEFAULT_DECK_STYLE;
 
-  const currentBackgroundUrl = getBackgroundMediaUrl(currentSong?.backgroundId);
-  const currentPosterUrl = getBackgroundPosterUrl(currentSong?.backgroundId);
+  const currentBackground = resolveBackgroundLayers(
+    useBackground(currentSong?.backgroundId),
+  );
   const nextSong = songs[position.songIndex + 1]?.deck;
-  const nextBackgroundUrl = getBackgroundMediaUrl(nextSong?.backgroundId);
+  const nextBackground = resolveBackgroundLayers(
+    useBackground(nextSong?.backgroundId),
+  );
 
   const handleNext = useCallback(() => {
     setPosition((prev) => nextPosition(prev, songs));
@@ -136,9 +139,10 @@ export function FullscreenPresentRoute(): React.JSX.Element {
       <SlideStage
         slide={currentSlide}
         style={currentStyle}
-        backgroundUrl={currentBackgroundUrl}
-        nextBackgroundUrl={nextBackgroundUrl}
-        posterUrl={currentPosterUrl}
+        backgroundUrl={currentBackground.videoUrl}
+        backgroundImageUrl={currentBackground.imageUrl}
+        nextBackgroundUrl={nextBackground.videoUrl}
+        posterUrl={currentBackground.posterUrl}
         isBlackout={isBlackout}
         isLyricsHidden={isLyricsHidden}
       />

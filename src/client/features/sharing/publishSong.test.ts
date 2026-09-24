@@ -1,10 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import {
-  DEFAULT_DECK_STYLE,
-  DeckSchema,
-  INITIAL_BACKGROUNDS,
-  type Deck,
-} from "#shared";
+import { DEFAULT_DECK_STYLE, DeckSchema, type Deck } from "#shared";
 import { signInAsTestUser } from "../../test/sessionFixture";
 import {
   SEED_PRESENTATIONS,
@@ -60,7 +55,7 @@ describe("편집기 '공유' — 보관함 원본 공개", () => {
     const master = saveSongToLibrary({
       title: "보관함 곡",
       lyricsRaw: "첫 줄\n\n둘째 슬라이드",
-      backgroundId: INITIAL_BACKGROUNDS[1].id,
+      backgroundId: "bg0000000000000000002",
     });
     addDeckToPresentation(master);
     return { index: getActivePresentation().items.length - 1, master };

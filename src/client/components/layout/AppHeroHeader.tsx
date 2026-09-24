@@ -12,6 +12,8 @@ export interface AppHeroHeaderProps {
   onQuickAdd: () => void;
   toolbarStart?: React.ReactNode;
   quickAddSlot?: React.ReactNode;
+  /** 필터·정렬·빠른 추가. 드라이브 전용이라 다른 화면에서는 숨긴다 */
+  showControls?: boolean;
 }
 
 type DropdownName = "type" | "category" | "owner" | "sort";
@@ -28,6 +30,7 @@ export function AppHeroHeader({
   onQuickAdd,
   toolbarStart,
   quickAddSlot,
+  showControls = true,
 }: AppHeroHeaderProps): React.JSX.Element {
   const [typeFilter, setTypeFilter] = useState<string>("전체");
   const [categoryFilter, setCategoryFilter] = useState<string>("전체");
@@ -92,245 +95,228 @@ export function AppHeroHeader({
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center justify-center gap-2 pt-1 relative">
-            <div className="relative">
-              <button
-                type="button"
-                onClick={() => toggleDropdown("type")}
-                className={`px-3.5 py-1.5 rounded-full text-xs font-medium border flex items-center gap-1.5 transition-all cursor-pointer ${
-                  typeFilter !== "전체"
-                    ? "bg-emerald-50 dark:bg-zinc-800 border-emerald-500 text-emerald-700 dark:text-emerald-400 font-semibold"
-                    : "bg-white dark:bg-zinc-900/80 border-zinc-300 dark:border-zinc-800 hover:border-zinc-400 dark:hover:border-zinc-700 text-zinc-700 dark:text-zinc-300"
-                }`}
-              >
-                <span>유형: {typeFilter}</span>
-                <svg
-                  className="w-3.5 h-3.5 text-zinc-400"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
+          {showControls && (
+            <div className="flex flex-wrap items-center justify-center gap-2 pt-1 relative">
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => toggleDropdown("type")}
+                  className={`px-3.5 py-1.5 rounded-full text-xs font-medium border flex items-center gap-1.5 transition-all cursor-pointer ${
+                    typeFilter !== "전체"
+                      ? "bg-emerald-50 dark:bg-zinc-800 border-emerald-500 text-emerald-700 dark:text-emerald-400 font-semibold"
+                      : "bg-white dark:bg-zinc-900/80 border-zinc-300 dark:border-zinc-800 hover:border-zinc-400 dark:hover:border-zinc-700 text-zinc-700 dark:text-zinc-300"
+                  }`}
                 >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M19 9l-7 7-7-7"
-                  />
-                </svg>
-              </button>
-              {openDropdown === "type" && (
-                <div className="absolute top-full left-0 mt-2 w-36 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-lg dark:shadow-2xl z-50 py-1.5">
-                  {["전체", "프레젠테이션", "단일 곡", "배경 루프"].map(
-                    (opt) => (
+                  <span>유형: {typeFilter}</span>
+                  <svg
+                    className="w-3.5 h-3.5 text-zinc-400"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M19 9l-7 7-7-7"
+                    />
+                  </svg>
+                </button>
+                {openDropdown === "type" && (
+                  <div className="absolute top-full left-0 mt-2 w-36 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-lg dark:shadow-2xl z-50 py-1.5">
+                    {["전체", "프레젠테이션", "단일 곡", "배경 루프"].map(
+                      (opt) => (
+                        <button
+                          key={opt}
+                          type="button"
+                          onClick={() => {
+                            setTypeFilter(opt);
+                            setOpenDropdown(null);
+                          }}
+                          className="w-full text-left px-3 py-1.5 text-xs hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white"
+                        >
+                          {opt}
+                        </button>
+                      ),
+                    )}
+                  </div>
+                )}
+              </div>
+
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => toggleDropdown("category")}
+                  className={`px-3.5 py-1.5 rounded-full text-xs font-medium border flex items-center gap-1.5 transition-all cursor-pointer ${
+                    categoryFilter !== "전체"
+                      ? "bg-indigo-50 dark:bg-zinc-800 border-indigo-500 text-indigo-700 dark:text-indigo-300 font-semibold"
+                      : "bg-white dark:bg-zinc-900/80 border-zinc-300 dark:border-zinc-800 hover:border-zinc-400 dark:hover:border-zinc-700 text-zinc-700 dark:text-zinc-300"
+                  }`}
+                >
+                  <span>카테고리: {categoryFilter}</span>
+                  <svg
+                    className="w-3.5 h-3.5 text-zinc-400"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M19 9l-7 7-7-7"
+                    />
+                  </svg>
+                </button>
+                {openDropdown === "category" && (
+                  <div className="absolute top-full left-0 mt-2 w-36 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-lg dark:shadow-2xl z-50 py-1.5">
+                    {["전체", "잔잔한", "밝은", "웅장한", "따뜻한"].map(
+                      (opt) => (
+                        <button
+                          key={opt}
+                          type="button"
+                          onClick={() => {
+                            setCategoryFilter(opt);
+                            setOpenDropdown(null);
+                          }}
+                          className="w-full text-left px-3 py-1.5 text-xs hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white"
+                        >
+                          {opt}
+                        </button>
+                      ),
+                    )}
+                  </div>
+                )}
+              </div>
+
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => toggleDropdown("owner")}
+                  className={`px-3.5 py-1.5 rounded-full text-xs font-medium border flex items-center gap-1.5 transition-all cursor-pointer ${
+                    ownerFilter !== "전체"
+                      ? "bg-teal-50 dark:bg-zinc-800 border-teal-500 text-teal-700 dark:text-teal-300 font-semibold"
+                      : "bg-white dark:bg-zinc-900/80 border-zinc-300 dark:border-zinc-800 hover:border-zinc-400 dark:hover:border-zinc-700 text-zinc-700 dark:text-zinc-300"
+                  }`}
+                >
+                  <span>소유자: {ownerFilter}</span>
+                  <svg
+                    className="w-3.5 h-3.5 text-zinc-400"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M19 9l-7 7-7-7"
+                    />
+                  </svg>
+                </button>
+                {openDropdown === "owner" && (
+                  <div className="absolute top-full left-0 mt-2 w-36 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-lg dark:shadow-2xl z-50 py-1.5">
+                    {["전체", "내가 만든 항목", "공유된 항목"].map((opt) => (
                       <button
                         key={opt}
                         type="button"
                         onClick={() => {
-                          setTypeFilter(opt);
+                          setOwnerFilter(opt);
                           setOpenDropdown(null);
                         }}
                         className="w-full text-left px-3 py-1.5 text-xs hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white"
                       >
                         {opt}
                       </button>
-                    ),
-                  )}
-                </div>
-              )}
-            </div>
+                    ))}
+                  </div>
+                )}
+              </div>
 
-            <div className="relative">
-              <button
-                type="button"
-                onClick={() => toggleDropdown("category")}
-                className={`px-3.5 py-1.5 rounded-full text-xs font-medium border flex items-center gap-1.5 transition-all cursor-pointer ${
-                  categoryFilter !== "전체"
-                    ? "bg-indigo-50 dark:bg-zinc-800 border-indigo-500 text-indigo-700 dark:text-indigo-300 font-semibold"
-                    : "bg-white dark:bg-zinc-900/80 border-zinc-300 dark:border-zinc-800 hover:border-zinc-400 dark:hover:border-zinc-700 text-zinc-700 dark:text-zinc-300"
-                }`}
-              >
-                <span>카테고리: {categoryFilter}</span>
-                <svg
-                  className="w-3.5 h-3.5 text-zinc-400"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => toggleDropdown("sort")}
+                  className="px-3.5 py-1.5 rounded-full text-xs font-medium border bg-white dark:bg-zinc-900/80 border-zinc-300 dark:border-zinc-800 hover:border-zinc-400 dark:hover:border-zinc-700 text-zinc-700 dark:text-zinc-300 flex items-center gap-1.5 transition-all cursor-pointer"
                 >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M19 9l-7 7-7-7"
-                  />
-                </svg>
-              </button>
-              {openDropdown === "category" && (
-                <div className="absolute top-full left-0 mt-2 w-36 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-lg dark:shadow-2xl z-50 py-1.5">
-                  {["전체", "잔잔한", "밝은", "웅장한", "따뜻한"].map((opt) => (
+                  <span>
+                    정렬:{" "}
+                    {sortOrder === "recent"
+                      ? "수정된 날짜"
+                      : sortOrder === "name"
+                        ? "이름순"
+                        : "슬라이드 수"}
+                  </span>
+                  <svg
+                    className="w-3.5 h-3.5 text-zinc-400"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M19 9l-7 7-7-7"
+                    />
+                  </svg>
+                </button>
+                {openDropdown === "sort" && (
+                  <div className="absolute top-full left-0 mt-2 w-36 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-lg dark:shadow-2xl z-50 py-1.5">
                     <button
-                      key={opt}
                       type="button"
                       onClick={() => {
-                        setCategoryFilter(opt);
+                        onSortOrderChange("recent");
                         setOpenDropdown(null);
                       }}
                       className="w-full text-left px-3 py-1.5 text-xs hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white"
                     >
-                      {opt}
+                      수정된 날짜순
                     </button>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            <div className="relative">
-              <button
-                type="button"
-                onClick={() => toggleDropdown("owner")}
-                className={`px-3.5 py-1.5 rounded-full text-xs font-medium border flex items-center gap-1.5 transition-all cursor-pointer ${
-                  ownerFilter !== "전체"
-                    ? "bg-teal-50 dark:bg-zinc-800 border-teal-500 text-teal-700 dark:text-teal-300 font-semibold"
-                    : "bg-white dark:bg-zinc-900/80 border-zinc-300 dark:border-zinc-800 hover:border-zinc-400 dark:hover:border-zinc-700 text-zinc-700 dark:text-zinc-300"
-                }`}
-              >
-                <span>소유자: {ownerFilter}</span>
-                <svg
-                  className="w-3.5 h-3.5 text-zinc-400"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M19 9l-7 7-7-7"
-                  />
-                </svg>
-              </button>
-              {openDropdown === "owner" && (
-                <div className="absolute top-full left-0 mt-2 w-36 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-lg dark:shadow-2xl z-50 py-1.5">
-                  {["전체", "내가 만든 항목", "공유된 항목"].map((opt) => (
                     <button
-                      key={opt}
                       type="button"
                       onClick={() => {
-                        setOwnerFilter(opt);
+                        onSortOrderChange("name");
                         setOpenDropdown(null);
                       }}
                       className="w-full text-left px-3 py-1.5 text-xs hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white"
                     >
-                      {opt}
+                      이름순
                     </button>
-                  ))}
-                </div>
-              )}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onSortOrderChange("slides");
+                        setOpenDropdown(null);
+                      }}
+                      className="w-full text-left px-3 py-1.5 text-xs hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white"
+                    >
+                      슬라이드 많은순
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
-
-            <div className="relative">
-              <button
-                type="button"
-                onClick={() => toggleDropdown("sort")}
-                className="px-3.5 py-1.5 rounded-full text-xs font-medium border bg-white dark:bg-zinc-900/80 border-zinc-300 dark:border-zinc-800 hover:border-zinc-400 dark:hover:border-zinc-700 text-zinc-700 dark:text-zinc-300 flex items-center gap-1.5 transition-all cursor-pointer"
-              >
-                <span>
-                  정렬:{" "}
-                  {sortOrder === "recent"
-                    ? "수정된 날짜"
-                    : sortOrder === "name"
-                      ? "이름순"
-                      : "슬라이드 수"}
-                </span>
-                <svg
-                  className="w-3.5 h-3.5 text-zinc-400"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M19 9l-7 7-7-7"
-                  />
-                </svg>
-              </button>
-              {openDropdown === "sort" && (
-                <div className="absolute top-full left-0 mt-2 w-36 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-lg dark:shadow-2xl z-50 py-1.5">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      onSortOrderChange("recent");
-                      setOpenDropdown(null);
-                    }}
-                    className="w-full text-left px-3 py-1.5 text-xs hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white"
-                  >
-                    수정된 날짜순
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      onSortOrderChange("name");
-                      setOpenDropdown(null);
-                    }}
-                    className="w-full text-left px-3 py-1.5 text-xs hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white"
-                  >
-                    이름순
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      onSortOrderChange("slides");
-                      setOpenDropdown(null);
-                    }}
-                    className="w-full text-left px-3 py-1.5 text-xs hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white"
-                  >
-                    슬라이드 많은순
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
+          )}
         </div>
       </header>
 
-      <div className="max-w-7xl w-full mx-auto px-6 sm:px-8 pt-6 pb-2 flex items-center justify-between gap-4">
-        <div className="min-w-0 flex-1">
-          {toolbarStart ?? (
-            <div className="text-xs text-zinc-500">{itemCountLabel}</div>
-          )}
-        </div>
+      {showControls && (
+        <div className="max-w-7xl w-full mx-auto px-6 sm:px-8 pt-6 pb-2 flex items-center justify-between gap-4">
+          <div className="min-w-0 flex-1">
+            {toolbarStart ?? (
+              <div className="text-xs text-zinc-500">{itemCountLabel}</div>
+            )}
+          </div>
 
-        <div className="flex items-center gap-2 shrink-0">
-          <button
-            type="button"
-            onClick={() =>
-              onSortOrderChange(sortOrder === "recent" ? "name" : "recent")
-            }
-            title="정렬 기준 전환"
-            className="p-2 rounded-xl bg-white dark:bg-zinc-900 hover:bg-zinc-100 dark:hover:bg-zinc-800 border border-zinc-200 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700 text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white transition-colors cursor-pointer"
-          >
-            <svg
-              className="w-4 h-4"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4"
-              />
-            </svg>
-          </button>
-
-          {quickAddSlot ?? (
+          <div className="flex items-center gap-2 shrink-0">
             <button
               type="button"
-              onClick={onQuickAdd}
-              title="새 항목 추가"
-              className="w-8 h-8 rounded-full bg-emerald-600 hover:bg-emerald-500 text-white flex items-center justify-center shadow-sm hover:shadow dark:shadow-emerald-950/40 hover:scale-105 active:scale-95 transition-all cursor-pointer"
+              onClick={() =>
+                onSortOrderChange(sortOrder === "recent" ? "name" : "recent")
+              }
+              title="정렬 기준 전환"
+              className="p-2 rounded-xl bg-white dark:bg-zinc-900 hover:bg-zinc-100 dark:hover:bg-zinc-800 border border-zinc-200 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700 text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white transition-colors cursor-pointer"
             >
               <svg
                 className="w-4 h-4"
@@ -341,14 +327,37 @@ export function AppHeroHeader({
                 <path
                   strokeLinecap="round"
                   strokeLinejoin="round"
-                  strokeWidth={2.5}
-                  d="M12 4v16m8-8H4"
+                  strokeWidth={2}
+                  d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4"
                 />
               </svg>
             </button>
-          )}
+
+            {quickAddSlot ?? (
+              <button
+                type="button"
+                onClick={onQuickAdd}
+                title="새 항목 추가"
+                className="w-8 h-8 rounded-full bg-emerald-600 hover:bg-emerald-500 text-white flex items-center justify-center shadow-sm hover:shadow dark:shadow-emerald-950/40 hover:scale-105 active:scale-95 transition-all cursor-pointer"
+              >
+                <svg
+                  className="w-4 h-4"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2.5}
+                    d="M12 4v16m8-8H4"
+                  />
+                </svg>
+              </button>
+            )}
+          </div>
         </div>
-      </div>
+      )}
     </>
   );
 }

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { ID_PATTERN, PresentationSchema } from "#shared";
+import { PresentationSchema } from "#shared";
 import { mockPresentation } from "./mockPresentation";
 
 describe("mockPresentation", () => {
@@ -45,10 +45,10 @@ describe("mockPresentation", () => {
     }
   });
 
-  it("모든 덱은 모션 배경 ID 및 유효한 스타일을 가져야 한다", () => {
+  it("샘플 곡은 배경 없이 두고(세트에 담을 때 기본 제공 배경을 배정받는다) 유효한 스타일을 가진다", () => {
     for (const item of mockPresentation.items) {
       const deck = item.deck;
-      expect(deck?.backgroundId).toMatch(ID_PATTERN);
+      expect(deck?.backgroundId).toBeNull();
       expect(deck?.style).toBeDefined();
       expect(deck?.style.fontFamily).toBe("Pretendard");
     }

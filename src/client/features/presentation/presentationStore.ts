@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from "react";
 import type { Deck, Presentation, PresentationItem } from "#shared";
-import { createId, createSlideId, INITIAL_BACKGROUNDS } from "#shared";
+import { createId, createSlideId } from "#shared";
 import {
   savePresentation,
   loadAllPresentations,
@@ -14,6 +14,7 @@ import {
   scheduleDocumentPush,
   cancelDocumentPush,
 } from "../../lib/sync/syncScheduler";
+import { getServiceBackgrounds } from "../backgrounds/backgroundCatalog";
 import { mockDecks } from "./mockPresentation";
 
 interface PresentationStoreState {
@@ -371,14 +372,21 @@ export function linkSongToLibraryDeck(
 
 /**
  * 덱은 항상 이 세트 전용 복제본으로 들어간다 (Clone-on-Add).
+ *
+ * 배경이 없는 곡에는 기본 제공 배경을 곡 순서대로 돌려 입힌다. 곡 전환을 배경
+ * 교체로 구분하기 때문이다 (제목 슬라이드가 없다). 기본 제공 배경이 하나도 없으면
+ * 배경 없이 넣는다.
  */
 export function addDeckToPresentation(deck: Deck): PresentationItem {
   pushHistory();
   const active = readActive();
   const currentCount = active.items.length;
+  const serviceBackgrounds = getServiceBackgrounds();
   const assignedBackgroundId =
     deck.backgroundId ||
-    INITIAL_BACKGROUNDS[currentCount % INITIAL_BACKGROUNDS.length].id;
+    (serviceBackgrounds.length > 0
+      ? serviceBackgrounds[currentCount % serviceBackgrounds.length].id
+      : null);
 
   const resolvedDeck: Deck = {
     ...cloneDeckForPresentation(deck, active.id),
@@ -525,7 +533,7 @@ export function updateSongStyle(
 
 export function updateSongBackground(
   songIndex: number,
-  backgroundId: string,
+  backgroundId: string | null,
 ): void {
   const item = readActive().items[songIndex];
   if (!item || !item.deck) return;

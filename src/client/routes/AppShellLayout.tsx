@@ -66,6 +66,7 @@ function AppShellFrame(): React.JSX.Element {
   const meta = metaFor(pathname);
   const onDrive = isDrivePath(pathname);
   const onTrash = pathname === "/presentations/trash";
+  const onBackgrounds = pathname.startsWith("/backgrounds");
 
   const handleCreateNewPresentation = (): void => {
     drive.createPresentationIn(drive.currentFolderId);
@@ -116,6 +117,7 @@ function AppShellFrame(): React.JSX.Element {
             ) : undefined
           }
           onQuickAdd={handleCreateNewPresentation}
+          showControls={!onBackgrounds}
         />
 
         <main className="flex-1 max-w-7xl w-full mx-auto px-6 sm:px-8 py-4">

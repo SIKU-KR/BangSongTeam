@@ -13,6 +13,15 @@ import {
   resetPresentationStore,
   SEED_PRESENTATION_IDS,
 } from "../features/presentation";
+import {
+  resetBackgroundCatalogForTests,
+  setBackgroundCatalogForTests,
+} from "../features/backgrounds/backgroundCatalog";
+import {
+  makeBackground,
+  TEST_SERVICE_BACKGROUNDS,
+  withBackgrounds,
+} from "../test/backgroundFixture";
 
 const DOC_ID = SEED_PRESENTATION_IDS[0];
 
@@ -54,6 +63,7 @@ describe("FullscreenPresentRoute", () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
+    resetBackgroundCatalogForTests();
   });
 
   it("should render the first song's first slide lyrics without external network requests", () => {
@@ -241,19 +251,59 @@ describe("FullscreenPresentRoute", () => {
   });
 
   it("should supply motion background video URL and preload next song video", () => {
+    const [first, second] = TEST_SERVICE_BACKGROUNDS;
+    setBackgroundCatalogForTests(TEST_SERVICE_BACKGROUNDS);
+    __loadDocumentsForTests([
+      withBackgrounds(SEED_PRESENTATIONS[0], [first.id, second.id]),
+    ]);
     renderPresent();
 
     const videoSlotA = screen.getByTestId("video-slot-a");
-    expect(videoSlotA).toHaveAttribute(
-      "src",
-      "/api/media/loops/warm_light_flow.mp4",
-    );
+    expect(videoSlotA).toHaveAttribute("src", first.mediaUrl);
+    expect(videoSlotA).toHaveAttribute("poster", first.posterUrl);
 
     const preloadVideo = screen.getByTestId("video-preload");
-    expect(preloadVideo).toHaveAttribute(
+    expect(preloadVideo).toHaveAttribute("src", second.mediaUrl);
+  });
+
+  it("이미지 배경 곡은 정지 이미지로 그리고, 앞 곡의 영상을 남기지 않는다", () => {
+    const video = TEST_SERVICE_BACKGROUNDS[0];
+    const image = makeBackground(8, {
+      source: "user",
+      kind: "image",
+      mediaUrl: "/api/media/uploads/u/8.png",
+      posterUrl: "/api/media/uploads/u/8.png",
+    });
+    setBackgroundCatalogForTests([video, image]);
+    const presentation = withBackgrounds(SEED_PRESENTATIONS[0], [
+      video.id,
+      image.id,
+      null,
+    ]);
+    __loadDocumentsForTests([presentation]);
+    renderPresent();
+
+    const firstSongSlides = presentation.items[0].deck?.slides.length ?? 0;
+    act(() => {
+      for (let i = 0; i < firstSongSlides; i += 1) dispatchKey("ArrowRight");
+    });
+
+    expect(screen.getByTestId("image-background-layer")).toHaveAttribute(
       "src",
-      "/api/media/loops/calm_lake_waves.mp4",
+      image.mediaUrl,
     );
+    expect(screen.getByTestId("video-slot-a")).toHaveStyle({ opacity: "0" });
+    expect(screen.getByTestId("video-slot-b")).toHaveStyle({ opacity: "0" });
+  });
+
+  it("카탈로그에 없는 배경(지워진 커스텀 배경)은 검은 배경으로 송출한다", () => {
+    __loadDocumentsForTests([
+      withBackgrounds(SEED_PRESENTATIONS[0], ["gone00000000000000001"]),
+    ]);
+    renderPresent();
+
+    expect(screen.getByTestId("video-slot-a")).not.toHaveAttribute("src");
+    expect(screen.queryByTestId("image-background-layer")).toBeNull();
   });
 
   it("존재하지 않는 presentationId 는 /presentations 로 리다이렉트된다", () => {

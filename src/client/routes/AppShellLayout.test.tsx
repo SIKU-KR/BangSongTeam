@@ -23,31 +23,34 @@ import { TrashRoute } from "./TrashRoute";
 import { LyricsRoute } from "./LyricsRoute";
 import { BackgroundsRoute } from "./BackgroundsRoute";
 import * as chromeChecker from "../components/common/ChromeAlertBanner";
+import { withQueryClient } from "../test/queryClientFixture";
 
 function renderShell(initialPath = "/presentations") {
   return render(
-    <MemoryRouter initialEntries={[initialPath]}>
-      <Routes>
-        <Route element={<AppShellLayout />}>
-          <Route path="/presentations" element={<PresentationsRoute />} />
+    withQueryClient(
+      <MemoryRouter initialEntries={[initialPath]}>
+        <Routes>
+          <Route element={<AppShellLayout />}>
+            <Route path="/presentations" element={<PresentationsRoute />} />
+            <Route
+              path="/presentations/folders/:folderId"
+              element={<PresentationsRoute />}
+            />
+            <Route path="/presentations/trash" element={<TrashRoute />} />
+            <Route path="/lyrics" element={<LyricsRoute />} />
+            <Route path="/backgrounds" element={<BackgroundsRoute />} />
+          </Route>
           <Route
-            path="/presentations/folders/:folderId"
-            element={<PresentationsRoute />}
+            path="/present/:presentationId/fullscreen"
+            element={<div data-testid="fullscreen-stub" />}
           />
-          <Route path="/presentations/trash" element={<TrashRoute />} />
-          <Route path="/lyrics" element={<LyricsRoute />} />
-          <Route path="/backgrounds" element={<BackgroundsRoute />} />
-        </Route>
-        <Route
-          path="/present/:presentationId/fullscreen"
-          element={<div data-testid="fullscreen-stub" />}
-        />
-        <Route
-          path="/editor/:presentationId"
-          element={<div data-testid="editor-stub" />}
-        />
-      </Routes>
-    </MemoryRouter>,
+          <Route
+            path="/editor/:presentationId"
+            element={<div data-testid="editor-stub" />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    ),
   );
 }
 
@@ -169,7 +172,8 @@ describe("AppShellLayout (드라이브형 홈)", () => {
     );
 
     fireEvent.click(screen.getByTestId("sidebar-nav-backgrounds"));
-    expect(screen.getByText("내가 등록한 배경")).toBeInTheDocument();
+    expect(screen.getByText("내가 올린 배경")).toBeInTheDocument();
+    expect(screen.queryByText("유형: 전체")).not.toBeInTheDocument();
     expect(
       screen.getByRole("heading", { name: "배경 라이브러리" }),
     ).toBeInTheDocument();

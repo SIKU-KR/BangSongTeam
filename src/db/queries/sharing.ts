@@ -10,6 +10,7 @@ import {
 import { decks, user, type Deck, type NewDeck } from "../schema";
 import { toDeckRow, toSharedDeck } from "./mappers";
 import { publicDeckCondition } from "./publicScope";
+import { maskNonServiceBackgrounds } from "./backgrounds";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type DbInstance = any;
@@ -111,7 +112,9 @@ export async function getPublicDeckDetail(
   deckId: string,
 ): Promise<PublicDeckDetail | null> {
   const row = await selectPublicDeckWithAuthor(db, deckId);
-  return row ? toPublicDeckDetail(row.deck, row.authorName) : null;
+  if (!row) return null;
+  const [deck] = await maskNonServiceBackgrounds(db, [row.deck]);
+  return toPublicDeckDetail(deck, row.authorName);
 }
 
 export type ForkResult =
@@ -125,6 +128,7 @@ export type ForkResult =
  * - 복제본은 비공개이고 `origin='fork'`다
  * - 같은 덱을 다시 가져오면 이전 포크를 돌려주고 가져간 횟수를 올리지 않는다
  * - 내 덱이면 그대로 돌려준다 (내가 공개한 곡을 내 세트에 담는 경우)
+ * - 원본이 원작자의 커스텀 배경을 쓰면 포크본은 배경 없이 만든다 (소유자 전용)
  *
  * 포크 insert와 원본 `fork_count + 1`은 `batch`로 묶는다. 둘 중 하나만 남으면
  * 인기순이 어긋나거나 가져간 곡이 사라진다.
@@ -160,7 +164,8 @@ export async function forkPublicDeck(
     return { status: "ok", deck: toSharedDeck(existing), alreadyOwned: true };
   }
 
-  const original = toSharedDeck(source.deck);
+  const [publicSource] = await maskNonServiceBackgrounds(db, [source.deck]);
+  const original = toSharedDeck(publicSource);
   const now = new Date().toISOString();
   const forkRow: NewDeck = toDeckRow({
     ...original,

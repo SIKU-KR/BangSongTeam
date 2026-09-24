@@ -5,6 +5,8 @@ export interface PublishDialogProps {
   songTitle: string;
   /** 보관함 원본이 이미 있어 그 내용이 세트 곡 내용으로 바뀐다 */
   overwritesLibraryCopy: boolean;
+  /** 내가 올린 배경은 소유자 전용이라 다른 사용자에게는 배경 없이 보인다 */
+  usesPrivateBackground?: boolean;
   isPending: boolean;
   error: string | null;
   onConfirm: () => void;
@@ -18,6 +20,7 @@ export function PublishDialog({
   isOpen,
   songTitle,
   overwritesLibraryCopy,
+  usesPrivateBackground = false,
   isPending,
   error,
   onConfirm,
@@ -58,6 +61,12 @@ export function PublishDialog({
             언제든 비공개로 돌릴 수 있습니다. 다만 이미 가져간 사람의 사본은
             남습니다.
           </li>
+          {usesPrivateBackground && (
+            <li data-testid="publish-private-background-note">
+              이 곡은 내가 올린 배경을 씁니다. 내 배경은 공개되지 않아 다른
+              사용자에게는 배경 없이 보입니다.
+            </li>
+          )}
           {overwritesLibraryCopy && (
             <li className="text-amber-700 dark:text-amber-400">
               내 보관함에 있는 이 곡(&lsquo;{songTitle}&rsquo;)의 내용이 지금

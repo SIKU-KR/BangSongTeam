@@ -1,9 +1,5 @@
 import type { Presentation } from "../schemas/presentation";
-import {
-  INITIAL_BACKGROUNDS,
-  getBackgroundMediaUrl,
-  getBackgroundPosterUrl,
-} from "../constants/backgrounds";
+import type { BackgroundMedia } from "../schemas/media";
 import type { SupportedFont } from "../constants";
 
 /**
@@ -19,9 +15,9 @@ export interface PresentationMediaAsset {
   songIndex: number;
   songTitle: string;
   backgroundId: string | null;
-  /** 사전 주입 배경 목록에서 찾은 제목. 못 찾으면 null */
+  /** 배경 카탈로그에서 찾은 제목. 못 찾으면 null */
   backgroundTitle: string | null;
-  /** 배경 영상 URL. 배경이 없거나 알 수 없는 id면 undefined */
+  /** 배경 영상(또는 이미지) URL. 배경이 없거나 알 수 없는 id면 undefined */
   mediaUrl?: string;
   /** 포스터 이미지 URL */
   posterUrl?: string;
@@ -30,11 +26,13 @@ export interface PresentationMediaAsset {
 /**
  * 세트의 곡별 배경 자산을 곡 순서대로 돌려준다.
  *
- * 배경이 없거나 알 수 없는 id인 곡도 곡 순번을 유지하려고 빠뜨리지 않는다.
- * 다만 URL이 없으므로 다운로드 대상에서는 자연히 빠진다.
+ * 배경 메타데이터는 호출하는 쪽의 카탈로그(IndexedDB에 보관된 목록)에서 찾는다.
+ * 카탈로그에 없는 id — 지워진 커스텀 배경, 아직 동기화되지 않은 배경 — 인 곡도
+ * 곡 순번을 유지하려고 빠뜨리지 않는다. URL이 없으므로 다운로드 대상에서는 자연히 빠진다.
  */
 export function collectPresentationMediaAssets(
   presentation: Presentation,
+  findBackground: (backgroundId: string) => BackgroundMedia | undefined,
 ): PresentationMediaAsset[] {
   return presentation.items
     .slice()
@@ -43,7 +41,7 @@ export function collectPresentationMediaAssets(
       const deck = item.deck;
       const backgroundId = deck?.backgroundId ?? null;
       const background = backgroundId
-        ? INITIAL_BACKGROUNDS.find((bg) => bg.id === backgroundId)
+        ? findBackground(backgroundId)
         : undefined;
 
       return {
@@ -51,8 +49,8 @@ export function collectPresentationMediaAssets(
         songTitle: deck?.title ?? "(제목 없음)",
         backgroundId,
         backgroundTitle: background?.title ?? null,
-        mediaUrl: getBackgroundMediaUrl(backgroundId),
-        posterUrl: getBackgroundPosterUrl(backgroundId),
+        mediaUrl: background?.mediaUrl,
+        posterUrl: background?.posterUrl,
       };
     });
 }
@@ -60,8 +58,8 @@ export function collectPresentationMediaAssets(
 /**
  * 실제로 내려받을 URL 목록 (중복 제거).
  *
- * 사전 주입 배경은 10개뿐이라 5곡 세트에서 같은 루프를 여러 곡이 쓰는 것이
- * 정상이다. 곡 수만큼 받으면 같은 20MB 영상을 네 번 받는다.
+ * 5곡 세트에서 같은 루프를 여러 곡이 쓰는 것이 정상이다. 곡 수만큼 받으면
+ * 같은 20MB 영상을 네 번 받는다. 이미지 배경은 영상과 포스터 URL이 같다.
  */
 export function collectUniqueMediaUrls(
   assets: readonly PresentationMediaAsset[],

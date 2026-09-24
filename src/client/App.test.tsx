@@ -68,8 +68,8 @@ describe("App Route Integration", () => {
   it("should render the background library at '/backgrounds'", async () => {
     renderAt("/backgrounds");
 
-    expect(await screen.findByText("내가 등록한 배경")).toBeInTheDocument();
-    expect(await screen.findByText("유저가 등록한 배경")).toBeInTheDocument();
+    expect(await screen.findByText("내가 올린 배경")).toBeInTheDocument();
+    expect(await screen.findByText("기본 제공 배경")).toBeInTheDocument();
   });
 
   it("should render FullscreenPresentRoute at '/present/:presentationId/fullscreen'", async () => {

@@ -1,12 +1,15 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { renderHook, act } from "@testing-library/react";
-import {
-  INITIAL_BACKGROUNDS,
-  getBackgroundMediaUrl,
-  getBackgroundPosterUrl,
-  type Presentation,
-} from "#shared";
+import type { Presentation } from "#shared";
 import { SEED_PRESENTATIONS } from "../presentation";
+import {
+  resetBackgroundCatalogForTests,
+  setBackgroundCatalogForTests,
+} from "../backgrounds/backgroundCatalog";
+import {
+  makeBackground,
+  TEST_SERVICE_BACKGROUNDS,
+} from "../../test/backgroundFixture";
 import {
   useBackgroundAutoCache,
   AUTO_CACHE_DELAY_MS,
@@ -34,17 +37,18 @@ function withBackground(backgroundId: string): Presentation {
 }
 
 function urlsOf(backgroundId: string): string[] {
-  return [
-    getBackgroundMediaUrl(backgroundId),
-    getBackgroundPosterUrl(backgroundId),
-  ] as string[];
+  const background = TEST_SERVICE_BACKGROUNDS.find(
+    (bg) => bg.id === backgroundId,
+  );
+  return background ? [background.mediaUrl, background.posterUrl] : [];
 }
 
-const BG_A = INITIAL_BACKGROUNDS[0].id;
-const BG_B = INITIAL_BACKGROUNDS[1].id;
-const BG_C = INITIAL_BACKGROUNDS[2].id;
+const BG_A = TEST_SERVICE_BACKGROUNDS[0].id;
+const BG_B = TEST_SERVICE_BACKGROUNDS[1].id;
+const BG_C = TEST_SERVICE_BACKGROUNDS[2].id;
 
 beforeEach(() => {
+  setBackgroundCatalogForTests(TEST_SERVICE_BACKGROUNDS);
   vi.useFakeTimers();
   scheduleMediaCaching.mockClear();
   warmPresentationFonts.mockClear();
@@ -52,6 +56,7 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.useRealTimers();
+  resetBackgroundCatalogForTests();
 });
 
 describe("useBackgroundAutoCache", () => {
@@ -164,6 +169,31 @@ describe("useBackgroundAutoCache", () => {
     });
 
     expect(scheduleMediaCaching).not.toHaveBeenCalled();
+  });
+
+  it("방금 올린 배경이 카탈로그에 들어오면 그 배경도 받는다", () => {
+    const upload = makeBackground(7, {
+      source: "user",
+      kind: "image",
+      mediaUrl: "/api/media/uploads/u/bg7.png",
+      posterUrl: "/api/media/uploads/u/bg7.png",
+    });
+    renderHook(() => useBackgroundAutoCache(withBackground(upload.id)));
+    act(() => {
+      vi.advanceTimersByTime(AUTO_CACHE_DELAY_MS);
+    });
+    expect(scheduleMediaCaching).toHaveBeenLastCalledWith([]);
+
+    act(() => {
+      setBackgroundCatalogForTests([...TEST_SERVICE_BACKGROUNDS, upload]);
+    });
+    act(() => {
+      vi.advanceTimersByTime(AUTO_CACHE_DELAY_MS);
+    });
+
+    expect(scheduleMediaCaching).toHaveBeenLastCalledWith([
+      "/api/media/uploads/u/bg7.png",
+    ]);
   });
 
   it("세트가 없으면 아무것도 하지 않는다", () => {

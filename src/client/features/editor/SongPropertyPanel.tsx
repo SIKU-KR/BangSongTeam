@@ -4,9 +4,8 @@ import {
   DEFAULT_DECK_STYLE,
   SUPPORTED_FONTS,
   GRID_ANCHOR_PRESET_COORDINATES,
-  INITIAL_BACKGROUNDS,
-  getBackgroundPosterUrl,
 } from "#shared";
+import { useBackground } from "../backgrounds/backgroundCatalog";
 import { BackgroundPickerModal } from "./BackgroundPickerModal";
 import { ColorPickerField } from "./ColorPickerField";
 
@@ -15,7 +14,7 @@ export interface SongPropertyPanelProps {
   backgroundId?: string | null;
   activeSlide?: Slide | null;
   onUpdateStyle: (update: Partial<DeckStyle>) => void;
-  onUpdateBackground: (bgId: string) => void;
+  onUpdateBackground: (backgroundId: string | null) => void;
   onUpdateSlideLines?: (lines: string[]) => void;
   footer?: React.ReactNode;
   className?: string;
@@ -125,10 +124,7 @@ export function SongPropertyPanel({
   const [isBgModalOpen, setIsBgModalOpen] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(false);
 
-  const currentBg =
-    INITIAL_BACKGROUNDS.find((b) => b.id === backgroundId) ||
-    INITIAL_BACKGROUNDS[0];
-  const posterUrl = getBackgroundPosterUrl(currentBg.id);
+  const currentBg = useBackground(backgroundId);
 
   const handleGridPresetClick = (preset: GridAnchorPreset) => {
     if (preset === "custom") return;
@@ -239,25 +235,30 @@ export function SongPropertyPanel({
       <div className="p-4 flex flex-col gap-6">
         <section className="space-y-2.5">
           <label className="text-xs font-semibold text-zinc-600 dark:text-zinc-400 uppercase tracking-wider flex items-center justify-between">
-            <span>모션 루프 배경</span>
-            <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-mono">
-              Cloudflare R2
-            </span>
+            <span>곡 배경</span>
+            {currentBg && (
+              <span className="text-[10px] text-zinc-500 dark:text-zinc-400 normal-case">
+                {currentBg.source === "user" ? "내 배경" : "기본 제공"} ·{" "}
+                {currentBg.kind === "video" ? "영상" : "이미지"}
+              </span>
+            )}
           </label>
 
-          <div
+          <button
+            type="button"
+            data-testid="open-bg-picker-btn"
             onClick={() => setIsBgModalOpen(true)}
-            className="group relative aspect-video w-full rounded-lg overflow-hidden border border-zinc-200 dark:border-zinc-800 hover:border-emerald-500 cursor-pointer transition-all bg-black"
+            className="group relative block aspect-video w-full rounded-lg overflow-hidden border border-zinc-200 dark:border-zinc-800 hover:border-emerald-500 cursor-pointer transition-all bg-black"
           >
-            {posterUrl ? (
+            {currentBg ? (
               <img
-                src={posterUrl}
+                src={currentBg.posterUrl}
                 alt={currentBg.title}
                 className="w-full h-full object-cover group-hover:scale-105 transition-transform"
               />
             ) : (
-              <div className="w-full h-full bg-zinc-100 dark:bg-zinc-900 flex items-center justify-center text-xs text-zinc-500">
-                배경
+              <div className="w-full h-full bg-zinc-900 flex items-center justify-center text-xs text-zinc-400">
+                배경 없음
               </div>
             )}
             <div className="absolute inset-0 bg-black/40 group-hover:bg-black/20 transition-colors flex items-center justify-center">
@@ -265,10 +266,12 @@ export function SongPropertyPanel({
                 배경 변경
               </span>
             </div>
-            <div className="absolute bottom-1.5 left-2 z-10 text-[11px] font-medium text-white drop-shadow">
-              {currentBg.title}
-            </div>
-          </div>
+            {currentBg && (
+              <div className="absolute bottom-1.5 left-2 right-2 z-10 text-left text-[11px] font-medium text-white drop-shadow truncate">
+                {currentBg.title}
+              </div>
+            )}
+          </button>
         </section>
 
         <section className="space-y-2">
@@ -545,7 +548,7 @@ export function SongPropertyPanel({
       <BackgroundPickerModal
         isOpen={isBgModalOpen}
         onClose={() => setIsBgModalOpen(false)}
-        selectedBackgroundId={currentBg.id}
+        selectedBackgroundId={currentBg?.id ?? null}
         onSelect={onUpdateBackground}
       />
     </aside>
