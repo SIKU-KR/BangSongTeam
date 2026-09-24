@@ -25,7 +25,7 @@
 ### Phase M2-1: 의존성 패키지 구성, 오버플로우 감지 유틸리티 및 편집기 상태 엔진 (TDD)
 
 - [ ] **Task 1.1: M2 필수 라이브러리 설치 및 웹폰트 번들 추가**
-  - **대상 파일**: `apps/web/package.json`, `apps/web/src/index.css`
+  - **대상 파일**: `apps/web/package.json`, `src/client/index.css`
   - **선행 조건**: M1 완료 (`docs/tasks/m1/tasks_4.md`)
   - **구현 내용**:
     - `apps/web`에 필수 라이브러리 설치:
@@ -33,11 +33,11 @@
       - `@dnd-kit/core`, `@dnd-kit/sortable`, `@dnd-kit/utilities`: 곡 목록 드래그 앤 드롭 순서 변경
       - `react-colorful`: 텍스트 색상 컬러피커
       - `@fontsource/noto-sans-kr`: 번들 한글 웹폰트 추가
-    - `apps/web/src/index.css`에 `@fontsource/noto-sans-kr` import 추가
+    - `src/client/index.css`에 `@fontsource/noto-sans-kr` import 추가
   - **DoD (통과 기준)**: `pnpm --filter web exec tsc --noEmit`이 통과하고 라이브러리 import 에러 없이 번들링 준비가 완료된다.
 
 - [ ] **Task 1.2: 텍스트 박스 폭 및 높이 넘침(Overflow) 감지 유틸리티 단위 테스트 작성 (TDD Red)**
-  - **대상 파일**: `packages/shared/src/utils/overflow.test.ts`
+  - **대상 파일**: `src/shared/utils/overflow.test.ts`
   - **선행 조건**: Task 1.1
   - **구현 내용**:
     - 테스트 케이스 1: 단일 줄 글자 수가 텍스트 박스 폭(`widthPercent`)을 초과하는지 여부 판별 (`isLineOverflowing`)
@@ -46,7 +46,7 @@
   - **DoD (통과 기준)**: `pnpm --filter @repo/shared vitest run src/utils/overflow.test.ts` 실행 시 구현체가 없어 실패(Red)함을 확인한다.
 
 - [ ] **Task 1.3: 텍스트 박스 폭 및 높이 넘침(Overflow) 감지 유틸리티 구현 (TDD Green)**
-  - **대상 파일**: `packages/shared/src/utils/overflow.ts`, `packages/shared/src/utils/index.ts`
+  - **대상 파일**: `src/shared/utils/overflow.ts`, `src/shared/utils/index.ts`
   - **선행 조건**: Task 1.2
   - **구현 내용**:
     - 한글(약 1.8~2.0배 폭 가중치) 및 영문 문자폭을 고려한 가상 너비 계산 알고리즘 구현
@@ -55,7 +55,7 @@
   - **DoD (통과 기준)**: `pnpm --filter @repo/shared vitest run src/utils/overflow.test.ts`가 100% 통과(Green)한다.
 
 - [ ] **Task 1.4: 세트 편집기 상태 머신 리듀서 단위 테스트 작성 (TDD Red)**
-  - **대상 파일**: `apps/web/src/features/editor/usePresentationEditor.test.ts`
+  - **대상 파일**: `src/client/features/editor/usePresentationEditor.test.ts`
   - **선행 조건**: Task 1.3
   - **구현 내용**:
     - 테스트 케이스 1: 곡 선택(`selectSong`), 슬라이드 선택(`selectSlide`) 인덱스 상태 갱신
@@ -66,7 +66,7 @@
   - **DoD (통과 기준)**: `pnpm --filter web vitest run src/features/editor/usePresentationEditor.test.ts` 실행 시 구현체가 없어 실패(Red)함을 확인한다.
 
 - [ ] **Task 1.5: 세트 편집기 상태 관리 훅 구현 (TDD Green)**
-  - **대상 파일**: `apps/web/src/features/editor/usePresentationEditor.ts`
+  - **대상 파일**: `src/client/features/editor/usePresentationEditor.ts`
   - **선행 조건**: Task 1.4
   - **구현 내용**:
     - `useReducer` 기반 세트 편집기 상태 관리 (`presentation`, `selectedSongIndex`, `selectedSlideIndex`, `isDirty`)
@@ -79,7 +79,7 @@
 ### Phase M2-2: 좌측 곡 목록 패널(드래그 정렬) 및 가사 분할/합치기 수동 편집 모달
 
 - [ ] **Task 2.1: 드래그 앤 드롭 정렬 가능한 곡 리스트 아이템 컴포넌트 구현**
-  - **대상 파일**: `apps/web/src/features/editor/SongListItem.tsx`
+  - **대상 파일**: `src/client/features/editor/SongListItem.tsx`
   - **선행 조건**: Task 1.5
   - **구현 내용**:
     - `@dnd-kit/sortable`의 `useSortable` 훅 연동 (`transform`, `transition`, `listeners`, `attributes`)
@@ -89,7 +89,7 @@
   - **DoD (통과 기준)**: `pnpm --filter web exec tsc --noEmit`이 통과하고 곡 카드 렌더링 및 클릭/삭제 이벤트가 정상 동작한다.
 
 - [ ] **Task 2.2: 좌측 곡 목록 및 드래그 정렬 패널 컴포넌트 구현**
-  - **대상 파일**: `apps/web/src/features/editor/SongListPanel.tsx`
+  - **대상 파일**: `src/client/features/editor/SongListPanel.tsx`
   - **선행 조건**: Task 2.1
   - **구현 내용**:
     - `@dnd-kit/core`의 `DndContext`, `SortableContext`, `closestCenter` 알고리즘 적용
@@ -99,7 +99,7 @@
   - **DoD (통과 기준)**: `pnpm --filter web exec tsc --noEmit`이 통과하고 드래그 앤 드롭을 통한 곡 순서 변경이 정상 작동한다.
 
 - [ ] **Task 2.3: 슬라이드 수동 분할/합치기 로직 단위 테스트 작성 (TDD Red)**
-  - **대상 파일**: `apps/web/src/features/editor/manualLyricSplit.test.ts`
+  - **대상 파일**: `src/client/features/editor/manualLyricSplit.test.ts`
   - **선행 조건**: Task 1.5
   - **구현 내용**:
     - 테스트 케이스 1: 특정 커서 줄 위치에서 슬라이드 나누기(`splitSlideAtLine`) 시 2개 슬라이드로 분할
@@ -108,7 +108,7 @@
   - **DoD (통과 기준)**: `pnpm --filter web vitest run src/features/editor/manualLyricSplit.test.ts` 실행 시 실패(Red)함을 확인한다.
 
 - [ ] **Task 2.4: 슬라이드 수동 분할/합치기 로직 및 분할 미리보기 카드 컴포넌트 구현 (TDD Green)**
-  - **대상 파일**: `apps/web/src/features/editor/manualLyricSplit.ts`, `apps/web/src/features/editor/LyricSlideCard.tsx`
+  - **대상 파일**: `src/client/features/editor/manualLyricSplit.ts`, `src/client/features/editor/LyricSlideCard.tsx`
   - **선행 조건**: Task 2.3
   - **구현 내용**:
     - 슬라이드 텍스트 분할/합치기 순수 함수 구현
@@ -117,7 +117,7 @@
   - **DoD (통과 기준)**: `pnpm --filter web vitest run src/features/editor/manualLyricSplit.test.ts`가 100% 통과(Green)한다.
 
 - [ ] **Task 2.5: 세트 곡 추가 및 가사 편집 통합 모달 구현**
-  - **대상 파일**: `apps/web/src/features/editor/AddSongModal.tsx`
+  - **대상 파일**: `src/client/features/editor/AddSongModal.tsx`
   - **선행 조건**: Task 2.4
   - **구현 내용**:
     - 곡 제목 및 아티스트 입력 폼
@@ -132,7 +132,7 @@
 ### Phase M2-3: 중앙 16:9 인터랙티브 스테이지 & 하단 슬라이드 스트립
 
 - [ ] **Task 3.1: react-moveable 기반 텍스트 박스 조작 오버레이 컴포넌트 구현**
-  - **대상 파일**: `apps/web/src/features/editor/MoveableTextBox.tsx`
+  - **대상 파일**: `src/client/features/editor/MoveableTextBox.tsx`
   - **선행 조건**: Task 1.5
   - **구현 내용**:
     - 1920x1080 가상 스테이지 좌표계 내부에서 동작하는 `Moveable` 래퍼 컴포넌트
@@ -143,7 +143,7 @@
   - **DoD (통과 기준)**: `pnpm --filter web exec tsc --noEmit`이 통과하고 텍스트 박스 드래그 및 폭 조절 시 퍼센트 좌표가 계산된다.
 
 - [ ] **Task 3.2: 16:9 편집 미리보기 인터랙티브 스테이지 컴포넌트 구현**
-  - **대상 파일**: `apps/web/src/features/editor/EditorStagePreview.tsx`
+  - **대상 파일**: `src/client/features/editor/EditorStagePreview.tsx`
   - **선행 조건**: Task 3.1
   - **구현 내용**:
     - 기존 `SlideStage` 위에 `MoveableTextBox` 및 중앙선 스냅 가이드라인 오버레이 렌더링
@@ -152,7 +152,7 @@
   - **DoD (통과 기준)**: `pnpm --filter web exec tsc --noEmit`이 통과하고 스테이지 위에서 텍스트 조작 및 경고가 올바르게 렌더링된다.
 
 - [ ] **Task 3.3: 하단 슬라이드 썸네일 스트립 컴포넌트 구현**
-  - **대상 파일**: `apps/web/src/features/editor/SlideStripPanel.tsx`
+  - **대상 파일**: `src/client/features/editor/SlideStripPanel.tsx`
   - **선행 조건**: Task 3.2
   - **구현 내용**:
     - 현재 활성 곡의 모든 슬라이드를 가로 스크롤 카드 스트립으로 표시
@@ -167,7 +167,7 @@
 ### Phase M2-4: 우측 곡 속성 패널 & 모션 배경 라이브러리 모달
 
 - [ ] **Task 4.1: 사전 주입 루프 배경 영상 선택 모달 컴포넌트 구현**
-  - **대상 파일**: `apps/web/src/features/editor/BackgroundPickerModal.tsx`
+  - **대상 파일**: `src/client/features/editor/BackgroundPickerModal.tsx`
   - **선행 조건**: Task 1.5
   - **구현 내용**:
     - M0에서 사전 주입된 배경 영상 10종(R2 비디오 URL 및 포스터) 그리드 렌더링
@@ -177,7 +177,7 @@
   - **DoD (통과 기준)**: `pnpm --filter web exec tsc --noEmit`이 통과하고 호버 재생 및 배경 선택 콜백이 정상 작동한다.
 
 - [ ] **Task 4.2: 타이포그래피 및 가독성 오버레이 컨트롤 컴포넌트 구현**
-  - **대상 파일**: `apps/web/src/features/editor/TypographyControls.tsx`
+  - **대상 파일**: `src/client/features/editor/TypographyControls.tsx`
   - **선행 조건**: Task 1.5
   - **구현 내용**:
     - 검정 오버레이 불투명도 슬라이더 (0% ~ 100%, 1% 단위 숫자 표시)
@@ -189,7 +189,7 @@
   - **DoD (통과 기준)**: `pnpm --filter web exec tsc --noEmit`이 통과하고 각 컨트롤 값 변경 시 `updateSongStyle`이 호출된다.
 
 - [ ] **Task 4.3: 3×3 격자 앵커 프리셋 및 폭 조절 컨트롤 컴포넌트 구현**
-  - **대상 파일**: `apps/web/src/features/editor/PositionControls.tsx`
+  - **대상 파일**: `src/client/features/editor/PositionControls.tsx`
   - **선행 조건**: Task 4.2
   - **구현 내용**:
     - 3×3 격자 버튼(9칸: top-left ~ bottom-right) 렌더링 및 현재 선택 하이라이트
@@ -199,7 +199,7 @@
   - **DoD (통과 기준)**: `pnpm --filter web exec tsc --noEmit`이 통과하고 3×3 격자 클릭 시 좌표가 즉각 갱신된다.
 
 - [ ] **Task 4.4: 우측 통합 곡 속성 패널(Property Panel) 컴포넌트 완성**
-  - **대상 파일**: `apps/web/src/features/editor/SongPropertyPanel.tsx`
+  - **대상 파일**: `src/client/features/editor/SongPropertyPanel.tsx`
   - **선행 조건**: Task 4.1, Task 4.2, Task 4.3
   - **구현 내용**:
     - 상단: 현재 선택된 배경 썸네일 + '배경 바꾸기' 버튼 (`BackgroundPickerModal` 연동)
@@ -213,7 +213,7 @@
 ### Phase M2-5: 세트 편집기 페이지 통합, 전체화면 송출 연동 & 최종 검증
 
 - [ ] **Task 5.1: 세트 편집기 상단 헤더 바 컴포넌트 구현**
-  - **대상 파일**: `apps/web/src/features/editor/EditorHeader.tsx`
+  - **대상 파일**: `src/client/features/editor/EditorHeader.tsx`
   - **선행 조건**: Task 1.5
   - **구현 내용**:
     - 세트 제목 인라인 텍스트 편집 (예: '새 예배 프레젠테이션')
@@ -223,7 +223,7 @@
   - **DoD (통과 기준)**: `pnpm --filter web exec tsc --noEmit`이 통과하고 버튼 클릭 시 올바른 이벤트 및 네비게이션이 실행된다.
 
 - [ ] **Task 5.2: 전체화면 송출 라우트(`FullscreenPresentRoute`)의 세트 주입 연동**
-  - **대상 파일**: `apps/web/src/routes/FullscreenPresentRoute.tsx`
+  - **대상 파일**: `src/client/routes/FullscreenPresentRoute.tsx`
   - **선행 조건**: Task 5.1
   - **구현 내용**:
     - React Router `useLocation().state?.presentation` 또는 `localStorage`의 편집된 세트 데이터를 우선 로드
@@ -232,7 +232,7 @@
   - **DoD (통과 기준)**: `pnpm --filter web exec tsc --noEmit`이 통과하고 편집기에서 구성한 세트가 전체화면으로 송출된다.
 
 - [ ] **Task 5.3: 세트 편집기 전체 화면 라우트 컴포넌트 구현**
-  - **대상 파일**: `apps/web/src/routes/PresentationEditorRoute.tsx`
+  - **대상 파일**: `src/client/routes/PresentationEditorRoute.tsx`
   - **선행 조건**: Task 2.2, Task 2.5, Task 3.3, Task 4.4, Task 5.1
   - **구현 내용**:
     - 3패널 레이아웃 구성:
@@ -245,7 +245,7 @@
   - **DoD (통과 기준)**: `pnpm --filter web exec tsc --noEmit`이 통과하고 브라우저 렌더링 시 3패널 레이아웃이 완벽히 표시된다.
 
 - [ ] **Task 5.4: 라우팅 등록 및 메인 홈 화면 세트 편집기 진입 카드 추가**
-  - **대상 파일**: `apps/web/src/App.tsx`, `apps/web/src/routes/index.tsx`
+  - **대상 파일**: `src/client/App.tsx`, `src/client/routes/index.tsx`
   - **선행 조건**: Task 5.3
   - **구현 내용**:
     - `App.tsx`에 `/editor` 라우트 등록 (`PresentationEditorRoute`)
@@ -254,7 +254,7 @@
   - **DoD (통과 기준)**: `pnpm --filter web exec tsc --noEmit`이 통과하고 홈 화면에서 `/editor` 진입 및 전체 화면 구성이 가능하다.
 
 - [ ] **Task 5.5: M2 편집기 15분 5곡 세트 구성 워크플로우 통합 테스트 작성 및 통과**
-  - **대상 파일**: `apps/web/src/features/editor/editorWorkflow.test.tsx`
+  - **대상 파일**: `src/client/features/editor/editorWorkflow.test.tsx`
   - **선행 조건**: Task 5.4
   - **구현 내용**:
     - 통합 테스트: 신규 세트 생성 $\rightarrow$ 가사 붙여넣기로 곡 추가 및 슬라이드 분할 $\rightarrow$ 곡 순서 변경 $\rightarrow$ 곡 속성(오버레이, 폰트, 3x3 위치) 변경 $\rightarrow$ 오버플로우 감지 및 송출 데이터 전달 검증

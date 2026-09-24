@@ -41,23 +41,23 @@
   - **DoD (통과 기준)**: `pnpm --filter web exec tsc --noEmit`이 에러 없이 통과한다.
 
 - [x] **Task 1.2: 오프라인 캐시 상수 정의**
-  - **대상 파일**: `packages/shared/src/constants/projection.ts`
+  - **대상 파일**: `src/shared/constants/projection.ts`
   - **선행 조건**: Task 1.1
   - **구현 내용**:
     - `MEDIA_CACHE_NAME = "worship-videos-cache"` — Workbox `runtimeCaching.cacheName`과 예배 준비 화면이 공유한다
     - `MEDIA_URL_PREFIX = "/api/media/"` — 캐시 규칙과 URL 생성기가 같은 값을 본다
     - `PROJECTION_CHANNEL_NAME = "worship-projection"` — 지금까지 TECH_SPEC 산문에만 있던 채널명을 코드로 승격(`tasks_3.md`에서 사용)
     - `HEARTBEAT_INTERVAL_MS`, `AUDIENCE_TIMEOUT_MS`, `INVALID_JUMP_TOAST_MS = 2000`(PRD §5 '없는 번호 알림 2초')
-    - `packages/shared/src/constants/index.ts`에서 re-export
-  - **DoD (통과 기준)**: `pnpm exec vitest run packages/shared/src/constants/projection.test.ts`가 100% 통과(Green)한다.
+    - `src/shared/constants/index.ts`에서 re-export
+  - **DoD (통과 기준)**: `pnpm exec vitest run src/shared/constants/projection.test.ts`가 100% 통과(Green)한다.
 
 - [x] **Task 1.3: 미디어 프록시 `Cache-Control` 헤더 추가**
-  - **대상 파일**: `apps/web/worker/routes/media.ts`
+  - **대상 파일**: `src/worker/routes/media.ts`
   - **선행 조건**: 없음
   - **구현 내용**:
     - 200·206 응답 양쪽에 `Cache-Control: public, max-age=31536000, immutable`을 붙인다 (TECH_SPEC §5.4-1이 요구하는데 현재 코드에 없다)
     - R2 키는 불변 자산이므로 만료를 길게 잡아도 안전하다
-  - **DoD (통과 기준)**: `pnpm exec vitest run apps/web/worker/routes/media.test.ts`가 100% 통과(Green)한다.
+  - **DoD (통과 기준)**: `pnpm exec vitest run src/worker/routes/media.test.ts`가 100% 통과(Green)한다.
 
 - [x] **Task 1.4: PWA 아이콘 및 정적 자산 디렉토리 생성**
   - **대상 파일**: `apps/web/public/icons/*`
@@ -69,7 +69,7 @@
   - **DoD (통과 기준)**: `ls apps/web/public/icons/`에 3개 PNG가 존재하고 `file` 결과가 유효한 PNG다.
 
 - [x] **Task 1.5: vite-plugin-pwa 설정 (generateSW + RangeRequests)**
-  - **대상 파일**: `apps/web/vite.config.ts`
+  - **대상 파일**: `vite.config.ts`
   - **선행 조건**: Task 1.1, 1.2, 1.4
   - **구현 내용**:
     - `VitePWA({ registerType: "prompt", ... })`를 `react()`·`cloudflare()` 뒤에 추가
@@ -78,33 +78,33 @@
     - `runtimeCaching`: `/api/media/*`를 `CacheFirst` + `cacheName: MEDIA_CACHE_NAME` + `rangeRequests: true` + `cacheableResponse: { statuses: [200, 206] }` + `expiration: { maxEntries: 30, maxAgeSeconds: 2592000 }`
     - `manifest`: 이름·`theme_color`/`background_color` 검정·`display: standalone`·`start_url: "/presentations"`·Task 1.4 아이콘
     - **빌드 산출 위치 확인 필수**: `build.outDir`은 `dist`인데 wrangler는 `./dist/client`를 서빙한다(`@cloudflare/vite-plugin`이 `client/` 하위를 만든다). `sw.js`가 `dist/client/`에 떨어지지 않으면 `VitePWA({ outDir })`로 맞춘다
-  - **DoD (통과 기준)**: `pnpm --filter web build` 후 `apps/web/dist/client/sw.js`와 `manifest.webmanifest`가 존재하고 `sw.js`에 `worship-videos-cache`가 포함된다.
+  - **DoD (통과 기준)**: `pnpm --filter web build` 후 `dist/client/sw.js`와 `manifest.webmanifest`가 존재하고 `sw.js`에 `worship-videos-cache`가 포함된다.
 
 - [x] **Task 1.6: Service Worker 등록 및 갱신 알림 스토어**
-  - **대상 파일**: `apps/web/src/pwa/registerServiceWorker.ts`
+  - **대상 파일**: `src/client/pwa/registerServiceWorker.ts`
   - **선행 조건**: Task 1.5
   - **구현 내용**:
     - `virtual:pwa-register`의 `registerSW`를 `onNeedRefresh`/`onOfflineReady` 콜백과 함께 호출하고, 결과를 외부 스토어(`useSyncExternalStore` 패턴, `persistenceStatus.ts`와 동일 형태)로 노출
     - **자동 새로고침을 하지 않는다.** 갱신 적용은 사용자가 버튼을 눌렀을 때만
     - 테스트 환경(jsdom)과 SSR 안전 가드: `navigator.serviceWorker`가 없으면 조용히 no-op
-    - `apps/web/src/vite-env.d.ts`에 `/// <reference types="vite-plugin-pwa/client" />` 추가
-  - **DoD (통과 기준)**: `pnpm exec vitest run apps/web/src/pwa/registerServiceWorker.test.ts`가 100% 통과(Green)한다.
+    - `src/client/vite-env.d.ts`에 `/// <reference types="vite-plugin-pwa/client" />` 추가
+  - **DoD (통과 기준)**: `pnpm exec vitest run src/client/pwa/registerServiceWorker.test.ts`가 100% 통과(Green)한다.
 
 - [x] **Task 1.7: 앱 부팅에 SW 등록 결합 및 갱신 배너**
-  - **대상 파일**: `apps/web/src/main.tsx`, `apps/web/src/components/common/AppUpdateBanner.tsx`
+  - **대상 파일**: `src/client/main.tsx`, `src/client/components/common/AppUpdateBanner.tsx`
   - **선행 조건**: Task 1.6
   - **구현 내용**:
     - `main.tsx`에서 `registerServiceWorker()` 호출
     - `AppUpdateBanner`: 새 버전이 대기 중일 때만 노출, '지금 새로고침' 버튼. **`/present/`로 시작하는 경로에서는 렌더하지 않는다**
     - `AppShellLayout`에만 붙이고 송출 라우트에는 붙이지 않는다
-  - **DoD (통과 기준)**: `pnpm exec vitest run apps/web/src/components/common/AppUpdateBanner.test.tsx`가 100% 통과(Green)한다.
+  - **DoD (통과 기준)**: `pnpm exec vitest run src/client/components/common/AppUpdateBanner.test.tsx`가 100% 통과(Green)한다.
 
 ---
 
 ## 3. 검증 명령어
 
 ```bash
-pnpm --filter web build && ls -la apps/web/dist/client/sw.js apps/web/dist/client/manifest.webmanifest
+pnpm --filter web build && ls -la dist/client/sw.js dist/client/manifest.webmanifest
 pnpm typecheck && pnpm lint && pnpm test
 ```
 

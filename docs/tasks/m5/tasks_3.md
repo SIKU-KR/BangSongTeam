@@ -1,6 +1,6 @@
 # Goal: [M5-3] 공개·검색·가져오기·신고 API (packages/db, worker)
 
-> **2026-09-23 범위 변경**: LLM 가사 정규화와 가사 라이브러리(카탈로그·가사 기여·대표 가사·곡 식별)는 MVP에서 제거됐다 (`packages/db/drizzle/0005_remove_catalog.sql`). 공유 라이브러리는 같은 곡을 여러 사람이 따로 공개하는 게시판(가져간 횟수순)만 남는다. 이 문서의 해당 부분은 이력으로 남긴다.
+> **2026-09-23 범위 변경**: LLM 가사 정규화와 가사 라이브러리(카탈로그·가사 기여·대표 가사·곡 식별)는 MVP에서 제거됐다 (`migrations/0005_remove_catalog.sql`). 공유 라이브러리는 같은 곡을 여러 사람이 따로 공개하는 게시판(가져간 횟수순)만 남는다. 이 문서의 해당 부분은 이력으로 남긴다.
 
 > **마일스톤**: M5 (공유·가사 라이브러리)
 > **태스크 번호**: `tasks_3.md`
@@ -32,13 +32,13 @@
 ## 2. 세부 작업 체크리스트
 
 - [x] **Task 3.1: 미리보기 헬퍼 (TDD)**
-  - **대상 파일**: `packages/shared/src/utils/previews.ts`, `previews.test.ts`
+  - **대상 파일**: `src/shared/utils/previews.ts`, `previews.test.ts`
   - **선행 조건**: 없음
   - **구현 내용**: `firstSlidePreview(slides)` — `order`가 가장 앞선 슬라이드의 줄. `twoLinesPreview(text)` — 빈 줄을 건너뛴 첫 2줄
-  - **DoD (통과 기준)**: `pnpm vitest run packages/shared/src/utils/previews.test.ts`가 100% 통과(Green)한다.
+  - **DoD (통과 기준)**: `pnpm vitest run src/shared/utils/previews.test.ts`가 100% 통과(Green)한다.
 
 - [x] **Task 3.2: 공유 쿼리 헬퍼 (TDD)**
-  - **대상 파일**: `packages/db/src/queries/sharing.ts`, `sharing.test.ts`
+  - **대상 파일**: `src/db/queries/sharing.ts`, `sharing.test.ts`
   - **선행 조건**: Task 3.1
   - **구현 내용**:
     - `toPublicDeckSummary`·`toPublicDeckDetail`·`toCatalogLyricSummary` — 공개 응답 모양으로 자른다 (`userId` 없음)
@@ -47,22 +47,22 @@
     - `forkPublicDeck(db, userId, sourceId)` — 멱등, 자기 덱은 `alreadyOwned`. 포크 insert와 `fork_count + 1`을 `batch`로 묶는다. 포크는 비공개·`origin='fork'`·기여 끔·작성자명 스냅샷
     - `importCatalogLyrics(db, userId, catalogId)` — 대표 가사를 `splitLyricsIntoSlides`로 나눠 보관함 곡을 만든다. `origin='catalog'`, 멱등
     - `getCatalogCandidates(db, title, artist)` — 제목 정규화 키가 같은 곡, `exact` 표시, 최대 5건
-  - **DoD (통과 기준)**: `pnpm vitest run packages/db/src/queries/sharing.test.ts`가 100% 통과(Green)한다.
+  - **DoD (통과 기준)**: `pnpm vitest run src/db/queries/sharing.test.ts`가 100% 통과(Green)한다.
 
 - [x] **Task 3.3: 신고 쿼리 헬퍼 (TDD)**
-  - **대상 파일**: `packages/db/src/queries/reports.ts`, `reports.test.ts`
+  - **대상 파일**: `src/db/queries/reports.ts`, `reports.test.ts`
   - **선행 조건**: Task 3.2
   - **구현 내용**: `createReport(db, userId, input)` → `ok | not_found | duplicate`. 덱 신고는 공개 덱만(비공개 덱의 존재를 확인하는 창구가 되지 않게), 카탈로그 신고는 등록자가 있는 곡만. 같은 사용자가 같은 대상에 대기 중 신고를 또 내면 `duplicate`
-  - **DoD (통과 기준)**: `pnpm vitest run packages/db/src/queries/reports.test.ts`가 100% 통과(Green)한다.
+  - **DoD (통과 기준)**: `pnpm vitest run src/db/queries/reports.test.ts`가 100% 통과(Green)한다.
 
 - [x] **Task 3.4: 덱 공개 전환·가져오기 라우트**
-  - **대상 파일**: `apps/web/worker/routes/decks.ts`
+  - **대상 파일**: `src/worker/routes/decks.ts`
   - **선행 조건**: Task 3.2
   - **구현 내용**: `PATCH /api/decks/:id/visibility`(404·400·409), `POST /api/decks/:id/fork`(404)
   - **DoD (통과 기준)**: `pnpm --filter web exec tsc --noEmit`이 에러 없이 통과한다.
 
 - [x] **Task 3.5: 카탈로그 라우트**
-  - **대상 파일**: `apps/web/worker/routes/catalog.ts`
+  - **대상 파일**: `src/worker/routes/catalog.ts`
   - **선행 조건**: Task 3.2
   - **구현 내용**:
     - `GET /api/catalog/search` — 공개, `cache-control: public, max-age=30`
@@ -72,22 +72,22 @@
   - **DoD (통과 기준)**: `pnpm --filter web exec tsc --noEmit`이 에러 없이 통과한다.
 
 - [x] **Task 3.6: 신고 라우트**
-  - **대상 파일**: `apps/web/worker/routes/reports.ts`
+  - **대상 파일**: `src/worker/routes/reports.ts`
   - **선행 조건**: Task 3.3
   - **구현 내용**: `POST /api/reports` → 201 `{id}` / 404 / 409
   - **DoD (통과 기준)**: `pnpm --filter web exec tsc --noEmit`이 에러 없이 통과한다.
 
 - [x] **Task 3.7: 앱에 마운트**
-  - **대상 파일**: `apps/web/worker/index.ts`
+  - **대상 파일**: `src/worker/index.ts`
   - **선행 조건**: Task 3.4~3.6
   - **구현 내용**: `/api/catalog`, `/api/reports`를 `createApp` 체인에 넣는다 (체인 밖에 두면 `AppType`에서 빠진다)
-  - **DoD (통과 기준)**: `pnpm vitest run apps/web/worker/index.test.ts`가 100% 통과(Green)한다.
+  - **DoD (통과 기준)**: `pnpm vitest run src/worker/index.test.ts`가 100% 통과(Green)한다.
 
 - [x] **Task 3.8: 공유 경로 통합 테스트**
-  - **대상 파일**: `apps/web/worker/routes/sharing.test.ts`
+  - **대상 파일**: `src/worker/routes/sharing.test.ts`
   - **선행 조건**: Task 3.7
   - **구현 내용**: `createApp({ readSession })`으로 실제 라우트를 마운트한다. 누출 없음(비공개·세트 복제본·게시 중단), 검색은 미리보기만, 상세는 비로그인 401, 동의 없는 공개 400, 남의 덱 공개 전환 404, 가져간 횟수 1회만, 포크본 비공개·원작자 표시, 대표 가사 가져오기, 곡 식별 후보, 신고 중복 409
-  - **DoD (통과 기준)**: `pnpm vitest run apps/web/worker/routes/sharing.test.ts`가 100% 통과(Green)한다.
+  - **DoD (통과 기준)**: `pnpm vitest run src/worker/routes/sharing.test.ts`가 100% 통과(Green)한다.
 
 - [x] **Task 3.9: 전체 검증**
   - **대상 파일**: 없음
@@ -99,7 +99,7 @@
 ## 3. 검증 명령어
 
 ```bash
-pnpm vitest run packages/shared/src/utils/previews.test.ts packages/db/src/queries/ apps/web/worker/
+pnpm vitest run src/shared/utils/previews.test.ts src/db/queries/ src/worker/
 pnpm typecheck && pnpm lint && pnpm test
 ```
 

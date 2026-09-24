@@ -7,7 +7,7 @@
 
 > **구현 현황 (2026-09-21 재검토)**
 >
-> - Task 1.4·1.5는 설계와 다른 형태로 구현되었다. `useReducer` 기반 `usePresentationEditor` 대신 **`apps/web/src/features/presentation/presentationStore.ts`** (`useSyncExternalStore` 기반 외부 스토어 + 문서별 undo/redo)로 구현했고 테스트는 `presentationStore.test.ts`에 있다. 편집기·송출 라우트가 같은 스토어를 공유해야 해서 훅 지역 상태보다 외부 스토어가 맞다. 완료로 인정한다.
+> - Task 1.4·1.5는 설계와 다른 형태로 구현되었다. `useReducer` 기반 `usePresentationEditor` 대신 **`src/client/features/presentation/presentationStore.ts`** (`useSyncExternalStore` 기반 외부 스토어 + 문서별 undo/redo)로 구현했고 테스트는 `presentationStore.test.ts`에 있다. 편집기·송출 라우트가 같은 스토어를 공유해야 해서 훅 지역 상태보다 외부 스토어가 맞다. 완료로 인정한다.
 > - 단, 1.4에 명시된 `splitSlide`·`mergeSlideWithNext` 액션은 아직 없다. Task 2.3·2.4에서 함께 구현한다.
 > - **잔여: Task 1.2·1.3 (넘침 감지 유틸)** — PRD 4.2·4.4의 경고 아이콘이 여기에 달린다.
 
@@ -24,7 +24,7 @@
 ## 2. 세부 작업 체크리스트
 
 - [x] **Task 1.1: M2 필수 라이브러리 설치 및 웹폰트 번들 추가**
-  - **대상 파일**: `apps/web/package.json`, `apps/web/src/index.css`
+  - **대상 파일**: `apps/web/package.json`, `src/client/index.css`
   - **선행 조건**: `docs/tasks/m1/tasks_4.md`
   - **구현 내용**:
     - `apps/web`에 필수 라이브러리 설치:
@@ -32,11 +32,11 @@
       - `@dnd-kit/core`, `@dnd-kit/sortable`, `@dnd-kit/utilities`: 곡 목록 드래그 앤 드롭 순서 변경
       - `react-colorful`: 텍스트 색상 컬러피커
       - `@fontsource/noto-sans-kr`: 번들 한글 웹폰트 추가
-    - `apps/web/src/index.css`에 `@fontsource/noto-sans-kr` import 추가
+    - `src/client/index.css`에 `@fontsource/noto-sans-kr` import 추가
   - **DoD (통과 기준)**: `pnpm --filter web exec tsc --noEmit`이 통과하고 라이브러리 import 에러 없이 번들링 준비가 완료된다.
 
 - [ ] **Task 1.2: 텍스트 박스 폭 및 높이 넘침(Overflow) 감지 유틸리티 단위 테스트 작성 (TDD Red)**
-  - **대상 파일**: `packages/shared/src/utils/overflow.test.ts`
+  - **대상 파일**: `src/shared/utils/overflow.test.ts`
   - **선행 조건**: Task 1.1
   - **구현 내용**:
     - 테스트 케이스 1: 단일 줄 글자 수가 텍스트 박스 폭(`widthPercent`)을 초과하는지 여부 판별 (`isLineOverflowing`)
@@ -45,7 +45,7 @@
   - **DoD (통과 기준)**: `pnpm --filter @repo/shared vitest run src/utils/overflow.test.ts` 실행 시 구현체가 없어 실패(Red)함을 확인한다.
 
 - [ ] **Task 1.3: 텍스트 박스 폭 및 높이 넘침(Overflow) 감지 유틸리티 구현 (TDD Green)**
-  - **대상 파일**: `packages/shared/src/utils/overflow.ts`, `packages/shared/src/utils/index.ts`
+  - **대상 파일**: `src/shared/utils/overflow.ts`, `src/shared/utils/index.ts`
   - **선행 조건**: Task 1.2
   - **구현 내용**:
     - 한글(약 1.8~2.0배 폭 가중치) 및 영문 문자폭을 고려한 가상 너비 계산 알고리즘 구현
@@ -54,7 +54,7 @@
   - **DoD (통과 기준)**: `pnpm --filter @repo/shared vitest run src/utils/overflow.test.ts`가 100% 통과(Green)한다.
 
 - [x] **Task 1.4: 세트 편집기 상태 머신 리듀서 단위 테스트 작성 (TDD Red)**
-  - **대상 파일**: `apps/web/src/features/editor/usePresentationEditor.test.ts`
+  - **대상 파일**: `src/client/features/editor/usePresentationEditor.test.ts`
   - **선행 조건**: Task 1.3
   - **구현 내용**:
     - 테스트 케이스 1: 곡 선택(`selectSong`), 슬라이드 선택(`selectSlide`) 인덱스 상태 갱신
@@ -65,7 +65,7 @@
   - **DoD (통과 기준)**: `pnpm --filter web vitest run src/features/editor/usePresentationEditor.test.ts` 실행 시 구현체가 없어 실패(Red)함을 확인한다.
 
 - [x] **Task 1.5: 세트 편집기 상태 관리 훅 구현 (TDD Green)**
-  - **대상 파일**: `apps/web/src/features/editor/usePresentationEditor.ts`
+  - **대상 파일**: `src/client/features/editor/usePresentationEditor.ts`
   - **선행 조건**: Task 1.4
   - **구현 내용**:
     - `useReducer` 기반 세트 편집기 상태 관리 (`presentation`, `selectedSongIndex`, `selectedSlideIndex`, `isDirty`)

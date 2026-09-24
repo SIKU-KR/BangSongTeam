@@ -17,7 +17,7 @@
 ## 2. 세부 작업 체크리스트
 
 - [x] **Task 3.1: M1 검증용 5곡 인메모리 프레젠테이션 Mock 데이터 작성**
-  - **대상 파일**: `apps/web/src/features/presentation/mockPresentation.ts`
+  - **대상 파일**: `src/client/features/presentation/mockPresentation.ts`
   - **선행 조건**: `docs/tasks/m1/tasks_2.md`
   - **구현 내용**:
     - 주일 예배 실전 송출 검증용 대표 5곡 찬양(예: 은혜로다, 주 품에, 시선, 꽃들도, 주의 이름 높이며) 덱 데이터 작성
@@ -26,7 +26,7 @@
   - **DoD (통과 기준)**: `pnpm --filter web exec tsc --noEmit`이 통과하고 Mock 세트 파싱이 에러 없이 완료된다.
 
 - [x] **Task 3.2: 빠른 가사 붙여넣기 및 실시간 분할 모달 UI 구현**
-  - **대상 파일**: `apps/web/src/features/editor/QuickLyricPasteModal.tsx`
+  - **대상 파일**: `src/client/features/editor/QuickLyricPasteModal.tsx`
   - **선행 조건**: Task 3.1
   - **구현 내용**:
     - 텍스트 입력 에어리어(`textarea`)에 가사 붙여넣기 시 `splitLyricsIntoSlides`를 실시간 호출
@@ -35,7 +35,7 @@
   - **DoD (통과 기준)**: `pnpm --filter web exec tsc --noEmit`이 통과하고 텍스트 변경 시 슬라이드 분할 카드가 즉각 업데이트된다.
 
 - [x] **Task 3.3: 멜론/벅스 가사 검색 새 탭 링크 컴포넌트 구현**
-  - **대상 파일**: `apps/web/src/features/editor/ExternalSearchLinks.tsx`
+  - **대상 파일**: `src/client/features/editor/ExternalSearchLinks.tsx`
   - **선행 조건**: Task 3.2
   - **구현 내용**:
     - 입력된 곡 제목을 인코딩하여 Melon / Bugs 가사 검색 URL 생성

@@ -1,9 +1,0 @@
-{
-  "extends": "@repo/typescript-config/tsconfig.base.json",
-  "compilerOptions": {
-    "jsx": "react-jsx",
-    "lib": ["DOM", "DOM.Iterable", "ES2022"],
-    "types": ["@cloudflare/workers-types", "@cloudflare/vitest-pool-workers"]
-  },
-  "include": ["worker/**/*", "src/**/*", "*.ts", "*.tsx", "*.d.ts"]
-}

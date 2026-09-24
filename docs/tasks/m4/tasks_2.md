@@ -35,27 +35,27 @@
 ## 2. 세부 작업 체크리스트
 
 - [x] **Task 2.1: 세트 미디어 자산 수집 유틸리티 (TDD)**
-  - **대상 파일**: `packages/shared/src/utils/offlineAssets.ts`
+  - **대상 파일**: `src/shared/utils/offlineAssets.ts`
   - **선행 조건**: `tasks_1.md` Task 1.2
   - **구현 내용**:
     - `collectPresentationMediaAssets(presentation)` — `items[].deck.backgroundId`를 기존 `getBackgroundMediaUrl`·`getBackgroundPosterUrl`로 URL화
     - 곡별 표시용으로 `{ songIndex, songTitle, backgroundId, backgroundTitle, mediaUrl, posterUrl }`를 돌려준다
     - `collectUniqueMediaUrls(assets)` — **중복 제거**. 10개 루프를 여러 곡이 공유하는 것이 정상이므로 같은 영상을 두 번 받지 않는다
     - 배경이 없거나 알 수 없는 id인 곡은 URL 없이 표시만 남긴다(다운로드 대상에서 제외)
-  - **DoD (통과 기준)**: `pnpm exec vitest run packages/shared/src/utils/offlineAssets.test.ts`가 100% 통과(Green)한다.
+  - **DoD (통과 기준)**: `pnpm exec vitest run src/shared/utils/offlineAssets.test.ts`가 100% 통과(Green)한다.
 
 - [x] **Task 2.2: 오프라인 캐시 상태 저장소 (TDD)**
-  - **대상 파일**: `apps/web/src/lib/storage/offlineStatusRepository.ts`
+  - **대상 파일**: `src/client/lib/storage/offlineStatusRepository.ts`
   - **선행 조건**: Task 2.1
   - **구현 내용**:
     - 선언만 되어 있고 읽고 쓰는 코드가 전혀 없던 `sync_meta` 스토어에 `isReady`·`cachedVideos`·`cachedAt`·`storagePersisted`를 기록한다
     - `saveOfflineStatus(presentationId, patch)` — 기존 레코드를 읽어 **병합**해 넣는다 (M3-B 필드 보존)
     - `loadOfflineStatus(presentationId)`, `clearOfflineStatus(presentationId)`
     - 실패는 `reportPersistenceError`로 올린다 (기존 `persistenceStatus.ts` 재사용)
-  - **DoD (통과 기준)**: `pnpm exec vitest run apps/web/src/lib/storage/offlineStatusRepository.test.ts`가 100% 통과(Green)한다.
+  - **DoD (통과 기준)**: `pnpm exec vitest run src/client/lib/storage/offlineStatusRepository.test.ts`가 100% 통과(Green)한다.
 
 - [x] **Task 2.3: Cache Storage 미디어 다운로더 (TDD)**
-  - **대상 파일**: `apps/web/src/lib/offline/mediaCache.ts`
+  - **대상 파일**: `src/client/lib/offline/mediaCache.ts`
   - **선행 조건**: Task 2.2
   - **구현 내용**:
     - `cacheMediaUrls(urls, { onProgress, signal })` — URL 단위 순차 다운로드. 상태는 `pending | downloading | done | failed`
@@ -63,29 +63,29 @@
     - 받은 응답을 `cache.put`으로 `MEDIA_CACHE_NAME`에 넣고, `cache.match`로 검증한다
     - `isMediaCached(urls)` — 이미 캐시된 URL 집합을 돌려줘 재방문 시 다시 받지 않게 한다
     - `QuotaExceededError`는 별도 실패 사유로 구분한다
-    - jsdom에는 CacheStorage가 없으므로 `apps/web/src/test/setup.ts`에 최소 fake CacheStorage를 추가한다
-  - **DoD (통과 기준)**: `pnpm exec vitest run apps/web/src/lib/offline/mediaCache.test.ts`가 100% 통과(Green)한다.
+    - jsdom에는 CacheStorage가 없으므로 `src/client/test/setup.ts`에 최소 fake CacheStorage를 추가한다
+  - **DoD (통과 기준)**: `pnpm exec vitest run src/client/lib/offline/mediaCache.test.ts`가 100% 통과(Green)한다.
 
 - [x] **Task 2.4: 영구 저장소 요청 래퍼 (TDD)**
-  - **대상 파일**: `apps/web/src/lib/offline/storagePersistence.ts`
+  - **대상 파일**: `src/client/lib/offline/storagePersistence.ts`
   - **선행 조건**: 없음
   - **구현 내용**:
     - `requestPersistentStorage()` — 이미 `persisted()`면 요청하지 않고 true. 미지원 브라우저는 `"unsupported"`로 구분
     - `estimateStorageUsage()` — `navigator.storage.estimate()`의 `usage`/`quota`를 돌려준다
     - 거부(`false`)는 예외가 아니라 상태다. 준비 화면이 경고를 띄운다 (PRD §6.1)
-  - **DoD (통과 기준)**: `pnpm exec vitest run apps/web/src/lib/offline/storagePersistence.test.ts`가 100% 통과(Green)한다.
+  - **DoD (통과 기준)**: `pnpm exec vitest run src/client/lib/offline/storagePersistence.test.ts`가 100% 통과(Green)한다.
 
 - [x] **Task 2.5: 예배 준비 오케스트레이션 훅 (TDD)**
-  - **대상 파일**: `apps/web/src/features/offline/useWorshipPrep.ts`
+  - **대상 파일**: `src/client/features/offline/useWorshipPrep.ts`
   - **선행 조건**: Task 2.1~2.4
   - **구현 내용**:
     - 자산 수집 → 이미 캐시된 것 확인 → 영구 저장소 요청 → 남은 URL 다운로드 → `sync_meta` 기록의 흐름을 한 훅으로 묶는다
     - 노출 상태: 곡별 자산 행, URL별 상태, 전체 진행률, 총 바이트, `isReady`, 영구 저장소 결과, 실패 사유
     - 언마운트 시 진행 중 다운로드를 `AbortController`로 취소한다
-  - **DoD (통과 기준)**: `pnpm exec vitest run apps/web/src/features/offline/useWorshipPrep.test.ts`가 100% 통과(Green)한다.
+  - **DoD (통과 기준)**: `pnpm exec vitest run src/client/features/offline/useWorshipPrep.test.ts`가 100% 통과(Green)한다.
 
 - [x] **Task 2.6: 예배 준비 화면 라우트**
-  - **대상 파일**: `apps/web/src/routes/WorshipReadyRoute.tsx`
+  - **대상 파일**: `src/client/routes/WorshipReadyRoute.tsx`
   - **선행 조건**: Task 2.5
   - **구현 내용**:
     - 경로 `/present/:presentationId/ready` (PRD §5 화면 목록 기준)
@@ -94,33 +94,33 @@
     - 영구 저장소 거부 시 경고 문구
     - 하단 송출 버튼: 「단독 전체화면 송출」 / 「발표자 보기로 송출」 / 「지금 바로 송출(캐시 미완료)」
     - 전체화면 진입은 **버튼 클릭 제스처 안에서 동기적으로** 호출한다 (`fullscreen.ts`의 기존 주의사항)
-  - **DoD (통과 기준)**: `pnpm exec vitest run apps/web/src/routes/WorshipReadyRoute.test.tsx`가 100% 통과(Green)한다.
+  - **DoD (통과 기준)**: `pnpm exec vitest run src/client/routes/WorshipReadyRoute.test.tsx`가 100% 통과(Green)한다.
 
 - [x] **Task 2.7: 송출 진입점을 준비 화면으로 전환**
-  - **대상 파일**: `apps/web/src/features/presentation/fullscreen.ts`, `apps/web/src/routes/PresentationsRoute.tsx`, `apps/web/src/routes/EditorRoute.tsx`, `apps/web/src/App.tsx`
+  - **대상 파일**: `src/client/features/presentation/fullscreen.ts`, `src/client/routes/PresentationsRoute.tsx`, `src/client/routes/EditorRoute.tsx`, `src/client/App.tsx`
   - **선행 조건**: Task 2.6
   - **구현 내용**:
     - `launchPreparation(navigate, presentationId)` 추가 — 대시보드 카드와 편집기 「슬라이드쇼 발표」가 이것을 쓴다
     - 기존 `launchPresentation`(즉시 전체화면)은 준비 화면의 버튼용으로 남긴다
     - `App.tsx`에 `/present/:presentationId/ready` 라우트 등록
-  - **DoD (통과 기준)**: `pnpm exec vitest run apps/web/src/routes`가 100% 통과(Green)한다.
+  - **DoD (통과 기준)**: `pnpm exec vitest run src/client/routes`가 100% 통과(Green)한다.
 
 - [x] **Task 2.8: 세트 글꼴 사전 로드 (문서 원안에 없던 추가 태스크)**
-  - **대상 파일**: `apps/web/src/lib/offline/fontWarmup.ts`
+  - **대상 파일**: `src/client/lib/offline/fontWarmup.ts`
   - **선행 조건**: Task 2.5
   - **구현 내용**:
     - `tasks_1.md`에서 폰트를 프리캐시 대상에서 뺐다(전체 33MB). 그래서 세트가 쓰는 글꼴이 오프라인에서 자동으로 보장되지 않는다
     - 준비 단계에서 세트 가사에 실제로 쓰인 글자를 모아 `document.fonts.load()`를 부른다. 그러면 필요한 유니코드 서브셋만 요청되어 `worship-fonts-cache`에 들어간다
     - 실패는 무시한다. 글꼴 워밍 실패로 준비 자체가 막히면 안 된다
-  - **DoD (통과 기준)**: `pnpm exec vitest run packages/shared/src/utils/offlineAssets.test.ts`의 `collectPresentationFonts` 케이스가 통과한다.
+  - **DoD (통과 기준)**: `pnpm exec vitest run src/shared/utils/offlineAssets.test.ts`의 `collectPresentationFonts` 케이스가 통과한다.
 
 ---
 
 ## 3. 검증 명령어
 
 ```bash
-pnpm exec vitest run packages/shared/src/utils/offlineAssets.test.ts
-pnpm exec vitest run apps/web/src/lib/offline apps/web/src/lib/storage apps/web/src/features/offline apps/web/src/routes
+pnpm exec vitest run src/shared/utils/offlineAssets.test.ts
+pnpm exec vitest run src/client/lib/offline src/client/lib/storage src/client/features/offline src/client/routes
 pnpm typecheck && pnpm lint && pnpm test
 ```
 

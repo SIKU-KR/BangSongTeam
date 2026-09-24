@@ -26,7 +26,7 @@
 ## 2. 세부 작업 체크리스트
 
 - [x] **Task 2.1: 드래그 앤 드롭 정렬 가능한 곡 리스트 아이템 컴포넌트 구현**
-  - **대상 파일**: `apps/web/src/features/editor/SongListItem.tsx`
+  - **대상 파일**: `src/client/features/editor/SongListItem.tsx`
   - **선행 조건**: `docs/tasks/m2/tasks_1.md`
   - **구현 내용**:
     - `@dnd-kit/sortable`의 `useSortable` 훅 연동 (`transform`, `transition`, `listeners`, `attributes`)
@@ -36,7 +36,7 @@
   - **DoD (통과 기준)**: `pnpm --filter web exec tsc --noEmit`이 통과하고 곡 카드 렌더링 및 클릭/삭제 이벤트가 정상 동작한다.
 
 - [x] **Task 2.2: 좌측 곡 목록 및 드래그 정렬 패널 컴포넌트 구현**
-  - **대상 파일**: `apps/web/src/features/editor/SongListPanel.tsx`
+  - **대상 파일**: `src/client/features/editor/SongListPanel.tsx`
   - **선행 조건**: Task 2.1
   - **구현 내용**:
     - `@dnd-kit/core`의 `DndContext`, `SortableContext`, `closestCenter` 알고리즘 적용
@@ -46,7 +46,7 @@
   - **DoD (통과 기준)**: `pnpm --filter web exec tsc --noEmit`이 통과하고 드래그 앤 드롭을 통한 곡 순서 변경이 정상 작동한다.
 
 - [ ] **Task 2.3: 슬라이드 수동 분할/합치기 로직 단위 테스트 작성 (TDD Red)**
-  - **대상 파일**: `apps/web/src/features/editor/manualLyricSplit.test.ts`
+  - **대상 파일**: `src/client/features/editor/manualLyricSplit.test.ts`
   - **선행 조건**: `docs/tasks/m2/tasks_1.md`
   - **구현 내용**:
     - 테스트 케이스 1: 특정 커서 줄 위치에서 슬라이드 나누기(`splitSlideAtLine`) 시 2개 슬라이드로 분할
@@ -55,7 +55,7 @@
   - **DoD (통과 기준)**: `pnpm --filter web vitest run src/features/editor/manualLyricSplit.test.ts` 실행 시 실패(Red)함을 확인한다.
 
 - [ ] **Task 2.4: 슬라이드 수동 분할/합치기 로직 및 분할 미리보기 카드 컴포넌트 구현 (TDD Green)**
-  - **대상 파일**: `apps/web/src/features/editor/manualLyricSplit.ts`, `apps/web/src/features/editor/LyricSlideCard.tsx`
+  - **대상 파일**: `src/client/features/editor/manualLyricSplit.ts`, `src/client/features/editor/LyricSlideCard.tsx`
   - **선행 조건**: Task 2.3
   - **구현 내용**:
     - 슬라이드 텍스트 분할/합치기 순수 함수 구현
@@ -64,7 +64,7 @@
   - **DoD (통과 기준)**: `pnpm --filter web vitest run src/features/editor/manualLyricSplit.test.ts`가 100% 통과(Green)한다.
 
 - [x] **Task 2.5: 세트 곡 추가 및 가사 편집 통합 모달 구현**
-  - **대상 파일**: `apps/web/src/features/editor/AddSongModal.tsx`
+  - **대상 파일**: `src/client/features/editor/AddSongModal.tsx`
   - **선행 조건**: Task 2.4
   - **구현 내용**:
     - 곡 제목 및 아티스트 입력 폼

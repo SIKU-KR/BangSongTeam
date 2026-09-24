@@ -1,14 +1,14 @@
 # 운영 런북: 신고·게시 중단 (M5)
 
 > **대상**: 서비스 운영자 (관리자 화면은 두지 않는다 — 2026-09-23 결정)
-> **정본**: 아래 SQL은 `packages/db/src/ops/moderationSql.ts`에 정의되어 있고, `moderationSql.test.ts`가 실제 마이그레이션 스키마에 대해 실행해 본다. `runbook.test.ts`가 이 문서에 글자 그대로 실려 있는지 확인하므로, **문장을 고칠 때는 두 곳을 함께 고친다.**
+> **정본**: 아래 SQL은 `src/db/ops/moderationSql.ts`에 정의되어 있고, `moderationSql.test.ts`가 실제 마이그레이션 스키마에 대해 실행해 본다. `runbook.test.ts`가 이 문서에 글자 그대로 실려 있는지 확인하므로, **문장을 고칠 때는 두 곳을 함께 고친다.**
 
 ## 0. 실행 방법
 
 D1 원격 DB에 SQL 한 문장을 실행한다.
 
 ```bash
-pnpm dlx wrangler d1 execute prj-ppt-db --remote --config apps/web/wrangler.jsonc --command "<SQL>"
+pnpm dlx wrangler d1 execute prj-ppt-db --remote --command "<SQL>"
 ```
 
 - 로컬에서 먼저 확인하려면 `--remote`를 `--local`로 바꾼다.

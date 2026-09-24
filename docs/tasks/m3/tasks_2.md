@@ -17,7 +17,7 @@
 ## 1. 아키텍처 가드레일 & 준수 사항
 
 1. **id는 UUID여야 한다**: `@repo/shared`의 `DeckSchema.userId`·`PresentationSchema.userId`가 `z.string().uuid()`다. Better Auth 기본 id는 32자 nanoid라 그대로 두면 서버 응답이 전부 스키마 검증에서 터진다. `advanced.database.generateId`로 UUID를 강제한다. 스키마를 느슨하게 푸는 방향으로 도망가지 않는다.
-2. **기존 D1 테이블을 그대로 쓴다**: `packages/db/src/schema/auth.ts`의 `user`/`session`/`account`/`verification`은 이미 Better Auth v1 기본 단수 테이블명·컬럼과 일치한다. **새 마이그레이션을 만들지 않는다.**
+2. **기존 D1 테이블을 그대로 쓴다**: `src/db/schema/auth.ts`의 `user`/`session`/`account`/`verification`은 이미 Better Auth v1 기본 단수 테이블명·컬럼과 일치한다. **새 마이그레이션을 만들지 않는다.**
 3. **auth 인스턴스는 요청 스코프다**: Worker는 요청마다 `env`가 온다. 모듈 스코프 싱글턴으로 만들면 바인딩이 없는 시점에 초기화된다. `(env) => auth` 팩토리로 만든다.
 4. **체인을 끊지 않는다**: `worker/index.ts`는 `AppType` 추론을 위해 단일 체인식이다. 체인에서 떨어진 `app.on(...)` 문장은 RPC 타입에서 누락된다.
 5. **카카오는 이메일을 안 줄 수 있다**: `account_email`은 비즈 앱 심사를 통과해야 내려온다. 이메일이 없다고 가입이 실패하면 안 되므로 `mapProfileToUser`에서 합성 이메일로 폴백한다.
@@ -36,15 +36,15 @@
   - **DoD (통과 기준)**: `pnpm --filter web exec tsc --noEmit`이 에러 없이 통과한다.
 
 - [x] **Task 1.2: 로컬 개발 환경변수 자리 채우기**
-  - **대상 파일**: `apps/web/.dev.vars`
+  - **대상 파일**: `.dev.vars`
   - **선행 조건**: Task 1.1
   - **구현 내용**:
     - `.dev.vars.example`을 기준으로 `BETTER_AUTH_SECRET`(32자 이상), `BETTER_AUTH_URL`, 카카오·네이버 클라이언트 자격증명을 채운다
     - 실제 자격증명 발급 전까지는 플레이스홀더로 두되, 값이 플레이스홀더일 때 어떤 동작이 되는지 Task 1.4의 auth 인스턴스에서 명시적으로 다룬다
-  - **DoD (통과 기준)**: `apps/web/.dev.vars`에 6개 키가 모두 존재한다 (`.gitignore` 대상이므로 커밋하지 않는다).
+  - **DoD (통과 기준)**: `.dev.vars`에 6개 키가 모두 존재한다 (`.gitignore` 대상이므로 커밋하지 않는다).
 
 - [x] **Task 1.3: auth 인스턴스 단위 테스트 작성 (TDD Red)**
-  - **대상 파일**: `apps/web/worker/lib/auth.test.ts`
+  - **대상 파일**: `src/worker/lib/auth.test.ts`
   - **선행 조건**: Task 1.2
   - **구현 내용**:
     - 테스트 1: `createAuth(env)`가 `/api/auth`를 basePath로 하는 인스턴스를 만든다
@@ -55,7 +55,7 @@
   - **DoD (통과 기준)**: `pnpm --filter web vitest run worker/lib/auth.test.ts`가 Red(구현 부재로 실패)를 명확히 보고한다.
 
 - [x] **Task 1.4: auth 인스턴스 구현 (TDD Green)**
-  - **대상 파일**: `apps/web/worker/lib/auth.ts`
+  - **대상 파일**: `src/worker/lib/auth.ts`
   - **선행 조건**: Task 1.3
   - **구현 내용**:
     - `createAuth(env: Bindings)` 팩토리로 `betterAuth()` 인스턴스 생성
@@ -68,7 +68,7 @@
   - **구현 메모**: `advanced.database.generateId`에 별도 함수를 넘겼다. better-auth가 `"uuid"` 리터럴도 받지만, sqlite에서는 드라이버 함수가 아니라 자체 생성이라 동작이 같고 테스트에서 직접 검증하기 쉬운 쪽을 택했다. `AuthInstance` 타입은 `ReturnType<typeof betterAuth>`(제네릭 기본값)가 아니라 실제 팩토리에서 추론해야 한다 — 옵션 리터럴로 좁혀진 타입이라 기본값에는 대입되지 않는다. 또 `telemetry: { enabled: false }`를 켰다.
 
 - [x] **Task 1.5: 세션 미들웨어 단위 테스트 작성 (TDD Red)**
-  - **대상 파일**: `apps/web/worker/middleware/auth.test.ts`
+  - **대상 파일**: `src/worker/middleware/auth.test.ts`
   - **선행 조건**: Task 1.4
   - **구현 내용**:
     - 테스트 1: 세션이 없으면 `requireAuth`가 401 JSON을 반환하고 다음 핸들러를 부르지 않는다
@@ -77,7 +77,7 @@
   - **DoD (통과 기준)**: `pnpm --filter web vitest run worker/middleware/auth.test.ts`가 Red를 명확히 보고한다.
 
 - [x] **Task 1.6: 세션 미들웨어 구현 (TDD Green)**
-  - **대상 파일**: `apps/web/worker/middleware/auth.ts`
+  - **대상 파일**: `src/worker/middleware/auth.ts`
   - **선행 조건**: Task 1.5
   - **구현 내용**:
     - `auth.api.getSession({ headers: c.req.raw.headers })`로 세션을 읽어 `c.set("userId", ...)`
@@ -85,17 +85,17 @@
   - **DoD (통과 기준)**: `pnpm --filter web vitest run worker/middleware/auth.test.ts`가 100% 통과(Green)한다.
 
 - [x] **Task 1.7: Worker 테스트 부트스트랩을 마이그레이션 기반으로 교체**
-  - **대상 파일**: `apps/web/worker/test/setup.ts`, `apps/web/worker/test/env.d.ts`, `apps/web/vitest.config.ts`
+  - **대상 파일**: `src/worker/test/setup.ts`, `src/worker/test/env.d.ts`, `vitest.worker.config.ts`
   - **선행 조건**: Task 1.6
   - **구현 내용**:
     - 현재 `worker/index.test.ts`가 `env.DB.exec("CREATE TABLE ...")` 문자열로 테이블을 만든다. 인증·덱·프레젠테이션 테이블까지 손으로 베껴 쓰면 `0000_initial.sql`과 갈라진다
-    - `packages/db/drizzle/0000_initial.sql`과 `0001_fts5.sql`을 읽어 `--> statement-breakpoint`로 나눠 적용하는 헬퍼를 만들어 공유한다 (`packages/db/src/test-utils.ts`와 같은 방식)
+    - `migrations/0000_initial.sql`과 `0001_fts5.sql`을 읽어 `--> statement-breakpoint`로 나눠 적용하는 헬퍼를 만들어 공유한다 (`src/db/test-utils.ts`와 같은 방식)
     - `declare module "cloudflare:test"`의 `ProvidedEnv`에 인증 환경변수를 추가한다
   - **DoD (통과 기준)**: `pnpm --filter web vitest run worker/index.test.ts`가 100% 통과(Green)한다.
   - **구현 메모**: `readD1Migrations`(Node 측 설정에서 읽기) + `applyD1Migrations`(workerd 안에서 적용) 조합을 썼다. 테스트 파일마다 중복되던 `declare module "cloudflare:test"`는 `worker/test/env.d.ts` 한 곳으로 모았다.
 
 - [x] **Task 1.8: Worker에 `/api/auth/*` 마운트 및 통합 테스트**
-  - **대상 파일**: `apps/web/worker/index.ts`
+  - **대상 파일**: `src/worker/index.ts`
   - **선행 조건**: Task 1.7
   - **구현 내용**:
     - 단일 체인 안에서 `.on(["GET", "POST"], "/api/auth/*", ...)`로 Better Auth 핸들러를 연결

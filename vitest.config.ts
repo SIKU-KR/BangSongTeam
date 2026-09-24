@@ -3,13 +3,16 @@ import { defineConfig } from "vitest/config";
 export default defineConfig({
   test: {
     projects: [
-      "packages/*",
-      "apps/web/vitest.config.ts",
-      "apps/web/vitest.client.config.ts",
+      "./vitest.worker.config.ts",
+      "./vitest.client.config.ts",
       {
         test: {
-          name: "root",
-          include: ["tests/**/*.test.ts"],
+          name: "node",
+          include: [
+            "src/shared/**/*.test.ts",
+            "src/db/**/*.test.ts",
+            "tests/**/*.test.ts",
+          ],
           environment: "node",
         },
       },

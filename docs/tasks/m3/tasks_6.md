@@ -1,6 +1,6 @@
 # Goal: [M3B-5] 가사 기여 및 M3-B 통합 검증
 
-> **2026-09-23 범위 변경**: LLM 가사 정규화와 가사 라이브러리(카탈로그·가사 기여·대표 가사·곡 식별)는 MVP에서 제거됐다 (`packages/db/drizzle/0005_remove_catalog.sql`). 공유 라이브러리는 같은 곡을 여러 사람이 따로 공개하는 게시판(가져간 횟수순)만 남는다. 이 문서의 해당 부분은 이력으로 남긴다.
+> **2026-09-23 범위 변경**: LLM 가사 정규화와 가사 라이브러리(카탈로그·가사 기여·대표 가사·곡 식별)는 MVP에서 제거됐다 (`migrations/0005_remove_catalog.sql`). 공유 라이브러리는 같은 곡을 여러 사람이 따로 공개하는 게시판(가져간 횟수순)만 남는다. 이 문서의 해당 부분은 이력으로 남긴다.
 
 > **마일스톤**: M3-B (계정·서버 저장)
 > **태스크 번호**: `tasks_6.md`
@@ -29,24 +29,24 @@
 ## 2. 세부 작업 체크리스트
 
 - [x] **Task 5.1: 가사 정규화 키 유틸 (TDD)**
-  - **대상 파일**: `packages/shared/src/utils/catalogKey.ts`
+  - **대상 파일**: `src/shared/utils/catalogKey.ts`
   - **선행 조건**: 없음
   - **구현 내용**:
     - `normalizeCatalogKey(title, artist)` — 공백·특수문자 제거, 소문자화. `lyrics_catalog.title_norm`/`artist_norm`의 생성 규칙을 한 곳에 둔다
     - 서버와 클라이언트가 같은 규칙을 써야 같은 곡이 같은 카탈로그로 모인다
-  - **DoD (통과 기준)**: `pnpm vitest run packages/shared/src/utils/catalogKey.test.ts`가 100% 통과(Green)한다.
+  - **DoD (통과 기준)**: `pnpm vitest run src/shared/utils/catalogKey.test.ts`가 100% 통과(Green)한다.
 
 - [x] **Task 5.2: 카탈로그 기여 쿼리 헬퍼 (TDD)**
-  - **대상 파일**: `packages/db/src/queries/lyrics.ts`
+  - **대상 파일**: `src/db/queries/lyrics.ts`
   - **선행 조건**: Task 5.1
   - **구현 내용**:
     - `contributeLyrics(db, { userId, deckId, title, artist, lyrics })` — 정규화 키로 카탈로그를 찾고 없으면 만든 뒤 `upsertLyricVersion`
     - `version_count`를 실제 버전 수로 갱신한다
     - `status = 'locked'`면 `lyrics_canonical`을 건드리지 않는다
-  - **DoD (통과 기준)**: `pnpm vitest run packages/db/src/queries/lyrics.test.ts`가 100% 통과(Green)한다.
+  - **DoD (통과 기준)**: `pnpm vitest run src/db/queries/lyrics.test.ts`가 100% 통과(Green)한다.
 
 - [x] **Task 5.3: 덱 저장 시 기여 연결**
-  - **대상 파일**: `apps/web/worker/routes/decks.ts`
+  - **대상 파일**: `src/worker/routes/decks.ts`
   - **선행 조건**: Task 5.2
   - **구현 내용**:
     - `PUT /api/decks/:id`에 `?contribute=true`를 받아 기여를 수행한다
@@ -55,7 +55,7 @@
   - **구현 메모**: 기여 실패가 덱 저장을 되돌리지 않는다. 공용 카탈로그는 부가 기능인데 여기서 500을 내면 사용자는 자기 곡이 저장되지 않았다고 이해한다.
 
 - [x] **Task 5.4: 2-기기 동기화 왕복 통합 테스트**
-  - **대상 파일**: `apps/web/worker/routes/sync.test.ts`
+  - **대상 파일**: `src/worker/routes/sync.test.ts`
   - **선행 조건**: Task 5.3
   - **구현 내용**:
     - A 기기에서 5곡 세트를 저장 → B 기기(같은 계정, 빈 로컬)에서 받아 → 곡·순서·스타일·배경이 동일함을 검증

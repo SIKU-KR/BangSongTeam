@@ -61,10 +61,10 @@ jobs:
       # dist/client plus the generated wrangler.json that carries the assets
       # binding. Without it the dry run validates a Worker with no frontend.
       - name: Build web app
-        run: pnpm --filter web build
+        run: pnpm build
 
       - name: Verify Worker deployment (dry run)
-        run: pnpm --filter web exec wrangler deploy --dry-run
+        run: pnpm exec wrangler deploy --dry-run
 
   deploy:
     name: Migrate D1 & Deploy Worker
@@ -120,17 +120,16 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Build web app
-        run: pnpm --filter web build
+        run: pnpm build
 
       # Runs before the deploy so the schema is in place when the new code
       # starts serving traffic.
       - name: Apply D1 production migrations
-        run: pnpm --filter @repo/db db:migrate:prod
+        run: pnpm db:migrate:prod
 
       - name: Deploy Cloudflare Worker
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          workingDirectory: apps/web
           command: deploy

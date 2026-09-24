@@ -9,7 +9,7 @@
 
 ## 1. 아키텍처 가드레일 & 준수 사항
 
-- **D1 보안 및 스코핑 (No RLS)**: D1 SQLite는 RLS가 없으므로 모든 덱/프레젠테이션 조회 및 수정 쿼리는 반드시 `userId` 일치 여부를 강제하는 `packages/db/src/queries/` 헬퍼를 통해 수행한다.
+- **D1 보안 및 스코핑 (No RLS)**: D1 SQLite는 RLS가 없으므로 모든 덱/프레젠테이션 조회 및 수정 쿼리는 반드시 `userId` 일치 여부를 강제하는 `src/db/queries/` 헬퍼를 통해 수행한다.
 - **공개 덱 유출 차단**: 공개 덱 조회는 `where(eq(decks.visibility, 'public'))`를 조건으로 무조건 강제한다.
 - **Clone-on-Add 격리**: 프레젠테이션 추가 덱은 `scope = 'presentation'`, `presentation_id = id`로 저장되고, 사용자 라이브러리는 `scope = 'library'`로만 조회하여 고아 데이터 및 라이브러리 오염을 원천 차단한다.
 
@@ -18,7 +18,7 @@
 ## 2. 세부 작업 체크리스트
 
 - [x] **Task 3.1: packages/db 패키지 구성 및 Drizzle Kit 설정**
-  - **대상 파일**: `packages/db/package.json`, `packages/db/tsconfig.json`, `packages/db/drizzle.config.ts`
+  - **대상 파일**: `packages/db/package.json`, `packages/db/tsconfig.json`, `migrations.config.ts`
   - **선행 조건**: `docs/tasks/m0/tasks_2.md`
   - **구현 내용**:
     - `drizzle-orm`, `drizzle-kit`, `@cloudflare/workers-types` 의존성 추가
@@ -26,7 +26,7 @@
   - **DoD (통과 기준)**: `pnpm --filter @repo/db exec tsc --noEmit`이 에러 없이 통과한다.
 
 - [x] **Task 3.2: Better Auth v1 공식 완결 인증 테이블 스키마 선언**
-  - **대상 파일**: `packages/db/src/schema/auth.ts`
+  - **대상 파일**: `src/db/schema/auth.ts`
   - **선행 조건**: Task 3.1
   - **구현 내용**:
     - `user`: `id`, `name`, `email(nullable)`, `emailVerified`, `image`, 타임스탬프
@@ -36,7 +36,7 @@
   - **DoD (통과 기준)**: `pnpm --filter @repo/db exec tsc --noEmit`이 에러 없이 통과한다.
 
 - [x] **Task 3.3: 가사 카탈로그 및 1인 1표 버전 관리 테이블 스키마 선언**
-  - **대상 파일**: `packages/db/src/schema/lyrics.ts`
+  - **대상 파일**: `src/db/schema/lyrics.ts`
   - **선행 조건**: Task 3.2
   - **구현 내용**:
     - `lyricsCatalog`: `id`, `title`, `artist`, `titleNorm`, `artistNorm`, `lyricsCanonical`, `versionCount`, `status('single'|'normalized'|'locked')`, 인덱스(`idx_lyrics_catalog_norm`)
@@ -44,14 +44,14 @@
   - **DoD (통과 기준)**: `pnpm --filter @repo/db exec tsc --noEmit`이 에러 없이 통과한다.
 
 - [x] **Task 3.4: 배경 미디어 메타데이터 테이블 스키마 선언**
-  - **대상 파일**: `packages/db/src/schema/media.ts`
+  - **대상 파일**: `src/db/schema/media.ts`
   - **선행 조건**: Task 3.1
   - **구현 내용**:
     - `backgrounds`: `id`, `title`, `r2Key`, `posterKey`, `durationSec`, `license`, `tags(JSON text)`
   - **DoD (통과 기준)**: `pnpm --filter @repo/db exec tsc --noEmit`이 에러 없이 통과한다.
 
 - [x] **Task 3.5: 덱(Deck) 테이블 스키마 선언 (Clone-on-Add 격리 및 인덱스 최적화)**
-  - **대상 파일**: `packages/db/src/schema/decks.ts`
+  - **대상 파일**: `src/db/schema/decks.ts`
   - **선행 조건**: Task 3.3, Task 3.4
   - **구현 내용**:
     - `decks`: `id`, `userId(FK cascade)`, `catalogId(FK set null)`, `scope('library'|'presentation')`, `presentationId(FK cascade)`, `title`, `artist`, `lyricsRaw`, `slides(JSON TEXT)`, `backgroundId(FK set null)`, `style(JSON TEXT)`, `visibility`, `forkedFrom`, `forkCount`
@@ -59,7 +59,7 @@
   - **DoD (통과 기준)**: `pnpm --filter @repo/db exec tsc --noEmit`이 에러 없이 통과한다.
 
 - [x] **Task 3.6: 프레젠테이션(Presentation) 및 신고(Report) 테이블 스키마 선언**
-  - **대상 파일**: `packages/db/src/schema/presentations.ts`, `packages/db/src/schema/reports.ts`
+  - **대상 파일**: `src/db/schema/presentations.ts`, `src/db/schema/reports.ts`
   - **선행 조건**: Task 3.5
   - **구현 내용**:
     - `presentations`: `id`, `userId(FK cascade)`, `title`, `serviceDate`, 타임스탬프, 인덱스(`idx_presentations_user_date`)
@@ -68,7 +68,7 @@
   - **DoD (통과 기준)**: `pnpm --filter @repo/db exec tsc --noEmit`이 에러 없이 통과한다.
 
 - [x] **Task 3.7: 스키마 배럴 및 D1 Drizzle 클라이언트 팩토리 구현**
-  - **대상 파일**: `packages/db/src/schema/index.ts`, `packages/db/src/client.ts`
+  - **대상 파일**: `src/db/schema/index.ts`, `src/db/client.ts`
   - **선행 조건**: Task 3.2 ~ Task 3.6
   - **구현 내용**:
     - `schema/index.ts`에서 모든 테이블 및 인덱스 객체 re-export
@@ -76,7 +76,7 @@
   - **DoD (통과 기준)**: `pnpm --filter @repo/db exec tsc --noEmit`이 통과하고 스키마 타입이 바인딩된다.
 
 - [x] **Task 3.8: Drizzle 마이그레이션 생성 및 FTS5 Trigram 가상 테이블 작성**
-  - **대상 파일**: `packages/db/drizzle/0000_initial.sql`, `packages/db/drizzle/0001_fts5.sql`
+  - **대상 파일**: `migrations/0000_initial.sql`, `migrations/0001_fts5.sql`
   - **선행 조건**: Task 3.7
   - **구현 내용**:
     - `pnpm --filter @repo/db db:generate`로 테이블 생성 SQL 추출
@@ -84,7 +84,7 @@
   - **DoD (통과 기준)**: `drizzle/` 디렉토리에 마이그레이션 파일이 정상 생성된다.
 
 - [x] **Task 3.9: FTS5 새니타이저 및 덱 검색 쿼리 단위 테스트 작성 (TDD Red)**
-  - **대상 파일**: `packages/db/src/queries/decks.test.ts`
+  - **대상 파일**: `src/db/queries/decks.test.ts`
   - **선행 조건**: Task 3.7
   - **구현 내용**:
     - `sanitizeFts5Query`: 제어 문자 주입 방지 및 큰따옴표 토큰화 검증
@@ -92,7 +92,7 @@
   - **DoD (통과 기준)**: `pnpm --filter @repo/db vitest run src/queries/decks.test.ts` 실행 시 실패(Red)함을 확인한다.
 
 - [x] **Task 3.10: D1 보안 가드레일 적용 덱 쿼리 헬퍼 구현 (TDD Green)**
-  - **대상 파일**: `packages/db/src/queries/decks.ts`
+  - **대상 파일**: `src/db/queries/decks.ts`
   - **선행 조건**: Task 3.9
   - **구현 내용**:
     - `sanitizeFts5Query(query: string): string`
@@ -104,12 +104,12 @@
   - **DoD (통과 기준)**: `pnpm --filter @repo/db vitest run src/queries/decks.test.ts`가 100% 통과(Green)한다.
 
 - [x] **Task 3.11: 프레젠테이션 쿼리 헬퍼 구현 및 DB 패키지 엔트리포인트 완성**
-  - **대상 파일**: `packages/db/src/queries/presentations.ts`, `packages/db/src/index.ts`
+  - **대상 파일**: `src/db/queries/presentations.ts`, `src/db/index.ts`
   - **선행 조건**: Task 3.10
   - **구현 내용**:
     - `getPresentationWithDecks(presentationId, userId)`: 세트와 속한 덱 목록 원자적 조회
     - `createPresentationWithClonedDecks(...)`: 프레젠테이션에 곡 추가 시 `scope='presentation'`, `presentationId=id`로 덱을 복제 생성하는 트랜잭션 헬퍼
-    - `packages/db/src/index.ts`에서 클라이언트 팩토리, 스키마, 쿼리 헬퍼 export
+    - `src/db/index.ts`에서 클라이언트 팩토리, 스키마, 쿼리 헬퍼 export
   - **DoD (통과 기준)**: `pnpm --filter @repo/db typecheck && pnpm --filter @repo/db test`가 모두 성공한다.
 
 ---

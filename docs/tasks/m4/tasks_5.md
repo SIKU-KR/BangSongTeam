@@ -33,13 +33,13 @@
 ## 2. 세부 작업 체크리스트
 
 - [x] **Task 5.1: 송출 라우트 Zero-Fetch 회귀 테스트**
-  - **대상 파일**: `apps/web/src/routes/zeroFetch.test.tsx`
+  - **대상 파일**: `src/client/routes/zeroFetch.test.tsx`
   - **선행 조건**: `tasks_4.md` 완료
   - **구현 내용**:
     - `globalThis.fetch`를 호출 시 throw하는 스텁으로 바꾸고 `/present/:id/fullscreen`(단독·청중)과 `/present/:id/control`을 마운트한다
     - 슬라이드 이동·블랙아웃·가사 숨기기까지 조작한 뒤 fetch 호출 0건을 단언한다
     - 배경 `<video src>`는 브라우저가 가져가는 것이므로 jsdom에서는 호출되지 않는다. 이 테스트가 막는 것은 **앱 코드가 직접 부르는 fetch**다
-  - **DoD (통과 기준)**: `pnpm exec vitest run apps/web/src/routes/zeroFetch.test.tsx`가 100% 통과(Green)한다.
+  - **DoD (통과 기준)**: `pnpm exec vitest run src/client/routes/zeroFetch.test.tsx`가 100% 통과(Green)한다.
 
 - [x] **Task 5.2: TECH_SPEC 정정**
   - **대상 파일**: `docs/TECH_SPEC.md`
@@ -76,7 +76,7 @@
 
 ```bash
 pnpm typecheck && pnpm lint && pnpm test
-pnpm --filter web build && ls -la apps/web/dist/client/sw.js
+pnpm --filter web build && ls -la dist/client/sw.js
 ```
 
 ---

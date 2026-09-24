@@ -1,6 +1,6 @@
 # Goal: [M5-2] 보관함 덱 서버 동기화·서버측 가사 기여 (worker, apps/web)
 
-> **2026-09-23 범위 변경**: LLM 가사 정규화와 가사 라이브러리(카탈로그·가사 기여·대표 가사·곡 식별)는 MVP에서 제거됐다 (`packages/db/drizzle/0005_remove_catalog.sql`). 공유 라이브러리는 같은 곡을 여러 사람이 따로 공개하는 게시판(가져간 횟수순)만 남는다. 이 문서의 해당 부분은 이력으로 남긴다.
+> **2026-09-23 범위 변경**: LLM 가사 정규화와 가사 라이브러리(카탈로그·가사 기여·대표 가사·곡 식별)는 MVP에서 제거됐다 (`migrations/0005_remove_catalog.sql`). 공유 라이브러리는 같은 곡을 여러 사람이 따로 공개하는 게시판(가져간 횟수순)만 남는다. 이 문서의 해당 부분은 이력으로 남긴다.
 
 > **마일스톤**: M5 (공유·가사 라이브러리)
 > **태스크 번호**: `tasks_2.md`
@@ -35,7 +35,7 @@
 ## 2. 세부 작업 체크리스트
 
 - [x] **Task 2.1: `contributeLyrics` 확장 (TDD)**
-  - **대상 파일**: `packages/db/src/queries/lyrics.ts`, `lyrics.test.ts`
+  - **대상 파일**: `src/db/queries/lyrics.ts`, `lyrics.test.ts`
   - **선행 조건**: `tasks_1.md` 완료
   - **구현 내용**:
     - `preferredCatalogId` — '이 곡이 맞나요?'에서 고른 카탈로그. 존재하고 제목 정규화 키가 같을 때만 쓴다 (다른 곡으로 투표를 옮기는 것을 막는다)
@@ -45,61 +45,61 @@
     - 같은 덱이 제목을 바꿔 다른 곡으로 옮겨 가면, 옛 곡에 남은 그 덱의 버전을 지우고 옛 곡의 버전 수를 다시 센다
     - `decks.catalog_id`를 되써 준다 (userId·deckId 범위)
     - `shouldContribute(deck)` — 루트 버전 판정 함수
-  - **DoD (통과 기준)**: `pnpm vitest run packages/db/src/queries/lyrics.test.ts`가 100% 통과(Green)한다.
+  - **DoD (통과 기준)**: `pnpm vitest run src/db/queries/lyrics.test.ts`가 100% 통과(Green)한다.
 
 - [x] **Task 2.2: 라우트 팩토리와 `createApp`**
-  - **대상 파일**: `apps/web/worker/routes/decks.ts`, `routes/presentations.ts`, `worker/index.ts`, `worker/types.ts`
+  - **대상 파일**: `src/worker/routes/decks.ts`, `routes/presentations.ts`, `worker/index.ts`, `worker/types.ts`
   - **선행 조건**: Task 2.1
   - **구현 내용**:
     - `AppDeps { readSession?: SessionReader }`. `createDecksRoute(deps)`, `createPresentationsRoute(deps)`, `createApp(deps = {})`
     - `export type AppType = ReturnType<typeof createApp>` — 체인 추론을 그대로 유지한다
     - `PUT /api/decks/:id`: 저장 → `shouldContribute(saved)`면 기여 → 기여가 `catalogId`를 바꿨으면 덱을 다시 읽어 응답한다. `?contribute`는 없앤다
-  - **DoD (통과 기준)**: `pnpm vitest run apps/web/worker/index.test.ts`가 100% 통과(Green)한다.
+  - **DoD (통과 기준)**: `pnpm vitest run src/worker/index.test.ts`가 100% 통과(Green)한다.
 
 - [x] **Task 2.3: worker 테스트를 실제 라우트로**
-  - **대상 파일**: `apps/web/worker/routes/lyrics.test.ts`, `routes/sync.test.ts`
+  - **대상 파일**: `src/worker/routes/lyrics.test.ts`, `routes/sync.test.ts`
   - **선행 조건**: Task 2.2
   - **구현 내용**: 복제한 핸들러를 걷어내고 `createApp({ readSession: fake })`를 마운트한다. 기여 케이스: 플래그 켬/끔, 포크본(`origin='fork'`)은 기여 안 함, 응답 덱에 `catalogId`가 붙음, 기여 실패가 저장을 되돌리지 않음
-  - **DoD (통과 기준)**: `pnpm vitest run apps/web/worker/`가 100% 통과(Green)한다.
+  - **DoD (통과 기준)**: `pnpm vitest run src/worker/`가 100% 통과(Green)한다.
 
 - [x] **Task 2.4: 보관함 병합 (TDD)**
-  - **대상 파일**: `apps/web/src/lib/sync/mergeLibraryDecks.ts`, `mergeLibraryDecks.test.ts`
+  - **대상 파일**: `src/client/lib/sync/mergeLibraryDecks.ts`, `mergeLibraryDecks.test.ts`
   - **선행 조건**: 없음
   - **구현 내용**: 덱 단위 LWW. 서버 소유 필드는 항상 서버 값, `catalogId`는 서버 값이 있으면 서버. 서버에 없거나 로컬이 더 최신이면 `needsPush`
-  - **DoD (통과 기준)**: `pnpm vitest run apps/web/src/lib/sync/mergeLibraryDecks.test.ts`가 100% 통과(Green)한다.
+  - **DoD (통과 기준)**: `pnpm vitest run src/client/lib/sync/mergeLibraryDecks.test.ts`가 100% 통과(Green)한다.
 
 - [x] **Task 2.5: 보관함 push 큐 (TDD)**
-  - **대상 파일**: `apps/web/src/lib/sync/deckSync.ts`, `deckSync.test.ts`, `presentationSync.ts`
+  - **대상 파일**: `src/client/lib/sync/deckSync.ts`, `deckSync.test.ts`, `presentationSync.ts`
   - **선행 조건**: Task 2.4
   - **구현 내용**:
     - `scheduleDeckPush(deck)`, `scheduleDeckDelete(id)`, `pushDeckNow(deck)`, `flushDeckSync()`, `setDeckSyncEnabled()`
     - 오프라인이면 다시 큐에 넣는다. 서버 응답 덱은 `onServerDeck` 콜백으로 스토어에 반영한다 (서버 소유 필드·`catalogId`)
     - `pushDeck`이 서버가 확정한 덱을 돌려주고, `deleteDeckRemote`를 더한다
-  - **DoD (통과 기준)**: `pnpm vitest run apps/web/src/lib/sync/deckSync.test.ts`가 100% 통과(Green)한다.
+  - **DoD (통과 기준)**: `pnpm vitest run src/client/lib/sync/deckSync.test.ts`가 100% 통과(Green)한다.
 
 - [x] **Task 2.6: 곡 보관함 스토어 서버 연결**
-  - **대상 파일**: `apps/web/src/features/editor/songLibraryStore.ts`, `songLibraryStore.test.ts`
+  - **대상 파일**: `src/client/features/editor/songLibraryStore.ts`, `songLibraryStore.test.ts`
   - **선행 조건**: Task 2.5
   - **구현 내용**:
     - `saveSongToLibrary`가 `contributeToCatalog`(신규 곡 기본 true)·`catalogId`를 받고 push를 예약한다
     - `upsertLibraryDeck(deck, { push })`, `applyServerLibraryDecks(decks)`, `applyServerDeckFields(deck)`, `getLibraryDeck(id)`
     - `deleteUserSong`이 서버 삭제를 예약한다
-  - **DoD (통과 기준)**: `pnpm vitest run apps/web/src/features/editor/songLibraryStore.test.ts`가 100% 통과(Green)한다.
+  - **DoD (통과 기준)**: `pnpm vitest run src/client/features/editor/songLibraryStore.test.ts`가 100% 통과(Green)한다.
 
 - [x] **Task 2.7: 부팅 동기화에 보관함 추가 + 송출 화면 가드**
-  - **대상 파일**: `apps/web/src/lib/sync/bootSync.ts`, `bootSync.test.ts`, `lib/sync/index.ts`, `App.tsx`
+  - **대상 파일**: `src/client/lib/sync/bootSync.ts`, `bootSync.test.ts`, `lib/sync/index.ts`, `App.tsx`
   - **선행 조건**: Task 2.6
   - **구현 내용**:
     - 프레젠테이션 병합 뒤 `pullDecks` → `mergeLibraryDecks` → 적용·로컬 저장 → `needsPush` 업로드
     - `shouldRunBootSync(pathname)` — `/present/:id/fullscreen`·`/present/:id/control`이면 false. `App.tsx`가 이 가드를 통과할 때만 `runBootSync`를 부른다
     - `pagehide` 플러시에 `flushDeckSync`를 더한다
-  - **DoD (통과 기준)**: `pnpm vitest run apps/web/src/lib/sync/`가 100% 통과(Green)한다.
+  - **DoD (통과 기준)**: `pnpm vitest run src/client/lib/sync/`가 100% 통과(Green)한다.
 
 - [x] **Task 2.8: '가사 라이브러리에 기여' 체크박스**
-  - **대상 파일**: `apps/web/src/features/editor/SongPickerModal.tsx`, `SongPickerModal.test.tsx`
+  - **대상 파일**: `src/client/features/editor/SongPickerModal.tsx`, `SongPickerModal.test.tsx`
   - **선행 조건**: Task 2.6
   - **구현 내용**: 직접 등록 폼에 체크박스(기본 켜짐, PRD 4.8)를 넣고 값을 `saveSongToLibrary`에 넘긴다
-  - **DoD (통과 기준)**: `pnpm vitest run apps/web/src/features/editor/SongPickerModal.test.tsx`가 100% 통과(Green)한다.
+  - **DoD (통과 기준)**: `pnpm vitest run src/client/features/editor/SongPickerModal.test.tsx`가 100% 통과(Green)한다.
 
 - [x] **Task 2.9: 전체 검증**
   - **대상 파일**: 없음
@@ -111,7 +111,7 @@
 ## 3. 검증 명령어
 
 ```bash
-pnpm vitest run packages/db/src/queries/lyrics.test.ts apps/web/worker/ apps/web/src/lib/sync/ apps/web/src/features/editor/
+pnpm vitest run src/db/queries/lyrics.test.ts src/worker/ src/client/lib/sync/ src/client/features/editor/
 pnpm typecheck && pnpm lint && pnpm test
 ```
 

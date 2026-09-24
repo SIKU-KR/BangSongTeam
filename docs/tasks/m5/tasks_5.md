@@ -1,6 +1,6 @@
 # Goal: [M5-5] 프론트엔드 공유 UI (apps/web)
 
-> **2026-09-23 범위 변경**: LLM 가사 정규화와 가사 라이브러리(카탈로그·가사 기여·대표 가사·곡 식별)는 MVP에서 제거됐다 (`packages/db/drizzle/0005_remove_catalog.sql`). 공유 라이브러리는 같은 곡을 여러 사람이 따로 공개하는 게시판(가져간 횟수순)만 남는다. 이 문서의 해당 부분은 이력으로 남긴다.
+> **2026-09-23 범위 변경**: LLM 가사 정규화와 가사 라이브러리(카탈로그·가사 기여·대표 가사·곡 식별)는 MVP에서 제거됐다 (`migrations/0005_remove_catalog.sql`). 공유 라이브러리는 같은 곡을 여러 사람이 따로 공개하는 게시판(가져간 횟수순)만 남는다. 이 문서의 해당 부분은 이력으로 남긴다.
 
 > **마일스톤**: M5 (공유·가사 라이브러리)
 > **태스크 번호**: `tasks_5.md`
@@ -40,19 +40,19 @@
   - **DoD (통과 기준)**: `pnpm --filter web exec tsc --noEmit`이 에러 없이 통과한다.
 
 - [x] **Task 5.2: QueryClient와 공급자**
-  - **대상 파일**: `apps/web/src/lib/api/queryClient.ts`, `apps/web/src/App.tsx`
+  - **대상 파일**: `src/client/lib/api/queryClient.ts`, `src/client/App.tsx`
   - **선행 조건**: Task 5.1
   - **구현 내용**: `networkMode: 'online'`, 포커스 재조회 끔, 재시도 1회. 공급자는 로그인 뒤 분기에만 둔다
-  - **DoD (통과 기준)**: `pnpm vitest run apps/web/src/App.test.tsx`가 100% 통과(Green)한다.
+  - **DoD (통과 기준)**: `pnpm vitest run src/client/App.test.tsx`가 100% 통과(Green)한다.
 
 - [x] **Task 5.3: 송출 화면 import 가드**
-  - **대상 파일**: `packages/config/eslint/index.js`, `apps/web/src/routes/zeroFetch.test.tsx`
+  - **대상 파일**: `packages/config/eslint/index.js`, `src/client/routes/zeroFetch.test.tsx`
   - **선행 조건**: Task 5.2
   - **구현 내용**: 송출 라우트·`features/presentation/**`·`components/stage/**`에서 `@tanstack/react-query`·`lib/api/*`·`@repo/db` import 금지. Zero-Fetch 테스트를 공급자 안에서도 돌린다
-  - **DoD (통과 기준)**: `pnpm lint && pnpm vitest run apps/web/src/routes/zeroFetch.test.tsx`가 통과한다.
+  - **DoD (통과 기준)**: `pnpm lint && pnpm vitest run src/client/routes/zeroFetch.test.tsx`가 통과한다.
 
 - [x] **Task 5.4: 공유 API 함수와 훅**
-  - **대상 파일**: `apps/web/src/lib/api/request.ts`, `catalogApi.ts`, `catalogQueries.ts`
+  - **대상 파일**: `src/client/lib/api/request.ts`, `catalogApi.ts`, `catalogQueries.ts`
   - **선행 조건**: Task 5.2
   - **구현 내용**:
     - `callApi` — 동기화 상태 배지를 건드리지 않는 요청 래퍼. `OfflineError`·`SessionExpiredError`·`ServerRejectedError(서버 문장)`
@@ -61,19 +61,19 @@
   - **DoD (통과 기준)**: `pnpm --filter web exec tsc --noEmit`이 에러 없이 통과한다.
 
 - [x] **Task 5.5: 세트 복제 규칙과 보관함 연결**
-  - **대상 파일**: `apps/web/src/features/presentation/presentationStore.ts`, `presentationStore.test.ts`
+  - **대상 파일**: `src/client/features/presentation/presentationStore.ts`, `presentationStore.test.ts`
   - **선행 조건**: 없음
   - **구현 내용**: 복제본의 `forkedFrom` = 복제해 온 보관함 덱, 공개·가져간 횟수·기여 끔. `linkSongToLibraryDeck(songIndex, deckId)`
-  - **DoD (통과 기준)**: `pnpm vitest run apps/web/src/features/presentation/presentationStore.test.ts`가 100% 통과(Green)한다.
+  - **DoD (통과 기준)**: `pnpm vitest run src/client/features/presentation/presentationStore.test.ts`가 100% 통과(Green)한다.
 
 - [x] **Task 5.6: 샘플 공유 곡 제거**
-  - **대상 파일**: `apps/web/src/features/editor/songLibraryStore.ts`, `features/library/mockCustomBackgrounds.ts`
+  - **대상 파일**: `src/client/features/editor/songLibraryStore.ts`, `features/library/mockCustomBackgrounds.ts`
   - **선행 조건**: Task 5.4
   - **구현 내용**: `COMMUNITY_SONGS`와 `useAvailableSongs`를 지우고 `useUserSongs`·`useLibraryDeck`로 바꾼다
-  - **DoD (통과 기준)**: `grep -rn "COMMUNITY_SONGS" apps/web/src`가 0건이다.
+  - **DoD (통과 기준)**: `grep -rn "COMMUNITY_SONGS" src/client`가 0건이다.
 
 - [x] **Task 5.7: 곡 추가 모달을 서버 검색으로**
-  - **대상 파일**: `apps/web/src/features/editor/SongPickerModal.tsx`, `songPicker/{CreateSongForm,CatalogCandidateChooser,SongPickerPreview,LyricsViewer,CatalogStatusBadge}.tsx`, `hooks/useIsOnline.ts`, `SongPickerModal.test.tsx`, `test/fakeApi.ts`, `test/queryClientFixture.tsx`
+  - **대상 파일**: `src/client/features/editor/SongPickerModal.tsx`, `songPicker/{CreateSongForm,CatalogCandidateChooser,SongPickerPreview,LyricsViewer,CatalogStatusBadge}.tsx`, `hooks/useIsOnline.ts`, `SongPickerModal.test.tsx`, `test/fakeApi.ts`, `test/queryClientFixture.tsx`
   - **선행 조건**: Task 5.6
   - **구현 내용**:
     - 필터: 전체 / 내 곡 / 공유 곡 / 가사 라이브러리
@@ -81,36 +81,36 @@
     - 가사 라이브러리: '1명 등록' / '정규화됨 · N명 등록' / '검수됨 · N명 등록' 배지, 첫 2줄만, 대표 가사 가져오기
     - 직접 등록: '가사 라이브러리에 기여' 체크박스, '이 곡이 맞나요?' 후보 선택(제목·아티스트가 같은 곡이 하나뿐이면 묻지 않는다)
     - 신고 버튼, 오프라인 안내
-  - **DoD (통과 기준)**: `pnpm vitest run apps/web/src/features/editor/SongPickerModal.test.tsx`가 100% 통과(Green)한다.
+  - **DoD (통과 기준)**: `pnpm vitest run src/client/features/editor/SongPickerModal.test.tsx`가 100% 통과(Green)한다.
 
 - [x] **Task 5.8: 공개 로직 (TDD)**
-  - **대상 파일**: `apps/web/src/features/sharing/publishSong.ts`, `publishSong.test.ts`
+  - **대상 파일**: `src/client/features/sharing/publishSong.ts`, `publishSong.test.ts`
   - **선행 조건**: Task 5.5
   - **구현 내용**: `resolveLibraryMaster`, `buildPublishedDeck`(슬라이드에서 `lyricsRaw` 재생성), `hasUnpublishedChanges`, `canContributeFromSong`, `publishSong`(원본 즉시 push → 공개 요청), `updatePublishedSong`, `unpublishSong`. 원본 업로드가 실패하면 공개 요청을 보내지 않는다
-  - **DoD (통과 기준)**: `pnpm vitest run apps/web/src/features/sharing/publishSong.test.ts`가 100% 통과(Green)한다.
+  - **DoD (통과 기준)**: `pnpm vitest run src/client/features/sharing/publishSong.test.ts`가 100% 통과(Green)한다.
 
 - [x] **Task 5.9: 공개 동의 대화상자**
-  - **대상 파일**: `apps/web/src/features/sharing/PublishDialog.tsx`
+  - **대상 파일**: `src/client/features/sharing/PublishDialog.tsx`
   - **선행 조건**: Task 5.8
   - **구현 내용**: 공개 범위·저작권(CCLI 범위 내 사용 책임, 권리자 요청 시 게시 중단)·비공개 전환 후에도 사본이 남는다는 안내, 필수 동의 체크, 루트 곡이면 '가사 라이브러리에도 기여'
-  - **DoD (통과 기준)**: `pnpm vitest run apps/web/src/features/sharing/SongSharePanel.test.tsx`가 100% 통과(Green)한다.
+  - **DoD (통과 기준)**: `pnpm vitest run src/client/features/sharing/SongSharePanel.test.tsx`가 100% 통과(Green)한다.
 
 - [x] **Task 5.10: 신고 대화상자**
-  - **대상 파일**: `apps/web/src/features/sharing/ReportDialog.tsx`
+  - **대상 파일**: `src/client/features/sharing/ReportDialog.tsx`
   - **선행 조건**: Task 5.4
   - **구현 내용**: 사유(가사 오류·교정 제안·부적절·저작권), 상세 500자
-  - **DoD (통과 기준)**: `pnpm vitest run apps/web/src/features/editor/SongPickerModal.test.tsx`가 100% 통과(Green)한다.
+  - **DoD (통과 기준)**: `pnpm vitest run src/client/features/editor/SongPickerModal.test.tsx`가 100% 통과(Green)한다.
 
 - [x] **Task 5.11: 편집기 '공유' 패널**
-  - **대상 파일**: `apps/web/src/features/sharing/SongSharePanel.tsx`, `SongSharePanel.test.tsx`
+  - **대상 파일**: `src/client/features/sharing/SongSharePanel.tsx`, `SongSharePanel.test.tsx`
   - **선행 조건**: Task 5.9, 5.10
   - **구현 내용**: 비공개 / 공개 중 · N회 가져감 / 게시 중단됨, '원작: X'와 '원본에 교정 제안', 공개·공개본 업데이트·비공개 전환. 오프라인이면 버튼을 막는다
-  - **DoD (통과 기준)**: `pnpm vitest run apps/web/src/features/sharing/SongSharePanel.test.tsx`가 100% 통과(Green)한다.
+  - **DoD (통과 기준)**: `pnpm vitest run src/client/features/sharing/SongSharePanel.test.tsx`가 100% 통과(Green)한다.
 
 - [x] **Task 5.12: 편집기에 연결**
-  - **대상 파일**: `apps/web/src/features/editor/SongPropertyPanel.tsx`(`footer` 슬롯), `apps/web/src/routes/EditorRoute.tsx`, `EditorRoute.test.tsx`
+  - **대상 파일**: `src/client/features/editor/SongPropertyPanel.tsx`(`footer` 슬롯), `src/client/routes/EditorRoute.tsx`, `EditorRoute.test.tsx`
   - **선행 조건**: Task 5.11
-  - **DoD (통과 기준)**: `pnpm vitest run apps/web/src/routes/EditorRoute.test.tsx`가 100% 통과(Green)한다.
+  - **DoD (통과 기준)**: `pnpm vitest run src/client/routes/EditorRoute.test.tsx`가 100% 통과(Green)한다.
 
 - [x] **Task 5.13: 전체 검증**
   - **대상 파일**: 없음
@@ -122,8 +122,8 @@
 ## 3. 검증 명령어
 
 ```bash
-pnpm vitest run apps/web/src/features/editor apps/web/src/features/sharing apps/web/src/routes
-grep -rn "COMMUNITY_SONGS" apps/web/src   # 0건
+pnpm vitest run src/client/features/editor src/client/features/sharing src/client/routes
+grep -rn "COMMUNITY_SONGS" src/client   # 0건
 pnpm typecheck && pnpm lint && pnpm test && pnpm --filter web build
 ```
 

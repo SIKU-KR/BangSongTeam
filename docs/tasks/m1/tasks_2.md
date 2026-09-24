@@ -17,7 +17,7 @@
 ## 2. 세부 작업 체크리스트
 
 - [x] **Task 2.1: 숫자 키패드 입력 버퍼 상태 머신 단위 테스트 작성 (TDD Red)**
-  - **대상 파일**: `apps/web/src/features/presentation/navigationBuffer.test.ts`
+  - **대상 파일**: `src/client/features/presentation/navigationBuffer.test.ts`
   - **선행 조건**: `docs/tasks/m1/tasks_1.md`
   - **구현 내용**:
     - 테스트 케이스 1: `3` + Enter $\rightarrow$ 현재 곡의 3번째 슬라이드(`slideIndex: 2`) 점프 콜백 발생
@@ -29,7 +29,7 @@
   - **DoD (통과 기준)**: `pnpm --filter web vitest run src/features/presentation/navigationBuffer.test.ts` 실행 시 구현체가 없어 실패(Red)함을 확인한다.
 
 - [x] **Task 2.2: 숫자 키패드 입력 버퍼 훅 구현 (TDD Green)**
-  - **대상 파일**: `apps/web/src/features/presentation/useNavigationBuffer.ts`
+  - **대상 파일**: `src/client/features/presentation/useNavigationBuffer.ts`
   - **선행 조건**: Task 2.1
   - **구현 내용**:
     - `buffer` 문자열 상태 관리 및 3초 타이머(`useRef<NodeJS.Timeout>`) 관리
@@ -38,7 +38,7 @@
   - **DoD (통과 기준)**: `pnpm --filter web vitest run src/features/presentation/navigationBuffer.test.ts`가 100% 통과(Green)한다.
 
 - [x] **Task 2.3: 송출 키보드 및 리모컨 단축키 이벤트 훅 구현**
-  - **대상 파일**: `apps/web/src/features/presentation/usePresentationShortcuts.ts`
+  - **대상 파일**: `src/client/features/presentation/usePresentationShortcuts.ts`
   - **선행 조건**: Task 2.2
   - **구현 내용**:
     - `tinykeys` 라이브러리 연동:

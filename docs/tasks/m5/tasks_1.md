@@ -1,6 +1,6 @@
 # Goal: [M5-1] 스키마·마이그레이션·서버 권한 고정 (packages/shared, packages/db, worker)
 
-> **2026-09-23 범위 변경**: LLM 가사 정규화와 가사 라이브러리(카탈로그·가사 기여·대표 가사·곡 식별)는 MVP에서 제거됐다 (`packages/db/drizzle/0005_remove_catalog.sql`). 공유 라이브러리는 같은 곡을 여러 사람이 따로 공개하는 게시판(가져간 횟수순)만 남는다. 이 문서의 해당 부분은 이력으로 남긴다.
+> **2026-09-23 범위 변경**: LLM 가사 정규화와 가사 라이브러리(카탈로그·가사 기여·대표 가사·곡 식별)는 MVP에서 제거됐다 (`migrations/0005_remove_catalog.sql`). 공유 라이브러리는 같은 곡을 여러 사람이 따로 공개하는 게시판(가져간 횟수순)만 남는다. 이 문서의 해당 부분은 이력으로 남긴다.
 
 > **마일스톤**: M5 (공유·가사 라이브러리)
 > **태스크 번호**: `tasks_1.md`
@@ -37,16 +37,16 @@
 ## 2. 세부 작업 체크리스트
 
 - [x] **Task 1.1: DeckSchema 공유 필드 확장**
-  - **대상 파일**: `packages/shared/src/schemas/deck.ts`, `deck.test.ts`
+  - **대상 파일**: `src/shared/schemas/deck.ts`, `deck.test.ts`
   - **선행 조건**: 없음
   - **구현 내용**:
     - `DeckOriginSchema = z.enum(['user','fork','catalog'])` — 덱이 처음 어떻게 생겼는지. 루트 버전 판정(PRD 4.8)의 근거
     - 선택 필드: `contributeToCatalog: boolean`, `origin`, `forkedFromAuthorName: string(≤100) | null`, `publishedAt: datetime | null`, `takedownAt: datetime | null`
     - 옛 페이로드(새 필드 없음)가 그대로 파싱되는지 테스트
-  - **DoD (통과 기준)**: `pnpm vitest run packages/shared/src/schemas/deck.test.ts`가 100% 통과(Green)한다.
+  - **DoD (통과 기준)**: `pnpm vitest run src/shared/schemas/deck.test.ts`가 100% 통과(Green)한다.
 
 - [x] **Task 1.2: 공유 라이브러리 API 계약**
-  - **대상 파일**: `packages/shared/src/schemas/library.ts`, `library.test.ts`, `api.ts`, `catalog.ts`
+  - **대상 파일**: `src/shared/schemas/library.ts`, `library.test.ts`, `api.ts`, `catalog.ts`
   - **선행 조건**: Task 1.1
   - **구현 내용**:
     - `VisibilityUpdateRequestSchema` — `{visibility:'public', acceptedCopyrightNotice: z.literal(true)}` | `{visibility:'private'}`
@@ -56,10 +56,10 @@
     - `ReportReasonSchema`(`lyrics_error|inappropriate|copyright|correction`), `CreateReportRequestSchema {targetType, targetId, reason, details?(≤500)}`
     - `CatalogCanonicalSourceSchema`(`user|llm|popular_root|operator`)를 `catalog.ts`에 추가
     - `api.ts`의 `SearchCatalogQuerySchema.q`는 빈 문자열을 허용한다(빈 값 = 인기순 둘러보기). `SearchCatalogResponseSchema`는 위 요약 스키마를 쓴다
-  - **DoD (통과 기준)**: `pnpm vitest run packages/shared/src/schemas/`가 100% 통과(Green)한다.
+  - **DoD (통과 기준)**: `pnpm vitest run src/shared/schemas/`가 100% 통과(Green)한다.
 
 - [x] **Task 1.3: Drizzle 스키마 확장**
-  - **대상 파일**: `packages/db/src/schema/decks.ts`, `lyrics.ts`, `reports.ts`
+  - **대상 파일**: `src/db/schema/decks.ts`, `lyrics.ts`, `reports.ts`
   - **선행 조건**: Task 1.2
   - **구현 내용**:
     - `decks`: `contribute_to_catalog`(boolean, 기본 false), `origin`(기본 `'user'`), `forked_from_author_name`, `published_at`, `takedown_at`, 인덱스 `idx_decks_forked_from(user_id, forked_from)`
@@ -69,43 +69,43 @@
   - **DoD (통과 기준)**: `pnpm --filter @repo/db exec tsc --noEmit`이 에러 없이 통과한다.
 
 - [x] **Task 1.4: 생성 마이그레이션 `0003`**
-  - **대상 파일**: `packages/db/drizzle/0003_m5_sharing.sql` (+ `meta/`)
+  - **대상 파일**: `migrations/0003_m5_sharing.sql` (+ `meta/`)
   - **선행 조건**: Task 1.3
   - **구현 내용**: `pnpm --filter @repo/db db:generate --name m5_sharing`. 생성된 SQL에서 `*_fts`를 건드리는 문장을 손으로 지운다. 스냅샷은 유지한다
-  - **DoD (통과 기준)**: `grep -c "_fts" packages/db/drizzle/0003_m5_sharing.sql`이 0을 출력한다.
+  - **DoD (통과 기준)**: `grep -c "_fts" migrations/0003_m5_sharing.sql`이 0을 출력한다.
 
 - [x] **Task 1.5: 커스텀 FTS 마이그레이션 `0004`**
-  - **대상 파일**: `packages/db/drizzle/0004_m5_fts.sql`
+  - **대상 파일**: `migrations/0004_m5_fts.sql`
   - **선행 조건**: Task 1.4
   - **구현 내용**:
     - 옛 트리거 3개와 `decks_fts`를 지우고 `lyrics` 컬럼을 넣어 다시 만든다 (공유 곡 가사 본문 검색)
     - 데이터 정리: `scope='presentation'` 덱은 `visibility='private', fork_count=0`. 공개 동의 기록(`published_at`)이 없는 공개 덱도 비공개로 되돌린다 — 지금까지 공개 경로가 없었으므로 모두 샘플에서 흘러든 값이다
     - 트리거 조건: `new.scope='library' AND new.visibility='public' AND new.takedown_at IS NULL`. 삭제·갱신 트리거도 `old` 행이 색인 대상이었을 때만 FTS를 건드린다 — 세트 동기화는 덱을 매번 지우고 다시 넣으므로 조건 없이 걸면 곡마다 FTS를 훑는다. (`rowid` 연결은 쓰지 않는다: TEXT 기본키 테이블의 rowid는 VACUUM에서 바뀔 수 있다)
     - `lyrics_catalog_fts(catalog_id UNINDEXED, title, artist, tokenize='trigram')` + 트리거 + backfill
-  - **DoD (통과 기준)**: `pnpm vitest run apps/web/worker/index.test.ts`가 통과한다 (workerd에서 전 마이그레이션 적용).
+  - **DoD (통과 기준)**: `pnpm vitest run src/worker/index.test.ts`가 통과한다 (workerd에서 전 마이그레이션 적용).
 
 - [x] **Task 1.6: 테스트 DB가 모든 마이그레이션을 적용**
-  - **대상 파일**: `packages/db/src/test-utils.ts`
+  - **대상 파일**: `src/db/test-utils.ts`
   - **선행 조건**: Task 1.5
   - **구현 내용**: `drizzle/*.sql`을 이름순으로 적용한다. 배경 시드(`0002`)는 테스트가 직접 넣는 배경과 겹치므로 건너뛴다. better-sqlite3는 외래키를 강제하지 않는다는 주석을 남긴다
   - **DoD (통과 기준)**: `pnpm vitest run packages/db`가 100% 통과(Green)한다.
 
 - [x] **Task 1.7: 매퍼 — 새 필드 왕복과 프레젠테이션 덱 강제값**
-  - **대상 파일**: `packages/db/src/queries/mappers.ts`, `mappers.test.ts`
+  - **대상 파일**: `src/db/queries/mappers.ts`, `mappers.test.ts`
   - **선행 조건**: Task 1.6
   - **구현 내용**:
     - 새 필드를 Date↔ISO, boolean으로 매핑한다
     - `fromPresentationDocument`는 `visibility:'private'`, `forkCount:0`, `publishedAt/takedownAt:null`, `contributeToCatalog:false`를 강제한다. `forkedFrom`(= 복제해 온 보관함 덱)·`forkedFromAuthorName`(표시용)은 클라이언트 값을 유지한다
-  - **DoD (통과 기준)**: `pnpm vitest run packages/db/src/queries/mappers.test.ts`가 100% 통과(Green)한다.
+  - **DoD (통과 기준)**: `pnpm vitest run src/db/queries/mappers.test.ts`가 100% 통과(Green)한다.
 
 - [x] **Task 1.8: 모르는 카탈로그 id 방어**
-  - **대상 파일**: `packages/db/src/queries/catalogRefs.ts`, `catalogRefs.test.ts`, `presentations.ts`
+  - **대상 파일**: `src/db/queries/catalogRefs.ts`, `catalogRefs.test.ts`, `presentations.ts`
   - **선행 조건**: Task 1.7
   - **구현 내용**: `nullifyUnknownCatalogs(db, rows)` — `nullifyUnknownBackgrounds`와 같은 패턴. `decks.catalog_id`도 D1이 강제하는 외래키라, 운영자가 카탈로그를 나누거나 지운 뒤 옛 id를 든 세트가 오면 `db.batch()` 전체가 롤백된다(M4 배경 사고와 같은 모양). `upsertPresentationDocument`에 적용한다
-  - **DoD (통과 기준)**: `pnpm vitest run packages/db/src/queries/catalogRefs.test.ts`가 100% 통과(Green)한다.
+  - **DoD (통과 기준)**: `pnpm vitest run src/db/queries/catalogRefs.test.ts`가 100% 통과(Green)한다.
 
 - [x] **Task 1.9: `upsertDeck` 서버 필드 보존**
-  - **대상 파일**: `packages/db/src/queries/decks.ts`, `decks.test.ts`
+  - **대상 파일**: `src/db/queries/decks.ts`, `decks.test.ts`
   - **선행 조건**: Task 1.8
   - **구현 내용**:
     - `scope:'library'`, `presentationId:null`을 강제한다
@@ -113,10 +113,10 @@
     - 기존 행: 위 서버 필드를 기존 행 값으로 유지한다. `catalogId`는 클라이언트가 null을 보내도 서버 값이 있으면 유지한다
     - `nullifyUnknownCatalogs` 적용. 반환값을 `SharedDeck | null`(남의 덱이면 null)로 바꾼다
     - `getPublicById`에 scope·takedown 조건을 더한다
-  - **DoD (통과 기준)**: `pnpm vitest run packages/db/src/queries/decks.test.ts`가 100% 통과(Green)한다.
+  - **DoD (통과 기준)**: `pnpm vitest run src/db/queries/decks.test.ts`가 100% 통과(Green)한다.
 
 - [x] **Task 1.10: 검색 헬퍼 재작성 (TDD)**
-  - **대상 파일**: `packages/db/src/queries/search.ts`, `search.test.ts` (CLAUDE.md §5.2가 지정한 위치)
+  - **대상 파일**: `src/db/queries/search.ts`, `search.test.ts` (CLAUDE.md §5.2가 지정한 위치)
   - **선행 조건**: Task 1.9
   - **구현 내용**:
     - `planSearch(q)` — 새니타이즈 후 토큰으로 나눈다. 3자 이상 토큰은 FTS `MATCH`, 2자 이하 토큰은 `LIKE '%t%' ESCAPE '\'`. 모두 AND. 빈 쿼리는 '둘러보기'
@@ -124,13 +124,13 @@
     - `searchCatalog(db, q, limit)` — 제목·아티스트, `version_count DESC`
     - 옛 `decks.ts`의 `searchPublicDecks`는 이 파일로 옮기고 테스트도 옮긴다
     - 케이스: `"주 은혜"`, `"시선"`, `"%"`·`"_"` 리터럴, FTS 연산자 주입, `scope='presentation'` 공개 행·게시 중단 행 비노출, 빈 쿼리 인기순
-  - **DoD (통과 기준)**: `pnpm vitest run packages/db/src/queries/search.test.ts`가 100% 통과(Green)한다.
+  - **DoD (통과 기준)**: `pnpm vitest run src/db/queries/search.test.ts`가 100% 통과(Green)한다.
 
 - [x] **Task 1.11: `PUT /api/decks/:id` 보관함 전용**
-  - **대상 파일**: `apps/web/worker/routes/decks.ts`, `worker/routes/sync.test.ts`, `worker/routes/lyrics.test.ts`
+  - **대상 파일**: `src/worker/routes/decks.ts`, `worker/routes/sync.test.ts`, `worker/routes/lyrics.test.ts`
   - **선행 조건**: Task 1.9
   - **구현 내용**: `scope !== 'library'`면 400. 응답에 저장된 덱을 담는다 `{ok, deck, contributed}` — 클라이언트가 서버 소유 필드를 받아 반영할 수 있게 한다
-  - **DoD (통과 기준)**: `pnpm vitest run apps/web/worker/`가 100% 통과(Green)한다.
+  - **DoD (통과 기준)**: `pnpm vitest run src/worker/`가 100% 통과(Green)한다.
 
 - [x] **Task 1.12: 전체 검증**
   - **대상 파일**: 없음
@@ -143,7 +143,7 @@
 
 ```bash
 pnpm vitest run packages/shared packages/db
-pnpm vitest run apps/web/worker/
+pnpm vitest run src/worker/
 pnpm typecheck && pnpm lint && pnpm test
 ```
 
