@@ -5,6 +5,7 @@ import type { AppEnv } from "../types";
 import {
   createAuth,
   isDevLoginEnabled,
+  isEmailLoginEnabled,
   configuredSocialProviders,
 } from "../lib/auth";
 
@@ -35,6 +36,7 @@ const devLoginRoute = new Hono<AppEnv>()
       {
         providers: configuredSocialProviders(c.env),
         devLogin: isDevLoginEnabled(c.env, c.req.url),
+        emailLogin: isEmailLoginEnabled(c.env),
       },
       200,
     );

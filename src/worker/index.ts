@@ -9,6 +9,7 @@ import { createDecksRoute } from "./routes/decks";
 import { createCatalogRoute } from "./routes/catalog";
 import { createReportsRoute } from "./routes/reports";
 import { devLoginRoute } from "./routes/devLogin";
+import { emailSignupRoute } from "./routes/emailSignup";
 import type { AppDeps } from "./deps";
 
 /**
@@ -43,6 +44,7 @@ export function createApp(deps: AppDeps = {}) {
       return createAuth(c.env).handler(c.req.raw);
     })
     .route("/api", devLoginRoute)
+    .route("/api", emailSignupRoute)
     .route("/api/presentations", createPresentationsRoute(deps))
     .route("/api/folders", createFoldersRoute(deps))
     .route("/api/decks", createDecksRoute(deps))

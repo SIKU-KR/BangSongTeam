@@ -5,6 +5,7 @@ import { SlideSchema } from "./slide";
 import { DeckSchema } from "./deck";
 import { PresentationSchema, PresentationItemSchema } from "./presentation";
 import { PublicDeckSummarySchema } from "./library";
+import { PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH } from "../constants/auth";
 
 export const CreateDeckRequestSchema = z.object({
   title: z.string().min(1).max(100),
@@ -88,8 +89,16 @@ export const DevLoginRequestSchema = z.object({
 });
 export type DevLoginRequest = z.infer<typeof DevLoginRequestSchema>;
 
+export const EmailSignUpRequestSchema = z.object({
+  email: z.string().trim().toLowerCase().email().max(254),
+  password: z.string().min(PASSWORD_MIN_LENGTH).max(PASSWORD_MAX_LENGTH),
+  name: z.string().trim().min(1).max(50),
+});
+export type EmailSignUpRequest = z.infer<typeof EmailSignUpRequestSchema>;
+
 export const AuthConfigResponseSchema = z.object({
   providers: z.array(z.enum(["kakao", "naver"])),
   devLogin: z.boolean(),
+  emailLogin: z.boolean(),
 });
 export type AuthConfigResponse = z.infer<typeof AuthConfigResponseSchema>;

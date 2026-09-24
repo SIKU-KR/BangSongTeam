@@ -26,3 +26,9 @@ export {
   type SessionStatus,
   type SessionFetcher,
 } from "./sessionStore";
+export {
+  signInWithEmail,
+  signUpWithEmail,
+  EmailAuthError,
+  type EmailAuthFailure,
+} from "./emailAuth";

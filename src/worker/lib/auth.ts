@@ -1,8 +1,9 @@
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "@better-auth/drizzle-adapter";
 import { createD1Client, user, session, account, verification } from "#db";
-import { createId } from "#shared";
+import { createId, PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH } from "#shared";
 import type { Bindings } from "../types";
+import { hashPassword, verifyPassword } from "./password";
 
 /**
  * Better Auth 마운트 경로.
@@ -98,6 +99,38 @@ export function isDevLoginEnabled(
   );
 }
 
+/** 쉼표·공백·줄바꿈으로 구분된 이메일 목록. 대소문자는 구분하지 않는다. */
+export function parseEmailAllowlist(raw: string | undefined): Set<string> {
+  return new Set(
+    (raw ?? "")
+      .split(/[\s,]+/)
+      .map((email) => email.trim().toLowerCase())
+      .filter(Boolean),
+  );
+}
+
+/**
+ * 이메일·비밀번호 로그인이 켜져 있는지.
+ *
+ * 가입 허용 목록(`EMAIL_SIGNUP_ALLOWLIST` 시크릿)이 곧 스위치다. 목록을 비우면
+ * 로그인 화면의 폼과 로그인·가입 엔드포인트가 함께 꺼진다.
+ */
+export function isEmailLoginEnabled(env: Bindings): boolean {
+  return parseEmailAllowlist(env.EMAIL_SIGNUP_ALLOWLIST).size > 0;
+}
+
+/**
+ * 이 이메일로 비밀번호 가입을 받아도 되는지.
+ *
+ * 메일 인증 없이 가입시키므로 아무 주소나 받으면 남의 이메일을 선점할 수 있다.
+ * 허용 목록에 적힌 주소만 받는다.
+ */
+export function isEmailSignupAllowed(env: Bindings, email: string): boolean {
+  return parseEmailAllowlist(env.EMAIL_SIGNUP_ALLOWLIST).has(
+    email.trim().toLowerCase(),
+  );
+}
+
 /** 자격증명이 실제로 채워져 있는지 (빈 문자열·공백은 미설정으로 본다) */
 export function hasCredentials(
   clientId: string | undefined,
@@ -186,10 +219,18 @@ function buildAuth(env: Bindings) {
       provider: "sqlite",
       schema: { user, session, account, verification },
     }),
-    emailAndPassword: { enabled: env.DEV_LOGIN_ENABLED === "true" },
+    emailAndPassword: {
+      enabled: isEmailLoginEnabled(env) || env.DEV_LOGIN_ENABLED === "true",
+      minPasswordLength: PASSWORD_MIN_LENGTH,
+      maxPasswordLength: PASSWORD_MAX_LENGTH,
+      password: { hash: hashPassword, verify: verifyPassword },
+    },
+    disabledPaths: ["/sign-up/email"],
+    rateLimit: { enabled: true },
     telemetry: { enabled: false },
     socialProviders,
     advanced: {
+      ipAddress: { ipAddressHeaders: ["cf-connecting-ip"] },
       database: {
         generateId: () => generateUserId(),
       },
@@ -201,7 +242,18 @@ type AuthInstance = ReturnType<typeof buildAuth>;
 
 const instances = new WeakMap<Bindings, AuthInstance>();
 
-/** Better Auth 인스턴스 생성 또는 캐시 조회 */
+/**
+ * Better Auth 인스턴스 생성 또는 캐시 조회.
+ *
+ * - 비밀번호 가입은 공개 경로(`/api/auth/sign-up/email`)를 닫고, 허용 목록을 거치는
+ *   `/api/email-signup`과 개발자 로그인이 서버 안에서 `auth.api.signUpEmail`로만 받는다.
+ *   `disabledPaths`는 HTTP 라우터에서만 검사하므로 서버 내부 호출은 통과한다.
+ * - 비밀번호 사용자는 `emailVerified=false`다. Better Auth의 `requireLocalEmailVerified`
+ *   기본값 때문에 같은 이메일의 카카오·네이버 로그인이 이 계정에 자동으로 붙지 않는다
+ *   (선점 방지). 그 대신 해당 소셜 로그인은 "account not linked"로 실패한다.
+ * - rate limit은 `NODE_ENV=production`에서만 기본으로 켜지는데 Workers에는 그 값이 없어
+ *   명시적으로 켠다. 저장소가 isolate 메모리라 부분 방어다.
+ */
 export function createAuth(env: Bindings): AuthInstance {
   const cached = instances.get(env);
   if (cached) return cached;
