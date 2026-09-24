@@ -163,7 +163,7 @@ export function DriveProvider({
       const trashed = trashItems(refs);
       clearSelection();
       showToast(`${withObjectParticle(label)} 휴지통으로 이동했습니다`, {
-        label: "실행취소",
+        label: "실행 취소",
         run: () => restoreItems(trashed),
       });
     },
@@ -197,7 +197,7 @@ export function DriveProvider({
       showToast(
         `${withObjectParticle(label)} ${withDirectionParticle(`‘${targetName}’`)} 옮겼습니다`,
         {
-          label: "실행취소",
+          label: "실행 취소",
           run: () => undoMove(outcome),
         },
       );
@@ -395,12 +395,17 @@ export function DriveProvider({
         <ConfirmDialog
           title="영구 삭제"
           message={
-            <>
-              {withObjectParticle(describeCount(dialog.refs))} 영구 삭제합니다.
-              {dialog.refs.some((ref) => ref.kind === "folder") &&
-                " 폴더 안의 모든 항목도 함께 삭제됩니다."}{" "}
-              이 작업은 되돌릴 수 없습니다.
-            </>
+            <div>
+              <p>
+                {withObjectParticle(describeCount(dialog.refs))} 영구
+                삭제합니다.
+                {dialog.refs.some((ref) => ref.kind === "folder") &&
+                  " 폴더 안의 모든 항목도 함께 삭제됩니다."}
+              </p>
+              <p className="mt-1 text-zinc-500 dark:text-zinc-400">
+                이 작업은 되돌릴 수 없습니다.
+              </p>
+            </div>
           }
           confirmLabel="영구 삭제"
           isPending={isDeleting}

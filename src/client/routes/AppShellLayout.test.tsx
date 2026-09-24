@@ -316,7 +316,7 @@ describe("AppShellLayout (드라이브형 홈)", () => {
     expect(card("폴더 성탄절")).toHaveAttribute("aria-selected", "true");
   });
 
-  it("우클릭 메뉴 → 이동으로 다른 폴더에 옮기고, 실행취소로 되돌린다", () => {
+  it("우클릭 메뉴 → 이동으로 다른 폴더에 옮기고, 실행 취소로 되돌린다", () => {
     __loadFoldersForTests([folder(WORSHIP, "2026 주일 대예배")]);
     renderShell();
     const target = SEED_PRESENTATIONS[1];
@@ -379,6 +379,23 @@ describe("AppShellLayout (드라이브형 홈)", () => {
 
     expect(getPresentationById(target.id)?.trashedAt).toBeNull();
     expect(screen.getByText("휴지통이 비어 있습니다")).toBeInTheDocument();
+  });
+
+  it("휴지통 항목 우클릭 메뉴 → 영구 삭제 시 대화 상자를 띄운다", () => {
+    const trashed = {
+      ...SEED_PRESENTATIONS[0],
+      title: "성탄절 특별 예배",
+      trashedAt: "2026-09-20T12:00:00.000Z",
+    };
+    __loadDocumentsForTests([trashed, ...SEED_PRESENTATIONS.slice(1)]);
+    renderShell("/presentations/trash");
+
+    fireEvent.contextMenu(card(trashed.title));
+    fireEvent.click(screen.getByTestId("action-delete-forever"));
+
+    const dialog = screen.getByTestId("drive-confirm-dialog");
+    expect(dialog).toHaveTextContent("‘성탄절 특별 예배’를 영구 삭제합니다.");
+    expect(dialog).toHaveTextContent("이 작업은 되돌릴 수 없습니다.");
   });
 
   it("휴지통에서 항목을 영구 삭제하면 토스트에 항목 제목과 올바른 조사가 표시된다", async () => {

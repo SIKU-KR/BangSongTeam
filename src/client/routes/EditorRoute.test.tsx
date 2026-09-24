@@ -103,7 +103,7 @@ describe("EditorRoute (PowerPoint식 프레젠테이션 편집기)", () => {
     expect(screen.getAllByText("수정된 두 번째 가사")[0]).toBeInTheDocument();
   });
 
-  it("should toggle blackout test and lyrics hidden test", () => {
+  it("should toggle blackout preview and lyrics hidden preview", () => {
     renderEditor();
 
     const blackoutBtn = screen.getByTestId("test-blackout-btn");
@@ -112,7 +112,7 @@ describe("EditorRoute (PowerPoint식 프레젠테이션 편집기)", () => {
 
     const lyricsBtn = screen.getByTestId("test-lyrics-btn");
     fireEvent.click(lyricsBtn);
-    expect(screen.getByText("가사숨김(H) 해제")).toBeInTheDocument();
+    expect(screen.getByText("가사 숨김(H) 해제")).toBeInTheDocument();
   });
 
   it("should update typography and 3x3 position when controls are changed", () => {

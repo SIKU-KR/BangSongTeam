@@ -158,6 +158,14 @@ export function SongPickerModal({
   const sharedCount = search.data?.decks.length ?? 0;
   const isAdding = fork.isPending;
 
+  const emptyMessage = useMemo(() => {
+    if (search.isFetching) return "공유 라이브러리를 검색하는 중…";
+    if (searchQuery.trim()) return "일치하는 찬양곡이 없습니다.";
+    if (filter === "shared") return "아직 공유된 찬양곡이 없습니다.";
+    if (filter === "mine") return "보관함에 찬양곡이 없습니다.";
+    return "아직 등록되거나 공유된 찬양곡이 없습니다.";
+  }, [search.isFetching, searchQuery, filter]);
+
   return (
     <div
       role="dialog"
@@ -269,11 +277,7 @@ export function SongPickerModal({
             <div className="flex-1 overflow-y-auto divide-y divide-zinc-100 dark:divide-zinc-800/60">
               {entries.length === 0 ? (
                 <div className="p-8 text-center flex flex-col items-center justify-center gap-2.5 text-zinc-500">
-                  <p className="text-xs">
-                    {search.isFetching
-                      ? "공유 라이브러리를 검색하는 중…"
-                      : "일치하는 찬양곡이 없습니다."}
-                  </p>
+                  <p className="text-xs">{emptyMessage}</p>
                   <button
                     type="button"
                     onClick={() => setMode("create")}
