@@ -18,7 +18,7 @@
 ## 2. 세부 작업 체크리스트
 
 - [x] **Task 1.1: Vite SPA 프론트엔드 빌드 및 Tailwind CSS 구성**
-  - **대상 파일**: `apps/web/vite.config.ts`, `apps/web/index.html`, `apps/web/tailwind.config.js`
+  - **대상 파일**: `vite.config.ts`, `apps/web/index.html`, `apps/web/tailwind.config.js`
   - **선행 조건**: `docs/tasks/m0/tasks_4.md`
   - **구현 내용**:
     - `@cloudflare/vite-plugin`, `@vitejs/plugin-react` 플러그인 설정
@@ -26,7 +26,7 @@
   - **DoD (통과 기준)**: `pnpm --filter web build` 실행 시 번들링 에러 없이 `dist/` 빌드가 완료된다.
 
 - [x] **Task 1.2: Pretendard 로컬 웹폰트 번들링 및 글로벌 스타일 구성**
-  - **대상 파일**: `apps/web/src/index.css`, `apps/web/src/main.tsx`
+  - **대상 파일**: `src/client/index.css`, `src/client/main.tsx`
   - **선행 조건**: Task 1.1
   - **구현 내용**:
     - `pretendard` npm 패키지 설치 및 로컬 CSS import
@@ -35,7 +35,7 @@
   - **DoD (통과 기준)**: 브라우저 로드 시 네트워크 탭에 외부 폰트 요청 없이 Pretendard가 즉각 렌더링된다.
 
 - [x] **Task 1.3: 비-Chrome 브라우저 접속 감지 및 경고 배너 컴포넌트 구현**
-  - **대상 파일**: `apps/web/src/components/common/ChromeAlertBanner.tsx`
+  - **대상 파일**: `src/client/components/common/ChromeAlertBanner.tsx`
   - **선행 조건**: Task 1.1
   - **구현 내용**:
     - User-Agent Client Hints(`navigator.userAgentData?.brands`)로 'Google Chrome' 여부 판별
@@ -44,7 +44,7 @@
   - **DoD (통과 기준)**: 비-Chrome 에이전트 Mock 테스트 시 배너가 표시되고 닫기 동작이 정상 작동한다.
 
 - [x] **Task 1.4: 16:9 가상 스테이지 반응형 스케일러 훅 구현 및 테스트**
-  - **대상 파일**: `apps/web/src/hooks/useStageScale.ts`, `apps/web/src/hooks/useStageScale.test.ts`
+  - **대상 파일**: `src/client/hooks/useStageScale.ts`, `src/client/hooks/useStageScale.test.ts`
   - **선행 조건**: Task 1.1
   - **구현 내용**:
     - 1920x1080 해상도를 브라우저 화면에 맞춰 비율 왜곡 없이 CSS `scale`, `translateX`, `translateY`를 계산하는 훅
@@ -53,7 +53,7 @@
   - **DoD (통과 기준)**: `pnpm --filter web vitest run src/hooks/useStageScale.test.ts`가 100% 통과한다.
 
 - [x] **Task 1.5: 3-Layer Stage Layer 3 - Typography & Text Box 컴포넌트 구현**
-  - **대상 파일**: `apps/web/src/components/stage/TextLayer.tsx`
+  - **대상 파일**: `src/client/components/stage/TextLayer.tsx`
   - **선행 조건**: Task 1.4
   - **구현 내용**:
     - 위치 계산: `left: ${pos.xPercent}%`, `top: ${pos.yPercent}%`, `width: ${pos.widthPercent}%`
@@ -66,7 +66,7 @@
   - **DoD (통과 기준)**: `pnpm --filter web exec tsc --noEmit`이 통과하고 앵커별 DOM transform 스타일이 정확히 적용된다.
 
 - [x] **Task 1.6: 3-Layer Stage Layer 2 - Black Overlay 컴포넌트 구현**
-  - **대상 파일**: `apps/web/src/components/stage/OverlayLayer.tsx`
+  - **대상 파일**: `src/client/components/stage/OverlayLayer.tsx`
   - **선행 조건**: Task 1.4
   - **구현 내용**:
     - 순수 CSS 검정 오버레이: `background-color: #000000; opacity: ${opacity / 100};`
@@ -75,7 +75,7 @@
   - **DoD (통과 기준)**: `pnpm --filter web exec tsc --noEmit`이 통과하고 blackout prop 변경 시 전체가 암전된다.
 
 - [x] **Task 1.7: 3-Layer Stage Layer 1 - 무결점 전환 Dual Video A/B 교차 루프 컴포넌트 구현**
-  - **대상 파일**: `apps/web/src/components/stage/VideoLayer.tsx`
+  - **대상 파일**: `src/client/components/stage/VideoLayer.tsx`
   - **선행 조건**: Task 1.4
   - **구현 내용**:
     - 2개의 `<video autoplay muted loop playsinline>` 태그(`Video-A`, `Video-B`)를 겹쳐 배치
@@ -84,7 +84,7 @@
   - **DoD (통과 기준)**: `pnpm --filter web exec tsc --noEmit`이 통과하고 비디오 소스 교체 시 크로스페이드 상태 머신이 정상 동작한다.
 
 - [x] **Task 1.8: 3-Layer SlideStage 통합 컴포넌트 완성**
-  - **대상 파일**: `apps/web/src/components/stage/SlideStage.tsx`
+  - **대상 파일**: `src/client/components/stage/SlideStage.tsx`
   - **선행 조건**: Task 1.5, Task 1.6, Task 1.7
   - **구현 내용**:
     - 1920x1080 가상 스테이지 컨테이너에 `VideoLayer`, `OverlayLayer`, `TextLayer`를 z-index 순서로 배치

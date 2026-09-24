@@ -21,11 +21,11 @@
 
 ## 1. 아키텍처 가드레일 & 준수 사항
 
-1. **로컬이 1차 원천**: 이 단계에서 서버 API·로그인은 건드리지 않는다. `apps/web/src`에서 `fetch`를 추가하지 않는다. 서버 동기화는 M3-B다.
+1. **로컬이 1차 원천**: 이 단계에서 서버 API·로그인은 건드리지 않는다. `src/client`에서 `fetch`를 추가하지 않는다. 서버 동기화는 M3-B다.
 2. **스토어가 단일 진입점**: 영속화는 `presentationStore`의 뮤테이터 경로 한 곳에서만 일어난다. 컴포넌트가 직접 IndexedDB를 호출하지 않는다.
 3. **저장 실패를 삼키지 않는다**: `QuotaExceededError`, 시크릿 모드, IndexedDB 차단 환경에서 조용히 인메모리로 폴백하지 않는다. 사용자에게 '이 브라우저에 저장할 수 없습니다'를 보여준다. 저장된 줄 알고 예배 당일에 잃는 것이 최악의 시나리오다.
 4. **스키마 검증**: 저장본을 읽을 때 `PresentationSchema.safeParse`로 검증한다. 실패한 문서는 삭제하지 않고 격리 보관한다.
-5. **DB 직접 임포트 금지**: `apps/web/src`는 `packages/db`를 import하지 않는다 (ESLint 강제).
+5. **DB 직접 임포트 금지**: `src/client`는 `packages/db`를 import하지 않는다 (ESLint 강제).
 6. **단일 원천 타입**: 저장 값의 타입은 `@repo/shared`의 `Presentation`/`Deck`을 그대로 쓴다. 저장 전용 interface를 새로 선언하지 않는다.
 7. **TECH_SPEC §5.5 Phase 2 규칙**을 구현 기준으로 삼는다.
 
@@ -40,11 +40,11 @@
   - **선행 조건**: 없음
   - **구현 내용**:
     - `idb`를 dependencies에 추가 (TECH_SPEC 7.7 지정 라이브러리)
-    - `fake-indexeddb`를 devDependencies에 추가하고 `apps/web/src/test/setup.ts`에서 로드해 jsdom 환경에 IndexedDB를 제공
+    - `fake-indexeddb`를 devDependencies에 추가하고 `src/client/test/setup.ts`에서 로드해 jsdom 환경에 IndexedDB를 제공
   - **DoD (통과 기준)**: `pnpm --filter web exec tsc --noEmit`이 에러 없이 통과한다.
 
 - [x] **Task 1.2: 오프라인 DB 오픈 유틸리티 단위 테스트 작성 (TDD Red)**
-  - **대상 파일**: `apps/web/src/lib/storage/db.test.ts`
+  - **대상 파일**: `src/client/lib/storage/db.test.ts`
   - **선행 조건**: Task 1.1
   - **구현 내용**:
     - 테스트 1: `getOfflineDB()` 호출 시 `worship-offline-db` v1이 열리고 `presentations`·`decks`·`backgrounds`·`sync_meta` 스토어가 모두 생성된다
@@ -54,7 +54,7 @@
   - **DoD (통과 기준)**: `pnpm --filter web vitest run src/lib/storage/db.test.ts`가 Red(구현 부재로 실패)를 명확히 보고한다.
 
 - [x] **Task 1.3: 오프라인 DB 오픈 유틸리티 구현 (TDD Green)**
-  - **대상 파일**: `apps/web/src/lib/storage/db.ts`
+  - **대상 파일**: `src/client/lib/storage/db.ts`
   - **선행 조건**: Task 1.2
   - **구현 내용**:
     - TECH_SPEC §5.4-4의 `WorshipOfflineDB` 스키마(Version 1)를 그대로 구현
@@ -63,7 +63,7 @@
   - **DoD (통과 기준)**: `pnpm --filter web vitest run src/lib/storage/db.test.ts`가 100% 통과(Green)한다.
 
 - [x] **Task 1.4: 프레젠테이션 리포지토리 단위 테스트 작성 (TDD Red)**
-  - **대상 파일**: `apps/web/src/lib/storage/presentationRepository.test.ts`
+  - **대상 파일**: `src/client/lib/storage/presentationRepository.test.ts`
   - **선행 조건**: Task 1.3
   - **구현 내용**:
     - 테스트 1: `savePresentation(p)` 후 `loadAllPresentations()`가 동일 문서를 반환한다 (문서 단위 put)
@@ -74,7 +74,7 @@
   - **DoD (통과 기준)**: `pnpm --filter web vitest run src/lib/storage/presentationRepository.test.ts`가 Red를 명확히 보고한다.
 
 - [x] **Task 1.5: 프레젠테이션 리포지토리 구현 (TDD Green)**
-  - **대상 파일**: `apps/web/src/lib/storage/presentationRepository.ts`
+  - **대상 파일**: `src/client/lib/storage/presentationRepository.ts`
   - **선행 조건**: Task 1.4
   - **구현 내용**:
     - `savePresentation` / `loadAllPresentations` / `deletePresentation` / `clearAll` 제공
@@ -83,7 +83,7 @@
   - **DoD (통과 기준)**: `pnpm --filter web vitest run src/lib/storage/presentationRepository.test.ts`가 100% 통과(Green)한다.
 
 - [x] **Task 1.6: 구 localStorage 보관함 마이그레이션 (문서 원안에 없던 추가 태스크)**
-  - **대상 파일**: `apps/web/src/lib/storage/songRepository.ts`
+  - **대상 파일**: `src/client/lib/storage/songRepository.ts`
   - **선행 조건**: Task 1.5
   - **구현 내용**:
     - 커밋 0f68563이 만든 `worship_user_songs_v1` 키를 부팅 시 1회 IndexedDB로 이관
@@ -94,7 +94,7 @@
 ### Phase M3A-2: 스토어 연동
 
 - [x] **Task 2.1: presentationStore 영속성 연동 테스트 작성 (TDD Red)**
-  - **대상 파일**: `apps/web/src/features/presentation/presentationStore.persistence.test.ts`
+  - **대상 파일**: `src/client/features/presentation/presentationStore.persistence.test.ts`
   - **선행 조건**: Task 1.5
   - **구현 내용**:
     - 테스트 1: 임의 뮤테이터(`updateSongStyle` 등) 호출 후 디바운스 시간이 지나면 해당 문서 1건만 저장된다
@@ -105,7 +105,7 @@
   - **DoD (통과 기준)**: `pnpm --filter web vitest run src/features/presentation/presentationStore.persistence.test.ts`가 Red를 명확히 보고한다.
 
 - [x] **Task 2.2: presentationStore 영속성 연동 구현 (TDD Green)**
-  - **대상 파일**: `apps/web/src/features/presentation/presentationStore.ts`
+  - **대상 파일**: `src/client/features/presentation/presentationStore.ts`
   - **선행 조건**: Task 2.1
   - **구현 내용**:
     - `emitChange` 경로에 문서 단위 디바운스(≈300ms) 저장 스케줄러 연결
@@ -115,7 +115,7 @@
   - **구현 메모**: 저장 스케줄러를 `emitChange()` 한 곳에 걸었다. 모든 뮤테이터가 이 함수로 끝나므로 뮤테이터마다 저장 호출을 흩뿌릴 필요가 없다. `persistenceError`는 스토어가 아니라 `lib/storage/persistenceStatus.ts`에 두어 곡 보관함과 공유한다.
 
 - [x] **Task 2.3: 앱 부팅 하이드레이션 게이트 및 언로드 flush 연결**
-  - **대상 파일**: `apps/web/src/App.tsx`
+  - **대상 파일**: `src/client/App.tsx`
   - **선행 조건**: Task 2.2
   - **구현 내용**:
     - 라우터 렌더 전에 `hydrateFromStorage()`를 1회 실행하고, 완료 전까지 초기 로딩 화면을 보여준다 (시드 데이터가 잠깐 보였다가 교체되는 깜빡임 금지)
@@ -124,7 +124,7 @@
   - **구현 메모**: 하이드레이션 게이트가 생기면서 `App.test.tsx`의 단언이 동기 `getBy*`에서 `await findBy*`로 바뀌었다.
 
 - [x] **Task 2.4: 저장 실패 경고 배너 컴포넌트 구현**
-  - **대상 파일**: `apps/web/src/components/common/StorageWarningBanner.tsx`
+  - **대상 파일**: `src/client/components/common/StorageWarningBanner.tsx`
   - **선행 조건**: Task 2.2
   - **구현 내용**:
     - `persistenceError`가 있을 때 '이 브라우저에 저장할 수 없습니다 — 작업이 사라질 수 있습니다' 배너 표시
@@ -133,7 +133,7 @@
   - **DoD (통과 기준)**: `pnpm --filter web vitest run src/components/common/StorageWarningBanner.test.tsx`가 100% 통과(Green)한다.
 
 - [x] **Task 2.5: 곡 보관함 저장소 이관 (문서 원안에 없던 추가 태스크)**
-  - **대상 파일**: `apps/web/src/features/editor/songLibraryStore.ts`
+  - **대상 파일**: `src/client/features/editor/songLibraryStore.ts`
   - **선행 조건**: Task 1.6
   - **구현 내용**:
     - localStorage 직접 접근을 걷어내고 `songRepository`를 통해 IndexedDB에 저장
@@ -144,7 +144,7 @@
 ### Phase M3A-3: 통합 검증
 
 - [x] **Task 3.1: 영속성 왕복(Round-trip) 통합 테스트 작성 및 통과**
-  - **대상 파일**: `apps/web/src/features/presentation/persistenceRoundtrip.test.tsx`
+  - **대상 파일**: `src/client/features/presentation/persistenceRoundtrip.test.tsx`
   - **선행 조건**: Task 2.4
   - **구현 내용**:
     - 통합 시나리오: 새 세트 생성 → 가사 붙여넣기로 5곡 추가 → 곡 순서·스타일·배경 변경 → `flushPendingWrites()` → 스토어 리셋(새 탭 시뮬레이션) → `hydrateFromStorage()` → 곡 수·순서·스타일·배경이 모두 동일함을 검증
@@ -161,7 +161,7 @@
   - **구현 메모**: 명령 검증을 통과했다. 실사용 검증에서 결함 2건을 찾아 Task 3.3·3.4로 고쳤고, 그 회귀 테스트를 포함해 현재 **테스트 374개 / 54파일 Green**이다. 운영자의 최종 확인(브라우저 완전 종료 후 복원, 주일 예배 1회 송출)만 남았다.
 
 - [x] **Task 3.3: 곡 복제 시 덱 id가 스키마를 어겨 세트 전체가 사라지는 결함 수정 (실사용 검증 중 발견)**
-  - **대상 파일**: `apps/web/src/features/presentation/presentationStore.ts`
+  - **대상 파일**: `src/client/features/presentation/presentationStore.ts`
   - **선행 조건**: Task 3.2
   - **구현 내용**:
     - `duplicateSongInPresentation`이 복제 덱 id를 `deck_${8자}`로 만들었다. `DeckSchema.id`와 `PresentationItemSchema.deckId`는 `z.string().uuid()`라 저장은 되지만 다음 부팅의 `PresentationSchema.safeParse`가 실패한다
@@ -170,7 +170,7 @@
   - **DoD (통과 기준)**: `pnpm --filter web vitest run src/features/presentation/persistenceRoundtrip.test.ts`가 100% 통과(Green)한다.
 
 - [x] **Task 3.4: 블랙아웃이 가사를 가리지 못하는 결함 수정 (실사용 검증 중 발견)**
-  - **대상 파일**: `apps/web/src/components/stage/SlideStage.tsx`
+  - **대상 파일**: `src/client/components/stage/SlideStage.tsx`
   - **선행 조건**: Task 3.3
   - **구현 내용**:
     - `OverlayLayer`(z-10)만 불투명도 1로 올리고 `TextLayer`(z-20)는 그대로 둬서, 운영자가 `B`를 눌러도 검은 화면 위에 가사가 계속 보였다. PRD 144줄의 '화면 검게 하기'가 성립하지 않는다
@@ -179,7 +179,7 @@
   - **DoD (통과 기준)**: `pnpm --filter web vitest run src/components/stage/SlideStage.test.tsx`가 100% 통과(Green)한다.
 
 - [x] **Task 3.5: 격리된 저장본을 사용자에게 알리기 (TECH_SPEC §5.5 규칙 5 미이행분)**
-  - **대상 파일**: `apps/web/src/lib/storage/persistenceStatus.ts`
+  - **대상 파일**: `src/client/lib/storage/persistenceStatus.ts`
   - **선행 조건**: Task 3.2
   - **구현 내용**:
     - `hydrateFromStorage()`가 `loadAllPresentations()`의 `corrupted`를 버리고 있어, 규칙 5의 '격리 보관한 뒤 사용자에게 알린다' 중 뒷부분이 빠져 있었다

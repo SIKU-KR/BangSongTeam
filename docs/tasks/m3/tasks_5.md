@@ -28,7 +28,7 @@
 ## 2. 세부 작업 체크리스트
 
 - [x] **Task 4.1: 동기화 상태 스토어 (TDD)**
-  - **대상 파일**: `apps/web/src/lib/sync/syncStatus.ts`
+  - **대상 파일**: `src/client/lib/sync/syncStatus.ts`
   - **선행 조건**: 없음
   - **구현 내용**:
     - `idle` / `syncing` / `synced` / `offline` / `error` 상태와 구독 훅
@@ -36,7 +36,7 @@
   - **DoD (통과 기준)**: `pnpm --filter web vitest run src/lib/sync/syncStatus.test.ts`가 100% 통과(Green)한다.
 
 - [x] **Task 4.2: 서버 통신 모듈 (TDD)**
-  - **대상 파일**: `apps/web/src/lib/sync/presentationSync.ts`
+  - **대상 파일**: `src/client/lib/sync/presentationSync.ts`
   - **선행 조건**: Task 4.1
   - **구현 내용**:
     - `pushPresentation(doc)` / `pullPresentations()` / `pushDeck(deck)` / `pullDecks()`
@@ -45,7 +45,7 @@
   - **DoD (통과 기준)**: `pnpm --filter web vitest run src/lib/sync/presentationSync.test.ts`가 100% 통과(Green)한다.
 
 - [x] **Task 4.3: 디바운스 push 스케줄러 (TDD)**
-  - **대상 파일**: `apps/web/src/lib/sync/syncScheduler.ts`
+  - **대상 파일**: `src/client/lib/sync/syncScheduler.ts`
   - **선행 조건**: Task 4.2
   - **구현 내용**:
     - 문서 단위 디바운스(≈2s). IndexedDB(300ms)보다 길게 잡아 네트워크 왕복을 줄인다
@@ -55,7 +55,7 @@
   - **구현 메모**: 큐(`Map`)와 in-flight 체인을 IndexedDB 쪽과 완전히 분리했다. 같은 문서를 연달아 고치면 마지막 값 하나만 올라간다.
 
 - [x] **Task 4.4: LWW 병합 (TDD)**
-  - **대상 파일**: `apps/web/src/lib/sync/mergeDocuments.ts`
+  - **대상 파일**: `src/client/lib/sync/mergeDocuments.ts`
   - **선행 조건**: Task 4.2
   - **구현 내용**:
     - 문서 id 기준으로 로컬·서버를 합치고, 양쪽에 있으면 `updatedAt`이 늦은 쪽을 택한다
@@ -64,7 +64,7 @@
   - **DoD (통과 기준)**: `pnpm --filter web vitest run src/lib/sync/mergeDocuments.test.ts`가 100% 통과(Green)한다.
 
 - [x] **Task 4.5: 스토어 연동 및 부팅 동기화**
-  - **대상 파일**: `apps/web/src/features/presentation/presentationStore.ts`, `apps/web/src/App.tsx`
+  - **대상 파일**: `src/client/features/presentation/presentationStore.ts`, `src/client/App.tsx`
   - **선행 조건**: Task 4.3, Task 4.4
   - **구현 내용**:
     - `emitChange()`에 `scheduleDocumentPush()`를 `schedulePersist()` 옆에 붙인다 (뮤테이터 30개를 한 줄로 덮는다)
@@ -74,7 +74,7 @@
   - **구현 메모**: 부팅 동기화는 `await`하지 않고 `void runBootSync()`로 띄운다. 로컬 하이드레이션이 끝나는 즉시 화면을 그리고 서버 병합은 뒤에 붙인다 — 네트워크가 느린 교회에서 첫 화면이 밀리면 안 된다. 서버에서 받은 문서는 로컬에도 적어 둬야 다음 부팅에 네트워크 없이 열린다.
 
 - [x] **Task 4.6: 동기화 상태 표시 연결**
-  - **대상 파일**: `apps/web/src/features/editor/EditorHeader.tsx`
+  - **대상 파일**: `src/client/features/editor/EditorHeader.tsx`
   - **선행 조건**: Task 4.5
   - **구현 내용**:
     - 현재 '자동 저장됨'은 **데이터 바인딩이 전혀 없는 정적 초록 점**이라, 저장이 실패하는 중에도 '저장됨'이라고 한다

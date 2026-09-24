@@ -4,7 +4,6 @@ build/
 out/
 .wrangler/
 .dev.vars
-.turbo/
 pnpm-lock.yaml
 coverage/
 worker-configuration.d.ts

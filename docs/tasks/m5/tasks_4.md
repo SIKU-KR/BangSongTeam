@@ -1,6 +1,6 @@
 # Goal: [M5-4] LLM 가사 정규화 파이프라인 (packages/shared, packages/db, worker)
 
-> **2026-09-23 범위 변경**: 이 태스크의 산출물은 **전부 제거됐다**. LLM 가사 정규화와 가사 라이브러리는 MVP 범위에서 빠졌다 (`packages/db/drizzle/0005_remove_catalog.sql`). 이 문서는 이력으로만 남긴다.
+> **2026-09-23 범위 변경**: 이 태스크의 산출물은 **전부 제거됐다**. LLM 가사 정규화와 가사 라이브러리는 MVP 범위에서 빠졌다 (`migrations/0005_remove_catalog.sql`). 이 문서는 이력으로만 남긴다.
 
 > **마일스톤**: M5 (공유·가사 라이브러리)
 > **태스크 번호**: `tasks_4.md`
@@ -33,7 +33,7 @@
 ## 2. 세부 작업 체크리스트
 
 - [x] **Task 4.1: 정규화 순수 유틸 (TDD)**
-  - **대상 파일**: `packages/shared/src/utils/normalization.ts`, `normalization.test.ts`
+  - **대상 파일**: `src/shared/utils/normalization.ts`, `normalization.test.ts`
   - **선행 조건**: 없음
   - **구현 내용**:
     - `normalizeLyricsText(text)` — 줄 앞뒤 공백 제거, 연속 빈 줄 하나로, 앞뒤 빈 줄 제거 (절 사이 빈 줄 통일)
@@ -42,39 +42,39 @@
     - `extractModelText(raw)` — `<think>` 블록과 코드펜스를 걷어낸다 (thinking off가 무시될 때 대비)
     - `isPlausiblyComplete(candidate, versions)` — 가장 짧은 입력 버전의 80%보다 줄이 적으면 거부. `verifyNormalization`은 '없는 줄'만 잡고 '빠진 줄'은 못 잡는다
     - `suggestMaxTokens(versions)` — 입력 길이에 맞춘 출력 상한
-  - **DoD (통과 기준)**: `pnpm vitest run packages/shared/src/utils/normalization.test.ts`가 100% 통과(Green)한다.
+  - **DoD (통과 기준)**: `pnpm vitest run src/shared/utils/normalization.test.ts`가 100% 통과(Green)한다.
 
 - [x] **Task 4.2: 정규화 쿼리 헬퍼 (TDD)**
-  - **대상 파일**: `packages/db/src/queries/normalization.ts`, `normalization.test.ts`
+  - **대상 파일**: `src/db/queries/normalization.ts`, `normalization.test.ts`
   - **선행 조건**: Task 4.1
   - **구현 내용**:
     - `getNormalizationInput(db, catalogId)` — 카탈로그와 루트 버전들, 비교용 revision(`updated_at`·`version_count`)
     - `applyCanonical(db, catalogId, { canonical, source, expected })` — `status != 'locked'`이고 revision이 그대로일 때만 쓴다(compare-and-set). D1에는 대화형 트랜잭션이 없어, 모델을 기다리는 사이 새 버전이 들어오면 옛 입력으로 만든 결과가 새 상태를 덮을 수 있다
-  - **DoD (통과 기준)**: `pnpm vitest run packages/db/src/queries/normalization.test.ts`가 100% 통과(Green)한다.
+  - **DoD (통과 기준)**: `pnpm vitest run src/db/queries/normalization.test.ts`가 100% 통과(Green)한다.
 
 - [x] **Task 4.3: 정규화 실행기 (TDD)**
-  - **대상 파일**: `apps/web/worker/lib/normalization.ts`, `normalization.test.ts`
+  - **대상 파일**: `src/worker/lib/normalization.ts`, `normalization.test.ts`
   - **선행 조건**: Task 4.2
   - **구현 내용**:
     - `NORMALIZATION_MODEL`, `ModelRunner` 타입, `createWorkersAiRunner(ai, gatewayId?)` — `choices[0].message.content`와 `finish_reason`을 읽는다. `AI_GATEWAY_ID`가 있으면 AI Gateway로 보낸다 (호출 로그·요청 제한·비용 상한, PRD 7.1)
     - `normalizeCatalog(db, catalogId, runner)` → `llm | popular_root | skipped_locked | skipped_single | stale | missing`
     - 케이스: 검증 통과, 환각, 모델 예외, `<think>` 누출, `length` 잘림, 지나치게 짧은 출력, 잠긴 곡, 버전 1개
-  - **DoD (통과 기준)**: `pnpm vitest run apps/web/worker/lib/normalization.test.ts`가 100% 통과(Green)한다.
+  - **DoD (통과 기준)**: `pnpm vitest run src/worker/lib/normalization.test.ts`가 100% 통과(Green)한다.
 
 - [x] **Task 4.4: 백그라운드 실행 헬퍼**
-  - **대상 파일**: `apps/web/worker/lib/background.ts`
+  - **대상 파일**: `src/worker/lib/background.ts`
   - **선행 조건**: 없음
   - **구현 내용**: `runInBackground(c, label, task)` — `waitUntil`로 넘기고 오류는 로그로만 남긴다. 실행 컨텍스트가 없는 호출(일부 테스트)에서도 던지지 않는다
   - **DoD (통과 기준)**: `pnpm --filter web exec tsc --noEmit`이 에러 없이 통과한다.
 
 - [x] **Task 4.5: 기여 뒤 정규화 트리거**
-  - **대상 파일**: `apps/web/worker/routes/decks.ts`, `worker/deps.ts`, `worker/types.ts`, `worker/routes/lyrics.test.ts`
+  - **대상 파일**: `src/worker/routes/decks.ts`, `worker/deps.ts`, `worker/types.ts`, `worker/routes/lyrics.test.ts`
   - **선행 조건**: Task 4.3, 4.4
   - **구현 내용**:
     - `AppDeps.modelRunner?: (env) => ModelRunner` — 기본은 `env.AI`
     - `PUT /api/decks/:id`에서 기여가 `changed && versionCount >= 2 && !locked`면 백그라운드 정규화
     - 테스트: `cloudflare:test`의 `createExecutionContext`/`waitOnExecutionContext`로 백그라운드 작업 완료를 기다린 뒤 카탈로그 상태를 본다. 같은 가사 재저장은 모델을 부르지 않는다
-  - **DoD (통과 기준)**: `pnpm vitest run apps/web/worker/routes/lyrics.test.ts`가 100% 통과(Green)한다.
+  - **DoD (통과 기준)**: `pnpm vitest run src/worker/routes/lyrics.test.ts`가 100% 통과(Green)한다.
 
 - [x] **Task 4.6: 전체 검증**
   - **대상 파일**: 없음
@@ -86,7 +86,7 @@
 ## 3. 검증 명령어
 
 ```bash
-pnpm vitest run packages/shared/src/utils/normalization.test.ts packages/db/src/queries/normalization.test.ts apps/web/worker/
+pnpm vitest run src/shared/utils/normalization.test.ts src/db/queries/normalization.test.ts src/worker/
 pnpm typecheck && pnpm lint && pnpm test
 ```
 

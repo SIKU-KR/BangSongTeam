@@ -9,7 +9,7 @@
 
 ## 1. 아키텍처 가드레일 & 준수 사항
 
-- **패키지 격리 원칙**: `packages/db`는 Worker 백엔드 전용 패키지다. 프론트엔드(`apps/web/src`)에서 `packages/db`를 직접 임포트하는 행위를 ESLint `no-restricted-imports` 규칙으로 차단한다.
+- **패키지 격리 원칙**: `packages/db`는 Worker 백엔드 전용 패키지다. 프론트엔드(`src/client`)에서 `packages/db`를 직접 임포트하는 행위를 ESLint `no-restricted-imports` 규칙으로 차단한다.
 - **TypeScript 엄격 모드**: `strict: true`, `noImplicitAny: true`, `target: "ES2022"`, `moduleResolution: "Bundler"`를 기본 강제한다.
 
 ---
@@ -38,9 +38,9 @@
   - **선행 조건**: Task 1.1
   - **구현 내용**:
     - `@repo/eslint-config` 패키지 매니페스트 선언
-    - `no-restricted-imports` 규칙을 선언하여 `apps/web/src` 파일에서 `@repo/db` 또는 `packages/db` 임포트 시 ESLint 에러를 발생시키는 규칙 정의
+    - `no-restricted-imports` 규칙을 선언하여 `src/client` 파일에서 `@repo/db` 또는 `packages/db` 임포트 시 ESLint 에러를 발생시키는 규칙 정의
     - TypeScript 파서(`@typescript-eslint/parser`) 및 추천 린트 룰셋 연동
-  - **DoD (통과 기준)**: 프론트엔드 경로(`apps/web/src/test.ts`)에서 `@repo/db` 임포트 시 ESLint 위반 에러가 정상 출력된다.
+  - **DoD (통과 기준)**: 프론트엔드 경로(`src/client/test.ts`)에서 `@repo/db` 임포트 시 ESLint 위반 에러가 정상 출력된다.
 
 ---
 

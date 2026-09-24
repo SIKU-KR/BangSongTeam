@@ -1,6 +1,6 @@
 # Goal: [M5-6] 운영 런북·2계정 E2E·문서 정합화
 
-> **2026-09-23 범위 변경**: LLM 가사 정규화와 가사 라이브러리(카탈로그·가사 기여·대표 가사·곡 식별)는 MVP에서 제거됐다 (`packages/db/drizzle/0005_remove_catalog.sql`). 공유 라이브러리는 같은 곡을 여러 사람이 따로 공개하는 게시판(가져간 횟수순)만 남는다. 이 문서의 해당 부분은 이력으로 남긴다.
+> **2026-09-23 범위 변경**: LLM 가사 정규화와 가사 라이브러리(카탈로그·가사 기여·대표 가사·곡 식별)는 MVP에서 제거됐다 (`migrations/0005_remove_catalog.sql`). 공유 라이브러리는 같은 곡을 여러 사람이 따로 공개하는 게시판(가져간 횟수순)만 남는다. 이 문서의 해당 부분은 이력으로 남긴다.
 
 > **마일스톤**: M5 (공유·가사 라이브러리)
 > **태스크 번호**: `tasks_6.md`
@@ -20,7 +20,7 @@
 
 ## 1. 아키텍처 가드레일 & 준수 사항
 
-1. **운영 SQL은 한 곳에서 정의하고 테스트한다**: `packages/db/src/ops/moderationSql.ts`가 정본이다. 테스트가 실제 마이그레이션 스키마에 대해 실행하고, 런북에 글자 그대로 실려 있는지 확인한다.
+1. **운영 SQL은 한 곳에서 정의하고 테스트한다**: `src/db/ops/moderationSql.ts`가 정본이다. 테스트가 실제 마이그레이션 스키마에 대해 실행하고, 런북에 글자 그대로 실려 있는지 확인한다.
 2. **관찰 가능한 사실만 완료로 적는다**: 로컬에서 확인할 수 없는 것(실제 Qwen, 운영 D1)은 남은 일로 적는다 (docs/tasks/AGENTS.md §2).
 3. **E2E는 실제 라우트로**: `createApp({ readSession, modelRunner })`로 프로덕션 라우트를 그대로 지나간다.
 
@@ -29,25 +29,25 @@
 ## 2. 세부 작업 체크리스트
 
 - [x] **Task 6.1: 운영 SQL 정본 (TDD)**
-  - **대상 파일**: `packages/db/src/ops/moderationSql.ts`, `moderationSql.test.ts`
+  - **대상 파일**: `src/db/ops/moderationSql.ts`, `moderationSql.test.ts`
   - **선행 조건**: `tasks_5.md` 완료
   - **구현 내용**: 신고 목록·처리·반려, 게시 중단·해제, 다시 공개된 사본 찾기, 대표 가사 잠금·해제, 곡 분리(새 카탈로그·버전 이동·버전 수 재계산), 카탈로그 삭제. `:name` 자리표시자. better-sqlite3로 실제 스키마에 실행
-  - **DoD (통과 기준)**: `pnpm vitest run packages/db/src/ops/moderationSql.test.ts`가 100% 통과(Green)한다.
+  - **DoD (통과 기준)**: `pnpm vitest run src/db/ops/moderationSql.test.ts`가 100% 통과(Green)한다.
 
 - [x] **Task 6.2: 운영 런북**
-  - **대상 파일**: `docs/ops/moderation-runbook.md`, `packages/db/src/ops/runbook.test.ts`
+  - **대상 파일**: `docs/ops/moderation-runbook.md`, `src/db/ops/runbook.test.ts`
   - **선행 조건**: Task 6.1
   - **구현 내용**: `wrangler d1 execute` 실행법(자리표시자 치환, 여러 줄 가사는 `--file`), 신고 확인, 게시 중단, 대표 가사 교정·잠금, 곡 분리, 카탈로그 삭제, Qwen 원격 확인, AI Gateway 비용 상한. 모든 SQL이 정본과 글자 그대로 같은지 테스트
-  - **DoD (통과 기준)**: `pnpm vitest run packages/db/src/ops/runbook.test.ts`가 100% 통과(Green)한다.
+  - **DoD (통과 기준)**: `pnpm vitest run src/db/ops/runbook.test.ts`가 100% 통과(Green)한다.
 
 - [x] **Task 6.3: 2계정 E2E**
-  - **대상 파일**: `apps/web/worker/e2e/sharing.e2e.test.ts`
+  - **대상 파일**: `src/worker/e2e/sharing.e2e.test.ts`
   - **선행 조건**: Task 6.1
   - **구현 내용**:
     - (a) A 공개 → B 검색(미리보기만) → 상세 → 가져오기 → 세트 복제본 저장 → B가 받은 세트의 슬라이드·스타일이 원본과 같고 비공개, A의 가져간 횟수 1
     - (b) A·B가 같은 곡을 띄어쓰기만 다르게 등록 → 백그라운드 정규화 → `normalized`/`llm`, `verifyNormalization` 통과, 검색에 2명 등록
     - (b') 모델이 없는 줄을 지어내면 `popular_root`
-  - **DoD (통과 기준)**: `pnpm vitest run apps/web/worker/e2e/`가 100% 통과(Green)한다.
+  - **DoD (통과 기준)**: `pnpm vitest run src/worker/e2e/`가 100% 통과(Green)한다.
 
 - [x] **Task 6.4: 브라우저 실검증 (dev login 2계정)**
   - **대상 파일**: 이 문서 §4
@@ -71,9 +71,9 @@
 ## 3. 검증 명령어
 
 ```bash
-pnpm vitest run packages/db/src/ops apps/web/worker/e2e
+pnpm vitest run src/db/ops src/worker/e2e
 pnpm typecheck && pnpm lint && pnpm test && pnpm --filter web build
-grep -rn "COMMUNITY_SONGS" apps/web/src   # 0건
+grep -rn "COMMUNITY_SONGS" src/client   # 0건
 ```
 
 ---

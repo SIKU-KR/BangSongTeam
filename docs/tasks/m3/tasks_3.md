@@ -31,7 +31,7 @@
 ## 2. 세부 작업 체크리스트
 
 - [x] **Task 2.1: 문서 스키마 및 API 계약 확장 (TDD Red 포함)**
-  - **대상 파일**: `packages/shared/src/schemas/api.ts`
+  - **대상 파일**: `src/shared/schemas/api.ts`
   - **선행 조건**: 없음
   - **구현 내용**:
     - `PresentationDocumentSchema` — `PresentationSchema`에서 `items[].deck`을 필수로 좁힌 것. 로컬 IndexedDB 문서 모양과 1:1이다
@@ -40,7 +40,7 @@
   - **DoD (통과 기준)**: `pnpm --filter @repo/shared vitest run src/schemas/api.test.ts`가 100% 통과(Green)한다.
 
 - [x] **Task 2.2: 행↔DTO 매퍼 구현 (TDD)**
-  - **대상 파일**: `packages/db/src/queries/mappers.ts`
+  - **대상 파일**: `src/db/queries/mappers.ts`
   - **선행 조건**: Task 2.1
   - **구현 내용**:
     - `toSharedDeck(row)` / `toDeckRow(deck)` — JSON TEXT 컬럼(`slides`, `style`)과 `Date` ↔ ISO 문자열 변환
@@ -49,7 +49,7 @@
   - **DoD (통과 기준)**: `pnpm --filter @repo/db vitest run src/queries/mappers.test.ts`가 100% 통과(Green)한다.
 
 - [x] **Task 2.3: 덱 쓰기 쿼리 헬퍼 구현 (TDD)**
-  - **대상 파일**: `packages/db/src/queries/decks.ts`
+  - **대상 파일**: `src/db/queries/decks.ts`
   - **선행 조건**: Task 2.2
   - **구현 내용**:
     - `upsertDeck(db, userId, deck)` — 소유자 불일치 시 거부, 있으면 갱신 없으면 삽입
@@ -58,7 +58,7 @@
   - **DoD (통과 기준)**: `pnpm --filter @repo/db vitest run src/queries/decks.test.ts`가 100% 통과(Green)한다.
 
 - [x] **Task 2.4: 프레젠테이션 문서 업서트 및 소유권 결함 수정 (TDD)**
-  - **대상 파일**: `packages/db/src/queries/presentations.ts`
+  - **대상 파일**: `src/db/queries/presentations.ts`
   - **선행 조건**: Task 2.3
   - **구현 내용**:
     - `upsertPresentationDocument(db, userId, doc)` — 헤더 업서트 후 `presentation_items`와 해당 프레젠테이션 scope 덱을 `db.batch()`로 교체
@@ -67,7 +67,7 @@
   - **DoD (통과 기준)**: `pnpm --filter @repo/db vitest run src/queries/presentations.test.ts`가 100% 통과(Green)한다.
 
 - [x] **Task 2.5: 프레젠테이션 Worker 라우트 구현**
-  - **대상 파일**: `apps/web/worker/routes/presentations.ts`
+  - **대상 파일**: `src/worker/routes/presentations.ts`
   - **선행 조건**: Task 2.4
   - **구현 내용**:
     - `GET /` (내 문서 전체), `PUT /:id` (문서 업서트), `DELETE /:id`
@@ -77,7 +77,7 @@
   - **구현 메모**: 경로 `:id`와 본문 `id`가 어긋나면 400으로 끊는다. 어느 문서를 쓰는지 모호한 채로 저장하면 엉뚱한 문서를 덮어쓴다.
 
 - [x] **Task 2.6: 덱(보관함) Worker 라우트 구현**
-  - **대상 파일**: `apps/web/worker/routes/decks.ts`
+  - **대상 파일**: `src/worker/routes/decks.ts`
   - **선행 조건**: Task 2.5
   - **구현 내용**:
     - `GET /` (내 보관함), `PUT /:id`, `DELETE /:id`
@@ -85,7 +85,7 @@
   - **DoD (통과 기준)**: `pnpm --filter web vitest run worker/routes/decks.test.ts`가 100% 통과(Green)한다.
 
 - [x] **Task 2.7: 라우트 마운트 및 교차 사용자 격리 통합 테스트**
-  - **대상 파일**: `apps/web/worker/index.ts`
+  - **대상 파일**: `src/worker/index.ts`
   - **선행 조건**: Task 2.6
   - **구현 내용**:
     - 단일 체인 안에서 `.route("/api/presentations", ...)`, `.route("/api/decks", ...)` 마운트

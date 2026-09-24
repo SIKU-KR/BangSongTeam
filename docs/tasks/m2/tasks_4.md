@@ -23,7 +23,7 @@
 ## 2. 세부 작업 체크리스트
 
 - [x] **Task 4.1: 사전 주입 루프 배경 영상 선택 모달 컴포넌트 구현**
-  - **대상 파일**: `apps/web/src/features/editor/BackgroundPickerModal.tsx`
+  - **대상 파일**: `src/client/features/editor/BackgroundPickerModal.tsx`
   - **선행 조건**: `docs/tasks/m2/tasks_3.md`
   - **구현 내용**:
     - M0에서 사전 주입된 배경 영상 10종(R2 비디오 URL 및 포스터) 그리드 렌더링
@@ -33,7 +33,7 @@
   - **DoD (통과 기준)**: `pnpm --filter web exec tsc --noEmit`이 통과하고 호버 재생 및 배경 선택 콜백이 정상 작동한다.
 
 - [x] **Task 4.2: 타이포그래피 및 가독성 오버레이 컨트롤 컴포넌트 구현**
-  - **대상 파일**: `apps/web/src/features/editor/TypographyControls.tsx`
+  - **대상 파일**: `src/client/features/editor/TypographyControls.tsx`
   - **선행 조건**: Task 4.1
   - **구현 내용**:
     - 검정 오버레이 불투명도 슬라이더 (0% ~ 100%, 1% 단위 숫자 표시)
@@ -45,7 +45,7 @@
   - **DoD (통과 기준)**: `pnpm --filter web exec tsc --noEmit`이 통과하고 각 컨트롤 값 변경 시 `updateSongStyle`이 호출된다.
 
 - [x] **Task 4.3: 3×3 격자 앵커 프리셋 및 폭 조절 컨트롤 컴포넌트 구현**
-  - **대상 파일**: `apps/web/src/features/editor/PositionControls.tsx`
+  - **대상 파일**: `src/client/features/editor/PositionControls.tsx`
   - **선행 조건**: Task 4.2
   - **구현 내용**:
     - 3×3 격자 버튼(9칸: top-left ~ bottom-right) 렌더링 및 현재 선택 하이라이트
@@ -55,7 +55,7 @@
   - **DoD (통과 기준)**: `pnpm --filter web exec tsc --noEmit`이 통과하고 3×3 격자 클릭 시 좌표가 즉각 갱신된다.
 
 - [x] **Task 4.4: 우측 통합 곡 속성 패널(Property Panel) 컴포넌트 완성**
-  - **대상 파일**: `apps/web/src/features/editor/SongPropertyPanel.tsx`
+  - **대상 파일**: `src/client/features/editor/SongPropertyPanel.tsx`
   - **선행 조건**: Task 4.1, Task 4.2, Task 4.3
   - **구현 내용**:
     - 상단: 현재 선택된 배경 썸네일 + '배경 바꾸기' 버튼 (`BackgroundPickerModal` 연동)

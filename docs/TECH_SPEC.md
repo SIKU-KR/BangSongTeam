@@ -29,10 +29,10 @@
 
 ### 1.2 핵심 아키텍처 원칙
 
-1. **타입 단일 원천 (Single Source of Truth)**: 모든 도메인 모델, API 계약, 브로드캐스트 메시지, D1 JSON 컬럼 구조는 `packages/shared`의 **Zod 스키마**로 1회 선언하며, TypeScript 타입은 `z.infer`로만 추론한다. 수동 타입 복제는 금지한다.
-2. **단방향 의존성 및 패키지 격리**:
-   - `apps` $\rightarrow$ `packages` 단방향 참조만 허용.
-   - `packages/db`는 Worker 전용 패키지로, 프론트엔드(`apps/web/src`)에서의 임포트는 ESLint로 차단한다.
+1. **타입 단일 원천 (Single Source of Truth)**: 모든 도메인 모델, API 계약, 브로드캐스트 메시지, D1 JSON 컬럼 구조는 `src/shared`(`#shared`)의 **Zod 스키마**로 1회 선언하며, TypeScript 타입은 `z.infer`로만 추론한다. 수동 타입 복제는 금지한다.
+2. **단방향 의존성 및 레이어 격리** (단일 패키지, 2026-09-24):
+   - `src/shared` $\leftarrow$ `src/db` $\leftarrow$ `src/worker`, `src/shared` $\leftarrow$ `src/client` 단방향 참조만 허용하며 ESLint import 규칙으로 강제한다.
+   - `src/db`(`#db`)는 Worker 전용 레이어로, 프론트엔드(`src/client`)에서의 임포트는 ESLint로 차단한다.
    - 프론트엔드와 백엔드는 Hono RPC Client (`hc<AppType>`)를 통해서만 타입 안전하게 통신한다.
 3. **로컬 우선 영속성과 무결점 오프라인 송출 (Local-First & Zero-Network Presentation)**:
    - 사용자의 작업은 서버가 아니라 **브라우저 로컬 저장소를 1차 원천**으로 삼는다 (§5.5). 로그인은 2026-09-22 결정으로 **편집의 전제 조건**이 되었으나, 세션을 IndexedDB에 캐시해 네트워크가 끊겨도 게이트를 통과한다 — 로그인 때문에 예배 당일 송출이 멈추지 않는다.
@@ -52,7 +52,7 @@
 ```mermaid
 flowchart TB
   subgraph Client["Client Browser (Google Chrome Dedicated)"]
-    subgraph FrontendSPA["React SPA (apps/web/src)"]
+    subgraph FrontendSPA["React SPA (src/client)"]
       UI["Editor / Presentation UI (shadcn/ui + Tailwind)"]
       StageRenderer["3-Layer Slide Stage"]
       AudienceDisplay["Fullscreen Projection View"]
@@ -71,7 +71,7 @@ flowchart TB
   end
 
   subgraph CloudflarePlatform["Cloudflare Serverless Platform"]
-    subgraph EdgeWorker["Cloudflare Worker (apps/web/worker)"]
+    subgraph EdgeWorker["Cloudflare Worker (src/worker)"]
       HonoAPI["Hono REST API (/api/*)"]
       AuthMiddleware["Better Auth Session Guard"]
     end
@@ -98,32 +98,32 @@ flowchart TB
 
 본 명세의 항목 중 실제 코드가 있는 것과 설계만 있는 것을 구분한다. 이 표를 갱신하지 않은 채 "스펙에 있으니 구현되어 있다"고 가정하지 않는다.
 
-| 구성 요소                                     | 상태   | 비고                                                                                                             |
-| --------------------------------------------- | ------ | ---------------------------------------------------------------------------------------------------------------- |
-| `packages/shared` Zod 스키마 (§3)             | 구현   | Deck·Slide·Style·Presentation·API·공유 라이브러리(`library.ts`) 계약                                             |
-| `packages/db` Drizzle 스키마·마이그레이션(§4) | 구현   | `0001_initial` 하나. 첫 배포 전 0000~0008을 합쳤다 (2026-09-24). 다음 마이그레이션은 0002부터                    |
-| 스코프 쿼리 헬퍼 (§4.3)                       | 구현   | decks·presentations·search·sharing·reports. 공개 조건은 `publicDeckCondition()` 한 곳                            |
-| 3-Layer Slide Stage (§5.1)                    | 구현   | `components/stage/*` — 편집기와 송출이 동일 컴포넌트 사용                                                        |
-| 입력 버퍼 엔진·단축키 (§5.2)                  | 구현   | `useNavigationBuffer`, `usePresentationShortcuts` (tinykeys)                                                     |
-| 세트 편집기 (PRD 4.4)                         | 부분   | 넘침 경고와 커서 기준 분할·합치기 미구현 (M2 잔여). 속성 패널 '공유' 섹션 구현 (M5)                              |
-| 미디어 프록시 `/api/media/*` (§5.4)           | 구현   | HTTP Range 지원                                                                                                  |
-| 클라이언트 영속성 (§5.5)                      | 구현   | IndexedDB가 1차 원천. 프레젠테이션과 **보관함 곡** 모두 서버와 동기화 (보관함은 M5-2에서 연결)                   |
-| Hono RPC 클라이언트 (`hc<AppType>`)           | 구현   | `AppType = ReturnType<typeof createApp>`. 라우트는 팩토리(`createApp(deps)`)라 테스트가 실제 라우트를 마운트한다 |
-| Better Auth (§4.1 auth 테이블)                | 구현   | 카카오·네이버 + localhost 전용 개발자 로그인. 실제 OAuth 자격증명 확인은 대기                                    |
-| 발표자 보기·BroadcastChannel (§5.3)           | 제거   | MVP 범위에서 제외 (2026-09-24). 송출은 전체화면 `/present/:id/fullscreen` 한 가지                                |
-| PWA·Cache Storage (§5.4)                      | 구현   | vite-plugin-pwa(generateSW) + RangeRequests (M4)                                                                 |
-| TanStack Query (서버 캐시)                    | 구현   | 곡 추가 모달의 공유 검색·상세·가져오기, 공개 전환, 신고에만 쓴다. 송출 화면 import는 ESLint가 막는다 (M5-5)      |
-| 가사 라이브러리·LLM 정규화 (§6)               | 제거   | MVP 범위에서 제외 (2026-09-23). 테이블은 스키마에서 지웠다                                                       |
-| 공유 라이브러리 API (§7)                      | 구현   | 공개 전환·검색(가져간 횟수순 게시판)·상세·가져오기·신고 (M5-3)                                                   |
-| 운영자 도구                                   | 구현   | 관리자 화면 없음. `docs/ops/moderation-runbook.md`의 SQL (`packages/db/src/ops/moderationSql.ts`가 정본)         |
-| 사용자 커스텀 배경 업로드 (PRD 4.3)           | 미구현 | 배경 라이브러리 화면에 안내만 있음                                                                               |
-| 저장 실패 경고 배너                           | 구현   | `StorageWarningBanner` — 용량 초과와 저장소 차단을 구분, 닫을 수 없음                                            |
+| 구성 요소                                 | 상태   | 비고                                                                                                             |
+| ----------------------------------------- | ------ | ---------------------------------------------------------------------------------------------------------------- |
+| `src/shared` Zod 스키마 (§3)              | 구현   | Deck·Slide·Style·Presentation·API·공유 라이브러리(`library.ts`) 계약                                             |
+| `src/db` Drizzle 스키마·`migrations/`(§4) | 구현   | `0001_initial` 하나. 첫 배포 전 0000~0008을 합쳤다 (2026-09-24). 다음 마이그레이션은 0002부터                    |
+| 스코프 쿼리 헬퍼 (§4.3)                   | 구현   | decks·presentations·search·sharing·reports. 공개 조건은 `publicDeckCondition()` 한 곳                            |
+| 3-Layer Slide Stage (§5.1)                | 구현   | `components/stage/*` — 편집기와 송출이 동일 컴포넌트 사용                                                        |
+| 입력 버퍼 엔진·단축키 (§5.2)              | 구현   | `useNavigationBuffer`, `usePresentationShortcuts` (tinykeys)                                                     |
+| 세트 편집기 (PRD 4.4)                     | 부분   | 넘침 경고와 커서 기준 분할·합치기 미구현 (M2 잔여). 속성 패널 '공유' 섹션 구현 (M5)                              |
+| 미디어 프록시 `/api/media/*` (§5.4)       | 구현   | HTTP Range 지원                                                                                                  |
+| 클라이언트 영속성 (§5.5)                  | 구현   | IndexedDB가 1차 원천. 프레젠테이션과 **보관함 곡** 모두 서버와 동기화 (보관함은 M5-2에서 연결)                   |
+| Hono RPC 클라이언트 (`hc<AppType>`)       | 구현   | `AppType = ReturnType<typeof createApp>`. 라우트는 팩토리(`createApp(deps)`)라 테스트가 실제 라우트를 마운트한다 |
+| Better Auth (§4.1 auth 테이블)            | 구현   | 카카오·네이버 + localhost 전용 개발자 로그인. 실제 OAuth 자격증명 확인은 대기                                    |
+| 발표자 보기·BroadcastChannel (§5.3)       | 제거   | MVP 범위에서 제외 (2026-09-24). 송출은 전체화면 `/present/:id/fullscreen` 한 가지                                |
+| PWA·Cache Storage (§5.4)                  | 구현   | vite-plugin-pwa(generateSW) + RangeRequests (M4)                                                                 |
+| TanStack Query (서버 캐시)                | 구현   | 곡 추가 모달의 공유 검색·상세·가져오기, 공개 전환, 신고에만 쓴다. 송출 화면 import는 ESLint가 막는다 (M5-5)      |
+| 가사 라이브러리·LLM 정규화 (§6)           | 제거   | MVP 범위에서 제외 (2026-09-23). 테이블은 스키마에서 지웠다                                                       |
+| 공유 라이브러리 API (§7)                  | 구현   | 공개 전환·검색(가져간 횟수순 게시판)·상세·가져오기·신고 (M5-3)                                                   |
+| 운영자 도구                               | 구현   | 관리자 화면 없음. `docs/ops/moderation-runbook.md`의 SQL (`src/db/ops/moderationSql.ts`가 정본)                  |
+| 사용자 커스텀 배경 업로드 (PRD 4.3)       | 미구현 | 배경 라이브러리 화면에 안내만 있음                                                                               |
+| 저장 실패 경고 배너                       | 구현   | `StorageWarningBanner` — 용량 초과와 저장소 차단을 구분, 닫을 수 없음                                            |
 
 ---
 
-## 3. packages/shared: 도메인 모델 및 Zod 스키마 명세
+## 3. src/shared: 도메인 모델 및 Zod 스키마 명세
 
-`packages/shared`는 브라우저와 Cloudflare Worker 양쪽에서 실행되는 순수 TypeScript 패키지이다.
+`src/shared`(`#shared`)는 브라우저와 Cloudflare Worker 양쪽에서 실행되는 순수 TypeScript 레이어이다.
 
 **엔터티 id (2026-09-24, UUID → NanoID):** 사용자·세션·덱·프레젠테이션·항목·신고·배경 id는 모두 21자 NanoID(`[A-Za-z0-9_-]{21}`)다. 형식은 `schemas/id.ts`의 `IdSchema` 하나로 검증하고, 새 id는 `utils/id.ts`의 `createId()`로만 만든다 (Worker의 Better Auth `generateId`, D1 쿼리 헬퍼, 클라이언트 스토어 모두). `crypto.randomUUID()`는 ESLint(`no-restricted-properties`)가 막는다. 옛 UUID는 호환하지 않는다: 스키마가 거부하고, 로컬 IndexedDB는 v3 업그레이드가 비운다(§5.4-4). D1은 첫 배포 전이라 `0001_initial` 하나로 새로 만든다(§4.1.1).
 
@@ -299,7 +299,7 @@ export type BackgroundMedia = z.infer<typeof BackgroundMediaSchema>;
 
 ---
 
-## 4. 데이터베이스 아키텍처 및 Drizzle/D1 스키마 (`packages/db`)
+## 4. 데이터베이스 아키텍처 및 Drizzle/D1 스키마 (`src/db`)
 
 Cloudflare D1(SQLite)을 영속성 엔진으로 사용하며, Drizzle ORM을 통해 마이그레이션과 질의를 관리한다.
 
@@ -563,7 +563,7 @@ export const reports = sqliteTable("reports", {
 
 시드는 초기 마이그레이션 `0001_initial.sql` 끝에 NanoID로 들어 있다. 첫 배포 전인 2026-09-24에 UUID 시드·NanoID 초기화·NanoID 재시드를 포함한 0000~0008을 이 파일 하나로 합쳤다. 저널 idx를 1로 두어 다음 `db:generate`는 0002부터 번호를 매긴다. 옛 0000~0008을 적용한 D1(로컬 `.wrangler` 상태 포함)은 새로 만들어야 한다.
 
-값의 정본은 `packages/shared`의 `INITIAL_BACKGROUNDS` 하나이며, `packages/db/src/seed/backgrounds.ts`는 그것을 파생시키고, 정적 SQL인 마이그레이션은 `backgrounds.test.ts`가 상수와 대조해 갈라지지 못하게 막는다.
+값의 정본은 `src/shared`의 `INITIAL_BACKGROUNDS` 하나이며, `src/db/seed/backgrounds.ts`는 그것을 파생시키고, 정적 SQL인 마이그레이션은 `backgrounds.test.ts`가 상수와 대조해 갈라지지 못하게 막는다.
 
 추가로 서버는 모르는 `backgroundId`를 `null`로 낮춰 받는다(`nullifyUnknownBackgrounds`). 배경은 장식이고 가사는 봉사자의 작업물이므로, 배경 하나 때문에 세트 전체를 잃게 두지 않는다.
 
@@ -590,7 +590,7 @@ D1에는 Postgres RLS가 없으므로 애플리케이션 계층에서 `userId` �
 > - 검색 헬퍼는 `queries/search.ts`로 옮겼다 (§4.2).
 
 ```typescript
-// packages/db/src/queries/decks.ts
+// src/db/queries/decks.ts
 import { eq, and, desc, sql } from "drizzle-orm";
 import { db } from "../client";
 import { decks, decksFts } from "../schema";
@@ -764,7 +764,7 @@ stateDiagram-v2
 배경 영상의 완전 오프라인 재생을 위해 Worker 미디어 프록시와 Workbox RangeRequests를 연동한다.
 
 1. **미디어 전송 경로 (동일 출처 프록시)**:
-   - 클라이언트는 `/api/media/<r2Key>`로 요청하고, Worker가 R2 객체를 `Range` 헤더와 함께 중계한다 (`apps/web/worker/routes/media.ts`).
+   - 클라이언트는 `/api/media/<r2Key>`로 요청하고, Worker가 R2 객체를 `Range` 헤더와 함께 중계한다 (`src/worker/routes/media.ts`).
    - **R2 CORS 설정은 필요 없다.** 앱과 미디어가 같은 오리진이므로 프리플라이트가 발생하지 않는다.
    - Worker 응답은 `Accept-Ranges: bytes`, `Content-Range`, `Content-Length`를 그대로 전달하고, 불변 자산이므로 `Cache-Control: public, max-age=31536000, immutable`을 붙인다.
    - 이 결정의 대가는 영상 트래픽이 Worker 요청 수에 계상된다는 것이다. 월 사용량이 무료 티어를 위협하면 커스텀 도메인 직통으로 전환하고, 그때 `getBackgroundMediaUrl`의 base URL과 아래 `urlPattern`만 교체한다.
@@ -778,7 +778,7 @@ stateDiagram-v2
      urlPattern: /\/api\/media\/.*/i,
      handler: 'CacheFirst',
      options: {
-       cacheName: MEDIA_CACHE_NAME,                  // '@repo/shared' 상수
+       cacheName: MEDIA_CACHE_NAME,                  // '#shared' 상수
        rangeRequests: true,                          // = RangeRequestsPlugin
        cacheableResponse: { statuses: [200] },      // Cache API는 206을 저장하지 못한다
        expiration: { maxEntries: 30, maxAgeSeconds: 30 * 24 * 60 * 60 },
@@ -795,22 +795,22 @@ stateDiagram-v2
 3. **편집·송출 중 백그라운드 캐시 & 영속 저장소 요청** (2026-09-24 개정):
 
    > 송출 전 '예배 준비' 화면(`/present/:id/ready`)이 세트의 배경을 미리 받고 '오프라인 송출 가능' 배지를 띄우던 설계는 2026-09-24에 제거됐다. 송출 버튼은 곧바로 전체화면으로 들어간다. 제품 결정 없이 다운로드 관문을 다시 넣지 않는다.
-   - 편집기(`/editor/:id`)와 송출 화면(`/present/:id/fullscreen`)이 `useBackgroundAutoCache(presentation)`(`apps/web/src/features/offline/`)를 부른다. 세트가 열리거나 배경이 바뀌면 3초 뒤(`AUTO_CACHE_DELAY_MS`) 세트의 배경 영상·포스터 URL(중복 제거, `collectPresentationMediaAssets`·`collectUniqueMediaUrls`)을 `scheduleMediaCaching`에 넘기고, 같은 때 가사에 쓰인 글꼴을 데운다. 지연은 편집기에서 배경을 이것저것 눌러 볼 때마다 받지 않게 하고, 송출 직후에는 화면의 영상이 먼저 대역폭을 쓰게 하기 위한 것이다. `online` 이벤트가 오면 곧바로 다시 큐에 넣는다.
-   - `scheduleMediaCaching`(`apps/web/src/lib/offline/mediaCache.ts`)은 **모듈 단위 싱글턴 큐**다. 한 번에 하나씩 순차로 받고, 이미 `cache.match`되는 항목은 건너뛰며, 같은 URL을 겹쳐 받지 않는다. 라우트가 다시 마운트돼도(편집기 → 송출) 받던 것을 이어 받는다. 오프라인(`navigator.onLine === false`)이면 아무것도 하지 않는다. 실패는 알리지 않고 다음 호출에서 다시 시도한다. **진행률·배지·경고·기록은 없다.**
+   - 편집기(`/editor/:id`)와 송출 화면(`/present/:id/fullscreen`)이 `useBackgroundAutoCache(presentation)`(`src/client/features/offline/`)를 부른다. 세트가 열리거나 배경이 바뀌면 3초 뒤(`AUTO_CACHE_DELAY_MS`) 세트의 배경 영상·포스터 URL(중복 제거, `collectPresentationMediaAssets`·`collectUniqueMediaUrls`)을 `scheduleMediaCaching`에 넘기고, 같은 때 가사에 쓰인 글꼴을 데운다. 지연은 편집기에서 배경을 이것저것 눌러 볼 때마다 받지 않게 하고, 송출 직후에는 화면의 영상이 먼저 대역폭을 쓰게 하기 위한 것이다. `online` 이벤트가 오면 곧바로 다시 큐에 넣는다.
+   - `scheduleMediaCaching`(`src/client/lib/offline/mediaCache.ts`)은 **모듈 단위 싱글턴 큐**다. 한 번에 하나씩 순차로 받고, 이미 `cache.match`되는 항목은 건너뛰며, 같은 URL을 겹쳐 받지 않는다. 라우트가 다시 마운트돼도(편집기 → 송출) 받던 것을 이어 받는다. 오프라인(`navigator.onLine === false`)이면 아무것도 하지 않는다. 실패는 알리지 않고 다음 호출에서 다시 시도한다. **진행률·배지·경고·기록은 없다.**
    - 처음 캐시를 시작할 때 `navigator.storage.persist()`를 한 번 조용히 부른다. 거부돼도 캐시는 담는다.
    - **동일 출처 프록시이므로 `mode`를 지정하지 않는다** (5.4-1의 결정과 `mode: 'cors'`는 서로 어긋난다).
    - **Service Worker 활성화를 기다리지 않는다.** 첫 방문에서는 SW가 아직 activate되지 않아 `fetch`가 가로채이지 않으므로, 받은 응답을 `cache.put`으로 직접 `MEDIA_CACHE_NAME`에 넣는다. Workbox CacheFirst가 같은 캐시를 읽으므로 송출 때 그대로 재생된다.
    - **Range 헤더 없이 전체 응답(200)을 받아 스트림째 넣는다.** RangeRequestsPlugin은 캐시된 _전체_ 응답을 잘라 206을 만든다. 206은 Cache API가 저장하지도 못한다. 본문을 `arrayBuffer`로 읽지 않으므로 편집·송출 중 20MB를 메모리에 올리지 않는다.
 
-4. **클라이언트 IndexedDB 스키마 명세 (`worship-offline-db`, Version 3)** — _구현 완료 (`apps/web/src/lib/storage/db.ts`)_:
+4. **클라이언트 IndexedDB 스키마 명세 (`worship-offline-db`, Version 3)** — _구현 완료 (`src/client/lib/storage/db.ts`)_:
 
    > v2에서 오프라인 세션 캐시 `auth_session` 스토어가 추가되었고(M3-B), `sync_meta`에 서버 동기화 필드(`serverUpdatedAt`·`dirty`·`lastSyncedAt`)가 함께 들어간다. `decks`에는 `by-presentation` 인덱스를 두지 않는다(프레젠테이션 덱은 문서에 임베드된다). v3(2026-09-24)은 스토어 구조를 바꾸지 않고, v1·v2에서 올라올 때 모든 스토어를 비운다. 그 레코드들은 UUID id라 `IdSchema`를 통과하지 못해 부팅마다 '손상'으로 격리되고 동기화 PUT도 400으로 실패하기 때문이다. 아래 코드는 원안이며 실제 구현이 정본이다.
    > 오프라인 송출 보장을 위해 클라이언트는 `idb` 라이브러리를 통해 다음 객체 저장소(Object Stores)를 관리한다. 이 스토어는 오프라인 송출뿐 아니라 **평상시 편집 데이터의 1차 원천**이기도 하다 (§5.5).
 
    ```typescript
-   // apps/web/src/lib/storage/db.ts
+   // src/client/lib/storage/db.ts
    import { openDB, DBSchema } from "idb";
-   import type { Presentation, Deck, BackgroundMedia } from "@repo/shared";
+   import type { Presentation, Deck, BackgroundMedia } from "#shared";
 
    export interface WorshipOfflineDB extends DBSchema {
      // 1. 프레젠테이션 메타데이터 저장소
@@ -901,7 +901,7 @@ stateDiagram-v2
 7. **세션도 오프라인에서 살아야 한다.** 세션 쿠키는 httpOnly라 JS가 못 읽는다. 마지막으로 확인된 세션을 `auth_session` 스토어(v2)에 캐시하고 부팅 시 그것으로 로그인 게이트를 통과시킨다. 서버 재검증은 백그라운드이며, **'서버가 세션 없다고 답함'과 '서버에 닿지 못함'을 반드시 구분한다** — 뭉뚱그리면 네트워크가 끊기는 순간 로그아웃되어 송출이 멈춘다.
 8. **D1에는 RLS가 없다.** 모든 방어가 쿼리 헬퍼의 `userId` 조건 하나에 달려 있다. 요청 본문의 `userId`는 신뢰하지 않고 세션 값으로 덮어쓴다. 교차 사용자 격리는 라우트 레벨 통합 테스트로 고정한다.
 
-**구현 위치(Phase 3):** `apps/web/src/lib/sync/`(`syncStatus.ts`, `presentationSync.ts`, `syncScheduler.ts`, `mergeDocuments.ts`, `bootSync.ts`), 인증은 `apps/web/src/lib/auth/`와 `apps/web/worker/lib/auth.ts`·`worker/middleware/auth.ts`, 서버 라우트는 `apps/web/worker/routes/{presentations,decks}.ts`, 행↔DTO 변환은 `packages/db/src/queries/mappers.ts`.
+**구현 위치(Phase 3):** `src/client/lib/sync/`(`syncStatus.ts`, `presentationSync.ts`, `syncScheduler.ts`, `mergeDocuments.ts`, `bootSync.ts`), 인증은 `src/client/lib/auth/`와 `src/worker/lib/auth.ts`·`src/worker/middleware/auth.ts`, 서버 라우트는 `src/worker/routes/{presentations,decks}.ts`, 행↔DTO 변환은 `src/db/queries/mappers.ts`.
 
 **구 localStorage 보관함 마이그레이션:**
 
@@ -910,7 +910,7 @@ stateDiagram-v2
 - 항목별 `DeckSchema.safeParse`로 읽어 유효한 곡만 옮긴다. **배열 전체를 한 번에 파싱하지 않는다** — 이전 구현이 그렇게 해서, 항목 하나만 깨져도 보관함 전체를 못 읽고 다음 저장이 빈 배열로 덮어쓰는 데이터 손실 경로가 있었다.
 - 원본 JSON은 지우지 않고 `worship_user_songs_v1__migrated_backup`으로 옮긴다. 옮기지 못한 손상 항목도 그 안에 남아 복구할 수 있다.
 
-**구현 위치:** `apps/web/src/lib/storage/`(`db.ts`, `presentationRepository.ts`, `songRepository.ts`, `persistenceStatus.ts`), 스토어 연동은 `features/presentation/presentationStore.ts`·`features/editor/songLibraryStore.ts`, 부팅 게이트는 `App.tsx`, 경고 배너는 `components/common/StorageWarningBanner.tsx`.
+**구현 위치:** `src/client/lib/storage/`(`db.ts`, `presentationRepository.ts`, `songRepository.ts`, `persistenceStatus.ts`), 스토어 연동은 `features/presentation/presentationStore.ts`·`features/editor/songLibraryStore.ts`, 부팅 게이트는 `App.tsx`, 경고 배너는 `components/common/StorageWarningBanner.tsx`.
 
 **Zero-Fetch 불변식과의 관계:** 송출 라우트(`/present/*`)는 하이드레이션된 메모리 상태만 읽고, 그 상태의 원천은 IndexedDB다. 동기화와 세션 재검증은 편집 화면에서만 돈다. 남은 네트워크 의존은 배경 영상(`/api/media/*`) 하나이며, 편집·송출 중 백그라운드 캐시(5.4-3)가 Cache Storage로 덮는다.
 
@@ -959,7 +959,7 @@ stateDiagram-v2
 
 설계 당시의 `POST /api/decks`(생성)·`GET /api/decks/:id`·`GET /api/presentations/:id`는 두지 않았다. 로컬 우선 동기화가 문서 단위 `PUT`으로 생성과 수정을 함께 하고, 조회는 목록 한 번으로 충분하다.
 
-### 7.2 주요 API 요청/응답 페이로드 스키마 (`packages/shared/src/schemas/api.ts`)
+### 7.2 주요 API 요청/응답 페이로드 스키마 (`src/shared/schemas/api.ts`)
 
 ```typescript
 import { z } from "zod";
@@ -1039,7 +1039,7 @@ export type SearchCatalogResponse = z.infer<typeof SearchCatalogResponseSchema>;
 
 - **공개 웹 카탈로그 가사 전문 노출 차단**: 로그인하지 않은 외부 사용자가 접근하는 공개 웹 카탈로그 검색 결과(`GET /api/catalog/search`) 및 미인증 공유 카드에는 **첫 슬라이드만 노출**(`firstSlidePreview`)하여 가사 크롤링 및 공중송신권 분쟁을 방지한다.
 - **편집기 내부 곡 추가 모달(SongPickerModal)**: 예배 봉사자가 찬양 버전(절, 브릿지)을 확인하고 빠른 선곡을 할 수 있도록, 편집기 내부 곡 선택 시에는 공유 곡도 가사 전문 미리보기, 가사 본문 검색, 텍스트 복사를 정상 제공한다 (세트 추가 시 어차피 에디터로 임포트되므로).
-- **게시 중단(Takedown) 절차**: 저작권자 요청 접수 시 운영자가 `docs/ops/moderation-runbook.md`의 SQL로 해당 덱을 비공개로 내리고 `takedown_at`을 남긴다(소유자가 다시 공개할 수 없다). 가져가 다시 공개한 사본도 찾아 내린다. SQL 정본은 `packages/db/src/ops/moderationSql.ts`이며 테스트가 실제 스키마에 대해 실행해 본다.
+- **게시 중단(Takedown) 절차**: 저작권자 요청 접수 시 운영자가 `docs/ops/moderation-runbook.md`의 SQL로 해당 덱을 비공개로 내리고 `takedown_at`을 남긴다(소유자가 다시 공개할 수 없다). 가져가 다시 공개한 사본도 찾아 내린다. SQL 정본은 `src/db/ops/moderationSql.ts`이며 테스트가 실제 스키마에 대해 실행해 본다.
 - **공개 동의**: 공개 전환 요청은 `acceptedCopyrightNotice: true` 리터럴이어야 통과한다. 동의한 시각이 `decks.published_at`이다.
 
 ### 8.2 Better Auth 및 D1 세션 보안

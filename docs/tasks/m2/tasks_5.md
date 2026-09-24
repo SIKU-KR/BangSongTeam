@@ -17,7 +17,7 @@
 ## 1. 아키텍처 가드레일 & 준수 사항
 
 - **송출 무결성 보장**: 편집기에서 수정한 곡별 스타일(오버레이, 폰트, 위치)과 비디오 배경이 `/present/fullscreen` 송출 화면에서도 단 1px의 오차 없이 동일하게 재현되어야 한다.
-- **모노레포 경계 준수**: 프론트엔드(`apps/web/src`)가 `packages/db`를 참조하지 않고, 모든 타입은 `@repo/shared`의 Zod 스키마에서 유도한다.
+- **모노레포 경계 준수**: 프론트엔드(`src/client`)가 `packages/db`를 참조하지 않고, 모든 타입은 `@repo/shared`의 Zod 스키마에서 유도한다.
 - **M2 마일스톤 관찰 가능 완료 기준 달성**: "처음 써 보는 봉사자 1명이 도움 없이 5곡 세트를 15분 안에 구성"할 수 있도록 직관적인 UI 플로우와 즉각적인 피드백을 제공한다.
 
 ---
@@ -25,7 +25,7 @@
 ## 2. 세부 작업 체크리스트
 
 - [x] **Task 5.1: 세트 편집기 상단 헤더 바 컴포넌트 구현**
-  - **대상 파일**: `apps/web/src/features/editor/EditorHeader.tsx`
+  - **대상 파일**: `src/client/features/editor/EditorHeader.tsx`
   - **선행 조건**: `docs/tasks/m2/tasks_4.md`
   - **구현 내용**:
     - 세트 제목 인라인 텍스트 편집 (예: '새 예배 프레젠테이션')
@@ -35,7 +35,7 @@
   - **DoD (통과 기준)**: `pnpm --filter web exec tsc --noEmit`이 통과하고 버튼 클릭 시 올바른 이벤트 및 네비게이션이 실행된다.
 
 - [x] **Task 5.2: 전체화면 송출 라우트(`FullscreenPresentRoute`)의 세트 주입 연동**
-  - **대상 파일**: `apps/web/src/routes/FullscreenPresentRoute.tsx`
+  - **대상 파일**: `src/client/routes/FullscreenPresentRoute.tsx`
   - **선행 조건**: Task 5.1
   - **구현 내용**:
     - React Router `useLocation().state?.presentation` 또는 `localStorage`의 편집된 세트 데이터를 우선 로드
@@ -44,7 +44,7 @@
   - **DoD (통과 기준)**: `pnpm --filter web exec tsc --noEmit`이 통과하고 편집기에서 구성한 세트가 전체화면으로 송출된다.
 
 - [x] **Task 5.3: 세트 편집기 전체 화면 라우트 컴포넌트 구현**
-  - **대상 파일**: `apps/web/src/routes/PresentationEditorRoute.tsx`
+  - **대상 파일**: `src/client/routes/PresentationEditorRoute.tsx`
   - **선행 조건**: Task 5.1, Task 5.2
   - **구현 내용**:
     - 3패널 레이아웃 구성:
@@ -57,7 +57,7 @@
   - **DoD (통과 기준)**: `pnpm --filter web exec tsc --noEmit`이 통과하고 브라우저 렌더링 시 3패널 레이아웃이 완벽히 표시된다.
 
 - [x] **Task 5.4: 라우팅 등록 및 메인 홈 화면 세트 편집기 진입 카드 추가**
-  - **대상 파일**: `apps/web/src/App.tsx`, `apps/web/src/routes/index.tsx`
+  - **대상 파일**: `src/client/App.tsx`, `src/client/routes/index.tsx`
   - **선행 조건**: Task 5.3
   - **구현 내용**:
     - `App.tsx`에 `/editor` 라우트 등록 (`PresentationEditorRoute`)
@@ -66,7 +66,7 @@
   - **DoD (통과 기준)**: `pnpm --filter web exec tsc --noEmit`이 통과하고 홈 화면에서 `/editor` 진입 및 전체 화면 구성이 가능하다.
 
 - [ ] **Task 5.5: M2 편집기 15분 5곡 세트 구성 워크플로우 통합 테스트 작성 및 통과**
-  - **대상 파일**: `apps/web/src/features/editor/editorWorkflow.test.tsx`
+  - **대상 파일**: `src/client/features/editor/editorWorkflow.test.tsx`
   - **선행 조건**: Task 5.4
   - **구현 내용**:
     - 통합 테스트: 신규 세트 생성 $\rightarrow$ 가사 붙여넣기로 곡 추가 및 슬라이드 분할 $\rightarrow$ 곡 순서 변경 $\rightarrow$ 곡 속성(오버레이, 폰트, 3x3 위치) 변경 $\rightarrow$ 오버플로우 감지 및 송출 데이터 전달 검증

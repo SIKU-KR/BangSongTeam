@@ -30,7 +30,7 @@
 ## 2. 세부 작업 체크리스트
 
 - [x] **Task 6.1: 개발자 로그인 가드 및 auth 옵션 연결 (TDD)**
-  - **대상 파일**: `apps/web/worker/lib/auth.ts`
+  - **대상 파일**: `src/worker/lib/auth.ts`
   - **선행 조건**: 없음
   - **구현 내용**:
     - `isDevLoginEnabled(env, requestUrl)` — 플래그와 localhost 호스트를 **모두** 만족할 때만 true
@@ -40,7 +40,7 @@
   - **구현 메모**: 방어선이 3겹이다. ① 플래그, ② localhost 호스트, ③ 플래그가 꺼져 있으면 better-auth가 비밀번호 엔드포인트 자체를 만들지 않는다. 라우트 가드가 뚫려도 로그인할 방법이 없다.
 
 - [x] **Task 6.2: 개발자 로그인 라우트 (TDD)**
-  - **대상 파일**: `apps/web/worker/routes/devLogin.ts`
+  - **대상 파일**: `src/worker/routes/devLogin.ts`
   - **선행 조건**: Task 6.1
   - **구현 내용**:
     - `GET /api/auth-config` — `{ providers, devLogin }`. 로그인 화면이 무엇을 그릴지 정하는 근거
@@ -51,7 +51,7 @@
   - **구현 메모**: `asResponse: true`는 실패해도 던지지 않고 4xx Response를 돌려준다. try/catch로는 '계정 없음'을 못 잡아 상태 코드를 본다. 기본 계정은 `dev@worship.local` — `dev@localhost`는 better-auth의 이메일 검증(도메인에 점 필요)을 통과하지 못하고, `.local`은 실제로 등록될 수 없는 예약 TLD다.
 
 - [x] **Task 6.3: 라우트 마운트 및 환경변수 문서화**
-  - **대상 파일**: `apps/web/worker/index.ts`, `apps/web/worker/types.ts`, `apps/web/.dev.vars.example`
+  - **대상 파일**: `src/worker/index.ts`, `src/worker/types.ts`, `.dev.vars.example`
   - **선행 조건**: Task 6.2
   - **구현 내용**:
     - 단일 체인 안에 마운트한다
@@ -60,7 +60,7 @@
   - **DoD (통과 기준)**: `pnpm --filter web vitest run worker/`가 100% 통과(Green)한다.
 
 - [x] **Task 6.4: 로그인 화면 연결**
-  - **대상 파일**: `apps/web/src/routes/LoginRoute.tsx`
+  - **대상 파일**: `src/client/routes/LoginRoute.tsx`
   - **선행 조건**: Task 6.3
   - **구현 내용**:
     - 부팅 시 `/api/auth-config`를 읽어 설정된 프로바이더만 버튼으로 그린다
@@ -78,7 +78,7 @@
   - **DoD (통과 기준)**: 로그인 후 `/presentations`가 열리고, 만든 세트가 새로고침 뒤에도 남는다.
 
 - [x] **Task 6.7: 게이트 통과 후 로그인 시 부트스트랩이 돌지 않는 결함 수정 (실사용 검증 중 발견)**
-  - **대상 파일**: `apps/web/src/App.tsx`
+  - **대상 파일**: `src/client/App.tsx`
   - **선행 조건**: Task 6.5
   - **구현 내용**:
     - 부트스트랩(`hydrateFromStorage`·`hydrateSongLibrary`·`runBootSync`)이 `useEffect(..., [])`로 **부팅 때 한 번만** 돌았다. 부팅 시점에 미인증이면 영영 돌지 않는다

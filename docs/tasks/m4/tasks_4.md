@@ -33,53 +33,53 @@
 ## 2. 세부 작업 체크리스트
 
 - [x] **Task 4.1: 청중 창 오프너 및 Window Management 연동 (TDD)**
-  - **대상 파일**: `apps/web/src/features/presentation/audienceWindow.ts`
+  - **대상 파일**: `src/client/features/presentation/audienceWindow.ts`
   - **선행 조건**: `tasks_3.md` Task 3.4
   - **구현 내용**:
     - `openAudienceWindow(presentationId)` — `/present/:id/fullscreen?audience=1`을 `"WorshipAudienceWindow"` 이름으로 연다
     - `getScreenDetails()`를 **실제로 호출해 권한을 요청**한다. 기존 `fullscreen.ts`의 `checkScreenDetails()`는 이미 granted일 때만 읽어 호출부가 없는 죽은 코드였다 — 이것으로 대체하고 죽은 코드를 제거한다
     - `currentScreen`이 아닌 화면을 찾으면 `left/top/width/height`로 그 모니터에 띄운다
     - 결과를 `{ status: "secondary" | "fallback" | "blocked" | "unsupported", window, message }`로 돌려준다
-  - **DoD (통과 기준)**: `pnpm exec vitest run apps/web/src/features/presentation/audienceWindow.test.ts`가 100% 통과(Green)한다.
+  - **DoD (통과 기준)**: `pnpm exec vitest run src/client/features/presentation/audienceWindow.test.ts`가 100% 통과(Green)한다.
 
 - [x] **Task 4.2: 송출 경과 타이머 훅 (TDD)**
-  - **대상 파일**: `apps/web/src/features/presentation/useElapsedTimer.ts`
+  - **대상 파일**: `src/client/features/presentation/useElapsedTimer.ts`
   - **선행 조건**: 없음
   - **구현 내용**:
     - PRD에 '타이머' 한 줄만 있고 세부 명세가 없으므로 **송출 경과 시간(mm:ss) + 현재 시각**으로 정의한다
     - `start`/`pause`/`reset` 제공, 1초 간격 갱신, 언마운트 시 타이머 정리
-  - **DoD (통과 기준)**: `pnpm exec vitest run apps/web/src/features/presentation/useElapsedTimer.test.ts`가 100% 통과(Green)한다.
+  - **DoD (통과 기준)**: `pnpm exec vitest run src/client/features/presentation/useElapsedTimer.test.ts`가 100% 통과(Green)한다.
 
 - [x] **Task 4.3: 현재·다음 슬라이드 미리보기 패널**
-  - **대상 파일**: `apps/web/src/features/presentation/PresenterPreviewPanel.tsx`
+  - **대상 파일**: `src/client/features/presentation/PresenterPreviewPanel.tsx`
   - **선행 조건**: `tasks_3.md` Task 3.1
   - **구현 내용**:
     - '현재'는 크게, '다음'은 작게. 둘 다 `SlideStage`에 `containerDimensions`를 주어 렌더
     - 다음이 다음 곡의 첫 슬라이드면 곡 제목을 함께 표시한다
     - 세트 마지막이면 '마지막 슬라이드' 표시
-  - **DoD (통과 기준)**: `pnpm exec vitest run apps/web/src/features/presentation/PresenterPreviewPanel.test.tsx`가 100% 통과(Green)한다.
+  - **DoD (통과 기준)**: `pnpm exec vitest run src/client/features/presentation/PresenterPreviewPanel.test.tsx`가 100% 통과(Green)한다.
 
 - [x] **Task 4.4: 곡·슬라이드 점프 패널**
-  - **대상 파일**: `apps/web/src/features/presentation/PresenterJumpPanel.tsx`
+  - **대상 파일**: `src/client/features/presentation/PresenterJumpPanel.tsx`
   - **선행 조건**: Task 4.3
   - **구현 내용**:
     - 곡 목록에 번호(`1.`, `2.`)와 슬라이드 썸네일 번호를 표시한다 (PRD §5: 곡 목록과 슬라이드 썸네일에 번호 표시)
     - 클릭하면 해당 위치로 점프. 현재 위치 하이라이트
     - 세트가 길어도 현재 곡이 보이도록 스크롤을 따라가게 한다
-  - **DoD (통과 기준)**: `pnpm exec vitest run apps/web/src/features/presentation/PresenterJumpPanel.test.tsx`가 100% 통과(Green)한다.
+  - **DoD (통과 기준)**: `pnpm exec vitest run src/client/features/presentation/PresenterJumpPanel.test.tsx`가 100% 통과(Green)한다.
 
 - [x] **Task 4.5: 조작 바 (블랙아웃·가사 숨기기·타이머·창 제어)**
-  - **대상 파일**: `apps/web/src/features/presentation/PresenterControlBar.tsx`
+  - **대상 파일**: `src/client/features/presentation/PresenterControlBar.tsx`
   - **선행 조건**: Task 4.1, 4.2
   - **구현 내용**:
     - 블랙아웃(B)·가사 숨기기(H) 토글 버튼, 활성 상태를 눈에 띄게 표시
     - 경과 시간·현재 시각, 청중 창 연결 상태 배지
     - 「송출 창 열기」/「다시 연결」, 「송출 종료」 버튼
     - 입력 중인 번호(`4.2_`)와 '없는 번호' 2초 토스트
-  - **DoD (통과 기준)**: `pnpm exec vitest run apps/web/src/routes/PresenterControlRoute.test.tsx`의 블랙아웃·버퍼·연결 상태 케이스가 100% 통과(Green)한다.
+  - **DoD (통과 기준)**: `pnpm exec vitest run src/client/routes/PresenterControlRoute.test.tsx`의 블랙아웃·버퍼·연결 상태 케이스가 100% 통과(Green)한다.
 
 - [x] **Task 4.6: 발표자 보기 라우트 결합**
-  - **대상 파일**: `apps/web/src/routes/PresenterControlRoute.tsx`, `apps/web/src/App.tsx`
+  - **대상 파일**: `src/client/routes/PresenterControlRoute.tsx`, `src/client/App.tsx`
   - **선행 조건**: Task 4.3~4.5
   - **구현 내용**:
     - 경로 `/present/:presentationId/control` (PRD §5 화면 목록 기준)
@@ -88,14 +88,14 @@
     - `usePresentationShortcuts` + `useNavigationBuffer`를 조작 창에 건다. `onInvalidJump`로 토스트를 띄운다 (지금까지 아무도 쓰지 않던 인자다)
     - 「송출 종료」는 청중 창을 닫고 `/presentations`로 돌아간다. Esc는 종료하지 않는다
     - `App.tsx`·`routes/index.ts`에 라우트 등록
-  - **DoD (통과 기준)**: `pnpm exec vitest run apps/web/src/routes/PresenterControlRoute.test.tsx`가 100% 통과(Green)한다.
+  - **DoD (통과 기준)**: `pnpm exec vitest run src/client/routes/PresenterControlRoute.test.tsx`가 100% 통과(Green)한다.
 
 ---
 
 ## 3. 검증 명령어
 
 ```bash
-pnpm exec vitest run apps/web/src/features/presentation apps/web/src/routes
+pnpm exec vitest run src/client/features/presentation src/client/routes
 pnpm typecheck && pnpm lint && pnpm test
 ```
 

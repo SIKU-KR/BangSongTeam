@@ -21,7 +21,7 @@
 1. **로그인은 전제 조건이다**: 사용자 결정(2026-09-22)에 따라 게스트 편집 경로를 제거한다. `prd.md:150`의 '로그인은 편집의 전제 조건이 아니다'와 충돌하므로 **문서도 같이 고친다**(`tasks_6.md`).
 2. **부팅 시 서버 검증으로 게이트를 막지 않는다**: 캐시된 세션이 있으면 즉시 통과시키고 서버 재검증은 백그라운드로 돌린다. 예배 당일 네트워크가 끊겼는데 로그인 화면이 뜨면 서비스 전체가 실패한다.
 3. **송출 경로는 네트워크를 쓰지 않는다**: `/present/*`는 하이드레이션된 메모리 상태만 읽는다. 동기화·세션 재검증이 여기서 돌면 안 된다.
-4. **느슨한 fetch 금지**: 서버 통신은 `hc<AppType>` 한 곳을 통한다 (CLAUDE.md §6.1). `apps/web/src`는 `packages/db`를 import하지 않는다.
+4. **느슨한 fetch 금지**: 서버 통신은 `hc<AppType>` 한 곳을 통한다 (CLAUDE.md §6.1). `src/client`는 `packages/db`를 import하지 않는다.
 5. **시드 샘플을 자동 생성하지 않는다**: 계정이 생긴 이상 첫 로그인 사용자는 빈 대시보드에서 시작한다. 샘플 5개를 계정에 심으면 그게 서버로 올라가 남의 데이터처럼 보인다.
 6. **로컬 문서는 사용자별로 격리한다**: 한 브라우저에서 계정을 바꿔도 남의 문서가 보이면 안 된다. 로그아웃해도 로컬 데이터 자체는 지우지 않는다 (다시 로그인하면 그대로 써야 한다).
 
@@ -30,7 +30,7 @@
 ## 2. 세부 작업 체크리스트
 
 - [x] **Task 3.1: Hono RPC 클라이언트 모듈**
-  - **대상 파일**: `apps/web/src/lib/api/client.ts`
+  - **대상 파일**: `src/client/lib/api/client.ts`
   - **선행 조건**: 없음
   - **구현 내용**:
     - `hc<AppType>("/")` — `AppType`은 `worker/index.ts`에서 이미 export되어 있다
@@ -39,7 +39,7 @@
   - **DoD (통과 기준)**: `pnpm --filter web exec tsc --noEmit`이 에러 없이 통과한다.
 
 - [x] **Task 3.2: 오프라인 세션 캐시 (TDD)**
-  - **대상 파일**: `apps/web/src/lib/auth/sessionCache.ts`
+  - **대상 파일**: `src/client/lib/auth/sessionCache.ts`
   - **선행 조건**: Task 3.1
   - **구현 내용**:
     - httpOnly 쿠키는 JS가 못 읽으므로, 세션 확인에 성공할 때마다 `{ userId, name, image, expiresAt }`를 IndexedDB에 캐시한다
@@ -48,7 +48,7 @@
   - **DoD (통과 기준)**: `pnpm --filter web vitest run src/lib/auth/sessionCache.test.ts`가 100% 통과(Green)한다.
 
 - [x] **Task 3.3: 세션 스토어 (TDD)**
-  - **대상 파일**: `apps/web/src/lib/auth/sessionStore.ts`
+  - **대상 파일**: `src/client/lib/auth/sessionStore.ts`
   - **선행 조건**: Task 3.2
   - **구현 내용**:
     - 상태: `loading` / `authenticated` / `unauthenticated`
@@ -60,7 +60,7 @@
   - **구현 메모**: '오프라인'과 '세션 없음'을 반드시 구분한다. 세션 조회기는 서버가 확실히 답했을 때만 `null`을 돌리고, 네트워크에 닿지 못하면 던진다. 둘을 뭉뚱그리면 예배 당일 네트워크가 끊기는 순간 로그아웃되어 송출이 멈춘다.
 
 - [x] **Task 3.4: 로그인 화면**
-  - **대상 파일**: `apps/web/src/routes/LoginRoute.tsx`
+  - **대상 파일**: `src/client/routes/LoginRoute.tsx`
   - **선행 조건**: Task 3.3
   - **구현 내용**:
     - 카카오·네이버 로그인 버튼, 서비스 한 줄 소개
@@ -68,7 +68,7 @@
   - **DoD (통과 기준)**: `pnpm --filter web vitest run src/routes/LoginRoute.test.tsx`가 100% 통과(Green)한다.
 
 - [x] **Task 3.5: 게스트 경로 제거 및 세션 사용자 연결**
-  - **대상 파일**: `apps/web/src/features/presentation/presentationStore.ts`, `apps/web/src/features/editor/songLibraryStore.ts`
+  - **대상 파일**: `src/client/features/presentation/presentationStore.ts`, `src/client/features/editor/songLibraryStore.ts`
   - **선행 조건**: Task 3.3
   - **구현 내용**:
     - `createSeedState()`를 빈 컬렉션으로 바꾸고, 저장소가 비었을 때 샘플을 기록하던 분기를 제거한다
@@ -79,7 +79,7 @@
   - **구현 메모**: `resetActivePresentation()`의 의미가 '시드 복원'에서 '세트 비우기'로 바뀌었다. 시드가 사라진 이상 사용자가 만든 적 없는 곡이 복원되는 게 더 이상하다. `saveSongToLibrary()`는 세션이 없으면 던진다 — 빈 `userId`로 저장하면 `DeckSchema`(uuid)에서 터지거나, 더 나쁘게는 아무에게도 안 보이는 곡이 저장된다.
 
 - [x] **Task 3.6: 앱 인증 게이트**
-  - **대상 파일**: `apps/web/src/App.tsx`
+  - **대상 파일**: `src/client/App.tsx`
   - **선행 조건**: Task 3.4, Task 3.5
   - **구현 내용**:
     - 하이드레이션 게이트 다음에 인증 게이트를 둔다. 미인증이면 로그인 화면만 렌더한다
@@ -88,7 +88,7 @@
   - **구현 메모**: 세션을 먼저 확정한 다음 스토어를 싣는다. 두 하이드레이션 모두 세션 사용자로 문서를 거르므로 순서가 뒤집히면 빈 목록이 나온다.
 
 - [x] **Task 3.7: 사이드바 계정 영역 연결**
-  - **대상 파일**: `apps/web/src/components/layout/AppSidebar.tsx`
+  - **대상 파일**: `src/client/components/layout/AppSidebar.tsx`
   - **선행 조건**: Task 3.6
   - **구현 내용**:
     - '주일 찬양팀 / 로컬 오프라인 모드' 정적 아바타를 실제 세션 사용자로 교체하고 로그아웃을 붙인다

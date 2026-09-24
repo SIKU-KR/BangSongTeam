@@ -400,24 +400,25 @@ Vite 기반 React SPA와 Hono API를 하나의 Cloudflare Worker로 배포하고
 
 ### 7.8 저장소 구조와 공유 타입 시스템
 
-프론트엔드와 API를 하나의 모노레포에서 관리하고, 도메인 스키마를 공유 패키지 한 곳에서 정의해 양쪽이 같은 타입을 쓴다. 구체적인 타입 정의는 이 문서의 범위가 아니다.
+프론트엔드와 API를 한 저장소의 한 패키지에서 관리하고, 도메인 스키마를 공유 레이어 한 곳에서 정의해 양쪽이 같은 타입을 쓴다. 구체적인 타입 정의는 이 문서의 범위가 아니다.
 
-**도구:** pnpm workspaces. 패키지 수가 적어 Turborepo 같은 빌드 오케스트레이션 도구는 쓰지 않는다.
+**도구:** pnpm 단일 패키지(워크스페이스 없음). 배포 단위가 Worker 하나로 고정되어 있어 패키지를 나누지 않는다(2026-09-24에 워크스페이스 6개를 하나로 합쳤다). 레이어 경계는 패키지 대신 ESLint import 규칙으로 강제한다.
 
-| 경로            | 역할                                                                             | 비고                                                                                 |
-| --------------- | -------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
-| apps/web        | Vite SPA + Worker(Hono API). 하나의 배포 단위                                    | Cloudflare Vite 플러그인으로 함께 빌드·배포                                          |
-| packages/shared | 도메인 스키마, API 요청·응답 계약, 공통 상수(스타일 기본값·허용 범위, 단축키 등) | 브라우저와 Workers 양쪽에서 도는 순수 TypeScript. 다른 내부 패키지를 import하지 않음 |
-| packages/db     | Drizzle 스키마, 마이그레이션, 쿼리 헬퍼(7.5의 user\_id·visibility 강제 포함)     | Worker에서만 import                                                                  |
-| packages/config | tsconfig, ESLint 공통 설정                                                       |                                                                                      |
+| 경로       | 역할                                                                             | 비고                                                                      |
+| ---------- | -------------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| src/client | Vite SPA                                                                         | Worker와 함께 Cloudflare Vite 플러그인으로 빌드·배포하는 하나의 배포 단위 |
+| src/worker | Worker(Hono API)                                                                 |                                                                           |
+| src/shared | 도메인 스키마, API 요청·응답 계약, 공통 상수(스타일 기본값·허용 범위, 단축키 등) | `#shared`로 import. 브라우저와 Workers 양쪽에서 도는 순수 TypeScript      |
+| src/db     | Drizzle 스키마, 쿼리 헬퍼(7.5의 user\_id·visibility 강제 포함)                   | `#db`로 import. Worker에서만 import                                       |
+| migrations | D1 마이그레이션                                                                  | drizzle-kit이 생성하고 FTS5 SQL은 손으로 덧붙인다                         |
 
 **공유 타입 원칙**
 
-- 단일 원천: 도메인 스키마는 packages/shared의 Zod 스키마로 한 번만 정의하고, TypeScript 타입은 그 스키마에서 추론한다. 같은 구조를 손으로 다시 쓰는 중복 타입은 만들지 않는다
+- 단일 원천: 도메인 스키마는 src/shared의 Zod 스키마로 한 번만 정의하고, TypeScript 타입은 그 스키마에서 추론한다. 같은 구조를 손으로 다시 쓰는 중복 타입은 만들지 않는다
 - API 계약: 서버는 공유 스키마로 요청을 검증하고(@hono/zod-validator), 프론트엔드는 Hono RPC 클라이언트(hc)로 API를 호출해 경로·요청·응답 타입을 컴파일 시점에 맞춘다
 - DB와 API 분리: DB 행 타입은 Drizzle에서 추론하고, API로 내보내는 구조는 공유 스키마로 따로 정의한다. DB 구조를 API에 그대로 노출하지 않는다
 - JSON 컬럼: `decks.style`·`decks.slides`처럼 D1에 JSON TEXT로 저장하는 값은 공유 스키마로 구조를 정하고, 저장·조회 시 스키마로 검증한다
-- 의존 방향: apps → packages 한 방향만 허용한다. 프론트엔드 코드가 packages/db를 import하면 ESLint 규칙으로 막는다
+- 의존 방향: shared ← db ← worker, shared ← client 한 방향만 허용한다. 프론트엔드 코드가 src/db를 import하면 ESLint 규칙으로 막는다
 - CI는 저장소 전체 타입 검사를 한 번에 돌려, 스키마 변경이 양쪽 모두에 즉시 반영되게 한다
 
 ## 8. MVP 범위와 로드맵

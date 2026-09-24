@@ -84,21 +84,21 @@ AI 코딩 에이전트가 단독으로 실행할 수 있도록 태스크를 설�
 반드시 다음 순서에 따라 태스크를 배치한다:
 
 1. `패키지 환경/설정` (package.json, tsconfig)
-2. `타입 및 Zod 스키마 정의` (`packages/shared/src/schemas/*`)
+2. `타입 및 Zod 스키마 정의` (`src/shared/schemas/*`)
 3. `TDD 실패 테스트(Red) 작성` (`*.test.ts`)
 4. `핵심 비즈니스 로직 구현(Green)` (`*.ts`)
-5. `DB 스키마 및 마이그레이션` (`packages/db/src/schema/*`, `drizzle/*`)
-6. `보안 쿼리 헬퍼 구현` (`packages/db/src/queries/*`)
-7. `Worker API 엔드포인트` (`apps/web/worker/routes/*`)
-8. `프론트엔드 컴포넌트/훅` (`apps/web/src/*`)
+5. `DB 스키마 및 마이그레이션` (`src/db/schema/*`, `drizzle/*`)
+6. `보안 쿼리 헬퍼 구현` (`src/db/queries/*`)
+7. `Worker API 엔드포인트` (`src/worker/routes/*`)
+8. `프론트엔드 컴포넌트/훅` (`src/client/*`)
 9. `라우트 결합 및 E2E 무결점 검증`
 
 ### 규칙 3: 1줄 통과 기준 (1-Line Definition of Done)
 
 - 각 태스크마다 통과 기준(DoD)을 명확한 검증 명령어 또는 조건으로 **정확히 1줄**로 명시한다.
 - _예시_:
-  - `DoD (통과 기준)`: `pnpm --filter @repo/shared vitest run src/utils/lyrics.test.ts`가 100% 통과(Green)한다.
-  - `DoD (통과 기준)`: `pnpm --filter web exec tsc --noEmit`이 에러 없이 통과한다.
+  - `DoD (통과 기준)`: `pnpm vitest run src/shared/utils/lyrics.test.ts`가 100% 통과(Green)한다.
+  - `DoD (통과 기준)`: `pnpm typecheck`이 에러 없이 통과한다.
 
 ### 규칙 4: 마크다운 체크박스 포맷 (`- [ ]`)
 
@@ -200,9 +200,9 @@ flowchart TD
 
 | 영역                | 위반 금지 규칙                                                                           | 올바른 처리 방법                                                            |
 | ------------------- | ---------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
-| **의존성 경계**     | `apps/web/src`에서 `packages/db`를 직접 import하는 행위                                  | 프론트엔드는 반드시 Hono RPC Client (`hc<AppType>`)를 통해서만 서버와 통신  |
-| **타입 정의**       | TypeScript `interface`를 프론트/백엔드에 수동 중복 선언하는 행위                         | `packages/shared/src/schemas/`의 Zod 스키마에서 `z.infer`로만 타입 유도     |
-| **D1 데이터베이스** | API 핸들러에서 raw `db.select().from(decks)`를 직접 호출하는 행위                        | 반드시 `packages/db/src/queries/`의 스코프 헬퍼를 경유하여 `userId` 강제    |
+| **의존성 경계**     | `src/client`에서 `#db`(`src/db`)를 직접 import하는 행위                                  | 프론트엔드는 반드시 Hono RPC Client (`hc<AppType>`)를 통해서만 서버와 통신  |
+| **타입 정의**       | TypeScript `interface`를 프론트/백엔드에 수동 중복 선언하는 행위                         | `src/shared/schemas/`의 Zod 스키마에서 `z.infer`로만 타입 유도              |
+| **D1 데이터베이스** | API 핸들러에서 raw `db.select().from(decks)`를 직접 호출하는 행위                        | 반드시 `src/db/queries/`의 스코프 헬퍼를 경유하여 `userId` 강제             |
 | **공개 덱 보안**    | 공개 라이브러리 조회 시 비공개 덱이 유출되는 쿼리                                        | `where(eq(decks.visibility, 'public'))`를 쿼리 헬퍼 레벨에서 무조건 강제    |
 | **렌더링 엔진**     | SlideStage를 Reveal.js나 HTML5 Canvas로 교체하는 행위                                    | 16:9 DOM 3-Layer (Video A/B, Black Overlay, Typography) 아키텍처 엄수       |
 | **오프라인 송출**   | 송출 화면(`/present/*`) 실행 중에 외부 네트워크 fetch를 호출하는 행위                    | Cache Storage 및 IndexedDB(`worship-offline-db`)에서만 데이터를 로컬 로드   |

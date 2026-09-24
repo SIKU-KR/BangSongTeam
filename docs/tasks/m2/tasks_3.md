@@ -24,7 +24,7 @@
 ## 2. 세부 작업 체크리스트
 
 - [x] **Task 3.1: react-moveable 기반 텍스트 박스 조작 오버레이 컴포넌트 구현**
-  - **대상 파일**: `apps/web/src/features/editor/MoveableTextBox.tsx`
+  - **대상 파일**: `src/client/features/editor/MoveableTextBox.tsx`
   - **선행 조건**: `docs/tasks/m2/tasks_2.md`
   - **구현 내용**:
     - 1920x1080 가상 스테이지 좌표계 내부에서 동작하는 `Moveable` 래퍼 컴포넌트
@@ -35,7 +35,7 @@
   - **DoD (통과 기준)**: `pnpm --filter web exec tsc --noEmit`이 통과하고 텍스트 박스 드래그 및 폭 조절 시 퍼센트 좌표가 계산된다.
 
 - [x] **Task 3.2: 16:9 편집 미리보기 인터랙티브 스테이지 컴포넌트 구현**
-  - **대상 파일**: `apps/web/src/features/editor/EditorStagePreview.tsx`
+  - **대상 파일**: `src/client/features/editor/EditorStagePreview.tsx`
   - **선행 조건**: Task 3.1
   - **구현 내용**:
     - 기존 `SlideStage` 위에 `MoveableTextBox` 및 중앙선 스냅 가이드라인 오버레이 렌더링
@@ -44,7 +44,7 @@
   - **DoD (통과 기준)**: `pnpm --filter web exec tsc --noEmit`이 통과하고 스테이지 위에서 텍스트 조작 및 경고가 올바르게 렌더링된다.
 
 - [x] **Task 3.3: 하단 슬라이드 썸네일 스트립 컴포넌트 구현**
-  - **대상 파일**: `apps/web/src/features/editor/SlideStripPanel.tsx`
+  - **대상 파일**: `src/client/features/editor/SlideStripPanel.tsx`
   - **선행 조건**: Task 3.2
   - **구현 내용**:
     - 현재 활성 곡의 모든 슬라이드를 가로 스크롤 카드 스트립으로 표시

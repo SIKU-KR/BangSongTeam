@@ -17,7 +17,7 @@
 ## 2. 세부 작업 체크리스트
 
 - [x] **Task 4.1: 청중용 단독 전체화면 송출 페이지 구현**
-  - **대상 파일**: `apps/web/src/routes/FullscreenPresentRoute.tsx`
+  - **대상 파일**: `src/client/routes/FullscreenPresentRoute.tsx`
   - **선행 조건**: `docs/tasks/m1/tasks_3.md`
   - **구현 내용**:
     - 인메모리 5곡 세트 데이터를 로드하고 현재 곡/슬라이드 인덱스 상태 관리
@@ -28,7 +28,7 @@
   - **DoD (통과 기준)**: `pnpm --filter web exec tsc --noEmit`이 통과하고 전체화면 전환 및 방향키/키패드 점프가 화면 왜곡 없이 동작한다.
 
 - [x] **Task 4.2: React Router 라우팅 등록 및 메인 홈 진입 화면 구현**
-  - **대상 파일**: `apps/web/src/routes/index.tsx`, `apps/web/src/App.tsx`
+  - **대상 파일**: `src/client/routes/index.tsx`, `src/client/App.tsx`
   - **선행 조건**: Task 4.1
   - **구현 내용**:
     - React Router 라이브러리 모드 설정 (`/`, `/present/fullscreen`)
