@@ -15,6 +15,10 @@ export interface AppHeroHeaderProps {
   itemCountLabel: string;
   /** 원형 (+) 빠른 추가 버튼 동작 — 경로에 따라 달라진다 */
   onQuickAdd: () => void;
+  /** 툴바 왼쪽 (드라이브 경로 등). 있으면 카운트 문구 대신 보인다 */
+  toolbarStart?: React.ReactNode;
+  /** 원형 (+) 버튼 대신 넣을 요소 (드라이브의 '새로 만들기' 메뉴) */
+  quickAddSlot?: React.ReactNode;
 }
 
 type DropdownName = "type" | "category" | "owner" | "sort";
@@ -38,6 +42,8 @@ export function AppHeroHeader({
   onSortOrderChange,
   itemCountLabel,
   onQuickAdd,
+  toolbarStart,
+  quickAddSlot,
 }: AppHeroHeaderProps): React.JSX.Element {
   const [typeFilter, setTypeFilter] = useState<string>("전체");
   const [categoryFilter, setCategoryFilter] = useState<string>("전체");
@@ -312,10 +318,14 @@ export function AppHeroHeader({
       </header>
 
       {/* ── Canva 액션 툴바: 우측 상단 정렬(↑↓), 그리드/리스트 뷰 전환(:: / ☰), 빠른 추가(+) ── */}
-      <div className="max-w-7xl w-full mx-auto px-6 sm:px-8 pt-6 pb-2 flex items-center justify-between">
-        <div className="text-xs text-zinc-500">{itemCountLabel}</div>
+      <div className="max-w-7xl w-full mx-auto px-6 sm:px-8 pt-6 pb-2 flex items-center justify-between gap-4">
+        <div className="min-w-0 flex-1">
+          {toolbarStart ?? (
+            <div className="text-xs text-zinc-500">{itemCountLabel}</div>
+          )}
+        </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 shrink-0">
           {/* 1) 정렬 순서 토글 버튼 (↑↓) */}
           <button
             type="button"
@@ -385,26 +395,28 @@ export function AppHeroHeader({
           </div>
 
           {/* 3) 원형 빠른 추가 버튼 (+) */}
-          <button
-            type="button"
-            onClick={onQuickAdd}
-            title="새 항목 추가"
-            className="w-8 h-8 rounded-full bg-emerald-600 hover:bg-emerald-500 text-white flex items-center justify-center shadow-sm hover:shadow dark:shadow-emerald-950/40 hover:scale-105 active:scale-95 transition-all cursor-pointer"
-          >
-            <svg
-              className="w-4 h-4"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
+          {quickAddSlot ?? (
+            <button
+              type="button"
+              onClick={onQuickAdd}
+              title="새 항목 추가"
+              className="w-8 h-8 rounded-full bg-emerald-600 hover:bg-emerald-500 text-white flex items-center justify-center shadow-sm hover:shadow dark:shadow-emerald-950/40 hover:scale-105 active:scale-95 transition-all cursor-pointer"
             >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2.5}
-                d="M12 4v16m8-8H4"
-              />
-            </svg>
-          </button>
+              <svg
+                className="w-4 h-4"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2.5}
+                  d="M12 4v16m8-8H4"
+                />
+              </svg>
+            </button>
+          )}
         </div>
       </div>
     </>

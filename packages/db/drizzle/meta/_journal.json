@@ -43,6 +43,13 @@
       "when": 1790160527119,
       "tag": "0005_remove_catalog",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1790231211453,
+      "tag": "0006_drive_folders",
+      "breakpoints": true
     }
   ]
 }

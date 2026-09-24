@@ -30,7 +30,7 @@ prj-ppt/
 │   └── web/                   # Single deployable unit: Vite SPA + Cloudflare Worker API
 │       ├── src/               # React SPA (Vite + React Router library mode + shadcn/ui)
 │       │   ├── components/    # Reusable UI & slide rendering components
-│       │   ├── features/      # Feature modules (editor, presentation, library)
+│       │   ├── features/      # Feature modules (editor, presentation, drive, library)
 │       │   ├── hooks/         # Custom hooks (keyboard shortcuts, PWA cache)
 │       │   └── routes/        # Client-side routes (SPA)
 │       ├── worker/            # Cloudflare Worker entrypoint (Hono API routes at /api/*)

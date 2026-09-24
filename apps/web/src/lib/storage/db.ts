@@ -1,13 +1,16 @@
 import { openDB, type DBSchema, type IDBPDatabase } from "idb";
-import type { BackgroundMedia, Deck, Presentation } from "@repo/shared";
+import type { BackgroundMedia, Deck, Folder, Presentation } from "@repo/shared";
 
 export const OFFLINE_DB_NAME = "worship-offline-db";
 /**
  * v2: 오프라인 세션 캐시(`auth_session`)를 추가했다.
  * httpOnly 쿠키는 JS가 못 읽으므로, 네트워크 없이 로그인 게이트를 통과시키려면
  * 마지막으로 확인된 세션을 따로 들고 있어야 한다.
+ *
+ * v3: 드라이브 폴더(`folders`)를 추가했다. 홈의 폴더 트리도 프레젠테이션처럼
+ * 네트워크 없이 열려야 한다.
  */
-export const OFFLINE_DB_VERSION = 2;
+export const OFFLINE_DB_VERSION = 3;
 
 /**
  * IndexedDB를 쓸 수 없는 환경(시크릿 모드, 저장소 차단 등)을 호출자가 식별할 수 있게
@@ -37,6 +40,10 @@ export interface WorshipOfflineDB extends DBSchema {
   decks: {
     key: string;
     value: Deck;
+  };
+  folders: {
+    key: string;
+    value: Folder;
   };
   backgrounds: {
     key: string;
@@ -111,6 +118,9 @@ export function getOfflineDB(): Promise<IDBPDatabase<WorshipOfflineDB>> {
         }
         if (!db.objectStoreNames.contains("decks")) {
           db.createObjectStore("decks", { keyPath: "id" });
+        }
+        if (!db.objectStoreNames.contains("folders")) {
+          db.createObjectStore("folders", { keyPath: "id" });
         }
         if (!db.objectStoreNames.contains("backgrounds")) {
           db.createObjectStore("backgrounds", { keyPath: "id" });

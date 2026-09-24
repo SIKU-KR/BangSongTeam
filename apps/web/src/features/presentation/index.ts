@@ -57,12 +57,13 @@ export {
   flushPendingWrites,
   removePersistedPresentation,
   resetPersistenceForTests,
+  movePresentation,
+  renamePresentation,
+  trashPresentation,
+  restorePresentation,
+  duplicatePresentation,
+  removePresentationsLocally,
 } from "./presentationStore";
-
-export {
-  PresentationCard,
-  type PresentationCardProps,
-} from "./PresentationCard";
 
 export {
   enterFullscreen,

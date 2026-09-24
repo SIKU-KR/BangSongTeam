@@ -33,6 +33,7 @@ describe("worship-offline-db", () => {
       "auth_session",
       "backgrounds",
       "decks",
+      "folders",
       "presentations",
       "sync_meta",
     ]);

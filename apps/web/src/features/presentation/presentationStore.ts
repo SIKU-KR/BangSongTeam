@@ -10,7 +10,10 @@ import {
   reportCorruptedRecords,
 } from "../../lib/storage";
 import { getCurrentUserId } from "../../lib/auth/sessionStore";
-import { scheduleDocumentPush } from "../../lib/sync/syncScheduler";
+import {
+  scheduleDocumentPush,
+  cancelDocumentPush,
+} from "../../lib/sync/syncScheduler";
 import { mockDecks } from "./mockPresentation";
 
 /** 멀티 문서 컬렉션 상태 */
@@ -116,12 +119,33 @@ export function canRedo(): boolean {
   return (histories.get(state.activeId)?.redo.length ?? 0) > 0;
 }
 
+/**
+ * 되돌리기 스냅샷에 현재 드라이브 배치(폴더·휴지통)를 입힌다.
+ *
+ * 드라이브에서 옮기거나 휴지통에 넣는 것은 편집 기록이 아니다. 편집기에서
+ * Ctrl+Z를 눌렀다고 세트가 원래 폴더로 튀거나 휴지통에서 나오면 안 된다.
+ */
+function withCurrentPlacement(
+  snapshot: Presentation,
+  current: Presentation,
+): Presentation {
+  const next: Presentation = { ...snapshot };
+  delete next.folderId;
+  delete next.trashedAt;
+  if (current.folderId !== undefined) next.folderId = current.folderId;
+  if (current.trashedAt !== undefined) next.trashedAt = current.trashedAt;
+  return next;
+}
+
 export function undo(): boolean {
   const history = historyFor(state.activeId);
   const prevSerialized = history.undo.pop();
   if (!prevSerialized) return false;
-  history.redo.push(JSON.stringify(readActive()));
-  writeActive(JSON.parse(prevSerialized) as Presentation);
+  const current = readActive();
+  history.redo.push(JSON.stringify(current));
+  writeActive(
+    withCurrentPlacement(JSON.parse(prevSerialized) as Presentation, current),
+  );
   emitChange();
   return true;
 }
@@ -130,8 +154,11 @@ export function redo(): boolean {
   const history = historyFor(state.activeId);
   const nextSerialized = history.redo.pop();
   if (!nextSerialized) return false;
-  history.undo.push(JSON.stringify(readActive()));
-  writeActive(JSON.parse(nextSerialized) as Presentation);
+  const current = readActive();
+  history.undo.push(JSON.stringify(current));
+  writeActive(
+    withCurrentPlacement(JSON.parse(nextSerialized) as Presentation, current),
+  );
   emitChange();
   return true;
 }
@@ -180,10 +207,10 @@ function runPendingWrites(): void {
   inFlight = inFlight.then(() => writeDocuments(ids));
 }
 
-function schedulePersist(): void {
+function schedulePersist(id: string = state.activeId): void {
   if (!persistenceEnabled) return;
-  if (!state.activeId) return; // 빈 컬렉션 — 저장할 문서가 없다
-  pendingIds.add(state.activeId);
+  if (!id) return; // 빈 컬렉션 — 저장할 문서가 없다
+  pendingIds.add(id);
   if (debounceTimer) clearTimeout(debounceTimer);
   debounceTimer = setTimeout(runPendingWrites, PERSIST_DEBOUNCE_MS);
 }
@@ -518,8 +545,12 @@ export function loadSampleSongsIntoActivePresentation(): PresentationItem[] {
  * 아니므로, 기록하면 canUndo()가 허위로 true가 되어 유령 undo가 생긴다.
  *
  * 호출자는 반환된 id로 /editor/:presentationId 로 이동해야 한다.
+ * `folderId`는 드라이브에서 지금 보고 있는 폴더다 (없으면 루트).
  */
-export function createNewPresentation(title = "새 프레젠테이션"): Presentation {
+export function createNewPresentation(
+  title = "새 프레젠테이션",
+  folderId: string | null = null,
+): Presentation {
   const now = new Date().toISOString();
   const created: Presentation = {
     id: crypto.randomUUID(),
@@ -527,6 +558,8 @@ export function createNewPresentation(title = "새 프레젠테이션"): Present
     title,
     serviceDate: now.slice(0, 10),
     items: [],
+    folderId,
+    trashedAt: null,
     createdAt: now,
     updatedAt: now,
   };
@@ -917,6 +950,171 @@ export function reorderSlides(
     updatedAt: new Date().toISOString(),
   });
   emitChange();
+}
+
+// ----------------------------------------------------------------------------
+// 드라이브 조작 (홈 폴더 트리·휴지통)
+//
+// 활성 문서가 아니라 id로 대상을 고른다. 드라이브에서는 여러 문서를 한꺼번에
+// 옮기거나 지우므로 '지금 편집 중인 문서'라는 개념이 없다. 편집 기록(undo)에도
+// 남기지 않는다 — 드라이브 배치는 문서 내용이 아니다.
+// ----------------------------------------------------------------------------
+
+const MAX_TITLE_LENGTH = 100;
+const COPY_SUFFIX = " (사본)";
+
+/** id로 문서 1건을 바꾸고 저장·push를 예약한다 */
+function updateDocumentById(
+  id: string,
+  update: (doc: Presentation) => Presentation,
+): Presentation | undefined {
+  const current = state.byId[id];
+  if (!current) return undefined;
+  const next = update(current);
+  state = { ...state, byId: { ...state.byId, [id]: next } };
+  listSnapshot = buildListSnapshot(state);
+  notifyDocument(next);
+  return next;
+}
+
+function notifyDocument(doc: Presentation): void {
+  schedulePersist(doc.id);
+  scheduleDocumentPush(doc);
+  for (const listener of listeners) listener();
+}
+
+/** 문서를 다른 폴더로 옮긴다 (`null` = 루트) */
+export function movePresentation(id: string, folderId: string | null): void {
+  updateDocumentById(id, (doc) =>
+    (doc.folderId ?? null) === folderId
+      ? doc
+      : { ...doc, folderId, updatedAt: new Date().toISOString() },
+  );
+}
+
+/**
+ * 드라이브에서 이름 바꾸기. 빈 이름은 무시하고 100자로 자른다.
+ * (편집기 헤더의 제목 수정은 편집 기록을 남기는 `updatePresentationTitle`)
+ */
+export function renamePresentation(id: string, title: string): void {
+  const trimmed = title.trim().slice(0, MAX_TITLE_LENGTH);
+  if (!trimmed) return;
+  updateDocumentById(id, (doc) =>
+    doc.title === trimmed
+      ? doc
+      : { ...doc, title: trimmed, updatedAt: new Date().toISOString() },
+  );
+}
+
+/** 휴지통으로 보낸다. 폴더 배치는 그대로 두어 복원 시 제자리로 돌아간다 */
+export function trashPresentation(id: string): void {
+  updateDocumentById(id, (doc) => {
+    if (doc.trashedAt) return doc;
+    const now = new Date().toISOString();
+    return { ...doc, trashedAt: now, updatedAt: now };
+  });
+}
+
+/**
+ * 휴지통에서 복원한다. 돌아갈 폴더는 호출자가 정한다 — 원래 폴더가 없거나
+ * 휴지통에 있으면 루트다 (폴더 트리는 드라이브 기능 모듈이 안다).
+ */
+export function restorePresentation(id: string, folderId: string | null): void {
+  updateDocumentById(id, (doc) =>
+    doc.trashedAt
+      ? {
+          ...doc,
+          folderId,
+          trashedAt: null,
+          updatedAt: new Date().toISOString(),
+        }
+      : doc,
+  );
+}
+
+/**
+ * 사본 만들기. 같은 폴더에 "제목 (사본)"으로 만든다.
+ *
+ * 항목·덱 id를 모두 새로 발급한다. 덱 id가 원본과 같으면 서버의 `decks` 기본키를
+ * 위반해 사본이 영영 저장되지 않는다 (Clone-on-Add와 같은 이유로 uuid).
+ */
+export function duplicatePresentation(id: string): Presentation | null {
+  const source = state.byId[id];
+  if (!source) return null;
+
+  const now = new Date().toISOString();
+  const newId = crypto.randomUUID();
+  const items = source.items.map((item) => {
+    const deckId = crypto.randomUUID();
+    return {
+      ...item,
+      id: crypto.randomUUID(),
+      presentationId: newId,
+      deckId,
+      deck: item.deck
+        ? {
+            ...(JSON.parse(JSON.stringify(item.deck)) as Deck),
+            id: deckId,
+            presentationId: newId,
+            createdAt: now,
+            updatedAt: now,
+          }
+        : undefined,
+    };
+  });
+
+  const copy: Presentation = {
+    ...source,
+    id: newId,
+    title: `${source.title.slice(0, MAX_TITLE_LENGTH - COPY_SUFFIX.length)}${COPY_SUFFIX}`,
+    items,
+    folderId: source.folderId ?? null,
+    trashedAt: null,
+    createdAt: now,
+    updatedAt: now,
+  };
+
+  state = {
+    ...state,
+    byId: { ...state.byId, [newId]: copy },
+    order: [...state.order, newId],
+  };
+  listSnapshot = buildListSnapshot(state);
+  notifyDocument(copy);
+  return copy;
+}
+
+/**
+ * 영구 삭제가 끝난 문서를 메모리와 저장소에서 지운다.
+ *
+ * 서버 삭제가 성공한 뒤에만 부른다. 대기 중인 로컬 저장·서버 push도 취소한다 —
+ * 늦게 도착한 push가 서버에서 문서를 되살리면 안 된다.
+ */
+export async function removePresentationsLocally(
+  ids: readonly string[],
+): Promise<void> {
+  const removed = new Set(ids.filter((id) => state.byId[id]));
+  if (removed.size === 0) return;
+
+  const byId = { ...state.byId };
+  for (const id of removed) {
+    delete byId[id];
+    histories.delete(id);
+    pendingIds.delete(id);
+    cancelDocumentPush(id);
+  }
+  const order = state.order.filter((id) => !removed.has(id));
+  state = {
+    byId,
+    order,
+    activeId: removed.has(state.activeId) ? (order[0] ?? "") : state.activeId,
+  };
+  listSnapshot = buildListSnapshot(state);
+  for (const listener of listeners) listener();
+
+  for (const id of removed) {
+    await removePersistedPresentation(id);
+  }
 }
 
 function subscribe(listener: () => void): () => void {

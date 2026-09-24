@@ -31,6 +31,11 @@ export interface SlideStageProps {
   isTextInteracting?: boolean;
   /** 컨테이너 커스텀 크기 (선택적) */
   containerDimensions?: { width?: number; height?: number };
+  /**
+   * 배경을 영상 대신 포스터 정지 이미지로 그린다 (드라이브 썸네일).
+   * 카드 수십 개가 각자 루프 영상을 틀지 않게 한다. 송출·편집 화면은 쓰지 않는다.
+   */
+  posterOnly?: boolean;
   className?: string;
 }
 
@@ -53,6 +58,7 @@ export function SlideStage({
   textBoxRef,
   isTextInteracting = false,
   containerDimensions,
+  posterOnly = false,
   className = "",
 }: SlideStageProps): React.JSX.Element {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -124,11 +130,28 @@ export function SlideStage({
         }}
       >
         {/* Layer 1: Motion Background Loop (Dual Video A/B) */}
-        <VideoLayer
-          src={backgroundUrl}
-          nextSrc={nextBackgroundUrl}
-          posterUrl={posterUrl}
-        />
+        {posterOnly ? (
+          <div
+            data-testid="poster-layer"
+            className="absolute inset-0 overflow-hidden bg-black z-0 pointer-events-none"
+          >
+            {posterUrl && (
+              <img
+                src={posterUrl}
+                alt=""
+                loading="lazy"
+                draggable={false}
+                className="absolute inset-0 w-full h-full object-cover"
+              />
+            )}
+          </div>
+        ) : (
+          <VideoLayer
+            src={backgroundUrl}
+            nextSrc={nextBackgroundUrl}
+            posterUrl={posterUrl}
+          />
+        )}
 
         {/* Layer 2: Readability Black Overlay & Blackout */}
         <OverlayLayer

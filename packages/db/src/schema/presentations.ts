@@ -8,6 +8,7 @@ import {
 import { sql } from "drizzle-orm";
 import { user } from "./auth";
 import { decks } from "./decks";
+import { folders } from "./folders";
 
 // ============================================================================
 // 예배 프레젠테이션 (Presentation) 및 항목
@@ -21,6 +22,12 @@ export const presentations = sqliteTable(
       .references(() => user.id, { onDelete: "cascade" }),
     title: text("title").notNull(),
     serviceDate: text("service_date").notNull(), // 'YYYY-MM-DD'
+    // 드라이브 배치. 폴더가 어떤 경로로 사라지든 파일은 루트로 떨어지고 지워지지
+    // 않는다 (영구 삭제는 `deleteFolderTree`가 명시적으로 한다).
+    folderId: text("folder_id").references(() => folders.id, {
+      onDelete: "set null",
+    }),
+    trashedAt: integer("trashed_at", { mode: "timestamp_ms" }),
     createdAt: integer("created_at", { mode: "timestamp" }).default(
       sql`(unixepoch())`,
     ),
@@ -28,7 +35,10 @@ export const presentations = sqliteTable(
       sql`(unixepoch())`,
     ),
   },
-  (t) => [index("idx_presentations_user_date").on(t.userId, t.serviceDate)],
+  (t) => [
+    index("idx_presentations_user_date").on(t.userId, t.serviceDate),
+    index("idx_presentations_user_folder").on(t.userId, t.folderId),
+  ],
 );
 
 export const presentationItems = sqliteTable(

@@ -1,9 +1,17 @@
 import {
   listPresentations,
   applyServerDocuments,
+  removePersistedPresentation,
 } from "../../features/presentation";
+import {
+  getFolders,
+  applyServerFolders,
+  applyServerFolder,
+} from "../../features/drive/folderStore";
+import { sortFoldersParentFirst, type DriveTombstones } from "@repo/shared";
 import { savePresentation } from "../storage";
 import { mergeDocuments } from "./mergeDocuments";
+import { mergeFolders } from "./mergeFolders";
 import {
   getUserSongs,
   applyServerLibraryDecks,
@@ -14,8 +22,14 @@ import {
   pullPresentations,
   pushPresentation,
   pullDecks,
+  pullFolders,
   OfflineError,
 } from "./presentationSync";
+import {
+  setFolderSyncEnabled,
+  setServerFolderListener,
+  pushFolderNow,
+} from "./folderSync";
 import { setSyncStatus } from "./syncStatus";
 import { setSyncEnabled } from "./syncScheduler";
 import {
@@ -50,10 +64,19 @@ export async function runBootSync(): Promise<void> {
   setSyncEnabled(true);
   setDeckSyncEnabled(true);
   setServerDeckListener(applyServerDeckFields);
+  setFolderSyncEnabled(true);
+  setServerFolderListener(applyServerFolder);
 
+  // 폴더를 먼저 맞춘다. 세트가 가리키는 폴더가 서버에 먼저 있어야 한다 — 없으면
+  // 서버가 `folderId`를 루트로 보정한다. 폴더를 못 맞췄으면 세트도 올리지 않는다.
   let serverDocuments;
+  let tombstones: DriveTombstones;
+  let folderOffline: boolean;
   try {
     setSyncStatus("syncing");
+    const folderList = await pullFolders();
+    tombstones = folderList.tombstones;
+    folderOffline = await syncFolders(folderList.folders, tombstones);
     serverDocuments = await pullPresentations();
   } catch (err) {
     if (err instanceof OfflineError) {
@@ -64,12 +87,18 @@ export async function runBootSync(): Promise<void> {
     return;
   }
 
+  // 다른 기기에서 영구 삭제한 세트는 '아직 안 올라간 문서'가 아니다. 되살리지 않는다.
+  const deletedIds = new Set(tombstones.presentationIds);
+  const local = listPresentations();
   const { documents, needsPush } = mergeDocuments(
-    listPresentations(),
+    local.filter((doc) => !deletedIds.has(doc.id)),
     serverDocuments,
   );
 
   applyServerDocuments(documents);
+  for (const doc of local) {
+    if (deletedIds.has(doc.id)) await removePersistedPresentation(doc.id);
+  }
 
   // 서버에서 받은 문서를 로컬에도 적어 둔다. 다음 부팅에서 네트워크가
   // 없어도 그대로 열려야 한다 (오프라인 송출).
@@ -96,7 +125,41 @@ export async function runBootSync(): Promise<void> {
   // 보관함 곡 (M5-2). 공유·가져오기는 보관함 덱이 서버에 있어야 성립한다.
   const deckOffline = await syncLibraryDecks();
 
-  setSyncStatus(offline || deckOffline ? "offline" : "synced");
+  setSyncStatus(offline || deckOffline || folderOffline ? "offline" : "synced");
+}
+
+/**
+ * 폴더 병합 → 반영·저장 → 로컬이 더 최신인 폴더를 부모부터 올린다.
+ * @returns 오프라인이었는지
+ */
+async function syncFolders(
+  serverFolders: Parameters<typeof mergeFolders>[1],
+  tombstones: DriveTombstones,
+): Promise<boolean> {
+  const deletedIds = new Set(tombstones.folderIds);
+  const local = getFolders();
+  const { folders, needsPush } = mergeFolders(
+    local.filter((folder) => !deletedIds.has(folder.id)),
+    serverFolders,
+  );
+  await applyServerFolders(
+    folders,
+    local.filter((folder) => deletedIds.has(folder.id)).map((f) => f.id),
+  );
+
+  const toPush = new Set(needsPush);
+  let offline = false;
+  for (const folder of sortFoldersParentFirst(
+    folders.filter((candidate) => toPush.has(candidate.id)),
+    folders,
+  )) {
+    try {
+      await pushFolderNow(folder);
+    } catch (err) {
+      if (err instanceof OfflineError) offline = true;
+    }
+  }
+  return offline;
 }
 
 /** @returns 오프라인이었는지 */

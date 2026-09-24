@@ -49,6 +49,7 @@ const EMPTY_PRESENTATION: Presentation = {
   updatedAt: "",
 };
 import { EditorHeader } from "../features/editor/EditorHeader";
+import { drivePath } from "../features/drive";
 import { EditorSidebar } from "../features/editor/EditorSidebar";
 import { StorageWarningBanner } from "../components/common/StorageWarningBanner";
 import { EditorStageCanvas } from "../features/editor/EditorStageCanvas";
@@ -239,7 +240,11 @@ export function EditorRoute(): React.JSX.Element {
 
   // 새 프레젠테이션 만들기
   const handleNewPresentation = () => {
-    const created = createNewPresentation("새 주일 예배 프레젠테이션");
+    // 지금 세트와 같은 드라이브 폴더에 만든다
+    const created = createNewPresentation(
+      "새 주일 예배 프레젠테이션",
+      presentation.folderId ?? null,
+    );
     setActiveSongIndex(0);
     setActiveSlideIndex(0);
     // 이동하지 않으면 위의 useLayoutEffect가 곧바로 옛 문서를 다시 열어
@@ -330,6 +335,7 @@ export function EditorRoute(): React.JSX.Element {
         onNewPresentation={handleNewPresentation}
         onOpenLyricModal={() => setIsLyricModalOpen(true)}
         onLoadSampleSongs={handleLoadSampleSongs}
+        backPath={drivePath(presentation.folderId)}
       />
 
       {/* 2. 본문 3패널 레이아웃 */}

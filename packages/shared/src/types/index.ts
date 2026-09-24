@@ -10,6 +10,8 @@ export type { DeckVisibility, DeckScope, Deck } from "../schemas/deck";
 
 export type { PresentationItem, Presentation } from "../schemas/presentation";
 
+export type { Folder } from "../schemas/folder";
+
 export type { BackgroundMedia } from "../schemas/media";
 
 export type {

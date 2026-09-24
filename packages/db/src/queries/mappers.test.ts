@@ -160,7 +160,28 @@ describe("행 ↔ DTO 매퍼", () => {
         presentation,
         items.map((item, i) => ({ item, deck: decks[i] })),
       );
+      // 드라이브 필드가 없던 문서는 서버에서 '루트, 휴지통 아님'으로 명시되어 돌아온다.
+      expect(restored).toEqual({ ...doc, folderId: null, trashedAt: null });
+    });
+
+    it("드라이브 배치(folderId·trashedAt)를 ms까지 왕복한다", () => {
+      const doc = {
+        ...makeDocument(),
+        folderId: "f0000000-0000-4000-8000-000000000001",
+        trashedAt: "2026-09-24T01:02:03.456Z",
+      };
+      const { presentation, items, decks } = fromPresentationDocument(doc);
+      const restored = toPresentationDocument(
+        presentation,
+        items.map((item, i) => ({ item, deck: decks[i] })),
+      );
       expect(restored).toEqual(doc);
+    });
+
+    it("드라이브 필드가 없으면 행에도 넣지 않는다 (업서트가 기존 값을 유지)", () => {
+      const { presentation } = fromPresentationDocument(makeDocument());
+      expect("folderId" in presentation).toBe(false);
+      expect("trashedAt" in presentation).toBe(false);
     });
 
     it("분해 시 항목과 덱에 프레젠테이션 소유자를 강제한다", () => {

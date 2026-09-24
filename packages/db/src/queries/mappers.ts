@@ -6,9 +6,12 @@ import {
   type DeckStyle,
   type Slide,
   type PresentationDocument,
+  type Folder as SharedFolder,
 } from "@repo/shared";
 import type {
   Deck as DeckRow,
+  Folder as FolderRow,
+  NewFolder,
   NewDeck,
   Presentation as PresentationRow,
   NewPresentation,
@@ -142,6 +145,8 @@ export function toPresentationDocument(
     userId: presentation.userId as string,
     title: presentation.title as string,
     serviceDate: presentation.serviceDate as string,
+    folderId: presentation.folderId ?? null,
+    trashedAt: toIsoOrNull(presentation.trashedAt),
     items: rows.map(({ item, deck }) => ({
       id: item.id as string,
       presentationId: item.presentationId as string,
@@ -183,6 +188,11 @@ export function fromPresentationDocument(
       userId: doc.userId,
       title: doc.title,
       serviceDate: doc.serviceDate,
+      // 필드가 없으면(구버전 클라이언트) 행에도 넣지 않는다. 업서트가 기존 값을 유지한다.
+      ...(doc.folderId === undefined ? {} : { folderId: doc.folderId }),
+      ...(doc.trashedAt === undefined
+        ? {}
+        : { trashedAt: toDateOrNull(doc.trashedAt) }),
       createdAt: toDate(doc.createdAt),
       updatedAt: toDate(doc.updatedAt),
     },
@@ -204,5 +214,31 @@ export function fromPresentationDocument(
         takedownAt: null,
       }),
     ),
+  };
+}
+
+/** D1 폴더 행 → 공유 Folder DTO */
+export function toSharedFolder(row: FolderRow | NewFolder): SharedFolder {
+  return {
+    id: row.id,
+    userId: row.userId,
+    parentId: row.parentId ?? null,
+    name: row.name,
+    trashedAt: toIsoOrNull(row.trashedAt),
+    createdAt: toIso(row.createdAt),
+    updatedAt: toIso(row.updatedAt),
+  };
+}
+
+/** 공유 Folder DTO → D1 폴더 행 */
+export function toFolderRow(folder: SharedFolder): NewFolder {
+  return {
+    id: folder.id,
+    userId: folder.userId,
+    parentId: folder.parentId,
+    name: folder.name,
+    trashedAt: toDateOrNull(folder.trashedAt),
+    createdAt: toDate(folder.createdAt),
+    updatedAt: toDate(folder.updatedAt),
   };
 }

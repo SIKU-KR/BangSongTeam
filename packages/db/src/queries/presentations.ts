@@ -9,6 +9,12 @@ import {
 } from "../schema";
 import { fromPresentationDocument, toPresentationDocument } from "./mappers";
 import { nullifyUnknownBackgrounds } from "./backgrounds";
+import { runStatements } from "./batch";
+import {
+  clearTombstone,
+  resolveOwnedFolderId,
+  tombstoneStatements,
+} from "./folders";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type DbInstance = any;
@@ -200,7 +206,11 @@ export async function deletePresentation(
 
   if (!owned) return false;
 
-  await db.delete(presentations).where(eq(presentations.id, presentationId));
+  // 다른 기기의 부팅 병합이 되살리지 않도록 영구 삭제 기록을 함께 남긴다.
+  await runStatements(db, [
+    db.delete(presentations).where(eq(presentations.id, presentationId)),
+    ...tombstoneStatements(db, userId, "presentation", [presentationId]),
+  ]);
   return true;
 }
 
@@ -228,6 +238,14 @@ export async function upsertPresentationDocument(
 
   if (existing && existing.userId !== userId) return false;
 
+  // 드라이브 배치: 필드가 아예 없으면(구버전 클라이언트) 기존 값을 건드리지 않는다.
+  // 남의 폴더나 사라진 폴더를 가리키면 루트로 보정한다 — 문서를 거절하면
+  // 그 기기의 세트가 영영 올라가지 않는다.
+  const folderId =
+    doc.folderId === undefined
+      ? undefined
+      : await resolveOwnedFolderId(db, userId, doc.folderId);
+
   const {
     presentation,
     items,
@@ -235,9 +253,13 @@ export async function upsertPresentationDocument(
   } = fromPresentationDocument({
     ...doc,
     userId,
+    ...(folderId === undefined ? {} : { folderId }),
   });
 
   const deckRows = await nullifyUnknownBackgrounds(db, rawDeckRows);
+
+  // 영구 삭제 뒤 다른 기기가 같은 문서를 다시 저장했다 — 되살린다.
+  await clearTombstone(db, userId, doc.id);
 
   const statements = [
     // 이 프레젠테이션에 속한 기존 항목·덱을 걷어낸다.
@@ -255,6 +277,12 @@ export async function upsertPresentationDocument(
           title: presentation.title,
           serviceDate: presentation.serviceDate,
           updatedAt: presentation.updatedAt,
+          ...(presentation.folderId === undefined
+            ? {}
+            : { folderId: presentation.folderId }),
+          ...(presentation.trashedAt === undefined
+            ? {}
+            : { trashedAt: presentation.trashedAt }),
         })
         .where(eq(presentations.id, doc.id)),
     );
@@ -271,23 +299,6 @@ export async function upsertPresentationDocument(
 
   await runStatements(db, statements);
   return true;
-}
-
-/**
- * D1은 batch()를 제공하지만 테스트용 better-sqlite3 클라이언트에는 없다.
- * 있으면 원자적으로, 없으면 순차 실행으로 떨어뜨린다.
- */
-async function runStatements(
-  db: DbInstance,
-  statements: unknown[],
-): Promise<void> {
-  if (typeof db.batch === "function" && statements.length > 0) {
-    await db.batch(statements);
-    return;
-  }
-  for (const statement of statements) {
-    await statement;
-  }
 }
 
 /** 프레젠테이션 헤더(제목·예배일) 수정 */

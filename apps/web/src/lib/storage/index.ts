@@ -18,6 +18,14 @@ export {
 } from "./presentationRepository";
 
 export {
+  saveFolder,
+  saveFolders,
+  loadAllFolders,
+  deleteFolders,
+  clearAllFolders,
+} from "./folderRepository";
+
+export {
   saveSong,
   loadAllSongs,
   deleteSong,

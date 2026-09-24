@@ -1,6 +1,7 @@
 export { AppShellLayout } from "./AppShellLayout";
 export { LandingRoute } from "./LandingRoute";
 export { PresentationsRoute } from "./PresentationsRoute";
+export { TrashRoute } from "./TrashRoute";
 export { LyricsRoute } from "./LyricsRoute";
 export { BackgroundsRoute } from "./BackgroundsRoute";
 export { EditorRoute } from "./EditorRoute";

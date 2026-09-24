@@ -4,6 +4,7 @@ import { createAuth, AUTH_BASE_PATH } from "./lib/auth";
 import { backgroundsRoute } from "./routes/backgrounds";
 import { mediaRoute } from "./routes/media";
 import { createPresentationsRoute } from "./routes/presentations";
+import { createFoldersRoute } from "./routes/folders";
 import { createDecksRoute } from "./routes/decks";
 import { createCatalogRoute } from "./routes/catalog";
 import { createReportsRoute } from "./routes/reports";
@@ -54,6 +55,7 @@ export function createApp(deps: AppDeps = {}) {
       .route("/api", devLoginRoute)
       // 계정 데이터 동기화 (로그인 필수)
       .route("/api/presentations", createPresentationsRoute(deps))
+      .route("/api/folders", createFoldersRoute(deps))
       .route("/api/decks", createDecksRoute(deps))
       // 공유 라이브러리 (M5). 검색만 로그인 없이 열린다.
       .route("/api/catalog", createCatalogRoute(deps))
