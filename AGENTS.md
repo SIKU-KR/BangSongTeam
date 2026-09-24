@@ -83,7 +83,7 @@ prj-ppt/
 | **API & Serverless**     | Hono (`@hono/zod-validator`, `hono/client`)  | Runs inside the same Cloudflare Worker at `/api/*`.                     |
 | **Database & ORM**       | Cloudflare D1 (SQLite) + Drizzle ORM         | SQLite with FTS5 trigram. Manage schemas with `drizzle-kit`.            |
 | **File / Media Storage** | Cloudflare R2                                | Background video loops & posters. Zero egress cost.                     |
-| **Authentication**       | Better Auth (Kakao & Naver Social Providers) | Integrated with Drizzle D1 adapter. No password auth in MVP.            |
+| **Authentication**       | Better Auth (Kakao & Naver Social Providers) | Integrated with Drizzle D1 adapter. Allowlisted email/password (§6.7).  |
 | **Styling & UI**         | Tailwind CSS + shadcn/ui                     | Radix UI primitives + Tailwind styling.                                 |
 | **Offline / PWA**        | `vite-plugin-pwa` (Workbox) + `idb`          | RangeRequestsPlugin for cached video streaming. IndexedDB for sets.     |
 | **Canvas / Dragging**    | `react-moveable`                             | Text box 3×3 anchor snapping, width handle, 5% margin constraints.      |
@@ -248,6 +248,15 @@ Sunday worship services cannot tolerate network failures, but caching must never
 - The shared library is a **board of public decks**. The same song may be published many times by different users; entries are never merged into a single canonical version.
 - Results are ordered by use count (`fork_count DESC`, then `updated_at DESC`).
 - **No LLM in MVP**: Workers AI lyric normalization and the per-song lyrics catalog (`lyrics_catalog`, `lyrics_versions`, canonical lyrics, operator lock) were removed from the MVP scope on 2026-09-23. Do not reintroduce an `AI` binding or catalog tables without a product decision.
+
+### 6.7 Email/Password Login (Allowlisted)
+
+Until Kakao/Naver credentials exist, email/password login is how the deployed app is used (`docs/ops/deploy-runbook.md` §2.1):
+
+- **Allowlist is the switch**: the `EMAIL_SIGNUP_ALLOWLIST` secret (comma-separated) enables it. Empty means the form and the endpoints are off.
+- **Sign-up only through `POST /api/email-signup`**, which checks the allowlist and calls `auth.api.signUpEmail`. Better Auth's public `/api/auth/sign-up/email` stays in `disabledPaths`. Sign-in uses the standard `/api/auth/sign-in/email`.
+- **PBKDF2, not scrypt**: Better Auth's default scrypt costs ~40ms CPU per hash even natively in workerd, over the Workers Free 10ms limit (error 1102). `src/worker/lib/password.ts` hashes with Web Crypto PBKDF2-SHA256 at 100,000 iterations (the Workers cap) and stores the count in the hash. Do not switch back to the default hasher while on the Free plan.
+- Password users stay `emailVerified=false`, so a later Kakao/Naver login with the same email is not linked automatically.
 
 ---
 

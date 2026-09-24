@@ -41,6 +41,7 @@ gh secret set CLOUDFLARE_ACCOUNT_ID --body "<Account ID>"
 | `KAKAO_CLIENT_ID` / `KAKAO_CLIENT_SECRET` | 카카오 콘솔 발급값   | 비어 있으면 로그인 화면에 카카오 버튼이 나오지 않는다 |
 | `NAVER_CLIENT_ID` / `NAVER_CLIENT_SECRET` | 네이버 콘솔 발급값   | 위와 같다                                             |
 | `DEV_LOGIN_ENABLED`                       | **절대 넣지 않는다** | 켜지면 누구나 아무 계정으로 로그인할 수 있다          |
+| `EMAIL_SIGNUP_ALLOWLIST`                  | 가입을 허용할 이메일 | 쉼표로 구분. 비어 있으면 이메일 로그인이 꺼진다 (2.1) |
 
 값을 표준 입력으로 넘겨 화면에 남기지 않는다. 시크릿을 바꾸면 Worker 새 버전이 곧바로 배포된다.
 
@@ -49,6 +50,20 @@ openssl rand -base64 48 | tr -d '\n' | pnpm exec wrangler secret put BETTER_AUTH
 pbpaste | pnpm exec wrangler secret put KAKAO_CLIENT_ID
 pnpm exec wrangler secret list
 ```
+
+### 2.1 이메일·비밀번호 로그인
+
+카카오·네이버를 붙이기 전까지 쓰는 로그인이다. 메일 인증이 없으므로 `EMAIL_SIGNUP_ALLOWLIST`에 적힌 주소만 로그인 화면의 "가입" 탭으로 가입할 수 있다. Better Auth의 공개 가입 경로(`/api/auth/sign-up/email`)는 항상 닫혀 있다. 이메일은 개인정보라 `vars`가 아니라 시크릿으로 넣는다.
+
+```bash
+printf 'me@example.com,team@example.com' | pnpm exec wrangler secret put EMAIL_SIGNUP_ALLOWLIST
+pnpm exec wrangler secret delete EMAIL_SIGNUP_ALLOWLIST   # 이메일 로그인 끄기 (이미 가입한 계정도 로그인할 수 없게 된다)
+```
+
+- **목록에서 빼도 이미 가입한 계정은 남는다.** 목록은 가입만 막는다. 계정을 없애려면 D1에서 해당 `user` 행을 지운다.
+- **소셜 로그인과 자동으로 합쳐지지 않는다.** 비밀번호 계정은 이메일 미인증 상태라, 같은 이메일로 카카오·네이버 로그인을 하면 "account not linked"로 실패한다(계정 선점 방지). 소셜 로그인을 붙인 뒤에는 그 사람의 비밀번호 계정을 지우고 소셜로 다시 가입하게 한다.
+- **CPU 한도.** 비밀번호 해시는 Workers Free의 요청당 CPU 10ms 한도에 맞춰 PBKDF2-SHA256 100,000회(`src/worker/lib/password.ts`)다. 대시보드 Workers → prj-ppt-web → Logs에서 `/api/auth/sign-in/email`, `/api/email-signup` 요청의 CPU 시간과 `exceededCpu`/1102 오류를 본다. 1102가 반복되면 `PBKDF2_ITERATIONS`를 낮추거나(저장된 해시에 횟수가 기록되어 기존 계정은 그대로 검증된다) Workers Paid로 옮긴다.
+- 로그인 시도는 Better Auth rate limit(같은 IP에서 10초에 3회)으로 막는다. 저장소가 isolate 메모리라 isolate마다 따로 센다.
 
 ## 3. 배포할 때마다
 

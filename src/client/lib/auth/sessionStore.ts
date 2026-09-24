@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from "react";
+import { AuthConfigResponseSchema, type AuthConfigResponse } from "#shared";
 import {
   loadCachedSession,
   saveCachedSession,
@@ -136,18 +137,12 @@ export async function signInAsDeveloper(email?: string): Promise<void> {
   await revalidateSession();
 }
 
-export async function fetchAuthConfig(): Promise<{
-  providers: SocialProvider[];
-  devLogin: boolean;
-}> {
+export async function fetchAuthConfig(): Promise<AuthConfigResponse> {
   const response = await fetch("/api/auth-config", {
     credentials: "include",
   });
   if (!response.ok) throw new Error("로그인 설정을 읽지 못했습니다");
-  return (await response.json()) as {
-    providers: SocialProvider[];
-    devLogin: boolean;
-  };
+  return AuthConfigResponseSchema.parse(await response.json());
 }
 
 export async function signOut(): Promise<void> {

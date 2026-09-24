@@ -11,6 +11,7 @@ export interface Bindings {
   NAVER_CLIENT_ID?: string;
   NAVER_CLIENT_SECRET?: string;
   DEV_LOGIN_ENABLED?: string;
+  EMAIL_SIGNUP_ALLOWLIST?: string;
 }
 
 export interface Variables {

@@ -10,6 +10,7 @@ import {
   PresentationListResponseSchema,
   DeckListResponseSchema,
   ApiErrorSchema,
+  EmailSignUpRequestSchema,
 } from "./api";
 import { DeckStyleSchema } from "./style";
 import { PresentationSchema } from "./presentation";
@@ -178,6 +179,45 @@ describe("API Schemas", () => {
         error: "로그인이 필요합니다",
       });
       expect(ApiErrorSchema.safeParse({}).success).toBe(false);
+    });
+  });
+
+  describe("EmailSignUpRequestSchema", () => {
+    const valid = {
+      email: "  Worship.Team@Example.com ",
+      password: "12345678",
+      name: " 찬양팀 ",
+    };
+
+    it("이메일을 소문자로 정규화하고 공백을 걷어 낸다", () => {
+      expect(EmailSignUpRequestSchema.parse(valid)).toEqual({
+        email: "worship.team@example.com",
+        password: "12345678",
+        name: "찬양팀",
+      });
+    });
+
+    it("비밀번호는 8자 이상 128자 이하다", () => {
+      expect(
+        EmailSignUpRequestSchema.safeParse({ ...valid, password: "1234567" })
+          .success,
+      ).toBe(false);
+      expect(
+        EmailSignUpRequestSchema.safeParse({
+          ...valid,
+          password: "a".repeat(129),
+        }).success,
+      ).toBe(false);
+    });
+
+    it("이메일 형식이 아니거나 이름이 비면 거절한다", () => {
+      expect(
+        EmailSignUpRequestSchema.safeParse({ ...valid, email: "not-an-email" })
+          .success,
+      ).toBe(false);
+      expect(
+        EmailSignUpRequestSchema.safeParse({ ...valid, name: "   " }).success,
+      ).toBe(false);
     });
   });
 });

@@ -10,6 +10,13 @@ BETTER_AUTH_URL=http://localhost:5173
 # 운영에 넣지 않는 것이 1차 방어선이다.
 DEV_LOGIN_ENABLED=true
 
+# 이메일·비밀번호 로그인 가입 허용 목록 (쉼표로 구분, 대소문자 무시)
+#
+# 비워 두면 이메일 로그인 자체가 꺼진다 (로그인 화면에 폼이 나오지 않는다).
+# 메일 인증이 없으므로 여기 적힌 주소만 가입할 수 있다. 운영은 시크릿으로 넣는다
+# (docs/ops/deploy-runbook.md 2장). 예: EMAIL_SIGNUP_ALLOWLIST=me@example.com,team@example.com
+EMAIL_SIGNUP_ALLOWLIST=
+
 # OAuth Providers
 #
 # 도메인 구입 후 카카오·네이버 개발자 콘솔에서 앱을 등록하고 채운다.

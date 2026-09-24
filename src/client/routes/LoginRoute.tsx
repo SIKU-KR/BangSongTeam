@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import type { AuthConfigResponse } from "#shared";
 import {
   SOCIAL_PROVIDERS,
   signInWithProvider,
@@ -6,15 +7,11 @@ import {
   fetchAuthConfig,
   type SocialProvider,
 } from "../lib/auth";
-
-interface AuthConfig {
-  providers: SocialProvider[];
-  devLogin: boolean;
-}
+import { EmailLoginForm } from "../features/auth/EmailLoginForm";
 
 /** 로그인 화면 라우트 */
 export function LoginRoute(): React.JSX.Element {
-  const [config, setConfig] = useState<AuthConfig | null>(null);
+  const [config, setConfig] = useState<AuthConfigResponse | null>(null);
   const [pending, setPending] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [devEmail, setDevEmail] = useState("");
@@ -30,6 +27,7 @@ export function LoginRoute(): React.JSX.Element {
           setConfig({
             providers: SOCIAL_PROVIDERS.map((p) => p.id),
             devLogin: false,
+            emailLogin: false,
           });
         }
       }
@@ -108,11 +106,24 @@ export function LoginRoute(): React.JSX.Element {
                 </div>
               )}
 
+              {config.emailLogin && (
+                <div
+                  data-testid="email-login"
+                  className={
+                    visibleProviders.length > 0
+                      ? "mt-5 pt-5 border-t border-zinc-200 dark:border-zinc-800"
+                      : ""
+                  }
+                >
+                  <EmailLoginForm />
+                </div>
+              )}
+
               {config.devLogin && (
                 <div
                   data-testid="dev-login"
                   className={
-                    visibleProviders.length > 0
+                    visibleProviders.length > 0 || config.emailLogin
                       ? "mt-5 pt-5 border-t border-dashed border-zinc-300 dark:border-zinc-700"
                       : ""
                   }
@@ -146,15 +157,17 @@ export function LoginRoute(): React.JSX.Element {
                 </div>
               )}
 
-              {visibleProviders.length === 0 && !config.devLogin && (
-                <p
-                  role="alert"
-                  className="text-xs text-zinc-600 dark:text-zinc-400 leading-relaxed"
-                >
-                  사용 가능한 로그인 수단이 없습니다. 소셜 로그인 자격증명이
-                  설정되지 않았습니다.
-                </p>
-              )}
+              {visibleProviders.length === 0 &&
+                !config.emailLogin &&
+                !config.devLogin && (
+                  <p
+                    role="alert"
+                    className="text-xs text-zinc-600 dark:text-zinc-400 leading-relaxed"
+                  >
+                    사용 가능한 로그인 수단이 없습니다. 소셜 로그인 자격증명이
+                    설정되지 않았습니다.
+                  </p>
+                )}
             </>
           )}
 
