@@ -23,7 +23,7 @@ export interface UsePresentationShortcutsOptions {
    */
   onExit?: () => void;
   /**
-   * 숫자 키패드 및 버퍼 조작 키(0-9, ., Enter, Backspace) 처리 핸들러
+   * 숫자 키패드 및 버퍼 조작 키(0-9, Enter, Backspace) 처리 핸들러
    */
   handleKey?: (key: string) => void;
   /**
@@ -47,7 +47,7 @@ export interface UsePresentationShortcutsOptions {
  * - ArrowLeft / PageUp -> 이전 슬라이드
  * - 'b', 'B' -> 블랙아웃 토글
  * - 'h', 'H' -> 가사 숨김 토글
- * - 0~9, ., Enter, Backspace -> 네비게이션 버퍼의 handleKey로 위임
+ * - 0~9, Enter, Backspace -> 네비게이션 버퍼의 handleKey로 위임
  */
 export function usePresentationShortcuts({
   onNext,
@@ -154,11 +154,7 @@ export function usePresentationShortcuts({
         callbacksRef.current.onExit?.();
       },
 
-      // 3. 네비게이션 버퍼 점(.) 및 제어 키
-      ".": (event) => {
-        event.preventDefault();
-        callbacksRef.current.handleKey?.(".");
-      },
+      // 3. 네비게이션 버퍼 제어 키
       Enter: (event) => {
         event.preventDefault();
         callbacksRef.current.handleKey?.("Enter");

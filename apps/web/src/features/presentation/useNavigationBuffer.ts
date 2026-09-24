@@ -3,21 +3,14 @@ import { PRESENTATION_SHORTCUTS } from "@repo/shared";
 
 export interface UseNavigationBufferOptions {
   /**
-   * 현재 재생/선택 중인 곡의 0-based 인덱스 (기본값: 0)
+   * 세트 전체 슬라이드 수 (유효성 검사용). 없으면 상한을 검사하지 않는다.
    */
-  currentSongIndex?: number;
+  totalSlides?: number;
   /**
-   * 전체 곡 수 (유효성 검사용)
+   * 유효한 번호 입력 후 Enter 입력 시 호출되는 점프 콜백.
+   * `slideNumber`는 세트 전체에서 1부터 이어지는 슬라이드 번호다.
    */
-  songCount?: number;
-  /**
-   * 해당 곡의 슬라이드 개수를 반환하는 함수 (0-based songIndex 전달)
-   */
-  getSlideCount?: (songIndex: number) => number;
-  /**
-   * 유효한 슬라이드 번호 입력 후 Enter 입력 시 호출되는 점프 콜백
-   */
-  onJump: (songIndex: number, slideIndex: number) => void;
+  onJump: (slideNumber: number) => void;
   /**
    * 유효하지 않은 입력으로 점프 실패 시 호출되는 콜백 (예: 발표자 뷰 알림 표시)
    */
@@ -35,17 +28,13 @@ export interface UseNavigationBufferReturn {
 }
 
 /**
- * 프레젠테이션 숫자 키패드 점프 버퍼 훅
- * - N Enter: 현재 곡의 N번째 슬라이드 (slideIndex: N - 1)
- * - N. Enter: N번째 곡의 1번째 슬라이드 (songIndex: N - 1, slideIndex: 0)
- * - N.M Enter: N번째 곡의 M번째 슬라이드 (songIndex: N - 1, slideIndex: M - 1)
+ * 프레젠테이션 숫자 키패드 점프 버퍼 훅 (PPT식 번호)
+ * - N Enter: 세트 전체에서 N번째 슬라이드. 곡 경계와 상관없이 1부터 이어진다
  * - Backspace: 버퍼 마지막 문자 삭제
  * - 3초 무입력 시 자동 클리어
  */
 export function useNavigationBuffer({
-  currentSongIndex = 0,
-  songCount,
-  getSlideCount,
+  totalSlides,
   onJump,
   onInvalidJump,
   timeoutMs = PRESENTATION_SHORTCUTS.BUFFER_CLEAR_TIMEOUT_MS,
@@ -111,71 +100,17 @@ export function useNavigationBuffer({
         bufferRef.current = "";
         setBuffer("");
 
-        // 구문 분석
-        let targetSongIndex: number;
-        let targetSlideIndex: number;
-
-        if (raw.includes(".")) {
-          if (raw.endsWith(".")) {
-            // N. 형태 (N번째 곡의 첫 번째 슬라이드)
-            const songPart = raw.slice(0, -1);
-            const songNum = parseInt(songPart, 10);
-            if (isNaN(songNum) || songNum <= 0) {
-              onInvalidJump?.(raw);
-              return;
-            }
-            targetSongIndex = songNum - 1;
-            targetSlideIndex = 0;
-          } else {
-            // N.M 형태 (N번째 곡의 M번째 슬라이드)
-            const parts = raw.split(".");
-            if (parts.length !== 2) {
-              onInvalidJump?.(raw);
-              return;
-            }
-            const songNum = parseInt(parts[0], 10);
-            const slideNum = parseInt(parts[1], 10);
-            if (
-              isNaN(songNum) ||
-              isNaN(slideNum) ||
-              songNum <= 0 ||
-              slideNum <= 0
-            ) {
-              onInvalidJump?.(raw);
-              return;
-            }
-            targetSongIndex = songNum - 1;
-            targetSlideIndex = slideNum - 1;
-          }
-        } else {
-          // N 형태 (현재 곡의 N번째 슬라이드)
-          const slideNum = parseInt(raw, 10);
-          if (isNaN(slideNum) || slideNum <= 0) {
-            onInvalidJump?.(raw);
-            return;
-          }
-          targetSongIndex = currentSongIndex;
-          targetSlideIndex = slideNum - 1;
-        }
-
-        // 인덱스 범위 유효성 검증
+        const slideNumber = Number(raw);
         if (
-          songCount !== undefined &&
-          (targetSongIndex < 0 || targetSongIndex >= songCount)
+          !Number.isInteger(slideNumber) ||
+          slideNumber <= 0 ||
+          (totalSlides !== undefined && slideNumber > totalSlides)
         ) {
           onInvalidJump?.(raw);
           return;
         }
 
-        if (getSlideCount !== undefined) {
-          const maxSlides = getSlideCount(targetSongIndex);
-          if (targetSlideIndex < 0 || targetSlideIndex >= maxSlides) {
-            onInvalidJump?.(raw);
-            return;
-          }
-        }
-
-        onJump(targetSongIndex, targetSlideIndex);
+        onJump(slideNumber);
         return;
       }
 
@@ -188,28 +123,9 @@ export function useNavigationBuffer({
         return;
       }
 
-      // 4. 점 (.) - 첫 글자로 올 수 없으며 1개까지만 허용
-      if (key === ".") {
-        if (bufferRef.current.length > 0 && !bufferRef.current.includes(".")) {
-          const next = bufferRef.current + ".";
-          bufferRef.current = next;
-          setBuffer(next);
-          resetTimer();
-        }
-        return;
-      }
-
       // 그 외 키는 무시
     },
-    [
-      clearTimer,
-      currentSongIndex,
-      getSlideCount,
-      onInvalidJump,
-      onJump,
-      resetTimer,
-      songCount,
-    ],
+    [clearTimer, onInvalidJump, onJump, resetTimer, totalSlides],
   );
 
   return {

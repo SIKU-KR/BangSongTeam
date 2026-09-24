@@ -6,6 +6,9 @@ import {
   clampPosition,
   getSlideAt,
   getSongSlideCounts,
+  getTotalSlideCount,
+  slideNumberOf,
+  positionOfSlideNumber,
   isSamePosition,
   peekNext,
   INITIAL_POSITION,
@@ -158,5 +161,76 @@ describe("peekNext", () => {
 
   it("세트 마지막에서는 null이다", () => {
     expect(peekNext({ songIndex: 2, slideIndex: 3 }, SONGS)).toBeNull();
+  });
+});
+
+describe("세트 전체 슬라이드 번호 (PPT식)", () => {
+  // SONGS = [3, 2, 4] → 1곡: 1~3, 2곡: 4~5, 3곡: 6~9
+
+  it("전체 슬라이드 수를 센다", () => {
+    expect(getTotalSlideCount(SONGS)).toBe(9);
+    expect(getTotalSlideCount([])).toBe(0);
+  });
+
+  it("곡 경계를 넘어 1부터 이어서 번호를 매긴다", () => {
+    expect(slideNumberOf({ songIndex: 0, slideIndex: 0 }, SONGS)).toBe(1);
+    expect(slideNumberOf({ songIndex: 0, slideIndex: 2 }, SONGS)).toBe(3);
+    expect(slideNumberOf({ songIndex: 1, slideIndex: 0 }, SONGS)).toBe(4);
+    expect(slideNumberOf({ songIndex: 2, slideIndex: 3 }, SONGS)).toBe(9);
+  });
+
+  it("슬라이드가 없는 자리는 번호가 없다", () => {
+    expect(slideNumberOf({ songIndex: 0, slideIndex: 5 }, SONGS)).toBeNull();
+    expect(slideNumberOf({ songIndex: 9, slideIndex: 0 }, SONGS)).toBeNull();
+    expect(slideNumberOf(INITIAL_POSITION, [])).toBeNull();
+  });
+
+  it("번호를 곡·슬라이드 위치로 바꾼다", () => {
+    expect(positionOfSlideNumber(1, SONGS)).toEqual({
+      songIndex: 0,
+      slideIndex: 0,
+    });
+    expect(positionOfSlideNumber(3, SONGS)).toEqual({
+      songIndex: 0,
+      slideIndex: 2,
+    });
+    expect(positionOfSlideNumber(4, SONGS)).toEqual({
+      songIndex: 1,
+      slideIndex: 0,
+    });
+    expect(positionOfSlideNumber(9, SONGS)).toEqual({
+      songIndex: 2,
+      slideIndex: 3,
+    });
+  });
+
+  it("범위 밖이거나 정수가 아닌 번호는 null이다", () => {
+    expect(positionOfSlideNumber(0, SONGS)).toBeNull();
+    expect(positionOfSlideNumber(-1, SONGS)).toBeNull();
+    expect(positionOfSlideNumber(10, SONGS)).toBeNull();
+    expect(positionOfSlideNumber(1.5, SONGS)).toBeNull();
+    expect(positionOfSlideNumber(1, [])).toBeNull();
+  });
+
+  it("슬라이드가 0장인 곡은 번호를 차지하지 않는다", () => {
+    const withEmpty = makeSongs([2, 0, 3]);
+
+    expect(getTotalSlideCount(withEmpty)).toBe(5);
+    expect(positionOfSlideNumber(3, withEmpty)).toEqual({
+      songIndex: 2,
+      slideIndex: 0,
+    });
+    expect(slideNumberOf({ songIndex: 2, slideIndex: 0 }, withEmpty)).toBe(3);
+    expect(
+      slideNumberOf({ songIndex: 1, slideIndex: 0 }, withEmpty),
+    ).toBeNull();
+  });
+
+  it("번호 → 위치 → 번호가 왕복한다", () => {
+    for (let n = 1; n <= getTotalSlideCount(SONGS); n++) {
+      const position = positionOfSlideNumber(n, SONGS);
+      expect(position).not.toBeNull();
+      expect(slideNumberOf(position!, SONGS)).toBe(n);
+    }
   });
 });

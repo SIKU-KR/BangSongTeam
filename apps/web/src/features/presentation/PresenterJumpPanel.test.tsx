@@ -19,22 +19,31 @@ function renderPanel(songIndex = 0, slideIndex = 0) {
 }
 
 describe("PresenterJumpPanel", () => {
-  it("곡마다 1부터 시작하는 번호를 보여 준다", () => {
+  it("곡 머리에는 키패드로 칠 수 없는 곡 서수를 붙이지 않는다", () => {
     renderPanel();
 
-    // 숫자 키패드로 치는 N.M과 화면 번호가 같아야 한다 (PRD 5).
-    expect(screen.getByTestId("presenter-jump-song-0")).toHaveTextContent("1.");
-    expect(screen.getByTestId("presenter-jump-song-1")).toHaveTextContent("2.");
+    const title = SONGS[0].deck!.title;
+    expect(
+      screen
+        .getByTestId("presenter-jump-song-0")
+        .textContent?.startsWith(title),
+    ).toBe(true);
   });
 
-  it("슬라이드 칩도 1부터 번호를 매긴다", () => {
+  it("슬라이드 칩은 세트 전체에서 1부터 이어지는 번호를 매긴다", () => {
     renderPanel();
 
+    // 숫자 키패드로 치는 N과 화면 번호가 같아야 한다 (PPT식, PRD 5).
+    const firstSongSlides = SONGS[0].deck!.slides.length;
     expect(screen.getByTestId("presenter-jump-slide-0-0")).toHaveTextContent(
-      "1",
+      /^1$/,
     );
     expect(screen.getByTestId("presenter-jump-slide-0-2")).toHaveTextContent(
-      "3",
+      /^3$/,
+    );
+    // 두 번째 곡은 1이 아니라 앞 곡에 이어서 시작한다
+    expect(screen.getByTestId("presenter-jump-slide-1-0")).toHaveTextContent(
+      new RegExp(`^${firstSongSlides + 1}$`),
     );
   });
 

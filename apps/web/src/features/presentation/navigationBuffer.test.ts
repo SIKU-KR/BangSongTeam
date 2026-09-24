@@ -11,13 +11,11 @@ describe("useNavigationBuffer Hook", () => {
     vi.restoreAllMocks();
   });
 
-  it("Test 1: '3' + Enter -> triggers jump to current song's 3rd slide (slideIndex: 2)", () => {
+  it("Test 1: '3' + Enter -> triggers jump to slide number 3", () => {
     const onJump = vi.fn();
     const { result } = renderHook(() =>
       useNavigationBuffer({
-        currentSongIndex: 0,
-        songCount: 3,
-        getSlideCount: (songIndex) => (songIndex === 0 ? 5 : 4),
+        totalSlides: 20,
         onJump,
       }),
     );
@@ -32,110 +30,95 @@ describe("useNavigationBuffer Hook", () => {
     });
 
     expect(onJump).toHaveBeenCalledTimes(1);
-    expect(onJump).toHaveBeenCalledWith(0, 2);
+    expect(onJump).toHaveBeenCalledWith(3);
     expect(result.current.buffer).toBe("");
   });
 
-  it("Test 1b: '3' + Enter with different currentSongIndex (e.g. currentSongIndex: 1)", () => {
+  it("Test 2: multi-digit '12' + Enter -> triggers jump to slide number 12", () => {
     const onJump = vi.fn();
     const { result } = renderHook(() =>
       useNavigationBuffer({
-        currentSongIndex: 1,
-        songCount: 3,
-        getSlideCount: () => 5,
+        totalSlides: 20,
         onJump,
       }),
     );
 
     act(() => {
-      result.current.handleKey("3");
+      result.current.handleKey("1");
+      result.current.handleKey("2");
+    });
+    expect(result.current.buffer).toBe("12");
+
+    act(() => {
       result.current.handleKey("Enter");
     });
 
     expect(onJump).toHaveBeenCalledTimes(1);
-    expect(onJump).toHaveBeenCalledWith(1, 2);
+    expect(onJump).toHaveBeenCalledWith(12);
+    expect(result.current.buffer).toBe("");
   });
 
-  it("Test 2: '2.' + Enter -> triggers jump to 2nd song's 1st slide (songIndex: 1, slideIndex: 0)", () => {
+  it("Test 3: the last slide number (= totalSlides) is valid", () => {
     const onJump = vi.fn();
     const { result } = renderHook(() =>
       useNavigationBuffer({
-        currentSongIndex: 0,
-        songCount: 3,
-        getSlideCount: () => 5,
+        totalSlides: 20,
         onJump,
       }),
     );
 
     act(() => {
       result.current.handleKey("2");
-      result.current.handleKey(".");
-    });
-    expect(result.current.buffer).toBe("2.");
-
-    act(() => {
+      result.current.handleKey("0");
       result.current.handleKey("Enter");
     });
 
-    expect(onJump).toHaveBeenCalledTimes(1);
-    expect(onJump).toHaveBeenCalledWith(1, 0);
-    expect(result.current.buffer).toBe("");
+    expect(onJump).toHaveBeenCalledWith(20);
   });
 
-  it("Test 3: '2.4' + Enter -> triggers jump to 2nd song's 4th slide (songIndex: 1, slideIndex: 3)", () => {
+  it("Test 3b: leading zero is read as the same number ('07' -> 7)", () => {
     const onJump = vi.fn();
     const { result } = renderHook(() =>
       useNavigationBuffer({
-        currentSongIndex: 0,
-        songCount: 3,
-        getSlideCount: (songIndex) => (songIndex === 1 ? 5 : 3),
+        totalSlides: 20,
         onJump,
       }),
     );
 
     act(() => {
-      result.current.handleKey("2");
-      result.current.handleKey(".");
-      result.current.handleKey("4");
-    });
-    expect(result.current.buffer).toBe("2.4");
-
-    act(() => {
+      result.current.handleKey("0");
+      result.current.handleKey("7");
       result.current.handleKey("Enter");
     });
 
-    expect(onJump).toHaveBeenCalledTimes(1);
-    expect(onJump).toHaveBeenCalledWith(1, 3);
-    expect(result.current.buffer).toBe("");
+    expect(onJump).toHaveBeenCalledWith(7);
   });
 
   it("Test 4: Backspace removes the last character from buffer", () => {
     const onJump = vi.fn();
     const { result } = renderHook(() =>
       useNavigationBuffer({
-        currentSongIndex: 0,
-        songCount: 3,
-        getSlideCount: () => 5,
+        totalSlides: 200,
         onJump,
       }),
     );
 
     act(() => {
+      result.current.handleKey("1");
       result.current.handleKey("2");
-      result.current.handleKey(".");
       result.current.handleKey("4");
     });
-    expect(result.current.buffer).toBe("2.4");
+    expect(result.current.buffer).toBe("124");
 
     act(() => {
       result.current.handleKey("Backspace");
     });
-    expect(result.current.buffer).toBe("2.");
+    expect(result.current.buffer).toBe("12");
 
     act(() => {
       result.current.handleKey("Backspace");
     });
-    expect(result.current.buffer).toBe("2");
+    expect(result.current.buffer).toBe("1");
 
     act(() => {
       result.current.handleKey("Backspace");
@@ -153,9 +136,7 @@ describe("useNavigationBuffer Hook", () => {
     const onJump = vi.fn();
     const { result } = renderHook(() =>
       useNavigationBuffer({
-        currentSongIndex: 0,
-        songCount: 3,
-        getSlideCount: () => 5,
+        totalSlides: 20,
         onJump,
         timeoutMs: 3000,
       }),
@@ -183,35 +164,33 @@ describe("useNavigationBuffer Hook", () => {
     const onJump = vi.fn();
     const { result } = renderHook(() =>
       useNavigationBuffer({
-        currentSongIndex: 0,
-        songCount: 3,
-        getSlideCount: () => 5,
+        totalSlides: 20,
         onJump,
         timeoutMs: 3000,
       }),
     );
 
     act(() => {
-      result.current.handleKey("2");
+      result.current.handleKey("1");
     });
 
     // Advance 2000ms
     act(() => {
       vi.advanceTimersByTime(2000);
     });
-    expect(result.current.buffer).toBe("2");
+    expect(result.current.buffer).toBe("1");
 
     // New key resets timer
     act(() => {
-      result.current.handleKey(".");
+      result.current.handleKey("2");
     });
-    expect(result.current.buffer).toBe("2.");
+    expect(result.current.buffer).toBe("12");
 
     // Advance 2000ms (total 4000ms from start, but only 2000ms since last key)
     act(() => {
       vi.advanceTimersByTime(2000);
     });
-    expect(result.current.buffer).toBe("2.");
+    expect(result.current.buffer).toBe("12");
 
     // Advance another 1000ms -> clears
     act(() => {
@@ -225,34 +204,22 @@ describe("useNavigationBuffer Hook", () => {
     const onInvalidJump = vi.fn();
     const { result } = renderHook(() =>
       useNavigationBuffer({
-        currentSongIndex: 0,
-        songCount: 3,
-        getSlideCount: (songIndex) => (songIndex === 0 ? 3 : 2),
+        totalSlides: 5,
         onJump,
         onInvalidJump,
       }),
     );
 
-    // 1. Song index out of bounds: song 5 when only 3 songs exist
+    // 1. Beyond the last slide: 6 when only 5 slides exist
     act(() => {
-      result.current.handleKey("5");
-      result.current.handleKey(".");
+      result.current.handleKey("6");
       result.current.handleKey("Enter");
     });
     expect(onJump).not.toHaveBeenCalled();
-    expect(onInvalidJump).toHaveBeenCalledWith("5.");
+    expect(onInvalidJump).toHaveBeenCalledWith("6");
     expect(result.current.buffer).toBe("");
 
-    // 2. Slide index out of bounds: song 1 slide 9 (only 3 slides)
-    act(() => {
-      result.current.handleKey("9");
-      result.current.handleKey("Enter");
-    });
-    expect(onJump).not.toHaveBeenCalled();
-    expect(onInvalidJump).toHaveBeenCalledWith("9");
-    expect(result.current.buffer).toBe("");
-
-    // 3. Slide index 0 (1-based index required)
+    // 2. Slide number 0 (1-based numbering required)
     act(() => {
       result.current.handleKey("0");
       result.current.handleKey("Enter");
@@ -261,28 +228,32 @@ describe("useNavigationBuffer Hook", () => {
     expect(onInvalidJump).toHaveBeenCalledWith("0");
     expect(result.current.buffer).toBe("");
 
-    // 4. Dot only or invalid format
-    act(() => {
-      result.current.handleKey(".");
-      result.current.handleKey("Enter");
-    });
-    expect(onJump).not.toHaveBeenCalled();
-    expect(result.current.buffer).toBe("");
-
-    // 5. Empty buffer + Enter -> should do nothing
+    // 3. Empty buffer + Enter -> should do nothing
     act(() => {
       result.current.handleKey("Enter");
     });
     expect(onJump).not.toHaveBeenCalled();
+    expect(onInvalidJump).toHaveBeenCalledTimes(2);
   });
 
-  it("Test 7: Ignores non-numeric / non-dot invalid characters", () => {
+  it("Test 6b: without totalSlides only the lower bound is checked", () => {
+    const onJump = vi.fn();
+    const { result } = renderHook(() => useNavigationBuffer({ onJump }));
+
+    act(() => {
+      result.current.handleKey("9");
+      result.current.handleKey("9");
+      result.current.handleKey("Enter");
+    });
+
+    expect(onJump).toHaveBeenCalledWith(99);
+  });
+
+  it("Test 7: Ignores non-numeric characters, including the old '.' separator", () => {
     const onJump = vi.fn();
     const { result } = renderHook(() =>
       useNavigationBuffer({
-        currentSongIndex: 0,
-        songCount: 3,
-        getSlideCount: () => 5,
+        totalSlides: 20,
         onJump,
       }),
     );
@@ -291,33 +262,38 @@ describe("useNavigationBuffer Hook", () => {
       result.current.handleKey("a");
       result.current.handleKey(" ");
       result.current.handleKey("!");
+      result.current.handleKey(".");
     });
     expect(result.current.buffer).toBe("");
 
     act(() => {
       result.current.handleKey("1");
+      result.current.handleKey(".");
       result.current.handleKey("x");
       result.current.handleKey("2");
     });
     expect(result.current.buffer).toBe("12");
+
+    act(() => {
+      result.current.handleKey("Enter");
+    });
+    expect(onJump).toHaveBeenCalledWith(12);
   });
 
   it("Test 8: clearBuffer manually resets buffer and timer", () => {
     const onJump = vi.fn();
     const { result } = renderHook(() =>
       useNavigationBuffer({
-        currentSongIndex: 0,
-        songCount: 3,
-        getSlideCount: () => 5,
+        totalSlides: 20,
         onJump,
       }),
     );
 
     act(() => {
       result.current.handleKey("1");
-      result.current.handleKey(".");
+      result.current.handleKey("2");
     });
-    expect(result.current.buffer).toBe("1.");
+    expect(result.current.buffer).toBe("12");
 
     act(() => {
       result.current.clearBuffer();

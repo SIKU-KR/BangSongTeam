@@ -90,9 +90,8 @@ describe("송출 라우트 Zero-Fetch 불변식", () => {
       dispatchKey("b");
       dispatchKey("h");
       dispatchKey("ArrowLeft");
-      dispatchKey("2");
-      dispatchKey(".");
       dispatchKey("1");
+      dispatchKey("2");
       dispatchKey("Enter");
     });
 

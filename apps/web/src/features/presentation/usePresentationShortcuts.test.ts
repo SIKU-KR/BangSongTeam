@@ -135,7 +135,7 @@ describe("usePresentationShortcuts Hook", () => {
     expect(onToggleLyrics).toHaveBeenCalledTimes(2);
   });
 
-  it("should delegate numeric keys, dot, Enter, and Backspace to handleKey", () => {
+  it("should delegate numeric keys, Enter, and Backspace to handleKey", () => {
     const handleKey = vi.fn();
 
     renderHook(() =>
@@ -148,11 +148,6 @@ describe("usePresentationShortcuts Hook", () => {
       new KeyboardEvent("keydown", { key: "2", code: "Digit2", bubbles: true }),
     );
     expect(handleKey).toHaveBeenCalledWith("2");
-
-    window.dispatchEvent(
-      new KeyboardEvent("keydown", { key: ".", code: "Period", bubbles: true }),
-    );
-    expect(handleKey).toHaveBeenCalledWith(".");
 
     window.dispatchEvent(
       new KeyboardEvent("keydown", { key: "4", code: "Digit4", bubbles: true }),
@@ -293,9 +288,7 @@ describe("usePresentationShortcuts Hook", () => {
     const onJump = vi.fn();
     renderHook(() => {
       const nav = useNavigationBuffer({
-        currentSongIndex: 0,
-        songCount: 3,
-        getSlideCount: () => 5,
+        totalSlides: 15,
         onJump,
       });
       usePresentationShortcuts({
@@ -304,39 +297,20 @@ describe("usePresentationShortcuts Hook", () => {
       return nav;
     });
 
-    // Press '2', '.', '4', 'Enter' within act
+    // Press '1', '2', 'Enter' within act -> presentation-wide slide 12
     act(() => {
-      window.dispatchEvent(
-        new KeyboardEvent("keydown", {
-          key: "2",
-          code: "Digit2",
-          bubbles: true,
-        }),
-      );
-      window.dispatchEvent(
-        new KeyboardEvent("keydown", {
-          key: ".",
-          code: "Period",
-          bubbles: true,
-        }),
-      );
-      window.dispatchEvent(
-        new KeyboardEvent("keydown", {
-          key: "4",
-          code: "Digit4",
-          bubbles: true,
-        }),
-      );
-      window.dispatchEvent(
-        new KeyboardEvent("keydown", {
-          key: "Enter",
-          code: "Enter",
-          bubbles: true,
-        }),
-      );
+      for (const [key, code] of [
+        ["1", "Digit1"],
+        ["2", "Digit2"],
+        ["Enter", "Enter"],
+      ]) {
+        window.dispatchEvent(
+          new KeyboardEvent("keydown", { key, code, bubbles: true }),
+        );
+      }
     });
 
     expect(onJump).toHaveBeenCalledTimes(1);
-    expect(onJump).toHaveBeenCalledWith(1, 3);
+    expect(onJump).toHaveBeenCalledWith(12);
   });
 });

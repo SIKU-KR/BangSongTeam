@@ -41,6 +41,8 @@ import {
   prevPosition,
   clampPosition,
   getSlideAt,
+  getTotalSlideCount,
+  positionOfSlideNumber,
   INITIAL_POSITION,
   type ProjectionPosition,
 } from "../features/presentation";
@@ -101,21 +103,17 @@ export function FullscreenPresentRoute(): React.JSX.Element {
     setPosition((prev) => prevPosition(prev, songs));
   }, [songs]);
 
-  // 숫자 키패드 점프 (N, N., N.M)
+  // 숫자 키패드 점프 (N Enter = 세트 전체 N번째 슬라이드)
   const handleJump = useCallback(
-    (songIndex: number, slideIndex: number) => {
-      setPosition(clampPosition({ songIndex, slideIndex }, songs));
+    (slideNumber: number) => {
+      const target = positionOfSlideNumber(slideNumber, songs);
+      if (target) setPosition(target);
     },
     [songs],
   );
 
   const navBuffer = useNavigationBuffer({
-    currentSongIndex: position.songIndex,
-    songCount: songs.length,
-    getSlideCount: (idx) => {
-      const item = songs[idx];
-      return item?.deck ? item.deck.slides.length : 0;
-    },
+    totalSlides: getTotalSlideCount(songs),
     onJump: handleJump,
   });
 

@@ -174,12 +174,32 @@ describe("PresenterControlRoute", () => {
     renderControl();
 
     act(() => {
-      dispatchKey("2");
-      dispatchKey(".");
       dispatchKey("1");
+      dispatchKey("2");
     });
 
-    expect(screen.getByTestId("presenter-buffer")).toHaveTextContent("2.1");
+    expect(screen.getByTestId("presenter-buffer")).toHaveTextContent("12");
+  });
+
+  it("세트 전체 번호 + Enter로 곡 경계를 넘어 점프하고 송출 창에 알린다", async () => {
+    renderControl();
+
+    // 1곡이 5장이므로 7번 = 2곡의 2번째 장
+    const firstSongSlides = SET.items[0].deck!.slides.length;
+    const target = firstSongSlides + 2;
+
+    act(() => {
+      for (const digit of String(target)) dispatchKey(digit);
+      dispatchKey("Enter");
+    });
+    await flush();
+
+    expect(messagesOfType("NAVIGATE_SLIDE").at(-1)).toMatchObject({
+      payload: { songIndex: 1, slideIndex: 1 },
+    });
+    expect(screen.getByTestId("presenter-current-label")).toHaveTextContent(
+      `${target} / `,
+    );
   });
 
   it("없는 번호를 입력하면 조작 창에 알림을 띄운다", async () => {

@@ -4,7 +4,9 @@ import type { PresentationItem } from "@repo/shared";
 import { SlideStage } from "../../components/stage/SlideStage";
 import {
   getSlideAt,
+  getTotalSlideCount,
   peekNext,
+  slideNumberOf,
   type ProjectionPosition,
 } from "./projectionState";
 
@@ -72,6 +74,10 @@ export function PresenterPreviewPanel({
   const currentSong = songs[position.songIndex]?.deck;
   const nextSong = next ? songs[next.songIndex]?.deck : undefined;
   const isNextNewSong = next ? next.songIndex !== position.songIndex : false;
+  // 숫자 키패드로 치는 번호와 같은 세트 전체 번호 (PPT식)
+  const currentNumber = slideNumberOf(position, songs);
+  const nextNumber = next ? slideNumberOf(next, songs) : null;
+  const totalSlides = getTotalSlideCount(songs);
 
   return (
     <div
@@ -87,7 +93,7 @@ export function PresenterPreviewPanel({
             data-testid="presenter-current-label"
             className="text-xs text-zinc-400 tabular-nums"
           >
-            {position.songIndex + 1}.{position.slideIndex + 1}{" "}
+            {currentNumber !== null && `${currentNumber} / ${totalSlides} `}
             {currentSong?.title ?? ""}
           </span>
         </header>
@@ -111,7 +117,7 @@ export function PresenterPreviewPanel({
             className="text-xs text-zinc-500 tabular-nums"
           >
             {next
-              ? `${next.songIndex + 1}.${next.slideIndex + 1} ${
+              ? `${nextNumber ?? ""} ${
                   isNextNewSong ? (nextSong?.title ?? "") : ""
                 }`.trim()
               : "—"}

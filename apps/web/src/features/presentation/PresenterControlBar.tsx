@@ -10,7 +10,7 @@ export interface PresenterControlBarProps {
   onNext: () => void;
   onOpenAudience: () => void;
   onExit: () => void;
-  /** 입력 중인 번호 버퍼 (예: `4.2`) — 조작 창에만 표시한다 */
+  /** 입력 중인 번호 버퍼 (예: `12`) — 조작 창에만 표시한다 */
   buffer: string;
   /** 없는 번호 알림 (2초 뒤 사라짐) */
   invalidJump: string | null;

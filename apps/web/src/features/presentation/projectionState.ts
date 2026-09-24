@@ -29,6 +29,50 @@ export function getSongSlideCounts(songs: Songs): number[] {
   return songs.map((_, index) => slideCountOf(songs, index));
 }
 
+/** 세트 전체 슬라이드 수 (번호 점프의 상한) */
+export function getTotalSlideCount(songs: Songs): number {
+  return getSongSlideCounts(songs).reduce((sum, count) => sum + count, 0);
+}
+
+/**
+ * 세트 전체에서 1부터 이어지는 슬라이드 번호 (PPT식).
+ *
+ * 조작자가 보는 번호와 숫자 키패드로 치는 번호가 같아야 하므로, 화면 표시와
+ * 번호 점프가 모두 이 함수와 `positionOfSlideNumber`를 거친다.
+ * 슬라이드가 없는 자리(빈 곡)는 번호가 없으므로 null.
+ */
+export function slideNumberOf(
+  position: ProjectionPosition,
+  songs: Songs,
+): number | null {
+  if (!getSlideAt(position, songs)) return null;
+  const before = getSongSlideCounts(songs)
+    .slice(0, position.songIndex)
+    .reduce((sum, count) => sum + count, 0);
+  return before + position.slideIndex + 1;
+}
+
+/**
+ * 전체 번호 → 곡·슬라이드 위치. 범위 밖이면 null.
+ * 슬라이드가 0장인 곡은 번호를 차지하지 않고 건너뛴다.
+ */
+export function positionOfSlideNumber(
+  slideNumber: number,
+  songs: Songs,
+): ProjectionPosition | null {
+  if (!Number.isInteger(slideNumber) || slideNumber < 1) return null;
+
+  let remaining = slideNumber - 1;
+  const counts = getSongSlideCounts(songs);
+  for (let songIndex = 0; songIndex < counts.length; songIndex++) {
+    if (remaining < counts[songIndex]) {
+      return { songIndex, slideIndex: remaining };
+    }
+    remaining -= counts[songIndex];
+  }
+  return null;
+}
+
 /** 현재 위치의 슬라이드. 없으면 null */
 export function getSlideAt(
   position: ProjectionPosition,

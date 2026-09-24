@@ -22,6 +22,8 @@ import {
   nextPosition,
   prevPosition,
   clampPosition,
+  getTotalSlideCount,
+  positionOfSlideNumber,
   INITIAL_POSITION,
   type ProjectionPosition,
 } from "../features/presentation";
@@ -168,11 +170,18 @@ export function PresenterControlRoute(): React.JSX.Element {
     return () => clearTimeout(timeout);
   }, [invalidJump]);
 
+  // 숫자 키패드 점프 (N Enter = 세트 전체 N번째 슬라이드)
+  const handleNumberJump = useCallback(
+    (slideNumber: number) => {
+      const target = positionOfSlideNumber(slideNumber, songs);
+      if (target) applyPosition(target);
+    },
+    [applyPosition, songs],
+  );
+
   const navBuffer = useNavigationBuffer({
-    currentSongIndex: position.songIndex,
-    songCount: songs.length,
-    getSlideCount: (idx) => songs[idx]?.deck?.slides.length ?? 0,
-    onJump: handleJump,
+    totalSlides: getTotalSlideCount(songs),
+    onJump: handleNumberJump,
     onInvalidJump: handleInvalidJump,
   });
 

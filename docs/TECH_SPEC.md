@@ -777,7 +777,7 @@ stateDiagram-v2
   [*] --> IDLE
 
   IDLE --> BUFFERING : Key 0-9 pressed
-  BUFFERING --> BUFFERING : Key 0-9 or '.' pressed
+  BUFFERING --> BUFFERING : Key 0-9 pressed
   BUFFERING --> IDLE : Timeout 3000ms
   BUFFERING --> IDLE : Backspace (when buffer becomes empty)
 
@@ -797,9 +797,9 @@ stateDiagram-v2
 
 #### 번호 파싱 알고리즘:
 
-- `N` + Enter $\rightarrow$ 현재 곡의 N번째 슬라이드로 점프 (`slideIndex = N - 1`).
-- `N.` + Enter $\rightarrow$ N번째 곡의 1번째 슬라이드로 점프 (`songIndex = N - 1, slideIndex = 0`).
-- `N.M` + Enter $\rightarrow$ N번째 곡의 M번째 슬라이드로 점프 (`songIndex = N - 1, slideIndex = M - 1`).
+- `N` + Enter $\rightarrow$ 세트 전체에서 N번째 슬라이드로 점프 (PPT식, `1 ≤ N ≤ 전체 장수`). 번호는 곡 경계를 넘어 이어지고, 슬라이드가 0장인 곡은 번호를 차지하지 않는다.
+- 번호 ↔ 위치 변환은 `projectionState.ts`의 `positionOfSlideNumber` / `slideNumberOf`가 맡는다. 위치 상태와 BroadcastChannel 메시지는 계속 `{songIndex, slideIndex}`를 쓴다 (곡 경계에서 배경 영상을 유지하려면 곡 인덱스가 필요하다).
+- `.`는 버퍼에 쌓지 않는다 (2026-09-24, 곡.슬라이드 `N.`/`N.M` 입력 폐지).
 - 유효하지 않은 인덱스인 경우: 명령을 무시하고 조작 창에만 2초간 경고 토스트 노출, 청중 송출 창에는 아무것도 띄우지 않음.
 
 ### 5.3 발표자 보기 및 Chrome Window Management 연동

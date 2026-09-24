@@ -5,6 +5,11 @@ import { SEED_PRESENTATIONS } from "./mockPresentations";
 import { PresenterPreviewPanel } from "./PresenterPreviewPanel";
 
 const SONGS = SEED_PRESENTATIONS[0].items;
+const FIRST_SONG_SLIDES = SONGS[0].deck!.slides.length;
+const TOTAL_SLIDES = SONGS.reduce(
+  (sum, item) => sum + (item.deck?.slides.length ?? 0),
+  0,
+);
 
 function renderPanel(songIndex: number, slideIndex: number) {
   return render(
@@ -18,26 +23,27 @@ function renderPanel(songIndex: number, slideIndex: number) {
 }
 
 describe("PresenterPreviewPanel", () => {
-  it("현재 위치를 곡.슬라이드 번호와 제목으로 표시한다", () => {
+  it("현재 위치를 세트 전체 번호 / 전체 장수와 제목으로 표시한다", () => {
     renderPanel(1, 2);
 
+    // 2번째 곡의 3번째 장 = 1곡 장수 + 3 (PPT식 전체 번호)
     expect(screen.getByTestId("presenter-current-label")).toHaveTextContent(
-      `2.3 ${SONGS[1].deck!.title}`,
+      `${FIRST_SONG_SLIDES + 3} / ${TOTAL_SLIDES} ${SONGS[1].deck!.title}`,
     );
   });
 
   it("다음 슬라이드 번호를 함께 보여 준다", () => {
     renderPanel(0, 0);
 
-    expect(screen.getByTestId("presenter-next-label")).toHaveTextContent("1.2");
+    expect(screen.getByTestId("presenter-next-label")).toHaveTextContent(/^2$/);
   });
 
   it("다음이 새 곡이면 곡 제목을 붙인다", () => {
-    const firstSong = SONGS[0].deck!;
-    renderPanel(0, firstSong.slides.length - 1);
+    renderPanel(0, FIRST_SONG_SLIDES - 1);
 
+    // 곡이 바뀌어도 번호는 이어진다
     expect(screen.getByTestId("presenter-next-label")).toHaveTextContent(
-      SONGS[1].deck!.title,
+      `${FIRST_SONG_SLIDES + 1} ${SONGS[1].deck!.title}`,
     );
   });
 

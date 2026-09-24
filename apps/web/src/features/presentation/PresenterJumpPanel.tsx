@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from "react";
 import type { PresentationItem } from "@repo/shared";
-import { type ProjectionPosition } from "./projectionState";
+import { slideNumberOf, type ProjectionPosition } from "./projectionState";
 
 export interface PresenterJumpPanelProps {
   songs: readonly PresentationItem[];
@@ -11,9 +11,9 @@ export interface PresenterJumpPanelProps {
 /**
  * 곡·슬라이드 점프 패널.
  *
- * 곡 목록과 슬라이드 칩에 번호를 표시한다 (PRD 5: "곡 목록과 슬라이드 썸네일에
- * 번호를 표시한다"). 이 번호가 곧 숫자 키패드로 치는 `N.M`이므로, 화면에 보이는
- * 번호와 키패드 입력이 어긋나면 조작자가 예배 중에 엉뚱한 슬라이드를 띄운다.
+ * 슬라이드 칩에 세트 전체에서 1부터 이어지는 번호를 표시한다 (PPT식, PRD 5).
+ * 이 번호가 곧 숫자 키패드로 치는 `N`이므로, 화면에 보이는 번호와 키패드 입력이
+ * 어긋나면 조작자가 예배 중에 엉뚱한 슬라이드를 띄운다.
  */
 export function PresenterJumpPanel({
   songs,
@@ -56,9 +56,6 @@ export function PresenterJumpPanel({
                 onClick={() => onJump(songIndex, 0)}
                 className="w-full flex items-baseline gap-2 text-left cursor-pointer"
               >
-                <span className="text-xs tabular-nums text-zinc-400 shrink-0">
-                  {songIndex + 1}.
-                </span>
                 <span className="text-sm font-medium truncate text-zinc-100">
                   {deck?.title ?? "(제목 없음)"}
                 </span>
@@ -78,13 +75,13 @@ export function PresenterJumpPanel({
                       data-testid={`presenter-jump-slide-${songIndex}-${slideIndex}`}
                       title={slide.lines.join(" / ")}
                       onClick={() => onJump(songIndex, slideIndex)}
-                      className={`w-7 h-7 rounded text-[11px] tabular-nums transition-colors cursor-pointer ${
+                      className={`min-w-7 h-7 px-1 rounded text-[11px] tabular-nums transition-colors cursor-pointer ${
                         isActiveSlide
                           ? "bg-emerald-500 text-zinc-950 font-semibold"
                           : "bg-zinc-800 text-zinc-300 hover:bg-zinc-700"
                       }`}
                     >
-                      {slideIndex + 1}
+                      {slideNumberOf({ songIndex, slideIndex }, songs)}
                     </button>
                   );
                 })}
