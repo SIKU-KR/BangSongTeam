@@ -110,15 +110,41 @@ describe("AppShellLayout (드라이브형 홈)", () => {
       "폴더 1개 · 프레젠테이션 5개",
     );
 
-    expect(screen.getByText("23 슬라이드")).toBeInTheDocument();
-    expect(screen.getAllByText("5곡 세트").length).toBeGreaterThan(0);
+    expect(within(options[0]).getByTestId("row-icon-folder")).toBeTruthy();
+    expect(
+      within(card(SEED_PRESENTATIONS[0].title)).getByTestId(
+        "row-icon-presentation",
+      ),
+    ).toBeTruthy();
+    expect(
+      within(card(SEED_PRESENTATIONS[0].title)).getByText("5곡 · 23슬라이드"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("수정일")).toBeInTheDocument();
   });
 
-  it("카드의 발표 버튼은 Chrome에서 곧바로 전체화면 송출로 간다", () => {
+  it("그리드 보기 없이 목록으로만 보여 준다", () => {
+    renderShell();
+
+    expect(screen.queryByTitle("그리드 뷰")).toBeNull();
+    expect(screen.queryByTitle("리스트 뷰")).toBeNull();
+    expect(screen.getAllByTestId("presentation-row")).toHaveLength(5);
+
+    fireEvent.click(screen.getByTestId("sidebar-nav-trash"));
+    expect(screen.queryByTitle("그리드 뷰")).toBeNull();
+  });
+
+  it("목록의 편집 버튼은 편집기로 간다", () => {
+    renderShell();
+
+    fireEvent.click(screen.getAllByTestId("row-edit-btn")[0]);
+    expect(screen.getByTestId("editor-stub")).toBeInTheDocument();
+  });
+
+  it("목록의 발표 버튼은 Chrome에서 곧바로 전체화면 송출로 간다", () => {
     vi.spyOn(chromeChecker, "isGoogleChromeBrowser").mockReturnValue(true);
     renderShell();
 
-    fireEvent.click(screen.getAllByTestId("card-present-btn")[0]);
+    fireEvent.click(screen.getAllByTestId("row-present-btn")[0]);
     expect(screen.getByTestId("fullscreen-stub")).toBeInTheDocument();
   });
 
@@ -127,7 +153,7 @@ describe("AppShellLayout (드라이브형 홈)", () => {
     const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(false);
     renderShell();
 
-    const startBtn = screen.getAllByTestId("card-present-btn")[0];
+    const startBtn = screen.getAllByTestId("row-present-btn")[0];
     fireEvent.click(startBtn);
     expect(confirmSpy).toHaveBeenCalledTimes(1);
     expect(screen.queryByTestId("fullscreen-stub")).not.toBeInTheDocument();
@@ -160,7 +186,7 @@ describe("AppShellLayout (드라이브형 홈)", () => {
     expect(screen.getByText("휴지통이 비어 있습니다")).toBeInTheDocument();
 
     fireEvent.click(screen.getByTestId("sidebar-nav-home"));
-    expect(screen.getAllByTestId("presentation-card")).toHaveLength(5);
+    expect(screen.getAllByTestId("presentation-row")).toHaveLength(5);
   });
 
   it("새로 만들기 → 새 프레젠테이션은 문서를 만들고 편집기로 간다", () => {
@@ -225,7 +251,7 @@ describe("AppShellLayout (드라이브형 홈)", () => {
       fireEvent.doubleClick(card("폴더 2026 주일 대예배"));
     });
     expect(card("폴더 청년부")).toBeInTheDocument();
-    expect(screen.queryAllByTestId("presentation-card")).toHaveLength(0);
+    expect(screen.queryAllByTestId("presentation-row")).toHaveLength(0);
     expect(screen.getByTestId(`crumb-${WORSHIP}`)).toHaveAttribute(
       "aria-current",
       "page",
@@ -237,7 +263,7 @@ describe("AppShellLayout (드라이브형 홈)", () => {
     ).toBeInTheDocument();
 
     fireEvent.click(screen.getByTestId("crumb-root"));
-    expect(screen.getAllByTestId("presentation-card")).toHaveLength(5);
+    expect(screen.getAllByTestId("presentation-row")).toHaveLength(5);
   });
 
   it("새 폴더를 만들고, 같은 위치의 같은 이름은 거절한다", () => {
@@ -318,15 +344,34 @@ describe("AppShellLayout (드라이브형 홈)", () => {
     fireEvent.keyDown(window, { key: "Delete" });
 
     expect(getPresentationById(target.id)?.trashedAt).toBeTruthy();
-    expect(screen.getAllByTestId("presentation-card")).toHaveLength(4);
+    expect(screen.getAllByTestId("presentation-row")).toHaveLength(4);
 
     fireEvent.click(screen.getByTestId("sidebar-nav-trash"));
     const trashed = card(target.title);
+    expect(trashed).toHaveAttribute("data-testid", "presentation-row");
+    expect(within(trashed).queryByTestId("row-present-btn")).toBeNull();
+    expect(within(trashed).queryByTestId("row-edit-btn")).toBeNull();
     fireEvent.contextMenu(trashed);
     fireEvent.click(screen.getByTestId("action-restore"));
 
     expect(getPresentationById(target.id)?.trashedAt).toBeNull();
     expect(screen.getByText("휴지통이 비어 있습니다")).toBeInTheDocument();
+  });
+
+  it("휴지통의 날짜 칸은 삭제일을 보여 준다", () => {
+    const trashed = {
+      ...SEED_PRESENTATIONS[0],
+      updatedAt: "2026-09-01T12:00:00.000Z",
+      trashedAt: "2026-09-20T12:00:00.000Z",
+    };
+    __loadDocumentsForTests([trashed, ...SEED_PRESENTATIONS.slice(1)]);
+    renderShell("/presentations/trash");
+
+    expect(screen.getByText("삭제일")).toBeInTheDocument();
+    expect(screen.queryByText("수정일")).toBeNull();
+    const row = card(trashed.title);
+    expect(row).toHaveTextContent("2026. 9. 20.");
+    expect(row).not.toHaveTextContent("2026. 9. 1.");
   });
 
   it("폴더를 휴지통에 넣으면 안의 세트도 함께 가려진다", () => {
@@ -373,7 +418,7 @@ describe("AppShellLayout (드라이브형 홈)", () => {
       "aria-current",
       "page",
     );
-    expect(screen.getAllByTestId("presentation-card")).toHaveLength(5);
+    expect(screen.getAllByTestId("presentation-row")).toHaveLength(5);
   });
 
   it("사이드바 테마 메뉴", () => {

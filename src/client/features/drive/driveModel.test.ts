@@ -3,7 +3,6 @@ import { buildFolderIndex, type Folder, type Presentation } from "#shared";
 import {
   buildChildCounts,
   canDropInto,
-  formatEditedAgo,
   itemKey,
   listFolderContents,
   listTrash,
@@ -146,20 +145,6 @@ describe("표시 도우미", () => {
       kind: "folder",
       id: "abc",
     });
-  });
-
-  it("편집 시각을 사람 말로", () => {
-    const now = new Date("2026-09-24T12:00:00.000Z").getTime();
-    expect(formatEditedAgo("2026-09-24T08:00:00.000Z", now)).toBe(
-      "오늘 편집함",
-    );
-    expect(formatEditedAgo("2026-09-23T08:00:00.000Z", now)).toBe(
-      "어제 편집함",
-    );
-    expect(formatEditedAgo("2026-09-10T08:00:00.000Z", now)).toBe(
-      "2주일 전 편집함",
-    );
-    expect(formatEditedAgo("not-a-date", now)).toBe("최근 편집됨");
   });
 
   it("받침에 맞춰 조사를 고른다", () => {

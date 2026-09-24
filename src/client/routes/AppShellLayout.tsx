@@ -14,11 +14,7 @@ import {
   NewMenuButton,
   useDrive,
 } from "../features/drive";
-import type {
-  AppShellContextValue,
-  SortOrder,
-  ViewMode,
-} from "./appShellContext";
+import type { AppShellContextValue, SortOrder } from "./appShellContext";
 
 interface ShellPageMeta {
   title: string;
@@ -65,7 +61,6 @@ function AppShellFrame(): React.JSX.Element {
 
   const [isQuickPasteOpen, setIsQuickPasteOpen] = useState<boolean>(false);
   const [searchQuery, setSearchQuery] = useState<string>("");
-  const [viewMode, setViewMode] = useState<ViewMode>("grid");
   const [sortOrder, setSortOrder] = useState<SortOrder>("recent");
 
   const meta = metaFor(pathname);
@@ -84,7 +79,6 @@ function AppShellFrame(): React.JSX.Element {
 
   const context: AppShellContextValue = {
     searchQuery,
-    viewMode,
     sortOrder,
     onOpenQuickPaste: () => setIsQuickPasteOpen(true),
     onCreateNewPresentation: handleCreateNewPresentation,
@@ -105,8 +99,6 @@ function AppShellFrame(): React.JSX.Element {
           searchPlaceholder={meta.placeholder}
           searchQuery={searchQuery}
           onSearchQueryChange={setSearchQuery}
-          viewMode={viewMode}
-          onViewModeChange={setViewMode}
           sortOrder={sortOrder}
           onSortOrderChange={setSortOrder}
           itemCountLabel=""

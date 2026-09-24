@@ -1,13 +1,11 @@
 import { useOutletContext } from "react-router-dom";
 import type { Deck } from "#shared";
 
-export type ViewMode = "grid" | "list";
 export type SortOrder = "recent" | "name" | "slides";
 
 /** `AppShellLayout`이 `<Outlet context>`로 자식 라우트에 내려주는 값 */
 export interface AppShellContextValue {
   searchQuery: string;
-  viewMode: ViewMode;
   sortOrder: SortOrder;
   onOpenQuickPaste: () => void;
   onCreateNewPresentation: () => void;

@@ -78,22 +78,7 @@ export function buildSubtitle(presentation: Presentation): string {
   return restCount > 0 ? `${head} 외 ${restCount}곡` : head;
 }
 
-/** "3일 전 편집함" */
-export function formatEditedAgo(
-  updatedAt: string,
-  now: number = Date.now(),
-): string {
-  const updated = new Date(updatedAt).getTime();
-  if (Number.isNaN(updated)) return "최근 편집됨";
-  const days = Math.floor((now - updated) / (1000 * 60 * 60 * 24));
-  if (days <= 0) return "오늘 편집함";
-  if (days === 1) return "어제 편집함";
-  if (days < 7) return `${days}일 전 편집함`;
-  if (days < 30) return `${Math.floor(days / 7)}주일 전 편집함`;
-  return `${Math.floor(days / 30)}개월 전 편집함`;
-}
-
-/** 리스트 보기의 수정일 칸 ("2026. 9. 24.") */
+/** 목록의 날짜 칸 ("2026. 9. 24.") */
 export function formatDate(iso: string): string {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return "-";
@@ -280,6 +265,15 @@ export function searchDrive(
   return sortItems([...folders, ...files], sortOrder);
 }
 
+/** 항목 자신을 휴지통에 넣은 시각 (조상 폴더만 버려졌으면 `null`) */
+export function trashedAtOf(item: DriveItem): string | null {
+  return (
+    (item.kind === "folder"
+      ? item.folder.trashedAt
+      : item.presentation.trashedAt) ?? null
+  );
+}
+
 /**
  * 휴지통 목록. 직접 휴지통에 넣은 항목 중 조상이 휴지통에 없는 것만 보인다 —
  * 폴더를 버리면 그 안의 항목은 폴더와 함께 한 줄로 보인다 (드라이브와 같다).
@@ -321,12 +315,8 @@ export function listTrash(
       ),
     }));
 
-  const trashedAt = (item: DriveItem): string =>
-    (item.kind === "folder"
-      ? item.folder.trashedAt
-      : item.presentation.trashedAt) ?? "";
   return [...folders, ...files].sort((a, b) =>
-    trashedAt(b).localeCompare(trashedAt(a)),
+    (trashedAtOf(b) ?? "").localeCompare(trashedAtOf(a) ?? ""),
   );
 }
 
