@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import type { SortOrder } from "../../routes/appShellContext";
 
 export interface AppHeroHeaderProps {
@@ -36,6 +36,30 @@ export function AppHeroHeader({
   const [categoryFilter, setCategoryFilter] = useState<string>("전체");
   const [ownerFilter, setOwnerFilter] = useState<string>("전체");
   const [openDropdown, setOpenDropdown] = useState<DropdownName | null>(null);
+  const controlsRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!openDropdown) return;
+    const handleClickOutside = (event: MouseEvent): void => {
+      if (
+        controlsRef.current &&
+        !controlsRef.current.contains(event.target as Node)
+      ) {
+        setOpenDropdown(null);
+      }
+    };
+    const handleKeyDown = (event: KeyboardEvent): void => {
+      if (event.key === "Escape") {
+        setOpenDropdown(null);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [openDropdown]);
 
   const toggleDropdown = (name: DropdownName): void => {
     setOpenDropdown((prev) => (prev === name ? null : name));
@@ -96,7 +120,10 @@ export function AppHeroHeader({
           </div>
 
           {showControls && (
-            <div className="flex flex-wrap items-center justify-center gap-2 pt-1 relative">
+            <div
+              ref={controlsRef}
+              className="flex flex-wrap items-center justify-center gap-2 pt-1 relative"
+            >
               <div className="relative">
                 <button
                   type="button"
@@ -236,6 +263,7 @@ export function AppHeroHeader({
               <div className="relative">
                 <button
                   type="button"
+                  data-testid="drive-sort-dropdown"
                   onClick={() => toggleDropdown("sort")}
                   className="px-3.5 py-1.5 rounded-full text-xs font-medium border bg-white dark:bg-zinc-900/80 border-zinc-300 dark:border-zinc-800 hover:border-zinc-400 dark:hover:border-zinc-700 text-zinc-700 dark:text-zinc-300 flex items-center gap-1.5 transition-all cursor-pointer"
                 >
@@ -245,7 +273,7 @@ export function AppHeroHeader({
                       ? "수정된 날짜"
                       : sortOrder === "name"
                         ? "이름순"
-                        : "슬라이드 수"}
+                        : "슬라이드 많은순"}
                   </span>
                   <svg
                     className="w-3.5 h-3.5 text-zinc-400"
@@ -262,9 +290,13 @@ export function AppHeroHeader({
                   </svg>
                 </button>
                 {openDropdown === "sort" && (
-                  <div className="absolute top-full left-0 mt-2 w-36 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-lg dark:shadow-2xl z-50 py-1.5">
+                  <div
+                    data-testid="drive-sort-menu"
+                    className="absolute top-full left-0 mt-2 w-36 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-lg dark:shadow-2xl z-50 py-1.5"
+                  >
                     <button
                       type="button"
+                      data-testid="sort-option-recent"
                       onClick={() => {
                         onSortOrderChange("recent");
                         setOpenDropdown(null);
@@ -275,6 +307,7 @@ export function AppHeroHeader({
                     </button>
                     <button
                       type="button"
+                      data-testid="sort-option-name"
                       onClick={() => {
                         onSortOrderChange("name");
                         setOpenDropdown(null);
@@ -285,6 +318,7 @@ export function AppHeroHeader({
                     </button>
                     <button
                       type="button"
+                      data-testid="sort-option-slides"
                       onClick={() => {
                         onSortOrderChange("slides");
                         setOpenDropdown(null);
@@ -310,29 +344,6 @@ export function AppHeroHeader({
           </div>
 
           <div className="flex items-center gap-2 shrink-0">
-            <button
-              type="button"
-              onClick={() =>
-                onSortOrderChange(sortOrder === "recent" ? "name" : "recent")
-              }
-              title="정렬 기준 전환"
-              className="p-2 rounded-xl bg-white dark:bg-zinc-900 hover:bg-zinc-100 dark:hover:bg-zinc-800 border border-zinc-200 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700 text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white transition-colors cursor-pointer"
-            >
-              <svg
-                className="w-4 h-4"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4"
-                />
-              </svg>
-            </button>
-
             {quickAddSlot ?? (
               <button
                 type="button"
