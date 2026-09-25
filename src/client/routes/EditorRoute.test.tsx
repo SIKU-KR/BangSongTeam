@@ -5,7 +5,14 @@ import {
 } from "../features/presentation";
 import { signInAsTestUser } from "../test/sessionFixture";
 import { withQueryClient } from "../test/queryClientFixture";
-import { render, screen, fireEvent, act, within } from "@testing-library/react";
+import {
+  render,
+  screen,
+  fireEvent,
+  act,
+  within,
+  waitFor,
+} from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { MemoryRouter, Routes, Route } from "react-router-dom";
 import { EditorRoute } from "./EditorRoute";
@@ -36,6 +43,21 @@ function renderEditor(path = `/editor/${DOC_ID}`) {
 const statusBar = () => screen.getByTestId("editor-status-bar");
 const stageCanvas = () => screen.getByTestId("editor-stage-canvas");
 const firstSong = () => getActivePresentation().items[0].deck!;
+
+async function selectFont(font: string): Promise<void> {
+  fireEvent.click(screen.getByRole("combobox", { name: "글꼴" }));
+  const option = await screen.findByRole("option", { name: font });
+  fireEvent.pointerDown(option);
+  fireEvent.mouseDown(option);
+  fireEvent.pointerUp(option);
+  fireEvent.mouseUp(option);
+  fireEvent.click(option);
+  await waitFor(() =>
+    expect(screen.getByRole("combobox", { name: "글꼴" })).toHaveTextContent(
+      font,
+    ),
+  );
+}
 
 function startLyricsEdit(): HTMLTextAreaElement {
   act(() => {
@@ -282,13 +304,11 @@ describe("EditorRoute (PowerPoint식 프레젠테이션 편집기)", () => {
     expect(screen.queryByText("초기화")).not.toBeInTheDocument();
   });
 
-  it("리본으로 현재 곡의 글꼴·크기·정렬·줄 간격·오버레이를 바꾼다", () => {
+  it("리본으로 현재 곡의 글꼴·크기·정렬·줄 간격·오버레이를 바꾼다", async () => {
     renderEditor();
     const otherSongStyle = getActivePresentation().items[1].deck!.style;
 
-    fireEvent.change(screen.getByRole("combobox", { name: "글꼴" }), {
-      target: { value: "Gmarket Sans" },
-    });
+    await selectFont("Gmarket Sans");
     const size = screen.getByLabelText("글자 크기");
     expect(size).toHaveValue("40");
     fireEvent.change(size, { target: { value: "60" } });
@@ -298,9 +318,10 @@ describe("EditorRoute (PowerPoint식 프레젠테이션 편집기)", () => {
     fireEvent.click(screen.getByRole("button", { name: "1.8" }));
     fireEvent.click(screen.getByTestId("overlay-btn"));
     act(() => {
-      fireEvent.change(screen.getByLabelText("검정 오버레이 불투명도"), {
-        target: { value: "75" },
-      });
+      fireEvent.change(
+        screen.getByLabelText("검정 오버레이 불투명도", { selector: "input" }),
+        { target: { value: "75" } },
+      );
     });
 
     expect(screen.getByText("75%")).toBeInTheDocument();
@@ -355,7 +376,7 @@ describe("EditorRoute (PowerPoint식 프레젠테이션 편집기)", () => {
     expect(undoBtn).toBeDisabled();
     expect(redoBtn).toBeDisabled();
 
-    const titleBtn = screen.getByTitle("클릭하여 제목 수정");
+    const titleBtn = screen.getByTestId("header-title-btn");
     fireEvent.click(titleBtn);
     const input = screen.getByDisplayValue("2026 주일 3부 예배");
     fireEvent.change(input, { target: { value: "새로운 예배 제목" } });
@@ -377,11 +398,11 @@ describe("EditorRoute (PowerPoint식 프레젠테이션 편집기)", () => {
 
     expect(screen.getByText("100%")).toBeInTheDocument();
 
-    const zoomInBtn = screen.getByTitle("캔버스 확대");
+    const zoomInBtn = screen.getByRole("button", { name: "캔버스 확대" });
     fireEvent.click(zoomInBtn);
     expect(screen.getByText("115%")).toBeInTheDocument();
 
-    const zoomOutBtn = screen.getByTitle("캔버스 축소");
+    const zoomOutBtn = screen.getByRole("button", { name: "캔버스 축소" });
     fireEvent.click(zoomOutBtn);
     expect(screen.getByText("100%")).toBeInTheDocument();
   });
@@ -756,7 +777,7 @@ describe("EditorRoute (PowerPoint식 프레젠테이션 편집기)", () => {
         "은혜 아니면",
       );
       expect(screen.getByTestId("song-section-title-0")).toHaveAttribute(
-        "title",
+        "aria-label",
         "은혜 아니면 · 어노인팅",
       );
 
@@ -814,18 +835,16 @@ describe("EditorRoute (PowerPoint식 프레젠테이션 편집기)", () => {
       expect(statusBar()).toHaveTextContent("곡 1/5");
     });
 
-    it("다른 곡을 고르면 리본이 그 곡의 서식을 보여 준다", () => {
+    it("다른 곡을 고르면 리본이 그 곡의 서식을 보여 준다", async () => {
       renderEditor();
 
-      fireEvent.change(screen.getByRole("combobox", { name: "글꼴" }), {
-        target: { value: "Gmarket Sans" },
-      });
+      await selectFont("Gmarket Sans");
       fireEvent.click(screen.getByTestId("song-section-title-1"));
 
       expect(screen.getByTestId("ribbon-song-label")).toHaveTextContent(
         getActivePresentation().items[1].deck!.title,
       );
-      expect(screen.getByRole("combobox", { name: "글꼴" })).toHaveValue(
+      expect(screen.getByRole("combobox", { name: "글꼴" })).toHaveTextContent(
         getActivePresentation().items[1].deck!.style.fontFamily,
       );
     });

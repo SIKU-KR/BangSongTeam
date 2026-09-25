@@ -1,5 +1,25 @@
 import React, { useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
+import {
+  FolderIcon,
+  ImageIcon,
+  LogOutIcon,
+  PresentationIcon,
+  type LucideIcon,
+} from "lucide-react";
+import { cn } from "cn";
+import { Avatar, AvatarFallback, AvatarImage } from "#components/ui/avatar";
+import {
+  Sidebar,
+  SidebarContent,
+  SidebarFooter,
+  SidebarGroup,
+  SidebarGroupContent,
+  SidebarHeader,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+} from "#components/ui/sidebar";
 import { ThemeMenuButton } from "../common/ThemeMenuButton";
 import { useSession, signOut } from "../../lib/auth";
 import {
@@ -13,38 +33,24 @@ interface NavItem {
   testId: string;
   path: string;
   label: string;
-  accent: string;
-  iconPath: string;
+  icon: LucideIcon;
 }
 
 const DRIVE_ITEM: NavItem = {
   testId: "sidebar-nav-home",
   path: DRIVE_ROOT_PATH,
   label: "내 드라이브",
-  accent: "text-emerald-500 dark:text-emerald-400",
-  iconPath:
-    "M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z",
+  icon: FolderIcon,
 };
 
 const BACKGROUNDS_ITEM: NavItem = {
   testId: "sidebar-nav-backgrounds",
   path: "/backgrounds",
   label: "배경 갤러리",
-  accent: "text-sky-500 dark:text-sky-400",
-  iconPath:
-    "M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z",
+  icon: ImageIcon,
 };
 
-const NAV_BUTTON_BASE =
-  "w-full h-9 pl-4 pr-3 rounded-full text-sm flex items-center gap-4 transition-colors cursor-pointer";
-const NAV_ACTIVE =
-  "bg-emerald-100 dark:bg-emerald-900/40 text-emerald-900 dark:text-emerald-100 font-semibold";
-const NAV_IDLE =
-  "text-zinc-700 dark:text-zinc-300 hover:bg-zinc-200/70 dark:hover:bg-zinc-800/70";
-const NAV_DROP =
-  "ring-2 ring-inset ring-emerald-500/70 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-200";
-
-function NavButton({
+function NavItem({
   item,
   active,
   onClick,
@@ -61,47 +67,26 @@ function NavButton({
     !drop,
   );
   return (
-    <button
-      ref={setNodeRef}
-      type="button"
-      data-testid={item.testId}
-      aria-current={active ? "page" : undefined}
-      onClick={onClick}
-      className={`${NAV_BUTTON_BASE} ${
-        isDropTarget ? NAV_DROP : active ? NAV_ACTIVE : NAV_IDLE
-      }`}
-    >
-      <div
-        className={`w-5 h-5 flex items-center justify-center ${
-          active ? item.accent : "text-zinc-500 dark:text-zinc-400"
-        }`}
+    <SidebarMenuItem ref={setNodeRef}>
+      <SidebarMenuButton
+        data-testid={item.testId}
+        isActive={active}
+        aria-current={active ? "page" : undefined}
+        onClick={onClick}
+        className={cn(isDropTarget && "ring-2 ring-sidebar-ring")}
       >
-        <svg
-          className="w-5 h-5"
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-          aria-hidden="true"
-        >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={2}
-            d={item.iconPath}
-          />
-        </svg>
-      </div>
-      <span>{item.label}</span>
-    </button>
+        <item.icon />
+        <span>{item.label}</span>
+      </SidebarMenuButton>
+    </SidebarMenuItem>
   );
 }
 
-function AccountCard(): React.JSX.Element {
+function AccountMenuItem(): React.JSX.Element {
   const session = useSession();
   const [signingOut, setSigningOut] = useState(false);
 
   const name = session.user?.name ?? "사용자";
-  const initials = name.slice(0, 2);
 
   const handleSignOut = async (): Promise<void> => {
     setSigningOut(true);
@@ -113,35 +98,25 @@ function AccountCard(): React.JSX.Element {
   };
 
   return (
-    <div
-      data-testid="account-card"
-      className="p-3 rounded-2xl bg-zinc-100/90 dark:bg-zinc-900/60 border border-zinc-200 dark:border-zinc-900 flex items-center gap-3"
-    >
-      {session.user?.image ? (
-        <img
-          src={session.user.image}
-          alt=""
-          className="w-9 h-9 rounded-full object-cover shrink-0"
-        />
-      ) : (
-        <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-emerald-700 to-teal-500 flex items-center justify-center text-white text-xs font-bold shrink-0">
-          {initials}
+    <SidebarMenuItem data-testid="account-card">
+      <SidebarMenuButton
+        size="lg"
+        disabled={signingOut}
+        onClick={() => void handleSignOut()}
+      >
+        <Avatar>
+          {session.user?.image && <AvatarImage src={session.user.image} />}
+          <AvatarFallback>{name.slice(0, 2)}</AvatarFallback>
+        </Avatar>
+        <div className="grid flex-1 text-left leading-tight">
+          <span className="truncate font-semibold">{name}</span>
+          <span className="truncate text-xs text-muted-foreground">
+            {signingOut ? "로그아웃 중…" : "로그아웃"}
+          </span>
         </div>
-      )}
-      <div className="min-w-0 flex-1">
-        <p className="text-xs font-bold text-zinc-800 dark:text-zinc-200 truncate">
-          {name}
-        </p>
-        <button
-          type="button"
-          disabled={signingOut}
-          onClick={() => void handleSignOut()}
-          className="text-[10px] text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 transition-colors disabled:opacity-60"
-        >
-          {signingOut ? "로그아웃 중…" : "로그아웃"}
-        </button>
-      </div>
-    </div>
+        <LogOutIcon />
+      </SidebarMenuButton>
+    </SidebarMenuItem>
   );
 }
 
@@ -157,48 +132,60 @@ export function AppSidebar(): React.JSX.Element {
     pathname.startsWith(`${BACKGROUNDS_ITEM.path}/`);
 
   return (
-    <aside className="w-64 h-full bg-zinc-50 dark:bg-zinc-950 hidden lg:flex flex-col justify-between py-4 pl-3 pr-4 shrink-0 overflow-y-auto">
-      <div className="space-y-6">
-        <div className="flex items-center gap-3 px-2 pt-1">
-          <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-emerald-500 via-teal-400 to-indigo-500 flex items-center justify-center text-white shadow-sm dark:shadow-emerald-950/40">
-            <svg className="w-5 h-5 fill-current" viewBox="0 0 24 24">
-              <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-5 14H7v-2h7v2zm3-4H7v-2h10v2zm0-4H7V7h10v2z" />
-            </svg>
-          </div>
-          <div>
-            <span className="text-base font-extrabold tracking-tight text-zinc-900 dark:text-white flex items-center gap-1.5">
-              Worship Studio
-            </span>
-            <p className="text-[10px] text-zinc-500 font-medium">
-              16:9 프레젠테이션 스튜디오
-            </p>
-          </div>
-        </div>
-
+    <Sidebar>
+      <SidebarHeader>
+        <SidebarMenu>
+          <SidebarMenuItem>
+            <SidebarMenuButton
+              size="lg"
+              onClick={() => navigate(drivePath(null))}
+            >
+              <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
+                <PresentationIcon />
+              </div>
+              <div className="grid flex-1 text-left leading-tight">
+                <span className="truncate font-semibold">Worship Studio</span>
+                <span className="truncate text-xs text-muted-foreground">
+                  16:9 프레젠테이션 스튜디오
+                </span>
+              </div>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        </SidebarMenu>
         <NewMenuButton
           variant="sidebar"
           testId="sidebar-create-presentation-btn"
         />
+      </SidebarHeader>
 
-        <nav className="space-y-0.5" aria-label="주 메뉴">
-          <NavButton
-            item={DRIVE_ITEM}
-            active={isDrive}
-            onClick={() => navigate(drivePath(null))}
-            drop={{ kind: "folder", folderId: null }}
-          />
-          <NavButton
-            item={BACKGROUNDS_ITEM}
-            active={isBackgrounds}
-            onClick={() => navigate(BACKGROUNDS_ITEM.path)}
-          />
-        </nav>
-      </div>
+      <SidebarContent>
+        <SidebarGroup>
+          <SidebarGroupContent>
+            <nav aria-label="주 메뉴">
+              <SidebarMenu>
+                <NavItem
+                  item={DRIVE_ITEM}
+                  active={isDrive}
+                  onClick={() => navigate(drivePath(null))}
+                  drop={{ kind: "folder", folderId: null }}
+                />
+                <NavItem
+                  item={BACKGROUNDS_ITEM}
+                  active={isBackgrounds}
+                  onClick={() => navigate(BACKGROUNDS_ITEM.path)}
+                />
+              </SidebarMenu>
+            </nav>
+          </SidebarGroupContent>
+        </SidebarGroup>
+      </SidebarContent>
 
-      <div className="space-y-3 pt-3 border-t border-zinc-200 dark:border-zinc-900">
-        <ThemeMenuButton />
-        <AccountCard />
-      </div>
-    </aside>
+      <SidebarFooter>
+        <SidebarMenu>
+          <ThemeMenuButton />
+          <AccountMenuItem />
+        </SidebarMenu>
+      </SidebarFooter>
+    </Sidebar>
   );
 }

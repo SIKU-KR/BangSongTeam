@@ -1,18 +1,39 @@
-import React, { useState, useRef, useEffect } from "react";
-import { useTheme, type ThemeMode } from "../../features/theme";
+import React from "react";
+import {
+  ChevronsUpDownIcon,
+  MonitorIcon,
+  MoonIcon,
+  SunIcon,
+  type LucideIcon,
+} from "lucide-react";
+import { Button } from "#components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuTrigger,
+} from "#components/ui/dropdown-menu";
+import { SidebarMenuButton, SidebarMenuItem } from "#components/ui/sidebar";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "#components/ui/tooltip";
+import { useTheme } from "#components/theme-provider";
 
 export interface ThemeMenuButtonProps {
-  variant?: "full" | "compact";
-  direction?: "up" | "down";
-  align?: "left" | "right";
-  className?: string;
+  variant?: "sidebar" | "compact";
+  align?: "start" | "end";
 }
 
 interface ThemeOption {
-  mode: ThemeMode;
+  mode: ReturnType<typeof useTheme>["theme"];
   label: string;
   description: string;
-  icon: (className?: string) => React.JSX.Element;
+  icon: LucideIcon;
 }
 
 const THEME_OPTIONS: ThemeOption[] = [
@@ -20,255 +41,115 @@ const THEME_OPTIONS: ThemeOption[] = [
     mode: "light",
     label: "라이트 모드",
     description: "밝은 화면 테마",
-    icon: (className = "w-4 h-4") => (
-      <svg
-        className={className}
-        fill="none"
-        stroke="currentColor"
-        viewBox="0 0 24 24"
-      >
-        <circle cx="12" cy="12" r="4" strokeWidth={2} />
-        <path
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          strokeWidth={2}
-          d="M12 2v2m0 16v2M4.93 4.93l1.41 1.41m11.32 11.32l1.41 1.41M2 12h2m16 0h2M6.34 17.66l-1.41 1.41m14.14-14.14l-1.41 1.41"
-        />
-      </svg>
-    ),
+    icon: SunIcon,
   },
   {
     mode: "dark",
     label: "다크 모드",
     description: "어두운 화면 테마",
-    icon: (className = "w-4 h-4") => (
-      <svg
-        className={className}
-        fill="none"
-        stroke="currentColor"
-        viewBox="0 0 24 24"
-      >
-        <path
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          strokeWidth={2}
-          d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"
-        />
-      </svg>
-    ),
+    icon: MoonIcon,
   },
   {
     mode: "system",
     label: "시스템 설정",
     description: "기기 설정에 맞춤",
-    icon: (className = "w-4 h-4") => (
-      <svg
-        className={className}
-        fill="none"
-        stroke="currentColor"
-        viewBox="0 0 24 24"
-      >
-        <rect x="2" y="3" width="20" height="14" rx="2" strokeWidth={2} />
-        <path
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          strokeWidth={2}
-          d="M8 21h8m-4-4v4"
-        />
-      </svg>
-    ),
+    icon: MonitorIcon,
   },
 ];
 
-/** 테마 모드 전환 메뉴 버튼 */
+function isThemeMode(value: unknown): value is ThemeOption["mode"] {
+  return THEME_OPTIONS.some((option) => option.mode === value);
+}
+
+/**
+ * 테마 모드 전환 메뉴 버튼.
+ * - `sidebar`: 사이드바 아래 메뉴 항목 (위로 연다)
+ * - `compact`: 헤더의 아이콘 버튼 (아래로 연다)
+ */
 export function ThemeMenuButton({
-  variant = "full",
-  direction = "up",
-  align = "left",
-  className = "",
+  variant = "sidebar",
+  align = "start",
 }: ThemeMenuButtonProps): React.JSX.Element {
   const { theme, setTheme } = useTheme();
-  const [isOpen, setIsOpen] = useState(false);
-  const containerRef = useRef<HTMLDivElement>(null);
+  const current =
+    THEME_OPTIONS.find((option) => option.mode === theme) ?? THEME_OPTIONS[2];
+  const CurrentIcon = current.icon;
 
-  const currentOption =
-    THEME_OPTIONS.find((opt) => opt.mode === theme) ?? THEME_OPTIONS[2];
-
-  useEffect(() => {
-    if (!isOpen) return;
-
-    const handleClickOutside = (event: MouseEvent) => {
-      if (
-        containerRef.current &&
-        !containerRef.current.contains(event.target as Node)
-      ) {
-        setIsOpen(false);
-      }
-    };
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        setIsOpen(false);
-      }
-    };
-
-    document.addEventListener("mousedown", handleClickOutside);
-    document.addEventListener("keydown", handleKeyDown);
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-      document.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [isOpen]);
-
-  const handleSelect = (mode: ThemeMode) => {
-    setTheme(mode);
-    setIsOpen(false);
-  };
-
-  const dropdownPositionClass =
-    direction === "up" ? "bottom-full mb-2" : "top-full mt-2";
-
-  return (
-    <div ref={containerRef} className={`relative select-none ${className}`}>
-      {variant === "compact" ? (
-        <button
-          type="button"
-          data-testid="theme-menu-button"
-          aria-haspopup="menu"
-          aria-expanded={isOpen}
-          onClick={() => setIsOpen((prev) => !prev)}
-          title={`테마 설정: ${currentOption.label}`}
-          className="w-10 h-10 rounded-xl flex items-center justify-center text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-200/70 dark:hover:bg-zinc-900 transition-colors cursor-pointer"
+  const trigger =
+    variant === "compact" ? (
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <DropdownMenuTrigger
+              data-testid="theme-menu-button"
+              aria-label={`테마 설정: ${current.label}`}
+              render={<Button variant="ghost" size="icon" />}
+            />
+          }
         >
-          {currentOption.icon("w-5 h-5")}
-        </button>
-      ) : (
-        <button
-          type="button"
-          data-testid="theme-menu-button"
-          aria-haspopup="menu"
-          aria-expanded={isOpen}
-          onClick={() => setIsOpen((prev) => !prev)}
-          className="w-full px-3 py-2.5 rounded-xl bg-zinc-100 hover:bg-zinc-200/80 dark:bg-zinc-900/70 dark:hover:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-zinc-800 dark:text-zinc-200 flex items-center justify-between gap-2.5 transition-all cursor-pointer shadow-sm text-xs font-medium"
-        >
-          <div className="flex items-center gap-2.5 min-w-0">
-            <div className="w-6 h-6 rounded-lg bg-zinc-200 dark:bg-zinc-800 flex items-center justify-center text-emerald-600 dark:text-emerald-400 shrink-0">
-              {currentOption.icon("w-3.5 h-3.5")}
-            </div>
-            <div className="text-left min-w-0">
-              <span className="block text-xs font-semibold text-zinc-900 dark:text-zinc-100 truncate">
-                {currentOption.label}
-              </span>
-              <span className="block text-[10px] text-zinc-500 truncate">
-                화면 모드 전환
-              </span>
-            </div>
-          </div>
-
-          <div className="text-zinc-400 dark:text-zinc-500 shrink-0">
-            {direction === "up" ? (
-              <svg
-                className={`w-3.5 h-3.5 transition-transform ${isOpen ? "rotate-180" : ""}`}
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M5 15l7-7 7 7"
-                />
-              </svg>
-            ) : (
-              <svg
-                className={`w-3.5 h-3.5 transition-transform ${isOpen ? "rotate-180" : ""}`}
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M19 9l-7 7-7-7"
-                />
-              </svg>
-            )}
-          </div>
-        </button>
-      )}
-
-      {isOpen && (
-        <div
-          role="menu"
-          data-testid="theme-menu-dropdown"
-          className={`absolute ${dropdownPositionClass} ${align === "right" ? "right-0" : "left-0"} ${
-            variant === "compact" ? "w-52" : "w-full"
-          } bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-xl dark:shadow-2xl p-1.5 z-50 animate-in fade-in zoom-in-95 duration-100`}
-        >
-          <div className="px-2.5 py-1.5 border-b border-zinc-100 dark:border-zinc-800/80 mb-1">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-500">
-              테마 설정
-            </span>
-          </div>
-
-          <div className="space-y-0.5">
-            {THEME_OPTIONS.map((option) => {
-              const isSelected = theme === option.mode;
-              return (
-                <button
-                  key={option.mode}
-                  type="button"
-                  role="menuitem"
-                  data-testid={`theme-option-${option.mode}`}
-                  onClick={() => handleSelect(option.mode)}
-                  className={`w-full px-2.5 py-2 rounded-xl text-xs flex items-center justify-between gap-2.5 transition-colors cursor-pointer text-left ${
-                    isSelected
-                      ? "bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 font-semibold"
-                      : "text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800/80"
-                  }`}
-                >
-                  <div className="flex items-center gap-2.5 min-w-0">
-                    <div
-                      className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${
-                        isSelected
-                          ? "bg-emerald-500 text-white"
-                          : "bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400"
-                      }`}
-                    >
-                      {option.icon("w-4 h-4")}
-                    </div>
-                    <div className="min-w-0">
-                      <div className="text-xs truncate">{option.label}</div>
-                      <div className="text-[10px] text-zinc-500 dark:text-zinc-500 truncate">
-                        {option.description}
-                      </div>
-                    </div>
-                  </div>
-
-                  {isSelected && (
-                    <svg
-                      className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2.5}
-                        d="M5 13l4 4L19 7"
-                      />
-                    </svg>
-                  )}
-                </button>
-              );
-            })}
-          </div>
+          <CurrentIcon />
+        </TooltipTrigger>
+        <TooltipContent>테마 설정: {current.label}</TooltipContent>
+      </Tooltip>
+    ) : (
+      <DropdownMenuTrigger
+        data-testid="theme-menu-button"
+        render={<SidebarMenuButton size="lg" />}
+      >
+        <CurrentIcon />
+        <div className="grid flex-1 text-left leading-tight">
+          <span className="truncate font-semibold">{current.label}</span>
+          <span className="truncate text-xs text-muted-foreground">
+            화면 모드 전환
+          </span>
         </div>
-      )}
-    </div>
+        <ChevronsUpDownIcon />
+      </DropdownMenuTrigger>
+    );
+
+  const menu = (
+    <DropdownMenu>
+      {trigger}
+      <DropdownMenuContent
+        data-testid="theme-menu-dropdown"
+        side={variant === "compact" ? "bottom" : "top"}
+        align={align}
+        className="w-56"
+      >
+        <DropdownMenuGroup>
+          <DropdownMenuLabel>테마 설정</DropdownMenuLabel>
+          <DropdownMenuRadioGroup
+            value={theme}
+            onValueChange={(value) => {
+              if (isThemeMode(value)) setTheme(value);
+            }}
+          >
+            {THEME_OPTIONS.map((option) => (
+              <DropdownMenuRadioItem
+                key={option.mode}
+                value={option.mode}
+                data-testid={`theme-option-${option.mode}`}
+                closeOnClick
+              >
+                <option.icon />
+                <span className="min-w-0">
+                  <span className="block truncate">{option.label}</span>
+                  <span className="block truncate text-xs text-muted-foreground">
+                    {option.description}
+                  </span>
+                </span>
+              </DropdownMenuRadioItem>
+            ))}
+          </DropdownMenuRadioGroup>
+        </DropdownMenuGroup>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+
+  return variant === "sidebar" ? (
+    <SidebarMenuItem>{menu}</SidebarMenuItem>
+  ) : (
+    menu
   );
 }
 

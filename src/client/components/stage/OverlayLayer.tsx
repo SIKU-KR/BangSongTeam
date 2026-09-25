@@ -21,7 +21,7 @@ export function OverlayLayer({
   return (
     <div
       data-testid="overlay-layer"
-      className={`absolute inset-0 pointer-events-none transition-opacity duration-150 ease-out z-10 ${className}`}
+      className={`pointer-events-none absolute inset-0 z-10 transition-opacity duration-150 ease-out ${className}`}
       style={{
         backgroundColor: color,
         opacity: effectiveOpacity,

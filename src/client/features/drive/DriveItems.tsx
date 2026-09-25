@@ -1,8 +1,27 @@
-import React from "react";
+import React, { useState } from "react";
+import {
+  ArrowUpIcon,
+  EllipsisVerticalIcon,
+  FolderIcon,
+  PencilIcon,
+  PlayIcon,
+  PresentationIcon,
+  SquareArrowOutUpRightIcon,
+  Trash2Icon,
+  type LucideIcon,
+} from "lucide-react";
+import { cn } from "cn";
+import { Button } from "#components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuTrigger,
+} from "#components/ui/dropdown-menu";
+import { IconButton } from "#components/common/IconButton";
 import type { SortKey, SortOrder } from "../../routes/appShellContext";
 import { useDriveDraggable, useDriveDroppable } from "./driveContext";
 import { buildSubtitle, formatDate, type DriveItem } from "./driveModel";
-import { FolderGlyph, Icon, type IconName } from "./icons";
+import { ActionMenuItems, type MenuAction } from "./ActionMenu";
 
 /** 둘째 열이 소유자(폴더 보기)인지 위치(검색 결과·휴지통)인지 */
 export type DriveColumnVariant = "owner" | "location";
@@ -15,9 +34,9 @@ export interface DriveItemHandlers {
   onMouseDown: (event: React.MouseEvent) => void;
   onClick: (event: React.MouseEvent) => void;
   onDoubleClick: () => void;
-  onContextMenu: (event: React.MouseEvent) => void;
   onFocus: () => void;
-  onMore: (event: React.MouseEvent<HTMLButtonElement>) => void;
+  /** ⋮ 메뉴를 열 때 부른다. 선택되지 않은 행이면 그 행만 선택한다 */
+  menuActions: () => MenuAction[];
   onPresent?: () => void;
   onEdit?: () => void;
 }
@@ -48,51 +67,94 @@ function useItemDnd(
   };
 }
 
-const LIST_COLUMNS: Record<DriveColumnVariant, string> = {
-  owner:
-    "grid items-center gap-x-4 pl-4 pr-2 grid-cols-[minmax(0,1fr)_8rem_6.5rem] sm:grid-cols-[minmax(0,1fr)_4rem_8rem_6.5rem] md:grid-cols-[minmax(0,1fr)_4rem_7.5rem_8rem_6.5rem]",
-  location:
-    "grid items-center gap-x-4 pl-4 pr-2 grid-cols-[minmax(0,1fr)_8rem_6.5rem] sm:grid-cols-[minmax(0,1fr)_10rem_8rem_6.5rem] md:grid-cols-[minmax(0,1fr)_12rem_7.5rem_8rem_6.5rem]",
-};
+/** 머리글과 행이 같은 열 폭을 쓴다. 좁은 화면에서는 둘째·날짜 열을 숨긴다 */
+const COLUMNS = {
+  row: "flex items-center gap-x-4 pr-2 pl-4",
+  name: "flex min-w-0 flex-1 items-center gap-4",
+  second: {
+    owner: "hidden w-16 shrink-0 truncate sm:block",
+    location: "hidden w-40 shrink-0 truncate sm:block md:w-48",
+  },
+  date: "hidden w-30 shrink-0 whitespace-nowrap md:block",
+  count: "w-32 shrink-0 truncate",
+  actions: "flex w-26 shrink-0 items-center justify-end",
+} as const;
 
 const HOVER_REVEAL =
   "opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 group-aria-selected:opacity-100 focus-visible:opacity-100";
 
+const ROW_CLASS =
+  "group h-12 cursor-default border-b text-sm text-muted-foreground outline-none select-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset";
+
+/** 행 안의 조작이 행 선택·더블클릭 열기로 번지지 않게 막는다 */
+const STOP_ROW_EVENTS = {
+  onMouseDown: (event: React.MouseEvent) => event.stopPropagation(),
+  onClick: (event: React.MouseEvent) => event.stopPropagation(),
+  onDoubleClick: (event: React.MouseEvent) => event.stopPropagation(),
+  onContextMenu: (event: React.MouseEvent) => event.stopPropagation(),
+};
+
+/** 행의 ⋮ 메뉴. 항목은 열 때 계산한다 (선택을 바꾸는 부수 효과가 있어서) */
+function RowMenu({
+  label,
+  getActions,
+}: {
+  label: string;
+  getActions: () => MenuAction[];
+}): React.JSX.Element {
+  const [actions, setActions] = useState<MenuAction[]>([]);
+  return (
+    <DropdownMenu
+      onOpenChange={(open) => {
+        if (open) setActions(getActions());
+      }}
+    >
+      <DropdownMenuTrigger
+        data-testid="item-more-btn"
+        aria-label={label}
+        tabIndex={-1}
+        {...STOP_ROW_EVENTS}
+        render={<Button variant="ghost" size="icon" />}
+      >
+        <EllipsisVerticalIcon />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent
+        data-testid="drive-menu"
+        align="end"
+        className="min-w-60"
+        {...STOP_ROW_EVENTS}
+      >
+        <ActionMenuItems actions={actions} />
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
 function RowIconButton({
   testId,
-  icon,
+  icon: Icon,
   label,
-  reveal = true,
   onSelect,
 }: {
   testId: string;
-  icon: IconName;
+  icon: LucideIcon;
   label: string;
-  reveal?: boolean;
-  onSelect: (event: React.MouseEvent<HTMLButtonElement>) => void;
+  onSelect: () => void;
 }): React.JSX.Element {
   return (
-    <button
-      type="button"
+    <IconButton
+      label={label}
       tabIndex={-1}
       data-testid={testId}
-      aria-label={label}
-      title={label}
-      onMouseDown={(event) => event.stopPropagation()}
+      className={HOVER_REVEAL}
+      {...STOP_ROW_EVENTS}
       onClick={(event) => {
         event.stopPropagation();
-        onSelect(event);
+        onSelect();
       }}
-      onDoubleClick={(event) => event.stopPropagation()}
-      className={`p-2 rounded-full text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-900/10 dark:hover:bg-white/10 transition-opacity cursor-pointer shrink-0 ${
-        reveal ? HOVER_REVEAL : ""
-      }`}
     >
-      <Icon
-        name={icon}
-        className={icon === "dots" ? "w-5 h-5" : "w-[18px] h-[18px]"}
-      />
-    </button>
+      <Icon />
+    </IconButton>
   );
 }
 
@@ -101,7 +163,7 @@ function SortHeader({
   sortKey,
   sort,
   onSort,
-  className = "",
+  className,
 }: {
   label: string;
   sortKey: SortKey;
@@ -124,37 +186,26 @@ function SortHeader({
   }
   return (
     <span role="columnheader" aria-sort={ariaSort} className={className}>
-      <button
-        type="button"
+      <Button
+        variant="ghost"
+        size="sm"
         data-testid={`sort-header-${sortKey}`}
+        className={cn("-ml-2.5", active && "text-foreground")}
         onClick={(event) => {
           event.stopPropagation();
           onSort(sortKey);
         }}
-        className={`-ml-2 px-2 py-1 rounded-full inline-flex items-center gap-1 cursor-pointer hover:bg-zinc-200/70 dark:hover:bg-zinc-800 ${
-          active ? "text-zinc-900 dark:text-white" : ""
-        }`}
       >
-        <span>{label}</span>
+        {label}
         {active && (
-          <svg
-            className={`w-4 h-4 transition-transform ${
-              sort.direction === "desc" ? "rotate-180" : ""
-            }`}
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-            aria-hidden="true"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M12 19V5m-6 6l6-6 6 6"
-            />
-          </svg>
+          <ArrowUpIcon
+            className={cn(
+              "transition-transform",
+              sort.direction === "desc" && "rotate-180",
+            )}
+          />
         )}
-      </button>
+      </Button>
     </span>
   );
 }
@@ -180,10 +231,19 @@ export function DriveListHeader({
     <div
       role="row"
       onClick={(event) => event.stopPropagation()}
-      className={`${LIST_COLUMNS[variant]} sticky top-0 z-10 h-12 bg-zinc-50 dark:bg-zinc-950 text-sm font-medium text-zinc-600 dark:text-zinc-400 border-b border-zinc-200 dark:border-zinc-800`}
+      className={cn(
+        COLUMNS.row,
+        "sticky top-0 z-10 h-12 border-b bg-background text-sm font-medium text-muted-foreground",
+      )}
     >
-      <SortHeader label="이름" sortKey="name" sort={sort} onSort={onSort} />
-      <span role="columnheader" className="hidden sm:block truncate">
+      <SortHeader
+        label="이름"
+        sortKey="name"
+        sort={sort}
+        onSort={onSort}
+        className={COLUMNS.name}
+      />
+      <span role="columnheader" className={COLUMNS.second[variant]}>
         {secondLabel}
       </span>
       <SortHeader
@@ -191,10 +251,18 @@ export function DriveListHeader({
         sortKey="updated"
         sort={sort}
         onSort={onSort}
-        className="hidden md:block"
+        className={COLUMNS.date}
       />
-      <SortHeader label="구성" sortKey="slides" sort={sort} onSort={onSort} />
-      <span className="sr-only">작업</span>
+      <SortHeader
+        label="구성"
+        sortKey="slides"
+        sort={sort}
+        onSort={onSort}
+        className={COLUMNS.count}
+      />
+      <span className={COLUMNS.actions}>
+        <span className="sr-only">작업</span>
+      </span>
     </div>
   );
 }
@@ -220,10 +288,10 @@ export function DriveListRow({
   const dnd = useItemDnd(item, handlers.interactive);
   const isFolder = item.kind === "folder";
   const stateClass = dnd.isDropTarget
-    ? "bg-emerald-50 dark:bg-emerald-950/40 outline outline-2 -outline-offset-2 outline-emerald-500"
+    ? "bg-primary/5 outline-2 -outline-offset-2 outline-primary"
     : handlers.selected
-      ? "bg-emerald-100/80 dark:bg-emerald-900/40"
-      : "hover:bg-zinc-200/60 dark:hover:bg-zinc-800/60";
+      ? "bg-primary/10"
+      : "hover:bg-muted";
   const subtitle = isFolder ? null : buildSubtitle(item.presentation);
 
   return (
@@ -239,61 +307,55 @@ export function DriveListRow({
       onMouseDown={handlers.onMouseDown}
       onClick={handlers.onClick}
       onDoubleClick={handlers.onDoubleClick}
-      onContextMenu={handlers.onContextMenu}
       onFocus={handlers.onFocus}
-      className={`group ${LIST_COLUMNS[variant]} h-12 text-sm text-zinc-600 dark:text-zinc-400 border-b border-zinc-200 dark:border-zinc-800 cursor-default select-none outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-emerald-600 dark:focus-visible:ring-emerald-400 ${stateClass} ${
-        dnd.isDragging ? "opacity-40" : ""
-      }`}
+      className={cn(
+        COLUMNS.row,
+        ROW_CLASS,
+        stateClass,
+        dnd.isDragging && "opacity-40",
+      )}
     >
-      <div className="flex items-center gap-4 min-w-0">
+      <div className={COLUMNS.name}>
         {isFolder ? (
           <span
             data-testid="row-icon-folder"
-            className="flex shrink-0 text-emerald-500 dark:text-emerald-400"
+            className="flex shrink-0 text-muted-foreground"
           >
-            <FolderGlyph />
+            <FolderIcon className="size-5 fill-current" />
           </span>
         ) : (
           <span
             data-testid="row-icon-presentation"
-            className="flex shrink-0 text-indigo-500 dark:text-indigo-400"
+            className="flex shrink-0 text-foreground"
           >
-            <Icon name="slides" className="w-5 h-5" />
+            <PresentationIcon className="size-5" />
           </span>
         )}
-        <div className="min-w-0 flex items-baseline gap-2">
-          <span
-            className="font-medium text-zinc-900 dark:text-white truncate"
-            title={item.name}
-          >
+        <div className="flex min-w-0 items-baseline gap-2">
+          <span className="truncate font-medium text-foreground">
             {item.name}
           </span>
           {subtitle && (
-            <span className="hidden lg:inline text-xs text-zinc-500 truncate">
+            <span className="hidden truncate text-xs lg:inline">
               {subtitle}
             </span>
           )}
         </div>
       </div>
-      <span
-        className="hidden sm:block truncate"
-        title={variant === "location" ? item.location : undefined}
-      >
+      <span className={COLUMNS.second[variant]}>
         {variant === "location" ? (item.location ?? "-") : "나"}
       </span>
-      <span className="hidden md:block whitespace-nowrap">
-        {formatDate(date)}
-      </span>
-      <span className="truncate">
+      <span className={COLUMNS.date}>{formatDate(date)}</span>
+      <span className={COLUMNS.count}>
         {isFolder
           ? `항목 ${item.childCount}개`
           : `${item.songCount}곡 · ${item.slideCount}슬라이드`}
       </span>
-      <div className="flex items-center justify-end">
+      <div className={COLUMNS.actions}>
         {handlers.onPresent && (
           <RowIconButton
             testId="row-present-btn"
-            icon="play"
+            icon={PlayIcon}
             label="발표 (전체화면 송출)"
             onSelect={handlers.onPresent}
           />
@@ -301,17 +363,14 @@ export function DriveListRow({
         {handlers.onEdit && (
           <RowIconButton
             testId="row-edit-btn"
-            icon="pencil"
+            icon={PencilIcon}
             label="편집기에서 열기"
             onSelect={handlers.onEdit}
           />
         )}
-        <RowIconButton
-          testId="item-more-btn"
-          icon="dots"
+        <RowMenu
           label={`${item.name} 더보기`}
-          reveal={false}
-          onSelect={handlers.onMore}
+          getActions={handlers.menuActions}
         />
       </div>
     </div>
@@ -328,18 +387,18 @@ export function DriveListRow({
 export function TrashFolderRow({
   count,
   onOpen,
-  onMenu,
+  menuActions,
 }: {
   count: number;
   onOpen: () => void;
-  onMenu: (anchor: { x: number; y: number }) => void;
+  menuActions: () => MenuAction[];
 }): React.JSX.Element {
   const { setNodeRef, isDropTarget } = useDriveDroppable("item:trash-folder", {
     kind: "trash",
   });
   const stateClass = isDropTarget
-    ? "bg-rose-50 dark:bg-rose-950/40 outline outline-2 -outline-offset-2 outline-rose-500"
-    : "hover:bg-zinc-200/60 dark:hover:bg-zinc-800/60";
+    ? "bg-destructive/10 outline-2 -outline-offset-2 outline-destructive"
+    : "hover:bg-muted";
 
   return (
     <div
@@ -348,70 +407,46 @@ export function TrashFolderRow({
       aria-label="휴지통 (고정 폴더)"
       tabIndex={0}
       data-testid="drive-trash-folder"
+      data-trash-folder
       onMouseDown={(event) => event.stopPropagation()}
       onClick={(event) => event.stopPropagation()}
       onDoubleClick={onOpen}
       onKeyDown={(event) => {
         if (event.target !== event.currentTarget) return;
-        if (event.key === "Enter") {
-          event.preventDefault();
-          event.stopPropagation();
-          onOpen();
-        } else if (
-          event.key === "ContextMenu" ||
-          (event.key === "F10" && event.shiftKey)
-        ) {
-          event.preventDefault();
-          event.stopPropagation();
-          const rect = event.currentTarget.getBoundingClientRect();
-          onMenu({ x: rect.left + 48, y: rect.bottom });
-        }
-      }}
-      onContextMenu={(event) => {
+        if (event.key !== "Enter") return;
         event.preventDefault();
         event.stopPropagation();
-        onMenu({ x: event.clientX, y: event.clientY });
+        onOpen();
       }}
-      className={`group ${LIST_COLUMNS.owner} h-12 text-sm text-zinc-600 dark:text-zinc-400 border-b border-zinc-200 dark:border-zinc-800 cursor-default select-none outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-emerald-600 dark:focus-visible:ring-emerald-400 ${stateClass}`}
+      className={cn(COLUMNS.row, ROW_CLASS, stateClass)}
     >
-      <div className="flex items-center gap-4 min-w-0">
+      <div className={COLUMNS.name}>
         <span
           data-testid="row-icon-trash"
-          className="flex shrink-0 text-rose-500 dark:text-rose-400"
+          className="flex shrink-0 text-destructive"
         >
-          <Icon name="trash" className="w-5 h-5" />
+          <Trash2Icon className="size-5" />
         </span>
-        <div className="min-w-0 flex items-baseline gap-2">
-          <span className="font-medium text-zinc-900 dark:text-white truncate">
-            휴지통
-          </span>
-          <span className="hidden lg:inline text-xs text-zinc-500 truncate">
+        <div className="flex min-w-0 items-baseline gap-2">
+          <span className="truncate font-medium text-foreground">휴지통</span>
+          <span className="hidden truncate text-xs lg:inline">
             삭제한 항목은 영구 삭제 전까지 복원할 수 있습니다
           </span>
         </div>
       </div>
-      <span className="hidden sm:block">나</span>
-      <span className="hidden md:block">-</span>
-      <span data-testid="trash-folder-count" className="truncate">
+      <span className={COLUMNS.second.owner}>나</span>
+      <span className={COLUMNS.date}>-</span>
+      <span data-testid="trash-folder-count" className={COLUMNS.count}>
         {`항목 ${count}개`}
       </span>
-      <div className="flex items-center justify-end">
+      <div className={COLUMNS.actions}>
         <RowIconButton
           testId="trash-folder-open-btn"
-          icon="open"
+          icon={SquareArrowOutUpRightIcon}
           label="휴지통 열기"
           onSelect={onOpen}
         />
-        <RowIconButton
-          testId="item-more-btn"
-          icon="dots"
-          label="휴지통 더보기"
-          reveal={false}
-          onSelect={(event) => {
-            const rect = event.currentTarget.getBoundingClientRect();
-            onMenu({ x: rect.right - 240, y: rect.bottom + 4 });
-          }}
-        />
+        <RowMenu label="휴지통 더보기" getActions={menuActions} />
       </div>
     </div>
   );

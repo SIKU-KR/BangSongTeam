@@ -1,4 +1,29 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import {
+  ChevronDownIcon,
+  CopyIcon,
+  EllipsisIcon,
+  PlusIcon,
+  Trash2Icon,
+  TriangleAlertIcon,
+} from "lucide-react";
+import { cn } from "cn";
+import { Button } from "#components/ui/button";
+import { ButtonGroup } from "#components/ui/button-group";
+import { Empty, EmptyDescription, EmptyHeader } from "#components/ui/empty";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "#components/ui/dropdown-menu";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "#components/ui/tooltip";
+import { IconButton } from "#components/common/IconButton";
 import type { PresentationItem } from "#shared";
 import { analyzeDeckOverflow } from "#shared";
 import {
@@ -6,7 +31,6 @@ import {
   useBackgroundCatalog,
 } from "../backgrounds/backgroundCatalog";
 import { SlideStage } from "../../components/stage/SlideStage";
-import { OverflowWarningIcon } from "./OverflowWarningIcon";
 import { SortableItem, SortableList, slideSortableId } from "./SortableList";
 import { useTextWidthMeasurer } from "./useTextWidthMeasurer";
 
@@ -54,14 +78,13 @@ export function SlideThumbnailPane({
   onEditSongInfo,
   onDeleteSong,
   onOpenSongPicker,
-  className = "",
+  className,
 }: SlideThumbnailPaneProps): React.JSX.Element {
   useBackgroundCatalog();
   const [collapsedIds, setCollapsedIds] = useState<ReadonlySet<string>>(
     () => new Set(),
   );
   const [menuSongIndex, setMenuSongIndex] = useState<number | null>(null);
-  const menuContainerRef = useRef<HTMLDivElement>(null);
   const activeThumbRef = useRef<HTMLDivElement>(null);
 
   const activeItemId = items[activeSongIndex]?.id;
@@ -97,29 +120,6 @@ export function SlideThumbnailPane({
     activeThumbRef.current?.scrollIntoView?.({ block: "nearest" });
   }, [activeSongIndex, activeSlideIndex]);
 
-  useEffect(() => {
-    if (menuSongIndex === null) return;
-
-    const handleMouseDown = (event: MouseEvent) => {
-      if (
-        menuContainerRef.current &&
-        !menuContainerRef.current.contains(event.target as Node)
-      ) {
-        setMenuSongIndex(null);
-      }
-    };
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setMenuSongIndex(null);
-    };
-
-    document.addEventListener("mousedown", handleMouseDown);
-    document.addEventListener("keydown", handleKeyDown);
-    return () => {
-      document.removeEventListener("mousedown", handleMouseDown);
-      document.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [menuSongIndex]);
-
   const toggleCollapsed = (itemId: string) => {
     setCollapsedIds((prev) => {
       const next = new Set(prev);
@@ -129,61 +129,57 @@ export function SlideThumbnailPane({
     });
   };
 
-  const runMenuAction = (action: () => void) => {
-    setMenuSongIndex(null);
-    action();
-  };
-
   return (
     <aside
       data-testid="slide-thumbnail-pane"
-      className={`w-64 shrink-0 bg-white dark:bg-zinc-950 border-r border-zinc-200 dark:border-zinc-800/80 flex flex-col select-none ${className}`}
+      className={cn(
+        "flex w-64 shrink-0 flex-col border-r bg-background select-none",
+        className,
+      )}
     >
-      <div className="h-11 px-3 flex items-center justify-between border-b border-zinc-200 dark:border-zinc-800/80 shrink-0">
-        <span className="text-xs font-bold text-zinc-900 dark:text-white">
+      <div className="flex h-11 shrink-0 items-center justify-between border-b px-3">
+        <span className="text-xs font-bold">
           슬라이드{" "}
-          <span className="font-mono font-medium text-zinc-400 dark:text-zinc-500">
+          <span className="font-mono font-medium text-muted-foreground">
             {totalSlides}
           </span>
         </span>
-        <button
-          type="button"
-          data-testid="add-slide-btn"
-          disabled={items.length === 0}
-          onClick={onAddSlide}
-          className="px-2 py-1 rounded-md text-xs font-medium text-zinc-700 dark:text-zinc-300 hover:text-emerald-700 dark:hover:text-emerald-400 hover:bg-zinc-100 dark:hover:bg-zinc-900 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1 cursor-pointer transition-colors"
-          title="현재 슬라이드 뒤에 새 슬라이드 추가"
-        >
-          <svg
-            className="w-3.5 h-3.5"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <Button
+                variant="ghost"
+                size="xs"
+                data-testid="add-slide-btn"
+                disabled={items.length === 0}
+                onClick={onAddSlide}
+              />
+            }
           >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M12 4v16m8-8H4"
-            />
-          </svg>
-          <span>새 슬라이드</span>
-        </button>
+            <PlusIcon />새 슬라이드
+          </TooltipTrigger>
+          <TooltipContent>현재 슬라이드 뒤에 새 슬라이드 추가</TooltipContent>
+        </Tooltip>
       </div>
 
       <div className="flex-1 overflow-y-auto px-3 py-2">
         {items.length === 0 && (
-          <p className="px-1 py-6 text-center text-xs text-zinc-500 dark:text-zinc-400">
-            아직 곡이 없습니다.
-            <br />
-            아래에서 찬양곡을 추가하세요.
-          </p>
+          <Empty>
+            <EmptyHeader>
+              <EmptyDescription>
+                아직 곡이 없습니다.
+                <br />
+                아래에서 찬양곡을 추가하세요.
+              </EmptyDescription>
+            </EmptyHeader>
+          </Empty>
         )}
 
         {items.map((item, songIndex) => {
           const deck = item.deck;
           const slides = deck?.slides ?? [];
           const title = deck?.title || "제목 없음";
+          const fullTitle = deck?.artist ? `${title} · ${deck.artist}` : title;
           const isActiveSong = songIndex === activeSongIndex;
           const isCollapsed = collapsedIds.has(item.id);
           const isMenuOpen = menuSongIndex === songIndex;
@@ -206,139 +202,115 @@ export function SlideThumbnailPane({
                   e.preventDefault();
                   setMenuSongIndex(songIndex);
                 }}
-                className={`group relative flex items-center gap-1 rounded-md px-1 py-1 hover:bg-zinc-100 dark:hover:bg-zinc-900 ${
-                  isActiveSong
-                    ? "text-emerald-700 dark:text-emerald-400"
-                    : "text-zinc-700 dark:text-zinc-300"
-                }`}
+                className={cn(
+                  "group relative flex items-center gap-1 rounded-md p-1 hover:bg-muted",
+                  isActiveSong ? "text-foreground" : "text-muted-foreground",
+                )}
               >
-                <button
-                  type="button"
+                <IconButton
+                  label={isCollapsed ? "구역 펼치기" : "구역 접기"}
+                  size="icon-xs"
                   data-testid={`song-section-toggle-${songIndex}`}
                   aria-expanded={!isCollapsed}
                   onClick={() => toggleCollapsed(item.id)}
-                  className="p-0.5 rounded text-zinc-400 hover:text-zinc-800 dark:text-zinc-500 dark:hover:text-zinc-200 cursor-pointer"
-                  title={isCollapsed ? "구역 펼치기" : "구역 접기"}
+                  className="text-muted-foreground"
                 >
-                  <svg
-                    className={`w-3 h-3 transition-transform ${isCollapsed ? "-rotate-90" : ""}`}
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2.5}
-                      d="M19 9l-7 7-7-7"
-                    />
-                  </svg>
-                </button>
+                  <ChevronDownIcon
+                    className={cn(
+                      "transition-transform",
+                      isCollapsed && "-rotate-90",
+                    )}
+                  />
+                </IconButton>
 
-                <button
-                  type="button"
-                  data-testid={`song-section-title-${songIndex}`}
-                  onClick={() => onSelectSlide(songIndex, 0)}
-                  className="min-w-0 flex-1 flex items-baseline gap-1.5 text-left cursor-pointer"
-                  title={deck?.artist ? `${title} · ${deck.artist}` : title}
-                >
-                  <span className="truncate text-xs font-semibold">
-                    {title}
-                  </span>
-                  <span className="shrink-0 text-[10px] font-mono text-zinc-400 dark:text-zinc-500">
-                    {slides.length}장
-                  </span>
-                </button>
+                <Tooltip>
+                  <TooltipTrigger
+                    render={
+                      <Button
+                        variant="ghost"
+                        size="xs"
+                        data-testid={`song-section-title-${songIndex}`}
+                        aria-label={fullTitle}
+                        onClick={() => onSelectSlide(songIndex, 0)}
+                        className="min-w-0 flex-1 justify-start gap-1.5 px-0 text-inherit hover:bg-transparent hover:text-inherit"
+                      />
+                    }
+                  >
+                    <span className="truncate text-xs font-semibold">
+                      {title}
+                    </span>
+                    <span className="shrink-0 font-mono text-2xs text-muted-foreground">
+                      {slides.length}장
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent side="right">{fullTitle}</TooltipContent>
+                </Tooltip>
 
                 {songWarning && (
-                  <span
-                    role="img"
-                    data-testid={`song-overflow-warning-${songIndex}`}
-                    aria-label={songWarning}
-                    title={songWarning}
-                    className="shrink-0 text-amber-500 dark:text-amber-400"
-                  >
-                    <OverflowWarningIcon />
-                  </span>
+                  <OverflowWarning
+                    testId={`song-overflow-warning-${songIndex}`}
+                    message={songWarning}
+                    className="text-warning"
+                  />
                 )}
 
-                <div
-                  ref={isMenuOpen ? menuContainerRef : undefined}
-                  className="relative shrink-0"
+                <DropdownMenu
+                  open={isMenuOpen}
+                  onOpenChange={(open) =>
+                    setMenuSongIndex(open ? songIndex : null)
+                  }
                 >
-                  <button
-                    type="button"
+                  <DropdownMenuTrigger
                     data-testid={`song-section-menu-btn-${songIndex}`}
-                    aria-haspopup="menu"
-                    aria-expanded={isMenuOpen}
-                    onClick={() =>
-                      setMenuSongIndex(isMenuOpen ? null : songIndex)
+                    aria-label="곡 메뉴"
+                    render={
+                      <Button
+                        variant="ghost"
+                        size="icon-xs"
+                        className={cn(
+                          "transition-opacity",
+                          !isMenuOpen &&
+                            "opacity-0 group-hover:opacity-100 focus-visible:opacity-100",
+                        )}
+                      />
                     }
-                    className={`p-0.5 rounded text-zinc-500 hover:text-zinc-900 hover:bg-zinc-200 dark:text-zinc-400 dark:hover:text-white dark:hover:bg-zinc-800 cursor-pointer transition-opacity ${
-                      isMenuOpen
-                        ? "opacity-100"
-                        : "opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
-                    }`}
-                    title="곡 메뉴"
                   >
-                    <svg
-                      className="w-4 h-4"
-                      fill="currentColor"
-                      viewBox="0 0 24 24"
+                    <EllipsisIcon />
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent
+                    data-testid="song-section-menu"
+                    align="end"
+                    className="w-44"
+                  >
+                    <DropdownMenuItem
+                      disabled={songIndex === 0}
+                      onClick={() => onReorderSong(songIndex, songIndex - 1)}
                     >
-                      <circle cx="5" cy="12" r="1.75" />
-                      <circle cx="12" cy="12" r="1.75" />
-                      <circle cx="19" cy="12" r="1.75" />
-                    </svg>
-                  </button>
-
-                  {isMenuOpen && (
-                    <div
-                      role="menu"
-                      data-testid="song-section-menu"
-                      className="absolute right-0 top-6 z-50 w-40 py-1 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg shadow-lg dark:shadow-2xl text-xs text-zinc-700 dark:text-zinc-300"
+                      위로 이동
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      disabled={songIndex === items.length - 1}
+                      onClick={() => onReorderSong(songIndex, songIndex + 1)}
                     >
-                      <SectionMenuItem
-                        label="위로 이동"
-                        disabled={songIndex === 0}
-                        onClick={() =>
-                          runMenuAction(() =>
-                            onReorderSong(songIndex, songIndex - 1),
-                          )
-                        }
-                      />
-                      <SectionMenuItem
-                        label="아래로 이동"
-                        disabled={songIndex === items.length - 1}
-                        onClick={() =>
-                          runMenuAction(() =>
-                            onReorderSong(songIndex, songIndex + 1),
-                          )
-                        }
-                      />
-                      <SectionMenuItem
-                        label="제목·아티스트 수정"
-                        onClick={() =>
-                          runMenuAction(() => onEditSongInfo(songIndex))
-                        }
-                      />
-                      <SectionMenuItem
-                        label="곡 복제"
-                        onClick={() =>
-                          runMenuAction(() => onDuplicateSong(songIndex))
-                        }
-                      />
-                      <div className="my-1 border-t border-zinc-200 dark:border-zinc-800" />
-                      <SectionMenuItem
-                        label="세트에서 제거"
-                        danger
-                        onClick={() =>
-                          runMenuAction(() => onDeleteSong(songIndex))
-                        }
-                      />
-                    </div>
-                  )}
-                </div>
+                      아래로 이동
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => onEditSongInfo(songIndex)}>
+                      제목·아티스트 수정
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onClick={() => onDuplicateSong(songIndex)}
+                    >
+                      곡 복제
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      variant="destructive"
+                      onClick={() => onDeleteSong(songIndex)}
+                    >
+                      세트에서 제거
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </div>
 
               {!isCollapsed && (
@@ -346,7 +318,7 @@ export function SlideThumbnailPane({
                   ids={slides.map(slideSortableId)}
                   onReorder={(from, to) => onReorderSlide(songIndex, from, to)}
                 >
-                  <div className="space-y-2 pt-1 pb-1">
+                  <div className="space-y-2 py-1">
                     {slides.map((slide, slideIndex) => {
                       const globalIndex = firstIndexes[songIndex] + slideIndex;
                       const isActive =
@@ -371,28 +343,29 @@ export function SlideThumbnailPane({
                           aria-current={isActive ? "true" : undefined}
                           aria-label={`슬라이드 ${globalIndex + 1}`}
                           onClick={() => onSelectSlide(songIndex, slideIndex)}
-                          className="group flex items-start gap-2 cursor-pointer outline-none"
+                          className="group flex cursor-pointer items-start gap-2 outline-none"
                         >
                           <span
-                            className={`w-6 shrink-0 pt-0.5 text-right text-[11px] font-mono ${
+                            className={cn(
+                              "w-6 shrink-0 pt-0.5 text-right font-mono text-2xs",
                               isActive
-                                ? "font-bold text-emerald-600 dark:text-emerald-400"
-                                : "text-zinc-400 dark:text-zinc-500"
-                            }`}
+                                ? "font-bold text-foreground"
+                                : "text-muted-foreground",
+                            )}
                           >
                             {globalIndex + 1}
                           </span>
 
                           <div
                             ref={isActive ? activeThumbRef : undefined}
-                            className={`relative shrink-0 rounded-md overflow-hidden bg-black transition-shadow ${
+                            className={cn(
+                              "relative aspect-video w-44 shrink-0 overflow-hidden rounded-md bg-black transition-shadow",
                               isActive
-                                ? "ring-2 ring-emerald-500 shadow-md"
-                                : "ring-1 ring-zinc-200 dark:ring-zinc-800 group-hover:ring-zinc-400 dark:group-hover:ring-zinc-600"
-                            }`}
-                            style={{ width: THUMB_WIDTH, height: THUMB_HEIGHT }}
+                                ? "shadow-md ring-2 ring-primary"
+                                : "ring-1 ring-border group-hover:ring-ring",
+                            )}
                           >
-                            <div className="w-full h-full pointer-events-none">
+                            <div className="pointer-events-none size-full">
                               <SlideStage
                                 slide={slide}
                                 style={deck?.style}
@@ -406,69 +379,42 @@ export function SlideThumbnailPane({
                             </div>
 
                             {slideWarning && (
-                              <span
-                                role="img"
-                                data-testid={`slide-overflow-warning-${globalIndex}`}
-                                aria-label={slideWarning}
-                                title={slideWarning}
-                                className="absolute bottom-1 left-1 z-30 p-0.5 rounded bg-black/75 text-amber-400"
-                              >
-                                <OverflowWarningIcon className="w-3 h-3" />
-                              </span>
+                              <OverflowWarning
+                                testId={`slide-overflow-warning-${globalIndex}`}
+                                message={slideWarning}
+                                className="absolute bottom-1 left-1 z-30 rounded-sm bg-black/75 p-0.5 text-warning"
+                                iconClassName="size-3"
+                              />
                             )}
 
-                            <div className="absolute top-1 right-1 z-30 flex items-center gap-0.5 p-0.5 rounded bg-black/75 border border-white/15 opacity-0 group-hover:opacity-100 transition-opacity">
-                              <button
-                                type="button"
+                            <ButtonGroup className="absolute top-1 right-1 z-30 opacity-0 transition-opacity group-hover:opacity-100">
+                              <IconButton
+                                label="슬라이드 복제"
+                                variant="secondary"
+                                size="icon-xs"
                                 data-testid={`duplicate-slide-btn-${globalIndex}`}
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   onDuplicateSlide(songIndex, slideIndex);
                                 }}
-                                className="p-0.5 rounded text-zinc-300 hover:text-white hover:bg-zinc-700 cursor-pointer"
-                                title="슬라이드 복제"
                               >
-                                <svg
-                                  className="w-3 h-3"
-                                  fill="none"
-                                  stroke="currentColor"
-                                  viewBox="0 0 24 24"
-                                >
-                                  <path
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                    strokeWidth={2}
-                                    d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
-                                  />
-                                </svg>
-                              </button>
+                                <CopyIcon />
+                              </IconButton>
                               {slides.length > 1 && (
-                                <button
-                                  type="button"
+                                <IconButton
+                                  label="슬라이드 삭제"
+                                  variant="secondary"
+                                  size="icon-xs"
                                   data-testid={`delete-slide-btn-${globalIndex}`}
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     onDeleteSlide(songIndex, slideIndex);
                                   }}
-                                  className="p-0.5 rounded text-zinc-300 hover:text-red-400 hover:bg-zinc-700 cursor-pointer"
-                                  title="슬라이드 삭제"
                                 >
-                                  <svg
-                                    className="w-3 h-3"
-                                    fill="none"
-                                    stroke="currentColor"
-                                    viewBox="0 0 24 24"
-                                  >
-                                    <path
-                                      strokeLinecap="round"
-                                      strokeLinejoin="round"
-                                      strokeWidth={2}
-                                      d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-                                    />
-                                  </svg>
-                                </button>
+                                  <Trash2Icon />
+                                </IconButton>
                               )}
-                            </div>
+                            </ButtonGroup>
                           </div>
                         </SortableItem>
                       );
@@ -481,57 +427,49 @@ export function SlideThumbnailPane({
         })}
       </div>
 
-      <div className="p-3 border-t border-zinc-200 dark:border-zinc-800/80 shrink-0">
-        <button
-          type="button"
+      <div className="shrink-0 border-t p-3">
+        <Button
+          variant="outline"
           data-testid="add-song-btn"
           onClick={onOpenSongPicker}
-          className="w-full py-2 px-3 rounded-lg bg-zinc-100 dark:bg-zinc-900 hover:bg-zinc-200 dark:hover:bg-zinc-800 border border-zinc-200 dark:border-zinc-700/80 hover:border-emerald-500/50 text-xs font-semibold text-zinc-800 dark:text-zinc-200 transition-colors flex items-center justify-center gap-2 cursor-pointer"
+          className="w-full"
         >
-          <svg
-            className="w-4 h-4 text-emerald-600 dark:text-emerald-400"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M12 4v16m8-8H4"
-            />
-          </svg>
-          <span>찬양곡 추가</span>
-        </button>
+          <PlusIcon />
+          찬양곡 추가
+        </Button>
       </div>
     </aside>
   );
 }
 
-function SectionMenuItem({
-  label,
-  onClick,
-  disabled = false,
-  danger = false,
+function OverflowWarning({
+  testId,
+  message,
+  className,
+  iconClassName,
 }: {
-  label: string;
-  onClick: () => void;
-  disabled?: boolean;
-  danger?: boolean;
+  testId: string;
+  message: string;
+  className?: string;
+  iconClassName?: string;
 }): React.JSX.Element {
   return (
-    <button
-      type="button"
-      role="menuitem"
-      disabled={disabled}
-      onClick={onClick}
-      className={`w-full px-3 py-1.5 text-left disabled:opacity-35 disabled:cursor-not-allowed cursor-pointer ${
-        danger
-          ? "text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40"
-          : "hover:bg-zinc-100 dark:hover:bg-zinc-800 hover:text-zinc-900 dark:hover:text-white"
-      }`}
-    >
-      {label}
-    </button>
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <span
+            role="img"
+            data-testid={testId}
+            aria-label={message}
+            className={cn("shrink-0", className)}
+          />
+        }
+      >
+        <TriangleAlertIcon className={cn("size-3.5", iconClassName)} />
+      </TooltipTrigger>
+      <TooltipContent className="max-w-64 whitespace-pre-line">
+        {message}
+      </TooltipContent>
+    </Tooltip>
   );
 }

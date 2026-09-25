@@ -1,27 +1,9 @@
 import React from "react";
+import { TriangleAlertIcon } from "lucide-react";
+import { Alert, AlertDescription, AlertTitle } from "#components/ui/alert";
 import { usePersistenceError, useCorruptedRecords } from "../../lib/storage";
 
-function WarningIcon(): React.JSX.Element {
-  return (
-    <svg
-      className="w-4 h-4 shrink-0"
-      fill="none"
-      stroke="currentColor"
-      viewBox="0 0 24 24"
-      aria-hidden="true"
-    >
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={2}
-        d="M12 9v2m0 4h.01M5 19h14a2 2 0 001.84-2.75L13.74 4a2 2 0 00-3.48 0L3.16 16.25A2 2 0 005 19z"
-      />
-    </svg>
-  );
-}
-
-const BANNER_CLASS =
-  "w-full px-4 py-2.5 text-white text-xs sm:text-sm font-medium flex items-center gap-2.5 shrink-0";
+const BANNER_CLASS = "shrink-0 rounded-none border-x-0 border-t-0";
 
 /**
  * 저장 실패·저장본 격리 경고 배너.
@@ -42,28 +24,25 @@ export function StorageWarningBanner(): React.JSX.Element | null {
   return (
     <>
       {error && (
-        <div
-          role="alert"
+        <Alert
+          variant="destructive"
           data-testid="storage-warning-banner"
-          className={`${BANNER_CLASS} bg-red-600`}
+          className={BANNER_CLASS}
         >
-          <WarningIcon />
-          <span>{error.message}</span>
-        </div>
+          <TriangleAlertIcon />
+          <AlertTitle>저장하지 못했습니다</AlertTitle>
+          <AlertDescription>{error.message}</AlertDescription>
+        </Alert>
       )}
 
       {corrupted.length > 0 && (
-        <div
-          role="alert"
-          data-testid="corrupted-warning-banner"
-          className={`${BANNER_CLASS} bg-amber-600`}
-        >
-          <WarningIcon />
-          <span>
-            저장본 {corrupted.length}개를 열지 못했습니다. 삭제하지 않고 그대로
-            보관해 두었으니 복구가 필요하면 문의해 주세요.
-          </span>
-        </div>
+        <Alert data-testid="corrupted-warning-banner" className={BANNER_CLASS}>
+          <TriangleAlertIcon />
+          <AlertTitle>저장본 {corrupted.length}개를 열지 못했습니다</AlertTitle>
+          <AlertDescription>
+            삭제하지 않고 그대로 보관해 두었으니 복구가 필요하면 문의해 주세요.
+          </AlertDescription>
+        </Alert>
       )}
     </>
   );

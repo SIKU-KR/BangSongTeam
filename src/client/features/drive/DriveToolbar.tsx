@@ -1,7 +1,21 @@
-import React, { useRef, useState } from "react";
+import React from "react";
+import {
+  CheckIcon,
+  ChevronDownIcon,
+  EllipsisVerticalIcon,
+  XIcon,
+} from "lucide-react";
+import { cn } from "cn";
+import { Button } from "#components/ui/button";
+import { ButtonGroup } from "#components/ui/button-group";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuTrigger,
+} from "#components/ui/dropdown-menu";
+import { IconButton } from "#components/common/IconButton";
 import type { DriveTypeFilter } from "../../routes/appShellContext";
-import { PopoverMenu, type MenuAction } from "./PopoverMenu";
-import { Icon } from "./icons";
+import { ActionMenuItems, type MenuAction } from "./ActionMenu";
 
 const TYPE_LABELS: Record<Exclude<DriveTypeFilter, "all">, string> = {
   folder: "폴더",
@@ -18,73 +32,46 @@ function TypeFilterChip({
   value: DriveTypeFilter;
   onChange: (value: DriveTypeFilter) => void;
 }): React.JSX.Element {
-  const [anchor, setAnchor] = useState<{ x: number; y: number } | null>(null);
-  const triggerRef = useRef<HTMLButtonElement>(null);
   const active = value !== "all";
 
   const actions: MenuAction[] = (["folder", "file"] as const).map((option) => ({
     key: option,
     label: TYPE_LABELS[option],
-    icon: value === option ? "check" : undefined,
+    icon: value === option ? CheckIcon : undefined,
     testId: `type-option-${option}`,
     onSelect: () => onChange(option),
   }));
 
   return (
-    <div
-      className={`h-8 rounded-lg border flex items-center text-sm font-medium transition-colors ${
-        active
-          ? "bg-emerald-100 dark:bg-emerald-900/50 border-transparent text-emerald-900 dark:text-emerald-100"
-          : "border-zinc-400/70 dark:border-zinc-600 text-zinc-700 dark:text-zinc-300"
-      }`}
-    >
-      <button
-        ref={triggerRef}
-        type="button"
-        data-testid="drive-type-dropdown"
-        aria-haspopup="menu"
-        aria-expanded={anchor !== null}
-        onClick={(event) => {
-          if (anchor) {
-            setAnchor(null);
-            return;
-          }
-          const rect = event.currentTarget.getBoundingClientRect();
-          setAnchor({ x: rect.left, y: rect.bottom + 4 });
-        }}
-        className={`h-full flex items-center gap-1.5 cursor-pointer rounded-lg ${
-          active
-            ? "pl-2 pr-1"
-            : "px-3 hover:bg-zinc-200/70 dark:hover:bg-zinc-800"
-        }`}
-      >
-        {active && <Icon name="check" className="w-4 h-4" />}
-        <span>{active ? TYPE_LABELS[value] : "유형"}</span>
-        {!active && <Icon name="chevronDown" className="w-4 h-4" />}
-      </button>
-      {active && (
-        <button
-          type="button"
-          data-testid="drive-type-clear"
-          aria-label="유형 필터 지우기"
-          title="유형 필터 지우기"
-          onClick={() => onChange("all")}
-          className="h-full px-1.5 rounded-r-lg hover:bg-emerald-200/70 dark:hover:bg-emerald-800/60 cursor-pointer"
+    <ButtonGroup>
+      <DropdownMenu>
+        <DropdownMenuTrigger
+          data-testid="drive-type-dropdown"
+          render={<Button variant={active ? "secondary" : "outline"} />}
         >
-          <Icon name="close" className="w-4 h-4" />
-        </button>
+          {active && <CheckIcon />}
+          {active ? TYPE_LABELS[value] : "유형"}
+          {!active && <ChevronDownIcon />}
+        </DropdownMenuTrigger>
+        <DropdownMenuContent
+          data-testid="drive-type-menu"
+          aria-label="유형"
+          className="min-w-60"
+        >
+          <ActionMenuItems actions={actions} />
+        </DropdownMenuContent>
+      </DropdownMenu>
+      {active && (
+        <IconButton
+          label="유형 필터 지우기"
+          variant="secondary"
+          data-testid="drive-type-clear"
+          onClick={() => onChange("all")}
+        >
+          <XIcon />
+        </IconButton>
       )}
-      {anchor && (
-        <PopoverMenu
-          anchor={anchor}
-          actions={actions}
-          label="유형"
-          testId="drive-type-menu"
-          triggerRef={triggerRef}
-          onClose={() => setAnchor(null)}
-        />
-      )}
-    </div>
+    </ButtonGroup>
   );
 }
 
@@ -96,64 +83,56 @@ function SelectionBar({
   count,
   actions,
   onClear,
-  onMore,
 }: {
   count: number;
   actions: MenuAction[];
   onClear: () => void;
-  onMore: (anchor: { x: number; y: number }) => void;
 }): React.JSX.Element {
   return (
     <div
       data-testid="selection-bar"
-      className="w-full h-10 pl-1 pr-2 rounded-full bg-zinc-200/70 dark:bg-zinc-800/80 flex items-center gap-0.5 overflow-x-auto"
+      className="flex h-10 w-full items-center gap-0.5 overflow-x-auto rounded-full bg-muted pr-2 pl-1"
     >
-      <button
-        type="button"
-        aria-label="선택 해제"
-        title="선택 해제"
+      <IconButton
+        label="선택 해제"
         data-testid="selection-clear"
         onClick={onClear}
-        className="p-2 rounded-full text-zinc-700 dark:text-zinc-300 hover:bg-zinc-900/10 dark:hover:bg-white/10 cursor-pointer"
       >
-        <Icon name="close" className="w-5 h-5" />
-      </button>
-      <span className="text-sm font-medium text-zinc-900 dark:text-zinc-100 px-2 whitespace-nowrap">
+        <XIcon />
+      </IconButton>
+      <span className="px-2 text-sm font-medium whitespace-nowrap">
         {count}개 선택됨
       </span>
       {actions
         .filter((action) => action.key !== "open")
         .map((action) => (
-          <button
+          <IconButton
             key={action.key}
-            type="button"
+            label={action.label}
             data-testid={action.testId ? `bar-${action.testId}` : undefined}
-            aria-label={action.label}
-            title={action.label}
             disabled={action.disabled}
+            className={cn(action.danger && "text-destructive")}
             onClick={action.onSelect}
-            className={`p-2 rounded-full cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed ${
-              action.danger
-                ? "text-rose-600 dark:text-rose-400 hover:bg-rose-500/10"
-                : "text-zinc-700 dark:text-zinc-300 hover:bg-zinc-900/10 dark:hover:bg-white/10"
-            }`}
           >
-            {action.icon && <Icon name={action.icon} className="w-5 h-5" />}
-          </button>
+            {action.icon && <action.icon />}
+          </IconButton>
         ))}
-      <button
-        type="button"
-        aria-label="작업 더보기"
-        title="작업 더보기"
-        data-testid="selection-more"
-        onClick={(event) => {
-          const rect = event.currentTarget.getBoundingClientRect();
-          onMore({ x: rect.left, y: rect.bottom + 4 });
-        }}
-        className="p-2 rounded-full text-zinc-700 dark:text-zinc-300 hover:bg-zinc-900/10 dark:hover:bg-white/10 cursor-pointer"
-      >
-        <Icon name="dots" className="w-5 h-5" />
-      </button>
+      <DropdownMenu>
+        <DropdownMenuTrigger
+          data-testid="selection-more"
+          aria-label="작업 더보기"
+          render={<Button variant="ghost" size="icon" />}
+        >
+          <EllipsisVerticalIcon />
+        </DropdownMenuTrigger>
+        <DropdownMenuContent
+          data-testid="drive-menu"
+          aria-label="작업"
+          className="min-w-60"
+        >
+          <ActionMenuItems actions={actions} />
+        </DropdownMenuContent>
+      </DropdownMenu>
     </div>
   );
 }
@@ -163,7 +142,6 @@ export interface DriveToolbarProps {
   selectionCount: number;
   selectionActions: MenuAction[];
   onClearSelection: () => void;
-  onSelectionMore: (anchor: { x: number; y: number }) => void;
   summary: string;
   typeFilter: DriveTypeFilter;
   onTypeFilterChange: (value: DriveTypeFilter) => void;
@@ -180,7 +158,6 @@ export function DriveToolbar({
   selectionCount,
   selectionActions,
   onClearSelection,
-  onSelectionMore,
   summary,
   typeFilter,
   onTypeFilterChange,
@@ -191,38 +168,36 @@ export function DriveToolbar({
     <div
       onMouseDown={(event) => event.stopPropagation()}
       onClick={(event) => event.stopPropagation()}
-      className="shrink-0 h-14 px-4 sm:px-6 flex items-center"
+      className="flex h-14 shrink-0 items-center px-4 sm:px-6"
     >
       {selectionCount > 0 ? (
         <SelectionBar
           count={selectionCount}
           actions={selectionActions}
           onClear={onClearSelection}
-          onMore={onSelectionMore}
         />
       ) : mode === "trash" ? (
-        <div className="w-full h-10 pl-4 pr-1 rounded-lg bg-zinc-200/60 dark:bg-zinc-800/70 flex items-center justify-between gap-3">
+        <div className="flex h-10 w-full items-center justify-between gap-3 rounded-lg bg-muted pr-1 pl-4">
           <p
-            className="text-sm text-zinc-700 dark:text-zinc-300 truncate"
+            className="truncate text-sm text-muted-foreground"
             data-testid="drive-summary"
           >
             휴지통의 항목은 영구 삭제하기 전까지 언제든 복원할 수 있습니다.
           </p>
-          <button
-            type="button"
+          <Button
+            variant="ghost"
             data-testid="empty-trash-btn"
             disabled={!canEmptyTrash}
             onClick={onEmptyTrash}
-            className="shrink-0 px-3 py-1.5 rounded-full text-sm font-medium text-emerald-700 dark:text-emerald-400 hover:bg-emerald-500/10 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
           >
             휴지통 비우기
-          </button>
+          </Button>
         </div>
       ) : (
-        <div className="w-full flex items-center justify-between gap-3">
+        <div className="flex w-full items-center justify-between gap-3">
           <TypeFilterChip value={typeFilter} onChange={onTypeFilterChange} />
           <p
-            className="text-xs text-zinc-500 truncate"
+            className="truncate text-xs text-muted-foreground"
             data-testid="drive-summary"
           >
             {summary}

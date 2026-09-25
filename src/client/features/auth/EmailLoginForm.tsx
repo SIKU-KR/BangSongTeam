@@ -1,4 +1,14 @@
-import React, { useState } from "react";
+import React, { useId, useState } from "react";
+import { Button } from "#components/ui/button";
+import {
+  Field,
+  FieldDescription,
+  FieldError,
+  FieldGroup,
+  FieldLabel,
+} from "#components/ui/field";
+import { Input } from "#components/ui/input";
+import { ToggleGroup, ToggleGroupItem } from "#components/ui/toggle-group";
 import {
   EmailSignUpRequestSchema,
   PASSWORD_MAX_LENGTH,
@@ -31,9 +41,6 @@ const SIGN_UP_FIELD_MESSAGES: Record<string, string> = {
   name: "이름을 입력해 주세요.",
 };
 
-const inputClassName =
-  "w-full px-3 py-2.5 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-sm text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400";
-
 /** 이메일·비밀번호 로그인과 허용 목록 가입 폼 */
 export function EmailLoginForm(): React.JSX.Element {
   const [mode, setMode] = useState<Mode>("sign-in");
@@ -44,6 +51,7 @@ export function EmailLoginForm(): React.JSX.Element {
   const [error, setError] = useState<string | null>(null);
 
   const isSignUp = mode === "sign-up";
+  const fieldId = useId();
 
   const switchMode = (next: Mode): void => {
     setMode(next);
@@ -91,94 +99,82 @@ export function EmailLoginForm(): React.JSX.Element {
         void submit();
       }}
     >
-      <div
-        role="group"
-        aria-label="이메일 로그인 방식"
-        className="grid grid-cols-2 gap-1 p-1 mb-3 rounded-lg bg-zinc-100 dark:bg-zinc-800"
-      >
-        {(
-          [
-            ["sign-in", "로그인"],
-            ["sign-up", "가입"],
-          ] as const
-        ).map(([value, label]) => (
-          <button
-            key={value}
-            type="button"
-            aria-pressed={mode === value}
-            onClick={() => switchMode(value)}
-            className={`py-1.5 rounded-md text-xs font-semibold transition-colors ${
-              mode === value
-                ? "bg-white text-zinc-900 shadow-sm dark:bg-zinc-950 dark:text-zinc-50"
-                : "text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200"
-            }`}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
+      <FieldGroup>
+        <ToggleGroup
+          aria-label="이메일 로그인 방식"
+          variant="outline"
+          value={[mode]}
+          onValueChange={(value) => {
+            const next = value[0] as Mode | undefined;
+            if (next) switchMode(next);
+          }}
+          className="w-full"
+        >
+          <ToggleGroupItem value="sign-in" className="flex-1">
+            로그인
+          </ToggleGroupItem>
+          <ToggleGroupItem value="sign-up" className="flex-1">
+            가입
+          </ToggleGroupItem>
+        </ToggleGroup>
 
-      <div className="space-y-2">
         {isSignUp && (
-          <input
-            type="text"
-            value={name}
-            onChange={(event) => setName(event.target.value)}
-            placeholder="이름"
-            aria-label="이름"
-            autoComplete="name"
-            maxLength={50}
-            className={inputClassName}
-          />
+          <Field>
+            <FieldLabel htmlFor={`${fieldId}-name`}>이름</FieldLabel>
+            <Input
+              id={`${fieldId}-name`}
+              type="text"
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+              autoComplete="name"
+              maxLength={50}
+            />
+          </Field>
         )}
-        <input
-          type="email"
-          value={email}
-          onChange={(event) => setEmail(event.target.value)}
-          placeholder="이메일"
-          aria-label="이메일"
-          autoComplete="email"
-          className={inputClassName}
-        />
-        <input
-          type="password"
-          value={password}
-          onChange={(event) => setPassword(event.target.value)}
-          placeholder={
-            isSignUp ? `비밀번호 (${PASSWORD_MIN_LENGTH}자 이상)` : "비밀번호"
-          }
-          aria-label="비밀번호"
-          autoComplete={isSignUp ? "new-password" : "current-password"}
-          maxLength={PASSWORD_MAX_LENGTH}
-          className={inputClassName}
-        />
-      </div>
+        <Field>
+          <FieldLabel htmlFor={`${fieldId}-email`}>이메일</FieldLabel>
+          <Input
+            id={`${fieldId}-email`}
+            type="email"
+            value={email}
+            onChange={(event) => setEmail(event.target.value)}
+            autoComplete="email"
+          />
+          {isSignUp && (
+            <FieldDescription>
+              허용된 이메일만 가입할 수 있습니다.
+            </FieldDescription>
+          )}
+        </Field>
+        <Field>
+          <FieldLabel htmlFor={`${fieldId}-password`}>비밀번호</FieldLabel>
+          <Input
+            id={`${fieldId}-password`}
+            type="password"
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+            autoComplete={isSignUp ? "new-password" : "current-password"}
+            maxLength={PASSWORD_MAX_LENGTH}
+          />
+          {isSignUp && (
+            <FieldDescription>
+              {PASSWORD_MIN_LENGTH}자 이상 입력해 주세요.
+            </FieldDescription>
+          )}
+        </Field>
 
-      {isSignUp && (
-        <p className="mt-2 text-[11px] text-zinc-500">
-          허용된 이메일만 가입할 수 있습니다.
-        </p>
-      )}
+        {error && <FieldError>{error}</FieldError>}
 
-      <button
-        type="submit"
-        disabled={pending}
-        className="w-full mt-3 py-3 rounded-xl text-sm font-bold bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-white transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
-      >
-        {isSignUp
-          ? pending
-            ? "가입 중…"
-            : "가입하기"
-          : pending
-            ? "로그인 중…"
-            : "이메일로 로그인"}
-      </button>
-
-      {error && (
-        <p role="alert" className="mt-3 text-xs text-red-600 dark:text-red-400">
-          {error}
-        </p>
-      )}
+        <Button type="submit" size="lg" disabled={pending}>
+          {isSignUp
+            ? pending
+              ? "가입 중…"
+              : "가입하기"
+            : pending
+              ? "로그인 중…"
+              : "이메일로 로그인"}
+        </Button>
+      </FieldGroup>
     </form>
   );
 }

@@ -1,6 +1,14 @@
-import React, { useCallback, useRef, useState } from "react";
-import { useDismiss } from "../../../hooks/useDismiss";
-import { RibbonButton, RibbonIcon } from "./RibbonPrimitives";
+import React, { useState } from "react";
+import { ChevronDownIcon } from "lucide-react";
+import { cn } from "cn";
+import { Button } from "#components/ui/button";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "#components/ui/popover";
+import { ToggleGroup, ToggleGroupItem } from "#components/ui/toggle-group";
+import { RibbonTooltip } from "./RibbonPrimitives";
 
 export interface RibbonDropdownProps {
   label: string;
@@ -10,13 +18,13 @@ export interface RibbonDropdownProps {
   testId?: string;
   panelTestId?: string;
   panelClassName?: string;
-  align?: "left" | "right";
+  align?: "start" | "end";
   children: (close: () => void) => React.ReactNode;
 }
 
 /**
- * 리본의 펼침 메뉴. 패널에 `role="dialog"`를 쓰지 않는다. 편집기 단축키가
- * 모달이 떠 있는지를 그 역할로 판단하기 때문이다.
+ * 리본의 펼침 패널. 열 때 포커스를 옮기지 않아, 가사 편집 중에 글자 크기·색을
+ * 바꿔도 textarea의 커서가 그대로 남는다. 패널 안 버튼도 mousedown을 막아야 한다.
  */
 export function RibbonDropdown({
   label,
@@ -25,43 +33,77 @@ export function RibbonDropdown({
   disabled,
   testId,
   panelTestId,
-  panelClassName = "w-56",
-  align = "left",
+  panelClassName,
+  align = "start",
   children,
 }: RibbonDropdownProps): React.JSX.Element {
   const [open, setOpen] = useState(false);
-  const rootRef = useRef<HTMLDivElement>(null);
-  const close = useCallback(() => setOpen(false), []);
-  useDismiss(rootRef, open, close);
 
   return (
-    <div ref={rootRef} className="relative">
-      <RibbonButton
-        label={label}
-        testId={testId}
-        disabled={disabled}
-        ariaHasPopup
-        ariaExpanded={open}
-        pressed={open}
-        onClick={() => setOpen((prev) => !prev)}
-        icon={
-          <>
-            {icon}
-            {text && <span className="hidden xl:inline">{text}</span>}
-            <RibbonIcon d="M19 9l-7 7-7-7" className="w-3 h-3 opacity-60" />
-          </>
-        }
-      />
-      {open && (
-        <div
-          data-testid={panelTestId}
-          className={`absolute top-full mt-1 z-40 p-2.5 rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 shadow-lg dark:shadow-2xl text-xs text-zinc-800 dark:text-zinc-200 ${
-            align === "right" ? "right-0" : "left-0"
-          } ${panelClassName}`}
+    <Popover open={open} onOpenChange={setOpen}>
+      <RibbonTooltip content={label}>
+        <PopoverTrigger
+          data-testid={testId}
+          aria-label={label}
+          disabled={disabled}
+          onMouseDown={(e) => e.preventDefault()}
+          render={<Button variant="ghost" size="sm" />}
         >
-          {children(close)}
-        </div>
-      )}
-    </div>
+          {icon}
+          {text && <span className="hidden xl:inline">{text}</span>}
+          <ChevronDownIcon className="opacity-60" />
+        </PopoverTrigger>
+      </RibbonTooltip>
+      <PopoverContent
+        data-testid={panelTestId}
+        align={align}
+        initialFocus={false}
+        finalFocus={false}
+        className={cn("w-56 text-xs", panelClassName)}
+      >
+        {children(() => setOpen(false))}
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+/** 펼침 패널 안의 선택지 목록 (글자 크기·줄 간격·그림자). 고르면 `onSelect`를 부른다 */
+export function RibbonChoices({
+  label,
+  choices,
+  value,
+  onSelect,
+  className,
+}: {
+  label: string;
+  choices: ReadonlyArray<{ value: string; label: React.ReactNode }>;
+  value: string;
+  onSelect: (value: string) => void;
+  className?: string;
+}): React.JSX.Element {
+  return (
+    <ToggleGroup
+      aria-label={label}
+      orientation="vertical"
+      spacing={0}
+      value={[value]}
+      onValueChange={(next) => {
+        const picked = next[0];
+        if (picked !== undefined) onSelect(picked);
+      }}
+      className="w-full"
+    >
+      {choices.map((choice) => (
+        <ToggleGroupItem
+          key={choice.value}
+          value={choice.value}
+          size="sm"
+          onMouseDown={(e) => e.preventDefault()}
+          className={cn("justify-start", className)}
+        >
+          {choice.label}
+        </ToggleGroupItem>
+      ))}
+    </ToggleGroup>
   );
 }

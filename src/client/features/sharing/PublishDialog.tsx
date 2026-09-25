@@ -1,4 +1,16 @@
-import React, { useState } from "react";
+import React, { useId, useState } from "react";
+import { Button } from "#components/ui/button";
+import { Checkbox } from "#components/ui/checkbox";
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "#components/ui/dialog";
+import { Field, FieldError, FieldLabel } from "#components/ui/field";
 
 export interface PublishDialogProps {
   isOpen: boolean;
@@ -21,26 +33,24 @@ export function PublishDialog({
   onCancel,
 }: PublishDialogProps): React.JSX.Element | null {
   const [accepted, setAccepted] = useState(false);
-
-  if (!isOpen) return null;
+  const acceptId = useId();
 
   return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="publish-dialog-title"
-      data-testid="publish-dialog"
-      className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/60"
+    <Dialog
+      open={isOpen}
+      onOpenChange={(open) => {
+        if (!open) onCancel();
+      }}
     >
-      <div className="w-full max-w-md bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-2xl p-5 space-y-4 text-zinc-900 dark:text-zinc-100">
-        <div>
-          <h2 id="publish-dialog-title" className="text-sm font-bold">
-            공유 라이브러리에 공개
-          </h2>
-          <p className="text-xs text-zinc-500 mt-0.5 truncate">{songTitle}</p>
-        </div>
+      <DialogContent data-testid="publish-dialog" className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>공유 라이브러리에 공개</DialogTitle>
+          <DialogDescription className="truncate">
+            {songTitle}
+          </DialogDescription>
+        </DialogHeader>
 
-        <ul className="text-xs text-zinc-700 dark:text-zinc-300 space-y-2 list-disc pl-4">
+        <ul className="list-disc space-y-2 pl-4 text-sm text-muted-foreground">
           <li>
             공개하면 다른 사용자가 이 곡의 가사·슬라이드 나눔·배경·스타일을
             검색해 자기 보관함으로 가져갈 수 있습니다. 로그인하지 않은
@@ -61,42 +71,29 @@ export function PublishDialog({
           </li>
         </ul>
 
-        <label className="flex items-start gap-2 text-xs cursor-pointer">
-          <input
-            type="checkbox"
+        <Field orientation="horizontal">
+          <Checkbox
+            id={acceptId}
             data-testid="publish-accept-checkbox"
             checked={accepted}
-            onChange={(e) => setAccepted(e.target.checked)}
-            className="mt-0.5 accent-emerald-600"
+            onCheckedChange={(checked) => setAccepted(checked)}
           />
-          <span className="font-semibold">위 내용을 확인했습니다</span>
-        </label>
+          <FieldLabel htmlFor={acceptId}>위 내용을 확인했습니다</FieldLabel>
+        </Field>
 
-        {error && (
-          <p role="alert" className="text-xs text-rose-600">
-            {error}
-          </p>
-        )}
+        {error && <FieldError>{error}</FieldError>}
 
-        <div className="flex justify-end gap-2">
-          <button
-            type="button"
-            onClick={onCancel}
-            className="px-4 py-2 rounded-xl text-xs text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 cursor-pointer"
-          >
-            취소
-          </button>
-          <button
-            type="button"
+        <DialogFooter>
+          <DialogClose render={<Button variant="outline" />}>취소</DialogClose>
+          <Button
             data-testid="publish-confirm-btn"
             disabled={!accepted || isPending}
             onClick={onConfirm}
-            className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-xs font-semibold cursor-pointer"
           >
             {isPending ? "공개하는 중…" : "공개하기"}
-          </button>
-        </div>
-      </div>
-    </div>
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

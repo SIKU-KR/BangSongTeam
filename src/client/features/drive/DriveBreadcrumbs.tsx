@@ -1,47 +1,64 @@
-import React, { useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import React from "react";
+import { Link, useNavigate } from "react-router-dom";
+import {
+  ChevronDownIcon,
+  FolderInputIcon,
+  PencilIcon,
+  Trash2Icon,
+} from "lucide-react";
+import { cn } from "cn";
+import {
+  Breadcrumb,
+  BreadcrumbItem,
+  BreadcrumbLink,
+  BreadcrumbList,
+  BreadcrumbPage,
+  BreadcrumbSeparator,
+} from "#components/ui/breadcrumb";
+import { Button } from "#components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuTrigger,
+} from "#components/ui/dropdown-menu";
 import { getFolderPath } from "#shared";
 import { useFolderIndex } from "./folderStore";
 import { useDrive, useDriveDroppable } from "./driveContext";
 import { drivePath } from "./driveActions";
 import { ROOT_LABEL, type DriveItemRef } from "./driveModel";
-import { PopoverMenu, type MenuAction } from "./PopoverMenu";
+import { ActionMenuItems, type MenuAction } from "./ActionMenu";
 import { useNewItemActions } from "./NewMenu";
-import { Icon } from "./icons";
 
 function Crumb({
   folderId,
   label,
   isCurrent,
-  onNavigate,
 }: {
   folderId: string | null;
   label: string;
   isCurrent: boolean;
-  onNavigate: () => void;
 }): React.JSX.Element {
   const { setNodeRef, isDropTarget } = useDriveDroppable(
     `crumb:${folderId ?? "root"}`,
     { kind: "folder", folderId },
   );
+  const testId = `crumb-${folderId ?? "root"}`;
   return (
-    <button
+    <BreadcrumbItem
       ref={setNodeRef}
-      type="button"
-      data-testid={`crumb-${folderId ?? "root"}`}
-      aria-current={isCurrent ? "page" : undefined}
-      onClick={onNavigate}
-      title={label}
-      className={`max-w-[240px] truncate px-3 py-1 rounded-full transition-colors cursor-pointer ${
-        isDropTarget
-          ? "ring-2 ring-emerald-500 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-200"
-          : isCurrent
-            ? "text-zinc-900 dark:text-white hover:bg-zinc-200/70 dark:hover:bg-zinc-800/70"
-            : "text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-200/70 dark:hover:bg-zinc-800/70"
-      }`}
+      className={cn(isDropTarget && "rounded-md ring-2 ring-ring")}
     >
-      {label}
-    </button>
+      {isCurrent ? (
+        <BreadcrumbPage data-testid={testId}>{label}</BreadcrumbPage>
+      ) : (
+        <BreadcrumbLink
+          data-testid={testId}
+          render={<Link to={drivePath(folderId)} />}
+        >
+          {label}
+        </BreadcrumbLink>
+      )}
+    </BreadcrumbItem>
   );
 }
 
@@ -55,8 +72,6 @@ export function DriveBreadcrumbs(): React.JSX.Element {
   const index = useFolderIndex();
   const drive = useDrive();
   const newActions = useNewItemActions();
-  const [anchor, setAnchor] = useState<{ x: number; y: number } | null>(null);
-  const triggerRef = useRef<HTMLButtonElement>(null);
 
   const path = getFolderPath(index, drive.currentFolderId);
   const current = path[path.length - 1] ?? null;
@@ -69,7 +84,7 @@ export function DriveBreadcrumbs(): React.JSX.Element {
           {
             key: "rename",
             label: "이름 바꾸기",
-            icon: "pencil",
+            icon: PencilIcon,
             shortcut: "F2",
             separated: true,
             onSelect: () => drive.requestRename(ref),
@@ -77,13 +92,13 @@ export function DriveBreadcrumbs(): React.JSX.Element {
           {
             key: "move",
             label: "이동",
-            icon: "folderOpen",
+            icon: FolderInputIcon,
             onSelect: () => drive.requestMove([ref]),
           },
           {
             key: "trash",
             label: "휴지통으로 이동",
-            icon: "trash",
+            icon: Trash2Icon,
             danger: true,
             separated: true,
             onSelect: () => {
@@ -97,87 +112,55 @@ export function DriveBreadcrumbs(): React.JSX.Element {
 
   if (drive.isTrashView) {
     return (
-      <nav
-        aria-label="드라이브 경로"
-        data-testid="drive-breadcrumbs"
-        className="flex items-center min-w-0 text-2xl"
-      >
-        <Crumb
-          folderId={null}
-          label={ROOT_LABEL}
-          isCurrent={false}
-          onNavigate={() => navigate(drivePath(null))}
-        />
-        <Icon
-          name="chevronRight"
-          className="w-5 h-5 text-zinc-400 shrink-0"
-          strokeWidth={2}
-        />
-        <span
-          data-testid="crumb-trash"
-          aria-current="page"
-          className="px-3 py-1 text-zinc-900 dark:text-white"
-        >
-          휴지통
-        </span>
-      </nav>
+      <Breadcrumb aria-label="드라이브 경로" data-testid="drive-breadcrumbs">
+        <BreadcrumbList className="text-xl">
+          <Crumb folderId={null} label={ROOT_LABEL} isCurrent={false} />
+          <BreadcrumbSeparator />
+          <BreadcrumbItem>
+            <BreadcrumbPage data-testid="crumb-trash">휴지통</BreadcrumbPage>
+          </BreadcrumbItem>
+        </BreadcrumbList>
+      </Breadcrumb>
     );
   }
 
   return (
-    <nav
-      aria-label="드라이브 경로"
-      data-testid="drive-breadcrumbs"
-      className="flex items-center min-w-0 text-2xl"
-    >
-      <Crumb
-        folderId={null}
-        label={ROOT_LABEL}
-        isCurrent={current === null}
-        onNavigate={() => navigate(drivePath(null))}
-      />
-      {path.map((folder, i) => (
-        <React.Fragment key={folder.id}>
-          <Icon
-            name="chevronRight"
-            className="w-5 h-5 text-zinc-400 shrink-0"
-            strokeWidth={2}
-          />
-          <Crumb
-            folderId={folder.id}
-            label={folder.name}
-            isCurrent={i === path.length - 1}
-            onNavigate={() => navigate(drivePath(folder.id))}
-          />
-        </React.Fragment>
-      ))}
-      <button
-        ref={triggerRef}
-        type="button"
-        data-testid="breadcrumb-menu-btn"
-        aria-label="현재 폴더 메뉴"
-        aria-haspopup="menu"
-        onClick={(event) => {
-          if (anchor) {
-            setAnchor(null);
-            return;
-          }
-          const rect = event.currentTarget.getBoundingClientRect();
-          setAnchor({ x: rect.left, y: rect.bottom + 6 });
-        }}
-        className="-ml-1 p-1.5 rounded-full text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-200/70 dark:hover:bg-zinc-800/70 cursor-pointer shrink-0"
-      >
-        <Icon name="chevronDown" className="w-5 h-5" strokeWidth={2} />
-      </button>
-      {anchor && (
-        <PopoverMenu
-          anchor={anchor}
-          actions={[...newActions, ...folderActions]}
-          label="현재 폴더"
-          triggerRef={triggerRef}
-          onClose={() => setAnchor(null)}
+    <Breadcrumb aria-label="드라이브 경로" data-testid="drive-breadcrumbs">
+      <BreadcrumbList className="text-xl">
+        <Crumb
+          folderId={null}
+          label={ROOT_LABEL}
+          isCurrent={current === null}
         />
-      )}
-    </nav>
+        {path.map((folder, i) => (
+          <React.Fragment key={folder.id}>
+            <BreadcrumbSeparator />
+            <Crumb
+              folderId={folder.id}
+              label={folder.name}
+              isCurrent={i === path.length - 1}
+            />
+          </React.Fragment>
+        ))}
+        <BreadcrumbItem>
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              data-testid="breadcrumb-menu-btn"
+              aria-label="현재 폴더 메뉴"
+              render={<Button variant="ghost" size="icon-sm" />}
+            >
+              <ChevronDownIcon />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent
+              data-testid="drive-menu"
+              aria-label="현재 폴더"
+              className="min-w-60"
+            >
+              <ActionMenuItems actions={[...newActions, ...folderActions]} />
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </BreadcrumbItem>
+      </BreadcrumbList>
+    </Breadcrumb>
   );
 }

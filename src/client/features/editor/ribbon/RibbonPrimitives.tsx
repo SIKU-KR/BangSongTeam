@@ -1,4 +1,11 @@
 import React from "react";
+import { Button } from "#components/ui/button";
+import { Separator } from "#components/ui/separator";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "#components/ui/tooltip";
 
 /** 리본 그룹. 컨트롤 줄 아래에 PowerPoint처럼 그룹 이름을 단다 */
 export function RibbonGroup({
@@ -17,7 +24,7 @@ export function RibbonGroup({
       <div className="flex items-center gap-1">{children}</div>
       <span
         aria-hidden="true"
-        className="hidden xl:block text-[10px] leading-none text-zinc-400 dark:text-zinc-500"
+        className="hidden text-2xs leading-none text-muted-foreground xl:block"
       >
         {label}
       </span>
@@ -27,10 +34,32 @@ export function RibbonGroup({
 
 export function RibbonDivider(): React.JSX.Element {
   return (
-    <div
+    <Separator
+      orientation="vertical"
       aria-hidden="true"
-      className="self-stretch w-px my-1.5 bg-zinc-200 dark:bg-zinc-800"
+      className="my-1.5 self-stretch"
     />
+  );
+}
+
+/**
+ * 리본 버튼에 툴팁을 붙인다. 트리거를 감싼 span에 걸어, 비활성 버튼에서도
+ * 왜 누를 수 없는지 안내가 뜬다.
+ */
+export function RibbonTooltip({
+  content,
+  children,
+}: {
+  content: string;
+  children: React.ReactNode;
+}): React.JSX.Element {
+  return (
+    <Tooltip>
+      <TooltipTrigger render={<span className="inline-flex" />}>
+        {children}
+      </TooltipTrigger>
+      <TooltipContent className="max-w-72">{content}</TooltipContent>
+    </Tooltip>
   );
 }
 
@@ -38,14 +67,11 @@ export interface RibbonButtonProps {
   label: string;
   icon?: React.ReactNode;
   text?: string;
-  pressed?: boolean;
   disabled?: boolean;
   onClick?: () => void;
   testId?: string;
-  title?: string;
-  className?: string;
-  ariaHasPopup?: boolean;
-  ariaExpanded?: boolean;
+  /** 툴팁 문구. 없으면 `label`을 쓴다 */
+  tooltip?: string;
 }
 
 /**
@@ -56,61 +82,25 @@ export function RibbonButton({
   label,
   icon,
   text,
-  pressed,
   disabled,
   onClick,
   testId,
-  title,
-  className = "",
-  ariaHasPopup,
-  ariaExpanded,
+  tooltip,
 }: RibbonButtonProps): React.JSX.Element {
   return (
-    <button
-      type="button"
-      data-testid={testId}
-      aria-label={label}
-      aria-pressed={pressed}
-      aria-haspopup={ariaHasPopup}
-      aria-expanded={ariaExpanded}
-      title={title ?? label}
-      disabled={disabled}
-      onMouseDown={(e) => e.preventDefault()}
-      onClick={onClick}
-      className={`h-8 min-w-8 px-1.5 rounded-md flex items-center justify-center gap-1 text-xs font-medium transition-colors cursor-pointer disabled:opacity-35 disabled:cursor-not-allowed ${
-        pressed
-          ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-300"
-          : "text-zinc-700 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800 disabled:hover:bg-transparent"
-      } ${className}`}
-    >
-      {icon}
-      {text && <span className="hidden xl:inline">{text}</span>}
-    </button>
-  );
-}
-
-/** 리본 아이콘 (24×24 선 아이콘) */
-export function RibbonIcon({
-  d,
-  className = "w-4 h-4",
-}: {
-  d: string;
-  className?: string;
-}): React.JSX.Element {
-  return (
-    <svg
-      className={className}
-      fill="none"
-      stroke="currentColor"
-      viewBox="0 0 24 24"
-      aria-hidden="true"
-    >
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={2}
-        d={d}
-      />
-    </svg>
+    <RibbonTooltip content={tooltip ?? label}>
+      <Button
+        variant="ghost"
+        size={text ? "sm" : "icon-sm"}
+        data-testid={testId}
+        aria-label={label}
+        disabled={disabled}
+        onMouseDown={(e) => e.preventDefault()}
+        onClick={onClick}
+      >
+        {icon}
+        {text && <span className="hidden xl:inline">{text}</span>}
+      </Button>
+    </RibbonTooltip>
   );
 }

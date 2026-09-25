@@ -240,7 +240,7 @@ describe("SongPickerModal", () => {
     renderPicker();
 
     fireEvent.click(screen.getByTestId("song-picker-copy-lyrics-btn"));
-    expect(await screen.findByText("가사 복사됨 ✓")).toBeInTheDocument();
+    expect(await screen.findByText("가사 복사됨")).toBeInTheDocument();
     expect(screen.getByText("넷째 줄")).toBeInTheDocument();
   });
 

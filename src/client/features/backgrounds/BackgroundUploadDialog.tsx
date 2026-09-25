@@ -1,4 +1,29 @@
 import React, { useEffect, useState } from "react";
+import { TriangleAlertIcon } from "lucide-react";
+import { cn } from "cn";
+import { Alert, AlertDescription } from "#components/ui/alert";
+import { Button } from "#components/ui/button";
+import { Checkbox } from "#components/ui/checkbox";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "#components/ui/dialog";
+import { Input } from "#components/ui/input";
+import {
+  Field,
+  FieldContent,
+  FieldDescription,
+  FieldError,
+  FieldGroup,
+  FieldLabel,
+  FieldLegend,
+  FieldSet,
+} from "#components/ui/field";
+import { ToggleGroup, ToggleGroupItem } from "#components/ui/toggle-group";
 import { BACKGROUND_TAGS, BACKGROUND_UPLOAD_LIMITS } from "#shared";
 import { useUploadBackground } from "../../lib/api/backgroundQueries";
 import { describeApiError } from "../../lib/api/request";
@@ -68,8 +93,6 @@ export function BackgroundUploadDialog({
       : undefined;
   const previewUrl = useObjectUrl(previewFile);
 
-  if (!isOpen) return null;
-
   const reset = (): void => {
     setSelection({ status: "empty" });
     setTitle("");
@@ -105,14 +128,6 @@ export function BackgroundUploadDialog({
     }
   };
 
-  const toggleTag = (tag: string): void => {
-    setTags((current) =>
-      current.includes(tag)
-        ? current.filter((t) => t !== tag)
-        : [...current, tag],
-    );
-  };
-
   const canSubmit =
     selection.status === "ready" &&
     title.trim().length > 0 &&
@@ -140,233 +155,189 @@ export function BackgroundUploadDialog({
   };
 
   return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="bg-upload-title"
-      data-testid="bg-upload-dialog"
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm"
+    <Dialog
+      open={isOpen}
+      onOpenChange={(open) => {
+        if (!open) close();
+      }}
     >
-      <form
-        onSubmit={(e) => void submit(e)}
-        className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto p-6 shadow-xl dark:shadow-2xl space-y-5 text-zinc-900 dark:text-zinc-100"
+      <DialogContent
+        data-testid="bg-upload-dialog"
+        className="max-h-9/10 overflow-y-auto sm:max-w-lg"
       >
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <h3 id="bg-upload-title" className="text-base font-bold">
-              배경 올리기
-            </h3>
-            <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
+        <form onSubmit={(e) => void submit(e)} className="grid gap-5">
+          <DialogHeader>
+            <DialogTitle>배경 올리기</DialogTitle>
+            <DialogDescription className="text-xs">
               MP4(H.264) 영상이나 JPEG·PNG·WebP 이미지, 파일당{" "}
               {formatBytes(BACKGROUND_UPLOAD_LIMITS.maxFileBytes)}까지. 올린
               배경은 모든 사용자에게 기본 제공 배경으로 보입니다.
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={close}
-            aria-label="닫기"
-            className="p-1 rounded-lg text-zinc-500 hover:text-zinc-800 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:text-white dark:hover:bg-zinc-800 cursor-pointer"
-          >
-            <svg
-              className="w-5 h-5"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M6 18L18 6M6 6l12 12"
-              />
-            </svg>
-          </button>
-        </div>
+            </DialogDescription>
+          </DialogHeader>
 
-        <label
-          onDragOver={(e) => {
-            e.preventDefault();
-            setIsDragging(true);
-          }}
-          onDragLeave={() => setIsDragging(false)}
-          onDrop={(e) => {
-            e.preventDefault();
-            setIsDragging(false);
-            const file = e.dataTransfer.files[0];
-            if (file) void selectFile(file);
-          }}
-          className={`block rounded-xl border-2 border-dashed overflow-hidden cursor-pointer transition-colors ${
-            isDragging
-              ? "border-emerald-500 bg-emerald-50 dark:bg-emerald-950/30"
-              : "border-zinc-300 dark:border-zinc-700 hover:border-emerald-500/60"
-          }`}
-        >
-          <input
-            type="file"
-            accept={ACCEPT}
-            data-testid="bg-upload-file-input"
-            className="sr-only"
-            onChange={(e) => {
-              const file = e.target.files?.[0];
-              if (file) void selectFile(file);
-              e.target.value = "";
+          <label
+            onDragOver={(e) => {
+              e.preventDefault();
+              setIsDragging(true);
             }}
-          />
-          {selection.status === "ready" && previewUrl ? (
-            <div className="relative aspect-video bg-black">
-              <img
-                src={previewUrl}
-                alt=""
-                className="absolute inset-0 w-full h-full object-cover"
-              />
-              <span className="absolute bottom-2 left-2 px-2 py-0.5 rounded bg-black/70 text-[11px] text-zinc-100 font-mono">
-                {selection.probed.width}×{selection.probed.height}
-                {selection.probed.kind === "video"
-                  ? ` · ${selection.probed.durationSec}초`
-                  : " · 이미지"}
-                {` · ${formatBytes(selection.file.size)}`}
-              </span>
-              <span className="absolute top-2 right-2 px-2 py-0.5 rounded bg-black/70 text-[11px] text-zinc-100">
-                다른 파일 고르기
-              </span>
-            </div>
-          ) : (
-            <div className="py-10 px-4 flex flex-col items-center gap-2 text-center">
-              <span className="text-sm font-semibold text-zinc-800 dark:text-zinc-200">
-                {selection.status === "probing"
-                  ? "파일을 확인하는 중…"
-                  : "여기로 끌어 놓거나 눌러서 파일 고르기"}
-              </span>
-              <span className="text-[11px] text-zinc-500 dark:text-zinc-400">
-                권장 해상도 {BACKGROUND_UPLOAD_LIMITS.recommendedWidth}×
-                {BACKGROUND_UPLOAD_LIMITS.recommendedHeight} · 영상 소리는
-                송출에서 항상 꺼집니다
-              </span>
-            </div>
+            onDragLeave={() => setIsDragging(false)}
+            onDrop={(e) => {
+              e.preventDefault();
+              setIsDragging(false);
+              const file = e.dataTransfer.files[0];
+              if (file) void selectFile(file);
+            }}
+            className={cn(
+              "block cursor-pointer overflow-hidden rounded-xl border-2 border-dashed transition-colors",
+              isDragging ? "border-primary bg-accent" : "hover:border-ring",
+            )}
+          >
+            <Input
+              type="file"
+              accept={ACCEPT}
+              data-testid="bg-upload-file-input"
+              className="sr-only"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) void selectFile(file);
+                e.target.value = "";
+              }}
+            />
+            {selection.status === "ready" && previewUrl ? (
+              <div className="relative aspect-video bg-black">
+                <img
+                  src={previewUrl}
+                  alt=""
+                  className="absolute inset-0 size-full object-cover"
+                />
+                <span className="absolute bottom-2 left-2 rounded-sm bg-black/70 px-2 py-0.5 font-mono text-2xs text-white">
+                  {selection.probed.width}×{selection.probed.height}
+                  {selection.probed.kind === "video"
+                    ? ` · ${selection.probed.durationSec}초`
+                    : " · 이미지"}
+                  {` · ${formatBytes(selection.file.size)}`}
+                </span>
+                <span className="absolute top-2 right-2 rounded-sm bg-black/70 px-2 py-0.5 text-2xs text-white">
+                  다른 파일 고르기
+                </span>
+              </div>
+            ) : (
+              <div className="flex flex-col items-center gap-2 px-4 py-10 text-center">
+                <span className="text-sm font-semibold">
+                  {selection.status === "probing"
+                    ? "파일을 확인하는 중…"
+                    : "여기로 끌어 놓거나 눌러서 파일 고르기"}
+                </span>
+                <span className="text-2xs text-muted-foreground">
+                  권장 해상도 {BACKGROUND_UPLOAD_LIMITS.recommendedWidth}×
+                  {BACKGROUND_UPLOAD_LIMITS.recommendedHeight} · 영상 소리는
+                  송출에서 항상 꺼집니다
+                </span>
+              </div>
+            )}
+          </label>
+
+          {selection.status === "invalid" && (
+            <FieldError>{selection.message}</FieldError>
           )}
-        </label>
+          {selection.status === "ready" && selection.probed.isLowResolution && (
+            <Alert data-testid="bg-upload-low-res">
+              <TriangleAlertIcon />
+              <AlertDescription>
+                {BACKGROUND_UPLOAD_LIMITS.recommendedWidth}×
+                {BACKGROUND_UPLOAD_LIMITS.recommendedHeight}보다 작습니다. 올릴
+                수는 있지만 송출 화면에서 확대되어 흐려 보일 수 있습니다.
+              </AlertDescription>
+            </Alert>
+          )}
 
-        {selection.status === "invalid" && (
-          <p role="alert" className="text-xs text-red-600 dark:text-red-400">
-            {selection.message}
-          </p>
-        )}
-        {selection.status === "ready" && selection.probed.isLowResolution && (
-          <p
-            data-testid="bg-upload-low-res"
-            className="text-xs text-amber-700 dark:text-amber-400"
-          >
-            {BACKGROUND_UPLOAD_LIMITS.recommendedWidth}×
-            {BACKGROUND_UPLOAD_LIMITS.recommendedHeight}보다 작습니다. 올릴 수는
-            있지만 송출 화면에서 확대되어 흐려 보일 수 있습니다.
-          </p>
-        )}
+          <FieldGroup>
+            <Field>
+              <FieldLabel htmlFor="bg-upload-title-input">배경 제목</FieldLabel>
+              <Input
+                id="bg-upload-title-input"
+                type="text"
+                value={title}
+                maxLength={BACKGROUND_UPLOAD_LIMITS.maxTitleLength}
+                placeholder="예: 본당 성탄 배경"
+                onChange={(e) => setTitle(e.target.value)}
+              />
+            </Field>
 
-        <div>
-          <label
-            htmlFor="bg-upload-title-input"
-            className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300 mb-1"
-          >
-            배경 제목
-          </label>
-          <input
-            id="bg-upload-title-input"
-            type="text"
-            value={title}
-            maxLength={BACKGROUND_UPLOAD_LIMITS.maxTitleLength}
-            placeholder="예: 본당 성탄 배경"
-            onChange={(e) => setTitle(e.target.value)}
-            className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 focus:border-emerald-500 rounded-xl px-3.5 py-2 text-xs focus:outline-none"
-          />
-        </div>
+            <Field>
+              <FieldLabel htmlFor="bg-upload-license-input">
+                출처·라이선스
+              </FieldLabel>
+              <Input
+                id="bg-upload-license-input"
+                type="text"
+                data-testid="bg-upload-license-input"
+                value={license}
+                maxLength={BACKGROUND_UPLOAD_LIMITS.maxLicenseLength}
+                placeholder="예: Pexels License — 작가명, 자체 제작 (CC0)"
+                onChange={(e) => setLicense(e.target.value)}
+              />
+            </Field>
 
-        <div>
-          <label
-            htmlFor="bg-upload-license-input"
-            className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300 mb-1"
-          >
-            출처·라이선스
-          </label>
-          <input
-            id="bg-upload-license-input"
-            type="text"
-            data-testid="bg-upload-license-input"
-            value={license}
-            maxLength={BACKGROUND_UPLOAD_LIMITS.maxLicenseLength}
-            placeholder="예: Pexels License — 작가명, 자체 제작 (CC0)"
-            onChange={(e) => setLicense(e.target.value)}
-            className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 focus:border-emerald-500 rounded-xl px-3.5 py-2 text-xs focus:outline-none"
-          />
-        </div>
+            <FieldSet>
+              <FieldLegend variant="label">분위기 태그 (선택)</FieldLegend>
+              <ToggleGroup
+                multiple
+                variant="outline"
+                size="sm"
+                value={tags}
+                onValueChange={(next) => setTags(next)}
+                className="flex-wrap"
+              >
+                {BACKGROUND_TAGS.map((tag) => (
+                  <ToggleGroupItem key={tag} value={tag}>
+                    {tag}
+                  </ToggleGroupItem>
+                ))}
+              </ToggleGroup>
+            </FieldSet>
 
-        <div>
-          <span className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300 mb-1.5">
-            분위기 태그 (선택)
-          </span>
-          <div className="flex flex-wrap gap-1.5">
-            {BACKGROUND_TAGS.map((tag) => {
-              const active = tags.includes(tag);
-              return (
-                <button
-                  key={tag}
-                  type="button"
-                  aria-pressed={active}
-                  onClick={() => toggleTag(tag)}
-                  className={`px-2.5 py-1 rounded-full text-xs font-medium cursor-pointer transition-colors ${
-                    active
-                      ? "bg-emerald-600 text-white"
-                      : "bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-700"
-                  }`}
-                >
-                  {tag}
-                </button>
-              );
-            })}
-          </div>
-        </div>
+            <Field orientation="horizontal">
+              <Checkbox
+                id="bg-upload-rights"
+                data-testid="bg-upload-rights-checkbox"
+                checked={acceptedRights}
+                onCheckedChange={(checked) => setAcceptedRights(checked)}
+              />
+              <FieldContent>
+                <FieldLabel htmlFor="bg-upload-rights">
+                  모든 사용자에게 배포해도 되는 라이선스를 확인했습니다
+                </FieldLabel>
+                <FieldDescription>
+                  확인되지 않은 파일은 올리지 않습니다.
+                </FieldDescription>
+              </FieldContent>
+            </Field>
+          </FieldGroup>
 
-        <label className="flex items-start gap-2 text-xs cursor-pointer">
-          <input
-            type="checkbox"
-            data-testid="bg-upload-rights-checkbox"
-            checked={acceptedRights}
-            onChange={(e) => setAcceptedRights(e.target.checked)}
-            className="mt-0.5 accent-emerald-600"
-          />
-          <span>
-            <span className="font-semibold">
-              모든 사용자에게 배포해도 되는 라이선스를 확인했습니다.
-            </span>{" "}
-            확인되지 않은 파일은 올리지 않습니다.
-          </span>
-        </label>
+          {upload.error && (
+            <FieldError>{describeApiError(upload.error)}</FieldError>
+          )}
 
-        {upload.error && (
-          <p role="alert" className="text-xs text-red-600 dark:text-red-400">
-            {describeApiError(upload.error)}
-          </p>
-        )}
-
-        <div className="flex items-center justify-end gap-2.5 pt-1">
-          <button
-            type="button"
-            onClick={close}
-            disabled={upload.isPending}
-            className="px-4 py-2 rounded-xl bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-xs font-medium text-zinc-700 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-700 cursor-pointer disabled:opacity-50"
-          >
-            취소
-          </button>
-          <button
-            type="submit"
-            data-testid="bg-upload-submit"
-            disabled={!canSubmit}
-            className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-xs font-bold text-white shadow-sm cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
-          >
-            {upload.isPending ? "올리는 중…" : "올리기"}
-          </button>
-        </div>
-      </form>
-    </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={close}
+              disabled={upload.isPending}
+            >
+              취소
+            </Button>
+            <Button
+              type="submit"
+              data-testid="bg-upload-submit"
+              disabled={!canSubmit}
+            >
+              {upload.isPending ? "올리는 중…" : "올리기"}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }

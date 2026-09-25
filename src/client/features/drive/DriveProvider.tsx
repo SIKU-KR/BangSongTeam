@@ -1,11 +1,8 @@
-import React, {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation, useMatch, useNavigate } from "react-router-dom";
+import { FolderIcon, PresentationIcon } from "lucide-react";
+import { toast } from "sonner";
+import { Badge } from "#components/ui/badge";
 import {
   DndContext,
   DragOverlay,
@@ -57,7 +54,6 @@ import {
 import { ConfirmDialog, MoveDialog, NameDialog } from "./DriveDialogs";
 import { listPresentations } from "../presentation";
 import { resolveUniqueName } from "#shared";
-import { FolderGlyph, Icon } from "./icons";
 import { isLetterKey, isTypingTarget } from "./keyboard";
 
 type DialogState =
@@ -68,12 +64,7 @@ type DialogState =
   | { kind: "empty-trash" }
   | null;
 
-interface ToastState {
-  id: number;
-  message: string;
-  action?: ToastAction;
-}
-
+const TOAST_ID = "drive-toast";
 const TOAST_DURATION_MS = 6000;
 
 const followCursor: Modifier = ({
@@ -124,20 +115,13 @@ export function DriveProvider({
   const [activeDrag, setActiveDrag] = useState<DriveItemRef[] | null>(null);
   const [dialog, setDialog] = useState<DialogState>(null);
   const [isDeleting, setIsDeleting] = useState(false);
-  const [toast, setToast] = useState<ToastState | null>(null);
-  const toastSeq = useRef(0);
+  const [undoAction, setUndoAction] = useState<ToastAction | null>(null);
 
   useEffect(() => {
     setSelectionState(new Set());
     setAnchorKey(null);
     setFocusKey(null);
   }, [pathname]);
-
-  useEffect(() => {
-    if (!toast) return;
-    const timer = setTimeout(() => setToast(null), TOAST_DURATION_MS);
-    return () => clearTimeout(timer);
-  }, [toast]);
 
   const setSelection = useCallback(
     (keys: readonly string[], anchor?: string | null): void => {
@@ -156,8 +140,22 @@ export function DriveProvider({
 
   const showToast = useCallback(
     (message: string, action?: ToastAction): void => {
-      toastSeq.current += 1;
-      setToast({ id: toastSeq.current, message, action });
+      setUndoAction(action ?? null);
+      toast(message, {
+        id: TOAST_ID,
+        testId: TOAST_ID,
+        duration: TOAST_DURATION_MS,
+        closeButton: true,
+        action: action && {
+          label: action.label,
+          onClick: () => {
+            action.run();
+            setUndoAction(null);
+          },
+        },
+        onDismiss: () => setUndoAction(null),
+        onAutoClose: () => setUndoAction(null),
+      });
     },
     [],
   );
@@ -266,7 +264,7 @@ export function DriveProvider({
   };
 
   useEffect(() => {
-    const action = toast?.action;
+    const action = undoAction;
     if (!action || dialog !== null) return;
     const handleUndo = (event: KeyboardEvent): void => {
       if (
@@ -280,11 +278,12 @@ export function DriveProvider({
       }
       event.preventDefault();
       action.run();
-      setToast(null);
+      toast.dismiss(TOAST_ID);
+      setUndoAction(null);
     };
     window.addEventListener("keydown", handleUndo);
     return () => window.removeEventListener("keydown", handleUndo);
-  }, [toast, dialog]);
+  }, [undoAction, dialog]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -432,9 +431,7 @@ export function DriveProvider({
                 {dialog.refs.some((ref) => ref.kind === "folder") &&
                   " 폴더 안의 모든 항목도 함께 삭제됩니다."}
               </p>
-              <p className="mt-1 text-zinc-500 dark:text-zinc-400">
-                이 작업은 되돌릴 수 없습니다.
-              </p>
+              <p className="mt-1">이 작업은 되돌릴 수 없습니다.</p>
             </div>
           }
           confirmLabel="영구 삭제"
@@ -458,14 +455,6 @@ export function DriveProvider({
             )
           }
           onCancel={() => setDialog(null)}
-        />
-      )}
-
-      {toast && (
-        <DriveToast
-          key={toast.id}
-          toast={toast}
-          onClose={() => setToast(null)}
         />
       )}
     </DriveContext.Provider>
@@ -511,63 +500,21 @@ function DragChip({
   return (
     <div className="relative inline-block cursor-grabbing">
       {many && (
-        <div className="absolute inset-0 translate-x-1 translate-y-1 rounded-xl bg-white dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 shadow" />
+        <div className="absolute inset-0 translate-1 rounded-xl border bg-card shadow-sm" />
       )}
-      <div className="relative flex items-center gap-2.5 w-60 px-3 py-2.5 rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 shadow-xl text-sm font-medium text-zinc-800 dark:text-zinc-100">
+      <div className="relative flex w-60 items-center gap-2.5 rounded-xl border bg-popover px-3 py-2.5 text-sm font-medium text-popover-foreground shadow-xl">
         {first?.kind === "folder" ? (
-          <FolderGlyph className="w-5 h-5 shrink-0 text-emerald-500" />
+          <FolderIcon className="size-5 shrink-0 fill-current text-muted-foreground" />
         ) : (
-          <Icon name="slides" className="w-5 h-5 shrink-0 text-indigo-500" />
+          <PresentationIcon className="size-5 shrink-0" />
         )}
         <span className="truncate">{first ? itemName(first) : ""}</span>
       </div>
       {many && (
-        <span
-          data-testid="drag-count"
-          className="absolute -top-2 -right-2 min-w-6 h-6 px-1.5 rounded-full bg-emerald-600 text-white text-xs font-bold flex items-center justify-center shadow"
-        >
+        <Badge data-testid="drag-count" className="absolute -top-2 -right-2">
           {refs.length}
-        </span>
+        </Badge>
       )}
-    </div>
-  );
-}
-
-function DriveToast({
-  toast,
-  onClose,
-}: {
-  toast: ToastState;
-  onClose: () => void;
-}): React.JSX.Element {
-  return (
-    <div
-      role="status"
-      data-testid="drive-toast"
-      className="fixed bottom-6 left-4 lg:left-[17rem] z-[70] flex items-center gap-3 min-w-[18rem] pl-4 pr-2 py-3 rounded-lg bg-zinc-800 dark:bg-zinc-100 text-white dark:text-zinc-900 shadow-2xl text-sm max-w-[calc(100vw-2rem)]"
-    >
-      <span className="truncate">{toast.message}</span>
-      {toast.action && (
-        <button
-          type="button"
-          data-testid="drive-toast-action"
-          onClick={() => {
-            toast.action?.run();
-            onClose();
-          }}
-          className="px-2 py-1 rounded-lg font-semibold text-emerald-300 dark:text-emerald-700 hover:bg-white/10 dark:hover:bg-black/10 cursor-pointer"
-        >
-          {toast.action.label}
-        </button>
-      )}
-      <button
-        type="button"
-        aria-label="알림 닫기"
-        onClick={onClose}
-        className="p-1 rounded-lg hover:bg-white/10 dark:hover:bg-black/10 cursor-pointer"
-      >
-        <Icon name="close" className="w-3.5 h-3.5" />
-      </button>
     </div>
   );
 }

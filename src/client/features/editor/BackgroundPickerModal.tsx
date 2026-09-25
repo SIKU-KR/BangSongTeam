@@ -1,4 +1,25 @@
 import React, { useEffect, useState } from "react";
+import { CheckIcon } from "lucide-react";
+import { cn } from "cn";
+import { Badge } from "#components/ui/badge";
+import { Button } from "#components/ui/button";
+import {
+  Card,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "#components/ui/card";
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "#components/ui/dialog";
+import { Empty, EmptyDescription, EmptyHeader } from "#components/ui/empty";
+import { ToggleGroup, ToggleGroupItem } from "#components/ui/toggle-group";
 import type { BackgroundMedia } from "#shared";
 import { BackgroundPreview, useBackgroundCatalog } from "../backgrounds";
 import { refreshBackgroundCatalog } from "../../lib/sync/backgroundSync";
@@ -14,30 +35,33 @@ const ALL_TAGS = "전체";
 
 function CheckBadge(): React.JSX.Element {
   return (
-    <div className="absolute top-2 right-2 w-5 h-5 rounded-full bg-emerald-500 text-white flex items-center justify-center shadow-lg">
-      <svg
-        className="w-3.5 h-3.5"
-        fill="none"
-        stroke="currentColor"
-        viewBox="0 0 24 24"
-      >
-        <path
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          strokeWidth={3}
-          d="M5 13l4 4L19 7"
-        />
-      </svg>
-    </div>
+    <Badge className="absolute top-2 right-2">
+      <CheckIcon />
+      선택됨
+    </Badge>
   );
 }
 
-function tileClassName(isSelected: boolean): string {
-  return `group relative flex flex-col rounded-xl overflow-hidden border text-left cursor-pointer transition-all ${
-    isSelected
-      ? "border-emerald-500 ring-2 ring-emerald-500/30 bg-emerald-50/50 dark:bg-zinc-800"
-      : "border-zinc-200 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-600 bg-white dark:bg-zinc-900/60 shadow-sm dark:shadow-none"
-  }`;
+/** 고르면 바로 적용되는 타일. 카드 전체를 누르거나 Enter·Space로 고른다 */
+function selectableTile(
+  selected: boolean,
+  onPick: () => void,
+): React.ComponentProps<typeof Card> {
+  return {
+    role: "button",
+    tabIndex: 0,
+    "aria-pressed": selected,
+    onClick: onPick,
+    onKeyDown: (event) => {
+      if (event.key !== "Enter" && event.key !== " ") return;
+      event.preventDefault();
+      onPick();
+    },
+    className: cn(
+      "cursor-pointer pt-0 outline-none hover:ring-foreground/30 focus-visible:ring-3 focus-visible:ring-ring/50",
+      selected && "ring-2 ring-primary",
+    ),
+  };
 }
 
 function PickerTile({
@@ -51,37 +75,30 @@ function PickerTile({
 }): React.JSX.Element {
   const [hovered, setHovered] = useState(false);
   return (
-    <button
-      type="button"
+    <Card
+      size="sm"
       data-testid={`bg-item-${background.id}`}
-      aria-pressed={isSelected}
-      onClick={onPick}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
-      className={tileClassName(isSelected)}
+      {...selectableTile(isSelected, onPick)}
     >
-      <div className="relative w-full">
+      <div className="relative">
         <BackgroundPreview background={background} playing={hovered} />
         {isSelected && <CheckBadge />}
       </div>
-      <div className="p-2.5 flex flex-col gap-1 w-full">
-        <span className="text-xs font-semibold text-zinc-900 dark:text-zinc-200 truncate">
-          {background.title}
-        </span>
+      <CardHeader>
+        <CardTitle className="truncate">{background.title}</CardTitle>
         {background.tags.length > 0 && (
-          <div className="flex flex-wrap gap-1">
+          <CardDescription className="flex flex-wrap gap-1">
             {background.tags.map((tag) => (
-              <span
-                key={tag}
-                className="text-[10px] px-1.5 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400"
-              >
+              <Badge key={tag} variant="secondary">
                 {tag}
-              </span>
+              </Badge>
             ))}
-          </div>
+          </CardDescription>
         )}
-      </div>
-    </button>
+      </CardHeader>
+    </Card>
   );
 }
 
@@ -120,87 +137,55 @@ function PickerDialog({
   };
 
   return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="background-picker-title"
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200"
+    <Dialog
+      open
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
     >
-      <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl w-full max-w-4xl max-h-[90vh] flex flex-col shadow-xl dark:shadow-2xl overflow-hidden text-zinc-900 dark:text-zinc-100">
-        <div className="px-6 py-4 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between">
-          <div>
-            <h2 id="background-picker-title" className="text-lg font-bold">
-              곡 배경 선택
-            </h2>
-            <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
-              한 곡의 모든 슬라이드가 같은 배경을 씁니다. 영상은 슬라이드가
-              넘어가도 끊기지 않고 이어집니다.
-            </p>
-          </div>
-          <button
-            type="button"
-            data-testid="close-bg-modal-btn"
-            onClick={onClose}
-            title="닫기"
-            aria-label="닫기"
-            className="p-1.5 rounded-lg text-zinc-500 hover:text-zinc-800 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:text-white dark:hover:bg-zinc-800 cursor-pointer"
-          >
-            <svg
-              className="w-5 h-5"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M6 18L18 6M6 6l12 12"
-              />
-            </svg>
-          </button>
-        </div>
+      <DialogContent className="flex max-h-9/10 flex-col gap-0 overflow-hidden p-0 sm:max-w-4xl">
+        <DialogHeader className="border-b px-6 py-4 pr-12">
+          <DialogTitle className="text-lg font-bold">곡 배경 선택</DialogTitle>
+          <DialogDescription className="text-xs">
+            한 곡의 모든 슬라이드가 같은 배경을 씁니다. 영상은 슬라이드가
+            넘어가도 끊기지 않고 이어집니다.
+          </DialogDescription>
+        </DialogHeader>
 
         {tags.length > 0 && (
-          <div className="px-6 py-3 border-b border-zinc-200 dark:border-zinc-800/80 bg-zinc-50 dark:bg-zinc-950/40 flex flex-wrap items-center gap-3">
-            <div className="flex items-center gap-1.5 overflow-x-auto">
+          <div className="overflow-x-auto border-b px-6 py-3">
+            <ToggleGroup
+              aria-label="분위기 태그"
+              variant="outline"
+              size="sm"
+              value={[activeTag]}
+              onValueChange={(next) => {
+                if (next[0]) setActiveTag(next[0]);
+              }}
+            >
               {[ALL_TAGS, ...tags].map((tag) => (
-                <button
-                  key={tag}
-                  type="button"
-                  aria-pressed={activeTag === tag}
-                  onClick={() => setActiveTag(tag)}
-                  className={`px-3 py-1 rounded-full text-xs font-medium shrink-0 cursor-pointer ${
-                    activeTag === tag
-                      ? "bg-emerald-600 text-white"
-                      : "bg-zinc-200/80 dark:bg-zinc-800/70 text-zinc-700 dark:text-zinc-400 hover:bg-zinc-300 dark:hover:bg-zinc-800"
-                  }`}
-                >
+                <ToggleGroupItem key={tag} value={tag}>
                   {tag}
-                </button>
+                </ToggleGroupItem>
               ))}
-            </div>
+            </ToggleGroup>
           </div>
         )}
 
-        <div className="flex-1 overflow-y-auto p-6 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 content-start">
-          <button
-            type="button"
+        <div className="grid flex-1 grid-cols-2 content-start gap-4 overflow-y-auto p-6 sm:grid-cols-3 md:grid-cols-4">
+          <Card
+            size="sm"
             data-testid="bg-item-none"
-            aria-pressed={!selectedBackgroundId}
-            onClick={() => pick(null)}
-            className={tileClassName(!selectedBackgroundId)}
+            {...selectableTile(!selectedBackgroundId, () => pick(null))}
           >
-            <div className="relative aspect-video w-full bg-black flex items-center justify-center text-xs text-zinc-400">
+            <div className="relative flex aspect-video items-center justify-center bg-black text-xs text-white/60">
               검은 화면
               {!selectedBackgroundId && <CheckBadge />}
             </div>
-            <div className="p-2.5 w-full">
-              <span className="text-xs font-semibold text-zinc-900 dark:text-zinc-200">
-                배경 없음
-              </span>
-            </div>
-          </button>
+            <CardHeader>
+              <CardTitle>배경 없음</CardTitle>
+            </CardHeader>
+          </Card>
 
           {visible.map((bg) => (
             <PickerTile
@@ -212,27 +197,30 @@ function PickerDialog({
           ))}
 
           {all.length === 0 && (
-            <div className="col-span-full py-8 text-center text-xs text-zinc-500 dark:text-zinc-400">
-              <p>아직 등록된 배경이 없습니다.</p>
-            </div>
+            <Empty className="col-span-full">
+              <EmptyHeader>
+                <EmptyDescription>
+                  아직 등록된 배경이 없습니다.
+                </EmptyDescription>
+              </EmptyHeader>
+            </Empty>
           )}
         </div>
 
-        <div className="px-6 py-3 border-t border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950/40 flex items-center justify-between text-xs text-zinc-500 dark:text-zinc-400">
-          <span>
+        <DialogFooter className="mx-0 mb-0 items-center px-6 py-3 sm:justify-between">
+          <span className="text-xs text-muted-foreground">
             {catalog.status === "offline"
               ? "오프라인: 저장해 둔 배경 목록입니다"
               : "고른 배경은 편집·송출 중에 이 기기에 저장되어 오프라인에서도 재생됩니다"}
           </span>
-          <button
-            type="button"
-            onClick={onClose}
-            className="px-4 py-1.5 rounded-lg bg-zinc-200 dark:bg-zinc-800 hover:bg-zinc-300 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300 cursor-pointer"
+          <DialogClose
+            data-testid="close-bg-modal-btn"
+            render={<Button variant="outline" />}
           >
             닫기
-          </button>
-        </div>
-      </div>
-    </div>
+          </DialogClose>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

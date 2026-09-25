@@ -10,6 +10,8 @@ import {
   useParams,
   Navigate,
 } from "react-router-dom";
+import { Button } from "#components/ui/button";
+import { Kbd } from "#components/ui/kbd";
 import { DEFAULT_DECK_STYLE } from "#shared";
 import type { Presentation } from "#shared";
 import { SlideStage } from "../components/stage/SlideStage";
@@ -143,7 +145,7 @@ export function FullscreenPresentRoute(): React.JSX.Element {
   return (
     <div
       data-testid="fullscreen-present-route"
-      className="relative w-screen h-screen overflow-hidden bg-black select-none group"
+      className="group relative h-screen w-screen overflow-hidden bg-black select-none"
     >
       <SlideStage
         slide={currentSlide}
@@ -156,19 +158,20 @@ export function FullscreenPresentRoute(): React.JSX.Element {
         isLyricsHidden={isLyricsHidden}
       />
 
-      <div className="absolute top-4 right-4 z-50 flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity duration-300 bg-zinc-900/80 backdrop-blur-sm border border-zinc-700/60 rounded-lg px-3 py-1.5 shadow-lg">
-        <button
-          type="button"
+      <div className="absolute top-4 right-4 z-50 rounded-lg border border-white/15 bg-black/70 p-1 opacity-0 shadow-lg backdrop-blur-sm transition-opacity duration-300 group-hover:opacity-100">
+        <Button
+          variant="ghost"
+          size="sm"
           data-testid="exit-present-btn"
           onClick={(e) => {
             e.stopPropagation();
             handleExit();
           }}
-          className="text-xs text-zinc-300 hover:text-white px-2 py-1 rounded hover:bg-zinc-800 transition-colors cursor-pointer"
-          title="송출 종료 (Esc)"
+          className="text-white/80 hover:bg-white/10 hover:text-white"
         >
           송출 종료
-        </button>
+          <Kbd>Esc</Kbd>
+        </Button>
       </div>
     </div>
   );

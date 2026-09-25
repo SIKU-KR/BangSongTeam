@@ -1,4 +1,29 @@
 import React, { useCallback, useMemo, useRef, useState } from "react";
+import {
+  CopyIcon,
+  FolderIcon,
+  FolderInputIcon,
+  PencilIcon,
+  PlayIcon,
+  SearchIcon,
+  SquareArrowOutUpRightIcon,
+  Trash2Icon,
+  Undo2Icon,
+} from "lucide-react";
+import { Button } from "#components/ui/button";
+import {
+  Empty,
+  EmptyContent,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "#components/ui/empty";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuTrigger,
+} from "#components/ui/context-menu";
 import { useLocation, useNavigate } from "react-router-dom";
 import { usePresentationList } from "../presentation";
 import { useAppShell } from "../../routes/appShellContext";
@@ -22,22 +47,15 @@ import {
   type DriveItemHandlers,
 } from "./DriveItems";
 import { DriveToolbar } from "./DriveToolbar";
-import { PopoverMenu, type MenuAction } from "./PopoverMenu";
+import { ActionMenuItems, type MenuAction } from "./ActionMenu";
 import { useNewItemActions } from "./NewMenu";
 import { mergeKeys, rangeKeys, toggleKey } from "./selectionModel";
 import { useDriveKeyboard } from "./useDriveKeyboard";
 import { useMarqueeSelection } from "./useMarqueeSelection";
-import { FolderGlyph, Icon } from "./icons";
 
 export interface DriveBrowserProps {
   mode: "drive" | "trash";
   folderId?: string | null;
-}
-
-interface MenuState {
-  anchor: { x: number; y: number };
-  actions: MenuAction[];
-  fromKeyboard?: boolean;
 }
 
 function toRef(item: DriveItem): DriveItemRef {
@@ -71,7 +89,7 @@ export function DriveBrowser({
   const index = useFolderIndex();
   const drive = useDrive();
   const newActions = useNewItemActions();
-  const [menu, setMenu] = useState<MenuState | null>(null);
+  const [contextActions, setContextActions] = useState<MenuAction[]>([]);
   const containerRef = useRef<HTMLDivElement>(null);
 
   const query = searchQuery.trim();
@@ -128,7 +146,7 @@ export function DriveBrowser({
     {
       key: "open",
       label: "열기",
-      icon: "open",
+      icon: SquareArrowOutUpRightIcon,
       shortcut: "Enter",
       testId: "action-open",
       onSelect: () => navigate(TRASH_PATH),
@@ -136,7 +154,7 @@ export function DriveBrowser({
     {
       key: "empty-trash",
       label: "휴지통 비우기",
-      icon: "trash",
+      icon: Trash2Icon,
       danger: true,
       separated: true,
       disabled: trashCount === 0,
@@ -155,14 +173,14 @@ export function DriveBrowser({
         {
           key: "restore",
           label: "복원",
-          icon: "restore",
+          icon: Undo2Icon,
           testId: "action-restore",
           onSelect: () => drive.restore(refs),
         },
         {
           key: "delete-forever",
           label: "영구 삭제",
-          icon: "trash",
+          icon: Trash2Icon,
           danger: true,
           shortcut: "Delete",
           testId: "action-delete-forever",
@@ -176,7 +194,7 @@ export function DriveBrowser({
       actions.push({
         key: "open",
         label: single.kind === "folder" ? "열기" : "편집기에서 열기",
-        icon: "open",
+        icon: SquareArrowOutUpRightIcon,
         shortcut: "Enter",
         testId: "action-open",
         onSelect: () => open(single),
@@ -185,7 +203,7 @@ export function DriveBrowser({
         actions.push({
           key: "present",
           label: "발표",
-          icon: "play",
+          icon: PlayIcon,
           testId: "action-present",
           onSelect: () => present(single.id),
         });
@@ -193,7 +211,7 @@ export function DriveBrowser({
       actions.push({
         key: "rename",
         label: "이름 바꾸기",
-        icon: "pencil",
+        icon: PencilIcon,
         shortcut: "F2",
         separated: true,
         testId: "action-rename",
@@ -203,7 +221,7 @@ export function DriveBrowser({
     actions.push({
       key: "move",
       label: "이동",
-      icon: "folderOpen",
+      icon: FolderInputIcon,
       shortcut: "Z",
       separated: !single,
       testId: "action-move",
@@ -213,7 +231,7 @@ export function DriveBrowser({
       actions.push({
         key: "duplicate",
         label: "사본 만들기",
-        icon: "duplicate",
+        icon: CopyIcon,
         testId: "action-duplicate",
         onSelect: () => drive.duplicate(refs),
       });
@@ -221,7 +239,7 @@ export function DriveBrowser({
     actions.push({
       key: "trash",
       label: "휴지통으로 이동",
-      icon: "trash",
+      icon: Trash2Icon,
       danger: true,
       separated: true,
       shortcut: "Delete",
@@ -235,18 +253,6 @@ export function DriveBrowser({
     if (drive.selection.has(item.key)) return selectedItems;
     drive.setSelection([item.key], item.key);
     return [item];
-  };
-
-  const openMenuFor = (item: DriveItem): void => {
-    const row = containerRef.current?.querySelector<HTMLElement>(
-      `[data-item-key="${item.key}"]`,
-    );
-    const rect = row?.getBoundingClientRect();
-    setMenu({
-      anchor: { x: (rect?.left ?? 0) + 48, y: rect?.bottom ?? 0 },
-      actions: actionsFor(targetsFor(item)),
-      fromKeyboard: true,
-    });
   };
 
   const handlersFor = (item: DriveItem): DriveItemHandlers => ({
@@ -282,24 +288,10 @@ export function DriveBrowser({
       }
     },
     onDoubleClick: () => open(item),
-    onContextMenu: (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      setMenu({
-        anchor: { x: event.clientX, y: event.clientY },
-        actions: actionsFor(targetsFor(item)),
-      });
-    },
     onFocus: () => {
       if (drive.focusKey !== item.key) drive.setFocusKey(item.key);
     },
-    onMore: (event) => {
-      const rect = event.currentTarget.getBoundingClientRect();
-      setMenu({
-        anchor: { x: rect.right - 240, y: rect.bottom + 4 },
-        actions: actionsFor(targetsFor(item)),
-      });
-    },
+    menuActions: () => actionsFor(targetsFor(item)),
     onPresent:
       !isTrash && item.kind === "file" ? () => present(item.id) : undefined,
     onEdit:
@@ -312,10 +304,9 @@ export function DriveBrowser({
     drive,
     items,
     isTrash,
-    enabled: !drive.dialogOpen && !menu && !drive.activeDrag,
+    enabled: !drive.dialogOpen && !drive.activeDrag,
     open,
     focusRow,
-    openMenuFor,
   });
 
   const marquee = useMarqueeSelection({
@@ -335,16 +326,13 @@ export function DriveBrowser({
   return (
     <div
       data-testid={isTrash ? "trash-view" : "drive-view"}
-      className="flex-1 min-h-0 flex flex-col"
+      className="flex min-h-0 flex-1 flex-col"
     >
       <DriveToolbar
         mode={mode}
         selectionCount={selectedItems.length}
         selectionActions={actionsFor(selectedItems)}
         onClearSelection={() => drive.clearSelection()}
-        onSelectionMore={(anchor) =>
-          setMenu({ anchor, actions: actionsFor(selectedItems) })
-        }
         summary={summary}
         typeFilter={typeFilter}
         onTypeFilterChange={onTypeFilterChange}
@@ -352,97 +340,102 @@ export function DriveBrowser({
         onEmptyTrash={() => drive.requestEmptyTrash()}
       />
 
-      <div
-        ref={containerRef}
-        data-testid="drive-scroll-area"
-        className="relative flex-1 min-h-0 overflow-y-auto px-4 sm:px-6 pb-16 select-none"
-        onMouseDown={marquee.onMouseDown}
-        onClick={() => {
-          if (marquee.consumeClick()) return;
-          drive.clearSelection();
-        }}
-        onContextMenu={(event) => {
-          if (isTrash || query) return;
-          event.preventDefault();
-          drive.clearSelection();
-          setMenu({
-            anchor: { x: event.clientX, y: event.clientY },
-            actions: newActions,
-          });
-        }}
-      >
-        {(items.length > 0 || showTrashFolder) && (
-          <>
-            <DriveListHeader
-              variant={variant}
-              secondLabel={isTrash ? "원래 위치" : query ? "위치" : "소유자"}
-              dateLabel={isTrash ? "삭제일" : "수정일"}
-              sort={isTrash ? undefined : sortOrder}
-              onSort={
-                isTrash
-                  ? undefined
-                  : (key) => onSortOrderChange(nextSortOrder(sortOrder, key))
-              }
-            />
-            {showTrashFolder && (
-              <TrashFolderRow
-                count={trashCount}
-                onOpen={() => navigate(TRASH_PATH)}
-                onMenu={(anchor) => {
-                  drive.clearSelection();
-                  setMenu({ anchor, actions: trashFolderActions });
-                }}
+      <ContextMenu>
+        <ContextMenuTrigger
+          ref={containerRef}
+          data-testid="drive-scroll-area"
+          className="relative min-h-0 flex-1 overflow-y-auto px-4 pb-16 sm:px-6"
+          onMouseDown={marquee.onMouseDown}
+          onClick={() => {
+            if (marquee.consumeClick()) return;
+            drive.clearSelection();
+          }}
+          onContextMenu={(event) => {
+            const target = event.target as HTMLElement;
+            const rowKey = target
+              .closest<HTMLElement>("[data-item-key]")
+              ?.getAttribute("data-item-key");
+            const item = items.find((candidate) => candidate.key === rowKey);
+            if (item) {
+              setContextActions(actionsFor(targetsFor(item)));
+            } else if (target.closest("[data-trash-folder]")) {
+              drive.clearSelection();
+              setContextActions(trashFolderActions);
+            } else if (isTrash || query) {
+              event.preventBaseUIHandler();
+            } else {
+              drive.clearSelection();
+              setContextActions(newActions);
+            }
+          }}
+        >
+          {(items.length > 0 || showTrashFolder) && (
+            <>
+              <DriveListHeader
+                variant={variant}
+                secondLabel={isTrash ? "원래 위치" : query ? "위치" : "소유자"}
+                dateLabel={isTrash ? "삭제일" : "수정일"}
+                sort={isTrash ? undefined : sortOrder}
+                onSort={
+                  isTrash
+                    ? undefined
+                    : (key) => onSortOrderChange(nextSortOrder(sortOrder, key))
+                }
               />
-            )}
-            {items.length > 0 && (
-              <div
-                role="listbox"
-                aria-multiselectable="true"
-                aria-label={isTrash ? "휴지통" : "폴더와 프레젠테이션"}
-              >
-                {items.map((item) => (
-                  <DriveListRow
-                    key={item.key}
-                    item={item}
-                    variant={variant}
-                    date={
-                      isTrash
-                        ? (trashedAtOf(item) ?? item.updatedAt)
-                        : item.updatedAt
-                    }
-                    handlers={handlersFor(item)}
-                  />
-                ))}
-              </div>
-            )}
-          </>
-        )}
+              {showTrashFolder && (
+                <TrashFolderRow
+                  count={trashCount}
+                  onOpen={() => navigate(TRASH_PATH)}
+                  menuActions={() => {
+                    drive.clearSelection();
+                    return trashFolderActions;
+                  }}
+                />
+              )}
+              {items.length > 0 && (
+                <div
+                  role="listbox"
+                  aria-multiselectable="true"
+                  aria-label={isTrash ? "휴지통" : "폴더와 프레젠테이션"}
+                >
+                  {items.map((item) => (
+                    <DriveListRow
+                      key={item.key}
+                      item={item}
+                      variant={variant}
+                      date={
+                        isTrash
+                          ? (trashedAtOf(item) ?? item.updatedAt)
+                          : item.updatedAt
+                      }
+                      handlers={handlersFor(item)}
+                    />
+                  ))}
+                </div>
+              )}
+            </>
+          )}
 
-        {items.length === 0 && (
-          <EmptyState mode={mode} query={query} filtered={isFiltered} />
-        )}
-      </div>
+          {items.length === 0 && (
+            <EmptyState mode={mode} query={query} filtered={isFiltered} />
+          )}
+        </ContextMenuTrigger>
+        <ContextMenuContent data-testid="drive-menu" className="min-w-60">
+          <ActionMenuItems kind="context" actions={contextActions} />
+        </ContextMenuContent>
+      </ContextMenu>
 
       {marquee.box && (
         <div
           data-testid="drive-marquee"
           aria-hidden="true"
-          className="fixed z-40 pointer-events-none rounded-sm border border-emerald-500 bg-emerald-500/15"
+          className="pointer-events-none fixed z-40 rounded-sm border border-primary bg-primary/10"
           style={{
             left: marquee.box.left,
             top: marquee.box.top,
             width: marquee.box.right - marquee.box.left,
             height: marquee.box.bottom - marquee.box.top,
           }}
-        />
-      )}
-
-      {menu && (
-        <PopoverMenu
-          anchor={menu.anchor}
-          actions={menu.actions}
-          autoFocusFirst={menu.fromKeyboard}
-          onClose={() => setMenu(null)}
         />
       )}
     </div>
@@ -461,13 +454,11 @@ function EmptyState({
   const drive = useDrive();
   const newActions = useNewItemActions();
 
-  let icon: React.ReactNode = (
-    <FolderGlyph className="w-10 h-10 text-emerald-500/80 dark:text-emerald-400/70" />
-  );
+  let icon: React.ReactNode = <FolderIcon />;
   let title: string;
   let hint: string;
   if (query) {
-    icon = <Icon name="search" className="w-10 h-10" strokeWidth={1.5} />;
+    icon = <SearchIcon />;
     title = `"${query}"에 일치하는 항목이 없습니다.`;
     hint =
       "다른 검색어를 입력해 보세요. 폴더 이름, 세트 제목, 곡 제목·가사로 찾을 수 있습니다.";
@@ -475,7 +466,7 @@ function EmptyState({
     title = "선택한 유형의 항목이 없습니다";
     hint = "유형 필터를 지우면 모든 항목을 볼 수 있습니다.";
   } else if (mode === "trash") {
-    icon = <Icon name="trash" className="w-10 h-10" strokeWidth={1.5} />;
+    icon = <Trash2Icon />;
     title = "휴지통이 비어 있습니다";
     hint = "삭제한 폴더와 프레젠테이션이 여기에 모입니다.";
   } else if (drive.currentFolderId) {
@@ -489,37 +480,33 @@ function EmptyState({
   }
 
   return (
-    <div
-      data-testid="drive-empty"
-      className="py-20 px-6 text-center flex flex-col items-center justify-center gap-3"
-    >
-      <div className="text-zinc-400 dark:text-zinc-500 mb-2">{icon}</div>
-      <p className="text-lg text-zinc-800 dark:text-zinc-200">{title}</p>
-      <p className="text-sm text-zinc-500 max-w-md">{hint}</p>
+    <Empty data-testid="drive-empty">
+      <EmptyHeader>
+        <EmptyMedia variant="icon">{icon}</EmptyMedia>
+        <EmptyTitle>{title}</EmptyTitle>
+        <EmptyDescription>{hint}</EmptyDescription>
+      </EmptyHeader>
       {mode === "drive" && !query && !filtered && (
-        <div className="flex items-center gap-2 pt-3">
+        <EmptyContent className="flex-row justify-center">
           {newActions.map((action) => (
-            <button
+            <Button
               key={action.key}
-              type="button"
+              variant={
+                action.key === "new-presentation" ? "default" : "outline"
+              }
               data-testid={`empty-${action.key}`}
               onMouseDown={(event) => event.stopPropagation()}
               onClick={(event) => {
                 event.stopPropagation();
                 action.onSelect();
               }}
-              className={`px-4 py-2 rounded-full text-sm font-medium flex items-center gap-2 cursor-pointer transition-colors ${
-                action.key === "new-presentation"
-                  ? "bg-emerald-600 hover:bg-emerald-500 text-white shadow-sm"
-                  : "border border-zinc-300 dark:border-zinc-700 hover:bg-zinc-200/70 dark:hover:bg-zinc-800 text-zinc-700 dark:text-zinc-200"
-              }`}
             >
-              {action.icon && <Icon name={action.icon} className="w-4 h-4" />}
-              <span>{action.label}</span>
-            </button>
+              {action.icon && <action.icon />}
+              {action.label}
+            </Button>
           ))}
-        </div>
+        </EmptyContent>
       )}
-    </div>
+    </Empty>
   );
 }

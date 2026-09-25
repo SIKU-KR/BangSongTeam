@@ -10,16 +10,24 @@ export type EditorShortcutHandlers = Partial<
   Record<EditorShortcutAction, () => boolean | void>
 >;
 
+const MODAL_SELECTOR =
+  '[data-slot="dialog-content"], [data-slot="alert-dialog-content"]';
+
+const KEY_HANDLING_WIDGET_SELECTOR =
+  '[role="combobox"], [role="listbox"], [role="menu"], [role="slider"], [role="dialog"]';
+
 function readContext(): EditorShortcutContext {
   const active = document.activeElement;
   const typing =
     active instanceof HTMLInputElement ||
     active instanceof HTMLTextAreaElement ||
     active instanceof HTMLSelectElement ||
-    (active instanceof HTMLElement && active.isContentEditable);
+    (active instanceof HTMLElement &&
+      (active.isContentEditable ||
+        active.closest(KEY_HANDLING_WIDGET_SELECTOR) !== null));
   return {
     typing,
-    modalOpen: document.querySelector('[role="dialog"]') !== null,
+    modalOpen: document.querySelector(MODAL_SELECTOR) !== null,
     onButton:
       active instanceof HTMLElement &&
       active.closest('button, [role="menuitem"]') !== null,

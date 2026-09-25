@@ -1,5 +1,13 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { HexColorPicker } from "react-colorful";
+import { cn } from "cn";
+import { Button } from "#components/ui/button";
+import { Input } from "#components/ui/input";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "#components/ui/popover";
 
 const HEX_PATTERN = /^#([0-9a-fA-F]{3}){1,2}$/;
 
@@ -14,37 +22,19 @@ export interface ColorPickerFieldProps {
   className?: string;
 }
 
-/** hex 입력과 팝오버 컬러피커 컴포넌트. */
+/** hex 입력과 팝오버 컬러피커 컴포넌트. 피커는 손을 뗄 때 한 번만 커밋한다 */
 export function ColorPickerField({
   value,
   onCommit,
-  className = "",
+  className,
 }: ColorPickerFieldProps): React.JSX.Element {
-  const [isOpen, setIsOpen] = useState(false);
   const [text, setText] = useState(value);
   const [pickerColor, setPickerColor] = useState(value);
-  const rootRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     setText(value);
     setPickerColor(value);
   }, [value]);
-
-  useEffect(() => {
-    if (!isOpen) return;
-    const handlePointerDown = (e: PointerEvent) => {
-      if (!rootRef.current?.contains(e.target as Node)) setIsOpen(false);
-    };
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setIsOpen(false);
-    };
-    document.addEventListener("pointerdown", handlePointerDown);
-    document.addEventListener("keydown", handleKeyDown);
-    return () => {
-      document.removeEventListener("pointerdown", handlePointerDown);
-      document.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [isOpen]);
 
   const commit = (hex: string) => {
     if (!isValidHex(hex)) return;
@@ -56,21 +46,40 @@ export function ColorPickerField({
   const isInvalid = !isValidHex(text);
 
   return (
-    <div
-      ref={rootRef}
-      className={`relative flex items-center gap-1.5 ${className}`}
-    >
-      <button
-        type="button"
-        data-testid="color-picker-toggle"
-        aria-label="컬러피커 열기"
-        aria-expanded={isOpen}
-        onClick={() => setIsOpen((open) => !open)}
-        style={{ backgroundColor: isValidHex(value) ? value : "#FFFFFF" }}
-        className="w-6 h-6 rounded-md border-2 border-zinc-300 dark:border-zinc-600 cursor-pointer shrink-0 hover:scale-110 transition-transform"
-        title="직접 색상 선택"
-      />
-      <input
+    <div className={cn("flex items-center gap-1.5", className)}>
+      <Popover>
+        <PopoverTrigger
+          data-testid="color-picker-toggle"
+          aria-label="컬러피커 열기"
+          render={
+            <Button
+              variant="outline"
+              size="icon-xs"
+              className="border-2 transition-transform hover:scale-110"
+              style={{
+                backgroundColor: isValidHex(value) ? value : "#FFFFFF",
+              }}
+            />
+          }
+        />
+        <PopoverContent
+          data-testid="color-picker-popover"
+          align="end"
+          initialFocus={false}
+          className="w-auto p-2"
+          onPointerUp={() => commit(pickerColor)}
+          onKeyUp={() => commit(pickerColor)}
+        >
+          <HexColorPicker
+            color={isValidHex(pickerColor) ? pickerColor : "#FFFFFF"}
+            onChange={(hex) => {
+              setPickerColor(hex);
+              setText(hex.toUpperCase());
+            }}
+          />
+        </PopoverContent>
+      </Popover>
+      <Input
         type="text"
         data-testid="color-hex-input"
         aria-label="글자 색상 hex 값"
@@ -85,29 +94,8 @@ export function ColorPickerField({
         onKeyDown={(e) => {
           if (e.key === "Enter") commit(text);
         }}
-        className={`w-20 bg-zinc-50 dark:bg-zinc-900 border rounded px-2 py-1 text-[11px] font-mono text-zinc-700 dark:text-zinc-300 uppercase ${
-          isInvalid
-            ? "border-red-400 dark:border-red-500"
-            : "border-zinc-200 dark:border-zinc-800"
-        }`}
+        className="h-7 w-24 font-mono text-xs uppercase md:text-xs"
       />
-
-      {isOpen && (
-        <div
-          data-testid="color-picker-popover"
-          className="absolute right-0 top-full mt-2 z-50 p-2 rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 shadow-md dark:shadow-xl"
-          onPointerUp={() => commit(pickerColor)}
-          onKeyUp={() => commit(pickerColor)}
-        >
-          <HexColorPicker
-            color={isValidHex(pickerColor) ? pickerColor : "#FFFFFF"}
-            onChange={(hex) => {
-              setPickerColor(hex);
-              setText(hex.toUpperCase());
-            }}
-          />
-        </div>
-      )}
     </div>
   );
 }

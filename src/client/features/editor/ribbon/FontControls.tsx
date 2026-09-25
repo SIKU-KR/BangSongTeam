@@ -1,9 +1,19 @@
 import React, { useEffect, useState } from "react";
+import { ButtonGroup } from "#components/ui/button-group";
+import { Input } from "#components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "#components/ui/select";
 import type { DeckStyle } from "#shared";
 import { SUPPORTED_FONTS } from "#shared";
 import { ColorPickerField } from "../ColorPickerField";
-import { RibbonDropdown } from "./RibbonDropdown";
-import { RibbonButton, RibbonGroup } from "./RibbonPrimitives";
+import { ToggleGroup, ToggleGroupItem } from "#components/ui/toggle-group";
+import { RibbonChoices, RibbonDropdown } from "./RibbonDropdown";
+import { RibbonButton, RibbonGroup, RibbonTooltip } from "./RibbonPrimitives";
 import {
   FONT_SIZE_PT_PRESETS,
   PRESET_COLORS,
@@ -42,98 +52,96 @@ export function FontControls({
 
   return (
     <RibbonGroup label="글꼴">
-      <select
-        aria-label="글꼴"
+      <Select
         value={style.fontFamily}
         disabled={disabled}
-        onChange={(e) =>
-          onUpdateStyle({
-            fontFamily: e.target.value as DeckStyle["fontFamily"],
-          })
-        }
-        className="h-8 w-36 px-2 rounded-md bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 text-xs text-zinc-800 dark:text-zinc-200 focus:outline-none focus:border-emerald-500 cursor-pointer disabled:opacity-35"
+        onValueChange={(value) => {
+          if (value) {
+            onUpdateStyle({ fontFamily: value as DeckStyle["fontFamily"] });
+          }
+        }}
       >
-        {SUPPORTED_FONTS.map((font) => (
-          <option key={font} value={font} style={{ fontFamily: font }}>
-            {font}
-          </option>
-        ))}
-      </select>
+        <SelectTrigger aria-label="글꼴" className="w-36 text-xs">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {SUPPORTED_FONTS.map((font) => (
+            <SelectItem key={font} value={font} style={{ fontFamily: font }}>
+              {font}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
 
-      <div className="flex items-center">
-        <input
-          type="text"
-          inputMode="numeric"
-          aria-label="글자 크기"
-          title="글자 크기 (pt)"
-          value={sizeText}
-          disabled={disabled}
-          onChange={(e) => setSizeText(e.target.value)}
-          onBlur={commitSize}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              e.preventDefault();
-              commitSize();
-            }
-            if (e.key === "Escape") setSizeText(String(sizePt));
-          }}
-          className="h-8 w-11 px-1.5 rounded-l-md bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 text-xs text-center font-mono text-zinc-800 dark:text-zinc-200 focus:outline-none focus:border-emerald-500 disabled:opacity-35"
-        />
+      <ButtonGroup>
+        <RibbonTooltip content="글자 크기 (pt)">
+          <Input
+            type="text"
+            inputMode="numeric"
+            aria-label="글자 크기"
+            value={sizeText}
+            disabled={disabled}
+            onChange={(e) => setSizeText(e.target.value)}
+            onBlur={commitSize}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                commitSize();
+              }
+              if (e.key === "Escape") setSizeText(String(sizePt));
+            }}
+            className="w-12 text-center font-mono"
+          />
+        </RibbonTooltip>
         <RibbonDropdown
           label="글자 크기 목록"
           testId="font-size-list-btn"
           disabled={disabled}
-          panelClassName="w-20 max-h-72 overflow-y-auto !p-1"
+          panelClassName="max-h-72 w-20 overflow-y-auto p-1"
         >
-          {(close) =>
-            FONT_SIZE_PT_PRESETS.map((pt) => (
-              <button
-                key={pt}
-                type="button"
-                aria-pressed={pt === sizePt}
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={() => {
-                  onUpdateStyle({ fontSizeVw: ptToVw(pt) });
-                  close();
-                }}
-                className={`w-full px-2 py-1 rounded text-left font-mono cursor-pointer ${
-                  pt === sizePt
-                    ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-300"
-                    : "hover:bg-zinc-100 dark:hover:bg-zinc-800"
-                }`}
-              >
-                {pt}
-              </button>
-            ))
-          }
+          {(close) => (
+            <RibbonChoices
+              label="글자 크기 목록"
+              className="font-mono"
+              value={String(sizePt)}
+              choices={FONT_SIZE_PT_PRESETS.map((pt) => ({
+                value: String(pt),
+                label: pt,
+              }))}
+              onSelect={(value) => {
+                onUpdateStyle({ fontSizeVw: ptToVw(Number(value)) });
+                close();
+              }}
+            />
+          )}
         </RibbonDropdown>
-      </div>
+      </ButtonGroup>
 
       <RibbonButton
         label="글자 크기 키우기"
-        title="글자 크기 키우기 (Ctrl/⌘+Shift+>)"
+        tooltip="글자 크기 키우기 (Ctrl/⌘+Shift+>)"
         testId="font-size-up-btn"
         disabled={disabled}
         onClick={() =>
           onUpdateStyle({ fontSizeVw: stepFontSize(style.fontSizeVw, 1) })
         }
         icon={
-          <span className="font-bold text-sm leading-none">
-            A<sup className="text-[9px]">+</sup>
+          <span className="text-sm leading-none font-bold">
+            A<sup className="text-2xs">+</sup>
           </span>
         }
       />
       <RibbonButton
         label="글자 크기 줄이기"
-        title="글자 크기 줄이기 (Ctrl/⌘+Shift+<)"
+        tooltip="글자 크기 줄이기 (Ctrl/⌘+Shift+<)"
         testId="font-size-down-btn"
         disabled={disabled}
         onClick={() =>
           onUpdateStyle({ fontSizeVw: stepFontSize(style.fontSizeVw, -1) })
         }
         icon={
-          <span className="font-bold text-xs leading-none">
-            A<sup className="text-[9px]">−</sup>
+          <span className="text-xs leading-none font-bold">
+            A<sup className="text-2xs">−</sup>
           </span>
         }
       />
@@ -145,44 +153,43 @@ export function FontControls({
         panelClassName="w-60"
         icon={
           <span className="flex flex-col items-center leading-none">
-            <span className="font-bold text-sm">가</span>
+            <span className="text-sm font-bold">가</span>
             <span
-              className="mt-0.5 h-1 w-4 rounded-sm border border-zinc-300 dark:border-zinc-600"
+              className="mt-0.5 h-1 w-4 rounded-sm border"
               style={{ backgroundColor: style.fontColor }}
             />
           </span>
         }
       >
         {() => (
-          <div className="space-y-2.5">
-            <div className="flex flex-wrap gap-1.5">
-              {PRESET_COLORS.map((color) => {
-                const selected =
-                  style.fontColor.toUpperCase() === color.value.toUpperCase();
-                return (
-                  <button
-                    key={color.value}
-                    type="button"
+          <>
+            <ToggleGroup
+              aria-label="글자 색"
+              variant="outline"
+              size="sm"
+              value={[style.fontColor.toUpperCase()]}
+              onValueChange={(next) => {
+                if (next[0]) onUpdateStyle({ fontColor: next[0] });
+              }}
+              className="flex-wrap"
+            >
+              {PRESET_COLORS.map((color) => (
+                <RibbonTooltip key={color.value} content={color.label}>
+                  <ToggleGroupItem
+                    value={color.value.toUpperCase()}
                     aria-label={color.label}
-                    aria-pressed={selected}
-                    title={color.label}
                     onMouseDown={(e) => e.preventDefault()}
-                    onClick={() => onUpdateStyle({ fontColor: color.value })}
                     style={{ backgroundColor: color.value }}
-                    className={`w-6 h-6 rounded-full border-2 cursor-pointer transition-transform hover:scale-110 ${
-                      selected
-                        ? "border-emerald-500 ring-2 ring-emerald-500/40"
-                        : "border-zinc-300 dark:border-zinc-600"
-                    }`}
+                    className="rounded-full aria-pressed:ring-3 aria-pressed:ring-ring/50"
                   />
-                );
-              })}
-            </div>
+                </RibbonTooltip>
+              ))}
+            </ToggleGroup>
             <ColorPickerField
               value={style.fontColor}
               onCommit={(hex) => onUpdateStyle({ fontColor: hex })}
             />
-          </div>
+          </>
         )}
       </RibbonDropdown>
 
@@ -190,37 +197,28 @@ export function FontControls({
         label="텍스트 그림자"
         testId="text-shadow-btn"
         disabled={disabled}
-        panelClassName="w-32 !p-1"
+        panelClassName="w-32 p-1"
         icon={
-          <span
-            className="font-bold text-sm leading-none"
-            style={{ textShadow: "1px 1px 2px rgba(0,0,0,0.6)" }}
-          >
+          <span className="text-sm leading-none font-bold text-shadow-sm">
             S
           </span>
         }
       >
-        {(close) =>
-          SHADOW_LEVELS.map((level) => (
-            <button
-              key={level.id}
-              type="button"
-              aria-pressed={style.textShadowLevel === level.id}
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={() => {
-                onUpdateStyle({ textShadowLevel: level.id });
-                close();
-              }}
-              className={`w-full px-2 py-1.5 rounded text-left cursor-pointer ${
-                style.textShadowLevel === level.id
-                  ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-300"
-                  : "hover:bg-zinc-100 dark:hover:bg-zinc-800"
-              }`}
-            >
-              그림자 {level.label}
-            </button>
-          ))
-        }
+        {(close) => (
+          <RibbonChoices
+            label="텍스트 그림자"
+            value={style.textShadowLevel}
+            choices={SHADOW_LEVELS.map((level) => ({
+              value: level.id,
+              label: `그림자 ${level.label}`,
+            }))}
+            onSelect={(value) => {
+              const level = SHADOW_LEVELS.find((item) => item.id === value);
+              if (level) onUpdateStyle({ textShadowLevel: level.id });
+              close();
+            }}
+          />
+        )}
       </RibbonDropdown>
     </RibbonGroup>
   );

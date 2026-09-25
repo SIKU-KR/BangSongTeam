@@ -1,13 +1,21 @@
 import React from "react";
+import {
+  AlignCenterIcon,
+  AlignLeftIcon,
+  AlignRightIcon,
+  ListIcon,
+  type LucideIcon,
+} from "lucide-react";
 import type { DeckStyle } from "#shared";
-import { RibbonDropdown } from "./RibbonDropdown";
-import { RibbonButton, RibbonGroup, RibbonIcon } from "./RibbonPrimitives";
+import { ToggleGroup, ToggleGroupItem } from "#components/ui/toggle-group";
+import { RibbonChoices, RibbonDropdown } from "./RibbonDropdown";
+import { RibbonGroup, RibbonTooltip } from "./RibbonPrimitives";
 import { LINE_HEIGHT_OPTIONS, TEXT_ALIGN_OPTIONS } from "./ribbonOptions";
 
-const ALIGN_ICONS: Record<DeckStyle["textAlign"], string> = {
-  left: "M4 6h16M4 12h10M4 18h16",
-  center: "M4 6h16M7 12h10M4 18h16",
-  right: "M4 6h16M10 12h10M4 18h16",
+const ALIGN_ICONS: Record<DeckStyle["textAlign"], LucideIcon> = {
+  left: AlignLeftIcon,
+  center: AlignCenterIcon,
+  right: AlignRightIcon,
 };
 
 export interface ParagraphControlsProps {
@@ -24,47 +32,57 @@ export function ParagraphControls({
 }: ParagraphControlsProps): React.JSX.Element {
   return (
     <RibbonGroup label="단락">
-      {TEXT_ALIGN_OPTIONS.map((option) => (
-        <RibbonButton
-          key={option.id}
-          label={option.label}
-          testId={`text-align-${option.id}-btn`}
-          pressed={style.textAlign === option.id}
-          disabled={disabled}
-          onClick={() => onUpdateStyle({ textAlign: option.id })}
-          icon={<RibbonIcon d={ALIGN_ICONS[option.id]} />}
-        />
-      ))}
+      <ToggleGroup
+        aria-label="정렬"
+        spacing={0}
+        size="sm"
+        value={[style.textAlign]}
+        disabled={disabled}
+        onValueChange={(next) => {
+          const picked = TEXT_ALIGN_OPTIONS.find(
+            (option) => option.id === next[0],
+          );
+          if (picked) onUpdateStyle({ textAlign: picked.id });
+        }}
+      >
+        {TEXT_ALIGN_OPTIONS.map((option) => {
+          const Icon = ALIGN_ICONS[option.id];
+          return (
+            <RibbonTooltip key={option.id} content={option.label}>
+              <ToggleGroupItem
+                value={option.id}
+                aria-label={option.label}
+                data-testid={`text-align-${option.id}-btn`}
+                onMouseDown={(e) => e.preventDefault()}
+              >
+                <Icon />
+              </ToggleGroupItem>
+            </RibbonTooltip>
+          );
+        })}
+      </ToggleGroup>
       <RibbonDropdown
         label="줄 간격"
         testId="line-height-btn"
         disabled={disabled}
-        panelClassName="w-28 !p-1"
-        icon={
-          <RibbonIcon d="M11 6h9M11 12h9M11 18h9M5 9V5m0 0L3 7m2-2l2 2m-2 8v4m0 0l-2-2m2 2l2-2" />
-        }
+        panelClassName="w-28 p-1"
+        icon={<ListIcon />}
       >
-        {(close) =>
-          LINE_HEIGHT_OPTIONS.map((value) => (
-            <button
-              key={value}
-              type="button"
-              aria-pressed={style.lineHeight === value}
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={() => {
-                onUpdateStyle({ lineHeight: value });
-                close();
-              }}
-              className={`w-full px-2 py-1 rounded text-left font-mono cursor-pointer ${
-                style.lineHeight === value
-                  ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-300"
-                  : "hover:bg-zinc-100 dark:hover:bg-zinc-800"
-              }`}
-            >
-              {value.toFixed(1)}
-            </button>
-          ))
-        }
+        {(close) => (
+          <RibbonChoices
+            label="줄 간격"
+            className="font-mono"
+            value={String(style.lineHeight)}
+            choices={LINE_HEIGHT_OPTIONS.map((value) => ({
+              value: String(value),
+              label: value.toFixed(1),
+            }))}
+            onSelect={(value) => {
+              onUpdateStyle({ lineHeight: Number(value) });
+              close();
+            }}
+          />
+        )}
       </RibbonDropdown>
     </RibbonGroup>
   );

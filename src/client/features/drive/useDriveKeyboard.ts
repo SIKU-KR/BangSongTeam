@@ -1,7 +1,12 @@
 import { useEffect, useRef } from "react";
 import type { DriveContextValue } from "./driveContext";
 import type { DriveItem, DriveItemRef } from "./driveModel";
-import { isControlTarget, isLetterKey, isTypingTarget } from "./keyboard";
+import {
+  isControlTarget,
+  isLetterKey,
+  isMenuTarget,
+  isTypingTarget,
+} from "./keyboard";
 import { rangeKeys, stepFocus, toggleKey } from "./selectionModel";
 
 export interface DriveKeyboardOptions {
@@ -12,7 +17,6 @@ export interface DriveKeyboardOptions {
   enabled: boolean;
   open: (item: DriveItem) => void;
   focusRow: (key: string) => void;
-  openMenuFor: (item: DriveItem) => void;
 }
 
 const STEP: Record<string, number> = {
@@ -32,7 +36,7 @@ function toRef(item: DriveItem): DriveItemRef {
  * - ↑↓·Home·End: 포커스 이동과 단일 선택 · Shift: 범위 확장 · Ctrl/⌘: 포커스만 이동
  * - Space: 포커스 항목 토글 · Enter: 열기 · F2: 이름 바꾸기 · Delete: 휴지통
  * - Esc: 선택 해제 · Ctrl/⌘+A: 모두 선택 · Z: 이동 · Shift+F: 새 폴더 · Shift+P: 새 프레젠테이션
- * - Shift+F10·메뉴 키: 포커스 항목의 메뉴
+ * - Shift+F10·메뉴 키: 브라우저가 포커스 행에 contextmenu를 보내 우클릭 메뉴가 뜬다
  *
  * 글자 단축키는 한글 입력 상태에서도 동작한다 (`isLetterKey`).
  */
@@ -42,9 +46,14 @@ export function useDriveKeyboard(options: DriveKeyboardOptions): void {
 
   useEffect(() => {
     const handleKey = (event: KeyboardEvent): void => {
-      const { drive, items, isTrash, enabled, open, focusRow, openMenuFor } =
+      const { drive, items, isTrash, enabled, open, focusRow } =
         optionsRef.current;
-      if (!enabled || event.isComposing || isTypingTarget(event.target)) {
+      if (
+        !enabled ||
+        event.isComposing ||
+        isTypingTarget(event.target) ||
+        isMenuTarget(event.target)
+      ) {
         return;
       }
       const keys = items.map((item) => item.key);
@@ -53,7 +62,6 @@ export function useDriveKeyboard(options: DriveKeyboardOptions): void {
         drive.focusKey !== null && keys.includes(drive.focusKey)
           ? drive.focusKey
           : null;
-      const focusedItem = items.find((item) => item.key === focus) ?? null;
       const mod = event.metaKey || event.ctrlKey;
       const plain = !mod && !event.altKey && !event.shiftKey;
 
@@ -81,17 +89,6 @@ export function useDriveKeyboard(options: DriveKeyboardOptions): void {
         if (isControlTarget(event.target) || focus === null) return;
         event.preventDefault();
         drive.setSelection(toggleKey(drive.selection, focus), focus);
-        return;
-      }
-
-      if (
-        event.key === "ContextMenu" ||
-        (event.key === "F10" && event.shiftKey)
-      ) {
-        const target = focusedItem ?? selected[0];
-        if (!target) return;
-        event.preventDefault();
-        openMenuFor(target);
         return;
       }
 
