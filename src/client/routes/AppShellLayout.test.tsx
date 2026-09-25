@@ -704,4 +704,72 @@ describe("AppShellLayout (드라이브형 홈)", () => {
     const recentRows = screen.getAllByTestId("presentation-row");
     expect(recentRows[1]).toHaveTextContent("청년부 금요 찬양 집회");
   });
+
+  it("유형 필터는 폴더·프레젠테이션만 고르고, 카테고리·소유자 칩은 없다", () => {
+    __loadFoldersForTests([folder(WORSHIP, "2026 주일 대예배")]);
+    renderShell();
+
+    expect(screen.queryByText(/카테고리:/)).toBeNull();
+    expect(screen.queryByText(/소유자:/)).toBeNull();
+
+    const typeButton = screen.getByTestId("drive-type-dropdown");
+    expect(typeButton).toHaveTextContent("유형: 전체");
+
+    fireEvent.click(typeButton);
+    const menu = screen.getByTestId("drive-type-menu");
+    expect(
+      within(menu)
+        .getAllByRole("button")
+        .map((button) => button.textContent),
+    ).toEqual(["전체", "폴더", "프레젠테이션"]);
+
+    fireEvent.click(screen.getByTestId("type-option-folder"));
+    expect(screen.queryByTestId("drive-type-menu")).toBeNull();
+    expect(typeButton).toHaveTextContent("유형: 폴더");
+    expect(screen.queryAllByTestId("presentation-row")).toHaveLength(0);
+    expect(within(screen.getByRole("listbox")).getAllByRole("option")).toEqual([
+      card("폴더 2026 주일 대예배"),
+    ]);
+    expect(screen.getByTestId("drive-trash-folder")).toBeInTheDocument();
+    expect(screen.getByTestId("drive-summary")).toHaveTextContent(
+      "폴더 1개 · 프레젠테이션 0개",
+    );
+
+    fireEvent.click(typeButton);
+    fireEvent.click(screen.getByTestId("type-option-file"));
+    expect(typeButton).toHaveTextContent("유형: 프레젠테이션");
+    expect(screen.getAllByTestId("presentation-row")).toHaveLength(
+      SEED_PRESENTATIONS.length,
+    );
+    expect(
+      screen.queryByRole("option", { name: /2026 주일 대예배/ }),
+    ).toBeNull();
+    expect(screen.queryByTestId("drive-trash-folder")).toBeNull();
+
+    fireEvent.click(typeButton);
+    fireEvent.click(screen.getByTestId("type-option-all"));
+    expect(
+      within(screen.getByRole("listbox")).getAllByRole("option"),
+    ).toHaveLength(1 + SEED_PRESENTATIONS.length);
+  });
+
+  it("유형 필터에 맞는 항목이 없으면 필터 안내를 보여 준다", () => {
+    renderShell();
+
+    fireEvent.click(screen.getByTestId("drive-type-dropdown"));
+    fireEvent.click(screen.getByTestId("type-option-folder"));
+
+    const empty = screen.getByTestId("drive-empty");
+    expect(empty).toHaveTextContent("선택한 유형의 항목이 없습니다");
+    expect(within(empty).queryByTestId("empty-new-presentation")).toBeNull();
+  });
+
+  it("휴지통에서는 목록에 반영되지 않는 유형·정렬 칩을 숨긴다", () => {
+    renderShell("/presentations/trash");
+
+    expect(screen.getByRole("heading", { name: "휴지통" })).toBeInTheDocument();
+    expect(screen.queryByTestId("drive-type-dropdown")).toBeNull();
+    expect(screen.queryByTestId("drive-sort-dropdown")).toBeNull();
+    expect(screen.getByTestId("empty-trash-btn")).toBeInTheDocument();
+  });
 });

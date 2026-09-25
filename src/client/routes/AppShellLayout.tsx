@@ -14,7 +14,11 @@ import {
   NewMenuButton,
   useDrive,
 } from "../features/drive";
-import type { AppShellContextValue, SortOrder } from "./appShellContext";
+import type {
+  AppShellContextValue,
+  DriveTypeFilter,
+  SortOrder,
+} from "./appShellContext";
 
 interface ShellPageMeta {
   title: string;
@@ -62,10 +66,12 @@ function AppShellFrame(): React.JSX.Element {
   const [isQuickPasteOpen, setIsQuickPasteOpen] = useState<boolean>(false);
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [sortOrder, setSortOrder] = useState<SortOrder>("recent");
+  const [typeFilter, setTypeFilter] = useState<DriveTypeFilter>("all");
 
   const meta = metaFor(pathname);
   const onDrive = isDrivePath(pathname);
   const onBackgrounds = pathname.startsWith("/backgrounds");
+  const onTrash = pathname === "/presentations/trash";
 
   const handleCreateNewPresentation = (): void => {
     drive.createPresentationIn(drive.currentFolderId);
@@ -79,6 +85,7 @@ function AppShellFrame(): React.JSX.Element {
   const context: AppShellContextValue = {
     searchQuery,
     sortOrder,
+    typeFilter,
     onOpenQuickPaste: () => setIsQuickPasteOpen(true),
     onCreateNewPresentation: handleCreateNewPresentation,
     onAddDeckToPresentation: handleAddDeckToPresentation,
@@ -100,6 +107,8 @@ function AppShellFrame(): React.JSX.Element {
           onSearchQueryChange={setSearchQuery}
           sortOrder={sortOrder}
           onSortOrderChange={setSortOrder}
+          typeFilter={typeFilter}
+          onTypeFilterChange={setTypeFilter}
           itemCountLabel=""
           toolbarStart={onDrive ? <DriveBreadcrumbs /> : undefined}
           quickAddSlot={
@@ -109,6 +118,7 @@ function AppShellFrame(): React.JSX.Element {
           }
           onQuickAdd={handleCreateNewPresentation}
           showControls={!onBackgrounds}
+          showFilters={!onTrash}
         />
 
         <main className="flex-1 max-w-7xl w-full mx-auto px-6 sm:px-8 py-4">
