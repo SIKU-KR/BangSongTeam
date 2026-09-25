@@ -186,6 +186,48 @@ describe("SlideThumbnailPane (PPT식 썸네일 창)", () => {
     expect(props.onOpenSongPicker).toHaveBeenCalledTimes(1);
   });
 
+  it("넘치지 않는 곡에는 넘침 경고를 띄우지 않는다", () => {
+    renderPane();
+
+    expect(screen.queryByTestId(/overflow-warning/)).not.toBeInTheDocument();
+  });
+
+  it("박스 폭을 넘는 슬라이드와 화면을 넘치는 곡에 경고 아이콘을 띄운다", () => {
+    const [item] = makeItems([2]);
+    const overflowing = {
+      ...item,
+      deck: {
+        ...item.deck!,
+        style: { ...DEFAULT_DECK_STYLE, fontSizeVw: 10 },
+        slides: [
+          {
+            id: "wrap",
+            order: 0,
+            lines: ["주의 은혜가 나를 붙드시니 두려움 없이"],
+          },
+          { id: "tall", order: 1, lines: ["가", "나", "다", "라"] },
+        ],
+      },
+    } as PresentationItem;
+
+    renderPane({ items: [overflowing] });
+
+    expect(screen.getByTestId("song-overflow-warning-0")).toHaveAttribute(
+      "title",
+      expect.stringContaining(
+        "가장 긴 슬라이드(2번)가 화면 가장자리 여백을 넘칩니다",
+      ),
+    );
+    expect(screen.getByTestId("slide-overflow-warning-0")).toHaveAttribute(
+      "title",
+      expect.stringContaining("자동 줄바꿈"),
+    );
+    expect(screen.getByTestId("slide-overflow-warning-1")).toHaveAttribute(
+      "title",
+      expect.stringContaining("화면 가장자리 여백을 넘칩니다"),
+    );
+  });
+
   it("곡이 없으면 안내를 보여 주고 새 슬라이드는 비활성이다", () => {
     renderPane({ items: [] });
 
