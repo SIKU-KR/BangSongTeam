@@ -1,8 +1,8 @@
 import { useOutletContext } from "react-router-dom";
 import type { Deck } from "#shared";
 
-/** 목록 정렬 기준. `updated`는 수정일(휴지통에서는 삭제일), `slides`는 슬라이드 수다 */
-export type SortKey = "name" | "updated" | "slides";
+/** 목록 정렬 기준. `updated`는 수정일(휴지통에서는 삭제일)이다 */
+export type SortKey = "name" | "updated";
 
 export type SortDirection = "asc" | "desc";
 

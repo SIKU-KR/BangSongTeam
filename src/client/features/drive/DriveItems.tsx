@@ -23,9 +23,6 @@ import { useDriveDraggable, useDriveDroppable } from "./driveContext";
 import { formatDate, type DriveItem } from "./driveModel";
 import { ActionMenuItems, type MenuAction } from "./ActionMenu";
 
-/** 둘째 열이 소유자(폴더 보기)인지 위치(검색 결과·휴지통)인지 */
-export type DriveColumnVariant = "owner" | "location";
-
 export interface DriveItemHandlers {
   selected: boolean;
   /** 로빙 tabindex: 목록에서 이 행만 Tab으로 들어올 수 있다 */
@@ -67,16 +64,12 @@ function useItemDnd(
   };
 }
 
-/** 머리글과 행이 같은 열 폭을 쓴다. 좁은 화면에서는 둘째·날짜 열을 숨긴다 */
+/** 머리글과 행이 같은 열 폭을 쓴다. 좁은 화면에서는 위치·날짜 열을 숨긴다 */
 const COLUMNS = {
   row: "flex items-center gap-x-4 pr-2 pl-4",
   name: "flex min-w-0 flex-1 items-center gap-4",
-  second: {
-    owner: "hidden w-16 shrink-0 truncate sm:block",
-    location: "hidden w-40 shrink-0 truncate sm:block md:w-48",
-  },
+  location: "hidden w-40 shrink-0 truncate sm:block md:w-48",
   date: "hidden w-30 shrink-0 whitespace-nowrap md:block",
-  count: "w-32 shrink-0 truncate",
   actions: "flex w-26 shrink-0 items-center justify-end",
 } as const;
 
@@ -212,17 +205,16 @@ function SortHeader({
 
 /**
  * 목록 머리글. 열 폭은 `DriveListRow`와 같은 격자를 쓴다.
- * `onSort`를 주면 이름·날짜·구성 머리글을 눌러 정렬한다 (구글 드라이브와 같다).
+ * `onSort`를 주면 이름·날짜 머리글을 눌러 정렬한다 (구글 드라이브와 같다).
+ * `locationLabel`을 주면 위치 열을 보인다 (검색 결과·휴지통).
  */
 export function DriveListHeader({
-  variant,
-  secondLabel,
+  locationLabel,
   dateLabel,
   sort,
   onSort,
 }: {
-  variant: DriveColumnVariant;
-  secondLabel: string;
+  locationLabel?: string;
   dateLabel: string;
   sort?: SortOrder;
   onSort?: (key: SortKey) => void;
@@ -243,22 +235,17 @@ export function DriveListHeader({
         onSort={onSort}
         className={COLUMNS.name}
       />
-      <span role="columnheader" className={COLUMNS.second[variant]}>
-        {secondLabel}
-      </span>
+      {locationLabel && (
+        <span role="columnheader" className={COLUMNS.location}>
+          {locationLabel}
+        </span>
+      )}
       <SortHeader
         label={dateLabel}
         sortKey="updated"
         sort={sort}
         onSort={onSort}
         className={COLUMNS.date}
-      />
-      <SortHeader
-        label="구성"
-        sortKey="slides"
-        sort={sort}
-        onSort={onSort}
-        className={COLUMNS.count}
       />
       <span className={COLUMNS.actions}>
         <span className="sr-only">작업</span>
@@ -271,18 +258,18 @@ export function DriveListHeader({
  * 드라이브 목록의 한 줄 (폴더 또는 프레젠테이션).
  *
  * `date`는 날짜 칸에 보일 ISO 시각이다. 드라이브는 수정 시각, 휴지통은 버린 시각을
- * 넘긴다. `location` 열에서는 둘째 칸에 항목의 위치를 보인다.
+ * 넘긴다. `showLocation`이면 이름 옆에 항목의 위치를 보인다.
  * 발표·편집 버튼은 마우스를 올리거나 선택·포커스했을 때만 보인다.
  */
 export function DriveListRow({
   item,
   date,
-  variant,
+  showLocation,
   handlers,
 }: {
   item: DriveItem;
   date: string;
-  variant: DriveColumnVariant;
+  showLocation: boolean;
   handlers: DriveItemHandlers;
 }): React.JSX.Element {
   const dnd = useItemDnd(item, handlers.interactive);
@@ -334,15 +321,10 @@ export function DriveListRow({
           {item.name}
         </span>
       </div>
-      <span className={COLUMNS.second[variant]}>
-        {variant === "location" ? (item.location ?? "-") : "나"}
-      </span>
+      {showLocation && (
+        <span className={COLUMNS.location}>{item.location ?? "-"}</span>
+      )}
       <span className={COLUMNS.date}>{formatDate(date)}</span>
-      <span className={COLUMNS.count}>
-        {isFolder
-          ? `항목 ${item.childCount}개`
-          : `${item.songCount}곡 · ${item.slideCount}슬라이드`}
-      </span>
       <div className={COLUMNS.actions}>
         {handlers.onPresent && (
           <RowIconButton
@@ -377,11 +359,9 @@ export function DriveListRow({
  * 항목을 끌어다 놓으면 휴지통으로 옮긴다.
  */
 export function TrashFolderRow({
-  count,
   onOpen,
   menuActions,
 }: {
-  count: number;
   onOpen: () => void;
   menuActions: () => MenuAction[];
 }): React.JSX.Element {
@@ -421,11 +401,7 @@ export function TrashFolderRow({
         </span>
         <span className="truncate font-medium text-foreground">휴지통</span>
       </div>
-      <span className={COLUMNS.second.owner}>나</span>
       <span className={COLUMNS.date}>-</span>
-      <span data-testid="trash-folder-count" className={COLUMNS.count}>
-        {`항목 ${count}개`}
-      </span>
       <div className={COLUMNS.actions}>
         <RowIconButton
           testId="trash-folder-open-btn"

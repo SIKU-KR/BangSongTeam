@@ -2,7 +2,6 @@ import { describe, it, expect } from "vitest";
 import { buildFolderIndex, type Folder, type Presentation } from "#shared";
 import type { SortOrder } from "../../routes/appShellContext";
 import {
-  buildChildCounts,
   canDropInto,
   filterByType,
   itemKey,
@@ -110,12 +109,6 @@ describe("listFolderContents", () => {
       "file:x",
     ]);
   });
-
-  it("폴더 '항목 N개'는 휴지통을 빼고 센다", () => {
-    const counts = buildChildCounts(index, DOCS);
-    expect(counts.get("a")).toBe(2);
-    expect(counts.get("b")).toBe(1);
-  });
 });
 
 describe("filterByType", () => {
@@ -217,9 +210,5 @@ describe("nextSortOrder", () => {
   it("다른 기준은 그 기준의 기본 방향으로 시작한다", () => {
     expect(nextSortOrder(RECENT, "name")).toEqual(NAME_ASC);
     expect(nextSortOrder(NAME_ASC, "updated")).toEqual(RECENT);
-    expect(nextSortOrder(NAME_ASC, "slides")).toEqual({
-      key: "slides",
-      direction: "desc",
-    });
   });
 });

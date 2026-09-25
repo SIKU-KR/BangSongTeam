@@ -134,9 +134,11 @@ describe("AppShellLayout (드라이브형 홈)", () => {
       ),
     ).toBeTruthy();
     expect(
-      within(card(SEED_PRESENTATIONS[0].title)).getByText("5곡 · 23슬라이드"),
-    ).toBeInTheDocument();
-    expect(screen.getByText("수정일")).toBeInTheDocument();
+      screen.getAllByRole("columnheader").map((header) => header.textContent),
+    ).toEqual(["이름", "수정일"]);
+    expect(
+      within(card(SEED_PRESENTATIONS[0].title)).queryByText(/슬라이드/),
+    ).toBeNull();
   });
 
   it("그리드 보기 없이 목록으로만 보여 준다", () => {
@@ -595,9 +597,6 @@ describe("AppShellLayout (드라이브형 홈)", () => {
     const trashRow = screen.getByTestId("drive-trash-folder");
     expect(trashRow).toHaveAccessibleName("휴지통 (고정 폴더)");
     expect(
-      within(trashRow).getByTestId("trash-folder-count"),
-    ).toHaveTextContent("항목 0개");
-    expect(
       trashRow.compareDocumentPosition(screen.getByRole("listbox")) &
         Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
@@ -638,9 +637,6 @@ describe("AppShellLayout (드라이브형 홈)", () => {
     renderShell();
 
     const trashRow = screen.getByTestId("drive-trash-folder");
-    expect(
-      within(trashRow).getByTestId("trash-folder-count"),
-    ).toHaveTextContent("항목 1개");
 
     fireEvent.contextMenu(trashRow);
     expect(screen.getByTestId("action-open")).toBeInTheDocument();
@@ -720,9 +716,6 @@ describe("AppShellLayout (드라이브형 홈)", () => {
     expect(reversed.map((row) => row.getAttribute("aria-label"))).toEqual(
       byName.map((row) => row.getAttribute("aria-label")).reverse(),
     );
-
-    fireEvent.click(screen.getByTestId("sort-header-slides"));
-    expect(columnHeader("구성")).toHaveAttribute("aria-sort", "descending");
 
     fireEvent.click(screen.getByTestId("sort-header-updated"));
     expect(columnHeader("수정일")).toHaveAttribute("aria-sort", "descending");
