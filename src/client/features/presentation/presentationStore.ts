@@ -500,7 +500,7 @@ export function updateSongStyle(
 
 /**
  * 세트 곡의 제목·아티스트만 바꾼다. 세트 곡은 보관함 원본의 복제본이라 원본은
- * 그대로 두며, 원본에 반영하려면 '공개본 업데이트'나 보관함에서 따로 고친다.
+ * 그대로 두며, 원본은 곡 추가 창의 내 보관함에서 따로 고친다.
  */
 export function updateSongInfo(
   songIndex: number,
