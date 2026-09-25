@@ -69,6 +69,7 @@ export {
   removePresentationsLocally,
   canEditPresentation,
   replaceWithServerDocument,
+  showSharedPreview,
 } from "./presentationStore";
 
 export {

@@ -30,6 +30,7 @@ import {
   EditorRoute,
   FullscreenPresentRoute,
   ShareJoinRoute,
+  SharePreviewRoute,
 } from "./routes";
 
 function useHydration(): boolean {
@@ -126,10 +127,10 @@ function AppRoutes(): React.JSX.Element {
     );
   }
 
-  if (session.status !== "authenticated") return <LoginRoute />;
+  if (session.status !== "authenticated") return <GuestRoutes />;
 
   return (
-    <AuthedProviders>
+    <AppProviders>
       <BrowserRouter>
         <Routes>
           <Route path="/" element={<LandingRoute />} />
@@ -154,11 +155,32 @@ function AppRoutes(): React.JSX.Element {
           <Route path="*" element={<Navigate to="/presentations" replace />} />
         </Routes>
       </BrowserRouter>
-    </AuthedProviders>
+    </AppProviders>
   );
 }
 
-function AuthedProviders({
+/**
+ * 로그인하지 않았을 때. 공유 링크 보기와 그 세트의 발표만 열고,
+ * 나머지 주소는 로그인 화면을 보여 준다 (로그인하면 그 주소로 이어진다).
+ */
+function GuestRoutes(): React.JSX.Element {
+  return (
+    <AppProviders>
+      <BrowserRouter>
+        <Routes>
+          <Route path="/s/:token" element={<SharePreviewRoute />} />
+          <Route
+            path="/present/:presentationId/fullscreen"
+            element={<FullscreenPresentRoute />}
+          />
+          <Route path="*" element={<LoginRoute />} />
+        </Routes>
+      </BrowserRouter>
+    </AppProviders>
+  );
+}
+
+function AppProviders({
   children,
 }: {
   children: React.ReactNode;

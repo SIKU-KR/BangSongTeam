@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useLayoutEffect, useMemo } from "react";
 import {
+  useLocation,
   useNavigate,
   useParams,
   useSearchParams,
@@ -74,6 +75,7 @@ import { SongInfoDialog } from "../features/editor/SongInfoDialog";
 import { useTextWidthMeasurer } from "../features/editor/useTextWidthMeasurer";
 import { useBackgroundAutoCache } from "../features/offline";
 import { PresentationShareDialog } from "../features/sharing/PresentationShareDialog";
+import { wantsMakeCopy } from "../features/sharing/shareLink";
 import { refreshSharedPresentation } from "../lib/sync";
 import {
   resolveBackgroundLayers,
@@ -90,10 +92,29 @@ const EMPTY_PRESENTATION: Presentation = {
   updatedAt: "",
 };
 
-/** PowerPoint식 프레젠테이션 편집기 라우트 */
-export function EditorRoute(): React.JSX.Element {
+/** 로그인하지 않고 공유 링크로 볼 때 편집기를 보기 화면으로 쓰기 위한 설정 */
+export interface EditorGuestOptions {
+  presentationId: string;
+  /** 송출을 마치고 돌아올 주소 (공유 링크) */
+  returnPath: string;
+  /** 사본은 내 계정에 남으므로 로그인부터 받는다 */
+  onRequestCopy: () => void;
+}
+
+/**
+ * PowerPoint식 프레젠테이션 편집기 라우트.
+ *
+ * `guest`가 있으면 로그인하지 않은 사람의 공유 세트 보기다. 드라이브·새 세트가
+ * 없고, 서버 최신본 받기(로그인 필요)도 하지 않는다.
+ */
+export function EditorRoute({
+  guest,
+}: { guest?: EditorGuestOptions } = {}): React.JSX.Element {
   const navigate = useNavigate();
-  const { presentationId } = useParams<{ presentationId: string }>();
+  const location = useLocation();
+  const params = useParams<{ presentationId: string }>();
+  const presentationId = guest?.presentationId ?? params.presentationId;
+  const isGuest = guest !== undefined;
   const [searchParams] = useSearchParams();
   const found = usePresentationById(presentationId);
   const presentation = found ?? EMPTY_PRESENTATION;
@@ -111,7 +132,9 @@ export function EditorRoute(): React.JSX.Element {
   } | null>(null);
   const [limitHintSlideId, setLimitHintSlideId] = useState<string | null>(null);
   const [isShareOpen, setIsShareOpen] = useState(false);
-  const [isCopyPickerOpen, setIsCopyPickerOpen] = useState(false);
+  const [isCopyPickerOpen, setIsCopyPickerOpen] = useState(() =>
+    wantsMakeCopy(location.state),
+  );
   const readOnly = !canEditPresentation(presentation);
 
   useLayoutEffect(() => {
@@ -119,14 +142,22 @@ export function EditorRoute(): React.JSX.Element {
   }, [presentationId]);
 
   useEffect(() => {
-    if (!presentationId || !readOnly) return;
+    if (!wantsMakeCopy(location.state)) return;
+    navigate(`${location.pathname}${location.search}`, {
+      replace: true,
+      state: null,
+    });
+  }, [location, navigate]);
+
+  useEffect(() => {
+    if (!presentationId || !readOnly || isGuest) return;
     const refresh = (): void => {
       void refreshSharedPresentation(presentationId).catch(() => undefined);
     };
     refresh();
     window.addEventListener("focus", refresh);
     return () => window.removeEventListener("focus", refresh);
-  }, [presentationId, readOnly]);
+  }, [presentationId, readOnly, isGuest]);
 
   useBackgroundAutoCache(found ?? null);
 
@@ -191,7 +222,11 @@ export function EditorRoute(): React.JSX.Element {
 
   const handlePresent = () => {
     if (presentationId) {
-      launchPresentation(navigate, presentationId, `/editor/${presentationId}`);
+      launchPresentation(
+        navigate,
+        presentationId,
+        guest?.returnPath ?? `/editor/${presentationId}`,
+      );
     }
   };
 
@@ -335,6 +370,10 @@ export function EditorRoute(): React.JSX.Element {
     navigate(`/editor/${copy.id}`);
   };
 
+  const openCopy = guest
+    ? guest.onRequestCopy
+    : () => setIsCopyPickerOpen(true);
+
   const handleNewPresentation = () => {
     const created = createNewPresentation(
       undefined,
@@ -407,15 +446,17 @@ export function EditorRoute(): React.JSX.Element {
         onRedo={readOnly ? undefined : redo}
         canUndo={canUndo()}
         canRedo={canRedo()}
-        onNewPresentation={handleNewPresentation}
+        onNewPresentation={isGuest ? undefined : handleNewPresentation}
         onOpenLyricModal={
           readOnly ? undefined : () => setSongPickerMode("create")
         }
         onShare={readOnly ? undefined : () => setIsShareOpen(true)}
-        onMakeCopy={readOnly ? () => setIsCopyPickerOpen(true) : undefined}
+        onMakeCopy={readOnly ? openCopy : undefined}
         sharedAccess={presentation.access}
         readOnly={readOnly}
-        backPath={drivePath(readOnly ? null : presentation.folderId)}
+        backPath={
+          isGuest ? null : drivePath(readOnly ? null : presentation.folderId)
+        }
       />
 
       {readOnly ? (
@@ -423,14 +464,12 @@ export function EditorRoute(): React.JSX.Element {
           <Alert data-testid="read-only-banner">
             <EyeIcon />
             <AlertDescription>
-              보기 전용으로 공유받은 세트입니다. 고치려면 사본을 만드세요.
+              {isGuest
+                ? "보기 전용으로 공유받은 세트입니다. 고치려면 로그인하고 사본을 만드세요."
+                : "보기 전용으로 공유받은 세트입니다. 고치려면 사본을 만드세요."}
             </AlertDescription>
             <AlertAction>
-              <Button
-                data-testid="make-copy-btn"
-                size="sm"
-                onClick={() => setIsCopyPickerOpen(true)}
-              >
+              <Button data-testid="make-copy-btn" size="sm" onClick={openCopy}>
                 <CopyIcon />
                 사본 만들기
               </Button>

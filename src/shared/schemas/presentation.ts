@@ -16,11 +16,11 @@ export type PresentationItem = z.infer<typeof PresentationItemSchema>;
  *
  * 클라이언트가 보낸 값은 서버가 권한 판단에 쓰지 않는다. `memberId`는 받은
  * 사람의 id로, 한 브라우저를 여러 계정이 쓸 때 로컬 저장소에서 내 공유 세트만
- * 고르는 데 쓴다.
+ * 고르는 데 쓴다. 로그인하지 않고 링크로 보는 사람에게는 없다.
  */
 export const PresentationAccessSchema = z.object({
   ownerName: z.string(),
-  memberId: IdSchema,
+  memberId: IdSchema.optional(),
 });
 export type PresentationAccess = z.infer<typeof PresentationAccessSchema>;
 

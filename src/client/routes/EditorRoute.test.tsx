@@ -18,16 +18,19 @@ import { MemoryRouter, Routes, Route } from "react-router-dom";
 import { EditorRoute } from "./EditorRoute";
 import {
   getActivePresentation,
+  replaceWithServerDocument,
   resetPresentationStore,
   SEED_PRESENTATION_IDS,
 } from "../features/presentation";
 
 const DOC_ID = SEED_PRESENTATION_IDS[0];
 
-function renderEditor(path = `/editor/${DOC_ID}`) {
+function renderEditor(path = `/editor/${DOC_ID}`, state: unknown = null) {
   return render(
     withQueryClient(
-      <MemoryRouter initialEntries={[path]}>
+      <MemoryRouter
+        initialEntries={[state === null ? path : { pathname: path, state }]}
+      >
         <Routes>
           <Route path="/editor/:presentationId" element={<EditorRoute />} />
           <Route
@@ -1029,6 +1032,40 @@ describe("EditorRoute (PowerPoint식 프레젠테이션 편집기)", () => {
       press({ key: "Enter" });
       expect(firstSong().slides).toHaveLength(5);
       expect(lyricsEditor()).toBeInTheDocument();
+    });
+  });
+
+  describe("공유받은 세트", () => {
+    const SHARED_ID = "s0000000000000000000a";
+
+    beforeEach(() => {
+      replaceWithServerDocument({
+        ...SEED_PRESENTATIONS[0],
+        id: SHARED_ID,
+        userId: "0000000000000000owner",
+        access: { ownerName: "인도자", memberId: "0000000000000000user1" },
+      });
+    });
+
+    it("로그인하고 돌아오면 사본 만들기 창을 바로 연다", async () => {
+      renderEditor(`/editor/${SHARED_ID}`, { makeCopy: true });
+
+      expect(
+        await screen.findByTestId("copy-picker-dialog"),
+      ).toBeInTheDocument();
+      expect(mockNavigate).toHaveBeenCalledWith(`/editor/${SHARED_ID}`, {
+        replace: true,
+        state: null,
+      });
+    });
+
+    it("그냥 열면 사본 만들기 창을 띄우지 않는다", () => {
+      renderEditor(`/editor/${SHARED_ID}`);
+
+      expect(screen.getByTestId("read-only-banner")).toBeInTheDocument();
+      expect(
+        screen.queryByTestId("copy-picker-dialog"),
+      ).not.toBeInTheDocument();
     });
   });
 });

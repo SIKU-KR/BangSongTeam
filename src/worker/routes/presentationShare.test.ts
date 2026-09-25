@@ -5,6 +5,7 @@ import {
   PresentationDocumentSchema,
   type JoinShareResponse,
   type PresentationDocument,
+  type SharePreviewResponse,
   type ShareSettings,
 } from "#shared";
 import { createD1Client, user } from "#db";
@@ -212,6 +213,57 @@ describe("세트 링크 공유 라우트", () => {
       .bind(DOC_ID)
       .first<{ n: number }>();
     expect(rows?.n).toBe(0);
+  });
+
+  it("로그인하지 않아도 링크로 볼 수 있지만 멤버로 기록되지 않는다", async () => {
+    const { body: settings } = await as<ShareSettings>(
+      OWNER,
+      `/api/presentations/${DOC_ID}/share`,
+      send("PUT", { access: "view" }),
+    );
+    currentUser = null;
+    const res = await app.request(`/api/share/${settings.token}`, {}, env);
+    const body = (await res.json()) as SharePreviewResponse;
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get("cache-control")).toBe("private, no-store");
+    expect(body.document.items[0].deck.lyricsRaw).toBe("시작됐네");
+    expect(body.document.access).toEqual({ ownerName: "인도자" });
+    expect(body.document.folderId).toBeNull();
+
+    const rows = await env.DB.prepare(
+      "SELECT COUNT(*) AS n FROM presentation_members WHERE presentation_id = ?",
+    )
+      .bind(DOC_ID)
+      .first<{ n: number }>();
+    expect(rows?.n).toBe(0);
+  });
+
+  it("꺼진 링크·휴지통의 세트는 로그인 없이도 볼 수 없다", async () => {
+    const token = await shareAndJoin();
+    currentUser = null;
+    expect((await app.request("/api/share/nope", {}, env)).status).toBe(404);
+
+    await as(
+      OWNER,
+      `/api/presentations/${DOC_ID}`,
+      send("PUT", makeDoc({ trashedAt: "2026-09-22T00:00:00.000Z" })),
+    );
+    currentUser = null;
+    expect((await app.request(`/api/share/${token}`, {}, env)).status).toBe(
+      404,
+    );
+
+    await as(OWNER, `/api/presentations/${DOC_ID}`, send("PUT", makeDoc()));
+    await as(
+      OWNER,
+      `/api/presentations/${DOC_ID}/share`,
+      send("PUT", { access: "off" }),
+    );
+    currentUser = null;
+    expect((await app.request(`/api/share/${token}`, {}, env)).status).toBe(
+      404,
+    );
   });
 
   it("로그인하지 않으면 링크로 들어오지 못한다", async () => {

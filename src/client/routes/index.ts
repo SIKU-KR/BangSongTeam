@@ -7,6 +7,7 @@ export { BackgroundsRoute } from "./BackgroundsRoute";
 export { EditorRoute } from "./EditorRoute";
 export { FullscreenPresentRoute } from "./FullscreenPresentRoute";
 export { ShareJoinRoute } from "./ShareJoinRoute";
+export { SharePreviewRoute } from "./SharePreviewRoute";
 
 export {
   useAppShell,
