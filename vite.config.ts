@@ -62,8 +62,8 @@ const appConfig: UserConfig = {
         ],
       },
       workbox: {
-        // 앱 셸만 프리캐시한다. 폰트를 여기 넣으면 33MB짜리 설치가 된다 —
-        // Pretendard 9종과 Noto Sans KR의 유니코드 서브셋 수백 개가 모두 빌드
+        // 앱 셸만 프리캐시한다. 폰트를 여기 넣으면 수십 MB짜리 설치가 된다 —
+        // Pretendard·Noto Sans KR·나눔명조의 유니코드 서브셋 수백 개가 모두 빌드
         // 산출물에 있기 때문이다. 폰트는 아래 runtimeCaching으로 실제 쓰인 것만
         // 담고, 세트를 열면 백그라운드 캐시가 가사에 쓰인 글꼴을 불러 캐시를 데운다.
         globPatterns: ["**/*.{js,css,html,ico,svg,webmanifest}", "icons/*.png"],
@@ -75,14 +75,17 @@ const appConfig: UserConfig = {
         runtimeCaching: [
           {
             // 번들 웹폰트 (Pretendard, Noto Sans KR, Nanum Myeongjo).
-            // 외부 CDN이 아니라 자체 오리진 /assets/ 에서 온다.
+            // 외부 CDN이 아니라 자체 오리진 /assets/ 에서 온다. 서브셋 파일은
+            // Pretendard Variable 92개, Noto Sans KR 248개, 나눔명조 184개다.
+            // 한도가 이보다 작으면 가사에 쓴 서브셋이 밀려나 오프라인 송출에서
+            // 대체 글꼴로 나올 수 있으므로 전부 담을 수 있게 둔다.
             urlPattern: /\.(?:woff2?|ttf|otf|eot)$/i,
             handler: "CacheFirst",
             options: {
               cacheName: "worship-fonts-cache",
               cacheableResponse: { statuses: [0, 200] },
               expiration: {
-                maxEntries: 300,
+                maxEntries: 600,
                 maxAgeSeconds: 365 * 24 * 60 * 60,
               },
             },
@@ -126,7 +129,31 @@ const appConfig: UserConfig = {
       },
     }),
   ],
-  build: { outDir: "dist" },
+  build: {
+    outDir: "dist",
+    rolldownOptions: {
+      output: {
+        // 앱 코드만 바뀐 배포에서 벤더 청크를 다시 받지 않도록 따로 둔다.
+        // Base UI는 편집기에서만 쓰는 부품이 많아 entriesAware로 라우트별로 나눈다.
+        // 한 청크로 묶으면 로그인 화면이 편집기의 메뉴·셀렉트까지 받는다.
+        codeSplitting: {
+          groups: [
+            {
+              name: "vendor-react",
+              test: /[\\/]node_modules[\\/](react|react-dom|scheduler|react-router|react-router-dom)[\\/]/,
+              priority: 2,
+            },
+            {
+              name: "vendor-base-ui",
+              test: /[\\/]node_modules[\\/](@base-ui|@floating-ui)[\\/]/,
+              entriesAware: true,
+              priority: 1,
+            },
+          ],
+        },
+      },
+    },
+  },
 };
 
 /**

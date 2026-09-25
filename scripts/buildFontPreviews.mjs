@@ -5,7 +5,7 @@
  * 이름을 그 글꼴로 그린 흰 글씨·투명 배경 WebP를 `src/client/public/font-previews/<id>.webp`
  * 로 만든다. 앱은 이 이미지를 CSS mask로 써서 테마 글자색으로 칠한다.
  *
- * 눈누 카탈로그(`src/shared/constants/noonnuFonts.ts`)가 바뀌면 다시 실행해 결과를 커밋한다.
+ * 눈누 카탈로그(`src/shared/constants/noonnuFontCatalog.ts`)가 바뀌면 다시 실행해 결과를 커밋한다.
  * 이미 있는 파일은 건너뛰므로 전체를 다시 그리려면 `--force`를 붙인다.
  *
  *   pnpm fonts:previews [--force]
@@ -25,7 +25,7 @@ import {
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { NOONNU_FONTS } from "../src/shared/constants/noonnuFonts.ts";
+import { NOONNU_FONTS } from "../src/shared/constants/noonnuFontCatalog.ts";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const OUT_DIR = path.join(ROOT, "src/client/public/font-previews");

@@ -14,6 +14,7 @@ import { Button } from "#components/ui/button";
 import {
   Tooltip,
   TooltipContent,
+  TooltipProvider,
   TooltipTrigger,
 } from "#components/ui/tooltip";
 import {
@@ -106,10 +107,25 @@ export interface EditorGuestOptions {
  *
  * `guest`가 있으면 로그인하지 않은 사람의 공유 세트 보기다. 드라이브·새 세트가
  * 없고, 서버 최신본 받기(로그인 필요)도 하지 않는다.
+ *
+ * 툴팁 Provider를 앱 루트가 아니라 여기에 두는 것은 Base UI 툴팁 전체가 로그인·송출
+ * 화면이 받는 메인 청크에 들어가지 않게 하기 위해서다.
  */
-export function EditorRoute({
+export function EditorRoute(props: {
+  guest?: EditorGuestOptions;
+}): React.JSX.Element {
+  return (
+    <TooltipProvider>
+      <EditorScreen {...props} />
+    </TooltipProvider>
+  );
+}
+
+function EditorScreen({
   guest,
-}: { guest?: EditorGuestOptions } = {}): React.JSX.Element {
+}: {
+  guest?: EditorGuestOptions;
+}): React.JSX.Element {
   const navigate = useNavigate();
   const location = useLocation();
   const params = useParams<{ presentationId: string }>();

@@ -1,7 +1,7 @@
 import React, { useEffect } from "react";
 import type { Slide, DeckStyle, GridAnchorPreset } from "#shared";
 import { GRID_ANCHOR_TRANSFORMS, TEXT_SHADOW_PRESETS } from "#shared";
-import { loadWebFont } from "../../lib/fonts/fontLoader";
+import { loadWebFont, toCssFontFamily } from "../../lib/fonts/fontLoader";
 
 export interface TextLayerProps {
   slide?: Slide | null;
@@ -46,7 +46,7 @@ export function TextLayer({
 
   useEffect(() => {
     if (fontFamily) {
-      loadWebFont(fontFamily);
+      void loadWebFont(fontFamily);
     }
   }, [fontFamily]);
 
@@ -71,7 +71,7 @@ export function TextLayer({
           top: `${position.yPercent}%`,
           width: `${position.widthPercent}%`,
           transform,
-          fontFamily,
+          fontFamily: toCssFontFamily(fontFamily),
           fontSize: `${fontSizePx}px`,
           color: fontColor,
           textAlign,

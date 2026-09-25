@@ -1,11 +1,9 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
-@import "pretendard/dist/web/static/pretendard.css";
-@import "@fontsource/noto-sans-kr/400.css";
-@import "@fontsource/noto-sans-kr/700.css";
-@import "@fontsource/nanum-myeongjo/400.css";
-@import "@fontsource/nanum-myeongjo/700.css";
+/* UI 글꼴은 화면에 나온 글자의 서브셋만 받는다. 가사용 번들 글꼴(Noto Sans KR,
+   나눔명조)은 lib/fonts/fontLoader.ts가 스테이지에서 쓸 때 따로 붙인다 */
+@import "pretendard/dist/web/variable/pretendardvariable-dynamic-subset.css";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -19,7 +17,8 @@
 
 @theme inline {
   --font-sans:
-    Pretendard, -apple-system, BlinkMacSystemFont, system-ui, Roboto, sans-serif;
+    "Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont,
+    system-ui, Roboto, sans-serif;
   --font-heading: var(--font-sans);
   --text-2xs: 0.6875rem;
   --text-2xs--line-height: 1rem;

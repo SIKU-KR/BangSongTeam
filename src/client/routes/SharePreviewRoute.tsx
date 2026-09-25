@@ -12,8 +12,7 @@ import { SHARE_COPY_PARAM, shareCopyPath } from "../features/sharing/shareLink";
 import { useSharePreview } from "../lib/api/shareQueries";
 import { describeApiError } from "../lib/api/request";
 import { refreshBackgroundCatalog } from "../lib/sync";
-import { EditorRoute } from "./EditorRoute";
-import { LoginRoute } from "./LoginRoute";
+import { EditorRoute, LoginRoute, preloadEditorRoute } from "./lazyRoutes";
 
 /**
  * 로그인하지 않은 사람의 공유 링크(`/s/:token`).
@@ -37,6 +36,7 @@ export function SharePreviewRoute(): React.JSX.Element {
 
   useEffect(() => {
     void refreshBackgroundCatalog();
+    preloadEditorRoute();
   }, []);
 
   if (searchParams.has(SHARE_COPY_PARAM)) {

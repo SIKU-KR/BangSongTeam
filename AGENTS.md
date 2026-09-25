@@ -43,6 +43,7 @@ config/       drizzle.config.ts (passed to drizzle-kit by path), dev.vars.exampl
 | `src/client` | `#shared`, `import type` from `src/worker`  |
 
 - Projection files (`routes/FullscreenPresentRoute.tsx`, `features/presentation/**`, `components/stage/**`) must not import `@tanstack/react-query` or `lib/api`.
+- Routes other than the projection, landing and share-join routes are `React.lazy` chunks (`routes/lazyRoutes.ts`). Modules in the main chunk (`App.tsx`, the projection route, stores) import feature files directly, not a feature barrel (`features/editor`, `features/drive`): Rolldown treats everything behind a barrel as reachable and pulls the editor and drive chunks (react-moveable, @dnd-kit) back into the first load. The noonnu font catalog loads through `loadNoonnuFontCatalog()`.
 - `vite.config.ts` imports `src/shared/constants/projection.ts` by relative path, so that file must stay import-free.
 
 ## Commands
@@ -60,7 +61,7 @@ pnpm build                         # dist/ (SPA + Worker); CI then runs `pnpm ex
 pnpm format:check                  # Prettier (`pnpm format` to fix)
 pnpm db:generate                   # after editing src/db/schema/*
 pnpm types                         # after editing wrangler.jsonc; needs .dev.vars or the secrets drop out of Env
-pnpm fonts:previews                # after editing noonnuFonts.ts; renders missing font-list previews with local Chrome (Node 23.6+)
+pnpm fonts:previews                # after editing noonnuFontCatalog.ts; renders missing font-list previews with local Chrome (Node 23.6+)
 ```
 
 - **Local login**: with `DEV_LOGIN_ENABLED=true`, the login page offers a dev login (`POST /api/dev-login`, default `dev@worship.local`). It works only when the host is localhost.

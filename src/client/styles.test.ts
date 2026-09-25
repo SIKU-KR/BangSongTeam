@@ -19,10 +19,15 @@ describe("Global Styles & Local Pretendard Webfont Configuration", () => {
     expect(cssContent).toMatch(/-webkit-font-smoothing:\s*antialiased/);
   });
 
-  it("should bundle Fontsource Korean webfonts locally for SUPPORTED_FONTS", () => {
+  it("UI 글꼴은 dynamic subset으로 싣고, 가사용 번들 글꼴은 메인 CSS에 넣지 않는다", () => {
     const cssContent = fs.readFileSync(cssPath, "utf-8");
-    expect(cssContent).toMatch(/@fontsource\/noto-sans-kr/);
-    expect(cssContent).toMatch(/@fontsource\/nanum-myeongjo/);
+    expect(cssContent).toMatch(
+      /@import "pretendard\/dist\/web\/variable\/pretendardvariable-dynamic-subset\.css"/,
+    );
+    expect(cssContent).not.toMatch(
+      /pretendard\/dist\/web\/static\/pretendard\.css/,
+    );
+    expect(cssContent).not.toMatch(/@fontsource\//);
   });
 
   it("should import index.css in main.tsx", () => {
