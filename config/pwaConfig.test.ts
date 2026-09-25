@@ -20,6 +20,14 @@ describe("PWA 설정", () => {
     expect(config).not.toContain("206]");
   });
 
+  it("글꼴 미리보기 이미지는 프리캐시하지 않고 런타임에 본 것만 캐시한다", () => {
+    expect(config).toContain('cacheName: "worship-font-previews-cache"');
+    expect(config).toMatch(/globPatterns: \[[^\]]*\]/);
+    expect(config.match(/globPatterns: \[[^\]]*\]/)?.[0]).not.toMatch(
+      /webp|font-previews/,
+    );
+  });
+
   it("오프라인 새로고침을 위한 navigateFallback이 있고 /api는 제외된다", () => {
     expect(config).toContain('navigateFallback: "index.html"');
     expect(config).toContain("navigateFallbackDenylist");
