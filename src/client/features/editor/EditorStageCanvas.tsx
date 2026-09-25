@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { Suspense, lazy, useState } from "react";
 import {
   ChevronLeftIcon,
   ChevronRightIcon,
@@ -21,8 +21,11 @@ import { IconButton } from "#components/common/IconButton";
 import type { Slide, DeckStyle, TextBoxPosition } from "#shared";
 import { DEFAULT_DECK_STYLE } from "#shared";
 import { SlideStage } from "../../components/stage/SlideStage";
-import { TextBoxMoveable } from "./TextBoxMoveable";
 import type { SnapGuides } from "./textBoxDrag";
+
+const TextBoxMoveable = lazy(() =>
+  import("./TextBoxMoveable").then((m) => ({ default: m.TextBoxMoveable })),
+);
 
 export interface EditorStageCanvasProps {
   slide?: Slide | null;
@@ -48,7 +51,11 @@ export interface EditorStageCanvasProps {
   className?: string;
 }
 
-/** 슬라이드 편집 캔버스 작업 공간 컴포넌트. */
+/**
+ * 슬라이드 편집 캔버스 작업 공간 컴포넌트.
+ * 텍스트 박스 조작(react-moveable)은 고칠 수 있을 때만 따로 불러와, 보기 전용인
+ * 공유 링크 미리보기는 그 청크를 받지 않는다.
+ */
 export function EditorStageCanvas({
   slide,
   style,
@@ -177,15 +184,17 @@ export function EditorStageCanvas({
           )}
 
           {canEditTextBox && (
-            <TextBoxMoveable
-              target={textBoxEl}
-              refreshKey={refreshKey}
-              onPreview={(position, guides) =>
-                setDraft(position ? { position, guides } : null)
-              }
-              onCommit={(position) => onUpdateStyle?.({ position })}
-              onDoubleClick={onRequestTextEdit}
-            />
+            <Suspense fallback={null}>
+              <TextBoxMoveable
+                target={textBoxEl}
+                refreshKey={refreshKey}
+                onPreview={(position, guides) =>
+                  setDraft(position ? { position, guides } : null)
+                }
+                onCommit={(position) => onUpdateStyle?.({ position })}
+                onDoubleClick={onRequestTextEdit}
+              />
+            </Suspense>
           )}
 
           <IconButton

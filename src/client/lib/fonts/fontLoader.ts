@@ -1,4 +1,4 @@
-import { NOONNU_FONTS, type NoonnuFont } from "#shared";
+import { loadNoonnuFontCatalog, type NoonnuFont } from "#shared";
 
 /**
  * npm으로 번들한 글꼴. 카탈로그의 CDN 주소 대신 자체 오리진에서 받는다.
@@ -36,21 +36,38 @@ const BUNDLED_FONT_FAMILIES: Record<string, string> = {
 /** 불러오기를 시작한 폰트 ID(번들 글꼴은 이름)별 로드 약속 */
 const loadingFonts = new Map<string, Promise<void>>();
 
-/** 폰트 이름 및 카드 패밀리명 색인 */
-const fontIndex = new Map<string, NoonnuFont>();
+let fontIndexPromise: Promise<Map<string, NoonnuFont>> | undefined;
 
-for (const font of NOONNU_FONTS) {
-  fontIndex.set(font.name, font);
-  if (font.cardFamily) {
-    fontIndex.set(font.cardFamily, font);
-  }
+/**
+ * 이름·카드 패밀리명 색인. 카탈로그 청크를 처음 찾을 때 한 번만 불러온다.
+ * 청크를 받지 못하면 빈 색인으로 두어 기본 글꼴로 그리고, 다음 호출에서 다시 받는다.
+ */
+function loadFontIndex(): Promise<Map<string, NoonnuFont>> {
+  fontIndexPromise ??= loadNoonnuFontCatalog().then(
+    (fonts) => {
+      const index = new Map<string, NoonnuFont>();
+      for (const font of fonts) {
+        index.set(font.name, font);
+        if (font.cardFamily) index.set(font.cardFamily, font);
+      }
+      return index;
+    },
+    () => {
+      fontIndexPromise = undefined;
+      return new Map<string, NoonnuFont>();
+    },
+  );
+  return fontIndexPromise;
 }
 
 /**
- * 폰트 이름 또는 카드 패밀리명으로 눈누 폰트 메타데이터 조회
+ * 폰트 이름 또는 카드 패밀리명으로 눈누 폰트 메타데이터 조회.
+ * 저장된 덱의 글꼴을 찾을 때 카탈로그 청크를 불러오므로 비동기다.
  */
-export function getNoonnuFont(nameOrFamily: string): NoonnuFont | undefined {
-  return fontIndex.get(nameOrFamily);
+export async function getNoonnuFont(
+  nameOrFamily: string,
+): Promise<NoonnuFont | undefined> {
+  return (await loadFontIndex()).get(nameOrFamily);
 }
 
 /**
@@ -84,18 +101,17 @@ function loadBundledFont(
  * stylesheet link를 붙인다. 번들 글꼴은 `@font-face`가 문서에 들어간 뒤 끝나므로,
  * 곧바로 `document.fonts.load`를 부르려면 기다려야 한다.
  */
-export function loadWebFont(nameOrFamily: string): Promise<void> {
-  if (typeof document === "undefined") return Promise.resolve();
+export async function loadWebFont(nameOrFamily: string): Promise<void> {
+  if (typeof document === "undefined") return;
 
   if (nameOrFamily in BUNDLED_FONT_STYLESHEETS) {
     const loadStylesheet = BUNDLED_FONT_STYLESHEETS[nameOrFamily];
-    return loadStylesheet
-      ? loadBundledFont(nameOrFamily, loadStylesheet)
-      : Promise.resolve();
+    if (loadStylesheet) await loadBundledFont(nameOrFamily, loadStylesheet);
+    return;
   }
 
-  const font = fontIndex.get(nameOrFamily);
-  if (!font || !font.url) return Promise.resolve();
+  const font = await getNoonnuFont(nameOrFamily);
+  if (!font || !font.url) return;
 
   const existing = loadingFonts.get(font.id);
   if (existing) return existing;
@@ -141,14 +157,15 @@ export function loadWebFont(nameOrFamily: string): Promise<void> {
 /**
  * 여러 폰트의 @font-face 스타일을 한 번에 로드 (글꼴 목록 렌더링용)
  */
-export function loadWebFonts(
+export async function loadWebFonts(
   namesOrFamilies: readonly (NoonnuFont | string)[],
-): void {
+): Promise<void> {
   if (typeof document === "undefined") return;
-  for (const item of namesOrFamilies) {
-    const name = typeof item === "string" ? item : item.name;
-    void loadWebFont(name);
-  }
+  await Promise.all(
+    namesOrFamilies.map((item) =>
+      loadWebFont(typeof item === "string" ? item : item.name),
+    ),
+  );
 }
 
 /**

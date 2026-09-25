@@ -115,7 +115,31 @@ const appConfig: UserConfig = {
       },
     }),
   ],
-  build: { outDir: "dist" },
+  build: {
+    outDir: "dist",
+    rolldownOptions: {
+      output: {
+        // 앱 코드만 바뀐 배포에서 벤더 청크를 다시 받지 않도록 따로 둔다.
+        // Base UI는 편집기에서만 쓰는 부품이 많아 entriesAware로 라우트별로 나눈다.
+        // 한 청크로 묶으면 로그인 화면이 편집기의 메뉴·셀렉트까지 받는다.
+        codeSplitting: {
+          groups: [
+            {
+              name: "vendor-react",
+              test: /[\\/]node_modules[\\/](react|react-dom|scheduler|react-router|react-router-dom)[\\/]/,
+              priority: 2,
+            },
+            {
+              name: "vendor-base-ui",
+              test: /[\\/]node_modules[\\/](@base-ui|@floating-ui)[\\/]/,
+              entriesAware: true,
+              priority: 1,
+            },
+          ],
+        },
+      },
+    },
+  },
 };
 
 /**

@@ -30,6 +30,24 @@ describe("PWA 설정", () => {
     expect(config).toContain('registerType: "prompt"');
   });
 
+  it("나뉜 JS 청크도 모두 프리캐시해 오프라인에서 각 화면이 열린다", () => {
+    expect(config).toContain('globPatterns: ["**/*.{js,');
+  });
+
+  it("해시가 붙은 /assets/*만 immutable로 캐시하고 index.html·sw.js는 재검증한다", () => {
+    const headers = fs.readFileSync(
+      path.join(rootDir, "src/client/public/_headers"),
+      "utf-8",
+    );
+    const rules = headers
+      .split("\n")
+      .filter((line) => line.trim() && !line.startsWith("#"));
+    expect(rules).toEqual([
+      "/assets/*",
+      "  Cache-Control: public, max-age=31536000, immutable",
+    ]);
+  });
+
   it("글꼴 캐시 한도가 번들 글꼴 서브셋을 모두 담는다", () => {
     const fontCache = config.slice(
       config.indexOf('cacheName: "worship-fonts-cache"'),

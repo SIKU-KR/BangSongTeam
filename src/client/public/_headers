@@ -1,0 +1,4 @@
+# 해시가 붙은 빌드 산출물은 내용이 바뀌면 이름도 바뀌므로 1년 동안 재검증하지 않는다.
+# index.html·sw.js 등 나머지는 기본값(매번 재검증)을 그대로 쓴다.
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
