@@ -2,13 +2,14 @@ import React, { useState } from "react";
 import { Outlet, useLocation } from "react-router-dom";
 import { SidebarInset, SidebarProvider } from "#components/ui/sidebar";
 import { Toaster } from "#components/ui/sonner";
+import { TooltipProvider } from "#components/ui/tooltip";
 import type { Deck } from "#shared";
 import { ChromeAlertBanner } from "../components/common/ChromeAlertBanner";
 import { StorageWarningBanner } from "../components/common/StorageWarningBanner";
 import { AppUpdateBanner } from "../components/common/AppUpdateBanner";
 import { AppSidebar } from "../components/layout/AppSidebar";
 import { AppHeader } from "../components/layout/AppHeader";
-import { QuickLyricPasteModal } from "../features/editor";
+import { QuickLyricPasteModal } from "../features/editor/QuickLyricPasteModal";
 import { addDeckToPresentation } from "../features/presentation";
 import {
   DEFAULT_SORT_ORDER,
@@ -56,12 +57,17 @@ function isDrivePath(pathname: string): boolean {
   );
 }
 
-/** 사이드바, 헤더 및 공통 툴바를 제공하는 셸 레이아웃 */
+/**
+ * 사이드바, 헤더 및 공통 툴바를 제공하는 셸 레이아웃.
+ * 툴팁 Provider는 Base UI 툴팁이 메인 청크에 들어가지 않도록 앱 루트 대신 여기에 둔다.
+ */
 export function AppShellLayout(): React.JSX.Element {
   return (
-    <DriveProvider>
-      <AppShellFrame />
-    </DriveProvider>
+    <TooltipProvider>
+      <DriveProvider>
+        <AppShellFrame />
+      </DriveProvider>
+    </TooltipProvider>
   );
 }
 

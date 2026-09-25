@@ -12,8 +12,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "#components/ui/select";
-import type { DeckStyle } from "#shared";
-import { DEFAULT_PRESET_FONTS, NOONNU_FONTS } from "#shared";
+import type { DeckStyle, NoonnuFont } from "#shared";
+import { DEFAULT_PRESET_FONTS, loadNoonnuFontCatalog } from "#shared";
 import { loadWebFont, loadWebFonts } from "../../../lib/fonts/fontLoader";
 import { ColorPickerField } from "../ColorPickerField";
 import { ToggleGroup, ToggleGroupItem } from "#components/ui/toggle-group";
@@ -58,34 +58,42 @@ export function FontControls({
   const [fontSearch, setFontSearch] = useState("");
   const [displayLimit, setDisplayLimit] = useState(60);
 
+  const [catalog, setCatalog] = useState<readonly NoonnuFont[]>([]);
+
   useEffect(() => {
     if (style.fontFamily) {
-      loadWebFont(style.fontFamily);
+      void loadWebFont(style.fontFamily);
     }
   }, [style.fontFamily]);
 
-  const presetSet = new Set<string>(DEFAULT_PRESET_FONTS);
+  const loadCatalog = (): void => {
+    if (catalog.length === 0) void loadNoonnuFontCatalog().then(setCatalog);
+  };
+
   const searchTrimmed = fontSearch.trim().toLowerCase();
 
   const allAdditionalFonts = React.useMemo(() => {
-    return NOONNU_FONTS.filter((f) => !presetSet.has(f.name));
-  }, []);
+    const presetSet = new Set<string>(DEFAULT_PRESET_FONTS);
+    return catalog.filter((f) => !presetSet.has(f.name));
+  }, [catalog]);
 
   const filteredFonts = React.useMemo(() => {
     if (!searchTrimmed) {
       return allAdditionalFonts.slice(0, displayLimit);
     }
-    return NOONNU_FONTS.filter(
-      (f) =>
-        f.name.toLowerCase().includes(searchTrimmed) ||
-        f.author.toLowerCase().includes(searchTrimmed) ||
-        f.cardFamily.toLowerCase().includes(searchTrimmed),
-    ).slice(0, 60);
-  }, [allAdditionalFonts, searchTrimmed, displayLimit]);
+    return catalog
+      .filter(
+        (f) =>
+          f.name.toLowerCase().includes(searchTrimmed) ||
+          f.author.toLowerCase().includes(searchTrimmed) ||
+          f.cardFamily.toLowerCase().includes(searchTrimmed),
+      )
+      .slice(0, 60);
+  }, [catalog, allAdditionalFonts, searchTrimmed, displayLimit]);
 
   useEffect(() => {
-    loadWebFonts(DEFAULT_PRESET_FONTS);
-    loadWebFonts(filteredFonts);
+    void loadWebFonts(DEFAULT_PRESET_FONTS);
+    void loadWebFonts(filteredFonts);
   }, [filteredFonts]);
 
   return (
@@ -93,9 +101,12 @@ export function FontControls({
       <Select
         value={style.fontFamily}
         disabled={disabled}
+        onOpenChange={(open) => {
+          if (open) loadCatalog();
+        }}
         onValueChange={(value) => {
           if (value) {
-            loadWebFont(value);
+            void loadWebFont(value);
             onUpdateStyle({ fontFamily: value as DeckStyle["fontFamily"] });
           }
         }}
@@ -135,7 +146,9 @@ export function FontControls({
               <SelectSeparator />
               <SelectGroup>
                 <SelectLabel className="px-2 py-1 text-2xs text-muted-foreground">
-                  눈누 무료 웹폰트 ({allAdditionalFonts.length}종)
+                  {catalog.length > 0
+                    ? `눈누 무료 웹폰트 (${allAdditionalFonts.length}종)`
+                    : "눈누 무료 웹폰트 불러오는 중…"}
                 </SelectLabel>
                 {filteredFonts.map((font) => (
                   <SelectItem

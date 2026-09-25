@@ -29,6 +29,24 @@ describe("PWA 설정", () => {
     expect(config).toContain('registerType: "prompt"');
   });
 
+  it("나뉜 JS 청크도 모두 프리캐시해 오프라인에서 각 화면이 열린다", () => {
+    expect(config).toContain('globPatterns: ["**/*.{js,');
+  });
+
+  it("해시가 붙은 /assets/*만 immutable로 캐시하고 index.html·sw.js는 재검증한다", () => {
+    const headers = fs.readFileSync(
+      path.join(rootDir, "src/client/public/_headers"),
+      "utf-8",
+    );
+    const rules = headers
+      .split("\n")
+      .filter((line) => line.trim() && !line.startsWith("#"));
+    expect(rules).toEqual([
+      "/assets/*",
+      "  Cache-Control: public, max-age=31536000, immutable",
+    ]);
+  });
+
   it("PWA 아이콘 파일이 실제로 존재한다", () => {
     const iconsDir = path.join(rootDir, "src/client/public/icons");
     for (const file of ["icon-192.png", "icon-512.png", "maskable-512.png"]) {

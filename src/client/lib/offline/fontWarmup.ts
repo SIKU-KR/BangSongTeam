@@ -23,10 +23,7 @@ export async function warmPresentationFonts(
   const fonts = collectPresentationFonts(presentation);
   if (fonts.length === 0) return;
 
-  // 동적 웹폰트 @font-face 스타일 주입
-  for (const fontFamily of fonts) {
-    loadWebFont(fontFamily);
-  }
+  await Promise.all(fonts.map((fontFamily) => loadWebFont(fontFamily)));
 
   const sample = sampleTextOf(presentation);
   if (!sample) return;

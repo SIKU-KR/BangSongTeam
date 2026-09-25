@@ -1,32 +1,49 @@
-import { NOONNU_FONTS, type NoonnuFont } from "#shared";
+import { loadNoonnuFontCatalog, type NoonnuFont } from "#shared";
 
 /** 주입된 폰트 ID 집합 */
 const injectedFontIds = new Set<string>();
 
-/** 폰트 이름 및 카드 패밀리명 색인 */
-const fontIndex = new Map<string, NoonnuFont>();
+let fontIndexPromise: Promise<Map<string, NoonnuFont>> | undefined;
 
-for (const font of NOONNU_FONTS) {
-  fontIndex.set(font.name, font);
-  if (font.cardFamily) {
-    fontIndex.set(font.cardFamily, font);
-  }
+/**
+ * 이름·카드 패밀리명 색인. 카탈로그 청크를 처음 찾을 때 한 번만 불러온다.
+ * 청크를 받지 못하면 빈 색인으로 두어 기본 글꼴로 그리고, 다음 호출에서 다시 받는다.
+ */
+function loadFontIndex(): Promise<Map<string, NoonnuFont>> {
+  fontIndexPromise ??= loadNoonnuFontCatalog().then(
+    (fonts) => {
+      const index = new Map<string, NoonnuFont>();
+      for (const font of fonts) {
+        index.set(font.name, font);
+        if (font.cardFamily) index.set(font.cardFamily, font);
+      }
+      return index;
+    },
+    () => {
+      fontIndexPromise = undefined;
+      return new Map<string, NoonnuFont>();
+    },
+  );
+  return fontIndexPromise;
 }
 
 /**
- * 폰트 이름 또는 카드 패밀리명으로 눈누 폰트 메타데이터 조회
+ * 폰트 이름 또는 카드 패밀리명으로 눈누 폰트 메타데이터 조회.
+ * 저장된 덱의 글꼴을 찾을 때 카탈로그 청크를 불러오므로 비동기다.
  */
-export function getNoonnuFont(nameOrFamily: string): NoonnuFont | undefined {
-  return fontIndex.get(nameOrFamily);
+export async function getNoonnuFont(
+  nameOrFamily: string,
+): Promise<NoonnuFont | undefined> {
+  return (await loadFontIndex()).get(nameOrFamily);
 }
 
 /**
  * 웹폰트 동적 로드 (DOM에 @font-face 스타일 또는 stylesheet link 주입)
  */
-export function loadWebFont(nameOrFamily: string): void {
+export async function loadWebFont(nameOrFamily: string): Promise<void> {
   if (typeof document === "undefined") return;
 
-  const font = fontIndex.get(nameOrFamily);
+  const font = await getNoonnuFont(nameOrFamily);
   if (!font || !font.url) return;
   if (injectedFontIds.has(font.id)) return;
 
@@ -69,14 +86,15 @@ export function loadWebFont(nameOrFamily: string): void {
 /**
  * 여러 폰트의 @font-face 스타일을 한 번에 로드 (글꼴 목록 렌더링용)
  */
-export function loadWebFonts(
+export async function loadWebFonts(
   namesOrFamilies: readonly (NoonnuFont | string)[],
-): void {
+): Promise<void> {
   if (typeof document === "undefined") return;
-  for (const item of namesOrFamilies) {
-    const name = typeof item === "string" ? item : item.name;
-    loadWebFont(name);
-  }
+  await Promise.all(
+    namesOrFamilies.map((item) =>
+      loadWebFont(typeof item === "string" ? item : item.name),
+    ),
+  );
 }
 
 /**
@@ -86,7 +104,7 @@ export async function preloadWebFont(
   nameOrFamily: string,
   sampleText: string = "가나다라마바사 123 ABC",
 ): Promise<void> {
-  loadWebFont(nameOrFamily);
+  await loadWebFont(nameOrFamily);
 
   if (typeof document === "undefined" || !document.fonts?.load) return;
 

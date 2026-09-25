@@ -46,7 +46,7 @@ export function TextLayer({
 
   useEffect(() => {
     if (fontFamily) {
-      loadWebFont(fontFamily);
+      void loadWebFont(fontFamily);
     }
   }, [fontFamily]);
 

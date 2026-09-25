@@ -1,14 +1,14 @@
-import React, { useEffect, useState } from "react";
+import React, { Suspense, useEffect, useState } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
-import { TooltipProvider } from "#components/ui/tooltip";
 import { ThemeProvider } from "#components/theme-provider";
+import { RouteErrorBoundary } from "./components/common/RouteErrorBoundary";
 import {
   hydrateFromStorage,
   flushPendingWrites,
 } from "./features/presentation";
-import { hydrateSongLibrary } from "./features/editor";
-import { hydrateFoldersFromStorage } from "./features/drive";
-import { hydrateBackgroundCatalog } from "./features/backgrounds";
+import { hydrateSongLibrary } from "./features/editor/songLibraryStore";
+import { hydrateFoldersFromStorage } from "./features/drive/folderStore";
+import { hydrateBackgroundCatalog } from "./features/backgrounds/backgroundCatalog";
 import { hydrateSession, useSession } from "./lib/auth";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { createAppQueryClient } from "./lib/api/queryClient";
@@ -19,7 +19,6 @@ import {
   flushDeckSync,
   flushFolderSync,
 } from "./lib/sync";
-import { LoginRoute } from "./routes/LoginRoute";
 import {
   AppShellLayout,
   LandingRoute,
@@ -29,6 +28,7 @@ import {
   BackgroundsRoute,
   EditorRoute,
   FullscreenPresentRoute,
+  LoginRoute,
   ShareJoinRoute,
   SharePreviewRoute,
 } from "./routes";
@@ -105,9 +105,7 @@ export const THEME_STORAGE_KEY = "worship-theme";
 export function App(): React.JSX.Element {
   return (
     <ThemeProvider defaultTheme="system" storageKey={THEME_STORAGE_KEY}>
-      <TooltipProvider>
-        <AppRoutes />
-      </TooltipProvider>
+      <AppRoutes />
     </ThemeProvider>
   );
 }
@@ -118,12 +116,9 @@ function AppRoutes(): React.JSX.Element {
 
   if (!isHydrated) {
     return (
-      <div
-        data-testid="app-hydrating"
-        className="flex min-h-screen items-center justify-center bg-background text-sm text-muted-foreground"
-      >
+      <LoadingScreen testId="app-hydrating">
         저장된 프레젠테이션을 불러오는 중…
-      </div>
+      </LoadingScreen>
     );
   }
 
@@ -132,28 +127,35 @@ function AppRoutes(): React.JSX.Element {
   return (
     <AppProviders>
       <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<LandingRoute />} />
+        <RouteErrorBoundary>
+          <Suspense fallback={<RouteFallback />}>
+            <Routes>
+              <Route path="/" element={<LandingRoute />} />
 
-          <Route element={<AppShellLayout />}>
-            <Route path="/presentations" element={<PresentationsRoute />} />
-            <Route
-              path="/presentations/folders/:folderId"
-              element={<PresentationsRoute />}
-            />
-            <Route path="/presentations/trash" element={<TrashRoute />} />
-            <Route path="/lyrics" element={<LyricsRoute />} />
-            <Route path="/backgrounds" element={<BackgroundsRoute />} />
-          </Route>
+              <Route element={<AppShellLayout />}>
+                <Route path="/presentations" element={<PresentationsRoute />} />
+                <Route
+                  path="/presentations/folders/:folderId"
+                  element={<PresentationsRoute />}
+                />
+                <Route path="/presentations/trash" element={<TrashRoute />} />
+                <Route path="/lyrics" element={<LyricsRoute />} />
+                <Route path="/backgrounds" element={<BackgroundsRoute />} />
+              </Route>
 
-          <Route path="/editor/:presentationId" element={<EditorRoute />} />
-          <Route path="/s/:token" element={<ShareJoinRoute />} />
-          <Route
-            path="/present/:presentationId/fullscreen"
-            element={<FullscreenPresentRoute />}
-          />
-          <Route path="*" element={<Navigate to="/presentations" replace />} />
-        </Routes>
+              <Route path="/editor/:presentationId" element={<EditorRoute />} />
+              <Route path="/s/:token" element={<ShareJoinRoute />} />
+              <Route
+                path="/present/:presentationId/fullscreen"
+                element={<FullscreenPresentRoute />}
+              />
+              <Route
+                path="*"
+                element={<Navigate to="/presentations" replace />}
+              />
+            </Routes>
+          </Suspense>
+        </RouteErrorBoundary>
       </BrowserRouter>
     </AppProviders>
   );
@@ -167,16 +169,44 @@ function GuestRoutes(): React.JSX.Element {
   return (
     <AppProviders>
       <BrowserRouter>
-        <Routes>
-          <Route path="/s/:token" element={<SharePreviewRoute />} />
-          <Route
-            path="/present/:presentationId/fullscreen"
-            element={<FullscreenPresentRoute />}
-          />
-          <Route path="*" element={<LoginRoute />} />
-        </Routes>
+        <RouteErrorBoundary>
+          <Suspense fallback={<RouteFallback />}>
+            <Routes>
+              <Route path="/s/:token" element={<SharePreviewRoute />} />
+              <Route
+                path="/present/:presentationId/fullscreen"
+                element={<FullscreenPresentRoute />}
+              />
+              <Route path="*" element={<LoginRoute />} />
+            </Routes>
+          </Suspense>
+        </RouteErrorBoundary>
       </BrowserRouter>
     </AppProviders>
+  );
+}
+
+function LoadingScreen({
+  testId,
+  children,
+}: {
+  testId: string;
+  children: React.ReactNode;
+}): React.JSX.Element {
+  return (
+    <div
+      data-testid={testId}
+      className="flex min-h-screen items-center justify-center bg-background text-sm text-muted-foreground"
+    >
+      {children}
+    </div>
+  );
+}
+
+/** 나뉜 라우트 청크를 받는 동안 보이는 화면 */
+function RouteFallback(): React.JSX.Element {
+  return (
+    <LoadingScreen testId="route-loading">화면을 불러오는 중…</LoadingScreen>
   );
 }
 

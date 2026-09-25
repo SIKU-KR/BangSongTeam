@@ -1,11 +1,12 @@
 import React from "react";
 import { describe, it, expect, vi } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { FontControls } from "./FontControls";
-import { DEFAULT_DECK_STYLE, NOONNU_FONTS } from "#shared";
+import { DEFAULT_DECK_STYLE, loadNoonnuFontCatalog } from "#shared";
 
 describe("FontControls (글꼴 컨트롤)", () => {
-  it("카탈로그의 모든 웹폰트는 비어있지 않은 유효한 URL을 갖는다", () => {
+  it("카탈로그의 모든 웹폰트는 비어있지 않은 유효한 URL을 갖는다", async () => {
+    const NOONNU_FONTS = await loadNoonnuFontCatalog();
     expect(NOONNU_FONTS.length).toBeGreaterThan(1100);
     const withoutUrl = NOONNU_FONTS.filter(
       (f) => !f.url || f.url.trim() === "",
@@ -37,8 +38,10 @@ describe("FontControls (글꼴 컨트롤)", () => {
     expect(gmarketOption).toBeInTheDocument();
     expect(gmarketOption.style.fontFamily).toContain("Gmarket Sans");
 
+    await waitFor(() =>
+      expect(screen.getAllByRole("option").length).toBeGreaterThan(10),
+    );
     const items = screen.getAllByRole("option");
-    expect(items.length).toBeGreaterThan(10);
     for (const item of items) {
       expect(item.style.fontFamily).toBeTruthy();
     }
