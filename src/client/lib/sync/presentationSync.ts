@@ -105,6 +105,45 @@ export async function pushPresentation(
   return true;
 }
 
+/** 공유받은 세트의 최신본을 받았거나(`replaced`) 접근을 잃었을 때(`lost`) 알린다. */
+export interface SharedPresentationListener {
+  replaced: (document: PresentationDocument) => void;
+  lost: (id: string) => void;
+}
+
+let sharedListener: SharedPresentationListener | null = null;
+
+export function setSharedPresentationListener(
+  next: SharedPresentationListener | null,
+): void {
+  sharedListener = next;
+}
+
+/**
+ * 공유받은 세트의 최신본을 받는다 (편집기를 열 때·창에 돌아올 때).
+ * 소유자가 링크를 끄거나 재설정했으면 로컬에서 지우도록 알린다. 오프라인이면
+ * 받아 둔 것을 그대로 쓴다.
+ */
+export async function refreshSharedPresentation(id: string): Promise<void> {
+  try {
+    const body = await send<{ presentation: unknown }>(() =>
+      api.api.presentations[":id"].$get({ param: { id } }),
+    );
+    sharedListener?.replaced(
+      PresentationDocumentSchema.parse(body.presentation),
+    );
+    setSyncStatus("synced");
+  } catch (err) {
+    if (err instanceof ServerRejectedError && err.status === 404) {
+      sharedListener?.lost(id);
+      setSyncStatus("synced");
+      return;
+    }
+    if (err instanceof OfflineError) return;
+    throw err;
+  }
+}
+
 export async function pullPresentations(): Promise<PresentationDocument[]> {
   const body = await send<{ presentations: PresentationDocument[] }>(() =>
     api.api.presentations.$get(),

@@ -6,6 +6,7 @@ export { LyricsRoute } from "./LyricsRoute";
 export { BackgroundsRoute } from "./BackgroundsRoute";
 export { EditorRoute } from "./EditorRoute";
 export { FullscreenPresentRoute } from "./FullscreenPresentRoute";
+export { ShareJoinRoute } from "./ShareJoinRoute";
 
 export {
   useAppShell,

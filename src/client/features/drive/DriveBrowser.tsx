@@ -85,7 +85,11 @@ export function DriveBrowser({
     onSortOrderChange,
     onTypeFilterChange,
   } = useAppShell();
-  const presentations = usePresentationList();
+  const allPresentations = usePresentationList();
+  const presentations = useMemo(
+    () => allPresentations.filter((presentation) => !presentation.access),
+    [allPresentations],
+  );
   const index = useFolderIndex();
   const drive = useDrive();
   const newActions = useNewItemActions();

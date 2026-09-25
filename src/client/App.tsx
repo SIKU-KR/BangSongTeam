@@ -29,6 +29,7 @@ import {
   BackgroundsRoute,
   EditorRoute,
   FullscreenPresentRoute,
+  ShareJoinRoute,
 } from "./routes";
 
 function useHydration(): boolean {
@@ -145,6 +146,7 @@ function AppRoutes(): React.JSX.Element {
           </Route>
 
           <Route path="/editor/:presentationId" element={<EditorRoute />} />
+          <Route path="/s/:token" element={<ShareJoinRoute />} />
           <Route
             path="/present/:presentationId/fullscreen"
             element={<FullscreenPresentRoute />}

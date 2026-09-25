@@ -9,7 +9,7 @@ import {
 } from "../schema";
 import { fromPresentationDocument, toPresentationDocument } from "./mappers";
 import { nullifyUnknownBackgrounds } from "./backgrounds";
-import { runStatements } from "./batch";
+import { chunkIds, runStatements } from "./batch";
 import {
   clearTombstone,
   resolveOwnedFolderId,
@@ -209,13 +209,17 @@ export async function deletePresentation(
  * D1에는 대화형 트랜잭션이 없으므로 `db.batch()`로 묶는다. 루프로 N번 await하면
  * 중간 실패 시 반쪽짜리 문서가 남는다.
  *
- * 소유자가 다르면 아무것도 쓰지 않고 false를 돌린다.
+ * 소유자가 다르면 아무것도 쓰지 않고 false를 돌린다. 링크로 공유받은 세트
+ * (`access`)는 서버에 없어도 새로 만들지 않는다. 소유자가 지운 세트를 받은
+ * 사람이 자기 문서로 되살리지 않게 하기 위해서다.
  */
 export async function upsertPresentationDocument(
   db: DbInstance,
   userId: string,
   doc: PresentationDocument,
 ): Promise<boolean> {
+  if (doc.access) return false;
+
   const [existing] = await db
     .select({ userId: presentations.userId })
     .from(presentations)
@@ -323,27 +327,39 @@ export async function getPresentationDocumentsByUserId(
     .where(eq(presentations.userId, userId))
     .orderBy(desc(presentations.serviceDate), desc(presentations.createdAt));
 
+  return hydratePresentationDocuments(db, headers);
+}
+
+/** 헤더 행에 항목·덱을 붙여 문서로 만든다. 권한 검사는 호출자 책임이다. */
+export async function hydratePresentationDocuments(
+  db: DbInstance,
+  headers: Presentation[],
+): Promise<PresentationDocument[]> {
   if (headers.length === 0) return [];
 
-  const ids = headers.map((h: Presentation) => h.id);
-  const rows = await db
-    .select({ item: presentationItems, deck: decks })
-    .from(presentationItems)
-    .innerJoin(decks, eq(presentationItems.deckId, decks.id))
-    .where(inArray(presentationItems.presentationId, ids))
-    .orderBy(asc(presentationItems.order));
+  const rows: Array<{
+    item: typeof presentationItems.$inferSelect;
+    deck: Deck;
+  }> = [];
+  for (const ids of chunkIds(headers.map((h) => h.id))) {
+    rows.push(
+      ...(await db
+        .select({ item: presentationItems, deck: decks })
+        .from(presentationItems)
+        .innerJoin(decks, eq(presentationItems.deckId, decks.id))
+        .where(inArray(presentationItems.presentationId, ids))
+        .orderBy(asc(presentationItems.order))),
+    );
+  }
 
-  const byPresentation = new Map<
-    string,
-    Array<{ item: typeof presentationItems.$inferSelect; deck: Deck }>
-  >();
+  const byPresentation = new Map<string, typeof rows>();
   for (const row of rows) {
     const list = byPresentation.get(row.item.presentationId) ?? [];
     list.push(row);
     byPresentation.set(row.item.presentationId, list);
   }
 
-  return headers.map((header: Presentation) =>
+  return headers.map((header) =>
     toPresentationDocument(header, byPresentation.get(header.id) ?? []),
   );
 }

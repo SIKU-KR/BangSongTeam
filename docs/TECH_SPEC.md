@@ -113,7 +113,7 @@ flowchart TB
 | 구성 요소                                 | 상태 | 비고                                                                                                                                                                                                                                                                              |
 | ----------------------------------------- | ---- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `src/shared` Zod 스키마 (§3)              | 구현 | Deck·Slide·Style·Presentation·API·공유 라이브러리(`library.ts`) 계약                                                                                                                                                                                                              |
-| `src/db` Drizzle 스키마·`migrations/`(§4) | 구현 | `0001_initial` 하나. 첫 배포 전 0000~0008을 합쳤다 (2026-09-24). 다음 마이그레이션은 0002부터                                                                                                                                                                                     |
+| `src/db` Drizzle 스키마·`migrations/`(§4) | 구현 | `0001_initial`(첫 배포 전 0000~0008을 합침, 2026-09-24), `0002_drop_user_backgrounds`, `0003_presentation_link_share`. 다음 마이그레이션은 0004부터                                                                                                                               |
 | 스코프 쿼리 헬퍼 (§4.3)                   | 구현 | decks·presentations·search·sharing·reports. 공개 조건은 `publicDeckCondition()` 한 곳                                                                                                                                                                                             |
 | 3-Layer Slide Stage (§5.1)                | 구현 | `components/stage/*` — 편집기와 송출이 동일 컴포넌트 사용                                                                                                                                                                                                                         |
 | 입력 버퍼 엔진·단축키 (§5.2)              | 구현 | `useNavigationBuffer`, `usePresentationShortcuts` (tinykeys)                                                                                                                                                                                                                      |
@@ -953,31 +953,44 @@ stateDiagram-v2
 
 ### 7.1 엔드포인트 요약표 (2026-09-23)
 
-| 메서드   | 경로                           | 설명                                                     | 인증 필요    | 상태 |
-| -------- | ------------------------------ | -------------------------------------------------------- | ------------ | ---- |
-| `GET`    | `/api/health`                  | 헬스 체크                                                | No           | 구현 |
-| `GET`    | `/api/media/*`                 | R2 배경 미디어 프록시 (HTTP Range)                       | No           | 구현 |
-| `GET`    | `/api/backgrounds`             | 배경 목록 (모두에게 같음) + 관리 권한 여부 `canManage`   | 선택         | 구현 |
-| `GET`    | `/api/auth/*`                  | Better Auth 핸들러 (카카오/네이버)                       | No           | 구현 |
-| `POST`   | `/api/dev-login`               | 개발자 로그인 (localhost + `DEV_LOGIN_ENABLED`)          | No           | 구현 |
-| `GET`    | `/api/presentations`           | 내 프레젠테이션 문서 전체 (덱 임베드)                    | Yes          | 구현 |
-| `PUT`    | `/api/presentations/:id`       | 프레젠테이션 문서 단위 업서트 (복제본은 항상 비공개)     | Yes (소유자) | 구현 |
-| `DELETE` | `/api/presentations/:id`       | 프레젠테이션 영구 삭제 (삭제 기록을 남긴다)              | Yes (소유자) | 구현 |
-| `GET`    | `/api/folders`                 | 내 드라이브 폴더 전체 + 영구 삭제 기록(tombstone)        | Yes          | 구현 |
-| `PUT`    | `/api/folders/:id`             | 폴더 업서트 (없는 부모·사이클은 루트로 보정해 반환)      | Yes (소유자) | 구현 |
-| `DELETE` | `/api/folders/:id`             | 폴더 영구 삭제 (하위 폴더·프레젠테이션 포함)             | Yes (소유자) | 구현 |
-| `GET`    | `/api/decks`                   | 내 보관함 곡 전체                                        | Yes          | 구현 |
-| `PUT`    | `/api/decks/:id`               | 보관함 곡 업서트 (공유 필드는 서버 값 유지)              | Yes (소유자) | 구현 |
-| `DELETE` | `/api/decks/:id`               | 보관함 곡 삭제                                           | Yes (소유자) | 구현 |
-| `PATCH`  | `/api/decks/:id/visibility`    | 공개 전환 (공개 시 `acceptedCopyrightNotice: true` 필수) | Yes (소유자) | 구현 |
-| `POST`   | `/api/decks/:id/fork`          | 공개 덱 가져오기 (멱등, 비공개 포크)                     | Yes          | 구현 |
-| `GET`    | `/api/catalog/search`          | 공개 덱 검색 (가져간 횟수순, 미리보기만)                 | No           | 구현 |
-| `GET`    | `/api/catalog/decks/:id`       | 공개 덱 전문                                             | Yes          | 구현 |
-| `POST`   | `/api/reports`                 | 신고·교정 제안 (공개 덱만)                               | Yes          | 구현 |
-| `POST`   | `/api/backgrounds/uploads`     | 배경 업로드 (크기·포맷 검사, R2 저장, 기본 제공 배경)    | Yes (관리자) | 구현 |
-| `DELETE` | `/api/backgrounds/uploads/:id` | 배경 삭제 (D1 행 → R2 객체)                              | Yes (관리자) | 구현 |
+| 메서드   | 경로                                 | 설명                                                      | 인증 필요    | 상태 |
+| -------- | ------------------------------------ | --------------------------------------------------------- | ------------ | ---- |
+| `GET`    | `/api/health`                        | 헬스 체크                                                 | No           | 구현 |
+| `GET`    | `/api/media/*`                       | R2 배경 미디어 프록시 (HTTP Range)                        | No           | 구현 |
+| `GET`    | `/api/backgrounds`                   | 배경 목록 (모두에게 같음) + 관리 권한 여부 `canManage`    | 선택         | 구현 |
+| `GET`    | `/api/auth/*`                        | Better Auth 핸들러 (카카오/네이버)                        | No           | 구현 |
+| `POST`   | `/api/dev-login`                     | 개발자 로그인 (localhost + `DEV_LOGIN_ENABLED`)           | No           | 구현 |
+| `GET`    | `/api/presentations`                 | 내 프레젠테이션 문서 전체 + 링크로 연 공유 세트(`access`) | Yes          | 구현 |
+| `GET`    | `/api/presentations/:id`             | 문서 1건 (공유 세트 최신본 받기)                          | Yes          | 구현 |
+| `PUT`    | `/api/presentations/:id`             | 프레젠테이션 문서 단위 업서트 (복제본은 항상 비공개)      | Yes (소유자) | 구현 |
+| `DELETE` | `/api/presentations/:id`             | 프레젠테이션 영구 삭제 (삭제 기록을 남긴다)               | Yes (소유자) | 구현 |
+| `GET`    | `/api/presentations/:id/share`       | 링크 공유 설정 `{ access: off\|view, token }`             | Yes (소유자) | 구현 |
+| `PUT`    | `/api/presentations/:id/share`       | 링크 공유 켜기·끄기 (처음 켤 때 토큰 발급)                | Yes (소유자) | 구현 |
+| `POST`   | `/api/presentations/:id/share/reset` | 링크 재설정 (새 토큰, 기존 멤버 삭제)                     | Yes (소유자) | 구현 |
+| `POST`   | `/api/share/:token/join`             | 링크로 세트 열기 (멤버 기록 후 문서 반환)                 | Yes          | 구현 |
+| `GET`    | `/api/folders`                       | 내 드라이브 폴더 전체 + 영구 삭제 기록(tombstone)         | Yes          | 구현 |
+| `PUT`    | `/api/folders/:id`                   | 폴더 업서트 (없는 부모·사이클은 루트로 보정해 반환)       | Yes (소유자) | 구현 |
+| `DELETE` | `/api/folders/:id`                   | 폴더 영구 삭제 (하위 폴더·프레젠테이션 포함)              | Yes (소유자) | 구현 |
+| `GET`    | `/api/decks`                         | 내 보관함 곡 전체                                         | Yes          | 구현 |
+| `PUT`    | `/api/decks/:id`                     | 보관함 곡 업서트 (공유 필드는 서버 값 유지)               | Yes (소유자) | 구현 |
+| `DELETE` | `/api/decks/:id`                     | 보관함 곡 삭제                                            | Yes (소유자) | 구현 |
+| `PATCH`  | `/api/decks/:id/visibility`          | 공개 전환 (공개 시 `acceptedCopyrightNotice: true` 필수)  | Yes (소유자) | 구현 |
+| `POST`   | `/api/decks/:id/fork`                | 공개 덱 가져오기 (멱등, 비공개 포크)                      | Yes          | 구현 |
+| `GET`    | `/api/catalog/search`                | 공개 덱 검색 (가져간 횟수순, 미리보기만)                  | No           | 구현 |
+| `GET`    | `/api/catalog/decks/:id`             | 공개 덱 전문                                              | Yes          | 구현 |
+| `POST`   | `/api/reports`                       | 신고·교정 제안 (공개 덱만)                                | Yes          | 구현 |
+| `POST`   | `/api/backgrounds/uploads`           | 배경 업로드 (크기·포맷 검사, R2 저장, 기본 제공 배경)     | Yes (관리자) | 구현 |
+| `DELETE` | `/api/backgrounds/uploads/:id`       | 배경 삭제 (D1 행 → R2 객체)                               | Yes (관리자) | 구현 |
 
-설계 당시의 `POST /api/decks`(생성)·`GET /api/decks/:id`·`GET /api/presentations/:id`는 두지 않았다. 로컬 우선 동기화가 문서 단위 `PUT`으로 생성과 수정을 함께 하고, 조회는 목록 한 번으로 충분하다.
+설계 당시의 `POST /api/decks`(생성)·`GET /api/decks/:id`는 두지 않았다. 로컬 우선 동기화가 문서 단위 `PUT`으로 생성과 수정을 함께 하고, 조회는 목록 한 번으로 충분하다. `GET /api/presentations/:id`는 공유받은 세트의 최신본을 받으려고 2026-09-25에 더했다.
+
+**세트 링크 공유 (PRD 4.9, 2026-09-25)**
+
+- `presentations.link_access`(`off`·`view`)와 `link_token`(21자 NanoID, unique), `presentation_members(presentation_id, user_id, joined_at)`를 `0003`에서 더했다. 역할은 저장하지 않는다. 받은 사람은 언제나 보기 전용이다.
+- 접근 판정은 `resolvePresentationAccess` 한 곳이다: 소유자이거나, 멤버 행이 있고 `link_access != 'off'`이고 휴지통에 없을 때만 볼 수 있다. 링크 재설정은 토큰을 바꾸고 멤버 행을 지운다.
+- 공유 세트는 `access: { ownerName, memberId }`를 달고 내려간다. 폴더·휴지통은 소유자의 드라이브 배치라 비워서 준다. `PUT`은 소유자만 되고, `access`가 달린 문서는 서버에 없어도 새로 만들지 않는다 (소유자가 지운 세트가 받은 사람 문서로 되살아나지 않게).
+- 클라이언트는 공유 세트를 로컬 스토어에 넣어 편집기·송출을 그대로 쓰되, 편집 함수·push·부팅 병합에서 모두 건너뛴다(보기 전용, 서버본 우선). 서버 목록에서 빠지면 로컬에서 지운다. 드라이브 목록에는 보이지 않는다.
+- 동시 편집이 없으므로 revision·충돌 처리는 두지 않는다. 공동 편집을 넣게 되면 문서 단위 LWW 대신 낙관적 잠금이 필요하다.
 
 ### 7.2 주요 API 요청/응답 페이로드 스키마 (`src/shared/schemas/api.ts`)
 
@@ -1057,6 +1070,7 @@ export type SearchCatalogResponse = z.infer<typeof SearchCatalogResponseSchema>;
 
 ### 8.1 비영리 저작권 보호 및 공개 범위 제한
 
+- **세트 링크 공유**: 링크(`/s/:token`)로 세트를 열려면 로그인해야 한다. 세트에는 가사 전문이 담겨 있어, 미인증 사용자에게 첫 슬라이드만 보인다는 아래 원칙을 지킨다.
 - **공개 웹 카탈로그 가사 전문 노출 차단**: 로그인하지 않은 외부 사용자가 접근하는 공개 웹 카탈로그 검색 결과(`GET /api/catalog/search`) 및 미인증 공유 카드에는 **첫 슬라이드만 노출**(`firstSlidePreview`)하여 가사 크롤링 및 공중송신권 분쟁을 방지한다.
 - **편집기 내부 곡 추가 모달(SongPickerModal)**: 예배 봉사자가 찬양 버전(절, 브릿지)을 확인하고 빠른 선곡을 할 수 있도록, 편집기 내부 곡 선택 시에는 공유 곡도 가사 전문 미리보기, 가사 본문 검색, 텍스트 복사를 정상 제공한다 (세트 추가 시 어차피 에디터로 임포트되므로).
 - **게시 중단(Takedown) 절차**: 저작권자 요청 접수 시 운영자가 `docs/ops/moderation-runbook.md`의 SQL로 해당 덱을 비공개로 내리고 `takedown_at`을 남긴다(소유자가 다시 공개할 수 없다). 가져가 다시 공개한 사본도 찾아 내린다. SQL 정본은 `src/db/ops/moderationSql.ts`이며 테스트가 실제 스키마에 대해 실행해 본다.

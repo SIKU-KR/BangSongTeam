@@ -8,6 +8,7 @@ import { createFoldersRoute } from "./routes/folders";
 import { createDecksRoute } from "./routes/decks";
 import { createCatalogRoute } from "./routes/catalog";
 import { createReportsRoute } from "./routes/reports";
+import { createShareRoute } from "./routes/share";
 import { devLoginRoute } from "./routes/devLogin";
 import { emailSignupRoute } from "./routes/emailSignup";
 import type { AppDeps } from "./deps";
@@ -50,6 +51,7 @@ export function createApp(deps: AppDeps = {}) {
     .route("/api/decks", createDecksRoute(deps))
     .route("/api/catalog", createCatalogRoute(deps))
     .route("/api/reports", createReportsRoute(deps))
+    .route("/api/share", createShareRoute(deps))
     .route("/api/backgrounds", createBackgroundsRoute(deps))
     .route("/api/media", mediaRoute);
 }

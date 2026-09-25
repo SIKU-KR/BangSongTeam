@@ -67,6 +67,8 @@ export {
   restorePresentation,
   duplicatePresentation,
   removePresentationsLocally,
+  canEditPresentation,
+  replaceWithServerDocument,
 } from "./presentationStore";
 
 export {
