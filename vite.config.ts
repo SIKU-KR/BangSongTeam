@@ -2,9 +2,7 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import { cloudflare } from "@cloudflare/vite-plugin";
 import { VitePWA } from "vite-plugin-pwa";
-import tailwindcss from "tailwindcss";
-import autoprefixer from "autoprefixer";
-import path from "node:path";
+import tailwindcss from "@tailwindcss/vite";
 import {
   MEDIA_CACHE_NAME,
   MEDIA_URL_PREFIX,
@@ -24,6 +22,7 @@ import {
 export default defineConfig({
   plugins: [
     react(),
+    tailwindcss(),
     // 원격 바인딩은 기본으로 끈다. 켜 두면 `pnpm dev`가 `CLOUDFLARE_API_TOKEN`을
     // 요구할 수 있어 토큰이 없는 사람은 로컬 개발을 시작하지 못한다. 테스트 설정도
     // remoteBindings: false이므로 개발·테스트 동작이 같아진다.
@@ -108,15 +107,5 @@ export default defineConfig({
       },
     }),
   ],
-  css: {
-    postcss: {
-      plugins: [
-        tailwindcss({
-          config: path.resolve(__dirname, "config/tailwind.config.js"),
-        }),
-        autoprefixer(),
-      ],
-    },
-  },
   build: { outDir: "dist" },
 });

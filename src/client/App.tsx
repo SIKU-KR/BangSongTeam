@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { TooltipProvider } from "#components/ui/tooltip";
 import { ThemeProvider } from "./features/theme";
 import {
   hydrateFromStorage,
@@ -97,61 +98,58 @@ function useHydration(): boolean {
 
 /** App 최상위 라우팅 컴포넌트 */
 export function App(): React.JSX.Element {
+  return (
+    <ThemeProvider>
+      <TooltipProvider>
+        <AppRoutes />
+      </TooltipProvider>
+    </ThemeProvider>
+  );
+}
+
+function AppRoutes(): React.JSX.Element {
   const isHydrated = useHydration();
   const session = useSession();
 
   if (!isHydrated) {
     return (
-      <ThemeProvider>
-        <div
-          data-testid="app-hydrating"
-          className="min-h-screen flex items-center justify-center bg-white dark:bg-zinc-950 text-zinc-500 dark:text-zinc-400 text-sm"
-        >
-          저장된 프레젠테이션을 불러오는 중…
-        </div>
-      </ThemeProvider>
+      <div
+        data-testid="app-hydrating"
+        className="flex min-h-screen items-center justify-center bg-background text-sm text-muted-foreground"
+      >
+        저장된 프레젠테이션을 불러오는 중…
+      </div>
     );
   }
 
-  if (session.status !== "authenticated") {
-    return (
-      <ThemeProvider>
-        <LoginRoute />
-      </ThemeProvider>
-    );
-  }
+  if (session.status !== "authenticated") return <LoginRoute />;
 
   return (
-    <ThemeProvider>
-      <AuthedProviders>
-        <BrowserRouter>
-          <Routes>
-            <Route path="/" element={<LandingRoute />} />
+    <AuthedProviders>
+      <BrowserRouter>
+        <Routes>
+          <Route path="/" element={<LandingRoute />} />
 
-            <Route element={<AppShellLayout />}>
-              <Route path="/presentations" element={<PresentationsRoute />} />
-              <Route
-                path="/presentations/folders/:folderId"
-                element={<PresentationsRoute />}
-              />
-              <Route path="/presentations/trash" element={<TrashRoute />} />
-              <Route path="/lyrics" element={<LyricsRoute />} />
-              <Route path="/backgrounds" element={<BackgroundsRoute />} />
-            </Route>
+          <Route element={<AppShellLayout />}>
+            <Route path="/presentations" element={<PresentationsRoute />} />
+            <Route
+              path="/presentations/folders/:folderId"
+              element={<PresentationsRoute />}
+            />
+            <Route path="/presentations/trash" element={<TrashRoute />} />
+            <Route path="/lyrics" element={<LyricsRoute />} />
+            <Route path="/backgrounds" element={<BackgroundsRoute />} />
+          </Route>
 
-            <Route path="/editor/:presentationId" element={<EditorRoute />} />
-            <Route
-              path="/present/:presentationId/fullscreen"
-              element={<FullscreenPresentRoute />}
-            />
-            <Route
-              path="*"
-              element={<Navigate to="/presentations" replace />}
-            />
-          </Routes>
-        </BrowserRouter>
-      </AuthedProviders>
-    </ThemeProvider>
+          <Route path="/editor/:presentationId" element={<EditorRoute />} />
+          <Route
+            path="/present/:presentationId/fullscreen"
+            element={<FullscreenPresentRoute />}
+          />
+          <Route path="*" element={<Navigate to="/presentations" replace />} />
+        </Routes>
+      </BrowserRouter>
+    </AuthedProviders>
   );
 }
 

@@ -27,9 +27,13 @@ describe("Cloudflare Worker 프로젝트 설정과 Wrangler 바인딩", () => {
     expect(pkg.imports).toEqual({
       "#shared": "./src/shared/index.ts",
       "#db": "./src/db/index.ts",
+      "#components/*": "./src/client/components/*.tsx",
+      "#lib/*": "./src/client/lib/*.ts",
+      "#hooks/*": "./src/client/hooks/*.ts",
     });
     for (const target of Object.values<string>(pkg.imports)) {
-      expect(fs.existsSync(path.join(rootDir, target))).toBe(true);
+      const existing = target.includes("*") ? path.dirname(target) : target;
+      expect(fs.existsSync(path.join(rootDir, existing))).toBe(true);
     }
 
     expect(pkg.scripts).toHaveProperty("dev");
