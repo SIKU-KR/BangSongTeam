@@ -35,12 +35,12 @@ export function BackgroundControls({
       >
         <Button
           variant="ghost"
+          size="sm"
           data-testid="open-bg-picker-btn"
           aria-label="곡 배경 바꾸기"
           disabled={disabled}
           onMouseDown={(e) => e.preventDefault()}
           onClick={() => setIsPickerOpen(true)}
-          className="h-8 gap-1.5 pr-2 pl-1 text-xs"
         >
           <span className="h-6 w-10 shrink-0 overflow-hidden rounded-sm border bg-black">
             {background && (

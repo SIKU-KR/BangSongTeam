@@ -1,13 +1,8 @@
-import React, {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation, useMatch, useNavigate } from "react-router-dom";
-import { FolderIcon, PresentationIcon, XIcon } from "lucide-react";
-import { Button } from "#components/ui/button";
+import { FolderIcon, PresentationIcon } from "lucide-react";
+import { toast } from "sonner";
+import { Badge } from "#components/ui/badge";
 import {
   DndContext,
   DragOverlay,
@@ -69,12 +64,7 @@ type DialogState =
   | { kind: "empty-trash" }
   | null;
 
-interface ToastState {
-  id: number;
-  message: string;
-  action?: ToastAction;
-}
-
+const TOAST_ID = "drive-toast";
 const TOAST_DURATION_MS = 6000;
 
 const followCursor: Modifier = ({
@@ -125,20 +115,13 @@ export function DriveProvider({
   const [activeDrag, setActiveDrag] = useState<DriveItemRef[] | null>(null);
   const [dialog, setDialog] = useState<DialogState>(null);
   const [isDeleting, setIsDeleting] = useState(false);
-  const [toast, setToast] = useState<ToastState | null>(null);
-  const toastSeq = useRef(0);
+  const [undoAction, setUndoAction] = useState<ToastAction | null>(null);
 
   useEffect(() => {
     setSelectionState(new Set());
     setAnchorKey(null);
     setFocusKey(null);
   }, [pathname]);
-
-  useEffect(() => {
-    if (!toast) return;
-    const timer = setTimeout(() => setToast(null), TOAST_DURATION_MS);
-    return () => clearTimeout(timer);
-  }, [toast]);
 
   const setSelection = useCallback(
     (keys: readonly string[], anchor?: string | null): void => {
@@ -157,8 +140,22 @@ export function DriveProvider({
 
   const showToast = useCallback(
     (message: string, action?: ToastAction): void => {
-      toastSeq.current += 1;
-      setToast({ id: toastSeq.current, message, action });
+      setUndoAction(action ?? null);
+      toast(message, {
+        id: TOAST_ID,
+        testId: TOAST_ID,
+        duration: TOAST_DURATION_MS,
+        closeButton: true,
+        action: action && {
+          label: action.label,
+          onClick: () => {
+            action.run();
+            setUndoAction(null);
+          },
+        },
+        onDismiss: () => setUndoAction(null),
+        onAutoClose: () => setUndoAction(null),
+      });
     },
     [],
   );
@@ -267,7 +264,7 @@ export function DriveProvider({
   };
 
   useEffect(() => {
-    const action = toast?.action;
+    const action = undoAction;
     if (!action || dialog !== null) return;
     const handleUndo = (event: KeyboardEvent): void => {
       if (
@@ -281,11 +278,12 @@ export function DriveProvider({
       }
       event.preventDefault();
       action.run();
-      setToast(null);
+      toast.dismiss(TOAST_ID);
+      setUndoAction(null);
     };
     window.addEventListener("keydown", handleUndo);
     return () => window.removeEventListener("keydown", handleUndo);
-  }, [toast, dialog]);
+  }, [undoAction, dialog]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -459,14 +457,6 @@ export function DriveProvider({
           onCancel={() => setDialog(null)}
         />
       )}
-
-      {toast && (
-        <DriveToast
-          key={toast.id}
-          toast={toast}
-          onClose={() => setToast(null)}
-        />
-      )}
     </DriveContext.Provider>
   );
 }
@@ -521,53 +511,10 @@ function DragChip({
         <span className="truncate">{first ? itemName(first) : ""}</span>
       </div>
       {many && (
-        <span
-          data-testid="drag-count"
-          className="absolute -top-2 -right-2 flex h-6 min-w-6 items-center justify-center rounded-full bg-primary px-1.5 text-xs font-bold text-primary-foreground shadow-sm"
-        >
+        <Badge data-testid="drag-count" className="absolute -top-2 -right-2">
           {refs.length}
-        </span>
+        </Badge>
       )}
-    </div>
-  );
-}
-
-function DriveToast({
-  toast,
-  onClose,
-}: {
-  toast: ToastState;
-  onClose: () => void;
-}): React.JSX.Element {
-  return (
-    <div
-      role="status"
-      data-testid="drive-toast"
-      className="fixed inset-x-4 bottom-6 z-70 flex items-center gap-3 rounded-lg border bg-popover py-2 pr-2 pl-4 text-sm text-popover-foreground shadow-lg sm:right-auto sm:min-w-72 lg:left-68"
-    >
-      <span className="flex-1 truncate">{toast.message}</span>
-      {toast.action && (
-        <Button
-          variant="ghost"
-          size="sm"
-          data-testid="drive-toast-action"
-          className="font-semibold"
-          onClick={() => {
-            toast.action?.run();
-            onClose();
-          }}
-        >
-          {toast.action.label}
-        </Button>
-      )}
-      <Button
-        variant="ghost"
-        size="icon-sm"
-        aria-label="알림 닫기"
-        onClick={onClose}
-      >
-        <XIcon />
-      </Button>
     </div>
   );
 }

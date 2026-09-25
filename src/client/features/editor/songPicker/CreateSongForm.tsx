@@ -1,7 +1,7 @@
 import React, { useId, useMemo, useState } from "react";
 import { Button } from "#components/ui/button";
 import { Input } from "#components/ui/input";
-import { Label } from "#components/ui/label";
+import { Field, FieldDescription, FieldLabel } from "#components/ui/field";
 import { Textarea } from "#components/ui/textarea";
 import { splitLyricsIntoSlides } from "#shared";
 import { ExternalSearchLinks } from "../ExternalSearchLinks";
@@ -48,10 +48,10 @@ export function CreateSongForm({
       </div>
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <div className="grid gap-1.5">
-          <Label htmlFor={`${fieldId}-title`}>
+        <Field>
+          <FieldLabel htmlFor={`${fieldId}-title`}>
             곡 제목 <span className="text-destructive">*</span>
-          </Label>
+          </FieldLabel>
           <Input
             id={`${fieldId}-title`}
             type="text"
@@ -60,10 +60,10 @@ export function CreateSongForm({
             onChange={(e) => setTitle(e.target.value)}
             placeholder="예: 시간을 뚫고"
           />
-        </div>
+        </Field>
 
-        <div className="grid gap-1.5">
-          <Label htmlFor={`${fieldId}-artist`}>아티스트 (선택)</Label>
+        <Field>
+          <FieldLabel htmlFor={`${fieldId}-artist`}>아티스트 (선택)</FieldLabel>
           <Input
             id={`${fieldId}-artist`}
             type="text"
@@ -72,7 +72,7 @@ export function CreateSongForm({
             onChange={(e) => setArtist(e.target.value)}
             placeholder="예: WELOVE"
           />
-        </div>
+        </Field>
       </div>
 
       {title.trim() && (
@@ -81,17 +81,10 @@ export function CreateSongForm({
         </div>
       )}
 
-      <div className="flex min-h-56 flex-1 flex-col gap-1.5">
-        <div className="flex items-center justify-between">
-          <Label htmlFor={`${fieldId}-lyrics`}>
-            가사 원문 붙여넣기 <span className="text-destructive">*</span>
-          </Label>
-          {previewSlides.length > 0 && (
-            <span className="font-mono text-xs font-medium text-muted-foreground">
-              {previewSlides.length}개 슬라이드로 자동 분할됨
-            </span>
-          )}
-        </div>
+      <Field className="min-h-56 flex-1">
+        <FieldLabel htmlFor={`${fieldId}-lyrics`}>
+          가사 원문 붙여넣기 <span className="text-destructive">*</span>
+        </FieldLabel>
         <Textarea
           id={`${fieldId}-lyrics`}
           data-testid="song-picker-create-lyrics-input"
@@ -100,9 +93,14 @@ export function CreateSongForm({
           placeholder={
             "당신은 시간을 뚫고\n이 땅 가운데 오셨네\n\n우리 없는 하늘을 원치 않아\n우리 삶에 오셨네"
           }
-          className="field-sizing-fixed flex-1 resize-none p-4 font-mono text-xs/relaxed md:text-xs/relaxed"
+          className="flex-1 resize-none font-mono"
         />
-      </div>
+        {previewSlides.length > 0 && (
+          <FieldDescription>
+            {previewSlides.length}개 슬라이드로 자동 분할됨
+          </FieldDescription>
+        )}
+      </Field>
 
       <div className="flex items-center justify-end gap-2.5 pt-2">
         <Button variant="ghost" onClick={onCancel}>

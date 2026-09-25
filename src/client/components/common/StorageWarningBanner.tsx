@@ -1,10 +1,9 @@
 import React from "react";
 import { TriangleAlertIcon } from "lucide-react";
-import { cn } from "cn";
+import { Alert, AlertDescription, AlertTitle } from "#components/ui/alert";
 import { usePersistenceError, useCorruptedRecords } from "../../lib/storage";
 
-const BANNER_CLASS =
-  "flex w-full shrink-0 items-center gap-2.5 px-4 py-2.5 text-xs font-medium sm:text-sm";
+const BANNER_CLASS = "shrink-0 rounded-none border-x-0 border-t-0";
 
 /**
  * 저장 실패·저장본 격리 경고 배너.
@@ -25,28 +24,25 @@ export function StorageWarningBanner(): React.JSX.Element | null {
   return (
     <>
       {error && (
-        <div
-          role="alert"
+        <Alert
+          variant="destructive"
           data-testid="storage-warning-banner"
-          className={cn(BANNER_CLASS, "bg-destructive text-white")}
+          className={BANNER_CLASS}
         >
-          <TriangleAlertIcon aria-hidden="true" className="size-4 shrink-0" />
-          <span>{error.message}</span>
-        </div>
+          <TriangleAlertIcon />
+          <AlertTitle>저장하지 못했습니다</AlertTitle>
+          <AlertDescription>{error.message}</AlertDescription>
+        </Alert>
       )}
 
       {corrupted.length > 0 && (
-        <div
-          role="alert"
-          data-testid="corrupted-warning-banner"
-          className={cn(BANNER_CLASS, "bg-warning text-warning-foreground")}
-        >
-          <TriangleAlertIcon aria-hidden="true" className="size-4 shrink-0" />
-          <span>
-            저장본 {corrupted.length}개를 열지 못했습니다. 삭제하지 않고 그대로
-            보관해 두었으니 복구가 필요하면 문의해 주세요.
-          </span>
-        </div>
+        <Alert data-testid="corrupted-warning-banner" className={BANNER_CLASS}>
+          <TriangleAlertIcon />
+          <AlertTitle>저장본 {corrupted.length}개를 열지 못했습니다</AlertTitle>
+          <AlertDescription>
+            삭제하지 않고 그대로 보관해 두었으니 복구가 필요하면 문의해 주세요.
+          </AlertDescription>
+        </Alert>
       )}
     </>
   );

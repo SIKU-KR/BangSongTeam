@@ -16,20 +16,21 @@ import {
   DropdownMenuRadioItem,
   DropdownMenuTrigger,
 } from "#components/ui/dropdown-menu";
+import { SidebarMenuButton, SidebarMenuItem } from "#components/ui/sidebar";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "#components/ui/tooltip";
-import { useTheme, type ThemeMode } from "../../features/theme";
+import { useTheme } from "#components/theme-provider";
 
 export interface ThemeMenuButtonProps {
-  variant?: "full" | "compact";
+  variant?: "sidebar" | "compact";
   align?: "start" | "end";
 }
 
 interface ThemeOption {
-  mode: ThemeMode;
+  mode: ReturnType<typeof useTheme>["theme"];
   label: string;
   description: string;
   icon: LucideIcon;
@@ -56,17 +57,17 @@ const THEME_OPTIONS: ThemeOption[] = [
   },
 ];
 
-function isThemeMode(value: unknown): value is ThemeMode {
+function isThemeMode(value: unknown): value is ThemeOption["mode"] {
   return THEME_OPTIONS.some((option) => option.mode === value);
 }
 
 /**
  * 테마 모드 전환 메뉴 버튼.
- * - `full`: 사이드바 아래의 넓은 버튼 (위로 연다)
+ * - `sidebar`: 사이드바 아래 메뉴 항목 (위로 연다)
  * - `compact`: 헤더의 아이콘 버튼 (아래로 연다)
  */
 export function ThemeMenuButton({
-  variant = "full",
+  variant = "sidebar",
   align = "start",
 }: ThemeMenuButtonProps): React.JSX.Element {
   const { theme, setTheme } = useTheme();
@@ -93,31 +94,20 @@ export function ThemeMenuButton({
     ) : (
       <DropdownMenuTrigger
         data-testid="theme-menu-button"
-        render={
-          <Button
-            variant="outline"
-            className="h-auto w-full justify-between rounded-xl px-3 py-2"
-          />
-        }
+        render={<SidebarMenuButton size="lg" />}
       >
-        <span className="flex min-w-0 items-center gap-2.5">
-          <span className="flex size-6 shrink-0 items-center justify-center rounded-md bg-muted">
-            <CurrentIcon className="size-3.5" />
+        <CurrentIcon />
+        <div className="grid flex-1 text-left leading-tight">
+          <span className="truncate font-semibold">{current.label}</span>
+          <span className="truncate text-xs text-muted-foreground">
+            화면 모드 전환
           </span>
-          <span className="min-w-0 text-left">
-            <span className="block truncate text-xs font-semibold">
-              {current.label}
-            </span>
-            <span className="block truncate text-2xs font-normal text-muted-foreground">
-              화면 모드 전환
-            </span>
-          </span>
-        </span>
-        <ChevronsUpDownIcon className="text-muted-foreground" />
+        </div>
+        <ChevronsUpDownIcon />
       </DropdownMenuTrigger>
     );
 
-  return (
+  const menu = (
     <DropdownMenu>
       {trigger}
       <DropdownMenuContent
@@ -154,6 +144,12 @@ export function ThemeMenuButton({
         </DropdownMenuGroup>
       </DropdownMenuContent>
     </DropdownMenu>
+  );
+
+  return variant === "sidebar" ? (
+    <SidebarMenuItem>{menu}</SidebarMenuItem>
+  ) : (
+    menu
   );
 }
 

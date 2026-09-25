@@ -1,5 +1,11 @@
 import React, { useState, useEffect } from "react";
 import { TriangleAlertIcon } from "lucide-react";
+import {
+  Alert,
+  AlertAction,
+  AlertDescription,
+  AlertTitle,
+} from "#components/ui/alert";
 import { Button } from "#components/ui/button";
 
 interface NavigatorUAData {
@@ -82,28 +88,26 @@ export function ChromeAlertBanner(): React.JSX.Element | null {
   }
 
   return (
-    <aside
-      role="alert"
+    <Alert
       aria-label="브라우저 호환성 안내"
-      className="relative z-50 flex items-center justify-between bg-warning px-4 py-2 text-sm font-medium text-warning-foreground shadow-sm"
+      className="relative z-50 shrink-0 rounded-none border-x-0 border-t-0"
     >
-      <div className="flex items-center gap-2">
-        <TriangleAlertIcon aria-hidden="true" className="size-4 shrink-0" />
-        <span>
-          안정적인 예배 슬라이드 송출을 위해 <strong>Google Chrome</strong>{" "}
-          데스크톱 브라우저 사용을 권장합니다. (Safari, Edge, Whale 등에서는
-          일부 기능이 제한될 수 있습니다.)
-        </span>
-      </div>
-      <Button
-        variant="secondary"
-        size="xs"
-        onClick={handleDismiss}
-        aria-label="안내 배너 닫기"
-        className="ml-4"
-      >
-        닫기
-      </Button>
-    </aside>
+      <TriangleAlertIcon />
+      <AlertTitle>Google Chrome 데스크톱 브라우저를 권장합니다</AlertTitle>
+      <AlertDescription>
+        안정적인 예배 슬라이드 송출을 위해서입니다. Safari, Edge, Whale 등에서는
+        일부 기능이 제한될 수 있습니다.
+      </AlertDescription>
+      <AlertAction>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={handleDismiss}
+          aria-label="안내 배너 닫기"
+        >
+          닫기
+        </Button>
+      </AlertAction>
+    </Alert>
   );
 }

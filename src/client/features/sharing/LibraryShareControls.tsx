@@ -67,7 +67,6 @@ export function LibraryShareControls({
               data-testid="song-share-correction-btn"
               disabled={!isOnline}
               onClick={() => setIsReportOpen(true)}
-              className="text-muted-foreground hover:text-destructive"
             >
               원본에 교정 제안
             </Button>

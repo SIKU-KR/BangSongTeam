@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useId, useState } from "react";
 import { Button } from "#components/ui/button";
 import { Checkbox } from "#components/ui/checkbox";
 import {
@@ -10,7 +10,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "#components/ui/dialog";
-import { Label } from "#components/ui/label";
+import { Field, FieldError, FieldLabel } from "#components/ui/field";
 
 export interface PublishDialogProps {
   isOpen: boolean;
@@ -33,6 +33,7 @@ export function PublishDialog({
   onCancel,
 }: PublishDialogProps): React.JSX.Element | null {
   const [accepted, setAccepted] = useState(false);
+  const acceptId = useId();
 
   return (
     <Dialog
@@ -44,12 +45,12 @@ export function PublishDialog({
       <DialogContent data-testid="publish-dialog" className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>공유 라이브러리에 공개</DialogTitle>
-          <DialogDescription className="truncate text-xs">
+          <DialogDescription className="truncate">
             {songTitle}
           </DialogDescription>
         </DialogHeader>
 
-        <ul className="list-disc space-y-2 pl-4 text-xs text-muted-foreground">
+        <ul className="list-disc space-y-2 pl-4 text-sm text-muted-foreground">
           <li>
             공개하면 다른 사용자가 이 곡의 가사·슬라이드 나눔·배경·스타일을
             검색해 자기 보관함으로 가져갈 수 있습니다. 로그인하지 않은
@@ -70,20 +71,17 @@ export function PublishDialog({
           </li>
         </ul>
 
-        <Label className="cursor-pointer text-xs font-semibold">
+        <Field orientation="horizontal">
           <Checkbox
+            id={acceptId}
             data-testid="publish-accept-checkbox"
             checked={accepted}
             onCheckedChange={(checked) => setAccepted(checked)}
           />
-          위 내용을 확인했습니다
-        </Label>
+          <FieldLabel htmlFor={acceptId}>위 내용을 확인했습니다</FieldLabel>
+        </Field>
 
-        {error && (
-          <p role="alert" className="text-xs text-destructive">
-            {error}
-          </p>
-        )}
+        {error && <FieldError>{error}</FieldError>}
 
         <DialogFooter>
           <DialogClose render={<Button variant="outline" />}>취소</DialogClose>

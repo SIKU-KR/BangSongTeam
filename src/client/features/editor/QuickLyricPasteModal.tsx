@@ -12,7 +12,20 @@ import {
   DialogTitle,
 } from "#components/ui/dialog";
 import { Input } from "#components/ui/input";
-import { Label } from "#components/ui/label";
+import {
+  Card,
+  CardAction,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "#components/ui/card";
+import {
+  Empty,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+} from "#components/ui/empty";
+import { Field, FieldGroup, FieldLabel } from "#components/ui/field";
 import { Textarea } from "#components/ui/textarea";
 import {
   createId,
@@ -112,11 +125,11 @@ export function QuickLyricPasteModal({
         </DialogHeader>
 
         <div className="grid grid-cols-1 gap-6 overflow-y-auto p-6 md:grid-cols-2">
-          <div className="flex flex-col gap-4">
-            <div className="grid gap-1.5">
-              <Label htmlFor="song-title-input">
+          <FieldGroup>
+            <Field>
+              <FieldLabel htmlFor="song-title-input">
                 곡 제목 <span className="text-destructive">*</span>
-              </Label>
+              </FieldLabel>
               <Input
                 id="song-title-input"
                 type="text"
@@ -124,10 +137,12 @@ export function QuickLyricPasteModal({
                 onChange={(e) => setTitle(e.target.value)}
                 placeholder="곡 제목을 입력하세요 (예: 은혜로다)"
               />
-            </div>
+            </Field>
 
-            <div className="grid gap-1.5">
-              <Label htmlFor="song-artist-input">아티스트 / 작곡가</Label>
+            <Field>
+              <FieldLabel htmlFor="song-artist-input">
+                아티스트 / 작곡가
+              </FieldLabel>
               <Input
                 id="song-artist-input"
                 type="text"
@@ -135,20 +150,18 @@ export function QuickLyricPasteModal({
                 onChange={(e) => setArtist(e.target.value)}
                 placeholder="아티스트 (선택사항, 예: 손경민)"
               />
-            </div>
+            </Field>
 
-            <div className="pt-1">
-              {renderSearchLinks ? (
-                renderSearchLinks(title)
-              ) : (
-                <ExternalSearchLinks title={title} />
-              )}
-            </div>
+            {renderSearchLinks ? (
+              renderSearchLinks(title)
+            ) : (
+              <ExternalSearchLinks title={title} />
+            )}
 
-            <div className="flex min-h-56 flex-1 flex-col gap-1.5">
-              <Label htmlFor="song-lyrics-textarea">
+            <Field className="flex-1">
+              <FieldLabel htmlFor="song-lyrics-textarea">
                 가사 원문 <span className="text-destructive">*</span>
-              </Label>
+              </FieldLabel>
               <Textarea
                 id="song-lyrics-textarea"
                 value={lyricsRaw}
@@ -156,14 +169,14 @@ export function QuickLyricPasteModal({
                 placeholder={
                   "가사를 여기에 붙여넣으세요...\n\n빈 줄로 슬라이드를 나눌 수 있으며, 4줄을 초과하면 2줄씩 자동 분할됩니다."
                 }
-                className="field-sizing-fixed min-h-56 flex-1 resize-none font-mono text-sm/relaxed md:text-sm/relaxed"
+                className="min-h-56 flex-1 resize-none font-mono"
               />
-            </div>
-          </div>
+            </Field>
+          </FieldGroup>
 
-          <div className="flex flex-col overflow-hidden rounded-lg border bg-muted/50 p-4">
-            <div className="mb-3 flex items-center justify-between border-b pb-3">
-              <span className="text-xs font-semibold tracking-wider text-muted-foreground uppercase">
+          <div className="flex flex-col gap-3 overflow-hidden">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold text-muted-foreground">
                 슬라이드 분할 미리보기
               </span>
               <Badge variant="secondary" className="font-mono">
@@ -171,37 +184,41 @@ export function QuickLyricPasteModal({
               </Badge>
             </div>
 
-            <div className="flex-1 space-y-3 overflow-y-auto pr-1">
+            <div className="flex-1 space-y-3 overflow-y-auto">
               {slides.length === 0 ? (
-                <div className="flex h-48 flex-col items-center justify-center gap-2 p-4 text-center text-xs text-muted-foreground">
-                  <FileTextIcon className="size-6" />
-                  <p>
-                    왼쪽 영역에 가사를 붙여넣으면
-                    <br />
-                    실시간으로 슬라이드가 분할되어 표시됩니다.
-                  </p>
-                </div>
+                <Empty className="border">
+                  <EmptyHeader>
+                    <EmptyMedia variant="icon">
+                      <FileTextIcon />
+                    </EmptyMedia>
+                    <EmptyDescription>
+                      왼쪽 영역에 가사를 붙여넣으면
+                      <br />
+                      실시간으로 슬라이드가 분할되어 표시됩니다.
+                    </EmptyDescription>
+                  </EmptyHeader>
+                </Empty>
               ) : (
                 slides.map((slide) => (
-                  <div
+                  <Card
                     key={slide.id || slide.order}
+                    size="sm"
                     data-testid="slide-preview-card"
-                    className="rounded-lg border bg-card p-3 text-card-foreground shadow-sm"
                   >
-                    <div className="mb-2 flex items-center justify-between">
-                      <span className="text-xs font-semibold">
-                        슬라이드 {slide.order + 1}
-                      </span>
-                      <Badge variant="outline">{slide.lines.length}줄</Badge>
-                    </div>
-                    <div className="space-y-1 text-xs">
+                    <CardHeader>
+                      <CardTitle>슬라이드 {slide.order + 1}</CardTitle>
+                      <CardAction>
+                        <Badge variant="outline">{slide.lines.length}줄</Badge>
+                      </CardAction>
+                    </CardHeader>
+                    <CardContent className="space-y-1 text-xs">
                       {slide.lines.map((line, idx) => (
                         <div key={idx} className="truncate">
                           {line}
                         </div>
                       ))}
-                    </div>
-                  </div>
+                    </CardContent>
+                  </Card>
                 ))
               )}
             </div>

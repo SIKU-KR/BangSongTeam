@@ -7,8 +7,9 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import type { DeckStyle } from "#shared";
-import { RibbonDropdown, RibbonOption } from "./RibbonDropdown";
-import { RibbonButton, RibbonGroup } from "./RibbonPrimitives";
+import { ToggleGroup, ToggleGroupItem } from "#components/ui/toggle-group";
+import { RibbonChoices, RibbonDropdown } from "./RibbonDropdown";
+import { RibbonGroup, RibbonTooltip } from "./RibbonPrimitives";
 import { LINE_HEIGHT_OPTIONS, TEXT_ALIGN_OPTIONS } from "./ribbonOptions";
 
 const ALIGN_ICONS: Record<DeckStyle["textAlign"], LucideIcon> = {
@@ -31,42 +32,57 @@ export function ParagraphControls({
 }: ParagraphControlsProps): React.JSX.Element {
   return (
     <RibbonGroup label="단락">
-      {TEXT_ALIGN_OPTIONS.map((option) => {
-        const Icon = ALIGN_ICONS[option.id];
-        return (
-          <RibbonButton
-            key={option.id}
-            label={option.label}
-            testId={`text-align-${option.id}-btn`}
-            pressed={style.textAlign === option.id}
-            disabled={disabled}
-            onClick={() => onUpdateStyle({ textAlign: option.id })}
-            icon={<Icon />}
-          />
-        );
-      })}
+      <ToggleGroup
+        aria-label="정렬"
+        spacing={0}
+        size="sm"
+        value={[style.textAlign]}
+        disabled={disabled}
+        onValueChange={(next) => {
+          const picked = TEXT_ALIGN_OPTIONS.find(
+            (option) => option.id === next[0],
+          );
+          if (picked) onUpdateStyle({ textAlign: picked.id });
+        }}
+      >
+        {TEXT_ALIGN_OPTIONS.map((option) => {
+          const Icon = ALIGN_ICONS[option.id];
+          return (
+            <RibbonTooltip key={option.id} content={option.label}>
+              <ToggleGroupItem
+                value={option.id}
+                aria-label={option.label}
+                data-testid={`text-align-${option.id}-btn`}
+                onMouseDown={(e) => e.preventDefault()}
+              >
+                <Icon />
+              </ToggleGroupItem>
+            </RibbonTooltip>
+          );
+        })}
+      </ToggleGroup>
       <RibbonDropdown
         label="줄 간격"
         testId="line-height-btn"
         disabled={disabled}
-        panelClassName="w-28 gap-0 p-1"
+        panelClassName="w-28 p-1"
         icon={<ListIcon />}
       >
-        {(close) =>
-          LINE_HEIGHT_OPTIONS.map((value) => (
-            <RibbonOption
-              key={value}
-              selected={style.lineHeight === value}
-              className="font-mono"
-              onSelect={() => {
-                onUpdateStyle({ lineHeight: value });
-                close();
-              }}
-            >
-              {value.toFixed(1)}
-            </RibbonOption>
-          ))
-        }
+        {(close) => (
+          <RibbonChoices
+            label="줄 간격"
+            className="font-mono"
+            value={String(style.lineHeight)}
+            choices={LINE_HEIGHT_OPTIONS.map((value) => ({
+              value: String(value),
+              label: value.toFixed(1),
+            }))}
+            onSelect={(value) => {
+              onUpdateStyle({ lineHeight: Number(value) });
+              close();
+            }}
+          />
+        )}
       </RibbonDropdown>
     </RibbonGroup>
   );

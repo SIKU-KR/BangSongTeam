@@ -1,7 +1,12 @@
 import React, { useEffect, useRef } from "react";
 import { SearchIcon, XIcon } from "lucide-react";
-import { Input } from "#components/ui/input";
-import { IconButton } from "#components/common/IconButton";
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupButton,
+  InputGroupInput,
+} from "#components/ui/input-group";
+import { SidebarTrigger } from "#components/ui/sidebar";
 import { isTypingTarget } from "../../features/drive";
 
 export interface AppHeaderProps {
@@ -51,13 +56,13 @@ export function AppHeader({
 
   return (
     <header className="shrink-0 bg-background">
-      <div className="flex h-16 items-center px-4 sm:px-6">
-        <div className="relative w-full max-w-3xl">
-          <SearchIcon
-            aria-hidden="true"
-            className="pointer-events-none absolute top-1/2 left-4 size-5 -translate-y-1/2 text-muted-foreground"
-          />
-          <Input
+      <div className="flex h-16 items-center gap-2 px-4 sm:px-6">
+        <SidebarTrigger />
+        <InputGroup className="h-10 max-w-3xl">
+          <InputGroupAddon>
+            <SearchIcon />
+          </InputGroupAddon>
+          <InputGroupInput
             ref={inputRef}
             type="search"
             aria-label="검색"
@@ -70,21 +75,22 @@ export function AppHeader({
               else e.currentTarget.blur();
             }}
             placeholder={searchPlaceholder}
-            className="h-12 rounded-full border-transparent bg-muted px-12 text-base focus-visible:bg-background md:text-base [&::-webkit-search-cancel-button]:hidden"
           />
           {searchQuery && (
-            <IconButton
-              label="검색어 지우기"
-              className="absolute top-1/2 right-2 -translate-y-1/2 rounded-full text-muted-foreground"
-              onClick={() => {
-                onSearchQueryChange("");
-                inputRef.current?.focus();
-              }}
-            >
-              <XIcon className="size-5" />
-            </IconButton>
+            <InputGroupAddon align="inline-end">
+              <InputGroupButton
+                size="icon-xs"
+                aria-label="검색어 지우기"
+                onClick={() => {
+                  onSearchQueryChange("");
+                  inputRef.current?.focus();
+                }}
+              >
+                <XIcon />
+              </InputGroupButton>
+            </InputGroupAddon>
           )}
-        </div>
+        </InputGroup>
       </div>
 
       <div className="flex h-14 items-center justify-between gap-4 px-4 sm:px-6">

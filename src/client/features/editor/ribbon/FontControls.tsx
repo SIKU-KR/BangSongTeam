@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { cn } from "cn";
-import { Button } from "#components/ui/button";
+import { ButtonGroup } from "#components/ui/button-group";
 import { Input } from "#components/ui/input";
 import {
   Select,
@@ -12,7 +11,8 @@ import {
 import type { DeckStyle } from "#shared";
 import { SUPPORTED_FONTS } from "#shared";
 import { ColorPickerField } from "../ColorPickerField";
-import { RibbonDropdown, RibbonOption } from "./RibbonDropdown";
+import { ToggleGroup, ToggleGroupItem } from "#components/ui/toggle-group";
+import { RibbonChoices, RibbonDropdown } from "./RibbonDropdown";
 import { RibbonButton, RibbonGroup, RibbonTooltip } from "./RibbonPrimitives";
 import {
   FONT_SIZE_PT_PRESETS,
@@ -73,7 +73,7 @@ export function FontControls({
         </SelectContent>
       </Select>
 
-      <div className="flex items-center">
+      <ButtonGroup>
         <RibbonTooltip content="글자 크기 (pt)">
           <Input
             type="text"
@@ -90,32 +90,32 @@ export function FontControls({
               }
               if (e.key === "Escape") setSizeText(String(sizePt));
             }}
-            className="w-11 rounded-r-none px-1.5 text-center font-mono text-xs md:text-xs"
+            className="w-12 text-center font-mono"
           />
         </RibbonTooltip>
         <RibbonDropdown
           label="글자 크기 목록"
           testId="font-size-list-btn"
           disabled={disabled}
-          panelClassName="max-h-72 w-20 gap-0 overflow-y-auto p-1"
+          panelClassName="max-h-72 w-20 overflow-y-auto p-1"
         >
-          {(close) =>
-            FONT_SIZE_PT_PRESETS.map((pt) => (
-              <RibbonOption
-                key={pt}
-                selected={pt === sizePt}
-                className="font-mono"
-                onSelect={() => {
-                  onUpdateStyle({ fontSizeVw: ptToVw(pt) });
-                  close();
-                }}
-              >
-                {pt}
-              </RibbonOption>
-            ))
-          }
+          {(close) => (
+            <RibbonChoices
+              label="글자 크기 목록"
+              className="font-mono"
+              value={String(sizePt)}
+              choices={FONT_SIZE_PT_PRESETS.map((pt) => ({
+                value: String(pt),
+                label: pt,
+              }))}
+              onSelect={(value) => {
+                onUpdateStyle({ fontSizeVw: ptToVw(Number(value)) });
+                close();
+              }}
+            />
+          )}
         </RibbonDropdown>
-      </div>
+      </ButtonGroup>
 
       <RibbonButton
         label="글자 크기 키우기"
@@ -163,29 +163,28 @@ export function FontControls({
       >
         {() => (
           <>
-            <div className="flex flex-wrap gap-1.5">
-              {PRESET_COLORS.map((color) => {
-                const selected =
-                  style.fontColor.toUpperCase() === color.value.toUpperCase();
-                return (
-                  <RibbonTooltip key={color.value} content={color.label}>
-                    <Button
-                      variant="outline"
-                      size="icon-xs"
-                      aria-label={color.label}
-                      aria-pressed={selected}
-                      onMouseDown={(e) => e.preventDefault()}
-                      onClick={() => onUpdateStyle({ fontColor: color.value })}
-                      style={{ backgroundColor: color.value }}
-                      className={cn(
-                        "rounded-full border-2 transition-transform hover:scale-110",
-                        selected && "border-primary ring-2 ring-ring/50",
-                      )}
-                    />
-                  </RibbonTooltip>
-                );
-              })}
-            </div>
+            <ToggleGroup
+              aria-label="글자 색"
+              variant="outline"
+              size="sm"
+              value={[style.fontColor.toUpperCase()]}
+              onValueChange={(next) => {
+                if (next[0]) onUpdateStyle({ fontColor: next[0] });
+              }}
+              className="flex-wrap"
+            >
+              {PRESET_COLORS.map((color) => (
+                <RibbonTooltip key={color.value} content={color.label}>
+                  <ToggleGroupItem
+                    value={color.value.toUpperCase()}
+                    aria-label={color.label}
+                    onMouseDown={(e) => e.preventDefault()}
+                    style={{ backgroundColor: color.value }}
+                    className="rounded-full aria-pressed:ring-3 aria-pressed:ring-ring/50"
+                  />
+                </RibbonTooltip>
+              ))}
+            </ToggleGroup>
             <ColorPickerField
               value={style.fontColor}
               onCommit={(hex) => onUpdateStyle({ fontColor: hex })}
@@ -198,27 +197,28 @@ export function FontControls({
         label="텍스트 그림자"
         testId="text-shadow-btn"
         disabled={disabled}
-        panelClassName="w-32 gap-0 p-1"
+        panelClassName="w-32 p-1"
         icon={
           <span className="text-sm leading-none font-bold text-shadow-sm">
             S
           </span>
         }
       >
-        {(close) =>
-          SHADOW_LEVELS.map((level) => (
-            <RibbonOption
-              key={level.id}
-              selected={style.textShadowLevel === level.id}
-              onSelect={() => {
-                onUpdateStyle({ textShadowLevel: level.id });
-                close();
-              }}
-            >
-              그림자 {level.label}
-            </RibbonOption>
-          ))
-        }
+        {(close) => (
+          <RibbonChoices
+            label="텍스트 그림자"
+            value={style.textShadowLevel}
+            choices={SHADOW_LEVELS.map((level) => ({
+              value: level.id,
+              label: `그림자 ${level.label}`,
+            }))}
+            onSelect={(value) => {
+              const level = SHADOW_LEVELS.find((item) => item.id === value);
+              if (level) onUpdateStyle({ textShadowLevel: level.id });
+              close();
+            }}
+          />
+        )}
       </RibbonDropdown>
     </RibbonGroup>
   );

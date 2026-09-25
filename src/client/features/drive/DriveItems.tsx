@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import {
   ArrowUpIcon,
   EllipsisVerticalIcon,
@@ -12,10 +12,16 @@ import {
 } from "lucide-react";
 import { cn } from "cn";
 import { Button } from "#components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuTrigger,
+} from "#components/ui/dropdown-menu";
 import { IconButton } from "#components/common/IconButton";
 import type { SortKey, SortOrder } from "../../routes/appShellContext";
 import { useDriveDraggable, useDriveDroppable } from "./driveContext";
 import { buildSubtitle, formatDate, type DriveItem } from "./driveModel";
+import { ActionMenuItems, type MenuAction } from "./ActionMenu";
 
 /** 둘째 열이 소유자(폴더 보기)인지 위치(검색 결과·휴지통)인지 */
 export type DriveColumnVariant = "owner" | "location";
@@ -28,9 +34,9 @@ export interface DriveItemHandlers {
   onMouseDown: (event: React.MouseEvent) => void;
   onClick: (event: React.MouseEvent) => void;
   onDoubleClick: () => void;
-  onContextMenu: (event: React.MouseEvent) => void;
   onFocus: () => void;
-  onMore: (event: React.MouseEvent<HTMLButtonElement>) => void;
+  /** ⋮ 메뉴를 열 때 부른다. 선택되지 않은 행이면 그 행만 선택한다 */
+  menuActions: () => MenuAction[];
   onPresent?: () => void;
   onEdit?: () => void;
 }
@@ -80,31 +86,72 @@ const HOVER_REVEAL =
 const ROW_CLASS =
   "group h-12 cursor-default border-b text-sm text-muted-foreground outline-none select-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset";
 
+/** 행 안의 조작이 행 선택·더블클릭 열기로 번지지 않게 막는다 */
+const STOP_ROW_EVENTS = {
+  onMouseDown: (event: React.MouseEvent) => event.stopPropagation(),
+  onClick: (event: React.MouseEvent) => event.stopPropagation(),
+  onDoubleClick: (event: React.MouseEvent) => event.stopPropagation(),
+  onContextMenu: (event: React.MouseEvent) => event.stopPropagation(),
+};
+
+/** 행의 ⋮ 메뉴. 항목은 열 때 계산한다 (선택을 바꾸는 부수 효과가 있어서) */
+function RowMenu({
+  label,
+  getActions,
+}: {
+  label: string;
+  getActions: () => MenuAction[];
+}): React.JSX.Element {
+  const [actions, setActions] = useState<MenuAction[]>([]);
+  return (
+    <DropdownMenu
+      onOpenChange={(open) => {
+        if (open) setActions(getActions());
+      }}
+    >
+      <DropdownMenuTrigger
+        data-testid="item-more-btn"
+        aria-label={label}
+        tabIndex={-1}
+        {...STOP_ROW_EVENTS}
+        render={<Button variant="ghost" size="icon" />}
+      >
+        <EllipsisVerticalIcon />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent
+        data-testid="drive-menu"
+        align="end"
+        className="min-w-60"
+        {...STOP_ROW_EVENTS}
+      >
+        <ActionMenuItems actions={actions} />
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
 function RowIconButton({
   testId,
   icon: Icon,
   label,
-  reveal = true,
   onSelect,
 }: {
   testId: string;
   icon: LucideIcon;
   label: string;
-  reveal?: boolean;
-  onSelect: (event: React.MouseEvent<HTMLButtonElement>) => void;
+  onSelect: () => void;
 }): React.JSX.Element {
   return (
     <IconButton
       label={label}
       tabIndex={-1}
       data-testid={testId}
-      className={cn("rounded-full", reveal && HOVER_REVEAL)}
-      onMouseDown={(event) => event.stopPropagation()}
+      className={HOVER_REVEAL}
+      {...STOP_ROW_EVENTS}
       onClick={(event) => {
         event.stopPropagation();
-        onSelect(event);
+        onSelect();
       }}
-      onDoubleClick={(event) => event.stopPropagation()}
     >
       <Icon />
     </IconButton>
@@ -143,7 +190,7 @@ function SortHeader({
         variant="ghost"
         size="sm"
         data-testid={`sort-header-${sortKey}`}
-        className={cn("-ml-2.5 rounded-full", active && "text-foreground")}
+        className={cn("-ml-2.5", active && "text-foreground")}
         onClick={(event) => {
           event.stopPropagation();
           onSort(sortKey);
@@ -260,7 +307,6 @@ export function DriveListRow({
       onMouseDown={handlers.onMouseDown}
       onClick={handlers.onClick}
       onDoubleClick={handlers.onDoubleClick}
-      onContextMenu={handlers.onContextMenu}
       onFocus={handlers.onFocus}
       className={cn(
         COLUMNS.row,
@@ -322,12 +368,9 @@ export function DriveListRow({
             onSelect={handlers.onEdit}
           />
         )}
-        <RowIconButton
-          testId="item-more-btn"
-          icon={EllipsisVerticalIcon}
+        <RowMenu
           label={`${item.name} 더보기`}
-          reveal={false}
-          onSelect={handlers.onMore}
+          getActions={handlers.menuActions}
         />
       </div>
     </div>
@@ -344,11 +387,11 @@ export function DriveListRow({
 export function TrashFolderRow({
   count,
   onOpen,
-  onMenu,
+  menuActions,
 }: {
   count: number;
   onOpen: () => void;
-  onMenu: (anchor: { x: number; y: number }) => void;
+  menuActions: () => MenuAction[];
 }): React.JSX.Element {
   const { setNodeRef, isDropTarget } = useDriveDroppable("item:trash-folder", {
     kind: "trash",
@@ -364,29 +407,16 @@ export function TrashFolderRow({
       aria-label="휴지통 (고정 폴더)"
       tabIndex={0}
       data-testid="drive-trash-folder"
+      data-trash-folder
       onMouseDown={(event) => event.stopPropagation()}
       onClick={(event) => event.stopPropagation()}
       onDoubleClick={onOpen}
       onKeyDown={(event) => {
         if (event.target !== event.currentTarget) return;
-        if (event.key === "Enter") {
-          event.preventDefault();
-          event.stopPropagation();
-          onOpen();
-        } else if (
-          event.key === "ContextMenu" ||
-          (event.key === "F10" && event.shiftKey)
-        ) {
-          event.preventDefault();
-          event.stopPropagation();
-          const rect = event.currentTarget.getBoundingClientRect();
-          onMenu({ x: rect.left + 48, y: rect.bottom });
-        }
-      }}
-      onContextMenu={(event) => {
+        if (event.key !== "Enter") return;
         event.preventDefault();
         event.stopPropagation();
-        onMenu({ x: event.clientX, y: event.clientY });
+        onOpen();
       }}
       className={cn(COLUMNS.row, ROW_CLASS, stateClass)}
     >
@@ -416,16 +446,7 @@ export function TrashFolderRow({
           label="휴지통 열기"
           onSelect={onOpen}
         />
-        <RowIconButton
-          testId="item-more-btn"
-          icon={EllipsisVerticalIcon}
-          label="휴지통 더보기"
-          reveal={false}
-          onSelect={(event) => {
-            const rect = event.currentTarget.getBoundingClientRect();
-            onMenu({ x: rect.right - 240, y: rect.bottom + 4 });
-          }}
-        />
+        <RowMenu label="휴지통 더보기" getActions={menuActions} />
       </div>
     </div>
   );

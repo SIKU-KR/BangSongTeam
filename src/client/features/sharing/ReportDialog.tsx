@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useId, useState } from "react";
 import { Button } from "#components/ui/button";
 import {
   Dialog,
@@ -8,7 +8,15 @@ import {
   DialogHeader,
   DialogTitle,
 } from "#components/ui/dialog";
-import { Label } from "#components/ui/label";
+import {
+  Field,
+  FieldContent,
+  FieldDescription,
+  FieldError,
+  FieldLabel,
+  FieldLegend,
+  FieldSet,
+} from "#components/ui/field";
 import { RadioGroup, RadioGroupItem } from "#components/ui/radio-group";
 import { Textarea } from "#components/ui/textarea";
 import type { ReportReason, ReportTargetType } from "#shared";
@@ -60,6 +68,7 @@ export function ReportDialog({
   const [reason, setReason] = useState<ReportReason>(defaultReason);
   const [details, setDetails] = useState("");
   const report = useSubmitReport();
+  const fieldId = useId();
 
   const close = (): void => {
     report.reset();
@@ -78,14 +87,14 @@ export function ReportDialog({
       <DialogContent data-testid="report-dialog" className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>신고하기</DialogTitle>
-          <DialogDescription className="truncate text-xs">
+          <DialogDescription className="truncate">
             {targetTitle}
           </DialogDescription>
         </DialogHeader>
 
         {report.isSuccess ? (
           <>
-            <p data-testid="report-dialog-done" className="text-xs">
+            <p data-testid="report-dialog-done" className="text-sm">
               신고가 접수되었습니다. 운영자가 확인한 뒤 처리합니다.
             </p>
             <DialogFooter>
@@ -105,44 +114,47 @@ export function ReportDialog({
               });
             }}
           >
-            <RadioGroup
-              aria-label="신고 사유"
-              value={reason}
-              onValueChange={(value) => setReason(value as ReportReason)}
-            >
-              {REASONS.map((option) => (
-                <Label
-                  key={option.value}
-                  className="cursor-pointer items-start text-xs font-normal"
-                >
-                  <RadioGroupItem
-                    value={option.value}
-                    data-testid={`report-reason-${option.value}`}
-                    className="mt-0.5"
-                  />
-                  <span className="grid gap-1">
-                    <span className="font-semibold">{option.label}</span>
-                    <span className="text-muted-foreground">{option.hint}</span>
-                  </span>
-                </Label>
-              ))}
-            </RadioGroup>
+            <FieldSet>
+              <FieldLegend variant="label">신고 사유</FieldLegend>
+              <RadioGroup
+                value={reason}
+                onValueChange={(value) => setReason(value as ReportReason)}
+              >
+                {REASONS.map((option) => (
+                  <Field key={option.value} orientation="horizontal">
+                    <RadioGroupItem
+                      id={`${fieldId}-${option.value}`}
+                      value={option.value}
+                      data-testid={`report-reason-${option.value}`}
+                    />
+                    <FieldContent>
+                      <FieldLabel htmlFor={`${fieldId}-${option.value}`}>
+                        {option.label}
+                      </FieldLabel>
+                      <FieldDescription>{option.hint}</FieldDescription>
+                    </FieldContent>
+                  </Field>
+                ))}
+              </RadioGroup>
+            </FieldSet>
 
-            <Textarea
-              aria-label="자세한 내용"
-              data-testid="report-details-input"
-              value={details}
-              maxLength={500}
-              onChange={(e) => setDetails(e.target.value)}
-              rows={3}
-              placeholder="자세한 내용 (선택, 500자 이내)"
-              className="field-sizing-fixed resize-none text-xs md:text-xs"
-            />
+            <Field>
+              <FieldLabel htmlFor={`${fieldId}-details`}>
+                자세한 내용 (선택)
+              </FieldLabel>
+              <Textarea
+                id={`${fieldId}-details`}
+                data-testid="report-details-input"
+                value={details}
+                maxLength={500}
+                onChange={(e) => setDetails(e.target.value)}
+                rows={3}
+                placeholder="500자 이내"
+              />
+            </Field>
 
             {report.isError && (
-              <p role="alert" className="text-xs text-destructive">
-                {describeApiError(report.error)}
-              </p>
+              <FieldError>{describeApiError(report.error)}</FieldError>
             )}
 
             <DialogFooter>

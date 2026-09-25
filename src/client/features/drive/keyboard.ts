@@ -7,6 +7,13 @@ export function isTypingTarget(target: EventTarget | null): boolean {
   );
 }
 
+/** 열린 메뉴 안의 키 입력인지. 메뉴가 방향키·Enter를 스스로 처리한다 */
+export function isMenuTarget(target: EventTarget | null): boolean {
+  return (
+    target instanceof HTMLElement && target.closest('[role="menu"]') !== null
+  );
+}
+
 /**
  * 버튼·링크·메뉴 항목처럼 Enter·Space를 스스로 처리하는 요소인지.
  * 목록 행(`role="option"`)은 여기에 들지 않는다.

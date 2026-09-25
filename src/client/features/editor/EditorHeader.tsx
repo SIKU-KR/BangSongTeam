@@ -20,6 +20,7 @@ import {
   DropdownMenuTrigger,
 } from "#components/ui/dropdown-menu";
 import { Input } from "#components/ui/input";
+import { Kbd } from "#components/ui/kbd";
 import {
   Popover,
   PopoverContent,
@@ -126,9 +127,14 @@ function ShortcutTable({
             <tr key={action}>
               <th
                 scope="row"
-                className="py-0.5 pr-3 text-left align-top font-mono font-normal whitespace-nowrap"
+                className="py-0.5 pr-3 text-left align-top font-normal whitespace-nowrap"
               >
-                {keys}
+                {keys.split(" / ").map((key, index) => (
+                  <React.Fragment key={key}>
+                    {index > 0 && " / "}
+                    <Kbd>{key}</Kbd>
+                  </React.Fragment>
+                ))}
               </th>
               <td className="py-0.5 text-muted-foreground">{action}</td>
             </tr>

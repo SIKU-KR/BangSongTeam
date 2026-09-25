@@ -7,6 +7,7 @@ import {
 } from "lucide-react";
 import { cn } from "cn";
 import { Button } from "#components/ui/button";
+import { ButtonGroup } from "#components/ui/button-group";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -42,23 +43,11 @@ function TypeFilterChip({
   }));
 
   return (
-    <div
-      className={cn(
-        "flex h-8 items-center rounded-lg border text-sm font-medium transition-colors",
-        active
-          ? "border-transparent bg-secondary text-secondary-foreground"
-          : "border-input",
-      )}
-    >
+    <ButtonGroup>
       <DropdownMenu>
         <DropdownMenuTrigger
           data-testid="drive-type-dropdown"
-          render={
-            <Button
-              variant="ghost"
-              className={cn("h-full", active ? "pr-1 pl-2" : "px-3")}
-            />
-          }
+          render={<Button variant={active ? "secondary" : "outline"} />}
         >
           {active && <CheckIcon />}
           {active ? TYPE_LABELS[value] : "유형"}
@@ -75,14 +64,14 @@ function TypeFilterChip({
       {active && (
         <IconButton
           label="유형 필터 지우기"
+          variant="secondary"
           data-testid="drive-type-clear"
-          size="icon-sm"
           onClick={() => onChange("all")}
         >
           <XIcon />
         </IconButton>
       )}
-    </div>
+    </ButtonGroup>
   );
 }
 
@@ -107,7 +96,6 @@ function SelectionBar({
       <IconButton
         label="선택 해제"
         data-testid="selection-clear"
-        className="rounded-full"
         onClick={onClear}
       >
         <XIcon />
@@ -123,10 +111,7 @@ function SelectionBar({
             label={action.label}
             data-testid={action.testId ? `bar-${action.testId}` : undefined}
             disabled={action.disabled}
-            className={cn(
-              "rounded-full",
-              action.danger && "text-destructive hover:text-destructive",
-            )}
+            className={cn(action.danger && "text-destructive")}
             onClick={action.onSelect}
           >
             {action.icon && <action.icon />}
@@ -136,9 +121,7 @@ function SelectionBar({
         <DropdownMenuTrigger
           data-testid="selection-more"
           aria-label="작업 더보기"
-          render={
-            <Button variant="ghost" size="icon" className="rounded-full" />
-          }
+          render={<Button variant="ghost" size="icon" />}
         >
           <EllipsisVerticalIcon />
         </DropdownMenuTrigger>

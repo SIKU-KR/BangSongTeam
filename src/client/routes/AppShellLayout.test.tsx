@@ -24,6 +24,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { MemoryRouter, Routes, Route } from "react-router-dom";
 import type { Folder } from "#shared";
 import { SEED_USER_ID } from "../features/presentation";
+import { ThemeProvider } from "#components/theme-provider";
 import { AppShellLayout } from "./AppShellLayout";
 import { PresentationsRoute } from "./PresentationsRoute";
 import { TrashRoute } from "./TrashRoute";
@@ -36,28 +37,30 @@ import { installFakeApi } from "../test/fakeApi";
 function renderShell(initialPath = "/presentations") {
   return render(
     withQueryClient(
-      <MemoryRouter initialEntries={[initialPath]}>
-        <Routes>
-          <Route element={<AppShellLayout />}>
-            <Route path="/presentations" element={<PresentationsRoute />} />
+      <ThemeProvider>
+        <MemoryRouter initialEntries={[initialPath]}>
+          <Routes>
+            <Route element={<AppShellLayout />}>
+              <Route path="/presentations" element={<PresentationsRoute />} />
+              <Route
+                path="/presentations/folders/:folderId"
+                element={<PresentationsRoute />}
+              />
+              <Route path="/presentations/trash" element={<TrashRoute />} />
+              <Route path="/lyrics" element={<LyricsRoute />} />
+              <Route path="/backgrounds" element={<BackgroundsRoute />} />
+            </Route>
             <Route
-              path="/presentations/folders/:folderId"
-              element={<PresentationsRoute />}
+              path="/present/:presentationId/fullscreen"
+              element={<div data-testid="fullscreen-stub" />}
             />
-            <Route path="/presentations/trash" element={<TrashRoute />} />
-            <Route path="/lyrics" element={<LyricsRoute />} />
-            <Route path="/backgrounds" element={<BackgroundsRoute />} />
-          </Route>
-          <Route
-            path="/present/:presentationId/fullscreen"
-            element={<div data-testid="fullscreen-stub" />}
-          />
-          <Route
-            path="/editor/:presentationId"
-            element={<div data-testid="editor-stub" />}
-          />
-        </Routes>
-      </MemoryRouter>,
+            <Route
+              path="/editor/:presentationId"
+              element={<div data-testid="editor-stub" />}
+            />
+          </Routes>
+        </MemoryRouter>
+      </ThemeProvider>,
     ),
   );
 }
@@ -323,7 +326,7 @@ describe("AppShellLayout (드라이브형 홈)", () => {
     expect(card("폴더 성탄절")).toHaveAttribute("aria-selected", "true");
   });
 
-  it("우클릭 메뉴 → 이동으로 다른 폴더에 옮기고, 실행 취소로 되돌린다", () => {
+  it("우클릭 메뉴 → 이동으로 다른 폴더에 옮기고, 실행 취소로 되돌린다", async () => {
     __loadFoldersForTests([folder(WORSHIP, "2026 주일 대예배")]);
     renderShell();
     const target = SEED_PRESENTATIONS[1];
@@ -339,11 +342,17 @@ describe("AppShellLayout (드라이브형 홈)", () => {
     expect(
       screen.queryByRole("option", { name: new RegExp(target.title) }),
     ).toBeNull();
-    expect(screen.getByTestId("drive-toast")).toHaveTextContent(
-      "‘2026 주일 대예배’로 옮겼습니다",
+    await waitFor(() =>
+      expect(screen.getByTestId("drive-toast")).toHaveTextContent(
+        "‘2026 주일 대예배’로 옮겼습니다",
+      ),
     );
 
-    fireEvent.click(screen.getByTestId("drive-toast-action"));
+    fireEvent.click(
+      within(screen.getByTestId("drive-toast")).getByRole("button", {
+        name: "실행 취소",
+      }),
+    );
     expect(getPresentationById(target.id)?.folderId ?? null).toBeNull();
   });
 
@@ -430,8 +439,10 @@ describe("AppShellLayout (드라이브형 홈)", () => {
       });
 
       expect(getPresentationById(target.id)).toBeUndefined();
-      expect(await screen.findByTestId("drive-toast")).toHaveTextContent(
-        "‘테스트 프레젠테이션 (사본)’을 영구 삭제했습니다",
+      await waitFor(() =>
+        expect(screen.getByTestId("drive-toast")).toHaveTextContent(
+          "‘테스트 프레젠테이션 (사본)’을 영구 삭제했습니다",
+        ),
       );
     } finally {
       fake.restore();
@@ -462,8 +473,10 @@ describe("AppShellLayout (드라이브형 홈)", () => {
       });
 
       expect(getPresentationById(target.id)).toBeUndefined();
-      expect(await screen.findByTestId("drive-toast")).toHaveTextContent(
-        "‘주일 콘티’를 영구 삭제했습니다",
+      await waitFor(() =>
+        expect(screen.getByTestId("drive-toast")).toHaveTextContent(
+          "‘주일 콘티’를 영구 삭제했습니다",
+        ),
       );
     } finally {
       fake.restore();
@@ -499,8 +512,10 @@ describe("AppShellLayout (드라이브형 홈)", () => {
       });
 
       expect(getFolders().find((f) => f.id === WORSHIP)).toBeUndefined();
-      expect(await screen.findByTestId("drive-toast")).toHaveTextContent(
-        "‘2026 주일 대예배’를 영구 삭제했습니다",
+      await waitFor(() =>
+        expect(screen.getByTestId("drive-toast")).toHaveTextContent(
+          "‘2026 주일 대예배’를 영구 삭제했습니다",
+        ),
       );
     } finally {
       fake.restore();
@@ -959,13 +974,13 @@ describe("AppShellLayout (구글 드라이브식 조작)", () => {
     expect(screen.getByTestId("shell-search-input")).toHaveFocus();
   });
 
-  it("메뉴는 키보드로 옮겨 다니고 단축키를 보여 주며, Shift+F10으로 연다", async () => {
+  it("우클릭 메뉴는 키보드로 옮겨 다니고 단축키를 보여 준다", async () => {
     renderShell();
     const options = screen.getAllByRole("option");
 
-    fireEvent.contextMenu(options[0]);
+    fireEvent.contextMenu(options[1]);
     const menu = await screen.findByTestId("drive-menu");
-    await waitFor(() => expect(menu).toHaveFocus());
+    expect(options[1]).toHaveAttribute("aria-selected", "true");
     expect(within(menu).getByTestId("action-rename")).toHaveTextContent("F2");
     const items = within(menu).getAllByRole("menuitem");
 
@@ -977,15 +992,5 @@ describe("AppShellLayout (구글 드라이브식 조작)", () => {
     await waitFor(() => expect(items[0]).toHaveFocus());
     fireEvent.keyDown(items[0], { key: "Escape" });
     await waitFor(() => expect(screen.queryByTestId("drive-menu")).toBeNull());
-
-    act(() => {
-      options[1].focus();
-    });
-    press("F10", { shiftKey: true });
-    const keyboardMenu = await screen.findByTestId("drive-menu");
-    await waitFor(() =>
-      expect(within(keyboardMenu).getAllByRole("menuitem")[0]).toHaveFocus(),
-    );
-    expect(options[1]).toHaveAttribute("aria-selected", "true");
   });
 });

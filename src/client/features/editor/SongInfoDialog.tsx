@@ -9,7 +9,12 @@ import {
   DialogTitle,
 } from "#components/ui/dialog";
 import { Input } from "#components/ui/input";
-import { Label } from "#components/ui/label";
+import {
+  Field,
+  FieldDescription,
+  FieldGroup,
+  FieldLabel,
+} from "#components/ui/field";
 
 const MAX_FIELD_LENGTH = 100;
 
@@ -67,11 +72,11 @@ export function SongInfoDialog({
             <DialogTitle>{heading}</DialogTitle>
           </DialogHeader>
 
-          <div className="grid gap-3">
-            <div className="grid gap-1.5">
-              <Label htmlFor="song-info-title">
+          <FieldGroup>
+            <Field>
+              <FieldLabel htmlFor="song-info-title">
                 곡 제목 <span className="text-destructive">*</span>
-              </Label>
+              </FieldLabel>
               <Input
                 id="song-info-title"
                 ref={titleRef}
@@ -81,9 +86,11 @@ export function SongInfoDialog({
                 maxLength={MAX_FIELD_LENGTH}
                 onChange={(event) => setTitle(event.target.value)}
               />
-            </div>
-            <div className="grid gap-1.5">
-              <Label htmlFor="song-info-artist">아티스트 (선택)</Label>
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="song-info-artist">
+                아티스트 (선택)
+              </FieldLabel>
               <Input
                 id="song-info-artist"
                 type="text"
@@ -92,12 +99,9 @@ export function SongInfoDialog({
                 maxLength={MAX_FIELD_LENGTH}
                 onChange={(event) => setArtist(event.target.value)}
               />
-            </div>
-          </div>
-
-          {notice && (
-            <p className="text-xs/relaxed text-muted-foreground">{notice}</p>
-          )}
+              {notice && <FieldDescription>{notice}</FieldDescription>}
+            </Field>
+          </FieldGroup>
 
           <DialogFooter>
             <DialogClose render={<Button variant="outline" />}>

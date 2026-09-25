@@ -1,5 +1,7 @@
 import React, { useState } from "react";
 import { Outlet, useLocation } from "react-router-dom";
+import { SidebarInset, SidebarProvider } from "#components/ui/sidebar";
+import { Toaster } from "#components/ui/sonner";
 import type { Deck } from "#shared";
 import { ChromeAlertBanner } from "../components/common/ChromeAlertBanner";
 import { StorageWarningBanner } from "../components/common/StorageWarningBanner";
@@ -102,10 +104,10 @@ function AppShellFrame(): React.JSX.Element {
   };
 
   return (
-    <div className="flex h-screen w-full overflow-hidden bg-background">
+    <SidebarProvider className="h-svh overflow-hidden">
       <AppSidebar />
 
-      <div className="flex h-full min-w-0 flex-1 flex-col overflow-hidden">
+      <SidebarInset className="min-w-0 overflow-hidden">
         <ChromeAlertBanner />
         <StorageWarningBanner />
         <AppUpdateBanner />
@@ -118,7 +120,7 @@ function AppShellFrame(): React.JSX.Element {
           titleSlot={onDrive ? <DriveBreadcrumbs /> : undefined}
           actions={
             onDrive ? (
-              <div className="lg:hidden">
+              <div className="md:hidden">
                 <NewMenuButton variant="fab" testId="toolbar-new-btn" />
               </div>
             ) : undefined
@@ -126,23 +128,23 @@ function AppShellFrame(): React.JSX.Element {
         />
 
         {onDrive ? (
-          <main className="flex min-h-0 flex-1 flex-col">
+          <div className="flex min-h-0 flex-1 flex-col">
             <Outlet context={context} />
-          </main>
+          </div>
         ) : (
-          <main className="min-h-0 flex-1 overflow-y-auto">
-            <div className="p-4 sm:px-6">
-              <Outlet context={context} />
-            </div>
-          </main>
+          <div className="min-h-0 flex-1 overflow-y-auto p-4 sm:px-6">
+            <Outlet context={context} />
+          </div>
         )}
-      </div>
+      </SidebarInset>
+
+      <Toaster position="bottom-left" />
 
       <QuickLyricPasteModal
         isOpen={isQuickPasteOpen}
         onClose={() => setIsQuickPasteOpen(false)}
         onAddToSet={handleAddDeckToPresentation}
       />
-    </div>
+    </SidebarProvider>
   );
 }

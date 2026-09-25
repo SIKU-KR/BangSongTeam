@@ -8,3 +8,5 @@ pnpm-lock.yaml
 coverage/
 worker-configuration.d.ts
 migrations/meta/
+src/client/components/ui/
+src/client/hooks/use-mobile.ts

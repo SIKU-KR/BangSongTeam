@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { TooltipProvider } from "#components/ui/tooltip";
-import { ThemeProvider } from "./features/theme";
+import { ThemeProvider } from "#components/theme-provider";
 import {
   hydrateFromStorage,
   flushPendingWrites,
@@ -96,10 +96,13 @@ function useHydration(): boolean {
   );
 }
 
+/** 예전 자체 테마 저장 키를 그대로 써서 사용자가 고른 테마를 잃지 않는다 */
+export const THEME_STORAGE_KEY = "worship-theme";
+
 /** App 최상위 라우팅 컴포넌트 */
 export function App(): React.JSX.Element {
   return (
-    <ThemeProvider>
+    <ThemeProvider defaultTheme="system" storageKey={THEME_STORAGE_KEY}>
       <TooltipProvider>
         <AppRoutes />
       </TooltipProvider>

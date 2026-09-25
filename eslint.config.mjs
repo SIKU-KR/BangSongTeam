@@ -183,7 +183,7 @@ export default tseslint.config(
   },
   {
     files: ["src/client/**/*.tsx"],
-    ignores: ["**/*.test.tsx"],
+    ignores: ["**/*.test.tsx", "src/client/components/ui/**"],
     plugins: { "better-tailwindcss": betterTailwindcss },
     settings: {
       "better-tailwindcss": { entryPoint: "src/client/index.css" },

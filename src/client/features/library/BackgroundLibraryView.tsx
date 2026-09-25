@@ -8,8 +8,24 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "#components/ui/alert-dialog";
+import { ImageIcon, WifiOffIcon } from "lucide-react";
+import { Alert, AlertDescription } from "#components/ui/alert";
 import { Badge } from "#components/ui/badge";
 import { Button } from "#components/ui/button";
+import {
+  Card,
+  CardAction,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "#components/ui/card";
+import {
+  Empty,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "#components/ui/empty";
+import { ToggleGroup, ToggleGroupItem } from "#components/ui/toggle-group";
 import { hangulIncludes, type BackgroundMedia } from "#shared";
 import {
   BackgroundPreview,
@@ -45,23 +61,22 @@ function BackgroundCard({
   const [hovered, setHovered] = useState(false);
 
   return (
-    <div
+    <Card
+      size="sm"
       data-testid={`bg-card-${background.id}`}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
-      className="flex flex-col overflow-hidden rounded-2xl border bg-card text-card-foreground shadow-sm transition-all hover:shadow-md"
+      className="pt-0"
     >
       <BackgroundPreview background={background} playing={hovered} />
-      <div className="flex items-center justify-between gap-2 border-t p-3">
-        <div className="min-w-0">
-          <h4 className="truncate text-xs font-bold">{background.title}</h4>
-          <p className="mt-0.5 truncate text-2xs text-muted-foreground">
-            {background.tags.join(" · ") || "태그 없음"}
-          </p>
-        </div>
-        {action}
-      </div>
-    </div>
+      <CardHeader>
+        <CardTitle className="truncate">{background.title}</CardTitle>
+        <CardDescription className="truncate">
+          {background.tags.join(" · ") || "태그 없음"}
+        </CardDescription>
+        {action && <CardAction>{action}</CardAction>}
+      </CardHeader>
+    </Card>
   );
 }
 
@@ -87,18 +102,6 @@ function SectionHeader({
         </div>
         <p className="mt-1 text-xs text-muted-foreground">{description}</p>
       </div>
-      {children}
-    </div>
-  );
-}
-
-function EmptyState({
-  children,
-}: {
-  children: React.ReactNode;
-}): React.JSX.Element {
-  return (
-    <div className="flex flex-col items-center justify-center gap-3 rounded-xl border bg-card px-4 py-12 text-center text-sm text-muted-foreground">
       {children}
     </div>
   );
@@ -152,12 +155,12 @@ export function BackgroundLibraryView({
   return (
     <div className="space-y-6">
       {isOffline && (
-        <div
-          role="status"
-          className="rounded-xl border border-warning/40 bg-warning/10 px-4 py-2.5 text-xs text-warning"
-        >
-          오프라인이라 저장해 둔 목록을 보여 줍니다.
-        </div>
+        <Alert role="status">
+          <WifiOffIcon />
+          <AlertDescription>
+            오프라인이라 저장해 둔 목록을 보여 줍니다.
+          </AlertDescription>
+        </Alert>
       )}
 
       <section className="space-y-4">
@@ -178,35 +181,38 @@ export function BackgroundLibraryView({
         </SectionHeader>
 
         {tags.length > 0 && (
-          <div
+          <ToggleGroup
             data-testid="bg-tag-filter"
-            className="flex items-center gap-1.5 overflow-x-auto py-1"
+            aria-label="태그"
+            variant="outline"
+            size="sm"
+            value={[activeTag]}
+            onValueChange={(next) => setActiveTag(next[0] ?? ALL_TAGS)}
+            className="flex-wrap"
           >
             {[ALL_TAGS, ...tags].map((tag) => (
-              <Button
-                key={tag}
-                size="xs"
-                variant={activeTag === tag ? "default" : "secondary"}
-                aria-pressed={activeTag === tag}
-                onClick={() => setActiveTag(tag)}
-                className="shrink-0 rounded-full px-2.5"
-              >
+              <ToggleGroupItem key={tag} value={tag}>
                 {tag}
-              </Button>
+              </ToggleGroupItem>
             ))}
-          </div>
+          </ToggleGroup>
         )}
 
         {visible.length === 0 ? (
-          <EmptyState>
-            {all.length === 0 ? (
-              <p>아직 등록된 배경이 없습니다.</p>
-            ) : query ? (
-              <p>&ldquo;{searchQuery}&rdquo;에 맞는 배경이 없습니다.</p>
-            ) : (
-              <p>조건에 맞는 배경이 없습니다.</p>
-            )}
-          </EmptyState>
+          <Empty className="border">
+            <EmptyHeader>
+              <EmptyMedia variant="icon">
+                <ImageIcon />
+              </EmptyMedia>
+              <EmptyTitle>
+                {all.length === 0
+                  ? "아직 등록된 배경이 없습니다."
+                  : query
+                    ? `“${searchQuery}”에 맞는 배경이 없습니다.`
+                    : "조건에 맞는 배경이 없습니다."}
+              </EmptyTitle>
+            </EmptyHeader>
+          </Empty>
         ) : (
           <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {visible.map((bg) => (

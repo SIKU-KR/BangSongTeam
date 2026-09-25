@@ -10,7 +10,7 @@ Web-first slide tool for church worship teams: build song decks and presentation
 
 One Cloudflare Worker serves the Vite SPA and the Hono API (`/api/*`), bound to one D1 database (`DB`) and one R2 bucket (`MEDIA_BUCKET`). The repo is a single pnpm package with no workspaces.
 
-- **Client**: React 19, React Router 7 in library mode (not Next.js or TanStack Start), TanStack Query, Tailwind CSS 4 (`@tailwindcss/vite`), shadcn/ui (`base-nova` style on Base UI, not Radix) with `lucide-react` icons
+- **Client**: React 19, React Router 7 in library mode (not Next.js or TanStack Start), TanStack Query, Tailwind CSS 4 (`@tailwindcss/vite`), shadcn/ui (`base-nova` style on Base UI, not Radix) with `lucide-react` icons and `sonner` toasts
 - **API**: Hono with `@hono/zod-validator`. The client talks to it only through `hc<AppType>` (`src/client/lib/api/client.ts`)
 - **Data**: D1 + Drizzle ORM (FTS5 trigram search), R2 for background MP4s and posters
 - **Auth**: Better Auth with Kakao/Naver (when configured), allowlisted email/password, and a localhost-only dev login
@@ -148,13 +148,15 @@ pnpm vitest run -t "slide split"
 - Server data goes through TanStack Query (invalidate after mutations). UI state lives in React state/context and the feature stores.
 - Comments, TSDoc and UI copy are written in Korean.
 - **UI** (ESLint-enforced in `src/client/**/*.tsx`, except `components/ui/**`):
-  - Build screens from `#components/ui/*`. Add a primitive with `pnpm exec shadcn add <name>`; only `components/ui/**` imports `@base-ui/react`.
-  - Colors, radii and sizes come from the tokens in `src/client/index.css` (`bg-background`, `text-muted-foreground`, `bg-primary`, `text-destructive`, `text-warning`, `bg-success`, `sidebar-*`). No palette colors (`zinc-500`), no `dark:`, no arbitrary values (`text-[11px]`); add a token to `@theme` instead (`text-2xs`). `text-white`/`bg-black` are fine on the stage and over slide thumbnails.
+  - Prefer a shadcn registry component over a hand-written pattern (menus, toggles, fields, empty states, toasts, sidebar…). Add one with `pnpm exec shadcn add <name>` and delete `components/ui/*` files nothing imports.
+  - Keep `components/ui/*` as the CLI generates it (Prettier and the Tailwind lint skip it). The only local edits are Korean copy (`닫기`, `사이드바…`) and the `sonner.tsx` import of `#components/theme-provider` (the Vite dark-mode guide's provider, not next-themes). Re-apply them after `--overwrite`.
+  - Use components with their variants; avoid restyling them with `className` beyond layout (width, position, spacing).
+  - Colors, radii and sizes come from the tokens in `src/client/index.css` (`bg-background`, `text-muted-foreground`, `bg-primary`, `text-destructive`, `text-warning`, `sidebar-*`). No palette colors (`zinc-500`), no `dark:`, no arbitrary values (`text-[11px]`); add a token to `@theme` instead (`text-2xs`). `text-white`/`bg-black` are fine on the stage and over slide thumbnails.
   - Compose classes with `cn` (package `cn`), not template literals. Class order is enforced by `better-tailwindcss` (`pnpm lint:fix`).
   - Icons come from `lucide-react`; no inline `<svg>`. Icon-only buttons use `components/common/IconButton` (aria-label + tooltip). Use `Tooltip`, never a native `title`.
-  - Use `Dialog`, `AlertDialog`, `DropdownMenu`, `Popover` instead of hand-rolled overlays. Editor shortcuts treat only `[data-slot="dialog-content"]` and `[data-slot="alert-dialog-content"]` as modal. Ribbon popovers pass `initialFocus={false}` so the lyrics caret survives.
+  - Editor shortcuts treat only `[data-slot="dialog-content"]` and `[data-slot="alert-dialog-content"]` as modal. Ribbon popovers pass `initialFocus={false}` and their buttons prevent `mousedown` so the lyrics caret survives.
   - Inline `style` is allowed only for user content (stage, canvas, font/colour previews, drag coordinates); the file list is `STYLE_ALLOWED_FILES` in `eslint.config.mjs`.
-  - Base UI in jsdom: popups close asynchronously (`waitFor`), outside clicks need `pointerDown` + `click`, and a `Select` option needs `pointerDown` → `mouseUp` → `click`.
+  - Base UI in jsdom: popups and sonner toasts update asynchronously (`waitFor`/`findBy`), outside clicks need `pointerDown` + `click`, and a `Select` option needs `pointerDown` → `mouseUp` → `click`. Components that read the sidebar or theme context need `SidebarProvider`/`ThemeProvider` in the test tree.
 - **Comments**: code is the source of truth.
   - No inline comments inside functions, JSX or tests. That covers restated logic, step numbers, TODOs, commented-out code, and milestone or spec tags (`M5`, `PRD 4.7`, `Task 4.5`).
   - The only exception is a workaround for a third-party or platform constraint, with a reference.

@@ -8,6 +8,15 @@ import {
 } from "lucide-react";
 import { cn } from "cn";
 import { Button } from "#components/ui/button";
+import { ButtonGroup, ButtonGroupText } from "#components/ui/button-group";
+import {
+  Empty,
+  EmptyContent,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "#components/ui/empty";
 import { IconButton } from "#components/common/IconButton";
 import type { Slide, DeckStyle, TextBoxPosition } from "#shared";
 import { DEFAULT_DECK_STYLE } from "#shared";
@@ -95,28 +104,26 @@ export function EditorStageCanvas({
           className,
         )}
       >
-        <div className="flex w-full max-w-xl flex-col items-center gap-4 rounded-2xl border bg-card p-8 text-center text-card-foreground shadow-xl">
-          <div className="flex size-16 items-center justify-center rounded-2xl border bg-muted">
-            <FileMusicIcon className="size-8" />
-          </div>
-
-          <div>
-            <h3 className="text-lg font-bold">
-              등록된 찬양 곡 또는 슬라이드가 없습니다
-            </h3>
-            <p className="mt-1 max-w-md text-xs text-muted-foreground">
+        <Empty className="max-w-xl border">
+          <EmptyHeader>
+            <EmptyMedia variant="icon">
+              <FileMusicIcon />
+            </EmptyMedia>
+            <EmptyTitle>등록된 찬양 곡 또는 슬라이드가 없습니다</EmptyTitle>
+            <EmptyDescription>
               새 찬양 가사를 빠른 입력으로 추가하여 프레젠테이션 제작을
               시작하세요.
-            </p>
-          </div>
-
+            </EmptyDescription>
+          </EmptyHeader>
           {onOpenLyricModal && (
-            <Button onClick={onOpenLyricModal}>
-              <PlusIcon />
-              가사 붙여넣기로 새 곡 추가
-            </Button>
+            <EmptyContent>
+              <Button onClick={onOpenLyricModal}>
+                <PlusIcon />
+                가사 붙여넣기로 새 곡 추가
+              </Button>
+            </EmptyContent>
           )}
-        </div>
+        </Empty>
       </div>
     );
   }
@@ -187,9 +194,10 @@ export function EditorStageCanvas({
             data-testid="canvas-prev-btn"
             disabled={slideNumber <= 1}
             onClick={onPrevSlide}
-            className={cn(CANVAS_NAV_BUTTON, "left-3")}
+            variant="secondary"
+            className={cn(CANVAS_NAV_POSITION, "left-3")}
           >
-            <ChevronLeftIcon className="size-5" />
+            <ChevronLeftIcon />
           </IconButton>
 
           <IconButton
@@ -198,9 +206,10 @@ export function EditorStageCanvas({
             data-testid="canvas-next-btn"
             disabled={slideNumber >= totalSlideCount}
             onClick={onNextSlide}
-            className={cn(CANVAS_NAV_BUTTON, "right-3")}
+            variant="secondary"
+            className={cn(CANVAS_NAV_POSITION, "right-3")}
           >
-            <ChevronRightIcon className="size-5" />
+            <ChevronRightIcon />
           </IconButton>
         </div>
       </div>
@@ -221,40 +230,41 @@ export function EditorStageCanvas({
         </div>
 
         {onZoomChange && (
-          <div className="hidden items-center gap-0.5 rounded-lg border bg-background p-0.5 sm:flex">
+          <ButtonGroup className="hidden sm:flex">
             <IconButton
               label="캔버스 축소"
-              size="icon-xs"
+              variant="outline"
+              size="icon-sm"
               onClick={() => onZoomChange(Math.max(50, zoomLevel - 15))}
             >
               <MinusIcon />
             </IconButton>
-            <span className="w-12 text-center font-mono text-xs text-foreground">
+            <ButtonGroupText className="w-14 justify-center font-mono text-xs">
               {zoomLevel}%
-            </span>
+            </ButtonGroupText>
             <IconButton
               label="캔버스 확대"
-              size="icon-xs"
+              variant="outline"
+              size="icon-sm"
               onClick={() => onZoomChange(Math.min(150, zoomLevel + 15))}
             >
               <PlusIcon />
             </IconButton>
             <IconButton
               label="100% 원본 맞춤"
-              variant="ghost"
-              size="xs"
-              className="border-l"
+              variant="outline"
+              size="sm"
               onClick={() => onZoomChange(100)}
             >
               맞춤
             </IconButton>
-          </div>
+          </ButtonGroup>
         )}
       </div>
     </div>
   );
 }
 
-/** 슬라이드(검정 배경) 위에 뜨는 이전·다음 버튼. 테마와 무관하게 흰 글자를 쓴다 */
-const CANVAS_NAV_BUTTON =
-  "absolute top-1/2 z-40 -translate-y-1/2 rounded-full border-white/10 bg-black/60 text-white opacity-0 shadow-lg backdrop-blur-sm group-hover:opacity-100 hover:bg-black/80 hover:text-white disabled:opacity-0";
+/** 슬라이드 위 이전·다음 버튼의 자리. 마우스를 올렸을 때만 보인다 */
+const CANVAS_NAV_POSITION =
+  "absolute top-1/2 z-40 -translate-y-1/2 rounded-full opacity-0 group-hover:opacity-100 disabled:opacity-0";

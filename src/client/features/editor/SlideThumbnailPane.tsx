@@ -9,6 +9,8 @@ import {
 } from "lucide-react";
 import { cn } from "cn";
 import { Button } from "#components/ui/button";
+import { ButtonGroup } from "#components/ui/button-group";
+import { Empty, EmptyDescription, EmptyHeader } from "#components/ui/empty";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -162,11 +164,15 @@ export function SlideThumbnailPane({
 
       <div className="flex-1 overflow-y-auto px-3 py-2">
         {items.length === 0 && (
-          <p className="px-1 py-6 text-center text-xs text-muted-foreground">
-            아직 곡이 없습니다.
-            <br />
-            아래에서 찬양곡을 추가하세요.
-          </p>
+          <Empty>
+            <EmptyHeader>
+              <EmptyDescription>
+                아직 곡이 없습니다.
+                <br />
+                아래에서 찬양곡을 추가하세요.
+              </EmptyDescription>
+            </EmptyHeader>
+          </Empty>
         )}
 
         {items.map((item, songIndex) => {
@@ -381,12 +387,12 @@ export function SlideThumbnailPane({
                               />
                             )}
 
-                            <div className="absolute top-1 right-1 z-30 flex items-center gap-0.5 rounded-sm border border-white/15 bg-black/75 p-0.5 opacity-0 transition-opacity group-hover:opacity-100">
+                            <ButtonGroup className="absolute top-1 right-1 z-30 opacity-0 transition-opacity group-hover:opacity-100">
                               <IconButton
                                 label="슬라이드 복제"
+                                variant="secondary"
                                 size="icon-xs"
                                 data-testid={`duplicate-slide-btn-${globalIndex}`}
-                                className={OVERLAY_BUTTON}
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   onDuplicateSlide(songIndex, slideIndex);
@@ -397,9 +403,9 @@ export function SlideThumbnailPane({
                               {slides.length > 1 && (
                                 <IconButton
                                   label="슬라이드 삭제"
+                                  variant="secondary"
                                   size="icon-xs"
                                   data-testid={`delete-slide-btn-${globalIndex}`}
-                                  className={OVERLAY_BUTTON}
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     onDeleteSlide(songIndex, slideIndex);
@@ -408,7 +414,7 @@ export function SlideThumbnailPane({
                                   <Trash2Icon />
                                 </IconButton>
                               )}
-                            </div>
+                            </ButtonGroup>
                           </div>
                         </SortableItem>
                       );
@@ -435,10 +441,6 @@ export function SlideThumbnailPane({
     </aside>
   );
 }
-
-/** 썸네일 위(검정 배경)에 뜨는 버튼. 테마와 무관하게 흰 글자를 쓴다 */
-const OVERLAY_BUTTON =
-  "text-white/80 hover:bg-white/20 hover:text-white aria-expanded:text-white";
 
 function OverflowWarning({
   testId,

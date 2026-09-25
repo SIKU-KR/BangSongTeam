@@ -7,7 +7,8 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "#components/ui/popover";
-import { RIBBON_BUTTON_CLASS, RibbonTooltip } from "./RibbonPrimitives";
+import { ToggleGroup, ToggleGroupItem } from "#components/ui/toggle-group";
+import { RibbonTooltip } from "./RibbonPrimitives";
 
 export interface RibbonDropdownProps {
   label: string;
@@ -46,11 +47,11 @@ export function RibbonDropdown({
           aria-label={label}
           disabled={disabled}
           onMouseDown={(e) => e.preventDefault()}
-          render={<Button variant="ghost" className={RIBBON_BUTTON_CLASS} />}
+          render={<Button variant="ghost" size="sm" />}
         >
           {icon}
           {text && <span className="hidden xl:inline">{text}</span>}
-          <ChevronDownIcon className="size-3 opacity-60" />
+          <ChevronDownIcon className="opacity-60" />
         </PopoverTrigger>
       </RibbonTooltip>
       <PopoverContent
@@ -66,31 +67,43 @@ export function RibbonDropdown({
   );
 }
 
-/** 펼침 패널 안의 선택지 목록 항목 (글자 크기·줄 간격·그림자) */
-export function RibbonOption({
-  selected,
+/** 펼침 패널 안의 선택지 목록 (글자 크기·줄 간격·그림자). 고르면 `onSelect`를 부른다 */
+export function RibbonChoices({
+  label,
+  choices,
+  value,
   onSelect,
   className,
-  children,
 }: {
-  selected: boolean;
-  onSelect: () => void;
+  label: string;
+  choices: ReadonlyArray<{ value: string; label: React.ReactNode }>;
+  value: string;
+  onSelect: (value: string) => void;
   className?: string;
-  children: React.ReactNode;
 }): React.JSX.Element {
   return (
-    <Button
-      variant="ghost"
-      size="sm"
-      aria-pressed={selected}
-      onMouseDown={(e) => e.preventDefault()}
-      onClick={onSelect}
-      className={cn(
-        "w-full justify-start font-normal aria-pressed:bg-accent aria-pressed:text-accent-foreground",
-        className,
-      )}
+    <ToggleGroup
+      aria-label={label}
+      orientation="vertical"
+      spacing={0}
+      value={[value]}
+      onValueChange={(next) => {
+        const picked = next[0];
+        if (picked !== undefined) onSelect(picked);
+      }}
+      className="w-full"
     >
-      {children}
-    </Button>
+      {choices.map((choice) => (
+        <ToggleGroupItem
+          key={choice.value}
+          value={choice.value}
+          size="sm"
+          onMouseDown={(e) => e.preventDefault()}
+          className={cn("justify-start", className)}
+        >
+          {choice.label}
+        </ToggleGroupItem>
+      ))}
+    </ToggleGroup>
   );
 }

@@ -1,7 +1,8 @@
 import React from "react";
 import { render, screen, fireEvent, act } from "@testing-library/react";
 import { describe, it, expect, beforeEach } from "vitest";
-import { ThemeProvider } from "../../features/theme";
+import { SidebarProvider } from "#components/ui/sidebar";
+import { ThemeProvider } from "#components/theme-provider";
 import { ThemeMenuButton } from "./ThemeMenuButton";
 
 describe("ThemeMenuButton", () => {
@@ -12,8 +13,10 @@ describe("ThemeMenuButton", () => {
 
   it("should render full variant button with current theme label", () => {
     render(
-      <ThemeProvider defaultTheme="light">
-        <ThemeMenuButton variant="full" />
+      <ThemeProvider defaultTheme="light" storageKey="worship-theme">
+        <SidebarProvider>
+          <ThemeMenuButton variant="sidebar" />
+        </SidebarProvider>
       </ThemeProvider>,
     );
 
@@ -25,8 +28,10 @@ describe("ThemeMenuButton", () => {
 
   it("should toggle dropdown menu when button is clicked", () => {
     render(
-      <ThemeProvider defaultTheme="dark">
-        <ThemeMenuButton />
+      <ThemeProvider defaultTheme="dark" storageKey="worship-theme">
+        <SidebarProvider>
+          <ThemeMenuButton />
+        </SidebarProvider>
       </ThemeProvider>,
     );
 
@@ -44,8 +49,10 @@ describe("ThemeMenuButton", () => {
 
   it("should switch theme when an option is selected and close dropdown", () => {
     render(
-      <ThemeProvider defaultTheme="dark">
-        <ThemeMenuButton />
+      <ThemeProvider defaultTheme="dark" storageKey="worship-theme">
+        <SidebarProvider>
+          <ThemeMenuButton />
+        </SidebarProvider>
       </ThemeProvider>,
     );
 
@@ -76,10 +83,12 @@ describe("ThemeMenuButton", () => {
 
   it("should close dropdown when clicking outside", () => {
     render(
-      <ThemeProvider defaultTheme="dark">
+      <ThemeProvider defaultTheme="dark" storageKey="worship-theme">
         <div>
           <span data-testid="outside-area">Outside</span>
-          <ThemeMenuButton />
+          <SidebarProvider>
+            <ThemeMenuButton />
+          </SidebarProvider>
         </div>
       </ThemeProvider>,
     );
@@ -94,8 +103,10 @@ describe("ThemeMenuButton", () => {
 
   it("should close dropdown when pressing Escape key", () => {
     render(
-      <ThemeProvider defaultTheme="dark">
-        <ThemeMenuButton />
+      <ThemeProvider defaultTheme="dark" storageKey="worship-theme">
+        <SidebarProvider>
+          <ThemeMenuButton />
+        </SidebarProvider>
       </ThemeProvider>,
     );
 
@@ -109,7 +120,7 @@ describe("ThemeMenuButton", () => {
 
   it("should render compact variant and work properly", () => {
     render(
-      <ThemeProvider defaultTheme="light">
+      <ThemeProvider defaultTheme="light" storageKey="worship-theme">
         <ThemeMenuButton variant="compact" />
       </ThemeProvider>,
     );

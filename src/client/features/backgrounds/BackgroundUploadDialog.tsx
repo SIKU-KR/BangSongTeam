@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from "react";
+import { TriangleAlertIcon } from "lucide-react";
 import { cn } from "cn";
+import { Alert, AlertDescription } from "#components/ui/alert";
 import { Button } from "#components/ui/button";
 import { Checkbox } from "#components/ui/checkbox";
 import {
@@ -11,7 +13,17 @@ import {
   DialogTitle,
 } from "#components/ui/dialog";
 import { Input } from "#components/ui/input";
-import { Label } from "#components/ui/label";
+import {
+  Field,
+  FieldContent,
+  FieldDescription,
+  FieldError,
+  FieldGroup,
+  FieldLabel,
+  FieldLegend,
+  FieldSet,
+} from "#components/ui/field";
+import { ToggleGroup, ToggleGroupItem } from "#components/ui/toggle-group";
 import { BACKGROUND_TAGS, BACKGROUND_UPLOAD_LIMITS } from "#shared";
 import { useUploadBackground } from "../../lib/api/backgroundQueries";
 import { describeApiError } from "../../lib/api/request";
@@ -114,14 +126,6 @@ export function BackgroundUploadDialog({
         message: err instanceof Error ? err.message : "파일을 열 수 없습니다",
       });
     }
-  };
-
-  const toggleTag = (tag: string): void => {
-    setTags((current) =>
-      current.includes(tag)
-        ? current.filter((t) => t !== tag)
-        : [...current, tag],
-    );
   };
 
   const canSubmit =
@@ -234,83 +238,85 @@ export function BackgroundUploadDialog({
           </label>
 
           {selection.status === "invalid" && (
-            <p role="alert" className="text-xs text-destructive">
-              {selection.message}
-            </p>
+            <FieldError>{selection.message}</FieldError>
           )}
           {selection.status === "ready" && selection.probed.isLowResolution && (
-            <p data-testid="bg-upload-low-res" className="text-xs text-warning">
-              {BACKGROUND_UPLOAD_LIMITS.recommendedWidth}×
-              {BACKGROUND_UPLOAD_LIMITS.recommendedHeight}보다 작습니다. 올릴
-              수는 있지만 송출 화면에서 확대되어 흐려 보일 수 있습니다.
-            </p>
+            <Alert data-testid="bg-upload-low-res">
+              <TriangleAlertIcon />
+              <AlertDescription>
+                {BACKGROUND_UPLOAD_LIMITS.recommendedWidth}×
+                {BACKGROUND_UPLOAD_LIMITS.recommendedHeight}보다 작습니다. 올릴
+                수는 있지만 송출 화면에서 확대되어 흐려 보일 수 있습니다.
+              </AlertDescription>
+            </Alert>
           )}
 
-          <div className="grid gap-1.5">
-            <Label htmlFor="bg-upload-title-input">배경 제목</Label>
-            <Input
-              id="bg-upload-title-input"
-              type="text"
-              value={title}
-              maxLength={BACKGROUND_UPLOAD_LIMITS.maxTitleLength}
-              placeholder="예: 본당 성탄 배경"
-              onChange={(e) => setTitle(e.target.value)}
-            />
-          </div>
+          <FieldGroup>
+            <Field>
+              <FieldLabel htmlFor="bg-upload-title-input">배경 제목</FieldLabel>
+              <Input
+                id="bg-upload-title-input"
+                type="text"
+                value={title}
+                maxLength={BACKGROUND_UPLOAD_LIMITS.maxTitleLength}
+                placeholder="예: 본당 성탄 배경"
+                onChange={(e) => setTitle(e.target.value)}
+              />
+            </Field>
 
-          <div className="grid gap-1.5">
-            <Label htmlFor="bg-upload-license-input">출처·라이선스</Label>
-            <Input
-              id="bg-upload-license-input"
-              type="text"
-              data-testid="bg-upload-license-input"
-              value={license}
-              maxLength={BACKGROUND_UPLOAD_LIMITS.maxLicenseLength}
-              placeholder="예: Pexels License — 작가명, 자체 제작 (CC0)"
-              onChange={(e) => setLicense(e.target.value)}
-            />
-          </div>
+            <Field>
+              <FieldLabel htmlFor="bg-upload-license-input">
+                출처·라이선스
+              </FieldLabel>
+              <Input
+                id="bg-upload-license-input"
+                type="text"
+                data-testid="bg-upload-license-input"
+                value={license}
+                maxLength={BACKGROUND_UPLOAD_LIMITS.maxLicenseLength}
+                placeholder="예: Pexels License — 작가명, 자체 제작 (CC0)"
+                onChange={(e) => setLicense(e.target.value)}
+              />
+            </Field>
 
-          <div className="grid gap-1.5">
-            <span className="text-sm font-medium">분위기 태그 (선택)</span>
-            <div className="flex flex-wrap gap-1.5">
-              {BACKGROUND_TAGS.map((tag) => {
-                const active = tags.includes(tag);
-                return (
-                  <Button
-                    key={tag}
-                    size="xs"
-                    variant={active ? "default" : "secondary"}
-                    aria-pressed={active}
-                    onClick={() => toggleTag(tag)}
-                    className="rounded-full px-2.5"
-                  >
+            <FieldSet>
+              <FieldLegend variant="label">분위기 태그 (선택)</FieldLegend>
+              <ToggleGroup
+                multiple
+                variant="outline"
+                size="sm"
+                value={tags}
+                onValueChange={(next) => setTags(next)}
+                className="flex-wrap"
+              >
+                {BACKGROUND_TAGS.map((tag) => (
+                  <ToggleGroupItem key={tag} value={tag}>
                     {tag}
-                  </Button>
-                );
-              })}
-            </div>
-          </div>
+                  </ToggleGroupItem>
+                ))}
+              </ToggleGroup>
+            </FieldSet>
 
-          <Label className="cursor-pointer items-start text-xs font-normal">
-            <Checkbox
-              data-testid="bg-upload-rights-checkbox"
-              checked={acceptedRights}
-              onCheckedChange={(checked) => setAcceptedRights(checked)}
-              className="mt-0.5"
-            />
-            <span>
-              <span className="font-semibold">
-                모든 사용자에게 배포해도 되는 라이선스를 확인했습니다.
-              </span>{" "}
-              확인되지 않은 파일은 올리지 않습니다.
-            </span>
-          </Label>
+            <Field orientation="horizontal">
+              <Checkbox
+                id="bg-upload-rights"
+                data-testid="bg-upload-rights-checkbox"
+                checked={acceptedRights}
+                onCheckedChange={(checked) => setAcceptedRights(checked)}
+              />
+              <FieldContent>
+                <FieldLabel htmlFor="bg-upload-rights">
+                  모든 사용자에게 배포해도 되는 라이선스를 확인했습니다
+                </FieldLabel>
+                <FieldDescription>
+                  확인되지 않은 파일은 올리지 않습니다.
+                </FieldDescription>
+              </FieldContent>
+            </Field>
+          </FieldGroup>
 
           {upload.error && (
-            <p role="alert" className="text-xs text-destructive">
-              {describeApiError(upload.error)}
-            </p>
+            <FieldError>{describeApiError(upload.error)}</FieldError>
           )}
 
           <DialogFooter>

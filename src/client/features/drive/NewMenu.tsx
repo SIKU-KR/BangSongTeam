@@ -39,8 +39,8 @@ export function useNewItemActions(): MenuAction[] {
 
 /**
  * '새로 만들기' 버튼 (드라이브의 '+ 신규').
- * - `sidebar`: 사이드바 상단의 큰 버튼
- * - `fab`: 툴바 오른쪽 원형 + 버튼
+ * - `sidebar`: 사이드바 상단의 넓은 버튼
+ * - `fab`: 사이드바가 숨는 좁은 화면에서 제목 줄 오른쪽 + 버튼
  */
 export function NewMenuButton({
   variant,
@@ -58,11 +58,12 @@ export function NewMenuButton({
         render={
           <Button
             variant="outline"
-            className="h-12 gap-3 rounded-2xl pr-6 pl-4 shadow-sm"
+            size="lg"
+            className="w-full justify-start"
           />
         }
       >
-        <PlusIcon className="size-5" />
+        <PlusIcon />
         새로 만들기
       </DropdownMenuTrigger>
     ) : (
@@ -72,7 +73,7 @@ export function NewMenuButton({
             <DropdownMenuTrigger
               data-testid={testId}
               aria-label="새로 만들기"
-              render={<Button size="icon" className="rounded-full" />}
+              render={<Button size="icon" />}
             />
           }
         >

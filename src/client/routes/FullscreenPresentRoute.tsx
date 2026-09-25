@@ -11,6 +11,7 @@ import {
   Navigate,
 } from "react-router-dom";
 import { Button } from "#components/ui/button";
+import { Kbd } from "#components/ui/kbd";
 import { DEFAULT_DECK_STYLE } from "#shared";
 import type { Presentation } from "#shared";
 import { SlideStage } from "../components/stage/SlideStage";
@@ -169,7 +170,7 @@ export function FullscreenPresentRoute(): React.JSX.Element {
           className="text-white/80 hover:bg-white/10 hover:text-white"
         >
           송출 종료
-          <kbd className="font-sans text-white/50">Esc</kbd>
+          <Kbd>Esc</Kbd>
         </Button>
       </div>
     </div>

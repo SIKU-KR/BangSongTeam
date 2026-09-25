@@ -4,6 +4,12 @@ import { cn } from "cn";
 import { Badge } from "#components/ui/badge";
 import { Button } from "#components/ui/button";
 import {
+  Card,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "#components/ui/card";
+import {
   Dialog,
   DialogClose,
   DialogContent,
@@ -12,6 +18,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "#components/ui/dialog";
+import { Empty, EmptyDescription, EmptyHeader } from "#components/ui/empty";
+import { ToggleGroup, ToggleGroupItem } from "#components/ui/toggle-group";
 import type { BackgroundMedia } from "#shared";
 import { BackgroundPreview, useBackgroundCatalog } from "../backgrounds";
 import { refreshBackgroundCatalog } from "../../lib/sync/backgroundSync";
@@ -27,17 +35,33 @@ const ALL_TAGS = "전체";
 
 function CheckBadge(): React.JSX.Element {
   return (
-    <div className="absolute top-2 right-2 flex size-5 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg">
-      <CheckIcon className="size-3.5" strokeWidth={3} />
-    </div>
+    <Badge className="absolute top-2 right-2">
+      <CheckIcon />
+      선택됨
+    </Badge>
   );
 }
 
-function tileClassName(isSelected: boolean): string {
-  return cn(
-    "group h-auto flex-col items-stretch justify-start gap-0 overflow-hidden rounded-xl p-0 text-left whitespace-normal",
-    isSelected && "border-primary ring-2 ring-ring/50",
-  );
+/** 고르면 바로 적용되는 타일. 카드 전체를 누르거나 Enter·Space로 고른다 */
+function selectableTile(
+  selected: boolean,
+  onPick: () => void,
+): React.ComponentProps<typeof Card> {
+  return {
+    role: "button",
+    tabIndex: 0,
+    "aria-pressed": selected,
+    onClick: onPick,
+    onKeyDown: (event) => {
+      if (event.key !== "Enter" && event.key !== " ") return;
+      event.preventDefault();
+      onPick();
+    },
+    className: cn(
+      "cursor-pointer pt-0 outline-none hover:ring-foreground/30 focus-visible:ring-3 focus-visible:ring-ring/50",
+      selected && "ring-2 ring-primary",
+    ),
+  };
 }
 
 function PickerTile({
@@ -51,34 +75,30 @@ function PickerTile({
 }): React.JSX.Element {
   const [hovered, setHovered] = useState(false);
   return (
-    <Button
-      variant="outline"
+    <Card
+      size="sm"
       data-testid={`bg-item-${background.id}`}
-      aria-pressed={isSelected}
-      onClick={onPick}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
-      className={tileClassName(isSelected)}
+      {...selectableTile(isSelected, onPick)}
     >
-      <div className="relative w-full">
+      <div className="relative">
         <BackgroundPreview background={background} playing={hovered} />
         {isSelected && <CheckBadge />}
       </div>
-      <div className="flex w-full flex-col gap-1 p-2.5">
-        <span className="truncate text-xs font-semibold">
-          {background.title}
-        </span>
+      <CardHeader>
+        <CardTitle className="truncate">{background.title}</CardTitle>
         {background.tags.length > 0 && (
-          <div className="flex flex-wrap gap-1">
+          <CardDescription className="flex flex-wrap gap-1">
             {background.tags.map((tag) => (
               <Badge key={tag} variant="secondary">
                 {tag}
               </Badge>
             ))}
-          </div>
+          </CardDescription>
         )}
-      </div>
-    </Button>
+      </CardHeader>
+    </Card>
   );
 }
 
@@ -133,38 +153,39 @@ function PickerDialog({
         </DialogHeader>
 
         {tags.length > 0 && (
-          <div className="flex items-center gap-1.5 overflow-x-auto border-b bg-muted/40 px-6 py-3">
-            {[ALL_TAGS, ...tags].map((tag) => (
-              <Button
-                key={tag}
-                size="xs"
-                variant={activeTag === tag ? "default" : "secondary"}
-                aria-pressed={activeTag === tag}
-                onClick={() => setActiveTag(tag)}
-                className="shrink-0 rounded-full px-3"
-              >
-                {tag}
-              </Button>
-            ))}
+          <div className="overflow-x-auto border-b px-6 py-3">
+            <ToggleGroup
+              aria-label="분위기 태그"
+              variant="outline"
+              size="sm"
+              value={[activeTag]}
+              onValueChange={(next) => {
+                if (next[0]) setActiveTag(next[0]);
+              }}
+            >
+              {[ALL_TAGS, ...tags].map((tag) => (
+                <ToggleGroupItem key={tag} value={tag}>
+                  {tag}
+                </ToggleGroupItem>
+              ))}
+            </ToggleGroup>
           </div>
         )}
 
         <div className="grid flex-1 grid-cols-2 content-start gap-4 overflow-y-auto p-6 sm:grid-cols-3 md:grid-cols-4">
-          <Button
-            variant="outline"
+          <Card
+            size="sm"
             data-testid="bg-item-none"
-            aria-pressed={!selectedBackgroundId}
-            onClick={() => pick(null)}
-            className={tileClassName(!selectedBackgroundId)}
+            {...selectableTile(!selectedBackgroundId, () => pick(null))}
           >
-            <div className="relative flex aspect-video w-full items-center justify-center bg-black text-xs text-white/60">
+            <div className="relative flex aspect-video items-center justify-center bg-black text-xs text-white/60">
               검은 화면
               {!selectedBackgroundId && <CheckBadge />}
             </div>
-            <div className="w-full p-2.5">
-              <span className="text-xs font-semibold">배경 없음</span>
-            </div>
-          </Button>
+            <CardHeader>
+              <CardTitle>배경 없음</CardTitle>
+            </CardHeader>
+          </Card>
 
           {visible.map((bg) => (
             <PickerTile
@@ -176,9 +197,13 @@ function PickerDialog({
           ))}
 
           {all.length === 0 && (
-            <div className="col-span-full py-8 text-center text-xs text-muted-foreground">
-              <p>아직 등록된 배경이 없습니다.</p>
-            </div>
+            <Empty className="col-span-full">
+              <EmptyHeader>
+                <EmptyDescription>
+                  아직 등록된 배경이 없습니다.
+                </EmptyDescription>
+              </EmptyHeader>
+            </Empty>
           )}
         </div>
 

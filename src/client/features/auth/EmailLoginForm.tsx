@@ -1,7 +1,14 @@
-import React, { useState } from "react";
-import { cn } from "cn";
+import React, { useId, useState } from "react";
 import { Button } from "#components/ui/button";
+import {
+  Field,
+  FieldDescription,
+  FieldError,
+  FieldGroup,
+  FieldLabel,
+} from "#components/ui/field";
 import { Input } from "#components/ui/input";
+import { ToggleGroup, ToggleGroupItem } from "#components/ui/toggle-group";
 import {
   EmailSignUpRequestSchema,
   PASSWORD_MAX_LENGTH,
@@ -44,6 +51,7 @@ export function EmailLoginForm(): React.JSX.Element {
   const [error, setError] = useState<string | null>(null);
 
   const isSignUp = mode === "sign-up";
+  const fieldId = useId();
 
   const switchMode = (next: Mode): void => {
     setMode(next);
@@ -91,97 +99,82 @@ export function EmailLoginForm(): React.JSX.Element {
         void submit();
       }}
     >
-      <div
-        role="group"
-        aria-label="이메일 로그인 방식"
-        className="mb-3 grid grid-cols-2 gap-1 rounded-lg bg-muted p-1"
-      >
-        {(
-          [
-            ["sign-in", "로그인"],
-            ["sign-up", "가입"],
-          ] as const
-        ).map(([value, label]) => (
-          <Button
-            key={value}
-            variant="ghost"
-            size="sm"
-            aria-pressed={mode === value}
-            onClick={() => switchMode(value)}
-            className={cn(
-              "text-xs font-semibold",
-              mode === value
-                ? "bg-background text-foreground shadow-sm hover:bg-background"
-                : "text-muted-foreground",
-            )}
-          >
-            {label}
-          </Button>
-        ))}
-      </div>
+      <FieldGroup>
+        <ToggleGroup
+          aria-label="이메일 로그인 방식"
+          variant="outline"
+          value={[mode]}
+          onValueChange={(value) => {
+            const next = value[0] as Mode | undefined;
+            if (next) switchMode(next);
+          }}
+          className="w-full"
+        >
+          <ToggleGroupItem value="sign-in" className="flex-1">
+            로그인
+          </ToggleGroupItem>
+          <ToggleGroupItem value="sign-up" className="flex-1">
+            가입
+          </ToggleGroupItem>
+        </ToggleGroup>
 
-      <div className="space-y-2">
         {isSignUp && (
-          <Input
-            type="text"
-            value={name}
-            onChange={(event) => setName(event.target.value)}
-            placeholder="이름"
-            aria-label="이름"
-            autoComplete="name"
-            maxLength={50}
-            className="h-10"
-          />
+          <Field>
+            <FieldLabel htmlFor={`${fieldId}-name`}>이름</FieldLabel>
+            <Input
+              id={`${fieldId}-name`}
+              type="text"
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+              autoComplete="name"
+              maxLength={50}
+            />
+          </Field>
         )}
-        <Input
-          type="email"
-          value={email}
-          onChange={(event) => setEmail(event.target.value)}
-          placeholder="이메일"
-          aria-label="이메일"
-          autoComplete="email"
-          className="h-10"
-        />
-        <Input
-          type="password"
-          value={password}
-          onChange={(event) => setPassword(event.target.value)}
-          placeholder={
-            isSignUp ? `비밀번호 (${PASSWORD_MIN_LENGTH}자 이상)` : "비밀번호"
-          }
-          aria-label="비밀번호"
-          autoComplete={isSignUp ? "new-password" : "current-password"}
-          maxLength={PASSWORD_MAX_LENGTH}
-          className="h-10"
-        />
-      </div>
+        <Field>
+          <FieldLabel htmlFor={`${fieldId}-email`}>이메일</FieldLabel>
+          <Input
+            id={`${fieldId}-email`}
+            type="email"
+            value={email}
+            onChange={(event) => setEmail(event.target.value)}
+            autoComplete="email"
+          />
+          {isSignUp && (
+            <FieldDescription>
+              허용된 이메일만 가입할 수 있습니다.
+            </FieldDescription>
+          )}
+        </Field>
+        <Field>
+          <FieldLabel htmlFor={`${fieldId}-password`}>비밀번호</FieldLabel>
+          <Input
+            id={`${fieldId}-password`}
+            type="password"
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+            autoComplete={isSignUp ? "new-password" : "current-password"}
+            maxLength={PASSWORD_MAX_LENGTH}
+          />
+          {isSignUp && (
+            <FieldDescription>
+              {PASSWORD_MIN_LENGTH}자 이상 입력해 주세요.
+            </FieldDescription>
+          )}
+        </Field>
 
-      {isSignUp && (
-        <p className="mt-2 text-2xs text-muted-foreground">
-          허용된 이메일만 가입할 수 있습니다.
-        </p>
-      )}
+        {error && <FieldError>{error}</FieldError>}
 
-      <Button
-        type="submit"
-        size="lg"
-        disabled={pending}
-        className="mt-3 h-11 w-full rounded-xl font-bold"
-      >
-        {isSignUp
-          ? pending
-            ? "가입 중…"
-            : "가입하기"
-          : pending
-            ? "로그인 중…"
-            : "이메일로 로그인"}
-      </Button>
-
-      {error && (
-        <p role="alert" className="mt-3 text-xs text-destructive">
-          {error}
-        </p>
-      )}
+        <Button type="submit" size="lg" disabled={pending}>
+          {isSignUp
+            ? pending
+              ? "가입 중…"
+              : "가입하기"
+            : pending
+              ? "로그인 중…"
+              : "이메일로 로그인"}
+        </Button>
+      </FieldGroup>
     </form>
   );
 }

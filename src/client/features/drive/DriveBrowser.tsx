@@ -11,6 +11,19 @@ import {
   Undo2Icon,
 } from "lucide-react";
 import { Button } from "#components/ui/button";
+import {
+  Empty,
+  EmptyContent,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "#components/ui/empty";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuTrigger,
+} from "#components/ui/context-menu";
 import { useLocation, useNavigate } from "react-router-dom";
 import { usePresentationList } from "../presentation";
 import { useAppShell } from "../../routes/appShellContext";
@@ -34,7 +47,7 @@ import {
   type DriveItemHandlers,
 } from "./DriveItems";
 import { DriveToolbar } from "./DriveToolbar";
-import { ActionMenu, type MenuAction } from "./ActionMenu";
+import { ActionMenuItems, type MenuAction } from "./ActionMenu";
 import { useNewItemActions } from "./NewMenu";
 import { mergeKeys, rangeKeys, toggleKey } from "./selectionModel";
 import { useDriveKeyboard } from "./useDriveKeyboard";
@@ -43,12 +56,6 @@ import { useMarqueeSelection } from "./useMarqueeSelection";
 export interface DriveBrowserProps {
   mode: "drive" | "trash";
   folderId?: string | null;
-}
-
-interface MenuState {
-  anchor: { x: number; y: number };
-  actions: MenuAction[];
-  fromKeyboard?: boolean;
 }
 
 function toRef(item: DriveItem): DriveItemRef {
@@ -82,7 +89,7 @@ export function DriveBrowser({
   const index = useFolderIndex();
   const drive = useDrive();
   const newActions = useNewItemActions();
-  const [menu, setMenu] = useState<MenuState | null>(null);
+  const [contextActions, setContextActions] = useState<MenuAction[]>([]);
   const containerRef = useRef<HTMLDivElement>(null);
 
   const query = searchQuery.trim();
@@ -248,18 +255,6 @@ export function DriveBrowser({
     return [item];
   };
 
-  const openMenuFor = (item: DriveItem): void => {
-    const row = containerRef.current?.querySelector<HTMLElement>(
-      `[data-item-key="${item.key}"]`,
-    );
-    const rect = row?.getBoundingClientRect();
-    setMenu({
-      anchor: { x: (rect?.left ?? 0) + 48, y: rect?.bottom ?? 0 },
-      actions: actionsFor(targetsFor(item)),
-      fromKeyboard: true,
-    });
-  };
-
   const handlersFor = (item: DriveItem): DriveItemHandlers => ({
     selected: drive.selection.has(item.key),
     tabStop: item.key === tabStopKey,
@@ -293,24 +288,10 @@ export function DriveBrowser({
       }
     },
     onDoubleClick: () => open(item),
-    onContextMenu: (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      setMenu({
-        anchor: { x: event.clientX, y: event.clientY },
-        actions: actionsFor(targetsFor(item)),
-      });
-    },
     onFocus: () => {
       if (drive.focusKey !== item.key) drive.setFocusKey(item.key);
     },
-    onMore: (event) => {
-      const rect = event.currentTarget.getBoundingClientRect();
-      setMenu({
-        anchor: { x: rect.right - 240, y: rect.bottom + 4 },
-        actions: actionsFor(targetsFor(item)),
-      });
-    },
+    menuActions: () => actionsFor(targetsFor(item)),
     onPresent:
       !isTrash && item.kind === "file" ? () => present(item.id) : undefined,
     onEdit:
@@ -323,10 +304,9 @@ export function DriveBrowser({
     drive,
     items,
     isTrash,
-    enabled: !drive.dialogOpen && !menu && !drive.activeDrag,
+    enabled: !drive.dialogOpen && !drive.activeDrag,
     open,
     focusRow,
-    openMenuFor,
   });
 
   const marquee = useMarqueeSelection({
@@ -360,76 +340,90 @@ export function DriveBrowser({
         onEmptyTrash={() => drive.requestEmptyTrash()}
       />
 
-      <div
-        ref={containerRef}
-        data-testid="drive-scroll-area"
-        className="relative min-h-0 flex-1 overflow-y-auto px-4 pb-16 select-none sm:px-6"
-        onMouseDown={marquee.onMouseDown}
-        onClick={() => {
-          if (marquee.consumeClick()) return;
-          drive.clearSelection();
-        }}
-        onContextMenu={(event) => {
-          if (isTrash || query) return;
-          event.preventDefault();
-          drive.clearSelection();
-          setMenu({
-            anchor: { x: event.clientX, y: event.clientY },
-            actions: newActions,
-          });
-        }}
-      >
-        {(items.length > 0 || showTrashFolder) && (
-          <>
-            <DriveListHeader
-              variant={variant}
-              secondLabel={isTrash ? "원래 위치" : query ? "위치" : "소유자"}
-              dateLabel={isTrash ? "삭제일" : "수정일"}
-              sort={isTrash ? undefined : sortOrder}
-              onSort={
-                isTrash
-                  ? undefined
-                  : (key) => onSortOrderChange(nextSortOrder(sortOrder, key))
-              }
-            />
-            {showTrashFolder && (
-              <TrashFolderRow
-                count={trashCount}
-                onOpen={() => navigate(TRASH_PATH)}
-                onMenu={(anchor) => {
-                  drive.clearSelection();
-                  setMenu({ anchor, actions: trashFolderActions });
-                }}
+      <ContextMenu>
+        <ContextMenuTrigger
+          ref={containerRef}
+          data-testid="drive-scroll-area"
+          className="relative min-h-0 flex-1 overflow-y-auto px-4 pb-16 sm:px-6"
+          onMouseDown={marquee.onMouseDown}
+          onClick={() => {
+            if (marquee.consumeClick()) return;
+            drive.clearSelection();
+          }}
+          onContextMenu={(event) => {
+            const target = event.target as HTMLElement;
+            const rowKey = target
+              .closest<HTMLElement>("[data-item-key]")
+              ?.getAttribute("data-item-key");
+            const item = items.find((candidate) => candidate.key === rowKey);
+            if (item) {
+              setContextActions(actionsFor(targetsFor(item)));
+            } else if (target.closest("[data-trash-folder]")) {
+              drive.clearSelection();
+              setContextActions(trashFolderActions);
+            } else if (isTrash || query) {
+              event.preventBaseUIHandler();
+            } else {
+              drive.clearSelection();
+              setContextActions(newActions);
+            }
+          }}
+        >
+          {(items.length > 0 || showTrashFolder) && (
+            <>
+              <DriveListHeader
+                variant={variant}
+                secondLabel={isTrash ? "원래 위치" : query ? "위치" : "소유자"}
+                dateLabel={isTrash ? "삭제일" : "수정일"}
+                sort={isTrash ? undefined : sortOrder}
+                onSort={
+                  isTrash
+                    ? undefined
+                    : (key) => onSortOrderChange(nextSortOrder(sortOrder, key))
+                }
               />
-            )}
-            {items.length > 0 && (
-              <div
-                role="listbox"
-                aria-multiselectable="true"
-                aria-label={isTrash ? "휴지통" : "폴더와 프레젠테이션"}
-              >
-                {items.map((item) => (
-                  <DriveListRow
-                    key={item.key}
-                    item={item}
-                    variant={variant}
-                    date={
-                      isTrash
-                        ? (trashedAtOf(item) ?? item.updatedAt)
-                        : item.updatedAt
-                    }
-                    handlers={handlersFor(item)}
-                  />
-                ))}
-              </div>
-            )}
-          </>
-        )}
+              {showTrashFolder && (
+                <TrashFolderRow
+                  count={trashCount}
+                  onOpen={() => navigate(TRASH_PATH)}
+                  menuActions={() => {
+                    drive.clearSelection();
+                    return trashFolderActions;
+                  }}
+                />
+              )}
+              {items.length > 0 && (
+                <div
+                  role="listbox"
+                  aria-multiselectable="true"
+                  aria-label={isTrash ? "휴지통" : "폴더와 프레젠테이션"}
+                >
+                  {items.map((item) => (
+                    <DriveListRow
+                      key={item.key}
+                      item={item}
+                      variant={variant}
+                      date={
+                        isTrash
+                          ? (trashedAtOf(item) ?? item.updatedAt)
+                          : item.updatedAt
+                      }
+                      handlers={handlersFor(item)}
+                    />
+                  ))}
+                </div>
+              )}
+            </>
+          )}
 
-        {items.length === 0 && (
-          <EmptyState mode={mode} query={query} filtered={isFiltered} />
-        )}
-      </div>
+          {items.length === 0 && (
+            <EmptyState mode={mode} query={query} filtered={isFiltered} />
+          )}
+        </ContextMenuTrigger>
+        <ContextMenuContent data-testid="drive-menu" className="min-w-60">
+          <ActionMenuItems kind="context" actions={contextActions} />
+        </ContextMenuContent>
+      </ContextMenu>
 
       {marquee.box && (
         <div
@@ -442,15 +436,6 @@ export function DriveBrowser({
             width: marquee.box.right - marquee.box.left,
             height: marquee.box.bottom - marquee.box.top,
           }}
-        />
-      )}
-
-      {menu && (
-        <ActionMenu
-          anchor={menu.anchor}
-          actions={menu.actions}
-          autoFocusFirst={menu.fromKeyboard}
-          onClose={() => setMenu(null)}
         />
       )}
     </div>
@@ -469,11 +454,11 @@ function EmptyState({
   const drive = useDrive();
   const newActions = useNewItemActions();
 
-  let icon: React.ReactNode = <FolderIcon className="size-10 fill-current" />;
+  let icon: React.ReactNode = <FolderIcon />;
   let title: string;
   let hint: string;
   if (query) {
-    icon = <SearchIcon className="size-10" strokeWidth={1.5} />;
+    icon = <SearchIcon />;
     title = `"${query}"에 일치하는 항목이 없습니다.`;
     hint =
       "다른 검색어를 입력해 보세요. 폴더 이름, 세트 제목, 곡 제목·가사로 찾을 수 있습니다.";
@@ -481,7 +466,7 @@ function EmptyState({
     title = "선택한 유형의 항목이 없습니다";
     hint = "유형 필터를 지우면 모든 항목을 볼 수 있습니다.";
   } else if (mode === "trash") {
-    icon = <Trash2Icon className="size-10" strokeWidth={1.5} />;
+    icon = <Trash2Icon />;
     title = "휴지통이 비어 있습니다";
     hint = "삭제한 폴더와 프레젠테이션이 여기에 모입니다.";
   } else if (drive.currentFolderId) {
@@ -495,22 +480,20 @@ function EmptyState({
   }
 
   return (
-    <div
-      data-testid="drive-empty"
-      className="flex flex-col items-center justify-center gap-3 px-6 py-20 text-center"
-    >
-      <div className="mb-2 text-muted-foreground">{icon}</div>
-      <p className="text-lg">{title}</p>
-      <p className="max-w-md text-sm text-muted-foreground">{hint}</p>
+    <Empty data-testid="drive-empty">
+      <EmptyHeader>
+        <EmptyMedia variant="icon">{icon}</EmptyMedia>
+        <EmptyTitle>{title}</EmptyTitle>
+        <EmptyDescription>{hint}</EmptyDescription>
+      </EmptyHeader>
       {mode === "drive" && !query && !filtered && (
-        <div className="flex items-center gap-2 pt-3">
+        <EmptyContent className="flex-row justify-center">
           {newActions.map((action) => (
             <Button
               key={action.key}
               variant={
                 action.key === "new-presentation" ? "default" : "outline"
               }
-              className="rounded-full"
               data-testid={`empty-${action.key}`}
               onMouseDown={(event) => event.stopPropagation()}
               onClick={(event) => {
@@ -522,8 +505,8 @@ function EmptyState({
               {action.label}
             </Button>
           ))}
-        </div>
+        </EmptyContent>
       )}
-    </div>
+    </Empty>
   );
 }

@@ -1,5 +1,12 @@
 import React from "react";
 import { useLocation } from "react-router-dom";
+import { RefreshCwIcon } from "lucide-react";
+import {
+  Alert,
+  AlertAction,
+  AlertDescription,
+  AlertTitle,
+} from "#components/ui/alert";
 import { Button } from "#components/ui/button";
 import {
   useServiceWorkerState,
@@ -22,24 +29,25 @@ export function AppUpdateBanner(): React.JSX.Element | null {
   if (pathname.startsWith("/present/")) return null;
 
   return (
-    <div
+    <Alert
       role="status"
       data-testid="app-update-banner"
-      className="flex w-full shrink-0 items-center gap-2.5 bg-primary px-4 py-2 text-xs font-medium text-primary-foreground sm:text-sm"
+      className="shrink-0 rounded-none border-x-0 border-t-0"
     >
-      <span className="flex-1">
-        새 버전이 준비되었습니다. 예배 송출 중이 아닐 때 적용해 주세요.
-      </span>
-      <Button
-        variant="secondary"
-        size="sm"
-        data-testid="app-update-apply-btn"
-        onClick={() => {
-          void applyServiceWorkerUpdate();
-        }}
-      >
-        지금 적용
-      </Button>
-    </div>
+      <RefreshCwIcon />
+      <AlertTitle>새 버전이 준비되었습니다</AlertTitle>
+      <AlertDescription>예배 송출 중이 아닐 때 적용해 주세요.</AlertDescription>
+      <AlertAction>
+        <Button
+          size="sm"
+          data-testid="app-update-apply-btn"
+          onClick={() => {
+            void applyServiceWorkerUpdate();
+          }}
+        >
+          지금 적용
+        </Button>
+      </AlertAction>
+    </Alert>
   );
 }

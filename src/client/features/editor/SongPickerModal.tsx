@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { ArrowLeftIcon, PlusIcon, XIcon } from "lucide-react";
+import { ArrowLeftIcon, PlusIcon, SearchIcon, XIcon } from "lucide-react";
 import { cn } from "cn";
 import { Badge } from "#components/ui/badge";
 import { Button } from "#components/ui/button";
@@ -10,8 +10,19 @@ import {
   DialogHeader,
   DialogTitle,
 } from "#components/ui/dialog";
-import { Input } from "#components/ui/input";
-import { IconButton } from "#components/common/IconButton";
+import {
+  Empty,
+  EmptyContent,
+  EmptyDescription,
+  EmptyHeader,
+} from "#components/ui/empty";
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupButton,
+  InputGroupInput,
+} from "#components/ui/input-group";
+import { ToggleGroup, ToggleGroupItem } from "#components/ui/toggle-group";
 import type { Deck, PublicDeckSummary } from "#shared";
 import { hangulIncludes } from "#shared";
 import {
@@ -207,43 +218,55 @@ export function SongPickerModal({
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden md:flex-row">
           <div className="flex w-full shrink-0 flex-col border-b md:w-5/12 md:border-r md:border-b-0 lg:w-4/12">
             <div className="shrink-0 space-y-2.5 border-b p-3.5">
-              <div className="relative">
-                <Input
+              <InputGroup>
+                <InputGroupInput
                   type="text"
                   data-testid="song-picker-search-input"
                   aria-label="찬양곡 검색"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   placeholder="곡 제목, 아티스트, 가사 검색..."
-                  className="pr-8"
                 />
+                <InputGroupAddon>
+                  <SearchIcon />
+                </InputGroupAddon>
                 {searchQuery && (
-                  <IconButton
-                    label="검색어 지우기"
-                    size="icon-xs"
-                    onClick={() => setSearchQuery("")}
-                    className="absolute top-1 right-1 text-muted-foreground"
-                  >
-                    <XIcon />
-                  </IconButton>
+                  <InputGroupAddon align="inline-end">
+                    <InputGroupButton
+                      size="icon-xs"
+                      aria-label="검색어 지우기"
+                      onClick={() => setSearchQuery("")}
+                    >
+                      <XIcon />
+                    </InputGroupButton>
+                  </InputGroupAddon>
                 )}
-              </div>
+              </InputGroup>
 
               <div className="flex items-center justify-between gap-1.5">
-                <div className="flex flex-wrap items-center gap-1">
+                <ToggleGroup
+                  aria-label="곡 종류"
+                  variant="outline"
+                  size="sm"
+                  spacing={0}
+                  value={[filter]}
+                  onValueChange={(next) => {
+                    const picked = FILTERS.find(
+                      (option) => option.id === next[0],
+                    );
+                    if (picked) setFilter(picked.id);
+                  }}
+                >
                   {FILTERS.map((option) => (
-                    <Button
+                    <ToggleGroupItem
                       key={option.id}
-                      size="xs"
-                      variant={filter === option.id ? "default" : "secondary"}
-                      aria-pressed={filter === option.id}
+                      value={option.id}
                       data-testid={`song-picker-filter-${option.id}`}
-                      onClick={() => setFilter(option.id)}
                     >
                       {option.label}
-                    </Button>
+                    </ToggleGroupItem>
                   ))}
-                </div>
+                </ToggleGroup>
 
                 <Button
                   size="xs"
@@ -280,18 +303,22 @@ export function SongPickerModal({
 
             <div className="flex-1 divide-y overflow-y-auto">
               {entries.length === 0 ? (
-                <div className="flex flex-col items-center justify-center gap-2.5 p-8 text-center text-muted-foreground">
-                  <p className="text-xs">{emptyMessage}</p>
-                  <Button
-                    variant="link"
-                    size="xs"
-                    onClick={() => setMode("create")}
-                  >
-                    <PlusIcon />
-                    {searchQuery ? `'${searchQuery}' ` : ""}새 곡으로 직접
-                    등록하기
-                  </Button>
-                </div>
+                <Empty>
+                  <EmptyHeader>
+                    <EmptyDescription>{emptyMessage}</EmptyDescription>
+                  </EmptyHeader>
+                  <EmptyContent>
+                    <Button
+                      variant="link"
+                      size="xs"
+                      onClick={() => setMode("create")}
+                    >
+                      <PlusIcon />
+                      {searchQuery ? `'${searchQuery}' ` : ""}새 곡으로 직접
+                      등록하기
+                    </Button>
+                  </EmptyContent>
+                </Empty>
               ) : (
                 entries.map((entry) => (
                   <EntryRow
