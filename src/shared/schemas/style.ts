@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { NOONNU_SUPPORTED_FONT_NAMES } from "../constants/noonnuFonts";
 
 /**
  * 3x3 격자 앵커 프리셋
@@ -39,15 +40,7 @@ export const DeckStyleSchema = z.object({
     .regex(/^#([0-9a-fA-F]{3}){1,2}$/)
     .default("#000000"),
 
-  fontFamily: z
-    .enum([
-      "Pretendard",
-      "Noto Sans KR",
-      "Nanum Myeongjo",
-      "Gmarket Sans",
-      "KoPubWorld Batang",
-    ])
-    .default("Pretendard"),
+  fontFamily: z.enum(NOONNU_SUPPORTED_FONT_NAMES).default("Pretendard"),
   fontSizeVw: z.number().min(2).max(10).default(4.2),
   fontColor: z
     .string()
