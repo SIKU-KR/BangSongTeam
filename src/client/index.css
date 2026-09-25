@@ -9,6 +9,14 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* 카카오·네이버 로그인 버튼의 브랜드 색. 테마와 무관하게 고정한다 */
+@theme {
+  --color-kakao: #fee500;
+  --color-kakao-foreground: #191600;
+  --color-naver: #03c75a;
+  --color-naver-foreground: #ffffff;
+}
+
 @theme inline {
   --font-sans:
     Pretendard, -apple-system, BlinkMacSystemFont, system-ui, Roboto, sans-serif;

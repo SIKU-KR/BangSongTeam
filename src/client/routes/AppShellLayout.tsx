@@ -102,7 +102,7 @@ function AppShellFrame(): React.JSX.Element {
   };
 
   return (
-    <div className="flex h-screen w-full overflow-hidden bg-zinc-50 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-100">
+    <div className="flex h-screen w-full overflow-hidden bg-background">
       <AppSidebar />
 
       <div className="flex h-full min-w-0 flex-1 flex-col overflow-hidden">

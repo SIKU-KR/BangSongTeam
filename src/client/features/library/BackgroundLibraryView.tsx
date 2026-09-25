@@ -1,4 +1,15 @@
 import React, { useEffect, useState } from "react";
+import {
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "#components/ui/alert-dialog";
+import { Badge } from "#components/ui/badge";
+import { Button } from "#components/ui/button";
 import { hangulIncludes, type BackgroundMedia } from "#shared";
 import {
   BackgroundPreview,
@@ -38,15 +49,13 @@ function BackgroundCard({
       data-testid={`bg-card-${background.id}`}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
-      className="flex flex-col overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm transition-all hover:border-zinc-300 hover:shadow-md dark:border-zinc-800/80 dark:bg-zinc-900/60 dark:shadow-none dark:hover:border-zinc-700"
+      className="flex flex-col overflow-hidden rounded-2xl border bg-card text-card-foreground shadow-sm transition-all hover:shadow-md"
     >
       <BackgroundPreview background={background} playing={hovered} />
-      <div className="flex items-center justify-between gap-2 border-t border-zinc-100 p-3 dark:border-zinc-800/80">
+      <div className="flex items-center justify-between gap-2 border-t p-3">
         <div className="min-w-0">
-          <h4 className="truncate text-xs font-bold text-zinc-900 dark:text-white">
-            {background.title}
-          </h4>
-          <p className="mt-0.5 truncate text-[11px] text-zinc-500 dark:text-zinc-400">
+          <h4 className="truncate text-xs font-bold">{background.title}</h4>
+          <p className="mt-0.5 truncate text-2xs text-muted-foreground">
             {background.tags.join(" · ") || "태그 없음"}
           </p>
         </div>
@@ -57,33 +66,26 @@ function BackgroundCard({
 }
 
 function SectionHeader({
-  dotClassName,
   title,
   count,
   description,
   children,
 }: {
-  dotClassName: string;
   title: string;
   count: number;
   description: string;
   children?: React.ReactNode;
 }): React.JSX.Element {
   return (
-    <div className="flex flex-col justify-between gap-3 border-b border-zinc-200 pb-3 sm:flex-row sm:items-end dark:border-zinc-800/80">
+    <div className="flex flex-col justify-between gap-3 border-b pb-3 sm:flex-row sm:items-end">
       <div>
         <div className="flex items-center gap-2.5">
-          <span className={`size-2.5 rounded-full ${dotClassName}`} />
-          <h2 className="text-xl font-bold tracking-tight text-zinc-900 dark:text-white">
-            {title}
-          </h2>
-          <span className="rounded-full bg-zinc-100 px-2.5 py-0.5 font-mono text-xs text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">
+          <h2 className="text-xl font-bold tracking-tight">{title}</h2>
+          <Badge variant="secondary" className="font-mono">
             {count}개
-          </span>
+          </Badge>
         </div>
-        <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
-          {description}
-        </p>
+        <p className="mt-1 text-xs text-muted-foreground">{description}</p>
       </div>
       {children}
     </div>
@@ -96,7 +98,7 @@ function EmptyState({
   children: React.ReactNode;
 }): React.JSX.Element {
   return (
-    <div className="flex flex-col items-center justify-center gap-3 rounded-xl border border-zinc-200 bg-white px-4 py-12 text-center text-sm text-zinc-600 dark:border-zinc-800 dark:bg-zinc-900/40 dark:text-zinc-400">
+    <div className="flex flex-col items-center justify-center gap-3 rounded-xl border bg-card px-4 py-12 text-center text-sm text-muted-foreground">
       {children}
     </div>
   );
@@ -152,7 +154,7 @@ export function BackgroundLibraryView({
       {isOffline && (
         <div
           role="status"
-          className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300"
+          className="rounded-xl border border-warning/40 bg-warning/10 px-4 py-2.5 text-xs text-warning"
         >
           오프라인이라 저장해 둔 목록을 보여 줍니다.
         </div>
@@ -160,21 +162,18 @@ export function BackgroundLibraryView({
 
       <section className="space-y-4">
         <SectionHeader
-          dotClassName="bg-sky-500"
           title="모든 배경"
           count={all.length}
           description="라이선스를 확인해 올린 무음 루프 영상과 이미지입니다. 마우스를 올리면 미리보기가 재생됩니다."
         >
           {catalog.canManage && (
-            <button
-              type="button"
+            <Button
               data-testid="open-bg-upload-btn"
               disabled={!canManage}
               onClick={() => setIsUploadOpen(true)}
-              className="cursor-pointer rounded-xl bg-emerald-600 px-4 py-2 text-xs font-bold text-white shadow-sm hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-40"
             >
               배경 올리기
-            </button>
+            </Button>
           )}
         </SectionHeader>
 
@@ -184,19 +183,16 @@ export function BackgroundLibraryView({
             className="flex items-center gap-1.5 overflow-x-auto py-1"
           >
             {[ALL_TAGS, ...tags].map((tag) => (
-              <button
+              <Button
                 key={tag}
-                type="button"
+                size="xs"
+                variant={activeTag === tag ? "default" : "secondary"}
                 aria-pressed={activeTag === tag}
                 onClick={() => setActiveTag(tag)}
-                className={`shrink-0 cursor-pointer rounded-full px-2.5 py-1 text-xs font-medium transition-colors ${
-                  activeTag === tag
-                    ? "bg-sky-600 text-white"
-                    : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200 dark:bg-zinc-800/80 dark:text-zinc-400 dark:hover:bg-zinc-800"
-                }`}
+                className="shrink-0 rounded-full px-2.5"
               >
                 {tag}
-              </button>
+              </Button>
             ))}
           </div>
         )}
@@ -219,18 +215,18 @@ export function BackgroundLibraryView({
                 background={bg}
                 action={
                   catalog.canManage ? (
-                    <button
-                      type="button"
+                    <Button
+                      variant="destructive"
+                      size="xs"
                       data-testid={`delete-bg-${bg.id}`}
                       disabled={!canManage}
                       onClick={() => {
                         deleteBackground.reset();
                         setPendingDelete(bg);
                       }}
-                      className="shrink-0 cursor-pointer rounded-lg px-2 py-1 text-[11px] font-medium text-red-600 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-40 dark:text-red-400 dark:hover:bg-red-950/40"
                     >
                       삭제
-                    </button>
+                    </Button>
                   ) : undefined
                 }
               />
@@ -239,7 +235,7 @@ export function BackgroundLibraryView({
         )}
       </section>
 
-      <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
+      <p className="text-2xs text-muted-foreground">
         곡에 배경을 입히려면 편집기의 곡 속성 패널에서 &lsquo;배경 변경&rsquo;을
         누르세요.
       </p>
@@ -248,57 +244,40 @@ export function BackgroundLibraryView({
         isOpen={isUploadOpen}
         onClose={() => setIsUploadOpen(false)}
       />
-      {pendingDelete && (
-        <div
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="bg-delete-title"
-          data-testid="bg-delete-dialog"
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
-        >
-          <div className="w-full max-w-sm space-y-4 rounded-2xl border border-zinc-200 bg-white p-5 text-zinc-900 shadow-2xl dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100">
-            <div>
-              <h3 id="bg-delete-title" className="text-sm font-bold">
-                배경 삭제
-              </h3>
-              <p className="mt-0.5 truncate text-xs text-zinc-500">
-                {pendingDelete.title}
-              </p>
-            </div>
-            <p className="text-xs text-zinc-700 dark:text-zinc-300">
-              이 배경을 쓰는 모든 사용자의 곡이 배경 없음이 됩니다. 지운 파일은
-              되살릴 수 없습니다.
+      <AlertDialog
+        open={pendingDelete !== null}
+        onOpenChange={(open) => {
+          if (!open && !deleteBackground.isPending) setPendingDelete(null);
+        }}
+      >
+        <AlertDialogContent data-testid="bg-delete-dialog">
+          <AlertDialogHeader>
+            <AlertDialogTitle>배경 삭제</AlertDialogTitle>
+            <AlertDialogDescription>
+              ‘{pendingDelete?.title}’ — 이 배경을 쓰는 모든 사용자의 곡이 배경
+              없음이 됩니다. 지운 파일은 되살릴 수 없습니다.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          {deleteBackground.error && (
+            <p role="alert" className="text-xs text-destructive">
+              {describeApiError(deleteBackground.error)}
             </p>
-            {deleteBackground.error && (
-              <p
-                role="alert"
-                className="text-xs text-red-600 dark:text-red-400"
-              >
-                {describeApiError(deleteBackground.error)}
-              </p>
-            )}
-            <div className="flex justify-end gap-2">
-              <button
-                type="button"
-                disabled={deleteBackground.isPending}
-                onClick={() => setPendingDelete(null)}
-                className="cursor-pointer rounded-lg bg-zinc-100 px-3.5 py-1.5 text-xs disabled:opacity-50 dark:bg-zinc-800"
-              >
-                취소
-              </button>
-              <button
-                type="button"
-                data-testid="confirm-delete-bg"
-                disabled={deleteBackground.isPending}
-                onClick={() => void confirmDelete()}
-                className="cursor-pointer rounded-lg bg-red-600 px-3.5 py-1.5 text-xs font-bold text-white hover:bg-red-500 disabled:opacity-50"
-              >
-                {deleteBackground.isPending ? "지우는 중…" : "삭제"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+          )}
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleteBackground.isPending}>
+              취소
+            </AlertDialogCancel>
+            <Button
+              variant="destructive"
+              data-testid="confirm-delete-bg"
+              disabled={deleteBackground.isPending}
+              onClick={() => void confirmDelete()}
+            >
+              {deleteBackground.isPending ? "지우는 중…" : "삭제"}
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

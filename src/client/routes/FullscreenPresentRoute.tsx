@@ -10,6 +10,7 @@ import {
   useParams,
   Navigate,
 } from "react-router-dom";
+import { Button } from "#components/ui/button";
 import { DEFAULT_DECK_STYLE } from "#shared";
 import type { Presentation } from "#shared";
 import { SlideStage } from "../components/stage/SlideStage";
@@ -156,19 +157,20 @@ export function FullscreenPresentRoute(): React.JSX.Element {
         isLyricsHidden={isLyricsHidden}
       />
 
-      <div className="absolute top-4 right-4 z-50 flex items-center gap-2 rounded-lg border border-zinc-700/60 bg-zinc-900/80 px-3 py-1.5 opacity-0 shadow-lg backdrop-blur-sm transition-opacity duration-300 group-hover:opacity-100">
-        <button
-          type="button"
+      <div className="absolute top-4 right-4 z-50 rounded-lg border border-white/15 bg-black/70 p-1 opacity-0 shadow-lg backdrop-blur-sm transition-opacity duration-300 group-hover:opacity-100">
+        <Button
+          variant="ghost"
+          size="sm"
           data-testid="exit-present-btn"
           onClick={(e) => {
             e.stopPropagation();
             handleExit();
           }}
-          className="cursor-pointer rounded-sm px-2 py-1 text-xs text-zinc-300 transition-colors hover:bg-zinc-800 hover:text-white"
-          title="송출 종료 (Esc)"
+          className="text-white/80 hover:bg-white/10 hover:text-white"
         >
           송출 종료
-        </button>
+          <kbd className="font-sans text-white/50">Esc</kbd>
+        </Button>
       </div>
     </div>
   );

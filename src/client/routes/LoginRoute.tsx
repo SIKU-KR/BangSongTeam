@@ -1,4 +1,8 @@
 import React, { useEffect, useState } from "react";
+import { cn } from "cn";
+import { Badge } from "#components/ui/badge";
+import { Button } from "#components/ui/button";
+import { Input } from "#components/ui/input";
 import type { AuthConfigResponse } from "#shared";
 import {
   SOCIAL_PROVIDERS,
@@ -8,6 +12,11 @@ import {
   type SocialProvider,
 } from "../lib/auth";
 import { EmailLoginForm } from "../features/auth/EmailLoginForm";
+
+const PROVIDER_BUTTON_CLASS: Record<SocialProvider, string> = {
+  kakao: "bg-kakao text-kakao-foreground hover:bg-kakao/90",
+  naver: "bg-naver text-naver-foreground hover:bg-naver/90",
+};
 
 /** 로그인 화면 라우트 */
 export function LoginRoute(): React.JSX.Element {
@@ -64,19 +73,17 @@ export function LoginRoute(): React.JSX.Element {
   );
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 px-4 dark:bg-zinc-950">
+    <div className="flex min-h-screen items-center justify-center bg-muted/40 px-4">
       <div className="w-full max-w-sm">
         <div className="mb-8 text-center">
-          <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-50">
-            Worship Studio
-          </h1>
-          <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
+          <h1 className="text-2xl font-bold">Worship Studio</h1>
+          <p className="mt-2 text-sm text-muted-foreground">
             예배 찬양 슬라이드를 만들고 송출합니다
           </p>
         </div>
 
-        <div className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-          <p className="mb-5 text-sm/relaxed text-zinc-700 dark:text-zinc-300">
+        <div className="rounded-2xl border bg-card p-6 text-card-foreground shadow-sm">
+          <p className="mb-5 text-sm/relaxed">
             로그인하면 만든 세트가 계정에 저장되어, 교회 PC와 집 PC 어디서든
             같은 세트를 열 수 있습니다.
           </p>
@@ -84,7 +91,7 @@ export function LoginRoute(): React.JSX.Element {
           {config === null ? (
             <p
               data-testid="login-loading"
-              className="py-3 text-center text-xs text-zinc-500"
+              className="py-3 text-center text-xs text-muted-foreground"
             >
               로그인 수단을 확인하는 중…
             </p>
@@ -93,15 +100,18 @@ export function LoginRoute(): React.JSX.Element {
               {visibleProviders.length > 0 && (
                 <div className="space-y-2.5">
                   {visibleProviders.map((provider) => (
-                    <button
+                    <Button
                       key={provider.id}
-                      type="button"
+                      size="lg"
                       disabled={pending !== null}
                       onClick={() => void handleSignIn(provider.id)}
-                      className={`w-full rounded-xl py-3 text-sm font-bold transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${provider.className}`}
+                      className={cn(
+                        "h-11 w-full rounded-xl font-bold",
+                        PROVIDER_BUTTON_CLASS[provider.id],
+                      )}
                     >
                       {pending === provider.id ? "이동 중…" : provider.label}
-                    </button>
+                    </Button>
                   ))}
                 </div>
               )}
@@ -110,9 +120,7 @@ export function LoginRoute(): React.JSX.Element {
                 <div
                   data-testid="email-login"
                   className={
-                    visibleProviders.length > 0
-                      ? "mt-5 border-t border-zinc-200 pt-5 dark:border-zinc-800"
-                      : ""
+                    visibleProviders.length > 0 ? "mt-5 border-t pt-5" : ""
                   }
                 >
                   <EmailLoginForm />
@@ -124,36 +132,36 @@ export function LoginRoute(): React.JSX.Element {
                   data-testid="dev-login"
                   className={
                     visibleProviders.length > 0 || config.emailLogin
-                      ? "mt-5 border-t border-dashed border-zinc-300 pt-5 dark:border-zinc-700"
+                      ? "mt-5 border-t border-dashed pt-5"
                       : ""
                   }
                 >
                   <div className="mb-2.5 flex items-center gap-2">
-                    <span className="rounded-sm bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-800 dark:bg-amber-900/40 dark:text-amber-300">
+                    <Badge variant="outline" className="text-warning">
                       개발용
-                    </span>
-                    <span className="text-[11px] text-zinc-500">
+                    </Badge>
+                    <span className="text-2xs text-muted-foreground">
                       이 기기(localhost)에서만 동작합니다
                     </span>
                   </div>
 
-                  <input
+                  <Input
                     type="email"
                     value={devEmail}
                     onChange={(event) => setDevEmail(event.target.value)}
                     placeholder="dev@worship.local (비워 두면 기본 계정)"
                     aria-label="개발자 계정 이메일"
-                    className="mb-2 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-xs text-zinc-900 placeholder:text-zinc-400 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100"
+                    className="mb-2"
                   />
 
-                  <button
-                    type="button"
+                  <Button
+                    size="lg"
                     disabled={pending !== null}
                     onClick={() => void handleDevSignIn()}
-                    className="w-full rounded-xl bg-zinc-900 py-3 text-sm font-bold text-white transition-colors hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-white"
+                    className="h-11 w-full rounded-xl font-bold"
                   >
                     {pending === "dev" ? "로그인 중…" : "개발자 로그인"}
-                  </button>
+                  </Button>
                 </div>
               )}
 
@@ -162,7 +170,7 @@ export function LoginRoute(): React.JSX.Element {
                 !config.devLogin && (
                   <p
                     role="alert"
-                    className="text-xs/relaxed text-zinc-600 dark:text-zinc-400"
+                    className="text-xs/relaxed text-muted-foreground"
                   >
                     사용 가능한 로그인 수단이 없습니다. 소셜 로그인 자격증명이
                     설정되지 않았습니다.
@@ -172,16 +180,13 @@ export function LoginRoute(): React.JSX.Element {
           )}
 
           {error && (
-            <p
-              role="alert"
-              className="mt-4 text-xs text-red-600 dark:text-red-400"
-            >
+            <p role="alert" className="mt-4 text-xs text-destructive">
               {error}
             </p>
           )}
         </div>
 
-        <p className="mt-6 text-center text-xs text-zinc-500 dark:text-zinc-500">
+        <p className="mt-6 text-center text-xs text-muted-foreground">
           데스크톱 Chrome에 최적화되어 있습니다
         </p>
       </div>

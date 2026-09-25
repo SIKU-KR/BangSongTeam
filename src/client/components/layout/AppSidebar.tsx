@@ -1,5 +1,13 @@
 import React, { useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
+import {
+  FolderIcon,
+  ImageIcon,
+  PresentationIcon,
+  type LucideIcon,
+} from "lucide-react";
+import { cn } from "cn";
+import { Button } from "#components/ui/button";
 import { ThemeMenuButton } from "../common/ThemeMenuButton";
 import { useSession, signOut } from "../../lib/auth";
 import {
@@ -13,36 +21,22 @@ interface NavItem {
   testId: string;
   path: string;
   label: string;
-  accent: string;
-  iconPath: string;
+  icon: LucideIcon;
 }
 
 const DRIVE_ITEM: NavItem = {
   testId: "sidebar-nav-home",
   path: DRIVE_ROOT_PATH,
   label: "내 드라이브",
-  accent: "text-emerald-500 dark:text-emerald-400",
-  iconPath:
-    "M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z",
+  icon: FolderIcon,
 };
 
 const BACKGROUNDS_ITEM: NavItem = {
   testId: "sidebar-nav-backgrounds",
   path: "/backgrounds",
   label: "배경 갤러리",
-  accent: "text-sky-500 dark:text-sky-400",
-  iconPath:
-    "M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z",
+  icon: ImageIcon,
 };
-
-const NAV_BUTTON_BASE =
-  "w-full h-9 pl-4 pr-3 rounded-full text-sm flex items-center gap-4 transition-colors cursor-pointer";
-const NAV_ACTIVE =
-  "bg-emerald-100 dark:bg-emerald-900/40 text-emerald-900 dark:text-emerald-100 font-semibold";
-const NAV_IDLE =
-  "text-zinc-700 dark:text-zinc-300 hover:bg-zinc-200/70 dark:hover:bg-zinc-800/70";
-const NAV_DROP =
-  "ring-2 ring-inset ring-emerald-500/70 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-200";
 
 function NavButton({
   item,
@@ -61,38 +55,22 @@ function NavButton({
     !drop,
   );
   return (
-    <button
+    <Button
       ref={setNodeRef}
-      type="button"
+      variant="ghost"
       data-testid={item.testId}
       aria-current={active ? "page" : undefined}
       onClick={onClick}
-      className={`${NAV_BUTTON_BASE} ${
-        isDropTarget ? NAV_DROP : active ? NAV_ACTIVE : NAV_IDLE
-      }`}
+      className={cn(
+        "h-9 w-full justify-start gap-4 rounded-full pr-3 pl-4 font-normal text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+        active &&
+          "bg-sidebar-accent font-semibold text-sidebar-accent-foreground",
+        isDropTarget && "ring-2 ring-sidebar-ring ring-inset",
+      )}
     >
-      <div
-        className={`flex size-5 items-center justify-center ${
-          active ? item.accent : "text-zinc-500 dark:text-zinc-400"
-        }`}
-      >
-        <svg
-          className="size-5"
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-          aria-hidden="true"
-        >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={2}
-            d={item.iconPath}
-          />
-        </svg>
-      </div>
-      <span>{item.label}</span>
-    </button>
+      <item.icon className={cn("size-5", !active && "text-muted-foreground")} />
+      {item.label}
+    </Button>
   );
 }
 
@@ -115,7 +93,7 @@ function AccountCard(): React.JSX.Element {
   return (
     <div
       data-testid="account-card"
-      className="flex items-center gap-3 rounded-2xl border border-zinc-200 bg-zinc-100/90 p-3 dark:border-zinc-900 dark:bg-zinc-900/60"
+      className="flex items-center gap-3 rounded-2xl border bg-card p-3 text-card-foreground"
     >
       {session.user?.image ? (
         <img
@@ -124,22 +102,21 @@ function AccountCard(): React.JSX.Element {
           className="size-9 shrink-0 rounded-full object-cover"
         />
       ) : (
-        <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-linear-to-tr from-emerald-700 to-teal-500 text-xs font-bold text-white">
+        <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">
           {initials}
         </div>
       )}
       <div className="min-w-0 flex-1">
-        <p className="truncate text-xs font-bold text-zinc-800 dark:text-zinc-200">
-          {name}
-        </p>
-        <button
-          type="button"
+        <p className="truncate text-xs font-bold">{name}</p>
+        <Button
+          variant="link"
+          size="xs"
           disabled={signingOut}
           onClick={() => void handleSignOut()}
-          className="text-[10px] text-zinc-500 transition-colors hover:text-zinc-700 disabled:opacity-60 dark:hover:text-zinc-300"
+          className="h-auto p-0 text-2xs text-muted-foreground"
         >
           {signingOut ? "로그아웃 중…" : "로그아웃"}
-        </button>
+        </Button>
       </div>
     </div>
   );
@@ -157,19 +134,17 @@ export function AppSidebar(): React.JSX.Element {
     pathname.startsWith(`${BACKGROUNDS_ITEM.path}/`);
 
   return (
-    <aside className="hidden h-full w-64 shrink-0 flex-col justify-between overflow-y-auto bg-zinc-50 py-4 pr-4 pl-3 lg:flex dark:bg-zinc-950">
+    <aside className="hidden h-full w-64 shrink-0 flex-col justify-between overflow-y-auto bg-sidebar py-4 pr-4 pl-3 text-sidebar-foreground lg:flex">
       <div className="space-y-6">
         <div className="flex items-center gap-3 px-2 pt-1">
-          <div className="flex size-9 items-center justify-center rounded-xl bg-linear-to-tr from-emerald-500 via-teal-400 to-indigo-500 text-white shadow-sm dark:shadow-emerald-950/40">
-            <svg className="size-5 fill-current" viewBox="0 0 24 24">
-              <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-5 14H7v-2h7v2zm3-4H7v-2h10v2zm0-4H7V7h10v2z" />
-            </svg>
+          <div className="flex size-9 items-center justify-center rounded-xl bg-sidebar-primary text-sidebar-primary-foreground shadow-sm">
+            <PresentationIcon className="size-5" />
           </div>
           <div>
-            <span className="flex items-center gap-1.5 text-base font-extrabold tracking-tight text-zinc-900 dark:text-white">
+            <span className="flex items-center gap-1.5 text-base font-extrabold tracking-tight">
               Worship Studio
             </span>
-            <p className="text-[10px] font-medium text-zinc-500">
+            <p className="text-2xs font-medium text-muted-foreground">
               16:9 프레젠테이션 스튜디오
             </p>
           </div>
@@ -195,7 +170,7 @@ export function AppSidebar(): React.JSX.Element {
         </nav>
       </div>
 
-      <div className="space-y-3 border-t border-zinc-200 pt-3 dark:border-zinc-900">
+      <div className="space-y-3 border-t border-sidebar-border pt-3">
         <ThemeMenuButton />
         <AccountCard />
       </div>

@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
+import { Button } from "#components/ui/button";
 import type { Deck } from "#shared";
 import { useIsOnline } from "../../hooks/useIsOnline";
 import { describeApiError } from "../../lib/api/request";
@@ -39,70 +40,72 @@ export function LibraryShareControls({
   return (
     <section
       data-testid="library-share-controls"
-      className="shrink-0 space-y-1.5 border-t border-zinc-200 bg-zinc-50 px-5 py-3 dark:border-zinc-800 dark:bg-zinc-950/40"
+      className="shrink-0 space-y-1.5 border-t bg-muted/40 px-5 py-3"
     >
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p data-testid="song-share-status" className="text-xs">
           {isTakenDown ? (
-            <span className="text-rose-600">
+            <span className="text-destructive">
               게시 중단됨 — 운영자가 공개를 내렸습니다
             </span>
           ) : isPublic ? (
-            <span className="text-emerald-700 dark:text-emerald-400">
+            <span className="font-medium">
               공유 라이브러리에 공개 중 · {deck.forkCount}회 가져감
             </span>
           ) : (
-            <span className="text-zinc-500">비공개 — 나만 볼 수 있습니다</span>
+            <span className="text-muted-foreground">
+              비공개 — 나만 볼 수 있습니다
+            </span>
           )}
         </p>
 
         <div className="flex items-center gap-2">
           {correctionTargetId && (
-            <button
-              type="button"
+            <Button
+              variant="ghost"
+              size="sm"
               data-testid="song-share-correction-btn"
               disabled={!isOnline}
               onClick={() => setIsReportOpen(true)}
-              className="cursor-pointer rounded-lg px-2.5 py-1.5 text-[11px] text-zinc-500 hover:text-rose-600 disabled:opacity-40"
+              className="text-muted-foreground hover:text-destructive"
             >
               원본에 교정 제안
-            </button>
+            </Button>
           )}
           {!isTakenDown &&
             (isPublic ? (
-              <button
-                type="button"
+              <Button
+                variant="outline"
+                size="sm"
                 data-testid="song-share-unpublish-btn"
                 disabled={!isOnline || busy}
                 onClick={() => unpublish.mutate()}
-                className="cursor-pointer rounded-lg border border-zinc-300 px-3 py-1.5 text-xs font-medium hover:bg-zinc-100 disabled:opacity-40 dark:border-zinc-700 dark:hover:bg-zinc-800"
               >
                 {unpublish.isPending ? "전환 중…" : "비공개로 전환"}
-              </button>
+              </Button>
             ) : (
-              <button
-                type="button"
+              <Button
+                size="sm"
                 data-testid="song-share-publish-btn"
                 disabled={!isOnline || busy}
                 onClick={() => {
                   publish.reset();
                   setIsPublishOpen(true);
                 }}
-                className="cursor-pointer rounded-lg border border-emerald-600 px-3 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-40 dark:text-emerald-400 dark:hover:bg-emerald-950/40"
               >
                 공유 라이브러리에 공개
-              </button>
+              </Button>
             ))}
         </div>
       </div>
 
       {!isOnline && (
-        <p className="text-[11px] text-zinc-400">
+        <p className="text-2xs text-muted-foreground">
           공유는 온라인에서만 할 수 있습니다.
         </p>
       )}
       {unpublish.error && (
-        <p role="alert" className="text-[11px] text-rose-600">
+        <p role="alert" className="text-2xs text-destructive">
           {describeApiError(unpublish.error)}
         </p>
       )}

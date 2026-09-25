@@ -1,4 +1,7 @@
 import React, { useState } from "react";
+import { cn } from "cn";
+import { Button } from "#components/ui/button";
+import { Input } from "#components/ui/input";
 import {
   EmailSignUpRequestSchema,
   PASSWORD_MAX_LENGTH,
@@ -30,9 +33,6 @@ const SIGN_UP_FIELD_MESSAGES: Record<string, string> = {
   password: PASSWORD_RULE,
   name: "이름을 입력해 주세요.",
 };
-
-const inputClassName =
-  "w-full px-3 py-2.5 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-sm text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400";
 
 /** 이메일·비밀번호 로그인과 허용 목록 가입 폼 */
 export function EmailLoginForm(): React.JSX.Element {
@@ -94,7 +94,7 @@ export function EmailLoginForm(): React.JSX.Element {
       <div
         role="group"
         aria-label="이메일 로그인 방식"
-        className="mb-3 grid grid-cols-2 gap-1 rounded-lg bg-zinc-100 p-1 dark:bg-zinc-800"
+        className="mb-3 grid grid-cols-2 gap-1 rounded-lg bg-muted p-1"
       >
         {(
           [
@@ -102,25 +102,27 @@ export function EmailLoginForm(): React.JSX.Element {
             ["sign-up", "가입"],
           ] as const
         ).map(([value, label]) => (
-          <button
+          <Button
             key={value}
-            type="button"
+            variant="ghost"
+            size="sm"
             aria-pressed={mode === value}
             onClick={() => switchMode(value)}
-            className={`rounded-md py-1.5 text-xs font-semibold transition-colors ${
+            className={cn(
+              "text-xs font-semibold",
               mode === value
-                ? "bg-white text-zinc-900 shadow-sm dark:bg-zinc-950 dark:text-zinc-50"
-                : "text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200"
-            }`}
+                ? "bg-background text-foreground shadow-sm hover:bg-background"
+                : "text-muted-foreground",
+            )}
           >
             {label}
-          </button>
+          </Button>
         ))}
       </div>
 
       <div className="space-y-2">
         {isSignUp && (
-          <input
+          <Input
             type="text"
             value={name}
             onChange={(event) => setName(event.target.value)}
@@ -128,19 +130,19 @@ export function EmailLoginForm(): React.JSX.Element {
             aria-label="이름"
             autoComplete="name"
             maxLength={50}
-            className={inputClassName}
+            className="h-10"
           />
         )}
-        <input
+        <Input
           type="email"
           value={email}
           onChange={(event) => setEmail(event.target.value)}
           placeholder="이메일"
           aria-label="이메일"
           autoComplete="email"
-          className={inputClassName}
+          className="h-10"
         />
-        <input
+        <Input
           type="password"
           value={password}
           onChange={(event) => setPassword(event.target.value)}
@@ -150,20 +152,21 @@ export function EmailLoginForm(): React.JSX.Element {
           aria-label="비밀번호"
           autoComplete={isSignUp ? "new-password" : "current-password"}
           maxLength={PASSWORD_MAX_LENGTH}
-          className={inputClassName}
+          className="h-10"
         />
       </div>
 
       {isSignUp && (
-        <p className="mt-2 text-[11px] text-zinc-500">
+        <p className="mt-2 text-2xs text-muted-foreground">
           허용된 이메일만 가입할 수 있습니다.
         </p>
       )}
 
-      <button
+      <Button
         type="submit"
+        size="lg"
         disabled={pending}
-        className="mt-3 w-full rounded-xl bg-zinc-900 py-3 text-sm font-bold text-white transition-colors hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-white"
+        className="mt-3 h-11 w-full rounded-xl font-bold"
       >
         {isSignUp
           ? pending
@@ -172,10 +175,10 @@ export function EmailLoginForm(): React.JSX.Element {
           : pending
             ? "로그인 중…"
             : "이메일로 로그인"}
-      </button>
+      </Button>
 
       {error && (
-        <p role="alert" className="mt-3 text-xs text-red-600 dark:text-red-400">
+        <p role="alert" className="mt-3 text-xs text-destructive">
           {error}
         </p>
       )}
