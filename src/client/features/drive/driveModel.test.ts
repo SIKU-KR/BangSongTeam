@@ -3,6 +3,7 @@ import { buildFolderIndex, type Folder, type Presentation } from "#shared";
 import {
   buildChildCounts,
   canDropInto,
+  filterByType,
   itemKey,
   listFolderContents,
   listTrash,
@@ -89,6 +90,24 @@ describe("listFolderContents", () => {
     const counts = buildChildCounts(index, DOCS);
     expect(counts.get("a")).toBe(2);
     expect(counts.get("b")).toBe(1);
+  });
+});
+
+describe("filterByType", () => {
+  const items = listFolderContents(index, DOCS, null, "name");
+
+  it("전체면 목록을 그대로 돌려준다", () => {
+    expect(filterByType(items, "all")).toBe(items);
+  });
+
+  it("폴더·프레젠테이션 중 고른 유형만 남긴다", () => {
+    expect(filterByType(items, "folder").map((i) => i.key)).toEqual([
+      "folder:a",
+    ]);
+    expect(filterByType(items, "file").map((i) => i.key)).toEqual([
+      "file:orphan",
+      "file:x",
+    ]);
   });
 });
 

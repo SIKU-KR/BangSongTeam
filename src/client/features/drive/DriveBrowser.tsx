@@ -6,6 +6,7 @@ import { useFolderIndex } from "./folderStore";
 import { useDrive } from "./driveContext";
 import { TRASH_PATH, openItem, startPresentation } from "./driveActions";
 import {
+  filterByType,
   listFolderContents,
   listTrash,
   searchDrive,
@@ -59,7 +60,7 @@ export function DriveBrowser({
 }: DriveBrowserProps): React.JSX.Element {
   const navigate = useNavigate();
   const { pathname } = useLocation();
-  const { searchQuery, sortOrder } = useAppShell();
+  const { searchQuery, sortOrder, typeFilter } = useAppShell();
   const presentations = usePresentationList();
   const index = useFolderIndex();
   const drive = useDrive();
@@ -70,11 +71,15 @@ export function DriveBrowser({
   const isTrash = mode === "trash";
   const items = useMemo(() => {
     if (isTrash) return listTrash(index, presentations, query);
-    if (query) return searchDrive(index, presentations, query, sortOrder);
-    return listFolderContents(index, presentations, folderId, sortOrder);
-  }, [isTrash, index, presentations, query, sortOrder, folderId]);
+    const listed = query
+      ? searchDrive(index, presentations, query, sortOrder)
+      : listFolderContents(index, presentations, folderId, sortOrder);
+    return filterByType(listed, typeFilter);
+  }, [isTrash, index, presentations, query, sortOrder, folderId, typeFilter]);
 
-  const showTrashFolder = !isTrash && folderId === null && !query;
+  const isFiltered = !isTrash && typeFilter !== "all";
+  const showTrashFolder =
+    !isTrash && folderId === null && !query && typeFilter !== "file";
   const trashCount = useMemo(
     () => (showTrashFolder ? listTrash(index, presentations).length : 0),
     [showTrashFolder, index, presentations],
@@ -367,7 +372,9 @@ export function DriveBrowser({
         </div>
       )}
 
-      {items.length === 0 && <EmptyState mode={mode} query={query} />}
+      {items.length === 0 && (
+        <EmptyState mode={mode} query={query} filtered={isFiltered} />
+      )}
 
       {menu && (
         <PopoverMenu
@@ -433,9 +440,11 @@ function SelectionBar({
 function EmptyState({
   mode,
   query,
+  filtered,
 }: {
   mode: "drive" | "trash";
   query: string;
+  filtered: boolean;
 }): React.JSX.Element {
   const drive = useDrive();
   const newActions = useNewItemActions();
@@ -450,6 +459,9 @@ function EmptyState({
     title = `"${query}"에 일치하는 항목이 없습니다.`;
     hint =
       "다른 검색어를 입력해 보세요. 폴더 이름, 세트 제목, 곡 제목·가사로 찾을 수 있습니다.";
+  } else if (filtered) {
+    title = "선택한 유형의 항목이 없습니다";
+    hint = "유형 필터를 ‘전체’로 바꾸면 모든 항목을 볼 수 있습니다.";
   } else if (mode === "trash") {
     icon = <Icon name="trash" className="w-6 h-6" strokeWidth={1.5} />;
     title = "휴지통이 비어 있습니다";
@@ -476,7 +488,7 @@ function EmptyState({
         {title}
       </p>
       <p className="text-xs text-zinc-500 max-w-md">{hint}</p>
-      {mode === "drive" && !query && (
+      {mode === "drive" && !query && !filtered && (
         <div className="flex items-center gap-2 pt-2">
           {newActions.map((action) => (
             <button

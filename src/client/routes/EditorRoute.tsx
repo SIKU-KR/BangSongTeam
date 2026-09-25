@@ -42,7 +42,10 @@ import { StorageWarningBanner } from "../components/common/StorageWarningBanner"
 import { EditorStageCanvas } from "../features/editor/EditorStageCanvas";
 import { SlideThumbnailPane } from "../features/editor/SlideThumbnailPane";
 import { SongPropertyPanel } from "../features/editor/SongPropertyPanel";
-import { SongPickerModal } from "../features/editor/SongPickerModal";
+import {
+  SongPickerModal,
+  type SongPickerMode,
+} from "../features/editor/SongPickerModal";
 import { SongSharePanel } from "../features/sharing/SongSharePanel";
 import { useBackgroundAutoCache } from "../features/offline";
 import {
@@ -67,7 +70,9 @@ export function EditorRoute(): React.JSX.Element {
   const [searchParams] = useSearchParams();
   const found = usePresentationById(presentationId);
   const presentation = found ?? EMPTY_PRESENTATION;
-  const [isLyricModalOpen, setIsLyricModalOpen] = useState(false);
+  const [songPickerMode, setSongPickerMode] = useState<SongPickerMode | null>(
+    null,
+  );
 
   useLayoutEffect(() => {
     if (presentationId) openPresentation(presentationId);
@@ -292,7 +297,7 @@ export function EditorRoute(): React.JSX.Element {
         canUndo={canUndo()}
         canRedo={canRedo()}
         onNewPresentation={handleNewPresentation}
-        onOpenLyricModal={() => setIsLyricModalOpen(true)}
+        onOpenLyricModal={() => setSongPickerMode("create")}
         backPath={drivePath(presentation.folderId)}
       />
 
@@ -309,7 +314,7 @@ export function EditorRoute(): React.JSX.Element {
           onReorderSong={handleReorderSong}
           onDuplicateSong={handleDuplicateSong}
           onDeleteSong={handleDeleteSong}
-          onOpenSongPicker={() => setIsLyricModalOpen(true)}
+          onOpenSongPicker={() => setSongPickerMode("browse")}
         />
 
         <EditorStageCanvas
@@ -326,7 +331,7 @@ export function EditorRoute(): React.JSX.Element {
           onPresent={handlePresent}
           zoomLevel={zoomLevel}
           onZoomChange={setZoomLevel}
-          onOpenLyricModal={() => setIsLyricModalOpen(true)}
+          onOpenLyricModal={() => setSongPickerMode("create")}
           onUpdateStyle={(styleUpdate) =>
             updateSongStyle(safeSongIndex, styleUpdate)
           }
@@ -354,13 +359,14 @@ export function EditorRoute(): React.JSX.Element {
       </div>
 
       <SongPickerModal
-        isOpen={isLyricModalOpen}
-        onClose={() => setIsLyricModalOpen(false)}
+        isOpen={songPickerMode !== null}
+        initialMode={songPickerMode ?? "browse"}
+        onClose={() => setSongPickerMode(null)}
         onSelectSong={(newDeck) => {
           addDeckToPresentation(newDeck);
           setActiveSongIndex(presentation.items.length);
           setActiveSlideIndex(0);
-          setIsLyricModalOpen(false);
+          setSongPickerMode(null);
         }}
       />
     </div>
