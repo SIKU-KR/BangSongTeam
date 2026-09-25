@@ -143,7 +143,7 @@ export function FullscreenPresentRoute(): React.JSX.Element {
   return (
     <div
       data-testid="fullscreen-present-route"
-      className="relative w-screen h-screen overflow-hidden bg-black select-none group"
+      className="group relative h-screen w-screen overflow-hidden bg-black select-none"
     >
       <SlideStage
         slide={currentSlide}
@@ -156,7 +156,7 @@ export function FullscreenPresentRoute(): React.JSX.Element {
         isLyricsHidden={isLyricsHidden}
       />
 
-      <div className="absolute top-4 right-4 z-50 flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity duration-300 bg-zinc-900/80 backdrop-blur-sm border border-zinc-700/60 rounded-lg px-3 py-1.5 shadow-lg">
+      <div className="absolute top-4 right-4 z-50 flex items-center gap-2 rounded-lg border border-zinc-700/60 bg-zinc-900/80 px-3 py-1.5 opacity-0 shadow-lg backdrop-blur-sm transition-opacity duration-300 group-hover:opacity-100">
         <button
           type="button"
           data-testid="exit-present-btn"
@@ -164,7 +164,7 @@ export function FullscreenPresentRoute(): React.JSX.Element {
             e.stopPropagation();
             handleExit();
           }}
-          className="text-xs text-zinc-300 hover:text-white px-2 py-1 rounded hover:bg-zinc-800 transition-colors cursor-pointer"
+          className="cursor-pointer rounded-sm px-2 py-1 text-xs text-zinc-300 transition-colors hover:bg-zinc-800 hover:text-white"
           title="송출 종료 (Esc)"
         >
           송출 종료

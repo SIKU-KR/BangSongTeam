@@ -17,7 +17,7 @@ export function RibbonGroup({
       <div className="flex items-center gap-1">{children}</div>
       <span
         aria-hidden="true"
-        className="hidden xl:block text-[10px] leading-none text-zinc-400 dark:text-zinc-500"
+        className="hidden text-[10px] leading-none text-zinc-400 xl:block dark:text-zinc-500"
       >
         {label}
       </span>
@@ -29,7 +29,7 @@ export function RibbonDivider(): React.JSX.Element {
   return (
     <div
       aria-hidden="true"
-      className="self-stretch w-px my-1.5 bg-zinc-200 dark:bg-zinc-800"
+      className="my-1.5 w-px self-stretch bg-zinc-200 dark:bg-zinc-800"
     />
   );
 }
@@ -77,10 +77,10 @@ export function RibbonButton({
       disabled={disabled}
       onMouseDown={(e) => e.preventDefault()}
       onClick={onClick}
-      className={`h-8 min-w-8 px-1.5 rounded-md flex items-center justify-center gap-1 text-xs font-medium transition-colors cursor-pointer disabled:opacity-35 disabled:cursor-not-allowed ${
+      className={`flex h-8 min-w-8 cursor-pointer items-center justify-center gap-1 rounded-md px-1.5 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-35 ${
         pressed
           ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-300"
-          : "text-zinc-700 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800 disabled:hover:bg-transparent"
+          : "text-zinc-700 hover:bg-zinc-100 disabled:hover:bg-transparent dark:text-zinc-300 dark:hover:bg-zinc-800"
       } ${className}`}
     >
       {icon}

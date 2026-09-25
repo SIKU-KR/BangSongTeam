@@ -145,7 +145,7 @@ export function PopoverMenu({
       onContextMenu={(event) => event.preventDefault()}
       onClick={(event) => event.stopPropagation()}
       onDoubleClick={(event) => event.stopPropagation()}
-      className="fixed z-[80] min-w-[240px] py-2 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg shadow-lg dark:shadow-2xl outline-none"
+      className="fixed z-80 min-w-[240px] rounded-lg border border-zinc-200 bg-white py-2 shadow-lg outline-none dark:border-zinc-800 dark:bg-zinc-900 dark:shadow-2xl"
     >
       {actions.map((action, index) => (
         <React.Fragment key={action.key}>
@@ -161,19 +161,16 @@ export function PopoverMenu({
               onClose();
               action.onSelect();
             }}
-            className={`w-full text-left px-4 py-2 text-sm flex items-center gap-3 transition-colors cursor-pointer outline-none disabled:opacity-40 disabled:cursor-not-allowed ${
+            className={`flex w-full cursor-pointer items-center gap-3 px-4 py-2 text-left text-sm transition-colors outline-none disabled:cursor-not-allowed disabled:opacity-40 ${
               action.danger
-                ? "text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 focus-visible:bg-rose-50 dark:focus-visible:bg-rose-950/40"
-                : "text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 hover:text-zinc-900 dark:hover:text-white focus-visible:bg-zinc-100 dark:focus-visible:bg-zinc-800"
+                ? "text-rose-600 hover:bg-rose-50 focus-visible:bg-rose-50 dark:text-rose-400 dark:hover:bg-rose-950/40 dark:focus-visible:bg-rose-950/40"
+                : "text-zinc-700 hover:bg-zinc-100 hover:text-zinc-900 focus-visible:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800 dark:hover:text-white dark:focus-visible:bg-zinc-800"
             }`}
           >
             {action.icon ? (
-              <Icon
-                name={action.icon}
-                className="w-4 h-4 shrink-0 opacity-80"
-              />
+              <Icon name={action.icon} className="size-4 shrink-0 opacity-80" />
             ) : (
-              <span className="w-4 h-4 shrink-0" />
+              <span className="size-4 shrink-0" />
             )}
             <span className="flex-1">{action.label}</span>
             {action.shortcut && (

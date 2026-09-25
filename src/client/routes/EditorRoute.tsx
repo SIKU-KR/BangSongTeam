@@ -387,7 +387,7 @@ export function EditorRoute(): React.JSX.Element {
   return (
     <div
       data-testid="editor-route"
-      className="flex flex-col h-screen w-screen bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 overflow-hidden select-none"
+      className="flex h-screen w-screen flex-col overflow-hidden bg-zinc-50 text-zinc-900 select-none dark:bg-zinc-950 dark:text-zinc-100"
     >
       <StorageWarningBanner />
 
@@ -435,7 +435,7 @@ export function EditorRoute(): React.JSX.Element {
         }}
       />
 
-      <div className="flex-1 flex overflow-hidden">
+      <div className="flex flex-1 overflow-hidden">
         <SlideThumbnailPane
           items={songs}
           activeSongIndex={safeSongIndex}
@@ -525,9 +525,9 @@ export function EditorRoute(): React.JSX.Element {
                   role="status"
                   data-testid="overflow-warning-status"
                   title={overflowMessages.join("\n")}
-                  className="flex items-center gap-1 min-w-0 text-amber-700 dark:text-amber-400"
+                  className="flex min-w-0 items-center gap-1 text-amber-700 dark:text-amber-400"
                 >
-                  <OverflowWarningIcon className="w-3.5 h-3.5 shrink-0" />
+                  <OverflowWarningIcon className="size-3.5 shrink-0" />
                   <span className="truncate">{overflowMessages[0]}</span>
                 </span>
               )}

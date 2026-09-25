@@ -94,7 +94,7 @@ export function EmailLoginForm(): React.JSX.Element {
       <div
         role="group"
         aria-label="이메일 로그인 방식"
-        className="grid grid-cols-2 gap-1 p-1 mb-3 rounded-lg bg-zinc-100 dark:bg-zinc-800"
+        className="mb-3 grid grid-cols-2 gap-1 rounded-lg bg-zinc-100 p-1 dark:bg-zinc-800"
       >
         {(
           [
@@ -107,7 +107,7 @@ export function EmailLoginForm(): React.JSX.Element {
             type="button"
             aria-pressed={mode === value}
             onClick={() => switchMode(value)}
-            className={`py-1.5 rounded-md text-xs font-semibold transition-colors ${
+            className={`rounded-md py-1.5 text-xs font-semibold transition-colors ${
               mode === value
                 ? "bg-white text-zinc-900 shadow-sm dark:bg-zinc-950 dark:text-zinc-50"
                 : "text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200"
@@ -163,7 +163,7 @@ export function EmailLoginForm(): React.JSX.Element {
       <button
         type="submit"
         disabled={pending}
-        className="w-full mt-3 py-3 rounded-xl text-sm font-bold bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-white transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+        className="mt-3 w-full rounded-xl bg-zinc-900 py-3 text-sm font-bold text-white transition-colors hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-white"
       >
         {isSignUp
           ? pending

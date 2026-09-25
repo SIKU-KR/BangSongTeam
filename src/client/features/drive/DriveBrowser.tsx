@@ -335,7 +335,7 @@ export function DriveBrowser({
   return (
     <div
       data-testid={isTrash ? "trash-view" : "drive-view"}
-      className="flex-1 min-h-0 flex flex-col"
+      className="flex min-h-0 flex-1 flex-col"
     >
       <DriveToolbar
         mode={mode}
@@ -355,7 +355,7 @@ export function DriveBrowser({
       <div
         ref={containerRef}
         data-testid="drive-scroll-area"
-        className="relative flex-1 min-h-0 overflow-y-auto px-4 sm:px-6 pb-16 select-none"
+        className="relative min-h-0 flex-1 overflow-y-auto px-4 pb-16 select-none sm:px-6"
         onMouseDown={marquee.onMouseDown}
         onClick={() => {
           if (marquee.consumeClick()) return;
@@ -427,7 +427,7 @@ export function DriveBrowser({
         <div
           data-testid="drive-marquee"
           aria-hidden="true"
-          className="fixed z-40 pointer-events-none rounded-sm border border-emerald-500 bg-emerald-500/15"
+          className="pointer-events-none fixed z-40 rounded-sm border border-emerald-500 bg-emerald-500/15"
           style={{
             left: marquee.box.left,
             top: marquee.box.top,
@@ -462,12 +462,12 @@ function EmptyState({
   const newActions = useNewItemActions();
 
   let icon: React.ReactNode = (
-    <FolderGlyph className="w-10 h-10 text-emerald-500/80 dark:text-emerald-400/70" />
+    <FolderGlyph className="size-10 text-emerald-500/80 dark:text-emerald-400/70" />
   );
   let title: string;
   let hint: string;
   if (query) {
-    icon = <Icon name="search" className="w-10 h-10" strokeWidth={1.5} />;
+    icon = <Icon name="search" className="size-10" strokeWidth={1.5} />;
     title = `"${query}"에 일치하는 항목이 없습니다.`;
     hint =
       "다른 검색어를 입력해 보세요. 폴더 이름, 세트 제목, 곡 제목·가사로 찾을 수 있습니다.";
@@ -475,7 +475,7 @@ function EmptyState({
     title = "선택한 유형의 항목이 없습니다";
     hint = "유형 필터를 지우면 모든 항목을 볼 수 있습니다.";
   } else if (mode === "trash") {
-    icon = <Icon name="trash" className="w-10 h-10" strokeWidth={1.5} />;
+    icon = <Icon name="trash" className="size-10" strokeWidth={1.5} />;
     title = "휴지통이 비어 있습니다";
     hint = "삭제한 폴더와 프레젠테이션이 여기에 모입니다.";
   } else if (drive.currentFolderId) {
@@ -491,11 +491,11 @@ function EmptyState({
   return (
     <div
       data-testid="drive-empty"
-      className="py-20 px-6 text-center flex flex-col items-center justify-center gap-3"
+      className="flex flex-col items-center justify-center gap-3 px-6 py-20 text-center"
     >
-      <div className="text-zinc-400 dark:text-zinc-500 mb-2">{icon}</div>
+      <div className="mb-2 text-zinc-400 dark:text-zinc-500">{icon}</div>
       <p className="text-lg text-zinc-800 dark:text-zinc-200">{title}</p>
-      <p className="text-sm text-zinc-500 max-w-md">{hint}</p>
+      <p className="max-w-md text-sm text-zinc-500">{hint}</p>
       {mode === "drive" && !query && !filtered && (
         <div className="flex items-center gap-2 pt-3">
           {newActions.map((action) => (
@@ -508,13 +508,13 @@ function EmptyState({
                 event.stopPropagation();
                 action.onSelect();
               }}
-              className={`px-4 py-2 rounded-full text-sm font-medium flex items-center gap-2 cursor-pointer transition-colors ${
+              className={`flex cursor-pointer items-center gap-2 rounded-full px-4 py-2 text-sm font-medium transition-colors ${
                 action.key === "new-presentation"
-                  ? "bg-emerald-600 hover:bg-emerald-500 text-white shadow-sm"
-                  : "border border-zinc-300 dark:border-zinc-700 hover:bg-zinc-200/70 dark:hover:bg-zinc-800 text-zinc-700 dark:text-zinc-200"
+                  ? "bg-emerald-600 text-white shadow-sm hover:bg-emerald-500"
+                  : "border border-zinc-300 text-zinc-700 hover:bg-zinc-200/70 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
               }`}
             >
-              {action.icon && <Icon name={action.icon} className="w-4 h-4" />}
+              {action.icon && <Icon name={action.icon} className="size-4" />}
               <span>{action.label}</span>
             </button>
           ))}

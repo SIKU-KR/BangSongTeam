@@ -100,7 +100,7 @@ export function SlideStage({
     <div
       ref={containerRef}
       data-testid="slide-stage-viewport"
-      className={`relative w-full h-full overflow-hidden bg-black select-none ${className}`}
+      className={`relative size-full overflow-hidden bg-black select-none ${className}`}
     >
       <div
         data-testid="virtual-slide-stage"
@@ -117,14 +117,14 @@ export function SlideStage({
         {staticBackground ? (
           <div
             data-testid="static-background-layer"
-            className="absolute inset-0 overflow-hidden bg-black z-0 select-none pointer-events-none"
+            className="pointer-events-none absolute inset-0 z-0 overflow-hidden bg-black select-none"
           >
             {posterUrl && (
               <img
                 src={posterUrl}
                 alt=""
                 draggable={false}
-                className="absolute inset-0 w-full h-full object-cover"
+                className="absolute inset-0 size-full object-cover"
               />
             )}
           </div>
@@ -141,7 +141,7 @@ export function SlideStage({
                 src={backgroundImageUrl}
                 alt=""
                 draggable={false}
-                className="absolute inset-0 w-full h-full object-cover z-0 select-none pointer-events-none"
+                className="pointer-events-none absolute inset-0 z-0 size-full object-cover select-none"
               />
             )}
           </>

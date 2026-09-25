@@ -48,7 +48,7 @@ export function TextLayer({
   return (
     <div
       data-testid="text-layer-container"
-      className={`absolute inset-0 pointer-events-none select-none transition-opacity duration-150 ease-out z-20 ${className}`}
+      className={`pointer-events-none absolute inset-0 z-20 transition-opacity duration-150 ease-out select-none ${className}`}
       style={{
         opacity: isLyricsHidden ? 0 : 1,
       }}

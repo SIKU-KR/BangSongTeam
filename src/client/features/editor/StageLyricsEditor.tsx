@@ -83,7 +83,7 @@ export function StageLyricsEditor({
       }}
       onBlur={onExit}
       spellCheck={false}
-      className="block w-full min-w-[4ch] m-0 p-0 border-0 bg-transparent outline-none resize-none overflow-hidden select-text placeholder:text-current placeholder:opacity-40"
+      className="m-0 block w-full min-w-[4ch] resize-none overflow-hidden border-0 bg-transparent p-0 outline-none select-text placeholder:text-current placeholder:opacity-40"
       style={
         {
           font: "inherit",

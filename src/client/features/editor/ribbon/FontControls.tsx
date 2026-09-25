@@ -51,7 +51,7 @@ export function FontControls({
             fontFamily: e.target.value as DeckStyle["fontFamily"],
           })
         }
-        className="h-8 w-36 px-2 rounded-md bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 text-xs text-zinc-800 dark:text-zinc-200 focus:outline-none focus:border-emerald-500 cursor-pointer disabled:opacity-35"
+        className="h-8 w-36 cursor-pointer rounded-md border border-zinc-200 bg-white px-2 text-xs text-zinc-800 focus:border-emerald-500 focus:outline-none disabled:opacity-35 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200"
       >
         {SUPPORTED_FONTS.map((font) => (
           <option key={font} value={font} style={{ fontFamily: font }}>
@@ -77,7 +77,7 @@ export function FontControls({
             }
             if (e.key === "Escape") setSizeText(String(sizePt));
           }}
-          className="h-8 w-11 px-1.5 rounded-l-md bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 text-xs text-center font-mono text-zinc-800 dark:text-zinc-200 focus:outline-none focus:border-emerald-500 disabled:opacity-35"
+          className="h-8 w-11 rounded-l-md border border-zinc-200 bg-white px-1.5 text-center font-mono text-xs text-zinc-800 focus:border-emerald-500 focus:outline-none disabled:opacity-35 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200"
         />
         <RibbonDropdown
           label="글자 크기 목록"
@@ -96,7 +96,7 @@ export function FontControls({
                   onUpdateStyle({ fontSizeVw: ptToVw(pt) });
                   close();
                 }}
-                className={`w-full px-2 py-1 rounded text-left font-mono cursor-pointer ${
+                className={`w-full cursor-pointer rounded-sm px-2 py-1 text-left font-mono ${
                   pt === sizePt
                     ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-300"
                     : "hover:bg-zinc-100 dark:hover:bg-zinc-800"
@@ -118,7 +118,7 @@ export function FontControls({
           onUpdateStyle({ fontSizeVw: stepFontSize(style.fontSizeVw, 1) })
         }
         icon={
-          <span className="font-bold text-sm leading-none">
+          <span className="text-sm leading-none font-bold">
             A<sup className="text-[9px]">+</sup>
           </span>
         }
@@ -132,7 +132,7 @@ export function FontControls({
           onUpdateStyle({ fontSizeVw: stepFontSize(style.fontSizeVw, -1) })
         }
         icon={
-          <span className="font-bold text-xs leading-none">
+          <span className="text-xs leading-none font-bold">
             A<sup className="text-[9px]">−</sup>
           </span>
         }
@@ -145,7 +145,7 @@ export function FontControls({
         panelClassName="w-60"
         icon={
           <span className="flex flex-col items-center leading-none">
-            <span className="font-bold text-sm">가</span>
+            <span className="text-sm font-bold">가</span>
             <span
               className="mt-0.5 h-1 w-4 rounded-sm border border-zinc-300 dark:border-zinc-600"
               style={{ backgroundColor: style.fontColor }}
@@ -169,7 +169,7 @@ export function FontControls({
                     onMouseDown={(e) => e.preventDefault()}
                     onClick={() => onUpdateStyle({ fontColor: color.value })}
                     style={{ backgroundColor: color.value }}
-                    className={`w-6 h-6 rounded-full border-2 cursor-pointer transition-transform hover:scale-110 ${
+                    className={`size-6 cursor-pointer rounded-full border-2 transition-transform hover:scale-110 ${
                       selected
                         ? "border-emerald-500 ring-2 ring-emerald-500/40"
                         : "border-zinc-300 dark:border-zinc-600"
@@ -193,7 +193,7 @@ export function FontControls({
         panelClassName="w-32 !p-1"
         icon={
           <span
-            className="font-bold text-sm leading-none"
+            className="text-sm leading-none font-bold"
             style={{ textShadow: "1px 1px 2px rgba(0,0,0,0.6)" }}
           >
             S
@@ -211,7 +211,7 @@ export function FontControls({
                 onUpdateStyle({ textShadowLevel: level.id });
                 close();
               }}
-              className={`w-full px-2 py-1.5 rounded text-left cursor-pointer ${
+              className={`w-full cursor-pointer rounded-sm px-2 py-1.5 text-left ${
                 style.textShadowLevel === level.id
                   ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-300"
                   : "hover:bg-zinc-100 dark:hover:bg-zinc-800"

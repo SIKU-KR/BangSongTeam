@@ -138,7 +138,7 @@ export function ThemeMenuButton({
           aria-expanded={isOpen}
           onClick={() => setIsOpen((prev) => !prev)}
           title={`테마 설정: ${currentOption.label}`}
-          className="w-10 h-10 rounded-xl flex items-center justify-center text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-200/70 dark:hover:bg-zinc-900 transition-colors cursor-pointer"
+          className="flex size-10 cursor-pointer items-center justify-center rounded-xl text-zinc-600 transition-colors hover:bg-zinc-200/70 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-900 dark:hover:text-zinc-100"
         >
           {currentOption.icon("w-5 h-5")}
         </button>
@@ -149,26 +149,26 @@ export function ThemeMenuButton({
           aria-haspopup="menu"
           aria-expanded={isOpen}
           onClick={() => setIsOpen((prev) => !prev)}
-          className="w-full px-3 py-2.5 rounded-xl bg-zinc-100 hover:bg-zinc-200/80 dark:bg-zinc-900/70 dark:hover:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-zinc-800 dark:text-zinc-200 flex items-center justify-between gap-2.5 transition-all cursor-pointer shadow-sm text-xs font-medium"
+          className="flex w-full cursor-pointer items-center justify-between gap-2.5 rounded-xl border border-zinc-200 bg-zinc-100 px-3 py-2.5 text-xs font-medium text-zinc-800 shadow-sm transition-all hover:bg-zinc-200/80 dark:border-zinc-800 dark:bg-zinc-900/70 dark:text-zinc-200 dark:hover:bg-zinc-900"
         >
-          <div className="flex items-center gap-2.5 min-w-0">
-            <div className="w-6 h-6 rounded-lg bg-zinc-200 dark:bg-zinc-800 flex items-center justify-center text-emerald-600 dark:text-emerald-400 shrink-0">
+          <div className="flex min-w-0 items-center gap-2.5">
+            <div className="flex size-6 shrink-0 items-center justify-center rounded-lg bg-zinc-200 text-emerald-600 dark:bg-zinc-800 dark:text-emerald-400">
               {currentOption.icon("w-3.5 h-3.5")}
             </div>
-            <div className="text-left min-w-0">
-              <span className="block text-xs font-semibold text-zinc-900 dark:text-zinc-100 truncate">
+            <div className="min-w-0 text-left">
+              <span className="block truncate text-xs font-semibold text-zinc-900 dark:text-zinc-100">
                 {currentOption.label}
               </span>
-              <span className="block text-[10px] text-zinc-500 truncate">
+              <span className="block truncate text-[10px] text-zinc-500">
                 화면 모드 전환
               </span>
             </div>
           </div>
 
-          <div className="text-zinc-400 dark:text-zinc-500 shrink-0">
+          <div className="shrink-0 text-zinc-400 dark:text-zinc-500">
             {direction === "up" ? (
               <svg
-                className={`w-3.5 h-3.5 transition-transform ${isOpen ? "rotate-180" : ""}`}
+                className={`size-3.5 transition-transform ${isOpen ? "rotate-180" : ""}`}
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"
@@ -182,7 +182,7 @@ export function ThemeMenuButton({
               </svg>
             ) : (
               <svg
-                className={`w-3.5 h-3.5 transition-transform ${isOpen ? "rotate-180" : ""}`}
+                className={`size-3.5 transition-transform ${isOpen ? "rotate-180" : ""}`}
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"
@@ -205,10 +205,10 @@ export function ThemeMenuButton({
           data-testid="theme-menu-dropdown"
           className={`absolute ${dropdownPositionClass} ${align === "right" ? "right-0" : "left-0"} ${
             variant === "compact" ? "w-52" : "w-full"
-          } bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-xl dark:shadow-2xl p-1.5 z-50 animate-in fade-in zoom-in-95 duration-100`}
+          } z-50 animate-in rounded-2xl border border-zinc-200 bg-white p-1.5 shadow-xl duration-100 zoom-in-95 fade-in dark:border-zinc-800 dark:bg-zinc-900 dark:shadow-2xl`}
         >
-          <div className="px-2.5 py-1.5 border-b border-zinc-100 dark:border-zinc-800/80 mb-1">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-500">
+          <div className="mb-1 border-b border-zinc-100 px-2.5 py-1.5 dark:border-zinc-800/80">
+            <span className="text-[10px] font-bold tracking-wider text-zinc-500 uppercase dark:text-zinc-500">
               테마 설정
             </span>
           </div>
@@ -223,25 +223,25 @@ export function ThemeMenuButton({
                   role="menuitem"
                   data-testid={`theme-option-${option.mode}`}
                   onClick={() => handleSelect(option.mode)}
-                  className={`w-full px-2.5 py-2 rounded-xl text-xs flex items-center justify-between gap-2.5 transition-colors cursor-pointer text-left ${
+                  className={`flex w-full cursor-pointer items-center justify-between gap-2.5 rounded-xl px-2.5 py-2 text-left text-xs transition-colors ${
                     isSelected
-                      ? "bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 font-semibold"
-                      : "text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800/80"
+                      ? "bg-emerald-50 font-semibold text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300"
+                      : "text-zinc-700 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800/80"
                   }`}
                 >
-                  <div className="flex items-center gap-2.5 min-w-0">
+                  <div className="flex min-w-0 items-center gap-2.5">
                     <div
-                      className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${
+                      className={`flex size-7 shrink-0 items-center justify-center rounded-lg ${
                         isSelected
                           ? "bg-emerald-500 text-white"
-                          : "bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400"
+                          : "bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400"
                       }`}
                     >
                       {option.icon("w-4 h-4")}
                     </div>
                     <div className="min-w-0">
-                      <div className="text-xs truncate">{option.label}</div>
-                      <div className="text-[10px] text-zinc-500 dark:text-zinc-500 truncate">
+                      <div className="truncate text-xs">{option.label}</div>
+                      <div className="truncate text-[10px] text-zinc-500 dark:text-zinc-500">
                         {option.description}
                       </div>
                     </div>
@@ -249,7 +249,7 @@ export function ThemeMenuButton({
 
                   {isSelected && (
                     <svg
-                      className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0"
+                      className="size-4 shrink-0 text-emerald-600 dark:text-emerald-400"
                       fill="none"
                       stroke="currentColor"
                       viewBox="0 0 24 24"

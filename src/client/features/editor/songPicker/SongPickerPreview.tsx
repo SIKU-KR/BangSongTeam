@@ -40,9 +40,9 @@ function ActionBar({
   };
 
   return (
-    <div className="p-4 border-t border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shrink-0 space-y-2">
+    <div className="shrink-0 space-y-2 border-t border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
       {error && (
-        <p role="alert" className="text-xs text-rose-600 text-right">
+        <p role="alert" className="text-right text-xs text-rose-600">
           {error}
         </p>
       )}
@@ -53,7 +53,7 @@ function ActionBar({
               type="button"
               data-testid="song-picker-copy-lyrics-btn"
               onClick={copy}
-              className="px-3 py-2 rounded-xl border border-zinc-300 dark:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-800 text-xs font-medium text-zinc-700 dark:text-zinc-300 transition-colors cursor-pointer"
+              className="cursor-pointer rounded-xl border border-zinc-300 px-3 py-2 text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
             >
               {copied ? "가사 복사됨 ✓" : "가사 텍스트 복사"}
             </button>
@@ -64,7 +64,7 @@ function ActionBar({
               type="button"
               data-testid="song-picker-report-btn"
               onClick={onReport}
-              className="px-3 py-2 rounded-xl text-xs font-medium text-zinc-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 cursor-pointer"
+              className="cursor-pointer rounded-xl px-3 py-2 text-xs font-medium text-zinc-500 hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-950/40"
             >
               신고
             </button>
@@ -75,7 +75,7 @@ function ActionBar({
           <button
             type="button"
             onClick={onClose}
-            className="px-4 py-2 rounded-xl text-xs font-medium text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
+            className="cursor-pointer rounded-xl px-4 py-2 text-xs font-medium text-zinc-600 transition-colors hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800"
           >
             닫기
           </button>
@@ -84,7 +84,7 @@ function ActionBar({
             data-testid="song-picker-add-btn"
             disabled={addDisabled}
             onClick={onAdd}
-            className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed text-white text-xs font-bold shadow-sm transition-all cursor-pointer"
+            className="cursor-pointer rounded-xl bg-emerald-600 px-4 py-2 text-xs font-bold text-white shadow-sm transition-all hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {addLabel}
           </button>
@@ -104,15 +104,15 @@ function PreviewHeader({
   meta: React.ReactNode;
 }): React.JSX.Element {
   return (
-    <div className="p-5 border-b border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shrink-0">
+    <div className="flex shrink-0 flex-col justify-between gap-3 border-b border-zinc-200 bg-white p-5 sm:flex-row sm:items-center dark:border-zinc-800 dark:bg-zinc-900">
       <div className="min-w-0">
         <div className="flex items-center gap-2">
-          <h3 className="text-base font-bold text-zinc-900 dark:text-white truncate">
+          <h3 className="truncate text-base font-bold text-zinc-900 dark:text-white">
             {title}
           </h3>
           {badge}
         </div>
-        <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
+        <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">
           {meta}
         </p>
       </div>
@@ -122,7 +122,7 @@ function PreviewHeader({
 }
 
 const MINE_BADGE = (
-  <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
+  <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
     내 보관함
   </span>
 );
@@ -144,7 +144,7 @@ export function MyDeckPreview({
   onDelete: () => void;
 }): React.JSX.Element {
   return (
-    <div className="flex-1 flex flex-col min-h-0">
+    <div className="flex min-h-0 flex-1 flex-col">
       <PreviewHeader
         title={deck.title}
         badge={MINE_BADGE}
@@ -171,7 +171,7 @@ export function MyDeckPreview({
               type="button"
               data-testid="song-picker-edit-info-btn"
               onClick={onEditInfo}
-              className="px-3 py-2 rounded-xl text-xs font-medium text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 cursor-pointer"
+              className="cursor-pointer rounded-xl px-3 py-2 text-xs font-medium text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800"
             >
               정보 수정
             </button>
@@ -179,7 +179,7 @@ export function MyDeckPreview({
               type="button"
               data-testid="song-picker-delete-btn"
               onClick={onDelete}
-              className="px-3 py-2 rounded-xl text-xs font-medium text-zinc-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 cursor-pointer"
+              className="cursor-pointer rounded-xl px-3 py-2 text-xs font-medium text-zinc-500 hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-950/40"
             >
               삭제
             </button>
@@ -213,11 +213,11 @@ export function SharedDeckPreview({
   const detail = usePublicDeck(summary.id);
 
   return (
-    <div className="flex-1 flex flex-col min-h-0">
+    <div className="flex min-h-0 flex-1 flex-col">
       <PreviewHeader
         title={summary.title}
         badge={
-          <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-indigo-100 text-indigo-800 dark:bg-indigo-950 dark:text-indigo-300">
+          <span className="rounded-full bg-indigo-100 px-2 py-0.5 text-[10px] font-semibold text-indigo-800 dark:bg-indigo-950 dark:text-indigo-300">
             공유 찬양
           </span>
         }

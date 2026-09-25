@@ -65,9 +65,9 @@ export function NewMenuButton({
           aria-haspopup="menu"
           aria-expanded={anchor !== null}
           onClick={open}
-          className="h-14 pl-4 pr-6 rounded-2xl bg-white dark:bg-zinc-800 hover:bg-emerald-50 dark:hover:bg-zinc-700 text-zinc-800 dark:text-zinc-100 font-medium text-sm shadow-md hover:shadow-lg dark:shadow-black/40 inline-flex items-center gap-3 cursor-pointer transition-all"
+          className="inline-flex h-14 cursor-pointer items-center gap-3 rounded-2xl bg-white pr-6 pl-4 text-sm font-medium text-zinc-800 shadow-md transition-all hover:bg-emerald-50 hover:shadow-lg dark:bg-zinc-800 dark:text-zinc-100 dark:shadow-black/40 dark:hover:bg-zinc-700"
         >
-          <Icon name="plus" className="w-6 h-6" strokeWidth={2} />
+          <Icon name="plus" className="size-6" strokeWidth={2} />
           <span>새로 만들기</span>
         </button>
       ) : (
@@ -79,9 +79,9 @@ export function NewMenuButton({
           aria-expanded={anchor !== null}
           onClick={open}
           title="새로 만들기"
-          className="w-8 h-8 rounded-full bg-emerald-600 hover:bg-emerald-500 text-white flex items-center justify-center shadow-sm hover:shadow dark:shadow-emerald-950/40 hover:scale-105 active:scale-95 transition-all cursor-pointer"
+          className="flex size-8 cursor-pointer items-center justify-center rounded-full bg-emerald-600 text-white shadow-sm transition-all hover:scale-105 hover:bg-emerald-500 hover:shadow-sm active:scale-95 dark:shadow-emerald-950/40"
         >
-          <Icon name="plus" className="w-4 h-4" strokeWidth={2.5} />
+          <Icon name="plus" className="size-4" strokeWidth={2.5} />
         </button>
       )}
       {anchor && (

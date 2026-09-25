@@ -69,7 +69,7 @@ export function EditorStageCanvas({
   ) : slide && slide.lines.length === 0 && onRequestTextEdit ? (
     <div
       data-testid="empty-slide-placeholder"
-      className="rounded-lg border-2 border-dashed border-current py-[0.3em] opacity-60 text-[0.5em]"
+      className="rounded-lg border-2 border-dashed border-current py-[0.3em] text-[0.5em] opacity-60"
     >
       더블클릭하여 가사 입력
     </div>
@@ -79,11 +79,11 @@ export function EditorStageCanvas({
     return (
       <div
         data-testid="editor-stage-canvas"
-        className={`relative flex-1 bg-zinc-100 dark:bg-zinc-900/60 overflow-hidden flex flex-col items-center justify-center p-6 select-none ${className}`}
+        className={`relative flex flex-1 flex-col items-center justify-center overflow-hidden bg-zinc-100 p-6 select-none dark:bg-zinc-900/60 ${className}`}
       >
-        <div className="w-full max-w-xl p-8 rounded-2xl bg-white dark:bg-zinc-950/80 border border-zinc-200 dark:border-zinc-800 text-center flex flex-col items-center gap-4 shadow-xl dark:shadow-2xl">
-          <div className="w-16 h-16 rounded-2xl bg-zinc-100 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700/60 flex items-center justify-center text-emerald-600 dark:text-emerald-400">
-            <svg className="w-8 h-8 fill-current" viewBox="0 0 24 24">
+        <div className="flex w-full max-w-xl flex-col items-center gap-4 rounded-2xl border border-zinc-200 bg-white p-8 text-center shadow-xl dark:border-zinc-800 dark:bg-zinc-950/80 dark:shadow-2xl">
+          <div className="flex size-16 items-center justify-center rounded-2xl border border-zinc-200 bg-zinc-100 text-emerald-600 dark:border-zinc-700/60 dark:bg-zinc-900 dark:text-emerald-400">
+            <svg className="size-8 fill-current" viewBox="0 0 24 24">
               <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-5 14H7v-2h7v2zm3-4H7v-2h10v2zm0-4H7V7h10v2z" />
             </svg>
           </div>
@@ -92,7 +92,7 @@ export function EditorStageCanvas({
             <h3 className="text-lg font-bold text-zinc-900 dark:text-white">
               등록된 찬양 곡 또는 슬라이드가 없습니다
             </h3>
-            <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1 max-w-md">
+            <p className="mt-1 max-w-md text-xs text-zinc-500 dark:text-zinc-400">
               새 찬양 가사를 빠른 입력으로 추가하여 프레젠테이션 제작을
               시작하세요.
             </p>
@@ -103,10 +103,10 @@ export function EditorStageCanvas({
               <button
                 type="button"
                 onClick={onOpenLyricModal}
-                className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-sm dark:shadow-lg dark:shadow-emerald-950/50 transition-colors flex items-center gap-1.5 cursor-pointer"
+                className="flex cursor-pointer items-center gap-1.5 rounded-lg bg-emerald-600 px-4 py-2 text-xs font-bold text-white shadow-sm transition-colors hover:bg-emerald-500 dark:shadow-lg dark:shadow-emerald-950/50"
               >
                 <svg
-                  className="w-4 h-4"
+                  className="size-4"
                   fill="none"
                   stroke="currentColor"
                   viewBox="0 0 24 24"
@@ -132,9 +132,9 @@ export function EditorStageCanvas({
   return (
     <div
       data-testid="editor-stage-canvas"
-      className={`relative flex-1 bg-zinc-100 dark:bg-zinc-900/60 overflow-hidden flex flex-col items-center justify-between px-6 pt-6 pb-2 select-none ${className}`}
+      className={`relative flex flex-1 flex-col items-center justify-between overflow-hidden bg-zinc-100 px-6 pt-6 pb-2 select-none dark:bg-zinc-900/60 ${className}`}
     >
-      <div className="flex-1 w-full flex items-center justify-center overflow-hidden py-2">
+      <div className="flex w-full flex-1 items-center justify-center overflow-hidden py-2">
         <div
           data-editor-canvas
           tabIndex={-1}
@@ -142,7 +142,7 @@ export function EditorStageCanvas({
             if ((e.target as HTMLElement).closest("button")) return;
             onRequestTextEdit?.();
           }}
-          className="relative w-full max-w-4xl aspect-video rounded-xl overflow-hidden shadow-xl ring-1 ring-zinc-300 dark:shadow-2xl dark:shadow-black dark:ring-zinc-800 bg-black group outline-none transition-transform duration-150"
+          className="group relative aspect-video w-full max-w-4xl overflow-hidden rounded-xl bg-black shadow-xl ring-1 ring-zinc-300 transition-transform duration-150 outline-none dark:shadow-2xl dark:shadow-black dark:ring-zinc-800"
           style={{
             transform: `scale(${zoomScale})`,
             transformOrigin: "center center",
@@ -162,13 +162,13 @@ export function EditorStageCanvas({
           {draft?.guides.vertical && (
             <div
               data-testid="snap-guide-vertical"
-              className="absolute inset-y-0 left-1/2 w-px bg-emerald-400/80 pointer-events-none z-30"
+              className="pointer-events-none absolute inset-y-0 left-1/2 z-30 w-px bg-emerald-400/80"
             />
           )}
           {draft?.guides.horizontal && (
             <div
               data-testid="snap-guide-horizontal"
-              className="absolute inset-x-0 top-1/2 h-px bg-emerald-400/80 pointer-events-none z-30"
+              className="pointer-events-none absolute inset-x-0 top-1/2 z-30 h-px bg-emerald-400/80"
             />
           )}
 
@@ -189,11 +189,11 @@ export function EditorStageCanvas({
             data-testid="canvas-prev-btn"
             disabled={slideNumber <= 1}
             onClick={onPrevSlide}
-            className="absolute left-3 top-1/2 -translate-y-1/2 z-40 w-10 h-10 rounded-full bg-black/60 hover:bg-black/80 text-white flex items-center justify-center backdrop-blur-sm border border-white/10 opacity-0 group-hover:opacity-100 transition-opacity disabled:opacity-0 cursor-pointer shadow-lg"
+            className="absolute top-1/2 left-3 z-40 flex size-10 -translate-y-1/2 cursor-pointer items-center justify-center rounded-full border border-white/10 bg-black/60 text-white opacity-0 shadow-lg backdrop-blur-sm transition-opacity group-hover:opacity-100 hover:bg-black/80 disabled:opacity-0"
             title="이전 슬라이드 (◀)"
           >
             <svg
-              className="w-5 h-5"
+              className="size-5"
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
@@ -212,11 +212,11 @@ export function EditorStageCanvas({
             data-testid="canvas-next-btn"
             disabled={slideNumber >= totalSlideCount}
             onClick={onNextSlide}
-            className="absolute right-3 top-1/2 -translate-y-1/2 z-40 w-10 h-10 rounded-full bg-black/60 hover:bg-black/80 text-white flex items-center justify-center backdrop-blur-sm border border-white/10 opacity-0 group-hover:opacity-100 transition-opacity disabled:opacity-0 cursor-pointer shadow-lg"
+            className="absolute top-1/2 right-3 z-40 flex size-10 -translate-y-1/2 cursor-pointer items-center justify-center rounded-full border border-white/10 bg-black/60 text-white opacity-0 shadow-lg backdrop-blur-sm transition-opacity group-hover:opacity-100 hover:bg-black/80 disabled:opacity-0"
             title="다음 슬라이드 (▶)"
           >
             <svg
-              className="w-5 h-5"
+              className="size-5"
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
@@ -234,9 +234,9 @@ export function EditorStageCanvas({
 
       <div
         data-testid="editor-status-bar"
-        className="w-full max-w-4xl mt-2 flex items-center justify-between gap-3 shrink-0 text-[11px] text-zinc-500 dark:text-zinc-400"
+        className="mt-2 flex w-full max-w-4xl shrink-0 items-center justify-between gap-3 text-[11px] text-zinc-500 dark:text-zinc-400"
       >
-        <div className="flex items-center gap-2 min-w-0">
+        <div className="flex min-w-0 items-center gap-2">
           <span className="font-mono text-zinc-700 dark:text-zinc-300">
             슬라이드 {slideNumber}/{totalSlideCount}
           </span>
@@ -248,11 +248,11 @@ export function EditorStageCanvas({
         </div>
 
         {onZoomChange && (
-          <div className="hidden sm:flex items-center gap-1 bg-white dark:bg-zinc-950/90 border border-zinc-200 dark:border-zinc-800 rounded-lg px-2 py-0.5 text-xs text-zinc-500 dark:text-zinc-400">
+          <div className="hidden items-center gap-1 rounded-lg border border-zinc-200 bg-white px-2 py-0.5 text-xs text-zinc-500 sm:flex dark:border-zinc-800 dark:bg-zinc-950/90 dark:text-zinc-400">
             <button
               type="button"
               onClick={() => onZoomChange(Math.max(50, zoomLevel - 15))}
-              className="hover:text-zinc-900 dark:hover:text-white px-1 font-bold cursor-pointer"
+              className="cursor-pointer px-1 font-bold hover:text-zinc-900 dark:hover:text-white"
               title="캔버스 축소"
             >
               -
@@ -263,7 +263,7 @@ export function EditorStageCanvas({
             <button
               type="button"
               onClick={() => onZoomChange(Math.min(150, zoomLevel + 15))}
-              className="hover:text-zinc-900 dark:hover:text-white px-1 font-bold cursor-pointer"
+              className="cursor-pointer px-1 font-bold hover:text-zinc-900 dark:hover:text-white"
               title="캔버스 확대"
             >
               +
@@ -271,7 +271,7 @@ export function EditorStageCanvas({
             <button
               type="button"
               onClick={() => onZoomChange(100)}
-              className="ml-1 pl-1.5 border-l border-zinc-200 dark:border-zinc-800 text-[11px] text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-200 cursor-pointer"
+              className="ml-1 cursor-pointer border-l border-zinc-200 pl-1.5 text-[11px] text-zinc-500 hover:text-zinc-900 dark:border-zinc-800 dark:hover:text-zinc-200"
               title="100% 원본 맞춤"
             >
               맞춤

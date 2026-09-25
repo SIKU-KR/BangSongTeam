@@ -84,13 +84,13 @@ function RowIconButton({
         onSelect(event);
       }}
       onDoubleClick={(event) => event.stopPropagation()}
-      className={`p-2 rounded-full text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-900/10 dark:hover:bg-white/10 transition-opacity cursor-pointer shrink-0 ${
+      className={`shrink-0 cursor-pointer rounded-full p-2 text-zinc-600 transition-opacity hover:bg-zinc-900/10 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-white/10 dark:hover:text-white ${
         reveal ? HOVER_REVEAL : ""
       }`}
     >
       <Icon
         name={icon}
-        className={icon === "dots" ? "w-5 h-5" : "w-[18px] h-[18px]"}
+        className={icon === "dots" ? "size-5" : "size-[18px]"}
       />
     </button>
   );
@@ -131,14 +131,14 @@ function SortHeader({
           event.stopPropagation();
           onSort(sortKey);
         }}
-        className={`-ml-2 px-2 py-1 rounded-full inline-flex items-center gap-1 cursor-pointer hover:bg-zinc-200/70 dark:hover:bg-zinc-800 ${
+        className={`-ml-2 inline-flex cursor-pointer items-center gap-1 rounded-full px-2 py-1 hover:bg-zinc-200/70 dark:hover:bg-zinc-800 ${
           active ? "text-zinc-900 dark:text-white" : ""
         }`}
       >
         <span>{label}</span>
         {active && (
           <svg
-            className={`w-4 h-4 transition-transform ${
+            className={`size-4 transition-transform ${
               sort.direction === "desc" ? "rotate-180" : ""
             }`}
             fill="none"
@@ -180,10 +180,10 @@ export function DriveListHeader({
     <div
       role="row"
       onClick={(event) => event.stopPropagation()}
-      className={`${LIST_COLUMNS[variant]} sticky top-0 z-10 h-12 bg-zinc-50 dark:bg-zinc-950 text-sm font-medium text-zinc-600 dark:text-zinc-400 border-b border-zinc-200 dark:border-zinc-800`}
+      className={`${LIST_COLUMNS[variant]} sticky top-0 z-10 h-12 border-b border-zinc-200 bg-zinc-50 text-sm font-medium text-zinc-600 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-400`}
     >
       <SortHeader label="이름" sortKey="name" sort={sort} onSort={onSort} />
-      <span role="columnheader" className="hidden sm:block truncate">
+      <span role="columnheader" className="hidden truncate sm:block">
         {secondLabel}
       </span>
       <SortHeader
@@ -241,11 +241,11 @@ export function DriveListRow({
       onDoubleClick={handlers.onDoubleClick}
       onContextMenu={handlers.onContextMenu}
       onFocus={handlers.onFocus}
-      className={`group ${LIST_COLUMNS[variant]} h-12 text-sm text-zinc-600 dark:text-zinc-400 border-b border-zinc-200 dark:border-zinc-800 cursor-default select-none outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-emerald-600 dark:focus-visible:ring-emerald-400 ${stateClass} ${
+      className={`group ${LIST_COLUMNS[variant]} h-12 cursor-default border-b border-zinc-200 text-sm text-zinc-600 outline-none select-none focus-visible:ring-2 focus-visible:ring-emerald-600 focus-visible:ring-inset dark:border-zinc-800 dark:text-zinc-400 dark:focus-visible:ring-emerald-400 ${stateClass} ${
         dnd.isDragging ? "opacity-40" : ""
       }`}
     >
-      <div className="flex items-center gap-4 min-w-0">
+      <div className="flex min-w-0 items-center gap-4">
         {isFolder ? (
           <span
             data-testid="row-icon-folder"
@@ -258,30 +258,30 @@ export function DriveListRow({
             data-testid="row-icon-presentation"
             className="flex shrink-0 text-indigo-500 dark:text-indigo-400"
           >
-            <Icon name="slides" className="w-5 h-5" />
+            <Icon name="slides" className="size-5" />
           </span>
         )}
-        <div className="min-w-0 flex items-baseline gap-2">
+        <div className="flex min-w-0 items-baseline gap-2">
           <span
-            className="font-medium text-zinc-900 dark:text-white truncate"
+            className="truncate font-medium text-zinc-900 dark:text-white"
             title={item.name}
           >
             {item.name}
           </span>
           {subtitle && (
-            <span className="hidden lg:inline text-xs text-zinc-500 truncate">
+            <span className="hidden truncate text-xs text-zinc-500 lg:inline">
               {subtitle}
             </span>
           )}
         </div>
       </div>
       <span
-        className="hidden sm:block truncate"
+        className="hidden truncate sm:block"
         title={variant === "location" ? item.location : undefined}
       >
         {variant === "location" ? (item.location ?? "-") : "나"}
       </span>
-      <span className="hidden md:block whitespace-nowrap">
+      <span className="hidden whitespace-nowrap md:block">
         {formatDate(date)}
       </span>
       <span className="truncate">
@@ -372,20 +372,20 @@ export function TrashFolderRow({
         event.stopPropagation();
         onMenu({ x: event.clientX, y: event.clientY });
       }}
-      className={`group ${LIST_COLUMNS.owner} h-12 text-sm text-zinc-600 dark:text-zinc-400 border-b border-zinc-200 dark:border-zinc-800 cursor-default select-none outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-emerald-600 dark:focus-visible:ring-emerald-400 ${stateClass}`}
+      className={`group ${LIST_COLUMNS.owner} h-12 cursor-default border-b border-zinc-200 text-sm text-zinc-600 outline-none select-none focus-visible:ring-2 focus-visible:ring-emerald-600 focus-visible:ring-inset dark:border-zinc-800 dark:text-zinc-400 dark:focus-visible:ring-emerald-400 ${stateClass}`}
     >
-      <div className="flex items-center gap-4 min-w-0">
+      <div className="flex min-w-0 items-center gap-4">
         <span
           data-testid="row-icon-trash"
           className="flex shrink-0 text-rose-500 dark:text-rose-400"
         >
-          <Icon name="trash" className="w-5 h-5" />
+          <Icon name="trash" className="size-5" />
         </span>
-        <div className="min-w-0 flex items-baseline gap-2">
-          <span className="font-medium text-zinc-900 dark:text-white truncate">
+        <div className="flex min-w-0 items-baseline gap-2">
+          <span className="truncate font-medium text-zinc-900 dark:text-white">
             휴지통
           </span>
-          <span className="hidden lg:inline text-xs text-zinc-500 truncate">
+          <span className="hidden truncate text-xs text-zinc-500 lg:inline">
             삭제한 항목은 영구 삭제 전까지 복원할 수 있습니다
           </span>
         </div>

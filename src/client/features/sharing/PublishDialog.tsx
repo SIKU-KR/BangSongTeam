@@ -30,17 +30,17 @@ export function PublishDialog({
       aria-modal="true"
       aria-labelledby="publish-dialog-title"
       data-testid="publish-dialog"
-      className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/60"
+      className="fixed inset-0 z-60 flex items-center justify-center bg-black/60 p-4"
     >
-      <div className="w-full max-w-md bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-2xl p-5 space-y-4 text-zinc-900 dark:text-zinc-100">
+      <div className="w-full max-w-md space-y-4 rounded-2xl border border-zinc-200 bg-white p-5 text-zinc-900 shadow-2xl dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100">
         <div>
           <h2 id="publish-dialog-title" className="text-sm font-bold">
             공유 라이브러리에 공개
           </h2>
-          <p className="text-xs text-zinc-500 mt-0.5 truncate">{songTitle}</p>
+          <p className="mt-0.5 truncate text-xs text-zinc-500">{songTitle}</p>
         </div>
 
-        <ul className="text-xs text-zinc-700 dark:text-zinc-300 space-y-2 list-disc pl-4">
+        <ul className="list-disc space-y-2 pl-4 text-xs text-zinc-700 dark:text-zinc-300">
           <li>
             공개하면 다른 사용자가 이 곡의 가사·슬라이드 나눔·배경·스타일을
             검색해 자기 보관함으로 가져갈 수 있습니다. 로그인하지 않은
@@ -61,7 +61,7 @@ export function PublishDialog({
           </li>
         </ul>
 
-        <label className="flex items-start gap-2 text-xs cursor-pointer">
+        <label className="flex cursor-pointer items-start gap-2 text-xs">
           <input
             type="checkbox"
             data-testid="publish-accept-checkbox"
@@ -82,7 +82,7 @@ export function PublishDialog({
           <button
             type="button"
             onClick={onCancel}
-            className="px-4 py-2 rounded-xl text-xs text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 cursor-pointer"
+            className="cursor-pointer rounded-xl px-4 py-2 text-xs text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800"
           >
             취소
           </button>
@@ -91,7 +91,7 @@ export function PublishDialog({
             data-testid="publish-confirm-btn"
             disabled={!accepted || isPending}
             onClick={onConfirm}
-            className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-xs font-semibold cursor-pointer"
+            className="cursor-pointer rounded-xl bg-emerald-600 px-4 py-2 text-xs font-semibold text-white hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-40"
           >
             {isPending ? "공개하는 중…" : "공개하기"}
           </button>

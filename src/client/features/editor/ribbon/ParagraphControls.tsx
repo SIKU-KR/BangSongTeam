@@ -55,7 +55,7 @@ export function ParagraphControls({
                 onUpdateStyle({ lineHeight: value });
                 close();
               }}
-              className={`w-full px-2 py-1 rounded text-left font-mono cursor-pointer ${
+              className={`w-full cursor-pointer rounded-sm px-2 py-1 text-left font-mono ${
                 style.lineHeight === value
                   ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-300"
                   : "hover:bg-zinc-100 dark:hover:bg-zinc-800"

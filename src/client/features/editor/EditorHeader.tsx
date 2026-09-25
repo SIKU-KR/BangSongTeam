@@ -68,9 +68,9 @@ function SaveStatusIndicator(): React.JSX.Element {
   return (
     <span
       data-testid="save-status"
-      className="hidden md:inline-flex items-center gap-1 text-[11px] text-zinc-500 dark:text-zinc-400 font-medium"
+      className="hidden items-center gap-1 text-[11px] font-medium text-zinc-500 md:inline-flex dark:text-zinc-400"
     >
-      <span className={`w-1.5 h-1.5 rounded-full ${dotClass}`}></span>
+      <span className={`size-1.5 rounded-full ${dotClass}`}></span>
       {label}
     </span>
   );
@@ -85,7 +85,7 @@ function ShortcutTable({
 }): React.JSX.Element {
   return (
     <div className="space-y-1">
-      <div className="font-bold text-zinc-900 dark:text-white text-xs pb-1 border-b border-zinc-200 dark:border-zinc-800">
+      <div className="border-b border-zinc-200 pb-1 text-xs font-bold text-zinc-900 dark:border-zinc-800 dark:text-white">
         {heading}
       </div>
       <table className="w-full">
@@ -94,7 +94,7 @@ function ShortcutTable({
             <tr key={action}>
               <th
                 scope="row"
-                className="py-0.5 pr-3 text-left font-mono font-normal text-zinc-700 dark:text-zinc-300 whitespace-nowrap align-top"
+                className="py-0.5 pr-3 text-left align-top font-mono font-normal whitespace-nowrap text-zinc-700 dark:text-zinc-300"
               >
                 {keys}
               </th>
@@ -151,18 +151,18 @@ export function EditorHeader({
   return (
     <header
       data-testid="editor-header"
-      className={`h-14 bg-white dark:bg-zinc-950 border-b border-zinc-200 dark:border-zinc-800/80 px-4 flex items-center justify-between select-none text-zinc-900 dark:text-zinc-100 ${className}`}
+      className={`flex h-14 items-center justify-between border-b border-zinc-200 bg-white px-4 text-zinc-900 select-none dark:border-zinc-800/80 dark:bg-zinc-950 dark:text-zinc-100 ${className}`}
     >
-      <div className="flex items-center gap-3 min-w-0">
+      <div className="flex min-w-0 items-center gap-3">
         <button
           type="button"
           data-testid="header-back-btn"
           onClick={() => navigate(backPath)}
-          className="p-1.5 rounded-lg text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors flex items-center gap-1 text-xs cursor-pointer"
+          className="flex cursor-pointer items-center gap-1 rounded-lg p-1.5 text-xs text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-white"
           title="프레젠테이션 목록으로 돌아가기"
         >
           <svg
-            className="w-4 h-4"
+            className="size-4"
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
@@ -184,11 +184,11 @@ export function EditorHeader({
             aria-haspopup="menu"
             aria-expanded={showFileMenu}
             onClick={() => setShowFileMenu((prev) => !prev)}
-            className="px-2 py-1 rounded text-xs text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors flex items-center gap-1 cursor-pointer font-medium"
+            className="flex cursor-pointer items-center gap-1 rounded-sm px-2 py-1 text-xs font-medium text-zinc-600 transition-colors hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-white"
           >
             <span>파일</span>
             <svg
-              className="w-3 h-3 text-zinc-400 dark:text-zinc-500"
+              className="size-3 text-zinc-400 dark:text-zinc-500"
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
@@ -206,7 +206,7 @@ export function EditorHeader({
             <div
               role="menu"
               data-testid="header-file-menu-dropdown"
-              className="absolute left-0 top-9 z-50 w-52 py-1.5 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-lg dark:shadow-2xl text-xs space-y-0.5 font-sans"
+              className="absolute top-9 left-0 z-50 w-52 space-y-0.5 rounded-xl border border-zinc-200 bg-white py-1.5 font-sans text-xs shadow-lg dark:border-zinc-800 dark:bg-zinc-900 dark:shadow-2xl"
             >
               {onNewPresentation && (
                 <button
@@ -216,10 +216,10 @@ export function EditorHeader({
                     setShowFileMenu(false);
                     onNewPresentation();
                   }}
-                  className="w-full px-3 py-2 text-left text-zinc-700 hover:text-zinc-900 dark:text-zinc-300 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800 flex items-center gap-2 cursor-pointer"
+                  className="flex w-full cursor-pointer items-center gap-2 px-3 py-2 text-left text-zinc-700 hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800 dark:hover:text-white"
                 >
                   <svg
-                    className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400"
+                    className="size-3.5 text-emerald-600 dark:text-emerald-400"
                     fill="none"
                     stroke="currentColor"
                     viewBox="0 0 24 24"
@@ -243,10 +243,10 @@ export function EditorHeader({
                     setShowFileMenu(false);
                     onOpenLyricModal();
                   }}
-                  className="w-full px-3 py-2 text-left text-zinc-700 hover:text-zinc-900 dark:text-zinc-300 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800 flex items-center gap-2 cursor-pointer"
+                  className="flex w-full cursor-pointer items-center gap-2 px-3 py-2 text-left text-zinc-700 hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800 dark:hover:text-white"
                 >
                   <svg
-                    className="w-3.5 h-3.5 text-indigo-400"
+                    className="size-3.5 text-indigo-400"
                     fill="none"
                     stroke="currentColor"
                     viewBox="0 0 24 24"
@@ -267,7 +267,7 @@ export function EditorHeader({
 
         <div className="h-4 w-px bg-zinc-200 dark:bg-zinc-800" />
 
-        <div className="flex items-center gap-2 min-w-0">
+        <div className="flex min-w-0 items-center gap-2">
           {isEditingTitle ? (
             <input
               type="text"
@@ -282,7 +282,7 @@ export function EditorHeader({
                   setTempTitle(title);
                 }
               }}
-              className="bg-white dark:bg-zinc-900 border border-emerald-500 rounded px-2 py-0.5 text-sm font-semibold text-zinc-900 dark:text-white focus:outline-none"
+              className="rounded-sm border border-emerald-500 bg-white px-2 py-0.5 text-sm font-semibold text-zinc-900 focus:outline-none dark:bg-zinc-900 dark:text-white"
             />
           ) : (
             <button
@@ -291,12 +291,12 @@ export function EditorHeader({
                 setTempTitle(title);
                 setIsEditingTitle(true);
               }}
-              className="text-sm font-bold text-zinc-900 dark:text-white hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors truncate max-w-xs sm:max-w-md flex items-center gap-1.5 cursor-pointer text-left"
+              className="flex max-w-xs cursor-pointer items-center gap-1.5 truncate text-left text-sm font-bold text-zinc-900 transition-colors hover:text-emerald-600 sm:max-w-md dark:text-white dark:hover:text-emerald-400"
               title="클릭하여 제목 수정"
             >
               <span className="truncate">{title}</span>
               <svg
-                className="w-3.5 h-3.5 text-zinc-400 dark:text-zinc-500 shrink-0"
+                className="size-3.5 shrink-0 text-zinc-400 dark:text-zinc-500"
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"
@@ -315,17 +315,17 @@ export function EditorHeader({
         </div>
 
         {(onUndo || onRedo) && (
-          <div className="hidden sm:flex items-center gap-0.5 border-l border-zinc-200 dark:border-zinc-800 pl-2">
+          <div className="hidden items-center gap-0.5 border-l border-zinc-200 pl-2 sm:flex dark:border-zinc-800">
             <button
               type="button"
               data-testid="header-undo-btn"
               disabled={!canUndo}
               onClick={onUndo}
-              className="p-1.5 rounded text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800 disabled:opacity-25 transition-colors cursor-pointer"
+              className="cursor-pointer rounded-sm p-1.5 text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-900 disabled:opacity-25 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-white"
               title="실행 취소 (Ctrl/⌘+Z)"
             >
               <svg
-                className="w-3.5 h-3.5"
+                className="size-3.5"
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"
@@ -343,11 +343,11 @@ export function EditorHeader({
               data-testid="header-redo-btn"
               disabled={!canRedo}
               onClick={onRedo}
-              className="p-1.5 rounded text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800 disabled:opacity-25 transition-colors cursor-pointer"
+              className="cursor-pointer rounded-sm p-1.5 text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-900 disabled:opacity-25 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-white"
               title="다시 실행 (Ctrl/⌘+Shift+Z)"
             >
               <svg
-                className="w-3.5 h-3.5"
+                className="size-3.5"
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"
@@ -364,18 +364,18 @@ export function EditorHeader({
         )}
       </div>
 
-      <div className="flex items-center gap-2 shrink-0">
+      <div className="flex shrink-0 items-center gap-2">
         <div ref={shortcutsRef} className="relative">
           <button
             type="button"
             data-testid="header-shortcuts-btn"
             aria-expanded={showShortcuts}
             onClick={() => setShowShortcuts((prev) => !prev)}
-            className="p-1.5 rounded-lg text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors text-xs flex items-center gap-1 cursor-pointer"
+            className="flex cursor-pointer items-center gap-1 rounded-lg p-1.5 text-xs text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-white"
             title="편집·송출 단축키 안내"
           >
             <svg
-              className="w-4 h-4"
+              className="size-4"
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
@@ -393,7 +393,7 @@ export function EditorHeader({
           {showShortcuts && (
             <div
               data-testid="header-shortcuts-popover"
-              className="absolute right-0 top-10 z-50 w-96 max-h-[75vh] overflow-y-auto p-3 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl shadow-lg dark:shadow-2xl text-xs space-y-2"
+              className="absolute top-10 right-0 z-50 max-h-[75vh] w-96 space-y-2 overflow-y-auto rounded-xl border border-zinc-200 bg-white p-3 text-xs shadow-lg dark:border-zinc-700 dark:bg-zinc-900 dark:shadow-2xl"
             >
               <ShortcutTable
                 heading="편집 단축키"
@@ -403,11 +403,11 @@ export function EditorHeader({
                 heading="발표 송출 단축키"
                 rows={PRESENTATION_SHORTCUT_GUIDE}
               />
-              <div className="pt-2 border-t border-zinc-200 dark:border-zinc-800 space-y-1">
+              <div className="space-y-1 border-t border-zinc-200 pt-2 dark:border-zinc-800">
                 <div className="font-semibold text-zinc-700 dark:text-zinc-300">
                   번호 이동 규칙
                 </div>
-                <ul className="list-disc pl-4 space-y-0.5 text-zinc-500 dark:text-zinc-400">
+                <ul className="list-disc space-y-0.5 pl-4 text-zinc-500 dark:text-zinc-400">
                   {NUMBER_JUMP_RULES.map((rule) => (
                     <li key={rule}>{rule}</li>
                   ))}
@@ -424,9 +424,9 @@ export function EditorHeader({
           data-testid="header-present-btn"
           disabled={totalSongs === 0}
           onClick={onPresent}
-          className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold text-xs transition-all shadow-sm dark:shadow-md dark:shadow-emerald-950/50 dark:hover:shadow-emerald-900/60 flex items-center gap-1.5 cursor-pointer"
+          className="flex cursor-pointer items-center gap-1.5 rounded-lg bg-emerald-600 px-4 py-2 text-xs font-semibold text-white shadow-sm transition-all hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-40 dark:shadow-md dark:shadow-emerald-950/50 dark:hover:shadow-emerald-900/60"
         >
-          <svg className="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24">
+          <svg className="size-3.5 fill-current" viewBox="0 0 24 24">
             <path d="M8 5v14l11-7z" />
           </svg>
           <span>슬라이드쇼 발표</span>

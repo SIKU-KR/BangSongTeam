@@ -34,14 +34,14 @@ export function BackgroundControls({
         disabled={disabled}
         onMouseDown={(e) => e.preventDefault()}
         onClick={() => setIsPickerOpen(true)}
-        className="h-8 pl-1 pr-2 rounded-md flex items-center gap-1.5 text-xs font-medium text-zinc-700 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800 cursor-pointer disabled:opacity-35 disabled:cursor-not-allowed"
+        className="flex h-8 cursor-pointer items-center gap-1.5 rounded-md pr-2 pl-1 text-xs font-medium text-zinc-700 hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-35 dark:text-zinc-300 dark:hover:bg-zinc-800"
       >
-        <span className="w-10 h-6 rounded overflow-hidden bg-zinc-900 border border-zinc-300 dark:border-zinc-700 shrink-0">
+        <span className="h-6 w-10 shrink-0 overflow-hidden rounded-sm border border-zinc-300 bg-zinc-900 dark:border-zinc-700">
           {background && (
             <img
               src={background.posterUrl}
               alt=""
-              className="w-full h-full object-cover"
+              className="size-full object-cover"
             />
           )}
         </span>
@@ -77,7 +77,7 @@ export function BackgroundControls({
                 )
               }
               aria-label="검정 오버레이 불투명도"
-              className="w-full accent-emerald-500 cursor-pointer"
+              className="w-full cursor-pointer accent-emerald-500"
             />
             <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
               배경 위를 어둡게 덮어 가사를 잘 보이게 합니다.

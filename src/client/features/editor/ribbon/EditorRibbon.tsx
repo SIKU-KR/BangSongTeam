@@ -31,14 +31,14 @@ export function EditorRibbon({
   return (
     <div
       data-testid="editor-ribbon"
-      className="shrink-0 flex flex-wrap items-stretch gap-y-1 px-2 py-1 bg-white dark:bg-zinc-950 border-b border-zinc-200 dark:border-zinc-800/80 text-zinc-800 dark:text-zinc-200 select-none"
+      className="flex shrink-0 flex-wrap items-stretch gap-y-1 border-b border-zinc-200 bg-white px-2 py-1 text-zinc-800 select-none dark:border-zinc-800/80 dark:bg-zinc-950 dark:text-zinc-200"
     >
       <SlideControls {...slideControls} />
       <RibbonDivider />
       <div
         data-testid="ribbon-song-label"
         title="서식은 현재 곡의 모든 슬라이드에 적용됩니다"
-        className="self-center max-w-40 px-2 text-[11px] leading-tight text-zinc-500 dark:text-zinc-400"
+        className="max-w-40 self-center px-2 text-[11px] leading-tight text-zinc-500 dark:text-zinc-400"
       >
         {song ? (
           <>

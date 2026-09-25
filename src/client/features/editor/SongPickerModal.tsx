@@ -190,10 +190,10 @@ export function SongPickerModal({
       aria-modal="true"
       aria-labelledby="song-picker-title"
       data-testid="song-picker-modal"
-      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200"
+      className="fixed inset-0 z-50 flex animate-in items-center justify-center bg-black/80 p-3 backdrop-blur-sm duration-200 fade-in sm:p-6"
     >
-      <div className="relative flex flex-col w-full max-w-5xl h-[88vh] max-h-[850px] bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-2xl overflow-hidden text-zinc-900 dark:text-zinc-100">
-        <div className="px-6 py-4 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between shrink-0">
+      <div className="relative flex h-[88vh] max-h-[850px] w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-zinc-200 bg-white text-zinc-900 shadow-2xl dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100">
+        <div className="flex shrink-0 items-center justify-between border-b border-zinc-200 px-6 py-4 dark:border-zinc-800">
           <div>
             <div className="flex items-center gap-2">
               <h2
@@ -202,11 +202,11 @@ export function SongPickerModal({
               >
                 찬양곡 추가
               </h2>
-              <span className="text-xs px-2.5 py-0.5 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 font-mono">
+              <span className="rounded-full bg-zinc-100 px-2.5 py-0.5 font-mono text-xs text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">
                 내 곡 {mySongs.length} · 공유 {sharedCount}
               </span>
             </div>
-            <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
+            <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">
               내 보관함과 다른 교회가 공유한 찬양을 검색해 세트에 추가하거나, 새
               가사를 직접 입력할 수 있습니다.
             </p>
@@ -216,15 +216,15 @@ export function SongPickerModal({
             type="button"
             onClick={onClose}
             aria-label="닫기"
-            className="p-1.5 rounded-lg text-zinc-400 hover:text-zinc-700 hover:bg-zinc-100 dark:hover:text-zinc-200 dark:hover:bg-zinc-800 cursor-pointer transition-colors"
+            className="cursor-pointer rounded-lg p-1.5 text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
           >
             ✕
           </button>
         </div>
 
-        <div className="flex-1 flex flex-col md:flex-row min-h-0 overflow-hidden">
-          <div className="w-full md:w-5/12 lg:w-4/12 flex flex-col border-b md:border-b-0 md:border-r border-zinc-200 dark:border-zinc-800 shrink-0 bg-white dark:bg-zinc-900">
-            <div className="p-3.5 space-y-2.5 border-b border-zinc-200 dark:border-zinc-800 shrink-0">
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden md:flex-row">
+          <div className="flex w-full shrink-0 flex-col border-b border-zinc-200 bg-white md:w-5/12 md:border-r md:border-b-0 lg:w-4/12 dark:border-zinc-800 dark:bg-zinc-900">
+            <div className="shrink-0 space-y-2.5 border-b border-zinc-200 p-3.5 dark:border-zinc-800">
               <div className="relative">
                 <input
                   type="text"
@@ -232,13 +232,13 @@ export function SongPickerModal({
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   placeholder="곡 제목, 아티스트, 가사 검색..."
-                  className="w-full pl-3 pr-8 py-2 text-xs bg-zinc-100 dark:bg-zinc-800/80 border border-zinc-200 dark:border-zinc-700/80 rounded-xl text-zinc-900 dark:text-zinc-100 placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  className="w-full rounded-xl border border-zinc-200 bg-zinc-100 py-2 pr-8 pl-3 text-xs text-zinc-900 placeholder-zinc-400 focus:ring-2 focus:ring-emerald-500 focus:outline-none dark:border-zinc-700/80 dark:bg-zinc-800/80 dark:text-zinc-100"
                 />
                 {searchQuery && (
                   <button
                     type="button"
                     onClick={() => setSearchQuery("")}
-                    className="absolute right-2.5 top-2.5 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 cursor-pointer"
+                    className="absolute top-2.5 right-2.5 cursor-pointer text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200"
                   >
                     ✕
                   </button>
@@ -246,17 +246,17 @@ export function SongPickerModal({
               </div>
 
               <div className="flex items-center justify-between gap-1.5">
-                <div className="flex items-center gap-1 flex-wrap">
+                <div className="flex flex-wrap items-center gap-1">
                   {FILTERS.map((option) => (
                     <button
                       key={option.id}
                       type="button"
                       data-testid={`song-picker-filter-${option.id}`}
                       onClick={() => setFilter(option.id)}
-                      className={`px-2 py-1 rounded-lg text-[11px] font-medium transition-colors cursor-pointer ${
+                      className={`cursor-pointer rounded-lg px-2 py-1 text-[11px] font-medium transition-colors ${
                         filter === option.id
                           ? option.active
-                          : "bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-700"
+                          : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-700"
                       }`}
                     >
                       {option.label}
@@ -270,10 +270,10 @@ export function SongPickerModal({
                   onClick={() =>
                     setMode(mode === "browse" ? "create" : "browse")
                   }
-                  className={`px-2.5 py-1 rounded-lg text-xs font-semibold shrink-0 transition-colors cursor-pointer ${
+                  className={`shrink-0 cursor-pointer rounded-lg px-2.5 py-1 text-xs font-semibold transition-colors ${
                     mode !== "browse"
-                      ? "bg-zinc-200 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300"
-                      : "bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800/80 hover:bg-emerald-100 dark:hover:bg-emerald-900/60"
+                      ? "bg-zinc-200 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300"
+                      : "border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:border-emerald-800/80 dark:bg-emerald-950 dark:text-emerald-400 dark:hover:bg-emerald-900/60"
                   }`}
                 >
                   {mode !== "browse" ? "← 목록 보기" : "+ 새 가사 입력"}
@@ -292,14 +292,14 @@ export function SongPickerModal({
               )}
             </div>
 
-            <div className="flex-1 overflow-y-auto divide-y divide-zinc-100 dark:divide-zinc-800/60">
+            <div className="flex-1 divide-y divide-zinc-100 overflow-y-auto dark:divide-zinc-800/60">
               {entries.length === 0 ? (
-                <div className="p-8 text-center flex flex-col items-center justify-center gap-2.5 text-zinc-500">
+                <div className="flex flex-col items-center justify-center gap-2.5 p-8 text-center text-zinc-500">
                   <p className="text-xs">{emptyMessage}</p>
                   <button
                     type="button"
                     onClick={() => setMode("create")}
-                    className="text-xs text-emerald-600 dark:text-emerald-400 hover:underline cursor-pointer font-medium"
+                    className="cursor-pointer text-xs font-medium text-emerald-600 hover:underline dark:text-emerald-400"
                   >
                     + {searchQuery ? `'${searchQuery}' ` : ""}새 곡으로 직접
                     등록하기
@@ -324,7 +324,7 @@ export function SongPickerModal({
             </div>
           </div>
 
-          <div className="flex-1 flex flex-col min-w-0 bg-zinc-50/60 dark:bg-zinc-950/40">
+          <div className="flex min-w-0 flex-1 flex-col bg-zinc-50/60 dark:bg-zinc-950/40">
             {mode === "create" ? (
               <CreateSongForm
                 initialTitle={searchQuery.trim()}
@@ -332,7 +332,7 @@ export function SongPickerModal({
                 onSubmit={handleCreateSubmit}
               />
             ) : !selected ? (
-              <div className="flex-1 flex items-center justify-center text-zinc-400 text-xs">
+              <div className="flex flex-1 items-center justify-center text-xs text-zinc-400">
                 곡을 선택해주세요.
               </div>
             ) : selected.kind === "mine" ? (
@@ -444,28 +444,28 @@ function EntryRow({
     <div
       data-testid={`song-item-${id}`}
       onClick={onSelect}
-      className={`p-3.5 cursor-pointer transition-colors flex flex-col gap-1 select-none ${
+      className={`flex cursor-pointer flex-col gap-1 p-3.5 transition-colors select-none ${
         isSelected
-          ? "bg-emerald-50/70 dark:bg-emerald-950/40 border-l-4 border-emerald-500 pl-2.5"
+          ? "border-l-4 border-emerald-500 bg-emerald-50/70 pl-2.5 dark:bg-emerald-950/40"
           : "hover:bg-zinc-50 dark:hover:bg-zinc-800/50"
       }`}
     >
       <div className="flex items-center justify-between gap-2">
-        <span className="text-xs font-bold text-zinc-900 dark:text-white truncate">
+        <span className="truncate text-xs font-bold text-zinc-900 dark:text-white">
           {title}
         </span>
-        <div className="flex items-center gap-1 shrink-0">
+        <div className="flex shrink-0 items-center gap-1">
           {entry.kind === "mine" && (
-            <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
+            <span className="rounded-sm bg-emerald-100 px-1.5 py-0.5 text-[10px] font-medium text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
               내 보관함
             </span>
           )}
           {entry.kind === "shared" && (
-            <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-indigo-100 text-indigo-800 dark:bg-indigo-950 dark:text-indigo-300">
+            <span className="rounded-sm bg-indigo-100 px-1.5 py-0.5 text-[10px] font-medium text-indigo-800 dark:bg-indigo-950 dark:text-indigo-300">
               {entry.ownedCopy ? "보관함에 있음" : "공유"}
             </span>
           )}
-          <span className="text-[10px] text-zinc-400 font-mono">
+          <span className="font-mono text-[10px] text-zinc-400">
             {entry.kind === "mine"
               ? `${entry.deck.slides.length}슬라이드`
               : `${entry.summary.forkCount}회 가져감`}
@@ -476,12 +476,12 @@ function EntryRow({
       <div className="flex items-center justify-between gap-2 text-[11px] text-zinc-500 dark:text-zinc-400">
         <span className="truncate">{artist || "아티스트 미상"}</span>
         {entry.kind === "shared" && (
-          <span className="truncate shrink-0">{entry.summary.authorName}</span>
+          <span className="shrink-0 truncate">{entry.summary.authorName}</span>
         )}
       </div>
 
       {snippet && (
-        <p className="text-[11px] text-zinc-400 dark:text-zinc-500 truncate mt-0.5 font-light">
+        <p className="mt-0.5 truncate text-[11px] font-light text-zinc-400 dark:text-zinc-500">
           {snippet}
         </p>
       )}

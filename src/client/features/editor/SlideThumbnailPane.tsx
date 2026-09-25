@@ -137,9 +137,9 @@ export function SlideThumbnailPane({
   return (
     <aside
       data-testid="slide-thumbnail-pane"
-      className={`w-64 shrink-0 bg-white dark:bg-zinc-950 border-r border-zinc-200 dark:border-zinc-800/80 flex flex-col select-none ${className}`}
+      className={`flex w-64 shrink-0 flex-col border-r border-zinc-200 bg-white select-none dark:border-zinc-800/80 dark:bg-zinc-950 ${className}`}
     >
-      <div className="h-11 px-3 flex items-center justify-between border-b border-zinc-200 dark:border-zinc-800/80 shrink-0">
+      <div className="flex h-11 shrink-0 items-center justify-between border-b border-zinc-200 px-3 dark:border-zinc-800/80">
         <span className="text-xs font-bold text-zinc-900 dark:text-white">
           슬라이드{" "}
           <span className="font-mono font-medium text-zinc-400 dark:text-zinc-500">
@@ -151,11 +151,11 @@ export function SlideThumbnailPane({
           data-testid="add-slide-btn"
           disabled={items.length === 0}
           onClick={onAddSlide}
-          className="px-2 py-1 rounded-md text-xs font-medium text-zinc-700 dark:text-zinc-300 hover:text-emerald-700 dark:hover:text-emerald-400 hover:bg-zinc-100 dark:hover:bg-zinc-900 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1 cursor-pointer transition-colors"
+          className="flex cursor-pointer items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-100 hover:text-emerald-700 disabled:cursor-not-allowed disabled:opacity-40 dark:text-zinc-300 dark:hover:bg-zinc-900 dark:hover:text-emerald-400"
           title="현재 슬라이드 뒤에 새 슬라이드 추가"
         >
           <svg
-            className="w-3.5 h-3.5"
+            className="size-3.5"
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
@@ -206,7 +206,7 @@ export function SlideThumbnailPane({
                   e.preventDefault();
                   setMenuSongIndex(songIndex);
                 }}
-                className={`group relative flex items-center gap-1 rounded-md px-1 py-1 hover:bg-zinc-100 dark:hover:bg-zinc-900 ${
+                className={`group relative flex items-center gap-1 rounded-md p-1 hover:bg-zinc-100 dark:hover:bg-zinc-900 ${
                   isActiveSong
                     ? "text-emerald-700 dark:text-emerald-400"
                     : "text-zinc-700 dark:text-zinc-300"
@@ -217,11 +217,11 @@ export function SlideThumbnailPane({
                   data-testid={`song-section-toggle-${songIndex}`}
                   aria-expanded={!isCollapsed}
                   onClick={() => toggleCollapsed(item.id)}
-                  className="p-0.5 rounded text-zinc-400 hover:text-zinc-800 dark:text-zinc-500 dark:hover:text-zinc-200 cursor-pointer"
+                  className="cursor-pointer rounded-sm p-0.5 text-zinc-400 hover:text-zinc-800 dark:text-zinc-500 dark:hover:text-zinc-200"
                   title={isCollapsed ? "구역 펼치기" : "구역 접기"}
                 >
                   <svg
-                    className={`w-3 h-3 transition-transform ${isCollapsed ? "-rotate-90" : ""}`}
+                    className={`size-3 transition-transform ${isCollapsed ? "-rotate-90" : ""}`}
                     fill="none"
                     stroke="currentColor"
                     viewBox="0 0 24 24"
@@ -239,13 +239,13 @@ export function SlideThumbnailPane({
                   type="button"
                   data-testid={`song-section-title-${songIndex}`}
                   onClick={() => onSelectSlide(songIndex, 0)}
-                  className="min-w-0 flex-1 flex items-baseline gap-1.5 text-left cursor-pointer"
+                  className="flex min-w-0 flex-1 cursor-pointer items-baseline gap-1.5 text-left"
                   title={deck?.artist ? `${title} · ${deck.artist}` : title}
                 >
                   <span className="truncate text-xs font-semibold">
                     {title}
                   </span>
-                  <span className="shrink-0 text-[10px] font-mono text-zinc-400 dark:text-zinc-500">
+                  <span className="shrink-0 font-mono text-[10px] text-zinc-400 dark:text-zinc-500">
                     {slides.length}장
                   </span>
                 </button>
@@ -274,7 +274,7 @@ export function SlideThumbnailPane({
                     onClick={() =>
                       setMenuSongIndex(isMenuOpen ? null : songIndex)
                     }
-                    className={`p-0.5 rounded text-zinc-500 hover:text-zinc-900 hover:bg-zinc-200 dark:text-zinc-400 dark:hover:text-white dark:hover:bg-zinc-800 cursor-pointer transition-opacity ${
+                    className={`cursor-pointer rounded-sm p-0.5 text-zinc-500 transition-opacity hover:bg-zinc-200 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-white ${
                       isMenuOpen
                         ? "opacity-100"
                         : "opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
@@ -282,7 +282,7 @@ export function SlideThumbnailPane({
                     title="곡 메뉴"
                   >
                     <svg
-                      className="w-4 h-4"
+                      className="size-4"
                       fill="currentColor"
                       viewBox="0 0 24 24"
                     >
@@ -296,7 +296,7 @@ export function SlideThumbnailPane({
                     <div
                       role="menu"
                       data-testid="song-section-menu"
-                      className="absolute right-0 top-6 z-50 w-40 py-1 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg shadow-lg dark:shadow-2xl text-xs text-zinc-700 dark:text-zinc-300"
+                      className="absolute top-6 right-0 z-50 w-40 rounded-lg border border-zinc-200 bg-white py-1 text-xs text-zinc-700 shadow-lg dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-300 dark:shadow-2xl"
                     >
                       <SectionMenuItem
                         label="위로 이동"
@@ -346,7 +346,7 @@ export function SlideThumbnailPane({
                   ids={slides.map(slideSortableId)}
                   onReorder={(from, to) => onReorderSlide(songIndex, from, to)}
                 >
-                  <div className="space-y-2 pt-1 pb-1">
+                  <div className="space-y-2 py-1">
                     {slides.map((slide, slideIndex) => {
                       const globalIndex = firstIndexes[songIndex] + slideIndex;
                       const isActive =
@@ -371,10 +371,10 @@ export function SlideThumbnailPane({
                           aria-current={isActive ? "true" : undefined}
                           aria-label={`슬라이드 ${globalIndex + 1}`}
                           onClick={() => onSelectSlide(songIndex, slideIndex)}
-                          className="group flex items-start gap-2 cursor-pointer outline-none"
+                          className="group flex cursor-pointer items-start gap-2 outline-none"
                         >
                           <span
-                            className={`w-6 shrink-0 pt-0.5 text-right text-[11px] font-mono ${
+                            className={`w-6 shrink-0 pt-0.5 text-right font-mono text-[11px] ${
                               isActive
                                 ? "font-bold text-emerald-600 dark:text-emerald-400"
                                 : "text-zinc-400 dark:text-zinc-500"
@@ -385,14 +385,14 @@ export function SlideThumbnailPane({
 
                           <div
                             ref={isActive ? activeThumbRef : undefined}
-                            className={`relative shrink-0 rounded-md overflow-hidden bg-black transition-shadow ${
+                            className={`relative shrink-0 overflow-hidden rounded-md bg-black transition-shadow ${
                               isActive
-                                ? "ring-2 ring-emerald-500 shadow-md"
-                                : "ring-1 ring-zinc-200 dark:ring-zinc-800 group-hover:ring-zinc-400 dark:group-hover:ring-zinc-600"
+                                ? "shadow-md ring-2 ring-emerald-500"
+                                : "ring-1 ring-zinc-200 group-hover:ring-zinc-400 dark:ring-zinc-800 dark:group-hover:ring-zinc-600"
                             }`}
                             style={{ width: THUMB_WIDTH, height: THUMB_HEIGHT }}
                           >
-                            <div className="w-full h-full pointer-events-none">
+                            <div className="pointer-events-none size-full">
                               <SlideStage
                                 slide={slide}
                                 style={deck?.style}
@@ -411,13 +411,13 @@ export function SlideThumbnailPane({
                                 data-testid={`slide-overflow-warning-${globalIndex}`}
                                 aria-label={slideWarning}
                                 title={slideWarning}
-                                className="absolute bottom-1 left-1 z-30 p-0.5 rounded bg-black/75 text-amber-400"
+                                className="absolute bottom-1 left-1 z-30 rounded-sm bg-black/75 p-0.5 text-amber-400"
                               >
-                                <OverflowWarningIcon className="w-3 h-3" />
+                                <OverflowWarningIcon className="size-3" />
                               </span>
                             )}
 
-                            <div className="absolute top-1 right-1 z-30 flex items-center gap-0.5 p-0.5 rounded bg-black/75 border border-white/15 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <div className="absolute top-1 right-1 z-30 flex items-center gap-0.5 rounded-sm border border-white/15 bg-black/75 p-0.5 opacity-0 transition-opacity group-hover:opacity-100">
                               <button
                                 type="button"
                                 data-testid={`duplicate-slide-btn-${globalIndex}`}
@@ -425,11 +425,11 @@ export function SlideThumbnailPane({
                                   e.stopPropagation();
                                   onDuplicateSlide(songIndex, slideIndex);
                                 }}
-                                className="p-0.5 rounded text-zinc-300 hover:text-white hover:bg-zinc-700 cursor-pointer"
+                                className="cursor-pointer rounded-sm p-0.5 text-zinc-300 hover:bg-zinc-700 hover:text-white"
                                 title="슬라이드 복제"
                               >
                                 <svg
-                                  className="w-3 h-3"
+                                  className="size-3"
                                   fill="none"
                                   stroke="currentColor"
                                   viewBox="0 0 24 24"
@@ -450,11 +450,11 @@ export function SlideThumbnailPane({
                                     e.stopPropagation();
                                     onDeleteSlide(songIndex, slideIndex);
                                   }}
-                                  className="p-0.5 rounded text-zinc-300 hover:text-red-400 hover:bg-zinc-700 cursor-pointer"
+                                  className="cursor-pointer rounded-sm p-0.5 text-zinc-300 hover:bg-zinc-700 hover:text-red-400"
                                   title="슬라이드 삭제"
                                 >
                                   <svg
-                                    className="w-3 h-3"
+                                    className="size-3"
                                     fill="none"
                                     stroke="currentColor"
                                     viewBox="0 0 24 24"
@@ -481,15 +481,15 @@ export function SlideThumbnailPane({
         })}
       </div>
 
-      <div className="p-3 border-t border-zinc-200 dark:border-zinc-800/80 shrink-0">
+      <div className="shrink-0 border-t border-zinc-200 p-3 dark:border-zinc-800/80">
         <button
           type="button"
           data-testid="add-song-btn"
           onClick={onOpenSongPicker}
-          className="w-full py-2 px-3 rounded-lg bg-zinc-100 dark:bg-zinc-900 hover:bg-zinc-200 dark:hover:bg-zinc-800 border border-zinc-200 dark:border-zinc-700/80 hover:border-emerald-500/50 text-xs font-semibold text-zinc-800 dark:text-zinc-200 transition-colors flex items-center justify-center gap-2 cursor-pointer"
+          className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-lg border border-zinc-200 bg-zinc-100 px-3 py-2 text-xs font-semibold text-zinc-800 transition-colors hover:border-emerald-500/50 hover:bg-zinc-200 dark:border-zinc-700/80 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
         >
           <svg
-            className="w-4 h-4 text-emerald-600 dark:text-emerald-400"
+            className="size-4 text-emerald-600 dark:text-emerald-400"
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
@@ -525,10 +525,10 @@ function SectionMenuItem({
       role="menuitem"
       disabled={disabled}
       onClick={onClick}
-      className={`w-full px-3 py-1.5 text-left disabled:opacity-35 disabled:cursor-not-allowed cursor-pointer ${
+      className={`w-full cursor-pointer px-3 py-1.5 text-left disabled:cursor-not-allowed disabled:opacity-35 ${
         danger
-          ? "text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40"
-          : "hover:bg-zinc-100 dark:hover:bg-zinc-800 hover:text-zinc-900 dark:hover:text-white"
+          ? "text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/40"
+          : "hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-zinc-800 dark:hover:text-white"
       }`}
     >
       {label}

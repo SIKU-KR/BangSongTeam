@@ -32,12 +32,12 @@ function Crumb({
       aria-current={isCurrent ? "page" : undefined}
       onClick={onNavigate}
       title={label}
-      className={`max-w-[240px] truncate px-3 py-1 rounded-full transition-colors cursor-pointer ${
+      className={`max-w-[240px] cursor-pointer truncate rounded-full px-3 py-1 transition-colors ${
         isDropTarget
-          ? "ring-2 ring-emerald-500 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-200"
+          ? "bg-emerald-50 text-emerald-800 ring-2 ring-emerald-500 dark:bg-emerald-950/40 dark:text-emerald-200"
           : isCurrent
-            ? "text-zinc-900 dark:text-white hover:bg-zinc-200/70 dark:hover:bg-zinc-800/70"
-            : "text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-200/70 dark:hover:bg-zinc-800/70"
+            ? "text-zinc-900 hover:bg-zinc-200/70 dark:text-white dark:hover:bg-zinc-800/70"
+            : "text-zinc-600 hover:bg-zinc-200/70 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800/70 dark:hover:text-white"
       }`}
     >
       {label}
@@ -100,7 +100,7 @@ export function DriveBreadcrumbs(): React.JSX.Element {
       <nav
         aria-label="드라이브 경로"
         data-testid="drive-breadcrumbs"
-        className="flex items-center min-w-0 text-2xl"
+        className="flex min-w-0 items-center text-2xl"
       >
         <Crumb
           folderId={null}
@@ -110,7 +110,7 @@ export function DriveBreadcrumbs(): React.JSX.Element {
         />
         <Icon
           name="chevronRight"
-          className="w-5 h-5 text-zinc-400 shrink-0"
+          className="size-5 shrink-0 text-zinc-400"
           strokeWidth={2}
         />
         <span
@@ -128,7 +128,7 @@ export function DriveBreadcrumbs(): React.JSX.Element {
     <nav
       aria-label="드라이브 경로"
       data-testid="drive-breadcrumbs"
-      className="flex items-center min-w-0 text-2xl"
+      className="flex min-w-0 items-center text-2xl"
     >
       <Crumb
         folderId={null}
@@ -140,7 +140,7 @@ export function DriveBreadcrumbs(): React.JSX.Element {
         <React.Fragment key={folder.id}>
           <Icon
             name="chevronRight"
-            className="w-5 h-5 text-zinc-400 shrink-0"
+            className="size-5 shrink-0 text-zinc-400"
             strokeWidth={2}
           />
           <Crumb
@@ -165,9 +165,9 @@ export function DriveBreadcrumbs(): React.JSX.Element {
           const rect = event.currentTarget.getBoundingClientRect();
           setAnchor({ x: rect.left, y: rect.bottom + 6 });
         }}
-        className="-ml-1 p-1.5 rounded-full text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-200/70 dark:hover:bg-zinc-800/70 cursor-pointer shrink-0"
+        className="-ml-1 shrink-0 cursor-pointer rounded-full p-1.5 text-zinc-600 hover:bg-zinc-200/70 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800/70 dark:hover:text-white"
       >
-        <Icon name="chevronDown" className="w-5 h-5" strokeWidth={2} />
+        <Icon name="chevronDown" className="size-5" strokeWidth={2} />
       </button>
       {anchor && (
         <PopoverMenu

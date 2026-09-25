@@ -39,7 +39,7 @@ export function LibraryShareControls({
   return (
     <section
       data-testid="library-share-controls"
-      className="px-5 py-3 border-t border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950/40 shrink-0 space-y-1.5"
+      className="shrink-0 space-y-1.5 border-t border-zinc-200 bg-zinc-50 px-5 py-3 dark:border-zinc-800 dark:bg-zinc-950/40"
     >
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p data-testid="song-share-status" className="text-xs">
@@ -63,7 +63,7 @@ export function LibraryShareControls({
               data-testid="song-share-correction-btn"
               disabled={!isOnline}
               onClick={() => setIsReportOpen(true)}
-              className="px-2.5 py-1.5 rounded-lg text-[11px] text-zinc-500 hover:text-rose-600 disabled:opacity-40 cursor-pointer"
+              className="cursor-pointer rounded-lg px-2.5 py-1.5 text-[11px] text-zinc-500 hover:text-rose-600 disabled:opacity-40"
             >
               원본에 교정 제안
             </button>
@@ -75,7 +75,7 @@ export function LibraryShareControls({
                 data-testid="song-share-unpublish-btn"
                 disabled={!isOnline || busy}
                 onClick={() => unpublish.mutate()}
-                className="px-3 py-1.5 rounded-lg border border-zinc-300 dark:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-800 disabled:opacity-40 text-xs font-medium cursor-pointer"
+                className="cursor-pointer rounded-lg border border-zinc-300 px-3 py-1.5 text-xs font-medium hover:bg-zinc-100 disabled:opacity-40 dark:border-zinc-700 dark:hover:bg-zinc-800"
               >
                 {unpublish.isPending ? "전환 중…" : "비공개로 전환"}
               </button>
@@ -88,7 +88,7 @@ export function LibraryShareControls({
                   publish.reset();
                   setIsPublishOpen(true);
                 }}
-                className="px-3 py-1.5 rounded-lg border border-emerald-600 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 disabled:opacity-40 disabled:cursor-not-allowed text-xs font-semibold cursor-pointer"
+                className="cursor-pointer rounded-lg border border-emerald-600 px-3 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-40 dark:text-emerald-400 dark:hover:bg-emerald-950/40"
               >
                 공유 라이브러리에 공개
               </button>

@@ -67,7 +67,7 @@ export function ColorPickerField({
         aria-expanded={isOpen}
         onClick={() => setIsOpen((open) => !open)}
         style={{ backgroundColor: isValidHex(value) ? value : "#FFFFFF" }}
-        className="w-6 h-6 rounded-md border-2 border-zinc-300 dark:border-zinc-600 cursor-pointer shrink-0 hover:scale-110 transition-transform"
+        className="size-6 shrink-0 cursor-pointer rounded-md border-2 border-zinc-300 transition-transform hover:scale-110 dark:border-zinc-600"
         title="직접 색상 선택"
       />
       <input
@@ -85,7 +85,7 @@ export function ColorPickerField({
         onKeyDown={(e) => {
           if (e.key === "Enter") commit(text);
         }}
-        className={`w-20 bg-zinc-50 dark:bg-zinc-900 border rounded px-2 py-1 text-[11px] font-mono text-zinc-700 dark:text-zinc-300 uppercase ${
+        className={`w-20 rounded-sm border bg-zinc-50 px-2 py-1 font-mono text-[11px] text-zinc-700 uppercase dark:bg-zinc-900 dark:text-zinc-300 ${
           isInvalid
             ? "border-red-400 dark:border-red-500"
             : "border-zinc-200 dark:border-zinc-800"
@@ -95,7 +95,7 @@ export function ColorPickerField({
       {isOpen && (
         <div
           data-testid="color-picker-popover"
-          className="absolute right-0 top-full mt-2 z-50 p-2 rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 shadow-md dark:shadow-xl"
+          className="absolute top-full right-0 z-50 mt-2 rounded-xl border border-zinc-200 bg-white p-2 shadow-md dark:border-zinc-700 dark:bg-zinc-900 dark:shadow-xl"
           onPointerUp={() => commit(pickerColor)}
           onKeyUp={() => commit(pickerColor)}
         >

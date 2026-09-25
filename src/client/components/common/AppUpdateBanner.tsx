@@ -24,7 +24,7 @@ export function AppUpdateBanner(): React.JSX.Element | null {
     <div
       role="status"
       data-testid="app-update-banner"
-      className="w-full px-4 py-2.5 bg-sky-600 text-white text-xs sm:text-sm font-medium flex items-center gap-2.5 shrink-0"
+      className="flex w-full shrink-0 items-center gap-2.5 bg-sky-600 px-4 py-2.5 text-xs font-medium text-white sm:text-sm"
     >
       <span className="flex-1">
         새 버전이 준비되었습니다. 예배 송출 중이 아닐 때 적용해 주세요.
@@ -35,7 +35,7 @@ export function AppUpdateBanner(): React.JSX.Element | null {
         onClick={() => {
           void applyServiceWorkerUpdate();
         }}
-        className="px-2.5 py-1 rounded bg-white/15 hover:bg-white/25 transition-colors cursor-pointer"
+        className="cursor-pointer rounded-sm bg-white/15 px-2.5 py-1 transition-colors hover:bg-white/25"
       >
         지금 적용
       </button>

@@ -145,18 +145,18 @@ export function BackgroundUploadDialog({
       aria-modal="true"
       aria-labelledby="bg-upload-title"
       data-testid="bg-upload-dialog"
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm"
     >
       <form
         onSubmit={(e) => void submit(e)}
-        className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto p-6 shadow-xl dark:shadow-2xl space-y-5 text-zinc-900 dark:text-zinc-100"
+        className="max-h-[90vh] w-full max-w-lg space-y-5 overflow-y-auto rounded-2xl border border-zinc-200 bg-white p-6 text-zinc-900 shadow-xl dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100 dark:shadow-2xl"
       >
         <div className="flex items-start justify-between gap-3">
           <div>
             <h3 id="bg-upload-title" className="text-base font-bold">
               배경 올리기
             </h3>
-            <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
+            <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">
               MP4(H.264) 영상이나 JPEG·PNG·WebP 이미지, 파일당{" "}
               {formatBytes(BACKGROUND_UPLOAD_LIMITS.maxFileBytes)}까지. 올린
               배경은 모든 사용자에게 기본 제공 배경으로 보입니다.
@@ -166,10 +166,10 @@ export function BackgroundUploadDialog({
             type="button"
             onClick={close}
             aria-label="닫기"
-            className="p-1 rounded-lg text-zinc-500 hover:text-zinc-800 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:text-white dark:hover:bg-zinc-800 cursor-pointer"
+            className="cursor-pointer rounded-lg p-1 text-zinc-500 hover:bg-zinc-100 hover:text-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-white"
           >
             <svg
-              className="w-5 h-5"
+              className="size-5"
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
@@ -196,10 +196,10 @@ export function BackgroundUploadDialog({
             const file = e.dataTransfer.files[0];
             if (file) void selectFile(file);
           }}
-          className={`block rounded-xl border-2 border-dashed overflow-hidden cursor-pointer transition-colors ${
+          className={`block cursor-pointer overflow-hidden rounded-xl border-2 border-dashed transition-colors ${
             isDragging
               ? "border-emerald-500 bg-emerald-50 dark:bg-emerald-950/30"
-              : "border-zinc-300 dark:border-zinc-700 hover:border-emerald-500/60"
+              : "border-zinc-300 hover:border-emerald-500/60 dark:border-zinc-700"
           }`}
         >
           <input
@@ -218,21 +218,21 @@ export function BackgroundUploadDialog({
               <img
                 src={previewUrl}
                 alt=""
-                className="absolute inset-0 w-full h-full object-cover"
+                className="absolute inset-0 size-full object-cover"
               />
-              <span className="absolute bottom-2 left-2 px-2 py-0.5 rounded bg-black/70 text-[11px] text-zinc-100 font-mono">
+              <span className="absolute bottom-2 left-2 rounded-sm bg-black/70 px-2 py-0.5 font-mono text-[11px] text-zinc-100">
                 {selection.probed.width}×{selection.probed.height}
                 {selection.probed.kind === "video"
                   ? ` · ${selection.probed.durationSec}초`
                   : " · 이미지"}
                 {` · ${formatBytes(selection.file.size)}`}
               </span>
-              <span className="absolute top-2 right-2 px-2 py-0.5 rounded bg-black/70 text-[11px] text-zinc-100">
+              <span className="absolute top-2 right-2 rounded-sm bg-black/70 px-2 py-0.5 text-[11px] text-zinc-100">
                 다른 파일 고르기
               </span>
             </div>
           ) : (
-            <div className="py-10 px-4 flex flex-col items-center gap-2 text-center">
+            <div className="flex flex-col items-center gap-2 px-4 py-10 text-center">
               <span className="text-sm font-semibold text-zinc-800 dark:text-zinc-200">
                 {selection.status === "probing"
                   ? "파일을 확인하는 중…"
@@ -266,7 +266,7 @@ export function BackgroundUploadDialog({
         <div>
           <label
             htmlFor="bg-upload-title-input"
-            className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300 mb-1"
+            className="mb-1 block text-xs font-semibold text-zinc-700 dark:text-zinc-300"
           >
             배경 제목
           </label>
@@ -277,14 +277,14 @@ export function BackgroundUploadDialog({
             maxLength={BACKGROUND_UPLOAD_LIMITS.maxTitleLength}
             placeholder="예: 본당 성탄 배경"
             onChange={(e) => setTitle(e.target.value)}
-            className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 focus:border-emerald-500 rounded-xl px-3.5 py-2 text-xs focus:outline-none"
+            className="w-full rounded-xl border border-zinc-200 bg-zinc-50 px-3.5 py-2 text-xs focus:border-emerald-500 focus:outline-none dark:border-zinc-800 dark:bg-zinc-950"
           />
         </div>
 
         <div>
           <label
             htmlFor="bg-upload-license-input"
-            className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300 mb-1"
+            className="mb-1 block text-xs font-semibold text-zinc-700 dark:text-zinc-300"
           >
             출처·라이선스
           </label>
@@ -296,12 +296,12 @@ export function BackgroundUploadDialog({
             maxLength={BACKGROUND_UPLOAD_LIMITS.maxLicenseLength}
             placeholder="예: Pexels License — 작가명, 자체 제작 (CC0)"
             onChange={(e) => setLicense(e.target.value)}
-            className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 focus:border-emerald-500 rounded-xl px-3.5 py-2 text-xs focus:outline-none"
+            className="w-full rounded-xl border border-zinc-200 bg-zinc-50 px-3.5 py-2 text-xs focus:border-emerald-500 focus:outline-none dark:border-zinc-800 dark:bg-zinc-950"
           />
         </div>
 
         <div>
-          <span className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300 mb-1.5">
+          <span className="mb-1.5 block text-xs font-semibold text-zinc-700 dark:text-zinc-300">
             분위기 태그 (선택)
           </span>
           <div className="flex flex-wrap gap-1.5">
@@ -313,10 +313,10 @@ export function BackgroundUploadDialog({
                   type="button"
                   aria-pressed={active}
                   onClick={() => toggleTag(tag)}
-                  className={`px-2.5 py-1 rounded-full text-xs font-medium cursor-pointer transition-colors ${
+                  className={`cursor-pointer rounded-full px-2.5 py-1 text-xs font-medium transition-colors ${
                     active
                       ? "bg-emerald-600 text-white"
-                      : "bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-700"
+                      : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-700"
                   }`}
                 >
                   {tag}
@@ -326,7 +326,7 @@ export function BackgroundUploadDialog({
           </div>
         </div>
 
-        <label className="flex items-start gap-2 text-xs cursor-pointer">
+        <label className="flex cursor-pointer items-start gap-2 text-xs">
           <input
             type="checkbox"
             data-testid="bg-upload-rights-checkbox"
@@ -353,7 +353,7 @@ export function BackgroundUploadDialog({
             type="button"
             onClick={close}
             disabled={upload.isPending}
-            className="px-4 py-2 rounded-xl bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-xs font-medium text-zinc-700 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-700 cursor-pointer disabled:opacity-50"
+            className="cursor-pointer rounded-xl border border-zinc-200 bg-zinc-100 px-4 py-2 text-xs font-medium text-zinc-700 hover:bg-zinc-200 disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700"
           >
             취소
           </button>
@@ -361,7 +361,7 @@ export function BackgroundUploadDialog({
             type="submit"
             data-testid="bg-upload-submit"
             disabled={!canSubmit}
-            className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-xs font-bold text-white shadow-sm cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+            className="cursor-pointer rounded-xl bg-emerald-600 px-4 py-2 text-xs font-bold text-white shadow-sm hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-40"
           >
             {upload.isPending ? "올리는 중…" : "올리기"}
           </button>

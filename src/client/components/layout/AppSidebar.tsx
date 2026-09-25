@@ -72,12 +72,12 @@ function NavButton({
       }`}
     >
       <div
-        className={`w-5 h-5 flex items-center justify-center ${
+        className={`flex size-5 items-center justify-center ${
           active ? item.accent : "text-zinc-500 dark:text-zinc-400"
         }`}
       >
         <svg
-          className="w-5 h-5"
+          className="size-5"
           fill="none"
           stroke="currentColor"
           viewBox="0 0 24 24"
@@ -115,28 +115,28 @@ function AccountCard(): React.JSX.Element {
   return (
     <div
       data-testid="account-card"
-      className="p-3 rounded-2xl bg-zinc-100/90 dark:bg-zinc-900/60 border border-zinc-200 dark:border-zinc-900 flex items-center gap-3"
+      className="flex items-center gap-3 rounded-2xl border border-zinc-200 bg-zinc-100/90 p-3 dark:border-zinc-900 dark:bg-zinc-900/60"
     >
       {session.user?.image ? (
         <img
           src={session.user.image}
           alt=""
-          className="w-9 h-9 rounded-full object-cover shrink-0"
+          className="size-9 shrink-0 rounded-full object-cover"
         />
       ) : (
-        <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-emerald-700 to-teal-500 flex items-center justify-center text-white text-xs font-bold shrink-0">
+        <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-linear-to-tr from-emerald-700 to-teal-500 text-xs font-bold text-white">
           {initials}
         </div>
       )}
       <div className="min-w-0 flex-1">
-        <p className="text-xs font-bold text-zinc-800 dark:text-zinc-200 truncate">
+        <p className="truncate text-xs font-bold text-zinc-800 dark:text-zinc-200">
           {name}
         </p>
         <button
           type="button"
           disabled={signingOut}
           onClick={() => void handleSignOut()}
-          className="text-[10px] text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 transition-colors disabled:opacity-60"
+          className="text-[10px] text-zinc-500 transition-colors hover:text-zinc-700 disabled:opacity-60 dark:hover:text-zinc-300"
         >
           {signingOut ? "로그아웃 중…" : "로그아웃"}
         </button>
@@ -157,19 +157,19 @@ export function AppSidebar(): React.JSX.Element {
     pathname.startsWith(`${BACKGROUNDS_ITEM.path}/`);
 
   return (
-    <aside className="w-64 h-full bg-zinc-50 dark:bg-zinc-950 hidden lg:flex flex-col justify-between py-4 pl-3 pr-4 shrink-0 overflow-y-auto">
+    <aside className="hidden h-full w-64 shrink-0 flex-col justify-between overflow-y-auto bg-zinc-50 py-4 pr-4 pl-3 lg:flex dark:bg-zinc-950">
       <div className="space-y-6">
         <div className="flex items-center gap-3 px-2 pt-1">
-          <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-emerald-500 via-teal-400 to-indigo-500 flex items-center justify-center text-white shadow-sm dark:shadow-emerald-950/40">
-            <svg className="w-5 h-5 fill-current" viewBox="0 0 24 24">
+          <div className="flex size-9 items-center justify-center rounded-xl bg-linear-to-tr from-emerald-500 via-teal-400 to-indigo-500 text-white shadow-sm dark:shadow-emerald-950/40">
+            <svg className="size-5 fill-current" viewBox="0 0 24 24">
               <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-5 14H7v-2h7v2zm3-4H7v-2h10v2zm0-4H7V7h10v2z" />
             </svg>
           </div>
           <div>
-            <span className="text-base font-extrabold tracking-tight text-zinc-900 dark:text-white flex items-center gap-1.5">
+            <span className="flex items-center gap-1.5 text-base font-extrabold tracking-tight text-zinc-900 dark:text-white">
               Worship Studio
             </span>
-            <p className="text-[10px] text-zinc-500 font-medium">
+            <p className="text-[10px] font-medium text-zinc-500">
               16:9 프레젠테이션 스튜디오
             </p>
           </div>
@@ -195,7 +195,7 @@ export function AppSidebar(): React.JSX.Element {
         </nav>
       </div>
 
-      <div className="space-y-3 pt-3 border-t border-zinc-200 dark:border-zinc-900">
+      <div className="space-y-3 border-t border-zinc-200 pt-3 dark:border-zinc-900">
         <ThemeMenuButton />
         <AccountCard />
       </div>

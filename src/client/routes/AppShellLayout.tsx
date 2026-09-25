@@ -102,10 +102,10 @@ function AppShellFrame(): React.JSX.Element {
   };
 
   return (
-    <div className="h-screen w-full bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 flex overflow-hidden">
+    <div className="flex h-screen w-full overflow-hidden bg-zinc-50 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-100">
       <AppSidebar />
 
-      <div className="flex-1 h-full flex flex-col min-w-0 overflow-hidden">
+      <div className="flex h-full min-w-0 flex-1 flex-col overflow-hidden">
         <ChromeAlertBanner />
         <StorageWarningBanner />
         <AppUpdateBanner />
@@ -126,12 +126,12 @@ function AppShellFrame(): React.JSX.Element {
         />
 
         {onDrive ? (
-          <main className="flex-1 min-h-0 flex flex-col">
+          <main className="flex min-h-0 flex-1 flex-col">
             <Outlet context={context} />
           </main>
         ) : (
-          <main className="flex-1 min-h-0 overflow-y-auto">
-            <div className="px-4 sm:px-6 py-4">
+          <main className="min-h-0 flex-1 overflow-y-auto">
+            <div className="p-4 sm:px-6">
               <Outlet context={context} />
             </div>
           </main>

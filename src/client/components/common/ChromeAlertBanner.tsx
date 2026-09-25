@@ -83,7 +83,7 @@ export function ChromeAlertBanner(): React.JSX.Element | null {
     <aside
       role="alert"
       aria-label="브라우저 호환성 안내"
-      className="relative z-50 flex items-center justify-between bg-amber-500 text-zinc-950 px-4 py-2 text-sm font-medium shadow-sm transition-all"
+      className="relative z-50 flex items-center justify-between bg-amber-500 px-4 py-2 text-sm font-medium text-zinc-950 shadow-sm transition-all"
     >
       <div className="flex items-center gap-2">
         <span className="text-base" aria-hidden="true">
@@ -99,7 +99,7 @@ export function ChromeAlertBanner(): React.JSX.Element | null {
         type="button"
         onClick={handleDismiss}
         aria-label="안내 배너 닫기"
-        className="ml-4 shrink-0 rounded px-2 py-0.5 text-xs font-semibold bg-zinc-950/10 hover:bg-zinc-950/20 active:bg-zinc-950/30 transition-colors cursor-pointer"
+        className="ml-4 shrink-0 cursor-pointer rounded-sm bg-zinc-950/10 px-2 py-0.5 text-xs font-semibold transition-colors hover:bg-zinc-950/20 active:bg-zinc-950/30"
       >
         닫기
       </button>

@@ -19,7 +19,7 @@ export function BackgroundPreview({
 
   return (
     <div
-      className={`relative aspect-video w-full bg-zinc-900 overflow-hidden select-none ${className}`}
+      className={`relative aspect-video w-full overflow-hidden bg-zinc-900 select-none ${className}`}
     >
       {failed ? (
         <div
@@ -36,7 +36,7 @@ export function BackgroundPreview({
           muted
           loop
           playsInline
-          className="absolute inset-0 w-full h-full object-cover"
+          className="absolute inset-0 size-full object-cover"
         />
       ) : (
         <img
@@ -45,19 +45,19 @@ export function BackgroundPreview({
           loading="lazy"
           draggable={false}
           onError={() => setFailedUrl(background.posterUrl)}
-          className="absolute inset-0 w-full h-full object-cover"
+          className="absolute inset-0 size-full object-cover"
         />
       )}
 
-      <div className="absolute bottom-1.5 right-1.5 flex items-center gap-1">
+      <div className="absolute right-1.5 bottom-1.5 flex items-center gap-1">
         {background.kind === "video" ? (
           background.durationSec > 0 && (
-            <span className="px-1.5 py-0.5 rounded text-[10px] font-mono bg-black/70 text-zinc-200">
+            <span className="rounded-sm bg-black/70 px-1.5 py-0.5 font-mono text-[10px] text-zinc-200">
               {background.durationSec}초
             </span>
           )
         ) : (
-          <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-black/70 text-zinc-200">
+          <span className="rounded-sm bg-black/70 px-1.5 py-0.5 text-[10px] font-semibold text-zinc-200">
             이미지
           </span>
         )}

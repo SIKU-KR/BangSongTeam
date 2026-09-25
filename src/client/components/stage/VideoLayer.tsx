@@ -58,7 +58,7 @@ export function VideoLayer({
   return (
     <div
       data-testid="video-layer-container"
-      className={`absolute inset-0 overflow-hidden bg-black z-0 select-none pointer-events-none ${className}`}
+      className={`pointer-events-none absolute inset-0 z-0 overflow-hidden bg-black select-none ${className}`}
     >
       <video
         ref={videoARef}
@@ -70,7 +70,7 @@ export function VideoLayer({
         playsInline
         preload="auto"
         poster={posterUrl}
-        className="absolute inset-0 w-full h-full object-cover"
+        className="absolute inset-0 size-full object-cover"
         style={{
           opacity: activeSlot === "A" && srcA ? 1 : 0,
           transition: "opacity 200ms ease-in-out",
@@ -88,7 +88,7 @@ export function VideoLayer({
         playsInline
         preload="auto"
         poster={posterUrl}
-        className="absolute inset-0 w-full h-full object-cover"
+        className="absolute inset-0 size-full object-cover"
         style={{
           opacity: activeSlot === "B" && srcB ? 1 : 0,
           transition: "opacity 200ms ease-in-out",

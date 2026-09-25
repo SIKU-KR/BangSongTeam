@@ -108,7 +108,7 @@ function FolderTreeNode({
     >
       <div
         data-testid={`picker-node-${folder.id}`}
-        className={`group w-full rounded-lg flex items-center gap-1 pr-2 transition-colors ${stateClass} ${
+        className={`group flex w-full items-center gap-1 rounded-lg pr-2 transition-colors ${stateClass} ${
           disabled ? "opacity-40" : ""
         }`}
         style={{ paddingLeft: 6 + depth * 14 }}
@@ -120,13 +120,13 @@ function FolderTreeNode({
             isExpanded ? `${folder.name} 접기` : `${folder.name} 펼치기`
           }
           onClick={() => onToggle(folder.id)}
-          className={`w-5 h-5 shrink-0 flex items-center justify-center rounded text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 cursor-pointer ${
+          className={`flex size-5 shrink-0 cursor-pointer items-center justify-center rounded-sm text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 ${
             children.length === 0 ? "invisible" : ""
           }`}
         >
           <Icon
             name="chevronRight"
-            className={`w-3 h-3 transition-transform duration-150 ${isExpanded ? "rotate-90" : ""}`}
+            className={`size-3 transition-transform duration-150 ${isExpanded ? "rotate-90" : ""}`}
             strokeWidth={2.5}
           />
         </button>
@@ -135,10 +135,10 @@ function FolderTreeNode({
           disabled={disabled}
           onClick={() => onSelect(folder.id)}
           title={folder.name}
-          className="flex-1 min-w-0 py-1.5 flex items-center gap-2 text-left text-xs cursor-pointer disabled:cursor-not-allowed"
+          className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 py-1.5 text-left text-xs disabled:cursor-not-allowed"
         >
           <FolderGlyph
-            className={`w-4 h-4 shrink-0 ${
+            className={`size-4 shrink-0 ${
               isSelected
                 ? "text-emerald-500 dark:text-emerald-400"
                 : "text-zinc-400 dark:text-zinc-500"
@@ -148,7 +148,7 @@ function FolderTreeNode({
         </button>
       </div>
       {isExpanded && children.length > 0 && (
-        <ul role="group" className="space-y-0.5 mt-0.5">
+        <ul role="group" className="mt-0.5 space-y-0.5">
           {children.map((child) => (
             <FolderTreeNode
               key={child.id}

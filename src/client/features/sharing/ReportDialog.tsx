@@ -64,14 +64,14 @@ export function ReportDialog({
       aria-modal="true"
       aria-labelledby="report-dialog-title"
       data-testid="report-dialog"
-      className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/60"
+      className="fixed inset-0 z-60 flex items-center justify-center bg-black/60 p-4"
     >
-      <div className="w-full max-w-md bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-2xl p-5 space-y-4 text-zinc-900 dark:text-zinc-100">
+      <div className="w-full max-w-md space-y-4 rounded-2xl border border-zinc-200 bg-white p-5 text-zinc-900 shadow-2xl dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100">
         <div>
           <h2 id="report-dialog-title" className="text-sm font-bold">
             신고하기
           </h2>
-          <p className="text-xs text-zinc-500 mt-0.5 truncate">{targetTitle}</p>
+          <p className="mt-0.5 truncate text-xs text-zinc-500">{targetTitle}</p>
         </div>
 
         {report.isSuccess ? (
@@ -86,7 +86,7 @@ export function ReportDialog({
               <button
                 type="button"
                 onClick={close}
-                className="px-4 py-2 rounded-xl bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 text-xs font-semibold cursor-pointer"
+                className="cursor-pointer rounded-xl bg-zinc-900 px-4 py-2 text-xs font-semibold text-white dark:bg-zinc-100 dark:text-zinc-900"
               >
                 닫기
               </button>
@@ -109,7 +109,7 @@ export function ReportDialog({
               {REASONS.map((option) => (
                 <label
                   key={option.value}
-                  className="flex items-start gap-2 text-xs cursor-pointer"
+                  className="flex cursor-pointer items-start gap-2 text-xs"
                 >
                   <input
                     type="radio"
@@ -135,7 +135,7 @@ export function ReportDialog({
               onChange={(e) => setDetails(e.target.value)}
               rows={3}
               placeholder="자세한 내용 (선택, 500자 이내)"
-              className="w-full p-2.5 text-xs bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg focus:outline-none focus:border-rose-500 resize-none"
+              className="w-full resize-none rounded-lg border border-zinc-200 bg-zinc-50 p-2.5 text-xs focus:border-rose-500 focus:outline-none dark:border-zinc-800 dark:bg-zinc-950"
             />
 
             {report.isError && (
@@ -148,7 +148,7 @@ export function ReportDialog({
               <button
                 type="button"
                 onClick={close}
-                className="px-4 py-2 rounded-xl text-xs text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 cursor-pointer"
+                className="cursor-pointer rounded-xl px-4 py-2 text-xs text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800"
               >
                 취소
               </button>
@@ -156,7 +156,7 @@ export function ReportDialog({
                 type="submit"
                 data-testid="report-submit-btn"
                 disabled={report.isPending}
-                className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 disabled:opacity-50 text-white text-xs font-semibold cursor-pointer"
+                className="cursor-pointer rounded-xl bg-rose-600 px-4 py-2 text-xs font-semibold text-white hover:bg-rose-500 disabled:opacity-50"
               >
                 {report.isPending ? "보내는 중…" : "신고 보내기"}
               </button>

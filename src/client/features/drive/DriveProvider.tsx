@@ -511,20 +511,20 @@ function DragChip({
   return (
     <div className="relative inline-block cursor-grabbing">
       {many && (
-        <div className="absolute inset-0 translate-x-1 translate-y-1 rounded-xl bg-white dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 shadow" />
+        <div className="absolute inset-0 translate-1 rounded-xl border border-zinc-300 bg-white shadow-sm dark:border-zinc-700 dark:bg-zinc-800" />
       )}
-      <div className="relative flex items-center gap-2.5 w-60 px-3 py-2.5 rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 shadow-xl text-sm font-medium text-zinc-800 dark:text-zinc-100">
+      <div className="relative flex w-60 items-center gap-2.5 rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm font-medium text-zinc-800 shadow-xl dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100">
         {first?.kind === "folder" ? (
-          <FolderGlyph className="w-5 h-5 shrink-0 text-emerald-500" />
+          <FolderGlyph className="size-5 shrink-0 text-emerald-500" />
         ) : (
-          <Icon name="slides" className="w-5 h-5 shrink-0 text-indigo-500" />
+          <Icon name="slides" className="size-5 shrink-0 text-indigo-500" />
         )}
         <span className="truncate">{first ? itemName(first) : ""}</span>
       </div>
       {many && (
         <span
           data-testid="drag-count"
-          className="absolute -top-2 -right-2 min-w-6 h-6 px-1.5 rounded-full bg-emerald-600 text-white text-xs font-bold flex items-center justify-center shadow"
+          className="absolute -top-2 -right-2 flex h-6 min-w-6 items-center justify-center rounded-full bg-emerald-600 px-1.5 text-xs font-bold text-white shadow-sm"
         >
           {refs.length}
         </span>
@@ -544,7 +544,7 @@ function DriveToast({
     <div
       role="status"
       data-testid="drive-toast"
-      className="fixed bottom-6 left-4 lg:left-[17rem] z-[70] flex items-center gap-3 min-w-[18rem] pl-4 pr-2 py-3 rounded-lg bg-zinc-800 dark:bg-zinc-100 text-white dark:text-zinc-900 shadow-2xl text-sm max-w-[calc(100vw-2rem)]"
+      className="fixed bottom-6 left-4 z-70 flex max-w-[calc(100vw-2rem)] min-w-[18rem] items-center gap-3 rounded-lg bg-zinc-800 py-3 pr-2 pl-4 text-sm text-white shadow-2xl lg:left-68 dark:bg-zinc-100 dark:text-zinc-900"
     >
       <span className="truncate">{toast.message}</span>
       {toast.action && (
@@ -555,7 +555,7 @@ function DriveToast({
             toast.action?.run();
             onClose();
           }}
-          className="px-2 py-1 rounded-lg font-semibold text-emerald-300 dark:text-emerald-700 hover:bg-white/10 dark:hover:bg-black/10 cursor-pointer"
+          className="cursor-pointer rounded-lg px-2 py-1 font-semibold text-emerald-300 hover:bg-white/10 dark:text-emerald-700 dark:hover:bg-black/10"
         >
           {toast.action.label}
         </button>
@@ -564,9 +564,9 @@ function DriveToast({
         type="button"
         aria-label="알림 닫기"
         onClick={onClose}
-        className="p-1 rounded-lg hover:bg-white/10 dark:hover:bg-black/10 cursor-pointer"
+        className="cursor-pointer rounded-lg p-1 hover:bg-white/10 dark:hover:bg-black/10"
       >
-        <Icon name="close" className="w-3.5 h-3.5" />
+        <Icon name="close" className="size-3.5" />
       </button>
     </div>
   );

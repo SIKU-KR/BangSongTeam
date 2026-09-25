@@ -14,9 +14,9 @@ const ALL_TAGS = "전체";
 
 function CheckBadge(): React.JSX.Element {
   return (
-    <div className="absolute top-2 right-2 w-5 h-5 rounded-full bg-emerald-500 text-white flex items-center justify-center shadow-lg">
+    <div className="absolute top-2 right-2 flex size-5 items-center justify-center rounded-full bg-emerald-500 text-white shadow-lg">
       <svg
-        className="w-3.5 h-3.5"
+        className="size-3.5"
         fill="none"
         stroke="currentColor"
         viewBox="0 0 24 24"
@@ -64,8 +64,8 @@ function PickerTile({
         <BackgroundPreview background={background} playing={hovered} />
         {isSelected && <CheckBadge />}
       </div>
-      <div className="p-2.5 flex flex-col gap-1 w-full">
-        <span className="text-xs font-semibold text-zinc-900 dark:text-zinc-200 truncate">
+      <div className="flex w-full flex-col gap-1 p-2.5">
+        <span className="truncate text-xs font-semibold text-zinc-900 dark:text-zinc-200">
           {background.title}
         </span>
         {background.tags.length > 0 && (
@@ -73,7 +73,7 @@ function PickerTile({
             {background.tags.map((tag) => (
               <span
                 key={tag}
-                className="text-[10px] px-1.5 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400"
+                className="rounded-sm bg-zinc-100 px-1.5 py-0.5 text-[10px] text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400"
               >
                 {tag}
               </span>
@@ -124,15 +124,15 @@ function PickerDialog({
       role="dialog"
       aria-modal="true"
       aria-labelledby="background-picker-title"
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200"
+      className="fixed inset-0 z-50 flex animate-in items-center justify-center bg-black/80 p-4 backdrop-blur-sm duration-200 fade-in"
     >
-      <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl w-full max-w-4xl max-h-[90vh] flex flex-col shadow-xl dark:shadow-2xl overflow-hidden text-zinc-900 dark:text-zinc-100">
-        <div className="px-6 py-4 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between">
+      <div className="flex max-h-[90vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl border border-zinc-200 bg-white text-zinc-900 shadow-xl dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100 dark:shadow-2xl">
+        <div className="flex items-center justify-between border-b border-zinc-200 px-6 py-4 dark:border-zinc-800">
           <div>
             <h2 id="background-picker-title" className="text-lg font-bold">
               곡 배경 선택
             </h2>
-            <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
+            <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">
               한 곡의 모든 슬라이드가 같은 배경을 씁니다. 영상은 슬라이드가
               넘어가도 끊기지 않고 이어집니다.
             </p>
@@ -143,10 +143,10 @@ function PickerDialog({
             onClick={onClose}
             title="닫기"
             aria-label="닫기"
-            className="p-1.5 rounded-lg text-zinc-500 hover:text-zinc-800 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:text-white dark:hover:bg-zinc-800 cursor-pointer"
+            className="cursor-pointer rounded-lg p-1.5 text-zinc-500 hover:bg-zinc-100 hover:text-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-white"
           >
             <svg
-              className="w-5 h-5"
+              className="size-5"
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
@@ -162,7 +162,7 @@ function PickerDialog({
         </div>
 
         {tags.length > 0 && (
-          <div className="px-6 py-3 border-b border-zinc-200 dark:border-zinc-800/80 bg-zinc-50 dark:bg-zinc-950/40 flex flex-wrap items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3 border-b border-zinc-200 bg-zinc-50 px-6 py-3 dark:border-zinc-800/80 dark:bg-zinc-950/40">
             <div className="flex items-center gap-1.5 overflow-x-auto">
               {[ALL_TAGS, ...tags].map((tag) => (
                 <button
@@ -170,10 +170,10 @@ function PickerDialog({
                   type="button"
                   aria-pressed={activeTag === tag}
                   onClick={() => setActiveTag(tag)}
-                  className={`px-3 py-1 rounded-full text-xs font-medium shrink-0 cursor-pointer ${
+                  className={`shrink-0 cursor-pointer rounded-full px-3 py-1 text-xs font-medium ${
                     activeTag === tag
                       ? "bg-emerald-600 text-white"
-                      : "bg-zinc-200/80 dark:bg-zinc-800/70 text-zinc-700 dark:text-zinc-400 hover:bg-zinc-300 dark:hover:bg-zinc-800"
+                      : "bg-zinc-200/80 text-zinc-700 hover:bg-zinc-300 dark:bg-zinc-800/70 dark:text-zinc-400 dark:hover:bg-zinc-800"
                   }`}
                 >
                   {tag}
@@ -183,7 +183,7 @@ function PickerDialog({
           </div>
         )}
 
-        <div className="flex-1 overflow-y-auto p-6 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 content-start">
+        <div className="grid flex-1 grid-cols-2 content-start gap-4 overflow-y-auto p-6 sm:grid-cols-3 md:grid-cols-4">
           <button
             type="button"
             data-testid="bg-item-none"
@@ -191,11 +191,11 @@ function PickerDialog({
             onClick={() => pick(null)}
             className={tileClassName(!selectedBackgroundId)}
           >
-            <div className="relative aspect-video w-full bg-black flex items-center justify-center text-xs text-zinc-400">
+            <div className="relative flex aspect-video w-full items-center justify-center bg-black text-xs text-zinc-400">
               검은 화면
               {!selectedBackgroundId && <CheckBadge />}
             </div>
-            <div className="p-2.5 w-full">
+            <div className="w-full p-2.5">
               <span className="text-xs font-semibold text-zinc-900 dark:text-zinc-200">
                 배경 없음
               </span>
@@ -218,7 +218,7 @@ function PickerDialog({
           )}
         </div>
 
-        <div className="px-6 py-3 border-t border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950/40 flex items-center justify-between text-xs text-zinc-500 dark:text-zinc-400">
+        <div className="flex items-center justify-between border-t border-zinc-200 bg-zinc-50 px-6 py-3 text-xs text-zinc-500 dark:border-zinc-800 dark:bg-zinc-950/40 dark:text-zinc-400">
           <span>
             {catalog.status === "offline"
               ? "오프라인: 저장해 둔 배경 목록입니다"
@@ -227,7 +227,7 @@ function PickerDialog({
           <button
             type="button"
             onClick={onClose}
-            className="px-4 py-1.5 rounded-lg bg-zinc-200 dark:bg-zinc-800 hover:bg-zinc-300 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300 cursor-pointer"
+            className="cursor-pointer rounded-lg bg-zinc-200 px-4 py-1.5 text-zinc-700 hover:bg-zinc-300 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700"
           >
             닫기
           </button>

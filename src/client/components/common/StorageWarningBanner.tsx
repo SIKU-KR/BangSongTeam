@@ -4,7 +4,7 @@ import { usePersistenceError, useCorruptedRecords } from "../../lib/storage";
 function WarningIcon(): React.JSX.Element {
   return (
     <svg
-      className="w-4 h-4 shrink-0"
+      className="size-4 shrink-0"
       fill="none"
       stroke="currentColor"
       viewBox="0 0 24 24"

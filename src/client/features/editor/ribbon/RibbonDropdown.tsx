@@ -48,14 +48,14 @@ export function RibbonDropdown({
           <>
             {icon}
             {text && <span className="hidden xl:inline">{text}</span>}
-            <RibbonIcon d="M19 9l-7 7-7-7" className="w-3 h-3 opacity-60" />
+            <RibbonIcon d="M19 9l-7 7-7-7" className="size-3 opacity-60" />
           </>
         }
       />
       {open && (
         <div
           data-testid={panelTestId}
-          className={`absolute top-full mt-1 z-40 p-2.5 rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 shadow-lg dark:shadow-2xl text-xs text-zinc-800 dark:text-zinc-200 ${
+          className={`absolute top-full z-40 mt-1 rounded-xl border border-zinc-200 bg-white p-2.5 text-xs text-zinc-800 shadow-lg dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 dark:shadow-2xl ${
             align === "right" ? "right-0" : "left-0"
           } ${panelClassName}`}
         >
