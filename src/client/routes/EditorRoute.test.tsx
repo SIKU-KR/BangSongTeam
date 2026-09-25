@@ -5,11 +5,12 @@ import {
 } from "../features/presentation";
 import { signInAsTestUser } from "../test/sessionFixture";
 import { withQueryClient } from "../test/queryClientFixture";
-import { render, screen, fireEvent, act } from "@testing-library/react";
+import { render, screen, fireEvent, act, within } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { MemoryRouter, Routes, Route } from "react-router-dom";
 import { EditorRoute } from "./EditorRoute";
 import {
+  getActivePresentation,
   resetPresentationStore,
   SEED_PRESENTATION_IDS,
 } from "../features/presentation";
@@ -32,6 +33,34 @@ function renderEditor(path = `/editor/${DOC_ID}`) {
   );
 }
 
+const statusBar = () => screen.getByTestId("editor-status-bar");
+const stageCanvas = () => screen.getByTestId("editor-stage-canvas");
+const firstSong = () => getActivePresentation().items[0].deck!;
+
+function startLyricsEdit(): HTMLTextAreaElement {
+  act(() => {
+    fireEvent.keyDown(window, { key: "F2" });
+  });
+  return lyricsEditor();
+}
+
+function lyricsEditor(): HTMLTextAreaElement {
+  return screen.getByLabelText("슬라이드 가사 편집") as HTMLTextAreaElement;
+}
+
+function typeLyrics(textarea: HTMLTextAreaElement, value: string): void {
+  act(() => {
+    fireEvent.change(textarea, { target: { value } });
+  });
+}
+
+function placeCaret(textarea: HTMLTextAreaElement, offset: number): void {
+  act(() => {
+    textarea.setSelectionRange(offset, offset);
+    fireEvent.select(textarea);
+  });
+}
+
 const mockNavigate = vi.fn();
 vi.mock("react-router-dom", async () => {
   const actual = await vi.importActual("react-router-dom");
@@ -50,23 +79,25 @@ describe("EditorRoute (PowerPoint식 프레젠테이션 편집기)", () => {
     vi.restoreAllMocks();
   });
 
-  it("should render editor header, stage canvas, property panel, and slide thumbnail pane", () => {
+  it("헤더·리본·썸네일 창·캔버스·상태 표시줄을 그리고 오른쪽 패널은 없다", () => {
     renderEditor();
 
     expect(screen.getByTestId("editor-header")).toBeInTheDocument();
     expect(screen.getByText("2026 주일 3부 예배")).toBeInTheDocument();
 
-    expect(screen.getByTestId("editor-stage-canvas")).toBeInTheDocument();
-    expect(
-      screen.getByText("16:9 와이드스크린 (1920 × 1080)"),
-    ).toBeInTheDocument();
+    expect(screen.getByTestId("editor-ribbon")).toBeInTheDocument();
+    expect(screen.getByTestId("ribbon-song-label")).toHaveTextContent(
+      "은혜로다",
+    );
+
+    expect(stageCanvas()).toBeInTheDocument();
+    expect(statusBar()).toHaveTextContent("슬라이드 1/23");
+    expect(statusBar()).toHaveTextContent("곡 1/5");
 
     expect(screen.getByTestId("slide-thumbnail-pane")).toBeInTheDocument();
     expect(screen.getByTestId("song-section-0")).toHaveTextContent("은혜로다");
 
-    expect(screen.getByTestId("song-property-panel")).toBeInTheDocument();
-    expect(screen.getByText("슬라이드 디자인 & 속성")).toBeInTheDocument();
-
+    expect(screen.queryByTestId("song-property-panel")).not.toBeInTheDocument();
     expect(screen.queryByTestId("slide-filmstrip")).not.toBeInTheDocument();
   });
 
@@ -86,135 +117,218 @@ describe("EditorRoute (PowerPoint식 프레젠테이션 편집기)", () => {
 
     fireEvent.click(screen.getByTestId("slide-thumb-1"));
 
+    expect(statusBar()).toHaveTextContent("슬라이드 2/23");
     expect(
-      screen.getByDisplayValue(/주의 사랑을 주의 선하심을/),
+      within(stageCanvas()).getByText(/주의 사랑을 주의 선하심을/),
     ).toBeInTheDocument();
   });
 
-  it("should update slide lines when edited in property panel", () => {
+  it("F2로 슬라이드 위에서 가사를 고치고 Esc로 편집을 끝낸다", () => {
     renderEditor();
 
-    const textarea = screen.getByPlaceholderText(/슬라이드 가사를 입력하세요/);
+    const textarea = startLyricsEdit();
+    expect(textarea).toHaveFocus();
+    expect(
+      within(stageCanvas()).getByTestId("text-layer-box"),
+    ).toContainElement(textarea);
+    typeLyrics(textarea, "수정된 첫 번째 가사\n수정된 두 번째 가사");
+
+    expect(firstSong().slides[0].lines).toEqual([
+      "수정된 첫 번째 가사",
+      "수정된 두 번째 가사",
+    ]);
+    expect(screen.getByTestId("slide-line-count")).toHaveTextContent("2/4줄");
+
     act(() => {
-      fireEvent.change(textarea, {
-        target: { value: "수정된 첫 번째 가사\n수정된 두 번째 가사" },
-      });
+      fireEvent.keyDown(textarea, { key: "Escape" });
+    });
+    expect(
+      screen.queryByLabelText("슬라이드 가사 편집"),
+    ).not.toBeInTheDocument();
+    expect(
+      within(stageCanvas()).getByText("수정된 두 번째 가사"),
+    ).toBeInTheDocument();
+  });
+
+  it("캔버스를 더블클릭하면 가사 편집을 시작한다", () => {
+    const { container } = renderEditor();
+
+    const canvas = container.querySelector("[data-editor-canvas]")!;
+    act(() => {
+      fireEvent.doubleClick(canvas);
     });
 
-    expect(screen.getAllByText("수정된 첫 번째 가사")[0]).toBeInTheDocument();
-    expect(screen.getAllByText("수정된 두 번째 가사")[0]).toBeInTheDocument();
+    expect(lyricsEditor()).toHaveValue(firstSong().slides[0].lines.join("\n"));
   });
 
   it("커서 위치에서 슬라이드를 나누고 뒷부분 슬라이드를 선택한다", () => {
     renderEditor();
-    const textarea = screen.getByLabelText(
-      "현재 슬라이드 가사",
-    ) as HTMLTextAreaElement;
-    act(() => {
-      fireEvent.change(textarea, {
-        target: { value: "첫째 줄\n둘째 줄\n셋째 줄" },
-      });
-    });
+    const textarea = startLyricsEdit();
+    typeLyrics(textarea, "첫째 줄\n둘째 줄\n셋째 줄");
+    placeCaret(textarea, textarea.value.length);
     const splitBtn = screen.getByTestId("split-slide-btn");
     expect(splitBtn).toBeDisabled();
 
-    act(() => {
-      textarea.setSelectionRange(5, 5);
-      fireEvent.select(textarea);
-    });
+    placeCaret(textarea, 5);
     expect(splitBtn).toBeEnabled();
     fireEvent.click(splitBtn);
 
-    expect(textarea.value).toBe("둘째 줄\n셋째 줄");
+    expect(lyricsEditor().value).toBe("둘째 줄\n셋째 줄");
+    expect(lyricsEditor()).toHaveFocus();
     expect(screen.getByTestId("slide-thumb-1")).toHaveAttribute(
       "aria-current",
       "true",
     );
-    fireEvent.click(screen.getByTestId("slide-thumb-0"));
-    expect(textarea.value).toBe("첫째 줄");
+    expect(firstSong().slides[0].lines).toEqual(["첫째 줄"]);
+  });
+
+  it("편집하지 않을 때 나누기는 슬라이드를 가운데에서 나눈다", () => {
+    renderEditor();
+    const lines = firstSong().slides[0].lines;
+    expect(lines.length).toBeGreaterThan(1);
+
+    fireEvent.click(screen.getByTestId("split-slide-btn"));
+
+    const half = Math.ceil(lines.length / 2);
+    expect(firstSong().slides[0].lines).toEqual(lines.slice(0, half));
+    expect(firstSong().slides[1].lines).toEqual(lines.slice(half));
+    expect(statusBar()).toHaveTextContent("슬라이드 2/24");
   });
 
   it("Ctrl/⌘+Enter로 커서 위치에서 슬라이드를 나눈다", () => {
     renderEditor();
-    const textarea = screen.getByLabelText(
-      "현재 슬라이드 가사",
-    ) as HTMLTextAreaElement;
-    act(() => {
-      fireEvent.change(textarea, { target: { value: "가나다\n라마바" } });
-    });
+    const textarea = startLyricsEdit();
+    typeLyrics(textarea, "가나다\n라마바");
 
     textarea.setSelectionRange(4, 4);
-    fireEvent.keyDown(textarea, { key: "Enter", metaKey: true });
+    act(() => {
+      fireEvent.keyDown(textarea, { key: "Enter", metaKey: true });
+    });
 
-    expect(textarea.value).toBe("라마바");
+    expect(lyricsEditor().value).toBe("라마바");
+    expect(firstSong().slides[0].lines).toEqual(["가나다"]);
   });
 
   it("다음 슬라이드와 합치고, 4줄을 넘으면 합치기 버튼을 막는다", () => {
     renderEditor();
-    const textarea = screen.getByLabelText(
-      "현재 슬라이드 가사",
-    ) as HTMLTextAreaElement;
-    fireEvent.click(screen.getByTestId("slide-thumb-1"));
-    const secondSlideText = textarea.value;
-    fireEvent.click(screen.getByTestId("slide-thumb-0"));
-    act(() => {
-      fireEvent.change(textarea, { target: { value: "첫째 줄" } });
-    });
+    const secondSlideLines = firstSong().slides[1].lines;
+    const textarea = startLyricsEdit();
+    typeLyrics(textarea, "첫째 줄");
 
     const mergeBtn = screen.getByTestId("merge-slide-btn");
     expect(mergeBtn).toBeEnabled();
     fireEvent.click(mergeBtn);
-    expect(textarea.value).toBe(`첫째 줄\n${secondSlideText}`);
+    expect(lyricsEditor().value).toBe(
+      ["첫째 줄", ...secondSlideLines].join("\n"),
+    );
 
-    act(() => {
-      fireEvent.change(textarea, { target: { value: "가\n나\n다\n라" } });
-    });
+    typeLyrics(lyricsEditor(), "가\n나\n다\n라");
     expect(screen.getByTestId("merge-slide-btn")).toBeDisabled();
   });
 
   it("한 슬라이드에 4줄을 넘겨 입력하지 않고 나누기 안내를 띄운다", () => {
     renderEditor();
-    const textarea = screen.getByLabelText(
-      "현재 슬라이드 가사",
-    ) as HTMLTextAreaElement;
-    act(() => {
-      fireEvent.change(textarea, { target: { value: "가\n나\n다\n라" } });
-    });
+    const textarea = startLyricsEdit();
+    typeLyrics(textarea, "가\n나\n다\n라");
     expect(screen.getByTestId("slide-line-count")).toHaveTextContent("4/4줄");
 
-    act(() => {
-      fireEvent.change(textarea, {
-        target: { value: "가\n나\n다\n라\n마" },
-      });
-    });
+    typeLyrics(textarea, "가\n나\n다\n라\n마");
 
     expect(textarea.value).toBe("가\n나\n다\n라");
     expect(screen.getByTestId("slide-line-limit-hint")).toBeInTheDocument();
   });
 
-  it("should toggle blackout preview and lyrics hidden preview", () => {
+  it("한 줄이 80자를 넘는 입력은 받지 않는다", () => {
     renderEditor();
+    const textarea = startLyricsEdit();
+    typeLyrics(textarea, "가".repeat(80));
+    expect(firstSong().slides[0].lines).toEqual(["가".repeat(80)]);
 
-    const blackoutBtn = screen.getByTestId("test-blackout-btn");
-    fireEvent.click(blackoutBtn);
-    expect(screen.getByText("암전(B) 해제")).toBeInTheDocument();
+    typeLyrics(textarea, "가".repeat(81));
 
-    const lyricsBtn = screen.getByTestId("test-lyrics-btn");
-    fireEvent.click(lyricsBtn);
-    expect(screen.getByText("가사 숨김(H) 해제")).toBeInTheDocument();
+    expect(firstSong().slides[0].lines).toEqual(["가".repeat(80)]);
+    expect(screen.getByTestId("slide-line-limit-hint")).toBeInTheDocument();
   });
 
-  it("should update typography and 3x3 position when controls are changed", () => {
+  it("연속으로 입력한 가사는 실행 취소 한 번에 되돌아간다", () => {
+    renderEditor();
+    const original = firstSong().slides[0].lines;
+    const textarea = startLyricsEdit();
+    typeLyrics(textarea, "가");
+    typeLyrics(textarea, "가나");
+    typeLyrics(textarea, "가나다");
+
+    act(() => {
+      fireEvent.click(screen.getByTestId("header-undo-btn"));
+    });
+
+    expect(firstSong().slides[0].lines).toEqual(original);
+  });
+
+  it("편집기에는 암전·가사 숨김 미리보기, 테마 프리셋, 3×3 기준점, 초기화, 공유가 없다", () => {
     renderEditor();
 
-    const bottomCenterAnchor = screen.getByTestId("grid-anchor-bottom-center");
-    fireEvent.click(bottomCenterAnchor);
+    for (const testId of [
+      "test-blackout-btn",
+      "test-lyrics-btn",
+      "canvas-present-cta",
+      "style-preset-0",
+      "grid-anchor-bottom-center",
+      "song-share-publish-btn",
+      "song-share-status",
+    ]) {
+      expect(screen.queryByTestId(testId)).not.toBeInTheDocument();
+    }
+    expect(screen.queryByText("초기화")).not.toBeInTheDocument();
+  });
 
-    const opacitySlider = screen.getByLabelText("검정 오버레이 불투명도");
-    act(() => {
-      fireEvent.change(opacitySlider, { target: { value: "75" } });
+  it("리본으로 현재 곡의 글꼴·크기·정렬·줄 간격·오버레이를 바꾼다", () => {
+    renderEditor();
+    const otherSongStyle = getActivePresentation().items[1].deck!.style;
+
+    fireEvent.change(screen.getByRole("combobox", { name: "글꼴" }), {
+      target: { value: "Gmarket Sans" },
     });
+    const size = screen.getByLabelText("글자 크기");
+    expect(size).toHaveValue("40");
+    fireEvent.change(size, { target: { value: "60" } });
+    fireEvent.keyDown(size, { key: "Enter" });
+    fireEvent.click(screen.getByTestId("text-align-right-btn"));
+    fireEvent.click(screen.getByTestId("line-height-btn"));
+    fireEvent.click(screen.getByRole("button", { name: "1.8" }));
+    fireEvent.click(screen.getByTestId("overlay-btn"));
+    act(() => {
+      fireEvent.change(screen.getByLabelText("검정 오버레이 불투명도"), {
+        target: { value: "75" },
+      });
+    });
+
     expect(screen.getByText("75%")).toBeInTheDocument();
+    expect(screen.getByTestId("text-align-right-btn")).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(firstSong().style).toMatchObject({
+      fontFamily: "Gmarket Sans",
+      fontSizeVw: 6.25,
+      textAlign: "right",
+      lineHeight: 1.8,
+      overlayOpacity: 75,
+    });
+    expect(getActivePresentation().items[1].deck!.style).toEqual(
+      otherSongStyle,
+    );
+  });
+
+  it("글자 크기 키우기·줄이기는 pt 목록을 한 칸씩 움직인다", () => {
+    renderEditor();
+
+    fireEvent.click(screen.getByTestId("font-size-up-btn"));
+    expect(screen.getByLabelText("글자 크기")).toHaveValue("44");
+
+    fireEvent.click(screen.getByTestId("font-size-down-btn"));
+    fireEvent.click(screen.getByTestId("font-size-down-btn"));
+    expect(screen.getByLabelText("글자 크기")).toHaveValue("36");
   });
 
   it("should add a new slide after the current slide", () => {
@@ -226,9 +340,10 @@ describe("EditorRoute (PowerPoint식 프레젠테이션 편집기)", () => {
 
     expect(screen.getByTestId("slide-thumb-23")).toBeInTheDocument();
     expect(screen.getByTestId("song-section-0")).toHaveTextContent("6장");
-    expect(screen.getByTestId("editor-header")).toHaveTextContent(
-      "슬라이드 2/24",
-    );
+    expect(statusBar()).toHaveTextContent("슬라이드 2/24");
+    expect(firstSong().slides[1].lines).toEqual([]);
+    expect(lyricsEditor()).toHaveValue("");
+    expect(lyricsEditor()).toHaveFocus();
   });
 
   it("should trigger undo and redo in header", () => {
@@ -274,32 +389,95 @@ describe("EditorRoute (PowerPoint식 프레젠테이션 편집기)", () => {
   it("should support keyboard navigation shortcuts (Space, ArrowRight, ArrowLeft)", () => {
     renderEditor();
 
-    expect(screen.getByText("1 / 23")).toBeInTheDocument();
+    expect(statusBar()).toHaveTextContent("슬라이드 1/23");
 
     fireEvent.keyDown(window, { key: "ArrowRight" });
-    expect(screen.getByText("2 / 23")).toBeInTheDocument();
+    expect(statusBar()).toHaveTextContent("슬라이드 2/23");
 
     fireEvent.keyDown(window, { key: " " });
-    expect(screen.getByText("3 / 23")).toBeInTheDocument();
+    expect(statusBar()).toHaveTextContent("슬라이드 3/23");
 
     fireEvent.keyDown(window, { key: "ArrowLeft" });
-    expect(screen.getByText("2 / 23")).toBeInTheDocument();
+    expect(statusBar()).toHaveTextContent("슬라이드 2/23");
+
+    fireEvent.keyDown(window, { key: "End" });
+    expect(statusBar()).toHaveTextContent("슬라이드 23/23");
+
+    fireEvent.keyDown(window, { key: "Home" });
+    expect(statusBar()).toHaveTextContent("슬라이드 1/23");
   });
 
-  it("should collapse and expand song property panel", () => {
+  it("Ctrl/⌘+M·D·Delete로 슬라이드를 추가·복제·삭제한다", () => {
     renderEditor();
 
-    const collapseBtn = screen.getByTestId("collapse-property-panel-btn");
-    fireEvent.click(collapseBtn);
+    act(() => {
+      fireEvent.keyDown(window, { key: "d", code: "KeyD", ctrlKey: true });
+    });
+    expect(screen.getByTestId("song-section-0")).toHaveTextContent("6장");
+    expect(statusBar()).toHaveTextContent("슬라이드 2/24");
 
-    expect(
-      screen.getByTestId("song-property-panel-collapsed"),
-    ).toBeInTheDocument();
+    act(() => {
+      fireEvent.keyDown(window, { key: "Delete" });
+    });
+    expect(screen.getByTestId("song-section-0")).toHaveTextContent("5장");
 
-    const expandBtn = screen.getByTestId("expand-property-panel-btn");
-    fireEvent.click(expandBtn);
+    act(() => {
+      fireEvent.keyDown(window, { key: "ㅡ", code: "KeyM", metaKey: true });
+    });
+    expect(screen.getByTestId("song-section-0")).toHaveTextContent("6장");
+    expect(lyricsEditor()).toHaveValue("");
+  });
 
-    expect(screen.getByTestId("song-property-panel")).toBeInTheDocument();
+  it("Ctrl/⌘+Shift+> 로 글자 크기를 키운다", () => {
+    renderEditor();
+
+    act(() => {
+      fireEvent.keyDown(window, {
+        key: ">",
+        code: "Period",
+        ctrlKey: true,
+        shiftKey: true,
+      });
+    });
+
+    expect(screen.getByLabelText("글자 크기")).toHaveValue("44");
+  });
+
+  it("버튼에 포커스가 있을 때 Space는 슬라이드를 넘기지 않는다", () => {
+    renderEditor();
+
+    screen.getByTestId("text-align-left-btn").focus();
+    fireEvent.keyDown(window, { key: " " });
+
+    expect(statusBar()).toHaveTextContent("슬라이드 1/23");
+  });
+
+  it("글꼴 선택 상자에서 방향키를 눌러도 슬라이드가 넘어가지 않는다", () => {
+    renderEditor();
+
+    screen.getByRole("combobox", { name: "글꼴" }).focus();
+    fireEvent.keyDown(window, { key: "ArrowDown" });
+
+    expect(statusBar()).toHaveTextContent("슬라이드 1/23");
+  });
+
+  it("배경 선택 창이 떠 있으면 방향키로 슬라이드를 넘기지 않는다", () => {
+    renderEditor();
+
+    fireEvent.click(screen.getByTestId("open-bg-picker-btn"));
+    fireEvent.keyDown(window, { key: "ArrowRight" });
+
+    expect(statusBar()).toHaveTextContent("슬라이드 1/23");
+  });
+
+  it("F5는 슬라이드쇼를 시작한다", () => {
+    renderEditor();
+
+    fireEvent.keyDown(window, { key: "F5" });
+
+    expect(mockNavigate).toHaveBeenCalledWith(`/present/${DOC_ID}/fullscreen`, {
+      state: { returnTo: `/editor/${DOC_ID}` },
+    });
   });
 
   it("should open file menu and handle actions in EditorHeader", () => {
@@ -318,12 +496,15 @@ describe("EditorRoute (PowerPoint식 프레젠테이션 편집기)", () => {
     renderEditor();
 
     fireEvent.click(screen.getByTestId("slide-thumb-2"));
-    expect(screen.getByText("3 / 23")).toBeInTheDocument();
+    const selectedLines = firstSong().slides[2].lines;
+    expect(statusBar()).toHaveTextContent("슬라이드 3/23");
 
     fireEvent.click(screen.getByTestId("delete-slide-btn-0"));
 
-    expect(screen.getByText("2 / 22")).toBeInTheDocument();
-    expect(screen.getByDisplayValue(/은혜로다 주의 은혜/)).toBeInTheDocument();
+    expect(statusBar()).toHaveTextContent("슬라이드 2/22");
+    expect(
+      within(stageCanvas()).getAllByText(selectedLines[0]).length,
+    ).toBeGreaterThan(0);
   });
 
   it("존재하지 않는 presentationId 는 /presentations 로 리다이렉트된다", () => {
@@ -343,10 +524,8 @@ describe("EditorRoute (PowerPoint식 프레젠테이션 편집기)", () => {
   it("?song= 파라미터로 진입하면 해당 곡이 선택된다", () => {
     renderEditor(`/editor/${DOC_ID}?song=2`);
 
-    expect(screen.getByTestId("editor-header")).toHaveTextContent("곡 3/5");
-    expect(screen.getByTestId("editor-header")).toHaveTextContent(
-      "슬라이드 10/23",
-    );
+    expect(statusBar()).toHaveTextContent("곡 3/5");
+    expect(statusBar()).toHaveTextContent("슬라이드 10/23");
     expect(screen.getAllByText("시선").length).toBeGreaterThan(0);
   });
 
@@ -474,26 +653,26 @@ describe("EditorRoute (PowerPoint식 프레젠테이션 편집기)", () => {
 
       fireEvent.click(screen.getByTestId("slide-thumb-5"));
 
-      const header = screen.getByTestId("editor-header");
-      expect(header).toHaveTextContent("곡 2/5");
-      expect(header).toHaveTextContent("슬라이드 6/23");
-      expect(screen.getByText("6 / 23")).toBeInTheDocument();
-      expect(screen.getByDisplayValue(/주 품에 품으소서/)).toBeInTheDocument();
+      expect(statusBar()).toHaveTextContent("곡 2/5");
+      expect(statusBar()).toHaveTextContent("슬라이드 6/23");
+      expect(
+        within(stageCanvas()).getByText(/주 품에 품으소서/),
+      ).toBeInTheDocument();
     });
 
     it("방향키로 곡 경계를 넘어도 번호가 이어진다", () => {
       renderEditor();
 
       fireEvent.click(screen.getByTestId("slide-thumb-4"));
-      expect(screen.getByText("5 / 23")).toBeInTheDocument();
+      expect(statusBar()).toHaveTextContent("슬라이드 5/23");
 
       fireEvent.keyDown(window, { key: "ArrowRight" });
-      expect(screen.getByText("6 / 23")).toBeInTheDocument();
-      expect(screen.getByTestId("editor-header")).toHaveTextContent("곡 2/5");
+      expect(statusBar()).toHaveTextContent("슬라이드 6/23");
+      expect(statusBar()).toHaveTextContent("곡 2/5");
 
       fireEvent.keyDown(window, { key: "ArrowLeft" });
-      expect(screen.getByText("5 / 23")).toBeInTheDocument();
-      expect(screen.getByTestId("editor-header")).toHaveTextContent("곡 1/5");
+      expect(statusBar()).toHaveTextContent("슬라이드 5/23");
+      expect(statusBar()).toHaveTextContent("곡 1/5");
     });
 
     it("캔버스 이전/다음 버튼은 곡이 아니라 세트의 처음/끝에서만 꺼진다", () => {
@@ -505,7 +684,7 @@ describe("EditorRoute (PowerPoint식 프레젠테이션 편집기)", () => {
       const nextBtn = screen.getByTestId("canvas-next-btn");
       expect(nextBtn).not.toBeDisabled();
       fireEvent.click(nextBtn);
-      expect(screen.getByText("6 / 23")).toBeInTheDocument();
+      expect(statusBar()).toHaveTextContent("슬라이드 6/23");
 
       fireEvent.click(screen.getByTestId("slide-thumb-22"));
       expect(screen.getByTestId("canvas-next-btn")).toBeDisabled();
@@ -516,9 +695,7 @@ describe("EditorRoute (PowerPoint식 프레젠테이션 편집기)", () => {
 
       fireEvent.click(screen.getByTestId("song-section-title-2"));
 
-      expect(screen.getByTestId("editor-header")).toHaveTextContent(
-        "슬라이드 10/23",
-      );
+      expect(statusBar()).toHaveTextContent("슬라이드 10/23");
     });
 
     it("구역 메뉴로 곡을 아래로 옮기면 선택도 따라간다", () => {
@@ -531,9 +708,8 @@ describe("EditorRoute (PowerPoint식 프레젠테이션 편집기)", () => {
       expect(screen.getByTestId("song-section-1")).toHaveTextContent(
         "은혜로다",
       );
-      const header = screen.getByTestId("editor-header");
-      expect(header).toHaveTextContent("곡 2/5");
-      expect(header).toHaveTextContent("슬라이드 5/23");
+      expect(statusBar()).toHaveTextContent("곡 2/5");
+      expect(statusBar()).toHaveTextContent("슬라이드 5/23");
       expect(screen.queryByTestId("song-section-menu")).not.toBeInTheDocument();
     });
 
@@ -546,13 +722,13 @@ describe("EditorRoute (PowerPoint식 프레젠테이션 편집기)", () => {
       expect(screen.getByTestId("song-section-1")).toHaveTextContent(
         "은혜로다 (사본)",
       );
-      expect(screen.getByTestId("editor-header")).toHaveTextContent("곡 2/6");
+      expect(statusBar()).toHaveTextContent("곡 2/6");
 
       fireEvent.click(screen.getByTestId("song-section-menu-btn-1"));
       fireEvent.click(screen.getByRole("menuitem", { name: "세트에서 제거" }));
 
       expect(screen.queryByText("은혜로다 (사본)")).not.toBeInTheDocument();
-      expect(screen.getByTestId("editor-header")).toHaveTextContent("곡 2/5");
+      expect(statusBar()).toHaveTextContent("곡 2/5");
     });
 
     it("구역 메뉴로 곡 제목·아티스트를 고치고 되돌릴 수 있다", () => {
@@ -634,19 +810,24 @@ describe("EditorRoute (PowerPoint식 프레젠테이션 편집기)", () => {
       fireEvent.click(screen.getByTestId("slide-thumb-1"));
       fireEvent.click(screen.getByTestId("delete-slide-btn-5"));
 
-      expect(screen.getByText("2 / 22")).toBeInTheDocument();
-      expect(screen.getByTestId("editor-header")).toHaveTextContent("곡 1/5");
+      expect(statusBar()).toHaveTextContent("슬라이드 2/22");
+      expect(statusBar()).toHaveTextContent("곡 1/5");
     });
 
-    it("우측 패널의 테마 프리셋이 현재 곡 스타일에 적용된다", () => {
+    it("다른 곡을 고르면 리본이 그 곡의 서식을 보여 준다", () => {
       renderEditor();
 
-      expect(screen.getByText("40%")).toBeInTheDocument();
+      fireEvent.change(screen.getByRole("combobox", { name: "글꼴" }), {
+        target: { value: "Gmarket Sans" },
+      });
+      fireEvent.click(screen.getByTestId("song-section-title-1"));
 
-      fireEvent.click(screen.getByTestId("style-preset-2"));
-
-      expect(screen.getByDisplayValue("Gmarket Sans")).toBeInTheDocument();
-      expect(screen.getByText("50%")).toBeInTheDocument();
+      expect(screen.getByTestId("ribbon-song-label")).toHaveTextContent(
+        getActivePresentation().items[1].deck!.title,
+      );
+      expect(screen.getByRole("combobox", { name: "글꼴" })).toHaveValue(
+        getActivePresentation().items[1].deck!.style.fontFamily,
+      );
     });
   });
 

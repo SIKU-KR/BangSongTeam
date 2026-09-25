@@ -98,7 +98,9 @@ export function SongPickerModal({
   useEffect(() => {
     if (!isOpen || libraryDialog) return;
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      if (e.key !== "Escape") return;
+      if (document.querySelectorAll('[role="dialog"]').length > 1) return;
+      onClose();
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);

@@ -285,6 +285,20 @@ describe("SongPickerModal", () => {
       expect(getUserSongs()[0].title).toBe("내가 만든 찬양");
     });
 
+    it("보관함 곡 미리보기에서 공개를 시작하고, 동의 창의 Esc는 곡 추가 창을 닫지 않는다", () => {
+      seedMySong();
+      renderPicker();
+
+      expect(screen.getByTestId("song-share-status")).toHaveTextContent(
+        "비공개",
+      );
+      fireEvent.click(screen.getByTestId("song-share-publish-btn"));
+      expect(screen.getByTestId("publish-dialog")).toBeInTheDocument();
+
+      fireEvent.keyDown(window, { key: "Escape" });
+      expect(onCloseMock).not.toHaveBeenCalled();
+    });
+
     it("확인을 거쳐 보관함에서 삭제한다", () => {
       const mine = seedMySong();
       renderPicker();

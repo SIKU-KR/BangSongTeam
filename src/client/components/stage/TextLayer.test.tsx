@@ -142,3 +142,19 @@ describe("TextLayer Component", () => {
     );
   });
 });
+
+describe("TextLayer content 슬롯", () => {
+  it("content가 있으면 가사 줄 대신 그 내용을 박스 안에 그린다", () => {
+    render(
+      <TextLayer
+        slide={{ id: "s1", order: 0, lines: ["원래 가사"] }}
+        style={DEFAULT_DECK_STYLE}
+        content={<textarea aria-label="편집기" />}
+      />,
+    );
+
+    const box = screen.getByTestId("text-layer-box");
+    expect(box).toContainElement(screen.getByLabelText("편집기"));
+    expect(screen.queryByText("원래 가사")).not.toBeInTheDocument();
+  });
+});

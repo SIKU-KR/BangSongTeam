@@ -3,8 +3,6 @@ import React, { useState } from "react";
 export interface PublishDialogProps {
   isOpen: boolean;
   songTitle: string;
-  /** 보관함 원본이 이미 있어 그 내용이 세트 곡 내용으로 바뀐다 */
-  overwritesLibraryCopy: boolean;
   isPending: boolean;
   error: string | null;
   onConfirm: () => void;
@@ -17,7 +15,6 @@ export interface PublishDialogProps {
 export function PublishDialog({
   isOpen,
   songTitle,
-  overwritesLibraryCopy,
   isPending,
   error,
   onConfirm,
@@ -58,12 +55,10 @@ export function PublishDialog({
             언제든 비공개로 돌릴 수 있습니다. 다만 이미 가져간 사람의 사본은
             남습니다.
           </li>
-          {overwritesLibraryCopy && (
-            <li className="text-amber-700 dark:text-amber-400">
-              내 보관함에 있는 이 곡(&lsquo;{songTitle}&rsquo;)의 내용이 지금
-              세트의 내용으로 바뀝니다.
-            </li>
-          )}
+          <li>
+            내 보관함에 있는 이 곡 그대로 공개됩니다. 세트에서 고친 가사나
+            서식은 들어가지 않습니다.
+          </li>
         </ul>
 
         <label className="flex items-start gap-2 text-xs cursor-pointer">

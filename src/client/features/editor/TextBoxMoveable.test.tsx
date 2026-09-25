@@ -4,10 +4,17 @@ import { render } from "@testing-library/react";
 import { TextBoxMoveable } from "./TextBoxMoveable";
 
 const updateRect = vi.hoisted(() => vi.fn());
+const stubProps = vi.hoisted(() => ({
+  current: null as null | { onClick?: (e: { isDouble: boolean }) => void },
+}));
 vi.mock("react-moveable", async () => {
   const { forwardRef, useImperativeHandle } = await import("react");
   return {
-    default: forwardRef(function MoveableStub(_props, ref) {
+    default: forwardRef(function MoveableStub(
+      props: { onClick?: (e: { isDouble: boolean }) => void },
+      ref,
+    ) {
+      stubProps.current = props;
       useImperativeHandle(ref, () => ({ updateRect }));
       return null;
     }),
@@ -92,5 +99,23 @@ describe("TextBoxMoveable", () => {
     expect(frames.size).toBe(0);
     target.dispatchEvent(new Event("transitionrun"));
     expect(frames.size).toBe(0);
+  });
+
+  it("더블클릭이면 onDoubleClick을 부르고 한 번 클릭은 무시한다", () => {
+    const onDoubleClick = vi.fn();
+    render(
+      <TextBoxMoveable
+        target={target}
+        refreshKey="song-a"
+        onPreview={() => {}}
+        onCommit={() => {}}
+        onDoubleClick={onDoubleClick}
+      />,
+    );
+
+    stubProps.current?.onClick?.({ isDouble: false });
+    expect(onDoubleClick).not.toHaveBeenCalled();
+    stubProps.current?.onClick?.({ isDouble: true });
+    expect(onDoubleClick).toHaveBeenCalledTimes(1);
   });
 });

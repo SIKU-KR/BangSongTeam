@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { signInAsTestUser } from "../../test/sessionFixture";
 import { renderHook, act } from "@testing-library/react";
 import { DeckSchema, DEFAULT_DECK_STYLE, PresentationSchema } from "#shared";
@@ -8,7 +8,6 @@ import {
   SEED_USER_ID,
 } from "./mockPresentations";
 import {
-  linkSongToLibraryDeck,
   getActivePresentation,
   addDeckToPresentation,
   resetPresentationStore,
@@ -39,6 +38,7 @@ import {
   redo,
   canUndo,
   canRedo,
+  breakHistoryCoalescing,
 } from "./presentationStore";
 import {
   resetBackgroundCatalogForTests,
@@ -607,24 +607,86 @@ describe("문서별 Undo/Redo 격리", () => {
       const second = addDeckToPresentation(first.deck!);
       expect(second.deck?.forkedFrom).toBe("9000000000000000000aa");
     });
+  });
+});
 
-    it("보관함 원본이 없는 세트 곡은 연결하지 않고, 나중에 연결할 수 있다", () => {
-      const pasted = DeckSchema.parse({
-        ...libraryDeck(),
-        id: "9000000000000000000cc",
-        scope: "presentation",
-        forkedFrom: null,
-      });
-      const item = addDeckToPresentation(pasted);
-      expect(item.deck?.forkedFrom).toBeNull();
+describe("되돌리기 묶음", () => {
+  beforeEach(() => {
+    signInAsTestUser();
+    resetPresentationStore();
+    __loadDocumentsForTests(SEED_PRESENTATIONS);
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-09-25T00:00:00.000Z"));
+  });
 
-      const index = getActivePresentation().items.length - 1;
-      act(() => {
-        linkSongToLibraryDeck(index, "9000000000000000000dd");
-      });
-      expect(getActivePresentation().items[index].deck?.forkedFrom).toBe(
-        "9000000000000000000dd",
-      );
-    });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  const opacity = () =>
+    getActivePresentation().items[0].deck?.style.overlayOpacity;
+  const firstLines = () =>
+    getActivePresentation().items[0].deck?.slides[0].lines;
+
+  function undoAll(): number {
+    let steps = 0;
+    while (undo()) steps += 1;
+    return steps;
+  }
+
+  it("같은 키로 1초 안에 들어온 변경은 한 단계다", () => {
+    const original = opacity();
+    updateSongStyle(0, { overlayOpacity: 10 }, { coalesceKey: "opacity" });
+    vi.advanceTimersByTime(300);
+    updateSongStyle(0, { overlayOpacity: 20 }, { coalesceKey: "opacity" });
+    vi.advanceTimersByTime(300);
+    updateSongStyle(0, { overlayOpacity: 30 }, { coalesceKey: "opacity" });
+
+    expect(undoAll()).toBe(1);
+    expect(opacity()).toBe(original);
+  });
+
+  it("키가 다르거나 1초 넘게 쉬면 새 단계다", () => {
+    updateSongStyle(0, { overlayOpacity: 10 }, { coalesceKey: "opacity" });
+    updateSongStyle(0, { fontSizeVw: 5 }, { coalesceKey: "size" });
+    vi.advanceTimersByTime(1500);
+    updateSongStyle(0, { fontSizeVw: 6 }, { coalesceKey: "size" });
+
+    expect(undoAll()).toBe(3);
+  });
+
+  it("undo가 끼면 묶음이 끊긴다", () => {
+    updateSlideLines(0, 0, ["가"], { coalesceKey: "lines" });
+    updateSlideLines(0, 0, ["가나"], { coalesceKey: "lines" });
+    undo();
+    updateSlideLines(0, 0, ["다"], { coalesceKey: "lines" });
+    updateSlideLines(0, 0, ["다라"], { coalesceKey: "lines" });
+
+    expect(firstLines()).toEqual(["다라"]);
+    expect(undoAll()).toBe(1);
+  });
+
+  it("breakHistoryCoalescing 뒤의 변경은 새 단계다", () => {
+    updateSlideLines(0, 0, ["가"], { coalesceKey: "lines" });
+    breakHistoryCoalescing();
+    updateSlideLines(0, 0, ["가나"], { coalesceKey: "lines" });
+
+    expect(undoAll()).toBe(2);
+  });
+
+  it("값이 그대로면 기록하지 않는다", () => {
+    const style = getActivePresentation().items[0].deck!.style;
+    updateSongStyle(0, { textAlign: style.textAlign });
+    updateSlideLines(0, 0, [...firstLines()!]);
+
+    expect(canUndo()).toBe(false);
+  });
+
+  it("키 없는 변경은 앞의 묶음을 끊는다", () => {
+    updateSongStyle(0, { overlayOpacity: 10 }, { coalesceKey: "opacity" });
+    updatePresentationTitle("제목");
+    updateSongStyle(0, { overlayOpacity: 20 }, { coalesceKey: "opacity" });
+
+    expect(undoAll()).toBe(3);
   });
 });

@@ -6,29 +6,25 @@ import { signInAsTestUser } from "../../test/sessionFixture";
 import { withQueryClient } from "../../test/queryClientFixture";
 import { installFakeApi, type FakeApi } from "../../test/fakeApi";
 import {
-  SEED_PRESENTATIONS,
-  __loadDocumentsForTests,
-  addDeckToPresentation,
-  getActivePresentation,
-  resetPresentationStore,
-  updateSongStyle,
-} from "../presentation";
-import {
   getLibraryDeck,
   resetSongLibraryStore,
   saveSongToLibrary,
   upsertLibraryDeck,
+  useLibraryDeck,
 } from "../editor/songLibraryStore";
 import { __resetDeckSyncForTests } from "../../lib/sync/deckSync";
-import { SongSharePanel } from "./SongSharePanel";
+import { LibraryShareControls } from "./LibraryShareControls";
 
-describe("SongSharePanel (편집기 '공유')", () => {
+function LiveControls({ id }: { id: string }): React.JSX.Element | null {
+  const deck = useLibraryDeck(id);
+  return deck ? <LibraryShareControls deck={deck} /> : null;
+}
+
+describe("LibraryShareControls (내 보관함 곡 공개)", () => {
   let api: FakeApi;
 
   beforeEach(async () => {
     signInAsTestUser();
-    resetPresentationStore();
-    __loadDocumentsForTests(SEED_PRESENTATIONS);
     await resetSongLibraryStore();
     __resetDeckSyncForTests();
 
@@ -62,25 +58,20 @@ describe("SongSharePanel (편집기 '공유')", () => {
     __resetDeckSyncForTests();
   });
 
-  function addSong(): { index: number; master: Deck } {
-    const master = saveSongToLibrary({
+  function addSong(): Deck {
+    return saveSongToLibrary({
       title: "공유할 곡",
       lyricsRaw: "첫 줄\n\n둘째 줄",
     });
-    addDeckToPresentation(master);
-    return { index: getActivePresentation().items.length - 1, master };
   }
 
-  function renderPanel(index: number) {
-    const song = getActivePresentation().items[index].deck!;
-    return render(
-      withQueryClient(<SongSharePanel songIndex={index} song={song} />),
-    );
+  function renderControls(id: string) {
+    return render(withQueryClient(<LiveControls id={id} />));
   }
 
-  it("shows a private song and requires copyright consent before publishing", async () => {
-    const { index, master } = addSong();
-    renderPanel(index);
+  it("requires copyright consent, uploads, then publishes the library deck", async () => {
+    const deck = addSong();
+    renderControls(deck.id);
 
     expect(screen.getByTestId("song-share-status")).toHaveTextContent("비공개");
     fireEvent.click(screen.getByTestId("song-share-publish-btn"));
@@ -88,10 +79,9 @@ describe("SongSharePanel (편집기 '공유')", () => {
     const confirm = screen.getByTestId("publish-confirm-btn");
     expect(confirm).toBeDisabled();
     expect(screen.getByText(/CCLI/)).toBeInTheDocument();
-    expect(screen.getByText(/세트의 내용으로 바뀝니다/)).toBeInTheDocument();
+    expect(screen.getByText(/보관함에 있는 이 곡 그대로/)).toBeInTheDocument();
 
     fireEvent.click(screen.getByTestId("publish-accept-checkbox"));
-    expect(confirm).toBeEnabled();
     fireEvent.click(confirm);
 
     await waitFor(() =>
@@ -100,7 +90,7 @@ describe("SongSharePanel (편집기 '공유')", () => {
       ),
     );
     const patch = api.calls.find((c) => c.method === "PATCH");
-    expect(patch?.path).toBe(`/api/decks/${master.id}/visibility`);
+    expect(patch?.path).toBe(`/api/decks/${deck.id}/visibility`);
     expect(patch?.body).toEqual({
       visibility: "public",
       acceptedCopyrightNotice: true,
@@ -108,36 +98,28 @@ describe("SongSharePanel (편집기 '공유')", () => {
     const putIndex = api.calls.findIndex((c) => c.method === "PUT");
     expect(putIndex).toBeGreaterThanOrEqual(0);
     expect(putIndex).toBeLessThan(api.calls.indexOf(patch!));
-  });
-
-  it("offers '공개본 업데이트' when the set copy has changed", () => {
-    const { index, master } = addSong();
-    upsertLibraryDeck({ ...master, visibility: "public" }, { push: false });
-    updateSongStyle(index, { overlayOpacity: 90 });
-    renderPanel(index);
-
-    expect(screen.getByTestId("song-share-update-btn")).toBeInTheDocument();
-    expect(screen.getByTestId("song-share-unpublish-btn")).toBeInTheDocument();
+    expect(screen.queryByTestId("publish-dialog")).not.toBeInTheDocument();
   });
 
   it("unpublishes", async () => {
-    const { index, master } = addSong();
-    upsertLibraryDeck({ ...master, visibility: "public" }, { push: false });
-    renderPanel(index);
+    const deck = addSong();
+    upsertLibraryDeck({ ...deck, visibility: "public" }, { push: false });
+    renderControls(deck.id);
 
     fireEvent.click(screen.getByTestId("song-share-unpublish-btn"));
     await waitFor(() =>
-      expect(getLibraryDeck(master.id)?.visibility).toBe("private"),
+      expect(getLibraryDeck(deck.id)?.visibility).toBe("private"),
     );
+    expect(screen.getByTestId("song-share-status")).toHaveTextContent("비공개");
   });
 
-  it("shows taken-down songs without a publish button", () => {
-    const { index, master } = addSong();
+  it("shows taken-down songs without publish controls", () => {
+    const deck = addSong();
     upsertLibraryDeck(
-      { ...master, takedownAt: "2026-09-23T00:00:00.000Z" },
+      { ...deck, takedownAt: "2026-09-23T00:00:00.000Z" },
       { push: false },
     );
-    renderPanel(index);
+    renderControls(deck.id);
 
     expect(screen.getByTestId("song-share-status")).toHaveTextContent(
       "게시 중단됨",
@@ -145,11 +127,14 @@ describe("SongSharePanel (편집기 '공유')", () => {
     expect(
       screen.queryByTestId("song-share-publish-btn"),
     ).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("song-share-unpublish-btn"),
+    ).not.toBeInTheDocument();
   });
 
-  it("credits the original author and sends manual correction suggestions", async () => {
+  it("sends a correction suggestion to the original of a forked song", async () => {
     const source = "c000000060000000000aa";
-    const fork = saveSongToLibrary({ title: "가져온 곡", lyricsRaw: "가사" });
+    const fork = addSong();
     upsertLibraryDeck(
       {
         ...fork,
@@ -159,12 +144,8 @@ describe("SongSharePanel (편집기 '공유')", () => {
       },
       { push: false },
     );
-    addDeckToPresentation(getLibraryDeck(fork.id)!);
-    renderPanel(getActivePresentation().items.length - 1);
+    renderControls(fork.id);
 
-    expect(screen.getByTestId("song-share-attribution")).toHaveTextContent(
-      "원작: 김찬양",
-    );
     fireEvent.click(screen.getByTestId("song-share-correction-btn"));
     expect(screen.getByTestId("report-reason-correction")).toBeChecked();
     fireEvent.change(screen.getByTestId("report-details-input"), {
@@ -181,20 +162,18 @@ describe("SongSharePanel (편집기 '공유')", () => {
     });
   });
 
-  it("does not offer a lyric-library contribution option", () => {
-    const { index } = addSong();
-    renderPanel(index);
-
-    fireEvent.click(screen.getByTestId("song-share-publish-btn"));
+  it("does not offer correction for songs the user wrote", () => {
+    const deck = addSong();
+    renderControls(deck.id);
     expect(
-      screen.queryByTestId("publish-contribute-checkbox"),
+      screen.queryByTestId("song-share-correction-btn"),
     ).not.toBeInTheDocument();
   });
 
   it("disables sharing while offline", () => {
     const onLine = vi.spyOn(navigator, "onLine", "get").mockReturnValue(false);
-    const { index } = addSong();
-    renderPanel(index);
+    const deck = addSong();
+    renderControls(deck.id);
 
     expect(screen.getByTestId("song-share-publish-btn")).toBeDisabled();
     expect(
