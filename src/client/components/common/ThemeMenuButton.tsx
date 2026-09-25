@@ -1,11 +1,5 @@
 import React from "react";
-import {
-  ChevronsUpDownIcon,
-  MonitorIcon,
-  MoonIcon,
-  SunIcon,
-  type LucideIcon,
-} from "lucide-react";
+import { MonitorIcon, MoonIcon, SunIcon, type LucideIcon } from "lucide-react";
 import { Button } from "#components/ui/button";
 import {
   DropdownMenu,
@@ -16,18 +10,12 @@ import {
   DropdownMenuRadioItem,
   DropdownMenuTrigger,
 } from "#components/ui/dropdown-menu";
-import { SidebarMenuButton, SidebarMenuItem } from "#components/ui/sidebar";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "#components/ui/tooltip";
 import { useTheme } from "#components/theme-provider";
-
-export interface ThemeMenuButtonProps {
-  variant?: "sidebar" | "compact";
-  align?: "start" | "end";
-}
 
 interface ThemeOption {
   mode: ReturnType<typeof useTheme>["theme"];
@@ -61,22 +49,15 @@ function isThemeMode(value: unknown): value is ThemeOption["mode"] {
   return THEME_OPTIONS.some((option) => option.mode === value);
 }
 
-/**
- * 테마 모드 전환 메뉴 버튼.
- * - `sidebar`: 사이드바 아래 메뉴 항목 (위로 연다)
- * - `compact`: 헤더의 아이콘 버튼 (아래로 연다)
- */
-export function ThemeMenuButton({
-  variant = "sidebar",
-  align = "start",
-}: ThemeMenuButtonProps): React.JSX.Element {
+/** 헤더의 테마 모드 전환 아이콘 버튼 (편집기·홈 공통) */
+export function ThemeMenuButton(): React.JSX.Element {
   const { theme, setTheme } = useTheme();
   const current =
     THEME_OPTIONS.find((option) => option.mode === theme) ?? THEME_OPTIONS[2];
   const CurrentIcon = current.icon;
 
-  const trigger =
-    variant === "compact" ? (
+  return (
+    <DropdownMenu>
       <Tooltip>
         <TooltipTrigger
           render={
@@ -91,29 +72,10 @@ export function ThemeMenuButton({
         </TooltipTrigger>
         <TooltipContent>테마 설정: {current.label}</TooltipContent>
       </Tooltip>
-    ) : (
-      <DropdownMenuTrigger
-        data-testid="theme-menu-button"
-        render={<SidebarMenuButton size="lg" />}
-      >
-        <CurrentIcon />
-        <div className="grid flex-1 text-left leading-tight">
-          <span className="truncate font-semibold">{current.label}</span>
-          <span className="truncate text-xs text-muted-foreground">
-            화면 모드 전환
-          </span>
-        </div>
-        <ChevronsUpDownIcon />
-      </DropdownMenuTrigger>
-    );
-
-  const menu = (
-    <DropdownMenu>
-      {trigger}
       <DropdownMenuContent
         data-testid="theme-menu-dropdown"
-        side={variant === "compact" ? "bottom" : "top"}
-        align={align}
+        side="bottom"
+        align="end"
         className="w-56"
       >
         <DropdownMenuGroup>
@@ -144,12 +106,6 @@ export function ThemeMenuButton({
         </DropdownMenuGroup>
       </DropdownMenuContent>
     </DropdownMenu>
-  );
-
-  return variant === "sidebar" ? (
-    <SidebarMenuItem>{menu}</SidebarMenuItem>
-  ) : (
-    menu
   );
 }
 

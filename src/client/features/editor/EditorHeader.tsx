@@ -336,7 +336,7 @@ export function EditorHeader({
           </PopoverContent>
         </Popover>
 
-        <ThemeMenuButton variant="compact" align="end" />
+        <ThemeMenuButton />
 
         <Button
           data-testid="header-present-btn"
