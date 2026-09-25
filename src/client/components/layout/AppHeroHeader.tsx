@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import type { SortOrder } from "../../routes/appShellContext";
+import type { DriveTypeFilter, SortOrder } from "../../routes/appShellContext";
 
 export interface AppHeroHeaderProps {
   title: string;
@@ -8,15 +8,31 @@ export interface AppHeroHeaderProps {
   onSearchQueryChange: (value: string) => void;
   sortOrder: SortOrder;
   onSortOrderChange: (order: SortOrder) => void;
+  typeFilter: DriveTypeFilter;
+  onTypeFilterChange: (filter: DriveTypeFilter) => void;
   itemCountLabel: string;
   onQuickAdd: () => void;
   toolbarStart?: React.ReactNode;
   quickAddSlot?: React.ReactNode;
   /** 필터·정렬·빠른 추가. 드라이브 전용이라 다른 화면에서는 숨긴다 */
   showControls?: boolean;
+  /** 유형·정렬 칩. 휴지통처럼 목록에 반영되지 않는 화면에서는 숨긴다 */
+  showFilters?: boolean;
 }
 
-type DropdownName = "type" | "category" | "owner" | "sort";
+type DropdownName = "type" | "sort";
+
+const TYPE_FILTER_LABELS: Record<DriveTypeFilter, string> = {
+  all: "전체",
+  folder: "폴더",
+  file: "프레젠테이션",
+};
+
+const TYPE_FILTER_OPTIONS: readonly DriveTypeFilter[] = [
+  "all",
+  "folder",
+  "file",
+];
 
 /** 검색, 필터 및 정렬을 제공하는 히어로 헤더와 툴바 */
 export function AppHeroHeader({
@@ -26,15 +42,15 @@ export function AppHeroHeader({
   onSearchQueryChange,
   sortOrder,
   onSortOrderChange,
+  typeFilter,
+  onTypeFilterChange,
   itemCountLabel,
   onQuickAdd,
   toolbarStart,
   quickAddSlot,
   showControls = true,
+  showFilters = true,
 }: AppHeroHeaderProps): React.JSX.Element {
-  const [typeFilter, setTypeFilter] = useState<string>("전체");
-  const [categoryFilter, setCategoryFilter] = useState<string>("전체");
-  const [ownerFilter, setOwnerFilter] = useState<string>("전체");
   const [openDropdown, setOpenDropdown] = useState<DropdownName | null>(null);
   const controlsRef = useRef<HTMLDivElement>(null);
 
@@ -119,7 +135,7 @@ export function AppHeroHeader({
             </div>
           </div>
 
-          {showControls && (
+          {showControls && showFilters && (
             <div
               ref={controlsRef}
               className="flex flex-wrap items-center justify-center gap-2 pt-1 relative"
@@ -127,14 +143,15 @@ export function AppHeroHeader({
               <div className="relative">
                 <button
                   type="button"
+                  data-testid="drive-type-dropdown"
                   onClick={() => toggleDropdown("type")}
                   className={`px-3.5 py-1.5 rounded-full text-xs font-medium border flex items-center gap-1.5 transition-all cursor-pointer ${
-                    typeFilter !== "전체"
+                    typeFilter !== "all"
                       ? "bg-emerald-50 dark:bg-zinc-800 border-emerald-500 text-emerald-700 dark:text-emerald-400 font-semibold"
                       : "bg-white dark:bg-zinc-900/80 border-zinc-300 dark:border-zinc-800 hover:border-zinc-400 dark:hover:border-zinc-700 text-zinc-700 dark:text-zinc-300"
                   }`}
                 >
-                  <span>유형: {typeFilter}</span>
+                  <span>유형: {TYPE_FILTER_LABELS[typeFilter]}</span>
                   <svg
                     className="w-3.5 h-3.5 text-zinc-400"
                     fill="none"
@@ -150,110 +167,22 @@ export function AppHeroHeader({
                   </svg>
                 </button>
                 {openDropdown === "type" && (
-                  <div className="absolute top-full left-0 mt-2 w-36 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-lg dark:shadow-2xl z-50 py-1.5">
-                    {["전체", "프레젠테이션", "단일 곡", "배경 루프"].map(
-                      (opt) => (
-                        <button
-                          key={opt}
-                          type="button"
-                          onClick={() => {
-                            setTypeFilter(opt);
-                            setOpenDropdown(null);
-                          }}
-                          className="w-full text-left px-3 py-1.5 text-xs hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white"
-                        >
-                          {opt}
-                        </button>
-                      ),
-                    )}
-                  </div>
-                )}
-              </div>
-
-              <div className="relative">
-                <button
-                  type="button"
-                  onClick={() => toggleDropdown("category")}
-                  className={`px-3.5 py-1.5 rounded-full text-xs font-medium border flex items-center gap-1.5 transition-all cursor-pointer ${
-                    categoryFilter !== "전체"
-                      ? "bg-indigo-50 dark:bg-zinc-800 border-indigo-500 text-indigo-700 dark:text-indigo-300 font-semibold"
-                      : "bg-white dark:bg-zinc-900/80 border-zinc-300 dark:border-zinc-800 hover:border-zinc-400 dark:hover:border-zinc-700 text-zinc-700 dark:text-zinc-300"
-                  }`}
-                >
-                  <span>카테고리: {categoryFilter}</span>
-                  <svg
-                    className="w-3.5 h-3.5 text-zinc-400"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
+                  <div
+                    data-testid="drive-type-menu"
+                    className="absolute top-full left-0 mt-2 w-36 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-lg dark:shadow-2xl z-50 py-1.5"
                   >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M19 9l-7 7-7-7"
-                    />
-                  </svg>
-                </button>
-                {openDropdown === "category" && (
-                  <div className="absolute top-full left-0 mt-2 w-36 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-lg dark:shadow-2xl z-50 py-1.5">
-                    {["전체", "잔잔한", "밝은", "웅장한", "따뜻한"].map(
-                      (opt) => (
-                        <button
-                          key={opt}
-                          type="button"
-                          onClick={() => {
-                            setCategoryFilter(opt);
-                            setOpenDropdown(null);
-                          }}
-                          className="w-full text-left px-3 py-1.5 text-xs hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white"
-                        >
-                          {opt}
-                        </button>
-                      ),
-                    )}
-                  </div>
-                )}
-              </div>
-
-              <div className="relative">
-                <button
-                  type="button"
-                  onClick={() => toggleDropdown("owner")}
-                  className={`px-3.5 py-1.5 rounded-full text-xs font-medium border flex items-center gap-1.5 transition-all cursor-pointer ${
-                    ownerFilter !== "전체"
-                      ? "bg-teal-50 dark:bg-zinc-800 border-teal-500 text-teal-700 dark:text-teal-300 font-semibold"
-                      : "bg-white dark:bg-zinc-900/80 border-zinc-300 dark:border-zinc-800 hover:border-zinc-400 dark:hover:border-zinc-700 text-zinc-700 dark:text-zinc-300"
-                  }`}
-                >
-                  <span>소유자: {ownerFilter}</span>
-                  <svg
-                    className="w-3.5 h-3.5 text-zinc-400"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M19 9l-7 7-7-7"
-                    />
-                  </svg>
-                </button>
-                {openDropdown === "owner" && (
-                  <div className="absolute top-full left-0 mt-2 w-36 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-lg dark:shadow-2xl z-50 py-1.5">
-                    {["전체", "내가 만든 항목", "공유된 항목"].map((opt) => (
+                    {TYPE_FILTER_OPTIONS.map((option) => (
                       <button
-                        key={opt}
+                        key={option}
                         type="button"
+                        data-testid={`type-option-${option}`}
                         onClick={() => {
-                          setOwnerFilter(opt);
+                          onTypeFilterChange(option);
                           setOpenDropdown(null);
                         }}
                         className="w-full text-left px-3 py-1.5 text-xs hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white"
                       >
-                        {opt}
+                        {TYPE_FILTER_LABELS[option]}
                       </button>
                     ))}
                   </div>

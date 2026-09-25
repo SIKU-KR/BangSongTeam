@@ -3,7 +3,11 @@ export {
   type QuickLyricPasteModalProps,
 } from "./QuickLyricPasteModal";
 
-export { SongPickerModal, type SongPickerModalProps } from "./SongPickerModal";
+export {
+  SongPickerModal,
+  type SongPickerModalProps,
+  type SongPickerMode,
+} from "./SongPickerModal";
 
 export * from "./songLibraryStore";
 

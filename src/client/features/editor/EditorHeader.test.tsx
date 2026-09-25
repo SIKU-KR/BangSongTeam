@@ -16,7 +16,6 @@ function renderHeader(
     totalSlideCount: 2,
     onNewPresentation: vi.fn(),
     onOpenLyricModal: vi.fn(),
-    onLoadSampleSongs: vi.fn(),
   };
 
   return render(
@@ -68,6 +67,19 @@ describe("EditorHeader", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("새 가사 입력 항목은 메뉴를 닫고 onOpenLyricModal을 부른다", () => {
+    const onOpenLyricModal = vi.fn();
+    renderHeader({ onOpenLyricModal });
+
+    fireEvent.click(screen.getByTestId("header-file-menu-btn"));
+    fireEvent.click(screen.getByTestId("header-file-menu-lyric-btn"));
+
+    expect(onOpenLyricModal).toHaveBeenCalledTimes(1);
+    expect(
+      screen.queryByTestId("header-file-menu-dropdown"),
+    ).not.toBeInTheDocument();
+  });
+
   it("단축키 안내가 ESC 키와 바깥 클릭으로 닫힌다", () => {
     renderHeader();
     const shortcutsButton = screen.getByTestId("header-shortcuts-btn");
@@ -83,5 +95,24 @@ describe("EditorHeader", () => {
 
     fireEvent.mouseDown(document.body);
     expect(screen.queryByText("발표 송출 단축키")).not.toBeInTheDocument();
+  });
+
+  it("단축키 안내에 PRD 송출 단축키와 번호 이동 규칙을 모두 보여 준다", () => {
+    renderHeader();
+    fireEvent.click(screen.getByTestId("header-shortcuts-btn"));
+    const popover = screen.getByTestId("header-shortcuts-popover");
+
+    for (const text of [
+      "→ / Space / PageDown",
+      "← / PageUp",
+      "Backspace",
+      "Esc",
+      "전체화면 해제 (송출 종료)",
+      "3초 동안 입력이 없으면 입력한 번호가 지워집니다.",
+      "없는 번호는 무시합니다.",
+      "입력 중인 번호는 청중 화면에 표시되지 않습니다.",
+    ]) {
+      expect(popover).toHaveTextContent(text);
+    }
   });
 });

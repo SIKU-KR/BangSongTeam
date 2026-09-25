@@ -27,10 +27,13 @@ export interface SongPickerModalProps {
   onClose: () => void;
   onSelectSong: (deck: Deck) => void;
   initialSearch?: string;
+  /** 열릴 때 보여 줄 화면. `create`는 목록을 건너뛰고 가사 직접 입력 폼을 바로 연다. */
+  initialMode?: SongPickerMode;
 }
 
+export type SongPickerMode = "browse" | "create";
+
 type FilterType = "all" | "mine" | "shared";
-type Mode = "browse" | "create";
 type LibraryDialog = { kind: "edit" | "delete"; deck: Deck };
 
 type PickerEntry =
@@ -60,13 +63,14 @@ export function SongPickerModal({
   onClose,
   onSelectSong,
   initialSearch = "",
+  initialMode = "browse",
 }: SongPickerModalProps): React.JSX.Element | null {
   const mySongs = useUserSongs();
   const isOnline = useIsOnline();
 
   const [searchQuery, setSearchQuery] = useState(initialSearch);
   const [filter, setFilter] = useState<FilterType>("all");
-  const [mode, setMode] = useState<Mode>("browse");
+  const [mode, setMode] = useState<SongPickerMode>("browse");
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [reportTarget, setReportTarget] = useState<{
@@ -85,10 +89,11 @@ export function SongPickerModal({
   useEffect(() => {
     if (isOpen) {
       setSearchQuery(initialSearch);
-      setMode("browse");
+      setMode(initialMode);
+      setSelectedKey(null);
       setActionError(null);
     }
-  }, [isOpen, initialSearch]);
+  }, [isOpen, initialSearch, initialMode]);
 
   useEffect(() => {
     if (!isOpen || libraryDialog) return;

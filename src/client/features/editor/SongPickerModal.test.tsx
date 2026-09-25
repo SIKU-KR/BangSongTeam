@@ -484,6 +484,52 @@ describe("SongPickerModal", () => {
     });
   });
 
+  describe("initialMode", () => {
+    it("create로 열면 목록 대신 가사 직접 입력 폼을 바로 보여 준다", () => {
+      seedMySong();
+      render(
+        withQueryClient(
+          <SongPickerModal
+            isOpen={true}
+            initialMode="create"
+            onClose={onCloseMock}
+            onSelectSong={onSelectSongMock}
+          />,
+        ),
+      );
+
+      expect(screen.getByText("새 찬양 가사 직접 입력")).toBeInTheDocument();
+      expect(
+        screen.queryByTestId("song-picker-add-btn"),
+      ).not.toBeInTheDocument();
+    });
+
+    it("다시 열 때 이전에 보던 곡이 아니라 지정한 화면으로 연다", () => {
+      seedMySong();
+      const renderWith = (isOpen: boolean, initialMode: "browse" | "create") =>
+        withQueryClient(
+          <SongPickerModal
+            isOpen={isOpen}
+            initialMode={initialMode}
+            onClose={onCloseMock}
+            onSelectSong={onSelectSongMock}
+          />,
+        );
+      const { rerender } = render(renderWith(true, "browse"));
+      expect(screen.getByTestId("song-picker-add-btn")).toBeInTheDocument();
+
+      rerender(renderWith(false, "browse"));
+      rerender(renderWith(true, "create"));
+
+      expect(
+        screen.getByTestId("song-picker-create-lyrics-input"),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByTestId("song-picker-add-btn"),
+      ).not.toBeInTheDocument();
+    });
+  });
+
   describe("빈 상태 및 수량 표기", () => {
     it("공유 곡 탭에서 공유 곡이 없을 때 검색 전 문구를 표시한다", async () => {
       api.restore();

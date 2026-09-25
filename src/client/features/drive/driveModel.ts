@@ -8,7 +8,7 @@ import {
   type FolderIndex,
   type Presentation,
 } from "#shared";
-import type { SortOrder } from "../../routes/appShellContext";
+import type { DriveTypeFilter, SortOrder } from "../../routes/appShellContext";
 
 /**
  * 드라이브 화면의 파생 데이터 (순수 함수).
@@ -186,6 +186,15 @@ function sortItems(items: DriveItem[], sortOrder: SortOrder): DriveItem[] {
   const folders = items.filter((item) => item.kind === "folder").sort(compare);
   const files = items.filter((item) => item.kind === "file").sort(compare);
   return [...folders, ...files];
+}
+
+/** 유형 필터에 맞는 항목만 남긴다. `all`이면 그대로 돌려준다 */
+export function filterByType(
+  items: DriveItem[],
+  typeFilter: DriveTypeFilter,
+): DriveItem[] {
+  if (typeFilter === "all") return items;
+  return items.filter((item) => item.kind === typeFilter);
 }
 
 /** 폴더 하나의 내용 (휴지통 제외). `null`이면 내 드라이브 루트 */
