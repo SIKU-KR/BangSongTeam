@@ -321,7 +321,6 @@ export function DriveBrowser({
   const summary = query
     ? `‘${query}’ 검색 결과 ${items.length}개`
     : `폴더 ${folderCount}개 · 프레젠테이션 ${fileCount}개`;
-  const variant = isTrash || query ? "location" : "owner";
 
   return (
     <div
@@ -372,8 +371,9 @@ export function DriveBrowser({
           {(items.length > 0 || showTrashFolder) && (
             <>
               <DriveListHeader
-                variant={variant}
-                secondLabel={isTrash ? "원래 위치" : query ? "위치" : "소유자"}
+                locationLabel={
+                  isTrash ? "원래 위치" : query ? "위치" : undefined
+                }
                 dateLabel={isTrash ? "삭제일" : "수정일"}
                 sort={isTrash ? undefined : sortOrder}
                 onSort={
@@ -384,7 +384,6 @@ export function DriveBrowser({
               />
               {showTrashFolder && (
                 <TrashFolderRow
-                  count={trashCount}
                   onOpen={() => navigate(TRASH_PATH)}
                   menuActions={() => {
                     drive.clearSelection();
@@ -402,7 +401,7 @@ export function DriveBrowser({
                     <DriveListRow
                       key={item.key}
                       item={item}
-                      variant={variant}
+                      showLocation={isTrash || Boolean(query)}
                       date={
                         isTrash
                           ? (trashedAtOf(item) ?? item.updatedAt)

@@ -38,14 +38,11 @@ interface DriveItemBase extends DriveItemRef {
 export interface DriveFolderItem extends DriveItemBase {
   kind: "folder";
   folder: Folder;
-  childCount: number;
 }
 
 export interface DriveFileItem extends DriveItemBase {
   kind: "file";
   presentation: Presentation;
-  songCount: number;
-  slideCount: number;
 }
 
 export type DriveItem = DriveFolderItem | DriveFileItem;
@@ -62,13 +59,6 @@ export function parseItemKey(key: string): DriveItemRef {
     kind: key.slice(0, separator) as DriveItemKind,
     id: key.slice(separator + 1),
   };
-}
-
-export function countSlides(presentation: Presentation): number {
-  return presentation.items.reduce(
-    (sum, item) => sum + (item.deck?.slides.length ?? 0),
-    0,
-  );
 }
 
 /** 목록의 날짜 칸 ("2026. 9. 24.") */
@@ -95,27 +85,6 @@ export function isPresentationTrashed(
   return isFolderTrashed(index, presentationFolderId(index, presentation));
 }
 
-/** 폴더별 '항목 N개' (휴지통 제외 직속 폴더 + 프레젠테이션) */
-export function buildChildCounts(
-  index: FolderIndex<Folder>,
-  presentations: readonly Presentation[],
-): Map<string, number> {
-  const counts = new Map<string, number>();
-  const bump = (folderId: string | null): void => {
-    if (folderId === null) return;
-    counts.set(folderId, (counts.get(folderId) ?? 0) + 1);
-  };
-  for (const folder of index.byId.values()) {
-    if (!folder.trashedAt) bump(index.parentOf.get(folder.id) ?? null);
-  }
-  for (const presentation of presentations) {
-    if (!presentation.trashedAt) {
-      bump(presentationFolderId(index, presentation));
-    }
-  }
-  return counts;
-}
-
 /** 위치 문자열 ("내 드라이브 › 2026 › 주일") */
 export function formatLocation(
   index: FolderIndex<Folder>,
@@ -127,10 +96,7 @@ export function formatLocation(
   ].join(" › ");
 }
 
-function toFolderItem(
-  folder: Folder,
-  counts: Map<string, number>,
-): DriveFolderItem {
+function toFolderItem(folder: Folder): DriveFolderItem {
   return {
     kind: "folder",
     key: itemKey("folder", folder.id),
@@ -138,7 +104,6 @@ function toFolderItem(
     name: folder.name,
     updatedAt: folder.updatedAt,
     folder,
-    childCount: counts.get(folder.id) ?? 0,
   };
 }
 
@@ -150,18 +115,15 @@ function toFileItem(presentation: Presentation): DriveFileItem {
     name: presentation.title,
     updatedAt: presentation.updatedAt,
     presentation,
-    songCount: presentation.items.length,
-    slideCount: countSlides(presentation),
   };
 }
 
 const collator = new Intl.Collator("ko", { numeric: true });
 
-/** 처음 정렬할 때의 기본 방향 (이름은 가나다순, 날짜·슬라이드 수는 큰 값부터) */
+/** 처음 정렬할 때의 기본 방향 (이름은 가나다순, 날짜는 최근부터) */
 export const DEFAULT_SORT_DIRECTION: Record<SortKey, SortOrder["direction"]> = {
   name: "asc",
   updated: "desc",
-  slides: "desc",
 };
 
 export const DEFAULT_SORT_ORDER: SortOrder = {
@@ -183,14 +145,10 @@ export function nextSortOrder(current: SortOrder, key: SortKey): SortOrder {
 function compareItems(sortOrder: SortOrder) {
   const sign = sortOrder.direction === "asc" ? 1 : -1;
   return (a: DriveItem, b: DriveItem): number => {
-    let primary = 0;
-    if (sortOrder.key === "updated") {
-      primary = a.updatedAt.localeCompare(b.updatedAt);
-    } else if (sortOrder.key === "name") {
-      primary = collator.compare(a.name, b.name);
-    } else if (a.kind === "file" && b.kind === "file") {
-      primary = a.slideCount - b.slideCount;
-    }
+    const primary =
+      sortOrder.key === "updated"
+        ? a.updatedAt.localeCompare(b.updatedAt)
+        : collator.compare(a.name, b.name);
     return primary !== 0 ? primary * sign : collator.compare(a.name, b.name);
   };
 }
@@ -218,10 +176,9 @@ export function listFolderContents(
   folderId: string | null,
   sortOrder: SortOrder,
 ): DriveItem[] {
-  const counts = buildChildCounts(index, presentations);
   const folders = (index.childrenOf.get(folderId) ?? [])
     .filter((folder) => !folder.trashedAt)
-    .map((folder) => toFolderItem(folder, counts));
+    .map(toFolderItem);
   const files = presentations
     .filter(
       (presentation) =>
@@ -261,7 +218,6 @@ export function searchDrive(
   const trimmed = query.trim();
   if (!trimmed) return [];
 
-  const counts = buildChildCounts(index, presentations);
   const folders = [...index.byId.values()]
     .filter(
       (folder) =>
@@ -269,7 +225,7 @@ export function searchDrive(
         hangulIncludes(folder.name, trimmed),
     )
     .map((folder) => ({
-      ...toFolderItem(folder, counts),
+      ...toFolderItem(folder),
       location: formatLocation(index, index.parentOf.get(folder.id) ?? null),
     }));
   const files = presentations
@@ -308,7 +264,6 @@ export function listTrash(
   query = "",
 ): DriveItem[] {
   const trimmed = query.trim();
-  const counts = buildChildCounts(index, presentations);
 
   const folders = [...index.byId.values()]
     .filter(
@@ -318,7 +273,7 @@ export function listTrash(
     )
     .filter((folder) => !trimmed || hangulIncludes(folder.name, trimmed))
     .map((folder) => ({
-      ...toFolderItem(folder, counts),
+      ...toFolderItem(folder),
       location: formatLocation(index, index.parentOf.get(folder.id) ?? null),
     }));
   const files = presentations
