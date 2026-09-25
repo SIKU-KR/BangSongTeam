@@ -309,7 +309,7 @@ export function EditorRoute(): React.JSX.Element {
 
   const handleNewPresentation = () => {
     const created = createNewPresentation(
-      "새 주일 예배 프레젠테이션",
+      undefined,
       presentation.folderId ?? null,
     );
     setActiveSongIndex(0);

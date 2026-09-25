@@ -549,6 +549,27 @@ describe("멀티 문서 컬렉션", () => {
     expect(() => PresentationSchema.parse(created)).not.toThrow();
   });
 
+  it("제목 없이 만든 프레젠테이션은 만든 날짜와 시간이 제목이 된다", () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      const createdAt = new Date(2026, 8, 25, 15, 42);
+      vi.setSystemTime(createdAt);
+
+      const created = createNewPresentation();
+
+      expect(created.title).toBe(
+        new Intl.DateTimeFormat("ko-KR", {
+          dateStyle: "medium",
+          timeStyle: "short",
+        }).format(createdAt),
+      );
+      expect(created.title).toContain("2026");
+      expect(created.title).toContain("3:42");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("usePresentationList는 문서 추가 시 리렌더된다", () => {
     const { result } = renderHook(() => usePresentationList());
     expect(result.current).toHaveLength(5);
