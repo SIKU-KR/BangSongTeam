@@ -30,7 +30,7 @@ describe("PWA 설정", () => {
   });
 
   it("PWA 아이콘 파일이 실제로 존재한다", () => {
-    const iconsDir = path.join(rootDir, "public/icons");
+    const iconsDir = path.join(rootDir, "src/client/public/icons");
     for (const file of ["icon-192.png", "icon-512.png", "maskable-512.png"]) {
       expect(fs.existsSync(path.join(iconsDir, file))).toBe(true);
     }

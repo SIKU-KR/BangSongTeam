@@ -22,7 +22,7 @@ export interface TestDbResult {
  */
 export function createTestDb(): TestDbResult {
   const sqlite = new Database(":memory:");
-  const dir = path.resolve(__dirname, "../../migrations");
+  const dir = path.resolve(__dirname, "migrations");
 
   const files = fs
     .readdirSync(dir)

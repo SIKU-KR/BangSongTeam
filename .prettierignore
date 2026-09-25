@@ -1,12 +1,5 @@
-node_modules/
-dist/
-build/
-out/
-.wrangler/
-.dev.vars
 pnpm-lock.yaml
-coverage/
 worker-configuration.d.ts
-migrations/meta/
+src/db/migrations/meta/
 src/client/components/ui/
 src/client/hooks/use-mobile.ts

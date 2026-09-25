@@ -8,7 +8,7 @@ on:
       - "docs/**"
       - ".gitignore"
       - ".prettierignore"
-      - ".dev.vars.example"
+      - "config/dev.vars.example"
   # On pull_request, path filtering is handled by the `changes` job because the
   # repository ruleset requires "Typecheck, Lint & Test". Workflow-level paths-ignore
   # would prevent check runs from being created, leaving PRs blocked in a pending state.
@@ -40,17 +40,13 @@ jobs:
           filters: |
             app:
               - 'src/**'
-              - 'public/**'
-              - 'migrations/**'
               - 'config/**'
-              - 'tests/**'
               - 'index.html'
               - 'package.json'
               - 'pnpm-lock.yaml'
               - 'pnpm-workspace.yaml'
               - 'tsconfig.json'
               - 'vite.config.ts'
-              - 'vitest.config.ts'
               - 'wrangler.jsonc'
               - 'eslint.config.mjs'
               - '.github/workflows/ci-cd.yml'
