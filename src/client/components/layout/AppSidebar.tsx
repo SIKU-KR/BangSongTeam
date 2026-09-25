@@ -36,13 +36,13 @@ const BACKGROUNDS_ITEM: NavItem = {
 };
 
 const NAV_BUTTON_BASE =
-  "w-full px-3.5 py-2.5 rounded-xl text-xs font-medium flex items-center gap-3 transition-all cursor-pointer border";
+  "w-full h-9 pl-4 pr-3 rounded-full text-sm flex items-center gap-4 transition-colors cursor-pointer";
 const NAV_ACTIVE =
-  "bg-zinc-100 dark:bg-zinc-800/90 text-zinc-900 dark:text-white font-semibold shadow-sm border-zinc-300 dark:border-zinc-700/60";
+  "bg-emerald-100 dark:bg-emerald-900/40 text-emerald-900 dark:text-emerald-100 font-semibold";
 const NAV_IDLE =
-  "text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-900/60 border-transparent";
+  "text-zinc-700 dark:text-zinc-300 hover:bg-zinc-200/70 dark:hover:bg-zinc-800/70";
 const NAV_DROP =
-  "ring-2 ring-emerald-500/70 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-200 border-transparent";
+  "ring-2 ring-inset ring-emerald-500/70 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-200";
 
 function NavButton({
   item,
@@ -73,14 +73,15 @@ function NavButton({
     >
       <div
         className={`w-5 h-5 flex items-center justify-center ${
-          active ? item.accent : "text-zinc-400"
+          active ? item.accent : "text-zinc-500 dark:text-zinc-400"
         }`}
       >
         <svg
-          className="w-4 h-4"
+          className="w-5 h-5"
           fill="none"
           stroke="currentColor"
           viewBox="0 0 24 24"
+          aria-hidden="true"
         >
           <path
             strokeLinecap="round"
@@ -156,7 +157,7 @@ export function AppSidebar(): React.JSX.Element {
     pathname.startsWith(`${BACKGROUNDS_ITEM.path}/`);
 
   return (
-    <aside className="w-64 h-full bg-white dark:bg-zinc-950 border-r border-zinc-200 dark:border-zinc-900 hidden lg:flex flex-col justify-between p-4 shrink-0 overflow-y-auto">
+    <aside className="w-64 h-full bg-zinc-50 dark:bg-zinc-950 hidden lg:flex flex-col justify-between py-4 pl-3 pr-4 shrink-0 overflow-y-auto">
       <div className="space-y-6">
         <div className="flex items-center gap-3 px-2 pt-1">
           <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-emerald-500 via-teal-400 to-indigo-500 flex items-center justify-center text-white shadow-sm dark:shadow-emerald-950/40">
@@ -179,7 +180,7 @@ export function AppSidebar(): React.JSX.Element {
           testId="sidebar-create-presentation-btn"
         />
 
-        <nav className="space-y-1" aria-label="주 메뉴">
+        <nav className="space-y-0.5" aria-label="주 메뉴">
           <NavButton
             item={DRIVE_ITEM}
             active={isDrive}

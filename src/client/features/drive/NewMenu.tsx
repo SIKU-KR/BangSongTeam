@@ -11,6 +11,7 @@ export function useNewItemActions(): MenuAction[] {
       key: "new-folder",
       label: "새 폴더",
       icon: "folderAdd",
+      shortcut: "Shift+F",
       testId: "new-menu-folder",
       onSelect: () => drive.requestNewFolder(target),
     },
@@ -18,6 +19,7 @@ export function useNewItemActions(): MenuAction[] {
       key: "new-presentation",
       label: "새 프레젠테이션",
       icon: "documentAdd",
+      shortcut: "Shift+P",
       testId: "new-menu-presentation",
       onSelect: () => drive.createPresentationIn(target),
     },
@@ -49,7 +51,7 @@ export function NewMenuButton({
     setAnchor(
       variant === "sidebar"
         ? { x: rect.left, y: rect.bottom + 6 }
-        : { x: rect.right - 200, y: rect.bottom + 6 },
+        : { x: rect.right - 240, y: rect.bottom + 6 },
     );
   };
 
@@ -63,9 +65,9 @@ export function NewMenuButton({
           aria-haspopup="menu"
           aria-expanded={anchor !== null}
           onClick={open}
-          className="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-500 hover:from-emerald-500 hover:to-teal-400 text-white font-bold text-xs shadow-sm hover:shadow-md hover:shadow-emerald-600/20 dark:shadow-emerald-950/50 flex items-center justify-center gap-2 cursor-pointer transition-all hover:scale-[1.02] active:scale-[0.98]"
+          className="h-14 pl-4 pr-6 rounded-2xl bg-white dark:bg-zinc-800 hover:bg-emerald-50 dark:hover:bg-zinc-700 text-zinc-800 dark:text-zinc-100 font-medium text-sm shadow-md hover:shadow-lg dark:shadow-black/40 inline-flex items-center gap-3 cursor-pointer transition-all"
         >
-          <Icon name="plus" className="w-4 h-4" strokeWidth={2.5} />
+          <Icon name="plus" className="w-6 h-6" strokeWidth={2} />
           <span>새로 만들기</span>
         </button>
       ) : (

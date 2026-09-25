@@ -17,8 +17,13 @@ export interface DriveContextValue {
   isTrashView: boolean;
 
   selection: ReadonlySet<string>;
+  /** Shift 범위 선택의 기준점 */
   anchorKey: string | null;
+  /** 키보드 커서. 선택과 따로 움직인다 (Ctrl+방향키) */
+  focusKey: string | null;
+  /** 선택을 바꾼다. `anchor`를 넘기면 기준점과 포커스를 함께 옮긴다 */
   setSelection: (keys: readonly string[], anchor?: string | null) => void;
+  setFocusKey: (key: string | null) => void;
   clearSelection: () => void;
 
   activeDrag: readonly DriveItemRef[] | null;

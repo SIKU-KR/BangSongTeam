@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { buildFolderIndex, type Folder, type Presentation } from "#shared";
+import type { SortOrder } from "../../routes/appShellContext";
 import {
   buildChildCounts,
   canDropInto,
@@ -7,6 +8,7 @@ import {
   itemKey,
   listFolderContents,
   listTrash,
+  nextSortOrder,
   parseItemKey,
   searchDrive,
   withDirectionParticle,
@@ -14,6 +16,8 @@ import {
 } from "./driveModel";
 
 const USER = "000000000000000000001";
+const NAME_ASC: SortOrder = { key: "name", direction: "asc" };
+const RECENT: SortOrder = { key: "updated", direction: "desc" };
 
 function folder(
   id: string,
@@ -66,7 +70,7 @@ const index = buildFolderIndex(FOLDERS);
 
 describe("listFolderContents", () => {
   it("폴더를 앞에 두고 휴지통 항목은 빼고 보여 준다", () => {
-    const items = listFolderContents(index, DOCS, null, "name");
+    const items = listFolderContents(index, DOCS, null, NAME_ASC);
     expect(items.map((i) => i.key)).toEqual([
       "folder:a",
       "file:orphan",
@@ -76,14 +80,35 @@ describe("listFolderContents", () => {
 
   it("폴더 안의 내용만 보여 준다", () => {
     expect(
-      listFolderContents(index, DOCS, "a", "name").map((i) => i.key),
+      listFolderContents(index, DOCS, "a", NAME_ASC).map((i) => i.key),
     ).toEqual(["folder:b", "file:y"]);
   });
 
   it("최근 수정순이면 파일끼리 최신이 먼저, 폴더는 여전히 앞", () => {
-    const items = listFolderContents(index, DOCS, null, "recent");
+    const items = listFolderContents(index, DOCS, null, RECENT);
     expect(items[0].key).toBe("folder:a");
     expect(items[1].key).toBe("file:x");
+  });
+
+  it("정렬 방향을 뒤집어도 폴더는 앞에 남는다", () => {
+    const byName = listFolderContents(index, DOCS, null, {
+      key: "name",
+      direction: "desc",
+    });
+    expect(byName.map((i) => i.key)).toEqual([
+      "folder:a",
+      "file:x",
+      "file:orphan",
+    ]);
+    const oldest = listFolderContents(index, DOCS, null, {
+      key: "updated",
+      direction: "asc",
+    });
+    expect(oldest.map((i) => i.key)).toEqual([
+      "folder:a",
+      "file:orphan",
+      "file:x",
+    ]);
   });
 
   it("폴더 '항목 N개'는 휴지통을 빼고 센다", () => {
@@ -94,7 +119,7 @@ describe("listFolderContents", () => {
 });
 
 describe("filterByType", () => {
-  const items = listFolderContents(index, DOCS, null, "name");
+  const items = listFolderContents(index, DOCS, null, NAME_ASC);
 
   it("전체면 목록을 그대로 돌려준다", () => {
     expect(filterByType(items, "all")).toBe(items);
@@ -113,20 +138,20 @@ describe("filterByType", () => {
 
 describe("searchDrive", () => {
   it("모든 폴더를 가로질러 찾고 위치를 붙인다", () => {
-    const items = searchDrive(index, DOCS, "은혜", "name");
+    const items = searchDrive(index, DOCS, "은혜", NAME_ASC);
     expect(items.map((i) => i.key)).toEqual(["file:z"]);
     expect(items[0].location).toBe("내 드라이브 › 2026 › 주일");
   });
 
   it("폴더 이름도 찾는다 (초성 포함)", () => {
-    expect(searchDrive(index, DOCS, "ㅈㅇ", "name").map((i) => i.key)).toEqual([
-      "folder:b",
-    ]);
+    expect(
+      searchDrive(index, DOCS, "ㅈㅇ", NAME_ASC).map((i) => i.key),
+    ).toEqual(["folder:b"]);
   });
 
   it("휴지통에 있거나 휴지통 폴더 안에 있는 항목은 찾지 않는다", () => {
-    expect(searchDrive(index, DOCS, "청년", "name")).toEqual([]);
-    expect(searchDrive(index, DOCS, "버린", "name")).toEqual([]);
+    expect(searchDrive(index, DOCS, "청년", NAME_ASC)).toEqual([]);
+    expect(searchDrive(index, DOCS, "버린", NAME_ASC)).toEqual([]);
   });
 });
 
@@ -178,5 +203,23 @@ describe("표시 도우미", () => {
     expect(withDirectionParticle("‘예배당’")).toBe("‘예배당’으로");
     expect(withDirectionParticle("‘청년부’")).toBe("‘청년부’로");
     expect(withDirectionParticle("‘2026’")).toBe("‘2026’(으)로");
+  });
+});
+
+describe("nextSortOrder", () => {
+  it("같은 기준을 다시 누르면 방향만 뒤집는다", () => {
+    expect(nextSortOrder(NAME_ASC, "name")).toEqual({
+      key: "name",
+      direction: "desc",
+    });
+  });
+
+  it("다른 기준은 그 기준의 기본 방향으로 시작한다", () => {
+    expect(nextSortOrder(RECENT, "name")).toEqual(NAME_ASC);
+    expect(nextSortOrder(NAME_ASC, "updated")).toEqual(RECENT);
+    expect(nextSortOrder(NAME_ASC, "slides")).toEqual({
+      key: "slides",
+      direction: "desc",
+    });
   });
 });
