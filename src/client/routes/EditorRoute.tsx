@@ -124,7 +124,9 @@ export function EditorRoute(): React.JSX.Element {
   );
 
   const handlePresent = () => {
-    if (presentationId) launchPresentation(navigate, presentationId);
+    if (presentationId) {
+      launchPresentation(navigate, presentationId, `/editor/${presentationId}`);
+    }
   };
 
   const selectPosition = (next: ProjectionPosition) => {
