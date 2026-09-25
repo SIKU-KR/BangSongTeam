@@ -3,6 +3,7 @@ import {
   enterFullscreen,
   exitFullscreen,
   launchPresentation,
+  resolvePresentReturnPath,
 } from "./fullscreen";
 
 describe("fullscreen utilities", () => {
@@ -136,10 +137,15 @@ describe("fullscreen utilities", () => {
       });
       const navigateMock = vi.fn();
 
-      await launchPresentation(navigateMock, "pres-123");
+      launchPresentation(navigateMock, "pres-123", "/editor/pres-123");
 
       expect(requestFullscreenMock).toHaveBeenCalled();
-      expect(navigateMock).toHaveBeenCalledWith("/present/pres-123/fullscreen");
+      expect(navigateMock).toHaveBeenCalledWith(
+        "/present/pres-123/fullscreen",
+        {
+          state: { returnTo: "/editor/pres-123" },
+        },
+      );
     });
 
     it("should request fullscreen before navigating (user activation)", () => {
@@ -157,9 +163,38 @@ describe("fullscreen utilities", () => {
         writable: true,
       });
 
-      launchPresentation(() => calls.push("navigate"), "pres-456");
+      launchPresentation(
+        () => calls.push("navigate"),
+        "pres-456",
+        "/presentations",
+      );
 
       expect(calls).toEqual(["fullscreen", "navigate"]);
+    });
+  });
+
+  describe("resolvePresentReturnPath", () => {
+    it("state의 앱 내부 경로를 그대로 돌려준다", () => {
+      expect(resolvePresentReturnPath({ returnTo: "/editor/abc" })).toBe(
+        "/editor/abc",
+      );
+      expect(
+        resolvePresentReturnPath({ returnTo: "/presentations/folders/f1" }),
+      ).toBe("/presentations/folders/f1");
+    });
+
+    it.each([
+      null,
+      undefined,
+      "/editor/abc",
+      {},
+      { returnTo: 42 },
+      { returnTo: "" },
+      { returnTo: "editor/abc" },
+      { returnTo: "//evil.example" },
+      { returnTo: "https://evil.example" },
+    ])("복귀 경로가 없거나 잘못되면 드라이브로 돌아간다 (%j)", (state) => {
+      expect(resolvePresentReturnPath(state)).toBe("/presentations");
     });
   });
 });

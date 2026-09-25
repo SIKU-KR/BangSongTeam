@@ -76,7 +76,9 @@ describe("EditorRoute (PowerPoint식 프레젠테이션 편집기)", () => {
     const presentBtn = screen.getByTestId("header-present-btn");
     fireEvent.click(presentBtn);
 
-    expect(mockNavigate).toHaveBeenCalledWith(`/present/${DOC_ID}/fullscreen`);
+    expect(mockNavigate).toHaveBeenCalledWith(`/present/${DOC_ID}/fullscreen`, {
+      state: { returnTo: `/editor/${DOC_ID}` },
+    });
   });
 
   it("should switch active slide when clicking a slide thumbnail", () => {

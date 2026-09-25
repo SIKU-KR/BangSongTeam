@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { usePresentationList } from "../presentation";
 import { useAppShell } from "../../routes/appShellContext";
 import { useFolderIndex } from "./folderStore";
@@ -58,6 +58,7 @@ export function DriveBrowser({
   folderId = null,
 }: DriveBrowserProps): React.JSX.Element {
   const navigate = useNavigate();
+  const { pathname } = useLocation();
   const { searchQuery, sortOrder } = useAppShell();
   const presentations = usePresentationList();
   const index = useFolderIndex();
@@ -83,8 +84,8 @@ export function DriveBrowser({
   const selectedItems = items.filter((item) => drive.selection.has(item.key));
 
   const present = useCallback(
-    (id: string) => startPresentation(id, navigate),
-    [navigate],
+    (id: string) => startPresentation(id, navigate, pathname),
+    [navigate, pathname],
   );
 
   const open = useCallback(

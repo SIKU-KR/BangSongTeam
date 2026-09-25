@@ -25,9 +25,12 @@ import {
 
 const DOC_ID = SEED_PRESENTATION_IDS[0];
 
-function renderPresent(path = `/present/${DOC_ID}/fullscreen`) {
+function renderPresent(
+  path = `/present/${DOC_ID}/fullscreen`,
+  state?: unknown,
+) {
   return render(
-    <MemoryRouter initialEntries={[path]}>
+    <MemoryRouter initialEntries={[{ pathname: path, state }]}>
       <Routes>
         <Route
           path="/present/:presentationId/fullscreen"
@@ -36,6 +39,14 @@ function renderPresent(path = `/present/${DOC_ID}/fullscreen`) {
         <Route
           path="/presentations"
           element={<div data-testid="presentations-stub" />}
+        />
+        <Route
+          path="/presentations/folders/:folderId"
+          element={<div data-testid="folder-stub" />}
+        />
+        <Route
+          path="/editor/:presentationId"
+          element={<div data-testid="editor-stub" />}
         />
       </Routes>
     </MemoryRouter>,
@@ -247,6 +258,70 @@ describe("FullscreenPresentRoute", () => {
 
     await act(async () => {
       document.dispatchEvent(new Event("fullscreenchange"));
+    });
+  });
+
+  describe("송출 종료 후 복귀", () => {
+    beforeEach(() => {
+      Object.defineProperty(document, "fullscreenElement", {
+        value: document.createElement("div"),
+        configurable: true,
+      });
+      Object.defineProperty(document, "exitFullscreen", {
+        value: vi.fn().mockResolvedValue(undefined),
+        configurable: true,
+        writable: true,
+      });
+    });
+
+    it("편집기에서 시작한 송출은 종료 버튼으로 편집기에 돌아간다", async () => {
+      renderPresent(`/present/${DOC_ID}/fullscreen`, {
+        returnTo: `/editor/${DOC_ID}`,
+      });
+
+      await act(async () => {
+        fireEvent.click(screen.getByTestId("exit-present-btn"));
+      });
+
+      expect(screen.getByTestId("editor-stub")).toBeInTheDocument();
+    });
+
+    it("편집기에서 시작한 송출은 Esc(전체화면 해제)로 편집기에 돌아간다", async () => {
+      renderPresent(`/present/${DOC_ID}/fullscreen`, {
+        returnTo: `/editor/${DOC_ID}`,
+      });
+
+      Object.defineProperty(document, "fullscreenElement", {
+        value: null,
+        configurable: true,
+      });
+      await act(async () => {
+        document.dispatchEvent(new Event("fullscreenchange"));
+      });
+
+      expect(screen.getByTestId("editor-stub")).toBeInTheDocument();
+    });
+
+    it("드라이브 폴더에서 시작한 송출은 그 폴더로 돌아간다", async () => {
+      renderPresent(`/present/${DOC_ID}/fullscreen`, {
+        returnTo: "/presentations/folders/f1",
+      });
+
+      await act(async () => {
+        fireEvent.click(screen.getByTestId("exit-present-btn"));
+      });
+
+      expect(screen.getByTestId("folder-stub")).toBeInTheDocument();
+    });
+
+    it("출발 화면을 모르면(주소 직접 진입) 드라이브로 돌아간다", async () => {
+      renderPresent();
+
+      await act(async () => {
+        fireEvent.click(screen.getByTestId("exit-present-btn"));
+      });
+
+      expect(screen.getByTestId("presentations-stub")).toBeInTheDocument();
     });
   });
 

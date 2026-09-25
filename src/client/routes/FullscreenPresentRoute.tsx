@@ -4,7 +4,12 @@ import React, {
   useEffect,
   useLayoutEffect,
 } from "react";
-import { useNavigate, useParams, Navigate } from "react-router-dom";
+import {
+  useLocation,
+  useNavigate,
+  useParams,
+  Navigate,
+} from "react-router-dom";
 import { DEFAULT_DECK_STYLE } from "#shared";
 import type { Presentation } from "#shared";
 import { SlideStage } from "../components/stage/SlideStage";
@@ -30,6 +35,8 @@ import {
   usePresentationShortcuts,
   enterFullscreen,
   exitFullscreen,
+  resolvePresentReturnPath,
+  DEFAULT_PRESENT_RETURN_PATH,
   nextPosition,
   prevPosition,
   getSlideAt,
@@ -39,9 +46,11 @@ import {
   type ProjectionPosition,
 } from "../features/presentation";
 
-/** 청중용 전체화면 송출 라우트 */
+/** 청중용 전체화면 송출 라우트. 종료하면 송출을 시작한 화면으로 돌아간다. */
 export function FullscreenPresentRoute(): React.JSX.Element {
   const navigate = useNavigate();
+  const location = useLocation();
+  const returnPath = resolvePresentReturnPath(location.state);
   const { presentationId } = useParams<{ presentationId: string }>();
 
   const found = usePresentationById(presentationId);
@@ -94,8 +103,8 @@ export function FullscreenPresentRoute(): React.JSX.Element {
 
   const handleExit = useCallback(async () => {
     await exitFullscreen().catch(() => {});
-    navigate("/presentations");
-  }, [navigate]);
+    navigate(returnPath);
+  }, [navigate, returnPath]);
 
   usePresentationShortcuts({
     onNext: handleNext,
@@ -129,7 +138,7 @@ export function FullscreenPresentRoute(): React.JSX.Element {
     };
   }, [handleExit]);
 
-  if (!found) return <Navigate to="/presentations" replace />;
+  if (!found) return <Navigate to={DEFAULT_PRESENT_RETURN_PATH} replace />;
 
   return (
     <div
