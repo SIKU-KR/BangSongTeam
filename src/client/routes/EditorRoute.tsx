@@ -14,6 +14,8 @@ import {
   addSlideToSong,
   removeSlideFromSong,
   duplicateSlide,
+  splitSlideAtCursor,
+  mergeSlideWithNext,
   reorderSongs,
   removeSongFromPresentation,
   addDeckToPresentation,
@@ -112,6 +114,7 @@ export function EditorRoute(): React.JSX.Element {
     Math.max(0, currentSlides.length - 1),
   );
   const currentSlide = currentSlides[safeSlideIndex] ?? null;
+  const nextSlideInSong = currentSlides[safeSlideIndex + 1] ?? null;
   const currentStyle = currentSong?.style ?? DEFAULT_DECK_STYLE;
 
   const songs = presentation.items;
@@ -173,6 +176,12 @@ export function EditorRoute(): React.JSX.Element {
       );
     } else if (slideIndex < safeSlideIndex) {
       setActiveSlideIndex(safeSlideIndex - 1);
+    }
+  };
+
+  const handleSplitSlide = (offset: number) => {
+    if (splitSlideAtCursor(safeSongIndex, safeSlideIndex, offset)) {
+      setActiveSlideIndex(safeSlideIndex + 1);
     }
   };
 
@@ -348,6 +357,7 @@ export function EditorRoute(): React.JSX.Element {
           style={currentStyle}
           backgroundId={currentSong?.backgroundId}
           activeSlide={currentSlide}
+          nextSlide={nextSlideInSong}
           onUpdateStyle={(styleUpdate) =>
             updateSongStyle(safeSongIndex, styleUpdate)
           }
@@ -356,6 +366,10 @@ export function EditorRoute(): React.JSX.Element {
           }
           onUpdateSlideLines={(lines) =>
             updateSlideLines(safeSongIndex, safeSlideIndex, lines)
+          }
+          onSplitSlide={handleSplitSlide}
+          onMergeWithNext={() =>
+            mergeSlideWithNext(safeSongIndex, safeSlideIndex)
           }
           footer={
             currentSong ? (

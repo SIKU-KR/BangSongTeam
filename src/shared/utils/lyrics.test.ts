@@ -3,6 +3,8 @@ import {
   sanitizeLyricLine,
   splitLyricsIntoSlides,
   mergeSlidesToLyrics,
+  splitLinesAtCursor,
+  mergeSlideLines,
 } from "./lyrics";
 
 describe("Lyric Processing Utilities", () => {
@@ -165,6 +167,68 @@ describe("Lyric Processing Utilities", () => {
         { id: "s_1", order: 0, lines: ["1절"] },
       ];
       expect(mergeSlidesToLyrics(slides)).toBe("1절\n\n2절");
+    });
+  });
+
+  describe("splitLinesAtCursor", () => {
+    const lines = ["첫째 줄", "둘째 줄", "셋째 줄"];
+
+    it("줄 경계의 커서에서 앞뒤 줄로 나눈다", () => {
+      const offset = "첫째 줄\n".length;
+      expect(splitLinesAtCursor(lines, offset)).toEqual([
+        ["첫째 줄"],
+        ["둘째 줄", "셋째 줄"],
+      ]);
+    });
+
+    it("줄 끝의 커서는 그 줄까지를 앞 슬라이드에 둔다", () => {
+      const offset = "첫째 줄\n둘째 줄".length;
+      expect(splitLinesAtCursor(lines, offset)).toEqual([
+        ["첫째 줄", "둘째 줄"],
+        ["셋째 줄"],
+      ]);
+    });
+
+    it("줄 중간의 커서는 그 줄을 쪼개고 경계의 공백을 지운다", () => {
+      const offset = "첫째 줄\n둘째".length;
+      expect(splitLinesAtCursor(lines, offset)).toEqual([
+        ["첫째 줄", "둘째"],
+        ["줄", "셋째 줄"],
+      ]);
+    });
+
+    it("경계에 생긴 빈 줄을 버린다", () => {
+      const withBlank = ["첫째 줄", "", "\u3000", "둘째 줄"];
+      const offset = "첫째 줄\n\n".length;
+      expect(splitLinesAtCursor(withBlank, offset)).toEqual([
+        ["첫째 줄"],
+        ["둘째 줄"],
+      ]);
+    });
+
+    it("커서가 맨 앞·맨 끝이거나 한쪽에 공백만 남으면 null", () => {
+      const text = lines.join("\n");
+      expect(splitLinesAtCursor(lines, 0)).toBeNull();
+      expect(splitLinesAtCursor(lines, text.length)).toBeNull();
+      expect(
+        splitLinesAtCursor(["  가사", "  "], "  가사\n ".length),
+      ).toBeNull();
+      expect(splitLinesAtCursor(["  가사"], 1)).toBeNull();
+    });
+  });
+
+  describe("mergeSlideLines", () => {
+    it("두 슬라이드의 줄을 순서대로 이어 붙인다", () => {
+      expect(mergeSlideLines(["가", "나"], ["다", "라"])).toEqual([
+        "가",
+        "나",
+        "다",
+        "라",
+      ]);
+    });
+
+    it("합친 줄이 4줄을 넘으면 null", () => {
+      expect(mergeSlideLines(["가", "나", "다"], ["라", "마"])).toBeNull();
     });
   });
 });
