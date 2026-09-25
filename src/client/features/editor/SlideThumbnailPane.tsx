@@ -186,6 +186,7 @@ export function SlideThumbnailPane({
   const [dropTarget, setDropTarget] = useState<DropTarget | null>(null);
   const paneRef = useRef<HTMLDivElement>(null);
   const activeThumbRef = useRef<HTMLDivElement>(null);
+  const keepCollapsedIdRef = useRef<string | null>(null);
 
   const activeItemId = items[activeSongIndex]?.id;
   const measureText = useTextWidthMeasurer();
@@ -212,6 +213,10 @@ export function SlideThumbnailPane({
 
   useEffect(() => {
     if (!activeItemId) return;
+    if (keepCollapsedIdRef.current === activeItemId) {
+      keepCollapsedIdRef.current = null;
+      return;
+    }
     setCollapsedIds((prev) => {
       if (!prev.has(activeItemId)) return prev;
       const next = new Set(prev);
@@ -233,6 +238,18 @@ export function SlideThumbnailPane({
       else next.add(itemId);
       return next;
     });
+  };
+
+  const selectAndToggleSong = (songIndex: number, itemId: string) => {
+    const willSelectAnother =
+      songIndex !== activeSongIndex &&
+      (items[songIndex]?.deck?.slides.length ?? 0) > 0;
+    if (willSelectAnother && !collapsedIds.has(itemId)) {
+      keepCollapsedIdRef.current = itemId;
+    }
+    toggleCollapsed(itemId);
+    focusPane();
+    onSelectSong(songIndex);
   };
 
   const isSelected = (songIndex: number, slideId: string) =>
@@ -559,10 +576,7 @@ export function SlideThumbnailPane({
                     warning={songWarning}
                     menuActions={songActions(songIndex)}
                     onToggle={() => toggleCollapsed(item.id)}
-                    onSelect={() => {
-                      focusPane();
-                      onSelectSong(songIndex);
-                    }}
+                    onSelect={() => selectAndToggleSong(songIndex, item.id)}
                   />
 
                   {!isCollapsed && (
@@ -708,7 +722,7 @@ function SongSection({
   );
 }
 
-/** 곡(구역) 머리글. 누르면 곡 전체 선택, 끌면 곡 순서 바꾸기 */
+/** 곡(구역) 머리글. 누르면 곡 전체 선택과 함께 접기/펼치기, 끌면 곡 순서 바꾸기 */
 function SongHeader({
   itemId,
   songIndex,
@@ -779,6 +793,7 @@ function SongHeader({
               size="xs"
               data-testid={`song-section-title-${songIndex}`}
               aria-label={fullTitle}
+              aria-expanded={!collapsed}
               onClick={onSelect}
               className="min-w-0 flex-1 justify-start gap-1.5 px-0 text-inherit hover:bg-transparent hover:text-inherit"
             />

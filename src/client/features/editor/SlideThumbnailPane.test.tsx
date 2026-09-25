@@ -113,6 +113,30 @@ describe("SlideThumbnailPane (PPT식 썸네일 창)", () => {
     expect(props.onSelectSong).toHaveBeenCalledWith(1);
   });
 
+  it("곡 머리글을 누르면 구역이 접히고, 그 곡이 선택돼도 접힌 채로 있다가 다시 누르면 펼쳐진다", () => {
+    const { props, rerender } = renderPane();
+
+    fireEvent.click(screen.getByTestId("song-section-title-1"));
+    expect(screen.queryByTestId("slide-thumb-3")).not.toBeInTheDocument();
+    expect(screen.getByTestId("song-section-title-1")).toHaveAttribute(
+      "aria-expanded",
+      "false",
+    );
+
+    rerender(
+      <SlideThumbnailPane
+        {...props}
+        activeSongIndex={1}
+        activeSlideIndex={0}
+        selectedIds={["s-1-0"]}
+      />,
+    );
+    expect(screen.queryByTestId("slide-thumb-3")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId("song-section-title-1"));
+    expect(screen.getByTestId("slide-thumb-3")).toBeInTheDocument();
+  });
+
   it("선택한 슬라이드를 모두 aria-selected로, 현재 슬라이드를 aria-current로 표시한다", () => {
     renderPane({
       activeSongIndex: 0,
