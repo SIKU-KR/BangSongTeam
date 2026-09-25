@@ -45,6 +45,8 @@ export {
   addSlideToSong,
   removeSlideFromSong,
   duplicateSlide,
+  splitSlideAtCursor,
+  mergeSlideWithNext,
   reorderSongs,
   removeSongFromPresentation,
   duplicateSongInPresentation,

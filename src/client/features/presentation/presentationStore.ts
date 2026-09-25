@@ -1,6 +1,11 @@
 import { useSyncExternalStore } from "react";
-import type { Deck, Presentation, PresentationItem } from "#shared";
-import { createId, createSlideId } from "#shared";
+import type { Deck, Presentation, PresentationItem, Slide } from "#shared";
+import {
+  createId,
+  createSlideId,
+  mergeSlideLines,
+  splitLinesAtCursor,
+} from "#shared";
 import {
   savePresentation,
   loadAllPresentations,
@@ -681,6 +686,81 @@ export function removeSlideFromSong(
     updatedAt: new Date().toISOString(),
   });
   emitChange();
+}
+
+function replaceSongSlides(songIndex: number, slides: Slide[]): void {
+  const item = readActive().items[songIndex];
+  if (!item || !item.deck) return;
+
+  const updatedDeck: Deck = {
+    ...item.deck,
+    slides: slides.map((s, idx) => ({ ...s, order: idx })),
+    updatedAt: new Date().toISOString(),
+  };
+
+  const updatedItems = [...readActive().items];
+  updatedItems[songIndex] = { ...item, deck: updatedDeck };
+
+  writeActive({
+    ...readActive(),
+    items: updatedItems,
+    updatedAt: new Date().toISOString(),
+  });
+  emitChange();
+}
+
+/**
+ * 가사 편집창의 커서 위치에서 슬라이드를 둘로 나눈다. 앞부분은 기존 슬라이드
+ * id를 유지하고 뒷부분은 새 슬라이드로 바로 뒤에 들어간다. 커서가 맨 앞·맨
+ * 끝이라 한쪽이 비면 아무것도 하지 않고 `false`를 돌려준다.
+ */
+export function splitSlideAtCursor(
+  songIndex: number,
+  slideIndex: number,
+  offset: number,
+): boolean {
+  const slides = readActive().items[songIndex]?.deck?.slides;
+  const target = slides?.[slideIndex];
+  if (!slides || !target) return false;
+
+  const parts = splitLinesAtCursor(target.lines, offset);
+  if (!parts) return false;
+
+  pushHistory();
+
+  const next = [...slides];
+  next.splice(
+    slideIndex,
+    1,
+    { ...target, lines: parts[0] },
+    { id: createSlideId(), order: slideIndex + 1, lines: parts[1] },
+  );
+  replaceSongSlides(songIndex, next);
+  return true;
+}
+
+/**
+ * 슬라이드를 다음 슬라이드와 합친다. 합친 줄 수가 슬라이드 최대 줄 수를 넘거나
+ * 다음 슬라이드가 없으면 아무것도 하지 않고 `false`를 돌려준다.
+ */
+export function mergeSlideWithNext(
+  songIndex: number,
+  slideIndex: number,
+): boolean {
+  const slides = readActive().items[songIndex]?.deck?.slides;
+  const target = slides?.[slideIndex];
+  const following = slides?.[slideIndex + 1];
+  if (!slides || !target || !following) return false;
+
+  const lines = mergeSlideLines(target.lines, following.lines);
+  if (!lines) return false;
+
+  pushHistory();
+
+  const next = [...slides];
+  next.splice(slideIndex, 2, { ...target, lines });
+  replaceSongSlides(songIndex, next);
+  return true;
 }
 
 export function duplicateSlide(songIndex: number, slideIndex: number): void {

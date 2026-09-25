@@ -4,6 +4,9 @@ import {
   DEFAULT_DECK_STYLE,
   SUPPORTED_FONTS,
   GRID_ANCHOR_PRESET_COORDINATES,
+  MAX_SLIDE_LINES,
+  mergeSlideLines,
+  splitLinesAtCursor,
 } from "#shared";
 import { useBackground } from "../backgrounds/backgroundCatalog";
 import { BackgroundPickerModal } from "./BackgroundPickerModal";
@@ -13,9 +16,12 @@ export interface SongPropertyPanelProps {
   style: DeckStyle;
   backgroundId?: string | null;
   activeSlide?: Slide | null;
+  nextSlide?: Slide | null;
   onUpdateStyle: (update: Partial<DeckStyle>) => void;
   onUpdateBackground: (backgroundId: string | null) => void;
   onUpdateSlideLines?: (lines: string[]) => void;
+  onSplitSlide?: (offset: number) => void;
+  onMergeWithNext?: () => void;
   footer?: React.ReactNode;
   className?: string;
 }
@@ -129,9 +135,12 @@ export function SongPropertyPanel({
   style = DEFAULT_DECK_STYLE,
   backgroundId,
   activeSlide,
+  nextSlide,
   onUpdateStyle,
   onUpdateBackground,
   onUpdateSlideLines,
+  onSplitSlide,
+  onMergeWithNext,
   footer,
   className = "",
 }: SongPropertyPanelProps): React.JSX.Element {
@@ -544,26 +553,13 @@ export function SongPropertyPanel({
         </section>
 
         {activeSlide && onUpdateSlideLines && (
-          <section className="space-y-2 pt-2 border-t border-zinc-200 dark:border-zinc-900">
-            <div className="flex items-center justify-between">
-              <label className="text-xs font-semibold text-zinc-600 dark:text-zinc-400 uppercase tracking-wider">
-                현재 슬라이드 가사
-              </label>
-              <span className="text-[10px] text-zinc-400 dark:text-zinc-500 font-mono">
-                줄 단위 입력
-              </span>
-            </div>
-            <textarea
-              rows={4}
-              value={activeSlide.lines.join("\n")}
-              onChange={(e) => {
-                const lines = e.target.value.split("\n");
-                onUpdateSlideLines(lines);
-              }}
-              placeholder="슬라이드 가사를 입력하세요 (Enter로 줄바꿈)"
-              className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg p-2.5 text-xs text-zinc-900 dark:text-zinc-100 placeholder-zinc-400 dark:placeholder-zinc-600 focus:outline-none focus:border-emerald-500 resize-none font-sans leading-relaxed"
-            />
-          </section>
+          <SlideLyricsEditor
+            slide={activeSlide}
+            nextSlide={nextSlide ?? null}
+            onUpdateLines={onUpdateSlideLines}
+            onSplit={onSplitSlide}
+            onMergeWithNext={onMergeWithNext}
+          />
         )}
 
         {footer}
@@ -576,5 +572,140 @@ export function SongPropertyPanel({
         onSelect={onUpdateBackground}
       />
     </aside>
+  );
+}
+
+function SlideLyricsEditor({
+  slide,
+  nextSlide,
+  onUpdateLines,
+  onSplit,
+  onMergeWithNext,
+}: {
+  slide: Slide;
+  nextSlide: Slide | null;
+  onUpdateLines: (lines: string[]) => void;
+  onSplit?: (offset: number) => void;
+  onMergeWithNext?: () => void;
+}): React.JSX.Element {
+  const [caret, setCaret] = useState<{ slideId: string; offset: number }>();
+  const [overflowSlideId, setOverflowSlideId] = useState<string | null>(null);
+
+  const caretOffset = caret?.slideId === slide.id ? caret.offset : null;
+  const canSplit =
+    caretOffset !== null &&
+    splitLinesAtCursor(slide.lines, caretOffset) !== null;
+  const canMerge =
+    nextSlide !== null &&
+    mergeSlideLines(slide.lines, nextSlide.lines) !== null;
+  const isFull = slide.lines.length >= MAX_SLIDE_LINES;
+  const showLimitHint = overflowSlideId === slide.id;
+
+  const split = (offset: number | null) => {
+    if (offset === null || !onSplit) return;
+    if (splitLinesAtCursor(slide.lines, offset) === null) return;
+    onSplit(offset);
+  };
+
+  const mergeTitle = !nextSlide
+    ? "이 곡의 마지막 슬라이드입니다"
+    : canMerge
+      ? "다음 슬라이드의 가사를 이 슬라이드 뒤에 붙입니다"
+      : `합치면 ${MAX_SLIDE_LINES}줄을 넘어 합칠 수 없습니다`;
+
+  return (
+    <section className="space-y-2 pt-2 border-t border-zinc-200 dark:border-zinc-900">
+      <div className="flex items-center justify-between">
+        <label
+          htmlFor="slide-lyrics-input"
+          className="text-xs font-semibold text-zinc-600 dark:text-zinc-400 uppercase tracking-wider"
+        >
+          현재 슬라이드 가사
+        </label>
+        <span
+          data-testid="slide-line-count"
+          className={`text-[10px] font-mono ${
+            isFull
+              ? "text-amber-600 dark:text-amber-400"
+              : "text-zinc-400 dark:text-zinc-500"
+          }`}
+        >
+          {slide.lines.length}/{MAX_SLIDE_LINES}줄
+        </span>
+      </div>
+      <textarea
+        id="slide-lyrics-input"
+        rows={MAX_SLIDE_LINES}
+        value={slide.lines.join("\n")}
+        onChange={(e) => {
+          const lines = e.target.value.split("\n");
+          if (
+            lines.length > MAX_SLIDE_LINES &&
+            lines.length > slide.lines.length
+          ) {
+            setOverflowSlideId(slide.id);
+            return;
+          }
+          if (lines.length < MAX_SLIDE_LINES) setOverflowSlideId(null);
+          onUpdateLines(lines);
+        }}
+        onSelect={(e) =>
+          setCaret({
+            slideId: slide.id,
+            offset: e.currentTarget.selectionStart,
+          })
+        }
+        onKeyDown={(e) => {
+          if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+            e.preventDefault();
+            split(e.currentTarget.selectionStart);
+          }
+        }}
+        placeholder="슬라이드 가사를 입력하세요 (Enter로 줄바꿈)"
+        className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg p-2.5 text-xs text-zinc-900 dark:text-zinc-100 placeholder-zinc-400 dark:placeholder-zinc-600 focus:outline-none focus:border-emerald-500 resize-none font-sans leading-relaxed"
+      />
+      {showLimitHint && (
+        <p
+          data-testid="slide-line-limit-hint"
+          className="text-[10px] text-zinc-500 dark:text-zinc-400"
+        >
+          한 슬라이드는 최대 {MAX_SLIDE_LINES}줄입니다. 더 넣으려면 커서를 두고
+          &lsquo;여기서 나누기&rsquo;를 누르세요.
+        </p>
+      )}
+      {(onSplit || onMergeWithNext) && (
+        <div className="grid grid-cols-2 gap-1.5">
+          {onSplit && (
+            <button
+              type="button"
+              data-testid="split-slide-btn"
+              disabled={!canSplit}
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => split(caretOffset)}
+              className="py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-800 text-[11px] font-medium text-zinc-700 dark:text-zinc-300 hover:border-emerald-500 hover:text-emerald-700 dark:hover:text-emerald-400 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:border-zinc-200 dark:disabled:hover:border-zinc-800 disabled:hover:text-zinc-700 dark:disabled:hover:text-zinc-300 cursor-pointer transition-colors"
+              title={
+                canSplit
+                  ? "커서 위치에서 슬라이드를 둘로 나눕니다 (Ctrl/⌘+Enter)"
+                  : "가사 사이에 커서를 두면 나눌 수 있습니다"
+              }
+            >
+              여기서 나누기
+            </button>
+          )}
+          {onMergeWithNext && (
+            <button
+              type="button"
+              data-testid="merge-slide-btn"
+              disabled={!canMerge}
+              onClick={onMergeWithNext}
+              className="py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-800 text-[11px] font-medium text-zinc-700 dark:text-zinc-300 hover:border-emerald-500 hover:text-emerald-700 dark:hover:text-emerald-400 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:border-zinc-200 dark:disabled:hover:border-zinc-800 disabled:hover:text-zinc-700 dark:disabled:hover:text-zinc-300 cursor-pointer transition-colors"
+              title={mergeTitle}
+            >
+              다음 슬라이드와 합치기
+            </button>
+          )}
+        </div>
+      )}
+    </section>
   );
 }

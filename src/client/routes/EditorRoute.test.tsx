@@ -105,6 +105,93 @@ describe("EditorRoute (PowerPoint식 프레젠테이션 편집기)", () => {
     expect(screen.getAllByText("수정된 두 번째 가사")[0]).toBeInTheDocument();
   });
 
+  it("커서 위치에서 슬라이드를 나누고 뒷부분 슬라이드를 선택한다", () => {
+    renderEditor();
+    const textarea = screen.getByLabelText(
+      "현재 슬라이드 가사",
+    ) as HTMLTextAreaElement;
+    act(() => {
+      fireEvent.change(textarea, {
+        target: { value: "첫째 줄\n둘째 줄\n셋째 줄" },
+      });
+    });
+    const splitBtn = screen.getByTestId("split-slide-btn");
+    expect(splitBtn).toBeDisabled();
+
+    act(() => {
+      textarea.setSelectionRange(5, 5);
+      fireEvent.select(textarea);
+    });
+    expect(splitBtn).toBeEnabled();
+    fireEvent.click(splitBtn);
+
+    expect(textarea.value).toBe("둘째 줄\n셋째 줄");
+    expect(screen.getByTestId("slide-thumb-1")).toHaveAttribute(
+      "aria-current",
+      "true",
+    );
+    fireEvent.click(screen.getByTestId("slide-thumb-0"));
+    expect(textarea.value).toBe("첫째 줄");
+  });
+
+  it("Ctrl/⌘+Enter로 커서 위치에서 슬라이드를 나눈다", () => {
+    renderEditor();
+    const textarea = screen.getByLabelText(
+      "현재 슬라이드 가사",
+    ) as HTMLTextAreaElement;
+    act(() => {
+      fireEvent.change(textarea, { target: { value: "가나다\n라마바" } });
+    });
+
+    textarea.setSelectionRange(4, 4);
+    fireEvent.keyDown(textarea, { key: "Enter", metaKey: true });
+
+    expect(textarea.value).toBe("라마바");
+  });
+
+  it("다음 슬라이드와 합치고, 4줄을 넘으면 합치기 버튼을 막는다", () => {
+    renderEditor();
+    const textarea = screen.getByLabelText(
+      "현재 슬라이드 가사",
+    ) as HTMLTextAreaElement;
+    fireEvent.click(screen.getByTestId("slide-thumb-1"));
+    const secondSlideText = textarea.value;
+    fireEvent.click(screen.getByTestId("slide-thumb-0"));
+    act(() => {
+      fireEvent.change(textarea, { target: { value: "첫째 줄" } });
+    });
+
+    const mergeBtn = screen.getByTestId("merge-slide-btn");
+    expect(mergeBtn).toBeEnabled();
+    fireEvent.click(mergeBtn);
+    expect(textarea.value).toBe(`첫째 줄\n${secondSlideText}`);
+
+    act(() => {
+      fireEvent.change(textarea, { target: { value: "가\n나\n다\n라" } });
+    });
+    expect(screen.getByTestId("merge-slide-btn")).toBeDisabled();
+  });
+
+  it("한 슬라이드에 4줄을 넘겨 입력하지 않고 나누기 안내를 띄운다", () => {
+    renderEditor();
+    const textarea = screen.getByLabelText(
+      "현재 슬라이드 가사",
+    ) as HTMLTextAreaElement;
+    act(() => {
+      fireEvent.change(textarea, { target: { value: "가\n나\n다\n라" } });
+    });
+    expect(screen.getByTestId("slide-line-count")).toHaveTextContent("4/4줄");
+
+    act(() => {
+      fireEvent.change(textarea, {
+        target: { value: "가\n나\n다\n라\n마" },
+      });
+    });
+
+    expect(textarea.value).toBe("가\n나\n다\n라");
+    expect(screen.getByTestId("slide-line-limit-hint")).toBeInTheDocument();
+  });
+
   it("should toggle blackout preview and lyrics hidden preview", () => {
     renderEditor();
 

@@ -11,8 +11,7 @@
 > - **2026-09-24**: `EditorSidebar.tsx`(아이콘 레일 + 탭 드로어)는 PPT식 `SlideThumbnailPane.tsx`로 대체되었다. 곡은 썸네일 창의 구역 헤더가 되고, 곡 정렬·복제·삭제는 구역 헤더의 ⋯/우클릭 메뉴로 옮겼다. 스타일 프리셋은 우측 속성 패널로 이동했다.
 > - Task 2.5는 `AddSongModal.tsx` 대신 **`SongPickerModal.tsx`** (2-Pane 곡 선택/등록 모달)로 구현되었다. 좌측에 내 보관함 + 공유 찬양 통합 목록(초성 검색), 우측에 미리보기와 직접 등록 폼을 둔다. 제목·아티스트 입력, `ExternalSearchLinks`, 실시간 분할 프리뷰, 세트 추가를 모두 포함하므로 원안의 요건을 만족한다. 가사 붙여넣기 전용 `QuickLyricPasteModal`은 대시보드 셸에서 계속 쓰인다.
 > - 공유 찬양도 편집기 내 선곡 편의(버전 확인, 가사 구절 검색)를 위해 **가사 전문 미리보기, 가사 본문 검색, 복사 버튼**을 정상 제공한다 (공개 웹 카탈로그 API 수준의 첫 슬라이드 제한과 에디터 내부 모달을 분리).
-> - 프리뷰에서의 수동 나누기·합치기는 Task 2.4에 의존하므로 아직 없다.
-> - **잔여: Task 2.3·2.4 (커서 위치 기준 슬라이드 나누기·합치기)** — PRD 4.2의 수동 편집 요건.
+> - **2026-09-25 (이슈 #33)**: Task 2.3·2.4는 원안의 `manualLyricSplit.ts`·`LyricSlideCard` 대신 편집기 속성 패널의 '현재 슬라이드 가사'에 붙였다. 순수 함수 `splitLinesAtCursor`·`mergeSlideLines`는 `src/shared/utils/lyrics.ts`, 스토어 액션 `splitSlideAtCursor`·`mergeSlideWithNext`는 `presentationStore.ts`에 있다. 커서 위치(줄 중간 포함)에서 '여기서 나누기'(Ctrl/⌘+Enter), 합쳐 4줄 이하일 때만 '다음 슬라이드와 합치기'를 허용하고, 가사 입력창도 4줄을 넘겨 입력할 수 없다. 곡 추가 모달 프리뷰의 수동 나누기·합치기는 두지 않았다 (세트에 담은 뒤 편집기에서 한다).
 
 ---
 
@@ -45,7 +44,7 @@
     - 곡 클릭 시 `selectSong` 호출로 활성 곡 전환
   - **DoD (통과 기준)**: `pnpm --filter web exec tsc --noEmit`이 통과하고 드래그 앤 드롭을 통한 곡 순서 변경이 정상 작동한다.
 
-- [ ] **Task 2.3: 슬라이드 수동 분할/합치기 로직 단위 테스트 작성 (TDD Red)**
+- [x] **Task 2.3: 슬라이드 수동 분할/합치기 로직 단위 테스트 작성 (TDD Red)**
   - **대상 파일**: `src/client/features/editor/manualLyricSplit.test.ts`
   - **선행 조건**: `docs/tasks/m2/tasks_1.md`
   - **구현 내용**:
@@ -54,7 +53,7 @@
     - 테스트 케이스 3: 슬라이드 내 빈 줄 정리 및 4줄 초과 시 자동 줄바꿈 분할 규칙 정합성 검증
   - **DoD (통과 기준)**: `pnpm --filter web vitest run src/features/editor/manualLyricSplit.test.ts` 실행 시 실패(Red)함을 확인한다.
 
-- [ ] **Task 2.4: 슬라이드 수동 분할/합치기 로직 및 분할 미리보기 카드 컴포넌트 구현 (TDD Green)**
+- [x] **Task 2.4: 슬라이드 수동 분할/합치기 로직 및 분할 미리보기 카드 컴포넌트 구현 (TDD Green)**
   - **대상 파일**: `src/client/features/editor/manualLyricSplit.ts`, `src/client/features/editor/LyricSlideCard.tsx`
   - **선행 조건**: Task 2.3
   - **구현 내용**:
