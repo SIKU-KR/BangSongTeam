@@ -11,16 +11,21 @@ export interface EditorStageCanvasProps {
   backgroundUrl?: string;
   backgroundImageUrl?: string;
   posterUrl?: string;
-  songTitle?: string;
   slideNumber: number;
   totalSlideCount: number;
+  songNumber: number;
+  totalSongs: number;
   onPrevSlide: () => void;
   onNextSlide: () => void;
-  onPresent: () => void;
   zoomLevel?: number;
   onZoomChange?: (zoom: number) => void;
   onOpenLyricModal?: () => void;
   onUpdateStyle?: (update: Partial<DeckStyle>) => void;
+  /** 가사 줄 대신 텍스트 박스 안에 그릴 직접 편집기. 있으면 박스 이동·폭 조절을 끈다 */
+  textEditor?: React.ReactNode;
+  onRequestTextEdit?: () => void;
+  /** 상태 표시줄 왼쪽에 덧붙일 항목 (줄 수, 넘침 경고) */
+  statusItems?: React.ReactNode;
   className?: string;
 }
 
@@ -31,37 +36,44 @@ export function EditorStageCanvas({
   backgroundUrl,
   backgroundImageUrl,
   posterUrl,
-  songTitle = "곡 제목",
   slideNumber,
   totalSlideCount,
+  songNumber,
+  totalSongs,
   onPrevSlide,
   onNextSlide,
-  onPresent,
   zoomLevel = 100,
   onZoomChange,
   onOpenLyricModal,
   onUpdateStyle,
+  textEditor,
+  onRequestTextEdit,
+  statusItems,
   className = "",
 }: EditorStageCanvasProps): React.JSX.Element {
-  const [isBlackout, setIsBlackout] = useState(false);
-  const [isLyricsHidden, setIsLyricsHidden] = useState(false);
   const [textBoxEl, setTextBoxEl] = useState<HTMLDivElement | null>(null);
   const [draft, setDraft] = useState<{
     position: TextBoxPosition;
     guides: SnapGuides;
   } | null>(null);
 
+  const isEditingText = textEditor !== undefined;
   const baseStyle = style ?? DEFAULT_DECK_STYLE;
   const effectiveStyle = draft
     ? { ...baseStyle, position: draft.position }
     : baseStyle;
-  const canEditTextBox =
-    !!onUpdateStyle &&
-    !!slide &&
-    slide.lines.length > 0 &&
-    !isBlackout &&
-    !isLyricsHidden;
+  const canEditTextBox = !!onUpdateStyle && !!slide && !isEditingText;
   const refreshKey = JSON.stringify([effectiveStyle, slide?.lines, zoomLevel]);
+  const textContent = isEditingText ? (
+    textEditor
+  ) : slide && slide.lines.length === 0 && onRequestTextEdit ? (
+    <div
+      data-testid="empty-slide-placeholder"
+      className="rounded-lg border-2 border-dashed border-current py-[0.3em] opacity-60 text-[0.5em]"
+    >
+      더블클릭하여 가사 입력
+    </div>
+  ) : undefined;
 
   if (!slide || totalSlideCount === 0) {
     return (
@@ -120,28 +132,17 @@ export function EditorStageCanvas({
   return (
     <div
       data-testid="editor-stage-canvas"
-      className={`relative flex-1 bg-zinc-100 dark:bg-zinc-900/60 overflow-hidden flex flex-col items-center justify-between p-6 select-none ${className}`}
+      className={`relative flex-1 bg-zinc-100 dark:bg-zinc-900/60 overflow-hidden flex flex-col items-center justify-between px-6 pt-6 pb-2 select-none ${className}`}
     >
-      <div className="w-full max-w-4xl mb-2 flex items-center justify-between text-xs text-zinc-500 dark:text-zinc-400 shrink-0">
-        <div className="flex items-center gap-2">
-          <span className="font-semibold text-zinc-800 dark:text-zinc-200">
-            {songTitle}
-          </span>
-          <span className="px-2 py-0.5 rounded bg-zinc-200 dark:bg-zinc-800 text-[11px] font-mono text-zinc-700 dark:text-zinc-300">
-            {slideNumber} / {totalSlideCount}
-          </span>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <span className="text-[11px] font-mono text-zinc-400 dark:text-zinc-500">
-            16:9 와이드스크린 (1920 × 1080)
-          </span>
-        </div>
-      </div>
-
       <div className="flex-1 w-full flex items-center justify-center overflow-hidden py-2">
         <div
-          className="relative w-full max-w-4xl aspect-video rounded-xl overflow-hidden shadow-xl ring-1 ring-zinc-300 dark:shadow-2xl dark:shadow-black dark:ring-zinc-800 bg-black group transition-transform duration-150"
+          data-editor-canvas
+          tabIndex={-1}
+          onDoubleClick={(e) => {
+            if ((e.target as HTMLElement).closest("button")) return;
+            onRequestTextEdit?.();
+          }}
+          className="relative w-full max-w-4xl aspect-video rounded-xl overflow-hidden shadow-xl ring-1 ring-zinc-300 dark:shadow-2xl dark:shadow-black dark:ring-zinc-800 bg-black group outline-none transition-transform duration-150"
           style={{
             transform: `scale(${zoomScale})`,
             transformOrigin: "center center",
@@ -153,10 +154,9 @@ export function EditorStageCanvas({
             backgroundUrl={backgroundUrl}
             backgroundImageUrl={backgroundImageUrl}
             posterUrl={posterUrl}
-            isBlackout={isBlackout}
-            isLyricsHidden={isLyricsHidden}
             textBoxRef={setTextBoxEl}
-            isTextInteracting={draft !== null}
+            isTextInteracting={draft !== null || isEditingText}
+            textContent={textContent}
           />
 
           {draft?.guides.vertical && (
@@ -180,6 +180,7 @@ export function EditorStageCanvas({
                 setDraft(position ? { position, guides } : null)
               }
               onCommit={(position) => onUpdateStyle?.({ position })}
+              onDoubleClick={onRequestTextEdit}
             />
           )}
 
@@ -231,43 +232,23 @@ export function EditorStageCanvas({
         </div>
       </div>
 
-      <div className="w-full max-w-4xl mt-2 flex items-center justify-between shrink-0">
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            data-testid="test-blackout-btn"
-            onClick={() => setIsBlackout((prev) => !prev)}
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1.5 border cursor-pointer ${
-              isBlackout
-                ? "bg-amber-50 dark:bg-zinc-800 text-amber-600 dark:text-amber-400 border-amber-500/50 shadow-sm dark:shadow"
-                : "bg-white dark:bg-zinc-950/80 text-zinc-500 dark:text-zinc-400 border-zinc-200 dark:border-zinc-800 hover:text-zinc-900 dark:hover:text-white"
-            }`}
-          >
-            <span
-              className={`w-2 h-2 rounded-full ${isBlackout ? "bg-amber-400 animate-pulse" : "bg-zinc-300 dark:bg-zinc-600"}`}
-            />
-            <span>암전(B) {isBlackout ? "해제" : "미리보기"}</span>
-          </button>
-
-          <button
-            type="button"
-            data-testid="test-lyrics-btn"
-            onClick={() => setIsLyricsHidden((prev) => !prev)}
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1.5 border cursor-pointer ${
-              isLyricsHidden
-                ? "bg-sky-50 dark:bg-zinc-800 text-sky-600 dark:text-sky-400 border-sky-500/50 shadow-sm dark:shadow"
-                : "bg-white dark:bg-zinc-950/80 text-zinc-500 dark:text-zinc-400 border-zinc-200 dark:border-zinc-800 hover:text-zinc-900 dark:hover:text-white"
-            }`}
-          >
-            <span
-              className={`w-2 h-2 rounded-full ${isLyricsHidden ? "bg-sky-400 animate-pulse" : "bg-zinc-300 dark:bg-zinc-600"}`}
-            />
-            <span>가사 숨김(H) {isLyricsHidden ? "해제" : "미리보기"}</span>
-          </button>
+      <div
+        data-testid="editor-status-bar"
+        className="w-full max-w-4xl mt-2 flex items-center justify-between gap-3 shrink-0 text-[11px] text-zinc-500 dark:text-zinc-400"
+      >
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="font-mono text-zinc-700 dark:text-zinc-300">
+            슬라이드 {slideNumber}/{totalSlideCount}
+          </span>
+          <span aria-hidden="true">·</span>
+          <span className="font-mono">
+            곡 {songNumber}/{totalSongs}
+          </span>
+          {statusItems}
         </div>
 
         {onZoomChange && (
-          <div className="hidden sm:flex items-center gap-1 bg-white dark:bg-zinc-950/90 border border-zinc-200 dark:border-zinc-800 rounded-lg px-2 py-1 text-xs text-zinc-500 dark:text-zinc-400">
+          <div className="hidden sm:flex items-center gap-1 bg-white dark:bg-zinc-950/90 border border-zinc-200 dark:border-zinc-800 rounded-lg px-2 py-0.5 text-xs text-zinc-500 dark:text-zinc-400">
             <button
               type="button"
               onClick={() => onZoomChange(Math.max(50, zoomLevel - 15))}
@@ -297,22 +278,6 @@ export function EditorStageCanvas({
             </button>
           </div>
         )}
-
-        <button
-          type="button"
-          data-testid="canvas-present-cta"
-          onClick={onPresent}
-          className="px-3.5 py-1.5 rounded-lg bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-xs font-medium text-zinc-800 dark:text-zinc-200 dark:hover:text-white border border-zinc-200 dark:border-zinc-700 flex items-center gap-1.5 transition-colors cursor-pointer"
-        >
-          <svg
-            className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400"
-            fill="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path d="M8 5v14l11-7z" />
-          </svg>
-          <span>전체화면 발표</span>
-        </button>
       </div>
     </div>
   );

@@ -54,6 +54,8 @@ export {
   redo,
   canUndo,
   canRedo,
+  breakHistoryCoalescing,
+  type HistoryOptions,
   hydrateFromStorage,
   flushPendingWrites,
   removePersistedPresentation,

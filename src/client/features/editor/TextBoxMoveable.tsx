@@ -22,6 +22,7 @@ export interface TextBoxMoveableProps {
   refreshKey: string;
   onPreview: (position: TextBoxPosition | null, guides: SnapGuides) => void;
   onCommit: (position: TextBoxPosition) => void;
+  onDoubleClick?: () => void;
 }
 
 interface GestureState {
@@ -40,6 +41,7 @@ export function TextBoxMoveable({
   refreshKey,
   onPreview,
   onCommit,
+  onDoubleClick,
 }: TextBoxMoveableProps): React.JSX.Element | null {
   const moveableRef = useRef<Moveable>(null);
   const gestureRef = useRef<GestureState | null>(null);
@@ -153,6 +155,9 @@ export function TextBoxMoveable({
       }}
       onResize={handleResize}
       onResizeEnd={finish}
+      onClick={(e) => {
+        if (e.isDouble) onDoubleClick?.();
+      }}
     />
   );
 }

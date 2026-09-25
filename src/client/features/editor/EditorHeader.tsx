@@ -1,9 +1,11 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useCallback, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { usePersistenceError } from "../../lib/storage";
 import { useSyncStatus } from "../../lib/sync";
 import { ThemeMenuButton } from "../../components/common/ThemeMenuButton";
 import { PRESENTATION_SHORTCUTS } from "#shared";
+import { useDismiss } from "../../hooks/useDismiss";
+import { EDITOR_SHORTCUT_GUIDE } from "./editorShortcuts";
 
 const PRESENTATION_SHORTCUT_GUIDE: ReadonlyArray<{
   keys: string;
@@ -30,10 +32,7 @@ export interface EditorHeaderProps {
   title: string;
   onUpdateTitle: (newTitle: string) => void;
   onPresent: () => void;
-  currentSongIndex: number;
   totalSongs: number;
-  currentSlideNumber: number;
-  totalSlideCount: number;
   onUndo?: () => void;
   onRedo?: () => void;
   canUndo?: boolean;
@@ -77,6 +76,39 @@ function SaveStatusIndicator(): React.JSX.Element {
   );
 }
 
+function ShortcutTable({
+  heading,
+  rows,
+}: {
+  heading: string;
+  rows: ReadonlyArray<{ keys: string; action: string }>;
+}): React.JSX.Element {
+  return (
+    <div className="space-y-1">
+      <div className="font-bold text-zinc-900 dark:text-white text-xs pb-1 border-b border-zinc-200 dark:border-zinc-800">
+        {heading}
+      </div>
+      <table className="w-full">
+        <tbody>
+          {rows.map(({ keys, action }) => (
+            <tr key={action}>
+              <th
+                scope="row"
+                className="py-0.5 pr-3 text-left font-mono font-normal text-zinc-700 dark:text-zinc-300 whitespace-nowrap align-top"
+              >
+                {keys}
+              </th>
+              <td className="py-0.5 text-zinc-500 dark:text-zinc-400">
+                {action}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 /**
  * 편집기 상단 네비게이션 헤더.
  */
@@ -84,10 +116,7 @@ export function EditorHeader({
   title,
   onUpdateTitle,
   onPresent,
-  currentSongIndex,
   totalSongs,
-  currentSlideNumber,
-  totalSlideCount,
   onUndo,
   onRedo,
   canUndo = false,
@@ -105,57 +134,10 @@ export function EditorHeader({
   const fileMenuRef = useRef<HTMLDivElement>(null);
   const shortcutsRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    if (!showFileMenu) return;
-
-    const handleClickOutside = (event: MouseEvent) => {
-      if (
-        fileMenuRef.current &&
-        !fileMenuRef.current.contains(event.target as Node)
-      ) {
-        setShowFileMenu(false);
-      }
-    };
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        setShowFileMenu(false);
-      }
-    };
-
-    document.addEventListener("mousedown", handleClickOutside);
-    document.addEventListener("keydown", handleKeyDown);
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-      document.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [showFileMenu]);
-
-  useEffect(() => {
-    if (!showShortcuts) return;
-
-    const handleClickOutside = (event: MouseEvent) => {
-      if (
-        shortcutsRef.current &&
-        !shortcutsRef.current.contains(event.target as Node)
-      ) {
-        setShowShortcuts(false);
-      }
-    };
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        setShowShortcuts(false);
-      }
-    };
-
-    document.addEventListener("mousedown", handleClickOutside);
-    document.addEventListener("keydown", handleKeyDown);
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-      document.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [showShortcuts]);
+  const closeFileMenu = useCallback(() => setShowFileMenu(false), []);
+  const closeShortcuts = useCallback(() => setShowShortcuts(false), []);
+  useDismiss(fileMenuRef, showFileMenu, closeFileMenu);
+  useDismiss(shortcutsRef, showShortcuts, closeShortcuts);
 
   const handleTitleSubmit = () => {
     setIsEditingTitle(false);
@@ -340,7 +322,7 @@ export function EditorHeader({
               disabled={!canUndo}
               onClick={onUndo}
               className="p-1.5 rounded text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800 disabled:opacity-25 transition-colors cursor-pointer"
-              title="실행 취소 (Undo)"
+              title="실행 취소 (Ctrl/⌘+Z)"
             >
               <svg
                 className="w-3.5 h-3.5"
@@ -362,7 +344,7 @@ export function EditorHeader({
               disabled={!canRedo}
               onClick={onRedo}
               className="p-1.5 rounded text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800 disabled:opacity-25 transition-colors cursor-pointer"
-              title="다시 실행 (Redo)"
+              title="다시 실행 (Ctrl/⌘+Shift+Z)"
             >
               <svg
                 className="w-3.5 h-3.5"
@@ -382,22 +364,6 @@ export function EditorHeader({
         )}
       </div>
 
-      <div className="hidden lg:flex items-center gap-2 px-3 py-1 rounded-full bg-zinc-100 dark:bg-zinc-900/80 border border-zinc-200 dark:border-zinc-800 text-xs text-zinc-700 dark:text-zinc-300 font-mono">
-        {totalSongs > 0 ? (
-          <>
-            <span>
-              곡 {currentSongIndex + 1}/{totalSongs}
-            </span>
-            <span className="text-zinc-400 dark:text-zinc-600">·</span>
-            <span>
-              슬라이드 {currentSlideNumber}/{totalSlideCount}
-            </span>
-          </>
-        ) : (
-          <span>곡 없음 · 0개 슬라이드</span>
-        )}
-      </div>
-
       <div className="flex items-center gap-2 shrink-0">
         <div ref={shortcutsRef} className="relative">
           <button
@@ -406,7 +372,7 @@ export function EditorHeader({
             aria-expanded={showShortcuts}
             onClick={() => setShowShortcuts((prev) => !prev)}
             className="p-1.5 rounded-lg text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors text-xs flex items-center gap-1 cursor-pointer"
-            title="송출 단축키 안내"
+            title="편집·송출 단축키 안내"
           >
             <svg
               className="w-4 h-4"
@@ -427,28 +393,16 @@ export function EditorHeader({
           {showShortcuts && (
             <div
               data-testid="header-shortcuts-popover"
-              className="absolute right-0 top-10 z-50 w-80 p-3 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl shadow-lg dark:shadow-2xl text-xs space-y-2"
+              className="absolute right-0 top-10 z-50 w-96 max-h-[75vh] overflow-y-auto p-3 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl shadow-lg dark:shadow-2xl text-xs space-y-2"
             >
-              <div className="font-bold text-zinc-900 dark:text-white text-xs pb-1 border-b border-zinc-200 dark:border-zinc-800">
-                발표 송출 단축키
-              </div>
-              <table className="w-full">
-                <tbody>
-                  {PRESENTATION_SHORTCUT_GUIDE.map(({ keys, action }) => (
-                    <tr key={action}>
-                      <th
-                        scope="row"
-                        className="py-0.5 pr-3 text-left font-mono font-normal text-zinc-700 dark:text-zinc-300 whitespace-nowrap align-top"
-                      >
-                        {keys}
-                      </th>
-                      <td className="py-0.5 text-zinc-500 dark:text-zinc-400">
-                        {action}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              <ShortcutTable
+                heading="편집 단축키"
+                rows={EDITOR_SHORTCUT_GUIDE}
+              />
+              <ShortcutTable
+                heading="발표 송출 단축키"
+                rows={PRESENTATION_SHORTCUT_GUIDE}
+              />
               <div className="pt-2 border-t border-zinc-200 dark:border-zinc-800 space-y-1">
                 <div className="font-semibold text-zinc-700 dark:text-zinc-300">
                   번호 이동 규칙
