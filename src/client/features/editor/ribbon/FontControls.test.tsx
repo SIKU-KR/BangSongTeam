@@ -13,35 +13,53 @@ describe("FontControls (글꼴 컨트롤)", () => {
     expect(withoutUrl).toHaveLength(0);
   });
 
-  it("글꼴 선택 드롭다운을 열면 글꼴 목록 항목에 해당 폰트 스타일이 렌더링되어 출력된다", async () => {
-    const onUpdateStyle = vi.fn();
+  it("글꼴 목록은 폰트 파일 대신 미리 그려 둔 이름 이미지로 보여 준다", async () => {
     render(
       <FontControls
         style={DEFAULT_DECK_STYLE}
         disabled={false}
-        onUpdateStyle={onUpdateStyle}
+        onUpdateStyle={vi.fn()}
       />,
     );
 
     fireEvent.click(screen.getByRole("combobox", { name: "글꼴" }));
 
-    const pretOption = await screen.findByRole("option", {
-      name: "Pretendard",
-    });
-    expect(pretOption).toBeInTheDocument();
-    expect(pretOption.style.fontFamily).toContain("Pretendard");
-
     const gmarketOption = await screen.findByRole("option", {
       name: "Gmarket Sans",
     });
-    expect(gmarketOption).toBeInTheDocument();
-    expect(gmarketOption.style.fontFamily).toContain("Gmarket Sans");
+    const preview = gmarketOption.querySelector<HTMLElement>(
+      "[aria-hidden='true']",
+    );
+    expect(preview?.style.maskImage).toContain(
+      "/font-previews/core-gmarket-sans.webp",
+    );
 
     const items = screen.getAllByRole("option");
     expect(items.length).toBeGreaterThan(10);
     for (const item of items) {
-      expect(item.style.fontFamily).toBeTruthy();
+      expect(item.style.fontFamily).toBe("");
     }
+  });
+
+  it("편집기를 열고 글꼴 목록을 펼쳐도 사용 중인 글꼴만 불러온다", async () => {
+    const before = new Set(document.querySelectorAll("[data-noonnu-font-id]"));
+    render(
+      <FontControls
+        style={{ ...DEFAULT_DECK_STYLE, fontFamily: "고운바탕" }}
+        disabled={false}
+        onUpdateStyle={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("combobox", { name: "글꼴" }));
+    await screen.findByRole("option", { name: "Gmarket Sans" });
+
+    const injected = [
+      ...document.querySelectorAll("[data-noonnu-font-id]"),
+    ].filter((el) => !before.has(el));
+    expect(
+      injected.map((el) => el.getAttribute("data-noonnu-font-id")),
+    ).toEqual(["733"]);
   });
 
   it("글꼴 검색창에 입력하면 매칭되는 눈누 웹폰트 목록이 필터링되어 출력된다", async () => {
@@ -64,7 +82,6 @@ describe("FontControls (글꼴 컨트롤)", () => {
       name: "페이퍼로지",
     });
     expect(paperOption).toBeInTheDocument();
-    expect(paperOption.style.fontFamily).toContain("페이퍼로지");
 
     fireEvent.pointerDown(paperOption);
     fireEvent.mouseDown(paperOption);

@@ -25,7 +25,8 @@
     "test:watch": "vitest",
     "db:generate": "drizzle-kit generate --config config/drizzle.config.ts",
     "db:migrate:local": "wrangler d1 migrations apply DB --local",
-    "db:migrate:prod": "wrangler d1 migrations apply DB --remote"
+    "db:migrate:prod": "wrangler d1 migrations apply DB --remote",
+    "fonts:previews": "node scripts/buildFontPreviews.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.8.0",

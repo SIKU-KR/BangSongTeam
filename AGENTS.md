@@ -60,6 +60,7 @@ pnpm build                         # dist/ (SPA + Worker); CI then runs `pnpm ex
 pnpm format:check                  # Prettier (`pnpm format` to fix)
 pnpm db:generate                   # after editing src/db/schema/*
 pnpm types                         # after editing wrangler.jsonc; needs .dev.vars or the secrets drop out of Env
+pnpm fonts:previews                # after editing noonnuFonts.ts; renders missing font-list previews with local Chrome (Node 23.6+)
 ```
 
 - **Local login**: with `DEV_LOGIN_ENABLED=true`, the login page offers a dev login (`POST /api/dev-login`, default `dev@worship.local`). It works only when the host is localhost.
