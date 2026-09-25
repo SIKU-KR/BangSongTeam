@@ -154,7 +154,27 @@ export function applyServerDeckFields(serverDeck: Deck): void {
 }
 
 /**
- * 사용자가 등록한 곡 삭제.
+ * 보관함 곡의 제목·아티스트 수정. 공개 곡이면 서버 동기화 뒤 공유 라이브러리에도
+ * 그대로 보인다. 이미 세트에 넣은 곡은 복제본이라 바뀌지 않는다.
+ */
+export function updateLibrarySongInfo(
+  id: string,
+  info: { title: string; artist: string },
+): Deck | undefined {
+  const deck = getLibraryDeck(id);
+  if (!deck) return undefined;
+  if (deck.title === info.title && deck.artist === info.artist) return deck;
+  return upsertLibraryDeck({
+    ...deck,
+    title: info.title,
+    artist: info.artist,
+    updatedAt: new Date().toISOString(),
+  });
+}
+
+/**
+ * 사용자가 등록한 곡 삭제. 세트에 넣은 곡은 복제본이라 남는다. 공개 곡이면
+ * 서버에서 지워지면서 공유 라이브러리에서도 사라진다.
  */
 export function deleteUserSong(id: string): void {
   userSongsCache = userSongsCache.filter((d) => d.id !== id);

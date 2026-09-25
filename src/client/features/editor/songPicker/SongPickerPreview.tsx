@@ -12,6 +12,7 @@ interface ActionBarProps {
   onAdd: () => void;
   onClose: () => void;
   onReport?: () => void;
+  extraActions?: React.ReactNode;
   error?: string | null;
 }
 
@@ -22,6 +23,7 @@ function ActionBar({
   onAdd,
   onClose,
   onReport,
+  extraActions,
   error,
 }: ActionBarProps): React.JSX.Element {
   const [copied, setCopied] = useState(false);
@@ -55,6 +57,7 @@ function ActionBar({
               {copied ? "가사 복사됨 ✓" : "가사 텍스트 복사"}
             </button>
           )}
+          {extraActions}
           {onReport && (
             <button
               type="button"
@@ -130,10 +133,14 @@ export function MyDeckPreview({
   deck,
   onAdd,
   onClose,
+  onEditInfo,
+  onDelete,
 }: {
   deck: Deck;
   onAdd: () => void;
   onClose: () => void;
+  onEditInfo: () => void;
+  onDelete: () => void;
 }): React.JSX.Element {
   return (
     <div className="flex-1 flex flex-col min-h-0">
@@ -156,6 +163,26 @@ export function MyDeckPreview({
         addLabel="이 곡을 프레젠테이션에 추가"
         onAdd={onAdd}
         onClose={onClose}
+        extraActions={
+          <>
+            <button
+              type="button"
+              data-testid="song-picker-edit-info-btn"
+              onClick={onEditInfo}
+              className="px-3 py-2 rounded-xl text-xs font-medium text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 cursor-pointer"
+            >
+              정보 수정
+            </button>
+            <button
+              type="button"
+              data-testid="song-picker-delete-btn"
+              onClick={onDelete}
+              className="px-3 py-2 rounded-xl text-xs font-medium text-zinc-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 cursor-pointer"
+            >
+              삭제
+            </button>
+          </>
+        }
       />
     </div>
   );

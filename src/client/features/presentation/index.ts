@@ -40,6 +40,7 @@ export {
   updatePresentationTitle,
   updateSongStyle,
   updateSongBackground,
+  updateSongInfo,
   updateSlideLines,
   addSlideToSong,
   removeSlideFromSong,

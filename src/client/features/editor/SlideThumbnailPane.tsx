@@ -25,6 +25,7 @@ export interface SlideThumbnailPaneProps {
   ) => void;
   onReorderSong: (fromIndex: number, toIndex: number) => void;
   onDuplicateSong: (songIndex: number) => void;
+  onEditSongInfo: (songIndex: number) => void;
   onDeleteSong: (songIndex: number) => void;
   onOpenSongPicker: () => void;
   className?: string;
@@ -42,6 +43,7 @@ export function SlideThumbnailPane({
   onReorderSlide,
   onReorderSong,
   onDuplicateSong,
+  onEditSongInfo,
   onDeleteSong,
   onOpenSongPicker,
   className = "",
@@ -255,7 +257,7 @@ export function SlideThumbnailPane({
                     <div
                       role="menu"
                       data-testid="song-section-menu"
-                      className="absolute right-0 top-6 z-50 w-36 py-1 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg shadow-lg dark:shadow-2xl text-xs text-zinc-700 dark:text-zinc-300"
+                      className="absolute right-0 top-6 z-50 w-40 py-1 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg shadow-lg dark:shadow-2xl text-xs text-zinc-700 dark:text-zinc-300"
                     >
                       <SectionMenuItem
                         label="위로 이동"
@@ -276,23 +278,25 @@ export function SlideThumbnailPane({
                         }
                       />
                       <SectionMenuItem
+                        label="제목·아티스트 수정"
+                        onClick={() =>
+                          runMenuAction(() => onEditSongInfo(songIndex))
+                        }
+                      />
+                      <SectionMenuItem
                         label="곡 복제"
                         onClick={() =>
                           runMenuAction(() => onDuplicateSong(songIndex))
                         }
                       />
-                      {items.length > 1 && (
-                        <>
-                          <div className="my-1 border-t border-zinc-200 dark:border-zinc-800" />
-                          <SectionMenuItem
-                            label="곡 삭제"
-                            danger
-                            onClick={() =>
-                              runMenuAction(() => onDeleteSong(songIndex))
-                            }
-                          />
-                        </>
-                      )}
+                      <div className="my-1 border-t border-zinc-200 dark:border-zinc-800" />
+                      <SectionMenuItem
+                        label="세트에서 제거"
+                        danger
+                        onClick={() =>
+                          runMenuAction(() => onDeleteSong(songIndex))
+                        }
+                      />
                     </div>
                   )}
                 </div>

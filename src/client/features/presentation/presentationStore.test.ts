@@ -24,6 +24,7 @@ import {
   updatePresentationTitle,
   updateSongStyle,
   updateSongBackground,
+  updateSongInfo,
   updateSlideLines,
   addSlideToSong,
   removeSlideFromSong,
@@ -188,6 +189,25 @@ describe("presentationStore (In-memory reactive presentation)", () => {
       updateSongBackground(0, null);
     });
     expect(result.current.items[0].deck?.backgroundId).toBeNull();
+  });
+
+  it("세트 곡의 제목·아티스트를 바꾸고 되돌릴 수 있다", () => {
+    const before = getActivePresentation().items[1].deck!;
+
+    updateSongInfo(1, { title: before.title, artist: before.artist });
+    expect(canUndo()).toBe(false);
+
+    updateSongInfo(1, { title: "새 제목", artist: "새 아티스트" });
+    const after = getActivePresentation().items[1].deck!;
+    expect(after).toMatchObject({
+      id: before.id,
+      title: "새 제목",
+      artist: "새 아티스트",
+      slides: before.slides,
+    });
+
+    undo();
+    expect(getActivePresentation().items[1].deck?.title).toBe(before.title);
   });
 
   it("should manage slides (update, add, duplicate, remove)", () => {

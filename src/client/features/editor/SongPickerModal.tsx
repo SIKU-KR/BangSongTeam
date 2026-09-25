@@ -1,11 +1,18 @@
 import React, { useEffect, useMemo, useState } from "react";
 import type { Deck, PublicDeckSummary } from "#shared";
 import { hangulIncludes } from "#shared";
-import { saveSongToLibrary, useUserSongs } from "./songLibraryStore";
+import {
+  deleteUserSong,
+  saveSongToLibrary,
+  updateLibrarySongInfo,
+  useUserSongs,
+} from "./songLibraryStore";
 import { useCatalogSearch, useForkDeck } from "../../lib/api/catalogQueries";
 import { describeApiError } from "../../lib/api/request";
 import { useIsOnline } from "../../hooks/useIsOnline";
 import { ReportDialog } from "../sharing/ReportDialog";
+import { ConfirmDialog } from "../drive/DriveDialogs";
+import { SongInfoDialog } from "./SongInfoDialog";
 import {
   CreateSongForm,
   type CreateSongValues,
@@ -27,6 +34,7 @@ export interface SongPickerModalProps {
 export type SongPickerMode = "browse" | "create";
 
 type FilterType = "all" | "mine" | "shared";
+type LibraryDialog = { kind: "edit" | "delete"; deck: Deck };
 
 type PickerEntry =
   | { kind: "mine"; key: string; deck: Deck }
@@ -69,6 +77,9 @@ export function SongPickerModal({
     id: string;
     title: string;
   } | null>(null);
+  const [libraryDialog, setLibraryDialog] = useState<LibraryDialog | null>(
+    null,
+  );
 
   const search = useCatalogSearch(searchQuery, {
     enabled: isOpen && isOnline,
@@ -85,13 +96,13 @@ export function SongPickerModal({
   }, [isOpen, initialSearch, initialMode]);
 
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen || libraryDialog) return;
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isOpen, onClose]);
+  }, [isOpen, onClose, libraryDialog]);
 
   const entries = useMemo<PickerEntry[]>(() => {
     const q = searchQuery.trim();
@@ -327,6 +338,12 @@ export function SongPickerModal({
                 deck={selected.deck}
                 onAdd={() => void handleAddSelected()}
                 onClose={onClose}
+                onEditInfo={() =>
+                  setLibraryDialog({ kind: "edit", deck: selected.deck })
+                }
+                onDelete={() =>
+                  setLibraryDialog({ kind: "delete", deck: selected.deck })
+                }
               />
             ) : (
               <SharedDeckPreview
@@ -347,6 +364,46 @@ export function SongPickerModal({
           </div>
         </div>
       </div>
+
+      {libraryDialog?.kind === "edit" && (
+        <SongInfoDialog
+          heading="보관함 곡 정보 수정"
+          initialValues={{
+            title: libraryDialog.deck.title,
+            artist: libraryDialog.deck.artist,
+          }}
+          notice={
+            libraryDialog.deck.visibility === "public"
+              ? "공개한 곡이라 공유 라이브러리에도 바로 반영됩니다. 이미 세트에 넣은 곡은 바뀌지 않습니다."
+              : "이미 세트에 넣은 곡은 바뀌지 않습니다."
+          }
+          onSubmit={(values) => {
+            updateLibrarySongInfo(libraryDialog.deck.id, values);
+            setLibraryDialog(null);
+          }}
+          onCancel={() => setLibraryDialog(null)}
+        />
+      )}
+
+      {libraryDialog?.kind === "delete" && (
+        <ConfirmDialog
+          title="보관함에서 삭제"
+          message={
+            <>
+              ‘{libraryDialog.deck.title}’ 곡을 내 보관함에서 삭제할까요? 이미
+              세트에 넣은 곡은 그대로 남습니다.
+              {libraryDialog.deck.visibility === "public" &&
+                " 공개한 곡이라 공유 라이브러리에서도 내려갑니다."}
+            </>
+          }
+          confirmLabel="삭제"
+          onConfirm={() => {
+            deleteUserSong(libraryDialog.deck.id);
+            setLibraryDialog(null);
+          }}
+          onCancel={() => setLibraryDialog(null)}
+        />
+      )}
 
       {reportTarget && (
         <ReportDialog

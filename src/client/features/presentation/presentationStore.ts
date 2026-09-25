@@ -519,6 +519,40 @@ export function updateSongStyle(
   emitChange();
 }
 
+/**
+ * 세트 곡의 제목·아티스트만 바꾼다. 세트 곡은 보관함 원본의 복제본이라 원본은
+ * 그대로 두며, 원본에 반영하려면 '공개본 업데이트'나 보관함에서 따로 고친다.
+ */
+export function updateSongInfo(
+  songIndex: number,
+  info: { title: string; artist: string },
+): void {
+  const item = readActive().items[songIndex];
+  if (!item || !item.deck) return;
+  if (item.deck.title === info.title && item.deck.artist === info.artist) {
+    return;
+  }
+
+  pushHistory();
+
+  const updatedDeck: Deck = {
+    ...item.deck,
+    title: info.title,
+    artist: info.artist,
+    updatedAt: new Date().toISOString(),
+  };
+
+  const updatedItems = [...readActive().items];
+  updatedItems[songIndex] = { ...item, deck: updatedDeck };
+
+  writeActive({
+    ...readActive(),
+    items: updatedItems,
+    updatedAt: new Date().toISOString(),
+  });
+  emitChange();
+}
+
 export function updateSongBackground(
   songIndex: number,
   backgroundId: string | null,

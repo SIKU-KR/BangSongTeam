@@ -12,6 +12,7 @@ import {
   getUserSongs,
   resetSongLibraryStore,
   saveSongToLibrary,
+  upsertLibraryDeck,
 } from "./songLibraryStore";
 
 const SHARED_ID = "c00000005000000000001";
@@ -198,6 +199,30 @@ describe("SongPickerModal", () => {
     expect(screen.queryByText("소원")).not.toBeInTheDocument();
   });
 
+  it("닫혀 있다가 열려도 렌더링이 깨지지 않는다", () => {
+    seedMySong();
+    const { rerender } = render(
+      withQueryClient(
+        <SongPickerModal
+          isOpen={false}
+          onClose={onCloseMock}
+          onSelectSong={onSelectSongMock}
+        />,
+      ),
+    );
+
+    rerender(
+      withQueryClient(
+        <SongPickerModal
+          isOpen={true}
+          onClose={onCloseMock}
+          onSelectSong={onSelectSongMock}
+        />,
+      ),
+    );
+    expect(screen.getByTestId("song-picker-modal")).toBeInTheDocument();
+  });
+
   it("내 곡을 골라 추가하면 onSelectSong이 호출된다", () => {
     const mine = seedMySong();
     renderPicker();
@@ -217,6 +242,81 @@ describe("SongPickerModal", () => {
     fireEvent.click(screen.getByTestId("song-picker-copy-lyrics-btn"));
     expect(await screen.findByText("가사 복사됨 ✓")).toBeInTheDocument();
     expect(screen.getByText("넷째 줄")).toBeInTheDocument();
+  });
+
+  describe("내 보관함 곡 관리", () => {
+    it("제목·아티스트를 고치면 보관함과 목록에 반영된다", () => {
+      const mine = seedMySong();
+      renderPicker();
+
+      fireEvent.click(screen.getByTestId("song-picker-edit-info-btn"));
+      expect(screen.getByTestId("song-info-title-input")).toHaveValue(
+        "내가 만든 찬양",
+      );
+      fireEvent.change(screen.getByTestId("song-info-title-input"), {
+        target: { value: "고친 제목" },
+      });
+      fireEvent.change(screen.getByTestId("song-info-artist-input"), {
+        target: { value: "" },
+      });
+      fireEvent.click(screen.getByTestId("song-info-save-btn"));
+
+      expect(screen.queryByTestId("song-info-dialog")).not.toBeInTheDocument();
+      expect(getUserSongs()).toHaveLength(1);
+      expect(getUserSongs()[0]).toMatchObject({
+        id: mine.id,
+        title: "고친 제목",
+        artist: "",
+      });
+      expect(screen.getByTestId(`song-item-${mine.id}`)).toHaveTextContent(
+        "고친 제목",
+      );
+    });
+
+    it("수정 창의 Esc는 수정 창만 닫고 곡 추가 창은 남긴다", () => {
+      seedMySong();
+      renderPicker();
+
+      fireEvent.click(screen.getByTestId("song-picker-edit-info-btn"));
+      fireEvent.keyDown(document, { key: "Escape" });
+
+      expect(screen.queryByTestId("song-info-dialog")).not.toBeInTheDocument();
+      expect(onCloseMock).not.toHaveBeenCalled();
+      expect(getUserSongs()[0].title).toBe("내가 만든 찬양");
+    });
+
+    it("확인을 거쳐 보관함에서 삭제한다", () => {
+      const mine = seedMySong();
+      renderPicker();
+
+      fireEvent.click(screen.getByTestId("song-picker-delete-btn"));
+      expect(screen.getByTestId("drive-confirm-dialog")).toHaveTextContent(
+        "이미 세트에 넣은 곡은 그대로 남습니다",
+      );
+      fireEvent.click(screen.getByTestId("drive-confirm-btn"));
+
+      expect(getUserSongs()).toHaveLength(0);
+      expect(
+        screen.queryByTestId(`song-item-${mine.id}`),
+      ).not.toBeInTheDocument();
+      expect(onCloseMock).not.toHaveBeenCalled();
+    });
+
+    it("공개한 곡을 지우려 하면 공유 라이브러리에서도 내려간다고 알린다", () => {
+      upsertLibraryDeck(
+        { ...seedMySong(), visibility: "public" },
+        { push: false },
+      );
+      renderPicker();
+
+      fireEvent.click(screen.getByTestId("song-picker-delete-btn"));
+      expect(screen.getByTestId("drive-confirm-dialog")).toHaveTextContent(
+        "공유 라이브러리에서도 내려갑니다",
+      );
+
+      fireEvent.click(screen.getByRole("button", { name: "취소" }));
+      expect(getUserSongs()).toHaveLength(1);
+    });
   });
 
   describe("공유 곡", () => {

@@ -44,6 +44,7 @@ function renderPane(overrides: Partial<SlideThumbnailPaneProps> = {}) {
     onReorderSlide: vi.fn(),
     onReorderSong: vi.fn(),
     onDuplicateSong: vi.fn(),
+    onEditSongInfo: vi.fn(),
     onDeleteSong: vi.fn(),
     onOpenSongPicker: vi.fn(),
     ...overrides,
@@ -141,17 +142,22 @@ describe("SlideThumbnailPane (PPT식 썸네일 창)", () => {
     expect(props.onDuplicateSong).toHaveBeenCalledWith(1);
 
     fireEvent.click(screen.getByTestId("song-section-menu-btn-1"));
-    fireEvent.click(screen.getByRole("menuitem", { name: "곡 삭제" }));
+    fireEvent.click(
+      screen.getByRole("menuitem", { name: "제목·아티스트 수정" }),
+    );
+    expect(props.onEditSongInfo).toHaveBeenCalledWith(1);
+
+    fireEvent.click(screen.getByTestId("song-section-menu-btn-1"));
+    fireEvent.click(screen.getByRole("menuitem", { name: "세트에서 제거" }));
     expect(props.onDeleteSong).toHaveBeenCalledWith(1);
   });
 
-  it("곡이 하나뿐이면 곡 삭제 메뉴가 없다", () => {
-    renderPane({ items: makeItems([2]) });
+  it("곡이 하나뿐이어도 세트에서 제거할 수 있다", () => {
+    const { props } = renderPane({ items: makeItems([2]) });
 
     fireEvent.click(screen.getByTestId("song-section-menu-btn-0"));
-    expect(
-      screen.queryByRole("menuitem", { name: "곡 삭제" }),
-    ).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("menuitem", { name: "세트에서 제거" }));
+    expect(props.onDeleteSong).toHaveBeenCalledWith(0);
   });
 
   it("선택이 접힌 구역으로 옮겨 가면 그 구역을 펼친다", () => {

@@ -9,6 +9,7 @@ import {
   updatePresentationTitle,
   updateSongStyle,
   updateSongBackground,
+  updateSongInfo,
   updateSlideLines,
   addSlideToSong,
   removeSlideFromSong,
@@ -46,6 +47,7 @@ import {
   SongPickerModal,
   type SongPickerMode,
 } from "../features/editor/SongPickerModal";
+import { SongInfoDialog } from "../features/editor/SongInfoDialog";
 import { SongSharePanel } from "../features/sharing/SongSharePanel";
 import { useBackgroundAutoCache } from "../features/offline";
 import {
@@ -73,6 +75,7 @@ export function EditorRoute(): React.JSX.Element {
   const [songPickerMode, setSongPickerMode] = useState<SongPickerMode | null>(
     null,
   );
+  const [editingSongIndex, setEditingSongIndex] = useState<number | null>(null);
 
   useLayoutEffect(() => {
     if (presentationId) openPresentation(presentationId);
@@ -118,6 +121,9 @@ export function EditorRoute(): React.JSX.Element {
   };
   const totalSlideCount = getTotalSlideCount(songs);
   const currentSlideNumber = slideNumberOfPosition(position, songs);
+
+  const editingSong =
+    editingSongIndex === null ? undefined : songs[editingSongIndex]?.deck;
 
   const background = resolveBackgroundLayers(
     useBackground(currentSong?.backgroundId),
@@ -313,6 +319,7 @@ export function EditorRoute(): React.JSX.Element {
           onReorderSlide={handleReorderSlide}
           onReorderSong={handleReorderSong}
           onDuplicateSong={handleDuplicateSong}
+          onEditSongInfo={setEditingSongIndex}
           onDeleteSong={handleDeleteSong}
           onOpenSongPicker={() => setSongPickerMode("browse")}
         />
@@ -357,6 +364,22 @@ export function EditorRoute(): React.JSX.Element {
           }
         />
       </div>
+
+      {editingSongIndex !== null && editingSong && (
+        <SongInfoDialog
+          heading="제목·아티스트 수정"
+          initialValues={{
+            title: editingSong.title,
+            artist: editingSong.artist,
+          }}
+          notice="이 세트의 곡만 바뀝니다. 보관함의 원본은 '찬양곡 추가'에서 따로 수정할 수 있습니다."
+          onSubmit={(values) => {
+            updateSongInfo(editingSongIndex, values);
+            setEditingSongIndex(null);
+          }}
+          onCancel={() => setEditingSongIndex(null)}
+        />
+      )}
 
       <SongPickerModal
         isOpen={songPickerMode !== null}

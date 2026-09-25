@@ -450,7 +450,7 @@ describe("EditorRoute (PowerPoint식 프레젠테이션 편집기)", () => {
       expect(screen.queryByTestId("song-section-menu")).not.toBeInTheDocument();
     });
 
-    it("구역 메뉴로 곡을 복제·삭제할 수 있다", () => {
+    it("구역 메뉴로 곡을 복제·제거할 수 있다", () => {
       renderEditor();
 
       fireEvent.click(screen.getByTestId("song-section-menu-btn-0"));
@@ -462,10 +462,61 @@ describe("EditorRoute (PowerPoint식 프레젠테이션 편집기)", () => {
       expect(screen.getByTestId("editor-header")).toHaveTextContent("곡 2/6");
 
       fireEvent.click(screen.getByTestId("song-section-menu-btn-1"));
-      fireEvent.click(screen.getByRole("menuitem", { name: "곡 삭제" }));
+      fireEvent.click(screen.getByRole("menuitem", { name: "세트에서 제거" }));
 
       expect(screen.queryByText("은혜로다 (사본)")).not.toBeInTheDocument();
       expect(screen.getByTestId("editor-header")).toHaveTextContent("곡 2/5");
+    });
+
+    it("구역 메뉴로 곡 제목·아티스트를 고치고 되돌릴 수 있다", () => {
+      renderEditor();
+
+      fireEvent.click(screen.getByTestId("song-section-menu-btn-0"));
+      fireEvent.click(
+        screen.getByRole("menuitem", { name: "제목·아티스트 수정" }),
+      );
+
+      const titleInput = screen.getByTestId("song-info-title-input");
+      expect(titleInput).toHaveValue("은혜로다");
+
+      fireEvent.change(titleInput, { target: { value: "  " } });
+      expect(screen.getByTestId("song-info-save-btn")).toBeDisabled();
+
+      fireEvent.change(titleInput, { target: { value: " 은혜 아니면 " } });
+      fireEvent.change(screen.getByTestId("song-info-artist-input"), {
+        target: { value: "어노인팅" },
+      });
+      fireEvent.click(screen.getByTestId("song-info-save-btn"));
+
+      expect(screen.queryByTestId("song-info-dialog")).not.toBeInTheDocument();
+      expect(screen.getByTestId("song-section-title-0")).toHaveTextContent(
+        "은혜 아니면",
+      );
+      expect(screen.getByTestId("song-section-title-0")).toHaveAttribute(
+        "title",
+        "은혜 아니면 · 어노인팅",
+      );
+
+      fireEvent.click(screen.getByTestId("header-undo-btn"));
+      expect(screen.getByTestId("song-section-title-0")).toHaveTextContent(
+        "은혜로다",
+      );
+    });
+
+    it("곡 정보 수정 창은 Esc로 닫히고 아무것도 바꾸지 않는다", () => {
+      renderEditor();
+
+      fireEvent.contextMenu(screen.getByTestId("song-section-1"));
+      fireEvent.click(
+        screen.getByRole("menuitem", { name: "제목·아티스트 수정" }),
+      );
+      fireEvent.change(screen.getByTestId("song-info-title-input"), {
+        target: { value: "바뀐 제목" },
+      });
+      fireEvent.keyDown(document, { key: "Escape" });
+
+      expect(screen.queryByTestId("song-info-dialog")).not.toBeInTheDocument();
+      expect(screen.queryByText("바뀐 제목")).not.toBeInTheDocument();
     });
 
     it("우클릭으로 구역 메뉴가 열리고 Esc로 닫힌다", () => {
