@@ -58,6 +58,7 @@ import { ConfirmDialog, MoveDialog, NameDialog } from "./DriveDialogs";
 import { listPresentations } from "../presentation";
 import { resolveUniqueName } from "#shared";
 import { FolderGlyph, Icon } from "./icons";
+import { isLetterKey, isTypingTarget } from "./keyboard";
 
 type DialogState =
   | { kind: "new-folder"; parentId: string | null }
@@ -119,6 +120,7 @@ export function DriveProvider({
     () => new Set(),
   );
   const [anchorKey, setAnchorKey] = useState<string | null>(null);
+  const [focusKey, setFocusKey] = useState<string | null>(null);
   const [activeDrag, setActiveDrag] = useState<DriveItemRef[] | null>(null);
   const [dialog, setDialog] = useState<DialogState>(null);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -128,6 +130,7 @@ export function DriveProvider({
   useEffect(() => {
     setSelectionState(new Set());
     setAnchorKey(null);
+    setFocusKey(null);
   }, [pathname]);
 
   useEffect(() => {
@@ -139,7 +142,10 @@ export function DriveProvider({
   const setSelection = useCallback(
     (keys: readonly string[], anchor?: string | null): void => {
       setSelectionState(new Set(keys));
-      if (anchor !== undefined) setAnchorKey(anchor);
+      if (anchor !== undefined) {
+        setAnchorKey(anchor);
+        if (anchor !== null) setFocusKey(anchor);
+      }
     },
     [],
   );
@@ -259,6 +265,27 @@ export function DriveProvider({
     }
   };
 
+  useEffect(() => {
+    const action = toast?.action;
+    if (!action || dialog !== null) return;
+    const handleUndo = (event: KeyboardEvent): void => {
+      if (
+        !(event.metaKey || event.ctrlKey) ||
+        event.shiftKey ||
+        event.altKey ||
+        !isLetterKey(event, "z") ||
+        isTypingTarget(event.target)
+      ) {
+        return;
+      }
+      event.preventDefault();
+      action.run();
+      setToast(null);
+    };
+    window.addEventListener("keydown", handleUndo);
+    return () => window.removeEventListener("keydown", handleUndo);
+  }, [toast, dialog]);
+
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
   );
@@ -288,7 +315,9 @@ export function DriveProvider({
       isTrashView,
       selection,
       anchorKey,
+      focusKey,
       setSelection,
+      setFocusKey,
       clearSelection,
       activeDrag,
       dialogOpen: dialog !== null,
@@ -314,6 +343,7 @@ export function DriveProvider({
       isTrashView,
       selection,
       anchorKey,
+      focusKey,
       setSelection,
       clearSelection,
       activeDrag,
@@ -476,17 +506,29 @@ function DragChip({
 }: {
   refs: readonly DriveItemRef[];
 }): React.JSX.Element {
-  const single = refs.length === 1 ? refs[0] : null;
+  const first = refs[0];
+  const many = refs.length > 1;
   return (
-    <div className="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-white dark:bg-zinc-900 border border-emerald-400 dark:border-emerald-600 shadow-xl text-xs font-semibold text-zinc-800 dark:text-zinc-100 cursor-grabbing">
-      {single?.kind === "folder" ? (
-        <FolderGlyph className="w-4 h-4 text-emerald-500" />
-      ) : (
-        <Icon name="slides" className="w-4 h-4 text-emerald-500" />
+    <div className="relative inline-block cursor-grabbing">
+      {many && (
+        <div className="absolute inset-0 translate-x-1 translate-y-1 rounded-xl bg-white dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 shadow" />
       )}
-      <span className="max-w-[220px] truncate">
-        {single ? itemName(single) : `${refs.length}개 항목`}
-      </span>
+      <div className="relative flex items-center gap-2.5 w-60 px-3 py-2.5 rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 shadow-xl text-sm font-medium text-zinc-800 dark:text-zinc-100">
+        {first?.kind === "folder" ? (
+          <FolderGlyph className="w-5 h-5 shrink-0 text-emerald-500" />
+        ) : (
+          <Icon name="slides" className="w-5 h-5 shrink-0 text-indigo-500" />
+        )}
+        <span className="truncate">{first ? itemName(first) : ""}</span>
+      </div>
+      {many && (
+        <span
+          data-testid="drag-count"
+          className="absolute -top-2 -right-2 min-w-6 h-6 px-1.5 rounded-full bg-emerald-600 text-white text-xs font-bold flex items-center justify-center shadow"
+        >
+          {refs.length}
+        </span>
+      )}
     </div>
   );
 }
@@ -502,7 +544,7 @@ function DriveToast({
     <div
       role="status"
       data-testid="drive-toast"
-      className="fixed bottom-6 left-1/2 -translate-x-1/2 lg:left-[calc(50%+8rem)] z-[70] flex items-center gap-3 pl-4 pr-2 py-2.5 rounded-xl bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 shadow-2xl text-xs max-w-[90vw]"
+      className="fixed bottom-6 left-4 lg:left-[17rem] z-[70] flex items-center gap-3 min-w-[18rem] pl-4 pr-2 py-3 rounded-lg bg-zinc-800 dark:bg-zinc-100 text-white dark:text-zinc-900 shadow-2xl text-sm max-w-[calc(100vw-2rem)]"
     >
       <span className="truncate">{toast.message}</span>
       {toast.action && (

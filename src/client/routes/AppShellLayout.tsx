@@ -5,14 +5,18 @@ import { ChromeAlertBanner } from "../components/common/ChromeAlertBanner";
 import { StorageWarningBanner } from "../components/common/StorageWarningBanner";
 import { AppUpdateBanner } from "../components/common/AppUpdateBanner";
 import { AppSidebar } from "../components/layout/AppSidebar";
-import { AppHeroHeader } from "../components/layout/AppHeroHeader";
+import { AppHeader } from "../components/layout/AppHeader";
 import { QuickLyricPasteModal } from "../features/editor";
 import { addDeckToPresentation } from "../features/presentation";
 import {
+  DEFAULT_SORT_ORDER,
   DriveBreadcrumbs,
   DriveProvider,
   NewMenuButton,
+  ROOT_LABEL,
+  getFolder,
   useDrive,
+  useFolderIndex,
 } from "../features/drive";
 import type {
   AppShellContextValue,
@@ -65,13 +69,17 @@ function AppShellFrame(): React.JSX.Element {
 
   const [isQuickPasteOpen, setIsQuickPasteOpen] = useState<boolean>(false);
   const [searchQuery, setSearchQuery] = useState<string>("");
-  const [sortOrder, setSortOrder] = useState<SortOrder>("recent");
+  const [sortOrder, setSortOrder] = useState<SortOrder>(DEFAULT_SORT_ORDER);
   const [typeFilter, setTypeFilter] = useState<DriveTypeFilter>("all");
 
   const meta = metaFor(pathname);
   const onDrive = isDrivePath(pathname);
-  const onBackgrounds = pathname.startsWith("/backgrounds");
   const onTrash = pathname === "/presentations/trash";
+  useFolderIndex();
+  const pageTitle =
+    onDrive && !onTrash && drive.currentFolderId
+      ? (getFolder(drive.currentFolderId)?.name ?? ROOT_LABEL)
+      : meta.title;
 
   const handleCreateNewPresentation = (): void => {
     drive.createPresentationIn(drive.currentFolderId);
@@ -86,6 +94,8 @@ function AppShellFrame(): React.JSX.Element {
     searchQuery,
     sortOrder,
     typeFilter,
+    onSortOrderChange: setSortOrder,
+    onTypeFilterChange: setTypeFilter,
     onOpenQuickPaste: () => setIsQuickPasteOpen(true),
     onCreateNewPresentation: handleCreateNewPresentation,
     onAddDeckToPresentation: handleAddDeckToPresentation,
@@ -95,35 +105,37 @@ function AppShellFrame(): React.JSX.Element {
     <div className="h-screen w-full bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 flex overflow-hidden">
       <AppSidebar />
 
-      <div className="flex-1 h-full flex flex-col min-w-0 overflow-y-auto overflow-x-hidden">
+      <div className="flex-1 h-full flex flex-col min-w-0 overflow-hidden">
         <ChromeAlertBanner />
         <StorageWarningBanner />
         <AppUpdateBanner />
 
-        <AppHeroHeader
-          title={meta.title}
+        <AppHeader
+          title={pageTitle}
           searchPlaceholder={meta.placeholder}
           searchQuery={searchQuery}
           onSearchQueryChange={setSearchQuery}
-          sortOrder={sortOrder}
-          onSortOrderChange={setSortOrder}
-          typeFilter={typeFilter}
-          onTypeFilterChange={setTypeFilter}
-          itemCountLabel=""
-          toolbarStart={onDrive ? <DriveBreadcrumbs /> : undefined}
-          quickAddSlot={
+          titleSlot={onDrive ? <DriveBreadcrumbs /> : undefined}
+          actions={
             onDrive ? (
-              <NewMenuButton variant="fab" testId="toolbar-new-btn" />
+              <div className="lg:hidden">
+                <NewMenuButton variant="fab" testId="toolbar-new-btn" />
+              </div>
             ) : undefined
           }
-          onQuickAdd={handleCreateNewPresentation}
-          showControls={!onBackgrounds}
-          showFilters={!onTrash}
         />
 
-        <main className="flex-1 max-w-7xl w-full mx-auto px-6 sm:px-8 py-4">
-          <Outlet context={context} />
-        </main>
+        {onDrive ? (
+          <main className="flex-1 min-h-0 flex flex-col">
+            <Outlet context={context} />
+          </main>
+        ) : (
+          <main className="flex-1 min-h-0 overflow-y-auto">
+            <div className="px-4 sm:px-6 py-4">
+              <Outlet context={context} />
+            </div>
+          </main>
+        )}
       </div>
 
       <QuickLyricPasteModal

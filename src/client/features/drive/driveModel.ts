@@ -8,7 +8,11 @@ import {
   type FolderIndex,
   type Presentation,
 } from "#shared";
-import type { DriveTypeFilter, SortOrder } from "../../routes/appShellContext";
+import type {
+  DriveTypeFilter,
+  SortKey,
+  SortOrder,
+} from "../../routes/appShellContext";
 
 /**
  * 드라이브 화면의 파생 데이터 (순수 함수).
@@ -164,20 +168,41 @@ function toFileItem(presentation: Presentation): DriveFileItem {
 
 const collator = new Intl.Collator("ko", { numeric: true });
 
+/** 처음 정렬할 때의 기본 방향 (이름은 가나다순, 날짜·슬라이드 수는 큰 값부터) */
+export const DEFAULT_SORT_DIRECTION: Record<SortKey, SortOrder["direction"]> = {
+  name: "asc",
+  updated: "desc",
+  slides: "desc",
+};
+
+export const DEFAULT_SORT_ORDER: SortOrder = {
+  key: "updated",
+  direction: DEFAULT_SORT_DIRECTION.updated,
+};
+
+/**
+ * 열 머리글을 눌렀을 때의 다음 정렬 (구글 드라이브와 같다).
+ * 지금 기준을 다시 누르면 방향만 뒤집고, 다른 기준은 그 기준의 기본 방향으로 시작한다.
+ */
+export function nextSortOrder(current: SortOrder, key: SortKey): SortOrder {
+  if (current.key === key) {
+    return { key, direction: current.direction === "asc" ? "desc" : "asc" };
+  }
+  return { key, direction: DEFAULT_SORT_DIRECTION[key] };
+}
+
 function compareItems(sortOrder: SortOrder) {
+  const sign = sortOrder.direction === "asc" ? 1 : -1;
   return (a: DriveItem, b: DriveItem): number => {
-    if (sortOrder === "recent") {
-      return b.updatedAt.localeCompare(a.updatedAt);
+    let primary = 0;
+    if (sortOrder.key === "updated") {
+      primary = a.updatedAt.localeCompare(b.updatedAt);
+    } else if (sortOrder.key === "name") {
+      primary = collator.compare(a.name, b.name);
+    } else if (a.kind === "file" && b.kind === "file") {
+      primary = a.slideCount - b.slideCount;
     }
-    if (
-      sortOrder === "slides" &&
-      a.kind === "file" &&
-      b.kind === "file" &&
-      a.slideCount !== b.slideCount
-    ) {
-      return b.slideCount - a.slideCount;
-    }
-    return collator.compare(a.name, b.name);
+    return primary !== 0 ? primary * sign : collator.compare(a.name, b.name);
   };
 }
 

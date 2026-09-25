@@ -38,6 +38,7 @@ export {
   listTrash,
   searchDrive,
   canDropInto,
+  DEFAULT_SORT_ORDER,
   itemKey,
   parseItemKey,
   ROOT_LABEL,
@@ -51,3 +52,4 @@ export { DriveBreadcrumbs } from "./DriveBreadcrumbs";
 export { NewMenuButton } from "./NewMenu";
 export { FolderTree, useTreeExpansion } from "./FolderTree";
 export { FolderGlyph } from "./icons";
+export { isTypingTarget } from "./keyboard";

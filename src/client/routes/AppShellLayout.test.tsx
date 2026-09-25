@@ -249,7 +249,7 @@ describe("AppShellLayout (드라이브형 홈)", () => {
     fireEvent.click(options[3], { shiftKey: true });
     expect(screen.getByTestId("selection-bar")).toHaveTextContent("4개 선택됨");
 
-    fireEvent.click(screen.getByTestId("drive-view"));
+    fireEvent.click(screen.getByTestId("drive-scroll-area"));
     expect(screen.queryByTestId("selection-bar")).not.toBeInTheDocument();
 
     act(() => {
@@ -551,6 +551,9 @@ describe("AppShellLayout (드라이브형 홈)", () => {
 
     const result = card(inside.title);
     expect(result).toHaveTextContent("내 드라이브 › 2026 주일 대예배");
+    expect(
+      screen.getByRole("columnheader", { name: "위치" }),
+    ).toBeInTheDocument();
     expect(screen.getByTestId("drive-summary")).toHaveTextContent("검색 결과");
   });
 
@@ -672,60 +675,62 @@ describe("AppShellLayout (드라이브형 홈)", () => {
     expect(screen.getByText("라이트 모드")).toBeInTheDocument();
   });
 
-  it("정렬 컨트롤은 드롭다운 하나만 제공되고 기준을 변경할 수 있다", () => {
+  it("열 머리글을 눌러 정렬하고, 같은 머리글을 다시 누르면 방향을 뒤집는다", () => {
     renderShell();
 
-    expect(screen.queryByTitle("정렬 기준 전환")).toBeNull();
+    expect(screen.queryByTestId("drive-sort-dropdown")).toBeNull();
+    const columnHeader = (label: string): HTMLElement =>
+      screen.getByRole("columnheader", { name: new RegExp(label) });
+    expect(columnHeader("수정일")).toHaveAttribute("aria-sort", "descending");
+    expect(screen.getAllByTestId("presentation-row")[1]).toHaveTextContent(
+      "청년부 금요 찬양 집회",
+    );
 
-    const sortButton = screen.getByTestId("drive-sort-dropdown");
-    expect(sortButton).toHaveTextContent("정렬: 수정된 날짜");
+    fireEvent.click(screen.getByTestId("sort-header-name"));
+    expect(columnHeader("이름")).toHaveAttribute("aria-sort", "ascending");
+    expect(columnHeader("수정일")).not.toHaveAttribute("aria-sort");
+    const byName = screen.getAllByTestId("presentation-row");
+    expect(byName[1]).toHaveTextContent("부활절 감사예배 특별 순서");
 
-    const initialRows = screen.getAllByTestId("presentation-row");
-    expect(initialRows[1]).toHaveTextContent("청년부 금요 찬양 집회");
+    fireEvent.click(screen.getByTestId("sort-header-name"));
+    expect(columnHeader("이름")).toHaveAttribute("aria-sort", "descending");
+    const reversed = screen.getAllByTestId("presentation-row");
+    expect(reversed.map((row) => row.getAttribute("aria-label"))).toEqual(
+      byName.map((row) => row.getAttribute("aria-label")).reverse(),
+    );
 
-    fireEvent.click(sortButton);
-    expect(screen.getByTestId("drive-sort-menu")).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId("sort-header-slides"));
+    expect(columnHeader("구성")).toHaveAttribute("aria-sort", "descending");
 
-    fireEvent.click(screen.getByTestId("sort-option-name"));
-    expect(screen.queryByTestId("drive-sort-menu")).toBeNull();
-    expect(sortButton).toHaveTextContent("정렬: 이름순");
-
-    const nameRows = screen.getAllByTestId("presentation-row");
-    expect(nameRows[1]).toHaveTextContent("부활절 감사예배 특별 순서");
-
-    fireEvent.click(sortButton);
-    fireEvent.click(screen.getByTestId("sort-option-slides"));
-    expect(sortButton).toHaveTextContent("정렬: 슬라이드 많은순");
-
-    fireEvent.click(sortButton);
-    fireEvent.click(screen.getByTestId("sort-option-recent"));
-    expect(sortButton).toHaveTextContent("정렬: 수정된 날짜");
-
-    const recentRows = screen.getAllByTestId("presentation-row");
-    expect(recentRows[1]).toHaveTextContent("청년부 금요 찬양 집회");
+    fireEvent.click(screen.getByTestId("sort-header-updated"));
+    expect(columnHeader("수정일")).toHaveAttribute("aria-sort", "descending");
+    expect(screen.getAllByTestId("presentation-row")[1]).toHaveTextContent(
+      "청년부 금요 찬양 집회",
+    );
   });
 
-  it("유형 필터는 폴더·프레젠테이션만 고르고, 카테고리·소유자 칩은 없다", () => {
+  it("유형 칩은 폴더·프레젠테이션을 고르고 ✕로 지운다", () => {
     __loadFoldersForTests([folder(WORSHIP, "2026 주일 대예배")]);
     renderShell();
 
-    expect(screen.queryByText(/카테고리:/)).toBeNull();
+    expect(screen.queryByText(/카테고리/)).toBeNull();
     expect(screen.queryByText(/소유자:/)).toBeNull();
 
     const typeButton = screen.getByTestId("drive-type-dropdown");
-    expect(typeButton).toHaveTextContent("유형: 전체");
+    expect(typeButton).toHaveTextContent("유형");
+    expect(screen.queryByTestId("drive-type-clear")).toBeNull();
 
     fireEvent.click(typeButton);
     const menu = screen.getByTestId("drive-type-menu");
     expect(
       within(menu)
-        .getAllByRole("button")
-        .map((button) => button.textContent),
-    ).toEqual(["전체", "폴더", "프레젠테이션"]);
+        .getAllByRole("menuitem")
+        .map((item) => item.textContent),
+    ).toEqual(["폴더", "프레젠테이션"]);
 
     fireEvent.click(screen.getByTestId("type-option-folder"));
     expect(screen.queryByTestId("drive-type-menu")).toBeNull();
-    expect(typeButton).toHaveTextContent("유형: 폴더");
+    expect(typeButton).toHaveTextContent("폴더");
     expect(screen.queryAllByTestId("presentation-row")).toHaveLength(0);
     expect(within(screen.getByRole("listbox")).getAllByRole("option")).toEqual([
       card("폴더 2026 주일 대예배"),
@@ -737,7 +742,7 @@ describe("AppShellLayout (드라이브형 홈)", () => {
 
     fireEvent.click(typeButton);
     fireEvent.click(screen.getByTestId("type-option-file"));
-    expect(typeButton).toHaveTextContent("유형: 프레젠테이션");
+    expect(typeButton).toHaveTextContent("프레젠테이션");
     expect(screen.getAllByTestId("presentation-row")).toHaveLength(
       SEED_PRESENTATIONS.length,
     );
@@ -746,8 +751,8 @@ describe("AppShellLayout (드라이브형 홈)", () => {
     ).toBeNull();
     expect(screen.queryByTestId("drive-trash-folder")).toBeNull();
 
-    fireEvent.click(typeButton);
-    fireEvent.click(screen.getByTestId("type-option-all"));
+    fireEvent.click(screen.getByTestId("drive-type-clear"));
+    expect(screen.getByTestId("drive-type-dropdown")).toHaveTextContent("유형");
     expect(
       within(screen.getByRole("listbox")).getAllByRole("option"),
     ).toHaveLength(1 + SEED_PRESENTATIONS.length);
@@ -764,12 +769,214 @@ describe("AppShellLayout (드라이브형 홈)", () => {
     expect(within(empty).queryByTestId("empty-new-presentation")).toBeNull();
   });
 
-  it("휴지통에서는 목록에 반영되지 않는 유형·정렬 칩을 숨긴다", () => {
-    renderShell("/presentations/trash");
+  it("휴지통에서는 유형 칩 대신 안내 배너를 보이고, 머리글로 정렬하지 않는다", () => {
+    renderShell();
+    act(() => {
+      fireEvent.keyDown(window, { key: "Delete" });
+    });
+    fireEvent.click(screen.getAllByRole("option")[0]);
+    fireEvent.keyDown(window, { key: "Delete" });
+    openTrashFolder();
 
     expect(screen.getByRole("heading", { name: "휴지통" })).toBeInTheDocument();
     expect(screen.queryByTestId("drive-type-dropdown")).toBeNull();
-    expect(screen.queryByTestId("drive-sort-dropdown")).toBeNull();
-    expect(screen.getByTestId("empty-trash-btn")).toBeInTheDocument();
+    expect(screen.getByTestId("drive-summary")).toHaveTextContent(
+      "영구 삭제하기 전까지",
+    );
+    expect(screen.getByTestId("empty-trash-btn")).toBeEnabled();
+    expect(screen.queryByTestId("sort-header-name")).toBeNull();
+    expect(
+      screen.getByRole("columnheader", { name: "원래 위치" }),
+    ).toBeInTheDocument();
+  });
+});
+
+describe("AppShellLayout (구글 드라이브식 조작)", () => {
+  beforeEach(() => {
+    signInAsTestUser();
+    resetPresentationStore();
+    resetFolderStore();
+    window.localStorage.clear();
+    __loadDocumentsForTests(SEED_PRESENTATIONS);
+    vi.restoreAllMocks();
+  });
+
+  function selectedCount(): number {
+    return screen
+      .getAllByRole("option")
+      .filter((option) => option.getAttribute("aria-selected") === "true")
+      .length;
+  }
+
+  function press(key: string, init: Partial<KeyboardEventInit> = {}): void {
+    act(() => {
+      fireEvent.keyDown(document.activeElement ?? window, { key, ...init });
+    });
+  }
+
+  it("방향키로 포커스와 선택을 옮기고 Shift·Ctrl·Space·Home·End가 동작한다", () => {
+    renderShell();
+    const options = screen.getAllByRole("option");
+
+    press("ArrowDown");
+    expect(options[0]).toHaveAttribute("aria-selected", "true");
+    expect(options[0]).toHaveFocus();
+    expect(options[0]).toHaveAttribute("tabindex", "0");
+    expect(options[1]).toHaveAttribute("tabindex", "-1");
+
+    press("ArrowDown");
+    expect(options[1]).toHaveAttribute("aria-selected", "true");
+    expect(selectedCount()).toBe(1);
+
+    press("ArrowDown", { shiftKey: true });
+    expect(selectedCount()).toBe(2);
+    expect(options[2]).toHaveFocus();
+
+    press("ArrowDown", { ctrlKey: true });
+    expect(options[3]).toHaveFocus();
+    expect(selectedCount()).toBe(2);
+
+    press(" ");
+    expect(options[3]).toHaveAttribute("aria-selected", "true");
+    expect(selectedCount()).toBe(3);
+
+    press("End");
+    expect(options[options.length - 1]).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    expect(selectedCount()).toBe(1);
+
+    press("Home", { shiftKey: true });
+    expect(selectedCount()).toBe(options.length);
+
+    press("Escape");
+    expect(selectedCount()).toBe(0);
+  });
+
+  it("선택된 묶음을 누르면 유지하고(끌기 대비), 떼면 그 항목만 남긴다", () => {
+    renderShell();
+    const options = screen.getAllByRole("option");
+
+    fireEvent.click(options[0]);
+    fireEvent.click(options[2], { ctrlKey: true });
+    expect(selectedCount()).toBe(2);
+
+    fireEvent.mouseDown(options[2]);
+    expect(selectedCount()).toBe(2);
+    fireEvent.click(options[2]);
+    expect(selectedCount()).toBe(1);
+    expect(options[2]).toHaveAttribute("aria-selected", "true");
+
+    fireEvent.mouseDown(options[4]);
+    expect(options[4]).toHaveAttribute("aria-selected", "true");
+    expect(selectedCount()).toBe(1);
+
+    fireEvent.click(options[1], { ctrlKey: true, shiftKey: true });
+    expect(selectedCount()).toBe(4);
+  });
+
+  it("빈 곳에서 끌면 사각형과 겹치는 행을 고른다", () => {
+    renderShell();
+    const options = screen.getAllByRole("option");
+    options.forEach((option, i) => {
+      option.getBoundingClientRect = () =>
+        ({
+          left: 0,
+          right: 800,
+          top: i * 50,
+          bottom: i * 50 + 48,
+        }) as DOMRect;
+    });
+    const area = screen.getByTestId("drive-scroll-area");
+
+    fireEvent.mouseDown(area, { clientX: 820, clientY: 10, button: 0 });
+    fireEvent.mouseMove(window, { clientX: 700, clientY: 130 });
+    expect(screen.getByTestId("drive-marquee")).toBeInTheDocument();
+    expect(selectedCount()).toBe(3);
+    expect(options[3]).toHaveAttribute("aria-selected", "false");
+
+    fireEvent.mouseUp(window);
+    fireEvent.click(area);
+    expect(screen.queryByTestId("drive-marquee")).toBeNull();
+    expect(selectedCount()).toBe(3);
+
+    fireEvent.mouseDown(area, {
+      clientX: 820,
+      clientY: 210,
+      button: 0,
+      ctrlKey: true,
+    });
+    fireEvent.mouseMove(window, { clientX: 700, clientY: 230 });
+    fireEvent.mouseUp(window);
+    fireEvent.click(area);
+    expect(selectedCount()).toBe(4);
+
+    fireEvent.click(area);
+    expect(selectedCount()).toBe(0);
+  });
+
+  it("단축키: Z 이동, Shift+F 새 폴더, Delete 후 Ctrl+Z 실행 취소, / 검색", () => {
+    renderShell();
+    const options = screen.getAllByRole("option");
+
+    fireEvent.click(options[0]);
+    press("z");
+    expect(screen.getByRole("dialog")).toHaveTextContent("이동");
+    act(() => {
+      fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
+    });
+    expect(screen.queryByRole("dialog")).toBeNull();
+
+    press("F", { shiftKey: true, code: "KeyF" });
+    expect(screen.getByRole("dialog")).toHaveTextContent("새 폴더");
+    act(() => {
+      fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
+    });
+    expect(screen.queryByRole("dialog")).toBeNull();
+
+    fireEvent.click(screen.getAllByRole("option")[0]);
+    press("Delete");
+    expect(screen.getAllByRole("option")).toHaveLength(
+      SEED_PRESENTATIONS.length - 1,
+    );
+    press("z", { ctrlKey: true, code: "KeyZ" });
+    expect(screen.getAllByRole("option")).toHaveLength(
+      SEED_PRESENTATIONS.length,
+    );
+    expect(screen.queryByTestId("drive-toast")).toBeNull();
+
+    act(() => {
+      fireEvent.keyDown(document.body, { key: "/" });
+    });
+    expect(screen.getByTestId("shell-search-input")).toHaveFocus();
+  });
+
+  it("메뉴는 키보드로 옮겨 다니고 단축키를 보여 주며, Shift+F10으로 연다", () => {
+    renderShell();
+    const options = screen.getAllByRole("option");
+
+    fireEvent.contextMenu(options[0]);
+    const menu = screen.getByTestId("drive-menu");
+    expect(menu).toHaveFocus();
+    expect(within(menu).getByTestId("action-rename")).toHaveTextContent("F2");
+    const items = within(menu).getAllByRole("menuitem");
+
+    fireEvent.keyDown(menu, { key: "ArrowDown" });
+    expect(items[0]).toHaveFocus();
+    fireEvent.keyDown(menu, { key: "ArrowUp" });
+    expect(items[items.length - 1]).toHaveFocus();
+    fireEvent.keyDown(menu, { key: "Home" });
+    expect(items[0]).toHaveFocus();
+    fireEvent.keyDown(menu, { key: "Tab" });
+    expect(screen.queryByTestId("drive-menu")).toBeNull();
+
+    act(() => {
+      options[1].focus();
+    });
+    press("F10", { shiftKey: true });
+    const keyboardMenu = screen.getByTestId("drive-menu");
+    expect(within(keyboardMenu).getAllByRole("menuitem")[0]).toHaveFocus();
+    expect(options[1]).toHaveAttribute("aria-selected", "true");
   });
 });

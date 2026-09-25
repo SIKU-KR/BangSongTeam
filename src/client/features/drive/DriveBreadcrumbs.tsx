@@ -32,12 +32,12 @@ function Crumb({
       aria-current={isCurrent ? "page" : undefined}
       onClick={onNavigate}
       title={label}
-      className={`max-w-[180px] truncate px-2 py-1 rounded-lg transition-colors cursor-pointer ${
+      className={`max-w-[240px] truncate px-3 py-1 rounded-full transition-colors cursor-pointer ${
         isDropTarget
           ? "ring-2 ring-emerald-500 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-200"
           : isCurrent
-            ? "text-zinc-900 dark:text-white"
-            : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800/60"
+            ? "text-zinc-900 dark:text-white hover:bg-zinc-200/70 dark:hover:bg-zinc-800/70"
+            : "text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-200/70 dark:hover:bg-zinc-800/70"
       }`}
     >
       {label}
@@ -70,6 +70,7 @@ export function DriveBreadcrumbs(): React.JSX.Element {
             key: "rename",
             label: "이름 바꾸기",
             icon: "pencil",
+            shortcut: "F2",
             separated: true,
             onSelect: () => drive.requestRename(ref),
           },
@@ -99,7 +100,7 @@ export function DriveBreadcrumbs(): React.JSX.Element {
       <nav
         aria-label="드라이브 경로"
         data-testid="drive-breadcrumbs"
-        className="flex items-center min-w-0 text-base font-bold tracking-tight"
+        className="flex items-center min-w-0 text-2xl"
       >
         <Crumb
           folderId={null}
@@ -109,13 +110,13 @@ export function DriveBreadcrumbs(): React.JSX.Element {
         />
         <Icon
           name="chevronRight"
-          className="w-4 h-4 text-zinc-400 shrink-0"
-          strokeWidth={2.5}
+          className="w-5 h-5 text-zinc-400 shrink-0"
+          strokeWidth={2}
         />
         <span
           data-testid="crumb-trash"
           aria-current="page"
-          className="px-2 py-1 text-zinc-900 dark:text-white"
+          className="px-3 py-1 text-zinc-900 dark:text-white"
         >
           휴지통
         </span>
@@ -127,7 +128,7 @@ export function DriveBreadcrumbs(): React.JSX.Element {
     <nav
       aria-label="드라이브 경로"
       data-testid="drive-breadcrumbs"
-      className="flex items-center min-w-0 text-base font-bold tracking-tight"
+      className="flex items-center min-w-0 text-2xl"
     >
       <Crumb
         folderId={null}
@@ -139,8 +140,8 @@ export function DriveBreadcrumbs(): React.JSX.Element {
         <React.Fragment key={folder.id}>
           <Icon
             name="chevronRight"
-            className="w-4 h-4 text-zinc-400 shrink-0"
-            strokeWidth={2.5}
+            className="w-5 h-5 text-zinc-400 shrink-0"
+            strokeWidth={2}
           />
           <Crumb
             folderId={folder.id}
@@ -164,9 +165,9 @@ export function DriveBreadcrumbs(): React.JSX.Element {
           const rect = event.currentTarget.getBoundingClientRect();
           setAnchor({ x: rect.left, y: rect.bottom + 6 });
         }}
-        className="p-1 rounded-lg text-zinc-500 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800/60 cursor-pointer shrink-0"
+        className="-ml-1 p-1.5 rounded-full text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-200/70 dark:hover:bg-zinc-800/70 cursor-pointer shrink-0"
       >
-        <Icon name="chevronDown" className="w-4 h-4" strokeWidth={2.5} />
+        <Icon name="chevronDown" className="w-5 h-5" strokeWidth={2} />
       </button>
       {anchor && (
         <PopoverMenu
