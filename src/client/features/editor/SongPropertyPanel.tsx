@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useId, useState } from "react";
 import type { DeckStyle, GridAnchorPreset, Slide } from "#shared";
 import {
   DEFAULT_DECK_STYLE,
@@ -28,7 +28,9 @@ const PRESET_COLORS = [
   { label: "핑크", value: "#FBCFE8" },
 ];
 
-const GRID_PRESETS: GridAnchorPreset[] = [
+type GridPreset = Exclude<GridAnchorPreset, "custom">;
+
+const GRID_PRESETS: GridPreset[] = [
   "top-left",
   "top-center",
   "top-right",
@@ -39,6 +41,18 @@ const GRID_PRESETS: GridAnchorPreset[] = [
   "bottom-center",
   "bottom-right",
 ];
+
+const GRID_PRESET_LABELS: Record<GridPreset, string> = {
+  "top-left": "좌측 상단",
+  "top-center": "가운데 상단",
+  "top-right": "우측 상단",
+  "middle-left": "좌측 중앙",
+  "middle-center": "가운데 중앙",
+  "middle-right": "우측 중앙",
+  "bottom-left": "좌측 하단",
+  "bottom-center": "가운데 하단",
+  "bottom-right": "우측 하단",
+};
 
 const STYLE_PRESETS: {
   name: string;
@@ -123,6 +137,7 @@ export function SongPropertyPanel({
 }: SongPropertyPanelProps): React.JSX.Element {
   const [isBgModalOpen, setIsBgModalOpen] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(false);
+  const anchorGroupLabelId = useId();
 
   const currentBg = useBackground(backgroundId);
 
@@ -461,10 +476,17 @@ export function SongPropertyPanel({
           </label>
 
           <div className="space-y-1.5">
-            <span className="text-[11px] text-zinc-600 dark:text-zinc-400">
+            <span
+              id={anchorGroupLabelId}
+              className="text-[11px] text-zinc-600 dark:text-zinc-400"
+            >
               3×3 화면 기준점 (Anchor)
             </span>
-            <div className="grid grid-cols-3 gap-1.5 w-32 mx-auto bg-zinc-100 dark:bg-zinc-900 p-2 rounded-xl border border-zinc-200 dark:border-zinc-800">
+            <div
+              role="group"
+              aria-labelledby={anchorGroupLabelId}
+              className="grid grid-cols-3 gap-1.5 w-32 mx-auto bg-zinc-100 dark:bg-zinc-900 p-2 rounded-xl border border-zinc-200 dark:border-zinc-800"
+            >
               {GRID_PRESETS.map((preset) => {
                 const isSelected = style.position?.anchor === preset;
                 return (
@@ -478,9 +500,12 @@ export function SongPropertyPanel({
                         ? "bg-emerald-500 text-white shadow-sm dark:shadow-md dark:shadow-emerald-950/60 ring-2 ring-emerald-400/50"
                         : "bg-zinc-200 dark:bg-zinc-800 text-zinc-500 hover:bg-zinc-300 dark:hover:bg-zinc-700 hover:text-zinc-700 dark:hover:text-zinc-300"
                     }`}
-                    title={preset}
+                    title={GRID_PRESET_LABELS[preset]}
+                    aria-label={GRID_PRESET_LABELS[preset]}
+                    aria-pressed={isSelected}
                   >
                     <div
+                      aria-hidden="true"
                       className={`w-2 h-2 rounded-full ${isSelected ? "bg-white" : "bg-zinc-400 dark:bg-zinc-500"}`}
                     />
                   </button>
