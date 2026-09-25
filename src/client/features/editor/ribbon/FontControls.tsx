@@ -14,7 +14,11 @@ import {
 } from "#components/ui/select";
 import type { DeckStyle } from "#shared";
 import { DEFAULT_PRESET_FONTS, NOONNU_FONTS } from "#shared";
-import { loadWebFont, loadWebFonts } from "../../../lib/fonts/fontLoader";
+import {
+  loadWebFont,
+  loadWebFonts,
+  toCssFontFamily,
+} from "../../../lib/fonts/fontLoader";
 import { ColorPickerField } from "../ColorPickerField";
 import { ToggleGroup, ToggleGroupItem } from "#components/ui/toggle-group";
 import { RibbonChoices, RibbonDropdown } from "./RibbonDropdown";
@@ -60,7 +64,7 @@ export function FontControls({
 
   useEffect(() => {
     if (style.fontFamily) {
-      loadWebFont(style.fontFamily);
+      void loadWebFont(style.fontFamily);
     }
   }, [style.fontFamily]);
 
@@ -95,7 +99,7 @@ export function FontControls({
         disabled={disabled}
         onValueChange={(value) => {
           if (value) {
-            loadWebFont(value);
+            void loadWebFont(value);
             onUpdateStyle({ fontFamily: value as DeckStyle["fontFamily"] });
           }
         }}
@@ -124,9 +128,15 @@ export function FontControls({
                   <SelectItem
                     key={font}
                     value={font}
-                    style={{ fontFamily: `'${font}', sans-serif` }}
+                    style={{
+                      fontFamily: `${toCssFontFamily(font)}, sans-serif`,
+                    }}
                   >
-                    <span style={{ fontFamily: `'${font}', sans-serif` }}>
+                    <span
+                      style={{
+                        fontFamily: `${toCssFontFamily(font)}, sans-serif`,
+                      }}
+                    >
                       {font}
                     </span>
                   </SelectItem>

@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import * as fs from "node:fs";
+import { createRequire } from "node:module";
 import * as path from "node:path";
 
 describe("PWA 설정", () => {
@@ -27,6 +28,26 @@ describe("PWA 설정", () => {
 
   it("송출 중 자동 갱신을 막기 위해 registerType이 prompt다", () => {
     expect(config).toContain('registerType: "prompt"');
+  });
+
+  it("글꼴 캐시 한도가 번들 글꼴 서브셋을 모두 담는다", () => {
+    const fontCache = config.slice(
+      config.indexOf('cacheName: "worship-fonts-cache"'),
+    );
+    const maxEntries = Number(/maxEntries: (\d+)/.exec(fontCache)?.[1]);
+    const subsetCount = [
+      "pretendard/dist/web/variable/pretendardvariable-dynamic-subset.css",
+      "@fontsource/noto-sans-kr/400.css",
+      "@fontsource/noto-sans-kr/700.css",
+      "@fontsource/nanum-myeongjo/400.css",
+      "@fontsource/nanum-myeongjo/700.css",
+    ]
+      .map((file) =>
+        fs.readFileSync(createRequire(import.meta.url).resolve(file), "utf-8"),
+      )
+      .reduce((sum, css) => sum + css.split("@font-face").length - 1, 0);
+
+    expect(maxEntries).toBeGreaterThanOrEqual(subsetCount);
   });
 
   it("PWA 아이콘 파일이 실제로 존재한다", () => {
