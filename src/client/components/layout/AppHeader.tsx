@@ -8,6 +8,7 @@ import {
 } from "#components/ui/input-group";
 import { SidebarTrigger } from "#components/ui/sidebar";
 import { isTypingTarget } from "../../features/drive";
+import { ThemeMenuButton } from "../common/ThemeMenuButton";
 
 export interface AppHeaderProps {
   /** 페이지 제목. `titleSlot`이 있으면 화면 읽기 프로그램용 제목으로만 쓴다 */
@@ -91,6 +92,9 @@ export function AppHeader({
             </InputGroupAddon>
           )}
         </InputGroup>
+        <div className="ml-auto">
+          <ThemeMenuButton />
+        </div>
       </div>
 
       <div className="flex h-14 items-center justify-between gap-4 px-4 sm:px-6">

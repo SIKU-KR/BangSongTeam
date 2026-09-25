@@ -20,7 +20,6 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "#components/ui/sidebar";
-import { ThemeMenuButton } from "../common/ThemeMenuButton";
 import { useSession, signOut } from "../../lib/auth";
 import {
   DRIVE_ROOT_PATH,
@@ -182,7 +181,6 @@ export function AppSidebar(): React.JSX.Element {
 
       <SidebarFooter>
         <SidebarMenu>
-          <ThemeMenuButton />
           <AccountMenuItem />
         </SidebarMenu>
       </SidebarFooter>

@@ -683,7 +683,7 @@ describe("AppShellLayout (드라이브형 홈)", () => {
     expect(screen.queryByRole("listbox")).toBeNull();
   });
 
-  it("사이드바 테마 메뉴", () => {
+  it("헤더 테마 메뉴", () => {
     renderShell();
 
     const themeBtn = screen.getByTestId("theme-menu-button");
@@ -694,7 +694,7 @@ describe("AppShellLayout (드라이브형 홈)", () => {
       fireEvent.click(screen.getByTestId("theme-option-light"));
     });
     expect(screen.queryByTestId("theme-menu-dropdown")).not.toBeInTheDocument();
-    expect(screen.getByText("라이트 모드")).toBeInTheDocument();
+    expect(themeBtn).toHaveAccessibleName("테마 설정: 라이트 모드");
   });
 
   it("열 머리글을 눌러 정렬하고, 같은 머리글을 다시 누르면 방향을 뒤집는다", () => {
