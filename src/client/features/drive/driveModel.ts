@@ -71,17 +71,6 @@ export function countSlides(presentation: Presentation): number {
   );
 }
 
-/** "시선, 주 품에 외 2곡" */
-export function buildSubtitle(presentation: Presentation): string {
-  const titles = presentation.items
-    .map((item) => item.deck?.title)
-    .filter((title): title is string => Boolean(title));
-  if (titles.length === 0) return "아직 등록된 찬양이 없습니다";
-  const head = titles.slice(0, 2).join(", ");
-  const restCount = titles.length - 2;
-  return restCount > 0 ? `${head} 외 ${restCount}곡` : head;
-}
-
 /** 목록의 날짜 칸 ("2026. 9. 24.") */
 export function formatDate(iso: string): string {
   const date = new Date(iso);

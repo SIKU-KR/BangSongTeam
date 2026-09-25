@@ -20,7 +20,7 @@ import {
 import { IconButton } from "#components/common/IconButton";
 import type { SortKey, SortOrder } from "../../routes/appShellContext";
 import { useDriveDraggable, useDriveDroppable } from "./driveContext";
-import { buildSubtitle, formatDate, type DriveItem } from "./driveModel";
+import { formatDate, type DriveItem } from "./driveModel";
 import { ActionMenuItems, type MenuAction } from "./ActionMenu";
 
 /** 둘째 열이 소유자(폴더 보기)인지 위치(검색 결과·휴지통)인지 */
@@ -292,7 +292,6 @@ export function DriveListRow({
     : handlers.selected
       ? "bg-primary/10"
       : "hover:bg-muted";
-  const subtitle = isFolder ? null : buildSubtitle(item.presentation);
 
   return (
     <div
@@ -331,16 +330,9 @@ export function DriveListRow({
             <PresentationIcon className="size-5" />
           </span>
         )}
-        <div className="flex min-w-0 items-baseline gap-2">
-          <span className="truncate font-medium text-foreground">
-            {item.name}
-          </span>
-          {subtitle && (
-            <span className="hidden truncate text-xs lg:inline">
-              {subtitle}
-            </span>
-          )}
-        </div>
+        <span className="truncate font-medium text-foreground">
+          {item.name}
+        </span>
       </div>
       <span className={COLUMNS.second[variant]}>
         {variant === "location" ? (item.location ?? "-") : "나"}
@@ -427,12 +419,7 @@ export function TrashFolderRow({
         >
           <Trash2Icon className="size-5" />
         </span>
-        <div className="flex min-w-0 items-baseline gap-2">
-          <span className="truncate font-medium text-foreground">휴지통</span>
-          <span className="hidden truncate text-xs lg:inline">
-            삭제한 항목은 영구 삭제 전까지 복원할 수 있습니다
-          </span>
-        </div>
+        <span className="truncate font-medium text-foreground">휴지통</span>
       </div>
       <span className={COLUMNS.second.owner}>나</span>
       <span className={COLUMNS.date}>-</span>

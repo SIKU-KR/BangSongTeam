@@ -80,7 +80,6 @@ const followCursor: Modifier = ({
     y: transform.y + origin.y - activeNodeRect.top + 12,
   };
 };
-const NEW_PRESENTATION_TITLE = "새 주일 예배 프레젠테이션";
 
 function describeCount(refs: readonly DriveItemRef[]): string {
   if (refs.length === 1) {
@@ -229,7 +228,7 @@ export function DriveProvider({
   const createPresentationIn = useCallback(
     (folderId: string | null): void => {
       const target = isFolderAvailable(folderId) ? folderId : null;
-      const created = createNewPresentation(NEW_PRESENTATION_TITLE, target);
+      const created = createNewPresentation(undefined, target);
       navigate(`/editor/${created.id}`);
     },
     [navigate],

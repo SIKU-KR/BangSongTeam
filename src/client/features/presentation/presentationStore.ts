@@ -429,20 +429,27 @@ export function resetPresentationStore(): void {
   emitChange();
 }
 
+const draftTitleFormat = new Intl.DateTimeFormat("ko-KR", {
+  dateStyle: "medium",
+  timeStyle: "short",
+});
+
 /**
  * pushHistory()를 호출하지 않는 것은 의도적이다 — 문서 추가는 "현재 문서의 편집"이
  * 아니므로, 기록하면 canUndo()가 허위로 true가 되어 유령 undo가 생긴다. `folderId`는
- * 드라이브에서 지금 보고 있는 폴더다 (없으면 루트).
+ * 드라이브에서 지금 보고 있는 폴더다 (없으면 루트). 제목을 생략하면 만든 시각
+ * ("2026. 9. 25. 오후 3:42")이 초안 제목이 된다.
  */
 export function createNewPresentation(
-  title = "새 프레젠테이션",
+  title?: string,
   folderId: string | null = null,
 ): Presentation {
-  const now = new Date().toISOString();
+  const createdAt = new Date();
+  const now = createdAt.toISOString();
   const created: Presentation = {
     id: createId(),
     userId: getCurrentUserId() ?? readActive().userId,
-    title,
+    title: title ?? draftTitleFormat.format(createdAt),
     serviceDate: now.slice(0, 10),
     items: [],
     folderId,
