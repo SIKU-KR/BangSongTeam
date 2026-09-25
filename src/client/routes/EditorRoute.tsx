@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useLayoutEffect } from "react";
+import React, { useState, useEffect, useLayoutEffect, useMemo } from "react";
 import {
   useNavigate,
   useParams,
@@ -14,6 +14,8 @@ import {
   addSlideToSong,
   removeSlideFromSong,
   duplicateSlide,
+  splitSlideAtCursor,
+  mergeSlideWithNext,
   reorderSongs,
   removeSongFromPresentation,
   addDeckToPresentation,
@@ -35,7 +37,7 @@ import {
   INITIAL_POSITION,
   type ProjectionPosition,
 } from "../features/presentation";
-import { DEFAULT_DECK_STYLE } from "#shared";
+import { DEFAULT_DECK_STYLE, analyzeDeckOverflow } from "#shared";
 import type { Presentation } from "#shared";
 import { EditorHeader } from "../features/editor/EditorHeader";
 import { drivePath } from "../features/drive";
@@ -48,6 +50,7 @@ import {
   type SongPickerMode,
 } from "../features/editor/SongPickerModal";
 import { SongInfoDialog } from "../features/editor/SongInfoDialog";
+import { useTextWidthMeasurer } from "../features/editor/useTextWidthMeasurer";
 import { SongSharePanel } from "../features/sharing/SongSharePanel";
 import { useBackgroundAutoCache } from "../features/offline";
 import {
@@ -112,7 +115,20 @@ export function EditorRoute(): React.JSX.Element {
     Math.max(0, currentSlides.length - 1),
   );
   const currentSlide = currentSlides[safeSlideIndex] ?? null;
+  const nextSlideInSong = currentSlides[safeSlideIndex + 1] ?? null;
   const currentStyle = currentSong?.style ?? DEFAULT_DECK_STYLE;
+  const measureText = useTextWidthMeasurer();
+  const currentOverflow = useMemo(
+    () =>
+      currentSong
+        ? analyzeDeckOverflow(
+            currentSong.slides,
+            currentSong.style,
+            measureText,
+          )
+        : null,
+    [currentSong, measureText],
+  );
 
   const songs = presentation.items;
   const position: ProjectionPosition = {
@@ -173,6 +189,12 @@ export function EditorRoute(): React.JSX.Element {
       );
     } else if (slideIndex < safeSlideIndex) {
       setActiveSlideIndex(safeSlideIndex - 1);
+    }
+  };
+
+  const handleSplitSlide = (offset: number) => {
+    if (splitSlideAtCursor(safeSongIndex, safeSlideIndex, offset)) {
+      setActiveSlideIndex(safeSlideIndex + 1);
     }
   };
 
@@ -348,6 +370,7 @@ export function EditorRoute(): React.JSX.Element {
           style={currentStyle}
           backgroundId={currentSong?.backgroundId}
           activeSlide={currentSlide}
+          nextSlide={nextSlideInSong}
           onUpdateStyle={(styleUpdate) =>
             updateSongStyle(safeSongIndex, styleUpdate)
           }
@@ -356,6 +379,15 @@ export function EditorRoute(): React.JSX.Element {
           }
           onUpdateSlideLines={(lines) =>
             updateSlideLines(safeSongIndex, safeSlideIndex, lines)
+          }
+          overflowWarnings={{
+            activeSlideWraps:
+              currentOverflow?.slides[safeSlideIndex]?.wraps ?? false,
+            exceedsStage: currentOverflow?.exceedsStage ?? false,
+          }}
+          onSplitSlide={handleSplitSlide}
+          onMergeWithNext={() =>
+            mergeSlideWithNext(safeSongIndex, safeSlideIndex)
           }
           footer={
             currentSong ? (

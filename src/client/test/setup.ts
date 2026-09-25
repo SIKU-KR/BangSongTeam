@@ -51,3 +51,10 @@ if (typeof window !== "undefined" && !window.matchMedia) {
     }),
   });
 }
+
+if (typeof HTMLCanvasElement !== "undefined") {
+  Object.defineProperty(HTMLCanvasElement.prototype, "getContext", {
+    configurable: true,
+    value: () => null,
+  });
+}

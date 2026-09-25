@@ -29,6 +29,8 @@ import {
   addSlideToSong,
   removeSlideFromSong,
   duplicateSlide,
+  splitSlideAtCursor,
+  mergeSlideWithNext,
   reorderSongs,
   removeSongFromPresentation,
   duplicateSongInPresentation,
@@ -281,6 +283,93 @@ describe("presentationStore (In-memory reactive presentation)", () => {
     expect(result.current.items[1].deck?.slides).toHaveLength(
       result.current.items[0].deck?.slides.length ?? 0,
     );
+  });
+
+  it("커서 위치에서 슬라이드를 나누고 되돌릴 수 있다", () => {
+    const { result } = renderHook(() => useActivePresentation());
+    act(() => {
+      updateSlideLines(0, 0, ["첫째 줄", "둘째 줄", "셋째 줄"]);
+    });
+    const before = result.current.items[0].deck!.slides;
+    const originalId = before[0].id;
+    const nextId = before[1].id;
+
+    let didSplit = false;
+    act(() => {
+      didSplit = splitSlideAtCursor(0, 0, "첫째 줄\n".length);
+    });
+
+    const slides = result.current.items[0].deck!.slides;
+    expect(didSplit).toBe(true);
+    expect(slides).toHaveLength(before.length + 1);
+    expect(slides[0]).toMatchObject({ id: originalId, order: 0 });
+    expect(slides[0].lines).toEqual(["첫째 줄"]);
+    expect(slides[1].lines).toEqual(["둘째 줄", "셋째 줄"]);
+    expect(slides[1].id).not.toBe(originalId);
+    expect(slides[1].order).toBe(1);
+    expect(slides[2]).toMatchObject({ id: nextId, order: 2 });
+
+    act(() => {
+      undo();
+    });
+    expect(result.current.items[0].deck!.slides).toEqual(before);
+  });
+
+  it("커서가 맨 앞이면 나누지 않고 기록도 남기지 않는다", () => {
+    const { result } = renderHook(() => useActivePresentation());
+    const before = result.current.items[0].deck!.slides;
+
+    let didSplit = true;
+    act(() => {
+      didSplit = splitSlideAtCursor(0, 0, 0);
+    });
+
+    expect(didSplit).toBe(false);
+    expect(result.current.items[0].deck!.slides).toBe(before);
+    expect(canUndo()).toBe(false);
+  });
+
+  it("다음 슬라이드와 합치고, 4줄을 넘으면 합치지 않는다", () => {
+    const { result } = renderHook(() => useActivePresentation());
+    act(() => {
+      updateSlideLines(0, 0, ["가", "나"]);
+      updateSlideLines(0, 1, ["다", "라"]);
+    });
+    const before = result.current.items[0].deck!.slides;
+
+    let didMerge = false;
+    act(() => {
+      didMerge = mergeSlideWithNext(0, 0);
+    });
+
+    const slides = result.current.items[0].deck!.slides;
+    expect(didMerge).toBe(true);
+    expect(slides).toHaveLength(before.length - 1);
+    expect(slides[0]).toMatchObject({
+      id: before[0].id,
+      order: 0,
+      lines: ["가", "나", "다", "라"],
+    });
+    expect(slides[1]).toMatchObject({ id: before[2].id, order: 1 });
+
+    act(() => {
+      didMerge = mergeSlideWithNext(0, 0);
+    });
+    expect(didMerge).toBe(false);
+    expect(result.current.items[0].deck!.slides).toHaveLength(
+      before.length - 1,
+    );
+  });
+
+  it("곡의 마지막 슬라이드는 합칠 대상이 없다", () => {
+    const { result } = renderHook(() => useActivePresentation());
+    const lastIndex = result.current.items[0].deck!.slides.length - 1;
+
+    let didMerge = true;
+    act(() => {
+      didMerge = mergeSlideWithNext(0, lastIndex);
+    });
+    expect(didMerge).toBe(false);
   });
 
   it("should reorder slides within a song", () => {

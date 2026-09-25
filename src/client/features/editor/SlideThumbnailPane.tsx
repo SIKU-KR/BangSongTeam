@@ -1,14 +1,22 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import type { PresentationItem } from "#shared";
+import { analyzeDeckOverflow } from "#shared";
 import {
   getBackgroundById,
   useBackgroundCatalog,
 } from "../backgrounds/backgroundCatalog";
 import { SlideStage } from "../../components/stage/SlideStage";
+import { OverflowWarningIcon } from "./OverflowWarningIcon";
 import { SortableItem, SortableList, slideSortableId } from "./SortableList";
+import { useTextWidthMeasurer } from "./useTextWidthMeasurer";
 
 const THUMB_WIDTH = 176;
 const THUMB_HEIGHT = 99;
+
+const SLIDE_WRAP_WARNING =
+  "한 줄이 텍스트 박스 폭을 넘어 자동 줄바꿈됩니다. 글자 크기를 줄이거나 박스 폭을 넓혀 보세요.";
+const SLIDE_STAGE_WARNING =
+  "이 곡에서 가장 긴 슬라이드라 화면 가장자리 여백을 넘칩니다. 글자 크기를 줄이거나 슬라이드를 나눠 보세요.";
 
 export interface SlideThumbnailPaneProps {
   items: PresentationItem[];
@@ -57,6 +65,16 @@ export function SlideThumbnailPane({
   const activeThumbRef = useRef<HTMLDivElement>(null);
 
   const activeItemId = items[activeSongIndex]?.id;
+  const measureText = useTextWidthMeasurer();
+  const overflows = useMemo(
+    () =>
+      items.map((item) =>
+        item.deck
+          ? analyzeDeckOverflow(item.deck.slides, item.deck.style, measureText)
+          : null,
+      ),
+    [items, measureText],
+  );
 
   const firstIndexes: number[] = [];
   let totalSlides = 0;
@@ -170,6 +188,15 @@ export function SlideThumbnailPane({
           const isCollapsed = collapsedIds.has(item.id);
           const isMenuOpen = menuSongIndex === songIndex;
           const posterUrl = getBackgroundById(deck?.backgroundId)?.posterUrl;
+          const overflow = overflows[songIndex];
+          const tallestSlideNumber =
+            overflow?.exceedsStage && overflow.tallestSlideIndex !== null
+              ? firstIndexes[songIndex] + overflow.tallestSlideIndex + 1
+              : null;
+          const songWarning =
+            tallestSlideNumber === null
+              ? null
+              : `가장 긴 슬라이드(${tallestSlideNumber}번)가 화면 가장자리 여백을 넘칩니다. 글자 크기를 줄이거나 슬라이드를 나눠 보세요.`;
 
           return (
             <section key={item.id} className="mb-2">
@@ -222,6 +249,18 @@ export function SlideThumbnailPane({
                     {slides.length}장
                   </span>
                 </button>
+
+                {songWarning && (
+                  <span
+                    role="img"
+                    data-testid={`song-overflow-warning-${songIndex}`}
+                    aria-label={songWarning}
+                    title={songWarning}
+                    className="shrink-0 text-amber-500 dark:text-amber-400"
+                  >
+                    <OverflowWarningIcon />
+                  </span>
+                )}
 
                 <div
                   ref={isMenuOpen ? menuContainerRef : undefined}
@@ -312,6 +351,17 @@ export function SlideThumbnailPane({
                       const globalIndex = firstIndexes[songIndex] + slideIndex;
                       const isActive =
                         isActiveSong && slideIndex === activeSlideIndex;
+                      const slideWarning = [
+                        overflow?.slides[slideIndex]?.wraps
+                          ? SLIDE_WRAP_WARNING
+                          : null,
+                        songWarning &&
+                        overflow?.tallestSlideIndex === slideIndex
+                          ? SLIDE_STAGE_WARNING
+                          : null,
+                      ]
+                        .filter(Boolean)
+                        .join("\n");
 
                       return (
                         <SortableItem
@@ -354,6 +404,18 @@ export function SlideThumbnailPane({
                                 }}
                               />
                             </div>
+
+                            {slideWarning && (
+                              <span
+                                role="img"
+                                data-testid={`slide-overflow-warning-${globalIndex}`}
+                                aria-label={slideWarning}
+                                title={slideWarning}
+                                className="absolute bottom-1 left-1 z-30 p-0.5 rounded bg-black/75 text-amber-400"
+                              >
+                                <OverflowWarningIcon className="w-3 h-3" />
+                              </span>
+                            )}
 
                             <div className="absolute top-1 right-1 z-30 flex items-center gap-0.5 p-0.5 rounded bg-black/75 border border-white/15 opacity-0 group-hover:opacity-100 transition-opacity">
                               <button
