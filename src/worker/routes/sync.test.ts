@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { env } from "cloudflare:test";
+import { count, eq, inArray } from "drizzle-orm";
 import {
   DEFAULT_DECK_STYLE,
   DeckSchema,
@@ -7,10 +8,17 @@ import {
   type Deck,
   type PresentationDocument,
 } from "#shared";
-import { createD1Client } from "#db";
-import { user } from "#db";
+import {
+  createD1Client,
+  decks,
+  decksFts,
+  presentationItems,
+  presentations,
+  user,
+} from "#db";
 import { createApp } from "../index";
 import type { SessionReader } from "../middleware/auth";
+import { clearTables } from "../test/db";
 import {
   insertUserBackgroundRow,
   resetBackgrounds,
@@ -83,12 +91,8 @@ function json(body: unknown) {
 describe("동기화 라우트 교차 사용자 격리", () => {
   beforeEach(async () => {
     const db = createD1Client(env.DB);
-    await env.DB.exec("DELETE FROM presentation_items");
-    await env.DB.exec("DELETE FROM decks");
-    await env.DB.exec("DELETE FROM presentations");
-    await env.DB.exec(
-      `DELETE FROM user WHERE id IN ('${USER_A}', '${USER_B}')`,
-    );
+    await clearTables(presentationItems, decks, presentations);
+    await db.delete(user).where(inArray(user.id, [USER_A, USER_B]));
 
     await db.insert(user).values([
       { id: USER_A, name: "A", createdAt: new Date(), updatedAt: new Date() },
@@ -241,26 +245,27 @@ describe("동기화 라우트 교차 사용자 격리", () => {
         .status,
     ).toBe(200);
 
-    const row = await env.DB.prepare(
-      "SELECT visibility, fork_count, published_at FROM decks WHERE id = ?",
-    )
-      .bind(DECK_ID)
-      .first<{
-        visibility: string;
-        fork_count: number;
-        published_at: number | null;
-      }>();
+    const db = createD1Client(env.DB);
+    const row = await db
+      .select({
+        visibility: decks.visibility,
+        forkCount: decks.forkCount,
+        publishedAt: decks.publishedAt,
+      })
+      .from(decks)
+      .where(eq(decks.id, DECK_ID))
+      .get();
     expect(row).toEqual({
       visibility: "private",
-      fork_count: 0,
-      published_at: null,
+      forkCount: 0,
+      publishedAt: null,
     });
 
-    const indexed = await env.DB.prepare(
-      "SELECT count(*) AS n FROM decks_fts WHERE deck_id = ?",
-    )
-      .bind(DECK_ID)
-      .first<{ n: number }>();
+    const indexed = await db
+      .select({ n: count() })
+      .from(decksFts)
+      .where(eq(decksFts.deckId, DECK_ID))
+      .get();
     expect(indexed?.n).toBe(0);
   });
 
@@ -274,12 +279,12 @@ describe("동기화 라우트 교차 사용자 격리", () => {
     });
     await app.request(`/api/decks/${LIB_DECK_ID}`, json(libraryDeck), env);
 
-    const row = await env.DB.prepare(
-      "SELECT visibility, fork_count FROM decks WHERE id = ?",
-    )
-      .bind(LIB_DECK_ID)
-      .first<{ visibility: string; fork_count: number }>();
-    expect(row).toEqual({ visibility: "private", fork_count: 0 });
+    const row = await createD1Client(env.DB)
+      .select({ visibility: decks.visibility, forkCount: decks.forkCount })
+      .from(decks)
+      .where(eq(decks.id, LIB_DECK_ID))
+      .get();
+    expect(row).toEqual({ visibility: "private", forkCount: 0 });
   });
 
   it("본문의 userId를 믿지 않는다", async () => {

@@ -1,14 +1,24 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { env } from "cloudflare:test";
+import { eq, inArray } from "drizzle-orm";
 import {
   DEFAULT_DECK_STYLE,
   PresentationDocumentSchema,
   type Folder,
   type PresentationDocument,
 } from "#shared";
-import { createD1Client, user } from "#db";
+import {
+  createD1Client,
+  decks,
+  driveTombstones,
+  folders,
+  presentationItems,
+  presentations,
+  user,
+} from "#db";
 import { createApp } from "../index";
 import type { SessionReader } from "../middleware/auth";
+import { clearTables } from "../test/db";
 
 const USER_A = "aaaaaaaa00000000000f1";
 const USER_B = "bbbbbbbb00000000000f2";
@@ -109,14 +119,16 @@ async function listDocs(): Promise<PresentationDocument[]> {
 
 describe("드라이브 폴더 API", () => {
   beforeEach(async () => {
-    await env.DB.exec("DELETE FROM presentation_items");
-    await env.DB.exec("DELETE FROM decks");
-    await env.DB.exec("DELETE FROM presentations");
-    await env.DB.exec("DELETE FROM folders");
-    await env.DB.exec("DELETE FROM drive_tombstones");
-    await env.DB.exec(
-      `DELETE FROM user WHERE id IN ('${USER_A}', '${USER_B}')`,
+    await clearTables(
+      presentationItems,
+      decks,
+      presentations,
+      folders,
+      driveTombstones,
     );
+    await createD1Client(env.DB)
+      .delete(user)
+      .where(inArray(user.id, [USER_A, USER_B]));
     await createD1Client(env.DB)
       .insert(user)
       .values([
@@ -236,9 +248,9 @@ describe("드라이브 폴더 API", () => {
     const doc = makeDoc(folder.id);
     await app.request(`/api/presentations/${doc.id}`, put(doc), env);
 
-    await env.DB.prepare("DELETE FROM folders WHERE id = ?")
-      .bind(folder.id)
-      .run();
+    await createD1Client(env.DB)
+      .delete(folders)
+      .where(eq(folders.id, folder.id));
 
     const [restored] = await listDocs();
     expect(restored.id).toBe(doc.id);

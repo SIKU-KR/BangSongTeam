@@ -12,9 +12,18 @@ import {
   type Deck,
   type PresentationDocument,
 } from "#shared";
-import { createD1Client, user } from "#db";
+import {
+  createD1Client,
+  decks,
+  presentationItems,
+  presentations,
+  reports,
+  user,
+} from "#db";
+import { inArray } from "drizzle-orm";
 import { createApp } from "../index";
 import type { SessionReader } from "../middleware/auth";
+import { clearTables } from "../test/db";
 
 const A = "aaaaaaaa6000000000001";
 const B = "bbbbbbbb6000000000002";
@@ -79,15 +88,10 @@ function librarySong(
 
 describe("2계정 공유 라이브러리 E2E", () => {
   beforeEach(async () => {
-    for (const table of [
-      "reports",
-      "presentation_items",
-      "decks",
-      "presentations",
-    ]) {
-      await env.DB.exec(`DELETE FROM ${table}`);
-    }
-    await env.DB.exec(`DELETE FROM user WHERE id IN ('${A}', '${B}')`);
+    await clearTables(reports, presentationItems, decks, presentations);
+    await createD1Client(env.DB)
+      .delete(user)
+      .where(inArray(user.id, [A, B]));
     await createD1Client(env.DB)
       .insert(user)
       .values([

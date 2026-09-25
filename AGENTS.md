@@ -103,6 +103,7 @@ pnpm vitest run -t "slide split"
 
 - Declare each domain model and API contract once, as a Zod schema in `src/shared/schemas/`, and derive types with `z.infer`. Parse the JSON TEXT columns (`decks.slides`, `decks.style`) with their schemas on read.
 - Entity ids are 21-char NanoIDs from `createId()`, validated by `IdSchema`. `crypto.randomUUID()` is banned by lint. Slide ids come from `createSlideId()`.
+- Write queries and test fixtures with the Drizzle query builder (`createD1Client(env.DB)` in worker tests, `createTestDb().db` in node tests, `clearTables` from `src/worker/test/db.ts` for resets). Raw `sql` fragments are only for what Drizzle lacks: the FTS5 `MATCH` operator, column arithmetic (`fork_count + 1`) and schema defaults. Only migrations and the runbook statements in `src/db/ops/` stay plain SQL.
 - D1 has no row-level security. All DB access goes through helpers in `src/db/queries/`. Every private query or mutation filters by the session's `user_id`, and every public-library query includes `visibility = 'public'`.
 - The library is a board: many users may publish the same song, and the copies are never merged. Sort by `fork_count DESC, updated_at DESC`.
 

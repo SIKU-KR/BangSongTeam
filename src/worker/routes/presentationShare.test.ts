@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { env } from "cloudflare:test";
+import { count, eq, inArray } from "drizzle-orm";
 import {
   DEFAULT_DECK_STYLE,
   PresentationDocumentSchema,
@@ -7,9 +8,17 @@ import {
   type PresentationDocument,
   type ShareSettings,
 } from "#shared";
-import { createD1Client, user } from "#db";
+import {
+  createD1Client,
+  decks,
+  presentationItems,
+  presentationMembers,
+  presentations,
+  user,
+} from "#db";
 import { createApp } from "../index";
 import type { SessionReader } from "../middleware/auth";
+import { clearTables } from "../test/db";
 
 const OWNER = "aaaaaaaa0000000000011";
 const MEMBER = "bbbbbbbb0000000000012";
@@ -92,10 +101,10 @@ async function shareAndJoin(): Promise<string> {
 
 describe("세트 링크 공유 라우트", () => {
   beforeEach(async () => {
-    await env.DB.exec("DELETE FROM presentation_items");
-    await env.DB.exec("DELETE FROM decks");
-    await env.DB.exec("DELETE FROM presentations");
-    await env.DB.exec(`DELETE FROM user WHERE id IN ('${OWNER}', '${MEMBER}')`);
+    await clearTables(presentationItems, decks, presentations);
+    await createD1Client(env.DB)
+      .delete(user)
+      .where(inArray(user.id, [OWNER, MEMBER]));
     await createD1Client(env.DB)
       .insert(user)
       .values([
@@ -206,12 +215,12 @@ describe("세트 링크 공유 라우트", () => {
     await shareAndJoin();
     await as(OWNER, `/api/presentations/${DOC_ID}`, send("DELETE"));
 
-    const rows = await env.DB.prepare(
-      "SELECT COUNT(*) AS n FROM presentation_members WHERE presentation_id = ?",
-    )
-      .bind(DOC_ID)
-      .first<{ n: number }>();
-    expect(rows?.n).toBe(0);
+    const members = await createD1Client(env.DB)
+      .select({ n: count() })
+      .from(presentationMembers)
+      .where(eq(presentationMembers.presentationId, DOC_ID))
+      .get();
+    expect(members?.n).toBe(0);
   });
 
   it("로그인하지 않으면 링크로 들어오지 못한다", async () => {

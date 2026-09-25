@@ -5,7 +5,7 @@ import {
   drizzle,
   type BetterSQLite3Database,
 } from "drizzle-orm/better-sqlite3";
-import fs from "node:fs";
+import { migrate } from "drizzle-orm/better-sqlite3/migrator";
 import path from "node:path";
 import * as schema from "./schema";
 
@@ -22,20 +22,9 @@ export interface TestDbResult {
  */
 export function createTestDb(): TestDbResult {
   const sqlite = new Database(":memory:");
-  const dir = path.resolve(__dirname, "../../migrations");
-
-  const files = fs
-    .readdirSync(dir)
-    .filter((name) => /^\d{4}_.*\.sql$/.test(name))
-    .sort();
-
-  for (const file of files) {
-    const content = fs.readFileSync(path.join(dir, file), "utf-8");
-    for (const stmt of content.split("--> statement-breakpoint")) {
-      if (stmt.trim()) sqlite.exec(stmt);
-    }
-  }
-
   const db = drizzle(sqlite, { schema });
+  migrate(db, {
+    migrationsFolder: path.resolve(__dirname, "../../migrations"),
+  });
   return { sqlite, db };
 }
