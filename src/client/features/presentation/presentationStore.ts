@@ -67,7 +67,10 @@ interface DocumentHistory {
 }
 
 const histories = new Map<string, DocumentHistory>();
-const MAX_HISTORY = 25;
+const MAX_HISTORY = 100;
+const COALESCE_WINDOW_MS = 1000;
+
+let lastPush: { docId: string; key: string; at: number } | null = null;
 
 function historyFor(id: string): DocumentHistory {
   let history = histories.get(id);
@@ -78,13 +81,37 @@ function historyFor(id: string): DocumentHistory {
   return history;
 }
 
-function pushHistory(): void {
+function pushHistory(coalesceKey?: string): void {
+  const now = Date.now();
+  if (
+    coalesceKey &&
+    lastPush &&
+    lastPush.docId === state.activeId &&
+    lastPush.key === coalesceKey &&
+    now - lastPush.at < COALESCE_WINDOW_MS
+  ) {
+    lastPush.at = now;
+    return;
+  }
+  lastPush = coalesceKey
+    ? { docId: state.activeId, key: coalesceKey, at: now }
+    : null;
+
   const history = historyFor(state.activeId);
   history.undo.push(JSON.stringify(readActive()));
   if (history.undo.length > MAX_HISTORY) {
     history.undo.shift();
   }
   history.redo.length = 0;
+}
+
+/**
+ * 되돌리기 묶음을 끊는다. 슬라이더를 끌거나 가사를 입력하는 동안의 연속 변경은
+ * 같은 키로 1초 안에 들어오면 한 단계로 묶이는데, 편집 시작·종료처럼 사용자가
+ * 한 동작을 마쳤다고 볼 수 있는 시점에 호출해 다음 변경을 새 단계로 만든다.
+ */
+export function breakHistoryCoalescing(): void {
+  lastPush = null;
 }
 
 export function canUndo(): boolean {
@@ -108,6 +135,7 @@ function withCurrentPlacement(
 }
 
 export function undo(): boolean {
+  lastPush = null;
   const history = historyFor(state.activeId);
   const prevSerialized = history.undo.pop();
   if (!prevSerialized) return false;
@@ -121,6 +149,7 @@ export function undo(): boolean {
 }
 
 export function redo(): boolean {
+  lastPush = null;
   const history = historyFor(state.activeId);
   const nextSerialized = history.redo.pop();
   if (!nextSerialized) return false;
@@ -246,6 +275,7 @@ export async function hydrateFromStorage(): Promise<void> {
     };
     listSnapshot = buildListSnapshot(state);
     histories.clear();
+    lastPush = null;
     emitChange();
 
     persistenceEnabled = true;
@@ -311,6 +341,7 @@ export function __loadDocumentsForTests(documents: Presentation[]): void {
   };
   listSnapshot = buildListSnapshot(state);
   histories.clear();
+  lastPush = null;
   for (const listener of listeners) listener();
 }
 
@@ -392,6 +423,7 @@ export function addDeckToPresentation(deck: Deck): PresentationItem {
 export function resetPresentationStore(): void {
   resetPersistenceForTests();
   histories.clear();
+  lastPush = null;
   state = createEmptyState();
   listSnapshot = buildListSnapshot(state);
   emitChange();
@@ -449,6 +481,7 @@ export function getActivePresentationId(): string {
 export function openPresentation(id: string): boolean {
   if (!state.byId[id]) return false;
   if (state.activeId === id) return true;
+  lastPush = null;
   state = { ...state, activeId: id };
   listSnapshot = buildListSnapshot(state);
   emitChange();
@@ -465,25 +498,38 @@ export function updatePresentationTitle(title: string): void {
   emitChange();
 }
 
+/** 연속 입력을 되돌리기 한 단계로 묶을 때 쓰는 키 (`breakHistoryCoalescing` 참고) */
+export interface HistoryOptions {
+  coalesceKey?: string;
+}
+
+/**
+ * 곡 서식을 바꾼다. 서식은 곡 단위라 곡의 모든 슬라이드에 적용된다. 값이 그대로면
+ * 되돌리기 기록도 남기지 않는다.
+ */
 export function updateSongStyle(
   songIndex: number,
   styleUpdate: Partial<Deck["style"]>,
+  options: HistoryOptions = {},
 ): void {
   const item = readActive().items[songIndex];
   if (!item || !item.deck) return;
 
-  pushHistory();
+  const style: Deck["style"] = {
+    ...item.deck.style,
+    ...styleUpdate,
+    position: {
+      ...item.deck.style.position,
+      ...(styleUpdate.position ?? {}),
+    },
+  };
+  if (JSON.stringify(style) === JSON.stringify(item.deck.style)) return;
+
+  pushHistory(options.coalesceKey);
 
   const updatedDeck: Deck = {
     ...item.deck,
-    style: {
-      ...item.deck.style,
-      ...styleUpdate,
-      position: {
-        ...item.deck.style.position,
-        ...(styleUpdate.position ?? {}),
-      },
-    },
+    style,
     updatedAt: new Date().toISOString(),
   };
 
@@ -558,18 +604,23 @@ export function updateSongBackground(
   emitChange();
 }
 
+/** 슬라이드 가사를 바꾼다. 값이 그대로면 되돌리기 기록도 남기지 않는다. */
 export function updateSlideLines(
   songIndex: number,
   slideIndex: number,
   lines: string[],
+  options: HistoryOptions = {},
 ): void {
   const item = readActive().items[songIndex];
   if (!item || !item.deck) return;
 
   const slides = [...item.deck.slides];
   if (!slides[slideIndex]) return;
+  if (JSON.stringify(slides[slideIndex].lines) === JSON.stringify(lines)) {
+    return;
+  }
 
-  pushHistory();
+  pushHistory(options.coalesceKey);
 
   slides[slideIndex] = {
     ...slides[slideIndex],

@@ -25,6 +25,8 @@ import {
   redo,
   canUndo,
   canRedo,
+  breakHistoryCoalescing,
+  getActivePresentation,
   createNewPresentation,
   launchPresentation,
   usePresentationById,
@@ -37,14 +39,25 @@ import {
   INITIAL_POSITION,
   type ProjectionPosition,
 } from "../features/presentation";
-import { DEFAULT_DECK_STYLE, analyzeDeckOverflow } from "#shared";
-import type { Presentation } from "#shared";
+import {
+  DEFAULT_DECK_STYLE,
+  MAX_SLIDE_LINE_LENGTH,
+  MAX_SLIDE_LINES,
+  analyzeDeckOverflow,
+  mergeSlideLines,
+  splitLinesAtCursor,
+} from "#shared";
+import type { DeckStyle, Presentation } from "#shared";
 import { EditorHeader } from "../features/editor/EditorHeader";
 import { drivePath } from "../features/drive";
 import { StorageWarningBanner } from "../components/common/StorageWarningBanner";
 import { EditorStageCanvas } from "../features/editor/EditorStageCanvas";
 import { SlideThumbnailPane } from "../features/editor/SlideThumbnailPane";
-import { SongPropertyPanel } from "../features/editor/SongPropertyPanel";
+import { EditorRibbon } from "../features/editor/ribbon/EditorRibbon";
+import { stepFontSize } from "../features/editor/ribbon/ribbonOptions";
+import { StageLyricsEditor } from "../features/editor/StageLyricsEditor";
+import { OverflowWarningIcon } from "../features/editor/OverflowWarningIcon";
+import { useEditorShortcuts } from "../features/editor/useEditorShortcuts";
 import {
   SongPickerModal,
   type SongPickerMode,
@@ -78,6 +91,15 @@ export function EditorRoute(): React.JSX.Element {
     null,
   );
   const [editingSongIndex, setEditingSongIndex] = useState<number | null>(null);
+  const [textEdit, setTextEdit] = useState<{
+    slideId: string;
+    caret: "start" | "end";
+  } | null>(null);
+  const [caret, setCaret] = useState<{
+    slideId: string;
+    offset: number;
+  } | null>(null);
+  const [limitHintSlideId, setLimitHintSlideId] = useState<string | null>(null);
 
   useLayoutEffect(() => {
     if (presentationId) openPresentation(presentationId);
@@ -163,13 +185,35 @@ export function EditorRoute(): React.JSX.Element {
   const handlePrevSlide = () => selectPosition(prevPosition(position, songs));
   const handleNextSlide = () => selectPosition(nextPosition(position, songs));
 
+  const isEditingText = !!currentSlide && textEdit?.slideId === currentSlide.id;
+  const caretOffset =
+    currentSlide && caret?.slideId === currentSlide.id ? caret.offset : null;
+
+  const startTextEdit = (
+    slideId: string | undefined = currentSlide?.id,
+    caretAt: "start" | "end" = "end",
+  ): void => {
+    if (!slideId) return;
+    breakHistoryCoalescing();
+    setTextEdit({ slideId, caret: caretAt });
+  };
+
+  const exitTextEdit = (slideId: string): void => {
+    breakHistoryCoalescing();
+    setTextEdit((prev) => (prev?.slideId === slideId ? null : prev));
+  };
+
+  const slideIdAt = (songIndex: number, slideIndex: number) =>
+    getActivePresentation().items[songIndex]?.deck?.slides[slideIndex]?.id;
+
   const handleAddSlide = () => {
     if (!currentSong) return;
-    addSlideToSong(safeSongIndex, ["새 가사 줄을 입력하세요"], safeSlideIndex);
+    addSlideToSong(safeSongIndex, [], safeSlideIndex);
     selectPosition({
       songIndex: safeSongIndex,
       slideIndex: safeSlideIndex + 1,
     });
+    startTextEdit(slideIdAt(safeSongIndex, safeSlideIndex + 1));
   };
 
   const handleDuplicateSlide = (songIndex: number, slideIndex: number) => {
@@ -191,10 +235,59 @@ export function EditorRoute(): React.JSX.Element {
     }
   };
 
+  const middleSplitOffset = currentSlide
+    ? currentSlide.lines
+        .slice(0, Math.ceil(currentSlide.lines.length / 2))
+        .join("\n").length
+    : 0;
+  const splitOffset =
+    isEditingText && caretOffset !== null ? caretOffset : middleSplitOffset;
+  const canSplit =
+    !!currentSlide &&
+    splitLinesAtCursor(currentSlide.lines, splitOffset) !== null;
+  const canMerge =
+    !!currentSlide &&
+    !!nextSlideInSong &&
+    mergeSlideLines(currentSlide.lines, nextSlideInSong.lines) !== null;
+
   const handleSplitSlide = (offset: number) => {
-    if (splitSlideAtCursor(safeSongIndex, safeSlideIndex, offset)) {
-      setActiveSlideIndex(safeSlideIndex + 1);
+    const wasEditing = isEditingText;
+    if (!splitSlideAtCursor(safeSongIndex, safeSlideIndex, offset)) return;
+    setActiveSlideIndex(safeSlideIndex + 1);
+    if (wasEditing) {
+      startTextEdit(slideIdAt(safeSongIndex, safeSlideIndex + 1), "start");
     }
+  };
+
+  const handleUpdateStyle = (
+    update: Partial<DeckStyle>,
+    coalesceField?: string,
+  ) => {
+    updateSongStyle(
+      safeSongIndex,
+      update,
+      coalesceField && currentSong
+        ? { coalesceKey: `style:${currentSong.id}:${coalesceField}` }
+        : {},
+    );
+  };
+
+  const selectEdge = (edge: "first" | "last") => {
+    if (songs.length === 0) return;
+    if (edge === "first") {
+      selectPosition(INITIAL_POSITION);
+      return;
+    }
+    const lastSong = songs.length - 1;
+    selectPosition(
+      clampPosition(
+        {
+          songIndex: lastSong,
+          slideIndex: (songs[lastSong]?.deck?.slides.length ?? 1) - 1,
+        },
+        songs,
+      ),
+    );
   };
 
   const handleReorderSlide = (songIndex: number, from: number, to: number) => {
@@ -252,55 +345,42 @@ export function EditorRoute(): React.JSX.Element {
     navigate(`/editor/${created.id}`);
   };
 
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      const activeElement = document.activeElement;
-      const isInputActive =
-        activeElement instanceof HTMLInputElement ||
-        activeElement instanceof HTMLTextAreaElement ||
-        (activeElement as HTMLElement)?.isContentEditable;
+  useEditorShortcuts({
+    undo: () => (canUndo() ? undo() : false),
+    redo: () => (canRedo() ? redo() : false),
+    prevSlide: handlePrevSlide,
+    nextSlide: handleNextSlide,
+    firstSlide: () => selectEdge("first"),
+    lastSlide: () => selectEdge("last"),
+    editText: () => (currentSlide ? startTextEdit() : false),
+    newSlide: () => (currentSong ? handleAddSlide() : false),
+    duplicateSlide: () =>
+      currentSlide
+        ? handleDuplicateSlide(safeSongIndex, safeSlideIndex)
+        : false,
+    deleteSlide: () =>
+      currentSlide ? handleDeleteSlide(safeSongIndex, safeSlideIndex) : false,
+    fontSizeUp: () =>
+      currentSong
+        ? handleUpdateStyle({
+            fontSizeVw: stepFontSize(currentStyle.fontSizeVw, 1),
+          })
+        : false,
+    fontSizeDown: () =>
+      currentSong
+        ? handleUpdateStyle({
+            fontSizeVw: stepFontSize(currentStyle.fontSizeVw, -1),
+          })
+        : false,
+    present: () => (songs.length > 0 ? handlePresent() : false),
+  });
 
-      const isMod = e.metaKey || e.ctrlKey;
-      if (isMod && (e.key === "z" || e.key === "Z")) {
-        if (e.shiftKey) {
-          if (canRedo()) {
-            e.preventDefault();
-            redo();
-          }
-        } else {
-          if (canUndo()) {
-            e.preventDefault();
-            undo();
-          }
-        }
-        return;
-      }
-      if (isMod && (e.key === "y" || e.key === "Y")) {
-        if (canRedo()) {
-          e.preventDefault();
-          redo();
-        }
-        return;
-      }
-
-      if (isInputActive) return;
-
-      if (e.key === "ArrowLeft" || e.key === "ArrowUp") {
-        e.preventDefault();
-        handlePrevSlide();
-      } else if (
-        e.key === "ArrowRight" ||
-        e.key === "ArrowDown" ||
-        e.key === " "
-      ) {
-        e.preventDefault();
-        handleNextSlide();
-      }
-    };
-
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [safeSongIndex, safeSlideIndex, songs]);
+  const overflowMessages = [
+    currentOverflow?.exceedsStage &&
+      "이 곡에서 가장 긴 슬라이드가 화면 가장자리 여백을 넘칩니다. 글자 크기를 줄이거나 슬라이드를 나눠 보세요.",
+    currentOverflow?.slides[safeSlideIndex]?.wraps &&
+      "현재 슬라이드의 한 줄이 텍스트 박스 폭을 넘어 자동 줄바꿈됩니다. 글자 크기를 줄이거나 박스 폭을 넓혀 보세요.",
+  ].filter((message): message is string => !!message);
 
   if (!found) return <Navigate to="/presentations" replace />;
 
@@ -315,10 +395,7 @@ export function EditorRoute(): React.JSX.Element {
         title={presentation.title}
         onUpdateTitle={(newTitle) => updatePresentationTitle(newTitle)}
         onPresent={handlePresent}
-        currentSongIndex={safeSongIndex}
         totalSongs={presentation.items.length}
-        currentSlideNumber={currentSlideNumber}
-        totalSlideCount={totalSlideCount}
         onUndo={undo}
         onRedo={redo}
         canUndo={canUndo()}
@@ -326,6 +403,36 @@ export function EditorRoute(): React.JSX.Element {
         onNewPresentation={handleNewPresentation}
         onOpenLyricModal={() => setSongPickerMode("create")}
         backPath={drivePath(presentation.folderId)}
+      />
+
+      <EditorRibbon
+        song={currentSong}
+        onUpdateStyle={handleUpdateStyle}
+        onUpdateBackground={(backgroundId) =>
+          updateSongBackground(safeSongIndex, backgroundId)
+        }
+        slideControls={{
+          hasSlide: !!currentSlide,
+          canDelete: currentSlides.length > 1,
+          canSplit,
+          canMerge,
+          splitTitle: canSplit
+            ? isEditingText
+              ? "커서 위치에서 슬라이드를 둘로 나눕니다 (Ctrl/⌘+Enter)"
+              : "슬라이드를 가운데에서 둘로 나눕니다"
+            : "가사가 두 줄 이상이거나, 편집 중 가사 사이에 커서가 있어야 나눌 수 있습니다",
+          mergeTitle: !nextSlideInSong
+            ? "이 곡의 마지막 슬라이드입니다"
+            : canMerge
+              ? "다음 슬라이드의 가사를 이 슬라이드 뒤에 붙입니다"
+              : `합치면 ${MAX_SLIDE_LINES}줄을 넘어 합칠 수 없습니다`,
+          onAdd: handleAddSlide,
+          onDuplicate: () =>
+            handleDuplicateSlide(safeSongIndex, safeSlideIndex),
+          onDelete: () => handleDeleteSlide(safeSongIndex, safeSlideIndex),
+          onSplit: () => handleSplitSlide(splitOffset),
+          onMerge: () => mergeSlideWithNext(safeSongIndex, safeSlideIndex),
+        }}
       />
 
       <div className="flex-1 flex overflow-hidden">
@@ -351,42 +458,80 @@ export function EditorRoute(): React.JSX.Element {
           backgroundUrl={background.videoUrl}
           backgroundImageUrl={background.imageUrl}
           posterUrl={background.posterUrl}
-          songTitle={currentSong?.title}
           slideNumber={currentSlideNumber}
           totalSlideCount={totalSlideCount}
+          songNumber={songs.length > 0 ? safeSongIndex + 1 : 0}
+          totalSongs={songs.length}
           onPrevSlide={handlePrevSlide}
           onNextSlide={handleNextSlide}
-          onPresent={handlePresent}
           zoomLevel={zoomLevel}
           onZoomChange={setZoomLevel}
           onOpenLyricModal={() => setSongPickerMode("create")}
-          onUpdateStyle={(styleUpdate) =>
-            updateSongStyle(safeSongIndex, styleUpdate)
+          onUpdateStyle={(styleUpdate) => handleUpdateStyle(styleUpdate)}
+          onRequestTextEdit={() => startTextEdit()}
+          textEditor={
+            isEditingText && currentSlide ? (
+              <StageLyricsEditor
+                key={currentSlide.id}
+                slide={currentSlide}
+                caretColor={currentStyle.fontColor}
+                initialCaret={textEdit?.caret}
+                onChangeLines={(lines) => {
+                  if (lines.length < MAX_SLIDE_LINES) {
+                    setLimitHintSlideId(null);
+                  }
+                  updateSlideLines(safeSongIndex, safeSlideIndex, lines, {
+                    coalesceKey: `lines:${currentSlide.id}`,
+                  });
+                }}
+                onLimitHit={() => setLimitHintSlideId(currentSlide.id)}
+                onCaretChange={(offset) =>
+                  setCaret({ slideId: currentSlide.id, offset })
+                }
+                onSplit={handleSplitSlide}
+                onExit={() => exitTextEdit(currentSlide.id)}
+              />
+            ) : undefined
           }
-        />
-
-        <SongPropertyPanel
-          style={currentStyle}
-          backgroundId={currentSong?.backgroundId}
-          activeSlide={currentSlide}
-          nextSlide={nextSlideInSong}
-          onUpdateStyle={(styleUpdate) =>
-            updateSongStyle(safeSongIndex, styleUpdate)
-          }
-          onUpdateBackground={(backgroundId) =>
-            updateSongBackground(safeSongIndex, backgroundId)
-          }
-          onUpdateSlideLines={(lines) =>
-            updateSlideLines(safeSongIndex, safeSlideIndex, lines)
-          }
-          overflowWarnings={{
-            activeSlideWraps:
-              currentOverflow?.slides[safeSlideIndex]?.wraps ?? false,
-            exceedsStage: currentOverflow?.exceedsStage ?? false,
-          }}
-          onSplitSlide={handleSplitSlide}
-          onMergeWithNext={() =>
-            mergeSlideWithNext(safeSongIndex, safeSlideIndex)
+          statusItems={
+            <>
+              {isEditingText && currentSlide && (
+                <>
+                  <span aria-hidden="true">·</span>
+                  <span
+                    data-testid="slide-line-count"
+                    className={`font-mono ${
+                      currentSlide.lines.length >= MAX_SLIDE_LINES
+                        ? "text-amber-600 dark:text-amber-400"
+                        : ""
+                    }`}
+                  >
+                    {currentSlide.lines.length}/{MAX_SLIDE_LINES}줄
+                  </span>
+                  {limitHintSlideId === currentSlide.id && (
+                    <span
+                      data-testid="slide-line-limit-hint"
+                      className="truncate text-amber-700 dark:text-amber-400"
+                    >
+                      한 슬라이드는 {MAX_SLIDE_LINES}줄, 한 줄{" "}
+                      {MAX_SLIDE_LINE_LENGTH}자까지입니다. 더 넣으려면
+                      Ctrl/⌘+Enter로 나누세요.
+                    </span>
+                  )}
+                </>
+              )}
+              {overflowMessages.length > 0 && (
+                <span
+                  role="status"
+                  data-testid="overflow-warning-status"
+                  title={overflowMessages.join("\n")}
+                  className="flex items-center gap-1 min-w-0 text-amber-700 dark:text-amber-400"
+                >
+                  <OverflowWarningIcon className="w-3.5 h-3.5 shrink-0" />
+                  <span className="truncate">{overflowMessages[0]}</span>
+                </span>
+              )}
+            </>
           }
         />
       </div>

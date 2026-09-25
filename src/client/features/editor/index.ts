@@ -35,7 +35,4 @@ export {
   type EditorStageCanvasProps,
 } from "./EditorStageCanvas";
 
-export {
-  SongPropertyPanel,
-  type SongPropertyPanelProps,
-} from "./SongPropertyPanel";
+export { EditorRibbon, type EditorRibbonProps } from "./ribbon/EditorRibbon";

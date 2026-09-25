@@ -8,6 +8,8 @@ export interface TextLayerProps {
   isLyricsHidden?: boolean;
   boxRef?: React.Ref<HTMLDivElement>;
   isInteracting?: boolean;
+  /** 가사 줄 대신 박스 안에 그릴 내용. 편집 캔버스의 직접 편집기가 쓴다 */
+  content?: React.ReactNode;
   className?: string;
 }
 
@@ -18,6 +20,7 @@ export function TextLayer({
   isLyricsHidden = false,
   boxRef,
   isInteracting = false,
+  content,
   className = "",
 }: TextLayerProps): React.JSX.Element {
   const {
@@ -71,11 +74,15 @@ export function TextLayer({
           whiteSpace: "pre-wrap",
         }}
       >
-        {lines.map((line, idx) => (
-          <p key={idx} className="m-0 p-0">
-            {line}
-          </p>
-        ))}
+        {content !== undefined ? (
+          <div className="pointer-events-auto">{content}</div>
+        ) : (
+          lines.map((line, idx) => (
+            <p key={idx} className="m-0 p-0">
+              {line}
+            </p>
+          ))
+        )}
       </div>
     </div>
   );

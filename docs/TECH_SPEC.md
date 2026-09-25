@@ -110,26 +110,26 @@ flowchart TB
 
 본 명세의 항목 중 실제 코드가 있는 것과 설계만 있는 것을 구분한다. 이 표를 갱신하지 않은 채 "스펙에 있으니 구현되어 있다"고 가정하지 않는다.
 
-| 구성 요소                                 | 상태 | 비고                                                                                                             |
-| ----------------------------------------- | ---- | ---------------------------------------------------------------------------------------------------------------- |
-| `src/shared` Zod 스키마 (§3)              | 구현 | Deck·Slide·Style·Presentation·API·공유 라이브러리(`library.ts`) 계약                                             |
-| `src/db` Drizzle 스키마·`migrations/`(§4) | 구현 | `0001_initial` 하나. 첫 배포 전 0000~0008을 합쳤다 (2026-09-24). 다음 마이그레이션은 0002부터                    |
-| 스코프 쿼리 헬퍼 (§4.3)                   | 구현 | decks·presentations·search·sharing·reports. 공개 조건은 `publicDeckCondition()` 한 곳                            |
-| 3-Layer Slide Stage (§5.1)                | 구현 | `components/stage/*` — 편집기와 송출이 동일 컴포넌트 사용                                                        |
-| 입력 버퍼 엔진·단축키 (§5.2)              | 구현 | `useNavigationBuffer`, `usePresentationShortcuts` (tinykeys)                                                     |
-| 세트 편집기 (PRD 4.4)                     | 구현 | 넘침 경고와 커서 기준 분할·합치기 구현 (M2). 공개·비공개는 곡 추가 창 내 보관함 미리보기로 옮겼다 (2026-09-25)   |
-| 미디어 프록시 `/api/media/*` (§5.4)       | 구현 | HTTP Range 지원                                                                                                  |
-| 클라이언트 영속성 (§5.5)                  | 구현 | IndexedDB가 1차 원천. 프레젠테이션과 **보관함 곡** 모두 서버와 동기화 (보관함은 M5-2에서 연결)                   |
-| Hono RPC 클라이언트 (`hc<AppType>`)       | 구현 | `AppType = ReturnType<typeof createApp>`. 라우트는 팩토리(`createApp(deps)`)라 테스트가 실제 라우트를 마운트한다 |
-| Better Auth (§4.1 auth 테이블)            | 구현 | 카카오·네이버 + localhost 전용 개발자 로그인. 실제 OAuth 자격증명 확인은 대기                                    |
-| 발표자 보기·BroadcastChannel (§5.3)       | 제거 | MVP 범위에서 제외 (2026-09-24). 송출은 전체화면 `/present/:id/fullscreen` 한 가지                                |
-| PWA·Cache Storage (§5.4)                  | 구현 | vite-plugin-pwa(generateSW) + RangeRequests (M4)                                                                 |
-| TanStack Query (서버 캐시)                | 구현 | 곡 추가 모달의 공유 검색·상세·가져오기, 공개 전환, 신고에만 쓴다. 송출 화면 import는 ESLint가 막는다 (M5-5)      |
-| 가사 라이브러리·LLM 정규화 (§6)           | 제거 | MVP 범위에서 제외 (2026-09-23). 테이블은 스키마에서 지웠다                                                       |
-| 공유 라이브러리 API (§7)                  | 구현 | 공개 전환·검색(가져간 횟수순 게시판)·상세·가져오기·신고 (M5-3)                                                   |
-| 운영자 도구                               | 구현 | 관리자 화면 없음. `docs/ops/moderation-runbook.md`의 SQL (`src/db/ops/moderationSql.ts`가 정본)                  |
-| 관리자 배경 업로드 (PRD 4.3)              | 구현 | 배경 갤러리에서 관리자만 올리기·지우기 (MP4·JPEG·PNG·WebP, 파일당 30MB, 출처·라이선스 입력). 사용자 업로드 없음  |
-| 저장 실패 경고 배너                       | 구현 | `StorageWarningBanner` — 용량 초과와 저장소 차단을 구분, 닫을 수 없음                                            |
+| 구성 요소                                 | 상태 | 비고                                                                                                                                                                                                                                                                              |
+| ----------------------------------------- | ---- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/shared` Zod 스키마 (§3)              | 구현 | Deck·Slide·Style·Presentation·API·공유 라이브러리(`library.ts`) 계약                                                                                                                                                                                                              |
+| `src/db` Drizzle 스키마·`migrations/`(§4) | 구현 | `0001_initial` 하나. 첫 배포 전 0000~0008을 합쳤다 (2026-09-24). 다음 마이그레이션은 0002부터                                                                                                                                                                                     |
+| 스코프 쿼리 헬퍼 (§4.3)                   | 구현 | decks·presentations·search·sharing·reports. 공개 조건은 `publicDeckCondition()` 한 곳                                                                                                                                                                                             |
+| 3-Layer Slide Stage (§5.1)                | 구현 | `components/stage/*` — 편집기와 송출이 동일 컴포넌트 사용                                                                                                                                                                                                                         |
+| 입력 버퍼 엔진·단축키 (§5.2)              | 구현 | `useNavigationBuffer`, `usePresentationShortcuts` (tinykeys)                                                                                                                                                                                                                      |
+| 세트 편집기 (PRD 4.4)                     | 구현 | 넘침 경고와 커서 기준 분할·합치기 구현 (M2). 2026-09-25 오른쪽 속성 패널을 상단 리본(`features/editor/ribbon/`)으로 바꾸고, 가사는 캔버스에서 직접 편집(`TextLayer`의 `content` 슬롯), 편집기 단축키는 `editorShortcuts.ts`. 공개·비공개는 곡 추가 창 내 보관함 미리보기로 옮겼다 |
+| 미디어 프록시 `/api/media/*` (§5.4)       | 구현 | HTTP Range 지원                                                                                                                                                                                                                                                                   |
+| 클라이언트 영속성 (§5.5)                  | 구현 | IndexedDB가 1차 원천. 프레젠테이션과 **보관함 곡** 모두 서버와 동기화 (보관함은 M5-2에서 연결)                                                                                                                                                                                    |
+| Hono RPC 클라이언트 (`hc<AppType>`)       | 구현 | `AppType = ReturnType<typeof createApp>`. 라우트는 팩토리(`createApp(deps)`)라 테스트가 실제 라우트를 마운트한다                                                                                                                                                                  |
+| Better Auth (§4.1 auth 테이블)            | 구현 | 카카오·네이버 + localhost 전용 개발자 로그인. 실제 OAuth 자격증명 확인은 대기                                                                                                                                                                                                     |
+| 발표자 보기·BroadcastChannel (§5.3)       | 제거 | MVP 범위에서 제외 (2026-09-24). 송출은 전체화면 `/present/:id/fullscreen` 한 가지                                                                                                                                                                                                 |
+| PWA·Cache Storage (§5.4)                  | 구현 | vite-plugin-pwa(generateSW) + RangeRequests (M4)                                                                                                                                                                                                                                  |
+| TanStack Query (서버 캐시)                | 구현 | 곡 추가 모달의 공유 검색·상세·가져오기, 공개 전환, 신고에만 쓴다. 송출 화면 import는 ESLint가 막는다 (M5-5)                                                                                                                                                                       |
+| 가사 라이브러리·LLM 정규화 (§6)           | 제거 | MVP 범위에서 제외 (2026-09-23). 테이블은 스키마에서 지웠다                                                                                                                                                                                                                        |
+| 공유 라이브러리 API (§7)                  | 구현 | 공개 전환·검색(가져간 횟수순 게시판)·상세·가져오기·신고 (M5-3)                                                                                                                                                                                                                    |
+| 운영자 도구                               | 구현 | 관리자 화면 없음. `docs/ops/moderation-runbook.md`의 SQL (`src/db/ops/moderationSql.ts`가 정본)                                                                                                                                                                                   |
+| 관리자 배경 업로드 (PRD 4.3)              | 구현 | 배경 갤러리에서 관리자만 올리기·지우기 (MP4·JPEG·PNG·WebP, 파일당 30MB, 출처·라이선스 입력). 사용자 업로드 없음                                                                                                                                                                   |
+| 저장 실패 경고 배너                       | 구현 | `StorageWarningBanner` — 용량 초과와 저장소 차단을 구분, 닫을 수 없음                                                                                                                                                                                                             |
 
 ---
 
@@ -907,7 +907,7 @@ stateDiagram-v2
 3. **부팅 순서:** IndexedDB에서 문서 목록을 로드 → 있으면 그것으로 스토어를 초기화 → 없을 때만 샘플 시드를 넣는다. `createSeedState()`는 "저장소가 비어 있을 때의 초기값"으로 격하되었고, 하이드레이션이 끝나기 전에는 라우터를 렌더하지 않는다(시드가 한 프레임 보였다가 교체되면 그 사이 편집이 저장본을 덮어쓴다).
 4. **쓰기 실패를 삼키지 않는다.** 용량 초과(`QuotaExceededError`)나 시크릿 모드로 IndexedDB를 못 쓰면 편집기 상단에 '이 브라우저에 저장할 수 없습니다' 배너를 띄운다. 조용히 인메모리로 폴백하면 사용자는 저장된 줄 알고 예배 당일에 잃는다.
 5. **스키마 버전:** `openDB(..., version)`의 upgrade 경로를 처음부터 유지한다. 스토어 구조가 바뀌면 버전을 올리고 마이그레이션을 쓴다. 저장된 문서는 읽을 때 `PresentationSchema.safeParse`로 검증하고, 실패한 문서는 버리지 말고 격리 보관한 뒤 사용자에게 알린다.
-6. **Undo/Redo 히스토리는 저장하지 않는다.** 세션 한정 상태이며 직렬화 비용이 크다.
+6. **Undo/Redo 히스토리는 저장하지 않는다.** 세션 한정 상태이며 직렬화 비용이 크다. 문서마다 100단계까지 두고, 같은 항목의 연속 변경(슬라이더 끌기, 가사 입력)은 1초 안이면 한 단계로 묶는다 (`pushHistory(coalesceKey)`, `breakHistoryCoalescing`).
 7. **배경 카탈로그:** 배경 id를 URL로 바꾸는 표는 `features/backgrounds/backgroundCatalog.ts`의 메모리 스토어다. 부팅 때 IndexedDB `backgrounds` 스토어에서 채우고(`hydrateBackgroundCatalog`), 부팅 동기화·배경 갤러리·배경 선택 창이 `/api/backgrounds`로 새로 받아 통째로 바꾼다(`refreshBackgroundCatalog`). 송출 화면은 로컬 사본만 읽는다. 배경 파일은 IndexedDB Blob이 아니라 R2에 두고, 곡에 지정되면 Cache Storage에 받아 둔다(5.4-3).
 
 **Phase 3 설계 규칙 (M3-B, 구현 완료):**

@@ -22,6 +22,8 @@ export interface SlideStageProps {
   isLyricsHidden?: boolean;
   textBoxRef?: React.Ref<HTMLDivElement>;
   isTextInteracting?: boolean;
+  /** 가사 줄 대신 텍스트 박스 안에 그릴 내용 (편집 캔버스 전용) */
+  textContent?: React.ReactNode;
   containerDimensions?: { width?: number; height?: number };
   staticBackground?: boolean;
   className?: string;
@@ -39,6 +41,7 @@ export function SlideStage({
   isLyricsHidden = false,
   textBoxRef,
   isTextInteracting = false,
+  textContent,
   containerDimensions,
   staticBackground = false,
   className = "",
@@ -156,6 +159,7 @@ export function SlideStage({
           isLyricsHidden={isLyricsHidden || isBlackout}
           boxRef={textBoxRef}
           isInteracting={isTextInteracting}
+          content={textContent}
         />
       </div>
     </div>

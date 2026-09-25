@@ -10,10 +10,7 @@ function renderHeader(
     title: "테스트 프레젠테이션",
     onUpdateTitle: vi.fn(),
     onPresent: vi.fn(),
-    currentSongIndex: 0,
     totalSongs: 1,
-    currentSlideNumber: 1,
-    totalSlideCount: 2,
     onNewPresentation: vi.fn(),
     onOpenLyricModal: vi.fn(),
   };
@@ -114,5 +111,23 @@ describe("EditorHeader", () => {
     ]) {
       expect(popover).toHaveTextContent(text);
     }
+  });
+
+  it("단축키 안내에 편집 단축키 표를 송출 단축키보다 먼저 보여 준다", () => {
+    renderHeader();
+    fireEvent.click(screen.getByTestId("header-shortcuts-btn"));
+
+    const popover = screen.getByTestId("header-shortcuts-popover");
+    expect(popover).toHaveTextContent("편집 단축키");
+    expect(popover).toHaveTextContent("Ctrl/⌘+M");
+    expect(popover).toHaveTextContent("슬라이드에서 가사 직접 편집");
+    expect(popover.textContent!.indexOf("편집 단축키")).toBeLessThan(
+      popover.textContent!.indexOf("발표 송출 단축키"),
+    );
+  });
+
+  it("곡·슬라이드 번호는 헤더가 아니라 캔버스 상태 표시줄에 둔다", () => {
+    renderHeader();
+    expect(screen.getByTestId("editor-header")).not.toHaveTextContent("곡 1/");
   });
 });
