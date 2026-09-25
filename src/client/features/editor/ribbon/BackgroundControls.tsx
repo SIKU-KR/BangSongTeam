@@ -1,9 +1,12 @@
-import React, { useState } from "react";
+import React, { useId, useState } from "react";
+import { ContrastIcon } from "lucide-react";
+import { Button } from "#components/ui/button";
+import { Slider } from "#components/ui/slider";
 import type { DeckStyle } from "#shared";
 import { useBackground } from "../../backgrounds/backgroundCatalog";
 import { BackgroundPickerModal } from "../BackgroundPickerModal";
 import { RibbonDropdown } from "./RibbonDropdown";
-import { RibbonGroup, RibbonIcon } from "./RibbonPrimitives";
+import { RibbonGroup, RibbonTooltip } from "./RibbonPrimitives";
 
 export interface BackgroundControlsProps {
   style: DeckStyle;
@@ -23,30 +26,34 @@ export function BackgroundControls({
 }: BackgroundControlsProps): React.JSX.Element {
   const [isPickerOpen, setIsPickerOpen] = useState(false);
   const background = useBackground(backgroundId);
+  const overlayLabelId = useId();
 
   return (
     <RibbonGroup label="배경">
-      <button
-        type="button"
-        data-testid="open-bg-picker-btn"
-        aria-label="곡 배경 바꾸기"
-        title={background ? `곡 배경: ${background.title}` : "곡 배경 선택"}
-        disabled={disabled}
-        onMouseDown={(e) => e.preventDefault()}
-        onClick={() => setIsPickerOpen(true)}
-        className="flex h-8 cursor-pointer items-center gap-1.5 rounded-md pr-2 pl-1 text-xs font-medium text-zinc-700 hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-35 dark:text-zinc-300 dark:hover:bg-zinc-800"
+      <RibbonTooltip
+        content={background ? `곡 배경: ${background.title}` : "곡 배경 선택"}
       >
-        <span className="h-6 w-10 shrink-0 overflow-hidden rounded-sm border border-zinc-300 bg-zinc-900 dark:border-zinc-700">
-          {background && (
-            <img
-              src={background.posterUrl}
-              alt=""
-              className="size-full object-cover"
-            />
-          )}
-        </span>
-        <span>배경</span>
-      </button>
+        <Button
+          variant="ghost"
+          data-testid="open-bg-picker-btn"
+          aria-label="곡 배경 바꾸기"
+          disabled={disabled}
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={() => setIsPickerOpen(true)}
+          className="h-8 gap-1.5 pr-2 pl-1 text-xs"
+        >
+          <span className="h-6 w-10 shrink-0 overflow-hidden rounded-sm border bg-black">
+            {background && (
+              <img
+                src={background.posterUrl}
+                alt=""
+                className="size-full object-cover"
+              />
+            )}
+          </span>
+          배경
+        </Button>
+      </RibbonTooltip>
 
       <RibbonDropdown
         label="어둡게"
@@ -54,35 +61,33 @@ export function BackgroundControls({
         testId="overlay-btn"
         disabled={disabled}
         panelClassName="w-60"
-        icon={<RibbonIcon d="M12 3a9 9 0 100 18 9 9 0 000-18zm0 0v18" />}
+        icon={<ContrastIcon />}
       >
         {() => (
-          <div className="space-y-2">
+          <>
             <div className="flex items-center justify-between">
-              <span className="font-semibold">검정 오버레이</span>
-              <span className="font-mono text-emerald-600 dark:text-emerald-400">
-                {style.overlayOpacity}%
+              <span id={overlayLabelId} className="font-semibold">
+                검정 오버레이 불투명도
               </span>
+              <span className="font-mono">{style.overlayOpacity}%</span>
             </div>
-            <input
-              type="range"
-              min="0"
-              max="100"
-              step="1"
-              value={style.overlayOpacity}
-              onChange={(e) =>
+            <Slider
+              aria-labelledby={overlayLabelId}
+              min={0}
+              max={100}
+              step={1}
+              value={[style.overlayOpacity]}
+              onValueChange={(value) =>
                 onUpdateStyle(
-                  { overlayOpacity: Number(e.target.value) },
+                  { overlayOpacity: Array.isArray(value) ? value[0] : value },
                   "overlayOpacity",
                 )
               }
-              aria-label="검정 오버레이 불투명도"
-              className="w-full cursor-pointer accent-emerald-500"
             />
-            <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
+            <p className="text-2xs text-muted-foreground">
               배경 위를 어둡게 덮어 가사를 잘 보이게 합니다.
             </p>
-          </div>
+          </>
         )}
       </RibbonDropdown>
 

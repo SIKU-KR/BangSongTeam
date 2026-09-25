@@ -1,5 +1,6 @@
 import React from "react";
 import { useLocation } from "react-router-dom";
+import { Button } from "#components/ui/button";
 import {
   useServiceWorkerState,
   applyServiceWorkerUpdate,
@@ -24,21 +25,21 @@ export function AppUpdateBanner(): React.JSX.Element | null {
     <div
       role="status"
       data-testid="app-update-banner"
-      className="flex w-full shrink-0 items-center gap-2.5 bg-sky-600 px-4 py-2.5 text-xs font-medium text-white sm:text-sm"
+      className="flex w-full shrink-0 items-center gap-2.5 bg-primary px-4 py-2 text-xs font-medium text-primary-foreground sm:text-sm"
     >
       <span className="flex-1">
         새 버전이 준비되었습니다. 예배 송출 중이 아닐 때 적용해 주세요.
       </span>
-      <button
-        type="button"
+      <Button
+        variant="secondary"
+        size="sm"
         data-testid="app-update-apply-btn"
         onClick={() => {
           void applyServiceWorkerUpdate();
         }}
-        className="cursor-pointer rounded-sm bg-white/15 px-2.5 py-1 transition-colors hover:bg-white/25"
       >
         지금 적용
-      </button>
+      </Button>
     </div>
   );
 }

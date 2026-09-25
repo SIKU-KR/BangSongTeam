@@ -84,13 +84,17 @@ const NATIVE_TOOLTIP = {
   message: "네이티브 title 툴팁 대신 #components/ui/tooltip을 쓰세요.",
 };
 const INLINE_STYLE = {
-  selector: "JSXAttribute[name.name='style']",
+  selector:
+    "JSXOpeningElement[name.name=/^[a-z]/] > JSXAttribute[name.name='style']",
   message:
     "인라인 style 대신 Tailwind 클래스를 쓰세요. 송출 스테이지처럼 사용자 값을 그려야 하는 파일만 허용 목록에 둡니다.",
 };
 const UI_SYNTAX = [RAW_ELEMENTS, HAND_ROLLED_OVERLAYS, NATIVE_TOOLTIP];
 
 /**
+ * StageLyricsEditor의 textarea는 송출 텍스트 박스의 글꼴·줄 간격을 그대로
+ * 물려받아야 하므로 Textarea 대신 기본 요소를 쓴다 (아래 전용 블록).
+ *
  * 사용자가 정한 글꼴·색·좌표(%)를 그리는 '콘텐츠'와 드래그·드래그 선택 좌표를 쓰는 파일.
  * 편집 화면과 송출 화면의 픽셀이 같아야 하므로 인라인 style을 허용한다.
  */
@@ -99,7 +103,7 @@ const STYLE_ALLOWED_FILES = [
   "src/client/routes/FullscreenPresentRoute.tsx",
   "src/client/features/editor/EditorStageCanvas.tsx",
   "src/client/features/editor/StageLyricsEditor.tsx",
-  "src/client/features/editor/SlideThumbnailPane.tsx",
+  "src/client/features/editor/ribbon/FontControls.tsx",
   "src/client/features/editor/SortableList.tsx",
   "src/client/features/drive/DriveBrowser.tsx",
 ];
@@ -205,6 +209,12 @@ export default tseslint.config(
     ignores: ["**/*.test.tsx"],
     rules: {
       "no-restricted-syntax": ["error", ...UI_SYNTAX],
+    },
+  },
+  {
+    files: ["src/client/features/editor/StageLyricsEditor.tsx"],
+    rules: {
+      "no-restricted-syntax": ["error", HAND_ROLLED_OVERLAYS, NATIVE_TOOLTIP],
     },
   },
   {

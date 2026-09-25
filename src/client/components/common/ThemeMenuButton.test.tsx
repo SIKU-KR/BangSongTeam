@@ -116,7 +116,7 @@ describe("ThemeMenuButton", () => {
 
     const button = screen.getByTestId("theme-menu-button");
     expect(button).toBeInTheDocument();
-    expect(button).toHaveAttribute("title", "테마 설정: 라이트 모드");
+    expect(button).toHaveAccessibleName("테마 설정: 라이트 모드");
 
     fireEvent.click(button);
     expect(screen.getByTestId("theme-menu-dropdown")).toBeInTheDocument();

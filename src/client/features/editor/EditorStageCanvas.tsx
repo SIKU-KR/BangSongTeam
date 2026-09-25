@@ -1,4 +1,14 @@
 import React, { useState } from "react";
+import {
+  ChevronLeftIcon,
+  ChevronRightIcon,
+  FileMusicIcon,
+  MinusIcon,
+  PlusIcon,
+} from "lucide-react";
+import { cn } from "cn";
+import { Button } from "#components/ui/button";
+import { IconButton } from "#components/common/IconButton";
 import type { Slide, DeckStyle, TextBoxPosition } from "#shared";
 import { DEFAULT_DECK_STYLE } from "#shared";
 import { SlideStage } from "../../components/stage/SlideStage";
@@ -49,7 +59,7 @@ export function EditorStageCanvas({
   textEditor,
   onRequestTextEdit,
   statusItems,
-  className = "",
+  className,
 }: EditorStageCanvasProps): React.JSX.Element {
   const [textBoxEl, setTextBoxEl] = useState<HTMLDivElement | null>(null);
   const [draft, setDraft] = useState<{
@@ -69,7 +79,8 @@ export function EditorStageCanvas({
   ) : slide && slide.lines.length === 0 && onRequestTextEdit ? (
     <div
       data-testid="empty-slide-placeholder"
-      className="rounded-lg border-2 border-dashed border-current py-[0.3em] text-[0.5em] opacity-60"
+      className="rounded-lg border-2 border-dashed border-current opacity-60"
+      style={{ fontSize: "0.5em", paddingBlock: "0.3em" }}
     >
       더블클릭하여 가사 입력
     </div>
@@ -79,49 +90,32 @@ export function EditorStageCanvas({
     return (
       <div
         data-testid="editor-stage-canvas"
-        className={`relative flex flex-1 flex-col items-center justify-center overflow-hidden bg-zinc-100 p-6 select-none dark:bg-zinc-900/60 ${className}`}
+        className={cn(
+          "relative flex flex-1 flex-col items-center justify-center overflow-hidden p-6 select-none",
+          className,
+        )}
       >
-        <div className="flex w-full max-w-xl flex-col items-center gap-4 rounded-2xl border border-zinc-200 bg-white p-8 text-center shadow-xl dark:border-zinc-800 dark:bg-zinc-950/80 dark:shadow-2xl">
-          <div className="flex size-16 items-center justify-center rounded-2xl border border-zinc-200 bg-zinc-100 text-emerald-600 dark:border-zinc-700/60 dark:bg-zinc-900 dark:text-emerald-400">
-            <svg className="size-8 fill-current" viewBox="0 0 24 24">
-              <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-5 14H7v-2h7v2zm3-4H7v-2h10v2zm0-4H7V7h10v2z" />
-            </svg>
+        <div className="flex w-full max-w-xl flex-col items-center gap-4 rounded-2xl border bg-card p-8 text-center text-card-foreground shadow-xl">
+          <div className="flex size-16 items-center justify-center rounded-2xl border bg-muted">
+            <FileMusicIcon className="size-8" />
           </div>
 
           <div>
-            <h3 className="text-lg font-bold text-zinc-900 dark:text-white">
+            <h3 className="text-lg font-bold">
               등록된 찬양 곡 또는 슬라이드가 없습니다
             </h3>
-            <p className="mt-1 max-w-md text-xs text-zinc-500 dark:text-zinc-400">
+            <p className="mt-1 max-w-md text-xs text-muted-foreground">
               새 찬양 가사를 빠른 입력으로 추가하여 프레젠테이션 제작을
               시작하세요.
             </p>
           </div>
 
-          <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
-            {onOpenLyricModal && (
-              <button
-                type="button"
-                onClick={onOpenLyricModal}
-                className="flex cursor-pointer items-center gap-1.5 rounded-lg bg-emerald-600 px-4 py-2 text-xs font-bold text-white shadow-sm transition-colors hover:bg-emerald-500 dark:shadow-lg dark:shadow-emerald-950/50"
-              >
-                <svg
-                  className="size-4"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M12 4v16m8-8H4"
-                  />
-                </svg>
-                <span>가사 붙여넣기로 새 곡 추가</span>
-              </button>
-            )}
-          </div>
+          {onOpenLyricModal && (
+            <Button onClick={onOpenLyricModal}>
+              <PlusIcon />
+              가사 붙여넣기로 새 곡 추가
+            </Button>
+          )}
         </div>
       </div>
     );
@@ -132,7 +126,10 @@ export function EditorStageCanvas({
   return (
     <div
       data-testid="editor-stage-canvas"
-      className={`relative flex flex-1 flex-col items-center justify-between overflow-hidden bg-zinc-100 px-6 pt-6 pb-2 select-none dark:bg-zinc-900/60 ${className}`}
+      className={cn(
+        "relative flex flex-1 flex-col items-center justify-between overflow-hidden px-6 pt-6 pb-2 select-none",
+        className,
+      )}
     >
       <div className="flex w-full flex-1 items-center justify-center overflow-hidden py-2">
         <div
@@ -142,7 +139,7 @@ export function EditorStageCanvas({
             if ((e.target as HTMLElement).closest("button")) return;
             onRequestTextEdit?.();
           }}
-          className="group relative aspect-video w-full max-w-4xl overflow-hidden rounded-xl bg-black shadow-xl ring-1 ring-zinc-300 transition-transform duration-150 outline-none dark:shadow-2xl dark:shadow-black dark:ring-zinc-800"
+          className="group relative aspect-video w-full max-w-4xl overflow-hidden rounded-xl bg-black shadow-xl ring-1 ring-border transition-transform duration-150 outline-none"
           style={{
             transform: `scale(${zoomScale})`,
             transformOrigin: "center center",
@@ -162,13 +159,13 @@ export function EditorStageCanvas({
           {draft?.guides.vertical && (
             <div
               data-testid="snap-guide-vertical"
-              className="pointer-events-none absolute inset-y-0 left-1/2 z-30 w-px bg-emerald-400/80"
+              className="pointer-events-none absolute inset-y-0 left-1/2 z-30 w-px bg-white/80"
             />
           )}
           {draft?.guides.horizontal && (
             <div
               data-testid="snap-guide-horizontal"
-              className="pointer-events-none absolute inset-x-0 top-1/2 z-30 h-px bg-emerald-400/80"
+              className="pointer-events-none absolute inset-x-0 top-1/2 z-30 h-px bg-white/80"
             />
           )}
 
@@ -184,60 +181,36 @@ export function EditorStageCanvas({
             />
           )}
 
-          <button
-            type="button"
+          <IconButton
+            label="이전 슬라이드 (◀)"
+            size="icon-lg"
             data-testid="canvas-prev-btn"
             disabled={slideNumber <= 1}
             onClick={onPrevSlide}
-            className="absolute top-1/2 left-3 z-40 flex size-10 -translate-y-1/2 cursor-pointer items-center justify-center rounded-full border border-white/10 bg-black/60 text-white opacity-0 shadow-lg backdrop-blur-sm transition-opacity group-hover:opacity-100 hover:bg-black/80 disabled:opacity-0"
-            title="이전 슬라이드 (◀)"
+            className={cn(CANVAS_NAV_BUTTON, "left-3")}
           >
-            <svg
-              className="size-5"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M15 19l-7-7 7-7"
-              />
-            </svg>
-          </button>
+            <ChevronLeftIcon className="size-5" />
+          </IconButton>
 
-          <button
-            type="button"
+          <IconButton
+            label="다음 슬라이드 (▶)"
+            size="icon-lg"
             data-testid="canvas-next-btn"
             disabled={slideNumber >= totalSlideCount}
             onClick={onNextSlide}
-            className="absolute top-1/2 right-3 z-40 flex size-10 -translate-y-1/2 cursor-pointer items-center justify-center rounded-full border border-white/10 bg-black/60 text-white opacity-0 shadow-lg backdrop-blur-sm transition-opacity group-hover:opacity-100 hover:bg-black/80 disabled:opacity-0"
-            title="다음 슬라이드 (▶)"
+            className={cn(CANVAS_NAV_BUTTON, "right-3")}
           >
-            <svg
-              className="size-5"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M9 5l7 7-7 7"
-              />
-            </svg>
-          </button>
+            <ChevronRightIcon className="size-5" />
+          </IconButton>
         </div>
       </div>
 
       <div
         data-testid="editor-status-bar"
-        className="mt-2 flex w-full max-w-4xl shrink-0 items-center justify-between gap-3 text-[11px] text-zinc-500 dark:text-zinc-400"
+        className="mt-2 flex w-full max-w-4xl shrink-0 items-center justify-between gap-3 text-2xs text-muted-foreground"
       >
         <div className="flex min-w-0 items-center gap-2">
-          <span className="font-mono text-zinc-700 dark:text-zinc-300">
+          <span className="font-mono text-foreground">
             슬라이드 {slideNumber}/{totalSlideCount}
           </span>
           <span aria-hidden="true">·</span>
@@ -248,37 +221,40 @@ export function EditorStageCanvas({
         </div>
 
         {onZoomChange && (
-          <div className="hidden items-center gap-1 rounded-lg border border-zinc-200 bg-white px-2 py-0.5 text-xs text-zinc-500 sm:flex dark:border-zinc-800 dark:bg-zinc-950/90 dark:text-zinc-400">
-            <button
-              type="button"
+          <div className="hidden items-center gap-0.5 rounded-lg border bg-background p-0.5 sm:flex">
+            <IconButton
+              label="캔버스 축소"
+              size="icon-xs"
               onClick={() => onZoomChange(Math.max(50, zoomLevel - 15))}
-              className="cursor-pointer px-1 font-bold hover:text-zinc-900 dark:hover:text-white"
-              title="캔버스 축소"
             >
-              -
-            </button>
-            <span className="w-12 text-center font-mono text-zinc-800 dark:text-zinc-200">
+              <MinusIcon />
+            </IconButton>
+            <span className="w-12 text-center font-mono text-xs text-foreground">
               {zoomLevel}%
             </span>
-            <button
-              type="button"
+            <IconButton
+              label="캔버스 확대"
+              size="icon-xs"
               onClick={() => onZoomChange(Math.min(150, zoomLevel + 15))}
-              className="cursor-pointer px-1 font-bold hover:text-zinc-900 dark:hover:text-white"
-              title="캔버스 확대"
             >
-              +
-            </button>
-            <button
-              type="button"
+              <PlusIcon />
+            </IconButton>
+            <IconButton
+              label="100% 원본 맞춤"
+              variant="ghost"
+              size="xs"
+              className="border-l"
               onClick={() => onZoomChange(100)}
-              className="ml-1 cursor-pointer border-l border-zinc-200 pl-1.5 text-[11px] text-zinc-500 hover:text-zinc-900 dark:border-zinc-800 dark:hover:text-zinc-200"
-              title="100% 원본 맞춤"
             >
               맞춤
-            </button>
+            </IconButton>
           </div>
         )}
       </div>
     </div>
   );
 }
+
+/** 슬라이드(검정 배경) 위에 뜨는 이전·다음 버튼. 테마와 무관하게 흰 글자를 쓴다 */
+const CANVAS_NAV_BUTTON =
+  "absolute top-1/2 z-40 -translate-y-1/2 rounded-full border-white/10 bg-black/60 text-white opacity-0 shadow-lg backdrop-blur-sm group-hover:opacity-100 hover:bg-black/80 hover:text-white disabled:opacity-0";

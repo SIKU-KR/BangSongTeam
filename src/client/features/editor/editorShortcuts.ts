@@ -16,9 +16,9 @@ export type EditorShortcutAction =
 
 /** 키가 눌린 순간의 포커스 상황 */
 export interface EditorShortcutContext {
-  /** input·textarea·select·contentEditable에 포커스가 있다 */
+  /** 입력칸이나 방향키를 스스로 쓰는 위젯(콤보박스·메뉴·슬라이더·팝오버)에 포커스가 있다 */
   typing: boolean;
-  /** `role="dialog"` 모달이 떠 있다 */
+  /** 모달 대화 상자(Dialog·AlertDialog)가 떠 있다. 리본 팝오버는 모달이 아니다 */
   modalOpen: boolean;
   /** 버튼·메뉴 항목에 포커스가 있다 (Space가 그 버튼을 누른다) */
   onButton: boolean;

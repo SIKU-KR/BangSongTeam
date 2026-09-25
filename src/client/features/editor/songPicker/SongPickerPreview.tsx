@@ -1,4 +1,7 @@
 import React, { useState } from "react";
+import { CheckIcon } from "lucide-react";
+import { Badge } from "#components/ui/badge";
+import { Button } from "#components/ui/button";
 import type { Deck, PublicDeckSummary } from "#shared";
 import { ExternalSearchLinks } from "../ExternalSearchLinks";
 import { LyricsViewer } from "./LyricsViewer";
@@ -40,54 +43,53 @@ function ActionBar({
   };
 
   return (
-    <div className="shrink-0 space-y-2 border-t border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
+    <div className="shrink-0 space-y-2 border-t bg-background p-4">
       {error && (
-        <p role="alert" className="text-right text-xs text-rose-600">
+        <p role="alert" className="text-right text-xs text-destructive">
           {error}
         </p>
       )}
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           {copyText !== undefined && (
-            <button
-              type="button"
+            <Button
+              variant="outline"
               data-testid="song-picker-copy-lyrics-btn"
               onClick={copy}
-              className="cursor-pointer rounded-xl border border-zinc-300 px-3 py-2 text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
             >
-              {copied ? "가사 복사됨 ✓" : "가사 텍스트 복사"}
-            </button>
+              {copied ? (
+                <>
+                  가사 복사됨 <CheckIcon />
+                </>
+              ) : (
+                "가사 텍스트 복사"
+              )}
+            </Button>
           )}
           {extraActions}
           {onReport && (
-            <button
-              type="button"
+            <Button
+              variant="ghost"
               data-testid="song-picker-report-btn"
               onClick={onReport}
-              className="cursor-pointer rounded-xl px-3 py-2 text-xs font-medium text-zinc-500 hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-950/40"
+              className="text-muted-foreground hover:text-destructive"
             >
               신고
-            </button>
+            </Button>
           )}
         </div>
 
         <div className="flex items-center gap-2.5">
-          <button
-            type="button"
-            onClick={onClose}
-            className="cursor-pointer rounded-xl px-4 py-2 text-xs font-medium text-zinc-600 transition-colors hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800"
-          >
+          <Button variant="ghost" onClick={onClose}>
             닫기
-          </button>
-          <button
-            type="button"
+          </Button>
+          <Button
             data-testid="song-picker-add-btn"
             disabled={addDisabled}
             onClick={onAdd}
-            className="cursor-pointer rounded-xl bg-emerald-600 px-4 py-2 text-xs font-bold text-white shadow-sm transition-all hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {addLabel}
-          </button>
+          </Button>
         </div>
       </div>
     </div>
@@ -104,28 +106,20 @@ function PreviewHeader({
   meta: React.ReactNode;
 }): React.JSX.Element {
   return (
-    <div className="flex shrink-0 flex-col justify-between gap-3 border-b border-zinc-200 bg-white p-5 sm:flex-row sm:items-center dark:border-zinc-800 dark:bg-zinc-900">
+    <div className="flex shrink-0 flex-col justify-between gap-3 border-b bg-background p-5 sm:flex-row sm:items-center">
       <div className="min-w-0">
         <div className="flex items-center gap-2">
-          <h3 className="truncate text-base font-bold text-zinc-900 dark:text-white">
-            {title}
-          </h3>
+          <h3 className="truncate text-base font-bold">{title}</h3>
           {badge}
         </div>
-        <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">
-          {meta}
-        </p>
+        <p className="mt-0.5 text-xs text-muted-foreground">{meta}</p>
       </div>
       <ExternalSearchLinks title={title} />
     </div>
   );
 }
 
-const MINE_BADGE = (
-  <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
-    내 보관함
-  </span>
-);
+const MINE_BADGE = <Badge variant="secondary">내 보관함</Badge>;
 
 /**
  * 내 보관함 곡 미리보기.
@@ -167,22 +161,21 @@ export function MyDeckPreview({
         onClose={onClose}
         extraActions={
           <>
-            <button
-              type="button"
+            <Button
+              variant="ghost"
               data-testid="song-picker-edit-info-btn"
               onClick={onEditInfo}
-              className="cursor-pointer rounded-xl px-3 py-2 text-xs font-medium text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800"
             >
               정보 수정
-            </button>
-            <button
-              type="button"
+            </Button>
+            <Button
+              variant="ghost"
               data-testid="song-picker-delete-btn"
               onClick={onDelete}
-              className="cursor-pointer rounded-xl px-3 py-2 text-xs font-medium text-zinc-500 hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-950/40"
+              className="text-muted-foreground hover:text-destructive"
             >
               삭제
-            </button>
+            </Button>
           </>
         }
       />
@@ -216,11 +209,7 @@ export function SharedDeckPreview({
     <div className="flex min-h-0 flex-1 flex-col">
       <PreviewHeader
         title={summary.title}
-        badge={
-          <span className="rounded-full bg-indigo-100 px-2 py-0.5 text-[10px] font-semibold text-indigo-800 dark:bg-indigo-950 dark:text-indigo-300">
-            공유 찬양
-          </span>
-        }
+        badge={<Badge variant="outline">공유 찬양</Badge>}
         meta={
           <>
             {`${summary.artist || "아티스트 미상"} · 총 ${summary.slideCount}개 슬라이드 · 공유: ${summary.authorName} · ${summary.forkCount}회 가져감`}
@@ -231,11 +220,11 @@ export function SharedDeckPreview({
         {detail.data ? (
           <LyricsViewer lyrics={detail.data.lyricsRaw} />
         ) : detail.isError ? (
-          <p className="text-xs text-rose-600">
+          <p className="text-xs text-destructive">
             {describeApiError(detail.error)}
           </p>
         ) : (
-          <p className="text-xs text-zinc-400">가사를 불러오는 중…</p>
+          <p className="text-xs text-muted-foreground">가사를 불러오는 중…</p>
         )}
       </div>
       <ActionBar

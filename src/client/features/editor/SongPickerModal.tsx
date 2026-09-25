@@ -1,4 +1,17 @@
 import React, { useEffect, useMemo, useState } from "react";
+import { ArrowLeftIcon, PlusIcon, XIcon } from "lucide-react";
+import { cn } from "cn";
+import { Badge } from "#components/ui/badge";
+import { Button } from "#components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "#components/ui/dialog";
+import { Input } from "#components/ui/input";
+import { IconButton } from "#components/common/IconButton";
 import type { Deck, PublicDeckSummary } from "#shared";
 import { hangulIncludes } from "#shared";
 import {
@@ -45,14 +58,10 @@ type PickerEntry =
       ownedCopy?: Deck;
     };
 
-const FILTERS: { id: FilterType; label: string; active: string }[] = [
-  {
-    id: "all",
-    label: "전체",
-    active: "bg-zinc-800 text-white dark:bg-zinc-100 dark:text-zinc-900",
-  },
-  { id: "mine", label: "내 곡", active: "bg-emerald-600 text-white" },
-  { id: "shared", label: "공유 곡", active: "bg-indigo-600 text-white" },
+const FILTERS: { id: FilterType; label: string }[] = [
+  { id: "all", label: "전체" },
+  { id: "mine", label: "내 곡" },
+  { id: "shared", label: "공유 곡" },
 ];
 
 /**
@@ -95,17 +104,6 @@ export function SongPickerModal({
     }
   }, [isOpen, initialSearch, initialMode]);
 
-  useEffect(() => {
-    if (!isOpen || libraryDialog) return;
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key !== "Escape") return;
-      if (document.querySelectorAll('[role="dialog"]').length > 1) return;
-      onClose();
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isOpen, onClose, libraryDialog]);
-
   const entries = useMemo<PickerEntry[]>(() => {
     const q = searchQuery.trim();
     const mine: PickerEntry[] = mySongs
@@ -146,8 +144,6 @@ export function SongPickerModal({
     return "아직 등록되거나 공유된 찬양곡이 없습니다.";
   }, [search.isFetching, searchQuery, filter]);
 
-  if (!isOpen) return null;
-
   const addDeck = (deck: Deck): void => {
     onSelectSong(deck);
     onClose();
@@ -185,105 +181,95 @@ export function SongPickerModal({
   const isAdding = fork.isPending;
 
   return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="song-picker-title"
-      data-testid="song-picker-modal"
-      className="fixed inset-0 z-50 flex animate-in items-center justify-center bg-black/80 p-3 backdrop-blur-sm duration-200 fade-in sm:p-6"
+    <Dialog
+      open={isOpen}
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
     >
-      <div className="relative flex h-[88vh] max-h-[850px] w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-zinc-200 bg-white text-zinc-900 shadow-2xl dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100">
-        <div className="flex shrink-0 items-center justify-between border-b border-zinc-200 px-6 py-4 dark:border-zinc-800">
-          <div>
-            <div className="flex items-center gap-2">
-              <h2
-                id="song-picker-title"
-                className="text-lg font-bold text-zinc-900 dark:text-white"
-              >
-                찬양곡 추가
-              </h2>
-              <span className="rounded-full bg-zinc-100 px-2.5 py-0.5 font-mono text-xs text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">
-                내 곡 {mySongs.length} · 공유 {sharedCount}
-              </span>
-            </div>
-            <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">
-              내 보관함과 다른 교회가 공유한 찬양을 검색해 세트에 추가하거나, 새
-              가사를 직접 입력할 수 있습니다.
-            </p>
+      <DialogContent
+        data-testid="song-picker-modal"
+        className="flex h-9/10 max-h-212 flex-col gap-0 overflow-hidden p-0 sm:max-w-5xl"
+      >
+        <DialogHeader className="shrink-0 border-b px-6 py-4 pr-12">
+          <div className="flex items-center gap-2">
+            <DialogTitle className="text-lg font-bold">찬양곡 추가</DialogTitle>
+            <Badge variant="secondary" className="font-mono">
+              내 곡 {mySongs.length} · 공유 {sharedCount}
+            </Badge>
           </div>
-
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="닫기"
-            className="cursor-pointer rounded-lg p-1.5 text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
-          >
-            ✕
-          </button>
-        </div>
+          <DialogDescription className="text-xs">
+            내 보관함과 다른 교회가 공유한 찬양을 검색해 세트에 추가하거나, 새
+            가사를 직접 입력할 수 있습니다.
+          </DialogDescription>
+        </DialogHeader>
 
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden md:flex-row">
-          <div className="flex w-full shrink-0 flex-col border-b border-zinc-200 bg-white md:w-5/12 md:border-r md:border-b-0 lg:w-4/12 dark:border-zinc-800 dark:bg-zinc-900">
-            <div className="shrink-0 space-y-2.5 border-b border-zinc-200 p-3.5 dark:border-zinc-800">
+          <div className="flex w-full shrink-0 flex-col border-b md:w-5/12 md:border-r md:border-b-0 lg:w-4/12">
+            <div className="shrink-0 space-y-2.5 border-b p-3.5">
               <div className="relative">
-                <input
+                <Input
                   type="text"
                   data-testid="song-picker-search-input"
+                  aria-label="찬양곡 검색"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   placeholder="곡 제목, 아티스트, 가사 검색..."
-                  className="w-full rounded-xl border border-zinc-200 bg-zinc-100 py-2 pr-8 pl-3 text-xs text-zinc-900 placeholder-zinc-400 focus:ring-2 focus:ring-emerald-500 focus:outline-none dark:border-zinc-700/80 dark:bg-zinc-800/80 dark:text-zinc-100"
+                  className="pr-8"
                 />
                 {searchQuery && (
-                  <button
-                    type="button"
+                  <IconButton
+                    label="검색어 지우기"
+                    size="icon-xs"
                     onClick={() => setSearchQuery("")}
-                    className="absolute top-2.5 right-2.5 cursor-pointer text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200"
+                    className="absolute top-1 right-1 text-muted-foreground"
                   >
-                    ✕
-                  </button>
+                    <XIcon />
+                  </IconButton>
                 )}
               </div>
 
               <div className="flex items-center justify-between gap-1.5">
                 <div className="flex flex-wrap items-center gap-1">
                   {FILTERS.map((option) => (
-                    <button
+                    <Button
                       key={option.id}
-                      type="button"
+                      size="xs"
+                      variant={filter === option.id ? "default" : "secondary"}
+                      aria-pressed={filter === option.id}
                       data-testid={`song-picker-filter-${option.id}`}
                       onClick={() => setFilter(option.id)}
-                      className={`cursor-pointer rounded-lg px-2 py-1 text-[11px] font-medium transition-colors ${
-                        filter === option.id
-                          ? option.active
-                          : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-700"
-                      }`}
                     >
                       {option.label}
-                    </button>
+                    </Button>
                   ))}
                 </div>
 
-                <button
-                  type="button"
+                <Button
+                  size="xs"
+                  variant={mode === "browse" ? "outline" : "secondary"}
                   data-testid="song-picker-switch-create-btn"
                   onClick={() =>
                     setMode(mode === "browse" ? "create" : "browse")
                   }
-                  className={`shrink-0 cursor-pointer rounded-lg px-2.5 py-1 text-xs font-semibold transition-colors ${
-                    mode !== "browse"
-                      ? "bg-zinc-200 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300"
-                      : "border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:border-emerald-800/80 dark:bg-emerald-950 dark:text-emerald-400 dark:hover:bg-emerald-900/60"
-                  }`}
                 >
-                  {mode !== "browse" ? "← 목록 보기" : "+ 새 가사 입력"}
-                </button>
+                  {mode !== "browse" ? (
+                    <>
+                      <ArrowLeftIcon />
+                      목록 보기
+                    </>
+                  ) : (
+                    <>
+                      <PlusIcon />새 가사 입력
+                    </>
+                  )}
+                </Button>
               </div>
 
               {serverUnavailable && (
                 <p
                   data-testid="song-picker-offline-notice"
-                  className="text-[11px] text-amber-700 dark:text-amber-400"
+                  className="text-2xs text-warning"
                 >
                   {isOnline
                     ? "공유 라이브러리에 연결하지 못했습니다 — 내 곡만 표시합니다"
@@ -292,18 +278,19 @@ export function SongPickerModal({
               )}
             </div>
 
-            <div className="flex-1 divide-y divide-zinc-100 overflow-y-auto dark:divide-zinc-800/60">
+            <div className="flex-1 divide-y overflow-y-auto">
               {entries.length === 0 ? (
-                <div className="flex flex-col items-center justify-center gap-2.5 p-8 text-center text-zinc-500">
+                <div className="flex flex-col items-center justify-center gap-2.5 p-8 text-center text-muted-foreground">
                   <p className="text-xs">{emptyMessage}</p>
-                  <button
-                    type="button"
+                  <Button
+                    variant="link"
+                    size="xs"
                     onClick={() => setMode("create")}
-                    className="cursor-pointer text-xs font-medium text-emerald-600 hover:underline dark:text-emerald-400"
                   >
-                    + {searchQuery ? `'${searchQuery}' ` : ""}새 곡으로 직접
+                    <PlusIcon />
+                    {searchQuery ? `'${searchQuery}' ` : ""}새 곡으로 직접
                     등록하기
-                  </button>
+                  </Button>
                 </div>
               ) : (
                 entries.map((entry) => (
@@ -324,7 +311,7 @@ export function SongPickerModal({
             </div>
           </div>
 
-          <div className="flex min-w-0 flex-1 flex-col bg-zinc-50/60 dark:bg-zinc-950/40">
+          <div className="flex min-w-0 flex-1 flex-col bg-muted/40">
             {mode === "create" ? (
               <CreateSongForm
                 initialTitle={searchQuery.trim()}
@@ -332,7 +319,7 @@ export function SongPickerModal({
                 onSubmit={handleCreateSubmit}
               />
             ) : !selected ? (
-              <div className="flex flex-1 items-center justify-center text-xs text-zinc-400">
+              <div className="flex flex-1 items-center justify-center text-xs text-muted-foreground">
                 곡을 선택해주세요.
               </div>
             ) : selected.kind === "mine" ? (
@@ -365,58 +352,58 @@ export function SongPickerModal({
             )}
           </div>
         </div>
-      </div>
 
-      {libraryDialog?.kind === "edit" && (
-        <SongInfoDialog
-          heading="보관함 곡 정보 수정"
-          initialValues={{
-            title: libraryDialog.deck.title,
-            artist: libraryDialog.deck.artist,
-          }}
-          notice={
-            libraryDialog.deck.visibility === "public"
-              ? "공개한 곡이라 공유 라이브러리에도 바로 반영됩니다. 이미 세트에 넣은 곡은 바뀌지 않습니다."
-              : "이미 세트에 넣은 곡은 바뀌지 않습니다."
-          }
-          onSubmit={(values) => {
-            updateLibrarySongInfo(libraryDialog.deck.id, values);
-            setLibraryDialog(null);
-          }}
-          onCancel={() => setLibraryDialog(null)}
-        />
-      )}
+        {libraryDialog?.kind === "edit" && (
+          <SongInfoDialog
+            heading="보관함 곡 정보 수정"
+            initialValues={{
+              title: libraryDialog.deck.title,
+              artist: libraryDialog.deck.artist,
+            }}
+            notice={
+              libraryDialog.deck.visibility === "public"
+                ? "공개한 곡이라 공유 라이브러리에도 바로 반영됩니다. 이미 세트에 넣은 곡은 바뀌지 않습니다."
+                : "이미 세트에 넣은 곡은 바뀌지 않습니다."
+            }
+            onSubmit={(values) => {
+              updateLibrarySongInfo(libraryDialog.deck.id, values);
+              setLibraryDialog(null);
+            }}
+            onCancel={() => setLibraryDialog(null)}
+          />
+        )}
 
-      {libraryDialog?.kind === "delete" && (
-        <ConfirmDialog
-          title="보관함에서 삭제"
-          message={
-            <>
-              ‘{libraryDialog.deck.title}’ 곡을 내 보관함에서 삭제할까요? 이미
-              세트에 넣은 곡은 그대로 남습니다.
-              {libraryDialog.deck.visibility === "public" &&
-                " 공개한 곡이라 공유 라이브러리에서도 내려갑니다."}
-            </>
-          }
-          confirmLabel="삭제"
-          onConfirm={() => {
-            deleteUserSong(libraryDialog.deck.id);
-            setLibraryDialog(null);
-          }}
-          onCancel={() => setLibraryDialog(null)}
-        />
-      )}
+        {libraryDialog?.kind === "delete" && (
+          <ConfirmDialog
+            title="보관함에서 삭제"
+            message={
+              <>
+                ‘{libraryDialog.deck.title}’ 곡을 내 보관함에서 삭제할까요? 이미
+                세트에 넣은 곡은 그대로 남습니다.
+                {libraryDialog.deck.visibility === "public" &&
+                  " 공개한 곡이라 공유 라이브러리에서도 내려갑니다."}
+              </>
+            }
+            confirmLabel="삭제"
+            onConfirm={() => {
+              deleteUserSong(libraryDialog.deck.id);
+              setLibraryDialog(null);
+            }}
+            onCancel={() => setLibraryDialog(null)}
+          />
+        )}
 
-      {reportTarget && (
-        <ReportDialog
-          isOpen
-          onClose={() => setReportTarget(null)}
-          targetType="deck"
-          targetId={reportTarget.id}
-          targetTitle={reportTarget.title}
-        />
-      )}
-    </div>
+        {reportTarget && (
+          <ReportDialog
+            isOpen
+            onClose={() => setReportTarget(null)}
+            targetType="deck"
+            targetId={reportTarget.id}
+            targetTitle={reportTarget.title}
+          />
+        )}
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -444,28 +431,25 @@ function EntryRow({
     <div
       data-testid={`song-item-${id}`}
       onClick={onSelect}
-      className={`flex cursor-pointer flex-col gap-1 p-3.5 transition-colors select-none ${
+      className={cn(
+        "flex cursor-pointer flex-col gap-1 p-3.5 transition-colors select-none",
         isSelected
-          ? "border-l-4 border-emerald-500 bg-emerald-50/70 pl-2.5 dark:bg-emerald-950/40"
-          : "hover:bg-zinc-50 dark:hover:bg-zinc-800/50"
-      }`}
+          ? "border-l-4 border-l-primary bg-accent pl-2.5"
+          : "hover:bg-muted/60",
+      )}
     >
       <div className="flex items-center justify-between gap-2">
-        <span className="truncate text-xs font-bold text-zinc-900 dark:text-white">
-          {title}
-        </span>
+        <span className="truncate text-xs font-bold">{title}</span>
         <div className="flex shrink-0 items-center gap-1">
           {entry.kind === "mine" && (
-            <span className="rounded-sm bg-emerald-100 px-1.5 py-0.5 text-[10px] font-medium text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
-              내 보관함
-            </span>
+            <Badge variant="secondary">내 보관함</Badge>
           )}
           {entry.kind === "shared" && (
-            <span className="rounded-sm bg-indigo-100 px-1.5 py-0.5 text-[10px] font-medium text-indigo-800 dark:bg-indigo-950 dark:text-indigo-300">
+            <Badge variant="outline">
               {entry.ownedCopy ? "보관함에 있음" : "공유"}
-            </span>
+            </Badge>
           )}
-          <span className="font-mono text-[10px] text-zinc-400">
+          <span className="font-mono text-2xs text-muted-foreground">
             {entry.kind === "mine"
               ? `${entry.deck.slides.length}슬라이드`
               : `${entry.summary.forkCount}회 가져감`}
@@ -473,7 +457,7 @@ function EntryRow({
         </div>
       </div>
 
-      <div className="flex items-center justify-between gap-2 text-[11px] text-zinc-500 dark:text-zinc-400">
+      <div className="flex items-center justify-between gap-2 text-2xs text-muted-foreground">
         <span className="truncate">{artist || "아티스트 미상"}</span>
         {entry.kind === "shared" && (
           <span className="shrink-0 truncate">{entry.summary.authorName}</span>
@@ -481,7 +465,7 @@ function EntryRow({
       </div>
 
       {snippet && (
-        <p className="mt-0.5 truncate text-[11px] font-light text-zinc-400 dark:text-zinc-500">
+        <p className="mt-0.5 truncate text-2xs font-light text-muted-foreground">
           {snippet}
         </p>
       )}

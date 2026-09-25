@@ -5,6 +5,13 @@ import {
   useSearchParams,
   Navigate,
 } from "react-router-dom";
+import { TriangleAlertIcon } from "lucide-react";
+import { cn } from "cn";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "#components/ui/tooltip";
 import {
   updatePresentationTitle,
   updateSongStyle,
@@ -56,7 +63,6 @@ import { SlideThumbnailPane } from "../features/editor/SlideThumbnailPane";
 import { EditorRibbon } from "../features/editor/ribbon/EditorRibbon";
 import { stepFontSize } from "../features/editor/ribbon/ribbonOptions";
 import { StageLyricsEditor } from "../features/editor/StageLyricsEditor";
-import { OverflowWarningIcon } from "../features/editor/OverflowWarningIcon";
 import { useEditorShortcuts } from "../features/editor/useEditorShortcuts";
 import {
   SongPickerModal,
@@ -387,7 +393,7 @@ export function EditorRoute(): React.JSX.Element {
   return (
     <div
       data-testid="editor-route"
-      className="flex h-screen w-screen flex-col overflow-hidden bg-zinc-50 text-zinc-900 select-none dark:bg-zinc-950 dark:text-zinc-100"
+      className="flex h-screen w-screen flex-col overflow-hidden bg-muted/40 select-none"
     >
       <StorageWarningBanner />
 
@@ -500,18 +506,18 @@ export function EditorRoute(): React.JSX.Element {
                   <span aria-hidden="true">·</span>
                   <span
                     data-testid="slide-line-count"
-                    className={`font-mono ${
-                      currentSlide.lines.length >= MAX_SLIDE_LINES
-                        ? "text-amber-600 dark:text-amber-400"
-                        : ""
-                    }`}
+                    className={cn(
+                      "font-mono",
+                      currentSlide.lines.length >= MAX_SLIDE_LINES &&
+                        "text-warning",
+                    )}
                   >
                     {currentSlide.lines.length}/{MAX_SLIDE_LINES}줄
                   </span>
                   {limitHintSlideId === currentSlide.id && (
                     <span
                       data-testid="slide-line-limit-hint"
-                      className="truncate text-amber-700 dark:text-amber-400"
+                      className="truncate text-warning"
                     >
                       한 슬라이드는 {MAX_SLIDE_LINES}줄, 한 줄{" "}
                       {MAX_SLIDE_LINE_LENGTH}자까지입니다. 더 넣으려면
@@ -521,15 +527,23 @@ export function EditorRoute(): React.JSX.Element {
                 </>
               )}
               {overflowMessages.length > 0 && (
-                <span
-                  role="status"
-                  data-testid="overflow-warning-status"
-                  title={overflowMessages.join("\n")}
-                  className="flex min-w-0 items-center gap-1 text-amber-700 dark:text-amber-400"
-                >
-                  <OverflowWarningIcon className="size-3.5 shrink-0" />
-                  <span className="truncate">{overflowMessages[0]}</span>
-                </span>
+                <Tooltip>
+                  <TooltipTrigger
+                    render={
+                      <span
+                        role="status"
+                        data-testid="overflow-warning-status"
+                        className="flex min-w-0 items-center gap-1 text-warning"
+                      />
+                    }
+                  >
+                    <TriangleAlertIcon className="size-3.5 shrink-0" />
+                    <span className="truncate">{overflowMessages[0]}</span>
+                  </TooltipTrigger>
+                  <TooltipContent className="max-w-80 whitespace-pre-line">
+                    {overflowMessages.join("\n")}
+                  </TooltipContent>
+                </Tooltip>
               )}
             </>
           }

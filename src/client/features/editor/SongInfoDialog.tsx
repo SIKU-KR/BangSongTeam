@@ -1,4 +1,15 @@
 import React, { useEffect, useRef, useState } from "react";
+import { Button } from "#components/ui/button";
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "#components/ui/dialog";
+import { Input } from "#components/ui/input";
+import { Label } from "#components/ui/label";
 
 const MAX_FIELD_LENGTH = 100;
 
@@ -36,91 +47,72 @@ export function SongInfoDialog({
     titleRef.current?.select();
   }, []);
 
-  useEffect(() => {
-    const handleKey = (event: KeyboardEvent): void => {
-      if (event.key === "Escape") onCancel();
-    };
-    document.addEventListener("keydown", handleKey);
-    return () => document.removeEventListener("keydown", handleKey);
-  }, [onCancel]);
-
   return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="song-info-dialog-title"
-      data-testid="song-info-dialog"
-      className="fixed inset-0 z-60 flex items-center justify-center bg-black/60 p-4"
-      onMouseDown={(event) => {
-        if (event.target === event.currentTarget) onCancel();
+    <Dialog
+      open
+      onOpenChange={(open) => {
+        if (!open) onCancel();
       }}
     >
-      <form
-        className="w-full max-w-sm space-y-4 rounded-2xl border border-zinc-200 bg-white p-5 text-zinc-900 shadow-2xl dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100"
-        onSubmit={(event) => {
-          event.preventDefault();
-          if (!isValid) return;
-          onSubmit({ title: title.trim(), artist: artist.trim() });
-        }}
-      >
-        <h2 id="song-info-dialog-title" className="text-sm font-bold">
-          {heading}
-        </h2>
+      <DialogContent data-testid="song-info-dialog" initialFocus={titleRef}>
+        <form
+          className="grid gap-4"
+          onSubmit={(event) => {
+            event.preventDefault();
+            if (!isValid) return;
+            onSubmit({ title: title.trim(), artist: artist.trim() });
+          }}
+        >
+          <DialogHeader>
+            <DialogTitle>{heading}</DialogTitle>
+          </DialogHeader>
 
-        <div className="space-y-3">
-          <label className="block">
-            <span className="mb-1 block text-xs font-semibold text-zinc-700 dark:text-zinc-300">
-              곡 제목 <span className="text-rose-500">*</span>
-            </span>
-            <input
-              ref={titleRef}
-              type="text"
-              data-testid="song-info-title-input"
-              value={title}
-              maxLength={MAX_FIELD_LENGTH}
-              onChange={(event) => setTitle(event.target.value)}
-              className="w-full rounded-xl border border-zinc-300 bg-white px-3 py-2 text-sm focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 focus:outline-none dark:border-zinc-700 dark:bg-zinc-950"
-            />
-          </label>
-          <label className="block">
-            <span className="mb-1 block text-xs font-semibold text-zinc-700 dark:text-zinc-300">
-              아티스트 (선택)
-            </span>
-            <input
-              type="text"
-              data-testid="song-info-artist-input"
-              value={artist}
-              maxLength={MAX_FIELD_LENGTH}
-              onChange={(event) => setArtist(event.target.value)}
-              className="w-full rounded-xl border border-zinc-300 bg-white px-3 py-2 text-sm focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 focus:outline-none dark:border-zinc-700 dark:bg-zinc-950"
-            />
-          </label>
-        </div>
+          <div className="grid gap-3">
+            <div className="grid gap-1.5">
+              <Label htmlFor="song-info-title">
+                곡 제목 <span className="text-destructive">*</span>
+              </Label>
+              <Input
+                id="song-info-title"
+                ref={titleRef}
+                type="text"
+                data-testid="song-info-title-input"
+                value={title}
+                maxLength={MAX_FIELD_LENGTH}
+                onChange={(event) => setTitle(event.target.value)}
+              />
+            </div>
+            <div className="grid gap-1.5">
+              <Label htmlFor="song-info-artist">아티스트 (선택)</Label>
+              <Input
+                id="song-info-artist"
+                type="text"
+                data-testid="song-info-artist-input"
+                value={artist}
+                maxLength={MAX_FIELD_LENGTH}
+                onChange={(event) => setArtist(event.target.value)}
+              />
+            </div>
+          </div>
 
-        {notice && (
-          <p className="text-[11px] leading-relaxed text-zinc-500 dark:text-zinc-400">
-            {notice}
-          </p>
-        )}
+          {notice && (
+            <p className="text-xs/relaxed text-muted-foreground">{notice}</p>
+          )}
 
-        <div className="flex justify-end gap-2">
-          <button
-            type="button"
-            onClick={onCancel}
-            className="cursor-pointer rounded-xl px-4 py-2 text-xs text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800"
-          >
-            취소
-          </button>
-          <button
-            type="submit"
-            data-testid="song-info-save-btn"
-            disabled={!isValid}
-            className="cursor-pointer rounded-xl bg-emerald-600 px-4 py-2 text-xs font-semibold text-white hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            저장
-          </button>
-        </div>
-      </form>
-    </div>
+          <DialogFooter>
+            <DialogClose render={<Button variant="outline" />}>
+              취소
+            </DialogClose>
+            <Button
+              type="submit"
+              data-testid="song-info-save-btn"
+              disabled={!isValid}
+            >
+              저장
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }

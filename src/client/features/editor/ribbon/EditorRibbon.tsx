@@ -4,7 +4,7 @@ import { DEFAULT_DECK_STYLE } from "#shared";
 import { BackgroundControls } from "./BackgroundControls";
 import { FontControls } from "./FontControls";
 import { ParagraphControls } from "./ParagraphControls";
-import { RibbonDivider } from "./RibbonPrimitives";
+import { RibbonDivider, RibbonTooltip } from "./RibbonPrimitives";
 import { SlideControls, type SlideControlsProps } from "./SlideControls";
 
 export interface EditorRibbonProps {
@@ -31,26 +31,27 @@ export function EditorRibbon({
   return (
     <div
       data-testid="editor-ribbon"
-      className="flex shrink-0 flex-wrap items-stretch gap-y-1 border-b border-zinc-200 bg-white px-2 py-1 text-zinc-800 select-none dark:border-zinc-800/80 dark:bg-zinc-950 dark:text-zinc-200"
+      className="flex shrink-0 flex-wrap items-stretch gap-y-1 border-b bg-background px-2 py-1 select-none"
     >
       <SlideControls {...slideControls} />
       <RibbonDivider />
-      <div
-        data-testid="ribbon-song-label"
-        title="서식은 현재 곡의 모든 슬라이드에 적용됩니다"
-        className="max-w-40 self-center px-2 text-[11px] leading-tight text-zinc-500 dark:text-zinc-400"
-      >
-        {song ? (
-          <>
-            <span className="block truncate font-semibold text-zinc-800 dark:text-zinc-200">
-              ‘{song.title}’
-            </span>
-            <span>곡 서식</span>
-          </>
-        ) : (
-          <span>곡 없음</span>
-        )}
-      </div>
+      <RibbonTooltip content="서식은 현재 곡의 모든 슬라이드에 적용됩니다">
+        <div
+          data-testid="ribbon-song-label"
+          className="max-w-40 self-center px-2 text-2xs/tight text-muted-foreground"
+        >
+          {song ? (
+            <>
+              <span className="block truncate font-semibold text-foreground">
+                ‘{song.title}’
+              </span>
+              <span>곡 서식</span>
+            </>
+          ) : (
+            <span>곡 없음</span>
+          )}
+        </div>
+      </RibbonTooltip>
       <FontControls
         style={style}
         disabled={disabled}

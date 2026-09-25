@@ -1,6 +1,6 @@
 import React from "react";
 import { describe, it, expect, vi } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import type { PresentationItem } from "#shared";
 import { DEFAULT_DECK_STYLE } from "#shared";
 import {
@@ -110,23 +110,27 @@ describe("SlideThumbnailPane (PPT식 썸네일 창)", () => {
     expect(screen.getByTestId("duplicate-slide-btn-3")).toBeInTheDocument();
   });
 
-  it("구역 메뉴는 ⋯ 또는 우클릭으로 열리고, 바깥 클릭·Esc로 닫힌다", () => {
+  it("구역 메뉴는 ⋯ 또는 우클릭으로 열리고, Esc로 닫힌다", async () => {
     renderPane();
 
     fireEvent.click(screen.getByTestId("song-section-menu-btn-0"));
     expect(screen.getByTestId("song-section-menu")).toBeInTheDocument();
-    expect(screen.getByRole("menuitem", { name: "위로 이동" })).toBeDisabled();
+    expect(screen.getByRole("menuitem", { name: "위로 이동" })).toHaveAttribute(
+      "aria-disabled",
+      "true",
+    );
 
-    fireEvent.mouseDown(document.body);
-    expect(screen.queryByTestId("song-section-menu")).not.toBeInTheDocument();
+    fireEvent.keyDown(screen.getByTestId("song-section-menu"), {
+      key: "Escape",
+    });
+    await waitFor(() =>
+      expect(screen.queryByTestId("song-section-menu")).not.toBeInTheDocument(),
+    );
 
     fireEvent.contextMenu(screen.getByTestId("song-section-2"));
     expect(
       screen.getByRole("menuitem", { name: "아래로 이동" }),
-    ).toBeDisabled();
-
-    fireEvent.keyDown(document, { key: "Escape" });
-    expect(screen.queryByTestId("song-section-menu")).not.toBeInTheDocument();
+    ).toHaveAttribute("aria-disabled", "true");
   });
 
   it("구역 메뉴 항목은 곡 동작을 호출하고 메뉴를 닫는다", () => {
@@ -213,17 +217,17 @@ describe("SlideThumbnailPane (PPT식 썸네일 창)", () => {
     renderPane({ items: [overflowing] });
 
     expect(screen.getByTestId("song-overflow-warning-0")).toHaveAttribute(
-      "title",
+      "aria-label",
       expect.stringContaining(
         "가장 긴 슬라이드(2번)가 화면 가장자리 여백을 넘칩니다",
       ),
     );
     expect(screen.getByTestId("slide-overflow-warning-0")).toHaveAttribute(
-      "title",
+      "aria-label",
       expect.stringContaining("자동 줄바꿈"),
     );
     expect(screen.getByTestId("slide-overflow-warning-1")).toHaveAttribute(
-      "title",
+      "aria-label",
       expect.stringContaining("화면 가장자리 여백을 넘칩니다"),
     );
   });

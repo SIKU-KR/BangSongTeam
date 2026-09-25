@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { EditorHeader } from "./EditorHeader";
 
@@ -77,21 +77,31 @@ describe("EditorHeader", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("단축키 안내가 ESC 키와 바깥 클릭으로 닫힌다", () => {
+  it("단축키 안내가 ESC 키와 바깥 클릭으로 닫힌다", async () => {
     renderHeader();
     const shortcutsButton = screen.getByTestId("header-shortcuts-btn");
 
     fireEvent.click(shortcutsButton);
     expect(screen.getByText("발표 송출 단축키")).toBeInTheDocument();
 
-    fireEvent.keyDown(document, { key: "Escape" });
-    expect(screen.queryByText("발표 송출 단축키")).not.toBeInTheDocument();
+    fireEvent.keyDown(screen.getByTestId("header-shortcuts-popover"), {
+      key: "Escape",
+    });
+    await waitFor(() =>
+      expect(screen.queryByText("발표 송출 단축키")).not.toBeInTheDocument(),
+    );
 
     fireEvent.click(shortcutsButton);
     expect(screen.getByText("발표 송출 단축키")).toBeInTheDocument();
 
+    fireEvent.pointerDown(document.body);
     fireEvent.mouseDown(document.body);
-    expect(screen.queryByText("발표 송출 단축키")).not.toBeInTheDocument();
+    fireEvent.pointerUp(document.body);
+    fireEvent.mouseUp(document.body);
+    fireEvent.click(document.body);
+    await waitFor(() =>
+      expect(screen.queryByText("발표 송출 단축키")).not.toBeInTheDocument(),
+    );
   });
 
   it("단축키 안내에 PRD 송출 단축키와 번호 이동 규칙을 모두 보여 준다", () => {

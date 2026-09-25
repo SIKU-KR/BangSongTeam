@@ -1,10 +1,41 @@
-import React, { useCallback, useRef, useState } from "react";
+import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import {
+  ArrowLeftIcon,
+  ChevronDownIcon,
+  FileTextIcon,
+  InfoIcon,
+  PencilIcon,
+  PlayIcon,
+  PlusIcon,
+  Redo2Icon,
+  Undo2Icon,
+} from "lucide-react";
+import { cn } from "cn";
+import { Button } from "#components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "#components/ui/dropdown-menu";
+import { Input } from "#components/ui/input";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "#components/ui/popover";
+import { Separator } from "#components/ui/separator";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "#components/ui/tooltip";
+import { IconButton } from "#components/common/IconButton";
 import { usePersistenceError } from "../../lib/storage";
 import { useSyncStatus } from "../../lib/sync";
 import { ThemeMenuButton } from "../../components/common/ThemeMenuButton";
 import { PRESENTATION_SHORTCUTS } from "#shared";
-import { useDismiss } from "../../hooks/useDismiss";
 import { EDITOR_SHORTCUT_GUIDE } from "./editorShortcuts";
 
 const PRESENTATION_SHORTCUT_GUIDE: ReadonlyArray<{
@@ -49,28 +80,31 @@ function SaveStatusIndicator(): React.JSX.Element {
 
   const { dotClass, label } = (() => {
     if (persistenceError) {
-      return { dotClass: "bg-red-500", label: "저장 실패" };
+      return { dotClass: "bg-destructive", label: "저장 실패" };
     }
     switch (status) {
       case "syncing":
-        return { dotClass: "bg-amber-500", label: "동기화 중…" };
+        return { dotClass: "bg-warning", label: "동기화 중…" };
       case "synced":
-        return { dotClass: "bg-emerald-500", label: "동기화됨" };
+        return { dotClass: "bg-success", label: "동기화됨" };
       case "offline":
-        return { dotClass: "bg-zinc-400", label: "오프라인 · 로컬 저장됨" };
+        return {
+          dotClass: "bg-muted-foreground",
+          label: "오프라인 · 로컬 저장됨",
+        };
       case "error":
-        return { dotClass: "bg-red-500", label: "동기화 실패" };
+        return { dotClass: "bg-destructive", label: "동기화 실패" };
       default:
-        return { dotClass: "bg-emerald-500", label: "자동 저장됨" };
+        return { dotClass: "bg-success", label: "자동 저장됨" };
     }
   })();
 
   return (
     <span
       data-testid="save-status"
-      className="hidden items-center gap-1 text-[11px] font-medium text-zinc-500 md:inline-flex dark:text-zinc-400"
+      className="hidden items-center gap-1 text-2xs font-medium text-muted-foreground md:inline-flex"
     >
-      <span className={`size-1.5 rounded-full ${dotClass}`}></span>
+      <span className={cn("size-1.5 rounded-full", dotClass)}></span>
       {label}
     </span>
   );
@@ -85,22 +119,18 @@ function ShortcutTable({
 }): React.JSX.Element {
   return (
     <div className="space-y-1">
-      <div className="border-b border-zinc-200 pb-1 text-xs font-bold text-zinc-900 dark:border-zinc-800 dark:text-white">
-        {heading}
-      </div>
+      <div className="border-b pb-1 text-xs font-bold">{heading}</div>
       <table className="w-full">
         <tbody>
           {rows.map(({ keys, action }) => (
             <tr key={action}>
               <th
                 scope="row"
-                className="py-0.5 pr-3 text-left align-top font-mono font-normal whitespace-nowrap text-zinc-700 dark:text-zinc-300"
+                className="py-0.5 pr-3 text-left align-top font-mono font-normal whitespace-nowrap"
               >
                 {keys}
               </th>
-              <td className="py-0.5 text-zinc-500 dark:text-zinc-400">
-                {action}
-              </td>
+              <td className="py-0.5 text-muted-foreground">{action}</td>
             </tr>
           ))}
         </tbody>
@@ -124,20 +154,11 @@ export function EditorHeader({
   onNewPresentation,
   onOpenLyricModal,
   backPath = "/presentations",
-  className = "",
+  className,
 }: EditorHeaderProps): React.JSX.Element {
   const navigate = useNavigate();
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [tempTitle, setTempTitle] = useState(title);
-  const [showShortcuts, setShowShortcuts] = useState(false);
-  const [showFileMenu, setShowFileMenu] = useState(false);
-  const fileMenuRef = useRef<HTMLDivElement>(null);
-  const shortcutsRef = useRef<HTMLDivElement>(null);
-
-  const closeFileMenu = useCallback(() => setShowFileMenu(false), []);
-  const closeShortcuts = useCallback(() => setShowShortcuts(false), []);
-  useDismiss(fileMenuRef, showFileMenu, closeFileMenu);
-  useDismiss(shortcutsRef, showShortcuts, closeShortcuts);
 
   const handleTitleSubmit = () => {
     setIsEditingTitle(false);
@@ -151,128 +172,67 @@ export function EditorHeader({
   return (
     <header
       data-testid="editor-header"
-      className={`flex h-14 items-center justify-between border-b border-zinc-200 bg-white px-4 text-zinc-900 select-none dark:border-zinc-800/80 dark:bg-zinc-950 dark:text-zinc-100 ${className}`}
+      className={cn(
+        "flex h-14 items-center justify-between border-b bg-background px-4 select-none",
+        className,
+      )}
     >
       <div className="flex min-w-0 items-center gap-3">
-        <button
-          type="button"
-          data-testid="header-back-btn"
-          onClick={() => navigate(backPath)}
-          className="flex cursor-pointer items-center gap-1 rounded-lg p-1.5 text-xs text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-white"
-          title="프레젠테이션 목록으로 돌아가기"
-        >
-          <svg
-            className="size-4"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M10 19l-7-7m0 0l7-7m-7 7h18"
-            />
-          </svg>
-          <span className="hidden sm:inline">홈</span>
-        </button>
-
-        <div ref={fileMenuRef} className="relative">
-          <button
-            type="button"
-            data-testid="header-file-menu-btn"
-            aria-haspopup="menu"
-            aria-expanded={showFileMenu}
-            onClick={() => setShowFileMenu((prev) => !prev)}
-            className="flex cursor-pointer items-center gap-1 rounded-sm px-2 py-1 text-xs font-medium text-zinc-600 transition-colors hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-white"
-          >
-            <span>파일</span>
-            <svg
-              className="size-3 text-zinc-400 dark:text-zinc-500"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M19 9l-7 7-7-7"
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <Button
+                variant="ghost"
+                size="sm"
+                data-testid="header-back-btn"
+                className="text-muted-foreground"
+                onClick={() => navigate(backPath)}
               />
-            </svg>
-          </button>
+            }
+          >
+            <ArrowLeftIcon />
+            <span className="hidden sm:inline">홈</span>
+          </TooltipTrigger>
+          <TooltipContent>프레젠테이션 목록으로 돌아가기</TooltipContent>
+        </Tooltip>
 
-          {showFileMenu && (
-            <div
-              role="menu"
-              data-testid="header-file-menu-dropdown"
-              className="absolute top-9 left-0 z-50 w-52 space-y-0.5 rounded-xl border border-zinc-200 bg-white py-1.5 font-sans text-xs shadow-lg dark:border-zinc-800 dark:bg-zinc-900 dark:shadow-2xl"
-            >
-              {onNewPresentation && (
-                <button
-                  type="button"
-                  role="menuitem"
-                  onClick={() => {
-                    setShowFileMenu(false);
-                    onNewPresentation();
-                  }}
-                  className="flex w-full cursor-pointer items-center gap-2 px-3 py-2 text-left text-zinc-700 hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800 dark:hover:text-white"
-                >
-                  <svg
-                    className="size-3.5 text-emerald-600 dark:text-emerald-400"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M12 4v16m8-8H4"
-                    />
-                  </svg>
-                  <span>새 프레젠테이션</span>
-                </button>
-              )}
-              {onOpenLyricModal && (
-                <button
-                  type="button"
-                  role="menuitem"
-                  data-testid="header-file-menu-lyric-btn"
-                  onClick={() => {
-                    setShowFileMenu(false);
-                    onOpenLyricModal();
-                  }}
-                  className="flex w-full cursor-pointer items-center gap-2 px-3 py-2 text-left text-zinc-700 hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800 dark:hover:text-white"
-                >
-                  <svg
-                    className="size-3.5 text-indigo-400"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-                    />
-                  </svg>
-                  <span>새 가사 입력</span>
-                </button>
-              )}
-            </div>
-          )}
-        </div>
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            data-testid="header-file-menu-btn"
+            render={<Button variant="ghost" size="sm" />}
+          >
+            파일
+            <ChevronDownIcon className="text-muted-foreground" />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent
+            data-testid="header-file-menu-dropdown"
+            className="w-52"
+          >
+            {onNewPresentation && (
+              <DropdownMenuItem onClick={onNewPresentation}>
+                <PlusIcon />새 프레젠테이션
+              </DropdownMenuItem>
+            )}
+            {onOpenLyricModal && (
+              <DropdownMenuItem
+                data-testid="header-file-menu-lyric-btn"
+                onClick={onOpenLyricModal}
+              >
+                <FileTextIcon />새 가사 입력
+              </DropdownMenuItem>
+            )}
+          </DropdownMenuContent>
+        </DropdownMenu>
 
-        <div className="h-4 w-px bg-zinc-200 dark:bg-zinc-800" />
+        <Separator orientation="vertical" className="h-4" />
 
         <div className="flex min-w-0 items-center gap-2">
           {isEditingTitle ? (
-            <input
+            <Input
               type="text"
               value={tempTitle}
               autoFocus
+              aria-label="프레젠테이션 제목"
               onChange={(e) => setTempTitle(e.target.value)}
               onBlur={handleTitleSubmit}
               onKeyDown={(e) => {
@@ -282,155 +242,104 @@ export function EditorHeader({
                   setTempTitle(title);
                 }
               }}
-              className="rounded-sm border border-emerald-500 bg-white px-2 py-0.5 text-sm font-semibold text-zinc-900 focus:outline-none dark:bg-zinc-900 dark:text-white"
+              className="h-7 w-64 font-semibold"
             />
           ) : (
-            <button
-              type="button"
-              onClick={() => {
-                setTempTitle(title);
-                setIsEditingTitle(true);
-              }}
-              className="flex max-w-xs cursor-pointer items-center gap-1.5 truncate text-left text-sm font-bold text-zinc-900 transition-colors hover:text-emerald-600 sm:max-w-md dark:text-white dark:hover:text-emerald-400"
-              title="클릭하여 제목 수정"
-            >
-              <span className="truncate">{title}</span>
-              <svg
-                className="size-3.5 shrink-0 text-zinc-400 dark:text-zinc-500"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    data-testid="header-title-btn"
+                    className="max-w-xs text-sm font-bold sm:max-w-md"
+                    onClick={() => {
+                      setTempTitle(title);
+                      setIsEditingTitle(true);
+                    }}
+                  />
+                }
               >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"
-                />
-              </svg>
-            </button>
+                <span className="truncate">{title}</span>
+                <PencilIcon className="text-muted-foreground" />
+              </TooltipTrigger>
+              <TooltipContent>클릭하여 제목 수정</TooltipContent>
+            </Tooltip>
           )}
 
           <SaveStatusIndicator />
         </div>
 
         {(onUndo || onRedo) && (
-          <div className="hidden items-center gap-0.5 border-l border-zinc-200 pl-2 sm:flex dark:border-zinc-800">
-            <button
-              type="button"
+          <div className="hidden items-center gap-0.5 border-l pl-2 sm:flex">
+            <IconButton
+              label="실행 취소 (Ctrl/⌘+Z)"
+              size="icon-sm"
               data-testid="header-undo-btn"
               disabled={!canUndo}
               onClick={onUndo}
-              className="cursor-pointer rounded-sm p-1.5 text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-900 disabled:opacity-25 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-white"
-              title="실행 취소 (Ctrl/⌘+Z)"
             >
-              <svg
-                className="size-3.5"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M3 10h10a5 5 0 015 5v2M3 10l6-6M3 10l6 6"
-                />
-              </svg>
-            </button>
-            <button
-              type="button"
+              <Undo2Icon />
+            </IconButton>
+            <IconButton
+              label="다시 실행 (Ctrl/⌘+Shift+Z)"
+              size="icon-sm"
               data-testid="header-redo-btn"
               disabled={!canRedo}
               onClick={onRedo}
-              className="cursor-pointer rounded-sm p-1.5 text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-900 disabled:opacity-25 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-white"
-              title="다시 실행 (Ctrl/⌘+Shift+Z)"
             >
-              <svg
-                className="size-3.5"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M21 10H11a5 5 0 00-5 5v2M21 10l-6-6M21 10l-6 6"
-                />
-              </svg>
-            </button>
+              <Redo2Icon />
+            </IconButton>
           </div>
         )}
       </div>
 
       <div className="flex shrink-0 items-center gap-2">
-        <div ref={shortcutsRef} className="relative">
-          <button
-            type="button"
+        <Popover>
+          <PopoverTrigger
             data-testid="header-shortcuts-btn"
-            aria-expanded={showShortcuts}
-            onClick={() => setShowShortcuts((prev) => !prev)}
-            className="flex cursor-pointer items-center gap-1 rounded-lg p-1.5 text-xs text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-white"
-            title="편집·송출 단축키 안내"
+            render={
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-muted-foreground"
+              />
+            }
           >
-            <svg
-              className="size-4"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-              />
-            </svg>
+            <InfoIcon />
             <span className="hidden sm:inline">단축키</span>
-          </button>
-
-          {showShortcuts && (
-            <div
-              data-testid="header-shortcuts-popover"
-              className="absolute top-10 right-0 z-50 max-h-[75vh] w-96 space-y-2 overflow-y-auto rounded-xl border border-zinc-200 bg-white p-3 text-xs shadow-lg dark:border-zinc-700 dark:bg-zinc-900 dark:shadow-2xl"
-            >
-              <ShortcutTable
-                heading="편집 단축키"
-                rows={EDITOR_SHORTCUT_GUIDE}
-              />
-              <ShortcutTable
-                heading="발표 송출 단축키"
-                rows={PRESENTATION_SHORTCUT_GUIDE}
-              />
-              <div className="space-y-1 border-t border-zinc-200 pt-2 dark:border-zinc-800">
-                <div className="font-semibold text-zinc-700 dark:text-zinc-300">
-                  번호 이동 규칙
-                </div>
-                <ul className="list-disc space-y-0.5 pl-4 text-zinc-500 dark:text-zinc-400">
-                  {NUMBER_JUMP_RULES.map((rule) => (
-                    <li key={rule}>{rule}</li>
-                  ))}
-                </ul>
-              </div>
+          </PopoverTrigger>
+          <PopoverContent
+            data-testid="header-shortcuts-popover"
+            align="end"
+            className="max-h-(--available-height) w-96 overflow-y-auto text-xs"
+          >
+            <ShortcutTable heading="편집 단축키" rows={EDITOR_SHORTCUT_GUIDE} />
+            <ShortcutTable
+              heading="발표 송출 단축키"
+              rows={PRESENTATION_SHORTCUT_GUIDE}
+            />
+            <div className="space-y-1 border-t pt-2">
+              <div className="font-semibold">번호 이동 규칙</div>
+              <ul className="list-disc space-y-0.5 pl-4 text-muted-foreground">
+                {NUMBER_JUMP_RULES.map((rule) => (
+                  <li key={rule}>{rule}</li>
+                ))}
+              </ul>
             </div>
-          )}
-        </div>
+          </PopoverContent>
+        </Popover>
 
-        <ThemeMenuButton variant="compact" direction="down" align="right" />
+        <ThemeMenuButton variant="compact" align="end" />
 
-        <button
-          type="button"
+        <Button
           data-testid="header-present-btn"
           disabled={totalSongs === 0}
           onClick={onPresent}
-          className="flex cursor-pointer items-center gap-1.5 rounded-lg bg-emerald-600 px-4 py-2 text-xs font-semibold text-white shadow-sm transition-all hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-40 dark:shadow-md dark:shadow-emerald-950/50 dark:hover:shadow-emerald-900/60"
         >
-          <svg className="size-3.5 fill-current" viewBox="0 0 24 24">
-            <path d="M8 5v14l11-7z" />
-          </svg>
-          <span>슬라이드쇼 발표</span>
-        </button>
+          <PlayIcon className="fill-current" />
+          슬라이드쇼 발표
+        </Button>
       </div>
     </header>
   );
