@@ -284,6 +284,48 @@ describe("EditorRoute (PowerPoint식 프레젠테이션 편집기)", () => {
     );
   });
 
+  it("파일 메뉴의 새 가사 입력은 가사 직접 입력 폼을 바로 연다", () => {
+    renderEditor();
+
+    act(() => {
+      fireEvent.click(screen.getByTestId("header-file-menu-btn"));
+    });
+    act(() => {
+      fireEvent.click(screen.getByTestId("header-file-menu-lyric-btn"));
+    });
+
+    expect(screen.getByTestId("song-picker-modal")).toBeInTheDocument();
+    expect(screen.getByText("새 찬양 가사 직접 입력")).toBeInTheDocument();
+    expect(
+      screen.getByTestId("song-picker-create-lyrics-input"),
+    ).toBeInTheDocument();
+  });
+
+  it("썸네일 창의 찬양곡 추가는 곡 목록으로 연다", () => {
+    renderEditor();
+
+    act(() => {
+      fireEvent.click(screen.getByTestId("add-song-btn"));
+    });
+
+    expect(screen.getByTestId("song-picker-modal")).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("song-picker-create-lyrics-input"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("파일 메뉴에는 헤더와 중복되는 슬라이드쇼 발표 항목이 없다", () => {
+    renderEditor();
+
+    act(() => {
+      fireEvent.click(screen.getByTestId("header-file-menu-btn"));
+    });
+
+    expect(
+      screen.getByTestId("header-file-menu-dropdown"),
+    ).not.toHaveTextContent("슬라이드쇼 발표");
+  });
+
   it("파일 메뉴는 ESC 키로 닫힌다", () => {
     renderEditor();
 
@@ -493,6 +535,18 @@ describe("EditorRoute (PowerPoint식 프레젠테이션 편집기)", () => {
       ).not.toBeInTheDocument();
       expect(
         screen.getByText("가사 붙여넣기로 새 곡 추가"),
+      ).toBeInTheDocument();
+    });
+
+    it("새 곡 추가 버튼은 가사 직접 입력 폼을 바로 연다", () => {
+      renderEmptyEditor();
+
+      act(() => {
+        fireEvent.click(screen.getByText("가사 붙여넣기로 새 곡 추가"));
+      });
+
+      expect(
+        screen.getByTestId("song-picker-create-lyrics-input"),
       ).toBeInTheDocument();
     });
   });

@@ -16,7 +16,6 @@ function renderHeader(
     totalSlideCount: 2,
     onNewPresentation: vi.fn(),
     onOpenLyricModal: vi.fn(),
-    onLoadSampleSongs: vi.fn(),
   };
 
   return render(
@@ -63,6 +62,19 @@ describe("EditorHeader", () => {
     expect(screen.getByTestId("header-file-menu-dropdown")).toBeInTheDocument();
 
     fireEvent.mouseDown(document.body);
+    expect(
+      screen.queryByTestId("header-file-menu-dropdown"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("새 가사 입력 항목은 메뉴를 닫고 onOpenLyricModal을 부른다", () => {
+    const onOpenLyricModal = vi.fn();
+    renderHeader({ onOpenLyricModal });
+
+    fireEvent.click(screen.getByTestId("header-file-menu-btn"));
+    fireEvent.click(screen.getByTestId("header-file-menu-lyric-btn"));
+
+    expect(onOpenLyricModal).toHaveBeenCalledTimes(1);
     expect(
       screen.queryByTestId("header-file-menu-dropdown"),
     ).not.toBeInTheDocument();
