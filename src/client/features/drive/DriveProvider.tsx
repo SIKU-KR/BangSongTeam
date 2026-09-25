@@ -6,6 +6,8 @@ import React, {
   useState,
 } from "react";
 import { useLocation, useMatch, useNavigate } from "react-router-dom";
+import { FolderIcon, PresentationIcon, XIcon } from "lucide-react";
+import { Button } from "#components/ui/button";
 import {
   DndContext,
   DragOverlay,
@@ -57,7 +59,6 @@ import {
 import { ConfirmDialog, MoveDialog, NameDialog } from "./DriveDialogs";
 import { listPresentations } from "../presentation";
 import { resolveUniqueName } from "#shared";
-import { FolderGlyph, Icon } from "./icons";
 import { isLetterKey, isTypingTarget } from "./keyboard";
 
 type DialogState =
@@ -432,9 +433,7 @@ export function DriveProvider({
                 {dialog.refs.some((ref) => ref.kind === "folder") &&
                   " 폴더 안의 모든 항목도 함께 삭제됩니다."}
               </p>
-              <p className="mt-1 text-zinc-500 dark:text-zinc-400">
-                이 작업은 되돌릴 수 없습니다.
-              </p>
+              <p className="mt-1">이 작업은 되돌릴 수 없습니다.</p>
             </div>
           }
           confirmLabel="영구 삭제"
@@ -511,20 +510,20 @@ function DragChip({
   return (
     <div className="relative inline-block cursor-grabbing">
       {many && (
-        <div className="absolute inset-0 translate-1 rounded-xl border border-zinc-300 bg-white shadow-sm dark:border-zinc-700 dark:bg-zinc-800" />
+        <div className="absolute inset-0 translate-1 rounded-xl border bg-card shadow-sm" />
       )}
-      <div className="relative flex w-60 items-center gap-2.5 rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm font-medium text-zinc-800 shadow-xl dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100">
+      <div className="relative flex w-60 items-center gap-2.5 rounded-xl border bg-popover px-3 py-2.5 text-sm font-medium text-popover-foreground shadow-xl">
         {first?.kind === "folder" ? (
-          <FolderGlyph className="size-5 shrink-0 text-emerald-500" />
+          <FolderIcon className="size-5 shrink-0 fill-current text-muted-foreground" />
         ) : (
-          <Icon name="slides" className="size-5 shrink-0 text-indigo-500" />
+          <PresentationIcon className="size-5 shrink-0" />
         )}
         <span className="truncate">{first ? itemName(first) : ""}</span>
       </div>
       {many && (
         <span
           data-testid="drag-count"
-          className="absolute -top-2 -right-2 flex h-6 min-w-6 items-center justify-center rounded-full bg-emerald-600 px-1.5 text-xs font-bold text-white shadow-sm"
+          className="absolute -top-2 -right-2 flex h-6 min-w-6 items-center justify-center rounded-full bg-primary px-1.5 text-xs font-bold text-primary-foreground shadow-sm"
         >
           {refs.length}
         </span>
@@ -544,30 +543,31 @@ function DriveToast({
     <div
       role="status"
       data-testid="drive-toast"
-      className="fixed bottom-6 left-4 z-70 flex max-w-[calc(100vw-2rem)] min-w-[18rem] items-center gap-3 rounded-lg bg-zinc-800 py-3 pr-2 pl-4 text-sm text-white shadow-2xl lg:left-68 dark:bg-zinc-100 dark:text-zinc-900"
+      className="fixed inset-x-4 bottom-6 z-70 flex items-center gap-3 rounded-lg border bg-popover py-2 pr-2 pl-4 text-sm text-popover-foreground shadow-lg sm:right-auto sm:min-w-72 lg:left-68"
     >
-      <span className="truncate">{toast.message}</span>
+      <span className="flex-1 truncate">{toast.message}</span>
       {toast.action && (
-        <button
-          type="button"
+        <Button
+          variant="ghost"
+          size="sm"
           data-testid="drive-toast-action"
+          className="font-semibold"
           onClick={() => {
             toast.action?.run();
             onClose();
           }}
-          className="cursor-pointer rounded-lg px-2 py-1 font-semibold text-emerald-300 hover:bg-white/10 dark:text-emerald-700 dark:hover:bg-black/10"
         >
           {toast.action.label}
-        </button>
+        </Button>
       )}
-      <button
-        type="button"
+      <Button
+        variant="ghost"
+        size="icon-sm"
         aria-label="알림 닫기"
         onClick={onClose}
-        className="cursor-pointer rounded-lg p-1 hover:bg-white/10 dark:hover:bg-black/10"
       >
-        <Icon name="close" className="size-3.5" />
-      </button>
+        <XIcon />
+      </Button>
     </div>
   );
 }

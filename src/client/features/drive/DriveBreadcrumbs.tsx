@@ -1,13 +1,26 @@
-import React, { useRef, useState } from "react";
+import React from "react";
 import { useNavigate } from "react-router-dom";
+import {
+  ChevronDownIcon,
+  ChevronRightIcon,
+  FolderInputIcon,
+  PencilIcon,
+  Trash2Icon,
+} from "lucide-react";
+import { cn } from "cn";
+import { Button } from "#components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuTrigger,
+} from "#components/ui/dropdown-menu";
 import { getFolderPath } from "#shared";
 import { useFolderIndex } from "./folderStore";
 import { useDrive, useDriveDroppable } from "./driveContext";
 import { drivePath } from "./driveActions";
 import { ROOT_LABEL, type DriveItemRef } from "./driveModel";
-import { PopoverMenu, type MenuAction } from "./PopoverMenu";
+import { ActionMenuItems, type MenuAction } from "./ActionMenu";
 import { useNewItemActions } from "./NewMenu";
-import { Icon } from "./icons";
 
 function Crumb({
   folderId,
@@ -25,23 +38,20 @@ function Crumb({
     { kind: "folder", folderId },
   );
   return (
-    <button
+    <Button
       ref={setNodeRef}
-      type="button"
+      variant="ghost"
       data-testid={`crumb-${folderId ?? "root"}`}
       aria-current={isCurrent ? "page" : undefined}
       onClick={onNavigate}
-      title={label}
-      className={`max-w-[240px] cursor-pointer truncate rounded-full px-3 py-1 transition-colors ${
-        isDropTarget
-          ? "bg-emerald-50 text-emerald-800 ring-2 ring-emerald-500 dark:bg-emerald-950/40 dark:text-emerald-200"
-          : isCurrent
-            ? "text-zinc-900 hover:bg-zinc-200/70 dark:text-white dark:hover:bg-zinc-800/70"
-            : "text-zinc-600 hover:bg-zinc-200/70 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800/70 dark:hover:text-white"
-      }`}
+      className={cn(
+        "h-auto max-w-60 truncate rounded-full px-3 py-1 text-2xl font-normal",
+        isCurrent ? "text-foreground" : "text-muted-foreground",
+        isDropTarget && "bg-primary/5 ring-2 ring-primary",
+      )}
     >
-      {label}
-    </button>
+      <span className="truncate">{label}</span>
+    </Button>
   );
 }
 
@@ -55,8 +65,6 @@ export function DriveBreadcrumbs(): React.JSX.Element {
   const index = useFolderIndex();
   const drive = useDrive();
   const newActions = useNewItemActions();
-  const [anchor, setAnchor] = useState<{ x: number; y: number } | null>(null);
-  const triggerRef = useRef<HTMLButtonElement>(null);
 
   const path = getFolderPath(index, drive.currentFolderId);
   const current = path[path.length - 1] ?? null;
@@ -69,7 +77,7 @@ export function DriveBreadcrumbs(): React.JSX.Element {
           {
             key: "rename",
             label: "이름 바꾸기",
-            icon: "pencil",
+            icon: PencilIcon,
             shortcut: "F2",
             separated: true,
             onSelect: () => drive.requestRename(ref),
@@ -77,13 +85,13 @@ export function DriveBreadcrumbs(): React.JSX.Element {
           {
             key: "move",
             label: "이동",
-            icon: "folderOpen",
+            icon: FolderInputIcon,
             onSelect: () => drive.requestMove([ref]),
           },
           {
             key: "trash",
             label: "휴지통으로 이동",
-            icon: "trash",
+            icon: Trash2Icon,
             danger: true,
             separated: true,
             onSelect: () => {
@@ -108,15 +116,11 @@ export function DriveBreadcrumbs(): React.JSX.Element {
           isCurrent={false}
           onNavigate={() => navigate(drivePath(null))}
         />
-        <Icon
-          name="chevronRight"
-          className="size-5 shrink-0 text-zinc-400"
-          strokeWidth={2}
-        />
+        <ChevronRightIcon className="size-5 shrink-0 text-muted-foreground" />
         <span
           data-testid="crumb-trash"
           aria-current="page"
-          className="px-3 py-1 text-zinc-900 dark:text-white"
+          className="px-3 py-1"
         >
           휴지통
         </span>
@@ -138,11 +142,7 @@ export function DriveBreadcrumbs(): React.JSX.Element {
       />
       {path.map((folder, i) => (
         <React.Fragment key={folder.id}>
-          <Icon
-            name="chevronRight"
-            className="size-5 shrink-0 text-zinc-400"
-            strokeWidth={2}
-          />
+          <ChevronRightIcon className="size-5 shrink-0 text-muted-foreground" />
           <Crumb
             folderId={folder.id}
             label={folder.name}
@@ -151,33 +151,28 @@ export function DriveBreadcrumbs(): React.JSX.Element {
           />
         </React.Fragment>
       ))}
-      <button
-        ref={triggerRef}
-        type="button"
-        data-testid="breadcrumb-menu-btn"
-        aria-label="현재 폴더 메뉴"
-        aria-haspopup="menu"
-        onClick={(event) => {
-          if (anchor) {
-            setAnchor(null);
-            return;
+      <DropdownMenu>
+        <DropdownMenuTrigger
+          data-testid="breadcrumb-menu-btn"
+          aria-label="현재 폴더 메뉴"
+          render={
+            <Button
+              variant="ghost"
+              size="icon"
+              className="-ml-1 rounded-full text-muted-foreground"
+            />
           }
-          const rect = event.currentTarget.getBoundingClientRect();
-          setAnchor({ x: rect.left, y: rect.bottom + 6 });
-        }}
-        className="-ml-1 shrink-0 cursor-pointer rounded-full p-1.5 text-zinc-600 hover:bg-zinc-200/70 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800/70 dark:hover:text-white"
-      >
-        <Icon name="chevronDown" className="size-5" strokeWidth={2} />
-      </button>
-      {anchor && (
-        <PopoverMenu
-          anchor={anchor}
-          actions={[...newActions, ...folderActions]}
-          label="현재 폴더"
-          triggerRef={triggerRef}
-          onClose={() => setAnchor(null)}
-        />
-      )}
+        >
+          <ChevronDownIcon className="size-5" />
+        </DropdownMenuTrigger>
+        <DropdownMenuContent
+          data-testid="drive-menu"
+          aria-label="현재 폴더"
+          className="min-w-60"
+        >
+          <ActionMenuItems actions={[...newActions, ...folderActions]} />
+        </DropdownMenuContent>
+      </DropdownMenu>
     </nav>
   );
 }

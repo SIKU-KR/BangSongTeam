@@ -91,7 +91,7 @@ const INLINE_STYLE = {
 const UI_SYNTAX = [RAW_ELEMENTS, HAND_ROLLED_OVERLAYS, NATIVE_TOOLTIP];
 
 /**
- * 사용자가 정한 글꼴·색·좌표(%)를 그리는 '콘텐츠'와 드래그 좌표를 쓰는 파일.
+ * 사용자가 정한 글꼴·색·좌표(%)를 그리는 '콘텐츠'와 드래그·드래그 선택 좌표를 쓰는 파일.
  * 편집 화면과 송출 화면의 픽셀이 같아야 하므로 인라인 style을 허용한다.
  */
 const STYLE_ALLOWED_FILES = [
@@ -101,6 +101,7 @@ const STYLE_ALLOWED_FILES = [
   "src/client/features/editor/StageLyricsEditor.tsx",
   "src/client/features/editor/SlideThumbnailPane.tsx",
   "src/client/features/editor/SortableList.tsx",
+  "src/client/features/drive/DriveBrowser.tsx",
 ];
 
 /**

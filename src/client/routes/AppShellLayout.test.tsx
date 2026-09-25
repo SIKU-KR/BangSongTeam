@@ -12,7 +12,14 @@ import {
   resetFolderStore,
 } from "../features/drive";
 import { signInAsTestUser } from "../test/sessionFixture";
-import { render, screen, fireEvent, act, within } from "@testing-library/react";
+import {
+  render,
+  screen,
+  fireEvent,
+  act,
+  within,
+  waitFor,
+} from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { MemoryRouter, Routes, Route } from "react-router-dom";
 import type { Folder } from "#shared";
@@ -952,31 +959,33 @@ describe("AppShellLayout (구글 드라이브식 조작)", () => {
     expect(screen.getByTestId("shell-search-input")).toHaveFocus();
   });
 
-  it("메뉴는 키보드로 옮겨 다니고 단축키를 보여 주며, Shift+F10으로 연다", () => {
+  it("메뉴는 키보드로 옮겨 다니고 단축키를 보여 주며, Shift+F10으로 연다", async () => {
     renderShell();
     const options = screen.getAllByRole("option");
 
     fireEvent.contextMenu(options[0]);
-    const menu = screen.getByTestId("drive-menu");
-    expect(menu).toHaveFocus();
+    const menu = await screen.findByTestId("drive-menu");
+    await waitFor(() => expect(menu).toHaveFocus());
     expect(within(menu).getByTestId("action-rename")).toHaveTextContent("F2");
     const items = within(menu).getAllByRole("menuitem");
 
     fireEvent.keyDown(menu, { key: "ArrowDown" });
-    expect(items[0]).toHaveFocus();
-    fireEvent.keyDown(menu, { key: "ArrowUp" });
-    expect(items[items.length - 1]).toHaveFocus();
-    fireEvent.keyDown(menu, { key: "Home" });
-    expect(items[0]).toHaveFocus();
-    fireEvent.keyDown(menu, { key: "Tab" });
-    expect(screen.queryByTestId("drive-menu")).toBeNull();
+    await waitFor(() => expect(items[0]).toHaveFocus());
+    fireEvent.keyDown(items[0], { key: "ArrowUp" });
+    await waitFor(() => expect(items[items.length - 1]).toHaveFocus());
+    fireEvent.keyDown(items[items.length - 1], { key: "Home" });
+    await waitFor(() => expect(items[0]).toHaveFocus());
+    fireEvent.keyDown(items[0], { key: "Escape" });
+    await waitFor(() => expect(screen.queryByTestId("drive-menu")).toBeNull());
 
     act(() => {
       options[1].focus();
     });
     press("F10", { shiftKey: true });
-    const keyboardMenu = screen.getByTestId("drive-menu");
-    expect(within(keyboardMenu).getAllByRole("menuitem")[0]).toHaveFocus();
+    const keyboardMenu = await screen.findByTestId("drive-menu");
+    await waitFor(() =>
+      expect(within(keyboardMenu).getAllByRole("menuitem")[0]).toHaveFocus(),
+    );
     expect(options[1]).toHaveAttribute("aria-selected", "true");
   });
 });
