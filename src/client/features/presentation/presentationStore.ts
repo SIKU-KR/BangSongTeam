@@ -1103,6 +1103,22 @@ export function duplicatePresentation(
  * 보기 전용이라 다시 push하지 않는다.
  */
 export function replaceWithServerDocument(doc: Presentation): void {
+  putSharedDocument(doc);
+  schedulePersist(doc.id);
+}
+
+/**
+ * 로그인 없이 링크로 보는 세트를 메모리에만 넣는다.
+ *
+ * 저장소에 쓰지 않는다. 로그아웃 뒤에는 저장이 켜져 있을 수 있는데, 그대로
+ * 두면 소유자 id가 달린 보기 전용 문서가 남아 소유자가 이 브라우저에서
+ * 로그인할 때 자기 세트를 보기 전용으로 읽게 된다.
+ */
+export function showSharedPreview(doc: Presentation): void {
+  putSharedDocument(doc);
+}
+
+function putSharedDocument(doc: Presentation): void {
   const exists = Boolean(state.byId[doc.id]);
   state = {
     ...state,
@@ -1110,7 +1126,6 @@ export function replaceWithServerDocument(doc: Presentation): void {
     order: exists ? state.order : [...state.order, doc.id],
   };
   listSnapshot = buildListSnapshot(state);
-  schedulePersist(doc.id);
   for (const listener of listeners) listener();
 }
 

@@ -7,6 +7,8 @@ import {
   SEED_PRESENTATION_IDS,
 } from "./features/presentation";
 import { closeOfflineDB, OFFLINE_DB_NAME } from "./lib/storage";
+import { installFakeApi } from "./test/fakeApi";
+import { SEED_PRESENTATIONS } from "./features/presentation/mockPresentations";
 import {
   signInAsTestUser,
   signOutForTests,
@@ -128,7 +130,7 @@ describe("App Route Integration", () => {
     expect(screen.queryByTestId("presentation-row")).not.toBeInTheDocument();
   });
 
-  it("미로그인이면 송출 경로도 막는다", async () => {
+  it("미로그인이면 링크로 연 세트가 아닌 송출 경로는 막는다", async () => {
     signOutForTests();
 
     renderAt(`/present/${DOC_ID}/fullscreen`);
@@ -139,6 +141,32 @@ describe("App Route Integration", () => {
     expect(
       screen.queryByTestId("fullscreen-present-route"),
     ).not.toBeInTheDocument();
+  });
+
+  it("미로그인이어도 공유 링크는 보기 전용으로 열린다", async () => {
+    signOutForTests();
+    const api = installFakeApi({
+      "GET /api/share/*": () => ({
+        body: {
+          document: {
+            ...SEED_PRESENTATIONS[0],
+            userId: "0000000000000000owner",
+            access: { ownerName: "인도자" },
+          },
+        },
+      }),
+    });
+
+    try {
+      renderAt("/s/tok-first");
+
+      expect(await screen.findByTestId("read-only-banner")).toBeInTheDocument();
+      expect(
+        screen.queryByRole("button", { name: /카카오로 시작하기/ }),
+      ).not.toBeInTheDocument();
+    } finally {
+      api.restore();
+    }
   });
 
   it("다른 계정으로 로그인하면 남의 세트가 보이지 않는다", async () => {

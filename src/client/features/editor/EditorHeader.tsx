@@ -83,7 +83,8 @@ export interface EditorHeaderProps {
   sharedAccess?: PresentationAccess;
   /** 보기 권한 세트. 제목을 고칠 수 없다 */
   readOnly?: boolean;
-  backPath?: string;
+  /** `null`이면 돌아갈 드라이브가 없는 것이다 (로그인하지 않고 링크로 봄) */
+  backPath?: string | null;
   className?: string;
 }
 
@@ -200,23 +201,25 @@ export function EditorHeader({
       )}
     >
       <div className="flex min-w-0 items-center gap-3">
-        <Tooltip>
-          <TooltipTrigger
-            render={
-              <Button
-                variant="ghost"
-                size="sm"
-                data-testid="header-back-btn"
-                className="text-muted-foreground"
-                onClick={() => navigate(backPath)}
-              />
-            }
-          >
-            <ArrowLeftIcon />
-            <span className="hidden sm:inline">홈</span>
-          </TooltipTrigger>
-          <TooltipContent>프레젠테이션 목록으로 돌아가기</TooltipContent>
-        </Tooltip>
+        {backPath !== null && (
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  data-testid="header-back-btn"
+                  className="text-muted-foreground"
+                  onClick={() => navigate(backPath)}
+                />
+              }
+            >
+              <ArrowLeftIcon />
+              <span className="hidden sm:inline">홈</span>
+            </TooltipTrigger>
+            <TooltipContent>프레젠테이션 목록으로 돌아가기</TooltipContent>
+          </Tooltip>
+        )}
 
         <DropdownMenu>
           <DropdownMenuTrigger

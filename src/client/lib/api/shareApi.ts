@@ -1,8 +1,10 @@
 import {
   JoinShareResponseSchema,
+  SharePreviewResponseSchema,
   ShareSettingsSchema,
   type JoinShareResponse,
   type LinkAccess,
+  type PresentationDocument,
   type ShareSettings,
 } from "#shared";
 import { api } from "./client";
@@ -42,6 +44,16 @@ export async function joinSharedPresentation(
     api.api.share[":token"].join.$post({ param: { token } }),
   );
   return JoinShareResponseSchema.parse(body);
+}
+
+/** 로그인 없이 링크로 보는 세트. 멤버로 기록되지 않는다. */
+export async function fetchSharePreview(
+  token: string,
+): Promise<PresentationDocument> {
+  const body = await callApi(() =>
+    api.api.share[":token"].$get({ param: { token } }),
+  );
+  return SharePreviewResponseSchema.parse(body).document;
 }
 
 /** 공유 링크 주소. 토큰만 서버가 정하고 주소는 지금 열린 origin으로 만든다. */

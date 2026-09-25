@@ -29,8 +29,18 @@ const PROVIDER_BUTTON_CLASS: Record<SocialProvider, string> = {
   naver: "bg-naver text-naver-foreground hover:bg-naver/90",
 };
 
+export interface LoginRouteProps {
+  /** 로그인이 필요한 까닭. 없으면 계정 저장 안내를 보여 준다 */
+  description?: string;
+  /** 로그인하지 않고 원래 화면으로 돌아간다 */
+  onCancel?: () => void;
+}
+
 /** 로그인 화면 라우트 */
-export function LoginRoute(): React.JSX.Element {
+export function LoginRoute({
+  description = "로그인하면 만든 세트가 계정에 저장되어, 교회 PC와 집 PC 어디서든 같은 세트를 열 수 있습니다.",
+  onCancel,
+}: LoginRouteProps = {}): React.JSX.Element {
   const [config, setConfig] = useState<AuthConfigResponse | null>(null);
   const [pending, setPending] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -89,9 +99,8 @@ export function LoginRoute(): React.JSX.Element {
       <Card className="w-full max-w-sm">
         <CardHeader className="text-center">
           <CardTitle className="text-2xl">Worship Studio</CardTitle>
-          <CardDescription>
-            로그인하면 만든 세트가 계정에 저장되어, 교회 PC와 집 PC 어디서든
-            같은 세트를 열 수 있습니다.
+          <CardDescription data-testid="login-description">
+            {description}
           </CardDescription>
         </CardHeader>
 
@@ -184,7 +193,17 @@ export function LoginRoute(): React.JSX.Element {
           )}
         </CardContent>
 
-        <CardFooter className="justify-center text-xs text-muted-foreground">
+        <CardFooter className="flex-col gap-2 text-xs text-muted-foreground">
+          {onCancel && (
+            <Button
+              variant="ghost"
+              data-testid="login-cancel-btn"
+              disabled={pending !== null}
+              onClick={onCancel}
+            >
+              로그인하지 않고 돌아가기
+            </Button>
+          )}
           데스크톱 Chrome에 최적화되어 있습니다
         </CardFooter>
       </Card>

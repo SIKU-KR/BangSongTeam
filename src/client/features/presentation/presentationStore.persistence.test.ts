@@ -18,7 +18,10 @@ import {
   getActivePresentation,
   canUndo,
   undo,
+  showSharedPreview,
+  getPresentationById,
 } from "./presentationStore";
+import { SEED_PRESENTATIONS } from "./mockPresentations";
 
 async function resetDatabase(): Promise<void> {
   closeOfflineDB();
@@ -54,6 +57,24 @@ describe("presentationStore 영속성", () => {
     const { valid } = await loadAllPresentations();
     const saved = valid.find((p) => p.id === before);
     expect(saved?.title).toBe("저장 확인용 제목");
+  });
+
+  it("로그인 없이 링크로 본 세트는 저장소에 남기지 않는다", async () => {
+    await hydrateFromStorage();
+    const preview = {
+      ...SEED_PRESENTATIONS[0],
+      id: "p0000000000000preview",
+      access: { ownerName: "인도자" },
+    };
+
+    showSharedPreview(preview);
+    await flushPendingWrites();
+
+    expect(getPresentationById(preview.id)?.access).toEqual({
+      ownerName: "인도자",
+    });
+    const { valid } = await loadAllPresentations();
+    expect(valid.some((p) => p.id === preview.id)).toBe(false);
   });
 
   it("새 문서를 만들면 그 문서도 저장된다", async () => {

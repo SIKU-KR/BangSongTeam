@@ -30,3 +30,9 @@ export const JoinShareResponseSchema = z.object({
   document: PresentationDocumentSchema,
 });
 export type JoinShareResponse = z.infer<typeof JoinShareResponseSchema>;
+
+/** 로그인 없이 링크로 보는 세트. 멤버로 기록하지 않아 `access.memberId`가 없다. */
+export const SharePreviewResponseSchema = z.object({
+  document: PresentationDocumentSchema,
+});
+export type SharePreviewResponse = z.infer<typeof SharePreviewResponseSchema>;

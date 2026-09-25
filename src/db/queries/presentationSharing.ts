@@ -81,12 +81,45 @@ export async function getPresentationDocument(
   if (!document) return null;
   return role === "owner"
     ? document
-    : {
-        ...document,
-        folderId: null,
-        trashedAt: null,
-        access: { ownerName: header.ownerName, memberId: userId },
-      };
+    : toSharedDocument(document, header.ownerName, userId);
+}
+
+/**
+ * 공유받은 사람에게 주는 모양. 폴더·휴지통은 소유자의 드라이브 배치라 비운다.
+ * `memberId`가 없으면 로그인하지 않고 링크로 보는 사람이다.
+ */
+function toSharedDocument(
+  document: PresentationDocument,
+  ownerName: string,
+  memberId?: string,
+): PresentationDocument {
+  return {
+    ...document,
+    folderId: null,
+    trashedAt: null,
+    access: memberId ? { ownerName, memberId } : { ownerName },
+  };
+}
+
+/**
+ * 로그인 없이 링크로 보는 세트. 멤버로 기록하지 않으므로 드라이브·목록 조회에는
+ * 이어지지 않고, 링크가 살아 있는 동안 토큰을 아는 사람에게만 문서를 준다.
+ */
+export async function getSharedDocumentByToken(
+  db: DbInstance,
+  token: string,
+): Promise<PresentationDocument | null> {
+  const [header] = await db
+    .select({ presentation: presentations, ownerName: user.name })
+    .from(presentations)
+    .innerJoin(user, eq(user.id, presentations.userId))
+    .where(and(eq(presentations.linkToken, token), linkActiveCondition()));
+  if (!header) return null;
+
+  const [document] = await hydratePresentationDocuments(db, [
+    header.presentation,
+  ]);
+  return document ? toSharedDocument(document, header.ownerName) : null;
 }
 
 /**
@@ -122,12 +155,9 @@ export async function getSharedPresentationDocuments(
     headers.map((h) => h.presentation),
   );
 
-  return documents.map((document, index) => ({
-    ...document,
-    folderId: null,
-    trashedAt: null,
-    access: { ownerName: headers[index]?.ownerName ?? "", memberId: userId },
-  }));
+  return documents.map((document, index) =>
+    toSharedDocument(document, headers[index]?.ownerName ?? "", userId),
+  );
 }
 
 /** 소유자만 볼 수 있다. 소유자가 아니면 null. */
