@@ -5,7 +5,12 @@ import {
   DEFAULT_PRESET_FONTS,
   DeckStyleSchema,
 } from "#shared";
-import { loadWebFont, getNoonnuFont, preloadWebFont } from "./fontLoader";
+import {
+  loadWebFont,
+  getNoonnuFont,
+  preloadWebFont,
+  toCssFontFamily,
+} from "./fontLoader";
 
 describe("눈누(noonnu.cc) 웹폰트 카탈로그 및 동적 로더", () => {
   beforeEach(() => {
@@ -74,6 +79,28 @@ describe("눈누(noonnu.cc) 웹폰트 카탈로그 및 동적 로더", () => {
     ).length;
 
     expect(countFirst).toBe(countSecond);
+  });
+
+  it("번들 글꼴은 카탈로그의 CDN 주소를 문서에 붙이지 않는다", async () => {
+    await Promise.all([
+      loadWebFont("Pretendard"),
+      loadWebFont("Noto Sans KR"),
+      loadWebFont("Nanum Myeongjo"),
+    ]);
+
+    expect(
+      document.querySelectorAll(
+        "style[data-noonnu-font-id], link[data-noonnu-font-id]",
+      ),
+    ).toHaveLength(0);
+  });
+
+  it("toCssFontFamily는 Pretendard를 variable 패밀리로 바꾸고 나머지는 그대로 감싼다", () => {
+    expect(toCssFontFamily("Pretendard")).toBe(
+      '"Pretendard Variable", "Pretendard"',
+    );
+    expect(toCssFontFamily("Noto Sans KR")).toBe('"Noto Sans KR"');
+    expect(toCssFontFamily("페이퍼로지")).toBe('"페이퍼로지"');
   });
 
   it("getNoonnuFont는 한글 이름 및 카드 패밀리명으로 조회된다", async () => {

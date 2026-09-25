@@ -14,7 +14,11 @@ import {
 } from "#components/ui/select";
 import type { DeckStyle, NoonnuFont } from "#shared";
 import { DEFAULT_PRESET_FONTS, loadNoonnuFontCatalog } from "#shared";
-import { loadWebFont, loadWebFonts } from "../../../lib/fonts/fontLoader";
+import {
+  loadWebFont,
+  loadWebFonts,
+  toCssFontFamily,
+} from "../../../lib/fonts/fontLoader";
 import { ColorPickerField } from "../ColorPickerField";
 import { ToggleGroup, ToggleGroupItem } from "#components/ui/toggle-group";
 import { RibbonChoices, RibbonDropdown } from "./RibbonDropdown";
@@ -135,9 +139,15 @@ export function FontControls({
                   <SelectItem
                     key={font}
                     value={font}
-                    style={{ fontFamily: `'${font}', sans-serif` }}
+                    style={{
+                      fontFamily: `${toCssFontFamily(font)}, sans-serif`,
+                    }}
                   >
-                    <span style={{ fontFamily: `'${font}', sans-serif` }}>
+                    <span
+                      style={{
+                        fontFamily: `${toCssFontFamily(font)}, sans-serif`,
+                      }}
+                    >
                       {font}
                     </span>
                   </SelectItem>
