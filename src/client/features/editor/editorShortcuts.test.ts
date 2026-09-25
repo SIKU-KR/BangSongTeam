@@ -10,6 +10,13 @@ const idle: EditorShortcutContext = {
   modalOpen: false,
   onButton: false,
   canvasFocused: true,
+  paneFocused: false,
+};
+
+const pane: EditorShortcutContext = {
+  ...idle,
+  canvasFocused: false,
+  paneFocused: true,
 };
 
 function key(
@@ -155,5 +162,45 @@ describe("resolveEditorShortcut", () => {
     expect(resolveEditorShortcut(key({ key: "F2" }), onButton)).toBe(
       "editText",
     );
+  });
+
+  it("슬라이드 창 포커스에서는 PowerPoint처럼 선택·클립보드·이동 키가 동작한다", () => {
+    const cases: Array<
+      [Partial<EditorShortcutKeyEvent> & { key: string }, string]
+    > = [
+      [{ key: "a", code: "KeyA", ctrlKey: true }, "selectAll"],
+      [{ key: "c", code: "KeyC", metaKey: true }, "copySlides"],
+      [{ key: "ㅌ", code: "KeyX", ctrlKey: true }, "cutSlides"],
+      [{ key: "v", code: "KeyV", ctrlKey: true }, "pasteSlides"],
+      [{ key: "ArrowUp", ctrlKey: true }, "moveSlidesUp"],
+      [{ key: "ArrowDown", metaKey: true }, "moveSlidesDown"],
+      [{ key: "ArrowUp", ctrlKey: true, shiftKey: true }, "moveSlidesToStart"],
+      [{ key: "ArrowDown", ctrlKey: true, shiftKey: true }, "moveSlidesToEnd"],
+      [{ key: "ArrowUp", shiftKey: true }, "extendPrev"],
+      [{ key: "ArrowDown", shiftKey: true }, "extendNext"],
+      [{ key: "Enter" }, "newSlide"],
+      [{ key: "Backspace" }, "deleteSlide"],
+      [{ key: "Delete" }, "deleteSlide"],
+      [{ key: "Escape" }, "clearInsertion"],
+      [{ key: "ArrowDown" }, "nextSlide"],
+    ];
+    for (const [init, action] of cases) {
+      expect(resolveEditorShortcut(key(init), pane)).toBe(action);
+    }
+  });
+
+  it("창 밖에서는 선택·클립보드 키를 브라우저에 남기고, 창 안 버튼의 Enter는 버튼을 누른다", () => {
+    for (const code of ["KeyA", "KeyC", "KeyX", "KeyV"]) {
+      expect(
+        resolveEditorShortcut(key({ key: "", code, ctrlKey: true }), idle),
+      ).toBeNull();
+    }
+    expect(
+      resolveEditorShortcut(key({ key: "ArrowUp", ctrlKey: true }), idle),
+    ).toBeNull();
+    expect(resolveEditorShortcut(key({ key: "Backspace" }), idle)).toBeNull();
+    expect(
+      resolveEditorShortcut(key({ key: "Enter" }), { ...pane, onButton: true }),
+    ).toBeNull();
   });
 });

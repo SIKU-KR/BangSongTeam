@@ -104,7 +104,6 @@ const STYLE_ALLOWED_FILES = [
   "src/client/features/editor/EditorStageCanvas.tsx",
   "src/client/features/editor/StageLyricsEditor.tsx",
   "src/client/features/editor/ribbon/FontControls.tsx",
-  "src/client/features/editor/SortableList.tsx",
   "src/client/features/drive/DriveBrowser.tsx",
 ];
 

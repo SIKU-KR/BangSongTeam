@@ -18,16 +18,12 @@ import {
   updateSongBackground,
   updateSongInfo,
   updateSlideLines,
-  addSlideToSong,
-  removeSlideFromSong,
-  duplicateSlide,
   splitSlideAtCursor,
   mergeSlideWithNext,
   reorderSongs,
   removeSongFromPresentation,
   addDeckToPresentation,
   duplicateSongInPresentation,
-  reorderSlides,
   undo,
   redo,
   canUndo,
@@ -64,6 +60,7 @@ import { EditorRibbon } from "../features/editor/ribbon/EditorRibbon";
 import { stepFontSize } from "../features/editor/ribbon/ribbonOptions";
 import { StageLyricsEditor } from "../features/editor/StageLyricsEditor";
 import { useEditorShortcuts } from "../features/editor/useEditorShortcuts";
+import { useSlideSelection } from "../features/editor/useSlideSelection";
 import {
   SongPickerModal,
   type SongPickerMode,
@@ -183,13 +180,14 @@ export function EditorRoute(): React.JSX.Element {
     setActiveSlideIndex(next.slideIndex);
   };
 
-  const handleSelectSlide = (songIndex: number, slideIndex: number) => {
-    if (songIndex < 0 || songIndex >= songs.length) return;
-    selectPosition(clampPosition({ songIndex, slideIndex }, songs));
-  };
+  const selection = useSlideSelection({
+    songs,
+    position,
+    setPosition: selectPosition,
+  });
 
-  const handlePrevSlide = () => selectPosition(prevPosition(position, songs));
-  const handleNextSlide = () => selectPosition(nextPosition(position, songs));
+  const handlePrevSlide = () => selection.select(prevPosition(position, songs));
+  const handleNextSlide = () => selection.select(nextPosition(position, songs));
 
   const isEditingText = !!currentSlide && textEdit?.slideId === currentSlide.id;
   const caretOffset =
@@ -213,32 +211,8 @@ export function EditorRoute(): React.JSX.Element {
     getActivePresentation().items[songIndex]?.deck?.slides[slideIndex]?.id;
 
   const handleAddSlide = () => {
-    if (!currentSong) return;
-    addSlideToSong(safeSongIndex, [], safeSlideIndex);
-    selectPosition({
-      songIndex: safeSongIndex,
-      slideIndex: safeSlideIndex + 1,
-    });
-    startTextEdit(slideIdAt(safeSongIndex, safeSlideIndex + 1));
-  };
-
-  const handleDuplicateSlide = (songIndex: number, slideIndex: number) => {
-    duplicateSlide(songIndex, slideIndex);
-    selectPosition({ songIndex, slideIndex: slideIndex + 1 });
-  };
-
-  const handleDeleteSlide = (songIndex: number, slideIndex: number) => {
-    const slideCount = songs[songIndex]?.deck?.slides.length ?? 0;
-    if (slideCount <= 1) return;
-    removeSlideFromSong(songIndex, slideIndex);
-    if (songIndex !== safeSongIndex) return;
-    if (slideIndex === safeSlideIndex) {
-      setActiveSlideIndex(
-        Math.max(0, Math.min(safeSlideIndex, slideCount - 2)),
-      );
-    } else if (slideIndex < safeSlideIndex) {
-      setActiveSlideIndex(safeSlideIndex - 1);
-    }
+    const newId = selection.addSlide();
+    if (newId) startTextEdit(newId);
   };
 
   const middleSplitOffset = currentSlide
@@ -259,7 +233,10 @@ export function EditorRoute(): React.JSX.Element {
   const handleSplitSlide = (offset: number) => {
     const wasEditing = isEditingText;
     if (!splitSlideAtCursor(safeSongIndex, safeSlideIndex, offset)) return;
-    setActiveSlideIndex(safeSlideIndex + 1);
+    selection.select({
+      songIndex: safeSongIndex,
+      slideIndex: safeSlideIndex + 1,
+    });
     if (wasEditing) {
       startTextEdit(slideIdAt(safeSongIndex, safeSlideIndex + 1), "start");
     }
@@ -281,11 +258,11 @@ export function EditorRoute(): React.JSX.Element {
   const selectEdge = (edge: "first" | "last") => {
     if (songs.length === 0) return;
     if (edge === "first") {
-      selectPosition(INITIAL_POSITION);
+      selection.select(INITIAL_POSITION);
       return;
     }
     const lastSong = songs.length - 1;
-    selectPosition(
+    selection.select(
       clampPosition(
         {
           songIndex: lastSong,
@@ -296,20 +273,9 @@ export function EditorRoute(): React.JSX.Element {
     );
   };
 
-  const handleReorderSlide = (songIndex: number, from: number, to: number) => {
-    reorderSlides(songIndex, from, to);
-    if (songIndex !== safeSongIndex) return;
-    if (safeSlideIndex === from) {
-      setActiveSlideIndex(to);
-    } else if (from < safeSlideIndex && to >= safeSlideIndex) {
-      setActiveSlideIndex(safeSlideIndex - 1);
-    } else if (from > safeSlideIndex && to <= safeSlideIndex) {
-      setActiveSlideIndex(safeSlideIndex + 1);
-    }
-  };
-
   const handleReorderSong = (from: number, to: number) => {
     reorderSongs(from, to);
+    selection.clearInsertion();
     if (safeSongIndex === from) {
       setActiveSongIndex(to);
     } else if (from < safeSongIndex && to >= safeSongIndex) {
@@ -321,18 +287,18 @@ export function EditorRoute(): React.JSX.Element {
 
   const handleDuplicateSong = (idx: number) => {
     duplicateSongInPresentation(idx);
-    selectPosition({ songIndex: idx + 1, slideIndex: 0 });
+    selection.select({ songIndex: idx + 1, slideIndex: 0 });
   };
 
   const handleDeleteSong = (idx: number) => {
     removeSongFromPresentation(idx);
     const newCount = songs.length - 1;
     if (newCount <= 0) {
-      selectPosition(INITIAL_POSITION);
+      selection.select(INITIAL_POSITION);
       return;
     }
     if (idx === safeSongIndex) {
-      selectPosition({
+      selection.select({
         songIndex: Math.min(safeSongIndex, newCount - 1),
         slideIndex: 0,
       });
@@ -360,12 +326,19 @@ export function EditorRoute(): React.JSX.Element {
     lastSlide: () => selectEdge("last"),
     editText: () => (currentSlide ? startTextEdit() : false),
     newSlide: () => (currentSong ? handleAddSlide() : false),
-    duplicateSlide: () =>
-      currentSlide
-        ? handleDuplicateSlide(safeSongIndex, safeSlideIndex)
-        : false,
-    deleteSlide: () =>
-      currentSlide ? handleDeleteSlide(safeSongIndex, safeSlideIndex) : false,
+    duplicateSlide: selection.duplicateSelection,
+    deleteSlide: selection.deleteSelection,
+    selectAll: selection.selectAll,
+    copySlides: selection.copy,
+    cutSlides: selection.cut,
+    pasteSlides: selection.paste,
+    extendPrev: () => selection.extend(-1),
+    extendNext: () => selection.extend(1),
+    moveSlidesUp: () => selection.moveSelection("up"),
+    moveSlidesDown: () => selection.moveSelection("down"),
+    moveSlidesToStart: () => selection.moveSelection("start"),
+    moveSlidesToEnd: () => selection.moveSelection("end"),
+    clearInsertion: selection.clearInsertion,
     fontSizeUp: () =>
       currentSong
         ? handleUpdateStyle({
@@ -419,7 +392,7 @@ export function EditorRoute(): React.JSX.Element {
         }
         slideControls={{
           hasSlide: !!currentSlide,
-          canDelete: currentSlides.length > 1,
+          canDelete: selection.canDelete,
           canSplit,
           canMerge,
           splitTitle: canSplit
@@ -433,9 +406,8 @@ export function EditorRoute(): React.JSX.Element {
               ? "다음 슬라이드의 가사를 이 슬라이드 뒤에 붙입니다"
               : `합치면 ${MAX_SLIDE_LINES}줄을 넘어 합칠 수 없습니다`,
           onAdd: handleAddSlide,
-          onDuplicate: () =>
-            handleDuplicateSlide(safeSongIndex, safeSlideIndex),
-          onDelete: () => handleDeleteSlide(safeSongIndex, safeSlideIndex),
+          onDuplicate: selection.duplicateSelection,
+          onDelete: selection.deleteSelection,
           onSplit: () => handleSplitSlide(splitOffset),
           onMerge: () => mergeSlideWithNext(safeSongIndex, safeSlideIndex),
         }}
@@ -446,11 +418,22 @@ export function EditorRoute(): React.JSX.Element {
           items={songs}
           activeSongIndex={safeSongIndex}
           activeSlideIndex={safeSlideIndex}
-          onSelectSlide={handleSelectSlide}
+          selectedIds={selection.selectedIds}
+          insertion={selection.insertion}
+          canDelete={selection.canDelete}
+          canPaste={selection.canPaste}
+          onClickSlide={(songIndex, slideIndex, modifiers) =>
+            selection.clickSlide(songIndex, slideIndex, modifiers)
+          }
+          onSelectSong={selection.selectSong}
+          onSetInsertion={selection.setInsertion}
           onAddSlide={handleAddSlide}
-          onDuplicateSlide={handleDuplicateSlide}
-          onDeleteSlide={handleDeleteSlide}
-          onReorderSlide={handleReorderSlide}
+          onDuplicateSlides={selection.duplicateSelection}
+          onDeleteSlides={selection.deleteSelection}
+          onCopySlides={selection.copy}
+          onCutSlides={selection.cut}
+          onPasteSlides={selection.paste}
+          onDropSlides={selection.dropSelection}
           onReorderSong={handleReorderSong}
           onDuplicateSong={handleDuplicateSong}
           onEditSongInfo={setEditingSongIndex}
@@ -572,8 +555,10 @@ export function EditorRoute(): React.JSX.Element {
         onClose={() => setSongPickerMode(null)}
         onSelectSong={(newDeck) => {
           addDeckToPresentation(newDeck);
-          setActiveSongIndex(presentation.items.length);
-          setActiveSlideIndex(0);
+          selection.select({
+            songIndex: presentation.items.length,
+            slideIndex: 0,
+          });
           setSongPickerMode(null);
         }}
       />

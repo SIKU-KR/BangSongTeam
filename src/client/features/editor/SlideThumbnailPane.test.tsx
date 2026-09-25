@@ -37,11 +37,20 @@ function renderPane(overrides: Partial<SlideThumbnailPaneProps> = {}) {
     items: makeItems([3, 1, 2]),
     activeSongIndex: 0,
     activeSlideIndex: 0,
-    onSelectSlide: vi.fn(),
+    selectedIds: ["s-0-0"],
+    insertion: null,
+    canDelete: true,
+    canPaste: false,
+    onClickSlide: vi.fn(),
+    onSelectSong: vi.fn(),
+    onSetInsertion: vi.fn(),
     onAddSlide: vi.fn(),
-    onDuplicateSlide: vi.fn(),
-    onDeleteSlide: vi.fn(),
-    onReorderSlide: vi.fn(),
+    onDuplicateSlides: vi.fn(),
+    onDeleteSlides: vi.fn(),
+    onCopySlides: vi.fn(),
+    onCutSlides: vi.fn(),
+    onPasteSlides: vi.fn(),
+    onDropSlides: vi.fn(),
     onReorderSong: vi.fn(),
     onDuplicateSong: vi.fn(),
     onEditSongInfo: vi.fn(),
@@ -74,46 +83,165 @@ describe("SlideThumbnailPane (PPT식 썸네일 창)", () => {
     expect(screen.getAllByTestId("static-background-layer")).toHaveLength(6);
   });
 
-  it("썸네일 클릭은 (곡, 곡 안 슬라이드) 위치로 선택을 알린다", () => {
+  it("썸네일 클릭은 (곡, 곡 안 슬라이드)와 Ctrl/⌘·Shift 여부를 알리고 창에 포커스를 준다", () => {
     const { props } = renderPane();
 
     fireEvent.click(screen.getByTestId("slide-thumb-4"));
-    expect(props.onSelectSlide).toHaveBeenCalledWith(2, 0);
+    expect(props.onClickSlide).toHaveBeenCalledWith(2, 0, {
+      shift: false,
+      mod: false,
+    });
+    expect(screen.getByTestId("slide-pane-list")).toHaveFocus();
 
-    fireEvent.click(screen.getByTestId("song-section-title-1"));
-    expect(props.onSelectSlide).toHaveBeenLastCalledWith(1, 0);
+    fireEvent.click(screen.getByTestId("slide-thumb-1"), { metaKey: true });
+    expect(props.onClickSlide).toHaveBeenLastCalledWith(0, 1, {
+      shift: false,
+      mod: true,
+    });
+
+    fireEvent.click(screen.getByTestId("slide-thumb-2"), { shiftKey: true });
+    expect(props.onClickSlide).toHaveBeenLastCalledWith(0, 2, {
+      shift: true,
+      mod: false,
+    });
   });
 
-  it("선택 슬라이드를 aria-current로 표시한다", () => {
-    renderPane({ activeSongIndex: 2, activeSlideIndex: 1 });
+  it("곡 머리글을 누르면 그 곡 전체를 선택한다", () => {
+    const { props } = renderPane();
 
-    expect(screen.getByTestId("slide-thumb-5")).toHaveAttribute(
+    fireEvent.click(screen.getByTestId("song-section-title-1"));
+    expect(props.onSelectSong).toHaveBeenCalledWith(1);
+  });
+
+  it("선택한 슬라이드를 모두 aria-selected로, 현재 슬라이드를 aria-current로 표시한다", () => {
+    renderPane({
+      activeSongIndex: 0,
+      activeSlideIndex: 2,
+      selectedIds: ["s-0-0", "s-0-2"],
+    });
+
+    for (const index of [0, 2]) {
+      expect(screen.getByTestId(`slide-thumb-${index}`)).toHaveAttribute(
+        "aria-selected",
+        "true",
+      );
+    }
+    expect(screen.getByTestId("slide-thumb-1")).toHaveAttribute(
+      "aria-selected",
+      "false",
+    );
+    expect(screen.getByTestId("slide-thumb-2")).toHaveAttribute(
       "aria-current",
       "true",
-    );
-    expect(screen.getByTestId("slide-thumb-5").className).toContain(
-      "bg-accent/80",
     );
     expect(screen.getByTestId("slide-thumb-0")).not.toHaveAttribute(
       "aria-current",
     );
-    expect(screen.getByTestId("slide-thumb-0").className).not.toContain(
-      "bg-accent/80",
+  });
+
+  it("썸네일 사이 틈을 누르면 삽입 커서를 두고, 삽입 커서 자리에 가로선을 그린다", () => {
+    const { props, rerender } = renderPane();
+
+    fireEvent.click(screen.getByTestId("slide-gap-2-1"));
+    expect(props.onSetInsertion).toHaveBeenCalledWith({
+      songIndex: 2,
+      index: 1,
+    });
+    expect(screen.getByTestId("slide-gap-2-1")).not.toHaveAttribute(
+      "data-active",
+    );
+
+    rerender(
+      <SlideThumbnailPane
+        {...props}
+        selectedIds={[]}
+        insertion={{ songIndex: 2, index: 1 }}
+      />,
+    );
+    expect(screen.getByTestId("slide-gap-2-1")).toHaveAttribute(
+      "data-active",
+      "true",
+    );
+    expect(screen.getByTestId("slide-thumb-0")).toHaveAttribute(
+      "aria-selected",
+      "false",
     );
   });
 
-  it("복제·삭제 버튼은 (곡, 슬라이드)를 넘기고, 1장짜리 곡에는 삭제가 없다", () => {
+  it("hover 복제·삭제 버튼 대신 우클릭 메뉴로 슬라이드를 다룬다", async () => {
+    const { props } = renderPane({ canPaste: true });
+
+    expect(screen.queryByTestId(/duplicate-slide-btn/)).not.toBeInTheDocument();
+
+    fireEvent.contextMenu(screen.getByTestId("slide-thumb-0"));
+    const menu = await screen.findByTestId("slide-pane-menu");
+    expect(menu).toHaveTextContent("잘라내기");
+    expect(props.onClickSlide).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("menuitem", { name: /슬라이드 복제/ }));
+    expect(props.onDuplicateSlides).toHaveBeenCalledTimes(1);
+  });
+
+  it("선택 밖의 썸네일을 우클릭하면 그 장만 선택한다", async () => {
     const { props } = renderPane();
 
-    fireEvent.click(screen.getByTestId("duplicate-slide-btn-5"));
-    expect(props.onDuplicateSlide).toHaveBeenCalledWith(2, 1);
-    expect(props.onSelectSlide).not.toHaveBeenCalled();
+    fireEvent.contextMenu(screen.getByTestId("slide-thumb-2"));
+    await screen.findByTestId("slide-pane-menu");
+    expect(props.onClickSlide).toHaveBeenCalledWith(0, 2, {
+      shift: false,
+      mod: false,
+    });
+  });
 
-    fireEvent.click(screen.getByTestId("delete-slide-btn-1"));
-    expect(props.onDeleteSlide).toHaveBeenCalledWith(0, 1);
+  it("지울 수 없거나 붙여넣을 것이 없으면 메뉴 항목이 비활성이다", async () => {
+    renderPane({ canDelete: false, canPaste: false });
 
-    expect(screen.queryByTestId("delete-slide-btn-3")).not.toBeInTheDocument();
-    expect(screen.getByTestId("duplicate-slide-btn-3")).toBeInTheDocument();
+    fireEvent.contextMenu(screen.getByTestId("slide-thumb-0"));
+    await screen.findByTestId("slide-pane-menu");
+    for (const name of [/잘라내기/, /붙여넣기/, /슬라이드 삭제/]) {
+      expect(screen.getByRole("menuitem", { name })).toHaveAttribute(
+        "aria-disabled",
+        "true",
+      );
+    }
+    expect(screen.getByRole("menuitem", { name: /복사/ })).not.toHaveAttribute(
+      "aria-disabled",
+    );
+  });
+
+  it("틈을 우클릭하면 그 자리에 삽입 커서를 두고 붙여넣기·새 슬라이드만 보여 준다", async () => {
+    const { props } = renderPane({ canPaste: true });
+
+    fireEvent.contextMenu(screen.getByTestId("slide-gap-0-3"));
+    const menu = await screen.findByTestId("slide-pane-menu");
+    expect(props.onSetInsertion).toHaveBeenCalledWith({
+      songIndex: 0,
+      index: 3,
+    });
+    expect(screen.getAllByRole("menuitem")).toHaveLength(2);
+    expect(menu).not.toHaveTextContent("삭제");
+
+    fireEvent.click(screen.getByRole("menuitem", { name: /붙여넣기/ }));
+    expect(props.onPasteSlides).toHaveBeenCalledTimes(1);
+  });
+
+  it("곡 머리글 메뉴의 모두 축소·모두 확장은 모든 구역을 접고 편다", async () => {
+    renderPane();
+
+    fireEvent.contextMenu(screen.getByTestId("song-section-1"));
+    await screen.findByTestId("slide-pane-menu");
+    fireEvent.click(screen.getByRole("menuitem", { name: "모두 축소" }));
+    await waitFor(() =>
+      expect(screen.queryByTestId("slide-thumb-0")).not.toBeInTheDocument(),
+    );
+    expect(screen.queryByTestId("slide-thumb-5")).not.toBeInTheDocument();
+
+    fireEvent.contextMenu(screen.getByTestId("song-section-1"));
+    await screen.findByTestId("slide-pane-menu");
+    fireEvent.click(screen.getByRole("menuitem", { name: "모두 확장" }));
+    await waitFor(() =>
+      expect(screen.getByTestId("slide-thumb-5")).toBeInTheDocument(),
+    );
   });
 
   it("구역 메뉴는 ⋯ 또는 우클릭으로 열리고, Esc로 닫힌다", async () => {
@@ -134,6 +262,7 @@ describe("SlideThumbnailPane (PPT식 썸네일 창)", () => {
     );
 
     fireEvent.contextMenu(screen.getByTestId("song-section-2"));
+    await screen.findByTestId("slide-pane-menu");
     expect(
       screen.getByRole("menuitem", { name: "아래로 이동" }),
     ).toHaveAttribute("aria-disabled", "true");

@@ -15,7 +15,7 @@ One Cloudflare Worker serves the Vite SPA and the Hono API (`/api/*`), bound to 
 - **Data**: D1 + Drizzle ORM (FTS5 trigram search), R2 for background MP4s and posters
 - **Auth**: Better Auth with Kakao/Naver (when configured), allowlisted email/password, and a localhost-only dev login
 - **Offline**: `vite-plugin-pwa` (Workbox `generateSW`), `idb`
-- **UI libs**: `react-moveable` (text box), `@dnd-kit/sortable` (reordering), `tinykeys` (shortcuts), fonts bundled from npm (`pretendard`, `@fontsource/*`), never from a CDN
+- **UI libs**: `react-moveable` (text box), `@dnd-kit/core` (drag and drop), `tinykeys` (shortcuts), fonts bundled from npm (`pretendard`, `@fontsource/*`), never from a CDN
 - **Tooling**: Zod 3, Vite 8, Vitest 3 + `@cloudflare/vitest-pool-workers`
 
 ## Layout
