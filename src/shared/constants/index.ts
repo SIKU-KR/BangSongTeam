@@ -1,15 +1,23 @@
 import { GridAnchorPreset, TextBoxPosition } from "../schemas/style";
+import { NOONNU_SUPPORTED_FONT_NAMES } from "./noonnuFonts";
+
+export * from "./noonnuFonts";
 
 /**
- * 지원하는 한글 및 영문 기본 웹폰트 목록
+ * 기본 프리셋 한글 웹폰트 목록
  */
-export const SUPPORTED_FONTS = [
+export const DEFAULT_PRESET_FONTS = [
   "Pretendard",
   "Noto Sans KR",
   "Nanum Myeongjo",
   "Gmarket Sans",
   "KoPubWorld Batang",
 ] as const;
+
+/**
+ * 지원하는 한글 및 영문 웹폰트 전체 목록 (눈누 무료 웹폰트 포함)
+ */
+export const SUPPORTED_FONTS = NOONNU_SUPPORTED_FONT_NAMES;
 export type SupportedFont = (typeof SUPPORTED_FONTS)[number];
 
 /**

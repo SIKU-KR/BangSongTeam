@@ -4,12 +4,20 @@ import { Input } from "#components/ui/input";
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
+  SelectSeparator,
   SelectTrigger,
   SelectValue,
 } from "#components/ui/select";
 import type { DeckStyle } from "#shared";
-import { SUPPORTED_FONTS } from "#shared";
+import {
+  DEFAULT_PRESET_FONTS,
+  INDEX_POPULAR_FONT_NAMES,
+  NOONNU_FONTS,
+} from "#shared";
+import { loadWebFont } from "../../../lib/fonts/fontLoader";
 import { ColorPickerField } from "../ColorPickerField";
 import { ToggleGroup, ToggleGroupItem } from "#components/ui/toggle-group";
 import { RibbonChoices, RibbonDropdown } from "./RibbonDropdown";
@@ -50,6 +58,34 @@ export function FontControls({
     setSizeText(String(sizePt));
   };
 
+  const [fontSearch, setFontSearch] = useState("");
+
+  useEffect(() => {
+    if (style.fontFamily) {
+      loadWebFont(style.fontFamily);
+    }
+  }, [style.fontFamily]);
+
+  const presetSet = new Set<string>(DEFAULT_PRESET_FONTS);
+  const searchTrimmed = fontSearch.trim().toLowerCase();
+
+  const filteredFonts = React.useMemo(() => {
+    if (!searchTrimmed) {
+      return NOONNU_FONTS.filter(
+        (f) =>
+          !presetSet.has(f.name) &&
+          (INDEX_POPULAR_FONT_NAMES.includes(f.name) ||
+            f.name === style.fontFamily),
+      );
+    }
+    return NOONNU_FONTS.filter(
+      (f) =>
+        f.name.toLowerCase().includes(searchTrimmed) ||
+        f.author.toLowerCase().includes(searchTrimmed) ||
+        f.cardFamily.toLowerCase().includes(searchTrimmed),
+    ).slice(0, 50);
+  }, [searchTrimmed, style.fontFamily]);
+
   return (
     <RibbonGroup label="글꼴">
       <Select
@@ -57,6 +93,7 @@ export function FontControls({
         disabled={disabled}
         onValueChange={(value) => {
           if (value) {
+            loadWebFont(value);
             onUpdateStyle({ fontFamily: value as DeckStyle["fontFamily"] });
           }
         }}
@@ -64,12 +101,66 @@ export function FontControls({
         <SelectTrigger aria-label="글꼴" className="w-36 text-xs">
           <SelectValue />
         </SelectTrigger>
-        <SelectContent>
-          {SUPPORTED_FONTS.map((font) => (
-            <SelectItem key={font} value={font} style={{ fontFamily: font }}>
-              {font}
-            </SelectItem>
-          ))}
+        <SelectContent className="max-h-72 w-56">
+          <div className="border-b border-border p-1">
+            <Input
+              type="text"
+              placeholder="글꼴 검색 (1,100+종)..."
+              value={fontSearch}
+              onChange={(e) => setFontSearch(e.target.value)}
+              onKeyDown={(e) => e.stopPropagation()}
+              className="h-7 text-xs"
+            />
+          </div>
+          {!searchTrimmed && (
+            <>
+              <SelectGroup>
+                <SelectLabel className="px-2 py-1 text-2xs text-muted-foreground">
+                  기본 글꼴
+                </SelectLabel>
+                {DEFAULT_PRESET_FONTS.map((font) => (
+                  <SelectItem
+                    key={font}
+                    value={font}
+                    style={{ fontFamily: font }}
+                  >
+                    {font}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+              <SelectSeparator />
+              <SelectGroup>
+                <SelectLabel className="px-2 py-1 text-2xs text-muted-foreground">
+                  인기 무료 웹폰트
+                </SelectLabel>
+                {filteredFonts.map((font) => (
+                  <SelectItem
+                    key={font.name}
+                    value={font.name}
+                    style={{ fontFamily: font.name }}
+                  >
+                    {font.name}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+            </>
+          )}
+          {searchTrimmed && (
+            <SelectGroup>
+              <SelectLabel className="px-2 py-1 text-2xs text-muted-foreground">
+                검색 결과 ({filteredFonts.length}개)
+              </SelectLabel>
+              {filteredFonts.map((font) => (
+                <SelectItem
+                  key={font.name}
+                  value={font.name}
+                  style={{ fontFamily: font.name }}
+                >
+                  {font.name}
+                </SelectItem>
+              ))}
+            </SelectGroup>
+          )}
         </SelectContent>
       </Select>
 

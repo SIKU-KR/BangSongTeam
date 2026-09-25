@@ -1,4 +1,5 @@
 import { collectPresentationFonts, type Presentation } from "#shared";
+import { loadWebFont } from "../fonts/fontLoader";
 
 function sampleTextOf(presentation: Presentation): string {
   const chars = new Set<string>();
@@ -21,6 +22,11 @@ export async function warmPresentationFonts(
 
   const fonts = collectPresentationFonts(presentation);
   if (fonts.length === 0) return;
+
+  // 동적 웹폰트 @font-face 스타일 주입
+  for (const fontFamily of fonts) {
+    loadWebFont(fontFamily);
+  }
 
   const sample = sampleTextOf(presentation);
   if (!sample) return;

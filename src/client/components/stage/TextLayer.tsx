@@ -1,6 +1,7 @@
-import React from "react";
+import React, { useEffect } from "react";
 import type { Slide, DeckStyle, GridAnchorPreset } from "#shared";
 import { GRID_ANCHOR_TRANSFORMS, TEXT_SHADOW_PRESETS } from "#shared";
+import { loadWebFont } from "../../lib/fonts/fontLoader";
 
 export interface TextLayerProps {
   slide?: Slide | null;
@@ -42,6 +43,12 @@ export function TextLayer({
 
   const textShadow =
     TEXT_SHADOW_PRESETS[textShadowLevel] ?? TEXT_SHADOW_PRESETS.medium;
+
+  useEffect(() => {
+    if (fontFamily) {
+      loadWebFont(fontFamily);
+    }
+  }, [fontFamily]);
 
   const lines = slide?.lines ?? [];
 
