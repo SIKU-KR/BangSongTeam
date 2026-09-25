@@ -1,5 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { env } from "cloudflare:test";
+import { eq, like } from "drizzle-orm";
+import { account, createD1Client, session, user } from "#db";
 import app from "../index";
 import type { Bindings } from "../types";
 import { ID_PATTERN } from "#shared";
@@ -8,6 +10,7 @@ import {
   isEmailSignupAllowed,
   parseEmailAllowlist,
 } from "../lib/auth";
+import { clearTables } from "../test/db";
 
 const ALLOWED = "worship.team@email.test";
 const PASSWORD = "correct-horse-battery";
@@ -50,10 +53,11 @@ function signUp(bindings: Bindings, overrides: Record<string, string> = {}) {
 }
 
 async function countUsers(email: string): Promise<number> {
-  const rows = await env.DB.prepare("SELECT id FROM user WHERE email = ?")
-    .bind(email)
-    .all();
-  return rows.results.length;
+  const rows = await createD1Client(env.DB)
+    .select({ id: user.id })
+    .from(user)
+    .where(eq(user.email, email));
+  return rows.length;
 }
 
 describe("가입 허용 목록", () => {
@@ -81,9 +85,10 @@ describe("가입 허용 목록", () => {
 
 describe("이메일 가입·로그인", () => {
   beforeEach(async () => {
-    await env.DB.exec("DELETE FROM session");
-    await env.DB.exec("DELETE FROM account");
-    await env.DB.exec("DELETE FROM user WHERE email LIKE '%@email.test'");
+    await clearTables(session, account);
+    await createD1Client(env.DB)
+      .delete(user)
+      .where(like(user.email, "%@email.test"));
   });
 
   it("허용 목록이 없으면 가입 경로는 404이고 로그인도 막힌다", async () => {
@@ -119,24 +124,24 @@ describe("이메일 가입·로그인", () => {
     expect(res.status).toBe(200);
     expect(res.headers.get("set-cookie")).toMatch(/session_token/);
 
-    const users = await env.DB.prepare(
-      "SELECT id, email_verified AS verified FROM user WHERE email = ?",
-    )
-      .bind(ALLOWED)
-      .all<{ id: string; verified: number }>();
-    expect(users.results).toHaveLength(1);
-    expect(users.results[0].id).toMatch(ID_PATTERN);
-    expect(users.results[0].verified).toBe(0);
+    const users = await createD1Client(env.DB)
+      .select({ id: user.id, verified: user.emailVerified })
+      .from(user)
+      .where(eq(user.email, ALLOWED));
+    expect(users).toHaveLength(1);
+    expect(users[0].id).toMatch(ID_PATTERN);
+    expect(users[0].verified).toBe(false);
   });
 
   it("비밀번호는 PBKDF2 형식으로 저장된다", async () => {
     await signUp(withAllowlist(ALLOWED));
 
-    const row = await env.DB.prepare(
-      "SELECT a.password FROM account a JOIN user u ON u.id = a.user_id WHERE u.email = ?",
-    )
-      .bind(ALLOWED)
-      .first<{ password: string }>();
+    const row = await createD1Client(env.DB)
+      .select({ password: account.password })
+      .from(account)
+      .innerJoin(user, eq(user.id, account.userId))
+      .where(eq(user.email, ALLOWED))
+      .get();
     expect(row?.password).toMatch(/^pbkdf2-sha256\$/);
   });
 

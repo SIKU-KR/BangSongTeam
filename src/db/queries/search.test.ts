@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { eq } from "drizzle-orm";
 import { createTestDb, type TestDbResult } from "../test-utils";
-import { decks, user, type NewDeck } from "../schema";
+import { decks, decksFts, user, type NewDeck } from "../schema";
 import { planSearch, sanitizeFts5Query, searchPublicDecks } from "./search";
 
 const USER_A = "00000000x000000000001";
@@ -219,9 +219,10 @@ describe("searchPublicDecks", () => {
   });
 
   it("does not index presentation clones via the FTS triggers", async () => {
-    const rows = testDb.sqlite
-      .prepare("SELECT deck_id FROM decks_fts ORDER BY deck_id")
-      .all() as { deck_id: string }[];
-    expect(rows.map((r) => r.deck_id)).toEqual(["s1", "s2", "s4"]);
+    const rows = await db
+      .select({ deckId: decksFts.deckId })
+      .from(decksFts)
+      .orderBy(decksFts.deckId);
+    expect(rows.map((r) => r.deckId)).toEqual(["s1", "s2", "s4"]);
   });
 });

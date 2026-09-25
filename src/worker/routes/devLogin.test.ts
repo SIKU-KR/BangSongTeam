@@ -1,9 +1,12 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { env } from "cloudflare:test";
+import { eq, inArray, like, or } from "drizzle-orm";
+import { account, createD1Client, session, user } from "#db";
 import app from "../index";
 import type { Bindings } from "../types";
 import { ID_PATTERN } from "#shared";
 import { isDevLoginEnabled } from "../lib/auth";
+import { clearTables } from "../test/db";
 
 function withDevLogin(enabled: boolean): Bindings {
   return {
@@ -70,13 +73,24 @@ describe("개발자 로그인 가드", () => {
   });
 });
 
+function devUsers(): Promise<{ id: string }[]> {
+  return createD1Client(env.DB)
+    .select({ id: user.id })
+    .from(user)
+    .where(eq(user.email, "dev@worship.local"));
+}
+
 describe("개발자 로그인 라우트", () => {
   beforeEach(async () => {
-    await env.DB.exec("DELETE FROM session");
-    await env.DB.exec("DELETE FROM account");
-    await env.DB.exec(
-      "DELETE FROM user WHERE email LIKE '%@worship.local' OR email LIKE '%@dev.local'",
-    );
+    await clearTables(session, account);
+    await createD1Client(env.DB)
+      .delete(user)
+      .where(
+        or(
+          like(user.email, "%@worship.local"),
+          like(user.email, "%@dev.local"),
+        ),
+      );
   });
 
   it("비활성 상태에서는 404다 (존재를 드러내지 않는다)", async () => {
@@ -97,29 +111,25 @@ describe("개발자 로그인 라우트", () => {
 
     expect(second.status).toBeLessThan(400);
 
-    const users = await env.DB.prepare(
-      "SELECT id FROM user WHERE email = 'dev@worship.local'",
-    ).all();
-    expect(users.results).toHaveLength(1);
+    expect(await devUsers()).toHaveLength(1);
   });
 
   it("개발자 계정 id는 21자 NanoID다 (DeckSchema.userId를 통과해야 한다)", async () => {
     await post("/api/dev-login", {}, withDevLogin(true));
 
-    const users = await env.DB.prepare(
-      "SELECT id FROM user WHERE email = 'dev@worship.local'",
-    ).all();
-    expect(users.results[0].id).toMatch(ID_PATTERN);
+    const [devUser] = await devUsers();
+    expect(devUser.id).toMatch(ID_PATTERN);
   });
 
   it("이메일을 바꾸면 다른 계정이 된다 (교차 사용자 확인용)", async () => {
     await post("/api/dev-login", { email: "a@dev.local" }, withDevLogin(true));
     await post("/api/dev-login", { email: "b@dev.local" }, withDevLogin(true));
 
-    const users = await env.DB.prepare(
-      "SELECT id FROM user WHERE email IN ('a@dev.local','b@dev.local')",
-    ).all();
-    expect(users.results).toHaveLength(2);
+    const users = await createD1Client(env.DB)
+      .select({ id: user.id })
+      .from(user)
+      .where(inArray(user.email, ["a@dev.local", "b@dev.local"]));
+    expect(users).toHaveLength(2);
   });
 
   it("이메일 형식이 아니면 400이다", async () => {

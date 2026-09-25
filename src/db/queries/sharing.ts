@@ -11,6 +11,7 @@ import { decks, user, type Deck, type NewDeck } from "../schema";
 import { toDeckRow, toSharedDeck } from "./mappers";
 import { publicDeckCondition } from "./publicScope";
 import { nullifyUnknownBackgrounds } from "./backgrounds";
+import { runStatements } from "./batch";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type DbInstance = any;
@@ -191,11 +192,7 @@ export async function forkPublicDeck(
       .set({ forkCount: sql`${decks.forkCount} + 1` })
       .where(eq(decks.id, sourceId)),
   ];
-  if (typeof db.batch === "function") {
-    await db.batch(statements);
-  } else {
-    for (const statement of statements) await statement;
-  }
+  await runStatements(db, statements);
 
   const [saved]: Deck[] = await db
     .select()

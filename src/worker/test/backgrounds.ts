@@ -12,7 +12,7 @@ export function serviceBackgroundId(index: number): string {
 }
 
 export async function resetBackgrounds(serviceCount = 0): Promise<string[]> {
-  await env.DB.exec("DELETE FROM backgrounds");
+  await createD1Client(env.DB).delete(backgrounds);
   const ids = Array.from({ length: serviceCount }, (_, index) =>
     serviceBackgroundId(index + 1),
   );

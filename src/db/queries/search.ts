@@ -1,5 +1,5 @@
-import { and, desc, eq, sql, type SQL } from "drizzle-orm";
-import { decks, user, type Deck } from "../schema";
+import { and, desc, eq, inArray, like, or, sql, type SQL } from "drizzle-orm";
+import { decks, decksFts, user, type Deck } from "../schema";
 import { publicDeckCondition } from "./publicScope";
 import { nullifyUnknownBackgrounds } from "./backgrounds";
 
@@ -56,19 +56,12 @@ export function planSearch(query: string): SearchPlan {
   return {
     kind: "search",
     match: long.length > 0 ? long.map((t) => `"${t}"`).join(" ") : null,
-    likePatterns: short.map((t) => `%${escapeLike(t)}%`),
+    likePatterns: short.map((t) => `%${t}%`),
   };
 }
 
-function escapeLike(token: string): string {
-  return token.replace(/[\\%_]/g, (ch) => `\\${ch}`);
-}
-
-function likeAny(columns: SQL[], pattern: string): SQL {
-  return sql`(${sql.join(
-    columns.map((col) => sql`${col} LIKE ${pattern} ESCAPE '\\'`),
-    sql` OR `,
-  )})`;
+function fts5Match(query: string): SQL {
+  return sql`${decksFts} MATCH ${query}`;
 }
 
 export interface PublicDeckSearchRow {
@@ -94,15 +87,22 @@ export async function searchPublicDecks(
   if (plan.kind === "search") {
     if (plan.match) {
       conditions.push(
-        sql`${decks.id} IN (SELECT deck_id FROM decks_fts WHERE decks_fts MATCH ${plan.match})`,
+        inArray(
+          decks.id,
+          db
+            .select({ deckId: decksFts.deckId })
+            .from(decksFts)
+            .where(fts5Match(plan.match)),
+        ),
       );
     }
     for (const pattern of plan.likePatterns) {
       conditions.push(
-        likeAny(
-          [sql`${decks.title}`, sql`${decks.artist}`, sql`${decks.lyricsRaw}`],
-          pattern,
-        ),
+        or(
+          like(decks.title, pattern),
+          like(decks.artist, pattern),
+          like(decks.lyricsRaw, pattern),
+        ) as SQL,
       );
     }
   }
