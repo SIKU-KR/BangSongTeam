@@ -16,17 +16,25 @@ const MODAL_SELECTOR =
 const KEY_HANDLING_WIDGET_SELECTOR =
   '[role="combobox"], [role="listbox"], [role="menu"], [role="slider"], [role="dialog"]';
 
+/** 슬라이드 썸네일 창. 창 자체가 listbox라 위젯 판별보다 먼저 본다 */
+const SLIDE_PANE_SELECTOR = "[data-slide-pane]";
+
 function readContext(): EditorShortcutContext {
   const active = document.activeElement;
+  const paneFocused =
+    active instanceof HTMLElement &&
+    active.closest(SLIDE_PANE_SELECTOR) !== null;
   const typing =
     active instanceof HTMLInputElement ||
     active instanceof HTMLTextAreaElement ||
     active instanceof HTMLSelectElement ||
     (active instanceof HTMLElement &&
       (active.isContentEditable ||
-        active.closest(KEY_HANDLING_WIDGET_SELECTOR) !== null));
+        (!paneFocused &&
+          active.closest(KEY_HANDLING_WIDGET_SELECTOR) !== null)));
   return {
     typing,
+    paneFocused,
     modalOpen: document.querySelector(MODAL_SELECTOR) !== null,
     onButton:
       active instanceof HTMLElement &&

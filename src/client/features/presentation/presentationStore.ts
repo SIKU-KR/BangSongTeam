@@ -684,33 +684,97 @@ export function addSlideToSong(
   emitChange();
 }
 
-export function removeSlideFromSong(
+/**
+ * 한 곡에서 여러 슬라이드를 한 번에 지운다(되돌리기 한 단계). 곡에는 슬라이드가
+ * 한 장 이상 남아야 하므로, 모두 지우게 되면 아무것도 하지 않고 `false`를 돌려준다.
+ */
+export function removeSlides(
   songIndex: number,
-  slideIndex: number,
-): void {
-  const item = readActive().items[songIndex];
-  if (!item || !item.deck || item.deck.slides.length <= 1) return;
+  slideIndexes: readonly number[],
+): boolean {
+  const slides = readActive().items[songIndex]?.deck?.slides;
+  if (!slides) return false;
+  const targets = new Set(
+    slideIndexes.filter((index) => index >= 0 && index < slides.length),
+  );
+  if (targets.size === 0 || targets.size >= slides.length) return false;
 
   pushHistory();
+  replaceSongSlides(
+    songIndex,
+    slides.filter((_, index) => !targets.has(index)),
+  );
+  return true;
+}
 
-  const slides = item.deck.slides.filter((_, idx) => idx !== slideIndex);
-  const reorderedSlides = slides.map((s, idx) => ({ ...s, order: idx }));
+/**
+ * 한 곡 안에서 여러 슬라이드를 순서를 지킨 채 한 덩어리로 옮긴다.
+ * `insertBefore`는 옮기기 전 목록 기준의 틈 번호(0 = 맨 앞, length = 맨 뒤)다.
+ * 순서가 그대로면 되돌리기 기록도 남기지 않는다.
+ */
+export function moveSlides(
+  songIndex: number,
+  slideIndexes: readonly number[],
+  insertBefore: number,
+): void {
+  const slides = readActive().items[songIndex]?.deck?.slides;
+  if (!slides) return;
+  const targets = new Set(
+    slideIndexes.filter((index) => index >= 0 && index < slides.length),
+  );
+  if (targets.size === 0) return;
 
-  const updatedDeck: Deck = {
-    ...item.deck,
-    slides: reorderedSlides,
-    updatedAt: new Date().toISOString(),
-  };
+  const at = Math.max(0, Math.min(insertBefore, slides.length));
+  const moving = slides.filter((_, index) => targets.has(index));
+  const before = slides.filter((_, index) => index < at && !targets.has(index));
+  const after = slides.filter((_, index) => index >= at && !targets.has(index));
+  const next = [...before, ...moving, ...after];
+  if (next.every((slide, index) => slide === slides[index])) return;
 
-  const updatedItems = [...readActive().items];
-  updatedItems[songIndex] = { ...item, deck: updatedDeck };
+  pushHistory();
+  replaceSongSlides(songIndex, next);
+}
 
-  writeActive({
-    ...readActive(),
-    items: updatedItems,
-    updatedAt: new Date().toISOString(),
-  });
-  emitChange();
+/** 가사 목록으로 새 슬라이드들을 `atIndex` 자리에 넣는다(붙여넣기). 새 id를 받는다. */
+export function insertSlides(
+  songIndex: number,
+  atIndex: number,
+  linesList: readonly string[][],
+): void {
+  const slides = readActive().items[songIndex]?.deck?.slides;
+  if (!slides || linesList.length === 0) return;
+
+  pushHistory();
+  const at = Math.max(0, Math.min(atIndex, slides.length));
+  const inserted: Slide[] = linesList.map((lines, offset) => ({
+    id: createSlideId(),
+    order: at + offset,
+    lines: [...lines],
+  }));
+  replaceSongSlides(songIndex, [
+    ...slides.slice(0, at),
+    ...inserted,
+    ...slides.slice(at),
+  ]);
+}
+
+/** 여러 슬라이드를 한 덩어리로 복제해 마지막 슬라이드 뒤에 넣는다. */
+export function duplicateSlides(
+  songIndex: number,
+  slideIndexes: readonly number[],
+): void {
+  const slides = readActive().items[songIndex]?.deck?.slides;
+  if (!slides) return;
+  const sorted = [...new Set(slideIndexes)]
+    .filter((index) => index >= 0 && index < slides.length)
+    .sort((a, b) => a - b);
+  if (sorted.length === 0) return;
+
+  insertSlides(
+    songIndex,
+    sorted[sorted.length - 1] + 1,
+    sorted.map((index) => slides[index].lines),
+  );
 }
 
 function replaceSongSlides(songIndex: number, slides: Slide[]): void {
@@ -786,14 +850,6 @@ export function mergeSlideWithNext(
   next.splice(slideIndex, 2, { ...target, lines });
   replaceSongSlides(songIndex, next);
   return true;
-}
-
-export function duplicateSlide(songIndex: number, slideIndex: number): void {
-  const item = readActive().items[songIndex];
-  if (!item || !item.deck || !item.deck.slides[slideIndex]) return;
-
-  const targetSlide = item.deck.slides[slideIndex];
-  addSlideToSong(songIndex, [...targetSlide.lines], slideIndex);
 }
 
 export function reorderSongs(fromIndex: number, toIndex: number): void {
@@ -879,48 +935,6 @@ export function duplicateSongInPresentation(songIndex: number): Deck | null {
   });
   emitChange();
   return clonedDeck;
-}
-
-export function reorderSlides(
-  songIndex: number,
-  fromSlideIndex: number,
-  toSlideIndex: number,
-): void {
-  const item = readActive().items[songIndex];
-  if (!item || !item.deck) return;
-  const slides = [...item.deck.slides];
-  if (
-    fromSlideIndex < 0 ||
-    fromSlideIndex >= slides.length ||
-    toSlideIndex < 0 ||
-    toSlideIndex >= slides.length ||
-    fromSlideIndex === toSlideIndex
-  ) {
-    return;
-  }
-
-  pushHistory();
-
-  const [movedSlide] = slides.splice(fromSlideIndex, 1);
-  slides.splice(toSlideIndex, 0, movedSlide);
-
-  const reorderedSlides = slides.map((s, idx) => ({ ...s, order: idx }));
-
-  const updatedDeck: Deck = {
-    ...item.deck,
-    slides: reorderedSlides,
-    updatedAt: new Date().toISOString(),
-  };
-
-  const updatedItems = [...readActive().items];
-  updatedItems[songIndex] = { ...item, deck: updatedDeck };
-
-  writeActive({
-    ...readActive(),
-    items: updatedItems,
-    updatedAt: new Date().toISOString(),
-  });
-  emitChange();
 }
 
 const MAX_TITLE_LENGTH = 100;

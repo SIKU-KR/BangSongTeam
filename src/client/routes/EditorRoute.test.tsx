@@ -513,19 +513,29 @@ describe("EditorRoute (PowerPoint식 프레젠테이션 편집기)", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("should maintain correct active slide index when deleting an earlier slide", () => {
+  it("Ctrl/⌘ 클릭으로 고른 여러 장을 Delete로 한 번에 지우고 Ctrl+Z 한 번에 되돌린다", () => {
     renderEditor();
+    const [first, , third, fourth] = firstSong().slides;
 
-    fireEvent.click(screen.getByTestId("slide-thumb-2"));
-    const selectedLines = firstSong().slides[2].lines;
+    fireEvent.click(screen.getByTestId("slide-thumb-0"));
+    fireEvent.click(screen.getByTestId("slide-thumb-2"), { ctrlKey: true });
     expect(statusBar()).toHaveTextContent("슬라이드 3/23");
 
-    fireEvent.click(screen.getByTestId("delete-slide-btn-0"));
-
-    expect(statusBar()).toHaveTextContent("슬라이드 2/22");
+    act(() => {
+      fireEvent.keyDown(window, { key: "Delete" });
+    });
+    expect(firstSong().slides.map((s) => s.id)).not.toContain(first.id);
+    expect(firstSong().slides.map((s) => s.id)).not.toContain(third.id);
+    expect(statusBar()).toHaveTextContent("슬라이드 1/21");
     expect(
-      within(stageCanvas()).getAllByText(selectedLines[0]).length,
+      within(stageCanvas()).getAllByText(firstSong().slides[0].lines[0]).length,
     ).toBeGreaterThan(0);
+    expect(firstSong().slides[1].id).toBe(fourth.id);
+
+    act(() => {
+      fireEvent.keyDown(window, { key: "z", code: "KeyZ", ctrlKey: true });
+    });
+    expect(firstSong().slides).toHaveLength(5);
   });
 
   it("존재하지 않는 presentationId 는 /presentations 로 리다이렉트된다", () => {
@@ -803,14 +813,17 @@ describe("EditorRoute (PowerPoint식 프레젠테이션 편집기)", () => {
       expect(screen.queryByText("바뀐 제목")).not.toBeInTheDocument();
     });
 
-    it("우클릭으로 구역 메뉴가 열리고 Esc로 닫힌다", () => {
+    it("우클릭으로 구역 메뉴가 열리고 Esc로 닫힌다", async () => {
       renderEditor();
 
       fireEvent.contextMenu(screen.getByTestId("song-section-3"));
-      expect(screen.getByTestId("song-section-menu")).toBeInTheDocument();
+      const menu = await screen.findByTestId("slide-pane-menu");
+      expect(menu).toHaveTextContent("세트에서 제거");
 
-      fireEvent.keyDown(document, { key: "Escape" });
-      expect(screen.queryByTestId("song-section-menu")).not.toBeInTheDocument();
+      fireEvent.keyDown(menu, { key: "Escape" });
+      await waitFor(() =>
+        expect(screen.queryByTestId("slide-pane-menu")).not.toBeInTheDocument(),
+      );
     });
 
     it("구역을 접으면 그 곡의 썸네일만 숨고 번호는 그대로다", () => {
@@ -825,14 +838,16 @@ describe("EditorRoute (PowerPoint식 프레젠테이션 편집기)", () => {
       expect(screen.getByTestId("slide-thumb-5")).toBeInTheDocument();
     });
 
-    it("다른 곡의 슬라이드를 지워도 현재 선택은 그대로다", () => {
+    it("다른 곡의 슬라이드를 우클릭해 지우면 그 곡으로 선택이 옮겨 간다", async () => {
       renderEditor();
 
       fireEvent.click(screen.getByTestId("slide-thumb-1"));
-      fireEvent.click(screen.getByTestId("delete-slide-btn-5"));
+      fireEvent.contextMenu(screen.getByTestId("slide-thumb-6"));
+      await screen.findByTestId("slide-pane-menu");
+      fireEvent.click(screen.getByRole("menuitem", { name: /슬라이드 삭제/ }));
 
-      expect(statusBar()).toHaveTextContent("슬라이드 2/22");
-      expect(statusBar()).toHaveTextContent("곡 1/5");
+      expect(statusBar()).toHaveTextContent("슬라이드 7/22");
+      expect(statusBar()).toHaveTextContent("곡 2/5");
     });
 
     it("다른 곡을 고르면 리본이 그 곡의 서식을 보여 준다", async () => {
@@ -888,6 +903,132 @@ describe("EditorRoute (PowerPoint식 프레젠테이션 편집기)", () => {
       expect(
         screen.getByTestId("song-picker-create-lyrics-input"),
       ).toBeInTheDocument();
+    });
+  });
+
+  describe("PowerPoint식 슬라이드 창 선택·클립보드", () => {
+    const pane = () => screen.getByTestId("slide-pane-list");
+    const press = (init: Parameters<typeof fireEvent.keyDown>[1]) =>
+      act(() => {
+        fireEvent.keyDown(window, init);
+      });
+    const firstSongIds = () => firstSong().slides.map((s) => s.id);
+
+    it("Shift 클릭으로 범위를 골라 복사하고, 틈을 눌러 그 자리에 붙여넣는다", () => {
+      renderEditor();
+      const [a, b] = firstSong().slides;
+
+      fireEvent.click(screen.getByTestId("slide-thumb-0"));
+      fireEvent.click(screen.getByTestId("slide-thumb-1"), { shiftKey: true });
+      expect(pane()).toHaveFocus();
+      press({ key: "c", code: "KeyC", ctrlKey: true });
+
+      fireEvent.click(screen.getByTestId("slide-gap-0-5"));
+      expect(screen.getByTestId("slide-gap-0-5")).toHaveAttribute(
+        "data-active",
+        "true",
+      );
+      press({ key: "v", code: "KeyV", ctrlKey: true });
+
+      const slides = firstSong().slides;
+      expect(slides).toHaveLength(7);
+      expect(slides[5].lines).toEqual(a.lines);
+      expect(slides[6].lines).toEqual(b.lines);
+      expect(slides[5].id).not.toBe(a.id);
+      expect(statusBar()).toHaveTextContent("슬라이드 7/25");
+      expect(screen.getByTestId("slide-thumb-5")).toHaveAttribute(
+        "aria-selected",
+        "true",
+      );
+    });
+
+    it("복사한 곡이 아닌 곡에는 붙여넣지 않는다", async () => {
+      renderEditor();
+
+      fireEvent.click(screen.getByTestId("slide-thumb-0"));
+      press({ key: "c", code: "KeyC", ctrlKey: true });
+      fireEvent.click(screen.getByTestId("slide-thumb-5"));
+      press({ key: "v", code: "KeyV", ctrlKey: true });
+
+      expect(statusBar()).toHaveTextContent("슬라이드 6/23");
+      fireEvent.contextMenu(screen.getByTestId("slide-thumb-5"));
+      expect(
+        await screen.findByRole("menuitem", { name: /붙여넣기/ }),
+      ).toHaveAttribute("aria-disabled", "true");
+    });
+
+    it("잘라내기 후 같은 곡에 붙여넣으면 슬라이드가 옮겨 간다", () => {
+      renderEditor();
+      const ids = firstSongIds();
+
+      fireEvent.click(screen.getByTestId("slide-thumb-0"));
+      press({ key: "x", code: "KeyX", metaKey: true });
+      expect(firstSongIds()).toEqual(ids.slice(1));
+
+      fireEvent.click(screen.getByTestId("slide-thumb-3"));
+      press({ key: "v", code: "KeyV", metaKey: true });
+      expect(firstSong().slides).toHaveLength(5);
+      expect(firstSong().slides[4].lines).toEqual(
+        SEED_PRESENTATIONS[0].items[0].deck!.slides[0].lines,
+      );
+    });
+
+    it("Ctrl/⌘+↓·Ctrl/⌘+Shift+↑로 선택을 옮기고 현재 슬라이드가 따라간다", () => {
+      renderEditor();
+      const ids = firstSongIds();
+
+      fireEvent.click(screen.getByTestId("slide-thumb-1"));
+      fireEvent.click(screen.getByTestId("slide-thumb-2"), { shiftKey: true });
+      press({ key: "ArrowDown", ctrlKey: true });
+      expect(firstSongIds()).toEqual([ids[0], ids[3], ids[1], ids[2], ids[4]]);
+      expect(statusBar()).toHaveTextContent("슬라이드 4/23");
+
+      press({ key: "ArrowUp", ctrlKey: true, shiftKey: true });
+      expect(firstSongIds()).toEqual([ids[1], ids[2], ids[0], ids[3], ids[4]]);
+      expect(statusBar()).toHaveTextContent("슬라이드 2/23");
+    });
+
+    it("Shift+↓로 선택을 넓히고, Ctrl/⌘+A로 곡 전체를 고르면 지우지 않는다", () => {
+      renderEditor();
+
+      fireEvent.click(screen.getByTestId("slide-thumb-0"));
+      press({ key: "ArrowDown", shiftKey: true });
+      expect(screen.getByTestId("slide-thumb-1")).toHaveAttribute(
+        "aria-selected",
+        "true",
+      );
+      expect(screen.getByTestId("slide-thumb-0")).toHaveAttribute(
+        "aria-selected",
+        "true",
+      );
+
+      press({ key: "a", code: "KeyA", ctrlKey: true });
+      expect(screen.getByTestId("slide-thumb-4")).toHaveAttribute(
+        "aria-selected",
+        "true",
+      );
+      press({ key: "Backspace" });
+      expect(firstSong().slides).toHaveLength(5);
+    });
+
+    it("삽입 커서에서 Enter를 누르면 그 자리에 새 슬라이드를 넣고 가사 편집을 연다", () => {
+      renderEditor();
+
+      fireEvent.click(screen.getByTestId("slide-gap-0-0"));
+      press({ key: "Enter" });
+
+      expect(firstSong().slides).toHaveLength(6);
+      expect(firstSong().slides[0].lines).toEqual([]);
+      expect(statusBar()).toHaveTextContent("슬라이드 1/24");
+      expect(lyricsEditor()).toHaveValue("");
+    });
+
+    it("창 밖(캔버스)에서 Enter는 지금처럼 가사 편집을 연다", () => {
+      renderEditor();
+
+      press({ key: "Enter" });
+      expect(firstSong().slides).toHaveLength(5);
+      expect(lyricsEditor()).toBeInTheDocument();
     });
   });
 });

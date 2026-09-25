@@ -26,14 +26,15 @@ import {
   updateSongInfo,
   updateSlideLines,
   addSlideToSong,
-  removeSlideFromSong,
-  duplicateSlide,
+  removeSlides,
+  moveSlides,
+  insertSlides,
+  duplicateSlides,
   splitSlideAtCursor,
   mergeSlideWithNext,
   reorderSongs,
   removeSongFromPresentation,
   duplicateSongInPresentation,
-  reorderSlides,
   undo,
   redo,
   canUndo,
@@ -235,7 +236,7 @@ describe("presentationStore (In-memory reactive presentation)", () => {
     ]);
 
     act(() => {
-      duplicateSlide(0, 1);
+      duplicateSlides(0, [1]);
     });
     expect(result.current.items[0].deck?.slides.length).toBe(
       initialSlideCount + 2,
@@ -245,7 +246,7 @@ describe("presentationStore (In-memory reactive presentation)", () => {
     ]);
 
     act(() => {
-      removeSlideFromSong(0, 2);
+      removeSlides(0, [2]);
     });
     expect(result.current.items[0].deck?.slides.length).toBe(
       initialSlideCount + 1,
@@ -372,21 +373,78 @@ describe("presentationStore (In-memory reactive presentation)", () => {
     expect(didMerge).toBe(false);
   });
 
-  it("should reorder slides within a song", () => {
-    const { result } = renderHook(() => useActivePresentation());
-    const originalSlide0 = result.current.items[0].deck?.slides[0].lines[0];
-    const originalSlide1 = result.current.items[0].deck?.slides[1].lines[0];
+  describe("여러 슬라이드 한 번에 다루기", () => {
+    const slideIds = (songIndex = 0) =>
+      getActivePresentation().items[songIndex].deck!.slides.map((s) => s.id);
 
-    act(() => {
-      reorderSlides(0, 0, 1);
+    beforeEach(() => {
+      insertSlides(0, 0, [["가"], ["나"], ["다"], ["라"], ["마"]]);
+      while (slideIds().length > 5) {
+        removeSlides(0, [5]);
+      }
     });
 
-    expect(result.current.items[0].deck?.slides[0].lines[0]).toBe(
-      originalSlide1,
-    );
-    expect(result.current.items[0].deck?.slides[1].lines[0]).toBe(
-      originalSlide0,
-    );
+    it("moveSlides는 흩어진 선택을 순서대로 모아 틈 자리로 옮긴다", () => {
+      const [a, b, c, d, e] = slideIds();
+
+      moveSlides(0, [3, 0], 5);
+      expect(slideIds()).toEqual([b, c, e, a, d]);
+
+      moveSlides(0, [2, 4], 0);
+      expect(slideIds()).toEqual([e, d, b, c, a]);
+
+      const orders = getActivePresentation().items[0].deck!.slides.map(
+        (s) => s.order,
+      );
+      expect(orders).toEqual([0, 1, 2, 3, 4]);
+    });
+
+    it("moveSlides는 순서가 그대로면 되돌리기 기록을 남기지 않는다", () => {
+      const before = slideIds();
+
+      moveSlides(0, [1, 2], 1);
+      moveSlides(0, [1, 2], 3);
+      expect(slideIds()).toEqual(before);
+
+      undo();
+      expect(slideIds()).not.toEqual(before);
+    });
+
+    it("removeSlides는 여러 장을 한 단계로 지우고, 곡을 비우게 되면 거부한다", () => {
+      const [a, , c, , e] = slideIds();
+
+      expect(removeSlides(0, [1, 3])).toBe(true);
+      expect(slideIds()).toEqual([a, c, e]);
+
+      expect(removeSlides(0, [0, 1, 2])).toBe(false);
+      expect(slideIds()).toEqual([a, c, e]);
+
+      undo();
+      expect(slideIds()).toHaveLength(5);
+    });
+
+    it("insertSlides는 새 id로 넣는다", () => {
+      const before = slideIds();
+      insertSlides(0, 1, [["새 1"], ["새 2"]]);
+
+      const after = getActivePresentation().items[0].deck!.slides;
+      expect(after[1].lines).toEqual(["새 1"]);
+      expect(after[2].lines).toEqual(["새 2"]);
+      expect(before).not.toContain(after[1].id);
+      expect(after[1].id).not.toBe(after[2].id);
+    });
+
+    it("duplicateSlides는 선택을 한 덩어리로 마지막 선택 뒤에 복제하고 한 단계로 되돌린다", () => {
+      duplicateSlides(0, [3, 1]);
+
+      const lines = getActivePresentation().items[0].deck!.slides.map(
+        (s) => s.lines[0],
+      );
+      expect(lines).toEqual(["가", "나", "다", "라", "나", "라", "마"]);
+
+      undo();
+      expect(slideIds()).toHaveLength(5);
+    });
   });
 
   it("should support undo and redo", () => {

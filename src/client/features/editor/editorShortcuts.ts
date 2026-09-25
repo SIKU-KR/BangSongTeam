@@ -12,7 +12,18 @@ export type EditorShortcutAction =
   | "deleteSlide"
   | "fontSizeUp"
   | "fontSizeDown"
-  | "present";
+  | "present"
+  | "selectAll"
+  | "copySlides"
+  | "cutSlides"
+  | "pasteSlides"
+  | "extendPrev"
+  | "extendNext"
+  | "moveSlidesUp"
+  | "moveSlidesDown"
+  | "moveSlidesToStart"
+  | "moveSlidesToEnd"
+  | "clearInsertion";
 
 /** 키가 눌린 순간의 포커스 상황 */
 export interface EditorShortcutContext {
@@ -24,6 +35,8 @@ export interface EditorShortcutContext {
   onButton: boolean;
   /** 포커스가 body나 편집 캔버스에 있다 (Enter로 편집을 시작해도 된다) */
   canvasFocused: boolean;
+  /** 포커스가 슬라이드 썸네일 창에 있다 (선택·클립보드·이동 단축키가 동작한다) */
+  paneFocused: boolean;
 }
 
 export type EditorShortcutKeyEvent = Pick<
@@ -34,6 +47,7 @@ export type EditorShortcutKeyEvent = Pick<
 /**
  * 키 입력을 편집기 동작으로 바꾼다. 글자 키는 한글 입력 상태에서도 같도록
  * `code`로 본다. Ctrl+L/E/R(정렬)은 Chrome의 주소창·새로고침과 겹쳐 두지 않는다.
+ * 선택·클립보드·이동 키는 PowerPoint처럼 슬라이드 창에 포커스가 있을 때만 쓴다.
  */
 export function resolveEditorShortcut(
   event: EditorShortcutKeyEvent,
@@ -51,12 +65,32 @@ export function resolveEditorShortcut(
     if (event.code === "KeyD" && !event.shiftKey && !context.typing) {
       return "duplicateSlide";
     }
+    if (!context.paneFocused || context.typing) return null;
+    if (event.key === "ArrowUp") {
+      return event.shiftKey ? "moveSlidesToStart" : "moveSlidesUp";
+    }
+    if (event.key === "ArrowDown") {
+      return event.shiftKey ? "moveSlidesToEnd" : "moveSlidesDown";
+    }
+    if (event.shiftKey) return null;
+    if (event.code === "KeyA") return "selectAll";
+    if (event.code === "KeyC") return "copySlides";
+    if (event.code === "KeyX") return "cutSlides";
+    if (event.code === "KeyV") return "pasteSlides";
     return null;
   }
   if (mod || event.altKey) return null;
 
   if (event.key === "F5") return "present";
   if (context.typing) return null;
+
+  if (context.paneFocused) {
+    if (event.shiftKey && event.key === "ArrowUp") return "extendPrev";
+    if (event.shiftKey && event.key === "ArrowDown") return "extendNext";
+    if (event.key === "Enter") return context.onButton ? null : "newSlide";
+    if (event.key === "Backspace") return "deleteSlide";
+    if (event.key === "Escape") return "clearInsertion";
+  }
 
   switch (event.key) {
     case "F2":
@@ -98,6 +132,20 @@ export const EDITOR_SHORTCUT_GUIDE: ReadonlyArray<{
   { keys: "Ctrl/⌘+M", action: "새 슬라이드" },
   { keys: "Ctrl/⌘+D", action: "슬라이드 복제" },
   { keys: "Delete", action: "슬라이드 삭제" },
+  { keys: "Ctrl/⌘·Shift+클릭", action: "슬라이드 창에서 여러 장 선택" },
+  {
+    keys: "Shift+↑ ↓ / Ctrl/⌘+A",
+    action: "슬라이드 창에서 선택 넓히기 · 곡 전체",
+  },
+  {
+    keys: "Ctrl/⌘+C · X · V",
+    action: "슬라이드 창에서 복사 · 잘라내기 · 붙여넣기",
+  },
+  {
+    keys: "Ctrl/⌘+↑ ↓ (+Shift)",
+    action: "슬라이드 한 칸 위·아래로 (곡 처음·끝으로)",
+  },
+  { keys: "Enter / Backspace", action: "슬라이드 창에서 새 슬라이드 · 삭제" },
   { keys: "Ctrl/⌘+Shift+> / <", action: "글자 크기 키우기·줄이기" },
   { keys: "F5", action: "슬라이드쇼 발표" },
 ];
