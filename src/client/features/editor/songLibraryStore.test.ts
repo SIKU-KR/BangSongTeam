@@ -17,6 +17,7 @@ import {
   applyServerDeckFields,
   applyServerLibraryDecks,
   getLibraryDeck,
+  updateLibrarySongInfo,
 } from "./songLibraryStore";
 import {
   flushDeckSync,
@@ -89,6 +90,31 @@ describe("songLibraryStore", () => {
 
     deleteUserSong(saved.id);
     expect(getUserSongs().length).toBe(0);
+  });
+
+  it("보관함 곡의 제목·아티스트를 고치면 하이드레이션 후에도 남는다", async () => {
+    const saved = saveSongToLibrary({
+      title: "옛 제목",
+      artist: "옛 아티스트",
+      lyricsRaw: "가사 한 줄",
+    });
+
+    const updated = updateLibrarySongInfo(saved.id, {
+      title: "새 제목",
+      artist: "",
+    });
+    expect(updated).toMatchObject({
+      id: saved.id,
+      title: "새 제목",
+      artist: "",
+    });
+    expect(updated?.lyricsRaw).toBe(saved.lyricsRaw);
+    expect(updateLibrarySongInfo(createId(), { title: "x", artist: "" })).toBe(
+      undefined,
+    );
+
+    await hydrateSongLibrary();
+    expect(getLibraryDeck(saved.id)?.title).toBe("새 제목");
   });
 
   it("저장한 곡은 하이드레이션 후에도 남아 있어야 한다 (IndexedDB 영속)", async () => {
