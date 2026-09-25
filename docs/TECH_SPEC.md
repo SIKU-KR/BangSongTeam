@@ -117,7 +117,7 @@ flowchart TB
 | 스코프 쿼리 헬퍼 (§4.3)                   | 구현 | decks·presentations·search·sharing·reports. 공개 조건은 `publicDeckCondition()` 한 곳                            |
 | 3-Layer Slide Stage (§5.1)                | 구현 | `components/stage/*` — 편집기와 송출이 동일 컴포넌트 사용                                                        |
 | 입력 버퍼 엔진·단축키 (§5.2)              | 구현 | `useNavigationBuffer`, `usePresentationShortcuts` (tinykeys)                                                     |
-| 세트 편집기 (PRD 4.4)                     | 부분 | 커서 기준 분할·합치기 미구현 (M2 잔여). 속성 패널 '공유' 섹션 구현 (M5)                                          |
+| 세트 편집기 (PRD 4.4)                     | 구현 | 넘침 경고와 커서 기준 분할·합치기 구현 (M2). 속성 패널 '공유' 섹션 구현 (M5)                                     |
 | 미디어 프록시 `/api/media/*` (§5.4)       | 구현 | HTTP Range 지원                                                                                                  |
 | 클라이언트 영속성 (§5.5)                  | 구현 | IndexedDB가 1차 원천. 프레젠테이션과 **보관함 곡** 모두 서버와 동기화 (보관함은 M5-2에서 연결)                   |
 | Hono RPC 클라이언트 (`hc<AppType>`)       | 구현 | `AppType = ReturnType<typeof createApp>`. 라우트는 팩토리(`createApp(deps)`)라 테스트가 실제 라우트를 마운트한다 |
