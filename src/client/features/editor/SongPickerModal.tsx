@@ -20,10 +20,13 @@ export interface SongPickerModalProps {
   onClose: () => void;
   onSelectSong: (deck: Deck) => void;
   initialSearch?: string;
+  /** 열릴 때 보여 줄 화면. `create`는 목록을 건너뛰고 가사 직접 입력 폼을 바로 연다. */
+  initialMode?: SongPickerMode;
 }
 
+export type SongPickerMode = "browse" | "create";
+
 type FilterType = "all" | "mine" | "shared";
-type Mode = "browse" | "create";
 
 type PickerEntry =
   | { kind: "mine"; key: string; deck: Deck }
@@ -52,13 +55,14 @@ export function SongPickerModal({
   onClose,
   onSelectSong,
   initialSearch = "",
+  initialMode = "browse",
 }: SongPickerModalProps): React.JSX.Element | null {
   const mySongs = useUserSongs();
   const isOnline = useIsOnline();
 
   const [searchQuery, setSearchQuery] = useState(initialSearch);
   const [filter, setFilter] = useState<FilterType>("all");
-  const [mode, setMode] = useState<Mode>("browse");
+  const [mode, setMode] = useState<SongPickerMode>("browse");
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [reportTarget, setReportTarget] = useState<{
@@ -74,10 +78,11 @@ export function SongPickerModal({
   useEffect(() => {
     if (isOpen) {
       setSearchQuery(initialSearch);
-      setMode("browse");
+      setMode(initialMode);
+      setSelectedKey(null);
       setActionError(null);
     }
-  }, [isOpen, initialSearch]);
+  }, [isOpen, initialSearch, initialMode]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -120,6 +125,14 @@ export function SongPickerModal({
   const selected =
     entries.find((entry) => entry.key === selectedKey) ?? entries[0];
 
+  const emptyMessage = useMemo(() => {
+    if (search.isFetching) return "공유 라이브러리를 검색하는 중…";
+    if (searchQuery.trim()) return "일치하는 찬양곡이 없습니다.";
+    if (filter === "shared") return "아직 공유된 찬양곡이 없습니다.";
+    if (filter === "mine") return "보관함에 찬양곡이 없습니다.";
+    return "아직 등록되거나 공유된 찬양곡이 없습니다.";
+  }, [search.isFetching, searchQuery, filter]);
+
   if (!isOpen) return null;
 
   const addDeck = (deck: Deck): void => {
@@ -157,14 +170,6 @@ export function SongPickerModal({
   const serverUnavailable = !isOnline || (search.isError && !search.data);
   const sharedCount = search.data?.decks.length ?? 0;
   const isAdding = fork.isPending;
-
-  const emptyMessage = useMemo(() => {
-    if (search.isFetching) return "공유 라이브러리를 검색하는 중…";
-    if (searchQuery.trim()) return "일치하는 찬양곡이 없습니다.";
-    if (filter === "shared") return "아직 공유된 찬양곡이 없습니다.";
-    if (filter === "mine") return "보관함에 찬양곡이 없습니다.";
-    return "아직 등록되거나 공유된 찬양곡이 없습니다.";
-  }, [search.isFetching, searchQuery, filter]);
 
   return (
     <div

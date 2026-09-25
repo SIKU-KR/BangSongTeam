@@ -234,6 +234,7 @@ export function EditorHeader({
                 <button
                   type="button"
                   role="menuitem"
+                  data-testid="header-file-menu-lyric-btn"
                   onClick={() => {
                     setShowFileMenu(false);
                     onOpenLyricModal();
@@ -253,24 +254,9 @@ export function EditorHeader({
                       d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
                     />
                   </svg>
-                  <span>가사 빠른 입력</span>
+                  <span>새 가사 입력</span>
                 </button>
               )}
-              <div className="my-1 border-t border-zinc-200 dark:border-zinc-800" />
-              <button
-                type="button"
-                role="menuitem"
-                onClick={() => {
-                  setShowFileMenu(false);
-                  onPresent();
-                }}
-                className="w-full px-3 py-2 text-left text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 flex items-center gap-2 cursor-pointer font-medium"
-              >
-                <svg className="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24">
-                  <path d="M8 5v14l11-7z" />
-                </svg>
-                <span>슬라이드쇼 발표</span>
-              </button>
             </div>
           )}
         </div>
