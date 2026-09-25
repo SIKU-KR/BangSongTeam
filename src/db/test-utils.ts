@@ -24,7 +24,7 @@ export function createTestDb(): TestDbResult {
   const sqlite = new Database(":memory:");
   const db = drizzle(sqlite, { schema });
   migrate(db, {
-    migrationsFolder: path.resolve(__dirname, "../../migrations"),
+    migrationsFolder: path.resolve(__dirname, "migrations"),
   });
   return { sqlite, db };
 }

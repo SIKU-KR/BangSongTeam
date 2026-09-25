@@ -77,9 +77,9 @@ describe("Cloudflare Worker 프로젝트 설정과 Wrangler 바인딩", () => {
 });
 
 describe("로컬 개발용 환경 변수 템플릿", () => {
-  it(".dev.vars.example이 필요한 환경 변수를 모두 담는다", () => {
+  it("config/dev.vars.example이 필요한 환경 변수를 모두 담는다", () => {
     const content = fs.readFileSync(
-      path.join(rootDir, ".dev.vars.example"),
+      path.join(rootDir, "config/dev.vars.example"),
       "utf-8",
     );
     const requiredKeys = [
@@ -109,7 +109,7 @@ describe("GitHub Actions CI/CD 워크플로우 설정", () => {
     expect(content).toContain("**.md");
     expect(content).toContain(".gitignore");
     expect(content).toContain(".prettierignore");
-    expect(content).toContain(".dev.vars.example");
+    expect(content).toContain("config/dev.vars.example");
     expect(content).toContain("dorny/paths-filter");
     expect(content).toContain("Typecheck, Lint & Test");
     expect(content).toContain("Migrate D1 & Deploy Worker");

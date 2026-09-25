@@ -440,13 +440,12 @@ Vite 기반 React SPA와 Hono API를 하나의 Cloudflare Worker로 배포하고
 
 **도구:** pnpm 단일 패키지(워크스페이스 없음). 배포 단위가 Worker 하나로 고정되어 있어 패키지를 나누지 않는다(2026-09-24에 워크스페이스 6개를 하나로 합쳤다). 레이어 경계는 패키지 대신 ESLint import 규칙으로 강제한다.
 
-| 경로       | 역할                                                                             | 비고                                                                      |
-| ---------- | -------------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
-| src/client | Vite SPA                                                                         | Worker와 함께 Cloudflare Vite 플러그인으로 빌드·배포하는 하나의 배포 단위 |
-| src/worker | Worker(Hono API)                                                                 |                                                                           |
-| src/shared | 도메인 스키마, API 요청·응답 계약, 공통 상수(스타일 기본값·허용 범위, 단축키 등) | `#shared`로 import. 브라우저와 Workers 양쪽에서 도는 순수 TypeScript      |
-| src/db     | Drizzle 스키마, 쿼리 헬퍼(7.5의 user\_id·visibility 강제 포함)                   | `#db`로 import. Worker에서만 import                                       |
-| migrations | D1 마이그레이션                                                                  | drizzle-kit이 생성하고 FTS5 SQL은 손으로 덧붙인다                         |
+| 경로       | 역할                                                                                         | 비고                                                                                                  |
+| ---------- | -------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| src/client | Vite SPA                                                                                     | Worker와 함께 Cloudflare Vite 플러그인으로 빌드·배포하는 하나의 배포 단위                             |
+| src/worker | Worker(Hono API)                                                                             |                                                                                                       |
+| src/shared | 도메인 스키마, API 요청·응답 계약, 공통 상수(스타일 기본값·허용 범위, 단축키 등)             | `#shared`로 import. 브라우저와 Workers 양쪽에서 도는 순수 TypeScript                                  |
+| src/db     | Drizzle 스키마, 쿼리 헬퍼(7.5의 user\_id·visibility 강제 포함), D1 마이그레이션(migrations/) | `#db`로 import. Worker에서만 import. 마이그레이션은 drizzle-kit이 생성하고 FTS5 SQL은 손으로 덧붙인다 |
 
 **공유 타입 원칙**
 

@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import * as fs from "node:fs";
 import * as path from "node:path";
 
-const migrationsDir = path.resolve(__dirname, "../migrations");
+const migrationsDir = path.resolve(__dirname, "migrations");
 const initialSql = fs.readFileSync(
   path.join(migrationsDir, "0001_initial.sql"),
   "utf-8",
