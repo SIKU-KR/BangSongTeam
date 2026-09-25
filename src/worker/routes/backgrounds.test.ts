@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll, beforeEach, afterEach } from "vitest";
 import { env } from "cloudflare:test";
+import { inArray } from "drizzle-orm";
 import {
   BACKGROUND_UPLOAD_LIMITS,
   BackgroundDeleteResponseSchema,
@@ -9,7 +10,7 @@ import {
   DeckSchema,
   type Deck,
 } from "#shared";
-import { createD1Client, user } from "#db";
+import { createD1Client, decks, user } from "#db";
 import { createApp } from "../index";
 import type { SessionReader } from "../middleware/auth";
 import { insertUserBackgroundRow, resetBackgrounds } from "../test/backgrounds";
@@ -119,24 +120,23 @@ describe("배경 갤러리 API", () => {
   });
 
   beforeEach(async () => {
-    await env.DB.exec("DELETE FROM decks");
-    await env.DB.exec(`DELETE FROM user WHERE id IN ('${ADMIN}', '${MEMBER}')`);
-    await createD1Client(env.DB)
-      .insert(user)
-      .values([
-        {
-          id: ADMIN,
-          name: "관리자",
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        },
-        {
-          id: MEMBER,
-          name: "회원",
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        },
-      ]);
+    const db = createD1Client(env.DB);
+    await db.delete(decks);
+    await db.delete(user).where(inArray(user.id, [ADMIN, MEMBER]));
+    await db.insert(user).values([
+      {
+        id: ADMIN,
+        name: "관리자",
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+      {
+        id: MEMBER,
+        name: "회원",
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    ]);
     serviceIds = await resetBackgrounds(2);
     await insertUserBackgroundRow(MEMBER, LEGACY_UPLOAD, 5000);
     currentUser = ADMIN;

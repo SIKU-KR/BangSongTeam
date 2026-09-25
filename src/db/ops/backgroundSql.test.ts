@@ -1,5 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { eq } from "drizzle-orm";
 import { createTestDb, type TestDbResult } from "../test-utils";
+import { decks, user } from "../schema";
 import { listBackgrounds } from "../queries/backgrounds";
 import { BACKGROUND_SQL } from "./backgroundSql";
 
@@ -31,12 +33,16 @@ describe("운영 SQL (background runbook)", () => {
 
   beforeEach(() => {
     testDb = createTestDb();
-    testDb.sqlite.exec(
-      `INSERT INTO user (id, name, created_at, updated_at) VALUES ('${OWNER}', 'A', 0, 0)`,
-    );
-    testDb.sqlite.exec(
-      `UPDATE user SET email = 'admin@example.com' WHERE id = '${OWNER}'`,
-    );
+    testDb.db
+      .insert(user)
+      .values({
+        id: OWNER,
+        name: "A",
+        email: "admin@example.com",
+        createdAt: new Date(0),
+        updatedAt: new Date(0),
+      })
+      .run();
   });
 
   afterEach(() => testDb.sqlite.close());
@@ -60,19 +66,30 @@ describe("운영 SQL (background runbook)", () => {
 
   it("사전 주입 배경을 지우면 쓰던 곡은 배경 없음이 된다", () => {
     register();
-    testDb.sqlite.exec(
-      `INSERT INTO decks (id, user_id, title, lyrics_raw, slides, style, background_id) VALUES ('${DECK}', '${OWNER}', '곡', '가사', '[]', '{}', '${SERVICE}')`,
-    );
+    testDb.db
+      .insert(decks)
+      .values({
+        id: DECK,
+        userId: OWNER,
+        title: "곡",
+        lyricsRaw: "가사",
+        slides: "[]",
+        style: "{}",
+        backgroundId: SERVICE,
+      })
+      .run();
     expect(
       all("COUNT_DECKS_USING_BACKGROUND", { background_id: SERVICE })[0].decks,
     ).toBe(1);
 
     run("DELETE_SERVICE_BACKGROUND", { background_id: SERVICE });
 
-    const deck = testDb.sqlite
-      .prepare("SELECT background_id FROM decks WHERE id = ?")
-      .get(DECK) as { background_id: string | null };
-    expect(deck.background_id).toBeNull();
+    const deck = testDb.db
+      .select({ backgroundId: decks.backgroundId })
+      .from(decks)
+      .where(eq(decks.id, DECK))
+      .get();
+    expect(deck?.backgroundId).toBeNull();
   });
 
   it("관리자로 지정할 계정의 id를 이메일로 찾는다", () => {

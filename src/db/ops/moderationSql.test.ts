@@ -1,5 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { count, eq } from "drizzle-orm";
 import { createTestDb, type TestDbResult } from "../test-utils";
+import { decks, decksFts, reports, user } from "../schema";
 import { MODERATION_SQL } from "./moderationSql";
 
 const A = "00000000000000000000a";
@@ -16,24 +18,67 @@ describe("운영 SQL (moderation runbook)", () => {
       string,
       unknown
     >[];
-  const one = (sql: string, ...params: unknown[]) =>
-    testDb.sqlite.prepare(sql).get(...params) as Record<string, unknown>;
+  const deckState = (id: string) =>
+    testDb.db
+      .select({ visibility: decks.visibility, takedownAt: decks.takedownAt })
+      .from(decks)
+      .where(eq(decks.id, id))
+      .get();
+  const report = (id: string) =>
+    testDb.db
+      .select({
+        status: reports.status,
+        resolutionNote: reports.resolutionNote,
+      })
+      .from(reports)
+      .where(eq(reports.id, id))
+      .get();
 
   beforeEach(() => {
     testDb = createTestDb();
-    const s = testDb.sqlite;
-    s.exec(
-      `INSERT INTO user (id, name, created_at, updated_at) VALUES ('${A}', 'A', 0, 0), ('${B}', 'B', 0, 0)`,
-    );
-    s.exec(
-      `INSERT INTO decks (id, user_id, title, lyrics_raw, slides, style, visibility, published_at) VALUES ('${DECK}', '${A}', '시선', '가사', '[]', '{}', 'public', 1)`,
-    );
-    s.exec(
-      `INSERT INTO decks (id, user_id, title, lyrics_raw, slides, style, visibility, forked_from, origin, published_at) VALUES ('${FORK}', '${B}', '시선', '가사', '[]', '{}', 'public', '${DECK}', 'fork', 1)`,
-    );
-    s.exec(
-      `INSERT INTO reports (id, user_id, target_type, target_id, reason) VALUES ('r1', '${B}', 'deck', '${DECK}', 'copyright'), ('r2', '${A}', 'deck', '${FORK}', 'lyrics_error')`,
-    );
+    const epoch = new Date(0);
+    testDb.db
+      .insert(user)
+      .values([
+        { id: A, name: "A", createdAt: epoch, updatedAt: epoch },
+        { id: B, name: "B", createdAt: epoch, updatedAt: epoch },
+      ])
+      .run();
+    const deck = {
+      userId: A,
+      title: "시선",
+      lyricsRaw: "가사",
+      slides: "[]",
+      style: "{}",
+      visibility: "public",
+      publishedAt: new Date(1000),
+    } as const;
+    testDb.db
+      .insert(decks)
+      .values([
+        { ...deck, id: DECK },
+        { ...deck, id: FORK, userId: B, forkedFrom: DECK, origin: "fork" },
+      ])
+      .run();
+    testDb.db
+      .insert(reports)
+      .values([
+        {
+          id: "r1",
+          userId: B,
+          targetType: "deck",
+          targetId: DECK,
+          reason: "copyright",
+        },
+        {
+          id: "r2",
+          userId: A,
+          targetType: "deck",
+          targetId: FORK,
+          reason: "lyrics_error",
+        },
+      ])
+      .run();
   });
 
   afterEach(() => testDb.sqlite.close());
@@ -48,16 +93,15 @@ describe("운영 SQL (moderation runbook)", () => {
 
   it("takes a deck down, removes it from search and blocks republishing", () => {
     run("TAKEDOWN_DECK", { deck_id: DECK });
+    const takenDown = deckState(DECK);
+    expect(takenDown?.visibility).toBe("private");
+    expect(takenDown?.takedownAt).not.toBeNull();
     expect(
-      one("SELECT visibility, takedown_at FROM decks WHERE id = ?", DECK),
-    ).toMatchObject({
-      visibility: "private",
-    });
-    expect(
-      one("SELECT takedown_at FROM decks WHERE id = ?", DECK).takedown_at,
-    ).not.toBeNull();
-    expect(
-      one("SELECT count(*) AS n FROM decks_fts WHERE deck_id = ?", DECK).n,
+      testDb.db
+        .select({ n: count() })
+        .from(decksFts)
+        .where(eq(decksFts.deckId, DECK))
+        .get()?.n,
     ).toBe(0);
 
     expect(
@@ -65,27 +109,21 @@ describe("운영 SQL (moderation runbook)", () => {
     ).toEqual([FORK]);
 
     run("RESOLVE_REPORTS_FOR_TARGET", { target_id: DECK, note: "권리자 요청" });
-    expect(
-      one("SELECT status, resolution_note FROM reports WHERE id = 'r1'"),
-    ).toEqual({
+    expect(report("r1")).toEqual({
       status: "resolved",
-      resolution_note: "권리자 요청",
+      resolutionNote: "권리자 요청",
     });
 
     run("RESTORE_DECK", { deck_id: DECK });
-    expect(
-      one("SELECT visibility, takedown_at FROM decks WHERE id = ?", DECK),
-    ).toEqual({
+    expect(deckState(DECK)).toEqual({
       visibility: "private",
-      takedown_at: null,
+      takedownAt: null,
     });
   });
 
   it("resolves or rejects single reports", () => {
     run("REJECT_REPORT", { report_id: "r2", note: "오류 아님" });
-    expect(one("SELECT status FROM reports WHERE id = 'r2'").status).toBe(
-      "rejected",
-    );
+    expect(report("r2")?.status).toBe("rejected");
     run("RESOLVE_REPORT", { report_id: "r1", note: "처리" });
     expect(all("LIST_PENDING_REPORTS")).toHaveLength(0);
   });

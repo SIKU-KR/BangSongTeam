@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { env } from "cloudflare:test";
+import { eq, inArray } from "drizzle-orm";
 import {
   DEFAULT_DECK_STYLE,
   DeckSchema,
@@ -8,9 +9,17 @@ import {
   type Deck,
   type SearchCatalogResponse,
 } from "#shared";
-import { createD1Client, user } from "#db";
+import {
+  createD1Client,
+  decks,
+  presentationItems,
+  presentations,
+  reports,
+  user,
+} from "#db";
 import { createApp } from "../index";
 import type { SessionReader } from "../middleware/auth";
+import { clearTables } from "../test/db";
 import { insertUserBackgroundRow, resetBackgrounds } from "../test/backgrounds";
 
 const A = "aaaaaaaa3000000000001";
@@ -78,17 +87,19 @@ const publish = (id: string) =>
     acceptedCopyrightNotice: true,
   });
 
+async function takeDown(deckId: string): Promise<void> {
+  await createD1Client(env.DB)
+    .update(decks)
+    .set({ takedownAt: new Date() })
+    .where(eq(decks.id, deckId));
+}
+
 describe("공유 라이브러리 API", () => {
   beforeEach(async () => {
-    for (const table of [
-      "reports",
-      "presentation_items",
-      "decks",
-      "presentations",
-    ]) {
-      await env.DB.exec(`DELETE FROM ${table}`);
-    }
-    await env.DB.exec(`DELETE FROM user WHERE id IN ('${A}', '${B}')`);
+    await clearTables(reports, presentationItems, decks, presentations);
+    await createD1Client(env.DB)
+      .delete(user)
+      .where(inArray(user.id, [A, B]));
     await createD1Client(env.DB)
       .insert(user)
       .values([
@@ -129,11 +140,7 @@ describe("공유 라이브러리 API", () => {
     });
 
     it("refuses to republish a taken-down deck", async () => {
-      await env.DB.prepare(
-        "UPDATE decks SET takedown_at = unixepoch() WHERE id = ?",
-      )
-        .bind(PUB)
-        .run();
+      await takeDown(PUB);
       expect((await publish(PUB)).status).toBe(409);
     });
 
@@ -211,11 +218,7 @@ describe("공유 라이브러리 API", () => {
         );
       }
 
-      await env.DB.prepare(
-        "UPDATE decks SET takedown_at = unixepoch() WHERE id = ?",
-      )
-        .bind(PUB)
-        .run();
+      await takeDown(PUB);
       expect((await search("은혜로다")).decks).toHaveLength(0);
       expect((await request("GET", `/api/catalog/decks/${PUB}`)).status).toBe(
         404,
