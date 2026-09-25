@@ -3,6 +3,28 @@ import { useNavigate } from "react-router-dom";
 import { usePersistenceError } from "../../lib/storage";
 import { useSyncStatus } from "../../lib/sync";
 import { ThemeMenuButton } from "../../components/common/ThemeMenuButton";
+import { PRESENTATION_SHORTCUTS } from "#shared";
+
+const PRESENTATION_SHORTCUT_GUIDE: ReadonlyArray<{
+  keys: string;
+  action: string;
+}> = [
+  { keys: "→ / Space / PageDown", action: "다음 슬라이드" },
+  { keys: "← / PageUp", action: "이전 슬라이드" },
+  { keys: "번호 + Enter", action: "세트 전체 N번째 슬라이드로 이동" },
+  { keys: "Backspace", action: "입력 중인 마지막 숫자 지우기" },
+  { keys: "B", action: "블랙아웃 켜기/끄기" },
+  { keys: "H", action: "가사 숨기기 (배경 유지)" },
+  { keys: "Esc", action: "전체화면 해제 (송출 종료)" },
+];
+
+const NUMBER_JUMP_RULES: ReadonlyArray<string> = [
+  "번호는 곡이 바뀌어도 이어서 셉니다. 1곡이 5장이면 2곡 첫 장은 6번입니다.",
+  "숫자를 입력한 뒤 Enter를 눌러야 이동합니다.",
+  `${PRESENTATION_SHORTCUTS.BUFFER_CLEAR_TIMEOUT_MS / 1000}초 동안 입력이 없으면 입력한 번호가 지워집니다.`,
+  "없는 번호는 무시합니다.",
+  "입력 중인 번호는 청중 화면에 표시되지 않습니다.",
+];
 
 export interface EditorHeaderProps {
   title: string;
@@ -417,33 +439,39 @@ export function EditorHeader({
           </button>
 
           {showShortcuts && (
-            <div className="absolute right-0 top-10 z-50 w-64 p-3 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl shadow-lg dark:shadow-2xl text-xs space-y-2 font-mono">
-              <div className="font-bold text-zinc-900 dark:text-white font-sans text-xs pb-1 border-b border-zinc-200 dark:border-zinc-800">
+            <div
+              data-testid="header-shortcuts-popover"
+              className="absolute right-0 top-10 z-50 w-80 p-3 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl shadow-lg dark:shadow-2xl text-xs space-y-2"
+            >
+              <div className="font-bold text-zinc-900 dark:text-white text-xs pb-1 border-b border-zinc-200 dark:border-zinc-800">
                 발표 송출 단축키
               </div>
-              <div className="flex justify-between text-zinc-700 dark:text-zinc-300">
-                <span className="text-zinc-500 dark:text-zinc-400">
-                  다음/이전 슬라이드
-                </span>
-                <span>Space, ▶ / ◀</span>
-              </div>
-              <div className="flex justify-between text-zinc-700 dark:text-zinc-300">
-                <span className="text-zinc-500 dark:text-zinc-400">
-                  암전 (Blackout)
-                </span>
-                <span>B</span>
-              </div>
-              <div className="flex justify-between text-zinc-700 dark:text-zinc-300">
-                <span className="text-zinc-500 dark:text-zinc-400">
-                  가사 숨김
-                </span>
-                <span>H</span>
-              </div>
-              <div className="flex justify-between text-zinc-700 dark:text-zinc-300">
-                <span className="text-zinc-500 dark:text-zinc-400">
-                  슬라이드 번호 이동
-                </span>
-                <span>번호 + Enter</span>
+              <table className="w-full">
+                <tbody>
+                  {PRESENTATION_SHORTCUT_GUIDE.map(({ keys, action }) => (
+                    <tr key={action}>
+                      <th
+                        scope="row"
+                        className="py-0.5 pr-3 text-left font-mono font-normal text-zinc-700 dark:text-zinc-300 whitespace-nowrap align-top"
+                      >
+                        {keys}
+                      </th>
+                      <td className="py-0.5 text-zinc-500 dark:text-zinc-400">
+                        {action}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <div className="pt-2 border-t border-zinc-200 dark:border-zinc-800 space-y-1">
+                <div className="font-semibold text-zinc-700 dark:text-zinc-300">
+                  번호 이동 규칙
+                </div>
+                <ul className="list-disc pl-4 space-y-0.5 text-zinc-500 dark:text-zinc-400">
+                  {NUMBER_JUMP_RULES.map((rule) => (
+                    <li key={rule}>{rule}</li>
+                  ))}
+                </ul>
               </div>
             </div>
           )}
