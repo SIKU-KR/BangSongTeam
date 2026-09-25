@@ -8,7 +8,6 @@ import {
   SEED_USER_ID,
 } from "./mockPresentations";
 import {
-  linkSongToLibraryDeck,
   getActivePresentation,
   addDeckToPresentation,
   resetPresentationStore,
@@ -606,25 +605,6 @@ describe("문서별 Undo/Redo 격리", () => {
       const first = addDeckToPresentation(libraryDeck());
       const second = addDeckToPresentation(first.deck!);
       expect(second.deck?.forkedFrom).toBe("9000000000000000000aa");
-    });
-
-    it("보관함 원본이 없는 세트 곡은 연결하지 않고, 나중에 연결할 수 있다", () => {
-      const pasted = DeckSchema.parse({
-        ...libraryDeck(),
-        id: "9000000000000000000cc",
-        scope: "presentation",
-        forkedFrom: null,
-      });
-      const item = addDeckToPresentation(pasted);
-      expect(item.deck?.forkedFrom).toBeNull();
-
-      const index = getActivePresentation().items.length - 1;
-      act(() => {
-        linkSongToLibraryDeck(index, "9000000000000000000dd");
-      });
-      expect(getActivePresentation().items[index].deck?.forkedFrom).toBe(
-        "9000000000000000000dd",
-      );
     });
   });
 });

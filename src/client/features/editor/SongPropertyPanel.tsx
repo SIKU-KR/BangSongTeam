@@ -30,7 +30,6 @@ export interface SongPropertyPanelProps {
   overflowWarnings?: SongOverflowWarnings;
   onSplitSlide?: (offset: number) => void;
   onMergeWithNext?: () => void;
-  footer?: React.ReactNode;
   className?: string;
 }
 
@@ -150,7 +149,6 @@ export function SongPropertyPanel({
   overflowWarnings,
   onSplitSlide,
   onMergeWithNext,
-  footer,
   className = "",
 }: SongPropertyPanelProps): React.JSX.Element {
   const [isBgModalOpen, setIsBgModalOpen] = useState(false);
@@ -595,8 +593,6 @@ export function SongPropertyPanel({
             onMergeWithNext={onMergeWithNext}
           />
         )}
-
-        {footer}
       </div>
 
       <BackgroundPickerModal

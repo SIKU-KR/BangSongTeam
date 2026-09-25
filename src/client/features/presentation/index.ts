@@ -26,7 +26,6 @@ export {
   getActivePresentation,
   createNewPresentation,
   addDeckToPresentation,
-  linkSongToLibraryDeck,
   resetPresentationStore,
   __loadDocumentsForTests,
   applyServerDocuments,

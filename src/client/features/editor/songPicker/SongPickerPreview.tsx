@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import type { Deck, PublicDeckSummary } from "#shared";
 import { ExternalSearchLinks } from "../ExternalSearchLinks";
 import { LyricsViewer } from "./LyricsViewer";
+import { LibraryShareControls } from "../../sharing/LibraryShareControls";
 import { usePublicDeck } from "../../../lib/api/catalogQueries";
 import { describeApiError } from "../../../lib/api/request";
 
@@ -158,6 +159,7 @@ export function MyDeckPreview({
       <div className="flex-1 overflow-y-auto p-5 font-mono text-xs">
         <LyricsViewer lyrics={deck.lyricsRaw} />
       </div>
+      <LibraryShareControls deck={deck} />
       <ActionBar
         copyText={deck.lyricsRaw}
         addLabel="이 곡을 프레젠테이션에 추가"

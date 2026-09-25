@@ -51,7 +51,6 @@ import {
 } from "../features/editor/SongPickerModal";
 import { SongInfoDialog } from "../features/editor/SongInfoDialog";
 import { useTextWidthMeasurer } from "../features/editor/useTextWidthMeasurer";
-import { SongSharePanel } from "../features/sharing/SongSharePanel";
 import { useBackgroundAutoCache } from "../features/offline";
 import {
   resolveBackgroundLayers,
@@ -388,11 +387,6 @@ export function EditorRoute(): React.JSX.Element {
           onSplitSlide={handleSplitSlide}
           onMergeWithNext={() =>
             mergeSlideWithNext(safeSongIndex, safeSlideIndex)
-          }
-          footer={
-            currentSong ? (
-              <SongSharePanel songIndex={safeSongIndex} song={currentSong} />
-            ) : null
           }
         />
       </div>

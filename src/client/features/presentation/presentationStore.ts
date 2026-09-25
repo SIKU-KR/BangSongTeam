@@ -349,32 +349,6 @@ function cloneDeckForPresentation(deck: Deck, presentationId: string): Deck {
 }
 
 /**
- * 붙여넣기로 바로 세트에 넣은 곡처럼 보관함 원본이 없던 곡을 공개하면, 편집기가
- * 새 보관함 덱을 만들고 이 함수로 연결한다. 다음 공개·'공개본 업데이트'는 같은
- * 원본을 갱신한다. 내용은 바꾸지 않으므로 되돌리기 기록을 남기지 않는다.
- */
-export function linkSongToLibraryDeck(
-  songIndex: number,
-  libraryDeckId: string,
-): void {
-  const item = readActive().items[songIndex];
-  if (!item || !item.deck) return;
-  if (item.deck.forkedFrom === libraryDeckId) return;
-
-  const updatedItems = [...readActive().items];
-  updatedItems[songIndex] = {
-    ...item,
-    deck: { ...item.deck, forkedFrom: libraryDeckId },
-  };
-  writeActive({
-    ...readActive(),
-    items: updatedItems,
-    updatedAt: new Date().toISOString(),
-  });
-  emitChange();
-}
-
-/**
  * 덱은 항상 이 세트 전용 복제본으로 들어간다 (Clone-on-Add).
  *
  * 배경이 없는 곡에는 기본 제공 배경을 곡 순서대로 돌려 입힌다. 곡 전환을 배경
