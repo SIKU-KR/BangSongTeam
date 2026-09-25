@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { Button } from "#components/ui/button";
 import { ButtonGroup } from "#components/ui/button-group";
 import { Input } from "#components/ui/input";
 import {
@@ -12,12 +13,8 @@ import {
   SelectValue,
 } from "#components/ui/select";
 import type { DeckStyle } from "#shared";
-import {
-  DEFAULT_PRESET_FONTS,
-  INDEX_POPULAR_FONT_NAMES,
-  NOONNU_FONTS,
-} from "#shared";
-import { loadWebFont } from "../../../lib/fonts/fontLoader";
+import { DEFAULT_PRESET_FONTS, NOONNU_FONTS } from "#shared";
+import { loadWebFont, loadWebFonts } from "../../../lib/fonts/fontLoader";
 import { ColorPickerField } from "../ColorPickerField";
 import { ToggleGroup, ToggleGroupItem } from "#components/ui/toggle-group";
 import { RibbonChoices, RibbonDropdown } from "./RibbonDropdown";
@@ -59,6 +56,7 @@ export function FontControls({
   };
 
   const [fontSearch, setFontSearch] = useState("");
+  const [displayLimit, setDisplayLimit] = useState(60);
 
   useEffect(() => {
     if (style.fontFamily) {
@@ -69,22 +67,26 @@ export function FontControls({
   const presetSet = new Set<string>(DEFAULT_PRESET_FONTS);
   const searchTrimmed = fontSearch.trim().toLowerCase();
 
+  const allAdditionalFonts = React.useMemo(() => {
+    return NOONNU_FONTS.filter((f) => !presetSet.has(f.name));
+  }, []);
+
   const filteredFonts = React.useMemo(() => {
     if (!searchTrimmed) {
-      return NOONNU_FONTS.filter(
-        (f) =>
-          !presetSet.has(f.name) &&
-          (INDEX_POPULAR_FONT_NAMES.includes(f.name) ||
-            f.name === style.fontFamily),
-      );
+      return allAdditionalFonts.slice(0, displayLimit);
     }
     return NOONNU_FONTS.filter(
       (f) =>
         f.name.toLowerCase().includes(searchTrimmed) ||
         f.author.toLowerCase().includes(searchTrimmed) ||
         f.cardFamily.toLowerCase().includes(searchTrimmed),
-    ).slice(0, 50);
-  }, [searchTrimmed, style.fontFamily]);
+    ).slice(0, 60);
+  }, [allAdditionalFonts, searchTrimmed, displayLimit]);
+
+  useEffect(() => {
+    loadWebFonts(DEFAULT_PRESET_FONTS);
+    loadWebFonts(filteredFonts);
+  }, [filteredFonts]);
 
   return (
     <RibbonGroup label="글꼴">
@@ -101,7 +103,7 @@ export function FontControls({
         <SelectTrigger aria-label="글꼴" className="w-36 text-xs">
           <SelectValue />
         </SelectTrigger>
-        <SelectContent className="max-h-72 w-56">
+        <SelectContent className="max-h-80 w-64">
           <div className="border-b border-border p-1">
             <Input
               type="text"
@@ -122,26 +124,51 @@ export function FontControls({
                   <SelectItem
                     key={font}
                     value={font}
-                    style={{ fontFamily: font }}
+                    style={{ fontFamily: `'${font}', sans-serif` }}
                   >
-                    {font}
+                    <span style={{ fontFamily: `'${font}', sans-serif` }}>
+                      {font}
+                    </span>
                   </SelectItem>
                 ))}
               </SelectGroup>
               <SelectSeparator />
               <SelectGroup>
                 <SelectLabel className="px-2 py-1 text-2xs text-muted-foreground">
-                  인기 무료 웹폰트
+                  눈누 무료 웹폰트 ({allAdditionalFonts.length}종)
                 </SelectLabel>
                 {filteredFonts.map((font) => (
                   <SelectItem
                     key={font.name}
                     value={font.name}
-                    style={{ fontFamily: font.name }}
+                    style={{
+                      fontFamily: `'${font.name}', '${font.cardFamily}', sans-serif`,
+                    }}
                   >
-                    {font.name}
+                    <span
+                      style={{
+                        fontFamily: `'${font.name}', '${font.cardFamily}', sans-serif`,
+                      }}
+                    >
+                      {font.name}
+                    </span>
                   </SelectItem>
                 ))}
+                {displayLimit < allAdditionalFonts.length && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setDisplayLimit((prev) => prev + 60);
+                    }}
+                    className="w-full py-1 text-center text-2xs text-muted-foreground hover:text-foreground"
+                  >
+                    더 보기 ({allAdditionalFonts.length - displayLimit}개 남음)
+                  </Button>
+                )}
               </SelectGroup>
             </>
           )}
@@ -154,9 +181,17 @@ export function FontControls({
                 <SelectItem
                   key={font.name}
                   value={font.name}
-                  style={{ fontFamily: font.name }}
+                  style={{
+                    fontFamily: `'${font.name}', '${font.cardFamily}', sans-serif`,
+                  }}
                 >
-                  {font.name}
+                  <span
+                    style={{
+                      fontFamily: `'${font.name}', '${font.cardFamily}', sans-serif`,
+                    }}
+                  >
+                    {font.name}
+                  </span>
                 </SelectItem>
               ))}
             </SelectGroup>

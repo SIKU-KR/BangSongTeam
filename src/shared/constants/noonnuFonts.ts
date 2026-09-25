@@ -1,5 +1,6 @@
 /**
  * 눈누(https://noonnu.cc/index) 상업용 무료 한글 웹폰트 전체 메타데이터 카탈로그
+ * 모든 폰트는 유효한 웹폰트 URL(woff2, woff, css 등)을 갖추고 있습니다.
  */
 export interface NoonnuFont {
   readonly id: string;
@@ -17,7 +18,7 @@ export const NOONNU_FONTS: readonly NoonnuFont[] = [
     name: "Pretendard",
     cardFamily: "Pretendard",
     author: "길형진",
-    url: "",
+    url: "https://cdn.jsdelivr.net/gh/projectnoonnu/pretendard@1.0/Pretendard-Regular.woff2",
     format: "woff2",
     weight: "400",
   },
@@ -26,8 +27,8 @@ export const NOONNU_FONTS: readonly NoonnuFont[] = [
     name: "Noto Sans KR",
     cardFamily: "Noto Sans KR",
     author: "Google & Adobe",
-    url: "",
-    format: "woff2",
+    url: "https://fonts.googleapis.com/earlyaccess/notosanskr.css",
+    format: "css",
     weight: "400",
   },
   {
@@ -35,8 +36,8 @@ export const NOONNU_FONTS: readonly NoonnuFont[] = [
     name: "Nanum Myeongjo",
     cardFamily: "Nanum Myeongjo",
     author: "네이버",
-    url: "",
-    format: "woff2",
+    url: "https://fonts.googleapis.com/earlyaccess/nanummyeongjo.css",
+    format: "css",
     weight: "400",
   },
   {
@@ -53,9 +54,9 @@ export const NOONNU_FONTS: readonly NoonnuFont[] = [
     name: "KoPubWorld Batang",
     cardFamily: "KoPubWorld Batang",
     author: "한국출판인회의",
-    url: "https://cdn.jsdelivr.net/gh/projectnoonnu/noonfonts_two@1.0/KoPubDotumMedium.woff",
-    format: "woff",
-    weight: "normal",
+    url: "https://cdn.jsdelivr.net/gh/projectnoonnu/2507-1@1.0/KoPubWorldBatangBold.woff2",
+    format: "woff2",
+    weight: "700",
   },
   {
     id: "733",
@@ -10481,6 +10482,11 @@ export const NOONNU_FONTS: readonly NoonnuFont[] = [
   },
 ] as const;
 
+export const INDEX_POPULAR_FONT_NAMES: readonly string[] = NOONNU_FONTS.slice(
+  0,
+  24,
+).map((f) => f.name);
+
 export const NOONNU_SUPPORTED_FONT_NAMES: readonly [string, ...string[]] = [
   "Pretendard",
   "Noto Sans KR",
@@ -12792,8 +12798,3 @@ export const NOONNU_SUPPORTED_FONT_NAMES: readonly [string, ...string[]] = [
   "KoPub바탕",
   "KoPub Batang",
 ] as const;
-
-export const INDEX_POPULAR_FONT_NAMES: readonly string[] = NOONNU_FONTS.slice(
-  0,
-  24,
-).map((f) => f.name);

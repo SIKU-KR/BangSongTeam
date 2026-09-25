@@ -67,6 +67,19 @@ export function loadWebFont(nameOrFamily: string): void {
 }
 
 /**
+ * 여러 폰트의 @font-face 스타일을 한 번에 로드 (글꼴 목록 렌더링용)
+ */
+export function loadWebFonts(
+  namesOrFamilies: readonly (NoonnuFont | string)[],
+): void {
+  if (typeof document === "undefined") return;
+  for (const item of namesOrFamilies) {
+    const name = typeof item === "string" ? item : item.name;
+    loadWebFont(name);
+  }
+}
+
+/**
  * 웹폰트 프리로드 및 브라우저 폰트 캐시 준비
  */
 export async function preloadWebFont(
