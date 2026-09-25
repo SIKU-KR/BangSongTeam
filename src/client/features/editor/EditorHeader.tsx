@@ -3,15 +3,19 @@ import { useNavigate } from "react-router-dom";
 import {
   ArrowLeftIcon,
   ChevronDownIcon,
+  CopyIcon,
   FileTextIcon,
   InfoIcon,
   PencilIcon,
   PlayIcon,
   PlusIcon,
   Redo2Icon,
+  Share2Icon,
   Undo2Icon,
+  UsersIcon,
 } from "lucide-react";
 import { cn } from "cn";
+import { Badge } from "#components/ui/badge";
 import { Button } from "#components/ui/button";
 import {
   DropdownMenu,
@@ -36,7 +40,7 @@ import { IconButton } from "#components/common/IconButton";
 import { usePersistenceError } from "../../lib/storage";
 import { useSyncStatus } from "../../lib/sync";
 import { ThemeMenuButton } from "../../components/common/ThemeMenuButton";
-import { PRESENTATION_SHORTCUTS } from "#shared";
+import { PRESENTATION_SHORTCUTS, type PresentationAccess } from "#shared";
 import { EDITOR_SHORTCUT_GUIDE } from "./editorShortcuts";
 
 const PRESENTATION_SHORTCUT_GUIDE: ReadonlyArray<{
@@ -71,6 +75,14 @@ export interface EditorHeaderProps {
   canRedo?: boolean;
   onNewPresentation?: () => void;
   onOpenLyricModal?: () => void;
+  /** 공유받은 세트에만 넘긴다. 파일 메뉴에 '사본 만들기'를 더한다 */
+  onMakeCopy?: () => void;
+  /** 소유자에게만 넘긴다. 없으면 공유 버튼을 그리지 않는다 */
+  onShare?: () => void;
+  /** 공유받은 세트면 누가 어떤 권한으로 공유했는지 보여 준다 */
+  sharedAccess?: PresentationAccess;
+  /** 보기 권한 세트. 제목을 고칠 수 없다 */
+  readOnly?: boolean;
   backPath?: string;
   className?: string;
 }
@@ -159,6 +171,10 @@ export function EditorHeader({
   canRedo = false,
   onNewPresentation,
   onOpenLyricModal,
+  onMakeCopy,
+  onShare,
+  sharedAccess,
+  readOnly = false,
   backPath = "/presentations",
   className,
 }: EditorHeaderProps): React.JSX.Element {
@@ -227,13 +243,29 @@ export function EditorHeader({
                 <FileTextIcon />새 가사 입력
               </DropdownMenuItem>
             )}
+            {onMakeCopy && (
+              <DropdownMenuItem
+                data-testid="header-file-menu-copy-btn"
+                onClick={onMakeCopy}
+              >
+                <CopyIcon />
+                사본 만들기
+              </DropdownMenuItem>
+            )}
           </DropdownMenuContent>
         </DropdownMenu>
 
         <Separator orientation="vertical" className="h-4" />
 
         <div className="flex min-w-0 items-center gap-2">
-          {isEditingTitle ? (
+          {readOnly ? (
+            <span
+              data-testid="header-title-text"
+              className="max-w-xs truncate px-2 text-sm font-bold sm:max-w-md"
+            >
+              {title}
+            </span>
+          ) : isEditingTitle ? (
             <Input
               type="text"
               value={tempTitle}
@@ -273,7 +305,18 @@ export function EditorHeader({
             </Tooltip>
           )}
 
-          <SaveStatusIndicator />
+          {sharedAccess && (
+            <Badge
+              data-testid="header-shared-badge"
+              variant="secondary"
+              className="hidden md:inline-flex"
+            >
+              <UsersIcon />
+              {sharedAccess.ownerName}님이 공유 · 보기 전용
+            </Badge>
+          )}
+
+          {!readOnly && <SaveStatusIndicator />}
         </div>
 
         {(onUndo || onRedo) && (
@@ -337,6 +380,17 @@ export function EditorHeader({
         </Popover>
 
         <ThemeMenuButton variant="compact" align="end" />
+
+        {onShare && (
+          <Button
+            data-testid="header-share-btn"
+            variant="outline"
+            onClick={onShare}
+          >
+            <Share2Icon />
+            공유
+          </Button>
+        )}
 
         <Button
           data-testid="header-present-btn"

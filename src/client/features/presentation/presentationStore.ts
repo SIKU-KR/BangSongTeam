@@ -53,7 +53,17 @@ function readActive(): Presentation {
   return state.byId[state.activeId] ?? EMPTY_PRESENTATION;
 }
 
+/**
+ * 링크로 공유받은 세트(`access`)는 보기 전용이다. 편집 함수는 모두
+ * `writeActive`·`pushHistory`·`updateDocumentById`를 거치므로 여기서 막으면
+ * 화면에서 버튼을 빠뜨려도 문서가 바뀌지 않는다.
+ */
+export function canEditPresentation(doc: Presentation): boolean {
+  return doc.access === undefined;
+}
+
 function writeActive(next: Presentation): void {
+  if (!canEditPresentation(readActive())) return;
   state = {
     ...state,
     byId: { ...state.byId, [state.activeId]: next },
@@ -82,6 +92,7 @@ function historyFor(id: string): DocumentHistory {
 }
 
 function pushHistory(coalesceKey?: string): void {
+  if (!canEditPresentation(readActive())) return;
   const now = Date.now();
   if (
     coalesceKey &&
@@ -262,7 +273,11 @@ export async function hydrateFromStorage(): Promise<void> {
     const { valid, corrupted } = await loadAllPresentations();
     reportCorruptedRecords(corrupted);
 
-    const mine = userId ? valid.filter((doc) => doc.userId === userId) : [];
+    const mine = userId
+      ? valid.filter(
+          (doc) => doc.userId === userId || doc.access?.memberId === userId,
+        )
+      : [];
     const sorted = [...mine].sort((a, b) =>
       a.createdAt.localeCompare(b.createdAt),
     );
@@ -945,7 +960,7 @@ function updateDocumentById(
   update: (doc: Presentation) => Presentation,
 ): Presentation | undefined {
   const current = state.byId[id];
-  if (!current) return undefined;
+  if (!current || !canEditPresentation(current)) return undefined;
   const next = update(current);
   state = { ...state, byId: { ...state.byId, [id]: next } };
   listSnapshot = buildListSnapshot(state);
@@ -1009,15 +1024,23 @@ export function restorePresentation(id: string, folderId: string | null): void {
 }
 
 /**
- * 사본 만들기. 같은 폴더에 "제목 (사본)"으로 만든다.
+ * 사본 만들기. "제목 (사본)"으로 `folderId`(생략하면 원본과 같은 폴더)에 만든다.
  *
  * 항목·덱 id를 모두 새로 발급한다. 덱 id가 원본과 같으면 서버의 `decks` 기본키를
  * 위반해 사본이 영영 저장되지 않는다 (Clone-on-Add와 같은 이유로 `createId()`).
+ *
+ * 공유받은 세트의 사본은 내 소유의 독립 문서다. 원본의 폴더는 소유자의
+ * 드라이브라 쓰지 않고, 위치를 따로 주지 않으면 내 드라이브 맨 위에 둔다.
  */
-export function duplicatePresentation(id: string): Presentation | null {
+export function duplicatePresentation(
+  id: string,
+  folderId?: string | null,
+): Presentation | null {
   const source = state.byId[id];
   if (!source) return null;
 
+  const shared = source.access !== undefined;
+  const userId = shared ? (getCurrentUserId() ?? source.userId) : source.userId;
   const now = new Date().toISOString();
   const newId = createId();
   const items = source.items.map((item) => {
@@ -1031,6 +1054,7 @@ export function duplicatePresentation(id: string): Presentation | null {
         ? {
             ...(JSON.parse(JSON.stringify(item.deck)) as Deck),
             id: deckId,
+            userId,
             presentationId: newId,
             createdAt: now,
             updatedAt: now,
@@ -1042,13 +1066,20 @@ export function duplicatePresentation(id: string): Presentation | null {
   const copy: Presentation = {
     ...source,
     id: newId,
+    userId,
     title: `${source.title.slice(0, MAX_TITLE_LENGTH - COPY_SUFFIX.length)}${COPY_SUFFIX}`,
     items,
-    folderId: source.folderId ?? null,
+    folderId:
+      folderId !== undefined
+        ? folderId
+        : shared
+          ? null
+          : (source.folderId ?? null),
     trashedAt: null,
     createdAt: now,
     updatedAt: now,
   };
+  delete copy.access;
 
   state = {
     ...state,
@@ -1058,6 +1089,22 @@ export function duplicatePresentation(id: string): Presentation | null {
   listSnapshot = buildListSnapshot(state);
   notifyDocument(copy);
   return copy;
+}
+
+/**
+ * 공유받은 세트를 서버본으로 넣거나 바꾼다 (링크로 들어옴·최신본 받기).
+ * 보기 전용이라 다시 push하지 않는다.
+ */
+export function replaceWithServerDocument(doc: Presentation): void {
+  const exists = Boolean(state.byId[doc.id]);
+  state = {
+    ...state,
+    byId: { ...state.byId, [doc.id]: doc },
+    order: exists ? state.order : [...state.order, doc.id],
+  };
+  listSnapshot = buildListSnapshot(state);
+  schedulePersist(doc.id);
+  for (const listener of listeners) listener();
 }
 
 /**

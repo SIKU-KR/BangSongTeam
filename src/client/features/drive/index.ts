@@ -48,6 +48,7 @@ export {
 export { DriveProvider } from "./DriveProvider";
 export { useDrive, useDriveDroppable } from "./driveContext";
 export { DriveBrowser } from "./DriveBrowser";
+export { FolderPickerDialog } from "./DriveDialogs";
 export { DriveBreadcrumbs } from "./DriveBreadcrumbs";
 export { NewMenuButton } from "./NewMenu";
 export { FolderTree, useTreeExpansion } from "./FolderTree";

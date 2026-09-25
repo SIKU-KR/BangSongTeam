@@ -18,9 +18,11 @@ import {
   applyServerDeckFields,
 } from "../../features/editor/songLibraryStore";
 import { mergeLibraryDecks } from "./mergeLibraryDecks";
+import { sharedPresentationListener } from "./sharedPresentationListener";
 import {
   pullPresentations,
   pushPresentation,
+  setSharedPresentationListener,
   pullDecks,
   pullFolders,
   OfflineError,
@@ -59,6 +61,7 @@ export function shouldRunBootSync(pathname: string): boolean {
  * 오프라인은 조용히 넘어간다 — 실패가 아니라 정상 경로다.
  */
 export async function runBootSync(): Promise<void> {
+  setSharedPresentationListener(sharedPresentationListener);
   setSyncEnabled(true);
   setDeckSyncEnabled(true);
   setServerDeckListener(applyServerDeckFields);
@@ -66,6 +69,7 @@ export async function runBootSync(): Promise<void> {
   setServerFolderListener(applyServerFolder);
   void refreshBackgroundCatalog();
 
+  const knownBeforePull = new Set(listPresentations().map((doc) => doc.id));
   let serverDocuments;
   let tombstones: DriveTombstones;
   let folderOffline: boolean;
@@ -86,14 +90,22 @@ export async function runBootSync(): Promise<void> {
 
   const deletedIds = new Set(tombstones.presentationIds);
   const local = listPresentations();
-  const { documents, needsPush } = mergeDocuments(
+  const merged = mergeDocuments(
     local.filter((doc) => !deletedIds.has(doc.id)),
     serverDocuments,
   );
+  const joinedDuringPull = local.filter(
+    (doc) => merged.removed.includes(doc.id) && !knownBeforePull.has(doc.id),
+  );
+  const documents = [...merged.documents, ...joinedDuringPull];
+  const { needsPush } = merged;
+  const removed = merged.removed.filter((id) => knownBeforePull.has(id));
 
   applyServerDocuments(documents);
-  for (const doc of local) {
-    if (deletedIds.has(doc.id)) await removePersistedPresentation(doc.id);
+  for (const id of [...deletedIds, ...removed]) {
+    if (local.some((doc) => doc.id === id)) {
+      await removePersistedPresentation(id);
+    }
   }
 
   for (const document of documents) {

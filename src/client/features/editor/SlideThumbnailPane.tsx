@@ -100,6 +100,8 @@ export interface SlideThumbnailPaneProps {
   onEditSongInfo: (songIndex: number) => void;
   onDeleteSong: (songIndex: number) => void;
   onOpenSongPicker: () => void;
+  /** 보기 권한으로 공유받은 세트. 선택·펼치기만 되고 메뉴·끌기·추가는 없다 */
+  readOnly?: boolean;
   className?: string;
 }
 
@@ -175,6 +177,7 @@ export function SlideThumbnailPane({
   onEditSongInfo,
   onDeleteSong,
   onOpenSongPicker,
+  readOnly = false,
   className,
 }: SlideThumbnailPaneProps): React.JSX.Element {
   useBackgroundCatalog();
@@ -306,33 +309,7 @@ export function SlideThumbnailPane({
     },
   ];
 
-  const songActions = (songIndex: number): MenuAction[] => [
-    {
-      key: "up",
-      label: "위로 이동",
-      icon: ArrowUpIcon,
-      disabled: songIndex === 0,
-      onSelect: () => onReorderSong(songIndex, songIndex - 1),
-    },
-    {
-      key: "down",
-      label: "아래로 이동",
-      icon: ArrowDownIcon,
-      disabled: songIndex === items.length - 1,
-      onSelect: () => onReorderSong(songIndex, songIndex + 1),
-    },
-    {
-      key: "info",
-      label: "제목·아티스트 수정",
-      icon: PencilIcon,
-      onSelect: () => onEditSongInfo(songIndex),
-    },
-    {
-      key: "duplicate",
-      label: "곡 복제",
-      icon: CopyPlusIcon,
-      onSelect: () => onDuplicateSong(songIndex),
-    },
+  const layoutActions: MenuAction[] = [
     {
       key: "collapse-all",
       label: "모두 축소",
@@ -346,15 +323,48 @@ export function SlideThumbnailPane({
       icon: ChevronsUpDownIcon,
       onSelect: () => setCollapsedIds(new Set()),
     },
-    {
-      key: "remove",
-      label: "세트에서 제거",
-      icon: Trash2Icon,
-      danger: true,
-      separated: true,
-      onSelect: () => onDeleteSong(songIndex),
-    },
   ];
+
+  const songActions = (songIndex: number): MenuAction[] =>
+    readOnly
+      ? layoutActions
+      : [
+          {
+            key: "up",
+            label: "위로 이동",
+            icon: ArrowUpIcon,
+            disabled: songIndex === 0,
+            onSelect: () => onReorderSong(songIndex, songIndex - 1),
+          },
+          {
+            key: "down",
+            label: "아래로 이동",
+            icon: ArrowDownIcon,
+            disabled: songIndex === items.length - 1,
+            onSelect: () => onReorderSong(songIndex, songIndex + 1),
+          },
+          {
+            key: "info",
+            label: "제목·아티스트 수정",
+            icon: PencilIcon,
+            onSelect: () => onEditSongInfo(songIndex),
+          },
+          {
+            key: "duplicate",
+            label: "곡 복제",
+            icon: CopyPlusIcon,
+            onSelect: () => onDuplicateSong(songIndex),
+          },
+          ...layoutActions,
+          {
+            key: "remove",
+            label: "세트에서 제거",
+            icon: Trash2Icon,
+            danger: true,
+            separated: true,
+            onSelect: () => onDeleteSong(songIndex),
+          },
+        ];
 
   const menuActions =
     menuTarget?.kind === "slides"
@@ -368,6 +378,10 @@ export function SlideThumbnailPane({
   const handleContextMenu = (
     event: React.MouseEvent & { preventBaseUIHandler: () => void },
   ) => {
+    if (readOnly) {
+      event.preventBaseUIHandler();
+      return;
+    }
     const target = event.target as HTMLElement;
     const indexOf = (element: HTMLElement, name: string) =>
       Number(element.getAttribute(name));
@@ -453,26 +467,28 @@ export function SlideThumbnailPane({
             {totalSlides}
           </span>
         </span>
-        <Tooltip>
-          <TooltipTrigger
-            render={
-              <Button
-                variant="ghost"
-                size="xs"
-                data-testid="add-slide-btn"
-                disabled={items.length === 0}
-                onClick={onAddSlide}
-              />
-            }
-          >
-            <PlusIcon />새 슬라이드
-          </TooltipTrigger>
-          <TooltipContent>현재 슬라이드 뒤에 새 슬라이드 추가</TooltipContent>
-        </Tooltip>
+        {!readOnly && (
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <Button
+                  variant="ghost"
+                  size="xs"
+                  data-testid="add-slide-btn"
+                  disabled={items.length === 0}
+                  onClick={onAddSlide}
+                />
+              }
+            >
+              <PlusIcon />새 슬라이드
+            </TooltipTrigger>
+            <TooltipContent>현재 슬라이드 뒤에 새 슬라이드 추가</TooltipContent>
+          </Tooltip>
+        )}
       </div>
 
       <DndContext
-        sensors={sensors}
+        sensors={readOnly ? [] : sensors}
         collisionDetection={byDragType}
         onDragStart={handleDragStart}
         onDragMove={(event) => setDropTarget(dropTargetOf(event))}
@@ -668,17 +684,19 @@ export function SlideThumbnailPane({
         </DragOverlay>
       </DndContext>
 
-      <div className="shrink-0 border-t p-3">
-        <Button
-          variant="outline"
-          data-testid="add-song-btn"
-          onClick={onOpenSongPicker}
-          className="w-full"
-        >
-          <PlusIcon />
-          찬양곡 추가
-        </Button>
-      </div>
+      {!readOnly && (
+        <div className="shrink-0 border-t p-3">
+          <Button
+            variant="outline"
+            data-testid="add-song-btn"
+            onClick={onOpenSongPicker}
+            className="w-full"
+          >
+            <PlusIcon />
+            찬양곡 추가
+          </Button>
+        </div>
+      )}
     </aside>
   );
 }

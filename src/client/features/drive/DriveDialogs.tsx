@@ -160,45 +160,52 @@ export function ConfirmDialog({
   );
 }
 
-export interface MoveDialogProps {
-  refs: DriveItemRef[];
-  onMove: (targetFolderId: string | null) => void;
+export interface FolderPickerDialogProps {
+  title: string;
+  /** 대화 상자 안내 문구 (예: 현재 위치) */
+  description?: string;
+  /** 고른 위치 앞에 붙는 말 ("옮길 위치", "만들 위치") */
+  targetLabel: string;
+  confirmLabel: string;
+  initialFolderId: string | null;
+  isDisabled?: (folderId: string | null) => boolean;
+  canConfirm?: (folderId: string | null) => boolean;
+  onConfirm: (folderId: string | null) => void;
   onCancel: () => void;
+  testId?: string;
+  confirmTestId?: string;
 }
 
-/**
- * 이동 대화 상자 (드라이브의 '이동'). 폴더 트리에서 옮길 곳을 고른다.
- * 옮기는 폴더 자신과 그 하위 폴더는 고를 수 없다.
- */
-export function MoveDialog({
-  refs,
-  onMove,
+/** 폴더 트리에서 내 드라이브의 위치 하나를 고른다 (이동·사본 만들기). */
+export function FolderPickerDialog({
+  title,
+  description,
+  targetLabel,
+  confirmLabel,
+  initialFolderId,
+  isDisabled = () => false,
+  canConfirm = () => true,
+  onConfirm,
   onCancel,
-}: MoveDialogProps): React.JSX.Element {
+  testId = "folder-picker-dialog",
+  confirmTestId = "folder-picker-confirm",
+}: FolderPickerDialogProps): React.JSX.Element {
   const index = useFolderIndex();
-  const origin = refs.length > 0 ? parentOf(refs[0]) : null;
-  const [target, setTarget] = useState<string | null>(origin);
+  const [target, setTarget] = useState<string | null>(initialFolderId);
   const { expanded, toggle } = useTreeExpansion(target);
-
-  const isAllowed = (folderId: string | null): boolean =>
-    canDropInto(index, refs, folderId);
-  const changesSomething = refs.some((ref) => parentOf(ref) !== target);
-  const canMove = isAllowed(target) && changesSomething;
-
-  const title =
-    refs.length === 1
-      ? `‘${itemName(refs[0])}’ 이동`
-      : `${refs.length}개 항목 이동`;
+  const enabled = !isDisabled(target) && canConfirm(target);
 
   return (
     <Dialog open onOpenChange={closeOnDismiss(onCancel)}>
-      <DialogContent data-testid="drive-move-dialog" className="sm:max-w-lg">
+      <DialogContent data-testid={testId} className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
         </DialogHeader>
-        <p className="truncate text-xs text-muted-foreground">
-          현재 위치: {formatLocation(index, origin)}
-        </p>
+        {description && (
+          <p className="truncate text-xs text-muted-foreground">
+            {description}
+          </p>
+        )}
         <div className="max-h-72 overflow-y-auto rounded-lg border p-1.5">
           <Button
             variant="ghost"
@@ -220,12 +227,12 @@ export function MoveDialog({
               onSelect={setTarget}
               expanded={expanded}
               onToggle={toggle}
-              isDisabled={(folderId) => !isAllowed(folderId)}
+              isDisabled={isDisabled}
             />
           </div>
         </div>
         <p className="truncate text-xs text-muted-foreground">
-          옮길 위치:{" "}
+          {targetLabel}:{" "}
           <span className="font-semibold text-foreground">
             {formatLocation(index, target)}
           </span>
@@ -233,14 +240,53 @@ export function MoveDialog({
         <DialogFooter>
           <DialogClose render={<Button variant="outline" />}>취소</DialogClose>
           <Button
-            data-testid="drive-move-confirm"
-            disabled={!canMove}
-            onClick={() => onMove(target)}
+            data-testid={confirmTestId}
+            disabled={!enabled}
+            onClick={() => onConfirm(target)}
           >
-            이동
+            {confirmLabel}
           </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+export interface MoveDialogProps {
+  refs: DriveItemRef[];
+  onMove: (targetFolderId: string | null) => void;
+  onCancel: () => void;
+}
+
+/**
+ * 이동 대화 상자 (드라이브의 '이동').
+ * 옮기는 폴더 자신과 그 하위 폴더는 고를 수 없다.
+ */
+export function MoveDialog({
+  refs,
+  onMove,
+  onCancel,
+}: MoveDialogProps): React.JSX.Element {
+  const index = useFolderIndex();
+  const origin = refs.length > 0 ? parentOf(refs[0]) : null;
+
+  return (
+    <FolderPickerDialog
+      testId="drive-move-dialog"
+      confirmTestId="drive-move-confirm"
+      title={
+        refs.length === 1
+          ? `‘${itemName(refs[0])}’ 이동`
+          : `${refs.length}개 항목 이동`
+      }
+      description={`현재 위치: ${formatLocation(index, origin)}`}
+      targetLabel="옮길 위치"
+      confirmLabel="이동"
+      initialFolderId={origin}
+      isDisabled={(folderId) => !canDropInto(index, refs, folderId)}
+      canConfirm={(folderId) => refs.some((ref) => parentOf(ref) !== folderId)}
+      onConfirm={onMove}
+      onCancel={onCancel}
+    />
   );
 }

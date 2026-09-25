@@ -7,3 +7,4 @@ export * from "./folder";
 export * from "./media";
 export * from "./library";
 export * from "./api";
+export * from "./presentationShare";

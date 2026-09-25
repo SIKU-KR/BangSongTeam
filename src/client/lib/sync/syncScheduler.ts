@@ -79,6 +79,7 @@ function run(): void {
 export function scheduleDocumentPush(document: Presentation): void {
   if (!enabled) return;
   if (!document.id) return;
+  if (document.access) return;
 
   pending.set(document.id, document);
   if (timer) clearTimeout(timer);

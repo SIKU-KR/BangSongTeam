@@ -113,12 +113,18 @@ export async function revalidateSession(): Promise<void> {
   setState({ status: "unauthenticated", user: null });
 }
 
+/**
+ * 소셜 로그인 후 원래 보던 주소로 돌아온다. 로그아웃 상태로 공유 링크를
+ * 연 사람이 로그인하고 나서 링크로 다시 들어오게 하기 위해서다.
+ * 첫 화면(`/`)에서 로그인하면 드라이브로 보낸다.
+ */
 export async function signInWithProvider(
   provider: SocialProvider,
 ): Promise<void> {
+  const { pathname, search } = window.location;
   await authClient.signIn.social({
     provider,
-    callbackURL: "/presentations",
+    callbackURL: pathname === "/" ? "/presentations" : `${pathname}${search}`,
   });
 }
 

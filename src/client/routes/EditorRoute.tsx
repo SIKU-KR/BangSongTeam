@@ -5,8 +5,11 @@ import {
   useSearchParams,
   Navigate,
 } from "react-router-dom";
-import { TriangleAlertIcon } from "lucide-react";
+import { CopyIcon, EyeIcon, TriangleAlertIcon } from "lucide-react";
 import { cn } from "cn";
+import { toast } from "sonner";
+import { Alert, AlertAction, AlertDescription } from "#components/ui/alert";
+import { Button } from "#components/ui/button";
 import {
   Tooltip,
   TooltipContent,
@@ -34,6 +37,8 @@ import {
   launchPresentation,
   usePresentationById,
   openPresentation,
+  canEditPresentation,
+  duplicatePresentation,
   clampPosition,
   nextPosition,
   prevPosition,
@@ -52,7 +57,7 @@ import {
 } from "#shared";
 import type { DeckStyle, Presentation } from "#shared";
 import { EditorHeader } from "../features/editor/EditorHeader";
-import { drivePath } from "../features/drive";
+import { FolderPickerDialog, drivePath } from "../features/drive";
 import { StorageWarningBanner } from "../components/common/StorageWarningBanner";
 import { EditorStageCanvas } from "../features/editor/EditorStageCanvas";
 import { SlideThumbnailPane } from "../features/editor/SlideThumbnailPane";
@@ -68,6 +73,8 @@ import {
 import { SongInfoDialog } from "../features/editor/SongInfoDialog";
 import { useTextWidthMeasurer } from "../features/editor/useTextWidthMeasurer";
 import { useBackgroundAutoCache } from "../features/offline";
+import { PresentationShareDialog } from "../features/sharing/PresentationShareDialog";
+import { refreshSharedPresentation } from "../lib/sync";
 import {
   resolveBackgroundLayers,
   useBackground,
@@ -103,10 +110,23 @@ export function EditorRoute(): React.JSX.Element {
     offset: number;
   } | null>(null);
   const [limitHintSlideId, setLimitHintSlideId] = useState<string | null>(null);
+  const [isShareOpen, setIsShareOpen] = useState(false);
+  const [isCopyPickerOpen, setIsCopyPickerOpen] = useState(false);
+  const readOnly = !canEditPresentation(presentation);
 
   useLayoutEffect(() => {
     if (presentationId) openPresentation(presentationId);
   }, [presentationId]);
+
+  useEffect(() => {
+    if (!presentationId || !readOnly) return;
+    const refresh = (): void => {
+      void refreshSharedPresentation(presentationId).catch(() => undefined);
+    };
+    refresh();
+    window.addEventListener("focus", refresh);
+    return () => window.removeEventListener("focus", refresh);
+  }, [presentationId, readOnly]);
 
   useBackgroundAutoCache(found ?? null);
 
@@ -307,6 +327,14 @@ export function EditorRoute(): React.JSX.Element {
     }
   };
 
+  const handleMakeCopy = (folderId: string | null) => {
+    setIsCopyPickerOpen(false);
+    const copy = duplicatePresentation(presentation.id, folderId);
+    if (!copy) return;
+    toast.success("내 드라이브에 사본을 만들었습니다");
+    navigate(`/editor/${copy.id}`);
+  };
+
   const handleNewPresentation = () => {
     const created = createNewPresentation(
       "새 주일 예배 프레젠테이션",
@@ -324,8 +352,8 @@ export function EditorRoute(): React.JSX.Element {
     nextSlide: handleNextSlide,
     firstSlide: () => selectEdge("first"),
     lastSlide: () => selectEdge("last"),
-    editText: () => (currentSlide ? startTextEdit() : false),
-    newSlide: () => (currentSong ? handleAddSlide() : false),
+    editText: () => (currentSlide && !readOnly ? startTextEdit() : false),
+    newSlide: () => (currentSong && !readOnly ? handleAddSlide() : false),
     duplicateSlide: selection.duplicateSelection,
     deleteSlide: selection.deleteSelection,
     selectAll: selection.selectAll,
@@ -375,43 +403,70 @@ export function EditorRoute(): React.JSX.Element {
         onUpdateTitle={(newTitle) => updatePresentationTitle(newTitle)}
         onPresent={handlePresent}
         totalSongs={presentation.items.length}
-        onUndo={undo}
-        onRedo={redo}
+        onUndo={readOnly ? undefined : undo}
+        onRedo={readOnly ? undefined : redo}
         canUndo={canUndo()}
         canRedo={canRedo()}
         onNewPresentation={handleNewPresentation}
-        onOpenLyricModal={() => setSongPickerMode("create")}
-        backPath={drivePath(presentation.folderId)}
+        onOpenLyricModal={
+          readOnly ? undefined : () => setSongPickerMode("create")
+        }
+        onShare={readOnly ? undefined : () => setIsShareOpen(true)}
+        onMakeCopy={readOnly ? () => setIsCopyPickerOpen(true) : undefined}
+        sharedAccess={presentation.access}
+        readOnly={readOnly}
+        backPath={drivePath(readOnly ? null : presentation.folderId)}
       />
 
-      <EditorRibbon
-        song={currentSong}
-        onUpdateStyle={handleUpdateStyle}
-        onUpdateBackground={(backgroundId) =>
-          updateSongBackground(safeSongIndex, backgroundId)
-        }
-        slideControls={{
-          hasSlide: !!currentSlide,
-          canDelete: selection.canDelete,
-          canSplit,
-          canMerge,
-          splitTitle: canSplit
-            ? isEditingText
-              ? "커서 위치에서 슬라이드를 둘로 나눕니다 (Ctrl/⌘+Enter)"
-              : "슬라이드를 가운데에서 둘로 나눕니다"
-            : "가사가 두 줄 이상이거나, 편집 중 가사 사이에 커서가 있어야 나눌 수 있습니다",
-          mergeTitle: !nextSlideInSong
-            ? "이 곡의 마지막 슬라이드입니다"
-            : canMerge
-              ? "다음 슬라이드의 가사를 이 슬라이드 뒤에 붙입니다"
-              : `합치면 ${MAX_SLIDE_LINES}줄을 넘어 합칠 수 없습니다`,
-          onAdd: handleAddSlide,
-          onDuplicate: selection.duplicateSelection,
-          onDelete: selection.deleteSelection,
-          onSplit: () => handleSplitSlide(splitOffset),
-          onMerge: () => mergeSlideWithNext(safeSongIndex, safeSlideIndex),
-        }}
-      />
+      {readOnly ? (
+        <div className="border-b bg-background px-4 py-2">
+          <Alert data-testid="read-only-banner">
+            <EyeIcon />
+            <AlertDescription>
+              보기 전용으로 공유받은 세트입니다. 고치려면 사본을 만드세요.
+            </AlertDescription>
+            <AlertAction>
+              <Button
+                data-testid="make-copy-btn"
+                size="sm"
+                onClick={() => setIsCopyPickerOpen(true)}
+              >
+                <CopyIcon />
+                사본 만들기
+              </Button>
+            </AlertAction>
+          </Alert>
+        </div>
+      ) : (
+        <EditorRibbon
+          song={currentSong}
+          onUpdateStyle={handleUpdateStyle}
+          onUpdateBackground={(backgroundId) =>
+            updateSongBackground(safeSongIndex, backgroundId)
+          }
+          slideControls={{
+            hasSlide: !!currentSlide,
+            canDelete: selection.canDelete,
+            canSplit,
+            canMerge,
+            splitTitle: canSplit
+              ? isEditingText
+                ? "커서 위치에서 슬라이드를 둘로 나눕니다 (Ctrl/⌘+Enter)"
+                : "슬라이드를 가운데에서 둘로 나눕니다"
+              : "가사가 두 줄 이상이거나, 편집 중 가사 사이에 커서가 있어야 나눌 수 있습니다",
+            mergeTitle: !nextSlideInSong
+              ? "이 곡의 마지막 슬라이드입니다"
+              : canMerge
+                ? "다음 슬라이드의 가사를 이 슬라이드 뒤에 붙입니다"
+                : `합치면 ${MAX_SLIDE_LINES}줄을 넘어 합칠 수 없습니다`,
+            onAdd: handleAddSlide,
+            onDuplicate: selection.duplicateSelection,
+            onDelete: selection.deleteSelection,
+            onSplit: () => handleSplitSlide(splitOffset),
+            onMerge: () => mergeSlideWithNext(safeSongIndex, safeSlideIndex),
+          }}
+        />
+      )}
 
       <div className="flex flex-1 overflow-hidden">
         <SlideThumbnailPane
@@ -439,6 +494,7 @@ export function EditorRoute(): React.JSX.Element {
           onEditSongInfo={setEditingSongIndex}
           onDeleteSong={handleDeleteSong}
           onOpenSongPicker={() => setSongPickerMode("browse")}
+          readOnly={readOnly}
         />
 
         <EditorStageCanvas
@@ -455,9 +511,15 @@ export function EditorRoute(): React.JSX.Element {
           onNextSlide={handleNextSlide}
           zoomLevel={zoomLevel}
           onZoomChange={setZoomLevel}
-          onOpenLyricModal={() => setSongPickerMode("create")}
-          onUpdateStyle={(styleUpdate) => handleUpdateStyle(styleUpdate)}
-          onRequestTextEdit={() => startTextEdit()}
+          onOpenLyricModal={
+            readOnly ? undefined : () => setSongPickerMode("create")
+          }
+          onUpdateStyle={
+            readOnly
+              ? undefined
+              : (styleUpdate) => handleUpdateStyle(styleUpdate)
+          }
+          onRequestTextEdit={readOnly ? undefined : () => startTextEdit()}
           textEditor={
             isEditingText && currentSlide ? (
               <StageLyricsEditor
@@ -546,6 +608,29 @@ export function EditorRoute(): React.JSX.Element {
             setEditingSongIndex(null);
           }}
           onCancel={() => setEditingSongIndex(null)}
+        />
+      )}
+
+      {isCopyPickerOpen && (
+        <FolderPickerDialog
+          testId="copy-picker-dialog"
+          confirmTestId="copy-picker-confirm"
+          title={`‘${presentation.title}’ 사본 만들기`}
+          description="사본은 내 소유의 새 세트입니다. 원본이 바뀌어도 따라 바뀌지 않습니다."
+          targetLabel="만들 위치"
+          confirmLabel="사본 만들기"
+          initialFolderId={null}
+          onConfirm={handleMakeCopy}
+          onCancel={() => setIsCopyPickerOpen(false)}
+        />
+      )}
+
+      {!readOnly && (
+        <PresentationShareDialog
+          presentationId={presentation.id}
+          title={presentation.title}
+          isOpen={isShareOpen}
+          onClose={() => setIsShareOpen(false)}
         />
       )}
 

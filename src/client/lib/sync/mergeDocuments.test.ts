@@ -104,4 +104,29 @@ describe("문서 단위 LWW 병합", () => {
 
     expect(documents[0]).toEqual(localDoc);
   });
+
+  describe("공유받은 세트", () => {
+    const access = { ownerName: "인도자", memberId: USER };
+
+    it("서버 목록에서 빠지면 지우고 올리지 않는다", () => {
+      const { documents, needsPush, removed } = mergeDocuments(
+        [doc("a", "2026-09-22T10:00:00.000Z", { access })],
+        [],
+      );
+
+      expect(documents).toEqual([]);
+      expect(needsPush).toEqual([]);
+      expect(removed).toEqual(["a"]);
+    });
+
+    it("로컬이 더 새로워 보여도 서버본을 쓴다", () => {
+      const { documents, needsPush } = mergeDocuments(
+        [doc("a", "2026-09-22T12:00:00.000Z", { access, title: "로컬" })],
+        [doc("a", "2026-09-22T10:00:00.000Z", { access, title: "원본" })],
+      );
+
+      expect(documents[0].title).toBe("원본");
+      expect(needsPush).toEqual([]);
+    });
+  });
 });

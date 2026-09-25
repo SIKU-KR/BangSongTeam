@@ -9,6 +9,9 @@ export {
 export {
   pushPresentation,
   pullPresentations,
+  refreshSharedPresentation,
+  setSharedPresentationListener,
+  type SharedPresentationListener,
   pushDeck,
   pullDecks,
   deleteDeckRemote,
