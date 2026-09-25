@@ -203,8 +203,10 @@ export function SlideThumbnailPane({
                   setMenuSongIndex(songIndex);
                 }}
                 className={cn(
-                  "group relative flex items-center gap-1 rounded-md p-1 hover:bg-muted",
-                  isActiveSong ? "text-foreground" : "text-muted-foreground",
+                  "group relative flex items-center gap-1 rounded-md p-1 transition-colors",
+                  isActiveSong
+                    ? "bg-muted/70 font-medium text-foreground"
+                    : "text-muted-foreground hover:bg-muted/40",
                 )}
               >
                 <IconButton
@@ -343,25 +345,32 @@ export function SlideThumbnailPane({
                           aria-current={isActive ? "true" : undefined}
                           aria-label={`슬라이드 ${globalIndex + 1}`}
                           onClick={() => onSelectSlide(songIndex, slideIndex)}
-                          className="group flex cursor-pointer items-start gap-2 outline-none"
+                          className={cn(
+                            "group flex cursor-pointer items-start gap-1.5 rounded-lg p-1.5 transition-colors outline-none",
+                            isActive
+                              ? "bg-accent/80 shadow-xs ring-1 ring-border/80"
+                              : "hover:bg-muted/50",
+                          )}
                         >
-                          <span
-                            className={cn(
-                              "w-6 shrink-0 pt-0.5 text-right font-mono text-2xs",
-                              isActive
-                                ? "font-bold text-foreground"
-                                : "text-muted-foreground",
-                            )}
-                          >
-                            {globalIndex + 1}
-                          </span>
+                          <div className="flex w-5 shrink-0 justify-end pt-1">
+                            <span
+                              className={cn(
+                                "flex h-5 min-w-5 items-center justify-center rounded-full font-mono text-2xs transition-colors",
+                                isActive
+                                  ? "bg-primary font-bold text-primary-foreground shadow-xs"
+                                  : "text-muted-foreground group-hover:text-foreground",
+                              )}
+                            >
+                              {globalIndex + 1}
+                            </span>
+                          </div>
 
                           <div
                             ref={isActive ? activeThumbRef : undefined}
                             className={cn(
-                              "relative aspect-video w-44 shrink-0 overflow-hidden rounded-md bg-black transition-shadow",
+                              "relative aspect-video w-44 shrink-0 overflow-hidden rounded-md bg-black transition-all",
                               isActive
-                                ? "shadow-md ring-2 ring-primary"
+                                ? "shadow-md ring-2 ring-primary ring-offset-2 ring-offset-background"
                                 : "ring-1 ring-border group-hover:ring-ring",
                             )}
                           >

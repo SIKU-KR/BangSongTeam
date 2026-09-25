@@ -219,7 +219,7 @@ export function EditorStageCanvas({
         className="mt-2 flex w-full max-w-4xl shrink-0 items-center justify-between gap-3 text-2xs text-muted-foreground"
       >
         <div className="flex min-w-0 items-center gap-2">
-          <span className="font-mono text-foreground">
+          <span className="inline-flex items-center rounded-md bg-muted px-2 py-0.5 font-mono font-semibold text-foreground">
             슬라이드 {slideNumber}/{totalSlideCount}
           </span>
           <span aria-hidden="true">·</span>

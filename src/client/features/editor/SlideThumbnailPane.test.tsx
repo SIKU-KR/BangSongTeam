@@ -91,8 +91,14 @@ describe("SlideThumbnailPane (PPT식 썸네일 창)", () => {
       "aria-current",
       "true",
     );
+    expect(screen.getByTestId("slide-thumb-5").className).toContain(
+      "bg-accent/80",
+    );
     expect(screen.getByTestId("slide-thumb-0")).not.toHaveAttribute(
       "aria-current",
+    );
+    expect(screen.getByTestId("slide-thumb-0").className).not.toContain(
+      "bg-accent/80",
     );
   });
 
