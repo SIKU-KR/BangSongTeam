@@ -11,6 +11,13 @@ import {
 import { useBackground } from "../backgrounds/backgroundCatalog";
 import { BackgroundPickerModal } from "./BackgroundPickerModal";
 import { ColorPickerField } from "./ColorPickerField";
+import { OverflowWarningIcon } from "./OverflowWarningIcon";
+
+/** 현재 곡·슬라이드의 텍스트 넘침 여부 (`analyzeDeckOverflow` 결과에서 뽑는다) */
+export interface SongOverflowWarnings {
+  activeSlideWraps: boolean;
+  exceedsStage: boolean;
+}
 
 export interface SongPropertyPanelProps {
   style: DeckStyle;
@@ -20,6 +27,7 @@ export interface SongPropertyPanelProps {
   onUpdateStyle: (update: Partial<DeckStyle>) => void;
   onUpdateBackground: (backgroundId: string | null) => void;
   onUpdateSlideLines?: (lines: string[]) => void;
+  overflowWarnings?: SongOverflowWarnings;
   onSplitSlide?: (offset: number) => void;
   onMergeWithNext?: () => void;
   footer?: React.ReactNode;
@@ -139,6 +147,7 @@ export function SongPropertyPanel({
   onUpdateStyle,
   onUpdateBackground,
   onUpdateSlideLines,
+  overflowWarnings,
   onSplitSlide,
   onMergeWithNext,
   footer,
@@ -257,6 +266,31 @@ export function SongPropertyPanel({
       </div>
 
       <div className="p-4 flex flex-col gap-6">
+        {(overflowWarnings?.exceedsStage ||
+          overflowWarnings?.activeSlideWraps) && (
+          <section
+            role="alert"
+            data-testid="overflow-warning-panel"
+            className="flex gap-2 p-3 rounded-lg border border-amber-300 dark:border-amber-500/40 bg-amber-50 dark:bg-amber-950/30 text-xs text-amber-800 dark:text-amber-300"
+          >
+            <OverflowWarningIcon className="w-4 h-4 shrink-0 mt-0.5" />
+            <ul className="space-y-1 leading-relaxed">
+              {overflowWarnings.exceedsStage && (
+                <li>
+                  이 곡에서 가장 긴 슬라이드가 화면 가장자리 여백을 넘칩니다.
+                  글자 크기를 줄이거나 슬라이드를 나눠 보세요.
+                </li>
+              )}
+              {overflowWarnings.activeSlideWraps && (
+                <li>
+                  현재 슬라이드의 한 줄이 텍스트 박스 폭을 넘어 자동
+                  줄바꿈됩니다. 글자 크기를 줄이거나 박스 폭을 넓혀 보세요.
+                </li>
+              )}
+            </ul>
+          </section>
+        )}
+
         <section className="space-y-2.5">
           <label className="text-xs font-semibold text-zinc-600 dark:text-zinc-400 uppercase tracking-wider flex items-center justify-between">
             <span>곡 배경</span>

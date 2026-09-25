@@ -9,7 +9,7 @@
 >
 > - Task 1.4·1.5는 설계와 다른 형태로 구현되었다. `useReducer` 기반 `usePresentationEditor` 대신 **`src/client/features/presentation/presentationStore.ts`** (`useSyncExternalStore` 기반 외부 스토어 + 문서별 undo/redo)로 구현했고 테스트는 `presentationStore.test.ts`에 있다. 편집기·송출 라우트가 같은 스토어를 공유해야 해서 훅 지역 상태보다 외부 스토어가 맞다. 완료로 인정한다.
 > - 단, 1.4에 명시된 `splitSlide`·`mergeSlideWithNext` 액션은 아직 없다. Task 2.3·2.4에서 함께 구현한다.
-> - **잔여: Task 1.2·1.3 (넘침 감지 유틸)** — PRD 4.2·4.4의 경고 아이콘이 여기에 달린다.
+> - Task 1.2·1.3은 `src/shared/utils/overflow.ts`의 `analyzeDeckOverflow`로 구현했다 (2026-09-25). 설계의 `isLineOverflowing`·`checkSlideOverflow`·`checkSongStageOverflow` 세 함수 대신 곡 하나를 한 번에 계산해 슬라이드별 줄바꿈 여부와 곡 단위 화면 넘침을 함께 돌려준다. 편집기에서는 캔버스로 실제 번들 폰트 폭을 재는 `useTextWidthMeasurer`를 넘기고, 캔버스가 없으면 글자 폭 어림값을 쓴다. 4줄 초과 경고는 두지 않았다 (넘치는 경우는 곡 단위 화면 넘침으로 잡힌다).
 
 ---
 
@@ -35,7 +35,7 @@
     - `src/client/index.css`에 `@fontsource/noto-sans-kr` import 추가
   - **DoD (통과 기준)**: `pnpm --filter web exec tsc --noEmit`이 통과하고 라이브러리 import 에러 없이 번들링 준비가 완료된다.
 
-- [ ] **Task 1.2: 텍스트 박스 폭 및 높이 넘침(Overflow) 감지 유틸리티 단위 테스트 작성 (TDD Red)**
+- [x] **Task 1.2: 텍스트 박스 폭 및 높이 넘침(Overflow) 감지 유틸리티 단위 테스트 작성 (TDD Red)**
   - **대상 파일**: `src/shared/utils/overflow.test.ts`
   - **선행 조건**: Task 1.1
   - **구현 내용**:
@@ -44,7 +44,7 @@
     - 테스트 케이스 3: 곡 내 최다 줄 슬라이드가 스테이지 상하 5% 안전 여백을 벗어나는지 감지 (`checkSongStageOverflow`)
   - **DoD (통과 기준)**: `pnpm --filter @repo/shared vitest run src/utils/overflow.test.ts` 실행 시 구현체가 없어 실패(Red)함을 확인한다.
 
-- [ ] **Task 1.3: 텍스트 박스 폭 및 높이 넘침(Overflow) 감지 유틸리티 구현 (TDD Green)**
+- [x] **Task 1.3: 텍스트 박스 폭 및 높이 넘침(Overflow) 감지 유틸리티 구현 (TDD Green)**
   - **대상 파일**: `src/shared/utils/overflow.ts`, `src/shared/utils/index.ts`
   - **선행 조건**: Task 1.2
   - **구현 내용**:

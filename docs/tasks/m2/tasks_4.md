@@ -8,7 +8,7 @@
 > **구현 현황 (2026-09-21 재검토)**
 >
 > - 4개 태스크 모두 구현 완료: `BackgroundPickerModal.tsx`, `ColorPickerField.tsx`, 그리고 타이포·그림자·3×3 앵커·폭 컨트롤을 모두 담은 `SongPropertyPanel.tsx`.
-> - 속성 패널에 넘침 경고 표시만 비어 있다 (`tasks_1.md`의 Task 1.2·1.3 완료 후 연결).
+> - 속성 패널 넘침 경고는 `tasks_1.md` Task 1.2·1.3의 `analyzeDeckOverflow`로 연결했다 (2026-09-25).
 > - 배경 목록은 아직 `/api/backgrounds`가 아니라 `@repo/shared`의 `INITIAL_BACKGROUNDS` 상수를 읽는다 (TECH_SPEC §7.1 각주).
 
 ---
