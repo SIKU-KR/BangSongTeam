@@ -162,7 +162,7 @@ function AppRoutes(): React.JSX.Element {
 }
 
 /**
- * 로그인하지 않았을 때. 공유 링크 보기와 그 세트의 발표만 열고,
+ * 로그인하지 않았을 때. 랜딩, 공유 링크 보기와 그 세트의 발표만 열고,
  * 나머지 주소는 로그인 화면을 보여 준다 (로그인하면 그 주소로 이어진다).
  */
 function GuestRoutes(): React.JSX.Element {
@@ -172,6 +172,7 @@ function GuestRoutes(): React.JSX.Element {
         <RouteErrorBoundary>
           <Suspense fallback={<RouteFallback />}>
             <Routes>
+              <Route path="/" element={<LandingRoute />} />
               <Route path="/s/:token" element={<SharePreviewRoute />} />
               <Route
                 path="/present/:presentationId/fullscreen"
