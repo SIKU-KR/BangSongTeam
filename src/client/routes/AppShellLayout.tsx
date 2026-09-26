@@ -4,7 +4,7 @@ import { SidebarInset, SidebarProvider } from "#components/ui/sidebar";
 import { Toaster } from "#components/ui/sonner";
 import { TooltipProvider } from "#components/ui/tooltip";
 import type { Deck } from "#shared";
-import { ChromeAlertBanner } from "../components/common/ChromeAlertBanner";
+import { BrowserSupportBanner } from "../components/common/BrowserSupportBanner";
 import { StorageWarningBanner } from "../components/common/StorageWarningBanner";
 import { AppUpdateBanner } from "../components/common/AppUpdateBanner";
 import { AppSidebar } from "../components/layout/AppSidebar";
@@ -114,7 +114,7 @@ function AppShellFrame(): React.JSX.Element {
       <AppSidebar />
 
       <SidebarInset className="min-w-0 overflow-hidden">
-        <ChromeAlertBanner />
+        <BrowserSupportBanner />
         <StorageWarningBanner />
         <AppUpdateBanner />
 

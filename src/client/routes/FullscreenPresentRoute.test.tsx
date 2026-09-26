@@ -261,6 +261,23 @@ describe("FullscreenPresentRoute", () => {
     });
   });
 
+  it("전체화면을 쓸 수 없는 브라우저에서도 창 안에서 송출하고 Esc로 돌아간다", async () => {
+    Reflect.deleteProperty(document, "fullscreenElement");
+    Reflect.deleteProperty(document, "exitFullscreen");
+    Reflect.deleteProperty(document.documentElement, "requestFullscreen");
+
+    renderPresent(`/present/${DOC_ID}/fullscreen`, {
+      returnTo: `/editor/${DOC_ID}`,
+    });
+    expect(screen.getByTestId("fullscreen-present-route")).toBeInTheDocument();
+
+    await act(async () => {
+      dispatchKey("Escape");
+    });
+
+    expect(screen.getByTestId("editor-stub")).toBeInTheDocument();
+  });
+
   describe("송출 종료 후 복귀", () => {
     beforeEach(() => {
       Object.defineProperty(document, "fullscreenElement", {

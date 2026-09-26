@@ -49,6 +49,7 @@ import {
   useUpdateShareSettings,
 } from "../../lib/api/shareQueries";
 import { describeApiError } from "../../lib/api/request";
+import { copyToClipboard } from "../../lib/browser/clipboard";
 
 const ACCESS_OPTIONS: Array<{ value: LinkAccess; label: string }> = [
   { value: "off", label: "제한됨 (나만 접근)" },
@@ -89,7 +90,7 @@ export function PresentationShareDialog({
 
   const copyLink = async (): Promise<void> => {
     try {
-      await navigator.clipboard.writeText(url);
+      await copyToClipboard(url);
       toast.success("링크를 복사했습니다");
     } catch {
       toast.error("링크를 복사하지 못했습니다");

@@ -8,6 +8,7 @@ import { LyricsViewer } from "./LyricsViewer";
 import { LibraryShareControls } from "../../sharing/LibraryShareControls";
 import { usePublicDeck } from "../../../lib/api/catalogQueries";
 import { describeApiError } from "../../../lib/api/request";
+import { copyToClipboard } from "../../../lib/browser/clipboard";
 
 interface ActionBarProps {
   copyText?: string;
@@ -34,7 +35,7 @@ function ActionBar({
 
   const copy = async (): Promise<void> => {
     try {
-      await navigator.clipboard.writeText(copyText ?? "");
+      await copyToClipboard(copyText ?? "");
     } catch (error) {
       void error;
     }

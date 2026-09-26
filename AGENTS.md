@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Web-first slide tool for church worship teams: build song decks and presentations (sets), project them fullscreen over looping video backgrounds, and share decks through a public library. The UI is Korean. Desktop Chrome is the only supported browser (others get a non-blocking banner).
+Web-first slide tool for church worship teams: build song decks and presentations (sets), project them fullscreen over looping video backgrounds, and share decks through a public library. The UI is Korean. Desktop Chrome, Edge, Whale, Safari 16.4+ and Firefox are supported; a non-blocking banner appears only when a capability projection needs (fullscreen, H.264 playback, offline) is missing.
 
 - Product scope: `docs/prd.md`, `docs/TECH_SPEC.md`
 - Milestone task specs and current status: `docs/tasks/` (has its own `AGENTS.md`)
@@ -21,7 +21,7 @@ One Cloudflare Worker serves the Vite SPA and the Hono API (`/api/*`), bound to 
 ## Layout
 
 ```
-src/client/   React SPA: routes/, features/<area>/, components/{ui,common,layout,stage}/, lib/{api,auth,storage,sync,offline}, public/ (static assets, Vite `publicDir`)
+src/client/   React SPA: routes/, features/<area>/, components/{ui,common,layout,stage}/, lib/{api,auth,browser,storage,sync,offline}, public/ (static assets, Vite `publicDir`)
 src/worker/   Hono API: index.ts (createApp, AppType), routes/, middleware/, lib/{auth,password}.ts
 src/shared/   "#shared": Zod schemas, constants, pure utils (runs in the browser and in workerd)
 src/db/       "#db": Drizzle schema, queries/ (all DB access), ops/ (runbook SQL), migrations/ (drizzle-kit SQL plus hand-written FTS5 SQL). Worker-only
@@ -124,6 +124,7 @@ pnpm vitest run -t "slide split"
 - Projection is fullscreen only (`/present/:presentationId/fullscreen`), driven from the same window.
 - During projection the app makes zero data requests. The only network traffic allowed is `<video>` playback and background caching of same-origin media under `/api/media/`.
 - While a set is open in the editor or on screen, `useBackgroundAutoCache` caches its backgrounds silently, with no progress UI, badge or download gate. The media route caches only full `200` responses.
+- Browser-dependent APIs (fullscreen, clipboard, capability checks) go through `src/client/lib/browser/`. Detect features, never browser brands: fullscreen picks a strategy (`standard`, `webkit`, `unsupported`) per call, and clipboard falls back to `execCommand("copy")` outside secure contexts.
 - The PWA uses `registerType: "prompt"`. Never auto-reload: a reload in the middle of a service stops the projection.
 - These features were removed by product decision. Don't bring them back without a new decision:
   - Presenter view and the `BroadcastChannel` control window
