@@ -167,6 +167,20 @@ describe("scheduleMediaCaching", () => {
     expect(await isCached(OTHER)).toBe(true);
   });
 
+  it("우선 항목은 아직 받지 않은 항목보다 먼저 받는다", async () => {
+    const fetchMock = mockFetch();
+
+    scheduleMediaCaching([VIDEO, POSTER]);
+    scheduleMediaCaching([OTHER, POSTER], { priority: true });
+    await __waitForMediaCachingForTests();
+
+    expect(fetchMock.mock.calls.map(([url]) => String(url))).toEqual([
+      OTHER,
+      POSTER,
+      VIDEO,
+    ]);
+  });
+
   it("실패한 URL은 다음 호출에서 다시 시도한다", async () => {
     let attempts = 0;
     const fetchMock = mockFetch(async () => {

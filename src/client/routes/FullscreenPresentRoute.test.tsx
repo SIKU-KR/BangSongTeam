@@ -4,7 +4,13 @@ import {
   SEED_PRESENTATIONS,
 } from "../features/presentation";
 import { signInAsTestUser } from "../test/sessionFixture";
-import { render, screen, fireEvent, act } from "@testing-library/react";
+import {
+  render,
+  screen,
+  fireEvent,
+  act,
+  waitFor,
+} from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { MemoryRouter, Routes, Route } from "react-router-dom";
 import { FullscreenPresentRoute } from "./FullscreenPresentRoute";
@@ -70,6 +76,8 @@ describe("FullscreenPresentRoute", () => {
     resetPresentationStore();
     __loadDocumentsForTests(SEED_PRESENTATIONS);
     vi.spyOn(globalThis, "fetch");
+    vi.spyOn(window.HTMLMediaElement.prototype, "play").mockResolvedValue();
+    vi.spyOn(window.HTMLMediaElement.prototype, "pause").mockReturnValue();
   });
 
   afterEach(() => {
@@ -162,11 +170,20 @@ describe("FullscreenPresentRoute", () => {
     expect(overlay).toHaveStyle({ opacity: 0.4 });
   });
 
-  it("should toggle lyrics hide on 'h' key press", () => {
+  it("글꼴이 준비될 때까지 첫 슬라이드 가사를 숨긴다", async () => {
     renderPresent();
 
     const textLayer = screen.getByTestId("text-layer-container");
-    expect(textLayer).toHaveStyle({ opacity: 1 });
+    expect(textLayer).toHaveStyle({ opacity: 0 });
+
+    await waitFor(() => expect(textLayer).toHaveStyle({ opacity: 1 }));
+  });
+
+  it("should toggle lyrics hide on 'h' key press", async () => {
+    renderPresent();
+
+    const textLayer = screen.getByTestId("text-layer-container");
+    await waitFor(() => expect(textLayer).toHaveStyle({ opacity: 1 }));
 
     act(() => {
       dispatchKey("h", "KeyH");
@@ -325,7 +342,7 @@ describe("FullscreenPresentRoute", () => {
     });
   });
 
-  it("should supply motion background video URL and preload next song video", () => {
+  it("지금 곡 영상을 재생하고 다음 곡 영상은 쉬는 슬롯에 미리 싣는다", () => {
     const [first, second] = TEST_SERVICE_BACKGROUNDS;
     setBackgroundCatalogForTests(TEST_SERVICE_BACKGROUNDS);
     __loadDocumentsForTests([
@@ -337,8 +354,9 @@ describe("FullscreenPresentRoute", () => {
     expect(videoSlotA).toHaveAttribute("src", first.mediaUrl);
     expect(videoSlotA).toHaveAttribute("poster", first.posterUrl);
 
-    const preloadVideo = screen.getByTestId("video-preload");
-    expect(preloadVideo).toHaveAttribute("src", second.mediaUrl);
+    const videoSlotB = screen.getByTestId("video-slot-b");
+    expect(videoSlotB).toHaveAttribute("src", second.mediaUrl);
+    expect(videoSlotB).toHaveStyle({ opacity: "0" });
   });
 
   it("이미지 배경 곡은 정지 이미지로 그리고, 앞 곡의 영상을 남기지 않는다", () => {
