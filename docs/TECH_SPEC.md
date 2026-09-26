@@ -1082,6 +1082,7 @@ export type SearchCatalogResponse = z.infer<typeof SearchCatalogResponseSchema>;
 
 - Session Token은 `HttpOnly`, `SameSite=Lax`, `Secure` 쿠키로만 취급한다.
 - Hono 인증 미들웨어는 모든 보호된 엔드포인트에서 세션을 검증하고, 요청 Context에 `userId`를 주입하여 쿼리 헬퍼 외의 임의 데이터 접근을 차단한다.
+- **세션 쿠키 캐시 (2026-09-26)**: Better Auth `session.cookieCache`를 5분(`SESSION_COOKIE_CACHE_SECONDS`)으로 켠다. 그동안은 서명된 `session_data` 쿠키로 세션을 확인하고 D1의 `session`·`user`를 읽지 않는다. 캐시가 만료돼 D1을 읽은 요청은 미들웨어가 새 캐시 쿠키를 응답에 실어 보낸다. 대가로 **다른 기기에서의 세션 폐기·계정 삭제는 최대 5분 늦게 반영된다.** 같은 브라우저의 로그아웃은 쿠키를 함께 지우므로 바로 반영된다.
 
 ---
 
