@@ -138,7 +138,7 @@ async function probeImage(file: File): Promise<ProbedBackgroundFile> {
 
 /**
  * 브라우저가 실제로 재생·표시할 수 있는지 확인하고, 해상도·길이를 읽고,
- * 영상이면 포스터를 만든다. 송출 화면과 같은 Chrome 디코더로 확인하므로
+ * 영상이면 포스터를 만든다. 송출할 브라우저와 같은 디코더로 확인하므로
  * 여기서 열리지 않는 파일은 예배 중에도 재생되지 않는다.
  */
 export function probeBackgroundFile(file: File): Promise<ProbedBackgroundFile> {

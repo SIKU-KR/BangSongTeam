@@ -8,7 +8,7 @@ const BANNER_CLASS = "shrink-0 rounded-none border-x-0 border-t-0";
 /**
  * 저장 실패·저장본 격리 경고 배너.
  *
- * ChromeAlertBanner와 달리 닫을 수 없다. 사용자가 "저장됐겠지" 하고 예배 당일에
+ * BrowserSupportBanner와 달리 닫을 수 없다. 사용자가 "저장됐겠지" 하고 예배 당일에
  * 작업을 잃는 것이 이 서비스에서 가장 나쁜 실패이므로, 저장이 안 되는 상태는
  * 해소될 때까지 계속 보여야 한다.
  *

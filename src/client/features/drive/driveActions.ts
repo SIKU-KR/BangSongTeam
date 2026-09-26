@@ -15,7 +15,7 @@ import {
   launchPresentation,
   type PresentNavigate,
 } from "../presentation";
-import { isGoogleChromeBrowser } from "../../components/common/ChromeAlertBanner";
+import { canPresentReliably } from "../../lib/browser/capabilities";
 import {
   deleteFolderRemote,
   deletePresentationRemote,
@@ -56,10 +56,11 @@ export function openItem(ref: DriveItemRef, navigate: Navigate): void {
 }
 
 /**
- * 곧바로 전체화면 송출로 들어간다. Chrome이 아니면 먼저 묻는다 (송출은 Chrome 권장).
+ * 곧바로 전체화면 송출로 들어간다. 전체화면이나 배경 영상 재생을 지원하지 않는
+ * 브라우저면 먼저 묻는다.
  * 송출을 끝내면 `returnTo`(지금 보고 있는 드라이브 경로)로 돌아온다.
  *
- * 클릭 핸들러 안에서 동기로 불러야 Chrome이 전체화면을 허용한다 — 이 함수와
+ * 클릭 핸들러 안에서 동기로 불러야 브라우저가 전체화면을 허용한다 — 이 함수와
  * 호출 경로 사이에 await를 끼우지 않는다.
  */
 export function startPresentation(
@@ -67,9 +68,9 @@ export function startPresentation(
   navigate: PresentNavigate,
   returnTo: string,
 ): boolean {
-  if (!isGoogleChromeBrowser()) {
+  if (!canPresentReliably()) {
     const proceed = window.confirm(
-      "이 서비스는 Google Chrome에 최적화되어 있습니다. 예배 송출은 Chrome에서 진행하는 것을 권장합니다.\n\n계속 진행하시겠습니까?",
+      "이 브라우저에서는 전체화면 송출이나 배경 영상이 제대로 동작하지 않을 수 있습니다.\n\n계속 진행하시겠습니까?",
     );
     if (!proceed) return false;
   }

@@ -40,6 +40,8 @@ import {
   usePresentationShortcuts,
   enterFullscreen,
   exitFullscreen,
+  isFullscreenActive,
+  subscribeFullscreenChange,
   resolvePresentReturnPath,
   DEFAULT_PRESENT_RETURN_PATH,
   nextPosition,
@@ -121,26 +123,21 @@ export function FullscreenPresentRoute(): React.JSX.Element {
   });
 
   useEffect(() => {
-    if (!document.fullscreenElement) {
+    if (!isFullscreenActive()) {
       enterFullscreen().catch(() => {});
     }
 
-    let hasBeenFullscreen = Boolean(document.fullscreenElement);
+    let hasBeenFullscreen = isFullscreenActive();
 
-    const handleFullscreenChange = () => {
-      if (document.fullscreenElement) {
+    return subscribeFullscreenChange(() => {
+      if (isFullscreenActive()) {
         hasBeenFullscreen = true;
         return;
       }
       if (hasBeenFullscreen) {
         handleExit();
       }
-    };
-
-    document.addEventListener("fullscreenchange", handleFullscreenChange);
-    return () => {
-      document.removeEventListener("fullscreenchange", handleFullscreenChange);
-    };
+    });
   }, [handleExit]);
 
   if (!found) return <Navigate to={DEFAULT_PRESENT_RETURN_PATH} replace />;
