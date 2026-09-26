@@ -130,6 +130,25 @@ describe("App Route Integration", () => {
     expect(screen.queryByTestId("presentation-row")).not.toBeInTheDocument();
   });
 
+  it("미로그인이어도 랜딩 페이지는 열리고, 진입 버튼은 로그인 화면으로 이어진다", async () => {
+    signOutForTests();
+
+    renderAt("/");
+
+    expect(await screen.findByTestId("landing-route")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /카카오로 시작하기/ }),
+    ).not.toBeInTheDocument();
+
+    act(() => {
+      screen.getByTestId("landing-enter-btn").click();
+    });
+
+    expect(
+      await screen.findByRole("button", { name: /카카오로 시작하기/ }),
+    ).toBeInTheDocument();
+  });
+
   it("미로그인이면 링크로 연 세트가 아닌 송출 경로는 막는다", async () => {
     signOutForTests();
 
