@@ -63,7 +63,7 @@
 
 ```mermaid
 flowchart TB
-  subgraph Client["Client Browser (Google Chrome Dedicated)"]
+  subgraph Client["Client Browser (Desktop Chrome, Edge, Safari, Firefox)"]
     subgraph FrontendSPA["React SPA (src/client)"]
       UI["Editor / Presentation UI (shadcn/ui + Tailwind)"]
       StageRenderer["3-Layer Slide Stage"]

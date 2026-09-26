@@ -140,9 +140,24 @@ function canCacheInBackground(): boolean {
   return !isOffline() && isCacheStorageAvailable();
 }
 
-export function scheduleMediaCaching(urls: readonly string[]): void {
+/**
+ * URL을 백그라운드 캐시 큐에 넣는다. 한 번에 하나씩 받아 재생과 대역폭을 덜 다툰다.
+ *
+ * `priority`면 아직 받지 않은 항목보다 앞에 세운다. 송출 중 지금·다음 곡 배경을
+ * 세트의 나머지보다 먼저 받을 때 쓴다. 이미 받고 있는 항목은 끊지 않는다.
+ */
+export function scheduleMediaCaching(
+  urls: readonly string[],
+  options: { priority?: boolean } = {},
+): void {
   if (urls.length === 0 || !canCacheInBackground()) return;
-  for (const url of urls) pending.add(url);
+  if (options.priority) {
+    const rest = [...pending].filter((url) => !urls.includes(url));
+    pending.clear();
+    for (const url of [...urls, ...rest]) pending.add(url);
+  } else {
+    for (const url of urls) pending.add(url);
+  }
   startDrain();
 }
 

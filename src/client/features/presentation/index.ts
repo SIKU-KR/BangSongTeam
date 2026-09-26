@@ -75,10 +75,11 @@ export {
 export {
   enterFullscreen,
   exitFullscreen,
+  isFullscreenActive,
+  subscribeFullscreenChange,
   launchPresentation,
   resolvePresentReturnPath,
   DEFAULT_PRESENT_RETURN_PATH,
-  type ChromeFullscreenOptions,
   type PresentNavigate,
 } from "./fullscreen";
 

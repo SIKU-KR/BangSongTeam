@@ -30,7 +30,7 @@ import { PresentationsRoute } from "./PresentationsRoute";
 import { TrashRoute } from "./TrashRoute";
 import { LyricsRoute } from "./LyricsRoute";
 import { BackgroundsRoute } from "./BackgroundsRoute";
-import * as chromeChecker from "../components/common/ChromeAlertBanner";
+import * as capabilities from "../lib/browser/capabilities";
 import { withQueryClient } from "../test/queryClientFixture";
 import { installFakeApi } from "../test/fakeApi";
 
@@ -159,16 +159,16 @@ describe("AppShellLayout (드라이브형 홈)", () => {
     expect(screen.getByTestId("editor-stub")).toBeInTheDocument();
   });
 
-  it("목록의 발표 버튼은 Chrome에서 곧바로 전체화면 송출로 간다", () => {
-    vi.spyOn(chromeChecker, "isGoogleChromeBrowser").mockReturnValue(true);
+  it("목록의 발표 버튼은 송출 기능을 모두 갖춘 브라우저에서 곧바로 전체화면 송출로 간다", () => {
+    vi.spyOn(capabilities, "canPresentReliably").mockReturnValue(true);
     renderShell();
 
     fireEvent.click(screen.getAllByTestId("row-present-btn")[0]);
     expect(screen.getByTestId("fullscreen-stub")).toBeInTheDocument();
   });
 
-  it("Chrome이 아니면 발표 전에 확인을 받는다", () => {
-    vi.spyOn(chromeChecker, "isGoogleChromeBrowser").mockReturnValue(false);
+  it("전체화면이나 H.264 재생을 지원하지 않으면 발표 전에 확인을 받는다", () => {
+    vi.spyOn(capabilities, "canPresentReliably").mockReturnValue(false);
     const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(false);
     renderShell();
 

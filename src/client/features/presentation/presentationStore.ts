@@ -71,9 +71,15 @@ function writeActive(next: Presentation): void {
   listSnapshot = buildListSnapshot(state);
 }
 
+/**
+ * 되돌리기 기록은 문서 객체의 참조를 그대로 보관한다. 스토어의 모든 편집이 바뀐
+ * 경로만 새 객체로 만드는 불변 갱신이라, 기록끼리 바뀌지 않은 곡·슬라이드를 공유해
+ * 직렬화 비용이 없고, 되돌린 뒤에도 바뀌지 않은 곡의 참조가 유지되어 썸네일·넘침
+ * 분석 캐시가 그대로 맞는다. 스토어 밖에서 문서 객체를 직접 고치면 기록이 함께 바뀐다.
+ */
 interface DocumentHistory {
-  undo: string[];
-  redo: string[];
+  undo: Presentation[];
+  redo: Presentation[];
 }
 
 const histories = new Map<string, DocumentHistory>();
@@ -109,7 +115,7 @@ function pushHistory(coalesceKey?: string): void {
     : null;
 
   const history = historyFor(state.activeId);
-  history.undo.push(JSON.stringify(readActive()));
+  history.undo.push(readActive());
   if (history.undo.length > MAX_HISTORY) {
     history.undo.shift();
   }
@@ -148,13 +154,11 @@ function withCurrentPlacement(
 export function undo(): boolean {
   lastPush = null;
   const history = historyFor(state.activeId);
-  const prevSerialized = history.undo.pop();
-  if (!prevSerialized) return false;
+  const previous = history.undo.pop();
+  if (!previous) return false;
   const current = readActive();
-  history.redo.push(JSON.stringify(current));
-  writeActive(
-    withCurrentPlacement(JSON.parse(prevSerialized) as Presentation, current),
-  );
+  history.redo.push(current);
+  writeActive(withCurrentPlacement(previous, current));
   emitChange();
   return true;
 }
@@ -162,13 +166,11 @@ export function undo(): boolean {
 export function redo(): boolean {
   lastPush = null;
   const history = historyFor(state.activeId);
-  const nextSerialized = history.redo.pop();
-  if (!nextSerialized) return false;
+  const next = history.redo.pop();
+  if (!next) return false;
   const current = readActive();
-  history.undo.push(JSON.stringify(current));
-  writeActive(
-    withCurrentPlacement(JSON.parse(nextSerialized) as Presentation, current),
-  );
+  history.undo.push(current);
+  writeActive(withCurrentPlacement(next, current));
   emitChange();
   return true;
 }

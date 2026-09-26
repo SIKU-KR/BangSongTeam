@@ -15,7 +15,10 @@ import { Kbd } from "#components/ui/kbd";
 import { DEFAULT_DECK_STYLE } from "#shared";
 import type { Presentation } from "#shared";
 import { SlideStage } from "../components/stage/SlideStage";
-import { useBackgroundAutoCache } from "../features/offline";
+import {
+  usePresentationFontsReady,
+  useProjectionMediaCache,
+} from "../features/offline";
 import {
   resolveBackgroundLayers,
   useBackground,
@@ -37,6 +40,8 @@ import {
   usePresentationShortcuts,
   enterFullscreen,
   exitFullscreen,
+  isFullscreenActive,
+  subscribeFullscreenChange,
   resolvePresentReturnPath,
   DEFAULT_PRESENT_RETURN_PATH,
   nextPosition,
@@ -62,10 +67,10 @@ export function FullscreenPresentRoute(): React.JSX.Element {
     if (presentationId) openPresentation(presentationId);
   }, [presentationId]);
 
-  useBackgroundAutoCache(found ?? null);
-
   const [position, setPosition] =
     useState<ProjectionPosition>(INITIAL_POSITION);
+  const fontsReady = usePresentationFontsReady(found ?? null);
+  useProjectionMediaCache(found ?? null, position.songIndex);
   const [isBlackout, setIsBlackout] = useState<boolean>(false);
   const [isLyricsHidden, setIsLyricsHidden] = useState<boolean>(false);
 
@@ -118,26 +123,21 @@ export function FullscreenPresentRoute(): React.JSX.Element {
   });
 
   useEffect(() => {
-    if (!document.fullscreenElement) {
+    if (!isFullscreenActive()) {
       enterFullscreen().catch(() => {});
     }
 
-    let hasBeenFullscreen = Boolean(document.fullscreenElement);
+    let hasBeenFullscreen = isFullscreenActive();
 
-    const handleFullscreenChange = () => {
-      if (document.fullscreenElement) {
+    return subscribeFullscreenChange(() => {
+      if (isFullscreenActive()) {
         hasBeenFullscreen = true;
         return;
       }
       if (hasBeenFullscreen) {
         handleExit();
       }
-    };
-
-    document.addEventListener("fullscreenchange", handleFullscreenChange);
-    return () => {
-      document.removeEventListener("fullscreenchange", handleFullscreenChange);
-    };
+    });
   }, [handleExit]);
 
   if (!found) return <Navigate to={DEFAULT_PRESENT_RETURN_PATH} replace />;
@@ -155,7 +155,7 @@ export function FullscreenPresentRoute(): React.JSX.Element {
         nextBackgroundUrl={nextBackground.videoUrl}
         posterUrl={currentBackground.posterUrl}
         isBlackout={isBlackout}
-        isLyricsHidden={isLyricsHidden}
+        isLyricsHidden={isLyricsHidden || !fontsReady}
       />
 
       <div className="absolute top-4 right-4 z-50 rounded-lg border border-white/15 bg-black/70 p-1 opacity-0 shadow-lg backdrop-blur-sm transition-opacity duration-300 group-hover:opacity-100">

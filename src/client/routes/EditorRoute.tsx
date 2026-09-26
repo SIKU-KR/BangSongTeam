@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useLayoutEffect, useMemo } from "react";
+import React, { useState, useEffect, useLayoutEffect } from "react";
 import {
   useLocation,
   useNavigate,
@@ -53,7 +53,6 @@ import {
   DEFAULT_DECK_STYLE,
   MAX_SLIDE_LINE_LENGTH,
   MAX_SLIDE_LINES,
-  analyzeDeckOverflow,
   mergeSlideLines,
   splitLinesAtCursor,
 } from "#shared";
@@ -73,11 +72,15 @@ import {
   type SongPickerMode,
 } from "../features/editor/SongPickerModal";
 import { SongInfoDialog } from "../features/editor/SongInfoDialog";
-import { useTextWidthMeasurer } from "../features/editor/useTextWidthMeasurer";
+import {
+  analyzeDeckOverflowCached,
+  useTextWidthMeasurer,
+} from "../features/editor/useTextWidthMeasurer";
 import {
   useBackgroundAutoCache,
   useCacheFirstVideo,
 } from "../features/offline";
+import { warmPresentationFonts } from "../lib/offline";
 import { PresentationShareDialog } from "../features/sharing/PresentationShareDialog";
 import { wantsMakeCopy } from "../features/sharing/shareLink";
 import { refreshSharedPresentation } from "../lib/sync";
@@ -212,17 +215,9 @@ function EditorScreen({
   const nextSlideInSong = currentSlides[safeSlideIndex + 1] ?? null;
   const currentStyle = currentSong?.style ?? DEFAULT_DECK_STYLE;
   const measureText = useTextWidthMeasurer();
-  const currentOverflow = useMemo(
-    () =>
-      currentSong
-        ? analyzeDeckOverflow(
-            currentSong.slides,
-            currentSong.style,
-            measureText,
-          )
-        : null,
-    [currentSong, measureText],
-  );
+  const currentOverflow = currentSong
+    ? analyzeDeckOverflowCached(currentSong, measureText)
+    : null;
 
   const songs = presentation.items;
   const position: ProjectionPosition = {
@@ -241,6 +236,7 @@ function EditorScreen({
 
   const handlePresent = () => {
     if (presentationId) {
+      if (found) void warmPresentationFonts(found).catch(() => undefined);
       launchPresentation(
         navigate,
         presentationId,
