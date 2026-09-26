@@ -93,6 +93,28 @@ describe("FontControls (글꼴 컨트롤)", () => {
     ).toEqual(["733"]);
   });
 
+  it("'더 보기'로 목록이 늘어도 팝업은 트리거 아래에 고정된 채 항목만 늘린다", async () => {
+    render(
+      <FontControls
+        style={DEFAULT_DECK_STYLE}
+        disabled={false}
+        onUpdateStyle={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("combobox", { name: "글꼴" }));
+    const moreButton = await screen.findByRole("button", { name: /더 보기/ });
+
+    const popup = document.querySelector("[data-slot='select-content']");
+    expect(popup).toHaveAttribute("data-align-trigger", "false");
+
+    const before = screen.getAllByRole("option").length;
+    fireEvent.click(moreButton);
+    await waitFor(() =>
+      expect(screen.getAllByRole("option")).toHaveLength(before + 60),
+    );
+  });
+
   it("글꼴 검색창에 입력하면 매칭되는 눈누 웹폰트 목록이 필터링되어 출력된다", async () => {
     const onUpdateStyle = vi.fn();
     render(
