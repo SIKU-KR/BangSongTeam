@@ -47,6 +47,7 @@ export function BackgroundControls({
               <img
                 src={background.posterUrl}
                 alt=""
+                decoding="async"
                 className="size-full object-cover"
               />
             )}

@@ -2,8 +2,10 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { MEDIA_CACHE_NAME } from "#shared";
 import { resetFakeCacheStorage } from "../../test/fakeCacheStorage";
 import {
+  cacheMediaFirst,
   cacheMediaUrls,
   scheduleMediaCaching,
+  shouldWaitForMediaCache,
   isCacheStorageAvailable,
   __resetMediaCachingForTests,
   __waitForMediaCachingForTests,
@@ -30,6 +32,23 @@ function mockFetch(
   return fetchMock;
 }
 
+function controlByServiceWorker(): void {
+  Object.defineProperty(navigator, "serviceWorker", {
+    value: { controller: {} },
+    configurable: true,
+  });
+}
+
+function mockServiceWorkerFetch() {
+  return mockFetch(async (url) => {
+    const response = okResponse();
+    const copy = response.clone();
+    const cache = await caches.open(MEDIA_CACHE_NAME);
+    setTimeout(() => void cache.put(url, copy), 0);
+    return response;
+  });
+}
+
 async function isCached(url: string): Promise<boolean> {
   const cache = await caches.open(MEDIA_CACHE_NAME);
   return (await cache.match(url)) !== undefined;
@@ -45,6 +64,9 @@ beforeEach(() => {
 afterEach(() => {
   globalThis.fetch = originalFetch;
   vi.restoreAllMocks();
+  vi.useRealTimers();
+  // @ts-expect-error 테스트에서 주입한 서비스 워커를 되돌린다
+  delete navigator.serviceWorker;
 });
 
 describe("cacheMediaUrls", () => {
@@ -113,6 +135,35 @@ describe("cacheMediaUrls", () => {
     const result = await cacheMediaUrls([VIDEO, POSTER]);
 
     expect(result).toEqual({ cachedUrls: [], failedUrls: [VIDEO, POSTER] });
+  });
+});
+
+describe("cacheMediaUrls (서비스 워커 제어 중)", () => {
+  it("SW가 캐시에 담으므로 페이지는 cache.put을 하지 않는다", async () => {
+    controlByServiceWorker();
+    mockServiceWorkerFetch();
+    const cache = await caches.open(MEDIA_CACHE_NAME);
+    const put = vi.spyOn(cache, "put");
+
+    const result = await cacheMediaUrls([VIDEO]);
+
+    expect(result).toEqual({ cachedUrls: [VIDEO], failedUrls: [] });
+    expect(put).toHaveBeenCalledTimes(1);
+    expect(await isCached(VIDEO)).toBe(true);
+  });
+
+  it("SW가 끝내 캐시에 담지 않으면 실패로 돌려준다", async () => {
+    vi.useFakeTimers();
+    controlByServiceWorker();
+    mockFetch();
+
+    const pendingResult = cacheMediaUrls([VIDEO]);
+    await vi.runAllTimersAsync();
+
+    expect(await pendingResult).toEqual({
+      cachedUrls: [],
+      failedUrls: [VIDEO],
+    });
   });
 });
 
@@ -220,6 +271,80 @@ describe("scheduleMediaCaching", () => {
     }
 
     expect(persist).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("cacheMediaFirst", () => {
+  it("큐가 같은 URL을 받는 중이면 그 다운로드를 기다리고 다시 받지 않는다", async () => {
+    let release: () => void = () => undefined;
+    const fetchMock = mockFetch(async (url) => {
+      if (url === VIDEO) {
+        await new Promise<void>((resolve) => {
+          release = resolve;
+        });
+      }
+      return okResponse();
+    });
+
+    scheduleMediaCaching([VIDEO, POSTER]);
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    const cached = cacheMediaFirst(VIDEO);
+    release();
+
+    expect(await cached).toBe(true);
+    await __waitForMediaCachingForTests();
+    expect(fetchMock.mock.calls.map(([url]) => String(url))).toEqual([
+      VIDEO,
+      POSTER,
+    ]);
+  });
+
+  it("큐가 다른 파일을 받는 중이어도 기다리지 않고 곧바로 받는다", async () => {
+    let release: () => void = () => undefined;
+    const fetchMock = mockFetch(async (url) => {
+      if (url === VIDEO) {
+        await new Promise<void>((resolve) => {
+          release = resolve;
+        });
+      }
+      return okResponse();
+    });
+
+    scheduleMediaCaching([VIDEO, OTHER]);
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+
+    expect(await cacheMediaFirst(OTHER)).toBe(true);
+    release();
+    await __waitForMediaCachingForTests();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("실패하면 false로 끝난다", async () => {
+    mockFetch(async () => new Response(null, { status: 404 }));
+
+    expect(await cacheMediaFirst(VIDEO)).toBe(false);
+  });
+});
+
+describe("shouldWaitForMediaCache", () => {
+  it("SW가 페이지를 제어하지 않으면 기다리지 않는다", () => {
+    expect(shouldWaitForMediaCache(VIDEO)).toBe(false);
+  });
+
+  it("SW가 제어하면 캐시에 담기기 전까지만 기다린다", async () => {
+    controlByServiceWorker();
+    mockServiceWorkerFetch();
+
+    expect(shouldWaitForMediaCache(VIDEO)).toBe(true);
+    expect(await cacheMediaFirst(VIDEO)).toBe(true);
+    expect(shouldWaitForMediaCache(VIDEO)).toBe(false);
+  });
+
+  it("오프라인이면 기다리지 않는다", () => {
+    controlByServiceWorker();
+    vi.spyOn(navigator, "onLine", "get").mockReturnValue(false);
+
+    expect(shouldWaitForMediaCache(VIDEO)).toBe(false);
   });
 });
 

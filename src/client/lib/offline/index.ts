@@ -1,6 +1,8 @@
 export {
+  cacheMediaFirst,
   cacheMediaUrls,
   scheduleMediaCaching,
+  shouldWaitForMediaCache,
   isCacheStorageAvailable,
   type MediaCacheResult,
 } from "./mediaCache";

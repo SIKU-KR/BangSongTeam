@@ -54,22 +54,21 @@ function backgroundFileExtension(mime: BackgroundMimeType): string {
  * 관리자가 앱에서 올린 기본 제공 배경의 R2 키.
  *
  * 운영 런북으로 등록하는 배경과 같은 접두사(`loops/`, `posters/`)를 쓴다. 이미지
- * 배경은 `stills/`에 두고 원본을 포스터로 함께 쓴다. 21자 NanoID가 들어가 같은
- * 제목의 배경을 올려도 키가 겹치지 않는다.
+ * 배경 원본은 `stills/`에 둔다. 포스터는 영상·이미지 모두 `posters/`에 두고, 포스터가
+ * 없을 때만 원본을 포스터로 함께 쓴다. 21자 NanoID가 들어가 같은 제목의 배경을
+ * 올려도 키가 겹치지 않는다.
  */
 export function serviceBackgroundKeys(
   backgroundId: string,
   mediaMime: BackgroundMimeType,
   posterMime: BackgroundImageMimeType | null,
 ): { mediaKey: string; posterKey: string } {
-  if (mediaMime === "video/mp4") {
-    return {
-      mediaKey: `loops/${backgroundId}.mp4`,
-      posterKey: posterMime
-        ? `posters/${backgroundId}.${backgroundFileExtension(posterMime)}`
-        : `loops/${backgroundId}.mp4`,
-    };
-  }
-  const mediaKey = `stills/${backgroundId}.${backgroundFileExtension(mediaMime)}`;
-  return { mediaKey, posterKey: mediaKey };
+  const mediaKey =
+    mediaMime === "video/mp4"
+      ? `loops/${backgroundId}.mp4`
+      : `stills/${backgroundId}.${backgroundFileExtension(mediaMime)}`;
+  const posterKey = posterMime
+    ? `posters/${backgroundId}.${backgroundFileExtension(posterMime)}`
+    : mediaKey;
+  return { mediaKey, posterKey };
 }

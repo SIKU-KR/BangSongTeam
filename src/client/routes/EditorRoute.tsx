@@ -74,7 +74,10 @@ import {
 } from "../features/editor/SongPickerModal";
 import { SongInfoDialog } from "../features/editor/SongInfoDialog";
 import { useTextWidthMeasurer } from "../features/editor/useTextWidthMeasurer";
-import { useBackgroundAutoCache } from "../features/offline";
+import {
+  useBackgroundAutoCache,
+  useCacheFirstVideo,
+} from "../features/offline";
 import { PresentationShareDialog } from "../features/sharing/PresentationShareDialog";
 import { wantsMakeCopy } from "../features/sharing/shareLink";
 import { refreshSharedPresentation } from "../lib/sync";
@@ -232,8 +235,8 @@ function EditorScreen({
   const editingSong =
     editingSongIndex === null ? undefined : songs[editingSongIndex]?.deck;
 
-  const background = resolveBackgroundLayers(
-    useBackground(currentSong?.backgroundId),
+  const background = useCacheFirstVideo(
+    resolveBackgroundLayers(useBackground(currentSong?.backgroundId)),
   );
 
   const handlePresent = () => {

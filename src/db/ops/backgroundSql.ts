@@ -11,6 +11,10 @@ export const BACKGROUND_SQL = {
 
   LIST_SERVICE_BACKGROUNDS: `SELECT id, title, r2_key, poster_key, duration_sec, size_bytes, tags FROM backgrounds WHERE source = 'service' ORDER BY title;`,
 
+  LIST_IMAGE_BACKGROUNDS_WITHOUT_POSTER: `SELECT id, title, r2_key, size_bytes FROM backgrounds WHERE source = 'service' AND kind = 'image' AND poster_key = r2_key ORDER BY title;`,
+
+  SET_IMAGE_BACKGROUND_POSTER: `UPDATE backgrounds SET poster_key = :poster_key, size_bytes = :size_bytes WHERE id = :background_id AND source = 'service' AND kind = 'image' AND poster_key = r2_key;`,
+
   COUNT_DECKS_USING_BACKGROUND: `SELECT count(*) AS decks FROM decks WHERE background_id = :background_id;`,
 
   DELETE_SERVICE_BACKGROUND: `DELETE FROM backgrounds WHERE id = :background_id AND source = 'service';`,

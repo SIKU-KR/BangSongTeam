@@ -78,6 +78,35 @@ INSERT INTO backgrounds (id, title, r2_key, poster_key, duration_sec, license, t
 SELECT id, title, r2_key, poster_key, duration_sec, size_bytes, tags FROM backgrounds WHERE source = 'service' ORDER BY title;
 ```
 
+### 1-4. 이미지 배경 포스터 채우기
+
+앱은 이미지 배경을 올릴 때도 폭 960px WebP 포스터를 만들어 `posters/<id>.webp`에 함께 올린다. 그 전에 올라간 이미지 배경은 원본(최대 30MB)을 포스터로도 써서, 배경 갤러리·배경 선택·편집기 슬라이드 썸네일이 모두 원본을 받는다. 이런 배경을 찾는다.
+
+```sql
+-- LIST_IMAGE_BACKGROUNDS_WITHOUT_POSTER
+SELECT id, title, r2_key, size_bytes FROM backgrounds WHERE source = 'service' AND kind = 'image' AND poster_key = r2_key ORDER BY title;
+```
+
+배경마다 원본을 받아 포스터를 만들고, R2에 먼저 올린다. `<id>`는 배경 id, `stills/<id>.jpg`는 위에서 나온 `r2_key`다.
+
+```bash
+pnpm dlx wrangler r2 object get prj-ppt-media/stills/<id>.jpg --file ./still.jpg --remote
+ffmpeg -i still.jpg -vf "scale='min(960,iw)':-2" -c:v libwebp -quality 80 poster.webp
+pnpm dlx wrangler r2 object put prj-ppt-media/posters/<id>.webp \
+  --file ./poster.webp --content-type image/webp --remote
+```
+
+ffmpeg에 `libwebp`가 없으면 1-1처럼 PNG로 뽑아 `cwebp`로 바꾼다.
+
+그다음 행이 포스터를 가리키게 한다. `:size_bytes`는 원래 `size_bytes`에 포스터 크기를 더한 값이다. 이미 포스터가 있는 행은 바뀌지 않는다.
+
+```sql
+-- SET_IMAGE_BACKGROUND_POSTER
+UPDATE backgrounds SET poster_key = :poster_key, size_bytes = :size_bytes WHERE id = :background_id AND source = 'service' AND kind = 'image' AND poster_key = r2_key;
+```
+
+앱의 배경 목록은 다음 동기화 때 새 포스터를 쓴다. 이 배경을 지울 때는 2장의 R2 삭제에 `posters/<id>.webp`도 넣는다 (앱에서 지우면 서버가 둘 다 지운다).
+
 ## 2. 사전 주입 배경 내리기
 
 라이선스 문제 등으로 내려야 할 때 쓴다. 먼저 몇 곡이 쓰고 있는지 본다.
@@ -103,7 +132,7 @@ pnpm dlx wrangler r2 object delete prj-ppt-media/posters/warm_light_flow.webp --
 
 ## 3. 앱에서 올리고 지우기 (관리자)
 
-`ADMIN_USER_IDS` 시크릿에 적힌 계정은 앱의 배경 화면에 '배경 올리기'와 카드별 '삭제'가 보인다. 올린 배경은 곧바로 기본 제공 배경이 되어 모든 사용자에게 보인다 (파일당 30MB, 계정 한도 없음). 영상은 브라우저가 첫 화면으로 포스터를 만들어 함께 올리고, R2 키는 `loops/<id>.mp4`·`posters/<id>.*`, 이미지는 `stills/<id>.*`다. 올릴 때는 1장처럼 R2 → D1, 지울 때는 2장처럼 D1 → R2 순서로 서버가 처리한다.
+`ADMIN_USER_IDS` 시크릿에 적힌 계정은 앱의 배경 화면에 '배경 올리기'와 카드별 '삭제'가 보인다. 올린 배경은 곧바로 기본 제공 배경이 되어 모든 사용자에게 보인다 (파일당 30MB, 계정 한도 없음). 브라우저가 영상은 첫 화면으로, 이미지는 원본을 줄여 폭 960px 포스터를 만들어 함께 올린다. R2 키는 영상 `loops/<id>.mp4`, 이미지 `stills/<id>.*`, 포스터 `posters/<id>.*`다. 올릴 때는 1장처럼 R2 → D1, 지울 때는 2장처럼 D1 → R2 순서로 서버가 처리한다.
 
 ### 3-1. 관리자 지정
 

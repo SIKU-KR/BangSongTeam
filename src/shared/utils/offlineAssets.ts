@@ -59,7 +59,8 @@ export function collectPresentationMediaAssets(
  * 실제로 내려받을 URL 목록 (중복 제거).
  *
  * 5곡 세트에서 같은 루프를 여러 곡이 쓰는 것이 정상이다. 곡 수만큼 받으면
- * 같은 20MB 영상을 네 번 받는다. 이미지 배경은 영상과 포스터 URL이 같다.
+ * 같은 20MB 영상을 네 번 받는다. 포스터 없이 올라간 예전 이미지 배경은 원본과
+ * 포스터 URL이 같다.
  */
 export function collectUniqueMediaUrls(
   assets: readonly PresentationMediaAsset[],

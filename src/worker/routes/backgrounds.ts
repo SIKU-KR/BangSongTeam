@@ -91,15 +91,15 @@ export function createBackgroundsRoute(deps: AppDeps = {}) {
         }
 
         const kind = isBackgroundVideoMimeType(mediaMime) ? "video" : "image";
+        const poster = form.poster;
         let posterMime: BackgroundImageMimeType | null = null;
-        if (kind === "video" && form.poster) {
-          const sniffed = await sniff(form.poster);
+        if (poster) {
+          const sniffed = await sniff(poster);
           if (!sniffed || !isBackgroundImageMimeType(sniffed)) {
             return c.json({ error: "포스터 이미지를 읽을 수 없습니다" }, 400);
           }
           posterMime = sniffed;
         }
-        const poster = kind === "video" ? form.poster : undefined;
 
         const db = createD1Client(c.env.DB);
         const id = createId();
