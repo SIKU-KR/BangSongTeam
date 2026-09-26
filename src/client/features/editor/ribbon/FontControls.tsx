@@ -156,7 +156,11 @@ export function FontControls({
         <SelectTrigger aria-label="글꼴" className="w-36 text-xs">
           <SelectValue />
         </SelectTrigger>
-        <SelectContent className="max-h-80 w-64">
+        <SelectContent
+          alignItemWithTrigger={false}
+          align="start"
+          className="max-h-80 w-64"
+        >
           <div className="border-b border-border p-1">
             <Input
               type="text"
