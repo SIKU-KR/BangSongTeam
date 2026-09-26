@@ -473,6 +473,21 @@ describe("presentationStore (In-memory reactive presentation)", () => {
     expect(canUndo()).toBe(true);
     expect(canRedo()).toBe(false);
   });
+
+  it("되돌리기·다시 실행 뒤에도 바뀌지 않은 곡은 같은 객체를 유지한다", () => {
+    const before = getActivePresentation();
+    updateSlideLines(0, 0, ["고친 가사"]);
+    const edited = getActivePresentation();
+    expect(edited.items[1].deck).toBe(before.items[1].deck);
+
+    undo();
+    const undone = getActivePresentation();
+    expect(undone.items[0].deck).toBe(before.items[0].deck);
+    expect(undone.items[1].deck).toBe(before.items[1].deck);
+
+    redo();
+    expect(getActivePresentation().items[0].deck).toBe(edited.items[0].deck);
+  });
 });
 
 describe("멀티 문서 컬렉션", () => {
