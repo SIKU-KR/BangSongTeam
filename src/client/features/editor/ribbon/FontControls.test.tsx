@@ -2,7 +2,11 @@ import React from "react";
 import { describe, it, expect, vi } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { FontControls } from "./FontControls";
-import { DEFAULT_DECK_STYLE, loadNoonnuFontCatalog } from "#shared";
+import {
+  DEFAULT_DECK_STYLE,
+  DEFAULT_PRESET_FONTS,
+  loadNoonnuFontCatalog,
+} from "#shared";
 
 describe("FontControls (글꼴 컨트롤)", () => {
   it("카탈로그의 모든 웹폰트는 비어있지 않은 유효한 URL을 갖는다", async () => {
@@ -41,6 +45,30 @@ describe("FontControls (글꼴 컨트롤)", () => {
     const items = screen.getAllByRole("option");
     for (const item of items) {
       expect(item.style.fontFamily).toBe("");
+    }
+  });
+
+  it("기본 글꼴은 카탈로그 없이 바로 보이고 미리보기는 카탈로그 ID를 쓴다", async () => {
+    render(
+      <FontControls
+        style={DEFAULT_DECK_STYLE}
+        disabled={false}
+        onUpdateStyle={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("combobox", { name: "글꼴" }));
+    await screen.findByRole("option", { name: DEFAULT_PRESET_FONTS[0] });
+
+    const catalog = await loadNoonnuFontCatalog();
+    for (const name of DEFAULT_PRESET_FONTS) {
+      const font = catalog.find((f) => f.name === name);
+      const preview = screen
+        .getByRole("option", { name })
+        .querySelector<HTMLElement>("[aria-hidden='true']");
+      expect(preview?.style.maskImage).toContain(
+        `/font-previews/${font?.id}.webp`,
+      );
     }
   });
 

@@ -34,7 +34,31 @@ export interface FontControlsProps {
   onUpdateStyle: (update: Partial<DeckStyle>) => void;
 }
 
-function FontOption({ font }: { font: NoonnuFont }): React.JSX.Element {
+/**
+ * 기본 글꼴의 미리보기 이미지 ID. 기본 글꼴은 카탈로그 청크를 기다리지 않고 드롭다운을
+ * 여는 즉시 보여야 해서 카탈로그의 `id`를 여기 따로 둔다.
+ */
+const PRESET_FONT_PREVIEW_IDS: Record<
+  (typeof DEFAULT_PRESET_FONTS)[number],
+  string
+> = {
+  Pretendard: "core-pretendard",
+  "Noto Sans KR": "core-noto-sans-kr",
+  "Nanum Myeongjo": "core-nanum-myeongjo",
+  "Gmarket Sans": "core-gmarket-sans",
+  "KoPubWorld Batang": "core-kopub-batang",
+};
+
+const PRESET_FONTS = DEFAULT_PRESET_FONTS.map((name) => ({
+  id: PRESET_FONT_PREVIEW_IDS[name],
+  name,
+}));
+
+function FontOption({
+  font,
+}: {
+  font: Pick<NoonnuFont, "id" | "name">;
+}): React.JSX.Element {
   return (
     <SelectItem value={font.name}>
       <span
@@ -96,14 +120,6 @@ export function FontControls({
 
   const searchTrimmed = fontSearch.trim().toLowerCase();
 
-  const presetFonts = React.useMemo(
-    () =>
-      DEFAULT_PRESET_FONTS.flatMap(
-        (name) => catalog.find((f) => f.name === name) ?? [],
-      ),
-    [catalog],
-  );
-
   const allAdditionalFonts = React.useMemo(() => {
     const presetSet = new Set<string>(DEFAULT_PRESET_FONTS);
     return catalog.filter((f) => !presetSet.has(f.name));
@@ -157,7 +173,7 @@ export function FontControls({
                 <SelectLabel className="px-2 py-1 text-2xs text-muted-foreground">
                   기본 글꼴
                 </SelectLabel>
-                {presetFonts.map((font) => (
+                {PRESET_FONTS.map((font) => (
                   <FontOption key={font.id} font={font} />
                 ))}
               </SelectGroup>
