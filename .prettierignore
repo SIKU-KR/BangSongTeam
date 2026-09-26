@@ -3,3 +3,5 @@ worker-configuration.d.ts
 src/db/migrations/meta/
 src/client/components/ui/
 src/client/hooks/use-mobile.ts
+data/
+
