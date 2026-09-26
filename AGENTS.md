@@ -57,7 +57,7 @@ pnpm db:migrate:local              # apply migrations to the local D1
 pnpm dev                           # http://localhost:5173 (Vite + workerd, local bindings)
 
 pnpm typecheck && pnpm lint && pnpm test    # the CI gate
-pnpm build                         # dist/ (SPA + Worker); CI then runs `pnpm exec wrangler deploy --dry-run`
+pnpm build                         # dist/ (SPA + minified Worker); CI fails if the Worker JS exceeds 1 MiB, then runs `pnpm exec wrangler deploy --dry-run`
 pnpm format:check                  # Prettier (`pnpm format` to fix)
 pnpm db:generate                   # after editing src/db/schema/*
 pnpm types                         # after editing wrangler.jsonc; needs .dev.vars or the secrets drop out of Env
@@ -103,7 +103,7 @@ pnpm vitest run -t "slide split"
 
 - Declare each domain model and API contract once, as a Zod schema in `src/shared/schemas/`, and derive types with `z.infer`. Parse the JSON TEXT columns (`decks.slides`, `decks.style`) with their schemas on read.
 - Entity ids are 21-char NanoIDs from `createId()`, validated by `IdSchema`. `crypto.randomUUID()` is banned by lint. Slide ids come from `createSlideId()`.
-- Write queries and test fixtures with the Drizzle query builder (`createD1Client(env.DB)` in worker tests, `createTestDb().db` in node tests, `clearTables` from `src/worker/test/db.ts` for resets). Raw `sql` fragments are only for what Drizzle lacks: the FTS5 `MATCH` operator, column arithmetic (`fork_count + 1`) and schema defaults. Only migrations and the runbook statements in `src/db/ops/` stay plain SQL.
+- Write queries and test fixtures with the Drizzle query builder (`createD1Client(env.DB)` in worker tests, `createTestDb().db` in node tests, `clearTables` from `src/worker/test/db.ts` for resets). Raw `sql` fragments are only for what Drizzle lacks: the FTS5 `MATCH` operator, column arithmetic (`fork_count + 1`), SQLite JSON functions (the search card's first slide and slide count) and schema defaults. Only migrations and the runbook statements in `src/db/ops/` stay plain SQL.
 - D1 has no row-level security. All DB access goes through helpers in `src/db/queries/`. Every private query or mutation filters by the session's `user_id`, and every public-library query includes `visibility = 'public'`.
 - The library is a board: many users may publish the same song, and the copies are never merged. Sort by `fork_count DESC, updated_at DESC`.
 
@@ -137,6 +137,8 @@ pnpm vitest run -t "slide split"
 - Email/password login turns on only when the `EMAIL_SIGNUP_ALLOWLIST` secret is set (empty means off). Sign-up goes only through `POST /api/email-signup`, and Better Auth's `/sign-up/email` stays in `disabledPaths`.
 - Passwords are hashed with PBKDF2-SHA256 at 100k iterations (`src/worker/lib/password.ts`). Better Auth's default scrypt goes over the Workers Free 10 ms CPU limit (error 1102), so don't switch back while on the Free plan.
 - Password users stay `emailVerified=false`, so a later Kakao or Naver login with the same email is not linked to them automatically.
+- Import `betterAuth` from `better-auth/minimal`. The default entry bundles Kysely and its dialects for direct DB connections, which the Drizzle adapter doesn't use.
+- Sessions use Better Auth's cookie cache (`SESSION_COOKIE_CACHE_SECONDS`, 5 min): within it, `requireAuth` trusts the signed `session_data` cookie and skips D1, so a session revoked from another device stays valid for up to 5 minutes. The auth middleware forwards the cookies `getSession` refreshes; keep that, or every request after the first 5 minutes goes back to D1.
 - Never set `DEV_LOGIN_ENABLED` in production secrets.
 
 ## Code style

@@ -8,6 +8,9 @@
   "observability": {
     "enabled": true
   },
+  // Worker 번들은 압축해서 올린다(vite.config.ts). 소스맵을 함께 올려야 로그의
+  // 스택 트레이스가 원래 파일·줄 번호로 보인다.
+  "upload_source_maps": true,
   // 운영 도메인을 사기 전까지 workers.dev 주소를 쓴다. 도메인을 옮기는 절차는
   // docs/ops/deploy-runbook.md. 로컬 개발은 .dev.vars(.env)의 값이 이것을 덮는다.
   "vars": {

@@ -39,7 +39,7 @@ export function toBackgroundMedia(row: Background): BackgroundMedia {
  * 앱이 다루는 배경은 기본 제공 배경뿐이다. 예전 사용자 업로드 행(`source='user'`)은
  * 마이그레이션 `0002`가 지웠고, 혹시 남아 있어도 어떤 경로로도 나가지 않는다.
  */
-const isService = eq(backgrounds.source, "service");
+export const isServiceBackground = eq(backgrounds.source, "service");
 
 /** 배경 갤러리: 모든 사용자에게 같은 목록을 제목순으로 준다 */
 export async function listBackgrounds(
@@ -48,7 +48,7 @@ export async function listBackgrounds(
   const rows: Background[] = await db
     .select()
     .from(backgrounds)
-    .where(isService)
+    .where(isServiceBackground)
     .orderBy(asc(backgrounds.title));
   return rows.map(toBackgroundMedia);
 }
@@ -105,7 +105,7 @@ export async function deleteServiceBackground(
 ): Promise<{ mediaKey: string; posterKey: string } | null> {
   const [row]: { r2Key: string; posterKey: string }[] = await db
     .delete(backgrounds)
-    .where(and(eq(backgrounds.id, backgroundId), isService))
+    .where(and(eq(backgrounds.id, backgroundId), isServiceBackground))
     .returning({ r2Key: backgrounds.r2Key, posterKey: backgrounds.posterKey });
   return row ? { mediaKey: row.r2Key, posterKey: row.posterKey } : null;
 }
@@ -146,7 +146,7 @@ export function knownBackgroundsQuery(
   return db
     .select({ id: backgrounds.id })
     .from(backgrounds)
-    .where(and(inArray(backgrounds.id, candidates), isService));
+    .where(and(inArray(backgrounds.id, candidates), isServiceBackground));
 }
 
 export function keepKnownBackgrounds<

@@ -1,4 +1,4 @@
-import { betterAuth } from "better-auth";
+import { betterAuth } from "better-auth/minimal";
 import { drizzleAdapter } from "@better-auth/drizzle-adapter";
 import { createD1Client, user, session, account, verification } from "#db";
 import { createId, PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH } from "#shared";
@@ -21,6 +21,15 @@ export const AUTH_BASE_PATH = "/api/auth";
  * 넣고 `emailVerified: false`로 표시한다. 실제로 메일을 보내는 주소가 아니다.
  */
 export const SYNTHETIC_EMAIL_DOMAIN = "users.noreply.worship-slide.local";
+
+/**
+ * 세션 쿠키 캐시 유효 시간(초).
+ *
+ * 이 시간 동안은 서명된 `session_data` 쿠키로 세션을 확인하고 D1의 `session`·`user`를
+ * 읽지 않는다. 그 대가로 다른 기기에서의 세션 폐기·계정 삭제는 최대 이 시간만큼 늦게
+ * 반영된다. 같은 브라우저의 로그아웃은 쿠키를 함께 지우므로 바로 반영된다.
+ */
+export const SESSION_COOKIE_CACHE_SECONDS = 5 * 60;
 
 /** 소셜 프로필에서 만들어 내는 로컬 사용자 속성 */
 export interface MappedSocialUser {
@@ -242,6 +251,9 @@ function buildAuth(env: Bindings) {
       password: { hash: hashPassword, verify: verifyPassword },
     },
     disabledPaths: ["/sign-up/email"],
+    session: {
+      cookieCache: { enabled: true, maxAge: SESSION_COOKIE_CACHE_SECONDS },
+    },
     rateLimit: { enabled: true },
     telemetry: { enabled: false },
     socialProviders,

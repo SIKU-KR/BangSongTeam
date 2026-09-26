@@ -1,12 +1,7 @@
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { SearchCatalogQuerySchema } from "#shared";
-import {
-  createD1Client,
-  getPublicDeckDetail,
-  searchPublicDecks,
-  toPublicDeckSummary,
-} from "#db";
+import { createD1Client, getPublicDeckDetail, searchPublicDecks } from "#db";
 import type { AppEnv } from "../types";
 import { resolveRequireAuth, type AppDeps } from "../deps";
 
@@ -30,17 +25,10 @@ export function createCatalogRoute(deps: AppDeps = {}) {
         const { q, limit } = c.req.valid("query");
         const db = createD1Client(c.env.DB);
 
-        const deckRows = await searchPublicDecks(db, q, limit);
+        const decks = await searchPublicDecks(db, q, limit);
 
         c.header("cache-control", `public, max-age=${SEARCH_CACHE_SECONDS}`);
-        return c.json(
-          {
-            decks: deckRows.map((row) =>
-              toPublicDeckSummary(row.deck, row.authorName),
-            ),
-          },
-          200,
-        );
+        return c.json({ decks }, 200);
       },
     )
     .get("/decks/:id", requireAuth, async (c) => {

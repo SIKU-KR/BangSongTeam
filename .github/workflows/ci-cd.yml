@@ -93,6 +93,18 @@ jobs:
       - name: Build web app
         run: pnpm build
 
+      # The Worker's JS is parsed on every cold start, so keep it under 1 MiB
+      # (source maps are uploaded separately and don't count).
+      - name: Check Worker bundle size
+        run: |
+          limit=1048576
+          size=$(find dist/prj_ppt_web -name '*.js' -not -path '*/.vite/*' -exec cat {} + | wc -c)
+          echo "Worker JS: ${size} bytes (limit ${limit})"
+          if [ "$size" -gt "$limit" ]; then
+            echo "::error::Worker bundle is ${size} bytes, over the ${limit}-byte limit."
+            exit 1
+          fi
+
       - name: Verify Worker deployment (dry run)
         run: pnpm exec wrangler deploy --dry-run
 
