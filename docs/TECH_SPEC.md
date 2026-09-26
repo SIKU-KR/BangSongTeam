@@ -912,7 +912,7 @@ stateDiagram-v2
 
 **Phase 3 설계 규칙 (M3-B, 구현 완료):**
 
-1. **로컬이 먼저다.** 편집은 지금처럼 IndexedDB에 먼저 쓰고 서버 반영은 뒤에 붙인다. 서버 push 큐와 in-flight 체인을 IndexedDB 저장과 **완전히 분리**한다 — 느린 네트워크가 로컬 저장을 막으면 안 된다. 디바운스는 로컬 300ms, 서버 2s로 다르게 잡는다.
+1. **로컬이 먼저다.** 편집은 지금처럼 IndexedDB에 먼저 쓰고 서버 반영은 뒤에 붙인다. 서버 push 큐와 in-flight 체인을 IndexedDB 저장과 **완전히 분리**한다 — 느린 네트워크가 로컬 저장을 막으면 안 된다. 디바운스는 로컬 300ms, 서버 3s로 다르게 잡고, 쉬지 않고 입력해도 서버에는 10s 안에 올린다(maxWait). 서로 다른 문서는 3개까지 동시에 올린다.
 2. **문서 단위 LWW.** 서버와 로컬이 다르면 `updatedAt`이 늦은 쪽 문서를 통째로 택한다. 필드 단위로 섞으면 곡 순서는 서버 것, 스타일은 로컬 것이 되어 사용자가 만든 적 없는 세트가 나온다.
 3. **로컬에만 있는 문서는 '아직 안 올라감'이다.** '서버에 없음'으로 보고 지우면 작업이 사라진다. 유지한 뒤 올린다. (tombstone이 없으므로 명시적 삭제는 아직 범위 밖이다.)
 4. **클라이언트가 만든 id를 서버가 그대로 보존한다.** 서버가 id를 새로 발급하면 같은 세트가 기기마다 다른 문서가 되어 동기화가 병합이 아니라 중복 생성이 된다.
@@ -920,6 +920,7 @@ stateDiagram-v2
 6. **부팅 동기화는 렌더를 막지 않는다.** 로컬 하이드레이션이 끝나면 곧바로 화면을 그리고 서버 병합은 백그라운드로 붙인다. 서버에서 받은 문서는 로컬에도 적어 둬야 다음 부팅에 네트워크 없이 열린다.
 7. **세션도 오프라인에서 살아야 한다.** 세션 쿠키는 httpOnly라 JS가 못 읽는다. 마지막으로 확인된 세션을 `auth_session` 스토어(v2)에 캐시하고 부팅 시 그것으로 로그인 게이트를 통과시킨다. 서버 재검증은 백그라운드이며, **'서버가 세션 없다고 답함'과 '서버에 닿지 못함'을 반드시 구분한다** — 뭉뚱그리면 네트워크가 끊기는 순간 로그아웃되어 송출이 멈춘다.
 8. **D1에는 RLS가 없다.** 모든 방어가 쿼리 헬퍼의 `userId` 조건 하나에 달려 있다. 요청 본문의 `userId`는 신뢰하지 않고 세션 값으로 덮어쓴다. 교차 사용자 격리는 라우트 레벨 통합 테스트로 고정한다.
+9. **세트 저장은 변경분으로 보낸다 (2026-09-26, #70).** 클라이언트는 서버에 마지막으로 올린(또는 부팅 때 받은) 덱의 지문을 메모리에 두고, `PATCH /api/presentations/:id`에 헤더·항목 순서 전부와 바뀐 덱만 담는다. 서버(`savePresentationChanges`)는 소유자·기존 항목과 덱·폴더·배경을 한 batch로 읽고, 쓰기를 `db.batch()` 하나로 묶는다(D1 왕복 2회). 목록에서 빠진 곡만 지우고, 보낸 덱만 쓰고, 순서가 바뀐 항목만 고치므로 결과는 문서 단위 전체 교체와 같다. 항목이 가리키는 덱이 본문에도 서버에도 없으면 409를 돌려주고, 클라이언트는 모든 덱을 담아 다시 보낸다. 10곡 세트에서 가사 한 줄을 고친 저장은 D1에 3행을 쓴다. 이전 버전 클라이언트가 보내는 `PUT`(문서 전체)도 같은 경로를 탄다.
 
 **구현 위치(Phase 3):** `src/client/lib/sync/`(`syncStatus.ts`, `presentationSync.ts`, `syncScheduler.ts`, `mergeDocuments.ts`, `bootSync.ts`), 인증은 `src/client/lib/auth/`와 `src/worker/lib/auth.ts`·`src/worker/middleware/auth.ts`, 서버 라우트는 `src/worker/routes/{presentations,decks}.ts`, 행↔DTO 변환은 `src/db/queries/mappers.ts`.
 
@@ -963,6 +964,7 @@ stateDiagram-v2
 | `GET`    | `/api/presentations`                 | 내 프레젠테이션 문서 전체 + 링크로 연 공유 세트(`access`) | Yes          | 구현 |
 | `GET`    | `/api/presentations/:id`             | 문서 1건 (공유 세트 최신본 받기)                          | Yes          | 구현 |
 | `PUT`    | `/api/presentations/:id`             | 프레젠테이션 문서 단위 업서트 (복제본은 항상 비공개)      | Yes (소유자) | 구현 |
+| `PATCH`  | `/api/presentations/:id`             | 변경분 저장 (바뀐 덱만, 모르는 곡이면 409)                | Yes (소유자) | 구현 |
 | `DELETE` | `/api/presentations/:id`             | 프레젠테이션 영구 삭제 (삭제 기록을 남긴다)               | Yes (소유자) | 구현 |
 | `GET`    | `/api/presentations/:id/share`       | 링크 공유 설정 `{ access: off\|view, token }`             | Yes (소유자) | 구현 |
 | `PUT`    | `/api/presentations/:id/share`       | 링크 공유 켜기·끄기 (처음 켤 때 토큰 발급)                | Yes (소유자) | 구현 |

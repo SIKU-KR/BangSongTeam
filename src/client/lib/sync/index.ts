@@ -8,6 +8,8 @@ export {
 } from "./syncStatus";
 export {
   pushPresentation,
+  rememberServerDocuments,
+  __resetServerDecksForTests,
   pullPresentations,
   refreshSharedPresentation,
   setSharedPresentationListener,

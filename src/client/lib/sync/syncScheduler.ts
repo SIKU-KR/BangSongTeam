@@ -3,7 +3,12 @@ import { pushPresentation, OfflineError } from "./presentationSync";
 import { setSyncStatus } from "./syncStatus";
 import { flushFolderSync } from "./folderSync";
 
-const SYNC_DEBOUNCE_MS = 2000;
+/** 입력이 멈춘 뒤 이만큼 조용하면 올린다 */
+export const SYNC_DEBOUNCE_MS = 3000;
+/** 쉬지 않고 입력해도 첫 변경 뒤 이 시간 안에는 올린다 */
+export const SYNC_MAX_WAIT_MS = 10_000;
+/** 서로 다른 문서를 동시에 올리는 최대 개수 */
+const PUSH_CONCURRENCY = 3;
 
 type Pusher = (document: Presentation) => Promise<boolean>;
 
@@ -11,6 +16,7 @@ let pusher: Pusher = pushPresentation;
 let enabled = false;
 let pending = new Map<string, Presentation>();
 let timer: ReturnType<typeof setTimeout> | null = null;
+let deadline: number | null = null;
 let inFlight: Promise<void> = Promise.resolve();
 
 /** 로그인·하이드레이션이 끝난 뒤에만 켠다 */
@@ -19,12 +25,17 @@ export function setSyncEnabled(next: boolean): void {
   if (!next) clearPending();
 }
 
-function clearPending(): void {
-  pending = new Map();
+function clearTimer(): void {
   if (timer) {
     clearTimeout(timer);
     timer = null;
   }
+  deadline = null;
+}
+
+function clearPending(): void {
+  pending = new Map();
+  clearTimer();
 }
 
 async function pushAll(documents: Presentation[]): Promise<void> {
@@ -36,18 +47,24 @@ async function pushAll(documents: Presentation[]): Promise<void> {
   let offline = false;
   let failed = false;
 
-  for (const document of documents) {
-    try {
-      await pusher(document);
-    } catch (err) {
-      if (err instanceof OfflineError) {
-        offline = true;
-        pending.set(document.id, document);
-      } else {
-        failed = true;
+  const queue = [...documents];
+  const worker = async (): Promise<void> => {
+    for (let document = queue.shift(); document; document = queue.shift()) {
+      try {
+        await pusher(document);
+      } catch (err) {
+        if (err instanceof OfflineError) {
+          offline = true;
+          if (!pending.has(document.id)) pending.set(document.id, document);
+        } else {
+          failed = true;
+        }
       }
     }
-  }
+  };
+  await Promise.all(
+    Array.from({ length: Math.min(PUSH_CONCURRENCY, queue.length) }, worker),
+  );
 
   if (offline) {
     setSyncStatus("offline");
@@ -59,10 +76,7 @@ async function pushAll(documents: Presentation[]): Promise<void> {
 }
 
 function run(): void {
-  if (timer) {
-    clearTimeout(timer);
-    timer = null;
-  }
+  clearTimer();
   if (pending.size === 0) return;
 
   const documents = [...pending.values()];
@@ -75,6 +89,10 @@ function run(): void {
  *
  * 활성 문서만 넣지 않는다 — 기존 IndexedDB 스케줄러의 제약을 물려받으면
  * 비활성 문서 변경이 영영 안 올라간다.
+ *
+ * 변경이 멈추면 `SYNC_DEBOUNCE_MS` 뒤에 올리되, 쉬지 않고 고쳐도 큐가 처음 찬
+ * 뒤 `SYNC_MAX_WAIT_MS` 안에는 올린다. 그러지 않으면 긴 입력 동안 서버에 아무것도
+ * 남지 않는다.
  */
 export function scheduleDocumentPush(document: Presentation): void {
   if (!enabled) return;
@@ -82,8 +100,10 @@ export function scheduleDocumentPush(document: Presentation): void {
   if (document.access) return;
 
   pending.set(document.id, document);
+  const now = Date.now();
+  deadline ??= now + SYNC_MAX_WAIT_MS;
   if (timer) clearTimeout(timer);
-  timer = setTimeout(run, SYNC_DEBOUNCE_MS);
+  timer = setTimeout(run, Math.min(SYNC_DEBOUNCE_MS, deadline - now));
 }
 
 /**

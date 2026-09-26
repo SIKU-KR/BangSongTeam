@@ -5,6 +5,8 @@ import {
   type Deck as SharedDeck,
   type DeckStyle,
   type Slide,
+  toPresentationChanges,
+  type PresentationChanges,
   type PresentationDocument,
   type Folder as SharedFolder,
 } from "#shared";
@@ -161,7 +163,7 @@ export interface DecomposedDocument {
 }
 
 /**
- * 하이드레이션된 문서 → 정규화된 행들.
+ * 변경분 저장 본문 → 정규화된 행들. `decks`에는 본문에 담긴 덱만 나온다.
  *
  * 항목의 `userId`·`scope`·`presentationId`는 문서 헤더 기준으로 덮어쓴다.
  * 본문이 보내온 값을 그대로 믿으면 남의 계정으로 문서를 심거나, 보관함 덱을
@@ -172,36 +174,36 @@ export interface DecomposedDocument {
  * `forkedFrom`(복제해 온 보관함 덱)과 `forkedFromAuthorName`(원작 표시)은 편집기가
  * 쓰는 값이라 그대로 둔다.
  */
-export function fromPresentationDocument(
-  doc: PresentationDocument,
+export function fromPresentationChanges(
+  changes: PresentationChanges,
 ): DecomposedDocument {
-  const ordered = [...doc.items].sort((a, b) => a.order - b.order);
+  const ordered = [...changes.items].sort((a, b) => a.order - b.order);
 
   return {
     presentation: {
-      id: doc.id,
-      userId: doc.userId,
-      title: doc.title,
-      serviceDate: doc.serviceDate,
-      ...(doc.folderId === undefined ? {} : { folderId: doc.folderId }),
-      ...(doc.trashedAt === undefined
+      id: changes.id,
+      userId: changes.userId,
+      title: changes.title,
+      serviceDate: changes.serviceDate,
+      ...(changes.folderId === undefined ? {} : { folderId: changes.folderId }),
+      ...(changes.trashedAt === undefined
         ? {}
-        : { trashedAt: toDateOrNull(doc.trashedAt) }),
-      createdAt: toDate(doc.createdAt),
-      updatedAt: toDate(doc.updatedAt),
+        : { trashedAt: toDateOrNull(changes.trashedAt) }),
+      createdAt: toDate(changes.createdAt),
+      updatedAt: toDate(changes.updatedAt),
     },
     items: ordered.map((item, index) => ({
       id: item.id,
-      presentationId: doc.id,
-      deckId: item.deck.id,
+      presentationId: changes.id,
+      deckId: item.deckId,
       order: index,
     })),
-    decks: ordered.map((item) =>
+    decks: changes.decks.map((deck) =>
       toDeckRow({
-        ...item.deck,
-        userId: doc.userId,
+        ...deck,
+        userId: changes.userId,
         scope: "presentation",
-        presentationId: doc.id,
+        presentationId: changes.id,
         visibility: "private",
         forkCount: 0,
         publishedAt: null,
@@ -209,6 +211,13 @@ export function fromPresentationDocument(
       }),
     ),
   };
+}
+
+/** 하이드레이션된 문서 → 정규화된 행들 (모든 덱 포함, 항목 순) */
+export function fromPresentationDocument(
+  doc: PresentationDocument,
+): DecomposedDocument {
+  return fromPresentationChanges(toPresentationChanges(doc));
 }
 
 /** D1 폴더 행 → 공유 Folder DTO */

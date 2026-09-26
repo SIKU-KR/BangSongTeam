@@ -6,3 +6,4 @@ export * from "./backgroundFiles";
 export * from "./previews";
 export * from "./folderTree";
 export * from "./overflow";
+export * from "./presentationChanges";
