@@ -155,20 +155,6 @@ export async function loadWebFont(nameOrFamily: string): Promise<void> {
 }
 
 /**
- * 여러 폰트의 @font-face 스타일을 한 번에 로드 (글꼴 목록 렌더링용)
- */
-export async function loadWebFonts(
-  namesOrFamilies: readonly (NoonnuFont | string)[],
-): Promise<void> {
-  if (typeof document === "undefined") return;
-  await Promise.all(
-    namesOrFamilies.map((item) =>
-      loadWebFont(typeof item === "string" ? item : item.name),
-    ),
-  );
-}
-
-/**
  * 웹폰트 프리로드 및 브라우저 폰트 캐시 준비
  */
 export async function preloadWebFont(

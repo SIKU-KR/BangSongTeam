@@ -91,6 +91,20 @@ const appConfig: UserConfig = {
             },
           },
           {
+            // 글꼴 드롭다운 미리보기 이미지 (1,163장). 프리캐시하면 설치 때 전부 받으므로
+            // 본 것만 담는다. 드롭다운을 다시 열 때 재검증 요청 수십 건이 나가지 않는다.
+            urlPattern: /\/font-previews\/[^/]+\.webp$/,
+            handler: "CacheFirst",
+            options: {
+              cacheName: "worship-font-previews-cache",
+              cacheableResponse: { statuses: [200] },
+              expiration: {
+                maxEntries: 1500,
+                maxAgeSeconds: 30 * 24 * 60 * 60,
+              },
+            },
+          },
+          {
             urlPattern: new RegExp(`${MEDIA_URL_PREFIX}.*`, "i"),
             handler: "CacheFirst",
             options: {

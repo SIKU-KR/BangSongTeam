@@ -14,11 +14,7 @@ import {
 } from "#components/ui/select";
 import type { DeckStyle, NoonnuFont } from "#shared";
 import { DEFAULT_PRESET_FONTS, loadNoonnuFontCatalog } from "#shared";
-import {
-  loadWebFont,
-  loadWebFonts,
-  toCssFontFamily,
-} from "../../../lib/fonts/fontLoader";
+import { loadWebFont } from "../../../lib/fonts/fontLoader";
 import { ColorPickerField } from "../ColorPickerField";
 import { ToggleGroup, ToggleGroupItem } from "#components/ui/toggle-group";
 import { RibbonChoices, RibbonDropdown } from "./RibbonDropdown";
@@ -38,7 +34,55 @@ export interface FontControlsProps {
   onUpdateStyle: (update: Partial<DeckStyle>) => void;
 }
 
-/** 리본 '글꼴' 그룹: 글꼴·크기(pt)·색·그림자 */
+/**
+ * 기본 글꼴의 미리보기 이미지 ID. 기본 글꼴은 카탈로그 청크를 기다리지 않고 드롭다운을
+ * 여는 즉시 보여야 해서 카탈로그의 `id`를 여기 따로 둔다.
+ */
+const PRESET_FONT_PREVIEW_IDS: Record<
+  (typeof DEFAULT_PRESET_FONTS)[number],
+  string
+> = {
+  Pretendard: "core-pretendard",
+  "Noto Sans KR": "core-noto-sans-kr",
+  "Nanum Myeongjo": "core-nanum-myeongjo",
+  "Gmarket Sans": "core-gmarket-sans",
+  "KoPubWorld Batang": "core-kopub-batang",
+};
+
+const PRESET_FONTS = DEFAULT_PRESET_FONTS.map((name) => ({
+  id: PRESET_FONT_PREVIEW_IDS[name],
+  name,
+}));
+
+function FontOption({
+  font,
+}: {
+  font: Pick<NoonnuFont, "id" | "name">;
+}): React.JSX.Element {
+  return (
+    <SelectItem value={font.name}>
+      <span
+        aria-hidden
+        className="h-6 flex-1 bg-current"
+        style={{
+          maskImage: `url("/font-previews/${font.id}.webp")`,
+          maskSize: "auto 100%",
+          maskRepeat: "no-repeat",
+          maskPosition: "left center",
+        }}
+      />
+      <span className="sr-only">{font.name}</span>
+    </SelectItem>
+  );
+}
+
+/**
+ * 리본 '글꼴' 그룹: 글꼴·크기(pt)·색·그림자.
+ *
+ * 글꼴 목록은 폰트 파일 대신 `scripts/buildFontPreviews.mjs`가 미리 그려 둔 이름 이미지
+ * (`/font-previews/<id>.webp`)를 mask로 보여 준다. 한글 폰트는 파일 하나가 수 MB라 목록을
+ * 그 글꼴로 그리면 드롭다운 하나로 수십~수백 MB를 받는다. 폰트 파일은 고른 글꼴만 받는다.
+ */
 export function FontControls({
   style,
   disabled,
@@ -95,11 +139,6 @@ export function FontControls({
       .slice(0, 60);
   }, [catalog, allAdditionalFonts, searchTrimmed, displayLimit]);
 
-  useEffect(() => {
-    void loadWebFonts(DEFAULT_PRESET_FONTS);
-    void loadWebFonts(filteredFonts);
-  }, [filteredFonts]);
-
   return (
     <RibbonGroup label="글꼴">
       <Select
@@ -110,7 +149,6 @@ export function FontControls({
         }}
         onValueChange={(value) => {
           if (value) {
-            void loadWebFont(value);
             onUpdateStyle({ fontFamily: value as DeckStyle["fontFamily"] });
           }
         }}
@@ -135,22 +173,8 @@ export function FontControls({
                 <SelectLabel className="px-2 py-1 text-2xs text-muted-foreground">
                   기본 글꼴
                 </SelectLabel>
-                {DEFAULT_PRESET_FONTS.map((font) => (
-                  <SelectItem
-                    key={font}
-                    value={font}
-                    style={{
-                      fontFamily: `${toCssFontFamily(font)}, sans-serif`,
-                    }}
-                  >
-                    <span
-                      style={{
-                        fontFamily: `${toCssFontFamily(font)}, sans-serif`,
-                      }}
-                    >
-                      {font}
-                    </span>
-                  </SelectItem>
+                {PRESET_FONTS.map((font) => (
+                  <FontOption key={font.id} font={font} />
                 ))}
               </SelectGroup>
               <SelectSeparator />
@@ -161,21 +185,7 @@ export function FontControls({
                     : "눈누 무료 웹폰트 불러오는 중…"}
                 </SelectLabel>
                 {filteredFonts.map((font) => (
-                  <SelectItem
-                    key={font.name}
-                    value={font.name}
-                    style={{
-                      fontFamily: `'${font.name}', '${font.cardFamily}', sans-serif`,
-                    }}
-                  >
-                    <span
-                      style={{
-                        fontFamily: `'${font.name}', '${font.cardFamily}', sans-serif`,
-                      }}
-                    >
-                      {font.name}
-                    </span>
-                  </SelectItem>
+                  <FontOption key={font.id} font={font} />
                 ))}
                 {displayLimit < allAdditionalFonts.length && (
                   <Button
@@ -201,21 +211,7 @@ export function FontControls({
                 검색 결과 ({filteredFonts.length}개)
               </SelectLabel>
               {filteredFonts.map((font) => (
-                <SelectItem
-                  key={font.name}
-                  value={font.name}
-                  style={{
-                    fontFamily: `'${font.name}', '${font.cardFamily}', sans-serif`,
-                  }}
-                >
-                  <span
-                    style={{
-                      fontFamily: `'${font.name}', '${font.cardFamily}', sans-serif`,
-                    }}
-                  >
-                    {font.name}
-                  </span>
-                </SelectItem>
+                <FontOption key={font.id} font={font} />
               ))}
             </SelectGroup>
           )}
