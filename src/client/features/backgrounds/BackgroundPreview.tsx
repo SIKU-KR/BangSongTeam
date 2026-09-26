@@ -47,6 +47,7 @@ export function BackgroundPreview({
           src={background.posterUrl}
           alt={background.title}
           loading="lazy"
+          decoding="async"
           draggable={false}
           onError={() => setFailedUrl(background.posterUrl)}
           className="absolute inset-0 size-full object-cover"

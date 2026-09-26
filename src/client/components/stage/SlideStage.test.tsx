@@ -144,14 +144,33 @@ describe("SlideStage Integration Component", () => {
     expect(
       screen.queryByTestId("video-layer-container"),
     ).not.toBeInTheDocument();
-    const layer = screen.getByTestId("static-background-layer");
-    expect(layer.querySelector("img")).toHaveAttribute(
-      "src",
-      "/api/media/poster1.jpg",
-    );
+    const image = screen
+      .getByTestId("static-background-layer")
+      .querySelector("img");
+    expect(image).toHaveAttribute("src", "/api/media/poster1.jpg");
+    expect(image).toHaveAttribute("loading", "lazy");
+    expect(image).toHaveAttribute("decoding", "async");
     expect(screen.getByTestId("overlay-layer")).toBeInTheDocument();
     expect(
       screen.getByText("꽃들도 구름도 바람도 넓은 바다도"),
     ).toBeInTheDocument();
+  });
+
+  it("이미지 배경은 원본만 그리고 영상 레이어에 축소 포스터를 걸지 않는다", () => {
+    const { container } = render(
+      <SlideStage
+        slide={mockSlide}
+        style={mockStyle}
+        backgroundImageUrl="/api/media/stills/hall.jpg"
+        posterUrl="/api/media/posters/hall.webp"
+      />,
+    );
+
+    const image = screen.getByTestId("image-background-layer");
+    expect(image).toHaveAttribute("src", "/api/media/stills/hall.jpg");
+    expect(image).not.toHaveAttribute("loading");
+    for (const video of container.querySelectorAll("video")) {
+      expect(video).not.toHaveAttribute("poster");
+    }
   });
 });

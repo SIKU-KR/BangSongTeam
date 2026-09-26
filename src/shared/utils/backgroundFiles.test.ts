@@ -48,7 +48,14 @@ describe("serviceBackgroundKeys", () => {
     });
   });
 
-  it("이미지는 stills/ 아래에 두고 원본을 포스터로 함께 쓴다", () => {
+  it("이미지는 stills/ 아래에 두고 포스터는 영상과 같이 posters/에 둔다", () => {
+    expect(serviceBackgroundKeys("bg-1", "image/png", "image/webp")).toEqual({
+      mediaKey: "stills/bg-1.png",
+      posterKey: "posters/bg-1.webp",
+    });
+  });
+
+  it("포스터가 없으면 원본을 포스터로 함께 쓴다", () => {
     expect(serviceBackgroundKeys("bg-1", "image/png", null)).toEqual({
       mediaKey: "stills/bg-1.png",
       posterKey: "stills/bg-1.png",

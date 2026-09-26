@@ -14,7 +14,10 @@ export interface SlideStageProps {
   slide?: Slide | null;
   style?: DeckStyle;
   backgroundUrl?: string;
-  /** 이미지 배경. 영상 레이어는 비운 채로 두고 그 위에 정지 이미지를 그린다 */
+  /**
+   * 이미지 배경. 영상 레이어는 포스터까지 비운 채로 두고 그 위에 원본 이미지를 그린다.
+   * 포스터는 썸네일용 축소본이라 원본 뒤에서 따로 받을 까닭이 없다
+   */
   backgroundImageUrl?: string;
   nextBackgroundUrl?: string;
   posterUrl?: string;
@@ -123,6 +126,8 @@ export function SlideStage({
               <img
                 src={posterUrl}
                 alt=""
+                loading="lazy"
+                decoding="async"
                 draggable={false}
                 className="absolute inset-0 size-full object-cover"
               />
@@ -133,7 +138,7 @@ export function SlideStage({
             <VideoLayer
               src={backgroundImageUrl ? undefined : backgroundUrl}
               nextSrc={nextBackgroundUrl}
-              posterUrl={posterUrl}
+              posterUrl={backgroundImageUrl ? undefined : posterUrl}
             />
             {backgroundImageUrl && (
               <img

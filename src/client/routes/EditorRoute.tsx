@@ -76,7 +76,10 @@ import {
   analyzeDeckOverflowCached,
   useTextWidthMeasurer,
 } from "../features/editor/useTextWidthMeasurer";
-import { useBackgroundAutoCache } from "../features/offline";
+import {
+  useBackgroundAutoCache,
+  useCacheFirstVideo,
+} from "../features/offline";
 import { warmPresentationFonts } from "../lib/offline";
 import { PresentationShareDialog } from "../features/sharing/PresentationShareDialog";
 import { wantsMakeCopy } from "../features/sharing/shareLink";
@@ -227,8 +230,8 @@ function EditorScreen({
   const editingSong =
     editingSongIndex === null ? undefined : songs[editingSongIndex]?.deck;
 
-  const background = resolveBackgroundLayers(
-    useBackground(currentSong?.backgroundId),
+  const background = useCacheFirstVideo(
+    resolveBackgroundLayers(useBackground(currentSong?.backgroundId)),
   );
 
   const handlePresent = () => {

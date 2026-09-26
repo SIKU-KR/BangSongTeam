@@ -10,7 +10,10 @@ export interface ProbedBackgroundFile {
   width: number;
   height: number;
   durationSec: number;
-  /** 영상의 첫 화면. 목록·썸네일이 영상을 받지 않고 그리게 한다 */
+  /**
+   * 목록·썸네일용 폭 960px 축소본. 영상은 첫 화면이고, 이미지는 원본을 줄인 것이다.
+   * 목록·썸네일이 영상이나 최대 30MB 원본 이미지를 받지 않고 그리게 한다
+   */
   poster?: File;
   /** 1920×1080 미만: 막지 않고 송출 시 흐려질 수 있다고만 알린다 */
   isLowResolution: boolean;
@@ -64,14 +67,18 @@ function once(target: EventTarget, event: string): Promise<void> {
   });
 }
 
-async function drawPoster(video: HTMLVideoElement): Promise<File> {
-  const scale = Math.min(1, POSTER_WIDTH / video.videoWidth);
+async function drawPoster(
+  source: CanvasImageSource,
+  width: number,
+  height: number,
+): Promise<File> {
+  const scale = Math.min(1, POSTER_WIDTH / width);
   const canvas = document.createElement("canvas");
-  canvas.width = Math.round(video.videoWidth * scale);
-  canvas.height = Math.round(video.videoHeight * scale);
+  canvas.width = Math.round(width * scale);
+  canvas.height = Math.round(height * scale);
   const context = canvas.getContext("2d");
   if (!context) throw new Error("canvas");
-  context.drawImage(video, 0, 0, canvas.width, canvas.height);
+  context.drawImage(source, 0, 0, canvas.width, canvas.height);
 
   const blob = await new Promise<Blob | null>((resolve) =>
     canvas.toBlob(resolve, "image/webp", 0.8),
@@ -100,7 +107,7 @@ async function probeVideo(file: File): Promise<ProbedBackgroundFile> {
       width: video.videoWidth,
       height: video.videoHeight,
       durationSec: Math.round(durationSec),
-      poster: await drawPoster(video),
+      poster: await drawPoster(video, video.videoWidth, video.videoHeight),
       isLowResolution: isLowResolution(video.videoWidth, video.videoHeight),
     };
   } catch {
@@ -120,11 +127,17 @@ async function probeImage(file: File): Promise<ProbedBackgroundFile> {
   try {
     image.src = url;
     await image.decode();
+    const poster = await drawPoster(
+      image,
+      image.naturalWidth,
+      image.naturalHeight,
+    ).catch(() => undefined);
     return {
       kind: "image",
       width: image.naturalWidth,
       height: image.naturalHeight,
       durationSec: 0,
+      poster,
       isLowResolution: isLowResolution(image.naturalWidth, image.naturalHeight),
     };
   } catch {
@@ -138,7 +151,8 @@ async function probeImage(file: File): Promise<ProbedBackgroundFile> {
 
 /**
  * 브라우저가 실제로 재생·표시할 수 있는지 확인하고, 해상도·길이를 읽고,
- * 영상이면 포스터를 만든다. 송출할 브라우저와 같은 디코더로 확인하므로
+ * 포스터를 만든다. 이미지 포스터를 만들지 못하면 포스터 없이 올리고 서버가
+ * 원본을 포스터로 쓴다. 송출할 브라우저와 같은 디코더로 확인하므로
  * 여기서 열리지 않는 파일은 예배 중에도 재생되지 않는다.
  */
 export function probeBackgroundFile(file: File): Promise<ProbedBackgroundFile> {

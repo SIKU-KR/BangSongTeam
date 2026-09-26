@@ -2,11 +2,15 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { eq } from "drizzle-orm";
 import { createTestDb, type TestDbResult } from "../test-utils";
 import { decks, user } from "../schema";
-import { listBackgrounds } from "../queries/backgrounds";
+import {
+  insertServiceBackground,
+  listBackgrounds,
+} from "../queries/backgrounds";
 import { BACKGROUND_SQL } from "./backgroundSql";
 
 const OWNER = "00000000000000000000a";
 const SERVICE = "svc000000000000000001";
+const STILL = "svc000000000000000002";
 const DECK = "c00000000000000000001";
 
 describe("운영 SQL (background runbook)", () => {
@@ -62,6 +66,51 @@ describe("운영 SQL (background runbook)", () => {
     expect(all("LIST_SERVICE_BACKGROUNDS").map((row) => row.id)).toEqual([
       SERVICE,
     ]);
+  });
+
+  it("포스터 없이 올라간 이미지 배경에 축소 포스터를 채운다", async () => {
+    register();
+    await insertServiceBackground(testDb.db, {
+      id: STILL,
+      title: "본당",
+      license: "CC0",
+      kind: "image",
+      mediaKey: `stills/${STILL}.jpg`,
+      posterKey: `stills/${STILL}.jpg`,
+      sizeBytes: 20_000_000,
+      durationSec: 0,
+      tags: [],
+    });
+    expect(all("LIST_IMAGE_BACKGROUNDS_WITHOUT_POSTER")).toEqual([
+      {
+        id: STILL,
+        title: "본당",
+        r2_key: `stills/${STILL}.jpg`,
+        size_bytes: 20_000_000,
+      },
+    ]);
+
+    const params = {
+      background_id: STILL,
+      poster_key: `posters/${STILL}.webp`,
+      size_bytes: 20_150_000,
+    };
+    expect(run("SET_IMAGE_BACKGROUND_POSTER", params).changes).toBe(1);
+    expect(run("SET_IMAGE_BACKGROUND_POSTER", params).changes).toBe(0);
+    expect(
+      run("SET_IMAGE_BACKGROUND_POSTER", { ...params, background_id: SERVICE })
+        .changes,
+    ).toBe(0);
+
+    const listed = (await listBackgrounds(testDb.db)).find(
+      (bg) => bg.id === STILL,
+    );
+    expect(listed).toMatchObject({
+      mediaUrl: `/api/media/stills/${STILL}.jpg`,
+      posterUrl: `/api/media/posters/${STILL}.webp`,
+      sizeBytes: 20_150_000,
+    });
+    expect(all("LIST_IMAGE_BACKGROUNDS_WITHOUT_POSTER")).toEqual([]);
   });
 
   it("사전 주입 배경을 지우면 쓰던 곡은 배경 없음이 된다", () => {

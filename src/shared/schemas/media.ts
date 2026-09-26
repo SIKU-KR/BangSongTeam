@@ -23,7 +23,8 @@ export const BackgroundTagsSchema = z.array(z.string());
  *
  * URL은 동일 출처 미디어 프록시(`/api/media/*`) 상대 경로다. 송출 화면은 이 값을
  * IndexedDB에서 읽어 그대로 재생하므로 서버에 다시 묻지 않는다.
- * 이미지 배경은 `mediaUrl`과 `posterUrl`이 같다.
+ * `posterUrl`은 목록·썸네일용 축소본(폭 960px)이다. 포스터 없이 올라간 예전 이미지
+ * 배경만 `mediaUrl`과 `posterUrl`이 같다 (운영 런북 1-4로 채운다).
  */
 export const BackgroundMediaSchema = z.object({
   id: IdSchema,
@@ -89,7 +90,8 @@ const TagsFieldSchema = z
  *
  * 선언된 MIME만 검사한다. 파일 앞부분 바이트로 실제 형식을 확인하는 것은
  * Worker가 맡는다 (`sniffBackgroundMimeType`). 영상은 첫 화면 포스터를 함께
- * 받아야 목록·썸네일이 영상을 내려받지 않고 그려진다.
+ * 받아야 목록·썸네일이 영상을 내려받지 않고 그려진다. 이미지도 축소 포스터를
+ * 받는다(선택). 없으면 최대 30MB 원본이 썸네일마다 디코딩된다.
  */
 export const BackgroundUploadFormSchema = z
   .object({

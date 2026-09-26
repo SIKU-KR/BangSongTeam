@@ -212,7 +212,45 @@ describe("배경 갤러리 API", () => {
       );
     });
 
-    it("이미지는 원본 하나만 올리고 포스터로도 쓴다", async () => {
+    it("이미지는 원본을 stills/에, 축소 포스터를 posters/에 올린다", async () => {
+      const res = await upload(
+        uploadForm({
+          file: new File([PNG_BYTES], "hall.png", { type: "image/png" }),
+          durationSec: null,
+        }),
+      );
+      expect(res.status).toBe(201);
+      const { background } = BackgroundUploadResponseSchema.parse(
+        await res.json(),
+      );
+      expect(background.kind).toBe("image");
+      expect(background).toMatchObject({
+        mediaUrl: `/api/media/stills/${background.id}.png`,
+        posterUrl: `/api/media/posters/${background.id}.webp`,
+        sizeBytes: PNG_BYTES.byteLength + WEBP_BYTES.byteLength,
+      });
+      expect(await mediaKeys()).toEqual(
+        [
+          ...initialKeys,
+          `posters/${background.id}.webp`,
+          `stills/${background.id}.png`,
+        ].sort(),
+      );
+    });
+
+    it("이미지 포스터가 이미지가 아니면 거절한다", async () => {
+      const res = await upload(
+        uploadForm({
+          file: new File([PNG_BYTES], "hall.png", { type: "image/png" }),
+          poster: new File([MP4_BYTES], "poster.webp", { type: "image/webp" }),
+          durationSec: null,
+        }),
+      );
+      expect(res.status).toBe(400);
+      expect(await mediaKeys()).toEqual(initialKeys);
+    });
+
+    it("포스터 없이 올린 이미지는 원본을 포스터로도 쓴다", async () => {
       const res = await upload(
         uploadForm({
           file: new File([PNG_BYTES], "hall.png", { type: "image/png" }),
