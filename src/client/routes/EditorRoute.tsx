@@ -75,6 +75,7 @@ import {
 import { SongInfoDialog } from "../features/editor/SongInfoDialog";
 import { useTextWidthMeasurer } from "../features/editor/useTextWidthMeasurer";
 import { useBackgroundAutoCache } from "../features/offline";
+import { warmPresentationFonts } from "../lib/offline";
 import { PresentationShareDialog } from "../features/sharing/PresentationShareDialog";
 import { wantsMakeCopy } from "../features/sharing/shareLink";
 import { refreshSharedPresentation } from "../lib/sync";
@@ -238,6 +239,7 @@ function EditorScreen({
 
   const handlePresent = () => {
     if (presentationId) {
+      if (found) void warmPresentationFonts(found).catch(() => undefined);
       launchPresentation(
         navigate,
         presentationId,
