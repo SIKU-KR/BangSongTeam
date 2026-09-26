@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   DndContext,
   DragOverlay,
@@ -48,7 +48,6 @@ import {
 } from "#components/ui/tooltip";
 import { IconButton } from "#components/common/IconButton";
 import type { PresentationItem } from "#shared";
-import { analyzeDeckOverflow } from "#shared";
 import {
   getBackgroundById,
   useBackgroundCatalog,
@@ -64,7 +63,10 @@ import {
 } from "./SlideThumbnail";
 import { resolveDropIndex, type ClickModifiers } from "./slideSelection";
 import type { SlideInsertion } from "./useSlideSelection";
-import { useTextWidthMeasurer } from "./useTextWidthMeasurer";
+import {
+  analyzeDeckOverflowCached,
+  useTextWidthMeasurer,
+} from "./useTextWidthMeasurer";
 
 const SLIDE_WRAP_WARNING =
   "한 줄이 텍스트 박스 폭을 넘어 자동 줄바꿈됩니다. 글자 크기를 줄이거나 박스 폭을 넓혀 보세요.";
@@ -113,6 +115,8 @@ type DropTarget =
   | { type: "song"; index: number };
 
 const NO_MODIFIERS: ClickModifiers = { shift: false, mod: false };
+const NO_SENSORS: [] = [];
+const POINTER_SENSOR_OPTIONS = { activationConstraint: { distance: 5 } };
 
 const byDragType: CollisionDetection = (args) => {
   const active = args.active.data.current as PaneDragData | undefined;
@@ -193,14 +197,8 @@ export function SlideThumbnailPane({
 
   const activeItemId = items[activeSongIndex]?.id;
   const measureText = useTextWidthMeasurer();
-  const overflows = useMemo(
-    () =>
-      items.map((item) =>
-        item.deck
-          ? analyzeDeckOverflow(item.deck.slides, item.deck.style, measureText)
-          : null,
-      ),
-    [items, measureText],
+  const overflows = items.map((item) =>
+    item.deck ? analyzeDeckOverflowCached(item.deck, measureText) : null,
   );
 
   const firstIndexes: number[] = [];
@@ -210,9 +208,7 @@ export function SlideThumbnailPane({
     totalSlides += item.deck?.slides.length ?? 0;
   }
 
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
-  );
+  const sensors = useSensors(useSensor(PointerSensor, POINTER_SENSOR_OPTIONS));
 
   useEffect(() => {
     if (!activeItemId) return;
@@ -437,6 +433,19 @@ export function SlideThumbnailPane({
     }
   };
 
+  const handleClick = (event: React.MouseEvent) => {
+    const thumb = (event.target as HTMLElement).closest<HTMLElement>(
+      "[data-slide-thumb]",
+    );
+    if (!thumb) return;
+    focusPane();
+    onClickSlide(
+      Number(thumb.getAttribute("data-song-index")),
+      Number(thumb.getAttribute("data-slide-index")),
+      { shift: event.shiftKey, mod: event.metaKey || event.ctrlKey },
+    );
+  };
+
   const handleDragStart = ({ active }: DragStartEvent) => {
     const data = active.data.current as PaneDragData | undefined;
     if (!data) return;
@@ -505,7 +514,7 @@ export function SlideThumbnailPane({
       </div>
 
       <DndContext
-        sensors={readOnly ? [] : sensors}
+        sensors={readOnly ? NO_SENSORS : sensors}
         collisionDetection={byDragType}
         onDragStart={handleDragStart}
         onDragMove={(event) => setDropTarget(dropTargetOf(event))}
@@ -524,6 +533,7 @@ export function SlideThumbnailPane({
             aria-multiselectable="true"
             data-slide-pane=""
             data-testid="slide-pane-list"
+            onClick={handleClick}
             onContextMenu={handleContextMenu}
             className="flex-1 overflow-y-auto px-3 py-2 outline-none"
           >
@@ -638,13 +648,6 @@ export function SlideThumbnailPane({
                               dimmed={dragging?.type === "slide" && selected}
                               warning={warning}
                               thumbRef={current ? activeThumbRef : undefined}
-                              onClick={(event) => {
-                                focusPane();
-                                onClickSlide(songIndex, slideIndex, {
-                                  shift: event.shiftKey,
-                                  mod: event.metaKey || event.ctrlKey,
-                                });
-                              }}
                             />
                             <SlideGap
                               songIndex={songIndex}

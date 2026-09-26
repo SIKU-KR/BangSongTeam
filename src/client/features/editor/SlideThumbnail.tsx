@@ -66,11 +66,16 @@ export interface SlideThumbnailProps {
   dimmed: boolean;
   warning: string;
   thumbRef?: React.Ref<HTMLDivElement>;
-  onClick: (event: React.MouseEvent) => void;
 }
 
-/** 썸네일 창의 슬라이드 한 장. 끌 수도 있고, 같은 곡 슬라이드를 놓을 자리도 된다 */
-export function SlideThumbnail({
+/**
+ * 썸네일 창의 슬라이드 한 장. 끌 수도 있고, 같은 곡 슬라이드를 놓을 자리도 된다.
+ *
+ * 가사를 한 글자 고칠 때 바뀐 슬라이드만 다시 그리도록 `memo`로 감싼다. 스토어가
+ * 바뀌지 않은 슬라이드·서식 객체의 참조를 유지하므로 props는 원시값과 그 참조만 받고,
+ * 클릭은 썸네일 창이 `data-slide-thumb`·`data-song-index`·`data-slide-index`로 위임받아 처리한다.
+ */
+export const SlideThumbnail = React.memo(function SlideThumbnail({
   dragId,
   songIndex,
   slideIndex,
@@ -83,7 +88,6 @@ export function SlideThumbnail({
   dimmed,
   warning,
   thumbRef,
-  onClick,
 }: SlideThumbnailProps): React.JSX.Element {
   const data: PaneDragData = {
     type: "slide",
@@ -111,7 +115,6 @@ export function SlideThumbnail({
       data-slide-thumb=""
       data-song-index={songIndex}
       data-slide-index={slideIndex}
-      onClick={onClick}
       className={cn(
         "group flex cursor-pointer items-start gap-1.5 rounded-lg p-1.5 transition-colors outline-none",
         selected ? "bg-accent/80 shadow-xs" : "hover:bg-muted/50",
@@ -155,7 +158,7 @@ export function SlideThumbnail({
       </div>
     </div>
   );
-}
+});
 
 /**
  * 썸네일 사이 틈. 누르면 PowerPoint처럼 삽입 커서가 되고, 삽입 커서가 있거나
