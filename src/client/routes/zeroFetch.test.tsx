@@ -9,7 +9,6 @@ import {
   SEED_PRESENTATIONS,
   SEED_PRESENTATION_IDS,
 } from "../features/presentation";
-import { PROJECTION_BACKLOG_DELAY_MS } from "../features/offline";
 import {
   __resetMediaCachingForTests,
   __waitForMediaCachingForTests,
@@ -93,9 +92,6 @@ function renderFullscreen() {
 }
 
 async function settleBackgroundCache(): Promise<void> {
-  act(() => {
-    vi.advanceTimersByTime(PROJECTION_BACKLOG_DELAY_MS);
-  });
   vi.useRealTimers();
   await __waitForMediaCachingForTests();
 }

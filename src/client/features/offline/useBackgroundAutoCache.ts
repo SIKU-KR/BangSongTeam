@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import {
   collectPresentationMediaAssets,
   collectUniqueMediaUrls,
@@ -9,12 +9,6 @@ import { scheduleMediaCaching, warmPresentationFonts } from "../../lib/offline";
 import { useBackgroundCatalog } from "../backgrounds/backgroundCatalog";
 
 export const AUTO_CACHE_DELAY_MS = 3000;
-
-/**
- * 송출 중 세트의 나머지 배경을 받기 시작하기까지의 조용한 시간.
- * 곡을 바꿀 때마다 다시 센다. 방금 시작한 곡 영상이 버퍼를 채울 동안 대역폭을 비워 둔다.
- */
-export const PROJECTION_BACKLOG_DELAY_MS = 30_000;
 
 function useBackgroundLookup(): (id: string) => BackgroundMedia | undefined {
   const catalog = useBackgroundCatalog();
@@ -75,10 +69,10 @@ export function useBackgroundAutoCache(
 }
 
 /**
- * 송출 화면의 배경 캐시. 캐시가 빈 채로 송출을 시작해도 재생 중인 영상과 대역폭을 덜 다투게 한다.
+ * 송출 화면의 배경 캐시. 송출을 시작하면 세트가 쓰는 배경을 지연 없이 모두 큐에 넣는다.
  *
- * 지금 곡과 다음 곡 배경은 곧바로 큐 맨 앞에 세운다. 세트의 나머지는 곡을 바꾼 뒤
- * `PROJECTION_BACKLOG_DELAY_MS` 동안 곡이 그대로일 때 받는다. 곡 순번은 송출 라우트와
+ * 큐는 한 번에 하나씩 받으므로 순서가 곧 우선순위다. 지금 곡과 다음 곡 배경을 맨 앞에
+ * 세우고, 곡이 바뀔 때마다 새 지금·다음 곡을 다시 앞으로 당긴다. 곡 순번은 송출 라우트와
  * 같게 `presentation.items`의 배열 순서를 따른다. 글꼴은 `usePresentationFontsReady`가 맡는다.
  */
 export function useProjectionMediaCache(
@@ -105,23 +99,14 @@ export function useProjectionMediaCache(
 
   const focusUrlsRef = useLatest(focusUrls);
   const allUrlsRef = useLatest(allUrls);
-  const [onlineCount, setOnlineCount] = useState(0);
 
   useEffect(() => {
-    scheduleMediaCaching(focusUrlsRef.current, { priority: true });
-  }, [focusKey, onlineCount]);
-
-  useEffect(() => {
-    if (!allKey) return;
-    const timer = setTimeout(() => {
+    const scheduleAll = (): void => {
+      scheduleMediaCaching(focusUrlsRef.current, { priority: true });
       scheduleMediaCaching(allUrlsRef.current);
-    }, PROJECTION_BACKLOG_DELAY_MS);
-    return () => clearTimeout(timer);
-  }, [allKey, songIndex, onlineCount]);
-
-  useEffect(() => {
-    const handleOnline = (): void => setOnlineCount((count) => count + 1);
-    window.addEventListener("online", handleOnline);
-    return () => window.removeEventListener("online", handleOnline);
-  }, []);
+    };
+    scheduleAll();
+    window.addEventListener("online", scheduleAll);
+    return () => window.removeEventListener("online", scheduleAll);
+  }, [focusKey, allKey]);
 }

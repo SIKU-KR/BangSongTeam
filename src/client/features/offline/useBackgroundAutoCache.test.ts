@@ -14,7 +14,6 @@ import {
   useBackgroundAutoCache,
   useProjectionMediaCache,
   AUTO_CACHE_DELAY_MS,
-  PROJECTION_BACKLOG_DELAY_MS,
 } from "./useBackgroundAutoCache";
 
 const { scheduleMediaCaching, warmPresentationFonts } = vi.hoisted(() => ({
@@ -225,58 +224,44 @@ function withSongBackgrounds(backgroundIds: string[]): Presentation {
 
 describe("useProjectionMediaCache", () => {
   const presentation = withSongBackgrounds([BG_A, BG_B, BG_C]);
+  const ALL_URLS = [...urlsOf(BG_A), ...urlsOf(BG_B), ...urlsOf(BG_C)];
 
-  it("지금 곡과 다음 곡 배경을 기다리지 않고 큐 맨 앞에 세운다", () => {
+  it("지연 없이 지금·다음 곡을 맨 앞에, 세트의 나머지를 그 뒤에 넣는다", () => {
     renderHook(() => useProjectionMediaCache(presentation, 0));
 
-    expect(scheduleMediaCaching).toHaveBeenCalledTimes(1);
-    expect(scheduleMediaCaching).toHaveBeenCalledWith(
-      [...urlsOf(BG_A), ...urlsOf(BG_B)],
-      { priority: true },
-    );
+    expect(scheduleMediaCaching.mock.calls).toEqual([
+      [[...urlsOf(BG_A), ...urlsOf(BG_B)], { priority: true }],
+      [ALL_URLS],
+    ]);
   });
 
-  it("세트의 나머지는 곡이 한동안 그대로일 때 받는다", () => {
+  it("곡이 바뀌면 새 지금·다음 곡을 다시 맨 앞으로 당긴다", () => {
     const { rerender } = renderHook(
       ({ songIndex }) => useProjectionMediaCache(presentation, songIndex),
       { initialProps: { songIndex: 0 } },
     );
+    scheduleMediaCaching.mockClear();
 
-    act(() => {
-      vi.advanceTimersByTime(PROJECTION_BACKLOG_DELAY_MS - 1);
-    });
     rerender({ songIndex: 1 });
-    expect(scheduleMediaCaching).toHaveBeenLastCalledWith(
+
+    expect(scheduleMediaCaching).toHaveBeenCalledWith(
       [...urlsOf(BG_B), ...urlsOf(BG_C)],
       { priority: true },
     );
-
-    act(() => {
-      vi.advanceTimersByTime(PROJECTION_BACKLOG_DELAY_MS - 1);
-    });
-    expect(scheduleMediaCaching).toHaveBeenCalledTimes(2);
-
-    act(() => {
-      vi.advanceTimersByTime(1);
-    });
-    expect(scheduleMediaCaching).toHaveBeenLastCalledWith([
-      ...urlsOf(BG_A),
-      ...urlsOf(BG_B),
-      ...urlsOf(BG_C),
-    ]);
   });
 
   it("같은 곡 안에서 슬라이드만 넘기면 다시 큐에 넣지 않는다", () => {
     const { rerender } = renderHook(() =>
       useProjectionMediaCache(presentation, 0),
     );
+    scheduleMediaCaching.mockClear();
 
     rerender();
 
-    expect(scheduleMediaCaching).toHaveBeenCalledTimes(1);
+    expect(scheduleMediaCaching).not.toHaveBeenCalled();
   });
 
-  it("네트워크가 돌아오면 지금·다음 곡을 먼저 다시 받는다", () => {
+  it("네트워크가 돌아오면 지금·다음 곡부터 다시 받는다", () => {
     renderHook(() => useProjectionMediaCache(presentation, 1));
     scheduleMediaCaching.mockClear();
 
@@ -284,17 +269,16 @@ describe("useProjectionMediaCache", () => {
       window.dispatchEvent(new Event("online"));
     });
 
-    expect(scheduleMediaCaching).toHaveBeenCalledTimes(1);
-    expect(scheduleMediaCaching).toHaveBeenCalledWith(
-      [...urlsOf(BG_B), ...urlsOf(BG_C)],
-      { priority: true },
-    );
+    expect(scheduleMediaCaching.mock.calls).toEqual([
+      [[...urlsOf(BG_B), ...urlsOf(BG_C)], { priority: true }],
+      [ALL_URLS],
+    ]);
   });
 
   it("글꼴은 데우지 않는다", () => {
     renderHook(() => useProjectionMediaCache(presentation, 0));
     act(() => {
-      vi.advanceTimersByTime(PROJECTION_BACKLOG_DELAY_MS);
+      vi.advanceTimersByTime(AUTO_CACHE_DELAY_MS);
     });
 
     expect(warmPresentationFonts).not.toHaveBeenCalled();
