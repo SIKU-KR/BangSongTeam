@@ -4,6 +4,8 @@ import {
   scheduleDocumentPush,
   flushPendingSync,
   setSyncEnabled,
+  SYNC_DEBOUNCE_MS,
+  SYNC_MAX_WAIT_MS,
   __resetSyncSchedulerForTests,
   __setPusherForTests,
 } from "./syncScheduler";
@@ -146,5 +148,87 @@ describe("서버 push 스케줄러", () => {
 
     expect(order).toEqual(["folder:f00000000000000000001", "doc:a"]);
     __resetFolderSyncForTests();
+  });
+
+  describe("타이머", () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it("입력이 멈추면 디바운스 뒤에 올린다", async () => {
+      scheduleDocumentPush(doc("a"));
+
+      await vi.advanceTimersByTimeAsync(SYNC_DEBOUNCE_MS - 1);
+      expect(push).not.toHaveBeenCalled();
+
+      await vi.advanceTimersByTimeAsync(1);
+      expect(push).toHaveBeenCalledTimes(1);
+    });
+
+    it("쉬지 않고 30초 입력해도 최대 대기 시간마다 올린다", async () => {
+      for (let elapsed = 0; elapsed < 30_000; elapsed += 500) {
+        scheduleDocumentPush(doc("a", String(elapsed)));
+        await vi.advanceTimersByTimeAsync(500);
+      }
+
+      expect(push.mock.calls.length).toBeGreaterThanOrEqual(
+        Math.floor(30_000 / SYNC_MAX_WAIT_MS),
+      );
+      expect(push.mock.calls[0][0].title).toBe(String(SYNC_MAX_WAIT_MS - 500));
+    });
+
+    it("올린 뒤 다시 고치면 최대 대기 시간을 새로 센다", async () => {
+      scheduleDocumentPush(doc("a"));
+      await vi.advanceTimersByTimeAsync(SYNC_DEBOUNCE_MS);
+      expect(push).toHaveBeenCalledTimes(1);
+
+      await vi.advanceTimersByTimeAsync(SYNC_MAX_WAIT_MS);
+      scheduleDocumentPush(doc("a", "2"));
+      await vi.advanceTimersByTimeAsync(SYNC_DEBOUNCE_MS - 1);
+      expect(push).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  it("서로 다른 문서는 동시에 올린다", async () => {
+    let active = 0;
+    let peak = 0;
+    push.mockImplementation(async () => {
+      active += 1;
+      peak = Math.max(peak, active);
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      active -= 1;
+      return true;
+    });
+
+    for (const id of ["a", "b", "c", "d", "e"]) scheduleDocumentPush(doc(id));
+    await flushPendingSync();
+
+    expect(push).toHaveBeenCalledTimes(5);
+    expect(peak).toBeGreaterThan(1);
+    expect(peak).toBeLessThanOrEqual(3);
+  });
+
+  it("오프라인으로 되돌릴 때 그 사이 새로 예약한 판을 덮어쓰지 않는다", async () => {
+    let release: () => void = () => {};
+    push.mockImplementationOnce(
+      () =>
+        new Promise((_, reject) => {
+          release = () => reject(new OfflineError());
+        }),
+    );
+
+    scheduleDocumentPush(doc("a", "옛 판"));
+    const flushing = flushPendingSync();
+    await vi.waitFor(() => expect(push).toHaveBeenCalledTimes(1));
+    scheduleDocumentPush(doc("a", "새 판"));
+    release();
+    await flushing;
+
+    await flushPendingSync();
+    expect(push.mock.calls.at(-1)?.[0].title).toBe("새 판");
   });
 });

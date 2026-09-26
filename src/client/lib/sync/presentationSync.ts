@@ -3,11 +3,13 @@ import {
   FolderDeleteResponseSchema,
   FolderSchema,
   PresentationDocumentSchema,
+  toPresentationChanges,
   type Deck,
   type Folder,
   type FolderDeleteResponse,
   type FolderListResponse,
   type Presentation,
+  type PresentationChanges,
   type PresentationDocument,
 } from "#shared";
 import { api } from "../api/client";
@@ -90,18 +92,94 @@ export async function send<T>(request: () => Promise<RpcResponse>): Promise<T> {
   return (await response.json()) as T;
 }
 
+/**
+ * 문서 id → (덱 id → 서버에 있다고 아는 덱의 지문). 메모리에만 둔다.
+ *
+ * 바뀐 덱만 올리는 기준이다. 모르는 문서(새로고침 직후 부팅 동기화 전 등)는
+ * 모든 덱을 보낸다. 서버가 실제로 덱을 잃었으면(다른 기기에서 영구 삭제 등) 409를
+ * 받고 모든 덱을 담아 다시 보내므로, 이 표가 틀려도 곡이 빠지지는 않는다.
+ */
+const serverDecks = new Map<string, Map<string, string>>();
+
+/**
+ * 스키마로 파싱한 덱의 JSON을 53비트 해시로 줄인다 (cyrb53). 덱 본문을 통째로
+ * 들고 있으면 세트 수만큼 메모리를 한 벌 더 쓴다.
+ */
+function deckFingerprint(deck: Deck): string {
+  const text = JSON.stringify(deck);
+  let h1 = 0xdeadbeef;
+  let h2 = 0x41c6ce57;
+  for (let i = 0; i < text.length; i++) {
+    const code = text.charCodeAt(i);
+    h1 = Math.imul(h1 ^ code, 2654435761);
+    h2 = Math.imul(h2 ^ code, 1597334677);
+  }
+  h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507);
+  h1 ^= Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+  h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507);
+  h2 ^= Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+  return (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(36);
+}
+
+function rememberServerDecks(document: PresentationDocument): void {
+  serverDecks.set(
+    document.id,
+    new Map(
+      document.items.map((item) => [item.deck.id, deckFingerprint(item.deck)]),
+    ),
+  );
+}
+
+/**
+ * 서버에서 받은 문서들을 변경분 계산의 기준으로 삼는다 (부팅 동기화).
+ * 보기 전용 공유 세트는 올리지 않으므로 기억하지 않는다.
+ */
+export function rememberServerDocuments(documents: readonly unknown[]): void {
+  for (const candidate of documents) {
+    const parsed = PresentationDocumentSchema.safeParse(candidate);
+    if (parsed.success && !parsed.data.access) rememberServerDecks(parsed.data);
+  }
+}
+
+export function __resetServerDecksForTests(): void {
+  serverDecks.clear();
+}
+
+async function sendChanges(changes: PresentationChanges): Promise<void> {
+  await send(() =>
+    api.api.presentations[":id"].$patch({
+      param: { id: changes.id },
+      json: changes,
+    }),
+  );
+}
+
+/**
+ * 세트를 서버에 올린다. 헤더와 곡 순서는 언제나, 덱은 서버에 마지막으로 올린 뒤
+ * 바뀐 것만 보낸다. 서버가 모르는 곡이 있다고 하면(409) 모든 덱을 담아 한 번 더
+ * 보낸다.
+ */
 export async function pushPresentation(
   presentation: Presentation,
 ): Promise<boolean> {
   const document = toSyncableDocument(presentation);
   if (!document) return false;
 
-  await send(() =>
-    api.api.presentations[":id"].$put({
-      param: { id: document.id },
-      json: document,
-    }),
-  );
+  const known = serverDecks.get(document.id);
+  try {
+    await sendChanges(
+      toPresentationChanges(
+        document,
+        (deck) => known?.get(deck.id) !== deckFingerprint(deck),
+      ),
+    );
+  } catch (err) {
+    if (!(err instanceof ServerRejectedError && err.status === 409)) throw err;
+    serverDecks.delete(document.id);
+    await sendChanges(toPresentationChanges(document));
+  }
+
+  rememberServerDecks(document);
   return true;
 }
 
@@ -184,9 +262,9 @@ export async function deletePresentationRemote(id: string): Promise<void> {
   try {
     await send(() => api.api.presentations[":id"].$delete({ param: { id } }));
   } catch (err) {
-    if (err instanceof ServerRejectedError && err.status === 404) return;
-    throw err;
+    if (!(err instanceof ServerRejectedError && err.status === 404)) throw err;
   }
+  serverDecks.delete(id);
 }
 
 export async function pullFolders(): Promise<FolderListResponse> {

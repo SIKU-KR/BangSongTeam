@@ -134,6 +134,28 @@ function replaceMissing<T extends { backgroundId?: string | null }>(
 }
 
 /**
+ * `nullifyUnknownBackgrounds`의 조회를 다른 읽기와 한 batch에 묶을 때 쓴다.
+ * 확인할 배경이 없으면 `null`이다. 결과는 `keepKnownBackgrounds`에 넘긴다.
+ */
+export function knownBackgroundsQuery(
+  db: DbInstance,
+  rows: readonly { backgroundId?: string | null }[],
+): unknown {
+  const candidates = distinctBackgroundIds(rows);
+  if (candidates.length === 0) return null;
+  return db
+    .select({ id: backgrounds.id })
+    .from(backgrounds)
+    .where(and(inArray(backgrounds.id, candidates), isServiceBackground));
+}
+
+export function keepKnownBackgrounds<
+  T extends { backgroundId?: string | null },
+>(rows: T[], found: readonly { id: string }[]): T[] {
+  return replaceMissing(rows, new Set(found.map((row) => row.id)));
+}
+
+/**
  * 기본 제공 배경이 아닌 `backgroundId`를 `null`로 떨군 덱 행을 돌려준다.
  *
  * 저장 경로: `decks.background_id`는 `backgrounds`를 참조하는 외래키이고, **D1은
@@ -148,12 +170,7 @@ function replaceMissing<T extends { backgroundId?: string | null }>(
 export async function nullifyUnknownBackgrounds<
   T extends { backgroundId?: string | null },
 >(db: DbInstance, rows: T[]): Promise<T[]> {
-  const candidates = distinctBackgroundIds(rows);
-  if (candidates.length === 0) return rows;
-
-  const found: { id: string }[] = await db
-    .select({ id: backgrounds.id })
-    .from(backgrounds)
-    .where(and(inArray(backgrounds.id, candidates), isServiceBackground));
-  return replaceMissing(rows, new Set(found.map((row) => row.id)));
+  const query = knownBackgroundsQuery(db, rows);
+  if (query === null) return rows;
+  return keepKnownBackgrounds(rows, (await query) as { id: string }[]);
 }

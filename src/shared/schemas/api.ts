@@ -66,6 +66,31 @@ export const PresentationDocumentSchema = PresentationSchema.extend({
 });
 export type PresentationDocument = z.infer<typeof PresentationDocumentSchema>;
 
+export const PresentationChangeItemSchema = z.object({
+  id: IdSchema,
+  deckId: IdSchema,
+  order: z.number().int().nonnegative(),
+});
+export type PresentationChangeItem = z.infer<
+  typeof PresentationChangeItemSchema
+>;
+
+/**
+ * 세트 변경분 저장 본문 (`PATCH /api/presentations/:id`).
+ *
+ * 헤더와 항목 순서는 언제나 전부 보내고, 덱은 서버에 마지막으로 올린 뒤 바뀐 것만
+ * 보낸다. 서버는 `items`에 없는 곡을 지우므로 문서 단위 전체 교체와 결과가 같다.
+ * 항목이 가리키는 덱이 본문에도 서버에도 없으면 서버가 409로 거절하고,
+ * 클라이언트는 모든 덱을 담아 다시 보낸다.
+ */
+export const PresentationChangesSchema = PresentationSchema.omit({
+  items: true,
+}).extend({
+  items: z.array(PresentationChangeItemSchema),
+  decks: z.array(DeckSchema),
+});
+export type PresentationChanges = z.infer<typeof PresentationChangesSchema>;
+
 export const ApiErrorSchema = z.object({
   error: z.string(),
 });
