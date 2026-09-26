@@ -1,3 +1,4 @@
+import type { Context } from "hono";
 import { createMiddleware } from "hono/factory";
 import { createAuth, isAdminUser } from "../lib/auth";
 import type { AppEnv, Bindings, Variables } from "../types";
@@ -13,22 +14,45 @@ export interface AuthedEnv {
   Variables: Variables & { userId: string };
 }
 
+/**
+ * 세션 조회 결과.
+ *
+ * `setCookies`는 Better Auth가 조회 중에 갱신한 쿠키(세션 쿠키 캐시 등)다. 미들웨어가
+ * 이를 응답에 실어 보내야 브라우저의 쿠키 캐시가 이어지고, 다음 요청도 D1을 거치지 않는다.
+ */
+export interface SessionResult {
+  userId: string;
+  setCookies?: string[];
+}
+
 /** 요청에서 세션 사용자를 읽어 오는 함수 (테스트에서 주입 가능) */
 export type SessionReader = (input: {
   headers: Headers;
   env: Bindings;
-}) => Promise<{ userId: string } | null>;
+}) => Promise<SessionResult | null>;
 
-/** Better Auth로 세션을 읽는 기본 구현 */
+/**
+ * Better Auth로 세션을 읽는 기본 구현.
+ *
+ * 쿠키 캐시(`session.cookieCache`)가 살아 있으면 D1을 읽지 않는다. 캐시가 만료돼
+ * D1을 읽은 요청은 새 캐시 쿠키를 `setCookies`로 돌려준다.
+ */
 export const readSessionFromBetterAuth: SessionReader = async ({
   headers,
   env,
 }) => {
   const auth = createAuth(env);
-  const session = await auth.api.getSession({ headers });
+  const { headers: responseHeaders, response: session } =
+    await auth.api.getSession({ headers, returnHeaders: true });
   const userId = session?.user?.id;
-  return userId ? { userId } : null;
+  return userId ? { userId, setCookies: responseHeaders.getSetCookie() } : null;
 };
+
+function forwardCookies(c: Context<AppEnv>, setCookies?: string[]): void {
+  for (const cookie of setCookies ?? []) {
+    c.header("set-cookie", cookie, { append: true });
+  }
+}
 
 /**
  * 세션이 없으면 401로 끊는 미들웨어.
@@ -41,7 +65,7 @@ export function createRequireAuth(
   readSession: SessionReader = readSessionFromBetterAuth,
 ) {
   return createMiddleware<AppEnv>(async (c, next) => {
-    let session: { userId: string } | null = null;
+    let session: SessionResult | null = null;
     try {
       session = await readSession({ headers: c.req.raw.headers, env: c.env });
     } catch {
@@ -54,6 +78,7 @@ export function createRequireAuth(
 
     c.set("userId", session.userId);
     await next();
+    forwardCookies(c, session.setCookies);
   });
 }
 
@@ -67,16 +92,15 @@ export function createOptionalSession(
   readSession: SessionReader = readSessionFromBetterAuth,
 ) {
   return createMiddleware<AppEnv>(async (c, next) => {
+    let session: SessionResult | null = null;
     try {
-      const session = await readSession({
-        headers: c.req.raw.headers,
-        env: c.env,
-      });
-      if (session) c.set("userId", session.userId);
+      session = await readSession({ headers: c.req.raw.headers, env: c.env });
     } catch {
-      c.set("userId", undefined);
+      session = null;
     }
+    c.set("userId", session?.userId);
     await next();
+    forwardCookies(c, session?.setCookies);
   });
 }
 

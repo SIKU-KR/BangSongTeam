@@ -1,7 +1,14 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { eq } from "drizzle-orm";
 import { createTestDb, type TestDbResult } from "../test-utils";
-import { decks, decksFts, user, type NewDeck } from "../schema";
+import {
+  backgrounds,
+  decks,
+  decksFts,
+  user,
+  type NewBackground,
+  type NewDeck,
+} from "../schema";
 import { planSearch, sanitizeFts5Query, searchPublicDecks } from "./search";
 
 const USER_A = "00000000x000000000001";
@@ -139,7 +146,7 @@ describe("searchPublicDecks", () => {
     testDb.sqlite.close();
   });
 
-  const ids = (rows: { deck: { id: string } }[]) => rows.map((r) => r.deck.id);
+  const ids = (rows: { id: string }[]) => rows.map((r) => r.id);
 
   it("uses FTS5 MATCH for queries of 3+ characters", async () => {
     expect(ids(await searchPublicDecks(db, "은혜로운"))).toEqual(["s1"]);
@@ -216,6 +223,86 @@ describe("searchPublicDecks", () => {
 
     await db.delete(decks).where(eq(decks.id, "s1"));
     expect(ids(await searchPublicDecks(db, "새 제목입니다"))).toEqual([]);
+  });
+
+  it("reads only the card columns in a single query", async () => {
+    const prepare = vi.spyOn(testDb.sqlite, "prepare");
+
+    await searchPublicDecks(db, "은혜로운");
+
+    expect(prepare).toHaveBeenCalledTimes(1);
+    expect(prepare.mock.calls[0][0]).not.toMatch(/"lyrics_raw"|"style"/);
+  });
+
+  it("builds the card from the lowest-order slide", async () => {
+    await db
+      .update(decks)
+      .set({
+        slides: JSON.stringify([
+          { id: "b", order: 1, lines: ["둘째"] },
+          { id: "a", order: 0, lines: ["첫째 줄", "첫째 둘째 줄"] },
+          { id: "c", order: 2, lines: ["셋째"] },
+        ]),
+      })
+      .where(eq(decks.id, "s1"));
+
+    const [card] = await searchPublicDecks(db, "은혜로운");
+
+    expect(card).toMatchObject({
+      id: "s1",
+      title: "은혜로운 주의 사랑",
+      artist: "어노인팅",
+      authorName: "김찬양",
+      forkCount: 10,
+      firstSlidePreview: ["첫째 줄", "첫째 둘째 줄"],
+      slideCount: 3,
+    });
+    expect(card).not.toHaveProperty("lyricsRaw");
+  });
+
+  it("returns an empty preview for empty or malformed slides", async () => {
+    await db
+      .update(decks)
+      .set({ slides: "not json" })
+      .where(eq(decks.id, "s2"));
+
+    const cards = await searchPublicDecks(db, "");
+
+    for (const card of cards) {
+      expect(card.firstSlidePreview).toEqual([]);
+      expect(card.slideCount).toBe(0);
+    }
+  });
+
+  it("keeps only service backgrounds on the card", async () => {
+    const background = (
+      id: string,
+      source: NewBackground["source"],
+    ): NewBackground => ({
+      id,
+      title: id,
+      r2Key: `${id}.mp4`,
+      posterKey: `${id}.jpg`,
+      durationSec: 10,
+      license: "CC0",
+      tags: "[]",
+      source,
+    });
+    await db
+      .insert(backgrounds)
+      .values([background("svc", "service"), background("upl", "user")]);
+    for (const [deckId, backgroundId] of [
+      ["s1", "svc"],
+      ["s2", "upl"],
+    ]) {
+      await db.update(decks).set({ backgroundId }).where(eq(decks.id, deckId));
+    }
+
+    const cards = await searchPublicDecks(db, "");
+
+    expect(
+      Object.fromEntries(cards.map((card) => [card.id, card.backgroundId])),
+    ).toEqual({ s1: "svc", s2: null, s4: null });
   });
 
   it("does not index presentation clones via the FTS triggers", async () => {
