@@ -5,13 +5,13 @@
 
 ## 0. 운영 구성
 
-| 항목      | 값                                                                                       |
-| --------- | ---------------------------------------------------------------------------------------- |
-| Worker    | `prj-ppt-web`                                                                            |
-| 주소      | `https://prj-ppt-web.peter012677.workers.dev` (도메인을 사기 전까지 쓰는 임시 주소)      |
-| D1        | `prj-ppt-db`, APAC. 옛 스키마가 남아 있어 2026-09-24에 새로 만들었다                     |
-| R2        | `prj-ppt-media`                                                                          |
-| 오류 로그 | Workers Logs (`wrangler.jsonc`의 `observability`). 대시보드 Workers → prj-ppt-web → Logs |
+| 항목      | 값                                                                                        |
+| --------- | ----------------------------------------------------------------------------------------- |
+| Worker    | `bangsongteam` (workers.dev 주소는 꺼져 있다)                                             |
+| 주소      | `https://bangsongteam.siku-labs.com` (Worker custom domain, 존 `siku-labs.com`)           |
+| D1        | `bangsongteam-db`, APAC. 2026-09-27 서비스 이름을 바꾸며 새로 만들었다                    |
+| R2        | `bangsongteam-media`, APAC                                                                |
+| 오류 로그 | Workers Logs (`wrangler.jsonc`의 `observability`). 대시보드 Workers → bangsongteam → Logs |
 
 `BETTER_AUTH_URL`은 시크릿이 아니라 `wrangler.jsonc`의 `vars`에 있다. 주소를 바꿀 때는 코드와 함께 머지한다.
 
@@ -63,7 +63,7 @@ pnpm exec wrangler secret delete EMAIL_SIGNUP_ALLOWLIST   # 이메일 로그인 
 
 - **목록에서 빼도 이미 가입한 계정은 남는다.** 목록은 가입만 막는다. 계정을 없애려면 D1에서 해당 `user` 행을 지운다.
 - **소셜 로그인과 자동으로 합쳐지지 않는다.** 비밀번호 계정은 이메일 미인증 상태라, 같은 이메일로 카카오·네이버 로그인을 하면 "account not linked"로 실패한다(계정 선점 방지). 소셜 로그인을 붙인 뒤에는 그 사람의 비밀번호 계정을 지우고 소셜로 다시 가입하게 한다.
-- **CPU 한도.** 비밀번호 해시는 Workers Free의 요청당 CPU 10ms 한도에 맞춰 PBKDF2-SHA256 100,000회(`src/worker/lib/password.ts`)다. 대시보드 Workers → prj-ppt-web → Logs에서 `/api/auth/sign-in/email`, `/api/email-signup` 요청의 CPU 시간과 `exceededCpu`/1102 오류를 본다. 1102가 반복되면 `PBKDF2_ITERATIONS`를 낮추거나(저장된 해시에 횟수가 기록되어 기존 계정은 그대로 검증된다) Workers Paid로 옮긴다.
+- **CPU 한도.** 비밀번호 해시는 Workers Free의 요청당 CPU 10ms 한도에 맞춰 PBKDF2-SHA256 100,000회(`src/worker/lib/password.ts`)다. 대시보드 Workers → bangsongteam → Logs에서 `/api/auth/sign-in/email`, `/api/email-signup` 요청의 CPU 시간과 `exceededCpu`/1102 오류를 본다. 1102가 반복되면 `PBKDF2_ITERATIONS`를 낮추거나(저장된 해시에 횟수가 기록되어 기존 계정은 그대로 검증된다) Workers Paid로 옮긴다.
 - 로그인 시도는 Better Auth rate limit(같은 IP에서 10초에 3회)으로 막는다. 저장소가 isolate 메모리라 isolate마다 따로 센다.
 
 ## 3. 배포할 때마다
@@ -74,7 +74,7 @@ main 머지 → `verify`(typecheck·lint·test·build·dry-run) → `deploy`(bui
 - 배포 후 확인:
 
 ```bash
-curl -s https://prj-ppt-web.peter012677.workers.dev/api/health   # {"status":"ok"}
+curl -s https://bangsongteam.siku-labs.com/api/health   # {"status":"ok"}
 ```
 
 - 서비스 워커는 `registerType: "prompt"`라 배포가 송출 중인 화면을 새로고침하지 않는다. 사용자는 편집 화면의 갱신 버튼을 눌러야 새 버전을 받는다.
@@ -91,24 +91,18 @@ pnpm exec wrangler rollback            # 직전 버전, 또는 rollback <version
 D1은 Time Travel로 특정 시점으로 복원한다 (무료 플랜 7일, 유료 30일). **복원은 그 시점 이후의 쓰기를 모두 지운다.**
 
 ```bash
-pnpm exec wrangler d1 time-travel info prj-ppt-db
-pnpm exec wrangler d1 time-travel restore prj-ppt-db --timestamp=<ISO-8601>
+pnpm exec wrangler d1 time-travel info bangsongteam-db
+pnpm exec wrangler d1 time-travel restore bangsongteam-db --timestamp=<ISO-8601>
 ```
 
-## 5. 도메인 연결 (도메인을 산 뒤)
+## 5. 주소·리소스 이름 바꾸기
 
-1. 도메인을 Cloudflare 존으로 추가하고 등록업체에서 네임서버를 바꾼다.
-2. `wrangler.jsonc`를 고친다. workers.dev를 끄는 이유: 출처가 둘이면 PWA 캐시·IndexedDB·로그인 쿠키가 둘로 갈린다.
+주소는 `wrangler.jsonc`의 `routes`(custom domain)와 `vars.BETTER_AUTH_URL`이 정한다. workers.dev는 `workers_dev: false`로 꺼 둔다. 출처가 둘이면 PWA 캐시·IndexedDB·로그인 쿠키가 둘로 갈린다.
 
-```jsonc
-"routes": [{ "pattern": "<도메인>", "custom_domain": true }],
-"workers_dev": false,
-"vars": { "BETTER_AUTH_URL": "https://<도메인>" }
-```
-
-3. 카카오·네이버 콘솔의 사이트 도메인과 Redirect URI를 새 도메인으로 바꾼다 (6장).
-4. API 토큰의 Zone Resources에 새 존을 넣는다. 배포가 권한 오류로 실패하면 그 존에 **Zone · DNS · Edit**를 더한다.
-5. main에 머지하면 CI가 도메인을 붙여 배포한다. DNS 레코드와 인증서는 Cloudflare가 만든다.
+- **새 존**: 도메인을 Cloudflare 존으로 추가하고, `CLOUDFLARE_API_TOKEN`의 Zone Resources에 그 존을 넣는다. 배포가 권한 오류로 실패하면 **Zone · Workers Routes · Edit**, **Zone · DNS · Edit**를 더한다. DNS 레코드와 인증서는 배포 때 Cloudflare가 만든다.
+- **Worker 이름**: 이름을 바꾸면 Cloudflare에는 새 Worker가 생긴다. 시크릿은 따라오지 않으므로 머지 전에 2장의 시크릿을 `--name <새 이름>`으로 넣는다. 옛 Worker는 새 주소를 확인한 뒤 `pnpm exec wrangler delete --name <옛 이름>`으로 지운다.
+- **D1·R2 이름**: 바꿀 수 없다. `wrangler d1 create <이름> --location apac`, `wrangler r2 bucket create <이름> --location apac`로 새로 만들고 `wrangler.jsonc`의 `database_name`·`database_id`·`bucket_name`을 고친다. 스키마는 머지 후 CI의 `db:migrate:prod`가 적용한다. 데이터는 옮겨지지 않으므로 배경은 관리자 화면에서 다시 올린다(background-runbook).
+- **출처가 바뀌면** 로그인 세션, 브라우저의 PWA 설치·오프라인 캐시·IndexedDB가 새 주소로 넘어가지 않는다. 카카오·네이버 콘솔의 사이트 도메인과 Redirect URI도 바꾼다 (6장).
 
 ## 6. 카카오·네이버 로그인 연결
 

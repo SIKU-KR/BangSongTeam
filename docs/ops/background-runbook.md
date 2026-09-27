@@ -12,7 +12,7 @@
 D1 원격 DB에 SQL 한 문장을 실행한다.
 
 ```bash
-pnpm dlx wrangler d1 execute prj-ppt-db --remote --command "<SQL>"
+pnpm dlx wrangler d1 execute bangsongteam-db --remote --command "<SQL>"
 ```
 
 - 로컬 개발 환경(`pnpm dev`)에 넣으려면 `--remote`를 `--local`로 바꾼다. R2 명령도 같다.
@@ -46,9 +46,9 @@ cwebp -q 80 poster.png -o warm_light_flow.webp
 `--content-type`을 빠뜨리지 않는다. 미디어 프록시(`/api/media/*`)는 R2 객체에 저장된 형식을 그대로 응답하므로, 빠지면 `<video>`가 재생하지 못할 수 있다.
 
 ```bash
-pnpm dlx wrangler r2 object put prj-ppt-media/loops/warm_light_flow.mp4 \
+pnpm dlx wrangler r2 object put bangsongteam-media/loops/warm_light_flow.mp4 \
   --file ./warm_light_flow.mp4 --content-type video/mp4 --remote
-pnpm dlx wrangler r2 object put prj-ppt-media/posters/warm_light_flow.webp \
+pnpm dlx wrangler r2 object put bangsongteam-media/posters/warm_light_flow.webp \
   --file ./warm_light_flow.webp --content-type image/webp --remote
 ```
 
@@ -90,9 +90,9 @@ SELECT id, title, r2_key, size_bytes FROM backgrounds WHERE source = 'service' A
 배경마다 원본을 받아 포스터를 만들고, R2에 먼저 올린다. `<id>`는 배경 id, `stills/<id>.jpg`는 위에서 나온 `r2_key`다.
 
 ```bash
-pnpm dlx wrangler r2 object get prj-ppt-media/stills/<id>.jpg --file ./still.jpg --remote
+pnpm dlx wrangler r2 object get bangsongteam-media/stills/<id>.jpg --file ./still.jpg --remote
 ffmpeg -i still.jpg -vf "scale='min(960,iw)':-2" -c:v libwebp -quality 80 poster.webp
-pnpm dlx wrangler r2 object put prj-ppt-media/posters/<id>.webp \
+pnpm dlx wrangler r2 object put bangsongteam-media/posters/<id>.webp \
   --file ./poster.webp --content-type image/webp --remote
 ```
 
@@ -126,8 +126,8 @@ DELETE FROM backgrounds WHERE id = :background_id AND source = 'service';
 그다음 R2 객체를 지운다. **순서를 바꾸지 않는다** — 파일부터 지우면 그사이 송출 중인 교회의 배경이 꺼진다.
 
 ```bash
-pnpm dlx wrangler r2 object delete prj-ppt-media/loops/warm_light_flow.mp4 --remote
-pnpm dlx wrangler r2 object delete prj-ppt-media/posters/warm_light_flow.webp --remote
+pnpm dlx wrangler r2 object delete bangsongteam-media/loops/warm_light_flow.mp4 --remote
+pnpm dlx wrangler r2 object delete bangsongteam-media/posters/warm_light_flow.webp --remote
 ```
 
 ## 3. 앱에서 올리고 지우기 (관리자)
@@ -155,7 +155,7 @@ pnpm exec wrangler secret delete ADMIN_USER_IDS   # 관리자 없음 (갤러리�
 `0002` 마이그레이션은 D1 행만 지운다. R2의 `uploads/` 아래에 파일이 남아 있으면 지운다. 앱은 이 파일을 더 이상 가리키지 않는다.
 
 ```bash
-pnpm dlx wrangler r2 object delete prj-ppt-media/uploads/<userId>/<배경 id>.mp4 --remote
+pnpm dlx wrangler r2 object delete bangsongteam-media/uploads/<userId>/<배경 id>.mp4 --remote
 ```
 
 ## 4. 로컬 개발 환경

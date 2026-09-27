@@ -8,7 +8,7 @@
 D1 원격 DB에 SQL 한 문장을 실행한다.
 
 ```bash
-pnpm dlx wrangler d1 execute prj-ppt-db --remote --command "<SQL>"
+pnpm dlx wrangler d1 execute bangsongteam-db --remote --command "<SQL>"
 ```
 
 - 로컬에서 먼저 확인하려면 `--remote`를 `--local`로 바꾼다.

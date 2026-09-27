@@ -1,6 +1,6 @@
 # AGENTS.md (docs/tasks)
 
-> **디렉토리 역할**: `docs/tasks/`는 예배 찬양 슬라이드 제작 및 송출 서비스(`prj-ppt`)의 마일스톤별 로드맵과 AI 코딩 에이전트가 단독으로 실행할 태스크 명세서를 관리하는 전용 제어 디렉토리이다.  
+> **디렉토리 역할**: `docs/tasks/`는 예배 찬양 슬라이드 제작 및 송출 서비스(방송팀, `bangsongteam`)의 마일스톤별 로드맵과 AI 코딩 에이전트가 단독으로 실행할 태스크 명세서를 관리하는 전용 제어 디렉토리이다.  
 > **상위 참조 문서**: 루트 [`/AGENTS.md`](../../AGENTS.md), [`/docs/TECH_SPEC.md`](../TECH_SPEC.md), [`/docs/prd.md`](../prd.md)
 
 ---

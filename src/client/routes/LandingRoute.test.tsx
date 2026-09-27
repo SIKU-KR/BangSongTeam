@@ -23,7 +23,7 @@ describe("LandingRoute", () => {
     renderLanding();
 
     expect(screen.getByTestId("landing-route")).toBeInTheDocument();
-    expect(screen.getByText("Worship Studio")).toBeInTheDocument();
+    expect(screen.getByText("방송팀")).toBeInTheDocument();
     expect(screen.getByText("랜딩 페이지 준비 중입니다.")).toBeInTheDocument();
   });
 

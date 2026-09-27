@@ -12,7 +12,7 @@ export function LandingRoute(): React.JSX.Element {
       className="flex h-screen w-full flex-col items-center justify-center gap-4 bg-background"
     >
       <h1 className="text-3xl font-extrabold tracking-tight sm:text-4xl">
-        Worship Studio
+        방송팀
       </h1>
       <p className="text-sm text-muted-foreground">
         랜딩 페이지 준비 중입니다.

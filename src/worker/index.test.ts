@@ -24,7 +24,7 @@ describe("Miniflare/workerd 환경 Worker 및 D1 통합 테스트", () => {
   it("처리되지 않은 오류는 내부 메시지를 숨기고 500을 준다", async () => {
     const brokenBucket = {
       get: async () => {
-        throw new Error("R2 internal: prj-ppt-media unreachable");
+        throw new Error("R2 internal: bangsongteam-media unreachable");
       },
     } as unknown as R2Bucket;
 
