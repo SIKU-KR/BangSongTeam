@@ -9,7 +9,7 @@ const B = "00000000000000000000b";
 const DECK = "c00000000000000000001";
 const FORK = "c00000000000000000002";
 
-describe("운영 SQL (moderation runbook)", () => {
+describe("운영 SQL (신고·게시 중단)", () => {
   let testDb: TestDbResult;
   const run = (key: keyof typeof MODERATION_SQL, params: object = {}) =>
     testDb.sqlite.prepare(MODERATION_SQL[key]).run(params);

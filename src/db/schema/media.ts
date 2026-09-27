@@ -11,7 +11,7 @@ import { user } from "./auth";
  * (`owner_user_id`는 외래키라 SQLite에서 `DROP COLUMN`이 되지 않는다).
  *
  * 행은 R2 객체가 올라간 뒤에만 만든다. 파일 없는 행이 있으면 편집기·송출이
- * 404 배경을 그린다 (`docs/ops/background-runbook.md`).
+ * 404 배경을 그린다.
  */
 export const backgrounds = sqliteTable(
   "backgrounds",

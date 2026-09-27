@@ -5,7 +5,7 @@
 -- 생성된 `CREATE TABLE decks_fts`는 지운다.
 --
 -- 배경 행은 넣지 않는다. R2에 파일이 없는 배경 행은 편집기·송출에서 깨진 배경이
--- 되므로, 사전 주입 배경은 R2 업로드 뒤 `docs/ops/background-runbook.md` 절차로
+-- 되므로, 사전 주입 배경은 R2 업로드 뒤 `src/db/ops/backgroundSql.ts`로
 -- 등록한다.
 --
 -- 저널 idx를 1로 두어 다음 `db:generate`가 0002부터 번호를 매기게 했다.
