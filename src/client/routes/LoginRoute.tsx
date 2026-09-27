@@ -27,6 +27,11 @@ const PROVIDER_BUTTON_PROPS: Record<
   google: { variant: "outline" },
 };
 
+const LEGAL_LINKS = [
+  { href: "/terms", label: "이용약관" },
+  { href: "/privacy", label: "개인정보 처리방침" },
+];
+
 export interface LoginRouteProps {
   /** 로그인이 필요한 까닭. 없으면 계정 저장 안내를 보여 준다 */
   description?: string;
@@ -143,6 +148,25 @@ export function LoginRoute({
             </Button>
           )}
           데스크톱 Chrome에 최적화되어 있습니다
+          <div className="flex gap-1">
+            {LEGAL_LINKS.map((link) => (
+              <Button
+                key={link.href}
+                variant="link"
+                size="xs"
+                nativeButton={false}
+                render={
+                  <a
+                    href={link.href}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  />
+                }
+              >
+                {link.label}
+              </Button>
+            ))}
+          </div>
         </CardFooter>
       </Card>
     </div>

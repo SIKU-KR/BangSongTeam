@@ -90,3 +90,17 @@ export const AuthConfigResponseSchema = z.object({
   providers: z.array(SocialProviderSchema),
 });
 export type AuthConfigResponse = z.infer<typeof AuthConfigResponseSchema>;
+
+/** 동의를 마치지 않은 사용자는 `agreedAt`이 null이고, 앱이 동의 모달로 막는다 */
+export const ConsentStatusResponseSchema = z.object({
+  agreedAt: z.string().datetime().nullable(),
+});
+export type ConsentStatusResponse = z.infer<typeof ConsentStatusResponseSchema>;
+
+/** 필수 항목만 있어 모두 `true`여야 동의로 기록한다 */
+export const AgreeConsentRequestSchema = z.object({
+  ageOver14: z.literal(true),
+  terms: z.literal(true),
+  privacy: z.literal(true),
+});
+export type AgreeConsentRequest = z.infer<typeof AgreeConsentRequestSchema>;

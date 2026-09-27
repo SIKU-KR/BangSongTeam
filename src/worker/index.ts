@@ -10,6 +10,7 @@ import { createCatalogRoute } from "./routes/catalog";
 import { createReportsRoute } from "./routes/reports";
 import { createShareRoute } from "./routes/share";
 import { authConfigRoute } from "./routes/authConfig";
+import { createConsentRoute } from "./routes/consent";
 import type { AppDeps } from "./deps";
 
 /**
@@ -44,6 +45,7 @@ export function createApp(deps: AppDeps = {}) {
       return createAuth(c.env).handler(c.req.raw);
     })
     .route("/api", authConfigRoute)
+    .route("/api/consent", createConsentRoute(deps))
     .route("/api/presentations", createPresentationsRoute(deps))
     .route("/api/folders", createFoldersRoute(deps))
     .route("/api/decks", createDecksRoute(deps))
