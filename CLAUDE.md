@@ -67,7 +67,3 @@ pnpm typecheck && pnpm lint && pnpm test   # must pass before pushing (the CI ga
   - Never drop or recreate a parent table (`decks`, `presentations`, …). D1 ignores `PRAGMA foreign_keys=OFF` in migrations, so the drop cascades deletes into child rows. Use `ALTER TABLE … ADD COLUMN`.
   - drizzle-kit drops `ON DELETE SET NULL`; write it by hand in the generated SQL.
   - CI applies migrations before deploying, so the previous release briefly runs on the new schema. Keep changes additive, and drop or rename a column only after the code stops using it.
-
-## Removed by product decision
-
-Don't bring these back without a new decision: the presenter view and `BroadcastChannel` control window, the worship-prep download screen (`/present/:id/ready`), LLM lyric normalization (the `AI` binding and lyrics catalog tables), and the `N.M` (song.slide) jump syntax.
