@@ -24,7 +24,7 @@ describe("QuickLyricPasteModal", () => {
     expect(container.firstChild).toBeNull();
   });
 
-  it("isOpen이 true이면 제목 입력란, 가사 textarea, 세트에 추가 버튼이 렌더링되어야 한다", () => {
+  it("isOpen이 true이면 제목 입력란, 가사 textarea, 추가 버튼이 렌더링되어야 한다", () => {
     render(
       <QuickLyricPasteModal
         isOpen={true}
@@ -34,7 +34,9 @@ describe("QuickLyricPasteModal", () => {
     );
 
     expect(screen.getByRole("dialog")).toBeInTheDocument();
-    expect(screen.getByPlaceholderText(/곡 제목/)).toBeInTheDocument();
+    expect(
+      screen.getByPlaceholderText(EDITOR_COPY.quickPaste.titlePlaceholder),
+    ).toBeInTheDocument();
     expect(screen.getByPlaceholderText(/가사/)).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: EDITOR_COPY.quickPaste.submit }),
@@ -67,7 +69,7 @@ describe("QuickLyricPasteModal", () => {
     ).toBeInTheDocument();
   });
 
-  it("제목이나 가사가 입력되지 않았을 때는 '세트에 추가' 버튼이 비활성화되어야 한다", () => {
+  it("제목이나 가사가 입력되지 않았을 때는 '추가' 버튼이 비활성화되어야 한다", () => {
     render(
       <QuickLyricPasteModal
         isOpen={true}
@@ -81,7 +83,9 @@ describe("QuickLyricPasteModal", () => {
     });
     expect(submitBtn).toBeDisabled();
 
-    const titleInput = screen.getByPlaceholderText(/곡 제목/);
+    const titleInput = screen.getByPlaceholderText(
+      EDITOR_COPY.quickPaste.titlePlaceholder,
+    );
     fireEvent.change(titleInput, { target: { value: "은혜로다" } });
     expect(submitBtn).toBeDisabled();
 
@@ -92,7 +96,7 @@ describe("QuickLyricPasteModal", () => {
     expect(submitBtn).toBeEnabled();
   });
 
-  it("'세트에 추가' 클릭 시 유효한 Deck 객체와 함께 onAddToSet 및 onClose가 호출되어야 한다", () => {
+  it("'추가' 클릭 시 유효한 Deck 객체와 함께 onAddToSet 및 onClose가 호출되어야 한다", () => {
     const handleAddToSet = vi.fn();
     const handleClose = vi.fn();
 
@@ -104,8 +108,12 @@ describe("QuickLyricPasteModal", () => {
       />,
     );
 
-    const titleInput = screen.getByPlaceholderText(/곡 제목/);
-    const artistInput = screen.getByPlaceholderText(/아티스트/);
+    const titleInput = screen.getByPlaceholderText(
+      EDITOR_COPY.quickPaste.titlePlaceholder,
+    );
+    const artistInput = screen.getByPlaceholderText(
+      EDITOR_COPY.quickPaste.artistPlaceholder,
+    );
     const textarea = screen.getByPlaceholderText(/가사/);
 
     fireEvent.change(titleInput, { target: { value: "은혜로다" } });
@@ -158,7 +166,9 @@ describe("QuickLyricPasteModal", () => {
       />,
     );
 
-    const titleInput = screen.getByPlaceholderText(/곡 제목/);
+    const titleInput = screen.getByPlaceholderText(
+      EDITOR_COPY.quickPaste.titlePlaceholder,
+    );
     fireEvent.change(titleInput, { target: { value: "시선" } });
 
     const melonLink = screen.getByRole("link", { name: /멜론/ });

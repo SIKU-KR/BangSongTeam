@@ -4,6 +4,7 @@ import { AUTH_COPY } from "./auth";
 import { BACKGROUND_COPY } from "./backgrounds";
 import { COMMON_COPY, ERROR_COPY } from "./common";
 import { DRIVE_COPY } from "./drive";
+import { EDITOR_COPY, SHORTCUT_GUIDE } from "./editor";
 import { FOLDER_COPY } from "./folders";
 import { PRESENTATION_COPY } from "./presentation";
 import { SHARE_LINK_COPY } from "./shareLink";
@@ -18,6 +19,8 @@ const COPY_MODULES = {
   COMMON_COPY,
   ERROR_COPY,
   DRIVE_COPY,
+  EDITOR_COPY,
+  SHORTCUT_GUIDE,
   FOLDER_COPY,
   PRESENTATION_COPY,
   SHARE_LINK_COPY,

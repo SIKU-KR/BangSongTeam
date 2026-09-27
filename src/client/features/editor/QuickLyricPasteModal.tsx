@@ -143,7 +143,7 @@ export function QuickLyricPasteModal({
 
             <Field>
               <FieldLabel htmlFor="song-artist-input">
-                {EDITOR_COPY.quickPaste.artistLabel}
+                {EDITOR_COPY.song.artistOptional}
               </FieldLabel>
               <Input
                 id="song-artist-input"
@@ -181,7 +181,7 @@ export function QuickLyricPasteModal({
                 {EDITOR_COPY.quickPaste.preview}
               </span>
               <Badge variant="secondary" className="font-mono">
-                {EDITOR_COPY.quickPaste.total(slides.length)}
+                {EDITOR_COPY.slide.pageCount(slides.length)}
               </Badge>
             </div>
 
@@ -194,8 +194,6 @@ export function QuickLyricPasteModal({
                     </EmptyMedia>
                     <EmptyDescription>
                       {EDITOR_COPY.quickPaste.emptyPreview}
-                      <br />
-                      {EDITOR_COPY.quickPaste.emptyPreviewLine2}
                     </EmptyDescription>
                   </EmptyHeader>
                 </Empty>
