@@ -85,7 +85,7 @@ function ConsentDialog({ userId }: { userId: string }): React.JSX.Element {
     <AlertDialog open>
       <AlertDialogContent data-testid="consent-dialog">
         <AlertDialogHeader>
-          <AlertDialogTitle>교회 방송팀 다모여! 이용 동의</AlertDialogTitle>
+          <AlertDialogTitle>방송팀 다모여 이용 동의</AlertDialogTitle>
           <AlertDialogDescription>
             서비스를 시작하려면 아래 필수 항목에 동의해 주세요.
           </AlertDialogDescription>

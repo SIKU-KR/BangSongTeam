@@ -27,7 +27,7 @@ export function LegalDocument({
             render={<Link to="/" />}
             className="self-start"
           >
-            교회 방송팀 다모여!
+            방송팀 다모여
           </Button>
           <h1 className="text-2xl font-bold tracking-tight">{title}</h1>
           <p className="text-muted-foreground">시행일: {effectiveDate}</p>

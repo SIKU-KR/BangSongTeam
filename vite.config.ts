@@ -39,7 +39,7 @@ const appConfig: UserConfig = {
       injectRegister: null,
       includeAssets: ["icons/*.png"],
       manifest: {
-        name: "교회 방송팀 다모여!",
+        name: "방송팀 다모여",
         short_name: "방송팀 다모여",
         description: "교회 방송팀을 위한 찬양 PPT",
         lang: "ko",

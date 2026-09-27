@@ -23,7 +23,7 @@ describe("LandingRoute", () => {
     renderLanding();
 
     expect(screen.getByTestId("landing-route")).toBeInTheDocument();
-    expect(screen.getByText("교회 방송팀 다모여!")).toBeInTheDocument();
+    expect(screen.getByText("방송팀 다모여")).toBeInTheDocument();
     expect(screen.getByText("교회 방송팀을 위한 찬양 PPT")).toBeInTheDocument();
   });
 
