@@ -34,6 +34,8 @@ pnpm typecheck && pnpm lint && pnpm test   # must pass before pushing (the CI ga
 ### Comments
 
 - Comments, TSDoc and UI copy are written in Korean. UI copy lives in `src/client/copy/*` (`#copy/*`); server errors, Zod messages and the app name live in `src/shared/copy/*`. Reuse an existing key for the same sentence instead of adding a new one.
+- UI copy follows Toss UX writing: sentences in 해요체 (`~해요`, `~했어요`, `~할까요?`, `~해 주세요`), active and positive; buttons and labels stay noun phrases (`저장`, `사본 만들기`). One or two sentences, no repeating what the title says, no developer terms, and failures say what to do next. `src/client/copy/tone.test.ts` rejects 합니다체; register new copy modules there. The legal pages stay formal.
+- Terms: 프레젠테이션 (not 세트/문서), 곡 (not 찬양곡), 보관함, 공유 라이브러리, 송출.
 - No inline comments inside functions, JSX or tests: no restated logic, step numbers, TODOs, commented-out code, or milestone and spec tags (`M5`, `PRD 4.7`, `Task 4.5`). The only exception is a workaround for a third-party or platform constraint, with a reference.
 - Write TSDoc only on exports, and explain why: business rules, side effects, security scoping, invariants. Skip `@param` and `@returns` when they only repeat the types.
 

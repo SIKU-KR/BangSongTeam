@@ -32,7 +32,7 @@ export function createDecksRoute(deps: AppDeps = {}) {
       const deck = c.req.valid("json");
 
       if (deck.id !== c.req.param("id")) {
-        return c.json({ error: API_ERRORS.deck.idMismatch }, 400);
+        return c.json({ error: API_ERRORS.idMismatch }, 400);
       }
       if (deck.scope !== "library") {
         return c.json({ error: API_ERRORS.deck.libraryOnly }, 400);

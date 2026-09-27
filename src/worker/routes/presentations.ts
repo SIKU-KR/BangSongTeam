@@ -25,7 +25,7 @@ import { resolveRequireAuth, type AppDeps } from "../deps";
 
 async function save(c: Context<AppEnv>, changes: PresentationChanges) {
   if (changes.id !== c.req.param("id")) {
-    return c.json({ error: API_ERRORS.presentation.idMismatch }, 400);
+    return c.json({ error: API_ERRORS.idMismatch }, 400);
   }
 
   let result: SavePresentationResult;

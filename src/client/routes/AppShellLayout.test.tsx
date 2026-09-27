@@ -564,7 +564,7 @@ describe("AppShellLayout (드라이브형 홈)", () => {
 
     fireEvent.click(screen.getByTestId("sidebar-nav-home"));
     fireEvent.change(
-      screen.getByPlaceholderText(/폴더, 프레젠테이션, 찬양 가사/),
+      screen.getByPlaceholderText(SHELL_COPY.searchPlaceholder.drive),
       { target: { value: inside.title } },
     );
     expect(
@@ -579,7 +579,7 @@ describe("AppShellLayout (드라이브형 홈)", () => {
     renderShell();
 
     fireEvent.change(
-      screen.getByPlaceholderText(/폴더, 프레젠테이션, 찬양 가사/),
+      screen.getByPlaceholderText(SHELL_COPY.searchPlaceholder.drive),
       { target: { value: inside.title } },
     );
 
@@ -632,7 +632,7 @@ describe("AppShellLayout (드라이브형 홈)", () => {
     expect(screen.getByTestId("drive-trash-folder")).toBeInTheDocument();
 
     fireEvent.change(
-      screen.getByPlaceholderText(/폴더, 프레젠테이션, 찬양 가사/),
+      screen.getByPlaceholderText(SHELL_COPY.searchPlaceholder.drive),
       { target: { value: COMMON_COPY.trash } },
     );
     expect(screen.queryByTestId("drive-trash-folder")).toBeNull();
