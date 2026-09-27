@@ -22,8 +22,7 @@ export const AUTH_COPY = {
     naver: "네이버 로그인",
     google: "Google 계정으로 로그인",
   },
-  defaultDescription:
-    "로그인하면 교회 PC와 집 PC 어디서든 같은 프레젠테이션을 열 수 있어요.",
+  defaultDescription: "로그인하면 교회와 집 어디서든 이어서 작업할 수 있어요.",
   signInFailed: "로그인을 시작하지 못했어요. 잠시 후 다시 시도해 주세요.",
   loadingProviders: "로그인 방법을 확인하는 중…",
   noProviders: "지금은 로그인할 수 없어요. 잠시 후 다시 시도해 주세요.",
