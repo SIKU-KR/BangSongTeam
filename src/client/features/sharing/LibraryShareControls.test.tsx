@@ -80,7 +80,7 @@ describe("LibraryShareControls (내 보관함 곡 공개)", () => {
     const confirm = screen.getByTestId("publish-confirm-btn");
     expect(confirm).toBeDisabled();
     expect(screen.getByText(/CCLI/)).toBeInTheDocument();
-    expect(screen.getByText(/보관함에 있는 이 곡 그대로/)).toBeInTheDocument();
+    expect(screen.getByText(/보관함에 있는 곡 그대로/)).toBeInTheDocument();
 
     fireEvent.click(screen.getByTestId("publish-accept-checkbox"));
     fireEvent.click(confirm);
@@ -123,7 +123,7 @@ describe("LibraryShareControls (내 보관함 곡 공개)", () => {
     renderControls(deck.id);
 
     expect(screen.getByTestId("song-share-status")).toHaveTextContent(
-      "게시 중단됨",
+      "공개를 중단했어요",
     );
     expect(
       screen.queryByTestId("song-share-publish-btn"),

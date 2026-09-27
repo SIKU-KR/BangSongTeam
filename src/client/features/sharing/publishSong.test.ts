@@ -70,7 +70,7 @@ describe("내 보관함 곡 공개", () => {
   it("rejects a deck that is not in the library", async () => {
     await expect(
       publishLibraryDeck("9000000000000000000zz", fakeDeps()),
-    ).rejects.toThrow("보관함에서 곡을 찾을 수 없습니다");
+    ).rejects.toThrow("보관함에서 곡을 찾을 수 없어요");
   });
 
   it("unpublishes", async () => {

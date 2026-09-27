@@ -1,21 +1,27 @@
 import { describe, expect, it } from "vitest";
 import { API_ERRORS, VALIDATION_COPY } from "#shared";
 import { AUTH_COPY } from "./auth";
+import { BACKGROUND_COPY } from "./backgrounds";
 import { COMMON_COPY, ERROR_COPY } from "./common";
+import { DRIVE_COPY } from "./drive";
 import { FOLDER_COPY } from "./folders";
 import { PRESENTATION_COPY } from "./presentation";
 import { SHARE_LINK_COPY } from "./shareLink";
+import { SHARING_COPY } from "./sharing";
 import { SHELL_COPY } from "./shell";
 
 const COPY_MODULES = {
   API_ERRORS,
   VALIDATION_COPY,
   AUTH_COPY,
+  BACKGROUND_COPY,
   COMMON_COPY,
   ERROR_COPY,
+  DRIVE_COPY,
   FOLDER_COPY,
   PRESENTATION_COPY,
   SHARE_LINK_COPY,
+  SHARING_COPY,
   SHELL_COPY,
 };
 

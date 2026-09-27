@@ -47,7 +47,7 @@ describe("PresentationShareDialog (세트 링크 공유)", () => {
   it("링크가 꺼져 있으면 주소를 보여 주지 않는다", async () => {
     renderDialog();
     expect(await screen.findByTestId("share-access-select")).toHaveTextContent(
-      "제한됨",
+      SHARING_COPY.link.accessOptions.off,
     );
     expect(screen.queryByTestId("share-link-input")).not.toBeInTheDocument();
   });
