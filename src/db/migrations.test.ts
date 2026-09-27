@@ -32,7 +32,7 @@ describe("0001_initial 마이그레이션", () => {
     expect(initialSql).toContain("CREATE INDEX `idx_backgrounds_owner`");
   });
 
-  it("저널은 0001_initial, 0002_drop_user_backgrounds, 0003_presentation_link_share 순서다 (다음 생성은 0004부터)", () => {
+  it("저널은 0001_initial, 0002_drop_user_backgrounds, 0003_presentation_link_share, 0004_user_terms_agreed_at 순서다 (다음 생성은 0005부터)", () => {
     const journal = JSON.parse(
       fs.readFileSync(path.join(migrationsDir, "meta/_journal.json"), "utf-8"),
     ) as { entries: { idx: number; tag: string }[] };
@@ -40,6 +40,7 @@ describe("0001_initial 마이그레이션", () => {
       expect.objectContaining({ idx: 1, tag: "0001_initial" }),
       expect.objectContaining({ idx: 2, tag: "0002_drop_user_backgrounds" }),
       expect.objectContaining({ idx: 3, tag: "0003_presentation_link_share" }),
+      expect.objectContaining({ idx: 4, tag: "0004_user_terms_agreed_at" }),
     ]);
     expect(
       fs.readdirSync(migrationsDir).filter((name) => name.endsWith(".sql")),
@@ -47,6 +48,7 @@ describe("0001_initial 마이그레이션", () => {
       "0001_initial.sql",
       "0002_drop_user_backgrounds.sql",
       "0003_presentation_link_share.sql",
+      "0004_user_terms_agreed_at.sql",
     ]);
   });
 });
@@ -86,5 +88,17 @@ describe("0003_presentation_link_share 마이그레이션", () => {
     expect(sql).not.toMatch(/CREATE TABLE `presentations`/);
     expect(sql).toContain("ALTER TABLE `presentations` ADD `link_access`");
     expect(sql).toContain("ALTER TABLE `presentations` ADD `link_token`");
+  });
+});
+
+describe("0004_user_terms_agreed_at 마이그레이션", () => {
+  const sql = fs.readFileSync(
+    path.join(migrationsDir, "0004_user_terms_agreed_at.sql"),
+    "utf-8",
+  );
+
+  it("부모 테이블을 다시 만들지 않고 컬럼만 더한다", () => {
+    expect(sql).not.toMatch(/DROP TABLE|CREATE TABLE/i);
+    expect(sql).toContain("ALTER TABLE `user` ADD `terms_agreed_at` integer");
   });
 });

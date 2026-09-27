@@ -8,6 +8,7 @@ export const user = sqliteTable("user", {
     .notNull()
     .default(false),
   image: text("image"),
+  termsAgreedAt: integer("terms_agreed_at", { mode: "timestamp" }),
   createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
   updatedAt: integer("updated_at", { mode: "timestamp" }).notNull(),
 });
