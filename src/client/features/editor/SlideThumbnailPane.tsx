@@ -621,11 +621,11 @@ export function SlideThumbnailPane({
                           slideIndex === activeSlideIndex;
                         const warning = [
                           overflow?.slides[slideIndex]?.wraps
-                            ? EDITOR_COPY.overflow.thumbnailWrap
+                            ? EDITOR_COPY.overflow.wrap
                             : null,
                           songWarning &&
                           overflow?.tallestSlideIndex === slideIndex
-                            ? EDITOR_COPY.overflow.thumbnailStage
+                            ? EDITOR_COPY.overflow.stage
                             : null,
                         ]
                           .filter(Boolean)

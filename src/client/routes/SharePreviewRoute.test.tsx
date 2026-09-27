@@ -52,7 +52,7 @@ describe("SharePreviewRoute (로그인하지 않은 /s/:token)", () => {
     renderAt("/s/tok-first");
 
     expect(await screen.findByTestId("read-only-banner")).toHaveTextContent(
-      "로그인하고 사본을 만드세요",
+      "로그인하고 사본을 만들어 주세요",
     );
     expect(screen.getByTestId("header-shared-badge")).toHaveTextContent(
       "인도자님이 공유",

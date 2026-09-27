@@ -392,24 +392,22 @@ describe("SlideThumbnailPane (PPT식 썸네일 창)", () => {
 
     expect(screen.getByTestId("song-overflow-warning-0")).toHaveAttribute(
       "aria-label",
-      expect.stringContaining(
-        "가장 긴 슬라이드(2번)가 화면 가장자리 여백을 넘칩니다",
-      ),
+      expect.stringContaining("가장 긴 슬라이드(2번)가 화면을 넘쳐요"),
     );
     expect(screen.getByTestId("slide-overflow-warning-0")).toHaveAttribute(
       "aria-label",
-      expect.stringContaining("자동 줄바꿈"),
+      expect.stringContaining("줄이 바뀌어요"),
     );
     expect(screen.getByTestId("slide-overflow-warning-1")).toHaveAttribute(
       "aria-label",
-      expect.stringContaining("화면 가장자리 여백을 넘칩니다"),
+      expect.stringContaining("화면을 넘쳐요"),
     );
   });
 
   it("곡이 없으면 안내를 보여 주고 새 슬라이드는 비활성이다", () => {
     renderPane({ items: [] });
 
-    expect(screen.getByText(/아직 곡이 없습니다/)).toBeInTheDocument();
+    expect(screen.getByText(/아직 곡이 없어요/)).toBeInTheDocument();
     expect(screen.getByTestId("add-slide-btn")).toBeDisabled();
     expect(screen.getByTestId("add-song-btn")).toBeEnabled();
   });

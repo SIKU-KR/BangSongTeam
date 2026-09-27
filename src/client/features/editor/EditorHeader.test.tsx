@@ -124,9 +124,9 @@ describe("EditorHeader", () => {
       "Backspace",
       "Esc",
       "전체화면 해제 (송출 종료)",
-      "3초 동안 입력이 없으면 입력한 번호가 지워집니다.",
-      "없는 번호는 무시합니다.",
-      "입력 중인 번호는 청중 화면에 표시되지 않습니다.",
+      "3초 동안 입력이 없으면 입력한 번호가 지워져요.",
+      "없는 번호는 무시해요.",
+      "입력 중인 번호는 청중 화면에 보이지 않아요.",
     ]) {
       expect(popover).toHaveTextContent(text);
     }
@@ -139,7 +139,7 @@ describe("EditorHeader", () => {
     const popover = screen.getByTestId("header-shortcuts-popover");
     expect(popover).toHaveTextContent(EDITOR_COPY.header.editorShortcuts);
     expect(popover).toHaveTextContent("Ctrl/⌘+M");
-    expect(popover).toHaveTextContent("슬라이드에서 가사 직접 편집");
+    expect(popover).toHaveTextContent("가사 편집");
     expect(
       popover.textContent!.indexOf(EDITOR_COPY.header.editorShortcuts),
     ).toBeLessThan(

@@ -309,7 +309,7 @@ describe("SongPickerModal", () => {
 
       fireEvent.click(screen.getByTestId("song-picker-delete-btn"));
       expect(screen.getByTestId("drive-confirm-dialog")).toHaveTextContent(
-        "이미 세트에 넣은 곡은 그대로 남습니다",
+        "이미 넣은 곡은 그대로 남아요",
       );
       fireEvent.click(screen.getByTestId("drive-confirm-btn"));
 
@@ -329,7 +329,7 @@ describe("SongPickerModal", () => {
 
       fireEvent.click(screen.getByTestId("song-picker-delete-btn"));
       expect(screen.getByTestId("drive-confirm-dialog")).toHaveTextContent(
-        "공유 라이브러리에서도 내려갑니다",
+        "공유 라이브러리에서도 내려가요",
       );
 
       fireEvent.click(screen.getByRole("button", { name: COMMON_COPY.cancel }));
@@ -571,11 +571,11 @@ describe("SongPickerModal", () => {
       ).toBeInTheDocument();
     });
 
-    it("내 보관함 곡 미리보기에 '총 N개 슬라이드'로 표기한다", () => {
+    it("내 보관함 곡 미리보기에 '슬라이드 N장'으로 표기한다", () => {
       seedMySong();
       renderPicker();
 
-      expect(screen.getByText(/총 2개 슬라이드/)).toBeInTheDocument();
+      expect(screen.getByText(/슬라이드 2장/)).toBeInTheDocument();
       expect(screen.queryByText(/소절/)).not.toBeInTheDocument();
     });
   });

@@ -250,7 +250,7 @@ export function SharedDeckPreview({
           isAdding
             ? EDITOR_COPY.preview.importing
             : ownedCopy
-              ? EDITOR_COPY.preview.addOwnedCopy
+              ? EDITOR_COPY.preview.addMine
               : EDITOR_COPY.preview.importAndAdd
         }
         addDisabled={isAdding}
