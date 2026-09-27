@@ -50,10 +50,10 @@ describe("LoginRoute", () => {
     render(<LoginRoute />);
 
     expect(
-      await screen.findByRole("button", { name: /카카오로 시작하기/ }),
+      await screen.findByRole("button", { name: /카카오 로그인/ }),
     ).toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: /네이버로 시작하기/ }),
+      screen.queryByRole("button", { name: /네이버 로그인/ }),
     ).not.toBeInTheDocument();
   });
 
@@ -61,7 +61,7 @@ describe("LoginRoute", () => {
     render(<LoginRoute />);
 
     fireEvent.click(
-      await screen.findByRole("button", { name: /카카오로 시작하기/ }),
+      await screen.findByRole("button", { name: /카카오 로그인/ }),
     );
 
     await waitFor(() => {
@@ -78,7 +78,7 @@ describe("LoginRoute", () => {
     render(<LoginRoute />);
 
     fireEvent.click(
-      await screen.findByRole("button", { name: /Google로 시작하기/ }),
+      await screen.findByRole("button", { name: /Google 계정으로 로그인/ }),
     );
 
     await waitFor(() => {
@@ -86,18 +86,36 @@ describe("LoginRoute", () => {
     });
   });
 
+  it("로그인으로 이동하는 동안 모든 소셜 버튼을 막고, 누른 버튼의 레이블은 그대로 둔다", async () => {
+    signInWithProvider.mockReturnValue(new Promise(() => {}));
+    render(<LoginRoute />);
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: /카카오 로그인/ }),
+    );
+
+    const kakao = await screen.findByRole("button", { name: "카카오 로그인" });
+    await waitFor(() => {
+      expect(kakao).toBeDisabled();
+    });
+    expect(kakao).toHaveAttribute("aria-busy", "true");
+    const naver = screen.getByRole("button", { name: "네이버 로그인" });
+    expect(naver).toBeDisabled();
+    expect(naver).not.toHaveAttribute("aria-busy");
+  });
+
   it("로그인 시작이 실패하면 안내를 띄우고 다시 시도할 수 있다", async () => {
     signInWithProvider.mockRejectedValue(new Error("network"));
     render(<LoginRoute />);
 
     fireEvent.click(
-      await screen.findByRole("button", { name: /네이버로 시작하기/ }),
+      await screen.findByRole("button", { name: /네이버 로그인/ }),
     );
 
     expect(await screen.findByRole("alert")).toHaveTextContent(/다시 시도/);
     await waitFor(() => {
       expect(
-        screen.getByRole("button", { name: /네이버로 시작하기/ }),
+        screen.getByRole("button", { name: /네이버 로그인/ }),
       ).toBeEnabled();
     });
   });
@@ -127,7 +145,7 @@ describe("LoginRoute", () => {
       });
       render(<LoginRoute />);
 
-      await screen.findByRole("button", { name: /카카오로 시작하기/ });
+      await screen.findByRole("button", { name: /카카오 로그인/ });
       expect(screen.queryByTestId("dev-login")).not.toBeInTheDocument();
     });
 
@@ -181,14 +199,14 @@ describe("LoginRoute", () => {
 
       expect(await screen.findByTestId("email-login")).toBeInTheDocument();
       expect(
-        screen.getByRole("button", { name: /카카오로 시작하기/ }),
+        screen.getByRole("button", { name: /카카오 로그인/ }),
       ).toBeInTheDocument();
     });
 
     it("꺼져 있으면 폼을 그리지 않는다", async () => {
       render(<LoginRoute />);
 
-      await screen.findByRole("button", { name: /카카오로 시작하기/ });
+      await screen.findByRole("button", { name: /카카오 로그인/ });
       expect(screen.queryByTestId("email-login")).not.toBeInTheDocument();
     });
 
@@ -236,7 +254,7 @@ describe("LoginRoute", () => {
     render(<LoginRoute />);
 
     expect(
-      await screen.findByRole("button", { name: /카카오로 시작하기/ }),
+      await screen.findByRole("button", { name: /카카오 로그인/ }),
     ).toBeInTheDocument();
   });
 });
