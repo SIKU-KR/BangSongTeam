@@ -12,7 +12,7 @@ export function LandingRoute(): React.JSX.Element {
       className="flex h-screen w-full flex-col items-center justify-center gap-4 bg-background"
     >
       <h1 className="text-3xl font-extrabold tracking-tight sm:text-4xl">
-        교회 방송팀 다모여!
+        방송팀 다모여
       </h1>
       <p className="text-sm text-muted-foreground">
         교회 방송팀을 위한 찬양 PPT

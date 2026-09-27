@@ -143,9 +143,7 @@ export function AppSidebar(): React.JSX.Element {
                 <PresentationIcon />
               </div>
               <div className="grid flex-1 text-left leading-tight">
-                <span className="truncate font-semibold">
-                  교회 방송팀 다모여!
-                </span>
+                <span className="truncate font-semibold">방송팀 다모여</span>
                 <span className="truncate text-xs text-muted-foreground">
                   교회 방송팀을 위한 찬양 PPT
                 </span>
