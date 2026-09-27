@@ -15,7 +15,7 @@ export type CreateReportResult =
  * 가사 오류·부적절 콘텐츠·저작권 신고와 교정 제안을 접수한다.
  *
  * 덱 신고는 공개 덱만 받는다. 비공개 덱 id로도 접수되면 '이 id의 덱이 있다'는
- * 사실이 새는 창구가 된다. 처리는 운영 런북(`docs/ops/moderation-runbook.md`)이 한다.
+ * 사실이 새는 창구가 된다. 처리는 `src/db/ops/moderationSql.ts`의 운영 SQL로 한다.
  */
 export async function createReport(
   db: DbInstance,

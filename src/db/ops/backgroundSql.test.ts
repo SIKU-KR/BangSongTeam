@@ -13,7 +13,7 @@ const SERVICE = "svc000000000000000001";
 const STILL = "svc000000000000000002";
 const DECK = "c00000000000000000001";
 
-describe("운영 SQL (background runbook)", () => {
+describe("운영 SQL (배경)", () => {
   let testDb: TestDbResult;
   const run = (key: keyof typeof BACKGROUND_SQL, params: object = {}) =>
     testDb.sqlite.prepare(BACKGROUND_SQL[key]).run(params);
