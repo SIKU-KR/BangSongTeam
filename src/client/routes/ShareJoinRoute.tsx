@@ -14,6 +14,7 @@ import {
 } from "../features/sharing/shareLink";
 import { joinSharedPresentation } from "../lib/api/shareApi";
 import { describeApiError } from "../lib/api/request";
+import { SHARING_COPY } from "#copy/sharing";
 
 /**
  * 로그인한 사람의 공유 링크(`/s/:token`) 진입.
@@ -64,7 +65,7 @@ export function ShareJoinRoute(): React.JSX.Element {
     return (
       <ShareLinkError
         message={error}
-        actionLabel="내 프레젠테이션으로"
+        actionLabel={SHARING_COPY.link.goToPresentations}
         onAction={() => navigate("/presentations", { replace: true })}
       />
     );

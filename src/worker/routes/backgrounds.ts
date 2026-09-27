@@ -1,16 +1,17 @@
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import {
+  API_ERRORS,
   BACKGROUND_SNIFF_BYTES,
   BackgroundIdParamSchema,
+  type BackgroundImageMimeType,
+  type BackgroundMimeType,
   BackgroundUploadFormSchema,
   createId,
   isBackgroundImageMimeType,
   isBackgroundVideoMimeType,
   serviceBackgroundKeys,
   sniffBackgroundMimeType,
-  type BackgroundImageMimeType,
-  type BackgroundMimeType,
 } from "#shared";
 import {
   createD1Client,
@@ -70,7 +71,7 @@ export function createBackgroundsRoute(deps: AppDeps = {}) {
             {
               error:
                 result.error.issues[0]?.message ??
-                "업로드 형식이 올바르지 않습니다",
+                API_ERRORS.background.invalidUpload,
             },
             400,
           );
@@ -83,8 +84,7 @@ export function createBackgroundsRoute(deps: AppDeps = {}) {
         if (!mediaMime || !sameKind(form.file.type, mediaMime)) {
           return c.json(
             {
-              error:
-                "파일 내용을 읽을 수 없습니다. MP4 영상이나 JPEG·PNG·WebP 이미지인지 확인해 주세요",
+              error: API_ERRORS.background.unreadableFile,
             },
             400,
           );
@@ -96,7 +96,10 @@ export function createBackgroundsRoute(deps: AppDeps = {}) {
         if (poster) {
           const sniffed = await sniff(poster);
           if (!sniffed || !isBackgroundImageMimeType(sniffed)) {
-            return c.json({ error: "포스터 이미지를 읽을 수 없습니다" }, 400);
+            return c.json(
+              { error: API_ERRORS.background.unreadablePoster },
+              400,
+            );
           }
           posterMime = sniffed;
         }
@@ -151,7 +154,7 @@ export function createBackgroundsRoute(deps: AppDeps = {}) {
           c.req.valid("param").id,
         );
         if (!keys) {
-          return c.json({ error: "배경을 찾을 수 없습니다" }, 404);
+          return c.json({ error: API_ERRORS.background.notFound }, 404);
         }
 
         try {

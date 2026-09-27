@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
-import { FolderSchema } from "#shared";
+import { API_ERRORS, FolderSchema } from "#shared";
 import {
   createD1Client,
   getFoldersByUserId,
@@ -35,7 +35,7 @@ export function createFoldersRoute(deps: AppDeps = {}) {
       const folder = c.req.valid("json");
 
       if (folder.id !== c.req.param("id")) {
-        return c.json({ error: "폴더 id가 경로와 일치하지 않습니다" }, 400);
+        return c.json({ error: API_ERRORS.folder.idMismatch }, 400);
       }
 
       const db = createD1Client(c.env.DB);
@@ -44,11 +44,11 @@ export function createFoldersRoute(deps: AppDeps = {}) {
       try {
         saved = await upsertFolder(db, userId, folder);
         if (!saved) {
-          return c.json({ error: "이 폴더에 접근할 수 없습니다" }, 403);
+          return c.json({ error: API_ERRORS.folder.notAccessible }, 403);
         }
       } catch (error) {
         console.error("folder upsert failed", { folderId: folder.id, error });
-        return c.json({ error: "폴더를 저장하지 못했습니다" }, 500);
+        return c.json({ error: API_ERRORS.folder.saveFailed }, 500);
       }
 
       return c.json({ folder: saved }, 200);
@@ -62,7 +62,7 @@ export function createFoldersRoute(deps: AppDeps = {}) {
       );
 
       if (!deleted) {
-        return c.json({ error: "이 폴더에 접근할 수 없습니다" }, 404);
+        return c.json({ error: API_ERRORS.folder.notAccessible }, 404);
       }
       return c.json(
         {

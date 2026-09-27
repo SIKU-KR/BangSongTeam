@@ -35,6 +35,7 @@ import {
   TermsRoute,
   PrivacyRoute,
 } from "./routes";
+import { SHELL_COPY } from "#copy/shell";
 
 function useHydration(): boolean {
   const [isSessionResolved, setIsSessionResolved] = useState(false);
@@ -120,7 +121,7 @@ function AppRoutes(): React.JSX.Element {
   if (!isHydrated) {
     return (
       <LoadingScreen testId="app-hydrating">
-        저장된 프레젠테이션을 불러오는 중…
+        {SHELL_COPY.hydrating}
       </LoadingScreen>
     );
   }
@@ -215,7 +216,9 @@ function LoadingScreen({
 /** 나뉜 라우트 청크를 받는 동안 보이는 화면 */
 function RouteFallback(): React.JSX.Element {
   return (
-    <LoadingScreen testId="route-loading">화면을 불러오는 중…</LoadingScreen>
+    <LoadingScreen testId="route-loading">
+      {SHELL_COPY.routeLoading}
+    </LoadingScreen>
   );
 }
 

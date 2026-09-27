@@ -25,9 +25,11 @@ import { getFolderPath } from "#shared";
 import { useFolderIndex } from "./folderStore";
 import { useDrive, useDriveDroppable } from "./driveContext";
 import { drivePath } from "./driveActions";
-import { ROOT_LABEL, type DriveItemRef } from "./driveModel";
+import type { DriveItemRef } from "./driveModel";
 import { ActionMenuItems, type MenuAction } from "./ActionMenu";
 import { useNewItemActions } from "./NewMenu";
+import { DRIVE_COPY } from "#copy/drive";
+import { COMMON_COPY } from "#copy/common";
 
 function Crumb({
   folderId,
@@ -83,7 +85,7 @@ export function DriveBreadcrumbs(): React.JSX.Element {
         return [
           {
             key: "rename",
-            label: "이름 바꾸기",
+            label: DRIVE_COPY.rename,
             icon: PencilIcon,
             shortcut: "F2",
             separated: true,
@@ -91,13 +93,13 @@ export function DriveBreadcrumbs(): React.JSX.Element {
           },
           {
             key: "move",
-            label: "이동",
+            label: DRIVE_COPY.move,
             icon: FolderInputIcon,
             onSelect: () => drive.requestMove([ref]),
           },
           {
             key: "trash",
-            label: "휴지통으로 이동",
+            label: DRIVE_COPY.moveToTrash,
             icon: Trash2Icon,
             danger: true,
             separated: true,
@@ -112,12 +114,21 @@ export function DriveBreadcrumbs(): React.JSX.Element {
 
   if (drive.isTrashView) {
     return (
-      <Breadcrumb aria-label="드라이브 경로" data-testid="drive-breadcrumbs">
+      <Breadcrumb
+        aria-label={DRIVE_COPY.breadcrumbs}
+        data-testid="drive-breadcrumbs"
+      >
         <BreadcrumbList className="text-xl">
-          <Crumb folderId={null} label={ROOT_LABEL} isCurrent={false} />
+          <Crumb
+            folderId={null}
+            label={COMMON_COPY.myDrive}
+            isCurrent={false}
+          />
           <BreadcrumbSeparator />
           <BreadcrumbItem>
-            <BreadcrumbPage data-testid="crumb-trash">휴지통</BreadcrumbPage>
+            <BreadcrumbPage data-testid="crumb-trash">
+              {COMMON_COPY.trash}
+            </BreadcrumbPage>
           </BreadcrumbItem>
         </BreadcrumbList>
       </Breadcrumb>
@@ -125,11 +136,14 @@ export function DriveBreadcrumbs(): React.JSX.Element {
   }
 
   return (
-    <Breadcrumb aria-label="드라이브 경로" data-testid="drive-breadcrumbs">
+    <Breadcrumb
+      aria-label={DRIVE_COPY.breadcrumbs}
+      data-testid="drive-breadcrumbs"
+    >
       <BreadcrumbList className="text-xl">
         <Crumb
           folderId={null}
-          label={ROOT_LABEL}
+          label={COMMON_COPY.myDrive}
           isCurrent={current === null}
         />
         {path.map((folder, i) => (
@@ -146,14 +160,14 @@ export function DriveBreadcrumbs(): React.JSX.Element {
           <DropdownMenu>
             <DropdownMenuTrigger
               data-testid="breadcrumb-menu-btn"
-              aria-label="현재 폴더 메뉴"
+              aria-label={DRIVE_COPY.currentFolderMenu}
               render={<Button variant="ghost" size="icon-sm" />}
             >
               <ChevronDownIcon />
             </DropdownMenuTrigger>
             <DropdownMenuContent
               data-testid="drive-menu"
-              aria-label="현재 폴더"
+              aria-label={DRIVE_COPY.currentFolder}
               className="min-w-60"
             >
               <ActionMenuItems actions={[...newActions, ...folderActions]} />

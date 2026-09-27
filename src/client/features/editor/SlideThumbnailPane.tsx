@@ -67,11 +67,8 @@ import {
   analyzeDeckOverflowCached,
   useTextWidthMeasurer,
 } from "./useTextWidthMeasurer";
-
-const SLIDE_WRAP_WARNING =
-  "한 줄이 텍스트 박스 폭을 넘어 자동 줄바꿈됩니다. 글자 크기를 줄이거나 박스 폭을 넓혀 보세요.";
-const SLIDE_STAGE_WARNING =
-  "이 곡에서 가장 긴 슬라이드라 화면 가장자리 여백을 넘칩니다. 글자 크기를 줄이거나 슬라이드를 나눠 보세요.";
+import { EDITOR_COPY } from "#copy/editor";
+import { COMMON_COPY } from "#copy/common";
 
 export interface SlideThumbnailPaneProps {
   items: PresentationItem[];
@@ -257,7 +254,7 @@ export function SlideThumbnailPane({
   const slideActions: MenuAction[] = [
     {
       key: "cut",
-      label: "잘라내기",
+      label: EDITOR_COPY.thumbnails.cut,
       icon: ScissorsIcon,
       shortcut: "Ctrl+X",
       disabled: !canDelete,
@@ -265,14 +262,14 @@ export function SlideThumbnailPane({
     },
     {
       key: "copy",
-      label: "복사",
+      label: COMMON_COPY.copy,
       icon: CopyIcon,
       shortcut: "Ctrl+C",
       onSelect: onCopySlides,
     },
     {
       key: "paste",
-      label: "붙여넣기",
+      label: EDITOR_COPY.thumbnails.paste,
       icon: ClipboardPasteIcon,
       shortcut: "Ctrl+V",
       disabled: !canPaste,
@@ -280,7 +277,7 @@ export function SlideThumbnailPane({
     },
     {
       key: "new",
-      label: "새 슬라이드",
+      label: EDITOR_COPY.slide.add,
       icon: PlusIcon,
       shortcut: "Ctrl+M",
       separated: true,
@@ -288,14 +285,14 @@ export function SlideThumbnailPane({
     },
     {
       key: "duplicate",
-      label: "슬라이드 복제",
+      label: EDITOR_COPY.slide.duplicate,
       icon: CopyPlusIcon,
       shortcut: "Ctrl+D",
       onSelect: onDuplicateSlides,
     },
     {
       key: "delete",
-      label: "슬라이드 삭제",
+      label: EDITOR_COPY.slide.delete,
       icon: Trash2Icon,
       shortcut: "Delete",
       danger: true,
@@ -307,7 +304,7 @@ export function SlideThumbnailPane({
   const gapActions: MenuAction[] = [
     {
       key: "paste",
-      label: "붙여넣기",
+      label: EDITOR_COPY.thumbnails.paste,
       icon: ClipboardPasteIcon,
       shortcut: "Ctrl+V",
       disabled: !canPaste,
@@ -315,7 +312,7 @@ export function SlideThumbnailPane({
     },
     {
       key: "new",
-      label: "새 슬라이드",
+      label: EDITOR_COPY.slide.add,
       icon: PlusIcon,
       shortcut: "Ctrl+M",
       onSelect: onAddSlide,
@@ -325,14 +322,14 @@ export function SlideThumbnailPane({
   const layoutActions: MenuAction[] = [
     {
       key: "collapse-all",
-      label: "모두 축소",
+      label: EDITOR_COPY.thumbnails.collapseAll,
       icon: ChevronsDownUpIcon,
       separated: true,
       onSelect: () => setCollapsedIds(new Set(items.map((item) => item.id))),
     },
     {
       key: "expand-all",
-      label: "모두 확장",
+      label: EDITOR_COPY.thumbnails.expandAll,
       icon: ChevronsUpDownIcon,
       onSelect: () => setCollapsedIds(new Set()),
     },
@@ -344,34 +341,34 @@ export function SlideThumbnailPane({
       : [
           {
             key: "up",
-            label: "위로 이동",
+            label: EDITOR_COPY.song.moveUp,
             icon: ArrowUpIcon,
             disabled: songIndex === 0,
             onSelect: () => onReorderSong(songIndex, songIndex - 1),
           },
           {
             key: "down",
-            label: "아래로 이동",
+            label: EDITOR_COPY.song.moveDown,
             icon: ArrowDownIcon,
             disabled: songIndex === items.length - 1,
             onSelect: () => onReorderSong(songIndex, songIndex + 1),
           },
           {
             key: "info",
-            label: "제목·아티스트 수정",
+            label: EDITOR_COPY.song.editInfo,
             icon: PencilIcon,
             onSelect: () => onEditSongInfo(songIndex),
           },
           {
             key: "duplicate",
-            label: "곡 복제",
+            label: EDITOR_COPY.song.duplicate,
             icon: CopyPlusIcon,
             onSelect: () => onDuplicateSong(songIndex),
           },
           ...layoutActions,
           {
             key: "remove",
-            label: "세트에서 제거",
+            label: EDITOR_COPY.song.removeFromSet,
             icon: Trash2Icon,
             danger: true,
             separated: true,
@@ -488,7 +485,7 @@ export function SlideThumbnailPane({
     >
       <div className="flex h-11 shrink-0 items-center justify-between border-b px-3">
         <span className="text-xs font-bold">
-          슬라이드{" "}
+          {EDITOR_COPY.slide.label}{" "}
           <span className="font-mono font-medium text-muted-foreground">
             {totalSlides}
           </span>
@@ -506,9 +503,10 @@ export function SlideThumbnailPane({
                 />
               }
             >
-              <PlusIcon />새 슬라이드
+              <PlusIcon />
+              {EDITOR_COPY.slide.add}
             </TooltipTrigger>
-            <TooltipContent>현재 슬라이드 뒤에 새 슬라이드 추가</TooltipContent>
+            <TooltipContent>{EDITOR_COPY.slide.addTooltip}</TooltipContent>
           </Tooltip>
         )}
       </div>
@@ -529,7 +527,7 @@ export function SlideThumbnailPane({
             ref={paneRef}
             tabIndex={0}
             role="listbox"
-            aria-label="슬라이드"
+            aria-label={EDITOR_COPY.slide.label}
             aria-multiselectable="true"
             data-slide-pane=""
             data-testid="slide-pane-list"
@@ -541,9 +539,9 @@ export function SlideThumbnailPane({
               <Empty>
                 <EmptyHeader>
                   <EmptyDescription>
-                    아직 곡이 없습니다.
+                    {EDITOR_COPY.thumbnails.noSongs}
                     <br />
-                    아래에서 찬양곡을 추가하세요.
+                    {EDITOR_COPY.thumbnails.addSongHint}
                   </EmptyDescription>
                 </EmptyHeader>
               </Empty>
@@ -564,7 +562,7 @@ export function SlideThumbnailPane({
               const songWarning =
                 tallestSlideNumber === null
                   ? null
-                  : `가장 긴 슬라이드(${tallestSlideNumber}번)가 화면 가장자리 여백을 넘칩니다. 글자 크기를 줄이거나 슬라이드를 나눠 보세요.`;
+                  : EDITOR_COPY.overflow.tallestSlide(tallestSlideNumber);
               const gapActive = (index: number) =>
                 (insertion?.songIndex === songIndex &&
                   insertion.index === index) ||
@@ -590,7 +588,7 @@ export function SlideThumbnailPane({
                   <SongHeader
                     itemId={item.id}
                     songIndex={songIndex}
-                    title={deck?.title || "제목 없음"}
+                    title={deck?.title || EDITOR_COPY.song.untitled}
                     artist={deck?.artist}
                     slideCount={slides.length}
                     active={songIndex === activeSongIndex}
@@ -623,11 +621,11 @@ export function SlideThumbnailPane({
                           slideIndex === activeSlideIndex;
                         const warning = [
                           overflow?.slides[slideIndex]?.wraps
-                            ? SLIDE_WRAP_WARNING
+                            ? EDITOR_COPY.overflow.thumbnailWrap
                             : null,
                           songWarning &&
                           overflow?.tallestSlideIndex === slideIndex
-                            ? SLIDE_STAGE_WARNING
+                            ? EDITOR_COPY.overflow.thumbnailStage
                             : null,
                         ]
                           .filter(Boolean)
@@ -695,7 +693,7 @@ export function SlideThumbnailPane({
           )}
           {dragging?.type === "song" && (
             <div className="w-56 truncate rounded-md bg-background px-2 py-1 text-xs font-semibold shadow-lg ring-1 ring-border">
-              {draggedDeck?.title || "제목 없음"}
+              {draggedDeck?.title || EDITOR_COPY.song.untitled}
             </div>
           )}
         </DragOverlay>
@@ -710,7 +708,7 @@ export function SlideThumbnailPane({
             className="w-full"
           >
             <PlusIcon />
-            찬양곡 추가
+            {EDITOR_COPY.song.addSong}
           </Button>
         </div>
       )}
@@ -794,7 +792,11 @@ function SongHeader({
       )}
     >
       <IconButton
-        label={collapsed ? "구역 펼치기" : "구역 접기"}
+        label={
+          collapsed
+            ? EDITOR_COPY.thumbnails.expandSection
+            : EDITOR_COPY.thumbnails.collapseSection
+        }
         size="icon-xs"
         data-testid={`song-section-toggle-${songIndex}`}
         aria-expanded={!collapsed}
@@ -822,7 +824,7 @@ function SongHeader({
         >
           <span className="truncate text-xs font-semibold">{title}</span>
           <span className="shrink-0 font-mono text-2xs text-muted-foreground">
-            {slideCount}장
+            {EDITOR_COPY.slide.pageCount(slideCount)}
           </span>
         </TooltipTrigger>
         <TooltipContent side="right">{fullTitle}</TooltipContent>
@@ -839,7 +841,7 @@ function SongHeader({
       <DropdownMenu>
         <DropdownMenuTrigger
           data-testid={`song-section-menu-btn-${songIndex}`}
-          aria-label="곡 메뉴"
+          aria-label={EDITOR_COPY.song.menu}
           render={
             <Button
               variant="ghost"

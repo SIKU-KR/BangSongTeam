@@ -11,6 +11,7 @@ import {
   MEDIA_CACHE_NAME,
   MEDIA_URL_PREFIX,
 } from "./src/shared/constants/projection";
+import { APP_NAME, APP_TAGLINE } from "./src/shared/copy/app";
 
 /**
  * 오프라인 송출 보장을 위한 PWA 구성.
@@ -39,9 +40,9 @@ const appConfig: UserConfig = {
       injectRegister: null,
       includeAssets: ["icons/*.png"],
       manifest: {
-        name: "방송팀 다모여",
-        short_name: "방송팀 다모여",
-        description: "교회 방송팀을 위한 찬양 PPT",
+        name: APP_NAME,
+        short_name: APP_NAME,
+        description: APP_TAGLINE,
         lang: "ko",
         start_url: "/presentations",
         scope: "/",

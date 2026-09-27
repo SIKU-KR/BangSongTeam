@@ -7,6 +7,8 @@ import { useBackground } from "../../backgrounds/backgroundCatalog";
 import { BackgroundPickerModal } from "../BackgroundPickerModal";
 import { RibbonDropdown } from "./RibbonDropdown";
 import { RibbonGroup, RibbonTooltip } from "./RibbonPrimitives";
+import { EDITOR_COPY } from "#copy/editor";
+import { BACKGROUND_COPY } from "#copy/backgrounds";
 
 export interface BackgroundControlsProps {
   style: DeckStyle;
@@ -29,15 +31,19 @@ export function BackgroundControls({
   const overlayLabelId = useId();
 
   return (
-    <RibbonGroup label="배경">
+    <RibbonGroup label={EDITOR_COPY.ribbon.background}>
       <RibbonTooltip
-        content={background ? `곡 배경: ${background.title}` : "곡 배경 선택"}
+        content={
+          background
+            ? EDITOR_COPY.ribbon.backgroundTooltip(background.title)
+            : BACKGROUND_COPY.picker.title
+        }
       >
         <Button
           variant="ghost"
           size="sm"
           data-testid="open-bg-picker-btn"
-          aria-label="곡 배경 바꾸기"
+          aria-label={EDITOR_COPY.ribbon.changeBackground}
           disabled={disabled}
           onMouseDown={(e) => e.preventDefault()}
           onClick={() => setIsPickerOpen(true)}
@@ -52,13 +58,13 @@ export function BackgroundControls({
               />
             )}
           </span>
-          배경
+          {EDITOR_COPY.ribbon.background}
         </Button>
       </RibbonTooltip>
 
       <RibbonDropdown
-        label="어둡게"
-        text="어둡게"
+        label={EDITOR_COPY.ribbon.dim}
+        text={EDITOR_COPY.ribbon.dim}
         testId="overlay-btn"
         disabled={disabled}
         panelClassName="w-60"
@@ -68,7 +74,7 @@ export function BackgroundControls({
           <>
             <div className="flex items-center justify-between">
               <span id={overlayLabelId} className="font-semibold">
-                검정 오버레이 불투명도
+                {EDITOR_COPY.ribbon.overlayOpacity}
               </span>
               <span className="font-mono">{style.overlayOpacity}%</span>
             </div>
@@ -86,7 +92,7 @@ export function BackgroundControls({
               }
             />
             <p className="text-2xs text-muted-foreground">
-              배경 위를 어둡게 덮어 가사를 잘 보이게 합니다.
+              {EDITOR_COPY.ribbon.overlayHint}
             </p>
           </>
         )}

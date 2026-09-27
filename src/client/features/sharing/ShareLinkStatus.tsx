@@ -9,6 +9,7 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "#components/ui/empty";
+import { SHARING_COPY } from "#copy/sharing";
 
 /** 공유 링크를 열 수 없을 때(만료·해제·오프라인) 보여 주는 안내 */
 export function ShareLinkError({
@@ -27,7 +28,7 @@ export function ShareLinkError({
           <EmptyMedia variant="icon">
             <Link2Off />
           </EmptyMedia>
-          <EmptyTitle>공유 세트를 열 수 없습니다</EmptyTitle>
+          <EmptyTitle>{SHARING_COPY.link.unavailable}</EmptyTitle>
           <EmptyDescription>{message}</EmptyDescription>
         </EmptyHeader>
         <EmptyContent>
@@ -46,7 +47,7 @@ export function ShareLinkLoading(): React.JSX.Element {
         className="flex items-center gap-2 text-sm text-muted-foreground"
       >
         <Loader2 className="animate-spin" />
-        공유받은 세트를 여는 중…
+        {SHARING_COPY.link.opening}
       </p>
     </div>
   );

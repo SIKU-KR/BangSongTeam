@@ -1,4 +1,5 @@
 import { resolveFullscreenStrategy } from "./fullscreen";
+import { SHELL_COPY } from "#copy/shell";
 
 export type BrowserCapabilityId = "fullscreen" | "h264" | "offline";
 
@@ -19,18 +20,18 @@ const H264_MP4 = 'video/mp4; codecs="avc1.42E01E"';
 export const BROWSER_CAPABILITIES: readonly BrowserCapability[] = [
   {
     id: "fullscreen",
-    label: "전체화면 송출",
+    label: SHELL_COPY.browserSupport.capabilities.fullscreen,
     isSupported: () => resolveFullscreenStrategy().kind !== "unsupported",
   },
   {
     id: "h264",
-    label: "배경 영상(H.264) 재생",
+    label: SHELL_COPY.browserSupport.capabilities.h264,
     isSupported: () =>
       document.createElement("video").canPlayType(H264_MP4) !== "",
   },
   {
     id: "offline",
-    label: "오프라인 송출",
+    label: SHELL_COPY.browserSupport.capabilities.offline,
     isSupported: () =>
       "serviceWorker" in navigator &&
       "caches" in window &&

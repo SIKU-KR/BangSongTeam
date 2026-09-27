@@ -16,11 +16,7 @@ import {
 import { IconButton } from "#components/common/IconButton";
 import type { DriveTypeFilter } from "../../routes/appShellContext";
 import { ActionMenuItems, type MenuAction } from "./ActionMenu";
-
-const TYPE_LABELS: Record<Exclude<DriveTypeFilter, "all">, string> = {
-  folder: "폴더",
-  file: "프레젠테이션",
-};
+import { DRIVE_COPY } from "#copy/drive";
 
 /**
  * 구글 드라이브식 유형 칩. 값을 고르면 칩이 채워지고 ✕로 전체로 돌아간다.
@@ -36,7 +32,7 @@ function TypeFilterChip({
 
   const actions: MenuAction[] = (["folder", "file"] as const).map((option) => ({
     key: option,
-    label: TYPE_LABELS[option],
+    label: DRIVE_COPY.kind[option],
     icon: value === option ? CheckIcon : undefined,
     testId: `type-option-${option}`,
     onSelect: () => onChange(option),
@@ -50,12 +46,12 @@ function TypeFilterChip({
           render={<Button variant={active ? "secondary" : "outline"} />}
         >
           {active && <CheckIcon />}
-          {active ? TYPE_LABELS[value] : "유형"}
+          {active ? DRIVE_COPY.kind[value] : DRIVE_COPY.type}
           {!active && <ChevronDownIcon />}
         </DropdownMenuTrigger>
         <DropdownMenuContent
           data-testid="drive-type-menu"
-          aria-label="유형"
+          aria-label={DRIVE_COPY.type}
           className="min-w-60"
         >
           <ActionMenuItems actions={actions} />
@@ -63,7 +59,7 @@ function TypeFilterChip({
       </DropdownMenu>
       {active && (
         <IconButton
-          label="유형 필터 지우기"
+          label={DRIVE_COPY.clearType}
           variant="secondary"
           data-testid="drive-type-clear"
           onClick={() => onChange("all")}
@@ -94,14 +90,14 @@ function SelectionBar({
       className="flex h-10 w-full items-center gap-0.5 overflow-x-auto rounded-full bg-muted pr-2 pl-1"
     >
       <IconButton
-        label="선택 해제"
+        label={DRIVE_COPY.clearSelection}
         data-testid="selection-clear"
         onClick={onClear}
       >
         <XIcon />
       </IconButton>
       <span className="px-2 text-sm font-medium whitespace-nowrap">
-        {count}개 선택됨
+        {DRIVE_COPY.selected(count)}
       </span>
       {actions
         .filter((action) => action.key !== "open")
@@ -120,14 +116,14 @@ function SelectionBar({
       <DropdownMenu>
         <DropdownMenuTrigger
           data-testid="selection-more"
-          aria-label="작업 더보기"
+          aria-label={DRIVE_COPY.moreActions}
           render={<Button variant="ghost" size="icon" />}
         >
           <EllipsisVerticalIcon />
         </DropdownMenuTrigger>
         <DropdownMenuContent
           data-testid="drive-menu"
-          aria-label="작업"
+          aria-label={DRIVE_COPY.actions}
           className="min-w-60"
         >
           <ActionMenuItems actions={actions} />
@@ -182,7 +178,7 @@ export function DriveToolbar({
             className="truncate text-sm text-muted-foreground"
             data-testid="drive-summary"
           >
-            휴지통의 항목은 영구 삭제하기 전까지 언제든 복원할 수 있습니다.
+            {DRIVE_COPY.trashSummary}
           </p>
           <Button
             variant="ghost"
@@ -190,7 +186,7 @@ export function DriveToolbar({
             disabled={!canEmptyTrash}
             onClick={onEmptyTrash}
           >
-            휴지통 비우기
+            {DRIVE_COPY.emptyTrash}
           </Button>
         </div>
       ) : (

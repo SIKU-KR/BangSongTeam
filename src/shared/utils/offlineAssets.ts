@@ -1,6 +1,7 @@
 import type { Presentation } from "../schemas/presentation";
 import type { BackgroundMedia } from "../schemas/media";
 import type { SupportedFont } from "../constants";
+import { UNTITLED_SONG } from "../copy/app";
 
 /**
  * 백그라운드 캐시가 내려받을 자산 목록 계산.
@@ -46,7 +47,7 @@ export function collectPresentationMediaAssets(
 
       return {
         songIndex,
-        songTitle: deck?.title ?? "(제목 없음)",
+        songTitle: deck?.title ?? UNTITLED_SONG,
         backgroundId,
         backgroundTitle: background?.title ?? null,
         mediaUrl: background?.mediaUrl,

@@ -52,6 +52,7 @@ import {
   INITIAL_POSITION,
   type ProjectionPosition,
 } from "../features/presentation";
+import { PRESENTATION_COPY } from "#copy/presentation";
 
 /** 청중용 전체화면 송출 라우트. 종료하면 송출을 시작한 화면으로 돌아간다. */
 export function FullscreenPresentRoute(): React.JSX.Element {
@@ -169,7 +170,7 @@ export function FullscreenPresentRoute(): React.JSX.Element {
           }}
           className="text-white/80 hover:bg-white/10 hover:text-white"
         >
-          송출 종료
+          {PRESENTATION_COPY.exit}
           <Kbd>Esc</Kbd>
         </Button>
       </div>

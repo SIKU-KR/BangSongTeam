@@ -24,15 +24,16 @@ import {
   useConsentStatus,
 } from "../../lib/api/consentQueries";
 import { describeApiError } from "../../lib/api/request";
+import { AUTH_COPY } from "#copy/auth";
 
 type ConsentItem = "ageOver14" | "terms" | "privacy";
 
 const ITEMS: { id: ConsentItem; label: string; href?: string }[] = [
-  { id: "ageOver14", label: "[필수] 만 14세 이상입니다" },
-  { id: "terms", label: "[필수] 이용약관 동의", href: "/terms" },
+  { id: "ageOver14", label: AUTH_COPY.consent.ageOver14 },
+  { id: "terms", label: AUTH_COPY.consent.terms, href: "/terms" },
   {
     id: "privacy",
-    label: "[필수] 개인정보 수집·이용 동의",
+    label: AUTH_COPY.consent.privacy,
     href: "/privacy",
   },
 ];
@@ -85,9 +86,9 @@ function ConsentDialog({ userId }: { userId: string }): React.JSX.Element {
     <AlertDialog open>
       <AlertDialogContent data-testid="consent-dialog">
         <AlertDialogHeader>
-          <AlertDialogTitle>방송팀 다모여 이용 동의</AlertDialogTitle>
+          <AlertDialogTitle>{AUTH_COPY.consent.title}</AlertDialogTitle>
           <AlertDialogDescription>
-            서비스를 시작하려면 아래 필수 항목에 동의해 주세요.
+            {AUTH_COPY.consent.description}
           </AlertDialogDescription>
         </AlertDialogHeader>
 
@@ -99,7 +100,9 @@ function ConsentDialog({ userId }: { userId: string }): React.JSX.Element {
               checked={allChecked}
               onCheckedChange={(value) => setAll(value)}
             />
-            <FieldLabel htmlFor={`${idPrefix}-all`}>전체 동의</FieldLabel>
+            <FieldLabel htmlFor={`${idPrefix}-all`}>
+              {AUTH_COPY.consent.all}
+            </FieldLabel>
           </Field>
           <FieldSeparator />
           {ITEMS.map((item) => (
@@ -128,7 +131,7 @@ function ConsentDialog({ userId }: { userId: string }): React.JSX.Element {
                     />
                   }
                 >
-                  보기
+                  {AUTH_COPY.consent.view}
                 </Button>
               )}
             </Field>
@@ -146,7 +149,7 @@ function ConsentDialog({ userId }: { userId: string }): React.JSX.Element {
             disabled={agree.isPending}
             onClick={() => void signOut()}
           >
-            동의하지 않음
+            {AUTH_COPY.consent.decline}
           </AlertDialogAction>
           <AlertDialogAction
             data-testid="consent-agree"
@@ -155,7 +158,9 @@ function ConsentDialog({ userId }: { userId: string }): React.JSX.Element {
               agree.mutate({ ageOver14: true, terms: true, privacy: true })
             }
           >
-            {agree.isPending ? "저장하는 중…" : "동의하고 시작하기"}
+            {agree.isPending
+              ? AUTH_COPY.consent.saving
+              : AUTH_COPY.consent.agree}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

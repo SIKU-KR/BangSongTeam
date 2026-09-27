@@ -1,9 +1,11 @@
 import {
   BACKGROUND_UPLOAD_LIMITS,
+  type BackgroundKind,
   isBackgroundImageMimeType,
   isBackgroundVideoMimeType,
-  type BackgroundKind,
+  VALIDATION_COPY,
 } from "#shared";
+import { BACKGROUND_COPY } from "#copy/backgrounds";
 
 export interface ProbedBackgroundFile {
   kind: BackgroundKind;
@@ -37,10 +39,13 @@ export function checkBackgroundFile(file: File): string | null {
     !isBackgroundVideoMimeType(file.type) &&
     !isBackgroundImageMimeType(file.type)
   ) {
-    return "MP4 영상이나 JPEG·PNG·WebP 이미지만 올릴 수 있습니다";
+    return VALIDATION_COPY.background.unsupportedType;
   }
   if (file.size > BACKGROUND_UPLOAD_LIMITS.maxFileBytes) {
-    return `파일 하나는 ${formatBytes(BACKGROUND_UPLOAD_LIMITS.maxFileBytes)} 이하만 올릴 수 있습니다 (지금 ${formatBytes(file.size)})`;
+    return BACKGROUND_COPY.probe.fileTooLarge(
+      formatBytes(BACKGROUND_UPLOAD_LIMITS.maxFileBytes),
+      formatBytes(file.size),
+    );
   }
   return null;
 }
@@ -111,9 +116,7 @@ async function probeVideo(file: File): Promise<ProbedBackgroundFile> {
       isLowResolution: isLowResolution(video.videoWidth, video.videoHeight),
     };
   } catch {
-    throw new Error(
-      "이 브라우저에서 재생할 수 없는 영상입니다. H.264 코덱의 MP4로 바꿔 올려 주세요",
-    );
+    throw new Error(BACKGROUND_COPY.probe.unplayableVideo);
   } finally {
     video.removeAttribute("src");
     video.load();
@@ -141,9 +144,7 @@ async function probeImage(file: File): Promise<ProbedBackgroundFile> {
       isLowResolution: isLowResolution(image.naturalWidth, image.naturalHeight),
     };
   } catch {
-    throw new Error(
-      "이미지를 열 수 없습니다. 파일이 손상되지 않았는지 확인해 주세요",
-    );
+    throw new Error(BACKGROUND_COPY.probe.unreadableImage);
   } finally {
     URL.revokeObjectURL(url);
   }

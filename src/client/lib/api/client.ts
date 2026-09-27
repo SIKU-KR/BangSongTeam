@@ -1,5 +1,6 @@
 import { hc } from "hono/client";
 import type { AppType } from "../../../worker/index";
+import { ERROR_COPY } from "#copy/common";
 
 /**
  * Hono RPC 클라이언트.
@@ -17,7 +18,7 @@ export const api = hc<AppType>("/", {
 /** 네트워크 자체에 닿지 못했을 때 (오프라인·DNS 실패 등) */
 export class NetworkUnavailableError extends Error {
   constructor(cause?: unknown) {
-    super("서버에 연결할 수 없습니다");
+    super(ERROR_COPY.serverUnreachable);
     this.name = "NetworkUnavailableError";
     this.cause = cause;
   }

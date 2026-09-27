@@ -15,6 +15,8 @@ import {
   FieldGroup,
   FieldLabel,
 } from "#components/ui/field";
+import { EDITOR_COPY } from "#copy/editor";
+import { COMMON_COPY } from "#copy/common";
 
 const MAX_FIELD_LENGTH = 100;
 
@@ -75,7 +77,8 @@ export function SongInfoDialog({
           <FieldGroup>
             <Field>
               <FieldLabel htmlFor="song-info-title">
-                곡 제목 <span className="text-destructive">*</span>
+                {EDITOR_COPY.song.title}{" "}
+                <span className="text-destructive">*</span>
               </FieldLabel>
               <Input
                 id="song-info-title"
@@ -89,7 +92,7 @@ export function SongInfoDialog({
             </Field>
             <Field>
               <FieldLabel htmlFor="song-info-artist">
-                아티스트 (선택)
+                {EDITOR_COPY.song.artistOptional}
               </FieldLabel>
               <Input
                 id="song-info-artist"
@@ -105,14 +108,14 @@ export function SongInfoDialog({
 
           <DialogFooter>
             <DialogClose render={<Button variant="outline" />}>
-              취소
+              {COMMON_COPY.cancel}
             </DialogClose>
             <Button
               type="submit"
               data-testid="song-info-save-btn"
               disabled={!isValid}
             >
-              저장
+              {COMMON_COPY.save}
             </Button>
           </DialogFooter>
         </form>

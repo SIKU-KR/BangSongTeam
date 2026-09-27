@@ -13,6 +13,8 @@ import {
 } from "#components/ui/tooltip";
 import { useDrive } from "./driveContext";
 import { ActionMenuItems, type MenuAction } from "./ActionMenu";
+import { DRIVE_COPY } from "#copy/drive";
+import { COMMON_COPY } from "#copy/common";
 
 export function useNewItemActions(): MenuAction[] {
   const drive = useDrive();
@@ -20,7 +22,7 @@ export function useNewItemActions(): MenuAction[] {
   return [
     {
       key: "new-folder",
-      label: "새 폴더",
+      label: DRIVE_COPY.newFolder,
       icon: FolderPlusIcon,
       shortcut: "Shift+F",
       testId: "new-menu-folder",
@@ -28,7 +30,7 @@ export function useNewItemActions(): MenuAction[] {
     },
     {
       key: "new-presentation",
-      label: "새 프레젠테이션",
+      label: COMMON_COPY.newPresentation,
       icon: FilePlusIcon,
       shortcut: "Shift+P",
       testId: "new-menu-presentation",
@@ -64,7 +66,7 @@ export function NewMenuButton({
         }
       >
         <PlusIcon />
-        새로 만들기
+        {DRIVE_COPY.newItem}
       </DropdownMenuTrigger>
     ) : (
       <Tooltip>
@@ -72,14 +74,14 @@ export function NewMenuButton({
           render={
             <DropdownMenuTrigger
               data-testid={testId}
-              aria-label="새로 만들기"
+              aria-label={DRIVE_COPY.newItem}
               render={<Button size="icon" />}
             />
           }
         >
           <PlusIcon />
         </TooltipTrigger>
-        <TooltipContent>새로 만들기</TooltipContent>
+        <TooltipContent>{DRIVE_COPY.newItem}</TooltipContent>
       </Tooltip>
     );
 
@@ -88,7 +90,7 @@ export function NewMenuButton({
       {trigger}
       <DropdownMenuContent
         data-testid="new-menu"
-        aria-label="새로 만들기"
+        aria-label={DRIVE_COPY.newItem}
         align={variant === "sidebar" ? "start" : "end"}
         className="min-w-60"
       >

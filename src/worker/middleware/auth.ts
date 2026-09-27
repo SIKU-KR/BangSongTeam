@@ -2,6 +2,7 @@ import type { Context } from "hono";
 import { createMiddleware } from "hono/factory";
 import { createAuth, isAdminUser } from "../lib/auth";
 import type { AppEnv, Bindings, Variables } from "../types";
+import { API_ERRORS } from "#shared";
 
 /**
  * 보호 라우트용 환경 타입.
@@ -73,7 +74,7 @@ export function createRequireAuth(
     }
 
     if (!session) {
-      return c.json({ error: "로그인이 필요합니다" }, 401);
+      return c.json({ error: API_ERRORS.loginRequired }, 401);
     }
 
     c.set("userId", session.userId);
@@ -110,7 +111,7 @@ export function createOptionalSession(
  */
 export const requireAdmin = createMiddleware<AppEnv>(async (c, next) => {
   if (!isAdminUser(c.env, c.get("userId"))) {
-    return c.json({ error: "관리자만 할 수 있습니다" }, 403);
+    return c.json({ error: API_ERRORS.adminOnly }, 403);
   }
   await next();
 });

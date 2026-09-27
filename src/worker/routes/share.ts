@@ -2,8 +2,7 @@ import { Hono } from "hono";
 import { createD1Client, getSharedDocumentByToken, joinByToken } from "#db";
 import type { AppEnv } from "../types";
 import { resolveRequireAuth, type AppDeps } from "../deps";
-
-const LINK_UNAVAILABLE = "링크가 만료되었거나 공유가 해제되었습니다";
+import { API_ERRORS } from "#shared";
 
 /**
  * 공유 링크(`/s/:token`) API.
@@ -22,7 +21,8 @@ export function createShareRoute(deps: AppDeps = {}) {
         c.req.param("token"),
       );
       c.header("cache-control", "private, no-store");
-      if (!document) return c.json({ error: LINK_UNAVAILABLE }, 404);
+      if (!document)
+        return c.json({ error: API_ERRORS.share.linkUnavailable }, 404);
       return c.json({ document }, 200);
     })
     .post("/:token/join", requireAuth, async (c) => {
@@ -31,7 +31,8 @@ export function createShareRoute(deps: AppDeps = {}) {
         c.req.param("token"),
         c.get("userId") as string,
       );
-      if (!result) return c.json({ error: LINK_UNAVAILABLE }, 404);
+      if (!result)
+        return c.json({ error: API_ERRORS.share.linkUnavailable }, 404);
       return c.json(result, 200);
     });
 }

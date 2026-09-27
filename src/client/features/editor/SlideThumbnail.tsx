@@ -9,6 +9,7 @@ import {
 } from "#components/ui/tooltip";
 import type { DeckStyle, Slide } from "#shared";
 import { SlideStage } from "../../components/stage/SlideStage";
+import { EDITOR_COPY } from "#copy/editor";
 
 const THUMB_WIDTH = 176;
 const THUMB_HEIGHT = 99;
@@ -110,7 +111,7 @@ export const SlideThumbnail = React.memo(function SlideThumbnail({
       tabIndex={-1}
       aria-selected={selected}
       aria-current={current ? "true" : undefined}
-      aria-label={`슬라이드 ${number}`}
+      aria-label={EDITOR_COPY.slide.number(number)}
       data-testid={`slide-thumb-${number - 1}`}
       data-slide-thumb=""
       data-song-index={songIndex}

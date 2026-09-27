@@ -6,6 +6,7 @@ import { FontControls } from "./FontControls";
 import { ParagraphControls } from "./ParagraphControls";
 import { RibbonDivider, RibbonTooltip } from "./RibbonPrimitives";
 import { SlideControls, type SlideControlsProps } from "./SlideControls";
+import { EDITOR_COPY } from "#copy/editor";
 
 export interface EditorRibbonProps {
   song: Deck | null | undefined;
@@ -35,7 +36,7 @@ export function EditorRibbon({
     >
       <SlideControls {...slideControls} />
       <RibbonDivider />
-      <RibbonTooltip content="서식은 현재 곡의 모든 슬라이드에 적용됩니다">
+      <RibbonTooltip content={EDITOR_COPY.song.formatTooltip}>
         <div
           data-testid="ribbon-song-label"
           className="max-w-40 self-center px-2 text-2xs/tight text-muted-foreground"
@@ -45,10 +46,10 @@ export function EditorRibbon({
               <span className="block truncate font-semibold text-foreground">
                 ‘{song.title}’
               </span>
-              <span>곡 서식</span>
+              <span>{EDITOR_COPY.song.songFormat}</span>
             </>
           ) : (
-            <span>곡 없음</span>
+            <span>{EDITOR_COPY.song.noSong}</span>
           )}
         </div>
       </RibbonTooltip>

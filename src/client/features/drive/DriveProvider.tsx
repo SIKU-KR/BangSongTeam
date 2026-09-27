@@ -21,7 +21,6 @@ import {
   getFolderIndex,
   isFolderAvailable,
   validateFolderName,
-  DEFAULT_FOLDER_NAME,
 } from "./folderStore";
 import {
   DriveContext,
@@ -46,15 +45,14 @@ import {
   itemKey,
   listTrash,
   parseItemKey,
-  ROOT_LABEL,
-  withDirectionParticle,
-  withObjectParticle,
   type DriveItemRef,
 } from "./driveModel";
 import { ConfirmDialog, MoveDialog, NameDialog } from "./DriveDialogs";
 import { listPresentations } from "../presentation";
 import { resolveUniqueName } from "#shared";
 import { isLetterKey, isTypingTarget } from "./keyboard";
+import { DRIVE_COPY } from "#copy/drive";
+import { COMMON_COPY } from "#copy/common";
 
 type DialogState =
   | { kind: "new-folder"; parentId: string | null }
@@ -84,9 +82,9 @@ const followCursor: Modifier = ({
 function describeCount(refs: readonly DriveItemRef[]): string {
   if (refs.length === 1) {
     const name = itemName(refs[0]).trim();
-    if (name) return `‘${name}’`;
+    if (name) return DRIVE_COPY.quoted(name);
   }
-  return `${refs.length}개 항목`;
+  return DRIVE_COPY.itemCount(refs.length);
 }
 
 /**
@@ -165,8 +163,8 @@ export function DriveProvider({
       const label = describeCount(refs);
       const trashed = trashItems(refs);
       clearSelection();
-      showToast(`${withObjectParticle(label)} 휴지통으로 이동했습니다`, {
-        label: "실행 취소",
+      showToast(DRIVE_COPY.toast.trashed(label), {
+        label: COMMON_COPY.undo,
         run: () => restoreItems(trashed),
       });
     },
@@ -179,7 +177,7 @@ export function DriveProvider({
       const label = describeCount(refs);
       restoreItems(refs);
       clearSelection();
-      showToast(`${withObjectParticle(label)} 복원했습니다`);
+      showToast(DRIVE_COPY.toast.restored(label));
     },
     [clearSelection, showToast],
   );
@@ -195,15 +193,12 @@ export function DriveProvider({
       if (outcome.moved.length === 0) return;
       const targetName =
         targetFolderId === null
-          ? ROOT_LABEL
+          ? COMMON_COPY.myDrive
           : itemName({ kind: "folder", id: targetFolderId });
-      showToast(
-        `${withObjectParticle(label)} ${withDirectionParticle(`‘${targetName}’`)} 옮겼습니다`,
-        {
-          label: "실행 취소",
-          run: () => undoMove(outcome),
-        },
-      );
+      showToast(DRIVE_COPY.toast.moved(label, targetName), {
+        label: COMMON_COPY.undo,
+        run: () => undoMove(outcome),
+      });
     },
     [showToast],
   );
@@ -218,8 +213,8 @@ export function DriveProvider({
       );
       showToast(
         copies.length === 1
-          ? `${withObjectParticle(`‘${copies[0].title}’`)} 만들었습니다`
-          : `사본 ${copies.length}개를 만들었습니다`,
+          ? DRIVE_COPY.toast.duplicated(copies[0].title)
+          : DRIVE_COPY.toast.duplicatedMany(copies.length),
       );
     },
     [setSelection, showToast],
@@ -247,15 +242,15 @@ export function DriveProvider({
       setDialog(null);
       showToast(
         refs.length === 1
-          ? `${withObjectParticle(label)} 영구 삭제했습니다`
-          : `${refs.length}개 항목을 영구 삭제했습니다`,
+          ? DRIVE_COPY.toast.deletedForever(label)
+          : DRIVE_COPY.toast.deletedForeverMany(refs.length),
       );
     } catch (err) {
       setDialog(null);
       showToast(
         err instanceof DriveActionError
           ? err.message
-          : "영구 삭제하지 못했습니다",
+          : DRIVE_COPY.toast.deleteForeverFailed,
       );
     } finally {
       setIsDeleting(false);
@@ -384,9 +379,9 @@ export function DriveProvider({
       )}
       {dialog?.kind === "rename" && (
         <NameDialog
-          title="이름 바꾸기"
+          title={DRIVE_COPY.rename}
           initialValue={itemName(dialog.ref)}
-          confirmLabel="확인"
+          confirmLabel={COMMON_COPY.confirm}
           validate={(name) => {
             if (dialog.ref.kind === "folder") {
               return validateFolderName(
@@ -396,8 +391,8 @@ export function DriveProvider({
               );
             }
             const trimmed = name.trim();
-            if (!trimmed) return "이름을 입력하세요";
-            if (trimmed.length > 100) return "이름은 100자까지 쓸 수 있습니다";
+            if (!trimmed) return DRIVE_COPY.nameRequired;
+            if (trimmed.length > 100) return DRIVE_COPY.nameTooLong(100);
             return null;
           }}
           onSubmit={(name) => {
@@ -421,19 +416,22 @@ export function DriveProvider({
       )}
       {dialog?.kind === "delete-forever" && (
         <ConfirmDialog
-          title="영구 삭제"
+          title={DRIVE_COPY.deleteForever}
           message={
             <div>
               <p>
-                {withObjectParticle(describeCount(dialog.refs))} 영구
-                삭제합니다.
+                {DRIVE_COPY.deleteForeverDialog.message(
+                  describeCount(dialog.refs),
+                )}
                 {dialog.refs.some((ref) => ref.kind === "folder") &&
-                  " 폴더 안의 모든 항목도 함께 삭제됩니다."}
+                  DRIVE_COPY.deleteForeverDialog.folderNote}
               </p>
-              <p className="mt-1">이 작업은 되돌릴 수 없습니다.</p>
+              <p className="mt-1">
+                {DRIVE_COPY.deleteForeverDialog.irreversible}
+              </p>
             </div>
           }
-          confirmLabel="영구 삭제"
+          confirmLabel={DRIVE_COPY.deleteForever}
           isPending={isDeleting}
           onConfirm={() => void runDeleteForever(dialog.refs)}
           onCancel={() => setDialog(null)}
@@ -441,9 +439,9 @@ export function DriveProvider({
       )}
       {dialog?.kind === "empty-trash" && (
         <ConfirmDialog
-          title="휴지통 비우기"
-          message="휴지통의 모든 항목이 영구 삭제됩니다. 이 작업은 되돌릴 수 없습니다."
-          confirmLabel="휴지통 비우기"
+          title={DRIVE_COPY.emptyTrash}
+          message={DRIVE_COPY.emptyTrashMessage}
+          confirmLabel={DRIVE_COPY.emptyTrash}
           isPending={isDeleting}
           onConfirm={() =>
             void runDeleteForever(
@@ -474,14 +472,14 @@ function NewFolderDialog({
     const siblings = (index.childrenOf.get(parentId) ?? [])
       .filter((folder) => !folder.trashedAt)
       .map((folder) => folder.name);
-    return resolveUniqueName(DEFAULT_FOLDER_NAME, siblings);
+    return resolveUniqueName(DRIVE_COPY.newFolder, siblings);
   });
 
   return (
     <NameDialog
-      title="새 폴더"
+      title={DRIVE_COPY.newFolder}
       initialValue={initialValue}
-      confirmLabel="만들기"
+      confirmLabel={DRIVE_COPY.create}
       validate={(name) => validateFolderName(name, parentId)}
       onSubmit={(name) => onCreated(createFolder(parentId, name).id)}
       onCancel={onClose}

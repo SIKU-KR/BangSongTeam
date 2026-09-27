@@ -7,6 +7,7 @@ import {
   Trash2Icon,
 } from "lucide-react";
 import { RibbonButton, RibbonGroup } from "./RibbonPrimitives";
+import { EDITOR_COPY } from "#copy/editor";
 
 export interface SlideControlsProps {
   hasSlide: boolean;
@@ -37,30 +38,30 @@ export function SlideControls({
   onMerge,
 }: SlideControlsProps): React.JSX.Element {
   return (
-    <RibbonGroup label="슬라이드">
+    <RibbonGroup label={EDITOR_COPY.slide.label}>
       <RibbonButton
-        label="새 슬라이드"
-        tooltip="새 슬라이드 (Ctrl/⌘+M)"
+        label={EDITOR_COPY.slide.add}
+        tooltip={EDITOR_COPY.ribbon.addSlideTooltip}
         testId="ribbon-new-slide-btn"
-        text="새 슬라이드"
+        text={EDITOR_COPY.slide.add}
         disabled={!hasSlide}
         onClick={onAdd}
         icon={<PlusIcon />}
       />
       <RibbonButton
-        label="슬라이드 복제"
-        tooltip="슬라이드 복제 (Ctrl/⌘+D)"
+        label={EDITOR_COPY.slide.duplicate}
+        tooltip={EDITOR_COPY.ribbon.duplicateSlideTooltip}
         testId="ribbon-duplicate-slide-btn"
         disabled={!hasSlide}
         onClick={onDuplicate}
         icon={<CopyIcon />}
       />
       <RibbonButton
-        label="슬라이드 삭제"
+        label={EDITOR_COPY.slide.delete}
         tooltip={
           canDelete
-            ? "슬라이드 삭제 (Delete)"
-            : "곡의 마지막 한 장은 지울 수 없습니다"
+            ? EDITOR_COPY.ribbon.deleteSlideTooltip
+            : EDITOR_COPY.slide.lastCannotDelete
         }
         testId="ribbon-delete-slide-btn"
         disabled={!canDelete}
@@ -68,19 +69,19 @@ export function SlideControls({
         icon={<Trash2Icon />}
       />
       <RibbonButton
-        label="슬라이드 나누기"
+        label={EDITOR_COPY.slide.split}
         tooltip={splitTitle}
         testId="split-slide-btn"
-        text="나누기"
+        text={EDITOR_COPY.slide.splitShort}
         disabled={!canSplit}
         onClick={onSplit}
         icon={<SeparatorHorizontalIcon />}
       />
       <RibbonButton
-        label="다음 슬라이드와 합치기"
+        label={EDITOR_COPY.slide.merge}
         tooltip={mergeTitle}
         testId="merge-slide-btn"
-        text="합치기"
+        text={EDITOR_COPY.slide.mergeShort}
         disabled={!canMerge}
         onClick={onMerge}
         icon={<FoldVerticalIcon />}

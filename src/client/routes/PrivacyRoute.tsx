@@ -3,9 +3,9 @@ import {
   LegalDocument,
   LegalList,
   LegalSection,
-  OPERATOR_EMAIL,
-  OPERATOR_NAME,
 } from "#components/layout/LegalDocument";
+import { LEGAL_COPY, OPERATOR_EMAIL, OPERATOR_NAME } from "#copy/auth";
+import { APP_NAME } from "#shared";
 
 /**
  * 개인정보 처리방침 (개인정보 보호법 제30조).
@@ -15,9 +15,9 @@ import {
  */
 export function PrivacyRoute(): React.JSX.Element {
   return (
-    <LegalDocument title="개인정보 처리방침" effectiveDate="2026년 9월 27일">
+    <LegalDocument title={LEGAL_COPY.privacy} effectiveDate="2026년 9월 27일">
       <p>
-        방송팀 다모여(이하 &lsquo;서비스&rsquo;)는 「개인정보 보호법」에 따라
+        {APP_NAME}(이하 &lsquo;서비스&rsquo;)는 「개인정보 보호법」에 따라
         이용자의 개인정보를 보호하고 관련 고충을 원활하게 처리하기 위해 다음과
         같이 개인정보 처리방침을 둡니다.
       </p>

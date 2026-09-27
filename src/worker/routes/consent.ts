@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
-import { AgreeConsentRequestSchema } from "#shared";
+import { AgreeConsentRequestSchema, API_ERRORS } from "#shared";
 import { agreeToTerms, createD1Client, getTermsAgreedAt } from "#db";
 import type { AppEnv } from "../types";
 import { resolveRequireAuth, type AppDeps } from "../deps";
@@ -22,7 +22,7 @@ export function createConsentRoute(deps: AppDeps = {}) {
     .post("/", zValidator("json", AgreeConsentRequestSchema), async (c) => {
       const db = createD1Client(c.env.DB);
       const agreedAt = await agreeToTerms(db, c.get("userId") as string);
-      if (!agreedAt) return c.json({ error: "사용자를 찾을 수 없습니다" }, 404);
+      if (!agreedAt) return c.json({ error: API_ERRORS.userNotFound }, 404);
       return c.json({ agreedAt: agreedAt.toISOString() }, 200);
     });
 }

@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { cn } from "cn";
 import type { BackgroundMedia } from "#shared";
+import { BACKGROUND_COPY } from "#copy/backgrounds";
 
 export interface BackgroundPreviewProps {
   background: BackgroundMedia;
@@ -30,7 +31,7 @@ export function BackgroundPreview({
           data-testid={`bg-preview-missing-${background.id}`}
           className="absolute inset-0 flex items-center justify-center px-3 text-center text-2xs text-white/60"
         >
-          미리보기를 불러오지 못했습니다
+          {BACKGROUND_COPY.previewFailed}
         </div>
       ) : playing && background.kind === "video" ? (
         <video
@@ -58,12 +59,12 @@ export function BackgroundPreview({
         {background.kind === "video" ? (
           background.durationSec > 0 && (
             <span className="rounded-sm bg-black/70 px-1.5 py-0.5 font-mono text-2xs text-white/90">
-              {background.durationSec}초
+              {BACKGROUND_COPY.seconds(background.durationSec)}
             </span>
           )
         ) : (
           <span className="rounded-sm bg-black/70 px-1.5 py-0.5 text-2xs font-semibold text-white/90">
-            이미지
+            {BACKGROUND_COPY.image}
           </span>
         )}
       </div>

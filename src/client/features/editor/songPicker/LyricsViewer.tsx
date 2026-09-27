@@ -1,5 +1,6 @@
 import React from "react";
 import { Card, CardContent } from "#components/ui/card";
+import { EDITOR_COPY } from "#copy/editor";
 
 /**
  * 가사 원문 뷰어.
@@ -21,7 +22,7 @@ export function LyricsViewer({
               </span>
               <div className="flex flex-1 items-center justify-end border-b border-dashed">
                 <span className="px-1 font-sans text-2xs text-muted-foreground">
-                  [슬라이드 분할]
+                  {EDITOR_COPY.preview.splitMarker}
                 </span>
               </div>
             </div>

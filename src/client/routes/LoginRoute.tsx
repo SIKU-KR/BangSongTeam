@@ -18,10 +18,12 @@ import {
   type SocialProvider,
 } from "../lib/auth";
 import { SocialLoginButton } from "../features/auth/SocialLoginButton";
+import { AUTH_COPY, LEGAL_COPY } from "#copy/auth";
+import { APP_NAME } from "#shared";
 
 const LEGAL_LINKS = [
-  { href: "/terms", label: "이용약관" },
-  { href: "/privacy", label: "개인정보 처리방침" },
+  { href: "/terms", label: LEGAL_COPY.terms },
+  { href: "/privacy", label: LEGAL_COPY.privacy },
 ];
 
 export interface LoginRouteProps {
@@ -33,7 +35,7 @@ export interface LoginRouteProps {
 
 /** 로그인 화면 라우트 */
 export function LoginRoute({
-  description = "로그인하면 만든 세트가 계정에 저장되어, 교회 PC와 집 PC 어디서든 같은 세트를 열 수 있습니다.",
+  description = AUTH_COPY.defaultDescription,
   onCancel,
 }: LoginRouteProps = {}): React.JSX.Element {
   const [config, setConfig] = useState<AuthConfigResponse | null>(null);
@@ -63,7 +65,7 @@ export function LoginRoute({
     try {
       await signInWithProvider(provider);
     } catch {
-      setError("로그인을 시작하지 못했습니다. 잠시 후 다시 시도해 주세요.");
+      setError(AUTH_COPY.signInFailed);
       setPending(null);
     }
   };
@@ -76,7 +78,7 @@ export function LoginRoute({
     <div className="flex min-h-screen items-center justify-center bg-muted/40 px-4">
       <Card className="w-full max-w-sm">
         <CardHeader className="text-center">
-          <CardTitle className="text-2xl">방송팀 다모여</CardTitle>
+          <CardTitle className="text-2xl">{APP_NAME}</CardTitle>
           <CardDescription data-testid="login-description">
             {description}
           </CardDescription>
@@ -88,7 +90,7 @@ export function LoginRoute({
               data-testid="login-loading"
               className="text-center text-sm text-muted-foreground"
             >
-              로그인 수단을 확인하는 중…
+              {AUTH_COPY.loadingProviders}
             </p>
           ) : (
             <>
@@ -110,10 +112,7 @@ export function LoginRoute({
               {visibleProviders.length === 0 && (
                 <Alert>
                   <CircleAlertIcon />
-                  <AlertDescription>
-                    사용 가능한 로그인 수단이 없습니다. 소셜 로그인 자격증명이
-                    설정되지 않았습니다.
-                  </AlertDescription>
+                  <AlertDescription>{AUTH_COPY.noProviders}</AlertDescription>
                 </Alert>
               )}
             </>
@@ -135,10 +134,10 @@ export function LoginRoute({
               disabled={pending !== null}
               onClick={onCancel}
             >
-              로그인하지 않고 돌아가기
+              {AUTH_COPY.cancel}
             </Button>
           )}
-          데스크톱 Chrome에 최적화되어 있습니다
+          {AUTH_COPY.optimizedFor}
           <div className="flex gap-1">
             {LEGAL_LINKS.map((link) => (
               <Button

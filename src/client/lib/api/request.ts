@@ -3,6 +3,7 @@ import {
   ServerRejectedError,
   SessionExpiredError,
 } from "../sync/presentationSync";
+import { ERROR_COPY } from "#copy/common";
 
 interface RpcResponse {
   status: number;
@@ -46,10 +47,8 @@ export async function callApi<T>(
 }
 
 export function describeApiError(err: unknown): string {
-  if (err instanceof OfflineError)
-    return "오프라인이라 서버에 연결할 수 없습니다";
-  if (err instanceof SessionExpiredError)
-    return "로그인이 만료되었습니다. 다시 로그인해 주세요";
+  if (err instanceof OfflineError) return ERROR_COPY.offline;
+  if (err instanceof SessionExpiredError) return ERROR_COPY.sessionExpired;
   if (err instanceof ServerRejectedError) return err.message;
-  return "요청을 처리하지 못했습니다";
+  return ERROR_COPY.requestFailed;
 }

@@ -23,6 +23,8 @@ import { ToggleGroup, ToggleGroupItem } from "#components/ui/toggle-group";
 import type { BackgroundMedia } from "#shared";
 import { BackgroundPreview, useBackgroundCatalog } from "../backgrounds";
 import { refreshBackgroundCatalog } from "../../lib/sync/backgroundSync";
+import { BACKGROUND_COPY } from "#copy/backgrounds";
+import { COMMON_COPY } from "#copy/common";
 
 export interface BackgroundPickerModalProps {
   isOpen: boolean;
@@ -31,13 +33,13 @@ export interface BackgroundPickerModalProps {
   onSelect: (backgroundId: string | null) => void;
 }
 
-const ALL_TAGS = "전체";
+const ALL_TAGS = COMMON_COPY.all;
 
 function CheckBadge(): React.JSX.Element {
   return (
     <Badge className="absolute top-2 right-2">
       <CheckIcon />
-      선택됨
+      {BACKGROUND_COPY.selected}
     </Badge>
   );
 }
@@ -145,17 +147,18 @@ function PickerDialog({
     >
       <DialogContent className="flex max-h-9/10 flex-col gap-0 overflow-hidden p-0 sm:max-w-4xl">
         <DialogHeader className="border-b px-6 py-4 pr-12">
-          <DialogTitle className="text-lg font-bold">곡 배경 선택</DialogTitle>
+          <DialogTitle className="text-lg font-bold">
+            {BACKGROUND_COPY.picker.title}
+          </DialogTitle>
           <DialogDescription className="text-xs">
-            한 곡의 모든 슬라이드가 같은 배경을 씁니다. 영상은 슬라이드가
-            넘어가도 끊기지 않고 이어집니다.
+            {BACKGROUND_COPY.picker.description}
           </DialogDescription>
         </DialogHeader>
 
         {tags.length > 0 && (
           <div className="overflow-x-auto border-b px-6 py-3">
             <ToggleGroup
-              aria-label="분위기 태그"
+              aria-label={BACKGROUND_COPY.moodTags}
               variant="outline"
               size="sm"
               value={[activeTag]}
@@ -179,11 +182,11 @@ function PickerDialog({
             {...selectableTile(!selectedBackgroundId, () => pick(null))}
           >
             <div className="relative flex aspect-video items-center justify-center bg-black text-xs text-white/60">
-              검은 화면
+              {BACKGROUND_COPY.blackScreen}
               {!selectedBackgroundId && <CheckBadge />}
             </div>
             <CardHeader>
-              <CardTitle>배경 없음</CardTitle>
+              <CardTitle>{BACKGROUND_COPY.none}</CardTitle>
             </CardHeader>
           </Card>
 
@@ -200,7 +203,7 @@ function PickerDialog({
             <Empty className="col-span-full">
               <EmptyHeader>
                 <EmptyDescription>
-                  아직 등록된 배경이 없습니다.
+                  {BACKGROUND_COPY.noBackgrounds}
                 </EmptyDescription>
               </EmptyHeader>
             </Empty>
@@ -210,14 +213,14 @@ function PickerDialog({
         <DialogFooter className="mx-0 mb-0 items-center px-6 py-3 sm:justify-between">
           <span className="text-xs text-muted-foreground">
             {catalog.status === "offline"
-              ? "오프라인: 저장해 둔 배경 목록입니다"
-              : "고른 배경은 편집·송출 중에 이 기기에 저장되어 오프라인에서도 재생됩니다"}
+              ? BACKGROUND_COPY.picker.offline
+              : BACKGROUND_COPY.picker.cachedHint}
           </span>
           <DialogClose
             data-testid="close-bg-modal-btn"
             render={<Button variant="outline" />}
           >
-            닫기
+            {COMMON_COPY.close}
           </DialogClose>
         </DialogFooter>
       </DialogContent>

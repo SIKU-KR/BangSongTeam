@@ -52,6 +52,8 @@ import { useNewItemActions } from "./NewMenu";
 import { mergeKeys, rangeKeys, toggleKey } from "./selectionModel";
 import { useDriveKeyboard } from "./useDriveKeyboard";
 import { useMarqueeSelection } from "./useMarqueeSelection";
+import { DRIVE_COPY } from "#copy/drive";
+import { COMMON_COPY } from "#copy/common";
 
 export interface DriveBrowserProps {
   mode: "drive" | "trash";
@@ -130,7 +132,7 @@ export function DriveBrowser({
   const open = useCallback(
     (item: DriveItem): void => {
       if (isTrash) {
-        drive.showToast("휴지통에 있는 항목은 복원한 뒤 열 수 있습니다");
+        drive.showToast(DRIVE_COPY.openTrashedItem);
         return;
       }
       openItem(toRef(item), navigate);
@@ -149,7 +151,7 @@ export function DriveBrowser({
   const trashFolderActions: MenuAction[] = [
     {
       key: "open",
-      label: "열기",
+      label: DRIVE_COPY.open,
       icon: SquareArrowOutUpRightIcon,
       shortcut: "Enter",
       testId: "action-open",
@@ -157,7 +159,7 @@ export function DriveBrowser({
     },
     {
       key: "empty-trash",
-      label: "휴지통 비우기",
+      label: DRIVE_COPY.emptyTrash,
       icon: Trash2Icon,
       danger: true,
       separated: true,
@@ -176,14 +178,14 @@ export function DriveBrowser({
       return [
         {
           key: "restore",
-          label: "복원",
+          label: DRIVE_COPY.restore,
           icon: Undo2Icon,
           testId: "action-restore",
           onSelect: () => drive.restore(refs),
         },
         {
           key: "delete-forever",
-          label: "영구 삭제",
+          label: DRIVE_COPY.deleteForever,
           icon: Trash2Icon,
           danger: true,
           shortcut: "Delete",
@@ -197,7 +199,8 @@ export function DriveBrowser({
     if (single) {
       actions.push({
         key: "open",
-        label: single.kind === "folder" ? "열기" : "편집기에서 열기",
+        label:
+          single.kind === "folder" ? DRIVE_COPY.open : DRIVE_COPY.openInEditor,
         icon: SquareArrowOutUpRightIcon,
         shortcut: "Enter",
         testId: "action-open",
@@ -206,7 +209,7 @@ export function DriveBrowser({
       if (single.kind === "file") {
         actions.push({
           key: "present",
-          label: "발표",
+          label: DRIVE_COPY.present,
           icon: PlayIcon,
           testId: "action-present",
           onSelect: () => present(single.id),
@@ -214,7 +217,7 @@ export function DriveBrowser({
       }
       actions.push({
         key: "rename",
-        label: "이름 바꾸기",
+        label: DRIVE_COPY.rename,
         icon: PencilIcon,
         shortcut: "F2",
         separated: true,
@@ -224,7 +227,7 @@ export function DriveBrowser({
     }
     actions.push({
       key: "move",
-      label: "이동",
+      label: DRIVE_COPY.move,
       icon: FolderInputIcon,
       shortcut: "Z",
       separated: !single,
@@ -234,7 +237,7 @@ export function DriveBrowser({
     if (allFiles) {
       actions.push({
         key: "duplicate",
-        label: "사본 만들기",
+        label: COMMON_COPY.makeCopy,
         icon: CopyIcon,
         testId: "action-duplicate",
         onSelect: () => drive.duplicate(refs),
@@ -242,7 +245,7 @@ export function DriveBrowser({
     }
     actions.push({
       key: "trash",
-      label: "휴지통으로 이동",
+      label: DRIVE_COPY.moveToTrash,
       icon: Trash2Icon,
       danger: true,
       separated: true,
@@ -323,8 +326,8 @@ export function DriveBrowser({
   const folderCount = items.filter((item) => item.kind === "folder").length;
   const fileCount = items.length - folderCount;
   const summary = query
-    ? `‘${query}’ 검색 결과 ${items.length}개`
-    : `폴더 ${folderCount}개 · 프레젠테이션 ${fileCount}개`;
+    ? DRIVE_COPY.summary.search(query, items.length)
+    : DRIVE_COPY.summary.counts(folderCount, fileCount);
 
   return (
     <div
@@ -376,9 +379,15 @@ export function DriveBrowser({
             <>
               <DriveListHeader
                 locationLabel={
-                  isTrash ? "원래 위치" : query ? "위치" : undefined
+                  isTrash
+                    ? DRIVE_COPY.originalLocation
+                    : query
+                      ? DRIVE_COPY.location
+                      : undefined
                 }
-                dateLabel={isTrash ? "삭제일" : "수정일"}
+                dateLabel={
+                  isTrash ? DRIVE_COPY.deletedAt : DRIVE_COPY.updatedAt
+                }
                 sort={isTrash ? undefined : sortOrder}
                 onSort={
                   isTrash
@@ -399,7 +408,9 @@ export function DriveBrowser({
                 <div
                   role="listbox"
                   aria-multiselectable="true"
-                  aria-label={isTrash ? "휴지통" : "폴더와 프레젠테이션"}
+                  aria-label={
+                    isTrash ? COMMON_COPY.trash : DRIVE_COPY.itemsList
+                  }
                 >
                   {items.map((item) => (
                     <DriveListRow
@@ -462,24 +473,21 @@ function EmptyState({
   let hint: string;
   if (query) {
     icon = <SearchIcon />;
-    title = `"${query}"에 일치하는 항목이 없습니다.`;
-    hint =
-      "다른 검색어를 입력해 보세요. 폴더 이름, 세트 제목, 곡 제목·가사로 찾을 수 있습니다.";
+    title = DRIVE_COPY.empty.searchTitle(query);
+    hint = DRIVE_COPY.empty.searchHint;
   } else if (filtered) {
-    title = "선택한 유형의 항목이 없습니다";
-    hint = "유형 필터를 지우면 모든 항목을 볼 수 있습니다.";
+    title = DRIVE_COPY.empty.filteredTitle;
+    hint = DRIVE_COPY.empty.filteredHint;
   } else if (mode === "trash") {
     icon = <Trash2Icon />;
-    title = "휴지통이 비어 있습니다";
-    hint = "삭제한 폴더와 프레젠테이션이 여기에 모입니다.";
+    title = DRIVE_COPY.empty.trashTitle;
+    hint = DRIVE_COPY.empty.trashHint;
   } else if (drive.currentFolderId) {
-    title = "이 폴더가 비어 있습니다";
-    hint =
-      "새 폴더나 프레젠테이션을 만들거나, 다른 항목을 이 폴더로 끌어다 놓으세요.";
+    title = DRIVE_COPY.empty.folderTitle;
+    hint = DRIVE_COPY.empty.folderHint;
   } else {
-    title = "아직 프레젠테이션이 없습니다";
-    hint =
-      "새 프레젠테이션을 만들어 예배 세트를 준비해 보세요. 폴더로 정리할 수도 있습니다.";
+    title = DRIVE_COPY.empty.rootTitle;
+    hint = DRIVE_COPY.empty.rootHint;
   }
 
   return (

@@ -5,6 +5,7 @@ import {
   collectPresentationFonts,
 } from "./offlineAssets";
 import { DEFAULT_DECK_STYLE } from "../constants";
+import { UNTITLED_SONG } from "../copy/app";
 import type { Presentation, PresentationItem } from "../schemas/presentation";
 import type { Deck } from "../schemas/deck";
 import type { BackgroundMedia } from "../schemas/media";
@@ -157,7 +158,7 @@ describe("collectPresentationMediaAssets", () => {
 
     const [asset] = collect(presentation);
 
-    expect(asset.songTitle).toBe("(제목 없음)");
+    expect(asset.songTitle).toBe(UNTITLED_SONG);
     expect(asset.mediaUrl).toBeUndefined();
   });
 });

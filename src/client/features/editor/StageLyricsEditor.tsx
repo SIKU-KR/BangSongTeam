@@ -1,6 +1,7 @@
 import React, { useLayoutEffect, useRef } from "react";
 import type { Slide } from "#shared";
 import { MAX_SLIDE_LINE_LENGTH, MAX_SLIDE_LINES } from "#shared";
+import { EDITOR_COPY } from "#copy/editor";
 
 export interface StageLyricsEditorProps {
   slide: Slide;
@@ -56,10 +57,10 @@ export function StageLyricsEditor({
     <textarea
       ref={ref}
       data-testid="stage-lyrics-editor"
-      aria-label="슬라이드 가사 편집"
+      aria-label={EDITOR_COPY.slide.editLyrics}
       rows={1}
       value={slide.lines.join("\n")}
-      placeholder="가사를 입력하세요"
+      placeholder={EDITOR_COPY.slide.lyricsPlaceholder}
       onChange={(e) => {
         const lines = e.target.value.split("\n");
         if (exceedsSlideLimits(lines, slide.lines)) {

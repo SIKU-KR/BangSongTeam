@@ -48,7 +48,7 @@ export const DriveContext = createContext<DriveContextValue | null>(null);
 export function useDrive(): DriveContextValue {
   const value = useContext(DriveContext);
   if (!value) {
-    throw new Error("useDrive는 DriveProvider 안에서만 쓸 수 있습니다");
+    throw new Error("useDrive must be used within a DriveProvider");
   }
   return value;
 }

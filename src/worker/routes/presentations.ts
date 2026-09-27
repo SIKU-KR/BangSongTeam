@@ -1,11 +1,12 @@
 import { Hono, type Context } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import {
+  API_ERRORS,
+  toPresentationChanges,
+  type PresentationChanges,
   PresentationChangesSchema,
   PresentationDocumentSchema,
   UpdateShareSettingsRequestSchema,
-  toPresentationChanges,
-  type PresentationChanges,
 } from "#shared";
 import {
   createD1Client,
@@ -22,11 +23,9 @@ import {
 import type { AppEnv } from "../types";
 import { resolveRequireAuth, type AppDeps } from "../deps";
 
-const NOT_ACCESSIBLE = "이 프레젠테이션에 접근할 수 없습니다";
-
 async function save(c: Context<AppEnv>, changes: PresentationChanges) {
   if (changes.id !== c.req.param("id")) {
-    return c.json({ error: "문서 id가 경로와 일치하지 않습니다" }, 400);
+    return c.json({ error: API_ERRORS.presentation.idMismatch }, 400);
   }
 
   let result: SavePresentationResult;
@@ -43,15 +42,13 @@ async function save(c: Context<AppEnv>, changes: PresentationChanges) {
       sentDeckCount: changes.decks.length,
       error,
     });
-    return c.json({ error: "프레젠테이션을 저장하지 못했습니다" }, 500);
+    return c.json({ error: API_ERRORS.presentation.saveFailed }, 500);
   }
 
-  if (result === "forbidden") return c.json({ error: NOT_ACCESSIBLE }, 403);
+  if (result === "forbidden")
+    return c.json({ error: API_ERRORS.presentation.notAccessible }, 403);
   if (result === "stale") {
-    return c.json(
-      { error: "서버에 없는 곡이 있어 전체를 다시 보내야 합니다" },
-      409,
-    );
+    return c.json({ error: API_ERRORS.presentation.fullSyncRequired }, 409);
   }
   return c.json({ ok: true as const }, 200);
 }
@@ -85,7 +82,8 @@ export function createPresentationsRoute(deps: AppDeps = {}) {
         c.req.param("id"),
         c.get("userId") as string,
       );
-      if (!document) return c.json({ error: NOT_ACCESSIBLE }, 404);
+      if (!document)
+        return c.json({ error: API_ERRORS.presentation.notAccessible }, 404);
       return c.json({ presentation: document }, 200);
     })
     .put("/:id", zValidator("json", PresentationDocumentSchema), async (c) => {
@@ -101,7 +99,8 @@ export function createPresentationsRoute(deps: AppDeps = {}) {
         c.req.param("id"),
         c.get("userId") as string,
       );
-      if (!removed) return c.json({ error: NOT_ACCESSIBLE }, 404);
+      if (!removed)
+        return c.json({ error: API_ERRORS.presentation.notAccessible }, 404);
       return c.json({ ok: true as const }, 200);
     })
     .get("/:id/share", async (c) => {
@@ -110,7 +109,8 @@ export function createPresentationsRoute(deps: AppDeps = {}) {
         c.req.param("id"),
         c.get("userId") as string,
       );
-      if (!settings) return c.json({ error: NOT_ACCESSIBLE }, 404);
+      if (!settings)
+        return c.json({ error: API_ERRORS.presentation.notAccessible }, 404);
       return c.json(settings, 200);
     })
     .put(
@@ -123,7 +123,8 @@ export function createPresentationsRoute(deps: AppDeps = {}) {
           c.get("userId") as string,
           c.req.valid("json").access,
         );
-        if (!settings) return c.json({ error: NOT_ACCESSIBLE }, 404);
+        if (!settings)
+          return c.json({ error: API_ERRORS.presentation.notAccessible }, 404);
         return c.json(settings, 200);
       },
     )
@@ -133,7 +134,8 @@ export function createPresentationsRoute(deps: AppDeps = {}) {
         c.req.param("id"),
         c.get("userId") as string,
       );
-      if (!settings) return c.json({ error: NOT_ACCESSIBLE }, 404);
+      if (!settings)
+        return c.json({ error: API_ERRORS.presentation.notAccessible }, 404);
       return c.json(settings, 200);
     });
 }

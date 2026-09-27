@@ -1,6 +1,8 @@
 import React from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "#components/ui/button";
+import { SHELL_COPY } from "#copy/shell";
+import { APP_NAME, APP_TAGLINE } from "#shared";
 
 /** 랜딩 페이지 플레이스홀더 라우트 */
 export function LandingRoute(): React.JSX.Element {
@@ -12,18 +14,16 @@ export function LandingRoute(): React.JSX.Element {
       className="flex h-screen w-full flex-col items-center justify-center gap-4 bg-background"
     >
       <h1 className="text-3xl font-extrabold tracking-tight sm:text-4xl">
-        방송팀 다모여
+        {APP_NAME}
       </h1>
-      <p className="text-sm text-muted-foreground">
-        교회 방송팀을 위한 찬양 PPT
-      </p>
+      <p className="text-sm text-muted-foreground">{APP_TAGLINE}</p>
       <Button
         size="lg"
         data-testid="landing-enter-btn"
         onClick={() => navigate("/presentations")}
         className="mt-2"
       >
-        내 프레젠테이션으로 이동
+        {SHELL_COPY.landingEnter}
       </Button>
     </div>
   );

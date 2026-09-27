@@ -16,7 +16,6 @@ import {
   DriveBreadcrumbs,
   DriveProvider,
   NewMenuButton,
-  ROOT_LABEL,
   getFolder,
   useDrive,
   useFolderIndex,
@@ -26,6 +25,8 @@ import type {
   DriveTypeFilter,
   SortOrder,
 } from "./appShellContext";
+import { SHELL_COPY } from "#copy/shell";
+import { COMMON_COPY } from "#copy/common";
 
 interface ShellPageMeta {
   title: string;
@@ -33,16 +34,16 @@ interface ShellPageMeta {
 }
 
 const TRASH_META: ShellPageMeta = {
-  title: "휴지통",
-  placeholder: "휴지통에서 폴더, 프레젠테이션을 검색해 보세요",
+  title: COMMON_COPY.trash,
+  placeholder: SHELL_COPY.searchPlaceholder.trash,
 };
 const DRIVE_META: ShellPageMeta = {
-  title: "내 드라이브",
-  placeholder: "폴더, 프레젠테이션, 찬양 가사, 곡을 검색해 보세요",
+  title: COMMON_COPY.myDrive,
+  placeholder: SHELL_COPY.searchPlaceholder.drive,
 };
 const BACKGROUNDS_META: ShellPageMeta = {
-  title: "배경 갤러리",
-  placeholder: "배경 영상, 이미지, 분위기 태그를 검색해 보세요",
+  title: SHELL_COPY.backgroundGallery,
+  placeholder: SHELL_COPY.searchPlaceholder.backgrounds,
 };
 
 function metaFor(pathname: string): ShellPageMeta {
@@ -86,7 +87,7 @@ function AppShellFrame(): React.JSX.Element {
   useFolderIndex();
   const pageTitle =
     onDrive && !onTrash && drive.currentFolderId
-      ? (getFolder(drive.currentFolderId)?.name ?? ROOT_LABEL)
+      ? (getFolder(drive.currentFolderId)?.name ?? COMMON_COPY.myDrive)
       : meta.title;
 
   const handleCreateNewPresentation = (): void => {

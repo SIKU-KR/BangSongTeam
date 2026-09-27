@@ -1,5 +1,6 @@
 import { openDB, type DBSchema, type IDBPDatabase } from "idb";
 import type { BackgroundMedia, Deck, Folder, Presentation } from "#shared";
+import { ERROR_COPY } from "#copy/common";
 
 export const OFFLINE_DB_NAME = "worship-offline-db";
 export const OFFLINE_DB_VERSION = 4;
@@ -8,7 +9,7 @@ const FIRST_NANOID_DB_VERSION = 3;
 
 export class PersistenceUnavailableError extends Error {
   constructor(cause?: unknown) {
-    super("이 브라우저에서 IndexedDB를 사용할 수 없습니다");
+    super(ERROR_COPY.indexedDbUnavailable);
     this.name = "PersistenceUnavailableError";
     this.cause = cause;
   }

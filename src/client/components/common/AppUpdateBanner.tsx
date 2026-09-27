@@ -12,6 +12,7 @@ import {
   useServiceWorkerState,
   applyServiceWorkerUpdate,
 } from "../../pwa/registerServiceWorker";
+import { SHELL_COPY } from "#copy/shell";
 
 /**
  * 새 버전 적용 안내 배너.
@@ -35,8 +36,8 @@ export function AppUpdateBanner(): React.JSX.Element | null {
       className="shrink-0 rounded-none border-x-0 border-t-0"
     >
       <RefreshCwIcon />
-      <AlertTitle>새 버전이 준비되었습니다</AlertTitle>
-      <AlertDescription>예배 송출 중이 아닐 때 적용해 주세요.</AlertDescription>
+      <AlertTitle>{SHELL_COPY.update.title}</AlertTitle>
+      <AlertDescription>{SHELL_COPY.update.description}</AlertDescription>
       <AlertAction>
         <Button
           size="sm"
@@ -45,7 +46,7 @@ export function AppUpdateBanner(): React.JSX.Element | null {
             void applyServiceWorkerUpdate();
           }}
         >
-          지금 적용
+          {SHELL_COPY.update.apply}
         </Button>
       </AlertAction>
     </Alert>

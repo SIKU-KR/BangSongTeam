@@ -9,6 +9,7 @@ import {
 import { SidebarTrigger } from "#components/ui/sidebar";
 import { isTypingTarget } from "../../features/drive";
 import { ThemeMenuButton } from "../common/ThemeMenuButton";
+import { COMMON_COPY } from "#copy/common";
 
 export interface AppHeaderProps {
   /** 페이지 제목. `titleSlot`이 있으면 화면 읽기 프로그램용 제목으로만 쓴다 */
@@ -66,7 +67,7 @@ export function AppHeader({
           <InputGroupInput
             ref={inputRef}
             type="search"
-            aria-label="검색"
+            aria-label={COMMON_COPY.search}
             data-testid="shell-search-input"
             value={searchQuery}
             onChange={(e) => onSearchQueryChange(e.target.value)}
@@ -81,7 +82,7 @@ export function AppHeader({
             <InputGroupAddon align="inline-end">
               <InputGroupButton
                 size="icon-xs"
-                aria-label="검색어 지우기"
+                aria-label={COMMON_COPY.clearSearch}
                 onClick={() => {
                   onSearchQueryChange("");
                   inputRef.current?.focus();

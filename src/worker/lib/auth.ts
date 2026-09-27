@@ -1,7 +1,12 @@
 import { betterAuth } from "better-auth/minimal";
 import { drizzleAdapter } from "@better-auth/drizzle-adapter";
 import { createD1Client, user, session, account, verification } from "#db";
-import { createId, type SocialProvider } from "#shared";
+import {
+  APP_NAME,
+  createId,
+  FALLBACK_USER_NAME,
+  type SocialProvider,
+} from "#shared";
 import type { Bindings } from "../types";
 
 /**
@@ -115,7 +120,7 @@ export function buildKakaoUser(profile: KakaoProfileLike): MappedSocialUser {
   const email = account?.email?.trim();
 
   return {
-    name: nickname || "카카오 사용자",
+    name: nickname || FALLBACK_USER_NAME.kakao,
     email: email || syntheticEmail("kakao", profile.id),
     image,
     emailVerified: Boolean(email) && account?.is_email_verified === true,
@@ -129,7 +134,7 @@ export function buildNaverUser(profile: NaverProfileLike): MappedSocialUser {
   const id = response?.id ?? "unknown";
 
   return {
-    name: displayName || "네이버 사용자",
+    name: displayName || FALLBACK_USER_NAME.naver,
     email: email || syntheticEmail("naver", id),
     image: response?.profile_image,
     emailVerified: Boolean(email),
@@ -181,7 +186,7 @@ function buildAuth(env: Bindings) {
   }
 
   return betterAuth({
-    appName: "방송팀 다모여",
+    appName: APP_NAME,
     basePath: AUTH_BASE_PATH,
     baseURL: env.BETTER_AUTH_URL,
     secret: env.BETTER_AUTH_SECRET,

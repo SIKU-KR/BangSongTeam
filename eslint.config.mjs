@@ -111,6 +111,51 @@ const STYLE_ALLOWED_FILES = [
   "src/client/features/drive/DriveBrowser.tsx",
 ];
 
+const HANGUL = /[가-힣]/;
+const COPY_IN_COPY_MODULES =
+  "사용자에게 보이는 문구는 src/client/copy/*(클라이언트)나 src/shared/copy/*(서버·검증)에 두고 가져다 쓰세요. 같은 문장이 이미 있으면 그 키를 재사용합니다.";
+
+/**
+ * 한국어 문자열·JSX 텍스트를 copy 모듈 밖에서 쓰지 못하게 한다. 같은 문장이
+ * 여러 파일에 흩어지면 한쪽만 고쳐져 어긋난다. `no-restricted-syntax`는 파일별로
+ * 덮어써져 UI_SYNTAX 블록과 겹치므로 별도 규칙으로 둔다.
+ */
+const copyPlugin = {
+  rules: {
+    "no-inline-copy": {
+      meta: { type: "suggestion", schema: [] },
+      create(context) {
+        const report = (node) =>
+          context.report({ node, message: COPY_IN_COPY_MODULES });
+        return {
+          Literal(node) {
+            if (typeof node.value === "string" && HANGUL.test(node.value)) {
+              report(node);
+            }
+          },
+          TemplateElement(node) {
+            if (HANGUL.test(node.value.raw)) report(node);
+          },
+          JSXText(node) {
+            if (HANGUL.test(node.value)) report(node);
+          },
+        };
+      },
+    },
+  },
+};
+
+/** 문구가 아닌 데이터(글꼴 이름, 샘플 가사, 분위기 태그 값)와 조문 본문 */
+const COPY_EXEMPT_FILES = [
+  "src/shared/constants/noonnuFontCatalog.ts",
+  "src/shared/constants/noonnuFonts.ts",
+  "src/shared/constants/backgrounds.ts",
+  "src/client/features/presentation/mockPresentation.ts",
+  "src/client/features/presentation/mockPresentations.ts",
+  "src/client/routes/TermsRoute.tsx",
+  "src/client/routes/PrivacyRoute.tsx",
+];
+
 /**
  * 한 배포 단위(Worker + SPA)를 단일 패키지로 두므로, 패키지 경계가 하던
  * 레이어 격리를 import 규칙으로 대신 강제한다.
@@ -163,6 +208,20 @@ export default tseslint.config(
             "엔터티 id는 #shared의 createId()(NanoID)로 만드세요. UUID는 IdSchema를 통과하지 못합니다.",
         },
       ],
+    },
+  },
+  {
+    files: ["src/**/*.{ts,tsx}"],
+    ignores: [
+      "src/**/copy/**",
+      "**/*.test.{ts,tsx}",
+      "src/**/test/**",
+      "src/client/components/ui/**",
+      ...COPY_EXEMPT_FILES,
+    ],
+    plugins: { copy: copyPlugin },
+    rules: {
+      "copy/no-inline-copy": "error",
     },
   },
   {

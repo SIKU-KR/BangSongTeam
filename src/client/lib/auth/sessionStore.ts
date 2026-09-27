@@ -1,5 +1,9 @@
 import { useSyncExternalStore } from "react";
-import { AuthConfigResponseSchema, type AuthConfigResponse } from "#shared";
+import {
+  type AuthConfigResponse,
+  AuthConfigResponseSchema,
+  FALLBACK_USER_NAME,
+} from "#shared";
 import {
   loadCachedSession,
   saveCachedSession,
@@ -7,6 +11,7 @@ import {
   type SessionUser,
 } from "./sessionCache";
 import { authClient, type SocialProvider } from "./authClient";
+import { AUTH_COPY } from "#copy/auth";
 
 export type SessionStatus = "loading" | "authenticated" | "unauthenticated";
 
@@ -21,7 +26,7 @@ const fetchFromServer: SessionFetcher = async () => {
   const result = await authClient.getSession();
   if (result.error) {
     if (result.error.status === undefined) {
-      throw new Error("세션 확인 실패: 서버에 닿지 못했습니다");
+      throw new Error(AUTH_COPY.sessionCheckFailed);
     }
     return null;
   }
@@ -31,7 +36,7 @@ const fetchFromServer: SessionFetcher = async () => {
 
   return {
     userId: data.user.id,
-    name: data.user.name ?? "사용자",
+    name: data.user.name ?? FALLBACK_USER_NAME.default,
     image: data.user.image ?? null,
     expiresAt: new Date(data.session.expiresAt).getTime(),
   };
@@ -132,7 +137,7 @@ export async function fetchAuthConfig(): Promise<AuthConfigResponse> {
   const response = await fetch("/api/auth-config", {
     credentials: "include",
   });
-  if (!response.ok) throw new Error("로그인 설정을 읽지 못했습니다");
+  if (!response.ok) throw new Error(AUTH_COPY.configLoadFailed);
   return AuthConfigResponseSchema.parse(await response.json());
 }
 

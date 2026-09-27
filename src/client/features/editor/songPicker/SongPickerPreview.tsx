@@ -9,6 +9,8 @@ import { LibraryShareControls } from "../../sharing/LibraryShareControls";
 import { usePublicDeck } from "../../../lib/api/catalogQueries";
 import { describeApiError } from "../../../lib/api/request";
 import { copyToClipboard } from "../../../lib/browser/clipboard";
+import { EDITOR_COPY } from "#copy/editor";
+import { COMMON_COPY } from "#copy/common";
 
 interface ActionBarProps {
   copyText?: string;
@@ -60,10 +62,10 @@ function ActionBar({
             >
               {copied ? (
                 <>
-                  가사 복사됨 <CheckIcon />
+                  {EDITOR_COPY.preview.lyricsCopied} <CheckIcon />
                 </>
               ) : (
-                "가사 텍스트 복사"
+                EDITOR_COPY.preview.copyLyrics
               )}
             </Button>
           )}
@@ -75,14 +77,14 @@ function ActionBar({
               onClick={onReport}
               className="text-muted-foreground hover:text-destructive"
             >
-              신고
+              {EDITOR_COPY.preview.report}
             </Button>
           )}
         </div>
 
         <div className="flex items-center gap-2.5">
           <Button variant="ghost" onClick={onClose}>
-            닫기
+            {COMMON_COPY.close}
           </Button>
           <Button
             data-testid="song-picker-add-btn"
@@ -120,7 +122,9 @@ function PreviewHeader({
   );
 }
 
-const MINE_BADGE = <Badge variant="secondary">내 보관함</Badge>;
+const MINE_BADGE = (
+  <Badge variant="secondary">{EDITOR_COPY.song.myLibrary}</Badge>
+);
 
 /**
  * 내 보관함 곡 미리보기.
@@ -145,9 +149,12 @@ export function MyDeckPreview({
         badge={MINE_BADGE}
         meta={
           <>
-            {`${deck.artist || "아티스트 미상"} · 총 ${deck.slides.length}개 슬라이드`}
+            {EDITOR_COPY.preview.mineMeta(
+              deck.artist || EDITOR_COPY.song.unknownArtist,
+              deck.slides.length,
+            )}
             {deck.forkedFromAuthorName &&
-              ` · 원작: ${deck.forkedFromAuthorName}`}
+              EDITOR_COPY.preview.forkedFrom(deck.forkedFromAuthorName)}
           </>
         }
       />
@@ -157,7 +164,7 @@ export function MyDeckPreview({
       <LibraryShareControls deck={deck} />
       <ActionBar
         copyText={deck.lyricsRaw}
-        addLabel="이 곡을 프레젠테이션에 추가"
+        addLabel={EDITOR_COPY.preview.addMine}
         onAdd={onAdd}
         onClose={onClose}
         extraActions={
@@ -167,7 +174,7 @@ export function MyDeckPreview({
               data-testid="song-picker-edit-info-btn"
               onClick={onEditInfo}
             >
-              정보 수정
+              {EDITOR_COPY.preview.editInfo}
             </Button>
             <Button
               variant="ghost"
@@ -175,7 +182,7 @@ export function MyDeckPreview({
               onClick={onDelete}
               className="text-muted-foreground hover:text-destructive"
             >
-              삭제
+              {COMMON_COPY.delete}
             </Button>
           </>
         }
@@ -210,10 +217,17 @@ export function SharedDeckPreview({
     <div className="flex min-h-0 flex-1 flex-col">
       <PreviewHeader
         title={summary.title}
-        badge={<Badge variant="outline">공유 찬양</Badge>}
+        badge={
+          <Badge variant="outline">{EDITOR_COPY.preview.sharedBadge}</Badge>
+        }
         meta={
           <>
-            {`${summary.artist || "아티스트 미상"} · 총 ${summary.slideCount}개 슬라이드 · 공유: ${summary.authorName} · ${summary.forkCount}회 가져감`}
+            {EDITOR_COPY.preview.sharedMeta(
+              summary.artist || EDITOR_COPY.song.unknownArtist,
+              summary.slideCount,
+              summary.authorName,
+              summary.forkCount,
+            )}
           </>
         }
       />
@@ -225,17 +239,19 @@ export function SharedDeckPreview({
             {describeApiError(detail.error)}
           </p>
         ) : (
-          <p className="text-xs text-muted-foreground">가사를 불러오는 중…</p>
+          <p className="text-xs text-muted-foreground">
+            {EDITOR_COPY.preview.loadingLyrics}
+          </p>
         )}
       </div>
       <ActionBar
         copyText={detail.data?.lyricsRaw}
         addLabel={
           isAdding
-            ? "가져오는 중…"
+            ? EDITOR_COPY.preview.importing
             : ownedCopy
-              ? "보관함의 이 곡을 프레젠테이션에 추가"
-              : "가져와서 프레젠테이션에 추가"
+              ? EDITOR_COPY.preview.addOwnedCopy
+              : EDITOR_COPY.preview.importAndAdd
         }
         addDisabled={isAdding}
         onAdd={onAdd}
