@@ -2,26 +2,11 @@
 BETTER_AUTH_SECRET=local-development-secret-key-at-least-32-chars-long
 BETTER_AUTH_URL=http://localhost:5173
 
-# 개발자 로그인 (OAuth 연결 전까지의 기본 로그인 경로)
-#
-# !! 운영 시크릿에 절대 넣지 말 것 !!
-# 이 값이 운영에 살아 있으면 누구나 아무 계정으로 로그인할 수 있다.
-# 안전장치가 하나 더 있다(요청 호스트가 localhost일 때만 동작). 그래도
-# 운영에 넣지 않는 것이 1차 방어선이다.
-DEV_LOGIN_ENABLED=true
-
-# 이메일·비밀번호 로그인 가입 허용 목록 (쉼표로 구분, 대소문자 무시)
-#
-# 비워 두면 이메일 로그인 자체가 꺼진다 (로그인 화면에 폼이 나오지 않는다).
-# 메일 인증이 없으므로 여기 적힌 주소만 가입할 수 있다. 운영은 시크릿으로 넣는다.
-# 예: EMAIL_SIGNUP_ALLOWLIST=me@example.com,team@example.com
-EMAIL_SIGNUP_ALLOWLIST=
-
 # 배경 갤러리 관리자 (쉼표로 구분한 user id)
 #
 # 여기 적힌 계정만 배경 화면에서 배경을 올리고 지울 수 있다. 이메일은 검증되지 않아
-# user id로 지정한다. 개발자 로그인 계정의 id는 로그인 후 D1 `user` 테이블에서
-# 찾는다. 비워 두면 관리자가 없다.
+# user id로 지정한다. 계정의 id는 로그인 후 D1 `user` 테이블에서 찾는다.
+# 비워 두면 관리자가 없다.
 ADMIN_USER_IDS=
 
 # OAuth Providers
@@ -30,6 +15,8 @@ ADMIN_USER_IDS=
 # 앱을 등록하고 채운다.
 # Redirect URI: https://<도메인>/api/auth/callback/kakao , .../naver , .../google
 # 비워 두면 해당 프로바이더는 등록되지 않고 로그인 화면에도 나오지 않는다.
+# 로컬에서 로그인하려면 하나 이상 채운다. 구글은 Redirect URI에 localhost를 허용한다
+# (http://localhost:5173/api/auth/callback/google).
 KAKAO_CLIENT_ID=
 KAKAO_CLIENT_SECRET=
 NAVER_CLIENT_ID=

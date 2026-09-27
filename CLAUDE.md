@@ -7,7 +7,7 @@ A web slide tool for church worship teams: song decks and sets, fullscreen proje
 ## Workflow
 
 ```bash
-cp config/dev.vars.example .dev.vars   # DEV_LOGIN_ENABLED=true enables the localhost dev login
+cp config/dev.vars.example .dev.vars   # fill in an OAuth client (Google accepts a localhost redirect URI) to log in locally
 pnpm db:migrate:local
 pnpm dev
 
@@ -16,7 +16,7 @@ pnpm typecheck && pnpm lint && pnpm test   # must pass before pushing (the CI ga
 
 - Run `pnpm db:generate` after editing `src/db/schema/*`, `pnpm types` after editing `wrangler.jsonc` (needs `.dev.vars`, or the secrets drop out of `Env`), and `pnpm fonts:previews` after editing `noonnuFontCatalog.ts`.
 - For UI changes, check the real rendering in Chrome against `pnpm dev`.
-- Deploys and production migrations run only in CI on push to `main`. Don't run `pnpm deploy` or `pnpm db:migrate:prod` locally, and never set `DEV_LOGIN_ENABLED` in production secrets.
+- Deploys and production migrations run only in CI on push to `main`. Don't run `pnpm deploy` or `pnpm db:migrate:prod` locally.
 - `scripts/seedSelected.mjs --target=remote` writes to the production D1. Ask before running it.
 
 ## Conventions

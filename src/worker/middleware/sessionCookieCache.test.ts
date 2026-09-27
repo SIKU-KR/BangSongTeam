@@ -1,21 +1,17 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { env } from "cloudflare:test";
-import { eq, like } from "drizzle-orm";
-import { account, createD1Client, session, user } from "#db";
+import { eq } from "drizzle-orm";
+import { makeSignature } from "better-auth/crypto";
+import { createD1Client, session, user } from "#db";
+import { createId } from "#shared";
 import app from "../index";
+import { createAuth } from "../lib/auth";
 import type { Bindings } from "../types";
-import { clearTables } from "../test/db";
 
-const EMAIL = "cookie-cache@dev.local";
+const USER_ID = createId();
+const SESSION_DATA = "better-auth.session_data";
 
-const bindings: Bindings = {
-  ...env,
-  DEV_LOGIN_ENABLED: "true",
-  KAKAO_CLIENT_ID: "",
-  KAKAO_CLIENT_SECRET: "",
-  NAVER_CLIENT_ID: "",
-  NAVER_CLIENT_SECRET: "",
-};
+const bindings: Bindings = { ...env };
 
 function cookiePairs(res: Response): Map<string, string> {
   return new Map(
@@ -26,9 +22,6 @@ function cookiePairs(res: Response): Map<string, string> {
     }),
   );
 }
-
-const SESSION_TOKEN = "better-auth.session_token";
-const SESSION_DATA = "better-auth.session_data";
 
 function hasCookie(cookies: Map<string, string>, suffix: string): boolean {
   return [...cookies.keys()].some((name) => name.endsWith(suffix));
@@ -44,18 +37,23 @@ function cookieHeader(
     .join("; ");
 }
 
-async function login(): Promise<Map<string, string>> {
-  const res = await app.request(
-    "/api/dev-login",
-    {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ email: EMAIL }),
-    },
-    bindings,
-  );
-  expect(res.status).toBeLessThan(400);
-  return cookiePairs(res);
+async function login(): Promise<string> {
+  const now = new Date();
+  const token = createId();
+  await createD1Client(env.DB)
+    .insert(session)
+    .values({
+      id: createId(),
+      userId: USER_ID,
+      token,
+      expiresAt: new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000),
+      createdAt: now,
+      updatedAt: now,
+    });
+
+  const ctx = await createAuth(bindings).$context;
+  const signed = `${token}.${await makeSignature(token, ctx.secret)}`;
+  return `${ctx.authCookies.sessionToken.name}=${encodeURIComponent(signed)}`;
 }
 
 async function listFolders(cookie: string): Promise<Response> {
@@ -63,48 +61,42 @@ async function listFolders(cookie: string): Promise<Response> {
 }
 
 async function deleteSessions(): Promise<void> {
-  const db = createD1Client(env.DB);
-  const [row] = await db
-    .select({ id: user.id })
-    .from(user)
-    .where(eq(user.email, EMAIL));
-  await db.delete(session).where(eq(session.userId, row.id));
+  await createD1Client(env.DB)
+    .delete(session)
+    .where(eq(session.userId, USER_ID));
 }
 
 describe("세션 쿠키 캐시", () => {
   beforeEach(async () => {
-    await clearTables(session, account);
-    await createD1Client(env.DB)
-      .delete(user)
-      .where(like(user.email, "%@dev.local"));
-  });
-
-  it("로그인 응답이 세션 토큰과 함께 쿠키 캐시를 준다", async () => {
-    const cookies = await login();
-
-    expect(hasCookie(cookies, SESSION_TOKEN)).toBe(true);
-    expect(hasCookie(cookies, SESSION_DATA)).toBe(true);
-  });
-
-  it("쿠키 캐시가 살아 있으면 D1의 세션을 읽지 않는다", async () => {
-    const cookies = await login();
-    await deleteSessions();
-
-    const cached = await listFolders(
-      cookieHeader(cookies, [SESSION_TOKEN, SESSION_DATA]),
-    );
-    expect(cached.status).toBe(200);
-
-    const uncached = await listFolders(cookieHeader(cookies, [SESSION_TOKEN]));
-    expect(uncached.status).toBe(401);
+    const db = createD1Client(env.DB);
+    await db.delete(user).where(eq(user.id, USER_ID));
+    const now = new Date();
+    await db.insert(user).values({
+      id: USER_ID,
+      name: "쿠키 캐시",
+      email: "cookie-cache@example.com",
+      createdAt: now,
+      updatedAt: now,
+    });
   });
 
   it("쿠키 캐시가 없어 D1을 읽은 요청은 새 쿠키 캐시를 응답에 싣는다", async () => {
-    const cookies = await login();
-
-    const res = await listFolders(cookieHeader(cookies, [SESSION_TOKEN]));
+    const res = await listFolders(await login());
 
     expect(res.status).toBe(200);
     expect(hasCookie(cookiePairs(res), SESSION_DATA)).toBe(true);
+  });
+
+  it("쿠키 캐시가 살아 있으면 D1의 세션을 읽지 않는다", async () => {
+    const token = await login();
+    const first = await listFolders(token);
+    const cache = cookieHeader(cookiePairs(first), [SESSION_DATA]);
+    await deleteSessions();
+
+    const cached = await listFolders(`${token}; ${cache}`);
+    expect(cached.status).toBe(200);
+
+    const uncached = await listFolders(token);
+    expect(uncached.status).toBe(401);
   });
 });
