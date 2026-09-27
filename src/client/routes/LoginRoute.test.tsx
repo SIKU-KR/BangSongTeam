@@ -69,6 +69,23 @@ describe("LoginRoute", () => {
     });
   });
 
+  it("구글 버튼을 누르면 google로 로그인을 시작한다", async () => {
+    fetchAuthConfig.mockResolvedValue({
+      providers: ["kakao", "naver", "google"],
+      devLogin: false,
+      emailLogin: false,
+    });
+    render(<LoginRoute />);
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: /Google로 시작하기/ }),
+    );
+
+    await waitFor(() => {
+      expect(signInWithProvider).toHaveBeenCalledWith("google");
+    });
+  });
+
   it("로그인 시작이 실패하면 안내를 띄우고 다시 시도할 수 있다", async () => {
     signInWithProvider.mockRejectedValue(new Error("network"));
     render(<LoginRoute />);

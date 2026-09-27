@@ -167,5 +167,22 @@ describe("개발자 로그인 라우트", () => {
     expect((await kakao.json()) as { providers: string[] }).toMatchObject({
       providers: ["kakao"],
     });
+
+    const all = await app.request(
+      "/api/auth-config",
+      {},
+      {
+        ...withDevLogin(true),
+        KAKAO_CLIENT_ID: "real-id",
+        KAKAO_CLIENT_SECRET: "real-secret",
+        NAVER_CLIENT_ID: "real-id",
+        NAVER_CLIENT_SECRET: "real-secret",
+        GOOGLE_CLIENT_ID: "real-id",
+        GOOGLE_CLIENT_SECRET: "real-secret",
+      },
+    );
+    expect((await all.json()) as { providers: string[] }).toMatchObject({
+      providers: ["kakao", "naver", "google"],
+    });
   });
 });
