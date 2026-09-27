@@ -76,7 +76,7 @@ export function LoginRoute({
     <div className="flex min-h-screen items-center justify-center bg-muted/40 px-4">
       <Card className="w-full max-w-sm">
         <CardHeader className="text-center">
-          <CardTitle className="text-2xl">방송팀</CardTitle>
+          <CardTitle className="text-2xl">교회 방송팀 다모여!</CardTitle>
           <CardDescription data-testid="login-description">
             {description}
           </CardDescription>

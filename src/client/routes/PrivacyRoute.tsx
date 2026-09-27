@@ -17,9 +17,9 @@ export function PrivacyRoute(): React.JSX.Element {
   return (
     <LegalDocument title="개인정보 처리방침" effectiveDate="2026년 9월 27일">
       <p>
-        방송팀(이하 &lsquo;서비스&rsquo;)은 「개인정보 보호법」에 따라 이용자의
-        개인정보를 보호하고 관련 고충을 원활하게 처리하기 위해 다음과 같이
-        개인정보 처리방침을 둡니다.
+        교회 방송팀 다모여!(이하 &lsquo;서비스&rsquo;)는 「개인정보 보호법」에
+        따라 이용자의 개인정보를 보호하고 관련 고충을 원활하게 처리하기 위해
+        다음과 같이 개인정보 처리방침을 둡니다.
       </p>
 
       <LegalSection title="1. 처리하는 개인정보 항목과 수집 방법">

@@ -52,7 +52,7 @@ describe("App Route Integration", () => {
   it("should render the dashboard at '/presentations'", async () => {
     renderAt("/presentations");
 
-    expect(await screen.findByText("방송팀")).toBeInTheDocument();
+    expect(await screen.findByText("교회 방송팀 다모여!")).toBeInTheDocument();
     expect(
       (await screen.findAllByTestId("presentation-row")).length,
     ).toBeGreaterThan(0);
@@ -61,7 +61,7 @@ describe("App Route Integration", () => {
   it("should redirect '/lyrics' to '/presentations'", async () => {
     renderAt("/lyrics");
 
-    expect(await screen.findByText("방송팀")).toBeInTheDocument();
+    expect(await screen.findByText("교회 방송팀 다모여!")).toBeInTheDocument();
     expect(
       (await screen.findAllByTestId("presentation-row")).length,
     ).toBeGreaterThan(0);
@@ -193,7 +193,7 @@ describe("App Route Integration", () => {
 
     renderAt("/presentations");
 
-    expect(await screen.findByText("방송팀")).toBeInTheDocument();
+    expect(await screen.findByText("교회 방송팀 다모여!")).toBeInTheDocument();
     expect(screen.queryByTestId("presentation-row")).not.toBeInTheDocument();
   });
 

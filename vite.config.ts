@@ -39,9 +39,9 @@ const appConfig: UserConfig = {
       injectRegister: null,
       includeAssets: ["icons/*.png"],
       manifest: {
-        name: "방송팀",
-        short_name: "방송팀",
-        description: "예배 찬양 슬라이드 제작 및 송출 도구",
+        name: "교회 방송팀 다모여!",
+        short_name: "방송팀 다모여",
+        description: "교회 방송팀을 위한 찬양 PPT",
         lang: "ko",
         start_url: "/presentations",
         scope: "/",
