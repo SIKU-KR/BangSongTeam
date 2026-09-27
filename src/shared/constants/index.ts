@@ -118,5 +118,3 @@ export const SAFE_MARGIN_PERCENT = {
 export * from "./backgrounds";
 
 export * from "./projection";
-
-export * from "./auth";

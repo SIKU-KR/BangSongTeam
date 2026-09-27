@@ -13,7 +13,6 @@ export {
   hydrateSession,
   revalidateSession,
   signInWithProvider,
-  signInAsDeveloper,
   fetchAuthConfig,
   signOut,
   useSession,
@@ -26,9 +25,3 @@ export {
   type SessionStatus,
   type SessionFetcher,
 } from "./sessionStore";
-export {
-  signInWithEmail,
-  signUpWithEmail,
-  EmailAuthError,
-  type EmailAuthFailure,
-} from "./emailAuth";

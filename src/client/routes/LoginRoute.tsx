@@ -1,7 +1,6 @@
-import React, { useEffect, useId, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { CircleAlertIcon } from "lucide-react";
 import { Alert, AlertDescription } from "#components/ui/alert";
-import { Badge } from "#components/ui/badge";
 import { Button } from "#components/ui/button";
 import {
   Card,
@@ -11,18 +10,13 @@ import {
   CardHeader,
   CardTitle,
 } from "#components/ui/card";
-import { Field, FieldDescription, FieldLabel } from "#components/ui/field";
-import { Input } from "#components/ui/input";
-import { Separator } from "#components/ui/separator";
 import type { AuthConfigResponse } from "#shared";
 import {
   SOCIAL_PROVIDERS,
   signInWithProvider,
-  signInAsDeveloper,
   fetchAuthConfig,
   type SocialProvider,
 } from "../lib/auth";
-import { EmailLoginForm } from "../features/auth/EmailLoginForm";
 import { SocialLoginButton } from "../features/auth/SocialLoginButton";
 
 export interface LoginRouteProps {
@@ -40,8 +34,6 @@ export function LoginRoute({
   const [config, setConfig] = useState<AuthConfigResponse | null>(null);
   const [pending, setPending] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [devEmail, setDevEmail] = useState("");
-  const devEmailId = useId();
 
   useEffect(() => {
     let cancelled = false;
@@ -51,11 +43,7 @@ export function LoginRoute({
         if (!cancelled) setConfig(next);
       } catch {
         if (!cancelled) {
-          setConfig({
-            providers: SOCIAL_PROVIDERS.map((p) => p.id),
-            devLogin: false,
-            emailLogin: false,
-          });
+          setConfig({ providers: SOCIAL_PROVIDERS.map((p) => p.id) });
         }
       }
     })();
@@ -71,17 +59,6 @@ export function LoginRoute({
       await signInWithProvider(provider);
     } catch {
       setError("로그인을 시작하지 못했습니다. 잠시 후 다시 시도해 주세요.");
-      setPending(null);
-    }
-  };
-
-  const handleDevSignIn = async (): Promise<void> => {
-    setPending("dev");
-    setError(null);
-    try {
-      await signInAsDeveloper(devEmail.trim() || undefined);
-    } catch {
-      setError("개발자 로그인에 실패했습니다.");
       setPending(null);
     }
   };
@@ -125,58 +102,15 @@ export function LoginRoute({
                 </div>
               )}
 
-              {config.emailLogin && (
-                <>
-                  {visibleProviders.length > 0 && <Separator />}
-                  <div data-testid="email-login">
-                    <EmailLoginForm />
-                  </div>
-                </>
+              {visibleProviders.length === 0 && (
+                <Alert>
+                  <CircleAlertIcon />
+                  <AlertDescription>
+                    사용 가능한 로그인 수단이 없습니다. 소셜 로그인 자격증명이
+                    설정되지 않았습니다.
+                  </AlertDescription>
+                </Alert>
               )}
-
-              {config.devLogin && (
-                <>
-                  {(visibleProviders.length > 0 || config.emailLogin) && (
-                    <Separator />
-                  )}
-                  <Field data-testid="dev-login">
-                    <FieldLabel htmlFor={devEmailId}>
-                      개발자 계정 이메일
-                    </FieldLabel>
-                    <Input
-                      id={devEmailId}
-                      type="email"
-                      value={devEmail}
-                      onChange={(event) => setDevEmail(event.target.value)}
-                      placeholder="dev@worship.local"
-                    />
-                    <FieldDescription>
-                      <Badge variant="outline">개발용</Badge> 비워 두면 기본
-                      계정으로 로그인합니다. 이 기기(localhost)에서만
-                      동작합니다.
-                    </FieldDescription>
-                    <Button
-                      size="lg"
-                      disabled={pending !== null}
-                      onClick={() => void handleDevSignIn()}
-                    >
-                      {pending === "dev" ? "로그인 중…" : "개발자 로그인"}
-                    </Button>
-                  </Field>
-                </>
-              )}
-
-              {visibleProviders.length === 0 &&
-                !config.emailLogin &&
-                !config.devLogin && (
-                  <Alert>
-                    <CircleAlertIcon />
-                    <AlertDescription>
-                      사용 가능한 로그인 수단이 없습니다. 소셜 로그인 자격증명이
-                      설정되지 않았습니다.
-                    </AlertDescription>
-                  </Alert>
-                )}
             </>
           )}
 

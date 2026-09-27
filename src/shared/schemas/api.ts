@@ -5,7 +5,6 @@ import { SlideSchema } from "./slide";
 import { DeckSchema } from "./deck";
 import { PresentationSchema, PresentationItemSchema } from "./presentation";
 import { PublicDeckSummarySchema } from "./library";
-import { PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH } from "../constants/auth";
 
 export const CreateDeckRequestSchema = z.object({
   title: z.string().min(1).max(100),
@@ -83,26 +82,11 @@ export const DeckListResponseSchema = z.object({
 });
 export type DeckListResponse = z.infer<typeof DeckListResponseSchema>;
 
-export const DevLoginRequestSchema = z.object({
-  email: z.string().email().optional(),
-  name: z.string().min(1).max(50).optional(),
-});
-export type DevLoginRequest = z.infer<typeof DevLoginRequestSchema>;
-
-export const EmailSignUpRequestSchema = z.object({
-  email: z.string().trim().toLowerCase().email().max(254),
-  password: z.string().min(PASSWORD_MIN_LENGTH).max(PASSWORD_MAX_LENGTH),
-  name: z.string().trim().min(1).max(50),
-});
-export type EmailSignUpRequest = z.infer<typeof EmailSignUpRequestSchema>;
-
 /** 로그인 화면에 버튼이 나오는 순서이기도 하다 */
 export const SocialProviderSchema = z.enum(["kakao", "naver", "google"]);
 export type SocialProvider = z.infer<typeof SocialProviderSchema>;
 
 export const AuthConfigResponseSchema = z.object({
   providers: z.array(SocialProviderSchema),
-  devLogin: z.boolean(),
-  emailLogin: z.boolean(),
 });
 export type AuthConfigResponse = z.infer<typeof AuthConfigResponseSchema>;
