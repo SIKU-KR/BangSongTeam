@@ -2,7 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-A web slide tool for church worship teams: song decks and sets, fullscreen projection over looping video backgrounds, and a public deck library. Code is the source of truth; this file holds only what the code can't tell you. Product scope: `docs/prd.md`, `docs/TECH_SPEC.md`. Milestone task specs: `docs/tasks/`. Ops runbooks: `docs/ops/`.
+A web slide tool for church worship teams: song decks and sets, fullscreen projection over looping video backgrounds, and a public deck library.
 
 ## Workflow
 
@@ -20,6 +20,11 @@ pnpm typecheck && pnpm lint && pnpm test   # must pass before pushing (the CI ga
 - `scripts/seedSelected.mjs --target=remote` writes to the production D1. Ask before running it.
 
 ## Conventions
+
+### Documentation
+
+- Keep documentation to a minimum. Code is the source of truth, so don't write docs for anything the code already shows. Duplicated docs drift out of date and end up misleading.
+- Document only what the code can't tell you, when it's needed. That includes this file.
 
 ### Git and PRs
 
@@ -66,7 +71,3 @@ pnpm typecheck && pnpm lint && pnpm test   # must pass before pushing (the CI ga
 ## Removed by product decision
 
 Don't bring these back without a new decision: the presenter view and `BroadcastChannel` control window, the worship-prep download screen (`/present/:id/ready`), LLM lyric normalization (the `AI` binding and lyrics catalog tables), and the `N.M` (song.slide) jump syntax.
-
-## Old paths in docs
-
-`docs/tasks/**` uses pre-2026-09-24 paths: `apps/web/src` → `src/client`, `apps/web/worker` → `src/worker`, `packages/shared/src` / `@repo/shared` → `src/shared` / `#shared`, `packages/db/src` / `@repo/db` → `src/db` / `#db`, `packages/db/drizzle` and root `migrations/` → `src/db/migrations/`, root `tests/` → `config/`, root `public/` → `src/client/public/`.
