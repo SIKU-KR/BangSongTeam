@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
-import { SearchCatalogQuerySchema } from "#shared";
+import { API_ERRORS, SearchCatalogQuerySchema } from "#shared";
 import { createD1Client, getPublicDeckDetail, searchPublicDecks } from "#db";
 import type { AppEnv } from "../types";
 import { resolveRequireAuth, type AppDeps } from "../deps";
@@ -35,7 +35,7 @@ export function createCatalogRoute(deps: AppDeps = {}) {
       const db = createD1Client(c.env.DB);
       const detail = await getPublicDeckDetail(db, c.req.param("id"));
       if (!detail) {
-        return c.json({ error: "공개된 곡을 찾을 수 없습니다" }, 404);
+        return c.json({ error: API_ERRORS.deck.notPublished }, 404);
       }
       return c.json({ deck: detail }, 200);
     });

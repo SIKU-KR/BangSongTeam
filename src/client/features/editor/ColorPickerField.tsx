@@ -8,6 +8,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "#components/ui/popover";
+import { EDITOR_COPY } from "#copy/editor";
 
 const HEX_PATTERN = /^#([0-9a-fA-F]{3}){1,2}$/;
 
@@ -50,7 +51,7 @@ export function ColorPickerField({
       <Popover>
         <PopoverTrigger
           data-testid="color-picker-toggle"
-          aria-label="컬러피커 열기"
+          aria-label={EDITOR_COPY.ribbon.colorPicker}
           render={
             <Button
               variant="outline"
@@ -82,7 +83,7 @@ export function ColorPickerField({
       <Input
         type="text"
         data-testid="color-hex-input"
-        aria-label="글자 색상 hex 값"
+        aria-label={EDITOR_COPY.ribbon.colorHex}
         aria-invalid={isInvalid}
         value={text}
         maxLength={7}

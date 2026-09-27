@@ -117,35 +117,3 @@ export function resolveEditorShortcut(
       return null;
   }
 }
-
-/** 단축키 안내 팝오버에 보여 줄 편집기 단축키 표 */
-export const EDITOR_SHORTCUT_GUIDE: ReadonlyArray<{
-  keys: string;
-  action: string;
-}> = [
-  { keys: "Ctrl/⌘+Z · Ctrl/⌘+Shift+Z", action: "실행 취소 · 다시 실행" },
-  { keys: "← → / PageUp · PageDown / Space", action: "이전·다음 슬라이드" },
-  { keys: "Home / End", action: "세트 처음·마지막 슬라이드" },
-  { keys: "더블클릭 / Enter / F2", action: "슬라이드에서 가사 직접 편집" },
-  { keys: "Ctrl/⌘+Enter", action: "편집 중 커서 위치에서 슬라이드 나누기" },
-  { keys: "Esc", action: "가사 편집 끝내기" },
-  { keys: "Ctrl/⌘+M", action: "새 슬라이드" },
-  { keys: "Ctrl/⌘+D", action: "슬라이드 복제" },
-  { keys: "Delete", action: "슬라이드 삭제" },
-  { keys: "Ctrl/⌘·Shift+클릭", action: "슬라이드 창에서 여러 장 선택" },
-  {
-    keys: "Shift+↑ ↓ / Ctrl/⌘+A",
-    action: "슬라이드 창에서 선택 넓히기 · 곡 전체",
-  },
-  {
-    keys: "Ctrl/⌘+C · X · V",
-    action: "슬라이드 창에서 복사 · 잘라내기 · 붙여넣기",
-  },
-  {
-    keys: "Ctrl/⌘+↑ ↓ (+Shift)",
-    action: "슬라이드 한 칸 위·아래로 (곡 처음·끝으로)",
-  },
-  { keys: "Enter / Backspace", action: "슬라이드 창에서 새 슬라이드 · 삭제" },
-  { keys: "Ctrl/⌘+Shift+> / <", action: "글자 크기 키우기·줄이기" },
-  { keys: "F5", action: "슬라이드쇼 발표" },
-];

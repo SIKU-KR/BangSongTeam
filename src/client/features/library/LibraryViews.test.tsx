@@ -15,6 +15,7 @@ import { withQueryClient } from "../../test/queryClientFixture";
 import { makeBackground } from "../../test/backgroundFixture";
 import { resetBackgroundCatalogForTests } from "../backgrounds";
 import { refreshBackgroundCatalog } from "../../lib/sync/backgroundSync";
+import { BACKGROUND_COPY } from "#copy/backgrounds";
 
 const { probeBackgroundFile } = vi.hoisted(() => ({
   probeBackgroundFile: vi.fn(),
@@ -83,7 +84,7 @@ describe("BackgroundLibraryView", () => {
     expect(await screen.findByText("본당 성탄 배경")).toBeInTheDocument();
     expect(screen.getByText("고요한 호수 물결")).toBeInTheDocument();
     expect(screen.getByText("타오르는 불꽃")).toBeInTheDocument();
-    expect(screen.getByText("모든 배경")).toBeInTheDocument();
+    expect(screen.getByText(BACKGROUND_COPY.library.title)).toBeInTheDocument();
     expect(screen.queryByText("내가 올린 배경")).not.toBeInTheDocument();
     expect(screen.queryByTestId("open-bg-upload-btn")).not.toBeInTheDocument();
     expect(
@@ -99,7 +100,7 @@ describe("BackgroundLibraryView", () => {
     await renderView();
 
     expect(
-      await screen.findByText("아직 등록된 배경이 없습니다."),
+      await screen.findByText(BACKGROUND_COPY.noBackgrounds),
     ).toBeInTheDocument();
   });
 
@@ -185,7 +186,9 @@ describe("BackgroundLibraryView", () => {
     });
 
     expect(await screen.findByTestId("bg-upload-low-res")).toBeInTheDocument();
-    expect(screen.getByLabelText("배경 제목")).toHaveValue("새벽기도 배경");
+    expect(
+      screen.getByLabelText(BACKGROUND_COPY.uploadDialog.titleLabel),
+    ).toHaveValue("새벽기도 배경");
 
     const submit = screen.getByTestId("bg-upload-submit");
     expect(submit).toBeDisabled();

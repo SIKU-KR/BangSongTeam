@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
-import { DeckSchema, VisibilityUpdateRequestSchema } from "#shared";
+import { API_ERRORS, DeckSchema, VisibilityUpdateRequestSchema } from "#shared";
 import {
   createD1Client,
   getMyLibraryDecks,
@@ -32,10 +32,10 @@ export function createDecksRoute(deps: AppDeps = {}) {
       const deck = c.req.valid("json");
 
       if (deck.id !== c.req.param("id")) {
-        return c.json({ error: "덱 id가 경로와 일치하지 않습니다" }, 400);
+        return c.json({ error: API_ERRORS.deck.idMismatch }, 400);
       }
       if (deck.scope !== "library") {
-        return c.json({ error: "보관함 곡만 저장할 수 있습니다" }, 400);
+        return c.json({ error: API_ERRORS.deck.libraryOnly }, 400);
       }
 
       const db = createD1Client(c.env.DB);
@@ -44,11 +44,11 @@ export function createDecksRoute(deps: AppDeps = {}) {
       try {
         saved = await upsertDeck(db, userId, deck);
         if (!saved) {
-          return c.json({ error: "이 곡에 접근할 수 없습니다" }, 403);
+          return c.json({ error: API_ERRORS.deck.notAccessible }, 403);
         }
       } catch (error) {
         console.error("deck upsert failed", { deckId: deck.id, error });
-        return c.json({ error: "곡을 저장하지 못했습니다" }, 500);
+        return c.json({ error: API_ERRORS.deck.saveFailed }, 500);
       }
 
       return c.json({ ok: true as const, deck: saved }, 200);
@@ -70,21 +70,15 @@ export function createDecksRoute(deps: AppDeps = {}) {
           case "ok":
             return c.json({ deck: result.deck }, 200);
           case "not_found":
-            return c.json({ error: "이 곡에 접근할 수 없습니다" }, 404);
+            return c.json({ error: API_ERRORS.deck.notAccessible }, 404);
           case "not_library":
-            return c.json(
-              { error: "세트에 담긴 곡은 보관함 원본으로 공개합니다" },
-              400,
-            );
+            return c.json({ error: API_ERRORS.deck.publishFromLibrary }, 400);
           case "empty":
-            return c.json(
-              { error: "슬라이드가 없는 곡은 공개할 수 없습니다" },
-              400,
-            );
+            return c.json({ error: API_ERRORS.deck.noSlides }, 400);
           case "taken_down":
             return c.json(
               {
-                error: "운영자가 게시를 중단한 곡이라 다시 공개할 수 없습니다",
+                error: API_ERRORS.deck.takenDown,
               },
               409,
             );
@@ -99,7 +93,7 @@ export function createDecksRoute(deps: AppDeps = {}) {
         c.req.param("id"),
       );
       if (result.status === "not_found") {
-        return c.json({ error: "공개된 곡을 찾을 수 없습니다" }, 404);
+        return c.json({ error: API_ERRORS.deck.notPublished }, 404);
       }
       return c.json(
         { deck: result.deck, alreadyOwned: result.alreadyOwned },
@@ -115,7 +109,7 @@ export function createDecksRoute(deps: AppDeps = {}) {
       );
 
       if (!removed) {
-        return c.json({ error: "이 곡에 접근할 수 없습니다" }, 404);
+        return c.json({ error: API_ERRORS.deck.notAccessible }, 404);
       }
       return c.json({ ok: true as const }, 200);
     });

@@ -6,6 +6,7 @@ import {
   isBackgroundImageMimeType,
   isBackgroundVideoMimeType,
 } from "../constants/backgrounds";
+import { VALIDATION_COPY } from "../copy/validation";
 
 export const BackgroundSourceSchema = z.enum(["service", "user"]);
 export type BackgroundSource = z.infer<typeof BackgroundSourceSchema>;
@@ -65,7 +66,7 @@ const TagsFieldSchema = z
     } catch {
       ctx.addIssue({
         code: "custom",
-        message: "태그 형식이 올바르지 않습니다",
+        message: VALIDATION_COPY.background.invalidTags,
       });
       return z.NEVER;
     }
@@ -78,7 +79,7 @@ const TagsFieldSchema = z
     if (!result.success) {
       ctx.addIssue({
         code: "custom",
-        message: `태그는 ${BACKGROUND_UPLOAD_LIMITS.maxTags}개까지 붙일 수 있습니다`,
+        message: VALIDATION_COPY.background.tooManyTags,
       });
       return z.NEVER;
     }
@@ -100,12 +101,12 @@ export const BackgroundUploadFormSchema = z
     title: z
       .string()
       .trim()
-      .min(1, "배경 제목을 입력해 주세요")
+      .min(1, VALIDATION_COPY.background.titleRequired)
       .max(BACKGROUND_UPLOAD_LIMITS.maxTitleLength),
     license: z
       .string()
       .trim()
-      .min(1, "출처와 라이선스를 적어 주세요")
+      .min(1, VALIDATION_COPY.background.licenseRequired)
       .max(BACKGROUND_UPLOAD_LIMITS.maxLicenseLength),
     tags: TagsFieldSchema,
     durationSec: z
@@ -118,7 +119,7 @@ export const BackgroundUploadFormSchema = z
       ),
     acceptedRightsNotice: z.literal("true", {
       errorMap: () => ({
-        message: "모든 사용자에게 배포해도 되는 라이선스인지 확인해 주세요",
+        message: VALIDATION_COPY.background.rightsNotice,
       }),
     }),
   })
@@ -128,28 +129,28 @@ export const BackgroundUploadFormSchema = z
       ctx.addIssue({
         code: "custom",
         path: ["file"],
-        message: "MP4 영상이나 JPEG·PNG·WebP 이미지만 올릴 수 있습니다",
+        message: VALIDATION_COPY.background.unsupportedType,
       });
     }
     if (form.file.size === 0) {
       ctx.addIssue({
         code: "custom",
         path: ["file"],
-        message: "빈 파일은 올릴 수 없습니다",
+        message: VALIDATION_COPY.background.emptyFile,
       });
     }
     if (form.file.size > BACKGROUND_UPLOAD_LIMITS.maxFileBytes) {
       ctx.addIssue({
         code: "custom",
         path: ["file"],
-        message: "파일 하나는 30MB 이하만 올릴 수 있습니다",
+        message: VALIDATION_COPY.background.fileTooLarge,
       });
     }
     if (isVideo && !form.poster) {
       ctx.addIssue({
         code: "custom",
         path: ["poster"],
-        message: "영상 배경은 포스터 이미지가 필요합니다",
+        message: VALIDATION_COPY.background.posterRequired,
       });
     }
     if (form.poster) {
@@ -157,14 +158,14 @@ export const BackgroundUploadFormSchema = z
         ctx.addIssue({
           code: "custom",
           path: ["poster"],
-          message: "포스터는 JPEG·PNG·WebP 이미지여야 합니다",
+          message: VALIDATION_COPY.background.posterType,
         });
       }
       if (form.poster.size > BACKGROUND_UPLOAD_LIMITS.maxPosterBytes) {
         ctx.addIssue({
           code: "custom",
           path: ["poster"],
-          message: "포스터 이미지는 2MB 이하여야 합니다",
+          message: VALIDATION_COPY.background.posterTooLarge,
         });
       }
     }

@@ -20,6 +20,8 @@ import {
   cancelDocumentPush,
 } from "../../lib/sync/syncScheduler";
 import { getServiceBackgrounds } from "../backgrounds/backgroundCatalog";
+import { PRESENTATION_COPY } from "#copy/presentation";
+import { COMMON_COPY } from "#copy/common";
 
 interface PresentationStoreState {
   byId: Record<string, Presentation>;
@@ -670,7 +672,7 @@ export function updateSlideLines(
 
 export function addSlideToSong(
   songIndex: number,
-  lines: string[] = ["새 슬라이드 가사를 입력하세요"],
+  lines: string[] = [PRESENTATION_COPY.newSlidePlaceholder],
   afterIndex?: number,
 ): void {
   const item = readActive().items[songIndex];
@@ -935,7 +937,7 @@ export function duplicateSongInPresentation(songIndex: number): Deck | null {
   const clonedDeck: Deck = {
     ...JSON.parse(JSON.stringify(originalDeck)),
     id: createId(),
-    title: `${originalDeck.title} (사본)`,
+    title: `${originalDeck.title}${COMMON_COPY.copySuffix}`,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   };
@@ -962,7 +964,6 @@ export function duplicateSongInPresentation(songIndex: number): Deck | null {
 }
 
 const MAX_TITLE_LENGTH = 100;
-const COPY_SUFFIX = " (사본)";
 
 function updateDocumentById(
   id: string,
@@ -1076,7 +1077,7 @@ export function duplicatePresentation(
     ...source,
     id: newId,
     userId,
-    title: `${source.title.slice(0, MAX_TITLE_LENGTH - COPY_SUFFIX.length)}${COPY_SUFFIX}`,
+    title: `${source.title.slice(0, MAX_TITLE_LENGTH - COMMON_COPY.copySuffix.length)}${COMMON_COPY.copySuffix}`,
     items,
     folderId:
       folderId !== undefined

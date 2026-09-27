@@ -16,6 +16,7 @@ import {
   TooltipTrigger,
 } from "#components/ui/tooltip";
 import { useTheme } from "#components/theme-provider";
+import { SHELL_COPY } from "#copy/shell";
 
 interface ThemeOption {
   mode: ReturnType<typeof useTheme>["theme"];
@@ -27,20 +28,17 @@ interface ThemeOption {
 const THEME_OPTIONS: ThemeOption[] = [
   {
     mode: "light",
-    label: "라이트 모드",
-    description: "밝은 화면 테마",
+    ...SHELL_COPY.theme.light,
     icon: SunIcon,
   },
   {
     mode: "dark",
-    label: "다크 모드",
-    description: "어두운 화면 테마",
+    ...SHELL_COPY.theme.dark,
     icon: MoonIcon,
   },
   {
     mode: "system",
-    label: "시스템 설정",
-    description: "기기 설정에 맞춤",
+    ...SHELL_COPY.theme.system,
     icon: MonitorIcon,
   },
 ];
@@ -63,14 +61,16 @@ export function ThemeMenuButton(): React.JSX.Element {
           render={
             <DropdownMenuTrigger
               data-testid="theme-menu-button"
-              aria-label={`테마 설정: ${current.label}`}
+              aria-label={SHELL_COPY.theme.current(current.label)}
               render={<Button variant="ghost" size="icon" />}
             />
           }
         >
           <CurrentIcon />
         </TooltipTrigger>
-        <TooltipContent>테마 설정: {current.label}</TooltipContent>
+        <TooltipContent>
+          {SHELL_COPY.theme.current(current.label)}
+        </TooltipContent>
       </Tooltip>
       <DropdownMenuContent
         data-testid="theme-menu-dropdown"
@@ -79,7 +79,7 @@ export function ThemeMenuButton(): React.JSX.Element {
         className="w-56"
       >
         <DropdownMenuGroup>
-          <DropdownMenuLabel>테마 설정</DropdownMenuLabel>
+          <DropdownMenuLabel>{SHELL_COPY.theme.title}</DropdownMenuLabel>
           <DropdownMenuRadioGroup
             value={theme}
             onValueChange={(value) => {

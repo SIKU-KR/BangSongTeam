@@ -7,6 +7,7 @@ import {
   DEFAULT_PRESET_FONTS,
   loadNoonnuFontCatalog,
 } from "#shared";
+import { EDITOR_COPY } from "#copy/editor";
 
 describe("FontControls (글꼴 컨트롤)", () => {
   it("카탈로그의 모든 웹폰트는 비어있지 않은 유효한 URL을 갖는다", async () => {
@@ -27,7 +28,9 @@ describe("FontControls (글꼴 컨트롤)", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("combobox", { name: "글꼴" }));
+    fireEvent.click(
+      screen.getByRole("combobox", { name: EDITOR_COPY.ribbon.font }),
+    );
 
     const gmarketOption = await screen.findByRole("option", {
       name: "Gmarket Sans",
@@ -57,7 +60,9 @@ describe("FontControls (글꼴 컨트롤)", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("combobox", { name: "글꼴" }));
+    fireEvent.click(
+      screen.getByRole("combobox", { name: EDITOR_COPY.ribbon.font }),
+    );
     await screen.findByRole("option", { name: DEFAULT_PRESET_FONTS[0] });
 
     const catalog = await loadNoonnuFontCatalog();
@@ -82,7 +87,9 @@ describe("FontControls (글꼴 컨트롤)", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("combobox", { name: "글꼴" }));
+    fireEvent.click(
+      screen.getByRole("combobox", { name: EDITOR_COPY.ribbon.font }),
+    );
     await screen.findByRole("option", { name: "Gmarket Sans" });
 
     const injected = [
@@ -102,7 +109,9 @@ describe("FontControls (글꼴 컨트롤)", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("combobox", { name: "글꼴" }));
+    fireEvent.click(
+      screen.getByRole("combobox", { name: EDITOR_COPY.ribbon.font }),
+    );
     const moreButton = await screen.findByRole("button", { name: /더 보기/ });
 
     const popup = document.querySelector("[data-slot='select-content']");
@@ -125,10 +134,13 @@ describe("FontControls (글꼴 컨트롤)", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("combobox", { name: "글꼴" }));
+    fireEvent.click(
+      screen.getByRole("combobox", { name: EDITOR_COPY.ribbon.font }),
+    );
 
-    const searchInput =
-      await screen.findByPlaceholderText("글꼴 검색 (1,100+종)...");
+    const searchInput = await screen.findByPlaceholderText(
+      EDITOR_COPY.ribbon.fontSearch,
+    );
     fireEvent.change(searchInput, { target: { value: "페이퍼로지" } });
 
     const paperOption = await screen.findByRole("option", {

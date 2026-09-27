@@ -9,7 +9,8 @@
     "#db": "./src/db/index.ts",
     "#components/*": "./src/client/components/*.tsx",
     "#lib/*": "./src/client/lib/*.ts",
-    "#hooks/*": "./src/client/hooks/*.ts"
+    "#hooks/*": "./src/client/hooks/*.ts",
+    "#copy/*": "./src/client/copy/*.ts"
   },
   "scripts": {
     "dev": "vite",

@@ -1,4 +1,5 @@
 import type { DeckStyle } from "#shared";
+import { EDITOR_COPY } from "#copy/editor";
 
 /**
  * PowerPoint 16:9 슬라이드는 가로 960pt라 1920px 스테이지에서 1pt = 2px이다.
@@ -42,27 +43,27 @@ export const SHADOW_LEVELS: ReadonlyArray<{
   id: DeckStyle["textShadowLevel"];
   label: string;
 }> = [
-  { id: "none", label: "없음" },
-  { id: "soft", label: "은은함" },
-  { id: "medium", label: "보통" },
-  { id: "strong", label: "강함" },
+  { id: "none", label: EDITOR_COPY.ribbon.shadowLevels.none },
+  { id: "soft", label: EDITOR_COPY.ribbon.shadowLevels.soft },
+  { id: "medium", label: EDITOR_COPY.ribbon.shadowLevels.medium },
+  { id: "strong", label: EDITOR_COPY.ribbon.shadowLevels.strong },
 ];
 
 export const PRESET_COLORS: ReadonlyArray<{ label: string; value: string }> = [
-  { label: "화이트", value: "#FFFFFF" },
-  { label: "옐로우", value: "#FEF08A" },
-  { label: "스카이", value: "#BAE6FD" },
-  { label: "민트", value: "#A7F3D0" },
-  { label: "핑크", value: "#FBCFE8" },
-  { label: "그레이", value: "#D4D4D8" },
-  { label: "블랙", value: "#000000" },
+  { label: EDITOR_COPY.ribbon.colors.white, value: "#FFFFFF" },
+  { label: EDITOR_COPY.ribbon.colors.yellow, value: "#FEF08A" },
+  { label: EDITOR_COPY.ribbon.colors.sky, value: "#BAE6FD" },
+  { label: EDITOR_COPY.ribbon.colors.mint, value: "#A7F3D0" },
+  { label: EDITOR_COPY.ribbon.colors.pink, value: "#FBCFE8" },
+  { label: EDITOR_COPY.ribbon.colors.gray, value: "#D4D4D8" },
+  { label: EDITOR_COPY.ribbon.colors.black, value: "#000000" },
 ];
 
 export const TEXT_ALIGN_OPTIONS: ReadonlyArray<{
   id: DeckStyle["textAlign"];
   label: string;
 }> = [
-  { id: "left", label: "왼쪽 맞춤" },
-  { id: "center", label: "가운데 맞춤" },
-  { id: "right", label: "오른쪽 맞춤" },
+  { id: "left", label: EDITOR_COPY.ribbon.alignOptions.left },
+  { id: "center", label: EDITOR_COPY.ribbon.alignOptions.center },
+  { id: "right", label: EDITOR_COPY.ribbon.alignOptions.right },
 ];

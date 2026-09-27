@@ -22,27 +22,25 @@ import { Textarea } from "#components/ui/textarea";
 import type { ReportReason, ReportTargetType } from "#shared";
 import { useSubmitReport } from "../../lib/api/catalogQueries";
 import { describeApiError } from "../../lib/api/request";
+import { SHARING_COPY } from "#copy/sharing";
+import { COMMON_COPY } from "#copy/common";
 
 const REASONS: { value: ReportReason; label: string; hint: string }[] = [
   {
     value: "lyrics_error",
-    label: "가사 오류",
-    hint: "틀린 가사, 빠진 절, 순서가 뒤바뀐 곳",
+    ...SHARING_COPY.report.reasons.lyrics_error,
   },
   {
     value: "correction",
-    label: "교정 제안",
-    hint: "이렇게 고치면 좋겠다는 제안 (아래에 고친 가사를 적어 주세요)",
+    ...SHARING_COPY.report.reasons.correction,
   },
   {
     value: "inappropriate",
-    label: "부적절한 콘텐츠",
-    hint: "찬양과 무관하거나 불쾌한 내용",
+    ...SHARING_COPY.report.reasons.inappropriate,
   },
   {
     value: "copyright",
-    label: "저작권 게시 중단 요청",
-    hint: "권리자이거나 권리자를 대리해 게시 중단을 요청합니다",
+    ...SHARING_COPY.report.reasons.copyright,
   },
 ];
 
@@ -86,7 +84,7 @@ export function ReportDialog({
     >
       <DialogContent data-testid="report-dialog" className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>신고하기</DialogTitle>
+          <DialogTitle>{SHARING_COPY.report.title}</DialogTitle>
           <DialogDescription className="truncate">
             {targetTitle}
           </DialogDescription>
@@ -95,10 +93,10 @@ export function ReportDialog({
         {report.isSuccess ? (
           <>
             <p data-testid="report-dialog-done" className="text-sm">
-              신고가 접수되었습니다. 운영자가 확인한 뒤 처리합니다.
+              {SHARING_COPY.report.done}
             </p>
             <DialogFooter>
-              <Button onClick={close}>닫기</Button>
+              <Button onClick={close}>{COMMON_COPY.close}</Button>
             </DialogFooter>
           </>
         ) : (
@@ -115,7 +113,9 @@ export function ReportDialog({
             }}
           >
             <FieldSet>
-              <FieldLegend variant="label">신고 사유</FieldLegend>
+              <FieldLegend variant="label">
+                {SHARING_COPY.report.reason}
+              </FieldLegend>
               <RadioGroup
                 value={reason}
                 onValueChange={(value) => setReason(value as ReportReason)}
@@ -140,7 +140,7 @@ export function ReportDialog({
 
             <Field>
               <FieldLabel htmlFor={`${fieldId}-details`}>
-                자세한 내용 (선택)
+                {SHARING_COPY.report.details}
               </FieldLabel>
               <Textarea
                 id={`${fieldId}-details`}
@@ -149,7 +149,7 @@ export function ReportDialog({
                 maxLength={500}
                 onChange={(e) => setDetails(e.target.value)}
                 rows={3}
-                placeholder="500자 이내"
+                placeholder={SHARING_COPY.report.detailsPlaceholder}
               />
             </Field>
 
@@ -159,7 +159,7 @@ export function ReportDialog({
 
             <DialogFooter>
               <Button type="button" variant="outline" onClick={close}>
-                취소
+                {COMMON_COPY.cancel}
               </Button>
               <Button
                 type="submit"
@@ -167,7 +167,9 @@ export function ReportDialog({
                 data-testid="report-submit-btn"
                 disabled={report.isPending}
               >
-                {report.isPending ? "보내는 중…" : "신고 보내기"}
+                {report.isPending
+                  ? SHARING_COPY.report.pending
+                  : SHARING_COPY.report.submit}
               </Button>
             </DialogFooter>
           </form>

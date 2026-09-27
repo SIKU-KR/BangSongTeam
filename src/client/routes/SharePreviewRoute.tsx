@@ -13,6 +13,7 @@ import { useSharePreview } from "../lib/api/shareQueries";
 import { describeApiError } from "../lib/api/request";
 import { refreshBackgroundCatalog } from "../lib/sync";
 import { EditorRoute, LoginRoute, preloadEditorRoute } from "./lazyRoutes";
+import { SHARE_LINK_COPY } from "#copy/shareLink";
 
 /**
  * 로그인하지 않은 사람의 공유 링크(`/s/:token`).
@@ -42,7 +43,7 @@ export function SharePreviewRoute(): React.JSX.Element {
   if (searchParams.has(SHARE_COPY_PARAM)) {
     return (
       <LoginRoute
-        description="로그인하면 이 세트의 사본을 내 드라이브에 만들어 고칠 수 있습니다."
+        description={SHARE_LINK_COPY.signInToCopy}
         onCancel={() => navigate(`/s/${token}`, { replace: true })}
       />
     );
@@ -52,7 +53,7 @@ export function SharePreviewRoute(): React.JSX.Element {
     return (
       <ShareLinkError
         message={describeApiError(preview.error)}
-        actionLabel="로그인하기"
+        actionLabel={SHARE_LINK_COPY.signIn}
         onAction={() => navigate("/", { replace: true })}
       />
     );

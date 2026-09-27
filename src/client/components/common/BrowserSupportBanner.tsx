@@ -8,6 +8,8 @@ import {
 } from "#components/ui/alert";
 import { Button } from "#components/ui/button";
 import { getMissingCapabilities } from "../../lib/browser/capabilities";
+import { SHELL_COPY } from "#copy/shell";
+import { COMMON_COPY } from "#copy/common";
 
 const STORAGE_KEY = "dismiss_browser_support_warning";
 
@@ -42,23 +44,22 @@ export function BrowserSupportBanner(): React.JSX.Element | null {
 
   return (
     <Alert
-      aria-label="브라우저 호환성 안내"
+      aria-label={SHELL_COPY.browserSupport.label}
       className="relative z-50 shrink-0 rounded-none border-x-0 border-t-0"
     >
       <TriangleAlertIcon />
-      <AlertTitle>이 브라우저에서는 일부 기능을 쓸 수 없습니다</AlertTitle>
+      <AlertTitle>{SHELL_COPY.browserSupport.title}</AlertTitle>
       <AlertDescription>
-        {missingLabels.join(", ")} 기능을 지원하지 않습니다. 예배 송출은 최신
-        데스크톱 브라우저(Chrome, Edge, Safari, Firefox 등)에서 진행해 주세요.
+        {SHELL_COPY.browserSupport.description(missingLabels.join(", "))}
       </AlertDescription>
       <AlertAction>
         <Button
           variant="outline"
           size="sm"
           onClick={handleDismiss}
-          aria-label="안내 배너 닫기"
+          aria-label={SHELL_COPY.browserSupport.dismiss}
         >
-          닫기
+          {COMMON_COPY.close}
         </Button>
       </AlertAction>
     </Alert>

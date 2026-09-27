@@ -30,6 +30,7 @@ describe("Cloudflare Worker 프로젝트 설정과 Wrangler 바인딩", () => {
       "#components/*": "./src/client/components/*.tsx",
       "#lib/*": "./src/client/lib/*.ts",
       "#hooks/*": "./src/client/hooks/*.ts",
+      "#copy/*": "./src/client/copy/*.ts",
     });
     for (const target of Object.values<string>(pkg.imports)) {
       const existing = target.includes("*") ? path.dirname(target) : target;

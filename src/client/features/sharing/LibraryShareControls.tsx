@@ -7,6 +7,7 @@ import { describeApiError } from "../../lib/api/request";
 import { PublishDialog } from "./PublishDialog";
 import { ReportDialog } from "./ReportDialog";
 import { publishLibraryDeck, unpublishLibraryDeck } from "./publishSong";
+import { SHARING_COPY } from "#copy/sharing";
 
 export interface LibraryShareControlsProps {
   deck: Deck;
@@ -46,15 +47,15 @@ export function LibraryShareControls({
         <p data-testid="song-share-status" className="text-xs">
           {isTakenDown ? (
             <span className="text-destructive">
-              게시 중단됨 — 운영자가 공개를 내렸습니다
+              {SHARING_COPY.library.takenDown}
             </span>
           ) : isPublic ? (
             <span className="font-medium">
-              공유 라이브러리에 공개 중 · {deck.forkCount}회 가져감
+              {SHARING_COPY.library.public(deck.forkCount)}
             </span>
           ) : (
             <span className="text-muted-foreground">
-              비공개 — 나만 볼 수 있습니다
+              {SHARING_COPY.library.private}
             </span>
           )}
         </p>
@@ -68,7 +69,7 @@ export function LibraryShareControls({
               disabled={!isOnline}
               onClick={() => setIsReportOpen(true)}
             >
-              원본에 교정 제안
+              {SHARING_COPY.library.suggestCorrection}
             </Button>
           )}
           {!isTakenDown &&
@@ -80,7 +81,9 @@ export function LibraryShareControls({
                 disabled={!isOnline || busy}
                 onClick={() => unpublish.mutate()}
               >
-                {unpublish.isPending ? "전환 중…" : "비공개로 전환"}
+                {unpublish.isPending
+                  ? SHARING_COPY.library.unpublishing
+                  : SHARING_COPY.library.unpublish}
               </Button>
             ) : (
               <Button
@@ -92,7 +95,7 @@ export function LibraryShareControls({
                   setIsPublishOpen(true);
                 }}
               >
-                공유 라이브러리에 공개
+                {SHARING_COPY.library.publish}
               </Button>
             ))}
         </div>
@@ -100,7 +103,7 @@ export function LibraryShareControls({
 
       {!isOnline && (
         <p className="text-2xs text-muted-foreground">
-          공유는 온라인에서만 할 수 있습니다.
+          {SHARING_COPY.library.onlineOnly}
         </p>
       )}
       {unpublish.error && (

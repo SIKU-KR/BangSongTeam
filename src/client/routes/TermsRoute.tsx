@@ -3,10 +3,14 @@ import {
   LegalDocument,
   LegalList,
   LegalSection,
+} from "#components/layout/LegalDocument";
+import {
+  LEGAL_COPY,
   OPERATOR_BRAND,
   OPERATOR_EMAIL,
   OPERATOR_NAME,
-} from "#components/layout/LegalDocument";
+} from "#copy/auth";
+import { APP_NAME } from "#shared";
 
 /**
  * 이용약관.
@@ -16,11 +20,11 @@ import {
  */
 export function TermsRoute(): React.JSX.Element {
   return (
-    <LegalDocument title="이용약관" effectiveDate="2026년 9월 27일">
+    <LegalDocument title={LEGAL_COPY.terms} effectiveDate="2026년 9월 27일">
       <LegalSection title="제1조 (목적)">
         <p>
           이 약관은 {OPERATOR_BRAND}(운영자 {OPERATOR_NAME}, 이하
-          &lsquo;운영자&rsquo;)가 제공하는 방송팀 다모여(이하
+          &lsquo;운영자&rsquo;)가 제공하는 {APP_NAME}(이하
           &lsquo;서비스&rsquo;)의 이용 조건과 절차, 운영자와 이용자의
           권리·의무를 정합니다.
         </p>

@@ -5,6 +5,8 @@ import { Field, FieldDescription, FieldLabel } from "#components/ui/field";
 import { Textarea } from "#components/ui/textarea";
 import { splitLyricsIntoSlides } from "#shared";
 import { ExternalSearchLinks } from "../ExternalSearchLinks";
+import { EDITOR_COPY } from "#copy/editor";
+import { COMMON_COPY } from "#copy/common";
 
 export interface CreateSongValues {
   title: string;
@@ -40,17 +42,16 @@ export function CreateSongForm({
   return (
     <div className="flex flex-1 flex-col space-y-4 overflow-y-auto p-6">
       <div className="border-b pb-3">
-        <h3 className="text-sm font-bold">새 찬양 가사 직접 입력</h3>
+        <h3 className="text-sm font-bold">{EDITOR_COPY.create.title}</h3>
         <p className="mt-0.5 text-xs text-muted-foreground">
-          가사를 입력하면 빈 줄(엔터 2번) 기준으로 슬라이드가 자동 분할됩니다.
-          빈 줄이 없으면 2줄씩 자동 분할됩니다. (슬라이드당 최대 4줄)
+          {EDITOR_COPY.create.description}
         </p>
       </div>
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <Field>
           <FieldLabel htmlFor={`${fieldId}-title`}>
-            곡 제목 <span className="text-destructive">*</span>
+            {EDITOR_COPY.song.title} <span className="text-destructive">*</span>
           </FieldLabel>
           <Input
             id={`${fieldId}-title`}
@@ -58,19 +59,21 @@ export function CreateSongForm({
             data-testid="song-picker-create-title-input"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-            placeholder="예: 시간을 뚫고"
+            placeholder={EDITOR_COPY.create.titlePlaceholder}
           />
         </Field>
 
         <Field>
-          <FieldLabel htmlFor={`${fieldId}-artist`}>아티스트 (선택)</FieldLabel>
+          <FieldLabel htmlFor={`${fieldId}-artist`}>
+            {EDITOR_COPY.song.artistOptional}
+          </FieldLabel>
           <Input
             id={`${fieldId}-artist`}
             type="text"
             data-testid="song-picker-create-artist-input"
             value={artist}
             onChange={(e) => setArtist(e.target.value)}
-            placeholder="예: WELOVE"
+            placeholder={EDITOR_COPY.create.artistPlaceholder}
           />
         </Field>
       </div>
@@ -83,28 +86,27 @@ export function CreateSongForm({
 
       <Field className="min-h-56 flex-1">
         <FieldLabel htmlFor={`${fieldId}-lyrics`}>
-          가사 원문 붙여넣기 <span className="text-destructive">*</span>
+          {EDITOR_COPY.create.lyricsLabel}{" "}
+          <span className="text-destructive">*</span>
         </FieldLabel>
         <Textarea
           id={`${fieldId}-lyrics`}
           data-testid="song-picker-create-lyrics-input"
           value={lyrics}
           onChange={(e) => setLyrics(e.target.value)}
-          placeholder={
-            "당신은 시간을 뚫고\n이 땅 가운데 오셨네\n\n우리 없는 하늘을 원치 않아\n우리 삶에 오셨네"
-          }
+          placeholder={EDITOR_COPY.create.lyricsPlaceholder}
           className="flex-1 resize-none font-mono"
         />
         {previewSlides.length > 0 && (
           <FieldDescription>
-            {previewSlides.length}개 슬라이드로 자동 분할됨
+            {EDITOR_COPY.create.splitCount(previewSlides.length)}
           </FieldDescription>
         )}
       </Field>
 
       <div className="flex items-center justify-end gap-2.5 pt-2">
         <Button variant="ghost" onClick={onCancel}>
-          취소
+          {COMMON_COPY.cancel}
         </Button>
         <Button
           data-testid="song-picker-create-submit-btn"
@@ -117,7 +119,7 @@ export function CreateSongForm({
             })
           }
         >
-          보관함에 저장하고 프레젠테이션에 추가
+          {EDITOR_COPY.create.submit}
         </Button>
       </div>
     </div>

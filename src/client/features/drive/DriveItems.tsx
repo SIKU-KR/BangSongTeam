@@ -22,6 +22,8 @@ import type { SortKey, SortOrder } from "../../routes/appShellContext";
 import { useDriveDraggable, useDriveDroppable } from "./driveContext";
 import { formatDate, type DriveItem } from "./driveModel";
 import { ActionMenuItems, type MenuAction } from "./ActionMenu";
+import { DRIVE_COPY } from "#copy/drive";
+import { COMMON_COPY } from "#copy/common";
 
 export interface DriveItemHandlers {
   selected: boolean;
@@ -229,7 +231,7 @@ export function DriveListHeader({
       )}
     >
       <SortHeader
-        label="이름"
+        label={DRIVE_COPY.name}
         sortKey="name"
         sort={sort}
         onSort={onSort}
@@ -248,7 +250,7 @@ export function DriveListHeader({
         className={COLUMNS.date}
       />
       <span className={COLUMNS.actions}>
-        <span className="sr-only">작업</span>
+        <span className="sr-only">{DRIVE_COPY.actions}</span>
       </span>
     </div>
   );
@@ -286,7 +288,7 @@ export function DriveListRow({
       {...dnd.listeners}
       role="option"
       aria-selected={handlers.selected}
-      aria-label={`${isFolder ? "폴더" : "프레젠테이션"} ${item.name}`}
+      aria-label={`${isFolder ? DRIVE_COPY.kind.folder : DRIVE_COPY.kind.file} ${item.name}`}
       tabIndex={handlers.tabStop ? 0 : -1}
       data-testid={isFolder ? "folder-row" : "presentation-row"}
       data-item-key={item.key}
@@ -330,7 +332,7 @@ export function DriveListRow({
           <RowIconButton
             testId="row-present-btn"
             icon={PlayIcon}
-            label="발표 (전체화면 송출)"
+            label={DRIVE_COPY.presentFullscreen}
             onSelect={handlers.onPresent}
           />
         )}
@@ -338,12 +340,12 @@ export function DriveListRow({
           <RowIconButton
             testId="row-edit-btn"
             icon={PencilIcon}
-            label="편집기에서 열기"
+            label={DRIVE_COPY.openInEditor}
             onSelect={handlers.onEdit}
           />
         )}
         <RowMenu
-          label={`${item.name} 더보기`}
+          label={DRIVE_COPY.more(item.name)}
           getActions={handlers.menuActions}
         />
       </div>
@@ -376,7 +378,7 @@ export function TrashFolderRow({
     <div
       ref={setNodeRef}
       role="button"
-      aria-label="휴지통 (고정 폴더)"
+      aria-label={DRIVE_COPY.trashFolder}
       tabIndex={0}
       data-testid="drive-trash-folder"
       data-trash-folder
@@ -399,17 +401,19 @@ export function TrashFolderRow({
         >
           <Trash2Icon className="size-5" />
         </span>
-        <span className="truncate font-medium text-foreground">휴지통</span>
+        <span className="truncate font-medium text-foreground">
+          {COMMON_COPY.trash}
+        </span>
       </div>
       <span className={COLUMNS.date}>-</span>
       <div className={COLUMNS.actions}>
         <RowIconButton
           testId="trash-folder-open-btn"
           icon={SquareArrowOutUpRightIcon}
-          label="휴지통 열기"
+          label={DRIVE_COPY.openTrash}
           onSelect={onOpen}
         />
-        <RowMenu label="휴지통 더보기" getActions={menuActions} />
+        <RowMenu label={DRIVE_COPY.trashMore} getActions={menuActions} />
       </div>
     </div>
   );

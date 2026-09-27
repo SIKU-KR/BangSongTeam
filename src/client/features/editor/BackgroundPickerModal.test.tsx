@@ -11,6 +11,7 @@ import {
   makeBackground,
   TEST_SERVICE_BACKGROUNDS,
 } from "../../test/backgroundFixture";
+import { BACKGROUND_COPY } from "#copy/backgrounds";
 
 const { refreshBackgroundCatalog } = vi.hoisted(() => ({
   refreshBackgroundCatalog: vi.fn(async () => undefined),
@@ -67,7 +68,7 @@ describe("BackgroundPickerModal", () => {
     });
 
     expect(refreshBackgroundCatalog).toHaveBeenCalledTimes(1);
-    expect(screen.getByText("곡 배경 선택")).toBeInTheDocument();
+    expect(screen.getByText(BACKGROUND_COPY.picker.title)).toBeInTheDocument();
     expect(
       screen.getByTestId(`bg-item-${TEST_SERVICE_BACKGROUNDS[0].id}`),
     ).toHaveAttribute("aria-pressed", "true");
@@ -120,9 +121,7 @@ describe("BackgroundPickerModal", () => {
     resetBackgroundCatalogForTests();
     renderPicker();
 
-    expect(
-      screen.getByText("아직 등록된 배경이 없습니다."),
-    ).toBeInTheDocument();
+    expect(screen.getByText(BACKGROUND_COPY.noBackgrounds)).toBeInTheDocument();
     expect(screen.getByTestId("bg-item-none")).toBeInTheDocument();
   });
 });

@@ -1,4 +1,5 @@
 import { loadNoonnuFontCatalog, type NoonnuFont } from "#shared";
+import { COMMON_COPY } from "#copy/common";
 
 /**
  * npm으로 번들한 글꼴. 카탈로그의 CDN 주소 대신 자체 오리진에서 받는다.
@@ -159,7 +160,7 @@ export async function loadWebFont(nameOrFamily: string): Promise<void> {
  */
 export async function preloadWebFont(
   nameOrFamily: string,
-  sampleText: string = "가나다라마바사 123 ABC",
+  sampleText: string = COMMON_COPY.fontSample,
 ): Promise<void> {
   await loadWebFont(nameOrFamily);
 

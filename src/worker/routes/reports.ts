@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
-import { CreateReportRequestSchema } from "#shared";
+import { API_ERRORS, CreateReportRequestSchema } from "#shared";
 import { createD1Client, createReport } from "#db";
 import type { AppEnv } from "../types";
 import { resolveRequireAuth, type AppDeps } from "../deps";
@@ -23,9 +23,9 @@ export function createReportsRoute(deps: AppDeps = {}) {
         case "ok":
           return c.json({ id: result.id }, 201);
         case "not_found":
-          return c.json({ error: "신고할 대상을 찾을 수 없습니다" }, 404);
+          return c.json({ error: API_ERRORS.report.targetNotFound }, 404);
         case "duplicate":
-          return c.json({ error: "이미 접수된 신고가 처리 중입니다" }, 409);
+          return c.json({ error: API_ERRORS.report.alreadyPending }, 409);
       }
     });
 }

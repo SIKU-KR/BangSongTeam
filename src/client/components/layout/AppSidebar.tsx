@@ -27,6 +27,9 @@ import {
   drivePath,
   useDriveDroppable,
 } from "../../features/drive";
+import { SHELL_COPY } from "#copy/shell";
+import { COMMON_COPY } from "#copy/common";
+import { APP_NAME, APP_TAGLINE, FALLBACK_USER_NAME } from "#shared";
 
 interface NavItem {
   testId: string;
@@ -38,14 +41,14 @@ interface NavItem {
 const DRIVE_ITEM: NavItem = {
   testId: "sidebar-nav-home",
   path: DRIVE_ROOT_PATH,
-  label: "내 드라이브",
+  label: COMMON_COPY.myDrive,
   icon: FolderIcon,
 };
 
 const BACKGROUNDS_ITEM: NavItem = {
   testId: "sidebar-nav-backgrounds",
   path: "/backgrounds",
-  label: "배경 갤러리",
+  label: SHELL_COPY.backgroundGallery,
   icon: ImageIcon,
 };
 
@@ -85,7 +88,7 @@ function AccountMenuItem(): React.JSX.Element {
   const session = useSession();
   const [signingOut, setSigningOut] = useState(false);
 
-  const name = session.user?.name ?? "사용자";
+  const name = session.user?.name ?? FALLBACK_USER_NAME.default;
 
   const handleSignOut = async (): Promise<void> => {
     setSigningOut(true);
@@ -110,7 +113,7 @@ function AccountMenuItem(): React.JSX.Element {
         <div className="grid flex-1 text-left leading-tight">
           <span className="truncate font-semibold">{name}</span>
           <span className="truncate text-xs text-muted-foreground">
-            {signingOut ? "로그아웃 중…" : "로그아웃"}
+            {signingOut ? SHELL_COPY.signingOut : SHELL_COPY.signOut}
           </span>
         </div>
         <LogOutIcon />
@@ -143,9 +146,9 @@ export function AppSidebar(): React.JSX.Element {
                 <PresentationIcon />
               </div>
               <div className="grid flex-1 text-left leading-tight">
-                <span className="truncate font-semibold">방송팀 다모여</span>
+                <span className="truncate font-semibold">{APP_NAME}</span>
                 <span className="truncate text-xs text-muted-foreground">
-                  교회 방송팀을 위한 찬양 PPT
+                  {APP_TAGLINE}
                 </span>
               </div>
             </SidebarMenuButton>
@@ -160,7 +163,7 @@ export function AppSidebar(): React.JSX.Element {
       <SidebarContent>
         <SidebarGroup>
           <SidebarGroupContent>
-            <nav aria-label="주 메뉴">
+            <nav aria-label={SHELL_COPY.mainNav}>
               <SidebarMenu>
                 <NavItem
                   item={DRIVE_ITEM}

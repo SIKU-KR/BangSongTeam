@@ -36,12 +36,14 @@ import { useDeleteBackground } from "../../lib/api/backgroundQueries";
 import { describeApiError } from "../../lib/api/request";
 import { refreshBackgroundCatalog } from "../../lib/sync/backgroundSync";
 import { useIsOnline } from "../../hooks/useIsOnline";
+import { BACKGROUND_COPY } from "#copy/backgrounds";
+import { COMMON_COPY } from "#copy/common";
 
 export interface BackgroundLibraryViewProps {
   searchQuery?: string;
 }
 
-const ALL_TAGS = "전체";
+const ALL_TAGS = COMMON_COPY.all;
 
 function matchesQuery(bg: BackgroundMedia, query: string): boolean {
   if (!query) return true;
@@ -72,7 +74,7 @@ function BackgroundCard({
       <CardHeader>
         <CardTitle className="truncate">{background.title}</CardTitle>
         <CardDescription className="truncate">
-          {background.tags.join(" · ") || "태그 없음"}
+          {background.tags.join(" · ") || BACKGROUND_COPY.library.noTags}
         </CardDescription>
         {action && <CardAction>{action}</CardAction>}
       </CardHeader>
@@ -97,7 +99,7 @@ function SectionHeader({
         <div className="flex items-center gap-2.5">
           <h2 className="text-xl font-bold tracking-tight">{title}</h2>
           <Badge variant="secondary" className="font-mono">
-            {count}개
+            {BACKGROUND_COPY.library.count(count)}
           </Badge>
         </div>
         <p className="mt-1 text-xs text-muted-foreground">{description}</p>
@@ -157,17 +159,15 @@ export function BackgroundLibraryView({
       {isOffline && (
         <Alert role="status">
           <WifiOffIcon />
-          <AlertDescription>
-            오프라인이라 저장해 둔 목록을 보여 줍니다.
-          </AlertDescription>
+          <AlertDescription>{BACKGROUND_COPY.library.offline}</AlertDescription>
         </Alert>
       )}
 
       <section className="space-y-4">
         <SectionHeader
-          title="모든 배경"
+          title={BACKGROUND_COPY.library.title}
           count={all.length}
-          description="라이선스를 확인해 올린 무음 루프 영상과 이미지입니다. 마우스를 올리면 미리보기가 재생됩니다."
+          description={BACKGROUND_COPY.library.description}
         >
           {catalog.canManage && (
             <Button
@@ -175,7 +175,7 @@ export function BackgroundLibraryView({
               disabled={!canManage}
               onClick={() => setIsUploadOpen(true)}
             >
-              배경 올리기
+              {BACKGROUND_COPY.upload}
             </Button>
           )}
         </SectionHeader>
@@ -183,7 +183,7 @@ export function BackgroundLibraryView({
         {tags.length > 0 && (
           <ToggleGroup
             data-testid="bg-tag-filter"
-            aria-label="태그"
+            aria-label={BACKGROUND_COPY.library.tags}
             variant="outline"
             size="sm"
             value={[activeTag]}
@@ -206,10 +206,10 @@ export function BackgroundLibraryView({
               </EmptyMedia>
               <EmptyTitle>
                 {all.length === 0
-                  ? "아직 등록된 배경이 없습니다."
+                  ? BACKGROUND_COPY.noBackgrounds
                   : query
-                    ? `“${searchQuery}”에 맞는 배경이 없습니다.`
-                    : "조건에 맞는 배경이 없습니다."}
+                    ? BACKGROUND_COPY.library.noMatch(searchQuery)
+                    : BACKGROUND_COPY.library.noFilterMatch}
               </EmptyTitle>
             </EmptyHeader>
           </Empty>
@@ -231,7 +231,7 @@ export function BackgroundLibraryView({
                         setPendingDelete(bg);
                       }}
                     >
-                      삭제
+                      {COMMON_COPY.delete}
                     </Button>
                   ) : undefined
                 }
@@ -242,8 +242,7 @@ export function BackgroundLibraryView({
       </section>
 
       <p className="text-2xs text-muted-foreground">
-        곡에 배경을 입히려면 편집기의 곡 속성 패널에서 &lsquo;배경 변경&rsquo;을
-        누르세요.
+        {BACKGROUND_COPY.library.applyHint}
       </p>
 
       <BackgroundUploadDialog
@@ -258,10 +257,13 @@ export function BackgroundLibraryView({
       >
         <AlertDialogContent data-testid="bg-delete-dialog">
           <AlertDialogHeader>
-            <AlertDialogTitle>배경 삭제</AlertDialogTitle>
+            <AlertDialogTitle>
+              {BACKGROUND_COPY.library.deleteTitle}
+            </AlertDialogTitle>
             <AlertDialogDescription>
-              ‘{pendingDelete?.title}’ — 이 배경을 쓰는 모든 사용자의 곡이 배경
-              없음이 됩니다. 지운 파일은 되살릴 수 없습니다.
+              {BACKGROUND_COPY.library.deleteMessage(
+                pendingDelete?.title ?? "",
+              )}
             </AlertDialogDescription>
           </AlertDialogHeader>
           {deleteBackground.error && (
@@ -271,7 +273,7 @@ export function BackgroundLibraryView({
           )}
           <AlertDialogFooter>
             <AlertDialogCancel disabled={deleteBackground.isPending}>
-              취소
+              {COMMON_COPY.cancel}
             </AlertDialogCancel>
             <Button
               variant="destructive"
@@ -279,7 +281,9 @@ export function BackgroundLibraryView({
               disabled={deleteBackground.isPending}
               onClick={() => void confirmDelete()}
             >
-              {deleteBackground.isPending ? "지우는 중…" : "삭제"}
+              {deleteBackground.isPending
+                ? BACKGROUND_COPY.library.deleting
+                : COMMON_COPY.delete}
             </Button>
           </AlertDialogFooter>
         </AlertDialogContent>

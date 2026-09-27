@@ -88,6 +88,8 @@ import {
   resolveBackgroundLayers,
   useBackground,
 } from "../features/backgrounds";
+import { EDITOR_COPY } from "#copy/editor";
+import { COMMON_COPY } from "#copy/common";
 
 const EMPTY_PRESENTATION: Presentation = {
   id: "",
@@ -381,7 +383,7 @@ function EditorScreen({
     setIsCopyPickerOpen(false);
     const copy = duplicatePresentation(presentation.id, folderId);
     if (!copy) return;
-    toast.success("내 드라이브에 사본을 만들었습니다");
+    toast.success(EDITOR_COPY.copyDialog.created);
     navigate(`/editor/${copy.id}`);
   };
 
@@ -437,11 +439,9 @@ function EditorScreen({
   });
 
   const overflowMessages = [
-    currentOverflow?.exceedsStage &&
-      "이 곡에서 가장 긴 슬라이드가 화면 가장자리 여백을 넘칩니다. 글자 크기를 줄이거나 슬라이드를 나눠 보세요.",
-    currentOverflow?.slides[safeSlideIndex]?.wraps &&
-      "현재 슬라이드의 한 줄이 텍스트 박스 폭을 넘어 자동 줄바꿈됩니다. 글자 크기를 줄이거나 박스 폭을 넓혀 보세요.",
-  ].filter((message): message is string => !!message);
+    currentOverflow?.exceedsStage && EDITOR_COPY.overflow.stage,
+    currentOverflow?.slides[safeSlideIndex]?.wraps && EDITOR_COPY.overflow.wrap,
+  ].filter((message) => typeof message === "string");
 
   if (!found) return <Navigate to="/presentations" replace />;
 
@@ -480,13 +480,13 @@ function EditorScreen({
             <EyeIcon />
             <AlertDescription>
               {isGuest
-                ? "보기 전용으로 공유받은 세트입니다. 고치려면 로그인하고 사본을 만드세요."
-                : "보기 전용으로 공유받은 세트입니다. 고치려면 사본을 만드세요."}
+                ? EDITOR_COPY.readOnly.guest
+                : EDITOR_COPY.readOnly.member}
             </AlertDescription>
             <AlertAction>
               <Button data-testid="make-copy-btn" size="sm" onClick={openCopy}>
                 <CopyIcon />
-                사본 만들기
+                {COMMON_COPY.makeCopy}
               </Button>
             </AlertAction>
           </Alert>
@@ -505,14 +505,14 @@ function EditorScreen({
             canMerge,
             splitTitle: canSplit
               ? isEditingText
-                ? "커서 위치에서 슬라이드를 둘로 나눕니다 (Ctrl/⌘+Enter)"
-                : "슬라이드를 가운데에서 둘로 나눕니다"
-              : "가사가 두 줄 이상이거나, 편집 중 가사 사이에 커서가 있어야 나눌 수 있습니다",
+                ? EDITOR_COPY.slide.splitAtCursor
+                : EDITOR_COPY.slide.splitInHalf
+              : EDITOR_COPY.slide.cannotSplit,
             mergeTitle: !nextSlideInSong
-              ? "이 곡의 마지막 슬라이드입니다"
+              ? EDITOR_COPY.slide.lastInSong
               : canMerge
-                ? "다음 슬라이드의 가사를 이 슬라이드 뒤에 붙입니다"
-                : `합치면 ${MAX_SLIDE_LINES}줄을 넘어 합칠 수 없습니다`,
+                ? EDITOR_COPY.slide.mergeNext
+                : EDITOR_COPY.slide.mergeTooLong(MAX_SLIDE_LINES),
             onAdd: handleAddSlide,
             onDuplicate: selection.duplicateSelection,
             onDelete: selection.deleteSelection,
@@ -611,16 +611,20 @@ function EditorScreen({
                         "text-warning",
                     )}
                   >
-                    {currentSlide.lines.length}/{MAX_SLIDE_LINES}줄
+                    {EDITOR_COPY.slide.lineUsage(
+                      currentSlide.lines.length,
+                      MAX_SLIDE_LINES,
+                    )}
                   </span>
                   {limitHintSlideId === currentSlide.id && (
                     <span
                       data-testid="slide-line-limit-hint"
                       className="truncate text-warning"
                     >
-                      한 슬라이드는 {MAX_SLIDE_LINES}줄, 한 줄{" "}
-                      {MAX_SLIDE_LINE_LENGTH}자까지입니다. 더 넣으려면
-                      Ctrl/⌘+Enter로 나누세요.
+                      {EDITOR_COPY.slide.lineLimit(
+                        MAX_SLIDE_LINES,
+                        MAX_SLIDE_LINE_LENGTH,
+                      )}
                     </span>
                   )}
                 </>
@@ -651,12 +655,12 @@ function EditorScreen({
 
       {editingSongIndex !== null && editingSong && (
         <SongInfoDialog
-          heading="제목·아티스트 수정"
+          heading={EDITOR_COPY.song.editInfo}
           initialValues={{
             title: editingSong.title,
             artist: editingSong.artist,
           }}
-          notice="이 세트의 곡만 바뀝니다. 보관함의 원본은 '찬양곡 추가'에서 따로 수정할 수 있습니다."
+          notice={EDITOR_COPY.song.setOnlyNotice}
           onSubmit={(values) => {
             updateSongInfo(editingSongIndex, values);
             setEditingSongIndex(null);
@@ -669,10 +673,10 @@ function EditorScreen({
         <FolderPickerDialog
           testId="copy-picker-dialog"
           confirmTestId="copy-picker-confirm"
-          title={`‘${presentation.title}’ 사본 만들기`}
-          description="사본은 내 소유의 새 세트입니다. 원본이 바뀌어도 따라 바뀌지 않습니다."
-          targetLabel="만들 위치"
-          confirmLabel="사본 만들기"
+          title={EDITOR_COPY.copyDialog.title(presentation.title)}
+          description={EDITOR_COPY.copyDialog.description}
+          targetLabel={EDITOR_COPY.copyDialog.target}
+          confirmLabel={COMMON_COPY.makeCopy}
           initialFolderId={null}
           onConfirm={handleMakeCopy}
           onCancel={() => setIsCopyPickerOpen(false)}

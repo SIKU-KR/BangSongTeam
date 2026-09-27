@@ -17,7 +17,6 @@ export {
   flushFolderWrites,
   resetFolderStore,
   __loadFoldersForTests,
-  DEFAULT_FOLDER_NAME,
   type FolderMutationResult,
 } from "./folderStore";
 export {
@@ -41,7 +40,6 @@ export {
   DEFAULT_SORT_ORDER,
   itemKey,
   parseItemKey,
-  ROOT_LABEL,
   type DriveItem,
   type DriveItemRef,
 } from "./driveModel";

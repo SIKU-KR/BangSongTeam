@@ -50,16 +50,13 @@ import {
 } from "../../lib/api/shareQueries";
 import { describeApiError } from "../../lib/api/request";
 import { copyToClipboard } from "../../lib/browser/clipboard";
+import { SHARING_COPY } from "#copy/sharing";
+import { COMMON_COPY } from "#copy/common";
 
 const ACCESS_OPTIONS: Array<{ value: LinkAccess; label: string }> = [
-  { value: "off", label: "제한됨 (나만 접근)" },
-  { value: "view", label: "링크가 있는 사람은 보기 가능" },
+  { value: "off", label: SHARING_COPY.link.accessOptions.off },
+  { value: "view", label: SHARING_COPY.link.accessOptions.view },
 ];
-
-const ACCESS_HINTS: Record<LinkAccess, string> = {
-  off: "링크를 열어도 들어올 수 없습니다.",
-  view: "로그인한 사람은 보고 발표할 수 있고, 사본을 만들어 자기 세트로 고칠 수 있습니다.",
-};
 
 export interface PresentationShareDialogProps {
   presentationId: string;
@@ -69,7 +66,7 @@ export interface PresentationShareDialogProps {
 }
 
 /**
- * 세트 링크 공유 설정 (Google·Canva의 "일반 액세스"와 같은 형식).
+ * 세트 링크 공유 설정 (Google·Canva의 SHARING_COPY.link.access와 같은 형식).
  * 링크를 받은 사람도 로그인해야 열 수 있다 (가사 저작권 정책).
  */
 export function PresentationShareDialog({
@@ -91,9 +88,9 @@ export function PresentationShareDialog({
   const copyLink = async (): Promise<void> => {
     try {
       await copyToClipboard(url);
-      toast.success("링크를 복사했습니다");
+      toast.success(SHARING_COPY.link.copied);
     } catch {
-      toast.error("링크를 복사하지 못했습니다");
+      toast.error(SHARING_COPY.link.copyFailed);
     }
   };
 
@@ -106,7 +103,7 @@ export function PresentationShareDialog({
     >
       <DialogContent data-testid="share-dialog" className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>공유</DialogTitle>
+          <DialogTitle>{COMMON_COPY.share}</DialogTitle>
           <DialogDescription className="truncate">{title}</DialogDescription>
         </DialogHeader>
 
@@ -115,7 +112,7 @@ export function PresentationShareDialog({
         ) : (
           <>
             <Field>
-              <FieldLabel>일반 액세스</FieldLabel>
+              <FieldLabel>{SHARING_COPY.link.access}</FieldLabel>
               <Select
                 items={ACCESS_OPTIONS}
                 value={access}
@@ -126,7 +123,7 @@ export function PresentationShareDialog({
               >
                 <SelectTrigger
                   data-testid="share-access-select"
-                  aria-label="일반 액세스"
+                  aria-label={SHARING_COPY.link.access}
                   className="w-full"
                 >
                   {access === "off" ? <Lock /> : <Globe />}
@@ -140,18 +137,20 @@ export function PresentationShareDialog({
                   ))}
                 </SelectContent>
               </Select>
-              <FieldDescription>{ACCESS_HINTS[access]}</FieldDescription>
+              <FieldDescription>
+                {SHARING_COPY.link.accessHints[access]}
+              </FieldDescription>
             </Field>
 
             {url && (
               <Field>
-                <FieldLabel>링크</FieldLabel>
+                <FieldLabel>{SHARING_COPY.link.link}</FieldLabel>
                 <InputGroup>
                   <InputGroupInput
                     data-testid="share-link-input"
                     readOnly
                     value={url}
-                    aria-label="공유 링크"
+                    aria-label={SHARING_COPY.link.shareLink}
                     onFocus={(event) => event.currentTarget.select()}
                   />
                   <InputGroupAddon align="inline-end">
@@ -160,7 +159,7 @@ export function PresentationShareDialog({
                       onClick={() => void copyLink()}
                     >
                       <Copy />
-                      복사
+                      {COMMON_COPY.copy}
                     </InputGroupButton>
                   </InputGroupAddon>
                 </InputGroup>
@@ -179,35 +178,36 @@ export function PresentationShareDialog({
               disabled={reset.isPending}
               onClick={() => setIsResetOpen(true)}
             >
-              링크 재설정
+              {SHARING_COPY.link.reset}
             </Button>
           )}
-          <DialogClose render={<Button />}>완료</DialogClose>
+          <DialogClose render={<Button />}>
+            {SHARING_COPY.link.done}
+          </DialogClose>
         </DialogFooter>
       </DialogContent>
 
       <AlertDialog open={isResetOpen} onOpenChange={setIsResetOpen}>
         <AlertDialogContent size="sm">
           <AlertDialogHeader>
-            <AlertDialogTitle>링크를 재설정할까요?</AlertDialogTitle>
+            <AlertDialogTitle>{SHARING_COPY.link.resetTitle}</AlertDialogTitle>
             <AlertDialogDescription>
-              지금 링크는 더 이상 열리지 않고, 이 링크로 들어온 사람은 모두
-              접근을 잃습니다. 새 링크를 다시 보내야 합니다.
+              {SHARING_COPY.link.resetDescription}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>취소</AlertDialogCancel>
+            <AlertDialogCancel>{COMMON_COPY.cancel}</AlertDialogCancel>
             <AlertDialogAction
               data-testid="share-reset-confirm-btn"
               variant="destructive"
               onClick={() => {
                 reset.mutate(undefined, {
-                  onSuccess: () => toast.success("새 링크를 만들었습니다"),
+                  onSuccess: () => toast.success(SHARING_COPY.link.regenerated),
                 });
                 setIsResetOpen(false);
               }}
             >
-              재설정
+              {SHARING_COPY.link.resetConfirm}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

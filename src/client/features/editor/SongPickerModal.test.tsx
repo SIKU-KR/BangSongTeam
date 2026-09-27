@@ -2,7 +2,7 @@ import React from "react";
 import { signInAsTestUser } from "../../test/sessionFixture";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
-import { DEFAULT_DECK_STYLE, type Deck } from "#shared";
+import { API_ERRORS, type Deck, DEFAULT_DECK_STYLE } from "#shared";
 import { closeOfflineDB, OFFLINE_DB_NAME } from "../../lib/storage";
 import { withQueryClient } from "../../test/queryClientFixture";
 import { installFakeApi, type FakeApi } from "../../test/fakeApi";
@@ -14,6 +14,8 @@ import {
   saveSongToLibrary,
   upsertLibraryDeck,
 } from "./songLibraryStore";
+import { EDITOR_COPY } from "#copy/editor";
+import { COMMON_COPY } from "#copy/common";
 
 const SHARED_ID = "c00000005000000000001";
 const FORK_ID = "c000000050000000000f0";
@@ -169,7 +171,7 @@ describe("SongPickerModal", () => {
     seedMySong();
     renderPicker();
 
-    expect(screen.getByText("찬양곡 추가")).toBeInTheDocument();
+    expect(screen.getByText(EDITOR_COPY.song.addSong)).toBeInTheDocument();
     expect(screen.getAllByText("내가 만든 찬양").length).toBeGreaterThan(0);
     expect(
       await screen.findByTestId(`song-item-${SHARED_ID}`),
@@ -240,7 +242,9 @@ describe("SongPickerModal", () => {
     renderPicker();
 
     fireEvent.click(screen.getByTestId("song-picker-copy-lyrics-btn"));
-    expect(await screen.findByText("가사 복사됨")).toBeInTheDocument();
+    expect(
+      await screen.findByText(EDITOR_COPY.preview.lyricsCopied),
+    ).toBeInTheDocument();
     expect(screen.getByText("넷째 줄")).toBeInTheDocument();
   });
 
@@ -328,7 +332,7 @@ describe("SongPickerModal", () => {
         "공유 라이브러리에서도 내려갑니다",
       );
 
-      fireEvent.click(screen.getByRole("button", { name: "취소" }));
+      fireEvent.click(screen.getByRole("button", { name: COMMON_COPY.cancel }));
       expect(getUserSongs()).toHaveLength(1);
     });
   });
@@ -374,7 +378,9 @@ describe("SongPickerModal", () => {
       renderPicker();
 
       fireEvent.click(await screen.findByTestId(`song-item-${SHARED_ID}`));
-      expect(screen.getByText("보관함에 있음")).toBeInTheDocument();
+      expect(
+        screen.getByText(EDITOR_COPY.picker.inLibrary),
+      ).toBeInTheDocument();
       fireEvent.click(screen.getByTestId("song-picker-add-btn"));
 
       expect(onSelectSongMock.mock.calls[0][0].id).toBe(FORK_ID);
@@ -393,7 +399,7 @@ describe("SongPickerModal", () => {
         }),
         "POST /api/decks/*/fork": () => ({
           status: 404,
-          body: { error: "공개된 곡을 찾을 수 없습니다" },
+          body: { error: API_ERRORS.deck.notPublished },
         }),
       });
       renderPicker();
@@ -401,7 +407,7 @@ describe("SongPickerModal", () => {
       fireEvent.click(screen.getByTestId("song-picker-add-btn"));
 
       expect(
-        await screen.findByText("공개된 곡을 찾을 수 없습니다"),
+        await screen.findByText(API_ERRORS.deck.notPublished),
       ).toBeInTheDocument();
       expect(onSelectSongMock).not.toHaveBeenCalled();
     });
@@ -443,9 +449,7 @@ describe("SongPickerModal", () => {
         .spyOn(navigator, "onLine", "get")
         .mockReturnValue(false);
       renderPicker();
-      expect(
-        screen.getByText("오프라인 — 내 곡만 표시합니다"),
-      ).toBeInTheDocument();
+      expect(screen.getByText(EDITOR_COPY.picker.offline)).toBeInTheDocument();
       expect(api.calls).toHaveLength(0);
       onLine.mockRestore();
     });
@@ -512,7 +516,7 @@ describe("SongPickerModal", () => {
         ),
       );
 
-      expect(screen.getByText("새 찬양 가사 직접 입력")).toBeInTheDocument();
+      expect(screen.getByText(EDITOR_COPY.create.title)).toBeInTheDocument();
       expect(
         screen.queryByTestId("song-picker-add-btn"),
       ).not.toBeInTheDocument();
@@ -552,7 +556,7 @@ describe("SongPickerModal", () => {
 
       fireEvent.click(screen.getByTestId("song-picker-filter-shared"));
       expect(
-        await screen.findByText("아직 공유된 찬양곡이 없습니다."),
+        await screen.findByText(EDITOR_COPY.picker.noShared),
       ).toBeInTheDocument();
     });
 
@@ -563,7 +567,7 @@ describe("SongPickerModal", () => {
       });
 
       expect(
-        await screen.findByText("일치하는 찬양곡이 없습니다."),
+        await screen.findByText(EDITOR_COPY.picker.noMatch),
       ).toBeInTheDocument();
     });
 

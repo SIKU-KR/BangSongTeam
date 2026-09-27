@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from "react";
-import { createId, type Deck } from "#shared";
+import { API_ERRORS, createId, type Deck } from "#shared";
 import { DeckSchema, DEFAULT_DECK_STYLE, splitLyricsIntoSlides } from "#shared";
 import {
   saveSong,
@@ -82,7 +82,7 @@ export function saveSongToLibrary(songInput: {
 }): Deck {
   const userId = getCurrentUserId();
   if (!userId) {
-    throw new Error("로그인이 필요합니다");
+    throw new Error(API_ERRORS.loginRequired);
   }
 
   const now = new Date().toISOString();

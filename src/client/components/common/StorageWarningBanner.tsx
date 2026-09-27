@@ -2,6 +2,7 @@ import React from "react";
 import { TriangleAlertIcon } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "#components/ui/alert";
 import { usePersistenceError, useCorruptedRecords } from "../../lib/storage";
+import { SHELL_COPY } from "#copy/shell";
 
 const BANNER_CLASS = "shrink-0 rounded-none border-x-0 border-t-0";
 
@@ -30,7 +31,7 @@ export function StorageWarningBanner(): React.JSX.Element | null {
           className={BANNER_CLASS}
         >
           <TriangleAlertIcon />
-          <AlertTitle>저장하지 못했습니다</AlertTitle>
+          <AlertTitle>{SHELL_COPY.storage.saveFailed}</AlertTitle>
           <AlertDescription>{error.message}</AlertDescription>
         </Alert>
       )}
@@ -38,9 +39,11 @@ export function StorageWarningBanner(): React.JSX.Element | null {
       {corrupted.length > 0 && (
         <Alert data-testid="corrupted-warning-banner" className={BANNER_CLASS}>
           <TriangleAlertIcon />
-          <AlertTitle>저장본 {corrupted.length}개를 열지 못했습니다</AlertTitle>
+          <AlertTitle>
+            {SHELL_COPY.storage.corrupted(corrupted.length)}
+          </AlertTitle>
           <AlertDescription>
-            삭제하지 않고 그대로 보관해 두었으니 복구가 필요하면 문의해 주세요.
+            {SHELL_COPY.storage.corruptedHint}
           </AlertDescription>
         </Alert>
       )}

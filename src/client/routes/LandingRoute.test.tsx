@@ -3,6 +3,7 @@ import { render, screen, fireEvent } from "@testing-library/react";
 import { describe, it, expect } from "vitest";
 import { MemoryRouter, Routes, Route } from "react-router-dom";
 import { LandingRoute } from "./LandingRoute";
+import { APP_NAME, APP_TAGLINE } from "#shared";
 
 function renderLanding() {
   return render(
@@ -23,8 +24,8 @@ describe("LandingRoute", () => {
     renderLanding();
 
     expect(screen.getByTestId("landing-route")).toBeInTheDocument();
-    expect(screen.getByText("방송팀 다모여")).toBeInTheDocument();
-    expect(screen.getByText("교회 방송팀을 위한 찬양 PPT")).toBeInTheDocument();
+    expect(screen.getByText(APP_NAME)).toBeInTheDocument();
+    expect(screen.getByText(APP_TAGLINE)).toBeInTheDocument();
   });
 
   it("진입 버튼은 /presentations 로 이동한다", () => {

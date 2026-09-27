@@ -1,5 +1,6 @@
 import { createAuthClient } from "better-auth/react";
 import type { SocialProvider } from "#shared";
+import { AUTH_COPY } from "#copy/auth";
 
 export const authClient = createAuthClient({
   basePath: "/api/auth",
@@ -16,7 +17,7 @@ export const SOCIAL_PROVIDERS: Array<{
   id: SocialProvider;
   label: string;
 }> = [
-  { id: "kakao", label: "카카오 로그인" },
-  { id: "naver", label: "네이버 로그인" },
-  { id: "google", label: "Google 계정으로 로그인" },
+  { id: "kakao", label: AUTH_COPY.providers.kakao },
+  { id: "naver", label: AUTH_COPY.providers.naver },
+  { id: "google", label: AUTH_COPY.providers.google },
 ];

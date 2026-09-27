@@ -7,6 +7,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "#components/ui/tooltip";
+import { EDITOR_COPY } from "#copy/editor";
 
 export interface ExternalSearchLinksProps {
   /** 곡 제목 */
@@ -58,11 +59,13 @@ function SearchLink({
           />
         }
       >
-        {site}에서 찾기
+        {EDITOR_COPY.externalSearch.find(site)}
         <ExternalLinkIcon className="opacity-70" />
       </TooltipTrigger>
       <TooltipContent>
-        {hasQuery ? `${site}에서 '${query}' 검색` : "곡 제목을 먼저 입력하세요"}
+        {hasQuery
+          ? EDITOR_COPY.externalSearch.search(site, query)
+          : EDITOR_COPY.externalSearch.needTitle}
       </TooltipContent>
     </Tooltip>
   );
@@ -80,14 +83,16 @@ export function ExternalSearchLinks({
 
   return (
     <div className={cn("flex items-center gap-2 text-xs", className)}>
-      <span className="font-medium text-muted-foreground">가사 검색:</span>
+      <span className="font-medium text-muted-foreground">
+        {EDITOR_COPY.externalSearch.label}
+      </span>
       <SearchLink
-        site="멜론"
+        site={EDITOR_COPY.externalSearch.melon}
         href={hasQuery ? getMelonSearchUrl(trimmed) : undefined}
         query={trimmed}
       />
       <SearchLink
-        site="벅스"
+        site={EDITOR_COPY.externalSearch.bugs}
         href={hasQuery ? getBugsSearchUrl(trimmed) : undefined}
         query={trimmed}
       />

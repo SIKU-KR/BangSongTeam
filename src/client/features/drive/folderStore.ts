@@ -22,6 +22,7 @@ import {
   scheduleFolderPush,
   cancelFolderPush,
 } from "../../lib/sync/folderSync";
+import { FOLDER_COPY } from "#copy/folders";
 
 /**
  * 드라이브 폴더 스토어 (홈 `/presentations`의 폴더 트리).
@@ -33,7 +34,6 @@ import {
  * (대소문자·앞뒤 공백 무시). 휴지통에 있는 폴더는 자리를 차지하지 않는다.
  */
 
-export const DEFAULT_FOLDER_NAME = "새 폴더";
 const MAX_NAME_LENGTH = 100;
 
 export type FolderMutationResult =
@@ -105,7 +105,7 @@ function resolveTargetParent(parentId: string | null): string | null {
  */
 export function createFolder(
   parentId: string | null,
-  name: string = DEFAULT_FOLDER_NAME,
+  name: string = FOLDER_COPY.newFolder,
 ): Folder {
   const parent = resolveTargetParent(parentId);
   const timestamp = now();
@@ -114,7 +114,7 @@ export function createFolder(
     userId: getCurrentUserId() ?? "",
     parentId: parent,
     name: resolveUniqueName(
-      name.trim() || DEFAULT_FOLDER_NAME,
+      name.trim() || FOLDER_COPY.newFolder,
       siblingNames(parent),
     ),
     trashedAt: null,
@@ -132,13 +132,13 @@ export function validateFolderName(
   excludeId?: string,
 ): string | null {
   const trimmed = name.trim();
-  if (!trimmed) return "이름을 입력하세요";
+  if (!trimmed) return FOLDER_COPY.nameRequired;
   if (trimmed.length > MAX_NAME_LENGTH) {
-    return `이름은 ${MAX_NAME_LENGTH}자까지 쓸 수 있습니다`;
+    return FOLDER_COPY.nameTooLong(MAX_NAME_LENGTH);
   }
   const key = folderNameKey(trimmed);
   if (siblingNames(parentId, excludeId).some((n) => folderNameKey(n) === key)) {
-    return "같은 위치에 같은 이름의 폴더가 있습니다";
+    return FOLDER_COPY.nameTaken;
   }
   return null;
 }
@@ -146,7 +146,7 @@ export function validateFolderName(
 /** 이름 바꾸기. 같은 위치에 같은 이름이 있으면 거절한다 (파일 탐색기와 같다) */
 export function renameFolder(id: string, name: string): FolderMutationResult {
   const folder = index.byId.get(id);
-  if (!folder) return { ok: false, error: "폴더를 찾을 수 없습니다" };
+  if (!folder) return { ok: false, error: FOLDER_COPY.folderNotFound };
 
   const parentId = index.parentOf.get(id) ?? null;
   const error = validateFolderName(name, parentId, id);
@@ -169,12 +169,12 @@ export function moveFolder(
   parentId: string | null,
 ): FolderMutationResult {
   const folder = index.byId.get(id);
-  if (!folder) return { ok: false, error: "폴더를 찾을 수 없습니다" };
+  if (!folder) return { ok: false, error: FOLDER_COPY.folderNotFound };
   if (parentId !== null && !isFolderAvailable(parentId)) {
-    return { ok: false, error: "옮길 폴더를 찾을 수 없습니다" };
+    return { ok: false, error: FOLDER_COPY.targetFolderNotFound };
   }
   if (wouldCreateCycle(index, id, parentId)) {
-    return { ok: false, error: "폴더를 자기 안으로 옮길 수 없습니다" };
+    return { ok: false, error: FOLDER_COPY.cannotMoveIntoSelf };
   }
   if ((index.parentOf.get(id) ?? null) === parentId) {
     return { ok: true, folder };

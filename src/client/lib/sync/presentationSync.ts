@@ -14,11 +14,12 @@ import {
 } from "#shared";
 import { api } from "../api/client";
 import { setSyncStatus } from "./syncStatus";
+import { ERROR_COPY } from "#copy/common";
 
 /** 서버가 세션을 거절했다 (만료·로그아웃) */
 export class SessionExpiredError extends Error {
   constructor() {
-    super("세션이 만료되었습니다");
+    super(ERROR_COPY.sessionExpiredShort);
     this.name = "SessionExpiredError";
   }
 }
@@ -26,7 +27,7 @@ export class SessionExpiredError extends Error {
 /** 네트워크에 닿지 못했다 — 실패가 아니라 오프라인이다 */
 export class OfflineError extends Error {
   constructor(cause?: unknown) {
-    super("서버에 연결할 수 없습니다");
+    super(ERROR_COPY.serverUnreachable);
     this.name = "OfflineError";
     this.cause = cause;
   }
@@ -39,7 +40,7 @@ export class OfflineError extends Error {
 export class ServerRejectedError extends Error {
   readonly status: number;
   constructor(status: number, message?: string) {
-    super(message ?? `서버가 요청을 거절했습니다 (${status})`);
+    super(message ?? ERROR_COPY.serverRejected(status));
     this.name = "ServerRejectedError";
     this.status = status;
   }

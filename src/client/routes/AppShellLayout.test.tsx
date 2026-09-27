@@ -33,6 +33,12 @@ import { BackgroundsRoute } from "./BackgroundsRoute";
 import * as capabilities from "../lib/browser/capabilities";
 import { withQueryClient } from "../test/queryClientFixture";
 import { installFakeApi } from "../test/fakeApi";
+import { APP_NAME } from "#shared";
+import { COMMON_COPY } from "#copy/common";
+import { DRIVE_COPY } from "#copy/drive";
+import { FOLDER_COPY } from "#copy/folders";
+import { SHELL_COPY } from "#copy/shell";
+import { BACKGROUND_COPY } from "#copy/backgrounds";
 
 function renderShell(initialPath = "/presentations") {
   return render(
@@ -108,9 +114,9 @@ describe("AppShellLayout (드라이브형 홈)", () => {
     __loadFoldersForTests([folder(WORSHIP, "2026 주일 대예배")]);
     renderShell();
 
-    expect(screen.getByText("방송팀 다모여")).toBeInTheDocument();
+    expect(screen.getByText(APP_NAME)).toBeInTheDocument();
     expect(
-      screen.getByRole("heading", { name: "내 드라이브" }),
+      screen.getByRole("heading", { name: COMMON_COPY.myDrive }),
     ).toBeInTheDocument();
 
     const listbox = screen.getByRole("listbox");
@@ -135,7 +141,7 @@ describe("AppShellLayout (드라이브형 홈)", () => {
     ).toBeTruthy();
     expect(
       screen.getAllByRole("columnheader").map((header) => header.textContent),
-    ).toEqual(["이름", "수정일"]);
+    ).toEqual([DRIVE_COPY.name, DRIVE_COPY.updatedAt]);
     expect(
       within(card(SEED_PRESENTATIONS[0].title)).queryByText(/슬라이드/),
     ).toBeNull();
@@ -191,10 +197,10 @@ describe("AppShellLayout (드라이브형 홈)", () => {
     );
 
     fireEvent.click(screen.getByTestId("sidebar-nav-backgrounds"));
-    expect(screen.getByText("모든 배경")).toBeInTheDocument();
+    expect(screen.getByText(BACKGROUND_COPY.library.title)).toBeInTheDocument();
     expect(screen.queryByText("유형: 전체")).not.toBeInTheDocument();
     expect(
-      screen.getByRole("heading", { name: "배경 갤러리" }),
+      screen.getByRole("heading", { name: SHELL_COPY.backgroundGallery }),
     ).toBeInTheDocument();
     expect(screen.getByTestId("sidebar-nav-home")).not.toHaveAttribute(
       "aria-current",
@@ -202,15 +208,17 @@ describe("AppShellLayout (드라이브형 홈)", () => {
 
     expect(screen.queryByTestId("sidebar-nav-trash")).toBeNull();
     expect(
-      within(screen.getByRole("navigation", { name: "주 메뉴" })).queryByText(
-        "휴지통",
-      ),
+      within(
+        screen.getByRole("navigation", { name: SHELL_COPY.mainNav }),
+      ).queryByText(COMMON_COPY.trash),
     ).toBeNull();
 
     fireEvent.click(screen.getByTestId("sidebar-nav-home"));
     openTrashFolder();
-    expect(screen.getByRole("heading", { name: "휴지통" })).toBeInTheDocument();
-    expect(screen.getByText("휴지통이 비어 있습니다")).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: COMMON_COPY.trash }),
+    ).toBeInTheDocument();
+    expect(screen.getByText(DRIVE_COPY.empty.trashTitle)).toBeInTheDocument();
     expect(screen.getByTestId("sidebar-nav-home")).toHaveAttribute(
       "aria-current",
       "page",
@@ -292,9 +300,9 @@ describe("AppShellLayout (드라이브형 홈)", () => {
       "page",
     );
     expect(
-      within(screen.getByRole("navigation", { name: "주 메뉴" })).queryByText(
-        "2026 주일 대예배",
-      ),
+      within(
+        screen.getByRole("navigation", { name: SHELL_COPY.mainNav }),
+      ).queryByText("2026 주일 대예배"),
     ).toBeNull();
 
     fireEvent.click(screen.getByTestId("crumb-root"));
@@ -314,7 +322,7 @@ describe("AppShellLayout (드라이브형 홈)", () => {
     fireEvent.change(input, { target: { value: "새 폴더" } });
     expect(
       within(screen.getByTestId("drive-name-dialog")).getByRole("alert"),
-    ).toHaveTextContent("같은 위치에 같은 이름의 폴더가 있습니다");
+    ).toHaveTextContent(FOLDER_COPY.nameTaken);
     expect(screen.getByTestId("drive-name-confirm")).toBeDisabled();
 
     fireEvent.change(input, { target: { value: "성탄절" } });
@@ -324,7 +332,7 @@ describe("AppShellLayout (드라이브형 홈)", () => {
       getFolders()
         .map((f) => f.name)
         .sort(),
-    ).toEqual(["새 폴더", "성탄절"]);
+    ).toEqual([FOLDER_COPY.newFolder, "성탄절"]);
     expect(card("폴더 성탄절")).toHaveAttribute("aria-selected", "true");
   });
 
@@ -352,7 +360,7 @@ describe("AppShellLayout (드라이브형 홈)", () => {
 
     fireEvent.click(
       within(screen.getByTestId("drive-toast")).getByRole("button", {
-        name: "실행 취소",
+        name: COMMON_COPY.undo,
       }),
     );
     expect(getPresentationById(target.id)?.folderId ?? null).toBeNull();
@@ -396,7 +404,7 @@ describe("AppShellLayout (드라이브형 홈)", () => {
     fireEvent.click(screen.getByTestId("action-restore"));
 
     expect(getPresentationById(target.id)?.trashedAt).toBeNull();
-    expect(screen.getByText("휴지통이 비어 있습니다")).toBeInTheDocument();
+    expect(screen.getByText(DRIVE_COPY.empty.trashTitle)).toBeInTheDocument();
   });
 
   it("휴지통 항목 우클릭 메뉴 → 영구 삭제 시 대화 상자를 띄운다", () => {
@@ -413,7 +421,9 @@ describe("AppShellLayout (드라이브형 홈)", () => {
 
     const dialog = screen.getByTestId("drive-confirm-dialog");
     expect(dialog).toHaveTextContent("‘성탄절 특별 예배’를 영구 삭제합니다.");
-    expect(dialog).toHaveTextContent("이 작업은 되돌릴 수 없습니다.");
+    expect(dialog).toHaveTextContent(
+      DRIVE_COPY.deleteForeverDialog.irreversible,
+    );
   });
 
   it("휴지통에서 항목을 영구 삭제하면 토스트에 항목 제목과 올바른 조사가 표시된다", async () => {
@@ -533,8 +543,8 @@ describe("AppShellLayout (드라이브형 홈)", () => {
     __loadDocumentsForTests([trashed, ...SEED_PRESENTATIONS.slice(1)]);
     renderShell("/presentations/trash");
 
-    expect(screen.getByText("삭제일")).toBeInTheDocument();
-    expect(screen.queryByText("수정일")).toBeNull();
+    expect(screen.getByText(DRIVE_COPY.deletedAt)).toBeInTheDocument();
+    expect(screen.queryByText(DRIVE_COPY.updatedAt)).toBeNull();
     const row = card(trashed.title);
     expect(row).toHaveTextContent("2026. 9. 20.");
     expect(row).not.toHaveTextContent("2026. 9. 1.");
@@ -576,7 +586,7 @@ describe("AppShellLayout (드라이브형 홈)", () => {
     const result = card(inside.title);
     expect(result).toHaveTextContent("내 드라이브 › 2026 주일 대예배");
     expect(
-      screen.getByRole("columnheader", { name: "위치" }),
+      screen.getByRole("columnheader", { name: DRIVE_COPY.location }),
     ).toBeInTheDocument();
     expect(screen.getByTestId("drive-summary")).toHaveTextContent("검색 결과");
   });
@@ -595,7 +605,7 @@ describe("AppShellLayout (드라이브형 홈)", () => {
     renderShell();
 
     const trashRow = screen.getByTestId("drive-trash-folder");
-    expect(trashRow).toHaveAccessibleName("휴지통 (고정 폴더)");
+    expect(trashRow).toHaveAccessibleName(DRIVE_COPY.trashFolder);
     expect(
       trashRow.compareDocumentPosition(screen.getByRole("listbox")) &
         Node.DOCUMENT_POSITION_FOLLOWING,
@@ -623,7 +633,7 @@ describe("AppShellLayout (드라이브형 홈)", () => {
 
     fireEvent.change(
       screen.getByPlaceholderText(/폴더, 프레젠테이션, 찬양 가사/),
-      { target: { value: "휴지통" } },
+      { target: { value: COMMON_COPY.trash } },
     );
     expect(screen.queryByTestId("drive-trash-folder")).toBeNull();
   });
@@ -647,7 +657,9 @@ describe("AppShellLayout (드라이브형 홈)", () => {
     expect(screen.queryByTestId("new-menu-folder")).toBeNull();
 
     fireEvent.click(screen.getByTestId("action-open"));
-    expect(screen.getByRole("heading", { name: "휴지통" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: COMMON_COPY.trash }),
+    ).toBeInTheDocument();
     expect(card(trashed.title)).toBeInTheDocument();
   });
 
@@ -674,7 +686,7 @@ describe("AppShellLayout (드라이브형 홈)", () => {
 
     expect(screen.getByTestId("drive-trash-folder")).toBeInTheDocument();
     expect(screen.getByTestId("drive-empty")).toHaveTextContent(
-      "아직 프레젠테이션이 없습니다",
+      DRIVE_COPY.empty.rootTitle,
     );
     expect(screen.queryByRole("listbox")).toBeNull();
   });
@@ -699,26 +711,38 @@ describe("AppShellLayout (드라이브형 홈)", () => {
     expect(screen.queryByTestId("drive-sort-dropdown")).toBeNull();
     const columnHeader = (label: string): HTMLElement =>
       screen.getByRole("columnheader", { name: new RegExp(label) });
-    expect(columnHeader("수정일")).toHaveAttribute("aria-sort", "descending");
+    expect(columnHeader(DRIVE_COPY.updatedAt)).toHaveAttribute(
+      "aria-sort",
+      "descending",
+    );
     expect(screen.getAllByTestId("presentation-row")[1]).toHaveTextContent(
       "청년부 금요 찬양 집회",
     );
 
     fireEvent.click(screen.getByTestId("sort-header-name"));
-    expect(columnHeader("이름")).toHaveAttribute("aria-sort", "ascending");
-    expect(columnHeader("수정일")).not.toHaveAttribute("aria-sort");
+    expect(columnHeader(DRIVE_COPY.name)).toHaveAttribute(
+      "aria-sort",
+      "ascending",
+    );
+    expect(columnHeader(DRIVE_COPY.updatedAt)).not.toHaveAttribute("aria-sort");
     const byName = screen.getAllByTestId("presentation-row");
     expect(byName[1]).toHaveTextContent("부활절 감사예배 특별 순서");
 
     fireEvent.click(screen.getByTestId("sort-header-name"));
-    expect(columnHeader("이름")).toHaveAttribute("aria-sort", "descending");
+    expect(columnHeader(DRIVE_COPY.name)).toHaveAttribute(
+      "aria-sort",
+      "descending",
+    );
     const reversed = screen.getAllByTestId("presentation-row");
     expect(reversed.map((row) => row.getAttribute("aria-label"))).toEqual(
       byName.map((row) => row.getAttribute("aria-label")).reverse(),
     );
 
     fireEvent.click(screen.getByTestId("sort-header-updated"));
-    expect(columnHeader("수정일")).toHaveAttribute("aria-sort", "descending");
+    expect(columnHeader(DRIVE_COPY.updatedAt)).toHaveAttribute(
+      "aria-sort",
+      "descending",
+    );
     expect(screen.getAllByTestId("presentation-row")[1]).toHaveTextContent(
       "청년부 금요 찬양 집회",
     );
@@ -732,7 +756,7 @@ describe("AppShellLayout (드라이브형 홈)", () => {
     expect(screen.queryByText(/소유자:/)).toBeNull();
 
     const typeButton = screen.getByTestId("drive-type-dropdown");
-    expect(typeButton).toHaveTextContent("유형");
+    expect(typeButton).toHaveTextContent(DRIVE_COPY.type);
     expect(screen.queryByTestId("drive-type-clear")).toBeNull();
 
     fireEvent.click(typeButton);
@@ -741,11 +765,11 @@ describe("AppShellLayout (드라이브형 홈)", () => {
       within(menu)
         .getAllByRole("menuitem")
         .map((item) => item.textContent),
-    ).toEqual(["폴더", "프레젠테이션"]);
+    ).toEqual([DRIVE_COPY.kind.folder, DRIVE_COPY.kind.file]);
 
     fireEvent.click(screen.getByTestId("type-option-folder"));
     expect(screen.queryByTestId("drive-type-menu")).toBeNull();
-    expect(typeButton).toHaveTextContent("폴더");
+    expect(typeButton).toHaveTextContent(DRIVE_COPY.kind.folder);
     expect(screen.queryAllByTestId("presentation-row")).toHaveLength(0);
     expect(within(screen.getByRole("listbox")).getAllByRole("option")).toEqual([
       card("폴더 2026 주일 대예배"),
@@ -757,7 +781,7 @@ describe("AppShellLayout (드라이브형 홈)", () => {
 
     fireEvent.click(typeButton);
     fireEvent.click(screen.getByTestId("type-option-file"));
-    expect(typeButton).toHaveTextContent("프레젠테이션");
+    expect(typeButton).toHaveTextContent(DRIVE_COPY.kind.file);
     expect(screen.getAllByTestId("presentation-row")).toHaveLength(
       SEED_PRESENTATIONS.length,
     );
@@ -767,7 +791,9 @@ describe("AppShellLayout (드라이브형 홈)", () => {
     expect(screen.queryByTestId("drive-trash-folder")).toBeNull();
 
     fireEvent.click(screen.getByTestId("drive-type-clear"));
-    expect(screen.getByTestId("drive-type-dropdown")).toHaveTextContent("유형");
+    expect(screen.getByTestId("drive-type-dropdown")).toHaveTextContent(
+      DRIVE_COPY.type,
+    );
     expect(
       within(screen.getByRole("listbox")).getAllByRole("option"),
     ).toHaveLength(1 + SEED_PRESENTATIONS.length);
@@ -780,7 +806,7 @@ describe("AppShellLayout (드라이브형 홈)", () => {
     fireEvent.click(screen.getByTestId("type-option-folder"));
 
     const empty = screen.getByTestId("drive-empty");
-    expect(empty).toHaveTextContent("선택한 유형의 항목이 없습니다");
+    expect(empty).toHaveTextContent(DRIVE_COPY.empty.filteredTitle);
     expect(within(empty).queryByTestId("empty-new-presentation")).toBeNull();
   });
 
@@ -793,7 +819,9 @@ describe("AppShellLayout (드라이브형 홈)", () => {
     fireEvent.keyDown(window, { key: "Delete" });
     openTrashFolder();
 
-    expect(screen.getByRole("heading", { name: "휴지통" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: COMMON_COPY.trash }),
+    ).toBeInTheDocument();
     expect(screen.queryByTestId("drive-type-dropdown")).toBeNull();
     expect(screen.getByTestId("drive-summary")).toHaveTextContent(
       "영구 삭제하기 전까지",
@@ -801,7 +829,7 @@ describe("AppShellLayout (드라이브형 홈)", () => {
     expect(screen.getByTestId("empty-trash-btn")).toBeEnabled();
     expect(screen.queryByTestId("sort-header-name")).toBeNull();
     expect(
-      screen.getByRole("columnheader", { name: "원래 위치" }),
+      screen.getByRole("columnheader", { name: DRIVE_COPY.originalLocation }),
     ).toBeInTheDocument();
   });
 });
@@ -937,14 +965,14 @@ describe("AppShellLayout (구글 드라이브식 조작)", () => {
 
     fireEvent.click(options[0]);
     press("z");
-    expect(screen.getByRole("dialog")).toHaveTextContent("이동");
+    expect(screen.getByRole("dialog")).toHaveTextContent(DRIVE_COPY.move);
     act(() => {
       fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
     });
     expect(screen.queryByRole("dialog")).toBeNull();
 
     press("F", { shiftKey: true, code: "KeyF" });
-    expect(screen.getByRole("dialog")).toHaveTextContent("새 폴더");
+    expect(screen.getByRole("dialog")).toHaveTextContent(FOLDER_COPY.newFolder);
     act(() => {
       fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
     });

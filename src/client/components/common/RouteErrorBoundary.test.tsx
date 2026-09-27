@@ -2,6 +2,7 @@ import React from "react";
 import { describe, it, expect, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { RouteErrorBoundary } from "./RouteErrorBoundary";
+import { SHELL_COPY } from "#copy/shell";
 
 function FailedChunk(): React.JSX.Element {
   throw new TypeError("Failed to fetch dynamically imported module");
@@ -18,7 +19,7 @@ describe("RouteErrorBoundary", () => {
 
     expect(screen.getByTestId("route-error")).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "새로고침" }),
+      screen.getByRole("button", { name: SHELL_COPY.routeError.reload }),
     ).toBeInTheDocument();
   });
 

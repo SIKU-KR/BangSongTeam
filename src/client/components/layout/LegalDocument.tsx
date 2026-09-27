@@ -1,16 +1,8 @@
 import React from "react";
 import { Link } from "react-router-dom";
 import { Button } from "#components/ui/button";
-
-/**
- * 운영 브랜드. 법인도 개인사업자도 아니라 계약 주체가 될 수 없으므로,
- * 약관·처리방침에서는 늘 {@link OPERATOR_NAME}과 함께 적는다.
- */
-export const OPERATOR_BRAND = "시쿠랩스";
-
-/** 운영자이자 개인정보 보호책임자. 권리 행사·게시 중단 요청을 받는 창구다. */
-export const OPERATOR_NAME = "박범식";
-export const OPERATOR_EMAIL = "peter012677@naver.com";
+import { LEGAL_COPY } from "#copy/auth";
+import { APP_NAME } from "#shared";
 
 /** 이용약관·개인정보 처리방침처럼 로그인 없이도 여는 긴 글 화면의 틀 */
 export function LegalDocument({
@@ -33,10 +25,12 @@ export function LegalDocument({
             render={<Link to="/" />}
             className="self-start"
           >
-            방송팀 다모여
+            {APP_NAME}
           </Button>
           <h1 className="text-2xl font-bold tracking-tight">{title}</h1>
-          <p className="text-muted-foreground">시행일: {effectiveDate}</p>
+          <p className="text-muted-foreground">
+            {LEGAL_COPY.effectiveDate(effectiveDate)}
+          </p>
         </header>
         {children}
       </article>

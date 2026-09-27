@@ -27,6 +27,7 @@ import {
   stepFontSize,
   vwToPt,
 } from "./ribbonOptions";
+import { EDITOR_COPY } from "#copy/editor";
 
 export interface FontControlsProps {
   style: DeckStyle;
@@ -140,7 +141,7 @@ export function FontControls({
   }, [catalog, allAdditionalFonts, searchTrimmed, displayLimit]);
 
   return (
-    <RibbonGroup label="글꼴">
+    <RibbonGroup label={EDITOR_COPY.ribbon.font}>
       <Select
         value={style.fontFamily}
         disabled={disabled}
@@ -153,7 +154,10 @@ export function FontControls({
           }
         }}
       >
-        <SelectTrigger aria-label="글꼴" className="w-36 text-xs">
+        <SelectTrigger
+          aria-label={EDITOR_COPY.ribbon.font}
+          className="w-36 text-xs"
+        >
           <SelectValue />
         </SelectTrigger>
         <SelectContent
@@ -164,7 +168,7 @@ export function FontControls({
           <div className="border-b border-border p-1">
             <Input
               type="text"
-              placeholder="글꼴 검색 (1,100+종)..."
+              placeholder={EDITOR_COPY.ribbon.fontSearch}
               value={fontSearch}
               onChange={(e) => setFontSearch(e.target.value)}
               onKeyDown={(e) => e.stopPropagation()}
@@ -175,7 +179,7 @@ export function FontControls({
             <>
               <SelectGroup>
                 <SelectLabel className="px-2 py-1 text-2xs text-muted-foreground">
-                  기본 글꼴
+                  {EDITOR_COPY.ribbon.presetFonts}
                 </SelectLabel>
                 {PRESET_FONTS.map((font) => (
                   <FontOption key={font.id} font={font} />
@@ -185,8 +189,8 @@ export function FontControls({
               <SelectGroup>
                 <SelectLabel className="px-2 py-1 text-2xs text-muted-foreground">
                   {catalog.length > 0
-                    ? `눈누 무료 웹폰트 (${allAdditionalFonts.length}종)`
-                    : "눈누 무료 웹폰트 불러오는 중…"}
+                    ? EDITOR_COPY.ribbon.noonnuFonts(allAdditionalFonts.length)
+                    : EDITOR_COPY.ribbon.noonnuLoading}
                 </SelectLabel>
                 {filteredFonts.map((font) => (
                   <FontOption key={font.id} font={font} />
@@ -203,7 +207,9 @@ export function FontControls({
                     }}
                     className="w-full py-1 text-center text-2xs text-muted-foreground hover:text-foreground"
                   >
-                    더 보기 ({allAdditionalFonts.length - displayLimit}개 남음)
+                    {EDITOR_COPY.ribbon.showMore(
+                      allAdditionalFonts.length - displayLimit,
+                    )}
                   </Button>
                 )}
               </SelectGroup>
@@ -212,7 +218,7 @@ export function FontControls({
           {searchTrimmed && (
             <SelectGroup>
               <SelectLabel className="px-2 py-1 text-2xs text-muted-foreground">
-                검색 결과 ({filteredFonts.length}개)
+                {EDITOR_COPY.ribbon.searchResults(filteredFonts.length)}
               </SelectLabel>
               {filteredFonts.map((font) => (
                 <FontOption key={font.id} font={font} />
@@ -223,11 +229,11 @@ export function FontControls({
       </Select>
 
       <ButtonGroup>
-        <RibbonTooltip content="글자 크기 (pt)">
+        <RibbonTooltip content={EDITOR_COPY.ribbon.fontSizeTooltip}>
           <Input
             type="text"
             inputMode="numeric"
-            aria-label="글자 크기"
+            aria-label={EDITOR_COPY.ribbon.fontSize}
             value={sizeText}
             disabled={disabled}
             onChange={(e) => setSizeText(e.target.value)}
@@ -243,14 +249,14 @@ export function FontControls({
           />
         </RibbonTooltip>
         <RibbonDropdown
-          label="글자 크기 목록"
+          label={EDITOR_COPY.ribbon.fontSizeList}
           testId="font-size-list-btn"
           disabled={disabled}
           panelClassName="max-h-72 w-20 overflow-y-auto p-1"
         >
           {(close) => (
             <RibbonChoices
-              label="글자 크기 목록"
+              label={EDITOR_COPY.ribbon.fontSizeList}
               className="font-mono"
               value={String(sizePt)}
               choices={FONT_SIZE_PT_PRESETS.map((pt) => ({
@@ -267,8 +273,8 @@ export function FontControls({
       </ButtonGroup>
 
       <RibbonButton
-        label="글자 크기 키우기"
-        tooltip="글자 크기 키우기 (Ctrl/⌘+Shift+>)"
+        label={EDITOR_COPY.ribbon.fontSizeUp}
+        tooltip={EDITOR_COPY.ribbon.fontSizeUpTooltip}
         testId="font-size-up-btn"
         disabled={disabled}
         onClick={() =>
@@ -281,8 +287,8 @@ export function FontControls({
         }
       />
       <RibbonButton
-        label="글자 크기 줄이기"
-        tooltip="글자 크기 줄이기 (Ctrl/⌘+Shift+<)"
+        label={EDITOR_COPY.ribbon.fontSizeDown}
+        tooltip={EDITOR_COPY.ribbon.fontSizeDownTooltip}
         testId="font-size-down-btn"
         disabled={disabled}
         onClick={() =>
@@ -296,13 +302,15 @@ export function FontControls({
       />
 
       <RibbonDropdown
-        label="글자 색"
+        label={EDITOR_COPY.ribbon.fontColor}
         testId="font-color-btn"
         disabled={disabled}
         panelClassName="w-60"
         icon={
           <span className="flex flex-col items-center leading-none">
-            <span className="text-sm font-bold">가</span>
+            <span className="text-sm font-bold">
+              {EDITOR_COPY.ribbon.fontColorSample}
+            </span>
             <span
               className="mt-0.5 h-1 w-4 rounded-sm border"
               style={{ backgroundColor: style.fontColor }}
@@ -313,7 +321,7 @@ export function FontControls({
         {() => (
           <>
             <ToggleGroup
-              aria-label="글자 색"
+              aria-label={EDITOR_COPY.ribbon.fontColor}
               variant="outline"
               size="sm"
               value={[style.fontColor.toUpperCase()]}
@@ -343,7 +351,7 @@ export function FontControls({
       </RibbonDropdown>
 
       <RibbonDropdown
-        label="텍스트 그림자"
+        label={EDITOR_COPY.ribbon.textShadow}
         testId="text-shadow-btn"
         disabled={disabled}
         panelClassName="w-32 p-1"
@@ -355,11 +363,11 @@ export function FontControls({
       >
         {(close) => (
           <RibbonChoices
-            label="텍스트 그림자"
+            label={EDITOR_COPY.ribbon.textShadow}
             value={style.textShadowLevel}
             choices={SHADOW_LEVELS.map((level) => ({
               value: level.id,
-              label: `그림자 ${level.label}`,
+              label: EDITOR_COPY.ribbon.shadowLevel(level.label),
             }))}
             onSelect={(value) => {
               const level = SHADOW_LEVELS.find((item) => item.id === value);

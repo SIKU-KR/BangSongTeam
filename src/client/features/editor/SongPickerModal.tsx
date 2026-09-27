@@ -45,6 +45,8 @@ import {
   MyDeckPreview,
   SharedDeckPreview,
 } from "./songPicker/SongPickerPreview";
+import { EDITOR_COPY } from "#copy/editor";
+import { COMMON_COPY } from "#copy/common";
 
 export interface SongPickerModalProps {
   isOpen: boolean;
@@ -70,9 +72,9 @@ type PickerEntry =
     };
 
 const FILTERS: { id: FilterType; label: string }[] = [
-  { id: "all", label: "전체" },
-  { id: "mine", label: "내 곡" },
-  { id: "shared", label: "공유 곡" },
+  { id: "all", label: EDITOR_COPY.picker.filters.all },
+  { id: "mine", label: EDITOR_COPY.picker.filters.mine },
+  { id: "shared", label: EDITOR_COPY.picker.filters.shared },
 ];
 
 /**
@@ -148,11 +150,11 @@ export function SongPickerModal({
     entries.find((entry) => entry.key === selectedKey) ?? entries[0];
 
   const emptyMessage = useMemo(() => {
-    if (search.isFetching) return "공유 라이브러리를 검색하는 중…";
-    if (searchQuery.trim()) return "일치하는 찬양곡이 없습니다.";
-    if (filter === "shared") return "아직 공유된 찬양곡이 없습니다.";
-    if (filter === "mine") return "보관함에 찬양곡이 없습니다.";
-    return "아직 등록되거나 공유된 찬양곡이 없습니다.";
+    if (search.isFetching) return EDITOR_COPY.picker.searching;
+    if (searchQuery.trim()) return EDITOR_COPY.picker.noMatch;
+    if (filter === "shared") return EDITOR_COPY.picker.noShared;
+    if (filter === "mine") return EDITOR_COPY.picker.noMine;
+    return EDITOR_COPY.picker.noSongs;
   }, [search.isFetching, searchQuery, filter]);
 
   const addDeck = (deck: Deck): void => {
@@ -204,14 +206,15 @@ export function SongPickerModal({
       >
         <DialogHeader className="shrink-0 border-b px-6 py-4 pr-12">
           <div className="flex items-center gap-2">
-            <DialogTitle className="text-lg font-bold">찬양곡 추가</DialogTitle>
+            <DialogTitle className="text-lg font-bold">
+              {EDITOR_COPY.song.addSong}
+            </DialogTitle>
             <Badge variant="secondary" className="font-mono">
-              내 곡 {mySongs.length} · 공유 {sharedCount}
+              {EDITOR_COPY.picker.counts(mySongs.length, sharedCount)}
             </Badge>
           </div>
           <DialogDescription className="text-xs">
-            내 보관함과 다른 교회가 공유한 찬양을 검색해 세트에 추가하거나, 새
-            가사를 직접 입력할 수 있습니다.
+            {EDITOR_COPY.picker.description}
           </DialogDescription>
         </DialogHeader>
 
@@ -222,10 +225,10 @@ export function SongPickerModal({
                 <InputGroupInput
                   type="text"
                   data-testid="song-picker-search-input"
-                  aria-label="찬양곡 검색"
+                  aria-label={EDITOR_COPY.picker.searchLabel}
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="곡 제목, 아티스트, 가사 검색..."
+                  placeholder={EDITOR_COPY.picker.searchPlaceholder}
                 />
                 <InputGroupAddon>
                   <SearchIcon />
@@ -234,7 +237,7 @@ export function SongPickerModal({
                   <InputGroupAddon align="inline-end">
                     <InputGroupButton
                       size="icon-xs"
-                      aria-label="검색어 지우기"
+                      aria-label={COMMON_COPY.clearSearch}
                       onClick={() => setSearchQuery("")}
                     >
                       <XIcon />
@@ -245,7 +248,7 @@ export function SongPickerModal({
 
               <div className="flex items-center justify-between gap-1.5">
                 <ToggleGroup
-                  aria-label="곡 종류"
+                  aria-label={EDITOR_COPY.picker.kind}
                   variant="outline"
                   size="sm"
                   spacing={0}
@@ -279,11 +282,12 @@ export function SongPickerModal({
                   {mode !== "browse" ? (
                     <>
                       <ArrowLeftIcon />
-                      목록 보기
+                      {EDITOR_COPY.picker.showList}
                     </>
                   ) : (
                     <>
-                      <PlusIcon />새 가사 입력
+                      <PlusIcon />
+                      {EDITOR_COPY.song.newLyrics}
                     </>
                   )}
                 </Button>
@@ -295,8 +299,8 @@ export function SongPickerModal({
                   className="text-2xs text-warning"
                 >
                   {isOnline
-                    ? "공유 라이브러리에 연결하지 못했습니다 — 내 곡만 표시합니다"
-                    : "오프라인 — 내 곡만 표시합니다"}
+                    ? EDITOR_COPY.picker.serverUnavailable
+                    : EDITOR_COPY.picker.offline}
                 </p>
               )}
             </div>
@@ -314,8 +318,7 @@ export function SongPickerModal({
                       onClick={() => setMode("create")}
                     >
                       <PlusIcon />
-                      {searchQuery ? `'${searchQuery}' ` : ""}새 곡으로 직접
-                      등록하기
+                      {EDITOR_COPY.picker.createNew(searchQuery)}
                     </Button>
                   </EmptyContent>
                 </Empty>
@@ -347,7 +350,7 @@ export function SongPickerModal({
               />
             ) : !selected ? (
               <div className="flex flex-1 items-center justify-center text-xs text-muted-foreground">
-                곡을 선택해주세요.
+                {EDITOR_COPY.picker.selectSong}
               </div>
             ) : selected.kind === "mine" ? (
               <MyDeckPreview
@@ -382,15 +385,15 @@ export function SongPickerModal({
 
         {libraryDialog?.kind === "edit" && (
           <SongInfoDialog
-            heading="보관함 곡 정보 수정"
+            heading={EDITOR_COPY.picker.editLibraryTitle}
             initialValues={{
               title: libraryDialog.deck.title,
               artist: libraryDialog.deck.artist,
             }}
             notice={
               libraryDialog.deck.visibility === "public"
-                ? "공개한 곡이라 공유 라이브러리에도 바로 반영됩니다. 이미 세트에 넣은 곡은 바뀌지 않습니다."
-                : "이미 세트에 넣은 곡은 바뀌지 않습니다."
+                ? EDITOR_COPY.picker.editPublicNotice
+                : EDITOR_COPY.picker.editNotice
             }
             onSubmit={(values) => {
               updateLibrarySongInfo(libraryDialog.deck.id, values);
@@ -402,16 +405,15 @@ export function SongPickerModal({
 
         {libraryDialog?.kind === "delete" && (
           <ConfirmDialog
-            title="보관함에서 삭제"
+            title={EDITOR_COPY.picker.deleteTitle}
             message={
               <>
-                ‘{libraryDialog.deck.title}’ 곡을 내 보관함에서 삭제할까요? 이미
-                세트에 넣은 곡은 그대로 남습니다.
+                {EDITOR_COPY.picker.deleteMessage(libraryDialog.deck.title)}
                 {libraryDialog.deck.visibility === "public" &&
-                  " 공개한 곡이라 공유 라이브러리에서도 내려갑니다."}
+                  EDITOR_COPY.picker.deletePublicNote}
               </>
             }
-            confirmLabel="삭제"
+            confirmLabel={COMMON_COPY.delete}
             onConfirm={() => {
               deleteUserSong(libraryDialog.deck.id);
               setLibraryDialog(null);
@@ -469,23 +471,27 @@ function EntryRow({
         <span className="truncate text-xs font-bold">{title}</span>
         <div className="flex shrink-0 items-center gap-1">
           {entry.kind === "mine" && (
-            <Badge variant="secondary">내 보관함</Badge>
+            <Badge variant="secondary">{EDITOR_COPY.song.myLibrary}</Badge>
           )}
           {entry.kind === "shared" && (
             <Badge variant="outline">
-              {entry.ownedCopy ? "보관함에 있음" : "공유"}
+              {entry.ownedCopy
+                ? EDITOR_COPY.picker.inLibrary
+                : COMMON_COPY.share}
             </Badge>
           )}
           <span className="font-mono text-2xs text-muted-foreground">
             {entry.kind === "mine"
-              ? `${entry.deck.slides.length}슬라이드`
-              : `${entry.summary.forkCount}회 가져감`}
+              ? EDITOR_COPY.picker.slideCount(entry.deck.slides.length)
+              : COMMON_COPY.forkCount(entry.summary.forkCount)}
           </span>
         </div>
       </div>
 
       <div className="flex items-center justify-between gap-2 text-2xs text-muted-foreground">
-        <span className="truncate">{artist || "아티스트 미상"}</span>
+        <span className="truncate">
+          {artist || EDITOR_COPY.song.unknownArtist}
+        </span>
         {entry.kind === "shared" && (
           <span className="shrink-0 truncate">{entry.summary.authorName}</span>
         )}

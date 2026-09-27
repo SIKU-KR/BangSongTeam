@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { EditorHeader } from "./EditorHeader";
+import { EDITOR_COPY } from "#copy/editor";
 
 function renderHeader(
   props?: Partial<React.ComponentProps<typeof EditorHeader>>,
@@ -82,17 +83,23 @@ describe("EditorHeader", () => {
     const shortcutsButton = screen.getByTestId("header-shortcuts-btn");
 
     fireEvent.click(shortcutsButton);
-    expect(screen.getByText("발표 송출 단축키")).toBeInTheDocument();
+    expect(
+      screen.getByText(EDITOR_COPY.header.presentShortcuts),
+    ).toBeInTheDocument();
 
     fireEvent.keyDown(screen.getByTestId("header-shortcuts-popover"), {
       key: "Escape",
     });
     await waitFor(() =>
-      expect(screen.queryByText("발표 송출 단축키")).not.toBeInTheDocument(),
+      expect(
+        screen.queryByText(EDITOR_COPY.header.presentShortcuts),
+      ).not.toBeInTheDocument(),
     );
 
     fireEvent.click(shortcutsButton);
-    expect(screen.getByText("발표 송출 단축키")).toBeInTheDocument();
+    expect(
+      screen.getByText(EDITOR_COPY.header.presentShortcuts),
+    ).toBeInTheDocument();
 
     fireEvent.pointerDown(document.body);
     fireEvent.mouseDown(document.body);
@@ -100,7 +107,9 @@ describe("EditorHeader", () => {
     fireEvent.mouseUp(document.body);
     fireEvent.click(document.body);
     await waitFor(() =>
-      expect(screen.queryByText("발표 송출 단축키")).not.toBeInTheDocument(),
+      expect(
+        screen.queryByText(EDITOR_COPY.header.presentShortcuts),
+      ).not.toBeInTheDocument(),
     );
   });
 
@@ -128,11 +137,13 @@ describe("EditorHeader", () => {
     fireEvent.click(screen.getByTestId("header-shortcuts-btn"));
 
     const popover = screen.getByTestId("header-shortcuts-popover");
-    expect(popover).toHaveTextContent("편집 단축키");
+    expect(popover).toHaveTextContent(EDITOR_COPY.header.editorShortcuts);
     expect(popover).toHaveTextContent("Ctrl/⌘+M");
     expect(popover).toHaveTextContent("슬라이드에서 가사 직접 편집");
-    expect(popover.textContent!.indexOf("편집 단축키")).toBeLessThan(
-      popover.textContent!.indexOf("발표 송출 단축키"),
+    expect(
+      popover.textContent!.indexOf(EDITOR_COPY.header.editorShortcuts),
+    ).toBeLessThan(
+      popover.textContent!.indexOf(EDITOR_COPY.header.presentShortcuts),
     );
   });
 

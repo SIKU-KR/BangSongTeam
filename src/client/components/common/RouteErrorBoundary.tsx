@@ -9,6 +9,7 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "#components/ui/empty";
+import { SHELL_COPY } from "#copy/shell";
 
 interface RouteErrorBoundaryState {
   failed: boolean;
@@ -38,13 +39,15 @@ export class RouteErrorBoundary extends React.Component<
             <EmptyMedia variant="icon">
               <RefreshCwIcon />
             </EmptyMedia>
-            <EmptyTitle>화면을 불러오지 못했습니다</EmptyTitle>
+            <EmptyTitle>{SHELL_COPY.routeError.title}</EmptyTitle>
             <EmptyDescription>
-              네트워크 연결을 확인한 뒤 새로고침해 주세요.
+              {SHELL_COPY.routeError.description}
             </EmptyDescription>
           </EmptyHeader>
           <EmptyContent>
-            <Button onClick={() => window.location.reload()}>새로고침</Button>
+            <Button onClick={() => window.location.reload()}>
+              {SHELL_COPY.routeError.reload}
+            </Button>
           </EmptyContent>
         </Empty>
       </div>

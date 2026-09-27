@@ -11,6 +11,7 @@ import { ToggleGroup, ToggleGroupItem } from "#components/ui/toggle-group";
 import { RibbonChoices, RibbonDropdown } from "./RibbonDropdown";
 import { RibbonGroup, RibbonTooltip } from "./RibbonPrimitives";
 import { LINE_HEIGHT_OPTIONS, TEXT_ALIGN_OPTIONS } from "./ribbonOptions";
+import { EDITOR_COPY } from "#copy/editor";
 
 const ALIGN_ICONS: Record<DeckStyle["textAlign"], LucideIcon> = {
   left: AlignLeftIcon,
@@ -31,9 +32,9 @@ export function ParagraphControls({
   onUpdateStyle,
 }: ParagraphControlsProps): React.JSX.Element {
   return (
-    <RibbonGroup label="단락">
+    <RibbonGroup label={EDITOR_COPY.ribbon.paragraph}>
       <ToggleGroup
-        aria-label="정렬"
+        aria-label={EDITOR_COPY.ribbon.align}
         spacing={0}
         size="sm"
         value={[style.textAlign]}
@@ -62,7 +63,7 @@ export function ParagraphControls({
         })}
       </ToggleGroup>
       <RibbonDropdown
-        label="줄 간격"
+        label={EDITOR_COPY.ribbon.lineHeight}
         testId="line-height-btn"
         disabled={disabled}
         panelClassName="w-28 p-1"
@@ -70,7 +71,7 @@ export function ParagraphControls({
       >
         {(close) => (
           <RibbonChoices
-            label="줄 간격"
+            label={EDITOR_COPY.ribbon.lineHeight}
             className="font-mono"
             value={String(style.lineHeight)}
             choices={LINE_HEIGHT_OPTIONS.map((value) => ({

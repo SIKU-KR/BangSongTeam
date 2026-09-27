@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from "react";
 import { PersistenceUnavailableError } from "./db";
 import type { CorruptedRecord } from "./presentationRepository";
+import { ERROR_COPY } from "#copy/common";
 
 export type PersistenceErrorKind = "unavailable" | "quota" | "unknown";
 
@@ -8,14 +9,6 @@ export interface PersistenceError {
   kind: PersistenceErrorKind;
   message: string;
 }
-
-const MESSAGES: Record<PersistenceErrorKind, string> = {
-  unavailable:
-    "이 브라우저에 저장할 수 없습니다 (시크릿 모드이거나 저장소가 차단되었습니다). 새로고침하면 작업이 사라집니다.",
-  quota:
-    "저장 공간이 가득 찼습니다. 오래된 프레젠테이션을 정리하지 않으면 작업이 저장되지 않습니다.",
-  unknown: "이 브라우저에 저장하지 못했습니다. 작업이 사라질 수 있습니다.",
-};
 
 let current: PersistenceError | null = null;
 
@@ -46,7 +39,7 @@ function classify(err: unknown): PersistenceErrorKind {
 export function reportPersistenceError(err: unknown): void {
   const kind = classify(err);
   if (current?.kind === kind) return;
-  current = { kind, message: MESSAGES[kind] };
+  current = { kind, message: ERROR_COPY.persistence[kind] };
   emit();
 }
 

@@ -22,14 +22,11 @@ import {
 } from "#components/ui/dialog";
 import { Input } from "#components/ui/input";
 import { useFolderIndex } from "./folderStore";
-import {
-  canDropInto,
-  formatLocation,
-  ROOT_LABEL,
-  type DriveItemRef,
-} from "./driveModel";
+import { canDropInto, formatLocation, type DriveItemRef } from "./driveModel";
 import { itemName, parentOf } from "./driveActions";
 import { FolderTree, useTreeExpansion } from "./FolderTree";
+import { DRIVE_COPY } from "#copy/drive";
+import { COMMON_COPY } from "#copy/common";
 
 function closeOnDismiss(onCancel: () => void): (open: boolean) => void {
   return (open) => {
@@ -83,7 +80,7 @@ export function NameDialog({
             <Input
               ref={inputRef}
               type="text"
-              aria-label="이름"
+              aria-label={DRIVE_COPY.name}
               aria-invalid={touched && Boolean(error)}
               data-testid="drive-name-input"
               value={value}
@@ -101,7 +98,7 @@ export function NameDialog({
           </div>
           <DialogFooter>
             <DialogClose render={<Button variant="outline" />}>
-              취소
+              {COMMON_COPY.cancel}
             </DialogClose>
             <Button
               type="submit"
@@ -145,14 +142,14 @@ export function ConfirmDialog({
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel>취소</AlertDialogCancel>
+          <AlertDialogCancel>{COMMON_COPY.cancel}</AlertDialogCancel>
           <AlertDialogAction
             variant="destructive"
             data-testid="drive-confirm-btn"
             disabled={isPending}
             onClick={onConfirm}
           >
-            {isPending ? "삭제하는 중…" : confirmLabel}
+            {isPending ? DRIVE_COPY.deleting : confirmLabel}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
@@ -164,7 +161,7 @@ export interface FolderPickerDialogProps {
   title: string;
   /** 대화 상자 안내 문구 (예: 현재 위치) */
   description?: string;
-  /** 고른 위치 앞에 붙는 말 ("옮길 위치", "만들 위치") */
+  /** 고른 위치 앞에 붙는 말 (DRIVE_COPY.moveDialog.target, "만들 위치") */
   targetLabel: string;
   confirmLabel: string;
   initialFolderId: string | null;
@@ -219,7 +216,7 @@ export function FolderPickerDialog({
             )}
           >
             <FolderIcon className="fill-current text-muted-foreground" />
-            {ROOT_LABEL}
+            {COMMON_COPY.myDrive}
           </Button>
           <div className="pl-3.5">
             <FolderTree
@@ -238,7 +235,9 @@ export function FolderPickerDialog({
           </span>
         </p>
         <DialogFooter>
-          <DialogClose render={<Button variant="outline" />}>취소</DialogClose>
+          <DialogClose render={<Button variant="outline" />}>
+            {COMMON_COPY.cancel}
+          </DialogClose>
           <Button
             data-testid={confirmTestId}
             disabled={!enabled}
@@ -276,12 +275,14 @@ export function MoveDialog({
       confirmTestId="drive-move-confirm"
       title={
         refs.length === 1
-          ? `‘${itemName(refs[0])}’ 이동`
-          : `${refs.length}개 항목 이동`
+          ? DRIVE_COPY.moveDialog.title(itemName(refs[0]))
+          : DRIVE_COPY.moveDialog.titleMany(refs.length)
       }
-      description={`현재 위치: ${formatLocation(index, origin)}`}
-      targetLabel="옮길 위치"
-      confirmLabel="이동"
+      description={DRIVE_COPY.moveDialog.currentLocation(
+        formatLocation(index, origin),
+      )}
+      targetLabel={DRIVE_COPY.moveDialog.target}
+      confirmLabel={DRIVE_COPY.move}
       initialFolderId={origin}
       isDisabled={(folderId) => !canDropInto(index, refs, folderId)}
       canConfirm={(folderId) => refs.some((ref) => parentOf(ref) !== folderId)}

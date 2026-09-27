@@ -5,6 +5,7 @@ import {
 } from "../editor/songLibraryStore";
 import { pushDeckNow } from "../../lib/sync/deckSync";
 import { updateDeckVisibility } from "../../lib/api/catalogApi";
+import { SHARING_COPY } from "#copy/sharing";
 
 export interface PublishDeps {
   push: (deck: Deck) => Promise<Deck>;
@@ -29,7 +30,7 @@ export async function publishLibraryDeck(
   deps: PublishDeps = defaultDeps,
 ): Promise<Deck> {
   const deck = getLibraryDeck(libraryDeckId);
-  if (!deck) throw new Error("보관함에서 곡을 찾을 수 없습니다");
+  if (!deck) throw new Error(SHARING_COPY.library.deckNotFound);
   const saved = await deps.push(deck);
   const published = await deps.setVisibility(saved.id, {
     visibility: "public",

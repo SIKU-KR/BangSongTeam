@@ -22,6 +22,7 @@ import type { Slide, DeckStyle, TextBoxPosition } from "#shared";
 import { DEFAULT_DECK_STYLE } from "#shared";
 import { SlideStage } from "../../components/stage/SlideStage";
 import type { SnapGuides } from "./textBoxDrag";
+import { EDITOR_COPY } from "#copy/editor";
 
 const TextBoxMoveable = lazy(() =>
   import("./TextBoxMoveable").then((m) => ({ default: m.TextBoxMoveable })),
@@ -98,7 +99,7 @@ export function EditorStageCanvas({
       className="rounded-lg border-2 border-dashed border-current opacity-60"
       style={{ fontSize: "0.5em", paddingBlock: "0.3em" }}
     >
-      더블클릭하여 가사 입력
+      {EDITOR_COPY.slide.emptyPlaceholder}
     </div>
   ) : undefined;
 
@@ -116,17 +117,16 @@ export function EditorStageCanvas({
             <EmptyMedia variant="icon">
               <FileMusicIcon />
             </EmptyMedia>
-            <EmptyTitle>등록된 찬양 곡 또는 슬라이드가 없습니다</EmptyTitle>
+            <EmptyTitle>{EDITOR_COPY.canvas.emptyTitle}</EmptyTitle>
             <EmptyDescription>
-              새 찬양 가사를 빠른 입력으로 추가하여 프레젠테이션 제작을
-              시작하세요.
+              {EDITOR_COPY.canvas.emptyDescription}
             </EmptyDescription>
           </EmptyHeader>
           {onOpenLyricModal && (
             <EmptyContent>
               <Button onClick={onOpenLyricModal}>
                 <PlusIcon />
-                가사 붙여넣기로 새 곡 추가
+                {EDITOR_COPY.canvas.pasteNewSong}
               </Button>
             </EmptyContent>
           )}
@@ -198,7 +198,7 @@ export function EditorStageCanvas({
           )}
 
           <IconButton
-            label="이전 슬라이드 (◀)"
+            label={EDITOR_COPY.canvas.prev}
             size="icon-lg"
             data-testid="canvas-prev-btn"
             disabled={slideNumber <= 1}
@@ -210,7 +210,7 @@ export function EditorStageCanvas({
           </IconButton>
 
           <IconButton
-            label="다음 슬라이드 (▶)"
+            label={EDITOR_COPY.canvas.next}
             size="icon-lg"
             data-testid="canvas-next-btn"
             disabled={slideNumber >= totalSlideCount}
@@ -229,11 +229,11 @@ export function EditorStageCanvas({
       >
         <div className="flex min-w-0 items-center gap-2">
           <span className="inline-flex items-center rounded-md bg-muted px-2 py-0.5 font-mono font-semibold text-foreground">
-            슬라이드 {slideNumber}/{totalSlideCount}
+            {EDITOR_COPY.canvas.slidePosition(slideNumber, totalSlideCount)}
           </span>
           <span aria-hidden="true">·</span>
           <span className="font-mono">
-            곡 {songNumber}/{totalSongs}
+            {EDITOR_COPY.canvas.songPosition(songNumber, totalSongs)}
           </span>
           {statusItems}
         </div>
@@ -241,7 +241,7 @@ export function EditorStageCanvas({
         {onZoomChange && (
           <ButtonGroup className="hidden sm:flex">
             <IconButton
-              label="캔버스 축소"
+              label={EDITOR_COPY.canvas.zoomOut}
               variant="outline"
               size="icon-sm"
               onClick={() => onZoomChange(Math.max(50, zoomLevel - 15))}
@@ -252,7 +252,7 @@ export function EditorStageCanvas({
               {zoomLevel}%
             </ButtonGroupText>
             <IconButton
-              label="캔버스 확대"
+              label={EDITOR_COPY.canvas.zoomIn}
               variant="outline"
               size="icon-sm"
               onClick={() => onZoomChange(Math.min(150, zoomLevel + 15))}
@@ -260,12 +260,12 @@ export function EditorStageCanvas({
               <PlusIcon />
             </IconButton>
             <IconButton
-              label="100% 원본 맞춤"
+              label={EDITOR_COPY.canvas.fitLabel}
               variant="outline"
               size="sm"
               onClick={() => onZoomChange(100)}
             >
-              맞춤
+              {EDITOR_COPY.canvas.fit}
             </IconButton>
           </ButtonGroup>
         )}

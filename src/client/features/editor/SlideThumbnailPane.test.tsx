@@ -7,6 +7,8 @@ import {
   SlideThumbnailPane,
   type SlideThumbnailPaneProps,
 } from "./SlideThumbnailPane";
+import { EDITOR_COPY } from "#copy/editor";
+import { COMMON_COPY } from "#copy/common";
 
 function makeItems(slideCounts: number[]): PresentationItem[] {
   return slideCounts.map(
@@ -199,7 +201,7 @@ describe("SlideThumbnailPane (PPT식 썸네일 창)", () => {
 
     fireEvent.contextMenu(screen.getByTestId("slide-thumb-0"));
     const menu = await screen.findByTestId("slide-pane-menu");
-    expect(menu).toHaveTextContent("잘라내기");
+    expect(menu).toHaveTextContent(EDITOR_COPY.thumbnails.cut);
     expect(props.onClickSlide).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByRole("menuitem", { name: /슬라이드 복제/ }));
@@ -243,7 +245,7 @@ describe("SlideThumbnailPane (PPT식 썸네일 창)", () => {
       index: 3,
     });
     expect(screen.getAllByRole("menuitem")).toHaveLength(2);
-    expect(menu).not.toHaveTextContent("삭제");
+    expect(menu).not.toHaveTextContent(COMMON_COPY.delete);
 
     fireEvent.click(screen.getByRole("menuitem", { name: /붙여넣기/ }));
     expect(props.onPasteSlides).toHaveBeenCalledTimes(1);
@@ -254,7 +256,11 @@ describe("SlideThumbnailPane (PPT식 썸네일 창)", () => {
 
     fireEvent.contextMenu(screen.getByTestId("song-section-1"));
     await screen.findByTestId("slide-pane-menu");
-    fireEvent.click(screen.getByRole("menuitem", { name: "모두 축소" }));
+    fireEvent.click(
+      screen.getByRole("menuitem", {
+        name: EDITOR_COPY.thumbnails.collapseAll,
+      }),
+    );
     await waitFor(() =>
       expect(screen.queryByTestId("slide-thumb-0")).not.toBeInTheDocument(),
     );
@@ -262,7 +268,9 @@ describe("SlideThumbnailPane (PPT식 썸네일 창)", () => {
 
     fireEvent.contextMenu(screen.getByTestId("song-section-1"));
     await screen.findByTestId("slide-pane-menu");
-    fireEvent.click(screen.getByRole("menuitem", { name: "모두 확장" }));
+    fireEvent.click(
+      screen.getByRole("menuitem", { name: EDITOR_COPY.thumbnails.expandAll }),
+    );
     await waitFor(() =>
       expect(screen.getByTestId("slide-thumb-5")).toBeInTheDocument(),
     );
@@ -273,10 +281,9 @@ describe("SlideThumbnailPane (PPT식 썸네일 창)", () => {
 
     fireEvent.click(screen.getByTestId("song-section-menu-btn-0"));
     expect(screen.getByTestId("song-section-menu")).toBeInTheDocument();
-    expect(screen.getByRole("menuitem", { name: "위로 이동" })).toHaveAttribute(
-      "aria-disabled",
-      "true",
-    );
+    expect(
+      screen.getByRole("menuitem", { name: EDITOR_COPY.song.moveUp }),
+    ).toHaveAttribute("aria-disabled", "true");
 
     fireEvent.keyDown(screen.getByTestId("song-section-menu"), {
       key: "Escape",
@@ -288,7 +295,7 @@ describe("SlideThumbnailPane (PPT식 썸네일 창)", () => {
     fireEvent.contextMenu(screen.getByTestId("song-section-2"));
     await screen.findByTestId("slide-pane-menu");
     expect(
-      screen.getByRole("menuitem", { name: "아래로 이동" }),
+      screen.getByRole("menuitem", { name: EDITOR_COPY.song.moveDown }),
     ).toHaveAttribute("aria-disabled", "true");
   });
 
@@ -296,22 +303,28 @@ describe("SlideThumbnailPane (PPT식 썸네일 창)", () => {
     const { props } = renderPane();
 
     fireEvent.click(screen.getByTestId("song-section-menu-btn-1"));
-    fireEvent.click(screen.getByRole("menuitem", { name: "위로 이동" }));
+    fireEvent.click(
+      screen.getByRole("menuitem", { name: EDITOR_COPY.song.moveUp }),
+    );
     expect(props.onReorderSong).toHaveBeenCalledWith(1, 0);
     expect(screen.queryByTestId("song-section-menu")).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByTestId("song-section-menu-btn-1"));
-    fireEvent.click(screen.getByRole("menuitem", { name: "곡 복제" }));
+    fireEvent.click(
+      screen.getByRole("menuitem", { name: EDITOR_COPY.song.duplicate }),
+    );
     expect(props.onDuplicateSong).toHaveBeenCalledWith(1);
 
     fireEvent.click(screen.getByTestId("song-section-menu-btn-1"));
     fireEvent.click(
-      screen.getByRole("menuitem", { name: "제목·아티스트 수정" }),
+      screen.getByRole("menuitem", { name: EDITOR_COPY.song.editInfo }),
     );
     expect(props.onEditSongInfo).toHaveBeenCalledWith(1);
 
     fireEvent.click(screen.getByTestId("song-section-menu-btn-1"));
-    fireEvent.click(screen.getByRole("menuitem", { name: "세트에서 제거" }));
+    fireEvent.click(
+      screen.getByRole("menuitem", { name: EDITOR_COPY.song.removeFromSet }),
+    );
     expect(props.onDeleteSong).toHaveBeenCalledWith(1);
   });
 
@@ -319,7 +332,9 @@ describe("SlideThumbnailPane (PPT식 썸네일 창)", () => {
     const { props } = renderPane({ items: makeItems([2]) });
 
     fireEvent.click(screen.getByTestId("song-section-menu-btn-0"));
-    fireEvent.click(screen.getByRole("menuitem", { name: "세트에서 제거" }));
+    fireEvent.click(
+      screen.getByRole("menuitem", { name: EDITOR_COPY.song.removeFromSet }),
+    );
     expect(props.onDeleteSong).toHaveBeenCalledWith(0);
   });
 

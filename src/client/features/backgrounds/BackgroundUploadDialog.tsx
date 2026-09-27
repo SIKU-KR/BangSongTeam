@@ -33,6 +33,8 @@ import {
   probeBackgroundFile,
   type ProbedBackgroundFile,
 } from "./probeBackgroundFile";
+import { BACKGROUND_COPY } from "#copy/backgrounds";
+import { COMMON_COPY } from "#copy/common";
 
 export interface BackgroundUploadDialogProps {
   isOpen: boolean;
@@ -123,7 +125,10 @@ export function BackgroundUploadDialog({
     } catch (err) {
       setSelection({
         status: "invalid",
-        message: err instanceof Error ? err.message : "파일을 열 수 없습니다",
+        message:
+          err instanceof Error
+            ? err.message
+            : BACKGROUND_COPY.uploadDialog.cannotOpen,
       });
     }
   };
@@ -167,11 +172,11 @@ export function BackgroundUploadDialog({
       >
         <form onSubmit={(e) => void submit(e)} className="grid gap-5">
           <DialogHeader>
-            <DialogTitle>배경 올리기</DialogTitle>
+            <DialogTitle>{BACKGROUND_COPY.upload}</DialogTitle>
             <DialogDescription className="text-xs">
-              MP4(H.264) 영상이나 JPEG·PNG·WebP 이미지, 파일당{" "}
-              {formatBytes(BACKGROUND_UPLOAD_LIMITS.maxFileBytes)}까지. 올린
-              배경은 모든 사용자에게 기본 제공 배경으로 보입니다.
+              {BACKGROUND_COPY.uploadDialog.description(
+                formatBytes(BACKGROUND_UPLOAD_LIMITS.maxFileBytes),
+              )}
             </DialogDescription>
           </DialogHeader>
 
@@ -213,25 +218,23 @@ export function BackgroundUploadDialog({
                 <span className="absolute bottom-2 left-2 rounded-sm bg-black/70 px-2 py-0.5 font-mono text-2xs text-white">
                   {selection.probed.width}×{selection.probed.height}
                   {selection.probed.kind === "video"
-                    ? ` · ${selection.probed.durationSec}초`
-                    : " · 이미지"}
+                    ? ` · ${BACKGROUND_COPY.seconds(selection.probed.durationSec)}`
+                    : ` · ${BACKGROUND_COPY.image}`}
                   {` · ${formatBytes(selection.file.size)}`}
                 </span>
                 <span className="absolute top-2 right-2 rounded-sm bg-black/70 px-2 py-0.5 text-2xs text-white">
-                  다른 파일 고르기
+                  {BACKGROUND_COPY.uploadDialog.changeFile}
                 </span>
               </div>
             ) : (
               <div className="flex flex-col items-center gap-2 px-4 py-10 text-center">
                 <span className="text-sm font-semibold">
                   {selection.status === "probing"
-                    ? "파일을 확인하는 중…"
-                    : "여기로 끌어 놓거나 눌러서 파일 고르기"}
+                    ? BACKGROUND_COPY.uploadDialog.probing
+                    : BACKGROUND_COPY.uploadDialog.dropHint}
                 </span>
                 <span className="text-2xs text-muted-foreground">
-                  권장 해상도 {BACKGROUND_UPLOAD_LIMITS.recommendedWidth}×
-                  {BACKGROUND_UPLOAD_LIMITS.recommendedHeight} · 영상 소리는
-                  송출에서 항상 꺼집니다
+                  {BACKGROUND_COPY.uploadDialog.recommendation}
                 </span>
               </div>
             )}
@@ -244,29 +247,29 @@ export function BackgroundUploadDialog({
             <Alert data-testid="bg-upload-low-res">
               <TriangleAlertIcon />
               <AlertDescription>
-                {BACKGROUND_UPLOAD_LIMITS.recommendedWidth}×
-                {BACKGROUND_UPLOAD_LIMITS.recommendedHeight}보다 작습니다. 올릴
-                수는 있지만 송출 화면에서 확대되어 흐려 보일 수 있습니다.
+                {BACKGROUND_COPY.uploadDialog.lowResolution}
               </AlertDescription>
             </Alert>
           )}
 
           <FieldGroup>
             <Field>
-              <FieldLabel htmlFor="bg-upload-title-input">배경 제목</FieldLabel>
+              <FieldLabel htmlFor="bg-upload-title-input">
+                {BACKGROUND_COPY.uploadDialog.titleLabel}
+              </FieldLabel>
               <Input
                 id="bg-upload-title-input"
                 type="text"
                 value={title}
                 maxLength={BACKGROUND_UPLOAD_LIMITS.maxTitleLength}
-                placeholder="예: 본당 성탄 배경"
+                placeholder={BACKGROUND_COPY.uploadDialog.titlePlaceholder}
                 onChange={(e) => setTitle(e.target.value)}
               />
             </Field>
 
             <Field>
               <FieldLabel htmlFor="bg-upload-license-input">
-                출처·라이선스
+                {BACKGROUND_COPY.uploadDialog.licenseLabel}
               </FieldLabel>
               <Input
                 id="bg-upload-license-input"
@@ -274,13 +277,15 @@ export function BackgroundUploadDialog({
                 data-testid="bg-upload-license-input"
                 value={license}
                 maxLength={BACKGROUND_UPLOAD_LIMITS.maxLicenseLength}
-                placeholder="예: Pexels License — 작가명, 자체 제작 (CC0)"
+                placeholder={BACKGROUND_COPY.uploadDialog.licensePlaceholder}
                 onChange={(e) => setLicense(e.target.value)}
               />
             </Field>
 
             <FieldSet>
-              <FieldLegend variant="label">분위기 태그 (선택)</FieldLegend>
+              <FieldLegend variant="label">
+                {BACKGROUND_COPY.uploadDialog.tagsLabel}
+              </FieldLegend>
               <ToggleGroup
                 multiple
                 variant="outline"
@@ -306,10 +311,10 @@ export function BackgroundUploadDialog({
               />
               <FieldContent>
                 <FieldLabel htmlFor="bg-upload-rights">
-                  모든 사용자에게 배포해도 되는 라이선스를 확인했습니다
+                  {BACKGROUND_COPY.uploadDialog.rightsLabel}
                 </FieldLabel>
                 <FieldDescription>
-                  확인되지 않은 파일은 올리지 않습니다.
+                  {BACKGROUND_COPY.uploadDialog.rightsHint}
                 </FieldDescription>
               </FieldContent>
             </Field>
@@ -326,14 +331,16 @@ export function BackgroundUploadDialog({
               onClick={close}
               disabled={upload.isPending}
             >
-              취소
+              {COMMON_COPY.cancel}
             </Button>
             <Button
               type="submit"
               data-testid="bg-upload-submit"
               disabled={!canSubmit}
             >
-              {upload.isPending ? "올리는 중…" : "올리기"}
+              {upload.isPending
+                ? BACKGROUND_COPY.uploadDialog.submitting
+                : BACKGROUND_COPY.uploadDialog.submit}
             </Button>
           </DialogFooter>
         </form>

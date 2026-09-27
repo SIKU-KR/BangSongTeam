@@ -34,6 +34,8 @@ import {
   type FolderMutationResult,
 } from "./folderStore";
 import type { DriveItemRef } from "./driveModel";
+import { DRIVE_COPY } from "#copy/drive";
+import { FOLDER_COPY } from "#copy/folders";
 
 /**
  * 드라이브 항목 조작 (폴더와 프레젠테이션을 같은 방식으로 다룬다).
@@ -69,9 +71,7 @@ export function startPresentation(
   returnTo: string,
 ): boolean {
   if (!canPresentReliably()) {
-    const proceed = window.confirm(
-      "이 브라우저에서는 전체화면 송출이나 배경 영상이 제대로 동작하지 않을 수 있습니다.\n\n계속 진행하시겠습니까?",
-    );
+    const proceed = window.confirm(DRIVE_COPY.presentUnreliable);
     if (!proceed) return false;
   }
   launchPresentation(navigate, id, returnTo);
@@ -110,7 +110,7 @@ export function moveItems(
 ): MoveOutcome {
   const outcome: MoveOutcome = { moved: [], errors: [] };
   if (targetFolderId !== null && !isFolderAvailable(targetFolderId)) {
-    outcome.errors.push("옮길 폴더를 찾을 수 없습니다");
+    outcome.errors.push(FOLDER_COPY.targetFolderNotFound);
     return outcome;
   }
 
@@ -221,14 +221,8 @@ export async function deleteItemsForever(
     }
   } catch (err) {
     if (err instanceof OfflineError) {
-      throw new DriveActionError(
-        "오프라인 상태에서는 영구 삭제할 수 없습니다. 인터넷에 연결한 뒤 다시 시도하세요.",
-        err,
-      );
+      throw new DriveActionError(DRIVE_COPY.deleteForeverOffline, err);
     }
-    throw new DriveActionError(
-      "영구 삭제하지 못했습니다. 잠시 후 다시 시도하세요.",
-      err,
-    );
+    throw new DriveActionError(DRIVE_COPY.deleteForeverRetry, err);
   }
 }

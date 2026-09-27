@@ -5,6 +5,7 @@ import { ChevronRightIcon, FolderIcon } from "lucide-react";
 import { cn } from "cn";
 import { Button } from "#components/ui/button";
 import { useFolderIndex } from "./folderStore";
+import { DRIVE_COPY } from "#copy/drive";
 
 const collator = new Intl.Collator("ko", { numeric: true });
 
@@ -118,7 +119,9 @@ function FolderTreeNode({
           size="icon-xs"
           tabIndex={-1}
           aria-label={
-            isExpanded ? `${folder.name} 접기` : `${folder.name} 펼치기`
+            isExpanded
+              ? DRIVE_COPY.collapse(folder.name)
+              : DRIVE_COPY.expand(folder.name)
           }
           onClick={() => onToggle(folder.id)}
           className={cn(children.length === 0 && "invisible")}

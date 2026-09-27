@@ -40,29 +40,9 @@ import { IconButton } from "#components/common/IconButton";
 import { usePersistenceError } from "../../lib/storage";
 import { useSyncStatus } from "../../lib/sync";
 import { ThemeMenuButton } from "../../components/common/ThemeMenuButton";
-import { PRESENTATION_SHORTCUTS, type PresentationAccess } from "#shared";
-import { EDITOR_SHORTCUT_GUIDE } from "./editorShortcuts";
-
-const PRESENTATION_SHORTCUT_GUIDE: ReadonlyArray<{
-  keys: string;
-  action: string;
-}> = [
-  { keys: "→ / Space / PageDown", action: "다음 슬라이드" },
-  { keys: "← / PageUp", action: "이전 슬라이드" },
-  { keys: "번호 + Enter", action: "세트 전체 N번째 슬라이드로 이동" },
-  { keys: "Backspace", action: "입력 중인 마지막 숫자 지우기" },
-  { keys: "B", action: "블랙아웃 켜기/끄기" },
-  { keys: "H", action: "가사 숨기기 (배경 유지)" },
-  { keys: "Esc", action: "전체화면 해제 (송출 종료)" },
-];
-
-const NUMBER_JUMP_RULES: ReadonlyArray<string> = [
-  "번호는 곡이 바뀌어도 이어서 셉니다. 1곡이 5장이면 2곡 첫 장은 6번입니다.",
-  "숫자를 입력한 뒤 Enter를 눌러야 이동합니다.",
-  `${PRESENTATION_SHORTCUTS.BUFFER_CLEAR_TIMEOUT_MS / 1000}초 동안 입력이 없으면 입력한 번호가 지워집니다.`,
-  "없는 번호는 무시합니다.",
-  "입력 중인 번호는 청중 화면에 표시되지 않습니다.",
-];
+import type { PresentationAccess } from "#shared";
+import { EDITOR_COPY, SHORTCUT_GUIDE } from "#copy/editor";
+import { COMMON_COPY } from "#copy/common";
 
 export interface EditorHeaderProps {
   title: string;
@@ -94,22 +74,34 @@ function SaveStatusIndicator(): React.JSX.Element {
 
   const { dotClass, label } = (() => {
     if (persistenceError) {
-      return { dotClass: "bg-destructive", label: "저장 실패" };
+      return {
+        dotClass: "bg-destructive",
+        label: EDITOR_COPY.syncStatus.saveFailed,
+      };
     }
     switch (status) {
       case "syncing":
-        return { dotClass: "bg-warning", label: "동기화 중…" };
+        return {
+          dotClass: "bg-warning",
+          label: EDITOR_COPY.syncStatus.syncing,
+        };
       case "synced":
-        return { dotClass: "bg-success", label: "동기화됨" };
+        return { dotClass: "bg-success", label: EDITOR_COPY.syncStatus.synced };
       case "offline":
         return {
           dotClass: "bg-muted-foreground",
-          label: "오프라인 · 로컬 저장됨",
+          label: EDITOR_COPY.syncStatus.offline,
         };
       case "error":
-        return { dotClass: "bg-destructive", label: "동기화 실패" };
+        return {
+          dotClass: "bg-destructive",
+          label: EDITOR_COPY.syncStatus.syncFailed,
+        };
       default:
-        return { dotClass: "bg-success", label: "자동 저장됨" };
+        return {
+          dotClass: "bg-success",
+          label: EDITOR_COPY.syncStatus.autoSaved,
+        };
     }
   })();
 
@@ -215,9 +207,11 @@ export function EditorHeader({
               }
             >
               <ArrowLeftIcon />
-              <span className="hidden sm:inline">홈</span>
+              <span className="hidden sm:inline">
+                {EDITOR_COPY.header.home}
+              </span>
             </TooltipTrigger>
-            <TooltipContent>프레젠테이션 목록으로 돌아가기</TooltipContent>
+            <TooltipContent>{EDITOR_COPY.header.backToList}</TooltipContent>
           </Tooltip>
         )}
 
@@ -226,7 +220,7 @@ export function EditorHeader({
             data-testid="header-file-menu-btn"
             render={<Button variant="ghost" size="sm" />}
           >
-            파일
+            {EDITOR_COPY.header.file}
             <ChevronDownIcon className="text-muted-foreground" />
           </DropdownMenuTrigger>
           <DropdownMenuContent
@@ -235,7 +229,8 @@ export function EditorHeader({
           >
             {onNewPresentation && (
               <DropdownMenuItem onClick={onNewPresentation}>
-                <PlusIcon />새 프레젠테이션
+                <PlusIcon />
+                {COMMON_COPY.newPresentation}
               </DropdownMenuItem>
             )}
             {onOpenLyricModal && (
@@ -243,7 +238,8 @@ export function EditorHeader({
                 data-testid="header-file-menu-lyric-btn"
                 onClick={onOpenLyricModal}
               >
-                <FileTextIcon />새 가사 입력
+                <FileTextIcon />
+                {EDITOR_COPY.song.newLyrics}
               </DropdownMenuItem>
             )}
             {onMakeCopy && (
@@ -252,7 +248,7 @@ export function EditorHeader({
                 onClick={onMakeCopy}
               >
                 <CopyIcon />
-                사본 만들기
+                {COMMON_COPY.makeCopy}
               </DropdownMenuItem>
             )}
           </DropdownMenuContent>
@@ -273,7 +269,7 @@ export function EditorHeader({
               type="text"
               value={tempTitle}
               autoFocus
-              aria-label="프레젠테이션 제목"
+              aria-label={EDITOR_COPY.header.titleLabel}
               onChange={(e) => setTempTitle(e.target.value)}
               onBlur={handleTitleSubmit}
               onKeyDown={(e) => {
@@ -304,7 +300,7 @@ export function EditorHeader({
                 <span className="truncate">{title}</span>
                 <PencilIcon className="text-muted-foreground" />
               </TooltipTrigger>
-              <TooltipContent>클릭하여 제목 수정</TooltipContent>
+              <TooltipContent>{EDITOR_COPY.header.editTitle}</TooltipContent>
             </Tooltip>
           )}
 
@@ -315,7 +311,7 @@ export function EditorHeader({
               className="hidden md:inline-flex"
             >
               <UsersIcon />
-              {sharedAccess.ownerName}님이 공유 · 보기 전용
+              {EDITOR_COPY.header.sharedBy(sharedAccess.ownerName)}
             </Badge>
           )}
 
@@ -325,7 +321,7 @@ export function EditorHeader({
         {(onUndo || onRedo) && (
           <div className="hidden items-center gap-0.5 border-l pl-2 sm:flex">
             <IconButton
-              label="실행 취소 (Ctrl/⌘+Z)"
+              label={EDITOR_COPY.header.undo}
               size="icon-sm"
               data-testid="header-undo-btn"
               disabled={!canUndo}
@@ -334,7 +330,7 @@ export function EditorHeader({
               <Undo2Icon />
             </IconButton>
             <IconButton
-              label="다시 실행 (Ctrl/⌘+Shift+Z)"
+              label={EDITOR_COPY.header.redo}
               size="icon-sm"
               data-testid="header-redo-btn"
               disabled={!canRedo}
@@ -359,22 +355,29 @@ export function EditorHeader({
             }
           >
             <InfoIcon />
-            <span className="hidden sm:inline">단축키</span>
+            <span className="hidden sm:inline">
+              {EDITOR_COPY.header.shortcuts}
+            </span>
           </PopoverTrigger>
           <PopoverContent
             data-testid="header-shortcuts-popover"
             align="end"
             className="max-h-(--available-height) w-96 overflow-y-auto text-xs"
           >
-            <ShortcutTable heading="편집 단축키" rows={EDITOR_SHORTCUT_GUIDE} />
             <ShortcutTable
-              heading="발표 송출 단축키"
-              rows={PRESENTATION_SHORTCUT_GUIDE}
+              heading={EDITOR_COPY.header.editorShortcuts}
+              rows={SHORTCUT_GUIDE.editor}
+            />
+            <ShortcutTable
+              heading={EDITOR_COPY.header.presentShortcuts}
+              rows={SHORTCUT_GUIDE.presentation}
             />
             <div className="space-y-1 border-t pt-2">
-              <div className="font-semibold">번호 이동 규칙</div>
+              <div className="font-semibold">
+                {EDITOR_COPY.header.numberJumpRules}
+              </div>
               <ul className="list-disc space-y-0.5 pl-4 text-muted-foreground">
-                {NUMBER_JUMP_RULES.map((rule) => (
+                {EDITOR_COPY.numberJumpRules.map((rule) => (
                   <li key={rule}>{rule}</li>
                 ))}
               </ul>
@@ -391,7 +394,7 @@ export function EditorHeader({
             onClick={onShare}
           >
             <Share2Icon />
-            공유
+            {COMMON_COPY.share}
           </Button>
         )}
 
@@ -401,7 +404,7 @@ export function EditorHeader({
           onClick={onPresent}
         >
           <PlayIcon className="fill-current" />
-          슬라이드쇼 발표
+          {EDITOR_COPY.slide.present}
         </Button>
       </div>
     </header>

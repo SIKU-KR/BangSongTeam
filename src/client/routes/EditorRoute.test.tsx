@@ -22,6 +22,8 @@ import {
   resetPresentationStore,
   SEED_PRESENTATION_IDS,
 } from "../features/presentation";
+import { EDITOR_COPY } from "#copy/editor";
+import { COMMON_COPY } from "#copy/common";
 
 const DOC_ID = SEED_PRESENTATION_IDS[0];
 
@@ -48,7 +50,9 @@ const stageCanvas = () => screen.getByTestId("editor-stage-canvas");
 const firstSong = () => getActivePresentation().items[0].deck!;
 
 async function selectFont(font: string): Promise<void> {
-  fireEvent.click(screen.getByRole("combobox", { name: "글꼴" }));
+  fireEvent.click(
+    screen.getByRole("combobox", { name: EDITOR_COPY.ribbon.font }),
+  );
   const option = await screen.findByRole("option", { name: font });
   fireEvent.pointerDown(option);
   fireEvent.mouseDown(option);
@@ -56,9 +60,9 @@ async function selectFont(font: string): Promise<void> {
   fireEvent.mouseUp(option);
   fireEvent.click(option);
   await waitFor(() =>
-    expect(screen.getByRole("combobox", { name: "글꼴" })).toHaveTextContent(
-      font,
-    ),
+    expect(
+      screen.getByRole("combobox", { name: EDITOR_COPY.ribbon.font }),
+    ).toHaveTextContent(font),
   );
 }
 
@@ -70,7 +74,9 @@ function startLyricsEdit(): HTMLTextAreaElement {
 }
 
 function lyricsEditor(): HTMLTextAreaElement {
-  return screen.getByLabelText("슬라이드 가사 편집") as HTMLTextAreaElement;
+  return screen.getByLabelText(
+    EDITOR_COPY.slide.editLyrics,
+  ) as HTMLTextAreaElement;
 }
 
 function typeLyrics(textarea: HTMLTextAreaElement, value: string): void {
@@ -168,7 +174,7 @@ describe("EditorRoute (PowerPoint식 프레젠테이션 편집기)", () => {
       fireEvent.keyDown(textarea, { key: "Escape" });
     });
     expect(
-      screen.queryByLabelText("슬라이드 가사 편집"),
+      screen.queryByLabelText(EDITOR_COPY.slide.editLyrics),
     ).not.toBeInTheDocument();
     expect(
       within(stageCanvas()).getByText("수정된 두 번째 가사"),
@@ -312,7 +318,7 @@ describe("EditorRoute (PowerPoint식 프레젠테이션 편집기)", () => {
     const otherSongStyle = getActivePresentation().items[1].deck!.style;
 
     await selectFont("Gmarket Sans");
-    const size = screen.getByLabelText("글자 크기");
+    const size = screen.getByLabelText(EDITOR_COPY.ribbon.fontSize);
     expect(size).toHaveValue("40");
     fireEvent.change(size, { target: { value: "60" } });
     fireEvent.keyDown(size, { key: "Enter" });
@@ -322,7 +328,9 @@ describe("EditorRoute (PowerPoint식 프레젠테이션 편집기)", () => {
     fireEvent.click(screen.getByTestId("overlay-btn"));
     act(() => {
       fireEvent.change(
-        screen.getByLabelText("검정 오버레이 불투명도", { selector: "input" }),
+        screen.getByLabelText(EDITOR_COPY.ribbon.overlayOpacity, {
+          selector: "input",
+        }),
         { target: { value: "75" } },
       );
     });
@@ -348,11 +356,15 @@ describe("EditorRoute (PowerPoint식 프레젠테이션 편집기)", () => {
     renderEditor();
 
     fireEvent.click(screen.getByTestId("font-size-up-btn"));
-    expect(screen.getByLabelText("글자 크기")).toHaveValue("44");
+    expect(screen.getByLabelText(EDITOR_COPY.ribbon.fontSize)).toHaveValue(
+      "44",
+    );
 
     fireEvent.click(screen.getByTestId("font-size-down-btn"));
     fireEvent.click(screen.getByTestId("font-size-down-btn"));
-    expect(screen.getByLabelText("글자 크기")).toHaveValue("36");
+    expect(screen.getByLabelText(EDITOR_COPY.ribbon.fontSize)).toHaveValue(
+      "36",
+    );
   });
 
   it("should add a new slide after the current slide", () => {
@@ -401,11 +413,15 @@ describe("EditorRoute (PowerPoint식 프레젠테이션 편집기)", () => {
 
     expect(screen.getByText("100%")).toBeInTheDocument();
 
-    const zoomInBtn = screen.getByRole("button", { name: "캔버스 확대" });
+    const zoomInBtn = screen.getByRole("button", {
+      name: EDITOR_COPY.canvas.zoomIn,
+    });
     fireEvent.click(zoomInBtn);
     expect(screen.getByText("115%")).toBeInTheDocument();
 
-    const zoomOutBtn = screen.getByRole("button", { name: "캔버스 축소" });
+    const zoomOutBtn = screen.getByRole("button", {
+      name: EDITOR_COPY.canvas.zoomOut,
+    });
     fireEvent.click(zoomOutBtn);
     expect(screen.getByText("100%")).toBeInTheDocument();
   });
@@ -464,7 +480,9 @@ describe("EditorRoute (PowerPoint식 프레젠테이션 편집기)", () => {
       });
     });
 
-    expect(screen.getByLabelText("글자 크기")).toHaveValue("44");
+    expect(screen.getByLabelText(EDITOR_COPY.ribbon.fontSize)).toHaveValue(
+      "44",
+    );
   });
 
   it("버튼에 포커스가 있을 때 Space는 슬라이드를 넘기지 않는다", () => {
@@ -479,7 +497,7 @@ describe("EditorRoute (PowerPoint식 프레젠테이션 편집기)", () => {
   it("글꼴 선택 상자에서 방향키를 눌러도 슬라이드가 넘어가지 않는다", () => {
     renderEditor();
 
-    screen.getByRole("combobox", { name: "글꼴" }).focus();
+    screen.getByRole("combobox", { name: EDITOR_COPY.ribbon.font }).focus();
     fireEvent.keyDown(window, { key: "ArrowDown" });
 
     expect(statusBar()).toHaveTextContent("슬라이드 1/23");
@@ -510,7 +528,7 @@ describe("EditorRoute (PowerPoint식 프레젠테이션 편집기)", () => {
     const fileMenuBtn = screen.getByTestId("header-file-menu-btn");
     fireEvent.click(fileMenuBtn);
 
-    expect(screen.getByText("새 프레젠테이션")).toBeInTheDocument();
+    expect(screen.getByText(COMMON_COPY.newPresentation)).toBeInTheDocument();
     expect(
       screen.queryByText("기본 5곡 세트 불러오기"),
     ).not.toBeInTheDocument();
@@ -578,7 +596,7 @@ describe("EditorRoute (PowerPoint식 프레젠테이션 편집기)", () => {
       fireEvent.click(screen.getByTestId("header-file-menu-btn"));
     });
     act(() => {
-      fireEvent.click(screen.getByText("새 프레젠테이션"));
+      fireEvent.click(screen.getByText(COMMON_COPY.newPresentation));
     });
 
     expect(mockNavigate).toHaveBeenCalledWith(
@@ -597,7 +615,7 @@ describe("EditorRoute (PowerPoint식 프레젠테이션 편집기)", () => {
     });
 
     expect(screen.getByTestId("song-picker-modal")).toBeInTheDocument();
-    expect(screen.getByText("새 찬양 가사 직접 입력")).toBeInTheDocument();
+    expect(screen.getByText(EDITOR_COPY.create.title)).toBeInTheDocument();
     expect(
       screen.getByTestId("song-picker-create-lyrics-input"),
     ).toBeInTheDocument();
@@ -625,7 +643,7 @@ describe("EditorRoute (PowerPoint식 프레젠테이션 편집기)", () => {
 
     expect(
       screen.getByTestId("header-file-menu-dropdown"),
-    ).not.toHaveTextContent("슬라이드쇼 발표");
+    ).not.toHaveTextContent(EDITOR_COPY.slide.present);
   });
 
   it("파일 메뉴는 ESC 키로 닫힌다", () => {
@@ -736,7 +754,9 @@ describe("EditorRoute (PowerPoint식 프레젠테이션 편집기)", () => {
       renderEditor();
 
       fireEvent.click(screen.getByTestId("song-section-menu-btn-0"));
-      fireEvent.click(screen.getByRole("menuitem", { name: "아래로 이동" }));
+      fireEvent.click(
+        screen.getByRole("menuitem", { name: EDITOR_COPY.song.moveDown }),
+      );
 
       expect(screen.getByTestId("song-section-0")).toHaveTextContent("주 품에");
       expect(screen.getByTestId("song-section-1")).toHaveTextContent(
@@ -751,7 +771,9 @@ describe("EditorRoute (PowerPoint식 프레젠테이션 편집기)", () => {
       renderEditor();
 
       fireEvent.click(screen.getByTestId("song-section-menu-btn-0"));
-      fireEvent.click(screen.getByRole("menuitem", { name: "곡 복제" }));
+      fireEvent.click(
+        screen.getByRole("menuitem", { name: EDITOR_COPY.song.duplicate }),
+      );
 
       expect(screen.getByTestId("song-section-1")).toHaveTextContent(
         "은혜로다 (사본)",
@@ -759,7 +781,9 @@ describe("EditorRoute (PowerPoint식 프레젠테이션 편집기)", () => {
       expect(statusBar()).toHaveTextContent("곡 2/6");
 
       fireEvent.click(screen.getByTestId("song-section-menu-btn-1"));
-      fireEvent.click(screen.getByRole("menuitem", { name: "세트에서 제거" }));
+      fireEvent.click(
+        screen.getByRole("menuitem", { name: EDITOR_COPY.song.removeFromSet }),
+      );
 
       expect(screen.queryByText("은혜로다 (사본)")).not.toBeInTheDocument();
       expect(statusBar()).toHaveTextContent("곡 2/5");
@@ -770,7 +794,7 @@ describe("EditorRoute (PowerPoint식 프레젠테이션 편집기)", () => {
 
       fireEvent.click(screen.getByTestId("song-section-menu-btn-0"));
       fireEvent.click(
-        screen.getByRole("menuitem", { name: "제목·아티스트 수정" }),
+        screen.getByRole("menuitem", { name: EDITOR_COPY.song.editInfo }),
       );
 
       const titleInput = screen.getByTestId("song-info-title-input");
@@ -805,7 +829,7 @@ describe("EditorRoute (PowerPoint식 프레젠테이션 편집기)", () => {
 
       fireEvent.contextMenu(screen.getByTestId("song-section-1"));
       fireEvent.click(
-        screen.getByRole("menuitem", { name: "제목·아티스트 수정" }),
+        screen.getByRole("menuitem", { name: EDITOR_COPY.song.editInfo }),
       );
       fireEvent.change(screen.getByTestId("song-info-title-input"), {
         target: { value: "바뀐 제목" },
@@ -821,7 +845,7 @@ describe("EditorRoute (PowerPoint식 프레젠테이션 편집기)", () => {
 
       fireEvent.contextMenu(screen.getByTestId("song-section-3"));
       const menu = await screen.findByTestId("slide-pane-menu");
-      expect(menu).toHaveTextContent("세트에서 제거");
+      expect(menu).toHaveTextContent(EDITOR_COPY.song.removeFromSet);
 
       fireEvent.keyDown(menu, { key: "Escape" });
       await waitFor(() =>
@@ -862,7 +886,9 @@ describe("EditorRoute (PowerPoint식 프레젠테이션 편집기)", () => {
       expect(screen.getByTestId("ribbon-song-label")).toHaveTextContent(
         getActivePresentation().items[1].deck!.title,
       );
-      expect(screen.getByRole("combobox", { name: "글꼴" })).toHaveTextContent(
+      expect(
+        screen.getByRole("combobox", { name: EDITOR_COPY.ribbon.font }),
+      ).toHaveTextContent(
         getActivePresentation().items[1].deck!.style.fontFamily,
       );
     });
@@ -886,13 +912,13 @@ describe("EditorRoute (PowerPoint식 프레젠테이션 편집기)", () => {
       renderEmptyEditor();
 
       expect(
-        screen.getByText("등록된 찬양 곡 또는 슬라이드가 없습니다"),
+        screen.getByText(EDITOR_COPY.canvas.emptyTitle),
       ).toBeInTheDocument();
       expect(
         screen.queryByText("기본 5곡 세트 불러오기"),
       ).not.toBeInTheDocument();
       expect(
-        screen.getByText("가사 붙여넣기로 새 곡 추가"),
+        screen.getByText(EDITOR_COPY.canvas.pasteNewSong),
       ).toBeInTheDocument();
     });
 
@@ -900,7 +926,7 @@ describe("EditorRoute (PowerPoint식 프레젠테이션 편집기)", () => {
       renderEmptyEditor();
 
       act(() => {
-        fireEvent.click(screen.getByText("가사 붙여넣기로 새 곡 추가"));
+        fireEvent.click(screen.getByText(EDITOR_COPY.canvas.pasteNewSong));
       });
 
       expect(
