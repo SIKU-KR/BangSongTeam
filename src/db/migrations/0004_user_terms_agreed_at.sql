@@ -1,0 +1,1 @@
+ALTER TABLE `user` ADD `terms_agreed_at` integer;

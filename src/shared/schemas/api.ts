@@ -5,7 +5,6 @@ import { SlideSchema } from "./slide";
 import { DeckSchema } from "./deck";
 import { PresentationSchema, PresentationItemSchema } from "./presentation";
 import { PublicDeckSummarySchema } from "./library";
-import { PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH } from "../constants/auth";
 
 export const CreateDeckRequestSchema = z.object({
   title: z.string().min(1).max(100),
@@ -108,22 +107,25 @@ export const DeckListResponseSchema = z.object({
 });
 export type DeckListResponse = z.infer<typeof DeckListResponseSchema>;
 
-export const DevLoginRequestSchema = z.object({
-  email: z.string().email().optional(),
-  name: z.string().min(1).max(50).optional(),
-});
-export type DevLoginRequest = z.infer<typeof DevLoginRequestSchema>;
-
-export const EmailSignUpRequestSchema = z.object({
-  email: z.string().trim().toLowerCase().email().max(254),
-  password: z.string().min(PASSWORD_MIN_LENGTH).max(PASSWORD_MAX_LENGTH),
-  name: z.string().trim().min(1).max(50),
-});
-export type EmailSignUpRequest = z.infer<typeof EmailSignUpRequestSchema>;
+/** 로그인 화면에 버튼이 나오는 순서이기도 하다 */
+export const SocialProviderSchema = z.enum(["kakao", "naver", "google"]);
+export type SocialProvider = z.infer<typeof SocialProviderSchema>;
 
 export const AuthConfigResponseSchema = z.object({
-  providers: z.array(z.enum(["kakao", "naver"])),
-  devLogin: z.boolean(),
-  emailLogin: z.boolean(),
+  providers: z.array(SocialProviderSchema),
 });
 export type AuthConfigResponse = z.infer<typeof AuthConfigResponseSchema>;
+
+/** 동의를 마치지 않은 사용자는 `agreedAt`이 null이고, 앱이 동의 모달로 막는다 */
+export const ConsentStatusResponseSchema = z.object({
+  agreedAt: z.string().datetime().nullable(),
+});
+export type ConsentStatusResponse = z.infer<typeof ConsentStatusResponseSchema>;
+
+/** 필수 항목만 있어 모두 `true`여야 동의로 기록한다 */
+export const AgreeConsentRequestSchema = z.object({
+  ageOver14: z.literal(true),
+  terms: z.literal(true),
+  privacy: z.literal(true),
+});
+export type AgreeConsentRequest = z.infer<typeof AgreeConsentRequestSchema>;

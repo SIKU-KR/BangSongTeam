@@ -60,17 +60,17 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       # The version comes from "packageManager" in package.json; pinning it
       # here as well makes the action fail whenever the two disagree.
       - name: Install pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
         with:
           run_install: false
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: "pnpm"
@@ -98,7 +98,7 @@ jobs:
       - name: Check Worker bundle size
         run: |
           limit=1048576
-          size=$(find dist/prj_ppt_web -name '*.js' -not -path '*/.vite/*' -exec cat {} + | wc -c)
+          size=$(find dist/bangsongteam -name '*.js' -not -path '*/.vite/*' -exec cat {} + | wc -c)
           echo "Worker JS: ${size} bytes (limit ${limit})"
           if [ "$size" -gt "$limit" ]; then
             echo "::error::Worker bundle is ${size} bytes, over the ${limit}-byte limit."
@@ -146,17 +146,17 @@ jobs:
           fi
 
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       # The version comes from "packageManager" in package.json; pinning it
       # here as well makes the action fail whenever the two disagree.
       - name: Install pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
         with:
           run_install: false
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: "pnpm"
@@ -173,7 +173,7 @@ jobs:
         run: pnpm db:migrate:prod
 
       - name: Deploy Cloudflare Worker
-        uses: cloudflare/wrangler-action@v3
+        uses: cloudflare/wrangler-action@v4
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}

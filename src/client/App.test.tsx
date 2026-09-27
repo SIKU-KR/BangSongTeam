@@ -52,7 +52,7 @@ describe("App Route Integration", () => {
   it("should render the dashboard at '/presentations'", async () => {
     renderAt("/presentations");
 
-    expect(await screen.findByText("Worship Studio")).toBeInTheDocument();
+    expect(await screen.findByText("방송팀")).toBeInTheDocument();
     expect(
       (await screen.findAllByTestId("presentation-row")).length,
     ).toBeGreaterThan(0);
@@ -61,7 +61,7 @@ describe("App Route Integration", () => {
   it("should redirect '/lyrics' to '/presentations'", async () => {
     renderAt("/lyrics");
 
-    expect(await screen.findByText("Worship Studio")).toBeInTheDocument();
+    expect(await screen.findByText("방송팀")).toBeInTheDocument();
     expect(
       (await screen.findAllByTestId("presentation-row")).length,
     ).toBeGreaterThan(0);
@@ -125,7 +125,7 @@ describe("App Route Integration", () => {
     renderAt("/presentations");
 
     expect(
-      await screen.findByRole("button", { name: /카카오로 시작하기/ }),
+      await screen.findByRole("button", { name: /카카오 로그인/ }),
     ).toBeInTheDocument();
     expect(screen.queryByTestId("presentation-row")).not.toBeInTheDocument();
   });
@@ -137,7 +137,7 @@ describe("App Route Integration", () => {
 
     expect(await screen.findByTestId("landing-route")).toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: /카카오로 시작하기/ }),
+      screen.queryByRole("button", { name: /카카오 로그인/ }),
     ).not.toBeInTheDocument();
 
     act(() => {
@@ -145,7 +145,7 @@ describe("App Route Integration", () => {
     });
 
     expect(
-      await screen.findByRole("button", { name: /카카오로 시작하기/ }),
+      await screen.findByRole("button", { name: /카카오 로그인/ }),
     ).toBeInTheDocument();
   });
 
@@ -155,7 +155,7 @@ describe("App Route Integration", () => {
     renderAt(`/present/${DOC_ID}/fullscreen`);
 
     expect(
-      await screen.findByRole("button", { name: /카카오로 시작하기/ }),
+      await screen.findByRole("button", { name: /카카오 로그인/ }),
     ).toBeInTheDocument();
     expect(
       screen.queryByTestId("fullscreen-present-route"),
@@ -181,7 +181,7 @@ describe("App Route Integration", () => {
 
       expect(await screen.findByTestId("read-only-banner")).toBeInTheDocument();
       expect(
-        screen.queryByRole("button", { name: /카카오로 시작하기/ }),
+        screen.queryByRole("button", { name: /카카오 로그인/ }),
       ).not.toBeInTheDocument();
     } finally {
       api.restore();
@@ -193,7 +193,7 @@ describe("App Route Integration", () => {
 
     renderAt("/presentations");
 
-    expect(await screen.findByText("Worship Studio")).toBeInTheDocument();
+    expect(await screen.findByText("방송팀")).toBeInTheDocument();
     expect(screen.queryByTestId("presentation-row")).not.toBeInTheDocument();
   });
 
@@ -201,7 +201,7 @@ describe("App Route Integration", () => {
     signOutForTests();
     renderAt("/presentations");
 
-    await screen.findByRole("button", { name: /카카오로 시작하기/ });
+    await screen.findByRole("button", { name: /카카오 로그인/ });
 
     await act(async () => {
       signInAsTestUser();

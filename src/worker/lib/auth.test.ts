@@ -26,6 +26,8 @@ function makeEnv(overrides: Partial<Bindings> = {}): Bindings {
     KAKAO_CLIENT_SECRET: "kakao-secret",
     NAVER_CLIENT_ID: "naver-id",
     NAVER_CLIENT_SECRET: "naver-secret",
+    GOOGLE_CLIENT_ID: "google-id",
+    GOOGLE_CLIENT_SECRET: "google-secret",
     ...overrides,
   };
 }
@@ -132,6 +134,8 @@ describe("worker auth 인스턴스", () => {
           KAKAO_CLIENT_SECRET: undefined,
           NAVER_CLIENT_ID: undefined,
           NAVER_CLIENT_SECRET: undefined,
+          GOOGLE_CLIENT_ID: undefined,
+          GOOGLE_CLIENT_SECRET: undefined,
         }),
       );
       expect(typeof auth.handler).toBe("function");

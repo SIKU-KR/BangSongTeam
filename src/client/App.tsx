@@ -10,6 +10,7 @@ import { hydrateSongLibrary } from "./features/editor/songLibraryStore";
 import { hydrateFoldersFromStorage } from "./features/drive/folderStore";
 import { hydrateBackgroundCatalog } from "./features/backgrounds/backgroundCatalog";
 import { hydrateSession, useSession } from "./lib/auth";
+import { ConsentGate } from "./features/auth/ConsentGate";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { createAppQueryClient } from "./lib/api/queryClient";
 import {
@@ -31,6 +32,8 @@ import {
   LoginRoute,
   ShareJoinRoute,
   SharePreviewRoute,
+  TermsRoute,
+  PrivacyRoute,
 } from "./routes";
 
 function useHydration(): boolean {
@@ -149,6 +152,8 @@ function AppRoutes(): React.JSX.Element {
                 path="/present/:presentationId/fullscreen"
                 element={<FullscreenPresentRoute />}
               />
+              <Route path="/terms" element={<TermsRoute />} />
+              <Route path="/privacy" element={<PrivacyRoute />} />
               <Route
                 path="*"
                 element={<Navigate to="/presentations" replace />}
@@ -156,6 +161,7 @@ function AppRoutes(): React.JSX.Element {
             </Routes>
           </Suspense>
         </RouteErrorBoundary>
+        <ConsentGate />
       </BrowserRouter>
     </AppProviders>
   );
@@ -178,6 +184,8 @@ function GuestRoutes(): React.JSX.Element {
                 path="/present/:presentationId/fullscreen"
                 element={<FullscreenPresentRoute />}
               />
+              <Route path="/terms" element={<TermsRoute />} />
+              <Route path="/privacy" element={<PrivacyRoute />} />
               <Route path="*" element={<LoginRoute />} />
             </Routes>
           </Suspense>

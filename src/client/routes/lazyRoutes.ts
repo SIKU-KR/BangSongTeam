@@ -35,6 +35,12 @@ export function preloadEditorRoute(): void {
 export const EditorRoute = lazy(() =>
   loadEditorRoute().then((m) => ({ default: m.EditorRoute })),
 );
+export const TermsRoute = lazy(() =>
+  import("./TermsRoute").then((m) => ({ default: m.TermsRoute })),
+);
+export const PrivacyRoute = lazy(() =>
+  import("./PrivacyRoute").then((m) => ({ default: m.PrivacyRoute })),
+);
 export const LoginRoute = lazy(() =>
   import("./LoginRoute").then((m) => ({ default: m.LoginRoute })),
 );

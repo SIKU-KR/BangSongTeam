@@ -128,21 +128,6 @@ export async function signInWithProvider(
   });
 }
 
-export async function signInAsDeveloper(email?: string): Promise<void> {
-  const response = await fetch("/api/dev-login", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    credentials: "include",
-    body: JSON.stringify(email ? { email } : {}),
-  });
-
-  if (!response.ok) {
-    throw new Error("개발자 로그인에 실패했습니다");
-  }
-
-  await revalidateSession();
-}
-
 export async function fetchAuthConfig(): Promise<AuthConfigResponse> {
   const response = await fetch("/api/auth-config", {
     credentials: "include",

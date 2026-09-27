@@ -7,6 +7,8 @@ export {
   EditorRoute,
   LoginRoute,
   SharePreviewRoute,
+  TermsRoute,
+  PrivacyRoute,
 } from "./lazyRoutes";
 export { LandingRoute } from "./LandingRoute";
 export { FullscreenPresentRoute } from "./FullscreenPresentRoute";

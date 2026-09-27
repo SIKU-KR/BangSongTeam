@@ -9,8 +9,8 @@ import { createDecksRoute } from "./routes/decks";
 import { createCatalogRoute } from "./routes/catalog";
 import { createReportsRoute } from "./routes/reports";
 import { createShareRoute } from "./routes/share";
-import { devLoginRoute } from "./routes/devLogin";
-import { emailSignupRoute } from "./routes/emailSignup";
+import { authConfigRoute } from "./routes/authConfig";
+import { createConsentRoute } from "./routes/consent";
 import type { AppDeps } from "./deps";
 
 /**
@@ -44,8 +44,8 @@ export function createApp(deps: AppDeps = {}) {
     .on(["GET", "POST"], `${AUTH_BASE_PATH}/*`, (c) => {
       return createAuth(c.env).handler(c.req.raw);
     })
-    .route("/api", devLoginRoute)
-    .route("/api", emailSignupRoute)
+    .route("/api", authConfigRoute)
+    .route("/api/consent", createConsentRoute(deps))
     .route("/api/presentations", createPresentationsRoute(deps))
     .route("/api/folders", createFoldersRoute(deps))
     .route("/api/decks", createDecksRoute(deps))

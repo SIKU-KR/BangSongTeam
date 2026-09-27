@@ -24,7 +24,7 @@ describe("Miniflare/workerd 환경 Worker 및 D1 통합 테스트", () => {
   it("처리되지 않은 오류는 내부 메시지를 숨기고 500을 준다", async () => {
     const brokenBucket = {
       get: async () => {
-        throw new Error("R2 internal: prj-ppt-media unreachable");
+        throw new Error("R2 internal: bangsongteam-media unreachable");
       },
     } as unknown as R2Bucket;
 
@@ -117,6 +117,31 @@ describe("Miniflare/workerd 환경 Worker 및 D1 통합 테스트", () => {
       const body = (await res.json()) as { url: string };
       expect(body.url).toContain("kauth.kakao.com");
       expect(body.url).toContain("api%2Fauth%2Fcallback%2Fkakao");
+    });
+
+    it("구글은 매번 계정을 고르게 하는 인가 URL을 돌려준다", async () => {
+      const res = await app.request(
+        "/api/auth/sign-in/social",
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ provider: "google", callbackURL: "/" }),
+        },
+        {
+          ...env,
+          GOOGLE_CLIENT_ID: "test-client-id",
+          GOOGLE_CLIENT_SECRET: "test-client-secret",
+        },
+      );
+
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as { url: string };
+      const url = new URL(body.url);
+      expect(url.hostname).toBe("accounts.google.com");
+      expect(url.searchParams.get("prompt")).toBe("select_account");
+      expect(url.searchParams.get("redirect_uri")).toMatch(
+        /\/api\/auth\/callback\/google$/,
+      );
     });
 
     it("자격증명이 없는 프로바이더는 404다", async () => {

@@ -10,8 +10,8 @@ export interface Bindings {
   KAKAO_CLIENT_SECRET?: string;
   NAVER_CLIENT_ID?: string;
   NAVER_CLIENT_SECRET?: string;
-  DEV_LOGIN_ENABLED?: string;
-  EMAIL_SIGNUP_ALLOWLIST?: string;
+  GOOGLE_CLIENT_ID?: string;
+  GOOGLE_CLIENT_SECRET?: string;
   ADMIN_USER_IDS?: string;
 }
 
