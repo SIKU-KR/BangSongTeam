@@ -19,6 +19,27 @@ export async function runStatements(
 }
 
 /**
+ * 서로 기다릴 필요가 없는 읽기 쿼리를 D1 왕복 한 번에 보낸다. 결과는 넘긴 순서대로
+ * 돌려주며, `null` 자리는 보내지 않고 빈 배열로 채운다. batch가 없는 테스트
+ * 클라이언트에서는 순서대로 await한다.
+ */
+export async function runQueries(
+  db: DbInstance,
+  queries: readonly unknown[],
+): Promise<unknown[][]> {
+  const present = queries.filter((query) => query !== null);
+  let results: unknown[][];
+  if (typeof db.batch === "function" && present.length > 0) {
+    results = await db.batch(present);
+  } else {
+    results = [];
+    for (const query of present) results.push((await query) as unknown[]);
+  }
+  let next = 0;
+  return queries.map((query) => (query === null ? [] : results[next++]));
+}
+
+/**
  * D1은 쿼리 하나에 바인딩 변수를 100개까지만 받는다. `inArray`에 넘길 id를
  * 이 크기로 나눈다.
  */

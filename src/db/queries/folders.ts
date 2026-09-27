@@ -224,13 +224,13 @@ export function tombstoneStatements(
   return statements;
 }
 
-/** 같은 id를 다시 저장하면 영구 삭제 기록을 지운다 */
-export async function clearTombstone(
+/** 같은 id를 다시 저장하면 영구 삭제 기록을 지운다 (호출자가 batch에 넣는다) */
+export function clearTombstoneStatement(
   db: DbInstance,
   userId: string,
   itemId: string,
-): Promise<void> {
-  await db
+): unknown {
+  return db
     .delete(driveTombstones)
     .where(
       and(
@@ -238,4 +238,13 @@ export async function clearTombstone(
         eq(driveTombstones.userId, userId),
       ),
     );
+}
+
+/** 같은 id를 다시 저장하면 영구 삭제 기록을 지운다 */
+export async function clearTombstone(
+  db: DbInstance,
+  userId: string,
+  itemId: string,
+): Promise<void> {
+  await clearTombstoneStatement(db, userId, itemId);
 }

@@ -1,20 +1,23 @@
 import { eq, and, asc, desc, inArray } from "drizzle-orm";
-import { createId, type PresentationDocument } from "#shared";
+import {
+  createId,
+  toPresentationChanges,
+  type PresentationChanges,
+  type PresentationDocument,
+} from "#shared";
 import {
   presentations,
   presentationItems,
   decks,
+  folders,
   type Presentation,
   type Deck,
+  type NewDeck,
 } from "../schema";
-import { fromPresentationDocument, toPresentationDocument } from "./mappers";
-import { nullifyUnknownBackgrounds } from "./backgrounds";
-import { chunkIds, runStatements } from "./batch";
-import {
-  clearTombstone,
-  resolveOwnedFolderId,
-  tombstoneStatements,
-} from "./folders";
+import { fromPresentationChanges, toPresentationDocument } from "./mappers";
+import { keepKnownBackgrounds, knownBackgroundsQuery } from "./backgrounds";
+import { chunkIds, runQueries, runStatements } from "./batch";
+import { clearTombstoneStatement, tombstoneStatements } from "./folders";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type DbInstance = any;
@@ -200,57 +203,165 @@ export async function deletePresentation(
 }
 
 /**
- * 프레젠테이션 문서 업서트 (문서 단위 전체 교체).
+ * `savePresentationChanges` 결과.
  *
- * 로컬 IndexedDB가 문서 1건을 통째로 put하는 것과 같은 의미를 서버에서도
- * 보장한다. 항목과 덱은 지우고 다시 넣는다. 부분 갱신을 시도하면 삭제된 곡이
- * 서버에 남아 다음 조회에서 되살아난다.
- *
- * D1에는 대화형 트랜잭션이 없으므로 `db.batch()`로 묶는다. 루프로 N번 await하면
- * 중간 실패 시 반쪽짜리 문서가 남는다.
- *
- * 소유자가 다르면 아무것도 쓰지 않고 false를 돌린다. 링크로 공유받은 세트
- * (`access`)는 서버에 없어도 새로 만들지 않는다. 소유자가 지운 세트를 받은
- * 사람이 자기 문서로 되살리지 않게 하기 위해서다.
+ * - `forbidden`: 남의 세트, 공유받은 세트(`access`), 또는 다른 곳에 속한 덱 id
+ * - `stale`: 항목이 가리키는 덱이 본문에도 서버에도 없다. 클라이언트가 서버 상태를
+ *   잘못 알고 있으므로 모든 덱을 담아 다시 보내야 한다.
  */
-export async function upsertPresentationDocument(
+export type SavePresentationResult = "saved" | "forbidden" | "stale";
+
+interface ExistingItem {
+  id: string;
+  deckId: string;
+  order: number;
+}
+
+interface ExistingDeck {
+  id: string;
+  presentationId: string | null;
+  userId: string;
+}
+
+/**
+ * 이미 있는 세트 덱에서 편집기가 바꿀 수 있는 컬럼만 고른다.
+ *
+ * 나머지(`user_id`·`scope`·`presentation_id`·`visibility`·`fork_count`·
+ * `forked_from`)는 덱이 생길 때 정해지거나 서버가 강제하는 값이다. 값이 같아도
+ * SET에 넣으면 SQLite가 그 컬럼의 인덱스를 다시 써서 곡 하나에 5행이 쓰인다.
+ */
+function editableDeckColumns(row: NewDeck): Partial<NewDeck> {
+  return {
+    title: row.title,
+    artist: row.artist,
+    lyricsRaw: row.lyricsRaw,
+    slides: row.slides,
+    backgroundId: row.backgroundId,
+    style: row.style,
+    origin: row.origin,
+    forkedFromAuthorName: row.forkedFromAuthorName,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  };
+}
+
+/**
+ * 프레젠테이션 변경분 저장.
+ *
+ * 결과는 문서 단위 전체 교체와 같다. `items`에 없는 항목과 곡은 지우고(삭제한 곡이
+ * 다음 조회에서 되살아나지 않게), 본문에 담긴 덱만 쓰고, 순서가 바뀐 항목만
+ * 고친다. 가사 한 줄을 고친 저장이 곡 수와 상관없이 몇 행만 쓰게 하기 위해서다.
+ *
+ * D1 왕복은 두 번이다. 소유자·기존 항목과 덱·폴더·배경을 한 batch로 읽고, 쓰기는
+ * 모두 `db.batch()` 하나로 묶는다. D1에는 대화형 트랜잭션이 없어서 루프로 N번
+ * await하면 중간 실패 시 반쪽짜리 문서가 남는다. 두 왕복 사이에 끼어든 쓰기에도
+ * 남의 행을 건드리지 않도록 갱신 문장마다 소유자 조건을 다시 건다.
+ *
+ * 링크로 공유받은 세트(`access`)는 서버에 없어도 새로 만들지 않는다. 소유자가
+ * 지운 세트를 받은 사람이 자기 문서로 되살리지 않게 하기 위해서다.
+ */
+export async function savePresentationChanges(
   db: DbInstance,
   userId: string,
-  doc: PresentationDocument,
-): Promise<boolean> {
-  if (doc.access) return false;
+  changes: PresentationChanges,
+): Promise<SavePresentationResult> {
+  if (changes.access) return "forbidden";
 
-  const [existing] = await db
-    .select({ userId: presentations.userId })
-    .from(presentations)
-    .where(eq(presentations.id, doc.id));
+  const sentDeckIdChunks = chunkIds(changes.decks.map((deck) => deck.id));
+  const [
+    owners,
+    existingItems,
+    existingDecks,
+    ownedFolders,
+    knownBackgrounds,
+    ...sentDeckChunks
+  ] = (await runQueries(db, [
+    db
+      .select({ userId: presentations.userId })
+      .from(presentations)
+      .where(eq(presentations.id, changes.id)),
+    db
+      .select({
+        id: presentationItems.id,
+        deckId: presentationItems.deckId,
+        order: presentationItems.order,
+      })
+      .from(presentationItems)
+      .where(eq(presentationItems.presentationId, changes.id)),
+    db
+      .select({ id: decks.id })
+      .from(decks)
+      .where(eq(decks.presentationId, changes.id)),
+    changes.folderId
+      ? db
+          .select({ id: folders.id })
+          .from(folders)
+          .where(
+            and(eq(folders.id, changes.folderId), eq(folders.userId, userId)),
+          )
+      : null,
+    knownBackgroundsQuery(db, changes.decks),
+    ...sentDeckIdChunks.map((ids) =>
+      db
+        .select({
+          id: decks.id,
+          presentationId: decks.presentationId,
+          userId: decks.userId,
+        })
+        .from(decks)
+        .where(inArray(decks.id, ids)),
+    ),
+  ])) as [
+    { userId: string }[],
+    ExistingItem[],
+    { id: string }[],
+    { id: string }[],
+    { id: string }[],
+    ...ExistingDeck[][],
+  ];
 
-  if (existing && existing.userId !== userId) return false;
+  const [existing] = owners;
+  if (existing && existing.userId !== userId) return "forbidden";
+
+  const sentDecksElsewhere = sentDeckChunks
+    .flat()
+    .some(
+      (deck) => deck.presentationId !== changes.id || deck.userId !== userId,
+    );
+  if (sentDecksElsewhere) return "forbidden";
 
   const folderId =
-    doc.folderId === undefined
+    changes.folderId === undefined
       ? undefined
-      : await resolveOwnedFolderId(db, userId, doc.folderId);
+      : changes.folderId !== null && ownedFolders.length > 0
+        ? changes.folderId
+        : null;
 
   const {
     presentation,
     items,
-    decks: rawDeckRows,
-  } = fromPresentationDocument({
-    ...doc,
+    decks: sentDeckRows,
+  } = fromPresentationChanges({
+    ...changes,
     userId,
     ...(folderId === undefined ? {} : { folderId }),
   });
 
-  const deckRows = await nullifyUnknownBackgrounds(db, rawDeckRows);
+  const existingDeckIds = new Set(existingDecks.map((deck) => deck.id));
+  const nextDeckIds = new Set(items.map((item) => item.deckId));
+  const sentDeckIds = new Set(sentDeckRows.map((deck) => deck.id));
+  const missingDeck = [...nextDeckIds].some(
+    (deckId) => !sentDeckIds.has(deckId) && !existingDeckIds.has(deckId),
+  );
+  if (missingDeck) return "stale";
 
-  await clearTombstone(db, userId, doc.id);
+  const deckRows = keepKnownBackgrounds(
+    sentDeckRows.filter((deck) => nextDeckIds.has(deck.id as string)),
+    knownBackgrounds,
+  );
 
-  const statements = [
-    db
-      .delete(presentationItems)
-      .where(eq(presentationItems.presentationId, doc.id)),
-    db.delete(decks).where(eq(decks.presentationId, doc.id)),
+  const statements: unknown[] = [
+    clearTombstoneStatement(db, userId, changes.id),
   ];
 
   if (existing) {
@@ -268,21 +379,103 @@ export async function upsertPresentationDocument(
             ? {}
             : { trashedAt: presentation.trashedAt }),
         })
-        .where(eq(presentations.id, doc.id)),
+        .where(
+          and(
+            eq(presentations.id, changes.id),
+            eq(presentations.userId, userId),
+          ),
+        ),
     );
   } else {
     statements.push(db.insert(presentations).values(presentation));
   }
 
-  for (const deckRow of deckRows) {
-    statements.push(db.insert(decks).values(deckRow));
+  const previousItems = new Map(existingItems.map((item) => [item.id, item]));
+  const nextItems = new Map(items.map((item) => [item.id, item]));
+  const removedItemIds = existingItems
+    .filter((item) => nextItems.get(item.id)?.deckId !== item.deckId)
+    .map((item) => item.id);
+  for (const ids of chunkIds(removedItemIds)) {
+    statements.push(
+      db
+        .delete(presentationItems)
+        .where(
+          and(
+            eq(presentationItems.presentationId, changes.id),
+            inArray(presentationItems.id, ids),
+          ),
+        ),
+    );
   }
+
+  const removedDeckIds = [...existingDeckIds].filter(
+    (id) => !nextDeckIds.has(id),
+  );
+  for (const ids of chunkIds(removedDeckIds)) {
+    statements.push(
+      db
+        .delete(decks)
+        .where(
+          and(eq(decks.presentationId, changes.id), inArray(decks.id, ids)),
+        ),
+    );
+  }
+
+  for (const deckRow of deckRows) {
+    if (existingDeckIds.has(deckRow.id as string)) {
+      statements.push(
+        db
+          .update(decks)
+          .set(editableDeckColumns(deckRow))
+          .where(
+            and(
+              eq(decks.id, deckRow.id as string),
+              eq(decks.presentationId, changes.id),
+              eq(decks.userId, userId),
+            ),
+          ),
+      );
+    } else {
+      statements.push(db.insert(decks).values(deckRow));
+    }
+  }
+
   for (const item of items) {
-    statements.push(db.insert(presentationItems).values(item));
+    const previous = previousItems.get(item.id);
+    if (previous?.deckId !== item.deckId) {
+      statements.push(db.insert(presentationItems).values(item));
+    } else if (previous.order !== item.order) {
+      statements.push(
+        db
+          .update(presentationItems)
+          .set({ order: item.order })
+          .where(
+            and(
+              eq(presentationItems.id, item.id),
+              eq(presentationItems.presentationId, changes.id),
+            ),
+          ),
+      );
+    }
   }
 
   await runStatements(db, statements);
-  return true;
+  return "saved";
+}
+
+/**
+ * 프레젠테이션 문서 업서트 (문서 단위 전체 교체). 모든 덱을 담은 변경분 저장과 같다.
+ * 소유자가 다르거나 공유받은 세트면 아무것도 쓰지 않고 false를 돌린다.
+ */
+export async function upsertPresentationDocument(
+  db: DbInstance,
+  userId: string,
+  doc: PresentationDocument,
+): Promise<boolean> {
+  return (
+    (await savePresentationChanges(db, userId, toPresentationChanges(doc))) ===
+    "saved"
+  );
 }
 
 /** 프레젠테이션 헤더(제목·예배일) 수정 */
@@ -377,6 +570,8 @@ export function createPresentationQueries(db: DbInstance) {
       deletePresentation(db, presentationId, userId),
     upsertPresentationDocument: (userId: string, doc: PresentationDocument) =>
       upsertPresentationDocument(db, userId, doc),
+    savePresentationChanges: (userId: string, changes: PresentationChanges) =>
+      savePresentationChanges(db, userId, changes),
     updatePresentation: (
       presentationId: string,
       userId: string,
@@ -393,6 +588,7 @@ export const presentationQueries = {
   createPresentationWithClonedDecks,
   deletePresentation,
   upsertPresentationDocument,
+  savePresentationChanges,
   updatePresentation,
   getPresentationDocumentsByUserId,
   createPresentationQueries,
