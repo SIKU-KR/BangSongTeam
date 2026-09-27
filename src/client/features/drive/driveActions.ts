@@ -35,6 +35,7 @@ import {
 } from "./folderStore";
 import type { DriveItemRef } from "./driveModel";
 import { DRIVE_COPY } from "#copy/drive";
+import { FOLDER_COPY } from "#copy/folders";
 
 /**
  * 드라이브 항목 조작 (폴더와 프레젠테이션을 같은 방식으로 다룬다).
@@ -109,7 +110,7 @@ export function moveItems(
 ): MoveOutcome {
   const outcome: MoveOutcome = { moved: [], errors: [] };
   if (targetFolderId !== null && !isFolderAvailable(targetFolderId)) {
-    outcome.errors.push(DRIVE_COPY.targetFolderNotFound);
+    outcome.errors.push(FOLDER_COPY.targetFolderNotFound);
     return outcome;
   }
 

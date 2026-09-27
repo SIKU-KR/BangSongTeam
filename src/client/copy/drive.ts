@@ -3,7 +3,6 @@ import { COMMON_COPY } from "./common";
 
 export const DRIVE_COPY = {
   kind: { folder: "폴더", file: "프레젠테이션" },
-  newFolder: "새 폴더",
   newItem: "새로 만들기",
   create: "만들기",
   open: "열기",
@@ -91,12 +90,6 @@ export const DRIVE_COPY = {
   },
   emptyTrashMessage:
     "휴지통의 모든 항목이 영구 삭제됩니다. 이 작업은 되돌릴 수 없습니다.",
-  nameRequired: "이름을 입력하세요",
-  nameTooLong: (max: number) => `이름은 ${max}자까지 쓸 수 있습니다`,
-  nameTaken: "같은 위치에 같은 이름의 폴더가 있습니다",
-  folderNotFound: "폴더를 찾을 수 없습니다",
-  targetFolderNotFound: "옮길 폴더를 찾을 수 없습니다",
-  cannotMoveIntoSelf: "폴더를 자기 안으로 옮길 수 없습니다",
   presentUnreliable:
     "이 브라우저에서는 전체화면 송출이나 배경 영상이 제대로 동작하지 않을 수 있습니다.\n\n계속 진행하시겠습니까?",
   deleteForeverOffline:

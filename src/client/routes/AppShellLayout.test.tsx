@@ -36,6 +36,7 @@ import { installFakeApi } from "../test/fakeApi";
 import { APP_NAME } from "#shared";
 import { COMMON_COPY } from "#copy/common";
 import { DRIVE_COPY } from "#copy/drive";
+import { FOLDER_COPY } from "#copy/folders";
 import { SHELL_COPY } from "#copy/shell";
 import { BACKGROUND_COPY } from "#copy/backgrounds";
 
@@ -321,7 +322,7 @@ describe("AppShellLayout (드라이브형 홈)", () => {
     fireEvent.change(input, { target: { value: "새 폴더" } });
     expect(
       within(screen.getByTestId("drive-name-dialog")).getByRole("alert"),
-    ).toHaveTextContent(DRIVE_COPY.nameTaken);
+    ).toHaveTextContent(FOLDER_COPY.nameTaken);
     expect(screen.getByTestId("drive-name-confirm")).toBeDisabled();
 
     fireEvent.change(input, { target: { value: "성탄절" } });
@@ -331,7 +332,7 @@ describe("AppShellLayout (드라이브형 홈)", () => {
       getFolders()
         .map((f) => f.name)
         .sort(),
-    ).toEqual([DRIVE_COPY.newFolder, "성탄절"]);
+    ).toEqual([FOLDER_COPY.newFolder, "성탄절"]);
     expect(card("폴더 성탄절")).toHaveAttribute("aria-selected", "true");
   });
 
@@ -971,7 +972,7 @@ describe("AppShellLayout (구글 드라이브식 조작)", () => {
     expect(screen.queryByRole("dialog")).toBeNull();
 
     press("F", { shiftKey: true, code: "KeyF" });
-    expect(screen.getByRole("dialog")).toHaveTextContent(DRIVE_COPY.newFolder);
+    expect(screen.getByRole("dialog")).toHaveTextContent(FOLDER_COPY.newFolder);
     act(() => {
       fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
     });

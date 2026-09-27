@@ -25,7 +25,7 @@ import {
   restoreFolder,
   trashFolder,
 } from "./folderStore";
-import { DRIVE_COPY } from "#copy/drive";
+import { FOLDER_COPY } from "#copy/folders";
 
 async function resetDatabase(): Promise<void> {
   closeOfflineDB();
@@ -71,7 +71,7 @@ describe("folderStore", () => {
       const c = createFolder(null, "  청년부 ");
 
       expect(a.userId).toBe(SEED_USER_ID);
-      expect(a.name).toBe(DRIVE_COPY.newFolder);
+      expect(a.name).toBe(FOLDER_COPY.newFolder);
       expect(b.name).toBe("새 폴더 (2)");
       expect(c.name).toBe("청년부");
     });
@@ -100,11 +100,11 @@ describe("folderStore", () => {
 
       expect(renameFolder(a.id, "   ")).toEqual({
         ok: false,
-        error: DRIVE_COPY.nameRequired,
+        error: FOLDER_COPY.nameRequired,
       });
       expect(renameFolder(a.id, "b")).toEqual({
         ok: false,
-        error: DRIVE_COPY.nameTaken,
+        error: FOLDER_COPY.nameTaken,
       });
       const result = renameFolder(a.id, " 새 이름 ");
       expect(result.ok && result.folder.name).toBe("새 이름");
@@ -140,7 +140,7 @@ describe("folderStore", () => {
       expect(moveFolder(a.id, a.id).ok).toBe(false);
       expect(moveFolder(a.id, b.id)).toEqual({
         ok: false,
-        error: DRIVE_COPY.cannotMoveIntoSelf,
+        error: FOLDER_COPY.cannotMoveIntoSelf,
       });
       expect(getFolder(a.id)?.parentId).toBeNull();
     });

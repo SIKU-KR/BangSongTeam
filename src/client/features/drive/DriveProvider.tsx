@@ -52,6 +52,7 @@ import { listPresentations } from "../presentation";
 import { resolveUniqueName } from "#shared";
 import { isLetterKey, isTypingTarget } from "./keyboard";
 import { DRIVE_COPY } from "#copy/drive";
+import { FOLDER_COPY } from "#copy/folders";
 import { COMMON_COPY } from "#copy/common";
 
 type DialogState =
@@ -391,8 +392,8 @@ export function DriveProvider({
               );
             }
             const trimmed = name.trim();
-            if (!trimmed) return DRIVE_COPY.nameRequired;
-            if (trimmed.length > 100) return DRIVE_COPY.nameTooLong(100);
+            if (!trimmed) return FOLDER_COPY.nameRequired;
+            if (trimmed.length > 100) return FOLDER_COPY.nameTooLong(100);
             return null;
           }}
           onSubmit={(name) => {
@@ -472,12 +473,12 @@ function NewFolderDialog({
     const siblings = (index.childrenOf.get(parentId) ?? [])
       .filter((folder) => !folder.trashedAt)
       .map((folder) => folder.name);
-    return resolveUniqueName(DRIVE_COPY.newFolder, siblings);
+    return resolveUniqueName(FOLDER_COPY.newFolder, siblings);
   });
 
   return (
     <NameDialog
-      title={DRIVE_COPY.newFolder}
+      title={FOLDER_COPY.newFolder}
       initialValue={initialValue}
       confirmLabel={DRIVE_COPY.create}
       validate={(name) => validateFolderName(name, parentId)}

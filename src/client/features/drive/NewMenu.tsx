@@ -14,6 +14,7 @@ import {
 import { useDrive } from "./driveContext";
 import { ActionMenuItems, type MenuAction } from "./ActionMenu";
 import { DRIVE_COPY } from "#copy/drive";
+import { FOLDER_COPY } from "#copy/folders";
 import { COMMON_COPY } from "#copy/common";
 
 export function useNewItemActions(): MenuAction[] {
@@ -22,7 +23,7 @@ export function useNewItemActions(): MenuAction[] {
   return [
     {
       key: "new-folder",
-      label: DRIVE_COPY.newFolder,
+      label: FOLDER_COPY.newFolder,
       icon: FolderPlusIcon,
       shortcut: "Shift+F",
       testId: "new-menu-folder",

@@ -33,7 +33,7 @@ pnpm typecheck && pnpm lint && pnpm test   # must pass before pushing (the CI ga
 
 ### Comments
 
-- Comments, TSDoc and UI copy are written in Korean.
+- Comments, TSDoc and UI copy are written in Korean. UI copy lives in `src/client/copy/*` (`#copy/*`); server errors, Zod messages and the app name live in `src/shared/copy/*`. Reuse an existing key for the same sentence instead of adding a new one.
 - No inline comments inside functions, JSX or tests: no restated logic, step numbers, TODOs, commented-out code, or milestone and spec tags (`M5`, `PRD 4.7`, `Task 4.5`). The only exception is a workaround for a third-party or platform constraint, with a reference.
 - Write TSDoc only on exports, and explain why: business rules, side effects, security scoping, invariants. Skip `@param` and `@returns` when they only repeat the types.
 

@@ -20,7 +20,7 @@ import {
   moveItems,
   undoMove,
 } from "./driveActions";
-import { DRIVE_COPY } from "#copy/drive";
+import { FOLDER_COPY } from "#copy/folders";
 
 const sync = vi.hoisted(() => ({
   flushPendingSync: vi.fn(async () => {}),
@@ -102,7 +102,7 @@ describe("driveActions", () => {
     it("사이클이 되는 폴더 이동은 건너뛰고 이유를 알린다", () => {
       const outcome = moveItems([{ kind: "folder", id: ROOT }], CHILD);
       expect(outcome.moved).toHaveLength(0);
-      expect(outcome.errors).toEqual([DRIVE_COPY.cannotMoveIntoSelf]);
+      expect(outcome.errors).toEqual([FOLDER_COPY.cannotMoveIntoSelf]);
     });
   });
 

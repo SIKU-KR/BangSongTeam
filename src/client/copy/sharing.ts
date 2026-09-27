@@ -74,12 +74,5 @@ export const SHARING_COPY = {
       "지금 링크는 더 이상 열리지 않고, 이 링크로 들어온 사람은 모두 접근을 잃습니다. 새 링크를 다시 보내야 합니다.",
     resetConfirm: "재설정",
     regenerated: "새 링크를 만들었습니다",
-    unavailable: "공유 세트를 열 수 없습니다",
-    opening: "공유받은 세트를 여는 중…",
-    goToPresentations: "내 프레젠테이션으로",
-    signIn: "로그인하기",
-    signInToCopy:
-      "로그인하면 이 세트의 사본을 내 드라이브에 만들어 고칠 수 있습니다.",
-    revoked: "공유가 해제되어 더 이상 볼 수 없습니다",
   },
 } as const;
