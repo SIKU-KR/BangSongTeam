@@ -22,6 +22,7 @@ import { sharedPresentationListener } from "./sharedPresentationListener";
 import {
   pullPresentations,
   pushPresentation,
+  rememberServerDocuments,
   setSharedPresentationListener,
   pullDecks,
   pullFolders,
@@ -79,6 +80,7 @@ export async function runBootSync(): Promise<void> {
     tombstones = folderList.tombstones;
     folderOffline = await syncFolders(folderList.folders, tombstones);
     serverDocuments = await pullPresentations();
+    rememberServerDocuments(serverDocuments);
   } catch (err) {
     if (err instanceof OfflineError) {
       setSyncStatus("offline");
