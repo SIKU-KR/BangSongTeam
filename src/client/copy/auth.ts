@@ -1,5 +1,11 @@
 import { APP_NAME } from "#shared";
 
+/**
+ * 운영 브랜드. 법인도 개인사업자도 아니라 계약 주체가 될 수 없으므로,
+ * 약관·처리방침에서는 늘 {@link OPERATOR_NAME}과 함께 적는다.
+ */
+export const OPERATOR_BRAND = "시쿠랩스";
+
 /** 운영자이자 개인정보 보호책임자. 권리 행사·게시 중단 요청을 받는 창구다. */
 export const OPERATOR_NAME = "박범식";
 export const OPERATOR_EMAIL = "peter012677@naver.com";

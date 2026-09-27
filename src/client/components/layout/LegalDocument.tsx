@@ -15,7 +15,7 @@ export function LegalDocument({
   children: React.ReactNode;
 }): React.JSX.Element {
   return (
-    <div className="min-h-screen bg-background">
+    <div className="h-full overflow-y-auto bg-background">
       <article className="mx-auto flex max-w-2xl flex-col gap-8 px-4 py-12 text-sm/relaxed">
         <header className="flex flex-col gap-2">
           <Button
