@@ -17,15 +17,7 @@ import {
   fetchAuthConfig,
   type SocialProvider,
 } from "../lib/auth";
-
-const PROVIDER_BUTTON_PROPS: Record<
-  SocialProvider,
-  Pick<React.ComponentProps<typeof Button>, "variant" | "className">
-> = {
-  kakao: { className: "bg-kakao text-kakao-foreground hover:bg-kakao/90" },
-  naver: { className: "bg-naver text-naver-foreground hover:bg-naver/90" },
-  google: { variant: "outline" },
-};
+import { SocialLoginButton } from "../features/auth/SocialLoginButton";
 
 export interface LoginRouteProps {
   /** 로그인이 필요한 까닭. 없으면 계정 저장 안내를 보여 준다 */
@@ -98,15 +90,14 @@ export function LoginRoute({
               {visibleProviders.length > 0 && (
                 <div className="flex flex-col gap-2">
                   {visibleProviders.map((provider) => (
-                    <Button
+                    <SocialLoginButton
                       key={provider.id}
-                      size="lg"
+                      provider={provider.id}
+                      label={provider.label}
+                      pending={pending === provider.id}
                       disabled={pending !== null}
                       onClick={() => void handleSignIn(provider.id)}
-                      {...PROVIDER_BUTTON_PROPS[provider.id]}
-                    >
-                      {pending === provider.id ? "이동 중…" : provider.label}
-                    </Button>
+                    />
                   ))}
                 </div>
               )}

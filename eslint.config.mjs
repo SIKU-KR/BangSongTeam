@@ -30,13 +30,17 @@ const ICON_IMPORTS = [
   },
 ];
 
-const UI_IMPORTS = [
-  ...ICON_IMPORTS,
-  { regex: "^(@base-ui/|@radix-ui/)", message: UI_PRIMITIVES_ONLY_IN_UI },
+const CLASS_MERGE_IMPORTS = [
   {
     regex: "^(clsx|tailwind-merge|classnames)$",
     message: "클래스 합성은 `cn`(패키지 `cn`)으로 한다.",
   },
+];
+
+const UI_IMPORTS = [
+  ...ICON_IMPORTS,
+  { regex: "^(@base-ui/|@radix-ui/)", message: UI_PRIMITIVES_ONLY_IN_UI },
+  ...CLASS_MERGE_IMPORTS,
 ];
 
 const ZERO_FETCH =
@@ -208,6 +212,30 @@ export default tseslint.config(
     ignores: ["**/*.test.tsx"],
     rules: {
       "no-restricted-syntax": ["error", ...UI_SYNTAX],
+    },
+  },
+  /**
+   * 소셜 로그인 버튼은 브랜드 가이드가 색·모서리·글꼴을 고정해 shadcn Button의 기본
+   * 스타일(rounded-lg 등)을 덮어써야 한다. `cn`이 사용자 정의 모서리 토큰의 충돌을 풀지
+   * 못하므로 이 파일만 Button 프리미티브를 직접 쓴다.
+   */
+  {
+    files: ["src/client/features/auth/SocialLoginButton.tsx"],
+    rules: {
+      "@typescript-eslint/no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            ...CLIENT_BOUNDARY,
+            ...ICON_IMPORTS,
+            ...CLASS_MERGE_IMPORTS,
+            {
+              regex: "^(@base-ui/(?!react/button$)|@radix-ui/)",
+              message: UI_PRIMITIVES_ONLY_IN_UI,
+            },
+          ],
+        },
+      ],
     },
   },
   {

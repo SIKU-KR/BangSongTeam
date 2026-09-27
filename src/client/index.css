@@ -7,15 +7,29 @@
 
 @custom-variant dark (&:is(.dark *));
 
-/* 카카오·네이버 로그인 버튼의 브랜드 색. 테마와 무관하게 고정한다 */
+/* 소셜 로그인 버튼 규정값. 카카오 로그인 디자인 가이드, 네이버 로그인 버튼 사용 가이드,
+   Sign in with Google Branding Guidelines의 지정값이라 앱 테마에 맞춰 바꾸지 않는다.
+   Google만 가이드에 다크 테마가 있어 :root·.dark의 --google-* 변수로 바뀐다 */
 @theme {
   --color-kakao: #fee500;
-  --color-kakao-foreground: #191600;
-  --color-naver: #03c75a;
+  --color-kakao-foreground: rgb(0 0 0 / 0.85);
+  --color-naver: #03a94d;
   --color-naver-foreground: #ffffff;
+  --radius-brand: 0.75rem;
+  --text-kakao-label: 0.9375rem;
+  --font-system:
+    -apple-system, BlinkMacSystemFont, system-ui, "Apple SD Gothic Neo",
+    "Malgun Gothic", sans-serif;
+  --font-google:
+    "Google Sans", "Pretendard Variable", Pretendard, -apple-system,
+    BlinkMacSystemFont, system-ui, sans-serif;
 }
 
 @theme inline {
+  --color-google: var(--google);
+  --color-google-foreground: var(--google-foreground);
+  --color-google-border: var(--google-border);
+  --color-google-hover: var(--google-hover);
   --font-sans:
     "Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont,
     system-ui, Roboto, sans-serif;
@@ -61,6 +75,10 @@
 }
 
 :root {
+  --google: #ffffff;
+  --google-foreground: #1f1f1f;
+  --google-border: #747775;
+  --google-hover: #eeeeee;
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
   --card: oklch(1 0 0);
@@ -94,6 +112,10 @@
 }
 
 .dark {
+  --google: #131314;
+  --google-foreground: #e3e3e3;
+  --google-border: #8e918f;
+  --google-hover: #262627;
   --background: oklch(0.145 0 0);
   --foreground: oklch(0.985 0 0);
   --card: oklch(0.205 0 0);
