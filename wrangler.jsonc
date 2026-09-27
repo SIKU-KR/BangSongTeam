@@ -1,6 +1,6 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "prj-ppt-web",
+  "name": "bangsongteam",
   "main": "src/worker/index.ts",
   "compatibility_date": "2025-02-14",
   "compatibility_flags": ["nodejs_compat"],
@@ -11,10 +11,15 @@
   // Worker 번들은 압축해서 올린다(vite.config.ts). 소스맵을 함께 올려야 로그의
   // 스택 트레이스가 원래 파일·줄 번호로 보인다.
   "upload_source_maps": true,
-  // 운영 도메인을 사기 전까지 workers.dev 주소를 쓴다. 로컬 개발은
-  // .dev.vars(.env)의 값이 이것을 덮는다.
+  // 운영 주소는 custom domain 하나뿐이다. workers.dev를 끄는 이유: 출처가 둘이면
+  // PWA 캐시·IndexedDB·로그인 쿠키가 둘로 갈린다. 로컬 개발은 .dev.vars(.env)의
+  // BETTER_AUTH_URL이 아래 값을 덮는다.
+  "routes": [
+    { "pattern": "bangsongteam.siku-labs.com", "custom_domain": true }
+  ],
+  "workers_dev": false,
   "vars": {
-    "BETTER_AUTH_URL": "https://prj-ppt-web.peter012677.workers.dev"
+    "BETTER_AUTH_URL": "https://bangsongteam.siku-labs.com"
   },
   // SPA 폴백: /presentations, /editor/:id, /present/:id/fullscreen 같은 클라이언트
   // 경로를 직접 열거나 새로고침해도 index.html 이 서빙되도록 한다.
@@ -27,15 +32,15 @@
   "d1_databases": [
     {
       "binding": "DB",
-      "database_name": "prj-ppt-db",
-      "database_id": "da46eb99-d8aa-4229-bbaa-8a6f5d0a6557",
+      "database_name": "bangsongteam-db",
+      "database_id": "bf29bc4d-6b91-472b-ba68-063bc99902e9",
       "migrations_dir": "src/db/migrations"
     }
   ],
   "r2_buckets": [
     {
       "binding": "MEDIA_BUCKET",
-      "bucket_name": "prj-ppt-media"
+      "bucket_name": "bangsongteam-media"
     }
   ]
 }

@@ -39,8 +39,8 @@ const appConfig: UserConfig = {
       injectRegister: null,
       includeAssets: ["icons/*.png"],
       manifest: {
-        name: "Worship Slide",
-        short_name: "Worship",
+        name: "방송팀",
+        short_name: "방송팀",
         description: "예배 찬양 슬라이드 제작 및 송출 도구",
         lang: "ko",
         start_url: "/presentations",
@@ -133,7 +133,7 @@ const appConfig: UserConfig = {
     // Worker 환경(이름은 wrangler `name`의 `-`를 `_`로 바꾼 것)은 SSR 빌드라 기본으로
     // 압축하지 않는다. 콜드 스타트 때 파싱할 코드를 줄이려고 압축하고, 운영 로그의
     // 스택 트레이스를 읽을 수 있게 소스맵을 함께 올린다(wrangler `upload_source_maps`).
-    prj_ppt_web: { build: { minify: true, sourcemap: true } },
+    bangsongteam: { build: { minify: true, sourcemap: true } },
   },
   build: {
     outDir: "dist",

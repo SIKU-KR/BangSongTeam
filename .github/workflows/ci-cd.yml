@@ -98,7 +98,7 @@ jobs:
       - name: Check Worker bundle size
         run: |
           limit=1048576
-          size=$(find dist/prj_ppt_web -name '*.js' -not -path '*/.vite/*' -exec cat {} + | wc -c)
+          size=$(find dist/bangsongteam -name '*.js' -not -path '*/.vite/*' -exec cat {} + | wc -c)
           echo "Worker JS: ${size} bytes (limit ${limit})"
           if [ "$size" -gt "$limit" ]; then
             echo "::error::Worker bundle is ${size} bytes, over the ${limit}-byte limit."

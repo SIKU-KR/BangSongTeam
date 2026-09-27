@@ -49,8 +49,8 @@ describe("개발자 로그인 가드", () => {
 
   it("플래그가 있어도 실제 도메인에서는 죽는다", () => {
     for (const host of [
-      "https://worship-slide.com/api/dev-login",
-      "https://prj-ppt-web.workers.dev/api/dev-login",
+      "https://bangsongteam.siku-labs.com/api/dev-login",
+      "https://bangsongteam.workers.dev/api/dev-login",
       "https://localhost.attacker.com/api/dev-login",
     ]) {
       expect(isDevLoginEnabled(withDevLogin(true), host)).toBe(false);

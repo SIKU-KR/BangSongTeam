@@ -236,7 +236,7 @@ function buildAuth(env: Bindings) {
   }
 
   return betterAuth({
-    appName: "Worship Slide",
+    appName: "방송팀",
     basePath: AUTH_BASE_PATH,
     baseURL: env.BETTER_AUTH_URL,
     secret: env.BETTER_AUTH_SECRET,
