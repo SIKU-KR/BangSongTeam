@@ -118,7 +118,7 @@ describe("LoginRoute", () => {
     render(<LoginRoute />);
 
     expect(await screen.findByRole("alert")).toHaveTextContent(
-      /사용 가능한 로그인 수단이 없습니다/,
+      AUTH_COPY.noProviders,
     );
   });
 

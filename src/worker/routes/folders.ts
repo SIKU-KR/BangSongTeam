@@ -35,7 +35,7 @@ export function createFoldersRoute(deps: AppDeps = {}) {
       const folder = c.req.valid("json");
 
       if (folder.id !== c.req.param("id")) {
-        return c.json({ error: API_ERRORS.folder.idMismatch }, 400);
+        return c.json({ error: API_ERRORS.idMismatch }, 400);
       }
 
       const db = createD1Client(c.env.DB);

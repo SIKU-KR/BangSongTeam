@@ -1,6 +1,8 @@
 import React from "react";
 import { render, screen } from "@testing-library/react";
 import { describe, it, expect, beforeEach } from "vitest";
+import { ERROR_COPY } from "#copy/common";
+import { SHELL_COPY } from "#copy/shell";
 import { StorageWarningBanner } from "./StorageWarningBanner";
 import {
   reportPersistenceError,
@@ -29,7 +31,7 @@ describe("StorageWarningBanner", () => {
     render(<StorageWarningBanner />);
 
     expect(screen.getByTestId("storage-warning-banner")).toHaveTextContent(
-      /저장할 수 없습니다/,
+      ERROR_COPY.persistence.unavailable,
     );
   });
 
@@ -58,8 +60,7 @@ describe("StorageWarningBanner", () => {
     render(<StorageWarningBanner />);
 
     const banner = screen.getByTestId("corrupted-warning-banner");
-    expect(banner).toHaveTextContent(/2개/);
-    expect(banner).toHaveTextContent(/열지 못했습니다/);
+    expect(banner).toHaveTextContent(SHELL_COPY.storage.corrupted(2));
   });
 
   it("격리 안내는 저장이 다시 성공해도 사라지지 않는다", () => {
