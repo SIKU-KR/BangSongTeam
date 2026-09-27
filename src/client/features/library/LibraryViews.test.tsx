@@ -136,7 +136,7 @@ describe("BackgroundLibraryView", () => {
     fireEvent.click(screen.getByTestId(`delete-bg-${STILL.id}`));
     const dialog = screen.getByTestId("bg-delete-dialog");
     expect(dialog).toHaveTextContent(
-      "이 배경을 쓰는 모든 사용자의 곡이 배경 없음이 됩니다",
+      "이 배경을 쓰던 곡은 모두 배경 없음이 되고",
     );
 
     fireEvent.click(within(dialog).getByTestId("confirm-delete-bg"));
@@ -230,7 +230,7 @@ describe("BackgroundLibraryView", () => {
       target: { files: [big] },
     });
 
-    expect(await screen.findByRole("alert")).toHaveTextContent("30MB 이하");
+    expect(await screen.findByRole("alert")).toHaveTextContent("30MB까지");
     expect(probeBackgroundFile).not.toHaveBeenCalled();
   });
 
@@ -239,7 +239,7 @@ describe("BackgroundLibraryView", () => {
     await renderView();
 
     expect(
-      await screen.findByText(/오프라인이라 저장해 둔 목록을 보여 줍니다/),
+      await screen.findByText(/오프라인이라 저장해 둔 배경만 보여요/),
     ).toBeInTheDocument();
     expect(screen.queryByTestId("open-bg-upload-btn")).not.toBeInTheDocument();
   });

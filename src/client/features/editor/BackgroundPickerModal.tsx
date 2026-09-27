@@ -213,7 +213,7 @@ function PickerDialog({
         <DialogFooter className="mx-0 mb-0 items-center px-6 py-3 sm:justify-between">
           <span className="text-xs text-muted-foreground">
             {catalog.status === "offline"
-              ? BACKGROUND_COPY.picker.offline
+              ? BACKGROUND_COPY.offline
               : BACKGROUND_COPY.picker.cachedHint}
           </span>
           <DialogClose

@@ -354,7 +354,7 @@ describe("AppShellLayout (드라이브형 홈)", () => {
     ).toBeNull();
     await waitFor(() =>
       expect(screen.getByTestId("drive-toast")).toHaveTextContent(
-        "‘2026 주일 대예배’로 옮겼습니다",
+        "‘2026 주일 대예배’로 옮겼어요",
       ),
     );
 
@@ -420,7 +420,7 @@ describe("AppShellLayout (드라이브형 홈)", () => {
     fireEvent.click(screen.getByTestId("action-delete-forever"));
 
     const dialog = screen.getByTestId("drive-confirm-dialog");
-    expect(dialog).toHaveTextContent("‘성탄절 특별 예배’를 영구 삭제합니다.");
+    expect(dialog).toHaveTextContent("‘성탄절 특별 예배’를 영구 삭제할까요?");
     expect(dialog).toHaveTextContent(
       DRIVE_COPY.deleteForeverDialog.irreversible,
     );
@@ -453,7 +453,7 @@ describe("AppShellLayout (드라이브형 홈)", () => {
       expect(getPresentationById(target.id)).toBeUndefined();
       await waitFor(() =>
         expect(screen.getByTestId("drive-toast")).toHaveTextContent(
-          "‘테스트 프레젠테이션 (사본)’을 영구 삭제했습니다",
+          "‘테스트 프레젠테이션 (사본)’을 영구 삭제했어요",
         ),
       );
     } finally {
@@ -487,7 +487,7 @@ describe("AppShellLayout (드라이브형 홈)", () => {
       expect(getPresentationById(target.id)).toBeUndefined();
       await waitFor(() =>
         expect(screen.getByTestId("drive-toast")).toHaveTextContent(
-          "‘주일 콘티’를 영구 삭제했습니다",
+          "‘주일 콘티’를 영구 삭제했어요",
         ),
       );
     } finally {
@@ -526,7 +526,7 @@ describe("AppShellLayout (드라이브형 홈)", () => {
       expect(getFolders().find((f) => f.id === WORSHIP)).toBeUndefined();
       await waitFor(() =>
         expect(screen.getByTestId("drive-toast")).toHaveTextContent(
-          "‘2026 주일 대예배’를 영구 삭제했습니다",
+          "‘2026 주일 대예배’를 영구 삭제했어요",
         ),
       );
     } finally {

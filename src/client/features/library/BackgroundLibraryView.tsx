@@ -159,7 +159,7 @@ export function BackgroundLibraryView({
       {isOffline && (
         <Alert role="status">
           <WifiOffIcon />
-          <AlertDescription>{BACKGROUND_COPY.library.offline}</AlertDescription>
+          <AlertDescription>{BACKGROUND_COPY.offline}</AlertDescription>
         </Alert>
       )}
 
