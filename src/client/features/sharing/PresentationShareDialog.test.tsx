@@ -5,6 +5,7 @@ import type { ShareSettings } from "#shared";
 import { withQueryClient } from "../../test/queryClientFixture";
 import { installFakeApi, type FakeApi } from "../../test/fakeApi";
 import { PresentationShareDialog } from "./PresentationShareDialog";
+import { SHARING_COPY } from "#copy/sharing";
 
 const ID = "p0000000000000000000a";
 
@@ -55,7 +56,7 @@ describe("PresentationShareDialog (세트 링크 공유)", () => {
     renderDialog();
     fireEvent.click(await screen.findByTestId("share-access-select"));
     const option = await screen.findByRole("option", {
-      name: "링크가 있는 사람은 보기 가능",
+      name: SHARING_COPY.link.accessOptions.view,
     });
     fireEvent.pointerDown(option);
     fireEvent.mouseUp(option);

@@ -2,6 +2,7 @@ import React from "react";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { LoginRoute } from "./LoginRoute";
+import { AUTH_COPY } from "#copy/auth";
 
 const signInWithProvider = vi.fn();
 const fetchAuthConfig = vi.fn();
@@ -80,12 +81,16 @@ describe("LoginRoute", () => {
       await screen.findByRole("button", { name: /카카오 로그인/ }),
     );
 
-    const kakao = await screen.findByRole("button", { name: "카카오 로그인" });
+    const kakao = await screen.findByRole("button", {
+      name: AUTH_COPY.providers.kakao,
+    });
     await waitFor(() => {
       expect(kakao).toBeDisabled();
     });
     expect(kakao).toHaveAttribute("aria-busy", "true");
-    const naver = screen.getByRole("button", { name: "네이버 로그인" });
+    const naver = screen.getByRole("button", {
+      name: AUTH_COPY.providers.naver,
+    });
     expect(naver).toBeDisabled();
     expect(naver).not.toHaveAttribute("aria-busy");
   });

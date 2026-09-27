@@ -14,6 +14,7 @@ import {
 } from "../editor/songLibraryStore";
 import { __resetDeckSyncForTests } from "../../lib/sync/deckSync";
 import { LibraryShareControls } from "./LibraryShareControls";
+import { SHARING_COPY } from "#copy/sharing";
 
 function LiveControls({ id }: { id: string }): React.JSX.Element | null {
   const deck = useLibraryDeck(id);
@@ -177,7 +178,7 @@ describe("LibraryShareControls (내 보관함 곡 공개)", () => {
 
     expect(screen.getByTestId("song-share-publish-btn")).toBeDisabled();
     expect(
-      screen.getByText("공유는 온라인에서만 할 수 있습니다."),
+      screen.getByText(SHARING_COPY.library.onlineOnly),
     ).toBeInTheDocument();
     onLine.mockRestore();
   });

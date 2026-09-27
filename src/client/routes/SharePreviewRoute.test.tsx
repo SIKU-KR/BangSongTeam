@@ -12,6 +12,7 @@ import {
   resetPresentationStore,
 } from "../features/presentation/presentationStore";
 import { SharePreviewRoute } from "./SharePreviewRoute";
+import { API_ERRORS } from "#shared";
 
 const OWNER = "0000000000000000owner";
 
@@ -88,13 +89,13 @@ describe("SharePreviewRoute (로그인하지 않은 /s/:token)", () => {
     api = installFakeApi({
       "GET /api/share/*": () => ({
         status: 404,
-        body: { error: "링크가 만료되었거나 공유가 해제되었습니다" },
+        body: { error: API_ERRORS.share.linkUnavailable },
       }),
     });
     renderAt("/s/expired");
 
     expect(await screen.findByTestId("share-link-error")).toHaveTextContent(
-      "링크가 만료되었거나 공유가 해제되었습니다",
+      API_ERRORS.share.linkUnavailable,
     );
   });
 });

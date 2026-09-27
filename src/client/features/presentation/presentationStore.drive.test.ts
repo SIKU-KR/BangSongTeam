@@ -27,6 +27,7 @@ import {
   flushPendingSync,
   setSyncEnabled,
 } from "../../lib/sync/syncScheduler";
+import { COMMON_COPY } from "#copy/common";
 
 const FOLDER = "f00000000000000000001";
 const OTHER = "f00000000000000000002";
@@ -123,7 +124,7 @@ describe("presentationStore 드라이브 조작", () => {
     renamePresentation(source.id, "가".repeat(100));
     const copy = duplicatePresentation(source.id);
     expect(copy!.title.length).toBeLessThanOrEqual(100);
-    expect(copy!.title.endsWith(" (사본)")).toBe(true);
+    expect(copy!.title.endsWith(COMMON_COPY.copySuffix)).toBe(true);
   });
 
   it("편집기 되돌리기는 드라이브 배치(폴더·휴지통)를 되돌리지 않는다", () => {

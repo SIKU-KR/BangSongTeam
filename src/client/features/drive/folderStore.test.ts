@@ -25,6 +25,7 @@ import {
   restoreFolder,
   trashFolder,
 } from "./folderStore";
+import { DRIVE_COPY } from "#copy/drive";
 
 async function resetDatabase(): Promise<void> {
   closeOfflineDB();
@@ -70,7 +71,7 @@ describe("folderStore", () => {
       const c = createFolder(null, "  청년부 ");
 
       expect(a.userId).toBe(SEED_USER_ID);
-      expect(a.name).toBe("새 폴더");
+      expect(a.name).toBe(DRIVE_COPY.newFolder);
       expect(b.name).toBe("새 폴더 (2)");
       expect(c.name).toBe("청년부");
     });
@@ -99,11 +100,11 @@ describe("folderStore", () => {
 
       expect(renameFolder(a.id, "   ")).toEqual({
         ok: false,
-        error: "이름을 입력하세요",
+        error: DRIVE_COPY.nameRequired,
       });
       expect(renameFolder(a.id, "b")).toEqual({
         ok: false,
-        error: "같은 위치에 같은 이름의 폴더가 있습니다",
+        error: DRIVE_COPY.nameTaken,
       });
       const result = renameFolder(a.id, " 새 이름 ");
       expect(result.ok && result.folder.name).toBe("새 이름");
@@ -139,7 +140,7 @@ describe("folderStore", () => {
       expect(moveFolder(a.id, a.id).ok).toBe(false);
       expect(moveFolder(a.id, b.id)).toEqual({
         ok: false,
-        error: "폴더를 자기 안으로 옮길 수 없습니다",
+        error: DRIVE_COPY.cannotMoveIntoSelf,
       });
       expect(getFolder(a.id)?.parentId).toBeNull();
     });

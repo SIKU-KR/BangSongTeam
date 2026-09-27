@@ -5,6 +5,8 @@ import { QuickLyricPasteModal } from "./QuickLyricPasteModal";
 import { DeckSchema } from "#shared";
 import { signInAsTestUser } from "../../test/sessionFixture";
 import { SEED_USER_ID } from "../presentation";
+import { EDITOR_COPY } from "#copy/editor";
+import { COMMON_COPY } from "#copy/common";
 
 describe("QuickLyricPasteModal", () => {
   beforeEach(() => {
@@ -35,7 +37,7 @@ describe("QuickLyricPasteModal", () => {
     expect(screen.getByPlaceholderText(/곡 제목/)).toBeInTheDocument();
     expect(screen.getByPlaceholderText(/가사/)).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "세트에 추가" }),
+      screen.getByRole("button", { name: EDITOR_COPY.quickPaste.submit }),
     ).toBeInTheDocument();
   });
 
@@ -74,7 +76,9 @@ describe("QuickLyricPasteModal", () => {
       />,
     );
 
-    const submitBtn = screen.getByRole("button", { name: "세트에 추가" });
+    const submitBtn = screen.getByRole("button", {
+      name: EDITOR_COPY.quickPaste.submit,
+    });
     expect(submitBtn).toBeDisabled();
 
     const titleInput = screen.getByPlaceholderText(/곡 제목/);
@@ -110,7 +114,9 @@ describe("QuickLyricPasteModal", () => {
       target: { value: "은혜로다 주의 은혜\n한량없는 주의 은혜" },
     });
 
-    const submitBtn = screen.getByRole("button", { name: "세트에 추가" });
+    const submitBtn = screen.getByRole("button", {
+      name: EDITOR_COPY.quickPaste.submit,
+    });
     fireEvent.click(submitBtn);
 
     expect(handleAddToSet).toHaveBeenCalledTimes(1);
@@ -137,7 +143,7 @@ describe("QuickLyricPasteModal", () => {
       />,
     );
 
-    const cancelBtn = screen.getByRole("button", { name: "취소" });
+    const cancelBtn = screen.getByRole("button", { name: COMMON_COPY.cancel });
     fireEvent.click(cancelBtn);
 
     expect(handleClose).toHaveBeenCalledTimes(1);
