@@ -26,10 +26,13 @@ ADMIN_USER_IDS=
 
 # OAuth Providers
 #
-# 도메인 구입 후 카카오·네이버 개발자 콘솔에서 앱을 등록하고 채운다.
-# Redirect URI: https://<도메인>/api/auth/callback/kakao , .../naver
+# 카카오·네이버 개발자 콘솔, Google Cloud Console(OAuth 클라이언트 ID, 웹 애플리케이션)에서
+# 앱을 등록하고 채운다.
+# Redirect URI: https://<도메인>/api/auth/callback/kakao , .../naver , .../google
 # 비워 두면 해당 프로바이더는 등록되지 않고 로그인 화면에도 나오지 않는다.
 KAKAO_CLIENT_ID=
 KAKAO_CLIENT_SECRET=
 NAVER_CLIENT_ID=
 NAVER_CLIENT_SECRET=
+GOOGLE_CLIENT_ID=
+GOOGLE_CLIENT_SECRET=

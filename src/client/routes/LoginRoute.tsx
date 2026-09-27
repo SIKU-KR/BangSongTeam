@@ -24,9 +24,13 @@ import {
 } from "../lib/auth";
 import { EmailLoginForm } from "../features/auth/EmailLoginForm";
 
-const PROVIDER_BUTTON_CLASS: Record<SocialProvider, string> = {
-  kakao: "bg-kakao text-kakao-foreground hover:bg-kakao/90",
-  naver: "bg-naver text-naver-foreground hover:bg-naver/90",
+const PROVIDER_BUTTON_PROPS: Record<
+  SocialProvider,
+  Pick<React.ComponentProps<typeof Button>, "variant" | "className">
+> = {
+  kakao: { className: "bg-kakao text-kakao-foreground hover:bg-kakao/90" },
+  naver: { className: "bg-naver text-naver-foreground hover:bg-naver/90" },
+  google: { variant: "outline" },
 };
 
 export interface LoginRouteProps {
@@ -122,7 +126,7 @@ export function LoginRoute({
                       size="lg"
                       disabled={pending !== null}
                       onClick={() => void handleSignIn(provider.id)}
-                      className={PROVIDER_BUTTON_CLASS[provider.id]}
+                      {...PROVIDER_BUTTON_PROPS[provider.id]}
                     >
                       {pending === provider.id ? "이동 중…" : provider.label}
                     </Button>

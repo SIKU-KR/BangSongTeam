@@ -1,7 +1,12 @@
 import { betterAuth } from "better-auth/minimal";
 import { drizzleAdapter } from "@better-auth/drizzle-adapter";
 import { createD1Client, user, session, account, verification } from "#db";
-import { createId, PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH } from "#shared";
+import {
+  createId,
+  PASSWORD_MAX_LENGTH,
+  PASSWORD_MIN_LENGTH,
+  type SocialProvider,
+} from "#shared";
 import type { Bindings } from "../types";
 import { hashPassword, verifyPassword } from "./password";
 
@@ -201,15 +206,16 @@ export function buildNaverUser(profile: NaverProfileLike): MappedSocialUser {
 }
 
 /** 실제로 자격증명이 설정된 소셜 프로바이더 */
-export function configuredSocialProviders(
-  env: Bindings,
-): Array<"kakao" | "naver"> {
-  const providers: Array<"kakao" | "naver"> = [];
+export function configuredSocialProviders(env: Bindings): SocialProvider[] {
+  const providers: SocialProvider[] = [];
   if (hasCredentials(env.KAKAO_CLIENT_ID, env.KAKAO_CLIENT_SECRET)) {
     providers.push("kakao");
   }
   if (hasCredentials(env.NAVER_CLIENT_ID, env.NAVER_CLIENT_SECRET)) {
     providers.push("naver");
+  }
+  if (hasCredentials(env.GOOGLE_CLIENT_ID, env.GOOGLE_CLIENT_SECRET)) {
+    providers.push("google");
   }
   return providers;
 }
@@ -232,6 +238,14 @@ function buildAuth(env: Bindings) {
       clientId: env.NAVER_CLIENT_ID as string,
       clientSecret: env.NAVER_CLIENT_SECRET as string,
       mapProfileToUser: (profile: NaverProfileLike) => buildNaverUser(profile),
+    };
+  }
+
+  if (hasCredentials(env.GOOGLE_CLIENT_ID, env.GOOGLE_CLIENT_SECRET)) {
+    socialProviders.google = {
+      clientId: env.GOOGLE_CLIENT_ID as string,
+      clientSecret: env.GOOGLE_CLIENT_SECRET as string,
+      prompt: "select_account",
     };
   }
 
@@ -277,8 +291,11 @@ const instances = new WeakMap<Bindings, AuthInstance>();
  *   `/api/email-signup`과 개발자 로그인이 서버 안에서 `auth.api.signUpEmail`로만 받는다.
  *   `disabledPaths`는 HTTP 라우터에서만 검사하므로 서버 내부 호출은 통과한다.
  * - 비밀번호 사용자는 `emailVerified=false`다. Better Auth의 `requireLocalEmailVerified`
- *   기본값 때문에 같은 이메일의 카카오·네이버 로그인이 이 계정에 자동으로 붙지 않는다
+ *   기본값 때문에 같은 이메일의 소셜 로그인이 이 계정에 자동으로 붙지 않는다
  *   (선점 방지). 그 대신 해당 소셜 로그인은 "account not linked"로 실패한다.
+ *   반대로 이메일이 검증된 소셜 계정끼리는 같은 이메일이면 한 사용자로 합쳐진다.
+ * - 구글은 교회 공용 PC에서 이전 사람의 구글 계정으로 조용히 들어가지 않도록
+ *   `prompt: "select_account"`로 매번 계정을 고르게 한다.
  * - rate limit은 `NODE_ENV=production`에서만 기본으로 켜지는데 Workers에는 그 값이 없어
  *   명시적으로 켠다. 저장소가 isolate 메모리라 부분 방어다.
  */

@@ -96,8 +96,12 @@ export const EmailSignUpRequestSchema = z.object({
 });
 export type EmailSignUpRequest = z.infer<typeof EmailSignUpRequestSchema>;
 
+/** 로그인 화면에 버튼이 나오는 순서이기도 하다 */
+export const SocialProviderSchema = z.enum(["kakao", "naver", "google"]);
+export type SocialProvider = z.infer<typeof SocialProviderSchema>;
+
 export const AuthConfigResponseSchema = z.object({
-  providers: z.array(z.enum(["kakao", "naver"])),
+  providers: z.array(SocialProviderSchema),
   devLogin: z.boolean(),
   emailLogin: z.boolean(),
 });
