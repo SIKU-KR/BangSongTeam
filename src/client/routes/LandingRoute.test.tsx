@@ -23,8 +23,8 @@ describe("LandingRoute", () => {
     renderLanding();
 
     expect(screen.getByTestId("landing-route")).toBeInTheDocument();
-    expect(screen.getByText("방송팀")).toBeInTheDocument();
-    expect(screen.getByText("랜딩 페이지 준비 중입니다.")).toBeInTheDocument();
+    expect(screen.getByText("교회 방송팀 다모여!")).toBeInTheDocument();
+    expect(screen.getByText("교회 방송팀을 위한 찬양 PPT")).toBeInTheDocument();
   });
 
   it("진입 버튼은 /presentations 로 이동한다", () => {

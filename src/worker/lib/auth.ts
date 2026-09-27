@@ -181,7 +181,7 @@ function buildAuth(env: Bindings) {
   }
 
   return betterAuth({
-    appName: "방송팀",
+    appName: "교회 방송팀 다모여!",
     basePath: AUTH_BASE_PATH,
     baseURL: env.BETTER_AUTH_URL,
     secret: env.BETTER_AUTH_SECRET,

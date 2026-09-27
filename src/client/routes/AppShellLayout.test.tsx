@@ -108,7 +108,7 @@ describe("AppShellLayout (드라이브형 홈)", () => {
     __loadFoldersForTests([folder(WORSHIP, "2026 주일 대예배")]);
     renderShell();
 
-    expect(screen.getByText("방송팀")).toBeInTheDocument();
+    expect(screen.getByText("교회 방송팀 다모여!")).toBeInTheDocument();
     expect(
       screen.getByRole("heading", { name: "내 드라이브" }),
     ).toBeInTheDocument();
