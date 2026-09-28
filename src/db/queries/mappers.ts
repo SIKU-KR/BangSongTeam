@@ -1,7 +1,8 @@
 import {
   DEFAULT_DECK_STYLE,
   DeckStyleSchema,
-  SlideSchema,
+  fitSlidesToLimits,
+  StoredSlideSchema,
   type Deck as SharedDeck,
   type DeckStyle,
   type Slide,
@@ -41,12 +42,12 @@ function parseSlides(raw: string | null | undefined): Slide[] {
   }
   if (!Array.isArray(parsed)) return [];
 
-  const slides: Slide[] = [];
-  for (const candidate of parsed) {
-    const result = SlideSchema.safeParse(candidate);
-    if (result.success) slides.push(result.data);
-  }
-  return slides;
+  return fitSlidesToLimits(
+    parsed.flatMap((candidate) => {
+      const result = StoredSlideSchema.safeParse(candidate);
+      return result.success ? [result.data] : [];
+    }),
+  );
 }
 
 function parseStyle(raw: string | null | undefined): DeckStyle {

@@ -5,7 +5,13 @@ import {
   mergeSlidesToLyrics,
   splitLinesAtCursor,
   mergeSlideLines,
+  fitLinesToSlides,
+  fitSlidesToLimits,
 } from "./lyrics";
+import { MAX_SLIDE_LINE_LENGTH, SlideSchema } from "../schemas/slide";
+
+const LONG_VERSE =
+  "걱정 근심 많은 자를 성령감화 하시며 복과 은혜 사랑 받아 평안하게 하소서 첨과 끝이 되신 주님 항상 인도 하셔서 마귀 유혹 받는 것을 속히 끊게 하소서";
 
 describe("Lyric Processing Utilities", () => {
   describe("sanitizeLyricLine", () => {
@@ -131,11 +137,75 @@ describe("Lyric Processing Utilities", () => {
       expect(splitLyricsIntoSlides("   \n\n\t  \n  ")).toEqual([]);
     });
 
+    it("80자를 넘는 줄을 던지지 않고 여러 줄로 감싼다", () => {
+      const slides = splitLyricsIntoSlides(`${LONG_VERSE}\n${LONG_VERSE}`);
+      expect(slides).toHaveLength(1);
+      expect(slides[0].lines).toHaveLength(4);
+    });
+
     it("generates unique IDs for each slide", () => {
       const rawText = `L1\nL2\n\nL3\nL4\n\nL5\nL6`;
       const slides = splitLyricsIntoSlides(rawText);
       const ids = new Set(slides.map((s) => s.id));
       expect(ids.size).toBe(slides.length);
+    });
+  });
+
+  describe("fitLinesToSlides", () => {
+    it("제한 안의 줄은 그대로 한 묶음으로 둔다", () => {
+      expect(fitLinesToSlides(["1줄", "2줄"])).toEqual([["1줄", "2줄"]]);
+      expect(fitLinesToSlides([])).toEqual([[]]);
+    });
+
+    it("긴 줄은 공백에서 고르게 끊는다", () => {
+      expect(LONG_VERSE.length).toBeGreaterThan(MAX_SLIDE_LINE_LENGTH);
+      const [lines] = fitLinesToSlides([LONG_VERSE]);
+      expect(lines).toHaveLength(2);
+      expect(lines.join(" ")).toBe(LONG_VERSE);
+      expect(Math.abs(lines[0].length - lines[1].length)).toBeLessThan(10);
+    });
+
+    it("공백 없는 긴 줄은 글자 수로 자른다", () => {
+      const [lines] = fitLinesToSlides(["가".repeat(170)]);
+      expect(lines.map((line) => line.length)).toEqual([80, 80, 10]);
+    });
+
+    it("감싼 뒤 4줄을 넘으면 2줄씩 나눈다", () => {
+      const chunks = fitLinesToSlides([LONG_VERSE, LONG_VERSE, LONG_VERSE]);
+      expect(chunks.map((lines) => lines.length)).toEqual([2, 2, 2]);
+    });
+
+    it("한 줄에서 나온 조각을 다른 슬라이드로 흩지 않는다", () => {
+      const chunks = fitLinesToSlides(["짧은 절", LONG_VERSE, LONG_VERSE]);
+      expect(chunks.map((lines) => lines.length)).toEqual([1, 2, 2]);
+      expect(chunks[1].join(" ")).toBe(LONG_VERSE);
+      expect(chunks[2].join(" ")).toBe(LONG_VERSE);
+    });
+  });
+
+  describe("fitSlidesToLimits", () => {
+    it("제한을 넘는 슬라이드를 나누고 뒷장에 이어지는 id를 붙인다", () => {
+      const slides = fitSlidesToLimits([
+        { id: "s_b", order: 1, lines: ["끝"] },
+        { id: "s_a", order: 0, lines: [LONG_VERSE, LONG_VERSE, LONG_VERSE] },
+      ]);
+      expect(slides.map((s) => [s.id, s.order])).toEqual([
+        ["s_a", 0],
+        ["s_a_2", 1],
+        ["s_a_3", 2],
+        ["s_b", 3],
+      ]);
+      for (const slide of slides) {
+        expect(SlideSchema.safeParse(slide).success).toBe(true);
+      }
+    });
+
+    it("제한 안의 슬라이드는 그대로 둔다", () => {
+      const slides = [
+        { id: "s_1", order: 0, lines: ["1절"] },
+        { id: "s_2", order: 1, lines: ["2절"] },
+      ];
+      expect(fitSlidesToLimits(slides)).toEqual(slides);
     });
   });
 

@@ -1,5 +1,9 @@
 import { and, desc, eq, inArray, like, or, sql, type SQL } from "drizzle-orm";
-import { SlideSchema, type PublicDeckSummary } from "#shared";
+import {
+  fitLinesToSlides,
+  StoredSlideSchema,
+  type PublicDeckSummary,
+} from "#shared";
 import { backgrounds, decks, decksFts, user } from "../schema";
 import { publicDeckCondition } from "./publicScope";
 import { isServiceBackground } from "./backgrounds";
@@ -92,8 +96,8 @@ interface PublicDeckSearchRow {
 function parseLines(raw: string | null): string[] {
   if (!raw) return [];
   try {
-    const parsed = SlideSchema.shape.lines.safeParse(JSON.parse(raw));
-    return parsed.success ? parsed.data : [];
+    const parsed = StoredSlideSchema.shape.lines.safeParse(JSON.parse(raw));
+    return parsed.success ? fitLinesToSlides(parsed.data)[0] : [];
   } catch {
     return [];
   }

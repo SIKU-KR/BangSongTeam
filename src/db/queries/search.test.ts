@@ -260,6 +260,23 @@ describe("searchPublicDecks", () => {
     expect(card).not.toHaveProperty("lyricsRaw");
   });
 
+  it("길이 제한을 넘는 첫 슬라이드도 나눠서 미리보기를 만든다", async () => {
+    const verse = `${"주 하나님 크신 사랑 ".repeat(8)}찬양하리`;
+    await db
+      .update(decks)
+      .set({
+        slides: JSON.stringify([
+          { id: "a", order: 0, lines: [verse, verse, verse] },
+        ]),
+      })
+      .where(eq(decks.id, "s1"));
+
+    const [card] = await searchPublicDecks(db, "은혜로운");
+
+    expect(card.firstSlidePreview).toHaveLength(2);
+    expect(card.firstSlidePreview.join(" ")).toBe(verse);
+  });
+
   it("returns an empty preview for empty or malformed slides", async () => {
     await db
       .update(decks)

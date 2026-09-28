@@ -1,4 +1,9 @@
-import { MAX_SLIDE_LINES, Slide, SlideSchema } from "../schemas/slide";
+import {
+  MAX_SLIDE_LINE_LENGTH,
+  MAX_SLIDE_LINES,
+  Slide,
+  SlideSchema,
+} from "../schemas/slide";
 
 /**
  * 앞뒤 일반 공백 및 전각 공백(\u3000), 특수 공백(\u00A0, \uFEFF 등)을 제거한다.
@@ -10,9 +15,88 @@ export function sanitizeLyricLine(line: string): string {
   );
 }
 
+function wrapLyricLine(line: string): string[] {
+  if (line.length <= MAX_SLIDE_LINE_LENGTH) return [line];
+
+  const text = sanitizeLyricLine(line);
+  if (text.length <= MAX_SLIDE_LINE_LENGTH) return [text];
+
+  const ideal = text.length / Math.ceil(text.length / MAX_SLIDE_LINE_LENGTH);
+  let space = -1;
+  for (let i = 1; i <= MAX_SLIDE_LINE_LENGTH; i++) {
+    if (
+      /\s/.test(text[i]) &&
+      (space < 0 || Math.abs(i - ideal) < Math.abs(space - ideal))
+    ) {
+      space = i;
+    }
+  }
+  const cut = space < 0 ? MAX_SLIDE_LINE_LENGTH : space;
+
+  return [
+    sanitizeLyricLine(text.slice(0, cut)),
+    ...wrapLyricLine(sanitizeLyricLine(text.slice(cut))),
+  ];
+}
+
 /**
- * 가사 원본 텍스트를 슬라이드 목록으로 분할한다.
- * 최대 4줄까지 단일 슬라이드를 유지하고, 4줄 초과 블록은 2줄 단위로 분할한다.
+ * 줄 목록을 슬라이드 한 장의 제한에 맞는 묶음으로 나눈다. `MAX_SLIDE_LINE_LENGTH`를
+ * 넘는 줄은 조각 길이가 고르도록 공백에서 끊어 여러 줄로 만든다(공백이 없으면
+ * 글자 수로 자른다). 그 결과가 `MAX_SLIDE_LINES`를 넘으면 2줄씩 나누되, 한 줄에서
+ * 나온 조각은 되도록 같은 슬라이드에 둔다.
+ */
+export function fitLinesToSlides(lines: readonly string[]): string[][] {
+  const units = lines.map(wrapLyricLine);
+  const wrapped = units.flat();
+  if (wrapped.length <= MAX_SLIDE_LINES) return [wrapped];
+
+  const chunks: string[][] = [];
+  let current: string[] = [];
+  for (const unit of units) {
+    if (current.length > 0 && current.length + unit.length > 2) {
+      chunks.push(current);
+      current = [];
+    }
+    for (const piece of unit) {
+      if (current.length === 2) {
+        chunks.push(current);
+        current = [];
+      }
+      current.push(piece);
+    }
+  }
+  if (current.length > 0) chunks.push(current);
+  return chunks;
+}
+
+/**
+ * 저장된 슬라이드를 `SlideSchema` 제한에 맞게 나눈다.
+ *
+ * 제한을 넘는 가사(찬송가는 한 절이 한 줄이라 80자를 넘기 쉽다)가 이미 DB에
+ * 있어도 버리지 않고 여러 장으로 읽기 위한 것이다. 나뉜 뒷장은 원래 id에
+ * `_2`, `_3`…을 붙여 몇 번을 읽어도 같은 id가 나오고, `order`는 0부터 다시 매긴다.
+ */
+export function fitSlidesToLimits(
+  slides: ReadonlyArray<{
+    id: string;
+    order: number;
+    lines: readonly string[];
+  }>,
+): Slide[] {
+  return [...slides]
+    .sort((a, b) => a.order - b.order)
+    .flatMap((slide) =>
+      fitLinesToSlides(slide.lines).map((lines, index) => ({
+        id: index === 0 ? slide.id : `${slide.id}_${index + 1}`,
+        lines,
+      })),
+    )
+    .map((slide, order) => ({ ...slide, order }));
+}
+
+/**
+ * 가사 원본 텍스트를 슬라이드 목록으로 분할한다. 빈 줄로 나뉜 블록마다
+ * `fitLinesToSlides` 규칙으로 슬라이드를 만든다.
  */
 export function splitLyricsIntoSlides(rawText: string): Slide[] {
   const rawLines = rawText.split(/\r?\n/);
@@ -34,31 +118,9 @@ export function splitLyricsIntoSlides(rawText: string): Slide[] {
     blocks.push(currentBlock);
   }
 
-  const slides: Slide[] = [];
-  let order = 0;
-
-  for (const block of blocks) {
-    if (block.length <= MAX_SLIDE_LINES) {
-      slides.push(
-        SlideSchema.parse({
-          order: order++,
-          lines: block,
-        }),
-      );
-    } else {
-      for (let i = 0; i < block.length; i += 2) {
-        const chunk = block.slice(i, i + 2);
-        slides.push(
-          SlideSchema.parse({
-            order: order++,
-            lines: chunk,
-          }),
-        );
-      }
-    }
-  }
-
-  return slides;
+  return blocks
+    .flatMap(fitLinesToSlides)
+    .map((lines, order) => SlideSchema.parse({ order, lines }));
 }
 
 /**

@@ -16,3 +16,11 @@ export const SlideSchema = z.object({
   lines: z.array(z.string().max(MAX_SLIDE_LINE_LENGTH)).max(MAX_SLIDE_LINES),
 });
 export type Slide = z.infer<typeof SlideSchema>;
+
+/**
+ * DB에 저장된 슬라이드. 줄 길이·줄 수 제한 없이 모양만 검사한다. 제한을 넘는
+ * 슬라이드를 버리지 않고 `fitSlidesToLimits`로 나눠 읽기 위해 쓴다.
+ */
+export const StoredSlideSchema = SlideSchema.extend({
+  lines: z.array(z.string()),
+});
