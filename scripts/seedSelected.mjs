@@ -47,6 +47,57 @@ function sanitizeLyricLine(line) {
   return line.replace(/^[\s\u00A0\u3000\u200B\uFEFF]+|[\s\u00A0\u3000\u200B\uFEFF]+$/g, "");
 }
 
+const MAX_SLIDE_LINES = 4;
+const MAX_SLIDE_LINE_LENGTH = 80;
+
+function wrapLyricLine(line) {
+  if (line.length <= MAX_SLIDE_LINE_LENGTH) return [line];
+
+  const text = sanitizeLyricLine(line);
+  if (text.length <= MAX_SLIDE_LINE_LENGTH) return [text];
+
+  const ideal = text.length / Math.ceil(text.length / MAX_SLIDE_LINE_LENGTH);
+  let space = -1;
+  for (let i = 1; i <= MAX_SLIDE_LINE_LENGTH; i++) {
+    if (
+      /\s/.test(text[i]) &&
+      (space < 0 || Math.abs(i - ideal) < Math.abs(space - ideal))
+    ) {
+      space = i;
+    }
+  }
+  const cut = space < 0 ? MAX_SLIDE_LINE_LENGTH : space;
+
+  return [
+    sanitizeLyricLine(text.slice(0, cut)),
+    ...wrapLyricLine(sanitizeLyricLine(text.slice(cut))),
+  ];
+}
+
+function fitLinesToSlides(lines) {
+  const units = lines.map(wrapLyricLine);
+  const wrapped = units.flat();
+  if (wrapped.length <= MAX_SLIDE_LINES) return [wrapped];
+
+  const chunks = [];
+  let current = [];
+  for (const unit of units) {
+    if (current.length > 0 && current.length + unit.length > 2) {
+      chunks.push(current);
+      current = [];
+    }
+    for (const piece of unit) {
+      if (current.length === 2) {
+        chunks.push(current);
+        current = [];
+      }
+      current.push(piece);
+    }
+  }
+  if (current.length > 0) chunks.push(current);
+  return chunks;
+}
+
 /**
  * 슬라이드 분할 규칙 (src/shared/utils/lyrics.ts 동일)
  */
@@ -70,29 +121,9 @@ function splitLyricsIntoSlides(rawText) {
     blocks.push(currentBlock);
   }
 
-  const slides = [];
-  let order = 0;
-
-  for (const block of blocks) {
-    if (block.length <= 4) {
-      slides.push({
-        id: createSlideId(),
-        order: order++,
-        lines: block,
-      });
-    } else {
-      for (let i = 0; i < block.length; i += 2) {
-        const chunk = block.slice(i, i + 2);
-        slides.push({
-          id: createSlideId(),
-          order: order++,
-          lines: chunk,
-        });
-      }
-    }
-  }
-
-  return slides;
+  return blocks
+    .flatMap(fitLinesToSlides)
+    .map((lines, order) => ({ id: createSlideId(), order, lines }));
 }
 
 /**

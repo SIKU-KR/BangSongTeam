@@ -148,6 +148,22 @@ describe("행 ↔ DTO 매퍼", () => {
       };
       expect(toSharedDeck(row).slides).toHaveLength(1);
     });
+
+    it("길이 제한을 넘는 슬라이드는 버리지 않고 제한에 맞게 나눠 읽는다", () => {
+      const verse = `${"주 하나님 크신 사랑 ".repeat(8)}찬양하리`;
+      const row = {
+        ...toDeckRow(makeSharedDeck()),
+        slides: JSON.stringify([
+          { id: "s1", order: 0, lines: [verse, verse, verse] },
+        ]),
+      };
+      const deck = toSharedDeck(row);
+      expect(deck.slides.map((s) => s.id)).toEqual(["s1", "s1_2", "s1_3"]);
+      expect(deck.slides.flatMap((s) => s.lines).join(" ")).toBe(
+        [verse, verse, verse].join(" "),
+      );
+      expect(DeckSchema.safeParse(deck).success).toBe(true);
+    });
   });
 
   describe("프레젠테이션 문서", () => {
