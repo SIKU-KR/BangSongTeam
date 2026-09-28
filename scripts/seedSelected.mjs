@@ -10,6 +10,7 @@
  * 
  * 옵션:
  *   --dir=<경로>    지정한 디렉터리의 txt 파일들을 읽어옵니다. (기본값: data/extracted/selected)
+ *   --json=<경로>   txt 폴더 대신 `{ title, artist, lyrics }` 배열 JSON(예: data/cleaned/songs.json)을 읽어옵니다.
  *   --dry-run       DB에 실행하지 않고 SQL 파일(data/seed.sql)만 생성합니다.
  */
 
@@ -17,30 +18,26 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { execSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { nanoid } from "nanoid";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT_DIR = path.resolve(__dirname, "..");
 const SELECTED_DIR = path.join(ROOT_DIR, "data", "cleaned", "selected");
 const OUTPUT_SQL = path.join(ROOT_DIR, "data", "seed_decks.sql");
 
-// 시스템 공식 봇 계정 ID
-const SEED_BOT_USER_ID = "bot-seed-official";
+// 시스템 공식 봇 계정 ID. 덱 응답의 userId가 IdSchema(21자)를 통과해야 해서 21자로 맞춘다.
+const SEED_BOT_USER_ID = "bot-seed-official-lib";
 const SEED_BOT_NAME = "공식 찬양 라이브러리";
 
 /**
- * 21자리 NanoID 생성 (createId 규칙 준수)
+ * src/shared/utils/id.ts의 createId·createSlideId와 같은 형식
  */
 function createId() {
-  const chars = "useandom-26T198340PX75pxJACKVERYMINDBUSHWOLFGQZ_flavor";
-  let id = "";
-  for (let i = 0; i < 21; i++) {
-    id += chars[Math.floor(Math.random() * chars.length)];
-  }
-  return id;
+  return nanoid();
 }
 
 function createSlideId() {
-  return `sld_${Math.random().toString(36).substring(2, 10)}`;
+  return `s_${nanoid(10)}`;
 }
 
 /**
@@ -182,14 +179,10 @@ function escapeSql(str) {
   return str.replace(/'/g, "''");
 }
 
-async function main() {
-  const args = process.argv.slice(2);
-  const target = args.find((a) => a.startsWith("--target="))?.split("=")[1] || "local";
-  const customDir = args.find((a) => a.startsWith("--dir="))?.split("=")[1];
-  const dryRun = args.includes("--dry-run");
-
-  const targetDir = customDir ? path.resolve(ROOT_DIR, customDir) : SELECTED_DIR;
-
+/**
+ * txt 폴더의 파일들을 `{ label, title, artist, lyricsRaw }`로 읽는다. 파일이 없으면 null.
+ */
+async function loadSongsFromDir(targetDir) {
   await fs.mkdir(targetDir, { recursive: true });
 
   const files = await fs.readdir(targetDir);
@@ -202,12 +195,48 @@ async function main() {
     console.log(`    ${targetDir} 폴더로 복사한 후 다시 실행해 주세요.`);
     console.log(`    또는 특정 폴더를 직접 지정할 수도 있습니다:`);
     console.log(`    node scripts/seedSelected.mjs --dir=data/cleaned/hymns`);
-    return;
+    return null;
   }
 
+  const songs = [];
+  for (const file of txtFiles) {
+    const content = await fs.readFile(path.join(targetDir, file), "utf-8");
+    songs.push({ label: file, ...parseTextFile(content, file) });
+  }
+  return songs;
+}
+
+/**
+ * `{ title, artist, lyrics }` 배열 JSON을 읽는다.
+ */
+async function loadSongsFromJson(jsonPath) {
+  const entries = JSON.parse(await fs.readFile(jsonPath, "utf-8"));
+  return entries.map((entry) => ({
+    label: entry.title,
+    title: entry.title.trim() || "제목 없음",
+    artist: (entry.artist ?? "").trim(),
+    lyricsRaw: (entry.lyrics ?? "").trim(),
+  }));
+}
+
+async function main() {
+  const args = process.argv.slice(2);
+  const target = args.find((a) => a.startsWith("--target="))?.split("=")[1] || "local";
+  const customDir = args.find((a) => a.startsWith("--dir="))?.split("=")[1];
+  const jsonFile = args.find((a) => a.startsWith("--json="))?.split("=")[1];
+  const dryRun = args.includes("--dry-run");
+
+  const source = jsonFile
+    ? path.resolve(ROOT_DIR, jsonFile)
+    : customDir
+      ? path.resolve(ROOT_DIR, customDir)
+      : SELECTED_DIR;
+  const songs = jsonFile ? await loadSongsFromJson(source) : await loadSongsFromDir(source);
+  if (!songs) return;
+
   console.log(`=== 시드 생성 시작 ===`);
-  console.log(`- 대상 폴더: ${targetDir}`);
-  console.log(`- 처리할 텍스트 파일: ${txtFiles.length}개`);
+  console.log(`- 원본: ${source}`);
+  console.log(`- 처리할 곡: ${songs.length}개`);
   console.log(`- 대상 데이터베이스: ${target === "remote" ? "원격(Remote)" : "로컬(Local)"}`);
 
   const nowUnix = Math.floor(Date.now() / 1000);
@@ -219,24 +248,20 @@ async function main() {
     `INSERT OR IGNORE INTO user (id, name, email, email_verified, image, created_at, updated_at) VALUES ('${SEED_BOT_USER_ID}', '${escapeSql(SEED_BOT_NAME)}', 'library@worship.local', 1, NULL, ${nowUnix}, ${nowUnix});`,
   );
 
-  // 2. 각 곡별 덱 SQL 생성
+  // 2. 각 곡별 덱 SQL 생성. 봇 계정에 같은 제목·아티스트 곡이 있으면 건너뛰어 다시 실행해도 중복되지 않는다.
   sqlStatements.push(`\n-- 2. 선별 덱 삽입`);
 
   let count = 0;
-  for (const file of txtFiles) {
-    const fullPath = path.join(targetDir, file);
-    const content = await fs.readFile(fullPath, "utf-8");
-    const { title, artist, lyricsRaw } = parseTextFile(content, file);
-
+  for (const { label, title, artist, lyricsRaw } of songs) {
     if (!lyricsRaw || lyricsRaw.length < 5) {
-      console.warn(`[건너뜀] 가사 내용 부족: ${file}`);
+      console.warn(`[건너뜀] 가사 내용 부족: ${label}`);
       continue;
     }
 
     const slides = splitLyricsIntoSlides(lyricsRaw);
     const deckId = createId();
 
-    const sql = `INSERT INTO decks (id, user_id, scope, title, artist, lyrics_raw, slides, background_id, style, visibility, fork_count, origin, published_at, created_at, updated_at) VALUES ('${deckId}', '${SEED_BOT_USER_ID}', 'library', '${escapeSql(title)}', '${escapeSql(artist)}', '${escapeSql(lyricsRaw)}', '${escapeSql(JSON.stringify(slides))}', NULL, '${escapeSql(JSON.stringify(DEFAULT_DECK_STYLE))}', 'public', 0, 'user', ${nowUnix}, ${nowUnix}, ${nowUnix});`;
+    const sql = `INSERT INTO decks (id, user_id, scope, title, artist, lyrics_raw, slides, background_id, style, visibility, fork_count, origin, published_at, created_at, updated_at) SELECT '${deckId}', '${SEED_BOT_USER_ID}', 'library', '${escapeSql(title)}', '${escapeSql(artist)}', '${escapeSql(lyricsRaw)}', '${escapeSql(JSON.stringify(slides))}', NULL, '${escapeSql(JSON.stringify(DEFAULT_DECK_STYLE))}', 'public', 0, 'user', ${nowUnix}, ${nowUnix}, ${nowUnix} WHERE NOT EXISTS (SELECT 1 FROM decks WHERE user_id = '${SEED_BOT_USER_ID}' AND title = '${escapeSql(title)}' AND artist = '${escapeSql(artist)}');`;
 
     sqlStatements.push(sql);
     count++;
