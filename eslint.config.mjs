@@ -1,6 +1,7 @@
 import js from "@eslint/js";
 import betterTailwindcss from "eslint-plugin-better-tailwindcss";
 import globals from "globals";
+import jsxA11y from "eslint-plugin-jsx-a11y";
 import tseslint from "typescript-eslint";
 
 const DB_IS_WORKER_ONLY =
@@ -245,6 +246,23 @@ export default tseslint.config(
       ],
     },
   },
+  /**
+   * 접근성 린트(WCAG 2.2 AA). `#components/ui` 래퍼는 DOM이 아니라서 autoFocus 검사에서
+   * 빠진다. 이름 바꾸기처럼 사용자가 연 편집 필드에만 쓴다.
+   *
+   * Base UI `render={<a … />}`는 링크 내용을 부모 컴포넌트의 children으로 받아
+   * 정적 분석으로는 비어 보이므로 `anchor-has-content`를 끈다.
+   */
+  {
+    files: ["src/client/**/*.tsx"],
+    ignores: ["**/*.test.tsx", "src/client/components/ui/**"],
+    ...jsxA11y.flatConfigs.recommended,
+    rules: {
+      ...jsxA11y.flatConfigs.recommended.rules,
+      "jsx-a11y/anchor-has-content": "off",
+      "jsx-a11y/no-autofocus": ["error", { ignoreNonDOM: true }],
+    },
+  },
   {
     files: ["src/client/**/*.tsx"],
     ignores: ["**/*.test.tsx", "src/client/components/ui/**"],
@@ -297,6 +315,16 @@ export default tseslint.config(
           ],
         },
       ],
+    },
+  },
+  /**
+   * 드라이브 목록 행(role="option")은 포커스를 받지만 키보드 조작(↑↓·Space·Enter…)은
+   * useDriveKeyboard가 창 단위로 받는다. 행마다 키 핸들러를 달 필요가 없다.
+   */
+  {
+    files: ["src/client/features/drive/DriveItems.tsx"],
+    rules: {
+      "jsx-a11y/click-events-have-key-events": "off",
     },
   },
   {

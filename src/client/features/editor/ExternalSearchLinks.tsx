@@ -45,7 +45,7 @@ function SearchLink({
             nativeButton={false}
             render={
               <a
-                role="link"
+                role={hasQuery ? undefined : "link"}
                 href={href}
                 target="_blank"
                 rel="noopener noreferrer"

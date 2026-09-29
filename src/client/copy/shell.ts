@@ -3,6 +3,7 @@ export const SHELL_COPY = {
   routeLoading: "불러오는 중…",
   backgroundGallery: "배경 갤러리",
   mainNav: "주 메뉴",
+  skipToContent: "본문으로 건너뛰기",
   signOut: "로그아웃",
   signingOut: "로그아웃 중…",
   landingEnter: "내 프레젠테이션으로 이동",

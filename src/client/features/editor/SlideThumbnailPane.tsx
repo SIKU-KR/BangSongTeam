@@ -685,7 +685,7 @@ export function SlideThumbnailPane({
                 className="shadow-lg ring-2 ring-primary"
               />
               {draggedCount > 1 && (
-                <span className="absolute -top-2 -right-2 flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1 font-mono text-2xs font-bold text-primary-foreground">
+                <span className="absolute -top-2 -right-2 flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1 font-mono text-xs font-bold text-primary-foreground">
                   {draggedCount}
                 </span>
               )}
@@ -823,7 +823,7 @@ function SongHeader({
           }
         >
           <span className="truncate text-xs font-semibold">{title}</span>
-          <span className="shrink-0 font-mono text-2xs text-muted-foreground">
+          <span className="shrink-0 font-mono text-xs text-muted-foreground">
             {EDITOR_COPY.slide.pageCount(slideCount)}
           </span>
         </TooltipTrigger>

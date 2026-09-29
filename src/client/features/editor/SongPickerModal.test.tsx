@@ -201,6 +201,18 @@ describe("SongPickerModal", () => {
     expect(screen.queryByText("소원")).not.toBeInTheDocument();
   });
 
+  it("곡 항목은 키보드 Enter로도 고를 수 있다", async () => {
+    seedMySong();
+    renderPicker();
+
+    const item = await screen.findByTestId(`song-item-${SHARED_ID}`);
+    expect(item).toHaveAttribute("aria-pressed", "false");
+    item.focus();
+    fireEvent.keyDown(item, { key: "Enter" });
+
+    expect(item).toHaveAttribute("aria-pressed", "true");
+  });
+
   it("닫혀 있다가 열려도 렌더링이 깨지지 않는다", () => {
     seedMySong();
     const { rerender } = render(

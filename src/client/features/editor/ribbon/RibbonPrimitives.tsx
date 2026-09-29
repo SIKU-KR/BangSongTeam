@@ -24,7 +24,7 @@ export function RibbonGroup({
       <div className="flex items-center gap-1">{children}</div>
       <span
         aria-hidden="true"
-        className="hidden text-2xs leading-none text-muted-foreground xl:block"
+        className="hidden text-xs leading-none text-muted-foreground xl:block"
       >
         {label}
       </span>

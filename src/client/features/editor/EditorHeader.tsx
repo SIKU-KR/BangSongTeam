@@ -108,7 +108,7 @@ function SaveStatusIndicator(): React.JSX.Element {
   return (
     <span
       data-testid="save-status"
-      className="hidden items-center gap-1 text-2xs font-medium text-muted-foreground md:inline-flex"
+      className="hidden items-center gap-1 text-xs font-medium text-muted-foreground md:inline-flex"
     >
       <span className={cn("size-1.5 rounded-full", dotClass)}></span>
       {label}

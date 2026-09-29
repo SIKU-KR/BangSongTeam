@@ -224,7 +224,7 @@ export function DriveListHeader({
   return (
     <div
       role="row"
-      onClick={(event) => event.stopPropagation()}
+      data-drive-list-header=""
       className={cn(
         COLUMNS.row,
         "sticky top-0 z-10 h-12 border-b bg-background text-sm font-medium text-muted-foreground",
@@ -387,7 +387,7 @@ export function TrashFolderRow({
       onDoubleClick={onOpen}
       onKeyDown={(event) => {
         if (event.target !== event.currentTarget) return;
-        if (event.key !== "Enter") return;
+        if (event.key !== "Enter" && event.key !== " ") return;
         event.preventDefault();
         event.stopPropagation();
         onOpen();

@@ -209,14 +209,14 @@ export function BackgroundUploadDialog({
                   alt=""
                   className="absolute inset-0 size-full object-cover"
                 />
-                <span className="absolute bottom-2 left-2 rounded-sm bg-black/70 px-2 py-0.5 font-mono text-2xs text-white">
+                <span className="absolute bottom-2 left-2 rounded-sm bg-black/70 px-2 py-0.5 font-mono text-xs text-white">
                   {selection.probed.width}×{selection.probed.height}
                   {selection.probed.kind === "video"
                     ? ` · ${BACKGROUND_COPY.seconds(selection.probed.durationSec)}`
                     : ` · ${BACKGROUND_COPY.image}`}
                   {` · ${formatBytes(selection.file.size)}`}
                 </span>
-                <span className="absolute top-2 right-2 rounded-sm bg-black/70 px-2 py-0.5 text-2xs text-white">
+                <span className="absolute top-2 right-2 rounded-sm bg-black/70 px-2 py-0.5 text-xs text-white">
                   {BACKGROUND_COPY.uploadDialog.changeFile}
                 </span>
               </div>
@@ -227,7 +227,7 @@ export function BackgroundUploadDialog({
                     ? BACKGROUND_COPY.uploadDialog.probing
                     : BACKGROUND_COPY.uploadDialog.dropHint}
                 </span>
-                <span className="text-2xs text-muted-foreground">
+                <span className="text-xs text-muted-foreground">
                   {BACKGROUND_COPY.uploadDialog.recommendation}
                 </span>
               </div>

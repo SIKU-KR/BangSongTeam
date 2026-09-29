@@ -55,6 +55,7 @@ export function ParagraphControls({
                 aria-label={option.label}
                 data-testid={`text-align-${option.id}-btn`}
                 onMouseDown={(e) => e.preventDefault()}
+                className="pointer-coarse:min-w-11"
               >
                 <Icon />
               </ToggleGroupItem>

@@ -102,12 +102,12 @@ export function LibraryShareControls({
       </div>
 
       {!isOnline && (
-        <p className="text-2xs text-muted-foreground">
+        <p className="text-xs text-muted-foreground">
           {SHARING_COPY.library.onlineOnly}
         </p>
       )}
       {unpublish.error && (
-        <p role="alert" className="text-2xs text-destructive">
+        <p role="alert" className="text-xs text-destructive">
           {describeApiError(unpublish.error)}
         </p>
       )}

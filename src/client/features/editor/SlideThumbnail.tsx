@@ -125,7 +125,7 @@ export const SlideThumbnail = React.memo(function SlideThumbnail({
       <div className="flex w-5 shrink-0 justify-end pt-1">
         <span
           className={cn(
-            "flex h-5 min-w-5 items-center justify-center rounded-full font-mono text-2xs transition-colors",
+            "flex h-5 min-w-5 items-center justify-center rounded-full font-mono text-xs transition-colors",
             selected
               ? "bg-primary font-bold text-primary-foreground shadow-xs"
               : "text-muted-foreground group-hover:text-foreground",
@@ -151,7 +151,7 @@ export const SlideThumbnail = React.memo(function SlideThumbnail({
             <OverflowWarning
               testId={`slide-overflow-warning-${number - 1}`}
               message={warning}
-              className="absolute bottom-1 left-1 z-30 rounded-sm bg-black/75 p-0.5 text-warning"
+              className="absolute bottom-1 left-1 z-30 rounded-sm bg-warning p-0.5 text-warning-foreground"
               iconClassName="size-3"
             />
           )}
@@ -183,6 +183,7 @@ export function SlideGap({
       data-song-index={songIndex}
       data-gap-index={index}
       data-active={active || undefined}
+      aria-hidden="true"
       onClick={onClick}
       className="relative h-2 cursor-pointer"
     >

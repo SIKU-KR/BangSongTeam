@@ -296,7 +296,7 @@ export function SongPickerModal({
               {serverUnavailable && (
                 <p
                   data-testid="song-picker-offline-notice"
-                  className="text-2xs text-warning"
+                  className="text-xs text-warning"
                 >
                   {isOnline
                     ? EDITOR_COPY.picker.serverUnavailable
@@ -458,10 +458,19 @@ function EntryRow({
 
   return (
     <div
+      role="button"
+      tabIndex={0}
+      aria-pressed={isSelected}
       data-testid={`song-item-${id}`}
       onClick={onSelect}
+      onKeyDown={(event) => {
+        if (event.target !== event.currentTarget) return;
+        if (event.key !== "Enter" && event.key !== " ") return;
+        event.preventDefault();
+        onSelect();
+      }}
       className={cn(
-        "flex cursor-pointer flex-col gap-1 p-3.5 transition-colors select-none",
+        "flex cursor-pointer flex-col gap-1 p-3.5 transition-colors outline-none select-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
         isSelected
           ? "border-l-4 border-l-primary bg-accent pl-2.5"
           : "hover:bg-muted/60",
@@ -480,7 +489,7 @@ function EntryRow({
                 : COMMON_COPY.share}
             </Badge>
           )}
-          <span className="font-mono text-2xs text-muted-foreground">
+          <span className="font-mono text-xs text-muted-foreground">
             {entry.kind === "mine"
               ? EDITOR_COPY.picker.slideCount(entry.deck.slides.length)
               : COMMON_COPY.forkCount(entry.summary.forkCount)}
@@ -488,7 +497,7 @@ function EntryRow({
         </div>
       </div>
 
-      <div className="flex items-center justify-between gap-2 text-2xs text-muted-foreground">
+      <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
         <span className="truncate">
           {artist || EDITOR_COPY.song.unknownArtist}
         </span>
@@ -498,7 +507,7 @@ function EntryRow({
       </div>
 
       {snippet && (
-        <p className="mt-0.5 truncate text-2xs font-light text-muted-foreground">
+        <p className="mt-0.5 truncate text-xs font-light text-muted-foreground">
           {snippet}
         </p>
       )}

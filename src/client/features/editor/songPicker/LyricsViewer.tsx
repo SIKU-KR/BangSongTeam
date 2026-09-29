@@ -17,11 +17,11 @@ export function LyricsViewer({
         {lines.map((line, idx) =>
           !line.trim() ? (
             <div key={idx} className="my-1 flex items-center gap-3 py-2">
-              <span className="w-8 text-right text-2xs text-muted-foreground/60 select-none">
+              <span className="w-8 text-right text-xs text-muted-foreground select-none">
                 {idx + 1}
               </span>
               <div className="flex flex-1 items-center justify-end border-b border-dashed">
-                <span className="px-1 font-sans text-2xs text-muted-foreground">
+                <span className="px-1 font-sans text-xs text-muted-foreground">
                   {EDITOR_COPY.preview.splitMarker}
                 </span>
               </div>
@@ -31,7 +31,7 @@ export function LyricsViewer({
               key={idx}
               className="-mx-1 flex items-start gap-3 rounded-sm px-1 hover:bg-muted/60"
             >
-              <span className="w-8 shrink-0 pt-0.5 text-right text-2xs text-muted-foreground select-none">
+              <span className="w-8 shrink-0 pt-0.5 text-right text-xs text-muted-foreground select-none">
                 {idx + 1}
               </span>
               <span className="font-sans text-xs/relaxed">{line}</span>

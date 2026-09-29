@@ -44,7 +44,7 @@ function Swatch({
             onMouseDown={(e) => e.preventDefault()}
             style={{ backgroundColor: color.value }}
             className={cn(
-              "size-4 min-w-4 rounded-none border border-foreground/15 p-0 hover:z-10 hover:ring-2 hover:ring-ring focus-visible:z-10 aria-pressed:z-10 aria-pressed:ring-2 aria-pressed:ring-primary",
+              "size-6 min-h-6 min-w-6 rounded-none border border-foreground/15 p-0 hover:z-10 hover:ring-2 hover:ring-ring focus-visible:z-10 aria-pressed:z-10 aria-pressed:ring-2 aria-pressed:ring-primary",
               className,
             )}
           />
@@ -78,7 +78,7 @@ export function ColorPalette({
       <span className="font-semibold text-muted-foreground">
         {EDITOR_COPY.ribbon.palette.theme}
       </span>
-      <div className="grid grid-cols-10 gap-x-1">
+      <div className="grid grid-cols-10 gap-1">
         {baseRow?.map((color) => (
           <Swatch
             key={color.value}
@@ -100,7 +100,7 @@ export function ColorPalette({
       <span className="mt-1 font-semibold text-muted-foreground">
         {EDITOR_COPY.ribbon.palette.standard}
       </span>
-      <div className="grid grid-cols-10 gap-x-1">
+      <div className="grid grid-cols-10 gap-1">
         {STANDARD_COLORS.map((color) => (
           <Swatch
             key={color.value + color.label}
