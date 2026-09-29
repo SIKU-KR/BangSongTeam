@@ -9,26 +9,7 @@ import { backgrounds, type Background } from "../schema";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type DbInstance = any;
 
-/**
- * `tags` 컬럼을 뺀 조회 컬럼. 컬럼을 지우는 마이그레이션이 배포 직전에 적용돼도
- * 이전 릴리스의 조회가 깨지지 않게 이 컬럼을 읽지 않는다.
- */
-const backgroundColumns = {
-  id: backgrounds.id,
-  title: backgrounds.title,
-  r2Key: backgrounds.r2Key,
-  posterKey: backgrounds.posterKey,
-  durationSec: backgrounds.durationSec,
-  license: backgrounds.license,
-  source: backgrounds.source,
-  ownerUserId: backgrounds.ownerUserId,
-  kind: backgrounds.kind,
-  sizeBytes: backgrounds.sizeBytes,
-  createdAt: backgrounds.createdAt,
-};
-type BackgroundRow = Omit<Background, "tags">;
-
-export function toBackgroundMedia(row: BackgroundRow): BackgroundMedia {
+export function toBackgroundMedia(row: Background): BackgroundMedia {
   return {
     id: row.id,
     title: row.title,
@@ -53,8 +34,8 @@ export const isServiceBackground = eq(backgrounds.source, "service");
 export async function listBackgrounds(
   db: DbInstance,
 ): Promise<BackgroundMedia[]> {
-  const rows: BackgroundRow[] = await db
-    .select(backgroundColumns)
+  const rows: Background[] = await db
+    .select()
     .from(backgrounds)
     .where(isServiceBackground)
     .orderBy(asc(backgrounds.title));
@@ -92,8 +73,8 @@ export async function insertServiceBackground(
     sizeBytes: input.sizeBytes,
   });
 
-  const [row]: BackgroundRow[] = await db
-    .select(backgroundColumns)
+  const [row]: Background[] = await db
+    .select()
     .from(backgrounds)
     .where(eq(backgrounds.id, input.id));
   return toBackgroundMedia(row);
