@@ -39,7 +39,8 @@ Thumbs.db
 .vscode/
 .idea/
 *.sublime-workspace
-.claude/
+.claude/worktrees/
+.claude/settings.local.json
 
 # Lyrics raw text files & temporary extractions
 data/extracted/
