@@ -59,11 +59,12 @@ jobs:
 
       # issue_comment runs on the default branch; switch to the PR so Claude
       # reads the code under review. Nothing from the PR is executed.
-      - name: Checkout PR branch
+      # pull/<n>/head outlives the head branch, which is deleted on merge.
+      - name: Checkout PR head
         if: github.event_name == 'issue_comment'
-        run: gh pr checkout "$PR_NUMBER"
-        env:
-          GH_TOKEN: ${{ github.token }}
+        run: |
+          git fetch --depth=1 origin "pull/$PR_NUMBER/head"
+          git checkout --detach FETCH_HEAD
 
       - name: Review with Claude
         uses: anthropics/claude-code-action@v1
