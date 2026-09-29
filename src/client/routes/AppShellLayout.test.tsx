@@ -147,6 +147,14 @@ describe("AppShellLayout (드라이브형 홈)", () => {
     ).toBeNull();
   });
 
+  it("첫 링크는 본문으로 건너뛰기이고 main 영역을 가리킨다", () => {
+    renderShell();
+
+    const skip = screen.getByRole("link", { name: SHELL_COPY.skipToContent });
+    expect(skip).toHaveAttribute("href", "#main-content");
+    expect(screen.getByRole("main")).toHaveAttribute("id", "main-content");
+  });
+
   it("그리드 보기 없이 목록으로만 보여 준다", () => {
     renderShell();
 

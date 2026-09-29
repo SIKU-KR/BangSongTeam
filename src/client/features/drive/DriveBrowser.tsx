@@ -352,8 +352,12 @@ export function DriveBrowser({
           data-testid="drive-scroll-area"
           className="relative min-h-0 flex-1 overflow-y-auto px-4 pb-16 sm:px-6"
           onMouseDown={marquee.onMouseDown}
-          onClick={() => {
+          onClick={(event) => {
             if (marquee.consumeClick()) return;
+            if (
+              (event.target as HTMLElement).closest("[data-drive-list-header]")
+            )
+              return;
             drive.clearSelection();
           }}
           onContextMenu={(event) => {

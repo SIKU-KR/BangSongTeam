@@ -12,12 +12,7 @@ import { ImageIcon, WifiOffIcon } from "lucide-react";
 import { Alert, AlertDescription } from "#components/ui/alert";
 import { Badge } from "#components/ui/badge";
 import { Button } from "#components/ui/button";
-import {
-  Card,
-  CardAction,
-  CardHeader,
-  CardTitle,
-} from "#components/ui/card";
+import { Card, CardAction, CardHeader, CardTitle } from "#components/ui/card";
 import {
   Empty,
   EmptyHeader,
@@ -208,7 +203,7 @@ export function BackgroundLibraryView({
         )}
       </section>
 
-      <p className="text-2xs text-muted-foreground">
+      <p className="text-xs text-muted-foreground">
         {BACKGROUND_COPY.library.applyHint}
       </p>
 

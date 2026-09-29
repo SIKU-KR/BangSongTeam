@@ -176,7 +176,7 @@ export function FontControls({
           {!searchTrimmed && (
             <>
               <SelectGroup>
-                <SelectLabel className="px-2 py-1 text-2xs text-muted-foreground">
+                <SelectLabel className="px-2 py-1 text-xs text-muted-foreground">
                   {EDITOR_COPY.ribbon.presetFonts}
                 </SelectLabel>
                 {PRESET_FONTS.map((font) => (
@@ -185,7 +185,7 @@ export function FontControls({
               </SelectGroup>
               <SelectSeparator />
               <SelectGroup>
-                <SelectLabel className="px-2 py-1 text-2xs text-muted-foreground">
+                <SelectLabel className="px-2 py-1 text-xs text-muted-foreground">
                   {catalog.length > 0
                     ? EDITOR_COPY.ribbon.noonnuFonts(allAdditionalFonts.length)
                     : EDITOR_COPY.ribbon.noonnuLoading}
@@ -203,7 +203,7 @@ export function FontControls({
                       e.stopPropagation();
                       setDisplayLimit((prev) => prev + 60);
                     }}
-                    className="w-full py-1 text-center text-2xs text-muted-foreground hover:text-foreground"
+                    className="w-full py-1 text-center text-xs text-muted-foreground hover:text-foreground"
                   >
                     {EDITOR_COPY.ribbon.showMore(
                       allAdditionalFonts.length - displayLimit,
@@ -215,7 +215,7 @@ export function FontControls({
           )}
           {searchTrimmed && (
             <SelectGroup>
-              <SelectLabel className="px-2 py-1 text-2xs text-muted-foreground">
+              <SelectLabel className="px-2 py-1 text-xs text-muted-foreground">
                 {EDITOR_COPY.ribbon.searchResults(filteredFonts.length)}
               </SelectLabel>
               {filteredFonts.map((font) => (
@@ -280,7 +280,7 @@ export function FontControls({
         }
         icon={
           <span className="text-sm leading-none font-bold">
-            A<sup className="text-2xs">+</sup>
+            A<sup className="text-xs">+</sup>
           </span>
         }
       />
@@ -294,7 +294,7 @@ export function FontControls({
         }
         icon={
           <span className="text-xs leading-none font-bold">
-            A<sup className="text-2xs">−</sup>
+            A<sup className="text-xs">−</sup>
           </span>
         }
       />

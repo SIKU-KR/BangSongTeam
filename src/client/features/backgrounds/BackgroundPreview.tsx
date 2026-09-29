@@ -69,7 +69,7 @@ export function BackgroundPreview({
       {failed ? (
         <div
           data-testid={`bg-preview-missing-${background.id}`}
-          className="absolute inset-0 flex items-center justify-center px-3 text-center text-2xs text-white/60"
+          className="absolute inset-0 flex items-center justify-center px-3 text-center text-xs text-white/60"
         >
           {BACKGROUND_COPY.previewFailed}
         </div>
@@ -98,14 +98,14 @@ export function BackgroundPreview({
 
       <span
         data-testid={`bg-kind-${background.id}`}
-        className="absolute top-1.5 left-1.5 flex items-center gap-1 rounded-sm bg-black/70 px-1.5 py-0.5 text-2xs font-semibold text-white/90 [&_svg]:size-3"
+        className="absolute top-1.5 left-1.5 flex items-center gap-1 rounded-sm bg-black/70 px-1.5 py-0.5 text-xs font-semibold text-white/90 [&_svg]:size-3"
       >
         {isVideo ? <FilmIcon aria-hidden /> : <ImageIcon aria-hidden />}
         {isVideo ? BACKGROUND_COPY.video : BACKGROUND_COPY.image}
       </span>
 
       {isVideo && background.durationSec > 0 && (
-        <span className="absolute right-1.5 bottom-1.5 rounded-sm bg-black/70 px-1.5 py-0.5 font-mono text-2xs text-white/90">
+        <span className="absolute right-1.5 bottom-1.5 rounded-sm bg-black/70 px-1.5 py-0.5 font-mono text-xs text-white/90">
           {BACKGROUND_COPY.seconds(background.durationSec)}
         </span>
       )}

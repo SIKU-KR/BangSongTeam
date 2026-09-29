@@ -28,6 +28,8 @@ import type {
 import { SHELL_COPY } from "#copy/shell";
 import { COMMON_COPY } from "#copy/common";
 
+const MAIN_CONTENT_ID = "main-content";
+
 interface ShellPageMeta {
   title: string;
   placeholder: string;
@@ -112,9 +114,20 @@ function AppShellFrame(): React.JSX.Element {
 
   return (
     <SidebarProvider className="h-svh overflow-hidden">
+      <a
+        href={`#${MAIN_CONTENT_ID}`}
+        className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-50 focus:rounded-lg focus:bg-background focus:px-3 focus:py-2 focus:text-sm focus:font-medium focus:ring-3 focus:ring-ring/50 focus:outline-none"
+      >
+        {SHELL_COPY.skipToContent}
+      </a>
+
       <AppSidebar />
 
-      <SidebarInset className="min-w-0 overflow-hidden">
+      <SidebarInset
+        id={MAIN_CONTENT_ID}
+        tabIndex={-1}
+        className="min-w-0 overflow-hidden outline-none"
+      >
         <BrowserSupportBanner />
         <StorageWarningBanner />
         <AppUpdateBanner />

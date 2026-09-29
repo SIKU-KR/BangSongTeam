@@ -58,6 +58,7 @@ pnpm typecheck && pnpm lint && pnpm test   # must pass before pushing (the CI ga
 - Prefer a shadcn registry component (`pnpm exec shadcn add <name>`) over a hand-written pattern, and delete `components/ui/*` files nothing imports. Use components through their variants; limit `className` to layout (width, position, spacing).
 - Keep `components/ui/*` as the CLI generates it. The only local edits are Korean copy (`닫기`, `사이드바…`) and the `sonner.tsx` import of `#components/theme-provider`; re-apply them after `--overwrite`.
 - When a Tailwind value is missing, add a token to `@theme` in `src/client/index.css` rather than an arbitrary value.
+- Accessibility target is WCAG 2.2 AA: color tokens keep 4.5:1 for text and 3:1 for focus rings and input borders (`styles.test.ts` checks them), text stays at `text-xs` (12px) or larger, and click targets stay at 24px or larger (touch screens get 44px from a global rule in `index.css`).
 - Fonts are bundled from npm, never loaded from a CDN.
 
 ## Gotchas

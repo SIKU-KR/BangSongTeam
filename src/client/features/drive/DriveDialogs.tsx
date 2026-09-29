@@ -208,7 +208,7 @@ export function FolderPickerDialog({
             variant="ghost"
             size="sm"
             data-testid="picker-node-root"
-            aria-selected={target === null}
+            aria-pressed={target === null}
             onClick={() => setTarget(null)}
             className={cn(
               "w-full justify-start",

@@ -162,6 +162,7 @@ export function DriveToolbar({
 }: DriveToolbarProps): React.JSX.Element {
   return (
     <div
+      role="presentation"
       onMouseDown={(event) => event.stopPropagation()}
       onClick={(event) => event.stopPropagation()}
       className="flex h-14 shrink-0 items-center px-4 sm:px-6"

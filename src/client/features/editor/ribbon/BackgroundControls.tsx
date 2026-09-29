@@ -99,7 +99,7 @@ export function BackgroundControls({
                 )
               }
             />
-            <p className="text-2xs text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
               {EDITOR_COPY.ribbon.overlayHint}
             </p>
           </>

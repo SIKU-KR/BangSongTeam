@@ -40,7 +40,7 @@ export function EditorRibbon({
       <RibbonTooltip content={EDITOR_COPY.song.formatTooltip}>
         <div
           data-testid="ribbon-song-label"
-          className="max-w-40 self-center px-2 text-2xs/tight text-muted-foreground"
+          className="max-w-40 self-center px-2 text-xs/tight text-muted-foreground"
         >
           {song ? (
             <>
