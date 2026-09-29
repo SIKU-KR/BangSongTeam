@@ -30,22 +30,23 @@ export const TextBoxPositionSchema = z.object({
 });
 export type TextBoxPosition = z.infer<typeof TextBoxPositionSchema>;
 
+const HexColorSchema = z.string().regex(/^#([0-9a-fA-F]{3}){1,2}$/);
+
 /**
  * 곡(Deck) 단위 타이포그래피 및 가독성 스타일
+ *
+ * `backgroundColor`는 배경 영상·이미지가 없을 때 깔리는 단색이다. 한 번도 고르지
+ * 않은 곡은 값이 없고 검정으로 그려진다. 값이 있으면 사용자가 단색을 고른 것이라
+ * 프레젠테이션에 넣을 때 기본 배경을 입히지 않는다.
  */
 export const DeckStyleSchema = z.object({
   overlayOpacity: z.number().min(0).max(100).default(40),
-  overlayColor: z
-    .string()
-    .regex(/^#([0-9a-fA-F]{3}){1,2}$/)
-    .default("#000000"),
+  overlayColor: HexColorSchema.default("#000000"),
+  backgroundColor: HexColorSchema.optional(),
 
   fontFamily: z.enum(NOONNU_SUPPORTED_FONT_NAMES).default("Pretendard"),
   fontSizeVw: z.number().min(2).max(10).default(4.2),
-  fontColor: z
-    .string()
-    .regex(/^#([0-9a-fA-F]{3}){1,2}$/)
-    .default("#FFFFFF"),
+  fontColor: HexColorSchema.default("#FFFFFF"),
   textAlign: z.enum(["left", "center", "right"]).default("center"),
   lineHeight: z.number().min(1.0).max(2.5).default(1.4),
 

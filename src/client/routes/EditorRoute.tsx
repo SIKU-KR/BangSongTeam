@@ -495,8 +495,8 @@ function EditorScreen({
         <EditorRibbon
           song={currentSong}
           onUpdateStyle={handleUpdateStyle}
-          onUpdateBackground={(backgroundId) =>
-            updateSongBackground(safeSongIndex, backgroundId)
+          onUpdateBackground={(choice) =>
+            updateSongBackground(safeSongIndex, choice)
           }
           slideControls={{
             hasSlide: !!currentSlide,

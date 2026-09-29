@@ -1,6 +1,5 @@
 import { and, asc, eq, inArray } from "drizzle-orm";
 import {
-  BackgroundTagsSchema,
   mediaUrlForKey,
   type BackgroundKind,
   type BackgroundMedia,
@@ -10,16 +9,26 @@ import { backgrounds, type Background } from "../schema";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type DbInstance = any;
 
-function parseTags(raw: string): string[] {
-  try {
-    const parsed = BackgroundTagsSchema.safeParse(JSON.parse(raw));
-    return parsed.success ? parsed.data : [];
-  } catch {
-    return [];
-  }
-}
+/**
+ * `tags` 컬럼을 뺀 조회 컬럼. 컬럼을 지우는 마이그레이션이 배포 직전에 적용돼도
+ * 이전 릴리스의 조회가 깨지지 않게 이 컬럼을 읽지 않는다.
+ */
+const backgroundColumns = {
+  id: backgrounds.id,
+  title: backgrounds.title,
+  r2Key: backgrounds.r2Key,
+  posterKey: backgrounds.posterKey,
+  durationSec: backgrounds.durationSec,
+  license: backgrounds.license,
+  source: backgrounds.source,
+  ownerUserId: backgrounds.ownerUserId,
+  kind: backgrounds.kind,
+  sizeBytes: backgrounds.sizeBytes,
+  createdAt: backgrounds.createdAt,
+};
+type BackgroundRow = Omit<Background, "tags">;
 
-export function toBackgroundMedia(row: Background): BackgroundMedia {
+export function toBackgroundMedia(row: BackgroundRow): BackgroundMedia {
   return {
     id: row.id,
     title: row.title,
@@ -30,7 +39,6 @@ export function toBackgroundMedia(row: Background): BackgroundMedia {
     durationSec: row.durationSec,
     sizeBytes: row.sizeBytes,
     license: row.license,
-    tags: parseTags(row.tags),
     createdAt: (row.createdAt ?? new Date(0)).toISOString(),
   };
 }
@@ -45,8 +53,8 @@ export const isServiceBackground = eq(backgrounds.source, "service");
 export async function listBackgrounds(
   db: DbInstance,
 ): Promise<BackgroundMedia[]> {
-  const rows: Background[] = await db
-    .select()
+  const rows: BackgroundRow[] = await db
+    .select(backgroundColumns)
     .from(backgrounds)
     .where(isServiceBackground)
     .orderBy(asc(backgrounds.title));
@@ -62,7 +70,6 @@ export interface NewServiceBackground {
   posterKey: string;
   sizeBytes: number;
   durationSec: number;
-  tags: string[];
 }
 
 /**
@@ -80,14 +87,13 @@ export async function insertServiceBackground(
     posterKey: input.posterKey,
     durationSec: input.durationSec,
     license: input.license,
-    tags: JSON.stringify(input.tags),
     source: "service",
     kind: input.kind,
     sizeBytes: input.sizeBytes,
   });
 
-  const [row]: Background[] = await db
-    .select()
+  const [row]: BackgroundRow[] = await db
+    .select(backgroundColumns)
     .from(backgrounds)
     .where(eq(backgrounds.id, input.id));
   return toBackgroundMedia(row);

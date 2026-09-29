@@ -49,16 +49,6 @@ export const SHADOW_LEVELS: ReadonlyArray<{
   { id: "strong", label: EDITOR_COPY.ribbon.shadowLevels.strong },
 ];
 
-export const PRESET_COLORS: ReadonlyArray<{ label: string; value: string }> = [
-  { label: EDITOR_COPY.ribbon.colors.white, value: "#FFFFFF" },
-  { label: EDITOR_COPY.ribbon.colors.yellow, value: "#FEF08A" },
-  { label: EDITOR_COPY.ribbon.colors.sky, value: "#BAE6FD" },
-  { label: EDITOR_COPY.ribbon.colors.mint, value: "#A7F3D0" },
-  { label: EDITOR_COPY.ribbon.colors.pink, value: "#FBCFE8" },
-  { label: EDITOR_COPY.ribbon.colors.gray, value: "#D4D4D8" },
-  { label: EDITOR_COPY.ribbon.colors.black, value: "#000000" },
-];
-
 export const TEXT_ALIGN_OPTIONS: ReadonlyArray<{
   id: DeckStyle["textAlign"];
   label: string;

@@ -1,6 +1,5 @@
 import { describe, it, expect } from "vitest";
 import {
-  BACKGROUND_TAGS,
   BACKGROUND_UPLOAD_LIMITS,
   isBackgroundImageMimeType,
   isBackgroundVideoMimeType,
@@ -33,16 +32,5 @@ describe("배경 업로드 한도와 형식", () => {
     expect(isBackgroundVideoMimeType("video/webm")).toBe(false);
     expect(isBackgroundImageMimeType("image/png")).toBe(true);
     expect(isBackgroundImageMimeType("image/gif")).toBe(false);
-  });
-
-  it("태그 선택지는 분위기 3종과 주조색 3종이다", () => {
-    expect(BACKGROUND_TAGS).toEqual([
-      "잔잔한",
-      "밝은",
-      "웅장한",
-      "따뜻한",
-      "차가운",
-      "어두운",
-    ]);
   });
 });

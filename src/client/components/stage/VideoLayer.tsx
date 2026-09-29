@@ -133,7 +133,7 @@ export function VideoLayer({
   return (
     <div
       data-testid="video-layer-container"
-      className={`pointer-events-none absolute inset-0 z-0 overflow-hidden bg-black select-none ${className}`}
+      className={`pointer-events-none absolute inset-0 z-0 overflow-hidden select-none ${className}`}
     >
       {SLOTS.map((slot) => (
         <video

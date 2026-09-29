@@ -1,6 +1,7 @@
 import React from "react";
 import type { Deck, DeckStyle } from "#shared";
 import { DEFAULT_DECK_STYLE } from "#shared";
+import type { BackgroundChoice } from "../../presentation/presentationStore";
 import { BackgroundControls } from "./BackgroundControls";
 import { FontControls } from "./FontControls";
 import { ParagraphControls } from "./ParagraphControls";
@@ -13,7 +14,7 @@ export interface EditorRibbonProps {
   slideControls: SlideControlsProps;
   /** `coalesceField`가 같은 연속 변경(슬라이더 끌기)은 되돌리기 한 단계로 묶는다 */
   onUpdateStyle: (update: Partial<DeckStyle>, coalesceField?: string) => void;
-  onUpdateBackground: (backgroundId: string | null) => void;
+  onUpdateBackground: (choice: BackgroundChoice) => void;
 }
 
 /**

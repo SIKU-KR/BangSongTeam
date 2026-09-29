@@ -2,8 +2,9 @@ import React, { useId, useState } from "react";
 import { ContrastIcon } from "lucide-react";
 import { Button } from "#components/ui/button";
 import { Slider } from "#components/ui/slider";
-import type { DeckStyle } from "#shared";
+import { DEFAULT_BACKGROUND_COLOR, type DeckStyle } from "#shared";
 import { useBackground } from "../../backgrounds/backgroundCatalog";
+import type { BackgroundChoice } from "../../presentation/presentationStore";
 import { BackgroundPickerModal } from "../BackgroundPickerModal";
 import { RibbonDropdown } from "./RibbonDropdown";
 import { RibbonGroup, RibbonTooltip } from "./RibbonPrimitives";
@@ -15,10 +16,10 @@ export interface BackgroundControlsProps {
   backgroundId: string | null | undefined;
   disabled: boolean;
   onUpdateStyle: (update: Partial<DeckStyle>, coalesceField?: string) => void;
-  onUpdateBackground: (backgroundId: string | null) => void;
+  onUpdateBackground: (choice: BackgroundChoice) => void;
 }
 
-/** 리본 '배경' 그룹: 곡 배경 선택과 검정 오버레이(어둡게) */
+/** 리본 '배경' 그룹: 곡 배경(단색·영상·이미지) 선택과 검정 오버레이(어둡게) */
 export function BackgroundControls({
   style,
   backgroundId,
@@ -48,7 +49,14 @@ export function BackgroundControls({
           onMouseDown={(e) => e.preventDefault()}
           onClick={() => setIsPickerOpen(true)}
         >
-          <span className="h-6 w-10 shrink-0 overflow-hidden rounded-sm border bg-black">
+          <span
+            className="h-6 w-10 shrink-0 overflow-hidden rounded-sm border"
+            style={{
+              backgroundColor: background
+                ? DEFAULT_BACKGROUND_COLOR
+                : (style.backgroundColor ?? DEFAULT_BACKGROUND_COLOR),
+            }}
+          >
             {background && (
               <img
                 src={background.posterUrl}
@@ -102,6 +110,7 @@ export function BackgroundControls({
         isOpen={isPickerOpen}
         onClose={() => setIsPickerOpen(false)}
         selectedBackgroundId={background?.id ?? null}
+        selectedColor={style.backgroundColor}
         onSelect={onUpdateBackground}
       />
     </RibbonGroup>

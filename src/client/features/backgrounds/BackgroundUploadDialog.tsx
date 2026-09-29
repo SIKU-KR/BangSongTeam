@@ -20,11 +20,8 @@ import {
   FieldError,
   FieldGroup,
   FieldLabel,
-  FieldLegend,
-  FieldSet,
 } from "#components/ui/field";
-import { ToggleGroup, ToggleGroupItem } from "#components/ui/toggle-group";
-import { BACKGROUND_TAGS, BACKGROUND_UPLOAD_LIMITS } from "#shared";
+import { BACKGROUND_UPLOAD_LIMITS } from "#shared";
 import { useUploadBackground } from "../../lib/api/backgroundQueries";
 import { describeApiError } from "../../lib/api/request";
 import {
@@ -84,7 +81,6 @@ export function BackgroundUploadDialog({
   const [selection, setSelection] = useState<Selection>({ status: "empty" });
   const [title, setTitle] = useState("");
   const [license, setLicense] = useState("");
-  const [tags, setTags] = useState<string[]>([]);
   const [acceptedRights, setAcceptedRights] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const upload = useUploadBackground();
@@ -99,7 +95,6 @@ export function BackgroundUploadDialog({
     setSelection({ status: "empty" });
     setTitle("");
     setLicense("");
-    setTags([]);
     setAcceptedRights(false);
     upload.reset();
   };
@@ -149,7 +144,6 @@ export function BackgroundUploadDialog({
         poster: selection.probed.poster,
         title: title.trim(),
         license: license.trim(),
-        tags,
         durationSec: selection.probed.durationSec,
       });
       reset();
@@ -281,26 +275,6 @@ export function BackgroundUploadDialog({
                 onChange={(e) => setLicense(e.target.value)}
               />
             </Field>
-
-            <FieldSet>
-              <FieldLegend variant="label">
-                {BACKGROUND_COPY.uploadDialog.tagsLabel}
-              </FieldLegend>
-              <ToggleGroup
-                multiple
-                variant="outline"
-                size="sm"
-                value={tags}
-                onValueChange={(next) => setTags(next)}
-                className="flex-wrap"
-              >
-                {BACKGROUND_TAGS.map((tag) => (
-                  <ToggleGroupItem key={tag} value={tag}>
-                    {tag}
-                  </ToggleGroupItem>
-                ))}
-              </ToggleGroup>
-            </FieldSet>
 
             <Field orientation="horizontal">
               <Checkbox

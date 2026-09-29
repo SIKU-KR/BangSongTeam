@@ -22,7 +22,9 @@ export const backgrounds = sqliteTable(
     posterKey: text("poster_key").notNull(),
     durationSec: integer("duration_sec").notNull(),
     license: text("license").notNull(),
-    tags: text("tags").notNull(),
+    tags: text("tags")
+      .notNull()
+      .$defaultFn(() => "[]"),
     source: text("source", { enum: ["service", "user"] })
       .notNull()
       .default("service"),

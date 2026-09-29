@@ -1,18 +1,5 @@
 import { MEDIA_URL_PREFIX } from "./projection";
 
-/**
- * 배경 태그 선택지: 분위기(잔잔한·밝은·웅장한) × 주조색(따뜻한·차가운·어두운).
- * 업로드 폼과 라이브러리 필터가 같은 어휘를 쓰게 한다.
- */
-export const BACKGROUND_TAGS = [
-  "잔잔한",
-  "밝은",
-  "웅장한",
-  "따뜻한",
-  "차가운",
-  "어두운",
-] as const;
-
 export const BACKGROUND_VIDEO_MIME_TYPES = ["video/mp4"] as const;
 export const BACKGROUND_IMAGE_MIME_TYPES = [
   "image/jpeg",
@@ -40,8 +27,6 @@ export const BACKGROUND_UPLOAD_LIMITS = {
   maxPosterBytes: 2 * 1024 * 1024,
   maxTitleLength: 100,
   maxLicenseLength: 200,
-  maxTags: 6,
-  maxTagLength: 20,
   maxDurationSec: 3600,
   recommendedWidth: 1920,
   recommendedHeight: 1080,

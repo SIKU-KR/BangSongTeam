@@ -119,6 +119,27 @@ describe("presentationStore (In-memory reactive presentation)", () => {
     resetBackgroundCatalogForTests();
   });
 
+  it("단색을 고른 곡에는 기본 제공 배경을 입히지 않는다", () => {
+    const item = addDeckToPresentation(
+      DeckSchema.parse({
+        id: "900000000000000000004",
+        userId: "00000000x000000000001",
+        scope: "presentation",
+        presentationId: null,
+        title: "단색 곡",
+        artist: "",
+        lyricsRaw: "가사",
+        slides: [{ id: "s-1", order: 0, lines: ["가사"] }],
+        backgroundId: null,
+        style: { ...DEFAULT_DECK_STYLE, backgroundColor: "#002060" },
+        createdAt: "2026-09-20T00:00:00.000Z",
+        updatedAt: "2026-09-20T00:00:00.000Z",
+      }),
+    );
+    expect(item.deck?.backgroundId).toBeNull();
+    expect(item.deck?.style.backgroundColor).toBe("#002060");
+  });
+
   it("should notify useActivePresentation hook subscribers on addDeckToPresentation", () => {
     const { result } = renderHook(() => useActivePresentation());
     expect(result.current.items).toHaveLength(5);
@@ -179,7 +200,9 @@ describe("presentationStore (In-memory reactive presentation)", () => {
           widthPercent: 85,
         },
       });
-      updateSongBackground(0, TEST_SERVICE_BACKGROUNDS[3].id);
+      updateSongBackground(0, {
+        backgroundId: TEST_SERVICE_BACKGROUNDS[3].id,
+      });
     });
 
     const song = result.current.items[0].deck;
@@ -189,9 +212,20 @@ describe("presentationStore (In-memory reactive presentation)", () => {
     expect(song?.backgroundId).toBe(TEST_SERVICE_BACKGROUNDS[3].id);
 
     act(() => {
-      updateSongBackground(0, null);
+      updateSongBackground(0, { color: "#002060" });
     });
     expect(result.current.items[0].deck?.backgroundId).toBeNull();
+    expect(result.current.items[0].deck?.style.backgroundColor).toBe(
+      "#002060",
+    );
+
+    act(() => {
+      undo();
+    });
+    expect(result.current.items[0].deck?.backgroundId).toBe(
+      TEST_SERVICE_BACKGROUNDS[3].id,
+    );
+    expect(result.current.items[0].deck?.style.backgroundColor).toBeUndefined();
   });
 
   it("세트 곡의 제목·아티스트를 바꾸고 되돌릴 수 있다", () => {

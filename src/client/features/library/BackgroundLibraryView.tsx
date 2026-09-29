@@ -15,7 +15,6 @@ import { Button } from "#components/ui/button";
 import {
   Card,
   CardAction,
-  CardDescription,
   CardHeader,
   CardTitle,
 } from "#components/ui/card";
@@ -25,12 +24,14 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "#components/ui/empty";
-import { ToggleGroup, ToggleGroupItem } from "#components/ui/toggle-group";
 import { hangulIncludes, type BackgroundMedia } from "#shared";
 import {
+  BackgroundKindFilter,
   BackgroundPreview,
   BackgroundUploadDialog,
+  filterBackgroundsByKind,
   useBackgroundCatalog,
+  type BackgroundKindFilterValue,
 } from "../backgrounds";
 import { useDeleteBackground } from "../../lib/api/backgroundQueries";
 import { describeApiError } from "../../lib/api/request";
@@ -43,14 +44,8 @@ export interface BackgroundLibraryViewProps {
   searchQuery?: string;
 }
 
-const ALL_TAGS = COMMON_COPY.all;
-
 function matchesQuery(bg: BackgroundMedia, query: string): boolean {
-  if (!query) return true;
-  return (
-    hangulIncludes(bg.title, query) ||
-    bg.tags.some((tag) => hangulIncludes(tag, query))
-  );
+  return !query || hangulIncludes(bg.title, query);
 }
 
 function BackgroundCard({
@@ -60,22 +55,11 @@ function BackgroundCard({
   background: BackgroundMedia;
   action?: React.ReactNode;
 }): React.JSX.Element {
-  const [hovered, setHovered] = useState(false);
-
   return (
-    <Card
-      size="sm"
-      data-testid={`bg-card-${background.id}`}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-      className="pt-0"
-    >
-      <BackgroundPreview background={background} playing={hovered} />
+    <Card size="sm" data-testid={`bg-card-${background.id}`} className="pt-0">
+      <BackgroundPreview background={background} />
       <CardHeader>
         <CardTitle className="truncate">{background.title}</CardTitle>
-        <CardDescription className="truncate">
-          {background.tags.join(" · ") || BACKGROUND_COPY.library.noTags}
-        </CardDescription>
         {action && <CardAction>{action}</CardAction>}
       </CardHeader>
     </Card>
@@ -110,7 +94,7 @@ function SectionHeader({
 }
 
 /**
- * 배경 갤러리: 모든 배경을 한 격자에 보여 주고 태그와 상단 검색으로 거른다.
+ * 배경 갤러리: 모든 배경을 한 격자에 보여 주고 종류(영상·이미지)와 상단 검색으로 거른다.
  * 관리자(서버가 `canManage`로 알림)에게만 올리기·삭제가 보인다.
  *
  * 곡에 배경을 입히는 것은 편집기의 배경 선택 창에서 한다. 이 화면에는 '지금 편집 중인
@@ -122,7 +106,7 @@ export function BackgroundLibraryView({
   const catalog = useBackgroundCatalog();
   const isOnline = useIsOnline();
   const deleteBackground = useDeleteBackground();
-  const [activeTag, setActiveTag] = useState<string>(ALL_TAGS);
+  const [kind, setKind] = useState<BackgroundKindFilterValue>("all");
   const [isUploadOpen, setIsUploadOpen] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<BackgroundMedia | null>(
     null,
@@ -134,11 +118,8 @@ export function BackgroundLibraryView({
 
   const query = searchQuery.trim();
   const all = catalog.backgrounds;
-  const tags = [...new Set(all.flatMap((bg) => bg.tags))];
-  const visible = all.filter(
-    (bg) =>
-      (activeTag === ALL_TAGS || bg.tags.includes(activeTag)) &&
-      matchesQuery(bg, query),
+  const visible = filterBackgroundsByKind(all, kind).filter((bg) =>
+    matchesQuery(bg, query),
   );
 
   const isOffline = !isOnline || catalog.status === "offline";
@@ -180,22 +161,8 @@ export function BackgroundLibraryView({
           )}
         </SectionHeader>
 
-        {tags.length > 0 && (
-          <ToggleGroup
-            data-testid="bg-tag-filter"
-            aria-label={BACKGROUND_COPY.library.tags}
-            variant="outline"
-            size="sm"
-            value={[activeTag]}
-            onValueChange={(next) => setActiveTag(next[0] ?? ALL_TAGS)}
-            className="flex-wrap"
-          >
-            {[ALL_TAGS, ...tags].map((tag) => (
-              <ToggleGroupItem key={tag} value={tag}>
-                {tag}
-              </ToggleGroupItem>
-            ))}
-          </ToggleGroup>
+        {all.length > 0 && (
+          <BackgroundKindFilter value={kind} onChange={setKind} />
         )}
 
         {visible.length === 0 ? (
