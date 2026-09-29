@@ -6,7 +6,7 @@
  * 깨진 배경이 된다 — 첫 마이그레이션에서 시드를 뺀 이유다.
  */
 export const BACKGROUND_SQL = {
-  REGISTER_SERVICE_BACKGROUND: `INSERT INTO backgrounds (id, title, r2_key, poster_key, duration_sec, license, tags, source, kind, size_bytes) VALUES (:id, :title, :r2_key, :poster_key, :duration_sec, :license, '[]', 'service', 'video', :size_bytes);`,
+  REGISTER_SERVICE_BACKGROUND: `INSERT INTO backgrounds (id, title, r2_key, poster_key, duration_sec, license, source, kind, size_bytes) VALUES (:id, :title, :r2_key, :poster_key, :duration_sec, :license, 'service', 'video', :size_bytes);`,
 
   LIST_SERVICE_BACKGROUNDS: `SELECT id, title, r2_key, poster_key, duration_sec, size_bytes FROM backgrounds WHERE source = 'service' ORDER BY title;`,
 
