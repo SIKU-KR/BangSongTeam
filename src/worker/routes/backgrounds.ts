@@ -133,7 +133,6 @@ export function createBackgroundsRoute(deps: AppDeps = {}) {
             posterKey,
             sizeBytes: form.file.size + (poster?.size ?? 0),
             durationSec: kind === "video" ? form.durationSec : 0,
-            tags: form.tags,
           });
         } catch (error) {
           await c.env.MEDIA_BUCKET.delete(uploadedKeys);

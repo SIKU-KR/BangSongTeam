@@ -28,7 +28,6 @@ function makeBackground(
     durationSec: 20,
     sizeBytes: 1000,
     license: "CC0",
-    tags: [],
     createdAt: NOW,
     ...overrides,
   };

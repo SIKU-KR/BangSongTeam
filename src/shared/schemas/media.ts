@@ -16,9 +16,6 @@ export type BackgroundKind = z.infer<typeof BackgroundKindSchema>;
 
 const MediaUrlSchema = z.string().startsWith(MEDIA_URL_PREFIX);
 
-/** `backgrounds.tags` JSON TEXT 컬럼의 형식 */
-export const BackgroundTagsSchema = z.array(z.string());
-
 /**
  * 클라이언트가 보는 배경 한 건.
  *
@@ -37,7 +34,6 @@ export const BackgroundMediaSchema = z.object({
   durationSec: z.number().int().nonnegative(),
   sizeBytes: z.number().int().nonnegative(),
   license: z.string(),
-  tags: BackgroundTagsSchema,
   createdAt: z.string().datetime(),
 });
 export type BackgroundMedia = z.infer<typeof BackgroundMediaSchema>;
@@ -54,37 +50,6 @@ export const BackgroundListResponseSchema = z.object({
 export type BackgroundListResponse = z.infer<
   typeof BackgroundListResponseSchema
 >;
-
-const TagsFieldSchema = z
-  .string()
-  .optional()
-  .transform((raw, ctx): string[] => {
-    if (!raw) return [];
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(raw);
-    } catch {
-      ctx.addIssue({
-        code: "custom",
-        message: VALIDATION_COPY.background.invalidTags,
-      });
-      return z.NEVER;
-    }
-    const result = z
-      .array(
-        z.string().trim().min(1).max(BACKGROUND_UPLOAD_LIMITS.maxTagLength),
-      )
-      .max(BACKGROUND_UPLOAD_LIMITS.maxTags)
-      .safeParse(parsed);
-    if (!result.success) {
-      ctx.addIssue({
-        code: "custom",
-        message: VALIDATION_COPY.background.tooManyTags,
-      });
-      return z.NEVER;
-    }
-    return [...new Set(result.data)];
-  });
 
 /**
  * 관리자 배경 업로드 폼 (multipart). 올린 배경은 곧바로 기본 제공 배경이 된다.
@@ -108,7 +73,6 @@ export const BackgroundUploadFormSchema = z
       .trim()
       .min(1, VALIDATION_COPY.background.licenseRequired)
       .max(BACKGROUND_UPLOAD_LIMITS.maxLicenseLength),
-    tags: TagsFieldSchema,
     durationSec: z
       .string()
       .regex(/^\d+$/)

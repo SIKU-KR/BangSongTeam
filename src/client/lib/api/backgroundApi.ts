@@ -19,7 +19,6 @@ export interface BackgroundUploadInput {
   poster?: File;
   title: string;
   license: string;
-  tags: string[];
   durationSec: number;
 }
 
@@ -31,7 +30,6 @@ export async function uploadBackground(
     file: input.file,
     title: input.title,
     license: input.license,
-    tags: JSON.stringify(input.tags),
     durationSec: String(Math.max(0, Math.round(input.durationSec))),
     acceptedRightsNotice: "true" as const,
     ...(input.poster ? { poster: input.poster } : {}),

@@ -15,7 +15,6 @@ const VALID_BACKGROUND = {
   durationSec: 30,
   sizeBytes: 12_000_000,
   license: "CC0",
-  tags: ["잔잔한", "따뜻한"],
   createdAt: "2026-09-24T00:00:00.000Z",
 };
 
@@ -29,7 +28,6 @@ function uploadForm(overrides: Record<string, unknown> = {}) {
     poster: file(10, "image/webp", "poster.webp"),
     title: "본당 배경",
     license: "Pexels License — 홍길동",
-    tags: JSON.stringify(["잔잔한"]),
     durationSec: "12",
     acceptedRightsNotice: "true",
     ...overrides,
@@ -80,18 +78,16 @@ describe("BackgroundListResponseSchema", () => {
 });
 
 describe("BackgroundUploadFormSchema", () => {
-  it("태그 JSON과 길이 문자열을 풀어서 받는다", () => {
+  it("길이 문자열을 숫자로 풀어서 받는다", () => {
     const parsed = BackgroundUploadFormSchema.parse(uploadForm());
-    expect(parsed.tags).toEqual(["잔잔한"]);
     expect(parsed.durationSec).toBe(12);
     expect(parsed.title).toBe("본당 배경");
   });
 
-  it("태그와 길이는 생략할 수 있다", () => {
+  it("길이는 생략할 수 있다", () => {
     const parsed = BackgroundUploadFormSchema.parse(
-      uploadForm({ tags: undefined, durationSec: undefined }),
+      uploadForm({ durationSec: undefined }),
     );
-    expect(parsed.tags).toEqual([]);
     expect(parsed.durationSec).toBe(0);
   });
 
@@ -133,13 +129,6 @@ describe("BackgroundUploadFormSchema", () => {
         uploadForm({ file: file(10, "image/png", "a.png"), poster: undefined }),
       ).success,
     ).toBe(true);
-  });
-
-  it("태그는 6개까지만 받는다", () => {
-    const result = BackgroundUploadFormSchema.safeParse(
-      uploadForm({ tags: JSON.stringify(["a", "b", "c", "d", "e", "f", "g"]) }),
-    );
-    expect(result.success).toBe(false);
   });
 
   it("빈 제목은 거절한다", () => {

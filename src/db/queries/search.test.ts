@@ -302,7 +302,6 @@ describe("searchPublicDecks", () => {
       posterKey: `${id}.jpg`,
       durationSec: 10,
       license: "CC0",
-      tags: "[]",
       source,
     });
     await db

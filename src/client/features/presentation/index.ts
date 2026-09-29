@@ -56,6 +56,7 @@ export {
   canUndo,
   canRedo,
   breakHistoryCoalescing,
+  type BackgroundChoice,
   type HistoryOptions,
   hydrateFromStorage,
   flushPendingWrites,

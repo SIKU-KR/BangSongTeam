@@ -22,7 +22,6 @@ function row(
     posterKey: `posters/${overrides.id}.webp`,
     durationSec: 20,
     license: "CC0",
-    tags: JSON.stringify(["잔잔한"]),
     ...overrides,
   };
 }
@@ -67,18 +66,7 @@ describe("배경 쿼리 헬퍼", () => {
         source: "service",
         mediaUrl: `/api/media/loops/${SERVICE_A}.mp4`,
         posterUrl: `/api/media/posters/${SERVICE_A}.webp`,
-        tags: ["잔잔한"],
       });
-    });
-
-    it("태그 JSON이 깨져 있어도 목록을 망가뜨리지 않는다", async () => {
-      await testDb.db
-        .insert(backgrounds)
-        .values(row({ id: "svc000000000000000003", tags: "{broken" }));
-      const list = await listBackgrounds(testDb.db);
-      expect(
-        list.find((bg) => bg.id === "svc000000000000000003")?.tags,
-      ).toEqual([]);
     });
   });
 
@@ -92,7 +80,6 @@ describe("배경 쿼리 헬퍼", () => {
       posterKey: "stills/svc000000000000000004.png",
       sizeBytes: 2048,
       durationSec: 0,
-      tags: ["밝은"],
     });
 
     expect(created).toMatchObject({
@@ -101,7 +88,6 @@ describe("배경 쿼리 헬퍼", () => {
       license: "Pexels License — 홍길동",
       mediaUrl: "/api/media/stills/svc000000000000000004.png",
       sizeBytes: 2048,
-      tags: ["밝은"],
     });
     const list = await listBackgrounds(testDb.db);
     expect(list.map((bg) => bg.id)).toContain("svc000000000000000004");

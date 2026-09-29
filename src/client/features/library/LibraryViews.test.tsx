@@ -29,23 +29,10 @@ vi.mock("../backgrounds/probeBackgroundFile", async (importOriginal) => ({
 }));
 
 const MB = 1024 * 1024;
-const LAKE = makeBackground(1, {
-  title: "고요한 호수 물결",
-  tags: ["잔잔한", "차가운"],
-});
-const FIRE = makeBackground(2, {
-  title: "타오르는 불꽃",
-  tags: ["웅장한", "따뜻한"],
-});
-const STILL = makeBackground(3, {
-  title: "본당 성탄 배경",
-  kind: "image",
-  tags: ["밝은"],
-});
-const UPLOADED = makeBackground(4, {
-  title: "새벽기도 배경",
-  tags: [],
-});
+const LAKE = makeBackground(1, { title: "고요한 호수 물결" });
+const FIRE = makeBackground(2, { title: "타오르는 불꽃" });
+const STILL = makeBackground(3, { title: "본당 성탄 배경", kind: "image" });
+const UPLOADED = makeBackground(4, { title: "새벽기도 배경" });
 
 function listResponse(backgrounds: BackgroundMedia[], canManage = false) {
   return { body: { backgrounds, canManage } };
@@ -104,21 +91,38 @@ describe("BackgroundLibraryView", () => {
     ).toBeInTheDocument();
   });
 
-  it("태그로 모든 배경을 거르고, 셸 검색어는 초성으로도 찾는다", async () => {
+  it("카드마다 영상·이미지를 표시하고 종류로 거른다", async () => {
     api = installFakeApi({
       "GET /api/backgrounds": () => listResponse([LAKE, FIRE, STILL]),
     });
-    const { unmount } = await renderView();
+    await renderView();
     await screen.findByText("타오르는 불꽃");
 
-    fireEvent.click(screen.getByRole("button", { name: "밝은" }));
+    expect(screen.getByTestId(`bg-kind-${LAKE.id}`)).toHaveTextContent(
+      BACKGROUND_COPY.video,
+    );
+    expect(screen.getByTestId(`bg-kind-${STILL.id}`)).toHaveTextContent(
+      BACKGROUND_COPY.image,
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", { name: BACKGROUND_COPY.image }),
+    );
     expect(screen.getByText("본당 성탄 배경")).toBeInTheDocument();
     expect(screen.queryByText("타오르는 불꽃")).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "웅장한" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: BACKGROUND_COPY.video }),
+    );
     expect(screen.getByText("타오르는 불꽃")).toBeInTheDocument();
-    expect(screen.queryByText("고요한 호수 물결")).not.toBeInTheDocument();
-    unmount();
+    expect(screen.getByText("고요한 호수 물결")).toBeInTheDocument();
+    expect(screen.queryByText("본당 성탄 배경")).not.toBeInTheDocument();
+  });
+
+  it("셸 검색어는 제목을 초성으로도 찾는다", async () => {
+    api = installFakeApi({
+      "GET /api/backgrounds": () => listResponse([LAKE, FIRE, STILL]),
+    });
 
     await renderView("ㅎㅅ");
     expect(await screen.findByText("고요한 호수 물결")).toBeInTheDocument();

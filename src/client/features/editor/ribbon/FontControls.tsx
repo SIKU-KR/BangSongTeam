@@ -15,13 +15,11 @@ import {
 import type { DeckStyle, NoonnuFont } from "#shared";
 import { DEFAULT_PRESET_FONTS, loadNoonnuFontCatalog } from "#shared";
 import { loadWebFont } from "../../../lib/fonts/fontLoader";
-import { ColorPickerField } from "../ColorPickerField";
-import { ToggleGroup, ToggleGroupItem } from "#components/ui/toggle-group";
+import { ColorPalette } from "../ColorPalette";
 import { RibbonChoices, RibbonDropdown } from "./RibbonDropdown";
 import { RibbonButton, RibbonGroup, RibbonTooltip } from "./RibbonPrimitives";
 import {
   FONT_SIZE_PT_PRESETS,
-  PRESET_COLORS,
   SHADOW_LEVELS,
   ptToVw,
   stepFontSize,
@@ -305,7 +303,7 @@ export function FontControls({
         label={EDITOR_COPY.ribbon.fontColor}
         testId="font-color-btn"
         disabled={disabled}
-        panelClassName="w-60"
+        panelClassName="w-auto"
         icon={
           <span className="flex flex-col items-center leading-none">
             <span className="text-sm font-bold">
@@ -318,35 +316,16 @@ export function FontControls({
           </span>
         }
       >
-        {() => (
-          <>
-            <ToggleGroup
-              aria-label={EDITOR_COPY.ribbon.fontColor}
-              variant="outline"
-              size="sm"
-              value={[style.fontColor.toUpperCase()]}
-              onValueChange={(next) => {
-                if (next[0]) onUpdateStyle({ fontColor: next[0] });
-              }}
-              className="flex-wrap"
-            >
-              {PRESET_COLORS.map((color) => (
-                <RibbonTooltip key={color.value} content={color.label}>
-                  <ToggleGroupItem
-                    value={color.value.toUpperCase()}
-                    aria-label={color.label}
-                    onMouseDown={(e) => e.preventDefault()}
-                    style={{ backgroundColor: color.value }}
-                    className="rounded-full aria-pressed:ring-3 aria-pressed:ring-ring/50"
-                  />
-                </RibbonTooltip>
-              ))}
-            </ToggleGroup>
-            <ColorPickerField
-              value={style.fontColor}
-              onCommit={(hex) => onUpdateStyle({ fontColor: hex })}
-            />
-          </>
+        {(close) => (
+          <ColorPalette
+            label={EDITOR_COPY.ribbon.fontColor}
+            testId="font-color-palette"
+            value={style.fontColor}
+            onPick={(hex) => {
+              onUpdateStyle({ fontColor: hex });
+              close();
+            }}
+          />
         )}
       </RibbonDropdown>
 

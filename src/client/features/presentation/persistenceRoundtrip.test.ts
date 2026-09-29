@@ -86,7 +86,7 @@ describe("영속성 왕복 (편집 → 저장 → 새 탭 복원)", () => {
     updatePresentationTitle("주일 1부 예배 (최종)");
     updateSongStyle(0, { overlayOpacity: 75, fontSizeVw: 5.5 });
     const targetBackgroundId = "bg0000000000000000004";
-    updateSongBackground(1, targetBackgroundId);
+    updateSongBackground(1, { backgroundId: targetBackgroundId });
     reorderSongs(0, 4);
 
     const expected = getPresentationById(created.id);

@@ -402,8 +402,8 @@ function cloneDeckForPresentation(deck: Deck, presentationId: string): Deck {
  * 덱은 항상 이 세트 전용 복제본으로 들어간다 (Clone-on-Add).
  *
  * 배경이 없는 곡에는 기본 제공 배경을 곡 순서대로 돌려 입힌다. 곡 전환을 배경
- * 교체로 구분하기 때문이다 (제목 슬라이드가 없다). 기본 제공 배경이 하나도 없으면
- * 배경 없이 넣는다.
+ * 교체로 구분하기 때문이다 (제목 슬라이드가 없다). 사용자가 단색을 고른 곡과,
+ * 기본 제공 배경이 하나도 없을 때는 그대로 넣는다.
  */
 export function addDeckToPresentation(deck: Deck): PresentationItem {
   pushHistory();
@@ -412,7 +412,7 @@ export function addDeckToPresentation(deck: Deck): PresentationItem {
   const serviceBackgrounds = getServiceBackgrounds();
   const assignedBackgroundId =
     deck.backgroundId ||
-    (serviceBackgrounds.length > 0
+    (!deck.style.backgroundColor && serviceBackgrounds.length > 0
       ? serviceBackgrounds[currentCount % serviceBackgrounds.length].id
       : null);
 
@@ -604,20 +604,32 @@ export function updateSongInfo(
   emitChange();
 }
 
+/** 곡 배경으로 고를 수 있는 것: 배경 갤러리의 영상·이미지, 또는 단색 */
+export type BackgroundChoice = { backgroundId: string } | { color: string };
+
+/** 단색을 고르면 배경 영상·이미지를 빼고 서식의 단색을 바꾼다. 되돌리기는 한 번에 된다 */
 export function updateSongBackground(
   songIndex: number,
-  backgroundId: string | null,
+  choice: BackgroundChoice,
 ): void {
   const item = readActive().items[songIndex];
   if (!item || !item.deck) return;
 
   pushHistory();
 
-  const updatedDeck: Deck = {
-    ...item.deck,
-    backgroundId,
-    updatedAt: new Date().toISOString(),
-  };
+  const updatedDeck: Deck =
+    "color" in choice
+      ? {
+          ...item.deck,
+          backgroundId: null,
+          style: { ...item.deck.style, backgroundColor: choice.color },
+          updatedAt: new Date().toISOString(),
+        }
+      : {
+          ...item.deck,
+          backgroundId: choice.backgroundId,
+          updatedAt: new Date().toISOString(),
+        };
 
   const updatedItems = [...readActive().items];
   updatedItems[songIndex] = { ...item, deck: updatedDeck };

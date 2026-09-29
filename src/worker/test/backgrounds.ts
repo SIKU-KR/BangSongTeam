@@ -27,7 +27,6 @@ export async function resetBackgrounds(serviceCount = 0): Promise<string[]> {
           posterKey: `posters/${id}.webp`,
           durationSec: 20,
           license: "Service Original (CC0)",
-          tags: JSON.stringify(["잔잔한"]),
         })),
       );
   }
@@ -52,7 +51,6 @@ export async function insertUserBackgroundRow(
       posterKey: `uploads/${ownerUserId}/${id}.poster.webp`,
       durationSec: 10,
       license: "사용자 업로드",
-      tags: "[]",
       source: "user",
       ownerUserId,
       kind: "video",

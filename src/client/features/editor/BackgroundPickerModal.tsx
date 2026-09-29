@@ -5,7 +5,6 @@ import { Badge } from "#components/ui/badge";
 import { Button } from "#components/ui/button";
 import {
   Card,
-  CardDescription,
   CardHeader,
   CardTitle,
 } from "#components/ui/card";
@@ -19,9 +18,16 @@ import {
   DialogTitle,
 } from "#components/ui/dialog";
 import { Empty, EmptyDescription, EmptyHeader } from "#components/ui/empty";
-import { ToggleGroup, ToggleGroupItem } from "#components/ui/toggle-group";
-import type { BackgroundMedia } from "#shared";
-import { BackgroundPreview, useBackgroundCatalog } from "../backgrounds";
+import { DEFAULT_BACKGROUND_COLOR, type BackgroundMedia } from "#shared";
+import {
+  BackgroundKindFilter,
+  BackgroundPreview,
+  filterBackgroundsByKind,
+  useBackgroundCatalog,
+  type BackgroundKindFilterValue,
+} from "../backgrounds";
+import type { BackgroundChoice } from "../presentation/presentationStore";
+import { ColorPalette } from "./ColorPalette";
 import { refreshBackgroundCatalog } from "../../lib/sync/backgroundSync";
 import { BACKGROUND_COPY } from "#copy/backgrounds";
 import { COMMON_COPY } from "#copy/common";
@@ -30,10 +36,10 @@ export interface BackgroundPickerModalProps {
   isOpen: boolean;
   onClose: () => void;
   selectedBackgroundId?: string | null;
-  onSelect: (backgroundId: string | null) => void;
+  /** 곡 서식의 단색. 배경 영상·이미지가 없을 때만 선택된 것으로 보인다 */
+  selectedColor?: string;
+  onSelect: (choice: BackgroundChoice) => void;
 }
-
-const ALL_TAGS = COMMON_COPY.all;
 
 function CheckBadge(): React.JSX.Element {
   return (
@@ -75,37 +81,25 @@ function PickerTile({
   isSelected: boolean;
   onPick: () => void;
 }): React.JSX.Element {
-  const [hovered, setHovered] = useState(false);
   return (
     <Card
       size="sm"
       data-testid={`bg-item-${background.id}`}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
       {...selectableTile(isSelected, onPick)}
     >
       <div className="relative">
-        <BackgroundPreview background={background} playing={hovered} />
+        <BackgroundPreview background={background} />
         {isSelected && <CheckBadge />}
       </div>
       <CardHeader>
         <CardTitle className="truncate">{background.title}</CardTitle>
-        {background.tags.length > 0 && (
-          <CardDescription className="flex flex-wrap gap-1">
-            {background.tags.map((tag) => (
-              <Badge key={tag} variant="secondary">
-                {tag}
-              </Badge>
-            ))}
-          </CardDescription>
-        )}
       </CardHeader>
     </Card>
   );
 }
 
 /**
- * 곡 배경 선택 창. 배경 갤러리에서 태그로 걸러 고르거나 배경을 뺀다.
+ * 곡 배경 선택 창. 위쪽의 단색 팔레트나 아래 배경 갤러리(종류로 거름)에서 고른다.
  * 고르는 즉시 편집 미리보기에 반영되고 창이 닫힌다.
  */
 export function BackgroundPickerModal(
@@ -117,24 +111,21 @@ export function BackgroundPickerModal(
 function PickerDialog({
   onClose,
   selectedBackgroundId,
+  selectedColor,
   onSelect,
 }: BackgroundPickerModalProps): React.JSX.Element {
   const catalog = useBackgroundCatalog();
-  const [activeTag, setActiveTag] = useState<string>(ALL_TAGS);
+  const [kind, setKind] = useState<BackgroundKindFilterValue>("all");
 
   useEffect(() => {
     void refreshBackgroundCatalog();
   }, []);
 
   const all = catalog.backgrounds;
-  const tags = [...new Set(all.flatMap((bg) => bg.tags))];
-  const visible =
-    activeTag === ALL_TAGS
-      ? all
-      : all.filter((bg) => bg.tags.includes(activeTag));
+  const visible = filterBackgroundsByKind(all, kind);
 
-  const pick = (backgroundId: string | null): void => {
-    onSelect(backgroundId);
+  const pick = (choice: BackgroundChoice): void => {
+    onSelect(choice);
     onClose();
   };
 
@@ -155,59 +146,53 @@ function PickerDialog({
           </DialogDescription>
         </DialogHeader>
 
-        {tags.length > 0 && (
-          <div className="overflow-x-auto border-b px-6 py-3">
-            <ToggleGroup
-              aria-label={BACKGROUND_COPY.moodTags}
-              variant="outline"
-              size="sm"
-              value={[activeTag]}
-              onValueChange={(next) => {
-                if (next[0]) setActiveTag(next[0]);
-              }}
-            >
-              {[ALL_TAGS, ...tags].map((tag) => (
-                <ToggleGroupItem key={tag} value={tag}>
-                  {tag}
-                </ToggleGroupItem>
-              ))}
-            </ToggleGroup>
-          </div>
-        )}
-
-        <div className="grid flex-1 grid-cols-2 content-start gap-4 overflow-y-auto p-6 sm:grid-cols-3 md:grid-cols-4">
-          <Card
-            size="sm"
-            data-testid="bg-item-none"
-            {...selectableTile(!selectedBackgroundId, () => pick(null))}
-          >
-            <div className="relative flex aspect-video items-center justify-center bg-black text-xs text-white/60">
-              {BACKGROUND_COPY.blackScreen}
-              {!selectedBackgroundId && <CheckBadge />}
-            </div>
-            <CardHeader>
-              <CardTitle>{BACKGROUND_COPY.none}</CardTitle>
-            </CardHeader>
-          </Card>
-
-          {visible.map((bg) => (
-            <PickerTile
-              key={bg.id}
-              background={bg}
-              isSelected={bg.id === selectedBackgroundId}
-              onPick={() => pick(bg.id)}
+        <div className="flex-1 overflow-y-auto">
+          <section className="space-y-2 border-b px-6 py-4">
+            <h3 className="text-sm font-semibold">
+              {BACKGROUND_COPY.picker.solid}
+            </h3>
+            <ColorPalette
+              label={BACKGROUND_COPY.picker.solid}
+              testId="bg-solid-palette"
+              value={
+                selectedBackgroundId
+                  ? undefined
+                  : (selectedColor ?? DEFAULT_BACKGROUND_COLOR)
+              }
+              onPick={(color) => pick({ color })}
             />
-          ))}
+          </section>
 
-          {all.length === 0 && (
-            <Empty className="col-span-full">
-              <EmptyHeader>
-                <EmptyDescription>
-                  {BACKGROUND_COPY.noBackgrounds}
-                </EmptyDescription>
-              </EmptyHeader>
-            </Empty>
-          )}
+          <section className="space-y-3 px-6 py-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h3 className="text-sm font-semibold">
+                {BACKGROUND_COPY.picker.media}
+              </h3>
+              {all.length > 0 && (
+                <BackgroundKindFilter value={kind} onChange={setKind} />
+              )}
+            </div>
+            <div className="grid grid-cols-2 content-start gap-4 sm:grid-cols-3 md:grid-cols-4">
+              {visible.map((bg) => (
+                <PickerTile
+                  key={bg.id}
+                  background={bg}
+                  isSelected={bg.id === selectedBackgroundId}
+                  onPick={() => pick({ backgroundId: bg.id })}
+                />
+              ))}
+
+              {all.length === 0 && (
+                <Empty className="col-span-full">
+                  <EmptyHeader>
+                    <EmptyDescription>
+                      {BACKGROUND_COPY.noBackgrounds}
+                    </EmptyDescription>
+                  </EmptyHeader>
+                </Empty>
+              )}
+            </div>
+          </section>
         </div>
 
         <DialogFooter className="mx-0 mb-0 items-center px-6 py-3 sm:justify-between">

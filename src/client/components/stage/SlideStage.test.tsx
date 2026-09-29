@@ -173,4 +173,26 @@ describe("SlideStage Integration Component", () => {
       expect(video).not.toHaveAttribute("poster");
     }
   });
+
+  it("배경 영상·이미지가 없으면 곡의 단색을 바탕에 깐다", () => {
+    const style = { ...mockStyle, backgroundColor: "#002060" };
+    const { rerender } = render(
+      <SlideStage slide={mockSlide} style={style} staticBackground />,
+    );
+    expect(screen.getByTestId("virtual-slide-stage")).toHaveStyle({
+      backgroundColor: "#002060",
+    });
+
+    rerender(
+      <SlideStage
+        slide={mockSlide}
+        style={style}
+        posterUrl="/api/media/poster1.jpg"
+        staticBackground
+      />,
+    );
+    expect(screen.getByTestId("virtual-slide-stage")).toHaveStyle({
+      backgroundColor: "#000000",
+    });
+  });
 });

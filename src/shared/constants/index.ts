@@ -77,6 +77,9 @@ export const DEFAULT_TEXT_BOX_POSITION: TextBoxPosition = {
   widthPercent: 80,
 };
 
+/** 배경 영상·이미지도, 고른 단색(`DeckStyle.backgroundColor`)도 없는 곡의 바탕 */
+export const DEFAULT_BACKGROUND_COLOR = "#000000";
+
 /**
  * 기본 덱 스타일 상수
  */

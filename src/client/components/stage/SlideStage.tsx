@@ -1,6 +1,6 @@
 import React, { useRef, useState, useEffect } from "react";
 import type { Slide, DeckStyle } from "#shared";
-import { DEFAULT_DECK_STYLE } from "#shared";
+import { DEFAULT_BACKGROUND_COLOR, DEFAULT_DECK_STYLE } from "#shared";
 import {
   useStageScale,
   VIRTUAL_STAGE_WIDTH,
@@ -98,17 +98,25 @@ export function SlideStage({
       : (measuredSize ?? undefined);
 
   const { scale, translateX, translateY } = useStageScale(effectiveDimensions);
+  const hasMedia = Boolean(backgroundUrl || backgroundImageUrl || posterUrl);
+  const backdrop = {
+    backgroundColor: hasMedia
+      ? DEFAULT_BACKGROUND_COLOR
+      : (style.backgroundColor ?? DEFAULT_BACKGROUND_COLOR),
+  };
 
   return (
     <div
       ref={containerRef}
       data-testid="slide-stage-viewport"
-      className={`relative size-full overflow-hidden bg-black select-none ${className}`}
+      className={`relative size-full overflow-hidden select-none ${className}`}
+      style={backdrop}
     >
       <div
         data-testid="virtual-slide-stage"
-        className="absolute overflow-hidden bg-black"
+        className="absolute overflow-hidden"
         style={{
+          ...backdrop,
           width: `${VIRTUAL_STAGE_WIDTH}px`,
           height: `${VIRTUAL_STAGE_HEIGHT}px`,
           left: `${translateX}px`,
@@ -120,7 +128,7 @@ export function SlideStage({
         {staticBackground ? (
           <div
             data-testid="static-background-layer"
-            className="pointer-events-none absolute inset-0 z-0 overflow-hidden bg-black select-none"
+            className="pointer-events-none absolute inset-0 z-0 overflow-hidden select-none"
           >
             {posterUrl && (
               <img

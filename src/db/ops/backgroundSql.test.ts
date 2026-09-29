@@ -31,7 +31,6 @@ describe("운영 SQL (배경)", () => {
       poster_key: "posters/warm_light_flow.webp",
       duration_sec: 20,
       license: "Service Original (CC0)",
-      tags: '["잔잔한","따뜻한"]',
       size_bytes: 18_000_000,
     });
 
@@ -61,7 +60,6 @@ describe("운영 SQL (배경)", () => {
       kind: "video",
       mediaUrl: "/api/media/loops/warm_light_flow.mp4",
       posterUrl: "/api/media/posters/warm_light_flow.webp",
-      tags: ["잔잔한", "따뜻한"],
     });
     expect(all("LIST_SERVICE_BACKGROUNDS").map((row) => row.id)).toEqual([
       SERVICE,
@@ -79,7 +77,6 @@ describe("운영 SQL (배경)", () => {
       posterKey: `stills/${STILL}.jpg`,
       sizeBytes: 20_000_000,
       durationSec: 0,
-      tags: [],
     });
     expect(all("LIST_IMAGE_BACKGROUNDS_WITHOUT_POSTER")).toEqual([
       {
