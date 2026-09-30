@@ -10,8 +10,26 @@ describe("PWA 설정", () => {
   it("미디어 캐시 이름과 경로를 공용 상수에서 가져온다", () => {
     expect(config).toContain('from "./src/shared/constants/projection"');
     expect(config).toContain("cacheName: MEDIA_CACHE_NAME");
-    expect(config).toContain("${MEDIA_URL_PREFIX}");
+    expect(config).toContain("new RegExp(MEDIA_URL_PREFIX");
     expect(config).not.toMatch(/const MEDIA_(CACHE_NAME|URL_PREFIX) =/);
+  });
+
+  it("포스터는 영상보다 먼저 맞춰 따로 담고, 영상 캐시에는 개수 한도가 없다", () => {
+    const posterRule = config.indexOf("new RegExp(POSTER_URL_PREFIX");
+    const mediaRule = config.indexOf("new RegExp(MEDIA_URL_PREFIX");
+    expect(posterRule).toBeGreaterThan(-1);
+    expect(posterRule).toBeLessThan(mediaRule);
+    expect(config).toContain("cacheName: POSTER_CACHE_NAME");
+
+    const mediaOptions = config.slice(
+      config.indexOf("cacheName: MEDIA_CACHE_NAME"),
+      config.indexOf("devOptions"),
+    );
+    expect(mediaOptions).not.toContain("expiration");
+  });
+
+  it("처음 설치된 SW가 곧바로 페이지를 제어해 첫 방문에도 캐시본으로 송출한다", () => {
+    expect(config).toContain("clientsClaim: true");
   });
 
   it("미디어 런타임 캐시가 CacheFirst + Range 지원으로 설정되어 있다", () => {

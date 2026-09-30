@@ -79,6 +79,7 @@ import {
 import {
   useBackgroundAutoCache,
   useCacheFirstVideo,
+  useProjectionMediaReady,
 } from "../features/offline";
 import { warmPresentationFonts } from "../lib/offline";
 import { PresentationShareDialog } from "../features/sharing/PresentationShareDialog";
@@ -235,6 +236,10 @@ function EditorScreen({
   const background = useCacheFirstVideo(
     resolveBackgroundLayers(useBackground(currentSong?.backgroundId)),
   );
+
+  const mediaReadiness = useProjectionMediaReady(found ?? null, {
+    passive: true,
+  });
 
   const handlePresent = () => {
     if (presentationId) {
@@ -471,6 +476,12 @@ function EditorScreen({
         readOnly={readOnly}
         backPath={
           isGuest ? null : drivePath(readOnly ? null : presentation.folderId)
+        }
+        mediaProgress={
+          mediaReadiness.status === "ready" ||
+          mediaReadiness.status === "checking"
+            ? null
+            : mediaReadiness
         }
       />
 

@@ -8,11 +8,22 @@
  */
 
 /**
- * Workbox 런타임 캐시 이름.
+ * 배경 영상·이미지 원본의 Workbox 런타임 캐시 이름.
  * Service Worker의 runtimeCaching과 백그라운드 캐시
  * (`src/client/lib/offline/mediaCache.ts`)의 `caches.open()`이 같은 캐시를 쓴다.
+ *
+ * 개수 한도를 두지 않는다. 배경 하나가 수백 MB일 수 있어 개수로는 용량을 다룰 수
+ * 없고, 한도에 걸려 송출할 세트의 영상이 밀려나면 안 된다. 용량이 모자라면 앱이
+ * 지금 세트 밖의 영상부터 지운다.
  */
 export const MEDIA_CACHE_NAME = "worship-videos-cache";
+
+/**
+ * 배경 포스터(목록·썸네일용 축소 이미지)의 런타임 캐시 이름.
+ * 라이브러리를 훑으면 포스터 수백 장이 담기므로 영상과 캐시를 나눈다. 같은 캐시에
+ * 두면 포스터가 개수 한도를 채워 송출용 영상을 밀어낸다.
+ */
+export const POSTER_CACHE_NAME = "worship-posters-cache";
 
 /**
  * 배경 영상·포스터를 중계하는 동일 출처 프록시 경로 접두사.
@@ -20,3 +31,13 @@ export const MEDIA_CACHE_NAME = "worship-videos-cache";
  * 바꾸게 되면 이 값과 Workbox `urlPattern`만 바뀐다.
  */
 export const MEDIA_URL_PREFIX = "/api/media/";
+
+/** 포스터 R2 키 접두사를 포함한 프록시 경로 */
+export const POSTER_URL_PREFIX = `${MEDIA_URL_PREFIX}posters/`;
+
+/** 미디어 URL이 담기는 런타임 캐시. Workbox `urlPattern`과 같은 기준으로 나눈다 */
+export function mediaCacheNameFor(url: string): string {
+  return url.startsWith(POSTER_URL_PREFIX)
+    ? POSTER_CACHE_NAME
+    : MEDIA_CACHE_NAME;
+}

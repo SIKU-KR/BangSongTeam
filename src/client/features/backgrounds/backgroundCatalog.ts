@@ -4,7 +4,6 @@ import {
   deleteBackgroundRecord,
   loadAllBackgrounds,
   replaceAllBackgrounds,
-  saveBackground,
 } from "../../lib/storage";
 import { getCurrentUserId } from "../../lib/auth/sessionStore";
 
@@ -96,21 +95,8 @@ export function markBackgroundCatalogStatus(
   setSnapshot({ ...snapshot, status });
 }
 
-/** 관리자가 방금 올린 배경을 갤러리에 제목순으로 끼워 넣는다 */
-export async function addUploadedBackground(
-  background: BackgroundMedia,
-): Promise<void> {
-  setSnapshot({
-    ...snapshot,
-    backgrounds: byTitle([
-      ...snapshot.backgrounds.filter((bg) => bg.id !== background.id),
-      background,
-    ]),
-  });
-  await persist(() => saveBackground(background, getCurrentUserId()));
-}
-
-export async function removeUploadedBackground(id: string): Promise<void> {
+/** 관리자가 지운 배경을 갤러리와 로컬 사본에서 곧바로 뺀다 */
+export async function removeCatalogBackground(id: string): Promise<void> {
   setSnapshot({
     ...snapshot,
     backgrounds: snapshot.backgrounds.filter((bg) => bg.id !== id),

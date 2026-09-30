@@ -15,10 +15,10 @@ import { Kbd } from "#components/ui/kbd";
 import { DEFAULT_DECK_STYLE } from "#shared";
 import type { Presentation } from "#shared";
 import { SlideStage } from "../components/stage/SlideStage";
-import {
-  usePresentationFontsReady,
-  useProjectionMediaCache,
-} from "../features/offline";
+import { ProjectionMediaGate } from "../features/offline/ProjectionMediaGate";
+import { usePresentationFontsReady } from "../features/offline/usePresentationFontsReady";
+import { useProjectionMediaCache } from "../features/offline/useBackgroundAutoCache";
+import { useProjectionMediaReady } from "../features/offline/useProjectionMediaReady";
 import {
   resolveBackgroundLayers,
   useBackground,
@@ -54,7 +54,16 @@ import {
 } from "../features/presentation";
 import { PRESENTATION_COPY } from "#copy/presentation";
 
-/** 청중용 전체화면 송출 라우트. 종료하면 송출을 시작한 화면으로 돌아간다. */
+const noop = (): void => {};
+
+/**
+ * 청중용 전체화면 송출 라우트. 종료하면 송출을 시작한 화면으로 돌아간다.
+ *
+ * 세트의 배경 영상을 모두 이 기기에 저장하기 전에는 슬라이드 대신 준비 카드를 띄우고
+ * 슬라이드 이동을 막는다(`useProjectionMediaReady`). 한 번 시작한 뒤에는 세트가 바뀌어도
+ * 다시 가리지 않는다 — 예배 중에 화면이 준비 카드로 바뀌면 안 되므로, 새로 생긴 배경은
+ * 백그라운드 큐(`useProjectionMediaCache`)에 맡긴다.
+ */
 export function FullscreenPresentRoute(): React.JSX.Element {
   const navigate = useNavigate();
   const location = useLocation();
@@ -72,6 +81,13 @@ export function FullscreenPresentRoute(): React.JSX.Element {
     useState<ProjectionPosition>(INITIAL_POSITION);
   const fontsReady = usePresentationFontsReady(found ?? null);
   useProjectionMediaCache(found ?? null, position.songIndex);
+  const mediaReadiness = useProjectionMediaReady(found ?? null);
+  const [hasStarted, setHasStarted] = useState(false);
+  const isPreparing = !hasStarted && mediaReadiness.status !== "ready";
+
+  useEffect(() => {
+    if (mediaReadiness.status === "ready") setHasStarted(true);
+  }, [mediaReadiness.status]);
   const [isBlackout, setIsBlackout] = useState<boolean>(false);
   const [isLyricsHidden, setIsLyricsHidden] = useState<boolean>(false);
 
@@ -115,8 +131,8 @@ export function FullscreenPresentRoute(): React.JSX.Element {
   }, [navigate, returnPath]);
 
   usePresentationShortcuts({
-    onNext: handleNext,
-    onPrev: handlePrev,
+    onNext: isPreparing ? noop : handleNext,
+    onPrev: isPreparing ? noop : handlePrev,
     onToggleBlackout: () => setIsBlackout((prev) => !prev),
     onToggleLyrics: () => setIsLyricsHidden((prev) => !prev),
     onExit: handleExit,
@@ -148,16 +164,23 @@ export function FullscreenPresentRoute(): React.JSX.Element {
       data-testid="fullscreen-present-route"
       className="group relative h-screen w-screen overflow-hidden bg-black select-none"
     >
-      <SlideStage
-        slide={currentSlide}
-        style={currentStyle}
-        backgroundUrl={currentBackground.videoUrl}
-        backgroundImageUrl={currentBackground.imageUrl}
-        nextBackgroundUrl={nextBackground.videoUrl}
-        posterUrl={currentBackground.posterUrl}
-        isBlackout={isBlackout}
-        isLyricsHidden={isLyricsHidden || !fontsReady}
-      />
+      {isPreparing ? (
+        <ProjectionMediaGate
+          readiness={mediaReadiness}
+          onStartWithSaved={() => setHasStarted(true)}
+        />
+      ) : (
+        <SlideStage
+          slide={currentSlide}
+          style={currentStyle}
+          backgroundUrl={currentBackground.videoUrl}
+          backgroundImageUrl={currentBackground.imageUrl}
+          nextBackgroundUrl={nextBackground.videoUrl}
+          posterUrl={currentBackground.posterUrl}
+          isBlackout={isBlackout}
+          isLyricsHidden={isLyricsHidden || !fontsReady}
+        />
+      )}
 
       <div className="absolute top-4 right-4 z-50 rounded-lg border border-white/15 bg-black/70 p-1 opacity-0 shadow-lg backdrop-blur-sm transition-opacity duration-300 group-hover:opacity-100">
         <Button

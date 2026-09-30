@@ -3,7 +3,6 @@ import { createTestDb, type TestDbResult } from "../test-utils";
 import { backgrounds, user, type NewBackground } from "../schema";
 import {
   deleteServiceBackground,
-  insertServiceBackground,
   listBackgrounds,
   nullifyUnknownBackgrounds,
 } from "./backgrounds";
@@ -70,27 +69,25 @@ describe("배경 쿼리 헬퍼", () => {
     });
   });
 
-  it("insertServiceBackground는 관리자 업로드를 기본 제공 배경으로 넣는다", async () => {
-    const created = await insertServiceBackground(testDb.db, {
-      id: "svc000000000000000004",
-      title: "성탄 배경",
-      license: "Pexels License — 홍길동",
-      kind: "image",
-      mediaKey: "stills/svc000000000000000004.png",
-      posterKey: "stills/svc000000000000000004.png",
-      sizeBytes: 2048,
-      durationSec: 0,
-    });
+  it("검색 메타데이터를 JSON 배열 그대로 돌려주고, 없으면 빈 값이다", async () => {
+    await testDb.db.insert(backgrounds).values(
+      row({
+        id: "svc000000000000000004",
+        title: "구름 하늘",
+        description: "흰 구름이 천천히 흘러가요.",
+        keywords: ["구름", "하늘", "clouds"],
+      }),
+    );
 
-    expect(created).toMatchObject({
-      source: "service",
-      kind: "image",
-      license: "Pexels License — 홍길동",
-      mediaUrl: "/api/media/stills/svc000000000000000004.png",
-      sizeBytes: 2048,
-    });
     const list = await listBackgrounds(testDb.db);
-    expect(list.map((bg) => bg.id)).toContain("svc000000000000000004");
+    expect(list.find((bg) => bg.id === "svc000000000000000004")).toMatchObject({
+      description: "흰 구름이 천천히 흘러가요.",
+      keywords: ["구름", "하늘", "clouds"],
+    });
+    expect(list.find((bg) => bg.id === SERVICE_A)).toMatchObject({
+      description: "",
+      keywords: [],
+    });
   });
 
   describe("deleteServiceBackground", () => {

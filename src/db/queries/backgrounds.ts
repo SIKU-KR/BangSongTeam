@@ -1,9 +1,5 @@
 import { and, asc, eq, inArray } from "drizzle-orm";
-import {
-  mediaUrlForKey,
-  type BackgroundKind,
-  type BackgroundMedia,
-} from "#shared";
+import { mediaUrlForKey, type BackgroundMedia } from "#shared";
 import { backgrounds, type Background } from "../schema";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -21,6 +17,8 @@ export function toBackgroundMedia(row: Background): BackgroundMedia {
     sizeBytes: row.sizeBytes,
     license: row.license,
     createdAt: (row.createdAt ?? new Date(0)).toISOString(),
+    description: row.description,
+    keywords: row.keywords,
   };
 }
 
@@ -40,44 +38,6 @@ export async function listBackgrounds(
     .where(isServiceBackground)
     .orderBy(asc(backgrounds.title));
   return rows.map(toBackgroundMedia);
-}
-
-export interface NewServiceBackground {
-  id: string;
-  title: string;
-  license: string;
-  kind: BackgroundKind;
-  mediaKey: string;
-  posterKey: string;
-  sizeBytes: number;
-  durationSec: number;
-}
-
-/**
- * 관리자가 올린 배경을 기본 제공 배경으로 남긴다.
- * R2 객체를 먼저 올린 뒤에 부른다. 파일 없는 행은 깨진 배경이 된다.
- */
-export async function insertServiceBackground(
-  db: DbInstance,
-  input: NewServiceBackground,
-): Promise<BackgroundMedia> {
-  await db.insert(backgrounds).values({
-    id: input.id,
-    title: input.title,
-    r2Key: input.mediaKey,
-    posterKey: input.posterKey,
-    durationSec: input.durationSec,
-    license: input.license,
-    source: "service",
-    kind: input.kind,
-    sizeBytes: input.sizeBytes,
-  });
-
-  const [row]: Background[] = await db
-    .select()
-    .from(backgrounds)
-    .where(eq(backgrounds.id, input.id));
-  return toBackgroundMedia(row);
 }
 
 /**

@@ -1,10 +1,5 @@
 import { describe, it, expect } from "vitest";
-import {
-  BACKGROUND_UPLOAD_LIMITS,
-  isBackgroundImageMimeType,
-  isBackgroundVideoMimeType,
-  mediaUrlForKey,
-} from "./backgrounds";
+import { mediaUrlForKey } from "./backgrounds";
 import { MEDIA_URL_PREFIX } from "./projection";
 
 describe("mediaUrlForKey", () => {
@@ -18,19 +13,5 @@ describe("mediaUrlForKey", () => {
 
   it("미디어 캐시 규칙이 보는 접두사로 시작한다", () => {
     expect(mediaUrlForKey("x.webp").startsWith(MEDIA_URL_PREFIX)).toBe(true);
-  });
-});
-
-describe("배경 업로드 한도와 형식", () => {
-  it("파일 하나는 30MB로 묶고, 계정 전체 한도는 두지 않는다", () => {
-    expect(BACKGROUND_UPLOAD_LIMITS.maxFileBytes).toBe(30 * 1024 * 1024);
-    expect(BACKGROUND_UPLOAD_LIMITS).not.toHaveProperty("maxAccountBytes");
-  });
-
-  it("영상은 MP4만, 이미지는 JPEG·PNG·WebP만 받는다", () => {
-    expect(isBackgroundVideoMimeType("video/mp4")).toBe(true);
-    expect(isBackgroundVideoMimeType("video/webm")).toBe(false);
-    expect(isBackgroundImageMimeType("image/png")).toBe(true);
-    expect(isBackgroundImageMimeType("image/gif")).toBe(false);
   });
 });

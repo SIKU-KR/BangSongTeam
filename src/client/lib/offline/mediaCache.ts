@@ -1,4 +1,4 @@
-import { MEDIA_CACHE_NAME } from "#shared";
+import { MEDIA_CACHE_NAME, mediaCacheNameFor } from "#shared";
 import { requestPersistentStorage } from "./storagePersistence";
 
 export interface MediaCacheResult {
@@ -6,8 +6,15 @@ export interface MediaCacheResult {
   failedUrls: string[];
 }
 
+/** 받는 중인 파일의 진행 상황. `total`은 응답에 길이가 없으면 null이다 */
+export interface MediaProgress {
+  received: number;
+  total: number | null;
+}
+
 const SW_CACHE_POLL_MS = 100;
-const SW_CACHE_POLL_LIMIT = 50;
+const SW_CACHE_POLL_BASE = 50;
+const SW_CACHE_POLL_BYTES_PER_EXTRA = 2 * 1024 * 1024;
 
 export function isCacheStorageAvailable(): boolean {
   try {
@@ -27,15 +34,75 @@ function isServiceWorkerControlled(): boolean {
   );
 }
 
-async function drainBody(response: Response): Promise<void> {
-  const reader = response.body?.getReader();
+const progress = new Map<string, MediaProgress>();
+const progressListeners = new Set<() => void>();
+let progressVersion = 0;
+
+function reportProgress(url: string, next: MediaProgress): void {
+  progress.set(url, next);
+  progressVersion += 1;
+  for (const listener of progressListeners) listener();
+}
+
+/** `useSyncExternalStore`용 구독. 스냅숏은 `getMediaProgressVersion`이다 */
+export function subscribeMediaProgress(listener: () => void): () => void {
+  progressListeners.add(listener);
+  return () => progressListeners.delete(listener);
+}
+
+export function getMediaProgressVersion(): number {
+  return progressVersion;
+}
+
+export function getMediaProgress(url: string): MediaProgress | undefined {
+  return progress.get(url);
+}
+
+function contentLength(response: Response): number | null {
+  const length = Number(response.headers.get("content-length"));
+  return Number.isFinite(length) && length > 0 ? length : null;
+}
+
+function countingBody(
+  url: string,
+  response: Response,
+): ReadableStream<Uint8Array> | null {
+  const total = contentLength(response);
+  let received = 0;
+  reportProgress(url, { received, total });
+  return (
+    response.body?.pipeThrough(
+      new TransformStream<Uint8Array, Uint8Array>({
+        transform(chunk, controller) {
+          received += chunk.byteLength;
+          reportProgress(url, { received, total });
+          controller.enqueue(chunk);
+        },
+      }),
+    ) ?? null
+  );
+}
+
+async function drain(body: ReadableStream<Uint8Array> | null): Promise<void> {
+  const reader = body?.getReader();
   if (!reader) return;
   let done = false;
   while (!done) ({ done } = await reader.read());
 }
 
-async function waitForCacheEntry(cache: Cache, url: string): Promise<boolean> {
-  for (let attempt = 0; attempt < SW_CACHE_POLL_LIMIT; attempt += 1) {
+/**
+ * SW가 캐시 쓰기를 마칠 때까지 기다린다. SW는 본문을 다 받은 뒤에 쓰기를 끝내므로
+ * 큰 파일일수록 오래 걸린다. 파일 크기에 비례해 기다리는 시간을 늘린다.
+ */
+async function waitForCacheEntry(
+  cache: Cache,
+  url: string,
+  bytes: number | null,
+): Promise<boolean> {
+  const limit =
+    SW_CACHE_POLL_BASE +
+    Math.ceil((bytes ?? 0) / SW_CACHE_POLL_BYTES_PER_EXTRA);
+  for (let attempt = 0; attempt < limit; attempt += 1) {
     if (await cache.match(url)) return true;
     await new Promise((resolve) => setTimeout(resolve, SW_CACHE_POLL_MS));
   }
@@ -46,12 +113,13 @@ async function waitForCacheEntry(cache: Cache, url: string): Promise<boolean> {
 const knownCached = new Set<string>();
 
 /**
- * 미디어 URL을 전체 응답(200)으로 받아 `worship-media` 캐시에 담는다.
+ * 미디어 URL을 전체 응답(200)으로 받아 캐시에 담는다. 포스터와 영상은 캐시가 다르다
+ * (`mediaCacheNameFor`). 받는 동안 바이트 수를 `getMediaProgress`로 알린다.
  *
  * 서비스 워커가 페이지를 제어하면 `fetch()`가 SW의 `CacheFirst` 미디어 라우트를
  * 지나며 SW가 캐시에 담으므로, 여기서는 본문을 다 읽고 SW의 쓰기가 끝나기를 기다리기만
- * 한다. 페이지가 `cache.put`을 한 번 더 하면 최대 30MB 파일마다 디스크 쓰기가 두 번이다.
- * SW가 없을 때(개발 서버, 설치 직후 첫 방문)만 직접 `put`한다.
+ * 한다. 페이지가 `cache.put`을 한 번 더 하면 수백 MB 영상마다 디스크 쓰기가 두 번이다.
+ * SW가 없을 때(개발 서버, SW를 지원하지 않는 브라우저)만 직접 `put`한다.
  */
 export async function cacheMediaUrls(
   urls: readonly string[],
@@ -63,9 +131,8 @@ export async function cacheMediaUrls(
     return { cachedUrls, failedUrls: [...urls] };
   }
 
-  const cache = await caches.open(MEDIA_CACHE_NAME);
-
   for (const url of urls) {
+    const cache = await caches.open(mediaCacheNameFor(url));
     if (await cache.match(url)) {
       knownCached.add(url);
       cachedUrls.push(url);
@@ -77,13 +144,20 @@ export async function cacheMediaUrls(
       if (response.status !== 200) {
         throw new Error(`HTTP ${response.status}`);
       }
+      const body = countingBody(url, response);
       if (isServiceWorkerControlled()) {
-        await drainBody(response);
-        if (!(await waitForCacheEntry(cache, url))) {
+        await drain(body);
+        if (!(await waitForCacheEntry(cache, url, contentLength(response)))) {
           throw new Error("service worker did not cache");
         }
       } else {
-        await cache.put(url, response);
+        await cache.put(
+          url,
+          new Response(body, {
+            status: response.status,
+            headers: response.headers,
+          }),
+        );
       }
       knownCached.add(url);
       cachedUrls.push(url);
@@ -189,6 +263,72 @@ export function shouldWaitForMediaCache(url: string): boolean {
   );
 }
 
+/** 이미 캐시에 담긴 URL만 골라 돌려준다. 이 세션에서 확인한 것은 다시 열어 보지 않는다 */
+export async function findCachedMediaUrls(
+  urls: readonly string[],
+): Promise<string[]> {
+  if (!isCacheStorageAvailable()) return [];
+  const cached: string[] = [];
+  for (const url of urls) {
+    if (knownCached.has(url)) {
+      cached.push(url);
+      continue;
+    }
+    const cache = await caches.open(mediaCacheNameFor(url));
+    if (await cache.match(url)) {
+      knownCached.add(url);
+      cached.push(url);
+    }
+  }
+  return cached;
+}
+
+async function estimateFreeBytes(): Promise<number | null> {
+  if (typeof navigator === "undefined" || !navigator.storage?.estimate) {
+    return null;
+  }
+  try {
+    const { quota, usage } = await navigator.storage.estimate();
+    if (quota === undefined || usage === undefined) return null;
+    return quota - usage;
+  } catch {
+    return null;
+  }
+}
+
+function pathOf(url: string): string {
+  return url.startsWith("/") ? url : new URL(url).pathname;
+}
+
+/**
+ * 영상 캐시에 `neededBytes`가 들어갈 자리를 만든다. 자리가 되면 true다.
+ *
+ * 남은 용량이 모자라면 `keepUrls`(지금 세트가 쓰는 영상) 밖의 영상을 오래 담긴
+ * 순서(`cache.keys()` 순서)로 지운다. 배경 교체로 목록에서 사라진 영상도 이렇게
+ * 정리된다. 브라우저가 용량을 알려 주지 않으면 지우지 않고 true로 둔다.
+ */
+export async function ensureMediaSpace(
+  neededBytes: number,
+  keepUrls: readonly string[],
+): Promise<boolean> {
+  let free = await estimateFreeBytes();
+  if (free === null || free >= neededBytes) return true;
+  if (!isCacheStorageAvailable()) return false;
+
+  const keep = new Set(keepUrls.map(pathOf));
+  const cache = await caches.open(MEDIA_CACHE_NAME);
+  for (const request of await cache.keys()) {
+    if (free >= neededBytes) break;
+    const path = pathOf(request.url);
+    if (keep.has(path)) continue;
+    const cached = await cache.match(request);
+    await cache.delete(request);
+    knownCached.delete(path);
+    free += cached ? (contentLength(cached) ?? 0) : 0;
+  }
+  return free >= neededBytes;
+}
+
 export async function __waitForMediaCachingForTests(): Promise<void> {
   while (draining || inFlight.size > 0) {
     await Promise.all([draining, ...inFlight.values()]);
@@ -199,6 +339,8 @@ export function __resetMediaCachingForTests(): void {
   pending.clear();
   inFlight.clear();
   knownCached.clear();
+  progress.clear();
+  progressVersion = 0;
   draining = null;
   persistenceRequested = false;
 }

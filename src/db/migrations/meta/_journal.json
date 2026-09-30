@@ -36,6 +36,13 @@
       "when": 1790643112609,
       "tag": "0005_drop_background_tags",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1790690803797,
+      "tag": "0006_background_search_metadata",
+      "breakpoints": true
     }
   ]
 }

@@ -19,7 +19,10 @@ const { refreshBackgroundCatalog } = vi.hoisted(() => ({
 
 vi.mock("../../lib/sync/backgroundSync", () => ({ refreshBackgroundCatalog }));
 
-const WARM = makeBackground(6, { title: "따뜻한 노을" });
+const WARM = makeBackground(6, {
+  title: "따뜻한 노을",
+  keywords: ["주황색", "노을", "감사"],
+});
 const STILL = makeBackground(7, {
   title: "본당 이미지",
   kind: "image",
@@ -88,13 +91,9 @@ describe("BackgroundPickerModal", () => {
       selectedBackgroundId: TEST_SERVICE_BACKGROUNDS[0].id,
     });
     const palette = screen.getByTestId("bg-solid-palette");
-    expect(
-      within(palette).queryByRole("button", { pressed: true }),
-    ).toBeNull();
+    expect(within(palette).queryByRole("button", { pressed: true })).toBeNull();
 
-    fireEvent.click(
-      within(palette).getByRole("button", { name: "진한 파랑" }),
-    );
+    fireEvent.click(within(palette).getByRole("button", { name: "진한 파랑" }));
 
     expect(onSelect).toHaveBeenCalledWith({ color: "#002060" });
     expect(onClose).toHaveBeenCalled();
@@ -144,6 +143,37 @@ describe("BackgroundPickerModal", () => {
 
     fireEvent.click(screen.getByTestId(`bg-item-${WARM.id}`));
     expect(onSelect).toHaveBeenCalledWith({ backgroundId: WARM.id });
+  });
+
+  it("검색어를 키워드로도 찾고, 맞는 배경이 없으면 알려 준다", () => {
+    renderPicker();
+
+    const input = screen.getByTestId("bg-picker-search-input");
+    fireEvent.change(input, { target: { value: "감사" } });
+    expect(screen.getByTestId(`bg-item-${WARM.id}`)).toBeInTheDocument();
+    expect(screen.queryByTestId(`bg-item-${STILL.id}`)).not.toBeInTheDocument();
+
+    fireEvent.change(input, { target: { value: "없는검색어" } });
+    expect(
+      screen.getByText(BACKGROUND_COPY.library.noMatch("없는검색어")),
+    ).toBeInTheDocument();
+  });
+
+  it("영상은 마우스를 올리거나 키보드로 고른 카드만 재생한다", () => {
+    vi.spyOn(window, "matchMedia").mockReturnValue({
+      matches: false,
+    } as MediaQueryList);
+    renderPicker();
+    const video = (id: string) =>
+      screen.queryByTestId(`bg-preview-video-${id}`);
+    expect(video(WARM.id)).toBeNull();
+
+    fireEvent.focus(screen.getByTestId(`bg-item-${WARM.id}`));
+    expect(video(WARM.id)).toBeInTheDocument();
+    expect(video(TEST_SERVICE_BACKGROUNDS[0].id)).toBeNull();
+
+    fireEvent.blur(screen.getByTestId(`bg-item-${WARM.id}`));
+    expect(video(WARM.id)).toBeNull();
   });
 
   it("배경이 하나도 없으면 빈 상태를 보여 준다", () => {

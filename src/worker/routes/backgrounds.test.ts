@@ -2,10 +2,8 @@ import { describe, it, expect, beforeAll, beforeEach, afterEach } from "vitest";
 import { env } from "cloudflare:test";
 import { inArray } from "drizzle-orm";
 import {
-  BACKGROUND_UPLOAD_LIMITS,
   BackgroundDeleteResponseSchema,
   BackgroundListResponseSchema,
-  BackgroundUploadResponseSchema,
   DEFAULT_DECK_STYLE,
   DeckSchema,
   type Deck,
@@ -26,49 +24,6 @@ let currentUser: string | null = ADMIN;
 const fakeSession: SessionReader = async () =>
   currentUser ? { userId: currentUser } : null;
 const app = createApp({ readSession: fakeSession });
-
-const ascii = (text: string): number[] =>
-  [...text].map((char) => char.charCodeAt(0));
-
-const MP4_BYTES = new Uint8Array([0, 0, 0, 0x20, ...ascii("ftypisom"), 1, 2]);
-const WEBP_BYTES = new Uint8Array([
-  ...ascii("RIFF"),
-  0,
-  0,
-  0,
-  0,
-  ...ascii("WEBP"),
-]);
-const PNG_BYTES = new Uint8Array([
-  0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0,
-]);
-
-function uploadForm(
-  overrides: Partial<Record<string, string | File | null>> = {},
-): FormData {
-  const fields: Record<string, string | File | null> = {
-    file: new File([MP4_BYTES], "loop.mp4", { type: "video/mp4" }),
-    poster: new File([WEBP_BYTES], "poster.webp", { type: "image/webp" }),
-    title: "본당 배경",
-    durationSec: "12",
-    license: "Pexels License — 홍길동",
-    acceptedRightsNotice: "true",
-    ...overrides,
-  };
-  const form = new FormData();
-  for (const [key, value] of Object.entries(fields)) {
-    if (value !== null) form.append(key, value);
-  }
-  return form;
-}
-
-function upload(form: FormData) {
-  return app.request(
-    "/api/backgrounds/uploads",
-    { method: "POST", body: form },
-    testEnv,
-  );
-}
 
 async function list() {
   const res = await app.request("/api/backgrounds", {}, testEnv);
@@ -174,161 +129,24 @@ describe("배경 갤러리 API", () => {
     });
   });
 
-  describe("POST /api/backgrounds/uploads", () => {
-    it("영상과 포스터를 R2에 올리고 모두에게 기본 제공 배경으로 나온다", async () => {
-      const res = await upload(uploadForm());
-      expect(res.status).toBe(201);
-      const { background } = BackgroundUploadResponseSchema.parse(
-        await res.json(),
-      );
-
-      expect(background).toMatchObject({
-        title: "본당 배경",
-        source: "service",
-        kind: "video",
-        license: "Pexels License — 홍길동",
-        durationSec: 12,
-        sizeBytes: MP4_BYTES.length + WEBP_BYTES.length,
-        mediaUrl: `/api/media/loops/${background.id}.mp4`,
-        posterUrl: `/api/media/posters/${background.id}.webp`,
-      });
-
-      const video = await env.MEDIA_BUCKET.head(`loops/${background.id}.mp4`);
-      expect(video?.httpMetadata?.contentType).toBe("video/mp4");
-      const poster = await env.MEDIA_BUCKET.head(
-        `posters/${background.id}.webp`,
-      );
-      expect(poster?.httpMetadata?.contentType).toBe("image/webp");
-
-      const media = await app.request(background.mediaUrl, {}, testEnv);
-      expect(media.status).toBe(200);
-      expect(media.headers.get("content-type")).toBe("video/mp4");
-
-      currentUser = MEMBER;
-      expect((await list()).backgrounds.map((bg) => bg.id)).toContain(
-        background.id,
-      );
-    });
-
-    it("이미지는 원본을 stills/에, 축소 포스터를 posters/에 올린다", async () => {
-      const res = await upload(
-        uploadForm({
-          file: new File([PNG_BYTES], "hall.png", { type: "image/png" }),
-          durationSec: null,
-        }),
-      );
-      expect(res.status).toBe(201);
-      const { background } = BackgroundUploadResponseSchema.parse(
-        await res.json(),
-      );
-      expect(background.kind).toBe("image");
-      expect(background).toMatchObject({
-        mediaUrl: `/api/media/stills/${background.id}.png`,
-        posterUrl: `/api/media/posters/${background.id}.webp`,
-        sizeBytes: PNG_BYTES.byteLength + WEBP_BYTES.byteLength,
-      });
-      expect(await mediaKeys()).toEqual(
-        [
-          ...initialKeys,
-          `posters/${background.id}.webp`,
-          `stills/${background.id}.png`,
-        ].sort(),
-      );
-    });
-
-    it("이미지 포스터가 이미지가 아니면 거절한다", async () => {
-      const res = await upload(
-        uploadForm({
-          file: new File([PNG_BYTES], "hall.png", { type: "image/png" }),
-          poster: new File([MP4_BYTES], "poster.webp", { type: "image/webp" }),
-          durationSec: null,
-        }),
-      );
-      expect(res.status).toBe(400);
-      expect(await mediaKeys()).toEqual(initialKeys);
-    });
-
-    it("포스터 없이 올린 이미지는 원본을 포스터로도 쓴다", async () => {
-      const res = await upload(
-        uploadForm({
-          file: new File([PNG_BYTES], "hall.png", { type: "image/png" }),
-          poster: null,
-          durationSec: null,
-        }),
-      );
-      expect(res.status).toBe(201);
-      const { background } = BackgroundUploadResponseSchema.parse(
-        await res.json(),
-      );
-      expect(background.kind).toBe("image");
-      expect(background.durationSec).toBe(0);
-      expect(background.posterUrl).toBe(background.mediaUrl);
-      expect(await mediaKeys()).toEqual(
-        [...initialKeys, `stills/${background.id}.png`].sort(),
-      );
-    });
-
-    it("로그인하지 않으면 401, 관리자가 아니면 403이다", async () => {
-      currentUser = null;
-      expect((await upload(uploadForm())).status).toBe(401);
-      currentUser = MEMBER;
-      const res = await upload(uploadForm());
-      expect(res.status).toBe(403);
-      expect(await mediaKeys()).toEqual(initialKeys);
-    });
-
-    it("출처·라이선스가 없으면 이유와 함께 거절한다", async () => {
-      const res = await upload(uploadForm({ license: null }));
-      expect(res.status).toBe(400);
-      expect(await mediaKeys()).toEqual(initialKeys);
-    });
-
-    it("라이선스 확인 동의가 없으면 이유와 함께 거절한다", async () => {
-      const res = await upload(uploadForm({ acceptedRightsNotice: null }));
-      expect(res.status).toBe(400);
-      const body = (await res.json()) as { error: string };
-      expect(body.error).toContain("라이선스");
-      expect(await mediaKeys()).toEqual(initialKeys);
-    });
-
-    it("선언한 형식과 파일 내용이 다르면 거절한다", async () => {
-      const res = await upload(
-        uploadForm({
-          file: new File([PNG_BYTES], "fake.mp4", { type: "video/mp4" }),
-        }),
-      );
-      expect(res.status).toBe(400);
-      expect(await mediaKeys()).toEqual(initialKeys);
-    });
-
-    it("영상에 포스터가 없으면 거절한다", async () => {
-      expect((await upload(uploadForm({ poster: null }))).status).toBe(400);
-    });
-
-    it("30MB를 넘는 파일은 거절한다", async () => {
-      const big = new Uint8Array(BACKGROUND_UPLOAD_LIMITS.maxFileBytes + 1);
-      big.set(MP4_BYTES);
-      const res = await upload(
-        uploadForm({
-          file: new File([big], "big.mp4", { type: "video/mp4" }),
-        }),
-      );
-      expect(res.status).toBe(400);
-      expect(await mediaKeys()).toEqual(initialKeys);
-    });
+  it("앱에서 배경을 올리는 경로는 없다 (등록은 스크립트로만)", async () => {
+    const res = await app.request(
+      "/api/backgrounds/uploads",
+      { method: "POST", body: new FormData() },
+      testEnv,
+    );
+    expect(res.status).toBe(404);
   });
 
   describe("DELETE /api/backgrounds/uploads/:id", () => {
-    async function uploadOne(): Promise<string> {
-      const res = await upload(uploadForm());
-      const { background } = BackgroundUploadResponseSchema.parse(
-        await res.json(),
-      );
-      return background.id;
+    async function storeFiles(id: string): Promise<void> {
+      await env.MEDIA_BUCKET.put(`loops/${id}.mp4`, "mp4");
+      await env.MEDIA_BUCKET.put(`posters/${id}.webp`, "webp");
     }
 
     it("배경을 R2와 함께 지우고, 쓰던 곡은 배경 없음이 된다", async () => {
-      const id = await uploadOne();
+      const id = serviceIds[0];
+      await storeFiles(id);
       const put = await app.request(
         "/api/decks/c00000005000000000001",
         {

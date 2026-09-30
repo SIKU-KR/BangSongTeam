@@ -4,13 +4,12 @@ import { signInAsTestUser } from "../../test/sessionFixture";
 import { makeBackground } from "../../test/backgroundFixture";
 import { getOfflineDB } from "../../lib/storage";
 import {
-  addUploadedBackground,
   applyServerBackgroundCatalog,
   getBackgroundById,
   getBackgroundCatalog,
   getServiceBackgrounds,
   hydrateBackgroundCatalog,
-  removeUploadedBackground,
+  removeCatalogBackground,
   resetBackgroundCatalogForTests,
   resolveBackgroundLayers,
   useBackground,
@@ -61,19 +60,13 @@ describe("배경 카탈로그", () => {
     expect(getBackgroundById(UPLOADED.id)).toBeUndefined();
   });
 
-  it("올린 배경을 제목순으로 끼워 넣고, 올리고 지운 배경을 구독자에게 곧바로 알린다", async () => {
-    await applyServerBackgroundCatalog([SERVICE], true);
+  it("지운 배경을 구독자에게 곧바로 알린다", async () => {
+    await applyServerBackgroundCatalog([UPLOADED, SERVICE], true);
     const { result } = renderHook(() => useBackground(UPLOADED.id));
-    expect(result.current).toBeUndefined();
-
-    await act(async () => {
-      await addUploadedBackground(UPLOADED);
-    });
     expect(result.current).toEqual(UPLOADED);
-    expect(getBackgroundCatalog().backgrounds).toEqual([UPLOADED, SERVICE]);
 
     await act(async () => {
-      await removeUploadedBackground(UPLOADED.id);
+      await removeCatalogBackground(UPLOADED.id);
     });
     expect(result.current).toBeUndefined();
   });

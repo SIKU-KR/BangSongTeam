@@ -28,6 +28,9 @@ import {
   TEST_SERVICE_BACKGROUNDS,
   withBackgrounds,
 } from "../test/backgroundFixture";
+import { resetFakeCacheStorage } from "../test/fakeCacheStorage";
+import { __resetMediaCachingForTests } from "../lib/offline/mediaCache";
+import { MEDIA_CACHE_NAME } from "#shared";
 
 const DOC_ID = SEED_PRESENTATION_IDS[0];
 
@@ -59,6 +62,21 @@ function renderPresent(
   );
 }
 
+async function storeMedia(...urls: string[]): Promise<void> {
+  const cache = await caches.open(MEDIA_CACHE_NAME);
+  for (const url of urls) await cache.put(url, new Response("media"));
+}
+
+function mockMediaFetch(status = 200): void {
+  vi.mocked(globalThis.fetch).mockImplementation(
+    async () =>
+      new Response(status === 200 ? "media" : null, {
+        status,
+        headers: { "content-length": "5" },
+      }),
+  );
+}
+
 function dispatchKey(key: string, code?: string, shiftKey = false): void {
   window.dispatchEvent(
     new KeyboardEvent("keydown", {
@@ -73,6 +91,8 @@ function dispatchKey(key: string, code?: string, shiftKey = false): void {
 describe("FullscreenPresentRoute", () => {
   beforeEach(() => {
     signInAsTestUser();
+    resetFakeCacheStorage();
+    __resetMediaCachingForTests();
     resetPresentationStore();
     __loadDocumentsForTests(SEED_PRESENTATIONS);
     vi.spyOn(globalThis, "fetch");
@@ -359,15 +379,16 @@ describe("FullscreenPresentRoute", () => {
     });
   });
 
-  it("지금 곡 영상을 재생하고 다음 곡 영상은 쉬는 슬롯에 미리 싣는다", () => {
+  it("지금 곡 영상을 재생하고 다음 곡 영상은 쉬는 슬롯에 미리 싣는다", async () => {
     const [first, second] = TEST_SERVICE_BACKGROUNDS;
     setBackgroundCatalogForTests(TEST_SERVICE_BACKGROUNDS);
     __loadDocumentsForTests([
       withBackgrounds(SEED_PRESENTATIONS[0], [first.id, second.id]),
     ]);
+    await storeMedia(first.mediaUrl, second.mediaUrl);
     renderPresent();
 
-    const videoSlotA = screen.getByTestId("video-slot-a");
+    const videoSlotA = await screen.findByTestId("video-slot-a");
     expect(videoSlotA).toHaveAttribute("src", first.mediaUrl);
     expect(videoSlotA).toHaveAttribute("poster", first.posterUrl);
 
@@ -376,7 +397,7 @@ describe("FullscreenPresentRoute", () => {
     expect(videoSlotB).toHaveStyle({ opacity: "0" });
   });
 
-  it("이미지 배경 곡은 정지 이미지로 그리고, 앞 곡의 영상을 남기지 않는다", () => {
+  it("이미지 배경 곡은 정지 이미지로 그리고, 앞 곡의 영상을 남기지 않는다", async () => {
     const video = TEST_SERVICE_BACKGROUNDS[0];
     const image = makeBackground(8, {
       source: "user",
@@ -391,7 +412,9 @@ describe("FullscreenPresentRoute", () => {
       null,
     ]);
     __loadDocumentsForTests([presentation]);
+    await storeMedia(video.mediaUrl, image.mediaUrl);
     renderPresent();
+    await screen.findByTestId("video-slot-a");
 
     const firstSongSlides = presentation.items[0].deck?.slides.length ?? 0;
     act(() => {
@@ -414,6 +437,92 @@ describe("FullscreenPresentRoute", () => {
 
     expect(screen.getByTestId("video-slot-a")).not.toHaveAttribute("src");
     expect(screen.queryByTestId("image-background-layer")).toBeNull();
+  });
+
+  describe("배경 영상 준비", () => {
+    const [first, second] = TEST_SERVICE_BACKGROUNDS;
+
+    beforeEach(() => {
+      setBackgroundCatalogForTests(TEST_SERVICE_BACKGROUNDS);
+      __loadDocumentsForTests([
+        withBackgrounds(SEED_PRESENTATIONS[0], [first.id, second.id]),
+      ]);
+    });
+
+    it("세트 영상을 모두 저장할 때까지 슬라이드를 띄우지 않고 넘기기도 막는다", async () => {
+      let release: () => void = () => {};
+      const gate = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      vi.mocked(globalThis.fetch).mockImplementation(async () => {
+        await gate;
+        return new Response("media", {
+          status: 200,
+          headers: { "content-length": "5" },
+        });
+      });
+      renderPresent();
+
+      expect(screen.getByTestId("projection-media-gate")).toBeInTheDocument();
+      expect(screen.queryByText("시작됐네 우리 주님의 능력이")).toBeNull();
+      act(() => dispatchKey("ArrowRight"));
+
+      await act(async () => release());
+
+      expect(
+        await screen.findByText("시작됐네 우리 주님의 능력이"),
+      ).toBeInTheDocument();
+      expect(screen.queryByTestId("projection-media-gate")).toBeNull();
+      expect(
+        await caches
+          .open(MEDIA_CACHE_NAME)
+          .then((c) => c.match(first.mediaUrl)),
+      ).toBeDefined();
+    });
+
+    it("이미 저장된 세트는 곧바로 시작한다", async () => {
+      await storeMedia(first.mediaUrl, second.mediaUrl);
+      renderPresent();
+
+      expect(
+        await screen.findByText("시작됐네 우리 주님의 능력이"),
+      ).toBeInTheDocument();
+    });
+
+    it("오프라인이라 받을 수 없으면 저장된 배경으로 시작할 수 있다", async () => {
+      await storeMedia(first.mediaUrl);
+      vi.spyOn(navigator, "onLine", "get").mockReturnValue(false);
+      renderPresent();
+
+      expect(await screen.findByRole("alert")).toHaveTextContent(
+        "인터넷에 연결되지 않아",
+      );
+      expect(screen.getByText("1/2개")).toBeInTheDocument();
+      fireEvent.click(screen.getByTestId("projection-media-start-saved"));
+
+      expect(
+        screen.getByText("시작됐네 우리 주님의 능력이"),
+      ).toBeInTheDocument();
+    });
+
+    it("연결은 되는데 받지 못해도 다시 시도하거나 저장된 배경으로 시작할 수 있다", async () => {
+      mockMediaFetch(500);
+      renderPresent();
+
+      expect(await screen.findByRole("alert")).toHaveTextContent(
+        "배경 영상을 받지 못했어요",
+      );
+      expect(
+        screen.getByTestId("projection-media-start-saved"),
+      ).toBeInTheDocument();
+
+      mockMediaFetch();
+      fireEvent.click(screen.getByTestId("projection-media-retry"));
+
+      expect(
+        await screen.findByText("시작됐네 우리 주님의 능력이"),
+      ).toBeInTheDocument();
+    });
   });
 
   it("존재하지 않는 presentationId 는 /presentations 로 리다이렉트된다", () => {

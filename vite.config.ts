@@ -10,6 +10,8 @@ import type { ViteUserConfig } from "vitest/config";
 import {
   MEDIA_CACHE_NAME,
   MEDIA_URL_PREFIX,
+  POSTER_CACHE_NAME,
+  POSTER_URL_PREFIX,
 } from "./src/shared/constants/projection";
 import { APP_NAME, APP_TAGLINE } from "./src/shared/copy/app";
 
@@ -23,6 +25,8 @@ import { APP_NAME, APP_TAGLINE } from "./src/shared/copy/app";
  *   선언형 등가 옵션(`rangeRequests`, `cacheableResponse`, `expiration`)으로 옮겼다.
  * - 배경 영상 캐시는 편집·송출 중 백그라운드 캐시(`src/client/lib/offline/mediaCache.ts`)가
  *   직접 써 넣는 캐시와 같아야 하므로, 이름과 경로를 공용 상수에서 가져온다.
+ * - `clientsClaim`: 처음 설치된 SW가 곧바로 지금 페이지를 제어해 첫 방문에도 배경
+ *   영상을 캐시본으로 재생한다. 갱신은 `prompt`라 사용자가 누를 때만 SW가 바뀐다.
  */
 const appConfig: UserConfig = {
   publicDir: "src/client/public",
@@ -73,6 +77,7 @@ const appConfig: UserConfig = {
         navigateFallback: "index.html",
         navigateFallbackDenylist: [/^\/api\//],
         cleanupOutdatedCaches: true,
+        clientsClaim: true,
         runtimeCaching: [
           {
             // 번들 웹폰트 (Pretendard, Noto Sans KR, Nanum Myeongjo).
@@ -106,7 +111,21 @@ const appConfig: UserConfig = {
             },
           },
           {
-            urlPattern: new RegExp(`${MEDIA_URL_PREFIX}.*`, "i"),
+            // 포스터는 영상보다 먼저 맞춰 따로 담는다. 라이브러리를 훑으며 쌓이는
+            // 포스터가 영상 캐시를 밀어내지 않게 하기 위해서다.
+            urlPattern: new RegExp(POSTER_URL_PREFIX, "i"),
+            handler: "CacheFirst",
+            options: {
+              cacheName: POSTER_CACHE_NAME,
+              cacheableResponse: { statuses: [200] },
+              expiration: {
+                maxEntries: 500,
+                maxAgeSeconds: 30 * 24 * 60 * 60,
+              },
+            },
+          },
+          {
+            urlPattern: new RegExp(MEDIA_URL_PREFIX, "i"),
             handler: "CacheFirst",
             options: {
               cacheName: MEDIA_CACHE_NAME,
@@ -116,10 +135,8 @@ const appConfig: UserConfig = {
               // 전체 응답(200)만 담는다. Cache API는 206을 저장하지 못해
               // (`cache.put`이 TypeError), 허용해 봐야 SW에서 에러만 난다.
               cacheableResponse: { statuses: [200] },
-              expiration: {
-                maxEntries: 30,
-                maxAgeSeconds: 30 * 24 * 60 * 60,
-              },
+              // 개수·기간 한도는 두지 않는다. 용량은 앱이 바이트 기준으로 관리한다
+              // (`ensureMediaSpace`).
             },
           },
         ],

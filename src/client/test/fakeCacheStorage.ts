@@ -12,8 +12,16 @@ class FakeCache {
     return hit ? hit.clone() : undefined;
   }
 
+  /** 실제 Cache API처럼 본문을 끝까지 읽은 뒤에 담는다 */
   async put(request: RequestInfo | URL, response: Response): Promise<void> {
-    this.entries.set(this.keyOf(request), response);
+    const body = await response.arrayBuffer();
+    this.entries.set(
+      this.keyOf(request),
+      new Response(body, {
+        status: response.status,
+        headers: response.headers,
+      }),
+    );
   }
 
   async delete(request: RequestInfo | URL): Promise<boolean> {

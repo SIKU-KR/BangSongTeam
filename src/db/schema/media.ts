@@ -3,8 +3,8 @@ import { sql } from "drizzle-orm";
 import { user } from "./auth";
 
 /**
- * 배경 갤러리. 앱은 기본 제공 배경(`source='service'`)만 만들고 내보낸다 (관리자
- * 업로드와 운영 런북 등록 모두).
+ * 배경 갤러리. 앱은 기본 제공 배경(`source='service'`)만 내보낸다. 행은
+ * `scripts/importBackgrounds.mjs`가 매니페스트(`data/backgrounds/*.json`)로 만든다.
  *
  * `source='user'`·`owner_user_id`는 없앤 사용자 업로드의 흔적이다. 행은
  * 마이그레이션 `0002`가 지웠고, 컬럼은 부모 테이블을 다시 만들지 않으려고 남겨 둔다
@@ -32,6 +32,11 @@ export const backgrounds = sqliteTable(
       .notNull()
       .default("video"),
     sizeBytes: integer("size_bytes").notNull().default(0),
+    description: text("description").notNull().default(""),
+    keywords: text("keywords", { mode: "json" })
+      .$type<string[]>()
+      .notNull()
+      .default(sql`'[]'`),
     createdAt: integer("created_at", { mode: "timestamp" }).default(
       sql`(unixepoch())`,
     ),

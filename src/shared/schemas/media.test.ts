@@ -1,9 +1,5 @@
 import { describe, it, expect } from "vitest";
-import {
-  BackgroundListResponseSchema,
-  BackgroundMediaSchema,
-  BackgroundUploadFormSchema,
-} from "./media";
+import { BackgroundListResponseSchema, BackgroundMediaSchema } from "./media";
 
 const VALID_BACKGROUND = {
   id: "a0eebc9996bb9bd380a11",
@@ -16,29 +12,25 @@ const VALID_BACKGROUND = {
   sizeBytes: 12_000_000,
   license: "CC0",
   createdAt: "2026-09-24T00:00:00.000Z",
+  description: "따뜻한 빛이 천천히 번져요.",
+  keywords: ["따뜻한", "빛"],
 };
-
-function file(bytes: number, type: string, name = "a"): File {
-  return new File([new Uint8Array(bytes)], name, { type });
-}
-
-function uploadForm(overrides: Record<string, unknown> = {}) {
-  return {
-    file: file(10, "video/mp4", "loop.mp4"),
-    poster: file(10, "image/webp", "poster.webp"),
-    title: "본당 배경",
-    license: "Pexels License — 홍길동",
-    durationSec: "12",
-    acceptedRightsNotice: "true",
-    ...overrides,
-  };
-}
 
 describe("BackgroundMediaSchema", () => {
   it("동일 출처 미디어 프록시 URL을 가진 배경을 받는다", () => {
     expect(BackgroundMediaSchema.parse(VALID_BACKGROUND)).toEqual(
       VALID_BACKGROUND,
     );
+  });
+
+  it("검색 메타데이터가 없는 예전 로컬 사본도 빈 값으로 받는다", () => {
+    const { description, keywords, ...legacy } = VALID_BACKGROUND;
+    void description;
+    void keywords;
+    expect(BackgroundMediaSchema.parse(legacy)).toMatchObject({
+      description: "",
+      keywords: [],
+    });
   });
 
   it("커스텀 도메인 절대 URL은 받지 않는다", () => {
@@ -74,67 +66,5 @@ describe("BackgroundListResponseSchema", () => {
     expect(() =>
       BackgroundListResponseSchema.parse({ backgrounds: [], usage: null }),
     ).toThrow();
-  });
-});
-
-describe("BackgroundUploadFormSchema", () => {
-  it("길이 문자열을 숫자로 풀어서 받는다", () => {
-    const parsed = BackgroundUploadFormSchema.parse(uploadForm());
-    expect(parsed.durationSec).toBe(12);
-    expect(parsed.title).toBe("본당 배경");
-  });
-
-  it("길이는 생략할 수 있다", () => {
-    const parsed = BackgroundUploadFormSchema.parse(
-      uploadForm({ durationSec: undefined }),
-    );
-    expect(parsed.durationSec).toBe(0);
-  });
-
-  it("출처·라이선스가 비어 있으면 거절한다", () => {
-    expect(
-      BackgroundUploadFormSchema.safeParse(uploadForm({ license: "  " }))
-        .success,
-    ).toBe(false);
-  });
-
-  it("라이선스 확인에 동의하지 않으면 거절한다", () => {
-    const result = BackgroundUploadFormSchema.safeParse(
-      uploadForm({ acceptedRightsNotice: "false" }),
-    );
-    expect(result.success).toBe(false);
-  });
-
-  it("허용하지 않는 형식은 거절한다", () => {
-    const result = BackgroundUploadFormSchema.safeParse(
-      uploadForm({ file: file(10, "image/gif", "a.gif"), poster: undefined }),
-    );
-    expect(result.success).toBe(false);
-  });
-
-  it("30MB를 넘는 파일은 거절한다", () => {
-    const result = BackgroundUploadFormSchema.safeParse(
-      uploadForm({ file: file(30 * 1024 * 1024 + 1, "video/mp4") }),
-    );
-    expect(result.success).toBe(false);
-  });
-
-  it("영상은 포스터가 없으면 거절하고 이미지는 포스터 없이 받는다", () => {
-    expect(
-      BackgroundUploadFormSchema.safeParse(uploadForm({ poster: undefined }))
-        .success,
-    ).toBe(false);
-    expect(
-      BackgroundUploadFormSchema.safeParse(
-        uploadForm({ file: file(10, "image/png", "a.png"), poster: undefined }),
-      ).success,
-    ).toBe(true);
-  });
-
-  it("빈 제목은 거절한다", () => {
-    expect(
-      BackgroundUploadFormSchema.safeParse(uploadForm({ title: "   " }))
-        .success,
-    ).toBe(false);
   });
 });

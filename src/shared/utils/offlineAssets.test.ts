@@ -29,6 +29,8 @@ function makeBackground(
     sizeBytes: 1000,
     license: "CC0",
     createdAt: NOW,
+    description: "",
+    keywords: [],
     ...overrides,
   };
 }

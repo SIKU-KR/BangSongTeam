@@ -1,9 +1,12 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { MEDIA_CACHE_NAME } from "#shared";
+import { MEDIA_CACHE_NAME, mediaCacheNameFor } from "#shared";
 import { resetFakeCacheStorage } from "../../test/fakeCacheStorage";
 import {
   cacheMediaFirst,
   cacheMediaUrls,
+  ensureMediaSpace,
+  findCachedMediaUrls,
+  getMediaProgress,
   scheduleMediaCaching,
   shouldWaitForMediaCache,
   isCacheStorageAvailable,
@@ -18,7 +21,7 @@ const OTHER = "/api/media/loops/ocean_wave.mp4";
 function okResponse(size = 16): Response {
   return new Response(new ArrayBuffer(size), {
     status: 200,
-    headers: { "content-type": "video/mp4" },
+    headers: { "content-type": "video/mp4", "content-length": String(size) },
   });
 }
 
@@ -43,14 +46,14 @@ function mockServiceWorkerFetch() {
   return mockFetch(async (url) => {
     const response = okResponse();
     const copy = response.clone();
-    const cache = await caches.open(MEDIA_CACHE_NAME);
+    const cache = await caches.open(mediaCacheNameFor(url));
     setTimeout(() => void cache.put(url, copy), 0);
     return response;
   });
 }
 
 async function isCached(url: string): Promise<boolean> {
-  const cache = await caches.open(MEDIA_CACHE_NAME);
+  const cache = await caches.open(mediaCacheNameFor(url));
   return (await cache.match(url)) !== undefined;
 }
 
@@ -132,9 +135,29 @@ describe("cacheMediaUrls", () => {
       new DOMException("quota", "QuotaExceededError"),
     );
 
-    const result = await cacheMediaUrls([VIDEO, POSTER]);
+    const result = await cacheMediaUrls([VIDEO, OTHER]);
 
-    expect(result).toEqual({ cachedUrls: [], failedUrls: [VIDEO, POSTER] });
+    expect(result).toEqual({ cachedUrls: [], failedUrls: [VIDEO, OTHER] });
+  });
+});
+
+describe("cacheMediaUrls 진행률과 캐시 분리", () => {
+  it("받은 바이트 수를 응답 길이와 함께 알린다", async () => {
+    mockFetch(async () => okResponse(64));
+
+    await cacheMediaUrls([VIDEO]);
+
+    expect(getMediaProgress(VIDEO)).toEqual({ received: 64, total: 64 });
+  });
+
+  it("포스터는 영상 캐시가 아닌 포스터 캐시에 담는다", async () => {
+    mockFetch();
+
+    await cacheMediaUrls([POSTER]);
+
+    const videos = await caches.open(MEDIA_CACHE_NAME);
+    expect(await videos.match(POSTER)).toBeUndefined();
+    expect(await isCached(POSTER)).toBe(true);
   });
 });
 
@@ -337,6 +360,62 @@ describe("cacheMediaFirst", () => {
     mockFetch(async () => new Response(null, { status: 404 }));
 
     expect(await cacheMediaFirst(VIDEO)).toBe(false);
+  });
+});
+
+describe("findCachedMediaUrls", () => {
+  it("이미 캐시에 담긴 URL만 돌려준다", async () => {
+    mockFetch();
+    await cacheMediaUrls([VIDEO]);
+    __resetMediaCachingForTests();
+
+    expect(await findCachedMediaUrls([VIDEO, OTHER, POSTER])).toEqual([VIDEO]);
+  });
+});
+
+describe("ensureMediaSpace", () => {
+  function mockEstimate(quota: number, usage: number): void {
+    Object.defineProperty(navigator, "storage", {
+      value: { estimate: vi.fn(async () => ({ quota, usage })) },
+      configurable: true,
+    });
+  }
+
+  afterEach(() => {
+    // @ts-expect-error 테스트에서 주입한 저장소 관리자를 되돌린다
+    delete navigator.storage;
+  });
+
+  it("자리가 있으면 아무것도 지우지 않는다", async () => {
+    mockFetch(async () => okResponse(100));
+    await cacheMediaUrls([OTHER]);
+    mockEstimate(1000, 100);
+
+    expect(await ensureMediaSpace(500, [VIDEO])).toBe(true);
+    expect(await isCached(OTHER)).toBe(true);
+  });
+
+  it("모자라면 지금 세트 밖의 영상부터 지우고 세트 영상은 남긴다", async () => {
+    mockFetch(async () => okResponse(400));
+    await cacheMediaUrls([OTHER, VIDEO]);
+    mockEstimate(1000, 800);
+
+    expect(await ensureMediaSpace(500, [VIDEO])).toBe(true);
+    expect(await isCached(OTHER)).toBe(false);
+    expect(await isCached(VIDEO)).toBe(true);
+  });
+
+  it("세트 밖 영상을 모두 지워도 모자라면 false다", async () => {
+    mockFetch(async () => okResponse(100));
+    await cacheMediaUrls([VIDEO]);
+    mockEstimate(1000, 900);
+
+    expect(await ensureMediaSpace(5000, [VIDEO])).toBe(false);
+    expect(await isCached(VIDEO)).toBe(true);
+  });
+
+  it("브라우저가 용량을 알려 주지 않으면 지우지 않고 통과시킨다", async () => {
+    expect(await ensureMediaSpace(5000, [])).toBe(true);
   });
 });
 
