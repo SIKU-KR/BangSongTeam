@@ -27,10 +27,6 @@ export const API_ERRORS = {
       "서버에 없는 곡이 있어 프레젠테이션 전체를 다시 보내야 해요",
   },
   background: {
-    invalidUpload: "올린 파일 형식이 올바르지 않아요",
-    unreadableFile:
-      "파일을 읽을 수 없어요. MP4 영상이나 JPEG·PNG·WebP 이미지인지 확인해 주세요",
-    unreadablePoster: "포스터 이미지를 읽을 수 없어요",
     notFound: "배경을 찾을 수 없어요",
   },
   report: {

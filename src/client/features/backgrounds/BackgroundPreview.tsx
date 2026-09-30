@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useState } from "react";
 import { FilmIcon, ImageIcon } from "lucide-react";
 import { cn } from "cn";
 import type { BackgroundMedia } from "#shared";
@@ -6,6 +6,8 @@ import { BACKGROUND_COPY } from "#copy/backgrounds";
 
 export interface BackgroundPreviewProps {
   background: BackgroundMedia;
+  /** 키보드 포커스처럼 카드 바깥에서 정한 재생 여부. 마우스를 올려도 재생한다 */
+  active?: boolean;
   className?: string;
 }
 
@@ -13,54 +15,32 @@ function prefersReducedMotion(): boolean {
   return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 }
 
-/** 요소가 화면(스크롤 영역)에 보이는 동안 true. 관찰할 수 없는 환경에서는 늘 false */
-function useIsVisible(
-  ref: React.RefObject<HTMLElement | null>,
-  enabled: boolean,
-): boolean {
-  const [visible, setVisible] = useState(false);
-
-  useEffect(() => {
-    const elem = ref.current;
-    if (!enabled || !elem || typeof IntersectionObserver === "undefined") {
-      return;
-    }
-    const observer = new IntersectionObserver(([entry]) =>
-      setVisible(entry?.isIntersecting ?? false),
-    );
-    observer.observe(elem);
-    return () => {
-      observer.disconnect();
-      setVisible(false);
-    };
-  }, [ref, enabled]);
-
-  return visible;
-}
-
 /**
  * 배경 카드의 16:9 미리보기 영역.
  *
- * 영상은 카드가 화면에 보이는 동안만 자동 재생하고, 벗어나면 `<video>`를 내려
- * 내려받기도 멈춘다. 목록 전체가 한꺼번에 영상을 받지 않게 하기 위해서다.
- * 동작 줄이기 설정을 켠 사용자에게는 포스터만 보인다.
+ * 평소에는 포스터만 보이고, 마우스를 올리거나 키보드로 고른(`active`) 카드 하나만
+ * `<video>`를 붙여 재생한다. 배경 영상은 원본(최대 수백 MB, 1080p)이라 보이는 카드마다
+ * 재생하면 목록을 여는 것만으로 대역폭을 다 쓴다. 벗어나면 `<video>`를 내려 내려받기도
+ * 멈춘다. 터치 입력과 동작 줄이기 설정을 켠 사용자에게는 포스터만 보인다.
  */
 export function BackgroundPreview({
   background,
+  active = false,
   className,
 }: BackgroundPreviewProps): React.JSX.Element {
-  const containerRef = useRef<HTMLDivElement>(null);
   const [failedUrl, setFailedUrl] = useState<string | null>(null);
+  const [hovered, setHovered] = useState(false);
   const failed = failedUrl === background.posterUrl;
   const isVideo = background.kind === "video";
-  const visible = useIsVisible(
-    containerRef,
-    isVideo && !failed && !prefersReducedMotion(),
-  );
+  const playing =
+    isVideo && !failed && (hovered || active) && !prefersReducedMotion();
 
   return (
     <div
-      ref={containerRef}
+      onPointerEnter={(event) => {
+        if (event.pointerType !== "touch") setHovered(true);
+      }}
+      onPointerLeave={() => setHovered(false)}
       className={cn(
         "relative aspect-video w-full overflow-hidden bg-black select-none",
         className,
@@ -84,8 +64,9 @@ export function BackgroundPreview({
           className="absolute inset-0 size-full object-cover"
         />
       )}
-      {visible && (
+      {playing && (
         <video
+          data-testid={`bg-preview-video-${background.id}`}
           src={background.mediaUrl}
           autoPlay
           muted

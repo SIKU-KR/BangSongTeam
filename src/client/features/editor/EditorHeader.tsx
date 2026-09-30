@@ -43,6 +43,7 @@ import { ThemeMenuButton } from "../../components/common/ThemeMenuButton";
 import type { PresentationAccess } from "#shared";
 import { EDITOR_COPY, SHORTCUT_GUIDE } from "#copy/editor";
 import { COMMON_COPY } from "#copy/common";
+import { BACKGROUND_COPY } from "#copy/backgrounds";
 
 export interface EditorHeaderProps {
   title: string;
@@ -65,6 +66,8 @@ export interface EditorHeaderProps {
   readOnly?: boolean;
   /** `null`이면 돌아갈 드라이브가 없는 것이다 (로그인하지 않고 링크로 봄) */
   backPath?: string | null;
+  /** 세트 배경 영상 중 이 기기에 저장된 수. 모두 저장됐으면 `null`이다 */
+  mediaProgress?: { readyCount: number; totalCount: number } | null;
   className?: string;
 }
 
@@ -169,6 +172,7 @@ export function EditorHeader({
   sharedAccess,
   readOnly = false,
   backPath = "/presentations",
+  mediaProgress = null,
   className,
 }: EditorHeaderProps): React.JSX.Element {
   const navigate = useNavigate();
@@ -396,6 +400,15 @@ export function EditorHeader({
             <Share2Icon />
             {COMMON_COPY.share}
           </Button>
+        )}
+
+        {mediaProgress && (
+          <Badge variant="secondary" data-testid="header-media-progress">
+            {BACKGROUND_COPY.prepare.editorStatus(
+              mediaProgress.readyCount,
+              mediaProgress.totalCount,
+            )}
+          </Badge>
         )}
 
         <Button

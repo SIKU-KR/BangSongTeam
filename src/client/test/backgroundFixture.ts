@@ -17,6 +17,8 @@ export function makeBackground(
     sizeBytes: 1_000_000,
     license: "Service Original (CC0)",
     createdAt: "2026-09-20T00:00:00.000Z",
+    description: "",
+    keywords: [],
     ...overrides,
   };
 }

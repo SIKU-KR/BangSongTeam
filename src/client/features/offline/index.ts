@@ -8,3 +8,10 @@ export {
   usePresentationFontsReady,
   FONT_READY_TIMEOUT_MS,
 } from "./usePresentationFontsReady";
+export {
+  useProjectionMediaReady,
+  type ProjectionMediaFailure,
+  type ProjectionMediaReadiness,
+  type ProjectionMediaStatus,
+} from "./useProjectionMediaReady";
+export { ProjectionMediaGate } from "./ProjectionMediaGate";

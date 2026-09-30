@@ -19,12 +19,12 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "#components/ui/empty";
-import { hangulIncludes, type BackgroundMedia } from "#shared";
+import type { BackgroundMedia } from "#shared";
 import {
   BackgroundKindFilter,
   BackgroundPreview,
-  BackgroundUploadDialog,
   filterBackgroundsByKind,
+  matchesBackgroundQuery,
   useBackgroundCatalog,
   type BackgroundKindFilterValue,
 } from "../backgrounds";
@@ -37,10 +37,6 @@ import { COMMON_COPY } from "#copy/common";
 
 export interface BackgroundLibraryViewProps {
   searchQuery?: string;
-}
-
-function matchesQuery(bg: BackgroundMedia, query: string): boolean {
-  return !query || hangulIncludes(bg.title, query);
 }
 
 function BackgroundCard({
@@ -65,32 +61,28 @@ function SectionHeader({
   title,
   count,
   description,
-  children,
 }: {
   title: string;
   count: number;
   description: string;
-  children?: React.ReactNode;
 }): React.JSX.Element {
   return (
-    <div className="flex flex-col justify-between gap-3 border-b pb-3 sm:flex-row sm:items-end">
-      <div>
-        <div className="flex items-center gap-2.5">
-          <h2 className="text-xl font-bold tracking-tight">{title}</h2>
-          <Badge variant="secondary" className="font-mono">
-            {BACKGROUND_COPY.library.count(count)}
-          </Badge>
-        </div>
-        <p className="mt-1 text-xs text-muted-foreground">{description}</p>
+    <div className="border-b pb-3">
+      <div className="flex items-center gap-2.5">
+        <h2 className="text-xl font-bold tracking-tight">{title}</h2>
+        <Badge variant="secondary" className="font-mono">
+          {BACKGROUND_COPY.library.count(count)}
+        </Badge>
       </div>
-      {children}
+      <p className="mt-1 text-xs text-muted-foreground">{description}</p>
     </div>
   );
 }
 
 /**
  * 배경 갤러리: 모든 배경을 한 격자에 보여 주고 종류(영상·이미지)와 상단 검색으로 거른다.
- * 관리자(서버가 `canManage`로 알림)에게만 올리기·삭제가 보인다.
+ * 관리자(서버가 `canManage`로 알림)에게만 삭제가 보인다. 배경 등록은
+ * `scripts/importBackgrounds.mjs`로만 한다 (큰 영상은 Worker 요청 본문 한도를 넘는다).
  *
  * 곡에 배경을 입히는 것은 편집기의 배경 선택 창에서 한다. 이 화면에는 '지금 편집 중인
  * 곡'이라는 맥락이 없기 때문이다.
@@ -102,7 +94,6 @@ export function BackgroundLibraryView({
   const isOnline = useIsOnline();
   const deleteBackground = useDeleteBackground();
   const [kind, setKind] = useState<BackgroundKindFilterValue>("all");
-  const [isUploadOpen, setIsUploadOpen] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<BackgroundMedia | null>(
     null,
   );
@@ -114,7 +105,7 @@ export function BackgroundLibraryView({
   const query = searchQuery.trim();
   const all = catalog.backgrounds;
   const visible = filterBackgroundsByKind(all, kind).filter((bg) =>
-    matchesQuery(bg, query),
+    matchesBackgroundQuery(bg, query),
   );
 
   const isOffline = !isOnline || catalog.status === "offline";
@@ -144,17 +135,7 @@ export function BackgroundLibraryView({
           title={BACKGROUND_COPY.library.title}
           count={all.length}
           description={BACKGROUND_COPY.library.description}
-        >
-          {catalog.canManage && (
-            <Button
-              data-testid="open-bg-upload-btn"
-              disabled={!canManage}
-              onClick={() => setIsUploadOpen(true)}
-            >
-              {BACKGROUND_COPY.upload}
-            </Button>
-          )}
-        </SectionHeader>
+        />
 
         {all.length > 0 && (
           <BackgroundKindFilter value={kind} onChange={setKind} />
@@ -207,10 +188,6 @@ export function BackgroundLibraryView({
         {BACKGROUND_COPY.library.applyHint}
       </p>
 
-      <BackgroundUploadDialog
-        isOpen={isUploadOpen}
-        onClose={() => setIsUploadOpen(false)}
-      />
       <AlertDialog
         open={pendingDelete !== null}
         onOpenChange={(open) => {

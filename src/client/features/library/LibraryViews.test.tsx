@@ -17,22 +17,12 @@ import { resetBackgroundCatalogForTests } from "../backgrounds";
 import { refreshBackgroundCatalog } from "../../lib/sync/backgroundSync";
 import { BACKGROUND_COPY } from "#copy/backgrounds";
 
-const { probeBackgroundFile } = vi.hoisted(() => ({
-  probeBackgroundFile: vi.fn(),
-}));
-
-vi.mock("../backgrounds/probeBackgroundFile", async (importOriginal) => ({
-  ...(await importOriginal<
-    typeof import("../backgrounds/probeBackgroundFile")
-  >()),
-  probeBackgroundFile,
-}));
-
-const MB = 1024 * 1024;
 const LAKE = makeBackground(1, { title: "고요한 호수 물결" });
-const FIRE = makeBackground(2, { title: "타오르는 불꽃" });
+const FIRE = makeBackground(2, {
+  title: "타오르는 불꽃",
+  keywords: ["빨간색", "불", "선포"],
+});
 const STILL = makeBackground(3, { title: "본당 성탄 배경", kind: "image" });
-const UPLOADED = makeBackground(4, { title: "새벽기도 배경" });
 
 function listResponse(backgrounds: BackgroundMedia[], canManage = false) {
   return { body: { backgrounds, canManage } };
@@ -53,16 +43,13 @@ describe("BackgroundLibraryView", () => {
 
   beforeEach(() => {
     resetBackgroundCatalogForTests();
-    probeBackgroundFile.mockReset();
-    URL.createObjectURL = vi.fn(() => "blob:preview");
-    URL.revokeObjectURL = vi.fn();
   });
 
   afterEach(() => {
     api?.restore();
   });
 
-  it("모든 배경을 한 갤러리로 보여 주고 일반 사용자에게는 올리기·삭제가 없다", async () => {
+  it("모든 배경을 한 갤러리로 보여 주고 일반 사용자에게는 삭제가 없다", async () => {
     api = installFakeApi({
       "GET /api/backgrounds": () => listResponse([LAKE, FIRE, STILL]),
     });
@@ -73,7 +60,6 @@ describe("BackgroundLibraryView", () => {
     expect(screen.getByText("타오르는 불꽃")).toBeInTheDocument();
     expect(screen.getByText(BACKGROUND_COPY.library.title)).toBeInTheDocument();
     expect(screen.queryByText("내가 올린 배경")).not.toBeInTheDocument();
-    expect(screen.queryByTestId("open-bg-upload-btn")).not.toBeInTheDocument();
     expect(
       screen.queryByTestId(`delete-bg-${LAKE.id}`),
     ).not.toBeInTheDocument();
@@ -129,6 +115,16 @@ describe("BackgroundLibraryView", () => {
     expect(screen.queryByText("본당 성탄 배경")).not.toBeInTheDocument();
   });
 
+  it("셸 검색어는 검색 키워드로도 찾는다", async () => {
+    api = installFakeApi({
+      "GET /api/backgrounds": () => listResponse([LAKE, FIRE, STILL]),
+    });
+
+    await renderView("선포");
+    expect(await screen.findByText("타오르는 불꽃")).toBeInTheDocument();
+    expect(screen.queryByText("고요한 호수 물결")).not.toBeInTheDocument();
+  });
+
   it("관리자는 배경을 확인을 거쳐 지운다", async () => {
     api = installFakeApi({
       "GET /api/backgrounds": () => listResponse([LAKE, STILL], true),
@@ -157,104 +153,22 @@ describe("BackgroundLibraryView", () => {
     ).toBe(true);
   });
 
-  it("관리자는 파일을 확인하고 출처·라이선스를 적은 뒤에만 올린다", async () => {
-    api = installFakeApi({
-      "GET /api/backgrounds": () => listResponse([LAKE], true),
-      "POST /api/backgrounds/uploads": () => ({
-        status: 201,
-        body: { background: UPLOADED },
-      }),
-    });
-    probeBackgroundFile.mockResolvedValue({
-      kind: "video",
-      width: 1280,
-      height: 720,
-      durationSec: 12,
-      poster: new File([new Uint8Array(4)], "poster.webp", {
-        type: "image/webp",
-      }),
-      isLowResolution: true,
-    });
-    await renderView();
-    await screen.findByText("고요한 호수 물결");
-
-    fireEvent.click(screen.getByTestId("open-bg-upload-btn"));
-    fireEvent.change(screen.getByTestId("bg-upload-file-input"), {
-      target: {
-        files: [
-          new File([new Uint8Array(16)], "새벽기도_배경.mp4", {
-            type: "video/mp4",
-          }),
-        ],
-      },
-    });
-
-    expect(await screen.findByTestId("bg-upload-low-res")).toBeInTheDocument();
-    expect(
-      screen.getByLabelText(BACKGROUND_COPY.uploadDialog.titleLabel),
-    ).toHaveValue("새벽기도 배경");
-
-    const submit = screen.getByTestId("bg-upload-submit");
-    expect(submit).toBeDisabled();
-    fireEvent.click(screen.getByTestId("bg-upload-rights-checkbox"));
-    expect(submit).toBeDisabled();
-    fireEvent.change(screen.getByTestId("bg-upload-license-input"), {
-      target: { value: "자체 제작 (CC0)" },
-    });
-    expect(submit).toBeEnabled();
-    fireEvent.click(submit);
-
-    await waitFor(() =>
-      expect(screen.queryByTestId("bg-upload-dialog")).not.toBeInTheDocument(),
-    );
-    expect(screen.getByText("새벽기도 배경")).toBeInTheDocument();
-    expect(
-      api.calls.filter(
-        (call) =>
-          call.method === "POST" && call.path === "/api/backgrounds/uploads",
-      ),
-    ).toHaveLength(1);
-  });
-
-  it("30MB를 넘는 파일은 열어 보지도 않고 이유를 알려 준다", async () => {
-    api = installFakeApi({
-      "GET /api/backgrounds": () => listResponse([], true),
-    });
-    await renderView();
-    await waitFor(() =>
-      expect(screen.getByTestId("open-bg-upload-btn")).toBeEnabled(),
-    );
-
-    fireEvent.click(screen.getByTestId("open-bg-upload-btn"));
-    const big = new File([new Uint8Array(1)], "big.mp4", {
-      type: "video/mp4",
-    });
-    Object.defineProperty(big, "size", { value: 31 * MB });
-    fireEvent.change(screen.getByTestId("bg-upload-file-input"), {
-      target: { files: [big] },
-    });
-
-    expect(await screen.findByRole("alert")).toHaveTextContent("30MB까지");
-    expect(probeBackgroundFile).not.toHaveBeenCalled();
-  });
-
-  it("서버에 닿지 않으면 저장된 목록을 보여 주고 올리기 버튼을 내놓지 않는다", async () => {
+  it("서버에 닿지 않으면 저장된 목록을 보여 준다", async () => {
     api = installFakeApi({}, { offline: true });
     await renderView();
 
     expect(
       await screen.findByText(/오프라인이라 저장해 둔 배경만 보여요/),
     ).toBeInTheDocument();
-    expect(screen.queryByTestId("open-bg-upload-btn")).not.toBeInTheDocument();
   });
 
-  it("관리자여도 오프라인이 되면 올리기·지우기를 막는다", async () => {
+  it("관리자여도 오프라인이 되면 지우기를 막는다", async () => {
     api = installFakeApi({
       "GET /api/backgrounds": () => listResponse([LAKE], true),
     });
     await renderView();
     await waitFor(() =>
-      expect(screen.getByTestId("open-bg-upload-btn")).toBeEnabled(),
+      expect(screen.getByTestId(`delete-bg-${LAKE.id}`)).toBeEnabled(),
     );
 
     const onLine = vi.spyOn(navigator, "onLine", "get").mockReturnValue(false);
@@ -262,7 +176,6 @@ describe("BackgroundLibraryView", () => {
       await act(async () => {
         window.dispatchEvent(new Event("offline"));
       });
-      expect(screen.getByTestId("open-bg-upload-btn")).toBeDisabled();
       expect(screen.getByTestId(`delete-bg-${LAKE.id}`)).toBeDisabled();
     } finally {
       onLine.mockRestore();

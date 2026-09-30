@@ -36,14 +36,6 @@ export async function replaceAllBackgrounds(
   await tx.done;
 }
 
-export async function saveBackground(
-  background: BackgroundMedia,
-  userId: string | null,
-): Promise<void> {
-  const db = await getOfflineDB();
-  await db.put("backgrounds", { ...background, cachedFor: userId });
-}
-
 export async function deleteBackgroundRecord(id: string): Promise<void> {
   const db = await getOfflineDB();
   await db.delete("backgrounds", id);
