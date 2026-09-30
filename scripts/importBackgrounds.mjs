@@ -5,7 +5,7 @@
  * 매니페스트의 `id`를 기준으로 D1의 `backgrounds`와 비교해:
  *   - 새 id: ffprobe로 H.264·길이를 확인하고 포스터(960px WebP)를 만든 뒤, R2에 영상·포스터를
  *     먼저 올리고 D1 행을 넣는다. 한 건씩 넣으므로 중간에 멈춰도 다시 돌리면 이어서 한다.
- *   - 있는 id: 파일은 그대로 두고 제목·설명·검색어·라이선스만 고친다.
+ *   - 있는 id: 파일은 그대로 두고 제목·설명·검색어만 고친다.
  *   - 매니페스트에 없는 행: 새 등록이 모두 성공했을 때만 D1 행을 지우고 R2 객체를 지운다.
  *     그 배경을 쓰던 곡은 `ON DELETE SET NULL`로 배경 없음이 된다.
  *
@@ -143,7 +143,6 @@ function deleteObject(target, key) {
 
 function loadManifest(manifestPath, dir) {
   const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf-8"));
-  if (!manifest.license) throw new Error("매니페스트에 license가 없습니다");
   const ids = new Set();
   for (const item of manifest.items) {
     if (!ID_PATTERN.test(item.id)) throw new Error(`잘못된 id: ${item.file}`);
@@ -202,17 +201,16 @@ function makePoster(file, durationSec, outFile) {
   return size;
 }
 
-function metadataParams(item, license) {
+function metadataParams(item) {
   return {
     id: item.id,
     title: item.title.trim(),
-    license,
     description: item.description ?? "",
     keywords: JSON.stringify(item.keywords),
   };
 }
 
-function registerBackground(target, item, dir, license, tmpDir) {
+function registerBackground(target, item, dir, tmpDir) {
   const videoFile = path.join(dir, item.file);
   const durationSec = probeVideo(videoFile);
   const posterFile = path.join(tmpDir, `${item.id}.webp`);
@@ -226,7 +224,7 @@ function registerBackground(target, item, dir, license, tmpDir) {
 
   execute(target, [
     fillSql(BACKGROUND_SQL.REGISTER_SERVICE_BACKGROUND, {
-      ...metadataParams(item, license),
+      ...metadataParams(item),
       r2_key: mediaKey,
       poster_key: posterKey,
       duration_sec: durationSec,
@@ -273,7 +271,7 @@ function main() {
   toRegister.forEach((item, index) => {
     process.stdout.write(`[${index + 1}/${toRegister.length}] ${item.file} … `);
     try {
-      registerBackground(target, item, dir, manifest.license, tmpDir);
+      registerBackground(target, item, dir, tmpDir);
       console.log("완료");
     } catch (error) {
       failed.push(item.file);
@@ -285,10 +283,7 @@ function main() {
   execute(
     target,
     toUpdate.map((item) =>
-      fillSql(
-        BACKGROUND_SQL.UPDATE_BACKGROUND_METADATA,
-        metadataParams(item, manifest.license),
-      ),
+      fillSql(BACKGROUND_SQL.UPDATE_BACKGROUND_METADATA, metadataParams(item)),
     ),
   );
   console.log(`메타데이터 ${toUpdate.length}개를 갱신했습니다.`);

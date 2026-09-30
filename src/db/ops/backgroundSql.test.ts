@@ -26,7 +26,6 @@ describe("운영 SQL (배경)", () => {
       r2_key: `loops/${SERVICE}.mp4`,
       poster_key: `posters/${SERVICE}.webp`,
       duration_sec: 20,
-      license: "Service Original (CC0)",
       size_bytes: 18_000_000,
       description: "따뜻한 빛이 천천히 번져요.",
       keywords: JSON.stringify(["빛", "따뜻한"]),
@@ -77,7 +76,6 @@ describe("운영 SQL (배경)", () => {
     run("UPDATE_BACKGROUND_METADATA", {
       id: SERVICE,
       title: "노을빛 흐름",
-      license: "CC0",
       description: "노을빛이 번져요.",
       keywords: JSON.stringify(["노을"]),
     });
@@ -85,7 +83,6 @@ describe("운영 SQL (배경)", () => {
     const [listed] = await listBackgrounds(testDb.db);
     expect(listed).toMatchObject({
       title: "노을빛 흐름",
-      license: "CC0",
       keywords: ["노을"],
       sizeBytes: 18_000_000,
       mediaUrl: `/api/media/loops/${SERVICE}.mp4`,

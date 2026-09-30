@@ -7,9 +7,9 @@
  * 지우고 R2 객체를 나중에 지운다.
  */
 export const BACKGROUND_SQL = {
-  REGISTER_SERVICE_BACKGROUND: `INSERT INTO backgrounds (id, title, r2_key, poster_key, duration_sec, license, source, kind, size_bytes, description, keywords) VALUES (:id, :title, :r2_key, :poster_key, :duration_sec, :license, 'service', 'video', :size_bytes, :description, :keywords);`,
+  REGISTER_SERVICE_BACKGROUND: `INSERT INTO backgrounds (id, title, r2_key, poster_key, duration_sec, license, source, kind, size_bytes, description, keywords) VALUES (:id, :title, :r2_key, :poster_key, :duration_sec, '', 'service', 'video', :size_bytes, :description, :keywords);`,
 
-  UPDATE_BACKGROUND_METADATA: `UPDATE backgrounds SET title = :title, license = :license, description = :description, keywords = :keywords WHERE id = :id;`,
+  UPDATE_BACKGROUND_METADATA: `UPDATE backgrounds SET title = :title, description = :description, keywords = :keywords WHERE id = :id;`,
 
   LIST_BACKGROUNDS: `SELECT id, title, r2_key, poster_key FROM backgrounds ORDER BY title;`,
 
