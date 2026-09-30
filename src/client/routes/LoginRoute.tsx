@@ -19,7 +19,7 @@ import {
 } from "../lib/auth";
 import { SocialLoginButton } from "../features/auth/SocialLoginButton";
 import { AUTH_COPY, LEGAL_COPY } from "#copy/auth";
-import { APP_NAME } from "#shared";
+import { APP_NAME, DEV_USERS } from "#shared";
 
 const LEGAL_LINKS = [
   { href: "/terms", label: LEGAL_COPY.terms },
@@ -116,6 +116,25 @@ export function LoginRoute({
                 </Alert>
               )}
             </>
+          )}
+
+          {import.meta.env.DEV && (
+            <div data-testid="dev-sign-in" className="flex flex-col gap-2">
+              <p className="text-center text-xs text-muted-foreground">
+                {AUTH_COPY.dev.title}
+              </p>
+              {DEV_USERS.map((dev) => (
+                <Button
+                  key={dev.id}
+                  variant="outline"
+                  nativeButton={false}
+                  render={<a href={`/api/auth/dev/sign-in?userId=${dev.id}`} />}
+                >
+                  {AUTH_COPY.dev.signInAs(dev.name)}
+                  {!dev.termsAgreed && ` · ${AUTH_COPY.dev.consentPending}`}
+                </Button>
+              ))}
+            </div>
           )}
 
           {error && (

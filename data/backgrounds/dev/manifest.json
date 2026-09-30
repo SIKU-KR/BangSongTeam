@@ -1,0 +1,52 @@
+{
+  "items": [
+    {
+      "file": "dawn-sky.webp",
+      "title": "새벽 하늘",
+      "description": "짙은 남색에서 주황빛으로 번지는 새벽 하늘 같은 그러데이션이에요.",
+      "keywords": ["새벽", "하늘", "주황", "남색", "그러데이션", "소망", "아침"]
+    },
+    {
+      "file": "deep-sea.webp",
+      "title": "깊은 바다",
+      "description": "가운데가 은은하게 밝은 짙은 파란색 배경이에요.",
+      "keywords": ["파란색", "바다", "깊은", "차분한", "묵상"]
+    },
+    {
+      "file": "violet-glow.webp",
+      "title": "보랏빛 빛무리",
+      "description": "오른쪽 위에서 보랏빛이 부드럽게 퍼져요.",
+      "keywords": ["보라색", "빛", "은혜", "경배", "어두운"]
+    },
+    {
+      "file": "warm-light.webp",
+      "title": "따뜻한 빛",
+      "description": "위쪽에서 금빛이 퍼지는 따뜻한 배경이에요.",
+      "keywords": ["금색", "주황", "따뜻한", "빛", "감사", "찬양"]
+    },
+    {
+      "file": "forest-green.webp",
+      "title": "숲의 초록",
+      "description": "왼쪽 위가 은은하게 밝은 짙은 초록색 배경이에요.",
+      "keywords": ["초록색", "숲", "자연", "평안", "어두운"]
+    },
+    {
+      "file": "soft-waves.webp",
+      "title": "잔잔한 물결",
+      "description": "푸른 물결무늬가 흐릿하게 번져 있어요.",
+      "keywords": ["파란색", "물결", "파도", "잔잔한", "성령"]
+    },
+    {
+      "file": "bokeh-lights.webp",
+      "title": "흐린 불빛",
+      "description": "어두운 바탕에 색색의 불빛이 흐릿하게 떠 있어요.",
+      "keywords": ["불빛", "보케", "성탄", "밤", "어두운"]
+    },
+    {
+      "file": "charcoal.webp",
+      "title": "차분한 회색",
+      "description": "가운데가 조금 밝은 짙은 회색 배경이에요. 어떤 곡에도 무난해요.",
+      "keywords": ["회색", "검정", "무난한", "차분한", "기본"]
+    }
+  ]
+}

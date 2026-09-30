@@ -2,6 +2,7 @@ import { GridAnchorPreset, TextBoxPosition } from "../schemas/style";
 import { NOONNU_SUPPORTED_FONT_NAMES } from "./noonnuFonts";
 
 export * from "./noonnuFonts";
+export * from "./devUsers";
 
 /**
  * 기본 프리셋 한글 웹폰트 목록

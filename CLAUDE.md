@@ -7,9 +7,8 @@ A web slide tool for church worship teams: song decks and sets, fullscreen proje
 ## Workflow
 
 ```bash
-cp config/dev.vars.example .dev.vars   # fill in an OAuth client (Google accepts a localhost redirect URI) to log in locally
-pnpm db:migrate:local
-pnpm dev
+pnpm db:seed:local   # creates .dev.vars if missing, migrates the local D1, reseeds dev accounts, the public library and presentations
+pnpm dev             # sign in with a dev account on the login screen; fill in an OAuth client in .dev.vars only to test social login
 
 pnpm typecheck && pnpm lint && pnpm test   # must pass before pushing (the CI gate)
 ```

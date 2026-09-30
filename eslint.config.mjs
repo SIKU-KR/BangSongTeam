@@ -148,11 +148,13 @@ const copyPlugin = {
   },
 };
 
-/** 문구가 아닌 데이터(글꼴 이름, 샘플 가사, 분위기 태그 값)와 조문 본문 */
+/** 문구가 아닌 데이터(글꼴 이름, 샘플 가사, 분위기 태그 값, 개발용 시드)와 조문 본문 */
 const COPY_EXEMPT_FILES = [
   "src/shared/constants/noonnuFontCatalog.ts",
   "src/shared/constants/noonnuFonts.ts",
   "src/shared/constants/backgrounds.ts",
+  "src/shared/constants/devUsers.ts",
+  "src/db/seed/devSeed.ts",
   "src/client/features/presentation/mockPresentation.ts",
   "src/client/features/presentation/mockPresentations.ts",
   "src/client/routes/TermsRoute.tsx",
