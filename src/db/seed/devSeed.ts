@@ -1,4 +1,4 @@
-import { asc, eq, inArray, sql } from "drizzle-orm";
+import { eq, inArray, sql } from "drizzle-orm";
 import {
   DEFAULT_DECK_STYLE,
   DEV_USERS,
@@ -28,6 +28,23 @@ export interface SeedSong {
   title: string;
   artist?: string | null;
   lyrics: string;
+}
+
+/**
+ * `data/backgrounds/dev/`의 이미지 배경 한 장. R2 객체(`key`)는 호출자가 먼저 올린다.
+ * 파일 없는 행이 있으면 편집기·송출이 깨진 배경을 그린다.
+ */
+export interface SeedBackground {
+  key: string;
+  title: string;
+  description: string;
+  keywords: string[];
+  sizeBytes: number;
+}
+
+export interface DevSeedInput {
+  songs: readonly SeedSong[];
+  backgrounds: readonly SeedBackground[];
 }
 
 export interface DevSeedSummary {
@@ -112,6 +129,45 @@ function toLibraryDeck(song: SeedSong, index: number, now: Date): Deck {
 async function resetSeedUsers(db: DbInstance): Promise<void> {
   await db.delete(reports).where(inArray(reports.userId, SEED_USER_IDS));
   await db.delete(user).where(inArray(user.id, SEED_USER_IDS));
+}
+
+async function upsertBackgrounds(
+  db: DbInstance,
+  items: readonly SeedBackground[],
+): Promise<string[]> {
+  const rows = items.map((item, n) => ({
+    id: seedId("bg", n),
+    title: item.title,
+    r2Key: item.key,
+    posterKey: item.key,
+    durationSec: 0,
+    license: "",
+    source: "service" as const,
+    kind: "image" as const,
+    sizeBytes: item.sizeBytes,
+    description: item.description,
+    keywords: item.keywords,
+  }));
+  await runStatements(
+    db,
+    rows.map((row) =>
+      db
+        .insert(backgrounds)
+        .values(row)
+        .onConflictDoUpdate({
+          target: backgrounds.id,
+          set: {
+            title: row.title,
+            r2Key: row.r2Key,
+            posterKey: row.posterKey,
+            sizeBytes: row.sizeBytes,
+            description: row.description,
+            keywords: row.keywords,
+          },
+        }),
+    ),
+  );
+  return rows.map((row) => row.id);
 }
 
 async function insertUsers(db: DbInstance, now: Date): Promise<void> {
@@ -209,12 +265,13 @@ const OWNER_STYLES: DeckStyle[] = [
  * `upsertPresentationDocument` …)로 넣어 편집기에서 만든 데이터와 같은 모양이 되게 한다.
  * id는 모두 `seedId`로 고정한다. 가져온 곡은 `forkPublicDeck`이 새 id를 만들어서 같은
  * 규칙(원본 `fork_count` + 1)으로 직접 넣는다.
- * 배경은 만들지 않는다. R2 객체가 먼저 있어야 해서 `scripts/importBackgrounds.mjs`가
- * 맡고, 여기서는 이미 등록된 배경을 곡에 입히기만 한다.
+ *
+ * 배경은 repo에 든 가벼운 이미지(`SeedBackground`)만 등록하고 곡에 입힌다. 운영 배경
+ * 영상은 수 GB라 로컬 R2에 올리지 않는다.
  */
 export async function seedDevData(
   db: DbInstance,
-  songs: readonly SeedSong[],
+  { songs, backgrounds: seedBackgrounds }: DevSeedInput,
   now: Date = new Date(),
 ): Promise<DevSeedSummary> {
   if (songs.length === 0) throw new Error("시드할 곡이 없습니다");
@@ -225,13 +282,7 @@ export async function seedDevData(
   const library = songs.map((song, index) => toLibraryDeck(song, index, now));
   await insertLibrary(db, library);
 
-  const backgroundIds: string[] = (
-    await db
-      .select({ id: backgrounds.id })
-      .from(backgrounds)
-      .orderBy(asc(backgrounds.title))
-      .limit(12)
-  ).map((row: { id: string }) => row.id);
+  const backgroundIds = await upsertBackgrounds(db, seedBackgrounds);
   const backgroundAt = (n: number): string | null =>
     backgroundIds.length > 0 ? backgroundIds[n % backgroundIds.length] : null;
   const libraryAt = (n: number): Deck =>

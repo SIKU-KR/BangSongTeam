@@ -7,7 +7,13 @@ import {
   PresentationDocumentSchema,
 } from "#shared";
 import { createTestDb } from "../test-utils";
-import { decks, folders, presentationMembers, user } from "../schema";
+import {
+  backgrounds,
+  decks,
+  folders,
+  presentationMembers,
+  user,
+} from "../schema";
 import {
   getMyLibraryDecks,
   getPresentationDocumentsByUserId,
@@ -19,6 +25,7 @@ import {
   SEED_LIBRARY_USER,
   seedDevData,
   seedId,
+  type DevSeedInput,
   type SeedSong,
 } from "./devSeed";
 
@@ -31,6 +38,17 @@ const SONGS: SeedSong[] = Array.from({ length: 60 }, (_, i) => ({
   artist: i % 2 === 0 ? "새찬송가" : null,
   lyrics: `첫 줄 ${i}\n둘째 줄\n\n셋째 줄\n넷째 줄`,
 }));
+
+const INPUT: DevSeedInput = {
+  songs: SONGS,
+  backgrounds: ["dawn", "sea"].map((name) => ({
+    key: `images/${name}.webp`,
+    title: name,
+    description: "",
+    keywords: [name],
+    sizeBytes: 1000,
+  })),
+};
 
 describe("seedDevData", () => {
   let db: ReturnType<typeof createTestDb>["db"];
@@ -50,13 +68,14 @@ describe("seedDevData", () => {
       "pres",
       "item",
       "folder",
+      "bg",
     ]) {
       expect(seedId(kind, 1234)).toMatch(ID_PATTERN);
     }
   });
 
   it("공유 라이브러리 곡을 공개 덱으로 만들고 검색에 올린다", async () => {
-    const summary = await seedDevData(db, SONGS, NOW);
+    const summary = await seedDevData(db, INPUT, NOW);
     expect(summary.libraryDecks).toBe(SONGS.length);
 
     const library = await db
@@ -74,7 +93,7 @@ describe("seedDevData", () => {
   });
 
   it("앱 스키마를 통과하는 폴더·세트·공유 상태를 만든다", async () => {
-    const summary = await seedDevData(db, SONGS, NOW);
+    const summary = await seedDevData(db, INPUT, NOW);
 
     const ownerDocs = await getPresentationDocumentsByUserId(db, OWNER.id);
     expect(ownerDocs.length).toBeGreaterThan(0);
@@ -101,8 +120,25 @@ describe("seedDevData", () => {
     );
   });
 
+  it("이미지 배경을 등록하고 곡에 입힌다", async () => {
+    const summary = await seedDevData(db, INPUT, NOW);
+    expect(summary.backgrounds).toBe(INPUT.backgrounds.length);
+
+    const rows = await db.select().from(backgrounds);
+    expect(rows.map((row) => [row.kind, row.r2Key, row.posterKey])).toEqual([
+      ["image", "images/dawn.webp", "images/dawn.webp"],
+      ["image", "images/sea.webp", "images/sea.webp"],
+    ]);
+
+    const ownerLibrary = await getMyLibraryDecks(db, OWNER.id);
+    const ids = new Set(rows.map((row) => row.id));
+    expect(ownerLibrary.some((deck) => ids.has(deck.backgroundId ?? ""))).toBe(
+      true,
+    );
+  });
+
   it("약관 동의 전 계정을 남겨 동의 모달을 볼 수 있게 한다", async () => {
-    await seedDevData(db, SONGS, NOW);
+    await seedDevData(db, INPUT, NOW);
     const [newbie] = await db.select().from(user).where(eq(user.id, NEWBIE.id));
     expect(newbie?.termsAgreedAt).toBeNull();
   });
@@ -123,11 +159,11 @@ describe("seedDevData", () => {
       updatedAt: NOW,
     });
 
-    await seedDevData(db, SONGS, NOW);
+    await seedDevData(db, INPUT, NOW);
     const first = await db.select({ id: decks.id }).from(decks);
     const firstMembers = await db.select().from(presentationMembers);
 
-    await seedDevData(db, SONGS, NOW);
+    await seedDevData(db, INPUT, NOW);
     const second = await db.select({ id: decks.id }).from(decks);
     const secondMembers = await db.select().from(presentationMembers);
 
@@ -135,14 +171,19 @@ describe("seedDevData", () => {
       first.map((d) => d.id).sort(),
     );
     expect(secondMembers).toHaveLength(firstMembers.length);
+    expect(await db.select().from(backgrounds)).toHaveLength(
+      INPUT.backgrounds.length,
+    );
     expect(
       await db.select().from(folders).where(eq(folders.userId, OTHER_USER)),
     ).toHaveLength(1);
   });
 
   it("곡이 없으면 아무것도 지우지 않고 멈춘다", async () => {
-    await seedDevData(db, SONGS, NOW);
-    await expect(seedDevData(db, [], NOW)).rejects.toThrow();
+    await seedDevData(db, INPUT, NOW);
+    await expect(
+      seedDevData(db, { ...INPUT, songs: [] }, NOW),
+    ).rejects.toThrow();
     expect(await db.select().from(user)).toHaveLength(DEV_USERS.length + 1);
   });
 });
