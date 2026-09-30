@@ -30,6 +30,11 @@ export const AUTH_COPY = {
   optimizedFor: "데스크톱 Chrome에서 가장 잘 동작해요",
   sessionCheckFailed: "서버에 연결하지 못했어요",
   configLoadFailed: "로그인 설정을 불러오지 못했어요",
+  dev: {
+    title: "개발용 계정",
+    signInAs: (name: string) => `${name} 계정으로 로그인`,
+    consentPending: "약관 동의 전",
+  },
   consent: {
     title: `${APP_NAME} 이용 동의`,
     description: "시작하려면 필수 항목에 동의해 주세요.",

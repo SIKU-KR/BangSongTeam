@@ -8,6 +8,7 @@ import {
   type SocialProvider,
 } from "#shared";
 import type { Bindings } from "../types";
+import { devSignIn } from "./devSignIn";
 
 /**
  * Better Auth 마운트 경로.
@@ -200,6 +201,7 @@ function buildAuth(env: Bindings) {
     rateLimit: { enabled: true },
     telemetry: { enabled: false },
     socialProviders,
+    plugins: import.meta.env.DEV ? [devSignIn()] : [],
     advanced: {
       ipAddress: { ipAddressHeaders: ["cf-connecting-ip"] },
       database: {
@@ -217,7 +219,7 @@ const instances = new WeakMap<Bindings, AuthInstance>();
  * Better Auth 인스턴스 생성 또는 캐시 조회.
  *
  * - 로그인은 소셜 로그인뿐이다. 서버에 비밀번호 해시를 두지 않으려고 `emailAndPassword`는
- *   켜지 않는다.
+ *   켜지 않는다. `pnpm dev`에서만 시드 계정 로그인(`devSignIn`)이 더해진다.
  * - 이메일이 검증된 소셜 계정끼리는 같은 이메일이면 한 사용자로 합쳐진다. 이메일이
  *   검증되지 않은 기존 사용자(카카오 합성 이메일, 예전 비밀번호 계정)에는
  *   `requireLocalEmailVerified` 기본값 때문에 자동으로 붙지 않고 "account not linked"로
