@@ -24,8 +24,9 @@ function megabytes(bytes: number): string {
 /**
  * 송출 화면을 가리는 배경 준비 카드. 세트의 배경 영상을 모두 저장할 때까지 보인다.
  *
- * 받을 수 없는 경우(오프라인, 저장 공간 부족)에만 `저장된 배경으로 시작`을 연다.
- * 연결은 되는데 실패한 경우는 다시 받으면 되므로 다시 시도만 준다.
+ * 받지 못하면 `다시 시도`와 함께 `저장된 배경으로 시작`을 연다. 인터넷이 안 되는
+ * 와이파이에서는 `navigator.onLine`이 true라 `network` 실패로 잡히는데, 이때도 막으면
+ * 예배 중에 송출을 시작할 방법이 없다.
  */
 export function ProjectionMediaGate({
   readiness,
@@ -35,7 +36,6 @@ export function ProjectionMediaGate({
   onStartWithSaved: () => void;
 }): React.JSX.Element {
   const { status, failure, readyCount, totalCount } = readiness;
-  const canStartWithSaved = failure === "offline" || failure === "quota";
   const percent =
     readiness.totalBytes > 0
       ? Math.round((readiness.receivedBytes / readiness.totalBytes) * 100)
@@ -78,16 +78,14 @@ export function ProjectionMediaGate({
             >
               {BACKGROUND_COPY.prepare.retry}
             </Button>
-            {canStartWithSaved && (
-              <Button
-                variant="outline"
-                data-testid="projection-media-start-saved"
-                title={BACKGROUND_COPY.prepare.savedHint}
-                onClick={onStartWithSaved}
-              >
-                {BACKGROUND_COPY.prepare.startWithSaved}
-              </Button>
-            )}
+            <Button
+              variant="outline"
+              data-testid="projection-media-start-saved"
+              title={BACKGROUND_COPY.prepare.savedHint}
+              onClick={onStartWithSaved}
+            >
+              {BACKGROUND_COPY.prepare.startWithSaved}
+            </Button>
           </CardFooter>
         )}
       </Card>

@@ -505,14 +505,16 @@ describe("FullscreenPresentRoute", () => {
       ).toBeInTheDocument();
     });
 
-    it("연결은 되는데 받다가 실패하면 다시 시도만 준다", async () => {
+    it("연결은 되는데 받지 못해도 다시 시도하거나 저장된 배경으로 시작할 수 있다", async () => {
       mockMediaFetch(500);
       renderPresent();
 
       expect(await screen.findByRole("alert")).toHaveTextContent(
         "배경 영상을 받지 못했어요",
       );
-      expect(screen.queryByTestId("projection-media-start-saved")).toBeNull();
+      expect(
+        screen.getByTestId("projection-media-start-saved"),
+      ).toBeInTheDocument();
 
       mockMediaFetch();
       fireEvent.click(screen.getByTestId("projection-media-retry"));
