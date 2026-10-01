@@ -2,6 +2,7 @@ export const BACKGROUND_COPY = {
   selected: "선택됨",
   video: "영상",
   image: "이미지",
+  saved: "기기에 저장됨",
   kindFilter: "배경 종류",
   seconds: (sec: number) => `${sec}초`,
   previewFailed: "미리보기를 불러오지 못했어요",
@@ -41,9 +42,5 @@ export const BACKGROUND_COPY = {
   library: {
     noMatch: (query: string) => `‘${query}’에 맞는 배경이 없어요.`,
     noFilterMatch: "조건에 맞는 배경이 없어요.",
-    deleteTitle: "배경 삭제",
-    deleteMessage: (title: string) =>
-      `‘${title}’ 배경을 삭제할까요? 이 배경을 쓰던 곡은 모두 배경 없음이 되고, 삭제하면 되돌릴 수 없어요.`,
-    deleting: "삭제하는 중…",
   },
 } as const;

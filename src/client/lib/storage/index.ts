@@ -39,7 +39,6 @@ export {
 export {
   loadAllBackgrounds,
   replaceAllBackgrounds,
-  deleteBackgroundRecord,
 } from "./backgroundRepository";
 
 export {

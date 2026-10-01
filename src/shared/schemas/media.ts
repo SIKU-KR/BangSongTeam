@@ -38,24 +38,10 @@ export const BackgroundMediaSchema = z.object({
 });
 export type BackgroundMedia = z.infer<typeof BackgroundMediaSchema>;
 
-/**
- * 배경 목록 응답. 모든 배경이 한 갤러리에 모두에게 똑같이 보인다.
- * `canManage`는 이 요청의 세션이 관리자(`ADMIN_USER_IDS`)일 때만 true이고,
- * 화면은 이 값으로 삭제 버튼을 보여 줄지 정한다 (권한 검사는 서버가 한다).
- */
+/** 배경 목록 응답. 모든 배경이 한 갤러리에 모두에게 똑같이 보인다 */
 export const BackgroundListResponseSchema = z.object({
   backgrounds: z.array(BackgroundMediaSchema),
-  canManage: z.boolean(),
 });
 export type BackgroundListResponse = z.infer<
   typeof BackgroundListResponseSchema
->;
-
-export const BackgroundIdParamSchema = z.object({ id: IdSchema });
-
-export const BackgroundDeleteResponseSchema = z.object({
-  ok: z.literal(true),
-});
-export type BackgroundDeleteResponse = z.infer<
-  typeof BackgroundDeleteResponseSchema
 >;

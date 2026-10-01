@@ -4,7 +4,6 @@
  */
 export const API_ERRORS = {
   loginRequired: "로그인이 필요해요",
-  adminOnly: "관리자만 할 수 있어요",
   userNotFound: "사용자를 찾을 수 없어요",
   idMismatch: "요청이 올바르지 않아요. 새로고침한 뒤 다시 시도해 주세요",
   deck: {
@@ -25,9 +24,6 @@ export const API_ERRORS = {
     saveFailed: "프레젠테이션을 저장하지 못했어요",
     fullSyncRequired:
       "서버에 없는 곡이 있어 프레젠테이션 전체를 다시 보내야 해요",
-  },
-  background: {
-    notFound: "배경을 찾을 수 없어요",
   },
   report: {
     targetNotFound: "신고할 곡을 찾을 수 없어요",

@@ -6,7 +6,7 @@
  *   pnpm db:seed:local --songs=200   # 공유 라이브러리 곡 수를 줄인다 (기본: 전체)
  *
  * 순서:
- *   1. `.dev.vars`가 없으면 `config/dev.vars.example`로 만들고 시드 계정을 배경 관리자로 둔다.
+ *   1. `.dev.vars`가 없으면 `config/dev.vars.example`로 만든다.
  *   2. 로컬 D1 마이그레이션을 적용한다.
  *   3. `data/backgrounds/dev/`의 이미지 배경을 로컬 R2에 올린다. 운영 배경 영상은 수 GB라
  *      올리지 않는다.
@@ -51,14 +51,10 @@ function run(command, args) {
   execFileSync(command, args, { cwd: ROOT_DIR, stdio: "inherit" });
 }
 
-function ensureDevVars(adminUserId) {
+function ensureDevVars() {
   if (fs.existsSync(DEV_VARS)) return;
-  const example = fs.readFileSync(DEV_VARS_EXAMPLE, "utf-8");
-  fs.writeFileSync(
-    DEV_VARS,
-    example.replace(/^ADMIN_USER_IDS=.*$/m, `ADMIN_USER_IDS=${adminUserId}`),
-  );
-  console.log(`.dev.vars를 만들었습니다 (배경 관리자: ${adminUserId}).`);
+  fs.copyFileSync(DEV_VARS_EXAMPLE, DEV_VARS);
+  console.log(".dev.vars를 만들었습니다.");
 }
 
 async function uploadDevBackgrounds(bucket) {
@@ -87,7 +83,7 @@ async function main() {
     ]);
   const { DEV_USERS } = devUsers;
 
-  ensureDevVars(DEV_USERS[0].id);
+  ensureDevVars();
   run("pnpm", [
     "exec",
     "wrangler",

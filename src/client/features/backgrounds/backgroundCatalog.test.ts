@@ -6,10 +6,8 @@ import { getOfflineDB } from "../../lib/storage";
 import {
   applyServerBackgroundCatalog,
   getBackgroundById,
-  getBackgroundCatalog,
   getServiceBackgrounds,
   hydrateBackgroundCatalog,
-  removeCatalogBackground,
   resetBackgroundCatalogForTests,
   resolveBackgroundLayers,
   useBackground,
@@ -32,7 +30,7 @@ describe("배경 카탈로그", () => {
   });
 
   it("서버 목록을 IndexedDB에 남겨 두고 다음 부팅(송출 화면)에서 서버 없이 되살린다", async () => {
-    await applyServerBackgroundCatalog([UPLOADED, SERVICE], true);
+    await applyServerBackgroundCatalog([UPLOADED, SERVICE]);
     resetBackgroundCatalogForTests();
     expect(getBackgroundById(SERVICE.id)).toBeUndefined();
 
@@ -42,17 +40,9 @@ describe("배경 카탈로그", () => {
     expect(getServiceBackgrounds()).toEqual([UPLOADED, SERVICE]);
   });
 
-  it("관리 권한은 서버 응답에서만 오고 로컬 사본으로는 켜지지 않는다", async () => {
-    await applyServerBackgroundCatalog([SERVICE], true);
-    expect(getBackgroundCatalog().canManage).toBe(true);
-
-    await hydrateBackgroundCatalog();
-    expect(getBackgroundCatalog().canManage).toBe(false);
-  });
-
   it("서버 목록으로 바꾸면 지워진 배경이 로컬에 남지 않는다", async () => {
-    await applyServerBackgroundCatalog([UPLOADED, SERVICE], false);
-    await applyServerBackgroundCatalog([SERVICE], false);
+    await applyServerBackgroundCatalog([UPLOADED, SERVICE]);
+    await applyServerBackgroundCatalog([SERVICE]);
     resetBackgroundCatalogForTests();
 
     await hydrateBackgroundCatalog();
@@ -60,13 +50,13 @@ describe("배경 카탈로그", () => {
     expect(getBackgroundById(UPLOADED.id)).toBeUndefined();
   });
 
-  it("지운 배경을 구독자에게 곧바로 알린다", async () => {
-    await applyServerBackgroundCatalog([UPLOADED, SERVICE], true);
+  it("서버 목록에서 빠진 배경을 구독자에게 곧바로 알린다", async () => {
+    await applyServerBackgroundCatalog([UPLOADED, SERVICE]);
     const { result } = renderHook(() => useBackground(UPLOADED.id));
     expect(result.current).toEqual(UPLOADED);
 
     await act(async () => {
-      await removeCatalogBackground(UPLOADED.id);
+      await applyServerBackgroundCatalog([SERVICE]);
     });
     expect(result.current).toBeUndefined();
   });

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { BackgroundListResponseSchema, BackgroundMediaSchema } from "./media";
+import { BackgroundMediaSchema } from "./media";
 
 const VALID_BACKGROUND = {
   id: "a0eebc9996bb9bd380a11",
@@ -48,23 +48,6 @@ describe("BackgroundMediaSchema", () => {
     ).toThrow();
     expect(() =>
       BackgroundMediaSchema.parse({ ...VALID_BACKGROUND, kind: "gif" }),
-    ).toThrow();
-  });
-});
-
-describe("BackgroundListResponseSchema", () => {
-  it("관리 권한 여부를 함께 받는다", () => {
-    expect(
-      BackgroundListResponseSchema.parse({
-        backgrounds: [VALID_BACKGROUND],
-        canManage: false,
-      }).canManage,
-    ).toBe(false);
-  });
-
-  it("관리 권한 여부가 빠지면 거절한다", () => {
-    expect(() =>
-      BackgroundListResponseSchema.parse({ backgrounds: [], usage: null }),
     ).toThrow();
   });
 });

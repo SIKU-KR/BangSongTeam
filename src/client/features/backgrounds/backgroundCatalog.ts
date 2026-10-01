@@ -1,10 +1,6 @@
 import { useMemo, useSyncExternalStore } from "react";
 import type { BackgroundMedia } from "#shared";
-import {
-  deleteBackgroundRecord,
-  loadAllBackgrounds,
-  replaceAllBackgrounds,
-} from "../../lib/storage";
+import { loadAllBackgrounds, replaceAllBackgrounds } from "../../lib/storage";
 import { getCurrentUserId } from "../../lib/auth/sessionStore";
 
 /**
@@ -16,8 +12,6 @@ export type BackgroundCatalogStatus = "local" | "synced" | "offline" | "error";
 
 export interface BackgroundCatalogSnapshot {
   backgrounds: BackgroundMedia[];
-  /** 서버가 이 세션을 관리자로 알렸는지. 올리기·삭제 버튼만 가린다 */
-  canManage: boolean;
   status: BackgroundCatalogStatus;
 }
 
@@ -30,7 +24,6 @@ export interface BackgroundLayers {
 
 const EMPTY: BackgroundCatalogSnapshot = {
   backgrounds: [],
-  canManage: false,
   status: "local",
 };
 
@@ -74,7 +67,6 @@ export async function hydrateBackgroundCatalog(): Promise<void> {
   }
   setSnapshot({
     backgrounds: byTitle(backgrounds),
-    canManage: false,
     status: "local",
   });
 }
@@ -82,9 +74,8 @@ export async function hydrateBackgroundCatalog(): Promise<void> {
 /** 서버가 준 목록으로 통째로 바꾼다 (지워진 배경이 남지 않게) */
 export async function applyServerBackgroundCatalog(
   backgrounds: BackgroundMedia[],
-  canManage: boolean,
 ): Promise<void> {
-  setSnapshot({ backgrounds, canManage, status: "synced" });
+  setSnapshot({ backgrounds, status: "synced" });
   await persist(() => replaceAllBackgrounds(backgrounds, getCurrentUserId()));
 }
 
@@ -93,15 +84,6 @@ export function markBackgroundCatalogStatus(
 ): void {
   if (snapshot.status === status) return;
   setSnapshot({ ...snapshot, status });
-}
-
-/** 관리자가 지운 배경을 갤러리와 로컬 사본에서 곧바로 뺀다 */
-export async function removeCatalogBackground(id: string): Promise<void> {
-  setSnapshot({
-    ...snapshot,
-    backgrounds: snapshot.backgrounds.filter((bg) => bg.id !== id),
-  });
-  await persist(() => deleteBackgroundRecord(id));
 }
 
 export function getBackgroundCatalog(): BackgroundCatalogSnapshot {
@@ -176,10 +158,9 @@ export function useBackgroundLayers(
 /** 테스트 격리용. 저장소는 건드리지 않는다 */
 export function setBackgroundCatalogForTests(
   backgrounds: BackgroundMedia[],
-  canManage = false,
   status: BackgroundCatalogStatus = "synced",
 ): void {
-  setSnapshot({ backgrounds, canManage, status });
+  setSnapshot({ backgrounds, status });
 }
 
 export function resetBackgroundCatalogForTests(): void {

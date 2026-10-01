@@ -11,7 +11,10 @@ import {
   makeBackground,
   TEST_SERVICE_BACKGROUNDS,
 } from "../../test/backgroundFixture";
+import { mediaCacheNameFor } from "#shared";
 import { BACKGROUND_COPY } from "#copy/backgrounds";
+import { resetFakeCacheStorage } from "../../test/fakeCacheStorage";
+import { __resetMediaCachingForTests } from "../../lib/offline/mediaCache";
 
 const { refreshBackgroundCatalog } = vi.hoisted(() => ({
   refreshBackgroundCatalog: vi.fn(async () => undefined),
@@ -51,6 +54,8 @@ function renderPicker(
 describe("BackgroundPickerModal", () => {
   beforeEach(() => {
     refreshBackgroundCatalog.mockClear();
+    resetFakeCacheStorage();
+    __resetMediaCachingForTests();
     setBackgroundCatalogForTests([...TEST_SERVICE_BACKGROUNDS, WARM, STILL]);
   });
 
@@ -124,17 +129,23 @@ describe("BackgroundPickerModal", () => {
       screen.getByRole("button", { name: BACKGROUND_COPY.image }),
     );
 
-    expect(screen.getByText("본당 이미지")).toBeInTheDocument();
-    expect(screen.queryByText(TEST_SERVICE_BACKGROUNDS[0].title)).toBeNull();
+    expect(
+      screen.getByRole("img", { name: "본당 이미지" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("img", { name: TEST_SERVICE_BACKGROUNDS[0].title }),
+    ).toBeNull();
   });
 
   it("탭 없이 모든 배경을 한 격자에 보여 주고 영상·이미지를 함께 고른다", () => {
     const { onSelect } = renderPicker({ selectedBackgroundId: STILL.id });
 
     expect(screen.queryByRole("tab")).toBeNull();
-    expect(screen.getByText("본당 이미지")).toBeInTheDocument();
     expect(
-      screen.getByText(TEST_SERVICE_BACKGROUNDS[0].title),
+      screen.getByRole("img", { name: "본당 이미지" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("img", { name: TEST_SERVICE_BACKGROUNDS[0].title }),
     ).toBeInTheDocument();
     expect(screen.getByTestId(`bg-item-${STILL.id}`)).toHaveAttribute(
       "aria-pressed",
@@ -174,6 +185,17 @@ describe("BackgroundPickerModal", () => {
 
     fireEvent.blur(screen.getByTestId(`bg-item-${WARM.id}`));
     expect(video(WARM.id)).toBeNull();
+  });
+
+  it("기기에 저장된 배경에만 저장됨을 표시한다", async () => {
+    const cache = await caches.open(mediaCacheNameFor(WARM.mediaUrl));
+    await cache.put(WARM.mediaUrl, new Response("video"));
+    renderPicker();
+
+    expect(await screen.findByTestId(`bg-saved-${WARM.id}`)).toHaveTextContent(
+      BACKGROUND_COPY.saved,
+    );
+    expect(screen.queryByTestId(`bg-saved-${STILL.id}`)).toBeNull();
   });
 
   it("배경이 하나도 없으면 빈 상태를 보여 준다", () => {

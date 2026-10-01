@@ -35,8 +35,3 @@ export async function replaceAllBackgrounds(
   }
   await tx.done;
 }
-
-export async function deleteBackgroundRecord(id: string): Promise<void> {
-  const db = await getOfflineDB();
-  await db.delete("backgrounds", id);
-}

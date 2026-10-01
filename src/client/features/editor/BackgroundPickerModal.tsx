@@ -3,7 +3,7 @@ import { CheckIcon } from "lucide-react";
 import { cn } from "cn";
 import { Badge } from "#components/ui/badge";
 import { Button } from "#components/ui/button";
-import { Card, CardHeader, CardTitle } from "#components/ui/card";
+import { Card } from "#components/ui/card";
 import {
   Dialog,
   DialogClose,
@@ -60,7 +60,7 @@ function selectableTile(
       onPick();
     },
     className: cn(
-      "cursor-pointer pt-0 outline-none hover:ring-foreground/30 focus-visible:ring-3 focus-visible:ring-ring/50",
+      "cursor-pointer py-0 outline-none hover:ring-foreground/30 focus-visible:ring-3 focus-visible:ring-ring/50",
       selected && "ring-2 ring-primary",
     ),
   };
@@ -88,9 +88,6 @@ function PickerTile({
         <BackgroundPreview background={background} active={isFocused} />
         {isSelected && <CheckBadge />}
       </div>
-      <CardHeader>
-        <CardTitle className="truncate">{background.title}</CardTitle>
-      </CardHeader>
     </Card>
   );
 }
