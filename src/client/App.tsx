@@ -78,6 +78,15 @@ function useHydration(): boolean {
     };
   }, [session.status, userId, bootstrappedUserId]);
 
+  useFlushOnPageHide();
+
+  return (
+    isSessionResolved &&
+    (session.status !== "authenticated" || bootstrappedUserId === userId)
+  );
+}
+
+function useFlushOnPageHide(): void {
   useEffect(() => {
     const flush = (): void => {
       void flushPendingWrites();
@@ -95,11 +104,6 @@ function useHydration(): boolean {
       document.removeEventListener("visibilitychange", onVisibilityChange);
     };
   }, []);
-
-  return (
-    isSessionResolved &&
-    (session.status !== "authenticated" || bootstrappedUserId === userId)
-  );
 }
 
 /** 예전 자체 테마 저장 키를 그대로 써서 사용자가 고른 테마를 잃지 않는다 */
@@ -128,43 +132,35 @@ function AppRoutes(): React.JSX.Element {
 
   if (session.status !== "authenticated") return <GuestRoutes />;
 
+  return <AuthenticatedRoutes />;
+}
+
+function AuthenticatedRoutes(): React.JSX.Element {
   return (
-    <AppProviders>
-      <BrowserRouter>
-        <RouteErrorBoundary>
-          <Suspense fallback={<RouteFallback />}>
-            <Routes>
-              <Route path="/" element={<LandingRoute />} />
+    <AppRouter overlay={<ConsentGate />}>
+      <Route path="/" element={<LandingRoute />} />
 
-              <Route element={<AppShellLayout />}>
-                <Route path="/presentations" element={<PresentationsRoute />} />
-                <Route
-                  path="/presentations/folders/:folderId"
-                  element={<PresentationsRoute />}
-                />
-                <Route path="/presentations/trash" element={<TrashRoute />} />
-                <Route path="/lyrics" element={<LyricsRoute />} />
-                <Route path="/backgrounds" element={<BackgroundsRoute />} />
-              </Route>
+      <Route element={<AppShellLayout />}>
+        <Route path="/presentations" element={<PresentationsRoute />} />
+        <Route
+          path="/presentations/folders/:folderId"
+          element={<PresentationsRoute />}
+        />
+        <Route path="/presentations/trash" element={<TrashRoute />} />
+        <Route path="/lyrics" element={<LyricsRoute />} />
+        <Route path="/backgrounds" element={<BackgroundsRoute />} />
+      </Route>
 
-              <Route path="/editor/:presentationId" element={<EditorRoute />} />
-              <Route path="/s/:token" element={<ShareJoinRoute />} />
-              <Route
-                path="/present/:presentationId/fullscreen"
-                element={<FullscreenPresentRoute />}
-              />
-              <Route path="/terms" element={<TermsRoute />} />
-              <Route path="/privacy" element={<PrivacyRoute />} />
-              <Route
-                path="*"
-                element={<Navigate to="/presentations" replace />}
-              />
-            </Routes>
-          </Suspense>
-        </RouteErrorBoundary>
-        <ConsentGate />
-      </BrowserRouter>
-    </AppProviders>
+      <Route path="/editor/:presentationId" element={<EditorRoute />} />
+      <Route path="/s/:token" element={<ShareJoinRoute />} />
+      <Route
+        path="/present/:presentationId/fullscreen"
+        element={<FullscreenPresentRoute />}
+      />
+      <Route path="/terms" element={<TermsRoute />} />
+      <Route path="/privacy" element={<PrivacyRoute />} />
+      <Route path="*" element={<Navigate to="/presentations" replace />} />
+    </AppRouter>
   );
 }
 
@@ -174,23 +170,36 @@ function AppRoutes(): React.JSX.Element {
  */
 function GuestRoutes(): React.JSX.Element {
   return (
+    <AppRouter>
+      <Route path="/" element={<LandingRoute />} />
+      <Route path="/s/:token" element={<SharePreviewRoute />} />
+      <Route
+        path="/present/:presentationId/fullscreen"
+        element={<FullscreenPresentRoute />}
+      />
+      <Route path="/terms" element={<TermsRoute />} />
+      <Route path="/privacy" element={<PrivacyRoute />} />
+      <Route path="*" element={<LoginRoute />} />
+    </AppRouter>
+  );
+}
+
+function AppRouter({
+  children,
+  overlay,
+}: {
+  children: React.ReactNode;
+  overlay?: React.ReactNode;
+}): React.JSX.Element {
+  return (
     <AppProviders>
       <BrowserRouter>
         <RouteErrorBoundary>
           <Suspense fallback={<RouteFallback />}>
-            <Routes>
-              <Route path="/" element={<LandingRoute />} />
-              <Route path="/s/:token" element={<SharePreviewRoute />} />
-              <Route
-                path="/present/:presentationId/fullscreen"
-                element={<FullscreenPresentRoute />}
-              />
-              <Route path="/terms" element={<TermsRoute />} />
-              <Route path="/privacy" element={<PrivacyRoute />} />
-              <Route path="*" element={<LoginRoute />} />
-            </Routes>
+            <Routes>{children}</Routes>
           </Suspense>
         </RouteErrorBoundary>
+        {overlay}
       </BrowserRouter>
     </AppProviders>
   );

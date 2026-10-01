@@ -5,8 +5,13 @@
  */
 export const SHARE_COPY_PARAM = "copy";
 
+/** 공유 링크 화면의 앱 안 경로. 로그인 여부와 관계없이 같은 주소를 쓴다. */
+export function sharePath(token: string): string {
+  return `/s/${token}`;
+}
+
 export function shareCopyPath(token: string): string {
-  return `/s/${token}?${SHARE_COPY_PARAM}=1`;
+  return `${sharePath(token)}?${SHARE_COPY_PARAM}=1`;
 }
 
 /** 편집기를 열자마자 사본 만들기 창을 띄우라는 history state */
