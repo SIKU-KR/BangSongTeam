@@ -494,7 +494,7 @@ function EditorScreen({
                 ? EDITOR_COPY.readOnly.guest
                 : EDITOR_COPY.readOnly.member}
             </AlertDescription>
-            <AlertAction>
+            <AlertAction className="top-1/2 -translate-y-1/2">
               <Button data-testid="make-copy-btn" size="sm" onClick={openCopy}>
                 <CopyIcon />
                 {COMMON_COPY.makeCopy}
