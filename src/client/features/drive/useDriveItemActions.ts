@@ -13,7 +13,7 @@ import { useDrive } from "./driveContext";
 import { openItem, startPresentation } from "./driveActions";
 import { TRASH_PATH } from "./drivePaths";
 import { toItemRef, type DriveItem } from "./driveModel";
-import type { MenuAction } from "./ActionMenu";
+import type { MenuAction } from "#components/common/ActionMenu";
 import { DRIVE_COPY } from "#copy/drive";
 import { COMMON_COPY } from "#copy/common";
 

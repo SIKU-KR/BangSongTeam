@@ -12,7 +12,10 @@ import {
   TooltipTrigger,
 } from "#components/ui/tooltip";
 import { useDrive } from "./driveContext";
-import { ActionMenuItems, type MenuAction } from "./ActionMenu";
+import {
+  ActionMenuItems,
+  type MenuAction,
+} from "#components/common/ActionMenu";
 import { DRIVE_COPY } from "#copy/drive";
 import { FOLDER_COPY } from "#copy/folders";
 import { COMMON_COPY } from "#copy/common";

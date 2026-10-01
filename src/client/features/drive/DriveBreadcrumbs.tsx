@@ -26,7 +26,10 @@ import { useFolderIndex } from "./folderStore";
 import { useDrive, useDriveDroppable } from "./driveContext";
 import { drivePath } from "./drivePaths";
 import type { DriveItemRef } from "./driveModel";
-import { ActionMenuItems, type MenuAction } from "./ActionMenu";
+import {
+  ActionMenuItems,
+  type MenuAction,
+} from "#components/common/ActionMenu";
 import { useNewItemActions } from "./NewMenu";
 import { DRIVE_COPY } from "#copy/drive";
 import { COMMON_COPY } from "#copy/common";

@@ -15,7 +15,10 @@ import {
 } from "#components/ui/dropdown-menu";
 import { IconButton } from "#components/common/IconButton";
 import type { DriveTypeFilter } from "./driveModel";
-import { ActionMenuItems, type MenuAction } from "./ActionMenu";
+import {
+  ActionMenuItems,
+  type MenuAction,
+} from "#components/common/ActionMenu";
 import { DRIVE_COPY } from "#copy/drive";
 
 /**

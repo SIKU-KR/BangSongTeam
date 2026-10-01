@@ -44,7 +44,10 @@ import {
   getBackgroundById,
   useBackgroundCatalog,
 } from "../backgrounds/backgroundCatalog";
-import { ActionMenuItems, type MenuAction } from "../drive/ActionMenu";
+import {
+  ActionMenuItems,
+  type MenuAction,
+} from "#components/common/ActionMenu";
 import {
   OverflowWarning,
   PaneDropLine,

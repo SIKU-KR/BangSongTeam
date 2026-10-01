@@ -1,4 +1,5 @@
-import { useEffect, useRef } from "react";
+import { useEffect } from "react";
+import { useLatest } from "../../hooks/useLatest";
 import type { DriveContextValue } from "./driveContext";
 import { toItemRef, type DriveItem } from "./driveModel";
 import {
@@ -7,7 +8,12 @@ import {
   isMenuTarget,
   isTypingTarget,
 } from "../../lib/browser/keyboardTarget";
-import { rangeKeys, stepFocus, toggleKey, visibleKey } from "./selectionModel";
+import {
+  rangeKeys,
+  stepFocus,
+  toggleKey,
+  visibleKey,
+} from "#lib/selection/selectionModel";
 
 export interface DriveKeyboardOptions {
   drive: DriveContextValue;
@@ -37,8 +43,7 @@ const STEP: Record<string, number> = {
  * 글자 단축키는 한글 입력 상태에서도 동작한다 (`isLetterKey`).
  */
 export function useDriveKeyboard(options: DriveKeyboardOptions): void {
-  const optionsRef = useRef(options);
-  optionsRef.current = options;
+  const optionsRef = useLatest(options);
 
   useEffect(() => {
     const handleKey = (event: KeyboardEvent): void => {

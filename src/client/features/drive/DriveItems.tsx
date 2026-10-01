@@ -25,7 +25,10 @@ import {
   type SortKey,
   type SortOrder,
 } from "./driveModel";
-import { ActionMenuItems, type MenuAction } from "./ActionMenu";
+import {
+  ActionMenuItems,
+  type MenuAction,
+} from "#components/common/ActionMenu";
 import { DRIVE_COPY } from "#copy/drive";
 import { COMMON_COPY } from "#copy/common";
 

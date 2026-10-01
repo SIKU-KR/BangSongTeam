@@ -1,4 +1,5 @@
-import { useEffect, useRef } from "react";
+import { useEffect } from "react";
+import { useLatest } from "../../hooks/useLatest";
 import {
   resolveEditorShortcut,
   type EditorShortcutAction,
@@ -47,8 +48,7 @@ function readContext(): EditorShortcutContext {
 
 /** 편집기 전역 단축키를 window에 건다. 처리기는 매 렌더의 최신 값을 쓴다. */
 export function useEditorShortcuts(handlers: EditorShortcutHandlers): void {
-  const handlersRef = useRef(handlers);
-  handlersRef.current = handlers;
+  const handlersRef = useLatest(handlers);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {

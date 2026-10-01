@@ -26,9 +26,17 @@ import {
   type DriveItemHandlers,
 } from "./DriveItems";
 import { DriveToolbar } from "./DriveToolbar";
-import { ActionMenuItems, type MenuAction } from "./ActionMenu";
+import {
+  ActionMenuItems,
+  type MenuAction,
+} from "#components/common/ActionMenu";
 import { useNewItemActions } from "./NewMenu";
-import { mergeKeys, rangeKeys, toggleKey, visibleKey } from "./selectionModel";
+import {
+  mergeKeys,
+  rangeKeys,
+  toggleKey,
+  visibleKey,
+} from "#lib/selection/selectionModel";
 import { useDriveItemActions } from "./useDriveItemActions";
 import { useDriveKeyboard } from "./useDriveKeyboard";
 import { useDriveListing } from "./useDriveListing";

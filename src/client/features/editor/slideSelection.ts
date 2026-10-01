@@ -8,7 +8,7 @@ import {
   rangeKeys,
   stepFocus,
   toggleKey,
-} from "../drive/selectionModel";
+} from "#lib/selection/selectionModel";
 
 export interface SlideSelectionState {
   selected: string[];
