@@ -1,6 +1,7 @@
 import React from "react";
 import { Navigate, useParams } from "react-router-dom";
 import {
+  DRIVE_ROOT_PATH,
   DriveBrowser,
   isFolderAvailable,
   useFolderIndex,
@@ -12,7 +13,7 @@ export function PresentationsRoute(): React.JSX.Element {
   useFolderIndex();
 
   if (folderId && !isFolderAvailable(folderId)) {
-    return <Navigate to="/presentations" replace />;
+    return <Navigate to={DRIVE_ROOT_PATH} replace />;
   }
   return <DriveBrowser mode="drive" folderId={folderId ?? null} />;
 }

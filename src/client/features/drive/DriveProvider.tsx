@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation, useMatch, useNavigate } from "react-router-dom";
 import { FolderIcon, PresentationIcon } from "lucide-react";
-import { toast } from "sonner";
 import { Badge } from "#components/ui/badge";
 import {
   DndContext,
@@ -16,55 +15,35 @@ import {
 } from "@dnd-kit/core";
 import { getEventCoordinates } from "@dnd-kit/utilities";
 import { createNewPresentation } from "../presentation";
-import {
-  createFolder,
-  getFolderIndex,
-  isFolderAvailable,
-  validateFolderName,
-} from "./folderStore";
+import { isFolderAvailable } from "./folderStore";
 import {
   DriveContext,
   canDropOn,
   type DriveContextValue,
   type DropTarget,
-  type ToastAction,
 } from "./driveContext";
 import {
-  deleteItemsForever,
-  DriveActionError,
+  describeItems,
   duplicateItems,
   itemName,
   moveItems,
-  parentOf,
-  renameItem,
   restoreItems,
   trashItems,
   undoMove,
 } from "./driveActions";
 import {
+  DEFAULT_SORT_ORDER,
   itemKey,
-  listTrash,
   parseItemKey,
   type DriveItemRef,
+  type DriveTypeFilter,
+  type SortOrder,
 } from "./driveModel";
-import { ConfirmDialog, MoveDialog, NameDialog } from "./DriveDialogs";
-import { listPresentations } from "../presentation";
-import { resolveUniqueName } from "#shared";
-import { isLetterKey, isTypingTarget } from "./keyboard";
+import { DRIVE_FOLDER_ROUTE, TRASH_PATH } from "./drivePaths";
+import { DriveDialogHost, type DriveDialogState } from "./DriveDialogHost";
+import { useUndoToast } from "./useUndoToast";
 import { DRIVE_COPY } from "#copy/drive";
-import { FOLDER_COPY } from "#copy/folders";
 import { COMMON_COPY } from "#copy/common";
-
-type DialogState =
-  | { kind: "new-folder"; parentId: string | null }
-  | { kind: "rename"; ref: DriveItemRef }
-  | { kind: "move"; refs: DriveItemRef[] }
-  | { kind: "delete-forever"; refs: DriveItemRef[] }
-  | { kind: "empty-trash" }
-  | null;
-
-const TOAST_ID = "drive-toast";
-const TOAST_DURATION_MS = 6000;
 
 const followCursor: Modifier = ({
   activatorEvent,
@@ -80,14 +59,6 @@ const followCursor: Modifier = ({
   };
 };
 
-function describeCount(refs: readonly DriveItemRef[]): string {
-  if (refs.length === 1) {
-    const name = itemName(refs[0]).trim();
-    if (name) return DRIVE_COPY.quoted(name);
-  }
-  return DRIVE_COPY.itemCount(refs.length);
-}
-
 /**
  * 드라이브 상태 공급자 (홈 셸 전체를 감싼다).
  *
@@ -101,9 +72,9 @@ export function DriveProvider({
 }): React.JSX.Element {
   const navigate = useNavigate();
   const { pathname } = useLocation();
-  const folderMatch = useMatch("/presentations/folders/:folderId");
+  const folderMatch = useMatch(DRIVE_FOLDER_ROUTE);
   const currentFolderId = folderMatch?.params.folderId ?? null;
-  const isTrashView = pathname === "/presentations/trash";
+  const isTrashView = pathname === TRASH_PATH;
 
   const [selection, setSelectionState] = useState<ReadonlySet<string>>(
     () => new Set(),
@@ -111,9 +82,10 @@ export function DriveProvider({
   const [anchorKey, setAnchorKey] = useState<string | null>(null);
   const [focusKey, setFocusKey] = useState<string | null>(null);
   const [activeDrag, setActiveDrag] = useState<DriveItemRef[] | null>(null);
-  const [dialog, setDialog] = useState<DialogState>(null);
-  const [isDeleting, setIsDeleting] = useState(false);
-  const [undoAction, setUndoAction] = useState<ToastAction | null>(null);
+  const [dialog, setDialog] = useState<DriveDialogState | null>(null);
+  const [sortOrder, setSortOrder] = useState<SortOrder>(DEFAULT_SORT_ORDER);
+  const [typeFilter, setTypeFilter] = useState<DriveTypeFilter>("all");
+  const { showToast } = useUndoToast({ isSuspended: dialog !== null });
 
   useEffect(() => {
     setSelectionState(new Set());
@@ -136,32 +108,10 @@ export function DriveProvider({
     setAnchorKey(null);
   }, []);
 
-  const showToast = useCallback(
-    (message: string, action?: ToastAction): void => {
-      setUndoAction(action ?? null);
-      toast(message, {
-        id: TOAST_ID,
-        testId: TOAST_ID,
-        duration: TOAST_DURATION_MS,
-        closeButton: true,
-        action: action && {
-          label: action.label,
-          onClick: () => {
-            action.run();
-            setUndoAction(null);
-          },
-        },
-        onDismiss: () => setUndoAction(null),
-        onAutoClose: () => setUndoAction(null),
-      });
-    },
-    [],
-  );
-
   const trash = useCallback(
     (refs: DriveItemRef[]): void => {
       if (refs.length === 0) return;
-      const label = describeCount(refs);
+      const label = describeItems(refs);
       const trashed = trashItems(refs);
       clearSelection();
       showToast(DRIVE_COPY.toast.trashed(label), {
@@ -175,7 +125,7 @@ export function DriveProvider({
   const restore = useCallback(
     (refs: DriveItemRef[]): void => {
       if (refs.length === 0) return;
-      const label = describeCount(refs);
+      const label = describeItems(refs);
       restoreItems(refs);
       clearSelection();
       showToast(DRIVE_COPY.toast.restored(label));
@@ -185,7 +135,7 @@ export function DriveProvider({
 
   const move = useCallback(
     (refs: DriveItemRef[], targetFolderId: string | null): void => {
-      const label = describeCount(refs);
+      const label = describeItems(refs);
       const outcome = moveItems(refs, targetFolderId);
       if (outcome.errors.length > 0 && outcome.moved.length === 0) {
         showToast(outcome.errors[0]);
@@ -230,56 +180,6 @@ export function DriveProvider({
     [navigate],
   );
 
-  const runDeleteForever = async (refs: DriveItemRef[]): Promise<void> => {
-    if (refs.length === 0) {
-      setDialog(null);
-      return;
-    }
-    const label = describeCount(refs);
-    setIsDeleting(true);
-    try {
-      await deleteItemsForever(refs);
-      clearSelection();
-      setDialog(null);
-      showToast(
-        refs.length === 1
-          ? DRIVE_COPY.toast.deletedForever(label)
-          : DRIVE_COPY.toast.deletedForeverMany(refs.length),
-      );
-    } catch (err) {
-      setDialog(null);
-      showToast(
-        err instanceof DriveActionError
-          ? err.message
-          : DRIVE_COPY.toast.deleteForeverFailed,
-      );
-    } finally {
-      setIsDeleting(false);
-    }
-  };
-
-  useEffect(() => {
-    const action = undoAction;
-    if (!action || dialog !== null) return;
-    const handleUndo = (event: KeyboardEvent): void => {
-      if (
-        !(event.metaKey || event.ctrlKey) ||
-        event.shiftKey ||
-        event.altKey ||
-        !isLetterKey(event, "z") ||
-        isTypingTarget(event.target)
-      ) {
-        return;
-      }
-      event.preventDefault();
-      action.run();
-      toast.dismiss(TOAST_ID);
-      setUndoAction(null);
-    };
-    window.addEventListener("keydown", handleUndo);
-    return () => window.removeEventListener("keydown", handleUndo);
-  }, [undoAction, dialog]);
-
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
   );
@@ -315,6 +215,10 @@ export function DriveProvider({
       clearSelection,
       activeDrag,
       dialogOpen: dialog !== null,
+      sortOrder,
+      setSortOrder,
+      typeFilter,
+      setTypeFilter,
       requestNewFolder: (parentId) =>
         setDialog({ kind: "new-folder", parentId }),
       requestRename: (ref) => setDialog({ kind: "rename", ref }),
@@ -342,6 +246,8 @@ export function DriveProvider({
       clearSelection,
       activeDrag,
       dialog,
+      sortOrder,
+      typeFilter,
       createPresentationIn,
       trash,
       restore,
@@ -366,125 +272,8 @@ export function DriveProvider({
         </DragOverlay>
       </DndContext>
 
-      {dialog?.kind === "new-folder" && (
-        <NewFolderDialog
-          parentId={dialog.parentId}
-          onClose={() => setDialog(null)}
-          onCreated={(id) => {
-            setDialog(null);
-            if ((dialog.parentId ?? null) === currentFolderId) {
-              setSelection([itemKey("folder", id)], itemKey("folder", id));
-            }
-          }}
-        />
-      )}
-      {dialog?.kind === "rename" && (
-        <NameDialog
-          title={DRIVE_COPY.rename}
-          initialValue={itemName(dialog.ref)}
-          confirmLabel={COMMON_COPY.confirm}
-          validate={(name) => {
-            if (dialog.ref.kind === "folder") {
-              return validateFolderName(
-                name,
-                parentOf(dialog.ref),
-                dialog.ref.id,
-              );
-            }
-            const trimmed = name.trim();
-            if (!trimmed) return FOLDER_COPY.nameRequired;
-            if (trimmed.length > 100) return FOLDER_COPY.nameTooLong(100);
-            return null;
-          }}
-          onSubmit={(name) => {
-            const result = renameItem(dialog.ref, name);
-            setDialog(null);
-            if (!result.ok) showToast(result.error);
-          }}
-          onCancel={() => setDialog(null)}
-        />
-      )}
-      {dialog?.kind === "move" && (
-        <MoveDialog
-          refs={dialog.refs}
-          onCancel={() => setDialog(null)}
-          onMove={(target) => {
-            setDialog(null);
-            clearSelection();
-            move(dialog.refs, target);
-          }}
-        />
-      )}
-      {dialog?.kind === "delete-forever" && (
-        <ConfirmDialog
-          title={DRIVE_COPY.deleteForever}
-          message={
-            <div>
-              <p>
-                {DRIVE_COPY.deleteForeverDialog.message(
-                  describeCount(dialog.refs),
-                )}
-                {dialog.refs.some((ref) => ref.kind === "folder") &&
-                  DRIVE_COPY.deleteForeverDialog.folderNote}
-              </p>
-              <p className="mt-1">
-                {DRIVE_COPY.deleteForeverDialog.irreversible}
-              </p>
-            </div>
-          }
-          confirmLabel={DRIVE_COPY.deleteForever}
-          isPending={isDeleting}
-          onConfirm={() => void runDeleteForever(dialog.refs)}
-          onCancel={() => setDialog(null)}
-        />
-      )}
-      {dialog?.kind === "empty-trash" && (
-        <ConfirmDialog
-          title={DRIVE_COPY.emptyTrash}
-          message={DRIVE_COPY.emptyTrashMessage}
-          confirmLabel={DRIVE_COPY.emptyTrash}
-          isPending={isDeleting}
-          onConfirm={() =>
-            void runDeleteForever(
-              listTrash(getFolderIndex(), listPresentations()).map((item) => ({
-                kind: item.kind,
-                id: item.id,
-              })),
-            )
-          }
-          onCancel={() => setDialog(null)}
-        />
-      )}
+      <DriveDialogHost dialog={dialog} onClose={() => setDialog(null)} />
     </DriveContext.Provider>
-  );
-}
-
-function NewFolderDialog({
-  parentId,
-  onClose,
-  onCreated,
-}: {
-  parentId: string | null;
-  onClose: () => void;
-  onCreated: (id: string) => void;
-}): React.JSX.Element {
-  const [initialValue] = useState(() => {
-    const index = getFolderIndex();
-    const siblings = (index.childrenOf.get(parentId) ?? [])
-      .filter((folder) => !folder.trashedAt)
-      .map((folder) => folder.name);
-    return resolveUniqueName(FOLDER_COPY.newFolder, siblings);
-  });
-
-  return (
-    <NameDialog
-      title={FOLDER_COPY.newFolder}
-      initialValue={initialValue}
-      confirmLabel={DRIVE_COPY.create}
-      validate={(name) => validateFolderName(name, parentId)}
-      onSubmit={(name) => onCreated(createFolder(parentId, name).id)}
-      onCancel={onClose}
-    />
   );
 }
 

@@ -1,6 +1,9 @@
 import { z } from "zod";
 import { IdSchema } from "./id";
 
+/** 폴더 이름 최대 길이. 클라이언트 입력 검증과 서버 스키마가 같은 한도를 쓴다 */
+export const MAX_FOLDER_NAME_LENGTH = 100;
+
 /**
  * 드라이브 폴더 (홈 `/presentations`).
  *
@@ -12,7 +15,7 @@ export const FolderSchema = z.object({
   id: IdSchema,
   userId: IdSchema,
   parentId: IdSchema.nullable(),
-  name: z.string().trim().min(1).max(100),
+  name: z.string().trim().min(1).max(MAX_FOLDER_NAME_LENGTH),
   trashedAt: z.string().datetime().nullable(),
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),

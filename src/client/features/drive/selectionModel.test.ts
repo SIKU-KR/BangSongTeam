@@ -5,6 +5,7 @@ import {
   rangeKeys,
   stepFocus,
   toggleKey,
+  visibleKey,
 } from "./selectionModel";
 
 const KEYS = ["a", "b", "c", "d", "e"];
@@ -75,5 +76,17 @@ describe("marqueeKeys", () => {
     expect(
       marqueeKeys(rows, { left: 600, right: 700, top: 0, bottom: 300 }),
     ).toEqual([]);
+  });
+});
+
+describe("visibleKey", () => {
+  it("목록에 있는 키는 그대로 돌려준다", () => {
+    expect(visibleKey(KEYS, "c")).toBe("c");
+  });
+
+  it("목록에 없거나 null이면 null이다", () => {
+    expect(visibleKey(KEYS, "z")).toBeNull();
+    expect(visibleKey(KEYS, null)).toBeNull();
+    expect(visibleKey([], "a")).toBeNull();
   });
 });
