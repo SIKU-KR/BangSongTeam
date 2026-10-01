@@ -1,8 +1,9 @@
 import React, { useState } from "react";
-import { FilmIcon, ImageIcon } from "lucide-react";
+import { FilmIcon, HardDriveIcon, ImageIcon } from "lucide-react";
 import { cn } from "cn";
 import type { BackgroundMedia } from "#shared";
 import { BACKGROUND_COPY } from "#copy/backgrounds";
+import { useIsMediaCached } from "./useIsMediaCached";
 
 export interface BackgroundPreviewProps {
   background: BackgroundMedia;
@@ -22,6 +23,9 @@ function prefersReducedMotion(): boolean {
  * `<video>`를 붙여 재생한다. 배경 영상은 원본(최대 수백 MB, 1080p)이라 보이는 카드마다
  * 재생하면 목록을 여는 것만으로 대역폭을 다 쓴다. 벗어나면 `<video>`를 내려 내려받기도
  * 멈춘다. 터치 입력과 동작 줄이기 설정을 켠 사용자에게는 포스터만 보인다.
+ *
+ * 원본이 이미 기기 캐시에 있으면 '기기에 저장됨'을 표시해, 받지 않고 바로 송출하거나
+ * 오프라인에서 쓸 배경을 고를 수 있게 한다.
  */
 export function BackgroundPreview({
   background,
@@ -32,6 +36,7 @@ export function BackgroundPreview({
   const [hovered, setHovered] = useState(false);
   const failed = failedUrl === background.posterUrl;
   const isVideo = background.kind === "video";
+  const isSaved = useIsMediaCached(background.mediaUrl);
   const playing =
     isVideo && !failed && (hovered || active) && !prefersReducedMotion();
 
@@ -84,6 +89,16 @@ export function BackgroundPreview({
         {isVideo ? <FilmIcon aria-hidden /> : <ImageIcon aria-hidden />}
         {isVideo ? BACKGROUND_COPY.video : BACKGROUND_COPY.image}
       </span>
+
+      {isSaved && (
+        <span
+          data-testid={`bg-saved-${background.id}`}
+          className="absolute bottom-1.5 left-1.5 flex items-center gap-1 rounded-sm bg-black/70 px-1.5 py-0.5 text-xs font-semibold text-white/90 [&_svg]:size-3"
+        >
+          <HardDriveIcon aria-hidden />
+          {BACKGROUND_COPY.saved}
+        </span>
+      )}
 
       {isVideo && background.durationSec > 0 && (
         <span className="absolute right-1.5 bottom-1.5 rounded-sm bg-black/70 px-1.5 py-0.5 font-mono text-xs text-white/90">

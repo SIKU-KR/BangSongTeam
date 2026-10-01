@@ -2,6 +2,7 @@ export const BACKGROUND_COPY = {
   selected: "선택됨",
   video: "영상",
   image: "이미지",
+  saved: "기기에 저장됨",
   kindFilter: "배경 종류",
   seconds: (sec: number) => `${sec}초`,
   previewFailed: "미리보기를 불러오지 못했어요",

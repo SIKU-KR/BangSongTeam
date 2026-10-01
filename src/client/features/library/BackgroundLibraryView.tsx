@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { ImageIcon, WifiOffIcon } from "lucide-react";
 import { Alert, AlertDescription } from "#components/ui/alert";
 import { Button } from "#components/ui/button";
-import { Card, CardAction, CardHeader, CardTitle } from "#components/ui/card";
+import { Card, CardFooter } from "#components/ui/card";
 import {
   Empty,
   EmptyHeader,
@@ -34,12 +34,13 @@ function BackgroundCard({
   action?: React.ReactNode;
 }): React.JSX.Element {
   return (
-    <Card size="sm" data-testid={`bg-card-${background.id}`} className="pt-0">
+    <Card
+      size="sm"
+      data-testid={`bg-card-${background.id}`}
+      className="gap-0 py-0"
+    >
       <BackgroundPreview background={background} />
-      <CardHeader>
-        <CardTitle className="truncate">{background.title}</CardTitle>
-        {action && <CardAction>{action}</CardAction>}
-      </CardHeader>
+      {action && <CardFooter className="justify-end">{action}</CardFooter>}
     </Card>
   );
 }

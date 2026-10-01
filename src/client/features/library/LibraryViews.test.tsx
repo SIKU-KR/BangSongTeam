@@ -55,9 +55,15 @@ describe("BackgroundLibraryView", () => {
     });
     await renderView();
 
-    expect(await screen.findByText("본당 성탄 배경")).toBeInTheDocument();
-    expect(screen.getByText("고요한 호수 물결")).toBeInTheDocument();
-    expect(screen.getByText("타오르는 불꽃")).toBeInTheDocument();
+    expect(
+      await screen.findByRole("img", { name: "본당 성탄 배경" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("img", { name: "고요한 호수 물결" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("img", { name: "타오르는 불꽃" }),
+    ).toBeInTheDocument();
     expect(screen.queryByText("내가 올린 배경")).not.toBeInTheDocument();
     expect(
       screen.queryByTestId(`delete-bg-${LAKE.id}`),
@@ -81,7 +87,7 @@ describe("BackgroundLibraryView", () => {
       "GET /api/backgrounds": () => listResponse([LAKE, FIRE, STILL]),
     });
     await renderView();
-    await screen.findByText("타오르는 불꽃");
+    await screen.findByRole("img", { name: "타오르는 불꽃" });
 
     expect(screen.getByTestId(`bg-kind-${LAKE.id}`)).toHaveTextContent(
       BACKGROUND_COPY.video,
@@ -93,15 +99,25 @@ describe("BackgroundLibraryView", () => {
     fireEvent.click(
       screen.getByRole("button", { name: BACKGROUND_COPY.image }),
     );
-    expect(screen.getByText("본당 성탄 배경")).toBeInTheDocument();
-    expect(screen.queryByText("타오르는 불꽃")).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("img", { name: "본당 성탄 배경" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("img", { name: "타오르는 불꽃" }),
+    ).not.toBeInTheDocument();
 
     fireEvent.click(
       screen.getByRole("button", { name: BACKGROUND_COPY.video }),
     );
-    expect(screen.getByText("타오르는 불꽃")).toBeInTheDocument();
-    expect(screen.getByText("고요한 호수 물결")).toBeInTheDocument();
-    expect(screen.queryByText("본당 성탄 배경")).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("img", { name: "타오르는 불꽃" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("img", { name: "고요한 호수 물결" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("img", { name: "본당 성탄 배경" }),
+    ).not.toBeInTheDocument();
   });
 
   it("셸 검색어는 제목을 초성으로도 찾는다", async () => {
@@ -110,8 +126,12 @@ describe("BackgroundLibraryView", () => {
     });
 
     await renderView("ㅎㅅ");
-    expect(await screen.findByText("고요한 호수 물결")).toBeInTheDocument();
-    expect(screen.queryByText("본당 성탄 배경")).not.toBeInTheDocument();
+    expect(
+      await screen.findByRole("img", { name: "고요한 호수 물결" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("img", { name: "본당 성탄 배경" }),
+    ).not.toBeInTheDocument();
   });
 
   it("셸 검색어는 검색 키워드로도 찾는다", async () => {
@@ -120,8 +140,12 @@ describe("BackgroundLibraryView", () => {
     });
 
     await renderView("선포");
-    expect(await screen.findByText("타오르는 불꽃")).toBeInTheDocument();
-    expect(screen.queryByText("고요한 호수 물결")).not.toBeInTheDocument();
+    expect(
+      await screen.findByRole("img", { name: "타오르는 불꽃" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("img", { name: "고요한 호수 물결" }),
+    ).not.toBeInTheDocument();
   });
 
   it("관리자는 배경을 확인을 거쳐 지운다", async () => {
@@ -130,7 +154,7 @@ describe("BackgroundLibraryView", () => {
       "DELETE /api/backgrounds/uploads/*": () => ({ body: { ok: true } }),
     });
     await renderView();
-    await screen.findByText("본당 성탄 배경");
+    await screen.findByRole("img", { name: "본당 성탄 배경" });
 
     fireEvent.click(screen.getByTestId(`delete-bg-${STILL.id}`));
     const dialog = screen.getByTestId("bg-delete-dialog");
@@ -141,7 +165,9 @@ describe("BackgroundLibraryView", () => {
     fireEvent.click(within(dialog).getByTestId("confirm-delete-bg"));
 
     await waitFor(() =>
-      expect(screen.queryByText("본당 성탄 배경")).not.toBeInTheDocument(),
+      expect(
+        screen.queryByRole("img", { name: "본당 성탄 배경" }),
+      ).not.toBeInTheDocument(),
     );
     expect(
       api.calls.some(
