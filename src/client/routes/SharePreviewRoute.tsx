@@ -8,7 +8,11 @@ import {
   ShareLinkError,
   ShareLinkLoading,
 } from "../features/sharing/ShareLinkStatus";
-import { SHARE_COPY_PARAM, shareCopyPath } from "../features/sharing/shareLink";
+import {
+  SHARE_COPY_PARAM,
+  shareCopyPath,
+  sharePath,
+} from "../features/sharing/shareLink";
 import { useSharePreview } from "../lib/api/shareQueries";
 import { describeApiError } from "../lib/api/request";
 import { refreshBackgroundCatalog } from "../lib/sync";
@@ -44,7 +48,7 @@ export function SharePreviewRoute(): React.JSX.Element {
     return (
       <LoginRoute
         description={SHARE_LINK_COPY.signInToCopy}
-        onCancel={() => navigate(`/s/${token}`, { replace: true })}
+        onCancel={() => navigate(sharePath(token), { replace: true })}
       />
     );
   }
@@ -65,7 +69,7 @@ export function SharePreviewRoute(): React.JSX.Element {
     <EditorRoute
       guest={{
         presentationId: document.id,
-        returnPath: `/s/${token}`,
+        returnPath: sharePath(token),
         onRequestCopy: () => navigate(shareCopyPath(token)),
       }}
     />
