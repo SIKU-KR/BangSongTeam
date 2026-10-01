@@ -116,10 +116,4 @@ describe("운영 SQL (배경)", () => {
       .get();
     expect(deck?.backgroundId).toBeNull();
   });
-
-  it("관리자로 지정할 계정의 id를 이메일로 찾는다", () => {
-    expect(
-      all("FIND_USER_ID_BY_EMAIL", { email: "admin@example.com" }),
-    ).toEqual([{ id: OWNER, name: "A", email: "admin@example.com" }]);
-  });
 });

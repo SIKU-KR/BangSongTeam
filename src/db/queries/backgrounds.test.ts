@@ -1,11 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { createTestDb, type TestDbResult } from "../test-utils";
 import { backgrounds, user, type NewBackground } from "../schema";
-import {
-  deleteServiceBackground,
-  listBackgrounds,
-  nullifyUnknownBackgrounds,
-} from "./backgrounds";
+import { listBackgrounds, nullifyUnknownBackgrounds } from "./backgrounds";
 
 const LEGACY_OWNER = "user00000000000000001";
 const SERVICE_A = "svc000000000000000001";
@@ -87,26 +83,6 @@ describe("배경 쿼리 헬퍼", () => {
     expect(list.find((bg) => bg.id === SERVICE_A)).toMatchObject({
       description: "",
       keywords: [],
-    });
-  });
-
-  describe("deleteServiceBackground", () => {
-    it("기본 제공 배경을 지우고 R2 키를 돌려준다", async () => {
-      expect(await deleteServiceBackground(testDb.db, SERVICE_A)).toEqual({
-        mediaKey: `loops/${SERVICE_A}.mp4`,
-        posterKey: `posters/${SERVICE_A}.webp`,
-      });
-      const list = await listBackgrounds(testDb.db);
-      expect(list.map((bg) => bg.id)).toEqual([SERVICE_B]);
-    });
-
-    it("없는 배경이나 예전 사용자 업로드는 null이다", async () => {
-      expect(
-        await deleteServiceBackground(testDb.db, "gone00000000000000001"),
-      ).toBeNull();
-      expect(
-        await deleteServiceBackground(testDb.db, LEGACY_UPLOAD),
-      ).toBeNull();
     });
   });
 

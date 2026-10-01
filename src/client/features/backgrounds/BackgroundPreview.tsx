@@ -54,6 +54,8 @@ export function BackgroundPreview({
       {failed ? (
         <div
           data-testid={`bg-preview-missing-${background.id}`}
+          role="img"
+          aria-label={background.title}
           className="absolute inset-0 flex items-center justify-center px-3 text-center text-xs text-white/60"
         >
           {BACKGROUND_COPY.previewFailed}

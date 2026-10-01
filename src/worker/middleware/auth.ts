@@ -1,6 +1,6 @@
 import type { Context } from "hono";
 import { createMiddleware } from "hono/factory";
-import { createAuth, isAdminUser } from "../lib/auth";
+import { createAuth } from "../lib/auth";
 import type { AppEnv, Bindings, Variables } from "../types";
 import { API_ERRORS } from "#shared";
 
@@ -104,17 +104,6 @@ export function createOptionalSession(
     forwardCookies(c, session?.setCookies);
   });
 }
-
-/**
- * 관리자(`ADMIN_USER_IDS`)가 아니면 403으로 끊는 미들웨어.
- * `requireAuth` 뒤에 붙인다. 세션이 없는 요청은 앞에서 이미 401로 끝난다.
- */
-export const requireAdmin = createMiddleware<AppEnv>(async (c, next) => {
-  if (!isAdminUser(c.env, c.get("userId"))) {
-    return c.json({ error: API_ERRORS.adminOnly }, 403);
-  }
-  await next();
-});
 
 /** 기본 세션 검증 미들웨어 */
 export const requireAuth = createRequireAuth();

@@ -42,9 +42,5 @@ export const BACKGROUND_COPY = {
   library: {
     noMatch: (query: string) => `‘${query}’에 맞는 배경이 없어요.`,
     noFilterMatch: "조건에 맞는 배경이 없어요.",
-    deleteTitle: "배경 삭제",
-    deleteMessage: (title: string) =>
-      `‘${title}’ 배경을 삭제할까요? 이 배경을 쓰던 곡은 모두 배경 없음이 되고, 삭제하면 되돌릴 수 없어요.`,
-    deleting: "삭제하는 중…",
   },
 } as const;

@@ -40,23 +40,6 @@ export async function listBackgrounds(
   return rows.map(toBackgroundMedia);
 }
 
-/**
- * 기본 제공 배경을 지우고 R2에서 지울 키를 돌려준다. 없는 배경이면 null이다.
- *
- * 이 배경을 쓰던 모든 사용자의 곡은 `decks.background_id`의 `ON DELETE SET NULL`로
- * 배경 없음이 된다. 호출하는 쪽은 행을 먼저 지우고 R2 객체를 나중에 지운다.
- */
-export async function deleteServiceBackground(
-  db: DbInstance,
-  backgroundId: string,
-): Promise<{ mediaKey: string; posterKey: string } | null> {
-  const [row]: { r2Key: string; posterKey: string }[] = await db
-    .delete(backgrounds)
-    .where(and(eq(backgrounds.id, backgroundId), isServiceBackground))
-    .returning({ r2Key: backgrounds.r2Key, posterKey: backgrounds.posterKey });
-  return row ? { mediaKey: row.r2Key, posterKey: row.posterKey } : null;
-}
-
 function distinctBackgroundIds(
   rows: readonly { backgroundId?: string | null }[],
 ): string[] {

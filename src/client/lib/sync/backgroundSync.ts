@@ -18,8 +18,8 @@ export function refreshBackgroundCatalog(): Promise<void> {
   if (inFlight) return inFlight;
   inFlight = (async () => {
     try {
-      const { backgrounds, canManage } = await fetchBackgroundList();
-      await applyServerBackgroundCatalog(backgrounds, canManage);
+      const { backgrounds } = await fetchBackgroundList();
+      await applyServerBackgroundCatalog(backgrounds);
     } catch (err) {
       markBackgroundCatalogStatus(
         err instanceof OfflineError ? "offline" : "error",

@@ -1,6 +1,6 @@
 /**
  * 기본 제공 배경을 관리하는 운영 SQL. `scripts/importBackgrounds.mjs`가 `:name`
- * 자리에 값을 채워 `wrangler d1 execute`로 실행하고, 관리자 지정은 손으로 실행한다.
+ * 자리에 값을 채워 `wrangler d1 execute`로 실행한다.
  *
  * 등록 전에 R2 객체(영상·포스터)를 반드시 먼저 올린다. 파일 없는 행은 편집기·송출에서
  * 깨진 배경이 된다 — 첫 마이그레이션에서 시드를 뺀 이유다. 삭제는 거꾸로 행을 먼저
@@ -16,6 +16,4 @@ export const BACKGROUND_SQL = {
   COUNT_DECKS_BY_BACKGROUND: `SELECT background_id, count(*) AS decks FROM decks WHERE background_id IS NOT NULL GROUP BY background_id;`,
 
   DELETE_BACKGROUND: `DELETE FROM backgrounds WHERE id = :id;`,
-
-  FIND_USER_ID_BY_EMAIL: `SELECT id, name, email FROM user WHERE email = :email;`,
 } as const;
