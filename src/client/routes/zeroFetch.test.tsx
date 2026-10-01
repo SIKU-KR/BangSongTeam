@@ -6,7 +6,7 @@ import { MEDIA_URL_PREFIX } from "#shared";
 import {
   __loadDocumentsForTests,
   resetPresentationStore,
-} from "../features/presentation";
+} from "../features/presentation/presentationStore";
 import {
   __resetMediaCachingForTests,
   __waitForMediaCachingForTests,

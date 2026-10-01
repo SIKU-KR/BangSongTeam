@@ -1,17 +1,3 @@
-export {
-  useBackgroundAutoCache,
-  useProjectionMediaCache,
-  AUTO_CACHE_DELAY_MS,
-} from "./useBackgroundAutoCache";
+export { useBackgroundAutoCache } from "./useBackgroundAutoCache";
 export { useCacheFirstVideo } from "./useCacheFirstVideo";
-export {
-  usePresentationFontsReady,
-  FONT_READY_TIMEOUT_MS,
-} from "./usePresentationFontsReady";
-export {
-  useProjectionMediaReady,
-  type ProjectionMediaFailure,
-  type ProjectionMediaReadiness,
-  type ProjectionMediaStatus,
-} from "./useProjectionMediaReady";
-export { ProjectionMediaGate } from "./ProjectionMediaGate";
+export { useProjectionMediaReady } from "./useProjectionMediaReady";

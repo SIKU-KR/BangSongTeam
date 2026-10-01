@@ -1,5 +1,4 @@
 import React from "react";
-import { __loadDocumentsForTests } from "../features/presentation";
 import { signInAsTestUser } from "../test/sessionFixture";
 import {
   render,
@@ -12,7 +11,10 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { MemoryRouter, Routes, Route } from "react-router-dom";
 import { FullscreenPresentRoute } from "./FullscreenPresentRoute";
 
-import { resetPresentationStore } from "../features/presentation";
+import {
+  __loadDocumentsForTests,
+  resetPresentationStore,
+} from "../features/presentation/presentationStore";
 import {
   resetBackgroundCatalogForTests,
   setBackgroundCatalogForTests,

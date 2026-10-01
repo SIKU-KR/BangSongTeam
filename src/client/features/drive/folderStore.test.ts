@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import type { Folder } from "#shared";
 import { signInAsTestUser } from "../../test/sessionFixture";
-import { closeOfflineDB, OFFLINE_DB_NAME } from "../../lib/storage";
+import { closeOfflineDB, OFFLINE_DB_NAME } from "../../lib/storage/db";
 import {
   __resetFolderSyncForTests,
   __setFolderPusherForTests,

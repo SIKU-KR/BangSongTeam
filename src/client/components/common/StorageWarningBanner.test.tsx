@@ -8,9 +8,9 @@ import {
   reportPersistenceError,
   clearPersistenceError,
   reportCorruptedRecords,
-  clearCorruptedRecords,
-  PersistenceUnavailableError,
 } from "../../lib/storage";
+import { clearCorruptedRecords } from "../../lib/storage/persistenceStatus";
+import { PersistenceUnavailableError } from "../../lib/storage/db";
 
 describe("StorageWarningBanner", () => {
   beforeEach(() => {

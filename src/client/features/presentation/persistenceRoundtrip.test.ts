@@ -1,11 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { signInAsTestUser } from "../../test/sessionFixture";
 import { createId, DEFAULT_DECK_STYLE, type Deck } from "#shared";
-import {
-  closeOfflineDB,
-  OFFLINE_DB_NAME,
-  savePresentation,
-} from "../../lib/storage";
+import { savePresentation } from "../../lib/storage";
+import { closeOfflineDB, OFFLINE_DB_NAME } from "../../lib/storage/db";
 import {
   hydrateFromStorage,
   flushPendingWrites,

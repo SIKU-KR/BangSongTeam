@@ -6,7 +6,7 @@ import { BackgroundLibraryView } from "./index";
 import { installFakeApi, type FakeApi } from "../../test/fakeApi";
 import { withQueryClient } from "../../test/queryClientFixture";
 import { makeBackground } from "../../test/backgroundFixture";
-import { resetBackgroundCatalogForTests } from "../backgrounds";
+import { resetBackgroundCatalogForTests } from "../backgrounds/backgroundCatalog";
 import { refreshBackgroundCatalog } from "../../lib/sync/backgroundSync";
 import { BACKGROUND_COPY } from "#copy/backgrounds";
 

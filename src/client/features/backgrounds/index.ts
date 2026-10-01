@@ -1,4 +1,3 @@
-export * from "./backgroundCatalog";
-export * from "./BackgroundKindFilter";
-export * from "./BackgroundPreview";
-export * from "./backgroundSearch";
+export { BackgroundKindFilter } from "./BackgroundKindFilter";
+export { BackgroundPreview } from "./BackgroundPreview";
+export { useBackgroundLayers } from "./backgroundCatalog";

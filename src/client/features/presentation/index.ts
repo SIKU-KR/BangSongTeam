@@ -1,24 +1,12 @@
-export {
-  useNavigationBuffer,
-  type UseNavigationBufferOptions,
-  type UseNavigationBufferReturn,
-} from "./useNavigationBuffer";
-
-export {
-  usePresentationShortcuts,
-  type UsePresentationShortcutsOptions,
-} from "./usePresentationShortcuts";
-
+export { useNavigationBuffer } from "./useNavigationBuffer";
+export { usePresentationShortcuts } from "./usePresentationShortcuts";
 export {
   getActivePresentation,
   createNewPresentation,
   addDeckToPresentation,
-  resetPresentationStore,
-  __loadDocumentsForTests,
   applyServerDocuments,
   getPresentationById,
   listPresentations,
-  openPresentation,
   usePresentationList,
   usePresentationById,
   updatePresentationTitle,
@@ -41,7 +29,6 @@ export {
   canUndo,
   canRedo,
   breakHistoryCoalescing,
-  type BackgroundChoice,
   hydrateFromStorage,
   flushPendingWrites,
   removePersistedPresentation,
@@ -55,19 +42,14 @@ export {
   replaceWithServerDocument,
   showSharedPreview,
 } from "./presentationStore";
-
 export {
-  enterFullscreen,
   exitFullscreen,
-  isFullscreenActive,
-  subscribeFullscreenChange,
   launchPresentation,
   editorPath,
   resolvePresentReturnPath,
   DEFAULT_PRESENT_RETURN_PATH,
   type PresentNavigate,
 } from "./fullscreen";
-
 export {
   nextPosition,
   prevPosition,

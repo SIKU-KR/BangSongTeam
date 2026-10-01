@@ -1,11 +1,4 @@
-export {
-  useFolderIndex,
-  getFolder,
-  getFolders,
-  isFolderAvailable,
-  resetFolderStore,
-  __loadFoldersForTests,
-} from "./folderStore";
+export { useFolderIndex, getFolder, isFolderAvailable } from "./folderStore";
 export {
   drivePath,
   isDrivePath,

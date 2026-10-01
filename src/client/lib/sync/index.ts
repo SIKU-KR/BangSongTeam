@@ -1,66 +1,12 @@
+export { useSyncStatus, type SyncStatus } from "./syncStatus";
 export {
-  setSyncStatus,
-  getSyncSnapshot,
-  useSyncStatus,
-  __resetSyncStatusForTests,
-  type SyncStatus,
-} from "./syncStatus";
-export {
-  pushPresentation,
-  rememberServerDocuments,
-  __resetServerDecksForTests,
-  pullPresentations,
   refreshSharedPresentation,
-  setSharedPresentationListener,
-  type SharedPresentationListener,
-  pushDeck,
-  pullDecks,
-  deleteDeckRemote,
-  pullFolders,
-  pushFolder,
   deleteFolderRemote,
   deletePresentationRemote,
-  toSyncableDocument,
 } from "./presentationSync";
-export {
-  OfflineError,
-  ServerRejectedError,
-  SessionExpiredError,
-} from "../api/request";
-export {
-  scheduleDocumentPush,
-  cancelDocumentPush,
-  flushPendingSync,
-  setSyncEnabled,
-  __resetSyncSchedulerForTests,
-  __setPusherForTests,
-} from "./syncScheduler";
-export { mergeDocuments, type MergeResult } from "./mergeDocuments";
+export { OfflineError } from "../api/request";
+export { flushPendingSync } from "./syncScheduler";
 export { runBootSync, shouldRunBootSync } from "./bootSync";
 export { refreshBackgroundCatalog } from "./backgroundSync";
-export {
-  scheduleDeckPush,
-  scheduleDeckDelete,
-  pushDeckNow,
-  flushDeckSync,
-  setDeckSyncEnabled,
-  setServerDeckListener,
-  __setDeckTransportForTests,
-  __resetDeckSyncForTests,
-} from "./deckSync";
-export {
-  mergeLibraryDecks,
-  withServerFields,
-  type LibraryMergeResult,
-} from "./mergeLibraryDecks";
-export {
-  scheduleFolderPush,
-  cancelFolderPush,
-  pushFolderNow,
-  flushFolderSync,
-  setFolderSyncEnabled,
-  setServerFolderListener,
-  __setFolderPusherForTests,
-  __resetFolderSyncForTests,
-} from "./folderSync";
-export { mergeFolders, type FolderMergeResult } from "./mergeFolders";
+export { flushDeckSync } from "./deckSync";
+export { flushFolderSync } from "./folderSync";

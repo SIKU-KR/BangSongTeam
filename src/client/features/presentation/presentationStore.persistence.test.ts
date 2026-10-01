@@ -1,13 +1,12 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { signInAsTestUser } from "../../test/sessionFixture";
 import {
-  closeOfflineDB,
-  OFFLINE_DB_NAME,
   loadAllPresentations,
   savePresentation,
-  getPersistenceError,
   clearPersistenceError,
 } from "../../lib/storage";
+import { closeOfflineDB, OFFLINE_DB_NAME } from "../../lib/storage/db";
+import { getPersistenceError } from "../../lib/storage/persistenceStatus";
 import {
   hydrateFromStorage,
   flushPendingWrites,
