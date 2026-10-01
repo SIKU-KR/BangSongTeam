@@ -4,6 +4,10 @@ import "./index.css";
 import { App } from "./App";
 import { registerServiceWorker } from "./pwa/registerServiceWorker";
 
+if (import.meta.env.DEV) {
+  void import("react-grab");
+}
+
 registerServiceWorker();
 
 const rootElement = document.getElementById("root");
