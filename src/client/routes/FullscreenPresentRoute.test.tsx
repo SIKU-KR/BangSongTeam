@@ -1,8 +1,5 @@
 import React from "react";
-import {
-  __loadDocumentsForTests,
-  SEED_PRESENTATIONS,
-} from "../features/presentation";
+import { __loadDocumentsForTests } from "../features/presentation";
 import { signInAsTestUser } from "../test/sessionFixture";
 import {
   render,
@@ -15,10 +12,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { MemoryRouter, Routes, Route } from "react-router-dom";
 import { FullscreenPresentRoute } from "./FullscreenPresentRoute";
 
-import {
-  resetPresentationStore,
-  SEED_PRESENTATION_IDS,
-} from "../features/presentation";
+import { resetPresentationStore } from "../features/presentation";
 import {
   resetBackgroundCatalogForTests,
   setBackgroundCatalogForTests,
@@ -31,6 +25,10 @@ import {
 import { resetFakeCacheStorage } from "../test/fakeCacheStorage";
 import { __resetMediaCachingForTests } from "../lib/offline/mediaCache";
 import { MEDIA_CACHE_NAME } from "#shared";
+import {
+  SEED_PRESENTATIONS,
+  SEED_PRESENTATION_IDS,
+} from "../test/presentationFixtures";
 
 const DOC_ID = SEED_PRESENTATION_IDS[0];
 

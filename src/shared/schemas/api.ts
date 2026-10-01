@@ -2,13 +2,21 @@ import { z } from "zod";
 import { IdSchema } from "./id";
 import { DeckStyleSchema } from "./style";
 import { SlideSchema } from "./slide";
-import { DeckSchema } from "./deck";
-import { PresentationSchema, PresentationItemSchema } from "./presentation";
+import {
+  DeckSchema,
+  MAX_DECK_ARTIST_LENGTH,
+  MAX_DECK_TITLE_LENGTH,
+} from "./deck";
+import {
+  MAX_PRESENTATION_TITLE_LENGTH,
+  PresentationSchema,
+  PresentationItemSchema,
+} from "./presentation";
 import { PublicDeckSummarySchema } from "./library";
 
 export const CreateDeckRequestSchema = z.object({
-  title: z.string().min(1).max(100),
-  artist: z.string().max(100).default(""),
+  title: z.string().min(1).max(MAX_DECK_TITLE_LENGTH),
+  artist: z.string().max(MAX_DECK_ARTIST_LENGTH).default(""),
   lyricsRaw: z.string().min(1),
   slides: z.array(SlideSchema),
   backgroundId: IdSchema.nullable().optional(),
@@ -22,7 +30,7 @@ export const UpdateDeckRequestSchema = CreateDeckRequestSchema.partial();
 export type UpdateDeckRequest = z.infer<typeof UpdateDeckRequestSchema>;
 
 export const CreatePresentationRequestSchema = z.object({
-  title: z.string().min(1).max(100),
+  title: z.string().min(1).max(MAX_PRESENTATION_TITLE_LENGTH),
   serviceDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
 });
 export type CreatePresentationRequest = z.infer<

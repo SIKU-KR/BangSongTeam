@@ -1,7 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { PresentationDocumentSchema, type Presentation } from "#shared";
 import { signInAsTestUser } from "../../test/sessionFixture";
-import { SEED_PRESENTATIONS } from "./mockPresentations";
 import {
   __loadDocumentsForTests,
   createNewPresentation,
@@ -28,6 +27,7 @@ import {
   setSyncEnabled,
 } from "../../lib/sync/syncScheduler";
 import { COMMON_COPY } from "#copy/common";
+import { SEED_PRESENTATIONS } from "../../test/presentationFixtures";
 
 const FOLDER = "f00000000000000000001";
 const OTHER = "f00000000000000000002";

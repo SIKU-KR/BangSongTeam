@@ -6,8 +6,6 @@ import { MEDIA_URL_PREFIX } from "#shared";
 import {
   __loadDocumentsForTests,
   resetPresentationStore,
-  SEED_PRESENTATIONS,
-  SEED_PRESENTATION_IDS,
 } from "../features/presentation";
 import {
   __resetMediaCachingForTests,
@@ -25,6 +23,10 @@ import {
 import { signInAsTestUser } from "../test/sessionFixture";
 import { withQueryClient } from "../test/queryClientFixture";
 import { FullscreenPresentRoute } from "./FullscreenPresentRoute";
+import {
+  SEED_PRESENTATIONS,
+  SEED_PRESENTATION_IDS,
+} from "../test/presentationFixtures";
 
 const DOC_ID = SEED_PRESENTATION_IDS[0];
 

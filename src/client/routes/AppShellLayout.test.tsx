@@ -1,7 +1,6 @@
 import React from "react";
 import {
   __loadDocumentsForTests,
-  SEED_PRESENTATIONS,
   resetPresentationStore,
   listPresentations,
   getPresentationById,
@@ -23,7 +22,6 @@ import {
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { MemoryRouter, Routes, Route } from "react-router-dom";
 import type { Folder } from "#shared";
-import { SEED_USER_ID } from "../features/presentation";
 import { ThemeProvider } from "#components/theme-provider";
 import { AppShellLayout } from "./AppShellLayout";
 import { PresentationsRoute } from "./PresentationsRoute";
@@ -38,6 +36,7 @@ import { COMMON_COPY } from "#copy/common";
 import { DRIVE_COPY } from "#copy/drive";
 import { FOLDER_COPY } from "#copy/folders";
 import { SHELL_COPY } from "#copy/shell";
+import { SEED_PRESENTATIONS, SEED_USER_ID } from "../test/presentationFixtures";
 
 function renderShell(initialPath = "/presentations") {
   return render(

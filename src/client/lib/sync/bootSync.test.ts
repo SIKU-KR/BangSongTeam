@@ -8,7 +8,6 @@ import {
   type Presentation,
 } from "#shared";
 import { signInAsTestUser } from "../../test/sessionFixture";
-import { SEED_USER_ID as TEST_USER_ID } from "../../features/presentation";
 import {
   getUserSongs,
   resetSongLibraryStore,
@@ -34,6 +33,7 @@ import {
   listPresentations,
   resetPresentationStore,
 } from "../../features/presentation";
+import { SEED_USER_ID as TEST_USER_ID } from "../../test/presentationFixtures";
 
 const EMPTY_FOLDER_LIST: FolderListResponse = {
   folders: [],

@@ -1,7 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { PresentationDocumentSchema, type Presentation } from "#shared";
 import { signInAsTestUser } from "../../test/sessionFixture";
-import { SEED_PRESENTATIONS, SEED_USER_ID } from "./mockPresentations";
 import {
   __loadDocumentsForTests,
   canUndo,
@@ -21,6 +20,10 @@ import {
   flushPendingSync,
   setSyncEnabled,
 } from "../../lib/sync/syncScheduler";
+import {
+  SEED_PRESENTATIONS,
+  SEED_USER_ID,
+} from "../../test/presentationFixtures";
 
 const OWNER = "0000000000000000owner";
 const FOLDER = "f00000000000000000001";
