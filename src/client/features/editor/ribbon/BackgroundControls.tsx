@@ -2,7 +2,7 @@ import React, { useId, useState } from "react";
 import { ContrastIcon } from "lucide-react";
 import { Button } from "#components/ui/button";
 import { Slider } from "#components/ui/slider";
-import { DEFAULT_BACKGROUND_COLOR, type DeckStyle } from "#shared";
+import { resolveBackdropColor, type DeckStyle } from "#shared";
 import { useBackground } from "../../backgrounds/backgroundCatalog";
 import type { BackgroundChoice } from "../../presentation/presentationStore";
 import { BackgroundPickerModal } from "../BackgroundPickerModal";
@@ -52,9 +52,10 @@ export function BackgroundControls({
           <span
             className="h-6 w-10 shrink-0 overflow-hidden rounded-sm border"
             style={{
-              backgroundColor: background
-                ? DEFAULT_BACKGROUND_COLOR
-                : (style.backgroundColor ?? DEFAULT_BACKGROUND_COLOR),
+              backgroundColor: resolveBackdropColor(
+                style.backgroundColor,
+                Boolean(background),
+              ),
             }}
           >
             {background && (
