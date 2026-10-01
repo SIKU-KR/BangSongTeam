@@ -4,7 +4,6 @@ import {
   FolderIcon,
   ImageIcon,
   LogOutIcon,
-  PresentationIcon,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "cn";
@@ -142,9 +141,7 @@ export function AppSidebar(): React.JSX.Element {
               size="lg"
               onClick={() => navigate(drivePath(null))}
             >
-              <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
-                <PresentationIcon />
-              </div>
+              <img src="/icons/icon-192.png" alt="" className="size-8 shrink-0" />
               <div className="grid flex-1 text-left leading-tight">
                 <span className="truncate font-semibold">{APP_NAME}</span>
                 <span className="truncate text-xs text-muted-foreground">
