@@ -10,7 +10,6 @@ import {
 } from "#components/ui/alert-dialog";
 import { ImageIcon, WifiOffIcon } from "lucide-react";
 import { Alert, AlertDescription } from "#components/ui/alert";
-import { Badge } from "#components/ui/badge";
 import { Button } from "#components/ui/button";
 import { Card, CardAction, CardHeader, CardTitle } from "#components/ui/card";
 import {
@@ -54,28 +53,6 @@ function BackgroundCard({
         {action && <CardAction>{action}</CardAction>}
       </CardHeader>
     </Card>
-  );
-}
-
-function SectionHeader({
-  title,
-  count,
-  description,
-}: {
-  title: string;
-  count: number;
-  description: string;
-}): React.JSX.Element {
-  return (
-    <div className="border-b pb-3">
-      <div className="flex items-center gap-2.5">
-        <h2 className="text-xl font-bold tracking-tight">{title}</h2>
-        <Badge variant="secondary" className="font-mono">
-          {BACKGROUND_COPY.library.count(count)}
-        </Badge>
-      </div>
-      <p className="mt-1 text-xs text-muted-foreground">{description}</p>
-    </div>
   );
 }
 
@@ -131,12 +108,6 @@ export function BackgroundLibraryView({
       )}
 
       <section className="space-y-4">
-        <SectionHeader
-          title={BACKGROUND_COPY.library.title}
-          count={all.length}
-          description={BACKGROUND_COPY.library.description}
-        />
-
         {all.length > 0 && (
           <BackgroundKindFilter value={kind} onChange={setKind} />
         )}
@@ -183,10 +154,6 @@ export function BackgroundLibraryView({
           </div>
         )}
       </section>
-
-      <p className="text-xs text-muted-foreground">
-        {BACKGROUND_COPY.library.applyHint}
-      </p>
 
       <AlertDialog
         open={pendingDelete !== null}

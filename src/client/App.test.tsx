@@ -15,7 +15,7 @@ import {
   seedPresentationsIntoStorage,
 } from "./test/sessionFixture";
 import { APP_NAME } from "#shared";
-import { BACKGROUND_COPY } from "#copy/backgrounds";
+import { SHELL_COPY } from "#copy/shell";
 
 const DOC_ID = SEED_PRESENTATION_IDS[0];
 
@@ -73,7 +73,9 @@ describe("App Route Integration", () => {
     renderAt("/backgrounds");
 
     expect(
-      await screen.findByText(BACKGROUND_COPY.library.title),
+      await screen.findByRole("heading", {
+        name: SHELL_COPY.backgroundGallery,
+      }),
     ).toBeInTheDocument();
   });
 

@@ -38,7 +38,6 @@ import { COMMON_COPY } from "#copy/common";
 import { DRIVE_COPY } from "#copy/drive";
 import { FOLDER_COPY } from "#copy/folders";
 import { SHELL_COPY } from "#copy/shell";
-import { BACKGROUND_COPY } from "#copy/backgrounds";
 
 function renderShell(initialPath = "/presentations") {
   return render(
@@ -205,7 +204,6 @@ describe("AppShellLayout (드라이브형 홈)", () => {
     );
 
     fireEvent.click(screen.getByTestId("sidebar-nav-backgrounds"));
-    expect(screen.getByText(BACKGROUND_COPY.library.title)).toBeInTheDocument();
     expect(screen.queryByText("유형: 전체")).not.toBeInTheDocument();
     expect(
       screen.getByRole("heading", { name: SHELL_COPY.backgroundGallery }),
