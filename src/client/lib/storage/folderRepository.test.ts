@@ -6,7 +6,6 @@ import {
   saveFolders,
   loadAllFolders,
   deleteFolders,
-  clearAllFolders,
 } from "./folderRepository";
 
 function makeFolder(overrides: Partial<Folder> = {}): Folder {
@@ -69,7 +68,7 @@ describe("folderRepository", () => {
     expect(corrupted.map((record) => record.id)).toEqual(["broken"]);
   });
 
-  it("여러 건을 지우고 전체를 비운다", async () => {
+  it("여러 건을 지운다", async () => {
     const a = makeFolder();
     const b = makeFolder();
     const c = makeFolder();
@@ -77,8 +76,5 @@ describe("folderRepository", () => {
 
     await deleteFolders([a.id, b.id]);
     expect((await loadAllFolders()).valid).toEqual([c]);
-
-    await clearAllFolders();
-    expect((await loadAllFolders()).valid).toEqual([]);
   });
 });

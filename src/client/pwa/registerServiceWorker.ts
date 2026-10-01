@@ -10,17 +10,15 @@ import { registerSW } from "virtual:pwa-register";
  */
 export interface ServiceWorkerState {
   needRefresh: boolean;
-  offlineReady: boolean;
 }
 
 /** vite-plugin-pwa의 `registerSW` 시그니처 (테스트 주입용) */
 export type ServiceWorkerRegistrar = (options: {
   onNeedRefresh?: () => void;
-  onOfflineReady?: () => void;
   onRegisterError?: (error: unknown) => void;
 }) => (reloadPage?: boolean) => Promise<void>;
 
-const INITIAL: ServiceWorkerState = { needRefresh: false, offlineReady: false };
+const INITIAL: ServiceWorkerState = { needRefresh: false };
 
 let state: ServiceWorkerState = INITIAL;
 let applyUpdate: ((reloadPage?: boolean) => Promise<void>) | null = null;
@@ -29,12 +27,7 @@ let registered = false;
 const listeners = new Set<() => void>();
 
 function setState(next: ServiceWorkerState): void {
-  if (
-    next.needRefresh === state.needRefresh &&
-    next.offlineReady === state.offlineReady
-  ) {
-    return;
-  }
+  if (next.needRefresh === state.needRefresh) return;
   state = next;
   for (const listener of listeners) listener();
 }
@@ -80,9 +73,6 @@ export function registerServiceWorker(
   applyUpdate = registrar({
     onNeedRefresh: () => {
       setState({ ...state, needRefresh: true });
-    },
-    onOfflineReady: () => {
-      setState({ ...state, offlineReady: true });
     },
     onRegisterError: () => {
       registered = false;

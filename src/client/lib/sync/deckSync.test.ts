@@ -11,7 +11,7 @@ import {
   __resetDeckSyncForTests,
 } from "./deckSync";
 import { OfflineError } from "../api/request";
-import { getSyncStatus, __resetSyncStatusForTests } from "./syncStatus";
+import { getSyncSnapshot, __resetSyncStatusForTests } from "./syncStatus";
 
 const USER = "00000000x000000000001";
 const A = "c0000000000000000000a";
@@ -61,7 +61,7 @@ describe("보관함 push 큐", () => {
     await flushDeckSync();
     expect(push).toHaveBeenCalledTimes(1);
     expect(push.mock.calls[0][0].title).toBe("2");
-    expect(getSyncStatus()).toBe("synced");
+    expect(getSyncSnapshot().status).toBe("synced");
   });
 
   it("hands the server-confirmed deck to the listener", async () => {
@@ -84,18 +84,18 @@ describe("보관함 push 큐", () => {
     push.mockRejectedValueOnce(new OfflineError());
     scheduleDeckPush(deck());
     await flushDeckSync();
-    expect(getSyncStatus()).toBe("offline");
+    expect(getSyncSnapshot().status).toBe("offline");
 
     await flushDeckSync();
     expect(push).toHaveBeenCalledTimes(2);
-    expect(getSyncStatus()).toBe("synced");
+    expect(getSyncSnapshot().status).toBe("synced");
   });
 
   it("marks the status as error on a rejected push without retrying", async () => {
     push.mockRejectedValueOnce(new Error("400"));
     scheduleDeckPush(deck());
     await flushDeckSync();
-    expect(getSyncStatus()).toBe("error");
+    expect(getSyncSnapshot().status).toBe("error");
     await flushDeckSync();
     expect(push).toHaveBeenCalledTimes(1);
   });

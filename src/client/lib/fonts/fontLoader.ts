@@ -1,5 +1,4 @@
 import { loadNoonnuFontCatalog, type NoonnuFont } from "#shared";
-import { COMMON_COPY } from "#copy/common";
 
 /**
  * npm으로 번들한 글꼴. 카탈로그의 CDN 주소 대신 자체 오리진에서 받는다.
@@ -153,26 +152,4 @@ export async function loadWebFont(nameOrFamily: string): Promise<void> {
   style.textContent = faces.join("\n");
   document.head.appendChild(style);
   return loaded;
-}
-
-/**
- * 웹폰트 프리로드 및 브라우저 폰트 캐시 준비
- */
-export async function preloadWebFont(
-  nameOrFamily: string,
-  sampleText: string = COMMON_COPY.fontSample,
-): Promise<void> {
-  await loadWebFont(nameOrFamily);
-
-  if (typeof document === "undefined" || !document.fonts?.load) return;
-
-  const family = toCssFontFamily(nameOrFamily);
-  try {
-    await Promise.all([
-      document.fonts.load(`400 1rem ${family}`, sampleText),
-      document.fonts.load(`700 1rem ${family}`, sampleText),
-    ]);
-  } catch {
-    // 폰트 로드 실패 시 기본 폰트로 안전 폴백
-  }
 }

@@ -1,6 +1,5 @@
 export {
   setSyncStatus,
-  getSyncStatus,
   getSyncSnapshot,
   useSyncStatus,
   __resetSyncStatusForTests,

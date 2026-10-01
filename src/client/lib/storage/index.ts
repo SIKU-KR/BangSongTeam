@@ -12,7 +12,6 @@ export {
   savePresentation,
   loadAllPresentations,
   deletePresentation,
-  clearAllPresentations,
   type LoadResult,
   type CorruptedRecord,
 } from "./presentationRepository";
@@ -22,7 +21,6 @@ export {
   saveFolders,
   loadAllFolders,
   deleteFolders,
-  clearAllFolders,
 } from "./folderRepository";
 
 export {

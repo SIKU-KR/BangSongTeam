@@ -51,15 +51,6 @@ describe("registerServiceWorker", () => {
     expect(apply).not.toHaveBeenCalled();
   });
 
-  it("오프라인 준비 완료 신호를 상태로 노출한다", () => {
-    const { registrar, hooks } = makeRegistrar();
-    registerServiceWorker(registrar);
-
-    hooks().onOfflineReady?.();
-
-    expect(getServiceWorkerState().offlineReady).toBe(true);
-  });
-
   it("사용자가 적용을 요청하면 새로고침과 함께 갱신한다", async () => {
     const { registrar, hooks, apply } = makeRegistrar();
     registerServiceWorker(registrar);

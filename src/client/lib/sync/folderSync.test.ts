@@ -9,7 +9,7 @@ import {
   __resetFolderSyncForTests,
 } from "./folderSync";
 import { OfflineError } from "../api/request";
-import { getSyncStatus, __resetSyncStatusForTests } from "./syncStatus";
+import { getSyncSnapshot, __resetSyncStatusForTests } from "./syncStatus";
 
 const USER = "000000000000000000001";
 const PARENT = "a00000000000000000001";
@@ -56,7 +56,7 @@ describe("폴더 push 큐", () => {
     await flushFolderSync();
     expect(push).toHaveBeenCalledTimes(1);
     expect(push.mock.calls[0][0].name).toBe("2");
-    expect(getSyncStatus()).toBe("synced");
+    expect(getSyncSnapshot().status).toBe("synced");
   });
 
   it("부모를 자식보다 먼저 올린다 (예약 순서와 무관)", async () => {
@@ -87,11 +87,11 @@ describe("폴더 push 큐", () => {
     push.mockRejectedValueOnce(new OfflineError());
     scheduleFolderPush(folder(PARENT, null));
     await flushFolderSync();
-    expect(getSyncStatus()).toBe("offline");
+    expect(getSyncSnapshot().status).toBe("offline");
 
     await flushFolderSync();
     expect(push).toHaveBeenCalledTimes(2);
-    expect(getSyncStatus()).toBe("synced");
+    expect(getSyncSnapshot().status).toBe("synced");
   });
 
   it("오프라인 재큐잉이 그사이 예약된 더 새로운 변경을 덮지 않는다", async () => {

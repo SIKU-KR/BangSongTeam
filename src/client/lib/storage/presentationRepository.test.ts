@@ -10,7 +10,6 @@ import {
   savePresentation,
   loadAllPresentations,
   deletePresentation,
-  clearAllPresentations,
 } from "./presentationRepository";
 
 function makePresentation(overrides: Partial<Presentation> = {}): Presentation {
@@ -101,15 +100,5 @@ describe("presentationRepository", () => {
 
     expect(valid).toEqual([]);
     expect(corrupted).toEqual([]);
-  });
-
-  it("clearAllPresentations는 모든 문서를 비운다", async () => {
-    await savePresentation(makePresentation());
-    await savePresentation(makePresentation());
-
-    await clearAllPresentations();
-    const { valid } = await loadAllPresentations();
-
-    expect(valid).toHaveLength(0);
   });
 });

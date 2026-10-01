@@ -190,14 +190,3 @@ function subscribe(callback: () => void): () => void {
 export function useUserSongs(): Deck[] {
   return useSyncExternalStore(subscribe, getUserSongs, getUserSongs);
 }
-
-/**
- * 보관함 곡 1건 구독 훅.
- */
-export function useLibraryDeck(
-  id: string | null | undefined,
-): Deck | undefined {
-  const find = (): Deck | undefined =>
-    id ? userSongsCache.find((deck) => deck.id === id) : undefined;
-  return useSyncExternalStore(subscribe, find, find);
-}

@@ -58,9 +58,3 @@ export async function deletePresentation(id: string): Promise<void> {
   const db = await getOfflineDB();
   await db.delete("presentations", id);
 }
-
-/** 테스트 및 저장소 초기화 전용 */
-export async function clearAllPresentations(): Promise<void> {
-  const db = await getOfflineDB();
-  await db.clear("presentations");
-}

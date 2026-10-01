@@ -48,9 +48,3 @@ export async function deleteFolders(ids: readonly string[]): Promise<void> {
   const tx = db.transaction("folders", "readwrite");
   await Promise.all([...ids.map((id) => tx.store.delete(id)), tx.done]);
 }
-
-/** 테스트 전용: 모든 폴더 데이터 삭제 */
-export async function clearAllFolders(): Promise<void> {
-  const db = await getOfflineDB();
-  await db.clear("folders");
-}

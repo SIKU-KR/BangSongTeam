@@ -426,10 +426,6 @@ export function listPresentations(): Presentation[] {
   return listSnapshot;
 }
 
-export function getActivePresentationId(): string {
-  return state.activeId;
-}
-
 export function openPresentation(id: string): boolean {
   if (!state.byId[id]) return false;
   if (state.activeId === id) return true;
@@ -940,14 +936,6 @@ function subscribe(listener: () => void): () => void {
   return () => {
     listeners.delete(listener);
   };
-}
-
-export function useActivePresentation(): Presentation {
-  return useSyncExternalStore(
-    subscribe,
-    getActivePresentation,
-    getActivePresentation,
-  );
 }
 
 export function usePresentationList(): Presentation[] {
