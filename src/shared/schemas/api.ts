@@ -1,59 +1,13 @@
 import { z } from "zod";
 import { IdSchema } from "./id";
-import { DeckStyleSchema } from "./style";
-import { SlideSchema } from "./slide";
-import {
-  DeckSchema,
-  MAX_DECK_ARTIST_LENGTH,
-  MAX_DECK_TITLE_LENGTH,
-} from "./deck";
-import {
-  MAX_PRESENTATION_TITLE_LENGTH,
-  PresentationSchema,
-  PresentationItemSchema,
-} from "./presentation";
+import { DeckSchema } from "./deck";
+import { PresentationSchema, PresentationItemSchema } from "./presentation";
 import { PublicDeckSummarySchema } from "./library";
-
-export const CreateDeckRequestSchema = z.object({
-  title: z.string().min(1).max(MAX_DECK_TITLE_LENGTH),
-  artist: z.string().max(MAX_DECK_ARTIST_LENGTH).default(""),
-  lyricsRaw: z.string().min(1),
-  slides: z.array(SlideSchema),
-  backgroundId: IdSchema.nullable().optional(),
-  style: DeckStyleSchema,
-  visibility: z.enum(["private", "public"]).default("private"),
-  forkedFrom: IdSchema.optional(),
-});
-export type CreateDeckRequest = z.infer<typeof CreateDeckRequestSchema>;
-
-export const UpdateDeckRequestSchema = CreateDeckRequestSchema.partial();
-export type UpdateDeckRequest = z.infer<typeof UpdateDeckRequestSchema>;
-
-export const CreatePresentationRequestSchema = z.object({
-  title: z.string().min(1).max(MAX_PRESENTATION_TITLE_LENGTH),
-  serviceDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-});
-export type CreatePresentationRequest = z.infer<
-  typeof CreatePresentationRequestSchema
->;
-
-export const UpdatePresentationItemsRequestSchema = z.object({
-  items: z.array(
-    z.object({
-      deckId: IdSchema,
-      order: z.number().int().nonnegative(),
-    }),
-  ),
-});
-export type UpdatePresentationItemsRequest = z.infer<
-  typeof UpdatePresentationItemsRequestSchema
->;
 
 export const SearchCatalogQuerySchema = z.object({
   q: z.string().trim().max(50).default(""),
   limit: z.coerce.number().int().min(1).max(50).default(20),
 });
-export type SearchCatalogQuery = z.infer<typeof SearchCatalogQuerySchema>;
 
 export const SearchCatalogResponseSchema = z.object({
   decks: z.array(PublicDeckSummarySchema),
@@ -97,23 +51,6 @@ export const PresentationChangesSchema = PresentationSchema.omit({
   decks: z.array(DeckSchema),
 });
 export type PresentationChanges = z.infer<typeof PresentationChangesSchema>;
-
-export const ApiErrorSchema = z.object({
-  error: z.string(),
-});
-export type ApiError = z.infer<typeof ApiErrorSchema>;
-
-export const PresentationListResponseSchema = z.object({
-  presentations: z.array(PresentationDocumentSchema),
-});
-export type PresentationListResponse = z.infer<
-  typeof PresentationListResponseSchema
->;
-
-export const DeckListResponseSchema = z.object({
-  decks: z.array(DeckSchema),
-});
-export type DeckListResponse = z.infer<typeof DeckListResponseSchema>;
 
 /** 로그인 화면에 버튼이 나오는 순서이기도 하다 */
 export const SocialProviderSchema = z.enum(["kakao", "naver", "google"]);

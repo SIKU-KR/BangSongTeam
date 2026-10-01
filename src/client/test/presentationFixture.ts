@@ -4,7 +4,6 @@ import {
   Deck,
   DeckSchema,
   DEFAULT_DECK_STYLE,
-  mergeSlidesToLyrics,
   Slide,
 } from "#shared";
 
@@ -141,6 +140,10 @@ const SONG_DEFINITIONS: SongMockInput[] = [
     ],
   },
 ];
+
+function mergeSlidesToLyrics(slides: Slide[]): string {
+  return slides.map((slide) => slide.lines.join("\n")).join("\n\n");
+}
 
 function buildMockDeck(def: SongMockInput): Deck {
   const slides: Slide[] = def.slideLines.map((lines, index) => ({

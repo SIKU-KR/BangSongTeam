@@ -2,7 +2,6 @@ import { describe, it, expect } from "vitest";
 import {
   sanitizeLyricLine,
   splitLyricsIntoSlides,
-  mergeSlidesToLyrics,
   splitLinesAtCursor,
   mergeSlideLines,
   fitLinesToSlides,
@@ -212,37 +211,6 @@ describe("Lyric Processing Utilities", () => {
         { id: "s_2", order: 1, lines: ["2절"] },
       ];
       expect(fitSlidesToLimits(slides)).toEqual(slides);
-    });
-  });
-
-  describe("mergeSlidesToLyrics", () => {
-    it("merges slides into raw lyrics text with blank line separation", () => {
-      const slides = [
-        {
-          id: "s_1",
-          order: 0,
-          lines: ["1절 첫째줄", "1절 둘째줄"],
-        },
-        {
-          id: "s_2",
-          order: 1,
-          lines: ["2절 첫째줄", "2절 둘째줄"],
-        },
-      ];
-      const merged = mergeSlidesToLyrics(slides);
-      expect(merged).toBe("1절 첫째줄\n1절 둘째줄\n\n2절 첫째줄\n2절 둘째줄");
-    });
-
-    it("handles empty slides array", () => {
-      expect(mergeSlidesToLyrics([])).toBe("");
-    });
-
-    it("respects slide order even if input array is out of order", () => {
-      const slides = [
-        { id: "s_2", order: 1, lines: ["2절"] },
-        { id: "s_1", order: 0, lines: ["1절"] },
-      ];
-      expect(mergeSlidesToLyrics(slides)).toBe("1절\n\n2절");
     });
   });
 

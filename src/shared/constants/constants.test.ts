@@ -1,7 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
   SUPPORTED_FONTS,
-  GRID_ANCHOR_PRESET_COORDINATES,
   GRID_ANCHOR_TRANSFORMS,
   TEXT_SHADOW_PRESETS,
   DEFAULT_DECK_STYLE,
@@ -15,7 +14,7 @@ describe("Constants", () => {
     expect(parsed).toEqual(DEFAULT_DECK_STYLE);
   });
 
-  it("covers all 9 grid presets with valid coordinates within safe margin", () => {
+  it("covers all 9 grid presets with an anchor transform", () => {
     const presets = [
       "top-left",
       "top-center",
@@ -29,13 +28,7 @@ describe("Constants", () => {
     ] as const;
 
     for (const preset of presets) {
-      expect(GRID_ANCHOR_PRESET_COORDINATES[preset]).toBeDefined();
       expect(GRID_ANCHOR_TRANSFORMS[preset]).toBeDefined();
-      const coords = GRID_ANCHOR_PRESET_COORDINATES[preset];
-      expect(coords.xPercent).toBeGreaterThanOrEqual(5);
-      expect(coords.xPercent).toBeLessThanOrEqual(95);
-      expect(coords.yPercent).toBeGreaterThanOrEqual(5);
-      expect(coords.yPercent).toBeLessThanOrEqual(95);
     }
   });
 
@@ -54,9 +47,7 @@ describe("Constants", () => {
     expect(SUPPORTED_FONTS).toContain("KoPubWorld Batang");
   });
 
-  it("defines valid keyboard shortcuts", () => {
-    expect(PRESENTATION_SHORTCUTS.NEXT_SLIDE).toContain("Space");
-    expect(PRESENTATION_SHORTCUTS.PREV_SLIDE).toContain("ArrowLeft");
+  it("defines the navigation buffer timeout", () => {
     expect(PRESENTATION_SHORTCUTS.BUFFER_CLEAR_TIMEOUT_MS).toBe(3000);
   });
 });
