@@ -4,7 +4,6 @@ export interface OverlayLayerProps {
   opacity?: number;
   color?: string;
   isBlackout?: boolean;
-  className?: string;
 }
 
 /** 배경 밝기를 조절하거나 암전하는 오버레이 레이어 */
@@ -12,7 +11,6 @@ export function OverlayLayer({
   opacity = 40,
   color = "#000000",
   isBlackout = false,
-  className = "",
 }: OverlayLayerProps): React.JSX.Element {
   const effectiveOpacity = isBlackout
     ? 1
@@ -21,7 +19,7 @@ export function OverlayLayer({
   return (
     <div
       data-testid="overlay-layer"
-      className={`pointer-events-none absolute inset-0 z-10 transition-opacity duration-150 ease-out ${className}`}
+      className="pointer-events-none absolute inset-0 z-10 transition-opacity duration-150 ease-out"
       style={{
         backgroundColor: color,
         opacity: effectiveOpacity,

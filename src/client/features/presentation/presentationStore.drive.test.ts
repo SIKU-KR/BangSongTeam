@@ -44,8 +44,8 @@ describe("presentationStore 드라이브 조작", () => {
   });
 
   it("새 프레젠테이션을 지정한 폴더에 만든다", () => {
-    expect(createNewPresentation("세트", FOLDER).folderId).toBe(FOLDER);
-    expect(createNewPresentation("세트").folderId).toBeNull();
+    expect(createNewPresentation(FOLDER).folderId).toBe(FOLDER);
+    expect(createNewPresentation().folderId).toBeNull();
   });
 
   it("활성 문서가 아니어도 id로 옮기고 이름을 바꾼다", () => {

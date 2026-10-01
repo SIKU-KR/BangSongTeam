@@ -1,5 +1,3 @@
-export type StoragePersistenceState = "persisted" | "denied" | "unsupported";
-
 function hasStorageManager(): boolean {
   return (
     typeof navigator !== "undefined" &&
@@ -8,19 +6,21 @@ function hasStorageManager(): boolean {
   );
 }
 
-export async function requestPersistentStorage(): Promise<StoragePersistenceState> {
+/**
+ * 브라우저가 저장소를 임의로 비우지 않도록 영구 저장을 요청한다.
+ * 거부되거나 지원하지 않아도 동작에는 영향이 없어 결과를 알리지 않고 예외도 던지지 않는다.
+ */
+export async function requestPersistentStorage(): Promise<void> {
   if (!hasStorageManager() || typeof navigator.storage.persist !== "function") {
-    return "unsupported";
+    return;
   }
 
   try {
     if (typeof navigator.storage.persisted === "function") {
-      const already = await navigator.storage.persisted();
-      if (already) return "persisted";
+      if (await navigator.storage.persisted()) return;
     }
-    const granted = await navigator.storage.persist();
-    return granted ? "persisted" : "denied";
+    await navigator.storage.persist();
   } catch {
-    return "unsupported";
+    return;
   }
 }

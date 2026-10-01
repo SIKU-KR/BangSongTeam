@@ -21,7 +21,6 @@ import {
   cancelDocumentPush,
 } from "../../lib/sync/syncScheduler";
 import { getServiceBackgrounds } from "../backgrounds/backgroundCatalog";
-import { PRESENTATION_COPY } from "#copy/presentation";
 import { COMMON_COPY } from "#copy/common";
 import {
   breakHistoryCoalescing,
@@ -383,11 +382,10 @@ const draftTitleFormat = new Intl.DateTimeFormat("ko-KR", {
 /**
  * pushHistory()를 호출하지 않는 것은 의도적이다 — 문서 추가는 "현재 문서의 편집"이
  * 아니므로, 기록하면 canUndo()가 허위로 true가 되어 유령 undo가 생긴다. `folderId`는
- * 드라이브에서 지금 보고 있는 폴더다 (없으면 루트). 제목을 생략하면 만든 시각
+ * 드라이브에서 지금 보고 있는 폴더다 (없으면 루트). 제목은 만든 시각
  * ("2026. 9. 25. 오후 3:42")이 초안 제목이 된다.
  */
 export function createNewPresentation(
-  title?: string,
   folderId: string | null = null,
 ): Presentation {
   const createdAt = new Date();
@@ -395,7 +393,7 @@ export function createNewPresentation(
   const created: Presentation = {
     id: createId(),
     userId: getCurrentUserId() ?? readActive().userId,
-    title: title ?? draftTitleFormat.format(createdAt),
+    title: draftTitleFormat.format(createdAt),
     serviceDate: now.slice(0, 10),
     items: [],
     folderId,
@@ -547,8 +545,8 @@ export function updateSlideLines(
 
 export function addSlideToSong(
   songIndex: number,
-  lines: string[] = [PRESENTATION_COPY.newSlidePlaceholder],
-  afterIndex?: number,
+  lines: string[],
+  afterIndex: number,
 ): void {
   const current = readSongSlides(songIndex);
   if (!current) return;
@@ -556,7 +554,7 @@ export function addSlideToSong(
   pushHistory();
 
   const slides = [...current];
-  const insertAt = afterIndex !== undefined ? afterIndex + 1 : slides.length;
+  const insertAt = afterIndex + 1;
   slides.splice(insertAt, 0, {
     id: createSlideId(),
     order: insertAt,

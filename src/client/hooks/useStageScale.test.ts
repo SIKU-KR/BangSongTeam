@@ -9,8 +9,6 @@ describe("useStageScale and calculateStageScale", () => {
       expect(result.scale).toBe(1);
       expect(result.translateX).toBe(0);
       expect(result.translateY).toBe(0);
-      expect(result.stageWidth).toBe(1920);
-      expect(result.stageHeight).toBe(1080);
     });
 
     it("should calculate 2/3 (0.6667) scale for 1280x720 16:9 resolution", () => {

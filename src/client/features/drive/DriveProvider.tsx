@@ -174,7 +174,7 @@ export function DriveProvider({
   const createPresentationIn = useCallback(
     (folderId: string | null): void => {
       const target = isFolderAvailable(folderId) ? folderId : null;
-      const created = createNewPresentation(undefined, target);
+      const created = createNewPresentation(target);
       navigate(editorPath(created.id));
     },
     [navigate],

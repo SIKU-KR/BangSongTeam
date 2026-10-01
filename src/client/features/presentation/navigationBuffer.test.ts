@@ -1,6 +1,18 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { renderHook, act } from "@testing-library/react";
+import { PRESENTATION_SHORTCUTS } from "#shared";
 import { useNavigationBuffer } from "./useNavigationBuffer";
+
+const TIMEOUT_MS = PRESENTATION_SHORTCUTS.BUFFER_CLEAR_TIMEOUT_MS;
+
+function typeKeys(
+  handleKey: (key: string) => void,
+  keys: readonly string[],
+): void {
+  act(() => {
+    for (const key of keys) handleKey(key);
+  });
+}
 
 describe("useNavigationBuffer Hook", () => {
   beforeEach(() => {
@@ -8,70 +20,46 @@ describe("useNavigationBuffer Hook", () => {
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     vi.restoreAllMocks();
   });
 
   it("Test 1: '3' + Enter -> triggers jump to slide number 3", () => {
     const onJump = vi.fn();
     const { result } = renderHook(() =>
-      useNavigationBuffer({
-        totalSlides: 20,
-        onJump,
-      }),
+      useNavigationBuffer({ totalSlides: 20, onJump }),
     );
 
-    act(() => {
-      result.current.handleKey("3");
-    });
-    expect(result.current.buffer).toBe("3");
+    typeKeys(result.current.handleKey, ["3"]);
+    expect(onJump).not.toHaveBeenCalled();
 
-    act(() => {
-      result.current.handleKey("Enter");
-    });
-
+    typeKeys(result.current.handleKey, ["Enter"]);
     expect(onJump).toHaveBeenCalledTimes(1);
     expect(onJump).toHaveBeenCalledWith(3);
-    expect(result.current.buffer).toBe("");
+
+    typeKeys(result.current.handleKey, ["Enter"]);
+    expect(onJump).toHaveBeenCalledTimes(1);
   });
 
   it("Test 2: multi-digit '12' + Enter -> triggers jump to slide number 12", () => {
     const onJump = vi.fn();
     const { result } = renderHook(() =>
-      useNavigationBuffer({
-        totalSlides: 20,
-        onJump,
-      }),
+      useNavigationBuffer({ totalSlides: 20, onJump }),
     );
 
-    act(() => {
-      result.current.handleKey("1");
-      result.current.handleKey("2");
-    });
-    expect(result.current.buffer).toBe("12");
-
-    act(() => {
-      result.current.handleKey("Enter");
-    });
+    typeKeys(result.current.handleKey, ["1", "2", "Enter"]);
 
     expect(onJump).toHaveBeenCalledTimes(1);
     expect(onJump).toHaveBeenCalledWith(12);
-    expect(result.current.buffer).toBe("");
   });
 
   it("Test 3: the last slide number (= totalSlides) is valid", () => {
     const onJump = vi.fn();
     const { result } = renderHook(() =>
-      useNavigationBuffer({
-        totalSlides: 20,
-        onJump,
-      }),
+      useNavigationBuffer({ totalSlides: 20, onJump }),
     );
 
-    act(() => {
-      result.current.handleKey("2");
-      result.current.handleKey("0");
-      result.current.handleKey("Enter");
-    });
+    typeKeys(result.current.handleKey, ["2", "0", "Enter"]);
 
     expect(onJump).toHaveBeenCalledWith(20);
   });
@@ -79,17 +67,10 @@ describe("useNavigationBuffer Hook", () => {
   it("Test 3b: leading zero is read as the same number ('07' -> 7)", () => {
     const onJump = vi.fn();
     const { result } = renderHook(() =>
-      useNavigationBuffer({
-        totalSlides: 20,
-        onJump,
-      }),
+      useNavigationBuffer({ totalSlides: 20, onJump }),
     );
 
-    act(() => {
-      result.current.handleKey("0");
-      result.current.handleKey("7");
-      result.current.handleKey("Enter");
-    });
+    typeKeys(result.current.handleKey, ["0", "7", "Enter"]);
 
     expect(onJump).toHaveBeenCalledWith(7);
   });
@@ -97,144 +78,98 @@ describe("useNavigationBuffer Hook", () => {
   it("Test 4: Backspace removes the last character from buffer", () => {
     const onJump = vi.fn();
     const { result } = renderHook(() =>
-      useNavigationBuffer({
-        totalSlides: 200,
-        onJump,
-      }),
+      useNavigationBuffer({ totalSlides: 200, onJump }),
     );
 
-    act(() => {
-      result.current.handleKey("1");
-      result.current.handleKey("2");
-      result.current.handleKey("4");
-    });
-    expect(result.current.buffer).toBe("124");
+    typeKeys(result.current.handleKey, ["1", "2", "4", "Backspace", "Enter"]);
+    expect(onJump).toHaveBeenLastCalledWith(12);
 
-    act(() => {
-      result.current.handleKey("Backspace");
-    });
-    expect(result.current.buffer).toBe("12");
+    typeKeys(result.current.handleKey, ["1", "2", "Backspace", "Enter"]);
+    expect(onJump).toHaveBeenLastCalledWith(1);
 
-    act(() => {
-      result.current.handleKey("Backspace");
-    });
-    expect(result.current.buffer).toBe("1");
-
-    act(() => {
-      result.current.handleKey("Backspace");
-    });
-    expect(result.current.buffer).toBe("");
-
-    act(() => {
-      result.current.handleKey("Backspace");
-    });
-    expect(result.current.buffer).toBe("");
+    typeKeys(result.current.handleKey, [
+      "1",
+      "Backspace",
+      "Backspace",
+      "Backspace",
+      "Enter",
+    ]);
+    expect(onJump).toHaveBeenCalledTimes(2);
   });
 
-  it("Test 5: Automatically clears buffer after 3000ms of inactivity", () => {
+  it("Test 5: Automatically clears buffer after the inactivity timeout", () => {
     const onJump = vi.fn();
     const { result } = renderHook(() =>
-      useNavigationBuffer({
-        totalSlides: 20,
-        onJump,
-        timeoutMs: 3000,
-      }),
+      useNavigationBuffer({ totalSlides: 20, onJump }),
     );
 
+    typeKeys(result.current.handleKey, ["2"]);
     act(() => {
-      result.current.handleKey("2");
+      vi.advanceTimersByTime(TIMEOUT_MS - 1);
     });
-    expect(result.current.buffer).toBe("2");
+    typeKeys(result.current.handleKey, ["Enter"]);
+    expect(onJump).toHaveBeenCalledWith(2);
 
+    onJump.mockClear();
+    typeKeys(result.current.handleKey, ["2"]);
     act(() => {
-      vi.advanceTimersByTime(2999);
+      vi.advanceTimersByTime(TIMEOUT_MS);
     });
-    expect(result.current.buffer).toBe("2");
-
-    act(() => {
-      vi.advanceTimersByTime(1);
-    });
-    expect(result.current.buffer).toBe("");
+    typeKeys(result.current.handleKey, ["Enter"]);
+    expect(onJump).not.toHaveBeenCalled();
   });
 
-  it("Test 5b: Any new keypress resets the 3000ms timer", () => {
+  it("Test 5b: Any new keypress resets the timer", () => {
     const onJump = vi.fn();
     const { result } = renderHook(() =>
-      useNavigationBuffer({
-        totalSlides: 20,
-        onJump,
-        timeoutMs: 3000,
-      }),
+      useNavigationBuffer({ totalSlides: 20, onJump }),
     );
 
+    typeKeys(result.current.handleKey, ["1"]);
     act(() => {
-      result.current.handleKey("1");
+      vi.advanceTimersByTime(TIMEOUT_MS - 1000);
     });
+    typeKeys(result.current.handleKey, ["2"]);
+    act(() => {
+      vi.advanceTimersByTime(TIMEOUT_MS - 1000);
+    });
+    typeKeys(result.current.handleKey, ["Enter"]);
+    expect(onJump).toHaveBeenCalledWith(12);
 
+    onJump.mockClear();
+    typeKeys(result.current.handleKey, ["1", "2"]);
     act(() => {
-      vi.advanceTimersByTime(2000);
+      vi.advanceTimersByTime(TIMEOUT_MS);
     });
-    expect(result.current.buffer).toBe("1");
-
-    act(() => {
-      result.current.handleKey("2");
-    });
-    expect(result.current.buffer).toBe("12");
-
-    act(() => {
-      vi.advanceTimersByTime(2000);
-    });
-    expect(result.current.buffer).toBe("12");
-
-    act(() => {
-      vi.advanceTimersByTime(1000);
-    });
-    expect(result.current.buffer).toBe("");
+    typeKeys(result.current.handleKey, ["Enter"]);
+    expect(onJump).not.toHaveBeenCalled();
   });
 
   it("Test 6: Invalid inputs do not trigger onJump and clear buffer", () => {
     const onJump = vi.fn();
-    const onInvalidJump = vi.fn();
     const { result } = renderHook(() =>
-      useNavigationBuffer({
-        totalSlides: 5,
-        onJump,
-        onInvalidJump,
-      }),
+      useNavigationBuffer({ totalSlides: 5, onJump }),
     );
 
-    act(() => {
-      result.current.handleKey("6");
-      result.current.handleKey("Enter");
-    });
+    typeKeys(result.current.handleKey, ["6", "Enter"]);
     expect(onJump).not.toHaveBeenCalled();
-    expect(onInvalidJump).toHaveBeenCalledWith("6");
-    expect(result.current.buffer).toBe("");
 
-    act(() => {
-      result.current.handleKey("0");
-      result.current.handleKey("Enter");
-    });
+    typeKeys(result.current.handleKey, ["0", "Enter"]);
     expect(onJump).not.toHaveBeenCalled();
-    expect(onInvalidJump).toHaveBeenCalledWith("0");
-    expect(result.current.buffer).toBe("");
 
-    act(() => {
-      result.current.handleKey("Enter");
-    });
+    typeKeys(result.current.handleKey, ["Enter"]);
     expect(onJump).not.toHaveBeenCalled();
-    expect(onInvalidJump).toHaveBeenCalledTimes(2);
+
+    typeKeys(result.current.handleKey, ["3", "Enter"]);
+    expect(onJump).toHaveBeenCalledTimes(1);
+    expect(onJump).toHaveBeenCalledWith(3);
   });
 
   it("Test 6b: without totalSlides only the lower bound is checked", () => {
     const onJump = vi.fn();
     const { result } = renderHook(() => useNavigationBuffer({ onJump }));
 
-    act(() => {
-      result.current.handleKey("9");
-      result.current.handleKey("9");
-      result.current.handleKey("Enter");
-    });
+    typeKeys(result.current.handleKey, ["9", "9", "Enter"]);
 
     expect(onJump).toHaveBeenCalledWith(99);
   });
@@ -242,52 +177,13 @@ describe("useNavigationBuffer Hook", () => {
   it("Test 7: Ignores non-numeric characters, including the old '.' separator", () => {
     const onJump = vi.fn();
     const { result } = renderHook(() =>
-      useNavigationBuffer({
-        totalSlides: 20,
-        onJump,
-      }),
+      useNavigationBuffer({ totalSlides: 20, onJump }),
     );
 
-    act(() => {
-      result.current.handleKey("a");
-      result.current.handleKey(" ");
-      result.current.handleKey("!");
-      result.current.handleKey(".");
-    });
-    expect(result.current.buffer).toBe("");
+    typeKeys(result.current.handleKey, ["a", " ", "!", ".", "Enter"]);
+    expect(onJump).not.toHaveBeenCalled();
 
-    act(() => {
-      result.current.handleKey("1");
-      result.current.handleKey(".");
-      result.current.handleKey("x");
-      result.current.handleKey("2");
-    });
-    expect(result.current.buffer).toBe("12");
-
-    act(() => {
-      result.current.handleKey("Enter");
-    });
+    typeKeys(result.current.handleKey, ["1", ".", "x", "2", "Enter"]);
     expect(onJump).toHaveBeenCalledWith(12);
-  });
-
-  it("Test 8: clearBuffer manually resets buffer and timer", () => {
-    const onJump = vi.fn();
-    const { result } = renderHook(() =>
-      useNavigationBuffer({
-        totalSlides: 20,
-        onJump,
-      }),
-    );
-
-    act(() => {
-      result.current.handleKey("1");
-      result.current.handleKey("2");
-    });
-    expect(result.current.buffer).toBe("12");
-
-    act(() => {
-      result.current.clearBuffer();
-    });
-    expect(result.current.buffer).toBe("");
   });
 });

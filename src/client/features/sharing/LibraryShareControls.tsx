@@ -124,9 +124,7 @@ export function LibraryShareControls({
 
       {correctionTargetId && isReportOpen && (
         <ReportDialog
-          isOpen
           onClose={() => setIsReportOpen(false)}
-          targetType="deck"
           targetId={correctionTargetId}
           targetTitle={deck.title}
           defaultReason="correction"

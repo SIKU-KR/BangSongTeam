@@ -13,9 +13,6 @@ export {
   type MediaProgress,
 } from "./mediaCache";
 
-export {
-  requestPersistentStorage,
-  type StoragePersistenceState,
-} from "./storagePersistence";
+export { requestPersistentStorage } from "./storagePersistence";
 
 export { warmPresentationFonts } from "./fontWarmup";

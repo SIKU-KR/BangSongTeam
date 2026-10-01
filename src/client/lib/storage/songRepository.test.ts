@@ -115,10 +115,7 @@ describe("songRepository", () => {
         JSON.stringify([good1, broken, good2]),
       );
 
-      const result = await migrateLegacySongs();
-
-      expect(result.migrated).toBe(2);
-      expect(result.skipped).toBe(1);
+      await migrateLegacySongs();
 
       const { valid } = await loadAllSongs();
       expect(valid.map((d) => d.title).sort()).toEqual(["곡 A", "곡 B"]);
@@ -130,10 +127,9 @@ describe("songRepository", () => {
     });
 
     it("옮길 데이터가 없으면 아무것도 하지 않는다", async () => {
-      const result = await migrateLegacySongs();
+      await migrateLegacySongs();
 
-      expect(result.migrated).toBe(0);
-      expect(result.skipped).toBe(0);
+      expect((await loadAllSongs()).valid).toHaveLength(0);
       expect(localStorage.getItem(LEGACY_SONGS_BACKUP_KEY)).toBeNull();
     });
 
@@ -150,9 +146,9 @@ describe("songRepository", () => {
     it("JSON이 깨져 있으면 백업만 남기고 넘어간다", async () => {
       localStorage.setItem(LEGACY_SONGS_KEY, "{not json");
 
-      const result = await migrateLegacySongs();
+      await migrateLegacySongs();
 
-      expect(result.migrated).toBe(0);
+      expect((await loadAllSongs()).valid).toHaveLength(0);
       expect(localStorage.getItem(LEGACY_SONGS_BACKUP_KEY)).toBe("{not json");
     });
   });

@@ -4,7 +4,6 @@ import { getOfflineDB } from "./db";
 /** 스키마 검증에 실패한 저장본. 삭제하지 않고 그대로 두어 복구 가능성을 남긴다 */
 export interface CorruptedRecord {
   id: string;
-  reason: string;
 }
 
 export interface LoadResult<T> {
@@ -45,7 +44,6 @@ export async function loadAllPresentations(): Promise<
           typeof (row as { id?: unknown })?.id === "string"
             ? (row as { id: string }).id
             : "(unknown)",
-        reason: parsed.error.issues[0]?.message ?? "schema validation failed",
       });
     }
   }

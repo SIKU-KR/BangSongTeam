@@ -292,10 +292,7 @@ function EditorScreen({
   };
 
   const handleNewPresentation = () => {
-    const created = createNewPresentation(
-      undefined,
-      presentation.folderId ?? null,
-    );
+    const created = createNewPresentation(presentation.folderId ?? null);
     setActiveSongIndex(0);
     setActiveSlideIndex(0);
     navigate(editorPath(created.id));

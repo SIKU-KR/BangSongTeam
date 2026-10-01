@@ -591,7 +591,7 @@ describe("멀티 문서 컬렉션", () => {
     const before = getPresentationById(SEED_PRESENTATION_IDS[0]);
     expect(before?.items).toHaveLength(5);
 
-    const created = createNewPresentation("새 예배 프레젠테이션");
+    const created = createNewPresentation();
 
     expect(listPresentations()).toHaveLength(6);
     expect(created.items).toEqual([]);
@@ -632,7 +632,7 @@ describe("멀티 문서 컬렉션", () => {
     expect(result.current).toHaveLength(5);
 
     act(() => {
-      createNewPresentation("추가된 문서");
+      createNewPresentation();
     });
 
     expect(result.current).toHaveLength(6);
@@ -700,7 +700,7 @@ describe("문서별 Undo/Redo 격리", () => {
 
   it("createNewPresentation은 히스토리를 남기지 않는다 (유령 undo 방지)", () => {
     act(() => {
-      createNewPresentation("새 문서");
+      createNewPresentation();
     });
     expect(canUndo()).toBe(false);
     expect(canRedo()).toBe(false);

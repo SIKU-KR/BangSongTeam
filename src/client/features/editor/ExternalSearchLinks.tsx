@@ -12,7 +12,6 @@ import { EDITOR_COPY } from "#copy/editor";
 export interface ExternalSearchLinksProps {
   /** 곡 제목 */
   title: string;
-  className?: string;
 }
 
 /** 멜론 통합 검색 URL 생성. */
@@ -76,13 +75,12 @@ function SearchLink({
  */
 export function ExternalSearchLinks({
   title,
-  className,
 }: ExternalSearchLinksProps): React.JSX.Element {
   const trimmed = title.trim();
   const hasQuery = trimmed.length > 0;
 
   return (
-    <div className={cn("flex items-center gap-2 text-xs", className)}>
+    <div className="flex items-center gap-2 text-xs">
       <span className="font-medium text-muted-foreground">
         {EDITOR_COPY.externalSearch.label}
       </span>

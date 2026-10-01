@@ -3,7 +3,6 @@ import { requestPersistentStorage } from "./storagePersistence";
 
 export interface MediaCacheResult {
   cachedUrls: string[];
-  failedUrls: string[];
 }
 
 /** 받는 중인 파일의 진행 상황. `total`은 응답에 길이가 없으면 null이다 */
@@ -125,10 +124,9 @@ export async function cacheMediaUrls(
   urls: readonly string[],
 ): Promise<MediaCacheResult> {
   const cachedUrls: string[] = [];
-  const failedUrls: string[] = [];
 
   if (!isCacheStorageAvailable()) {
-    return { cachedUrls, failedUrls: [...urls] };
+    return { cachedUrls };
   }
 
   for (const url of urls) {
@@ -162,11 +160,11 @@ export async function cacheMediaUrls(
       knownCached.add(url);
       cachedUrls.push(url);
     } catch {
-      failedUrls.push(url);
+      continue;
     }
   }
 
-  return { cachedUrls, failedUrls };
+  return { cachedUrls };
 }
 
 const pending = new Set<string>();

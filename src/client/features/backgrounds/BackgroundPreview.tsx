@@ -1,6 +1,5 @@
 import React, { useState } from "react";
 import { FilmIcon, HardDriveIcon, ImageIcon } from "lucide-react";
-import { cn } from "cn";
 import type { BackgroundMedia } from "#shared";
 import { BACKGROUND_COPY } from "#copy/backgrounds";
 import { useIsMediaCached } from "./useIsMediaCached";
@@ -9,7 +8,6 @@ export interface BackgroundPreviewProps {
   background: BackgroundMedia;
   /** 키보드 포커스처럼 카드 바깥에서 정한 재생 여부. 마우스를 올려도 재생한다 */
   active?: boolean;
-  className?: string;
 }
 
 function prefersReducedMotion(): boolean {
@@ -30,7 +28,6 @@ function prefersReducedMotion(): boolean {
 export function BackgroundPreview({
   background,
   active = false,
-  className,
 }: BackgroundPreviewProps): React.JSX.Element {
   const [failedUrl, setFailedUrl] = useState<string | null>(null);
   const [hovered, setHovered] = useState(false);
@@ -46,10 +43,7 @@ export function BackgroundPreview({
         if (event.pointerType !== "touch") setHovered(true);
       }}
       onPointerLeave={() => setHovered(false)}
-      className={cn(
-        "relative aspect-video w-full overflow-hidden bg-black select-none",
-        className,
-      )}
+      className="relative aspect-video w-full overflow-hidden bg-black select-none"
     >
       {failed ? (
         <div

@@ -4,7 +4,6 @@ export interface VideoLayerProps {
   src?: string;
   nextSrc?: string;
   posterUrl?: string;
-  className?: string;
 }
 
 type Slot = "A" | "B";
@@ -45,7 +44,6 @@ export function VideoLayer({
   src,
   nextSrc,
   posterUrl,
-  className = "",
 }: VideoLayerProps): React.JSX.Element {
   const [slotSrc, setSlotSrc] = useState(() => initialSlots(src, nextSrc));
   const [activeSlot, setActiveSlot] = useState<Slot>("A");
@@ -133,7 +131,7 @@ export function VideoLayer({
   return (
     <div
       data-testid="video-layer-container"
-      className={`pointer-events-none absolute inset-0 z-0 overflow-hidden select-none ${className}`}
+      className="pointer-events-none absolute inset-0 z-0 overflow-hidden select-none"
     >
       {SLOTS.map((slot) => (
         <video

@@ -37,7 +37,6 @@ import {
   TooltipTrigger,
 } from "#components/ui/tooltip";
 import { IconButton } from "#components/common/IconButton";
-import { DRIVE_ROOT_PATH } from "../drive/drivePaths";
 import { usePersistenceError } from "../../lib/storage";
 import { useSyncStatus, type SyncStatus } from "../../lib/sync";
 import { ThemeMenuButton } from "../../components/common/ThemeMenuButton";
@@ -53,8 +52,8 @@ export interface EditorHeaderProps {
   totalSongs: number;
   onUndo?: () => void;
   onRedo?: () => void;
-  canUndo?: boolean;
-  canRedo?: boolean;
+  canUndo: boolean;
+  canRedo: boolean;
   onNewPresentation?: () => void;
   onOpenLyricModal?: () => void;
   /** 공유받은 세트에만 넘긴다. 파일 메뉴에 '사본 만들기'를 더한다 */
@@ -64,12 +63,11 @@ export interface EditorHeaderProps {
   /** 공유받은 세트면 누가 어떤 권한으로 공유했는지 보여 준다 */
   sharedAccess?: PresentationAccess;
   /** 보기 권한 세트. 제목을 고칠 수 없다 */
-  readOnly?: boolean;
+  readOnly: boolean;
   /** `null`이면 돌아갈 드라이브가 없는 것이다 (로그인하지 않고 링크로 봄) */
-  backPath?: string | null;
+  backPath: string | null;
   /** 세트 배경 영상 중 이 기기에 저장된 수. 모두 저장됐으면 `null`이다 */
-  mediaProgress?: { readyCount: number; totalCount: number } | null;
-  className?: string;
+  mediaProgress: { readyCount: number; totalCount: number } | null;
 }
 
 interface SaveStatusIndicatorState {
@@ -276,27 +274,23 @@ export function EditorHeader({
   totalSongs,
   onUndo,
   onRedo,
-  canUndo = false,
-  canRedo = false,
+  canUndo,
+  canRedo,
   onNewPresentation,
   onOpenLyricModal,
   onMakeCopy,
   onShare,
   sharedAccess,
-  readOnly = false,
-  backPath = DRIVE_ROOT_PATH,
-  mediaProgress = null,
-  className,
+  readOnly,
+  backPath,
+  mediaProgress,
 }: EditorHeaderProps): React.JSX.Element {
   const navigate = useNavigate();
 
   return (
     <header
       data-testid="editor-header"
-      className={cn(
-        "flex h-14 items-center justify-between border-b bg-background px-4 select-none",
-        className,
-      )}
+      className="flex h-14 items-center justify-between border-b bg-background px-4 select-none"
     >
       <div className="flex min-w-0 items-center gap-3">
         {backPath !== null && (

@@ -4,8 +4,6 @@ export interface StageScaleResult {
   scale: number;
   translateX: number;
   translateY: number;
-  stageWidth: number;
-  stageHeight: number;
 }
 
 export interface UseStageScaleOptions {
@@ -22,36 +20,22 @@ export const VIRTUAL_STAGE_HEIGHT = 1080;
 export function calculateStageScale(
   containerWidth: number,
   containerHeight: number,
-  stageWidth = VIRTUAL_STAGE_WIDTH,
-  stageHeight = VIRTUAL_STAGE_HEIGHT,
 ): StageScaleResult {
   if (containerWidth <= 0 || containerHeight <= 0) {
-    return {
-      scale: 1,
-      translateX: 0,
-      translateY: 0,
-      stageWidth,
-      stageHeight,
-    };
+    return { scale: 1, translateX: 0, translateY: 0 };
   }
 
   const scale = Math.min(
-    containerWidth / stageWidth,
-    containerHeight / stageHeight,
+    containerWidth / VIRTUAL_STAGE_WIDTH,
+    containerHeight / VIRTUAL_STAGE_HEIGHT,
   );
-  const scaledWidth = stageWidth * scale;
-  const scaledHeight = stageHeight * scale;
+  const scaledWidth = VIRTUAL_STAGE_WIDTH * scale;
+  const scaledHeight = VIRTUAL_STAGE_HEIGHT * scale;
 
   const translateX = (containerWidth - scaledWidth) / 2;
   const translateY = (containerHeight - scaledHeight) / 2;
 
-  return {
-    scale,
-    translateX,
-    translateY,
-    stageWidth,
-    stageHeight,
-  };
+  return { scale, translateX, translateY };
 }
 
 /**

@@ -9,7 +9,6 @@ export function enterFullscreen(
   element: Element = typeof document !== "undefined"
     ? document.documentElement
     : ({} as Element),
-  options?: FullscreenOptions,
 ): Promise<boolean> {
   if (typeof document === "undefined") {
     return Promise.resolve(false);
@@ -22,7 +21,7 @@ export function enterFullscreen(
 
   try {
     return strategy
-      .request(element, { navigationUI: "hide", ...options })
+      .request(element, { navigationUI: "hide" })
       .then(() => true)
       .catch((error: unknown) => {
         console.warn("Fullscreen request was not permitted or blocked:", error);
@@ -107,11 +106,9 @@ export function launchPresentation(
   navigate: PresentNavigate,
   presentationId: string,
   returnTo: string,
-  options?: FullscreenOptions,
 ): void {
   enterFullscreen(
     typeof document !== "undefined" ? document.documentElement : undefined,
-    options,
   ).catch(() => {});
 
   navigate(`/present/${presentationId}/fullscreen`, { state: { returnTo } });

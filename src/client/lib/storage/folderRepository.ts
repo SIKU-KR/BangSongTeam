@@ -34,7 +34,6 @@ export async function loadAllFolders(): Promise<LoadResult<Folder>> {
           typeof (row as { id?: unknown })?.id === "string"
             ? (row as { id: string }).id
             : "(unknown)",
-        reason: parsed.error.issues[0]?.message ?? "schema validation failed",
       });
     }
   }

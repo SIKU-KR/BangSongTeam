@@ -9,7 +9,6 @@ import {
 export type IconButtonProps = React.ComponentProps<typeof Button> & {
   /** 스크린 리더 이름이자 툴팁 문구 */
   label: string;
-  tooltipSide?: React.ComponentProps<typeof TooltipContent>["side"];
 };
 
 /**
@@ -18,7 +17,6 @@ export type IconButtonProps = React.ComponentProps<typeof Button> & {
  */
 export function IconButton({
   label,
-  tooltipSide,
   variant = "ghost",
   size = "icon",
   children,
@@ -33,7 +31,7 @@ export function IconButton({
       >
         {children}
       </TooltipTrigger>
-      <TooltipContent side={tooltipSide}>{label}</TooltipContent>
+      <TooltipContent>{label}</TooltipContent>
     </Tooltip>
   );
 }

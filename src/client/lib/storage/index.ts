@@ -31,7 +31,6 @@ export {
   migrateLegacySongs,
   LEGACY_SONGS_KEY,
   LEGACY_SONGS_BACKUP_KEY,
-  type MigrationResult,
 } from "./songRepository";
 
 export {
