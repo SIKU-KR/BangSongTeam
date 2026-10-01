@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 
-export interface CollapsedSongs {
+interface CollapsedSongs {
   collapsedIds: ReadonlySet<string>;
   toggle: (itemId: string) => void;
   collapseAll: (itemIds: readonly string[]) => void;

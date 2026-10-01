@@ -44,7 +44,7 @@ import {
 } from "./songPicker/LibrarySongDialog";
 import { EDITOR_COPY } from "#copy/editor";
 
-export interface SongPickerModalProps {
+interface SongPickerModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSelectSong: (deck: Deck) => void;

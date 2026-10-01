@@ -17,7 +17,7 @@ import {
 import { useIsOnline } from "../../hooks/useIsOnline";
 import { BACKGROUND_COPY } from "#copy/backgrounds";
 
-export interface BackgroundLibraryViewProps {
+interface BackgroundLibraryViewProps {
   searchQuery?: string;
 }
 

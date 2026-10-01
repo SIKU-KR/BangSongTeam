@@ -15,7 +15,7 @@ import { BACKGROUND_COPY } from "#copy/backgrounds";
  * 갤러리가 비었을 때의 이유. 배경이 하나도 없는지, 검색어에 맞는 배경이 없는지, 종류
  * 필터에 맞는 배경이 없는지를 구분해 화면마다 알맞은 안내를 고르게 한다.
  */
-export type BackgroundGalleryEmptyReason =
+type BackgroundGalleryEmptyReason =
   "noBackgrounds" | "noMatch" | "noFilterMatch";
 
 /**
@@ -31,7 +31,7 @@ export function describeBackgroundGalleryEmpty(
   return BACKGROUND_COPY.library.noFilterMatch;
 }
 
-export interface BackgroundGallery {
+interface BackgroundGallery {
   catalog: BackgroundCatalogSnapshot;
   kind: BackgroundKindFilterValue;
   setKind: (next: BackgroundKindFilterValue) => void;

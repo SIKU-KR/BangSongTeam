@@ -1,6 +1,6 @@
 import { buildFolderIndex, type Folder } from "#shared";
 
-export interface FolderMergeResult {
+interface FolderMergeResult {
   folders: Folder[];
   needsPush: string[];
 }

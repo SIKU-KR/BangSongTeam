@@ -3,7 +3,6 @@ import { IdSchema } from "./id";
 import { MEDIA_URL_PREFIX } from "../constants/projection";
 
 export const BackgroundSourceSchema = z.enum(["service", "user"]);
-export type BackgroundSource = z.infer<typeof BackgroundSourceSchema>;
 
 export const BackgroundKindSchema = z.enum(["video", "image"]);
 export type BackgroundKind = z.infer<typeof BackgroundKindSchema>;

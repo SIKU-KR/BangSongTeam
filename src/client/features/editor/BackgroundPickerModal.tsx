@@ -26,7 +26,7 @@ import { ColorPalette } from "./ColorPalette";
 import { BACKGROUND_COPY } from "#copy/backgrounds";
 import { COMMON_COPY } from "#copy/common";
 
-export interface BackgroundPickerModalProps {
+interface BackgroundPickerModalProps {
   isOpen: boolean;
   onClose: () => void;
   selectedBackgroundId?: string | null;

@@ -86,7 +86,7 @@ export function markBackgroundCatalogStatus(
   setSnapshot({ ...snapshot, status });
 }
 
-export function getBackgroundCatalog(): BackgroundCatalogSnapshot {
+function getBackgroundCatalog(): BackgroundCatalogSnapshot {
   return snapshot;
 }
 

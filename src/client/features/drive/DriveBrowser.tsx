@@ -44,7 +44,7 @@ import { useMarqueeSelection } from "./useMarqueeSelection";
 import { DRIVE_COPY } from "#copy/drive";
 import { COMMON_COPY } from "#copy/common";
 
-export interface DriveBrowserProps {
+interface DriveBrowserProps {
   mode: "drive" | "trash";
   folderId?: string | null;
   /**

@@ -45,7 +45,7 @@ import { EDITOR_COPY, SHORTCUT_GUIDE } from "#copy/editor";
 import { COMMON_COPY } from "#copy/common";
 import { BACKGROUND_COPY } from "#copy/backgrounds";
 
-export interface EditorHeaderProps {
+interface EditorHeaderProps {
   title: string;
   onUpdateTitle: (newTitle: string) => void;
   onPresent: () => void;

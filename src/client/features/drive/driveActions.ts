@@ -124,7 +124,7 @@ export function renameItem(
   return { ok: true };
 }
 
-export interface MoveOutcome {
+interface MoveOutcome {
   moved: Array<{ ref: DriveItemRef; from: string | null }>;
   errors: string[];
 }

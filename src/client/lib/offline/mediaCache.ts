@@ -1,12 +1,12 @@
 import { MEDIA_CACHE_NAME, mediaCacheNameFor } from "#shared";
 import { requestPersistentStorage } from "./storagePersistence";
 
-export interface MediaCacheResult {
+interface MediaCacheResult {
   cachedUrls: string[];
 }
 
 /** 받는 중인 파일의 진행 상황. `total`은 응답에 길이가 없으면 null이다 */
-export interface MediaProgress {
+interface MediaProgress {
   received: number;
   total: number | null;
 }

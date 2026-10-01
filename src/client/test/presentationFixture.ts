@@ -7,7 +7,7 @@ import {
   Slide,
 } from "#shared";
 
-export const MOCK_USER_ID = "00000000x000000000001";
+export const SEED_USER_ID = "00000000x000000000001";
 export const MOCK_PRESENTATION_ID = "100000000000000000001";
 const CREATED_AT = "2026-09-20T00:00:00.000Z";
 
@@ -154,7 +154,7 @@ function buildMockDeck(def: SongMockInput): Deck {
 
   const rawDeck = {
     id: def.deckId,
-    userId: MOCK_USER_ID,
+    userId: SEED_USER_ID,
     scope: "presentation" as const,
     presentationId: MOCK_PRESENTATION_ID,
     title: def.title,
@@ -177,7 +177,7 @@ export const mockDecks: Deck[] = SONG_DEFINITIONS.map(buildMockDeck);
 
 export const mockPresentation: Presentation = PresentationSchema.parse({
   id: MOCK_PRESENTATION_ID,
-  userId: MOCK_USER_ID,
+  userId: SEED_USER_ID,
   title: "2026 주일 3부 예배",
   serviceDate: "2026-09-20",
   items: SONG_DEFINITIONS.map((def, idx) => ({
@@ -190,8 +190,6 @@ export const mockPresentation: Presentation = PresentationSchema.parse({
   createdAt: CREATED_AT,
   updatedAt: CREATED_AT,
 });
-
-export const SEED_USER_ID = MOCK_USER_ID;
 
 interface SeedPresentationInput {
   seq: number;

@@ -18,7 +18,7 @@ import {
 const NO_SENSORS: [] = [];
 const POINTER_SENSOR_OPTIONS = { activationConstraint: { distance: 5 } };
 
-export interface SlidePaneDrag {
+interface SlidePaneDrag {
   dndContextProps: Pick<
     DndContextProps,
     | "sensors"

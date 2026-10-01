@@ -26,7 +26,7 @@ const LEGAL_LINKS = [
   { href: "/privacy", label: LEGAL_COPY.privacy },
 ];
 
-export interface LoginRouteProps {
+interface LoginRouteProps {
   /** 로그인이 필요한 까닭. 없으면 계정 저장 안내를 보여 준다 */
   description?: string;
   /** 로그인하지 않고 원래 화면으로 돌아간다 */
@@ -181,5 +181,3 @@ export function LoginRoute({
     </div>
   );
 }
-
-export default LoginRoute;

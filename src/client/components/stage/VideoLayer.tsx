@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 
-export interface VideoLayerProps {
+interface VideoLayerProps {
   src?: string;
   nextSrc?: string;
   posterUrl?: string;

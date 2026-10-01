@@ -4,7 +4,7 @@ import type { BackgroundMedia } from "#shared";
 import { BACKGROUND_COPY } from "#copy/backgrounds";
 import { useIsMediaCached } from "./useIsMediaCached";
 
-export interface BackgroundPreviewProps {
+interface BackgroundPreviewProps {
   background: BackgroundMedia;
   /** 키보드 포커스처럼 카드 바깥에서 정한 재생 여부. 마우스를 올려도 재생한다 */
   active?: boolean;

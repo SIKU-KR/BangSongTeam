@@ -1,6 +1,6 @@
 import React from "react";
 
-export interface OverlayLayerProps {
+interface OverlayLayerProps {
   opacity?: number;
   color?: string;
   isBlackout?: boolean;

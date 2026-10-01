@@ -51,7 +51,7 @@ export function SlidePreview({
   );
 }
 
-export interface SlideThumbnailProps {
+interface SlideThumbnailProps {
   dragId: string;
   songIndex: number;
   slideIndex: number;

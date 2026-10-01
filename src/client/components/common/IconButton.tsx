@@ -6,7 +6,7 @@ import {
   TooltipTrigger,
 } from "#components/ui/tooltip";
 
-export type IconButtonProps = React.ComponentProps<typeof Button> & {
+type IconButtonProps = React.ComponentProps<typeof Button> & {
   /** 스크린 리더 이름이자 툴팁 문구 */
   label: string;
 };

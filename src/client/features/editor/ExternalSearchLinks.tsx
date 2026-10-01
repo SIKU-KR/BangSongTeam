@@ -9,7 +9,7 @@ import {
 } from "#components/ui/tooltip";
 import { EDITOR_COPY } from "#copy/editor";
 
-export interface ExternalSearchLinksProps {
+interface ExternalSearchLinksProps {
   /** 곡 제목 */
   title: string;
 }

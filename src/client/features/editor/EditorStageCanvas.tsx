@@ -29,7 +29,7 @@ const TextBoxMoveable = lazy(() =>
   import("./TextBoxMoveable").then((m) => ({ default: m.TextBoxMoveable })),
 );
 
-export interface EditorStageCanvasProps {
+interface EditorStageCanvasProps {
   slide?: Slide | null;
   style: DeckStyle;
   backgroundUrl?: string;

@@ -14,15 +14,15 @@ import {
 } from "./catalogApi";
 import { upsertLibraryDeck } from "../../features/editor/songLibraryStore";
 
-export const CATALOG_SEARCH_DEBOUNCE_MS = 250;
+const CATALOG_SEARCH_DEBOUNCE_MS = 250;
 
-export const catalogKeys = {
+const catalogKeys = {
   all: ["catalog"] as const,
   search: (q: string) => ["catalog", "search", q] as const,
   deck: (id: string) => ["catalog", "deck", id] as const,
 };
 
-export function useDebouncedValue<T>(value: T, delayMs: number): T {
+function useDebouncedValue<T>(value: T, delayMs: number): T {
   const [debounced, setDebounced] = useState(value);
   useEffect(() => {
     const timer = setTimeout(() => setDebounced(value), delayMs);

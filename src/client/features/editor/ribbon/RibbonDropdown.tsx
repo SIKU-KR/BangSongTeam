@@ -10,7 +10,7 @@ import {
 import { ToggleGroup, ToggleGroupItem } from "#components/ui/toggle-group";
 import { RibbonTooltip } from "./RibbonPrimitives";
 
-export interface RibbonDropdownProps {
+interface RibbonDropdownProps {
   label: string;
   icon?: React.ReactNode;
   text?: string;

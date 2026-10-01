@@ -9,7 +9,7 @@ import { RibbonDivider, RibbonTooltip } from "./RibbonPrimitives";
 import { SlideControls, type SlideControlsProps } from "./SlideControls";
 import { EDITOR_COPY } from "#copy/editor";
 
-export interface EditorRibbonProps {
+interface EditorRibbonProps {
   song: Deck | null | undefined;
   slideControls: SlideControlsProps;
   /** `coalesceField`가 같은 연속 변경(슬라이더 끌기)은 되돌리기 한 단계로 묶는다 */

@@ -13,9 +13,9 @@ import {
 import { authClient, type SocialProvider } from "./authClient";
 import { AUTH_COPY } from "#copy/auth";
 
-export type SessionStatus = "loading" | "authenticated" | "unauthenticated";
+type SessionStatus = "loading" | "authenticated" | "unauthenticated";
 
-export interface SessionState {
+interface SessionState {
   status: SessionStatus;
   user: SessionUser | null;
 }

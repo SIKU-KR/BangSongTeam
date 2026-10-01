@@ -15,7 +15,7 @@ import {
   visibleKey,
 } from "../../lib/selection/selectionModel";
 
-export interface DriveKeyboardOptions {
+interface DriveKeyboardOptions {
   drive: DriveContextValue;
   items: readonly DriveItem[];
   isTrash: boolean;

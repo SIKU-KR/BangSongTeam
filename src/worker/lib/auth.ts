@@ -34,10 +34,10 @@ export const SYNTHETIC_EMAIL_DOMAIN = "users.noreply.worship-slide.local";
  * 읽지 않는다. 그 대가로 다른 기기에서의 세션 폐기·계정 삭제는 최대 이 시간만큼 늦게
  * 반영된다. 같은 브라우저의 로그아웃은 쿠키를 함께 지우므로 바로 반영된다.
  */
-export const SESSION_COOKIE_CACHE_SECONDS = 5 * 60;
+const SESSION_COOKIE_CACHE_SECONDS = 5 * 60;
 
 /** 소셜 프로필에서 만들어 내는 로컬 사용자 속성 */
-export interface MappedSocialUser {
+interface MappedSocialUser {
   name: string;
   email: string;
   image?: string;

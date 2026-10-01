@@ -8,7 +8,7 @@ import { registerSW } from "virtual:pwa-register";
  * 배포가 나간 순간 송출 중인 창이 새로고침되면 예배가 끊긴다. 새 버전이 대기
  * 중이라는 사실만 알리고, 적용 시점은 사용자가 편집 화면에서 고른다.
  */
-export interface ServiceWorkerState {
+interface ServiceWorkerState {
   needRefresh: boolean;
 }
 

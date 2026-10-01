@@ -8,7 +8,7 @@ import { RibbonButton, RibbonGroup } from "./RibbonPrimitives";
 import { SHADOW_LEVELS, stepFontSize } from "./ribbonOptions";
 import { EDITOR_COPY } from "#copy/editor";
 
-export interface FontControlsProps {
+interface FontControlsProps {
   style: DeckStyle;
   disabled: boolean;
   onUpdateStyle: (update: Partial<DeckStyle>) => void;

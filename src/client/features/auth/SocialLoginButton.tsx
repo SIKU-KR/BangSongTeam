@@ -30,7 +30,7 @@ const BRAND_MARKS: Record<SocialProvider, { src: string; className: string }> =
     google: { src: googleGUrl, className: "size-5 shrink-0" },
   };
 
-export interface SocialLoginButtonProps extends Omit<
+interface SocialLoginButtonProps extends Omit<
   ButtonPrimitive.Props,
   "className" | "children"
 > {

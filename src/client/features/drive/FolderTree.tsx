@@ -51,7 +51,7 @@ export function useTreeExpansion(selectedId: string | null | undefined): {
   return { expanded, toggle };
 }
 
-export interface FolderTreeProps {
+interface FolderTreeProps {
   selectedId: string | null | undefined;
   onSelect: (folderId: string) => void;
   expanded: Set<string>;

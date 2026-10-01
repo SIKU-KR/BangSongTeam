@@ -5,7 +5,7 @@
  * `keys`는 화면에 보이는 순서의 항목 키 목록이다.
  */
 
-export interface KeyRect {
+interface KeyRect {
   key: string;
   left: number;
   top: number;

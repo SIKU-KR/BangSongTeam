@@ -14,7 +14,7 @@ export interface CreateSongValues {
   lyricsRaw: string;
 }
 
-export interface CreateSongFormProps {
+interface CreateSongFormProps {
   initialTitle?: string;
   onCancel: () => void;
   onSubmit: (values: CreateSongValues) => void;

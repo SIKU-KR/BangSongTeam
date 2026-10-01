@@ -11,10 +11,10 @@ export interface PixelRect {
 /** 스테이지(1920x1080) 기준 % 사각형. */
 export type PercentRect = PixelRect;
 
-export const SAFE_MARGIN_PERCENT = 5;
-export const MIN_WIDTH_PERCENT = 20;
-export const MAX_WIDTH_PERCENT = 90;
-export const SNAP_THRESHOLD_PERCENT = 1;
+const SAFE_MARGIN_PERCENT = 5;
+const MIN_WIDTH_PERCENT = 20;
+const MAX_WIDTH_PERCENT = 90;
+const SNAP_THRESHOLD_PERCENT = 1;
 
 const CENTER_PERCENT = 50;
 const MIN_COORD_PERCENT = 5;

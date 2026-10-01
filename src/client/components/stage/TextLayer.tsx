@@ -3,7 +3,7 @@ import type { Slide, DeckStyle, GridAnchorPreset, TextBackdrop } from "#shared";
 import { GRID_ANCHOR_TRANSFORMS, TEXT_SHADOW_PRESETS } from "#shared";
 import { loadWebFont, toCssFontFamily } from "../../lib/fonts/fontLoader";
 
-export interface TextLayerProps {
+interface TextLayerProps {
   slide?: Slide | null;
   style: DeckStyle;
   isLyricsHidden?: boolean;

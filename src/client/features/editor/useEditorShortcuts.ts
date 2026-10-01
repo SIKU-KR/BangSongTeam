@@ -8,7 +8,7 @@ import {
 import { SLIDE_PANE_SELECTOR } from "./slidePaneTargets";
 
 /** 동작별 처리기. `false`를 돌려주면 처리하지 않은 것으로 보고 브라우저 기본 동작을 남긴다 */
-export type EditorShortcutHandlers = Partial<
+type EditorShortcutHandlers = Partial<
   Record<EditorShortcutAction, () => boolean | void>
 >;
 

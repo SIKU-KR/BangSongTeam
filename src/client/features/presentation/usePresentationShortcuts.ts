@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import { tinykeys } from "tinykeys";
 
-export interface UsePresentationShortcutsOptions {
+interface UsePresentationShortcutsOptions {
   onNext?: () => void;
   onPrev?: () => void;
   onToggleBlackout?: () => void;

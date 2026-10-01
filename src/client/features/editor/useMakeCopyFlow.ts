@@ -10,7 +10,7 @@ interface UseMakeCopyFlowOptions {
   onGuestRequest?: () => void;
 }
 
-export interface MakeCopyFlow {
+interface MakeCopyFlow {
   isPickerOpen: boolean;
   open: () => void;
   confirm: (folderId: string | null) => void;

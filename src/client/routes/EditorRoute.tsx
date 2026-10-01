@@ -558,5 +558,3 @@ function EditorScreen({
     </div>
   );
 }
-
-export default EditorRoute;

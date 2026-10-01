@@ -44,7 +44,7 @@ const REASONS: { value: ReportReason; label: string; hint: string }[] = [
   },
 ];
 
-export interface ReportDialogProps {
+interface ReportDialogProps {
   onClose: () => void;
   targetId: string;
   /** 무엇을 신고하는지 보여 줄 곡 제목 */

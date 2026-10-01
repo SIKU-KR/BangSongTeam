@@ -1,12 +1,12 @@
 import { useState, useEffect } from "react";
 
-export interface StageScaleResult {
+interface StageScaleResult {
   scale: number;
   translateX: number;
   translateY: number;
 }
 
-export interface UseStageScaleOptions {
+interface UseStageScaleOptions {
   width?: number;
   height?: number;
 }

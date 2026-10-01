@@ -1,12 +1,12 @@
 import { useRef, useCallback, useEffect } from "react";
 import { PRESENTATION_SHORTCUTS } from "#shared";
 
-export interface UseNavigationBufferOptions {
+interface UseNavigationBufferOptions {
   totalSlides?: number;
   onJump: (slideNumber: number) => void;
 }
 
-export interface UseNavigationBufferReturn {
+interface UseNavigationBufferReturn {
   handleKey: (key: string) => void;
 }
 

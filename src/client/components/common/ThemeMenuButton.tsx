@@ -108,5 +108,3 @@ export function ThemeMenuButton(): React.JSX.Element {
     </DropdownMenu>
   );
 }
-
-export default ThemeMenuButton;

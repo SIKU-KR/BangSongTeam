@@ -1,6 +1,6 @@
 import type { Presentation } from "#shared";
 
-export interface MergeResult {
+interface MergeResult {
   documents: Presentation[];
   needsPush: string[];
   /** 서버 목록에서 빠진 공유 세트 (공유 해제·링크 재설정·원본 삭제) */
@@ -55,7 +55,7 @@ export function mergeDocuments(
   return { documents, needsPush, removed };
 }
 
-export interface BootMergePlan {
+interface BootMergePlan {
   documents: Presentation[];
   needsPush: string[];
   /** 로컬 저장소에서 지울 프레젠테이션 (로컬에 있던 것만) */

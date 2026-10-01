@@ -22,7 +22,7 @@ import {
 } from "./ribbonOptions";
 import { EDITOR_COPY } from "#copy/editor";
 
-export interface FontFamilySelectProps {
+interface FontFamilySelectProps {
   value: DeckStyle["fontFamily"];
   disabled: boolean;
   onChange: (fontFamily: DeckStyle["fontFamily"]) => void;
