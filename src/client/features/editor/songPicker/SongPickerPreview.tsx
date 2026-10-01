@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { CheckIcon } from "lucide-react";
 import { Badge } from "#components/ui/badge";
 import { Button } from "#components/ui/button";
@@ -12,39 +12,60 @@ import { copyToClipboard } from "../../../lib/browser/clipboard";
 import { EDITOR_COPY } from "#copy/editor";
 import { COMMON_COPY } from "#copy/common";
 
-interface ActionBarProps {
-  copyText?: string;
-  addLabel: string;
-  addDisabled?: boolean;
-  onAdd: () => void;
-  onClose: () => void;
-  onReport?: () => void;
-  extraActions?: React.ReactNode;
-  error?: string | null;
-}
+const COPIED_FEEDBACK_MS = 2000;
 
-function ActionBar({
-  copyText,
-  addLabel,
-  addDisabled,
-  onAdd,
-  onClose,
-  onReport,
-  extraActions,
-  error,
-}: ActionBarProps): React.JSX.Element {
+function CopyLyricsButton({ text }: { text: string }): React.JSX.Element {
   const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    if (!copied) return;
+    const timer = setTimeout(() => setCopied(false), COPIED_FEEDBACK_MS);
+    return () => clearTimeout(timer);
+  }, [copied]);
 
   const copy = async (): Promise<void> => {
     try {
-      await copyToClipboard(copyText ?? "");
+      await copyToClipboard(text);
     } catch (error) {
       void error;
     }
     setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
   };
 
+  return (
+    <Button
+      variant="outline"
+      data-testid="song-picker-copy-lyrics-btn"
+      onClick={copy}
+    >
+      {copied ? (
+        <>
+          {EDITOR_COPY.preview.lyricsCopied} <CheckIcon />
+        </>
+      ) : (
+        EDITOR_COPY.preview.copyLyrics
+      )}
+    </Button>
+  );
+}
+
+interface ActionBarProps {
+  addLabel: string;
+  addDisabled?: boolean;
+  onAdd: () => void;
+  onClose: () => void;
+  error?: string | null;
+  children?: React.ReactNode;
+}
+
+function ActionBar({
+  addLabel,
+  addDisabled,
+  onAdd,
+  onClose,
+  error,
+  children,
+}: ActionBarProps): React.JSX.Element {
   return (
     <div className="shrink-0 space-y-2 border-t bg-background p-4">
       {error && (
@@ -53,34 +74,7 @@ function ActionBar({
         </p>
       )}
       <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
-          {copyText !== undefined && (
-            <Button
-              variant="outline"
-              data-testid="song-picker-copy-lyrics-btn"
-              onClick={copy}
-            >
-              {copied ? (
-                <>
-                  {EDITOR_COPY.preview.lyricsCopied} <CheckIcon />
-                </>
-              ) : (
-                EDITOR_COPY.preview.copyLyrics
-              )}
-            </Button>
-          )}
-          {extraActions}
-          {onReport && (
-            <Button
-              variant="ghost"
-              data-testid="song-picker-report-btn"
-              onClick={onReport}
-              className="text-muted-foreground hover:text-destructive"
-            >
-              {EDITOR_COPY.preview.report}
-            </Button>
-          )}
-        </div>
+        <div className="flex items-center gap-2">{children}</div>
 
         <div className="flex items-center gap-2.5">
           <Button variant="ghost" onClick={onClose}>
@@ -97,6 +91,12 @@ function ActionBar({
       </div>
     </div>
   );
+}
+
+function getSharedAddLabel(isAdding: boolean, hasOwnedCopy: boolean): string {
+  if (isAdding) return EDITOR_COPY.preview.importing;
+  if (hasOwnedCopy) return EDITOR_COPY.preview.addMine;
+  return EDITOR_COPY.preview.importAndAdd;
 }
 
 function PreviewHeader({
@@ -163,30 +163,27 @@ export function MyDeckPreview({
       </div>
       <LibraryShareControls deck={deck} />
       <ActionBar
-        copyText={deck.lyricsRaw}
         addLabel={EDITOR_COPY.preview.addMine}
         onAdd={onAdd}
         onClose={onClose}
-        extraActions={
-          <>
-            <Button
-              variant="ghost"
-              data-testid="song-picker-edit-info-btn"
-              onClick={onEditInfo}
-            >
-              {EDITOR_COPY.preview.editInfo}
-            </Button>
-            <Button
-              variant="ghost"
-              data-testid="song-picker-delete-btn"
-              onClick={onDelete}
-              className="text-muted-foreground hover:text-destructive"
-            >
-              {COMMON_COPY.delete}
-            </Button>
-          </>
-        }
-      />
+      >
+        <CopyLyricsButton text={deck.lyricsRaw} />
+        <Button
+          variant="ghost"
+          data-testid="song-picker-edit-info-btn"
+          onClick={onEditInfo}
+        >
+          {EDITOR_COPY.preview.editInfo}
+        </Button>
+        <Button
+          variant="ghost"
+          data-testid="song-picker-delete-btn"
+          onClick={onDelete}
+          className="text-muted-foreground hover:text-destructive"
+        >
+          {COMMON_COPY.delete}
+        </Button>
+      </ActionBar>
     </div>
   );
 }
@@ -245,20 +242,22 @@ export function SharedDeckPreview({
         )}
       </div>
       <ActionBar
-        copyText={detail.data?.lyricsRaw}
-        addLabel={
-          isAdding
-            ? EDITOR_COPY.preview.importing
-            : ownedCopy
-              ? EDITOR_COPY.preview.addMine
-              : EDITOR_COPY.preview.importAndAdd
-        }
+        addLabel={getSharedAddLabel(isAdding, ownedCopy !== undefined)}
         addDisabled={isAdding}
         onAdd={onAdd}
         onClose={onClose}
-        onReport={onReport}
         error={error}
-      />
+      >
+        {detail.data && <CopyLyricsButton text={detail.data.lyricsRaw} />}
+        <Button
+          variant="ghost"
+          data-testid="song-picker-report-btn"
+          onClick={onReport}
+          className="text-muted-foreground hover:text-destructive"
+        >
+          {EDITOR_COPY.preview.report}
+        </Button>
+      </ActionBar>
     </div>
   );
 }

@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from "react";
-import { CheckIcon, SearchIcon, XIcon } from "lucide-react";
+import React, { useState } from "react";
+import { CheckIcon } from "lucide-react";
 import { cn } from "cn";
 import { Badge } from "#components/ui/badge";
 import { Button } from "#components/ui/button";
@@ -14,24 +14,15 @@ import {
   DialogTitle,
 } from "#components/ui/dialog";
 import { Empty, EmptyDescription, EmptyHeader } from "#components/ui/empty";
-import {
-  InputGroup,
-  InputGroupAddon,
-  InputGroupButton,
-  InputGroupInput,
-} from "#components/ui/input-group";
+import { SearchInput } from "#components/common/SearchInput";
 import { DEFAULT_BACKGROUND_COLOR, type BackgroundMedia } from "#shared";
+import { BackgroundKindFilter, BackgroundPreview } from "../backgrounds";
 import {
-  BackgroundKindFilter,
-  BackgroundPreview,
-  filterBackgroundsByKind,
-  matchesBackgroundQuery,
-  useBackgroundCatalog,
-  type BackgroundKindFilterValue,
-} from "../backgrounds";
+  useBackgroundGallery,
+  type BackgroundGalleryEmptyReason,
+} from "../backgrounds/useBackgroundGallery";
 import type { BackgroundChoice } from "../presentation/presentationStore";
 import { ColorPalette } from "./ColorPalette";
-import { refreshBackgroundCatalog } from "../../lib/sync/backgroundSync";
 import { BACKGROUND_COPY } from "#copy/backgrounds";
 import { COMMON_COPY } from "#copy/common";
 
@@ -104,6 +95,15 @@ function PickerTile({
   );
 }
 
+function describeEmpty(
+  reason: BackgroundGalleryEmptyReason,
+  query: string,
+): string {
+  if (reason === "noBackgrounds") return BACKGROUND_COPY.noBackgrounds;
+  if (reason === "noMatch") return BACKGROUND_COPY.library.noMatch(query);
+  return BACKGROUND_COPY.library.noFilterMatch;
+}
+
 /**
  * 곡 배경 선택 창. 위쪽의 단색 팔레트나 아래 배경 갤러리(종류·검색어로 거름)에서 고른다.
  * 고르는 즉시 편집 미리보기에 반영되고 창이 닫힌다.
@@ -120,18 +120,15 @@ function PickerDialog({
   selectedColor,
   onSelect,
 }: BackgroundPickerModalProps): React.JSX.Element {
-  const catalog = useBackgroundCatalog();
-  const [kind, setKind] = useState<BackgroundKindFilterValue>("all");
   const [query, setQuery] = useState("");
-
-  useEffect(() => {
-    void refreshBackgroundCatalog();
-  }, []);
-
-  const all = catalog.backgrounds;
-  const visible = filterBackgroundsByKind(all, kind).filter((bg) =>
-    matchesBackgroundQuery(bg, query),
-  );
+  const {
+    catalog,
+    kind,
+    setKind,
+    visibleBackgrounds,
+    hasAnyBackground,
+    emptyReason,
+  } = useBackgroundGallery(query);
 
   const pick = (choice: BackgroundChoice): void => {
     onSelect(choice);
@@ -177,38 +174,21 @@ function PickerDialog({
               <h3 className="text-sm font-semibold">
                 {BACKGROUND_COPY.picker.media}
               </h3>
-              {all.length > 0 && (
+              {hasAnyBackground && (
                 <BackgroundKindFilter value={kind} onChange={setKind} />
               )}
             </div>
-            {all.length > 0 && (
-              <InputGroup>
-                <InputGroupInput
-                  type="text"
-                  data-testid="bg-picker-search-input"
-                  aria-label={BACKGROUND_COPY.picker.searchLabel}
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                  placeholder={BACKGROUND_COPY.picker.searchPlaceholder}
-                />
-                <InputGroupAddon>
-                  <SearchIcon />
-                </InputGroupAddon>
-                {query && (
-                  <InputGroupAddon align="inline-end">
-                    <InputGroupButton
-                      size="icon-xs"
-                      aria-label={COMMON_COPY.clearSearch}
-                      onClick={() => setQuery("")}
-                    >
-                      <XIcon />
-                    </InputGroupButton>
-                  </InputGroupAddon>
-                )}
-              </InputGroup>
+            {hasAnyBackground && (
+              <SearchInput
+                value={query}
+                onValueChange={setQuery}
+                label={BACKGROUND_COPY.picker.searchLabel}
+                placeholder={BACKGROUND_COPY.picker.searchPlaceholder}
+                testId="bg-picker-search-input"
+              />
             )}
             <div className="grid grid-cols-2 content-start gap-4 sm:grid-cols-3 md:grid-cols-4">
-              {visible.map((bg) => (
+              {visibleBackgrounds.map((bg) => (
                 <PickerTile
                   key={bg.id}
                   background={bg}
@@ -217,15 +197,11 @@ function PickerDialog({
                 />
               ))}
 
-              {visible.length === 0 && (
+              {emptyReason && (
                 <Empty className="col-span-full">
                   <EmptyHeader>
                     <EmptyDescription>
-                      {all.length === 0
-                        ? BACKGROUND_COPY.noBackgrounds
-                        : query.trim()
-                          ? BACKGROUND_COPY.library.noMatch(query.trim())
-                          : BACKGROUND_COPY.library.noFilterMatch}
+                      {describeEmpty(emptyReason, query.trim())}
                     </EmptyDescription>
                   </EmptyHeader>
                 </Empty>

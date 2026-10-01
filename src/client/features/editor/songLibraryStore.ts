@@ -1,6 +1,5 @@
 import { useSyncExternalStore } from "react";
-import { API_ERRORS, createId, type Deck } from "#shared";
-import { DeckSchema, DEFAULT_DECK_STYLE, splitLyricsIntoSlides } from "#shared";
+import { API_ERRORS, DeckSchema, type Deck } from "#shared";
 import {
   saveSong,
   deleteSong,
@@ -14,6 +13,7 @@ import {
 import { getCurrentUserId } from "../../lib/auth/sessionStore";
 import { scheduleDeckPush, scheduleDeckDelete } from "../../lib/sync/deckSync";
 import { withServerFields } from "../../lib/sync/mergeLibraryDecks";
+import { createSongDeck } from "./songDeck";
 
 let userSongsCache: Deck[] = [];
 const listeners = new Set<() => void>();
@@ -71,7 +71,7 @@ function putInCache(deck: Deck): void {
 }
 
 /**
- * 신규 찬양곡을 사용자 보관함에 저장.
+ * 새 곡을 사용자 보관함에 저장. 로그인하지 않았으면 저장할 곳이 없으므로 던진다.
  */
 export function saveSongToLibrary(songInput: {
   id?: string;
@@ -85,37 +85,18 @@ export function saveSongToLibrary(songInput: {
     throw new Error(API_ERRORS.loginRequired);
   }
 
-  const now = new Date().toISOString();
-  const slides = splitLyricsIntoSlides(songInput.lyricsRaw);
-
-  const newDeck: Deck = DeckSchema.parse({
-    id: songInput.id ?? createId(),
-    userId,
-    scope: "library",
-    presentationId: null,
-    title: songInput.title.trim(),
-    artist: songInput.artist?.trim() ?? "",
-    lyricsRaw: songInput.lyricsRaw,
-    slides,
-    backgroundId: songInput.backgroundId ?? null,
-    style: DEFAULT_DECK_STYLE,
-    visibility: "private",
-    forkedFrom: null,
-    forkCount: 0,
-    origin: "user",
-    createdAt: now,
-    updatedAt: now,
-  });
-
-  putInCache(newDeck);
-  emitChange();
-  void persist(() => saveSong(newDeck));
-  scheduleDeckPush(newDeck);
-  return newDeck;
+  return upsertLibraryDeck(
+    createSongDeck({
+      ...songInput,
+      userId,
+      scope: "library",
+      origin: "user",
+    }),
+  );
 }
 
 /**
- * 완성된 덱을 보관함에 추가하거나 갱신.
+ * 완성된 곡을 보관함에 추가하거나 갱신.
  */
 export function upsertLibraryDeck(
   deck: Deck,
@@ -155,7 +136,7 @@ export function applyServerDeckFields(serverDeck: Deck): void {
 
 /**
  * 보관함 곡의 제목·아티스트 수정. 공개 곡이면 서버 동기화 뒤 공유 라이브러리에도
- * 그대로 보인다. 이미 세트에 넣은 곡은 복제본이라 바뀌지 않는다.
+ * 그대로 보인다. 이미 프레젠테이션에 넣은 곡은 복제본이라 바뀌지 않는다.
  */
 export function updateLibrarySongInfo(
   id: string,
@@ -173,7 +154,7 @@ export function updateLibrarySongInfo(
 }
 
 /**
- * 사용자가 등록한 곡 삭제. 세트에 넣은 곡은 복제본이라 남는다. 공개 곡이면
+ * 사용자가 등록한 곡 삭제. 프레젠테이션에 넣은 곡은 복제본이라 남는다. 공개 곡이면
  * 서버에서 지워지면서 공유 라이브러리에서도 사라진다.
  */
 export function deleteUserSong(id: string): void {
