@@ -10,14 +10,11 @@ import {
 import type { DeckStyle, Slide } from "#shared";
 import { SlideStage } from "../../components/stage/SlideStage";
 import { EDITOR_COPY } from "#copy/editor";
+import type { PaneDragData } from "./slidePaneDnd";
+import { paneTargetAttrs } from "./slidePaneTargets";
 
 const THUMB_WIDTH = 176;
 const THUMB_HEIGHT = 99;
-
-/** 썸네일 창에서 끌거나 놓는 대상. 슬라이드는 같은 곡 안, 곡은 곡끼리만 오간다 */
-export type PaneDragData =
-  | { type: "slide"; songIndex: number; slideIndex: number; slideId: string }
-  | { type: "song"; songIndex: number };
 
 /** 16:9 슬라이드 미리보기. 썸네일과 끌기 미리보기가 같이 쓴다 */
 export function SlidePreview({
@@ -113,9 +110,7 @@ export const SlideThumbnail = React.memo(function SlideThumbnail({
       aria-current={current ? "true" : undefined}
       aria-label={EDITOR_COPY.slide.number(number)}
       data-testid={`slide-thumb-${number - 1}`}
-      data-slide-thumb=""
-      data-song-index={songIndex}
-      data-slide-index={slideIndex}
+      {...paneTargetAttrs({ kind: "slide", songIndex, slideIndex })}
       className={cn(
         "group flex cursor-pointer items-start gap-1.5 rounded-lg p-1.5 transition-colors outline-none",
         selected ? "bg-accent/80 shadow-xs" : "hover:bg-muted/50",
@@ -179,9 +174,7 @@ export function SlideGap({
   return (
     <div
       data-testid={`slide-gap-${songIndex}-${index}`}
-      data-slide-gap=""
-      data-song-index={songIndex}
-      data-gap-index={index}
+      {...paneTargetAttrs({ kind: "gap", songIndex, index })}
       data-active={active || undefined}
       aria-hidden="true"
       onClick={onClick}
