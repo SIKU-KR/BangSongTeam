@@ -45,7 +45,7 @@ import {
   SEED_PRESENTATION_IDS,
   SEED_PRESENTATIONS,
   SEED_USER_ID,
-} from "../../test/presentationFixtures";
+} from "../../test/presentationFixture";
 
 describe("presentationStore (In-memory reactive presentation)", () => {
   beforeEach(() => {
@@ -215,9 +215,7 @@ describe("presentationStore (In-memory reactive presentation)", () => {
       updateSongBackground(0, { color: "#002060" });
     });
     expect(result.current.items[0].deck?.backgroundId).toBeNull();
-    expect(result.current.items[0].deck?.style.backgroundColor).toBe(
-      "#002060",
-    );
+    expect(result.current.items[0].deck?.style.backgroundColor).toBe("#002060");
 
     act(() => {
       undo();

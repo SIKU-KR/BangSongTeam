@@ -14,7 +14,7 @@ import {
   useProjectionMediaCache,
   AUTO_CACHE_DELAY_MS,
 } from "./useBackgroundAutoCache";
-import { SEED_PRESENTATIONS } from "../../test/presentationFixtures";
+import { SEED_PRESENTATIONS } from "../../test/presentationFixture";
 
 const { scheduleMediaCaching, warmPresentationFonts } = vi.hoisted(() => ({
   scheduleMediaCaching: vi.fn(),

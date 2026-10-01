@@ -23,7 +23,7 @@ import { COMMON_COPY } from "#copy/common";
 import {
   SEED_PRESENTATIONS,
   SEED_PRESENTATION_IDS,
-} from "../test/presentationFixtures";
+} from "../test/presentationFixture";
 
 const DOC_ID = SEED_PRESENTATION_IDS[0];
 

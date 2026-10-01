@@ -6,7 +6,7 @@ import { DeckSchema } from "#shared";
 import { signInAsTestUser } from "../../test/sessionFixture";
 import { EDITOR_COPY } from "#copy/editor";
 import { COMMON_COPY } from "#copy/common";
-import { SEED_USER_ID } from "../../test/presentationFixtures";
+import { SEED_USER_ID } from "../../test/presentationFixture";
 
 describe("QuickLyricPasteModal", () => {
   beforeEach(() => {

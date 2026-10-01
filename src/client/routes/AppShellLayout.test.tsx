@@ -36,7 +36,7 @@ import { COMMON_COPY } from "#copy/common";
 import { DRIVE_COPY } from "#copy/drive";
 import { FOLDER_COPY } from "#copy/folders";
 import { SHELL_COPY } from "#copy/shell";
-import { SEED_PRESENTATIONS, SEED_USER_ID } from "../test/presentationFixtures";
+import { SEED_PRESENTATIONS, SEED_USER_ID } from "../test/presentationFixture";
 
 function renderShell(initialPath = "/presentations") {
   return render(

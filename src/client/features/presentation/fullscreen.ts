@@ -1,4 +1,5 @@
 import { resolveFullscreenStrategy } from "../../lib/browser/fullscreen";
+import { DRIVE_ROOT_PATH } from "../drive/drivePaths";
 
 /**
  * 브라우저의 User Activation 유효성을 보장하기 위해 전체화면 요청을 동기적으로 즉시 보낸다.
@@ -83,7 +84,7 @@ export function editorPath(presentationId: string): string {
 }
 
 /** 송출 종료 후 돌아갈 곳을 모를 때(주소 직접 진입·새로고침)의 복귀 경로 */
-export const DEFAULT_PRESENT_RETURN_PATH = "/presentations";
+export const DEFAULT_PRESENT_RETURN_PATH = DRIVE_ROOT_PATH;
 
 /** 송출 라우트로 넘기는 history state. 송출을 시작한 화면의 경로를 담는다. */
 export interface PresentLaunchState {

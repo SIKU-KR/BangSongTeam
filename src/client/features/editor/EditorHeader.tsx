@@ -37,6 +37,7 @@ import {
   TooltipTrigger,
 } from "#components/ui/tooltip";
 import { IconButton } from "#components/common/IconButton";
+import { DRIVE_ROOT_PATH } from "../drive/drivePaths";
 import { usePersistenceError } from "../../lib/storage";
 import { useSyncStatus, type SyncStatus } from "../../lib/sync";
 import { ThemeMenuButton } from "../../components/common/ThemeMenuButton";
@@ -283,7 +284,7 @@ export function EditorHeader({
   onShare,
   sharedAccess,
   readOnly = false,
-  backPath = "/presentations",
+  backPath = DRIVE_ROOT_PATH,
   mediaProgress = null,
   className,
 }: EditorHeaderProps): React.JSX.Element {

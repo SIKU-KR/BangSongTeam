@@ -5,7 +5,7 @@ import {
   SEED_PRESENTATIONS,
   SEED_PRESENTATION_IDS,
   MOCK_PRESENTATION_ID,
-} from "./presentationFixtures";
+} from "./presentationFixture";
 
 describe("mockPresentation", () => {
   it("PresentationSchema.parse를 통과하고 유효한 프레젠테이션 스키마를 만족해야 한다", () => {

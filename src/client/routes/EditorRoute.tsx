@@ -23,6 +23,7 @@ import {
   canUndo,
   canRedo,
   createNewPresentation,
+  editorPath,
   launchPresentation,
   canEditPresentation,
   clampPosition,
@@ -33,7 +34,6 @@ import {
   INITIAL_POSITION,
   type ProjectionPosition,
 } from "../features/presentation";
-import { editorPath } from "../features/presentation/fullscreen";
 import { songIndexAfterReorder } from "../features/presentation/projectionState";
 import { useOpenedPresentation } from "../features/presentation/useOpenedPresentation";
 import { DEFAULT_DECK_STYLE, MAX_SLIDE_LINES } from "#shared";
@@ -340,7 +340,7 @@ function EditorScreen({
 
   const overflowMessages = getOverflowMessages(currentOverflow, safeSlideIndex);
 
-  if (!found) return <Navigate to="/presentations" replace />;
+  if (!found) return <Navigate to={drivePath(null)} replace />;
 
   return (
     <div

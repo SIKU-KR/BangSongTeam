@@ -23,7 +23,7 @@ import { FOLDER_COPY } from "#copy/folders";
 import {
   SEED_PRESENTATIONS,
   SEED_USER_ID,
-} from "../../test/presentationFixtures";
+} from "../../test/presentationFixture";
 
 const sync = vi.hoisted(() => ({
   flushPendingSync: vi.fn(async () => {}),

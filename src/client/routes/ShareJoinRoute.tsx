@@ -1,10 +1,11 @@
 import React, { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { DRIVE_ROOT_PATH } from "../features/drive/drivePaths";
 import {
+  editorPath,
   getPresentationById,
   replaceWithServerDocument,
 } from "../features/presentation";
-import { editorPath } from "../features/presentation/fullscreen";
 import {
   ShareLinkError,
   ShareLinkLoading,
@@ -67,7 +68,7 @@ export function ShareJoinRoute(): React.JSX.Element {
       <ShareLinkError
         message={error}
         actionLabel={SHARE_LINK_COPY.goToPresentations}
-        onAction={() => navigate("/presentations", { replace: true })}
+        onAction={() => navigate(DRIVE_ROOT_PATH, { replace: true })}
       />
     );
   }

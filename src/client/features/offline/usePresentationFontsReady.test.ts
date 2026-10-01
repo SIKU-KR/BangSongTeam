@@ -4,7 +4,7 @@ import {
   usePresentationFontsReady,
   FONT_READY_TIMEOUT_MS,
 } from "./usePresentationFontsReady";
-import { SEED_PRESENTATIONS } from "../../test/presentationFixtures";
+import { SEED_PRESENTATIONS } from "../../test/presentationFixture";
 
 const { warmPresentationFonts } = vi.hoisted(() => ({
   warmPresentationFonts: vi.fn<() => Promise<void>>(),

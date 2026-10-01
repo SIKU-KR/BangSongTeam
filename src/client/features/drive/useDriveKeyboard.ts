@@ -13,7 +13,7 @@ import {
   stepFocus,
   toggleKey,
   visibleKey,
-} from "#lib/selection/selectionModel";
+} from "../../lib/selection/selectionModel";
 
 export interface DriveKeyboardOptions {
   drive: DriveContextValue;

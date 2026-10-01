@@ -23,7 +23,7 @@ import {
 import {
   SEED_PRESENTATIONS,
   SEED_USER_ID,
-} from "../../test/presentationFixtures";
+} from "../../test/presentationFixture";
 
 const OWNER = "0000000000000000owner";
 const FOLDER = "f00000000000000000001";

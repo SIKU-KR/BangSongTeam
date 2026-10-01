@@ -21,7 +21,7 @@ import {
   showSharedPreview,
   getPresentationById,
 } from "./presentationStore";
-import { SEED_PRESENTATIONS } from "../../test/presentationFixtures";
+import { SEED_PRESENTATIONS } from "../../test/presentationFixture";
 
 async function resetDatabase(): Promise<void> {
   closeOfflineDB();

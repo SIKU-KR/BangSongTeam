@@ -26,7 +26,7 @@ import {
   trashFolder,
 } from "./folderStore";
 import { FOLDER_COPY } from "#copy/folders";
-import { SEED_USER_ID } from "../../test/presentationFixtures";
+import { SEED_USER_ID } from "../../test/presentationFixture";
 
 async function resetDatabase(): Promise<void> {
   closeOfflineDB();

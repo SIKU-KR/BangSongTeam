@@ -15,7 +15,7 @@ import {
 } from "./songLibraryStore";
 import { EDITOR_COPY } from "#copy/editor";
 import { COMMON_COPY } from "#copy/common";
-import { SEED_USER_ID } from "../../test/presentationFixtures";
+import { SEED_USER_ID } from "../../test/presentationFixture";
 
 const SHARED_ID = "c00000005000000000001";
 const FORK_ID = "c000000050000000000f0";

@@ -5,7 +5,7 @@ import {
 } from "../lib/auth";
 import { savePresentation, saveSong } from "../lib/storage";
 import type { Deck, Presentation } from "#shared";
-import { SEED_PRESENTATIONS, SEED_USER_ID } from "./presentationFixtures";
+import { SEED_PRESENTATIONS, SEED_USER_ID } from "./presentationFixture";
 
 const HOUR = 60 * 60 * 1000;
 

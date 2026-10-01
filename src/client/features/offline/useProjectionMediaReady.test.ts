@@ -15,7 +15,7 @@ import {
   PASSIVE_RECHECK_MS,
   useProjectionMediaReady,
 } from "./useProjectionMediaReady";
-import { SEED_PRESENTATIONS } from "../../test/presentationFixtures";
+import { SEED_PRESENTATIONS } from "../../test/presentationFixture";
 
 const [FIRST, SECOND] = TEST_SERVICE_BACKGROUNDS;
 const PRESENTATION = withBackgrounds(SEED_PRESENTATIONS[0], [

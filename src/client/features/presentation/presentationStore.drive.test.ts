@@ -27,7 +27,7 @@ import {
   setSyncEnabled,
 } from "../../lib/sync/syncScheduler";
 import { COMMON_COPY } from "#copy/common";
-import { SEED_PRESENTATIONS } from "../../test/presentationFixtures";
+import { SEED_PRESENTATIONS } from "../../test/presentationFixture";
 
 const FOLDER = "f00000000000000000001";
 const OTHER = "f00000000000000000002";

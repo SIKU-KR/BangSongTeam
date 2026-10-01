@@ -36,7 +36,7 @@ import {
   rangeKeys,
   toggleKey,
   visibleKey,
-} from "#lib/selection/selectionModel";
+} from "../../lib/selection/selectionModel";
 import { useDriveItemActions } from "./useDriveItemActions";
 import { useDriveKeyboard } from "./useDriveKeyboard";
 import { useDriveListing } from "./useDriveListing";

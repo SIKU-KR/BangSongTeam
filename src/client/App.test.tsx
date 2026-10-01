@@ -15,7 +15,7 @@ import { SHELL_COPY } from "#copy/shell";
 import {
   SEED_PRESENTATION_IDS,
   SEED_PRESENTATIONS,
-} from "./test/presentationFixtures";
+} from "./test/presentationFixture";
 
 const DOC_ID = SEED_PRESENTATION_IDS[0];
 

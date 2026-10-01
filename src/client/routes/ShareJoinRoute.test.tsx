@@ -17,7 +17,7 @@ import {
 } from "../features/presentation/presentationStore";
 import { ShareJoinRoute } from "./ShareJoinRoute";
 import { API_ERRORS } from "#shared";
-import { SEED_PRESENTATIONS, SEED_USER_ID } from "../test/presentationFixtures";
+import { SEED_PRESENTATIONS, SEED_USER_ID } from "../test/presentationFixture";
 
 const OWNER = "0000000000000000owner";
 

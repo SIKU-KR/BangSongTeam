@@ -4,7 +4,7 @@ import {
   marqueeKeys,
   mergeKeys,
   type SelectionBox,
-} from "#lib/selection/selectionModel";
+} from "../../lib/selection/selectionModel";
 
 const DRAG_THRESHOLD_PX = 4;
 

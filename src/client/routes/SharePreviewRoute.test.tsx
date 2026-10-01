@@ -12,7 +12,7 @@ import {
 } from "../features/presentation/presentationStore";
 import { SharePreviewRoute } from "./SharePreviewRoute";
 import { API_ERRORS } from "#shared";
-import { SEED_PRESENTATIONS } from "../test/presentationFixtures";
+import { SEED_PRESENTATIONS } from "../test/presentationFixture";
 
 const OWNER = "0000000000000000owner";
 

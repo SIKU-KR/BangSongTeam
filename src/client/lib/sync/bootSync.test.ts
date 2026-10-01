@@ -33,7 +33,7 @@ import {
   listPresentations,
   resetPresentationStore,
 } from "../../features/presentation";
-import { SEED_USER_ID as TEST_USER_ID } from "../../test/presentationFixtures";
+import { SEED_USER_ID as TEST_USER_ID } from "../../test/presentationFixture";
 
 const EMPTY_FOLDER_LIST: FolderListResponse = {
   folders: [],

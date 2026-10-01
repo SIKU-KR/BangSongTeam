@@ -1,8 +1,7 @@
 import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
-import { duplicatePresentation } from "../presentation";
-import { editorPath } from "../presentation/fullscreen";
+import { duplicatePresentation, editorPath } from "../presentation";
 import { wantsMakeCopy } from "../sharing/shareLink";
 import { EDITOR_COPY } from "#copy/editor";
 

@@ -5,7 +5,7 @@ import {
   type Presentation,
 } from "#shared";
 import { COMMON_COPY } from "#copy/common";
-import { SEED_PRESENTATIONS } from "../../test/presentationFixtures";
+import { SEED_PRESENTATIONS } from "../../test/presentationFixture";
 import {
   buildPresentationCopy,
   repairDuplicateDeckIds,
