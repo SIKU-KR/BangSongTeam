@@ -254,6 +254,13 @@ const OWNER_STYLES: DeckStyle[] = [
     fontSizeVw: 5.5,
     fontColor: "#FDE68A",
     textShadowLevel: "strong",
+    overlayOpacity: 0,
+    textBackdrop: {
+      enabled: true,
+      opacity: 60,
+      paddingPercent: 20,
+      radiusPercent: 15,
+    },
   },
   { ...DEFAULT_DECK_STYLE, backgroundColor: "#1E3A8A", overlayOpacity: 0 },
 ];
