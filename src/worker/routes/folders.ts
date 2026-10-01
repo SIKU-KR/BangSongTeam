@@ -74,6 +74,3 @@ export function createFoldersRoute(deps: AppDeps = {}) {
       );
     });
 }
-
-export const foldersRoute = createFoldersRoute();
-export default foldersRoute;

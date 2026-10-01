@@ -114,6 +114,3 @@ export function createDecksRoute(deps: AppDeps = {}) {
       return c.json({ ok: true as const }, 200);
     });
 }
-
-export const decksRoute = createDecksRoute();
-export default decksRoute;

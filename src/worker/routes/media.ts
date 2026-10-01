@@ -62,5 +62,3 @@ export const mediaRoute = new Hono<AppEnv>().get("/*", async (c) => {
     headers,
   });
 });
-
-export default mediaRoute;

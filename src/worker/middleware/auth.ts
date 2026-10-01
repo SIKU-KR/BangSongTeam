@@ -1,19 +1,8 @@
 import type { Context } from "hono";
 import { createMiddleware } from "hono/factory";
 import { createAuth } from "../lib/auth";
-import type { AppEnv, Bindings, Variables } from "../types";
+import type { AppEnv, Bindings } from "../types";
 import { API_ERRORS } from "#shared";
-
-/**
- * 보호 라우트용 환경 타입.
- *
- * `AppEnv`의 `userId`는 선택값이라 핸들러마다 non-null 단언이 필요하다.
- * `requireAuth`를 통과한 뒤에는 항상 존재하므로 여기서 좁혀 둔다.
- */
-export interface AuthedEnv {
-  Bindings: Bindings;
-  Variables: Variables & { userId: string };
-}
 
 /**
  * 세션 조회 결과.
@@ -104,6 +93,3 @@ export function createOptionalSession(
     forwardCookies(c, session?.setCookies);
   });
 }
-
-/** 기본 세션 검증 미들웨어 */
-export const requireAuth = createRequireAuth();

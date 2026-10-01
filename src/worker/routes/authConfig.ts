@@ -6,5 +6,3 @@ import { configuredSocialProviders } from "../lib/auth";
 export const authConfigRoute = new Hono<AppEnv>().get("/auth-config", (c) => {
   return c.json({ providers: configuredSocialProviders(c.env) }, 200);
 });
-
-export default authConfigRoute;
