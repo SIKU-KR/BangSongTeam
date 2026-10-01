@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import type { Presentation } from "#shared";
-import { mergeDocuments } from "./mergeDocuments";
+import { mergeDocuments, planBootMerge } from "./mergeDocuments";
 
 const USER = "00000000x000000000001";
 
@@ -128,5 +128,73 @@ describe("문서 단위 LWW 병합", () => {
       expect(documents[0].title).toBe("원본");
       expect(needsPush).toEqual([]);
     });
+  });
+});
+
+describe("부팅 병합 계획", () => {
+  const access = { ownerName: "인도자", memberId: USER };
+  const at = "2026-09-22T10:00:00.000Z";
+
+  it("서버 삭제 기록에 있는 로컬 프레젠테이션은 병합에서 빼고 지운다", () => {
+    const plan = planBootMerge(
+      [doc("a", "2026-09-22T12:00:00.000Z"), doc("b", at)],
+      [doc("b", at)],
+      ["a"],
+      new Set(["a", "b"]),
+    );
+
+    expect(plan.documents.map((d) => d.id)).toEqual(["b"]);
+    expect(plan.needsPush).toEqual([]);
+    expect(plan.removedIds).toEqual(["a"]);
+  });
+
+  it("로컬에 없는 프레젠테이션의 삭제 기록은 지울 대상에 넣지 않는다", () => {
+    const plan = planBootMerge([], [], ["gone"], new Set());
+
+    expect(plan.removedIds).toEqual([]);
+  });
+
+  it("받기 전부터 알던 공유받은 프레젠테이션이 서버 목록에서 빠지면 지운다", () => {
+    const plan = planBootMerge(
+      [doc("shared", at, { access })],
+      [],
+      [],
+      new Set(["shared"]),
+    );
+
+    expect(plan.documents).toEqual([]);
+    expect(plan.removedIds).toEqual(["shared"]);
+  });
+
+  it("받는 사이에 들어온 공유받은 프레젠테이션은 서버 목록에 없어도 남긴다", () => {
+    const joined = doc("joined", at, { access });
+    const plan = planBootMerge([joined], [], [], new Set());
+
+    expect(plan.documents).toEqual([joined]);
+    expect(plan.removedIds).toEqual([]);
+    expect(plan.needsPush).toEqual([]);
+  });
+
+  it("삭제 기록을 먼저, 빠진 공유받은 프레젠테이션을 그다음에 지운다", () => {
+    const plan = planBootMerge(
+      [doc("shared", at, { access }), doc("deleted", at)],
+      [],
+      ["deleted"],
+      new Set(["shared", "deleted"]),
+    );
+
+    expect(plan.removedIds).toEqual(["deleted", "shared"]);
+  });
+
+  it("로컬에만 있는 프레젠테이션은 push 대상이 된다", () => {
+    const plan = planBootMerge(
+      [doc("local", at)],
+      [doc("server", at)],
+      [],
+      new Set(["local"]),
+    );
+
+    expect(plan.documents.map((d) => d.id).sort()).toEqual(["local", "server"]);
+    expect(plan.needsPush).toEqual(["local"]);
   });
 });

@@ -1,10 +1,10 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { renderHook, act } from "@testing-library/react";
-import { SEED_PRESENTATIONS } from "../presentation";
 import {
   usePresentationFontsReady,
   FONT_READY_TIMEOUT_MS,
 } from "./usePresentationFontsReady";
+import { SEED_PRESENTATIONS } from "../../test/presentationFixture";
 
 const { warmPresentationFonts } = vi.hoisted(() => ({
   warmPresentationFonts: vi.fn<() => Promise<void>>(),

@@ -1,10 +1,8 @@
 import React from "react";
 import { ToggleGroup, ToggleGroupItem } from "#components/ui/toggle-group";
-import type { BackgroundKind, BackgroundMedia } from "#shared";
+import type { BackgroundKindFilterValue } from "./backgroundSearch";
 import { BACKGROUND_COPY } from "#copy/backgrounds";
 import { COMMON_COPY } from "#copy/common";
-
-export type BackgroundKindFilterValue = "all" | BackgroundKind;
 
 const OPTIONS: ReadonlyArray<{
   value: BackgroundKindFilterValue;
@@ -14,15 +12,6 @@ const OPTIONS: ReadonlyArray<{
   { value: "video", label: BACKGROUND_COPY.video },
   { value: "image", label: BACKGROUND_COPY.image },
 ];
-
-export function filterBackgroundsByKind(
-  backgrounds: BackgroundMedia[],
-  kind: BackgroundKindFilterValue,
-): BackgroundMedia[] {
-  return kind === "all"
-    ? backgrounds
-    : backgrounds.filter((bg) => bg.kind === kind);
-}
 
 export function BackgroundKindFilter({
   value,

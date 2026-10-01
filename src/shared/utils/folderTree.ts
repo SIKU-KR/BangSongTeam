@@ -1,3 +1,5 @@
+import { MAX_FOLDER_NAME_LENGTH } from "../schemas/folder";
+
 /**
  * 드라이브 폴더 트리 연산 (서버·클라이언트 공용, 순수 함수).
  *
@@ -155,7 +157,6 @@ export function folderNameKey(name: string): string {
   return name.trim().toLowerCase();
 }
 
-const MAX_NAME_LENGTH = 100;
 const NUMBERED_NAME = /^(.*) \((\d+)\)$/;
 
 /**
@@ -169,7 +170,7 @@ export function resolveUniqueName(
   const taken = new Set<string>();
   for (const name of takenNames) taken.add(folderNameKey(name));
 
-  const trimmed = base.trim().slice(0, MAX_NAME_LENGTH);
+  const trimmed = base.trim().slice(0, MAX_FOLDER_NAME_LENGTH);
   if (!taken.has(folderNameKey(trimmed))) return trimmed;
 
   const match = NUMBERED_NAME.exec(trimmed);
@@ -178,7 +179,7 @@ export function resolveUniqueName(
 
   for (;;) {
     const suffix = ` (${counter})`;
-    const candidate = `${stem.slice(0, MAX_NAME_LENGTH - suffix.length)}${suffix}`;
+    const candidate = `${stem.slice(0, MAX_FOLDER_NAME_LENGTH - suffix.length)}${suffix}`;
     if (!taken.has(folderNameKey(candidate))) return candidate;
     counter += 1;
   }

@@ -1,5 +1,10 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { marqueeKeys, mergeKeys, type SelectionBox } from "./selectionModel";
+import { useLatest } from "../../hooks/useLatest";
+import {
+  marqueeKeys,
+  mergeKeys,
+  type SelectionBox,
+} from "../../lib/selection/selectionModel";
 
 const DRAG_THRESHOLD_PX = 4;
 
@@ -42,8 +47,7 @@ export function useMarqueeSelection({
   const [tracking, setTracking] = useState(false);
   const startRef = useRef<MarqueeStart | null>(null);
   const suppressClickRef = useRef(false);
-  const onSelectRef = useRef(onSelect);
-  onSelectRef.current = onSelect;
+  const onSelectRef = useLatest(onSelect);
 
   const update = useCallback(
     (clientX: number, clientY: number): void => {

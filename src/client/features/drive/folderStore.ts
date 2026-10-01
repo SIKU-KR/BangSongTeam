@@ -4,6 +4,7 @@ import {
   createId,
   folderNameKey,
   isFolderTrashed,
+  MAX_FOLDER_NAME_LENGTH,
   resolveUniqueName,
   wouldCreateCycle,
   type Folder,
@@ -33,8 +34,6 @@ import { FOLDER_COPY } from "#copy/folders";
  * 이름 규칙은 파일 탐색기와 같다. 같은 위치의 폴더끼리는 이름이 겹치지 않는다
  * (대소문자·앞뒤 공백 무시). 휴지통에 있는 폴더는 자리를 차지하지 않는다.
  */
-
-const MAX_NAME_LENGTH = 100;
 
 export type FolderMutationResult =
   { ok: true; folder: Folder } | { ok: false; error: string };
@@ -95,6 +94,11 @@ function siblingNames(parentId: string | null, excludeId?: string): string[] {
     .map((folder) => folder.name);
 }
 
+/** 새 폴더 이름 입력의 첫 값. 같은 위치에 이미 있으면 번호를 붙여 바로 만들 수 있게 한다 */
+export function suggestFolderName(parentId: string | null): string {
+  return resolveUniqueName(FOLDER_COPY.newFolder, siblingNames(parentId));
+}
+
 function resolveTargetParent(parentId: string | null): string | null {
   return parentId !== null && isFolderAvailable(parentId) ? parentId : null;
 }
@@ -133,8 +137,8 @@ export function validateFolderName(
 ): string | null {
   const trimmed = name.trim();
   if (!trimmed) return FOLDER_COPY.nameRequired;
-  if (trimmed.length > MAX_NAME_LENGTH) {
-    return FOLDER_COPY.nameTooLong(MAX_NAME_LENGTH);
+  if (trimmed.length > MAX_FOLDER_NAME_LENGTH) {
+    return FOLDER_COPY.nameTooLong(MAX_FOLDER_NAME_LENGTH);
   }
   const key = folderNameKey(trimmed);
   if (siblingNames(parentId, excludeId).some((n) => folderNameKey(n) === key)) {

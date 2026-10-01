@@ -27,15 +27,9 @@ import {
 } from "#components/ui/empty";
 import { Field, FieldGroup, FieldLabel } from "#components/ui/field";
 import { Textarea } from "#components/ui/textarea";
-import {
-  createId,
-  Deck,
-  DeckSchema,
-  DEFAULT_DECK_STYLE,
-  Slide,
-  splitLyricsIntoSlides,
-} from "#shared";
+import { splitLyricsIntoSlides, type Deck, type Slide } from "#shared";
 import { ExternalSearchLinks } from "./ExternalSearchLinks";
+import { createSongDeck } from "./songDeck";
 import { getCurrentUserId } from "../../lib/auth";
 import { EDITOR_COPY } from "#copy/editor";
 import { COMMON_COPY } from "#copy/common";
@@ -44,33 +38,28 @@ export interface QuickLyricPasteModalProps {
   isOpen: boolean;
   onClose: () => void;
   onAddToSet: (deck: Deck) => void;
-  initialTitle?: string;
-  initialArtist?: string;
-  initialLyrics?: string;
-  renderSearchLinks?: (title: string) => React.ReactNode;
 }
 
-/** 빠른 가사 붙여넣기로 새 곡을 세트에 추가하는 모달. */
+/**
+ * 가사를 붙여넣어 새 곡을 지금 프레젠테이션에 바로 추가하는 모달. 보관함에는 저장하지
+ * 않는다. 열 때마다 빈 입력란으로 시작한다.
+ */
 export function QuickLyricPasteModal({
   isOpen,
   onClose,
   onAddToSet,
-  initialTitle = "",
-  initialArtist = "",
-  initialLyrics = "",
-  renderSearchLinks,
 }: QuickLyricPasteModalProps): React.JSX.Element | null {
-  const [title, setTitle] = useState(initialTitle);
-  const [artist, setArtist] = useState(initialArtist);
-  const [lyricsRaw, setLyricsRaw] = useState(initialLyrics);
+  const [title, setTitle] = useState("");
+  const [artist, setArtist] = useState("");
+  const [lyricsRaw, setLyricsRaw] = useState("");
 
   useEffect(() => {
     if (isOpen) {
-      setTitle(initialTitle);
-      setArtist(initialArtist);
-      setLyricsRaw(initialLyrics);
+      setTitle("");
+      setArtist("");
+      setLyricsRaw("");
     }
-  }, [isOpen, initialTitle, initialArtist, initialLyrics]);
+  }, [isOpen]);
 
   const slides: Slide[] = useMemo(() => {
     if (!lyricsRaw.trim()) return [];
@@ -85,23 +74,13 @@ export function QuickLyricPasteModal({
     const userId = getCurrentUserId();
     if (!userId) return;
 
-    const now = new Date().toISOString();
-    const newDeck = DeckSchema.parse({
-      id: createId(),
+    const newDeck = createSongDeck({
       userId,
       scope: "presentation",
-      presentationId: null,
-      title: title.trim(),
-      artist: artist.trim(),
+      title,
+      artist,
       lyricsRaw,
       slides,
-      backgroundId: null,
-      style: DEFAULT_DECK_STYLE,
-      visibility: "private",
-      forkedFrom: null,
-      forkCount: 0,
-      createdAt: now,
-      updatedAt: now,
     });
 
     onAddToSet(newDeck);
@@ -154,11 +133,7 @@ export function QuickLyricPasteModal({
               />
             </Field>
 
-            {renderSearchLinks ? (
-              renderSearchLinks(title)
-            ) : (
-              <ExternalSearchLinks title={title} />
-            )}
+            <ExternalSearchLinks title={title} />
 
             <Field className="flex-1">
               <FieldLabel htmlFor="song-lyrics-textarea">

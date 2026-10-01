@@ -37,7 +37,7 @@ const PARTS = {
   },
 } as const;
 
-/** 드라이브 메뉴 항목 목록. ⋮·▾ 드롭다운 메뉴와 우클릭 메뉴가 같은 항목을 쓴다 */
+/** 메뉴 항목 목록. 드롭다운 메뉴와 우클릭 메뉴가 같은 항목 배열을 그대로 쓴다 */
 export function ActionMenuItems({
   actions,
   kind = "dropdown",

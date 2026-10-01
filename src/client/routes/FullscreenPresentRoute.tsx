@@ -1,9 +1,4 @@
-import React, {
-  useState,
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-} from "react";
+import React, { useState, useCallback, useEffect } from "react";
 import {
   useLocation,
   useNavigate,
@@ -13,35 +8,16 @@ import {
 import { Button } from "#components/ui/button";
 import { Kbd } from "#components/ui/kbd";
 import { DEFAULT_DECK_STYLE } from "#shared";
-import type { Presentation } from "#shared";
 import { SlideStage } from "../components/stage/SlideStage";
 import { ProjectionMediaGate } from "../features/offline/ProjectionMediaGate";
 import { usePresentationFontsReady } from "../features/offline/usePresentationFontsReady";
 import { useProjectionMediaCache } from "../features/offline/useBackgroundAutoCache";
 import { useProjectionMediaReady } from "../features/offline/useProjectionMediaReady";
+import { useBackgroundLayers } from "../features/backgrounds/backgroundCatalog";
 import {
-  resolveBackgroundLayers,
-  useBackground,
-} from "../features/backgrounds/backgroundCatalog";
-
-const EMPTY_PRESENTATION: Presentation = {
-  id: "",
-  userId: "",
-  title: "",
-  serviceDate: "",
-  items: [],
-  createdAt: "",
-  updatedAt: "",
-};
-import {
-  usePresentationById,
-  openPresentation,
   useNavigationBuffer,
   usePresentationShortcuts,
-  enterFullscreen,
   exitFullscreen,
-  isFullscreenActive,
-  subscribeFullscreenChange,
   resolvePresentReturnPath,
   DEFAULT_PRESENT_RETURN_PATH,
   nextPosition,
@@ -52,6 +28,8 @@ import {
   INITIAL_POSITION,
   type ProjectionPosition,
 } from "../features/presentation";
+import { useOpenedPresentation } from "../features/presentation/useOpenedPresentation";
+import { useFullscreenSession } from "../features/presentation/useFullscreenSession";
 import { PRESENTATION_COPY } from "#copy/presentation";
 
 const noop = (): void => {};
@@ -70,12 +48,7 @@ export function FullscreenPresentRoute(): React.JSX.Element {
   const returnPath = resolvePresentReturnPath(location.state);
   const { presentationId } = useParams<{ presentationId: string }>();
 
-  const found = usePresentationById(presentationId);
-  const presentation = found ?? EMPTY_PRESENTATION;
-
-  useLayoutEffect(() => {
-    if (presentationId) openPresentation(presentationId);
-  }, [presentationId]);
+  const { found, presentation } = useOpenedPresentation(presentationId);
 
   const [position, setPosition] =
     useState<ProjectionPosition>(INITIAL_POSITION);
@@ -96,13 +69,9 @@ export function FullscreenPresentRoute(): React.JSX.Element {
   const currentSlide = getSlideAt(position, songs);
   const currentStyle = currentSong?.style ?? DEFAULT_DECK_STYLE;
 
-  const currentBackground = resolveBackgroundLayers(
-    useBackground(currentSong?.backgroundId),
-  );
+  const currentBackground = useBackgroundLayers(currentSong?.backgroundId);
   const nextSong = songs[position.songIndex + 1]?.deck;
-  const nextBackground = resolveBackgroundLayers(
-    useBackground(nextSong?.backgroundId),
-  );
+  const nextBackground = useBackgroundLayers(nextSong?.backgroundId);
 
   const handleNext = useCallback(() => {
     setPosition((prev) => nextPosition(prev, songs));
@@ -139,23 +108,7 @@ export function FullscreenPresentRoute(): React.JSX.Element {
     navigationBuffer: navBuffer,
   });
 
-  useEffect(() => {
-    if (!isFullscreenActive()) {
-      enterFullscreen().catch(() => {});
-    }
-
-    let hasBeenFullscreen = isFullscreenActive();
-
-    return subscribeFullscreenChange(() => {
-      if (isFullscreenActive()) {
-        hasBeenFullscreen = true;
-        return;
-      }
-      if (hasBeenFullscreen) {
-        handleExit();
-      }
-    });
-  }, [handleExit]);
+  useFullscreenSession(handleExit);
 
   if (!found) return <Navigate to={DEFAULT_PRESENT_RETURN_PATH} replace />;
 

@@ -6,7 +6,6 @@ import { API_ERRORS, type Deck, DEFAULT_DECK_STYLE } from "#shared";
 import { closeOfflineDB, OFFLINE_DB_NAME } from "../../lib/storage";
 import { withQueryClient } from "../../test/queryClientFixture";
 import { installFakeApi, type FakeApi } from "../../test/fakeApi";
-import { SEED_USER_ID } from "../presentation";
 import { SongPickerModal } from "./SongPickerModal";
 import {
   getUserSongs,
@@ -16,6 +15,7 @@ import {
 } from "./songLibraryStore";
 import { EDITOR_COPY } from "#copy/editor";
 import { COMMON_COPY } from "#copy/common";
+import { SEED_USER_ID } from "../../test/presentationFixture";
 
 const SHARED_ID = "c00000005000000000001";
 const FORK_ID = "c000000050000000000f0";

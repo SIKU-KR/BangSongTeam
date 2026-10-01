@@ -1,6 +1,5 @@
 import { hc } from "hono/client";
 import type { AppType } from "../../../worker/index";
-import { ERROR_COPY } from "#copy/common";
 
 /**
  * Hono RPC 클라이언트.
@@ -14,29 +13,3 @@ import { ERROR_COPY } from "#copy/common";
 export const api = hc<AppType>("/", {
   init: { credentials: "include" },
 });
-
-/** 네트워크 자체에 닿지 못했을 때 (오프라인·DNS 실패 등) */
-export class NetworkUnavailableError extends Error {
-  constructor(cause?: unknown) {
-    super(ERROR_COPY.serverUnreachable);
-    this.name = "NetworkUnavailableError";
-    this.cause = cause;
-  }
-}
-
-/**
- * 요청을 보내되 '서버가 거절함'과 '서버에 닿지 못함'을 구분한다.
- *
- * 이 구분이 중요한 이유: 401은 로그아웃시켜야 하지만, 오프라인은 캐시된
- * 세션을 유지해야 한다. 둘을 묶으면 예배 당일 네트워크가 끊기는 순간
- * 로그인 화면으로 튕긴다.
- */
-export async function requestOrThrowOffline<T>(
-  send: () => Promise<T>,
-): Promise<T> {
-  try {
-    return await send();
-  } catch (err) {
-    throw new NetworkUnavailableError(err);
-  }
-}

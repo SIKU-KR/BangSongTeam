@@ -1,6 +1,6 @@
 import React, { useRef, useState, useEffect } from "react";
 import type { Slide, DeckStyle } from "#shared";
-import { DEFAULT_BACKGROUND_COLOR, DEFAULT_DECK_STYLE } from "#shared";
+import { DEFAULT_DECK_STYLE, resolveBackdropColor } from "#shared";
 import {
   useStageScale,
   VIRTUAL_STAGE_WIDTH,
@@ -100,9 +100,7 @@ export function SlideStage({
   const { scale, translateX, translateY } = useStageScale(effectiveDimensions);
   const hasMedia = Boolean(backgroundUrl || backgroundImageUrl || posterUrl);
   const backdrop = {
-    backgroundColor: hasMedia
-      ? DEFAULT_BACKGROUND_COLOR
-      : (style.backgroundColor ?? DEFAULT_BACKGROUND_COLOR),
+    backgroundColor: resolveBackdropColor(style.backgroundColor, hasMedia),
   };
 
   return (

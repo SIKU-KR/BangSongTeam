@@ -1,5 +1,6 @@
 import type { Deck } from "#shared";
-import { pushDeck, deleteDeckRemote, OfflineError } from "./presentationSync";
+import { OfflineError } from "../api/request";
+import { pushDeck, deleteDeckRemote } from "./presentationSync";
 import { setSyncStatus } from "./syncStatus";
 
 const DECK_SYNC_DEBOUNCE_MS = 2000;

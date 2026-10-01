@@ -2,13 +2,9 @@ import React from "react";
 import { render, screen, act } from "@testing-library/react";
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { App } from "./App";
-import {
-  resetPresentationStore,
-  SEED_PRESENTATION_IDS,
-} from "./features/presentation";
+import { resetPresentationStore } from "./features/presentation";
 import { closeOfflineDB, OFFLINE_DB_NAME } from "./lib/storage";
 import { installFakeApi } from "./test/fakeApi";
-import { SEED_PRESENTATIONS } from "./features/presentation/mockPresentations";
 import {
   signInAsTestUser,
   signOutForTests,
@@ -16,6 +12,10 @@ import {
 } from "./test/sessionFixture";
 import { APP_NAME } from "#shared";
 import { SHELL_COPY } from "#copy/shell";
+import {
+  SEED_PRESENTATION_IDS,
+  SEED_PRESENTATIONS,
+} from "./test/presentationFixture";
 
 const DOC_ID = SEED_PRESENTATION_IDS[0];
 

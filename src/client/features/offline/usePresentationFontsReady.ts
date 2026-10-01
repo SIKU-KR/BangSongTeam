@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import type { Presentation } from "#shared";
 import { warmPresentationFonts } from "../../lib/offline";
+import { useLatest } from "../../hooks/useLatest";
 
 /** 송출 시작 때 가사 글꼴을 기다리는 최대 시간. 넘기면 대체 글꼴로라도 가사를 보인다. */
 export const FONT_READY_TIMEOUT_MS = 1500;
@@ -16,8 +17,7 @@ export function usePresentationFontsReady(
 ): boolean {
   const presentationId = presentation?.id ?? null;
   const [readyId, setReadyId] = useState<string | null>(null);
-  const presentationRef = useRef(presentation);
-  presentationRef.current = presentation;
+  const presentationRef = useLatest(presentation);
 
   useEffect(() => {
     const current = presentationRef.current;

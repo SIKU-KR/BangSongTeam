@@ -21,11 +21,13 @@ export {
   pushFolder,
   deleteFolderRemote,
   deletePresentationRemote,
-  ServerRejectedError,
   toSyncableDocument,
-  SessionExpiredError,
-  OfflineError,
 } from "./presentationSync";
+export {
+  OfflineError,
+  ServerRejectedError,
+  SessionExpiredError,
+} from "../api/request";
 export {
   scheduleDocumentPush,
   cancelDocumentPush,

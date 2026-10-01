@@ -7,7 +7,7 @@ import {
   InputGroupInput,
 } from "#components/ui/input-group";
 import { SidebarTrigger } from "#components/ui/sidebar";
-import { isTypingTarget } from "../../features/drive";
+import { isTypingTarget } from "../../lib/browser/keyboardTarget";
 import { ThemeMenuButton } from "../common/ThemeMenuButton";
 import { COMMON_COPY } from "#copy/common";
 

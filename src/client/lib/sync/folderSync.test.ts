@@ -8,7 +8,7 @@ import {
   __setFolderPusherForTests,
   __resetFolderSyncForTests,
 } from "./folderSync";
-import { OfflineError } from "./presentationSync";
+import { OfflineError } from "../api/request";
 import { getSyncStatus, __resetSyncStatusForTests } from "./syncStatus";
 
 const USER = "000000000000000000001";

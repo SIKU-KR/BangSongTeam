@@ -1,13 +1,4 @@
-import React, { useEffect, useState } from "react";
-import {
-  AlertDialog,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "#components/ui/alert-dialog";
+import React, { useState } from "react";
 import { ImageIcon, WifiOffIcon } from "lucide-react";
 import { Alert, AlertDescription } from "#components/ui/alert";
 import { Button } from "#components/ui/button";
@@ -19,17 +10,14 @@ import {
   EmptyTitle,
 } from "#components/ui/empty";
 import type { BackgroundMedia } from "#shared";
+import { BackgroundKindFilter, BackgroundPreview } from "../backgrounds";
 import {
-  BackgroundKindFilter,
-  BackgroundPreview,
-  filterBackgroundsByKind,
-  matchesBackgroundQuery,
-  useBackgroundCatalog,
-  type BackgroundKindFilterValue,
-} from "../backgrounds";
+  describeBackgroundGalleryEmpty,
+  useBackgroundGallery,
+} from "../backgrounds/useBackgroundGallery";
+import { BackgroundDeleteDialog } from "./BackgroundDeleteDialog";
 import { useDeleteBackground } from "../../lib/api/backgroundQueries";
 import { describeApiError } from "../../lib/api/request";
-import { refreshBackgroundCatalog } from "../../lib/sync/backgroundSync";
 import { useIsOnline } from "../../hooks/useIsOnline";
 import { BACKGROUND_COPY } from "#copy/backgrounds";
 import { COMMON_COPY } from "#copy/common";
@@ -67,35 +55,28 @@ function BackgroundCard({
 export function BackgroundLibraryView({
   searchQuery = "",
 }: BackgroundLibraryViewProps): React.JSX.Element {
-  const catalog = useBackgroundCatalog();
+  const {
+    catalog,
+    kind,
+    setKind,
+    visibleBackgrounds,
+    hasAnyBackground,
+    emptyReason,
+  } = useBackgroundGallery(searchQuery);
   const isOnline = useIsOnline();
   const deleteBackground = useDeleteBackground();
-  const [kind, setKind] = useState<BackgroundKindFilterValue>("all");
   const [pendingDelete, setPendingDelete] = useState<BackgroundMedia | null>(
     null,
   );
 
-  useEffect(() => {
-    void refreshBackgroundCatalog();
-  }, []);
-
-  const query = searchQuery.trim();
-  const all = catalog.backgrounds;
-  const visible = filterBackgroundsByKind(all, kind).filter((bg) =>
-    matchesBackgroundQuery(bg, query),
-  );
-
   const isOffline = !isOnline || catalog.status === "offline";
-  const canManage = catalog.canManage && !isOffline;
+  const isDeleteEnabled = catalog.canManage && !isOffline;
 
-  const confirmDelete = async (): Promise<void> => {
+  const confirmDelete = (): void => {
     if (!pendingDelete) return;
-    try {
-      await deleteBackground.mutateAsync(pendingDelete.id);
-      setPendingDelete(null);
-    } catch (error) {
-      void error;
-    }
+    deleteBackground.mutate(pendingDelete.id, {
+      onSuccess: () => setPendingDelete(null),
+    });
   };
 
   return (
@@ -108,28 +89,24 @@ export function BackgroundLibraryView({
       )}
 
       <section className="space-y-4">
-        {all.length > 0 && (
+        {hasAnyBackground && (
           <BackgroundKindFilter value={kind} onChange={setKind} />
         )}
 
-        {visible.length === 0 ? (
+        {emptyReason ? (
           <Empty className="border">
             <EmptyHeader>
               <EmptyMedia variant="icon">
                 <ImageIcon />
               </EmptyMedia>
               <EmptyTitle>
-                {all.length === 0
-                  ? BACKGROUND_COPY.noBackgrounds
-                  : query
-                    ? BACKGROUND_COPY.library.noMatch(searchQuery)
-                    : BACKGROUND_COPY.library.noFilterMatch}
+                {describeBackgroundGalleryEmpty(emptyReason, searchQuery)}
               </EmptyTitle>
             </EmptyHeader>
           </Empty>
         ) : (
           <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {visible.map((bg) => (
+            {visibleBackgrounds.map((bg) => (
               <BackgroundCard
                 key={bg.id}
                 background={bg}
@@ -139,7 +116,7 @@ export function BackgroundLibraryView({
                       variant="destructive"
                       size="xs"
                       data-testid={`delete-bg-${bg.id}`}
-                      disabled={!canManage}
+                      disabled={!isDeleteEnabled}
                       onClick={() => {
                         deleteBackground.reset();
                         setPendingDelete(bg);
@@ -155,45 +132,17 @@ export function BackgroundLibraryView({
         )}
       </section>
 
-      <AlertDialog
-        open={pendingDelete !== null}
-        onOpenChange={(open) => {
-          if (!open && !deleteBackground.isPending) setPendingDelete(null);
-        }}
-      >
-        <AlertDialogContent data-testid="bg-delete-dialog">
-          <AlertDialogHeader>
-            <AlertDialogTitle>
-              {BACKGROUND_COPY.library.deleteTitle}
-            </AlertDialogTitle>
-            <AlertDialogDescription>
-              {BACKGROUND_COPY.library.deleteMessage(
-                pendingDelete?.title ?? "",
-              )}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          {deleteBackground.error && (
-            <p role="alert" className="text-xs text-destructive">
-              {describeApiError(deleteBackground.error)}
-            </p>
-          )}
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={deleteBackground.isPending}>
-              {COMMON_COPY.cancel}
-            </AlertDialogCancel>
-            <Button
-              variant="destructive"
-              data-testid="confirm-delete-bg"
-              disabled={deleteBackground.isPending}
-              onClick={() => void confirmDelete()}
-            >
-              {deleteBackground.isPending
-                ? BACKGROUND_COPY.library.deleting
-                : COMMON_COPY.delete}
-            </Button>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <BackgroundDeleteDialog
+        background={pendingDelete}
+        isPending={deleteBackground.isPending}
+        errorMessage={
+          deleteBackground.error
+            ? describeApiError(deleteBackground.error)
+            : null
+        }
+        onConfirm={confirmDelete}
+        onCancel={() => setPendingDelete(null)}
+      />
     </div>
   );
 }

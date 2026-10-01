@@ -1,4 +1,4 @@
-/** 글자를 입력하는 중인지. 드라이브 단축키는 입력 중에는 동작하지 않는다 */
+/** 글자를 입력하는 중인지. 전역 단축키는 입력 중에는 동작하지 않아야 한다 */
 export function isTypingTarget(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false;
   return (

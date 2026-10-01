@@ -1,8 +1,5 @@
 import React from "react";
-import {
-  __loadDocumentsForTests,
-  SEED_PRESENTATIONS,
-} from "../features/presentation";
+import { __loadDocumentsForTests } from "../features/presentation";
 import { signInAsTestUser } from "../test/sessionFixture";
 import { withQueryClient } from "../test/queryClientFixture";
 import {
@@ -20,10 +17,13 @@ import {
   getActivePresentation,
   replaceWithServerDocument,
   resetPresentationStore,
-  SEED_PRESENTATION_IDS,
 } from "../features/presentation";
 import { EDITOR_COPY } from "#copy/editor";
 import { COMMON_COPY } from "#copy/common";
+import {
+  SEED_PRESENTATIONS,
+  SEED_PRESENTATION_IDS,
+} from "../test/presentationFixture";
 
 const DOC_ID = SEED_PRESENTATION_IDS[0];
 

@@ -12,22 +12,14 @@ import {
 import {
   clickSelection,
   extendSelection,
+  resolveInsertIndex,
+  resolvePaneSelection,
   stepMoveTarget,
   type ClickModifiers,
+  type PickedSlides,
+  type SlideInsertion,
   type SlideMoveDirection,
 } from "./slideSelection";
-
-/** 썸네일 사이 삽입 커서. `index`는 곡 안 틈 번호(0 = 첫 장 앞)다 */
-export interface SlideInsertion {
-  songIndex: number;
-  index: number;
-}
-
-interface PickedSlides {
-  itemId: string;
-  ids: string[];
-  anchorId: string;
-}
 
 interface SlideClipboard {
   itemId: string;
@@ -86,22 +78,14 @@ export function useSlideSelection({
   const ids = slides.map((slide) => slide.id);
   const currentId = ids[position.slideIndex];
 
-  const pickedHere =
-    picked && item && picked.itemId === item.id
-      ? ids.filter((id) => picked.ids.includes(id))
-      : [];
-  const usePicked = currentId !== undefined && pickedHere.includes(currentId);
-  const activeIds = usePicked
-    ? pickedHere
-    : currentId === undefined
-      ? []
-      : [currentId];
-  const anchorId =
-    usePicked && picked && ids.includes(picked.anchorId)
-      ? picked.anchorId
-      : (currentId ?? "");
-  const selectedIds = insertion ? [] : activeIds;
-  const selectedIndexes = selectedIds.map((id) => ids.indexOf(id));
+  const { activeIds, anchorId, selectedIds, selectedIndexes } =
+    resolvePaneSelection({
+      ids,
+      itemId: item?.id,
+      currentId,
+      picked,
+      insertion,
+    });
 
   const canDelete =
     selectedIndexes.length > 0 && selectedIndexes.length < slides.length;
@@ -194,11 +178,7 @@ export function useSlideSelection({
   };
 
   const insertAt = (): number =>
-    insertion
-      ? insertion.index
-      : selectedIndexes.length > 0
-        ? Math.max(...selectedIndexes) + 1
-        : position.slideIndex + 1;
+    resolveInsertIndex(insertion, selectedIndexes, position.slideIndex);
 
   const addSlide = (): string | null => {
     if (!item?.deck) return null;

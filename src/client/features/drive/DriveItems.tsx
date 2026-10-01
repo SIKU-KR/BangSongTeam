@@ -18,10 +18,17 @@ import {
   DropdownMenuTrigger,
 } from "#components/ui/dropdown-menu";
 import { IconButton } from "#components/common/IconButton";
-import type { SortKey, SortOrder } from "../../routes/appShellContext";
 import { useDriveDraggable, useDriveDroppable } from "./driveContext";
-import { formatDate, type DriveItem } from "./driveModel";
-import { ActionMenuItems, type MenuAction } from "./ActionMenu";
+import {
+  formatDate,
+  type DriveItem,
+  type SortKey,
+  type SortOrder,
+} from "./driveModel";
+import {
+  ActionMenuItems,
+  type MenuAction,
+} from "#components/common/ActionMenu";
 import { DRIVE_COPY } from "#copy/drive";
 import { COMMON_COPY } from "#copy/common";
 

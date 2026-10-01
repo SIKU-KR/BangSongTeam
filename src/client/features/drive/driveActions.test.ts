@@ -2,8 +2,6 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 import type { Folder } from "#shared";
 import { signInAsTestUser } from "../../test/sessionFixture";
 import {
-  SEED_PRESENTATIONS,
-  SEED_USER_ID,
   __loadDocumentsForTests,
   getPresentationById,
   listPresentations,
@@ -19,8 +17,13 @@ import {
   DriveActionError,
   moveItems,
   undoMove,
+  validateItemName,
 } from "./driveActions";
 import { FOLDER_COPY } from "#copy/folders";
+import {
+  SEED_PRESENTATIONS,
+  SEED_USER_ID,
+} from "../../test/presentationFixture";
 
 const sync = vi.hoisted(() => ({
   flushPendingSync: vi.fn(async () => {}),
@@ -45,7 +48,7 @@ vi.mock("../../lib/sync", async (importOriginal) => {
   return { ...actual, ...sync };
 });
 
-const { OfflineError } = await import("../../lib/sync/presentationSync");
+const { OfflineError } = await import("../../lib/sync");
 
 const ROOT = "a00000000000000000001";
 const CHILD = "b00000000000000000002";
@@ -103,6 +106,24 @@ describe("driveActions", () => {
       const outcome = moveItems([{ kind: "folder", id: ROOT }], CHILD);
       expect(outcome.moved).toHaveLength(0);
       expect(outcome.errors).toEqual([FOLDER_COPY.cannotMoveIntoSelf]);
+    });
+  });
+
+  describe("validateItemName", () => {
+    it("폴더는 같은 위치의 이름 충돌을 거절하고 자기 이름은 허용한다", () => {
+      const ref = { kind: "folder", id: ROOT } as const;
+      expect(validateItemName(ref, "C")).toBe(FOLDER_COPY.nameTaken);
+      expect(validateItemName(ref, " a ")).toBeNull();
+    });
+
+    it("프레젠테이션은 빈 이름과 제목 길이 제한을 넘는 이름을 거절한다", () => {
+      const ref = { kind: "file", id: SEED_PRESENTATIONS[2].id } as const;
+      expect(validateItemName(ref, "   ")).toBe(FOLDER_COPY.nameRequired);
+      expect(validateItemName(ref, "가".repeat(101))).toBe(
+        FOLDER_COPY.nameTooLong(100),
+      );
+      expect(validateItemName(ref, ` ${"가".repeat(100)} `)).toBeNull();
+      expect(validateItemName(ref, "c")).toBeNull();
     });
   });
 

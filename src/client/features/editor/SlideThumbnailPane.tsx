@@ -2,16 +2,8 @@ import React, { useEffect, useRef, useState } from "react";
 import {
   DndContext,
   DragOverlay,
-  PointerSensor,
-  closestCenter,
   useDraggable,
   useDroppable,
-  useSensor,
-  useSensors,
-  type CollisionDetection,
-  type DragEndEvent,
-  type DragMoveEvent,
-  type DragStartEvent,
 } from "@dnd-kit/core";
 import {
   ArrowDownIcon,
@@ -47,22 +39,31 @@ import {
   TooltipTrigger,
 } from "#components/ui/tooltip";
 import { IconButton } from "#components/common/IconButton";
-import type { PresentationItem } from "#shared";
+import type { DeckOverflow, PresentationItem } from "#shared";
 import {
   getBackgroundById,
   useBackgroundCatalog,
 } from "../backgrounds/backgroundCatalog";
-import { ActionMenuItems, type MenuAction } from "../drive/ActionMenu";
+import {
+  ActionMenuItems,
+  type MenuAction,
+} from "#components/common/ActionMenu";
 import {
   OverflowWarning,
   PaneDropLine,
   SlideGap,
   SlidePreview,
   SlideThumbnail,
-  type PaneDragData,
 } from "./SlideThumbnail";
-import { resolveDropIndex, type ClickModifiers } from "./slideSelection";
-import type { SlideInsertion } from "./useSlideSelection";
+import type { ClickModifiers, SlideInsertion } from "./slideSelection";
+import type { PaneDragData } from "./slidePaneDnd";
+import {
+  paneRootAttrs,
+  paneTargetAttrs,
+  readPaneTarget,
+} from "./slidePaneTargets";
+import { useCollapsedSongs } from "./useCollapsedSongs";
+import { useSlidePaneDrag } from "./useSlidePaneDrag";
 import {
   analyzeDeckOverflowCached,
   useTextWidthMeasurer,
@@ -107,45 +108,53 @@ export interface SlideThumbnailPaneProps {
 type MenuTarget =
   { kind: "slides" } | { kind: "gap" } | { kind: "song"; songIndex: number };
 
-type DropTarget =
-  | { type: "slide"; songIndex: number; index: number }
-  | { type: "song"; index: number };
-
 const NO_MODIFIERS: ClickModifiers = { shift: false, mod: false };
-const NO_SENSORS: [] = [];
-const POINTER_SENSOR_OPTIONS = { activationConstraint: { distance: 5 } };
 
-const byDragType: CollisionDetection = (args) => {
-  const active = args.active.data.current as PaneDragData | undefined;
-  return closestCenter({
-    ...args,
-    droppableContainers: args.droppableContainers.filter((container) => {
-      const data = container.data.current as PaneDragData | undefined;
-      if (!active || !data || data.type !== active.type) return false;
-      return data.type === "song" || data.songIndex === active.songIndex;
-    }),
-  });
-};
-
-function dropTargetOf({
-  active,
-  over,
-}: DragMoveEvent | DragEndEvent): DropTarget | null {
-  const data = over?.data.current as PaneDragData | undefined;
-  const rect = active.rect.current.translated;
-  if (!over || !data || !rect) return null;
-  const centerY = rect.top + rect.height / 2;
-  if (data.type === "slide") {
-    return {
-      type: "slide",
-      songIndex: data.songIndex,
-      index: resolveDropIndex(data.slideIndex, centerY, over.rect),
-    };
+function actionsFor(
+  menuTarget: MenuTarget | null,
+  actions: {
+    slides: MenuAction[];
+    gap: MenuAction[];
+    song: (songIndex: number) => MenuAction[];
+  },
+): MenuAction[] {
+  switch (menuTarget?.kind) {
+    case "slides":
+      return actions.slides;
+    case "gap":
+      return actions.gap;
+    case "song":
+      return actions.song(menuTarget.songIndex);
+    default:
+      return [];
   }
-  return {
-    type: "song",
-    index: resolveDropIndex(data.songIndex, centerY, over.rect),
-  };
+}
+
+function songOverflowWarning(
+  overflow: DeckOverflow | null,
+  firstIndex: number,
+): string | null {
+  if (!overflow?.exceedsStage || overflow.tallestSlideIndex === null) {
+    return null;
+  }
+  return EDITOR_COPY.overflow.tallestSlide(
+    firstIndex + overflow.tallestSlideIndex + 1,
+  );
+}
+
+function slideOverflowWarning(
+  overflow: DeckOverflow | null,
+  slideIndex: number,
+  songWarning: string | null,
+): string {
+  return [
+    overflow?.slides[slideIndex]?.wraps ? EDITOR_COPY.overflow.wrap : null,
+    songWarning && overflow?.tallestSlideIndex === slideIndex
+      ? EDITOR_COPY.overflow.stage
+      : null,
+  ]
+    .filter(Boolean)
+    .join("\n");
 }
 
 /**
@@ -182,17 +191,12 @@ export function SlideThumbnailPane({
   className,
 }: SlideThumbnailPaneProps): React.JSX.Element {
   useBackgroundCatalog();
-  const [collapsedIds, setCollapsedIds] = useState<ReadonlySet<string>>(
-    () => new Set(),
-  );
   const [menuTarget, setMenuTarget] = useState<MenuTarget | null>(null);
-  const [dragging, setDragging] = useState<PaneDragData | null>(null);
-  const [dropTarget, setDropTarget] = useState<DropTarget | null>(null);
   const paneRef = useRef<HTMLDivElement>(null);
   const activeThumbRef = useRef<HTMLDivElement>(null);
-  const keepCollapsedIdRef = useRef<string | null>(null);
 
   const activeItemId = items[activeSongIndex]?.id;
+  const collapsedSongs = useCollapsedSongs(activeItemId);
   const measureText = useTextWidthMeasurer();
   const overflows = items.map((item) =>
     item.deck ? analyzeDeckOverflowCached(item.deck, measureText) : null,
@@ -205,51 +209,51 @@ export function SlideThumbnailPane({
     totalSlides += item.deck?.slides.length ?? 0;
   }
 
-  const sensors = useSensors(useSensor(PointerSensor, POINTER_SENSOR_OPTIONS));
-
-  useEffect(() => {
-    if (!activeItemId) return;
-    if (keepCollapsedIdRef.current === activeItemId) {
-      keepCollapsedIdRef.current = null;
-      return;
-    }
-    setCollapsedIds((prev) => {
-      if (!prev.has(activeItemId)) return prev;
-      const next = new Set(prev);
-      next.delete(activeItemId);
-      return next;
-    });
-  }, [activeItemId]);
-
   useEffect(() => {
     activeThumbRef.current?.scrollIntoView?.({ block: "nearest" });
   }, [activeSongIndex, activeSlideIndex]);
 
   const focusPane = () => paneRef.current?.focus({ preventScroll: true });
 
-  const toggleCollapsed = (itemId: string) => {
-    setCollapsedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(itemId)) next.delete(itemId);
-      else next.add(itemId);
-      return next;
-    });
-  };
-
   const selectAndToggleSong = (songIndex: number, itemId: string) => {
     const willSelectAnother =
       songIndex !== activeSongIndex &&
       (items[songIndex]?.deck?.slides.length ?? 0) > 0;
-    if (willSelectAnother && !collapsedIds.has(itemId)) {
-      keepCollapsedIdRef.current = itemId;
-    }
-    toggleCollapsed(itemId);
+    if (willSelectAnother) collapsedSongs.keepCollapsedOnActivate(itemId);
+    collapsedSongs.toggle(itemId);
     focusPane();
     onSelectSong(songIndex);
   };
 
   const isSelected = (songIndex: number, slideId: string) =>
     songIndex === activeSongIndex && selectedIds.includes(slideId);
+
+  const { dndContextProps, dragging, dropTarget } = useSlidePaneDrag({
+    isReadOnly: readOnly,
+    isSelected,
+    onPickSlide: (songIndex, slideIndex) =>
+      onClickSlide(songIndex, slideIndex, NO_MODIFIERS),
+    onDropSlides,
+    onReorderSong,
+    onDragBegin: focusPane,
+  });
+
+  const pasteAction: MenuAction = {
+    key: "paste",
+    label: EDITOR_COPY.thumbnails.paste,
+    icon: ClipboardPasteIcon,
+    shortcut: "Ctrl+V",
+    disabled: !canPaste,
+    onSelect: onPasteSlides,
+  };
+
+  const newSlideAction: MenuAction = {
+    key: "new",
+    label: EDITOR_COPY.slide.add,
+    icon: PlusIcon,
+    shortcut: "Ctrl+M",
+    onSelect: onAddSlide,
+  };
 
   const slideActions: MenuAction[] = [
     {
@@ -267,22 +271,8 @@ export function SlideThumbnailPane({
       shortcut: "Ctrl+C",
       onSelect: onCopySlides,
     },
-    {
-      key: "paste",
-      label: EDITOR_COPY.thumbnails.paste,
-      icon: ClipboardPasteIcon,
-      shortcut: "Ctrl+V",
-      disabled: !canPaste,
-      onSelect: onPasteSlides,
-    },
-    {
-      key: "new",
-      label: EDITOR_COPY.slide.add,
-      icon: PlusIcon,
-      shortcut: "Ctrl+M",
-      separated: true,
-      onSelect: onAddSlide,
-    },
+    pasteAction,
+    { ...newSlideAction, separated: true },
     {
       key: "duplicate",
       label: EDITOR_COPY.slide.duplicate,
@@ -301,23 +291,7 @@ export function SlideThumbnailPane({
     },
   ];
 
-  const gapActions: MenuAction[] = [
-    {
-      key: "paste",
-      label: EDITOR_COPY.thumbnails.paste,
-      icon: ClipboardPasteIcon,
-      shortcut: "Ctrl+V",
-      disabled: !canPaste,
-      onSelect: onPasteSlides,
-    },
-    {
-      key: "new",
-      label: EDITOR_COPY.slide.add,
-      icon: PlusIcon,
-      shortcut: "Ctrl+M",
-      onSelect: onAddSlide,
-    },
-  ];
+  const gapActions: MenuAction[] = [pasteAction, newSlideAction];
 
   const layoutActions: MenuAction[] = [
     {
@@ -325,13 +299,13 @@ export function SlideThumbnailPane({
       label: EDITOR_COPY.thumbnails.collapseAll,
       icon: ChevronsDownUpIcon,
       separated: true,
-      onSelect: () => setCollapsedIds(new Set(items.map((item) => item.id))),
+      onSelect: () => collapsedSongs.collapseAll(items.map((item) => item.id)),
     },
     {
       key: "expand-all",
       label: EDITOR_COPY.thumbnails.expandAll,
       icon: ChevronsUpDownIcon,
-      onSelect: () => setCollapsedIds(new Set()),
+      onSelect: collapsedSongs.expandAll,
     },
   ];
 
@@ -376,14 +350,11 @@ export function SlideThumbnailPane({
           },
         ];
 
-  const menuActions =
-    menuTarget?.kind === "slides"
-      ? slideActions
-      : menuTarget?.kind === "gap"
-        ? gapActions
-        : menuTarget?.kind === "song"
-          ? songActions(menuTarget.songIndex)
-          : [];
+  const menuActions = actionsFor(menuTarget, {
+    slides: slideActions,
+    gap: gapActions,
+    song: songActions,
+  });
 
   const handleContextMenu = (
     event: React.MouseEvent & { preventBaseUIHandler: () => void },
@@ -392,79 +363,47 @@ export function SlideThumbnailPane({
       event.preventBaseUIHandler();
       return;
     }
-    const target = event.target as HTMLElement;
-    const indexOf = (element: HTMLElement, name: string) =>
-      Number(element.getAttribute(name));
-    const thumb = target.closest<HTMLElement>("[data-slide-thumb]");
-    const gap = target.closest<HTMLElement>("[data-slide-gap]");
-    const header = target.closest<HTMLElement>("[data-song-header]");
+    const target = readPaneTarget(event.target as Element);
     focusPane();
-    if (thumb) {
-      const songIndex = indexOf(thumb, "data-song-index");
-      const slideIndex = indexOf(thumb, "data-slide-index");
-      const slideId = items[songIndex]?.deck?.slides[slideIndex]?.id ?? "";
-      if (!isSelected(songIndex, slideId)) {
-        onClickSlide(songIndex, slideIndex, NO_MODIFIERS);
+    switch (target?.kind) {
+      case "slide": {
+        const { songIndex, slideIndex } = target;
+        const slideId = items[songIndex]?.deck?.slides[slideIndex]?.id ?? "";
+        if (!isSelected(songIndex, slideId)) {
+          onClickSlide(songIndex, slideIndex, NO_MODIFIERS);
+        }
+        setMenuTarget({ kind: "slides" });
+        break;
       }
-      setMenuTarget({ kind: "slides" });
-    } else if (gap) {
-      onSetInsertion({
-        songIndex: indexOf(gap, "data-song-index"),
-        index: indexOf(gap, "data-gap-index"),
-      });
-      setMenuTarget({ kind: "gap" });
-    } else if (header) {
-      setMenuTarget({
-        kind: "song",
-        songIndex: indexOf(header, "data-song-index"),
-      });
-    } else if (items.length > 0) {
-      const lastSong = items.length - 1;
-      onSetInsertion({
-        songIndex: lastSong,
-        index: items[lastSong].deck?.slides.length ?? 0,
-      });
-      setMenuTarget({ kind: "gap" });
-    } else {
-      event.preventBaseUIHandler();
+      case "gap":
+        onSetInsertion({ songIndex: target.songIndex, index: target.index });
+        setMenuTarget({ kind: "gap" });
+        break;
+      case "header":
+        setMenuTarget({ kind: "song", songIndex: target.songIndex });
+        break;
+      default:
+        if (items.length > 0) {
+          const lastSong = items.length - 1;
+          onSetInsertion({
+            songIndex: lastSong,
+            index: items[lastSong].deck?.slides.length ?? 0,
+          });
+          setMenuTarget({ kind: "gap" });
+        } else {
+          event.preventBaseUIHandler();
+        }
     }
   };
 
   const handleClick = (event: React.MouseEvent) => {
-    const thumb = (event.target as HTMLElement).closest<HTMLElement>(
-      "[data-slide-thumb]",
-    );
-    if (!thumb) return;
+    const target = readPaneTarget(event.target as Element);
+    if (target?.kind !== "slide") return;
     focusPane();
-    onClickSlide(
-      Number(thumb.getAttribute("data-song-index")),
-      Number(thumb.getAttribute("data-slide-index")),
-      { shift: event.shiftKey, mod: event.metaKey || event.ctrlKey },
-    );
-  };
-
-  const handleDragStart = ({ active }: DragStartEvent) => {
-    const data = active.data.current as PaneDragData | undefined;
-    if (!data) return;
-    if (data.type === "slide" && !isSelected(data.songIndex, data.slideId)) {
-      onClickSlide(data.songIndex, data.slideIndex, NO_MODIFIERS);
-    }
-    focusPane();
-    setDragging(data);
-  };
-
-  const handleDragEnd = (event: DragEndEvent) => {
-    const target = dropTargetOf(event);
-    setDragging(null);
-    setDropTarget(null);
-    if (!target || !dragging) return;
-    if (target.type === "slide") {
-      onDropSlides(target.index);
-    } else if (dragging.type === "song") {
-      const from = dragging.songIndex;
-      const to = target.index > from ? target.index - 1 : target.index;
-      if (to !== from) onReorderSong(from, to);
-    }
+    onClickSlide(target.songIndex, target.slideIndex, {
+      shift: event.shiftKey,
+      mod: event.metaKey || event.ctrlKey,
+    });
   };
 
   const draggedCount =
@@ -511,17 +450,7 @@ export function SlideThumbnailPane({
         )}
       </div>
 
-      <DndContext
-        sensors={readOnly ? NO_SENSORS : sensors}
-        collisionDetection={byDragType}
-        onDragStart={handleDragStart}
-        onDragMove={(event) => setDropTarget(dropTargetOf(event))}
-        onDragEnd={handleDragEnd}
-        onDragCancel={() => {
-          setDragging(null);
-          setDropTarget(null);
-        }}
-      >
+      <DndContext {...dndContextProps}>
         <ContextMenu>
           <ContextMenuTrigger
             ref={paneRef}
@@ -529,7 +458,7 @@ export function SlideThumbnailPane({
             role="listbox"
             aria-label={EDITOR_COPY.slide.label}
             aria-multiselectable="true"
-            data-slide-pane=""
+            {...paneRootAttrs}
             data-testid="slide-pane-list"
             onClick={handleClick}
             onContextMenu={handleContextMenu}
@@ -550,19 +479,15 @@ export function SlideThumbnailPane({
             {items.map((item, songIndex) => {
               const deck = item.deck;
               const slides = deck?.slides ?? [];
-              const isCollapsed = collapsedIds.has(item.id);
+              const isCollapsed = collapsedSongs.collapsedIds.has(item.id);
               const posterUrl = getBackgroundById(
                 deck?.backgroundId,
               )?.posterUrl;
               const overflow = overflows[songIndex];
-              const tallestSlideNumber =
-                overflow?.exceedsStage && overflow.tallestSlideIndex !== null
-                  ? firstIndexes[songIndex] + overflow.tallestSlideIndex + 1
-                  : null;
-              const songWarning =
-                tallestSlideNumber === null
-                  ? null
-                  : EDITOR_COPY.overflow.tallestSlide(tallestSlideNumber);
+              const songWarning = songOverflowWarning(
+                overflow,
+                firstIndexes[songIndex],
+              );
               const gapActive = (index: number) =>
                 (insertion?.songIndex === songIndex &&
                   insertion.index === index) ||
@@ -599,7 +524,7 @@ export function SlideThumbnailPane({
                     }
                     warning={songWarning}
                     menuActions={songActions(songIndex)}
-                    onToggle={() => toggleCollapsed(item.id)}
+                    onToggle={() => collapsedSongs.toggle(item.id)}
                     onSelect={() => selectAndToggleSong(songIndex, item.id)}
                   />
 
@@ -619,17 +544,6 @@ export function SlideThumbnailPane({
                         const current =
                           songIndex === activeSongIndex &&
                           slideIndex === activeSlideIndex;
-                        const warning = [
-                          overflow?.slides[slideIndex]?.wraps
-                            ? EDITOR_COPY.overflow.wrap
-                            : null,
-                          songWarning &&
-                          overflow?.tallestSlideIndex === slideIndex
-                            ? EDITOR_COPY.overflow.stage
-                            : null,
-                        ]
-                          .filter(Boolean)
-                          .join("\n");
 
                         return (
                           <React.Fragment key={slide.id}>
@@ -644,7 +558,11 @@ export function SlideThumbnailPane({
                               current={current}
                               selected={selected}
                               dimmed={dragging?.type === "slide" && selected}
-                              warning={warning}
+                              warning={slideOverflowWarning(
+                                overflow,
+                                slideIndex,
+                                songWarning,
+                              )}
                               thumbRef={current ? activeThumbRef : undefined}
                             />
                             <SlideGap
@@ -781,8 +699,7 @@ function SongHeader({
       ref={setNodeRef}
       {...listeners}
       data-testid={`song-section-${songIndex}`}
-      data-song-header=""
-      data-song-index={songIndex}
+      {...paneTargetAttrs({ kind: "header", songIndex })}
       className={cn(
         "group relative flex items-center gap-1 rounded-md p-1 transition-colors",
         active

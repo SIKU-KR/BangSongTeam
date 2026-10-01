@@ -1,5 +1,6 @@
 /**
- * 드라이브 목록의 선택 규칙 (순수 함수). 구글 드라이브의 클릭·키보드·드래그 선택과 같다.
+ * 목록 다중 선택 규칙 (순수 함수). 여러 목록 화면이 함께 쓰며,
+ * 구글 드라이브의 클릭·키보드·드래그 선택과 같다.
  *
  * `keys`는 화면에 보이는 순서의 항목 키 목록이다.
  */
@@ -50,6 +51,17 @@ export function mergeKeys(
   extra: readonly string[],
 ): string[] {
   return [...new Set([...base, ...extra])];
+}
+
+/**
+ * 키가 지금 보이는 목록에 있으면 그대로, 없으면 `null`.
+ * 포커스·기준점은 목록이 바뀌면(이동·검색·필터) 사라질 수 있어 쓰기 전에 걸러야 한다.
+ */
+export function visibleKey(
+  keys: readonly string[],
+  key: string | null,
+): string | null {
+  return key !== null && keys.includes(key) ? key : null;
 }
 
 /**

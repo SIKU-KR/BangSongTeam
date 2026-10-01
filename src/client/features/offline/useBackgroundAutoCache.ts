@@ -1,28 +1,14 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo } from "react";
 import {
   collectPresentationMediaAssets,
   collectUniqueMediaUrls,
-  type BackgroundMedia,
   type Presentation,
 } from "#shared";
 import { scheduleMediaCaching, warmPresentationFonts } from "../../lib/offline";
-import { useBackgroundCatalog } from "../backgrounds/backgroundCatalog";
+import { useBackgroundLookup } from "../backgrounds/backgroundCatalog";
+import { useLatest } from "../../hooks/useLatest";
 
 export const AUTO_CACHE_DELAY_MS = 3000;
-
-function useBackgroundLookup(): (id: string) => BackgroundMedia | undefined {
-  const catalog = useBackgroundCatalog();
-  return useMemo(() => {
-    const byId = new Map(catalog.backgrounds.map((bg) => [bg.id, bg]));
-    return (id: string) => byId.get(id);
-  }, [catalog.backgrounds]);
-}
-
-function useLatest<T>(value: T): { readonly current: T } {
-  const ref = useRef(value);
-  ref.current = value;
-  return ref;
-}
 
 /**
  * 열려 있는 세트의 배경 영상·포스터와 글꼴을 조용히 캐시에 담는다.

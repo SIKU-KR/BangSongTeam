@@ -37,8 +37,9 @@ import {
   TooltipTrigger,
 } from "#components/ui/tooltip";
 import { IconButton } from "#components/common/IconButton";
+import { DRIVE_ROOT_PATH } from "../drive/drivePaths";
 import { usePersistenceError } from "../../lib/storage";
-import { useSyncStatus } from "../../lib/sync";
+import { useSyncStatus, type SyncStatus } from "../../lib/sync";
 import { ThemeMenuButton } from "../../components/common/ThemeMenuButton";
 import type { PresentationAccess } from "#shared";
 import { EDITOR_COPY, SHORTCUT_GUIDE } from "#copy/editor";
@@ -71,42 +72,37 @@ export interface EditorHeaderProps {
   className?: string;
 }
 
+interface SaveStatusIndicatorState {
+  dotClass: string;
+  label: string;
+}
+
+const SAVE_FAILED_INDICATOR: SaveStatusIndicatorState = {
+  dotClass: "bg-destructive",
+  label: EDITOR_COPY.syncStatus.saveFailed,
+};
+
+const SYNC_STATUS_INDICATOR: Record<SyncStatus, SaveStatusIndicatorState> = {
+  idle: { dotClass: "bg-success", label: EDITOR_COPY.syncStatus.autoSaved },
+  syncing: { dotClass: "bg-warning", label: EDITOR_COPY.syncStatus.syncing },
+  synced: { dotClass: "bg-success", label: EDITOR_COPY.syncStatus.synced },
+  offline: {
+    dotClass: "bg-muted-foreground",
+    label: EDITOR_COPY.syncStatus.offline,
+  },
+  error: {
+    dotClass: "bg-destructive",
+    label: EDITOR_COPY.syncStatus.syncFailed,
+  },
+};
+
 function SaveStatusIndicator(): React.JSX.Element {
   const persistenceError = usePersistenceError();
   const { status } = useSyncStatus();
 
-  const { dotClass, label } = (() => {
-    if (persistenceError) {
-      return {
-        dotClass: "bg-destructive",
-        label: EDITOR_COPY.syncStatus.saveFailed,
-      };
-    }
-    switch (status) {
-      case "syncing":
-        return {
-          dotClass: "bg-warning",
-          label: EDITOR_COPY.syncStatus.syncing,
-        };
-      case "synced":
-        return { dotClass: "bg-success", label: EDITOR_COPY.syncStatus.synced };
-      case "offline":
-        return {
-          dotClass: "bg-muted-foreground",
-          label: EDITOR_COPY.syncStatus.offline,
-        };
-      case "error":
-        return {
-          dotClass: "bg-destructive",
-          label: EDITOR_COPY.syncStatus.syncFailed,
-        };
-      default:
-        return {
-          dotClass: "bg-success",
-          label: EDITOR_COPY.syncStatus.autoSaved,
-        };
-    }
-  })();
+  const { dotClass, label } = persistenceError
+    ? SAVE_FAILED_INDICATOR
+    : SYNC_STATUS_INDICATOR[status];
 
   return (
     <span
@@ -116,6 +112,83 @@ function SaveStatusIndicator(): React.JSX.Element {
       <span className={cn("size-1.5 rounded-full", dotClass)}></span>
       {label}
     </span>
+  );
+}
+
+function PresentationTitleField({
+  title,
+  readOnly,
+  onSubmit,
+}: {
+  title: string;
+  readOnly: boolean;
+  onSubmit: (newTitle: string) => void;
+}): React.JSX.Element {
+  const [isEditingTitle, setIsEditingTitle] = useState(false);
+  const [tempTitle, setTempTitle] = useState(title);
+
+  const handleTitleSubmit = () => {
+    setIsEditingTitle(false);
+    if (tempTitle.trim() && tempTitle !== title) {
+      onSubmit(tempTitle.trim());
+    } else {
+      setTempTitle(title);
+    }
+  };
+
+  if (readOnly) {
+    return (
+      <span
+        data-testid="header-title-text"
+        className="max-w-xs truncate px-2 text-sm font-bold sm:max-w-md"
+      >
+        {title}
+      </span>
+    );
+  }
+
+  if (isEditingTitle) {
+    return (
+      <Input
+        type="text"
+        value={tempTitle}
+        autoFocus
+        aria-label={EDITOR_COPY.header.titleLabel}
+        onChange={(e) => setTempTitle(e.target.value)}
+        onBlur={handleTitleSubmit}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") handleTitleSubmit();
+          if (e.key === "Escape") {
+            setIsEditingTitle(false);
+            setTempTitle(title);
+          }
+        }}
+        className="h-7 w-64 font-semibold"
+      />
+    );
+  }
+
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <Button
+            variant="ghost"
+            size="sm"
+            data-testid="header-title-btn"
+            className="max-w-xs text-sm font-bold sm:max-w-md"
+            onClick={() => {
+              setTempTitle(title);
+              setIsEditingTitle(true);
+            }}
+          />
+        }
+      >
+        <span className="truncate">{title}</span>
+        <PencilIcon className="text-muted-foreground" />
+      </TooltipTrigger>
+      <TooltipContent>{EDITOR_COPY.header.editTitle}</TooltipContent>
+    </Tooltip>
   );
 }
 
@@ -153,6 +226,46 @@ function ShortcutTable({
   );
 }
 
+function ShortcutGuidePopover(): React.JSX.Element {
+  return (
+    <Popover>
+      <PopoverTrigger
+        data-testid="header-shortcuts-btn"
+        render={
+          <Button variant="ghost" size="sm" className="text-muted-foreground" />
+        }
+      >
+        <InfoIcon />
+        <span className="hidden sm:inline">{EDITOR_COPY.header.shortcuts}</span>
+      </PopoverTrigger>
+      <PopoverContent
+        data-testid="header-shortcuts-popover"
+        align="end"
+        className="max-h-(--available-height) w-96 overflow-y-auto text-xs"
+      >
+        <ShortcutTable
+          heading={EDITOR_COPY.header.editorShortcuts}
+          rows={SHORTCUT_GUIDE.editor}
+        />
+        <ShortcutTable
+          heading={EDITOR_COPY.header.presentShortcuts}
+          rows={SHORTCUT_GUIDE.presentation}
+        />
+        <div className="space-y-1 border-t pt-2">
+          <div className="font-semibold">
+            {EDITOR_COPY.header.numberJumpRules}
+          </div>
+          <ul className="list-disc space-y-0.5 pl-4 text-muted-foreground">
+            {EDITOR_COPY.numberJumpRules.map((rule) => (
+              <li key={rule}>{rule}</li>
+            ))}
+          </ul>
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 /**
  * 편집기 상단 네비게이션 헤더.
  */
@@ -171,22 +284,11 @@ export function EditorHeader({
   onShare,
   sharedAccess,
   readOnly = false,
-  backPath = "/presentations",
+  backPath = DRIVE_ROOT_PATH,
   mediaProgress = null,
   className,
 }: EditorHeaderProps): React.JSX.Element {
   const navigate = useNavigate();
-  const [isEditingTitle, setIsEditingTitle] = useState(false);
-  const [tempTitle, setTempTitle] = useState(title);
-
-  const handleTitleSubmit = () => {
-    setIsEditingTitle(false);
-    if (tempTitle.trim() && tempTitle !== title) {
-      onUpdateTitle(tempTitle.trim());
-    } else {
-      setTempTitle(title);
-    }
-  };
 
   return (
     <header
@@ -261,52 +363,11 @@ export function EditorHeader({
         <Separator orientation="vertical" className="h-4" />
 
         <div className="flex min-w-0 items-center gap-2">
-          {readOnly ? (
-            <span
-              data-testid="header-title-text"
-              className="max-w-xs truncate px-2 text-sm font-bold sm:max-w-md"
-            >
-              {title}
-            </span>
-          ) : isEditingTitle ? (
-            <Input
-              type="text"
-              value={tempTitle}
-              autoFocus
-              aria-label={EDITOR_COPY.header.titleLabel}
-              onChange={(e) => setTempTitle(e.target.value)}
-              onBlur={handleTitleSubmit}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") handleTitleSubmit();
-                if (e.key === "Escape") {
-                  setIsEditingTitle(false);
-                  setTempTitle(title);
-                }
-              }}
-              className="h-7 w-64 font-semibold"
-            />
-          ) : (
-            <Tooltip>
-              <TooltipTrigger
-                render={
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    data-testid="header-title-btn"
-                    className="max-w-xs text-sm font-bold sm:max-w-md"
-                    onClick={() => {
-                      setTempTitle(title);
-                      setIsEditingTitle(true);
-                    }}
-                  />
-                }
-              >
-                <span className="truncate">{title}</span>
-                <PencilIcon className="text-muted-foreground" />
-              </TooltipTrigger>
-              <TooltipContent>{EDITOR_COPY.header.editTitle}</TooltipContent>
-            </Tooltip>
-          )}
+          <PresentationTitleField
+            title={title}
+            readOnly={readOnly}
+            onSubmit={onUpdateTitle}
+          />
 
           {sharedAccess && (
             <Badge
@@ -347,47 +408,7 @@ export function EditorHeader({
       </div>
 
       <div className="flex shrink-0 items-center gap-2">
-        <Popover>
-          <PopoverTrigger
-            data-testid="header-shortcuts-btn"
-            render={
-              <Button
-                variant="ghost"
-                size="sm"
-                className="text-muted-foreground"
-              />
-            }
-          >
-            <InfoIcon />
-            <span className="hidden sm:inline">
-              {EDITOR_COPY.header.shortcuts}
-            </span>
-          </PopoverTrigger>
-          <PopoverContent
-            data-testid="header-shortcuts-popover"
-            align="end"
-            className="max-h-(--available-height) w-96 overflow-y-auto text-xs"
-          >
-            <ShortcutTable
-              heading={EDITOR_COPY.header.editorShortcuts}
-              rows={SHORTCUT_GUIDE.editor}
-            />
-            <ShortcutTable
-              heading={EDITOR_COPY.header.presentShortcuts}
-              rows={SHORTCUT_GUIDE.presentation}
-            />
-            <div className="space-y-1 border-t pt-2">
-              <div className="font-semibold">
-                {EDITOR_COPY.header.numberJumpRules}
-              </div>
-              <ul className="list-disc space-y-0.5 pl-4 text-muted-foreground">
-                {EDITOR_COPY.numberJumpRules.map((rule) => (
-                  <li key={rule}>{rule}</li>
-                ))}
-              </ul>
-            </div>
-          </PopoverContent>
-        </Popover>
+        <ShortcutGuidePopover />
 
         <ThemeMenuButton />
 

@@ -1,13 +1,19 @@
-import { useEffect, useRef } from "react";
+import { useEffect } from "react";
+import { useLatest } from "../../hooks/useLatest";
 import type { DriveContextValue } from "./driveContext";
-import type { DriveItem, DriveItemRef } from "./driveModel";
+import { toItemRef, type DriveItem } from "./driveModel";
 import {
   isControlTarget,
   isLetterKey,
   isMenuTarget,
   isTypingTarget,
-} from "./keyboard";
-import { rangeKeys, stepFocus, toggleKey } from "./selectionModel";
+} from "../../lib/browser/keyboardTarget";
+import {
+  rangeKeys,
+  stepFocus,
+  toggleKey,
+  visibleKey,
+} from "../../lib/selection/selectionModel";
 
 export interface DriveKeyboardOptions {
   drive: DriveContextValue;
@@ -26,10 +32,6 @@ const STEP: Record<string, number> = {
   End: Infinity,
 };
 
-function toRef(item: DriveItem): DriveItemRef {
-  return { kind: item.kind, id: item.id };
-}
-
 /**
  * 드라이브 목록의 키보드 조작 (구글 드라이브와 같다).
  *
@@ -41,8 +43,7 @@ function toRef(item: DriveItem): DriveItemRef {
  * 글자 단축키는 한글 입력 상태에서도 동작한다 (`isLetterKey`).
  */
 export function useDriveKeyboard(options: DriveKeyboardOptions): void {
-  const optionsRef = useRef(options);
-  optionsRef.current = options;
+  const optionsRef = useLatest(options);
 
   useEffect(() => {
     const handleKey = (event: KeyboardEvent): void => {
@@ -58,10 +59,7 @@ export function useDriveKeyboard(options: DriveKeyboardOptions): void {
       }
       const keys = items.map((item) => item.key);
       const selected = items.filter((item) => drive.selection.has(item.key));
-      const focus =
-        drive.focusKey !== null && keys.includes(drive.focusKey)
-          ? drive.focusKey
-          : null;
+      const focus = visibleKey(keys, drive.focusKey);
       const mod = event.metaKey || event.ctrlKey;
       const plain = !mod && !event.altKey && !event.shiftKey;
 
@@ -70,10 +68,7 @@ export function useDriveKeyboard(options: DriveKeyboardOptions): void {
         if (next === null) return;
         event.preventDefault();
         if (event.shiftKey) {
-          const anchor =
-            drive.anchorKey !== null && keys.includes(drive.anchorKey)
-              ? drive.anchorKey
-              : (focus ?? next);
+          const anchor = visibleKey(keys, drive.anchorKey) ?? focus ?? next;
           drive.setSelection(rangeKeys(keys, anchor, next), anchor);
           drive.setFocusKey(next);
         } else if (mod) {
@@ -100,19 +95,19 @@ export function useDriveKeyboard(options: DriveKeyboardOptions): void {
       } else if (event.key === "Delete" || event.key === "Backspace") {
         if (selected.length === 0) return;
         event.preventDefault();
-        if (isTrash) drive.requestDeleteForever(selected.map(toRef));
-        else drive.trash(selected.map(toRef));
+        if (isTrash) drive.requestDeleteForever(selected.map(toItemRef));
+        else drive.trash(selected.map(toItemRef));
       } else if (event.key === "Enter" && !mod) {
         if (isControlTarget(event.target) || selected.length !== 1) return;
         event.preventDefault();
         open(selected[0]);
       } else if (event.key === "F2" && selected.length === 1 && !isTrash) {
         event.preventDefault();
-        drive.requestRename(toRef(selected[0]));
+        drive.requestRename(toItemRef(selected[0]));
       } else if (plain && isLetterKey(event, "z") && !isTrash) {
         if (selected.length === 0) return;
         event.preventDefault();
-        drive.requestMove(selected.map(toRef));
+        drive.requestMove(selected.map(toItemRef));
       } else if (
         event.shiftKey &&
         !mod &&

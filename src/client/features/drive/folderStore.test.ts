@@ -1,7 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import type { Folder } from "#shared";
 import { signInAsTestUser } from "../../test/sessionFixture";
-import { SEED_USER_ID } from "../presentation";
 import { closeOfflineDB, OFFLINE_DB_NAME } from "../../lib/storage";
 import {
   __resetFolderSyncForTests,
@@ -23,9 +22,11 @@ import {
   renameFolder,
   resetFolderStore,
   restoreFolder,
+  suggestFolderName,
   trashFolder,
 } from "./folderStore";
 import { FOLDER_COPY } from "#copy/folders";
+import { SEED_USER_ID } from "../../test/presentationFixture";
 
 async function resetDatabase(): Promise<void> {
   closeOfflineDB();
@@ -90,6 +91,18 @@ describe("folderStore", () => {
       const parent = createFolder(null, "부모");
       trashFolder(parent.id);
       expect(createFolder(parent.id, "자식").parentId).toBeNull();
+    });
+  });
+
+  describe("suggestFolderName", () => {
+    it("같은 위치에서 겹치지 않는 기본 이름을 고르고 다른 위치는 따로 센다", () => {
+      const parent = createFolder(null, "부모");
+      expect(suggestFolderName(null)).toBe(FOLDER_COPY.newFolder);
+
+      createFolder(null);
+      createFolder(null);
+      expect(suggestFolderName(null)).toBe("새 폴더 (3)");
+      expect(suggestFolderName(parent.id)).toBe(FOLDER_COPY.newFolder);
     });
   });
 

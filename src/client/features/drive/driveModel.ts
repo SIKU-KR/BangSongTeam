@@ -1,5 +1,6 @@
 import {
   collectDescendantFolderIds,
+  deckMatchesQuery,
   getFolderPath,
   hangulIncludes,
   isFolderTrashed,
@@ -8,11 +9,6 @@ import {
   type FolderIndex,
   type Presentation,
 } from "#shared";
-import type {
-  DriveTypeFilter,
-  SortKey,
-  SortOrder,
-} from "../../routes/appShellContext";
 import { COMMON_COPY } from "#copy/common";
 
 /**
@@ -23,6 +19,20 @@ import { COMMON_COPY } from "#copy/common";
  */
 
 export type DriveItemKind = "folder" | "file";
+
+/** 목록 정렬 기준. `updated`는 수정일(휴지통에서는 삭제일)이다 */
+export type SortKey = "name" | "updated";
+
+export type SortDirection = "asc" | "desc";
+
+/** 열 머리글로 고르는 정렬. 폴더는 기준과 상관없이 항상 파일 앞에 둔다 */
+export interface SortOrder {
+  key: SortKey;
+  direction: SortDirection;
+}
+
+/** 드라이브 목록의 유형 필터. `file`은 프레젠테이션이다 */
+export type DriveTypeFilter = "all" | "folder" | "file";
 
 export interface DriveItemRef {
   kind: DriveItemKind;
@@ -50,6 +60,11 @@ export type DriveItem = DriveFolderItem | DriveFileItem;
 
 export function itemKey(kind: DriveItemKind, id: string): string {
   return `${kind}:${id}`;
+}
+
+/** 목록 항목에서 조작에 넘길 참조만 떼어 낸다. 항목 스냅숏을 액션에 넘기지 않기 위해서다 */
+export function toItemRef(item: DriveItemRef): DriveItemRef {
+  return { kind: item.kind, id: item.id };
 }
 
 export function parseItemKey(key: string): DriveItemRef {
@@ -114,6 +129,26 @@ function toFileItem(presentation: Presentation): DriveFileItem {
     name: presentation.title,
     updatedAt: presentation.updatedAt,
     presentation,
+  };
+}
+
+function toLocatedFolderItem(
+  index: FolderIndex<Folder>,
+  folder: Folder,
+): DriveFolderItem {
+  return {
+    ...toFolderItem(folder),
+    location: formatLocation(index, index.parentOf.get(folder.id) ?? null),
+  };
+}
+
+function toLocatedFileItem(
+  index: FolderIndex<Folder>,
+  presentation: Presentation,
+): DriveFileItem {
+  return {
+    ...toFileItem(presentation),
+    location: formatLocation(index, presentationFolderId(index, presentation)),
   };
 }
 
@@ -193,19 +228,13 @@ function matchesPresentation(
   query: string,
 ): boolean {
   if (hangulIncludes(presentation.title, query)) return true;
-  return presentation.items.some((entry) => {
-    const deck = entry.deck;
-    if (!deck) return false;
-    return (
-      hangulIncludes(deck.title, query) ||
-      hangulIncludes(deck.artist, query) ||
-      hangulIncludes(deck.lyricsRaw, query)
-    );
-  });
+  return presentation.items.some(
+    (entry) => entry.deck !== undefined && deckMatchesQuery(entry.deck, query),
+  );
 }
 
 /**
- * 드라이브 전체 검색 (휴지통 제외). 폴더 이름과 세트 제목·곡 제목·아티스트·가사를
+ * 드라이브 전체 검색 (휴지통 제외). 폴더 이름과 프레젠테이션 제목·곡 제목·아티스트·가사를
  * 한글 초성·자모 단위로 찾는다. 결과마다 위치를 붙인다.
  */
 export function searchDrive(
@@ -223,23 +252,14 @@ export function searchDrive(
         !isFolderTrashed(index, folder.id) &&
         hangulIncludes(folder.name, trimmed),
     )
-    .map((folder) => ({
-      ...toFolderItem(folder),
-      location: formatLocation(index, index.parentOf.get(folder.id) ?? null),
-    }));
+    .map((folder) => toLocatedFolderItem(index, folder));
   const files = presentations
     .filter(
       (presentation) =>
         !isPresentationTrashed(index, presentation) &&
         matchesPresentation(presentation, trimmed),
     )
-    .map((presentation) => ({
-      ...toFileItem(presentation),
-      location: formatLocation(
-        index,
-        presentationFolderId(index, presentation),
-      ),
-    }));
+    .map((presentation) => toLocatedFileItem(index, presentation));
   return sortItems([...folders, ...files], sortOrder);
 }
 
@@ -271,10 +291,7 @@ export function listTrash(
         !isFolderTrashed(index, index.parentOf.get(folder.id) ?? null),
     )
     .filter((folder) => !trimmed || hangulIncludes(folder.name, trimmed))
-    .map((folder) => ({
-      ...toFolderItem(folder),
-      location: formatLocation(index, index.parentOf.get(folder.id) ?? null),
-    }));
+    .map((folder) => toLocatedFolderItem(index, folder));
   const files = presentations
     .filter(
       (presentation) =>
@@ -284,13 +301,7 @@ export function listTrash(
     .filter(
       (presentation) => !trimmed || matchesPresentation(presentation, trimmed),
     )
-    .map((presentation) => ({
-      ...toFileItem(presentation),
-      location: formatLocation(
-        index,
-        presentationFolderId(index, presentation),
-      ),
-    }));
+    .map((presentation) => toLocatedFileItem(index, presentation));
 
   return [...folders, ...files].sort((a, b) =>
     (trashedAtOf(b) ?? "").localeCompare(trashedAtOf(a) ?? ""),

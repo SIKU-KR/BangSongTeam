@@ -1,30 +1,19 @@
-import React, { useState, useEffect, useLayoutEffect } from "react";
+import React, { useState, useEffect } from "react";
 import {
-  useLocation,
   useNavigate,
   useParams,
   useSearchParams,
   Navigate,
 } from "react-router-dom";
-import { CopyIcon, EyeIcon, TriangleAlertIcon } from "lucide-react";
-import { cn } from "cn";
-import { toast } from "sonner";
+import { CopyIcon, EyeIcon } from "lucide-react";
 import { Alert, AlertAction, AlertDescription } from "#components/ui/alert";
 import { Button } from "#components/ui/button";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "#components/ui/tooltip";
+import { TooltipProvider } from "#components/ui/tooltip";
 import {
   updatePresentationTitle,
   updateSongStyle,
   updateSongBackground,
   updateSongInfo,
-  updateSlideLines,
-  splitSlideAtCursor,
-  mergeSlideWithNext,
   reorderSongs,
   removeSongFromPresentation,
   addDeckToPresentation,
@@ -33,14 +22,10 @@ import {
   redo,
   canUndo,
   canRedo,
-  breakHistoryCoalescing,
-  getActivePresentation,
   createNewPresentation,
+  editorPath,
   launchPresentation,
-  usePresentationById,
-  openPresentation,
   canEditPresentation,
-  duplicatePresentation,
   clampPosition,
   nextPosition,
   prevPosition,
@@ -49,14 +34,10 @@ import {
   INITIAL_POSITION,
   type ProjectionPosition,
 } from "../features/presentation";
-import {
-  DEFAULT_DECK_STYLE,
-  MAX_SLIDE_LINE_LENGTH,
-  MAX_SLIDE_LINES,
-  mergeSlideLines,
-  splitLinesAtCursor,
-} from "#shared";
-import type { DeckStyle, Presentation } from "#shared";
+import { songIndexAfterReorder } from "../features/presentation/projectionState";
+import { useOpenedPresentation } from "../features/presentation/useOpenedPresentation";
+import { DEFAULT_DECK_STYLE, MAX_SLIDE_LINES } from "#shared";
+import type { DeckStyle } from "#shared";
 import { EditorHeader } from "../features/editor/EditorHeader";
 import { FolderPickerDialog, drivePath } from "../features/drive";
 import { StorageWarningBanner } from "../components/common/StorageWarningBanner";
@@ -65,6 +46,13 @@ import { SlideThumbnailPane } from "../features/editor/SlideThumbnailPane";
 import { EditorRibbon } from "../features/editor/ribbon/EditorRibbon";
 import { stepFontSize } from "../features/editor/ribbon/ribbonOptions";
 import { StageLyricsEditor } from "../features/editor/StageLyricsEditor";
+import { useSlideTextEditing } from "../features/editor/useSlideTextEditing";
+import {
+  OverflowWarningStatus,
+  SlideLineStatus,
+  getOverflowMessages,
+} from "../features/editor/EditorStatusItems";
+import { useMakeCopyFlow } from "../features/editor/useMakeCopyFlow";
 import { useEditorShortcuts } from "../features/editor/useEditorShortcuts";
 import { useSlideSelection } from "../features/editor/useSlideSelection";
 import {
@@ -83,24 +71,10 @@ import {
 } from "../features/offline";
 import { warmPresentationFonts } from "../lib/offline";
 import { PresentationShareDialog } from "../features/sharing/PresentationShareDialog";
-import { wantsMakeCopy } from "../features/sharing/shareLink";
 import { refreshSharedPresentation } from "../lib/sync";
-import {
-  resolveBackgroundLayers,
-  useBackground,
-} from "../features/backgrounds";
+import { useBackgroundLayers } from "../features/backgrounds";
 import { EDITOR_COPY } from "#copy/editor";
 import { COMMON_COPY } from "#copy/common";
-
-const EMPTY_PRESENTATION: Presentation = {
-  id: "",
-  userId: "",
-  title: "",
-  serviceDate: "",
-  items: [],
-  createdAt: "",
-  updatedAt: "",
-};
 
 /** 로그인하지 않고 공유 링크로 볼 때 편집기를 보기 화면으로 쓰기 위한 설정 */
 export interface EditorGuestOptions {
@@ -136,43 +110,21 @@ function EditorScreen({
   guest?: EditorGuestOptions;
 }): React.JSX.Element {
   const navigate = useNavigate();
-  const location = useLocation();
   const params = useParams<{ presentationId: string }>();
   const presentationId = guest?.presentationId ?? params.presentationId;
   const isGuest = guest !== undefined;
   const [searchParams] = useSearchParams();
-  const found = usePresentationById(presentationId);
-  const presentation = found ?? EMPTY_PRESENTATION;
+  const { found, presentation } = useOpenedPresentation(presentationId);
   const [songPickerMode, setSongPickerMode] = useState<SongPickerMode | null>(
     null,
   );
   const [editingSongIndex, setEditingSongIndex] = useState<number | null>(null);
-  const [textEdit, setTextEdit] = useState<{
-    slideId: string;
-    caret: "start" | "end";
-  } | null>(null);
-  const [caret, setCaret] = useState<{
-    slideId: string;
-    offset: number;
-  } | null>(null);
-  const [limitHintSlideId, setLimitHintSlideId] = useState<string | null>(null);
   const [isShareOpen, setIsShareOpen] = useState(false);
-  const [isCopyPickerOpen, setIsCopyPickerOpen] = useState(() =>
-    wantsMakeCopy(location.state),
-  );
+  const makeCopy = useMakeCopyFlow({
+    presentationId: presentation.id,
+    onGuestRequest: guest?.onRequestCopy,
+  });
   const readOnly = !canEditPresentation(presentation);
-
-  useLayoutEffect(() => {
-    if (presentationId) openPresentation(presentationId);
-  }, [presentationId]);
-
-  useEffect(() => {
-    if (!wantsMakeCopy(location.state)) return;
-    navigate(`${location.pathname}${location.search}`, {
-      replace: true,
-      state: null,
-    });
-  }, [location, navigate]);
 
   useEffect(() => {
     if (!presentationId || !readOnly || isGuest) return;
@@ -194,7 +146,6 @@ function EditorScreen({
   const [activeSongIndex, setActiveSongIndex] =
     useState<number>(initialSongIndex);
   const [activeSlideIndex, setActiveSlideIndex] = useState<number>(0);
-  const [zoomLevel, setZoomLevel] = useState<number>(100);
 
   useEffect(() => {
     const requested = Number(searchParams.get("song") || 0);
@@ -234,7 +185,7 @@ function EditorScreen({
     editingSongIndex === null ? undefined : songs[editingSongIndex]?.deck;
 
   const background = useCacheFirstVideo(
-    resolveBackgroundLayers(useBackground(currentSong?.backgroundId)),
+    useBackgroundLayers(currentSong?.backgroundId),
   );
 
   const mediaReadiness = useProjectionMediaReady(found ?? null, {
@@ -247,7 +198,7 @@ function EditorScreen({
       launchPresentation(
         navigate,
         presentationId,
-        guest?.returnPath ?? `/editor/${presentationId}`,
+        guest?.returnPath ?? editorPath(presentationId),
       );
     }
   };
@@ -266,57 +217,18 @@ function EditorScreen({
   const handlePrevSlide = () => selection.select(prevPosition(position, songs));
   const handleNextSlide = () => selection.select(nextPosition(position, songs));
 
-  const isEditingText = !!currentSlide && textEdit?.slideId === currentSlide.id;
-  const caretOffset =
-    currentSlide && caret?.slideId === currentSlide.id ? caret.offset : null;
-
-  const startTextEdit = (
-    slideId: string | undefined = currentSlide?.id,
-    caretAt: "start" | "end" = "end",
-  ): void => {
-    if (!slideId) return;
-    breakHistoryCoalescing();
-    setTextEdit({ slideId, caret: caretAt });
-  };
-
-  const exitTextEdit = (slideId: string): void => {
-    breakHistoryCoalescing();
-    setTextEdit((prev) => (prev?.slideId === slideId ? null : prev));
-  };
-
-  const slideIdAt = (songIndex: number, slideIndex: number) =>
-    getActivePresentation().items[songIndex]?.deck?.slides[slideIndex]?.id;
+  const textEditing = useSlideTextEditing({
+    songIndex: safeSongIndex,
+    slideIndex: safeSlideIndex,
+    currentSlide,
+    nextSlideInSong,
+    select: selection.select,
+  });
+  const { isEditingText, canSplit, canMerge } = textEditing;
 
   const handleAddSlide = () => {
     const newId = selection.addSlide();
-    if (newId) startTextEdit(newId);
-  };
-
-  const middleSplitOffset = currentSlide
-    ? currentSlide.lines
-        .slice(0, Math.ceil(currentSlide.lines.length / 2))
-        .join("\n").length
-    : 0;
-  const splitOffset =
-    isEditingText && caretOffset !== null ? caretOffset : middleSplitOffset;
-  const canSplit =
-    !!currentSlide &&
-    splitLinesAtCursor(currentSlide.lines, splitOffset) !== null;
-  const canMerge =
-    !!currentSlide &&
-    !!nextSlideInSong &&
-    mergeSlideLines(currentSlide.lines, nextSlideInSong.lines) !== null;
-
-  const handleSplitSlide = (offset: number) => {
-    const wasEditing = isEditingText;
-    if (!splitSlideAtCursor(safeSongIndex, safeSlideIndex, offset)) return;
-    selection.select({
-      songIndex: safeSongIndex,
-      slideIndex: safeSlideIndex + 1,
-    });
-    if (wasEditing) {
-      startTextEdit(slideIdAt(safeSongIndex, safeSlideIndex + 1), "start");
-    }
+    if (newId) textEditing.start(newId);
   };
 
   const handleUpdateStyle = (
@@ -353,13 +265,8 @@ function EditorScreen({
   const handleReorderSong = (from: number, to: number) => {
     reorderSongs(from, to);
     selection.clearInsertion();
-    if (safeSongIndex === from) {
-      setActiveSongIndex(to);
-    } else if (from < safeSongIndex && to >= safeSongIndex) {
-      setActiveSongIndex(safeSongIndex - 1);
-    } else if (from > safeSongIndex && to <= safeSongIndex) {
-      setActiveSongIndex(safeSongIndex + 1);
-    }
+    const nextSongIndex = songIndexAfterReorder(safeSongIndex, from, to);
+    if (nextSongIndex !== safeSongIndex) setActiveSongIndex(nextSongIndex);
   };
 
   const handleDuplicateSong = (idx: number) => {
@@ -384,18 +291,6 @@ function EditorScreen({
     }
   };
 
-  const handleMakeCopy = (folderId: string | null) => {
-    setIsCopyPickerOpen(false);
-    const copy = duplicatePresentation(presentation.id, folderId);
-    if (!copy) return;
-    toast.success(EDITOR_COPY.copyDialog.created);
-    navigate(`/editor/${copy.id}`);
-  };
-
-  const openCopy = guest
-    ? guest.onRequestCopy
-    : () => setIsCopyPickerOpen(true);
-
   const handleNewPresentation = () => {
     const created = createNewPresentation(
       undefined,
@@ -403,7 +298,7 @@ function EditorScreen({
     );
     setActiveSongIndex(0);
     setActiveSlideIndex(0);
-    navigate(`/editor/${created.id}`);
+    navigate(editorPath(created.id));
   };
 
   useEditorShortcuts({
@@ -413,7 +308,7 @@ function EditorScreen({
     nextSlide: handleNextSlide,
     firstSlide: () => selectEdge("first"),
     lastSlide: () => selectEdge("last"),
-    editText: () => (currentSlide && !readOnly ? startTextEdit() : false),
+    editText: () => (currentSlide && !readOnly ? textEditing.start() : false),
     newSlide: () => (currentSong && !readOnly ? handleAddSlide() : false),
     duplicateSlide: selection.duplicateSelection,
     deleteSlide: selection.deleteSelection,
@@ -443,12 +338,9 @@ function EditorScreen({
     present: () => (songs.length > 0 ? handlePresent() : false),
   });
 
-  const overflowMessages = [
-    currentOverflow?.exceedsStage && EDITOR_COPY.overflow.stage,
-    currentOverflow?.slides[safeSlideIndex]?.wraps && EDITOR_COPY.overflow.wrap,
-  ].filter((message) => typeof message === "string");
+  const overflowMessages = getOverflowMessages(currentOverflow, safeSlideIndex);
 
-  if (!found) return <Navigate to="/presentations" replace />;
+  if (!found) return <Navigate to={drivePath(null)} replace />;
 
   return (
     <div
@@ -471,7 +363,7 @@ function EditorScreen({
           readOnly ? undefined : () => setSongPickerMode("create")
         }
         onShare={readOnly ? undefined : () => setIsShareOpen(true)}
-        onMakeCopy={readOnly ? openCopy : undefined}
+        onMakeCopy={readOnly ? makeCopy.open : undefined}
         sharedAccess={presentation.access}
         readOnly={readOnly}
         backPath={
@@ -495,7 +387,11 @@ function EditorScreen({
                 : EDITOR_COPY.readOnly.member}
             </AlertDescription>
             <AlertAction className="top-1/2 -translate-y-1/2">
-              <Button data-testid="make-copy-btn" size="sm" onClick={openCopy}>
+              <Button
+                data-testid="make-copy-btn"
+                size="sm"
+                onClick={makeCopy.open}
+              >
                 <CopyIcon />
                 {COMMON_COPY.makeCopy}
               </Button>
@@ -527,8 +423,8 @@ function EditorScreen({
             onAdd: handleAddSlide,
             onDuplicate: selection.duplicateSelection,
             onDelete: selection.deleteSelection,
-            onSplit: () => handleSplitSlide(splitOffset),
-            onMerge: () => mergeSlideWithNext(safeSongIndex, safeSlideIndex),
+            onSplit: () => textEditing.split(textEditing.splitOffset),
+            onMerge: textEditing.merge,
           }}
         />
       )}
@@ -542,9 +438,7 @@ function EditorScreen({
           insertion={selection.insertion}
           canDelete={selection.canDelete}
           canPaste={selection.canPaste}
-          onClickSlide={(songIndex, slideIndex, modifiers) =>
-            selection.clickSlide(songIndex, slideIndex, modifiers)
-          }
+          onClickSlide={selection.clickSlide}
           onSelectSong={selection.selectSong}
           onSetInsertion={selection.setInsertion}
           onAddSlide={handleAddSlide}
@@ -574,8 +468,6 @@ function EditorScreen({
           totalSongs={songs.length}
           onPrevSlide={handlePrevSlide}
           onNextSlide={handleNextSlide}
-          zoomLevel={zoomLevel}
-          onZoomChange={setZoomLevel}
           onOpenLyricModal={
             readOnly ? undefined : () => setSongPickerMode("create")
           }
@@ -584,81 +476,31 @@ function EditorScreen({
               ? undefined
               : (styleUpdate) => handleUpdateStyle(styleUpdate)
           }
-          onRequestTextEdit={readOnly ? undefined : () => startTextEdit()}
+          onRequestTextEdit={readOnly ? undefined : () => textEditing.start()}
           textEditor={
             isEditingText && currentSlide ? (
               <StageLyricsEditor
                 key={currentSlide.id}
                 slide={currentSlide}
                 caretColor={currentStyle.fontColor}
-                initialCaret={textEdit?.caret}
-                onChangeLines={(lines) => {
-                  if (lines.length < MAX_SLIDE_LINES) {
-                    setLimitHintSlideId(null);
-                  }
-                  updateSlideLines(safeSongIndex, safeSlideIndex, lines, {
-                    coalesceKey: `lines:${currentSlide.id}`,
-                  });
-                }}
-                onLimitHit={() => setLimitHintSlideId(currentSlide.id)}
-                onCaretChange={(offset) =>
-                  setCaret({ slideId: currentSlide.id, offset })
-                }
-                onSplit={handleSplitSlide}
-                onExit={() => exitTextEdit(currentSlide.id)}
+                initialCaret={textEditing.initialCaret}
+                onChangeLines={textEditing.changeLines}
+                onLimitHit={textEditing.hitLimit}
+                onCaretChange={textEditing.updateCaret}
+                onSplit={textEditing.split}
+                onExit={() => textEditing.exit(currentSlide.id)}
               />
             ) : undefined
           }
           statusItems={
             <>
               {isEditingText && currentSlide && (
-                <>
-                  <span aria-hidden="true">·</span>
-                  <span
-                    data-testid="slide-line-count"
-                    className={cn(
-                      "font-mono",
-                      currentSlide.lines.length >= MAX_SLIDE_LINES &&
-                        "text-warning",
-                    )}
-                  >
-                    {EDITOR_COPY.slide.lineUsage(
-                      currentSlide.lines.length,
-                      MAX_SLIDE_LINES,
-                    )}
-                  </span>
-                  {limitHintSlideId === currentSlide.id && (
-                    <span
-                      data-testid="slide-line-limit-hint"
-                      className="truncate text-warning"
-                    >
-                      {EDITOR_COPY.slide.lineLimit(
-                        MAX_SLIDE_LINES,
-                        MAX_SLIDE_LINE_LENGTH,
-                      )}
-                    </span>
-                  )}
-                </>
+                <SlideLineStatus
+                  lineCount={currentSlide.lines.length}
+                  showLimitHint={textEditing.isLimitHintShown}
+                />
               )}
-              {overflowMessages.length > 0 && (
-                <Tooltip>
-                  <TooltipTrigger
-                    render={
-                      <span
-                        role="status"
-                        data-testid="overflow-warning-status"
-                        className="flex min-w-0 items-center gap-1 text-warning"
-                      />
-                    }
-                  >
-                    <TriangleAlertIcon className="size-3.5 shrink-0" />
-                    <span className="truncate">{overflowMessages[0]}</span>
-                  </TooltipTrigger>
-                  <TooltipContent className="max-w-80 whitespace-pre-line">
-                    {overflowMessages.join("\n")}
-                  </TooltipContent>
-                </Tooltip>
-              )}
+              <OverflowWarningStatus messages={overflowMessages} />
             </>
           }
         />
@@ -680,7 +522,7 @@ function EditorScreen({
         />
       )}
 
-      {isCopyPickerOpen && (
+      {makeCopy.isPickerOpen && (
         <FolderPickerDialog
           testId="copy-picker-dialog"
           confirmTestId="copy-picker-confirm"
@@ -689,8 +531,8 @@ function EditorScreen({
           targetLabel={EDITOR_COPY.copyDialog.target}
           confirmLabel={COMMON_COPY.makeCopy}
           initialFolderId={null}
-          onConfirm={handleMakeCopy}
-          onCancel={() => setIsCopyPickerOpen(false)}
+          onConfirm={makeCopy.confirm}
+          onCancel={makeCopy.cancel}
         />
       )}
 

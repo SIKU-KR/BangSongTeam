@@ -12,15 +12,12 @@ import type { PresentationDocument } from "#shared";
 import { signInAsTestUser } from "../test/sessionFixture";
 import { installFakeApi, type FakeApi } from "../test/fakeApi";
 import {
-  SEED_PRESENTATIONS,
-  SEED_USER_ID,
-} from "../features/presentation/mockPresentations";
-import {
   getPresentationById,
   resetPresentationStore,
 } from "../features/presentation/presentationStore";
 import { ShareJoinRoute } from "./ShareJoinRoute";
 import { API_ERRORS } from "#shared";
+import { SEED_PRESENTATIONS, SEED_USER_ID } from "../test/presentationFixture";
 
 const OWNER = "0000000000000000owner";
 

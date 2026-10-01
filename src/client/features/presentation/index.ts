@@ -10,19 +10,6 @@ export {
 } from "./usePresentationShortcuts";
 
 export {
-  mockPresentation,
-  mockDecks,
-  MOCK_PRESENTATION_ID,
-  MOCK_USER_ID,
-} from "./mockPresentation";
-
-export {
-  SEED_PRESENTATIONS,
-  SEED_PRESENTATION_IDS,
-  SEED_USER_ID,
-} from "./mockPresentations";
-
-export {
   getActivePresentation,
   createNewPresentation,
   addDeckToPresentation,
@@ -57,11 +44,9 @@ export {
   canRedo,
   breakHistoryCoalescing,
   type BackgroundChoice,
-  type HistoryOptions,
   hydrateFromStorage,
   flushPendingWrites,
   removePersistedPresentation,
-  resetPersistenceForTests,
   movePresentation,
   renamePresentation,
   trashPresentation,
@@ -79,6 +64,7 @@ export {
   isFullscreenActive,
   subscribeFullscreenChange,
   launchPresentation,
+  editorPath,
   resolvePresentReturnPath,
   DEFAULT_PRESENT_RETURN_PATH,
   type PresentNavigate,

@@ -24,6 +24,8 @@ import { SlideStage } from "../../components/stage/SlideStage";
 import type { SnapGuides } from "./textBoxDrag";
 import { EDITOR_COPY } from "#copy/editor";
 
+const ZOOM_PERCENT = { min: 50, max: 150, step: 15, fit: 100 } as const;
+
 const TextBoxMoveable = lazy(() =>
   import("./TextBoxMoveable").then((m) => ({ default: m.TextBoxMoveable })),
 );
@@ -40,8 +42,6 @@ export interface EditorStageCanvasProps {
   totalSongs: number;
   onPrevSlide: () => void;
   onNextSlide: () => void;
-  zoomLevel?: number;
-  onZoomChange?: (zoom: number) => void;
   onOpenLyricModal?: () => void;
   onUpdateStyle?: (update: Partial<DeckStyle>) => void;
   /** 가사 줄 대신 텍스트 박스 안에 그릴 직접 편집기. 있으면 박스 이동·폭 조절을 끈다 */
@@ -69,8 +69,6 @@ export function EditorStageCanvas({
   totalSongs,
   onPrevSlide,
   onNextSlide,
-  zoomLevel = 100,
-  onZoomChange,
   onOpenLyricModal,
   onUpdateStyle,
   textEditor,
@@ -83,6 +81,7 @@ export function EditorStageCanvas({
     position: TextBoxPosition;
     guides: SnapGuides;
   } | null>(null);
+  const [zoomLevel, setZoomLevel] = useState<number>(ZOOM_PERCENT.fit);
 
   const isEditingText = textEditor !== undefined;
   const baseStyle = style ?? DEFAULT_DECK_STYLE;
@@ -238,37 +237,43 @@ export function EditorStageCanvas({
           {statusItems}
         </div>
 
-        {onZoomChange && (
-          <ButtonGroup className="hidden sm:flex">
-            <IconButton
-              label={EDITOR_COPY.canvas.zoomOut}
-              variant="outline"
-              size="icon-sm"
-              onClick={() => onZoomChange(Math.max(50, zoomLevel - 15))}
-            >
-              <MinusIcon />
-            </IconButton>
-            <ButtonGroupText className="w-14 justify-center font-mono text-xs">
-              {zoomLevel}%
-            </ButtonGroupText>
-            <IconButton
-              label={EDITOR_COPY.canvas.zoomIn}
-              variant="outline"
-              size="icon-sm"
-              onClick={() => onZoomChange(Math.min(150, zoomLevel + 15))}
-            >
-              <PlusIcon />
-            </IconButton>
-            <IconButton
-              label={EDITOR_COPY.canvas.fitLabel}
-              variant="outline"
-              size="sm"
-              onClick={() => onZoomChange(100)}
-            >
-              {EDITOR_COPY.canvas.fit}
-            </IconButton>
-          </ButtonGroup>
-        )}
+        <ButtonGroup className="hidden sm:flex">
+          <IconButton
+            label={EDITOR_COPY.canvas.zoomOut}
+            variant="outline"
+            size="icon-sm"
+            onClick={() =>
+              setZoomLevel(
+                Math.max(ZOOM_PERCENT.min, zoomLevel - ZOOM_PERCENT.step),
+              )
+            }
+          >
+            <MinusIcon />
+          </IconButton>
+          <ButtonGroupText className="w-14 justify-center font-mono text-xs">
+            {zoomLevel}%
+          </ButtonGroupText>
+          <IconButton
+            label={EDITOR_COPY.canvas.zoomIn}
+            variant="outline"
+            size="icon-sm"
+            onClick={() =>
+              setZoomLevel(
+                Math.min(ZOOM_PERCENT.max, zoomLevel + ZOOM_PERCENT.step),
+              )
+            }
+          >
+            <PlusIcon />
+          </IconButton>
+          <IconButton
+            label={EDITOR_COPY.canvas.fitLabel}
+            variant="outline"
+            size="sm"
+            onClick={() => setZoomLevel(ZOOM_PERCENT.fit)}
+          >
+            {EDITOR_COPY.canvas.fit}
+          </IconButton>
+        </ButtonGroup>
       </div>
     </div>
   );

@@ -8,7 +8,7 @@ import {
   rangeKeys,
   stepFocus,
   toggleKey,
-} from "../drive/selectionModel";
+} from "../../lib/selection/selectionModel";
 
 export interface SlideSelectionState {
   selected: string[];
@@ -93,11 +93,77 @@ export function stepMoveTarget(
   }
 }
 
-/** 끌어 놓은 썸네일의 위·아래 절반으로 틈 번호를 정한다 */
-export function resolveDropIndex(
-  overIndex: number,
-  pointerY: number,
-  rect: { top: number; height: number },
+/** 썸네일 사이 삽입 커서. `index`는 곡 안 틈 번호(0 = 첫 장 앞)다 */
+export interface SlideInsertion {
+  songIndex: number;
+  index: number;
+}
+
+/** Ctrl/⌘·Shift로 고른 슬라이드. 곡 id와 slide id로 기억해 순서를 바꿔도 따라간다 */
+export interface PickedSlides {
+  itemId: string;
+  ids: string[];
+  anchorId: string;
+}
+
+export interface PaneSelection {
+  /** 삽입 커서와 상관없이 지금 고른 슬라이드 id (화면 순서) */
+  activeIds: string[];
+  anchorId: string;
+  /** 화면에 선택으로 보이는 슬라이드 id. 삽입 커서가 있으면 비어 있다 */
+  selectedIds: string[];
+  selectedIndexes: number[];
+}
+
+/**
+ * 현재 곡의 선택을 정한다. 고른 묶음이 다른 곡 것이거나 현재 슬라이드를 품지 않으면
+ * 현재 슬라이드 한 장만 고른 것으로 본다. 기준점이 사라졌으면 현재 슬라이드가
+ * 기준점이 되고, 현재 슬라이드도 없으면 빈 문자열이다.
+ */
+export function resolvePaneSelection({
+  ids,
+  itemId,
+  currentId,
+  picked,
+  insertion,
+}: {
+  ids: readonly string[];
+  itemId: string | undefined;
+  currentId: string | undefined;
+  picked: PickedSlides | null;
+  insertion: SlideInsertion | null;
+}): PaneSelection {
+  const pickedHere =
+    picked && itemId !== undefined && picked.itemId === itemId
+      ? ids.filter((id) => picked.ids.includes(id))
+      : [];
+  const usePicked = currentId !== undefined && pickedHere.includes(currentId);
+  const activeIds = usePicked
+    ? pickedHere
+    : currentId === undefined
+      ? []
+      : [currentId];
+  const anchorId =
+    usePicked && picked && ids.includes(picked.anchorId)
+      ? picked.anchorId
+      : (currentId ?? "");
+  const selectedIds = insertion ? [] : activeIds;
+  const selectedIndexes = selectedIds.map((id) => ids.indexOf(id));
+  return { activeIds, anchorId, selectedIds, selectedIndexes };
+}
+
+/**
+ * 새 슬라이드·붙여넣기가 들어갈 틈 번호. 삽입 커서가 있으면 그 자리, 아니면 선택한
+ * 마지막 장 뒤, 선택이 없으면 현재 슬라이드 뒤다.
+ */
+export function resolveInsertIndex(
+  insertion: SlideInsertion | null,
+  selectedIndexes: readonly number[],
+  slideIndex: number,
 ): number {
-  return pointerY < rect.top + rect.height / 2 ? overIndex : overIndex + 1;
+  return insertion
+    ? insertion.index
+    : selectedIndexes.length > 0
+      ? Math.max(...selectedIndexes) + 1
+      : slideIndex + 1;
 }

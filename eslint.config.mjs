@@ -109,6 +109,7 @@ const STYLE_ALLOWED_FILES = [
   "src/client/features/editor/EditorStageCanvas.tsx",
   "src/client/features/editor/StageLyricsEditor.tsx",
   "src/client/features/editor/ribbon/FontControls.tsx",
+  "src/client/features/editor/ribbon/FontFamilySelect.tsx",
   "src/client/features/editor/ribbon/BackgroundControls.tsx",
   "src/client/features/editor/ColorPalette.tsx",
   "src/client/features/drive/DriveBrowser.tsx",
@@ -155,8 +156,6 @@ const COPY_EXEMPT_FILES = [
   "src/shared/constants/backgrounds.ts",
   "src/shared/constants/devUsers.ts",
   "src/db/seed/devSeed.ts",
-  "src/client/features/presentation/mockPresentation.ts",
-  "src/client/features/presentation/mockPresentations.ts",
   "src/client/routes/TermsRoute.tsx",
   "src/client/routes/PrivacyRoute.tsx",
 ];

@@ -1,5 +1,6 @@
 import type { Presentation } from "#shared";
-import { pushPresentation, OfflineError } from "./presentationSync";
+import { OfflineError } from "../api/request";
+import { pushPresentation } from "./presentationSync";
 import { setSyncStatus } from "./syncStatus";
 import { flushFolderSync } from "./folderSync";
 
