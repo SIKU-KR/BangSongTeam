@@ -8,9 +8,13 @@ import {
   applyServerFolders,
   applyServerFolder,
 } from "../../features/drive/folderStore";
-import { sortFoldersParentFirst, type DriveTombstones } from "#shared";
+import {
+  sortFoldersParentFirst,
+  type DriveTombstones,
+  type Folder,
+} from "#shared";
 import { savePresentation } from "../storage";
-import { mergeDocuments } from "./mergeDocuments";
+import { planBootMerge } from "./mergeDocuments";
 import { mergeFolders } from "./mergeFolders";
 import {
   getUserSongs,
@@ -26,8 +30,8 @@ import {
   setSharedPresentationListener,
   pullDecks,
   pullFolders,
-  OfflineError,
 } from "./presentationSync";
+import { OfflineError } from "../api/request";
 import {
   setFolderSyncEnabled,
   setServerFolderListener,
@@ -90,24 +94,16 @@ export async function runBootSync(): Promise<void> {
     return;
   }
 
-  const deletedIds = new Set(tombstones.presentationIds);
-  const local = listPresentations();
-  const merged = mergeDocuments(
-    local.filter((doc) => !deletedIds.has(doc.id)),
+  const { documents, needsPush, removedIds } = planBootMerge(
+    listPresentations(),
     serverDocuments,
+    tombstones.presentationIds,
+    knownBeforePull,
   );
-  const joinedDuringPull = local.filter(
-    (doc) => merged.removed.includes(doc.id) && !knownBeforePull.has(doc.id),
-  );
-  const documents = [...merged.documents, ...joinedDuringPull];
-  const { needsPush } = merged;
-  const removed = merged.removed.filter((id) => knownBeforePull.has(id));
 
   applyServerDocuments(documents);
-  for (const id of [...deletedIds, ...removed]) {
-    if (local.some((doc) => doc.id === id)) {
-      await removePersistedPresentation(id);
-    }
+  for (const id of removedIds) {
+    await removePersistedPresentation(id);
   }
 
   for (const document of documents) {
@@ -118,16 +114,10 @@ export async function runBootSync(): Promise<void> {
     }
   }
 
-  let offline = false;
-  for (const id of needsPush) {
-    const document = documents.find((doc) => doc.id === id);
-    if (!document) continue;
-    try {
-      await pushPresentation(document);
-    } catch (err) {
-      if (err instanceof OfflineError) offline = true;
-    }
-  }
+  const offline = await pushEachTrackingOffline(
+    findEach(documents, needsPush),
+    pushPresentation,
+  );
 
   const deckOffline = await syncLibraryDecks();
 
@@ -135,7 +125,7 @@ export async function runBootSync(): Promise<void> {
 }
 
 async function syncFolders(
-  serverFolders: Parameters<typeof mergeFolders>[1],
+  serverFolders: Folder[],
   tombstones: DriveTombstones,
 ): Promise<boolean> {
   const deletedIds = new Set(tombstones.folderIds);
@@ -150,18 +140,13 @@ async function syncFolders(
   );
 
   const toPush = new Set(needsPush);
-  let offline = false;
-  for (const folder of sortFoldersParentFirst(
-    folders.filter((candidate) => toPush.has(candidate.id)),
-    folders,
-  )) {
-    try {
-      await pushFolderNow(folder);
-    } catch (err) {
-      if (err instanceof OfflineError) offline = true;
-    }
-  }
-  return offline;
+  return pushEachTrackingOffline(
+    sortFoldersParentFirst(
+      folders.filter((candidate) => toPush.has(candidate.id)),
+      folders,
+    ),
+    pushFolderNow,
+  );
 }
 
 async function syncLibraryDecks(): Promise<boolean> {
@@ -175,12 +160,26 @@ async function syncLibraryDecks(): Promise<boolean> {
   const { decks, needsPush } = mergeLibraryDecks(getUserSongs(), serverDecks);
   await applyServerLibraryDecks(decks);
 
+  return pushEachTrackingOffline(findEach(decks, needsPush), pushDeckNow);
+}
+
+function findEach<T extends { id: string }>(
+  items: readonly T[],
+  ids: readonly string[],
+): T[] {
+  return ids
+    .map((id) => items.find((item) => item.id === id))
+    .filter((item): item is T => item !== undefined);
+}
+
+async function pushEachTrackingOffline<T>(
+  items: readonly T[],
+  push: (item: T) => Promise<unknown>,
+): Promise<boolean> {
   let offline = false;
-  for (const id of needsPush) {
-    const deck = decks.find((candidate) => candidate.id === id);
-    if (!deck) continue;
+  for (const item of items) {
     try {
-      await pushDeckNow(deck);
+      await push(item);
     } catch (err) {
       if (err instanceof OfflineError) offline = true;
     }

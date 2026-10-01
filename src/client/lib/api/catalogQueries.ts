@@ -5,22 +5,14 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
-import type {
-  CreateReportRequest,
-  Deck,
-  VisibilityUpdateRequest,
-} from "#shared";
+import type { CreateReportRequest } from "#shared";
 import {
   fetchPublicDeck,
   forkPublicDeck,
   searchCatalog,
   submitReport,
-  updateDeckVisibility,
 } from "./catalogApi";
-import {
-  applyServerDeckFields,
-  upsertLibraryDeck,
-} from "../../features/editor/songLibraryStore";
+import { upsertLibraryDeck } from "../../features/editor/songLibraryStore";
 
 export const CATALOG_SEARCH_DEBOUNCE_MS = 250;
 
@@ -69,24 +61,6 @@ export function useForkDeck() {
     mutationFn: forkPublicDeck,
     onSuccess: ({ deck }) => {
       upsertLibraryDeck(deck, { push: false });
-      void queryClient.invalidateQueries({ queryKey: catalogKeys.all });
-    },
-  });
-}
-
-/** 서버가 확정한 공유 필드를 보관함에 반영한다 */
-export function useSetDeckVisibility() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: ({
-      deckId,
-      request,
-    }: {
-      deckId: string;
-      request: VisibilityUpdateRequest;
-    }): Promise<Deck> => updateDeckVisibility(deckId, request),
-    onSuccess: (deck) => {
-      applyServerDeckFields(deck);
       void queryClient.invalidateQueries({ queryKey: catalogKeys.all });
     },
   });
