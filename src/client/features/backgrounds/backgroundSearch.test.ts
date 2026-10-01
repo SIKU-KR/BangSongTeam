@@ -1,6 +1,10 @@
 import { describe, it, expect } from "vitest";
 import { makeBackground } from "../../test/backgroundFixture";
-import { matchesBackgroundQuery } from "./backgroundSearch";
+import {
+  filterBackgrounds,
+  filterBackgroundsByKind,
+  matchesBackgroundQuery,
+} from "./backgroundSearch";
 
 const CLOUDS = makeBackground(1, {
   title: "푸른 하늘 구름",
@@ -49,5 +53,31 @@ describe("matchesBackgroundQuery", () => {
     const legacy = makeBackground(3, { title: "고요한 호수" });
     expect(matchesBackgroundQuery(legacy, "ㅎㅅ")).toBe(true);
     expect(matchesBackgroundQuery(legacy, "구름")).toBe(false);
+  });
+});
+
+describe("filterBackgrounds", () => {
+  const STILL = makeBackground(4, {
+    title: "고요한 성탄 이미지",
+    kind: "image",
+    keywords: ["성탄"],
+  });
+  const all = [CLOUDS, TREE, STILL];
+  const titles = (kind: "all" | "video" | "image", query: string): string[] =>
+    filterBackgrounds(all, { kind, query }).map((bg) => bg.title);
+
+  it("종류만 고르면 그 종류만 남기고, all이면 원래 배열을 그대로 준다", () => {
+    expect(filterBackgroundsByKind(all, "all")).toBe(all);
+    expect(titles("image", "")).toEqual(["고요한 성탄 이미지"]);
+    expect(titles("video", "")).toEqual(["푸른 하늘 구름", "반짝이는 트리"]);
+  });
+
+  it("종류와 검색어가 모두 맞아야 남는다", () => {
+    expect(titles("all", "성탄")).toEqual([
+      "반짝이는 트리",
+      "고요한 성탄 이미지",
+    ]);
+    expect(titles("video", "성탄")).toEqual(["반짝이는 트리"]);
+    expect(titles("image", "구름")).toEqual([]);
   });
 });

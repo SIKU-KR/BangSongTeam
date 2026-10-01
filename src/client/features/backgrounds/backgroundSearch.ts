@@ -1,4 +1,10 @@
-import { hangulIncludes, type BackgroundMedia } from "#shared";
+import {
+  hangulIncludes,
+  type BackgroundKind,
+  type BackgroundMedia,
+} from "#shared";
+
+export type BackgroundKindFilterValue = "all" | BackgroundKind;
 
 /**
  * 배경 검색. 띄어쓰기로 나눈 단어가 모두 맞아야 통과한다 ("파란 구름").
@@ -18,5 +24,29 @@ export function matchesBackgroundQuery(
       hangulIncludes(background.title, term) ||
       background.keywords.some((keyword) => hangulIncludes(keyword, term)) ||
       description.includes(term),
+  );
+}
+
+/**
+ * 배경 종류(영상·이미지)로 거른다. `all`이면 원래 배열을 그대로 돌려준다.
+ */
+export function filterBackgroundsByKind(
+  backgrounds: BackgroundMedia[],
+  kind: BackgroundKindFilterValue,
+): BackgroundMedia[] {
+  return kind === "all"
+    ? backgrounds
+    : backgrounds.filter((bg) => bg.kind === kind);
+}
+
+/**
+ * 배경 갤러리와 배경 선택 창이 같은 기준으로 거르도록 종류와 검색어를 한 번에 적용한다.
+ */
+export function filterBackgrounds(
+  backgrounds: BackgroundMedia[],
+  { kind, query }: { kind: BackgroundKindFilterValue; query: string },
+): BackgroundMedia[] {
+  return filterBackgroundsByKind(backgrounds, kind).filter((bg) =>
+    matchesBackgroundQuery(bg, query),
   );
 }
