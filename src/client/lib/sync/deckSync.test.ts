@@ -10,7 +10,7 @@ import {
   __setDeckTransportForTests,
   __resetDeckSyncForTests,
 } from "./deckSync";
-import { OfflineError } from "./presentationSync";
+import { OfflineError } from "../api/request";
 import { getSyncStatus, __resetSyncStatusForTests } from "./syncStatus";
 
 const USER = "00000000x000000000001";

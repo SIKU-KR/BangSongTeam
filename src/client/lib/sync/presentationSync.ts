@@ -13,38 +13,13 @@ import {
   type PresentationDocument,
 } from "#shared";
 import { api } from "../api/client";
+import {
+  callApi,
+  OfflineError,
+  ServerRejectedError,
+  SessionExpiredError,
+} from "../api/request";
 import { setSyncStatus } from "./syncStatus";
-import { ERROR_COPY } from "#copy/common";
-
-/** 서버가 세션을 거절했다 (만료·로그아웃) */
-export class SessionExpiredError extends Error {
-  constructor() {
-    super(ERROR_COPY.sessionExpiredShort);
-    this.name = "SessionExpiredError";
-  }
-}
-
-/** 네트워크에 닿지 못했다 — 실패가 아니라 오프라인이다 */
-export class OfflineError extends Error {
-  constructor(cause?: unknown) {
-    super(ERROR_COPY.serverUnreachable);
-    this.name = "OfflineError";
-    this.cause = cause;
-  }
-}
-
-/**
- * 서버가 요청을 거절했다 (4xx·5xx). 상태 코드로 사유를 가를 수 있게 남긴다.
- * 메시지는 서버가 준 한국어 오류 문장이 있으면 그것을 쓴다.
- */
-export class ServerRejectedError extends Error {
-  readonly status: number;
-  constructor(status: number, message?: string) {
-    super(message ?? ERROR_COPY.serverRejected(status));
-    this.name = "ServerRejectedError";
-    this.status = status;
-  }
-}
 
 /**
  * 프레젠테이션을 서버가 받을 수 있는 문서로 좁힌다.
@@ -59,38 +34,26 @@ export function toSyncableDocument(
   return result.success ? result.data : null;
 }
 
-interface RpcResponse {
-  status: number;
-  ok: boolean;
-  json: () => Promise<unknown>;
-}
-
-export async function send<T>(request: () => Promise<RpcResponse>): Promise<T> {
-  let response: RpcResponse;
+/**
+ * 동기화 경로의 요청 1건. 오류 구분은 `callApi`에 맡기고, 실패 갈래에 맞춰
+ * 동기화 상태 배지만 남긴다. 성공 응답의 본문을 못 읽은 실패는 상태를 바꾸지 않는다.
+ */
+export async function send<T>(
+  request: Parameters<typeof callApi>[0],
+): Promise<T> {
   try {
-    response = await request();
+    return await callApi<T>(request);
   } catch (err) {
-    setSyncStatus("offline");
-    throw new OfflineError(err);
-  }
-
-  if (response.status === 401) {
-    setSyncStatus("error");
-    throw new SessionExpiredError();
-  }
-  if (!response.ok) {
-    setSyncStatus("error");
-    let message: string | undefined;
-    try {
-      const body = (await response.json()) as { error?: unknown };
-      if (typeof body?.error === "string") message = body.error;
-    } catch (error) {
-      void error;
+    if (err instanceof OfflineError) {
+      setSyncStatus("offline");
+    } else if (
+      err instanceof SessionExpiredError ||
+      err instanceof ServerRejectedError
+    ) {
+      setSyncStatus("error");
     }
-    throw new ServerRejectedError(response.status, message);
+    throw err;
   }
-
-  return (await response.json()) as T;
 }
 
 /**

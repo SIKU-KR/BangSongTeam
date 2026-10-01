@@ -10,7 +10,7 @@ import {
   __setPusherForTests,
 } from "./syncScheduler";
 import { getSyncStatus, __resetSyncStatusForTests } from "./syncStatus";
-import { OfflineError } from "./presentationSync";
+import { OfflineError } from "../api/request";
 import {
   scheduleFolderPush,
   setFolderSyncEnabled,

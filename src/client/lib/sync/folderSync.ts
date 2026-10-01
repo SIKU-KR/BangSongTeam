@@ -1,5 +1,6 @@
 import { sortFoldersParentFirst, type Folder } from "#shared";
-import { pushFolder, OfflineError } from "./presentationSync";
+import { OfflineError } from "../api/request";
+import { pushFolder } from "./presentationSync";
 import { setSyncStatus } from "./syncStatus";
 
 const FOLDER_SYNC_DEBOUNCE_MS = 2000;

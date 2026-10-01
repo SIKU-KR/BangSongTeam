@@ -45,7 +45,7 @@ vi.mock("../../lib/sync", async (importOriginal) => {
   return { ...actual, ...sync };
 });
 
-const { OfflineError } = await import("../../lib/sync/presentationSync");
+const { OfflineError } = await import("../../lib/sync");
 
 const ROOT = "a00000000000000000001";
 const CHILD = "b00000000000000000002";

@@ -3,7 +3,7 @@ import {
   markBackgroundCatalogStatus,
 } from "../../features/backgrounds/backgroundCatalog";
 import { fetchBackgroundList } from "../api/backgroundApi";
-import { OfflineError } from "./presentationSync";
+import { OfflineError } from "../api/request";
 
 let inFlight: Promise<void> | null = null;
 
