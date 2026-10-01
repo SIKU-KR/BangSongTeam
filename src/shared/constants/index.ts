@@ -1,4 +1,8 @@
-import { GridAnchorPreset, TextBoxPosition } from "../schemas/style";
+import {
+  GridAnchorPreset,
+  TextBackdrop,
+  TextBoxPosition,
+} from "../schemas/style";
 import { NOONNU_SUPPORTED_FONT_NAMES } from "./noonnuFonts";
 
 export * from "./noonnuFonts";
@@ -78,6 +82,14 @@ export const DEFAULT_TEXT_BOX_POSITION: TextBoxPosition = {
   widthPercent: 80,
 };
 
+/** 글자 배경 기본값. 꺼진 채로 시작하고, 켜면 이 불투명도·여백·둥글기로 그린다 */
+export const DEFAULT_TEXT_BACKDROP: TextBackdrop = {
+  enabled: false,
+  opacity: 60,
+  paddingPercent: 20,
+  radiusPercent: 15,
+};
+
 /** 배경 영상·이미지도, 고른 단색(`DeckStyle.backgroundColor`)도 없는 곡의 바탕 */
 export const DEFAULT_BACKGROUND_COLOR = "#000000";
 
@@ -87,6 +99,7 @@ export const DEFAULT_BACKGROUND_COLOR = "#000000";
 export const DEFAULT_DECK_STYLE = {
   overlayOpacity: 40,
   overlayColor: "#000000",
+  textBackdrop: DEFAULT_TEXT_BACKDROP,
   fontFamily: "Pretendard" as const,
   fontSizeVw: 4.2,
   fontColor: "#FFFFFF",

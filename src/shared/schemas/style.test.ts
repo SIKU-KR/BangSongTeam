@@ -66,6 +66,12 @@ describe("Style Schemas", () => {
       expect(parsed).toEqual({
         overlayOpacity: 40,
         overlayColor: "#000000",
+        textBackdrop: {
+          enabled: false,
+          opacity: 60,
+          paddingPercent: 20,
+          radiusPercent: 15,
+        },
         fontFamily: "Pretendard",
         fontSizeVw: 4.2,
         fontColor: "#FFFFFF",
@@ -90,6 +96,28 @@ describe("Style Schemas", () => {
       expect(
         DeckStyleSchema.parse({ overlayOpacity: 100 }).overlayOpacity,
       ).toBe(100);
+    });
+
+    it("fills text backdrop defaults for partial or legacy styles", () => {
+      expect(
+        DeckStyleSchema.parse({ textBackdrop: { enabled: true } }).textBackdrop,
+      ).toEqual({
+        enabled: true,
+        opacity: 60,
+        paddingPercent: 20,
+        radiusPercent: 15,
+      });
+    });
+
+    it("validates text backdrop ranges", () => {
+      for (const textBackdrop of [
+        { opacity: -1 },
+        { opacity: 101 },
+        { paddingPercent: 61 },
+        { radiusPercent: -1 },
+      ]) {
+        expect(() => DeckStyleSchema.parse({ textBackdrop })).toThrow();
+      }
     });
 
     it("validates color hex formats", () => {

@@ -92,6 +92,55 @@ describe("TextLayer Component", () => {
     });
   });
 
+  it("draws no text backdrop while it is off", () => {
+    render(<TextLayer slide={sampleSlide} style={defaultStyle} />);
+    expect(screen.queryByTestId("text-backdrop")).not.toBeInTheDocument();
+  });
+
+  it("draws a backdrop box behind every line scaled to the font size", () => {
+    render(
+      <TextLayer
+        slide={sampleSlide}
+        style={{
+          ...defaultStyle,
+          textBackdrop: {
+            enabled: true,
+            opacity: 70,
+            paddingPercent: 25,
+            radiusPercent: 40,
+          },
+        }}
+      />,
+    );
+    const backdrop = screen.getByTestId("text-backdrop");
+    expect(backdrop).toHaveAttribute("aria-hidden", "true");
+    expect(backdrop).toHaveStyle({ opacity: "0.7" });
+    const boxes = backdrop.querySelectorAll("span");
+    expect(boxes).toHaveLength(sampleSlide.lines.length);
+    expect(boxes[0]).toHaveTextContent(sampleSlide.lines[0]);
+    expect(boxes[0]).toHaveStyle({
+      boxShadow: "0 0 0 0.25em #000000",
+      borderRadius: "0.4em",
+    });
+  });
+
+  it("keeps the text backdrop under custom content such as the lyrics editor", () => {
+    render(
+      <TextLayer
+        slide={sampleSlide}
+        style={{
+          ...defaultStyle,
+          textBackdrop: { ...defaultStyle.textBackdrop, enabled: true },
+        }}
+        content={<textarea aria-label="편집" />}
+      />,
+    );
+    expect(
+      screen.getByTestId("text-backdrop").querySelectorAll("span"),
+    ).toHaveLength(sampleSlide.lines.length);
+    expect(screen.getByLabelText("편집")).toBeInTheDocument();
+  });
+
   it("should hide lyrics (opacity: 0) when isLyricsHidden is true", () => {
     const { rerender } = render(
       <TextLayer

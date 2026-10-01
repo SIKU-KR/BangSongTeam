@@ -352,6 +352,48 @@ describe("EditorRoute (PowerPoint식 프레젠테이션 편집기)", () => {
     );
   });
 
+  it("리본으로 현재 곡의 글자 배경을 켜고 불투명도·여백·둥글기를 바꾼다", () => {
+    renderEditor();
+    const otherSongStyle = getActivePresentation().items[1].deck!.style;
+
+    fireEvent.click(screen.getByTestId("text-backdrop-btn"));
+    const opacity = () =>
+      screen.getByLabelText(EDITOR_COPY.ribbon.textBackdropOpacity, {
+        selector: "input",
+      });
+    expect(opacity()).toBeDisabled();
+
+    fireEvent.click(
+      screen.getByRole("switch", { name: EDITOR_COPY.ribbon.textBackdrop }),
+    );
+    act(() => {
+      fireEvent.change(opacity(), { target: { value: "80" } });
+      fireEvent.change(
+        screen.getByLabelText(EDITOR_COPY.ribbon.textBackdropPadding, {
+          selector: "input",
+        }),
+        { target: { value: "30" } },
+      );
+      fireEvent.change(
+        screen.getByLabelText(EDITOR_COPY.ribbon.textBackdropRadius, {
+          selector: "input",
+        }),
+        { target: { value: "50" } },
+      );
+    });
+
+    expect(firstSong().style.textBackdrop).toEqual({
+      enabled: true,
+      opacity: 80,
+      paddingPercent: 30,
+      radiusPercent: 50,
+    });
+    expect(screen.getAllByTestId("text-backdrop").length).toBeGreaterThan(0);
+    expect(getActivePresentation().items[1].deck!.style).toEqual(
+      otherSongStyle,
+    );
+  });
+
   it("글자 크기 키우기·줄이기는 pt 목록을 한 칸씩 움직인다", () => {
     renderEditor();
 
