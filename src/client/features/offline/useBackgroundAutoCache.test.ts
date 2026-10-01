@@ -1,7 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { renderHook, act } from "@testing-library/react";
 import type { Presentation } from "#shared";
-import { SEED_PRESENTATIONS } from "../presentation";
 import {
   resetBackgroundCatalogForTests,
   setBackgroundCatalogForTests,
@@ -15,6 +14,7 @@ import {
   useProjectionMediaCache,
   AUTO_CACHE_DELAY_MS,
 } from "./useBackgroundAutoCache";
+import { SEED_PRESENTATIONS } from "../../test/presentationFixtures";
 
 const { scheduleMediaCaching, warmPresentationFonts } = vi.hoisted(() => ({
   scheduleMediaCaching: vi.fn(),

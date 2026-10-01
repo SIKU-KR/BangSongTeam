@@ -2,8 +2,6 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 import type { Folder } from "#shared";
 import { signInAsTestUser } from "../../test/sessionFixture";
 import {
-  SEED_PRESENTATIONS,
-  SEED_USER_ID,
   __loadDocumentsForTests,
   getPresentationById,
   listPresentations,
@@ -21,6 +19,10 @@ import {
   undoMove,
 } from "./driveActions";
 import { FOLDER_COPY } from "#copy/folders";
+import {
+  SEED_PRESENTATIONS,
+  SEED_USER_ID,
+} from "../../test/presentationFixtures";
 
 const sync = vi.hoisted(() => ({
   flushPendingSync: vi.fn(async () => {}),
@@ -45,7 +47,7 @@ vi.mock("../../lib/sync", async (importOriginal) => {
   return { ...actual, ...sync };
 });
 
-const { OfflineError } = await import("../../lib/sync/presentationSync");
+const { OfflineError } = await import("../../lib/sync");
 
 const ROOT = "a00000000000000000001";
 const CHILD = "b00000000000000000002";

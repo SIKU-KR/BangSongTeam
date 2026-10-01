@@ -3,11 +3,6 @@ import { signInAsTestUser } from "../../test/sessionFixture";
 import { renderHook, act } from "@testing-library/react";
 import { DeckSchema, DEFAULT_DECK_STYLE, PresentationSchema } from "#shared";
 import {
-  SEED_PRESENTATION_IDS,
-  SEED_PRESENTATIONS,
-  SEED_USER_ID,
-} from "./mockPresentations";
-import {
   getActivePresentation,
   addDeckToPresentation,
   resetPresentationStore,
@@ -46,6 +41,11 @@ import {
   setBackgroundCatalogForTests,
 } from "../backgrounds/backgroundCatalog";
 import { TEST_SERVICE_BACKGROUNDS } from "../../test/backgroundFixture";
+import {
+  SEED_PRESENTATION_IDS,
+  SEED_PRESENTATIONS,
+  SEED_USER_ID,
+} from "../../test/presentationFixtures";
 
 describe("presentationStore (In-memory reactive presentation)", () => {
   beforeEach(() => {

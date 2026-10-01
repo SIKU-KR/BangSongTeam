@@ -2,6 +2,9 @@ import { z } from "zod";
 import { IdSchema } from "./id";
 import { DeckSchema } from "./deck";
 
+/** 프레젠테이션 제목 최대 길이. 서버 스키마와 클라이언트 입력 제한이 모두 이 값을 따른다. */
+export const MAX_PRESENTATION_TITLE_LENGTH = 100;
+
 export const PresentationItemSchema = z.object({
   id: IdSchema,
   presentationId: IdSchema,
@@ -27,7 +30,7 @@ export type PresentationAccess = z.infer<typeof PresentationAccessSchema>;
 export const PresentationSchema = z.object({
   id: IdSchema,
   userId: IdSchema,
-  title: z.string().min(1).max(100),
+  title: z.string().min(1).max(MAX_PRESENTATION_TITLE_LENGTH),
   serviceDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   items: z.array(PresentationItemSchema).default([]),
 

@@ -1,7 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import type { Folder } from "#shared";
 import { signInAsTestUser } from "../../test/sessionFixture";
-import { SEED_USER_ID } from "../presentation";
 import { closeOfflineDB, OFFLINE_DB_NAME } from "../../lib/storage";
 import {
   __resetFolderSyncForTests,
@@ -26,6 +25,7 @@ import {
   trashFolder,
 } from "./folderStore";
 import { FOLDER_COPY } from "#copy/folders";
+import { SEED_USER_ID } from "../../test/presentationFixtures";
 
 async function resetDatabase(): Promise<void> {
   closeOfflineDB();

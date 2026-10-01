@@ -3,6 +3,12 @@ import { IdSchema } from "./id";
 import { SlideSchema } from "./slide";
 import { DeckStyleSchema } from "./style";
 
+/** 곡 제목 최대 길이. 서버 스키마와 클라이언트 입력 제한이 모두 이 값을 따른다. */
+export const MAX_DECK_TITLE_LENGTH = 100;
+
+/** 곡 아티스트 최대 길이. 서버 스키마와 클라이언트 입력 제한이 모두 이 값을 따른다. */
+export const MAX_DECK_ARTIST_LENGTH = 100;
+
 export const DeckVisibilitySchema = z.enum(["private", "public"]);
 export type DeckVisibility = z.infer<typeof DeckVisibilitySchema>;
 
@@ -37,8 +43,8 @@ export const DeckSchema = z.object({
   userId: IdSchema,
   scope: DeckScopeSchema.default("library"),
   presentationId: IdSchema.nullable().optional(),
-  title: z.string().min(1).max(100),
-  artist: z.string().max(100).default(""),
+  title: z.string().min(1).max(MAX_DECK_TITLE_LENGTH),
+  artist: z.string().max(MAX_DECK_ARTIST_LENGTH).default(""),
   lyricsRaw: z.string(),
   slides: z.array(SlideSchema),
   backgroundId: IdSchema.nullable(),

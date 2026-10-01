@@ -6,13 +6,13 @@ import type { PresentationDocument } from "#shared";
 import { signOutForTests } from "../test/sessionFixture";
 import { withQueryClient } from "../test/queryClientFixture";
 import { installFakeApi, type FakeApi } from "../test/fakeApi";
-import { SEED_PRESENTATIONS } from "../features/presentation/mockPresentations";
 import {
   getPresentationById,
   resetPresentationStore,
 } from "../features/presentation/presentationStore";
 import { SharePreviewRoute } from "./SharePreviewRoute";
 import { API_ERRORS } from "#shared";
+import { SEED_PRESENTATIONS } from "../test/presentationFixtures";
 
 const OWNER = "0000000000000000owner";
 

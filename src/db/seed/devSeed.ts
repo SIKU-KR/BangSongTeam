@@ -2,6 +2,8 @@ import { eq, inArray, sql } from "drizzle-orm";
 import {
   DEFAULT_DECK_STYLE,
   DEV_USERS,
+  MAX_DECK_ARTIST_LENGTH,
+  MAX_DECK_TITLE_LENGTH,
   splitLyricsIntoSlides,
   type Deck,
   type DeckStyle,
@@ -67,7 +69,6 @@ export const SEED_LIBRARY_USER = {
 
 const [OWNER, MEMBER] = DEV_USERS;
 const SEED_USER_IDS = [SEED_LIBRARY_USER.id, ...DEV_USERS.map((u) => u.id)];
-const TITLE_MAX = 100;
 const ROWS_PER_INSERT = 5;
 const STATEMENTS_PER_BATCH = 50;
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -108,8 +109,8 @@ function toLibraryDeck(song: SeedSong, index: number, now: Date): Deck {
     userId: SEED_LIBRARY_USER.id,
     scope: "library",
     presentationId: null,
-    title: song.title.trim().slice(0, TITLE_MAX) || "제목 없음",
-    artist: (song.artist ?? "").trim().slice(0, TITLE_MAX),
+    title: song.title.trim().slice(0, MAX_DECK_TITLE_LENGTH) || "제목 없음",
+    artist: (song.artist ?? "").trim().slice(0, MAX_DECK_ARTIST_LENGTH),
     lyricsRaw: song.lyrics.trim(),
     slides: splitLyricsIntoSlides(song.lyrics),
     backgroundId: null,

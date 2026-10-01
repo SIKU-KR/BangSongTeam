@@ -17,8 +17,7 @@ import {
 } from "#components/ui/field";
 import { EDITOR_COPY } from "#copy/editor";
 import { COMMON_COPY } from "#copy/common";
-
-const MAX_FIELD_LENGTH = 100;
+import { MAX_DECK_ARTIST_LENGTH, MAX_DECK_TITLE_LENGTH } from "#shared";
 
 export interface SongInfoValues {
   title: string;
@@ -34,8 +33,7 @@ export interface SongInfoDialogProps {
 }
 
 /**
- * 곡 제목·아티스트 수정 대화 상자. 세트 곡과 보관함 곡이 함께 쓴다.
- * 길이 제한은 `DeckSchema`의 title·artist 최대 100자와 맞춘다.
+ * 곡 제목·아티스트 수정 대화 상자. 프레젠테이션 곡과 보관함 곡이 함께 쓴다.
  */
 export function SongInfoDialog({
   heading,
@@ -86,7 +84,7 @@ export function SongInfoDialog({
                 type="text"
                 data-testid="song-info-title-input"
                 value={title}
-                maxLength={MAX_FIELD_LENGTH}
+                maxLength={MAX_DECK_TITLE_LENGTH}
                 onChange={(event) => setTitle(event.target.value)}
               />
             </Field>
@@ -99,7 +97,7 @@ export function SongInfoDialog({
                 type="text"
                 data-testid="song-info-artist-input"
                 value={artist}
-                maxLength={MAX_FIELD_LENGTH}
+                maxLength={MAX_DECK_ARTIST_LENGTH}
                 onChange={(event) => setArtist(event.target.value)}
               />
               {notice && <FieldDescription>{notice}</FieldDescription>}

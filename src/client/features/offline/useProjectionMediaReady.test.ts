@@ -1,7 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { renderHook, waitFor, act } from "@testing-library/react";
 import { MEDIA_CACHE_NAME } from "#shared";
-import { SEED_PRESENTATIONS } from "../presentation";
 import {
   resetBackgroundCatalogForTests,
   setBackgroundCatalogForTests,
@@ -16,6 +15,7 @@ import {
   PASSIVE_RECHECK_MS,
   useProjectionMediaReady,
 } from "./useProjectionMediaReady";
+import { SEED_PRESENTATIONS } from "../../test/presentationFixtures";
 
 const [FIRST, SECOND] = TEST_SERVICE_BACKGROUNDS;
 const PRESENTATION = withBackgrounds(SEED_PRESENTATIONS[0], [

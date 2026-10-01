@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from "react";
 import type { Deck, Presentation, PresentationItem, Slide } from "#shared";
 import {
+  MAX_PRESENTATION_TITLE_LENGTH,
   createId,
   createSlideId,
   mergeSlideLines,
@@ -22,6 +23,22 @@ import {
 import { getServiceBackgrounds } from "../backgrounds/backgroundCatalog";
 import { PRESENTATION_COPY } from "#copy/presentation";
 import { COMMON_COPY } from "#copy/common";
+import {
+  breakHistoryCoalescing,
+  canRedoDocument,
+  canUndoDocument,
+  clearHistory,
+  recordHistory,
+  takeRedo,
+  takeUndo,
+} from "./presentationHistory";
+import {
+  buildPresentationCopy,
+  cloneDeck,
+  forkDeckIntoPresentation,
+  repairDuplicateDeckIds,
+  withCurrentPlacement,
+} from "./presentationDocument";
 
 interface PresentationStoreState {
   byId: Record<string, Presentation>;
@@ -51,12 +68,21 @@ let state: PresentationStoreState = createEmptyState();
 let listSnapshot: Presentation[] = buildListSnapshot(state);
 const listeners = new Set<() => void>();
 
+function commit(next: PresentationStoreState): void {
+  state = next;
+  listSnapshot = buildListSnapshot(state);
+}
+
+function notifyListeners(): void {
+  for (const listener of listeners) listener();
+}
+
 function readActive(): Presentation {
   return state.byId[state.activeId] ?? EMPTY_PRESENTATION;
 }
 
 /**
- * 링크로 공유받은 세트(`access`)는 보기 전용이다. 편집 함수는 모두
+ * 링크로 공유받은 프레젠테이션(`access`)은 보기 전용이다. 편집 함수는 모두
  * `writeActive`·`pushHistory`·`updateDocumentById`를 거치므로 여기서 막으면
  * 화면에서 버튼을 빠뜨려도 문서가 바뀌지 않는다.
  */
@@ -66,112 +92,41 @@ export function canEditPresentation(doc: Presentation): boolean {
 
 function writeActive(next: Presentation): void {
   if (!canEditPresentation(readActive())) return;
-  state = {
+  commit({
     ...state,
     byId: { ...state.byId, [state.activeId]: next },
-  };
-  listSnapshot = buildListSnapshot(state);
-}
-
-/**
- * 되돌리기 기록은 문서 객체의 참조를 그대로 보관한다. 스토어의 모든 편집이 바뀐
- * 경로만 새 객체로 만드는 불변 갱신이라, 기록끼리 바뀌지 않은 곡·슬라이드를 공유해
- * 직렬화 비용이 없고, 되돌린 뒤에도 바뀌지 않은 곡의 참조가 유지되어 썸네일·넘침
- * 분석 캐시가 그대로 맞는다. 스토어 밖에서 문서 객체를 직접 고치면 기록이 함께 바뀐다.
- */
-interface DocumentHistory {
-  undo: Presentation[];
-  redo: Presentation[];
-}
-
-const histories = new Map<string, DocumentHistory>();
-const MAX_HISTORY = 100;
-const COALESCE_WINDOW_MS = 1000;
-
-let lastPush: { docId: string; key: string; at: number } | null = null;
-
-function historyFor(id: string): DocumentHistory {
-  let history = histories.get(id);
-  if (!history) {
-    history = { undo: [], redo: [] };
-    histories.set(id, history);
-  }
-  return history;
+  });
 }
 
 function pushHistory(coalesceKey?: string): void {
-  if (!canEditPresentation(readActive())) return;
-  const now = Date.now();
-  if (
-    coalesceKey &&
-    lastPush &&
-    lastPush.docId === state.activeId &&
-    lastPush.key === coalesceKey &&
-    now - lastPush.at < COALESCE_WINDOW_MS
-  ) {
-    lastPush.at = now;
-    return;
-  }
-  lastPush = coalesceKey
-    ? { docId: state.activeId, key: coalesceKey, at: now }
-    : null;
-
-  const history = historyFor(state.activeId);
-  history.undo.push(readActive());
-  if (history.undo.length > MAX_HISTORY) {
-    history.undo.shift();
-  }
-  history.redo.length = 0;
+  const active = readActive();
+  if (!canEditPresentation(active)) return;
+  recordHistory(state.activeId, active, coalesceKey);
 }
 
-/**
- * 되돌리기 묶음을 끊는다. 슬라이더를 끌거나 가사를 입력하는 동안의 연속 변경은
- * 같은 키로 1초 안에 들어오면 한 단계로 묶이는데, 편집 시작·종료처럼 사용자가
- * 한 동작을 마쳤다고 볼 수 있는 시점에 호출해 다음 변경을 새 단계로 만든다.
- */
-export function breakHistoryCoalescing(): void {
-  lastPush = null;
-}
+export { breakHistoryCoalescing };
 
 export function canUndo(): boolean {
-  return (histories.get(state.activeId)?.undo.length ?? 0) > 0;
+  return canUndoDocument(state.activeId);
 }
 
 export function canRedo(): boolean {
-  return (histories.get(state.activeId)?.redo.length ?? 0) > 0;
-}
-
-function withCurrentPlacement(
-  snapshot: Presentation,
-  current: Presentation,
-): Presentation {
-  const next: Presentation = { ...snapshot };
-  delete next.folderId;
-  delete next.trashedAt;
-  if (current.folderId !== undefined) next.folderId = current.folderId;
-  if (current.trashedAt !== undefined) next.trashedAt = current.trashedAt;
-  return next;
+  return canRedoDocument(state.activeId);
 }
 
 export function undo(): boolean {
-  lastPush = null;
-  const history = historyFor(state.activeId);
-  const previous = history.undo.pop();
-  if (!previous) return false;
   const current = readActive();
-  history.redo.push(current);
+  const previous = takeUndo(state.activeId, current);
+  if (!previous) return false;
   writeActive(withCurrentPlacement(previous, current));
   emitChange();
   return true;
 }
 
 export function redo(): boolean {
-  lastPush = null;
-  const history = historyFor(state.activeId);
-  const next = history.redo.pop();
-  if (!next) return false;
   const current = readActive();
-  history.undo.push(current);
+  const next = takeRedo(state.activeId, current);
+  if (!next) return false;
   writeActive(withCurrentPlacement(next, current));
   emitChange();
   return true;
@@ -230,45 +185,6 @@ export async function flushPendingWrites(): Promise<void> {
   await inFlight;
 }
 
-function repairDuplicateDeckIds(documents: Presentation[]): {
-  documents: Presentation[];
-  repairedIds: string[];
-} {
-  const repairedIds: string[] = [];
-
-  const repaired = documents.map((doc) => {
-    const seen = new Set<string>();
-    let changed = false;
-
-    const items = doc.items.map((item) => {
-      const deck = item.deck;
-      if (!deck) return item;
-
-      if (!seen.has(deck.id)) {
-        seen.add(deck.id);
-        if (item.deckId === deck.id) return item;
-        changed = true;
-        return { ...item, deckId: deck.id };
-      }
-
-      changed = true;
-      const newId = createId();
-      seen.add(newId);
-      return {
-        ...item,
-        deckId: newId,
-        deck: { ...deck, id: newId, forkedFrom: deck.forkedFrom ?? deck.id },
-      };
-    });
-
-    if (!changed) return doc;
-    repairedIds.push(doc.id);
-    return { ...doc, items };
-  });
-
-  return { documents: repaired, repairedIds };
-}
-
 export async function hydrateFromStorage(): Promise<void> {
   persistenceEnabled = false;
   const userId = getCurrentUserId();
@@ -287,14 +203,12 @@ export async function hydrateFromStorage(): Promise<void> {
     );
     const { documents, repairedIds } = repairDuplicateDeckIds(sorted);
 
-    state = {
+    commit({
       byId: Object.fromEntries(documents.map((doc) => [doc.id, doc])),
       order: documents.map((doc) => doc.id),
       activeId: documents[0]?.id ?? "",
-    };
-    listSnapshot = buildListSnapshot(state);
-    histories.clear();
-    lastPush = null;
+    });
+    clearHistory();
     emitChange();
 
     persistenceEnabled = true;
@@ -319,7 +233,7 @@ export async function removePersistedPresentation(id: string): Promise<void> {
   }
 }
 
-export function resetPersistenceForTests(): void {
+function resetPersistenceForTests(): void {
   persistenceEnabled = false;
   pendingIds = new Set();
   if (debounceTimer) {
@@ -330,20 +244,19 @@ export function resetPersistenceForTests(): void {
 }
 
 /**
- * 활성 문서는 가능하면 유지한다. 동기화가 돌았다고 사용자가 보던 세트가
+ * 활성 문서는 가능하면 유지한다. 동기화가 돌았다고 사용자가 보던 프레젠테이션이
  * 바뀌면 편집 중에 화면이 튄다.
  */
 export function applyServerDocuments(documents: Presentation[]): void {
   const previousActive = state.activeId;
-  state = {
+  commit({
     byId: Object.fromEntries(documents.map((doc) => [doc.id, doc])),
     order: documents.map((doc) => doc.id),
     activeId: documents.some((doc) => doc.id === previousActive)
       ? previousActive
       : (documents[0]?.id ?? ""),
-  };
-  listSnapshot = buildListSnapshot(state);
-  for (const listener of listeners) listener();
+  });
+  notifyListeners();
 }
 
 /**
@@ -353,53 +266,69 @@ export function __loadDocumentsForTests(documents: Presentation[]): void {
   const copies = documents.map(
     (doc) => JSON.parse(JSON.stringify(doc)) as Presentation,
   );
-  state = {
+  commit({
     byId: Object.fromEntries(copies.map((doc) => [doc.id, doc])),
     order: copies.map((doc) => doc.id),
     activeId: copies[0]?.id ?? "",
-  };
-  listSnapshot = buildListSnapshot(state);
-  histories.clear();
-  lastPush = null;
-  for (const listener of listeners) listener();
+  });
+  clearHistory();
+  notifyListeners();
 }
 
 function emitChange(): void {
-  schedulePersist();
-  scheduleServerPush();
-  for (const listener of listeners) {
-    listener();
+  const active = state.byId[state.activeId];
+  if (active) {
+    notifyDocument(active);
+  } else {
+    notifyListeners();
   }
 }
 
-function scheduleServerPush(): void {
-  const active = state.byId[state.activeId];
-  if (active) scheduleDocumentPush(active);
+function notifyDocument(doc: Presentation): void {
+  schedulePersist(doc.id);
+  scheduleDocumentPush(doc);
+  notifyListeners();
 }
 
 export function getActivePresentation(): Presentation {
   return readActive();
 }
 
-function cloneDeckForPresentation(deck: Deck, presentationId: string): Deck {
-  const now = new Date().toISOString();
-  return {
-    ...(JSON.parse(JSON.stringify(deck)) as Deck),
-    id: createId(),
-    userId: getCurrentUserId() ?? deck.userId,
-    scope: "presentation",
-    presentationId,
-    forkedFrom: deck.scope === "library" ? deck.id : (deck.forkedFrom ?? null),
-    visibility: "private",
-    forkCount: 0,
-    publishedAt: null,
-    createdAt: now,
+function reindexOrder<T extends { order: number }>(list: readonly T[]): T[] {
+  return list.map((entry, idx) => ({ ...entry, order: idx }));
+}
+
+function writeActiveItems(
+  items: PresentationItem[],
+  now: string = new Date().toISOString(),
+): void {
+  writeActive({
+    ...readActive(),
+    items,
     updatedAt: now,
+  });
+  emitChange();
+}
+
+function readSongSlides(songIndex: number): Slide[] | undefined {
+  return readActive().items[songIndex]?.deck?.slides;
+}
+
+function writeSongDeck(songIndex: number, changes: Partial<Deck>): void {
+  const items = [...readActive().items];
+  const item = items[songIndex];
+  if (!item || !item.deck) return;
+
+  const now = new Date().toISOString();
+  items[songIndex] = {
+    ...item,
+    deck: { ...item.deck, ...changes, updatedAt: now },
   };
+  writeActiveItems(items, now);
 }
 
 /**
- * 덱은 항상 이 세트 전용 복제본으로 들어간다 (Clone-on-Add).
+ * 덱은 항상 이 프레젠테이션 전용 복제본으로 들어간다 (Clone-on-Add).
  *
  * 배경이 없는 곡에는 기본 제공 배경을 곡 순서대로 돌려 입힌다. 곡 전환을 배경
  * 교체로 구분하기 때문이다 (제목 슬라이드가 없다). 사용자가 단색을 고른 곡과,
@@ -416,8 +345,14 @@ export function addDeckToPresentation(deck: Deck): PresentationItem {
       ? serviceBackgrounds[currentCount % serviceBackgrounds.length].id
       : null);
 
+  const now = new Date().toISOString();
   const resolvedDeck: Deck = {
-    ...cloneDeckForPresentation(deck, active.id),
+    ...forkDeckIntoPresentation(
+      deck,
+      active.id,
+      getCurrentUserId() ?? deck.userId,
+      now,
+    ),
     backgroundId: assignedBackgroundId,
   };
 
@@ -429,22 +364,14 @@ export function addDeckToPresentation(deck: Deck): PresentationItem {
     deck: resolvedDeck,
   };
 
-  writeActive({
-    ...readActive(),
-    items: [...readActive().items, newItem],
-    updatedAt: new Date().toISOString(),
-  });
-
-  emitChange();
+  writeActiveItems([...readActive().items, newItem], now);
   return newItem;
 }
 
 export function resetPresentationStore(): void {
   resetPersistenceForTests();
-  histories.clear();
-  lastPush = null;
-  state = createEmptyState();
-  listSnapshot = buildListSnapshot(state);
+  clearHistory();
+  commit(createEmptyState());
   emitChange();
 }
 
@@ -476,12 +403,11 @@ export function createNewPresentation(
     createdAt: now,
     updatedAt: now,
   };
-  state = {
+  commit({
     byId: { ...state.byId, [created.id]: created },
     order: [...state.order, created.id],
     activeId: created.id,
-  };
-  listSnapshot = buildListSnapshot(state);
+  });
   emitChange();
   return created;
 }
@@ -507,9 +433,8 @@ export function getActivePresentationId(): string {
 export function openPresentation(id: string): boolean {
   if (!state.byId[id]) return false;
   if (state.activeId === id) return true;
-  lastPush = null;
-  state = { ...state, activeId: id };
-  listSnapshot = buildListSnapshot(state);
+  breakHistoryCoalescing();
+  commit({ ...state, activeId: id });
   emitChange();
   return true;
 }
@@ -524,14 +449,14 @@ export function updatePresentationTitle(title: string): void {
   emitChange();
 }
 
-/** 연속 입력을 되돌리기 한 단계로 묶을 때 쓰는 키 (`breakHistoryCoalescing` 참고) */
-export interface HistoryOptions {
+interface HistoryOptions {
   coalesceKey?: string;
 }
 
 /**
  * 곡 서식을 바꾼다. 서식은 곡 단위라 곡의 모든 슬라이드에 적용된다. 값이 그대로면
- * 되돌리기 기록도 남기지 않는다.
+ * 되돌리기 기록도 남기지 않는다. `coalesceKey`가 같은 연속 변경은 되돌리기 한
+ * 단계로 묶인다 (`breakHistoryCoalescing` 참고).
  */
 export function updateSongStyle(
   songIndex: number,
@@ -552,27 +477,12 @@ export function updateSongStyle(
   if (JSON.stringify(style) === JSON.stringify(item.deck.style)) return;
 
   pushHistory(options.coalesceKey);
-
-  const updatedDeck: Deck = {
-    ...item.deck,
-    style,
-    updatedAt: new Date().toISOString(),
-  };
-
-  const updatedItems = [...readActive().items];
-  updatedItems[songIndex] = { ...item, deck: updatedDeck };
-
-  writeActive({
-    ...readActive(),
-    items: updatedItems,
-    updatedAt: new Date().toISOString(),
-  });
-  emitChange();
+  writeSongDeck(songIndex, { style });
 }
 
 /**
- * 세트 곡의 제목·아티스트만 바꾼다. 세트 곡은 보관함 원본의 복제본이라 원본은
- * 그대로 두며, 원본은 곡 추가 창의 내 보관함에서 따로 고친다.
+ * 프레젠테이션 곡의 제목·아티스트만 바꾼다. 프레젠테이션 곡은 보관함 원본의
+ * 복제본이라 원본은 그대로 두며, 원본은 곡 추가 창의 내 보관함에서 따로 고친다.
  */
 export function updateSongInfo(
   songIndex: number,
@@ -585,23 +495,7 @@ export function updateSongInfo(
   }
 
   pushHistory();
-
-  const updatedDeck: Deck = {
-    ...item.deck,
-    title: info.title,
-    artist: info.artist,
-    updatedAt: new Date().toISOString(),
-  };
-
-  const updatedItems = [...readActive().items];
-  updatedItems[songIndex] = { ...item, deck: updatedDeck };
-
-  writeActive({
-    ...readActive(),
-    items: updatedItems,
-    updatedAt: new Date().toISOString(),
-  });
-  emitChange();
+  writeSongDeck(songIndex, { title: info.title, artist: info.artist });
 }
 
 /** 곡 배경으로 고를 수 있는 것: 배경 갤러리의 영상·이미지, 또는 단색 */
@@ -616,43 +510,31 @@ export function updateSongBackground(
   if (!item || !item.deck) return;
 
   pushHistory();
-
-  const updatedDeck: Deck =
+  writeSongDeck(
+    songIndex,
     "color" in choice
       ? {
-          ...item.deck,
           backgroundId: null,
           style: { ...item.deck.style, backgroundColor: choice.color },
-          updatedAt: new Date().toISOString(),
         }
-      : {
-          ...item.deck,
-          backgroundId: choice.backgroundId,
-          updatedAt: new Date().toISOString(),
-        };
-
-  const updatedItems = [...readActive().items];
-  updatedItems[songIndex] = { ...item, deck: updatedDeck };
-
-  writeActive({
-    ...readActive(),
-    items: updatedItems,
-    updatedAt: new Date().toISOString(),
-  });
-  emitChange();
+      : { backgroundId: choice.backgroundId },
+  );
 }
 
-/** 슬라이드 가사를 바꾼다. 값이 그대로면 되돌리기 기록도 남기지 않는다. */
+/**
+ * 슬라이드 가사를 바꾼다. 값이 그대로면 되돌리기 기록도 남기지 않는다.
+ * `coalesceKey`가 같은 연속 입력은 되돌리기 한 단계로 묶인다.
+ */
 export function updateSlideLines(
   songIndex: number,
   slideIndex: number,
   lines: string[],
   options: HistoryOptions = {},
 ): void {
-  const item = readActive().items[songIndex];
-  if (!item || !item.deck) return;
+  const current = readSongSlides(songIndex);
+  if (!current) return;
 
-  const slides = [...item.deck.slides];
+  const slides = [...current];
   if (!slides[slideIndex]) return;
   if (JSON.stringify(slides[slideIndex].lines) === JSON.stringify(lines)) {
     return;
@@ -664,22 +546,7 @@ export function updateSlideLines(
     ...slides[slideIndex],
     lines,
   };
-
-  const updatedDeck: Deck = {
-    ...item.deck,
-    slides,
-    updatedAt: new Date().toISOString(),
-  };
-
-  const updatedItems = [...readActive().items];
-  updatedItems[songIndex] = { ...item, deck: updatedDeck };
-
-  writeActive({
-    ...readActive(),
-    items: updatedItems,
-    updatedAt: new Date().toISOString(),
-  });
-  emitChange();
+  writeSongDeck(songIndex, { slides });
 }
 
 export function addSlideToSong(
@@ -687,39 +554,19 @@ export function addSlideToSong(
   lines: string[] = [PRESENTATION_COPY.newSlidePlaceholder],
   afterIndex?: number,
 ): void {
-  const item = readActive().items[songIndex];
-  if (!item || !item.deck) return;
+  const current = readSongSlides(songIndex);
+  if (!current) return;
 
   pushHistory();
 
-  const slides = [...item.deck.slides];
+  const slides = [...current];
   const insertAt = afterIndex !== undefined ? afterIndex + 1 : slides.length;
-
-  const newSlide = {
+  slides.splice(insertAt, 0, {
     id: createSlideId(),
     order: insertAt,
     lines,
-  };
-
-  slides.splice(insertAt, 0, newSlide);
-
-  const reorderedSlides = slides.map((s, idx) => ({ ...s, order: idx }));
-
-  const updatedDeck: Deck = {
-    ...item.deck,
-    slides: reorderedSlides,
-    updatedAt: new Date().toISOString(),
-  };
-
-  const updatedItems = [...readActive().items];
-  updatedItems[songIndex] = { ...item, deck: updatedDeck };
-
-  writeActive({
-    ...readActive(),
-    items: updatedItems,
-    updatedAt: new Date().toISOString(),
   });
-  emitChange();
+  replaceSongSlides(songIndex, slides);
 }
 
 /**
@@ -730,7 +577,7 @@ export function removeSlides(
   songIndex: number,
   slideIndexes: readonly number[],
 ): boolean {
-  const slides = readActive().items[songIndex]?.deck?.slides;
+  const slides = readSongSlides(songIndex);
   if (!slides) return false;
   const targets = new Set(
     slideIndexes.filter((index) => index >= 0 && index < slides.length),
@@ -755,7 +602,7 @@ export function moveSlides(
   slideIndexes: readonly number[],
   insertBefore: number,
 ): void {
-  const slides = readActive().items[songIndex]?.deck?.slides;
+  const slides = readSongSlides(songIndex);
   if (!slides) return;
   const targets = new Set(
     slideIndexes.filter((index) => index >= 0 && index < slides.length),
@@ -779,7 +626,7 @@ export function insertSlides(
   atIndex: number,
   linesList: readonly string[][],
 ): void {
-  const slides = readActive().items[songIndex]?.deck?.slides;
+  const slides = readSongSlides(songIndex);
   if (!slides || linesList.length === 0) return;
 
   pushHistory();
@@ -801,7 +648,7 @@ export function duplicateSlides(
   songIndex: number,
   slideIndexes: readonly number[],
 ): void {
-  const slides = readActive().items[songIndex]?.deck?.slides;
+  const slides = readSongSlides(songIndex);
   if (!slides) return;
   const sorted = [...new Set(slideIndexes)]
     .filter((index) => index >= 0 && index < slides.length)
@@ -816,24 +663,7 @@ export function duplicateSlides(
 }
 
 function replaceSongSlides(songIndex: number, slides: Slide[]): void {
-  const item = readActive().items[songIndex];
-  if (!item || !item.deck) return;
-
-  const updatedDeck: Deck = {
-    ...item.deck,
-    slides: slides.map((s, idx) => ({ ...s, order: idx })),
-    updatedAt: new Date().toISOString(),
-  };
-
-  const updatedItems = [...readActive().items];
-  updatedItems[songIndex] = { ...item, deck: updatedDeck };
-
-  writeActive({
-    ...readActive(),
-    items: updatedItems,
-    updatedAt: new Date().toISOString(),
-  });
-  emitChange();
+  writeSongDeck(songIndex, { slides: reindexOrder(slides) });
 }
 
 /**
@@ -846,7 +676,7 @@ export function splitSlideAtCursor(
   slideIndex: number,
   offset: number,
 ): boolean {
-  const slides = readActive().items[songIndex]?.deck?.slides;
+  const slides = readSongSlides(songIndex);
   const target = slides?.[slideIndex];
   if (!slides || !target) return false;
 
@@ -874,7 +704,7 @@ export function mergeSlideWithNext(
   songIndex: number,
   slideIndex: number,
 ): boolean {
-  const slides = readActive().items[songIndex]?.deck?.slides;
+  const slides = readSongSlides(songIndex);
   const target = slides?.[slideIndex];
   const following = slides?.[slideIndex + 1];
   if (!slides || !target || !following) return false;
@@ -906,37 +736,16 @@ export function reorderSongs(fromIndex: number, toIndex: number): void {
   const items = [...readActive().items];
   const [movedItem] = items.splice(fromIndex, 1);
   items.splice(toIndex, 0, movedItem);
-
-  const reorderedItems = items.map((item, idx) => ({
-    ...item,
-    order: idx,
-  }));
-
-  writeActive({
-    ...readActive(),
-    items: reorderedItems,
-    updatedAt: new Date().toISOString(),
-  });
-  emitChange();
+  writeActiveItems(reindexOrder(items));
 }
 
 export function removeSongFromPresentation(songIndex: number): void {
   if (songIndex < 0 || songIndex >= readActive().items.length) return;
 
   pushHistory();
-
-  const filtered = readActive().items.filter((_, idx) => idx !== songIndex);
-  const reorderedItems = filtered.map((item, idx) => ({
-    ...item,
-    order: idx,
-  }));
-
-  writeActive({
-    ...readActive(),
-    items: reorderedItems,
-    updatedAt: new Date().toISOString(),
-  });
-  emitChange();
+  writeActiveItems(
+    reindexOrder(readActive().items.filter((_, idx) => idx !== songIndex)),
+  );
 }
 
 export function duplicateSongInPresentation(songIndex: number): Deck | null {
@@ -945,13 +754,14 @@ export function duplicateSongInPresentation(songIndex: number): Deck | null {
 
   pushHistory();
 
+  const now = new Date().toISOString();
   const originalDeck = item.deck;
   const clonedDeck: Deck = {
-    ...JSON.parse(JSON.stringify(originalDeck)),
+    ...cloneDeck(originalDeck),
     id: createId(),
     title: `${originalDeck.title}${COMMON_COPY.copySuffix}`,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
+    createdAt: now,
+    updatedAt: now,
   };
 
   const newItem: PresentationItem = {
@@ -962,20 +772,11 @@ export function duplicateSongInPresentation(songIndex: number): Deck | null {
     deck: clonedDeck,
   };
 
-  const updatedItems = [...readActive().items];
-  updatedItems.splice(songIndex + 1, 0, newItem);
-  const reorderedItems = updatedItems.map((it, idx) => ({ ...it, order: idx }));
-
-  writeActive({
-    ...readActive(),
-    items: reorderedItems,
-    updatedAt: new Date().toISOString(),
-  });
-  emitChange();
+  const items = [...readActive().items];
+  items.splice(songIndex + 1, 0, newItem);
+  writeActiveItems(reindexOrder(items), now);
   return clonedDeck;
 }
-
-const MAX_TITLE_LENGTH = 100;
 
 function updateDocumentById(
   id: string,
@@ -984,16 +785,9 @@ function updateDocumentById(
   const current = state.byId[id];
   if (!current || !canEditPresentation(current)) return undefined;
   const next = update(current);
-  state = { ...state, byId: { ...state.byId, [id]: next } };
-  listSnapshot = buildListSnapshot(state);
+  commit({ ...state, byId: { ...state.byId, [id]: next } });
   notifyDocument(next);
   return next;
-}
-
-function notifyDocument(doc: Presentation): void {
-  schedulePersist(doc.id);
-  scheduleDocumentPush(doc);
-  for (const listener of listeners) listener();
 }
 
 /** `folderId`가 `null`이면 루트로 옮긴다. */
@@ -1006,11 +800,11 @@ export function movePresentation(id: string, folderId: string | null): void {
 }
 
 /**
- * 빈 이름은 무시하고 100자로 자른다. 편집기 헤더의 제목 수정은 편집 기록을
+ * 빈 이름은 무시하고 최대 길이로 자른다. 편집기 헤더의 제목 수정은 편집 기록을
  * 남기는 `updatePresentationTitle`을 쓴다.
  */
 export function renamePresentation(id: string, title: string): void {
-  const trimmed = title.trim().slice(0, MAX_TITLE_LENGTH);
+  const trimmed = title.trim().slice(0, MAX_PRESENTATION_TITLE_LENGTH);
   if (!trimmed) return;
   updateDocumentById(id, (doc) =>
     doc.title === trimmed
@@ -1048,10 +842,7 @@ export function restorePresentation(id: string, folderId: string | null): void {
 /**
  * 사본 만들기. "제목 (사본)"으로 `folderId`(생략하면 원본과 같은 폴더)에 만든다.
  *
- * 항목·덱 id를 모두 새로 발급한다. 덱 id가 원본과 같으면 서버의 `decks` 기본키를
- * 위반해 사본이 영영 저장되지 않는다 (Clone-on-Add와 같은 이유로 `createId()`).
- *
- * 공유받은 세트의 사본은 내 소유의 독립 문서다. 원본의 폴더는 소유자의
+ * 공유받은 프레젠테이션의 사본은 내 소유의 독립 문서다. 원본의 폴더는 소유자의
  * 드라이브라 쓰지 않고, 위치를 따로 주지 않으면 내 드라이브 맨 위에 둔다.
  */
 export function duplicatePresentation(
@@ -1062,59 +853,28 @@ export function duplicatePresentation(
   if (!source) return null;
 
   const shared = source.access !== undefined;
-  const userId = shared ? (getCurrentUserId() ?? source.userId) : source.userId;
-  const now = new Date().toISOString();
-  const newId = createId();
-  const items = source.items.map((item) => {
-    const deckId = createId();
-    return {
-      ...item,
-      id: createId(),
-      presentationId: newId,
-      deckId,
-      deck: item.deck
-        ? {
-            ...(JSON.parse(JSON.stringify(item.deck)) as Deck),
-            id: deckId,
-            userId,
-            presentationId: newId,
-            createdAt: now,
-            updatedAt: now,
-          }
-        : undefined,
-    };
-  });
-
-  const copy: Presentation = {
-    ...source,
-    id: newId,
-    userId,
-    title: `${source.title.slice(0, MAX_TITLE_LENGTH - COMMON_COPY.copySuffix.length)}${COMMON_COPY.copySuffix}`,
-    items,
+  const copy = buildPresentationCopy(source, {
+    userId: shared ? (getCurrentUserId() ?? source.userId) : source.userId,
     folderId:
       folderId !== undefined
         ? folderId
         : shared
           ? null
           : (source.folderId ?? null),
-    trashedAt: null,
-    createdAt: now,
-    updatedAt: now,
-  };
-  delete copy.access;
+    now: new Date().toISOString(),
+  });
 
-  state = {
+  commit({
     ...state,
-    byId: { ...state.byId, [newId]: copy },
-    order: [...state.order, newId],
-  };
-  listSnapshot = buildListSnapshot(state);
+    byId: { ...state.byId, [copy.id]: copy },
+    order: [...state.order, copy.id],
+  });
   notifyDocument(copy);
   return copy;
 }
 
 /**
- * 공유받은 세트를 서버본으로 넣거나 바꾼다 (링크로 들어옴·최신본 받기).
+ * 공유받은 프레젠테이션을 서버본으로 넣거나 바꾼다 (링크로 들어옴·최신본 받기).
  * 보기 전용이라 다시 push하지 않는다.
  */
 export function replaceWithServerDocument(doc: Presentation): void {
@@ -1123,11 +883,11 @@ export function replaceWithServerDocument(doc: Presentation): void {
 }
 
 /**
- * 로그인 없이 링크로 보는 세트를 메모리에만 넣는다.
+ * 로그인 없이 링크로 보는 프레젠테이션을 메모리에만 넣는다.
  *
  * 저장소에 쓰지 않는다. 로그아웃 뒤에는 저장이 켜져 있을 수 있는데, 그대로
  * 두면 소유자 id가 달린 보기 전용 문서가 남아 소유자가 이 브라우저에서
- * 로그인할 때 자기 세트를 보기 전용으로 읽게 된다.
+ * 로그인할 때 자기 프레젠테이션을 보기 전용으로 읽게 된다.
  */
 export function showSharedPreview(doc: Presentation): void {
   putSharedDocument(doc);
@@ -1135,13 +895,12 @@ export function showSharedPreview(doc: Presentation): void {
 
 function putSharedDocument(doc: Presentation): void {
   const exists = Boolean(state.byId[doc.id]);
-  state = {
+  commit({
     ...state,
     byId: { ...state.byId, [doc.id]: doc },
     order: exists ? state.order : [...state.order, doc.id],
-  };
-  listSnapshot = buildListSnapshot(state);
-  for (const listener of listeners) listener();
+  });
+  notifyListeners();
 }
 
 /**
@@ -1159,18 +918,17 @@ export async function removePresentationsLocally(
   const byId = { ...state.byId };
   for (const id of removed) {
     delete byId[id];
-    histories.delete(id);
+    clearHistory(id);
     pendingIds.delete(id);
     cancelDocumentPush(id);
   }
   const order = state.order.filter((id) => !removed.has(id));
-  state = {
+  commit({
     byId,
     order,
     activeId: removed.has(state.activeId) ? (order[0] ?? "") : state.activeId,
-  };
-  listSnapshot = buildListSnapshot(state);
-  for (const listener of listeners) listener();
+  });
+  notifyListeners();
 
   for (const id of removed) {
     await removePersistedPresentation(id);
