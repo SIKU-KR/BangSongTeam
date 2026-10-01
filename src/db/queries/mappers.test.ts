@@ -3,6 +3,7 @@ import {
   DEFAULT_DECK_STYLE,
   DeckSchema,
   PresentationDocumentSchema,
+  toPresentationChanges,
   type Deck as SharedDeck,
   type PresentationDocument,
 } from "#shared";
@@ -10,7 +11,7 @@ import {
   toSharedDeck,
   toDeckRow,
   toPresentationDocument,
-  fromPresentationDocument,
+  fromPresentationChanges,
 } from "./mappers";
 
 const USER_ID = "00000000x000000000001";
@@ -169,7 +170,9 @@ describe("행 ↔ DTO 매퍼", () => {
   describe("프레젠테이션 문서", () => {
     it("문서를 행으로 분해했다가 되조립해도 같다", () => {
       const doc = makeDocument();
-      const { presentation, items, decks } = fromPresentationDocument(doc);
+      const { presentation, items, decks } = fromPresentationChanges(
+        toPresentationChanges(doc),
+      );
       const restored = toPresentationDocument(
         presentation,
         items.map((item, i) => ({ item, deck: decks[i] })),
@@ -183,7 +186,9 @@ describe("행 ↔ DTO 매퍼", () => {
         folderId: "f00000000000000000001",
         trashedAt: "2026-09-24T01:02:03.456Z",
       };
-      const { presentation, items, decks } = fromPresentationDocument(doc);
+      const { presentation, items, decks } = fromPresentationChanges(
+        toPresentationChanges(doc),
+      );
       const restored = toPresentationDocument(
         presentation,
         items.map((item, i) => ({ item, deck: decks[i] })),
@@ -192,7 +197,9 @@ describe("행 ↔ DTO 매퍼", () => {
     });
 
     it("드라이브 필드가 없으면 행에도 넣지 않는다 (업서트가 기존 값을 유지)", () => {
-      const { presentation } = fromPresentationDocument(makeDocument());
+      const { presentation } = fromPresentationChanges(
+        toPresentationChanges(makeDocument()),
+      );
       expect("folderId" in presentation).toBe(false);
       expect("trashedAt" in presentation).toBe(false);
     });
@@ -200,7 +207,7 @@ describe("행 ↔ DTO 매퍼", () => {
     it("분해 시 항목과 덱에 프레젠테이션 소유자를 강제한다", () => {
       const doc = makeDocument();
       doc.userId = "999999999999999999999";
-      const { decks } = fromPresentationDocument(doc);
+      const { decks } = fromPresentationChanges(toPresentationChanges(doc));
       expect(decks[0].userId).toBe("999999999999999999999");
     });
 
@@ -209,7 +216,7 @@ describe("행 ↔ DTO 매퍼", () => {
       doc.items[0].deck.scope = "library";
       doc.items[0].deck.presentationId = null;
 
-      const { decks } = fromPresentationDocument(doc);
+      const { decks } = fromPresentationChanges(toPresentationChanges(doc));
       expect(decks[0].scope).toBe("presentation");
       expect(decks[0].presentationId).toBe(PRESENTATION_ID);
     });
@@ -224,7 +231,7 @@ describe("행 ↔ DTO 매퍼", () => {
         forkedFromAuthorName: "김찬양",
       });
 
-      const { decks } = fromPresentationDocument(doc);
+      const { decks } = fromPresentationChanges(toPresentationChanges(doc));
       expect(decks[0].visibility).toBe("private");
       expect(decks[0].forkCount).toBe(0);
       expect(decks[0].publishedAt).toBeNull();
@@ -243,7 +250,7 @@ describe("행 ↔ DTO 매퍼", () => {
       };
       doc.items = [second, doc.items[0]];
 
-      const { items } = fromPresentationDocument(doc);
+      const { items } = fromPresentationChanges(toPresentationChanges(doc));
       expect(items.map((i) => i.order)).toEqual([0, 1]);
       expect(items[0].deckId).toBe(DECK_ID);
     });

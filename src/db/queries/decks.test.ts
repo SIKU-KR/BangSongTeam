@@ -1,13 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { eq } from "drizzle-orm";
 import { createTestDb } from "../test-utils";
-import {
-  getMyLibraryDecks,
-  getByIdScoped,
-  getPublicById,
-  upsertDeck,
-  deleteDeckScoped,
-} from "./decks";
+import { getMyLibraryDecks, upsertDeck, deleteDeckScoped } from "./decks";
 import { user, decks } from "../schema";
 import { DEFAULT_DECK_STYLE, DeckSchema, type Deck } from "#shared";
 import { toSharedDeck } from "./mappers";
@@ -77,86 +71,6 @@ describe("D1 Scoped Deck Queries", () => {
       expect(userADecks).toHaveLength(1);
       expect(userADecks[0].id).toBe("d1");
       expect(userADecks[0].scope).toBe("library");
-    });
-  });
-
-  describe("getByIdScoped", () => {
-    it("should return deck only when userId matches", async () => {
-      await db.insert(decks).values({
-        id: "d-scoped",
-        userId: userAId,
-        title: "Private Deck",
-        lyricsRaw: "가사",
-        slides: "[]",
-        style: "{}",
-        visibility: "private",
-      });
-
-      const found = await getByIdScoped(db, "d-scoped", userAId);
-      expect(found).not.toBeNull();
-      expect(found?.id).toBe("d-scoped");
-
-      const notFound = await getByIdScoped(db, "d-scoped", userBId);
-      expect(notFound).toBeNull();
-    });
-  });
-
-  describe("getPublicById", () => {
-    it("should return public deck and reject private deck", async () => {
-      await db.insert(decks).values([
-        {
-          id: "pub-deck",
-          userId: userAId,
-          title: "Public Deck",
-          lyricsRaw: "가사",
-          slides: "[]",
-          style: "{}",
-          visibility: "public",
-        },
-        {
-          id: "priv-deck",
-          userId: userAId,
-          title: "Private Deck",
-          lyricsRaw: "가사",
-          slides: "[]",
-          style: "{}",
-          visibility: "private",
-        },
-      ]);
-
-      const pubResult = await getPublicById(db, "pub-deck");
-      expect(pubResult).not.toBeNull();
-      expect(pubResult?.id).toBe("pub-deck");
-
-      const privResult = await getPublicById(db, "priv-deck");
-      expect(privResult).toBeNull();
-    });
-
-    it("rejects public presentation clones and taken-down decks", async () => {
-      await db.insert(decks).values([
-        {
-          id: "clone-deck",
-          userId: userAId,
-          scope: "presentation",
-          title: "세트 복제본",
-          lyricsRaw: "가사",
-          slides: "[]",
-          style: "{}",
-          visibility: "public",
-        },
-        {
-          id: "down-deck",
-          userId: userAId,
-          title: "게시 중단",
-          lyricsRaw: "가사",
-          slides: "[]",
-          style: "{}",
-          visibility: "public",
-          takedownAt: new Date(),
-        },
-      ]);
-      expect(await getPublicById(db, "clone-deck")).toBeNull();
-      expect(await getPublicById(db, "down-deck")).toBeNull();
     });
   });
 });

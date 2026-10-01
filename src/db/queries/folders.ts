@@ -33,23 +33,6 @@ export async function getFoldersByUserId(
 }
 
 /**
- * 폴더 id가 이 사용자 것이면 그대로, 아니면(남의 것·없음) `null`(루트).
- * 프레젠테이션 업서트가 `folder_id` 외래키를 어기지 않게 한다.
- */
-export async function resolveOwnedFolderId(
-  db: DbInstance,
-  userId: string,
-  folderId: string | null,
-): Promise<string | null> {
-  if (folderId === null) return null;
-  const [owned] = await db
-    .select({ id: folders.id })
-    .from(folders)
-    .where(and(eq(folders.id, folderId), eq(folders.userId, userId)));
-  return owned ? folderId : null;
-}
-
-/**
  * 폴더 1건 업서트.
  *
  * - 남의 폴더면 아무것도 쓰지 않고 `null` (→ 403).

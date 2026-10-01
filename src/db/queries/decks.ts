@@ -3,8 +3,6 @@ import type { Deck as SharedDeck } from "#shared";
 import { decks, type Deck, type NewDeck } from "../schema";
 import { toDeckRow, toSharedDeck } from "./mappers";
 import { nullifyUnknownBackgrounds } from "./backgrounds";
-import { publicDeckCondition } from "./publicScope";
-import { sanitizeFts5Query, searchPublicDecks } from "./search";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type DbInstance = any;
@@ -21,35 +19,6 @@ export async function getMyLibraryDecks(
     .from(decks)
     .where(and(eq(decks.userId, userId), eq(decks.scope, "library")))
     .orderBy(desc(decks.updatedAt));
-}
-
-/**
- * 사용자 본인 소유 덱 단건 조회.
- */
-export async function getByIdScoped(
-  db: DbInstance,
-  deckId: string,
-  userId: string,
-): Promise<Deck | null> {
-  const [result] = await db
-    .select()
-    .from(decks)
-    .where(and(eq(decks.id, deckId), eq(decks.userId, userId)));
-  return result ?? null;
-}
-
-/**
- * 공개 덱 안전 조회 (비공개 덱 유출 차단).
- */
-export async function getPublicById(
-  db: DbInstance,
-  deckId: string,
-): Promise<Deck | null> {
-  const [result] = await db
-    .select()
-    .from(decks)
-    .where(and(eq(decks.id, deckId), publicDeckCondition()));
-  return result ?? null;
 }
 
 const SERVER_OWNED_DECK_FIELDS = [
@@ -136,29 +105,3 @@ export async function deleteDeckScoped(
   await db.delete(decks).where(eq(decks.id, deckId));
   return true;
 }
-
-export function createDeckQueries(db: DbInstance) {
-  return {
-    getMyLibraryDecks: (userId: string) => getMyLibraryDecks(db, userId),
-    getByIdScoped: (deckId: string, userId: string) =>
-      getByIdScoped(db, deckId, userId),
-    getPublicById: (deckId: string) => getPublicById(db, deckId),
-    searchPublicDecks: (query: string, limit = 20) =>
-      searchPublicDecks(db, query, limit),
-    upsertDeck: (userId: string, deck: SharedDeck) =>
-      upsertDeck(db, userId, deck),
-    deleteDeckScoped: (deckId: string, userId: string) =>
-      deleteDeckScoped(db, deckId, userId),
-  };
-}
-
-export const deckQueries = {
-  sanitizeFts5Query,
-  getMyLibraryDecks,
-  getByIdScoped,
-  getPublicById,
-  searchPublicDecks,
-  upsertDeck,
-  deleteDeckScoped,
-  createDeckQueries,
-};

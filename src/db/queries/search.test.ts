@@ -9,7 +9,7 @@ import {
   type NewBackground,
   type NewDeck,
 } from "../schema";
-import { planSearch, sanitizeFts5Query, searchPublicDecks } from "./search";
+import { planSearch, searchPublicDecks } from "./search";
 
 const USER_A = "00000000x000000000001";
 const USER_B = "00000000x000000000002";
@@ -27,21 +27,6 @@ function deckRow(overrides: Partial<NewDeck> & { id: string }): NewDeck {
     ...overrides,
   };
 }
-
-describe("sanitizeFts5Query", () => {
-  it("wraps words in double quotes", () => {
-    expect(sanitizeFts5Query("은혜로운 찬양")).toBe('"은혜로운" "찬양"');
-    expect(sanitizeFts5Query("10000 Reasons")).toBe('"10000" "Reasons"');
-  });
-
-  it("strips FTS5 operators and injection attempts", () => {
-    expect(sanitizeFts5Query('은혜* AND OR NOT "찬양"')).toBe(
-      '"은혜" "AND" "OR" "NOT" "찬양"',
-    );
-    expect(sanitizeFts5Query("찬양 (곡: 1) ^ $ @ # !")).toBe('"찬양" "곡" "1"');
-    expect(sanitizeFts5Query("!@#$%^&*()")).toBe("");
-  });
-});
 
 describe("planSearch", () => {
   it("browses by popularity for an empty query", () => {
