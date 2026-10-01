@@ -18,8 +18,8 @@ import { SearchInput } from "#components/common/SearchInput";
 import { DEFAULT_BACKGROUND_COLOR, type BackgroundMedia } from "#shared";
 import { BackgroundKindFilter, BackgroundPreview } from "../backgrounds";
 import {
+  describeBackgroundGalleryEmpty,
   useBackgroundGallery,
-  type BackgroundGalleryEmptyReason,
 } from "../backgrounds/useBackgroundGallery";
 import type { BackgroundChoice } from "../presentation/presentationStore";
 import { ColorPalette } from "./ColorPalette";
@@ -93,15 +93,6 @@ function PickerTile({
       </CardHeader>
     </Card>
   );
-}
-
-function describeEmpty(
-  reason: BackgroundGalleryEmptyReason,
-  query: string,
-): string {
-  if (reason === "noBackgrounds") return BACKGROUND_COPY.noBackgrounds;
-  if (reason === "noMatch") return BACKGROUND_COPY.library.noMatch(query);
-  return BACKGROUND_COPY.library.noFilterMatch;
 }
 
 /**
@@ -201,7 +192,10 @@ function PickerDialog({
                 <Empty className="col-span-full">
                   <EmptyHeader>
                     <EmptyDescription>
-                      {describeEmpty(emptyReason, query.trim())}
+                      {describeBackgroundGalleryEmpty(
+                        emptyReason,
+                        query.trim(),
+                      )}
                     </EmptyDescription>
                   </EmptyHeader>
                 </Empty>

@@ -12,8 +12,8 @@ import {
 import type { BackgroundMedia } from "#shared";
 import { BackgroundKindFilter, BackgroundPreview } from "../backgrounds";
 import {
+  describeBackgroundGalleryEmpty,
   useBackgroundGallery,
-  type BackgroundGalleryEmptyReason,
 } from "../backgrounds/useBackgroundGallery";
 import { BackgroundDeleteDialog } from "./BackgroundDeleteDialog";
 import { useDeleteBackground } from "../../lib/api/backgroundQueries";
@@ -42,15 +42,6 @@ function BackgroundCard({
       </CardHeader>
     </Card>
   );
-}
-
-function describeEmpty(
-  reason: BackgroundGalleryEmptyReason,
-  query: string,
-): string {
-  if (reason === "noBackgrounds") return BACKGROUND_COPY.noBackgrounds;
-  if (reason === "noMatch") return BACKGROUND_COPY.library.noMatch(query);
-  return BACKGROUND_COPY.library.noFilterMatch;
 }
 
 /**
@@ -108,7 +99,9 @@ export function BackgroundLibraryView({
               <EmptyMedia variant="icon">
                 <ImageIcon />
               </EmptyMedia>
-              <EmptyTitle>{describeEmpty(emptyReason, searchQuery)}</EmptyTitle>
+              <EmptyTitle>
+                {describeBackgroundGalleryEmpty(emptyReason, searchQuery)}
+              </EmptyTitle>
             </EmptyHeader>
           </Empty>
         ) : (

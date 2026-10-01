@@ -9,6 +9,7 @@ import {
   type BackgroundKindFilterValue,
 } from "./backgroundSearch";
 import { refreshBackgroundCatalog } from "../../lib/sync/backgroundSync";
+import { BACKGROUND_COPY } from "#copy/backgrounds";
 
 /**
  * 갤러리가 비었을 때의 이유. 배경이 하나도 없는지, 검색어에 맞는 배경이 없는지, 종류
@@ -16,6 +17,19 @@ import { refreshBackgroundCatalog } from "../../lib/sync/backgroundSync";
  */
 export type BackgroundGalleryEmptyReason =
   "noBackgrounds" | "noMatch" | "noFilterMatch";
+
+/**
+ * 빈 갤러리 안내 문구. 배경 갤러리와 배경 선택 창이 같은 이유에 같은 문구를 보이도록
+ * 한 곳에 둔다.
+ */
+export function describeBackgroundGalleryEmpty(
+  reason: BackgroundGalleryEmptyReason,
+  query: string,
+): string {
+  if (reason === "noBackgrounds") return BACKGROUND_COPY.noBackgrounds;
+  if (reason === "noMatch") return BACKGROUND_COPY.library.noMatch(query);
+  return BACKGROUND_COPY.library.noFilterMatch;
+}
 
 export interface BackgroundGallery {
   catalog: BackgroundCatalogSnapshot;
