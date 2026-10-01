@@ -1,10 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { makeBackground } from "../../test/backgroundFixture";
-import {
-  filterBackgrounds,
-  filterBackgroundsByKind,
-  matchesBackgroundQuery,
-} from "./backgroundSearch";
+import { filterBackgrounds, matchesBackgroundQuery } from "./backgroundSearch";
 
 const CLOUDS = makeBackground(1, {
   title: "푸른 하늘 구름",
@@ -66,8 +62,12 @@ describe("filterBackgrounds", () => {
   const titles = (kind: "all" | "video" | "image", query: string): string[] =>
     filterBackgrounds(all, { kind, query }).map((bg) => bg.title);
 
-  it("종류만 고르면 그 종류만 남기고, all이면 원래 배열을 그대로 준다", () => {
-    expect(filterBackgroundsByKind(all, "all")).toBe(all);
+  it("종류만 고르면 그 종류만 남기고, all이면 모두 남긴다", () => {
+    expect(titles("all", "")).toEqual([
+      "푸른 하늘 구름",
+      "반짝이는 트리",
+      "고요한 성탄 이미지",
+    ]);
     expect(titles("image", "")).toEqual(["고요한 성탄 이미지"]);
     expect(titles("video", "")).toEqual(["푸른 하늘 구름", "반짝이는 트리"]);
   });

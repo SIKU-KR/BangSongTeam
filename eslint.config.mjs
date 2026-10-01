@@ -156,8 +156,6 @@ const COPY_EXEMPT_FILES = [
   "src/shared/constants/backgrounds.ts",
   "src/shared/constants/devUsers.ts",
   "src/db/seed/devSeed.ts",
-  "src/client/features/presentation/mockPresentation.ts",
-  "src/client/features/presentation/mockPresentations.ts",
   "src/client/routes/TermsRoute.tsx",
   "src/client/routes/PrivacyRoute.tsx",
 ];

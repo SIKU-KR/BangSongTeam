@@ -168,7 +168,7 @@ function runPendingWrites(): void {
   inFlight = inFlight.then(() => writeDocuments(ids));
 }
 
-function schedulePersist(id: string = state.activeId): void {
+function schedulePersist(id: string): void {
   if (!persistenceEnabled) return;
   if (!id) return;
   pendingIds.add(id);

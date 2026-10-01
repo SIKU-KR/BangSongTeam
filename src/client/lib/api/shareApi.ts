@@ -55,8 +55,3 @@ export async function fetchSharePreview(
   );
   return SharePreviewResponseSchema.parse(body).document;
 }
-
-/** 공유 링크 주소. 토큰만 서버가 정하고 주소는 지금 열린 origin으로 만든다. */
-export function buildShareUrl(token: string): string {
-  return `${window.location.origin}/s/${token}`;
-}

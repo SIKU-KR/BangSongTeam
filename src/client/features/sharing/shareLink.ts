@@ -10,6 +10,11 @@ export function sharePath(token: string): string {
   return `/s/${token}`;
 }
 
+/** 공유 링크 주소. 토큰만 서버가 정하고 주소는 지금 열린 origin으로 만든다. */
+export function buildShareUrl(token: string): string {
+  return `${window.location.origin}${sharePath(token)}`;
+}
+
 export function shareCopyPath(token: string): string {
   return `${sharePath(token)}?${SHARE_COPY_PARAM}=1`;
 }

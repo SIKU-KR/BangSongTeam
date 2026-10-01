@@ -7,8 +7,13 @@ export type PaneTarget =
   | { kind: "gap"; songIndex: number; index: number }
   | { kind: "header"; songIndex: number };
 
+const PANE_ROOT_ATTR = "data-slide-pane";
+
+/** 썸네일 창 루트에 펼쳐 넣을 data 속성. `SLIDE_PANE_SELECTOR`가 같은 속성을 찾는다 */
+export const paneRootAttrs = { [PANE_ROOT_ATTR]: "" };
+
 /** 슬라이드 썸네일 창. 창 자체가 listbox라 단축키는 위젯 판별보다 먼저 본다 */
-export const SLIDE_PANE_SELECTOR = "[data-slide-pane]";
+export const SLIDE_PANE_SELECTOR = `[${PANE_ROOT_ATTR}]`;
 
 const THUMB_SELECTOR = "[data-slide-thumb]";
 const GAP_SELECTOR = "[data-slide-gap]";

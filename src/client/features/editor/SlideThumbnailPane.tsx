@@ -57,7 +57,11 @@ import {
 } from "./SlideThumbnail";
 import type { ClickModifiers, SlideInsertion } from "./slideSelection";
 import type { PaneDragData } from "./slidePaneDnd";
-import { paneTargetAttrs, readPaneTarget } from "./slidePaneTargets";
+import {
+  paneRootAttrs,
+  paneTargetAttrs,
+  readPaneTarget,
+} from "./slidePaneTargets";
 import { useCollapsedSongs } from "./useCollapsedSongs";
 import { useSlidePaneDrag } from "./useSlidePaneDrag";
 import {
@@ -192,7 +196,7 @@ export function SlideThumbnailPane({
   const activeThumbRef = useRef<HTMLDivElement>(null);
 
   const activeItemId = items[activeSongIndex]?.id;
-  const collapsed = useCollapsedSongs(activeItemId);
+  const collapsedSongs = useCollapsedSongs(activeItemId);
   const measureText = useTextWidthMeasurer();
   const overflows = items.map((item) =>
     item.deck ? analyzeDeckOverflowCached(item.deck, measureText) : null,
@@ -215,8 +219,8 @@ export function SlideThumbnailPane({
     const willSelectAnother =
       songIndex !== activeSongIndex &&
       (items[songIndex]?.deck?.slides.length ?? 0) > 0;
-    if (willSelectAnother) collapsed.keepCollapsedOnActivate(itemId);
-    collapsed.toggle(itemId);
+    if (willSelectAnother) collapsedSongs.keepCollapsedOnActivate(itemId);
+    collapsedSongs.toggle(itemId);
     focusPane();
     onSelectSong(songIndex);
   };
@@ -295,13 +299,13 @@ export function SlideThumbnailPane({
       label: EDITOR_COPY.thumbnails.collapseAll,
       icon: ChevronsDownUpIcon,
       separated: true,
-      onSelect: () => collapsed.collapseAll(items.map((item) => item.id)),
+      onSelect: () => collapsedSongs.collapseAll(items.map((item) => item.id)),
     },
     {
       key: "expand-all",
       label: EDITOR_COPY.thumbnails.expandAll,
       icon: ChevronsUpDownIcon,
-      onSelect: collapsed.expandAll,
+      onSelect: collapsedSongs.expandAll,
     },
   ];
 
@@ -454,7 +458,7 @@ export function SlideThumbnailPane({
             role="listbox"
             aria-label={EDITOR_COPY.slide.label}
             aria-multiselectable="true"
-            data-slide-pane=""
+            {...paneRootAttrs}
             data-testid="slide-pane-list"
             onClick={handleClick}
             onContextMenu={handleContextMenu}
@@ -475,7 +479,7 @@ export function SlideThumbnailPane({
             {items.map((item, songIndex) => {
               const deck = item.deck;
               const slides = deck?.slides ?? [];
-              const isCollapsed = collapsed.collapsedIds.has(item.id);
+              const isCollapsed = collapsedSongs.collapsedIds.has(item.id);
               const posterUrl = getBackgroundById(
                 deck?.backgroundId,
               )?.posterUrl;
@@ -520,7 +524,7 @@ export function SlideThumbnailPane({
                     }
                     warning={songWarning}
                     menuActions={songActions(songIndex)}
-                    onToggle={() => collapsed.toggle(item.id)}
+                    onToggle={() => collapsedSongs.toggle(item.id)}
                     onSelect={() => selectAndToggleSong(songIndex, item.id)}
                   />
 

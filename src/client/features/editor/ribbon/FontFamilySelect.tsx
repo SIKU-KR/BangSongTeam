@@ -101,7 +101,7 @@ export function FontFamilySelect({
     if (catalog.length === 0) void loadNoonnuFontCatalog().then(setCatalog);
   };
 
-  const searchTrimmed = fontSearch.trim().toLowerCase();
+  const isSearching = fontSearch.trim() !== "";
 
   const allAdditionalFonts = React.useMemo(
     () => excludePresetFonts(catalog),
@@ -109,11 +109,11 @@ export function FontFamilySelect({
   );
 
   const filteredFonts = React.useMemo(() => {
-    if (!searchTrimmed) {
+    if (!isSearching) {
       return allAdditionalFonts.slice(0, displayLimit);
     }
-    return searchFonts(catalog, searchTrimmed, FONT_SEARCH_RESULT_LIMIT);
-  }, [catalog, allAdditionalFonts, searchTrimmed, displayLimit]);
+    return searchFonts(catalog, fontSearch, FONT_SEARCH_RESULT_LIMIT);
+  }, [catalog, allAdditionalFonts, isSearching, fontSearch, displayLimit]);
 
   return (
     <Select
@@ -149,7 +149,7 @@ export function FontFamilySelect({
             className="h-7 text-xs"
           />
         </div>
-        {!searchTrimmed && (
+        {!isSearching && (
           <>
             <SelectGroup>
               <SelectLabel className="px-2 py-1 text-xs text-muted-foreground">
@@ -189,7 +189,7 @@ export function FontFamilySelect({
             </SelectGroup>
           </>
         )}
-        {searchTrimmed && (
+        {isSearching && (
           <SelectGroup>
             <SelectLabel className="px-2 py-1 text-xs text-muted-foreground">
               {EDITOR_COPY.ribbon.searchResults(filteredFonts.length)}

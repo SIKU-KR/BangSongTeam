@@ -58,18 +58,18 @@ export function mergeDocuments(
 export interface BootMergePlan {
   documents: Presentation[];
   needsPush: string[];
-  /** 로컬 저장소에서 지울 문서 (로컬에 있던 것만) */
+  /** 로컬 저장소에서 지울 프레젠테이션 (로컬에 있던 것만) */
   removedIds: string[];
 }
 
 /**
- * 부팅 동기화에서 로컬 문서와 서버 문서를 맞춘 결과를 계산한다.
+ * 부팅 동기화에서 로컬 프레젠테이션과 서버 프레젠테이션을 맞춘 결과를 계산한다.
  *
- * - 서버 삭제 기록(`deletedIds`)에 있는 문서는 다른 기기에서 영구 삭제된 것이라
- *   병합에서 빼고 지운다.
- * - 서버 목록에서 빠진 공유 세트는 서버를 받기 전부터 알던 것(`knownBeforePull`)만
- *   지운다. 받는 사이에 새로 들어온 공유 세트는 그보다 앞선 서버 목록에 없을 뿐이라
- *   그대로 둔다.
+ * - 서버 삭제 기록(`deletedIds`)에 있는 프레젠테이션은 다른 기기에서 영구 삭제된
+ *   것이라 병합에서 빼고 지운다.
+ * - 서버 목록에서 빠진 공유받은 프레젠테이션은 서버를 받기 전부터 알던 것
+ *   (`knownBeforePull`)만 지운다. 받는 사이에 새로 들어온 공유받은 프레젠테이션은
+ *   그보다 앞선 서버 목록에 없을 뿐이라 그대로 둔다.
  */
 export function planBootMerge(
   local: Presentation[],

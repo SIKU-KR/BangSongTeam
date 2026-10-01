@@ -27,10 +27,7 @@ export function matchesBackgroundQuery(
   );
 }
 
-/**
- * 배경 종류(영상·이미지)로 거른다. `all`이면 원래 배열을 그대로 돌려준다.
- */
-export function filterBackgroundsByKind(
+function filterBackgroundsByKind(
   backgrounds: BackgroundMedia[],
   kind: BackgroundKindFilterValue,
 ): BackgroundMedia[] {

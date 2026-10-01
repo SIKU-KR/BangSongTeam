@@ -42,12 +42,12 @@ import {
   SelectValue,
 } from "#components/ui/select";
 import { Skeleton } from "#components/ui/skeleton";
-import { buildShareUrl } from "../../lib/api/shareApi";
 import {
   useResetShareLink,
   useShareSettings,
   useUpdateShareSettings,
 } from "../../lib/api/shareQueries";
+import { buildShareUrl } from "./shareLink";
 import { describeApiError } from "../../lib/api/request";
 import { copyToClipboard } from "../../lib/browser/clipboard";
 import { SHARING_COPY } from "#copy/sharing";
