@@ -58,7 +58,6 @@ describe("BackgroundLibraryView", () => {
     expect(await screen.findByText("본당 성탄 배경")).toBeInTheDocument();
     expect(screen.getByText("고요한 호수 물결")).toBeInTheDocument();
     expect(screen.getByText("타오르는 불꽃")).toBeInTheDocument();
-    expect(screen.getByText(BACKGROUND_COPY.library.title)).toBeInTheDocument();
     expect(screen.queryByText("내가 올린 배경")).not.toBeInTheDocument();
     expect(
       screen.queryByTestId(`delete-bg-${LAKE.id}`),

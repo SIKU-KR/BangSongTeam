@@ -39,12 +39,8 @@ export const BACKGROUND_COPY = {
       `배경 저장 중 ${ready}/${total}`,
   },
   library: {
-    title: "모든 배경",
-    description: "라이선스를 확인하고 올린 무음 루프 영상과 이미지예요.",
-    count: (count: number) => `${count}개`,
     noMatch: (query: string) => `‘${query}’에 맞는 배경이 없어요.`,
     noFilterMatch: "조건에 맞는 배경이 없어요.",
-    applyHint: "편집기 위쪽의 ‘배경’ 버튼을 눌러 곡에 입혀 보세요.",
     deleteTitle: "배경 삭제",
     deleteMessage: (title: string) =>
       `‘${title}’ 배경을 삭제할까요? 이 배경을 쓰던 곡은 모두 배경 없음이 되고, 삭제하면 되돌릴 수 없어요.`,
