@@ -2,8 +2,10 @@ import { describe, expect, it } from "vitest";
 import {
   clickSelection,
   extendSelection,
-  resolveDropIndex,
+  resolveInsertIndex,
+  resolvePaneSelection,
   stepMoveTarget,
+  type PickedSlides,
   type SlideSelectionState,
 } from "./slideSelection";
 
@@ -79,10 +81,78 @@ describe("stepMoveTarget", () => {
   });
 });
 
-describe("resolveDropIndex", () => {
-  it("대상 썸네일의 위 절반이면 앞 틈, 아래 절반이면 뒤 틈", () => {
-    const rect = { top: 100, height: 40 };
-    expect(resolveDropIndex(2, 110, rect)).toBe(2);
-    expect(resolveDropIndex(2, 130, rect)).toBe(3);
+describe("resolvePaneSelection", () => {
+  const picked: PickedSlides = {
+    itemId: "song",
+    ids: ["b", "c"],
+    anchorId: "c",
+  };
+  const base = {
+    ids: IDS,
+    itemId: "song",
+    currentId: "b",
+    picked,
+    insertion: null,
+  };
+
+  it("현재 슬라이드를 품은 이 곡의 묶음이면 그 묶음과 기준점을 쓴다", () => {
+    expect(resolvePaneSelection(base)).toEqual({
+      activeIds: ["b", "c"],
+      anchorId: "c",
+      selectedIds: ["b", "c"],
+      selectedIndexes: [1, 2],
+    });
+  });
+
+  it("다른 곡에서 고른 묶음이면 현재 슬라이드 한 장만 고른다", () => {
+    expect(resolvePaneSelection({ ...base, itemId: "other" })).toEqual({
+      activeIds: ["b"],
+      anchorId: "b",
+      selectedIds: ["b"],
+      selectedIndexes: [1],
+    });
+  });
+
+  it("현재 슬라이드가 묶음 밖이면 현재 슬라이드 한 장만 고른다", () => {
+    expect(resolvePaneSelection({ ...base, currentId: "e" })).toEqual({
+      activeIds: ["e"],
+      anchorId: "e",
+      selectedIds: ["e"],
+      selectedIndexes: [4],
+    });
+  });
+
+  it("기준점이 사라졌으면 현재 슬라이드가 기준점이 되고, 현재 슬라이드도 없으면 빈 문자열이다", () => {
+    const missingAnchor = { ...picked, anchorId: "gone" };
+    expect(
+      resolvePaneSelection({ ...base, picked: missingAnchor }).anchorId,
+    ).toBe("b");
+    expect(
+      resolvePaneSelection({ ...base, currentId: undefined, picked: null }),
+    ).toEqual({
+      activeIds: [],
+      anchorId: "",
+      selectedIds: [],
+      selectedIndexes: [],
+    });
+  });
+
+  it("삽입 커서가 있으면 고른 묶음은 남기고 화면 선택만 비운다", () => {
+    expect(
+      resolvePaneSelection({ ...base, insertion: { songIndex: 0, index: 3 } }),
+    ).toEqual({
+      activeIds: ["b", "c"],
+      anchorId: "c",
+      selectedIds: [],
+      selectedIndexes: [],
+    });
+  });
+});
+
+describe("resolveInsertIndex", () => {
+  it("삽입 커서가 있으면 그 틈, 없으면 선택한 마지막 장 뒤, 선택도 없으면 현재 장 뒤", () => {
+    expect(resolveInsertIndex({ songIndex: 0, index: 0 }, [2, 3], 3)).toBe(0);
+    expect(resolveInsertIndex(null, [3, 1], 1)).toBe(4);
+    expect(resolveInsertIndex(null, [], 2)).toBe(3);
   });
 });
