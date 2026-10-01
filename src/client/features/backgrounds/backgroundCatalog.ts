@@ -1,4 +1,4 @@
-import { useSyncExternalStore } from "react";
+import { useMemo, useSyncExternalStore } from "react";
 import type { BackgroundMedia } from "#shared";
 import {
   deleteBackgroundRecord,
@@ -148,6 +148,29 @@ export function useBackground(
 ): BackgroundMedia | undefined {
   const find = (): BackgroundMedia | undefined => getBackgroundById(id);
   return useSyncExternalStore(subscribe, find, find);
+}
+
+/**
+ * 카탈로그 스냅샷으로 만든 id → 배경 찾기 함수.
+ *
+ * 목록이 바뀔 때만 새 함수가 되어, 이 함수에 기대는 `useMemo`·이펙트가 렌더마다
+ * 다시 돌지 않는다.
+ */
+export function useBackgroundLookup(): (
+  id: string,
+) => BackgroundMedia | undefined {
+  const catalog = useBackgroundCatalog();
+  return useMemo(() => {
+    const byId = new Map(catalog.backgrounds.map((bg) => [bg.id, bg]));
+    return (id: string) => byId.get(id);
+  }, [catalog.backgrounds]);
+}
+
+/** 곡 배경을 배경 레이어에 넘길 URL로 바꾼다. 배경이 없거나 지워졌으면 빈 레이어 */
+export function useBackgroundLayers(
+  id: string | null | undefined,
+): BackgroundLayers {
+  return resolveBackgroundLayers(useBackground(id));
 }
 
 /** 테스트 격리용. 저장소는 건드리지 않는다 */

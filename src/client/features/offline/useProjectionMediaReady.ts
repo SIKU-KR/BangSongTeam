@@ -2,7 +2,6 @@ import {
   useCallback,
   useEffect,
   useMemo,
-  useRef,
   useState,
   useSyncExternalStore,
 } from "react";
@@ -19,7 +18,8 @@ import {
   getMediaProgressVersion,
   subscribeMediaProgress,
 } from "../../lib/offline";
-import { useBackgroundCatalog } from "../backgrounds/backgroundCatalog";
+import { useBackgroundLookup } from "../backgrounds/backgroundCatalog";
+import { useLatest } from "../../hooks/useLatest";
 
 export type ProjectionMediaStatus =
   "checking" | "downloading" | "ready" | "failed";
@@ -124,18 +124,13 @@ export function useProjectionMediaReady(
   options: { passive?: boolean } = {},
 ): ProjectionMediaReadiness {
   const passive = options.passive ?? false;
-  const catalog = useBackgroundCatalog();
-  const findBackground = useMemo(() => {
-    const byId = new Map(catalog.backgrounds.map((bg) => [bg.id, bg]));
-    return (id: string) => byId.get(id);
-  }, [catalog.backgrounds]);
+  const findBackground = useBackgroundLookup();
 
   const files = useMemo(
     () => collectMediaFiles(presentation, findBackground),
     [presentation, findBackground],
   );
-  const filesRef = useRef(files);
-  filesRef.current = files;
+  const filesRef = useLatest(files);
   const [attempt, setAttempt] = useState(0);
   const key = `${passive}|${attempt}|${files.map((file) => file.url).join("|")}`;
   const [run, setRun] = useState<RunState>({

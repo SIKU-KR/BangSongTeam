@@ -8,6 +8,7 @@ import {
   getTotalSlideCount,
   positionOfSlideNumber,
   slideNumberOfPosition,
+  songIndexAfterReorder,
   INITIAL_POSITION,
 } from "./projectionState";
 
@@ -223,5 +224,27 @@ describe("세트 전체 슬라이드 번호 (PPT식)", () => {
       slideNumberOfPosition({ songIndex: 1, slideIndex: 0 }, withEmpty),
     ).toBe(0);
     expect(slideNumberOfPosition(INITIAL_POSITION, [])).toBe(0);
+  });
+});
+
+describe("songIndexAfterReorder", () => {
+  it("보고 있던 곡을 옮기면 새 자리로 따라간다", () => {
+    expect(songIndexAfterReorder(1, 1, 3)).toBe(3);
+    expect(songIndexAfterReorder(3, 3, 0)).toBe(0);
+  });
+
+  it("앞의 곡을 뒤로 넘기면 한 칸 당겨진다", () => {
+    expect(songIndexAfterReorder(2, 0, 3)).toBe(1);
+    expect(songIndexAfterReorder(2, 1, 2)).toBe(1);
+  });
+
+  it("뒤의 곡을 앞으로 넘기면 한 칸 밀린다", () => {
+    expect(songIndexAfterReorder(1, 3, 0)).toBe(2);
+    expect(songIndexAfterReorder(1, 2, 1)).toBe(2);
+  });
+
+  it("보고 있던 곡을 넘지 않는 이동은 그대로 둔다", () => {
+    expect(songIndexAfterReorder(1, 2, 3)).toBe(1);
+    expect(songIndexAfterReorder(3, 0, 2)).toBe(3);
   });
 });

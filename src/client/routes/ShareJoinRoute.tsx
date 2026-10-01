@@ -4,6 +4,7 @@ import {
   getPresentationById,
   replaceWithServerDocument,
 } from "../features/presentation";
+import { editorPath } from "../features/presentation/fullscreen";
 import {
   ShareLinkError,
   ShareLinkLoading,
@@ -48,7 +49,7 @@ export function ShareJoinRoute(): React.JSX.Element {
         ) {
           replaceWithServerDocument(joined.document);
         }
-        navigate(`/editor/${joined.presentationId}`, {
+        navigate(editorPath(joined.presentationId), {
           replace: true,
           state:
             continueCopy && joined.role === "viewer"

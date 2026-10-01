@@ -74,6 +74,11 @@ export function subscribeFullscreenChange(listener: () => void): () => void {
   return () => document.removeEventListener(eventName, listener);
 }
 
+/** 편집기 주소. 사본·공유 링크 진입처럼 편집기로 보내는 곳이 같은 경로를 쓰게 한다. */
+export function editorPath(presentationId: string): string {
+  return `/editor/${presentationId}`;
+}
+
 /** 송출 종료 후 돌아갈 곳을 모를 때(주소 직접 진입·새로고침)의 복귀 경로 */
 export const DEFAULT_PRESENT_RETURN_PATH = "/presentations";
 

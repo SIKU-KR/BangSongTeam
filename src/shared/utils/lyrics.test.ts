@@ -7,8 +7,14 @@ import {
   mergeSlideLines,
   fitLinesToSlides,
   fitSlidesToLimits,
+  exceedsSlideLimits,
+  middleSplitOffset,
 } from "./lyrics";
-import { MAX_SLIDE_LINE_LENGTH, SlideSchema } from "../schemas/slide";
+import {
+  MAX_SLIDE_LINE_LENGTH,
+  MAX_SLIDE_LINES,
+  SlideSchema,
+} from "../schemas/slide";
 
 const LONG_VERSE =
   "걱정 근심 많은 자를 성령감화 하시며 복과 은혜 사랑 받아 평안하게 하소서 첨과 끝이 되신 주님 항상 인도 하셔서 마귀 유혹 받는 것을 속히 끊게 하소서";
@@ -299,6 +305,48 @@ describe("Lyric Processing Utilities", () => {
 
     it("합친 줄이 4줄을 넘으면 null", () => {
       expect(mergeSlideLines(["가", "나", "다"], ["라", "마"])).toBeNull();
+    });
+  });
+
+  describe("exceedsSlideLimits", () => {
+    const full = Array.from({ length: MAX_SLIDE_LINES }, (_, i) => `줄 ${i}`);
+
+    it("최대 줄 수를 넘겨 줄이 늘어나면 true", () => {
+      expect(exceedsSlideLimits([...full, "새 줄"], full)).toBe(true);
+    });
+
+    it("이미 최대 줄 수를 넘긴 슬라이드에서 줄이 늘지 않으면 false", () => {
+      const over = [...full, "넘친 줄"];
+      expect(exceedsSlideLimits(over, over)).toBe(false);
+      expect(exceedsSlideLimits(full, over)).toBe(false);
+    });
+
+    it("한 줄이라도 최대 길이를 넘으면 true", () => {
+      expect(
+        exceedsSlideLimits(["가".repeat(MAX_SLIDE_LINE_LENGTH + 1)], []),
+      ).toBe(true);
+      expect(exceedsSlideLimits(["가".repeat(MAX_SLIDE_LINE_LENGTH)], [])).toBe(
+        false,
+      );
+    });
+  });
+
+  describe("middleSplitOffset", () => {
+    it("줄 수의 절반 뒤 위치를 준다", () => {
+      const lines = ["첫째", "둘째", "셋째", "넷째"];
+      expect(middleSplitOffset(lines)).toBe("첫째\n둘째".length);
+      expect(splitLinesAtCursor(lines, middleSplitOffset(lines))).toEqual([
+        ["첫째", "둘째"],
+        ["셋째", "넷째"],
+      ]);
+    });
+
+    it("홀수 줄이면 앞쪽에 한 줄을 더 둔다", () => {
+      expect(middleSplitOffset(["가", "나", "다"])).toBe("가\n나".length);
+    });
+
+    it("줄이 없으면 0", () => {
+      expect(middleSplitOffset([])).toBe(0);
     });
   });
 });

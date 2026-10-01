@@ -133,3 +133,22 @@ export function prevPosition(
   }
   return current;
 }
+
+/**
+ * 곡 순서를 `from`에서 `to`로 옮긴 뒤 보고 있던 곡의 새 인덱스.
+ * 옮긴 곡이 보고 있던 곡이면 따라가고, 앞뒤로 끼어든 곡만큼 한 칸 밀리거나 당겨진다.
+ */
+export function songIndexAfterReorder(
+  activeSongIndex: number,
+  from: number,
+  to: number,
+): number {
+  if (activeSongIndex === from) return to;
+  if (from < activeSongIndex && to >= activeSongIndex) {
+    return activeSongIndex - 1;
+  }
+  if (from > activeSongIndex && to <= activeSongIndex) {
+    return activeSongIndex + 1;
+  }
+  return activeSongIndex;
+}
