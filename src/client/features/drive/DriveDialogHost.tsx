@@ -12,8 +12,8 @@ import {
   describeItems,
   DriveActionError,
   itemName,
-  parentOf,
   renameItem,
+  validateItemName,
 } from "./driveActions";
 import { itemKey, listTrash, toItemRef, type DriveItemRef } from "./driveModel";
 import { ConfirmDialog, MoveDialog, NameDialog } from "./DriveDialogs";
@@ -95,19 +95,7 @@ export function DriveDialogHost({
           title={DRIVE_COPY.rename}
           initialValue={itemName(dialog.ref)}
           confirmLabel={COMMON_COPY.confirm}
-          validate={(name) => {
-            if (dialog.ref.kind === "folder") {
-              return validateFolderName(
-                name,
-                parentOf(dialog.ref),
-                dialog.ref.id,
-              );
-            }
-            const trimmed = name.trim();
-            if (!trimmed) return FOLDER_COPY.nameRequired;
-            if (trimmed.length > 100) return FOLDER_COPY.nameTooLong(100);
-            return null;
-          }}
+          validate={(name) => validateItemName(dialog.ref, name)}
           onSubmit={(name) => {
             const result = renameItem(dialog.ref, name);
             onClose();

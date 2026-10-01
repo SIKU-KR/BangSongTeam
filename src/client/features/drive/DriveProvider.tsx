@@ -14,7 +14,7 @@ import {
   type Modifier,
 } from "@dnd-kit/core";
 import { getEventCoordinates } from "@dnd-kit/utilities";
-import { createNewPresentation } from "../presentation";
+import { createNewPresentation, editorPath } from "../presentation";
 import { isFolderAvailable } from "./folderStore";
 import {
   DriveContext,
@@ -175,7 +175,7 @@ export function DriveProvider({
     (folderId: string | null): void => {
       const target = isFolderAvailable(folderId) ? folderId : null;
       const created = createNewPresentation(undefined, target);
-      navigate(`/editor/${created.id}`);
+      navigate(editorPath(created.id));
     },
     [navigate],
   );

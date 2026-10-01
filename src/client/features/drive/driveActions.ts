@@ -1,5 +1,6 @@
 import {
   collectDescendantFolderIds,
+  MAX_PRESENTATION_TITLE_LENGTH,
   resolveFolderId,
   type Presentation,
 } from "#shared";
@@ -13,6 +14,7 @@ import {
   duplicatePresentation,
   removePresentationsLocally,
   launchPresentation,
+  editorPath,
   type PresentNavigate,
 } from "../presentation";
 import { canPresentReliably } from "../../lib/browser/capabilities";
@@ -31,6 +33,7 @@ import {
   renameFolder,
   restoreFolder,
   trashFolder,
+  validateFolderName,
   type FolderMutationResult,
 } from "./folderStore";
 import type { DriveItemRef } from "./driveModel";
@@ -48,7 +51,7 @@ import { FOLDER_COPY } from "#copy/folders";
 type Navigate = (to: string) => void;
 
 export function openItem(ref: DriveItemRef, navigate: Navigate): void {
-  navigate(ref.kind === "folder" ? drivePath(ref.id) : `/editor/${ref.id}`);
+  navigate(ref.kind === "folder" ? drivePath(ref.id) : editorPath(ref.id));
 }
 
 /**
@@ -91,6 +94,25 @@ export function describeItems(refs: readonly DriveItemRef[]): string {
     if (name) return DRIVE_COPY.quoted(name);
   }
   return DRIVE_COPY.itemCount(refs.length);
+}
+
+/**
+ * 이름 바꾸기 입력 검증. 잘못된 이름이면 안내 문구, 괜찮으면 `null`.
+ * 폴더는 같은 위치의 이름 충돌까지 보고, 프레젠테이션은 서버 스키마와 같은 길이 제한만 본다.
+ */
+export function validateItemName(
+  ref: DriveItemRef,
+  name: string,
+): string | null {
+  if (ref.kind === "folder") {
+    return validateFolderName(name, parentOf(ref), ref.id);
+  }
+  const trimmed = name.trim();
+  if (!trimmed) return FOLDER_COPY.nameRequired;
+  if (trimmed.length > MAX_PRESENTATION_TITLE_LENGTH) {
+    return FOLDER_COPY.nameTooLong(MAX_PRESENTATION_TITLE_LENGTH);
+  }
+  return null;
 }
 
 export function renameItem(

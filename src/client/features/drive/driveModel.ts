@@ -1,5 +1,6 @@
 import {
   collectDescendantFolderIds,
+  deckMatchesQuery,
   getFolderPath,
   hangulIncludes,
   isFolderTrashed,
@@ -227,19 +228,13 @@ function matchesPresentation(
   query: string,
 ): boolean {
   if (hangulIncludes(presentation.title, query)) return true;
-  return presentation.items.some((entry) => {
-    const deck = entry.deck;
-    if (!deck) return false;
-    return (
-      hangulIncludes(deck.title, query) ||
-      hangulIncludes(deck.artist, query) ||
-      hangulIncludes(deck.lyricsRaw, query)
-    );
-  });
+  return presentation.items.some(
+    (entry) => entry.deck !== undefined && deckMatchesQuery(entry.deck, query),
+  );
 }
 
 /**
- * 드라이브 전체 검색 (휴지통 제외). 폴더 이름과 세트 제목·곡 제목·아티스트·가사를
+ * 드라이브 전체 검색 (휴지통 제외). 폴더 이름과 프레젠테이션 제목·곡 제목·아티스트·가사를
  * 한글 초성·자모 단위로 찾는다. 결과마다 위치를 붙인다.
  */
 export function searchDrive(

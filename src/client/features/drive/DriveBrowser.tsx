@@ -15,7 +15,7 @@ import {
   ContextMenuTrigger,
 } from "#components/ui/context-menu";
 import { useNavigate } from "react-router-dom";
-import { useAppShell } from "../../routes/appShellContext";
+import { editorPath } from "../presentation";
 import { useDrive } from "./driveContext";
 import { TRASH_PATH } from "./drivePaths";
 import { nextSortOrder, trashedAtOf, type DriveItem } from "./driveModel";
@@ -47,6 +47,11 @@ import { COMMON_COPY } from "#copy/common";
 export interface DriveBrowserProps {
   mode: "drive" | "trash";
   folderId?: string | null;
+  /**
+   * 앱 셸 머리글의 검색어. 라우트가 셸 컨텍스트에서 읽어 넘긴다.
+   * 드라이브는 폴더 내용 대신 검색 결과를, 휴지통은 걸러진 목록을 보여 준다.
+   */
+  searchQuery: string;
 }
 
 /**
@@ -62,9 +67,9 @@ export interface DriveBrowserProps {
 export function DriveBrowser({
   mode,
   folderId = null,
+  searchQuery,
 }: DriveBrowserProps): React.JSX.Element {
   const navigate = useNavigate();
-  const { searchQuery } = useAppShell();
   const drive = useDrive();
   const { sortOrder, typeFilter } = drive;
   const newActions = useNewItemActions();
@@ -149,7 +154,7 @@ export function DriveBrowser({
       !isTrash && item.kind === "file" ? () => present(item.id) : undefined,
     onEdit:
       !isTrash && item.kind === "file"
-        ? () => navigate(`/editor/${item.id}`)
+        ? () => navigate(editorPath(item.id))
         : undefined,
   });
 

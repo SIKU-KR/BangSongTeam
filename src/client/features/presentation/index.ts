@@ -64,6 +64,7 @@ export {
   isFullscreenActive,
   subscribeFullscreenChange,
   launchPresentation,
+  editorPath,
   resolvePresentReturnPath,
   DEFAULT_PRESENT_RETURN_PATH,
   type PresentNavigate,

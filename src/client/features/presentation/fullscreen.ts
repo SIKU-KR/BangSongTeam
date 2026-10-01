@@ -74,7 +74,10 @@ export function subscribeFullscreenChange(listener: () => void): () => void {
   return () => document.removeEventListener(eventName, listener);
 }
 
-/** 편집기 주소. 사본·공유 링크 진입처럼 편집기로 보내는 곳이 같은 경로를 쓰게 한다. */
+/**
+ * 편집기 주소. 드라이브에서 열기·새로 만들기, 사본 만들기, 공유 링크 진입처럼 편집기로
+ * 보내는 곳이 모두 이 함수로 경로를 만들어 `/editor/:presentationId` 라우트와 어긋나지 않게 한다.
+ */
 export function editorPath(presentationId: string): string {
   return `/editor/${presentationId}`;
 }

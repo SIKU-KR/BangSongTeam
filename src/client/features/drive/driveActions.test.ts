@@ -17,6 +17,7 @@ import {
   DriveActionError,
   moveItems,
   undoMove,
+  validateItemName,
 } from "./driveActions";
 import { FOLDER_COPY } from "#copy/folders";
 import {
@@ -105,6 +106,24 @@ describe("driveActions", () => {
       const outcome = moveItems([{ kind: "folder", id: ROOT }], CHILD);
       expect(outcome.moved).toHaveLength(0);
       expect(outcome.errors).toEqual([FOLDER_COPY.cannotMoveIntoSelf]);
+    });
+  });
+
+  describe("validateItemName", () => {
+    it("폴더는 같은 위치의 이름 충돌을 거절하고 자기 이름은 허용한다", () => {
+      const ref = { kind: "folder", id: ROOT } as const;
+      expect(validateItemName(ref, "C")).toBe(FOLDER_COPY.nameTaken);
+      expect(validateItemName(ref, " a ")).toBeNull();
+    });
+
+    it("프레젠테이션은 빈 이름과 제목 길이 제한을 넘는 이름을 거절한다", () => {
+      const ref = { kind: "file", id: SEED_PRESENTATIONS[2].id } as const;
+      expect(validateItemName(ref, "   ")).toBe(FOLDER_COPY.nameRequired);
+      expect(validateItemName(ref, "가".repeat(101))).toBe(
+        FOLDER_COPY.nameTooLong(100),
+      );
+      expect(validateItemName(ref, ` ${"가".repeat(100)} `)).toBeNull();
+      expect(validateItemName(ref, "c")).toBeNull();
     });
   });
 
