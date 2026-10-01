@@ -53,6 +53,17 @@ export function mergeKeys(
 }
 
 /**
+ * 키가 지금 보이는 목록에 있으면 그대로, 없으면 `null`.
+ * 포커스·기준점은 폴더 이동·검색·필터로 목록에서 사라질 수 있어 쓰기 전에 걸러야 한다.
+ */
+export function visibleKey(
+  keys: readonly string[],
+  key: string | null,
+): string | null {
+  return key !== null && keys.includes(key) ? key : null;
+}
+
+/**
  * 방향키·Home·End로 옮길 다음 포커스. `delta`는 ±1 또는 ±Infinity(처음·끝)다.
  * 포커스가 목록에 없으면 아래쪽 이동은 첫 항목, 위쪽 이동은 마지막 항목에서 시작한다.
  */

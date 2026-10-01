@@ -1,6 +1,5 @@
 import { describe, it, expect } from "vitest";
 import { buildFolderIndex, type Folder, type Presentation } from "#shared";
-import type { SortOrder } from "../../routes/appShellContext";
 import {
   canDropInto,
   filterByType,
@@ -10,6 +9,7 @@ import {
   nextSortOrder,
   parseItemKey,
   searchDrive,
+  type SortOrder,
 } from "./driveModel";
 
 const USER = "000000000000000000001";

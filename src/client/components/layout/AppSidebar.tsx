@@ -24,6 +24,7 @@ import {
   DRIVE_ROOT_PATH,
   NewMenuButton,
   drivePath,
+  isDrivePath,
   useDriveDroppable,
 } from "../../features/drive";
 import { SHELL_COPY } from "#copy/shell";
@@ -126,8 +127,7 @@ export function AppSidebar(): React.JSX.Element {
   const navigate = useNavigate();
   const { pathname } = useLocation();
 
-  const isDrive =
-    pathname === DRIVE_ROOT_PATH || pathname.startsWith(`${DRIVE_ROOT_PATH}/`);
+  const isDrive = isDrivePath(pathname);
   const isBackgrounds =
     pathname === BACKGROUNDS_ITEM.path ||
     pathname.startsWith(`${BACKGROUNDS_ITEM.path}/`);
@@ -141,7 +141,11 @@ export function AppSidebar(): React.JSX.Element {
               size="lg"
               onClick={() => navigate(drivePath(null))}
             >
-              <img src="/icons/icon-192.png" alt="" className="size-8 shrink-0" />
+              <img
+                src="/icons/icon-192.png"
+                alt=""
+                className="size-8 shrink-0"
+              />
               <div className="grid flex-1 text-left leading-tight">
                 <span className="truncate font-semibold">{APP_NAME}</span>
                 <span className="truncate text-xs text-muted-foreground">

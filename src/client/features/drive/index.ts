@@ -21,8 +21,11 @@ export {
 } from "./folderStore";
 export {
   drivePath,
+  isDrivePath,
   DRIVE_ROOT_PATH,
   TRASH_PATH,
+} from "./drivePaths";
+export {
   openItem,
   startPresentation,
   moveItems,
@@ -50,4 +53,3 @@ export { FolderPickerDialog } from "./DriveDialogs";
 export { DriveBreadcrumbs } from "./DriveBreadcrumbs";
 export { NewMenuButton } from "./NewMenu";
 export { FolderTree, useTreeExpansion } from "./FolderTree";
-export { isTypingTarget } from "./keyboard";

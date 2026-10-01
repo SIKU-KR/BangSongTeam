@@ -1,7 +1,13 @@
 import { createContext, useContext } from "react";
 import { useDraggable, useDroppable } from "@dnd-kit/core";
 import { getFolderIndex } from "./folderStore";
-import { canDropInto, type DriveItemRef } from "./driveModel";
+import {
+  canDropInto,
+  itemKey,
+  type DriveItemRef,
+  type DriveTypeFilter,
+  type SortOrder,
+} from "./driveModel";
 import { parentOf } from "./driveActions";
 
 export type DropTarget =
@@ -28,6 +34,12 @@ export interface DriveContextValue {
 
   activeDrag: readonly DriveItemRef[] | null;
   dialogOpen: boolean;
+
+  /** 정렬과 유형 필터. 휴지통·폴더를 오가도 유지되도록 셸과 수명이 같은 여기에 둔다 */
+  sortOrder: SortOrder;
+  setSortOrder: (order: SortOrder) => void;
+  typeFilter: DriveTypeFilter;
+  setTypeFilter: (filter: DriveTypeFilter) => void;
 
   requestNewFolder: (parentId: string | null) => void;
   requestRename: (ref: DriveItemRef) => void;
@@ -93,6 +105,6 @@ export function useDriveDraggable(
   const { activeDrag } = useDrive();
   const { setNodeRef, listeners } = useDraggable({ id: key, disabled });
   const isDragging =
-    activeDrag?.some((ref) => `${ref.kind}:${ref.id}` === key) ?? false;
+    activeDrag?.some((ref) => itemKey(ref.kind, ref.id) === key) ?? false;
   return { setNodeRef, listeners, isDragging };
 }

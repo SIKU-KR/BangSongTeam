@@ -34,6 +34,7 @@ import {
   type FolderMutationResult,
 } from "./folderStore";
 import type { DriveItemRef } from "./driveModel";
+import { drivePath } from "./drivePaths";
 import { DRIVE_COPY } from "#copy/drive";
 import { FOLDER_COPY } from "#copy/folders";
 
@@ -43,13 +44,6 @@ import { FOLDER_COPY } from "#copy/folders";
  * 선택된 여러 항목에 한 번에 적용한다. 폴더 규칙(사이클·이름 충돌)은
  * `folderStore`가, 문서 저장·push는 `presentationStore`가 책임진다.
  */
-
-export const DRIVE_ROOT_PATH = "/presentations";
-export const TRASH_PATH = "/presentations/trash";
-
-export function drivePath(folderId: string | null | undefined): string {
-  return folderId ? `${DRIVE_ROOT_PATH}/folders/${folderId}` : DRIVE_ROOT_PATH;
-}
 
 type Navigate = (to: string) => void;
 
@@ -88,6 +82,15 @@ export function itemName(ref: DriveItemRef): string {
   return ref.kind === "folder"
     ? (getFolder(ref.id)?.name ?? "")
     : (getPresentationById(ref.id)?.title ?? "");
+}
+
+/** 알림·확인 문구의 대상 표현. 하나면 이름을 따옴표로, 여럿이거나 이름이 비면 개수로 쓴다 */
+export function describeItems(refs: readonly DriveItemRef[]): string {
+  if (refs.length === 1) {
+    const name = itemName(refs[0]).trim();
+    if (name) return DRIVE_COPY.quoted(name);
+  }
+  return DRIVE_COPY.itemCount(refs.length);
 }
 
 export function renameItem(
