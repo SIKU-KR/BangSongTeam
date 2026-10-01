@@ -1,31 +1,20 @@
 import React, { useLayoutEffect, useRef } from "react";
 import type { Slide } from "#shared";
-import { MAX_SLIDE_LINE_LENGTH, MAX_SLIDE_LINES } from "#shared";
+import { exceedsSlideLimits } from "#shared";
 import { EDITOR_COPY } from "#copy/editor";
+
+/** 편집을 시작할 때 커서를 둘 곳. 나눈 뒷장은 맨 앞에서 이어 쓴다 */
+export type CaretPlacement = "start" | "end";
 
 export interface StageLyricsEditorProps {
   slide: Slide;
   caretColor: string;
-  initialCaret?: "start" | "end";
+  initialCaret?: CaretPlacement;
   onChangeLines: (lines: string[]) => void;
   onLimitHit: () => void;
   onCaretChange: (offset: number) => void;
   onSplit: (offset: number) => void;
   onExit: () => void;
-}
-
-/** 한 슬라이드의 줄 수·줄 길이 제한(`SlideSchema`)을 넘는 입력인지 확인한다. */
-export function exceedsSlideLimits(
-  nextLines: string[],
-  currentLines: string[],
-): boolean {
-  if (
-    nextLines.length > MAX_SLIDE_LINES &&
-    nextLines.length > currentLines.length
-  ) {
-    return true;
-  }
-  return nextLines.some((line) => line.length > MAX_SLIDE_LINE_LENGTH);
 }
 
 /**

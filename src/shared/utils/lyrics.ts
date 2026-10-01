@@ -176,3 +176,25 @@ export function mergeSlideLines(
   const merged = [...first, ...second];
   return merged.length <= MAX_SLIDE_LINES ? merged : null;
 }
+
+/** 한 슬라이드의 줄 수·줄 길이 제한(`SlideSchema`)을 넘는 입력인지 확인한다. */
+export function exceedsSlideLimits(
+  nextLines: readonly string[],
+  currentLines: readonly string[],
+): boolean {
+  if (
+    nextLines.length > MAX_SLIDE_LINES &&
+    nextLines.length > currentLines.length
+  ) {
+    return true;
+  }
+  return nextLines.some((line) => line.length > MAX_SLIDE_LINE_LENGTH);
+}
+
+/**
+ * 커서 없이 슬라이드를 나눌 때 쓰는 위치. 줄 수의 절반(홀수면 앞쪽이 한 줄 더)
+ * 뒤를 `lines.join("\n")` 기준 문자 위치로 돌려준다(`splitLinesAtCursor`의 `offset`).
+ */
+export function middleSplitOffset(lines: readonly string[]): number {
+  return lines.slice(0, Math.ceil(lines.length / 2)).join("\n").length;
+}
