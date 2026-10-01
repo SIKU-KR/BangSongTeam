@@ -1,4 +1,5 @@
-import type { DeckStyle } from "#shared";
+import type { DeckStyle, NoonnuFont } from "#shared";
+import { DEFAULT_PRESET_FONTS } from "#shared";
 import { EDITOR_COPY } from "#copy/editor";
 
 /**
@@ -57,3 +58,37 @@ export const TEXT_ALIGN_OPTIONS: ReadonlyArray<{
   { id: "center", label: EDITOR_COPY.ribbon.alignOptions.center },
   { id: "right", label: EDITOR_COPY.ribbon.alignOptions.right },
 ];
+
+/** 글꼴 목록을 처음에 보여 주고 '더 보기'로 늘리는 개수 */
+export const FONT_LIST_PAGE_SIZE = 60;
+
+/** 글꼴 검색 결과 최대 개수. 한 번에 수백 개의 미리보기 이미지를 받지 않게 자른다 */
+export const FONT_SEARCH_RESULT_LIMIT = 60;
+
+/**
+ * 이름·제작자·카드 패밀리명에 검색어가 들어 있는 글꼴을 대소문자 구분 없이 찾는다.
+ * 기본 글꼴도 카탈로그에 있어 검색 결과에 함께 나온다.
+ */
+export function searchFonts(
+  catalog: readonly NoonnuFont[],
+  query: string,
+  limit: number,
+): NoonnuFont[] {
+  const needle = query.trim().toLowerCase();
+  return catalog
+    .filter(
+      (f) =>
+        f.name.toLowerCase().includes(needle) ||
+        f.author.toLowerCase().includes(needle) ||
+        f.cardFamily.toLowerCase().includes(needle),
+    )
+    .slice(0, limit);
+}
+
+/** 기본 글꼴은 목록 위 '기본 글꼴' 묶음에 따로 보여서 추가 글꼴 목록에서는 뺀다 */
+export function excludePresetFonts(
+  catalog: readonly NoonnuFont[],
+): NoonnuFont[] {
+  const presetSet = new Set<string>(DEFAULT_PRESET_FONTS);
+  return catalog.filter((f) => !presetSet.has(f.name));
+}
