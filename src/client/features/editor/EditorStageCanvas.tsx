@@ -19,7 +19,6 @@ import {
 } from "#components/ui/empty";
 import { IconButton } from "#components/common/IconButton";
 import type { Slide, DeckStyle, TextBoxPosition } from "#shared";
-import { DEFAULT_DECK_STYLE } from "#shared";
 import { SlideStage } from "../../components/stage/SlideStage";
 import type { SnapGuides } from "./textBoxDrag";
 import { EDITOR_COPY } from "#copy/editor";
@@ -30,9 +29,9 @@ const TextBoxMoveable = lazy(() =>
   import("./TextBoxMoveable").then((m) => ({ default: m.TextBoxMoveable })),
 );
 
-export interface EditorStageCanvasProps {
+interface EditorStageCanvasProps {
   slide?: Slide | null;
-  style?: DeckStyle;
+  style: DeckStyle;
   backgroundUrl?: string;
   backgroundImageUrl?: string;
   posterUrl?: string;
@@ -49,7 +48,6 @@ export interface EditorStageCanvasProps {
   onRequestTextEdit?: () => void;
   /** 상태 표시줄 왼쪽에 덧붙일 항목 (줄 수, 넘침 경고) */
   statusItems?: React.ReactNode;
-  className?: string;
 }
 
 /**
@@ -74,7 +72,6 @@ export function EditorStageCanvas({
   textEditor,
   onRequestTextEdit,
   statusItems,
-  className,
 }: EditorStageCanvasProps): React.JSX.Element {
   const [textBoxEl, setTextBoxEl] = useState<HTMLDivElement | null>(null);
   const [draft, setDraft] = useState<{
@@ -84,10 +81,7 @@ export function EditorStageCanvas({
   const [zoomLevel, setZoomLevel] = useState<number>(ZOOM_PERCENT.fit);
 
   const isEditingText = textEditor !== undefined;
-  const baseStyle = style ?? DEFAULT_DECK_STYLE;
-  const effectiveStyle = draft
-    ? { ...baseStyle, position: draft.position }
-    : baseStyle;
+  const effectiveStyle = draft ? { ...style, position: draft.position } : style;
   const canEditTextBox = !!onUpdateStyle && !!slide && !isEditingText;
   const refreshKey = JSON.stringify([effectiveStyle, slide?.lines, zoomLevel]);
   const textContent = isEditingText ? (
@@ -106,10 +100,7 @@ export function EditorStageCanvas({
     return (
       <div
         data-testid="editor-stage-canvas"
-        className={cn(
-          "relative flex flex-1 flex-col items-center justify-center overflow-hidden p-6 select-none",
-          className,
-        )}
+        className="relative flex flex-1 flex-col items-center justify-center overflow-hidden p-6 select-none"
       >
         <Empty className="max-w-xl border">
           <EmptyHeader>
@@ -139,10 +130,7 @@ export function EditorStageCanvas({
   return (
     <div
       data-testid="editor-stage-canvas"
-      className={cn(
-        "relative flex flex-1 flex-col items-center justify-between overflow-hidden px-6 pt-6 pb-2 select-none",
-        className,
-      )}
+      className="relative flex flex-1 flex-col items-center justify-between overflow-hidden px-6 pt-6 pb-2 select-none"
     >
       <div className="flex w-full flex-1 items-center justify-center overflow-hidden py-2">
         <div

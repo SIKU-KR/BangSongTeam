@@ -1,12 +1,11 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { signInAsTestUser } from "../../test/sessionFixture";
 import { createId, DEFAULT_DECK_STYLE } from "#shared";
+import { closeOfflineDB, OFFLINE_DB_NAME } from "../../lib/storage/db";
 import {
-  closeOfflineDB,
-  OFFLINE_DB_NAME,
   LEGACY_SONGS_KEY,
   LEGACY_SONGS_BACKUP_KEY,
-} from "../../lib/storage";
+} from "../../lib/storage/songRepository";
 import {
   getUserSongs,
   saveSongToLibrary,

@@ -1,17 +1,13 @@
-import { useState, useRef, useCallback, useEffect } from "react";
+import { useRef, useCallback, useEffect } from "react";
 import { PRESENTATION_SHORTCUTS } from "#shared";
 
-export interface UseNavigationBufferOptions {
+interface UseNavigationBufferOptions {
   totalSlides?: number;
   onJump: (slideNumber: number) => void;
-  onInvalidJump?: (buffer: string) => void;
-  timeoutMs?: number;
 }
 
-export interface UseNavigationBufferReturn {
-  buffer: string;
+interface UseNavigationBufferReturn {
   handleKey: (key: string) => void;
-  clearBuffer: () => void;
 }
 
 /**
@@ -20,10 +16,7 @@ export interface UseNavigationBufferReturn {
 export function useNavigationBuffer({
   totalSlides,
   onJump,
-  onInvalidJump,
-  timeoutMs = PRESENTATION_SHORTCUTS.BUFFER_CLEAR_TIMEOUT_MS,
 }: UseNavigationBufferOptions): UseNavigationBufferReturn {
-  const [buffer, setBuffer] = useState<string>("");
   const bufferRef = useRef<string>("");
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -38,21 +31,14 @@ export function useNavigationBuffer({
     clearTimer();
     timerRef.current = setTimeout(() => {
       bufferRef.current = "";
-      setBuffer("");
       timerRef.current = null;
-    }, timeoutMs);
-  }, [clearTimer, timeoutMs]);
+    }, PRESENTATION_SHORTCUTS.BUFFER_CLEAR_TIMEOUT_MS);
+  }, [clearTimer]);
 
   useEffect(() => {
     return () => {
       clearTimer();
     };
-  }, [clearTimer]);
-
-  const clearBuffer = useCallback(() => {
-    clearTimer();
-    bufferRef.current = "";
-    setBuffer("");
   }, [clearTimer]);
 
   const handleKey = useCallback(
@@ -61,7 +47,6 @@ export function useNavigationBuffer({
         if (bufferRef.current.length > 0) {
           const next = bufferRef.current.slice(0, -1);
           bufferRef.current = next;
-          setBuffer(next);
           if (next.length > 0) {
             resetTimer();
           } else {
@@ -79,7 +64,6 @@ export function useNavigationBuffer({
 
         clearTimer();
         bufferRef.current = "";
-        setBuffer("");
 
         const slideNumber = Number(raw);
         if (
@@ -87,7 +71,6 @@ export function useNavigationBuffer({
           slideNumber <= 0 ||
           (totalSlides !== undefined && slideNumber > totalSlides)
         ) {
-          onInvalidJump?.(raw);
           return;
         }
 
@@ -98,17 +81,12 @@ export function useNavigationBuffer({
       if (/^[0-9]$/.test(key)) {
         const next = bufferRef.current + key;
         bufferRef.current = next;
-        setBuffer(next);
         resetTimer();
         return;
       }
     },
-    [clearTimer, onInvalidJump, onJump, resetTimer, totalSlides],
+    [clearTimer, onJump, resetTimer, totalSlides],
   );
 
-  return {
-    buffer,
-    handleKey,
-    clearBuffer,
-  };
+  return { handleKey };
 }

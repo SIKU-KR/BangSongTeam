@@ -19,7 +19,7 @@ const ALIGN_ICONS: Record<DeckStyle["textAlign"], LucideIcon> = {
   right: AlignRightIcon,
 };
 
-export interface ParagraphControlsProps {
+interface ParagraphControlsProps {
   style: DeckStyle;
   disabled: boolean;
   onUpdateStyle: (update: Partial<DeckStyle>) => void;

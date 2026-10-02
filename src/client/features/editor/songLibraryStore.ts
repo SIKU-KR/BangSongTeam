@@ -74,25 +74,16 @@ function putInCache(deck: Deck): void {
  * 새 곡을 사용자 보관함에 저장. 로그인하지 않았으면 저장할 곳이 없으므로 던진다.
  */
 export function saveSongToLibrary(songInput: {
-  id?: string;
   title: string;
   artist?: string;
   lyricsRaw: string;
-  backgroundId?: string | null;
 }): Deck {
   const userId = getCurrentUserId();
   if (!userId) {
     throw new Error(API_ERRORS.loginRequired);
   }
 
-  return upsertLibraryDeck(
-    createSongDeck({
-      ...songInput,
-      userId,
-      scope: "library",
-      origin: "user",
-    }),
-  );
+  return upsertLibraryDeck(createSongDeck({ ...songInput, userId }));
 }
 
 /**
@@ -198,15 +189,4 @@ function subscribe(callback: () => void): () => void {
  */
 export function useUserSongs(): Deck[] {
   return useSyncExternalStore(subscribe, getUserSongs, getUserSongs);
-}
-
-/**
- * 보관함 곡 1건 구독 훅.
- */
-export function useLibraryDeck(
-  id: string | null | undefined,
-): Deck | undefined {
-  const find = (): Deck | undefined =>
-    id ? userSongsCache.find((deck) => deck.id === id) : undefined;
-  return useSyncExternalStore(subscribe, find, find);
 }

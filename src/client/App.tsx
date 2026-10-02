@@ -107,7 +107,7 @@ function useFlushOnPageHide(): void {
 }
 
 /** 예전 자체 테마 저장 키를 그대로 써서 사용자가 고른 테마를 잃지 않는다 */
-export const THEME_STORAGE_KEY = "worship-theme";
+const THEME_STORAGE_KEY = "worship-theme";
 
 /** App 최상위 라우팅 컴포넌트 */
 export function App(): React.JSX.Element {
@@ -241,5 +241,3 @@ function AppProviders({
     <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
   );
 }
-
-export default App;

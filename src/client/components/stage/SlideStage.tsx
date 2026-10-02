@@ -29,7 +29,6 @@ export interface SlideStageProps {
   textContent?: React.ReactNode;
   containerDimensions?: { width?: number; height?: number };
   staticBackground?: boolean;
-  className?: string;
 }
 
 /** 16:9 가상 스테이지 위에서 3-Layer로 슬라이드를 렌더링하는 컴포넌트 */
@@ -47,7 +46,6 @@ export function SlideStage({
   textContent,
   containerDimensions,
   staticBackground = false,
-  className = "",
 }: SlideStageProps): React.JSX.Element {
   const containerRef = useRef<HTMLDivElement>(null);
   const [measuredSize, setMeasuredSize] = useState<{
@@ -107,7 +105,7 @@ export function SlideStage({
     <div
       ref={containerRef}
       data-testid="slide-stage-viewport"
-      className={`relative size-full overflow-hidden select-none ${className}`}
+      className="relative size-full overflow-hidden select-none"
       style={backdrop}
     >
       <div

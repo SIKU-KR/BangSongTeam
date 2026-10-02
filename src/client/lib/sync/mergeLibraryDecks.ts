@@ -1,6 +1,6 @@
 import type { Deck } from "#shared";
 
-export interface LibraryMergeResult {
+interface LibraryMergeResult {
   decks: Deck[];
   needsPush: string[];
 }
@@ -9,7 +9,7 @@ export interface LibraryMergeResult {
  * 동기화 PUT은 이 값을 바꾸지 못한다. 공개 전환·가져오기·게시 중단은 서버에서만
  * 일어나므로, 로컬 사본이 더 최신이어도 이 값만큼은 서버 것이 진실이다.
  */
-export const SERVER_OWNED_DECK_KEYS = [
+const SERVER_OWNED_DECK_KEYS = [
   "visibility",
   "forkCount",
   "origin",

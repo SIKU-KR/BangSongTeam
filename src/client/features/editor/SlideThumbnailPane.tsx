@@ -102,7 +102,6 @@ export interface SlideThumbnailPaneProps {
   onOpenSongPicker: () => void;
   /** 보기 권한으로 공유받은 세트. 선택·펼치기만 되고 메뉴·끌기·추가는 없다 */
   readOnly?: boolean;
-  className?: string;
 }
 
 type MenuTarget =
@@ -188,7 +187,6 @@ export function SlideThumbnailPane({
   onDeleteSong,
   onOpenSongPicker,
   readOnly = false,
-  className,
 }: SlideThumbnailPaneProps): React.JSX.Element {
   useBackgroundCatalog();
   const [menuTarget, setMenuTarget] = useState<MenuTarget | null>(null);
@@ -417,10 +415,7 @@ export function SlideThumbnailPane({
   return (
     <aside
       data-testid="slide-thumbnail-pane"
-      className={cn(
-        "flex w-64 shrink-0 flex-col border-r bg-background select-none",
-        className,
-      )}
+      className="flex w-64 shrink-0 flex-col border-r bg-background select-none"
     >
       <div className="flex h-11 shrink-0 items-center justify-between border-b px-3">
         <span className="text-xs font-bold">

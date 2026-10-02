@@ -3,6 +3,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { EditorHeader } from "./EditorHeader";
 import { EDITOR_COPY } from "#copy/editor";
+import { DRIVE_ROOT_PATH } from "../drive/drivePaths";
 
 function renderHeader(
   props?: Partial<React.ComponentProps<typeof EditorHeader>>,
@@ -14,6 +15,11 @@ function renderHeader(
     totalSongs: 1,
     onNewPresentation: vi.fn(),
     onOpenLyricModal: vi.fn(),
+    canUndo: false,
+    canRedo: false,
+    readOnly: false,
+    backPath: DRIVE_ROOT_PATH,
+    mediaProgress: null,
   };
 
   return render(

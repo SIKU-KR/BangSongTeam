@@ -29,7 +29,6 @@ export async function loadAllSongs(): Promise<LoadResult<Deck>> {
           typeof (row as { id?: unknown })?.id === "string"
             ? (row as { id: string }).id
             : "(unknown)",
-        reason: parsed.error.issues[0]?.message ?? "schema validation failed",
       });
     }
   }
@@ -46,11 +45,6 @@ export async function deleteSong(id: string): Promise<void> {
 export async function clearAllSongs(): Promise<void> {
   const db = await getOfflineDB();
   await db.clear("decks");
-}
-
-export interface MigrationResult {
-  migrated: number;
-  skipped: number;
 }
 
 function readLegacyRaw(): string | null {
@@ -76,36 +70,29 @@ function moveLegacyToBackup(raw: string): void {
  * 항목별로 검증해 유효한 곡만 옮기고, 원본 JSON은 삭제하지 않고 백업 키로 옮긴다.
  * 이전 구현은 배열 전체를 한 번에 파싱해서 한 항목만 깨져도 보관함 전체를 잃었다.
  */
-export async function migrateLegacySongs(): Promise<MigrationResult> {
+export async function migrateLegacySongs(): Promise<void> {
   const raw = readLegacyRaw();
-  if (!raw) return { migrated: 0, skipped: 0 };
+  if (!raw) return;
 
   let parsed: unknown;
   try {
     parsed = JSON.parse(raw);
   } catch {
     moveLegacyToBackup(raw);
-    return { migrated: 0, skipped: 0 };
+    return;
   }
 
   if (!Array.isArray(parsed)) {
     moveLegacyToBackup(raw);
-    return { migrated: 0, skipped: 0 };
+    return;
   }
-
-  let migrated = 0;
-  let skipped = 0;
 
   for (const item of parsed) {
     const deck = DeckSchema.safeParse(item);
     if (deck.success) {
       await saveSong(deck.data);
-      migrated += 1;
-    } else {
-      skipped += 1;
     }
   }
 
   moveLegacyToBackup(raw);
-  return { migrated, skipped };
 }

@@ -3,9 +3,9 @@ import { PersistenceUnavailableError } from "./db";
 import type { CorruptedRecord } from "./presentationRepository";
 import { ERROR_COPY } from "#copy/common";
 
-export type PersistenceErrorKind = "unavailable" | "quota" | "unknown";
+type PersistenceErrorKind = "unavailable" | "quota" | "unknown";
 
-export interface PersistenceError {
+interface PersistenceError {
   kind: PersistenceErrorKind;
   message: string;
 }
@@ -100,7 +100,7 @@ export function clearCorruptedRecords(): void {
   emit();
 }
 
-export function getCorruptedRecords(): readonly CorruptedRecord[] {
+function getCorruptedRecords(): readonly CorruptedRecord[] {
   return corrupted;
 }
 

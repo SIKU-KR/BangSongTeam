@@ -16,7 +16,7 @@ import { RibbonGroup, RibbonTooltip } from "./RibbonPrimitives";
 import { EDITOR_COPY } from "#copy/editor";
 import { BACKGROUND_COPY } from "#copy/backgrounds";
 
-export interface BackgroundControlsProps {
+interface BackgroundControlsProps {
   style: DeckStyle;
   backgroundId: string | null | undefined;
   disabled: boolean;

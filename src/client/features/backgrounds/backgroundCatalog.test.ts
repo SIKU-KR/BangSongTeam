@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from "vitest";
 import { renderHook, act } from "@testing-library/react";
 import { signInAsTestUser } from "../../test/sessionFixture";
 import { makeBackground } from "../../test/backgroundFixture";
-import { getOfflineDB } from "../../lib/storage";
+import { getOfflineDB } from "../../lib/storage/db";
 import {
   applyServerBackgroundCatalog,
   getBackgroundById,

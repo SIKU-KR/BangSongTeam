@@ -17,12 +17,12 @@ import type { MenuAction } from "#components/common/ActionMenu";
 import { DRIVE_COPY } from "#copy/drive";
 import { COMMON_COPY } from "#copy/common";
 
-export interface DriveItemActionsOptions {
+interface DriveItemActionsOptions {
   isTrash: boolean;
   trashCount: number;
 }
 
-export interface DriveItemActions {
+interface DriveItemActions {
   present: (id: string) => boolean;
   open: (item: DriveItem) => void;
   /** 고정된 휴지통 폴더의 메뉴 */

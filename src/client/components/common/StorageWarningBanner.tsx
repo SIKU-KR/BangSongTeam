@@ -50,5 +50,3 @@ export function StorageWarningBanner(): React.JSX.Element | null {
     </>
   );
 }
-
-export default StorageWarningBanner;

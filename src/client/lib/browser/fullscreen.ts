@@ -4,7 +4,7 @@
  * 진입·종료·현재 요소·변경 이벤트 이름이 환경에 따라 함께 바뀌므로 하나의 객체로 묶는다.
  * 호출부는 `resolveFullscreenStrategy()`가 고른 전략만 쓰고 접두사 분기를 직접 하지 않는다.
  */
-export interface FullscreenStrategy {
+interface FullscreenStrategy {
   readonly kind: "standard" | "webkit" | "unsupported";
   /** 전체화면 변경을 알리는 이벤트 이름. 전체화면을 쓸 수 없으면 null */
   readonly changeEvent: string | null;

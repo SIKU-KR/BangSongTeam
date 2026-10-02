@@ -10,30 +10,23 @@ import { useSyncExternalStore } from "react";
 export type SyncStatus = "idle" | "syncing" | "synced" | "offline" | "error";
 
 let status: SyncStatus = "idle";
-let lastSyncedAt: number | null = null;
 const listeners = new Set<() => void>();
 
 interface SyncSnapshot {
   status: SyncStatus;
-  lastSyncedAt: number | null;
 }
 
-let snapshot: SyncSnapshot = { status, lastSyncedAt };
+let snapshot: SyncSnapshot = { status };
 
 function emit(): void {
-  snapshot = { status, lastSyncedAt };
+  snapshot = { status };
   for (const listener of listeners) listener();
 }
 
 export function setSyncStatus(next: SyncStatus): void {
   if (status === next) return;
   status = next;
-  if (next === "synced") lastSyncedAt = Date.now();
   emit();
-}
-
-export function getSyncStatus(): SyncStatus {
-  return status;
 }
 
 export function getSyncSnapshot(): SyncSnapshot {
@@ -54,6 +47,5 @@ export function useSyncStatus(): SyncSnapshot {
 
 export function __resetSyncStatusForTests(): void {
   status = "idle";
-  lastSyncedAt = null;
   emit();
 }

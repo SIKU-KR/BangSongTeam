@@ -10,15 +10,13 @@ import {
 import { ToggleGroup, ToggleGroupItem } from "#components/ui/toggle-group";
 import { RibbonTooltip } from "./RibbonPrimitives";
 
-export interface RibbonDropdownProps {
+interface RibbonDropdownProps {
   label: string;
   icon?: React.ReactNode;
   text?: string;
   disabled?: boolean;
   testId?: string;
-  panelTestId?: string;
   panelClassName?: string;
-  align?: "start" | "end";
   children: (close: () => void) => React.ReactNode;
 }
 
@@ -32,9 +30,7 @@ export function RibbonDropdown({
   text,
   disabled,
   testId,
-  panelTestId,
   panelClassName,
-  align = "start",
   children,
 }: RibbonDropdownProps): React.JSX.Element {
   const [open, setOpen] = useState(false);
@@ -55,8 +51,7 @@ export function RibbonDropdown({
         </PopoverTrigger>
       </RibbonTooltip>
       <PopoverContent
-        data-testid={panelTestId}
-        align={align}
+        align="start"
         initialFocus={false}
         finalFocus={false}
         className={cn("w-56 text-xs", panelClassName)}

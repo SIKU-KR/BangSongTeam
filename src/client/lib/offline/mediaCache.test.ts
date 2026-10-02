@@ -78,7 +78,7 @@ describe("cacheMediaUrls", () => {
 
     const result = await cacheMediaUrls([VIDEO, POSTER]);
 
-    expect(result).toEqual({ cachedUrls: [VIDEO, POSTER], failedUrls: [] });
+    expect(result).toEqual({ cachedUrls: [VIDEO, POSTER] });
     expect(await isCached(VIDEO)).toBe(true);
     expect(await isCached(POSTER)).toBe(true);
   });
@@ -112,7 +112,7 @@ describe("cacheMediaUrls", () => {
 
     const result = await cacheMediaUrls([VIDEO, POSTER]);
 
-    expect(result).toEqual({ cachedUrls: [POSTER], failedUrls: [VIDEO] });
+    expect(result).toEqual({ cachedUrls: [POSTER] });
     expect(await isCached(VIDEO)).toBe(false);
   });
 
@@ -121,7 +121,7 @@ describe("cacheMediaUrls", () => {
 
     const result = await cacheMediaUrls([VIDEO]);
 
-    expect(result.failedUrls).toEqual([VIDEO]);
+    expect(result.cachedUrls).toEqual([]);
     expect(await isCached(VIDEO)).toBe(false);
   });
 
@@ -137,7 +137,7 @@ describe("cacheMediaUrls", () => {
 
     const result = await cacheMediaUrls([VIDEO, OTHER]);
 
-    expect(result).toEqual({ cachedUrls: [], failedUrls: [VIDEO, OTHER] });
+    expect(result).toEqual({ cachedUrls: [] });
   });
 });
 
@@ -170,7 +170,7 @@ describe("cacheMediaUrls (서비스 워커 제어 중)", () => {
 
     const result = await cacheMediaUrls([VIDEO]);
 
-    expect(result).toEqual({ cachedUrls: [VIDEO], failedUrls: [] });
+    expect(result).toEqual({ cachedUrls: [VIDEO] });
     expect(put).toHaveBeenCalledTimes(1);
     expect(await isCached(VIDEO)).toBe(true);
   });
@@ -183,10 +183,7 @@ describe("cacheMediaUrls (서비스 워커 제어 중)", () => {
     const pendingResult = cacheMediaUrls([VIDEO]);
     await vi.runAllTimersAsync();
 
-    expect(await pendingResult).toEqual({
-      cachedUrls: [],
-      failedUrls: [VIDEO],
-    });
+    expect(await pendingResult).toEqual({ cachedUrls: [] });
   });
 });
 

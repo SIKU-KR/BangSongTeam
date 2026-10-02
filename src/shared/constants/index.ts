@@ -26,24 +26,6 @@ export const SUPPORTED_FONTS = NOONNU_SUPPORTED_FONT_NAMES;
 export type SupportedFont = (typeof SUPPORTED_FONTS)[number];
 
 /**
- * 3x3 격자 앵커 프리셋별 기본 좌표 및 크기 정의 (16:9 가상 스테이지 기준 %)
- */
-export const GRID_ANCHOR_PRESET_COORDINATES: Record<
-  Exclude<GridAnchorPreset, "custom">,
-  Omit<TextBoxPosition, "anchor">
-> = {
-  "top-left": { xPercent: 10, yPercent: 10, widthPercent: 80 },
-  "top-center": { xPercent: 50, yPercent: 10, widthPercent: 80 },
-  "top-right": { xPercent: 90, yPercent: 10, widthPercent: 80 },
-  "middle-left": { xPercent: 10, yPercent: 50, widthPercent: 80 },
-  "middle-center": { xPercent: 50, yPercent: 50, widthPercent: 80 },
-  "middle-right": { xPercent: 90, yPercent: 50, widthPercent: 80 },
-  "bottom-left": { xPercent: 10, yPercent: 90, widthPercent: 80 },
-  "bottom-center": { xPercent: 50, yPercent: 90, widthPercent: 80 },
-  "bottom-right": { xPercent: 90, yPercent: 90, widthPercent: 80 },
-};
-
-/**
  * 3x3 앵커 기준 CSS transform 오프셋 정의
  */
 export const GRID_ANCHOR_TRANSFORMS: Record<
@@ -113,23 +95,7 @@ export const DEFAULT_DECK_STYLE = {
  * 프레젠테이션 송출 단축키 정의
  */
 export const PRESENTATION_SHORTCUTS = {
-  NEXT_SLIDE: ["ArrowRight", "Space", "PageDown"],
-  PREV_SLIDE: ["ArrowLeft", "PageUp"],
-  TOGGLE_BLACKOUT: ["b", "B"],
-  TOGGLE_LYRICS_HIDDEN: ["h", "H"],
   BUFFER_CLEAR_TIMEOUT_MS: 3000,
-} as const;
-
-/**
- * 텍스트 박스 이동 제한 안전 여백 (%)
- */
-export const SAFE_MARGIN_PERCENT = {
-  MIN_X: 5,
-  MAX_X: 95,
-  MIN_Y: 5,
-  MAX_Y: 95,
-  MIN_WIDTH: 20,
-  MAX_WIDTH: 90,
 } as const;
 
 export * from "./backgrounds";

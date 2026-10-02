@@ -1,13 +1,12 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { signInAsTestUser } from "../../test/sessionFixture";
 import {
-  closeOfflineDB,
-  OFFLINE_DB_NAME,
   loadAllPresentations,
   savePresentation,
-  getPersistenceError,
   clearPersistenceError,
 } from "../../lib/storage";
+import { closeOfflineDB, OFFLINE_DB_NAME } from "../../lib/storage/db";
+import { getPersistenceError } from "../../lib/storage/persistenceStatus";
 import {
   hydrateFromStorage,
   flushPendingWrites,
@@ -49,7 +48,7 @@ describe("presentationStore 영속성", () => {
 
   it("편집하면 활성 문서가 저장된다", async () => {
     await hydrateFromStorage();
-    const before = createNewPresentation("임시").id;
+    const before = createNewPresentation().id;
 
     updatePresentationTitle("저장 확인용 제목");
     await flushPendingWrites();
@@ -80,7 +79,7 @@ describe("presentationStore 영속성", () => {
   it("새 문서를 만들면 그 문서도 저장된다", async () => {
     await hydrateFromStorage();
 
-    const created = createNewPresentation("새 예배 세트");
+    const created = createNewPresentation();
     await flushPendingWrites();
 
     const { valid } = await loadAllPresentations();
@@ -89,7 +88,7 @@ describe("presentationStore 영속성", () => {
 
   it("저장본이 있으면 시드 대신 저장본으로 복원한다", async () => {
     await hydrateFromStorage();
-    const created = createNewPresentation("복원 대상");
+    const created = createNewPresentation();
     updatePresentationTitle("복원 대상");
     await flushPendingWrites();
 
@@ -112,7 +111,7 @@ describe("presentationStore 영속성", () => {
 
   it("다른 계정의 저장본은 싣지 않는다", async () => {
     await hydrateFromStorage();
-    const mine = createNewPresentation("내 세트");
+    const mine = createNewPresentation();
     await flushPendingWrites();
 
     signInAsTestUser("999999999999999999999");
@@ -140,7 +139,7 @@ describe("presentationStore 영속성", () => {
 
   it("손상된 저장본이 있어도 나머지 문서는 복원한다", async () => {
     await hydrateFromStorage();
-    const healthy = createNewPresentation("정상 문서");
+    const healthy = createNewPresentation();
     await flushPendingWrites();
 
     await savePresentation({
@@ -157,7 +156,7 @@ describe("presentationStore 영속성", () => {
 
   it("저장에 실패하면 경고 상태를 올리고 편집은 계속 가능하다", async () => {
     await hydrateFromStorage();
-    createNewPresentation("임시");
+    createNewPresentation();
     await flushPendingWrites();
 
     vi.stubGlobal("indexedDB", undefined);

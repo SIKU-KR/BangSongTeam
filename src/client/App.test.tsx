@@ -2,8 +2,8 @@ import React from "react";
 import { render, screen, act } from "@testing-library/react";
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { App } from "./App";
-import { resetPresentationStore } from "./features/presentation";
-import { closeOfflineDB, OFFLINE_DB_NAME } from "./lib/storage";
+import { resetPresentationStore } from "./features/presentation/presentationStore";
+import { closeOfflineDB, OFFLINE_DB_NAME } from "./lib/storage/db";
 import { installFakeApi } from "./test/fakeApi";
 import {
   signInAsTestUser,

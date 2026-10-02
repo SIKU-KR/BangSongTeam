@@ -34,7 +34,6 @@ export const EDITOR_COPY = {
   slide: {
     ...SLIDE,
     number: (n: number) => `${SLIDE.label} ${n}`,
-    lineCount: (count: number) => `${count}줄`,
     lineUsage: (used: number, max: number) => `${used}/${max}줄`,
     pageCount: (count: number) => `${count}장`,
     addTooltip: "이 슬라이드 뒤에 새 슬라이드 추가",
@@ -128,17 +127,6 @@ export const EDITOR_COPY = {
     collapseSection: "구역 접기",
     noSongs: EMPTY_SONGS,
     addSongHint: "아래에서 곡을 추가해 보세요.",
-  },
-  quickPaste: {
-    title: "가사 붙여넣기",
-    description: SPLIT_RULE,
-    titlePlaceholder: "예: 은혜로다",
-    artistPlaceholder: "예: 손경민",
-    lyricsLabel: "가사",
-    lyricsPlaceholder: "가사를 붙여넣어 주세요",
-    preview: "미리보기",
-    emptyPreview: "가사를 붙여넣으면 여기에 슬라이드가 보여요.",
-    submit: "추가",
   },
   externalSearch: {
     label: "가사 검색:",

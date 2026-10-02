@@ -8,7 +8,7 @@ import {
 } from "#components/ui/input-group";
 import { COMMON_COPY } from "#copy/common";
 
-export interface SearchInputProps {
+interface SearchInputProps {
   value: string;
   onValueChange: (next: string) => void;
   /** 보이는 레이블이 없어 `aria-label`로만 붙는 입력란 이름 */

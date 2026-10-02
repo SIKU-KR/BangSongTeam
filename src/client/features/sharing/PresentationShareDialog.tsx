@@ -58,7 +58,7 @@ const ACCESS_OPTIONS: Array<{ value: LinkAccess; label: string }> = [
   { value: "view", label: SHARING_COPY.link.accessOptions.view },
 ];
 
-export interface PresentationShareDialogProps {
+interface PresentationShareDialogProps {
   presentationId: string;
   title: string;
   isOpen: boolean;

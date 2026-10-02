@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { closeOfflineDB, OFFLINE_DB_NAME } from "../storage";
+import { closeOfflineDB, OFFLINE_DB_NAME } from "../storage/db";
 import {
   saveCachedSession,
   loadCachedSession,

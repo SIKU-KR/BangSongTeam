@@ -18,7 +18,6 @@ export const COMMON_COPY = {
   myDrive: "내 드라이브",
   trash: "휴지통",
   forkCount: (count: number) => `${count}회 가져감`,
-  fontSample: "가나다라마바사 123 ABC",
 } as const;
 
 export const ERROR_COPY = {

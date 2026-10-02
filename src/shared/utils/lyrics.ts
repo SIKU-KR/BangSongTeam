@@ -123,15 +123,6 @@ export function splitLyricsIntoSlides(rawText: string): Slide[] {
     .map((lines, order) => SlideSchema.parse({ order, lines }));
 }
 
-/**
- * 슬라이드 목록을 순서대로 정렬하여 빈 줄(\n\n)로 구분된 가사 원문 문자열로 역변환한다.
- */
-export function mergeSlidesToLyrics(slides: Slide[]): string {
-  if (slides.length === 0) return "";
-  const sorted = [...slides].sort((a, b) => a.order - b.order);
-  return sorted.map((slide) => slide.lines.join("\n")).join("\n\n");
-}
-
 function isBlankLine(line: string): boolean {
   return sanitizeLyricLine(line).length === 0;
 }

@@ -1,9 +1,9 @@
 import { resolveFullscreenStrategy } from "./fullscreen";
 import { SHELL_COPY } from "#copy/shell";
 
-export type BrowserCapabilityId = "fullscreen" | "h264" | "offline";
+type BrowserCapabilityId = "fullscreen" | "h264" | "offline";
 
-export interface BrowserCapability {
+interface BrowserCapability {
   id: BrowserCapabilityId;
   /** 배너에 보여 줄 기능 이름 */
   label: string;

@@ -15,12 +15,9 @@ import { api } from "./client";
 import { callApi } from "./request";
 
 /** 공개 덱 검색. 빈 검색어는 가져간 횟수순 둘러보기 */
-export async function searchCatalog(
-  q: string,
-  limit = 20,
-): Promise<SearchCatalogResponse> {
+export async function searchCatalog(q: string): Promise<SearchCatalogResponse> {
   const body = await callApi(() =>
-    api.api.catalog.search.$get({ query: { q, limit: String(limit) } }),
+    api.api.catalog.search.$get({ query: { q, limit: "20" } }),
   );
   return SearchCatalogResponseSchema.parse(body);
 }

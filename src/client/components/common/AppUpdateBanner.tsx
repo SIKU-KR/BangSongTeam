@@ -1,5 +1,4 @@
 import React from "react";
-import { useLocation } from "react-router-dom";
 import { RefreshCwIcon } from "lucide-react";
 import {
   Alert,
@@ -19,15 +18,11 @@ import { SHELL_COPY } from "#copy/shell";
  *
  * 갱신을 자동으로 적용하지 않는 이유가 이 컴포넌트의 존재 이유다. 배포가 나간
  * 순간 창이 새로고침되면 예배가 끊기므로, 적용 시점을 사용자가 고르게 한다.
- * 송출 경로(`/present/*`)에서는 어떤 경우에도 렌더하지 않는다 — 청중 화면에
- * 배너가 뜨는 것 자체가 사고다.
  */
 export function AppUpdateBanner(): React.JSX.Element | null {
-  const { pathname } = useLocation();
   const { needRefresh } = useServiceWorkerState();
 
   if (!needRefresh) return null;
-  if (pathname.startsWith("/present/")) return null;
 
   return (
     <Alert

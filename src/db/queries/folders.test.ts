@@ -12,7 +12,6 @@ import {
   deleteFolderTree,
   getDriveTombstones,
   getFoldersByUserId,
-  resolveOwnedFolderId,
   upsertFolder,
 } from "./folders";
 import {
@@ -310,17 +309,6 @@ describe("드라이브 폴더 쿼리", () => {
 
       const [restored] = await getPresentationDocumentsByUserId(db, USER_A);
       expect(restored.folderId).toBeNull();
-    });
-
-    it("resolveOwnedFolderId는 본인 폴더만 통과시킨다", async () => {
-      const mine = makeFolder(USER_A);
-      const theirs = makeFolder(USER_B);
-      await upsertFolder(db, USER_A, mine);
-      await upsertFolder(db, USER_B, theirs);
-
-      expect(await resolveOwnedFolderId(db, USER_A, mine.id)).toBe(mine.id);
-      expect(await resolveOwnedFolderId(db, USER_A, theirs.id)).toBeNull();
-      expect(await resolveOwnedFolderId(db, USER_A, null)).toBeNull();
     });
   });
 

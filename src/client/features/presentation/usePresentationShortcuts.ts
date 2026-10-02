@@ -1,16 +1,13 @@
 import { useEffect, useRef } from "react";
 import { tinykeys } from "tinykeys";
 
-export interface UsePresentationShortcutsOptions {
+interface UsePresentationShortcutsOptions {
   onNext?: () => void;
   onPrev?: () => void;
   onToggleBlackout?: () => void;
   onToggleLyrics?: () => void;
   onExit?: () => void;
-  handleKey?: (key: string) => void;
   navigationBuffer?: { handleKey: (key: string) => void };
-  enabled?: boolean;
-  target?: Window | HTMLElement;
 }
 
 /**
@@ -22,20 +19,15 @@ export function usePresentationShortcuts({
   onToggleBlackout,
   onToggleLyrics,
   onExit,
-  handleKey,
   navigationBuffer,
-  enabled = true,
-  target,
 }: UsePresentationShortcutsOptions): void {
-  const activeHandleKey = handleKey ?? navigationBuffer?.handleKey;
-
   const callbacksRef = useRef({
     onNext,
     onPrev,
     onToggleBlackout,
     onToggleLyrics,
     onExit,
-    handleKey: activeHandleKey,
+    handleKey: navigationBuffer?.handleKey,
   });
 
   callbacksRef.current = {
@@ -44,17 +36,11 @@ export function usePresentationShortcuts({
     onToggleBlackout,
     onToggleLyrics,
     onExit,
-    handleKey: activeHandleKey,
+    handleKey: navigationBuffer?.handleKey,
   };
 
   useEffect(() => {
-    if (!enabled) {
-      return;
-    }
-
-    const eventTarget =
-      target ?? (typeof window !== "undefined" ? window : null);
-    if (!eventTarget) {
+    if (typeof window === "undefined") {
       return;
     }
 
@@ -136,10 +122,10 @@ export function usePresentationShortcuts({
       };
     }
 
-    const unsubscribe = tinykeys(eventTarget, keybindings);
+    const unsubscribe = tinykeys(window, keybindings);
 
     return () => {
       unsubscribe();
     };
-  }, [enabled, target]);
+  }, []);
 }

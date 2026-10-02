@@ -10,4 +10,3 @@ import { z } from "zod";
 export const ID_PATTERN = /^[A-Za-z0-9_-]{21}$/;
 
 export const IdSchema = z.string().regex(ID_PATTERN, "Invalid id");
-export type Id = z.infer<typeof IdSchema>;

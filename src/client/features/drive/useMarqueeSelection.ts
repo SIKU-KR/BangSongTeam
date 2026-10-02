@@ -19,7 +19,7 @@ interface MarqueeStart {
   active: boolean;
 }
 
-export interface MarqueeOptions {
+interface MarqueeOptions {
   containerRef: React.RefObject<HTMLElement | null>;
   enabled: boolean;
   selection: ReadonlySet<string>;

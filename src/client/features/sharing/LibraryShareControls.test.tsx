@@ -10,14 +10,14 @@ import {
   resetSongLibraryStore,
   saveSongToLibrary,
   upsertLibraryDeck,
-  useLibraryDeck,
+  useUserSongs,
 } from "../editor/songLibraryStore";
 import { __resetDeckSyncForTests } from "../../lib/sync/deckSync";
 import { LibraryShareControls } from "./LibraryShareControls";
 import { SHARING_COPY } from "#copy/sharing";
 
 function LiveControls({ id }: { id: string }): React.JSX.Element | null {
-  const deck = useLibraryDeck(id);
+  const deck = useUserSongs().find((song) => song.id === id);
   return deck ? <LibraryShareControls deck={deck} /> : null;
 }
 

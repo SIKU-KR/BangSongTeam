@@ -139,6 +139,3 @@ export function createPresentationsRoute(deps: AppDeps = {}) {
       return c.json(settings, 200);
     });
 }
-
-export const presentationsRoute = createPresentationsRoute();
-export default presentationsRoute;

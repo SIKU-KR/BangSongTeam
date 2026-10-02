@@ -27,7 +27,7 @@ import { setSyncStatus } from "./syncStatus";
  * 덱이 비어 있는 항목이 하나라도 있으면 서버의 `PresentationDocumentSchema`가
  * 거절한다. 여기서 걸러 내지 않으면 400을 받고 그 문서는 영영 안 올라간다.
  */
-export function toSyncableDocument(
+function toSyncableDocument(
   presentation: Presentation,
 ): PresentationDocument | null {
   const result = PresentationDocumentSchema.safeParse(presentation);
@@ -38,9 +38,7 @@ export function toSyncableDocument(
  * 동기화 경로의 요청 1건. 오류 구분은 `callApi`에 맡기고, 실패 갈래에 맞춰
  * 동기화 상태 배지만 남긴다. 성공 응답의 본문을 못 읽은 실패는 상태를 바꾸지 않는다.
  */
-export async function send<T>(
-  request: Parameters<typeof callApi>[0],
-): Promise<T> {
+async function send<T>(request: Parameters<typeof callApi>[0]): Promise<T> {
   try {
     return await callApi<T>(request);
   } catch (err) {

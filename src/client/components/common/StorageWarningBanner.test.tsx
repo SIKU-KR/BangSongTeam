@@ -8,9 +8,9 @@ import {
   reportPersistenceError,
   clearPersistenceError,
   reportCorruptedRecords,
-  clearCorruptedRecords,
-  PersistenceUnavailableError,
 } from "../../lib/storage";
+import { clearCorruptedRecords } from "../../lib/storage/persistenceStatus";
+import { PersistenceUnavailableError } from "../../lib/storage/db";
 
 describe("StorageWarningBanner", () => {
   beforeEach(() => {
@@ -53,10 +53,7 @@ describe("StorageWarningBanner", () => {
   });
 
   it("읽지 못한 저장본이 있으면 격리 안내를 띄운다", () => {
-    reportCorruptedRecords([
-      { id: "p1", reason: "invalid uuid" },
-      { id: "p2", reason: "invalid uuid" },
-    ]);
+    reportCorruptedRecords([{ id: "p1" }, { id: "p2" }]);
     render(<StorageWarningBanner />);
 
     const banner = screen.getByTestId("corrupted-warning-banner");
@@ -64,7 +61,7 @@ describe("StorageWarningBanner", () => {
   });
 
   it("격리 안내는 저장이 다시 성공해도 사라지지 않는다", () => {
-    reportCorruptedRecords([{ id: "p1", reason: "invalid uuid" }]);
+    reportCorruptedRecords([{ id: "p1" }]);
     clearPersistenceError();
     render(<StorageWarningBanner />);
 

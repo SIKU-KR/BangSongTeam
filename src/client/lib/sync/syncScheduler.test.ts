@@ -9,7 +9,7 @@ import {
   __resetSyncSchedulerForTests,
   __setPusherForTests,
 } from "./syncScheduler";
-import { getSyncStatus, __resetSyncStatusForTests } from "./syncStatus";
+import { getSyncSnapshot, __resetSyncStatusForTests } from "./syncStatus";
 import { OfflineError } from "../api/request";
 import {
   scheduleFolderPush,
@@ -61,7 +61,7 @@ describe("서버 push 스케줄러", () => {
     await flushPendingSync();
 
     expect(push).toHaveBeenCalledTimes(1);
-    expect(getSyncStatus()).toBe("synced");
+    expect(getSyncSnapshot().status).toBe("synced");
   });
 
   it("같은 문서를 연달아 고치면 한 번만 올린다 (디바운스)", async () => {
@@ -97,11 +97,11 @@ describe("서버 push 스케줄러", () => {
     scheduleDocumentPush(doc("a"));
     await flushPendingSync();
 
-    expect(getSyncStatus()).toBe("offline");
+    expect(getSyncSnapshot().status).toBe("offline");
 
     push.mockResolvedValue(true);
     await flushPendingSync();
-    expect(getSyncStatus()).toBe("synced");
+    expect(getSyncSnapshot().status).toBe("synced");
   });
 
   it("서버가 거절하면 error로 표시한다", async () => {
@@ -110,12 +110,12 @@ describe("서버 push 스케줄러", () => {
     scheduleDocumentPush(doc("a"));
     await flushPendingSync();
 
-    expect(getSyncStatus()).toBe("error");
+    expect(getSyncSnapshot().status).toBe("error");
   });
 
   it("빈 큐를 flush해도 상태를 건드리지 않는다", async () => {
     await flushPendingSync();
-    expect(getSyncStatus()).toBe("idle");
+    expect(getSyncSnapshot().status).toBe("idle");
   });
 
   it("새 폴더를 세트보다 먼저 올린다 (폴더 큐를 먼저 비운다)", async () => {

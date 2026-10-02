@@ -16,5 +16,3 @@ export const MODERATION_SQL = {
 
   REJECT_REPORT: `UPDATE reports SET status = 'rejected', resolved_at = unixepoch(), resolution_note = :note WHERE id = :report_id;`,
 } as const;
-
-export type ModerationStatement = keyof typeof MODERATION_SQL;

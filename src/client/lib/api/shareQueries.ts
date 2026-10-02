@@ -7,7 +7,7 @@ import {
   updateShareSettings,
 } from "./shareApi";
 
-export const shareKeys = {
+const shareKeys = {
   settings: (id: string) => ["presentation-share", id] as const,
   preview: (token: string) => ["share-preview", token] as const,
 };

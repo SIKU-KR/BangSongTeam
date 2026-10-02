@@ -3,7 +3,7 @@ import type { Slide, DeckStyle, GridAnchorPreset, TextBackdrop } from "#shared";
 import { GRID_ANCHOR_TRANSFORMS, TEXT_SHADOW_PRESETS } from "#shared";
 import { loadWebFont, toCssFontFamily } from "../../lib/fonts/fontLoader";
 
-export interface TextLayerProps {
+interface TextLayerProps {
   slide?: Slide | null;
   style: DeckStyle;
   isLyricsHidden?: boolean;
@@ -11,7 +11,6 @@ export interface TextLayerProps {
   isInteracting?: boolean;
   /** 가사 줄 대신 박스 안에 그릴 내용. 편집 캔버스의 직접 편집기가 쓴다 */
   content?: React.ReactNode;
-  className?: string;
 }
 
 /**
@@ -29,7 +28,6 @@ export function TextLayer({
   boxRef,
   isInteracting = false,
   content,
-  className = "",
 }: TextLayerProps): React.JSX.Element {
   const {
     position,
@@ -63,7 +61,7 @@ export function TextLayer({
   return (
     <div
       data-testid="text-layer-container"
-      className={`pointer-events-none absolute inset-0 z-20 transition-opacity duration-150 ease-out select-none ${className}`}
+      className="pointer-events-none absolute inset-0 z-20 transition-opacity duration-150 ease-out select-none"
       style={{
         opacity: isLyricsHidden ? 0 : 1,
       }}

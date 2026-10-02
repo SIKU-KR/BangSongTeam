@@ -131,12 +131,12 @@ describe("usePresentationShortcuts Hook", () => {
     expect(onToggleLyrics).toHaveBeenCalledTimes(2);
   });
 
-  it("should delegate numeric keys, Enter, and Backspace to handleKey", () => {
+  it("should delegate numeric keys, Enter, and Backspace to the navigation buffer", () => {
     const handleKey = vi.fn();
 
     renderHook(() =>
       usePresentationShortcuts({
-        handleKey,
+        navigationBuffer: { handleKey },
       }),
     );
 
@@ -167,52 +167,6 @@ describe("usePresentationShortcuts Hook", () => {
       }),
     );
     expect(handleKey).toHaveBeenCalledWith("Backspace");
-  });
-
-  it("should accept navigationBuffer object with handleKey", () => {
-    const mockNavigationBuffer = {
-      buffer: "",
-      handleKey: vi.fn(),
-      clearBuffer: vi.fn(),
-    };
-
-    renderHook(() =>
-      usePresentationShortcuts({
-        navigationBuffer: mockNavigationBuffer,
-      }),
-    );
-
-    window.dispatchEvent(
-      new KeyboardEvent("keydown", { key: "5", code: "Digit5", bubbles: true }),
-    );
-    expect(mockNavigationBuffer.handleKey).toHaveBeenCalledWith("5");
-  });
-
-  it("should not trigger shortcuts when enabled is false", () => {
-    const onNext = vi.fn();
-    const handleKey = vi.fn();
-
-    renderHook(() =>
-      usePresentationShortcuts({
-        onNext,
-        handleKey,
-        enabled: false,
-      }),
-    );
-
-    window.dispatchEvent(
-      new KeyboardEvent("keydown", {
-        key: "ArrowRight",
-        code: "ArrowRight",
-        bubbles: true,
-      }),
-    );
-    window.dispatchEvent(
-      new KeyboardEvent("keydown", { key: "1", code: "Digit1", bubbles: true }),
-    );
-
-    expect(onNext).not.toHaveBeenCalled();
-    expect(handleKey).not.toHaveBeenCalled();
   });
 
   it("should cleanup event listeners when unmounted", () => {
@@ -251,7 +205,7 @@ describe("usePresentationShortcuts Hook", () => {
     renderHook(() =>
       usePresentationShortcuts({
         onNext,
-        handleKey,
+        navigationBuffer: { handleKey },
       }),
     );
 

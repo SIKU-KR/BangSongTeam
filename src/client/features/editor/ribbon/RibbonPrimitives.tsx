@@ -63,7 +63,7 @@ export function RibbonTooltip({
   );
 }
 
-export interface RibbonButtonProps {
+interface RibbonButtonProps {
   label: string;
   icon?: React.ReactNode;
   text?: string;

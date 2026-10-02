@@ -2,7 +2,7 @@ import {
   __setSessionFetcherForTests,
   __resetSessionForTests,
   __setSessionForTests,
-} from "../lib/auth";
+} from "../lib/auth/sessionStore";
 import { savePresentation, saveSong } from "../lib/storage";
 import type { Deck, Presentation } from "#shared";
 import { SEED_PRESENTATIONS, SEED_USER_ID } from "./presentationFixture";

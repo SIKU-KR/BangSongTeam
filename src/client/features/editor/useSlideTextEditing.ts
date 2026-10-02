@@ -24,7 +24,7 @@ interface UseSlideTextEditingOptions {
   select: (position: ProjectionPosition) => void;
 }
 
-export interface SlideTextEditing {
+interface SlideTextEditing {
   isEditingText: boolean;
   initialCaret: CaretPlacement | undefined;
   /** 줄 수·길이 제한에 막힌 입력이 지금 슬라이드에서 있었는지 */

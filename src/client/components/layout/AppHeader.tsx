@@ -11,7 +11,7 @@ import { isTypingTarget } from "../../lib/browser/keyboardTarget";
 import { ThemeMenuButton } from "../common/ThemeMenuButton";
 import { COMMON_COPY } from "#copy/common";
 
-export interface AppHeaderProps {
+interface AppHeaderProps {
   /** 페이지 제목. `titleSlot`이 있으면 화면 읽기 프로그램용 제목으로만 쓴다 */
   title: string;
   searchPlaceholder: string;

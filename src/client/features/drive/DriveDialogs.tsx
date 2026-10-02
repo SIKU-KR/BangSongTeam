@@ -34,7 +34,7 @@ function closeOnDismiss(onCancel: () => void): (open: boolean) => void {
   };
 }
 
-export interface NameDialogProps {
+interface NameDialogProps {
   title: string;
   initialValue: string;
   confirmLabel: string;
@@ -114,7 +114,7 @@ export function NameDialog({
   );
 }
 
-export interface ConfirmDialogProps {
+interface ConfirmDialogProps {
   title: string;
   message: React.ReactNode;
   confirmLabel: string;
@@ -157,7 +157,7 @@ export function ConfirmDialog({
   );
 }
 
-export interface FolderPickerDialogProps {
+interface FolderPickerDialogProps {
   title: string;
   /** 대화 상자 안내 문구 (예: 현재 위치) */
   description?: string;
@@ -251,7 +251,7 @@ export function FolderPickerDialog({
   );
 }
 
-export interface MoveDialogProps {
+interface MoveDialogProps {
   refs: DriveItemRef[];
   onMove: (targetFolderId: string | null) => void;
   onCancel: () => void;

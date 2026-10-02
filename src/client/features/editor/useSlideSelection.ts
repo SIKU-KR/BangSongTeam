@@ -26,7 +26,7 @@ interface SlideClipboard {
   lines: string[][];
 }
 
-export interface SlideSelection {
+interface SlideSelection {
   /** 선택된 슬라이드 id (현재 곡 안, 화면 순서). 삽입 커서가 있으면 비어 있다 */
   selectedIds: string[];
   insertion: SlideInsertion | null;

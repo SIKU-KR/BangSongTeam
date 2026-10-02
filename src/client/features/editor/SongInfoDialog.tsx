@@ -19,12 +19,12 @@ import { EDITOR_COPY } from "#copy/editor";
 import { COMMON_COPY } from "#copy/common";
 import { MAX_DECK_ARTIST_LENGTH, MAX_DECK_TITLE_LENGTH } from "#shared";
 
-export interface SongInfoValues {
+interface SongInfoValues {
   title: string;
   artist: string;
 }
 
-export interface SongInfoDialogProps {
+interface SongInfoDialogProps {
   heading: string;
   initialValues: SongInfoValues;
   notice?: React.ReactNode;

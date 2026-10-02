@@ -83,7 +83,7 @@ export function formatDate(iso: string): string {
 }
 
 /** 프레젠테이션이 실제로 놓인 폴더 (사라진 폴더를 가리키면 루트) */
-export function presentationFolderId(
+function presentationFolderId(
   index: FolderIndex<Folder>,
   presentation: Presentation,
 ): string | null {
@@ -91,7 +91,7 @@ export function presentationFolderId(
 }
 
 /** 자신이나 담긴 폴더(조상 포함)가 휴지통에 있는지 */
-export function isPresentationTrashed(
+function isPresentationTrashed(
   index: FolderIndex<Folder>,
   presentation: Presentation,
 ): boolean {
@@ -155,7 +155,7 @@ function toLocatedFileItem(
 const collator = new Intl.Collator("ko", { numeric: true });
 
 /** 처음 정렬할 때의 기본 방향 (이름은 가나다순, 날짜는 최근부터) */
-export const DEFAULT_SORT_DIRECTION: Record<SortKey, SortOrder["direction"]> = {
+const DEFAULT_SORT_DIRECTION: Record<SortKey, SortOrder["direction"]> = {
   name: "asc",
   updated: "desc",
 };

@@ -1,1 +1,1 @@
-export * from "./BackgroundLibraryView";
+export { BackgroundLibraryView } from "./BackgroundLibraryView";

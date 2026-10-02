@@ -17,7 +17,7 @@ import {
   type SnapGuides,
 } from "./textBoxDrag";
 
-export interface TextBoxMoveableProps {
+interface TextBoxMoveableProps {
   target: HTMLElement | null;
   refreshKey: string;
   onPreview: (position: TextBoxPosition | null, guides: SnapGuides) => void;

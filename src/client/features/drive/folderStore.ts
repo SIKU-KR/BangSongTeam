@@ -313,10 +313,6 @@ function subscribe(listener: () => void): () => void {
   };
 }
 
-export function useFolders(): Folder[] {
-  return useSyncExternalStore(subscribe, getFolders, getFolders);
-}
-
 /** 트리 인덱스 (폴더 목록이 바뀔 때만 새로 만든다) */
 export function useFolderIndex(): FolderIndex<Folder> {
   return useSyncExternalStore(subscribe, getFolderIndex, getFolderIndex);

@@ -12,7 +12,7 @@ import {
 } from "./driveModel";
 import { DRIVE_COPY } from "#copy/drive";
 
-export interface DriveListingOptions {
+interface DriveListingOptions {
   isTrash: boolean;
   folderId: string | null;
   searchQuery: string;
@@ -20,7 +20,7 @@ export interface DriveListingOptions {
   typeFilter: DriveTypeFilter;
 }
 
-export interface DriveListing {
+interface DriveListing {
   /** 앞뒤 공백을 뺀 검색어. 비어 있으면 폴더 내용을 보여 준다 */
   query: string;
   items: DriveItem[];

@@ -12,7 +12,7 @@ const EMPTY_PRESENTATION: Presentation = {
   updatedAt: "",
 };
 
-export interface OpenedPresentation {
+interface OpenedPresentation {
   /** 스토어에 없으면 `undefined`. 라우트는 이 값으로 다른 화면으로 보낼지 정한다 */
   found: Presentation | undefined;
   /** `found`가 없을 때도 그릴 수 있게 빈 프레젠테이션으로 채운 값 */

@@ -6,7 +6,6 @@ import {
   createNewPresentation,
   duplicatePresentation,
   getActivePresentation,
-  getActivePresentationId,
   getPresentationById,
   listPresentations,
   movePresentation,
@@ -45,13 +44,13 @@ describe("presentationStore 드라이브 조작", () => {
   });
 
   it("새 프레젠테이션을 지정한 폴더에 만든다", () => {
-    expect(createNewPresentation("세트", FOLDER).folderId).toBe(FOLDER);
-    expect(createNewPresentation("세트").folderId).toBeNull();
+    expect(createNewPresentation(FOLDER).folderId).toBe(FOLDER);
+    expect(createNewPresentation().folderId).toBeNull();
   });
 
   it("활성 문서가 아니어도 id로 옮기고 이름을 바꾼다", () => {
     const target = SEED_PRESENTATIONS[3];
-    expect(getActivePresentationId()).not.toBe(target.id);
+    expect(getActivePresentation().id).not.toBe(target.id);
 
     movePresentation(target.id, FOLDER);
     renamePresentation(target.id, "  바뀐 이름  ");
@@ -60,7 +59,7 @@ describe("presentationStore 드라이브 조작", () => {
     expect(doc?.folderId).toBe(FOLDER);
     expect(doc?.title).toBe("바뀐 이름");
     expect(doc!.updatedAt > target.updatedAt).toBe(true);
-    expect(getActivePresentationId()).toBe(SEED_PRESENTATIONS[0].id);
+    expect(getActivePresentation().id).toBe(SEED_PRESENTATIONS[0].id);
   });
 
   it("빈 이름으로는 바꾸지 않는다", () => {
@@ -154,7 +153,7 @@ describe("presentationStore 드라이브 조작", () => {
     await flushPendingSync();
 
     expect(getPresentationById(active.id)).toBeUndefined();
-    expect(getActivePresentationId()).toBe(SEED_PRESENTATIONS[1].id);
+    expect(getActivePresentation().id).toBe(SEED_PRESENTATIONS[1].id);
     expect(push).not.toHaveBeenCalled();
   });
 });

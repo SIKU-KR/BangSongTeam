@@ -19,7 +19,7 @@ import {
 } from "#components/ui/field";
 import { RadioGroup, RadioGroupItem } from "#components/ui/radio-group";
 import { Textarea } from "#components/ui/textarea";
-import type { ReportReason, ReportTargetType } from "#shared";
+import type { ReportReason } from "#shared";
 import { useSubmitReport } from "../../lib/api/catalogQueries";
 import { describeApiError } from "../../lib/api/request";
 import { SHARING_COPY } from "#copy/sharing";
@@ -44,25 +44,21 @@ const REASONS: { value: ReportReason; label: string; hint: string }[] = [
   },
 ];
 
-export interface ReportDialogProps {
-  isOpen: boolean;
+interface ReportDialogProps {
   onClose: () => void;
-  targetType: ReportTargetType;
   targetId: string;
   /** 무엇을 신고하는지 보여 줄 곡 제목 */
   targetTitle: string;
   defaultReason?: ReportReason;
 }
 
-/** 신고·교정 제안 대화상자. */
+/** 신고·교정 제안 대화상자. 곡 신고만 받으며, 열려 있을 때만 마운트해서 쓴다. */
 export function ReportDialog({
-  isOpen,
   onClose,
-  targetType,
   targetId,
   targetTitle,
   defaultReason = "lyrics_error",
-}: ReportDialogProps): React.JSX.Element | null {
+}: ReportDialogProps): React.JSX.Element {
   const [reason, setReason] = useState<ReportReason>(defaultReason);
   const [details, setDetails] = useState("");
   const report = useSubmitReport();
@@ -77,7 +73,7 @@ export function ReportDialog({
 
   return (
     <Dialog
-      open={isOpen}
+      open
       onOpenChange={(open) => {
         if (!open) close();
       }}
@@ -105,7 +101,7 @@ export function ReportDialog({
             onSubmit={(e) => {
               e.preventDefault();
               report.mutate({
-                targetType,
+                targetType: "deck",
                 targetId,
                 reason,
                 details: details.trim() || undefined,

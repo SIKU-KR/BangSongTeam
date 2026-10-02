@@ -1,59 +1,13 @@
 import { describe, it, expect } from "vitest";
 import {
-  CreateDeckRequestSchema,
-  UpdateDeckRequestSchema,
-  CreatePresentationRequestSchema,
-  UpdatePresentationItemsRequestSchema,
   SearchCatalogQuerySchema,
   SearchCatalogResponseSchema,
   PresentationDocumentSchema,
-  PresentationListResponseSchema,
-  DeckListResponseSchema,
-  ApiErrorSchema,
 } from "./api";
 import { DeckStyleSchema } from "./style";
 import { PresentationSchema } from "./presentation";
 
 describe("API Schemas", () => {
-  it("validates CreateDeckRequestSchema with default values", () => {
-    const valid = {
-      title: "꽃들도",
-      lyricsRaw: "이곳에 생명 샘 솟아나",
-      slides: [{ order: 0, lines: ["이곳에 생명 샘 솟아나"] }],
-      style: {},
-    };
-    const parsed = CreateDeckRequestSchema.parse(valid);
-    expect(parsed.artist).toBe("");
-    expect(parsed.visibility).toBe("private");
-  });
-
-  it("validates UpdateDeckRequestSchema as partial", () => {
-    const partial = {
-      title: "새로운 제목",
-    };
-    const parsed = UpdateDeckRequestSchema.parse(partial);
-    expect(parsed.title).toBe("새로운 제목");
-    expect(parsed.lyricsRaw).toBeUndefined();
-  });
-
-  it("validates CreatePresentationRequestSchema", () => {
-    const valid = {
-      title: "주일 찬양 프레젠테이션",
-      serviceDate: "2026-09-27",
-    };
-    expect(CreatePresentationRequestSchema.parse(valid)).toEqual(valid);
-  });
-
-  it("validates UpdatePresentationItemsRequestSchema", () => {
-    const valid = {
-      items: [
-        { deckId: "a0eebc9996bb9bd380a11", order: 0 },
-        { deckId: "b0eebc9996bb9bd380a22", order: 1 },
-      ],
-    };
-    expect(UpdatePresentationItemsRequestSchema.parse(valid)).toEqual(valid);
-  });
-
   it("validates SearchCatalogQuerySchema and coerces limit", () => {
     const parsed = SearchCatalogQuerySchema.parse({
       q: " 은혜 ",
@@ -163,21 +117,6 @@ describe("API Schemas", () => {
         false,
       );
       expect(PresentationSchema.safeParse(withoutDeck).success).toBe(true);
-    });
-
-    it("목록 응답 봉투를 검증한다", () => {
-      const listed = { presentations: [document] };
-      expect(PresentationListResponseSchema.parse(listed)).toEqual(listed);
-      expect(DeckListResponseSchema.parse({ decks: [deck] })).toEqual({
-        decks: [deck],
-      });
-    });
-
-    it("오류 본문을 검증한다", () => {
-      expect(ApiErrorSchema.parse({ error: "로그인이 필요합니다" })).toEqual({
-        error: "로그인이 필요합니다",
-      });
-      expect(ApiErrorSchema.safeParse({}).success).toBe(false);
     });
   });
 });

@@ -6,7 +6,7 @@ import { RibbonTooltip } from "./RibbonPrimitives";
 import { FONT_SIZE_PT_PRESETS, ptToVw, vwToPt } from "./ribbonOptions";
 import { EDITOR_COPY } from "#copy/editor";
 
-export interface FontSizeFieldProps {
+interface FontSizeFieldProps {
   fontSizeVw: number;
   disabled: boolean;
   onChange: (fontSizeVw: number) => void;

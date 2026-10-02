@@ -1,15 +1,17 @@
 import React from "react";
 import {
-  __loadDocumentsForTests,
-  resetPresentationStore,
   listPresentations,
   getPresentationById,
 } from "../features/presentation";
 import {
+  __loadDocumentsForTests,
+  resetPresentationStore,
+} from "../features/presentation/presentationStore";
+import {
   __loadFoldersForTests,
   getFolders,
   resetFolderStore,
-} from "../features/drive";
+} from "../features/drive/folderStore";
 import { signInAsTestUser } from "../test/sessionFixture";
 import {
   render,

@@ -106,7 +106,7 @@ export interface PickedSlides {
   anchorId: string;
 }
 
-export interface PaneSelection {
+interface PaneSelection {
   /** 삽입 커서와 상관없이 지금 고른 슬라이드 id (화면 순서) */
   activeIds: string[];
   anchorId: string;

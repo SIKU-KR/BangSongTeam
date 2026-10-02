@@ -13,16 +13,6 @@ type DbInstance = any;
 
 const TRIGRAM_MIN_LENGTH = 3;
 
-/**
- * FTS5 쿼리 새니타이저.
- * 특수문자 및 FTS5 제어 연산자 주입을 방지한다.
- */
-export function sanitizeFts5Query(query: string): string {
-  return tokenize(query)
-    .map((t) => `"${t}"`)
-    .join(" ");
-}
-
 function tokenize(query: string): string[] {
   return query
     .replace(/[^\p{L}\p{N}\s]/gu, " ")

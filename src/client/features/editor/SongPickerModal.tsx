@@ -44,11 +44,10 @@ import {
 } from "./songPicker/LibrarySongDialog";
 import { EDITOR_COPY } from "#copy/editor";
 
-export interface SongPickerModalProps {
+interface SongPickerModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSelectSong: (deck: Deck) => void;
-  initialSearch?: string;
   /** 열릴 때 보여 줄 화면. `create`는 목록을 건너뛰고 가사 직접 입력 폼을 바로 연다. */
   initialMode?: SongPickerMode;
 }
@@ -68,13 +67,12 @@ export function SongPickerModal({
   isOpen,
   onClose,
   onSelectSong,
-  initialSearch = "",
   initialMode = "browse",
 }: SongPickerModalProps): React.JSX.Element | null {
   const mySongs = useUserSongs();
   const isOnline = useIsOnline();
 
-  const [searchQuery, setSearchQuery] = useState(initialSearch);
+  const [searchQuery, setSearchQuery] = useState("");
   const [filter, setFilter] = useState<PickerFilter>("all");
   const [mode, setMode] = useState<SongPickerMode>("browse");
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
@@ -93,12 +91,12 @@ export function SongPickerModal({
 
   useEffect(() => {
     if (isOpen) {
-      setSearchQuery(initialSearch);
+      setSearchQuery("");
       setMode(initialMode);
       setSelectedKey(null);
       setActionError(null);
     }
-  }, [isOpen, initialSearch, initialMode]);
+  }, [isOpen, initialMode]);
 
   const entries = useMemo<PickerEntry[]>(
     () =>
@@ -338,9 +336,7 @@ export function SongPickerModal({
 
         {reportTarget && (
           <ReportDialog
-            isOpen
             onClose={() => setReportTarget(null)}
-            targetType="deck"
             targetId={reportTarget.id}
             targetTitle={reportTarget.title}
           />

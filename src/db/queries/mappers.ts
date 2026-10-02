@@ -6,7 +6,6 @@ import {
   type Deck as SharedDeck,
   type DeckStyle,
   type Slide,
-  toPresentationChanges,
   type PresentationChanges,
   type PresentationDocument,
   type Folder as SharedFolder,
@@ -212,13 +211,6 @@ export function fromPresentationChanges(
       }),
     ),
   };
-}
-
-/** 하이드레이션된 문서 → 정규화된 행들 (모든 덱 포함, 항목 순) */
-export function fromPresentationDocument(
-  doc: PresentationDocument,
-): DecomposedDocument {
-  return fromPresentationChanges(toPresentationChanges(doc));
 }
 
 /** D1 폴더 행 → 공유 Folder DTO */

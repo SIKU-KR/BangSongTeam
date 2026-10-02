@@ -6,7 +6,7 @@ import { EDITOR_COPY } from "#copy/editor";
 /** 편집을 시작할 때 커서를 둘 곳. 나눈 뒷장은 맨 앞에서 이어 쓴다 */
 export type CaretPlacement = "start" | "end";
 
-export interface StageLyricsEditorProps {
+interface StageLyricsEditorProps {
   slide: Slide;
   caretColor: string;
   initialCaret?: CaretPlacement;

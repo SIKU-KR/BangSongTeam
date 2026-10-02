@@ -1,12 +1,11 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import type { Folder } from "#shared";
 import { signInAsTestUser } from "../../test/sessionFixture";
+import { getPresentationById, listPresentations } from "../presentation";
 import {
   __loadDocumentsForTests,
-  getPresentationById,
-  listPresentations,
   resetPresentationStore,
-} from "../presentation";
+} from "../presentation/presentationStore";
 import {
   __loadFoldersForTests,
   getFolders,

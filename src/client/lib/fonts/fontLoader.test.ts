@@ -5,12 +5,7 @@ import {
   DEFAULT_PRESET_FONTS,
   DeckStyleSchema,
 } from "#shared";
-import {
-  loadWebFont,
-  getNoonnuFont,
-  preloadWebFont,
-  toCssFontFamily,
-} from "./fontLoader";
+import { loadWebFont, getNoonnuFont, toCssFontFamily } from "./fontLoader";
 
 describe("눈누(noonnu.cc) 웹폰트 카탈로그 및 동적 로더", () => {
   beforeEach(() => {
@@ -111,11 +106,5 @@ describe("눈누(noonnu.cc) 웹폰트 카탈로그 및 동적 로더", () => {
     const byFamily = await getNoonnuFont(byName!.cardFamily);
     expect(byFamily).toBeDefined();
     expect(byFamily?.id).toBe(byName?.id);
-  });
-
-  it("preloadWebFont는 에러 없이 안전하게 실행된다", async () => {
-    await expect(
-      preloadWebFont("고운바탕", "찬양 슬라이드 테스트"),
-    ).resolves.not.toThrow();
   });
 });

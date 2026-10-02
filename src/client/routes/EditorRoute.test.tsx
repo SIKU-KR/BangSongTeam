@@ -1,5 +1,4 @@
 import React from "react";
-import { __loadDocumentsForTests } from "../features/presentation";
 import { signInAsTestUser } from "../test/sessionFixture";
 import { withQueryClient } from "../test/queryClientFixture";
 import {
@@ -16,8 +15,11 @@ import { EditorRoute } from "./EditorRoute";
 import {
   getActivePresentation,
   replaceWithServerDocument,
-  resetPresentationStore,
 } from "../features/presentation";
+import {
+  __loadDocumentsForTests,
+  resetPresentationStore,
+} from "../features/presentation/presentationStore";
 import { EDITOR_COPY } from "#copy/editor";
 import { COMMON_COPY } from "#copy/common";
 import {

@@ -13,7 +13,7 @@ import {
 } from "./paletteColors";
 import { EDITOR_COPY } from "#copy/editor";
 
-export interface ColorPaletteProps {
+interface ColorPaletteProps {
   /** 지금 색. 팔레트에 없는 색(예전의 자유 색)이면 아무 칸도 선택되지 않는다 */
   value: string | undefined;
   onPick: (hex: string) => void;

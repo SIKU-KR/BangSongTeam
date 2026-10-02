@@ -16,11 +16,9 @@ const OPTIONS: ReadonlyArray<{
 export function BackgroundKindFilter({
   value,
   onChange,
-  className,
 }: {
   value: BackgroundKindFilterValue;
   onChange: (next: BackgroundKindFilterValue) => void;
-  className?: string;
 }): React.JSX.Element {
   return (
     <ToggleGroup
@@ -33,7 +31,6 @@ export function BackgroundKindFilter({
         const picked = OPTIONS.find((option) => option.value === next[0]);
         if (picked) onChange(picked.value);
       }}
-      className={className}
     >
       {OPTIONS.map((option) => (
         <ToggleGroupItem key={option.value} value={option.value}>

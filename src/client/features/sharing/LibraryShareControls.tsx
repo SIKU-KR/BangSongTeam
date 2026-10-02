@@ -9,7 +9,7 @@ import { ReportDialog } from "./ReportDialog";
 import { publishLibraryDeck, unpublishLibraryDeck } from "./publishSong";
 import { SHARING_COPY } from "#copy/sharing";
 
-export interface LibraryShareControlsProps {
+interface LibraryShareControlsProps {
   deck: Deck;
 }
 
@@ -124,9 +124,7 @@ export function LibraryShareControls({
 
       {correctionTargetId && isReportOpen && (
         <ReportDialog
-          isOpen
           onClose={() => setIsReportOpen(false)}
-          targetType="deck"
           targetId={correctionTargetId}
           targetTitle={deck.title}
           defaultReason="correction"

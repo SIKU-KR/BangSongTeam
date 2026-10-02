@@ -136,7 +136,7 @@ function SelectionBar({
   );
 }
 
-export interface DriveToolbarProps {
+interface DriveToolbarProps {
   mode: "drive" | "trash";
   selectionCount: number;
   selectionActions: MenuAction[];

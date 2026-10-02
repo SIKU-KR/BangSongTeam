@@ -6,7 +6,7 @@ import type { ToastAction } from "./driveContext";
 const TOAST_ID = "drive-toast";
 const TOAST_DURATION_MS = 6000;
 
-export interface UndoToastOptions {
+interface UndoToastOptions {
   /** 대화 상자가 열려 있으면 Cmd/Ctrl+Z를 대화 상자 입력에 맡긴다 */
   isSuspended: boolean;
 }

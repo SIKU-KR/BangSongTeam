@@ -28,11 +28,11 @@ import {
   getFolders,
   resetFolderStore,
 } from "../../features/drive/folderStore";
+import { listPresentations } from "../../features/presentation";
 import {
   __loadDocumentsForTests,
-  listPresentations,
   resetPresentationStore,
-} from "../../features/presentation";
+} from "../../features/presentation/presentationStore";
 import { SEED_USER_ID as TEST_USER_ID } from "../../test/presentationFixture";
 
 const EMPTY_FOLDER_LIST: FolderListResponse = {

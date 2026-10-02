@@ -43,7 +43,7 @@ export async function runQueries(
  * D1은 쿼리 하나에 바인딩 변수를 100개까지만 받는다. `inArray`에 넘길 id를
  * 이 크기로 나눈다.
  */
-export const MAX_IDS_PER_STATEMENT = 50;
+const MAX_IDS_PER_STATEMENT = 50;
 
 export function chunkIds(ids: readonly string[]): string[][] {
   const chunks: string[][] = [];

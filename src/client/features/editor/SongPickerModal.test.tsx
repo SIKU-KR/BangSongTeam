@@ -3,7 +3,7 @@ import { signInAsTestUser } from "../../test/sessionFixture";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { API_ERRORS, type Deck, DEFAULT_DECK_STYLE } from "#shared";
-import { closeOfflineDB, OFFLINE_DB_NAME } from "../../lib/storage";
+import { closeOfflineDB, OFFLINE_DB_NAME } from "../../lib/storage/db";
 import { withQueryClient } from "../../test/queryClientFixture";
 import { installFakeApi, type FakeApi } from "../../test/fakeApi";
 import { SongPickerModal } from "./SongPickerModal";

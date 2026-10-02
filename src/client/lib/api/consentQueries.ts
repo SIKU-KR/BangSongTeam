@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { AgreeConsentRequest, ConsentStatusResponse } from "#shared";
 import { agreeConsent, fetchConsentStatus } from "./consentApi";
 
-export const consentKeys = {
+const consentKeys = {
   status: (userId: string) => ["consent", userId] as const,
 };
 

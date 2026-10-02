@@ -14,7 +14,7 @@ import { Field, FieldError, FieldLabel } from "#components/ui/field";
 import { SHARING_COPY } from "#copy/sharing";
 import { COMMON_COPY } from "#copy/common";
 
-export interface PublishDialogProps {
+interface PublishDialogProps {
   isOpen: boolean;
   songTitle: string;
   isPending: boolean;
