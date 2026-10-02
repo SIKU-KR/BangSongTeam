@@ -15,6 +15,12 @@ const SW_CACHE_POLL_MS = 100;
 const SW_CACHE_POLL_BASE = 50;
 const SW_CACHE_POLL_BYTES_PER_EXTRA = 2 * 1024 * 1024;
 
+/**
+ * 새 바이트가 이만큼 오지 않으면 받기를 끊고 실패로 본다. 끊지 않으면 멈춘 다운로드가
+ * 영영 끝나지 않아, 다시 시도해도 같은 다운로드(`inFlight`)를 기다리기만 한다.
+ */
+export const MEDIA_STALL_TIMEOUT_MS = 30_000;
+
 export function isCacheStorageAvailable(): boolean {
   try {
     return typeof caches !== "undefined" && caches !== null;
@@ -62,9 +68,27 @@ function contentLength(response: Response): number | null {
   return Number.isFinite(length) && length > 0 ? length : null;
 }
 
+interface StallWatchdog {
+  signal: AbortSignal;
+  poke: () => void;
+  stop: () => void;
+}
+
+function stallWatchdog(): StallWatchdog {
+  const controller = new AbortController();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const stop = (): void => clearTimeout(timer);
+  const poke = (): void => {
+    stop();
+    timer = setTimeout(() => controller.abort(), MEDIA_STALL_TIMEOUT_MS);
+  };
+  return { signal: controller.signal, poke, stop };
+}
+
 function countingBody(
   url: string,
   response: Response,
+  watchdog: StallWatchdog,
 ): ReadableStream<Uint8Array> | null {
   const total = contentLength(response);
   let received = 0;
@@ -72,10 +96,21 @@ function countingBody(
   return (
     response.body?.pipeThrough(
       new TransformStream<Uint8Array, Uint8Array>({
+        start(controller) {
+          watchdog.signal.addEventListener(
+            "abort",
+            () => controller.error(watchdog.signal.reason),
+            { once: true },
+          );
+        },
         transform(chunk, controller) {
           received += chunk.byteLength;
+          watchdog.poke();
           reportProgress(url, { received, total });
           controller.enqueue(chunk);
+        },
+        flush() {
+          watchdog.poke();
         },
       }),
     ) ?? null
@@ -97,15 +132,59 @@ async function waitForCacheEntry(
   cache: Cache,
   url: string,
   bytes: number | null,
+  watchdog: StallWatchdog,
 ): Promise<boolean> {
   const limit =
     SW_CACHE_POLL_BASE +
     Math.ceil((bytes ?? 0) / SW_CACHE_POLL_BYTES_PER_EXTRA);
   for (let attempt = 0; attempt < limit; attempt += 1) {
+    watchdog.poke();
     if (await cache.match(url)) return true;
     await new Promise((resolve) => setTimeout(resolve, SW_CACHE_POLL_MS));
   }
   return false;
+}
+
+function aborted(watchdog: StallWatchdog): Promise<never> {
+  return new Promise((_, reject) => {
+    watchdog.signal.addEventListener(
+      "abort",
+      () => reject(watchdog.signal.reason),
+      { once: true },
+    );
+  });
+}
+
+async function cacheOne(
+  url: string,
+  watchdog: StallWatchdog,
+): Promise<boolean> {
+  const cache = await caches.open(mediaCacheNameFor(url));
+  if (await cache.match(url)) return true;
+
+  watchdog.poke();
+  const response = await fetch(url, { signal: watchdog.signal });
+  if (response.status !== 200) {
+    throw new Error(`HTTP ${response.status}`);
+  }
+  const body = countingBody(url, response, watchdog);
+  if (isServiceWorkerControlled()) {
+    await drain(body);
+    if (
+      !(await waitForCacheEntry(cache, url, contentLength(response), watchdog))
+    ) {
+      throw new Error("service worker did not cache");
+    }
+  } else {
+    await cache.put(
+      url,
+      new Response(body, {
+        status: response.status,
+        headers: response.headers,
+      }),
+    );
+  }
+  return true;
 }
 
 /** 이 세션에서 캐시에 들어 있는 것을 확인한 URL */
@@ -119,6 +198,11 @@ const knownCached = new Set<string>();
  * 지나며 SW가 캐시에 담으므로, 여기서는 본문을 다 읽고 SW의 쓰기가 끝나기를 기다리기만
  * 한다. 페이지가 `cache.put`을 한 번 더 하면 수백 MB 영상마다 디스크 쓰기가 두 번이다.
  * SW가 없을 때(개발 서버, SW를 지원하지 않는 브라우저)만 직접 `put`한다.
+ *
+ * `MEDIA_STALL_TIMEOUT_MS` 동안 진전이 없으면(새 바이트가 오지 않거나 Cache Storage가
+ * 응답하지 않으면) 그 URL은 끊고 실패로 넘긴다.
+ * SW를 지날 때는 페이지 요청을 끊어도 SW의 요청은 계속될 수 있어, 다시 시도하면 같은
+ * 파일을 한 번 더 받을 수 있다. 캐시에 없는 파일을 성공으로 치지 않는 쪽을 택했다.
  */
 export async function cacheMediaUrls(
   urls: readonly string[],
@@ -130,37 +214,17 @@ export async function cacheMediaUrls(
   }
 
   for (const url of urls) {
-    const cache = await caches.open(mediaCacheNameFor(url));
-    if (await cache.match(url)) {
-      knownCached.add(url);
-      cachedUrls.push(url);
-      continue;
-    }
-
+    const watchdog = stallWatchdog();
+    watchdog.poke();
     try {
-      const response = await fetch(url);
-      if (response.status !== 200) {
-        throw new Error(`HTTP ${response.status}`);
+      if (await Promise.race([cacheOne(url, watchdog), aborted(watchdog)])) {
+        knownCached.add(url);
+        cachedUrls.push(url);
       }
-      const body = countingBody(url, response);
-      if (isServiceWorkerControlled()) {
-        await drain(body);
-        if (!(await waitForCacheEntry(cache, url, contentLength(response)))) {
-          throw new Error("service worker did not cache");
-        }
-      } else {
-        await cache.put(
-          url,
-          new Response(body, {
-            status: response.status,
-            headers: response.headers,
-          }),
-        );
-      }
-      knownCached.add(url);
-      cachedUrls.push(url);
     } catch {
       continue;
+    } finally {
+      watchdog.stop();
     }
   }
 
@@ -261,7 +325,12 @@ export function shouldWaitForMediaCache(url: string): boolean {
   );
 }
 
-/** 이미 캐시에 담긴 URL만 골라 돌려준다. 이 세션에서 확인한 것은 다시 열어 보지 않는다 */
+/**
+ * 이미 캐시에 담긴 URL만 골라 돌려준다. 이 세션에서 확인한 것은 다시 열어 보지 않는다.
+ *
+ * Cache Storage가 열리지 않으면(디스크 부족, 손상) 그 URL은 담기지 않은 것으로 본다.
+ * 던지면 송출 준비 카드가 확인 중에 멈춰 송출을 시작할 수 없다.
+ */
 export async function findCachedMediaUrls(
   urls: readonly string[],
 ): Promise<string[]> {
@@ -272,10 +341,14 @@ export async function findCachedMediaUrls(
       cached.push(url);
       continue;
     }
-    const cache = await caches.open(mediaCacheNameFor(url));
-    if (await cache.match(url)) {
-      knownCached.add(url);
-      cached.push(url);
+    try {
+      const cache = await caches.open(mediaCacheNameFor(url));
+      if (await cache.match(url)) {
+        knownCached.add(url);
+        cached.push(url);
+      }
+    } catch {
+      continue;
     }
   }
   return cached;
@@ -304,6 +377,7 @@ function pathOf(url: string): string {
  * 남은 용량이 모자라면 `keepUrls`(지금 세트가 쓰는 영상) 밖의 영상을 오래 담긴
  * 순서(`cache.keys()` 순서)로 지운다. 배경 교체로 목록에서 사라진 영상도 이렇게
  * 정리된다. 브라우저가 용량을 알려 주지 않으면 지우지 않고 true로 둔다.
+ * 지우다가 Cache Storage가 실패하면 던지지 않고 자리가 없다고 본다.
  */
 export async function ensureMediaSpace(
   neededBytes: number,
@@ -314,15 +388,19 @@ export async function ensureMediaSpace(
   if (!isCacheStorageAvailable()) return false;
 
   const keep = new Set(keepUrls.map(pathOf));
-  const cache = await caches.open(MEDIA_CACHE_NAME);
-  for (const request of await cache.keys()) {
-    if (free >= neededBytes) break;
-    const path = pathOf(request.url);
-    if (keep.has(path)) continue;
-    const cached = await cache.match(request);
-    await cache.delete(request);
-    knownCached.delete(path);
-    free += cached ? (contentLength(cached) ?? 0) : 0;
+  try {
+    const cache = await caches.open(MEDIA_CACHE_NAME);
+    for (const request of await cache.keys()) {
+      if (free >= neededBytes) break;
+      const path = pathOf(request.url);
+      if (keep.has(path)) continue;
+      const cached = await cache.match(request);
+      await cache.delete(request);
+      knownCached.delete(path);
+      free += cached ? (contentLength(cached) ?? 0) : 0;
+    }
+  } catch {
+    return false;
   }
   return free >= neededBytes;
 }
