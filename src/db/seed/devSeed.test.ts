@@ -112,7 +112,7 @@ describe("seedDevData", () => {
     expect(shared.map((doc) => doc.access?.ownerName)).toEqual([OWNER.name]);
 
     const ownerLibrary = await getMyLibraryDecks(db, OWNER.id);
-    expect(ownerLibrary.some((deck) => deck.origin === "fork")).toBe(true);
+    expect(ownerLibrary.some((deck) => deck.forkedFromAuthorName)).toBe(true);
     expect(ownerLibrary.some((deck) => deck.visibility === "public")).toBe(
       true,
     );

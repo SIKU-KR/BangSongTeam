@@ -7,9 +7,10 @@ import {
   type Deck as SharedDeck,
   type PresentationDocument,
 } from "#shared";
+import type { Deck as DeckRow, NewDeck, Presentation } from "../schema";
 import {
   toSharedDeck,
-  toDeckRow,
+  toDeckContent,
   toPresentationDocument,
   fromPresentationChanges,
 } from "./mappers";
@@ -67,55 +68,89 @@ function makeDocument(): PresentationDocument {
   });
 }
 
+/** 테이블 기본값을 채운 덱 행. DB가 채우는 값(`fork_count` 등)을 흉내 낸다. */
+function asRow(row: NewDeck): DeckRow {
+  return {
+    presentationId: null,
+    itemId: null,
+    position: null,
+    backgroundId: null,
+    forkedFrom: null,
+    forkedFromAuthorName: null,
+    visibility: "private",
+    publishedAt: null,
+    takedownAt: null,
+    forkCount: 0,
+    artist: "",
+    ...row,
+  } as DeckRow;
+}
+
+/** 공유 Deck DTO를 저장된 행으로 만든다 (보관함 곡이면 소속·자리 없음). */
+function toRow(deck: SharedDeck): DeckRow {
+  return asRow({
+    id: deck.id,
+    userId: deck.userId,
+    ...toDeckContent(deck),
+    presentationId: deck.presentationId ?? null,
+    itemId: deck.presentationId ? ITEM_ID : null,
+    position: deck.presentationId ? 0 : null,
+    forkedFrom: deck.forkedFrom ?? null,
+    forkedFromAuthorName: deck.forkedFromAuthorName ?? null,
+    visibility: deck.visibility,
+    publishedAt: deck.publishedAt ? new Date(deck.publishedAt) : null,
+    takedownAt: deck.takedownAt ? new Date(deck.takedownAt) : null,
+    forkCount: deck.forkCount,
+  });
+}
+
+function reassemble(doc: PresentationDocument): PresentationDocument {
+  const { presentation, decks } = fromPresentationChanges(
+    toPresentationChanges(doc),
+  );
+  return toPresentationDocument(
+    { folderId: null, trashedAt: null, ...presentation } as Presentation,
+    decks.map(asRow),
+  );
+}
+
 describe("행 ↔ DTO 매퍼", () => {
   describe("덱", () => {
     it("왕복해도 값이 보존된다", () => {
       const original = makeSharedDeck();
-      const restored = toSharedDeck(toDeckRow(original));
-      expect(restored).toEqual(original);
+      expect(toSharedDeck(toRow(original))).toEqual(original);
     });
 
     it("JSON TEXT 컬럼으로 직렬화한다", () => {
-      const row = toDeckRow(makeSharedDeck());
-      expect(typeof row.slides).toBe("string");
-      expect(typeof row.style).toBe("string");
-      expect(JSON.parse(row.slides as string)).toHaveLength(2);
+      const content = toDeckContent(makeSharedDeck());
+      expect(typeof content.slides).toBe("string");
+      expect(typeof content.style).toBe("string");
+      expect(JSON.parse(content.slides)).toHaveLength(2);
     });
 
     it("타임스탬프를 Date로 넣고 ISO 문자열로 되읽는다", () => {
-      const row = toDeckRow(makeSharedDeck());
+      const row = toRow(makeSharedDeck());
       expect(row.createdAt).toBeInstanceOf(Date);
       expect(toSharedDeck(row).createdAt).toBe("2026-09-20T00:00:00.000Z");
     });
 
-    it("타임스탬프가 비어 있어도 유효한 덱을 만든다", () => {
-      const row = {
-        ...toDeckRow(makeSharedDeck()),
-        createdAt: null,
-        updatedAt: null,
-      };
-      const deck = toSharedDeck(row);
-      expect(DeckSchema.safeParse(deck).success).toBe(true);
-    });
-
     it("슬라이드 JSON이 깨져 있어도 던지지 않고 빈 배열로 복구한다", () => {
-      const row = { ...toDeckRow(makeSharedDeck()), slides: "{not json" };
+      const row = { ...toRow(makeSharedDeck()), slides: "{not json" };
       const deck = toSharedDeck(row);
       expect(deck.slides).toEqual([]);
       expect(DeckSchema.safeParse(deck).success).toBe(true);
     });
 
     it("스타일 JSON이 깨져 있으면 기본 스타일로 복구한다", () => {
-      const row = { ...toDeckRow(makeSharedDeck()), style: "null" };
-      const deck = toSharedDeck(row);
-      expect(deck.style).toEqual(DEFAULT_DECK_STYLE);
+      const row = { ...toRow(makeSharedDeck()), style: "null" };
+      expect(toSharedDeck(row).style).toEqual(DEFAULT_DECK_STYLE);
     });
 
     it("공유 필드를 왕복한다", () => {
       const original = makeSharedDeck({
         scope: "library",
         presentationId: null,
-        visibility: "public",
+        visibility: "private",
         forkCount: 7,
         origin: "fork",
         forkedFrom: "c00000000000000000009",
@@ -123,25 +158,26 @@ describe("행 ↔ DTO 매퍼", () => {
         publishedAt: "2026-09-22T00:00:00.000Z",
         takedownAt: "2026-09-23T00:00:00.000Z",
       });
-      const row = toDeckRow(original);
-      expect(row.publishedAt).toBeInstanceOf(Date);
-      expect(toSharedDeck(row)).toEqual(original);
+      expect(toSharedDeck(toRow(original))).toEqual(original);
     });
 
-    it("공유 필드가 없는 행은 안전한 기본값으로 읽는다", () => {
-      const row = {
-        ...toDeckRow(makeSharedDeck()),
-        origin: undefined,
-        publishedAt: undefined,
-      };
-      const deck = toSharedDeck(row);
-      expect(deck.origin).toBe("user");
-      expect(deck.publishedAt).toBeNull();
+    it("scope와 origin은 저장하지 않고 소속·원작 표시에서 정한다", () => {
+      const library = toSharedDeck(
+        toRow(makeSharedDeck({ scope: "library", presentationId: null })),
+      );
+      expect(library.scope).toBe("library");
+      expect(library.origin).toBe("user");
+
+      const copy = toSharedDeck(
+        toRow(makeSharedDeck({ forkedFromAuthorName: "김찬양" })),
+      );
+      expect(copy.scope).toBe("presentation");
+      expect(copy.origin).toBe("fork");
     });
 
     it("스키마에 맞지 않는 슬라이드 항목은 걸러 낸다", () => {
       const row = {
-        ...toDeckRow(makeSharedDeck()),
+        ...toRow(makeSharedDeck()),
         slides: JSON.stringify([
           { id: "ok", order: 0, lines: ["한 줄"] },
           { id: "bad", order: "영", lines: "문자열" },
@@ -153,7 +189,7 @@ describe("행 ↔ DTO 매퍼", () => {
     it("길이 제한을 넘는 슬라이드는 버리지 않고 제한에 맞게 나눠 읽는다", () => {
       const verse = `${"주 하나님 크신 사랑 ".repeat(8)}찬양하리`;
       const row = {
-        ...toDeckRow(makeSharedDeck()),
+        ...toRow(makeSharedDeck()),
         slides: JSON.stringify([
           { id: "s1", order: 0, lines: [verse, verse, verse] },
         ]),
@@ -170,14 +206,11 @@ describe("행 ↔ DTO 매퍼", () => {
   describe("프레젠테이션 문서", () => {
     it("문서를 행으로 분해했다가 되조립해도 같다", () => {
       const doc = makeDocument();
-      const { presentation, items, decks } = fromPresentationChanges(
-        toPresentationChanges(doc),
-      );
-      const restored = toPresentationDocument(
-        presentation,
-        items.map((item, i) => ({ item, deck: decks[i] })),
-      );
-      expect(restored).toEqual({ ...doc, folderId: null, trashedAt: null });
+      expect(reassemble(doc)).toEqual({
+        ...doc,
+        folderId: null,
+        trashedAt: null,
+      });
     });
 
     it("드라이브 배치(folderId·trashedAt)를 ms까지 왕복한다", () => {
@@ -186,14 +219,7 @@ describe("행 ↔ DTO 매퍼", () => {
         folderId: "f00000000000000000001",
         trashedAt: "2026-09-24T01:02:03.456Z",
       };
-      const { presentation, items, decks } = fromPresentationChanges(
-        toPresentationChanges(doc),
-      );
-      const restored = toPresentationDocument(
-        presentation,
-        items.map((item, i) => ({ item, deck: decks[i] })),
-      );
-      expect(restored).toEqual(doc);
+      expect(reassemble(doc)).toEqual(doc);
     });
 
     it("드라이브 필드가 없으면 행에도 넣지 않는다 (업서트가 기존 값을 유지)", () => {
@@ -211,17 +237,20 @@ describe("행 ↔ DTO 매퍼", () => {
       expect(decks[0].userId).toBe("999999999999999999999");
     });
 
-    it("분해한 덱은 scope와 presentationId가 고정된다", () => {
+    it("분해한 덱은 소속과 자리가 문서·항목 기준으로 고정된다", () => {
       const doc = makeDocument();
       doc.items[0].deck.scope = "library";
       doc.items[0].deck.presentationId = null;
 
       const { decks } = fromPresentationChanges(toPresentationChanges(doc));
-      expect(decks[0].scope).toBe("presentation");
-      expect(decks[0].presentationId).toBe(PRESENTATION_ID);
+      expect(decks[0]).toMatchObject({
+        presentationId: PRESENTATION_ID,
+        itemId: ITEM_ID,
+        position: 0,
+      });
     });
 
-    it("세트 복제본은 공개·가져간 횟수·게시 기록을 강제로 끈다", () => {
+    it("세트 복제본은 공개 상태를 본문에서 받지 않는다", () => {
       const doc = makeDocument();
       doc.items[0].deck = makeSharedDeck({
         visibility: "public",
@@ -232,9 +261,9 @@ describe("행 ↔ DTO 매퍼", () => {
       });
 
       const { decks } = fromPresentationChanges(toPresentationChanges(doc));
-      expect(decks[0].visibility).toBe("private");
-      expect(decks[0].forkCount).toBe(0);
-      expect(decks[0].publishedAt).toBeNull();
+      expect(decks[0]).not.toHaveProperty("visibility");
+      expect(decks[0]).not.toHaveProperty("forkCount");
+      expect(decks[0]).not.toHaveProperty("publishedAt");
       expect(decks[0].forkedFrom).toBe("c00000000000000000009");
       expect(decks[0].forkedFromAuthorName).toBe("김찬양");
     });
@@ -250,9 +279,9 @@ describe("행 ↔ DTO 매퍼", () => {
       };
       doc.items = [second, doc.items[0]];
 
-      const { items } = fromPresentationChanges(toPresentationChanges(doc));
-      expect(items.map((i) => i.order)).toEqual([0, 1]);
-      expect(items[0].deckId).toBe(DECK_ID);
+      const { slots } = fromPresentationChanges(toPresentationChanges(doc));
+      expect(slots.map((slot) => slot.position)).toEqual([0, 1]);
+      expect(slots[0].deckId).toBe(DECK_ID);
     });
   });
 });

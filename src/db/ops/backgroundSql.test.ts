@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { eq } from "drizzle-orm";
 import { createTestDb, type TestDbResult } from "../test-utils";
 import { decks, user } from "../schema";
+import { deckRow } from "../test-fixtures";
 import { listBackgrounds } from "../queries/backgrounds";
 import { BACKGROUND_SQL } from "./backgroundSql";
 
@@ -11,8 +12,11 @@ const DECK = "c00000000000000000001";
 
 describe("운영 SQL (배경)", () => {
   let testDb: TestDbResult;
-  const run = (key: keyof typeof BACKGROUND_SQL, params: object = {}) =>
-    testDb.sqlite.prepare(BACKGROUND_SQL[key]).run(params);
+  const run = (key: keyof typeof BACKGROUND_SQL, params: object = {}) => {
+    for (const statement of BACKGROUND_SQL[key].split("\n")) {
+      testDb.sqlite.prepare(statement).run(params);
+    }
+  };
   const all = (key: keyof typeof BACKGROUND_SQL, params: object = {}) =>
     testDb.sqlite.prepare(BACKGROUND_SQL[key]).all(params) as Record<
       string,
@@ -58,7 +62,7 @@ describe("운영 SQL (배경)", () => {
       mediaUrl: `/api/media/loops/${SERVICE}.mp4`,
       posterUrl: `/api/media/posters/${SERVICE}.webp`,
       description: "따뜻한 빛이 천천히 번져요.",
-      keywords: ["빛", "따뜻한"],
+      keywords: ["따뜻한", "빛"],
     });
     expect(all("LIST_BACKGROUNDS")).toEqual([
       {
@@ -93,15 +97,7 @@ describe("운영 SQL (배경)", () => {
     register();
     testDb.db
       .insert(decks)
-      .values({
-        id: DECK,
-        userId: OWNER,
-        title: "곡",
-        lyricsRaw: "가사",
-        slides: "[]",
-        style: "{}",
-        backgroundId: SERVICE,
-      })
+      .values(deckRow({ id: DECK, userId: OWNER, backgroundId: SERVICE }))
       .run();
     expect(all("COUNT_DECKS_BY_BACKGROUND")).toEqual([
       { background_id: SERVICE, decks: 1 },

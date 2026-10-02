@@ -1,14 +1,15 @@
-import { sqliteTable, text, integer, index } from "drizzle-orm/sqlite-core";
+import {
+  sqliteTable,
+  text,
+  integer,
+  primaryKey,
+  check,
+} from "drizzle-orm/sqlite-core";
 import { sql } from "drizzle-orm";
-import { user } from "./auth";
 
 /**
- * 배경 갤러리. 앱은 기본 제공 배경(`source='service'`)만 내보낸다. 행은
+ * 배경 갤러리. 모든 배경은 관리자가 올리는 기본 제공 배경이다. 행은
  * `scripts/importBackgrounds.mjs`가 매니페스트(`data/backgrounds/*.json`)로 만든다.
- *
- * `source='user'`·`owner_user_id`는 없앤 사용자 업로드의 흔적이다. 행은
- * 마이그레이션 `0002`가 지웠고, 컬럼은 부모 테이블을 다시 만들지 않으려고 남겨 둔다
- * (`owner_user_id`는 외래키라 SQLite에서 `DROP COLUMN`이 되지 않는다).
  *
  * 행은 R2 객체가 올라간 뒤에만 만든다. 파일 없는 행이 있으면 편집기·송출이
  * 404 배경을 그린다.
@@ -18,31 +19,32 @@ export const backgrounds = sqliteTable(
   {
     id: text("id").primaryKey(),
     title: text("title").notNull(),
-    r2Key: text("r2_key").notNull(),
-    posterKey: text("poster_key").notNull(),
-    durationSec: integer("duration_sec").notNull(),
-    license: text("license").notNull(),
-    source: text("source", { enum: ["service", "user"] })
-      .notNull()
-      .default("service"),
-    ownerUserId: text("owner_user_id").references(() => user.id, {
-      onDelete: "cascade",
-    }),
     kind: text("kind", { enum: ["video", "image"] })
       .notNull()
       .default("video"),
+    r2Key: text("r2_key").notNull().unique(),
+    posterKey: text("poster_key").notNull(),
+    durationSec: integer("duration_sec").notNull(),
     sizeBytes: integer("size_bytes").notNull().default(0),
+    license: text("license").notNull().default(""),
     description: text("description").notNull().default(""),
-    keywords: text("keywords", { mode: "json" })
-      .$type<string[]>()
-      .notNull()
-      .default(sql`'[]'`),
-    createdAt: integer("created_at", { mode: "timestamp" }).default(
-      sql`(unixepoch())`,
-    ),
+    createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
   },
-  (t) => [index("idx_backgrounds_source").on(t.source)],
+  (t) => [check("backgrounds_kind", sql`${t.kind} IN ('video', 'image')`)],
+);
+
+/** 배경 검색 키워드. 스틸컷을 보고 붙인 태그 집합이다. */
+export const backgroundKeywords = sqliteTable(
+  "background_keywords",
+  {
+    backgroundId: text("background_id")
+      .notNull()
+      .references(() => backgrounds.id, { onDelete: "cascade" }),
+    keyword: text("keyword").notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.backgroundId, t.keyword] })],
 );
 
 export type Background = typeof backgrounds.$inferSelect;
 export type NewBackground = typeof backgrounds.$inferInsert;
+export type BackgroundKeyword = typeof backgroundKeywords.$inferSelect;

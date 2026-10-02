@@ -11,7 +11,6 @@ import {
   createD1Client,
   decks,
   driveTombstones,
-  presentationItems,
   presentations,
   user,
 } from "#db";
@@ -107,7 +106,7 @@ async function readSet(): Promise<PresentationDocument> {
 describe("PATCH /api/presentations/:id (변경분 저장)", () => {
   beforeEach(async () => {
     const db = createD1Client(env.DB);
-    await clearTables(presentationItems, decks, presentations, driveTombstones);
+    await clearTables(decks, presentations, driveTombstones);
     await db.delete(user).where(inArray(user.id, [USER_A, USER_B]));
     await db.insert(user).values([
       { id: USER_A, name: "A", createdAt: new Date(), updatedAt: new Date() },

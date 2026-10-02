@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { count, eq } from "drizzle-orm";
 import { createTestDb, type TestDbResult } from "../test-utils";
 import { decks, decksFts, reports, user } from "../schema";
+import { deckRow } from "../test-fixtures";
 import { MODERATION_SQL } from "./moderationSql";
 
 const A = "00000000000000000000a";
@@ -45,19 +46,21 @@ describe("운영 SQL (신고·게시 중단)", () => {
       ])
       .run();
     const deck = {
-      userId: A,
       title: "시선",
-      lyricsRaw: "가사",
-      slides: "[]",
-      style: "{}",
       visibility: "public",
       publishedAt: new Date(1000),
     } as const;
     testDb.db
       .insert(decks)
       .values([
-        { ...deck, id: DECK },
-        { ...deck, id: FORK, userId: B, forkedFrom: DECK, origin: "fork" },
+        deckRow({ ...deck, id: DECK, userId: A }),
+        deckRow({
+          ...deck,
+          id: FORK,
+          userId: B,
+          forkedFrom: DECK,
+          forkedFromAuthorName: "A",
+        }),
       ])
       .run();
     testDb.db
@@ -65,17 +68,17 @@ describe("운영 SQL (신고·게시 중단)", () => {
       .values([
         {
           id: "r1",
-          userId: B,
-          targetType: "deck",
-          targetId: DECK,
+          reporterId: B,
+          deckId: DECK,
           reason: "copyright",
+          createdAt: epoch,
         },
         {
           id: "r2",
-          userId: A,
-          targetType: "deck",
-          targetId: FORK,
+          reporterId: A,
+          deckId: FORK,
           reason: "lyrics_error",
+          createdAt: new Date(1),
         },
       ])
       .run();
@@ -108,7 +111,7 @@ describe("운영 SQL (신고·게시 중단)", () => {
       all("LIST_PUBLIC_DESCENDANTS", { deck_id: DECK }).map((r) => r.id),
     ).toEqual([FORK]);
 
-    run("RESOLVE_REPORTS_FOR_TARGET", { target_id: DECK, note: "권리자 요청" });
+    run("RESOLVE_REPORTS_FOR_TARGET", { deck_id: DECK, note: "권리자 요청" });
     expect(report("r1")).toEqual({
       status: "resolved",
       resolutionNote: "권리자 요청",

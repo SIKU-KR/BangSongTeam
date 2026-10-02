@@ -12,7 +12,6 @@ import {
 import {
   createD1Client,
   decks,
-  presentationItems,
   presentationMembers,
   presentations,
   user,
@@ -102,7 +101,7 @@ async function shareAndJoin(): Promise<string> {
 
 describe("세트 링크 공유 라우트", () => {
   beforeEach(async () => {
-    await clearTables(presentationItems, decks, presentations);
+    await clearTables(decks, presentations);
     await createD1Client(env.DB)
       .delete(user)
       .where(inArray(user.id, [OWNER, MEMBER]));

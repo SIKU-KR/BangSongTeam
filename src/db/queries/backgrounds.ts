@@ -1,43 +1,59 @@
-import { and, asc, eq, inArray } from "drizzle-orm";
+import { asc, inArray } from "drizzle-orm";
 import { mediaUrlForKey, type BackgroundMedia } from "#shared";
-import { backgrounds, type Background } from "../schema";
+import {
+  backgroundKeywords,
+  backgrounds,
+  type Background,
+  type BackgroundKeyword,
+} from "../schema";
+import { runQueries } from "./batch";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type DbInstance = any;
 
-export function toBackgroundMedia(row: Background): BackgroundMedia {
+/**
+ * 배경 행 → 공유 DTO. 모든 배경이 기본 제공 배경이라 `source`는 늘 `service`다.
+ * 클라이언트가 예전 사용자 업로드 캐시를 거르는 데 아직 이 필드를 쓴다.
+ */
+export function toBackgroundMedia(
+  row: Background,
+  keywords: string[] = [],
+): BackgroundMedia {
   return {
     id: row.id,
     title: row.title,
-    source: row.source,
+    source: "service",
     kind: row.kind,
     mediaUrl: mediaUrlForKey(row.r2Key),
     posterUrl: mediaUrlForKey(row.posterKey),
     durationSec: row.durationSec,
     sizeBytes: row.sizeBytes,
     license: row.license,
-    createdAt: (row.createdAt ?? new Date(0)).toISOString(),
+    createdAt: row.createdAt.toISOString(),
     description: row.description,
-    keywords: row.keywords,
+    keywords,
   };
 }
-
-/**
- * 앱이 다루는 배경은 기본 제공 배경뿐이다. 예전 사용자 업로드 행(`source='user'`)은
- * 마이그레이션 `0002`가 지웠고, 혹시 남아 있어도 어떤 경로로도 나가지 않는다.
- */
-export const isServiceBackground = eq(backgrounds.source, "service");
 
 /** 배경 갤러리: 모든 사용자에게 같은 목록을 제목순으로 준다 */
 export async function listBackgrounds(
   db: DbInstance,
 ): Promise<BackgroundMedia[]> {
-  const rows: Background[] = await db
-    .select()
-    .from(backgrounds)
-    .where(isServiceBackground)
-    .orderBy(asc(backgrounds.title));
-  return rows.map(toBackgroundMedia);
+  const [rows, keywordRows] = (await runQueries(db, [
+    db.select().from(backgrounds).orderBy(asc(backgrounds.title)),
+    db
+      .select()
+      .from(backgroundKeywords)
+      .orderBy(asc(backgroundKeywords.keyword)),
+  ])) as [Background[], BackgroundKeyword[]];
+
+  const keywordsById = new Map<string, string[]>();
+  for (const { backgroundId, keyword } of keywordRows) {
+    const list = keywordsById.get(backgroundId) ?? [];
+    list.push(keyword);
+    keywordsById.set(backgroundId, list);
+  }
+  return rows.map((row) => toBackgroundMedia(row, keywordsById.get(row.id)));
 }
 
 function distinctBackgroundIds(
@@ -76,7 +92,7 @@ export function knownBackgroundsQuery(
   return db
     .select({ id: backgrounds.id })
     .from(backgrounds)
-    .where(and(inArray(backgrounds.id, candidates), isServiceBackground));
+    .where(inArray(backgrounds.id, candidates));
 }
 
 export function keepKnownBackgrounds<
@@ -86,7 +102,7 @@ export function keepKnownBackgrounds<
 }
 
 /**
- * 기본 제공 배경이 아닌 `backgroundId`를 `null`로 떨군 덱 행을 돌려준다.
+ * 없는 배경을 가리키는 `backgroundId`를 `null`로 떨군 덱 행을 돌려준다.
  *
  * 저장 경로: `decks.background_id`는 `backgrounds`를 참조하는 외래키이고, **D1은
  * 외래키를 기본으로 강제한다.** 알 수 없는 id가 하나라도 섞이면 `db.batch()` 전체가
@@ -94,8 +110,7 @@ export function keepKnownBackgrounds<
  * 작업물이다 — 배경 하나 때문에 작업 전체를 잃는 쪽이 훨씬 나쁘므로, 모르는 배경은
  * '배경 없음'으로 낮춰 받고 나머지는 저장한다.
  *
- * 공개 경로(검색·상세·포크): 지워진 배경이나 예전 사용자 업로드를 가리키는 덱도
- * '배경 없음'으로 내보낸다.
+ * 읽기 경로에는 필요 없다. 배경을 지우면 외래키(SET NULL)가 곡의 배경을 비운다.
  */
 export async function nullifyUnknownBackgrounds<
   T extends { backgroundId?: string | null },

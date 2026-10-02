@@ -17,21 +17,19 @@ import type {
   NewDeck,
   Presentation as PresentationRow,
   NewPresentation,
-  NewPresentationItem,
-  PresentationItem as PresentationItemRow,
 } from "../schema";
 
 /**
  * D1 행과 `#shared` DTO 사이의 변환을 한 곳에 모은다.
  *
  * 두 `Deck` 타입은 이름만 같고 실제로는 다르다:
- * - `#db`의 Deck: `slides`·`style`이 JSON TEXT(`string`), 타임스탬프가 `Date | null`
+ * - `#db`의 Deck: `slides`·`style`이 JSON TEXT(`string`), 타임스탬프가 `Date`
  * - `#shared`의 Deck: `slides: Slide[]`, `style: DeckStyle`, 타임스탬프가 ISO 문자열
  *
  * 라우트마다 `JSON.parse`를 흩뿌리면 한쪽만 고쳐져 조용히 어긋난다.
  */
 
-function parseSlides(raw: string | null | undefined): Slide[] {
+export function parseSlides(raw: string | null | undefined): Slide[] {
   if (!raw) return [];
   let parsed: unknown;
   try {
@@ -49,7 +47,7 @@ function parseSlides(raw: string | null | undefined): Slide[] {
   );
 }
 
-function parseStyle(raw: string | null | undefined): DeckStyle {
+export function parseStyle(raw: string | null | undefined): DeckStyle {
   if (!raw) return { ...DEFAULT_DECK_STYLE };
   try {
     const result = DeckStyleSchema.safeParse(JSON.parse(raw));
@@ -59,15 +57,12 @@ function parseStyle(raw: string | null | undefined): DeckStyle {
   }
 }
 
-function toIso(value: Date | number | null | undefined): string {
-  if (value instanceof Date) return value.toISOString();
-  if (typeof value === "number") return new Date(value * 1000).toISOString();
-  return new Date(0).toISOString();
+function toIso(value: Date | null | undefined): string {
+  return (value ?? new Date(0)).toISOString();
 }
 
-function toIsoOrNull(value: Date | number | null | undefined): string | null {
-  if (value === null || value === undefined) return null;
-  return toIso(value);
+function toIsoOrNull(value: Date | null | undefined): string | null {
+  return value ? value.toISOString() : null;
 }
 
 function toDateOrNull(iso: string | null | undefined): Date | null {
@@ -79,23 +74,28 @@ function toDate(iso: string): Date {
   return Number.isNaN(date.getTime()) ? new Date(0) : date;
 }
 
-/** D1 덱 행 → 공유 Deck DTO */
-export function toSharedDeck(row: DeckRow | NewDeck): SharedDeck {
+/**
+ * D1 덱 행 → 공유 Deck DTO.
+ *
+ * `scope`는 `presentation_id`가 있는지로, `origin`은 원작 표시 스냅샷
+ * (`forked_from_author_name`)이 있는지로 정한다. 둘 다 저장하지 않는 파생값이다.
+ */
+export function toSharedDeck(row: DeckRow): SharedDeck {
   return {
-    id: row.id as string,
-    userId: row.userId as string,
-    scope: (row.scope ?? "library") as SharedDeck["scope"],
+    id: row.id,
+    userId: row.userId,
+    scope: row.presentationId ? "presentation" : "library",
     presentationId: row.presentationId ?? null,
-    title: row.title as string,
-    artist: row.artist ?? "",
-    lyricsRaw: row.lyricsRaw as string,
-    slides: parseSlides(row.slides as string | null),
+    title: row.title,
+    artist: row.artist,
+    lyricsRaw: row.lyricsRaw,
+    slides: parseSlides(row.slides),
     backgroundId: row.backgroundId ?? null,
-    style: parseStyle(row.style as string | null),
-    visibility: (row.visibility ?? "private") as SharedDeck["visibility"],
+    style: parseStyle(row.style),
+    visibility: row.visibility,
     forkedFrom: row.forkedFrom ?? null,
-    forkCount: row.forkCount ?? 0,
-    origin: (row.origin ?? "user") as NonNullable<SharedDeck["origin"]>,
+    forkCount: row.forkCount,
+    origin: row.forkedFromAuthorName ? "fork" : "user",
     forkedFromAuthorName: row.forkedFromAuthorName ?? null,
     publishedAt: toIsoOrNull(row.publishedAt),
     takedownAt: toIsoOrNull(row.takedownAt),
@@ -104,51 +104,52 @@ export function toSharedDeck(row: DeckRow | NewDeck): SharedDeck {
   };
 }
 
-/** 공유 Deck DTO → D1 덱 행 */
-export function toDeckRow(deck: SharedDeck): NewDeck {
+/**
+ * 공유 Deck DTO의 곡 내용 → D1 덱 컬럼. id·소유자·소속·공개 상태·가져온 곡 정보는
+ * 넣지 않는다. 그 값은 호출자가 서버 기준으로 정해 덧붙인다.
+ */
+export function toDeckContent(
+  deck: SharedDeck,
+): Pick<
+  NewDeck,
+  | "title"
+  | "artist"
+  | "lyricsRaw"
+  | "slides"
+  | "style"
+  | "backgroundId"
+  | "createdAt"
+  | "updatedAt"
+> {
   return {
-    id: deck.id,
-    userId: deck.userId,
-    scope: deck.scope,
-    presentationId: deck.presentationId ?? null,
     title: deck.title,
     artist: deck.artist,
     lyricsRaw: deck.lyricsRaw,
     slides: JSON.stringify(deck.slides),
-    backgroundId: deck.backgroundId ?? null,
     style: JSON.stringify(deck.style),
-    visibility: deck.visibility,
-    forkedFrom: deck.forkedFrom ?? null,
-    forkCount: deck.forkCount,
-    origin: deck.origin ?? "user",
-    forkedFromAuthorName: deck.forkedFromAuthorName ?? null,
-    publishedAt: toDateOrNull(deck.publishedAt),
-    takedownAt: toDateOrNull(deck.takedownAt),
+    backgroundId: deck.backgroundId ?? null,
     createdAt: toDate(deck.createdAt),
     updatedAt: toDate(deck.updatedAt),
   };
 }
 
-/** 헤더 행 + 조인된 (항목, 덱) 쌍 → 하이드레이션된 문서 */
+/** 머리 행 + 사본 덱 행(`position` 순) → 하이드레이션된 문서 */
 export function toPresentationDocument(
-  presentation: PresentationRow | NewPresentation,
-  rows: Array<{
-    item: PresentationItemRow | NewPresentationItem;
-    deck: DeckRow | NewDeck;
-  }>,
+  presentation: PresentationRow,
+  copies: DeckRow[],
 ): PresentationDocument {
   return {
-    id: presentation.id as string,
-    userId: presentation.userId as string,
-    title: presentation.title as string,
-    serviceDate: presentation.serviceDate as string,
+    id: presentation.id,
+    userId: presentation.userId,
+    title: presentation.title,
+    serviceDate: presentation.serviceDate,
     folderId: presentation.folderId ?? null,
     trashedAt: toIsoOrNull(presentation.trashedAt),
-    items: rows.map(({ item, deck }) => ({
-      id: item.id as string,
-      presentationId: item.presentationId as string,
-      deckId: item.deckId as string,
-      order: item.order as number,
+    items: copies.map((deck) => ({
+      id: deck.itemId as string,
+      presentationId: presentation.id,
+      deckId: deck.id,
+      order: deck.position as number,
       deck: toSharedDeck(deck),
     })),
     createdAt: toIso(presentation.createdAt),
@@ -156,28 +157,39 @@ export function toPresentationDocument(
   };
 }
 
+export interface PresentationSlot {
+  itemId: string;
+  deckId: string;
+  position: number;
+}
+
 export interface DecomposedDocument {
   presentation: NewPresentation;
-  items: NewPresentationItem[];
+  slots: PresentationSlot[];
   decks: NewDeck[];
 }
 
 /**
- * 변경분 저장 본문 → 정규화된 행들. `decks`에는 본문에 담긴 덱만 나온다.
+ * 변경분 저장 본문 → 정규화된 행들. `slots`는 항목 순서대로 매긴 자리이고,
+ * `decks`에는 본문에 담겼고 자리가 있는 사본만 나온다.
  *
- * 항목의 `userId`·`scope`·`presentationId`는 문서 헤더 기준으로 덮어쓴다.
- * 본문이 보내온 값을 그대로 믿으면 남의 계정으로 문서를 심거나, 보관함 덱을
- * 프레젠테이션 덱으로 둔갑시킬 수 있다.
- *
- * 세트 복제본은 공유 대상이 아니다. 공개·가져간 횟수·게시 기록·기여 여부를
- * 강제로 끈다 — 그러지 않으면 공개 곡을 세트에 담은 복제본이 공개 검색에 섞인다.
- * `forkedFrom`(복제해 온 보관함 덱)과 `forkedFromAuthorName`(원작 표시)은 편집기가
- * 쓰는 값이라 그대로 둔다.
+ * 사본의 소유자·소속·자리는 문서 헤더와 항목 기준으로 덮어쓴다. 본문이 보내온 값을
+ * 그대로 믿으면 남의 계정으로 문서를 심거나, 보관함 곡을 사본으로 둔갑시킬 수 있다.
+ * 사본은 공유 대상이 아니라 공개 상태 컬럼은 기본값(비공개)으로 둔다. `forkedFrom`
+ * (담아 온 보관함 곡)과 `forkedFromAuthorName`(원작 표시)은 편집기가 쓰는 값이라
+ * 그대로 둔다.
  */
 export function fromPresentationChanges(
   changes: PresentationChanges,
 ): DecomposedDocument {
-  const ordered = [...changes.items].sort((a, b) => a.order - b.order);
+  const slots = [...changes.items]
+    .sort((a, b) => a.order - b.order)
+    .map((item, position) => ({
+      itemId: item.id,
+      deckId: item.deckId,
+      position,
+    }));
+  const slotByDeck = new Map(slots.map((slot) => [slot.deckId, slot]));
 
   return {
     presentation: {
@@ -192,24 +204,23 @@ export function fromPresentationChanges(
       createdAt: toDate(changes.createdAt),
       updatedAt: toDate(changes.updatedAt),
     },
-    items: ordered.map((item, index) => ({
-      id: item.id,
-      presentationId: changes.id,
-      deckId: item.deckId,
-      order: index,
-    })),
-    decks: changes.decks.map((deck) =>
-      toDeckRow({
-        ...deck,
-        userId: changes.userId,
-        scope: "presentation",
-        presentationId: changes.id,
-        visibility: "private",
-        forkCount: 0,
-        publishedAt: null,
-        takedownAt: null,
-      }),
-    ),
+    slots,
+    decks: changes.decks.flatMap((deck) => {
+      const slot = slotByDeck.get(deck.id);
+      if (!slot) return [];
+      return [
+        {
+          id: deck.id,
+          ...toDeckContent(deck),
+          userId: changes.userId,
+          presentationId: changes.id,
+          itemId: slot.itemId,
+          position: slot.position,
+          forkedFrom: deck.forkedFrom ?? null,
+          forkedFromAuthorName: deck.forkedFromAuthorName ?? null,
+        },
+      ];
+    }),
   };
 }
 

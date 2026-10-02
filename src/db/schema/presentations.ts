@@ -5,12 +5,15 @@ import {
   index,
   uniqueIndex,
   primaryKey,
+  check,
 } from "drizzle-orm/sqlite-core";
 import { sql } from "drizzle-orm";
 import { user } from "./auth";
-import { decks } from "./decks";
 import { folders } from "./folders";
 
+/**
+ * 프레젠테이션 머리. 담긴 곡은 `decks`의 사본 행(`presentation_id`)이다.
+ */
 export const presentations = sqliteTable(
   "presentations",
   {
@@ -28,35 +31,14 @@ export const presentations = sqliteTable(
       .notNull()
       .default("off"),
     linkToken: text("link_token"),
-    createdAt: integer("created_at", { mode: "timestamp" }).default(
-      sql`(unixepoch())`,
-    ),
-    updatedAt: integer("updated_at", { mode: "timestamp" }).default(
-      sql`(unixepoch())`,
-    ),
+    createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
+    updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
   },
   (t) => [
+    check("presentations_link_access", sql`${t.linkAccess} IN ('off', 'view')`),
     index("idx_presentations_user_date").on(t.userId, t.serviceDate),
     index("idx_presentations_user_folder").on(t.userId, t.folderId),
     uniqueIndex("idx_presentations_link_token").on(t.linkToken),
-  ],
-);
-
-export const presentationItems = sqliteTable(
-  "presentation_items",
-  {
-    id: text("id").primaryKey(),
-    presentationId: text("presentation_id")
-      .notNull()
-      .references(() => presentations.id, { onDelete: "cascade" }),
-    deckId: text("deck_id")
-      .notNull()
-      .references(() => decks.id, { onDelete: "cascade" }),
-    order: integer("order").notNull(),
-  },
-  (t) => [
-    index("idx_presentation_items_order").on(t.presentationId, t.order),
-    uniqueIndex("idx_presentation_items_unique").on(t.presentationId, t.deckId),
   ],
 );
 
@@ -82,6 +64,4 @@ export const presentationMembers = sqliteTable(
 
 export type Presentation = typeof presentations.$inferSelect;
 export type NewPresentation = typeof presentations.$inferInsert;
-export type PresentationItem = typeof presentationItems.$inferSelect;
-export type NewPresentationItem = typeof presentationItems.$inferInsert;
 export type PresentationMember = typeof presentationMembers.$inferSelect;

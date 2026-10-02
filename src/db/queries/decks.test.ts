@@ -2,7 +2,8 @@ import { describe, it, expect, beforeEach } from "vitest";
 import { eq } from "drizzle-orm";
 import { createTestDb } from "../test-utils";
 import { getMyLibraryDecks, upsertDeck, deleteDeckScoped } from "./decks";
-import { user, decks } from "../schema";
+import { user, decks, presentations } from "../schema";
+import { deckRow } from "../test-fixtures";
 import { DEFAULT_DECK_STYLE, DeckSchema, type Deck } from "#shared";
 import { toSharedDeck } from "./mappers";
 
@@ -34,43 +35,30 @@ describe("D1 Scoped Deck Queries", () => {
 
   describe("getMyLibraryDecks", () => {
     it("should return only library decks belonging to the user", async () => {
-      await db.insert(decks).values({
-        id: "d1",
+      await db.insert(presentations).values({
+        id: "p1",
         userId: userAId,
-        scope: "library",
-        title: "User A Deck 1",
-        lyricsRaw: "가사",
-        slides: "[]",
-        style: "{}",
-        visibility: "private",
+        title: "세트",
+        serviceDate: "2026-09-27",
+        createdAt: new Date(0),
+        updatedAt: new Date(0),
       });
-
-      await db.insert(decks).values({
-        id: "d2",
-        userId: userAId,
-        scope: "presentation",
-        title: "User A Presentation Deck",
-        lyricsRaw: "가사",
-        slides: "[]",
-        style: "{}",
-        visibility: "private",
-      });
-
-      await db.insert(decks).values({
-        id: "d3",
-        userId: userBId,
-        scope: "library",
-        title: "User B Deck",
-        lyricsRaw: "가사",
-        slides: "[]",
-        style: "{}",
-        visibility: "private",
-      });
+      await db.insert(decks).values([
+        deckRow({ id: "d1", userId: userAId, title: "User A Deck 1" }),
+        deckRow({
+          id: "d2",
+          userId: userAId,
+          presentationId: "p1",
+          itemId: "i2",
+          position: 0,
+        }),
+        deckRow({ id: "d3", userId: userBId, title: "User B Deck" }),
+      ]);
 
       const userADecks = await getMyLibraryDecks(db, userAId);
       expect(userADecks).toHaveLength(1);
       expect(userADecks[0].id).toBe("d1");
-      expect(userADecks[0].scope).toBe("library");
+      expect(userADecks[0].presentationId).toBeNull();
     });
   });
 });
@@ -195,14 +183,15 @@ describe("덱 쓰기 헬퍼 (보관함 동기화)", () => {
     });
 
     it("기존 덱을 갱신해도 서버 값이 유지된다", async () => {
+      await db
+        .insert(decks)
+        .values(deckRow({ id: "c00000000000000000099", userId: strangerId }));
       await upsertDeck(db, ownerId, makeDeck(ownerId));
       const publishedAt = new Date("2026-09-22T00:00:00.000Z");
       await db
         .update(decks)
         .set({
           visibility: "public",
-          forkCount: 3,
-          origin: "fork",
           forkedFrom: "c00000000000000000099",
           forkedFromAuthorName: "원작자",
           publishedAt,
@@ -224,7 +213,7 @@ describe("덱 쓰기 헬퍼 (보관함 동기화)", () => {
       expect(saved).toMatchObject({
         title: "제목만 바꿈",
         visibility: "public",
-        forkCount: 3,
+        forkCount: 0,
         origin: "fork",
         forkedFrom: "c00000000000000000099",
         forkedFromAuthorName: "원작자",
@@ -232,7 +221,7 @@ describe("덱 쓰기 헬퍼 (보관함 동기화)", () => {
       });
     });
 
-    it("보관함 경로로 세트 복제본을 만들 수 없다", async () => {
+    it("보관함 경로로 세트 복제본을 만들거나 고칠 수 없다", async () => {
       const saved = await upsertDeck(
         db,
         ownerId,
@@ -243,6 +232,34 @@ describe("덱 쓰기 헬퍼 (보관함 동기화)", () => {
       );
       expect(saved?.scope).toBe("library");
       expect(saved?.presentationId).toBeNull();
+
+      await db.insert(presentations).values({
+        id: "100000000000000000001",
+        userId: ownerId,
+        title: "세트",
+        serviceDate: "2026-09-27",
+        createdAt: new Date(0),
+        updatedAt: new Date(0),
+      });
+      await db.insert(decks).values(
+        deckRow({
+          id: "c00000000000000000002",
+          userId: ownerId,
+          presentationId: "100000000000000000001",
+          itemId: "300000000000000000001",
+          position: 0,
+        }),
+      );
+      expect(
+        await upsertDeck(
+          db,
+          ownerId,
+          makeDeck(ownerId, { id: "c00000000000000000002" }),
+        ),
+      ).toBeNull();
+      expect(await deleteDeckScoped(db, "c00000000000000000002", ownerId)).toBe(
+        false,
+      );
     });
   });
 

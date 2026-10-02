@@ -4,3 +4,4 @@ export * from "./decks";
 export * from "./folders";
 export * from "./presentations";
 export * from "./reports";
+export * from "./views";

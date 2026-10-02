@@ -12,7 +12,6 @@ import {
   decks,
   driveTombstones,
   folders,
-  presentationItems,
   presentations,
   user,
 } from "#db";
@@ -119,13 +118,7 @@ async function listDocs(): Promise<PresentationDocument[]> {
 
 describe("드라이브 폴더 API", () => {
   beforeEach(async () => {
-    await clearTables(
-      presentationItems,
-      decks,
-      presentations,
-      folders,
-      driveTombstones,
-    );
+    await clearTables(decks, presentations, folders, driveTombstones);
     await createD1Client(env.DB)
       .delete(user)
       .where(inArray(user.id, [USER_A, USER_B]));

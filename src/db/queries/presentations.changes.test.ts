@@ -1,7 +1,8 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { eq } from "drizzle-orm";
 import { createTestDb } from "../test-utils";
-import { user, decks, presentationItems, driveTombstones } from "../schema";
+import { user, decks, driveTombstones } from "../schema";
+import { deckRow } from "../test-fixtures";
 import {
   DEFAULT_DECK_STYLE,
   PresentationDocumentSchema,
@@ -252,11 +253,14 @@ describe("세트 변경분 저장", () => {
     expect(rows).toHaveLength(0);
   });
 
-  it("바뀌지 않은 항목은 다시 쓰지 않는다 (항목 행 id 유지)", async () => {
-    const before = await db
-      .select()
-      .from(presentationItems)
-      .where(eq(presentationItems.presentationId, DOC_ID));
+  it("바뀌지 않은 사본은 다시 쓰지 않는다 (자리·내용 유지)", async () => {
+    const copies = () =>
+      db
+        .select()
+        .from(decks)
+        .where(eq(decks.presentationId, DOC_ID))
+        .orderBy(decks.position);
+    const before = await copies();
 
     await savePresentationChanges(
       db,
@@ -267,10 +271,70 @@ describe("세트 변경분 저장", () => {
       ),
     );
 
-    const after = await db
-      .select()
-      .from(presentationItems)
-      .where(eq(presentationItems.presentationId, DOC_ID));
-    expect(after).toEqual(before);
+    const after = await copies();
+    expect(after.slice(1)).toEqual(before.slice(1));
+    expect(after[0]).toMatchObject({
+      itemId: before[0].itemId,
+      position: 0,
+      lyricsRaw: "고친 가사",
+    });
+  });
+
+  it("남아 있는 두 곡이 항목 id를 맞바꿔도 저장된다", async () => {
+    const doc = makeSet(USER_A, 10);
+    const swapped = {
+      ...doc,
+      items: doc.items.map((item, i) =>
+        i === 0
+          ? { ...item, id: itemId(1) }
+          : i === 1
+            ? { ...item, id: itemId(0) }
+            : item,
+      ),
+    };
+
+    expect(
+      await savePresentationChanges(
+        db,
+        USER_A,
+        toPresentationChanges(swapped, () => false),
+      ),
+    ).toBe("saved");
+
+    const restored = await readSet();
+    expect(
+      restored.items.slice(0, 2).map((item) => [item.id, item.deckId]),
+    ).toEqual([
+      [itemId(1), deckId(0)],
+      [itemId(0), deckId(1)],
+    ]);
+  });
+
+  it("forkedFrom은 내 곡을 가리킬 때만 남긴다 (남의 곡 id 존재 여부를 흘리지 않는다)", async () => {
+    await db
+      .insert(decks)
+      .values([
+        deckRow({ id: "library-song", userId: USER_A }),
+        deckRow({ id: "others-song", userId: USER_B }),
+      ]);
+    const doc = makeSet(USER_A, 13);
+    doc.items[10].deck.forkedFrom = "library-song";
+    doc.items[11].deck.forkedFrom = "c0000000000000000dead";
+    doc.items[12].deck.forkedFrom = "others-song";
+
+    expect(
+      await savePresentationChanges(
+        db,
+        USER_A,
+        toPresentationChanges(doc, (deck) =>
+          [deckId(10), deckId(11), deckId(12)].includes(deck.id),
+        ),
+      ),
+    ).toBe("saved");
+
+    const restored = await readSet();
+    expect(restored.items[10].deck.forkedFrom).toBe("library-song");
+    expect(restored.items[11].deck.forkedFrom).toBeNull();
+    expect(restored.items[12].deck.forkedFrom).toBeNull();
   });
 });
