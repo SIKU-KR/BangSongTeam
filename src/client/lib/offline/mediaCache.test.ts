@@ -245,6 +245,22 @@ describe("cacheMediaUrls 멈춘 다운로드", () => {
     expect(signal?.aborted).toBe(true);
   });
 
+  it("Cache Storage가 응답하지 않으면 제한 시간 뒤 실패로 끝나고, 다음 호출은 새로 시도한다", async () => {
+    vi.useFakeTimers();
+    const fetchMock = mockFetchWithInit(async () => okResponse());
+    vi.spyOn(caches, "open").mockReturnValueOnce(new Promise<Cache>(() => {}));
+
+    const first = cacheMediaFirst(VIDEO);
+    await vi.advanceTimersByTimeAsync(MEDIA_STALL_TIMEOUT_MS);
+
+    expect(await first).toBe(false);
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    const second = cacheMediaFirst(VIDEO);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(await second).toBe(true);
+  });
+
   it("느려도 바이트가 계속 오면 끊지 않는다", async () => {
     vi.useFakeTimers();
     const step = MEDIA_STALL_TIMEOUT_MS / 2;

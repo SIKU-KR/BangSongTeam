@@ -110,7 +110,7 @@ function countingBody(
           controller.enqueue(chunk);
         },
         flush() {
-          watchdog.stop();
+          watchdog.poke();
         },
       }),
     ) ?? null
@@ -132,15 +132,59 @@ async function waitForCacheEntry(
   cache: Cache,
   url: string,
   bytes: number | null,
+  watchdog: StallWatchdog,
 ): Promise<boolean> {
   const limit =
     SW_CACHE_POLL_BASE +
     Math.ceil((bytes ?? 0) / SW_CACHE_POLL_BYTES_PER_EXTRA);
   for (let attempt = 0; attempt < limit; attempt += 1) {
+    watchdog.poke();
     if (await cache.match(url)) return true;
     await new Promise((resolve) => setTimeout(resolve, SW_CACHE_POLL_MS));
   }
   return false;
+}
+
+function aborted(watchdog: StallWatchdog): Promise<never> {
+  return new Promise((_, reject) => {
+    watchdog.signal.addEventListener(
+      "abort",
+      () => reject(watchdog.signal.reason),
+      { once: true },
+    );
+  });
+}
+
+async function cacheOne(
+  url: string,
+  watchdog: StallWatchdog,
+): Promise<boolean> {
+  const cache = await caches.open(mediaCacheNameFor(url));
+  if (await cache.match(url)) return true;
+
+  watchdog.poke();
+  const response = await fetch(url, { signal: watchdog.signal });
+  if (response.status !== 200) {
+    throw new Error(`HTTP ${response.status}`);
+  }
+  const body = countingBody(url, response, watchdog);
+  if (isServiceWorkerControlled()) {
+    await drain(body);
+    if (
+      !(await waitForCacheEntry(cache, url, contentLength(response), watchdog))
+    ) {
+      throw new Error("service worker did not cache");
+    }
+  } else {
+    await cache.put(
+      url,
+      new Response(body, {
+        status: response.status,
+        headers: response.headers,
+      }),
+    );
+  }
+  return true;
 }
 
 /** 이 세션에서 캐시에 들어 있는 것을 확인한 URL */
@@ -155,7 +199,8 @@ const knownCached = new Set<string>();
  * 한다. 페이지가 `cache.put`을 한 번 더 하면 수백 MB 영상마다 디스크 쓰기가 두 번이다.
  * SW가 없을 때(개발 서버, SW를 지원하지 않는 브라우저)만 직접 `put`한다.
  *
- * `MEDIA_STALL_TIMEOUT_MS` 동안 새 바이트가 없으면 그 URL은 끊고 실패로 넘긴다.
+ * `MEDIA_STALL_TIMEOUT_MS` 동안 진전이 없으면(새 바이트가 오지 않거나 Cache Storage가
+ * 응답하지 않으면) 그 URL은 끊고 실패로 넘긴다.
  * SW를 지날 때는 페이지 요청을 끊어도 SW의 요청은 계속될 수 있어, 다시 시도하면 같은
  * 파일을 한 번 더 받을 수 있다. 캐시에 없는 파일을 성공으로 치지 않는 쪽을 택했다.
  */
@@ -170,36 +215,12 @@ export async function cacheMediaUrls(
 
   for (const url of urls) {
     const watchdog = stallWatchdog();
+    watchdog.poke();
     try {
-      const cache = await caches.open(mediaCacheNameFor(url));
-      if (await cache.match(url)) {
+      if (await Promise.race([cacheOne(url, watchdog), aborted(watchdog)])) {
         knownCached.add(url);
         cachedUrls.push(url);
-        continue;
       }
-
-      watchdog.poke();
-      const response = await fetch(url, { signal: watchdog.signal });
-      if (response.status !== 200) {
-        throw new Error(`HTTP ${response.status}`);
-      }
-      const body = countingBody(url, response, watchdog);
-      if (isServiceWorkerControlled()) {
-        await drain(body);
-        if (!(await waitForCacheEntry(cache, url, contentLength(response)))) {
-          throw new Error("service worker did not cache");
-        }
-      } else {
-        await cache.put(
-          url,
-          new Response(body, {
-            status: response.status,
-            headers: response.headers,
-          }),
-        );
-      }
-      knownCached.add(url);
-      cachedUrls.push(url);
     } catch {
       continue;
     } finally {
@@ -356,7 +377,7 @@ function pathOf(url: string): string {
  * 남은 용량이 모자라면 `keepUrls`(지금 세트가 쓰는 영상) 밖의 영상을 오래 담긴
  * 순서(`cache.keys()` 순서)로 지운다. 배경 교체로 목록에서 사라진 영상도 이렇게
  * 정리된다. 브라우저가 용량을 알려 주지 않으면 지우지 않고 true로 둔다.
- * 지우다가 Cache Storage가 실패해도 던지지 않고 그때까지 확보한 자리로 판단한다.
+ * 지우다가 Cache Storage가 실패하면 던지지 않고 자리가 없다고 본다.
  */
 export async function ensureMediaSpace(
   neededBytes: number,
@@ -379,7 +400,7 @@ export async function ensureMediaSpace(
       free += cached ? (contentLength(cached) ?? 0) : 0;
     }
   } catch {
-    return free >= neededBytes;
+    return false;
   }
   return free >= neededBytes;
 }
