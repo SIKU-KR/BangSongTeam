@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
+  CDN_FONT_STYLESHEET_PATTERN,
   CDN_FONT_URL_PATTERN,
   MEDIA_CACHE_NAME,
   MEDIA_URL_PREFIX,
@@ -9,9 +10,12 @@ import {
 import { mediaUrlForKey } from "./backgrounds";
 import { NOONNU_FONTS } from "./noonnuFontCatalog";
 
-function matchesFromStart(url: string): boolean {
+function matchesFromStart(
+  url: string,
+  pattern: RegExp = CDN_FONT_URL_PATTERN,
+): boolean {
   const href = new URL(url, "https://worship.example").href;
-  return CDN_FONT_URL_PATTERN.exec(href)?.index === 0;
+  return pattern.exec(href)?.index === 0;
 }
 
 describe("projection constants", () => {
@@ -57,6 +61,27 @@ describe("projection constants", () => {
     ).toBe(false);
     expect(
       matchesFromStart("https://cdn.jsdelivr.net.evil.example/a.woff2"),
+    ).toBe(false);
+  });
+
+  it("CSS 형식 글꼴만 CSS 규칙에 맞고 글꼴 파일은 맞지 않는다", () => {
+    const misrouted = NOONNU_FONTS.filter(
+      (font) =>
+        matchesFromStart(font.url, CDN_FONT_STYLESHEET_PATTERN) !==
+        (font.format === "css"),
+    ).map((font) => font.url);
+    expect(misrouted).toEqual([]);
+    expect(
+      matchesFromStart(
+        "https://fonts.gstatic.com/s/notosanskr/v1/a.woff2",
+        CDN_FONT_STYLESHEET_PATTERN,
+      ),
+    ).toBe(false);
+    expect(
+      matchesFromStart(
+        "https://evil.example/fonts.googleapis.com/css?family=A",
+        CDN_FONT_STYLESHEET_PATTERN,
+      ),
     ).toBe(false);
   });
 });

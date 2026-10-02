@@ -42,8 +42,17 @@ export function mediaCacheNameFor(url: string): string {
     : MEDIA_CACHE_NAME;
 }
 
-/** 눈누 카탈로그 글꼴(외부 CDN)의 Workbox 런타임 캐시 이름 */
+/** 눈누 카탈로그 글꼴 파일(외부 CDN)의 Workbox 런타임 캐시 이름 */
 export const CDN_FONT_CACHE_NAME = "worship-cdn-fonts-cache";
+
+/**
+ * 눈누 카탈로그 글꼴 CSS(외부 CDN)의 Workbox 런타임 캐시 이름.
+ * `<link>`로 붙인 CSS는 불투명 응답이라 오류 응답도 status 0으로 담긴다. 그래서 글꼴
+ * 파일과 캐시를 나눠 CSS만 다음 온라인 로드에서 다시 받아 바꾼다.
+ */
+export const CDN_FONT_STYLESHEET_CACHE_NAME = "worship-cdn-font-css-cache";
+
+const CDN_FONT_ORIGIN = String.raw`^https:\/\/(?:(?:cdn|fastly|gcore)\.jsdelivr\.net|fonts\.(?:googleapis|gstatic)\.com|hangeul\.pstatic\.net|cdn\.noonnu\.cc|cdn\.df\.nexon\.com|spoqa\.github\.io|raw\.githubusercontent\.com)\/`;
 
 /**
  * 눈누 카탈로그 글꼴 CSS·파일을 내려 주는 외부 CDN 주소.
@@ -54,5 +63,14 @@ export const CDN_FONT_CACHE_NAME = "worship-cdn-fonts-cache";
  * 송출이 대체 글꼴로 바뀐다. Google CSS가 가리키는 `fonts.gstatic.com`처럼 CSS 안에서
  * 받는 호스트도 담아야 한다. 카탈로그에 새 호스트가 생기면 테스트가 실패한다.
  */
-export const CDN_FONT_URL_PATTERN =
-  /^https:\/\/(?:(?:cdn|fastly|gcore)\.jsdelivr\.net|fonts\.(?:googleapis|gstatic)\.com|hangeul\.pstatic\.net|cdn\.noonnu\.cc|cdn\.df\.nexon\.com|spoqa\.github\.io|raw\.githubusercontent\.com)\//i;
+export const CDN_FONT_URL_PATTERN = new RegExp(CDN_FONT_ORIGIN, "i");
+
+/**
+ * `CDN_FONT_URL_PATTERN` 가운데 글꼴 CSS 주소(`*.css`, Google `/css?family=`).
+ * Workbox 규칙에서 `CDN_FONT_URL_PATTERN`보다 먼저 맞춰야 CSS가 글꼴 파일 규칙으로
+ * 새지 않는다.
+ */
+export const CDN_FONT_STYLESHEET_PATTERN = new RegExp(
+  String.raw`${CDN_FONT_ORIGIN}(?:[^?#]*\.css|css2?)(?:[?#]|$)`,
+  "i",
+);
