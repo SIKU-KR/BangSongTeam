@@ -23,21 +23,22 @@ interface SessionState {
 }
 
 /**
- * 서버가 "세션 없음"이라고 분명히 답할 때(401·403, 또는 200에 `null`)만 null을 돌려준다.
- * 5xx·429·캡티브 포털 응답·시간 초과는 모두 던진다. 호출자는 던짐을 "확인하지 못함"으로
- * 보고 로그인 상태를 지키므로, 서버가 잠깐 아파도 예배 중에 로그아웃되지 않는다.
+ * 서버가 "세션 없음"이라고 분명히 답할 때(401, 또는 200에 `null`)만 null을 돌려준다.
+ * better-auth의 get-session은 403을 내지 않으므로 403은 교회·회사 프록시나 WAF가 보낸
+ * 응답으로 보고, 5xx·429·캡티브 포털 응답·시간 초과와 함께 던진다. 호출자는 던짐을
+ * "확인하지 못함"으로 보고 로그인 상태를 지키므로, 서버가 잠깐 아파도 예배 중에 로그아웃되지 않는다.
  */
-export type SessionFetcher = () => Promise<SessionUser | null>;
+export type SessionFetcher = (timeoutMs: number) => Promise<SessionUser | null>;
 
-const SESSION_CHECK_TIMEOUT_MS = 5000;
+const CACHED_SESSION_CHECK_TIMEOUT_MS = 5000;
+const FIRST_SESSION_CHECK_TIMEOUT_MS = 15000;
 
-const fetchFromServer: SessionFetcher = async () => {
+const fetchFromServer: SessionFetcher = async (timeoutMs) => {
   const result = await authClient.getSession({
-    fetchOptions: { signal: AbortSignal.timeout(SESSION_CHECK_TIMEOUT_MS) },
+    fetchOptions: { signal: AbortSignal.timeout(timeoutMs) },
   });
   if (result.error) {
-    const { status } = result.error;
-    if (status === 401 || status === 403) return null;
+    if (result.error.status === 401) return null;
     throw new Error(AUTH_COPY.sessionCheckFailed);
   }
 
@@ -91,6 +92,8 @@ export function getCurrentUserId(): string | null {
  * - 만료된 캐시는 서버에 물어본다. 서버에 닿지 못하면 캐시된 사용자로 들어간다.
  *   일주일에 한 번 쓰는 노트북이 오프라인 예배당에서 송출하지 못하게 되는 것을 막기 위해서다.
  *   데이터는 이미 이 기기에 있고, 서버 API는 서버 세션으로 따로 막힌다.
+ * - 캐시가 없으면(로그인 직후) 돌아갈 사용자가 없으므로 느린 회선에서도 로그인이
+ *   끊기지 않게 서버를 더 오래 기다린다.
  * - 서버가 세션 없음을 분명히 답하면 캐시를 지우고 로그아웃한다.
  */
 export async function hydrateSession(): Promise<SessionState> {
@@ -109,7 +112,9 @@ export async function hydrateSession(): Promise<SessionState> {
 
   let user: SessionUser | null;
   try {
-    user = await fetcher();
+    user = await fetcher(
+      cached ? CACHED_SESSION_CHECK_TIMEOUT_MS : FIRST_SESSION_CHECK_TIMEOUT_MS,
+    );
   } catch {
     setState(
       cached
@@ -133,7 +138,7 @@ export async function hydrateSession(): Promise<SessionState> {
 export async function revalidateSession(): Promise<void> {
   let user: SessionUser | null;
   try {
-    user = await fetcher();
+    user = await fetcher(CACHED_SESSION_CHECK_TIMEOUT_MS);
   } catch {
     return;
   }

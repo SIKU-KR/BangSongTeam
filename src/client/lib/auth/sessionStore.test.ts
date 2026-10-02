@@ -70,6 +70,7 @@ describe("세션 스토어", () => {
     __resetSessionForTests();
     closeOfflineDB();
     getSession.mockReset();
+    vi.restoreAllMocks();
     window.history.replaceState({}, "", "/");
   });
 
@@ -176,6 +177,7 @@ describe("세션 스토어", () => {
     it.each([
       ["500", serverError(500)],
       ["429", serverError(429)],
+      ["403", serverError(403)],
       ["상태 코드 없는 오류", { data: null, error: { statusText: "" } }],
       ["캡티브 포털 HTML", { data: "<html>login</html>", error: null }],
       ["모양이 다른 본문", { data: { user: {} }, error: null }],
@@ -205,7 +207,6 @@ describe("세션 스토어", () => {
 
     it.each([
       ["401", serverError(401)],
-      ["403", serverError(403)],
       ["data: null", { data: null, error: null }],
     ])("%s 응답은 로그아웃하고 캐시를 비운다", async (_, result) => {
       await saveExpiredSession();
@@ -237,6 +238,37 @@ describe("세션 스토어", () => {
         fetchOptions: { signal: expect.any(AbortSignal) },
       });
     });
+
+    it.each([
+      ["만료된 캐시", true, "authenticated", 5000],
+      ["캐시 없음", false, "unauthenticated", 15000],
+    ] as const)(
+      "%s에서 응답 없는 요청은 시간 제한이 지나면 부팅을 마친다",
+      async (_, hasCache, status, timeoutMs) => {
+        if (hasCache) await saveExpiredSession();
+        const deadline = new AbortController();
+        const timeout = vi
+          .spyOn(AbortSignal, "timeout")
+          .mockReturnValue(deadline.signal);
+        getSession.mockImplementation(
+          () =>
+            new Promise((_, reject) => {
+              deadline.signal.addEventListener("abort", () =>
+                reject(deadline.signal.reason),
+              );
+            }),
+        );
+        __setSessionFetcherForTests(null);
+
+        const hydrating = hydrateSession();
+        await vi.waitFor(() => expect(getSession).toHaveBeenCalled());
+        deadline.abort(new DOMException("timeout", "TimeoutError"));
+        await hydrating;
+
+        expect(timeout).toHaveBeenCalledWith(timeoutMs);
+        expect(getSessionState().status).toBe(status);
+      },
+    );
   });
 
   describe("백그라운드 재검증", () => {
