@@ -280,6 +280,65 @@ describe("SlideStage Integration Component", () => {
       ).not.toBeInTheDocument();
     });
 
+    it("영상이 나타난 직후 다른 영상 곡으로 넘어가도 앞 이미지는 전환이 끝나면 걷어 낸다", () => {
+      const { rerender } = render(
+        <SlideStage
+          slide={mockSlide}
+          style={mockStyle}
+          backgroundImageUrl={STILL}
+        />,
+      );
+
+      rerender(
+        <SlideStage slide={mockSlide} style={mockStyle} backgroundUrl={LOOP} />,
+      );
+      act(() => {
+        fireEvent(screen.getByTestId("video-slot-b"), new Event("playing"));
+      });
+      rerender(
+        <SlideStage
+          slide={mockSlide}
+          style={mockStyle}
+          backgroundUrl="https://media.example.com/loop2.mp4"
+        />,
+      );
+      advance(FADE_MS);
+
+      expect(
+        screen.queryByTestId("image-background-layer"),
+      ).not.toBeInTheDocument();
+    });
+
+    it("영상이 나타난 직후 이미지 곡으로 돌아가면 그 이미지는 남는다", () => {
+      const { rerender } = render(
+        <SlideStage
+          slide={mockSlide}
+          style={mockStyle}
+          backgroundImageUrl={STILL}
+        />,
+      );
+
+      rerender(
+        <SlideStage slide={mockSlide} style={mockStyle} backgroundUrl={LOOP} />,
+      );
+      act(() => {
+        fireEvent(screen.getByTestId("video-slot-b"), new Event("playing"));
+      });
+      rerender(
+        <SlideStage
+          slide={mockSlide}
+          style={mockStyle}
+          backgroundImageUrl="/api/media/stills/stage.jpg"
+        />,
+      );
+      advance(FIRST_FRAME_TIMEOUT_MS + FADE_MS);
+
+      expect(screen.getByTestId("image-background-layer")).toHaveAttribute(
+        "src",
+        "/api/media/stills/stage.jpg",
+      );
+    });
+
     it("배경이 없는 곡으로 넘어가면 이미지를 바로 지운다", () => {
       const { rerender } = render(
         <SlideStage

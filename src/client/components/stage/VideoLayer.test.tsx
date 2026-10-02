@@ -5,7 +5,9 @@ import {
   VideoLayer,
   FADE_MS,
   FIRST_FRAME_TIMEOUT_MS,
+  HEALTHY_PLAYBACK_MS,
   RETRY_BASE_MS,
+  RETRY_MAX_MS,
   STALL_RELOAD_MS,
 } from "./VideoLayer";
 
@@ -37,6 +39,28 @@ function advance(ms: number): void {
   });
 }
 
+function markStarved(video: HTMLVideoElement): void {
+  Object.defineProperty(video, "paused", { configurable: true, value: false });
+  Object.defineProperty(video, "readyState", {
+    configurable: true,
+    value: HTMLMediaElement.HAVE_CURRENT_DATA,
+  });
+}
+
+function setCurrentTime(video: HTMLVideoElement, seconds: number): void {
+  Object.defineProperty(video, "currentTime", {
+    configurable: true,
+    value: seconds,
+  });
+}
+
+function setOnline(online: boolean): void {
+  Object.defineProperty(navigator, "onLine", {
+    configurable: true,
+    value: online,
+  });
+}
+
 function markErrored(video: HTMLVideoElement): void {
   Object.defineProperty(video, "error", {
     configurable: true,
@@ -61,6 +85,7 @@ describe("VideoLayer", () => {
 
   afterEach(() => {
     vi.useRealTimers();
+    Reflect.deleteProperty(navigator, "onLine");
   });
 
   it("두 슬롯 모두 음소거·반복·인라인 재생이고, 자동 재생 대신 직접 재생한다", () => {
@@ -266,6 +291,7 @@ describe("VideoLayer", () => {
 
   it("버퍼링이 이어져 재생이 나아가지 않으면 다시 불러온다", () => {
     render(<VideoLayer src={LOOP1} />);
+    markStarved(slotA());
 
     fire(slotA(), "waiting");
     advance(STALL_RELOAD_MS + RETRY_BASE_MS);
@@ -281,6 +307,111 @@ describe("VideoLayer", () => {
     advance(STALL_RELOAD_MS + RETRY_BASE_MS);
 
     expect(load).not.toHaveBeenCalled();
+  });
+
+  it("다시 불러오기를 기다리는 사이 재생이 돌아오면 다시 불러오지 않는다", () => {
+    render(<VideoLayer src={LOOP1} />);
+    markStarved(slotA());
+
+    fire(slotA(), "waiting");
+    advance(STALL_RELOAD_MS);
+    fire(slotA(), "playing");
+    advance(RETRY_MAX_MS);
+
+    expect(load).not.toHaveBeenCalled();
+  });
+
+  it("느리게라도 데이터가 들어오고 있으면 다시 불러오지 않는다", () => {
+    render(<VideoLayer src={LOOP1} />);
+    markStarved(slotA());
+
+    fire(slotA(), "waiting");
+    for (let i = 0; i < 4; i += 1) {
+      advance(STALL_RELOAD_MS - 1);
+      fire(slotA(), "progress");
+    }
+    expect(load).not.toHaveBeenCalled();
+
+    advance(STALL_RELOAD_MS + RETRY_BASE_MS);
+    expect(load.mock.contexts).toEqual([slotA()]);
+  });
+
+  it("stalled 뒤 버퍼가 바닥나 waiting이 와도 멈춘 영상을 다시 불러온다", () => {
+    render(<VideoLayer src={LOOP1} />);
+    markStarved(slotA());
+
+    fire(slotA(), "stalled");
+    setCurrentTime(slotA(), 3);
+    fire(slotA(), "waiting");
+    advance(STALL_RELOAD_MS * 2 + RETRY_BASE_MS);
+
+    expect(load.mock.contexts).toEqual([slotA()]);
+  });
+
+  it("일부러 멈춘 영상은 버퍼링으로 보지 않는다", () => {
+    render(<VideoLayer src={LOOP1} />);
+
+    fire(slotA(), "stalled");
+    advance(STALL_RELOAD_MS + RETRY_MAX_MS);
+
+    expect(load).not.toHaveBeenCalled();
+  });
+
+  it("오프라인에서 멈춘 영상은 다시 연결될 때 다시 불러온다", () => {
+    setOnline(false);
+    render(<VideoLayer src={LOOP1} />);
+    markStarved(slotA());
+
+    fire(slotA(), "waiting");
+    advance(STALL_RELOAD_MS + RETRY_MAX_MS);
+    expect(load).not.toHaveBeenCalled();
+
+    setOnline(true);
+    fire(window, "online");
+    advance(RETRY_BASE_MS);
+    expect(load.mock.contexts).toEqual([slotA()]);
+  });
+
+  it("다시 불러온 뒤 오래 재생되지 못하고 또 멈추면 재시도 간격을 늘린다", () => {
+    render(<VideoLayer src={LOOP1} />);
+
+    fire(slotA(), "error");
+    advance(RETRY_BASE_MS);
+    expect(load).toHaveBeenCalledTimes(1);
+
+    markStarved(slotA());
+    fire(slotA(), "playing");
+    advance(RETRY_BASE_MS);
+    fire(slotA(), "waiting");
+    advance(STALL_RELOAD_MS + RETRY_BASE_MS);
+    expect(load).toHaveBeenCalledTimes(1);
+
+    advance(RETRY_BASE_MS);
+    expect(load).toHaveBeenCalledTimes(2);
+  });
+
+  it("끊김 없이 충분히 재생되면 재시도 간격을 처음으로 되돌린다", () => {
+    render(<VideoLayer src={LOOP1} />);
+
+    fire(slotA(), "error");
+    advance(RETRY_BASE_MS);
+    fire(slotA(), "playing");
+    advance(HEALTHY_PLAYBACK_MS);
+
+    fire(slotA(), "error");
+    advance(RETRY_BASE_MS);
+    expect(load).toHaveBeenCalledTimes(2);
+  });
+
+  it("제한 시간으로 나타난 영상이 아직 받는 중이면 멈춤을 지켜본다", () => {
+    const { rerender } = render(<VideoLayer src={LOOP1} />);
+
+    rerender(<VideoLayer src={LOOP2} />);
+    markStarved(slotB());
+    advance(FIRST_FRAME_TIMEOUT_MS);
+    advance(STALL_RELOAD_MS + RETRY_BASE_MS);
+
+    expect(load.mock.contexts).toEqual([slotB()]);
   });
 
   it("재시도를 기다리는 사이 곡이 바뀌면 앞 슬롯을 다시 불러오지 않는다", () => {

@@ -101,8 +101,8 @@ export function SlideStage({
   }, [containerDimensions?.width, containerDimensions?.height]);
 
   useEffect(() => {
-    clearTimeout(releaseTimerRef.current);
     if (backgroundImageUrl) {
+      clearTimeout(releaseTimerRef.current);
       setHeldImageUrl(backgroundImageUrl);
       return;
     }
