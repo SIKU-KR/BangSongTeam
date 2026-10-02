@@ -82,7 +82,10 @@ describe("useProjectionMediaReady", () => {
     expect(result.current.status).toBe("checking");
     await waitFor(() => expect(result.current.status).toBe("ready"));
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(fetchMock).toHaveBeenCalledWith(SECOND.mediaUrl);
+    expect(fetchMock).toHaveBeenCalledWith(
+      SECOND.mediaUrl,
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
     expect(result.current).toMatchObject({
       readyCount: 2,
       totalCount: 2,
@@ -119,6 +122,39 @@ describe("useProjectionMediaReady", () => {
 
     mockFetch();
     act(() => result.current.retry());
+
+    await waitFor(() => expect(result.current.status).toBe("ready"));
+  });
+
+  it("Cache Storage가 실패해도 확인 중에 멈추지 않고 실패로 끝난다", async () => {
+    vi.spyOn(caches, "open").mockRejectedValue(
+      new DOMException("broken", "UnknownError"),
+    );
+    mockFetch();
+
+    const { result } = renderHook(() => useProjectionMediaReady(PRESENTATION));
+
+    await waitFor(() => expect(result.current.status).toBe("failed"));
+    expect(result.current.failure).toBe("network");
+  });
+
+  it("passive면 Cache Storage가 실패해도 다시 확인한다", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const open = vi
+      .spyOn(caches, "open")
+      .mockRejectedValue(new DOMException("broken", "UnknownError"));
+
+    const { result } = renderHook(() =>
+      useProjectionMediaReady(PRESENTATION, { passive: true }),
+    );
+    await waitFor(() => expect(result.current.status).toBe("downloading"));
+
+    open.mockRestore();
+    await store(FIRST.mediaUrl);
+    await store(SECOND.mediaUrl);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(PASSIVE_RECHECK_MS);
+    });
 
     await waitFor(() => expect(result.current.status).toBe("ready"));
   });

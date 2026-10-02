@@ -800,6 +800,22 @@ describe("FullscreenPresentRoute", () => {
       ).toBeDefined();
     });
 
+    it("받기가 멈춰 있어도 저장된 배경으로 시작할 수 있다", async () => {
+      vi.mocked(globalThis.fetch).mockImplementation(
+        () => new Promise<Response>(() => {}),
+      );
+      renderPresent();
+
+      await waitFor(() => expect(globalThis.fetch).toHaveBeenCalled());
+      expect(screen.queryByRole("alert")).toBeNull();
+      expect(screen.queryByTestId("projection-media-retry")).toBeNull();
+      fireEvent.click(screen.getByTestId("projection-media-start-saved"));
+
+      expect(
+        screen.getByText("시작됐네 우리 주님의 능력이"),
+      ).toBeInTheDocument();
+    });
+
     it("이미 저장된 세트는 곧바로 시작한다", async () => {
       await storeMedia(first.mediaUrl, second.mediaUrl);
       renderPresent();

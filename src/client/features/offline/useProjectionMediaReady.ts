@@ -109,12 +109,15 @@ function useMediaProgressVersion(): number {
  * 송출 전에 세트가 쓰는 배경 영상·이미지 원본을 모두 이 기기에 받아 둔다.
  *
  * 배경 영상은 하나에 수백 MB일 수 있어, 받는 도중에 송출을 시작하면 예배 중에
- * 네트워크가 끊겼을 때 배경이 멈춘다. 그래서 송출 화면은 `ready`가 될 때까지 슬라이드를
- * 띄우지 않는다. 받기 전에 모자란 저장 공간을 세트 밖의 영상을 지워 확보한다
+ * 네트워크가 끊겼을 때 배경이 멈춘다. 그래서 송출 화면은 `ready`가 되거나 운영자가
+ * 저장된 배경으로 시작할 때까지 슬라이드를 띄우지 않는다. 받기 전에 모자란 저장 공간을 세트 밖의 영상을 지워 확보한다
  * (`ensureMediaSpace`). 포스터는 작아서 기다리지 않는다 — 기존 백그라운드 큐가 받는다.
  *
  * 총 용량은 카탈로그의 `sizeBytes`(영상+포스터)로 먼저 잡고, 받기 시작하면 응답
  * 길이로 바꾼다.
+ *
+ * 준비 중에 Cache Storage 등이 예상 밖으로 실패해도 `failed`로 끝낸다. `checking`에
+ * 머무르면 준비 카드가 멈춘 채로 남는다.
  *
  * `passive`면 직접 받지 않고 저장 상태만 본다. 편집기는 자동 캐시
  * (`useBackgroundAutoCache`)가 이미 받고 있으므로 송출 버튼 옆에 진행만 보여 준다.
@@ -151,7 +154,9 @@ export function useProjectionMediaReady(
     if (passive) {
       let timer: ReturnType<typeof setTimeout> | undefined;
       const check = async (): Promise<void> => {
-        const readyUrls = new Set(await findCachedMediaUrls(urls));
+        const readyUrls = new Set(
+          await findCachedMediaUrls(urls).catch((): string[] => []),
+        );
         const ready = readyUrls.size === urls.length;
         update({
           status: ready ? "ready" : "downloading",
@@ -168,8 +173,9 @@ export function useProjectionMediaReady(
       };
     }
 
-    void (async () => {
-      const readyUrls = new Set(await findCachedMediaUrls(urls));
+    const readyUrls = new Set<string>();
+    const prepare = async (): Promise<void> => {
+      for (const url of await findCachedMediaUrls(urls)) readyUrls.add(url);
       const missing = files.filter((file) => !readyUrls.has(file.url));
       if (missing.length === 0) {
         update({ status: "ready", failure: null, readyUrls });
@@ -212,7 +218,14 @@ export function useProjectionMediaReady(
         });
       }
       update({ status: "ready", failure: null, readyUrls });
-    })();
+    };
+    prepare().catch(() =>
+      update({
+        status: "failed",
+        failure: isOffline() ? "offline" : "network",
+        readyUrls: new Set(readyUrls),
+      }),
+    );
 
     return () => {
       cancelled = true;

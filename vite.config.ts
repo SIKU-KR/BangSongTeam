@@ -8,6 +8,10 @@ import { createRequire } from "node:module";
 import path from "node:path";
 import type { ViteUserConfig } from "vitest/config";
 import {
+  CDN_FONT_CACHE_NAME,
+  CDN_FONT_STYLESHEET_CACHE_NAME,
+  CDN_FONT_STYLESHEET_PATTERN,
+  CDN_FONT_URL_PATTERN,
   MEDIA_CACHE_NAME,
   MEDIA_URL_PREFIX,
   POSTER_CACHE_NAME,
@@ -69,8 +73,9 @@ const appConfig: UserConfig = {
       workbox: {
         // 앱 셸만 프리캐시한다. 폰트를 여기 넣으면 수십 MB짜리 설치가 된다 —
         // Pretendard·Noto Sans KR·나눔명조의 유니코드 서브셋 수백 개가 모두 빌드
-        // 산출물에 있기 때문이다. 폰트는 아래 runtimeCaching으로 실제 쓰인 것만
-        // 담고, 세트를 열면 백그라운드 캐시가 가사에 쓰인 글꼴을 불러 캐시를 데운다.
+        // 산출물에 있기 때문이다. 번들 글꼴과 눈누 카탈로그의 CDN 글꼴 모두 아래
+        // runtimeCaching으로 실제 쓰인 것만 담고, 세트를 열면 백그라운드 캐시가
+        // 가사에 쓰인 글꼴을 불러 캐시를 데운다.
         globPatterns: ["**/*.{js,css,html,ico,svg,webmanifest}", "icons/*.png"],
         maximumFileSizeToCacheInBytes: 6 * 1024 * 1024,
         // 이게 없으면 네트워크가 끊긴 상태에서 /present/... 새로고침 시 앱이 뜨지 않는다.
@@ -80,9 +85,45 @@ const appConfig: UserConfig = {
         clientsClaim: true,
         runtimeCaching: [
           {
+            // 눈누 카탈로그 글꼴 CSS (jsDelivr, Google Fonts 등 외부 CDN).
+            // <link>로 붙인 CSS는 불투명 응답(status 0)이라 오류 응답도 그대로 담긴다.
+            // 캐시본으로 바로 그리되 온라인이면 뒤에서 다시 받아, 한 번 담긴 오류가
+            // 다음 로드에서 바뀌게 한다.
+            urlPattern: CDN_FONT_STYLESHEET_PATTERN,
+            handler: "StaleWhileRevalidate",
+            options: {
+              cacheName: CDN_FONT_STYLESHEET_CACHE_NAME,
+              cacheableResponse: { statuses: [0, 200] },
+              expiration: {
+                maxEntries: 100,
+                maxAgeSeconds: 365 * 24 * 60 * 60,
+              },
+            },
+          },
+          {
+            // 눈누 카탈로그 글꼴 파일. Workbox는 다른 출처 URL을 정규식이 첫 글자부터
+            // 맞을 때만 처리하므로 아래 확장자 규칙으로는 잡히지 않는다. 패턴은 공용
+            // 상수에서 가져온다. @font-face 요청은 CORS라 실제 상태 코드가 보이므로
+            // 200만 담는다. Google CSS 하나가 유니코드 서브셋 100개 안팎으로
+            // 펼쳐지므로 한도를 넉넉히 둔다.
+            // purgeOnQuotaError를 켜지 않는다. 배경 영상 저장이 용량 오류를 내면 모든
+            // 런타임 캐시의 콜백이 불려 송출 글꼴 캐시가 통째로 지워진다.
+            urlPattern: CDN_FONT_URL_PATTERN,
+            handler: "CacheFirst",
+            options: {
+              cacheName: CDN_FONT_CACHE_NAME,
+              cacheableResponse: { statuses: [200] },
+              expiration: {
+                maxEntries: 1000,
+                maxAgeSeconds: 365 * 24 * 60 * 60,
+              },
+            },
+          },
+          {
             // 번들 웹폰트 (Pretendard, Noto Sans KR, Nanum Myeongjo).
-            // 외부 CDN이 아니라 자체 오리진 /assets/ 에서 온다. 서브셋 파일은
-            // Pretendard Variable 92개, Noto Sans KR 248개, 나눔명조 184개다.
+            // 자체 오리진 /assets/ 에서 온다. 확장자만 보는 이 규칙은 같은 출처에만
+            // 맞는다. 서브셋 파일은 Pretendard Variable 92개, Noto Sans KR 248개,
+            // 나눔명조 184개다.
             // 한도가 이보다 작으면 가사에 쓴 서브셋이 밀려나 오프라인 송출에서
             // 대체 글꼴로 나올 수 있으므로 전부 담을 수 있게 둔다.
             urlPattern: /\.(?:woff2?|ttf|otf|eot)$/i,

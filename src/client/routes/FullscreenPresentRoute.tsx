@@ -57,10 +57,12 @@ const preventDefault = (event: React.SyntheticEvent): void => {
 /**
  * 청중용 전체화면 송출 라우트. 종료하면 송출을 시작한 화면으로 돌아간다.
  *
- * 세트의 배경 영상을 모두 이 기기에 저장하기 전에는 슬라이드 대신 준비 카드를 띄우고
- * 슬라이드 이동을 막는다(`useProjectionMediaReady`). 한 번 시작한 뒤에는 세트가 바뀌어도
- * 다시 가리지 않는다 — 예배 중에 화면이 준비 카드로 바뀌면 안 되므로, 새로 생긴 배경은
- * 백그라운드 큐(`useProjectionMediaCache`)에 맡긴다.
+ * 세트의 배경 영상을 모두 이 기기에 저장하거나 운영자가 저장된 배경으로 시작하기 전에는
+ * 슬라이드 대신 준비 카드를 띄우고 슬라이드 이동을 막는다(`useProjectionMediaReady`).
+ * 한 번 시작한 뒤에는 세트가 바뀌어도 다시 가리지 않는다 — 예배 중에 화면이 준비 카드로
+ * 바뀌면 안 되므로, 남은 배경과 새로 생긴 배경은 지금·다음 곡을 먼저 받는 백그라운드
+ * 큐(`useProjectionMediaCache`)에 맡긴다. 준비 카드가 세트 순서대로 계속 받으면 송출 중인
+ * 배경 영상과 대역폭을 다툰다.
  *
  * 송출은 운영자가 Esc나 종료 버튼으로 끝낼 때만 끝난다. 전체화면이 풀리거나, 뒤로 가기·
  * 새로고침을 누르거나, 다른 곳에서 프레젠테이션이 바뀌어도 청중 화면은 이어진다.
@@ -141,8 +143,8 @@ function ProjectionSession({
   }
   const fontsReady = usePresentationFontsReady(shown);
   useProjectionMediaCache(shown, position.songIndex);
-  const mediaReadiness = useProjectionMediaReady(shown);
   const [hasStarted, setHasStarted] = useState(resume?.hasStarted ?? false);
+  const mediaReadiness = useProjectionMediaReady(hasStarted ? null : shown);
   const isPreparing = !hasStarted && mediaReadiness.status !== "ready";
 
   useEffect(() => {

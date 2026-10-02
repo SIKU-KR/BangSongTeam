@@ -94,6 +94,36 @@ describe("PWA 설정", () => {
     expect(maxEntries).toBeGreaterThanOrEqual(subsetCount);
   });
 
+  it("눈누 CDN 글꼴은 공용 패턴으로 CSS, 글꼴 파일, 확장자 규칙 순서로 맞춰 따로 담는다", () => {
+    const stylesheetRule = config.indexOf(
+      "urlPattern: CDN_FONT_STYLESHEET_PATTERN",
+    );
+    const cdnRule = config.indexOf("urlPattern: CDN_FONT_URL_PATTERN");
+    const bundledRule = config.indexOf("urlPattern: /\\.(?:woff2?");
+    expect(stylesheetRule).toBeGreaterThan(-1);
+    expect(stylesheetRule).toBeLessThan(cdnRule);
+    expect(cdnRule).toBeLessThan(bundledRule);
+    expect(config).toContain("cacheName: CDN_FONT_STYLESHEET_CACHE_NAME");
+    expect(config).toContain("cacheName: CDN_FONT_CACHE_NAME");
+  });
+
+  it("CDN 글꼴 CSS는 담긴 오류가 남지 않게 다시 받고, 글꼴 파일은 200만 담는다", () => {
+    const stylesheetOptions = config.slice(
+      config.indexOf("urlPattern: CDN_FONT_STYLESHEET_PATTERN"),
+      config.indexOf("urlPattern: CDN_FONT_URL_PATTERN"),
+    );
+    expect(stylesheetOptions).toContain('handler: "StaleWhileRevalidate"');
+    const fontOptions = config.slice(
+      config.indexOf("urlPattern: CDN_FONT_URL_PATTERN"),
+      config.indexOf("urlPattern: /\\.(?:woff2?"),
+    );
+    expect(fontOptions).toContain("statuses: [200] }");
+  });
+
+  it("영상 저장의 용량 오류가 송출 글꼴 캐시를 지우지 않게 purgeOnQuotaError를 쓰지 않는다", () => {
+    expect(config).not.toMatch(/purgeOnQuotaError:\s*true/);
+  });
+
   it("PWA 아이콘 파일이 실제로 존재한다", () => {
     const iconsDir = path.join(rootDir, "src/client/public/icons");
     for (const file of ["icon-192.png", "icon-512.png", "maskable-512.png"]) {
