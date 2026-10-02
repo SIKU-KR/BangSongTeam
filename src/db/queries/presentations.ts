@@ -6,7 +6,6 @@ import {
 } from "#shared";
 import {
   presentations,
-  presentationItems,
   decks,
   folders,
   type Presentation,
@@ -55,24 +54,24 @@ export async function deletePresentation(
  */
 export type SavePresentationResult = "saved" | "forbidden" | "stale";
 
-interface ExistingItem {
+interface ExistingCopy {
   id: string;
-  deckId: string;
-  order: number;
+  itemId: string;
+  position: number;
 }
 
-interface ExistingDeck {
+interface SentDeckOwner {
   id: string;
   presentationId: string | null;
   userId: string;
 }
 
 /**
- * 이미 있는 세트 덱에서 편집기가 바꿀 수 있는 컬럼만 고른다.
+ * 이미 있는 사본에서 편집기가 바꿀 수 있는 곡 내용 컬럼만 고른다.
  *
- * 나머지(`user_id`·`scope`·`presentation_id`·`visibility`·`fork_count`·
- * `forked_from`)는 덱이 생길 때 정해지거나 서버가 강제하는 값이다. 값이 같아도
- * SET에 넣으면 SQLite가 그 컬럼의 인덱스를 다시 써서 곡 하나에 5행이 쓰인다.
+ * 나머지(`user_id`·`presentation_id`·`forked_from`·공개 상태)는 사본이 생길 때
+ * 정해지거나 서버가 강제하는 값이다. 값이 같아도 SET에 넣으면 SQLite가 그 컬럼의
+ * 인덱스를 다시 쓰고 트리거를 돌린다.
  */
 function editableDeckColumns(row: NewDeck): Partial<NewDeck> {
   return {
@@ -82,7 +81,6 @@ function editableDeckColumns(row: NewDeck): Partial<NewDeck> {
     slides: row.slides,
     backgroundId: row.backgroundId,
     style: row.style,
-    origin: row.origin,
     forkedFromAuthorName: row.forkedFromAuthorName,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
@@ -92,14 +90,17 @@ function editableDeckColumns(row: NewDeck): Partial<NewDeck> {
 /**
  * 프레젠테이션 변경분 저장.
  *
- * 결과는 문서 단위 전체 교체와 같다. `items`에 없는 항목과 곡은 지우고(삭제한 곡이
- * 다음 조회에서 되살아나지 않게), 본문에 담긴 덱만 쓰고, 순서가 바뀐 항목만
- * 고친다. 가사 한 줄을 고친 저장이 곡 수와 상관없이 몇 행만 쓰게 하기 위해서다.
+ * 결과는 문서 단위 전체 교체와 같다. 항목에 없는 사본은 지우고(삭제한 곡이 다음
+ * 조회에서 되살아나지 않게), 본문에 담긴 사본만 내용을 쓰고, 자리가 바뀐 사본만
+ * 자리를 고친다. 가사 한 줄을 고친 저장이 곡 수와 상관없이 몇 행만 쓰게 하기 위해서다.
  *
- * D1 왕복은 두 번이다. 소유자·기존 항목과 덱·폴더·배경을 한 batch로 읽고, 쓰기는
+ * D1 왕복은 두 번이다. 소유자·기존 사본·폴더·배경·원본 곡을 한 batch로 읽고, 쓰기는
  * 모두 `db.batch()` 하나로 묶는다. D1에는 대화형 트랜잭션이 없어서 루프로 N번
  * await하면 중간 실패 시 반쪽짜리 문서가 남는다. 두 왕복 사이에 끼어든 쓰기에도
  * 남의 행을 건드리지 않도록 갱신 문장마다 소유자 조건을 다시 건다.
+ *
+ * 항목 id(`item_id`)는 전역 유일이다. 남아 있는 사본끼리 항목 id를 맞바꾸면 batch
+ * 중간에 유일 제약에 걸리므로, 항목 id가 바뀌는 사본은 먼저 자기 덱 id로 비켜 둔다.
  *
  * 링크로 공유받은 세트(`access`)는 서버에 없어도 새로 만들지 않는다. 소유자가
  * 지운 세트를 받은 사람이 자기 문서로 되살리지 않게 하기 위해서다.
@@ -112,66 +113,71 @@ export async function savePresentationChanges(
   if (changes.access) return "forbidden";
 
   const sentDeckIdChunks = chunkIds(changes.decks.map((deck) => deck.id));
-  const [
-    owners,
-    existingItems,
-    existingDecks,
-    ownedFolders,
-    knownBackgrounds,
-    ...sentDeckChunks
-  ] = (await runQueries(db, [
-    db
-      .select({ userId: presentations.userId })
-      .from(presentations)
-      .where(eq(presentations.id, changes.id)),
-    db
-      .select({
-        id: presentationItems.id,
-        deckId: presentationItems.deckId,
-        order: presentationItems.order,
-      })
-      .from(presentationItems)
-      .where(eq(presentationItems.presentationId, changes.id)),
-    db
-      .select({ id: decks.id })
-      .from(decks)
-      .where(eq(decks.presentationId, changes.id)),
-    changes.folderId
-      ? db
-          .select({ id: folders.id })
-          .from(folders)
-          .where(
-            and(eq(folders.id, changes.folderId), eq(folders.userId, userId)),
-          )
-      : null,
-    knownBackgroundsQuery(db, changes.decks),
-    ...sentDeckIdChunks.map((ids) =>
+  const forkedFromIdChunks = chunkIds([
+    ...new Set(
+      changes.decks.flatMap((deck) =>
+        deck.forkedFrom ? [deck.forkedFrom] : [],
+      ),
+    ),
+  ]);
+  const [owners, existingCopies, ownedFolders, knownBackgrounds, ...lookups] =
+    (await runQueries(db, [
+      db
+        .select({ userId: presentations.userId })
+        .from(presentations)
+        .where(eq(presentations.id, changes.id)),
       db
         .select({
           id: decks.id,
-          presentationId: decks.presentationId,
-          userId: decks.userId,
+          itemId: decks.itemId,
+          position: decks.position,
         })
         .from(decks)
-        .where(inArray(decks.id, ids)),
-    ),
-  ])) as [
-    { userId: string }[],
-    ExistingItem[],
-    { id: string }[],
-    { id: string }[],
-    { id: string }[],
-    ...ExistingDeck[][],
-  ];
+        .where(eq(decks.presentationId, changes.id)),
+      changes.folderId
+        ? db
+            .select({ id: folders.id })
+            .from(folders)
+            .where(
+              and(eq(folders.id, changes.folderId), eq(folders.userId, userId)),
+            )
+        : null,
+      knownBackgroundsQuery(db, changes.decks),
+      ...sentDeckIdChunks.map((ids) =>
+        db
+          .select({
+            id: decks.id,
+            presentationId: decks.presentationId,
+            userId: decks.userId,
+          })
+          .from(decks)
+          .where(inArray(decks.id, ids)),
+      ),
+      ...forkedFromIdChunks.map((ids) =>
+        db.select({ id: decks.id }).from(decks).where(inArray(decks.id, ids)),
+      ),
+    ])) as [
+      { userId: string }[],
+      ExistingCopy[],
+      { id: string }[],
+      { id: string }[],
+      ...(SentDeckOwner[] | { id: string }[])[],
+    ];
+  const sentDeckOwners = lookups
+    .slice(0, sentDeckIdChunks.length)
+    .flat() as SentDeckOwner[];
+  const knownDeckIds = new Set(
+    lookups
+      .slice(sentDeckIdChunks.length)
+      .flatMap((rows) => rows.map((row) => row.id)),
+  );
 
   const [existing] = owners;
   if (existing && existing.userId !== userId) return "forbidden";
 
-  const sentDecksElsewhere = sentDeckChunks
-    .flat()
-    .some(
-      (deck) => deck.presentationId !== changes.id || deck.userId !== userId,
-    );
+  const sentDecksElsewhere = sentDeckOwners.some(
+    (deck) => deck.presentationId !== changes.id || deck.userId !== userId,
+  );
   if (sentDecksElsewhere) return "forbidden";
 
   const folderId =
@@ -183,7 +189,7 @@ export async function savePresentationChanges(
 
   const {
     presentation,
-    items,
+    slots,
     decks: sentDeckRows,
   } = fromPresentationChanges({
     ...changes,
@@ -191,18 +197,30 @@ export async function savePresentationChanges(
     ...(folderId === undefined ? {} : { folderId }),
   });
 
-  const existingDeckIds = new Set(existingDecks.map((deck) => deck.id));
-  const nextDeckIds = new Set(items.map((item) => item.deckId));
-  const sentDeckIds = new Set(sentDeckRows.map((deck) => deck.id));
-  const missingDeck = [...nextDeckIds].some(
-    (deckId) => !sentDeckIds.has(deckId) && !existingDeckIds.has(deckId),
+  const previous = new Map(existingCopies.map((copy) => [copy.id, copy]));
+  const sent = new Map(
+    keepKnownBackgrounds(sentDeckRows, knownBackgrounds).map((row) => [
+      row.id as string,
+      row,
+    ]),
+  );
+  const missingDeck = slots.some(
+    (slot) => !sent.has(slot.deckId) && !previous.has(slot.deckId),
   );
   if (missingDeck) return "stale";
 
-  const deckRows = keepKnownBackgrounds(
-    sentDeckRows.filter((deck) => nextDeckIds.has(deck.id as string)),
-    knownBackgrounds,
-  );
+  const nextDeckIds = new Set(slots.map((slot) => slot.deckId));
+  const removedDeckIds = existingCopies
+    .map((copy) => copy.id)
+    .filter((id) => !nextDeckIds.has(id));
+  const removed = new Set(removedDeckIds);
+
+  const ownedCopy = (deckId: string) =>
+    and(
+      eq(decks.id, deckId),
+      eq(decks.presentationId, changes.id),
+      eq(decks.userId, userId),
+    );
 
   const statements: unknown[] = [
     clearTombstoneStatement(db, userId, changes.id),
@@ -234,27 +252,6 @@ export async function savePresentationChanges(
     statements.push(db.insert(presentations).values(presentation));
   }
 
-  const previousItems = new Map(existingItems.map((item) => [item.id, item]));
-  const nextItems = new Map(items.map((item) => [item.id, item]));
-  const removedItemIds = existingItems
-    .filter((item) => nextItems.get(item.id)?.deckId !== item.deckId)
-    .map((item) => item.id);
-  for (const ids of chunkIds(removedItemIds)) {
-    statements.push(
-      db
-        .delete(presentationItems)
-        .where(
-          and(
-            eq(presentationItems.presentationId, changes.id),
-            inArray(presentationItems.id, ids),
-          ),
-        ),
-    );
-  }
-
-  const removedDeckIds = [...existingDeckIds].filter(
-    (id) => !nextDeckIds.has(id),
-  );
   for (const ids of chunkIds(removedDeckIds)) {
     statements.push(
       db
@@ -265,41 +262,41 @@ export async function savePresentationChanges(
     );
   }
 
-  for (const deckRow of deckRows) {
-    if (existingDeckIds.has(deckRow.id as string)) {
-      statements.push(
-        db
-          .update(decks)
-          .set(editableDeckColumns(deckRow))
-          .where(
-            and(
-              eq(decks.id, deckRow.id as string),
-              eq(decks.presentationId, changes.id),
-              eq(decks.userId, userId),
-            ),
-          ),
-      );
-    } else {
-      statements.push(db.insert(decks).values(deckRow));
-    }
+  const moved = slots.filter((slot) => {
+    const copy = previous.get(slot.deckId);
+    return copy !== undefined && copy.itemId !== slot.itemId;
+  });
+  for (const slot of moved) {
+    statements.push(
+      db
+        .update(decks)
+        .set({ itemId: slot.deckId })
+        .where(ownedCopy(slot.deckId)),
+    );
   }
 
-  for (const item of items) {
-    const previous = previousItems.get(item.id);
-    if (previous?.deckId !== item.deckId) {
-      statements.push(db.insert(presentationItems).values(item));
-    } else if (previous.order !== item.order) {
-      statements.push(
-        db
-          .update(presentationItems)
-          .set({ order: item.order })
-          .where(
-            and(
-              eq(presentationItems.id, item.id),
-              eq(presentationItems.presentationId, changes.id),
-            ),
-          ),
-      );
+  for (const slot of slots) {
+    const copy = previous.get(slot.deckId);
+    const row = sent.get(slot.deckId);
+    if (copy) {
+      const changed = {
+        ...(row ? editableDeckColumns(row) : {}),
+        ...(copy.itemId === slot.itemId ? {} : { itemId: slot.itemId }),
+        ...(copy.position === slot.position ? {} : { position: slot.position }),
+      };
+      if (Object.keys(changed).length > 0) {
+        statements.push(
+          db.update(decks).set(changed).where(ownedCopy(slot.deckId)),
+        );
+      }
+    } else if (row) {
+      const forkedFrom =
+        row.forkedFrom &&
+        knownDeckIds.has(row.forkedFrom) &&
+        !removed.has(row.forkedFrom)
+          ? row.forkedFrom
+          : null;
+      statements.push(db.insert(decks).values({ ...row, forkedFrom }));
     }
   }
 
@@ -336,33 +333,30 @@ export async function getPresentationDocumentsByUserId(
   return hydratePresentationDocuments(db, headers);
 }
 
-/** 헤더 행에 항목·덱을 붙여 문서로 만든다. 권한 검사는 호출자 책임이다. */
+/** 헤더 행에 사본 덱을 붙여 문서로 만든다. 권한 검사는 호출자 책임이다. */
 export async function hydratePresentationDocuments(
   db: DbInstance,
   headers: Presentation[],
 ): Promise<PresentationDocument[]> {
   if (headers.length === 0) return [];
 
-  const rows: Array<{
-    item: typeof presentationItems.$inferSelect;
-    deck: Deck;
-  }> = [];
+  const copies: Deck[] = [];
   for (const ids of chunkIds(headers.map((h) => h.id))) {
-    rows.push(
+    copies.push(
       ...(await db
-        .select({ item: presentationItems, deck: decks })
-        .from(presentationItems)
-        .innerJoin(decks, eq(presentationItems.deckId, decks.id))
-        .where(inArray(presentationItems.presentationId, ids))
-        .orderBy(asc(presentationItems.order))),
+        .select()
+        .from(decks)
+        .where(inArray(decks.presentationId, ids))
+        .orderBy(asc(decks.position))),
     );
   }
 
-  const byPresentation = new Map<string, typeof rows>();
-  for (const row of rows) {
-    const list = byPresentation.get(row.item.presentationId) ?? [];
-    list.push(row);
-    byPresentation.set(row.item.presentationId, list);
+  const byPresentation = new Map<string, Deck[]>();
+  for (const copy of copies) {
+    const id = copy.presentationId as string;
+    const list = byPresentation.get(id) ?? [];
+    list.push(copy);
+    byPresentation.set(id, list);
   }
 
   return headers.map((header) =>

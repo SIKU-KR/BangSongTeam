@@ -4,7 +4,6 @@ export * from "./presentations";
 export * from "./folders";
 export * from "./backgrounds";
 export * from "./search";
-export * from "./publicScope";
 export * from "./sharing";
 export * from "./reports";
 export * from "./presentationSharing";

@@ -1,4 +1,4 @@
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import {
   createId,
   firstSlidePreview,
@@ -7,46 +7,38 @@ import {
   type PublicDeckDetail,
   type PublicDeckSummary,
 } from "#shared";
-import { decks, user, type Deck, type NewDeck } from "../schema";
-import { toDeckRow, toSharedDeck } from "./mappers";
-import { publicDeckCondition } from "./publicScope";
-import { nullifyUnknownBackgrounds } from "./backgrounds";
-import { runStatements } from "./batch";
+import { decks, publicDecks, type Deck } from "../schema";
+import { parseSlides, parseStyle, toSharedDeck } from "./mappers";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type DbInstance = any;
 
+export type PublicDeckRow = typeof publicDecks.$inferSelect;
+
 /** 공개 검색 카드: 첫 슬라이드만 */
-export function toPublicDeckSummary(
-  row: Deck,
-  authorName: string,
-): PublicDeckSummary {
-  const deck = toSharedDeck(row);
+export function toPublicDeckSummary(row: PublicDeckRow): PublicDeckSummary {
+  const slides = parseSlides(row.slides);
   return {
-    id: deck.id,
-    title: deck.title,
-    artist: deck.artist,
-    authorName,
-    forkedFromAuthorName: deck.forkedFromAuthorName ?? null,
-    forkCount: deck.forkCount,
-    backgroundId: deck.backgroundId,
-    firstSlidePreview: firstSlidePreview(deck.slides),
-    slideCount: deck.slides.length,
-    updatedAt: deck.updatedAt,
+    id: row.id,
+    title: row.title,
+    artist: row.artist,
+    authorName: row.authorName,
+    forkedFromAuthorName: row.forkedFromAuthorName ?? null,
+    forkCount: row.forkCount,
+    backgroundId: row.backgroundId ?? null,
+    firstSlidePreview: firstSlidePreview(slides),
+    slideCount: slides.length,
+    updatedAt: row.updatedAt.toISOString(),
   };
 }
 
 /** 공개 덱 상세: 로그인 사용자에게만 주는 전문 */
-export function toPublicDeckDetail(
-  row: Deck,
-  authorName: string,
-): PublicDeckDetail {
-  const deck = toSharedDeck(row);
+export function toPublicDeckDetail(row: PublicDeckRow): PublicDeckDetail {
   return {
-    ...toPublicDeckSummary(row, authorName),
-    lyricsRaw: deck.lyricsRaw,
-    slides: deck.slides,
-    style: deck.style,
+    ...toPublicDeckSummary(row),
+    lyricsRaw: row.lyricsRaw,
+    slides: parseSlides(row.slides),
+    style: parseStyle(row.style),
   };
 }
 
@@ -57,8 +49,16 @@ export type SetVisibilityResult =
   | { status: "taken_down" }
   | { status: "empty" };
 
+async function selectDeck(db: DbInstance, deckId: string): Promise<Deck> {
+  const [row]: Deck[] = await db
+    .select()
+    .from(decks)
+    .where(eq(decks.id, deckId));
+  return row;
+}
+
 /**
- * 보관함 덱의 공개 여부를 변경한다.
+ * 보관함 곡의 공개 여부를 변경한다. 게시 중단된 곡과 빈 곡은 공개할 수 없다.
  */
 export async function setDeckVisibility(
   db: DbInstance,
@@ -72,11 +72,11 @@ export async function setDeckVisibility(
     .where(and(eq(decks.id, deckId), eq(decks.userId, userId)));
 
   if (!row) return { status: "not_found" };
-  if (row.scope !== "library") return { status: "not_library" };
+  if (row.presentationId) return { status: "not_library" };
 
   if (visibility === "public") {
     if (row.takedownAt) return { status: "taken_down" };
-    if (toSharedDeck(row).slides.length === 0) return { status: "empty" };
+    if (parseSlides(row.slides).length === 0) return { status: "empty" };
   }
 
   await db
@@ -88,22 +88,17 @@ export async function setDeckVisibility(
     )
     .where(and(eq(decks.id, deckId), eq(decks.userId, userId)));
 
-  const [saved]: Deck[] = await db
-    .select()
-    .from(decks)
-    .where(eq(decks.id, deckId));
-  return { status: "ok", deck: toSharedDeck(saved) };
+  return { status: "ok", deck: toSharedDeck(await selectDeck(db, deckId)) };
 }
 
-async function selectPublicDeckWithAuthor(
+async function selectPublicDeck(
   db: DbInstance,
   deckId: string,
-): Promise<{ deck: Deck; authorName: string } | null> {
+): Promise<PublicDeckRow | null> {
   const [row] = await db
-    .select({ deck: decks, authorName: user.name })
-    .from(decks)
-    .innerJoin(user, eq(user.id, decks.userId))
-    .where(and(eq(decks.id, deckId), publicDeckCondition()));
+    .select()
+    .from(publicDecks)
+    .where(eq(publicDecks.id, deckId));
   return row ?? null;
 }
 
@@ -112,10 +107,8 @@ export async function getPublicDeckDetail(
   db: DbInstance,
   deckId: string,
 ): Promise<PublicDeckDetail | null> {
-  const row = await selectPublicDeckWithAuthor(db, deckId);
-  if (!row) return null;
-  const [deck] = await nullifyUnknownBackgrounds(db, [row.deck]);
-  return toPublicDeckDetail(deck, row.authorName);
+  const row = await selectPublicDeck(db, deckId);
+  return row ? toPublicDeckDetail(row) : null;
 }
 
 export type ForkResult =
@@ -126,77 +119,63 @@ export type ForkResult =
  * 공개 덱을 내 보관함으로 가져온다 (fork).
  *
  * - 원본은 바뀌지 않는다. 복제본에 `forked_from`과 원작자 이름을 남긴다
- * - 복제본은 비공개이고 `origin='fork'`다
- * - 같은 덱을 다시 가져오면 이전 포크를 돌려주고 가져간 횟수를 올리지 않는다
+ * - 복제본은 비공개다
+ * - 같은 덱을 다시 가져오면 이전 포크를 돌려준다. 한 사람이 한 곡을 한 번만
+ *   가져오는 것은 유일 인덱스(`idx_decks_fork_once`)가 보장하므로 동시 요청에도
+ *   포크가 둘 생기지 않는다
  * - 내 덱이면 그대로 돌려준다 (내가 공개한 곡을 내 세트에 담는 경우)
- * - 원본이 원작자의 커스텀 배경을 쓰면 포크본은 배경 없이 만든다 (소유자 전용)
  *
- * 포크 insert와 원본 `fork_count + 1`은 `batch`로 묶는다. 둘 중 하나만 남으면
- * 인기순이 어긋나거나 가져간 곡이 사라진다.
+ * 원본의 가져간 횟수는 트리거가 올린다.
  */
 export async function forkPublicDeck(
   db: DbInstance,
   userId: string,
   sourceId: string,
 ): Promise<ForkResult> {
-  const source = await selectPublicDeckWithAuthor(db, sourceId);
+  const source = await selectPublicDeck(db, sourceId);
   if (!source) return { status: "not_found" };
 
-  if (source.deck.userId === userId) {
+  if (source.userId === userId) {
     return {
       status: "ok",
-      deck: toSharedDeck(source.deck),
+      deck: toSharedDeck(await selectDeck(db, sourceId)),
       alreadyOwned: true,
     };
   }
 
-  const [existing]: Deck[] = await db
+  const now = new Date();
+  const [inserted]: { id: string }[] = await db
+    .insert(decks)
+    .values({
+      id: createId(),
+      userId,
+      title: source.title,
+      artist: source.artist,
+      lyricsRaw: source.lyricsRaw,
+      slides: source.slides,
+      style: source.style,
+      backgroundId: source.backgroundId,
+      forkedFrom: source.id,
+      forkedFromAuthorName: source.authorName,
+      createdAt: now,
+      updatedAt: now,
+    })
+    .onConflictDoNothing()
+    .returning({ id: decks.id });
+
+  const [saved]: Deck[] = await db
     .select()
     .from(decks)
     .where(
       and(
         eq(decks.userId, userId),
         eq(decks.forkedFrom, sourceId),
-        eq(decks.origin, "fork"),
-        eq(decks.scope, "library"),
+        isNull(decks.presentationId),
       ),
     );
-  if (existing) {
-    return { status: "ok", deck: toSharedDeck(existing), alreadyOwned: true };
-  }
-
-  const [publicSource] = await nullifyUnknownBackgrounds(db, [source.deck]);
-  const original = toSharedDeck(publicSource);
-  const now = new Date().toISOString();
-  const forkRow: NewDeck = toDeckRow({
-    ...original,
-    id: createId(),
-    userId,
-    scope: "library",
-    presentationId: null,
-    visibility: "private",
-    forkedFrom: original.id,
-    forkedFromAuthorName: source.authorName,
-    forkCount: 0,
-    origin: "fork",
-    publishedAt: null,
-    takedownAt: null,
-    createdAt: now,
-    updatedAt: now,
-  });
-
-  const statements = [
-    db.insert(decks).values(forkRow),
-    db
-      .update(decks)
-      .set({ forkCount: sql`${decks.forkCount} + 1` })
-      .where(eq(decks.id, sourceId)),
-  ];
-  await runStatements(db, statements);
-
-  const [saved]: Deck[] = await db
-    .select()
-    .from(decks)
-    .where(eq(decks.id, forkRow.id as string));
-  return { status: "ok", deck: toSharedDeck(saved), alreadyOwned: false };
+  return {
+    status: "ok",
+    deck: toSharedDeck(saved),
+    alreadyOwned: inserted === undefined,
+  };
 }

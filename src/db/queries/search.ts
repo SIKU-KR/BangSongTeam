@@ -1,12 +1,10 @@
-import { and, desc, eq, inArray, like, or, sql, type SQL } from "drizzle-orm";
+import { and, desc, inArray, like, or, sql, type SQL } from "drizzle-orm";
 import {
   fitLinesToSlides,
   StoredSlideSchema,
   type PublicDeckSummary,
 } from "#shared";
-import { backgrounds, decks, decksFts, user } from "../schema";
-import { publicDeckCondition } from "./publicScope";
-import { isServiceBackground } from "./backgrounds";
+import { decksFts, publicDecks } from "../schema";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type DbInstance = any;
@@ -66,21 +64,21 @@ function fts5Match(query: string): SQL {
  */
 const firstSlideLines = sql<
   string | null
->`CASE WHEN json_valid(${decks.slides}) THEN (SELECT json_extract(value, '$.lines') FROM json_each(${decks.slides}) ORDER BY json_extract(value, '$.order'), key LIMIT 1) END`;
+>`CASE WHEN json_valid(${publicDecks.slides}) THEN (SELECT json_extract(value, '$.lines') FROM json_each(${publicDecks.slides}) ORDER BY json_extract(value, '$.order'), key LIMIT 1) END`;
 
-const slideCount = sql<number>`CASE WHEN json_valid(${decks.slides}) THEN json_array_length(${decks.slides}) ELSE 0 END`;
+const slideCount = sql<number>`CASE WHEN json_valid(${publicDecks.slides}) THEN json_array_length(${publicDecks.slides}) ELSE 0 END`;
 
 interface PublicDeckSearchRow {
   id: string;
   title: string;
-  artist: string | null;
+  artist: string;
   authorName: string;
   forkedFromAuthorName: string | null;
   forkCount: number;
   backgroundId: string | null;
   firstSlideLines: string | null;
   slideCount: number;
-  updatedAt: Date | null;
+  updatedAt: Date;
 }
 
 function parseLines(raw: string | null): string[] {
@@ -97,27 +95,26 @@ function toSummary(row: PublicDeckSearchRow): PublicDeckSummary {
   return {
     id: row.id,
     title: row.title,
-    artist: row.artist ?? "",
+    artist: row.artist,
     authorName: row.authorName,
     forkedFromAuthorName: row.forkedFromAuthorName,
     forkCount: row.forkCount,
     backgroundId: row.backgroundId,
     firstSlidePreview: parseLines(row.firstSlideLines),
     slideCount: row.slideCount,
-    updatedAt: (row.updatedAt ?? new Date(0)).toISOString(),
+    updatedAt: row.updatedAt.toISOString(),
   };
 }
 
 /**
  * 공개 덱 검색 — 제목·아티스트·가사 본문 (FTS5 trigram + LIKE 하이브리드).
  *
- * 공개 조건(`publicDeckCondition`)은 이 함수 안에 고정되어 있다. 결과는 가져간
- * 횟수순, 동률이면 최근 수정순이다.
+ * 공개 범위는 `public_decks` 뷰가 정한다. 결과는 가져간 횟수순, 동률이면 최근
+ * 수정순이고, 검색어가 없으면 부분 인덱스 `idx_decks_public`을 순서대로 읽어
+ * `limit`개만 읽는다.
  *
  * 검색 카드에 필요한 열만 D1 왕복 한 번으로 읽는다. 가사 원문(`lyrics_raw`)과
- * `style`은 읽지 않고, 첫 슬라이드와 슬라이드 수는 D1 안에서 계산한다. 기본 제공
- * 배경이 아닌 `background_id`(지워진 배경, 예전 사용자 업로드)는 `LEFT JOIN`으로
- * 걸러 `null`이 된다.
+ * `style`은 읽지 않고, 첫 슬라이드와 슬라이드 수는 D1 안에서 계산한다.
  */
 export async function searchPublicDecks(
   db: DbInstance,
@@ -127,12 +124,12 @@ export async function searchPublicDecks(
   const plan = planSearch(query);
   if (plan.kind === "nothing") return [];
 
-  const conditions: SQL[] = [publicDeckCondition() as SQL];
+  const conditions: SQL[] = [];
   if (plan.kind === "search") {
     if (plan.match) {
       conditions.push(
         inArray(
-          decks.id,
+          publicDecks.id,
           db
             .select({ deckId: decksFts.deckId })
             .from(decksFts)
@@ -143,9 +140,9 @@ export async function searchPublicDecks(
     for (const pattern of plan.likePatterns) {
       conditions.push(
         or(
-          like(decks.title, pattern),
-          like(decks.artist, pattern),
-          like(decks.lyricsRaw, pattern),
+          like(publicDecks.title, pattern),
+          like(publicDecks.artist, pattern),
+          like(publicDecks.lyricsRaw, pattern),
         ) as SQL,
       );
     }
@@ -153,25 +150,20 @@ export async function searchPublicDecks(
 
   const rows: PublicDeckSearchRow[] = await db
     .select({
-      id: decks.id,
-      title: decks.title,
-      artist: decks.artist,
-      authorName: user.name,
-      forkedFromAuthorName: decks.forkedFromAuthorName,
-      forkCount: decks.forkCount,
-      backgroundId: backgrounds.id,
+      id: publicDecks.id,
+      title: publicDecks.title,
+      artist: publicDecks.artist,
+      authorName: publicDecks.authorName,
+      forkedFromAuthorName: publicDecks.forkedFromAuthorName,
+      forkCount: publicDecks.forkCount,
+      backgroundId: publicDecks.backgroundId,
       firstSlideLines,
       slideCount,
-      updatedAt: decks.updatedAt,
+      updatedAt: publicDecks.updatedAt,
     })
-    .from(decks)
-    .innerJoin(user, eq(user.id, decks.userId))
-    .leftJoin(
-      backgrounds,
-      and(eq(backgrounds.id, decks.backgroundId), isServiceBackground),
-    )
+    .from(publicDecks)
     .where(and(...conditions))
-    .orderBy(desc(decks.forkCount), desc(decks.updatedAt))
+    .orderBy(desc(publicDecks.forkCount), desc(publicDecks.updatedAt))
     .limit(limit);
 
   return rows.map(toSummary);

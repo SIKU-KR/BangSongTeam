@@ -6,13 +6,7 @@ import {
   type DriveTombstones,
   type Folder as SharedFolder,
 } from "#shared";
-import {
-  folders,
-  presentations,
-  presentationItems,
-  decks,
-  driveTombstones,
-} from "../schema";
+import { folders, presentations, driveTombstones } from "../schema";
 import { toFolderRow, toSharedFolder } from "./mappers";
 import { chunkIds, runStatements } from "./batch";
 
@@ -97,7 +91,8 @@ export interface DeletedFolderTree {
  * 폴더를 하위 폴더·프레젠테이션과 함께 영구 삭제한다 (휴지통 비우기).
  *
  * 프레젠테이션은 명시적으로 지운다. `presentations.folder_id`는 안전망으로
- * SET NULL이라 cascade로는 파일이 루트로 떨어질 뿐 지워지지 않는다.
+ * SET NULL이라 cascade로는 파일이 루트로 떨어질 뿐 지워지지 않는다. 프레젠테이션에
+ * 담긴 사본 덱과 멤버는 외래키 cascade로 함께 지워진다.
  *
  * 없거나 남의 폴더면 `null` (→ 404).
  */
@@ -130,10 +125,6 @@ export async function deleteFolderTree(
   const statements: unknown[] = [];
   for (const chunk of chunkIds(presentationIds)) {
     statements.push(
-      db
-        .delete(presentationItems)
-        .where(inArray(presentationItems.presentationId, chunk)),
-      db.delete(decks).where(inArray(decks.presentationId, chunk)),
       db
         .delete(presentations)
         .where(
