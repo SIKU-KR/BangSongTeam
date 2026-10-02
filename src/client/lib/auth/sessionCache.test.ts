@@ -40,15 +40,16 @@ describe("오프라인 세션 캐시", () => {
     expect(await loadCachedSession()).toBeNull();
   });
 
-  it("만료된 세션은 통과시키지 않고 지운다", async () => {
+  it("만료된 세션도 지우지 않고 돌려준다", async () => {
+    const expiresAt = Date.now() - 1000;
     await saveCachedSession({
       userId: "8f14e45fc1a2b3c4d5e6f",
       name: "봉사자",
-      expiresAt: Date.now() - 1000,
+      expiresAt,
     });
 
-    expect(await loadCachedSession()).toBeNull();
-    expect(await loadCachedSession()).toBeNull();
+    expect((await loadCachedSession())?.expiresAt).toBe(expiresAt);
+    expect((await loadCachedSession())?.userId).toBe("8f14e45fc1a2b3c4d5e6f");
   });
 
   it("단일 레코드만 유지한다 (계정을 바꿔도 하나)", async () => {

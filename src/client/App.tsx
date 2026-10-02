@@ -1,11 +1,18 @@
-import React, { Suspense, useEffect, useState } from "react";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import React, { Suspense, useCallback, useEffect, useState } from "react";
+import {
+  BrowserRouter,
+  Routes,
+  Route,
+  Navigate,
+  useLocation,
+} from "react-router-dom";
 import { ThemeProvider } from "#components/theme-provider";
 import { RouteErrorBoundary } from "./components/common/RouteErrorBoundary";
 import {
   hydrateFromStorage,
   flushPendingWrites,
 } from "./features/presentation";
+import { isProjectionPath } from "./features/presentation/fullscreen";
 import { hydrateSongLibrary } from "./features/editor/songLibraryStore";
 import { hydrateFoldersFromStorage } from "./features/drive/folderStore";
 import { hydrateBackgroundCatalog } from "./features/backgrounds/backgroundCatalog";
@@ -109,7 +116,14 @@ function useFlushOnPageHide(): void {
 /** 예전 자체 테마 저장 키를 그대로 써서 사용자가 고른 테마를 잃지 않는다 */
 const THEME_STORAGE_KEY = "worship-theme";
 
-/** App 최상위 라우팅 컴포넌트 */
+/**
+ * App 최상위 라우팅 컴포넌트.
+ *
+ * 송출 중에 세션이 끊겨도 로그인한 라우트 트리를 그대로 둔다. 트리를 바꾸면 송출
+ * 라우트가 다시 마운트되어 관객 화면이 첫 슬라이드로 돌아가거나 로그인 화면이 뜬다.
+ * 송출을 마치고 다른 주소로 나가면 그때 손님 트리로 바꾼다. 송출 주소의 로딩 화면은
+ * 새로고침 중에도 프로젝터가 흰 화면으로 번쩍이지 않게 검게만 그린다.
+ */
 export function App(): React.JSX.Element {
   return (
     <ThemeProvider defaultTheme="system" storageKey={THEME_STORAGE_KEY}>
@@ -121,6 +135,19 @@ export function App(): React.JSX.Element {
 function AppRoutes(): React.JSX.Element {
   const isHydrated = useHydration();
   const session = useSession();
+  const isAuthenticated = session.status === "authenticated";
+  const [wasAuthenticated, setWasAuthenticated] = useState(false);
+  const releaseProjectionLatch = useCallback(
+    () => setWasAuthenticated(false),
+    [],
+  );
+
+  const isOnProjection = isProjectionPath(window.location.pathname);
+
+  if (isAuthenticated && !wasAuthenticated) setWasAuthenticated(true);
+  if (!isAuthenticated && wasAuthenticated && !isOnProjection) {
+    setWasAuthenticated(false);
+  }
 
   if (!isHydrated) {
     return (
@@ -130,14 +157,22 @@ function AppRoutes(): React.JSX.Element {
     );
   }
 
-  if (session.status !== "authenticated") return <GuestRoutes />;
+  if (isAuthenticated) return <AuthenticatedRoutes />;
 
-  return <AuthenticatedRoutes />;
+  if (wasAuthenticated && isOnProjection) {
+    return <AuthenticatedRoutes onLeaveProjection={releaseProjectionLatch} />;
+  }
+
+  return <GuestRoutes />;
 }
 
-function AuthenticatedRoutes(): React.JSX.Element {
+function AuthenticatedRoutes({
+  onLeaveProjection,
+}: {
+  onLeaveProjection?: () => void;
+}): React.JSX.Element {
   return (
-    <AppRouter overlay={<ConsentGate />}>
+    <AppRouter overlay={<ConsentGate />} onLeaveProjection={onLeaveProjection}>
       <Route path="/" element={<LandingRoute />} />
 
       <Route element={<AppShellLayout />}>
@@ -184,19 +219,40 @@ function GuestRoutes(): React.JSX.Element {
   );
 }
 
+function ProjectionLatchGate({
+  onLeave,
+  children,
+}: {
+  onLeave?: () => void;
+  children: React.ReactNode;
+}): React.JSX.Element | null {
+  const { pathname } = useLocation();
+  const hasLeft = onLeave !== undefined && !isProjectionPath(pathname);
+
+  useEffect(() => {
+    if (hasLeft) onLeave?.();
+  }, [hasLeft, onLeave]);
+
+  return hasLeft ? null : <>{children}</>;
+}
+
 function AppRouter({
   children,
   overlay,
+  onLeaveProjection,
 }: {
   children: React.ReactNode;
   overlay?: React.ReactNode;
+  onLeaveProjection?: () => void;
 }): React.JSX.Element {
   return (
     <AppProviders>
       <BrowserRouter>
         <RouteErrorBoundary>
           <Suspense fallback={<RouteFallback />}>
-            <Routes>{children}</Routes>
+            <ProjectionLatchGate onLeave={onLeaveProjection}>
+              <Routes>{children}</Routes>
+            </ProjectionLatchGate>
           </Suspense>
         </RouteErrorBoundary>
         {overlay}
@@ -212,6 +268,14 @@ function LoadingScreen({
   testId: string;
   children: React.ReactNode;
 }): React.JSX.Element {
+  if (isProjectionPath(window.location.pathname)) {
+    return (
+      <div data-testid={testId} className="min-h-screen bg-black">
+        <span className="sr-only">{children}</span>
+      </div>
+    );
+  }
+
   return (
     <div
       data-testid={testId}

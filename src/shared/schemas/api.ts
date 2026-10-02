@@ -61,6 +61,22 @@ export const AuthConfigResponseSchema = z.object({
 });
 export type AuthConfigResponse = z.infer<typeof AuthConfigResponseSchema>;
 
+/**
+ * better-auth `/get-session`이 세션이 있을 때 돌려주는 본문 중 앱이 쓰는 부분.
+ * 캡티브 포털의 HTML처럼 이 모양이 아닌 200 응답은 "로그아웃됨"이 아니라
+ * "서버에 닿지 못함"으로 다뤄야 해서 모양을 검사한다.
+ */
+export const AuthSessionResponseSchema = z.object({
+  user: z.object({
+    id: z.string().min(1),
+    name: z.string().nullish(),
+    image: z.string().nullish(),
+  }),
+  session: z.object({
+    expiresAt: z.coerce.date(),
+  }),
+});
+
 /** 동의를 마치지 않은 사용자는 `agreedAt`이 null이고, 앱이 동의 모달로 막는다 */
 export const ConsentStatusResponseSchema = z.object({
   agreedAt: z.string().datetime().nullable(),

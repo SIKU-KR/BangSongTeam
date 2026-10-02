@@ -82,6 +82,17 @@ export function editorPath(presentationId: string): string {
   return `/editor/${presentationId}`;
 }
 
+const PROJECTION_PATH = /^\/present\/[^/]+\/fullscreen\/?$/;
+
+/**
+ * 송출 화면 주소인지. 송출 중 새로고침해도 부팅이 서버 요청이나 로그인 화면 전환으로
+ * 관객 화면을 흔들지 않도록, 부팅 동기화·세션 재검증·로딩 화면이 이 판정으로 갈린다.
+ * `launchPresentation`이 만드는 경로와 짝을 이룬다.
+ */
+export function isProjectionPath(pathname: string): boolean {
+  return PROJECTION_PATH.test(pathname);
+}
+
 /** 송출 종료 후 돌아갈 곳을 모를 때(주소 직접 진입·새로고침)의 복귀 경로 */
 export const DEFAULT_PRESENT_RETURN_PATH = DRIVE_ROOT_PATH;
 
