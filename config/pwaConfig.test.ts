@@ -94,6 +94,14 @@ describe("PWA 설정", () => {
     expect(maxEntries).toBeGreaterThanOrEqual(subsetCount);
   });
 
+  it("눈누 CDN 글꼴은 공용 패턴으로 확장자 규칙보다 먼저 맞춰 따로 담는다", () => {
+    const cdnRule = config.indexOf("urlPattern: CDN_FONT_URL_PATTERN");
+    const bundledRule = config.indexOf("urlPattern: /\\.(?:woff2?");
+    expect(cdnRule).toBeGreaterThan(-1);
+    expect(cdnRule).toBeLessThan(bundledRule);
+    expect(config).toContain("cacheName: CDN_FONT_CACHE_NAME");
+  });
+
   it("PWA 아이콘 파일이 실제로 존재한다", () => {
     const iconsDir = path.join(rootDir, "src/client/public/icons");
     for (const file of ["icon-192.png", "icon-512.png", "maskable-512.png"]) {

@@ -41,3 +41,18 @@ export function mediaCacheNameFor(url: string): string {
     ? POSTER_CACHE_NAME
     : MEDIA_CACHE_NAME;
 }
+
+/** 눈누 카탈로그 글꼴(외부 CDN)의 Workbox 런타임 캐시 이름 */
+export const CDN_FONT_CACHE_NAME = "worship-cdn-fonts-cache";
+
+/**
+ * 눈누 카탈로그 글꼴 CSS·파일을 내려 주는 외부 CDN 주소.
+ *
+ * Workbox `RegExpRoute`는 다른 출처 URL이면 정규식이 URL의 첫 글자부터 맞아야만
+ * 처리한다(`result.index !== 0`이면 건너뜀, workbox-routing `RegExpRoute.js`). 그래서
+ * `^https://`로 고정한다. 확장자만 보는 정규식은 다른 출처에서 늘 빗나가 오프라인
+ * 송출이 대체 글꼴로 바뀐다. Google CSS가 가리키는 `fonts.gstatic.com`처럼 CSS 안에서
+ * 받는 호스트도 담아야 한다. 카탈로그에 새 호스트가 생기면 테스트가 실패한다.
+ */
+export const CDN_FONT_URL_PATTERN =
+  /^https:\/\/(?:(?:cdn|fastly|gcore)\.jsdelivr\.net|fonts\.(?:googleapis|gstatic)\.com|hangeul\.pstatic\.net|cdn\.noonnu\.cc|cdn\.df\.nexon\.com|spoqa\.github\.io|raw\.githubusercontent\.com)\//i;
