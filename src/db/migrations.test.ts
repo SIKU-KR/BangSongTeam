@@ -32,7 +32,7 @@ describe("0001_initial 마이그레이션", () => {
     expect(initialSql).toContain("CREATE INDEX `idx_backgrounds_owner`");
   });
 
-  it("저널은 0001_initial부터 0006_background_search_metadata까지 순서대로다 (다음 생성은 0007부터)", () => {
+  it("저널은 0001_initial부터 0007_unused_db_phase1까지 순서대로다 (다음 생성은 0008부터)", () => {
     const journal = JSON.parse(
       fs.readFileSync(path.join(migrationsDir, "meta/_journal.json"), "utf-8"),
     ) as { entries: { idx: number; tag: string }[] };
@@ -46,6 +46,7 @@ describe("0001_initial 마이그레이션", () => {
         idx: 6,
         tag: "0006_background_search_metadata",
       }),
+      expect.objectContaining({ idx: 7, tag: "0007_unused_db_phase1" }),
     ]);
     expect(
       fs.readdirSync(migrationsDir).filter((name) => name.endsWith(".sql")),
@@ -56,6 +57,7 @@ describe("0001_initial 마이그레이션", () => {
       "0004_user_terms_agreed_at.sql",
       "0005_drop_background_tags.sql",
       "0006_background_search_metadata.sql",
+      "0007_unused_db_phase1.sql",
     ]);
   });
 });
