@@ -424,12 +424,17 @@ export function listPresentations(): Presentation[] {
   return listSnapshot;
 }
 
+/**
+ * 여는 것은 편집이 아니라서 저장도 서버 전송도 하지 않고 구독자에게만 알린다.
+ * 서버 PATCH는 문서 전체를 덮어쓰므로, 송출하려고 열기만 해도 올리면 다른 기기에서
+ * 추가한 곡이 지워지고 송출 중에 요청이 나간다.
+ */
 export function openPresentation(id: string): boolean {
   if (!state.byId[id]) return false;
   if (state.activeId === id) return true;
   breakHistoryCoalescing();
   commit({ ...state, activeId: id });
-  emitChange();
+  notifyListeners();
   return true;
 }
 

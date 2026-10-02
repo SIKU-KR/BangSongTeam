@@ -83,6 +83,18 @@ describe("presentationStore 드라이브 조작", () => {
     expect(pushed[0].folderId).toBe(FOLDER);
   });
 
+  it("문서를 열기만 하면 서버 push 큐에 넣지 않는다", async () => {
+    const push = vi.fn(async () => true);
+    __setPusherForTests(push);
+    setSyncEnabled(true);
+
+    expect(openPresentation(SEED_PRESENTATIONS[2].id)).toBe(true);
+    await flushPendingSync();
+
+    expect(getActivePresentation().id).toBe(SEED_PRESENTATIONS[2].id);
+    expect(push).not.toHaveBeenCalled();
+  });
+
   it("휴지통에 넣고 복원한다 (폴더 배치는 호출자가 정한다)", () => {
     const target = SEED_PRESENTATIONS[1];
     movePresentation(target.id, FOLDER);
