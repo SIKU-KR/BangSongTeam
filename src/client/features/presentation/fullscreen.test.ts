@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import {
   enterFullscreen,
   exitFullscreen,
+  isProjectionPath,
   launchPresentation,
   resolvePresentReturnPath,
 } from "./fullscreen";
@@ -170,6 +171,23 @@ describe("fullscreen utilities", () => {
       );
 
       expect(calls).toEqual(["fullscreen", "navigate"]);
+    });
+  });
+
+  describe("isProjectionPath", () => {
+    it("송출 화면 주소만 송출로 본다", () => {
+      expect(isProjectionPath("/present/abc/fullscreen")).toBe(true);
+      expect(isProjectionPath("/present/abc/fullscreen/")).toBe(true);
+    });
+
+    it.each([
+      "/presentations",
+      "/editor/abc",
+      "/present/abc",
+      "/present//fullscreen",
+      "/present/abc/fullscreen/extra",
+    ])("다른 주소는 송출이 아니다 (%s)", (pathname) => {
+      expect(isProjectionPath(pathname)).toBe(false);
     });
   });
 

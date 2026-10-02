@@ -1,9 +1,10 @@
 import React from "react";
-import { render, screen, act } from "@testing-library/react";
+import { render, screen, act, fireEvent } from "@testing-library/react";
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { App } from "./App";
 import { resetPresentationStore } from "./features/presentation/presentationStore";
 import { closeOfflineDB, OFFLINE_DB_NAME } from "./lib/storage/db";
+import { __setSessionForTests } from "./lib/auth/sessionStore";
 import { installFakeApi } from "./test/fakeApi";
 import {
   signInAsTestUser,
@@ -88,6 +89,44 @@ describe("App Route Integration", () => {
     expect(
       await screen.findByText("시작됐네 우리 주님의 능력이"),
     ).toBeInTheDocument();
+  });
+
+  it("송출 주소에서는 부팅 화면을 검게 그린다", () => {
+    renderAt(`/present/${DOC_ID}/fullscreen`);
+
+    expect(screen.getByTestId("app-hydrating")).toHaveClass("bg-black");
+    expect(screen.getByTestId("app-hydrating")).not.toHaveClass(
+      "bg-background",
+    );
+  });
+
+  it("다른 주소의 부팅 화면은 테마 배경을 쓴다", () => {
+    renderAt("/presentations");
+
+    expect(screen.getByTestId("app-hydrating")).toHaveClass("bg-background");
+  });
+
+  it("송출 중 세션이 끊겨도 송출 화면을 그대로 두고, 송출을 마치면 로그인 화면으로 간다", async () => {
+    renderAt(`/present/${DOC_ID}/fullscreen`);
+    const route = await screen.findByTestId("fullscreen-present-route");
+
+    act(() => {
+      __setSessionForTests(null);
+    });
+
+    expect(screen.getByTestId("fullscreen-present-route")).toBe(route);
+    expect(
+      screen.queryByRole("button", { name: /카카오 로그인/ }),
+    ).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId("exit-present-btn"));
+
+    expect(
+      await screen.findByRole("button", { name: /카카오 로그인/ }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("fullscreen-present-route"),
+    ).not.toBeInTheDocument();
   });
 
   it("should render EditorRoute at '/editor/:presentationId'", async () => {

@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { closeOfflineDB, OFFLINE_DB_NAME } from "../storage/db";
+import { authClient } from "./authClient";
 import { saveCachedSession, loadCachedSession } from "./sessionCache";
 import {
   hydrateSession,
@@ -10,6 +11,12 @@ import {
   __resetSessionForTests,
   type SessionFetcher,
 } from "./sessionStore";
+
+vi.mock("./authClient", () => ({
+  authClient: { getSession: vi.fn() },
+}));
+
+const getSession = vi.mocked(authClient.getSession);
 
 const HOUR = 60 * 60 * 1000;
 const USER_ID = "8f14e45fc1a2b3c4d5e6f";
@@ -38,6 +45,21 @@ const offlineFetcher: SessionFetcher = async () => {
   throw new Error("network down");
 };
 
+type GetSessionResult = Awaited<ReturnType<typeof authClient.getSession>>;
+
+function serverAnswers(result: unknown): void {
+  getSession.mockResolvedValue(result as GetSessionResult);
+  __setSessionFetcherForTests(null);
+}
+
+function serverError(status: number): unknown {
+  return { data: null, error: { status, statusText: "" } };
+}
+
+async function saveExpiredSession(): Promise<void> {
+  await saveCachedSession(makeUser({ expiresAt: Date.now() - 1000 }));
+}
+
 describe("세션 스토어", () => {
   beforeEach(async () => {
     await resetDatabase();
@@ -47,6 +69,8 @@ describe("세션 스토어", () => {
   afterEach(() => {
     __resetSessionForTests();
     closeOfflineDB();
+    getSession.mockReset();
+    window.history.replaceState({}, "", "/");
   });
 
   describe("부팅 하이드레이션", () => {
@@ -102,13 +126,116 @@ describe("세션 스토어", () => {
       expect(getSessionState().status).toBe("unauthenticated");
     });
 
-    it("만료된 캐시는 통과시키지 않는다", async () => {
-      await saveCachedSession(makeUser({ expiresAt: Date.now() - 1000 }));
+    it("만료된 캐시는 서버가 세션 없음을 답하면 로그아웃하고 캐시를 비운다", async () => {
+      await saveExpiredSession();
       __setSessionFetcherForTests(async () => null);
 
       await hydrateSession();
 
       expect(getSessionState().status).toBe("unauthenticated");
+      expect(await loadCachedSession()).toBeNull();
+    });
+
+    it("만료된 캐시라도 서버에 닿지 못하면 캐시된 사용자로 들어가고 캐시를 지킨다", async () => {
+      await saveExpiredSession();
+      __setSessionFetcherForTests(offlineFetcher);
+
+      await hydrateSession();
+
+      expect(getSessionState().status).toBe("authenticated");
+      expect(getCurrentUserId()).toBe(USER_ID);
+      expect((await loadCachedSession())?.userId).toBe(USER_ID);
+    });
+
+    it("만료된 캐시는 서버가 세션을 돌려주면 만료 시각을 갱신한다", async () => {
+      await saveExpiredSession();
+      const renewed = Date.now() + 7 * 24 * HOUR;
+      __setSessionFetcherForTests(async () => makeUser({ expiresAt: renewed }));
+
+      await hydrateSession();
+
+      expect(getSessionState().status).toBe("authenticated");
+      expect((await loadCachedSession())?.expiresAt).toBe(renewed);
+    });
+
+    it("송출 화면에서 부팅하면 유효한 캐시로 들어가고 서버에 묻지 않는다", async () => {
+      window.history.replaceState({}, "", "/present/abc/fullscreen");
+      await saveCachedSession(makeUser());
+      const fetcher = vi.fn(async () => null);
+      __setSessionFetcherForTests(fetcher);
+
+      await hydrateSession();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      expect(getSessionState().status).toBe("authenticated");
+      expect(fetcher).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("서버 응답 해석", () => {
+    it.each([
+      ["500", serverError(500)],
+      ["429", serverError(429)],
+      ["상태 코드 없는 오류", { data: null, error: { statusText: "" } }],
+      ["캡티브 포털 HTML", { data: "<html>login</html>", error: null }],
+      ["모양이 다른 본문", { data: { user: {} }, error: null }],
+    ])("%s 응답은 만료된 캐시로 로그인 상태를 지킨다", async (_, result) => {
+      await saveExpiredSession();
+      serverAnswers(result);
+
+      await hydrateSession();
+
+      expect(getSessionState().status).toBe("authenticated");
+      expect((await loadCachedSession())?.userId).toBe(USER_ID);
+    });
+
+    it.each([
+      ["500", serverError(500)],
+      ["캡티브 포털 HTML", { data: "<html>login</html>", error: null }],
+    ])("재검증 중 %s 응답은 로그아웃시키지 않는다", async (_, result) => {
+      await saveCachedSession(makeUser());
+      serverAnswers(result);
+
+      await hydrateSession();
+      await revalidateSession();
+
+      expect(getSessionState().status).toBe("authenticated");
+      expect(await loadCachedSession()).not.toBeNull();
+    });
+
+    it.each([
+      ["401", serverError(401)],
+      ["403", serverError(403)],
+      ["data: null", { data: null, error: null }],
+    ])("%s 응답은 로그아웃하고 캐시를 비운다", async (_, result) => {
+      await saveExpiredSession();
+      serverAnswers(result);
+
+      await hydrateSession();
+
+      expect(getSessionState().status).toBe("unauthenticated");
+      expect(await loadCachedSession()).toBeNull();
+    });
+
+    it("세션 본문을 사용자로 바꾸고 요청에 시간 제한을 건다", async () => {
+      const expiresAt = new Date(Date.now() + 7 * 24 * HOUR);
+      serverAnswers({
+        data: {
+          user: { id: USER_ID, name: null, image: null },
+          session: { expiresAt: expiresAt.toISOString() },
+        },
+        error: null,
+      });
+
+      await hydrateSession();
+
+      expect(getSessionState().user).toMatchObject({
+        userId: USER_ID,
+        expiresAt: expiresAt.getTime(),
+      });
+      expect(getSession).toHaveBeenCalledWith({
+        fetchOptions: { signal: expect.any(AbortSignal) },
+      });
     });
   });
 

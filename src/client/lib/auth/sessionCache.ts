@@ -21,15 +21,14 @@ export async function saveCachedSession(user: SessionUser): Promise<void> {
   await db.put("auth_session", record);
 }
 
+/**
+ * 만료된 기록도 지우지 않고 돌려준다. 오프라인에서는 만료된 세션이라도 송출할 수 있어야 해서,
+ * 만료 여부와 그때 서버에 물을지는 `hydrateSession`이 판단한다.
+ */
 export async function loadCachedSession(): Promise<SessionUser | null> {
   const db = await getOfflineDB();
   const record = await db.get("auth_session", CURRENT_KEY);
   if (!record) return null;
-
-  if (record.expiresAt <= Date.now()) {
-    await db.delete("auth_session", CURRENT_KEY);
-    return null;
-  }
 
   return {
     userId: record.userId,

@@ -45,15 +45,14 @@ import {
   pushDeckNow,
 } from "./deckSync";
 import { refreshBackgroundCatalog } from "./backgroundSync";
-
-const PROJECTION_ROUTE = /^\/present\/[^/]+\/fullscreen\/?$/;
+import { isProjectionPath } from "../../features/presentation/fullscreen";
 
 /**
  * 송출 중 새로고침하면 부팅 경로를 처음부터 다시 탄다. 여기서 서버와 맞추면
  * 송출 중 API·데이터 요청 0건이 깨지므로, 송출 화면에서는 부팅 동기화를 돌리지 않는다.
  */
 export function shouldRunBootSync(pathname: string): boolean {
-  return !PROJECTION_ROUTE.test(pathname);
+  return !isProjectionPath(pathname);
 }
 
 /**

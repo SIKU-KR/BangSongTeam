@@ -1,11 +1,18 @@
-import React, { Suspense, useEffect, useState } from "react";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import React, { Suspense, useCallback, useEffect, useState } from "react";
+import {
+  BrowserRouter,
+  Routes,
+  Route,
+  Navigate,
+  useLocation,
+} from "react-router-dom";
 import { ThemeProvider } from "#components/theme-provider";
 import { RouteErrorBoundary } from "./components/common/RouteErrorBoundary";
 import {
   hydrateFromStorage,
   flushPendingWrites,
 } from "./features/presentation";
+import { isProjectionPath } from "./features/presentation/fullscreen";
 import { hydrateSongLibrary } from "./features/editor/songLibraryStore";
 import { hydrateFoldersFromStorage } from "./features/drive/folderStore";
 import { hydrateBackgroundCatalog } from "./features/backgrounds/backgroundCatalog";
@@ -118,9 +125,22 @@ export function App(): React.JSX.Element {
   );
 }
 
+/**
+ * 송출 중에 세션이 끊겨도 로그인한 라우트 트리를 그대로 둔다. 트리를 바꾸면 송출
+ * 라우트가 다시 마운트되어 관객 화면이 첫 슬라이드로 돌아가거나 로그인 화면이 뜬다.
+ * 송출을 마치고 다른 주소로 나가면 그때 손님 트리로 바꾼다.
+ */
 function AppRoutes(): React.JSX.Element {
   const isHydrated = useHydration();
   const session = useSession();
+  const isAuthenticated = session.status === "authenticated";
+  const [wasAuthenticated, setWasAuthenticated] = useState(false);
+  const releaseProjectionLatch = useCallback(
+    () => setWasAuthenticated(false),
+    [],
+  );
+
+  if (isAuthenticated && !wasAuthenticated) setWasAuthenticated(true);
 
   if (!isHydrated) {
     return (
@@ -130,14 +150,31 @@ function AppRoutes(): React.JSX.Element {
     );
   }
 
-  if (session.status !== "authenticated") return <GuestRoutes />;
+  if (isAuthenticated) return <AuthenticatedRoutes />;
 
-  return <AuthenticatedRoutes />;
+  if (wasAuthenticated && isProjectionPath(window.location.pathname)) {
+    return <AuthenticatedRoutes onLeaveProjection={releaseProjectionLatch} />;
+  }
+
+  return <GuestRoutes />;
 }
 
-function AuthenticatedRoutes(): React.JSX.Element {
+function AuthenticatedRoutes({
+  onLeaveProjection,
+}: {
+  onLeaveProjection?: () => void;
+}): React.JSX.Element {
   return (
-    <AppRouter overlay={<ConsentGate />}>
+    <AppRouter
+      overlay={
+        <>
+          <ConsentGate />
+          {onLeaveProjection && (
+            <ProjectionLeaveWatcher onLeave={onLeaveProjection} />
+          )}
+        </>
+      }
+    >
       <Route path="/" element={<LandingRoute />} />
 
       <Route element={<AppShellLayout />}>
@@ -184,6 +221,14 @@ function GuestRoutes(): React.JSX.Element {
   );
 }
 
+function ProjectionLeaveWatcher({ onLeave }: { onLeave: () => void }): null {
+  const { pathname } = useLocation();
+  useEffect(() => {
+    if (!isProjectionPath(pathname)) onLeave();
+  }, [pathname, onLeave]);
+  return null;
+}
+
 function AppRouter({
   children,
   overlay,
@@ -205,6 +250,7 @@ function AppRouter({
   );
 }
 
+/** 송출 주소에서는 새로고침 중에도 프로젝터가 흰 화면으로 번쩍이지 않게 검은 화면만 그린다 */
 function LoadingScreen({
   testId,
   children,
@@ -212,6 +258,14 @@ function LoadingScreen({
   testId: string;
   children: React.ReactNode;
 }): React.JSX.Element {
+  if (isProjectionPath(window.location.pathname)) {
+    return (
+      <div data-testid={testId} className="min-h-screen bg-black">
+        <span className="sr-only">{children}</span>
+      </div>
+    );
+  }
+
   return (
     <div
       data-testid={testId}

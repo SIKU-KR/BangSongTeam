@@ -2,6 +2,7 @@ import { useSyncExternalStore } from "react";
 import {
   type AuthConfigResponse,
   AuthConfigResponseSchema,
+  AuthSessionResponseSchema,
   FALLBACK_USER_NAME,
 } from "#shared";
 import {
@@ -11,6 +12,7 @@ import {
   type SessionUser,
 } from "./sessionCache";
 import { authClient, type SocialProvider } from "./authClient";
+import { isProjectionPath } from "../../features/presentation/fullscreen";
 import { AUTH_COPY } from "#copy/auth";
 
 type SessionStatus = "loading" | "authenticated" | "unauthenticated";
@@ -20,25 +22,36 @@ interface SessionState {
   user: SessionUser | null;
 }
 
+/**
+ * 서버가 "세션 없음"이라고 분명히 답할 때(401·403, 또는 200에 `null`)만 null을 돌려준다.
+ * 5xx·429·캡티브 포털 응답·시간 초과는 모두 던진다. 호출자는 던짐을 "확인하지 못함"으로
+ * 보고 로그인 상태를 지키므로, 서버가 잠깐 아파도 예배 중에 로그아웃되지 않는다.
+ */
 export type SessionFetcher = () => Promise<SessionUser | null>;
 
+const SESSION_CHECK_TIMEOUT_MS = 5000;
+
 const fetchFromServer: SessionFetcher = async () => {
-  const result = await authClient.getSession();
+  const result = await authClient.getSession({
+    fetchOptions: { signal: AbortSignal.timeout(SESSION_CHECK_TIMEOUT_MS) },
+  });
   if (result.error) {
-    if (result.error.status === undefined) {
-      throw new Error(AUTH_COPY.sessionCheckFailed);
-    }
-    return null;
+    const { status } = result.error;
+    if (status === 401 || status === 403) return null;
+    throw new Error(AUTH_COPY.sessionCheckFailed);
   }
 
-  const data = result.data;
-  if (!data?.user || !data.session) return null;
+  if (result.data === null) return null;
 
+  const parsed = AuthSessionResponseSchema.safeParse(result.data);
+  if (!parsed.success) throw new Error(AUTH_COPY.sessionCheckFailed);
+
+  const { user, session } = parsed.data;
   return {
-    userId: data.user.id,
-    name: data.user.name ?? FALLBACK_USER_NAME.default,
-    image: data.user.image ?? null,
-    expiresAt: new Date(data.session.expiresAt).getTime(),
+    userId: user.id,
+    name: user.name ?? FALLBACK_USER_NAME.default,
+    image: user.image ?? null,
+    expiresAt: session.expiresAt.getTime(),
   };
 };
 
@@ -70,7 +83,16 @@ export function getCurrentUserId(): string | null {
   return state.user?.userId ?? null;
 }
 
-/** 앱 초기화 시 캐시된 세션 또는 서버 세션 복원 */
+/**
+ * 앱 초기화 시 캐시된 세션 또는 서버 세션을 복원한다.
+ *
+ * - 유효한 캐시는 서버를 기다리지 않고 통과시킨다. 송출 화면에서 부팅했으면 재검증도
+ *   건너뛴다. 송출 중 새로고침이 서버 요청을 만들거나 로그아웃으로 화면을 바꾸면 안 된다.
+ * - 만료된 캐시는 서버에 물어본다. 서버에 닿지 못하면 캐시된 사용자로 들어간다.
+ *   일주일에 한 번 쓰는 노트북이 오프라인 예배당에서 송출하지 못하게 되는 것을 막기 위해서다.
+ *   데이터는 이미 이 기기에 있고, 서버 API는 서버 세션으로 따로 막힌다.
+ * - 서버가 세션 없음을 분명히 답하면 캐시를 지우고 로그아웃한다.
+ */
 export async function hydrateSession(): Promise<SessionState> {
   let cached: SessionUser | null = null;
   try {
@@ -79,21 +101,29 @@ export async function hydrateSession(): Promise<SessionState> {
     cached = null;
   }
 
-  if (cached) {
+  if (cached && cached.expiresAt > Date.now()) {
     setState({ status: "authenticated", user: cached });
-    void revalidateSession();
+    if (!isProjectionPath(window.location.pathname)) void revalidateSession();
     return state;
   }
 
+  let user: SessionUser | null;
   try {
-    const user = await fetcher();
-    if (user) {
-      await persist(user);
-      setState({ status: "authenticated", user });
-    } else {
-      setState({ status: "unauthenticated", user: null });
-    }
+    user = await fetcher();
   } catch {
+    setState(
+      cached
+        ? { status: "authenticated", user: cached }
+        : { status: "unauthenticated", user: null },
+    );
+    return state;
+  }
+
+  if (user) {
+    await persist(user);
+    setState({ status: "authenticated", user });
+  } else {
+    if (cached) await forget();
     setState({ status: "unauthenticated", user: null });
   }
 
