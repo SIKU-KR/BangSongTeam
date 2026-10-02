@@ -19,7 +19,6 @@ export interface WorshipOfflineDB extends DBSchema {
   presentations: {
     key: string;
     value: Presentation;
-    indexes: { "by-date": string };
   };
   decks: {
     key: string;
@@ -32,15 +31,6 @@ export interface WorshipOfflineDB extends DBSchema {
   backgrounds: {
     key: string;
     value: StoredBackground;
-  };
-  sync_meta: {
-    key: string;
-    value: {
-      presentationId: string;
-      serverUpdatedAt?: string;
-      dirty?: boolean;
-      lastSyncedAt?: number;
-    };
   };
   auth_session: {
     key: string;
@@ -60,7 +50,6 @@ export interface CachedSession {
   name: string;
   image?: string | null;
   expiresAt: number;
-  cachedAt: number;
 }
 
 let dbPromise: Promise<IDBPDatabase<WorshipOfflineDB>> | null = null;
@@ -87,10 +76,7 @@ export function getOfflineDB(): Promise<IDBPDatabase<WorshipOfflineDB>> {
           }
         }
         if (!db.objectStoreNames.contains("presentations")) {
-          const presentationStore = db.createObjectStore("presentations", {
-            keyPath: "id",
-          });
-          presentationStore.createIndex("by-date", "serviceDate");
+          db.createObjectStore("presentations", { keyPath: "id" });
         }
         if (!db.objectStoreNames.contains("decks")) {
           db.createObjectStore("decks", { keyPath: "id" });
@@ -100,9 +86,6 @@ export function getOfflineDB(): Promise<IDBPDatabase<WorshipOfflineDB>> {
         }
         if (!db.objectStoreNames.contains("backgrounds")) {
           db.createObjectStore("backgrounds", { keyPath: "id" });
-        }
-        if (!db.objectStoreNames.contains("sync_meta")) {
-          db.createObjectStore("sync_meta", { keyPath: "presentationId" });
         }
         if (!db.objectStoreNames.contains("auth_session")) {
           db.createObjectStore("auth_session", { keyPath: "id" });

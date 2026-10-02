@@ -42,7 +42,6 @@ export const driveTombstones = sqliteTable(
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
     kind: text("kind", { enum: ["folder", "presentation"] }).notNull(),
-    deletedAt: integer("deleted_at", { mode: "timestamp_ms" }).notNull(),
   },
   (t) => [index("idx_drive_tombstones_user").on(t.userId)],
 );

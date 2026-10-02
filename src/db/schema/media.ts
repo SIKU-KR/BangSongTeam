@@ -41,10 +41,7 @@ export const backgrounds = sqliteTable(
       sql`(unixepoch())`,
     ),
   },
-  (t) => [
-    index("idx_backgrounds_source").on(t.source),
-    index("idx_backgrounds_owner").on(t.ownerUserId),
-  ],
+  (t) => [index("idx_backgrounds_source").on(t.source)],
 );
 
 export type Background = typeof backgrounds.$inferSelect;

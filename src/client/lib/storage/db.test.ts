@@ -36,16 +36,7 @@ describe("worship-offline-db", () => {
       "decks",
       "folders",
       "presentations",
-      "sync_meta",
     ]);
-  });
-
-  it("presentations 스토어에 by-date 인덱스를 만든다", async () => {
-    const db = await getOfflineDB();
-    const tx = db.transaction("presentations", "readonly");
-
-    expect([...tx.store.indexNames]).toContain("by-date");
-    await tx.done;
   });
 
   it("두 번 호출해도 같은 커넥션을 재사용한다", async () => {
@@ -104,18 +95,21 @@ describe("worship-offline-db", () => {
     for (const name of db.objectStoreNames) {
       expect(await db.count(name), `${name}가 비어 있어야 한다`).toBe(0);
     }
-    expect(db.transaction("presentations").store.indexNames).toContain(
-      "by-date",
-    );
   });
 
   it("이미 v3인 DB는 다시 열어도 레코드를 지우지 않는다", async () => {
     const first = await getOfflineDB();
-    await first.put("sync_meta", { presentationId: "100000000000000000001" });
+    await first.put("auth_session", {
+      id: "current",
+      userId: "100000000000000000001",
+      name: "테스터",
+      image: null,
+      expiresAt: Date.now() + 60_000,
+    });
     closeOfflineDB();
 
     const reopened = await getOfflineDB();
-    expect(await reopened.count("sync_meta")).toBe(1);
+    expect(await reopened.count("auth_session")).toBe(1);
   });
 
   it("v3(NanoID) DB를 v4로 올리면 레코드를 지우지 않고 folders 스토어만 더한다", async () => {
