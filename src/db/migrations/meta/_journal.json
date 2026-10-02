@@ -50,6 +50,13 @@
       "when": 1790905967590,
       "tag": "0007_unused_db_phase1",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1790906426769,
+      "tag": "0008_unused_db_phase2",
+      "breakpoints": true
     }
   ]
 }
