@@ -27,33 +27,9 @@ export async function resetBackgrounds(serviceCount = 0): Promise<string[]> {
           posterKey: `posters/${id}.webp`,
           durationSec: 20,
           license: "Service Original (CC0)",
+          createdAt: new Date(0),
         })),
       );
   }
   return ids;
-}
-
-/**
- * 마이그레이션 `0002` 이전의 사용자 업로드 행. 앱은 이 행을 어떤 경로로도 내보내지
- * 않아야 한다 (운영 D1에 남아 있을 경우를 대비한 회귀 검사용).
- */
-export async function insertUserBackgroundRow(
-  ownerUserId: string,
-  id: string,
-  sizeBytes = 1000,
-): Promise<void> {
-  await createD1Client(env.DB)
-    .insert(backgrounds)
-    .values({
-      id,
-      title: "본당 배경",
-      r2Key: `uploads/${ownerUserId}/${id}.mp4`,
-      posterKey: `uploads/${ownerUserId}/${id}.poster.webp`,
-      durationSec: 10,
-      license: "사용자 업로드",
-      source: "user",
-      ownerUserId,
-      kind: "video",
-      sizeBytes,
-    });
 }

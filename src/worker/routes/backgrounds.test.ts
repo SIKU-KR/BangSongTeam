@@ -5,10 +5,9 @@ import { BackgroundListResponseSchema } from "#shared";
 import { createD1Client, decks, user } from "#db";
 import { createApp } from "../index";
 import type { SessionReader } from "../middleware/auth";
-import { insertUserBackgroundRow, resetBackgrounds } from "../test/backgrounds";
+import { resetBackgrounds } from "../test/backgrounds";
 
 const MEMBER = "bbbbbbbb5000000000002";
-const LEGACY_UPLOAD = "othr50000000000000001";
 
 let currentUser: string | null = MEMBER;
 const fakeSession: SessionReader = async () =>
@@ -35,11 +34,10 @@ describe("배경 갤러리 API", () => {
       updatedAt: new Date(),
     });
     serviceIds = await resetBackgrounds(2);
-    await insertUserBackgroundRow(MEMBER, LEGACY_UPLOAD, 5000);
     currentUser = MEMBER;
   });
 
-  it("누구에게나 같은 기본 제공 배경 목록을 주고 예전 사용자 업로드는 뺀다", async () => {
+  it("누구에게나 같은 기본 제공 배경 목록을 준다", async () => {
     for (const who of [null, MEMBER]) {
       currentUser = who;
       const body = await list();

@@ -1,7 +1,14 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { eq } from "drizzle-orm";
 import { createTestDb, type TestDbResult } from "../test-utils";
-import { decks, user, type NewDeck } from "../schema";
+import {
+  decks,
+  presentations,
+  publicDecks,
+  user,
+  type NewDeck,
+} from "../schema";
+import { deckRow } from "../test-fixtures";
 import {
   forkPublicDeck,
   getPublicDeckDetail,
@@ -19,17 +26,15 @@ const SLIDES = JSON.stringify([
 ]);
 
 function row(overrides: Partial<NewDeck> = {}): NewDeck {
-  return {
+  return deckRow({
     id: DECK,
     userId: A,
-    scope: "library",
     title: "은혜로다",
     artist: "예수전도단",
     lyricsRaw: "첫 줄\n둘째 줄\n\n둘째 슬라이드",
     slides: SLIDES,
-    style: "{}",
     ...overrides,
-  };
+  });
 }
 
 describe("공유 쿼리 헬퍼", () => {
@@ -54,8 +59,9 @@ describe("공유 쿼리 헬퍼", () => {
 
   describe("toPublicDeckSummary", () => {
     it("keeps only the first slide and never the owner id", async () => {
-      await db.insert(decks).values(row());
-      const summary = toPublicDeckSummary(await readRow(DECK), "김찬양");
+      await db.insert(decks).values(row({ visibility: "public" }));
+      const [publicRow] = await db.select().from(publicDecks);
+      const summary = toPublicDeckSummary(publicRow);
       expect(summary.firstSlidePreview).toEqual(["첫 줄", "둘째 줄"]);
       expect(summary.slideCount).toBe(2);
       expect(summary.authorName).toBe("김찬양");
@@ -91,10 +97,18 @@ describe("공유 쿼리 헬퍼", () => {
     });
 
     it("refuses presentation clones, taken-down decks and empty decks", async () => {
+      await db.insert(presentations).values({
+        id: "p1",
+        userId: A,
+        title: "세트",
+        serviceDate: "2026-09-27",
+        createdAt: new Date(0),
+        updatedAt: new Date(0),
+      });
       await db
         .insert(decks)
         .values([
-          row({ id: "clone", scope: "presentation" }),
+          row({ id: "clone", presentationId: "p1", itemId: "i1", position: 0 }),
           row({ id: "down", takedownAt: new Date() }),
           row({ id: "empty", slides: "[]" }),
         ]);
@@ -174,20 +188,34 @@ describe("공유 쿼리 헬퍼", () => {
         .insert(decks)
         .values([
           row({ id: "priv" }),
-          row({ id: "down", visibility: "public", takedownAt: new Date() }),
+          row({ id: "down", takedownAt: new Date() }),
         ]);
       for (const id of ["priv", "down", "nope"]) {
         expect((await forkPublicDeck(db, B, id)).status).toBe("not_found");
       }
     });
 
-    it("keeps the fork when the original goes private or is deleted", async () => {
+    it("keeps the fork and its credit when the original is deleted", async () => {
       const result = await forkPublicDeck(db, B, DECK);
       if (result.status !== "ok") throw new Error();
       await db.delete(decks).where(eq(decks.id, DECK));
-      expect((await readRow(result.deck.id)).forkedFromAuthorName).toBe(
-        "김찬양",
-      );
+      expect(await readRow(result.deck.id)).toMatchObject({
+        forkedFrom: null,
+        forkedFromAuthorName: "김찬양",
+      });
+    });
+
+    it("counts current forks: deleting a fork lowers the count", async () => {
+      const result = await forkPublicDeck(db, B, DECK);
+      if (result.status !== "ok") throw new Error();
+      expect((await readRow(DECK)).forkCount).toBe(1);
+
+      await db.delete(decks).where(eq(decks.id, result.deck.id));
+      expect((await readRow(DECK)).forkCount).toBe(0);
+
+      const again = await forkPublicDeck(db, B, DECK);
+      expect(again.status === "ok" && again.alreadyOwned).toBe(false);
+      expect((await readRow(DECK)).forkCount).toBe(1);
     });
   });
 });

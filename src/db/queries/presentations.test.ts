@@ -1,7 +1,8 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { eq } from "drizzle-orm";
 import { createTestDb } from "../test-utils";
-import { user, decks, presentations, presentationItems } from "../schema";
+import { user, decks, presentations } from "../schema";
+import { deckRow } from "../test-fixtures";
 import {
   DEFAULT_DECK_STYLE,
   PresentationDocumentSchema,
@@ -83,17 +84,16 @@ describe("프레젠테이션 쿼리", () => {
   });
 
   describe("deletePresentation", () => {
-    it("should delete presentation and cascade-delete cloned decks and presentation_items (no orphans)", async () => {
-      await db.insert(decks).values({
-        id: "deck-song-1",
-        userId: userAId,
-        scope: "library",
-        title: "Song 1: 꽃들도",
-        lyricsRaw: "이곳에 생명샘 솟아나",
-        slides: "[]",
-        style: "{}",
-        visibility: "public",
-      });
+    it("should delete presentation and cascade-delete its copy decks (no orphans)", async () => {
+      await db.insert(decks).values(
+        deckRow({
+          id: "deck-song-1",
+          userId: userAId,
+          title: "Song 1: 꽃들도",
+          lyricsRaw: "이곳에 생명샘 솟아나",
+          visibility: "public",
+        }),
+      );
       await upsertPresentationDocument(db, userAId, makeDoc(userAId));
       const clonedDeckId = "c00000000000000000001";
 
@@ -108,12 +108,6 @@ describe("프레젠테이션 쿼리", () => {
           .select()
           .from(presentations)
           .where(eq(presentations.id, DOC_ID)),
-      ).toHaveLength(0);
-      expect(
-        await db
-          .select()
-          .from(presentationItems)
-          .where(eq(presentationItems.presentationId, DOC_ID)),
       ).toHaveLength(0);
       expect(
         await db.select().from(decks).where(eq(decks.id, clonedDeckId)),

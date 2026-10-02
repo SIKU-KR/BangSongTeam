@@ -9,18 +9,11 @@ import {
   type Deck,
   type SearchCatalogResponse,
 } from "#shared";
-import {
-  createD1Client,
-  decks,
-  presentationItems,
-  presentations,
-  reports,
-  user,
-} from "#db";
+import { createD1Client, decks, presentations, reports, user } from "#db";
 import { createApp } from "../index";
 import type { SessionReader } from "../middleware/auth";
 import { clearTables } from "../test/db";
-import { insertUserBackgroundRow, resetBackgrounds } from "../test/backgrounds";
+import { resetBackgrounds } from "../test/backgrounds";
 
 const A = "aaaaaaaa3000000000001";
 const B = "bbbbbbbb3000000000002";
@@ -90,13 +83,13 @@ const publish = (id: string) =>
 async function takeDown(deckId: string): Promise<void> {
   await createD1Client(env.DB)
     .update(decks)
-    .set({ takedownAt: new Date() })
+    .set({ visibility: "private", takedownAt: new Date() })
     .where(eq(decks.id, deckId));
 }
 
 describe("공유 라이브러리 API", () => {
   beforeEach(async () => {
-    await clearTables(reports, presentationItems, decks, presentations);
+    await clearTables(reports, decks, presentations);
     await createD1Client(env.DB)
       .delete(user)
       .where(inArray(user.id, [A, B]));
@@ -312,12 +305,10 @@ describe("공유 라이브러리 API", () => {
   });
 
   describe("공개 경로의 배경", () => {
-    const LEGACY_UPLOAD = "upld00000000000000001";
     let serviceId = "";
 
     beforeEach(async () => {
       [serviceId] = await resetBackgrounds(1);
-      await insertUserBackgroundRow(A, LEGACY_UPLOAD);
     });
 
     async function publishWithBackground(backgroundId: string): Promise<void> {
@@ -326,8 +317,9 @@ describe("공유 라이브러리 API", () => {
       expect((await publish(PUB)).status).toBe(200);
     }
 
-    it("예전 사용자 업로드는 저장·검색·상세·포크 모두에서 배경 없음이다", async () => {
-      await publishWithBackground(LEGACY_UPLOAD);
+    it("지운 배경은 검색·상세·포크·보관함 모두에서 배경 없음이다", async () => {
+      await publishWithBackground(serviceId);
+      await resetBackgrounds(0);
 
       const [card] = (await search("은혜로다")).decks;
       expect(card.backgroundId).toBeNull();

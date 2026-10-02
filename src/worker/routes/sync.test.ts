@@ -8,22 +8,11 @@ import {
   type Deck,
   type PresentationDocument,
 } from "#shared";
-import {
-  createD1Client,
-  decks,
-  decksFts,
-  presentationItems,
-  presentations,
-  user,
-} from "#db";
+import { createD1Client, decks, decksFts, presentations, user } from "#db";
 import { createApp } from "../index";
 import type { SessionReader } from "../middleware/auth";
 import { clearTables } from "../test/db";
-import {
-  insertUserBackgroundRow,
-  resetBackgrounds,
-  serviceBackgroundId,
-} from "../test/backgrounds";
+import { resetBackgrounds, serviceBackgroundId } from "../test/backgrounds";
 
 const USER_A = "aaaaaaaa0000000000001";
 const USER_B = "bbbbbbbb0000000000002";
@@ -91,7 +80,7 @@ function json(body: unknown) {
 describe("동기화 라우트 교차 사용자 격리", () => {
   beforeEach(async () => {
     const db = createD1Client(env.DB);
-    await clearTables(presentationItems, decks, presentations);
+    await clearTables(decks, presentations);
     await db.delete(user).where(inArray(user.id, [USER_A, USER_B]));
 
     await db.insert(user).values([
@@ -442,12 +431,10 @@ describe("동기화 라우트 교차 사용자 격리", () => {
   });
 
   describe("배경 외래키 (동기화 500 회귀)", () => {
-    const OTHERS_BACKGROUND = "othr00000000000000001";
     let serviceIds: string[] = [];
 
     beforeEach(async () => {
       serviceIds = await resetBackgrounds(5);
-      await insertUserBackgroundRow(USER_B, OTHERS_BACKGROUND);
     });
 
     it("배경이 붙은 세트를 저장해도 500이 나지 않는다", async () => {
@@ -523,24 +510,6 @@ describe("동기화 라우트 교차 사용자 격리", () => {
       expect(
         body.presentations[0].items.map((item) => item.deck.backgroundId),
       ).toEqual(serviceIds);
-    });
-
-    it("예전 사용자 업로드 id는 세트에 걸리지 않는다", async () => {
-      const doc = makeDoc(USER_A);
-      doc.items[0].deck.backgroundId = OTHERS_BACKGROUND;
-
-      const put = await app.request(
-        `/api/presentations/${DOC_ID}`,
-        json(doc),
-        env,
-      );
-      expect(put.status).toBe(200);
-
-      const res = await app.request("/api/presentations", {}, env);
-      const body = (await res.json()) as {
-        presentations: PresentationDocument[];
-      };
-      expect(body.presentations[0].items[0].deck.backgroundId).toBeNull();
     });
   });
 });

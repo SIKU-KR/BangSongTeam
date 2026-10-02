@@ -1,6 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { createTestDb, type TestDbResult } from "../test-utils";
+import { eq } from "drizzle-orm";
 import { decks, reports, user } from "../schema";
+import { deckRow } from "../test-fixtures";
 import { createReport } from "./reports";
 
 const A = "00000000000000000000a";
@@ -19,17 +21,12 @@ describe("createReport", () => {
       { id: A, name: "A", createdAt: new Date(), updatedAt: new Date() },
       { id: B, name: "B", createdAt: new Date(), updatedAt: new Date() },
     ]);
-    const base = {
-      userId: A,
-      title: "곡",
-      lyricsRaw: "가사",
-      slides: "[]",
-      style: "{}",
-    };
-    await db.insert(decks).values([
-      { ...base, id: PUB, visibility: "public" },
-      { ...base, id: PRIV },
-    ]);
+    await db
+      .insert(decks)
+      .values([
+        deckRow({ id: PUB, userId: A, visibility: "public" }),
+        deckRow({ id: PRIV, userId: A }),
+      ]);
   });
 
   afterEach(() => testDb.sqlite.close());
@@ -44,9 +41,8 @@ describe("createReport", () => {
     expect(result.status).toBe("ok");
     const [saved] = await db.select().from(reports);
     expect(saved).toMatchObject({
-      userId: B,
-      targetType: "deck",
-      targetId: PUB,
+      reporterId: B,
+      deckId: PUB,
       reason: "lyrics_error",
       details: "2절 가사가 틀렸어요",
       status: "pending",
@@ -77,5 +73,22 @@ describe("createReport", () => {
     expect((await createReport(db, B, input)).status).toBe("ok");
     expect((await createReport(db, B, input)).status).toBe("duplicate");
     expect((await createReport(db, A, input)).status).toBe("ok");
+  });
+
+  it("keeps the report when the reporter or the deck is deleted", async () => {
+    await createReport(db, B, {
+      targetType: "deck",
+      targetId: PUB,
+      reason: "copyright",
+    });
+    await db.delete(user).where(eq(user.id, B));
+    await db.delete(decks).where(eq(decks.id, PUB));
+
+    const [saved] = await db.select().from(reports);
+    expect(saved).toMatchObject({
+      reporterId: null,
+      deckId: null,
+      reason: "copyright",
+    });
   });
 });

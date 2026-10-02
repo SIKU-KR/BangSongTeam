@@ -5,27 +5,23 @@ import {
   backgrounds,
   decks,
   decksFts,
+  presentations,
   user,
-  type NewBackground,
   type NewDeck,
 } from "../schema";
+import { deckRow } from "../test-fixtures";
 import { planSearch, searchPublicDecks } from "./search";
 
 const USER_A = "00000000x000000000001";
 const USER_B = "00000000x000000000002";
 
-function deckRow(overrides: Partial<NewDeck> & { id: string }): NewDeck {
-  return {
+function publicDeck(overrides: Partial<NewDeck> & { id: string }): NewDeck {
+  return deckRow({
     userId: USER_A,
     title: "제목",
-    artist: "",
-    lyricsRaw: "가사",
-    slides: "[]",
-    style: "{}",
     visibility: "public",
-    scope: "library",
     ...overrides,
-  };
+  });
 }
 
 describe("planSearch", () => {
@@ -85,42 +81,53 @@ describe("searchPublicDecks", () => {
         updatedAt: new Date(),
       },
     ]);
+    await db.insert(presentations).values({
+      id: "p1",
+      userId: USER_A,
+      title: "세트",
+      serviceDate: "2026-09-27",
+      createdAt: new Date(0),
+      updatedAt: new Date(0),
+    });
     await db.insert(decks).values([
-      deckRow({
+      publicDeck({
         id: "s1",
         title: "은혜로운 주의 사랑",
         artist: "어노인팅",
         forkCount: 10,
       }),
-      deckRow({
+      publicDeck({
         id: "s2",
         title: "주의 은혜로",
         artist: "마커스",
         forkCount: 50,
         userId: USER_B,
       }),
-      deckRow({
+      publicDeck({
         id: "s3",
         title: "은혜 비공개곡",
         visibility: "private",
         forkCount: 99,
       }),
-      deckRow({
+      publicDeck({
         id: "s4",
         title: "꽃들도",
         artist: "JWorship",
         forkCount: 20,
         lyricsRaw: "이 곳에 오셔서 은혜를 베푸소서",
       }),
-      deckRow({
+      publicDeck({
         id: "s5",
         title: "은혜 세트 복제본",
-        scope: "presentation",
-        forkCount: 80,
+        visibility: "private",
+        presentationId: "p1",
+        itemId: "i5",
+        position: 0,
       }),
-      deckRow({
+      publicDeck({
         id: "s6",
         title: "은혜 게시 중단",
+        visibility: "private",
         forkCount: 70,
         takedownAt: new Date(),
       }),
@@ -262,48 +269,42 @@ describe("searchPublicDecks", () => {
     expect(card.firstSlidePreview.join(" ")).toBe(verse);
   });
 
-  it("returns an empty preview for empty or malformed slides", async () => {
-    await db
-      .update(decks)
-      .set({ slides: "not json" })
-      .where(eq(decks.id, "s2"));
+  it("returns an empty preview for empty slides and never stores malformed ones", async () => {
+    await db.update(decks).set({ slides: "[]" }).where(eq(decks.id, "s2"));
 
-    const cards = await searchPublicDecks(db, "");
+    const [card] = await searchPublicDecks(db, "마커스");
 
-    for (const card of cards) {
-      expect(card.firstSlidePreview).toEqual([]);
-      expect(card.slideCount).toBe(0);
-    }
+    expect(card.firstSlidePreview).toEqual([]);
+    expect(card.slideCount).toBe(0);
+    expect(() =>
+      testDb.sqlite.exec(
+        "UPDATE decks SET slides = 'not json' WHERE id = 's2'",
+      ),
+    ).toThrow(/decks_slides_json/);
   });
 
-  it("keeps only service backgrounds on the card", async () => {
-    const background = (
-      id: string,
-      source: NewBackground["source"],
-    ): NewBackground => ({
-      id,
-      title: id,
-      r2Key: `${id}.mp4`,
-      posterKey: `${id}.jpg`,
+  it("drops a deleted background from the card", async () => {
+    await db.insert(backgrounds).values({
+      id: "svc",
+      title: "svc",
+      r2Key: "svc.mp4",
+      posterKey: "svc.jpg",
       durationSec: 10,
-      license: "CC0",
-      source,
+      createdAt: new Date(0),
     });
     await db
-      .insert(backgrounds)
-      .values([background("svc", "service"), background("upl", "user")]);
-    for (const [deckId, backgroundId] of [
-      ["s1", "svc"],
-      ["s2", "upl"],
-    ]) {
-      await db.update(decks).set({ backgroundId }).where(eq(decks.id, deckId));
-    }
+      .update(decks)
+      .set({ backgroundId: "svc" })
+      .where(eq(decks.id, "s1"));
+    expect((await searchPublicDecks(db, "은혜로운"))[0].backgroundId).toBe(
+      "svc",
+    );
 
-    const cards = await searchPublicDecks(db, "");
+    await db.delete(backgrounds).where(eq(backgrounds.id, "svc"));
 
     expect(
-      Object.fromEntries(cards.map((card) => [card.id, card.backgroundId])),
-    ).toEqual({ s1: "svc", s2: null, s4: null });
+      (await searchPublicDecks(db, "은혜로운"))[0].backgroundId,
+    ).toBeNull();
   });
 
   it("does not index presentation clones via the FTS triggers", async () => {

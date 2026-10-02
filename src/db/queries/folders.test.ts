@@ -7,7 +7,7 @@ import {
   type PresentationDocument,
 } from "#shared";
 import { createTestDb } from "../test-utils";
-import { user, decks, presentations, presentationItems } from "../schema";
+import { user, decks, presentations } from "../schema";
 import {
   deleteFolderTree,
   getDriveTombstones,
@@ -204,16 +204,13 @@ describe("드라이브 폴더 쿼리", () => {
         [inSibling.id, atRoot.id].sort(),
       );
 
-      const orphanDecks = await db
-        .select()
-        .from(decks)
-        .where(eq(decks.presentationId, inRoot.id));
-      const orphanItems = await db
-        .select()
-        .from(presentationItems)
-        .where(eq(presentationItems.presentationId, inChild.id));
-      expect(orphanDecks).toHaveLength(0);
-      expect(orphanItems).toHaveLength(0);
+      for (const id of [inRoot.id, inChild.id]) {
+        const orphanCopies = await db
+          .select()
+          .from(decks)
+          .where(eq(decks.presentationId, id));
+        expect(orphanCopies).toHaveLength(0);
+      }
     });
 
     it("남의 폴더·없는 폴더는 null이고 아무것도 지우지 않는다", async () => {
