@@ -12,6 +12,7 @@ import {
   flushPendingWrites,
   resetPresentationStore,
   createNewPresentation,
+  openPresentation,
   updatePresentationTitle,
   listPresentations,
   getActivePresentation,
@@ -84,6 +85,22 @@ describe("presentationStore 영속성", () => {
 
     const { valid } = await loadAllPresentations();
     expect(valid.map((p) => p.id)).toContain(created.id);
+  });
+
+  it("문서를 열기만 하면 저장소에 다시 쓰지 않는다", async () => {
+    await hydrateFromStorage();
+    const first = createNewPresentation();
+    createNewPresentation();
+    await flushPendingWrites();
+
+    await savePresentation({ ...first, title: "다른 탭에서 바꾼 제목" });
+    openPresentation(first.id);
+    await flushPendingWrites();
+
+    const { valid } = await loadAllPresentations();
+    expect(valid.find((p) => p.id === first.id)?.title).toBe(
+      "다른 탭에서 바꾼 제목",
+    );
   });
 
   it("저장본이 있으면 시드 대신 저장본으로 복원한다", async () => {
