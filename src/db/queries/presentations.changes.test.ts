@@ -310,20 +310,24 @@ describe("세트 변경분 저장", () => {
     ]);
   });
 
-  it("담아 온 보관함 곡이 없으면 forkedFrom을 비워서 저장한다", async () => {
+  it("forkedFrom은 내 곡을 가리킬 때만 남긴다 (남의 곡 id 존재 여부를 흘리지 않는다)", async () => {
     await db
       .insert(decks)
-      .values(deckRow({ id: "library-song", userId: USER_A }));
-    const doc = makeSet(USER_A, 12);
+      .values([
+        deckRow({ id: "library-song", userId: USER_A }),
+        deckRow({ id: "others-song", userId: USER_B }),
+      ]);
+    const doc = makeSet(USER_A, 13);
     doc.items[10].deck.forkedFrom = "library-song";
     doc.items[11].deck.forkedFrom = "c0000000000000000dead";
+    doc.items[12].deck.forkedFrom = "others-song";
 
     expect(
       await savePresentationChanges(
         db,
         USER_A,
         toPresentationChanges(doc, (deck) =>
-          [deckId(10), deckId(11)].includes(deck.id),
+          [deckId(10), deckId(11), deckId(12)].includes(deck.id),
         ),
       ),
     ).toBe("saved");
@@ -331,5 +335,6 @@ describe("세트 변경분 저장", () => {
     const restored = await readSet();
     expect(restored.items[10].deck.forkedFrom).toBe("library-song");
     expect(restored.items[11].deck.forkedFrom).toBeNull();
+    expect(restored.items[12].deck.forkedFrom).toBeNull();
   });
 });

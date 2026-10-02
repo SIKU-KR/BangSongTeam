@@ -99,6 +99,10 @@ function editableDeckColumns(row: NewDeck): Partial<NewDeck> {
  * await하면 중간 실패 시 반쪽짜리 문서가 남는다. 두 왕복 사이에 끼어든 쓰기에도
  * 남의 행을 건드리지 않도록 갱신 문장마다 소유자 조건을 다시 건다.
  *
+ * 사본의 `forked_from`은 내 곡을 가리킬 때만 남긴다. 아무 곡이나 남기면 저장 뒤
+ * 값이 남았는지로 남의 비공개 곡 id가 있는지 알아낼 수 있다. 나머지는 배경처럼
+ * 비워서 받는다 — FK 위반으로 batch 전체가 롤백되지 않게.
+ *
  * 항목 id(`item_id`)는 전역 유일이다. 남아 있는 사본끼리 항목 id를 맞바꾸면 batch
  * 중간에 유일 제약에 걸리므로, 항목 id가 바뀌는 사본은 먼저 자기 덱 id로 비켜 둔다.
  *
@@ -154,7 +158,10 @@ export async function savePresentationChanges(
           .where(inArray(decks.id, ids)),
       ),
       ...forkedFromIdChunks.map((ids) =>
-        db.select({ id: decks.id }).from(decks).where(inArray(decks.id, ids)),
+        db
+          .select({ id: decks.id })
+          .from(decks)
+          .where(and(inArray(decks.id, ids), eq(decks.userId, userId))),
       ),
     ])) as [
       { userId: string }[],
