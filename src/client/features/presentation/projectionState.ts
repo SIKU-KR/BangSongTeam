@@ -152,3 +152,40 @@ export function songIndexAfterReorder(
   }
   return activeSongIndex;
 }
+
+/**
+ * 곡 id로 고정한 송출 위치. 동기화나 공유 프레젠테이션 새로고침이 문서를 통째로 바꾸면
+ * 인덱스만으로는 다른 곡을 가리키게 되므로 보던 곡의 id를 함께 들고 다닌다.
+ * 슬라이드 id는 파싱할 때마다 새로 생길 수 있어 곡 id(`item.id`)에만 고정한다.
+ */
+export interface AnchoredPosition extends ProjectionPosition {
+  itemId: string | null;
+}
+
+export function anchorPosition(
+  position: ProjectionPosition,
+  songs: Songs,
+): AnchoredPosition {
+  const current = clampPosition(position, songs);
+  return { ...current, itemId: songs[current.songIndex]?.id ?? null };
+}
+
+/**
+ * 고정한 곡을 지금 프레젠테이션에서 다시 찾아 위치를 정한다. 곡이 사라졌으면 원래 인덱스를,
+ * 슬라이드가 줄었으면 남은 마지막 슬라이드를 쓴다 (clamp).
+ */
+export function resolveAnchoredPosition(
+  anchored: AnchoredPosition,
+  songs: Songs,
+): ProjectionPosition {
+  const songIndex =
+    anchored.itemId === null
+      ? -1
+      : songs.findIndex((item) => item.id === anchored.itemId);
+  return clampPosition(
+    songIndex === -1
+      ? anchored
+      : { songIndex, slideIndex: anchored.slideIndex },
+    songs,
+  );
+}

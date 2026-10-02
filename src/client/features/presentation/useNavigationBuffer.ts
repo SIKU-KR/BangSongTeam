@@ -8,6 +8,8 @@ interface UseNavigationBufferOptions {
 
 interface UseNavigationBufferReturn {
   handleKey: (key: string) => void;
+  /** 입력 중인 번호를 버린다. 다음·이전으로 넘긴 뒤 남은 숫자가 다음 점프에 섞이지 않게 한다 */
+  clear: () => void;
 }
 
 /**
@@ -88,5 +90,10 @@ export function useNavigationBuffer({
     [clearTimer, onJump, resetTimer, totalSlides],
   );
 
-  return { handleKey };
+  const clear = useCallback(() => {
+    clearTimer();
+    bufferRef.current = "";
+  }, [clearTimer]);
+
+  return { handleKey, clear };
 }

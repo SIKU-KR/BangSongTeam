@@ -8,13 +8,22 @@ import {
   waitFor,
 } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { MemoryRouter, Routes, Route } from "react-router-dom";
+import {
+  MemoryRouter,
+  Routes,
+  Route,
+  useNavigationType,
+} from "react-router-dom";
+import type { Presentation } from "#shared";
 import { FullscreenPresentRoute } from "./FullscreenPresentRoute";
 
 import {
   __loadDocumentsForTests,
+  applyServerDocuments,
+  removePresentationsLocally,
   resetPresentationStore,
 } from "../features/presentation/presentationStore";
+import { loadProjectionResume } from "../features/presentation/projectionResume";
 import {
   resetBackgroundCatalogForTests,
   setBackgroundCatalogForTests,
@@ -34,6 +43,20 @@ import {
 
 const DOC_ID = SEED_PRESENTATION_IDS[0];
 
+function LandingStub({ testId }: { testId: string }): React.JSX.Element {
+  return <div data-testid={testId} data-navigation={useNavigationType()} />;
+}
+
+function withItems(
+  presentation: Presentation,
+  items: Presentation["items"],
+): Presentation[] {
+  return [
+    { ...presentation, items },
+    ...SEED_PRESENTATIONS.filter((doc) => doc.id !== presentation.id),
+  ];
+}
+
 function renderPresent(
   path = `/present/${DOC_ID}/fullscreen`,
   state?: unknown,
@@ -47,15 +70,15 @@ function renderPresent(
         />
         <Route
           path="/presentations"
-          element={<div data-testid="presentations-stub" />}
+          element={<LandingStub testId="presentations-stub" />}
         />
         <Route
           path="/presentations/folders/:folderId"
-          element={<div data-testid="folder-stub" />}
+          element={<LandingStub testId="folder-stub" />}
         />
         <Route
           path="/editor/:presentationId"
-          element={<div data-testid="editor-stub" />}
+          element={<LandingStub testId="editor-stub" />}
         />
       </Routes>
     </MemoryRouter>,
@@ -91,6 +114,11 @@ function dispatchKey(key: string, code?: string, shiftKey = false): void {
 describe("FullscreenPresentRoute", () => {
   beforeEach(() => {
     signInAsTestUser();
+    window.sessionStorage.clear();
+    Object.defineProperty(document, "fullscreenElement", {
+      value: null,
+      configurable: true,
+    });
     resetFakeCacheStorage();
     __resetMediaCachingForTests();
     resetPresentationStore();
@@ -101,6 +129,7 @@ describe("FullscreenPresentRoute", () => {
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     vi.restoreAllMocks();
     resetBackgroundCatalogForTests();
   });
@@ -275,27 +304,46 @@ describe("FullscreenPresentRoute", () => {
     expect(exitFullscreenMock).toHaveBeenCalled();
   });
 
-  it("should automatically exit presentation when fullscreen is exited via fullscreenchange event (Esc)", async () => {
-    const mockDiv = document.createElement("div");
+  it("전체화면이 풀려도 송출과 위치를 이어 가고, 다음 키 입력에서 전체화면을 다시 요청한다", async () => {
+    const requestFullscreenMock = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(document.documentElement, "requestFullscreen", {
+      value: requestFullscreenMock,
+      configurable: true,
+      writable: true,
+    });
     Object.defineProperty(document, "fullscreenElement", {
-      value: mockDiv,
+      value: document.createElement("div"),
       configurable: true,
     });
 
-    renderPresent();
-
-    await act(async () => {
-      document.dispatchEvent(new Event("fullscreenchange"));
+    renderPresent(`/present/${DOC_ID}/fullscreen`, {
+      returnTo: `/editor/${DOC_ID}`,
     });
+    act(() => dispatchKey("ArrowRight"));
 
     Object.defineProperty(document, "fullscreenElement", {
       value: null,
       configurable: true,
     });
-
     await act(async () => {
       document.dispatchEvent(new Event("fullscreenchange"));
     });
+
+    expect(screen.getByTestId("fullscreen-present-route")).toBeInTheDocument();
+    expect(screen.getByText("주의 사랑을 주의 선하심을")).toBeInTheDocument();
+    expect(requestFullscreenMock).not.toHaveBeenCalled();
+
+    act(() => dispatchKey("ArrowRight"));
+
+    expect(requestFullscreenMock).toHaveBeenCalledTimes(1);
+    expect(screen.getAllByText("은혜로다 주의 은혜").length).toBeGreaterThan(0);
+
+    await act(async () => {
+      dispatchKey("Escape");
+    });
+
+    expect(requestFullscreenMock).toHaveBeenCalledTimes(1);
+    expect(await screen.findByTestId("editor-stub")).toBeInTheDocument();
   });
 
   it("전체화면을 쓸 수 없는 브라우저에서도 창 안에서 송출하고 Esc로 돌아간다", async () => {
@@ -312,7 +360,7 @@ describe("FullscreenPresentRoute", () => {
       dispatchKey("Escape");
     });
 
-    expect(screen.getByTestId("editor-stub")).toBeInTheDocument();
+    expect(await screen.findByTestId("editor-stub")).toBeInTheDocument();
   });
 
   describe("송출 종료 후 복귀", () => {
@@ -337,23 +385,34 @@ describe("FullscreenPresentRoute", () => {
         fireEvent.click(screen.getByTestId("exit-present-btn"));
       });
 
-      expect(screen.getByTestId("editor-stub")).toBeInTheDocument();
+      expect(await screen.findByTestId("editor-stub")).toBeInTheDocument();
     });
 
-    it("편집기에서 시작한 송출은 Esc(전체화면 해제)로 편집기에 돌아간다", async () => {
+    it("편집기에서 시작한 송출은 Esc로 편집기에 돌아간다", async () => {
       renderPresent(`/present/${DOC_ID}/fullscreen`, {
         returnTo: `/editor/${DOC_ID}`,
       });
 
-      Object.defineProperty(document, "fullscreenElement", {
-        value: null,
-        configurable: true,
-      });
       await act(async () => {
-        document.dispatchEvent(new Event("fullscreenchange"));
+        dispatchKey("Escape");
       });
 
-      expect(screen.getByTestId("editor-stub")).toBeInTheDocument();
+      expect(await screen.findByTestId("editor-stub")).toBeInTheDocument();
+    });
+
+    it("종료는 한 번만 일어나고, 송출 주소를 history에 남기지 않는다", async () => {
+      renderPresent(`/present/${DOC_ID}/fullscreen`, {
+        returnTo: `/editor/${DOC_ID}`,
+      });
+
+      await act(async () => {
+        fireEvent.click(screen.getByTestId("exit-present-btn"));
+        dispatchKey("Escape");
+      });
+
+      const editor = await screen.findByTestId("editor-stub");
+      expect(editor).toHaveAttribute("data-navigation", "REPLACE");
+      expect(document.exitFullscreen).toHaveBeenCalledTimes(1);
     });
 
     it("드라이브 폴더에서 시작한 송출은 그 폴더로 돌아간다", async () => {
@@ -365,7 +424,7 @@ describe("FullscreenPresentRoute", () => {
         fireEvent.click(screen.getByTestId("exit-present-btn"));
       });
 
-      expect(screen.getByTestId("folder-stub")).toBeInTheDocument();
+      expect(await screen.findByTestId("folder-stub")).toBeInTheDocument();
     });
 
     it("출발 화면을 모르면(주소 직접 진입) 드라이브로 돌아간다", async () => {
@@ -375,7 +434,171 @@ describe("FullscreenPresentRoute", () => {
         fireEvent.click(screen.getByTestId("exit-present-btn"));
       });
 
-      expect(screen.getByTestId("presentations-stub")).toBeInTheDocument();
+      expect(
+        await screen.findByTestId("presentations-stub"),
+      ).toBeInTheDocument();
+    });
+  });
+
+  describe("뒤로 가기", () => {
+    it("뒤로 가기를 해도 송출 화면과 위치가 그대로다", () => {
+      renderPresent();
+      act(() => dispatchKey("ArrowRight"));
+      const pushState = vi.spyOn(window.history, "pushState");
+
+      act(() => {
+        window.history.replaceState(null, "");
+        window.dispatchEvent(new PopStateEvent("popstate", { state: null }));
+      });
+
+      expect(pushState).toHaveBeenCalledTimes(1);
+      expect(
+        screen.getByTestId("fullscreen-present-route"),
+      ).toBeInTheDocument();
+      expect(screen.getByText("주의 사랑을 주의 선하심을")).toBeInTheDocument();
+    });
+
+    it("송출 중에는 가로 스와이프 뒤로 가기를 막고, 끝나면 되돌린다", async () => {
+      renderPresent();
+      const root = document.documentElement;
+
+      expect(root.style.overscrollBehaviorX).toBe("none");
+
+      await act(async () => {
+        fireEvent.click(screen.getByTestId("exit-present-btn"));
+      });
+      await screen.findByTestId("presentations-stub");
+
+      expect(root.style.overscrollBehaviorX).toBe("");
+    });
+  });
+
+  describe("새로고침 뒤 이어 보기", () => {
+    it("다시 마운트되면 보던 위치·블랙아웃을 이어 간다", () => {
+      const first = renderPresent();
+      act(() => {
+        dispatchKey("ArrowRight");
+        dispatchKey("b", "KeyB");
+      });
+      first.unmount();
+
+      renderPresent();
+
+      expect(screen.getByText("주의 사랑을 주의 선하심을")).toBeInTheDocument();
+      expect(screen.getByTestId("overlay-layer")).toHaveStyle({ opacity: 1 });
+    });
+
+    it("송출을 끝내면 저장한 위치를 지운다", async () => {
+      renderPresent();
+      act(() => dispatchKey("ArrowRight"));
+      expect(loadProjectionResume(DOC_ID)).not.toBeNull();
+
+      await act(async () => {
+        fireEvent.click(screen.getByTestId("exit-present-btn"));
+      });
+      await screen.findByTestId("presentations-stub");
+
+      expect(loadProjectionResume(DOC_ID)).toBeNull();
+    });
+  });
+
+  describe("송출 중 데이터 변경", () => {
+    it("곡 순서가 바뀌어도 보던 곡의 같은 슬라이드를 계속 띄운다", () => {
+      renderPresent();
+      act(() => {
+        dispatchKey("6", "Digit6");
+        dispatchKey("Enter");
+      });
+      expect(screen.getByText("주 품에 품으소서")).toBeInTheDocument();
+
+      act(() => {
+        applyServerDocuments(
+          withItems(
+            SEED_PRESENTATIONS[0],
+            [...SEED_PRESENTATIONS[0].items].reverse(),
+          ),
+        );
+      });
+
+      expect(screen.getByText("주 품에 품으소서")).toBeInTheDocument();
+    });
+
+    it("보던 곡의 슬라이드가 줄면 남은 마지막 슬라이드를 띄운다", () => {
+      renderPresent();
+      act(() => {
+        dispatchKey("5", "Digit5");
+        dispatchKey("Enter");
+      });
+
+      const [firstSong, ...rest] = SEED_PRESENTATIONS[0].items;
+      const deck = firstSong.deck;
+      if (!deck) throw new Error("fixture song has no deck");
+      act(() => {
+        applyServerDocuments(
+          withItems(SEED_PRESENTATIONS[0], [
+            {
+              ...firstSong,
+              deck: { ...deck, slides: deck.slides.slice(0, 2) },
+            },
+            ...rest,
+          ]),
+        );
+      });
+
+      expect(screen.getByText("주의 사랑을 주의 선하심을")).toBeInTheDocument();
+    });
+
+    it("프레젠테이션이 사라져도 마지막으로 받은 내용으로 송출을 이어 간다", async () => {
+      renderPresent();
+      act(() => dispatchKey("ArrowRight"));
+
+      await act(async () => {
+        await removePresentationsLocally([DOC_ID]);
+      });
+
+      expect(
+        screen.getByTestId("fullscreen-present-route"),
+      ).toBeInTheDocument();
+      expect(screen.getByText("주의 사랑을 주의 선하심을")).toBeInTheDocument();
+    });
+  });
+
+  describe("커서와 종료 버튼", () => {
+    function movePointer(x: number, y: number): void {
+      window.dispatchEvent(
+        new MouseEvent("pointermove", { clientX: x, clientY: y }),
+      );
+    }
+
+    it("마우스를 움직일 때만 커서와 종료 버튼을 보이고, 멈추면 숨긴다", () => {
+      vi.useFakeTimers();
+      renderPresent();
+      const root = screen.getByTestId("fullscreen-present-route");
+      const chip = screen.getByTestId("exit-present-chip");
+
+      expect(root).toHaveClass("cursor-none");
+      expect(chip).toHaveClass("opacity-0", "pointer-events-none");
+
+      act(() => movePointer(10, 10));
+      expect(root).not.toHaveClass("cursor-none");
+      expect(chip).toHaveClass("opacity-100");
+
+      act(() => vi.advanceTimersByTime(2500));
+      expect(root).toHaveClass("cursor-none");
+      expect(chip).toHaveClass("opacity-0");
+
+      act(() => movePointer(10, 10));
+      expect(root).toHaveClass("cursor-none");
+    });
+
+    it("오른쪽 클릭 메뉴를 띄우지 않는다", () => {
+      renderPresent();
+
+      const notPrevented = fireEvent.contextMenu(
+        screen.getByTestId("fullscreen-present-route"),
+      );
+
+      expect(notPrevented).toBe(false);
     });
   });
 
@@ -465,6 +688,12 @@ describe("FullscreenPresentRoute", () => {
 
       expect(screen.getByTestId("projection-media-gate")).toBeInTheDocument();
       expect(screen.queryByText("시작됐네 우리 주님의 능력이")).toBeNull();
+      expect(screen.getByTestId("fullscreen-present-route")).not.toHaveClass(
+        "cursor-none",
+      );
+      expect(screen.getByTestId("exit-present-chip")).toHaveClass(
+        "opacity-100",
+      );
       act(() => dispatchKey("ArrowRight"));
 
       await act(async () => release());

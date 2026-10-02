@@ -1,5 +1,6 @@
 import { resolveFullscreenStrategy } from "../../lib/browser/fullscreen";
 import { DRIVE_ROOT_PATH } from "../drive/drivePaths";
+import { clearProjectionResume } from "./projectionResume";
 
 /**
  * 브라우저의 User Activation 유효성을 보장하기 위해 전체화면 요청을 동기적으로 즉시 보낸다.
@@ -101,6 +102,9 @@ export type PresentNavigate = (
  * (송출 대상이 활성 문서와 어긋나는 사고를 구조적으로 방지).
  *
  * `returnTo`는 송출 종료 시 돌아갈 출발 화면 경로다 (편집기에서 시작하면 편집기, 드라이브에서 시작하면 드라이브).
+ *
+ * 새로 시작하는 송출은 첫 슬라이드부터 띄우도록 같은 탭에 남은 이어 보기 상태를 지운다.
+ * 이어 보기는 송출 화면을 새로고침했을 때만 쓴다.
  */
 export function launchPresentation(
   navigate: PresentNavigate,
@@ -110,6 +114,7 @@ export function launchPresentation(
   enterFullscreen(
     typeof document !== "undefined" ? document.documentElement : undefined,
   ).catch(() => {});
+  clearProjectionResume(presentationId);
 
   navigate(`/present/${presentationId}/fullscreen`, { state: { returnTo } });
 }

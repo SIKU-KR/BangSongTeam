@@ -125,8 +125,9 @@ describe("EditorHeader", () => {
     const popover = screen.getByTestId("header-shortcuts-popover");
 
     for (const text of [
-      "→ / Space / PageDown",
-      "← / PageUp",
+      "→ ↓ / Space / PageDown",
+      "← ↑ / PageUp",
+      "B / .",
       "Backspace",
       "Esc",
       "전체화면 해제 (송출 종료)",
