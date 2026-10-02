@@ -8,3 +8,4 @@ export * from "./media";
 export * from "./library";
 export * from "./api";
 export * from "./presentationShare";
+export * from "./projection";

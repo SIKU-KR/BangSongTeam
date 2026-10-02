@@ -1,5 +1,6 @@
 import { PRESENTATION_SHORTCUTS } from "#shared";
 import { COMMON_COPY } from "./common";
+import { PRESENTATION_COPY } from "./presentation";
 
 const SLIDE = {
   label: "슬라이드",
@@ -316,12 +317,12 @@ export const SHORTCUT_GUIDE = {
     { keys: "F5", action: SLIDE.present },
   ],
   presentation: [
-    { keys: "→ / Space / PageDown", action: SLIDE.next },
-    { keys: "← / PageUp", action: SLIDE.prev },
+    { keys: "→ ↓ / Space / PageDown", action: SLIDE.next },
+    { keys: "← ↑ / PageUp", action: SLIDE.prev },
     { keys: "번호 + Enter", action: "N번째 슬라이드로 이동" },
     { keys: "Backspace", action: "입력 중인 마지막 숫자 지우기" },
-    { keys: "B", action: "블랙아웃 켜기/끄기" },
+    { keys: "B / .", action: "블랙아웃 켜기/끄기" },
     { keys: "H", action: "가사 숨기기 (배경 유지)" },
-    { keys: "Esc", action: "전체화면 해제 (송출 종료)" },
+    { keys: "Esc", action: PRESENTATION_COPY.exit },
   ],
 } as const;

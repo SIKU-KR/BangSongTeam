@@ -125,11 +125,12 @@ describe("EditorHeader", () => {
     const popover = screen.getByTestId("header-shortcuts-popover");
 
     for (const text of [
-      "→ / Space / PageDown",
-      "← / PageUp",
+      "→ ↓ / Space / PageDown",
+      "← ↑ / PageUp",
+      "B / .",
       "Backspace",
       "Esc",
-      "전체화면 해제 (송출 종료)",
+      "송출 종료",
       "3초 동안 입력이 없으면 입력한 번호가 지워져요.",
       "없는 번호는 무시해요.",
       "입력 중인 번호는 청중 화면에 보이지 않아요.",

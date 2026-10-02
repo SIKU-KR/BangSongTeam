@@ -6,6 +6,7 @@ import {
   launchPresentation,
   resolvePresentReturnPath,
 } from "./fullscreen";
+import { loadProjectionResume, saveProjectionResume } from "./projectionResume";
 
 describe("fullscreen utilities", () => {
   const originalFullscreenElement = Object.getOwnPropertyDescriptor(
@@ -171,6 +172,21 @@ describe("fullscreen utilities", () => {
       );
 
       expect(calls).toEqual(["fullscreen", "navigate"]);
+    });
+
+    it("새로 시작하는 송출은 지난 송출의 이어 보기 상태를 버린다", () => {
+      saveProjectionResume("pres-789", {
+        songIndex: 2,
+        slideIndex: 1,
+        itemId: "item-3",
+        hasStarted: true,
+        isBlackout: true,
+        isLyricsHidden: false,
+      });
+
+      launchPresentation(vi.fn(), "pres-789", "/presentations");
+
+      expect(loadProjectionResume("pres-789")).toBeNull();
     });
   });
 

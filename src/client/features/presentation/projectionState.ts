@@ -1,9 +1,11 @@
-import type { PresentationItem, Slide } from "#shared";
+import type {
+  AnchoredPosition,
+  PresentationItem,
+  ProjectionPosition,
+  Slide,
+} from "#shared";
 
-export interface ProjectionPosition {
-  songIndex: number;
-  slideIndex: number;
-}
+export type { AnchoredPosition, ProjectionPosition };
 
 export const INITIAL_POSITION: ProjectionPosition = {
   songIndex: 0,
@@ -151,4 +153,33 @@ export function songIndexAfterReorder(
     return activeSongIndex + 1;
   }
   return activeSongIndex;
+}
+
+/** 위치를 그 자리 곡의 id에 고정한다. 범위 밖 위치는 clamp한 자리의 곡에 고정한다 */
+export function anchorPosition(
+  position: ProjectionPosition,
+  songs: Songs,
+): AnchoredPosition {
+  const current = clampPosition(position, songs);
+  return { ...current, itemId: songs[current.songIndex]?.id ?? null };
+}
+
+/**
+ * 고정한 곡을 지금 프레젠테이션에서 다시 찾아 위치를 정한다. 곡이 사라졌으면 원래 인덱스를,
+ * 슬라이드가 줄었으면 남은 마지막 슬라이드를 쓴다 (clamp).
+ */
+export function resolveAnchoredPosition(
+  anchored: AnchoredPosition,
+  songs: Songs,
+): ProjectionPosition {
+  const songIndex =
+    anchored.itemId === null
+      ? -1
+      : songs.findIndex((item) => item.id === anchored.itemId);
+  return clampPosition(
+    songIndex === -1
+      ? anchored
+      : { songIndex, slideIndex: anchored.slideIndex },
+    songs,
+  );
 }

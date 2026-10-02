@@ -186,4 +186,18 @@ describe("useNavigationBuffer Hook", () => {
     typeKeys(result.current.handleKey, ["1", ".", "x", "2", "Enter"]);
     expect(onJump).toHaveBeenCalledWith(12);
   });
+
+  it("clear()는 입력 중인 번호를 버려 다음 번호와 섞이지 않게 한다", () => {
+    const onJump = vi.fn();
+    const { result } = renderHook(() =>
+      useNavigationBuffer({ totalSlides: 40, onJump }),
+    );
+
+    typeKeys(result.current.handleKey, ["3"]);
+    act(() => result.current.clear());
+    typeKeys(result.current.handleKey, ["1", "Enter"]);
+
+    expect(onJump).toHaveBeenCalledTimes(1);
+    expect(onJump).toHaveBeenCalledWith(1);
+  });
 });

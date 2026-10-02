@@ -9,6 +9,8 @@ import {
   positionOfSlideNumber,
   slideNumberOfPosition,
   songIndexAfterReorder,
+  anchorPosition,
+  resolveAnchoredPosition,
   INITIAL_POSITION,
 } from "./projectionState";
 
@@ -246,5 +248,44 @@ describe("songIndexAfterReorder", () => {
   it("보고 있던 곡을 넘지 않는 이동은 그대로 둔다", () => {
     expect(songIndexAfterReorder(1, 2, 3)).toBe(1);
     expect(songIndexAfterReorder(3, 0, 2)).toBe(3);
+  });
+});
+
+describe("anchorPosition / resolveAnchoredPosition", () => {
+  it("곡 순서가 바뀌어도 보던 곡의 같은 슬라이드를 가리킨다", () => {
+    const anchored = anchorPosition({ songIndex: 1, slideIndex: 1 }, SONGS);
+    const reordered = [SONGS[2], SONGS[0], SONGS[1]];
+
+    expect(resolveAnchoredPosition(anchored, reordered)).toEqual({
+      songIndex: 2,
+      slideIndex: 1,
+    });
+  });
+
+  it("보던 곡이 사라지면 원래 인덱스를 프레젠테이션 안으로 맞춘다", () => {
+    const anchored = anchorPosition({ songIndex: 2, slideIndex: 3 }, SONGS);
+
+    expect(resolveAnchoredPosition(anchored, SONGS.slice(0, 2))).toEqual({
+      songIndex: 1,
+      slideIndex: 1,
+    });
+  });
+
+  it("슬라이드가 줄면 남은 마지막 슬라이드를 가리킨다", () => {
+    const anchored = anchorPosition({ songIndex: 2, slideIndex: 3 }, SONGS);
+
+    expect(resolveAnchoredPosition(anchored, makeSongs([3, 2, 2]))).toEqual({
+      songIndex: 2,
+      slideIndex: 1,
+    });
+  });
+
+  it("빈 프레젠테이션에서는 처음 위치로 돌아간다", () => {
+    expect(
+      resolveAnchoredPosition(
+        { songIndex: 1, slideIndex: 1, itemId: "item-1" },
+        [],
+      ),
+    ).toEqual(INITIAL_POSITION);
   });
 });
