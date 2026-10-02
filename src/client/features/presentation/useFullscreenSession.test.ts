@@ -13,6 +13,10 @@ function pressKey(key: string): void {
   window.dispatchEvent(new KeyboardEvent("keydown", { key, code: key }));
 }
 
+function touchPointer(type: string): Event {
+  return Object.assign(new MouseEvent(type), { pointerType: "touch" });
+}
+
 describe("useFullscreenSession", () => {
   const requestFullscreen = vi.fn().mockResolvedValue(undefined);
   const exitFullscreen = vi.fn().mockResolvedValue(undefined);
@@ -82,6 +86,44 @@ describe("useFullscreenSession", () => {
     expect(requestFullscreen).toHaveBeenCalledTimes(1);
 
     button.remove();
+  });
+
+  it("수정 키나 수정 키 조합에서는 다시 요청하지 않는다", () => {
+    renderHook(() => useFullscreenSession({ current: false }));
+    setFullscreenElement(null);
+
+    pressKey("Meta");
+    window.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Tab", code: "Tab", metaKey: true }),
+    );
+    pressKey("Shift");
+
+    expect(requestFullscreen).not.toHaveBeenCalled();
+  });
+
+  it("버튼에 초점이 있을 때의 키 입력은 버튼에 맡긴다", () => {
+    renderHook(() => useFullscreenSession({ current: false }));
+    setFullscreenElement(null);
+    const button = document.createElement("button");
+    document.body.appendChild(button);
+
+    button.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Enter", bubbles: true }),
+    );
+
+    expect(requestFullscreen).not.toHaveBeenCalled();
+    button.remove();
+  });
+
+  it("터치는 손을 뗄 때 다시 요청한다", () => {
+    renderHook(() => useFullscreenSession({ current: false }));
+    setFullscreenElement(null);
+
+    window.dispatchEvent(touchPointer("pointerdown"));
+    expect(requestFullscreen).not.toHaveBeenCalled();
+
+    window.dispatchEvent(touchPointer("pointerup"));
+    expect(requestFullscreen).toHaveBeenCalledTimes(1);
   });
 
   it("송출을 끝내는 중에는 다시 요청하지 않는다", () => {

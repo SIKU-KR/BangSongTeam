@@ -9,6 +9,7 @@ import {
 } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import {
+  BrowserRouter,
   MemoryRouter,
   Routes,
   Route,
@@ -473,6 +474,76 @@ describe("FullscreenPresentRoute", () => {
     });
   });
 
+  describe("브라우저 history", () => {
+    const EDITOR_PATH = `/editor/${DOC_ID}`;
+
+    function renderInBrowser() {
+      window.history.replaceState({ idx: 0, key: "start" }, "", EDITOR_PATH);
+      window.history.pushState(
+        { usr: { returnTo: EDITOR_PATH }, idx: 1, key: "present" },
+        "",
+        `/present/${DOC_ID}/fullscreen`,
+      );
+      return render(
+        <BrowserRouter>
+          <Routes>
+            <Route
+              path="/present/:presentationId/fullscreen"
+              element={<FullscreenPresentRoute />}
+            />
+            <Route
+              path="/editor/:presentationId"
+              element={<LandingStub testId="editor-stub" />}
+            />
+          </Routes>
+        </BrowserRouter>,
+      );
+    }
+
+    function backAndWait(): Promise<void> {
+      return act(
+        () =>
+          new Promise<void>((resolve) => {
+            window.addEventListener("popstate", () => resolve(), {
+              once: true,
+            });
+            window.history.back();
+          }),
+      );
+    }
+
+    it("뒤로 가기로 보초 항목을 걷어도 같은 송출 화면과 슬라이드가 그대로다", async () => {
+      renderInBrowser();
+      act(() => dispatchKey("ArrowRight"));
+      const stage = screen.getByTestId("fullscreen-present-route");
+
+      await backAndWait();
+
+      expect(window.location.pathname).toBe(`/present/${DOC_ID}/fullscreen`);
+      expect(screen.getByTestId("fullscreen-present-route")).toBe(stage);
+      expect(screen.getByText("주의 사랑을 주의 선하심을")).toBeInTheDocument();
+    });
+
+    it("종료하면 출발 화면으로 가고, 뒤로 가기로 송출이 다시 열리지 않는다", async () => {
+      renderInBrowser();
+
+      await act(async () => {
+        fireEvent.click(screen.getByTestId("exit-present-btn"));
+      });
+      await screen.findByTestId("editor-stub");
+      expect(window.location.pathname).toBe(EDITOR_PATH);
+
+      await backAndWait();
+
+      expect(window.location.pathname).not.toBe(
+        `/present/${DOC_ID}/fullscreen`,
+      );
+      expect(
+        screen.queryByTestId("fullscreen-present-route"),
+      ).not.toBeInTheDocument();
+    });
+  });
+
   describe("새로고침 뒤 이어 보기", () => {
     it("다시 마운트되면 보던 위치·블랙아웃을 이어 간다", () => {
       const first = renderPresent();
@@ -521,6 +592,26 @@ describe("FullscreenPresentRoute", () => {
       });
 
       expect(screen.getByText("주 품에 품으소서")).toBeInTheDocument();
+    });
+
+    it("넘기기 전에 곡 순서가 바뀌어도 첫 곡의 첫 슬라이드를 계속 띄운다", () => {
+      renderPresent();
+      expect(
+        screen.getByText("시작됐네 우리 주님의 능력이"),
+      ).toBeInTheDocument();
+
+      act(() => {
+        applyServerDocuments(
+          withItems(
+            SEED_PRESENTATIONS[0],
+            [...SEED_PRESENTATIONS[0].items].reverse(),
+          ),
+        );
+      });
+
+      expect(
+        screen.getByText("시작됐네 우리 주님의 능력이"),
+      ).toBeInTheDocument();
     });
 
     it("보던 곡의 슬라이드가 줄면 남은 마지막 슬라이드를 띄운다", () => {
@@ -761,6 +852,27 @@ describe("FullscreenPresentRoute", () => {
     expect(
       screen.queryByTestId("fullscreen-present-route"),
     ).not.toBeInTheDocument();
+  });
+
+  it("송출할 프레젠테이션이 없으면 전체화면을 풀고, 송출용 history 항목을 쌓지 않는다", async () => {
+    const exitFullscreenMock = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(document, "fullscreenElement", {
+      value: document.createElement("div"),
+      configurable: true,
+    });
+    Object.defineProperty(document, "exitFullscreen", {
+      value: exitFullscreenMock,
+      configurable: true,
+      writable: true,
+    });
+    const pushState = vi.spyOn(window.history, "pushState");
+
+    renderPresent("/present/999999999999999999999/fullscreen");
+
+    expect(screen.getByTestId("presentations-stub")).toBeInTheDocument();
+    await waitFor(() => expect(exitFullscreenMock).toHaveBeenCalled());
+    expect(pushState).not.toHaveBeenCalled();
+    expect(loadProjectionResume("999999999999999999999")).toBeNull();
   });
 
   it("URL의 문서를 송출한다 (활성 문서가 아니라)", () => {

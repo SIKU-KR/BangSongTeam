@@ -294,10 +294,13 @@ describe("usePresentationShortcuts Hook", () => {
     { key: "ㄱ", code: "KeyR", metaKey: true },
     { key: "ArrowLeft", code: "ArrowLeft", altKey: true },
     { key: "ArrowRight", code: "ArrowRight", altKey: true },
+    { key: "ArrowLeft", code: "ArrowLeft", metaKey: true },
+    { key: "ArrowRight", code: "ArrowRight", metaKey: true },
     { key: "[", code: "BracketLeft", metaKey: true },
     { key: "]", code: "BracketRight", metaKey: true },
     { key: "BrowserBack", code: "BrowserBack" },
     { key: "BrowserForward", code: "BrowserForward" },
+    { key: "BrowserRefresh", code: "BrowserRefresh" },
   ])("새로고침·뒤로 가기 키($key)의 기본 동작을 막는다", (init) => {
     const onPrev = vi.fn();
     const onNext = vi.fn();

@@ -1,18 +1,8 @@
-import { z } from "zod";
+import { ProjectionResumeSchema, type ProjectionResume } from "#shared";
+
+export type { ProjectionResume };
 
 const KEY_PREFIX = "chiton:projection:";
-
-const ProjectionResumeSchema = z.object({
-  songIndex: z.number().int().nonnegative(),
-  slideIndex: z.number().int().nonnegative(),
-  itemId: z.string().nullable(),
-  hasStarted: z.boolean(),
-  isBlackout: z.boolean(),
-  isLyricsHidden: z.boolean(),
-});
-
-/** 새로고침 뒤 송출을 이어 가는 데 필요한 화면 상태 */
-export type ProjectionResume = z.infer<typeof ProjectionResumeSchema>;
 
 function keyOf(presentationId: string): string {
   return `${KEY_PREFIX}${presentationId}`;

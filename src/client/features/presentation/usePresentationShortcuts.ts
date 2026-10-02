@@ -18,8 +18,9 @@ const MOUSE_FORWARD_BUTTON = 4;
 function isLeavingKey(event: KeyboardEvent): boolean {
   return (
     event.key === "F5" ||
+    event.key === "BrowserRefresh" ||
     ((event.ctrlKey || event.metaKey) && event.code === "KeyR") ||
-    (event.altKey && HISTORY_KEY_CODES.has(event.code)) ||
+    ((event.altKey || event.metaKey) && HISTORY_KEY_CODES.has(event.code)) ||
     (event.metaKey && BRACKET_CODES.has(event.code)) ||
     event.key === "BrowserBack" ||
     event.key === "BrowserForward"
@@ -44,7 +45,7 @@ function blockHistoryButtons(event: MouseEvent): void {
  *
  * 글자 단축키는 물리 키(`code`)로 묶어 한글 입력 상태에서도 동작한다.
  *
- * 새로고침(F5, Ctrl/⌘+R)과 뒤로·앞으로 가기(Alt+←→, ⌘+[ ], 브라우저 키, 마우스 옆 버튼)는
+ * 새로고침(F5, Ctrl/⌘+R, 브라우저 키)과 뒤로·앞으로 가기(Alt/⌘+←→, ⌘+[ ], 브라우저 키, 마우스 옆 버튼)는
  * 기본 동작을 막는다. 예배 중에 송출 화면이 다시 뜨거나 떠나면 안 되기 때문이다.
  * tinykeys는 키를 누르고 있을 때(`repeat`)와 조합 중인 입력을 건너뛰므로 이 차단은
  * 별도의 keydown 리스너가 맡는다.

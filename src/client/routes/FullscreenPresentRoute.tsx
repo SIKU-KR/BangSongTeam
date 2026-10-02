@@ -8,7 +8,7 @@ import {
 import { cn } from "cn";
 import { Button } from "#components/ui/button";
 import { Kbd } from "#components/ui/kbd";
-import { DEFAULT_DECK_STYLE } from "#shared";
+import { DEFAULT_DECK_STYLE, type Presentation } from "#shared";
 import { ProjectionErrorBoundary } from "../components/stage/ProjectionErrorBoundary";
 import { SlideStage } from "../components/stage/SlideStage";
 import { ProjectionMediaGate } from "../features/offline/ProjectionMediaGate";
@@ -48,6 +48,8 @@ import { PRESENTATION_COPY } from "#copy/presentation";
 
 const noop = (): void => {};
 
+const EXIT_FULLSCREEN_TIMEOUT_MS = 1000;
+
 const preventDefault = (event: React.SyntheticEvent): void => {
   event.preventDefault();
 };
@@ -61,25 +63,69 @@ const preventDefault = (event: React.SyntheticEvent): void => {
  * 백그라운드 큐(`useProjectionMediaCache`)에 맡긴다.
  *
  * 송출은 운영자가 Esc나 종료 버튼으로 끝낼 때만 끝난다. 전체화면이 풀리거나, 뒤로 가기·
- * 새로고침을 누르거나, 다른 곳에서 프레젠테이션이 바뀌거나 사라져도 청중 화면은 이어진다.
+ * 새로고침을 누르거나, 다른 곳에서 프레젠테이션이 바뀌어도 청중 화면은 이어진다.
+ * 위치는 처음부터 곡 id에 고정해, 첫 슬라이드를 띄워 둔 채 곡 순서가 바뀌어도 화면이 그대로다.
  * 새로고침되면 같은 탭에 저장한 위치·블랙아웃·가사 숨김으로 다시 뜬다.
+ *
+ * 송출할 프레젠테이션을 찾지 못하면 송출 화면을 마운트하지 않고 드라이브로 보낸다.
+ * 이때 전체화면을 풀어, 다음 화면이 전체화면에 갇히지 않게 한다. 송출 화면의 전체화면·
+ * history·화면 잠금 방지는 송출할 내용이 있을 때만 건다.
+ *
+ * 프레젠테이션이 한 번 보인 뒤 다른 곳에서 사라지면 마지막으로 받은 내용으로 송출을 이어 간다.
  */
 export function FullscreenPresentRoute(): React.JSX.Element {
-  const navigate = useNavigate();
-  const location = useLocation();
-  const returnPath = resolvePresentReturnPath(location.state);
   const { presentationId } = useParams<{ presentationId: string }>();
-
   const { found } = useOpenedPresentation(presentationId);
   const [lastShown, setLastShown] = useState(found);
   if (found && found !== lastShown) setLastShown(found);
   const shown =
     found ?? (lastShown?.id === presentationId ? lastShown : undefined);
-  const songs = shown?.items ?? [];
 
-  const [resume] = useState(() =>
-    presentationId ? loadProjectionResume(presentationId) : null,
+  if (!presentationId || !shown) return <ProjectionRedirect />;
+
+  return (
+    <ProjectionSession
+      key={presentationId}
+      presentationId={presentationId}
+      presentation={shown}
+    />
   );
+}
+
+function ProjectionRedirect(): React.JSX.Element {
+  useEffect(() => {
+    exitFullscreen().catch(() => {});
+  }, []);
+  return <Navigate to={DEFAULT_PRESENT_RETURN_PATH} replace />;
+}
+
+function exitFullscreenWithin(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    const timer = setTimeout(resolve, ms);
+    void exitFullscreen()
+      .catch(() => false)
+      .finally(() => {
+        clearTimeout(timer);
+        resolve();
+      });
+  });
+}
+
+interface ProjectionSessionProps {
+  presentationId: string;
+  presentation: Presentation;
+}
+
+function ProjectionSession({
+  presentationId,
+  presentation: shown,
+}: ProjectionSessionProps): React.JSX.Element {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const returnPath = resolvePresentReturnPath(location.state);
+  const songs = shown.items;
+
+  const [resume] = useState(() => loadProjectionResume(presentationId));
   const [anchored, setAnchored] = useState<AnchoredPosition>(() =>
     resume
       ? {
@@ -90,9 +136,12 @@ export function FullscreenPresentRoute(): React.JSX.Element {
       : { ...INITIAL_POSITION, itemId: null },
   );
   const position = resolveAnchoredPosition(anchored, songs);
-  const fontsReady = usePresentationFontsReady(shown ?? null);
-  useProjectionMediaCache(shown ?? null, position.songIndex);
-  const mediaReadiness = useProjectionMediaReady(shown ?? null);
+  if (anchored.itemId === null && songs.length > 0) {
+    setAnchored(anchorPosition(position, songs));
+  }
+  const fontsReady = usePresentationFontsReady(shown);
+  useProjectionMediaCache(shown, position.songIndex);
+  const mediaReadiness = useProjectionMediaReady(shown);
   const [hasStarted, setHasStarted] = useState(resume?.hasStarted ?? false);
   const isPreparing = !hasStarted && mediaReadiness.status !== "ready";
 
@@ -150,7 +199,7 @@ export function FullscreenPresentRoute(): React.JSX.Element {
   const releaseHistory = useProjectionHistoryGuard();
 
   useEffect(() => {
-    if (!presentationId || isExitingRef.current) return;
+    if (isExitingRef.current) return;
     saveProjectionResume(presentationId, {
       ...anchored,
       hasStarted,
@@ -162,8 +211,8 @@ export function FullscreenPresentRoute(): React.JSX.Element {
   const handleExit = useCallback(async () => {
     if (isExitingRef.current) return;
     isExitingRef.current = true;
-    if (presentationId) clearProjectionResume(presentationId);
-    await exitFullscreen().catch(() => {});
+    clearProjectionResume(presentationId);
+    await exitFullscreenWithin(EXIT_FULLSCREEN_TIMEOUT_MS);
     await releaseHistory();
     navigate(returnPath, { replace: true });
   }, [navigate, presentationId, releaseHistory, returnPath]);
@@ -180,8 +229,6 @@ export function FullscreenPresentRoute(): React.JSX.Element {
   useFullscreenSession(isExitingRef);
   useScreenWakeLock();
   const isPointerActive = useIdlePointer();
-
-  if (!shown) return <Navigate to={DEFAULT_PRESENT_RETURN_PATH} replace />;
 
   return (
     <div
@@ -217,7 +264,7 @@ export function FullscreenPresentRoute(): React.JSX.Element {
       <div
         data-testid="exit-present-chip"
         className={cn(
-          "absolute top-4 right-4 z-50 rounded-lg border border-white/15 bg-black/70 p-1 shadow-lg backdrop-blur-sm transition-opacity duration-300 focus-within:pointer-events-auto focus-within:opacity-100",
+          "absolute top-4 right-4 z-50 rounded-lg border border-white/15 bg-black/70 p-1 shadow-lg backdrop-blur-sm transition-opacity duration-300 has-focus-visible:pointer-events-auto has-focus-visible:opacity-100",
           isPreparing || isPointerActive
             ? "opacity-100"
             : "pointer-events-none opacity-0",

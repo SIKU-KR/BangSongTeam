@@ -1,9 +1,11 @@
-import type { PresentationItem, Slide } from "#shared";
+import type {
+  AnchoredPosition,
+  PresentationItem,
+  ProjectionPosition,
+  Slide,
+} from "#shared";
 
-export interface ProjectionPosition {
-  songIndex: number;
-  slideIndex: number;
-}
+export type { AnchoredPosition, ProjectionPosition };
 
 export const INITIAL_POSITION: ProjectionPosition = {
   songIndex: 0,
@@ -153,15 +155,7 @@ export function songIndexAfterReorder(
   return activeSongIndex;
 }
 
-/**
- * 곡 id로 고정한 송출 위치. 동기화나 공유 프레젠테이션 새로고침이 문서를 통째로 바꾸면
- * 인덱스만으로는 다른 곡을 가리키게 되므로 보던 곡의 id를 함께 들고 다닌다.
- * 슬라이드 id는 파싱할 때마다 새로 생길 수 있어 곡 id(`item.id`)에만 고정한다.
- */
-export interface AnchoredPosition extends ProjectionPosition {
-  itemId: string | null;
-}
-
+/** 위치를 그 자리 곡의 id에 고정한다. 범위 밖 위치는 clamp한 자리의 곡에 고정한다 */
 export function anchorPosition(
   position: ProjectionPosition,
   songs: Songs,
