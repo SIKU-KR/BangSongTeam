@@ -1,4 +1,4 @@
-import { eq, inArray, sql } from "drizzle-orm";
+import { inArray } from "drizzle-orm";
 import {
   DEFAULT_DECK_STYLE,
   DEV_USERS,
@@ -10,12 +10,19 @@ import {
   type Folder,
   type PresentationDocument,
 } from "#shared";
-import { backgrounds, decks, reports, user } from "../schema";
+import {
+  backgroundKeywords,
+  backgrounds,
+  decks,
+  reports,
+  user,
+  type NewDeck,
+} from "../schema";
 import {
   joinByToken,
   setDeckVisibility,
   setLinkAccess,
-  toDeckRow,
+  toDeckContent,
   upsertDeck,
   upsertFolder,
   upsertPresentationDocument,
@@ -70,6 +77,7 @@ export const SEED_LIBRARY_USER = {
 const [OWNER, MEMBER] = DEV_USERS;
 const SEED_USER_IDS = [SEED_LIBRARY_USER.id, ...DEV_USERS.map((u) => u.id)];
 const ROWS_PER_INSERT = 5;
+const KEYWORDS_PER_INSERT = 40;
 const STATEMENTS_PER_BATCH = 50;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -128,13 +136,14 @@ function toLibraryDeck(song: SeedSong, index: number, now: Date): Deck {
 }
 
 async function resetSeedUsers(db: DbInstance): Promise<void> {
-  await db.delete(reports).where(inArray(reports.userId, SEED_USER_IDS));
+  await db.delete(reports).where(inArray(reports.reporterId, SEED_USER_IDS));
   await db.delete(user).where(inArray(user.id, SEED_USER_IDS));
 }
 
 async function upsertBackgrounds(
   db: DbInstance,
   items: readonly SeedBackground[],
+  now: Date,
 ): Promise<string[]> {
   const rows = items.map((item, n) => ({
     id: seedId("bg", n),
@@ -142,16 +151,20 @@ async function upsertBackgrounds(
     r2Key: item.key,
     posterKey: item.key,
     durationSec: 0,
-    license: "",
-    source: "service" as const,
     kind: "image" as const,
     sizeBytes: item.sizeBytes,
     description: item.description,
-    keywords: item.keywords,
+    createdAt: now,
   }));
-  await runStatements(
-    db,
-    rows.map((row) =>
+  const ids = rows.map((row) => row.id);
+  const keywords = items.flatMap((item, n) =>
+    [...new Set(item.keywords)].map((keyword) => ({
+      backgroundId: seedId("bg", n),
+      keyword,
+    })),
+  );
+  await runStatements(db, [
+    ...rows.map((row) =>
       db
         .insert(backgrounds)
         .values(row)
@@ -163,12 +176,30 @@ async function upsertBackgrounds(
             posterKey: row.posterKey,
             sizeBytes: row.sizeBytes,
             description: row.description,
-            keywords: row.keywords,
           },
         }),
     ),
-  );
-  return rows.map((row) => row.id);
+    ...(ids.length > 0
+      ? [
+          db
+            .delete(backgroundKeywords)
+            .where(inArray(backgroundKeywords.backgroundId, ids)),
+        ]
+      : []),
+    ...Array.from(
+      { length: Math.ceil(keywords.length / KEYWORDS_PER_INSERT) },
+      (_, i) =>
+        db
+          .insert(backgroundKeywords)
+          .values(
+            keywords.slice(
+              i * KEYWORDS_PER_INSERT,
+              (i + 1) * KEYWORDS_PER_INSERT,
+            ),
+          ),
+    ),
+  ]);
+  return ids;
 }
 
 async function insertUsers(db: DbInstance, now: Date): Promise<void> {
@@ -192,13 +223,23 @@ async function insertUsers(db: DbInstance, now: Date): Promise<void> {
   ]);
 }
 
+function toLibraryRow(deck: Deck): NewDeck {
+  return {
+    id: deck.id,
+    userId: deck.userId,
+    ...toDeckContent(deck),
+    visibility: deck.visibility,
+    publishedAt: deck.publishedAt ? new Date(deck.publishedAt) : null,
+  };
+}
+
 async function insertLibrary(db: DbInstance, library: Deck[]): Promise<void> {
   const statements: unknown[] = [];
   for (let i = 0; i < library.length; i += ROWS_PER_INSERT) {
     statements.push(
       db
         .insert(decks)
-        .values(library.slice(i, i + ROWS_PER_INSERT).map(toDeckRow)),
+        .values(library.slice(i, i + ROWS_PER_INSERT).map(toLibraryRow)),
     );
   }
   for (let i = 0; i < statements.length; i += STATEMENTS_PER_BATCH) {
@@ -213,25 +254,13 @@ async function insertFork(
   authorName: string,
   n: number,
 ): Promise<void> {
-  await runStatements(db, [
-    db.insert(decks).values(
-      toDeckRow({
-        ...source,
-        id: seedId("fork", n),
-        userId,
-        visibility: "private",
-        forkedFrom: source.id,
-        forkedFromAuthorName: authorName,
-        forkCount: 0,
-        origin: "fork",
-        publishedAt: null,
-      }),
-    ),
-    db
-      .update(decks)
-      .set({ forkCount: sql`${decks.forkCount} + 1` })
-      .where(eq(decks.id, source.id)),
-  ]);
+  await db.insert(decks).values({
+    id: seedId("fork", n),
+    userId,
+    ...toDeckContent(source),
+    forkedFrom: source.id,
+    forkedFromAuthorName: authorName,
+  });
 }
 
 const OWNER_STYLES: DeckStyle[] = [
@@ -271,8 +300,8 @@ const OWNER_STYLES: DeckStyle[] = [
  *
  * 곡·폴더·세트는 앱의 저장 쿼리(`upsertDeck`, `upsertFolder`,
  * `upsertPresentationDocument` …)로 넣어 편집기에서 만든 데이터와 같은 모양이 되게 한다.
- * id는 모두 `seedId`로 고정한다. 가져온 곡은 `forkPublicDeck`이 새 id를 만들어서 같은
- * 규칙(원본 `fork_count` + 1)으로 직접 넣는다.
+ * id는 모두 `seedId`로 고정한다. 가져온 곡은 `forkPublicDeck`이 새 id를 만들어서
+ * 직접 넣는다. 원본의 가져간 횟수는 트리거가 올린다.
  *
  * 배경은 repo에 든 가벼운 이미지(`SeedBackground`)만 등록하고 곡에 입힌다. 운영 배경
  * 영상은 수 GB라 로컬 R2에 올리지 않는다.
@@ -290,7 +319,7 @@ export async function seedDevData(
   const library = songs.map((song, index) => toLibraryDeck(song, index, now));
   await insertLibrary(db, library);
 
-  const backgroundIds = await upsertBackgrounds(db, seedBackgrounds);
+  const backgroundIds = await upsertBackgrounds(db, seedBackgrounds, now);
   const backgroundAt = (n: number): string | null =>
     backgroundIds.length > 0 ? backgroundIds[n % backgroundIds.length] : null;
   const libraryAt = (n: number): Deck =>

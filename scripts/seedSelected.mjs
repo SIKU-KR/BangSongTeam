@@ -270,7 +270,8 @@ async function main() {
   console.log(`- 처리할 곡: ${songs.length}개`);
   console.log(`- 대상 데이터베이스: ${target === "remote" ? "원격(Remote)" : "로컬(Local)"}`);
 
-  const nowUnix = Math.floor(Date.now() / 1000);
+  const nowMs = Date.now();
+  const nowUnix = Math.floor(nowMs / 1000);
   const sqlStatements = [];
 
   // 1. 공식 봇 유저 생성 (없을 경우 INSERT OR IGNORE)
@@ -292,7 +293,7 @@ async function main() {
     const slides = splitLyricsIntoSlides(lyricsRaw);
     const deckId = createId();
 
-    const sql = `INSERT INTO decks (id, user_id, scope, title, artist, lyrics_raw, slides, background_id, style, visibility, fork_count, origin, published_at, created_at, updated_at) SELECT '${deckId}', '${SEED_BOT_USER_ID}', 'library', '${escapeSql(title)}', '${escapeSql(artist)}', '${escapeSql(lyricsRaw)}', '${escapeSql(JSON.stringify(slides))}', NULL, '${escapeSql(JSON.stringify(DEFAULT_DECK_STYLE))}', 'public', 0, 'user', ${nowUnix}, ${nowUnix}, ${nowUnix} WHERE NOT EXISTS (SELECT 1 FROM decks WHERE user_id = '${SEED_BOT_USER_ID}' AND title = '${escapeSql(title)}' AND artist = '${escapeSql(artist)}');`;
+    const sql = `INSERT INTO decks (id, user_id, title, artist, lyrics_raw, slides, style, visibility, published_at, created_at, updated_at) SELECT '${deckId}', '${SEED_BOT_USER_ID}', '${escapeSql(title)}', '${escapeSql(artist)}', '${escapeSql(lyricsRaw)}', '${escapeSql(JSON.stringify(slides))}', '${escapeSql(JSON.stringify(DEFAULT_DECK_STYLE))}', 'public', ${nowMs}, ${nowMs}, ${nowMs} WHERE NOT EXISTS (SELECT 1 FROM decks WHERE user_id = '${SEED_BOT_USER_ID}' AND presentation_id IS NULL AND title = '${escapeSql(title)}' AND artist = '${escapeSql(artist)}');`;
 
     sqlStatements.push(sql);
     count++;
