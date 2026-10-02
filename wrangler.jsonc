@@ -32,8 +32,8 @@
   "d1_databases": [
     {
       "binding": "DB",
-      "database_name": "bangsongteam-db",
-      "database_id": "bf29bc4d-6b91-472b-ba68-063bc99902e9",
+      "database_name": "bangsongteam-db-v2",
+      "database_id": "5a48a9a7-6b5a-4914-89ac-1b7da45e8d4b",
       "migrations_dir": "src/db/migrations"
     }
   ],
