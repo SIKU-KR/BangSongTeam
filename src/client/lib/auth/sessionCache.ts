@@ -17,7 +17,6 @@ export async function saveCachedSession(user: SessionUser): Promise<void> {
     name: user.name,
     image: user.image ?? null,
     expiresAt: user.expiresAt,
-    cachedAt: Date.now(),
   };
   await db.put("auth_session", record);
 }
