@@ -96,9 +96,8 @@ export interface DeletedFolderTree {
 /**
  * 폴더를 하위 폴더·프레젠테이션과 함께 영구 삭제한다 (휴지통 비우기).
  *
- * 외래키 cascade에 기대지 않고 명시적으로 지운다. `presentations.folder_id`는
- * 안전망으로 SET NULL이라 cascade로는 파일이 루트로 떨어질 뿐 지워지지 않고,
- * 테스트용 better-sqlite3는 외래키를 강제하지도 않는다.
+ * 프레젠테이션은 명시적으로 지운다. `presentations.folder_id`는 안전망으로
+ * SET NULL이라 cascade로는 파일이 루트로 떨어질 뿐 지워지지 않는다.
  *
  * 없거나 남의 폴더면 `null` (→ 404).
  */

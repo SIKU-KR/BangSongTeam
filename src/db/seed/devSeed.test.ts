@@ -54,9 +54,7 @@ describe("seedDevData", () => {
   let db: ReturnType<typeof createTestDb>["db"];
 
   beforeEach(() => {
-    const testDb = createTestDb();
-    testDb.sqlite.pragma("foreign_keys = ON");
-    db = testDb.db;
+    db = createTestDb().db;
   });
 
   it("시드 id는 IdSchema를 통과한다", () => {
