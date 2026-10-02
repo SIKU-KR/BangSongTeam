@@ -1,4 +1,4 @@
-import React, { useRef, useState, useEffect } from "react";
+import React, { useRef, useState, useEffect, useCallback } from "react";
 import type { Slide, DeckStyle } from "#shared";
 import { DEFAULT_DECK_STYLE, resolveBackdropColor } from "#shared";
 import {
@@ -6,7 +6,7 @@ import {
   VIRTUAL_STAGE_WIDTH,
   VIRTUAL_STAGE_HEIGHT,
 } from "../../hooks/useStageScale";
-import { VideoLayer } from "./VideoLayer";
+import { VideoLayer, FADE_MS, FIRST_FRAME_TIMEOUT_MS } from "./VideoLayer";
 import { OverlayLayer } from "./OverlayLayer";
 import { TextLayer } from "./TextLayer";
 
@@ -31,7 +31,13 @@ export interface SlideStageProps {
   staticBackground?: boolean;
 }
 
-/** 16:9 가상 스테이지 위에서 3-Layer로 슬라이드를 렌더링하는 컴포넌트 */
+/**
+ * 16:9 가상 스테이지 위에서 3-Layer로 슬라이드를 렌더링하는 컴포넌트.
+ *
+ * 이미지 배경 곡에서 영상 배경 곡으로 넘어가면 앞 이미지를 영상 아래에 남겨 두고,
+ * 새 영상이 나타나 교차 전환이 끝난 뒤에(또는 첫 프레임 제한 시간이 지나면) 걷어 낸다.
+ * 바로 지우면 영상이 준비되는 동안 검은 화면이 보인다.
+ */
 export function SlideStage({
   slide,
   style = DEFAULT_DECK_STYLE,
@@ -48,6 +54,10 @@ export function SlideStage({
   staticBackground = false,
 }: SlideStageProps): React.JSX.Element {
   const containerRef = useRef<HTMLDivElement>(null);
+  const [heldImageUrl, setHeldImageUrl] = useState(backgroundImageUrl);
+  const releaseTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(
+    undefined,
+  );
   const [measuredSize, setMeasuredSize] = useState<{
     width: number;
     height: number;
@@ -89,6 +99,36 @@ export function SlideStage({
       return () => observer.disconnect();
     }
   }, [containerDimensions?.width, containerDimensions?.height]);
+
+  useEffect(() => {
+    clearTimeout(releaseTimerRef.current);
+    if (backgroundImageUrl) {
+      setHeldImageUrl(backgroundImageUrl);
+      return;
+    }
+    if (!backgroundUrl) {
+      setHeldImageUrl(undefined);
+      return;
+    }
+    const timer = setTimeout(
+      () => setHeldImageUrl(undefined),
+      FIRST_FRAME_TIMEOUT_MS + FADE_MS,
+    );
+    return () => clearTimeout(timer);
+  }, [backgroundImageUrl, backgroundUrl]);
+
+  useEffect(() => () => clearTimeout(releaseTimerRef.current), []);
+
+  const releaseHeldImage = useCallback((): void => {
+    clearTimeout(releaseTimerRef.current);
+    releaseTimerRef.current = setTimeout(
+      () => setHeldImageUrl(undefined),
+      FADE_MS,
+    );
+  }, []);
+
+  const imageUrl =
+    backgroundImageUrl ?? (backgroundUrl ? heldImageUrl : undefined);
 
   const effectiveDimensions =
     containerDimensions?.width && containerDimensions?.height
@@ -139,20 +179,21 @@ export function SlideStage({
           </div>
         ) : (
           <>
-            <VideoLayer
-              src={backgroundImageUrl ? undefined : backgroundUrl}
-              nextSrc={nextBackgroundUrl}
-              posterUrl={backgroundImageUrl ? undefined : posterUrl}
-            />
-            {backgroundImageUrl && (
+            {imageUrl && (
               <img
                 data-testid="image-background-layer"
-                src={backgroundImageUrl}
+                src={imageUrl}
                 alt=""
                 draggable={false}
                 className="pointer-events-none absolute inset-0 z-0 size-full object-cover select-none"
               />
             )}
+            <VideoLayer
+              src={backgroundImageUrl ? undefined : backgroundUrl}
+              nextSrc={nextBackgroundUrl}
+              posterUrl={backgroundImageUrl ? undefined : posterUrl}
+              onReveal={releaseHeldImage}
+            />
           </>
         )}
 

@@ -1,7 +1,8 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import React from "react";
-import { render, screen } from "@testing-library/react";
+import { render, screen, act, fireEvent } from "@testing-library/react";
 import { SlideStage } from "./SlideStage";
+import { FADE_MS, FIRST_FRAME_TIMEOUT_MS } from "./VideoLayer";
 import { DEFAULT_DECK_STYLE } from "#shared";
 import type { Slide, DeckStyle } from "#shared";
 
@@ -193,6 +194,113 @@ describe("SlideStage Integration Component", () => {
     );
     expect(screen.getByTestId("virtual-slide-stage")).toHaveStyle({
       backgroundColor: "#000000",
+    });
+  });
+
+  describe("이미지 배경에서 영상 배경으로 넘어갈 때", () => {
+    const STILL = "/api/media/stills/hall.jpg";
+    const LOOP = "https://media.example.com/loop1.mp4";
+
+    beforeEach(() => {
+      vi.useFakeTimers();
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    function advance(ms: number): void {
+      act(() => {
+        vi.advanceTimersByTime(ms);
+      });
+    }
+
+    it("이미지는 영상 아래에 깔린다", () => {
+      render(
+        <SlideStage
+          slide={mockSlide}
+          style={mockStyle}
+          backgroundImageUrl={STILL}
+        />,
+      );
+
+      const image = screen.getByTestId("image-background-layer");
+      const videoLayer = screen.getByTestId("video-layer-container");
+      expect(
+        image.compareDocumentPosition(videoLayer) &
+          Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+    });
+
+    it("새 영상이 나타나 교차 전환이 끝날 때까지 앞 이미지를 남겨 둔다", () => {
+      const { rerender } = render(
+        <SlideStage
+          slide={mockSlide}
+          style={mockStyle}
+          backgroundImageUrl={STILL}
+        />,
+      );
+
+      rerender(
+        <SlideStage slide={mockSlide} style={mockStyle} backgroundUrl={LOOP} />,
+      );
+      expect(screen.getByTestId("image-background-layer")).toHaveAttribute(
+        "src",
+        STILL,
+      );
+
+      act(() => {
+        fireEvent(screen.getByTestId("video-slot-b"), new Event("playing"));
+      });
+      advance(FADE_MS - 1);
+      expect(screen.getByTestId("image-background-layer")).toBeInTheDocument();
+
+      advance(1);
+      expect(
+        screen.queryByTestId("image-background-layer"),
+      ).not.toBeInTheDocument();
+    });
+
+    it("영상이 끝내 나오지 않아도 제한 시간이 지나면 이미지를 걷어 낸다", () => {
+      const { rerender } = render(
+        <SlideStage
+          slide={mockSlide}
+          style={mockStyle}
+          backgroundImageUrl={STILL}
+        />,
+      );
+
+      rerender(
+        <SlideStage slide={mockSlide} style={mockStyle} backgroundUrl={LOOP} />,
+      );
+      advance(FIRST_FRAME_TIMEOUT_MS + FADE_MS);
+
+      expect(
+        screen.queryByTestId("image-background-layer"),
+      ).not.toBeInTheDocument();
+    });
+
+    it("배경이 없는 곡으로 넘어가면 이미지를 바로 지운다", () => {
+      const { rerender } = render(
+        <SlideStage
+          slide={mockSlide}
+          style={mockStyle}
+          backgroundImageUrl={STILL}
+        />,
+      );
+
+      rerender(<SlideStage slide={mockSlide} style={mockStyle} />);
+
+      expect(
+        screen.queryByTestId("image-background-layer"),
+      ).not.toBeInTheDocument();
+
+      rerender(
+        <SlideStage slide={mockSlide} style={mockStyle} backgroundUrl={LOOP} />,
+      );
+      expect(
+        screen.queryByTestId("image-background-layer"),
+      ).not.toBeInTheDocument();
     });
   });
 });

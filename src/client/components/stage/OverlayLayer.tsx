@@ -6,7 +6,11 @@ interface OverlayLayerProps {
   isBlackout?: boolean;
 }
 
-/** 배경 밝기를 조절하거나 암전하는 오버레이 레이어 */
+/**
+ * 배경 밝기를 조절하거나 암전하는 오버레이 레이어.
+ * 암전은 덱의 오버레이 색과 상관없이 항상 검정이다. 색은 API나 공유 데이터로도 바뀔 수 있어
+ * 그대로 쓰면 암전 화면이 흰색이나 다른 색으로 송출될 수 있다.
+ */
 export function OverlayLayer({
   opacity = 40,
   color = "#000000",
@@ -21,7 +25,7 @@ export function OverlayLayer({
       data-testid="overlay-layer"
       className="pointer-events-none absolute inset-0 z-10 transition-opacity duration-150 ease-out"
       style={{
-        backgroundColor: color,
+        backgroundColor: isBlackout ? "#000000" : color,
         opacity: effectiveOpacity,
         willChange: "opacity",
       }}
