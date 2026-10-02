@@ -87,8 +87,10 @@ export function getCurrentUserId(): string | null {
 /**
  * 앱 초기화 시 캐시된 세션 또는 서버 세션을 복원한다.
  *
- * - 유효한 캐시는 서버를 기다리지 않고 통과시킨다. 송출 화면에서 부팅했으면 재검증도
- *   건너뛴다. 송출 중 새로고침이 서버 요청을 만들거나 로그아웃으로 화면을 바꾸면 안 된다.
+ * - 유효한 캐시는 서버를 기다리지 않고 통과시킨다.
+ * - 송출 화면에서 부팅했으면 캐시가 만료됐어도 통과시키고 서버에 묻지 않는다. 송출 중
+ *   새로고침이 서버 요청을 만들거나, 응답을 기다리며 검은 화면을 늘리거나, 로그아웃으로
+ *   화면을 바꾸면 안 된다.
  * - 만료된 캐시는 서버에 물어본다. 서버에 닿지 못하면 캐시된 사용자로 들어간다.
  *   일주일에 한 번 쓰는 노트북이 오프라인 예배당에서 송출하지 못하게 되는 것을 막기 위해서다.
  *   데이터는 이미 이 기기에 있고, 서버 API는 서버 세션으로 따로 막힌다.
@@ -104,9 +106,10 @@ export async function hydrateSession(): Promise<SessionState> {
     cached = null;
   }
 
-  if (cached && cached.expiresAt > Date.now()) {
+  const isProjection = isProjectionPath(window.location.pathname);
+  if (cached && (isProjection || cached.expiresAt > Date.now())) {
     setState({ status: "authenticated", user: cached });
-    if (!isProjectionPath(window.location.pathname)) void revalidateSession();
+    if (!isProjection) void revalidateSession();
     return state;
   }
 

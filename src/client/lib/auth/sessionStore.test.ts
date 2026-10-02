@@ -171,6 +171,21 @@ describe("세션 스토어", () => {
       expect(getSessionState().status).toBe("authenticated");
       expect(fetcher).not.toHaveBeenCalled();
     });
+
+    it("송출 화면에서 부팅하면 만료된 캐시로도 들어가고 서버에 묻지 않는다", async () => {
+      window.history.replaceState({}, "", "/present/abc/fullscreen");
+      await saveExpiredSession();
+      const fetcher = vi.fn(async () => null);
+      __setSessionFetcherForTests(fetcher);
+
+      await hydrateSession();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      expect(getSessionState().status).toBe("authenticated");
+      expect(getCurrentUserId()).toBe(USER_ID);
+      expect(fetcher).not.toHaveBeenCalled();
+      expect((await loadCachedSession())?.userId).toBe(USER_ID);
+    });
   });
 
   describe("서버 응답 해석", () => {
