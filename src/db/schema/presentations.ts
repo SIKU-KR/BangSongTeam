@@ -73,9 +73,6 @@ export const presentationMembers = sqliteTable(
     userId: text("user_id")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
-    joinedAt: integer("joined_at", { mode: "timestamp" }).default(
-      sql`(unixepoch())`,
-    ),
   },
   (t) => [
     primaryKey({ columns: [t.presentationId, t.userId] }),

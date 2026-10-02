@@ -191,16 +191,15 @@ export function tombstoneStatements(
   kind: "folder" | "presentation",
   ids: readonly string[],
 ): unknown[] {
-  const deletedAt = new Date();
   const statements: unknown[] = [];
   for (let i = 0; i < ids.length; i += TOMBSTONES_PER_STATEMENT) {
     const rows = ids
       .slice(i, i + TOMBSTONES_PER_STATEMENT)
-      .map((itemId) => ({ itemId, userId, kind, deletedAt }));
+      .map((itemId) => ({ itemId, userId, kind }));
     statements.push(
       db.insert(driveTombstones).values(rows).onConflictDoUpdate({
         target: driveTombstones.itemId,
-        set: { kind, deletedAt },
+        set: { kind },
       }),
     );
   }
