@@ -49,4 +49,12 @@ describe("OverlayLayer Component", () => {
       opacity: "1",
     });
   });
+
+  it("암전은 오버레이 색과 상관없이 검정이다", () => {
+    render(<OverlayLayer opacity={30} color="#ffffff" isBlackout />);
+    expect(screen.getByTestId("overlay-layer")).toHaveStyle({
+      opacity: "1",
+      backgroundColor: "#000000",
+    });
+  });
 });
