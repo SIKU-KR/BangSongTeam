@@ -3,8 +3,10 @@ import {
   text,
   integer,
   index,
+  check,
   type AnySQLiteColumn,
 } from "drizzle-orm/sqlite-core";
+import { sql } from "drizzle-orm";
 import { user } from "./auth";
 
 /**
@@ -43,7 +45,13 @@ export const driveTombstones = sqliteTable(
       .references(() => user.id, { onDelete: "cascade" }),
     kind: text("kind", { enum: ["folder", "presentation"] }).notNull(),
   },
-  (t) => [index("idx_drive_tombstones_user").on(t.userId)],
+  (t) => [
+    check(
+      "drive_tombstones_kind",
+      sql`${t.kind} IN ('folder', 'presentation')`,
+    ),
+    index("idx_drive_tombstones_user").on(t.userId),
+  ],
 );
 
 export type DriveTombstone = typeof driveTombstones.$inferSelect;

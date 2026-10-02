@@ -1,1 +1,0 @@
-ALTER TABLE `backgrounds` DROP COLUMN `tags`;
