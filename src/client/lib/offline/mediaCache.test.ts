@@ -10,6 +10,7 @@ import {
   scheduleMediaCaching,
   shouldWaitForMediaCache,
   isCacheStorageAvailable,
+  MEDIA_STALL_TIMEOUT_MS,
   __resetMediaCachingForTests,
   __waitForMediaCachingForTests,
 } from "./mediaCache";
@@ -184,6 +185,90 @@ describe("cacheMediaUrls (서비스 워커 제어 중)", () => {
     await vi.runAllTimersAsync();
 
     expect(await pendingResult).toEqual({ cachedUrls: [] });
+  });
+});
+
+describe("cacheMediaUrls 멈춘 다운로드", () => {
+  function mockFetchWithInit(
+    impl: (url: string, init: RequestInit | undefined) => Promise<Response>,
+  ) {
+    const fetchMock = vi.fn(
+      async (input: RequestInfo | URL, init?: RequestInit) =>
+        impl(String(input), init),
+    );
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+    return fetchMock;
+  }
+
+  function stalledResponse(): Response {
+    return new Response(
+      new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(new Uint8Array(8));
+        },
+      }),
+      { status: 200, headers: { "content-length": "16" } },
+    );
+  }
+
+  it("본문이 멈추면 제한 시간 뒤 실패로 끝나고, 다음 호출은 새로 받는다", async () => {
+    vi.useFakeTimers();
+    const fetchMock = mockFetchWithInit(async () => stalledResponse());
+
+    const first = cacheMediaFirst(VIDEO);
+    await vi.advanceTimersByTimeAsync(MEDIA_STALL_TIMEOUT_MS);
+
+    expect(await first).toBe(false);
+    expect(getMediaProgress(VIDEO)).toEqual({ received: 8, total: 16 });
+
+    void cacheMediaFirst(VIDEO);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    await vi.advanceTimersByTimeAsync(MEDIA_STALL_TIMEOUT_MS);
+  });
+
+  it("응답 헤더가 오지 않으면 요청을 끊고 실패로 끝낸다", async () => {
+    vi.useFakeTimers();
+    let signal: AbortSignal | undefined;
+    mockFetchWithInit(
+      (_url, init) =>
+        new Promise<Response>((_resolve, reject) => {
+          signal = init?.signal ?? undefined;
+          signal?.addEventListener("abort", () => reject(signal?.reason));
+        }),
+    );
+
+    const result = cacheMediaFirst(VIDEO);
+    await vi.advanceTimersByTimeAsync(MEDIA_STALL_TIMEOUT_MS);
+
+    expect(await result).toBe(false);
+    expect(signal?.aborted).toBe(true);
+  });
+
+  it("느려도 바이트가 계속 오면 끊지 않는다", async () => {
+    vi.useFakeTimers();
+    const step = MEDIA_STALL_TIMEOUT_MS / 2;
+    let chunks = 0;
+    mockFetchWithInit(
+      async () =>
+        new Response(
+          new ReadableStream<Uint8Array>({
+            async pull(controller) {
+              await new Promise((resolve) => setTimeout(resolve, step));
+              chunks += 1;
+              controller.enqueue(new Uint8Array(4));
+              if (chunks === 4) controller.close();
+            },
+          }),
+          { status: 200 },
+        ),
+    );
+
+    const result = cacheMediaFirst(VIDEO);
+    await vi.advanceTimersByTimeAsync(MEDIA_STALL_TIMEOUT_MS * 3);
+
+    expect(await result).toBe(true);
+    expect(getMediaProgress(VIDEO)?.received).toBe(16);
   });
 });
 
@@ -368,6 +453,14 @@ describe("findCachedMediaUrls", () => {
 
     expect(await findCachedMediaUrls([VIDEO, OTHER, POSTER])).toEqual([VIDEO]);
   });
+
+  it("Cache Storage가 열리지 않으면 던지지 않고 담기지 않은 것으로 본다", async () => {
+    vi.spyOn(caches, "open").mockRejectedValue(
+      new DOMException("broken", "UnknownError"),
+    );
+
+    expect(await findCachedMediaUrls([VIDEO, POSTER])).toEqual([]);
+  });
 });
 
 describe("ensureMediaSpace", () => {
@@ -409,6 +502,15 @@ describe("ensureMediaSpace", () => {
 
     expect(await ensureMediaSpace(5000, [VIDEO])).toBe(false);
     expect(await isCached(VIDEO)).toBe(true);
+  });
+
+  it("지우다가 Cache Storage가 실패해도 던지지 않고 자리가 없다고 본다", async () => {
+    mockEstimate(1000, 900);
+    vi.spyOn(caches, "open").mockRejectedValue(
+      new DOMException("broken", "UnknownError"),
+    );
+
+    expect(await ensureMediaSpace(500, [VIDEO])).toBe(false);
   });
 
   it("브라우저가 용량을 알려 주지 않으면 지우지 않고 통과시킨다", async () => {

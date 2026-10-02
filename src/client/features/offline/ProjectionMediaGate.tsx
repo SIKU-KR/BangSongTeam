@@ -24,9 +24,10 @@ function megabytes(bytes: number): string {
 /**
  * 송출 화면을 가리는 배경 준비 카드. 세트의 배경 영상을 모두 저장할 때까지 보인다.
  *
- * 받지 못하면 `다시 시도`와 함께 `저장된 배경으로 시작`을 연다. 인터넷이 안 되는
- * 와이파이에서는 `navigator.onLine`이 true라 `network` 실패로 잡히는데, 이때도 막으면
- * 예배 중에 송출을 시작할 방법이 없다.
+ * `저장된 배경으로 시작`은 확인·받는 중에도 늘 연다. 약한 와이파이에서 받기가 느리거나
+ * 멈추면, 막아 두는 동안 예배 중에 송출을 시작할 방법이 없다. 시작한 뒤에도 받기는
+ * 이어지고, 아직 저장하지 못한 곡은 정지 화면을 띄운다. `다시 시도`는 받지 못했을 때만
+ * 연다.
  */
 export function ProjectionMediaGate({
   readiness,
@@ -70,24 +71,24 @@ export function ProjectionMediaGate({
             </ProgressValue>
           </Progress>
         </div>
-        {failure && (
-          <CardFooter className="flex-wrap gap-2">
+        <CardFooter className="flex-wrap gap-2">
+          {failure && (
             <Button
               data-testid="projection-media-retry"
               onClick={readiness.retry}
             >
               {BACKGROUND_COPY.prepare.retry}
             </Button>
-            <Button
-              variant="outline"
-              data-testid="projection-media-start-saved"
-              title={BACKGROUND_COPY.prepare.savedHint}
-              onClick={onStartWithSaved}
-            >
-              {BACKGROUND_COPY.prepare.startWithSaved}
-            </Button>
-          </CardFooter>
-        )}
+          )}
+          <Button
+            variant="outline"
+            data-testid="projection-media-start-saved"
+            title={BACKGROUND_COPY.prepare.savedHint}
+            onClick={onStartWithSaved}
+          >
+            {BACKGROUND_COPY.prepare.startWithSaved}
+          </Button>
+        </CardFooter>
       </Card>
     </div>
   );

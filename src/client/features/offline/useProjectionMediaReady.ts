@@ -116,6 +116,9 @@ function useMediaProgressVersion(): number {
  * 총 용량은 카탈로그의 `sizeBytes`(영상+포스터)로 먼저 잡고, 받기 시작하면 응답
  * 길이로 바꾼다.
  *
+ * 준비 중에 Cache Storage 등이 예상 밖으로 실패해도 `failed`로 끝낸다. `checking`에
+ * 머무르면 준비 카드가 멈춘 채로 남는다.
+ *
  * `passive`면 직접 받지 않고 저장 상태만 본다. 편집기는 자동 캐시
  * (`useBackgroundAutoCache`)가 이미 받고 있으므로 송출 버튼 옆에 진행만 보여 준다.
  */
@@ -151,7 +154,9 @@ export function useProjectionMediaReady(
     if (passive) {
       let timer: ReturnType<typeof setTimeout> | undefined;
       const check = async (): Promise<void> => {
-        const readyUrls = new Set(await findCachedMediaUrls(urls));
+        const readyUrls = new Set(
+          await findCachedMediaUrls(urls).catch((): string[] => []),
+        );
         const ready = readyUrls.size === urls.length;
         update({
           status: ready ? "ready" : "downloading",
@@ -168,7 +173,7 @@ export function useProjectionMediaReady(
       };
     }
 
-    void (async () => {
+    const prepare = async (): Promise<void> => {
       const readyUrls = new Set(await findCachedMediaUrls(urls));
       const missing = files.filter((file) => !readyUrls.has(file.url));
       if (missing.length === 0) {
@@ -212,7 +217,14 @@ export function useProjectionMediaReady(
         });
       }
       update({ status: "ready", failure: null, readyUrls });
-    })();
+    };
+    prepare().catch(() =>
+      update({
+        status: "failed",
+        failure: isOffline() ? "offline" : "network",
+        readyUrls: new Set(),
+      }),
+    );
 
     return () => {
       cancelled = true;
