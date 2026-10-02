@@ -49,8 +49,9 @@ pnpm typecheck && pnpm lint && pnpm test   # must pass before pushing (the CI ga
 ### Database (Drizzle ORM)
 
 - Use the ORM as far as it goes. Queries, test fixtures and schema changes go through Drizzle (`src/db/queries/`, `src/db/schema/*` + `pnpm db:generate`).
-- Raw `sql` only where Drizzle has no API (FTS5 `MATCH`, column arithmetic, SQLite JSON functions, schema defaults), with table and column objects interpolated, never string column names or `sql.raw`.
-- D1 has no row-level security. Every private query or mutation filters by the session's `user_id`, and every public-library query goes through the public-scope condition.
+- Raw `sql` only where Drizzle has no API (FTS5 `MATCH`, column arithmetic, SQLite JSON functions, schema defaults, CHECK constraints), with table and column objects interpolated, never string column names or `sql.raw`.
+- Keep the schema normalized. One entity lives in one table, with subtype rules as CHECK constraints (`decks` holds library songs and presentation copies). Derived values such as counts are views; promote one to a trigger-maintained column only when a hot query sorts or filters on it (`decks.fork_count`), and back every hot query with an index.
+- D1 has no row-level security. Every private query or mutation filters by the session's `user_id`, and every public-library query reads the `public_decks` view, the single definition of public scope.
 
 ### UI
 
@@ -67,5 +68,4 @@ pnpm typecheck && pnpm lint && pnpm test   # must pass before pushing (the CI ga
 - D1 migrations:
   - All history is squashed into `0001_initial.sql`. A D1 that applied older migration files must be recreated; locally, delete `.wrangler/state/v3/d1` and run `pnpm db:migrate:local`.
   - Never drop or recreate a parent table (`decks`, `presentations`, …). D1 ignores `PRAGMA foreign_keys=OFF` in migrations, so the drop cascades deletes into child rows. Use `ALTER TABLE … ADD COLUMN`.
-  - drizzle-kit drops `ON DELETE SET NULL`; write it by hand in the generated SQL.
   - CI applies migrations before deploying, so the previous release briefly runs on the new schema. Keep changes additive, and drop or rename a column only after the code stops using it.
