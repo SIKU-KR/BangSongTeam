@@ -4,6 +4,7 @@ import {
   getServiceWorkerState,
   applyServiceWorkerUpdate,
   reloadIfUncontrolled,
+  reloadOnStaleChunk,
   __resetServiceWorkerStateForTests,
   type ServiceWorkerRegistrar,
 } from "./registerServiceWorker";
@@ -32,7 +33,12 @@ function makeRegistrar(): {
 }
 
 const RELOAD_KEY = "sw-uncontrolled-reload";
+const STALE_CHUNK_KEY = "sw-stale-chunk-reload";
 const originalLocation = Object.getOwnPropertyDescriptor(window, "location");
+const originalServiceWorker = Object.getOwnPropertyDescriptor(
+  navigator,
+  "serviceWorker",
+);
 
 function stubLocation(pathname = "/presentations"): ReturnType<typeof vi.fn> {
   const reload = vi.fn();
@@ -61,6 +67,11 @@ afterEach(() => {
   sessionStorage.clear();
   if (originalLocation) {
     Object.defineProperty(window, "location", originalLocation);
+  }
+  if (originalServiceWorker) {
+    Object.defineProperty(navigator, "serviceWorker", originalServiceWorker);
+  } else {
+    Reflect.deleteProperty(navigator, "serviceWorker");
   }
 });
 
@@ -162,6 +173,119 @@ describe("새 버전 적용 뒤 새로고침", () => {
     hooks().onNeedReload?.();
 
     expect(reload).not.toHaveBeenCalled();
+  });
+
+  it("다른 탭이 먼저 적용했으면 이 탭의 적용은 곧바로 한 번 새로고침한다", async () => {
+    const reload = stubLocation();
+    const { registrar, hooks, apply } = makeRegistrar();
+    registerServiceWorker(registrar);
+    hooks().onNeedRefresh?.();
+    hooks().onNeedReload?.();
+
+    await applyServiceWorkerUpdate();
+
+    expect(reload).toHaveBeenCalledTimes(1);
+    expect(apply).not.toHaveBeenCalled();
+  });
+
+  it("송출 중에 제어가 바뀌었으면 송출을 마친 뒤 적용할 때 새로고침한다", async () => {
+    const reload = stubLocation("/present/p1/fullscreen");
+    const { registrar, hooks } = makeRegistrar();
+    registerServiceWorker(registrar);
+    hooks().onNeedRefresh?.();
+    await applyServiceWorkerUpdate();
+    hooks().onNeedReload?.();
+    expect(reload).not.toHaveBeenCalled();
+
+    const reloadAfter = stubLocation();
+    await applyServiceWorkerUpdate();
+
+    expect(reloadAfter).toHaveBeenCalledTimes(1);
+  });
+
+  it("송출 중이라 넘긴 적용 요청은 나중에 다른 탭의 갱신으로 이 탭을 새로고침하지 않는다", async () => {
+    stubLocation("/present/p1/fullscreen");
+    const { registrar, hooks } = makeRegistrar();
+    registerServiceWorker(registrar);
+    await applyServiceWorkerUpdate();
+    hooks().onNeedReload?.();
+
+    const reload = stubLocation();
+    hooks().onNeedRefresh?.();
+    hooks().onNeedReload?.();
+
+    expect(reload).not.toHaveBeenCalled();
+  });
+
+  it("제어가 바뀐 뒤 더 새로운 버전이 대기하면 그 버전을 적용한다", async () => {
+    const reload = stubLocation();
+    const { registrar, hooks, apply } = makeRegistrar();
+    registerServiceWorker(registrar);
+    hooks().onNeedRefresh?.();
+    hooks().onNeedReload?.();
+    hooks().onNeedRefresh?.();
+
+    await applyServiceWorkerUpdate();
+
+    expect(apply).toHaveBeenCalledWith(true);
+    expect(reload).not.toHaveBeenCalled();
+  });
+});
+
+describe("reloadOnStaleChunk", () => {
+  beforeEach(() => {
+    __resetServiceWorkerStateForTests();
+  });
+
+  it("옛 청크를 받지 못하면 한 번만 새로고침한다", () => {
+    const reload = stubLocation("/editor/p1");
+
+    reloadOnStaleChunk();
+    reloadOnStaleChunk();
+
+    expect(reload).toHaveBeenCalledTimes(1);
+    expect(sessionStorage.getItem(STALE_CHUNK_KEY)).not.toBeNull();
+  });
+
+  it("지난 새로고침에서 1분이 지났으면 다시 새로고침한다", () => {
+    const reload = stubLocation("/editor/p1");
+    sessionStorage.setItem(STALE_CHUNK_KEY, String(Date.now() - 61_000));
+
+    reloadOnStaleChunk();
+
+    expect(reload).toHaveBeenCalledTimes(1);
+  });
+
+  it("송출 화면에서는 새로고침하지 않는다", () => {
+    const reload = stubLocation("/present/p1/fullscreen");
+
+    reloadOnStaleChunk();
+
+    expect(reload).not.toHaveBeenCalled();
+  });
+
+  it("sessionStorage를 쓸 수 없으면 새로고침하지 않는다", () => {
+    const reload = stubLocation("/editor/p1");
+    vi.stubGlobal("sessionStorage", {
+      getItem: () => null,
+      setItem: () => {
+        throw new DOMException("denied", "SecurityError");
+      },
+    });
+
+    reloadOnStaleChunk();
+
+    expect(reload).not.toHaveBeenCalled();
+  });
+
+  it("등록하면 청크 로드 실패 이벤트에 새로고침을 건다", () => {
+    stubServiceWorker({ controlled: true });
+    const reload = stubLocation("/editor/p1");
+    registerServiceWorker(makeRegistrar().registrar);
+
+    window.dispatchEvent(new Event("vite:preloadError"));
+
+    expect(reload).toHaveBeenCalledTimes(1);
   });
 });
 

@@ -11,7 +11,9 @@ import { registerSW } from "virtual:pwa-register";
  * 새 SW가 제어를 넘겨받으면 같은 출처의 모든 탭에 `controllerchange`가 온다.
  * `onNeedReload`를 넘기지 않으면 workbox-window가 그때마다 모든 탭을 새로고침하므로,
  * 다른 탭에서 적용을 눌러도 송출 중인 창이 새로고침된다. 그래서 적용을 요청한 탭만,
- * 그 탭이 송출 화면이 아닐 때만 새로고침한다.
+ * 그 탭이 송출 화면이 아닐 때만 새로고침한다. 새로고침하지 않은 탭은 옛 코드로 남으므로
+ * 그 탭의 적용 버튼은 새로고침만 하고, 지워진 옛 청크를 못 받으면 송출 화면이 아닐 때
+ * 한 번 새로고침해 새 버전으로 넘어간다.
  */
 interface ServiceWorkerState {
   needRefresh: boolean;
@@ -30,9 +32,12 @@ let state: ServiceWorkerState = INITIAL;
 let applyUpdate: ((reloadPage?: boolean) => Promise<void>) | null = null;
 let registered = false;
 let updateRequestedHere = false;
+let controllerReplaced = false;
 
 const PROJECTION_PATH = /^\/present\//;
 const UNCONTROLLED_RELOAD_KEY = "sw-uncontrolled-reload";
+const STALE_CHUNK_RELOAD_KEY = "sw-stale-chunk-reload";
+const STALE_CHUNK_RELOAD_INTERVAL_MS = 60_000;
 
 const listeners = new Set<() => void>();
 
@@ -72,11 +77,41 @@ export function useServiceWorkerState(): ServiceWorkerState {
  * 여기서 바로 새로고침하지 않는다. 새 SW가 제어를 넘겨받기 전에 새로고침하면 옛 SW의
  * 캐시된 셸이 다시 뜬다. 이 탭이 요청했다는 표시만 남기고, 제어가 넘어온 뒤
  * `onNeedReload`에서 이 탭만 새로고침한다.
+ *
+ * 다른 탭이 먼저 적용해 새 SW가 이미 제어하면 대기 중인 SW가 없어 skip-waiting 메시지가
+ * 나가지 않고 `onNeedReload`도 다시 오지 않는다. 그때는 곧바로 새로고침해야 배너가
+ * 사라진다.
  */
 export async function applyServiceWorkerUpdate(): Promise<void> {
+  if (controllerReplaced) {
+    if (!isProjectionPath()) window.location.reload();
+    return;
+  }
   if (!applyUpdate) return;
   updateRequestedHere = true;
   await applyUpdate(true);
+}
+
+/**
+ * 지워진 옛 청크를 불러오지 못했을 때(`vite:preloadError`) 새 버전으로 새로고침한다.
+ *
+ * 다른 탭이 새 버전을 적용하면 새 SW가 옛 프리캐시를 지우고, 새 배포 서버에도 옛 해시
+ * 청크가 없다. 새로고침하지 않고 남은 탭은 지연 로드 화면으로 이동할 때 오류 화면에
+ * 걸린다. 송출 화면에서는 전체 화면이 풀리므로 새로고침하지 않는다. 1분 안에 다시
+ * 실패하면 새로고침하지 않아 무한 새로고침이 생기지 않고, sessionStorage를 쓸 수 없으면
+ * 새로고침하지 않는다.
+ */
+export function reloadOnStaleChunk(): void {
+  try {
+    if (isProjectionPath()) return;
+    const last = Number(sessionStorage.getItem(STALE_CHUNK_RELOAD_KEY));
+    const now = Date.now();
+    if (now - last < STALE_CHUNK_RELOAD_INTERVAL_MS) return;
+    sessionStorage.setItem(STALE_CHUNK_RELOAD_KEY, String(now));
+    window.location.reload();
+  } catch {
+    return;
+  }
 }
 
 /**
@@ -121,13 +156,20 @@ export function registerServiceWorker(
     return;
   }
   registered = true;
+  window.addEventListener("vite:preloadError", reloadOnStaleChunk);
 
   applyUpdate = registrar({
     onNeedRefresh: () => {
+      controllerReplaced = false;
       setState({ ...state, needRefresh: true });
     },
     onNeedReload: () => {
-      if (updateRequestedHere && !isProjectionPath()) window.location.reload();
+      if (updateRequestedHere && !isProjectionPath()) {
+        window.location.reload();
+        return;
+      }
+      updateRequestedHere = false;
+      controllerReplaced = true;
     },
     onRegisterError: () => {
       registered = false;
@@ -141,5 +183,7 @@ export function __resetServiceWorkerStateForTests(): void {
   applyUpdate = null;
   registered = false;
   updateRequestedHere = false;
+  controllerReplaced = false;
+  window.removeEventListener("vite:preloadError", reloadOnStaleChunk);
   listeners.clear();
 }
