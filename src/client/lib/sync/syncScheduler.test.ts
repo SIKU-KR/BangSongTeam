@@ -8,9 +8,14 @@ import {
   SYNC_MAX_WAIT_MS,
   __resetSyncSchedulerForTests,
   __setPusherForTests,
+  __setBackoffRandomForTests,
 } from "./syncScheduler";
 import { getSyncSnapshot, __resetSyncStatusForTests } from "./syncStatus";
-import { OfflineError } from "../api/request";
+import {
+  OfflineError,
+  ServerRejectedError,
+  SessionExpiredError,
+} from "../api/request";
 import {
   scheduleFolderPush,
   setFolderSyncEnabled,
@@ -230,5 +235,157 @@ describe("서버 push 스케줄러", () => {
 
     await flushPendingSync();
     expect(push.mock.calls.at(-1)?.[0].title).toBe("새 판");
+  });
+
+  it("Head-of-Line Blocking 방지: 느린 문서 A가 전송 중이어도 다른 문서 B는 먼저 시작하고 끝난다", async () => {
+    let finishA: () => void = () => {};
+    const order: string[] = [];
+
+    push.mockImplementation(async (d) => {
+      if (d.id === "a") {
+        await new Promise<void>((resolve) => {
+          finishA = resolve;
+        });
+      }
+      order.push(d.id);
+      return true;
+    });
+
+    vi.useFakeTimers();
+
+    scheduleDocumentPush(doc("a"));
+    await vi.advanceTimersByTimeAsync(SYNC_DEBOUNCE_MS);
+    expect(push).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "a" }),
+    );
+
+    scheduleDocumentPush(doc("b"));
+    await vi.advanceTimersByTimeAsync(SYNC_DEBOUNCE_MS);
+
+    // B는 A가 끝나기를 기다리지 않고 먼저 끝나야 한다
+    expect(order).toEqual(["b"]);
+
+    finishA();
+    await vi.waitFor(() => expect(order).toEqual(["b", "a"]));
+    vi.useRealTimers();
+  });
+
+  it("동일 문서 직렬화: 문서 A가 전송 중일 때 들어온 새 수정은 첫 전송이 끝난 뒤 나간다", async () => {
+    let finishFirst: () => void = () => {};
+    let firstInFlight = false;
+    let secondStartedWhileFirstInFlight = false;
+
+    push.mockImplementation(async (d) => {
+      if (d.title === "1차") {
+        firstInFlight = true;
+        await new Promise<void>((resolve) => {
+          finishFirst = resolve;
+        });
+        firstInFlight = false;
+      } else if (d.title === "2차") {
+        if (firstInFlight) secondStartedWhileFirstInFlight = true;
+      }
+      return true;
+    });
+
+    scheduleDocumentPush(doc("a", "1차"));
+    const flushing = flushPendingSync();
+    await vi.waitFor(() => expect(push).toHaveBeenCalledTimes(1));
+
+    scheduleDocumentPush(doc("a", "2차"));
+    finishFirst();
+    await flushing;
+    await flushPendingSync();
+
+    expect(secondStartedWhileFirstInFlight).toBe(false);
+    expect(push).toHaveBeenCalledTimes(2);
+    expect(push.mock.calls[1][0].title).toBe("2차");
+  });
+
+  it("503 응답 2회 후 200 성공 시 사용자는 error(동기화 실패)를 보지 않고 복구된다", async () => {
+    push
+      .mockRejectedValueOnce(
+        new ServerRejectedError(503, "Service Unavailable"),
+      )
+      .mockRejectedValueOnce(
+        new ServerRejectedError(503, "Service Unavailable"),
+      )
+      .mockResolvedValueOnce(true);
+
+    __setBackoffRandomForTests(() => 1);
+    vi.useFakeTimers();
+
+    scheduleDocumentPush(doc("a"));
+    await vi.advanceTimersByTimeAsync(SYNC_DEBOUNCE_MS);
+    expect(push).toHaveBeenCalledTimes(1);
+    expect(getSyncSnapshot().status).toBe("offline");
+
+    // 1차 재시도: attempt 0 -> 2000ms
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(push).toHaveBeenCalledTimes(2);
+    expect(getSyncSnapshot().status).toBe("offline");
+
+    // 2차 재시도: attempt 1 -> 4000ms
+    await vi.advanceTimersByTimeAsync(4000);
+    expect(push).toHaveBeenCalledTimes(3);
+    expect(getSyncSnapshot().status).toBe("synced");
+
+    vi.useRealTimers();
+  });
+
+  it("서버가 Retry-After를 주면 백오프 계산 대신 헤더 값을 기다린다", async () => {
+    push
+      .mockRejectedValueOnce(new ServerRejectedError(503, "과부하", 15_000))
+      .mockResolvedValueOnce(true);
+
+    vi.useFakeTimers();
+
+    scheduleDocumentPush(doc("a"));
+    await vi.advanceTimersByTimeAsync(SYNC_DEBOUNCE_MS);
+    expect(push).toHaveBeenCalledTimes(1);
+    expect(getSyncSnapshot().status).toBe("offline");
+
+    await vi.advanceTimersByTimeAsync(14_000);
+    expect(push).toHaveBeenCalledTimes(1);
+
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(push).toHaveBeenCalledTimes(2);
+    expect(getSyncSnapshot().status).toBe("synced");
+
+    vi.useRealTimers();
+  });
+
+  it("영구 실패(400)는 재시도하지 않고 error 상태와 실패 문서 정보를 남긴다", async () => {
+    push.mockRejectedValue(new ServerRejectedError(400, "잘못된 문서 구조"));
+
+    scheduleDocumentPush(doc("a", "불량 세트"));
+    await flushPendingSync();
+
+    expect(getSyncSnapshot().status).toBe("error");
+    expect(getSyncSnapshot().lastFailure).toMatchObject({
+      id: "a",
+      title: "불량 세트",
+      kind: "presentation",
+      status: 400,
+    });
+
+    vi.useFakeTimers();
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(push).toHaveBeenCalledTimes(1);
+    vi.useRealTimers();
+  });
+
+  it("401 세션 만료는 재시도하지 않는다", async () => {
+    push.mockRejectedValue(new SessionExpiredError());
+
+    scheduleDocumentPush(doc("a"));
+    await flushPendingSync();
+
+    expect(getSyncSnapshot().status).toBe("error");
+
+    vi.useFakeTimers();
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(push).toHaveBeenCalledTimes(1);
+    vi.useRealTimers();
   });
 });

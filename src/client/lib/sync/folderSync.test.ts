@@ -6,9 +6,10 @@ import {
   setFolderSyncEnabled,
   setServerFolderListener,
   __setFolderPusherForTests,
+  __setFolderBackoffRandomForTests,
   __resetFolderSyncForTests,
 } from "./folderSync";
-import { OfflineError } from "../api/request";
+import { OfflineError, ServerRejectedError } from "../api/request";
 import { getSyncSnapshot, __resetSyncStatusForTests } from "./syncStatus";
 
 const USER = "000000000000000000001";
@@ -103,5 +104,48 @@ describe("폴더 push 큐", () => {
     await flushFolderSync();
     await flushFolderSync();
     expect(push.mock.calls.at(-1)?.[0].name).toBe("새 이름");
+  });
+
+  it("503 응답 시 백오프 타이머로 자동 재시도하고 성공 시 synced로 복구된다", async () => {
+    push
+      .mockRejectedValueOnce(
+        new ServerRejectedError(503, "Service Unavailable"),
+      )
+      .mockResolvedValueOnce(folder(PARENT, null));
+
+    __setFolderBackoffRandomForTests(() => 1);
+    vi.useFakeTimers();
+
+    scheduleFolderPush(folder(PARENT, null));
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(push).toHaveBeenCalledTimes(1);
+    expect(getSyncSnapshot().status).toBe("offline");
+
+    // attempt 0: 2000ms delay
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(push).toHaveBeenCalledTimes(2);
+    expect(getSyncSnapshot().status).toBe("synced");
+
+    vi.useRealTimers();
+  });
+
+  it("영구 실패(400) 시 재시도하지 않고 error 상태와 실패 정보를 남긴다", async () => {
+    push.mockRejectedValue(new ServerRejectedError(400, "잘못된 폴더"));
+
+    scheduleFolderPush(folder(PARENT, null, "불량 폴더"));
+    await flushFolderSync();
+
+    expect(getSyncSnapshot().status).toBe("error");
+    expect(getSyncSnapshot().lastFailure).toMatchObject({
+      id: PARENT,
+      title: "불량 폴더",
+      kind: "folder",
+      status: 400,
+    });
+
+    vi.useFakeTimers();
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(push).toHaveBeenCalledTimes(1);
+    vi.useRealTimers();
   });
 });

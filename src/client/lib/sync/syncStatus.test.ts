@@ -33,4 +33,22 @@ describe("동기화 상태", () => {
     expect(getSyncSnapshot().status).toBe("offline");
     expect(getSyncSnapshot().status).not.toBe("error");
   });
+
+  it("영구 실패 시 실패 정보를 함께 기록하고, synced/idle 전환 시 지운다", () => {
+    const failure = {
+      id: "doc-1",
+      title: "찬양 세트",
+      kind: "presentation" as const,
+      status: 400,
+      message: "잘못된 요청",
+      failedAt: Date.now(),
+    };
+    setSyncStatus("error", failure);
+    expect(getSyncSnapshot().status).toBe("error");
+    expect(getSyncSnapshot().lastFailure).toEqual(failure);
+
+    setSyncStatus("synced");
+    expect(getSyncSnapshot().status).toBe("synced");
+    expect(getSyncSnapshot().lastFailure).toBeNull();
+  });
 });

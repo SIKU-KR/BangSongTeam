@@ -8,9 +8,10 @@ import {
   setDeckSyncEnabled,
   setServerDeckListener,
   __setDeckTransportForTests,
+  __setDeckBackoffRandomForTests,
   __resetDeckSyncForTests,
 } from "./deckSync";
-import { OfflineError } from "../api/request";
+import { OfflineError, ServerRejectedError } from "../api/request";
 import { getSyncSnapshot, __resetSyncStatusForTests } from "./syncStatus";
 
 const USER = "00000000x000000000001";
@@ -112,5 +113,43 @@ describe("보관함 push 큐", () => {
   it("pushDeckNow surfaces failures to the caller", async () => {
     push.mockRejectedValueOnce(new OfflineError());
     await expect(pushDeckNow(deck())).rejects.toBeInstanceOf(OfflineError);
+  });
+
+  it("503 응답 시 백오프 타이머로 자동 재시도하고 성공 시 synced로 복구된다", async () => {
+    push
+      .mockRejectedValueOnce(
+        new ServerRejectedError(503, "Service Unavailable"),
+      )
+      .mockResolvedValueOnce(deck());
+
+    __setDeckBackoffRandomForTests(() => 1);
+    vi.useFakeTimers();
+
+    scheduleDeckPush(deck());
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(push).toHaveBeenCalledTimes(1);
+    expect(getSyncSnapshot().status).toBe("offline");
+
+    // attempt 0: 2000ms delay
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(push).toHaveBeenCalledTimes(2);
+    expect(getSyncSnapshot().status).toBe("synced");
+
+    vi.useRealTimers();
+  });
+
+  it("영구 실패(400) 시 failure 정보를 남긴다", async () => {
+    push.mockRejectedValue(new ServerRejectedError(400, "잘못된 덱"));
+
+    scheduleDeckPush(deck("불량 덱"));
+    await flushDeckSync();
+
+    expect(getSyncSnapshot().status).toBe("error");
+    expect(getSyncSnapshot().lastFailure).toMatchObject({
+      id: A,
+      title: "불량 덱",
+      kind: "deck",
+      status: 400,
+    });
   });
 });

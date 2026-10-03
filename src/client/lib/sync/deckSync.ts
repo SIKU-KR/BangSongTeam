@@ -1,7 +1,12 @@
 import type { Deck } from "#shared";
-import { OfflineError } from "../api/request";
+import {
+  isRetryableApiError,
+  ServerRejectedError,
+  SessionExpiredError,
+} from "../api/request";
 import { pushDeck, deleteDeckRemote } from "./presentationSync";
-import { setSyncStatus } from "./syncStatus";
+import { setSyncStatus, type SyncFailure } from "./syncStatus";
+import { BackoffTracker } from "./backoff";
 
 const DECK_SYNC_DEBOUNCE_MS = 2000;
 
@@ -18,6 +23,7 @@ let enabled = false;
 let pending = new Map<string, PendingOp>();
 let timer: ReturnType<typeof setTimeout> | null = null;
 let inFlight: Promise<void> = Promise.resolve();
+const backoff = new BackoffTracker();
 
 /** 로그인·하이드레이션이 끝난 뒤에만 켠다 (송출 화면에서는 켜지 않는다) */
 export function setDeckSyncEnabled(next: boolean): void {
@@ -35,6 +41,7 @@ function clearPending(): void {
     clearTimeout(timer);
     timer = null;
   }
+  backoff.reset();
 }
 
 async function runOps(ops: PendingOp[]): Promise<void> {
@@ -43,8 +50,10 @@ async function runOps(ops: PendingOp[]): Promise<void> {
   setSyncStatus("syncing");
   let offline = false;
   let failed = false;
+  let minRetryDelay = Infinity;
 
   for (const op of ops) {
+    const key = op.kind === "push" ? op.deck.id : op.id;
     try {
       if (op.kind === "push") {
         const saved = await pusher(op.deck);
@@ -53,19 +62,42 @@ async function runOps(ops: PendingOp[]): Promise<void> {
         await deleter(op.id);
       }
     } catch (err) {
-      if (err instanceof OfflineError) {
+      if (err instanceof SessionExpiredError) {
+        failed = true;
+        setSyncStatus("error");
+      } else if (isRetryableApiError(err)) {
         offline = true;
-        const key = op.kind === "push" ? op.deck.id : op.id;
         if (!pending.has(key)) pending.set(key, op);
+        const delay = backoff.getDelay(err);
+        if (delay < minRetryDelay) minRetryDelay = delay;
       } else {
         failed = true;
+        const failure: SyncFailure = {
+          id: key,
+          title: op.kind === "push" ? op.deck.title : undefined,
+          kind: "deck",
+          status:
+            err instanceof ServerRejectedError ? err.status : undefined,
+          message: err instanceof Error ? err.message : String(err),
+          failedAt: Date.now(),
+        };
+        console.error("Deck push failed permanently", failure);
+        setSyncStatus("error", failure);
       }
     }
   }
 
-  if (offline) setSyncStatus("offline");
-  else if (failed) setSyncStatus("error");
-  else setSyncStatus("synced");
+  if (offline) {
+    setSyncStatus("offline");
+    if (!timer && minRetryDelay !== Infinity) {
+      timer = setTimeout(run, minRetryDelay);
+    }
+  } else if (failed) {
+    setSyncStatus("error");
+  } else {
+    backoff.reset();
+    setSyncStatus("synced");
+  }
 }
 
 function run(): void {
@@ -123,6 +155,10 @@ export function __setDeckTransportForTests(next: {
 }): void {
   pusher = next.push ?? pushDeck;
   deleter = next.remove ?? deleteDeckRemote;
+}
+
+export function __setDeckBackoffRandomForTests(fn: () => number): void {
+  backoff.__setRandomForTests(fn);
 }
 
 export function __resetDeckSyncForTests(): void {

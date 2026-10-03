@@ -1,4 +1,9 @@
-export { useSyncStatus, type SyncStatus } from "./syncStatus";
+export {
+  useSyncStatus,
+  type SyncStatus,
+  type SyncFailure,
+  type SyncSnapshot,
+} from "./syncStatus";
 export {
   refreshSharedPresentation,
   deleteFolderRemote,

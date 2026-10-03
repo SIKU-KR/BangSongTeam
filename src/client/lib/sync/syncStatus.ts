@@ -9,23 +9,44 @@ import { useSyncExternalStore } from "react";
  */
 export type SyncStatus = "idle" | "syncing" | "synced" | "offline" | "error";
 
-let status: SyncStatus = "idle";
-const listeners = new Set<() => void>();
-
-interface SyncSnapshot {
-  status: SyncStatus;
+export interface SyncFailure {
+  id: string;
+  title?: string;
+  kind?: "presentation" | "folder" | "deck";
+  status?: number;
+  message: string;
+  failedAt: number;
 }
 
-let snapshot: SyncSnapshot = { status };
+export interface SyncSnapshot {
+  status: SyncStatus;
+  lastFailure: SyncFailure | null;
+}
+
+let status: SyncStatus = "idle";
+let lastFailure: SyncFailure | null = null;
+const listeners = new Set<() => void>();
+
+let snapshot: SyncSnapshot = { status, lastFailure };
 
 function emit(): void {
-  snapshot = { status };
+  snapshot = { status, lastFailure };
   for (const listener of listeners) listener();
 }
 
-export function setSyncStatus(next: SyncStatus): void {
-  if (status === next) return;
+export function setSyncStatus(
+  next: SyncStatus,
+  failure?: SyncFailure | null,
+): void {
+  const nextFailure =
+    failure !== undefined
+      ? failure
+      : next === "synced" || next === "idle"
+        ? null
+        : lastFailure;
+  if (status === next && lastFailure === nextFailure) return;
   status = next;
+  lastFailure = nextFailure;
   emit();
 }
 
@@ -47,5 +68,6 @@ export function useSyncStatus(): SyncSnapshot {
 
 export function __resetSyncStatusForTests(): void {
   status = "idle";
+  lastFailure = null;
   emit();
 }
