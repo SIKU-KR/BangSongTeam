@@ -12,11 +12,6 @@ export const SHELL_COPY = {
     drive: "폴더, 프레젠테이션, 곡 제목, 가사로 검색",
     backgrounds: "색, 분위기, 장면으로 검색",
   },
-  update: {
-    title: "새 버전이 나왔어요",
-    description: "송출 중이 아닐 때 적용해 주세요.",
-    apply: "지금 적용",
-  },
   browserSupport: {
     label: "브라우저 호환성 안내",
     title: "이 브라우저에선 일부 기능을 쓸 수 없어요",

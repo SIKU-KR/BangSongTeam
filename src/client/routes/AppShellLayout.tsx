@@ -5,7 +5,6 @@ import { Toaster } from "#components/ui/sonner";
 import { TooltipProvider } from "#components/ui/tooltip";
 import { BrowserSupportBanner } from "../components/common/BrowserSupportBanner";
 import { StorageWarningBanner } from "../components/common/StorageWarningBanner";
-import { AppUpdateBanner } from "../components/common/AppUpdateBanner";
 import { AppSidebar } from "../components/layout/AppSidebar";
 import { AppHeader } from "../components/layout/AppHeader";
 import {
@@ -97,7 +96,6 @@ function AppShellFrame(): React.JSX.Element {
       >
         <BrowserSupportBanner />
         <StorageWarningBanner />
-        <AppUpdateBanner />
 
         <AppHeader
           title={pageTitle}
