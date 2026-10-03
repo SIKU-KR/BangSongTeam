@@ -50,16 +50,8 @@ function stubLocation(pathname = "/presentations"): ReturnType<typeof vi.fn> {
 function stubServiceWorker({
   controlled = false,
   active = true,
-  waiting = false,
-}: {
-  controlled?: boolean;
-  active?: boolean;
-  waiting?: boolean;
-} = {}): ReturnType<typeof vi.fn> {
-  const getRegistration = vi.fn(async () => ({
-    ...(active ? { active: {} } : {}),
-    ...(waiting ? { waiting: {} } : {}),
-  }));
+}: { controlled?: boolean; active?: boolean } = {}): ReturnType<typeof vi.fn> {
+  const getRegistration = vi.fn(async () => (active ? { active: {} } : {}));
   Object.defineProperty(navigator, "serviceWorker", {
     configurable: true,
     value: { controller: controlled ? {} : null, getRegistration },
@@ -117,31 +109,33 @@ describe("registerServiceWorker", () => {
 
     if (original) Object.defineProperty(navigator, "serviceWorker", original);
   });
-
-  it("등록 정보를 읽지 못하면 새 버전을 적용하지 않는다", async () => {
-    const { registrar, hooks, apply } = makeRegistrar();
-    registerServiceWorker(registrar);
-
-    hooks().onNeedRefresh?.();
-    await flushPromises();
-
-    expect(apply).not.toHaveBeenCalled();
-  });
 });
+
+function fakeRegistration({
+  waiting = false,
+  update = vi.fn(async () => {}),
+}: {
+  waiting?: boolean;
+  update?: () => Promise<void>;
+} = {}): ServiceWorkerRegistration {
+  return {
+    waiting: waiting ? {} : null,
+    update,
+  } as unknown as ServiceWorkerRegistration;
+}
 
 describe("새로고침할 때 새 버전 적용", () => {
   beforeEach(() => {
     __resetServiceWorkerStateForTests();
+    stubServiceWorker({ controlled: true });
   });
 
-  it("부팅할 때 대기 중인 새 버전이 있으면 적용하고 제어가 바뀐 뒤 새로고침한다", async () => {
-    stubServiceWorker({ controlled: true, waiting: true });
+  it("등록을 마칠 때 대기 중인 새 버전이 있으면 적용하고 제어가 바뀐 뒤 새로고침한다", () => {
     const reload = stubLocation();
     const { registrar, hooks, apply } = makeRegistrar();
     registerServiceWorker(registrar);
 
-    hooks().onNeedRefresh?.();
-    await flushPromises();
+    hooks().onRegisteredSW?.("/sw.js", fakeRegistration({ waiting: true }));
     expect(apply).toHaveBeenCalledWith(true);
     expect(reload).not.toHaveBeenCalled();
 
@@ -149,56 +143,48 @@ describe("새로고침할 때 새 버전 적용", () => {
     expect(reload).toHaveBeenCalledTimes(1);
   });
 
-  it("이번 로드 중에 발견한 새 버전은 다음 새로고침으로 미룬다", async () => {
-    stubServiceWorker({ controlled: true });
+  it("적용을 요청하고 5초가 지나서 제어가 바뀌면 새로고침하지 않는다", () => {
+    vi.useFakeTimers();
+    const reload = stubLocation();
+    const { registrar, hooks, apply } = makeRegistrar();
+    registerServiceWorker(registrar);
+    hooks().onRegisteredSW?.("/sw.js", fakeRegistration({ waiting: true }));
+    expect(apply).toHaveBeenCalledWith(true);
+
+    vi.advanceTimersByTime(5_000);
+    hooks().onNeedReload?.();
+
+    expect(reload).not.toHaveBeenCalled();
+  });
+
+  it("등록을 마칠 때 대기 중인 새 버전이 없으면 적용하지 않는다", () => {
     const reload = stubLocation();
     const { registrar, hooks, apply } = makeRegistrar();
     registerServiceWorker(registrar);
 
-    hooks().onNeedRefresh?.();
-    await flushPromises();
+    hooks().onRegisteredSW?.("/sw.js", fakeRegistration());
 
     expect(apply).not.toHaveBeenCalled();
     expect(reload).not.toHaveBeenCalled();
   });
 
-  it("송출 화면은 새로고침해도 새 버전을 적용하지 않는다", async () => {
-    stubServiceWorker({ controlled: true, waiting: true });
+  it("송출 화면은 새로고침해도 새 버전을 적용하지 않는다", () => {
     const reload = stubLocation("/present/p1/fullscreen");
     const { registrar, hooks, apply } = makeRegistrar();
     registerServiceWorker(registrar);
 
-    hooks().onNeedRefresh?.();
-    await flushPromises();
+    hooks().onRegisteredSW?.("/sw.js", fakeRegistration({ waiting: true }));
     hooks().onNeedReload?.();
 
     expect(apply).not.toHaveBeenCalled();
     expect(reload).not.toHaveBeenCalled();
   });
 
-  it("송출 화면에서 편집 화면으로 옮긴 뒤 더 새로운 버전이 와도 새로고침하지 않는다", async () => {
-    stubServiceWorker({ controlled: true, waiting: true });
-    stubLocation("/present/p1/fullscreen");
-    const { registrar, hooks, apply } = makeRegistrar();
-    registerServiceWorker(registrar);
-    hooks().onNeedRefresh?.();
-    await flushPromises();
-
-    const reload = stubLocation();
-    hooks().onNeedRefresh?.();
-    await flushPromises();
-
-    expect(apply).not.toHaveBeenCalled();
-    expect(reload).not.toHaveBeenCalled();
-  });
-
-  it("다른 탭이 적용해 제어가 바뀌면 이 탭은 새로고침하지 않는다", async () => {
-    stubServiceWorker({ controlled: true });
+  it("다른 탭이 적용해 제어가 바뀌면 이 탭은 새로고침하지 않는다", () => {
     const reload = stubLocation();
     const { registrar, hooks } = makeRegistrar();
     registerServiceWorker(registrar);
-    hooks().onNeedRefresh?.();
-    await flushPromises();
+    hooks().onRegisteredSW?.("/sw.js", fakeRegistration());
 
     hooks().onNeedReload?.();
 
@@ -215,13 +201,17 @@ describe("갱신 확인", () => {
   function registerWith(update: () => Promise<void>): void {
     const { registrar, hooks } = makeRegistrar();
     registerServiceWorker(registrar);
-    hooks().onRegisteredSW?.("/sw.js", {
-      update,
-    } as unknown as ServiceWorkerRegistration);
+    hooks().onRegisteredSW?.("/sw.js", fakeRegistration({ update }));
+  }
+
+  function becomeVisible(): void {
+    vi.spyOn(document, "visibilityState", "get").mockReturnValue("visible");
+    document.dispatchEvent(new Event("visibilitychange"));
   }
 
   it("30분마다 새 버전을 확인한다", () => {
     vi.useFakeTimers();
+    stubLocation();
     const update = vi.fn(async () => {});
     registerWith(update);
 
@@ -231,23 +221,35 @@ describe("갱신 확인", () => {
   });
 
   it("탭이 다시 보이면 새 버전을 확인한다", () => {
+    stubLocation();
     const update = vi.fn(async () => {});
     registerWith(update);
-    vi.spyOn(document, "visibilityState", "get").mockReturnValue("visible");
 
-    document.dispatchEvent(new Event("visibilitychange"));
+    becomeVisible();
 
     expect(update).toHaveBeenCalledTimes(1);
   });
 
+  it("송출 화면에서는 새 버전을 확인하지 않는다", () => {
+    vi.useFakeTimers();
+    stubLocation("/present/p1/fullscreen");
+    const update = vi.fn(async () => {});
+    registerWith(update);
+
+    vi.advanceTimersByTime(30 * 60_000);
+    becomeVisible();
+
+    expect(update).not.toHaveBeenCalled();
+  });
+
   it("확인이 실패해도 오류를 던지지 않는다", async () => {
+    stubLocation();
     const update = vi.fn(async () => {
       throw new TypeError("offline");
     });
     registerWith(update);
-    vi.spyOn(document, "visibilityState", "get").mockReturnValue("visible");
 
-    document.dispatchEvent(new Event("visibilitychange"));
+    becomeVisible();
     await flushPromises();
 
     expect(update).toHaveBeenCalledTimes(1);

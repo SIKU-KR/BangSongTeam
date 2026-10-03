@@ -2,7 +2,6 @@ import { registerSW } from "virtual:pwa-register";
 
 /** vite-plugin-pwa의 `registerSW` 시그니처 (테스트 주입용) */
 export type ServiceWorkerRegistrar = (options: {
-  onNeedRefresh?: () => void;
   onNeedReload?: () => void;
   onRegisteredSW?: (
     swUrl: string,
@@ -13,8 +12,7 @@ export type ServiceWorkerRegistrar = (options: {
 
 let applyUpdate: ((reloadPage?: boolean) => Promise<void>) | null = null;
 let registered = false;
-let updateRequestedHere = false;
-let waitingAtBoot: Promise<boolean> = Promise.resolve(false);
+let updateRequestedAt: number | null = null;
 let stopUpdateChecks: (() => void) | null = null;
 
 const PROJECTION_PATH = /^\/present\//;
@@ -22,33 +20,22 @@ const UNCONTROLLED_RELOAD_KEY = "sw-uncontrolled-reload";
 const STALE_CHUNK_RELOAD_KEY = "sw-stale-chunk-reload";
 const STALE_CHUNK_RELOAD_INTERVAL_MS = 60_000;
 const UPDATE_CHECK_INTERVAL_MS = 30 * 60_000;
+const APPLY_RELOAD_DEADLINE_MS = 5_000;
 
 function isProjectionPath(): boolean {
   return PROJECTION_PATH.test(window.location.pathname);
 }
 
-async function hasWaitingWorker(): Promise<boolean> {
-  try {
-    const registration = await navigator.serviceWorker.getRegistration();
-    return Boolean(registration?.waiting);
-  } catch {
-    return false;
-  }
-}
-
-function applyIfWaitingAtBoot(): void {
-  const pending = waitingAtBoot;
-  waitingAtBoot = Promise.resolve(false);
-  void pending.then(async (waiting) => {
-    if (!waiting || isProjectionPath() || !applyUpdate) return;
-    updateRequestedHere = true;
-    await applyUpdate(true);
-  });
+function applyIfWaiting(registration: ServiceWorkerRegistration): void {
+  if (!registration.waiting || isProjectionPath() || !applyUpdate) return;
+  updateRequestedAt = Date.now();
+  void applyUpdate(true);
 }
 
 function startUpdateChecks(registration: ServiceWorkerRegistration): void {
   stopUpdateChecks?.();
   const check = (): void => {
+    if (isProjectionPath()) return;
     registration.update().catch(() => undefined);
   };
   const checkWhenVisible = (): void => {
@@ -125,16 +112,21 @@ export async function reloadIfUncontrolled(): Promise<void> {
  * 새로고침되면 예배가 끊기므로 실행 중인 탭은 절대 스스로 새로고침하지 않는다.
  *
  * 평범한 새로고침은 대기 중인 SW를 활성화하지 않는다. 새로 열린 페이지도 옛 SW가
- * 제어하고 옛 프리캐시의 셸을 받는다. 그래서 부팅할 때 이미 대기 중인 SW가 있었으면
- * skip-waiting을 보내고, 제어가 넘어오면 그 탭만 한 번 더 새로고침한다. 이번 로드 중에
- * 새로 발견된 버전은 쓰고 있는 화면을 몇 초 뒤 갑자기 새로고침하게 되므로 다음
- * 새로고침으로 미룬다. 열어 둔 탭이 배포를 미리 발견해 두도록 주기적으로, 그리고 탭이
- * 다시 보일 때 갱신을 확인한다.
+ * 제어하고 옛 프리캐시의 셸을 받는다. 그래서 등록을 마친 순간 대기 중인 SW가 있으면
+ * skip-waiting을 보내고, 제어가 넘어오면 그 탭만 한 번 더 새로고침한다. 판단은 등록
+ * 직후 한 번뿐이다. 그 뒤에 발견한 버전은 쓰고 있는 화면을 갑자기 새로고침하게 되므로
+ * 다음 새로고침으로 미룬다. 옛 SW에 끝나지 않은 요청이 남아 있으면 브라우저가 활성화를
+ * 미뤄 제어가 수십 초 뒤에 넘어오기도 한다. 그때는 이미 화면을 쓰고 있을 수 있으므로
+ * 요청 후 5초 안에 넘어온 경우에만 새로고침하고, 늦게 넘어오면 다음 새로고침에 맡긴다. 열어 둔 탭이 배포를 미리 발견해 두도록 주기적으로, 그리고
+ * 탭이 다시 보일 때 갱신을 확인한다.
  *
- * 송출 경로(`/present/...`)는 새로고침해도 적용하지 않는다. 새 SW가 제어를 넘겨받으면
- * 같은 출처의 모든 탭에 `controllerchange`가 오는데, `onNeedReload`를 넘기지 않으면
- * workbox-window가 모든 탭을 새로고침하므로 적용을 요청한 탭만 새로고침한다.
- * 새로고침하지 않은 탭은 옛 코드로 남고, 지워진 옛 청크는 `reloadOnStaleChunk`가 다룬다.
+ * 송출 경로(`/present/...`)는 새로고침해도 적용하지 않고, 예배 중 새 버전을 내려받지
+ * 않도록 갱신 확인도 건너뛴다.
+ *
+ * 새 SW가 제어를 넘겨받으면 같은 출처의 모든 탭에 `controllerchange`가 오는데,
+ * `onNeedReload`를 넘기지 않으면 workbox-window가 모든 탭을 새로고침하므로 적용을
+ * 요청한 탭만 새로고침한다. 새로고침하지 않은 탭은 옛 코드로 남고, 지워진 옛 청크는
+ * `reloadOnStaleChunk`가 다룬다.
  */
 export function registerServiceWorker(
   registrar: ServiceWorkerRegistrar = registerSW,
@@ -145,19 +137,20 @@ export function registerServiceWorker(
   }
   registered = true;
   window.addEventListener("vite:preloadError", reloadOnStaleChunk);
-  waitingAtBoot = hasWaitingWorker();
 
   applyUpdate = registrar({
-    onNeedRefresh: applyIfWaitingAtBoot,
     onNeedReload: () => {
-      if (updateRequestedHere && !isProjectionPath()) {
+      const requestedAt = updateRequestedAt;
+      updateRequestedAt = null;
+      if (requestedAt === null || isProjectionPath()) return;
+      if (Date.now() - requestedAt < APPLY_RELOAD_DEADLINE_MS) {
         window.location.reload();
-        return;
       }
-      updateRequestedHere = false;
     },
     onRegisteredSW: (_swUrl, registration) => {
-      if (registration) startUpdateChecks(registration);
+      if (!registration) return;
+      applyIfWaiting(registration);
+      startUpdateChecks(registration);
     },
     onRegisterError: () => {
       registered = false;
@@ -169,8 +162,7 @@ export function registerServiceWorker(
 export function __resetServiceWorkerStateForTests(): void {
   applyUpdate = null;
   registered = false;
-  updateRequestedHere = false;
-  waitingAtBoot = Promise.resolve(false);
+  updateRequestedAt = null;
   stopUpdateChecks?.();
   stopUpdateChecks = null;
   window.removeEventListener("vite:preloadError", reloadOnStaleChunk);
