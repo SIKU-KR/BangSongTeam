@@ -22,6 +22,7 @@ import {
 } from "#db";
 import type { AppEnv } from "../types";
 import { resolveRequireAuth, type AppDeps } from "../deps";
+import { isTransientStorageError } from "../lib/storageErrors";
 
 async function save(c: Context<AppEnv>, changes: PresentationChanges) {
   if (changes.id !== c.req.param("id")) {
@@ -42,6 +43,10 @@ async function save(c: Context<AppEnv>, changes: PresentationChanges) {
       sentDeckCount: changes.decks.length,
       error,
     });
+    if (isTransientStorageError(error)) {
+      c.header("Retry-After", "2");
+      return c.json({ error: API_ERRORS.presentation.saveFailed }, 503);
+    }
     return c.json({ error: API_ERRORS.presentation.saveFailed }, 500);
   }
 

@@ -15,9 +15,9 @@ import {
 import { api } from "../api/client";
 import {
   callApi,
+  isRetryableApiError,
   OfflineError,
   ServerRejectedError,
-  SessionExpiredError,
 } from "../api/request";
 import { setSyncStatus } from "./syncStatus";
 
@@ -42,12 +42,9 @@ async function send<T>(request: Parameters<typeof callApi>[0]): Promise<T> {
   try {
     return await callApi<T>(request);
   } catch (err) {
-    if (err instanceof OfflineError) {
+    if (isRetryableApiError(err)) {
       setSyncStatus("offline");
-    } else if (
-      err instanceof SessionExpiredError ||
-      err instanceof ServerRejectedError
-    ) {
+    } else {
       setSyncStatus("error");
     }
     throw err;

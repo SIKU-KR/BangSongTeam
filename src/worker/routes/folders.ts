@@ -10,6 +10,7 @@ import {
 } from "#db";
 import type { AppEnv } from "../types";
 import { resolveRequireAuth, type AppDeps } from "../deps";
+import { isTransientStorageError } from "../lib/storageErrors";
 
 /**
  * 드라이브 폴더 동기화 API (홈 `/presentations`의 폴더 트리).
@@ -48,6 +49,10 @@ export function createFoldersRoute(deps: AppDeps = {}) {
         }
       } catch (error) {
         console.error("folder upsert failed", { folderId: folder.id, error });
+        if (isTransientStorageError(error)) {
+          c.header("Retry-After", "2");
+          return c.json({ error: API_ERRORS.folder.saveFailed }, 503);
+        }
         return c.json({ error: API_ERRORS.folder.saveFailed }, 500);
       }
 
