@@ -49,12 +49,51 @@ export function installFakeApi(
 
       if (options.offline) throw new TypeError("Failed to fetch");
 
+      const signal = init?.signal ?? request?.signal;
+      if (signal?.aborted) {
+        throw (
+          signal.reason ??
+          new DOMException("This operation was aborted", "AbortError")
+        );
+      }
+
       const route = matchers.find(
         (m) => m.method === method && m.regex.test(url.pathname),
       );
-      const result = route
-        ? await route.handler({ url, method, body })
-        : { status: 404, body: { error: "Not Found" } };
+
+      const result = await new Promise<{ status?: number; body: unknown }>(
+        (resolve, reject) => {
+          let done = false;
+          const onAbort = () => {
+            if (done) return;
+            done = true;
+            reject(
+              signal?.reason ??
+                new DOMException("This operation was aborted", "AbortError"),
+            );
+          };
+          if (signal) {
+            signal.addEventListener("abort", onAbort, { once: true });
+          }
+          Promise.resolve(
+            route
+              ? route.handler({ url, method, body })
+              : { status: 404, body: { error: "Not Found" } },
+          )
+            .then((res) => {
+              if (done) return;
+              done = true;
+              if (signal) signal.removeEventListener("abort", onAbort);
+              resolve(res);
+            })
+            .catch((err) => {
+              if (done) return;
+              done = true;
+              if (signal) signal.removeEventListener("abort", onAbort);
+              reject(err);
+            });
+        },
+      );
       return new Response(JSON.stringify(result.body), {
         status: result.status ?? 200,
         headers: { "content-type": "application/json" },

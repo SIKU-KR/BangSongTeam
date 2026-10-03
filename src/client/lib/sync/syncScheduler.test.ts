@@ -10,7 +10,8 @@ import {
   __setPusherForTests,
 } from "./syncScheduler";
 import { getSyncSnapshot, __resetSyncStatusForTests } from "./syncStatus";
-import { OfflineError } from "../api/request";
+import { OfflineError, TimeoutError } from "../api/request";
+import { installFakeApi } from "../../test/fakeApi";
 import {
   scheduleFolderPush,
   setFolderSyncEnabled,
@@ -102,6 +103,63 @@ describe("서버 push 스케줄러", () => {
     push.mockResolvedValue(true);
     await flushPendingSync();
     expect(getSyncSnapshot().status).toBe("synced");
+  });
+
+  it("멈춘 요청으로 인해 타임아웃(TimeoutError)이 발생해도 syncing에 머물지 않고 offline으로 바뀐 뒤 재시도된다", async () => {
+    push.mockRejectedValueOnce(new TimeoutError());
+
+    scheduleDocumentPush(doc("a"));
+    await flushPendingSync();
+
+    expect(getSyncSnapshot().status).toBe("offline");
+
+    push.mockResolvedValue(true);
+    await flushPendingSync();
+    expect(getSyncSnapshot().status).toBe("synced");
+  });
+
+  it("서버가 응답하지 않고 멈춘 경우 데드라인 뒤 offline 상태로 전환되고 재연결 시 정상 동기화된다", async () => {
+    vi.useFakeTimers();
+    __setPusherForTests(null);
+
+    const waiter: { resolve?: () => void } = {};
+    let shouldResolve = false;
+    const fake = installFakeApi({
+      "PATCH /api/presentations/*": () =>
+        new Promise((resolve) => {
+          if (shouldResolve) {
+            resolve({ status: 200, body: { ok: true } });
+            return;
+          }
+          waiter.resolve = () => {
+            shouldResolve = true;
+            resolve({ status: 200, body: { ok: true } });
+          };
+        }),
+    });
+
+    const validDocId = "100000000000000000001";
+    scheduleDocumentPush(doc(validDocId));
+    const flushPromise = flushPendingSync();
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(getSyncSnapshot().status).toBe("syncing");
+
+    await vi.advanceTimersByTimeAsync(10_000);
+    await flushPromise;
+
+    expect(getSyncSnapshot().status).toBe("offline");
+
+    shouldResolve = true;
+    waiter.resolve?.();
+    const nextFlush = flushPendingSync();
+    await vi.advanceTimersByTimeAsync(0);
+    await nextFlush;
+
+    expect(getSyncSnapshot().status).toBe("synced");
+
+    fake.restore();
+    vi.useRealTimers();
   });
 
   it("서버가 거절하면 error로 표시한다", async () => {

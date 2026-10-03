@@ -17,6 +17,14 @@ export class OfflineError extends Error {
   }
 }
 
+/** 요청이 데드라인 안에 끝나지 않았다 — 실패가 아니라 오프라인(재시도 대상)이다 */
+export class TimeoutError extends OfflineError {
+  constructor(cause?: unknown) {
+    super(cause);
+    this.name = "TimeoutError";
+  }
+}
+
 /**
  * 서버가 요청을 거절했다 (4xx·5xx). 상태 코드로 사유를 가를 수 있게 남긴다.
  * 메시지는 서버가 준 한국어 오류 문장이 있으면 그것을 쓴다.
@@ -28,6 +36,14 @@ export class ServerRejectedError extends Error {
     this.name = "ServerRejectedError";
     this.status = status;
   }
+}
+
+function isTimeoutOrAbortError(err: unknown): boolean {
+  if (err && typeof err === "object" && "name" in err) {
+    const name = (err as { name: unknown }).name;
+    return name === "TimeoutError" || name === "AbortError";
+  }
+  return false;
 }
 
 interface RpcResponse {
@@ -48,7 +64,7 @@ interface RpcResponse {
  * '저장 안 됨' 배지가 뜨면 안 되므로, 동기화 경로(`presentationSync.send`)가
  * 이 함수를 감싸 상태를 따로 남긴다. 그래서 의존 방향은 sync → api 한쪽뿐이다.
  *
- * - 네트워크에 닿지 못함 → `OfflineError`
+ * - 네트워크에 닿지 못함(타임아웃 포함) → `OfflineError` (또는 `TimeoutError`)
  * - 401 → `SessionExpiredError`
  * - 그 외 4xx·5xx → `ServerRejectedError(status, 서버가 준 한국어 문장)`
  */
@@ -59,6 +75,7 @@ export async function callApi<T>(
   try {
     response = await request();
   } catch (err) {
+    if (isTimeoutOrAbortError(err)) throw new TimeoutError(err);
     throw new OfflineError(err);
   }
 
@@ -69,11 +86,18 @@ export async function callApi<T>(
       const body = (await response.json()) as { error?: unknown };
       if (typeof body?.error === "string") message = body.error;
     } catch (error) {
+      if (isTimeoutOrAbortError(error)) throw new TimeoutError(error);
       void error;
     }
     throw new ServerRejectedError(response.status, message);
   }
-  return (await response.json()) as T;
+
+  try {
+    return (await response.json()) as T;
+  } catch (err) {
+    if (isTimeoutOrAbortError(err)) throw new TimeoutError(err);
+    throw new OfflineError(err);
+  }
 }
 
 export function describeApiError(err: unknown): string {
