@@ -75,14 +75,36 @@ describe("request", () => {
       expect(err).toBeInstanceOf(OfflineError);
     });
 
-    it("요청 중단(AbortError)은 TimeoutError(OfflineError 상속)를 던진다", async () => {
+    it("호출자가 직접 중단한 AbortError는 OfflineError나 TimeoutError로 바꾸지 않고 그대로 던진다", async () => {
+      const abortError = new DOMException(
+        "This operation was aborted",
+        "AbortError",
+      );
       const request = async () => {
-        throw new DOMException("This operation was aborted", "AbortError");
+        throw abortError;
       };
 
-      const err = await callApi(request).catch((e) => e);
-      expect(err).toBeInstanceOf(TimeoutError);
-      expect(err).toBeInstanceOf(OfflineError);
+      const err = await callApi(request).catch((e: unknown) => e);
+      expect(err).toBe(abortError);
+      expect(err).not.toBeInstanceOf(OfflineError);
+    });
+
+    it("성공 응답 후 본문 읽기 중 호출자가 중단하면 AbortError를 그대로 던진다", async () => {
+      const abortError = new DOMException(
+        "This operation was aborted",
+        "AbortError",
+      );
+      const response = {
+        status: 200,
+        ok: true,
+        json: async () => {
+          throw abortError;
+        },
+      };
+
+      const err = await callApi(async () => response).catch((e: unknown) => e);
+      expect(err).toBe(abortError);
+      expect(err).not.toBeInstanceOf(OfflineError);
     });
 
     it("성공 응답 후 본문 읽기(response.json()) 중 타임아웃이 발생해도 TimeoutError를 던진다", async () => {

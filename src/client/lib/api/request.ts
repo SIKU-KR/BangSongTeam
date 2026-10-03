@@ -38,10 +38,25 @@ export class ServerRejectedError extends Error {
   }
 }
 
-function isTimeoutOrAbortError(err: unknown): boolean {
+function isTimeoutError(err: unknown): boolean {
   if (err && typeof err === "object" && "name" in err) {
-    const name = (err as { name: unknown }).name;
-    return name === "TimeoutError" || name === "AbortError";
+    const error = err as { name?: unknown; cause?: unknown };
+    if (error.name === "TimeoutError") return true;
+    if (
+      error.cause &&
+      typeof error.cause === "object" &&
+      "name" in error.cause &&
+      (error.cause as { name: unknown }).name === "TimeoutError"
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function isCallerAbort(err: unknown): boolean {
+  if (err && typeof err === "object" && "name" in err) {
+    return (err as { name: unknown }).name === "AbortError";
   }
   return false;
 }
@@ -65,6 +80,7 @@ interface RpcResponse {
  * 이 함수를 감싸 상태를 따로 남긴다. 그래서 의존 방향은 sync → api 한쪽뿐이다.
  *
  * - 네트워크에 닿지 못함(타임아웃 포함) → `OfflineError` (또는 `TimeoutError`)
+ * - 호출자 취소(`AbortError`) → 그대로 던짐 (오프라인으로 오인하지 않음)
  * - 401 → `SessionExpiredError`
  * - 그 외 4xx·5xx → `ServerRejectedError(status, 서버가 준 한국어 문장)`
  */
@@ -75,7 +91,8 @@ export async function callApi<T>(
   try {
     response = await request();
   } catch (err) {
-    if (isTimeoutOrAbortError(err)) throw new TimeoutError(err);
+    if (isTimeoutError(err)) throw new TimeoutError(err);
+    if (isCallerAbort(err)) throw err;
     throw new OfflineError(err);
   }
 
@@ -86,7 +103,8 @@ export async function callApi<T>(
       const body = (await response.json()) as { error?: unknown };
       if (typeof body?.error === "string") message = body.error;
     } catch (error) {
-      if (isTimeoutOrAbortError(error)) throw new TimeoutError(error);
+      if (isTimeoutError(error)) throw new TimeoutError(error);
+      if (isCallerAbort(error)) throw error;
       void error;
     }
     throw new ServerRejectedError(response.status, message);
@@ -95,7 +113,8 @@ export async function callApi<T>(
   try {
     return (await response.json()) as T;
   } catch (err) {
-    if (isTimeoutOrAbortError(err)) throw new TimeoutError(err);
+    if (isTimeoutError(err)) throw new TimeoutError(err);
+    if (isCallerAbort(err)) throw err;
     throw new OfflineError(err);
   }
 }

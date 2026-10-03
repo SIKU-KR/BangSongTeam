@@ -21,13 +21,9 @@ const BULK_PULL_PATHS = new Set([
  */
 export function getDeadlineForRequest(url: string, method = "GET"): number {
   if (method.toUpperCase() === "GET") {
-    try {
-      const pathname = new URL(url, "http://localhost").pathname;
-      if (BULK_PULL_PATHS.has(pathname)) {
-        return PULL_API_TIMEOUT_MS;
-      }
-    } catch {
-      // 상대 경로 등 URL 파싱 실패 시 기본값 사용
+    const pathname = new URL(url, "http://localhost").pathname;
+    if (BULK_PULL_PATHS.has(pathname)) {
+      return PULL_API_TIMEOUT_MS;
     }
   }
   return DEFAULT_API_TIMEOUT_MS;
