@@ -1,95 +1,65 @@
-import { useSyncExternalStore } from "react";
 import { registerSW } from "virtual:pwa-register";
-
-/**
- * Service Worker 등록과 갱신 상태.
- *
- * **자동 새로고침을 하지 않는다.** `registerType: "prompt"`를 쓰는 이유와 같다 —
- * 배포가 나간 순간 송출 중인 창이 새로고침되면 예배가 끊긴다. 새 버전이 대기
- * 중이라는 사실만 알리고, 적용 시점은 사용자가 편집 화면에서 고른다.
- *
- * 새 SW가 제어를 넘겨받으면 같은 출처의 모든 탭에 `controllerchange`가 온다.
- * `onNeedReload`를 넘기지 않으면 workbox-window가 그때마다 모든 탭을 새로고침하므로,
- * 다른 탭에서 적용을 눌러도 송출 중인 창이 새로고침된다. 그래서 적용을 요청한 탭만,
- * 그 탭이 송출 화면이 아닐 때만 새로고침한다. 새로고침하지 않은 탭은 옛 코드로 남으므로
- * 그 탭의 적용 버튼은 새로고침만 하고, 지워진 옛 청크를 못 받으면 송출 화면이 아닐 때
- * 한 번 새로고침해 새 버전으로 넘어간다.
- */
-interface ServiceWorkerState {
-  needRefresh: boolean;
-}
 
 /** vite-plugin-pwa의 `registerSW` 시그니처 (테스트 주입용) */
 export type ServiceWorkerRegistrar = (options: {
   onNeedRefresh?: () => void;
   onNeedReload?: () => void;
+  onRegisteredSW?: (
+    swUrl: string,
+    registration: ServiceWorkerRegistration | undefined,
+  ) => void;
   onRegisterError?: (error: unknown) => void;
 }) => (reloadPage?: boolean) => Promise<void>;
 
-const INITIAL: ServiceWorkerState = { needRefresh: false };
-
-let state: ServiceWorkerState = INITIAL;
 let applyUpdate: ((reloadPage?: boolean) => Promise<void>) | null = null;
 let registered = false;
 let updateRequestedHere = false;
-let controllerReplaced = false;
+let waitingAtBoot: Promise<boolean> = Promise.resolve(false);
+let stopUpdateChecks: (() => void) | null = null;
 
 const PROJECTION_PATH = /^\/present\//;
 const UNCONTROLLED_RELOAD_KEY = "sw-uncontrolled-reload";
 const STALE_CHUNK_RELOAD_KEY = "sw-stale-chunk-reload";
 const STALE_CHUNK_RELOAD_INTERVAL_MS = 60_000;
-
-const listeners = new Set<() => void>();
-
-function setState(next: ServiceWorkerState): void {
-  if (next.needRefresh === state.needRefresh) return;
-  state = next;
-  for (const listener of listeners) listener();
-}
+const UPDATE_CHECK_INTERVAL_MS = 30 * 60_000;
 
 function isProjectionPath(): boolean {
   return PROJECTION_PATH.test(window.location.pathname);
 }
 
-function subscribe(listener: () => void): () => void {
-  listeners.add(listener);
-  return () => {
-    listeners.delete(listener);
-  };
-}
-
-export function getServiceWorkerState(): ServiceWorkerState {
-  return state;
-}
-
-/** 새 버전 대기 여부를 반응형으로 구독한다 (갱신 배너용) */
-export function useServiceWorkerState(): ServiceWorkerState {
-  return useSyncExternalStore(
-    subscribe,
-    getServiceWorkerState,
-    getServiceWorkerState,
-  );
-}
-
-/**
- * 대기 중인 새 버전을 적용한다. 사용자가 버튼을 눌렀을 때만 호출된다.
- *
- * 여기서 바로 새로고침하지 않는다. 새 SW가 제어를 넘겨받기 전에 새로고침하면 옛 SW의
- * 캐시된 셸이 다시 뜬다. 이 탭이 요청했다는 표시만 남기고, 제어가 넘어온 뒤
- * `onNeedReload`에서 이 탭만 새로고침한다.
- *
- * 다른 탭이 먼저 적용해 새 SW가 이미 제어하면 대기 중인 SW가 없어 skip-waiting 메시지가
- * 나가지 않고 `onNeedReload`도 다시 오지 않는다. 그때는 곧바로 새로고침해야 배너가
- * 사라진다.
- */
-export async function applyServiceWorkerUpdate(): Promise<void> {
-  if (controllerReplaced) {
-    if (!isProjectionPath()) window.location.reload();
-    return;
+async function hasWaitingWorker(): Promise<boolean> {
+  try {
+    const registration = await navigator.serviceWorker.getRegistration();
+    return Boolean(registration?.waiting);
+  } catch {
+    return false;
   }
-  if (!applyUpdate) return;
-  updateRequestedHere = true;
-  await applyUpdate(true);
+}
+
+function applyIfWaitingAtBoot(): void {
+  const pending = waitingAtBoot;
+  waitingAtBoot = Promise.resolve(false);
+  void pending.then(async (waiting) => {
+    if (!waiting || isProjectionPath() || !applyUpdate) return;
+    updateRequestedHere = true;
+    await applyUpdate(true);
+  });
+}
+
+function startUpdateChecks(registration: ServiceWorkerRegistration): void {
+  stopUpdateChecks?.();
+  const check = (): void => {
+    registration.update().catch(() => undefined);
+  };
+  const checkWhenVisible = (): void => {
+    if (document.visibilityState === "visible") check();
+  };
+  const timer = window.setInterval(check, UPDATE_CHECK_INTERVAL_MS);
+  document.addEventListener("visibilitychange", checkWhenVisible);
+  stopUpdateChecks = () => {
+    window.clearInterval(timer);
+    document.removeEventListener("visibilitychange", checkWhenVisible);
+  };
 }
 
 /**
@@ -148,6 +118,24 @@ export async function reloadIfUncontrolled(): Promise<void> {
   }
 }
 
+/**
+ * Service Worker 등록과 갱신.
+ *
+ * **새 버전은 사용자가 새로고침할 때 적용한다.** 배포가 나간 순간 송출 중인 창이
+ * 새로고침되면 예배가 끊기므로 실행 중인 탭은 절대 스스로 새로고침하지 않는다.
+ *
+ * 평범한 새로고침은 대기 중인 SW를 활성화하지 않는다. 새로 열린 페이지도 옛 SW가
+ * 제어하고 옛 프리캐시의 셸을 받는다. 그래서 부팅할 때 이미 대기 중인 SW가 있었으면
+ * skip-waiting을 보내고, 제어가 넘어오면 그 탭만 한 번 더 새로고침한다. 이번 로드 중에
+ * 새로 발견된 버전은 쓰고 있는 화면을 몇 초 뒤 갑자기 새로고침하게 되므로 다음
+ * 새로고침으로 미룬다. 열어 둔 탭이 배포를 미리 발견해 두도록 주기적으로, 그리고 탭이
+ * 다시 보일 때 갱신을 확인한다.
+ *
+ * 송출 경로(`/present/...`)는 새로고침해도 적용하지 않는다. 새 SW가 제어를 넘겨받으면
+ * 같은 출처의 모든 탭에 `controllerchange`가 오는데, `onNeedReload`를 넘기지 않으면
+ * workbox-window가 모든 탭을 새로고침하므로 적용을 요청한 탭만 새로고침한다.
+ * 새로고침하지 않은 탭은 옛 코드로 남고, 지워진 옛 청크는 `reloadOnStaleChunk`가 다룬다.
+ */
 export function registerServiceWorker(
   registrar: ServiceWorkerRegistrar = registerSW,
 ): void {
@@ -157,19 +145,19 @@ export function registerServiceWorker(
   }
   registered = true;
   window.addEventListener("vite:preloadError", reloadOnStaleChunk);
+  waitingAtBoot = hasWaitingWorker();
 
   applyUpdate = registrar({
-    onNeedRefresh: () => {
-      controllerReplaced = false;
-      setState({ ...state, needRefresh: true });
-    },
+    onNeedRefresh: applyIfWaitingAtBoot,
     onNeedReload: () => {
       if (updateRequestedHere && !isProjectionPath()) {
         window.location.reload();
         return;
       }
       updateRequestedHere = false;
-      controllerReplaced = true;
+    },
+    onRegisteredSW: (_swUrl, registration) => {
+      if (registration) startUpdateChecks(registration);
     },
     onRegisterError: () => {
       registered = false;
@@ -179,11 +167,11 @@ export function registerServiceWorker(
 }
 
 export function __resetServiceWorkerStateForTests(): void {
-  state = INITIAL;
   applyUpdate = null;
   registered = false;
   updateRequestedHere = false;
-  controllerReplaced = false;
+  waitingAtBoot = Promise.resolve(false);
+  stopUpdateChecks?.();
+  stopUpdateChecks = null;
   window.removeEventListener("vite:preloadError", reloadOnStaleChunk);
-  listeners.clear();
 }

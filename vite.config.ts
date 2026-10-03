@@ -23,14 +23,15 @@ import { APP_NAME, APP_TAGLINE } from "./src/shared/copy/app";
  * 오프라인 송출 보장을 위한 PWA 구성.
  *
  * - `registerType: "prompt"`: 자동 갱신을 쓰지 않는다. 배포가 나간 순간 송출 중인
- *   페이지가 새로고침되면 예배가 끊긴다. 갱신은 사용자가 편집 화면에서 직접 누른다.
+ *   페이지가 새로고침되면 예배가 끊긴다. 새 버전은 사용자가 송출 화면이 아닌 곳을
+ *   새로고침할 때 적용한다 (`src/client/pwa/registerServiceWorker.ts`).
  * - `generateSW` 전략이므로 설정이 직렬화된다. 함수형 urlPattern과
  *   `new RangeRequestsPlugin()` 인스턴스는 injectManifest 전용이라 쓸 수 없고,
  *   선언형 등가 옵션(`rangeRequests`, `cacheableResponse`, `expiration`)으로 옮겼다.
  * - 배경 영상 캐시는 편집·송출 중 백그라운드 캐시(`src/client/lib/offline/mediaCache.ts`)가
  *   직접 써 넣는 캐시와 같아야 하므로, 이름과 경로를 공용 상수에서 가져온다.
  * - `clientsClaim`: 처음 설치된 SW가 곧바로 지금 페이지를 제어해 첫 방문에도 배경
- *   영상을 캐시본으로 재생한다. 갱신은 `prompt`라 사용자가 누를 때만 SW가 바뀐다.
+ *   영상을 캐시본으로 재생한다. 갱신은 `prompt`라 사용자가 새로고침할 때만 SW가 바뀐다.
  */
 const appConfig: UserConfig = {
   publicDir: "src/client/public",

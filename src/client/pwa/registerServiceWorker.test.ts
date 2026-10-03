@@ -1,8 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import {
   registerServiceWorker,
-  getServiceWorkerState,
-  applyServiceWorkerUpdate,
   reloadIfUncontrolled,
   reloadOnStaleChunk,
   __resetServiceWorkerStateForTests,
@@ -52,8 +50,16 @@ function stubLocation(pathname = "/presentations"): ReturnType<typeof vi.fn> {
 function stubServiceWorker({
   controlled = false,
   active = true,
-}: { controlled?: boolean; active?: boolean } = {}): ReturnType<typeof vi.fn> {
-  const getRegistration = vi.fn(async () => (active ? { active: {} } : {}));
+  waiting = false,
+}: {
+  controlled?: boolean;
+  active?: boolean;
+  waiting?: boolean;
+} = {}): ReturnType<typeof vi.fn> {
+  const getRegistration = vi.fn(async () => ({
+    ...(active ? { active: {} } : {}),
+    ...(waiting ? { waiting: {} } : {}),
+  }));
   Object.defineProperty(navigator, "serviceWorker", {
     configurable: true,
     value: { controller: controlled ? {} : null, getRegistration },
@@ -61,7 +67,12 @@ function stubServiceWorker({
   return getRegistration;
 }
 
+async function flushPromises(): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, 0));
+}
+
 afterEach(() => {
+  vi.useRealTimers();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
   sessionStorage.clear();
@@ -82,28 +93,6 @@ describe("registerServiceWorker", () => {
       value: {},
       configurable: true,
     });
-  });
-
-  it("새 버전이 준비되어도 자동으로 새로고침하지 않고 상태만 올린다", () => {
-    const { registrar, hooks, apply } = makeRegistrar();
-    registerServiceWorker(registrar);
-
-    expect(getServiceWorkerState().needRefresh).toBe(false);
-
-    hooks().onNeedRefresh?.();
-
-    expect(getServiceWorkerState().needRefresh).toBe(true);
-    expect(apply).not.toHaveBeenCalled();
-  });
-
-  it("사용자가 적용을 요청하면 새로고침과 함께 갱신한다", async () => {
-    const { registrar, hooks, apply } = makeRegistrar();
-    registerServiceWorker(registrar);
-    hooks().onNeedRefresh?.();
-
-    await applyServiceWorkerUpdate();
-
-    expect(apply).toHaveBeenCalledWith(true);
   });
 
   it("두 번 호출해도 한 번만 등록한다", () => {
@@ -129,106 +118,139 @@ describe("registerServiceWorker", () => {
     if (original) Object.defineProperty(navigator, "serviceWorker", original);
   });
 
-  it("등록 전에는 적용 요청이 아무 일도 하지 않는다", async () => {
-    await expect(applyServiceWorkerUpdate()).resolves.toBeUndefined();
+  it("등록 정보를 읽지 못하면 새 버전을 적용하지 않는다", async () => {
+    const { registrar, hooks, apply } = makeRegistrar();
+    registerServiceWorker(registrar);
+
+    hooks().onNeedRefresh?.();
+    await flushPromises();
+
+    expect(apply).not.toHaveBeenCalled();
   });
 });
 
-describe("새 버전 적용 뒤 새로고침", () => {
+describe("새로고침할 때 새 버전 적용", () => {
+  beforeEach(() => {
+    __resetServiceWorkerStateForTests();
+  });
+
+  it("부팅할 때 대기 중인 새 버전이 있으면 적용하고 제어가 바뀐 뒤 새로고침한다", async () => {
+    stubServiceWorker({ controlled: true, waiting: true });
+    const reload = stubLocation();
+    const { registrar, hooks, apply } = makeRegistrar();
+    registerServiceWorker(registrar);
+
+    hooks().onNeedRefresh?.();
+    await flushPromises();
+    expect(apply).toHaveBeenCalledWith(true);
+    expect(reload).not.toHaveBeenCalled();
+
+    hooks().onNeedReload?.();
+    expect(reload).toHaveBeenCalledTimes(1);
+  });
+
+  it("이번 로드 중에 발견한 새 버전은 다음 새로고침으로 미룬다", async () => {
+    stubServiceWorker({ controlled: true });
+    const reload = stubLocation();
+    const { registrar, hooks, apply } = makeRegistrar();
+    registerServiceWorker(registrar);
+
+    hooks().onNeedRefresh?.();
+    await flushPromises();
+
+    expect(apply).not.toHaveBeenCalled();
+    expect(reload).not.toHaveBeenCalled();
+  });
+
+  it("송출 화면은 새로고침해도 새 버전을 적용하지 않는다", async () => {
+    stubServiceWorker({ controlled: true, waiting: true });
+    const reload = stubLocation("/present/p1/fullscreen");
+    const { registrar, hooks, apply } = makeRegistrar();
+    registerServiceWorker(registrar);
+
+    hooks().onNeedRefresh?.();
+    await flushPromises();
+    hooks().onNeedReload?.();
+
+    expect(apply).not.toHaveBeenCalled();
+    expect(reload).not.toHaveBeenCalled();
+  });
+
+  it("송출 화면에서 편집 화면으로 옮긴 뒤 더 새로운 버전이 와도 새로고침하지 않는다", async () => {
+    stubServiceWorker({ controlled: true, waiting: true });
+    stubLocation("/present/p1/fullscreen");
+    const { registrar, hooks, apply } = makeRegistrar();
+    registerServiceWorker(registrar);
+    hooks().onNeedRefresh?.();
+    await flushPromises();
+
+    const reload = stubLocation();
+    hooks().onNeedRefresh?.();
+    await flushPromises();
+
+    expect(apply).not.toHaveBeenCalled();
+    expect(reload).not.toHaveBeenCalled();
+  });
+
+  it("다른 탭이 적용해 제어가 바뀌면 이 탭은 새로고침하지 않는다", async () => {
+    stubServiceWorker({ controlled: true });
+    const reload = stubLocation();
+    const { registrar, hooks } = makeRegistrar();
+    registerServiceWorker(registrar);
+    hooks().onNeedRefresh?.();
+    await flushPromises();
+
+    hooks().onNeedReload?.();
+
+    expect(reload).not.toHaveBeenCalled();
+  });
+});
+
+describe("갱신 확인", () => {
   beforeEach(() => {
     __resetServiceWorkerStateForTests();
     stubServiceWorker({ controlled: true });
   });
 
-  it("다른 탭이 적용해 제어가 바뀌면 이 탭은 새로고침하지 않는다", () => {
-    const reload = stubLocation();
+  function registerWith(update: () => Promise<void>): void {
     const { registrar, hooks } = makeRegistrar();
     registerServiceWorker(registrar);
-    hooks().onNeedRefresh?.();
+    hooks().onRegisteredSW?.("/sw.js", {
+      update,
+    } as unknown as ServiceWorkerRegistration);
+  }
 
-    hooks().onNeedReload?.();
+  it("30분마다 새 버전을 확인한다", () => {
+    vi.useFakeTimers();
+    const update = vi.fn(async () => {});
+    registerWith(update);
 
-    expect(reload).not.toHaveBeenCalled();
-    expect(getServiceWorkerState().needRefresh).toBe(true);
+    vi.advanceTimersByTime(30 * 60_000);
+
+    expect(update).toHaveBeenCalledTimes(1);
   });
 
-  it("이 탭에서 적용을 요청했으면 제어가 바뀐 뒤 새로고침한다", async () => {
-    const reload = stubLocation();
-    const { registrar, hooks } = makeRegistrar();
-    registerServiceWorker(registrar);
+  it("탭이 다시 보이면 새 버전을 확인한다", () => {
+    const update = vi.fn(async () => {});
+    registerWith(update);
+    vi.spyOn(document, "visibilityState", "get").mockReturnValue("visible");
 
-    await applyServiceWorkerUpdate();
-    expect(reload).not.toHaveBeenCalled();
+    document.dispatchEvent(new Event("visibilitychange"));
 
-    hooks().onNeedReload?.();
-    expect(reload).toHaveBeenCalledTimes(1);
+    expect(update).toHaveBeenCalledTimes(1);
   });
 
-  it("적용을 요청한 탭이라도 송출 화면이면 새로고침하지 않는다", async () => {
-    const reload = stubLocation("/present/p1/fullscreen");
-    const { registrar, hooks } = makeRegistrar();
-    registerServiceWorker(registrar);
-    await applyServiceWorkerUpdate();
+  it("확인이 실패해도 오류를 던지지 않는다", async () => {
+    const update = vi.fn(async () => {
+      throw new TypeError("offline");
+    });
+    registerWith(update);
+    vi.spyOn(document, "visibilityState", "get").mockReturnValue("visible");
 
-    hooks().onNeedReload?.();
+    document.dispatchEvent(new Event("visibilitychange"));
+    await flushPromises();
 
-    expect(reload).not.toHaveBeenCalled();
-  });
-
-  it("다른 탭이 먼저 적용했으면 이 탭의 적용은 곧바로 한 번 새로고침한다", async () => {
-    const reload = stubLocation();
-    const { registrar, hooks, apply } = makeRegistrar();
-    registerServiceWorker(registrar);
-    hooks().onNeedRefresh?.();
-    hooks().onNeedReload?.();
-
-    await applyServiceWorkerUpdate();
-
-    expect(reload).toHaveBeenCalledTimes(1);
-    expect(apply).not.toHaveBeenCalled();
-  });
-
-  it("송출 중에 제어가 바뀌었으면 송출을 마친 뒤 적용할 때 새로고침한다", async () => {
-    const reload = stubLocation("/present/p1/fullscreen");
-    const { registrar, hooks } = makeRegistrar();
-    registerServiceWorker(registrar);
-    hooks().onNeedRefresh?.();
-    await applyServiceWorkerUpdate();
-    hooks().onNeedReload?.();
-    expect(reload).not.toHaveBeenCalled();
-
-    const reloadAfter = stubLocation();
-    await applyServiceWorkerUpdate();
-
-    expect(reloadAfter).toHaveBeenCalledTimes(1);
-  });
-
-  it("송출 중이라 넘긴 적용 요청은 나중에 다른 탭의 갱신으로 이 탭을 새로고침하지 않는다", async () => {
-    stubLocation("/present/p1/fullscreen");
-    const { registrar, hooks } = makeRegistrar();
-    registerServiceWorker(registrar);
-    await applyServiceWorkerUpdate();
-    hooks().onNeedReload?.();
-
-    const reload = stubLocation();
-    hooks().onNeedRefresh?.();
-    hooks().onNeedReload?.();
-
-    expect(reload).not.toHaveBeenCalled();
-  });
-
-  it("제어가 바뀐 뒤 더 새로운 버전이 대기하면 그 버전을 적용한다", async () => {
-    const reload = stubLocation();
-    const { registrar, hooks, apply } = makeRegistrar();
-    registerServiceWorker(registrar);
-    hooks().onNeedRefresh?.();
-    hooks().onNeedReload?.();
-    hooks().onNeedRefresh?.();
-
-    await applyServiceWorkerUpdate();
-
-    expect(apply).toHaveBeenCalledWith(true);
-    expect(reload).not.toHaveBeenCalled();
+    expect(update).toHaveBeenCalledTimes(1);
   });
 });
 
