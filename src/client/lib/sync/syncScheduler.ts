@@ -1,6 +1,7 @@
 import type { Presentation } from "#shared";
 import {
   isRetryableApiError,
+  OfflineError,
   ServerRejectedError,
   SessionExpiredError,
 } from "../api/request";
@@ -87,8 +88,9 @@ function startPush(document: Presentation): void {
         backoff.reset(document.id);
         setSyncStatus("error");
       } else if (
-        isRetryableApiError(err) &&
-        backoff.getAttempt(document.id) < MAX_RETRY_ATTEMPTS
+        err instanceof OfflineError ||
+        (isRetryableApiError(err) &&
+          backoff.getServerAttempt(document.id) < MAX_RETRY_ATTEMPTS)
       ) {
         const delay = backoff.getDelay(document.id, err);
         const now = Date.now();

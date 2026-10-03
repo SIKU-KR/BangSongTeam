@@ -1,6 +1,7 @@
 import type { Deck } from "#shared";
 import {
   isRetryableApiError,
+  OfflineError,
   ServerRejectedError,
   SessionExpiredError,
 } from "../api/request";
@@ -69,8 +70,9 @@ async function runOps(ops: PendingOp[]): Promise<void> {
         backoff.reset(key);
         setSyncStatus("error");
       } else if (
-        isRetryableApiError(err) &&
-        backoff.getAttempt(key) < MAX_RETRY_ATTEMPTS
+        err instanceof OfflineError ||
+        (isRetryableApiError(err) &&
+          backoff.getServerAttempt(key) < MAX_RETRY_ATTEMPTS)
       ) {
         offline = true;
         if (!pending.has(key)) pending.set(key, op);

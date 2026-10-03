@@ -1,6 +1,7 @@
 import { sortFoldersParentFirst, type Folder } from "#shared";
 import {
   isRetryableApiError,
+  OfflineError,
   ServerRejectedError,
   SessionExpiredError,
 } from "../api/request";
@@ -63,8 +64,9 @@ async function pushAll(folders: Folder[]): Promise<void> {
         backoff.reset(folder.id);
         setSyncStatus("error");
       } else if (
-        isRetryableApiError(err) &&
-        backoff.getAttempt(folder.id) < MAX_RETRY_ATTEMPTS
+        err instanceof OfflineError ||
+        (isRetryableApiError(err) &&
+          backoff.getServerAttempt(folder.id) < MAX_RETRY_ATTEMPTS)
       ) {
         offline = true;
         if (!pending.has(folder.id)) pending.set(folder.id, folder);

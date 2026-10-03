@@ -92,6 +92,22 @@ describe("BackoffTracker", () => {
     expect(tracker.getAttempt("doc-b")).toBe(0);
   });
 
+  it("OfflineError는 serverAttempt를 증가시키지 않고 ServerRejectedError만 증가시킨다", () => {
+    const tracker = new BackoffTracker();
+    tracker.__setRandomForTests(() => 1);
+
+    tracker.getDelay("doc-a", new OfflineError());
+    expect(tracker.getAttempt("doc-a")).toBe(1);
+    expect(tracker.getServerAttempt("doc-a")).toBe(0);
+
+    tracker.getDelay("doc-a", new ServerRejectedError(503, "과부하"));
+    expect(tracker.getAttempt("doc-a")).toBe(2);
+    expect(tracker.getServerAttempt("doc-a")).toBe(1);
+
+    tracker.reset("doc-a");
+    expect(tracker.getServerAttempt("doc-a")).toBe(0);
+  });
+
   it("MAX_RETRY_ATTEMPTS 상수는 10이다", () => {
     expect(MAX_RETRY_ATTEMPTS).toBe(10);
   });

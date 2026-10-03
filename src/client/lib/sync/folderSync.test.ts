@@ -194,4 +194,26 @@ describe("폴더 push 큐", () => {
 
     vi.useRealTimers();
   });
+
+  it("오프라인(OfflineError)은 10회를 초과해도 재시도를 포기하지 않고 큐에 유지된다", async () => {
+    push.mockRejectedValue(new OfflineError());
+    __setFolderBackoffRandomForTests(() => 1);
+    vi.useFakeTimers();
+
+    scheduleFolderPush(folder(PARENT, null));
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(push).toHaveBeenCalledTimes(1);
+
+    for (let i = 0; i < 15; i++) {
+      await vi.advanceTimersByTimeAsync(60_000);
+    }
+    expect(push.mock.calls.length).toBeGreaterThanOrEqual(15);
+    expect(getSyncSnapshot().status).toBe("offline");
+
+    push.mockImplementation(async (f) => f);
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(getSyncSnapshot().status).toBe("synced");
+
+    vi.useRealTimers();
+  });
 });

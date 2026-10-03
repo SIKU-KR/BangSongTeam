@@ -4,7 +4,7 @@ import { ServerRejectedError } from "../api/request";
 export const BASE_BACKOFF_MS = 2000;
 /** 백오프 최대 상한 (60초) */
 export const MAX_BACKOFF_MS = 60_000;
-/** 최대 재시도 횟수 (10회 초과 시 영구 실패 처리) */
+/** 서버 재시도 한도 (5xx·429 등 서버 오류 10회 초과 시 영구 실패 처리; 오프라인은 제외) */
 export const MAX_RETRY_ATTEMPTS = 10;
 
 /**
@@ -54,6 +54,7 @@ export function getRetryDelay(
  */
 export class BackoffTracker {
   private attempts = new Map<string, number>();
+  private serverAttempts = new Map<string, number>();
   private randomGenerator: () => number = Math.random;
 
   getDelay(keyOrErr: string | unknown, maybeErr?: unknown): number {
@@ -71,11 +72,19 @@ export class BackoffTracker {
     const attempt = this.attempts.get(key) ?? 0;
     const delay = getRetryDelay(err, attempt, this.randomGenerator());
     this.attempts.set(key, attempt + 1);
+    if (err instanceof ServerRejectedError) {
+      const serverAttempt = this.serverAttempts.get(key) ?? 0;
+      this.serverAttempts.set(key, serverAttempt + 1);
+    }
     return delay;
   }
 
   getAttempt(key = ""): number {
     return this.attempts.get(key) ?? 0;
+  }
+
+  getServerAttempt(key = ""): number {
+    return this.serverAttempts.get(key) ?? 0;
   }
 
   get currentAttempt(): number {
@@ -85,8 +94,10 @@ export class BackoffTracker {
   reset(key?: string): void {
     if (key !== undefined) {
       this.attempts.delete(key);
+      this.serverAttempts.delete(key);
     } else {
       this.attempts.clear();
+      this.serverAttempts.clear();
     }
   }
 
