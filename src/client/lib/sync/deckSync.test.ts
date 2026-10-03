@@ -130,7 +130,6 @@ describe("보관함 push 큐", () => {
     expect(push).toHaveBeenCalledTimes(1);
     expect(getSyncSnapshot().status).toBe("offline");
 
-    // attempt 0: 2000ms delay
     await vi.advanceTimersByTimeAsync(2000);
     expect(push).toHaveBeenCalledTimes(2);
     expect(getSyncSnapshot().status).toBe("synced");
@@ -151,5 +150,52 @@ describe("보관함 push 큐", () => {
       kind: "deck",
       status: 400,
     });
+  });
+
+  it("동시에 여러 덱이 실패해도 각 덱의 백오프 attempt는 독립적으로 계산된다", async () => {
+    push.mockRejectedValue(
+      new ServerRejectedError(503, "Service Unavailable"),
+    );
+
+    __setDeckBackoffRandomForTests(() => 1);
+    vi.useFakeTimers();
+
+    scheduleDeckPush(deck("곡 1"));
+    scheduleDeckPush({ ...deck("곡 2"), id: "c0000000000000000000b" });
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(push).toHaveBeenCalledTimes(2);
+
+    push.mockImplementation(async (d: Deck) => ({ ...d, forkCount: 3 }));
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(push).toHaveBeenCalledTimes(4);
+    expect(getSyncSnapshot().status).toBe("synced");
+
+    vi.useRealTimers();
+  });
+
+  it("재시도 한도(MAX_RETRY_ATTEMPTS)를 초과하면 재시도를 중단하고 error 상태가 된다", async () => {
+    push.mockRejectedValue(new ServerRejectedError(503, "지속 과부하"));
+    __setDeckBackoffRandomForTests(() => 1);
+    vi.useFakeTimers();
+
+    scheduleDeckPush(deck());
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(push).toHaveBeenCalledTimes(1);
+
+    for (let i = 0; i < 10; i++) {
+      await vi.advanceTimersByTimeAsync(60_000);
+    }
+    expect(push).toHaveBeenCalledTimes(11);
+    expect(getSyncSnapshot().status).toBe("error");
+    expect(getSyncSnapshot().lastFailure).toMatchObject({
+      id: A,
+      kind: "deck",
+      status: 503,
+    });
+
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(push).toHaveBeenCalledTimes(11);
+
+    vi.useRealTimers();
   });
 });

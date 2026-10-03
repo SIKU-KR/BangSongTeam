@@ -121,7 +121,6 @@ describe("폴더 push 큐", () => {
     expect(push).toHaveBeenCalledTimes(1);
     expect(getSyncSnapshot().status).toBe("offline");
 
-    // attempt 0: 2000ms delay
     await vi.advanceTimersByTimeAsync(2000);
     expect(push).toHaveBeenCalledTimes(2);
     expect(getSyncSnapshot().status).toBe("synced");
@@ -146,6 +145,53 @@ describe("폴더 push 큐", () => {
     vi.useFakeTimers();
     await vi.advanceTimersByTimeAsync(60_000);
     expect(push).toHaveBeenCalledTimes(1);
+    vi.useRealTimers();
+  });
+
+  it("동시에 여러 폴더가 실패해도 각 폴더의 백오프 attempt는 독립적으로 계산된다", async () => {
+    push.mockRejectedValue(
+      new ServerRejectedError(503, "Service Unavailable"),
+    );
+
+    __setFolderBackoffRandomForTests(() => 1);
+    vi.useFakeTimers();
+
+    scheduleFolderPush(folder(PARENT, null, "부모"));
+    scheduleFolderPush(folder(CHILD, PARENT, "자식"));
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(push).toHaveBeenCalledTimes(2);
+
+    push.mockImplementation(async (f) => f);
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(push).toHaveBeenCalledTimes(4);
+    expect(getSyncSnapshot().status).toBe("synced");
+
+    vi.useRealTimers();
+  });
+
+  it("재시도 한도(MAX_RETRY_ATTEMPTS)를 초과하면 재시도를 중단하고 error 상태가 된다", async () => {
+    push.mockRejectedValue(new ServerRejectedError(503, "지속 과부하"));
+    __setFolderBackoffRandomForTests(() => 1);
+    vi.useFakeTimers();
+
+    scheduleFolderPush(folder(PARENT, null));
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(push).toHaveBeenCalledTimes(1);
+
+    for (let i = 0; i < 10; i++) {
+      await vi.advanceTimersByTimeAsync(60_000);
+    }
+    expect(push).toHaveBeenCalledTimes(11);
+    expect(getSyncSnapshot().status).toBe("error");
+    expect(getSyncSnapshot().lastFailure).toMatchObject({
+      id: PARENT,
+      kind: "folder",
+      status: 503,
+    });
+
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(push).toHaveBeenCalledTimes(11);
+
     vi.useRealTimers();
   });
 });

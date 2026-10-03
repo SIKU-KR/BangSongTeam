@@ -109,9 +109,7 @@ export async function callApi<T>(
     } catch (error) {
       void error;
     }
-    const retryAfter =
-      response.headers?.get("retry-after") ??
-      response.headers?.get("Retry-After");
+    const retryAfter = response.headers?.get("retry-after");
     const retryAfterMs = parseRetryAfter(retryAfter) ?? undefined;
     throw new ServerRejectedError(response.status, message, retryAfterMs);
   }

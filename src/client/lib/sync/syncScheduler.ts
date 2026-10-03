@@ -7,7 +7,7 @@ import {
 import { pushPresentation } from "./presentationSync";
 import { setSyncStatus, type SyncFailure, getSyncSnapshot } from "./syncStatus";
 import { flushFolderSync } from "./folderSync";
-import { BackoffTracker } from "./backoff";
+import { BackoffTracker, MAX_RETRY_ATTEMPTS } from "./backoff";
 
 /** 입력이 멈춘 뒤 이만큼 조용하면 올린다 */
 export const SYNC_DEBOUNCE_MS = 3000;
@@ -77,17 +77,25 @@ function startPush(document: Presentation): void {
     try {
       await flushFolderSync();
       await pusher(document);
-      backoff.reset();
+      backoff.reset(document.id);
       if (inFlightDocs.size === 1 && pending.size === 0) {
         setSyncStatus("synced");
       }
     } catch (err) {
       if (err instanceof SessionExpiredError) {
+        pending.delete(document.id);
+        backoff.reset(document.id);
         setSyncStatus("error");
-      } else if (isRetryableApiError(err)) {
-        if (!pending.has(document.id)) {
-          const delay = backoff.getDelay(err);
-          const now = Date.now();
+      } else if (
+        isRetryableApiError(err) &&
+        backoff.getAttempt(document.id) < MAX_RETRY_ATTEMPTS
+      ) {
+        const delay = backoff.getDelay(document.id, err);
+        const now = Date.now();
+        const existing = pending.get(document.id);
+        if (existing) {
+          existing.readyAt = Math.max(existing.readyAt, now + delay);
+        } else {
           pending.set(document.id, {
             document,
             firstScheduledAt: now,
@@ -96,6 +104,8 @@ function startPush(document: Presentation): void {
         }
         setSyncStatus("offline");
       } else {
+        pending.delete(document.id);
+        backoff.reset(document.id);
         const failure: SyncFailure = {
           id: document.id,
           title: document.title,
@@ -154,6 +164,7 @@ function dispatch(): void {
 
 function handleOnline(): void {
   if (!enabled) return;
+  backoff.reset();
   for (const item of pending.values()) {
     item.readyAt = 0;
   }
@@ -187,7 +198,11 @@ export function scheduleDocumentPush(document: Presentation): void {
   const existing = pending.get(document.id);
   const firstScheduledAt = existing ? existing.firstScheduledAt : now;
   const deadline = firstScheduledAt + SYNC_MAX_WAIT_MS;
-  const readyAt = Math.min(now + SYNC_DEBOUNCE_MS, deadline);
+  const debounceReady = Math.min(now + SYNC_DEBOUNCE_MS, deadline);
+  const readyAt =
+    existing && existing.readyAt > now
+      ? Math.max(existing.readyAt, debounceReady)
+      : debounceReady;
 
   pending.set(document.id, { document, firstScheduledAt, readyAt });
   scheduleNextTimer();
@@ -199,6 +214,7 @@ export function scheduleDocumentPush(document: Presentation): void {
  */
 export function cancelDocumentPush(id: string): void {
   pending.delete(id);
+  backoff.reset(id);
   scheduleNextTimer();
 }
 

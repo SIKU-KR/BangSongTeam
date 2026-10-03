@@ -4,6 +4,8 @@ import { ServerRejectedError } from "../api/request";
 export const BASE_BACKOFF_MS = 2000;
 /** 백오프 최대 상한 (60초) */
 export const MAX_BACKOFF_MS = 60_000;
+/** 최대 재시도 횟수 (10회 초과 시 영구 실패 처리) */
+export const MAX_RETRY_ATTEMPTS = 10;
 
 /**
  * 지수 백오프와 풀 지터(Full Jitter)를 계산한다 (AWS Architecture Blog 권고).
@@ -21,7 +23,7 @@ export function calculateBackoffWithJitter(
 
 /**
  * 오류 정보와 시도 횟수를 바탕으로 다음 재시도까지 대기할 밀리초를 구한다.
- * 서버가 `Retry-After` 헤더를 준 경우 백오프 계산 대신 그 값을 따른다.
+ * 서버가 `Retry-After` 헤더를 준 경우 `[BASE_BACKOFF_MS, MAX_BACKOFF_MS]` 범위로 보정해 따른다.
  */
 export function getRetryDelay(
   err: unknown,
@@ -33,7 +35,10 @@ export function getRetryDelay(
     typeof err.retryAfterMs === "number" &&
     err.retryAfterMs >= 0
   ) {
-    return err.retryAfterMs;
+    return Math.min(
+      MAX_BACKOFF_MS,
+      Math.max(BASE_BACKOFF_MS, err.retryAfterMs),
+    );
   }
   return calculateBackoffWithJitter(
     attempt,
@@ -44,25 +49,45 @@ export function getRetryDelay(
 }
 
 /**
- * 큐별 재시도 시도 횟수와 백오프 지연을 추적하는 유틸리티.
- * 성공 시 `reset()`을 호출해 시도 횟수를 0으로 되돌린다.
+ * 항목별 재시도 시도 횟수와 백오프 지연을 추적하는 유틸리티.
+ * 항목 키를 지정하지 않으면 단일 항목(기본 키)으로 동작한다.
  */
 export class BackoffTracker {
-  private attempt = 0;
+  private attempts = new Map<string, number>();
   private randomGenerator: () => number = Math.random;
 
-  getDelay(err: unknown): number {
-    const delay = getRetryDelay(err, this.attempt, this.randomGenerator());
-    this.attempt += 1;
+  getDelay(keyOrErr: string | unknown, maybeErr?: unknown): number {
+    let key: string;
+    let err: unknown;
+
+    if (typeof keyOrErr === "string") {
+      key = keyOrErr;
+      err = maybeErr;
+    } else {
+      key = "";
+      err = keyOrErr;
+    }
+
+    const attempt = this.attempts.get(key) ?? 0;
+    const delay = getRetryDelay(err, attempt, this.randomGenerator());
+    this.attempts.set(key, attempt + 1);
     return delay;
   }
 
-  reset(): void {
-    this.attempt = 0;
+  getAttempt(key = ""): number {
+    return this.attempts.get(key) ?? 0;
   }
 
   get currentAttempt(): number {
-    return this.attempt;
+    return this.getAttempt("");
+  }
+
+  reset(key?: string): void {
+    if (key !== undefined) {
+      this.attempts.delete(key);
+    } else {
+      this.attempts.clear();
+    }
   }
 
   __setRandomForTests(fn: () => number): void {

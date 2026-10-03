@@ -6,7 +6,7 @@ import {
 } from "../api/request";
 import { pushFolder } from "./presentationSync";
 import { setSyncStatus, type SyncFailure } from "./syncStatus";
-import { BackoffTracker } from "./backoff";
+import { BackoffTracker, MAX_RETRY_ATTEMPTS } from "./backoff";
 
 const FOLDER_SYNC_DEBOUNCE_MS = 2000;
 
@@ -55,17 +55,25 @@ async function pushAll(folders: Folder[]): Promise<void> {
     try {
       const saved = await pusher(folder);
       listener?.(saved);
+      backoff.reset(folder.id);
     } catch (err) {
       if (err instanceof SessionExpiredError) {
         failed = true;
+        pending.delete(folder.id);
+        backoff.reset(folder.id);
         setSyncStatus("error");
-      } else if (isRetryableApiError(err)) {
+      } else if (
+        isRetryableApiError(err) &&
+        backoff.getAttempt(folder.id) < MAX_RETRY_ATTEMPTS
+      ) {
         offline = true;
         if (!pending.has(folder.id)) pending.set(folder.id, folder);
-        const delay = backoff.getDelay(err);
+        const delay = backoff.getDelay(folder.id, err);
         if (delay < minRetryDelay) minRetryDelay = delay;
       } else {
         failed = true;
+        pending.delete(folder.id);
+        backoff.reset(folder.id);
         const failure: SyncFailure = {
           id: folder.id,
           title: folder.name,
@@ -81,16 +89,16 @@ async function pushAll(folders: Folder[]): Promise<void> {
     }
   }
 
-  if (offline) {
-    setSyncStatus("offline");
-    if (!timer && minRetryDelay !== Infinity) {
-      timer = setTimeout(run, minRetryDelay);
-    }
-  } else if (failed) {
+  if (failed) {
     setSyncStatus("error");
+  } else if (offline) {
+    setSyncStatus("offline");
   } else {
     backoff.reset();
     setSyncStatus("synced");
+  }
+  if (offline && !timer && minRetryDelay !== Infinity) {
+    timer = setTimeout(run, minRetryDelay);
   }
 }
 
@@ -117,6 +125,7 @@ export function scheduleFolderPush(folder: Folder): void {
 /** 영구 삭제한 폴더의 대기 중인 push를 취소한다 */
 export function cancelFolderPush(id: string): void {
   pending.delete(id);
+  backoff.reset(id);
 }
 
 /**
@@ -125,6 +134,7 @@ export function cancelFolderPush(id: string): void {
  */
 export async function pushFolderNow(folder: Folder): Promise<Folder> {
   pending.delete(folder.id);
+  backoff.reset(folder.id);
   await inFlight;
   const saved = await pusher(folder);
   listener?.(saved);

@@ -11,7 +11,6 @@ export function isTransientStorageError(error: unknown): boolean {
     status?: number;
   };
 
-  // 코드 버그(TypeError 등)는 일시 장애가 아닌 500이다.
   if (
     err.name === "TypeError" ||
     err.name === "ReferenceError" ||
@@ -28,15 +27,20 @@ export function isTransientStorageError(error: unknown): boolean {
   const message = (err.message ?? "").toLowerCase();
   const name = (err.name ?? "").toLowerCase();
 
+  if (
+    message.includes("constraint failed") ||
+    message.includes("syntax error") ||
+    message.includes("no such table") ||
+    message.includes("no such column")
+  ) {
+    return false;
+  }
+
   const transientIndicators = [
     "sqlite_busy",
     "sqlite_locked",
     "database is locked",
     "database table is locked",
-    "is locked",
-    "d1_error",
-    "d1error",
-    "r2error",
     "timeout",
     "timed out",
     "temporarily unavailable",

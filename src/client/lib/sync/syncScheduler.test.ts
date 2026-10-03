@@ -262,7 +262,6 @@ describe("서버 push 스케줄러", () => {
     scheduleDocumentPush(doc("b"));
     await vi.advanceTimersByTimeAsync(SYNC_DEBOUNCE_MS);
 
-    // B는 A가 끝나기를 기다리지 않고 먼저 끝나야 한다
     expect(order).toEqual(["b"]);
 
     finishA();
@@ -320,12 +319,10 @@ describe("서버 push 스케줄러", () => {
     expect(push).toHaveBeenCalledTimes(1);
     expect(getSyncSnapshot().status).toBe("offline");
 
-    // 1차 재시도: attempt 0 -> 2000ms
     await vi.advanceTimersByTimeAsync(2000);
     expect(push).toHaveBeenCalledTimes(2);
     expect(getSyncSnapshot().status).toBe("offline");
 
-    // 2차 재시도: attempt 1 -> 4000ms
     await vi.advanceTimersByTimeAsync(4000);
     expect(push).toHaveBeenCalledTimes(3);
     expect(getSyncSnapshot().status).toBe("synced");
@@ -386,6 +383,80 @@ describe("서버 push 스케줄러", () => {
     vi.useFakeTimers();
     await vi.advanceTimersByTimeAsync(60_000);
     expect(push).toHaveBeenCalledTimes(1);
+    vi.useRealTimers();
+  });
+
+  it("동시에 여러 문서가 실패해도 각 문서의 백오프 attempt는 독립적으로 계산된다", async () => {
+    push.mockRejectedValueOnce(
+      new ServerRejectedError(503, "Service Unavailable"),
+    );
+    push.mockRejectedValueOnce(
+      new ServerRejectedError(503, "Service Unavailable"),
+    );
+    push.mockResolvedValue(true);
+
+    __setBackoffRandomForTests(() => 1);
+    vi.useFakeTimers();
+
+    scheduleDocumentPush(doc("a"));
+    scheduleDocumentPush(doc("b"));
+    await vi.advanceTimersByTimeAsync(SYNC_DEBOUNCE_MS);
+    expect(push).toHaveBeenCalledTimes(2);
+
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(push).toHaveBeenCalledTimes(4);
+    expect(getSyncSnapshot().status).toBe("synced");
+
+    vi.useRealTimers();
+  });
+
+  it("오프라인 편집 시 활성 백오프 지연이 디바운스 기본값(3초)으로 단축되지 않고 유지된다", async () => {
+    push
+      .mockRejectedValueOnce(new ServerRejectedError(503, "과부하", 10_000))
+      .mockResolvedValue(true);
+
+    vi.useFakeTimers();
+
+    scheduleDocumentPush(doc("a", "1차"));
+    await vi.advanceTimersByTimeAsync(SYNC_DEBOUNCE_MS);
+    expect(push).toHaveBeenCalledTimes(1);
+
+    await vi.advanceTimersByTimeAsync(2000);
+    scheduleDocumentPush(doc("a", "2차"));
+
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(push).toHaveBeenCalledTimes(1);
+
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(push).toHaveBeenCalledTimes(2);
+    expect(push.mock.calls[1][0].title).toBe("2차");
+
+    vi.useRealTimers();
+  });
+
+  it("재시도 한도(MAX_RETRY_ATTEMPTS)를 초과하면 재시도를 중단하고 error 상태가 된다", async () => {
+    push.mockRejectedValue(new ServerRejectedError(503, "지속 과부하"));
+    __setBackoffRandomForTests(() => 1);
+    vi.useFakeTimers();
+
+    scheduleDocumentPush(doc("a"));
+    await vi.advanceTimersByTimeAsync(SYNC_DEBOUNCE_MS);
+    expect(push).toHaveBeenCalledTimes(1);
+
+    for (let i = 0; i < 10; i++) {
+      await vi.advanceTimersByTimeAsync(60_000);
+    }
+    expect(push).toHaveBeenCalledTimes(11);
+    expect(getSyncSnapshot().status).toBe("error");
+    expect(getSyncSnapshot().lastFailure).toMatchObject({
+      id: "a",
+      kind: "presentation",
+      status: 503,
+    });
+
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(push).toHaveBeenCalledTimes(11);
+
     vi.useRealTimers();
   });
 });

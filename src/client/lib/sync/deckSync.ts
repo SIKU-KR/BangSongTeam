@@ -6,7 +6,7 @@ import {
 } from "../api/request";
 import { pushDeck, deleteDeckRemote } from "./presentationSync";
 import { setSyncStatus, type SyncFailure } from "./syncStatus";
-import { BackoffTracker } from "./backoff";
+import { BackoffTracker, MAX_RETRY_ATTEMPTS } from "./backoff";
 
 const DECK_SYNC_DEBOUNCE_MS = 2000;
 
@@ -61,17 +61,25 @@ async function runOps(ops: PendingOp[]): Promise<void> {
       } else {
         await deleter(op.id);
       }
+      backoff.reset(key);
     } catch (err) {
       if (err instanceof SessionExpiredError) {
         failed = true;
+        pending.delete(key);
+        backoff.reset(key);
         setSyncStatus("error");
-      } else if (isRetryableApiError(err)) {
+      } else if (
+        isRetryableApiError(err) &&
+        backoff.getAttempt(key) < MAX_RETRY_ATTEMPTS
+      ) {
         offline = true;
         if (!pending.has(key)) pending.set(key, op);
-        const delay = backoff.getDelay(err);
+        const delay = backoff.getDelay(key, err);
         if (delay < minRetryDelay) minRetryDelay = delay;
       } else {
         failed = true;
+        pending.delete(key);
+        backoff.reset(key);
         const failure: SyncFailure = {
           id: key,
           title: op.kind === "push" ? op.deck.title : undefined,
@@ -87,16 +95,16 @@ async function runOps(ops: PendingOp[]): Promise<void> {
     }
   }
 
-  if (offline) {
-    setSyncStatus("offline");
-    if (!timer && minRetryDelay !== Infinity) {
-      timer = setTimeout(run, minRetryDelay);
-    }
-  } else if (failed) {
+  if (failed) {
     setSyncStatus("error");
+  } else if (offline) {
+    setSyncStatus("offline");
   } else {
     backoff.reset();
     setSyncStatus("synced");
+  }
+  if (offline && !timer && minRetryDelay !== Infinity) {
+    timer = setTimeout(run, minRetryDelay);
   }
 }
 
@@ -126,6 +134,7 @@ export function scheduleDeckPush(deck: Deck): void {
 
 /** 대기 중인 push는 버린다 */
 export function scheduleDeckDelete(id: string): void {
+  backoff.reset(id);
   schedule(id, { kind: "delete", id });
 }
 
@@ -137,6 +146,7 @@ export function scheduleDeckDelete(id: string): void {
  */
 export async function pushDeckNow(deck: Deck): Promise<Deck> {
   pending.delete(deck.id);
+  backoff.reset(deck.id);
   await inFlight;
   const saved = await pusher(deck);
   listener?.(saved);
