@@ -10,7 +10,8 @@ import {
   __setDeckTransportForTests,
   __resetDeckSyncForTests,
 } from "./deckSync";
-import { OfflineError } from "../api/request";
+import { OfflineError, TimeoutError } from "../api/request";
+import { installFakeApi } from "../../test/fakeApi";
 import { getSyncSnapshot, __resetSyncStatusForTests } from "./syncStatus";
 
 const USER = "00000000x000000000001";
@@ -89,6 +90,66 @@ describe("보관함 push 큐", () => {
     await flushDeckSync();
     expect(push).toHaveBeenCalledTimes(2);
     expect(getSyncSnapshot().status).toBe("synced");
+  });
+
+  it("멈춘 요청으로 인해 타임아웃(TimeoutError)이 발생해도 syncing에 머물지 않고 offline으로 바뀐 뒤 재시도된다", async () => {
+    push.mockRejectedValueOnce(new TimeoutError());
+    scheduleDeckPush(deck());
+    await flushDeckSync();
+    expect(getSyncSnapshot().status).toBe("offline");
+
+    await flushDeckSync();
+    expect(push).toHaveBeenCalledTimes(2);
+    expect(getSyncSnapshot().status).toBe("synced");
+  });
+
+  it("서버가 응답하지 않고 멈춘 경우 데드라인 뒤 offline 상태로 전환되고 재연결 시 정상 동기화된다", async () => {
+    vi.useFakeTimers();
+    __setDeckTransportForTests({});
+
+    const waiter: { resolve?: () => void } = {};
+    let shouldResolve = false;
+    const fake = installFakeApi({
+      "PUT /api/decks/*": () =>
+        new Promise((resolve) => {
+          if (shouldResolve) {
+            resolve({
+              status: 200,
+              body: { deck: deck() },
+            });
+            return;
+          }
+          waiter.resolve = () => {
+            shouldResolve = true;
+            resolve({
+              status: 200,
+              body: { deck: deck() },
+            });
+          };
+        }),
+    });
+
+    scheduleDeckPush(deck());
+    const flushPromise = flushDeckSync();
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(getSyncSnapshot().status).toBe("syncing");
+
+    await vi.advanceTimersByTimeAsync(10_000);
+    await flushPromise;
+
+    expect(getSyncSnapshot().status).toBe("offline");
+
+    shouldResolve = true;
+    waiter.resolve?.();
+    const nextFlush = flushDeckSync();
+    await vi.advanceTimersByTimeAsync(0);
+    await nextFlush;
+
+    expect(getSyncSnapshot().status).toBe("synced");
+
+    fake.restore();
+    vi.useRealTimers();
   });
 
   it("marks the status as error on a rejected push without retrying", async () => {

@@ -12,6 +12,7 @@ import {
   type SessionUser,
 } from "./sessionCache";
 import { authClient, type SocialProvider } from "./authClient";
+import { fetchWithTimeout } from "../api/fetchWithTimeout";
 import { isProjectionPath } from "../../features/presentation/fullscreen";
 import { AUTH_COPY } from "#copy/auth";
 
@@ -171,9 +172,14 @@ export async function signInWithProvider(
   });
 }
 
-export async function fetchAuthConfig(): Promise<AuthConfigResponse> {
-  const response = await fetch("/api/auth-config", {
+export async function fetchAuthConfig(options?: {
+  signal?: AbortSignal;
+  timeoutMs?: number;
+}): Promise<AuthConfigResponse> {
+  const response = await fetchWithTimeout("/api/auth-config", {
     credentials: "include",
+    signal: options?.signal,
+    timeoutMs: options?.timeoutMs,
   });
   if (!response.ok) throw new Error(AUTH_COPY.configLoadFailed);
   return AuthConfigResponseSchema.parse(await response.json());
