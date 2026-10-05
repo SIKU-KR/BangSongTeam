@@ -5,9 +5,8 @@ export type ResolvedByteRange = { start: number; end: number };
 
 const SINGLE_BYTE_RANGE = /^bytes=(\d*)-(\d*)$/i;
 
-function toSafeInteger(digits: string): number | null {
-  const value = Number(digits);
-  return Number.isSafeInteger(value) ? value : null;
+function toClampedInteger(digits: string): number {
+  return Math.min(Number(digits), Number.MAX_SAFE_INTEGER);
 }
 
 /**
@@ -15,7 +14,9 @@ function toSafeInteger(digits: string): number | null {
  *
  * multipart/byteranges 응답을 만들지 않으므로 여러 범위, 다른 단위, 구문 오류는
  * 모두 `null`로 돌려 헤더를 무시하고 전체(200)를 내보내게 한다. RFC 9110 §14.2가
- * 서버에 허용하는 처리다.
+ * 서버에 허용하는 처리다. 안전한 정수를 넘는 위치는 구문상 올바르므로 버리지 않고
+ * `Number.MAX_SAFE_INTEGER`로 줄여, 크기를 넘는 다른 위치와 똑같이 끝은 마지막
+ * 바이트로 줄고 시작은 416이 된다.
  */
 export function parseRangeHeader(header: string): ByteRangeRequest | null {
   const match = SINGLE_BYTE_RANGE.exec(header.trim());
@@ -24,17 +25,12 @@ export function parseRangeHeader(header: string): ByteRangeRequest | null {
   const [, first = "", last = ""] = match;
   if (first === "" && last === "") return null;
 
-  if (first === "") {
-    const suffix = toSafeInteger(last);
-    return suffix === null ? null : { suffix };
-  }
+  if (first === "") return { suffix: toClampedInteger(last) };
 
-  const start = toSafeInteger(first);
-  if (start === null) return null;
+  const start = toClampedInteger(first);
   if (last === "") return { start };
 
-  const end = toSafeInteger(last);
-  return end === null ? null : { start, end };
+  return { start, end: toClampedInteger(last) };
 }
 
 /**

@@ -18,9 +18,20 @@ describe("parseRangeHeader", () => {
     expect(parseRangeHeader("bytes=")).toBeNull();
     expect(parseRangeHeader("items=0-1")).toBeNull();
     expect(parseRangeHeader("bytes=0-1,4-5")).toBeNull();
-    expect(parseRangeHeader("bytes=99999999999999999999-")).toBeNull();
-    expect(parseRangeHeader("bytes=0-99999999999999999999")).toBeNull();
-    expect(parseRangeHeader("bytes=-99999999999999999999")).toBeNull();
+  });
+
+  it("안전한 정수를 넘는 위치는 버리지 않고 가장 큰 안전한 정수로 줄인다", () => {
+    const max = Number.MAX_SAFE_INTEGER;
+    expect(parseRangeHeader("bytes=99999999999999999999-")).toEqual({
+      start: max,
+    });
+    expect(parseRangeHeader("bytes=0-99999999999999999999")).toEqual({
+      start: 0,
+      end: max,
+    });
+    expect(parseRangeHeader("bytes=-99999999999999999999")).toEqual({
+      suffix: max,
+    });
   });
 });
 

@@ -1,4 +1,5 @@
-import { Hono } from "hono";
+import { Hono, type Context } from "hono";
+import { API_ERRORS } from "#shared";
 import { parseRangeHeader, resolveByteRange } from "../lib/byteRange";
 import type { AppEnv } from "../types";
 
@@ -13,6 +14,10 @@ function objectHeaders(object: R2Object): Headers {
   return headers;
 }
 
+function mediaNotFound(c: Context<AppEnv>): Response {
+  return c.json({ error: API_ERRORS.media.notFound }, 404);
+}
+
 /**
  * R2 바인딩 기반 미디어 스트리밍 라우트 (HTTP Range 및 Partial Content 지원).
  * 로컬 개발(Miniflare) 및 커스텀 도메인 미연결 환경에서도 R2 비디오 직접 재생 보장.
@@ -23,11 +28,13 @@ function objectHeaders(object: R2Object): Headers {
  *
  * Range는 R2에 그대로 넘기지 않고 직접 검증한다. 만족할 수 없는 범위는 R2가
  * InvalidRange로 던져 500이 되므로 416으로 답하고, 깨진 헤더는 무시하고 200으로 답한다.
+ * 그래서 Range 요청마다 크기를 알기 위한 HEAD가 한 번 더 나간다. R2 오류 코드에 기대
+ * 범위를 추측하는 대신 왕복 한 번을 감수한 의도된 비용이다.
  */
 export const mediaRoute = new Hono<AppEnv>().get("/*", async (c) => {
   const key = c.req.path.replace(/^\/api\/media\/?/, "");
   if (!key) {
-    return c.json({ error: "Media key is required" }, 400);
+    return c.json({ error: API_ERRORS.media.keyRequired }, 400);
   }
 
   const rangeHeader = c.req.header("range");
@@ -36,7 +43,7 @@ export const mediaRoute = new Hono<AppEnv>().get("/*", async (c) => {
   if (!requested) {
     const object = await c.env.MEDIA_BUCKET.get(key);
     if (!object) {
-      return c.json({ error: "Media not found" }, 404);
+      return mediaNotFound(c);
     }
     const headers = objectHeaders(object);
     headers.set("content-length", String(object.size));
@@ -45,7 +52,7 @@ export const mediaRoute = new Hono<AppEnv>().get("/*", async (c) => {
 
   const head = await c.env.MEDIA_BUCKET.head(key);
   if (!head) {
-    return c.json({ error: "Media not found" }, 404);
+    return mediaNotFound(c);
   }
 
   const resolved = resolveByteRange(requested, head.size);
@@ -64,7 +71,7 @@ export const mediaRoute = new Hono<AppEnv>().get("/*", async (c) => {
     range: { offset: resolved.start, length },
   });
   if (!object) {
-    return c.json({ error: "Media not found" }, 404);
+    return mediaNotFound(c);
   }
 
   const headers = objectHeaders(object);

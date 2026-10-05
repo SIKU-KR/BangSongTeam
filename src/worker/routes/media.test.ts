@@ -49,7 +49,13 @@ describe("GET /api/media/*", () => {
     expect(res.headers.get("cache-control")).not.toBe(IMMUTABLE);
   });
 
-  it.each(["bytes=16-", "bytes=100-200", "bytes=5-2", "bytes=-0"])(
+  it.each([
+    "bytes=16-",
+    "bytes=100-200",
+    "bytes=5-2",
+    "bytes=-0",
+    "bytes=99999999999999999999-",
+  ])(
     "만족할 수 없는 범위(%s)는 500이 아니라 416과 전체 크기를 돌려준다",
     async (range) => {
       const res = await requestRange(range);
@@ -68,6 +74,14 @@ describe("GET /api/media/*", () => {
     expect(res.headers.get("content-range")).toBe(`bytes 10-15/${BODY.length}`);
     expect(res.headers.get("content-length")).toBe("6");
     expect(await res.text()).toBe("abcdef");
+  });
+
+  it("안전한 정수를 넘는 끝 위치도 마지막 바이트까지로 줄여 206을 돌려준다", async () => {
+    const res = await requestRange("bytes=0-99999999999999999999");
+
+    expect(res.status).toBe(206);
+    expect(res.headers.get("content-range")).toBe(`bytes 0-15/${BODY.length}`);
+    expect(await res.text()).toBe(BODY);
   });
 
   it("suffix 범위는 끝에서부터 잘라 206을 돌려준다", async () => {

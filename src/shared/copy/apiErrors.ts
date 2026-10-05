@@ -29,6 +29,10 @@ export const API_ERRORS = {
     targetNotFound: "신고할 곡을 찾을 수 없어요",
     alreadyPending: "이미 보낸 신고를 확인하고 있어요",
   },
+  media: {
+    keyRequired: "열 배경 파일을 지정해 주세요",
+    notFound: "배경 파일을 찾을 수 없어요",
+  },
   share: {
     linkUnavailable: "링크가 만료되었거나 공유가 해제됐어요",
   },
