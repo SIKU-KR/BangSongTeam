@@ -9,7 +9,12 @@ import {
   __setFolderBackoffRandomForTests,
   __resetFolderSyncForTests,
 } from "./folderSync";
-import { OfflineError, ServerRejectedError } from "../api/request";
+import {
+  OfflineError,
+  ServerRejectedError,
+  TimeoutError,
+} from "../api/request";
+import { installFakeApi } from "../../test/fakeApi";
 import { getSyncSnapshot, __resetSyncStatusForTests } from "./syncStatus";
 
 const USER = "000000000000000000001";
@@ -95,6 +100,66 @@ describe("폴더 push 큐", () => {
     expect(getSyncSnapshot().status).toBe("synced");
   });
 
+  it("멈춘 요청으로 인해 타임아웃(TimeoutError)이 발생해도 syncing에 머물지 않고 offline으로 바뀐 뒤 재시도된다", async () => {
+    push.mockRejectedValueOnce(new TimeoutError());
+    scheduleFolderPush(folder(PARENT, null));
+    await flushFolderSync();
+    expect(getSyncSnapshot().status).toBe("offline");
+
+    await flushFolderSync();
+    expect(push).toHaveBeenCalledTimes(2);
+    expect(getSyncSnapshot().status).toBe("synced");
+  });
+
+  it("서버가 응답하지 않고 멈춘 경우 데드라인 뒤 offline 상태로 전환되고 재연결 시 정상 동기화된다", async () => {
+    vi.useFakeTimers();
+    __setFolderPusherForTests(null);
+
+    const waiter: { resolve?: () => void } = {};
+    let shouldResolve = false;
+    const fake = installFakeApi({
+      "PUT /api/folders/*": () =>
+        new Promise((resolve) => {
+          if (shouldResolve) {
+            resolve({
+              status: 200,
+              body: { folder: folder(PARENT, null) },
+            });
+            return;
+          }
+          waiter.resolve = () => {
+            shouldResolve = true;
+            resolve({
+              status: 200,
+              body: { folder: folder(PARENT, null) },
+            });
+          };
+        }),
+    });
+
+    scheduleFolderPush(folder(PARENT, null));
+    const flushPromise = flushFolderSync();
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(getSyncSnapshot().status).toBe("syncing");
+
+    await vi.advanceTimersByTimeAsync(10_000);
+    await flushPromise;
+
+    expect(getSyncSnapshot().status).toBe("offline");
+
+    shouldResolve = true;
+    waiter.resolve?.();
+    const nextFlush = flushFolderSync();
+    await vi.advanceTimersByTimeAsync(0);
+    await nextFlush;
+
+    expect(getSyncSnapshot().status).toBe("synced");
+
+    fake.restore();
+    vi.useRealTimers();
+  });
+
   it("오프라인 재큐잉이 그사이 예약된 더 새로운 변경을 덮지 않는다", async () => {
     push.mockImplementationOnce(async () => {
       scheduleFolderPush(folder(PARENT, null, "새 이름"));
@@ -149,9 +214,7 @@ describe("폴더 push 큐", () => {
   });
 
   it("동시에 여러 폴더가 실패해도 각 폴더의 백오프 attempt는 독립적으로 계산된다", async () => {
-    push.mockRejectedValue(
-      new ServerRejectedError(503, "Service Unavailable"),
-    );
+    push.mockRejectedValue(new ServerRejectedError(503, "Service Unavailable"));
 
     __setFolderBackoffRandomForTests(() => 1);
     vi.useFakeTimers();
