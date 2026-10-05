@@ -8,9 +8,14 @@ import {
   setDeckSyncEnabled,
   setServerDeckListener,
   __setDeckTransportForTests,
+  __setDeckBackoffRandomForTests,
   __resetDeckSyncForTests,
 } from "./deckSync";
-import { OfflineError, TimeoutError } from "../api/request";
+import {
+  OfflineError,
+  ServerRejectedError,
+  TimeoutError,
+} from "../api/request";
 import { installFakeApi } from "../../test/fakeApi";
 import { getSyncSnapshot, __resetSyncStatusForTests } from "./syncStatus";
 
@@ -173,5 +178,109 @@ describe("보관함 push 큐", () => {
   it("pushDeckNow surfaces failures to the caller", async () => {
     push.mockRejectedValueOnce(new OfflineError());
     await expect(pushDeckNow(deck())).rejects.toBeInstanceOf(OfflineError);
+  });
+
+  it("503 응답 시 백오프 타이머로 자동 재시도하고 성공 시 synced로 복구된다", async () => {
+    push
+      .mockRejectedValueOnce(
+        new ServerRejectedError(503, "Service Unavailable"),
+      )
+      .mockResolvedValueOnce(deck());
+
+    __setDeckBackoffRandomForTests(() => 1);
+    vi.useFakeTimers();
+
+    scheduleDeckPush(deck());
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(push).toHaveBeenCalledTimes(1);
+    expect(getSyncSnapshot().status).toBe("offline");
+
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(push).toHaveBeenCalledTimes(2);
+    expect(getSyncSnapshot().status).toBe("synced");
+
+    vi.useRealTimers();
+  });
+
+  it("영구 실패(400) 시 failure 정보를 남긴다", async () => {
+    push.mockRejectedValue(new ServerRejectedError(400, "잘못된 덱"));
+
+    scheduleDeckPush(deck("불량 덱"));
+    await flushDeckSync();
+
+    expect(getSyncSnapshot().status).toBe("error");
+    expect(getSyncSnapshot().lastFailure).toMatchObject({
+      id: A,
+      title: "불량 덱",
+      kind: "deck",
+      status: 400,
+    });
+  });
+
+  it("동시에 여러 덱이 실패해도 각 덱의 백오프 attempt는 독립적으로 계산된다", async () => {
+    push.mockRejectedValue(new ServerRejectedError(503, "Service Unavailable"));
+
+    __setDeckBackoffRandomForTests(() => 1);
+    vi.useFakeTimers();
+
+    scheduleDeckPush(deck("곡 1"));
+    scheduleDeckPush({ ...deck("곡 2"), id: "c0000000000000000000b" });
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(push).toHaveBeenCalledTimes(2);
+
+    push.mockImplementation(async (d: Deck) => ({ ...d, forkCount: 3 }));
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(push).toHaveBeenCalledTimes(4);
+    expect(getSyncSnapshot().status).toBe("synced");
+
+    vi.useRealTimers();
+  });
+
+  it("재시도 한도(MAX_RETRY_ATTEMPTS)를 초과하면 재시도를 중단하고 error 상태가 된다", async () => {
+    push.mockRejectedValue(new ServerRejectedError(503, "지속 과부하"));
+    __setDeckBackoffRandomForTests(() => 1);
+    vi.useFakeTimers();
+
+    scheduleDeckPush(deck());
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(push).toHaveBeenCalledTimes(1);
+
+    for (let i = 0; i < 10; i++) {
+      await vi.advanceTimersByTimeAsync(60_000);
+    }
+    expect(push).toHaveBeenCalledTimes(11);
+    expect(getSyncSnapshot().status).toBe("error");
+    expect(getSyncSnapshot().lastFailure).toMatchObject({
+      id: A,
+      kind: "deck",
+      status: 503,
+    });
+
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(push).toHaveBeenCalledTimes(11);
+
+    vi.useRealTimers();
+  });
+
+  it("오프라인(OfflineError)은 10회를 초과해도 재시도를 포기하지 않고 큐에 유지된다", async () => {
+    push.mockRejectedValue(new OfflineError());
+    __setDeckBackoffRandomForTests(() => 1);
+    vi.useFakeTimers();
+
+    scheduleDeckPush(deck());
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(push).toHaveBeenCalledTimes(1);
+
+    for (let i = 0; i < 15; i++) {
+      await vi.advanceTimersByTimeAsync(60_000);
+    }
+    expect(push.mock.calls.length).toBeGreaterThanOrEqual(15);
+    expect(getSyncSnapshot().status).toBe("offline");
+
+    push.mockImplementation(async (d: Deck) => ({ ...d, forkCount: 3 }));
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(getSyncSnapshot().status).toBe("synced");
+
+    vi.useRealTimers();
   });
 });

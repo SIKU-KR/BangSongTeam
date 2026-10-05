@@ -12,6 +12,7 @@ import { createShareRoute } from "./routes/share";
 import { authConfigRoute } from "./routes/authConfig";
 import { createConsentRoute } from "./routes/consent";
 import type { AppDeps } from "./deps";
+import { isTransientStorageError } from "./lib/storageErrors";
 
 /**
  * Worker 앱을 조립한다.
@@ -23,6 +24,15 @@ export function createApp(deps: AppDeps = {}) {
   return new Hono<AppEnv>()
     .onError((err, c) => {
       console.error("Worker Error:", err);
+      if (isTransientStorageError(err)) {
+        c.header("Retry-After", "2");
+        return c.json(
+          {
+            error: "Service Unavailable",
+          },
+          503,
+        );
+      }
       return c.json(
         {
           error: "Internal Server Error",

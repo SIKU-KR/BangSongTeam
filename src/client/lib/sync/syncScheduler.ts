@@ -1,8 +1,14 @@
 import type { Presentation } from "#shared";
-import { OfflineError } from "../api/request";
+import {
+  isRetryableApiError,
+  OfflineError,
+  ServerRejectedError,
+  SessionExpiredError,
+} from "../api/request";
 import { pushPresentation } from "./presentationSync";
-import { setSyncStatus } from "./syncStatus";
+import { setSyncStatus, type SyncFailure, getSyncSnapshot } from "./syncStatus";
 import { flushFolderSync } from "./folderSync";
+import { BackoffTracker, MAX_RETRY_ATTEMPTS } from "./backoff";
 
 /** 입력이 멈춘 뒤 이만큼 조용하면 올린다 */
 export const SYNC_DEBOUNCE_MS = 3000;
@@ -13,12 +19,33 @@ const PUSH_CONCURRENCY = 3;
 
 type Pusher = (document: Presentation) => Promise<boolean>;
 
+interface PendingItem {
+  document: Presentation;
+  firstScheduledAt: number;
+  readyAt: number;
+}
+
 let pusher: Pusher = pushPresentation;
 let enabled = false;
-let pending = new Map<string, Presentation>();
+let pending = new Map<string, PendingItem>();
+const inFlightDocs = new Set<string>();
+const inFlightTasks = new Set<Promise<void>>();
 let timer: ReturnType<typeof setTimeout> | null = null;
-let deadline: number | null = null;
-let inFlight: Promise<void> = Promise.resolve();
+const backoff = new BackoffTracker();
+let onlineListenerRegistered = false;
+
+function clearTimer(): void {
+  if (timer) {
+    clearTimeout(timer);
+    timer = null;
+  }
+}
+
+function clearPending(): void {
+  pending = new Map();
+  clearTimer();
+  backoff.reset();
+}
 
 /** 로그인·하이드레이션이 끝난 뒤에만 켠다 */
 export function setSyncEnabled(next: boolean): void {
@@ -26,63 +53,130 @@ export function setSyncEnabled(next: boolean): void {
   if (!next) clearPending();
 }
 
-function clearTimer(): void {
-  if (timer) {
-    clearTimeout(timer);
-    timer = null;
-  }
-  deadline = null;
-}
-
-function clearPending(): void {
-  pending = new Map();
+function scheduleNextTimer(): void {
   clearTimer();
-}
+  if (!enabled || pending.size === 0) return;
 
-async function pushAll(documents: Presentation[]): Promise<void> {
-  if (documents.length === 0) return;
+  const now = Date.now();
+  let earliest = Infinity;
 
-  await flushFolderSync();
-
-  setSyncStatus("syncing");
-  let offline = false;
-  let failed = false;
-
-  const queue = [...documents];
-  const worker = async (): Promise<void> => {
-    for (let document = queue.shift(); document; document = queue.shift()) {
-      try {
-        await pusher(document);
-      } catch (err) {
-        if (err instanceof OfflineError) {
-          offline = true;
-          if (!pending.has(document.id)) pending.set(document.id, document);
-        } else {
-          failed = true;
-        }
-      }
+  for (const [id, item] of pending.entries()) {
+    if (inFlightDocs.has(id)) continue;
+    if (item.readyAt < earliest) {
+      earliest = item.readyAt;
     }
-  };
-  await Promise.all(
-    Array.from({ length: Math.min(PUSH_CONCURRENCY, queue.length) }, worker),
-  );
-
-  if (offline) {
-    setSyncStatus("offline");
-  } else if (failed) {
-    setSyncStatus("error");
-  } else {
-    setSyncStatus("synced");
   }
+
+  if (earliest === Infinity) return;
+  const delay = Math.max(0, earliest - now);
+  timer = setTimeout(dispatch, delay);
 }
 
-function run(): void {
-  clearTimer();
-  if (pending.size === 0) return;
+function startPush(document: Presentation): void {
+  setSyncStatus("syncing");
+  const task = (async (): Promise<void> => {
+    try {
+      await flushFolderSync();
+      await pusher(document);
+      backoff.reset(document.id);
+      if (inFlightDocs.size === 1 && pending.size === 0) {
+        setSyncStatus("synced");
+      }
+    } catch (err) {
+      if (err instanceof SessionExpiredError) {
+        pending.delete(document.id);
+        backoff.reset(document.id);
+        setSyncStatus("error");
+      } else if (
+        err instanceof OfflineError ||
+        (isRetryableApiError(err) &&
+          backoff.getServerAttempt(document.id) < MAX_RETRY_ATTEMPTS)
+      ) {
+        const delay = backoff.getDelay(document.id, err);
+        const now = Date.now();
+        const existing = pending.get(document.id);
+        if (existing) {
+          existing.readyAt = Math.max(existing.readyAt, now + delay);
+        } else {
+          pending.set(document.id, {
+            document,
+            firstScheduledAt: now,
+            readyAt: now + delay,
+          });
+        }
+        setSyncStatus("offline");
+      } else {
+        pending.delete(document.id);
+        backoff.reset(document.id);
+        const failure: SyncFailure = {
+          id: document.id,
+          title: document.title,
+          kind: "presentation",
+          status:
+            err instanceof ServerRejectedError ? err.status : undefined,
+          message: err instanceof Error ? err.message : String(err),
+          failedAt: Date.now(),
+        };
+        console.error("Presentation push failed permanently", failure);
+        setSyncStatus("error", failure);
+      }
+    } finally {
+      inFlightDocs.delete(document.id);
+      if (
+        inFlightDocs.size === 0 &&
+        pending.size === 0 &&
+        getSyncSnapshot().status === "syncing"
+      ) {
+        setSyncStatus("synced");
+      }
+      dispatch();
+    }
+  })();
 
-  const documents = [...pending.values()];
-  pending = new Map();
-  inFlight = inFlight.then(() => pushAll(documents));
+  inFlightTasks.add(task);
+  void task.finally(() => {
+    inFlightTasks.delete(task);
+  });
+}
+
+function dispatch(): void {
+  if (!enabled) return;
+  clearTimer();
+
+  const now = Date.now();
+  const readyItems: PendingItem[] = [];
+
+  for (const [id, item] of pending.entries()) {
+    if (!inFlightDocs.has(id) && now >= item.readyAt) {
+      readyItems.push(item);
+    }
+  }
+
+  readyItems.sort((a, b) => a.readyAt - b.readyAt);
+
+  while (inFlightDocs.size < PUSH_CONCURRENCY && readyItems.length > 0) {
+    const item = readyItems.shift()!;
+    pending.delete(item.document.id);
+    inFlightDocs.add(item.document.id);
+    startPush(item.document);
+  }
+
+  scheduleNextTimer();
+}
+
+function handleOnline(): void {
+  if (!enabled) return;
+  backoff.reset();
+  for (const item of pending.values()) {
+    item.readyAt = 0;
+  }
+  dispatch();
+}
+
+function registerOnlineListener(): void {
+  if (onlineListenerRegistered || typeof window === "undefined") return;
+  onlineListenerRegistered = true;
+  window.addEventListener("online", handleOnline);
 }
 
 /**
@@ -100,11 +194,20 @@ export function scheduleDocumentPush(document: Presentation): void {
   if (!document.id) return;
   if (document.access) return;
 
-  pending.set(document.id, document);
+  registerOnlineListener();
+
   const now = Date.now();
-  deadline ??= now + SYNC_MAX_WAIT_MS;
-  if (timer) clearTimeout(timer);
-  timer = setTimeout(run, Math.min(SYNC_DEBOUNCE_MS, deadline - now));
+  const existing = pending.get(document.id);
+  const firstScheduledAt = existing ? existing.firstScheduledAt : now;
+  const deadline = firstScheduledAt + SYNC_MAX_WAIT_MS;
+  const debounceReady = Math.min(now + SYNC_DEBOUNCE_MS, deadline);
+  const readyAt =
+    existing && existing.readyAt > now
+      ? Math.max(existing.readyAt, debounceReady)
+      : debounceReady;
+
+  pending.set(document.id, { document, firstScheduledAt, readyAt });
+  scheduleNextTimer();
 }
 
 /**
@@ -113,20 +216,45 @@ export function scheduleDocumentPush(document: Presentation): void {
  */
 export function cancelDocumentPush(id: string): void {
   pending.delete(id);
+  backoff.reset(id);
+  scheduleNextTimer();
 }
 
-export function flushPendingSync(): Promise<void> {
-  run();
-  return inFlight;
+export async function flushPendingSync(): Promise<void> {
+  if (!enabled) return;
+  for (const item of pending.values()) {
+    item.readyAt = 0;
+  }
+  dispatch();
+
+  while (inFlightTasks.size > 0) {
+    await Promise.all(Array.from(inFlightTasks));
+    let hasReady = false;
+    for (const [id, item] of pending.entries()) {
+      if (!inFlightDocs.has(id) && item.readyAt === 0) {
+        hasReady = true;
+        break;
+      }
+    }
+    if (hasReady && inFlightDocs.size < PUSH_CONCURRENCY) {
+      dispatch();
+    }
+  }
 }
 
 export function __setPusherForTests(next: Pusher | null): void {
   pusher = next ?? pushPresentation;
 }
 
+export function __setBackoffRandomForTests(fn: () => number): void {
+  backoff.__setRandomForTests(fn);
+}
+
 export function __resetSyncSchedulerForTests(): void {
   enabled = false;
   pusher = pushPresentation;
   clearPending();
-  inFlight = Promise.resolve();
+  inFlightDocs.clear();
+  inFlightTasks.clear();
+  backoff.reset();
 }

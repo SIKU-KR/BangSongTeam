@@ -31,11 +31,48 @@ export class TimeoutError extends OfflineError {
  */
 export class ServerRejectedError extends Error {
   readonly status: number;
-  constructor(status: number, message?: string) {
+  readonly retryAfterMs?: number;
+  constructor(status: number, message?: string, retryAfterMs?: number) {
     super(message ?? ERROR_COPY.serverRejected(status));
     this.name = "ServerRejectedError";
     this.status = status;
+    this.retryAfterMs = retryAfterMs;
   }
+}
+
+/**
+ * Retry-After 헤더 값을 밀리초로 환산한다 (RFC 9110 §10.2.3).
+ * 초 단위 숫자나 HTTP 날짜 포맷을 지원한다.
+ */
+export function parseRetryAfter(
+  header: string | null | undefined,
+): number | null {
+  if (!header) return null;
+  const trimmed = header.trim();
+  const seconds = Number(trimmed);
+  if (Number.isFinite(seconds) && seconds >= 0) {
+    return Math.round(seconds * 1000);
+  }
+  const dateMs = Date.parse(trimmed);
+  if (!Number.isNaN(dateMs)) {
+    return Math.max(0, dateMs - Date.now());
+  }
+  return null;
+}
+
+/**
+ * 일시 장애(네트워크 실패, 타임아웃, 408·429·5xx)와 영구 실패(그 외 4xx)를 가른다.
+ * 401(세션 만료)은 재시도하지 않는다.
+ */
+export function isRetryableApiError(err: unknown): boolean {
+  if (err instanceof OfflineError) return true;
+  if (err instanceof ServerRejectedError) {
+    const s = err.status;
+    if (s === 408 || s === 429) return true;
+    if (s >= 500 && s <= 599) return true;
+    return false;
+  }
+  return false;
 }
 
 function isTimeoutError(err: unknown): boolean {
@@ -64,6 +101,7 @@ function isCallerAbort(err: unknown): boolean {
 interface RpcResponse {
   status: number;
   ok: boolean;
+  headers?: Headers;
   json: () => Promise<unknown>;
 }
 
@@ -82,7 +120,7 @@ interface RpcResponse {
  * - 네트워크에 닿지 못함(타임아웃 포함) → `OfflineError` (또는 `TimeoutError`)
  * - 호출자 취소(`AbortError`) → 그대로 던짐 (오프라인으로 오인하지 않음)
  * - 401 → `SessionExpiredError`
- * - 그 외 4xx·5xx → `ServerRejectedError(status, 서버가 준 한국어 문장)`
+ * - 그 외 4xx·5xx → `ServerRejectedError(status, 서버가 준 한국어 문장, retryAfterMs)`
  */
 export async function callApi<T>(
   request: () => Promise<RpcResponse>,
@@ -107,7 +145,9 @@ export async function callApi<T>(
       if (isCallerAbort(error)) throw error;
       void error;
     }
-    throw new ServerRejectedError(response.status, message);
+    const retryAfter = response.headers?.get("retry-after");
+    const retryAfterMs = parseRetryAfter(retryAfter) ?? undefined;
+    throw new ServerRejectedError(response.status, message, retryAfterMs);
   }
 
   try {

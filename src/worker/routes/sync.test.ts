@@ -4,11 +4,20 @@ import { count, eq, inArray } from "drizzle-orm";
 import {
   DEFAULT_DECK_STYLE,
   DeckSchema,
+  FolderSchema,
   PresentationDocumentSchema,
+  toPresentationChanges,
   type Deck,
   type PresentationDocument,
 } from "#shared";
-import { createD1Client, decks, decksFts, presentations, user } from "#db";
+import {
+  createD1Client,
+  decks,
+  decksFts,
+  folders,
+  presentations,
+  user,
+} from "#db";
 import { createApp } from "../index";
 import type { SessionReader } from "../middleware/auth";
 import { clearTables } from "../test/db";
@@ -72,6 +81,14 @@ const app = createApp({ readSession: fakeSession });
 function json(body: unknown) {
   return {
     method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  };
+}
+
+function patchJson(body: unknown) {
+  return {
+    method: "PATCH",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(body),
   };
@@ -510,6 +527,143 @@ describe("동기화 라우트 교차 사용자 격리", () => {
       expect(
         body.presentations[0].items.map((item) => item.deck.backgroundId),
       ).toEqual(serviceIds);
+    });
+  });
+
+  describe("동기화 라우트 멱등성 및 일시 오류", () => {
+    beforeEach(async () => {
+      const db = createD1Client(env.DB);
+      await clearTables(decks, presentations, folders);
+      await db.delete(user).where(eq(user.id, USER_A));
+      await db.insert(user).values([
+        { id: USER_A, name: "A", createdAt: new Date(), updatedAt: new Date() },
+      ]);
+      currentUser = USER_A;
+    });
+
+    it("PUT /api/presentations/:id 를 같은 본문으로 두 번 보내도 결과가 같다", async () => {
+      const doc = makeDoc(USER_A);
+      const first = await app.request(
+        `/api/presentations/${DOC_ID}`,
+        json(doc),
+        env,
+      );
+      expect(first.status).toBe(200);
+
+      const second = await app.request(
+        `/api/presentations/${DOC_ID}`,
+        json(doc),
+        env,
+      );
+      expect(second.status).toBe(200);
+
+      const get = await app.request(`/api/presentations/${DOC_ID}`, {}, env);
+      const body = (await get.json()) as { presentation: PresentationDocument };
+      expect(body.presentation.id).toBe(DOC_ID);
+      expect(body.presentation.title).toBe(doc.title);
+    });
+
+    it("PATCH /api/presentations/:id 를 같은 본문으로 두 번 보내도 결과가 같다", async () => {
+      const doc = makeDoc(USER_A);
+      const changes = toPresentationChanges(doc);
+
+      const first = await app.request(
+        `/api/presentations/${DOC_ID}`,
+        patchJson(changes),
+        env,
+      );
+      expect(first.status).toBe(200);
+
+      const second = await app.request(
+        `/api/presentations/${DOC_ID}`,
+        patchJson(changes),
+        env,
+      );
+      expect(second.status).toBe(200);
+
+      const get = await app.request(`/api/presentations/${DOC_ID}`, {}, env);
+      const body = (await get.json()) as { presentation: PresentationDocument };
+      expect(body.presentation.id).toBe(DOC_ID);
+      expect(body.presentation.title).toBe(doc.title);
+    });
+
+    it("PUT /api/decks/:id 를 같은 본문으로 두 번 보내도 결과가 같다", async () => {
+      const libDeck = makeDeck(USER_A, {
+        id: LIB_DECK_ID,
+        scope: "library",
+        presentationId: null,
+      });
+      const first = await app.request(
+        `/api/decks/${LIB_DECK_ID}`,
+        json(libDeck),
+        env,
+      );
+      expect(first.status).toBe(200);
+      const firstBody = await first.json();
+
+      const second = await app.request(
+        `/api/decks/${LIB_DECK_ID}`,
+        json(libDeck),
+        env,
+      );
+      expect(second.status).toBe(200);
+      const secondBody = await second.json();
+
+      expect(firstBody).toEqual(secondBody);
+    });
+
+    it("PUT /api/folders/:id 를 같은 본문으로 두 번 보내도 결과가 같다", async () => {
+      const folderData = FolderSchema.parse({
+        id: "f000000000000000000aa",
+        userId: USER_A,
+        parentId: null,
+        name: "주일 찬양",
+        trashedAt: null,
+        createdAt: "2026-09-20T00:00:00.000Z",
+        updatedAt: "2026-09-20T00:00:00.000Z",
+      });
+
+      const first = await app.request(
+        `/api/folders/${folderData.id}`,
+        json(folderData),
+        env,
+      );
+      expect(first.status).toBe(200);
+      const firstBody = await first.json();
+
+      const second = await app.request(
+        `/api/folders/${folderData.id}`,
+        json(folderData),
+        env,
+      );
+      expect(second.status).toBe(200);
+      const secondBody = await second.json();
+
+      expect(firstBody).toEqual(secondBody);
+    });
+
+    it("D1 일시 장애(SQLITE_BUSY 등) 시 503과 Retry-After를 반환한다", async () => {
+      const brokenEnv = {
+        ...env,
+        DB: {
+          ...env.DB,
+          prepare() {
+            throw new Error("SQLITE_BUSY: database is locked");
+          },
+          batch() {
+            throw new Error("SQLITE_BUSY: database is locked");
+          },
+        },
+      };
+
+      const res = await app.request(
+        `/api/presentations/${DOC_ID}`,
+        json(makeDoc(USER_A)),
+        brokenEnv,
+      );
+
+      expect(res.status).toBe(503);
+      expect(res.headers.get("Retry-After")).toBe("2");
     });
   });
 });
