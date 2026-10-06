@@ -3,7 +3,6 @@ import { MEDIA_CACHE_NAME, mediaCacheNameFor } from "#shared";
 import { resetFakeCacheStorage } from "../../test/fakeCacheStorage";
 import {
   cacheMediaFirst,
-  cacheMediaUrls,
   ensureMediaSpace,
   findCachedMediaUrls,
   getMediaCacheFailure,
@@ -78,6 +77,12 @@ async function isCached(url: string): Promise<boolean> {
   return (await cache.match(url)) !== undefined;
 }
 
+async function cacheAll(urls: readonly string[]): Promise<string[]> {
+  const cached: string[] = [];
+  for (const url of urls) if (await cacheMediaFirst(url)) cached.push(url);
+  return cached;
+}
+
 const originalFetch = globalThis.fetch;
 
 beforeEach(() => {
@@ -95,13 +100,13 @@ afterEach(() => {
   delete navigator.storage;
 });
 
-describe("cacheMediaUrls", () => {
+describe("cacheMediaFirst", () => {
   it("요청한 URL을 모두 받아 캐시에 넣는다", async () => {
     mockFetch();
 
-    const result = await cacheMediaUrls([VIDEO, POSTER]);
+    const result = await cacheAll([VIDEO, POSTER]);
 
-    expect(result).toEqual({ cachedUrls: [VIDEO, POSTER] });
+    expect(result).toEqual([VIDEO, POSTER]);
     expect(await isCached(VIDEO)).toBe(true);
     expect(await isCached(POSTER)).toBe(true);
   });
@@ -109,7 +114,7 @@ describe("cacheMediaUrls", () => {
   it("Range 헤더 없이 전체 응답을 받는다", async () => {
     const fetchMock = mockFetch();
 
-    await cacheMediaUrls([VIDEO]);
+    await cacheAll([VIDEO]);
 
     const init = (fetchMock.mock.calls[0] as unknown[])[1] as
       RequestInit | undefined;
@@ -122,10 +127,10 @@ describe("cacheMediaUrls", () => {
     await cache.put(VIDEO, okResponse());
     const fetchMock = mockFetch();
 
-    const result = await cacheMediaUrls([VIDEO]);
+    const result = await cacheAll([VIDEO]);
 
     expect(fetchMock).not.toHaveBeenCalled();
-    expect(result.cachedUrls).toEqual([VIDEO]);
+    expect(result).toEqual([VIDEO]);
   });
 
   it("한 항목이 실패해도 나머지를 계속 받는다", async () => {
@@ -133,18 +138,18 @@ describe("cacheMediaUrls", () => {
       url === VIDEO ? new Response(null, { status: 404 }) : okResponse(),
     );
 
-    const result = await cacheMediaUrls([VIDEO, POSTER]);
+    const result = await cacheAll([VIDEO, POSTER]);
 
-    expect(result).toEqual({ cachedUrls: [POSTER] });
+    expect(result).toEqual([POSTER]);
     expect(await isCached(VIDEO)).toBe(false);
   });
 
   it("부분 응답(206)은 캐시에 넣지 않는다", async () => {
     mockFetch(async () => new Response(new ArrayBuffer(4), { status: 206 }));
 
-    const result = await cacheMediaUrls([VIDEO]);
+    const result = await cacheAll([VIDEO]);
 
-    expect(result.cachedUrls).toEqual([]);
+    expect(result).toEqual([]);
     expect(await isCached(VIDEO)).toBe(false);
   });
 
@@ -156,19 +161,19 @@ describe("cacheMediaUrls", () => {
     const cache = await caches.open(MEDIA_CACHE_NAME);
     vi.spyOn(cache, "put").mockRejectedValue(quotaError());
 
-    const result = await cacheMediaUrls([VIDEO, OTHER]);
+    const result = await cacheAll([VIDEO, OTHER]);
 
-    expect(result).toEqual({ cachedUrls: [] });
+    expect(result).toEqual([]);
     expect(getMediaCacheFailure(VIDEO)).toBe("network");
     expect(getMediaCacheFailure(OTHER)).toBe("quota");
   });
 });
 
-describe("cacheMediaUrls 진행률과 캐시 분리", () => {
+describe("cacheMediaFirst 진행률과 캐시 분리", () => {
   it("받은 바이트 수를 응답 길이와 함께 알린다", async () => {
     mockFetch(async () => okResponse(64));
 
-    await cacheMediaUrls([VIDEO]);
+    await cacheAll([VIDEO]);
 
     expect(getMediaProgress(VIDEO)).toEqual({ received: 64, total: 64 });
   });
@@ -176,7 +181,7 @@ describe("cacheMediaUrls 진행률과 캐시 분리", () => {
   it("포스터는 영상 캐시가 아닌 포스터 캐시에 담는다", async () => {
     mockFetch();
 
-    await cacheMediaUrls([POSTER]);
+    await cacheAll([POSTER]);
 
     const videos = await caches.open(MEDIA_CACHE_NAME);
     expect(await videos.match(POSTER)).toBeUndefined();
@@ -184,16 +189,16 @@ describe("cacheMediaUrls 진행률과 캐시 분리", () => {
   });
 });
 
-describe("cacheMediaUrls (서비스 워커 제어 중)", () => {
+describe("cacheMediaFirst (서비스 워커 제어 중)", () => {
   it("SW가 캐시에 담으므로 페이지는 cache.put을 하지 않는다", async () => {
     controlByServiceWorker();
     mockServiceWorkerFetch();
     const cache = await caches.open(MEDIA_CACHE_NAME);
     const put = vi.spyOn(cache, "put");
 
-    const result = await cacheMediaUrls([VIDEO]);
+    const result = await cacheAll([VIDEO]);
 
-    expect(result).toEqual({ cachedUrls: [VIDEO] });
+    expect(result).toEqual([VIDEO]);
     expect(put).toHaveBeenCalledTimes(1);
     expect(await isCached(VIDEO)).toBe(true);
   });
@@ -209,10 +214,10 @@ describe("cacheMediaUrls (서비스 워커 제어 중)", () => {
         }),
     );
 
-    const pendingResult = cacheMediaUrls([VIDEO]);
+    const pendingResult = cacheAll([VIDEO]);
     await vi.runAllTimersAsync();
 
-    expect(await pendingResult).toEqual({ cachedUrls: [] });
+    expect(await pendingResult).toEqual([]);
     expect(getMediaCacheFailure(VIDEO)).toBe("network");
   });
 
@@ -221,10 +226,10 @@ describe("cacheMediaUrls (서비스 워커 제어 중)", () => {
     controlByServiceWorker();
     mockFetch();
 
-    const pendingResult = cacheMediaUrls([VIDEO]);
+    const pendingResult = cacheAll([VIDEO]);
     await vi.runAllTimersAsync();
 
-    expect(await pendingResult).toEqual({ cachedUrls: [] });
+    expect(await pendingResult).toEqual([]);
     expect(getMediaCacheFailure(VIDEO)).toBe("quota");
   });
 
@@ -234,10 +239,10 @@ describe("cacheMediaUrls (서비스 워커 제어 중)", () => {
     mockEstimate(1024 * 1024 * 1024, 0);
     mockFetch();
 
-    const pendingResult = cacheMediaUrls([VIDEO]);
+    const pendingResult = cacheAll([VIDEO]);
     await vi.runAllTimersAsync();
 
-    expect(await pendingResult).toEqual({ cachedUrls: [] });
+    expect(await pendingResult).toEqual([]);
     expect(getMediaCacheFailure(VIDEO)).toBe("network");
   });
 
@@ -247,15 +252,15 @@ describe("cacheMediaUrls (서비스 워커 제어 중)", () => {
     mockEstimate(100, 92);
     mockFetch();
 
-    const pendingResult = cacheMediaUrls([VIDEO]);
+    const pendingResult = cacheAll([VIDEO]);
     await vi.runAllTimersAsync();
 
-    expect(await pendingResult).toEqual({ cachedUrls: [] });
+    expect(await pendingResult).toEqual([]);
     expect(getMediaCacheFailure(VIDEO)).toBe("quota");
   });
 });
 
-describe("cacheMediaUrls 멈춘 다운로드", () => {
+describe("cacheMediaFirst 멈춘 다운로드", () => {
   function mockFetchWithInit(
     impl: (url: string, init: RequestInit | undefined) => Promise<Response>,
   ) {
@@ -467,7 +472,7 @@ describe("scheduleMediaCaching", () => {
 
   it("이 세션에서 담긴 것을 확인한 영상은 다시 큐에 넣지 않는다", async () => {
     mockFetch();
-    await cacheMediaUrls([VIDEO]);
+    await cacheAll([VIDEO]);
     const fetchMock = mockFetch();
     const open = vi.spyOn(caches, "open");
 
@@ -481,7 +486,7 @@ describe("scheduleMediaCaching", () => {
 
   it("이 세션에서 담긴 것을 확인한 포스터는 다시 넣어도 캐시에 있으면 다시 받지 않는다", async () => {
     mockFetch();
-    await cacheMediaUrls([POSTER]);
+    await cacheAll([POSTER]);
     const fetchMock = mockFetch();
 
     scheduleMediaCaching([POSTER]);
@@ -587,7 +592,7 @@ describe("cacheMediaFirst", () => {
 describe("findCachedMediaUrls", () => {
   it("이미 캐시에 담긴 URL만 돌려준다", async () => {
     mockFetch();
-    await cacheMediaUrls([VIDEO]);
+    await cacheAll([VIDEO]);
     __resetMediaCachingForTests();
 
     expect(await findCachedMediaUrls([VIDEO, OTHER, POSTER])).toEqual([VIDEO]);
@@ -618,7 +623,7 @@ describe("ensureMediaSpace", () => {
 
   it("자리가 있으면 아무것도 지우지 않는다", async () => {
     mockFetch(async () => okResponse(100));
-    await cacheMediaUrls([OTHER]);
+    await cacheAll([OTHER]);
     mockEstimate(1000, 100);
 
     expect(await ensureMediaSpace(500, [VIDEO])).toBe(true);
@@ -627,7 +632,7 @@ describe("ensureMediaSpace", () => {
 
   it("모자라면 지금 세트 밖의 영상부터 지우고 세트 영상은 남긴다", async () => {
     mockFetch(async () => okResponse(400));
-    await cacheMediaUrls([OTHER, VIDEO]);
+    await cacheAll([OTHER, VIDEO]);
     mockEstimate(1000, 800);
 
     expect(await ensureMediaSpace(500, [VIDEO])).toBe(true);
@@ -637,7 +642,7 @@ describe("ensureMediaSpace", () => {
 
   it("지운 영상은 다시 큐에 넣으면 다시 받는다", async () => {
     mockFetch(async () => okResponse(400));
-    await cacheMediaUrls([OTHER, VIDEO]);
+    await cacheAll([OTHER, VIDEO]);
     mockEstimate(1000, 800);
     await ensureMediaSpace(500, [VIDEO]);
     const fetchMock = mockFetch();
@@ -651,7 +656,7 @@ describe("ensureMediaSpace", () => {
 
   it("세트 밖 영상을 모두 지워도 모자라면 false다", async () => {
     mockFetch(async () => okResponse(100));
-    await cacheMediaUrls([VIDEO]);
+    await cacheAll([VIDEO]);
     mockEstimate(1000, 900);
 
     expect(await ensureMediaSpace(5000, [VIDEO])).toBe(false);

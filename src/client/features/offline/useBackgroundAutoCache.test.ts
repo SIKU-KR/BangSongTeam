@@ -60,6 +60,31 @@ function urlsOf(backgroundId: string): string[] {
   return background ? [background.mediaUrl, background.posterUrl] : [];
 }
 
+function urlsDroppedToZero(): string[] {
+  const events = [
+    ...retainMediaUrls.mock.calls.map(([urls], index) => ({
+      order: retainMediaUrls.mock.invocationCallOrder[index],
+      urls,
+      delta: 1,
+    })),
+    ...releaseMediaUrls.mock.calls.map(([urls], index) => ({
+      order: releaseMediaUrls.mock.invocationCallOrder[index],
+      urls,
+      delta: -1,
+    })),
+  ].sort((a, b) => a.order - b.order);
+  const counts = new Map<string, number>();
+  const dropped = new Set<string>();
+  for (const { urls, delta } of events) {
+    for (const url of urls) {
+      const count = (counts.get(url) ?? 0) + delta;
+      counts.set(url, count);
+      if (count === 0) dropped.add(url);
+    }
+  }
+  return [...dropped];
+}
+
 const BG_A = TEST_SERVICE_BACKGROUNDS[0].id;
 const BG_B = TEST_SERVICE_BACKGROUNDS[1].id;
 const BG_C = TEST_SERVICE_BACKGROUNDS[2].id;
@@ -195,6 +220,16 @@ describe("useBackgroundAutoCache", () => {
     expect(releaseMediaUrls).toHaveBeenLastCalledWith(urlsOf(BG_B));
   });
 
+  it("배경을 바꿔도 두 세트에 함께 있는 URL은 놓지 않는다", () => {
+    const { rerender } = renderHook(({ p }) => useBackgroundAutoCache(p), {
+      initialProps: { p: withSongBackgrounds([BG_A, BG_B]) },
+    });
+
+    rerender({ p: withSongBackgrounds([BG_A, BG_C]) });
+
+    expect(urlsDroppedToZero()).toEqual(urlsOf(BG_B));
+  });
+
   it("지연 전에 화면을 떠나면 아무것도 받지 않는다", () => {
     const { unmount } = renderHook(() =>
       useBackgroundAutoCache(withBackground(BG_A)),
@@ -314,6 +349,16 @@ describe("useProjectionMediaCache", () => {
 
     unmount();
     expect(releaseMediaUrls).toHaveBeenCalledWith(ALL_URLS);
+  });
+
+  it("세트의 배경이 바뀌어도 그대로 쓰는 URL은 놓지 않는다", () => {
+    const { rerender } = renderHook(({ p }) => useProjectionMediaCache(p, 0), {
+      initialProps: { p: presentation },
+    });
+
+    rerender({ p: withSongBackgrounds([BG_A, BG_B]) });
+
+    expect(urlsDroppedToZero()).toEqual(urlsOf(BG_C));
   });
 
   it("네트워크가 돌아오면 지금·다음 곡부터 다시 받는다", () => {

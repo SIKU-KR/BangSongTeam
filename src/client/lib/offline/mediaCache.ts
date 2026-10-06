@@ -8,10 +8,6 @@ import { isQuotaExceededError } from "../browser/quotaError";
 import { BackoffTracker } from "../sync/backoff";
 import { requestPersistentStorage } from "./storagePersistence";
 
-interface MediaCacheResult {
-  cachedUrls: string[];
-}
-
 /** 받는 중인 파일의 진행 상황. `total`은 응답에 길이가 없으면 null이다 */
 interface MediaProgress {
   received: number;
@@ -254,57 +250,6 @@ export function getMediaCacheFailure(
   return failures.get(url);
 }
 
-/**
- * 미디어 URL을 전체 응답(200)으로 받아 캐시에 담는다. 포스터와 영상은 캐시가 다르다
- * (`mediaCacheNameFor`). 받는 동안 바이트 수를 `getMediaProgress`로 알린다.
- *
- * 서비스 워커가 페이지를 제어하면 `fetch()`가 SW의 `CacheFirst` 미디어 라우트를
- * 지나며 SW가 캐시에 담으므로, 여기서는 본문을 다 읽고 SW의 쓰기가 끝나기를 기다리기만
- * 한다. 페이지가 `cache.put`을 한 번 더 하면 수백 MB 영상마다 디스크 쓰기가 두 번이다.
- * SW가 없을 때(개발 서버, SW를 지원하지 않는 브라우저)만 직접 `put`한다.
- *
- * `MEDIA_STALL_TIMEOUT_MS` 동안 진전이 없으면(새 바이트가 오지 않거나 Cache Storage가
- * 응답하지 않으면) 그 URL은 끊고 실패로 넘긴다.
- * SW를 지날 때는 페이지 요청을 끊어도 SW의 요청은 계속될 수 있어, 다시 시도하면 같은
- * 파일을 한 번 더 받을 수 있다. 캐시에 없는 파일을 성공으로 치지 않는 쪽을 택했다.
- *
- * 실패한 URL은 던지지 않고 건너뛰되, 저장 공간 부족(`QuotaExceededError`)인지 다른
- * 실패인지를 `getMediaCacheFailure`로 남긴다. SW가 담을 때는 SW 안에서 난 오류가 페이지에
- * 오지 않는다. 그래서 응답 길이만큼 본문이 다 왔는데도 SW가 끝내 담지 않았으면, Safari처럼
- * `navigator.storage.estimate()`로 남은 용량을 알 수 없거나 알려 준 남은 용량이 파일보다 작을
- * 때만 공간 부족으로 본다. 큰 파일의 쓰기가 기다리는 시간을 넘기거나 쓰는 도중 SW가 멈춘
- * 것까지 공간 부족으로 치면, 다시 받지 않고 '저장 공간 부족'을 잘못 알린다. 그 대신 브라우저가
- * 남은 용량을 부풀려 알려 주면 실제 부족도 `network`로 남아 큐와 `useCacheFirstVideo`의
- * 재시도 한도까지 다시 받는다.
- *
- * 끊긴 지점부터 `Range`로 이어 받지 않고 처음부터 다시 받는다. 페이지 요청은 SW의
- * `CacheFirst` 라우트를 피할 수 없고 그 라우트는 206을 담지 않는다(`statuses: [200]`).
- * 끊기기 전에 받은 바이트도 남아 있지 않다. SW든 페이지든 본문을 흘려 넣던 캐시 쓰기는
- * 스트림 오류와 함께 버려지므로 이어 붙일 앞부분이 없다. 이어 받으려면 수백 MB를 페이지
- * 메모리에 들고 있거나, 조각을 따로 담아 SW가 다시 합치게 바꿔야 한다. 그래서 큐가 백오프로
- * 다시 받는 쪽을 택했다.
- */
-export async function cacheMediaUrls(
-  urls: readonly string[],
-): Promise<MediaCacheResult> {
-  const cachedUrls: string[] = [];
-
-  if (!isCacheStorageAvailable()) {
-    return { cachedUrls };
-  }
-
-  for (const url of urls) {
-    try {
-      await cacheWithWatchdog(url);
-      cachedUrls.push(url);
-    } catch {
-      continue;
-    }
-  }
-
-  return { cachedUrls };
-}
-
 async function cacheWithWatchdog(url: string): Promise<void> {
   const watchdog = stallWatchdog();
   watchdog.poke();
@@ -439,6 +384,8 @@ function canCacheInBackground(): boolean {
  * 이 세션에서 담긴 것을 확인한 영상은 다시 넣지 않는다. 영상 캐시는 SW 만료 정책이 없고
  * 이 모듈의 `ensureMediaSpace`만 지우며 그때 확인 기록도 지운다. 포스터는 SW 만료 정책이
  * 페이지 모르게 지울 수 있으니 다시 넣어 캐시를 열어 본다.
+ 확인 기록은 탭마다 따로라서, 다른 탭의 `ensureMediaSpace`가 지운 영상은 이 탭이 모른 채
+ * 다시 받지 않는다. 한 기기에서 세트 하나를 여는 쓰임에 맞춘 것이고, 새로 고치면 다시 확인한다.
  */
 export function scheduleMediaCaching(
   urls: readonly string[],
@@ -533,9 +480,39 @@ export function getMediaQueueState(url: string): MediaQueueState | null {
 
 /**
  * 큐 순서를 기다리지 않고 `url`을 곧바로 캐시에 담는다. 담기면 true, 실패하면 false다.
+ * 백그라운드 큐(`scheduleMediaCaching`)도 같은 방식으로 받는다.
  *
  * 큐가 다른 파일을 받는 중이어도 함께 받는다. 같은 URL을 이미 받는 중이면 그 다운로드를
  * 기다린다 — 같은 URL을 동시에 두 번 받지 않는다.
+ *
+ * 전체 응답(200)만 담는다. 포스터와 영상은 캐시가 다르다(`mediaCacheNameFor`). 받는 동안
+ * 바이트 수를 `getMediaProgress`로 알린다.
+ *
+ * 서비스 워커가 페이지를 제어하면 `fetch()`가 SW의 `CacheFirst` 미디어 라우트를
+ * 지나며 SW가 캐시에 담으므로, 여기서는 본문을 다 읽고 SW의 쓰기가 끝나기를 기다리기만
+ * 한다. 페이지가 `cache.put`을 한 번 더 하면 수백 MB 영상마다 디스크 쓰기가 두 번이다.
+ * SW가 없을 때(개발 서버, SW를 지원하지 않는 브라우저)만 직접 `put`한다.
+ *
+ * `MEDIA_STALL_TIMEOUT_MS` 동안 진전이 없으면(새 바이트가 오지 않거나 Cache Storage가
+ * 응답하지 않으면) 끊고 실패로 넘긴다.
+ * SW를 지날 때는 페이지 요청을 끊어도 SW의 요청은 계속될 수 있어, 다시 시도하면 같은
+ * 파일을 한 번 더 받을 수 있다. 캐시에 없는 파일을 성공으로 치지 않는 쪽을 택했다.
+ *
+ * 실패하면 던지지 않고 false를 돌려주되, 저장 공간 부족(`QuotaExceededError`)인지 다른
+ * 실패인지를 `getMediaCacheFailure`로 남긴다. SW가 담을 때는 SW 안에서 난 오류가 페이지에
+ * 오지 않는다. 그래서 응답 길이만큼 본문이 다 왔는데도 SW가 끝내 담지 않았으면, Safari처럼
+ * `navigator.storage.estimate()`로 남은 용량을 알 수 없거나 알려 준 남은 용량이 파일보다 작을
+ * 때만 공간 부족으로 본다. 큰 파일의 쓰기가 기다리는 시간을 넘기거나 쓰는 도중 SW가 멈춘
+ * 것까지 공간 부족으로 치면, 다시 받지 않고 '저장 공간 부족'을 잘못 알린다. 그 대신 브라우저가
+ * 남은 용량을 부풀려 알려 주면 실제 부족도 `network`로 남아 큐와 `useCacheFirstVideo`의
+ * 재시도 한도까지 다시 받는다.
+ *
+ * 끊긴 지점부터 `Range`로 이어 받지 않고 처음부터 다시 받는다. 페이지 요청은 SW의
+ * `CacheFirst` 라우트를 피할 수 없고 그 라우트는 206을 담지 않는다(`statuses: [200]`).
+ * 끊기기 전에 받은 바이트도 남아 있지 않다. SW든 페이지든 본문을 흘려 넣던 캐시 쓰기는
+ * 스트림 오류와 함께 버려지므로 이어 붙일 앞부분이 없다. 이어 받으려면 수백 MB를 페이지
+ * 메모리에 들고 있거나, 조각을 따로 담아 SW가 다시 합치게 바꿔야 한다. 그래서 큐가 백오프로
+ * 다시 받는 쪽을 택했다.
  */
 export function cacheMediaFirst(url: string): Promise<boolean> {
   if (knownCached.has(url)) return Promise.resolve(true);
@@ -620,7 +597,7 @@ function pathOf(url: string): string {
  * 용량을 알려 주지 않는 브라우저의 오리진 한도가 수백 MB라 그냥 받으면 받는 도중에 한도에
  * 걸린다. 부족을 겪었는데도 알려 준 용량이 넉넉한 것은 페이지가 직접 `cache.put`하다
  * `QuotaExceededError`를 받을 때(SW 제어 전 첫 방문, 강력 새로고침, 개발 서버)뿐이다. SW가
- * 담을 때는 용량을 알 수 없거나 모자랄 때만 부족으로 치므로(`cacheMediaUrls`), SW 경로에서
+ * 담을 때는 용량을 알 수 없거나 모자랄 때만 부족으로 치므로(`cacheMediaFirst`), SW 경로에서
  * 의심은 사실상 용량을 알려 주지 않는 브라우저에만 걸리고, 부풀려 알려 준 용량은 `network`
  * 실패와 재시도로 넘어간다.
  * 다른 세트나 세트에서 빠진 영상이 겪은 부족은 따지지 않는다. 따지면 한 번의 부족으로

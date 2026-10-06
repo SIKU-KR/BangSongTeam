@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import {
   collectPresentationMediaAssets,
   collectUniqueMediaUrls,
@@ -15,6 +15,27 @@ import { useLatest } from "../../hooks/useLatest";
 
 export const AUTO_CACHE_DELAY_MS = 3000;
 
+function useRetainedMediaUrls(
+  urlsRef: { readonly current: readonly string[] },
+  key: string | null,
+): void {
+  const releaseRef = useRef<(() => void) | null>(null);
+
+  useEffect(() => {
+    const release = key === null ? null : retainMediaUrls(urlsRef.current);
+    releaseRef.current?.();
+    releaseRef.current = release;
+  }, [key]);
+
+  useEffect(
+    () => () => {
+      releaseRef.current?.();
+      releaseRef.current = null;
+    },
+    [],
+  );
+}
+
 /**
  * 열려 있는 세트의 배경 영상·포스터와 글꼴을 조용히 캐시에 담는다.
  *
@@ -22,7 +43,9 @@ export const AUTO_CACHE_DELAY_MS = 3000;
  * 배경을 곡에 지정, 동기화로 목록 갱신) 새로 생긴 URL도 곧바로 캐시 대상이 된다.
  *
  * 큐에 넣는 것은 지연 뒤지만 URL은 열자마자 붙잡는다(`retainMediaUrls`). 그 사이 미리보기
- * (`useCacheFirstVideo`)가 먼저 받다 실패해도 큐가 백오프로 다시 받는다.
+ * (`useCacheFirstVideo`)가 먼저 받다 실패해도 큐가 백오프로 다시 받는다. 배경을 바꾸면 새
+ * URL을 먼저 붙잡은 뒤 지난 URL을 놓는다. 두 세트에 함께 있는 URL이 잠깐이라도 놓이면
+ * 기다리던 재시도와 시도 횟수가 지워져, SW가 아직 받고 있을 수 있는 파일을 곧바로 다시 받는다.
  */
 export function useBackgroundAutoCache(
   presentation: Presentation | null,
@@ -53,10 +76,7 @@ export function useBackgroundAutoCache(
     return () => clearTimeout(timer);
   }, [presentationId, urlKey]);
 
-  useEffect(
-    () => (presentationId ? retainMediaUrls(urlsRef.current) : undefined),
-    [presentationId, urlKey],
-  );
+  useRetainedMediaUrls(urlsRef, presentationId ? urlKey : null);
 
   useEffect(() => {
     const handleOnline = (): void => {
@@ -101,7 +121,7 @@ export function useProjectionMediaCache(
   const focusUrlsRef = useLatest(focusUrls);
   const allUrlsRef = useLatest(allUrls);
 
-  useEffect(() => retainMediaUrls(allUrlsRef.current), [allKey]);
+  useRetainedMediaUrls(allUrlsRef, allKey);
 
   useEffect(() => {
     const scheduleAll = (): void => {
