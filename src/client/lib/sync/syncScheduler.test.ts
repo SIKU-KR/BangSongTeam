@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import type { Presentation } from "#shared";
 import {
   scheduleDocumentPush,
+  cancelDocumentPush,
   flushPendingSync,
   setSyncEnabled,
   SYNC_DEBOUNCE_MS,
@@ -10,7 +11,7 @@ import {
   __setPusherForTests,
   __setBackoffRandomForTests,
 } from "./syncScheduler";
-import { getSyncSnapshot, __resetSyncStatusForTests } from "./syncStatus";
+import { getSyncSnapshot, resetSyncStatus } from "./syncStatus";
 import {
   OfflineError,
   ServerRejectedError,
@@ -20,6 +21,7 @@ import {
 import { installFakeApi } from "../../test/fakeApi";
 import {
   scheduleFolderPush,
+  flushFolderSync,
   setFolderSyncEnabled,
   __resetFolderSyncForTests,
   __setFolderPusherForTests,
@@ -44,7 +46,7 @@ describe("서버 push 스케줄러", () => {
 
   beforeEach(() => {
     __resetSyncSchedulerForTests();
-    __resetSyncStatusForTests();
+    resetSyncStatus();
     push = vi.fn(async () => true);
     __setPusherForTests(push);
     setSyncEnabled(true);
@@ -180,6 +182,64 @@ describe("서버 push 스케줄러", () => {
   it("빈 큐를 flush해도 상태를 건드리지 않는다", async () => {
     await flushPendingSync();
     expect(getSyncSnapshot().status).toBe("idle");
+  });
+
+  it("세트 동기화가 실패한 뒤 폴더 동기화가 성공해도 동기화 실패로 남는다", async () => {
+    __resetFolderSyncForTests();
+    __setFolderPusherForTests(async (folder) => folder);
+    setFolderSyncEnabled(true);
+    push.mockRejectedValue(new ServerRejectedError(400, "잘못된 문서 구조"));
+
+    scheduleDocumentPush(doc("a", "불량 세트"));
+    await flushPendingSync();
+    expect(getSyncSnapshot().status).toBe("error");
+
+    scheduleFolderPush({
+      id: "f00000000000000000001",
+      userId: USER,
+      parentId: null,
+      name: "새 폴더",
+      trashedAt: null,
+      createdAt: "2026-09-22T00:00:00.000Z",
+      updatedAt: "2026-09-22T00:00:00.000Z",
+    });
+    await flushFolderSync();
+
+    expect(getSyncSnapshot().status).toBe("error");
+    expect(getSyncSnapshot().lastFailure).toMatchObject({
+      id: "a",
+      kind: "presentation",
+    });
+    __resetFolderSyncForTests();
+  });
+
+  it("다른 세트가 성공해도 실패한 세트가 다시 올라가기 전까지 실패로 남는다", async () => {
+    push.mockImplementation(async (document) => {
+      if (document.id === "a") throw new ServerRejectedError(400, "거절");
+      return true;
+    });
+
+    scheduleDocumentPush(doc("a"));
+    await flushPendingSync();
+    scheduleDocumentPush(doc("b"));
+    await flushPendingSync();
+    expect(getSyncSnapshot().status).toBe("error");
+
+    push.mockResolvedValue(true);
+    scheduleDocumentPush(doc("a"));
+    await flushPendingSync();
+    expect(getSyncSnapshot()).toEqual({ status: "synced", lastFailure: null });
+  });
+
+  it("실패한 세트를 영구 삭제하면 실패 표시를 지운다", async () => {
+    push.mockRejectedValueOnce(new ServerRejectedError(400, "거절"));
+
+    scheduleDocumentPush(doc("a"));
+    await flushPendingSync();
+    expect(getSyncSnapshot().status).toBe("error");
+
+    cancelDocumentPush("a");
+    expect(getSyncSnapshot()).toEqual({ status: "synced", lastFailure: null });
   });
 
   it("새 폴더를 세트보다 먼저 올린다 (폴더 큐를 먼저 비운다)", async () => {

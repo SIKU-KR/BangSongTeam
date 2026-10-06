@@ -17,7 +17,14 @@ import {
   TimeoutError,
 } from "../api/request";
 import { installFakeApi } from "../../test/fakeApi";
-import { getSyncSnapshot, __resetSyncStatusForTests } from "./syncStatus";
+import { getSyncSnapshot, resetSyncStatus } from "./syncStatus";
+import {
+  scheduleDocumentPush,
+  flushPendingSync,
+  setSyncEnabled,
+  __setPusherForTests,
+  __resetSyncSchedulerForTests,
+} from "./syncScheduler";
 
 const USER = "00000000x000000000001";
 const A = "c0000000000000000000a";
@@ -43,7 +50,7 @@ describe("보관함 push 큐", () => {
 
   beforeEach(() => {
     __resetDeckSyncForTests();
-    __resetSyncStatusForTests();
+    resetSyncStatus();
     push = vi.fn(async (d: Deck) => ({ ...d, forkCount: 3 }));
     remove = vi.fn(async () => {});
     __setDeckTransportForTests({ push, remove });
@@ -282,5 +289,56 @@ describe("보관함 push 큐", () => {
     expect(getSyncSnapshot().status).toBe("synced");
 
     vi.useRealTimers();
+  });
+
+  it("곡이 영구 실패한 뒤 세트 동기화가 성공해도 동기화 실패로 남는다", async () => {
+    __resetSyncSchedulerForTests();
+    __setPusherForTests(async () => true);
+    setSyncEnabled(true);
+    push.mockRejectedValue(new ServerRejectedError(400, "잘못된 덱"));
+
+    scheduleDeckPush(deck());
+    await flushDeckSync();
+    scheduleDocumentPush({
+      id: "100000000000000000001",
+      userId: USER,
+      title: "세트",
+      serviceDate: "2026-09-27",
+      items: [],
+      createdAt: "2026-09-20T00:00:00.000Z",
+      updatedAt: "2026-09-22T00:00:00.000Z",
+    });
+    await flushPendingSync();
+
+    expect(getSyncSnapshot().status).toBe("error");
+    expect(getSyncSnapshot().lastFailure).toMatchObject({
+      id: A,
+      kind: "deck",
+    });
+    __resetSyncSchedulerForTests();
+  });
+
+  it("올리지 못한 곡을 지우면 실패 표시를 지운다", async () => {
+    push.mockRejectedValue(new ServerRejectedError(400, "잘못된 덱"));
+    scheduleDeckPush(deck());
+    await flushDeckSync();
+    expect(getSyncSnapshot().status).toBe("error");
+
+    scheduleDeckDelete(A);
+    await flushDeckSync();
+
+    expect(remove).toHaveBeenCalledWith(A);
+    expect(getSyncSnapshot()).toEqual({ status: "synced", lastFailure: null });
+  });
+
+  it("pushDeckNow는 오프라인으로 밀린 곡이 남아 있으면 synced로 바꾸지 않는다", async () => {
+    push.mockRejectedValueOnce(new OfflineError());
+    scheduleDeckPush({ ...deck(), id: "c0000000000000000000b" });
+    await flushDeckSync();
+    expect(getSyncSnapshot().status).toBe("offline");
+
+    await pushDeckNow(deck("공개"));
+
+    expect(getSyncSnapshot().status).toBe("offline");
   });
 });

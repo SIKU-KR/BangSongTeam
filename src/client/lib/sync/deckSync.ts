@@ -6,7 +6,12 @@ import {
   SessionExpiredError,
 } from "../api/request";
 import { pushDeck, deleteDeckRemote } from "./presentationSync";
-import { setSyncStatus, type SyncFailure } from "./syncStatus";
+import {
+  clearSyncFailure,
+  recordSyncFailure,
+  setSyncStatus,
+  type SyncFailure,
+} from "./syncStatus";
 import { BackoffTracker, MAX_RETRY_ATTEMPTS } from "./backoff";
 
 const DECK_SYNC_DEBOUNCE_MS = 2000;
@@ -48,9 +53,9 @@ function clearPending(): void {
 async function runOps(ops: PendingOp[]): Promise<void> {
   if (ops.length === 0) return;
 
-  setSyncStatus("syncing");
+  setSyncStatus("deck", "syncing");
   let offline = false;
-  let failed = false;
+  let sessionExpired = false;
   let minRetryDelay = Infinity;
 
   for (const op of ops) {
@@ -63,12 +68,12 @@ async function runOps(ops: PendingOp[]): Promise<void> {
         await deleter(op.id);
       }
       backoff.reset(key);
+      clearSyncFailure("deck", key);
     } catch (err) {
       if (err instanceof SessionExpiredError) {
-        failed = true;
+        sessionExpired = true;
         pending.delete(key);
         backoff.reset(key);
-        setSyncStatus("error");
       } else if (
         err instanceof OfflineError ||
         (isRetryableApiError(err) &&
@@ -79,31 +84,29 @@ async function runOps(ops: PendingOp[]): Promise<void> {
         const delay = backoff.getDelay(key, err);
         if (delay < minRetryDelay) minRetryDelay = delay;
       } else {
-        failed = true;
         pending.delete(key);
         backoff.reset(key);
         const failure: SyncFailure = {
           id: key,
           title: op.kind === "push" ? op.deck.title : undefined,
           kind: "deck",
-          status:
-            err instanceof ServerRejectedError ? err.status : undefined,
+          status: err instanceof ServerRejectedError ? err.status : undefined,
           message: err instanceof Error ? err.message : String(err),
           failedAt: Date.now(),
         };
         console.error("Deck push failed permanently", failure);
-        setSyncStatus("error", failure);
+        recordSyncFailure(failure);
       }
     }
   }
 
-  if (failed) {
-    setSyncStatus("error");
+  if (sessionExpired) {
+    setSyncStatus("deck", "error");
   } else if (offline) {
-    setSyncStatus("offline");
+    setSyncStatus("deck", "offline");
   } else {
     backoff.reset();
-    setSyncStatus("synced");
+    setSyncStatus("deck", "synced");
   }
   if (offline && !timer && minRetryDelay !== Infinity) {
     timer = setTimeout(run, minRetryDelay);
@@ -134,9 +137,10 @@ export function scheduleDeckPush(deck: Deck): void {
   schedule(deck.id, { kind: "push", deck });
 }
 
-/** 대기 중인 push는 버린다 */
+/** 대기 중인 push와 그 push의 실패 기록은 버린다 (지운 곡을 올릴 일은 없다) */
 export function scheduleDeckDelete(id: string): void {
   backoff.reset(id);
+  clearSyncFailure("deck", id);
   schedule(id, { kind: "delete", id });
 }
 
@@ -152,7 +156,8 @@ export async function pushDeckNow(deck: Deck): Promise<Deck> {
   await inFlight;
   const saved = await pusher(deck);
   listener?.(saved);
-  setSyncStatus("synced");
+  clearSyncFailure("deck", deck.id);
+  if (pending.size === 0) setSyncStatus("deck", "synced");
   return saved;
 }
 

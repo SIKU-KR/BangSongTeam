@@ -37,6 +37,7 @@ import {
   pushPresentation,
   rememberServerDocuments,
 } from "./presentationSync";
+import { getSyncSnapshot, resetSyncStatus } from "./syncStatus";
 
 const USER = "00000000x000000000001";
 const DOC_ID = "100000000000000000001";
@@ -187,5 +188,23 @@ describe("세트 변경분 push", () => {
 
     expect(await pushPresentation(broken)).toBe(false);
     expect(api.patch).not.toHaveBeenCalled();
+  });
+});
+
+describe("세트 원격 삭제", () => {
+  beforeEach(() => {
+    resetSyncStatus();
+  });
+
+  it("이미 없는 세트(404)는 성공으로 보고 동기화 실패를 띄우지 않는다", async () => {
+    api.remove.mockResolvedValueOnce({
+      status: 404,
+      ok: false,
+      json: async () => ({ ok: false }),
+    });
+
+    await expect(deletePresentationRemote(DOC_ID)).resolves.toBeUndefined();
+
+    expect(getSyncSnapshot().status).toBe("idle");
   });
 });

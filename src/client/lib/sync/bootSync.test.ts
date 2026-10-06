@@ -34,6 +34,12 @@ import {
   resetPresentationStore,
 } from "../../features/presentation/presentationStore";
 import { SEED_USER_ID as TEST_USER_ID } from "../../test/presentationFixture";
+import { OfflineError, ServerRejectedError } from "../api/request";
+import {
+  getSyncSnapshot,
+  recordSyncFailure,
+  resetSyncStatus,
+} from "./syncStatus";
 
 const EMPTY_FOLDER_LIST: FolderListResponse = {
   folders: [],
@@ -241,5 +247,73 @@ describe("runBootSync — drive folders", () => {
     __loadDocumentsForTests([presentation(DOC)]);
     await runBootSync();
     expect(presentationSync.pushPresentation).not.toHaveBeenCalled();
+  });
+});
+
+describe("runBootSync — 동기화 상태", () => {
+  beforeEach(async () => {
+    signInAsTestUser();
+    await resetSongLibraryStore();
+    resetFolderStore();
+    resetPresentationStore();
+    resetSyncStatus();
+    __resetDeckSyncForTests();
+    __resetSyncSchedulerForTests();
+    __resetFolderSyncForTests();
+    __setDeckTransportForTests({ push: vi.fn(async (deck: Deck) => deck) });
+    __setFolderPusherForTests(vi.fn(async (f: Folder) => f));
+    presentationSync.pullDecks.mockResolvedValue([]);
+    presentationSync.pullPresentations.mockResolvedValue([]);
+    presentationSync.pushPresentation.mockReset();
+    presentationSync.pushPresentation.mockResolvedValue(true);
+    presentationSync.pullFolders.mockResolvedValue(EMPTY_FOLDER_LIST);
+  });
+
+  afterEach(() => {
+    __resetFolderSyncForTests();
+    __resetDeckSyncForTests();
+    __resetSyncSchedulerForTests();
+  });
+
+  it("세트 push가 거절되면 곡·폴더 동기화가 성공해도 동기화 실패로 남는다", async () => {
+    __loadFoldersForTests([folder(PARENT)]);
+    __loadDocumentsForTests([presentation(DOC)]);
+    saveSongToLibrary({ title: "로컬 곡", lyricsRaw: "가사" });
+    presentationSync.pushPresentation.mockRejectedValue(
+      new ServerRejectedError(400, "거절"),
+    );
+
+    await runBootSync();
+
+    expect(getSyncSnapshot().status).toBe("error");
+  });
+
+  it("곡을 받지 못하고 오프라인이면 offline으로 남는다", async () => {
+    presentationSync.pullDecks.mockRejectedValue(new OfflineError());
+
+    await runBootSync();
+
+    expect(getSyncSnapshot().status).toBe("offline");
+  });
+
+  it("폴더를 받지 못하고 오프라인이면 offline으로 남는다", async () => {
+    presentationSync.pullFolders.mockRejectedValue(new OfflineError());
+
+    await runBootSync();
+
+    expect(getSyncSnapshot().status).toBe("offline");
+  });
+
+  it("앞서 남은 실패 기록을 지우고 시작한다", async () => {
+    recordSyncFailure({
+      id: DOC,
+      kind: "presentation",
+      message: "이전 사용자의 실패",
+      failedAt: 1,
+    });
+
+    await runBootSync();
+
+    expect(getSyncSnapshot()).toEqual({ status: "synced", lastFailure: null });
   });
 });

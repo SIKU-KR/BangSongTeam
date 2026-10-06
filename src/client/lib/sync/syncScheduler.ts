@@ -6,7 +6,13 @@ import {
   SessionExpiredError,
 } from "../api/request";
 import { pushPresentation } from "./presentationSync";
-import { setSyncStatus, type SyncFailure, getSyncSnapshot } from "./syncStatus";
+import {
+  clearSyncFailure,
+  getSyncDomainStatus,
+  recordSyncFailure,
+  setSyncStatus,
+  type SyncFailure,
+} from "./syncStatus";
 import { flushFolderSync } from "./folderSync";
 import { BackoffTracker, MAX_RETRY_ATTEMPTS } from "./backoff";
 
@@ -73,20 +79,21 @@ function scheduleNextTimer(): void {
 }
 
 function startPush(document: Presentation): void {
-  setSyncStatus("syncing");
+  setSyncStatus("presentation", "syncing");
   const task = (async (): Promise<void> => {
     try {
       await flushFolderSync();
       await pusher(document);
       backoff.reset(document.id);
+      clearSyncFailure("presentation", document.id);
       if (inFlightDocs.size === 1 && pending.size === 0) {
-        setSyncStatus("synced");
+        setSyncStatus("presentation", "synced");
       }
     } catch (err) {
       if (err instanceof SessionExpiredError) {
         pending.delete(document.id);
         backoff.reset(document.id);
-        setSyncStatus("error");
+        setSyncStatus("presentation", "error");
       } else if (
         err instanceof OfflineError ||
         (isRetryableApiError(err) &&
@@ -104,7 +111,7 @@ function startPush(document: Presentation): void {
             readyAt: now + delay,
           });
         }
-        setSyncStatus("offline");
+        setSyncStatus("presentation", "offline");
       } else {
         pending.delete(document.id);
         backoff.reset(document.id);
@@ -112,22 +119,21 @@ function startPush(document: Presentation): void {
           id: document.id,
           title: document.title,
           kind: "presentation",
-          status:
-            err instanceof ServerRejectedError ? err.status : undefined,
+          status: err instanceof ServerRejectedError ? err.status : undefined,
           message: err instanceof Error ? err.message : String(err),
           failedAt: Date.now(),
         };
         console.error("Presentation push failed permanently", failure);
-        setSyncStatus("error", failure);
+        recordSyncFailure(failure);
       }
     } finally {
       inFlightDocs.delete(document.id);
       if (
         inFlightDocs.size === 0 &&
         pending.size === 0 &&
-        getSyncSnapshot().status === "syncing"
+        getSyncDomainStatus("presentation") === "syncing"
       ) {
-        setSyncStatus("synced");
+        setSyncStatus("presentation", "synced");
       }
       dispatch();
     }
@@ -213,10 +219,12 @@ export function scheduleDocumentPush(document: Presentation): void {
 /**
  * 대기 중인 push 1건을 취소한다 (영구 삭제한 문서).
  * 이미 나간 요청은 되돌릴 수 없으므로 호출자는 `flushPendingSync()`로 기다린다.
+ * 지운 문서의 실패 기록도 함께 지운다. 없는 문서 때문에 헤더가 계속 빨갛게 남으면 안 된다.
  */
 export function cancelDocumentPush(id: string): void {
   pending.delete(id);
   backoff.reset(id);
+  clearSyncFailure("presentation", id);
   scheduleNextTimer();
 }
 

@@ -6,7 +6,12 @@ import {
   SessionExpiredError,
 } from "../api/request";
 import { pushFolder } from "./presentationSync";
-import { setSyncStatus, type SyncFailure } from "./syncStatus";
+import {
+  clearSyncFailure,
+  recordSyncFailure,
+  setSyncStatus,
+  type SyncFailure,
+} from "./syncStatus";
 import { BackoffTracker, MAX_RETRY_ATTEMPTS } from "./backoff";
 
 const FOLDER_SYNC_DEBOUNCE_MS = 2000;
@@ -47,9 +52,9 @@ function clearPending(): void {
 async function pushAll(folders: Folder[]): Promise<void> {
   if (folders.length === 0) return;
 
-  setSyncStatus("syncing");
+  setSyncStatus("folder", "syncing");
   let offline = false;
-  let failed = false;
+  let sessionExpired = false;
   let minRetryDelay = Infinity;
 
   for (const folder of sortFoldersParentFirst(folders)) {
@@ -57,12 +62,12 @@ async function pushAll(folders: Folder[]): Promise<void> {
       const saved = await pusher(folder);
       listener?.(saved);
       backoff.reset(folder.id);
+      clearSyncFailure("folder", folder.id);
     } catch (err) {
       if (err instanceof SessionExpiredError) {
-        failed = true;
+        sessionExpired = true;
         pending.delete(folder.id);
         backoff.reset(folder.id);
-        setSyncStatus("error");
       } else if (
         err instanceof OfflineError ||
         (isRetryableApiError(err) &&
@@ -73,31 +78,29 @@ async function pushAll(folders: Folder[]): Promise<void> {
         const delay = backoff.getDelay(folder.id, err);
         if (delay < minRetryDelay) minRetryDelay = delay;
       } else {
-        failed = true;
         pending.delete(folder.id);
         backoff.reset(folder.id);
         const failure: SyncFailure = {
           id: folder.id,
           title: folder.name,
           kind: "folder",
-          status:
-            err instanceof ServerRejectedError ? err.status : undefined,
+          status: err instanceof ServerRejectedError ? err.status : undefined,
           message: err instanceof Error ? err.message : String(err),
           failedAt: Date.now(),
         };
         console.error("Folder push failed permanently", failure);
-        setSyncStatus("error", failure);
+        recordSyncFailure(failure);
       }
     }
   }
 
-  if (failed) {
-    setSyncStatus("error");
+  if (sessionExpired) {
+    setSyncStatus("folder", "error");
   } else if (offline) {
-    setSyncStatus("offline");
+    setSyncStatus("folder", "offline");
   } else {
     backoff.reset();
-    setSyncStatus("synced");
+    setSyncStatus("folder", "synced");
   }
   if (offline && !timer && minRetryDelay !== Infinity) {
     timer = setTimeout(run, minRetryDelay);
@@ -124,10 +127,11 @@ export function scheduleFolderPush(folder: Folder): void {
   timer = setTimeout(run, FOLDER_SYNC_DEBOUNCE_MS);
 }
 
-/** 영구 삭제한 폴더의 대기 중인 push를 취소한다 */
+/** 영구 삭제한 폴더의 대기 중인 push를 취소하고, 남은 실패 기록도 지운다 */
 export function cancelFolderPush(id: string): void {
   pending.delete(id);
   backoff.reset(id);
+  clearSyncFailure("folder", id);
 }
 
 /**
@@ -140,6 +144,7 @@ export async function pushFolderNow(folder: Folder): Promise<Folder> {
   await inFlight;
   const saved = await pusher(folder);
   listener?.(saved);
+  clearSyncFailure("folder", folder.id);
   return saved;
 }
 
