@@ -89,6 +89,7 @@ interface StallWatchdog {
   signal: AbortSignal;
   poke: () => void;
   stop: () => void;
+  receiving: boolean;
 }
 
 function stallWatchdog(): StallWatchdog {
@@ -99,7 +100,7 @@ function stallWatchdog(): StallWatchdog {
     stop();
     timer = setTimeout(() => controller.abort(), MEDIA_STALL_TIMEOUT_MS);
   };
-  return { signal: controller.signal, poke, stop };
+  return { signal: controller.signal, poke, stop, receiving: false };
 }
 
 interface CountingBody {
@@ -132,10 +133,12 @@ function countingBody(
           controller.enqueue(chunk);
         },
         flush() {
+          watchdog.receiving = false;
           watchdog.poke();
         },
       }),
     ) ?? null;
+  if (!body) watchdog.receiving = false;
   return { body, received: () => received };
 }
 
@@ -212,6 +215,7 @@ async function cacheOne(
   if (await cache.match(url)) return;
 
   watchdog.poke();
+  watchdog.receiving = true;
   const response = await fetchMedia(url, watchdog, trace);
   const { body, received } = countingBody(url, response, watchdog);
   if (isServiceWorkerControlled()) {
@@ -284,6 +288,7 @@ function reportMediaFailure(
   watchdog: StallWatchdog,
   trace: TraceContext,
 ): void {
+  if (watchdog.signal.aborted && !watchdog.receiving) return;
   const kind = watchdog.signal.aborted
     ? "stalled"
     : err instanceof TypeError

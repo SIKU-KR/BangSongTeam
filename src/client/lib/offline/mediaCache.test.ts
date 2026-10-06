@@ -1204,6 +1204,23 @@ describe("받기 실패 보고", () => {
     ]);
   });
 
+  it("본문을 다 받은 뒤 Cache Storage가 멈춘 것은 stalled로 담지 않는다", async () => {
+    vi.useFakeTimers();
+    mockFetch();
+    const cache = await caches.open(mediaCacheNameFor(VIDEO));
+    vi.spyOn(caches, "open").mockResolvedValue(cache);
+    vi.spyOn(cache, "put").mockImplementation(async (_request, response) => {
+      await response.arrayBuffer();
+      return new Promise<void>(() => {});
+    });
+
+    const result = cacheMediaFirst(VIDEO);
+    await vi.advanceTimersByTimeAsync(MEDIA_STALL_TIMEOUT_MS);
+    expect(await result).toBe(false);
+
+    expect(await flushedReports()).toEqual([]);
+  });
+
   it("5xx와 닿지 못한 받기를 담는다", async () => {
     const calls: Array<RequestInit | undefined> = [];
     globalThis.fetch = vi.fn(

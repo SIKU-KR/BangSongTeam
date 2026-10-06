@@ -23,12 +23,6 @@ import {
 import { reportApiFailure } from "../observability/clientReports";
 import { setSyncStatus, type SyncStatus } from "./syncStatus";
 
-/**
- * 동기화 요청 1건을 보낸다. 실패하면 실패 보고(`reportApiFailure`)에 담고 그대로 던진다.
- *
- * 프레젠테이션·곡·폴더 큐와 부팅 동기화는 모두 이 모듈의 함수로 서버와 통신하므로, 여기 한
- * 곳에서 담으면 동기화 실패가 빠짐없이 모인다. 분류(재시도·영구 실패)는 호출자 몫이다.
- */
 async function callSyncApi<T>(
   request: Parameters<typeof callApi>[0],
 ): Promise<T> {

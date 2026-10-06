@@ -13,7 +13,8 @@ export const CLIENT_REPORT_MAX_BYTES = 8 * 1024;
  * - `timeout`: 데드라인 안에 응답이 오지 않았다
  * - `unreachable`: 네트워크 오류로 서버에 닿지 못했다
  * - `server_error`: 서버가 5xx로 답했다
- * - `stalled`: 미디어를 받다가 새 바이트가 오지 않아 끊었다
+ * - `stalled`: 미디어를 받다가 새 바이트가 오지 않아 끊었다. 본문을 다 받은 뒤 Cache Storage가
+ *   멈춘 것은 서버와 상관없어 담지 않는다
  * - `interrupted`: 미디어 응답(200)은 왔는데 본문을 받다가 연결이 끊겼다. Worker 로그에는
  *   200으로 남으므로 `unreachable`과 나눠야 운영자가 서버 쪽 실패를 찾지 않는다
  */
