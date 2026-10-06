@@ -5,7 +5,7 @@ import {
   ServerRejectedError,
 } from "../api/request";
 import { isQuotaExceededError } from "../browser/quotaError";
-import { BackoffTracker } from "../sync/backoff";
+import { BackoffTracker, type SyncRetryMode } from "../sync/backoff";
 import { requestPersistentStorage } from "./storagePersistence";
 
 /** 받는 중인 파일의 진행 상황. `total`은 응답에 길이가 없으면 null이다 */
@@ -276,6 +276,7 @@ const pending = new Set<string>();
 const inFlight = new Map<string, Promise<boolean>>();
 const backoff = new BackoffTracker();
 const retryTimers = new Map<string, ReturnType<typeof setTimeout>>();
+const waitingOnServer = new Set<string>();
 const retained = new Map<string, number>();
 let draining: Promise<void> | null = null;
 let persistenceRequested = false;
@@ -285,6 +286,7 @@ function clearRetry(url: string): boolean {
   if (timer === undefined) return false;
   clearTimeout(timer);
   retryTimers.delete(url);
+  waitingOnServer.delete(url);
   return true;
 }
 
@@ -307,10 +309,12 @@ function scheduleRetry(url: string, err: unknown): void {
     return;
   }
   const delay = MEDIA_STALL_TIMEOUT_MS + backoff.getDelay(url, err);
+  if (err instanceof ServerRejectedError) waitingOnServer.add(url);
   retryTimers.set(
     url,
     setTimeout(() => {
       retryTimers.delete(url);
+      waitingOnServer.delete(url);
       if (retained.has(url) && !knownCached.has(url)) {
         pending.add(url);
         startDrain();
@@ -447,16 +451,34 @@ export function retainMediaUrls(urls: readonly string[]): () => void {
  * 재시도를 기다리던 URL을 백오프를 기다리지 않고 곧바로 다시 받는다. 붙잡힌 URL 가운데
  * 받다 실패한 채 재시도 횟수를 다 쓴 것도 함께 넣는다.
  *
- * 연결이 회복됐다는 신호(지금은 `online` 이벤트)가 배경 큐를 다시 돌리는 입구다. 저장
- * 공간 부족으로 실패한 URL은 공간을 비우기 전에는 낫지 않으므로 넣지 않는다.
+ * 연결이 회복됐다는 신호(`syncRecovery`, 송출 화면은 `online` 이벤트)가 배경 큐를 다시
+ * 돌리는 입구다. 저장 공간 부족으로 실패한 URL은 공간을 비우기 전에는 낫지 않으므로
+ * 넣지 않는다.
+ *
+ * `wake`(포커스·탭 복귀·상태 확인 성공)는 자주 오므로 네트워크 실패로 기다리던 URL만
+ * 앞당긴다. 서버가 거절해(5xx·429) 기다리던 URL과 재시도를 포기한 URL은 그대로 둔다.
+ * 시도마다 큰 영상을 처음부터 다시 받으므로, 포커스마다 넣으면 백오프와
+ * `MAX_MEDIA_RETRIES`가 소용없어진다.
+ *
+ * 다만 서버에 닿지 못하다가 다시 닿은 것을 확인했으면(`afterOutage`) `wake`라도 재시도를
+ * 포기한 URL을 다시 넣는다. `online` 이벤트 없이 끊긴 동안(캡티브 포털, 멈춘 Wi‑Fi)에도
+ * 큐는 계속 받다 한도를 다 쓰므로, 그렇지 않으면 회복한 뒤에도 영영 다시 받지 않는다.
  */
-export function resumeMediaCaching(): void {
+export function resumeMediaCaching(
+  mode: SyncRetryMode = "reconnect",
+  options: { afterOutage?: boolean } = {},
+): void {
   if (!canCacheInBackground()) return;
-  const waiting = [...retryTimers.keys()];
-  for (const url of waiting) clearRetry(url);
-  const failed = [...retained.keys()].filter(
-    (url) => getMediaCacheFailure(url) === "network",
+  const waiting = [...retryTimers.keys()].filter(
+    (url) => mode !== "wake" || !waitingOnServer.has(url),
   );
+  for (const url of waiting) clearRetry(url);
+  const failed =
+    mode === "wake" && !options.afterOutage
+      ? []
+      : [...retained.keys()].filter(
+          (url) => getMediaCacheFailure(url) === "network",
+        );
   for (const url of [...waiting, ...failed]) {
     if (!knownCached.has(url) && !inFlight.has(url)) pending.add(url);
   }
@@ -667,6 +689,7 @@ export function __setMediaRetryRandomForTests(fn: () => number): void {
 export function __resetMediaCachingForTests(): void {
   for (const timer of retryTimers.values()) clearTimeout(timer);
   retryTimers.clear();
+  waitingOnServer.clear();
   retained.clear();
   backoff.reset();
   backoff.__setRandomForTests(Math.random);

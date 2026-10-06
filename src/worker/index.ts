@@ -49,6 +49,7 @@ export function createApp(deps: AppDeps = {}) {
       );
     })
     .get("/api/health", (c) => {
+      c.header("Cache-Control", "no-store");
       return c.json({ status: "ok" as const }, 200);
     })
     .on(["GET", "POST"], `${AUTH_BASE_PATH}/*`, (c) => {

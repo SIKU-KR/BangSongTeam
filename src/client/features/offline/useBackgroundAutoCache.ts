@@ -5,11 +5,14 @@ import {
   type Presentation,
 } from "#shared";
 import {
+  getMediaCacheFailure,
   resumeMediaCaching,
   retainMediaUrls,
   scheduleMediaCaching,
   warmPresentationFonts,
 } from "../../lib/offline";
+import type { SyncRetryMode } from "../../lib/sync/backoff";
+import { subscribeSyncRecovery } from "../../lib/sync/syncRecovery";
 import { useBackgroundLookup } from "../backgrounds/backgroundCatalog";
 import { useLatest } from "../../hooks/useLatest";
 
@@ -46,6 +49,12 @@ function useRetainedMediaUrls(
  * (`useCacheFirstVideo`)가 먼저 받다 실패해도 큐가 백오프로 다시 받는다. 배경을 바꾸면 새
  * URL을 먼저 붙잡은 뒤 지난 URL을 놓는다. 두 세트에 함께 있는 URL이 잠깐이라도 놓이면
  * 기다리던 재시도와 시도 횟수가 지워져, SW가 아직 받고 있을 수 있는 파일을 곧바로 다시 받는다.
+ *
+ * 연결이 회복되면(`subscribeSyncRecovery`: `online`·탭 복귀·포커스·상태 확인 성공)
+ * 프레젠테이션의 URL을 다시 넣는다. 기다리던 재시도는 회복 경로가 `resumeMediaCaching`으로 먼저 깨운다.
+ * 포커스·탭 복귀(`wake`)에는 이미 실패한 URL을 넣지 않고, `online`에도 저장 공간 부족으로
+ * 실패한 URL은 넣지 않는다. 다시 넣으면 영상을 끝까지 받은 뒤에야 같은 실패를 알게 되어,
+ * 포커스마다 큰 파일을 처음부터 다시 받는다. '다시 시도'(`manual`)만 모두 넣는다.
  */
 export function useBackgroundAutoCache(
   presentation: Presentation | null,
@@ -78,14 +87,21 @@ export function useBackgroundAutoCache(
 
   useRetainedMediaUrls(urlsRef, presentationId ? urlKey : null);
 
-  useEffect(() => {
-    const handleOnline = (): void => {
-      resumeMediaCaching();
-      scheduleMediaCaching(urlsRef.current);
-    };
-    window.addEventListener("online", handleOnline);
-    return () => window.removeEventListener("online", handleOnline);
-  }, []);
+  useEffect(
+    () =>
+      subscribeSyncRecovery((mode) =>
+        scheduleMediaCaching(
+          urlsRef.current.filter((url) => shouldRequeueOnRecovery(url, mode)),
+        ),
+      ),
+    [],
+  );
+}
+
+function shouldRequeueOnRecovery(url: string, mode: SyncRetryMode): boolean {
+  const failure = getMediaCacheFailure(url);
+  if (mode === "manual" || failure === undefined) return true;
+  return mode === "reconnect" && failure !== "quota";
 }
 
 /**

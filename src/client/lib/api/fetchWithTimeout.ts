@@ -7,6 +7,10 @@
 
 export const DEFAULT_API_TIMEOUT_MS = 10_000;
 export const PULL_API_TIMEOUT_MS = 30_000;
+/** 연결 회복 확인 요청은 짧게 끊는다. 멈춘 연결에서 10초를 기다리면 회복이 그만큼 늦다 */
+export const HEALTH_API_TIMEOUT_MS = 5_000;
+
+const HEALTH_PATH = "/api/health";
 
 const BULK_PULL_PATHS = new Set([
   "/api/presentations",
@@ -22,6 +26,7 @@ const BULK_PULL_PATHS = new Set([
 export function getDeadlineForRequest(url: string, method = "GET"): number {
   if (method.toUpperCase() === "GET") {
     const pathname = new URL(url, "http://localhost").pathname;
+    if (pathname === HEALTH_PATH) return HEALTH_API_TIMEOUT_MS;
     if (BULK_PULL_PATHS.has(pathname)) {
       return PULL_API_TIMEOUT_MS;
     }

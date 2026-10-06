@@ -14,7 +14,11 @@ import {
   type SyncFailure,
 } from "./syncStatus";
 import { flushFolderSync } from "./folderSync";
-import { BackoffTracker, MAX_RETRY_ATTEMPTS } from "./backoff";
+import {
+  BackoffTracker,
+  MAX_RETRY_ATTEMPTS,
+  type SyncRetryMode,
+} from "./backoff";
 
 /** 입력이 멈춘 뒤 이만큼 조용하면 올린다 */
 export const SYNC_DEBOUNCE_MS = 3000;
@@ -29,16 +33,17 @@ interface PendingItem {
   document: Presentation;
   firstScheduledAt: number;
   readyAt: number;
+  waitingOnServer: boolean;
 }
 
 let pusher: Pusher = pushPresentation;
 let enabled = false;
 let pending = new Map<string, PendingItem>();
+let failed = new Map<string, Presentation>();
 const inFlightDocs = new Set<string>();
 const inFlightTasks = new Set<Promise<void>>();
 let timer: ReturnType<typeof setTimeout> | null = null;
 const backoff = new BackoffTracker();
-let onlineListenerRegistered = false;
 
 function clearTimer(): void {
   if (timer) {
@@ -49,6 +54,7 @@ function clearTimer(): void {
 
 function clearPending(): void {
   pending = new Map();
+  failed = new Map();
   clearTimer();
   backoff.reset();
 }
@@ -85,6 +91,7 @@ function startPush(document: Presentation): void {
       await flushFolderSync();
       await pusher(document);
       backoff.reset(document.id);
+      failed.delete(document.id);
       clearSyncFailure("presentation", document.id);
       if (inFlightDocs.size === 1 && pending.size === 0) {
         setSyncStatus("presentation", "synced");
@@ -101,20 +108,24 @@ function startPush(document: Presentation): void {
       ) {
         const delay = backoff.getDelay(document.id, err);
         const now = Date.now();
+        const waitingOnServer = err instanceof ServerRejectedError;
         const existing = pending.get(document.id);
         if (existing) {
           existing.readyAt = Math.max(existing.readyAt, now + delay);
+          existing.waitingOnServer = waitingOnServer;
         } else {
           pending.set(document.id, {
             document,
             firstScheduledAt: now,
             readyAt: now + delay,
+            waitingOnServer,
           });
         }
         setSyncStatus("presentation", "offline");
       } else {
         pending.delete(document.id);
         backoff.reset(document.id);
+        failed.set(document.id, document);
         const failure: SyncFailure = {
           id: document.id,
           title: document.title,
@@ -170,19 +181,47 @@ function dispatch(): void {
   scheduleNextTimer();
 }
 
-function handleOnline(): void {
+/**
+ * 연결 회복 신호(`syncRecovery`)에 맞춰 대기 중인 push를 디바운스·백오프를 기다리지 않고
+ * 곧바로 보낸다. 여기서 `online`을 따로 들으면 회복 경로가 둘이 된다.
+ *
+ * `wake`(포커스·탭 복귀·상태 확인 성공)는 서버가 거절해(5xx·429) 기다리는 항목을 앞당기지
+ * 않고 백오프 횟수도 그대로 둔다. 그래야 `Retry-After`를 지키고 서버 재시도 한도에 이른다.
+ * `reconnect`·`manual`은 백오프를 비우고 모두 보낸다. 회복 뒤 다시 실패하면 짧은 간격부터
+ * 다시 센다. `manual`은 영구 실패로 남긴 항목도 실패 기록을 지우고 다시 넣는다.
+ */
+export function retryPendingSyncNow(mode: SyncRetryMode): void {
   if (!enabled) return;
-  backoff.reset();
+  if (mode === "manual") requeueFailedDocuments();
+  if (mode !== "wake") backoff.reset();
   for (const item of pending.values()) {
+    if (mode === "wake" && item.waitingOnServer) continue;
     item.readyAt = 0;
   }
   dispatch();
 }
 
-function registerOnlineListener(): void {
-  if (onlineListenerRegistered || typeof window === "undefined") return;
-  onlineListenerRegistered = true;
-  window.addEventListener("online", handleOnline);
+function requeueFailedDocuments(): void {
+  const now = Date.now();
+  for (const [id, document] of failed) {
+    clearSyncFailure("presentation", id);
+    if (pending.has(id) || inFlightDocs.has(id)) continue;
+    pending.set(id, {
+      document,
+      firstScheduledAt: now,
+      readyAt: 0,
+      waitingOnServer: false,
+    });
+  }
+  failed = new Map();
+}
+
+/**
+ * 부팅 동기화가 올리다 영구 실패로 남긴 프레젠테이션을 맡긴다. 사용자가 '다시 시도'를
+ * 누르면(`retryPendingSyncNow("manual")`) 큐가 다시 올린다.
+ */
+export function holdFailedDocumentPush(document: Presentation): void {
+  failed.set(document.id, document);
 }
 
 /**
@@ -200,8 +239,6 @@ export function scheduleDocumentPush(document: Presentation): void {
   if (!document.id) return;
   if (document.access) return;
 
-  registerOnlineListener();
-
   const now = Date.now();
   const existing = pending.get(document.id);
   const firstScheduledAt = existing ? existing.firstScheduledAt : now;
@@ -212,7 +249,13 @@ export function scheduleDocumentPush(document: Presentation): void {
       ? Math.max(existing.readyAt, debounceReady)
       : debounceReady;
 
-  pending.set(document.id, { document, firstScheduledAt, readyAt });
+  failed.delete(document.id);
+  pending.set(document.id, {
+    document,
+    firstScheduledAt,
+    readyAt,
+    waitingOnServer: existing?.waitingOnServer ?? false,
+  });
   scheduleNextTimer();
 }
 
@@ -223,6 +266,7 @@ export function scheduleDocumentPush(document: Presentation): void {
  */
 export function cancelDocumentPush(id: string): void {
   pending.delete(id);
+  failed.delete(id);
   backoff.reset(id);
   clearSyncFailure("presentation", id);
   scheduleNextTimer();

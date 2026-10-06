@@ -8,6 +8,7 @@ export const COMMON_COPY = {
   copy: "복사",
   undo: "실행 취소",
   redo: "다시 실행",
+  retry: "다시 시도",
   makeCopy: "사본 만들기",
   copySuffix: " (사본)",
   share: "공유",

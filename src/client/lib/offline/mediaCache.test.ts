@@ -1048,6 +1048,80 @@ describe("백그라운드 재시도", () => {
     expect(getMediaQueueState(VIDEO)).toBe("retrying");
   });
 
+  it("포커스(wake)는 네트워크 실패로 기다리던 URL만 앞당기고 서버가 거절한 URL은 기다리게 둔다", async () => {
+    retainMediaUrls([VIDEO, OTHER]);
+    const attempts = new Map<string, number>();
+    const fetchMock = mockFetch(async (url) => {
+      const attempt = (attempts.get(url) ?? 0) + 1;
+      attempts.set(url, attempt);
+      if (attempt > 1) return okResponse();
+      if (url === OTHER) return new Response(null, { status: 503 });
+      throw new TypeError("Failed to fetch");
+    });
+    scheduleMediaCaching([VIDEO, OTHER]);
+    await settle();
+
+    resumeMediaCaching("wake");
+    await settle();
+
+    expect(await isCached(VIDEO)).toBe(true);
+    expect(getMediaQueueState(OTHER)).toBe("retrying");
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
+  it("포커스(wake)는 재시도를 포기한 URL과 저장 공간 부족 URL을 다시 받지 않는다", async () => {
+    retainMediaUrls([VIDEO, OTHER]);
+    const fetchMock = mockFetch(async (url) => {
+      if (url === VIDEO) throw new TypeError("Failed to fetch");
+      return okResponse();
+    });
+    const cache = await caches.open(mediaCacheNameFor(OTHER));
+    vi.spyOn(cache, "put").mockImplementation(async (request) => {
+      if (String(request) === OTHER) throw quotaError();
+    });
+
+    scheduleMediaCaching([VIDEO, OTHER]);
+    await settle();
+    for (let i = 0; i < MAX_MEDIA_RETRIES + 2; i += 1) {
+      await settle(MEDIA_STALL_TIMEOUT_MS);
+    }
+    const calls = fetchMock.mock.calls.length;
+    expect(getMediaCacheFailure(VIDEO)).toBe("network");
+    expect(getMediaCacheFailure(OTHER)).toBe("quota");
+
+    for (let i = 0; i < 20; i += 1) {
+      resumeMediaCaching("wake");
+      await settle();
+    }
+
+    expect(fetchMock).toHaveBeenCalledTimes(calls);
+  });
+
+  it("끊겼다 다시 닿은 뒤의 wake는 재시도를 포기한 URL도 다시 받는다", async () => {
+    retainMediaUrls([VIDEO]);
+    let blocked = true;
+    const fetchMock = mockFetch(async () => {
+      if (blocked) throw new TypeError("Failed to fetch");
+      return okResponse();
+    });
+
+    scheduleMediaCaching([VIDEO]);
+    await settle();
+    for (let i = 0; i < MAX_MEDIA_RETRIES + 2; i += 1) {
+      await settle(MEDIA_STALL_TIMEOUT_MS);
+    }
+    expect(getMediaQueueState(VIDEO)).toBeNull();
+    expect(getMediaCacheFailure(VIDEO)).toBe("network");
+    const calls = fetchMock.mock.calls.length;
+
+    blocked = false;
+    resumeMediaCaching("wake", { afterOutage: true });
+    await settle();
+
+    expect(await isCached(VIDEO)).toBe(true);
+    expect(fetchMock).toHaveBeenCalledTimes(calls + 1);
+  });
+
   it("오프라인이면 연결이 회복돼도 다시 받지 않고 재시도를 그대로 둔다", async () => {
     retainMediaUrls([VIDEO]);
     const fetchMock = failingThen([networkError]);

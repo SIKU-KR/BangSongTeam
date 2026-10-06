@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import {
   setSyncStatus,
   recordSyncFailure,
@@ -25,7 +25,11 @@ describe("동기화 상태", () => {
   beforeEach(resetSyncStatus);
 
   it("기본 상태는 idle이고 실패 정보가 없다", () => {
-    expect(getSyncSnapshot()).toEqual({ status: "idle", lastFailure: null });
+    expect(getSyncSnapshot()).toEqual({
+      status: "idle",
+      lastFailure: null,
+      lastSyncedAt: null,
+    });
   });
 
   it("상태 전이를 반영한다", () => {
@@ -87,7 +91,10 @@ describe("동기화 상태", () => {
     expect(getSyncDomainStatus("presentation")).toBe("synced");
 
     clearSyncFailure("presentation", "A");
-    expect(getSyncSnapshot()).toEqual({ status: "synced", lastFailure: null });
+    expect(getSyncSnapshot()).toMatchObject({
+      status: "synced",
+      lastFailure: null,
+    });
   });
 
   it("없는 실패를 지워도 스냅샷은 그대로다", () => {
@@ -113,7 +120,67 @@ describe("동기화 상태", () => {
 
     resetSyncStatus();
 
-    expect(getSyncSnapshot()).toEqual({ status: "idle", lastFailure: null });
+    expect(getSyncSnapshot()).toEqual({
+      status: "idle",
+      lastFailure: null,
+      lastSyncedAt: null,
+    });
     expect(getSyncDomainStatus("deck")).toBe("idle");
+  });
+
+  describe("마지막 동기화 시각", () => {
+    beforeEach(() => {
+      vi.useFakeTimers({ toFake: ["Date"] });
+      vi.setSystemTime(new Date("2026-10-06T09:30:00+09:00"));
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it("모든 도메인이 동기화됨에 이르면 그 시각을 남긴다", () => {
+      setSyncStatus("presentation", "syncing");
+      expect(getSyncSnapshot().lastSyncedAt).toBeNull();
+
+      setSyncStatus("presentation", "synced");
+
+      expect(getSyncSnapshot().lastSyncedAt).toBe(Date.now());
+    });
+
+    it("다른 도메인이 실패나 오프라인이면 한 도메인이 성공해도 바꾸지 않는다", () => {
+      setSyncStatus("presentation", "synced");
+      const syncedAt = getSyncSnapshot().lastSyncedAt;
+      vi.advanceTimersByTime(60_000);
+
+      recordSyncFailure(failure({ kind: "folder", id: "F" }));
+      setSyncStatus("presentation", "syncing");
+      setSyncStatus("presentation", "synced");
+      expect(getSyncSnapshot().lastSyncedAt).toBe(syncedAt);
+
+      setSyncStatus("deck", "offline");
+      clearSyncFailure("folder", "F");
+      setSyncStatus("folder", "synced");
+      expect(getSyncSnapshot().lastSyncedAt).toBe(syncedAt);
+
+      setSyncStatus("deck", "synced");
+      expect(getSyncSnapshot().lastSyncedAt).toBe(Date.now());
+    });
+
+    it("이미 동기화됨인 도메인이 다시 성공을 보고해도 시각을 새로 남긴다", () => {
+      setSyncStatus("deck", "synced");
+      vi.advanceTimersByTime(60_000);
+
+      setSyncStatus("deck", "synced");
+
+      expect(getSyncSnapshot().lastSyncedAt).toBe(Date.now());
+    });
+
+    it("초기화하면 지운다", () => {
+      setSyncStatus("presentation", "synced");
+
+      resetSyncStatus();
+
+      expect(getSyncSnapshot().lastSyncedAt).toBeNull();
+    });
   });
 });

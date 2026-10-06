@@ -37,12 +37,18 @@ import {
   ServerRejectedError,
   SessionExpiredError,
 } from "../api/request";
-import { BackoffTracker, BASE_BACKOFF_MS, MAX_RETRY_ATTEMPTS } from "./backoff";
+import {
+  BackoffTracker,
+  BASE_BACKOFF_MS,
+  MAX_RETRY_ATTEMPTS,
+  type SyncRetryMode,
+} from "./backoff";
 import {
   setFolderSyncEnabled,
   setServerFolderListener,
   pushFolderNow,
   hasPendingFolderPush,
+  holdFailedFolderPush,
   scheduleFolderPush,
 } from "./folderSync";
 import {
@@ -55,6 +61,7 @@ import {
 } from "./syncStatus";
 import {
   hasPendingDocumentPush,
+  holdFailedDocumentPush,
   scheduleDocumentPush,
   setSyncEnabled,
 } from "./syncScheduler";
@@ -63,6 +70,7 @@ import {
   setServerDeckListener,
   pushDeckNow,
   hasPendingDeckSync,
+  holdFailedDeckPush,
   scheduleDeckPush,
 } from "./deckSync";
 import { refreshBackgroundCatalog } from "./backgroundSync";
@@ -84,9 +92,9 @@ export function shouldRunBootSync(pathname: string): boolean {
  * 느린 교회에서 예배 시작이 그만큼 밀린다.
  *
  * 오프라인은 조용히 넘어간다 — 실패가 아니라 정상 경로다. 다만 받지 못한 단계는
- * 백오프 간격과 `online` 이벤트로 다시 받고, 올리지 못한 항목은 도메인 큐에 넘겨
- * 큐의 백오프로 다시 올린다. 다시 하지 않으면 그 도메인이 세션 내내 '오프라인'으로
- * 남아, 연결이 돌아와 저장이 다 끝나도 헤더가 초록색으로 돌아오지 않는다.
+ * 백오프 간격과 연결 회복(`retryBootSyncIfNeeded`)으로 다시 받고, 올리지 못한 항목은
+ * 도메인 큐에 넘겨 큐의 백오프로 다시 올린다. 다시 하지 않으면 그 도메인이 세션 내내
+ * '오프라인'으로 남아, 연결이 돌아와 저장이 다 끝나도 헤더가 초록색으로 돌아오지 않는다.
  * 송출 화면에 있는 동안에는 다시 받지 않고 송출을 마친 뒤로 미룬다. 송출 중에는
  * API·데이터 요청이 0건이어야 하고, 받은 결과를 병합하면 띄운 문서가 바뀔 수 있다.
  *
@@ -178,6 +186,7 @@ async function syncDriveAndDecks(): Promise<void> {
       current: listPresentations,
       push: pushPresentation,
       requeue: scheduleDocumentPush,
+      hold: holdFailedDocumentPush,
       titleOf: (document) => document.title,
     },
     needsPush,
@@ -212,12 +221,15 @@ function settleSyncStatus(
 const retryBackoff = new BackoffTracker();
 let retryTimer: ReturnType<typeof setTimeout> | null = null;
 let retryStep: (() => Promise<void>) | null = null;
-let onlineListenerRegistered = false;
+let retryWaitsOnServer = false;
+let abandonedStep: (() => Promise<void>) | null = null;
 
 function cancelBootRetry(): void {
   if (retryTimer) clearTimeout(retryTimer);
   retryTimer = null;
   retryStep = null;
+  retryWaitsOnServer = false;
+  abandonedStep = null;
   retryBackoff.reset();
 }
 
@@ -228,12 +240,14 @@ function retryPullLater(step: () => Promise<void>, err: unknown): SyncStatus {
       retryBackoff.getServerAttempt() >= MAX_RETRY_ATTEMPTS)
   ) {
     retryBackoff.reset();
+    abandonedStep = step;
     return "error";
   }
+  abandonedStep = null;
   retryStep = step;
+  retryWaitsOnServer = !(err instanceof OfflineError);
   if (retryTimer) clearTimeout(retryTimer);
   retryTimer = setTimeout(runRetry, retryBackoff.getDelay(err));
-  registerOnlineListener();
   return "offline";
 }
 
@@ -243,28 +257,45 @@ function isProjecting(): boolean {
   );
 }
 
-function runRetry(): void {
+function runRetry(): Promise<void> | null {
   if (retryTimer) clearTimeout(retryTimer);
   retryTimer = null;
   if (isProjecting()) {
     if (retryStep) retryTimer = setTimeout(runRetry, BASE_BACKOFF_MS);
-    return;
+    return null;
   }
   const step = retryStep;
   retryStep = null;
-  if (step) void step().catch(() => undefined);
+  return step ? step().catch(() => undefined) : null;
 }
 
-function handleOnline(): void {
-  if (!retryStep || isProjecting()) return;
-  retryBackoff.reset();
-  runRetry();
-}
-
-function registerOnlineListener(): void {
-  if (onlineListenerRegistered || typeof window === "undefined") return;
-  onlineListenerRegistered = true;
-  window.addEventListener("online", handleOnline);
+/**
+ * 부팅 때 받지 못한 단계가 백오프를 기다리고 있으면 지금 곧바로 다시 받고, 끝날 때까지
+ * 기다린다. 다시 받았으면 true다. 기다리는 단계가 없거나 송출 중이면 요청 없이 false다.
+ *
+ * 연결 회복(`syncRecovery`)이 도메인 큐보다 먼저 부른다. 받지 못한 단계는 어느 큐에도
+ * 들어 있지 않아, 회복을 알아도 백오프 타이머가 끝날 때까지(최대 1분) 헤더가
+ * '오프라인'으로 남는다. 먼저 받아 병합해야 큐가 병합 결과를 올린다.
+ *
+ * `wake`는 서버가 거절해(5xx·429) 기다리는 단계를 앞당기지 않고 백오프 횟수도 그대로
+ * 둔다. 포커스마다 목록 전체를 다시 받으면 장애 중인 서버를 더 누른다. `manual`은 서버
+ * 재시도 한도에 이르렀거나 거절돼 포기한 단계도 다시 받는다.
+ */
+export async function retryBootSyncIfNeeded(
+  mode: SyncRetryMode,
+): Promise<boolean> {
+  if (isProjecting()) return false;
+  if (mode === "manual" && !retryStep && abandonedStep) {
+    retryStep = abandonedStep;
+    abandonedStep = null;
+  }
+  if (!retryStep) return false;
+  if (mode === "wake" && retryWaitsOnServer) return false;
+  if (mode !== "wake") retryBackoff.reset();
+  const running = runRetry();
+  if (!running) return false;
+  await running;
+  return true;
 }
 
 async function syncFolders(
@@ -290,6 +321,7 @@ async function syncFolders(
       current: getFolders,
       push: pushFolderNow,
       requeue: scheduleFolderPush,
+      hold: holdFailedFolderPush,
       titleOf: (folder) => folder.name,
     },
     sortFoldersParentFirst(
@@ -322,6 +354,7 @@ async function syncLibraryDecks(): Promise<void> {
       current: getUserSongs,
       push: pushDeckNow,
       requeue: scheduleDeckPush,
+      hold: holdFailedDeckPush,
       titleOf: (deck) => deck.title,
     },
     needsPush,
@@ -336,6 +369,7 @@ interface BootPushTarget<T extends { id: string }> {
   current: () => readonly T[];
   push: (item: T) => Promise<unknown>;
   requeue: (item: T) => void;
+  hold: (item: T) => void;
   titleOf: (item: T) => string;
 }
 
@@ -368,6 +402,8 @@ async function pushLatestEach<T extends { id: string }>(
         const latest = findLatest(target.current, id);
         if (latest) target.requeue(latest);
       } else {
+        const latest = findLatest(target.current, id);
+        if (latest) target.hold(latest);
         recordSyncFailure({
           id: item.id,
           title: target.titleOf(item),

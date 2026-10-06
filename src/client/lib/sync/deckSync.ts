@@ -12,7 +12,11 @@ import {
   setSyncStatus,
   type SyncFailure,
 } from "./syncStatus";
-import { BackoffTracker, MAX_RETRY_ATTEMPTS } from "./backoff";
+import {
+  BackoffTracker,
+  MAX_RETRY_ATTEMPTS,
+  type SyncRetryMode,
+} from "./backoff";
 
 const DECK_SYNC_DEBOUNCE_MS = 2000;
 
@@ -27,6 +31,8 @@ let deleter: DeckDeleter = deleteDeckRemote;
 let listener: ServerDeckListener | null = null;
 let enabled = false;
 let pending = new Map<string, PendingOp>();
+let failed = new Map<string, PendingOp>();
+const waitingOnServer = new Set<string>();
 let timer: ReturnType<typeof setTimeout> | null = null;
 let inFlight: Promise<void> = Promise.resolve();
 const runningBatches = new Set<Promise<void>>();
@@ -44,6 +50,8 @@ export function setServerDeckListener(next: ServerDeckListener | null): void {
 
 function clearPending(): void {
   pending = new Map();
+  failed = new Map();
+  waitingOnServer.clear();
   if (timer) {
     clearTimeout(timer);
     timer = null;
@@ -69,11 +77,14 @@ async function runOps(ops: PendingOp[]): Promise<void> {
         await deleter(op.id);
       }
       backoff.reset(key);
+      waitingOnServer.delete(key);
+      failed.delete(key);
       clearSyncFailure("deck", key);
     } catch (err) {
       if (err instanceof SessionExpiredError) {
         sessionExpired = true;
         pending.delete(key);
+        waitingOnServer.delete(key);
         backoff.reset(key);
       } else if (
         err instanceof OfflineError ||
@@ -81,12 +92,16 @@ async function runOps(ops: PendingOp[]): Promise<void> {
           backoff.getServerAttempt(key) < MAX_RETRY_ATTEMPTS)
       ) {
         offline = true;
+        if (err instanceof ServerRejectedError) waitingOnServer.add(key);
+        else waitingOnServer.delete(key);
         if (!pending.has(key)) pending.set(key, op);
         const delay = backoff.getDelay(key, err);
         if (delay < minRetryDelay) minRetryDelay = delay;
       } else {
         pending.delete(key);
+        waitingOnServer.delete(key);
         backoff.reset(key);
+        failed.set(key, op);
         const failure: SyncFailure = {
           id: key,
           title: op.kind === "push" ? op.deck.title : undefined,
@@ -103,7 +118,7 @@ async function runOps(ops: PendingOp[]): Promise<void> {
 
   if (sessionExpired) {
     setSyncStatus("deck", "error");
-  } else if (offline) {
+  } else if (offline || waitingOnServer.size > 0) {
     setSyncStatus("deck", "offline");
   } else {
     backoff.reset();
@@ -112,6 +127,14 @@ async function runOps(ops: PendingOp[]): Promise<void> {
   if (offline && !timer && minRetryDelay !== Infinity) {
     timer = setTimeout(run, minRetryDelay);
   }
+}
+
+function startBatch(ops: PendingOp[]): void {
+  const batch = inFlight.then(() => runOps(ops));
+  runningBatches.add(batch);
+  inFlight = batch.finally(() => {
+    runningBatches.delete(batch);
+  });
 }
 
 function run(): void {
@@ -123,15 +146,22 @@ function run(): void {
 
   const ops = [...pending.values()];
   pending = new Map();
-  const batch = inFlight.then(() => runOps(ops));
-  runningBatches.add(batch);
-  inFlight = batch.finally(() => {
-    runningBatches.delete(batch);
-  });
+  startBatch(ops);
+}
+
+function runNotWaitingOnServer(): void {
+  const ops: PendingOp[] = [];
+  for (const [key, op] of pending) {
+    if (waitingOnServer.has(key)) continue;
+    pending.delete(key);
+    ops.push(op);
+  }
+  if (ops.length > 0) startBatch(ops);
 }
 
 function schedule(key: string, op: PendingOp): void {
   if (!enabled) return;
+  failed.delete(key);
   pending.set(key, op);
   if (timer) clearTimeout(timer);
   timer = setTimeout(run, DECK_SYNC_DEBOUNCE_MS);
@@ -157,10 +187,12 @@ export function scheduleDeckDelete(id: string): void {
  */
 export async function pushDeckNow(deck: Deck): Promise<Deck> {
   pending.delete(deck.id);
+  waitingOnServer.delete(deck.id);
   backoff.reset(deck.id);
   await inFlight;
   const saved = await pusher(deck);
   listener?.(saved);
+  failed.delete(deck.id);
   clearSyncFailure("deck", deck.id);
   if (pending.size === 0) setSyncStatus("deck", "synced");
   return saved;
@@ -174,6 +206,40 @@ export function hasPendingDeckSync(): boolean {
 export function flushDeckSync(): Promise<void> {
   run();
   return inFlight;
+}
+
+/**
+ * 부팅 동기화가 올리다 영구 실패로 남긴 곡을 맡긴다. 사용자가 '다시 시도'를 누르면
+ * (`retryDeckSyncNow("manual")`) 큐가 다시 올린다.
+ */
+export function holdFailedDeckPush(deck: Deck): void {
+  failed.set(deck.id, { kind: "push", deck });
+}
+
+/**
+ * 연결 회복 신호(`syncRecovery`)에 맞춰 대기 중인 곡 변경을 곧바로 보낸다.
+ *
+ * `wake`는 서버가 거절해(5xx·429) 기다리는 곡만 백오프 타이머에 맡기고 나머지는 곧바로
+ * 보낸다. 포커스마다 앞당기면 `Retry-After`를 어기고 서버 재시도 한도에 이르지 못한다.
+ * 곡 변경끼리는 순서가 없으므로 오프라인으로 밀린 곡까지 함께 기다릴 까닭이 없다.
+ * `reconnect`·`manual`은 백오프를 비우고 모두 보낸다(`syncScheduler`와 같다). 비우지
+ * 않으면 '다시 시도' 뒤 한 번 더 실패한 곡이 지난 횟수 때문에 곧바로 영구 실패가 된다.
+ * `manual`은 영구 실패로 남긴 곡 변경도 실패 기록을 지우고 다시 넣는다.
+ */
+export function retryDeckSyncNow(mode: SyncRetryMode): Promise<void> {
+  if (mode === "manual") {
+    for (const [key, op] of failed) {
+      clearSyncFailure("deck", key);
+      if (!pending.has(key)) pending.set(key, op);
+    }
+    failed = new Map();
+  }
+  if (mode !== "wake") backoff.reset();
+  if (mode === "wake" && waitingOnServer.size > 0) {
+    runNotWaitingOnServer();
+    return inFlight;
+  }
+  return flushDeckSync();
 }
 
 export function __setDeckTransportForTests(next: {

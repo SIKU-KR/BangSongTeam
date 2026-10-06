@@ -16,3 +16,9 @@ export { runBootSync, shouldRunBootSync } from "./bootSync";
 export { refreshBackgroundCatalog } from "./backgroundSync";
 export { flushDeckSync } from "./deckSync";
 export { flushFolderSync } from "./folderSync";
+export {
+  startSyncRecovery,
+  retrySyncNow,
+  resumeDeferredSyncRecovery,
+  subscribeSyncRecovery,
+} from "./syncRecovery";

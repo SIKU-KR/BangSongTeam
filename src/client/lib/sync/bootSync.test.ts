@@ -17,6 +17,7 @@ import {
 } from "../../features/editor/songLibraryStore";
 import {
   __resetBootSyncForTests,
+  retryBootSyncIfNeeded,
   shouldRunBootSync,
   runBootSync,
 } from "./bootSync";
@@ -331,7 +332,10 @@ describe("runBootSync — 동기화 상태", () => {
 
     await runBootSync();
 
-    expect(getSyncSnapshot()).toEqual({ status: "synced", lastFailure: null });
+    expect(getSyncSnapshot()).toMatchObject({
+      status: "synced",
+      lastFailure: null,
+    });
   });
 
   it("부팅 때 거절된 프레젠테이션은 다른 프레젠테이션이 올라가도 동기화 실패로 남는다", async () => {
@@ -376,11 +380,85 @@ describe("runBootSync — 동기화 상태", () => {
     await runBootSync();
     expect(getSyncSnapshot().status).toBe("offline");
 
-    window.dispatchEvent(new Event("online"));
+    await expect(retryBootSyncIfNeeded("reconnect")).resolves.toBe(true);
 
-    await vi.waitFor(() => {
-      expect(getSyncSnapshot().status).toBe("synced");
-    });
+    expect(getSyncSnapshot().status).toBe("synced");
+    await expect(retryBootSyncIfNeeded("reconnect")).resolves.toBe(false);
+  });
+
+  it("포커스 같은 가벼운 회복 신호에는 서버가 거절해 기다리는 단계를 앞당기지 않는다", async () => {
+    presentationSync.pullFolders.mockRejectedValueOnce(
+      new ServerRejectedError(503),
+    );
+    await runBootSync();
+    presentationSync.pullFolders.mockClear();
+
+    await expect(retryBootSyncIfNeeded("wake")).resolves.toBe(false);
+    expect(presentationSync.pullFolders).not.toHaveBeenCalled();
+
+    await expect(retryBootSyncIfNeeded("reconnect")).resolves.toBe(true);
+    expect(presentationSync.pullFolders).toHaveBeenCalledTimes(1);
+  });
+
+  it("네트워크 실패로 기다리는 단계는 가벼운 회복 신호에도 곧바로 다시 받는다", async () => {
+    presentationSync.pullFolders.mockRejectedValueOnce(new OfflineError());
+    await runBootSync();
+
+    await expect(retryBootSyncIfNeeded("wake")).resolves.toBe(true);
+    expect(getSyncSnapshot().status).toBe("synced");
+  });
+
+  it("거절돼 포기한 단계는 사용자가 다시 시도할 때만 다시 받는다", async () => {
+    presentationSync.pullFolders.mockRejectedValueOnce(
+      new ServerRejectedError(400),
+    );
+    await runBootSync();
+    expect(getSyncSnapshot().status).toBe("error");
+
+    await expect(retryBootSyncIfNeeded("reconnect")).resolves.toBe(false);
+    await expect(retryBootSyncIfNeeded("manual")).resolves.toBe(true);
+
+    expect(getSyncSnapshot().status).toBe("synced");
+  });
+
+  it("받지 못한 단계가 없으면 회복 때 다시 받지 않는다", async () => {
+    await runBootSync();
+    presentationSync.pullFolders.mockClear();
+    presentationSync.pullPresentations.mockClear();
+    presentationSync.pullDecks.mockClear();
+
+    await expect(retryBootSyncIfNeeded("reconnect")).resolves.toBe(false);
+
+    expect(presentationSync.pullFolders).not.toHaveBeenCalled();
+    expect(presentationSync.pullPresentations).not.toHaveBeenCalled();
+    expect(presentationSync.pullDecks).not.toHaveBeenCalled();
+  });
+
+  it("회복 신호가 겹쳐도 받지 못한 단계는 한 번만 다시 받는다", async () => {
+    presentationSync.pullFolders.mockRejectedValueOnce(new OfflineError());
+    await runBootSync();
+    presentationSync.pullFolders.mockClear();
+
+    const results = await Promise.all([
+      retryBootSyncIfNeeded("reconnect"),
+      retryBootSyncIfNeeded("reconnect"),
+    ]);
+
+    expect(results).toEqual([true, false]);
+    expect(presentationSync.pullFolders).toHaveBeenCalledTimes(1);
+  });
+
+  it("곡을 받지 못한 단계도 회복 때 다시 받는다", async () => {
+    presentationSync.pullDecks.mockClear();
+    presentationSync.pullDecks.mockRejectedValueOnce(new OfflineError());
+
+    await runBootSync();
+    expect(getSyncSnapshot().status).toBe("offline");
+
+    await expect(retryBootSyncIfNeeded("reconnect")).resolves.toBe(true);
+
+    expect(presentationSync.pullDecks).toHaveBeenCalledTimes(2);
+    expect(getSyncSnapshot().status).toBe("synced");
   });
 
   it("오프라인으로 부팅한 뒤 송출 화면으로 가면 연결이 돌아와도 송출을 마칠 때까지 다시 받지 않는다", async () => {
@@ -392,7 +470,7 @@ describe("runBootSync — 동기화 상태", () => {
     try {
       await runBootSync();
       window.history.pushState({}, "", "/present/abc/fullscreen");
-      window.dispatchEvent(new Event("online"));
+      await expect(retryBootSyncIfNeeded("reconnect")).resolves.toBe(false);
       await vi.advanceTimersByTimeAsync(MAX_BACKOFF_MS * 2);
 
       expect(presentationSync.pullFolders).toHaveBeenCalledTimes(1);

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from "vitest";
+import { beforeEach, describe, it, expect, vi } from "vitest";
 import {
   callApi,
   describeApiError,
@@ -10,6 +10,12 @@ import {
   TimeoutError,
 } from "./request";
 import { ERROR_COPY } from "#copy/common";
+import {
+  __resetConnectivityForTests,
+  isServerReachable,
+  markServerReachable,
+  markServerUnreachable,
+} from "./connectivity";
 
 describe("request", () => {
   describe("callApi", () => {
@@ -154,6 +160,86 @@ describe("request", () => {
       const err = await callApi(async () => response).catch((e) => e);
       expect(err).toBeInstanceOf(TimeoutError);
       expect(err).toBeInstanceOf(OfflineError);
+    });
+  });
+
+  describe("callApi 연결 상태", () => {
+    beforeEach(() => {
+      __resetConnectivityForTests();
+    });
+
+    it.each([200, 401, 500])(
+      "%i 응답을 받으면 서버에 닿은 것으로 남긴다",
+      async (status) => {
+        markServerUnreachable();
+        const response = {
+          status,
+          ok: status < 400,
+          json: async () => ({}),
+        };
+
+        await callApi(async () => response).catch(() => undefined);
+
+        expect(isServerReachable()).toBe(true);
+      },
+    );
+
+    it("네트워크 실패는 서버에 닿지 못한 것으로 남긴다", async () => {
+      markServerReachable();
+
+      await callApi(async () => {
+        throw new TypeError("Failed to fetch");
+      }).catch(() => undefined);
+
+      expect(isServerReachable()).toBe(false);
+    });
+
+    it("타임아웃은 서버에 닿지 못한 것으로 남긴다", async () => {
+      markServerReachable();
+
+      await callApi(async () => {
+        throw new DOMException("timeout", "TimeoutError");
+      }).catch(() => undefined);
+
+      expect(isServerReachable()).toBe(false);
+    });
+
+    it.each([
+      [200, new TypeError("network error")],
+      [200, new DOMException("timeout", "TimeoutError")],
+      [500, new DOMException("timeout", "TimeoutError")],
+    ])(
+      "%i 응답의 본문을 받다 끊기면 서버에 닿지 못한 것으로 남긴다",
+      async (status, error) => {
+        markServerUnreachable();
+        const response = {
+          status,
+          ok: status < 400,
+          json: async (): Promise<never> => {
+            throw error;
+          },
+        };
+
+        await expect(callApi(async () => response)).rejects.toBeInstanceOf(
+          OfflineError,
+        );
+
+        expect(isServerReachable()).toBe(false);
+      },
+    );
+
+    it("호출자 취소는 연결 상태를 바꾸지 않는다", async () => {
+      const abort = async (): Promise<never> => {
+        throw new DOMException("aborted", "AbortError");
+      };
+
+      markServerReachable();
+      await callApi(abort).catch(() => undefined);
+      expect(isServerReachable()).toBe(true);
+
+      markServerUnreachable();
+      await callApi(abort).catch(() => undefined);
+      expect(isServerReachable()).toBe(false);
     });
   });
 

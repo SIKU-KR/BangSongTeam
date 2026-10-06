@@ -1,10 +1,36 @@
-import { describe, it, expect, vi } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
+import { TooltipProvider } from "#components/ui/tooltip";
 import { EditorHeader } from "./EditorHeader";
 import { EDITOR_COPY } from "#copy/editor";
 import { BACKGROUND_COPY } from "#copy/backgrounds";
+import { COMMON_COPY } from "#copy/common";
 import { DRIVE_ROOT_PATH } from "../drive/drivePaths";
+import {
+  recordSyncFailure,
+  resetSyncStatus,
+  setSyncStatus,
+} from "../../lib/sync/syncStatus";
+import {
+  clearPersistenceError,
+  reportPersistenceError,
+} from "../../lib/storage/persistenceStatus";
+
+const syncRecovery = vi.hoisted(() => ({ retrySyncNow: vi.fn() }));
+
+vi.mock("../../lib/sync/syncRecovery", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("../../lib/sync/syncRecovery")>();
+  return { ...actual, ...syncRecovery };
+});
 
 function renderHeader(
   props?: Partial<React.ComponentProps<typeof EditorHeader>>,
@@ -25,7 +51,9 @@ function renderHeader(
 
   return render(
     <MemoryRouter>
-      <EditorHeader {...defaultProps} {...props} />
+      <TooltipProvider>
+        <EditorHeader {...defaultProps} {...props} />
+      </TooltipProvider>
     </MemoryRouter>,
   );
 }
@@ -244,5 +272,120 @@ describe("EditorHeader", () => {
 
     fireEvent.click(screen.getByTestId("header-media-failure-retry"));
     expect(retry).toHaveBeenCalledTimes(1);
+  });
+
+  describe("동기화 상태", () => {
+    beforeEach(() => {
+      resetSyncStatus();
+      clearPersistenceError();
+      syncRecovery.retrySyncNow.mockClear();
+    });
+
+    afterEach(() => {
+      cleanup();
+      vi.useRealTimers();
+      resetSyncStatus();
+      clearPersistenceError();
+    });
+
+    it("아직 동기화하지 않았으면 툴팁에 그 사실을 보여 준다", async () => {
+      renderHeader();
+
+      act(() => screen.getByTestId("save-status").focus());
+
+      expect(await screen.findByTestId("save-status-detail")).toHaveTextContent(
+        EDITOR_COPY.syncStatus.notSyncedYet,
+      );
+    });
+
+    it("툴팁에 마지막으로 동기화한 시각을 보여 준다", async () => {
+      vi.useFakeTimers({ toFake: ["Date"] });
+      vi.setSystemTime(new Date(2026, 9, 6, 14, 5));
+      setSyncStatus("presentation", "synced");
+      const time = new Intl.DateTimeFormat("ko-KR", {
+        hour: "numeric",
+        minute: "2-digit",
+      }).format(Date.now());
+      renderHeader();
+
+      act(() => screen.getByTestId("save-status").focus());
+
+      expect(await screen.findByTestId("save-status-detail")).toHaveTextContent(
+        EDITOR_COPY.syncStatus.lastSynced(time),
+      );
+    });
+
+    it("오늘 동기화한 것이 아니면 툴팁에 날짜도 보여 준다", async () => {
+      vi.useFakeTimers({ toFake: ["Date"] });
+      vi.setSystemTime(new Date(2026, 9, 3, 14, 5));
+      setSyncStatus("presentation", "synced");
+      const time = new Intl.DateTimeFormat("ko-KR", {
+        month: "long",
+        day: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
+      }).format(Date.now());
+      vi.setSystemTime(new Date(2026, 9, 4, 9, 0));
+      renderHeader();
+
+      act(() => screen.getByTestId("save-status").focus());
+
+      expect(await screen.findByTestId("save-status-detail")).toHaveTextContent(
+        EDITOR_COPY.syncStatus.lastSynced(time),
+      );
+    });
+
+    it.each(["synced", "syncing", "idle"] as const)(
+      "%s 상태에서는 다시 시도를 보여 주지 않는다",
+      (status) => {
+        setSyncStatus("presentation", status);
+        renderHeader();
+
+        expect(
+          screen.queryByTestId("save-status-retry"),
+        ).not.toBeInTheDocument();
+      },
+    );
+
+    it("오프라인이면 다시 시도를 보여 주고, 누르면 곧바로 다시 동기화한다", () => {
+      setSyncStatus("presentation", "offline");
+      renderHeader();
+
+      expect(screen.getByTestId("save-status")).toHaveTextContent(
+        EDITOR_COPY.syncStatus.offline,
+      );
+      const retry = screen.getByTestId("save-status-retry");
+      expect(retry).toHaveAccessibleName(COMMON_COPY.retry);
+
+      fireEvent.click(retry);
+
+      expect(syncRecovery.retrySyncNow).toHaveBeenCalledTimes(1);
+    });
+
+    it("동기화 실패면 다시 시도를 보여 준다", () => {
+      recordSyncFailure({
+        id: "doc",
+        kind: "presentation",
+        message: "거절",
+        failedAt: 1,
+      });
+      renderHeader();
+
+      expect(screen.getByTestId("save-status")).toHaveTextContent(
+        EDITOR_COPY.syncStatus.syncFailed,
+      );
+      expect(screen.getByTestId("save-status-retry")).toBeInTheDocument();
+    });
+
+    it("기기 저장이 실패했으면 동기화 다시 시도를 보여 주지 않는다", () => {
+      setSyncStatus("presentation", "offline");
+      reportPersistenceError(new Error("disk"));
+      renderHeader();
+
+      expect(screen.getByTestId("save-status")).toHaveTextContent(
+        EDITOR_COPY.syncStatus.saveFailed,
+      );
+      expect(screen.queryByTestId("save-status-retry")).not.toBeInTheDocument();
+    });
   });
 });
