@@ -291,7 +291,7 @@ describe("보관함 push 큐", () => {
     vi.useRealTimers();
   });
 
-  it("곡이 영구 실패한 뒤 세트 동기화가 성공해도 동기화 실패로 남는다", async () => {
+  it("곡이 영구 실패한 뒤 프레젠테이션 동기화가 성공해도 동기화 실패로 남는다", async () => {
     __resetSyncSchedulerForTests();
     __setPusherForTests(async () => true);
     setSyncEnabled(true);

@@ -19,13 +19,20 @@ const api = vi.hoisted(() => ({
     ok: true,
     json: async () => ({ ok: true }),
   })),
+  get: vi.fn<
+    () => Promise<{
+      status: number;
+      ok: boolean;
+      json: () => Promise<unknown>;
+    }>
+  >(),
 }));
 
 vi.mock("../api/client", () => ({
   api: {
     api: {
       presentations: {
-        ":id": { $patch: api.patch, $delete: api.remove },
+        ":id": { $patch: api.patch, $delete: api.remove, $get: api.get },
       },
     },
   },
@@ -34,10 +41,12 @@ vi.mock("../api/client", () => ({
 import {
   __resetServerDecksForTests,
   deletePresentationRemote,
+  endSharedPresentationRefresh,
   pushPresentation,
+  refreshSharedPresentation,
   rememberServerDocuments,
 } from "./presentationSync";
-import { getSyncSnapshot, resetSyncStatus } from "./syncStatus";
+import { getSyncSnapshot, resetSyncStatus, setSyncStatus } from "./syncStatus";
 
 const USER = "00000000x000000000001";
 const DOC_ID = "100000000000000000001";
@@ -191,12 +200,12 @@ describe("세트 변경분 push", () => {
   });
 });
 
-describe("세트 원격 삭제", () => {
+describe("프레젠테이션 원격 삭제", () => {
   beforeEach(() => {
     resetSyncStatus();
   });
 
-  it("이미 없는 세트(404)는 성공으로 보고 동기화 실패를 띄우지 않는다", async () => {
+  it("이미 없는 프레젠테이션(404)은 성공으로 보고 동기화 실패를 띄우지 않는다", async () => {
     api.remove.mockResolvedValueOnce({
       status: 404,
       ok: false,
@@ -206,5 +215,53 @@ describe("세트 원격 삭제", () => {
     await expect(deletePresentationRemote(DOC_ID)).resolves.toBeUndefined();
 
     expect(getSyncSnapshot().status).toBe("idle");
+  });
+});
+
+describe("공유받은 프레젠테이션 새로고침 상태", () => {
+  beforeEach(() => {
+    resetSyncStatus();
+    endSharedPresentationRefresh();
+    api.get.mockReset();
+  });
+
+  it("서버가 잠시 응답하지 못하면(503) 실패가 아니라 오프라인으로 본다", async () => {
+    api.get.mockResolvedValueOnce({
+      status: 503,
+      ok: false,
+      json: async () => ({}),
+    });
+
+    await expect(refreshSharedPresentation(DOC_ID)).rejects.toThrow();
+
+    expect(getSyncSnapshot().status).toBe("offline");
+  });
+
+  it("공유 화면을 떠나면 새로고침 실패가 내 프레젠테이션 동기화 표시에 남지 않는다", async () => {
+    api.get.mockRejectedValueOnce(new TypeError("Failed to fetch"));
+    await refreshSharedPresentation(DOC_ID);
+    setSyncStatus("presentation", "synced");
+    expect(getSyncSnapshot().status).toBe("offline");
+
+    endSharedPresentationRefresh();
+
+    expect(getSyncSnapshot().status).toBe("synced");
+  });
+
+  it("화면을 떠난 뒤 도착한 새로고침 결과는 상태를 남기지 않는다", async () => {
+    let fail: (err: Error) => void = () => undefined;
+    api.get.mockReturnValueOnce(
+      new Promise((_, reject) => {
+        fail = reject;
+      }),
+    );
+    const refreshing = refreshSharedPresentation(DOC_ID);
+    endSharedPresentationRefresh();
+    setSyncStatus("presentation", "synced");
+
+    fail(new TypeError("Failed to fetch"));
+    await refreshing;
+
+    expect(getSyncSnapshot().status).toBe("synced");
   });
 });

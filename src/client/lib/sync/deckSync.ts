@@ -161,6 +161,11 @@ export async function pushDeckNow(deck: Deck): Promise<Deck> {
   return saved;
 }
 
+/** 아직 서버에 보내지 않은 곡 변경이 큐에 남아 있는지 (다시 시도할 것 포함) */
+export function hasPendingDeckSync(): boolean {
+  return pending.size > 0;
+}
+
 export function flushDeckSync(): Promise<void> {
   run();
   return inFlight;

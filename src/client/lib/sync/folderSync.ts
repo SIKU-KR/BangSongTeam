@@ -148,6 +148,11 @@ export async function pushFolderNow(folder: Folder): Promise<Folder> {
   return saved;
 }
 
+/** 아직 서버에 보내지 않은 폴더가 큐에 남아 있는지 (다시 시도할 것 포함) */
+export function hasPendingFolderPush(): boolean {
+  return pending.size > 0;
+}
+
 /**
  * 대기 중인 폴더 push를 즉시 시작하고 완료를 기다린다.
  *

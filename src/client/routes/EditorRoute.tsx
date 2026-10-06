@@ -71,7 +71,10 @@ import {
 } from "../features/offline";
 import { warmPresentationFonts } from "../lib/offline";
 import { PresentationShareDialog } from "../features/sharing/PresentationShareDialog";
-import { refreshSharedPresentation } from "../lib/sync";
+import {
+  endSharedPresentationRefresh,
+  refreshSharedPresentation,
+} from "../lib/sync";
 import { useBackgroundLayers } from "../features/backgrounds";
 import { EDITOR_COPY } from "#copy/editor";
 import { COMMON_COPY } from "#copy/common";
@@ -133,7 +136,10 @@ function EditorScreen({
     };
     refresh();
     window.addEventListener("focus", refresh);
-    return () => window.removeEventListener("focus", refresh);
+    return () => {
+      window.removeEventListener("focus", refresh);
+      endSharedPresentationRefresh();
+    };
   }, [presentationId, readOnly, isGuest]);
 
   useBackgroundAutoCache(found ?? null);

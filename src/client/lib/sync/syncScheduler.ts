@@ -228,6 +228,11 @@ export function cancelDocumentPush(id: string): void {
   scheduleNextTimer();
 }
 
+/** 아직 서버에 보내지 않은 프레젠테이션이 큐에 남아 있는지 (다시 시도할 것 포함) */
+export function hasPendingDocumentPush(): boolean {
+  return pending.size > 0;
+}
+
 export async function flushPendingSync(): Promise<void> {
   if (!enabled) return;
   for (const item of pending.values()) {

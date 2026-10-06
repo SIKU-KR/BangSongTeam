@@ -53,7 +53,7 @@ describe("동기화 상태", () => {
     expect(getSyncSnapshot().status).toBe("offline");
   });
 
-  it("세트 동기화가 실패한 뒤 폴더 동기화가 성공해도 동기화 실패로 남는다", () => {
+  it("프레젠테이션 동기화가 실패한 뒤 폴더 동기화가 성공해도 동기화 실패로 남는다", () => {
     recordSyncFailure(failure());
     setSyncStatus("folder", "syncing");
     setSyncStatus("folder", "synced");

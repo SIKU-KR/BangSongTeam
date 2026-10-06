@@ -13,8 +13,13 @@ import {
   type PresentationDocument,
 } from "#shared";
 import { api } from "../api/client";
-import { callApi, OfflineError, ServerRejectedError } from "../api/request";
-import { setSyncStatus } from "./syncStatus";
+import {
+  callApi,
+  isRetryableApiError,
+  OfflineError,
+  ServerRejectedError,
+} from "../api/request";
+import { setSyncStatus, type SyncStatus } from "./syncStatus";
 
 /**
  * 프레젠테이션을 서버가 받을 수 있는 문서로 좁힌다.
@@ -134,14 +139,22 @@ export function setSharedPresentationListener(
   sharedListener = next;
 }
 
+let sharedRefreshGeneration = 0;
+
 /**
- * 공유받은 세트의 최신본을 받는다 (편집기를 열 때·창에 돌아올 때).
+ * 공유받은 프레젠테이션의 최신본을 받는다 (편집기를 열 때·창에 돌아올 때).
  * 소유자가 링크를 끄거나 재설정했으면 로컬에서 지우도록 알린다. 오프라인이면
  * 받아 둔 것을 그대로 쓴다.
  *
  * 동기화 큐를 거치지 않는 요청이라 결과를 `shared` 도메인 상태로 직접 남긴다.
+ * 이 상태는 공유받은 프레젠테이션을 보는 동안만 의미가 있으므로, 화면을 떠나면
+ * `endSharedPresentationRefresh`로 지운다. 그 뒤에 도착한 응답은 상태를 남기지 않는다.
  */
 export async function refreshSharedPresentation(id: string): Promise<void> {
+  const generation = sharedRefreshGeneration;
+  const report = (status: SyncStatus): void => {
+    if (generation === sharedRefreshGeneration) setSyncStatus("shared", status);
+  };
   try {
     const body = await callApi<{ presentation: unknown }>(() =>
       api.api.presentations[":id"].$get({ param: { id } }),
@@ -149,20 +162,26 @@ export async function refreshSharedPresentation(id: string): Promise<void> {
     sharedListener?.replaced(
       PresentationDocumentSchema.parse(body.presentation),
     );
-    setSyncStatus("shared", "synced");
+    report("synced");
   } catch (err) {
     if (err instanceof ServerRejectedError && err.status === 404) {
       sharedListener?.lost(id);
-      setSyncStatus("shared", "synced");
+      report("synced");
       return;
     }
-    if (err instanceof OfflineError) {
-      setSyncStatus("shared", "offline");
-      return;
-    }
-    setSyncStatus("shared", "error");
+    report(isRetryableApiError(err) ? "offline" : "error");
+    if (err instanceof OfflineError) return;
     throw err;
   }
+}
+
+/**
+ * 공유받은 프레젠테이션 화면을 떠날 때 부른다. 새로고침 결과는 그 화면에만 해당하는
+ * 읽기라, 남겨 두면 내 프레젠테이션이 다 저장된 뒤에도 헤더가 '오프라인'·'동기화 실패'로 남는다.
+ */
+export function endSharedPresentationRefresh(): void {
+  sharedRefreshGeneration += 1;
+  setSyncStatus("shared", "idle");
 }
 
 export async function pullPresentations(): Promise<PresentationDocument[]> {

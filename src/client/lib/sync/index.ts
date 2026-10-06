@@ -6,6 +6,7 @@ export {
 } from "./syncStatus";
 export {
   refreshSharedPresentation,
+  endSharedPresentationRefresh,
   deleteFolderRemote,
   deletePresentationRemote,
 } from "./presentationSync";

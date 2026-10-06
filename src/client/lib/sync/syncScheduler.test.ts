@@ -184,7 +184,7 @@ describe("서버 push 스케줄러", () => {
     expect(getSyncSnapshot().status).toBe("idle");
   });
 
-  it("세트 동기화가 실패한 뒤 폴더 동기화가 성공해도 동기화 실패로 남는다", async () => {
+  it("프레젠테이션 동기화가 실패한 뒤 폴더 동기화가 성공해도 동기화 실패로 남는다", async () => {
     __resetFolderSyncForTests();
     __setFolderPusherForTests(async (folder) => folder);
     setFolderSyncEnabled(true);
@@ -213,7 +213,7 @@ describe("서버 push 스케줄러", () => {
     __resetFolderSyncForTests();
   });
 
-  it("다른 세트가 성공해도 실패한 세트가 다시 올라가기 전까지 실패로 남는다", async () => {
+  it("다른 프레젠테이션이 성공해도 실패한 프레젠테이션이 다시 올라가기 전까지 실패로 남는다", async () => {
     push.mockImplementation(async (document) => {
       if (document.id === "a") throw new ServerRejectedError(400, "거절");
       return true;
@@ -231,7 +231,7 @@ describe("서버 push 스케줄러", () => {
     expect(getSyncSnapshot()).toEqual({ status: "synced", lastFailure: null });
   });
 
-  it("실패한 세트를 영구 삭제하면 실패 표시를 지운다", async () => {
+  it("실패한 프레젠테이션을 영구 삭제하면 실패 표시를 지운다", async () => {
     push.mockRejectedValueOnce(new ServerRejectedError(400, "거절"));
 
     scheduleDocumentPush(doc("a"));

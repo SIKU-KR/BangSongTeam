@@ -13,12 +13,22 @@ import {
   resetSongLibraryStore,
   saveSongToLibrary,
 } from "../../features/editor/songLibraryStore";
-import { shouldRunBootSync, runBootSync } from "./bootSync";
+import {
+  __resetBootSyncForTests,
+  shouldRunBootSync,
+  runBootSync,
+} from "./bootSync";
 import {
   __resetDeckSyncForTests,
   __setDeckTransportForTests,
+  flushDeckSync,
+  scheduleDeckPush,
 } from "./deckSync";
-import { __resetSyncSchedulerForTests } from "./syncScheduler";
+import {
+  __resetSyncSchedulerForTests,
+  flushPendingSync,
+  scheduleDocumentPush,
+} from "./syncScheduler";
 import {
   __resetFolderSyncForTests,
   __setFolderPusherForTests,
@@ -270,12 +280,13 @@ describe("runBootSync — 동기화 상태", () => {
   });
 
   afterEach(() => {
+    __resetBootSyncForTests();
     __resetFolderSyncForTests();
     __resetDeckSyncForTests();
     __resetSyncSchedulerForTests();
   });
 
-  it("세트 push가 거절되면 곡·폴더 동기화가 성공해도 동기화 실패로 남는다", async () => {
+  it("프레젠테이션 push가 거절되면 곡·폴더 동기화가 성공해도 동기화 실패로 남는다", async () => {
     __loadFoldersForTests([folder(PARENT)]);
     __loadDocumentsForTests([presentation(DOC)]);
     saveSongToLibrary({ title: "로컬 곡", lyricsRaw: "가사" });
@@ -315,5 +326,54 @@ describe("runBootSync — 동기화 상태", () => {
     await runBootSync();
 
     expect(getSyncSnapshot()).toEqual({ status: "synced", lastFailure: null });
+  });
+
+  it("부팅 때 거절된 프레젠테이션은 다른 프레젠테이션이 올라가도 동기화 실패로 남는다", async () => {
+    const OTHER = "e00000000000000000004";
+    __loadDocumentsForTests([presentation(DOC)]);
+    presentationSync.pushPresentation.mockImplementation(async (doc) => {
+      if ((doc as Presentation).id === DOC) {
+        throw new ServerRejectedError(400, "거절");
+      }
+      return true;
+    });
+
+    await runBootSync();
+    scheduleDocumentPush(presentation(OTHER));
+    await flushPendingSync();
+
+    expect(getSyncSnapshot().status).toBe("error");
+    expect(getSyncSnapshot().lastFailure?.id).toBe(DOC);
+  });
+
+  it("곡 큐가 오프라인으로 다시 시도할 곡을 들고 있으면 부팅 성공으로 덮지 않는다", async () => {
+    const queued = serverDeck({ id: "c000000000000000000aa" });
+    __setDeckTransportForTests({
+      push: vi.fn(async () => {
+        throw new OfflineError();
+      }),
+    });
+    presentationSync.pullDecks.mockImplementation(async () => {
+      scheduleDeckPush(queued);
+      await flushDeckSync();
+      return [];
+    });
+
+    await runBootSync();
+
+    expect(getSyncSnapshot().status).toBe("offline");
+  });
+
+  it("오프라인이라 받지 못한 단계는 연결이 돌아오면 다시 받아 동기화됨으로 돌아온다", async () => {
+    presentationSync.pullFolders.mockRejectedValueOnce(new OfflineError());
+
+    await runBootSync();
+    expect(getSyncSnapshot().status).toBe("offline");
+
+    window.dispatchEvent(new Event("online"));
+
+    await vi.waitFor(() => {
+      expect(getSyncSnapshot().status).toBe("synced");
+    });
   });
 });

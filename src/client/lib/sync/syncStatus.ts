@@ -10,10 +10,10 @@ import { useSyncExternalStore } from "react";
 export type SyncStatus = "idle" | "syncing" | "synced" | "offline" | "error";
 
 /**
- * 동기화 상태를 따로 보고하는 곳. 세트·폴더·보관함 곡은 각자 다른 시점에
+ * 동기화 상태를 따로 보고하는 곳. 프레젠테이션·폴더·보관함 곡은 각자 다른 시점에
  * 서버와 통신하므로, 한 큐의 결과가 다른 큐의 결과를 덮지 않도록 나눠 담는다.
- * 공유받은 세트 새로고침(`shared`)도 세트 push 큐와 나눈다. 같이 두면 새로고침
- * 한 번의 성공이 오프라인으로 밀려 있는 세트 push를 가린다.
+ * 공유받은 프레젠테이션 새로고침(`shared`)도 프레젠테이션 push 큐와 나눈다.
+ * 같이 두면 새로고침 한 번의 성공이 오프라인으로 밀려 있는 push를 가린다.
  */
 export type SyncDomain = "presentation" | "folder" | "deck" | "shared";
 
@@ -91,8 +91,8 @@ function emit(): void {
  * 한 도메인의 진행 단계를 바꾼다. 헤더는 모든 도메인을 우선순위
  * (error > offline > syncing > synced > idle)로 모아 보여 준다.
  *
- * 폴더가 'synced'를 보고해도 세트의 'error'·'offline'은 그대로 남는다.
- * 한 큐의 성공이 다른 큐의 실패를 덮으면 세트 저장이 실패했는데도 헤더가
+ * 폴더가 'synced'를 보고해도 프레젠테이션의 'error'·'offline'은 그대로 남는다.
+ * 한 큐의 성공이 다른 큐의 실패를 덮으면 프레젠테이션 저장이 실패했는데도 헤더가
  * '동기화됨'으로 바뀌어, 사용자는 저장된 줄 알고 기기를 끈다.
  */
 export function setSyncStatus(domain: SyncDomain, next: SyncStatus): void {
