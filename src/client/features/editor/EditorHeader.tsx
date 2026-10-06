@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import {
   ArrowLeftIcon,
   ChevronDownIcon,
+  CloudAlertIcon,
   CopyIcon,
   FileTextIcon,
   HardDriveIcon,
@@ -71,12 +72,15 @@ interface EditorHeaderProps {
   backPath: string | null;
   /**
    * 세트 배경 영상 중 이 기기에 저장된 수. 모두 저장됐으면 `null`이다.
-   * 저장 공간 부족(`quota`)으로 멈췄으면 진행 대신 그 사실과 다시 받기(`retry`)를 보여 준다
+   * 받다 실패해 곧 다시 받을 예정이면(`retrying`) '저장 중'과 구분해 보여 준다.
+   * 저장 공간 부족이나 다시 받기를 멈춘 실패(`failure`)면 진행 대신 그 사실과 다시
+   * 받기(`retry`)를 보여 준다
    */
   mediaProgress: {
     readyCount: number;
     totalCount: number;
     failure: ProjectionMediaFailure | null;
+    retrying: boolean;
     retry: () => void;
   } | null;
 }
@@ -235,26 +239,32 @@ function ShortcutTable({
   );
 }
 
-function MediaQuotaPopover({
+function MediaFailurePopover({
+  failure,
   onRetry,
 }: {
+  failure: ProjectionMediaFailure;
   onRetry: () => void;
 }): React.JSX.Element {
+  const quota = failure === "quota";
   return (
     <Popover>
       <PopoverTrigger
-        data-testid="header-media-quota"
+        data-testid="header-media-failure"
+        data-failure={failure}
         render={<Button variant="destructive" size="sm" />}
       >
-        <HardDriveIcon />
-        {BACKGROUND_COPY.prepare.editorQuota}
+        {quota ? <HardDriveIcon /> : <CloudAlertIcon />}
+        {quota
+          ? BACKGROUND_COPY.prepare.editorQuota
+          : BACKGROUND_COPY.prepare.editorFailed}
       </PopoverTrigger>
-      <PopoverContent data-testid="header-media-quota-popover" align="end">
+      <PopoverContent data-testid="header-media-failure-popover" align="end">
         <PopoverDescription>
-          {BACKGROUND_COPY.prepare.failed.quota}
+          {BACKGROUND_COPY.prepare.failed[failure]}
         </PopoverDescription>
         <Button
-          data-testid="header-media-quota-retry"
+          data-testid="header-media-failure-retry"
           size="sm"
           onClick={onRetry}
         >
@@ -458,12 +468,21 @@ export function EditorHeader({
           </Button>
         )}
 
-        {mediaProgress?.failure === "quota" ? (
-          <MediaQuotaPopover onRetry={mediaProgress.retry} />
+        {mediaProgress?.failure ? (
+          <MediaFailurePopover
+            failure={mediaProgress.failure}
+            onRetry={mediaProgress.retry}
+          />
         ) : (
           mediaProgress && (
-            <Badge variant="secondary" data-testid="header-media-progress">
-              {BACKGROUND_COPY.prepare.editorStatus(
+            <Badge
+              variant={mediaProgress.retrying ? "outline" : "secondary"}
+              data-testid="header-media-progress"
+              data-state={mediaProgress.retrying ? "retrying" : "downloading"}
+            >
+              {(mediaProgress.retrying
+                ? BACKGROUND_COPY.prepare.editorRetrying
+                : BACKGROUND_COPY.prepare.editorStatus)(
                 mediaProgress.readyCount,
                 mediaProgress.totalCount,
               )}

@@ -1,20 +1,51 @@
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import {
   collectPresentationMediaAssets,
   collectUniqueMediaUrls,
   type Presentation,
 } from "#shared";
-import { scheduleMediaCaching, warmPresentationFonts } from "../../lib/offline";
+import {
+  resumeMediaCaching,
+  retainMediaUrls,
+  scheduleMediaCaching,
+  warmPresentationFonts,
+} from "../../lib/offline";
 import { useBackgroundLookup } from "../backgrounds/backgroundCatalog";
 import { useLatest } from "../../hooks/useLatest";
 
 export const AUTO_CACHE_DELAY_MS = 3000;
+
+function useRetainedMediaUrls(
+  urlsRef: { readonly current: readonly string[] },
+  key: string | null,
+): void {
+  const releaseRef = useRef<(() => void) | null>(null);
+
+  useEffect(() => {
+    const release = key === null ? null : retainMediaUrls(urlsRef.current);
+    releaseRef.current?.();
+    releaseRef.current = release;
+  }, [key]);
+
+  useEffect(
+    () => () => {
+      releaseRef.current?.();
+      releaseRef.current = null;
+    },
+    [],
+  );
+}
 
 /**
  * 열려 있는 세트의 배경 영상·포스터와 글꼴을 조용히 캐시에 담는다.
  *
  * 배경 URL은 로컬 배경 카탈로그에서 찾는다. 카탈로그가 바뀌면(방금 올린 커스텀
  * 배경을 곡에 지정, 동기화로 목록 갱신) 새로 생긴 URL도 곧바로 캐시 대상이 된다.
+ *
+ * 큐에 넣는 것은 지연 뒤지만 URL은 열자마자 붙잡는다(`retainMediaUrls`). 그 사이 미리보기
+ * (`useCacheFirstVideo`)가 먼저 받다 실패해도 큐가 백오프로 다시 받는다. 배경을 바꾸면 새
+ * URL을 먼저 붙잡은 뒤 지난 URL을 놓는다. 두 세트에 함께 있는 URL이 잠깐이라도 놓이면
+ * 기다리던 재시도와 시도 횟수가 지워져, SW가 아직 받고 있을 수 있는 파일을 곧바로 다시 받는다.
  */
 export function useBackgroundAutoCache(
   presentation: Presentation | null,
@@ -45,8 +76,11 @@ export function useBackgroundAutoCache(
     return () => clearTimeout(timer);
   }, [presentationId, urlKey]);
 
+  useRetainedMediaUrls(urlsRef, presentationId ? urlKey : null);
+
   useEffect(() => {
     const handleOnline = (): void => {
+      resumeMediaCaching();
       scheduleMediaCaching(urlsRef.current);
     };
     window.addEventListener("online", handleOnline);
@@ -60,6 +94,7 @@ export function useBackgroundAutoCache(
  * 큐는 한 번에 하나씩 받으므로 순서가 곧 우선순위다. 지금 곡과 다음 곡 배경을 맨 앞에
  * 세우고, 곡이 바뀔 때마다 새 지금·다음 곡을 다시 앞으로 당긴다. 곡 순번은 송출 라우트와
  * 같게 `presentation.items`의 배열 순서를 따른다. 글꼴은 `usePresentationFontsReady`가 맡는다.
+ * 송출하는 동안 세트의 URL을 붙잡아 받다 실패한 배경을 백오프로 다시 받는다.
  */
 export function useProjectionMediaCache(
   presentation: Presentation | null,
@@ -86,13 +121,19 @@ export function useProjectionMediaCache(
   const focusUrlsRef = useLatest(focusUrls);
   const allUrlsRef = useLatest(allUrls);
 
+  useRetainedMediaUrls(allUrlsRef, allKey);
+
   useEffect(() => {
     const scheduleAll = (): void => {
       scheduleMediaCaching(focusUrlsRef.current, { priority: true });
       scheduleMediaCaching(allUrlsRef.current);
     };
+    const handleOnline = (): void => {
+      resumeMediaCaching();
+      scheduleAll();
+    };
     scheduleAll();
-    window.addEventListener("online", scheduleAll);
-    return () => window.removeEventListener("online", scheduleAll);
+    window.addEventListener("online", handleOnline);
+    return () => window.removeEventListener("online", handleOnline);
   }, [focusKey, allKey]);
 }

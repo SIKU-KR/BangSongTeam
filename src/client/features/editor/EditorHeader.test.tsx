@@ -166,33 +166,83 @@ describe("EditorHeader", () => {
         readyCount: 1,
         totalCount: 2,
         failure: null,
+        retrying: false,
         retry: vi.fn(),
       },
     });
 
-    expect(screen.getByTestId("header-media-progress")).toHaveTextContent(
-      BACKGROUND_COPY.prepare.editorStatus(1, 2),
+    const badge = screen.getByTestId("header-media-progress");
+    expect(badge).toHaveTextContent(BACKGROUND_COPY.prepare.editorStatus(1, 2));
+    expect(badge).toHaveAttribute("data-state", "downloading");
+    expect(
+      screen.queryByTestId("header-media-failure"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("받다 실패해 곧 다시 받을 예정이면 저장 중과 구분해 보여 준다", () => {
+    renderHeader({
+      mediaProgress: {
+        readyCount: 1,
+        totalCount: 2,
+        failure: null,
+        retrying: true,
+        retry: vi.fn(),
+      },
+    });
+
+    const badge = screen.getByTestId("header-media-progress");
+    expect(badge).toHaveTextContent(
+      BACKGROUND_COPY.prepare.editorRetrying(1, 2),
     );
-    expect(screen.queryByTestId("header-media-quota")).not.toBeInTheDocument();
+    expect(badge).toHaveAttribute("data-state", "retrying");
+  });
+
+  it("다시 받기를 멈춘 실패면 저장 실패를 알리고, 누르면 안내와 다시 시도를 보여 준다", async () => {
+    const retry = vi.fn();
+    renderHeader({
+      mediaProgress: {
+        readyCount: 1,
+        totalCount: 2,
+        failure: "network",
+        retrying: false,
+        retry,
+      },
+    });
+
+    const trigger = screen.getByTestId("header-media-failure");
+    expect(trigger).toHaveTextContent(BACKGROUND_COPY.prepare.editorFailed);
+
+    fireEvent.click(trigger);
+    const popover = await screen.findByTestId("header-media-failure-popover");
+    expect(popover).toHaveTextContent(BACKGROUND_COPY.prepare.failed.network);
+
+    fireEvent.click(screen.getByTestId("header-media-failure-retry"));
+    expect(retry).toHaveBeenCalledTimes(1);
   });
 
   it("저장 공간이 부족해 멈췄으면 진행 대신 저장 공간 부족을 알리고, 누르면 안내와 다시 시도를 보여 준다", async () => {
     const retry = vi.fn();
     renderHeader({
-      mediaProgress: { readyCount: 0, totalCount: 2, failure: "quota", retry },
+      mediaProgress: {
+        readyCount: 0,
+        totalCount: 2,
+        failure: "quota",
+        retrying: false,
+        retry,
+      },
     });
 
-    const trigger = screen.getByTestId("header-media-quota");
+    const trigger = screen.getByTestId("header-media-failure");
     expect(trigger).toHaveTextContent(BACKGROUND_COPY.prepare.editorQuota);
     expect(
       screen.queryByTestId("header-media-progress"),
     ).not.toBeInTheDocument();
 
     fireEvent.click(trigger);
-    const popover = await screen.findByTestId("header-media-quota-popover");
+    const popover = await screen.findByTestId("header-media-failure-popover");
     expect(popover).toHaveTextContent(BACKGROUND_COPY.prepare.failed.quota);
 
-    fireEvent.click(screen.getByTestId("header-media-quota-retry"));
+    fireEvent.click(screen.getByTestId("header-media-failure-retry"));
     expect(retry).toHaveBeenCalledTimes(1);
   });
 });

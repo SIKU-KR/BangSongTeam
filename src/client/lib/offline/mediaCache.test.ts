@@ -3,16 +3,22 @@ import { MEDIA_CACHE_NAME, mediaCacheNameFor } from "#shared";
 import { resetFakeCacheStorage } from "../../test/fakeCacheStorage";
 import {
   cacheMediaFirst,
-  cacheMediaUrls,
   ensureMediaSpace,
   findCachedMediaUrls,
   getMediaCacheFailure,
   getMediaProgress,
+  getMediaProgressVersion,
+  getMediaQueueState,
+  resumeMediaCaching,
+  retainMediaUrls,
   scheduleMediaCaching,
+  subscribeMediaProgress,
   shouldWaitForMediaCache,
   isCacheStorageAvailable,
+  MAX_MEDIA_RETRIES,
   MEDIA_STALL_TIMEOUT_MS,
   __resetMediaCachingForTests,
+  __setMediaRetryRandomForTests,
   __waitForMediaCachingForTests,
 } from "./mediaCache";
 
@@ -71,6 +77,12 @@ async function isCached(url: string): Promise<boolean> {
   return (await cache.match(url)) !== undefined;
 }
 
+async function cacheAll(urls: readonly string[]): Promise<string[]> {
+  const cached: string[] = [];
+  for (const url of urls) if (await cacheMediaFirst(url)) cached.push(url);
+  return cached;
+}
+
 const originalFetch = globalThis.fetch;
 
 beforeEach(() => {
@@ -88,13 +100,13 @@ afterEach(() => {
   delete navigator.storage;
 });
 
-describe("cacheMediaUrls", () => {
+describe("cacheMediaFirst", () => {
   it("요청한 URL을 모두 받아 캐시에 넣는다", async () => {
     mockFetch();
 
-    const result = await cacheMediaUrls([VIDEO, POSTER]);
+    const result = await cacheAll([VIDEO, POSTER]);
 
-    expect(result).toEqual({ cachedUrls: [VIDEO, POSTER] });
+    expect(result).toEqual([VIDEO, POSTER]);
     expect(await isCached(VIDEO)).toBe(true);
     expect(await isCached(POSTER)).toBe(true);
   });
@@ -102,7 +114,7 @@ describe("cacheMediaUrls", () => {
   it("Range 헤더 없이 전체 응답을 받는다", async () => {
     const fetchMock = mockFetch();
 
-    await cacheMediaUrls([VIDEO]);
+    await cacheAll([VIDEO]);
 
     const init = (fetchMock.mock.calls[0] as unknown[])[1] as
       RequestInit | undefined;
@@ -115,10 +127,10 @@ describe("cacheMediaUrls", () => {
     await cache.put(VIDEO, okResponse());
     const fetchMock = mockFetch();
 
-    const result = await cacheMediaUrls([VIDEO]);
+    const result = await cacheAll([VIDEO]);
 
     expect(fetchMock).not.toHaveBeenCalled();
-    expect(result.cachedUrls).toEqual([VIDEO]);
+    expect(result).toEqual([VIDEO]);
   });
 
   it("한 항목이 실패해도 나머지를 계속 받는다", async () => {
@@ -126,18 +138,18 @@ describe("cacheMediaUrls", () => {
       url === VIDEO ? new Response(null, { status: 404 }) : okResponse(),
     );
 
-    const result = await cacheMediaUrls([VIDEO, POSTER]);
+    const result = await cacheAll([VIDEO, POSTER]);
 
-    expect(result).toEqual({ cachedUrls: [POSTER] });
+    expect(result).toEqual([POSTER]);
     expect(await isCached(VIDEO)).toBe(false);
   });
 
   it("부분 응답(206)은 캐시에 넣지 않는다", async () => {
     mockFetch(async () => new Response(new ArrayBuffer(4), { status: 206 }));
 
-    const result = await cacheMediaUrls([VIDEO]);
+    const result = await cacheAll([VIDEO]);
 
-    expect(result.cachedUrls).toEqual([]);
+    expect(result).toEqual([]);
     expect(await isCached(VIDEO)).toBe(false);
   });
 
@@ -149,19 +161,19 @@ describe("cacheMediaUrls", () => {
     const cache = await caches.open(MEDIA_CACHE_NAME);
     vi.spyOn(cache, "put").mockRejectedValue(quotaError());
 
-    const result = await cacheMediaUrls([VIDEO, OTHER]);
+    const result = await cacheAll([VIDEO, OTHER]);
 
-    expect(result).toEqual({ cachedUrls: [] });
+    expect(result).toEqual([]);
     expect(getMediaCacheFailure(VIDEO)).toBe("network");
     expect(getMediaCacheFailure(OTHER)).toBe("quota");
   });
 });
 
-describe("cacheMediaUrls 진행률과 캐시 분리", () => {
+describe("cacheMediaFirst 진행률과 캐시 분리", () => {
   it("받은 바이트 수를 응답 길이와 함께 알린다", async () => {
     mockFetch(async () => okResponse(64));
 
-    await cacheMediaUrls([VIDEO]);
+    await cacheAll([VIDEO]);
 
     expect(getMediaProgress(VIDEO)).toEqual({ received: 64, total: 64 });
   });
@@ -169,7 +181,7 @@ describe("cacheMediaUrls 진행률과 캐시 분리", () => {
   it("포스터는 영상 캐시가 아닌 포스터 캐시에 담는다", async () => {
     mockFetch();
 
-    await cacheMediaUrls([POSTER]);
+    await cacheAll([POSTER]);
 
     const videos = await caches.open(MEDIA_CACHE_NAME);
     expect(await videos.match(POSTER)).toBeUndefined();
@@ -177,16 +189,16 @@ describe("cacheMediaUrls 진행률과 캐시 분리", () => {
   });
 });
 
-describe("cacheMediaUrls (서비스 워커 제어 중)", () => {
+describe("cacheMediaFirst (서비스 워커 제어 중)", () => {
   it("SW가 캐시에 담으므로 페이지는 cache.put을 하지 않는다", async () => {
     controlByServiceWorker();
     mockServiceWorkerFetch();
     const cache = await caches.open(MEDIA_CACHE_NAME);
     const put = vi.spyOn(cache, "put");
 
-    const result = await cacheMediaUrls([VIDEO]);
+    const result = await cacheAll([VIDEO]);
 
-    expect(result).toEqual({ cachedUrls: [VIDEO] });
+    expect(result).toEqual([VIDEO]);
     expect(put).toHaveBeenCalledTimes(1);
     expect(await isCached(VIDEO)).toBe(true);
   });
@@ -202,10 +214,10 @@ describe("cacheMediaUrls (서비스 워커 제어 중)", () => {
         }),
     );
 
-    const pendingResult = cacheMediaUrls([VIDEO]);
+    const pendingResult = cacheAll([VIDEO]);
     await vi.runAllTimersAsync();
 
-    expect(await pendingResult).toEqual({ cachedUrls: [] });
+    expect(await pendingResult).toEqual([]);
     expect(getMediaCacheFailure(VIDEO)).toBe("network");
   });
 
@@ -214,10 +226,10 @@ describe("cacheMediaUrls (서비스 워커 제어 중)", () => {
     controlByServiceWorker();
     mockFetch();
 
-    const pendingResult = cacheMediaUrls([VIDEO]);
+    const pendingResult = cacheAll([VIDEO]);
     await vi.runAllTimersAsync();
 
-    expect(await pendingResult).toEqual({ cachedUrls: [] });
+    expect(await pendingResult).toEqual([]);
     expect(getMediaCacheFailure(VIDEO)).toBe("quota");
   });
 
@@ -227,10 +239,10 @@ describe("cacheMediaUrls (서비스 워커 제어 중)", () => {
     mockEstimate(1024 * 1024 * 1024, 0);
     mockFetch();
 
-    const pendingResult = cacheMediaUrls([VIDEO]);
+    const pendingResult = cacheAll([VIDEO]);
     await vi.runAllTimersAsync();
 
-    expect(await pendingResult).toEqual({ cachedUrls: [] });
+    expect(await pendingResult).toEqual([]);
     expect(getMediaCacheFailure(VIDEO)).toBe("network");
   });
 
@@ -240,15 +252,15 @@ describe("cacheMediaUrls (서비스 워커 제어 중)", () => {
     mockEstimate(100, 92);
     mockFetch();
 
-    const pendingResult = cacheMediaUrls([VIDEO]);
+    const pendingResult = cacheAll([VIDEO]);
     await vi.runAllTimersAsync();
 
-    expect(await pendingResult).toEqual({ cachedUrls: [] });
+    expect(await pendingResult).toEqual([]);
     expect(getMediaCacheFailure(VIDEO)).toBe("quota");
   });
 });
 
-describe("cacheMediaUrls 멈춘 다운로드", () => {
+describe("cacheMediaFirst 멈춘 다운로드", () => {
   function mockFetchWithInit(
     impl: (url: string, init: RequestInit | undefined) => Promise<Response>,
   ) {
@@ -442,6 +454,48 @@ describe("scheduleMediaCaching", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  it("영구 저장소 요청이 끝나지 않아도 큐는 받는다", async () => {
+    mockFetch();
+    Object.defineProperty(navigator, "storage", {
+      value: {
+        persisted: async () => false,
+        persist: () => new Promise<boolean>(() => {}),
+      },
+      configurable: true,
+    });
+
+    scheduleMediaCaching([VIDEO]);
+    await __waitForMediaCachingForTests();
+
+    expect(await isCached(VIDEO)).toBe(true);
+  });
+
+  it("이 세션에서 담긴 것을 확인한 영상은 다시 큐에 넣지 않는다", async () => {
+    mockFetch();
+    await cacheAll([VIDEO]);
+    const fetchMock = mockFetch();
+    const open = vi.spyOn(caches, "open");
+
+    scheduleMediaCaching([VIDEO]);
+    expect(getMediaQueueState(VIDEO)).toBeNull();
+    await __waitForMediaCachingForTests();
+
+    expect(open).not.toHaveBeenCalled();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("이 세션에서 담긴 것을 확인한 포스터는 다시 넣어도 캐시에 있으면 다시 받지 않는다", async () => {
+    mockFetch();
+    await cacheAll([POSTER]);
+    const fetchMock = mockFetch();
+
+    scheduleMediaCaching([POSTER]);
+    await __waitForMediaCachingForTests();
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(getMediaQueueState(POSTER)).toBeNull();
+  });
+
   it("처음 시작할 때 한 번만 영구 저장소를 요청한다", async () => {
     mockFetch();
     const persist = vi.fn(async () => true);
@@ -538,7 +592,7 @@ describe("cacheMediaFirst", () => {
 describe("findCachedMediaUrls", () => {
   it("이미 캐시에 담긴 URL만 돌려준다", async () => {
     mockFetch();
-    await cacheMediaUrls([VIDEO]);
+    await cacheAll([VIDEO]);
     __resetMediaCachingForTests();
 
     expect(await findCachedMediaUrls([VIDEO, OTHER, POSTER])).toEqual([VIDEO]);
@@ -569,7 +623,7 @@ describe("ensureMediaSpace", () => {
 
   it("자리가 있으면 아무것도 지우지 않는다", async () => {
     mockFetch(async () => okResponse(100));
-    await cacheMediaUrls([OTHER]);
+    await cacheAll([OTHER]);
     mockEstimate(1000, 100);
 
     expect(await ensureMediaSpace(500, [VIDEO])).toBe(true);
@@ -578,7 +632,7 @@ describe("ensureMediaSpace", () => {
 
   it("모자라면 지금 세트 밖의 영상부터 지우고 세트 영상은 남긴다", async () => {
     mockFetch(async () => okResponse(400));
-    await cacheMediaUrls([OTHER, VIDEO]);
+    await cacheAll([OTHER, VIDEO]);
     mockEstimate(1000, 800);
 
     expect(await ensureMediaSpace(500, [VIDEO])).toBe(true);
@@ -586,9 +640,23 @@ describe("ensureMediaSpace", () => {
     expect(await isCached(VIDEO)).toBe(true);
   });
 
+  it("지운 영상은 다시 큐에 넣으면 다시 받는다", async () => {
+    mockFetch(async () => okResponse(400));
+    await cacheAll([OTHER, VIDEO]);
+    mockEstimate(1000, 800);
+    await ensureMediaSpace(500, [VIDEO]);
+    const fetchMock = mockFetch();
+
+    scheduleMediaCaching([OTHER]);
+    await __waitForMediaCachingForTests();
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(await isCached(OTHER)).toBe(true);
+  });
+
   it("세트 밖 영상을 모두 지워도 모자라면 false다", async () => {
     mockFetch(async () => okResponse(100));
-    await cacheMediaUrls([VIDEO]);
+    await cacheAll([VIDEO]);
     mockEstimate(1000, 900);
 
     expect(await ensureMediaSpace(5000, [VIDEO])).toBe(false);
@@ -731,5 +799,266 @@ describe("shouldWaitForMediaCache", () => {
 describe("isCacheStorageAvailable", () => {
   it("대역이 깔린 테스트 환경에서는 사용 가능하다", () => {
     expect(isCacheStorageAvailable()).toBe(true);
+  });
+});
+
+describe("백그라운드 재시도", () => {
+  function stalledResponse(): Response {
+    return new Response(
+      new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(new Uint8Array(8));
+        },
+      }),
+      { status: 200, headers: { "content-length": "16" } },
+    );
+  }
+
+  function failingThen(
+    failures: Array<() => Response>,
+  ): ReturnType<typeof mockFetch> {
+    let attempt = 0;
+    return mockFetch(async () => {
+      const fail = failures[attempt];
+      attempt += 1;
+      return fail ? fail() : okResponse();
+    });
+  }
+
+  function networkError(): Response {
+    throw new TypeError("Failed to fetch");
+  }
+
+  async function settle(ms = 0): Promise<void> {
+    await vi.advanceTimersByTimeAsync(ms);
+    await __waitForMediaCachingForTests();
+  }
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    __setMediaRetryRandomForTests(() => 0);
+  });
+
+  it("첫 시도가 무진행으로 끊기고 두 번째에 성공하면 조작 없이 캐시에 담긴다", async () => {
+    retainMediaUrls([VIDEO]);
+    const fetchMock = failingThen([stalledResponse]);
+
+    scheduleMediaCaching([VIDEO]);
+    await settle(MEDIA_STALL_TIMEOUT_MS);
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(getMediaQueueState(VIDEO)).toBe("retrying");
+    expect(getMediaCacheFailure(VIDEO)).toBe("network");
+
+    await settle(MEDIA_STALL_TIMEOUT_MS);
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(await isCached(VIDEO)).toBe(true);
+    expect(getMediaQueueState(VIDEO)).toBeNull();
+    expect(getMediaCacheFailure(VIDEO)).toBeUndefined();
+  });
+
+  it("재시도 간격은 무진행 감시 시간보다 짧지 않다", async () => {
+    retainMediaUrls([VIDEO]);
+    const fetchMock = failingThen([networkError]);
+
+    scheduleMediaCaching([VIDEO]);
+    await settle();
+    await settle(MEDIA_STALL_TIMEOUT_MS - 1);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    await settle(1);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("서버가 Retry-After를 주면 그만큼 더 기다린다", async () => {
+    retainMediaUrls([VIDEO]);
+    const fetchMock = failingThen([
+      () =>
+        new Response(null, { status: 503, headers: { "retry-after": "45" } }),
+    ]);
+
+    scheduleMediaCaching([VIDEO]);
+    await settle();
+    await settle(MEDIA_STALL_TIMEOUT_MS + 45_000 - 1);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    await settle(1);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("화면이 붙잡지 않은 URL은 실패해도 다시 받지 않는다", async () => {
+    const fetchMock = failingThen([networkError]);
+
+    scheduleMediaCaching([VIDEO]);
+    await settle();
+    await settle(10 * 60_000);
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(getMediaQueueState(VIDEO)).toBeNull();
+  });
+
+  it("마지막 화면이 놓으면 기다리던 재시도를 취소하고 진행 구독에 알린다", async () => {
+    const release = retainMediaUrls([VIDEO]);
+    const alsoHeld = retainMediaUrls([VIDEO]);
+    const fetchMock = failingThen([networkError]);
+    scheduleMediaCaching([VIDEO]);
+    await settle();
+    const listener = vi.fn();
+    subscribeMediaProgress(listener);
+
+    release();
+    release();
+    expect(getMediaQueueState(VIDEO)).toBe("retrying");
+
+    alsoHeld();
+    expect(getMediaQueueState(VIDEO)).toBeNull();
+    expect(getMediaCacheFailure(VIDEO)).toBeUndefined();
+    expect(listener).toHaveBeenCalled();
+
+    await settle(10 * 60_000);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("다시 받아도 낫지 않는 404는 다시 받지 않고, 일시 장애인 503은 다시 받는다", async () => {
+    retainMediaUrls([VIDEO, OTHER]);
+    let otherAttempts = 0;
+    const fetchMock = mockFetch(async (url) => {
+      if (url === VIDEO) return new Response(null, { status: 404 });
+      otherAttempts += 1;
+      return otherAttempts === 1
+        ? new Response(null, { status: 503 })
+        : okResponse();
+    });
+
+    scheduleMediaCaching([VIDEO, OTHER]);
+    await settle();
+    expect(getMediaQueueState(VIDEO)).toBeNull();
+    expect(getMediaQueueState(OTHER)).toBe("retrying");
+
+    await settle(MEDIA_STALL_TIMEOUT_MS);
+
+    expect(await isCached(OTHER)).toBe(true);
+    expect(
+      fetchMock.mock.calls.filter(([url]) => String(url) === VIDEO),
+    ).toHaveLength(1);
+  });
+
+  it("저장 공간 부족은 다시 받지 않는다", async () => {
+    retainMediaUrls([VIDEO]);
+    const fetchMock = mockFetch();
+    const cache = await caches.open(MEDIA_CACHE_NAME);
+    vi.spyOn(cache, "put").mockRejectedValue(quotaError());
+
+    scheduleMediaCaching([VIDEO]);
+    await settle();
+    await settle(10 * 60_000);
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(getMediaCacheFailure(VIDEO)).toBe("quota");
+  });
+
+  it("재시도를 기다리는 URL은 곡이 바뀌어 다시 넣어도 간격을 줄이지 않는다", async () => {
+    retainMediaUrls([VIDEO]);
+    const fetchMock = failingThen([networkError]);
+
+    scheduleMediaCaching([VIDEO]);
+    await settle();
+    scheduleMediaCaching([VIDEO], { priority: true });
+    scheduleMediaCaching([VIDEO]);
+    await settle();
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(getMediaQueueState(VIDEO)).toBe("retrying");
+  });
+
+  it("받는 중에 다시 넣은 URL도 실패하면 백오프를 기다린 뒤에 다시 받는다", async () => {
+    retainMediaUrls([VIDEO, OTHER]);
+    const attempts = new Map<string, number>();
+    const fetchMock = mockFetch(async (url) => {
+      const attempt = (attempts.get(url) ?? 0) + 1;
+      attempts.set(url, attempt);
+      return attempt === 1 ? stalledResponse() : okResponse();
+    });
+    const videoFetches = (): number =>
+      fetchMock.mock.calls.filter(([url]) => String(url) === VIDEO).length;
+
+    void cacheMediaFirst(VIDEO);
+    await vi.advanceTimersByTimeAsync(10);
+    scheduleMediaCaching([OTHER, VIDEO]);
+    expect(getMediaQueueState(VIDEO)).toBe("downloading");
+
+    await vi.advanceTimersByTimeAsync(MEDIA_STALL_TIMEOUT_MS);
+    expect(getMediaQueueState(VIDEO)).toBe("retrying");
+    await vi.advanceTimersByTimeAsync(MEDIA_STALL_TIMEOUT_MS - 20);
+    expect(videoFetches()).toBe(1);
+
+    await settle(MEDIA_STALL_TIMEOUT_MS);
+    expect(videoFetches()).toBe(2);
+    expect(await isCached(VIDEO)).toBe(true);
+  });
+
+  it("담긴 것을 확인한 포스터도 캐시에서 사라졌으면 다시 넣을 때 다시 받는다", async () => {
+    const fetchMock = mockFetch();
+    scheduleMediaCaching([POSTER]);
+    await settle();
+    const cache = await caches.open(mediaCacheNameFor(POSTER));
+    await cache.delete(POSTER);
+
+    scheduleMediaCaching([POSTER]);
+    await settle();
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(await isCached(POSTER)).toBe(true);
+  });
+
+  it("연결이 회복되면 백오프를 기다리지 않고 곧바로 다시 받는다", async () => {
+    retainMediaUrls([VIDEO]);
+    const fetchMock = failingThen([networkError]);
+    scheduleMediaCaching([VIDEO]);
+    await settle();
+    const version = getMediaProgressVersion();
+
+    resumeMediaCaching();
+    await settle();
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(await isCached(VIDEO)).toBe(true);
+    expect(getMediaProgressVersion()).toBeGreaterThan(version);
+  });
+
+  it("타이머 재시도는 한도에서 멈추고, 연결이 회복되면 처음부터 다시 받는다", async () => {
+    retainMediaUrls([VIDEO]);
+    const fetchMock = mockFetch(async () => networkError());
+
+    scheduleMediaCaching([VIDEO]);
+    await settle();
+    for (let i = 0; i < MAX_MEDIA_RETRIES + 2; i += 1) {
+      await settle(MEDIA_STALL_TIMEOUT_MS);
+    }
+
+    expect(fetchMock).toHaveBeenCalledTimes(MAX_MEDIA_RETRIES + 1);
+    expect(getMediaQueueState(VIDEO)).toBeNull();
+    expect(getMediaCacheFailure(VIDEO)).toBe("network");
+
+    resumeMediaCaching();
+    await settle();
+
+    expect(fetchMock).toHaveBeenCalledTimes(MAX_MEDIA_RETRIES + 2);
+    expect(getMediaQueueState(VIDEO)).toBe("retrying");
+  });
+
+  it("오프라인이면 연결이 회복돼도 다시 받지 않고 재시도를 그대로 둔다", async () => {
+    retainMediaUrls([VIDEO]);
+    const fetchMock = failingThen([networkError]);
+    scheduleMediaCaching([VIDEO]);
+    await settle();
+    vi.spyOn(navigator, "onLine", "get").mockReturnValue(false);
+
+    resumeMediaCaching();
+    await settle();
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(getMediaQueueState(VIDEO)).toBe("retrying");
   });
 });

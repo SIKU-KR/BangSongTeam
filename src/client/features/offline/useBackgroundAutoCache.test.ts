@@ -16,14 +16,30 @@ import {
 } from "./useBackgroundAutoCache";
 import { SEED_PRESENTATIONS } from "../../test/presentationFixture";
 
-const { scheduleMediaCaching, warmPresentationFonts } = vi.hoisted(() => ({
-  scheduleMediaCaching: vi.fn(),
-  warmPresentationFonts: vi.fn(async () => undefined),
-}));
+const {
+  scheduleMediaCaching,
+  warmPresentationFonts,
+  retainMediaUrls,
+  releaseMediaUrls,
+  resumeMediaCaching,
+} = vi.hoisted(() => {
+  const releaseMediaUrls = vi.fn<(urls: readonly string[]) => void>();
+  return {
+    scheduleMediaCaching: vi.fn(),
+    warmPresentationFonts: vi.fn(async () => undefined),
+    releaseMediaUrls,
+    retainMediaUrls: vi.fn(
+      (urls: readonly string[]) => () => releaseMediaUrls(urls),
+    ),
+    resumeMediaCaching: vi.fn(),
+  };
+});
 
 vi.mock("../../lib/offline", () => ({
   scheduleMediaCaching,
   warmPresentationFonts,
+  retainMediaUrls,
+  resumeMediaCaching,
 }));
 
 const BASE = SEED_PRESENTATIONS[0];
@@ -44,6 +60,31 @@ function urlsOf(backgroundId: string): string[] {
   return background ? [background.mediaUrl, background.posterUrl] : [];
 }
 
+function urlsDroppedToZero(): string[] {
+  const events = [
+    ...retainMediaUrls.mock.calls.map(([urls], index) => ({
+      order: retainMediaUrls.mock.invocationCallOrder[index],
+      urls,
+      delta: 1,
+    })),
+    ...releaseMediaUrls.mock.calls.map(([urls], index) => ({
+      order: releaseMediaUrls.mock.invocationCallOrder[index],
+      urls,
+      delta: -1,
+    })),
+  ].sort((a, b) => a.order - b.order);
+  const counts = new Map<string, number>();
+  const dropped = new Set<string>();
+  for (const { urls, delta } of events) {
+    for (const url of urls) {
+      const count = (counts.get(url) ?? 0) + delta;
+      counts.set(url, count);
+      if (count === 0) dropped.add(url);
+    }
+  }
+  return [...dropped];
+}
+
 const BG_A = TEST_SERVICE_BACKGROUNDS[0].id;
 const BG_B = TEST_SERVICE_BACKGROUNDS[1].id;
 const BG_C = TEST_SERVICE_BACKGROUNDS[2].id;
@@ -53,6 +94,9 @@ beforeEach(() => {
   vi.useFakeTimers();
   scheduleMediaCaching.mockClear();
   warmPresentationFonts.mockClear();
+  retainMediaUrls.mockClear();
+  releaseMediaUrls.mockClear();
+  resumeMediaCaching.mockClear();
 });
 
 afterEach(() => {
@@ -143,7 +187,7 @@ describe("useBackgroundAutoCache", () => {
     expect(scheduleMediaCaching).toHaveBeenCalledTimes(1);
   });
 
-  it("네트워크가 돌아오면 곧바로 다시 큐에 넣는다", () => {
+  it("네트워크가 돌아오면 재시도를 기다리던 것까지 곧바로 다시 큐에 넣는다", () => {
     const presentation = withBackground(BG_A);
     renderHook(() => useBackgroundAutoCache(presentation));
     act(() => {
@@ -154,8 +198,36 @@ describe("useBackgroundAutoCache", () => {
       window.dispatchEvent(new Event("online"));
     });
 
+    expect(resumeMediaCaching).toHaveBeenCalledTimes(1);
     expect(scheduleMediaCaching).toHaveBeenCalledTimes(2);
     expect(scheduleMediaCaching).toHaveBeenLastCalledWith(urlsOf(BG_A));
+  });
+
+  it("열자마자 세트의 URL을 붙잡고, 배경을 바꾸거나 떠나면 놓는다", () => {
+    const { rerender, unmount } = renderHook(
+      ({ p }) => useBackgroundAutoCache(p),
+      { initialProps: { p: withBackground(BG_A) } },
+    );
+
+    expect(retainMediaUrls).toHaveBeenCalledWith(urlsOf(BG_A));
+    expect(releaseMediaUrls).not.toHaveBeenCalled();
+
+    rerender({ p: withBackground(BG_B) });
+    expect(releaseMediaUrls).toHaveBeenCalledWith(urlsOf(BG_A));
+    expect(retainMediaUrls).toHaveBeenLastCalledWith(urlsOf(BG_B));
+
+    unmount();
+    expect(releaseMediaUrls).toHaveBeenLastCalledWith(urlsOf(BG_B));
+  });
+
+  it("배경을 바꿔도 두 세트에 함께 있는 URL은 놓지 않는다", () => {
+    const { rerender } = renderHook(({ p }) => useBackgroundAutoCache(p), {
+      initialProps: { p: withSongBackgrounds([BG_A, BG_B]) },
+    });
+
+    rerender({ p: withSongBackgrounds([BG_A, BG_C]) });
+
+    expect(urlsDroppedToZero()).toEqual(urlsOf(BG_B));
   });
 
   it("지연 전에 화면을 떠나면 아무것도 받지 않는다", () => {
@@ -204,6 +276,7 @@ describe("useBackgroundAutoCache", () => {
     });
 
     expect(scheduleMediaCaching).not.toHaveBeenCalled();
+    expect(retainMediaUrls).not.toHaveBeenCalled();
     expect(warmPresentationFonts).not.toHaveBeenCalled();
   });
 });
@@ -261,6 +334,33 @@ describe("useProjectionMediaCache", () => {
     expect(scheduleMediaCaching).not.toHaveBeenCalled();
   });
 
+  it("송출하는 동안 세트의 URL을 붙잡고 떠나면 놓는다", () => {
+    const { rerender, unmount } = renderHook(
+      ({ songIndex }) => useProjectionMediaCache(presentation, songIndex),
+      { initialProps: { songIndex: 0 } },
+    );
+
+    expect(retainMediaUrls).toHaveBeenCalledTimes(1);
+    expect(retainMediaUrls).toHaveBeenCalledWith(ALL_URLS);
+
+    rerender({ songIndex: 1 });
+    expect(retainMediaUrls).toHaveBeenCalledTimes(1);
+    expect(releaseMediaUrls).not.toHaveBeenCalled();
+
+    unmount();
+    expect(releaseMediaUrls).toHaveBeenCalledWith(ALL_URLS);
+  });
+
+  it("세트의 배경이 바뀌어도 그대로 쓰는 URL은 놓지 않는다", () => {
+    const { rerender } = renderHook(({ p }) => useProjectionMediaCache(p, 0), {
+      initialProps: { p: presentation },
+    });
+
+    rerender({ p: withSongBackgrounds([BG_A, BG_B]) });
+
+    expect(urlsDroppedToZero()).toEqual(urlsOf(BG_C));
+  });
+
   it("네트워크가 돌아오면 지금·다음 곡부터 다시 받는다", () => {
     renderHook(() => useProjectionMediaCache(presentation, 1));
     scheduleMediaCaching.mockClear();
@@ -269,6 +369,7 @@ describe("useProjectionMediaCache", () => {
       window.dispatchEvent(new Event("online"));
     });
 
+    expect(resumeMediaCaching).toHaveBeenCalledTimes(1);
     expect(scheduleMediaCaching.mock.calls).toEqual([
       [[...urlsOf(BG_B), ...urlsOf(BG_C)], { priority: true }],
       [ALL_URLS],

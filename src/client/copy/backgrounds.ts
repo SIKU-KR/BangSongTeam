@@ -38,7 +38,10 @@ export const BACKGROUND_COPY = {
     savedHint: "저장하지 못한 곡은 배경 대신 정지 화면이 보여요.",
     editorStatus: (ready: number, total: number) =>
       `배경 저장 중 ${ready}/${total}`,
+    editorRetrying: (ready: number, total: number) =>
+      `배경 다시 시도 대기 ${ready}/${total}`,
     editorQuota: "기기 저장 공간 부족",
+    editorFailed: "배경 저장 실패",
   },
   library: {
     noMatch: (query: string) => `‘${query}’에 맞는 배경이 없어요.`,
