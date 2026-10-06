@@ -37,12 +37,13 @@ import {
   ServerRejectedError,
   SessionExpiredError,
 } from "../api/request";
-import { BackoffTracker, MAX_RETRY_ATTEMPTS } from "./backoff";
+import { BackoffTracker, BASE_BACKOFF_MS, MAX_RETRY_ATTEMPTS } from "./backoff";
 import {
   setFolderSyncEnabled,
   setServerFolderListener,
   pushFolderNow,
   hasPendingFolderPush,
+  scheduleFolderPush,
 } from "./folderSync";
 import {
   recordSyncFailure,
@@ -51,12 +52,17 @@ import {
   type SyncDomain,
   type SyncStatus,
 } from "./syncStatus";
-import { hasPendingDocumentPush, setSyncEnabled } from "./syncScheduler";
+import {
+  hasPendingDocumentPush,
+  scheduleDocumentPush,
+  setSyncEnabled,
+} from "./syncScheduler";
 import {
   setDeckSyncEnabled,
   setServerDeckListener,
   pushDeckNow,
   hasPendingDeckSync,
+  scheduleDeckPush,
 } from "./deckSync";
 import { refreshBackgroundCatalog } from "./backgroundSync";
 import { isProjectionPath } from "../../features/presentation/fullscreen";
@@ -77,9 +83,11 @@ export function shouldRunBootSync(pathname: string): boolean {
  * 느린 교회에서 예배 시작이 그만큼 밀린다.
  *
  * 오프라인은 조용히 넘어간다 — 실패가 아니라 정상 경로다. 다만 받지 못한 단계는
- * 백오프 간격과 `online` 이벤트로 다시 받는다. 다시 받지 않으면 그 도메인이 세션
- * 내내 '오프라인'으로 남아, 연결이 돌아와 저장이 다 끝나도 헤더가 초록색으로
- * 돌아오지 않는다.
+ * 백오프 간격과 `online` 이벤트로 다시 받고, 올리지 못한 항목은 도메인 큐에 넘겨
+ * 큐의 백오프로 다시 올린다. 다시 하지 않으면 그 도메인이 세션 내내 '오프라인'으로
+ * 남아, 연결이 돌아와 저장이 다 끝나도 헤더가 초록색으로 돌아오지 않는다.
+ * 송출 화면에 있는 동안에는 다시 받지 않고 송출을 마친 뒤로 미룬다. 송출 중에는
+ * API·데이터 요청이 0건이어야 하고, 받은 결과를 병합하면 띄운 문서가 바뀔 수 있다.
  *
  * 결과는 폴더·프레젠테이션·곡 도메인별로 따로 남기고, 올리지 못한 항목은 항목별
  * 실패로 남긴다. 도메인 단계만 바꾸면 같은 도메인 큐의 다음 성공이 그 실패를 덮는다.
@@ -150,6 +158,7 @@ async function syncDriveAndDecks(): Promise<void> {
       "presentation",
       findEach(documents, needsPush),
       pushPresentation,
+      scheduleDocumentPush,
       (document) => document.title,
     ),
   );
@@ -204,16 +213,26 @@ function retryPullLater(step: () => Promise<void>, err: unknown): SyncStatus {
   return "offline";
 }
 
+function isProjecting(): boolean {
+  return (
+    typeof window !== "undefined" && isProjectionPath(window.location.pathname)
+  );
+}
+
 function runRetry(): void {
   if (retryTimer) clearTimeout(retryTimer);
   retryTimer = null;
+  if (isProjecting()) {
+    if (retryStep) retryTimer = setTimeout(runRetry, BASE_BACKOFF_MS);
+    return;
+  }
   const step = retryStep;
   retryStep = null;
   if (step) void step().catch(() => undefined);
 }
 
 function handleOnline(): void {
-  if (!retryStep) return;
+  if (!retryStep || isProjecting()) return;
   retryBackoff.reset();
   runRetry();
 }
@@ -247,6 +266,7 @@ async function syncFolders(
       folders,
     ),
     pushFolderNow,
+    scheduleFolderPush,
     (folder) => folder.name,
   );
 }
@@ -270,6 +290,7 @@ async function syncLibraryDecks(): Promise<void> {
       "deck",
       findEach(decks, needsPush),
       pushDeckNow,
+      scheduleDeckPush,
       (deck) => deck.title,
     ),
   );
@@ -288,6 +309,7 @@ async function pushEachTrackingStatus<T extends { id: string }>(
   domain: SyncDomain,
   items: readonly T[],
   push: (item: T) => Promise<unknown>,
+  requeue: (item: T) => void,
   titleOf: (item: T) => string,
 ): Promise<SyncStatus> {
   let sessionExpired = false;
@@ -300,6 +322,7 @@ async function pushEachTrackingStatus<T extends { id: string }>(
         sessionExpired = true;
       } else if (isRetryableApiError(err)) {
         offline = true;
+        requeue(item);
       } else {
         recordSyncFailure({
           id: item.id,

@@ -45,6 +45,7 @@ import {
 } from "../../features/presentation/presentationStore";
 import { SEED_USER_ID as TEST_USER_ID } from "../../test/presentationFixture";
 import { OfflineError, ServerRejectedError } from "../api/request";
+import { MAX_BACKOFF_MS } from "./backoff";
 import {
   getSyncSnapshot,
   recordSyncFailure,
@@ -375,5 +376,48 @@ describe("runBootSync — 동기화 상태", () => {
     await vi.waitFor(() => {
       expect(getSyncSnapshot().status).toBe("synced");
     });
+  });
+
+  it("오프라인으로 부팅한 뒤 송출 화면으로 가면 연결이 돌아와도 송출을 마칠 때까지 다시 받지 않는다", async () => {
+    const startPath = window.location.pathname;
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    presentationSync.pullFolders.mockClear();
+    presentationSync.pullFolders.mockRejectedValueOnce(new OfflineError());
+
+    try {
+      await runBootSync();
+      window.history.pushState({}, "", "/present/abc/fullscreen");
+      window.dispatchEvent(new Event("online"));
+      await vi.advanceTimersByTimeAsync(MAX_BACKOFF_MS * 2);
+
+      expect(presentationSync.pullFolders).toHaveBeenCalledTimes(1);
+      expect(getSyncSnapshot().status).toBe("offline");
+
+      window.history.pushState({}, "", "/presentations");
+      await vi.advanceTimersByTimeAsync(MAX_BACKOFF_MS);
+
+      expect(presentationSync.pullFolders).toHaveBeenCalledTimes(2);
+      expect(getSyncSnapshot().status).toBe("synced");
+    } finally {
+      vi.useRealTimers();
+      window.history.pushState({}, "", startPath);
+    }
+  });
+
+  it("부팅 때 일시 오류로 올리지 못한 곡은 큐가 다시 올려 동기화됨으로 돌아온다", async () => {
+    const push = vi
+      .fn(async (deck: Deck) => deck)
+      .mockRejectedValueOnce(new ServerRejectedError(503));
+    __setDeckTransportForTests({ push });
+    const local = saveSongToLibrary({ title: "로컬 곡", lyricsRaw: "가사" });
+
+    await runBootSync();
+    expect(getSyncSnapshot().status).toBe("offline");
+
+    await flushDeckSync();
+
+    expect(push).toHaveBeenCalledTimes(2);
+    expect(push.mock.calls[1][0].id).toBe(local.id);
+    expect(getSyncSnapshot().status).toBe("synced");
   });
 });
