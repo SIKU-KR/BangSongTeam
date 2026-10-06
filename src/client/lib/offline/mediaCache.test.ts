@@ -220,6 +220,32 @@ describe("cacheMediaUrls (서비스 워커 제어 중)", () => {
     expect(await pendingResult).toEqual({ cachedUrls: [] });
     expect(getMediaCacheFailure(VIDEO)).toBe("quota");
   });
+
+  it("본문을 다 받았는데 SW가 담지 않아도 알려 준 남은 용량이 파일보다 크면 네트워크 실패로 남긴다", async () => {
+    vi.useFakeTimers();
+    controlByServiceWorker();
+    mockEstimate(1024 * 1024 * 1024, 0);
+    mockFetch();
+
+    const pendingResult = cacheMediaUrls([VIDEO]);
+    await vi.runAllTimersAsync();
+
+    expect(await pendingResult).toEqual({ cachedUrls: [] });
+    expect(getMediaCacheFailure(VIDEO)).toBe("network");
+  });
+
+  it("본문을 다 받았는데 SW가 담지 않고 알려 준 남은 용량도 파일보다 작으면 저장 공간 부족으로 남긴다", async () => {
+    vi.useFakeTimers();
+    controlByServiceWorker();
+    mockEstimate(100, 92);
+    mockFetch();
+
+    const pendingResult = cacheMediaUrls([VIDEO]);
+    await vi.runAllTimersAsync();
+
+    expect(await pendingResult).toEqual({ cachedUrls: [] });
+    expect(getMediaCacheFailure(VIDEO)).toBe("quota");
+  });
 });
 
 describe("cacheMediaUrls 멈춘 다운로드", () => {

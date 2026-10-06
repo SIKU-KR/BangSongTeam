@@ -246,4 +246,28 @@ describe("useProjectionMediaReady", () => {
     });
     expect(result.current.failure).toBeNull();
   });
+
+  it("passive에서 다시 시도해도 세트 밖 영상을 다 지워 자리가 없으면 다시 받지 않고 저장 공간 부족을 남긴다", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const fetchMock = mockFetch();
+    const put = await rejectPutWithQuota();
+    expect(await cacheMediaFirst(FIRST.mediaUrl)).toBe(false);
+    put.mockRestore();
+    fetchMock.mockClear();
+    mockEstimate(100, 100);
+
+    const { result } = renderHook(() =>
+      useProjectionMediaReady(PRESENTATION, { passive: true }),
+    );
+    await waitFor(() => expect(result.current.failure).toBe("quota"));
+
+    act(() => result.current.retry());
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(PASSIVE_RECHECK_MS * 2);
+    });
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(result.current.status).toBe("failed");
+    expect(result.current.failure).toBe("quota");
+  });
 });

@@ -97,10 +97,8 @@ async function requeueMissing(files: readonly MediaFile[]): Promise<void> {
   const cached = new Set(await findCachedMediaUrls(urls));
   const missing = files.filter((file) => !cached.has(file.url));
   if (missing.length === 0) return;
-  await ensureMediaSpace(
-    missing.reduce((sum, file) => sum + file.sizeBytes, 0),
-    urls,
-  );
+  const neededBytes = missing.reduce((sum, file) => sum + file.sizeBytes, 0);
+  if (!(await ensureMediaSpace(neededBytes, urls))) return;
   scheduleMediaCaching(
     missing.map((file) => file.url),
     { priority: true },
@@ -156,6 +154,8 @@ function useMediaProgressVersion(): number {
  * 편집기는 끝나지 않을 '배경 저장 중'만 보여 준다. 공간이 생겨 저장되면 다시 확인할 때
  * 풀린다. 자동 캐시는 실패한 영상을 스스로 다시 받지 않으므로, `passive`에서 `retry`하면
  * 세트 밖 영상을 지워 자리를 만든 뒤(`ensureMediaSpace`) 빠진 영상을 큐 맨 앞에 다시 넣는다.
+ * 다 지워도 자리가 없으면 다시 넣지 않는다. 수백 MB를 다시 받아 봐야 같은 한도에 걸리고,
+ * 그동안 헤더만 '저장 중'으로 돌아간다.
  *
  * 받다가 저장 공간 부족으로 실패하면 연결이 끊겼더라도 `quota`로 알린다. 다시 연결해도
  * 공간을 비우기 전에는 낫지 않기 때문이다.

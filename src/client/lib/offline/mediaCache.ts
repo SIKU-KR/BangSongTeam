@@ -179,7 +179,10 @@ async function cacheOne(
     const bytes = contentLength(response);
     if (!(await waitForCacheEntry(cache, url, bytes, watchdog))) {
       if (bytes !== null && received() >= bytes) {
-        throw new DOMException("media cache quota", "QuotaExceededError");
+        const free = await estimateFreeBytes();
+        if (free === null || free < bytes) {
+          throw new DOMException("media cache quota", "QuotaExceededError");
+        }
       }
       throw new Error("service worker did not cache");
     }
@@ -206,14 +209,6 @@ const knownCached = new Set<string>();
 export type MediaCacheFailure = "quota" | "network";
 
 const failures = new Map<string, MediaCacheFailure>();
-
-/**
- * 이 세션에서 저장 공간 부족을 겪은 URL. 담기면 지운다.
- *
- * `failures`는 다시 받기 시작하면 지워지지만(헤더가 '저장 중'으로 돌아가게), 이것은
- * 남아야 한다. 송출 준비가 다시 받기 전에 `ensureMediaSpace`로 공간을 비울지 정할 때,
- * 자동 캐시가 먼저 다시 큐에 넣었다고 근거가 사라지면 같은 한도에 또 걸린다.
- */
 const quotaHits = new Set<string>();
 
 function recordFailure(url: string, err: unknown): void {
@@ -260,7 +255,10 @@ export function getMediaCacheFailure(
  * 실패인지를 `getMediaCacheFailure`로 남긴다. SW가 담을 때는 SW 안에서 난 오류가 페이지에
  * 오지 않는다. 그래서 응답 길이만큼 본문이 다 왔는데도 SW가 끝내 담지 않았으면 공간 부족으로
  * 본다. 받기는 끝났으니 남은 까닭은 쓰기 실패이고, Safari처럼 `navigator.storage.estimate()`로
- * 남은 용량을 알 수 없는 브라우저에서도 이렇게 가려진다.
+ * 남은 용량을 알 수 없는 브라우저에서도 이렇게 가려진다. 다만 브라우저가 알려 준 남은 용량이
+ * 파일보다 크면 `network`로 둔다. 큰 파일의 쓰기가 기다리는 시간을 넘기거나 쓰는 도중 SW가
+ * 멈춘 것까지 공간 부족으로 치면, `ensureMediaSpace`가 알려 준 용량을 의심해 다른 세트의
+ * 오프라인 배경을 지우고 '저장 공간 부족'을 잘못 알린다.
  */
 export async function cacheMediaUrls(
   urls: readonly string[],
@@ -450,6 +448,10 @@ function pathOf(url: string): string {
  * 지워야 할 영상을 남긴 채 같은 부족을 되풀이한다. 예산은 짐작일 뿐이므로 알려 준 용량이
  * 모자라다고 하지 않는 한 지운 뒤에는 true로 두고 실제 받기에 맡긴다. 그래도 모자라면
  * `getMediaCacheFailure`가 `quota`를 알린다.
+ *
+ * 부족을 겪은 기록은 `getMediaCacheFailure`의 까닭과 따로 두고, 담기기 전까지 남긴다. 까닭은
+ * 다시 받기 시작하면 지워지므로(헤더가 '저장 중'으로 돌아가게), 자동 캐시가 먼저 다시 큐에
+ * 넣으면 근거가 사라져 같은 한도에 또 걸린다.
  */
 export async function ensureMediaSpace(
   neededBytes: number,
