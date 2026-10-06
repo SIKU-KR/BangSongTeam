@@ -12,8 +12,14 @@ import {
 import { resetFakeCacheStorage } from "../../test/fakeCacheStorage";
 import {
   __resetMediaCachingForTests,
+  __setMediaRetryRandomForTests,
   cacheMediaFirst,
+  MEDIA_STALL_TIMEOUT_MS,
 } from "../../lib/offline/mediaCache";
+import {
+  AUTO_CACHE_DELAY_MS,
+  useBackgroundAutoCache,
+} from "./useBackgroundAutoCache";
 import {
   PASSIVE_RECHECK_MS,
   useProjectionMediaReady,
@@ -269,5 +275,110 @@ describe("useProjectionMediaReady", () => {
     expect(fetchMock).not.toHaveBeenCalled();
     expect(result.current.status).toBe("failed");
     expect(result.current.failure).toBe("quota");
+  });
+
+  describe("편집기 자동 캐시와 함께", () => {
+    function stalledResponse(): Response {
+      return new Response(
+        new ReadableStream<Uint8Array>({
+          start(controller) {
+            controller.enqueue(new Uint8Array(2));
+          },
+        }),
+        { status: 200, headers: { "content-length": "5" } },
+      );
+    }
+
+    function mockFetchFor(
+      firstVideo: (attempt: number) => Response,
+    ): ReturnType<typeof vi.fn> {
+      let attempt = 0;
+      const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+        if (String(input) === FIRST.mediaUrl) {
+          attempt += 1;
+          return firstVideo(attempt);
+        }
+        return new Response("media", {
+          status: 200,
+          headers: { "content-length": "5" },
+        });
+      });
+      globalThis.fetch = fetchMock as unknown as typeof fetch;
+      return fetchMock;
+    }
+
+    function renderEditor() {
+      return renderHook(() => {
+        useBackgroundAutoCache(PRESENTATION);
+        return useProjectionMediaReady(PRESENTATION, { passive: true });
+      });
+    }
+
+    async function advance(ms: number): Promise<void> {
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(ms);
+      });
+    }
+
+    beforeEach(() => {
+      vi.useFakeTimers();
+      __setMediaRetryRandomForTests(() => 0);
+    });
+
+    it("첫 시도가 무진행으로 끊기면 곧 다시 시도한다고 알리고, 다시 받아 담기면 조작 없이 진행 표시가 사라진다", async () => {
+      mockFetchFor((attempt) =>
+        attempt === 1
+          ? stalledResponse()
+          : new Response("media", {
+              status: 200,
+              headers: { "content-length": "5" },
+            }),
+      );
+
+      const { result } = renderEditor();
+      await advance(
+        AUTO_CACHE_DELAY_MS + MEDIA_STALL_TIMEOUT_MS + PASSIVE_RECHECK_MS,
+      );
+
+      expect(result.current).toMatchObject({
+        status: "downloading",
+        retrying: true,
+        readyCount: 1,
+        failure: null,
+      });
+
+      await advance(MEDIA_STALL_TIMEOUT_MS + PASSIVE_RECHECK_MS);
+
+      expect(result.current).toMatchObject({
+        status: "ready",
+        retrying: false,
+        readyCount: 2,
+      });
+    });
+
+    it("다시 받아도 낫지 않는 실패로 멈추면 failed로 알리고, 다시 시도하면 받는다", async () => {
+      mockFetchFor((attempt) =>
+        attempt === 1
+          ? new Response(null, { status: 404 })
+          : new Response("media", {
+              status: 200,
+              headers: { "content-length": "5" },
+            }),
+      );
+
+      const { result } = renderEditor();
+      await advance(AUTO_CACHE_DELAY_MS + PASSIVE_RECHECK_MS);
+
+      expect(result.current).toMatchObject({
+        status: "failed",
+        failure: "network",
+        retrying: false,
+      });
+
+      act(() => result.current.retry());
+      await advance(PASSIVE_RECHECK_MS);
+
+      expect(result.current.status).toBe("ready");
+    });
   });
 });

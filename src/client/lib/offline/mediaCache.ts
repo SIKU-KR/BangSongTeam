@@ -1,5 +1,11 @@
 import { MEDIA_CACHE_NAME, mediaCacheNameFor } from "#shared";
+import {
+  isRetryableApiError,
+  parseRetryAfter,
+  ServerRejectedError,
+} from "../api/request";
 import { isQuotaExceededError } from "../browser/quotaError";
+import { BackoffTracker } from "../sync/backoff";
 import { requestPersistentStorage } from "./storagePersistence";
 
 interface MediaCacheResult {
@@ -44,13 +50,22 @@ const progress = new Map<string, MediaProgress>();
 const progressListeners = new Set<() => void>();
 let progressVersion = 0;
 
-function reportProgress(url: string, next: MediaProgress): void {
-  progress.set(url, next);
+function notify(): void {
   progressVersion += 1;
   for (const listener of progressListeners) listener();
 }
 
-/** `useSyncExternalStore`용 구독. 스냅숏은 `getMediaProgressVersion`이다 */
+function reportProgress(url: string, next: MediaProgress): void {
+  progress.set(url, next);
+  notify();
+}
+
+/**
+ * `useSyncExternalStore`용 구독. 스냅숏은 `getMediaProgressVersion`이다.
+ *
+ * 받은 바이트뿐 아니라 담기 성공, 재시도 예약·취소 때도 알린다. 그래야 포스터로 기다리던
+ * 미리보기와 편집기 헤더가 백그라운드 재시도의 결과를 곧바로 따라간다.
+ */
 export function subscribeMediaProgress(listener: () => void): () => void {
   progressListeners.add(listener);
   return () => progressListeners.delete(listener);
@@ -161,17 +176,18 @@ function aborted(watchdog: StallWatchdog): Promise<never> {
   });
 }
 
-async function cacheOne(
-  url: string,
-  watchdog: StallWatchdog,
-): Promise<boolean> {
+async function cacheOne(url: string, watchdog: StallWatchdog): Promise<void> {
   const cache = await caches.open(mediaCacheNameFor(url));
-  if (await cache.match(url)) return true;
+  if (await cache.match(url)) return;
 
   watchdog.poke();
   const response = await fetch(url, { signal: watchdog.signal });
   if (response.status !== 200) {
-    throw new Error(`HTTP ${response.status}`);
+    throw new ServerRejectedError(
+      response.status,
+      undefined,
+      parseRetryAfter(response.headers.get("retry-after")) ?? undefined,
+    );
   }
   const { body, received } = countingBody(url, response, watchdog);
   if (isServiceWorkerControlled()) {
@@ -195,7 +211,6 @@ async function cacheOne(
       }),
     );
   }
-  return true;
 }
 
 /** 이 세션에서 캐시에 들어 있는 것을 확인한 URL */
@@ -221,11 +236,13 @@ function recordCached(url: string): void {
   knownCached.add(url);
   failures.delete(url);
   quotaHits.delete(url);
+  notify();
 }
 
 /**
  * 이 세션에서 `url`을 마지막으로 담으려다 실패한 까닭. 다시 받기 시작하거나(큐에 다시
- * 넣는 것 포함) 성공하면 지워진다.
+ * 넣는 것 포함) 성공하면 지워진다. `network`는 붙잡던 화면이 모두 놓아도 지워진다
+ * (`retainMediaUrls`).
  *
  * `cacheMediaFirst`는 담겼는지만 알리는 boolean을 그대로 두고(`useCacheFirstVideo`가
  * 그 계약에 기댄다), 까닭은 여기서 따로 읽는다. 백그라운드 큐가 받다 실패한 것도 남으므로
@@ -257,8 +274,15 @@ export function getMediaCacheFailure(
  * `navigator.storage.estimate()`로 남은 용량을 알 수 없거나 알려 준 남은 용량이 파일보다 작을
  * 때만 공간 부족으로 본다. 큰 파일의 쓰기가 기다리는 시간을 넘기거나 쓰는 도중 SW가 멈춘
  * 것까지 공간 부족으로 치면, 다시 받지 않고 '저장 공간 부족'을 잘못 알린다. 그 대신 브라우저가
- * 남은 용량을 부풀려 알려 주면 실제 부족도 `network`로 남아 `useCacheFirstVideo`의 재시도
- * 한도까지 다시 받는다.
+ * 남은 용량을 부풀려 알려 주면 실제 부족도 `network`로 남아 큐와 `useCacheFirstVideo`의
+ * 재시도 한도까지 다시 받는다.
+ *
+ * 끊긴 지점부터 `Range`로 이어 받지 않고 처음부터 다시 받는다. 페이지 요청은 SW의
+ * `CacheFirst` 라우트를 피할 수 없고 그 라우트는 206을 담지 않는다(`statuses: [200]`).
+ * 끊기기 전에 받은 바이트도 남아 있지 않다. SW든 페이지든 본문을 흘려 넣던 캐시 쓰기는
+ * 스트림 오류와 함께 버려지므로 이어 붙일 앞부분이 없다. 이어 받으려면 수백 MB를 페이지
+ * 메모리에 들고 있거나, 조각을 따로 담아 SW가 다시 합치게 바꿔야 한다. 그래서 큐가 백오프로
+ * 다시 받는 쪽을 택했다.
  */
 export async function cacheMediaUrls(
   urls: readonly string[],
@@ -270,38 +294,104 @@ export async function cacheMediaUrls(
   }
 
   for (const url of urls) {
-    const watchdog = stallWatchdog();
-    watchdog.poke();
-    failures.delete(url);
     try {
-      if (await Promise.race([cacheOne(url, watchdog), aborted(watchdog)])) {
-        recordCached(url);
-        cachedUrls.push(url);
-      }
-    } catch (err) {
-      recordFailure(url, err);
-    } finally {
-      watchdog.stop();
+      await cacheWithWatchdog(url);
+      cachedUrls.push(url);
+    } catch {
+      continue;
     }
   }
 
   return { cachedUrls };
 }
 
+async function cacheWithWatchdog(url: string): Promise<void> {
+  const watchdog = stallWatchdog();
+  watchdog.poke();
+  failures.delete(url);
+  try {
+    await Promise.race([cacheOne(url, watchdog), aborted(watchdog)]);
+    recordCached(url);
+  } catch (err) {
+    recordFailure(url, err);
+    throw err;
+  } finally {
+    watchdog.stop();
+  }
+}
+
+/**
+ * 실패한 URL을 타이머로 다시 받는 최대 횟수. 시도마다 큰 영상을 처음부터 다시 받으므로
+ * 끝없이 되풀이하지 않는다. 넘으면 시도 횟수를 비우고, 다음에 큐에 다시 넣거나 연결이
+ * 회복될 때(`resumeMediaCaching`) 처음부터 센다.
+ */
+export const MAX_MEDIA_RETRIES = 5;
+
 const pending = new Set<string>();
 const inFlight = new Map<string, Promise<boolean>>();
+const backoff = new BackoffTracker();
+const retryTimers = new Map<string, ReturnType<typeof setTimeout>>();
+const retained = new Map<string, number>();
 let draining: Promise<void> | null = null;
 let persistenceRequested = false;
+
+function clearRetry(url: string): boolean {
+  const timer = retryTimers.get(url);
+  if (timer === undefined) return false;
+  clearTimeout(timer);
+  retryTimers.delete(url);
+  return true;
+}
+
+function isPermanentFailure(err: unknown): boolean {
+  return (
+    isQuotaExceededError(err) ||
+    (err instanceof ServerRejectedError && !isRetryableApiError(err))
+  );
+}
+
+function scheduleRetry(url: string, err: unknown): void {
+  clearRetry(url);
+  if (
+    !retained.has(url) ||
+    isPermanentFailure(err) ||
+    backoff.getAttempt(url) >= MAX_MEDIA_RETRIES
+  ) {
+    backoff.reset(url);
+    return;
+  }
+  const delay = MEDIA_STALL_TIMEOUT_MS + backoff.getDelay(url, err);
+  retryTimers.set(
+    url,
+    setTimeout(() => {
+      retryTimers.delete(url);
+      if (retained.has(url) && !knownCached.has(url)) {
+        pending.add(url);
+        startDrain();
+      }
+      notify();
+    }, delay),
+  );
+}
 
 function cacheOnce(url: string): Promise<boolean> {
   const running = inFlight.get(url);
   if (running) return running;
-  const task = cacheMediaUrls([url])
-    .then(
-      (result) => result.cachedUrls.includes(url),
-      () => false,
-    )
-    .finally(() => inFlight.delete(url));
+  clearRetry(url);
+  const task = cacheWithWatchdog(url).then(
+    () => {
+      inFlight.delete(url);
+      backoff.reset(url);
+      notify();
+      return true;
+    },
+    (err: unknown) => {
+      inFlight.delete(url);
+      scheduleRetry(url, err);
+      notify();
+      return false;
+    },
+  );
   inFlight.set(url, task);
   return task;
 }
@@ -309,8 +399,9 @@ function cacheOnce(url: string): Promise<boolean> {
 async function drainQueue(): Promise<void> {
   if (!persistenceRequested) {
     persistenceRequested = true;
-    await requestPersistentStorage();
+    void requestPersistentStorage();
   }
+  await Promise.resolve();
 
   while (pending.size > 0 && !isOffline()) {
     const [url] = pending;
@@ -337,22 +428,99 @@ function canCacheInBackground(): boolean {
  * URL을 백그라운드 캐시 큐에 넣는다. 한 번에 하나씩 받아 재생과 대역폭을 덜 다툰다.
  *
  * `priority`면 아직 받지 않은 항목보다 앞에 세운다. 송출 중 지금·다음 곡 배경을
- * 세트의 나머지보다 먼저 받을 때 쓴다. 이미 받고 있는 항목은 끊지 않는다.
+ * 세트의 나머지보다 먼저 받을 때 쓴다. 이미 받고 있는 항목은 끊지 않는다. 같은 틱에
+ * 여러 번 부르면 모두 모은 순서대로 받는다.
+ *
+ * 이 세션에서 담긴 것을 확인한 URL과 재시도를 기다리는 URL은 넣지 않는다. 송출 중 곡이
+ * 바뀔 때마다 불려도 백오프 간격이 줄지 않아야, SW가 아직 받고 있을 수 있는 파일을 겹쳐
+ * 받지 않는다.
  */
 export function scheduleMediaCaching(
   urls: readonly string[],
   options: { priority?: boolean } = {},
 ): void {
   if (urls.length === 0 || !canCacheInBackground()) return;
-  for (const url of urls) failures.delete(url);
+  const fresh = urls.filter(
+    (url) => !knownCached.has(url) && !retryTimers.has(url),
+  );
+  for (const url of fresh) failures.delete(url);
   if (options.priority) {
-    const rest = [...pending].filter((url) => !urls.includes(url));
+    const rest = [...pending].filter((url) => !fresh.includes(url));
     pending.clear();
-    for (const url of [...urls, ...rest]) pending.add(url);
+    for (const url of [...fresh, ...rest]) pending.add(url);
   } else {
-    for (const url of urls) pending.add(url);
+    for (const url of fresh) pending.add(url);
   }
   startDrain();
+}
+
+/**
+ * 에디터·송출 화면이 `urls`를 쓰는 동안 붙잡아 둔다. 돌려준 함수로 놓는다(여러 번 불러도
+ * 한 번만 놓는다).
+ *
+ * 붙잡힌 URL만 실패한 뒤 백오프로 다시 받는다. 화면을 떠났거나 배경을 바꿔 아무도 쓰지
+ * 않는 영상까지 다시 받으면 대역폭과 저장 공간만 쓴다. 마지막으로 놓이면 기다리던 재시도를
+ * 취소하고 시도 횟수와 네트워크 실패 기록을 비운다. 세트를 다시 열 때 지난 실패가 '저장
+ * 실패'로 먼저 보이지 않게 하려는 것이다. 저장 공간 부족 기록은 남긴다. 이미 큐에 들어간
+ * 항목은 그대로 받는다.
+ */
+export function retainMediaUrls(urls: readonly string[]): () => void {
+  const held = [...new Set(urls)];
+  for (const url of held) retained.set(url, (retained.get(url) ?? 0) + 1);
+  let released = false;
+  return () => {
+    if (released) return;
+    released = true;
+    let changed = false;
+    for (const url of held) {
+      const count = (retained.get(url) ?? 0) - 1;
+      if (count > 0) {
+        retained.set(url, count);
+        continue;
+      }
+      retained.delete(url);
+      backoff.reset(url);
+      if (failures.get(url) === "network") failures.delete(url);
+      if (clearRetry(url)) changed = true;
+    }
+    if (changed) notify();
+  };
+}
+
+/**
+ * 재시도를 기다리던 URL을 백오프를 기다리지 않고 곧바로 다시 받는다. 붙잡힌 URL 가운데
+ * 받다 실패한 채 재시도 횟수를 다 쓴 것도 함께 넣는다.
+ *
+ * 연결이 회복됐다는 신호(지금은 `online` 이벤트)가 배경 큐를 다시 돌리는 입구다. 저장
+ * 공간 부족으로 실패한 URL은 공간을 비우기 전에는 낫지 않으므로 넣지 않는다.
+ */
+export function resumeMediaCaching(): void {
+  if (!canCacheInBackground()) return;
+  const waiting = [...retryTimers.keys()];
+  for (const url of waiting) clearRetry(url);
+  const failed = [...retained.keys()].filter(
+    (url) => getMediaCacheFailure(url) === "network",
+  );
+  for (const url of [...waiting, ...failed]) {
+    if (!knownCached.has(url) && !inFlight.has(url)) pending.add(url);
+  }
+  startDrain();
+  notify();
+}
+
+/**
+ * - `downloading`: 지금 받고 있다
+ * - `queued`: 큐에서 차례를 기다린다
+ * - `retrying`: 받다 실패해 백오프 뒤 다시 받기를 기다린다
+ */
+export type MediaQueueState = "downloading" | "queued" | "retrying";
+
+/** 백그라운드 큐에서 `url`의 상태. 큐에 없으면(담겼거나, 아직 넣지 않았거나, 포기했으면) null이다 */
+export function getMediaQueueState(url: string): MediaQueueState | null {
+  if (inFlight.has(url)) return "downloading";
+  if (pending.has(url)) return "queued";
+  if (retryTimers.has(url)) return "retrying";
+  return null;
 }
 
 /**
@@ -506,7 +674,16 @@ export async function __waitForMediaCachingForTests(): Promise<void> {
   }
 }
 
+export function __setMediaRetryRandomForTests(fn: () => number): void {
+  backoff.__setRandomForTests(fn);
+}
+
 export function __resetMediaCachingForTests(): void {
+  for (const timer of retryTimers.values()) clearTimeout(timer);
+  retryTimers.clear();
+  retained.clear();
+  backoff.reset();
+  backoff.__setRandomForTests(Math.random);
   pending.clear();
   inFlight.clear();
   knownCached.clear();

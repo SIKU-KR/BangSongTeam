@@ -16,14 +16,30 @@ import {
 } from "./useBackgroundAutoCache";
 import { SEED_PRESENTATIONS } from "../../test/presentationFixture";
 
-const { scheduleMediaCaching, warmPresentationFonts } = vi.hoisted(() => ({
-  scheduleMediaCaching: vi.fn(),
-  warmPresentationFonts: vi.fn(async () => undefined),
-}));
+const {
+  scheduleMediaCaching,
+  warmPresentationFonts,
+  retainMediaUrls,
+  releaseMediaUrls,
+  resumeMediaCaching,
+} = vi.hoisted(() => {
+  const releaseMediaUrls = vi.fn<(urls: readonly string[]) => void>();
+  return {
+    scheduleMediaCaching: vi.fn(),
+    warmPresentationFonts: vi.fn(async () => undefined),
+    releaseMediaUrls,
+    retainMediaUrls: vi.fn(
+      (urls: readonly string[]) => () => releaseMediaUrls(urls),
+    ),
+    resumeMediaCaching: vi.fn(),
+  };
+});
 
 vi.mock("../../lib/offline", () => ({
   scheduleMediaCaching,
   warmPresentationFonts,
+  retainMediaUrls,
+  resumeMediaCaching,
 }));
 
 const BASE = SEED_PRESENTATIONS[0];
@@ -53,6 +69,9 @@ beforeEach(() => {
   vi.useFakeTimers();
   scheduleMediaCaching.mockClear();
   warmPresentationFonts.mockClear();
+  retainMediaUrls.mockClear();
+  releaseMediaUrls.mockClear();
+  resumeMediaCaching.mockClear();
 });
 
 afterEach(() => {
@@ -143,7 +162,7 @@ describe("useBackgroundAutoCache", () => {
     expect(scheduleMediaCaching).toHaveBeenCalledTimes(1);
   });
 
-  it("네트워크가 돌아오면 곧바로 다시 큐에 넣는다", () => {
+  it("네트워크가 돌아오면 재시도를 기다리던 것까지 곧바로 다시 큐에 넣는다", () => {
     const presentation = withBackground(BG_A);
     renderHook(() => useBackgroundAutoCache(presentation));
     act(() => {
@@ -154,8 +173,26 @@ describe("useBackgroundAutoCache", () => {
       window.dispatchEvent(new Event("online"));
     });
 
+    expect(resumeMediaCaching).toHaveBeenCalledTimes(1);
     expect(scheduleMediaCaching).toHaveBeenCalledTimes(2);
     expect(scheduleMediaCaching).toHaveBeenLastCalledWith(urlsOf(BG_A));
+  });
+
+  it("열자마자 세트의 URL을 붙잡고, 배경을 바꾸거나 떠나면 놓는다", () => {
+    const { rerender, unmount } = renderHook(
+      ({ p }) => useBackgroundAutoCache(p),
+      { initialProps: { p: withBackground(BG_A) } },
+    );
+
+    expect(retainMediaUrls).toHaveBeenCalledWith(urlsOf(BG_A));
+    expect(releaseMediaUrls).not.toHaveBeenCalled();
+
+    rerender({ p: withBackground(BG_B) });
+    expect(releaseMediaUrls).toHaveBeenCalledWith(urlsOf(BG_A));
+    expect(retainMediaUrls).toHaveBeenLastCalledWith(urlsOf(BG_B));
+
+    unmount();
+    expect(releaseMediaUrls).toHaveBeenLastCalledWith(urlsOf(BG_B));
   });
 
   it("지연 전에 화면을 떠나면 아무것도 받지 않는다", () => {
@@ -204,6 +241,7 @@ describe("useBackgroundAutoCache", () => {
     });
 
     expect(scheduleMediaCaching).not.toHaveBeenCalled();
+    expect(retainMediaUrls).not.toHaveBeenCalled();
     expect(warmPresentationFonts).not.toHaveBeenCalled();
   });
 });
@@ -261,6 +299,23 @@ describe("useProjectionMediaCache", () => {
     expect(scheduleMediaCaching).not.toHaveBeenCalled();
   });
 
+  it("송출하는 동안 세트의 URL을 붙잡고 떠나면 놓는다", () => {
+    const { rerender, unmount } = renderHook(
+      ({ songIndex }) => useProjectionMediaCache(presentation, songIndex),
+      { initialProps: { songIndex: 0 } },
+    );
+
+    expect(retainMediaUrls).toHaveBeenCalledTimes(1);
+    expect(retainMediaUrls).toHaveBeenCalledWith(ALL_URLS);
+
+    rerender({ songIndex: 1 });
+    expect(retainMediaUrls).toHaveBeenCalledTimes(1);
+    expect(releaseMediaUrls).not.toHaveBeenCalled();
+
+    unmount();
+    expect(releaseMediaUrls).toHaveBeenCalledWith(ALL_URLS);
+  });
+
   it("네트워크가 돌아오면 지금·다음 곡부터 다시 받는다", () => {
     renderHook(() => useProjectionMediaCache(presentation, 1));
     scheduleMediaCaching.mockClear();
@@ -269,6 +324,7 @@ describe("useProjectionMediaCache", () => {
       window.dispatchEvent(new Event("online"));
     });
 
+    expect(resumeMediaCaching).toHaveBeenCalledTimes(1);
     expect(scheduleMediaCaching.mock.calls).toEqual([
       [[...urlsOf(BG_B), ...urlsOf(BG_C)], { priority: true }],
       [ALL_URLS],

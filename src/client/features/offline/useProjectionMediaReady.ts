@@ -17,6 +17,7 @@ import {
   getMediaCacheFailure,
   getMediaProgress,
   getMediaProgressVersion,
+  getMediaQueueState,
   scheduleMediaCaching,
   subscribeMediaProgress,
 } from "../../lib/offline";
@@ -36,6 +37,8 @@ export type ProjectionMediaFailure = "offline" | "quota" | "network";
 export interface ProjectionMediaReadiness {
   status: ProjectionMediaStatus;
   failure: ProjectionMediaFailure | null;
+  /** `passive`에서 받다 실패한 영상을 큐가 곧 다시 받으려고 기다리는 중이다 */
+  retrying: boolean;
   readyCount: number;
   totalCount: number;
   receivedBytes: number;
@@ -65,6 +68,25 @@ function isOffline(): boolean {
 function failureOf(url: string): ProjectionMediaFailure {
   if (getMediaCacheFailure(url) === "quota") return "quota";
   return isOffline() ? "offline" : "network";
+}
+
+type PassiveQueueState = "active" | "retrying" | "gaveUp" | "idle";
+
+function passiveQueueState(
+  files: readonly MediaFile[],
+  readyUrls: ReadonlySet<string>,
+): PassiveQueueState {
+  const missing = files
+    .map((file) => file.url)
+    .filter((url) => !readyUrls.has(url));
+  const states = missing.map(getMediaQueueState);
+  if (states.some((state) => state === "downloading" || state === "queued")) {
+    return "active";
+  }
+  if (states.includes("retrying")) return "retrying";
+  return missing.some((url) => getMediaCacheFailure(url) !== undefined)
+    ? "gaveUp"
+    : "idle";
 }
 
 function hitQuota(
@@ -152,10 +174,12 @@ function useMediaProgressVersion(): number {
  * (`useBackgroundAutoCache`)가 이미 받고 있으므로 송출 버튼 옆에 진행만 보여 준다.
  * 다만 자동 캐시가 저장 공간 부족으로 실패했으면 `failed`/`quota`로 알린다. 알리지 않으면
  * 편집기는 끝나지 않을 '배경 저장 중'만 보여 준다. 공간이 생겨 저장되면 다시 확인할 때
- * 풀린다. 자동 캐시는 실패한 영상을 스스로 다시 받지 않으므로, `passive`에서 `retry`하면
- * 세트 밖 영상을 지워 자리를 만든 뒤(`ensureMediaSpace`) 빠진 영상을 큐 맨 앞에 다시 넣는다.
- * 다 지워도 자리가 없으면 다시 넣지 않는다. 수백 MB를 다시 받아 봐야 같은 한도에 걸리고,
- * 그동안 헤더만 '저장 중'으로 돌아간다.
+ * 풀린다. 큐가 받다 실패한 영상을 백오프 뒤 다시 받으려고 기다리는 동안은 `retrying`을
+ * 켠다. 다시 받아 저장되면 주기적인 확인이 `ready`로 바꾸므로 따로 조작할 필요가 없다. 큐가
+ * 재시도를 다 쓰거나 다시 받아도 낫지 않는 실패(4xx)로 멈추면 `failed`로 알린다. 그때
+ * `retry`하면 세트 밖 영상을 지워 자리를 만든 뒤(`ensureMediaSpace`) 빠진 영상을 큐 맨 앞에
+ * 다시 넣는다. 다 지워도 자리가 없으면 다시 넣지 않는다. 수백 MB를 다시 받아 봐야 같은
+ * 한도에 걸리고, 그동안 헤더만 '저장 중'으로 돌아간다.
  *
  * 받다가 저장 공간 부족으로 실패하면 연결이 끊겼더라도 `quota`로 알린다. 다시 연결해도
  * 공간을 비우기 전에는 낫지 않기 때문이다.
@@ -293,9 +317,23 @@ export function useProjectionMediaReady(
 
   const retry = useCallback(() => setAttempt((value) => value + 1), []);
 
+  const queue =
+    passive && current.status === "downloading"
+      ? passiveQueueState(files, current.readyUrls)
+      : "idle";
+  const failedUrl =
+    queue === "gaveUp"
+      ? files.find(
+          (file) =>
+            !current.readyUrls.has(file.url) &&
+            getMediaCacheFailure(file.url) !== undefined,
+        )?.url
+      : undefined;
+
   return {
-    status: current.status,
-    failure: current.failure,
+    status: failedUrl ? "failed" : current.status,
+    failure: failedUrl ? failureOf(failedUrl) : current.failure,
+    retrying: queue === "retrying",
     readyCount: current.readyUrls.size,
     totalCount: files.length,
     receivedBytes,
