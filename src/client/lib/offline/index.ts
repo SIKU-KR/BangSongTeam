@@ -8,6 +8,5 @@ export {
   scheduleMediaCaching,
   shouldWaitForMediaCache,
   subscribeMediaProgress,
-  type MediaCacheFailure,
 } from "./mediaCache";
 export { warmPresentationFonts } from "./fontWarmup";

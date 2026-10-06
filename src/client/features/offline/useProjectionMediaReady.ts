@@ -17,6 +17,7 @@ import {
   getMediaCacheFailure,
   getMediaProgress,
   getMediaProgressVersion,
+  scheduleMediaCaching,
   subscribeMediaProgress,
 } from "../../lib/offline";
 import { useBackgroundLookup } from "../backgrounds/backgroundCatalog";
@@ -91,6 +92,21 @@ async function waitForServiceWorker(): Promise<void> {
   ]);
 }
 
+async function requeueMissing(files: readonly MediaFile[]): Promise<void> {
+  const urls = files.map((file) => file.url);
+  const cached = new Set(await findCachedMediaUrls(urls));
+  const missing = files.filter((file) => !cached.has(file.url));
+  if (missing.length === 0) return;
+  await ensureMediaSpace(
+    missing.reduce((sum, file) => sum + file.sizeBytes, 0),
+    urls,
+  );
+  scheduleMediaCaching(
+    missing.map((file) => file.url),
+    { priority: true },
+  );
+}
+
 function collectMediaFiles(
   presentation: Presentation | null,
   findBackground: (id: string) => BackgroundMedia | undefined,
@@ -138,7 +154,8 @@ function useMediaProgressVersion(): number {
  * (`useBackgroundAutoCache`)가 이미 받고 있으므로 송출 버튼 옆에 진행만 보여 준다.
  * 다만 자동 캐시가 저장 공간 부족으로 실패했으면 `failed`/`quota`로 알린다. 알리지 않으면
  * 편집기는 끝나지 않을 '배경 저장 중'만 보여 준다. 공간이 생겨 저장되면 다시 확인할 때
- * 풀린다.
+ * 풀린다. 자동 캐시는 실패한 영상을 스스로 다시 받지 않으므로, `passive`에서 `retry`하면
+ * 세트 밖 영상을 지워 자리를 만든 뒤(`ensureMediaSpace`) 빠진 영상을 큐 맨 앞에 다시 넣는다.
  *
  * 받다가 저장 공간 부족으로 실패하면 연결이 끊겼더라도 `quota`로 알린다. 다시 연결해도
  * 공간을 비우기 전에는 낫지 않기 때문이다.
@@ -188,7 +205,9 @@ export function useProjectionMediaReady(
         if (!ready && !cancelled)
           timer = setTimeout(() => void check(), PASSIVE_RECHECK_MS);
       };
-      void check();
+      void (attempt > 0 ? requeueMissing(files) : Promise.resolve())
+        .catch(() => undefined)
+        .then(check);
       return () => {
         cancelled = true;
         clearTimeout(timer);

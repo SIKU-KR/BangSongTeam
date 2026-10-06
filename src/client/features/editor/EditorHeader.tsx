@@ -5,6 +5,7 @@ import {
   ChevronDownIcon,
   CopyIcon,
   FileTextIcon,
+  HardDriveIcon,
   InfoIcon,
   PencilIcon,
   PlayIcon,
@@ -28,6 +29,7 @@ import { Kbd } from "#components/ui/kbd";
 import {
   Popover,
   PopoverContent,
+  PopoverDescription,
   PopoverTrigger,
 } from "#components/ui/popover";
 import { Separator } from "#components/ui/separator";
@@ -69,12 +71,13 @@ interface EditorHeaderProps {
   backPath: string | null;
   /**
    * 세트 배경 영상 중 이 기기에 저장된 수. 모두 저장됐으면 `null`이다.
-   * 저장 공간 부족(`quota`)으로 멈췄으면 진행 대신 그 사실을 보여 준다
+   * 저장 공간 부족(`quota`)으로 멈췄으면 진행 대신 그 사실과 다시 받기(`retry`)를 보여 준다
    */
   mediaProgress: {
     readyCount: number;
     totalCount: number;
     failure: ProjectionMediaFailure | null;
+    retry: () => void;
   } | null;
 }
 
@@ -229,6 +232,36 @@ function ShortcutTable({
         </tbody>
       </table>
     </div>
+  );
+}
+
+function MediaQuotaPopover({
+  onRetry,
+}: {
+  onRetry: () => void;
+}): React.JSX.Element {
+  return (
+    <Popover>
+      <PopoverTrigger
+        data-testid="header-media-quota"
+        render={<Button variant="destructive" size="sm" />}
+      >
+        <HardDriveIcon />
+        {BACKGROUND_COPY.prepare.editorQuota}
+      </PopoverTrigger>
+      <PopoverContent data-testid="header-media-quota-popover" align="end">
+        <PopoverDescription>
+          {BACKGROUND_COPY.prepare.failed.quota}
+        </PopoverDescription>
+        <Button
+          data-testid="header-media-quota-retry"
+          size="sm"
+          onClick={onRetry}
+        >
+          {BACKGROUND_COPY.prepare.retry}
+        </Button>
+      </PopoverContent>
+    </Popover>
   );
 }
 
@@ -426,13 +459,7 @@ export function EditorHeader({
         )}
 
         {mediaProgress?.failure === "quota" ? (
-          <Badge
-            variant="destructive"
-            data-testid="header-media-quota"
-            title={BACKGROUND_COPY.prepare.failed.quota}
-          >
-            {BACKGROUND_COPY.prepare.editorQuota}
-          </Badge>
+          <MediaQuotaPopover onRetry={mediaProgress.retry} />
         ) : (
           mediaProgress && (
             <Badge variant="secondary" data-testid="header-media-progress">

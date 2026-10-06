@@ -162,7 +162,12 @@ describe("EditorHeader", () => {
 
   it("배경 저장 중이면 저장된 수를 보여 준다", () => {
     renderHeader({
-      mediaProgress: { readyCount: 1, totalCount: 2, failure: null },
+      mediaProgress: {
+        readyCount: 1,
+        totalCount: 2,
+        failure: null,
+        retry: vi.fn(),
+      },
     });
 
     expect(screen.getByTestId("header-media-progress")).toHaveTextContent(
@@ -171,19 +176,23 @@ describe("EditorHeader", () => {
     expect(screen.queryByTestId("header-media-quota")).not.toBeInTheDocument();
   });
 
-  it("저장 공간이 부족해 멈췄으면 진행 대신 저장 공간 부족을 알린다", () => {
+  it("저장 공간이 부족해 멈췄으면 진행 대신 저장 공간 부족을 알리고, 누르면 안내와 다시 시도를 보여 준다", async () => {
+    const retry = vi.fn();
     renderHeader({
-      mediaProgress: { readyCount: 0, totalCount: 2, failure: "quota" },
+      mediaProgress: { readyCount: 0, totalCount: 2, failure: "quota", retry },
     });
 
-    const badge = screen.getByTestId("header-media-quota");
-    expect(badge).toHaveTextContent(BACKGROUND_COPY.prepare.editorQuota);
-    expect(badge).toHaveAttribute(
-      "title",
-      BACKGROUND_COPY.prepare.failed.quota,
-    );
+    const trigger = screen.getByTestId("header-media-quota");
+    expect(trigger).toHaveTextContent(BACKGROUND_COPY.prepare.editorQuota);
     expect(
       screen.queryByTestId("header-media-progress"),
     ).not.toBeInTheDocument();
+
+    fireEvent.click(trigger);
+    const popover = await screen.findByTestId("header-media-quota-popover");
+    expect(popover).toHaveTextContent(BACKGROUND_COPY.prepare.failed.quota);
+
+    fireEvent.click(screen.getByTestId("header-media-quota-retry"));
+    expect(retry).toHaveBeenCalledTimes(1);
   });
 });

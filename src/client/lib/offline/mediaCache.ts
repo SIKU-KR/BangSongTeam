@@ -86,15 +86,20 @@ function stallWatchdog(): StallWatchdog {
   return { signal: controller.signal, poke, stop };
 }
 
+interface CountingBody {
+  body: ReadableStream<Uint8Array> | null;
+  received: () => number;
+}
+
 function countingBody(
   url: string,
   response: Response,
   watchdog: StallWatchdog,
-): ReadableStream<Uint8Array> | null {
+): CountingBody {
   const total = contentLength(response);
   let received = 0;
   reportProgress(url, { received, total });
-  return (
+  const body =
     response.body?.pipeThrough(
       new TransformStream<Uint8Array, Uint8Array>({
         start(controller) {
@@ -114,8 +119,8 @@ function countingBody(
           watchdog.poke();
         },
       }),
-    ) ?? null
-  );
+    ) ?? null;
+  return { body, received: () => received };
 }
 
 async function drain(body: ReadableStream<Uint8Array> | null): Promise<void> {
@@ -168,13 +173,12 @@ async function cacheOne(
   if (response.status !== 200) {
     throw new Error(`HTTP ${response.status}`);
   }
-  const body = countingBody(url, response, watchdog);
+  const { body, received } = countingBody(url, response, watchdog);
   if (isServiceWorkerControlled()) {
     await drain(body);
     const bytes = contentLength(response);
     if (!(await waitForCacheEntry(cache, url, bytes, watchdog))) {
-      const free = await estimateFreeBytes();
-      if (bytes !== null && free !== null && free < bytes) {
+      if (bytes !== null && received() >= bytes) {
         throw new DOMException("media cache quota", "QuotaExceededError");
       }
       throw new Error("service worker did not cache");
@@ -204,7 +208,29 @@ export type MediaCacheFailure = "quota" | "network";
 const failures = new Map<string, MediaCacheFailure>();
 
 /**
- * 이 세션에서 `url`을 마지막으로 담으려다 실패한 까닭. 성공하면 지워진다.
+ * 이 세션에서 저장 공간 부족을 겪은 URL. 담기면 지운다.
+ *
+ * `failures`는 다시 받기 시작하면 지워지지만(헤더가 '저장 중'으로 돌아가게), 이것은
+ * 남아야 한다. 송출 준비가 다시 받기 전에 `ensureMediaSpace`로 공간을 비울지 정할 때,
+ * 자동 캐시가 먼저 다시 큐에 넣었다고 근거가 사라지면 같은 한도에 또 걸린다.
+ */
+const quotaHits = new Set<string>();
+
+function recordFailure(url: string, err: unknown): void {
+  const quota = isQuotaExceededError(err);
+  failures.set(url, quota ? "quota" : "network");
+  if (quota) quotaHits.add(url);
+}
+
+function recordCached(url: string): void {
+  knownCached.add(url);
+  failures.delete(url);
+  quotaHits.delete(url);
+}
+
+/**
+ * 이 세션에서 `url`을 마지막으로 담으려다 실패한 까닭. 다시 받기 시작하거나(큐에 다시
+ * 넣는 것 포함) 성공하면 지워진다.
  *
  * `cacheMediaFirst`는 담겼는지만 알리는 boolean을 그대로 두고(`useCacheFirstVideo`가
  * 그 계약에 기댄다), 까닭은 여기서 따로 읽는다. 백그라운드 큐가 받다 실패한 것도 남으므로
@@ -214,10 +240,6 @@ export function getMediaCacheFailure(
   url: string,
 ): MediaCacheFailure | undefined {
   return failures.get(url);
-}
-
-function hasQuotaFailure(): boolean {
-  return [...failures.values()].includes("quota");
 }
 
 /**
@@ -236,8 +258,9 @@ function hasQuotaFailure(): boolean {
  *
  * 실패한 URL은 던지지 않고 건너뛰되, 저장 공간 부족(`QuotaExceededError`)인지 다른
  * 실패인지를 `getMediaCacheFailure`로 남긴다. SW가 담을 때는 SW 안에서 난 오류가 페이지에
- * 오지 않으므로, SW가 끝내 담지 않았고 남은 용량이 파일보다 작으면 공간 부족으로 본다.
- * 브라우저가 용량을 알려 주지 않으면 이 경우도 `network`로 남는다.
+ * 오지 않는다. 그래서 응답 길이만큼 본문이 다 왔는데도 SW가 끝내 담지 않았으면 공간 부족으로
+ * 본다. 받기는 끝났으니 남은 까닭은 쓰기 실패이고, Safari처럼 `navigator.storage.estimate()`로
+ * 남은 용량을 알 수 없는 브라우저에서도 이렇게 가려진다.
  */
 export async function cacheMediaUrls(
   urls: readonly string[],
@@ -251,14 +274,14 @@ export async function cacheMediaUrls(
   for (const url of urls) {
     const watchdog = stallWatchdog();
     watchdog.poke();
+    failures.delete(url);
     try {
       if (await Promise.race([cacheOne(url, watchdog), aborted(watchdog)])) {
-        knownCached.add(url);
-        failures.delete(url);
+        recordCached(url);
         cachedUrls.push(url);
       }
     } catch (err) {
-      failures.set(url, isQuotaExceededError(err) ? "quota" : "network");
+      recordFailure(url, err);
     } finally {
       watchdog.stop();
     }
@@ -323,6 +346,7 @@ export function scheduleMediaCaching(
   options: { priority?: boolean } = {},
 ): void {
   if (urls.length === 0 || !canCacheInBackground()) return;
+  for (const url of urls) failures.delete(url);
   if (options.priority) {
     const rest = [...pending].filter((url) => !urls.includes(url));
     pending.clear();
@@ -380,8 +404,7 @@ export async function findCachedMediaUrls(
     try {
       const cache = await caches.open(mediaCacheNameFor(url));
       if (await cache.match(url)) {
-        knownCached.add(url);
-        failures.delete(url);
+        recordCached(url);
         cached.push(url);
       }
     } catch {
@@ -417,9 +440,11 @@ function pathOf(url: string): string {
  * 순서(`cache.keys()` 순서)로 지운다. 배경 교체로 목록에서 사라진 영상도 이렇게
  * 정리된다. 지우다가 Cache Storage가 실패하면 던지지 않고 자리가 없다고 본다.
  *
- * Safari·iOS처럼 브라우저가 용량을 알려 주지 않거나, 이 세션에서 이미 저장 공간 부족을
- * 겪어 알려 준 용량을 믿을 수 없으면 미디어에 `UNKNOWN_QUOTA_MEDIA_BUDGET_BYTES`만
- * 쓸 수 있다고 보고 세트 밖 영상을 미리 지운다. 그런 브라우저의 오리진 한도가 수백 MB라
+ * Safari·iOS처럼 브라우저가 용량을 알려 주지 않거나, 이 세션에서 `keepUrls`의 영상이
+ * 이미 저장 공간 부족을 겪어 알려 준 용량을 믿을 수 없으면 미디어에
+ * `UNKNOWN_QUOTA_MEDIA_BUDGET_BYTES`만 쓸 수 있다고 보고 세트 밖 영상을 미리 지운다.
+ * 다른 세트나 세트에서 빠진 영상이 겪은 부족은 따지지 않는다. 따지면 한 번의 부족으로
+ * 세션 내내 다른 세트의 오프라인 배경까지 지운다. 그런 브라우저의 오리진 한도가 수백 MB라
  * 그냥 받으면 받는 도중에 한도에 걸린다. 이 예산은 짐작일 뿐이므로 지운 뒤에는 늘 true로
  * 두고 실제 받기에 맡긴다. 그래도 모자라면 `getMediaCacheFailure`가 `quota`를 알린다.
  */
@@ -427,7 +452,8 @@ export async function ensureMediaSpace(
   neededBytes: number,
   keepUrls: readonly string[],
 ): Promise<boolean> {
-  const reported = hasQuotaFailure() ? null : await estimateFreeBytes();
+  const distrust = keepUrls.some((url) => quotaHits.has(url));
+  const reported = distrust ? null : await estimateFreeBytes();
   if (reported !== null && reported >= neededBytes) return true;
   if (!isCacheStorageAvailable()) return reported === null;
 
@@ -472,6 +498,7 @@ export function __resetMediaCachingForTests(): void {
   inFlight.clear();
   knownCached.clear();
   failures.clear();
+  quotaHits.clear();
   progress.clear();
   progressVersion = 0;
   draining = null;

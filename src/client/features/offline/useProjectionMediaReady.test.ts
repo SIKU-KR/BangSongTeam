@@ -226,4 +226,24 @@ describe("useProjectionMediaReady", () => {
     await waitFor(() => expect(result.current.status).toBe("ready"));
     expect(result.current.failure).toBeNull();
   });
+
+  it("passive에서 다시 시도하면 빠진 영상을 다시 받아 저장 공간 부족을 푼다", async () => {
+    mockFetch();
+    const put = await rejectPutWithQuota();
+    expect(await cacheMediaFirst(FIRST.mediaUrl)).toBe(false);
+
+    const { result } = renderHook(() =>
+      useProjectionMediaReady(PRESENTATION, { passive: true }),
+    );
+    await waitFor(() => expect(result.current.failure).toBe("quota"));
+
+    put.mockRestore();
+    act(() => result.current.retry());
+
+    await waitFor(() => expect(result.current.status).toBe("downloading"));
+    await waitFor(() => expect(result.current.status).toBe("ready"), {
+      timeout: PASSIVE_RECHECK_MS * 2,
+    });
+    expect(result.current.failure).toBeNull();
+  });
 });
