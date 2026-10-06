@@ -30,7 +30,7 @@ export const API_ERRORS = {
     alreadyPending: "이미 보낸 신고를 확인하고 있어요",
   },
   media: {
-    keyRequired: "열 배경 파일을 지정해 주세요",
+    keyRequired: "배경 파일을 지정해 주세요",
     notFound: "배경 파일을 찾을 수 없어요",
   },
   share: {
