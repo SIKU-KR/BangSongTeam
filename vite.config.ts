@@ -32,9 +32,16 @@ import { APP_NAME, APP_TAGLINE } from "./src/shared/copy/app";
  *   직접 써 넣는 캐시와 같아야 하므로, 이름과 경로를 공용 상수에서 가져온다.
  * - `clientsClaim`: 처음 설치된 SW가 곧바로 지금 페이지를 제어해 첫 방문에도 배경
  *   영상을 캐시본으로 재생한다. 갱신은 `prompt`라 사용자가 새로고침할 때만 SW가 바뀐다.
+ * - `VITE_APP_VERSION`: 클라이언트 실패 보고에 실을 앱 버전. CI 빌드는 커밋 SHA 앞 7자리,
+ *   그 밖에서는 `dev`다.
  */
 const appConfig: UserConfig = {
   publicDir: "src/client/public",
+  define: {
+    "import.meta.env.VITE_APP_VERSION": JSON.stringify(
+      process.env.GITHUB_SHA?.slice(0, 7) ?? "dev",
+    ),
+  },
   plugins: [
     react(),
     tailwindcss(),
@@ -347,6 +354,10 @@ async function createTestConfig(): Promise<
 
   const { test } = defineVitestConfig({
     test: {
+      // Worker가 요청마다 남기는 구조화 로그(`requestLog`)가 테스트 출력을 덮지 않게
+      // 성공 요청 줄만 숨긴다. 5xx 줄은 console.error라 그대로 보인다.
+      onConsoleLog: (log, type) =>
+        !(type === "stdout" && log.includes("event: 'request'")),
       projects: [
         workerProject,
         clientProject,

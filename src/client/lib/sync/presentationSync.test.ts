@@ -47,6 +47,11 @@ import {
   rememberServerDocuments,
 } from "./presentationSync";
 import { getSyncSnapshot, resetSyncStatus, setSyncStatus } from "./syncStatus";
+import { rememberRequestMeta } from "../api/traceContext";
+import {
+  __resetClientReportsForTests,
+  flushClientReports,
+} from "../observability/clientReports";
 
 const USER = "00000000x000000000001";
 const DOC_ID = "100000000000000000001";
@@ -197,6 +202,61 @@ describe("세트 변경분 push", () => {
 
     expect(await pushPresentation(broken)).toBe(false);
     expect(api.patch).not.toHaveBeenCalled();
+  });
+});
+
+describe("동기화 실패 보고", () => {
+  const ROUTE = "/api/presentations/:id";
+  const sendBeacon = vi.fn<(url: string, data: Blob) => boolean>(() => true);
+
+  async function flushedReports(): Promise<unknown[]> {
+    flushClientReports();
+    const blob = sendBeacon.mock.calls.at(-1)?.[1];
+    if (!blob) return [];
+    return (JSON.parse(await blob.text()) as { reports: unknown[] }).reports;
+  }
+
+  beforeEach(() => {
+    __resetServerDecksForTests();
+    __resetClientReportsForTests();
+    sendBeacon.mockClear();
+    Object.defineProperty(navigator, "sendBeacon", {
+      value: sendBeacon,
+      configurable: true,
+    });
+    api.patch.mockReset();
+  });
+
+  it("5xx는 상관 ID와 경로 패턴으로 보고에 담는다", async () => {
+    const response = respond(503);
+    rememberRequestMeta(response, { requestId: "a".repeat(32), route: ROUTE });
+    api.patch.mockResolvedValueOnce(response);
+
+    await expect(pushPresentation(makeSet())).rejects.toThrow();
+
+    expect(await flushedReports()).toEqual([
+      expect.objectContaining({
+        kind: "server_error",
+        route: ROUTE,
+        requestId: "a".repeat(32),
+      }),
+    ]);
+  });
+
+  it("서버에 닿지 못한 요청도 담고, 다시 보내면 되는 409는 담지 않는다", async () => {
+    const network = new TypeError("Failed to fetch");
+    rememberRequestMeta(network, { requestId: "b".repeat(32), route: ROUTE });
+    api.patch
+      .mockResolvedValueOnce(respond(409))
+      .mockResolvedValueOnce(respond(200))
+      .mockRejectedValueOnce(network);
+
+    await pushPresentation(makeSet());
+    await expect(pushPresentation(makeSet())).rejects.toThrow();
+
+    expect(await flushedReports()).toEqual([
+      expect.objectContaining({ kind: "unreachable", route: ROUTE }),
+    ]);
   });
 });
 

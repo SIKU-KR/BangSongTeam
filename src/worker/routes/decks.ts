@@ -13,6 +13,7 @@ import {
 import type { AppEnv } from "../types";
 import { resolveRequireAuth, type AppDeps } from "../deps";
 import { isTransientStorageError } from "../lib/storageErrors";
+import { logServerError } from "../lib/requestLog";
 
 /**
  * 곡 보관함(scope: 'library') 동기화 API.
@@ -48,7 +49,7 @@ export function createDecksRoute(deps: AppDeps = {}) {
           return c.json({ error: API_ERRORS.deck.notAccessible }, 403);
         }
       } catch (error) {
-        console.error("deck upsert failed", { deckId: deck.id, error });
+        logServerError(c, "deck upsert failed", error, { deckId: deck.id });
         if (isTransientStorageError(error)) {
           c.header("Retry-After", "2");
           return c.json({ error: API_ERRORS.deck.saveFailed }, 503);

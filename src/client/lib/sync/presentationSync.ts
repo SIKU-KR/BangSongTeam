@@ -19,7 +19,25 @@ import {
   OfflineError,
   ServerRejectedError,
 } from "../api/request";
+import { reportApiFailure } from "../observability/clientReports";
 import { setSyncStatus, type SyncStatus } from "./syncStatus";
+
+/**
+ * 동기화 요청 1건을 보낸다. 실패하면 실패 보고(`reportApiFailure`)에 담고 그대로 던진다.
+ *
+ * 프레젠테이션·곡·폴더 큐와 부팅 동기화는 모두 이 모듈의 함수로 서버와 통신하므로, 여기 한
+ * 곳에서 담으면 동기화 실패가 빠짐없이 모인다. 분류(재시도·영구 실패)는 호출자 몫이다.
+ */
+async function callSyncApi<T>(
+  request: Parameters<typeof callApi>[0],
+): Promise<T> {
+  try {
+    return await callApi<T>(request);
+  } catch (err) {
+    reportApiFailure(err);
+    throw err;
+  }
+}
 
 /**
  * 프레젠테이션을 서버가 받을 수 있는 문서로 좁힌다.
@@ -88,7 +106,7 @@ export function __resetServerDecksForTests(): void {
 }
 
 async function sendChanges(changes: PresentationChanges): Promise<void> {
-  await callApi(() =>
+  await callSyncApi(() =>
     api.api.presentations[":id"].$patch({
       param: { id: changes.id },
       json: changes,
@@ -156,7 +174,7 @@ export async function refreshSharedPresentation(id: string): Promise<void> {
     if (generation === sharedRefreshGeneration) setSyncStatus("shared", status);
   };
   try {
-    const body = await callApi<{ presentation: unknown }>(() =>
+    const body = await callSyncApi<{ presentation: unknown }>(() =>
       api.api.presentations[":id"].$get({ param: { id } }),
     );
     sharedListener?.replaced(
@@ -185,8 +203,8 @@ export function endSharedPresentationRefresh(): void {
 }
 
 export async function pullPresentations(): Promise<PresentationDocument[]> {
-  const body = await callApi<{ presentations: PresentationDocument[] }>(() =>
-    api.api.presentations.$get(),
+  const body = await callSyncApi<{ presentations: PresentationDocument[] }>(
+    () => api.api.presentations.$get(),
   );
   return body.presentations;
 }
@@ -198,7 +216,7 @@ export async function pullPresentations(): Promise<PresentationDocument[]> {
  * 로컬에 반영해야 한다.
  */
 export async function pushDeck(deck: Deck): Promise<Deck> {
-  const body = await callApi<{ deck: Deck }>(() =>
+  const body = await callSyncApi<{ deck: Deck }>(() =>
     api.api.decks[":id"].$put({ param: { id: deck.id }, json: deck }),
   );
   return DeckSchema.parse(body.deck);
@@ -207,7 +225,7 @@ export async function pushDeck(deck: Deck): Promise<Deck> {
 /** 이미 없으면(404) 성공으로 본다 */
 export async function deleteDeckRemote(id: string): Promise<void> {
   try {
-    await callApi(() => api.api.decks[":id"].$delete({ param: { id } }));
+    await callSyncApi(() => api.api.decks[":id"].$delete({ param: { id } }));
   } catch (err) {
     if (err instanceof ServerRejectedError && err.status === 404) return;
     throw err;
@@ -215,14 +233,14 @@ export async function deleteDeckRemote(id: string): Promise<void> {
 }
 
 export async function pullDecks(): Promise<Deck[]> {
-  const body = await callApi<{ decks: Deck[] }>(() => api.api.decks.$get());
+  const body = await callSyncApi<{ decks: Deck[] }>(() => api.api.decks.$get());
   return body.decks;
 }
 
 /** 이미 없으면(404 — 한 번도 안 올라간 문서) 성공으로 본다 */
 export async function deletePresentationRemote(id: string): Promise<void> {
   try {
-    await callApi(() =>
+    await callSyncApi(() =>
       api.api.presentations[":id"].$delete({ param: { id } }),
     );
   } catch (err) {
@@ -232,7 +250,7 @@ export async function deletePresentationRemote(id: string): Promise<void> {
 }
 
 export async function pullFolders(): Promise<FolderListResponse> {
-  return callApi<FolderListResponse>(() => api.api.folders.$get());
+  return callSyncApi<FolderListResponse>(() => api.api.folders.$get());
 }
 
 /**
@@ -240,7 +258,7 @@ export async function pullFolders(): Promise<FolderListResponse> {
  * 서버는 없는 부모·사이클을 루트로 보정하므로 호출자는 응답을 반영해야 한다.
  */
 export async function pushFolder(folder: Folder): Promise<Folder> {
-  const body = await callApi<{ folder: Folder }>(() =>
+  const body = await callSyncApi<{ folder: Folder }>(() =>
     api.api.folders[":id"].$put({ param: { id: folder.id }, json: folder }),
   );
   return FolderSchema.parse(body.folder);
@@ -254,7 +272,7 @@ export async function deleteFolderRemote(
   id: string,
 ): Promise<FolderDeleteResponse> {
   try {
-    const body = await callApi<unknown>(() =>
+    const body = await callSyncApi<unknown>(() =>
       api.api.folders[":id"].$delete({ param: { id } }),
     );
     return FolderDeleteResponseSchema.parse(body);

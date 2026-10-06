@@ -16,6 +16,8 @@ export interface Bindings {
 
 export interface Variables {
   userId?: string;
+  /** 요청 상관 ID. `requestLog` 미들웨어가 정하고 응답의 `x-request-id`로도 내보낸다 */
+  requestId?: string;
 }
 
 export interface AppEnv {

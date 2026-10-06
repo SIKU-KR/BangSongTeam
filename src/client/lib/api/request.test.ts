@@ -5,6 +5,7 @@ import {
   isRetryableApiError,
   OfflineError,
   parseRetryAfter,
+  requestIdOfError,
   ServerRejectedError,
   SessionExpiredError,
   TimeoutError,
@@ -16,6 +17,7 @@ import {
   markServerReachable,
   markServerUnreachable,
 } from "./connectivity";
+import { rememberRequestMeta } from "./traceContext";
 
 describe("request", () => {
   describe("callApi", () => {
@@ -348,5 +350,70 @@ describe("callApi with Retry-After", () => {
       status: 503,
       retryAfterMs: 5000,
     });
+  });
+});
+
+describe("callApi 상관 ID", () => {
+  const meta = {
+    requestId: "4bf92f3577b34da6a3ce929d0e0e4736",
+    route: "/api/presentations/:id",
+  };
+
+  it("서버가 거절하면 응답의 상관 ID와 경로 패턴을 오류에 싣는다", async () => {
+    const response = {
+      status: 500,
+      ok: false,
+      json: async () => ({ error: "x" }),
+    };
+    rememberRequestMeta(response, meta);
+
+    const err = await callApi(async () => response).catch((e: unknown) => e);
+
+    expect(err).toBeInstanceOf(ServerRejectedError);
+    expect(err).toMatchObject(meta);
+    expect(requestIdOfError(err)).toBe(meta.requestId);
+  });
+
+  it("타임아웃·네트워크 실패도 던진 오류의 상관 ID를 싣는다", async () => {
+    const timeout = new DOMException("timed out", "TimeoutError");
+    const network = new TypeError("Failed to fetch");
+    rememberRequestMeta(timeout, meta);
+    rememberRequestMeta(network, meta);
+
+    const timedOut = await callApi(async () => {
+      throw timeout;
+    }).catch((e: unknown) => e);
+    const unreachable = await callApi(async () => {
+      throw network;
+    }).catch((e: unknown) => e);
+
+    expect(timedOut).toBeInstanceOf(TimeoutError);
+    expect(timedOut).toMatchObject(meta);
+    expect(unreachable).toBeInstanceOf(OfflineError);
+    expect(unreachable).toMatchObject(meta);
+  });
+
+  it("본문을 받다 끊기면 응답의 상관 ID를 싣는다", async () => {
+    const response = {
+      status: 200,
+      ok: true,
+      json: async () => {
+        throw new TypeError("network error");
+      },
+    };
+    rememberRequestMeta(response, meta);
+
+    await expect(callApi(async () => response)).rejects.toMatchObject(meta);
+  });
+
+  it("상관 ID를 모르는 응답이나 다른 오류에는 싣지 않는다", async () => {
+    const err = await callApi(async () => ({
+      status: 503,
+      ok: false,
+      json: async () => ({}),
+    })).catch((e: unknown) => e);
+
+    expect(requestIdOfError(err)).toBeUndefined();
+    expect(requestIdOfError(new Error("x"))).toBeUndefined();
   });
 });

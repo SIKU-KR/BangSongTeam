@@ -33,6 +33,7 @@ import {
 } from "./presentationSync";
 import {
   isRetryableApiError,
+  requestIdOfError,
   OfflineError,
   ServerRejectedError,
   SessionExpiredError,
@@ -411,6 +412,7 @@ async function pushLatestEach<T extends { id: string }>(
           status: err instanceof ServerRejectedError ? err.status : undefined,
           message: err instanceof Error ? err.message : String(err),
           failedAt: Date.now(),
+          requestId: requestIdOfError(err),
         });
       }
     }

@@ -21,6 +21,10 @@ import {
   __setMediaRetryRandomForTests,
   __waitForMediaCachingForTests,
 } from "./mediaCache";
+import {
+  __resetClientReportsForTests,
+  flushClientReports,
+} from "../observability/clientReports";
 
 const VIDEO = "/api/media/loops/warm_light_flow.mp4";
 const POSTER = "/api/media/posters/warm_light_flow.webp";
@@ -118,7 +122,11 @@ describe("cacheMediaFirst", () => {
 
     const init = (fetchMock.mock.calls[0] as unknown[])[1] as
       RequestInit | undefined;
-    expect(init?.headers).toBeUndefined();
+    const headers = new Headers(init?.headers);
+    expect(headers.has("range")).toBe(false);
+    expect(headers.get("traceparent")).toMatch(
+      /^00-[0-9a-f]{32}-[0-9a-f]{16}-01$/,
+    );
     expect(init?.mode).toBeUndefined();
   });
 
@@ -1134,5 +1142,105 @@ describe("백그라운드 재시도", () => {
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(getMediaQueueState(VIDEO)).toBe("retrying");
+  });
+});
+
+describe("받기 실패 보고", () => {
+  const sendBeacon = vi.fn<(url: string, data: Blob) => boolean>(() => true);
+
+  async function flushedReports(): Promise<Array<Record<string, unknown>>> {
+    flushClientReports();
+    const blob = sendBeacon.mock.calls.at(-1)?.[1];
+    if (!blob) return [];
+    return (
+      JSON.parse(await blob.text()) as {
+        reports: Array<Record<string, unknown>>;
+      }
+    ).reports;
+  }
+
+  function traceIdOf(init: RequestInit | undefined): string | undefined {
+    return new Headers(init?.headers).get("traceparent")?.split("-")[1];
+  }
+
+  beforeEach(() => {
+    __resetClientReportsForTests();
+    sendBeacon.mockClear();
+    Object.defineProperty(navigator, "sendBeacon", {
+      value: sendBeacon,
+      configurable: true,
+    });
+  });
+
+  afterEach(() => {
+    // @ts-expect-error 테스트에서 주입한 sendBeacon을 되돌린다
+    delete navigator.sendBeacon;
+  });
+
+  it("진전 없이 끊긴 받기는 그 요청의 상관 ID로 stalled를 담는다", async () => {
+    vi.useFakeTimers();
+    let init: RequestInit | undefined;
+    globalThis.fetch = vi.fn(
+      (_input: RequestInfo | URL, requestInit?: RequestInit) =>
+        new Promise<Response>((_resolve, reject) => {
+          init = requestInit;
+          const signal = requestInit?.signal;
+          signal?.addEventListener("abort", () => reject(signal.reason));
+        }),
+    ) as unknown as typeof fetch;
+
+    const result = cacheMediaFirst(VIDEO);
+    await vi.advanceTimersByTimeAsync(MEDIA_STALL_TIMEOUT_MS);
+    expect(await result).toBe(false);
+
+    expect(await flushedReports()).toEqual([
+      {
+        requestId: traceIdOf(init),
+        kind: "stalled",
+        route: "/api/media/*",
+        online: true,
+        swControlled: false,
+      },
+    ]);
+  });
+
+  it("5xx와 닿지 못한 받기를 담는다", async () => {
+    const calls: Array<RequestInit | undefined> = [];
+    globalThis.fetch = vi.fn(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        calls.push(init);
+        if (String(input) === VIDEO) return new Response(null, { status: 503 });
+        throw new TypeError("Failed to fetch");
+      },
+    ) as unknown as typeof fetch;
+
+    await cacheAll([VIDEO, OTHER]);
+
+    expect(await flushedReports()).toEqual([
+      expect.objectContaining({
+        kind: "server_error",
+        route: "/api/media/*",
+        requestId: traceIdOf(calls[0]),
+      }),
+      expect.objectContaining({
+        kind: "unreachable",
+        route: "/api/media/*",
+        requestId: traceIdOf(calls[1]),
+      }),
+    ]);
+  });
+
+  it("저장 공간 부족과 4xx는 담지 않는다", async () => {
+    mockFetch(async (url) =>
+      url === VIDEO ? new Response(null, { status: 404 }) : okResponse(),
+    );
+    const cache = await caches.open(mediaCacheNameFor(OTHER));
+    vi.spyOn(caches, "open").mockResolvedValue(cache);
+    vi.spyOn(cache, "put").mockRejectedValueOnce(quotaError());
+
+    await cacheAll([VIDEO, OTHER]);
+
+    expect(getMediaCacheFailure(OTHER)).toBe("quota");
+    expect(await flushedReports()).toEqual([]);
   });
 });

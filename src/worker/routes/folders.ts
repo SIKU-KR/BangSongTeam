@@ -11,6 +11,7 @@ import {
 import type { AppEnv } from "../types";
 import { resolveRequireAuth, type AppDeps } from "../deps";
 import { isTransientStorageError } from "../lib/storageErrors";
+import { logServerError } from "../lib/requestLog";
 
 /**
  * 드라이브 폴더 동기화 API (홈 `/presentations`의 폴더 트리).
@@ -48,7 +49,9 @@ export function createFoldersRoute(deps: AppDeps = {}) {
           return c.json({ error: API_ERRORS.folder.notAccessible }, 403);
         }
       } catch (error) {
-        console.error("folder upsert failed", { folderId: folder.id, error });
+        logServerError(c, "folder upsert failed", error, {
+          folderId: folder.id,
+        });
         if (isTransientStorageError(error)) {
           c.header("Retry-After", "2");
           return c.json({ error: API_ERRORS.folder.saveFailed }, 503);

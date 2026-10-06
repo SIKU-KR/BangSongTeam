@@ -24,6 +24,8 @@ export interface SyncFailure {
   status?: number;
   message: string;
   failedAt: number;
+  /** 마지막으로 실패한 요청의 상관 ID. 에디터가 '문의 코드'로 보여 주고 Worker 로그에서 찾는다 */
+  requestId?: string;
 }
 
 export interface SyncSnapshot {

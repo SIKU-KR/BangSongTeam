@@ -1,5 +1,6 @@
 import { ERROR_COPY } from "#copy/common";
 import { markServerReachable, markServerUnreachable } from "./connectivity";
+import { requestMetaOf, type RequestMeta } from "./traceContext";
 
 /** 서버가 세션을 거절했다 (만료·로그아웃) */
 export class SessionExpiredError extends Error {
@@ -9,19 +10,26 @@ export class SessionExpiredError extends Error {
   }
 }
 
-/** 네트워크에 닿지 못했다 — 실패가 아니라 오프라인이다 */
+/**
+ * 네트워크에 닿지 못했다 — 실패가 아니라 오프라인이다.
+ * `requestId`·`route`는 그 요청의 상관 ID와 경로 패턴이다 (실패 보고·문의 코드용).
+ */
 export class OfflineError extends Error {
-  constructor(cause?: unknown) {
+  readonly requestId?: string;
+  readonly route?: string;
+  constructor(cause?: unknown, meta?: RequestMeta) {
     super(ERROR_COPY.serverUnreachable);
     this.name = "OfflineError";
     this.cause = cause;
+    this.requestId = meta?.requestId;
+    this.route = meta?.route;
   }
 }
 
 /** 요청이 데드라인 안에 끝나지 않았다 — 실패가 아니라 오프라인(재시도 대상)이다 */
 export class TimeoutError extends OfflineError {
-  constructor(cause?: unknown) {
-    super(cause);
+  constructor(cause?: unknown, meta?: RequestMeta) {
+    super(cause, meta);
     this.name = "TimeoutError";
   }
 }
@@ -33,12 +41,32 @@ export class TimeoutError extends OfflineError {
 export class ServerRejectedError extends Error {
   readonly status: number;
   readonly retryAfterMs?: number;
-  constructor(status: number, message?: string, retryAfterMs?: number) {
+  readonly requestId?: string;
+  readonly route?: string;
+  constructor(
+    status: number,
+    message?: string,
+    retryAfterMs?: number,
+    meta?: RequestMeta,
+  ) {
     super(message ?? ERROR_COPY.serverRejected(status));
     this.name = "ServerRejectedError";
     this.status = status;
     this.retryAfterMs = retryAfterMs;
+    this.requestId = meta?.requestId;
+    this.route = meta?.route;
   }
+}
+
+/**
+ * 실패한 요청의 상관 ID. 동기화 실패 기록에 실어 화면에 '문의 코드'로 보여 주고,
+ * Worker 로그에서 같은 값으로 찾는다. 요청까지 가지 못한 오류면 없다.
+ */
+export function requestIdOfError(err: unknown): string | undefined {
+  if (err instanceof OfflineError || err instanceof ServerRejectedError) {
+    return err.requestId;
+  }
+  return undefined;
 }
 
 /**
@@ -136,10 +164,12 @@ export async function callApi<T>(
   } catch (err) {
     if (isCallerAbort(err) && !isTimeoutError(err)) throw err;
     markServerUnreachable();
-    if (isTimeoutError(err)) throw new TimeoutError(err);
-    throw new OfflineError(err);
+    const meta = requestMetaOf(err);
+    if (isTimeoutError(err)) throw new TimeoutError(err, meta);
+    throw new OfflineError(err, meta);
   }
   markServerReachable();
+  const meta = requestMetaOf(response);
 
   if (response.status === 401) throw new SessionExpiredError();
   if (!response.ok) {
@@ -150,14 +180,14 @@ export async function callApi<T>(
     } catch (error) {
       if (isTimeoutError(error)) {
         markServerUnreachable();
-        throw new TimeoutError(error);
+        throw new TimeoutError(error, meta);
       }
       if (isCallerAbort(error)) throw error;
       void error;
     }
     const retryAfter = response.headers?.get("retry-after");
     const retryAfterMs = parseRetryAfter(retryAfter) ?? undefined;
-    throw new ServerRejectedError(response.status, message, retryAfterMs);
+    throw new ServerRejectedError(response.status, message, retryAfterMs, meta);
   }
 
   try {
@@ -165,8 +195,8 @@ export async function callApi<T>(
   } catch (err) {
     if (isCallerAbort(err) && !isTimeoutError(err)) throw err;
     markServerUnreachable();
-    if (isTimeoutError(err)) throw new TimeoutError(err);
-    throw new OfflineError(err);
+    if (isTimeoutError(err)) throw new TimeoutError(err, meta);
+    throw new OfflineError(err, meta);
   }
 }
 

@@ -377,6 +377,41 @@ describe("EditorHeader", () => {
       expect(screen.getByTestId("save-status-retry")).toBeInTheDocument();
     });
 
+    it("동기화 실패의 상관 ID를 툴팁에 문의 코드로 보여 준다", async () => {
+      recordSyncFailure({
+        id: "doc",
+        kind: "presentation",
+        status: 500,
+        message: "거절",
+        failedAt: 1,
+        requestId: "4bf92f3577b34da6a3ce929d0e0e4736",
+      });
+      renderHeader();
+
+      act(() => screen.getByTestId("save-status").focus());
+
+      expect(
+        await screen.findByTestId("save-status-failure-code"),
+      ).toHaveTextContent(EDITOR_COPY.syncStatus.failureCode("4bf92f35"));
+    });
+
+    it("상관 ID가 없거나 실패 상태가 아니면 문의 코드를 보여 주지 않는다", async () => {
+      recordSyncFailure({
+        id: "doc",
+        kind: "presentation",
+        message: "거절",
+        failedAt: 1,
+      });
+      renderHeader();
+
+      act(() => screen.getByTestId("save-status").focus());
+
+      expect(await screen.findByTestId("save-status-detail")).toBeVisible();
+      expect(
+        screen.queryByTestId("save-status-failure-code"),
+      ).not.toBeInTheDocument();
+    });
+
     it("기기 저장이 실패했으면 동기화 다시 시도를 보여 주지 않는다", () => {
       setSyncStatus("presentation", "offline");
       reportPersistenceError(new Error("disk"));

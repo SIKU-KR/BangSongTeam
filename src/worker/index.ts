@@ -11,19 +11,24 @@ import { createReportsRoute } from "./routes/reports";
 import { createShareRoute } from "./routes/share";
 import { authConfigRoute } from "./routes/authConfig";
 import { createConsentRoute } from "./routes/consent";
+import { createClientReportsRoute } from "./routes/clientReports";
 import type { AppDeps } from "./deps";
 import { isTransientStorageError } from "./lib/storageErrors";
+import { requestLog } from "./middleware/requestLog";
+import { CLIENT_REPORTS_PATH } from "#shared";
 
 /**
  * Worker 앱을 조립한다.
  *
  * 테스트는 `createApp({ readSession })`으로 세션만 바꿔 실제 라우트를 그대로
  * 검증한다. 프로덕션은 기본 의존성으로 만든 `app`을 쓴다.
+ *
+ * 모든 요청은 `requestLog`가 상관 ID와 함께 구조화 로그 한 줄로 남긴다. 처리되지 않은
+ * 예외도 그 줄에 원인과 함께 실리므로 `onError`는 따로 로그를 남기지 않는다.
  */
 export function createApp(deps: AppDeps = {}) {
   return new Hono<AppEnv>()
     .onError((err, c) => {
-      console.error("Worker Error:", err);
       if (isTransientStorageError(err)) {
         c.header("Retry-After", "2");
         return c.json(
@@ -48,6 +53,7 @@ export function createApp(deps: AppDeps = {}) {
         404,
       );
     })
+    .use("*", requestLog())
     .get("/api/health", (c) => {
       c.header("Cache-Control", "no-store");
       return c.json({ status: "ok" as const }, 200);
@@ -64,7 +70,8 @@ export function createApp(deps: AppDeps = {}) {
     .route("/api/reports", createReportsRoute(deps))
     .route("/api/share", createShareRoute(deps))
     .route("/api/backgrounds", createBackgroundsRoute(deps))
-    .route("/api/media", mediaRoute);
+    .route("/api/media", mediaRoute)
+    .route(CLIENT_REPORTS_PATH, createClientReportsRoute(deps));
 }
 
 export type AppType = ReturnType<typeof createApp>;
