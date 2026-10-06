@@ -465,16 +465,30 @@ describe("scheduleMediaCaching", () => {
     expect(await isCached(VIDEO)).toBe(true);
   });
 
-  it("이 세션에서 담긴 것을 확인한 URL은 다시 넣어도 캐시에 있으면 다시 받지 않는다", async () => {
+  it("이 세션에서 담긴 것을 확인한 영상은 다시 큐에 넣지 않는다", async () => {
     mockFetch();
     await cacheMediaUrls([VIDEO]);
     const fetchMock = mockFetch();
+    const open = vi.spyOn(caches, "open");
 
     scheduleMediaCaching([VIDEO]);
+    expect(getMediaQueueState(VIDEO)).toBeNull();
+    await __waitForMediaCachingForTests();
+
+    expect(open).not.toHaveBeenCalled();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("이 세션에서 담긴 것을 확인한 포스터는 다시 넣어도 캐시에 있으면 다시 받지 않는다", async () => {
+    mockFetch();
+    await cacheMediaUrls([POSTER]);
+    const fetchMock = mockFetch();
+
+    scheduleMediaCaching([POSTER]);
     await __waitForMediaCachingForTests();
 
     expect(fetchMock).not.toHaveBeenCalled();
-    expect(getMediaQueueState(VIDEO)).toBeNull();
+    expect(getMediaQueueState(POSTER)).toBeNull();
   });
 
   it("처음 시작할 때 한 번만 영구 저장소를 요청한다", async () => {
@@ -619,6 +633,20 @@ describe("ensureMediaSpace", () => {
     expect(await ensureMediaSpace(500, [VIDEO])).toBe(true);
     expect(await isCached(OTHER)).toBe(false);
     expect(await isCached(VIDEO)).toBe(true);
+  });
+
+  it("지운 영상은 다시 큐에 넣으면 다시 받는다", async () => {
+    mockFetch(async () => okResponse(400));
+    await cacheMediaUrls([OTHER, VIDEO]);
+    mockEstimate(1000, 800);
+    await ensureMediaSpace(500, [VIDEO]);
+    const fetchMock = mockFetch();
+
+    scheduleMediaCaching([OTHER]);
+    await __waitForMediaCachingForTests();
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(await isCached(OTHER)).toBe(true);
   });
 
   it("세트 밖 영상을 모두 지워도 모자라면 false다", async () => {
@@ -965,7 +993,7 @@ describe("백그라운드 재시도", () => {
     expect(await isCached(VIDEO)).toBe(true);
   });
 
-  it("담긴 것을 확인한 URL도 캐시에서 사라졌으면 다시 넣을 때 다시 받는다", async () => {
+  it("담긴 것을 확인한 포스터도 캐시에서 사라졌으면 다시 넣을 때 다시 받는다", async () => {
     const fetchMock = mockFetch();
     scheduleMediaCaching([POSTER]);
     await settle();

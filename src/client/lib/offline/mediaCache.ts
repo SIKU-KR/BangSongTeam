@@ -434,8 +434,11 @@ function canCacheInBackground(): boolean {
  *
  * 받고 있는 URL과 재시도를 기다리는 URL은 넣지 않는다. 송출 중 곡이 바뀔 때마다 불려도
  * 백오프 간격이 줄지 않아야, SW가 아직 받고 있을 수 있는 파일을 겹쳐 받지 않는다. 받다가
- * 실패한 URL도 큐에서 빼고 재시도 타이머에 맡긴다. 이 세션에서 담긴 것을 확인한 URL은 다시
- * 넣어 캐시를 열어 본다. SW의 만료 정책이 페이지 모르게 지웠을 수 있어서다.
+ * 실패한 URL도 큐에서 빼고 재시도 타이머에 맡긴다.
+ *
+ * 이 세션에서 담긴 것을 확인한 영상은 다시 넣지 않는다. 영상 캐시는 SW 만료 정책이 없고
+ * 이 모듈의 `ensureMediaSpace`만 지우며 그때 확인 기록도 지운다. 포스터는 SW 만료 정책이
+ * 페이지 모르게 지울 수 있으니 다시 넣어 캐시를 열어 본다.
  */
 export function scheduleMediaCaching(
   urls: readonly string[],
@@ -443,7 +446,10 @@ export function scheduleMediaCaching(
 ): void {
   if (urls.length === 0 || !canCacheInBackground()) return;
   const fresh = urls.filter(
-    (url) => !inFlight.has(url) && !retryTimers.has(url),
+    (url) =>
+      !inFlight.has(url) &&
+      !retryTimers.has(url) &&
+      !(knownCached.has(url) && mediaCacheNameFor(url) === MEDIA_CACHE_NAME),
   );
   for (const url of fresh) failures.delete(url);
   if (options.priority) {
