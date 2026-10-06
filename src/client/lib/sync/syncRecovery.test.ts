@@ -224,6 +224,24 @@ describe("동기화 회복", () => {
     },
   );
 
+  it.each([
+    ["focus", "wake"],
+    ["online", "reconnect"],
+  ] as const)(
+    "%s 이벤트의 회복 강도를 배경 다운로드와 구독자에게 넘긴다",
+    async (event, mode) => {
+      const listener = vi.fn();
+      subscribeSyncRecovery(listener);
+      start();
+
+      window.dispatchEvent(new Event(event));
+      await __waitForSyncRecoveryForTests();
+
+      expect(recoveryDeps.resumeMediaCaching).toHaveBeenCalledWith(mode);
+      expect(listener).toHaveBeenCalledWith(mode);
+    },
+  );
+
   it("탭이 가려질 때는 회복 경로를 타지 않는다", async () => {
     setVisibility("hidden");
     const push = vi.fn(async () => true);
@@ -356,7 +374,9 @@ describe("동기화 회복", () => {
 
     expect(recoveryDeps.retryBootSyncIfNeeded).toHaveBeenCalledTimes(1);
     expect(recoveryDeps.resumeMediaCaching).toHaveBeenCalledTimes(1);
+    expect(recoveryDeps.resumeMediaCaching).toHaveBeenCalledWith("manual");
     expect(listener).toHaveBeenCalledTimes(1);
+    expect(listener).toHaveBeenCalledWith("manual");
     expect(pushFolder).toHaveBeenCalledTimes(1);
     expect(pushDeck).toHaveBeenCalledTimes(1);
     expect(pushDoc).toHaveBeenCalledTimes(1);

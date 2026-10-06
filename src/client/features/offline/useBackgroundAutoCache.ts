@@ -5,11 +5,13 @@ import {
   type Presentation,
 } from "#shared";
 import {
+  getMediaCacheFailure,
   resumeMediaCaching,
   retainMediaUrls,
   scheduleMediaCaching,
   warmPresentationFonts,
 } from "../../lib/offline";
+import type { SyncRetryMode } from "../../lib/sync/backoff";
 import { subscribeSyncRecovery } from "../../lib/sync/syncRecovery";
 import { useBackgroundLookup } from "../backgrounds/backgroundCatalog";
 import { useLatest } from "../../hooks/useLatest";
@@ -50,6 +52,9 @@ function useRetainedMediaUrls(
  *
  * 연결이 회복되면(`subscribeSyncRecovery`: `online`·탭 복귀·포커스·상태 확인 성공)
  * 프레젠테이션의 URL을 다시 넣는다. 기다리던 재시도는 회복 경로가 `resumeMediaCaching`으로 먼저 깨운다.
+ * 포커스·탭 복귀(`wake`)에는 이미 실패한 URL을 넣지 않고, `online`에도 저장 공간 부족으로
+ * 실패한 URL은 넣지 않는다. 다시 넣으면 영상을 끝까지 받은 뒤에야 같은 실패를 알게 되어,
+ * 포커스마다 큰 파일을 처음부터 다시 받는다. '다시 시도'(`manual`)만 모두 넣는다.
  */
 export function useBackgroundAutoCache(
   presentation: Presentation | null,
@@ -83,9 +88,20 @@ export function useBackgroundAutoCache(
   useRetainedMediaUrls(urlsRef, presentationId ? urlKey : null);
 
   useEffect(
-    () => subscribeSyncRecovery(() => scheduleMediaCaching(urlsRef.current)),
+    () =>
+      subscribeSyncRecovery((mode) =>
+        scheduleMediaCaching(
+          urlsRef.current.filter((url) => shouldRequeueOnRecovery(url, mode)),
+        ),
+      ),
     [],
   );
+}
+
+function shouldRequeueOnRecovery(url: string, mode: SyncRetryMode): boolean {
+  const failure = getMediaCacheFailure(url);
+  if (mode === "manual" || failure === undefined) return true;
+  return mode === "reconnect" && failure !== "quota";
 }
 
 /**

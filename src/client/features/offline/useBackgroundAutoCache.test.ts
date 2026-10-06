@@ -15,6 +15,7 @@ import {
   AUTO_CACHE_DELAY_MS,
 } from "./useBackgroundAutoCache";
 import { SEED_PRESENTATIONS } from "../../test/presentationFixture";
+import type { SyncRetryMode } from "../../lib/sync/backoff";
 
 const {
   scheduleMediaCaching,
@@ -22,6 +23,7 @@ const {
   retainMediaUrls,
   releaseMediaUrls,
   resumeMediaCaching,
+  getMediaCacheFailure,
 } = vi.hoisted(() => {
   const releaseMediaUrls = vi.fn<(urls: readonly string[]) => void>();
   return {
@@ -32,6 +34,8 @@ const {
       (urls: readonly string[]) => () => releaseMediaUrls(urls),
     ),
     resumeMediaCaching: vi.fn(),
+    getMediaCacheFailure:
+      vi.fn<(url: string) => "quota" | "network" | undefined>(),
   };
 });
 
@@ -40,19 +44,22 @@ vi.mock("../../lib/offline", () => ({
   warmPresentationFonts,
   retainMediaUrls,
   resumeMediaCaching,
+  getMediaCacheFailure,
 }));
 
-const recoveryListeners = vi.hoisted(() => new Set<() => void>());
+type RecoveryListener = (mode: SyncRetryMode) => void;
+
+const recoveryListeners = vi.hoisted(() => new Set<RecoveryListener>());
 
 vi.mock("../../lib/sync/syncRecovery", () => ({
-  subscribeSyncRecovery: (listener: () => void) => {
+  subscribeSyncRecovery: (listener: RecoveryListener) => {
     recoveryListeners.add(listener);
     return () => recoveryListeners.delete(listener);
   },
 }));
 
-function notifySyncRecovery(): void {
-  for (const listener of recoveryListeners) listener();
+function notifySyncRecovery(mode: SyncRetryMode = "reconnect"): void {
+  for (const listener of recoveryListeners) listener(mode);
 }
 
 const BASE = SEED_PRESENTATIONS[0];
@@ -110,6 +117,7 @@ beforeEach(() => {
   retainMediaUrls.mockClear();
   releaseMediaUrls.mockClear();
   resumeMediaCaching.mockClear();
+  getMediaCacheFailure.mockReset();
 });
 
 afterEach(() => {
@@ -214,6 +222,51 @@ describe("useBackgroundAutoCache", () => {
     expect(scheduleMediaCaching).toHaveBeenCalledTimes(2);
     expect(scheduleMediaCaching).toHaveBeenLastCalledWith(urlsOf(BG_A));
   });
+
+  it("포커스가 스무 번 와도 이미 실패한 URL은 다시 넣지 않는다", () => {
+    const [video, poster] = urlsOf(BG_A);
+    getMediaCacheFailure.mockImplementation((url) =>
+      url === video ? "quota" : undefined,
+    );
+    renderHook(() => useBackgroundAutoCache(withBackground(BG_A)));
+    act(() => {
+      vi.advanceTimersByTime(AUTO_CACHE_DELAY_MS);
+    });
+    scheduleMediaCaching.mockClear();
+
+    act(() => {
+      for (let i = 0; i < 20; i += 1) notifySyncRecovery("wake");
+    });
+
+    expect(scheduleMediaCaching).toHaveBeenCalledTimes(20);
+    for (const [urls] of scheduleMediaCaching.mock.calls) {
+      expect(urls).toEqual([poster]);
+    }
+  });
+
+  it.each([
+    ["reconnect", "network", true],
+    ["reconnect", "quota", false],
+    ["manual", "quota", true],
+    ["wake", "network", false],
+  ] as const)(
+    "%s 회복에 %s 실패한 URL을 다시 넣을지는 %s다",
+    (mode, failure, requeued) => {
+      const [video] = urlsOf(BG_A);
+      getMediaCacheFailure.mockImplementation((url) =>
+        url === video ? failure : undefined,
+      );
+      renderHook(() => useBackgroundAutoCache(withBackground(BG_A)));
+
+      act(() => {
+        notifySyncRecovery(mode);
+      });
+
+      expect(scheduleMediaCaching.mock.calls[0][0].includes(video)).toBe(
+        requeued,
+      );
+    },
+  );
 
   it("열자마자 세트의 URL을 붙잡고, 배경을 바꾸거나 떠나면 놓는다", () => {
     const { rerender, unmount } = renderHook(

@@ -37,7 +37,7 @@ let deferredMode: SyncRetryMode | null = null;
 let modeOnReachable: SyncRetryMode | null = null;
 let reachableSince = 0;
 const probeBackoff = new BackoffTracker();
-const resumeListeners = new Set<() => void>();
+const resumeListeners = new Set<(mode: SyncRetryMode) => void>();
 
 function stronger(
   current: SyncRetryMode | null,
@@ -94,8 +94,8 @@ function runProbe(): Promise<void> {
 async function runResume(mode: SyncRetryMode): Promise<void> {
   clearProbeTimer();
   if (mode !== "wake") probeBackoff.reset();
-  resumeMediaCaching();
-  for (const listener of resumeListeners) listener();
+  resumeMediaCaching(mode);
+  for (const listener of resumeListeners) listener(mode);
   await retryBootSyncIfNeeded(mode).catch(() => false);
   void retryFolderSyncNow(mode).catch(() => undefined);
   retryPendingSyncNow(mode);
@@ -249,8 +249,11 @@ export function resumeDeferredSyncRecovery(): void {
 /**
  * 연결 회복 경로를 탈 때마다 알린다. 열려 있는 화면이 자기 일(배경 URL 다시 넣기,
  * 공유받은 프레젠테이션 새로고침)을 같은 신호에 붙일 때 쓴다. 송출 중에는 알리지 않는다.
+ * `wake`는 포커스마다 오므로, 비싼 일은 `mode`를 보고 줄인다.
  */
-export function subscribeSyncRecovery(listener: () => void): () => void {
+export function subscribeSyncRecovery(
+  listener: (mode: SyncRetryMode) => void,
+): () => void {
   resumeListeners.add(listener);
   return () => {
     resumeListeners.delete(listener);
