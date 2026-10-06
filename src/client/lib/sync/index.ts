@@ -19,5 +19,6 @@ export { flushFolderSync } from "./folderSync";
 export {
   startSyncRecovery,
   retrySyncNow,
+  resumeDeferredSyncRecovery,
   subscribeSyncRecovery,
 } from "./syncRecovery";

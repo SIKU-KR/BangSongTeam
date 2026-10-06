@@ -204,6 +204,30 @@ describe("request", () => {
       expect(isServerReachable()).toBe(false);
     });
 
+    it.each([
+      [200, new TypeError("network error")],
+      [200, new DOMException("timeout", "TimeoutError")],
+      [500, new DOMException("timeout", "TimeoutError")],
+    ])(
+      "%i 응답의 본문을 받다 끊기면 서버에 닿지 못한 것으로 남긴다",
+      async (status, error) => {
+        markServerUnreachable();
+        const response = {
+          status,
+          ok: status < 400,
+          json: async (): Promise<never> => {
+            throw error;
+          },
+        };
+
+        await expect(callApi(async () => response)).rejects.toBeInstanceOf(
+          OfflineError,
+        );
+
+        expect(isServerReachable()).toBe(false);
+      },
+    );
+
     it("호출자 취소는 연결 상태를 바꾸지 않는다", async () => {
       const abort = async (): Promise<never> => {
         throw new DOMException("aborted", "AbortError");

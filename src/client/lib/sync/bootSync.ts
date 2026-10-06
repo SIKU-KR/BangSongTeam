@@ -37,12 +37,18 @@ import {
   ServerRejectedError,
   SessionExpiredError,
 } from "../api/request";
-import { BackoffTracker, BASE_BACKOFF_MS, MAX_RETRY_ATTEMPTS } from "./backoff";
+import {
+  BackoffTracker,
+  BASE_BACKOFF_MS,
+  MAX_RETRY_ATTEMPTS,
+  type SyncRetryMode,
+} from "./backoff";
 import {
   setFolderSyncEnabled,
   setServerFolderListener,
   pushFolderNow,
   hasPendingFolderPush,
+  holdFailedFolderPush,
   scheduleFolderPush,
 } from "./folderSync";
 import {
@@ -55,6 +61,7 @@ import {
 } from "./syncStatus";
 import {
   hasPendingDocumentPush,
+  holdFailedDocumentPush,
   scheduleDocumentPush,
   setSyncEnabled,
 } from "./syncScheduler";
@@ -63,6 +70,7 @@ import {
   setServerDeckListener,
   pushDeckNow,
   hasPendingDeckSync,
+  holdFailedDeckPush,
   scheduleDeckPush,
 } from "./deckSync";
 import { refreshBackgroundCatalog } from "./backgroundSync";
@@ -178,6 +186,7 @@ async function syncDriveAndDecks(): Promise<void> {
       current: listPresentations,
       push: pushPresentation,
       requeue: scheduleDocumentPush,
+      hold: holdFailedDocumentPush,
       titleOf: (document) => document.title,
     },
     needsPush,
@@ -212,11 +221,15 @@ function settleSyncStatus(
 const retryBackoff = new BackoffTracker();
 let retryTimer: ReturnType<typeof setTimeout> | null = null;
 let retryStep: (() => Promise<void>) | null = null;
+let retryWaitsOnServer = false;
+let abandonedStep: (() => Promise<void>) | null = null;
 
 function cancelBootRetry(): void {
   if (retryTimer) clearTimeout(retryTimer);
   retryTimer = null;
   retryStep = null;
+  retryWaitsOnServer = false;
+  abandonedStep = null;
   retryBackoff.reset();
 }
 
@@ -227,9 +240,12 @@ function retryPullLater(step: () => Promise<void>, err: unknown): SyncStatus {
       retryBackoff.getServerAttempt() >= MAX_RETRY_ATTEMPTS)
   ) {
     retryBackoff.reset();
+    abandonedStep = step;
     return "error";
   }
+  abandonedStep = null;
   retryStep = step;
+  retryWaitsOnServer = !(err instanceof OfflineError);
   if (retryTimer) clearTimeout(retryTimer);
   retryTimer = setTimeout(runRetry, retryBackoff.getDelay(err));
   return "offline";
@@ -260,10 +276,22 @@ function runRetry(): Promise<void> | null {
  * 연결 회복(`syncRecovery`)이 도메인 큐보다 먼저 부른다. 받지 못한 단계는 어느 큐에도
  * 들어 있지 않아, 회복을 알아도 백오프 타이머가 끝날 때까지(최대 1분) 헤더가
  * '오프라인'으로 남는다. 먼저 받아 병합해야 큐가 병합 결과를 올린다.
+ *
+ * `wake`는 서버가 거절해(5xx·429) 기다리는 단계를 앞당기지 않고 백오프 횟수도 그대로
+ * 둔다. 포커스마다 목록 전체를 다시 받으면 장애 중인 서버를 더 누른다. `manual`은 서버
+ * 재시도 한도에 이르렀거나 거절돼 포기한 단계도 다시 받는다.
  */
-export async function retryBootSyncIfNeeded(): Promise<boolean> {
-  if (!retryStep || isProjecting()) return false;
-  retryBackoff.reset();
+export async function retryBootSyncIfNeeded(
+  mode: SyncRetryMode,
+): Promise<boolean> {
+  if (isProjecting()) return false;
+  if (mode === "manual" && !retryStep && abandonedStep) {
+    retryStep = abandonedStep;
+    abandonedStep = null;
+  }
+  if (!retryStep) return false;
+  if (mode === "wake" && retryWaitsOnServer) return false;
+  if (mode !== "wake") retryBackoff.reset();
   const running = runRetry();
   if (!running) return false;
   await running;
@@ -293,6 +321,7 @@ async function syncFolders(
       current: getFolders,
       push: pushFolderNow,
       requeue: scheduleFolderPush,
+      hold: holdFailedFolderPush,
       titleOf: (folder) => folder.name,
     },
     sortFoldersParentFirst(
@@ -325,6 +354,7 @@ async function syncLibraryDecks(): Promise<void> {
       current: getUserSongs,
       push: pushDeckNow,
       requeue: scheduleDeckPush,
+      hold: holdFailedDeckPush,
       titleOf: (deck) => deck.title,
     },
     needsPush,
@@ -339,6 +369,7 @@ interface BootPushTarget<T extends { id: string }> {
   current: () => readonly T[];
   push: (item: T) => Promise<unknown>;
   requeue: (item: T) => void;
+  hold: (item: T) => void;
   titleOf: (item: T) => string;
 }
 
@@ -371,6 +402,8 @@ async function pushLatestEach<T extends { id: string }>(
         const latest = findLatest(target.current, id);
         if (latest) target.requeue(latest);
       } else {
+        const latest = findLatest(target.current, id);
+        if (latest) target.hold(latest);
         recordSyncFailure({
           id: item.id,
           title: target.titleOf(item),

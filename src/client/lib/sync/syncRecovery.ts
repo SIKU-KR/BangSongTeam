@@ -6,10 +6,10 @@ import {
 import { probeServerHealth } from "../api/healthApi";
 import { OfflineError } from "../api/request";
 import { resumeMediaCaching } from "../offline/mediaCache";
-import { BackoffTracker, BASE_BACKOFF_MS } from "./backoff";
+import { BackoffTracker, MAX_BACKOFF_MS, type SyncRetryMode } from "./backoff";
 import { retryBootSyncIfNeeded } from "./bootSync";
-import { flushDeckSync } from "./deckSync";
-import { flushFolderSync } from "./folderSync";
+import { retryDeckSyncNow } from "./deckSync";
+import { retryFolderSyncNow } from "./folderSync";
 import { retryPendingSyncNow } from "./syncScheduler";
 
 interface SyncRecoveryOptions {
@@ -18,16 +18,33 @@ interface SyncRecoveryOptions {
 }
 
 const NEVER_PAUSED = (): boolean => false;
+const STABLE_REACHABLE_MS = MAX_BACKOFF_MS;
+const MODE_RANK: Record<SyncRetryMode, number> = {
+  wake: 0,
+  reconnect: 1,
+  manual: 2,
+};
 
 let isPaused: () => boolean = NEVER_PAUSED;
 let started = false;
 let stop: (() => void) | null = null;
 let probeTimer: ReturnType<typeof setTimeout> | null = null;
-let deferTimer: ReturnType<typeof setTimeout> | null = null;
 let probeInFlight: Promise<void> | null = null;
 let resumeInFlight: Promise<void> | null = null;
+let runningMode: SyncRetryMode = "wake";
+let queuedMode: SyncRetryMode | null = null;
+let deferredMode: SyncRetryMode | null = null;
+let modeOnReachable: SyncRetryMode | null = null;
+let reachableSince = 0;
 const probeBackoff = new BackoffTracker();
 const resumeListeners = new Set<() => void>();
+
+function stronger(
+  current: SyncRetryMode | null,
+  next: SyncRetryMode,
+): SyncRetryMode {
+  return current && MODE_RANK[current] >= MODE_RANK[next] ? current : next;
+}
 
 function isBrowserOffline(): boolean {
   return typeof navigator !== "undefined" && navigator.onLine === false;
@@ -38,17 +55,8 @@ function clearProbeTimer(): void {
   probeTimer = null;
 }
 
-function clearDeferTimer(): void {
-  if (deferTimer) clearTimeout(deferTimer);
-  deferTimer = null;
-}
-
-function deferUntilUnpaused(): void {
-  if (deferTimer) return;
-  deferTimer = setTimeout(() => {
-    deferTimer = null;
-    wake();
-  }, BASE_BACKOFF_MS);
+function deferUntilUnpaused(mode: SyncRetryMode): void {
+  deferredMode = stronger(deferredMode, mode);
 }
 
 function scheduleProbe(): void {
@@ -56,7 +64,7 @@ function scheduleProbe(): void {
     return;
   }
   if (isPaused()) {
-    deferUntilUnpaused();
+    deferUntilUnpaused("wake");
     return;
   }
   probeTimer = setTimeout(() => {
@@ -69,7 +77,7 @@ function runProbe(): Promise<void> {
   clearProbeTimer();
   if (!started || isServerReachable()) return Promise.resolve();
   if (isPaused()) {
-    deferUntilUnpaused();
+    deferUntilUnpaused("wake");
     return Promise.resolve();
   }
   probeInFlight ??= (async (): Promise<void> => {
@@ -83,54 +91,81 @@ function runProbe(): Promise<void> {
   return probeInFlight;
 }
 
-async function runResume(): Promise<void> {
-  probeBackoff.reset();
+async function runResume(mode: SyncRetryMode): Promise<void> {
   clearProbeTimer();
+  if (mode !== "wake") probeBackoff.reset();
   resumeMediaCaching();
   for (const listener of resumeListeners) listener();
-  await retryBootSyncIfNeeded().catch(() => false);
-  void flushFolderSync().catch(() => undefined);
-  retryPendingSyncNow();
-  void flushDeckSync().catch(() => undefined);
+  await retryBootSyncIfNeeded(mode).catch(() => false);
+  void retryFolderSyncNow(mode).catch(() => undefined);
+  retryPendingSyncNow(mode);
+  void retryDeckSyncNow(mode).catch(() => undefined);
 }
 
-function resume(): Promise<void> {
+function resume(mode: SyncRetryMode): Promise<void> {
   if (!started) return Promise.resolve();
   if (isPaused()) {
-    deferUntilUnpaused();
+    deferUntilUnpaused(mode);
     return Promise.resolve();
   }
-  resumeInFlight ??= runResume().finally(() => {
+  if (resumeInFlight) {
+    if (MODE_RANK[mode] > MODE_RANK[runningMode]) {
+      queuedMode = stronger(queuedMode, mode);
+    }
+    return resumeInFlight;
+  }
+  resumeInFlight = (async (): Promise<void> => {
+    let next: SyncRetryMode | null = mode;
+    while (next) {
+      runningMode = next;
+      queuedMode = null;
+      await runResume(next);
+      next = queuedMode;
+    }
+  })().finally(() => {
     resumeInFlight = null;
   });
   return resumeInFlight;
 }
 
-function wake(): void {
+function wake(mode: SyncRetryMode): void {
   if (!started) return;
   if (isPaused()) {
-    deferUntilUnpaused();
+    deferUntilUnpaused(mode);
     return;
   }
   if (isServerReachable()) {
-    void resume();
+    void resume(mode);
     return;
   }
+  if (mode !== "wake") modeOnReachable = stronger(modeOnReachable, mode);
   probeBackoff.reset();
   void runProbe();
 }
 
 function handleReachabilityChange(): void {
   if (isServerReachable()) {
-    queueMicrotask(() => void resume());
+    reachableSince = Date.now();
+    const mode = modeOnReachable ?? "wake";
+    modeOnReachable = null;
+    queueMicrotask(() => void resume(mode));
     return;
   }
+  if (Date.now() - reachableSince >= STABLE_REACHABLE_MS) probeBackoff.reset();
   clearProbeTimer();
   scheduleProbe();
 }
 
+function handleOnline(): void {
+  wake("reconnect");
+}
+
+function handleFocus(): void {
+  wake("wake");
+}
+
 function handleVisibilityChange(): void {
-  if (document.visibilityState === "visible") wake();
+  if (document.visibilityState === "visible") wake("wake");
 }
 
 /**
@@ -145,17 +180,24 @@ function handleVisibilityChange(): void {
  * 경로를 탄다. 닿는 중이면 확인 없이 대기 중인 쓰기를 곧바로 보낸다 (TanStack Query의
  * `refetchOnReconnect`·`refetchOnWindowFocus`와 같은 원칙).
  *
- * `isPaused`가 true인 동안(송출 화면)에는 상태 확인도 큐 재시도도 보내지 않고 송출을
- * 마친 뒤로 미룬다. 송출 화면은 같은 SPA 안에서 이동해 들어가므로 매번 다시 묻는다.
+ * 포커스·탭 복귀·상태 확인 성공은 자주 오므로 큐의 백오프 횟수와 서버가 준 대기를 비우지
+ * 않는다(`SyncRetryMode`의 `wake`). 상태 확인의 백오프도 회복 때 비우지 않고, 닿는 상태가
+ * `STABLE_REACHABLE_MS` 이상 이어진 뒤 다시 끊겼을 때만 비운다. 상태 확인은 닿는데 무거운
+ * 요청만 시간을 넘기는 느린 연결에서, 회복할 때마다 처음 간격으로 돌아가 같은 요청을 쉬지
+ * 않고 다시 보내지 않게 하려는 것이다.
+ *
+ * `isPaused`가 true인 동안(송출 화면)에는 상태 확인도 큐 재시도도 보내지 않고, 들어온
+ * 신호만 기억했다가 송출을 마친 뒤(`resumeDeferredSyncRecovery`) 한 번 돌린다. 송출
+ * 화면은 같은 SPA 안에서 이동해 들어가므로 매번 다시 묻는다.
  */
 export function startSyncRecovery(options: SyncRecoveryOptions): () => void {
   if (started || typeof window === "undefined") return () => undefined;
   started = true;
   isPaused = options.isPaused;
   const unsubscribe = subscribeServerReachability(handleReachabilityChange);
-  window.addEventListener("online", wake);
+  window.addEventListener("online", handleOnline);
   window.addEventListener("offline", markServerUnreachable);
-  window.addEventListener("focus", wake);
+  window.addEventListener("focus", handleFocus);
   document.addEventListener("visibilitychange", handleVisibilityChange);
   scheduleProbe();
 
@@ -163,26 +205,45 @@ export function startSyncRecovery(options: SyncRecoveryOptions): () => void {
     if (stop !== cleanup) return;
     stop = null;
     unsubscribe();
-    window.removeEventListener("online", wake);
+    window.removeEventListener("online", handleOnline);
     window.removeEventListener("offline", markServerUnreachable);
-    window.removeEventListener("focus", wake);
+    window.removeEventListener("focus", handleFocus);
     document.removeEventListener("visibilitychange", handleVisibilityChange);
     clearProbeTimer();
-    clearDeferTimer();
-    probeBackoff.reset();
-    isPaused = NEVER_PAUSED;
-    started = false;
+    resetRecoveryState();
   };
   stop = cleanup;
   return cleanup;
 }
 
+function resetRecoveryState(): void {
+  probeBackoff.reset();
+  queuedMode = null;
+  deferredMode = null;
+  modeOnReachable = null;
+  reachableSince = 0;
+  isPaused = NEVER_PAUSED;
+  started = false;
+}
+
 /**
  * 사용자가 '다시 시도'를 눌렀을 때. 닿지 못하는 중이면 백오프를 기다리지 않고 곧바로
- * 상태를 확인하고, 닿는 중이면 대기 중인 쓰기를 곧바로 보낸다.
+ * 상태를 확인하고, 닿으면(지금이든 확인 뒤든) 백오프를 비우고 대기 중인 쓰기와 영구 실패로
+ * 남긴 항목, 받다 포기한 부팅 단계를 다시 보낸다.
  */
 export function retrySyncNow(): void {
-  wake();
+  wake("manual");
+}
+
+/**
+ * 송출 화면을 떠났을 때 부른다. 송출 중에 미뤄 둔 회복 신호가 있으면 지금 한 번 돌린다.
+ * 송출 중에 타이머로 다시 묻지 않으려고, 라우트 변화를 아는 쪽(`App`)이 알려 준다.
+ */
+export function resumeDeferredSyncRecovery(): void {
+  if (!started || !deferredMode || isPaused()) return;
+  const mode = deferredMode;
+  deferredMode = null;
+  wake(mode);
 }
 
 /**
@@ -209,12 +270,9 @@ export async function __waitForSyncRecoveryForTests(): Promise<void> {
 export function __resetSyncRecoveryForTests(): void {
   stop?.();
   clearProbeTimer();
-  clearDeferTimer();
-  probeBackoff.reset();
+  resetRecoveryState();
   probeBackoff.__setRandomForTests(Math.random);
   probeInFlight = null;
   resumeInFlight = null;
   resumeListeners.clear();
-  isPaused = NEVER_PAUSED;
-  started = false;
 }

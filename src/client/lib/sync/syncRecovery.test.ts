@@ -10,6 +10,7 @@ import {
   __resetSyncRecoveryForTests,
   __setProbeRandomForTests,
   __waitForSyncRecoveryForTests,
+  resumeDeferredSyncRecovery,
   retrySyncNow,
   startSyncRecovery,
   subscribeSyncRecovery,
@@ -37,6 +38,7 @@ import {
 import { __resetServerDecksForTests } from "./presentationSync";
 import { getSyncSnapshot, resetSyncStatus } from "./syncStatus";
 import { BASE_BACKOFF_MS, MAX_BACKOFF_MS } from "./backoff";
+import { ServerRejectedError, TimeoutError } from "../api/request";
 
 const recoveryDeps = vi.hoisted(() => ({
   retryBootSyncIfNeeded: vi.fn(async () => false),
@@ -280,18 +282,24 @@ describe("동기화 회복", () => {
     expect(recoveryDeps.resumeMediaCaching).not.toHaveBeenCalled();
   });
 
-  it("송출로 들어가기 전에 잡힌 상태 확인은 송출 중에 보내지 않고 송출을 마친 뒤 보낸다", async () => {
+  it("송출로 들어가기 전에 잡힌 상태 확인은 송출 중에 타이머 없이 미뤘다가 송출을 마치면 보낸다", async () => {
     server.blocked = true;
     markServerUnreachable();
     start();
     paused = true;
 
     await vi.advanceTimersByTimeAsync(MAX_BACKOFF_MS * 2);
+    window.dispatchEvent(new Event("focus"));
+    expect(healthCalls(server)).toBe(0);
+    expect(vi.getTimerCount()).toBe(0);
+
+    resumeDeferredSyncRecovery();
     expect(healthCalls(server)).toBe(0);
 
     paused = false;
-    await vi.advanceTimersByTimeAsync(BASE_BACKOFF_MS);
-    expect(healthCalls(server)).toBeGreaterThan(0);
+    resumeDeferredSyncRecovery();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(healthCalls(server)).toBe(1);
   });
 
   it("offline 이벤트는 닿지 못함으로 남기고, 브라우저가 오프라인인 동안에는 확인하지 않다가 online이 오면 곧바로 확인한다", async () => {
@@ -352,6 +360,95 @@ describe("동기화 회복", () => {
     expect(pushFolder).toHaveBeenCalledTimes(1);
     expect(pushDeck).toHaveBeenCalledTimes(1);
     expect(pushDoc).toHaveBeenCalledTimes(1);
+  });
+
+  it("동기화 실패로 남은 프레젠테이션·폴더·곡을 다시 시도하면 다시 올리고 실패를 지운다", async () => {
+    const rejected = new ServerRejectedError(400, "거절");
+    const pushDoc = vi.fn<(doc: Presentation) => Promise<boolean>>(async () => {
+      throw rejected;
+    });
+    const pushFolder = vi.fn<(folder: Folder) => Promise<Folder>>(async () => {
+      throw rejected;
+    });
+    const pushDeck = vi.fn<(deck: Deck) => Promise<Deck>>(async () => {
+      throw rejected;
+    });
+    __setPusherForTests(pushDoc);
+    __setFolderPusherForTests(pushFolder);
+    __setDeckTransportForTests({ push: pushDeck });
+    setFolderSyncEnabled(true);
+    setDeckSyncEnabled(true);
+    start();
+
+    scheduleFolderPush({ id: "00000000f000000000001" } as Folder);
+    scheduleDeckPush({ id: "00000000c000000000001" } as Deck);
+    scheduleDocumentPush(presentation());
+    await vi.advanceTimersByTimeAsync(SYNC_DEBOUNCE_MS);
+    expect(getSyncSnapshot().status).toBe("error");
+
+    window.dispatchEvent(new Event("focus"));
+    window.dispatchEvent(new Event("online"));
+    await __waitForSyncRecoveryForTests();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(getSyncSnapshot().status).toBe("error");
+
+    pushDoc.mockImplementation(async () => true);
+    pushFolder.mockImplementation(async (folder: Folder) => folder);
+    pushDeck.mockImplementation(async (deck: Deck) => deck);
+    retrySyncNow();
+    await __waitForSyncRecoveryForTests();
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(pushDoc).toHaveBeenCalledTimes(2);
+    expect(pushFolder).toHaveBeenCalledTimes(2);
+    expect(pushDeck).toHaveBeenCalledTimes(2);
+    expect(getSyncSnapshot()).toMatchObject({
+      status: "synced",
+      lastFailure: null,
+    });
+  });
+
+  it("포커스는 서버가 거절해 기다리는 push를 앞당기지 않고 재시도 횟수도 비우지 않는다", async () => {
+    const push = vi.fn(async (): Promise<boolean> => {
+      throw new ServerRejectedError(503);
+    });
+    __setPusherForTests(push);
+    setVisibility("visible");
+    start();
+    scheduleDocumentPush(presentation());
+    await vi.advanceTimersByTimeAsync(SYNC_DEBOUNCE_MS);
+    expect(push).toHaveBeenCalledTimes(1);
+
+    for (let i = 0; i < 20; i += 1) {
+      window.dispatchEvent(new Event("focus"));
+      document.dispatchEvent(new Event("visibilitychange"));
+      await __waitForSyncRecoveryForTests();
+      await vi.advanceTimersByTimeAsync(0);
+    }
+    expect(push).toHaveBeenCalledTimes(1);
+
+    await vi.advanceTimersByTimeAsync(MAX_BACKOFF_MS * 12);
+    expect(getSyncSnapshot().status).toBe("error");
+  });
+
+  it("상태 확인은 닿는데 push만 시간을 넘기면 다시 보내는 간격이 점점 늘어난다", async () => {
+    __setProbeRandomForTests(() => 1);
+    const pushedAt: number[] = [];
+    __setPusherForTests(async () => {
+      pushedAt.push(Date.now());
+      markServerUnreachable();
+      throw new TimeoutError();
+    });
+    start();
+    scheduleDocumentPush(presentation());
+
+    await vi.advanceTimersByTimeAsync(MAX_BACKOFF_MS * 5);
+
+    const lastMinute = pushedAt.filter(
+      (at) => at > Date.now() - MAX_BACKOFF_MS,
+    );
+    expect(pushedAt.length).toBeLessThan(15);
+    expect(lastMinute.length).toBeLessThanOrEqual(2);
   });
 
   it("구독을 풀거나 회복을 끄면 알리지 않는다", async () => {

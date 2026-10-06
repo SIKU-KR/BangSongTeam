@@ -315,6 +315,26 @@ describe("EditorHeader", () => {
       );
     });
 
+    it("오늘 동기화한 것이 아니면 툴팁에 날짜도 보여 준다", async () => {
+      vi.useFakeTimers({ toFake: ["Date"] });
+      vi.setSystemTime(new Date(2026, 9, 3, 14, 5));
+      setSyncStatus("presentation", "synced");
+      const time = new Intl.DateTimeFormat("ko-KR", {
+        month: "long",
+        day: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
+      }).format(Date.now());
+      vi.setSystemTime(new Date(2026, 9, 4, 9, 0));
+      renderHeader();
+
+      act(() => screen.getByTestId("save-status").focus());
+
+      expect(await screen.findByTestId("save-status-detail")).toHaveTextContent(
+        EDITOR_COPY.syncStatus.lastSynced(time),
+      );
+    });
+
     it.each(["synced", "syncing", "idle"] as const)(
       "%s 상태에서는 다시 시도를 보여 주지 않는다",
       (status) => {

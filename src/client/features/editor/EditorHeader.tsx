@@ -115,6 +115,19 @@ const SYNC_TIME_FORMAT = new Intl.DateTimeFormat("ko-KR", {
   minute: "2-digit",
 });
 
+const SYNC_DATE_TIME_FORMAT = new Intl.DateTimeFormat("ko-KR", {
+  month: "long",
+  day: "numeric",
+  hour: "numeric",
+  minute: "2-digit",
+});
+
+function formatSyncedAt(syncedAt: number): string {
+  const synced = new Date(syncedAt);
+  const isToday = synced.toDateString() === new Date().toDateString();
+  return (isToday ? SYNC_TIME_FORMAT : SYNC_DATE_TIME_FORMAT).format(synced);
+}
+
 const RETRYABLE_SYNC_STATUSES: ReadonlySet<SyncStatus> = new Set([
   "offline",
   "error",
@@ -150,9 +163,7 @@ function SaveStatusIndicator(): React.JSX.Element {
         <TooltipContent data-testid="save-status-detail">
           {lastSyncedAt === null
             ? EDITOR_COPY.syncStatus.notSyncedYet
-            : EDITOR_COPY.syncStatus.lastSynced(
-                SYNC_TIME_FORMAT.format(lastSyncedAt),
-              )}
+            : EDITOR_COPY.syncStatus.lastSynced(formatSyncedAt(lastSyncedAt))}
         </TooltipContent>
       </Tooltip>
       {canRetry && (

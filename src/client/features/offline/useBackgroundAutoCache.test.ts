@@ -200,7 +200,7 @@ describe("useBackgroundAutoCache", () => {
     expect(scheduleMediaCaching).toHaveBeenCalledTimes(1);
   });
 
-  it("연결이 회복되면 세트의 URL을 곧바로 다시 큐에 넣는다", () => {
+  it("연결이 회복되면 프레젠테이션의 URL을 곧바로 다시 큐에 넣는다", () => {
     const presentation = withBackground(BG_A);
     renderHook(() => useBackgroundAutoCache(presentation));
     act(() => {

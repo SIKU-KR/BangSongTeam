@@ -27,6 +27,7 @@ import {
   flushDeckSync,
   flushFolderSync,
   startSyncRecovery,
+  resumeDeferredSyncRecovery,
 } from "./lib/sync";
 import {
   AppShellLayout,
@@ -239,11 +240,16 @@ function ProjectionLatchGate({
   children: React.ReactNode;
 }): React.JSX.Element | null {
   const { pathname } = useLocation();
-  const hasLeft = onLeave !== undefined && !isProjectionPath(pathname);
+  const isOnProjection = isProjectionPath(pathname);
+  const hasLeft = onLeave !== undefined && !isOnProjection;
 
   useEffect(() => {
     if (hasLeft) onLeave?.();
   }, [hasLeft, onLeave]);
+
+  useEffect(() => {
+    if (!isOnProjection) resumeDeferredSyncRecovery();
+  }, [isOnProjection]);
 
   return hasLeft ? null : <>{children}</>;
 }

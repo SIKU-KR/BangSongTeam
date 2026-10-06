@@ -8,6 +8,19 @@ export const MAX_BACKOFF_MS = 60_000;
 export const MAX_RETRY_ATTEMPTS = 10;
 
 /**
+ * 연결 회복 경로가 큐를 얼마나 세게 다시 돌리는지.
+ *
+ * - `wake`: 포커스·탭 복귀·상태 확인 성공. 네트워크 실패로 기다리던 항목만 앞당기고
+ *   백오프 횟수와 서버가 준 대기(5xx·429 `Retry-After`)는 그대로 둔다. 자주 오는
+ *   신호마다 횟수를 비우면 서버 재시도 한도가 끝나지 않고, 느린 연결에서 같은 요청을
+ *   쉬지 않고 다시 보낸다.
+ * - `reconnect`: 브라우저 `online` 이벤트. 백오프를 비우고 대기 중인 항목을 모두 보낸다.
+ * - `manual`: 사용자가 '다시 시도'를 눌렀다. `reconnect`에 더해 영구 실패로 남긴 항목과
+ *   받다 포기한 부팅 단계도 다시 보낸다.
+ */
+export type SyncRetryMode = "wake" | "reconnect" | "manual";
+
+/**
  * 지수 백오프와 풀 지터(Full Jitter)를 계산한다 (AWS Architecture Blog 권고).
  * 지연 상한 `min(maxMs, baseMs * 2 ** attempt)` 내에서 0부터 균등한 난수를 취한다.
  */
