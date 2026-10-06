@@ -1,6 +1,7 @@
 import type { Presentation } from "#shared";
 import {
   isRetryableApiError,
+  requestIdOfError,
   OfflineError,
   ServerRejectedError,
   SessionExpiredError,
@@ -133,6 +134,7 @@ function startPush(document: Presentation): void {
           status: err instanceof ServerRejectedError ? err.status : undefined,
           message: err instanceof Error ? err.message : String(err),
           failedAt: Date.now(),
+          requestId: requestIdOfError(err),
         };
         console.error("Presentation push failed permanently", failure);
         recordSyncFailure(failure);

@@ -7,6 +7,9 @@ import {
   PULL_API_TIMEOUT_MS,
   HEALTH_API_TIMEOUT_MS,
 } from "./fetchWithTimeout";
+import { requestMetaOf } from "./traceContext";
+
+const TRACEPARENT = /^00-([0-9a-f]{32})-[0-9a-f]{16}-01$/;
 
 describe("fetchWithTimeout", () => {
   const originalFetch = globalThis.fetch;
@@ -140,6 +143,74 @@ describe("fetchWithTimeout", () => {
       expect(interceptedSignal?.aborted).toBe(true);
 
       vi.useRealTimers();
+    });
+  });
+
+  describe("상관 ID", () => {
+    it("호출자 헤더를 지키면서 traceparent를 붙이고 응답에 상관 ID를 남긴다", async () => {
+      let sent: Headers | undefined;
+      globalThis.fetch = vi.fn(async (_input, init) => {
+        sent = new Headers(init?.headers);
+        return new Response("{}");
+      });
+
+      const response = await fetchWithTimeout(
+        "/api/presentations/V1StGXR8_Z5jdHi6B-myT",
+        { method: "PATCH", headers: { "content-type": "application/json" } },
+      );
+
+      expect(sent?.get("content-type")).toBe("application/json");
+      const traceId = TRACEPARENT.exec(sent?.get("traceparent") ?? "")?.[1];
+      expect(traceId).toBeDefined();
+      expect(requestMetaOf(response)).toEqual({
+        requestId: traceId,
+        route: "/api/presentations/:id",
+      });
+    });
+
+    it("호출자가 넘긴 traceparent는 그대로 둔다", async () => {
+      const traceparent = `00-${"a".repeat(32)}-${"b".repeat(16)}-01`;
+      let sent: Headers | undefined;
+      globalThis.fetch = vi.fn(async (_input, init) => {
+        sent = new Headers(init?.headers);
+        return new Response("{}");
+      });
+
+      const response = await fetchWithTimeout("/api/health", {
+        headers: { traceparent },
+      });
+
+      expect(sent?.get("traceparent")).toBe(traceparent);
+      expect(requestMetaOf(response)?.requestId).toBe("a".repeat(32));
+    });
+
+    it("요청마다 다른 상관 ID를 만든다", async () => {
+      globalThis.fetch = vi.fn(async () => new Response("{}"));
+
+      const first = await fetchWithTimeout("/api/health");
+      const second = await fetchWithTimeout("/api/health");
+
+      expect(requestMetaOf(first)?.requestId).not.toBe(
+        requestMetaOf(second)?.requestId,
+      );
+    });
+
+    it("응답 없이 실패해도 던진 오류에 같은 상관 ID를 남긴다", async () => {
+      let sent: Headers | undefined;
+      const timeout = new DOMException("timed out", "TimeoutError");
+      globalThis.fetch = vi.fn(async (_input, init) => {
+        sent = new Headers(init?.headers);
+        throw timeout;
+      });
+
+      await expect(
+        fetchWithTimeout("/api/decks/V1StGXR8_Z5jdHi6B-myT"),
+      ).rejects.toBe(timeout);
+
+      expect(requestMetaOf(timeout)).toEqual({
+        requestId: TRACEPARENT.exec(sent?.get("traceparent") ?? "")?.[1],
+        route: "/api/decks/:id",
+      });
     });
   });
 });

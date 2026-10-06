@@ -1,6 +1,7 @@
 import { sortFoldersParentFirst, type Folder } from "#shared";
 import {
   isRetryableApiError,
+  requestIdOfError,
   OfflineError,
   ServerRejectedError,
   SessionExpiredError,
@@ -100,6 +101,7 @@ async function pushAll(folders: Folder[]): Promise<void> {
           status: err instanceof ServerRejectedError ? err.status : undefined,
           message: err instanceof Error ? err.message : String(err),
           failedAt: Date.now(),
+          requestId: requestIdOfError(err),
         };
         console.error("Folder push failed permanently", failure);
         recordSyncFailure(failure);

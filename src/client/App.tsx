@@ -20,6 +20,7 @@ import { hydrateSession, useSession } from "./lib/auth";
 import { ConsentGate } from "./features/auth/ConsentGate";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { createAppQueryClient } from "./lib/api/queryClient";
+import { flushClientReports } from "./lib/observability/clientReports";
 import {
   runBootSync,
   shouldRunBootSync,
@@ -103,6 +104,7 @@ function useFlushOnPageHide(): void {
       void flushFolderSync();
       void flushPendingSync();
       void flushDeckSync();
+      flushClientReports();
     };
     const onVisibilityChange = (): void => {
       if (document.visibilityState === "hidden") flush();
@@ -248,7 +250,9 @@ function ProjectionLatchGate({
   }, [hasLeft, onLeave]);
 
   useEffect(() => {
-    if (!isOnProjection) resumeDeferredSyncRecovery();
+    if (isOnProjection) return;
+    resumeDeferredSyncRecovery();
+    flushClientReports();
   }, [isOnProjection]);
 
   return hasLeft ? null : <>{children}</>;

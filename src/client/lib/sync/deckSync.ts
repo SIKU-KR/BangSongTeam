@@ -1,6 +1,7 @@
 import type { Deck } from "#shared";
 import {
   isRetryableApiError,
+  requestIdOfError,
   OfflineError,
   ServerRejectedError,
   SessionExpiredError,
@@ -109,6 +110,7 @@ async function runOps(ops: PendingOp[]): Promise<void> {
           status: err instanceof ServerRejectedError ? err.status : undefined,
           message: err instanceof Error ? err.message : String(err),
           failedAt: Date.now(),
+          requestId: requestIdOfError(err),
         };
         console.error("Deck push failed permanently", failure);
         recordSyncFailure(failure);

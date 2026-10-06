@@ -33,6 +33,7 @@ import {
 } from "./presentationSync";
 import {
   isRetryableApiError,
+  requestIdOfError,
   OfflineError,
   ServerRejectedError,
   SessionExpiredError,
@@ -156,7 +157,9 @@ async function syncDriveAndDecks(): Promise<void> {
   } catch (err) {
     if (generation !== bootGeneration) return;
     const status = retryPullLater(syncDriveAndDecks, err);
-    for (const domain of unsynced) setSyncStatus(domain, status);
+    for (const domain of unsynced) {
+      setSyncStatus(domain, status, requestIdOfError(err));
+    }
     return;
   }
 
@@ -341,7 +344,11 @@ async function syncLibraryDecks(): Promise<void> {
     retryBackoff.reset();
   } catch (err) {
     if (generation !== bootGeneration) return;
-    setSyncStatus("deck", retryPullLater(syncLibraryDecks, err));
+    setSyncStatus(
+      "deck",
+      retryPullLater(syncLibraryDecks, err),
+      requestIdOfError(err),
+    );
     return;
   }
 
@@ -411,6 +418,7 @@ async function pushLatestEach<T extends { id: string }>(
           status: err instanceof ServerRejectedError ? err.status : undefined,
           message: err instanceof Error ? err.message : String(err),
           failedAt: Date.now(),
+          requestId: requestIdOfError(err),
         });
       }
     }

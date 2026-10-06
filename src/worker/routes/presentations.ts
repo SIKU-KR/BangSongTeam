@@ -23,6 +23,7 @@ import {
 import type { AppEnv } from "../types";
 import { resolveRequireAuth, type AppDeps } from "../deps";
 import { isTransientStorageError } from "../lib/storageErrors";
+import { logServerError } from "../lib/requestLog";
 
 async function save(c: Context<AppEnv>, changes: PresentationChanges) {
   if (changes.id !== c.req.param("id")) {
@@ -37,11 +38,10 @@ async function save(c: Context<AppEnv>, changes: PresentationChanges) {
       changes,
     );
   } catch (error) {
-    console.error("presentation upsert failed", {
+    logServerError(c, "presentation upsert failed", error, {
       presentationId: changes.id,
       songCount: changes.items.length,
       sentDeckCount: changes.decks.length,
-      error,
     });
     if (isTransientStorageError(error)) {
       c.header("Retry-After", "2");

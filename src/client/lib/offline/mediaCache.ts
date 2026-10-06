@@ -1,10 +1,21 @@
 import { MEDIA_CACHE_NAME, mediaCacheNameFor } from "#shared";
 import {
   isRetryableApiError,
+  OfflineError,
   parseRetryAfter,
   ServerRejectedError,
 } from "../api/request";
+import {
+  createTraceContext,
+  toRoutePattern,
+  type TraceContext,
+} from "../api/traceContext";
+import { isServiceWorkerControlled } from "../browser/capabilities";
 import { isQuotaExceededError } from "../browser/quotaError";
+import {
+  recordClientFailure,
+  reportApiFailure,
+} from "../observability/clientReports";
 import { BackoffTracker, type SyncRetryMode } from "../sync/backoff";
 import { requestPersistentStorage } from "./storagePersistence";
 
@@ -34,12 +45,6 @@ export function isCacheStorageAvailable(): boolean {
 
 function isOffline(): boolean {
   return typeof navigator !== "undefined" && navigator.onLine === false;
-}
-
-function isServiceWorkerControlled(): boolean {
-  return (
-    typeof navigator !== "undefined" && !!navigator.serviceWorker?.controller
-  );
 }
 
 const progress = new Map<string, MediaProgress>();
@@ -84,6 +89,7 @@ interface StallWatchdog {
   signal: AbortSignal;
   poke: () => void;
   stop: () => void;
+  receiving: boolean;
 }
 
 function stallWatchdog(): StallWatchdog {
@@ -94,7 +100,7 @@ function stallWatchdog(): StallWatchdog {
     stop();
     timer = setTimeout(() => controller.abort(), MEDIA_STALL_TIMEOUT_MS);
   };
-  return { signal: controller.signal, poke, stop };
+  return { signal: controller.signal, poke, stop, receiving: false };
 }
 
 interface CountingBody {
@@ -127,10 +133,12 @@ function countingBody(
           controller.enqueue(chunk);
         },
         flush() {
+          watchdog.receiving = false;
           watchdog.poke();
         },
       }),
     ) ?? null;
+  if (!body) watchdog.receiving = false;
   return { body, received: () => received };
 }
 
@@ -172,19 +180,43 @@ function aborted(watchdog: StallWatchdog): Promise<never> {
   });
 }
 
-async function cacheOne(url: string, watchdog: StallWatchdog): Promise<void> {
-  const cache = await caches.open(mediaCacheNameFor(url));
-  if (await cache.match(url)) return;
-
-  watchdog.poke();
-  const response = await fetch(url, { signal: watchdog.signal });
+async function fetchMedia(
+  url: string,
+  watchdog: StallWatchdog,
+  trace: TraceContext,
+): Promise<Response> {
+  const meta = { requestId: trace.requestId, route: toRoutePattern(url) };
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      signal: watchdog.signal,
+      headers: { traceparent: trace.traceparent },
+    });
+  } catch (err) {
+    throw new OfflineError(err, meta);
+  }
   if (response.status !== 200) {
     throw new ServerRejectedError(
       response.status,
       undefined,
       parseRetryAfter(response.headers.get("retry-after")) ?? undefined,
+      meta,
     );
   }
+  return response;
+}
+
+async function cacheOne(
+  url: string,
+  watchdog: StallWatchdog,
+  trace: TraceContext,
+): Promise<void> {
+  const cache = await caches.open(mediaCacheNameFor(url));
+  if (await cache.match(url)) return;
+
+  watchdog.poke();
+  watchdog.receiving = true;
+  const response = await fetchMedia(url, watchdog, trace);
   const { body, received } = countingBody(url, response, watchdog);
   if (isServiceWorkerControlled()) {
     await drain(body);
@@ -250,15 +282,40 @@ export function getMediaCacheFailure(
   return failures.get(url);
 }
 
+function reportMediaFailure(
+  url: string,
+  err: unknown,
+  watchdog: StallWatchdog,
+  trace: TraceContext,
+): void {
+  if (watchdog.signal.aborted && !watchdog.receiving) return;
+  const kind = watchdog.signal.aborted
+    ? "stalled"
+    : err instanceof TypeError
+      ? "interrupted"
+      : null;
+  if (kind) {
+    recordClientFailure({
+      kind,
+      route: toRoutePattern(url),
+      requestId: trace.requestId,
+    });
+    return;
+  }
+  reportApiFailure(err);
+}
+
 async function cacheWithWatchdog(url: string): Promise<void> {
   const watchdog = stallWatchdog();
+  const trace = createTraceContext();
   watchdog.poke();
   failures.delete(url);
   try {
-    await Promise.race([cacheOne(url, watchdog), aborted(watchdog)]);
+    await Promise.race([cacheOne(url, watchdog, trace), aborted(watchdog)]);
     recordCached(url);
   } catch (err) {
     recordFailure(url, err);
+    reportMediaFailure(url, err, watchdog, trace);
     throw err;
   } finally {
     watchdog.stop();
@@ -529,6 +586,9 @@ export function getMediaQueueState(url: string): MediaQueueState | null {
  * 것까지 공간 부족으로 치면, 다시 받지 않고 '저장 공간 부족'을 잘못 알린다. 그 대신 브라우저가
  * 남은 용량을 부풀려 알려 주면 실제 부족도 `network`로 남아 큐와 `useCacheFirstVideo`의
  * 재시도 한도까지 다시 받는다.
+ * 받기 실패(무진행 중단, 닿지 못함, 5xx, 본문을 받다 끊김)는 상관 ID와 함께 실패
+ * 보고(`clientReports`)에도 담는다. 본문 스트림의 네트워크 오류는 `fetch()` 밖에서
+ * `TypeError`로 나므로 따로 가려 담는다. 저장 공간 부족은 서버와 상관없는 기기 사정이라 담지 않는다.
  *
  * 끊긴 지점부터 `Range`로 이어 받지 않고 처음부터 다시 받는다. 페이지 요청은 SW의
  * `CacheFirst` 라우트를 피할 수 없고 그 라우트는 206을 담지 않는다(`statuses: [200]`).

@@ -94,6 +94,7 @@ export const EDITOR_COPY = {
     autoSaved: "자동 저장됨",
     lastSynced: (time: string) => `${time}에 마지막으로 동기화했어요`,
     notSyncedYet: "아직 동기화하지 않았어요",
+    failureCode: (code: string) => `문의 코드 ${code}`,
   },
   readOnly: {
     guest:

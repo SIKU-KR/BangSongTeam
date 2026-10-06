@@ -421,6 +421,23 @@ describe("runBootSync — 동기화 상태", () => {
     expect(getSyncSnapshot().status).toBe("synced");
   });
 
+  it("받기를 끝내 실패하면 그 요청의 상관 ID를 문의 코드로 남긴다", async () => {
+    const requestId = "4bf92f3577b34da6a3ce929d0e0e4736";
+    presentationSync.pullPresentations.mockRejectedValueOnce(
+      new ServerRejectedError(400, undefined, undefined, {
+        requestId,
+        route: "/api/presentations",
+      }),
+    );
+
+    await runBootSync();
+
+    expect(getSyncSnapshot()).toMatchObject({
+      status: "error",
+      failureRequestId: requestId,
+    });
+  });
+
   it("받지 못한 단계가 없으면 회복 때 다시 받지 않는다", async () => {
     await runBootSync();
     presentationSync.pullFolders.mockClear();

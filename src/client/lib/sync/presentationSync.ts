@@ -17,9 +17,22 @@ import {
   callApi,
   isRetryableApiError,
   OfflineError,
+  requestIdOfError,
   ServerRejectedError,
 } from "../api/request";
+import { reportApiFailure } from "../observability/clientReports";
 import { setSyncStatus, type SyncStatus } from "./syncStatus";
+
+async function callSyncApi<T>(
+  request: Parameters<typeof callApi>[0],
+): Promise<T> {
+  try {
+    return await callApi<T>(request);
+  } catch (err) {
+    reportApiFailure(err);
+    throw err;
+  }
+}
 
 /**
  * 프레젠테이션을 서버가 받을 수 있는 문서로 좁힌다.
@@ -88,7 +101,7 @@ export function __resetServerDecksForTests(): void {
 }
 
 async function sendChanges(changes: PresentationChanges): Promise<void> {
-  await callApi(() =>
+  await callSyncApi(() =>
     api.api.presentations[":id"].$patch({
       param: { id: changes.id },
       json: changes,
@@ -152,11 +165,13 @@ let sharedRefreshGeneration = 0;
  */
 export async function refreshSharedPresentation(id: string): Promise<void> {
   const generation = sharedRefreshGeneration;
-  const report = (status: SyncStatus): void => {
-    if (generation === sharedRefreshGeneration) setSyncStatus("shared", status);
+  const report = (status: SyncStatus, requestId?: string): void => {
+    if (generation === sharedRefreshGeneration) {
+      setSyncStatus("shared", status, requestId);
+    }
   };
   try {
-    const body = await callApi<{ presentation: unknown }>(() =>
+    const body = await callSyncApi<{ presentation: unknown }>(() =>
       api.api.presentations[":id"].$get({ param: { id } }),
     );
     sharedListener?.replaced(
@@ -169,7 +184,10 @@ export async function refreshSharedPresentation(id: string): Promise<void> {
       report("synced");
       return;
     }
-    report(isRetryableApiError(err) ? "offline" : "error");
+    report(
+      isRetryableApiError(err) ? "offline" : "error",
+      requestIdOfError(err),
+    );
     if (err instanceof OfflineError) return;
     throw err;
   }
@@ -185,8 +203,8 @@ export function endSharedPresentationRefresh(): void {
 }
 
 export async function pullPresentations(): Promise<PresentationDocument[]> {
-  const body = await callApi<{ presentations: PresentationDocument[] }>(() =>
-    api.api.presentations.$get(),
+  const body = await callSyncApi<{ presentations: PresentationDocument[] }>(
+    () => api.api.presentations.$get(),
   );
   return body.presentations;
 }
@@ -198,7 +216,7 @@ export async function pullPresentations(): Promise<PresentationDocument[]> {
  * 로컬에 반영해야 한다.
  */
 export async function pushDeck(deck: Deck): Promise<Deck> {
-  const body = await callApi<{ deck: Deck }>(() =>
+  const body = await callSyncApi<{ deck: Deck }>(() =>
     api.api.decks[":id"].$put({ param: { id: deck.id }, json: deck }),
   );
   return DeckSchema.parse(body.deck);
@@ -207,7 +225,7 @@ export async function pushDeck(deck: Deck): Promise<Deck> {
 /** 이미 없으면(404) 성공으로 본다 */
 export async function deleteDeckRemote(id: string): Promise<void> {
   try {
-    await callApi(() => api.api.decks[":id"].$delete({ param: { id } }));
+    await callSyncApi(() => api.api.decks[":id"].$delete({ param: { id } }));
   } catch (err) {
     if (err instanceof ServerRejectedError && err.status === 404) return;
     throw err;
@@ -215,14 +233,14 @@ export async function deleteDeckRemote(id: string): Promise<void> {
 }
 
 export async function pullDecks(): Promise<Deck[]> {
-  const body = await callApi<{ decks: Deck[] }>(() => api.api.decks.$get());
+  const body = await callSyncApi<{ decks: Deck[] }>(() => api.api.decks.$get());
   return body.decks;
 }
 
 /** 이미 없으면(404 — 한 번도 안 올라간 문서) 성공으로 본다 */
 export async function deletePresentationRemote(id: string): Promise<void> {
   try {
-    await callApi(() =>
+    await callSyncApi(() =>
       api.api.presentations[":id"].$delete({ param: { id } }),
     );
   } catch (err) {
@@ -232,7 +250,7 @@ export async function deletePresentationRemote(id: string): Promise<void> {
 }
 
 export async function pullFolders(): Promise<FolderListResponse> {
-  return callApi<FolderListResponse>(() => api.api.folders.$get());
+  return callSyncApi<FolderListResponse>(() => api.api.folders.$get());
 }
 
 /**
@@ -240,7 +258,7 @@ export async function pullFolders(): Promise<FolderListResponse> {
  * 서버는 없는 부모·사이클을 루트로 보정하므로 호출자는 응답을 반영해야 한다.
  */
 export async function pushFolder(folder: Folder): Promise<Folder> {
-  const body = await callApi<{ folder: Folder }>(() =>
+  const body = await callSyncApi<{ folder: Folder }>(() =>
     api.api.folders[":id"].$put({ param: { id: folder.id }, json: folder }),
   );
   return FolderSchema.parse(body.folder);
@@ -254,7 +272,7 @@ export async function deleteFolderRemote(
   id: string,
 ): Promise<FolderDeleteResponse> {
   try {
-    const body = await callApi<unknown>(() =>
+    const body = await callSyncApi<unknown>(() =>
       api.api.folders[":id"].$delete({ param: { id } }),
     );
     return FolderDeleteResponseSchema.parse(body);

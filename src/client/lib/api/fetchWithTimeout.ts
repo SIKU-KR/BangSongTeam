@@ -5,6 +5,19 @@
  * 방지하기 위해 모든 요청에 요청 단위의 데드라인을 부여한다.
  */
 
+import {
+  createTraceContext,
+  rememberRequestMeta,
+  toRoutePattern,
+  type RequestMeta,
+} from "./traceContext";
+
+const TRACEPARENT_HEADER = "traceparent";
+
+function traceIdOf(traceparent: string | null): string | undefined {
+  return /^00-([0-9a-f]{32})-/.exec(traceparent ?? "")?.[1];
+}
+
 export const DEFAULT_API_TIMEOUT_MS = 10_000;
 export const PULL_API_TIMEOUT_MS = 30_000;
 /** 연결 회복 확인 요청은 짧게 끊는다. 멈춘 연결에서 10초를 기다리면 회복이 그만큼 늦다 */
@@ -91,6 +104,10 @@ export interface FetchWithTimeoutOptions extends RequestInit {
  * 주의: `init`에 고정된 signal을 두면 한 번 만료된 신호가 다음 요청에 재사용되므로,
  * 매 요청마다 새로 `AbortSignal.timeout(timeoutMs)`을 만든다.
  * 호출자가 넘긴 signal이 있으면 `AbortSignal.any`로 합성한다.
+ *
+ * 요청마다 `traceparent`를 붙이고(호출자가 이미 붙였으면 그대로 둔다), 그 상관 ID와
+ * 경로 패턴을 응답이나 던진 오류에 남긴다(`requestMetaOf`). 타임아웃으로 응답이 없어도
+ * 사용자 화면의 실패를 Worker 로그와 이을 수 있다.
  */
 export async function fetchWithTimeout(
   input: RequestInfo | URL,
@@ -113,8 +130,28 @@ export async function fetchWithTimeout(
     ? combineSignals(callerSignal, timeoutSignal)
     : timeoutSignal;
 
-  return await globalThis.fetch(input, {
-    ...init,
-    signal,
-  });
+  const headers = new Headers(
+    init?.headers ?? (input instanceof Request ? input.headers : undefined),
+  );
+  const trace = createTraceContext();
+  if (!headers.has(TRACEPARENT_HEADER)) {
+    headers.set(TRACEPARENT_HEADER, trace.traceparent);
+  }
+  const meta: RequestMeta = {
+    requestId: traceIdOf(headers.get(TRACEPARENT_HEADER)) ?? trace.requestId,
+    route: toRoutePattern(url),
+  };
+
+  try {
+    const response = await globalThis.fetch(input, {
+      ...init,
+      headers,
+      signal,
+    });
+    rememberRequestMeta(response, meta);
+    return response;
+  } catch (err) {
+    if (err !== null && typeof err === "object") rememberRequestMeta(err, meta);
+    throw err;
+  }
 }

@@ -8,3 +8,4 @@ export * from "./folderTree";
 export * from "./overflow";
 export * from "./presentationChanges";
 export * from "./deckBackground";
+export * from "./hex";

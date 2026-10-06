@@ -24,6 +24,8 @@ export interface SyncFailure {
   status?: number;
   message: string;
   failedAt: number;
+  /** 마지막으로 실패한 요청의 상관 ID. 에디터가 '문의 코드'로 보여 주고 Worker 로그에서 찾는다 */
+  requestId?: string;
 }
 
 export interface SyncSnapshot {
@@ -36,10 +38,25 @@ export interface SyncSnapshot {
    * 변경이 있는데도 방금 저장된 것처럼 보인다.
    */
   lastSyncedAt: number | null;
+  /**
+   * 가장 최근 실패의 상관 ID. 에디터가 '문의 코드'로 보여 준다.
+   *
+   * 항목 실패뿐 아니라 항목 없이 도메인이 실패한 경우(부팅 받기를 끝내 실패, 공유받은
+   * 프레젠테이션 새로고침 거절)도 본다. 항목 실패만 보면 그때 헤더는 '동기화 실패'인데
+   * 코드가 없거나, 남아 있던 다른 항목의 오래된 코드를 보여 운영자가 엉뚱한 요청을 찾는다.
+   * 가장 최근 실패에 ID가 없으면(세션 만료처럼 요청 밖의 실패) null이다.
+   */
+  failureRequestId: string | null;
+}
+
+interface DomainFailure {
+  requestId?: string;
+  failedAt: number;
 }
 
 interface DomainState {
   phase: SyncStatus;
+  phaseFailure: DomainFailure | null;
   failures: Map<string, SyncFailure>;
 }
 
@@ -51,7 +68,7 @@ const PRIORITY: readonly SyncStatus[] = [
 ];
 
 function idleDomain(): DomainState {
-  return { phase: "idle", failures: new Map() };
+  return { phase: "idle", phaseFailure: null, failures: new Map() };
 }
 
 function createDomains(): Record<SyncDomain, DomainState> {
@@ -70,6 +87,7 @@ let snapshot: SyncSnapshot = {
   status: "idle",
   lastFailure: null,
   lastSyncedAt: null,
+  failureRequestId: null,
 };
 
 function aggregateStatus(): SyncStatus {
@@ -89,17 +107,31 @@ function latestFailure(): SyncFailure | null {
   return latest;
 }
 
+function latestFailureRequestId(): string | null {
+  let latest: DomainFailure | null = null;
+  for (const state of Object.values(domains)) {
+    const candidates: DomainFailure[] = [...state.failures.values()];
+    if (state.phaseFailure) candidates.push(state.phaseFailure);
+    for (const failure of candidates) {
+      if (!latest || failure.failedAt >= latest.failedAt) latest = failure;
+    }
+  }
+  return latest?.requestId ?? null;
+}
+
 function emit(): void {
   const status = aggregateStatus();
   const lastFailure = latestFailure();
+  const failureRequestId = latestFailureRequestId();
   if (
     snapshot.status === status &&
     snapshot.lastFailure === lastFailure &&
-    snapshot.lastSyncedAt === lastSyncedAt
+    snapshot.lastSyncedAt === lastSyncedAt &&
+    snapshot.failureRequestId === failureRequestId
   ) {
     return;
   }
-  snapshot = { status, lastFailure, lastSyncedAt };
+  snapshot = { status, lastFailure, lastSyncedAt, failureRequestId };
   for (const listener of listeners) listener();
 }
 
@@ -114,11 +146,20 @@ function emit(): void {
  * 'synced'는 성공한 뒤에만 보고하므로, 이미 'synced'인 도메인이 다시 보고해도 마지막
  * 동기화 시각은 새로 남긴다. 단계가 바뀔 때만 남기면 곧바로 올린 곡(`pushDeckNow`)처럼
  * 'syncing'을 거치지 않은 업로드가 시각에 빠진다.
+ *
+ * 'error'로 바꿀 때는 실패한 요청의 상관 ID를 함께 넘긴다(`failureRequestId`).
+ * 다른 단계로 바꾸면 그 도메인의 실패 ID는 지운다.
  */
-export function setSyncStatus(domain: SyncDomain, next: SyncStatus): void {
+export function setSyncStatus(
+  domain: SyncDomain,
+  next: SyncStatus,
+  requestId?: string,
+): void {
   const state = domains[domain];
-  const changed = state.phase !== next;
+  const changed = state.phase !== next || next === "error";
   state.phase = next;
+  state.phaseFailure =
+    next === "error" ? { requestId, failedAt: Date.now() } : null;
   if (next === "synced" && aggregateStatus() === "synced") {
     lastSyncedAt = Date.now();
   } else if (!changed) {
