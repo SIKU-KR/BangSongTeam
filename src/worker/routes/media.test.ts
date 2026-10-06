@@ -119,6 +119,31 @@ describe("GET /api/media/*", () => {
     expect(res.status).toBe(404);
   });
 
+  it("HEAD와 GET 사이에 객체가 작게 바뀌면 500 대신 새 객체 전체를 200으로 돌려준다", async () => {
+    const raceKey = "loops/replaced.mp4";
+    const replacement = "xyz";
+    await env.MEDIA_BUCKET.put(raceKey, BODY);
+    const bucket = env.MEDIA_BUCKET;
+    const racingBucket = Object.assign(Object.create(bucket) as R2Bucket, {
+      head: async (key: string): Promise<R2Object | null> => {
+        const head = await bucket.head(key);
+        await bucket.put(key, replacement);
+        return head;
+      },
+      get: bucket.get.bind(bucket),
+    });
+
+    const res = await app.request(
+      `/api/media/${raceKey}`,
+      { headers: { range: "bytes=10-15" } },
+      { ...env, MEDIA_BUCKET: racingBucket },
+    );
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-range")).toBeNull();
+    expect(await res.text()).toBe(replacement);
+  });
+
   it("빈 객체에 Range를 보내면 416과 크기 0을 돌려준다", async () => {
     const res = await requestRange("bytes=0-", EMPTY_KEY);
 
