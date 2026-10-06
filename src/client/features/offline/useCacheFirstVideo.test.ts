@@ -4,6 +4,7 @@ import { useCacheFirstVideo } from "./useCacheFirstVideo";
 
 const {
   cacheMediaFirst,
+  getMediaQueueState,
   shouldWaitForMediaCache,
   retainMediaUrls,
   releaseMediaUrls,
@@ -13,6 +14,7 @@ const {
   const releaseMediaUrls = vi.fn<(urls: readonly string[]) => void>();
   return {
     cacheMediaFirst: vi.fn<(url: string) => Promise<boolean>>(),
+    getMediaQueueState: vi.fn<(url: string) => string | null>(),
     shouldWaitForMediaCache: vi.fn<(url: string) => boolean>(),
     releaseMediaUrls,
     retainMediaUrls: vi.fn(
@@ -25,6 +27,7 @@ const {
 
 vi.mock("../../lib/offline", () => ({
   cacheMediaFirst,
+  getMediaQueueState,
   shouldWaitForMediaCache,
   retainMediaUrls,
   subscribeMediaProgress: (listener: () => void) => {
@@ -57,6 +60,8 @@ function notifyProgress(): void {
 
 beforeEach(() => {
   cacheMediaFirst.mockReset();
+  getMediaQueueState.mockReset();
+  getMediaQueueState.mockReturnValue(null);
   shouldWaitForMediaCache.mockReset();
   retainMediaUrls.mockClear();
   releaseMediaUrls.mockClear();
@@ -115,6 +120,18 @@ describe("useCacheFirstVideo", () => {
     expect(result.current).toEqual(LAYERS);
     expect(releaseMediaUrls).toHaveBeenCalledWith([VIDEO]);
     expect(cacheMediaFirst).toHaveBeenCalledTimes(1);
+  });
+
+  it("영상이 재시도를 기다리는 중이면 곧바로 받지 않고 붙잡기만 한다", async () => {
+    shouldWaitForMediaCache.mockReturnValue(true);
+    getMediaQueueState.mockReturnValue("retrying");
+
+    const { result } = renderHook(() => useCacheFirstVideo(LAYERS));
+    await act(async () => undefined);
+
+    expect(result.current).toEqual(STILL);
+    expect(cacheMediaFirst).not.toHaveBeenCalled();
+    expect(retainMediaUrls).toHaveBeenCalledWith([VIDEO]);
   });
 
   it("언마운트하면 붙잡은 URL을 놓는다", async () => {

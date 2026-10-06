@@ -12,5 +12,4 @@ export {
   shouldWaitForMediaCache,
   subscribeMediaProgress,
 } from "./mediaCache";
-export type { MediaQueueState } from "./mediaCache";
 export { warmPresentationFonts } from "./fontWarmup";

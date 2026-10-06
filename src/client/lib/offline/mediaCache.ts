@@ -352,6 +352,7 @@ function isPermanentFailure(err: unknown): boolean {
 
 function scheduleRetry(url: string, err: unknown): void {
   clearRetry(url);
+  pending.delete(url);
   if (
     !retained.has(url) ||
     isPermanentFailure(err) ||
@@ -431,9 +432,10 @@ function canCacheInBackground(): boolean {
  * 세트의 나머지보다 먼저 받을 때 쓴다. 이미 받고 있는 항목은 끊지 않는다. 같은 틱에
  * 여러 번 부르면 모두 모은 순서대로 받는다.
  *
- * 이 세션에서 담긴 것을 확인한 URL과 재시도를 기다리는 URL은 넣지 않는다. 송출 중 곡이
- * 바뀔 때마다 불려도 백오프 간격이 줄지 않아야, SW가 아직 받고 있을 수 있는 파일을 겹쳐
- * 받지 않는다.
+ * 받고 있는 URL과 재시도를 기다리는 URL은 넣지 않는다. 송출 중 곡이 바뀔 때마다 불려도
+ * 백오프 간격이 줄지 않아야, SW가 아직 받고 있을 수 있는 파일을 겹쳐 받지 않는다. 받다가
+ * 실패한 URL도 큐에서 빼고 재시도 타이머에 맡긴다. 이 세션에서 담긴 것을 확인한 URL은 다시
+ * 넣어 캐시를 열어 본다. SW의 만료 정책이 페이지 모르게 지웠을 수 있어서다.
  */
 export function scheduleMediaCaching(
   urls: readonly string[],
@@ -441,7 +443,7 @@ export function scheduleMediaCaching(
 ): void {
   if (urls.length === 0 || !canCacheInBackground()) return;
   const fresh = urls.filter(
-    (url) => !knownCached.has(url) && !retryTimers.has(url),
+    (url) => !inFlight.has(url) && !retryTimers.has(url),
   );
   for (const url of fresh) failures.delete(url);
   if (options.priority) {

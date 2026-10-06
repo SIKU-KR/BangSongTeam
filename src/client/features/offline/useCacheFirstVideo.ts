@@ -2,6 +2,7 @@ import { useEffect, useState, useSyncExternalStore } from "react";
 import {
   cacheMediaFirst,
   getMediaProgressVersion,
+  getMediaQueueState,
   retainMediaUrls,
   shouldWaitForMediaCache,
   subscribeMediaProgress,
@@ -18,7 +19,8 @@ import type { BackgroundLayers } from "../backgrounds/backgroundCatalog";
  * 캐시에 실패하면 스트리밍으로 넘어가지 않고 포스터를 유지한다. 캐시본 없이 재생되면 배경이
  * 저장된 것처럼 보이다가 오프라인 예배에서 멈추기 때문이다. 기다리는 동안 영상 URL을
  * 붙잡아(`retainMediaUrls`) 다시 받기는 백그라운드 큐의 백오프에 맡긴다. 여기서 따로
- * 타이머를 돌리면 큐와 같은 파일을 겹쳐 받는다.
+ * 타이머를 돌리면 큐와 같은 파일을 겹쳐 받는다. 곡을 바꿨다 돌아왔을 때 그 영상이 재시도를
+ * 기다리는 중이면 곧바로 받지 않는다. 받으면 백오프 간격이 사라진다.
  *
  * 큐나 헤더의 수동 확인(`useProjectionMediaReady`)이 캐시에 담으면 미디어 진행 구독이 다시
  * 그리게 하고, `shouldWaitForMediaCache`가 false가 되어 곧바로 영상을 재생한다. 그래서
@@ -40,9 +42,11 @@ export function useCacheFirstVideo(layers: BackgroundLayers): BackgroundLayers {
     if (!videoUrl || !waiting) return;
     let cancelled = false;
     const release = retainMediaUrls([videoUrl]);
-    void cacheMediaFirst(videoUrl).then((cached) => {
-      if (!cancelled && cached) setReadyUrl(videoUrl);
-    });
+    if (getMediaQueueState(videoUrl) !== "retrying") {
+      void cacheMediaFirst(videoUrl).then((cached) => {
+        if (!cancelled && cached) setReadyUrl(videoUrl);
+      });
+    }
     return () => {
       cancelled = true;
       release();

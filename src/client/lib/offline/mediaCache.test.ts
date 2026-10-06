@@ -465,18 +465,16 @@ describe("scheduleMediaCaching", () => {
     expect(await isCached(VIDEO)).toBe(true);
   });
 
-  it("이 세션에서 담긴 것을 확인한 URL은 다시 큐에 넣지 않는다", async () => {
+  it("이 세션에서 담긴 것을 확인한 URL은 다시 넣어도 캐시에 있으면 다시 받지 않는다", async () => {
     mockFetch();
     await cacheMediaUrls([VIDEO]);
     const fetchMock = mockFetch();
-    const open = vi.spyOn(caches, "open");
 
     scheduleMediaCaching([VIDEO]);
-    expect(getMediaQueueState(VIDEO)).toBeNull();
     await __waitForMediaCachingForTests();
 
-    expect(open).not.toHaveBeenCalled();
     expect(fetchMock).not.toHaveBeenCalled();
+    expect(getMediaQueueState(VIDEO)).toBeNull();
   });
 
   it("처음 시작할 때 한 번만 영구 저장소를 요청한다", async () => {
@@ -939,6 +937,46 @@ describe("백그라운드 재시도", () => {
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(getMediaQueueState(VIDEO)).toBe("retrying");
+  });
+
+  it("받는 중에 다시 넣은 URL도 실패하면 백오프를 기다린 뒤에 다시 받는다", async () => {
+    retainMediaUrls([VIDEO, OTHER]);
+    const attempts = new Map<string, number>();
+    const fetchMock = mockFetch(async (url) => {
+      const attempt = (attempts.get(url) ?? 0) + 1;
+      attempts.set(url, attempt);
+      return attempt === 1 ? stalledResponse() : okResponse();
+    });
+    const videoFetches = (): number =>
+      fetchMock.mock.calls.filter(([url]) => String(url) === VIDEO).length;
+
+    void cacheMediaFirst(VIDEO);
+    await vi.advanceTimersByTimeAsync(10);
+    scheduleMediaCaching([OTHER, VIDEO]);
+    expect(getMediaQueueState(VIDEO)).toBe("downloading");
+
+    await vi.advanceTimersByTimeAsync(MEDIA_STALL_TIMEOUT_MS);
+    expect(getMediaQueueState(VIDEO)).toBe("retrying");
+    await vi.advanceTimersByTimeAsync(MEDIA_STALL_TIMEOUT_MS - 20);
+    expect(videoFetches()).toBe(1);
+
+    await settle(MEDIA_STALL_TIMEOUT_MS);
+    expect(videoFetches()).toBe(2);
+    expect(await isCached(VIDEO)).toBe(true);
+  });
+
+  it("담긴 것을 확인한 URL도 캐시에서 사라졌으면 다시 넣을 때 다시 받는다", async () => {
+    const fetchMock = mockFetch();
+    scheduleMediaCaching([POSTER]);
+    await settle();
+    const cache = await caches.open(mediaCacheNameFor(POSTER));
+    await cache.delete(POSTER);
+
+    scheduleMediaCaching([POSTER]);
+    await settle();
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(await isCached(POSTER)).toBe(true);
   });
 
   it("연결이 회복되면 백오프를 기다리지 않고 곧바로 다시 받는다", async () => {
