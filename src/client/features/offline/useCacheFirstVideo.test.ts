@@ -120,11 +120,13 @@ describe("useCacheFirstVideo", () => {
     });
     expect(cacheMediaFirst).toHaveBeenCalledTimes(MAX_TIMED_RETRIES + 2);
 
+    await act(() => vi.advanceTimersByTimeAsync(MAX_BACKOFF_MS));
     await act(async () => {
       window.dispatchEvent(new Event("focus"));
     });
     expect(cacheMediaFirst).toHaveBeenCalledTimes(MAX_TIMED_RETRIES + 3);
 
+    await act(() => vi.advanceTimersByTimeAsync(MAX_BACKOFF_MS));
     await act(async () => {
       document.dispatchEvent(new Event("visibilitychange"));
     });
@@ -132,6 +134,37 @@ describe("useCacheFirstVideo", () => {
 
     await act(() => vi.advanceTimersByTimeAsync(MAX_BACKOFF_MS * 2));
     expect(cacheMediaFirst).toHaveBeenCalledTimes(MAX_TIMED_RETRIES + 4);
+  });
+
+  it("한도를 넘긴 뒤 탭 복귀·포커스가 잇달아 와도 한 번만 다시 받는다", async () => {
+    vi.useFakeTimers();
+    shouldWaitForMediaCache.mockReturnValue(true);
+    cacheMediaFirst.mockResolvedValue(false);
+
+    renderHook(() => useCacheFirstVideo(LAYERS));
+    await act(async () => undefined);
+    for (let i = 0; i < MAX_TIMED_RETRIES + 2; i += 1) {
+      await act(() => vi.advanceTimersByTimeAsync(MAX_BACKOFF_MS * 2));
+    }
+    expect(cacheMediaFirst).toHaveBeenCalledTimes(MAX_TIMED_RETRIES + 1);
+
+    await act(async () => {
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+    await act(async () => {
+      window.dispatchEvent(new Event("focus"));
+    });
+    await act(() => vi.advanceTimersByTimeAsync(MAX_BACKOFF_MS - 1));
+    await act(async () => {
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+    expect(cacheMediaFirst).toHaveBeenCalledTimes(MAX_TIMED_RETRIES + 2);
+
+    await act(() => vi.advanceTimersByTimeAsync(1));
+    await act(async () => {
+      window.dispatchEvent(new Event("focus"));
+    });
+    expect(cacheMediaFirst).toHaveBeenCalledTimes(MAX_TIMED_RETRIES + 3);
   });
 
   it("백오프를 기다리는 동안 온 포커스는 재시도를 앞당기지 않는다", async () => {

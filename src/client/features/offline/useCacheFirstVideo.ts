@@ -3,13 +3,16 @@ import { cacheMediaFirst, shouldWaitForMediaCache } from "../../lib/offline";
 import {
   BASE_BACKOFF_MS,
   calculateBackoffWithJitter,
+  MAX_BACKOFF_MS,
 } from "../../lib/sync/backoff";
 import type { BackgroundLayers } from "../backgrounds/backgroundCatalog";
 
 /**
  * 캐시 실패 뒤 타이머로 다시 받는 최대 횟수. 저장 공간 부족처럼 다시 받아도 낫지 않는
  * 실패에서도 시도마다 파일 전체를 내려받으므로, 넘으면 연결 회복(`online`)이나 탭
- * 복귀·포커스에서만 한 번씩 다시 받는다.
+ * 복귀·포커스에서만 한 번씩 다시 받는다. 탭 복귀·포커스는 직전 시도가 끝난 뒤
+ * `MAX_BACKOFF_MS`가 지나야 다시 받는다. 창을 오갈 때마다 파일 전체를 다시 받지 않게 하기
+ * 위해서다.
  */
 export const MAX_TIMED_RETRIES = 3;
 
@@ -44,6 +47,7 @@ export function useCacheFirstVideo(layers: BackgroundLayers): BackgroundLayers {
     let cancelled = false;
     let inProgress = false;
     let attempt = 0;
+    let lastFinishedAt = Number.NEGATIVE_INFINITY;
     let timer: ReturnType<typeof setTimeout> | undefined;
     const tryCache = async (): Promise<void> => {
       if (inProgress) return;
@@ -52,6 +56,7 @@ export function useCacheFirstVideo(layers: BackgroundLayers): BackgroundLayers {
       timer = undefined;
       const cached = await cacheMediaFirst(videoUrl);
       inProgress = false;
+      lastFinishedAt = Date.now();
       if (cancelled) return;
       if (cached) {
         setReadyUrl(videoUrl);
@@ -66,7 +71,13 @@ export function useCacheFirstVideo(layers: BackgroundLayers): BackgroundLayers {
     };
     const retryNow = (): void => void tryCache();
     const wake = (): void => {
-      if (document.visibilityState === "hidden" || timer !== undefined) return;
+      if (
+        document.visibilityState === "hidden" ||
+        timer !== undefined ||
+        Date.now() - lastFinishedAt < MAX_BACKOFF_MS
+      ) {
+        return;
+      }
       void tryCache();
     };
     window.addEventListener("online", retryNow);
