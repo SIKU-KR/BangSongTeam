@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { renderHook, act } from "@testing-library/react";
-import { MAX_BACKOFF_MS } from "../../lib/sync/backoff";
-import { useCacheFirstVideo } from "./useCacheFirstVideo";
+import { BASE_BACKOFF_MS, MAX_BACKOFF_MS } from "../../lib/sync/backoff";
+import { MAX_TIMED_RETRIES, useCacheFirstVideo } from "./useCacheFirstVideo";
 
 const { cacheMediaFirst, shouldWaitForMediaCache } = vi.hoisted(() => ({
   cacheMediaFirst: vi.fn<(url: string) => Promise<boolean>>(),
@@ -35,6 +35,7 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.useRealTimers();
+  vi.restoreAllMocks();
 });
 
 describe("useCacheFirstVideo", () => {
@@ -68,14 +69,40 @@ describe("useCacheFirstVideo", () => {
     shouldWaitForMediaCache.mockReturnValue(true);
     cacheMediaFirst.mockResolvedValueOnce(false).mockResolvedValueOnce(true);
 
+    vi.spyOn(Math, "random").mockReturnValue(0.5);
+
     const { result } = renderHook(() => useCacheFirstVideo(LAYERS));
     await act(async () => undefined);
     expect(result.current).toEqual({ imageUrl: POSTER, posterUrl: POSTER });
 
-    await act(() => vi.advanceTimersByTimeAsync(MAX_BACKOFF_MS));
+    await act(() => vi.advanceTimersByTimeAsync(BASE_BACKOFF_MS / 2 - 1));
+    expect(cacheMediaFirst).toHaveBeenCalledTimes(1);
 
+    await act(() => vi.advanceTimersByTimeAsync(1));
     expect(cacheMediaFirst).toHaveBeenCalledTimes(2);
     expect(result.current).toEqual(LAYERS);
+  });
+
+  it("타이머 재시도는 한도에서 멈추고 그 뒤로는 연결이 돌아올 때만 다시 받는다", async () => {
+    vi.useFakeTimers();
+    shouldWaitForMediaCache.mockReturnValue(true);
+    cacheMediaFirst.mockResolvedValue(false);
+
+    const { result } = renderHook(() => useCacheFirstVideo(LAYERS));
+    await act(async () => undefined);
+    for (let i = 0; i < MAX_TIMED_RETRIES + 2; i += 1) {
+      await act(() => vi.advanceTimersByTimeAsync(MAX_BACKOFF_MS));
+    }
+
+    expect(cacheMediaFirst).toHaveBeenCalledTimes(MAX_TIMED_RETRIES + 1);
+    expect(result.current).toEqual({ imageUrl: POSTER, posterUrl: POSTER });
+
+    await act(async () => {
+      window.dispatchEvent(new Event("online"));
+    });
+    await act(() => vi.advanceTimersByTimeAsync(MAX_BACKOFF_MS));
+
+    expect(cacheMediaFirst).toHaveBeenCalledTimes(MAX_TIMED_RETRIES + 2);
   });
 
   it("연결이 돌아오면 기다리지 않고 다시 받는다", async () => {
