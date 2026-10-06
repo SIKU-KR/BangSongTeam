@@ -35,6 +35,7 @@ let runningMode: SyncRetryMode = "wake";
 let queuedMode: SyncRetryMode | null = null;
 let deferredMode: SyncRetryMode | null = null;
 let modeOnReachable: SyncRetryMode | null = null;
+let outageEnded = false;
 let reachableSince = 0;
 const probeBackoff = new BackoffTracker();
 const resumeListeners = new Set<(mode: SyncRetryMode) => void>();
@@ -94,7 +95,9 @@ function runProbe(): Promise<void> {
 async function runResume(mode: SyncRetryMode): Promise<void> {
   clearProbeTimer();
   if (mode !== "wake") probeBackoff.reset();
-  resumeMediaCaching(mode);
+  const afterOutage = outageEnded;
+  outageEnded = false;
+  resumeMediaCaching(mode, { afterOutage });
   for (const listener of resumeListeners) listener(mode);
   await retryBootSyncIfNeeded(mode).catch(() => false);
   void retryFolderSyncNow(mode).catch(() => undefined);
@@ -109,7 +112,7 @@ function resume(mode: SyncRetryMode): Promise<void> {
     return Promise.resolve();
   }
   if (resumeInFlight) {
-    if (MODE_RANK[mode] > MODE_RANK[runningMode]) {
+    if (MODE_RANK[mode] > MODE_RANK[runningMode] || outageEnded) {
       queuedMode = stronger(queuedMode, mode);
     }
     return resumeInFlight;
@@ -146,6 +149,7 @@ function wake(mode: SyncRetryMode): void {
 function handleReachabilityChange(): void {
   if (isServerReachable()) {
     reachableSince = Date.now();
+    outageEnded = true;
     const mode = modeOnReachable ?? "wake";
     modeOnReachable = null;
     queueMicrotask(() => void resume(mode));
@@ -181,7 +185,8 @@ function handleVisibilityChange(): void {
  * `refetchOnReconnect`·`refetchOnWindowFocus`와 같은 원칙).
  *
  * 포커스·탭 복귀·상태 확인 성공은 자주 오므로 큐의 백오프 횟수와 서버가 준 대기를 비우지
- * 않는다(`SyncRetryMode`의 `wake`). 상태 확인의 백오프도 회복 때 비우지 않고, 닿는 상태가
+ * 않는다(`SyncRetryMode`의 `wake`). 다만 닿지 못하다 다시 닿았으면 배경 다운로드에는
+ * 그 사실(`afterOutage`)을 함께 넘겨, 끊긴 동안 재시도를 다 쓴 영상을 다시 받게 한다. 상태 확인의 백오프도 회복 때 비우지 않고, 닿는 상태가
  * `STABLE_REACHABLE_MS` 이상 이어진 뒤 다시 끊겼을 때만 비운다. 상태 확인은 닿는데 무거운
  * 요청만 시간을 넘기는 느린 연결에서, 회복할 때마다 처음 간격으로 돌아가 같은 요청을 쉬지
  * 않고 다시 보내지 않게 하려는 것이다.
@@ -221,6 +226,7 @@ function resetRecoveryState(): void {
   queuedMode = null;
   deferredMode = null;
   modeOnReachable = null;
+  outageEnded = false;
   reachableSince = 0;
   isPaused = NEVER_PAUSED;
   started = false;

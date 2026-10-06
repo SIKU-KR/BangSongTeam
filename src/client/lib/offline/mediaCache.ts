@@ -459,15 +459,22 @@ export function retainMediaUrls(urls: readonly string[]): () => void {
  * 앞당긴다. 서버가 거절해(5xx·429) 기다리던 URL과 재시도를 포기한 URL은 그대로 둔다.
  * 시도마다 큰 영상을 처음부터 다시 받으므로, 포커스마다 넣으면 백오프와
  * `MAX_MEDIA_RETRIES`가 소용없어진다.
+ *
+ * 다만 서버에 닿지 못하다가 다시 닿은 것을 확인했으면(`afterOutage`) `wake`라도 재시도를
+ * 포기한 URL을 다시 넣는다. `online` 이벤트 없이 끊긴 동안(캡티브 포털, 멈춘 Wi‑Fi)에도
+ * 큐는 계속 받다 한도를 다 쓰므로, 그렇지 않으면 회복한 뒤에도 영영 다시 받지 않는다.
  */
-export function resumeMediaCaching(mode: SyncRetryMode = "reconnect"): void {
+export function resumeMediaCaching(
+  mode: SyncRetryMode = "reconnect",
+  options: { afterOutage?: boolean } = {},
+): void {
   if (!canCacheInBackground()) return;
   const waiting = [...retryTimers.keys()].filter(
     (url) => mode !== "wake" || !waitingOnServer.has(url),
   );
   for (const url of waiting) clearRetry(url);
   const failed =
-    mode === "wake"
+    mode === "wake" && !options.afterOutage
       ? []
       : [...retained.keys()].filter(
           (url) => getMediaCacheFailure(url) === "network",

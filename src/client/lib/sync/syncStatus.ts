@@ -110,13 +110,19 @@ function emit(): void {
  * 폴더가 'synced'를 보고해도 프레젠테이션의 'error'·'offline'은 그대로 남는다.
  * 한 큐의 성공이 다른 큐의 실패를 덮으면 프레젠테이션 저장이 실패했는데도 헤더가
  * '동기화됨'으로 바뀌어, 사용자는 저장된 줄 알고 기기를 끈다.
+ *
+ * 'synced'는 성공한 뒤에만 보고하므로, 이미 'synced'인 도메인이 다시 보고해도 마지막
+ * 동기화 시각은 새로 남긴다. 단계가 바뀔 때만 남기면 곧바로 올린 곡(`pushDeckNow`)처럼
+ * 'syncing'을 거치지 않은 업로드가 시각에 빠진다.
  */
 export function setSyncStatus(domain: SyncDomain, next: SyncStatus): void {
   const state = domains[domain];
-  if (state.phase === next) return;
+  const changed = state.phase !== next;
   state.phase = next;
   if (next === "synced" && aggregateStatus() === "synced") {
     lastSyncedAt = Date.now();
+  } else if (!changed) {
+    return;
   }
   emit();
 }

@@ -197,8 +197,11 @@ export function flushFolderSync(): Promise<void> {
  * 연결 회복 신호(`syncRecovery`)에 맞춰 대기 중인 폴더를 곧바로 올린다.
  *
  * `wake`는 서버가 거절해(5xx·429) 기다리는 중이면 백오프 타이머에 맡긴다. 포커스마다
- * 앞당기면 `Retry-After`를 어기고 서버 재시도 한도에 이르지 못한다. `manual`은 영구
- * 실패로 남긴 폴더도 실패 기록을 지우고 다시 넣는다.
+ * 앞당기면 `Retry-After`를 어기고 서버 재시도 한도에 이르지 못한다. 기다리는 폴더만 빼고
+ * 보내지 않는 것은 부모보다 자식이 먼저 도착하면 서버가 자식을 루트로 옮기기 때문이다.
+ * `reconnect`·`manual`은 백오프를 비우고 모두 보낸다(`syncScheduler`와 같다). 비우지
+ * 않으면 '다시 시도' 뒤 한 번 더 실패한 폴더가 지난 횟수 때문에 곧바로 영구 실패가 된다.
+ * `manual`은 영구 실패로 남긴 폴더도 실패 기록을 지우고 다시 넣는다.
  */
 export function retryFolderSyncNow(mode: SyncRetryMode): Promise<void> {
   if (mode === "manual") {
@@ -208,6 +211,7 @@ export function retryFolderSyncNow(mode: SyncRetryMode): Promise<void> {
     }
     failed = new Map();
   }
+  if (mode !== "wake") backoff.reset();
   if (mode === "wake" && waitingOnServer) return inFlight;
   return flushFolderSync();
 }

@@ -1097,6 +1097,31 @@ describe("백그라운드 재시도", () => {
     expect(fetchMock).toHaveBeenCalledTimes(calls);
   });
 
+  it("끊겼다 다시 닿은 뒤의 wake는 재시도를 포기한 URL도 다시 받는다", async () => {
+    retainMediaUrls([VIDEO]);
+    let blocked = true;
+    const fetchMock = mockFetch(async () => {
+      if (blocked) throw new TypeError("Failed to fetch");
+      return okResponse();
+    });
+
+    scheduleMediaCaching([VIDEO]);
+    await settle();
+    for (let i = 0; i < MAX_MEDIA_RETRIES + 2; i += 1) {
+      await settle(MEDIA_STALL_TIMEOUT_MS);
+    }
+    expect(getMediaQueueState(VIDEO)).toBeNull();
+    expect(getMediaCacheFailure(VIDEO)).toBe("network");
+    const calls = fetchMock.mock.calls.length;
+
+    blocked = false;
+    resumeMediaCaching("wake", { afterOutage: true });
+    await settle();
+
+    expect(await isCached(VIDEO)).toBe(true);
+    expect(fetchMock).toHaveBeenCalledTimes(calls + 1);
+  });
+
   it("오프라인이면 연결이 회복돼도 다시 받지 않고 재시도를 그대로 둔다", async () => {
     retainMediaUrls([VIDEO]);
     const fetchMock = failingThen([networkError]);

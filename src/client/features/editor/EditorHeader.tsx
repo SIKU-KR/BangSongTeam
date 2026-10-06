@@ -151,14 +151,14 @@ function SaveStatusIndicator(): React.JSX.Element {
               variant="ghost"
               size="xs"
               data-testid="save-status"
-              className="min-w-0 shrink text-muted-foreground"
+              className="min-w-0 shrink"
             />
           }
         >
           <span
             className={cn("size-1.5 shrink-0 rounded-full", dotClass)}
           ></span>
-          <span className="truncate">{label}</span>
+          <span className="truncate text-muted-foreground">{label}</span>
         </TooltipTrigger>
         <TooltipContent data-testid="save-status-detail">
           {lastSyncedAt === null

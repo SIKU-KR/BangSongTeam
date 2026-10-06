@@ -8,6 +8,7 @@ import {
 import {
   scheduleFolderPush,
   flushFolderSync,
+  retryFolderSyncNow,
   setFolderSyncEnabled,
   setServerFolderListener,
   __setFolderPusherForTests,
@@ -258,6 +259,27 @@ describe("폴더 push 큐", () => {
 
     vi.useRealTimers();
   });
+
+  it.each(["reconnect", "manual"] as const)(
+    "%s 재시도는 백오프를 비워 한도 가까이 실패한 폴더가 한 번 더 실패해도 영구 실패로 넘기지 않는다",
+    async (mode) => {
+      push.mockRejectedValue(new ServerRejectedError(503, "지속 과부하"));
+      __setFolderBackoffRandomForTests(() => 1);
+      vi.useFakeTimers();
+
+      scheduleFolderPush(folder(PARENT, null));
+      while (push.mock.calls.length < 10) {
+        await vi.advanceTimersByTimeAsync(1000);
+      }
+
+      await retryFolderSyncNow(mode);
+
+      expect(push).toHaveBeenCalledTimes(11);
+      expect(getSyncSnapshot().status).toBe("offline");
+
+      vi.useRealTimers();
+    },
+  );
 
   it("재시도 한도(MAX_RETRY_ATTEMPTS)를 초과하면 재시도를 중단하고 error 상태가 된다", async () => {
     push.mockRejectedValue(new ServerRejectedError(503, "지속 과부하"));

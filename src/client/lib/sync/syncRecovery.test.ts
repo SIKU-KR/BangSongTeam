@@ -237,10 +237,39 @@ describe("동기화 회복", () => {
       window.dispatchEvent(new Event(event));
       await __waitForSyncRecoveryForTests();
 
-      expect(recoveryDeps.resumeMediaCaching).toHaveBeenCalledWith(mode);
+      expect(recoveryDeps.resumeMediaCaching).toHaveBeenCalledWith(mode, {
+        afterOutage: false,
+      });
       expect(listener).toHaveBeenCalledWith(mode);
     },
   );
+
+  it("상태 확인으로 다시 닿으면 끊긴 동안 재시도를 다 쓴 배경도 다시 받게 하고, 그 뒤 포커스에는 넘기지 않는다", async () => {
+    setVisibility("visible");
+    server.blocked = true;
+    markServerUnreachable();
+    start();
+
+    server.blocked = false;
+    window.dispatchEvent(new Event("focus"));
+    await __waitForSyncRecoveryForTests();
+    await vi.advanceTimersByTimeAsync(0);
+    await __waitForSyncRecoveryForTests();
+
+    expect(isServerReachable()).toBe(true);
+    expect(recoveryDeps.resumeMediaCaching).toHaveBeenCalledTimes(1);
+    expect(recoveryDeps.resumeMediaCaching).toHaveBeenLastCalledWith("wake", {
+      afterOutage: true,
+    });
+
+    window.dispatchEvent(new Event("focus"));
+    await __waitForSyncRecoveryForTests();
+
+    expect(recoveryDeps.resumeMediaCaching).toHaveBeenCalledTimes(2);
+    expect(recoveryDeps.resumeMediaCaching).toHaveBeenLastCalledWith("wake", {
+      afterOutage: false,
+    });
+  });
 
   it("탭이 가려질 때는 회복 경로를 타지 않는다", async () => {
     setVisibility("hidden");
@@ -374,7 +403,9 @@ describe("동기화 회복", () => {
 
     expect(recoveryDeps.retryBootSyncIfNeeded).toHaveBeenCalledTimes(1);
     expect(recoveryDeps.resumeMediaCaching).toHaveBeenCalledTimes(1);
-    expect(recoveryDeps.resumeMediaCaching).toHaveBeenCalledWith("manual");
+    expect(recoveryDeps.resumeMediaCaching).toHaveBeenCalledWith("manual", {
+      afterOutage: false,
+    });
     expect(listener).toHaveBeenCalledTimes(1);
     expect(listener).toHaveBeenCalledWith("manual");
     expect(pushFolder).toHaveBeenCalledTimes(1);

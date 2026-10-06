@@ -166,6 +166,15 @@ describe("동기화 상태", () => {
       expect(getSyncSnapshot().lastSyncedAt).toBe(Date.now());
     });
 
+    it("이미 동기화됨인 도메인이 다시 성공을 보고해도 시각을 새로 남긴다", () => {
+      setSyncStatus("deck", "synced");
+      vi.advanceTimersByTime(60_000);
+
+      setSyncStatus("deck", "synced");
+
+      expect(getSyncSnapshot().lastSyncedAt).toBe(Date.now());
+    });
+
     it("초기화하면 지운다", () => {
       setSyncStatus("presentation", "synced");
 

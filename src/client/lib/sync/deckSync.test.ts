@@ -5,6 +5,7 @@ import {
   scheduleDeckDelete,
   pushDeckNow,
   flushDeckSync,
+  retryDeckSyncNow,
   setDeckSyncEnabled,
   setServerDeckListener,
   __setDeckTransportForTests,
@@ -332,6 +333,70 @@ describe("보관함 push 큐", () => {
       status: "synced",
       lastFailure: null,
     });
+  });
+
+  it.each(["reconnect", "manual"] as const)(
+    "%s 재시도는 백오프를 비워 한도 가까이 실패한 곡이 한 번 더 실패해도 영구 실패로 넘기지 않는다",
+    async (mode) => {
+      push.mockRejectedValue(new ServerRejectedError(503, "지속 과부하"));
+      __setDeckBackoffRandomForTests(() => 1);
+      vi.useFakeTimers();
+
+      scheduleDeckPush(deck());
+      while (push.mock.calls.length < 10) {
+        await vi.advanceTimersByTimeAsync(1000);
+      }
+
+      await retryDeckSyncNow(mode);
+
+      expect(push).toHaveBeenCalledTimes(11);
+      expect(getSyncSnapshot().status).toBe("offline");
+
+      vi.useRealTimers();
+    },
+  );
+
+  it("포커스(wake)는 서버가 거절해 기다리는 곡만 두고 오프라인으로 밀린 곡은 곧바로 보낸다", async () => {
+    const B = "c0000000000000000000b";
+    push.mockImplementation(async (d: Deck) => {
+      if (d.id === A) throw new ServerRejectedError(503, "과부하");
+      throw new OfflineError();
+    });
+    __setDeckBackoffRandomForTests(() => 1);
+    vi.useFakeTimers();
+
+    scheduleDeckPush(deck());
+    scheduleDeckPush({ ...deck("다른 곡"), id: B });
+    await flushDeckSync();
+    expect(push).toHaveBeenCalledTimes(2);
+
+    push.mockImplementation(async (d: Deck) => d);
+    await retryDeckSyncNow("wake");
+
+    expect(push).toHaveBeenCalledTimes(3);
+    expect(push.mock.calls[2][0].id).toBe(B);
+    expect(getSyncSnapshot().status).toBe("offline");
+
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(push).toHaveBeenCalledTimes(4);
+    expect(push.mock.calls[3][0].id).toBe(A);
+    expect(getSyncSnapshot().status).toBe("synced");
+
+    vi.useRealTimers();
+  });
+
+  it("pushDeckNow는 이미 동기화됨이어도 마지막 동기화 시각을 새로 남긴다", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    scheduleDeckPush(deck());
+    await flushDeckSync();
+    const syncedAt = getSyncSnapshot().lastSyncedAt;
+    vi.advanceTimersByTime(60_000);
+
+    await pushDeckNow(deck("공개"));
+
+    expect(getSyncSnapshot().lastSyncedAt).toBe(Date.now());
+    expect(getSyncSnapshot().lastSyncedAt).not.toBe(syncedAt);
+    vi.useRealTimers();
   });
 
   it("pushDeckNow는 오프라인으로 밀린 곡이 남아 있으면 synced로 바꾸지 않는다", async () => {
