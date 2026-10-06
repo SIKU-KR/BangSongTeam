@@ -2,6 +2,7 @@ export {
   cacheMediaFirst,
   ensureMediaSpace,
   findCachedMediaUrls,
+  getMediaCacheFailure,
   getMediaProgress,
   getMediaProgressVersion,
   scheduleMediaCaching,

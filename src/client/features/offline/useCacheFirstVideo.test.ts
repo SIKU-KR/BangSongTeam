@@ -3,13 +3,16 @@ import { renderHook, act } from "@testing-library/react";
 import { BASE_BACKOFF_MS, MAX_BACKOFF_MS } from "../../lib/sync/backoff";
 import { MAX_TIMED_RETRIES, useCacheFirstVideo } from "./useCacheFirstVideo";
 
-const { cacheMediaFirst, shouldWaitForMediaCache } = vi.hoisted(() => ({
-  cacheMediaFirst: vi.fn<(url: string) => Promise<boolean>>(),
-  shouldWaitForMediaCache: vi.fn<(url: string) => boolean>(),
-}));
+const { cacheMediaFirst, getMediaCacheFailure, shouldWaitForMediaCache } =
+  vi.hoisted(() => ({
+    cacheMediaFirst: vi.fn<(url: string) => Promise<boolean>>(),
+    getMediaCacheFailure: vi.fn<(url: string) => string | undefined>(),
+    shouldWaitForMediaCache: vi.fn<(url: string) => boolean>(),
+  }));
 
 vi.mock("../../lib/offline", () => ({
   cacheMediaFirst,
+  getMediaCacheFailure,
   shouldWaitForMediaCache,
 }));
 
@@ -30,6 +33,7 @@ function deferred(): {
 
 beforeEach(() => {
   cacheMediaFirst.mockReset();
+  getMediaCacheFailure.mockReset();
   shouldWaitForMediaCache.mockReset();
 });
 
@@ -201,6 +205,31 @@ describe("useCacheFirstVideo", () => {
     }
 
     expect(cacheMediaFirst).toHaveBeenCalledTimes(MAX_TIMED_RETRIES + 1);
+  });
+
+  it("저장 공간이 모자라 실패하면 타이머나 탭 복귀로 다시 받지 않고 연결이 돌아올 때만 다시 받는다", async () => {
+    vi.useFakeTimers();
+    shouldWaitForMediaCache.mockReturnValue(true);
+    cacheMediaFirst.mockResolvedValue(false);
+    getMediaCacheFailure.mockReturnValue("quota");
+
+    renderHook(() => useCacheFirstVideo(LAYERS));
+    await act(async () => undefined);
+    await act(() => vi.advanceTimersByTimeAsync(MAX_BACKOFF_MS * 2));
+
+    expect(cacheMediaFirst).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      window.dispatchEvent(new Event("focus"));
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+    expect(cacheMediaFirst).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      window.dispatchEvent(new Event("online"));
+    });
+
+    expect(cacheMediaFirst).toHaveBeenCalledTimes(2);
   });
 
   it("연결이 돌아오면 기다리지 않고 다시 받는다", async () => {

@@ -14,8 +14,10 @@ import {
   cacheMediaFirst,
   ensureMediaSpace,
   findCachedMediaUrls,
+  getMediaCacheFailure,
   getMediaProgress,
   getMediaProgressVersion,
+  scheduleMediaCaching,
   subscribeMediaProgress,
 } from "../../lib/offline";
 import { useBackgroundLookup } from "../backgrounds/backgroundCatalog";
@@ -60,6 +62,20 @@ function isOffline(): boolean {
   return typeof navigator !== "undefined" && navigator.onLine === false;
 }
 
+function failureOf(url: string): ProjectionMediaFailure {
+  if (getMediaCacheFailure(url) === "quota") return "quota";
+  return isOffline() ? "offline" : "network";
+}
+
+function hitQuota(
+  urls: readonly string[],
+  readyUrls: ReadonlySet<string>,
+): boolean {
+  return urls.some(
+    (url) => !readyUrls.has(url) && getMediaCacheFailure(url) === "quota",
+  );
+}
+
 /**
  * 처음 설치된 SW가 페이지를 제어하기를 잠깐 기다린다(`clientsClaim`). 제어받기 전에
  * 받으면 SW 캐시가 아니라 페이지가 직접 캐시에 담는데, 그래도 캐시본은 같으므로
@@ -74,6 +90,19 @@ async function waitForServiceWorker(): Promise<void> {
       setTimeout(resolve, SERVICE_WORKER_READY_TIMEOUT_MS),
     ),
   ]);
+}
+
+async function requeueMissing(files: readonly MediaFile[]): Promise<void> {
+  const urls = files.map((file) => file.url);
+  const cached = new Set(await findCachedMediaUrls(urls));
+  const missing = files.filter((file) => !cached.has(file.url));
+  if (missing.length === 0) return;
+  const neededBytes = missing.reduce((sum, file) => sum + file.sizeBytes, 0);
+  if (!(await ensureMediaSpace(neededBytes, urls))) return;
+  scheduleMediaCaching(
+    missing.map((file) => file.url),
+    { priority: true },
+  );
 }
 
 function collectMediaFiles(
@@ -121,6 +150,15 @@ function useMediaProgressVersion(): number {
  *
  * `passive`면 직접 받지 않고 저장 상태만 본다. 편집기는 자동 캐시
  * (`useBackgroundAutoCache`)가 이미 받고 있으므로 송출 버튼 옆에 진행만 보여 준다.
+ * 다만 자동 캐시가 저장 공간 부족으로 실패했으면 `failed`/`quota`로 알린다. 알리지 않으면
+ * 편집기는 끝나지 않을 '배경 저장 중'만 보여 준다. 공간이 생겨 저장되면 다시 확인할 때
+ * 풀린다. 자동 캐시는 실패한 영상을 스스로 다시 받지 않으므로, `passive`에서 `retry`하면
+ * 세트 밖 영상을 지워 자리를 만든 뒤(`ensureMediaSpace`) 빠진 영상을 큐 맨 앞에 다시 넣는다.
+ * 다 지워도 자리가 없으면 다시 넣지 않는다. 수백 MB를 다시 받아 봐야 같은 한도에 걸리고,
+ * 그동안 헤더만 '저장 중'으로 돌아간다.
+ *
+ * 받다가 저장 공간 부족으로 실패하면 연결이 끊겼더라도 `quota`로 알린다. 다시 연결해도
+ * 공간을 비우기 전에는 낫지 않기 때문이다.
  */
 export function useProjectionMediaReady(
   presentation: Presentation | null,
@@ -158,15 +196,18 @@ export function useProjectionMediaReady(
           await findCachedMediaUrls(urls).catch((): string[] => []),
         );
         const ready = readyUrls.size === urls.length;
+        const quota = !ready && hitQuota(urls, readyUrls);
         update({
-          status: ready ? "ready" : "downloading",
-          failure: null,
+          status: ready ? "ready" : quota ? "failed" : "downloading",
+          failure: quota ? "quota" : null,
           readyUrls,
         });
         if (!ready && !cancelled)
           timer = setTimeout(() => void check(), PASSIVE_RECHECK_MS);
       };
-      void check();
+      void (attempt > 0 ? requeueMissing(files) : Promise.resolve())
+        .catch(() => undefined)
+        .then(check);
       return () => {
         cancelled = true;
         clearTimeout(timer);
@@ -203,11 +244,7 @@ export function useProjectionMediaReady(
       for (const file of missing) {
         if (cancelled) return;
         if (!(await cacheMediaFirst(file.url))) {
-          update({
-            status: "failed",
-            failure: isOffline() ? "offline" : "network",
-            readyUrls,
-          });
+          update({ status: "failed", failure: failureOf(file.url), readyUrls });
           return;
         }
         readyUrls.add(file.url);

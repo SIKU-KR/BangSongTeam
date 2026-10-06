@@ -1,5 +1,9 @@
 import { useEffect, useState } from "react";
-import { cacheMediaFirst, shouldWaitForMediaCache } from "../../lib/offline";
+import {
+  cacheMediaFirst,
+  getMediaCacheFailure,
+  shouldWaitForMediaCache,
+} from "../../lib/offline";
 import {
   BASE_BACKOFF_MS,
   calculateBackoffWithJitter,
@@ -8,11 +12,12 @@ import {
 import type { BackgroundLayers } from "../backgrounds/backgroundCatalog";
 
 /**
- * 캐시 실패 뒤 타이머로 다시 받는 최대 횟수. 저장 공간 부족처럼 다시 받아도 낫지 않는
- * 실패에서도 시도마다 파일 전체를 내려받으므로, 넘으면 연결 회복(`online`)이나 탭
- * 복귀·포커스에서만 한 번씩 다시 받는다. 탭 복귀·포커스는 직전 시도가 끝난 뒤
- * `MAX_BACKOFF_MS`가 지나야 다시 받는다. 창을 오갈 때마다 파일 전체를 다시 받지 않게 하기
- * 위해서다.
+ * 캐시 실패 뒤 타이머로 다시 받는 최대 횟수. 시도마다 파일 전체를 내려받으므로, 넘으면
+ * 연결 회복(`online`)이나 탭 복귀·포커스에서만 한 번씩 다시 받는다. 탭 복귀·포커스는 직전
+ * 시도가 끝난 뒤 `MAX_BACKOFF_MS`가 지나야 다시 받는다. 창을 오갈 때마다 파일 전체를 다시
+ * 받지 않게 하기 위해서다. 저장 공간 부족(`getMediaCacheFailure`가 `quota`)은 다시 받아도
+ * 공간을 비우기 전에는 낫지 않으므로 타이머나 탭 복귀·포커스로 다시 받지 않고 연결
+ * 회복에서만 다시 받는다.
  */
 export const MAX_TIMED_RETRIES = 3;
 
@@ -62,7 +67,12 @@ export function useCacheFirstVideo(layers: BackgroundLayers): BackgroundLayers {
         setReadyUrl(videoUrl);
         return;
       }
-      if (attempt >= MAX_TIMED_RETRIES) return;
+      if (
+        attempt >= MAX_TIMED_RETRIES ||
+        getMediaCacheFailure(videoUrl) === "quota"
+      ) {
+        return;
+      }
       timer = setTimeout(
         () => void tryCache(),
         BASE_BACKOFF_MS + calculateBackoffWithJitter(attempt),
@@ -74,7 +84,8 @@ export function useCacheFirstVideo(layers: BackgroundLayers): BackgroundLayers {
       if (
         document.visibilityState === "hidden" ||
         timer !== undefined ||
-        Date.now() - lastFinishedAt < MAX_BACKOFF_MS
+        Date.now() - lastFinishedAt < MAX_BACKOFF_MS ||
+        getMediaCacheFailure(videoUrl) === "quota"
       ) {
         return;
       }

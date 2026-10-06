@@ -6,6 +6,7 @@ import {
   cacheMediaUrls,
   ensureMediaSpace,
   findCachedMediaUrls,
+  getMediaCacheFailure,
   getMediaProgress,
   scheduleMediaCaching,
   shouldWaitForMediaCache,
@@ -18,6 +19,7 @@ import {
 const VIDEO = "/api/media/loops/warm_light_flow.mp4";
 const POSTER = "/api/media/posters/warm_light_flow.webp";
 const OTHER = "/api/media/loops/ocean_wave.mp4";
+const LARGE = "/api/media/loops/mountain_dawn.mp4";
 
 function okResponse(size = 16): Response {
   return new Response(new ArrayBuffer(size), {
@@ -53,6 +55,17 @@ function mockServiceWorkerFetch() {
   });
 }
 
+function mockEstimate(quota: number, usage: number): void {
+  Object.defineProperty(navigator, "storage", {
+    value: { estimate: vi.fn(async () => ({ quota, usage })) },
+    configurable: true,
+  });
+}
+
+function quotaError(): DOMException {
+  return new DOMException("quota", "QuotaExceededError");
+}
+
 async function isCached(url: string): Promise<boolean> {
   const cache = await caches.open(mediaCacheNameFor(url));
   return (await cache.match(url)) !== undefined;
@@ -71,6 +84,8 @@ afterEach(() => {
   vi.useRealTimers();
   // @ts-expect-error 테스트에서 주입한 서비스 워커를 되돌린다
   delete navigator.serviceWorker;
+  // @ts-expect-error 테스트에서 주입한 저장소 관리자를 되돌린다
+  delete navigator.storage;
 });
 
 describe("cacheMediaUrls", () => {
@@ -132,13 +147,13 @@ describe("cacheMediaUrls", () => {
       return okResponse();
     });
     const cache = await caches.open(MEDIA_CACHE_NAME);
-    vi.spyOn(cache, "put").mockRejectedValue(
-      new DOMException("quota", "QuotaExceededError"),
-    );
+    vi.spyOn(cache, "put").mockRejectedValue(quotaError());
 
     const result = await cacheMediaUrls([VIDEO, OTHER]);
 
     expect(result).toEqual({ cachedUrls: [] });
+    expect(getMediaCacheFailure(VIDEO)).toBe("network");
+    expect(getMediaCacheFailure(OTHER)).toBe("quota");
   });
 });
 
@@ -176,7 +191,25 @@ describe("cacheMediaUrls (서비스 워커 제어 중)", () => {
     expect(await isCached(VIDEO)).toBe(true);
   });
 
-  it("SW가 끝내 캐시에 담지 않으면 실패로 돌려준다", async () => {
+  it("본문이 다 오기 전에 끝났고 SW가 담지 않으면 네트워크 실패로 돌려준다", async () => {
+    vi.useFakeTimers();
+    controlByServiceWorker();
+    mockFetch(
+      async () =>
+        new Response(new ArrayBuffer(8), {
+          status: 200,
+          headers: { "content-length": "16" },
+        }),
+    );
+
+    const pendingResult = cacheMediaUrls([VIDEO]);
+    await vi.runAllTimersAsync();
+
+    expect(await pendingResult).toEqual({ cachedUrls: [] });
+    expect(getMediaCacheFailure(VIDEO)).toBe("network");
+  });
+
+  it("본문을 다 받았는데 SW가 담지 않으면 용량을 알 수 없어도 저장 공간 부족으로 남긴다", async () => {
     vi.useFakeTimers();
     controlByServiceWorker();
     mockFetch();
@@ -185,6 +218,33 @@ describe("cacheMediaUrls (서비스 워커 제어 중)", () => {
     await vi.runAllTimersAsync();
 
     expect(await pendingResult).toEqual({ cachedUrls: [] });
+    expect(getMediaCacheFailure(VIDEO)).toBe("quota");
+  });
+
+  it("본문을 다 받았는데 SW가 담지 않아도 알려 준 남은 용량이 파일보다 크면 네트워크 실패로 남긴다", async () => {
+    vi.useFakeTimers();
+    controlByServiceWorker();
+    mockEstimate(1024 * 1024 * 1024, 0);
+    mockFetch();
+
+    const pendingResult = cacheMediaUrls([VIDEO]);
+    await vi.runAllTimersAsync();
+
+    expect(await pendingResult).toEqual({ cachedUrls: [] });
+    expect(getMediaCacheFailure(VIDEO)).toBe("network");
+  });
+
+  it("본문을 다 받았는데 SW가 담지 않고 알려 준 남은 용량도 파일보다 작으면 저장 공간 부족으로 남긴다", async () => {
+    vi.useFakeTimers();
+    controlByServiceWorker();
+    mockEstimate(100, 92);
+    mockFetch();
+
+    const pendingResult = cacheMediaUrls([VIDEO]);
+    await vi.runAllTimersAsync();
+
+    expect(await pendingResult).toEqual({ cachedUrls: [] });
+    expect(getMediaCacheFailure(VIDEO)).toBe("quota");
   });
 });
 
@@ -458,6 +518,20 @@ describe("cacheMediaFirst", () => {
     mockFetch(async () => new Response(null, { status: 404 }));
 
     expect(await cacheMediaFirst(VIDEO)).toBe(false);
+    expect(getMediaCacheFailure(VIDEO)).toBe("network");
+  });
+
+  it("저장 공간이 모자라면 까닭을 quota로 남기고, 다시 담기면 지운다", async () => {
+    mockFetch();
+    const cache = await caches.open(MEDIA_CACHE_NAME);
+    const put = vi.spyOn(cache, "put").mockRejectedValueOnce(quotaError());
+
+    expect(await cacheMediaFirst(VIDEO)).toBe(false);
+    expect(getMediaCacheFailure(VIDEO)).toBe("quota");
+
+    put.mockRestore();
+    expect(await cacheMediaFirst(VIDEO)).toBe(true);
+    expect(getMediaCacheFailure(VIDEO)).toBeUndefined();
   });
 });
 
@@ -480,17 +554,18 @@ describe("findCachedMediaUrls", () => {
 });
 
 describe("ensureMediaSpace", () => {
-  function mockEstimate(quota: number, usage: number): void {
-    Object.defineProperty(navigator, "storage", {
-      value: { estimate: vi.fn(async () => ({ quota, usage })) },
-      configurable: true,
-    });
-  }
+  const MIB = 1024 * 1024;
 
-  afterEach(() => {
-    // @ts-expect-error 테스트에서 주입한 저장소 관리자를 되돌린다
-    delete navigator.storage;
-  });
+  async function seedVideo(url: string, claimedBytes: number): Promise<void> {
+    const cache = await caches.open(MEDIA_CACHE_NAME);
+    await cache.put(
+      url,
+      new Response("media", {
+        status: 200,
+        headers: { "content-length": String(claimedBytes) },
+      }),
+    );
+  }
 
   it("자리가 있으면 아무것도 지우지 않는다", async () => {
     mockFetch(async () => okResponse(100));
@@ -529,8 +604,105 @@ describe("ensureMediaSpace", () => {
     expect(await ensureMediaSpace(500, [VIDEO])).toBe(false);
   });
 
-  it("브라우저가 용량을 알려 주지 않으면 지우지 않고 통과시킨다", async () => {
+  it("브라우저가 용량을 알려 주지 않아도 지울 것이 없으면 실제 받기에 맡기고 통과시킨다", async () => {
     expect(await ensureMediaSpace(5000, [])).toBe(true);
+  });
+
+  it("브라우저가 용량을 알려 주지 않으면 예산을 넘는 만큼 세트 밖 영상을 미리 지운다", async () => {
+    await seedVideo(OTHER, 300 * MIB);
+    await seedVideo(VIDEO, 300 * MIB);
+
+    expect(await ensureMediaSpace(300 * MIB, [VIDEO])).toBe(true);
+    expect(await isCached(OTHER)).toBe(false);
+    expect(await isCached(VIDEO)).toBe(true);
+  });
+
+  it("브라우저가 용량을 알려 주지 않아도 예산 안이면 지우지 않는다", async () => {
+    await seedVideo(OTHER, 10 * MIB);
+
+    expect(await ensureMediaSpace(10 * MIB, [VIDEO])).toBe(true);
+    expect(await isCached(OTHER)).toBe(true);
+  });
+
+  it("이미 저장 공간 부족을 겪었으면 알려 준 용량을 믿지 않고 세트 밖 영상을 지운다", async () => {
+    mockFetch();
+    const cache = await caches.open(MEDIA_CACHE_NAME);
+    vi.spyOn(cache, "put").mockRejectedValueOnce(quotaError());
+    await cacheMediaFirst(LARGE);
+    expect(getMediaCacheFailure(LARGE)).toBe("quota");
+    await seedVideo(OTHER, 300 * MIB);
+    await seedVideo(VIDEO, 300 * MIB);
+    mockEstimate(10_000 * MIB, 0);
+
+    expect(await ensureMediaSpace(300 * MIB, [VIDEO, LARGE])).toBe(true);
+    expect(await isCached(OTHER)).toBe(false);
+    expect(await isCached(VIDEO)).toBe(true);
+  });
+
+  it("다시 큐에 넣어 실패 까닭이 지워져도 세트 영상이 겪은 부족은 공간 확보에 남는다", async () => {
+    mockFetch();
+    const cache = await caches.open(MEDIA_CACHE_NAME);
+    vi.spyOn(cache, "put").mockRejectedValueOnce(quotaError());
+    await cacheMediaFirst(LARGE);
+    let release: () => void = () => undefined;
+    const fetchMock = mockFetch(
+      () =>
+        new Promise<Response>((resolve) => {
+          release = () => resolve(new Response(null, { status: 404 }));
+        }),
+    );
+
+    scheduleMediaCaching([LARGE]);
+    expect(getMediaCacheFailure(LARGE)).toBeUndefined();
+    await seedVideo(OTHER, 300 * MIB);
+    await seedVideo(VIDEO, 300 * MIB);
+    mockEstimate(10_000 * MIB, 0);
+
+    expect(await ensureMediaSpace(300 * MIB, [VIDEO, LARGE])).toBe(true);
+    expect(await isCached(OTHER)).toBe(false);
+
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    release();
+    await __waitForMediaCachingForTests();
+  });
+
+  it("부족을 겪어 의심할 때도 알려 준 용량이 예산보다 작으면 그만큼 세트 밖 영상을 지운다", async () => {
+    mockFetch();
+    const cache = await caches.open(MEDIA_CACHE_NAME);
+    vi.spyOn(cache, "put").mockRejectedValueOnce(quotaError());
+    await cacheMediaFirst(LARGE);
+    expect(getMediaCacheFailure(LARGE)).toBe("quota");
+    await seedVideo(OTHER, 100 * MIB);
+    mockEstimate(250 * MIB, 0);
+
+    expect(await ensureMediaSpace(300 * MIB, [LARGE])).toBe(true);
+    expect(await isCached(OTHER)).toBe(false);
+  });
+
+  it("부족을 겪어 의심할 때 세트 밖 영상을 모두 지워도 알려 준 용량이 모자라면 false다", async () => {
+    mockFetch();
+    const cache = await caches.open(MEDIA_CACHE_NAME);
+    vi.spyOn(cache, "put").mockRejectedValueOnce(quotaError());
+    await cacheMediaFirst(LARGE);
+    await seedVideo(OTHER, 10 * MIB);
+    mockEstimate(250 * MIB, 0);
+
+    expect(await ensureMediaSpace(300 * MIB, [LARGE])).toBe(false);
+    expect(await isCached(OTHER)).toBe(false);
+  });
+
+  it("세트 밖 영상이 겪은 저장 공간 부족으로는 알려 준 용량을 의심하지 않는다", async () => {
+    mockFetch();
+    const cache = await caches.open(MEDIA_CACHE_NAME);
+    vi.spyOn(cache, "put").mockRejectedValueOnce(quotaError());
+    await cacheMediaFirst(LARGE);
+    expect(getMediaCacheFailure(LARGE)).toBe("quota");
+    await seedVideo(OTHER, 300 * MIB);
+    await seedVideo(VIDEO, 300 * MIB);
+    mockEstimate(10_000 * MIB, 0);
+
+    expect(await ensureMediaSpace(300 * MIB, [VIDEO])).toBe(true);
+    expect(await isCached(OTHER)).toBe(true);
   });
 });
 

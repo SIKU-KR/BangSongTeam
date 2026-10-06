@@ -10,7 +10,10 @@ import {
   withBackgrounds,
 } from "../../test/backgroundFixture";
 import { resetFakeCacheStorage } from "../../test/fakeCacheStorage";
-import { __resetMediaCachingForTests } from "../../lib/offline/mediaCache";
+import {
+  __resetMediaCachingForTests,
+  cacheMediaFirst,
+} from "../../lib/offline/mediaCache";
 import {
   PASSIVE_RECHECK_MS,
   useProjectionMediaReady,
@@ -45,6 +48,13 @@ function mockEstimate(quota: number, usage: number): void {
     value: { estimate: vi.fn(async () => ({ quota, usage })) },
     configurable: true,
   });
+}
+
+async function rejectPutWithQuota() {
+  const cache = await caches.open(MEDIA_CACHE_NAME);
+  return vi
+    .spyOn(cache, "put")
+    .mockRejectedValue(new DOMException("quota", "QuotaExceededError"));
 }
 
 const originalFetch = globalThis.fetch;
@@ -126,6 +136,16 @@ describe("useProjectionMediaReady", () => {
     await waitFor(() => expect(result.current.status).toBe("ready"));
   });
 
+  it("받다가 저장 공간이 모자라면 network가 아니라 quota로 실패한다", async () => {
+    mockFetch();
+    await rejectPutWithQuota();
+
+    const { result } = renderHook(() => useProjectionMediaReady(PRESENTATION));
+
+    await waitFor(() => expect(result.current.status).toBe("failed"));
+    expect(result.current.failure).toBe("quota");
+  });
+
   it("Cache Storage가 실패해도 확인 중에 멈추지 않고 실패로 끝난다", async () => {
     vi.spyOn(caches, "open").mockRejectedValue(
       new DOMException("broken", "UnknownError"),
@@ -177,5 +197,77 @@ describe("useProjectionMediaReady", () => {
 
     await waitFor(() => expect(result.current.status).toBe("ready"));
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("passive면 자동 캐시가 저장 공간 부족으로 실패한 것을 알리고, 저장되면 풀린다", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    mockFetch();
+    const put = await rejectPutWithQuota();
+
+    const { result } = renderHook(() =>
+      useProjectionMediaReady(PRESENTATION, { passive: true }),
+    );
+    await waitFor(() => expect(result.current.status).toBe("downloading"));
+
+    await act(async () => {
+      expect(await cacheMediaFirst(FIRST.mediaUrl)).toBe(false);
+      await vi.advanceTimersByTimeAsync(PASSIVE_RECHECK_MS);
+    });
+    await waitFor(() => expect(result.current.failure).toBe("quota"));
+    expect(result.current.status).toBe("failed");
+
+    put.mockRestore();
+    await store(FIRST.mediaUrl);
+    await store(SECOND.mediaUrl);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(PASSIVE_RECHECK_MS);
+    });
+
+    await waitFor(() => expect(result.current.status).toBe("ready"));
+    expect(result.current.failure).toBeNull();
+  });
+
+  it("passive에서 다시 시도하면 빠진 영상을 다시 받아 저장 공간 부족을 푼다", async () => {
+    mockFetch();
+    const put = await rejectPutWithQuota();
+    expect(await cacheMediaFirst(FIRST.mediaUrl)).toBe(false);
+
+    const { result } = renderHook(() =>
+      useProjectionMediaReady(PRESENTATION, { passive: true }),
+    );
+    await waitFor(() => expect(result.current.failure).toBe("quota"));
+
+    put.mockRestore();
+    act(() => result.current.retry());
+
+    await waitFor(() => expect(result.current.status).toBe("downloading"));
+    await waitFor(() => expect(result.current.status).toBe("ready"), {
+      timeout: PASSIVE_RECHECK_MS * 2,
+    });
+    expect(result.current.failure).toBeNull();
+  });
+
+  it("passive에서 다시 시도해도 세트 밖 영상을 다 지워 자리가 없으면 다시 받지 않고 저장 공간 부족을 남긴다", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const fetchMock = mockFetch();
+    const put = await rejectPutWithQuota();
+    expect(await cacheMediaFirst(FIRST.mediaUrl)).toBe(false);
+    put.mockRestore();
+    fetchMock.mockClear();
+    mockEstimate(100, 100);
+
+    const { result } = renderHook(() =>
+      useProjectionMediaReady(PRESENTATION, { passive: true }),
+    );
+    await waitFor(() => expect(result.current.failure).toBe("quota"));
+
+    act(() => result.current.retry());
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(PASSIVE_RECHECK_MS * 2);
+    });
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(result.current.status).toBe("failed");
+    expect(result.current.failure).toBe("quota");
   });
 });

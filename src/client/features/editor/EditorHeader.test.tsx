@@ -3,6 +3,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { EditorHeader } from "./EditorHeader";
 import { EDITOR_COPY } from "#copy/editor";
+import { BACKGROUND_COPY } from "#copy/backgrounds";
 import { DRIVE_ROOT_PATH } from "../drive/drivePaths";
 
 function renderHeader(
@@ -157,5 +158,41 @@ describe("EditorHeader", () => {
   it("곡·슬라이드 번호는 헤더가 아니라 캔버스 상태 표시줄에 둔다", () => {
     renderHeader();
     expect(screen.getByTestId("editor-header")).not.toHaveTextContent("곡 1/");
+  });
+
+  it("배경 저장 중이면 저장된 수를 보여 준다", () => {
+    renderHeader({
+      mediaProgress: {
+        readyCount: 1,
+        totalCount: 2,
+        failure: null,
+        retry: vi.fn(),
+      },
+    });
+
+    expect(screen.getByTestId("header-media-progress")).toHaveTextContent(
+      BACKGROUND_COPY.prepare.editorStatus(1, 2),
+    );
+    expect(screen.queryByTestId("header-media-quota")).not.toBeInTheDocument();
+  });
+
+  it("저장 공간이 부족해 멈췄으면 진행 대신 저장 공간 부족을 알리고, 누르면 안내와 다시 시도를 보여 준다", async () => {
+    const retry = vi.fn();
+    renderHeader({
+      mediaProgress: { readyCount: 0, totalCount: 2, failure: "quota", retry },
+    });
+
+    const trigger = screen.getByTestId("header-media-quota");
+    expect(trigger).toHaveTextContent(BACKGROUND_COPY.prepare.editorQuota);
+    expect(
+      screen.queryByTestId("header-media-progress"),
+    ).not.toBeInTheDocument();
+
+    fireEvent.click(trigger);
+    const popover = await screen.findByTestId("header-media-quota-popover");
+    expect(popover).toHaveTextContent(BACKGROUND_COPY.prepare.failed.quota);
+
+    fireEvent.click(screen.getByTestId("header-media-quota-retry"));
+    expect(retry).toHaveBeenCalledTimes(1);
   });
 });
