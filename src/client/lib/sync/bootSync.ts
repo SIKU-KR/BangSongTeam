@@ -31,18 +31,39 @@ import {
   pullDecks,
   pullFolders,
 } from "./presentationSync";
-import { OfflineError } from "../api/request";
+import {
+  isRetryableApiError,
+  OfflineError,
+  ServerRejectedError,
+  SessionExpiredError,
+} from "../api/request";
+import { BackoffTracker, BASE_BACKOFF_MS, MAX_RETRY_ATTEMPTS } from "./backoff";
 import {
   setFolderSyncEnabled,
   setServerFolderListener,
   pushFolderNow,
+  hasPendingFolderPush,
+  scheduleFolderPush,
 } from "./folderSync";
-import { setSyncStatus } from "./syncStatus";
-import { setSyncEnabled } from "./syncScheduler";
+import {
+  getSyncDomainStatus,
+  recordSyncFailure,
+  resetSyncStatus,
+  setSyncStatus,
+  type SyncDomain,
+  type SyncStatus,
+} from "./syncStatus";
+import {
+  hasPendingDocumentPush,
+  scheduleDocumentPush,
+  setSyncEnabled,
+} from "./syncScheduler";
 import {
   setDeckSyncEnabled,
   setServerDeckListener,
   pushDeckNow,
+  hasPendingDeckSync,
+  scheduleDeckPush,
 } from "./deckSync";
 import { refreshBackgroundCatalog } from "./backgroundSync";
 import { isProjectionPath } from "../../features/presentation/fullscreen";
@@ -62,9 +83,33 @@ export function shouldRunBootSync(pathname: string): boolean {
  * 서버 병합은 그 뒤에 붙인다. 서버를 기다리느라 첫 화면이 늦어지면 네트워크가
  * 느린 교회에서 예배 시작이 그만큼 밀린다.
  *
- * 오프라인은 조용히 넘어간다 — 실패가 아니라 정상 경로다.
+ * 오프라인은 조용히 넘어간다 — 실패가 아니라 정상 경로다. 다만 받지 못한 단계는
+ * 백오프 간격과 `online` 이벤트로 다시 받고, 올리지 못한 항목은 도메인 큐에 넘겨
+ * 큐의 백오프로 다시 올린다. 다시 하지 않으면 그 도메인이 세션 내내 '오프라인'으로
+ * 남아, 연결이 돌아와 저장이 다 끝나도 헤더가 초록색으로 돌아오지 않는다.
+ * 송출 화면에 있는 동안에는 다시 받지 않고 송출을 마친 뒤로 미룬다. 송출 중에는
+ * API·데이터 요청이 0건이어야 하고, 받은 결과를 병합하면 띄운 문서가 바뀔 수 있다.
+ *
+ * 항목마다 올리기 직전과 큐에 넘길 때 지금 저장소에 있는 것을 다시 찾아 쓰고, 그사이
+ * 지워졌으면 건너뛴다. 부팅 병합 때의 사본을 올리면 앞 항목을 올리는 동안 사용자가 지운
+ * 곡이 되살아나고, 바로 올리기는 큐에 대기 중인 같은 항목을 버리므로 그사이 고친 내용
+ * (폴더 이름 등)이 다음 부팅까지 서버에 가지 않는다.
+ *
+ * 결과는 폴더·프레젠테이션·곡 도메인별로 따로 남기고, 올리지 못한 항목은 항목별
+ * 실패로 남긴다. 도메인 단계만 바꾸면 같은 도메인 큐의 다음 성공이 그 실패를 덮는다.
+ * 도메인 큐가 아직 끝내지 못한 일(보내는 중이거나 다시 시도할 것)이 있으면 그 결과는
+ * 큐가 남긴다. 부팅의 '동기화됨'은 아직 올라가지 않은 변경을 가리고, 큐가 이미 다시
+ * 올린 항목을 두고 남긴 '오프라인'은 지울 주체가 없어 세션 내내 남는다.
+ * 상태 초기화는 큐를 켜기 전에 한다. 켠 뒤에 지우면 먼저 실패한 큐의 기록이 사라진다.
+ * 다시 부르면(새로고침 없이 계정 전환) 앞선 부팅의 남은 단계는 상태를 남기지 않는다.
  */
 export async function runBootSync(): Promise<void> {
+  bootGeneration += 1;
+  cancelBootRetry();
+  resetSyncStatus();
+  setSyncStatus("folder", "syncing");
+  setSyncStatus("presentation", "syncing");
+  setSyncStatus("deck", "syncing");
   setSharedPresentationListener(sharedPresentationListener);
   setSyncEnabled(true);
   setDeckSyncEnabled(true);
@@ -73,23 +118,37 @@ export async function runBootSync(): Promise<void> {
   setServerFolderListener(applyServerFolder);
   void refreshBackgroundCatalog();
 
+  await syncDriveAndDecks();
+}
+
+let bootGeneration = 0;
+
+async function syncDriveAndDecks(): Promise<void> {
+  const generation = bootGeneration;
   const knownBeforePull = new Set(listPresentations().map((doc) => doc.id));
   let serverDocuments;
   let tombstones: DriveTombstones;
-  let folderOffline: boolean;
+  let unsynced: readonly SyncDomain[] = ["folder", "presentation", "deck"];
   try {
-    setSyncStatus("syncing");
     const folderList = await pullFolders();
+    if (generation !== bootGeneration) return;
     tombstones = folderList.tombstones;
-    folderOffline = await syncFolders(folderList.folders, tombstones);
+    const folderStatus = await syncFolders(
+      folderList.folders,
+      tombstones,
+      generation,
+    );
+    if (generation !== bootGeneration) return;
+    settleSyncStatus("folder", folderStatus);
+    unsynced = ["presentation", "deck"];
     serverDocuments = await pullPresentations();
+    if (generation !== bootGeneration) return;
     rememberServerDocuments(serverDocuments);
+    retryBackoff.reset();
   } catch (err) {
-    if (err instanceof OfflineError) {
-      setSyncStatus("offline");
-    } else {
-      setSyncStatus("error");
-    }
+    if (generation !== bootGeneration) return;
+    const status = retryPullLater(syncDriveAndDecks, err);
+    for (const domain of unsynced) setSyncStatus(domain, status);
     return;
   }
 
@@ -113,20 +172,106 @@ export async function runBootSync(): Promise<void> {
     }
   }
 
-  const offline = await pushEachTrackingOffline(
-    findEach(documents, needsPush),
-    pushPresentation,
+  const presentationStatus = await pushLatestEach(
+    {
+      domain: "presentation",
+      current: listPresentations,
+      push: pushPresentation,
+      requeue: scheduleDocumentPush,
+      titleOf: (document) => document.title,
+    },
+    needsPush,
+    generation,
   );
+  if (generation !== bootGeneration) return;
+  settleSyncStatus("presentation", presentationStatus);
 
-  const deckOffline = await syncLibraryDecks();
+  await syncLibraryDecks();
+}
 
-  setSyncStatus(offline || deckOffline || folderOffline ? "offline" : "synced");
+const hasQueuedWork: Record<Exclude<SyncDomain, "shared">, () => boolean> = {
+  folder: hasPendingFolderPush,
+  presentation: hasPendingDocumentPush,
+  deck: hasPendingDeckSync,
+};
+
+function settleSyncStatus(
+  domain: Exclude<SyncDomain, "shared">,
+  next: SyncStatus,
+): void {
+  const queueBusy = hasQueuedWork[domain]();
+  if (next === "synced" && queueBusy) return;
+  if (next === "offline" && !queueBusy) {
+    if (getSyncDomainStatus(domain) !== "syncing") return;
+    setSyncStatus(domain, "synced");
+    return;
+  }
+  setSyncStatus(domain, next);
+}
+
+const retryBackoff = new BackoffTracker();
+let retryTimer: ReturnType<typeof setTimeout> | null = null;
+let retryStep: (() => Promise<void>) | null = null;
+let onlineListenerRegistered = false;
+
+function cancelBootRetry(): void {
+  if (retryTimer) clearTimeout(retryTimer);
+  retryTimer = null;
+  retryStep = null;
+  retryBackoff.reset();
+}
+
+function retryPullLater(step: () => Promise<void>, err: unknown): SyncStatus {
+  if (
+    !isRetryableApiError(err) ||
+    (!(err instanceof OfflineError) &&
+      retryBackoff.getServerAttempt() >= MAX_RETRY_ATTEMPTS)
+  ) {
+    retryBackoff.reset();
+    return "error";
+  }
+  retryStep = step;
+  if (retryTimer) clearTimeout(retryTimer);
+  retryTimer = setTimeout(runRetry, retryBackoff.getDelay(err));
+  registerOnlineListener();
+  return "offline";
+}
+
+function isProjecting(): boolean {
+  return (
+    typeof window !== "undefined" && isProjectionPath(window.location.pathname)
+  );
+}
+
+function runRetry(): void {
+  if (retryTimer) clearTimeout(retryTimer);
+  retryTimer = null;
+  if (isProjecting()) {
+    if (retryStep) retryTimer = setTimeout(runRetry, BASE_BACKOFF_MS);
+    return;
+  }
+  const step = retryStep;
+  retryStep = null;
+  if (step) void step().catch(() => undefined);
+}
+
+function handleOnline(): void {
+  if (!retryStep || isProjecting()) return;
+  retryBackoff.reset();
+  runRetry();
+}
+
+function registerOnlineListener(): void {
+  if (onlineListenerRegistered || typeof window === "undefined") return;
+  onlineListenerRegistered = true;
+  window.addEventListener("online", handleOnline);
 }
 
 async function syncFolders(
   serverFolders: Folder[],
   tombstones: DriveTombstones,
-): Promise<boolean> {
+  generation: number,
+): Promise<SyncStatus> {
   const deletedIds = new Set(tombstones.folderIds);
   const local = getFolders();
   const { folders, needsPush } = mergeFolders(
@@ -139,49 +284,105 @@ async function syncFolders(
   );
 
   const toPush = new Set(needsPush);
-  return pushEachTrackingOffline(
+  return pushLatestEach(
+    {
+      domain: "folder",
+      current: getFolders,
+      push: pushFolderNow,
+      requeue: scheduleFolderPush,
+      titleOf: (folder) => folder.name,
+    },
     sortFoldersParentFirst(
       folders.filter((candidate) => toPush.has(candidate.id)),
       folders,
-    ),
-    pushFolderNow,
+    ).map((folder) => folder.id),
+    generation,
   );
 }
 
-async function syncLibraryDecks(): Promise<boolean> {
+async function syncLibraryDecks(): Promise<void> {
+  const generation = bootGeneration;
   let serverDecks;
   try {
     serverDecks = await pullDecks();
+    if (generation !== bootGeneration) return;
+    retryBackoff.reset();
   } catch (err) {
-    return err instanceof OfflineError;
+    if (generation !== bootGeneration) return;
+    setSyncStatus("deck", retryPullLater(syncLibraryDecks, err));
+    return;
   }
 
   const { decks, needsPush } = mergeLibraryDecks(getUserSongs(), serverDecks);
   await applyServerLibraryDecks(decks);
 
-  return pushEachTrackingOffline(findEach(decks, needsPush), pushDeckNow);
+  const deckStatus = await pushLatestEach(
+    {
+      domain: "deck",
+      current: getUserSongs,
+      push: pushDeckNow,
+      requeue: scheduleDeckPush,
+      titleOf: (deck) => deck.title,
+    },
+    needsPush,
+    generation,
+  );
+  if (generation !== bootGeneration) return;
+  settleSyncStatus("deck", deckStatus);
 }
 
-function findEach<T extends { id: string }>(
-  items: readonly T[],
+interface BootPushTarget<T extends { id: string }> {
+  domain: SyncDomain;
+  current: () => readonly T[];
+  push: (item: T) => Promise<unknown>;
+  requeue: (item: T) => void;
+  titleOf: (item: T) => string;
+}
+
+function findLatest<T extends { id: string }>(
+  current: () => readonly T[],
+  id: string,
+): T | undefined {
+  return current().find((candidate) => candidate.id === id);
+}
+
+async function pushLatestEach<T extends { id: string }>(
+  target: BootPushTarget<T>,
   ids: readonly string[],
-): T[] {
-  return ids
-    .map((id) => items.find((item) => item.id === id))
-    .filter((item): item is T => item !== undefined);
-}
-
-async function pushEachTrackingOffline<T>(
-  items: readonly T[],
-  push: (item: T) => Promise<unknown>,
-): Promise<boolean> {
+  generation: number,
+): Promise<SyncStatus> {
+  let sessionExpired = false;
   let offline = false;
-  for (const item of items) {
+  for (const id of ids) {
+    if (generation !== bootGeneration) break;
+    const item = findLatest(target.current, id);
+    if (!item) continue;
     try {
-      await push(item);
+      await target.push(item);
     } catch (err) {
-      if (err instanceof OfflineError) offline = true;
+      if (generation !== bootGeneration) break;
+      if (err instanceof SessionExpiredError) {
+        sessionExpired = true;
+      } else if (isRetryableApiError(err)) {
+        offline = true;
+        const latest = findLatest(target.current, id);
+        if (latest) target.requeue(latest);
+      } else {
+        recordSyncFailure({
+          id: item.id,
+          title: target.titleOf(item),
+          kind: target.domain,
+          status: err instanceof ServerRejectedError ? err.status : undefined,
+          message: err instanceof Error ? err.message : String(err),
+          failedAt: Date.now(),
+        });
+      }
     }
   }
-  return offline;
+  if (sessionExpired) return "error";
+  return offline ? "offline" : "synced";
+}
+
+export function __resetBootSyncForTests(): void {
+  cancelBootRetry();
 }

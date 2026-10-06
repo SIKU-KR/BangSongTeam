@@ -9,31 +9,53 @@ import {
 } from "#shared";
 import { signInAsTestUser } from "../../test/sessionFixture";
 import {
+  deleteUserSong,
   getUserSongs,
   resetSongLibraryStore,
   saveSongToLibrary,
+  updateLibrarySongInfo,
 } from "../../features/editor/songLibraryStore";
-import { shouldRunBootSync, runBootSync } from "./bootSync";
+import {
+  __resetBootSyncForTests,
+  shouldRunBootSync,
+  runBootSync,
+} from "./bootSync";
 import {
   __resetDeckSyncForTests,
   __setDeckTransportForTests,
+  flushDeckSync,
+  scheduleDeckPush,
 } from "./deckSync";
-import { __resetSyncSchedulerForTests } from "./syncScheduler";
+import {
+  __resetSyncSchedulerForTests,
+  flushPendingSync,
+  scheduleDocumentPush,
+} from "./syncScheduler";
 import {
   __resetFolderSyncForTests,
   __setFolderPusherForTests,
+  flushFolderSync,
 } from "./folderSync";
 import {
   __loadFoldersForTests,
   getFolders,
+  renameFolder,
   resetFolderStore,
 } from "../../features/drive/folderStore";
 import { listPresentations } from "../../features/presentation";
 import {
   __loadDocumentsForTests,
+  renamePresentation,
   resetPresentationStore,
 } from "../../features/presentation/presentationStore";
 import { SEED_USER_ID as TEST_USER_ID } from "../../test/presentationFixture";
+import { OfflineError, ServerRejectedError } from "../api/request";
+import { MAX_BACKOFF_MS } from "./backoff";
+import {
+  getSyncSnapshot,
+  recordSyncFailure,
+  resetSyncStatus,
+} from "./syncStatus";
 
 const EMPTY_FOLDER_LIST: FolderListResponse = {
   folders: [],
@@ -241,5 +263,402 @@ describe("runBootSync — drive folders", () => {
     __loadDocumentsForTests([presentation(DOC)]);
     await runBootSync();
     expect(presentationSync.pushPresentation).not.toHaveBeenCalled();
+  });
+});
+
+describe("runBootSync — 동기화 상태", () => {
+  beforeEach(async () => {
+    signInAsTestUser();
+    await resetSongLibraryStore();
+    resetFolderStore();
+    resetPresentationStore();
+    resetSyncStatus();
+    __resetDeckSyncForTests();
+    __resetSyncSchedulerForTests();
+    __resetFolderSyncForTests();
+    __setDeckTransportForTests({ push: vi.fn(async (deck: Deck) => deck) });
+    __setFolderPusherForTests(vi.fn(async (f: Folder) => f));
+    presentationSync.pullDecks.mockResolvedValue([]);
+    presentationSync.pullPresentations.mockResolvedValue([]);
+    presentationSync.pushPresentation.mockReset();
+    presentationSync.pushPresentation.mockResolvedValue(true);
+    presentationSync.pullFolders.mockResolvedValue(EMPTY_FOLDER_LIST);
+  });
+
+  afterEach(() => {
+    __resetBootSyncForTests();
+    __resetFolderSyncForTests();
+    __resetDeckSyncForTests();
+    __resetSyncSchedulerForTests();
+  });
+
+  it("프레젠테이션 push가 거절되면 곡·폴더 동기화가 성공해도 동기화 실패로 남는다", async () => {
+    __loadFoldersForTests([folder(PARENT)]);
+    __loadDocumentsForTests([presentation(DOC)]);
+    saveSongToLibrary({ title: "로컬 곡", lyricsRaw: "가사" });
+    presentationSync.pushPresentation.mockRejectedValue(
+      new ServerRejectedError(400, "거절"),
+    );
+
+    await runBootSync();
+
+    expect(getSyncSnapshot().status).toBe("error");
+  });
+
+  it("곡을 받지 못하고 오프라인이면 offline으로 남는다", async () => {
+    presentationSync.pullDecks.mockRejectedValue(new OfflineError());
+
+    await runBootSync();
+
+    expect(getSyncSnapshot().status).toBe("offline");
+  });
+
+  it("폴더를 받지 못하고 오프라인이면 offline으로 남는다", async () => {
+    presentationSync.pullFolders.mockRejectedValue(new OfflineError());
+
+    await runBootSync();
+
+    expect(getSyncSnapshot().status).toBe("offline");
+  });
+
+  it("앞서 남은 실패 기록을 지우고 시작한다", async () => {
+    recordSyncFailure({
+      id: DOC,
+      kind: "presentation",
+      message: "이전 사용자의 실패",
+      failedAt: 1,
+    });
+
+    await runBootSync();
+
+    expect(getSyncSnapshot()).toEqual({ status: "synced", lastFailure: null });
+  });
+
+  it("부팅 때 거절된 프레젠테이션은 다른 프레젠테이션이 올라가도 동기화 실패로 남는다", async () => {
+    const OTHER = "e00000000000000000004";
+    __loadDocumentsForTests([presentation(DOC)]);
+    presentationSync.pushPresentation.mockImplementation(async (doc) => {
+      if ((doc as Presentation).id === DOC) {
+        throw new ServerRejectedError(400, "거절");
+      }
+      return true;
+    });
+
+    await runBootSync();
+    scheduleDocumentPush(presentation(OTHER));
+    await flushPendingSync();
+
+    expect(getSyncSnapshot().status).toBe("error");
+    expect(getSyncSnapshot().lastFailure?.id).toBe(DOC);
+  });
+
+  it("곡 큐가 오프라인으로 다시 시도할 곡을 들고 있으면 부팅 성공으로 덮지 않는다", async () => {
+    const queued = serverDeck({ id: "c000000000000000000aa" });
+    __setDeckTransportForTests({
+      push: vi.fn(async () => {
+        throw new OfflineError();
+      }),
+    });
+    presentationSync.pullDecks.mockImplementation(async () => {
+      scheduleDeckPush(queued);
+      await flushDeckSync();
+      return [];
+    });
+
+    await runBootSync();
+
+    expect(getSyncSnapshot().status).toBe("offline");
+  });
+
+  it("오프라인이라 받지 못한 단계는 연결이 돌아오면 다시 받아 동기화됨으로 돌아온다", async () => {
+    presentationSync.pullFolders.mockRejectedValueOnce(new OfflineError());
+
+    await runBootSync();
+    expect(getSyncSnapshot().status).toBe("offline");
+
+    window.dispatchEvent(new Event("online"));
+
+    await vi.waitFor(() => {
+      expect(getSyncSnapshot().status).toBe("synced");
+    });
+  });
+
+  it("오프라인으로 부팅한 뒤 송출 화면으로 가면 연결이 돌아와도 송출을 마칠 때까지 다시 받지 않는다", async () => {
+    const startPath = window.location.pathname;
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    presentationSync.pullFolders.mockClear();
+    presentationSync.pullFolders.mockRejectedValueOnce(new OfflineError());
+
+    try {
+      await runBootSync();
+      window.history.pushState({}, "", "/present/abc/fullscreen");
+      window.dispatchEvent(new Event("online"));
+      await vi.advanceTimersByTimeAsync(MAX_BACKOFF_MS * 2);
+
+      expect(presentationSync.pullFolders).toHaveBeenCalledTimes(1);
+      expect(getSyncSnapshot().status).toBe("offline");
+
+      window.history.pushState({}, "", "/presentations");
+      await vi.advanceTimersByTimeAsync(MAX_BACKOFF_MS);
+
+      expect(presentationSync.pullFolders).toHaveBeenCalledTimes(2);
+      expect(getSyncSnapshot().status).toBe("synced");
+    } finally {
+      vi.useRealTimers();
+      window.history.pushState({}, "", startPath);
+    }
+  });
+
+  it("부팅 때 일시 오류로 올리지 못한 곡은 큐가 다시 올려 동기화됨으로 돌아온다", async () => {
+    const push = vi
+      .fn(async (deck: Deck) => deck)
+      .mockRejectedValueOnce(new ServerRejectedError(503));
+    __setDeckTransportForTests({ push });
+    const local = saveSongToLibrary({ title: "로컬 곡", lyricsRaw: "가사" });
+
+    await runBootSync();
+    expect(getSyncSnapshot().status).toBe("offline");
+
+    await flushDeckSync();
+
+    expect(push).toHaveBeenCalledTimes(2);
+    expect(push.mock.calls[1][0].id).toBe(local.id);
+    expect(getSyncSnapshot().status).toBe("synced");
+  });
+
+  it("부팅이 올리지 못한 세트를 그사이 고쳤으면 고친 내용을 큐에 넘긴다", async () => {
+    __loadDocumentsForTests([presentation(DOC)]);
+    presentationSync.pushPresentation.mockImplementationOnce(async () => {
+      renamePresentation(DOC, "고친 세트");
+      throw new OfflineError();
+    });
+
+    await runBootSync();
+    await flushPendingSync();
+
+    const titles = presentationSync.pushPresentation.mock.calls.map(
+      ([doc]) => (doc as Presentation).title,
+    );
+    expect(titles.at(-1)).toBe("고친 세트");
+    expect(getSyncSnapshot().status).toBe("synced");
+  });
+
+  it("부팅이 올리지 못한 곡을 그사이 지웠으면 다시 올리지 않고 지운다", async () => {
+    const remove = vi.fn(async () => undefined);
+    const push = vi.fn(async (deck: Deck): Promise<Deck> => {
+      deleteUserSong(deck.id);
+      throw new OfflineError();
+    });
+    __setDeckTransportForTests({ push, remove });
+    const local = saveSongToLibrary({ title: "로컬 곡", lyricsRaw: "가사" });
+
+    await runBootSync();
+    await flushDeckSync();
+
+    expect(push).toHaveBeenCalledTimes(1);
+    expect(remove).toHaveBeenCalledWith(local.id);
+    expect(getSyncSnapshot().status).toBe("synced");
+  });
+
+  it("부팅이 큐에 넘긴 세트를 큐가 먼저 올렸으면 오프라인으로 남지 않는다", async () => {
+    const OTHER = "e00000000000000000004";
+    __loadDocumentsForTests([presentation(DOC), presentation(OTHER)]);
+    let calls = 0;
+    presentationSync.pushPresentation.mockImplementation(async () => {
+      calls += 1;
+      if (calls === 1) throw new OfflineError();
+      if (calls === 2) await flushPendingSync();
+      return true;
+    });
+
+    await runBootSync();
+
+    expect(calls).toBe(3);
+    expect(getSyncSnapshot().status).toBe("synced");
+  });
+
+  it("큐가 세트를 올리는 중이면 부팅이 먼저 동기화됨을 띄우지 않는다", async () => {
+    let release: (() => void) | undefined;
+    presentationSync.pushPresentation.mockImplementation(
+      () =>
+        new Promise<boolean>((resolve) => {
+          release = () => resolve(true);
+        }),
+    );
+    presentationSync.pullPresentations.mockImplementation(async () => {
+      scheduleDocumentPush(presentation(DOC));
+      void flushPendingSync();
+      return [];
+    });
+
+    await runBootSync();
+    expect(getSyncSnapshot().status).toBe("syncing");
+
+    release?.();
+    await flushPendingSync();
+    expect(getSyncSnapshot().status).toBe("synced");
+  });
+
+  it("큐가 곡을 올리는 중이면 부팅이 먼저 동기화됨을 띄우지 않는다", async () => {
+    let release: (() => void) | undefined;
+    __setDeckTransportForTests({
+      push: vi.fn(
+        (deck: Deck) =>
+          new Promise<Deck>((resolve) => {
+            release = () => resolve(deck);
+          }),
+      ),
+    });
+    presentationSync.pullDecks.mockImplementation(async () => {
+      scheduleDeckPush(serverDeck({ id: "c000000000000000000aa" }));
+      void flushDeckSync();
+      return [];
+    });
+
+    await runBootSync();
+    expect(getSyncSnapshot().status).toBe("syncing");
+
+    release?.();
+    await flushDeckSync();
+    expect(getSyncSnapshot().status).toBe("synced");
+  });
+
+  it("다시 부팅하면 앞선 부팅의 늦은 실패가 새 상태를 덮지 않는다", async () => {
+    let failFirst: (() => void) | undefined;
+    presentationSync.pullFolders.mockImplementationOnce(
+      () =>
+        new Promise<FolderListResponse>((_, reject) => {
+          failFirst = () => reject(new OfflineError());
+        }),
+    );
+
+    const first = runBootSync();
+    await runBootSync();
+    expect(getSyncSnapshot().status).toBe("synced");
+
+    failFirst?.();
+    await first;
+
+    expect(getSyncSnapshot().status).toBe("synced");
+  });
+});
+
+describe("runBootSync — 부팅이 올리는 동안 바뀐 항목", () => {
+  beforeEach(async () => {
+    signInAsTestUser();
+    await resetSongLibraryStore();
+    resetFolderStore();
+    resetPresentationStore();
+    resetSyncStatus();
+    __resetDeckSyncForTests();
+    __resetSyncSchedulerForTests();
+    __resetFolderSyncForTests();
+    __setDeckTransportForTests({ push: vi.fn(async (deck: Deck) => deck) });
+    __setFolderPusherForTests(vi.fn(async (f: Folder) => f));
+    presentationSync.pullDecks.mockResolvedValue([]);
+    presentationSync.pullPresentations.mockResolvedValue([]);
+    presentationSync.pushPresentation.mockReset();
+    presentationSync.pushPresentation.mockResolvedValue(true);
+    presentationSync.pullFolders.mockResolvedValue(EMPTY_FOLDER_LIST);
+  });
+
+  afterEach(() => {
+    __resetBootSyncForTests();
+    __resetFolderSyncForTests();
+    __resetDeckSyncForTests();
+    __resetSyncSchedulerForTests();
+  });
+
+  it("앞 곡을 올리는 동안 지운 곡은 올리지 않고 서버에서도 지운다", async () => {
+    const first = saveSongToLibrary({ title: "첫 곡", lyricsRaw: "가사" });
+    const second = saveSongToLibrary({ title: "둘째 곡", lyricsRaw: "가사" });
+    const remove = vi.fn(async () => undefined);
+    const pushed: string[] = [];
+    const push = vi.fn(async (deck: Deck): Promise<Deck> => {
+      if (pushed.length === 0) {
+        deleteUserSong(deck.id === first.id ? second.id : first.id);
+      }
+      pushed.push(deck.id);
+      return deck;
+    });
+    __setDeckTransportForTests({ push, remove });
+
+    await runBootSync();
+    await flushDeckSync();
+
+    const deletedId = pushed[0] === first.id ? second.id : first.id;
+    expect(pushed).not.toContain(deletedId);
+    expect(remove).toHaveBeenCalledWith(deletedId);
+    expect(getSyncSnapshot().status).toBe("synced");
+  });
+
+  it("앞 곡을 올리는 동안 고친 곡은 고친 내용으로 올린다", async () => {
+    const first = saveSongToLibrary({ title: "첫 곡", lyricsRaw: "가사" });
+    const second = saveSongToLibrary({ title: "둘째 곡", lyricsRaw: "가사" });
+    const pushed: Deck[] = [];
+    const push = vi.fn(async (deck: Deck): Promise<Deck> => {
+      if (pushed.length === 0) {
+        updateLibrarySongInfo(deck.id === first.id ? second.id : first.id, {
+          title: "고친 곡",
+          artist: "",
+        });
+      }
+      pushed.push(deck);
+      return deck;
+    });
+    __setDeckTransportForTests({ push });
+
+    await runBootSync();
+    await flushDeckSync();
+
+    const editedId = pushed[0].id === first.id ? second.id : first.id;
+    const editedPushes = pushed.filter((deck) => deck.id === editedId);
+    expect(editedPushes.length).toBeGreaterThan(0);
+    expect(editedPushes.every((deck) => deck.title === "고친 곡")).toBe(true);
+  });
+
+  it("앞 폴더를 올리는 동안 이름을 바꾼 폴더는 바뀐 이름으로 올리고 큐의 것도 잃지 않는다", async () => {
+    __loadFoldersForTests([
+      folder(PARENT, { name: "부모" }),
+      folder(CHILD, { parentId: PARENT, name: "자식" }),
+    ]);
+    const pushed: Folder[] = [];
+    __setFolderPusherForTests(
+      vi.fn(async (f: Folder) => {
+        if (f.id === PARENT) renameFolder(CHILD, "새 이름");
+        pushed.push(f);
+        return f;
+      }),
+    );
+
+    await runBootSync();
+    await flushFolderSync();
+
+    const childPushes = pushed.filter((f) => f.id === CHILD);
+    expect(childPushes.length).toBeGreaterThan(0);
+    expect(childPushes.every((f) => f.name === "새 이름")).toBe(true);
+    expect(getFolders().find((f) => f.id === CHILD)?.name).toBe("새 이름");
+  });
+
+  it("앞 세트를 올리는 동안 고친 세트는 고친 내용으로 올린다", async () => {
+    const OTHER = "e00000000000000000004";
+    __loadDocumentsForTests([presentation(DOC), presentation(OTHER)]);
+    const pushed: Presentation[] = [];
+    presentationSync.pushPresentation.mockImplementation(async (doc) => {
+      const current = doc as Presentation;
+      if (pushed.length === 0) {
+        renamePresentation(current.id === DOC ? OTHER : DOC, "고친 세트");
+      }
+      pushed.push(current);
+      return true;
+    });
+
+    await runBootSync();
+    await flushPendingSync();
+
+    const editedId = pushed[0].id === DOC ? OTHER : DOC;
+    const editedPushes = pushed.filter((doc) => doc.id === editedId);
+    expect(editedPushes.length).toBeGreaterThan(0);
+    expect(editedPushes.every((doc) => doc.title === "고친 세트")).toBe(true);
   });
 });

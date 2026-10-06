@@ -19,7 +19,7 @@ import {
   OfflineError,
   ServerRejectedError,
 } from "../api/request";
-import { setSyncStatus } from "./syncStatus";
+import { setSyncStatus, type SyncStatus } from "./syncStatus";
 
 /**
  * 프레젠테이션을 서버가 받을 수 있는 문서로 좁힌다.
@@ -32,23 +32,6 @@ function toSyncableDocument(
 ): PresentationDocument | null {
   const result = PresentationDocumentSchema.safeParse(presentation);
   return result.success ? result.data : null;
-}
-
-/**
- * 동기화 경로의 요청 1건. 오류 구분은 `callApi`에 맡기고, 실패 갈래에 맞춰
- * 동기화 상태 배지만 남긴다. 성공 응답의 본문을 못 읽은 실패는 상태를 바꾸지 않는다.
- */
-async function send<T>(request: Parameters<typeof callApi>[0]): Promise<T> {
-  try {
-    return await callApi<T>(request);
-  } catch (err) {
-    if (isRetryableApiError(err)) {
-      setSyncStatus("offline");
-    } else {
-      setSyncStatus("error");
-    }
-    throw err;
-  }
 }
 
 /**
@@ -105,7 +88,7 @@ export function __resetServerDecksForTests(): void {
 }
 
 async function sendChanges(changes: PresentationChanges): Promise<void> {
-  await send(() =>
+  await callApi(() =>
     api.api.presentations[":id"].$patch({
       param: { id: changes.id },
       json: changes,
@@ -156,33 +139,53 @@ export function setSharedPresentationListener(
   sharedListener = next;
 }
 
+let sharedRefreshGeneration = 0;
+
 /**
- * 공유받은 세트의 최신본을 받는다 (편집기를 열 때·창에 돌아올 때).
+ * 공유받은 프레젠테이션의 최신본을 받는다 (편집기를 열 때·창에 돌아올 때).
  * 소유자가 링크를 끄거나 재설정했으면 로컬에서 지우도록 알린다. 오프라인이면
  * 받아 둔 것을 그대로 쓴다.
+ *
+ * 동기화 큐를 거치지 않는 요청이라 결과를 `shared` 도메인 상태로 직접 남긴다.
+ * 이 상태는 공유받은 프레젠테이션을 보는 동안만 의미가 있으므로, 화면을 떠나면
+ * `endSharedPresentationRefresh`로 지운다. 그 뒤에 도착한 응답은 상태를 남기지 않는다.
  */
 export async function refreshSharedPresentation(id: string): Promise<void> {
+  const generation = sharedRefreshGeneration;
+  const report = (status: SyncStatus): void => {
+    if (generation === sharedRefreshGeneration) setSyncStatus("shared", status);
+  };
   try {
-    const body = await send<{ presentation: unknown }>(() =>
+    const body = await callApi<{ presentation: unknown }>(() =>
       api.api.presentations[":id"].$get({ param: { id } }),
     );
     sharedListener?.replaced(
       PresentationDocumentSchema.parse(body.presentation),
     );
-    setSyncStatus("synced");
+    report("synced");
   } catch (err) {
     if (err instanceof ServerRejectedError && err.status === 404) {
       sharedListener?.lost(id);
-      setSyncStatus("synced");
+      report("synced");
       return;
     }
+    report(isRetryableApiError(err) ? "offline" : "error");
     if (err instanceof OfflineError) return;
     throw err;
   }
 }
 
+/**
+ * 공유받은 프레젠테이션 화면을 떠날 때 부른다. 새로고침 결과는 그 화면에만 해당하는
+ * 읽기라, 남겨 두면 내 프레젠테이션이 다 저장된 뒤에도 헤더가 '오프라인'·'동기화 실패'로 남는다.
+ */
+export function endSharedPresentationRefresh(): void {
+  sharedRefreshGeneration += 1;
+  setSyncStatus("shared", "idle");
+}
+
 export async function pullPresentations(): Promise<PresentationDocument[]> {
-  const body = await send<{ presentations: PresentationDocument[] }>(() =>
+  const body = await callApi<{ presentations: PresentationDocument[] }>(() =>
     api.api.presentations.$get(),
   );
   return body.presentations;
@@ -195,7 +198,7 @@ export async function pullPresentations(): Promise<PresentationDocument[]> {
  * 로컬에 반영해야 한다.
  */
 export async function pushDeck(deck: Deck): Promise<Deck> {
-  const body = await send<{ deck: Deck }>(() =>
+  const body = await callApi<{ deck: Deck }>(() =>
     api.api.decks[":id"].$put({ param: { id: deck.id }, json: deck }),
   );
   return DeckSchema.parse(body.deck);
@@ -204,7 +207,7 @@ export async function pushDeck(deck: Deck): Promise<Deck> {
 /** 이미 없으면(404) 성공으로 본다 */
 export async function deleteDeckRemote(id: string): Promise<void> {
   try {
-    await send(() => api.api.decks[":id"].$delete({ param: { id } }));
+    await callApi(() => api.api.decks[":id"].$delete({ param: { id } }));
   } catch (err) {
     if (err instanceof ServerRejectedError && err.status === 404) return;
     throw err;
@@ -212,14 +215,16 @@ export async function deleteDeckRemote(id: string): Promise<void> {
 }
 
 export async function pullDecks(): Promise<Deck[]> {
-  const body = await send<{ decks: Deck[] }>(() => api.api.decks.$get());
+  const body = await callApi<{ decks: Deck[] }>(() => api.api.decks.$get());
   return body.decks;
 }
 
 /** 이미 없으면(404 — 한 번도 안 올라간 문서) 성공으로 본다 */
 export async function deletePresentationRemote(id: string): Promise<void> {
   try {
-    await send(() => api.api.presentations[":id"].$delete({ param: { id } }));
+    await callApi(() =>
+      api.api.presentations[":id"].$delete({ param: { id } }),
+    );
   } catch (err) {
     if (!(err instanceof ServerRejectedError && err.status === 404)) throw err;
   }
@@ -227,7 +232,7 @@ export async function deletePresentationRemote(id: string): Promise<void> {
 }
 
 export async function pullFolders(): Promise<FolderListResponse> {
-  return send<FolderListResponse>(() => api.api.folders.$get());
+  return callApi<FolderListResponse>(() => api.api.folders.$get());
 }
 
 /**
@@ -235,7 +240,7 @@ export async function pullFolders(): Promise<FolderListResponse> {
  * 서버는 없는 부모·사이클을 루트로 보정하므로 호출자는 응답을 반영해야 한다.
  */
 export async function pushFolder(folder: Folder): Promise<Folder> {
-  const body = await send<{ folder: Folder }>(() =>
+  const body = await callApi<{ folder: Folder }>(() =>
     api.api.folders[":id"].$put({ param: { id: folder.id }, json: folder }),
   );
   return FolderSchema.parse(body.folder);
@@ -249,7 +254,7 @@ export async function deleteFolderRemote(
   id: string,
 ): Promise<FolderDeleteResponse> {
   try {
-    const body = await send<unknown>(() =>
+    const body = await callApi<unknown>(() =>
       api.api.folders[":id"].$delete({ param: { id } }),
     );
     return FolderDeleteResponseSchema.parse(body);

@@ -1,5 +1,10 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import type { Folder } from "#shared";
+import {
+  DEFAULT_DECK_STYLE,
+  DeckSchema,
+  type Deck,
+  type Folder,
+} from "#shared";
 import {
   scheduleFolderPush,
   flushFolderSync,
@@ -15,7 +20,14 @@ import {
   TimeoutError,
 } from "../api/request";
 import { installFakeApi } from "../../test/fakeApi";
-import { getSyncSnapshot, __resetSyncStatusForTests } from "./syncStatus";
+import { getSyncSnapshot, resetSyncStatus } from "./syncStatus";
+import {
+  scheduleDeckPush,
+  flushDeckSync,
+  setDeckSyncEnabled,
+  __setDeckTransportForTests,
+  __resetDeckSyncForTests,
+} from "./deckSync";
 
 const USER = "000000000000000000001";
 const PARENT = "a00000000000000000001";
@@ -34,12 +46,27 @@ function folder(id: string, parentId: string | null, name = "폴더"): Folder {
   };
 }
 
+function libraryDeck(): Deck {
+  return DeckSchema.parse({
+    id: "c0000000000000000000a",
+    userId: USER,
+    scope: "library",
+    title: "은혜로다",
+    lyricsRaw: "가사",
+    slides: [],
+    backgroundId: null,
+    style: DEFAULT_DECK_STYLE,
+    createdAt: "2026-09-20T00:00:00.000Z",
+    updatedAt: "2026-09-21T00:00:00.000Z",
+  });
+}
+
 describe("폴더 push 큐", () => {
   let push: ReturnType<typeof vi.fn<(folder: Folder) => Promise<Folder>>>;
 
   beforeEach(() => {
     __resetFolderSyncForTests();
-    __resetSyncStatusForTests();
+    resetSyncStatus();
     push = vi.fn(async (f: Folder) => f);
     __setFolderPusherForTests(push);
     setFolderSyncEnabled(true);
@@ -278,5 +305,43 @@ describe("폴더 push 큐", () => {
     expect(getSyncSnapshot().status).toBe("synced");
 
     vi.useRealTimers();
+  });
+
+  describe("다른 큐와 함께", () => {
+    beforeEach(() => {
+      __resetDeckSyncForTests();
+      __setDeckTransportForTests({ push: async (deck) => deck });
+      setDeckSyncEnabled(true);
+    });
+
+    afterEach(() => {
+      __resetDeckSyncForTests();
+    });
+
+    it("폴더가 영구 실패한 뒤 곡 동기화가 성공해도 동기화 실패로 남는다", async () => {
+      push.mockRejectedValue(new ServerRejectedError(400, "잘못된 폴더"));
+      scheduleFolderPush(folder(PARENT, null));
+      await flushFolderSync();
+
+      scheduleDeckPush(libraryDeck());
+      await flushDeckSync();
+
+      expect(getSyncSnapshot().status).toBe("error");
+      expect(getSyncSnapshot().lastFailure).toMatchObject({
+        id: PARENT,
+        kind: "folder",
+      });
+    });
+
+    it("폴더가 오프라인으로 밀린 뒤 곡 동기화가 성공해도 offline으로 남는다", async () => {
+      push.mockRejectedValue(new OfflineError());
+      scheduleFolderPush(folder(PARENT, null));
+      await flushFolderSync();
+
+      scheduleDeckPush(libraryDeck());
+      await flushDeckSync();
+
+      expect(getSyncSnapshot().status).toBe("offline");
+    });
   });
 });
