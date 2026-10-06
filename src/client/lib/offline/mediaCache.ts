@@ -445,17 +445,21 @@ function pathOf(url: string): string {
  * `UNKNOWN_QUOTA_MEDIA_BUDGET_BYTES`만 쓸 수 있다고 보고 세트 밖 영상을 미리 지운다.
  * 다른 세트나 세트에서 빠진 영상이 겪은 부족은 따지지 않는다. 따지면 한 번의 부족으로
  * 세션 내내 다른 세트의 오프라인 배경까지 지운다. 그런 브라우저의 오리진 한도가 수백 MB라
- * 그냥 받으면 받는 도중에 한도에 걸린다. 이 예산은 짐작일 뿐이므로 지운 뒤에는 늘 true로
- * 두고 실제 받기에 맡긴다. 그래도 모자라면 `getMediaCacheFailure`가 `quota`를 알린다.
+ * 그냥 받으면 받는 도중에 한도에 걸린다. 의심할 때도 알려 준 용량이 예산보다 작으면 그
+ * 용량을 따른다. 부풀려 알려 주는 일은 있어도 실제보다 작게 알려 주지는 않아서, 예산만 보면
+ * 지워야 할 영상을 남긴 채 같은 부족을 되풀이한다. 예산은 짐작일 뿐이므로 알려 준 용량이
+ * 모자라다고 하지 않는 한 지운 뒤에는 true로 두고 실제 받기에 맡긴다. 그래도 모자라면
+ * `getMediaCacheFailure`가 `quota`를 알린다.
  */
 export async function ensureMediaSpace(
   neededBytes: number,
   keepUrls: readonly string[],
 ): Promise<boolean> {
   const distrust = keepUrls.some((url) => quotaHits.has(url));
-  const reported = distrust ? null : await estimateFreeBytes();
-  if (reported !== null && reported >= neededBytes) return true;
-  if (!isCacheStorageAvailable()) return reported === null;
+  const reported = await estimateFreeBytes();
+  const short = reported !== null && reported < neededBytes;
+  if (reported !== null && !short && !distrust) return true;
+  if (!isCacheStorageAvailable()) return !short;
 
   const keep = new Set(keepUrls.map(pathOf));
   try {
@@ -470,20 +474,22 @@ export async function ensureMediaSpace(
         };
       }),
     );
-    let free =
-      reported ??
-      UNKNOWN_QUOTA_MEDIA_BUDGET_BYTES -
-        entries.reduce((sum, entry) => sum + entry.bytes, 0);
+    const budget =
+      distrust || reported === null
+        ? UNKNOWN_QUOTA_MEDIA_BUDGET_BYTES -
+          entries.reduce((sum, entry) => sum + entry.bytes, 0)
+        : Infinity;
+    let freed = 0;
     for (const entry of entries) {
-      if (free >= neededBytes) break;
+      if (Math.min(reported ?? Infinity, budget) + freed >= neededBytes) break;
       if (keep.has(entry.path)) continue;
       await cache.delete(entry.request);
       knownCached.delete(entry.path);
-      free += entry.bytes;
+      freed += entry.bytes;
     }
-    return reported === null || free >= neededBytes;
+    return reported === null || reported + freed >= neededBytes;
   } catch {
-    return reported === null;
+    return !short;
   }
 }
 

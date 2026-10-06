@@ -640,6 +640,31 @@ describe("ensureMediaSpace", () => {
     await __waitForMediaCachingForTests();
   });
 
+  it("부족을 겪어 의심할 때도 알려 준 용량이 예산보다 작으면 그만큼 세트 밖 영상을 지운다", async () => {
+    mockFetch();
+    const cache = await caches.open(MEDIA_CACHE_NAME);
+    vi.spyOn(cache, "put").mockRejectedValueOnce(quotaError());
+    await cacheMediaFirst(LARGE);
+    expect(getMediaCacheFailure(LARGE)).toBe("quota");
+    await seedVideo(OTHER, 100 * MIB);
+    mockEstimate(250 * MIB, 0);
+
+    expect(await ensureMediaSpace(300 * MIB, [LARGE])).toBe(true);
+    expect(await isCached(OTHER)).toBe(false);
+  });
+
+  it("부족을 겪어 의심할 때 세트 밖 영상을 모두 지워도 알려 준 용량이 모자라면 false다", async () => {
+    mockFetch();
+    const cache = await caches.open(MEDIA_CACHE_NAME);
+    vi.spyOn(cache, "put").mockRejectedValueOnce(quotaError());
+    await cacheMediaFirst(LARGE);
+    await seedVideo(OTHER, 10 * MIB);
+    mockEstimate(250 * MIB, 0);
+
+    expect(await ensureMediaSpace(300 * MIB, [LARGE])).toBe(false);
+    expect(await isCached(OTHER)).toBe(false);
+  });
+
   it("세트 밖 영상이 겪은 저장 공간 부족으로는 알려 준 용량을 의심하지 않는다", async () => {
     mockFetch();
     const cache = await caches.open(MEDIA_CACHE_NAME);
