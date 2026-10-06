@@ -1,4 +1,5 @@
 import { ERROR_COPY } from "#copy/common";
+import { markServerReachable, markServerUnreachable } from "./connectivity";
 
 /** 서버가 세션을 거절했다 (만료·로그아웃) */
 export class SessionExpiredError extends Error {
@@ -118,6 +119,8 @@ interface RpcResponse {
  * 던져진 오류를 보고 자기 도메인 상태를 따로 남긴다. 그래서 의존 방향은
  * sync → api 한쪽뿐이다.
  *
+ * - 응답을 받으면(상태 코드와 상관없이) 서버에 닿음, 닿지 못하면 닿지 못함으로
+ *   `connectivity`에 남긴다. 호출자 취소는 연결 상태를 바꾸지 않는다
  * - 네트워크에 닿지 못함(타임아웃 포함) → `OfflineError` (또는 `TimeoutError`)
  * - 호출자 취소(`AbortError`) → 그대로 던짐 (오프라인으로 오인하지 않음)
  * - 401 → `SessionExpiredError`
@@ -130,10 +133,12 @@ export async function callApi<T>(
   try {
     response = await request();
   } catch (err) {
+    if (isCallerAbort(err) && !isTimeoutError(err)) throw err;
+    markServerUnreachable();
     if (isTimeoutError(err)) throw new TimeoutError(err);
-    if (isCallerAbort(err)) throw err;
     throw new OfflineError(err);
   }
+  markServerReachable();
 
   if (response.status === 401) throw new SessionExpiredError();
   if (!response.ok) {

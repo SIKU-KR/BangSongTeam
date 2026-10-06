@@ -328,7 +328,10 @@ describe("보관함 push 큐", () => {
     await flushDeckSync();
 
     expect(remove).toHaveBeenCalledWith(A);
-    expect(getSyncSnapshot()).toEqual({ status: "synced", lastFailure: null });
+    expect(getSyncSnapshot()).toMatchObject({
+      status: "synced",
+      lastFailure: null,
+    });
   });
 
   it("pushDeckNow는 오프라인으로 밀린 곡이 남아 있으면 synced로 바꾸지 않는다", async () => {

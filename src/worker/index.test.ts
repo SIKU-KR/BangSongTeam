@@ -2,6 +2,7 @@ import { describe, it, expect, beforeAll } from "vitest";
 import { env } from "cloudflare:test";
 import { API_ERRORS, type BackgroundListResponse } from "#shared";
 import app from "./index";
+import { meterD1 } from "./test/meteredD1";
 
 describe("Miniflare/workerd 환경 Worker 및 D1 통합 테스트", () => {
   beforeAll(async () => {
@@ -19,6 +20,17 @@ describe("Miniflare/workerd 환경 Worker 및 D1 통합 테스트", () => {
     expect(res.status).toBe(200);
     const json = await res.json();
     expect(json).toEqual({ status: "ok" });
+  });
+
+  it("GET /api/health는 세션 없이 D1에 가지 않고 캐시 금지로 답한다", async () => {
+    const { db, meter } = meterD1(env.DB);
+
+    const res = await app.request("/api/health", {}, { ...env, DB: db });
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get("cache-control")).toBe("no-store");
+    expect(await res.json()).toEqual({ status: "ok" });
+    expect(meter.roundTrips).toBe(0);
   });
 
   it("처리되지 않은 오류는 내부 메시지를 숨기고 500을 준다", async () => {

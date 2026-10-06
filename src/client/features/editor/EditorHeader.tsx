@@ -12,6 +12,7 @@ import {
   PlayIcon,
   PlusIcon,
   Redo2Icon,
+  RefreshCwIcon,
   Share2Icon,
   Undo2Icon,
   UsersIcon,
@@ -41,7 +42,7 @@ import {
 } from "#components/ui/tooltip";
 import { IconButton } from "#components/common/IconButton";
 import { usePersistenceError } from "../../lib/storage";
-import { useSyncStatus, type SyncStatus } from "../../lib/sync";
+import { retrySyncNow, useSyncStatus, type SyncStatus } from "../../lib/sync";
 import { ThemeMenuButton } from "../../components/common/ThemeMenuButton";
 import type { PresentationAccess } from "#shared";
 import type { ProjectionMediaFailure } from "../offline/useProjectionMediaReady";
@@ -109,21 +110,62 @@ const SYNC_STATUS_INDICATOR: Record<SyncStatus, SaveStatusIndicatorState> = {
   },
 };
 
+const SYNC_TIME_FORMAT = new Intl.DateTimeFormat("ko-KR", {
+  hour: "numeric",
+  minute: "2-digit",
+});
+
+const RETRYABLE_SYNC_STATUSES: ReadonlySet<SyncStatus> = new Set([
+  "offline",
+  "error",
+]);
+
 function SaveStatusIndicator(): React.JSX.Element {
   const persistenceError = usePersistenceError();
-  const { status } = useSyncStatus();
+  const { status, lastSyncedAt } = useSyncStatus();
 
   const { dotClass, label } = persistenceError
     ? SAVE_FAILED_INDICATOR
     : SYNC_STATUS_INDICATOR[status];
+  const canRetry = !persistenceError && RETRYABLE_SYNC_STATUSES.has(status);
 
   return (
-    <span
-      data-testid="save-status"
-      className="hidden items-center gap-1 text-xs font-medium text-muted-foreground md:inline-flex"
-    >
-      <span className={cn("size-1.5 rounded-full", dotClass)}></span>
-      {label}
+    <span className="hidden min-w-0 items-center gap-1 md:inline-flex">
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <Button
+              variant="ghost"
+              size="xs"
+              data-testid="save-status"
+              className="min-w-0 shrink text-muted-foreground"
+            />
+          }
+        >
+          <span
+            className={cn("size-1.5 shrink-0 rounded-full", dotClass)}
+          ></span>
+          <span className="truncate">{label}</span>
+        </TooltipTrigger>
+        <TooltipContent data-testid="save-status-detail">
+          {lastSyncedAt === null
+            ? EDITOR_COPY.syncStatus.notSyncedYet
+            : EDITOR_COPY.syncStatus.lastSynced(
+                SYNC_TIME_FORMAT.format(lastSyncedAt),
+              )}
+        </TooltipContent>
+      </Tooltip>
+      {canRetry && (
+        <IconButton
+          label={COMMON_COPY.retry}
+          variant="outline"
+          size="icon-xs"
+          data-testid="save-status-retry"
+          onClick={retrySyncNow}
+        >
+          <RefreshCwIcon />
+        </IconButton>
+      )}
     </span>
   );
 }
@@ -189,7 +231,7 @@ function PresentationTitleField({
             variant="ghost"
             size="sm"
             data-testid="header-title-btn"
-            className="max-w-xs text-sm font-bold sm:max-w-md"
+            className="max-w-xs min-w-0 shrink text-sm font-bold sm:max-w-md"
             onClick={() => {
               setTempTitle(title);
               setIsEditingTitle(true);

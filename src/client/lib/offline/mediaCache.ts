@@ -447,8 +447,9 @@ export function retainMediaUrls(urls: readonly string[]): () => void {
  * 재시도를 기다리던 URL을 백오프를 기다리지 않고 곧바로 다시 받는다. 붙잡힌 URL 가운데
  * 받다 실패한 채 재시도 횟수를 다 쓴 것도 함께 넣는다.
  *
- * 연결이 회복됐다는 신호(지금은 `online` 이벤트)가 배경 큐를 다시 돌리는 입구다. 저장
- * 공간 부족으로 실패한 URL은 공간을 비우기 전에는 낫지 않으므로 넣지 않는다.
+ * 연결이 회복됐다는 신호(`syncRecovery`, 송출 화면은 `online` 이벤트)가 배경 큐를 다시
+ * 돌리는 입구다. 저장 공간 부족으로 실패한 URL은 공간을 비우기 전에는 낫지 않으므로
+ * 넣지 않는다.
  */
 export function resumeMediaCaching(): void {
   if (!canCacheInBackground()) return;

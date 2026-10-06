@@ -74,6 +74,7 @@ import { PresentationShareDialog } from "../features/sharing/PresentationShareDi
 import {
   endSharedPresentationRefresh,
   refreshSharedPresentation,
+  subscribeSyncRecovery,
 } from "../lib/sync";
 import { useBackgroundLayers } from "../features/backgrounds";
 import { EDITOR_COPY } from "#copy/editor";
@@ -135,9 +136,9 @@ function EditorScreen({
       void refreshSharedPresentation(presentationId).catch(() => undefined);
     };
     refresh();
-    window.addEventListener("focus", refresh);
+    const unsubscribe = subscribeSyncRecovery(refresh);
     return () => {
-      window.removeEventListener("focus", refresh);
+      unsubscribe();
       endSharedPresentationRefresh();
     };
   }, [presentationId, readOnly, isGuest]);

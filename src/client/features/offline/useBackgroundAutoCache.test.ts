@@ -42,6 +42,19 @@ vi.mock("../../lib/offline", () => ({
   resumeMediaCaching,
 }));
 
+const recoveryListeners = vi.hoisted(() => new Set<() => void>());
+
+vi.mock("../../lib/sync/syncRecovery", () => ({
+  subscribeSyncRecovery: (listener: () => void) => {
+    recoveryListeners.add(listener);
+    return () => recoveryListeners.delete(listener);
+  },
+}));
+
+function notifySyncRecovery(): void {
+  for (const listener of recoveryListeners) listener();
+}
+
 const BASE = SEED_PRESENTATIONS[0];
 
 function withBackground(backgroundId: string): Presentation {
@@ -187,7 +200,7 @@ describe("useBackgroundAutoCache", () => {
     expect(scheduleMediaCaching).toHaveBeenCalledTimes(1);
   });
 
-  it("네트워크가 돌아오면 재시도를 기다리던 것까지 곧바로 다시 큐에 넣는다", () => {
+  it("연결이 회복되면 세트의 URL을 곧바로 다시 큐에 넣는다", () => {
     const presentation = withBackground(BG_A);
     renderHook(() => useBackgroundAutoCache(presentation));
     act(() => {
@@ -195,10 +208,9 @@ describe("useBackgroundAutoCache", () => {
     });
 
     act(() => {
-      window.dispatchEvent(new Event("online"));
+      notifySyncRecovery();
     });
 
-    expect(resumeMediaCaching).toHaveBeenCalledTimes(1);
     expect(scheduleMediaCaching).toHaveBeenCalledTimes(2);
     expect(scheduleMediaCaching).toHaveBeenLastCalledWith(urlsOf(BG_A));
   });
@@ -238,7 +250,7 @@ describe("useBackgroundAutoCache", () => {
     unmount();
     act(() => {
       vi.advanceTimersByTime(AUTO_CACHE_DELAY_MS);
-      window.dispatchEvent(new Event("online"));
+      notifySyncRecovery();
     });
 
     expect(scheduleMediaCaching).not.toHaveBeenCalled();

@@ -10,6 +10,7 @@ import {
   scheduleMediaCaching,
   warmPresentationFonts,
 } from "../../lib/offline";
+import { subscribeSyncRecovery } from "../../lib/sync/syncRecovery";
 import { useBackgroundLookup } from "../backgrounds/backgroundCatalog";
 import { useLatest } from "../../hooks/useLatest";
 
@@ -46,6 +47,9 @@ function useRetainedMediaUrls(
  * (`useCacheFirstVideo`)가 먼저 받다 실패해도 큐가 백오프로 다시 받는다. 배경을 바꾸면 새
  * URL을 먼저 붙잡은 뒤 지난 URL을 놓는다. 두 세트에 함께 있는 URL이 잠깐이라도 놓이면
  * 기다리던 재시도와 시도 횟수가 지워져, SW가 아직 받고 있을 수 있는 파일을 곧바로 다시 받는다.
+ *
+ * 연결이 회복되면(`subscribeSyncRecovery`: `online`·탭 복귀·포커스·상태 확인 성공) 세트의
+ * URL을 다시 넣는다. 기다리던 재시도는 회복 경로가 `resumeMediaCaching`으로 먼저 깨운다.
  */
 export function useBackgroundAutoCache(
   presentation: Presentation | null,
@@ -78,14 +82,10 @@ export function useBackgroundAutoCache(
 
   useRetainedMediaUrls(urlsRef, presentationId ? urlKey : null);
 
-  useEffect(() => {
-    const handleOnline = (): void => {
-      resumeMediaCaching();
-      scheduleMediaCaching(urlsRef.current);
-    };
-    window.addEventListener("online", handleOnline);
-    return () => window.removeEventListener("online", handleOnline);
-  }, []);
+  useEffect(
+    () => subscribeSyncRecovery(() => scheduleMediaCaching(urlsRef.current)),
+    [],
+  );
 }
 
 /**

@@ -228,7 +228,10 @@ describe("서버 push 스케줄러", () => {
     push.mockResolvedValue(true);
     scheduleDocumentPush(doc("a"));
     await flushPendingSync();
-    expect(getSyncSnapshot()).toEqual({ status: "synced", lastFailure: null });
+    expect(getSyncSnapshot()).toMatchObject({
+      status: "synced",
+      lastFailure: null,
+    });
   });
 
   it("실패한 프레젠테이션을 영구 삭제하면 실패 표시를 지운다", async () => {
@@ -239,7 +242,10 @@ describe("서버 push 스케줄러", () => {
     expect(getSyncSnapshot().status).toBe("error");
 
     cancelDocumentPush("a");
-    expect(getSyncSnapshot()).toEqual({ status: "synced", lastFailure: null });
+    expect(getSyncSnapshot()).toMatchObject({
+      status: "synced",
+      lastFailure: null,
+    });
   });
 
   it("새 폴더를 세트보다 먼저 올린다 (폴더 큐를 먼저 비운다)", async () => {

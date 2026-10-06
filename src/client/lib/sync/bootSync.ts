@@ -84,9 +84,9 @@ export function shouldRunBootSync(pathname: string): boolean {
  * 느린 교회에서 예배 시작이 그만큼 밀린다.
  *
  * 오프라인은 조용히 넘어간다 — 실패가 아니라 정상 경로다. 다만 받지 못한 단계는
- * 백오프 간격과 `online` 이벤트로 다시 받고, 올리지 못한 항목은 도메인 큐에 넘겨
- * 큐의 백오프로 다시 올린다. 다시 하지 않으면 그 도메인이 세션 내내 '오프라인'으로
- * 남아, 연결이 돌아와 저장이 다 끝나도 헤더가 초록색으로 돌아오지 않는다.
+ * 백오프 간격과 연결 회복(`retryBootSyncIfNeeded`)으로 다시 받고, 올리지 못한 항목은
+ * 도메인 큐에 넘겨 큐의 백오프로 다시 올린다. 다시 하지 않으면 그 도메인이 세션 내내
+ * '오프라인'으로 남아, 연결이 돌아와 저장이 다 끝나도 헤더가 초록색으로 돌아오지 않는다.
  * 송출 화면에 있는 동안에는 다시 받지 않고 송출을 마친 뒤로 미룬다. 송출 중에는
  * API·데이터 요청이 0건이어야 하고, 받은 결과를 병합하면 띄운 문서가 바뀔 수 있다.
  *
@@ -212,7 +212,6 @@ function settleSyncStatus(
 const retryBackoff = new BackoffTracker();
 let retryTimer: ReturnType<typeof setTimeout> | null = null;
 let retryStep: (() => Promise<void>) | null = null;
-let onlineListenerRegistered = false;
 
 function cancelBootRetry(): void {
   if (retryTimer) clearTimeout(retryTimer);
@@ -233,7 +232,6 @@ function retryPullLater(step: () => Promise<void>, err: unknown): SyncStatus {
   retryStep = step;
   if (retryTimer) clearTimeout(retryTimer);
   retryTimer = setTimeout(runRetry, retryBackoff.getDelay(err));
-  registerOnlineListener();
   return "offline";
 }
 
@@ -243,28 +241,33 @@ function isProjecting(): boolean {
   );
 }
 
-function runRetry(): void {
+function runRetry(): Promise<void> | null {
   if (retryTimer) clearTimeout(retryTimer);
   retryTimer = null;
   if (isProjecting()) {
     if (retryStep) retryTimer = setTimeout(runRetry, BASE_BACKOFF_MS);
-    return;
+    return null;
   }
   const step = retryStep;
   retryStep = null;
-  if (step) void step().catch(() => undefined);
+  return step ? step().catch(() => undefined) : null;
 }
 
-function handleOnline(): void {
-  if (!retryStep || isProjecting()) return;
+/**
+ * 부팅 때 받지 못한 단계가 백오프를 기다리고 있으면 지금 곧바로 다시 받고, 끝날 때까지
+ * 기다린다. 다시 받았으면 true다. 기다리는 단계가 없거나 송출 중이면 요청 없이 false다.
+ *
+ * 연결 회복(`syncRecovery`)이 도메인 큐보다 먼저 부른다. 받지 못한 단계는 어느 큐에도
+ * 들어 있지 않아, 회복을 알아도 백오프 타이머가 끝날 때까지(최대 1분) 헤더가
+ * '오프라인'으로 남는다. 먼저 받아 병합해야 큐가 병합 결과를 올린다.
+ */
+export async function retryBootSyncIfNeeded(): Promise<boolean> {
+  if (!retryStep || isProjecting()) return false;
   retryBackoff.reset();
-  runRetry();
-}
-
-function registerOnlineListener(): void {
-  if (onlineListenerRegistered || typeof window === "undefined") return;
-  onlineListenerRegistered = true;
-  window.addEventListener("online", handleOnline);
+  const running = runRetry();
+  if (!running) return false;
+  await running;
+  return true;
 }
 
 async function syncFolders(

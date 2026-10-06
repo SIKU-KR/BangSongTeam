@@ -5,6 +5,7 @@ import {
   getDeadlineForRequest,
   DEFAULT_API_TIMEOUT_MS,
   PULL_API_TIMEOUT_MS,
+  HEALTH_API_TIMEOUT_MS,
 } from "./fetchWithTimeout";
 
 describe("fetchWithTimeout", () => {
@@ -29,6 +30,7 @@ describe("fetchWithTimeout", () => {
       ["/api/auth-config", "GET", DEFAULT_API_TIMEOUT_MS],
       ["/api/consent", "GET", DEFAULT_API_TIMEOUT_MS],
       ["/api/reports", "POST", DEFAULT_API_TIMEOUT_MS],
+      ["/api/health", "GET", HEALTH_API_TIMEOUT_MS],
     ])("%s (%s) 데드라인은 %dms이다", (url, method, expected) => {
       expect(getDeadlineForRequest(url, method)).toBe(expected);
     });

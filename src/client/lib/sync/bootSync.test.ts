@@ -17,6 +17,7 @@ import {
 } from "../../features/editor/songLibraryStore";
 import {
   __resetBootSyncForTests,
+  retryBootSyncIfNeeded,
   shouldRunBootSync,
   runBootSync,
 } from "./bootSync";
@@ -331,7 +332,10 @@ describe("runBootSync — 동기화 상태", () => {
 
     await runBootSync();
 
-    expect(getSyncSnapshot()).toEqual({ status: "synced", lastFailure: null });
+    expect(getSyncSnapshot()).toMatchObject({
+      status: "synced",
+      lastFailure: null,
+    });
   });
 
   it("부팅 때 거절된 프레젠테이션은 다른 프레젠테이션이 올라가도 동기화 실패로 남는다", async () => {
@@ -376,11 +380,50 @@ describe("runBootSync — 동기화 상태", () => {
     await runBootSync();
     expect(getSyncSnapshot().status).toBe("offline");
 
-    window.dispatchEvent(new Event("online"));
+    await expect(retryBootSyncIfNeeded()).resolves.toBe(true);
 
-    await vi.waitFor(() => {
-      expect(getSyncSnapshot().status).toBe("synced");
-    });
+    expect(getSyncSnapshot().status).toBe("synced");
+    await expect(retryBootSyncIfNeeded()).resolves.toBe(false);
+  });
+
+  it("받지 못한 단계가 없으면 회복 때 다시 받지 않는다", async () => {
+    await runBootSync();
+    presentationSync.pullFolders.mockClear();
+    presentationSync.pullPresentations.mockClear();
+    presentationSync.pullDecks.mockClear();
+
+    await expect(retryBootSyncIfNeeded()).resolves.toBe(false);
+
+    expect(presentationSync.pullFolders).not.toHaveBeenCalled();
+    expect(presentationSync.pullPresentations).not.toHaveBeenCalled();
+    expect(presentationSync.pullDecks).not.toHaveBeenCalled();
+  });
+
+  it("회복 신호가 겹쳐도 받지 못한 단계는 한 번만 다시 받는다", async () => {
+    presentationSync.pullFolders.mockRejectedValueOnce(new OfflineError());
+    await runBootSync();
+    presentationSync.pullFolders.mockClear();
+
+    const results = await Promise.all([
+      retryBootSyncIfNeeded(),
+      retryBootSyncIfNeeded(),
+    ]);
+
+    expect(results).toEqual([true, false]);
+    expect(presentationSync.pullFolders).toHaveBeenCalledTimes(1);
+  });
+
+  it("곡을 받지 못한 단계도 회복 때 다시 받는다", async () => {
+    presentationSync.pullDecks.mockClear();
+    presentationSync.pullDecks.mockRejectedValueOnce(new OfflineError());
+
+    await runBootSync();
+    expect(getSyncSnapshot().status).toBe("offline");
+
+    await expect(retryBootSyncIfNeeded()).resolves.toBe(true);
+
+    expect(presentationSync.pullDecks).toHaveBeenCalledTimes(2);
+    expect(getSyncSnapshot().status).toBe("synced");
   });
 
   it("오프라인으로 부팅한 뒤 송출 화면으로 가면 연결이 돌아와도 송출을 마칠 때까지 다시 받지 않는다", async () => {
@@ -392,7 +435,7 @@ describe("runBootSync — 동기화 상태", () => {
     try {
       await runBootSync();
       window.history.pushState({}, "", "/present/abc/fullscreen");
-      window.dispatchEvent(new Event("online"));
+      await expect(retryBootSyncIfNeeded()).resolves.toBe(false);
       await vi.advanceTimersByTimeAsync(MAX_BACKOFF_MS * 2);
 
       expect(presentationSync.pullFolders).toHaveBeenCalledTimes(1);

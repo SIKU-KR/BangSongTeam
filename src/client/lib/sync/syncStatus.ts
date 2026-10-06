@@ -29,6 +29,13 @@ export interface SyncFailure {
 export interface SyncSnapshot {
   status: SyncStatus;
   lastFailure: SyncFailure | null;
+  /**
+   * 모든 도메인이 마지막으로 '동기화됨'에 이른 시각(ms). 에디터 헤더가 보여 준다.
+   * 메모리에만 두므로 이 세션에서 확인한 것만 뜻한다. 한 도메인만 성공하고 다른
+   * 도메인이 실패·오프라인이면 바꾸지 않는다. 그때 시각을 바꾸면 아직 올라가지 않은
+   * 변경이 있는데도 방금 저장된 것처럼 보인다.
+   */
+  lastSyncedAt: number | null;
 }
 
 interface DomainState {
@@ -58,7 +65,12 @@ function createDomains(): Record<SyncDomain, DomainState> {
 
 let domains = createDomains();
 const listeners = new Set<() => void>();
-let snapshot: SyncSnapshot = { status: "idle", lastFailure: null };
+let lastSyncedAt: number | null = null;
+let snapshot: SyncSnapshot = {
+  status: "idle",
+  lastFailure: null,
+  lastSyncedAt: null,
+};
 
 function aggregateStatus(): SyncStatus {
   const effective = Object.values(domains).map((state) =>
@@ -80,10 +92,14 @@ function latestFailure(): SyncFailure | null {
 function emit(): void {
   const status = aggregateStatus();
   const lastFailure = latestFailure();
-  if (snapshot.status === status && snapshot.lastFailure === lastFailure) {
+  if (
+    snapshot.status === status &&
+    snapshot.lastFailure === lastFailure &&
+    snapshot.lastSyncedAt === lastSyncedAt
+  ) {
     return;
   }
-  snapshot = { status, lastFailure };
+  snapshot = { status, lastFailure, lastSyncedAt };
   for (const listener of listeners) listener();
 }
 
@@ -99,6 +115,9 @@ export function setSyncStatus(domain: SyncDomain, next: SyncStatus): void {
   const state = domains[domain];
   if (state.phase === next) return;
   state.phase = next;
+  if (next === "synced" && aggregateStatus() === "synced") {
+    lastSyncedAt = Date.now();
+  }
   emit();
 }
 
@@ -145,9 +164,10 @@ export function useSyncStatus(): SyncSnapshot {
 
 /**
  * 모든 도메인을 처음 상태로 되돌린다. 부팅 동기화가 큐를 켜기 전에 부른다.
- * 새로고침 없이 계정을 바꿨을 때 앞 사용자의 실패 기록이 남으면 안 된다.
+ * 새로고침 없이 계정을 바꿨을 때 앞 사용자의 실패 기록과 동기화 시각이 남으면 안 된다.
  */
 export function resetSyncStatus(): void {
   domains = createDomains();
+  lastSyncedAt = null;
   emit();
 }

@@ -1,3 +1,5 @@
+import { COMMON_COPY } from "./common";
+
 export const BACKGROUND_COPY = {
   selected: "선택됨",
   video: "영상",
@@ -33,7 +35,7 @@ export const BACKGROUND_COPY = {
       network:
         "배경 영상을 받지 못했어요. 인터넷 연결을 확인하고 다시 시도해 주세요.",
     },
-    retry: "다시 시도",
+    retry: COMMON_COPY.retry,
     startWithSaved: "저장된 배경으로 시작",
     savedHint: "저장하지 못한 곡은 배경 대신 정지 화면이 보여요.",
     editorStatus: (ready: number, total: number) =>

@@ -26,6 +26,7 @@ import {
   flushPendingSync,
   flushDeckSync,
   flushFolderSync,
+  startSyncRecovery,
 } from "./lib/sync";
 import {
   AppShellLayout,
@@ -86,6 +87,7 @@ function useHydration(): boolean {
   }, [session.status, userId, bootstrappedUserId]);
 
   useFlushOnPageHide();
+  useSyncRecovery();
 
   return (
     isSessionResolved &&
@@ -111,6 +113,16 @@ function useFlushOnPageHide(): void {
       document.removeEventListener("visibilitychange", onVisibilityChange);
     };
   }, []);
+}
+
+function useSyncRecovery(): void {
+  useEffect(
+    () =>
+      startSyncRecovery({
+        isPaused: () => isProjectionPath(window.location.pathname),
+      }),
+    [],
+  );
 }
 
 /** 예전 자체 테마 저장 키를 그대로 써서 사용자가 고른 테마를 잃지 않는다 */

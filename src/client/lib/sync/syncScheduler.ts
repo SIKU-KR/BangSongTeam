@@ -38,7 +38,6 @@ const inFlightDocs = new Set<string>();
 const inFlightTasks = new Set<Promise<void>>();
 let timer: ReturnType<typeof setTimeout> | null = null;
 const backoff = new BackoffTracker();
-let onlineListenerRegistered = false;
 
 function clearTimer(): void {
   if (timer) {
@@ -170,19 +169,20 @@ function dispatch(): void {
   scheduleNextTimer();
 }
 
-function handleOnline(): void {
+/**
+ * 연결이 회복됐을 때 대기 중인 push를 백오프와 디바운스를 기다리지 않고 곧바로 보낸다.
+ * 백오프 횟수도 비운다. 회복 뒤 다시 실패하면 짧은 간격부터 다시 센다.
+ *
+ * 회복 신호(`online`·탭 복귀·포커스·상태 확인 성공)는 `syncRecovery`가 모아서 부른다.
+ * 여기서 `online`을 따로 들으면 회복 경로가 둘이 된다.
+ */
+export function retryPendingSyncNow(): void {
   if (!enabled) return;
   backoff.reset();
   for (const item of pending.values()) {
     item.readyAt = 0;
   }
   dispatch();
-}
-
-function registerOnlineListener(): void {
-  if (onlineListenerRegistered || typeof window === "undefined") return;
-  onlineListenerRegistered = true;
-  window.addEventListener("online", handleOnline);
 }
 
 /**
@@ -199,8 +199,6 @@ export function scheduleDocumentPush(document: Presentation): void {
   if (!enabled) return;
   if (!document.id) return;
   if (document.access) return;
-
-  registerOnlineListener();
 
   const now = Date.now();
   const existing = pending.get(document.id);
