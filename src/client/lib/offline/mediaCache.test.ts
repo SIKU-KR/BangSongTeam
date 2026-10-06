@@ -1230,6 +1230,37 @@ describe("받기 실패 보고", () => {
     ]);
   });
 
+  it("응답이 온 뒤 본문을 받다 끊긴 받기를 그 요청의 상관 ID로 담는다", async () => {
+    let init: RequestInit | undefined;
+    globalThis.fetch = vi.fn(
+      async (_input: RequestInfo | URL, requestInit?: RequestInit) => {
+        init = requestInit;
+        return new Response(
+          new ReadableStream<Uint8Array>({
+            start(controller) {
+              controller.enqueue(new Uint8Array(8));
+              controller.error(new TypeError("network error"));
+            },
+          }),
+          { status: 200, headers: { "content-length": "16" } },
+        );
+      },
+    ) as unknown as typeof fetch;
+
+    expect(await cacheMediaFirst(VIDEO)).toBe(false);
+
+    expect(getMediaCacheFailure(VIDEO)).toBe("network");
+    expect(await flushedReports()).toEqual([
+      {
+        requestId: traceIdOf(init),
+        kind: "interrupted",
+        route: "/api/media/*",
+        online: true,
+        swControlled: false,
+      },
+    ]);
+  });
+
   it("저장 공간 부족과 4xx는 담지 않는다", async () => {
     mockFetch(async (url) =>
       url === VIDEO ? new Response(null, { status: 404 }) : okResponse(),

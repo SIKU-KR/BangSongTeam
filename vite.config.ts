@@ -234,6 +234,8 @@ const appConfig: UserConfig = {
  * 루트의 설정 파일 수를 줄이려고 vitest 설정을 이 파일에 함께 둔다. vitest로 실행될
  * 때만 만들며, 이때는 앱 플러그인(cloudflare·PWA)을 싣지 않는다. 테스트 전용
  * 의존성은 `vite dev`·`vite build`가 불러오지 않도록 동적으로 import한다.
+ * Worker가 요청마다 남기는 구조화 로그(`requestLog`)가 테스트 출력을 덮지 않게 성공 요청
+ * 줄만 숨긴다. 5xx 줄은 `console.error`라 그대로 보인다.
  */
 async function createTestConfig(): Promise<
   UserConfig & Pick<ViteUserConfig, "test">
@@ -354,8 +356,6 @@ async function createTestConfig(): Promise<
 
   const { test } = defineVitestConfig({
     test: {
-      // Worker가 요청마다 남기는 구조화 로그(`requestLog`)가 테스트 출력을 덮지 않게
-      // 성공 요청 줄만 숨긴다. 5xx 줄은 console.error라 그대로 보인다.
       onConsoleLog: (log, type) =>
         !(type === "stdout" && log.includes("event: 'request'")),
       projects: [

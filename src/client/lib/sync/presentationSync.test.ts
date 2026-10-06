@@ -297,6 +297,23 @@ describe("공유받은 프레젠테이션 새로고침 상태", () => {
     expect(getSyncSnapshot().status).toBe("offline");
   });
 
+  it("서버가 새로고침을 거절하면 그 요청의 상관 ID를 문의 코드로 남긴다", async () => {
+    const requestId = "4bf92f3577b34da6a3ce929d0e0e4736";
+    const response = { status: 403, ok: false, json: async () => ({}) };
+    rememberRequestMeta(response, {
+      requestId,
+      route: "/api/presentations/:id",
+    });
+    api.get.mockResolvedValueOnce(response);
+
+    await expect(refreshSharedPresentation(DOC_ID)).rejects.toThrow();
+
+    expect(getSyncSnapshot()).toMatchObject({
+      status: "error",
+      failureRequestId: requestId,
+    });
+  });
+
   it("공유 화면을 떠나면 새로고침 실패가 내 프레젠테이션 동기화 표시에 남지 않는다", async () => {
     api.get.mockRejectedValueOnce(new TypeError("Failed to fetch"));
     await refreshSharedPresentation(DOC_ID);

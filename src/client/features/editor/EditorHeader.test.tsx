@@ -395,6 +395,21 @@ describe("EditorHeader", () => {
       ).toHaveTextContent(EDITOR_COPY.syncStatus.failureCode("4bf92f35"));
     });
 
+    it("항목 없이 받기가 실패해도 그 요청의 문의 코드를 보여 준다", async () => {
+      setSyncStatus(
+        "presentation",
+        "error",
+        "0af7651916cd43dd8448eb211c80319c",
+      );
+      renderHeader();
+
+      act(() => screen.getByTestId("save-status").focus());
+
+      expect(
+        await screen.findByTestId("save-status-failure-code"),
+      ).toHaveTextContent(EDITOR_COPY.syncStatus.failureCode("0af76519"));
+    });
+
     it("상관 ID가 없거나 실패 상태가 아니면 문의 코드를 보여 주지 않는다", async () => {
       recordSyncFailure({
         id: "doc",

@@ -1,10 +1,4 @@
-import { MEDIA_URL_PREFIX } from "#shared";
-
-function randomHex(bytes: number): string {
-  return Array.from(crypto.getRandomValues(new Uint8Array(bytes)), (byte) =>
-    byte.toString(16).padStart(2, "0"),
-  ).join("");
-}
+import { MEDIA_URL_PREFIX, randomHex } from "#shared";
 
 export interface TraceContext {
   traceparent: string;

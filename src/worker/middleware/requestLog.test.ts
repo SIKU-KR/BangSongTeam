@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll, afterEach, vi } from "vitest";
 import { env } from "cloudflare:test";
+import { DrizzleQueryError } from "drizzle-orm";
 import { Hono } from "hono";
 import { createApp } from "../index";
 import type { SessionReader } from "./auth";
@@ -81,15 +82,13 @@ describe("resolveRequestId", () => {
 describe("describeError", () => {
   it("D1 오류를 감싼 cause 사슬의 이름과 메시지를 남긴다", () => {
     const d1 = new Error("D1_ERROR: UNIQUE constraint failed: decks.id");
-    const wrapped = new Error("Failed query: insert into decks", {
-      cause: d1,
-    });
+    const wrapped = new Error("wrapped", { cause: d1 });
 
     const described = describeError(wrapped);
 
     expect(described).toMatchObject({
       name: "Error",
-      message: "Failed query: insert into decks",
+      message: "wrapped",
       cause: {
         name: "Error",
         message: "D1_ERROR: UNIQUE constraint failed: decks.id",
@@ -98,6 +97,26 @@ describe("describeError", () => {
     expect(JSON.parse(JSON.stringify(described)).cause.message).toContain(
       "D1_ERROR",
     );
+  });
+
+  it("Drizzle 쿼리 오류는 SQL 문과 원인만 남기고 바인딩 값(가사)은 남기지 않는다", () => {
+    const d1 = new Error("D1_ERROR: UNIQUE constraint failed: decks.id");
+    const query = 'insert into "decks" ("id", "slides") values (?, ?)';
+    const wrapped = new DrizzleQueryError(
+      query,
+      ["deck-1", JSON.stringify({ lyrics: "주 하나님 지으신 모든 세계" })],
+      d1,
+    );
+
+    const described = describeError(wrapped);
+
+    expect(described).toMatchObject({
+      name: "DrizzleQueryError",
+      message: `Failed query: ${query}`,
+      cause: { message: "D1_ERROR: UNIQUE constraint failed: decks.id" },
+    });
+    expect(described).not.toHaveProperty("stack");
+    expect(JSON.stringify(described)).not.toContain("주 하나님");
   });
 
   it("cause는 3단계까지만 따라간다", () => {
@@ -122,10 +141,17 @@ describe("logServerError", () => {
     const app = new Hono<AppEnv>()
       .use("*", requestLog())
       .put("/api/things/:id", async (c) => {
-        logServerError(c, "thing upsert failed", new Error("D1_ERROR: busy"), {
-          thingId: c.req.param("id"),
-          songCount: 3,
-        });
+        const body = await c.req.text();
+        logServerError(
+          c,
+          "thing upsert failed",
+          new DrizzleQueryError(
+            "insert into things values (?)",
+            [body],
+            new Error("D1_ERROR: busy"),
+          ),
+          { thingId: c.req.param("id"), songCount: 3 },
+        );
         return c.json({ error: "x" }, 500);
       });
 
@@ -148,7 +174,7 @@ describe("logServerError", () => {
       route: "/api/things/:id",
       thingId: "abc",
       songCount: 3,
-      error: { message: "D1_ERROR: busy" },
+      error: { cause: { message: "D1_ERROR: busy" } },
     });
     expect(JSON.stringify(error.mock.calls)).not.toContain("주 하나님");
   });

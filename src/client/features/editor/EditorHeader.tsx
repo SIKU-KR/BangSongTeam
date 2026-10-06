@@ -128,10 +128,6 @@ function formatSyncedAt(syncedAt: number): string {
   return (isToday ? SYNC_TIME_FORMAT : SYNC_DATE_TIME_FORMAT).format(synced);
 }
 
-/**
- * 화면에 보여 주는 문의 코드 길이. 상관 ID(32자) 앞부분만 보여 줘도 Worker 로그에서
- * 앞부분 일치로 찾을 수 있고, 사용자가 읽어 주기 쉽다.
- */
 const FAILURE_CODE_LENGTH = 8;
 
 const RETRYABLE_SYNC_STATUSES: ReadonlySet<SyncStatus> = new Set([
@@ -141,15 +137,15 @@ const RETRYABLE_SYNC_STATUSES: ReadonlySet<SyncStatus> = new Set([
 
 function SaveStatusIndicator(): React.JSX.Element {
   const persistenceError = usePersistenceError();
-  const { status, lastSyncedAt, lastFailure } = useSyncStatus();
+  const { status, lastSyncedAt, failureRequestId } = useSyncStatus();
 
   const { dotClass, label } = persistenceError
     ? SAVE_FAILED_INDICATOR
     : SYNC_STATUS_INDICATOR[status];
   const canRetry = !persistenceError && RETRYABLE_SYNC_STATUSES.has(status);
   const failureCode =
-    !persistenceError && status === "error" && lastFailure?.requestId
-      ? lastFailure.requestId.slice(0, FAILURE_CODE_LENGTH)
+    !persistenceError && status === "error" && failureRequestId
+      ? failureRequestId.slice(0, FAILURE_CODE_LENGTH)
       : null;
 
   return (
@@ -390,6 +386,9 @@ function ShortcutGuidePopover(): React.JSX.Element {
 
 /**
  * 편집기 상단 네비게이션 헤더.
+ *
+ * 동기화 실패면 저장 상태 툴팁에 실패한 요청의 상관 ID 앞 8자리를 문의 코드로 보여 준다.
+ * 앞부분만으로도 Worker 로그에서 앞부분 일치로 찾을 수 있고, 사용자가 읽어 주기 쉽다.
  */
 export function EditorHeader({
   title,

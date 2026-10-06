@@ -17,6 +17,7 @@ import {
   callApi,
   isRetryableApiError,
   OfflineError,
+  requestIdOfError,
   ServerRejectedError,
 } from "../api/request";
 import { reportApiFailure } from "../observability/clientReports";
@@ -170,8 +171,10 @@ let sharedRefreshGeneration = 0;
  */
 export async function refreshSharedPresentation(id: string): Promise<void> {
   const generation = sharedRefreshGeneration;
-  const report = (status: SyncStatus): void => {
-    if (generation === sharedRefreshGeneration) setSyncStatus("shared", status);
+  const report = (status: SyncStatus, requestId?: string): void => {
+    if (generation === sharedRefreshGeneration) {
+      setSyncStatus("shared", status, requestId);
+    }
   };
   try {
     const body = await callSyncApi<{ presentation: unknown }>(() =>
@@ -187,7 +190,10 @@ export async function refreshSharedPresentation(id: string): Promise<void> {
       report("synced");
       return;
     }
-    report(isRetryableApiError(err) ? "offline" : "error");
+    report(
+      isRetryableApiError(err) ? "offline" : "error",
+      requestIdOfError(err),
+    );
     if (err instanceof OfflineError) return;
     throw err;
   }

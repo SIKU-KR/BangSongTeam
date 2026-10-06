@@ -284,9 +284,14 @@ function reportMediaFailure(
   watchdog: StallWatchdog,
   trace: TraceContext,
 ): void {
-  if (watchdog.signal.aborted) {
+  const kind = watchdog.signal.aborted
+    ? "stalled"
+    : err instanceof TypeError
+      ? "interrupted"
+      : null;
+  if (kind) {
     recordClientFailure({
-      kind: "stalled",
+      kind,
       route: toRoutePattern(url),
       requestId: trace.requestId,
     });
@@ -576,8 +581,9 @@ export function getMediaQueueState(url: string): MediaQueueState | null {
  * 것까지 공간 부족으로 치면, 다시 받지 않고 '저장 공간 부족'을 잘못 알린다. 그 대신 브라우저가
  * 남은 용량을 부풀려 알려 주면 실제 부족도 `network`로 남아 큐와 `useCacheFirstVideo`의
  * 재시도 한도까지 다시 받는다.
- * 받기 실패(무진행 중단, 닿지 못함, 5xx)는 상관 ID와 함께 실패 보고(`clientReports`)에도
- * 담는다. 저장 공간 부족은 서버와 상관없는 기기 사정이라 담지 않는다.
+ * 받기 실패(무진행 중단, 닿지 못함, 5xx, 본문을 받다 끊김)는 상관 ID와 함께 실패
+ * 보고(`clientReports`)에도 담는다. 본문 스트림의 네트워크 오류는 `fetch()` 밖에서
+ * `TypeError`로 나므로 따로 가려 담는다. 저장 공간 부족은 서버와 상관없는 기기 사정이라 담지 않는다.
  *
  * 끊긴 지점부터 `Range`로 이어 받지 않고 처음부터 다시 받는다. 페이지 요청은 SW의
  * `CacheFirst` 라우트를 피할 수 없고 그 라우트는 206을 담지 않는다(`statuses: [200]`).

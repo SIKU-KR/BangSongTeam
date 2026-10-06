@@ -29,6 +29,7 @@ describe("동기화 상태", () => {
       status: "idle",
       lastFailure: null,
       lastSyncedAt: null,
+      failureRequestId: null,
     });
   });
 
@@ -114,6 +115,33 @@ describe("동기화 상태", () => {
     expect(getSyncSnapshot().lastFailure).toEqual(older);
   });
 
+  it("항목 없이 도메인이 실패해도 그 요청의 상관 ID를 문의 코드로 남긴다", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(1_000);
+    recordSyncFailure(failure({ requestId: "a".repeat(32), failedAt: 500 }));
+    setSyncStatus("presentation", "error", "b".repeat(32));
+
+    expect(getSyncSnapshot().failureRequestId).toBe("b".repeat(32));
+
+    vi.setSystemTime(2_000);
+    setSyncStatus("presentation", "error", "c".repeat(32));
+    expect(getSyncSnapshot().failureRequestId).toBe("c".repeat(32));
+
+    setSyncStatus("presentation", "synced");
+    expect(getSyncSnapshot().failureRequestId).toBe("a".repeat(32));
+    vi.useRealTimers();
+  });
+
+  it("가장 최근 실패에 상관 ID가 없으면 이전 실패의 코드를 보여 주지 않는다", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(1_000);
+    recordSyncFailure(failure({ requestId: "a".repeat(32), failedAt: 500 }));
+    setSyncStatus("deck", "error");
+
+    expect(getSyncSnapshot().failureRequestId).toBeNull();
+    vi.useRealTimers();
+  });
+
   it("초기화하면 모든 도메인이 idle로 돌아간다", () => {
     recordSyncFailure(failure());
     setSyncStatus("deck", "offline");
@@ -124,6 +152,7 @@ describe("동기화 상태", () => {
       status: "idle",
       lastFailure: null,
       lastSyncedAt: null,
+      failureRequestId: null,
     });
     expect(getSyncDomainStatus("deck")).toBe("idle");
   });

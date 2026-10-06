@@ -1,11 +1,11 @@
 const PRUNE_THRESHOLD = 1000;
 
-interface Window {
+interface LimitWindow {
   startedAt: number;
   count: number;
 }
 
-export interface FixedWindowLimiterOptions {
+interface FixedWindowLimiterOptions {
   limit: number;
   windowMs: number;
   now?: () => number;
@@ -24,11 +24,11 @@ export function createFixedWindowLimiter({
   windowMs,
   now = Date.now,
 }: FixedWindowLimiterOptions): (key: string) => boolean {
-  const windows = new Map<string, Window>();
+  const windows = new Map<string, LimitWindow>();
 
   const prune = (at: number): void => {
-    for (const [key, window] of windows) {
-      if (at - window.startedAt >= windowMs) windows.delete(key);
+    for (const [key, entry] of windows) {
+      if (at - entry.startedAt >= windowMs) windows.delete(key);
     }
   };
 

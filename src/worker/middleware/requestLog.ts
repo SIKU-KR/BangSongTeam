@@ -4,7 +4,7 @@ import { routePath } from "hono/route";
 import type { AppEnv } from "../types";
 import { describeError, hashUserId, resolveRequestId } from "../lib/requestLog";
 
-export const REQUEST_ID_HEADER = "x-request-id";
+const REQUEST_ID_HEADER = "x-request-id";
 
 /**
  * 요청마다 구조화 로그 한 줄을 남기고 응답에 상관 ID(`x-request-id`)를 붙인다.

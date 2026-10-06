@@ -1,16 +1,12 @@
+import { DrizzleQueryError } from "drizzle-orm";
 import type { Context } from "hono";
 import { routePath } from "hono/route";
+import { bytesToHex, randomHex } from "#shared";
 import type { AppEnv } from "../types";
 
 const TRACEPARENT = /^00-([0-9a-f]{32})-([0-9a-f]{16})-[0-9a-f]{2}$/;
 const ZERO_TRACE_ID = "0".repeat(32);
 const MAX_CAUSE_DEPTH = 3;
-
-function randomHex(bytes: number): string {
-  return Array.from(crypto.getRandomValues(new Uint8Array(bytes)), (byte) =>
-    byte.toString(16).padStart(2, "0"),
-  ).join("");
-}
 
 /**
  * 요청의 상관 ID를 정한다. 브라우저가 보낸 W3C `traceparent`의 trace-id를 먼저 쓴다.
@@ -36,12 +32,10 @@ export async function hashUserId(userId: string): Promise<string> {
     "SHA-256",
     new TextEncoder().encode(userId),
   );
-  return Array.from(new Uint8Array(digest).slice(0, 8), (byte) =>
-    byte.toString(16).padStart(2, "0"),
-  ).join("");
+  return bytesToHex(new Uint8Array(digest).slice(0, 8));
 }
 
-export interface LoggedError {
+interface LoggedError {
   name: string;
   message: string;
   stack?: string;
@@ -52,8 +46,14 @@ function describeAt(err: unknown, depth: number): LoggedError {
   if (!(err instanceof Error)) {
     return { name: typeof err, message: String(err) };
   }
-  const described: LoggedError = { name: err.name, message: err.message };
-  if (err.stack) described.stack = err.stack;
+  const described: LoggedError =
+    err instanceof DrizzleQueryError
+      ? { name: "DrizzleQueryError", message: `Failed query: ${err.query}` }
+      : {
+          name: err.name,
+          message: err.message,
+          ...(err.stack ? { stack: err.stack } : {}),
+        };
   if (err.cause !== undefined && depth < MAX_CAUSE_DEPTH) {
     described.cause = describeAt(err.cause, depth + 1);
   }
@@ -65,6 +65,10 @@ function describeAt(err: unknown, depth: number): LoggedError {
  *
  * `Error`를 그대로 넘기면 Workers Logs에 `{}`로 남는다. Drizzle은 D1 오류
  * (`D1_ERROR: ...`)를 `cause`에 감싸 던지므로, 따라가지 않으면 실제 원인이 빠진다.
+ *
+ * Drizzle의 `DrizzleQueryError`는 메시지와 스택 첫 줄에 바인딩 값(`params`)을 싣는다.
+ * 덱 upsert면 그 값이 가사·슬라이드 JSON이므로, 이 오류는 SQL 문(값은 `?` 자리표시자)만
+ * 남기고 스택은 버린다. 원인은 `cause`의 D1 오류가 알려 준다.
  */
 export function describeError(err: unknown): LoggedError {
   return describeAt(err, 0);

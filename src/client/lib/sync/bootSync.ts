@@ -157,7 +157,9 @@ async function syncDriveAndDecks(): Promise<void> {
   } catch (err) {
     if (generation !== bootGeneration) return;
     const status = retryPullLater(syncDriveAndDecks, err);
-    for (const domain of unsynced) setSyncStatus(domain, status);
+    for (const domain of unsynced) {
+      setSyncStatus(domain, status, requestIdOfError(err));
+    }
     return;
   }
 
@@ -342,7 +344,11 @@ async function syncLibraryDecks(): Promise<void> {
     retryBackoff.reset();
   } catch (err) {
     if (generation !== bootGeneration) return;
-    setSyncStatus("deck", retryPullLater(syncLibraryDecks, err));
+    setSyncStatus(
+      "deck",
+      retryPullLater(syncLibraryDecks, err),
+      requestIdOfError(err),
+    );
     return;
   }
 
