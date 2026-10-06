@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll } from "vitest";
 import { env } from "cloudflare:test";
-import type { BackgroundListResponse } from "#shared";
+import { API_ERRORS, type BackgroundListResponse } from "#shared";
 import app from "./index";
 
 describe("Miniflare/workerd 환경 Worker 및 D1 통합 테스트", () => {
@@ -87,7 +87,7 @@ describe("Miniflare/workerd 환경 Worker 및 D1 통합 테스트", () => {
     const res = await app.request("/api/media/loops/non_existent.mp4", {}, env);
     expect(res.status).toBe(404);
     const json = await res.json();
-    expect(json).toEqual({ error: "Media not found" });
+    expect(json).toEqual({ error: API_ERRORS.media.notFound });
   });
 
   describe("Better Auth 마운트 (/api/auth/*)", () => {
