@@ -384,7 +384,8 @@ function canCacheInBackground(): boolean {
  * 이 세션에서 담긴 것을 확인한 영상은 다시 넣지 않는다. 영상 캐시는 SW 만료 정책이 없고
  * 이 모듈의 `ensureMediaSpace`만 지우며 그때 확인 기록도 지운다. 포스터는 SW 만료 정책이
  * 페이지 모르게 지울 수 있으니 다시 넣어 캐시를 열어 본다.
- 확인 기록은 탭마다 따로라서, 다른 탭의 `ensureMediaSpace`가 지운 영상은 이 탭이 모른 채
+ *
+ * 확인 기록은 탭마다 따로라서, 다른 탭의 `ensureMediaSpace`가 지운 영상은 이 탭이 모른 채
  * 다시 받지 않는다. 한 기기에서 세트 하나를 여는 쓰임에 맞춘 것이고, 새로 고치면 다시 확인한다.
  */
 export function scheduleMediaCaching(
