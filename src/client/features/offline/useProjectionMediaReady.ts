@@ -14,6 +14,7 @@ import {
   cacheMediaFirst,
   ensureMediaSpace,
   findCachedMediaUrls,
+  getMediaCacheFailure,
   getMediaProgress,
   getMediaProgressVersion,
   subscribeMediaProgress,
@@ -58,6 +59,20 @@ export const PASSIVE_RECHECK_MS = 2000;
 
 function isOffline(): boolean {
   return typeof navigator !== "undefined" && navigator.onLine === false;
+}
+
+function failureOf(url: string): ProjectionMediaFailure {
+  if (getMediaCacheFailure(url) === "quota") return "quota";
+  return isOffline() ? "offline" : "network";
+}
+
+function hitQuota(
+  urls: readonly string[],
+  readyUrls: ReadonlySet<string>,
+): boolean {
+  return urls.some(
+    (url) => !readyUrls.has(url) && getMediaCacheFailure(url) === "quota",
+  );
 }
 
 /**
@@ -121,6 +136,12 @@ function useMediaProgressVersion(): number {
  *
  * `passive`면 직접 받지 않고 저장 상태만 본다. 편집기는 자동 캐시
  * (`useBackgroundAutoCache`)가 이미 받고 있으므로 송출 버튼 옆에 진행만 보여 준다.
+ * 다만 자동 캐시가 저장 공간 부족으로 실패했으면 `failed`/`quota`로 알린다. 알리지 않으면
+ * 편집기는 끝나지 않을 '배경 저장 중'만 보여 준다. 공간이 생겨 저장되면 다시 확인할 때
+ * 풀린다.
+ *
+ * 받다가 저장 공간 부족으로 실패하면 연결이 끊겼더라도 `quota`로 알린다. 다시 연결해도
+ * 공간을 비우기 전에는 낫지 않기 때문이다.
  */
 export function useProjectionMediaReady(
   presentation: Presentation | null,
@@ -158,9 +179,10 @@ export function useProjectionMediaReady(
           await findCachedMediaUrls(urls).catch((): string[] => []),
         );
         const ready = readyUrls.size === urls.length;
+        const quota = !ready && hitQuota(urls, readyUrls);
         update({
-          status: ready ? "ready" : "downloading",
-          failure: null,
+          status: ready ? "ready" : quota ? "failed" : "downloading",
+          failure: quota ? "quota" : null,
           readyUrls,
         });
         if (!ready && !cancelled)
@@ -203,11 +225,7 @@ export function useProjectionMediaReady(
       for (const file of missing) {
         if (cancelled) return;
         if (!(await cacheMediaFirst(file.url))) {
-          update({
-            status: "failed",
-            failure: isOffline() ? "offline" : "network",
-            readyUrls,
-          });
+          update({ status: "failed", failure: failureOf(file.url), readyUrls });
           return;
         }
         readyUrls.add(file.url);

@@ -41,6 +41,7 @@ import { usePersistenceError } from "../../lib/storage";
 import { useSyncStatus, type SyncStatus } from "../../lib/sync";
 import { ThemeMenuButton } from "../../components/common/ThemeMenuButton";
 import type { PresentationAccess } from "#shared";
+import type { ProjectionMediaFailure } from "../offline/useProjectionMediaReady";
 import { EDITOR_COPY, SHORTCUT_GUIDE } from "#copy/editor";
 import { COMMON_COPY } from "#copy/common";
 import { BACKGROUND_COPY } from "#copy/backgrounds";
@@ -66,8 +67,15 @@ interface EditorHeaderProps {
   readOnly: boolean;
   /** `null`이면 돌아갈 드라이브가 없는 것이다 (로그인하지 않고 링크로 봄) */
   backPath: string | null;
-  /** 세트 배경 영상 중 이 기기에 저장된 수. 모두 저장됐으면 `null`이다 */
-  mediaProgress: { readyCount: number; totalCount: number } | null;
+  /**
+   * 세트 배경 영상 중 이 기기에 저장된 수. 모두 저장됐으면 `null`이다.
+   * 저장 공간 부족(`quota`)으로 멈췄으면 진행 대신 그 사실을 보여 준다
+   */
+  mediaProgress: {
+    readyCount: number;
+    totalCount: number;
+    failure: ProjectionMediaFailure | null;
+  } | null;
 }
 
 interface SaveStatusIndicatorState {
@@ -417,13 +425,23 @@ export function EditorHeader({
           </Button>
         )}
 
-        {mediaProgress && (
-          <Badge variant="secondary" data-testid="header-media-progress">
-            {BACKGROUND_COPY.prepare.editorStatus(
-              mediaProgress.readyCount,
-              mediaProgress.totalCount,
-            )}
+        {mediaProgress?.failure === "quota" ? (
+          <Badge
+            variant="destructive"
+            data-testid="header-media-quota"
+            title={BACKGROUND_COPY.prepare.failed.quota}
+          >
+            {BACKGROUND_COPY.prepare.editorQuota}
           </Badge>
+        ) : (
+          mediaProgress && (
+            <Badge variant="secondary" data-testid="header-media-progress">
+              {BACKGROUND_COPY.prepare.editorStatus(
+                mediaProgress.readyCount,
+                mediaProgress.totalCount,
+              )}
+            </Badge>
+          )
         )}
 
         <Button

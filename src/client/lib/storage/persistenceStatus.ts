@@ -2,6 +2,7 @@ import { useSyncExternalStore } from "react";
 import { PersistenceUnavailableError } from "./db";
 import type { CorruptedRecord } from "./presentationRepository";
 import { ERROR_COPY } from "#copy/common";
+import { isQuotaExceededError } from "../browser/quotaError";
 
 type PersistenceErrorKind = "unavailable" | "quota" | "unknown";
 
@@ -23,10 +24,7 @@ function emit(): void {
 
 function classify(err: unknown): PersistenceErrorKind {
   if (err instanceof PersistenceUnavailableError) return "unavailable";
-  if (err instanceof DOMException && err.name === "QuotaExceededError") {
-    return "quota";
-  }
-  if (err instanceof Error && err.name === "QuotaExceededError") return "quota";
+  if (isQuotaExceededError(err)) return "quota";
   return "unknown";
 }
 
