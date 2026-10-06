@@ -29,6 +29,7 @@ let enabled = false;
 let pending = new Map<string, PendingOp>();
 let timer: ReturnType<typeof setTimeout> | null = null;
 let inFlight: Promise<void> = Promise.resolve();
+const runningBatches = new Set<Promise<void>>();
 const backoff = new BackoffTracker();
 
 /** 로그인·하이드레이션이 끝난 뒤에만 켠다 (송출 화면에서는 켜지 않는다) */
@@ -122,7 +123,11 @@ function run(): void {
 
   const ops = [...pending.values()];
   pending = new Map();
-  inFlight = inFlight.then(() => runOps(ops));
+  const batch = inFlight.then(() => runOps(ops));
+  runningBatches.add(batch);
+  inFlight = batch.finally(() => {
+    runningBatches.delete(batch);
+  });
 }
 
 function schedule(key: string, op: PendingOp): void {
@@ -161,9 +166,9 @@ export async function pushDeckNow(deck: Deck): Promise<Deck> {
   return saved;
 }
 
-/** 아직 서버에 보내지 않은 곡 변경이 큐에 남아 있는지 (다시 시도할 것 포함) */
+/** 큐가 아직 끝내지 못한 곡 변경이 있는지 (보내는 중이거나 다시 시도할 것 포함) */
 export function hasPendingDeckSync(): boolean {
-  return pending.size > 0;
+  return pending.size > 0 || runningBatches.size > 0;
 }
 
 export function flushDeckSync(): Promise<void> {
@@ -190,4 +195,5 @@ export function __resetDeckSyncForTests(): void {
   listener = null;
   clearPending();
   inFlight = Promise.resolve();
+  runningBatches.clear();
 }

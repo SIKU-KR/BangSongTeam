@@ -46,6 +46,7 @@ import {
   scheduleFolderPush,
 } from "./folderSync";
 import {
+  getSyncDomainStatus,
   recordSyncFailure,
   resetSyncStatus,
   setSyncStatus,
@@ -89,11 +90,19 @@ export function shouldRunBootSync(pathname: string): boolean {
  * 송출 화면에 있는 동안에는 다시 받지 않고 송출을 마친 뒤로 미룬다. 송출 중에는
  * API·데이터 요청이 0건이어야 하고, 받은 결과를 병합하면 띄운 문서가 바뀔 수 있다.
  *
+ * 큐에 넘길 때는 부팅 병합 때의 사본이 아니라 지금 저장소에 있는 것을 넘긴다. 부팅이
+ * 올리는 동안 사용자가 고치거나 지운 것을 옛 사본이 덮으면 그 변경이 서버에 가지 않는다.
+ *
  * 결과는 폴더·프레젠테이션·곡 도메인별로 따로 남기고, 올리지 못한 항목은 항목별
  * 실패로 남긴다. 도메인 단계만 바꾸면 같은 도메인 큐의 다음 성공이 그 실패를 덮는다.
+ * 도메인 큐가 아직 끝내지 못한 일(보내는 중이거나 다시 시도할 것)이 있으면 그 결과는
+ * 큐가 남긴다. 부팅의 '동기화됨'은 아직 올라가지 않은 변경을 가리고, 큐가 이미 다시
+ * 올린 항목을 두고 남긴 '오프라인'은 지울 주체가 없어 세션 내내 남는다.
  * 상태 초기화는 큐를 켜기 전에 한다. 켠 뒤에 지우면 먼저 실패한 큐의 기록이 사라진다.
+ * 다시 부르면(새로고침 없이 계정 전환) 앞선 부팅의 남은 단계는 상태를 남기지 않는다.
  */
 export async function runBootSync(): Promise<void> {
+  bootGeneration += 1;
   cancelBootRetry();
   resetSyncStatus();
   setSyncStatus("folder", "syncing");
@@ -110,23 +119,32 @@ export async function runBootSync(): Promise<void> {
   await syncDriveAndDecks();
 }
 
+let bootGeneration = 0;
+
 async function syncDriveAndDecks(): Promise<void> {
+  const generation = bootGeneration;
   const knownBeforePull = new Set(listPresentations().map((doc) => doc.id));
   let serverDocuments;
   let tombstones: DriveTombstones;
   let unsynced: readonly SyncDomain[] = ["folder", "presentation", "deck"];
   try {
     const folderList = await pullFolders();
+    if (generation !== bootGeneration) return;
     tombstones = folderList.tombstones;
-    settleSyncStatus(
-      "folder",
-      await syncFolders(folderList.folders, tombstones),
+    const folderStatus = await syncFolders(
+      folderList.folders,
+      tombstones,
+      generation,
     );
+    if (generation !== bootGeneration) return;
+    settleSyncStatus("folder", folderStatus);
     unsynced = ["presentation", "deck"];
     serverDocuments = await pullPresentations();
+    if (generation !== bootGeneration) return;
     rememberServerDocuments(serverDocuments);
     retryBackoff.reset();
   } catch (err) {
+    if (generation !== bootGeneration) return;
     const status = retryPullLater(syncDriveAndDecks, err);
     for (const domain of unsynced) setSyncStatus(domain, status);
     return;
@@ -152,16 +170,16 @@ async function syncDriveAndDecks(): Promise<void> {
     }
   }
 
-  settleSyncStatus(
+  const presentationStatus = await pushEachTrackingStatus(
     "presentation",
-    await pushEachTrackingStatus(
-      "presentation",
-      findEach(documents, needsPush),
-      pushPresentation,
-      scheduleDocumentPush,
-      (document) => document.title,
-    ),
+    findEach(documents, needsPush),
+    pushPresentation,
+    requeueLatest(listPresentations, scheduleDocumentPush),
+    (document) => document.title,
+    generation,
   );
+  if (generation !== bootGeneration) return;
+  settleSyncStatus("presentation", presentationStatus);
 
   await syncLibraryDecks();
 }
@@ -172,17 +190,28 @@ const hasQueuedWork: Record<Exclude<SyncDomain, "shared">, () => boolean> = {
   deck: hasPendingDeckSync,
 };
 
-/**
- * 부팅 동기화의 마지막 결과를 남긴다. 'synced'는 같은 도메인 큐에 대기 중인
- * 항목이 없을 때만 쓴다. 큐가 오프라인으로 다시 시도할 항목을 들고 있는데
- * 부팅의 성공으로 덮으면, 아직 올라가지 않은 변경이 있는데도 '동기화됨'이 뜬다.
- */
 function settleSyncStatus(
   domain: Exclude<SyncDomain, "shared">,
   next: SyncStatus,
 ): void {
-  if (next === "synced" && hasQueuedWork[domain]()) return;
+  const queueBusy = hasQueuedWork[domain]();
+  if (next === "synced" && queueBusy) return;
+  if (next === "offline" && !queueBusy) {
+    if (getSyncDomainStatus(domain) !== "syncing") return;
+    setSyncStatus(domain, "synced");
+    return;
+  }
   setSyncStatus(domain, next);
+}
+
+function requeueLatest<T extends { id: string }>(
+  current: () => readonly T[],
+  schedule: (item: T) => void,
+): (item: T) => void {
+  return (item) => {
+    const latest = current().find((candidate) => candidate.id === item.id);
+    if (latest) schedule(latest);
+  };
 }
 
 const retryBackoff = new BackoffTracker();
@@ -246,6 +275,7 @@ function registerOnlineListener(): void {
 async function syncFolders(
   serverFolders: Folder[],
   tombstones: DriveTombstones,
+  generation: number,
 ): Promise<SyncStatus> {
   const deletedIds = new Set(tombstones.folderIds);
   const local = getFolders();
@@ -266,17 +296,21 @@ async function syncFolders(
       folders,
     ),
     pushFolderNow,
-    scheduleFolderPush,
+    requeueLatest(getFolders, scheduleFolderPush),
     (folder) => folder.name,
+    generation,
   );
 }
 
 async function syncLibraryDecks(): Promise<void> {
+  const generation = bootGeneration;
   let serverDecks;
   try {
     serverDecks = await pullDecks();
+    if (generation !== bootGeneration) return;
     retryBackoff.reset();
   } catch (err) {
+    if (generation !== bootGeneration) return;
     setSyncStatus("deck", retryPullLater(syncLibraryDecks, err));
     return;
   }
@@ -284,16 +318,16 @@ async function syncLibraryDecks(): Promise<void> {
   const { decks, needsPush } = mergeLibraryDecks(getUserSongs(), serverDecks);
   await applyServerLibraryDecks(decks);
 
-  settleSyncStatus(
+  const deckStatus = await pushEachTrackingStatus(
     "deck",
-    await pushEachTrackingStatus(
-      "deck",
-      findEach(decks, needsPush),
-      pushDeckNow,
-      scheduleDeckPush,
-      (deck) => deck.title,
-    ),
+    findEach(decks, needsPush),
+    pushDeckNow,
+    requeueLatest(getUserSongs, scheduleDeckPush),
+    (deck) => deck.title,
+    generation,
   );
+  if (generation !== bootGeneration) return;
+  settleSyncStatus("deck", deckStatus);
 }
 
 function findEach<T extends { id: string }>(
@@ -311,13 +345,16 @@ async function pushEachTrackingStatus<T extends { id: string }>(
   push: (item: T) => Promise<unknown>,
   requeue: (item: T) => void,
   titleOf: (item: T) => string,
+  generation: number,
 ): Promise<SyncStatus> {
   let sessionExpired = false;
   let offline = false;
   for (const item of items) {
+    if (generation !== bootGeneration) break;
     try {
       await push(item);
     } catch (err) {
+      if (generation !== bootGeneration) break;
       if (err instanceof SessionExpiredError) {
         sessionExpired = true;
       } else if (isRetryableApiError(err)) {

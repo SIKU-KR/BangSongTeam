@@ -228,9 +228,9 @@ export function cancelDocumentPush(id: string): void {
   scheduleNextTimer();
 }
 
-/** 아직 서버에 보내지 않은 프레젠테이션이 큐에 남아 있는지 (다시 시도할 것 포함) */
+/** 큐가 아직 끝내지 못한 프레젠테이션이 있는지 (보내는 중이거나 다시 시도할 것 포함) */
 export function hasPendingDocumentPush(): boolean {
-  return pending.size > 0;
+  return pending.size > 0 || inFlightDocs.size > 0;
 }
 
 export async function flushPendingSync(): Promise<void> {

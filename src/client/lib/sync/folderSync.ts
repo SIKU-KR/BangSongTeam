@@ -25,6 +25,7 @@ let enabled = false;
 let pending = new Map<string, Folder>();
 let timer: ReturnType<typeof setTimeout> | null = null;
 let inFlight: Promise<void> = Promise.resolve();
+const runningBatches = new Set<Promise<void>>();
 const backoff = new BackoffTracker();
 
 /** 로그인·하이드레이션이 끝난 뒤에만 켠다 (송출 화면에서는 켜지 않는다) */
@@ -116,7 +117,11 @@ function run(): void {
 
   const folders = [...pending.values()];
   pending = new Map();
-  inFlight = inFlight.then(() => pushAll(folders));
+  const batch = inFlight.then(() => pushAll(folders));
+  runningBatches.add(batch);
+  inFlight = batch.finally(() => {
+    runningBatches.delete(batch);
+  });
 }
 
 /** 같은 폴더를 연달아 고치면 마지막 것만 올린다 */
@@ -148,9 +153,9 @@ export async function pushFolderNow(folder: Folder): Promise<Folder> {
   return saved;
 }
 
-/** 아직 서버에 보내지 않은 폴더가 큐에 남아 있는지 (다시 시도할 것 포함) */
+/** 큐가 아직 끝내지 못한 폴더가 있는지 (보내는 중이거나 다시 시도할 것 포함) */
 export function hasPendingFolderPush(): boolean {
-  return pending.size > 0;
+  return pending.size > 0 || runningBatches.size > 0;
 }
 
 /**
@@ -178,4 +183,5 @@ export function __resetFolderSyncForTests(): void {
   listener = null;
   clearPending();
   inFlight = Promise.resolve();
+  runningBatches.clear();
 }

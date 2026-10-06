@@ -9,6 +9,7 @@ import {
 } from "#shared";
 import { signInAsTestUser } from "../../test/sessionFixture";
 import {
+  deleteUserSong,
   getUserSongs,
   resetSongLibraryStore,
   saveSongToLibrary,
@@ -41,6 +42,7 @@ import {
 import { listPresentations } from "../../features/presentation";
 import {
   __loadDocumentsForTests,
+  renamePresentation,
   resetPresentationStore,
 } from "../../features/presentation/presentationStore";
 import { SEED_USER_ID as TEST_USER_ID } from "../../test/presentationFixture";
@@ -418,6 +420,122 @@ describe("runBootSync — 동기화 상태", () => {
 
     expect(push).toHaveBeenCalledTimes(2);
     expect(push.mock.calls[1][0].id).toBe(local.id);
+    expect(getSyncSnapshot().status).toBe("synced");
+  });
+
+  it("부팅이 올리지 못한 세트를 그사이 고쳤으면 고친 내용을 큐에 넘긴다", async () => {
+    __loadDocumentsForTests([presentation(DOC)]);
+    presentationSync.pushPresentation.mockImplementationOnce(async () => {
+      renamePresentation(DOC, "고친 세트");
+      throw new OfflineError();
+    });
+
+    await runBootSync();
+    await flushPendingSync();
+
+    const titles = presentationSync.pushPresentation.mock.calls.map(
+      ([doc]) => (doc as Presentation).title,
+    );
+    expect(titles.at(-1)).toBe("고친 세트");
+    expect(getSyncSnapshot().status).toBe("synced");
+  });
+
+  it("부팅이 올리지 못한 곡을 그사이 지웠으면 다시 올리지 않고 지운다", async () => {
+    const remove = vi.fn(async () => undefined);
+    const push = vi.fn(async (deck: Deck): Promise<Deck> => {
+      deleteUserSong(deck.id);
+      throw new OfflineError();
+    });
+    __setDeckTransportForTests({ push, remove });
+    const local = saveSongToLibrary({ title: "로컬 곡", lyricsRaw: "가사" });
+
+    await runBootSync();
+    await flushDeckSync();
+
+    expect(push).toHaveBeenCalledTimes(1);
+    expect(remove).toHaveBeenCalledWith(local.id);
+    expect(getSyncSnapshot().status).toBe("synced");
+  });
+
+  it("부팅이 큐에 넘긴 세트를 큐가 먼저 올렸으면 오프라인으로 남지 않는다", async () => {
+    const OTHER = "e00000000000000000004";
+    __loadDocumentsForTests([presentation(DOC), presentation(OTHER)]);
+    let calls = 0;
+    presentationSync.pushPresentation.mockImplementation(async () => {
+      calls += 1;
+      if (calls === 1) throw new OfflineError();
+      if (calls === 2) await flushPendingSync();
+      return true;
+    });
+
+    await runBootSync();
+
+    expect(calls).toBe(3);
+    expect(getSyncSnapshot().status).toBe("synced");
+  });
+
+  it("큐가 세트를 올리는 중이면 부팅이 먼저 동기화됨을 띄우지 않는다", async () => {
+    let release: (() => void) | undefined;
+    presentationSync.pushPresentation.mockImplementation(
+      () =>
+        new Promise<boolean>((resolve) => {
+          release = () => resolve(true);
+        }),
+    );
+    presentationSync.pullPresentations.mockImplementation(async () => {
+      scheduleDocumentPush(presentation(DOC));
+      void flushPendingSync();
+      return [];
+    });
+
+    await runBootSync();
+    expect(getSyncSnapshot().status).toBe("syncing");
+
+    release?.();
+    await flushPendingSync();
+    expect(getSyncSnapshot().status).toBe("synced");
+  });
+
+  it("큐가 곡을 올리는 중이면 부팅이 먼저 동기화됨을 띄우지 않는다", async () => {
+    let release: (() => void) | undefined;
+    __setDeckTransportForTests({
+      push: vi.fn(
+        (deck: Deck) =>
+          new Promise<Deck>((resolve) => {
+            release = () => resolve(deck);
+          }),
+      ),
+    });
+    presentationSync.pullDecks.mockImplementation(async () => {
+      scheduleDeckPush(serverDeck({ id: "c000000000000000000aa" }));
+      void flushDeckSync();
+      return [];
+    });
+
+    await runBootSync();
+    expect(getSyncSnapshot().status).toBe("syncing");
+
+    release?.();
+    await flushDeckSync();
+    expect(getSyncSnapshot().status).toBe("synced");
+  });
+
+  it("다시 부팅하면 앞선 부팅의 늦은 실패가 새 상태를 덮지 않는다", async () => {
+    let failFirst: (() => void) | undefined;
+    presentationSync.pullFolders.mockImplementationOnce(
+      () =>
+        new Promise<FolderListResponse>((_, reject) => {
+          failFirst = () => reject(new OfflineError());
+        }),
+    );
+
+    const first = runBootSync();
+    await runBootSync();
+    expect(getSyncSnapshot().status).toBe("synced");
+
+    failFirst?.();
+    await first;
+
     expect(getSyncSnapshot().status).toBe("synced");
   });
 });
