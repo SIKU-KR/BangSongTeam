@@ -90,8 +90,10 @@ export function shouldRunBootSync(pathname: string): boolean {
  * 송출 화면에 있는 동안에는 다시 받지 않고 송출을 마친 뒤로 미룬다. 송출 중에는
  * API·데이터 요청이 0건이어야 하고, 받은 결과를 병합하면 띄운 문서가 바뀔 수 있다.
  *
- * 큐에 넘길 때는 부팅 병합 때의 사본이 아니라 지금 저장소에 있는 것을 넘긴다. 부팅이
- * 올리는 동안 사용자가 고치거나 지운 것을 옛 사본이 덮으면 그 변경이 서버에 가지 않는다.
+ * 항목마다 올리기 직전과 큐에 넘길 때 지금 저장소에 있는 것을 다시 찾아 쓰고, 그사이
+ * 지워졌으면 건너뛴다. 부팅 병합 때의 사본을 올리면 앞 항목을 올리는 동안 사용자가 지운
+ * 곡이 되살아나고, 바로 올리기는 큐에 대기 중인 같은 항목을 버리므로 그사이 고친 내용
+ * (폴더 이름 등)이 다음 부팅까지 서버에 가지 않는다.
  *
  * 결과는 폴더·프레젠테이션·곡 도메인별로 따로 남기고, 올리지 못한 항목은 항목별
  * 실패로 남긴다. 도메인 단계만 바꾸면 같은 도메인 큐의 다음 성공이 그 실패를 덮는다.
@@ -170,12 +172,15 @@ async function syncDriveAndDecks(): Promise<void> {
     }
   }
 
-  const presentationStatus = await pushEachTrackingStatus(
-    "presentation",
-    findEach(documents, needsPush),
-    pushPresentation,
-    requeueLatest(listPresentations, scheduleDocumentPush),
-    (document) => document.title,
+  const presentationStatus = await pushLatestEach(
+    {
+      domain: "presentation",
+      current: listPresentations,
+      push: pushPresentation,
+      requeue: scheduleDocumentPush,
+      titleOf: (document) => document.title,
+    },
+    needsPush,
     generation,
   );
   if (generation !== bootGeneration) return;
@@ -202,16 +207,6 @@ function settleSyncStatus(
     return;
   }
   setSyncStatus(domain, next);
-}
-
-function requeueLatest<T extends { id: string }>(
-  current: () => readonly T[],
-  schedule: (item: T) => void,
-): (item: T) => void {
-  return (item) => {
-    const latest = current().find((candidate) => candidate.id === item.id);
-    if (latest) schedule(latest);
-  };
 }
 
 const retryBackoff = new BackoffTracker();
@@ -289,15 +284,18 @@ async function syncFolders(
   );
 
   const toPush = new Set(needsPush);
-  return pushEachTrackingStatus(
-    "folder",
+  return pushLatestEach(
+    {
+      domain: "folder",
+      current: getFolders,
+      push: pushFolderNow,
+      requeue: scheduleFolderPush,
+      titleOf: (folder) => folder.name,
+    },
     sortFoldersParentFirst(
       folders.filter((candidate) => toPush.has(candidate.id)),
       folders,
-    ),
-    pushFolderNow,
-    requeueLatest(getFolders, scheduleFolderPush),
-    (folder) => folder.name,
+    ).map((folder) => folder.id),
     generation,
   );
 }
@@ -318,53 +316,62 @@ async function syncLibraryDecks(): Promise<void> {
   const { decks, needsPush } = mergeLibraryDecks(getUserSongs(), serverDecks);
   await applyServerLibraryDecks(decks);
 
-  const deckStatus = await pushEachTrackingStatus(
-    "deck",
-    findEach(decks, needsPush),
-    pushDeckNow,
-    requeueLatest(getUserSongs, scheduleDeckPush),
-    (deck) => deck.title,
+  const deckStatus = await pushLatestEach(
+    {
+      domain: "deck",
+      current: getUserSongs,
+      push: pushDeckNow,
+      requeue: scheduleDeckPush,
+      titleOf: (deck) => deck.title,
+    },
+    needsPush,
     generation,
   );
   if (generation !== bootGeneration) return;
   settleSyncStatus("deck", deckStatus);
 }
 
-function findEach<T extends { id: string }>(
-  items: readonly T[],
-  ids: readonly string[],
-): T[] {
-  return ids
-    .map((id) => items.find((item) => item.id === id))
-    .filter((item): item is T => item !== undefined);
+interface BootPushTarget<T extends { id: string }> {
+  domain: SyncDomain;
+  current: () => readonly T[];
+  push: (item: T) => Promise<unknown>;
+  requeue: (item: T) => void;
+  titleOf: (item: T) => string;
 }
 
-async function pushEachTrackingStatus<T extends { id: string }>(
-  domain: SyncDomain,
-  items: readonly T[],
-  push: (item: T) => Promise<unknown>,
-  requeue: (item: T) => void,
-  titleOf: (item: T) => string,
+function findLatest<T extends { id: string }>(
+  current: () => readonly T[],
+  id: string,
+): T | undefined {
+  return current().find((candidate) => candidate.id === id);
+}
+
+async function pushLatestEach<T extends { id: string }>(
+  target: BootPushTarget<T>,
+  ids: readonly string[],
   generation: number,
 ): Promise<SyncStatus> {
   let sessionExpired = false;
   let offline = false;
-  for (const item of items) {
+  for (const id of ids) {
     if (generation !== bootGeneration) break;
+    const item = findLatest(target.current, id);
+    if (!item) continue;
     try {
-      await push(item);
+      await target.push(item);
     } catch (err) {
       if (generation !== bootGeneration) break;
       if (err instanceof SessionExpiredError) {
         sessionExpired = true;
       } else if (isRetryableApiError(err)) {
         offline = true;
-        requeue(item);
+        const latest = findLatest(target.current, id);
+        if (latest) target.requeue(latest);
       } else {
         recordSyncFailure({
           id: item.id,
-          title: titleOf(item),
-          kind: domain,
+          title: target.titleOf(item),
+          kind: target.domain,
           status: err instanceof ServerRejectedError ? err.status : undefined,
           message: err instanceof Error ? err.message : String(err),
           failedAt: Date.now(),

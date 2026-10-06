@@ -13,6 +13,7 @@ import {
   getUserSongs,
   resetSongLibraryStore,
   saveSongToLibrary,
+  updateLibrarySongInfo,
 } from "../../features/editor/songLibraryStore";
 import {
   __resetBootSyncForTests,
@@ -33,10 +34,12 @@ import {
 import {
   __resetFolderSyncForTests,
   __setFolderPusherForTests,
+  flushFolderSync,
 } from "./folderSync";
 import {
   __loadFoldersForTests,
   getFolders,
+  renameFolder,
   resetFolderStore,
 } from "../../features/drive/folderStore";
 import { listPresentations } from "../../features/presentation";
@@ -537,5 +540,125 @@ describe("runBootSync — 동기화 상태", () => {
     await first;
 
     expect(getSyncSnapshot().status).toBe("synced");
+  });
+});
+
+describe("runBootSync — 부팅이 올리는 동안 바뀐 항목", () => {
+  beforeEach(async () => {
+    signInAsTestUser();
+    await resetSongLibraryStore();
+    resetFolderStore();
+    resetPresentationStore();
+    resetSyncStatus();
+    __resetDeckSyncForTests();
+    __resetSyncSchedulerForTests();
+    __resetFolderSyncForTests();
+    __setDeckTransportForTests({ push: vi.fn(async (deck: Deck) => deck) });
+    __setFolderPusherForTests(vi.fn(async (f: Folder) => f));
+    presentationSync.pullDecks.mockResolvedValue([]);
+    presentationSync.pullPresentations.mockResolvedValue([]);
+    presentationSync.pushPresentation.mockReset();
+    presentationSync.pushPresentation.mockResolvedValue(true);
+    presentationSync.pullFolders.mockResolvedValue(EMPTY_FOLDER_LIST);
+  });
+
+  afterEach(() => {
+    __resetBootSyncForTests();
+    __resetFolderSyncForTests();
+    __resetDeckSyncForTests();
+    __resetSyncSchedulerForTests();
+  });
+
+  it("앞 곡을 올리는 동안 지운 곡은 올리지 않고 서버에서도 지운다", async () => {
+    const first = saveSongToLibrary({ title: "첫 곡", lyricsRaw: "가사" });
+    const second = saveSongToLibrary({ title: "둘째 곡", lyricsRaw: "가사" });
+    const remove = vi.fn(async () => undefined);
+    const pushed: string[] = [];
+    const push = vi.fn(async (deck: Deck): Promise<Deck> => {
+      if (pushed.length === 0) {
+        deleteUserSong(deck.id === first.id ? second.id : first.id);
+      }
+      pushed.push(deck.id);
+      return deck;
+    });
+    __setDeckTransportForTests({ push, remove });
+
+    await runBootSync();
+    await flushDeckSync();
+
+    const deletedId = pushed[0] === first.id ? second.id : first.id;
+    expect(pushed).not.toContain(deletedId);
+    expect(remove).toHaveBeenCalledWith(deletedId);
+    expect(getSyncSnapshot().status).toBe("synced");
+  });
+
+  it("앞 곡을 올리는 동안 고친 곡은 고친 내용으로 올린다", async () => {
+    const first = saveSongToLibrary({ title: "첫 곡", lyricsRaw: "가사" });
+    const second = saveSongToLibrary({ title: "둘째 곡", lyricsRaw: "가사" });
+    const pushed: Deck[] = [];
+    const push = vi.fn(async (deck: Deck): Promise<Deck> => {
+      if (pushed.length === 0) {
+        updateLibrarySongInfo(deck.id === first.id ? second.id : first.id, {
+          title: "고친 곡",
+          artist: "",
+        });
+      }
+      pushed.push(deck);
+      return deck;
+    });
+    __setDeckTransportForTests({ push });
+
+    await runBootSync();
+    await flushDeckSync();
+
+    const editedId = pushed[0].id === first.id ? second.id : first.id;
+    const editedPushes = pushed.filter((deck) => deck.id === editedId);
+    expect(editedPushes.length).toBeGreaterThan(0);
+    expect(editedPushes.every((deck) => deck.title === "고친 곡")).toBe(true);
+  });
+
+  it("앞 폴더를 올리는 동안 이름을 바꾼 폴더는 바뀐 이름으로 올리고 큐의 것도 잃지 않는다", async () => {
+    __loadFoldersForTests([
+      folder(PARENT, { name: "부모" }),
+      folder(CHILD, { parentId: PARENT, name: "자식" }),
+    ]);
+    const pushed: Folder[] = [];
+    __setFolderPusherForTests(
+      vi.fn(async (f: Folder) => {
+        if (f.id === PARENT) renameFolder(CHILD, "새 이름");
+        pushed.push(f);
+        return f;
+      }),
+    );
+
+    await runBootSync();
+    await flushFolderSync();
+
+    const childPushes = pushed.filter((f) => f.id === CHILD);
+    expect(childPushes.length).toBeGreaterThan(0);
+    expect(childPushes.every((f) => f.name === "새 이름")).toBe(true);
+    expect(getFolders().find((f) => f.id === CHILD)?.name).toBe("새 이름");
+  });
+
+  it("앞 세트를 올리는 동안 고친 세트는 고친 내용으로 올린다", async () => {
+    const OTHER = "e00000000000000000004";
+    __loadDocumentsForTests([presentation(DOC), presentation(OTHER)]);
+    const pushed: Presentation[] = [];
+    presentationSync.pushPresentation.mockImplementation(async (doc) => {
+      const current = doc as Presentation;
+      if (pushed.length === 0) {
+        renamePresentation(current.id === DOC ? OTHER : DOC, "고친 세트");
+      }
+      pushed.push(current);
+      return true;
+    });
+
+    await runBootSync();
+    await flushPendingSync();
+
+    const editedId = pushed[0].id === DOC ? OTHER : DOC;
+    const editedPushes = pushed.filter((doc) => doc.id === editedId);
+    expect(editedPushes.length).toBeGreaterThan(0);
+    expect(editedPushes.every((doc) => doc.title === "고친 세트")).toBe(true);
   });
 });
