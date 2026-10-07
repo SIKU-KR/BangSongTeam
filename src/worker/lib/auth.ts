@@ -169,30 +169,15 @@ function buildAuth(env: Bindings) {
 
 type AuthInstance = ReturnType<typeof buildAuth>;
 
-const instances = new WeakMap<Bindings, AuthInstance>();
-
 /**
- * Better Auth 인스턴스 생성 또는 캐시 조회.
+ * 요청마다 Better Auth 인스턴스를 만든다.
  *
  * - `basePath`는 `index.ts`의 마운트 경로와 같아야 한다. `wrangler.jsonc`의
  *   `assets.run_worker_first: ["/api/*"]`가 덮는 경로라, `/auth/*`로 옮기면 정적 자산
  *   핸들러가 먼저 가로채 로그인이 조용히 깨진다.
- * - 로그인은 소셜 로그인뿐이다. 서버에 비밀번호 해시를 두지 않으려고 `emailAndPassword`는
- *   켜지 않는다. `pnpm dev`에서만 시드 계정 로그인(`devSignIn`)이 더해진다.
- * - 이메일이 검증된 소셜 계정끼리는 같은 이메일이면 한 사용자로 합쳐진다. 이메일이
- *   검증되지 않은 기존 사용자(카카오 합성 이메일, 예전 비밀번호 계정)에는
- *   `requireLocalEmailVerified` 기본값 때문에 자동으로 붙지 않고 "account not linked"로
- *   실패한다 (선점 방지).
- * - 구글은 교회 공용 PC에서 이전 사람의 구글 계정으로 조용히 들어가지 않도록
- *   `prompt: "select_account"`로 매번 계정을 고르게 한다.
  * - rate limit은 `NODE_ENV=production`에서만 기본으로 켜지는데 Workers에는 그 값이 없어
  *   명시적으로 켠다. 저장소가 isolate 메모리라 부분 방어다.
  */
 export function getAuth(env: Bindings): AuthInstance {
-  const cached = instances.get(env);
-  if (cached) return cached;
-
-  const auth = buildAuth(env);
-  instances.set(env, auth);
-  return auth;
+  return buildAuth(env);
 }
