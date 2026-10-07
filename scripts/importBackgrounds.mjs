@@ -301,8 +301,11 @@ async function main() {
   );
   console.log(`메타데이터 ${toUpdate.length}개를 갱신했습니다.`);
 
-  await upsertBackgroundVectors(target, manifest.items);
-  console.log(`벡터 ${manifest.items.length}개를 넣었습니다.`);
+  const registered = manifest.items.filter(
+    (item) => !failed.includes(item.file),
+  );
+  await upsertBackgroundVectors(target, registered);
+  console.log(`벡터 ${registered.length}개를 넣었습니다.`);
 
   if (failed.length > 0) {
     console.error(
