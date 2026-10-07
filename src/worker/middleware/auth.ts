@@ -32,10 +32,16 @@ export const readSessionFromBetterAuth: SessionReader = async ({
   env,
 }) => {
   const auth = getAuth(env);
-  const { headers: responseHeaders, response: session } =
-    await auth.api.getSession({ headers, returnHeaders: true });
-  const userId = session?.user?.id;
-  return userId ? { userId, setCookies: responseHeaders.getSetCookie() } : null;
+  const { headers: responseHeaders, response } = await auth.api.getSession({
+    headers,
+    returnHeaders: true,
+  });
+  if (!response) return null;
+
+  return {
+    userId: response.user.id,
+    setCookies: responseHeaders.getSetCookie(),
+  };
 };
 
 function forwardCookies(c: Context<AppEnv>, setCookies?: string[]): void {
