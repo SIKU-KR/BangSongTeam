@@ -3,9 +3,9 @@
  * 영상·이미지를 MiniMax 멀티모달 모델에 보여 주고 받은 설명을 매니페스트에 바로 써 넣는다.
  * 한 건씩 저장하므로 중간에 멈춰도 다시 돌리면 빈 항목만 이어서 한다.
  *
- * 영상은 base64 data URI 한도(50MB)를 넘는 경우가 많아, ffmpeg로 480p·무음 사본을 만들어
- * 보낸다. 길이와 상관없이 전체에서 프레임 24장 안팎을 고르게 뽑아(초당 2장 이하) 뒷부분
- * 장면과 움직임은 남기고 입력 토큰은 줄인다.
+ * 영상은 base64 data URI 한도(50MB)를 넘는 경우가 많아, ffmpeg로 480p·무음·초당 2프레임
+ * 사본을 만들어 보낸다. 움직임 속도를 그대로 보여 주려고 실제 속도를 유지하고 앞 60초만
+ * 쓴다. MiniMax는 초당 2프레임보다 듬성한 영상을 invalid params(2013)로 거부한다.
  *
  * 필요한 것: Node 22.18+, ffmpeg (`brew install ffmpeg`), `MINIMAX_API_KEY` 환경 변수.
  *
@@ -45,8 +45,8 @@ const DEFAULT_MODEL = "MiniMax-M3";
 const CONCURRENCY = 4;
 const MAX_ATTEMPTS = 3;
 const PREVIEW_HEIGHT = 480;
-const PREVIEW_MAX_FPS = 2;
-const PREVIEW_FRAMES = 24;
+const PREVIEW_FPS = 2;
+const PREVIEW_MAX_SEC = 60;
 const MAX_VIDEO_BYTES = 50 * 1024 * 1024;
 const IMAGE_TYPES = {
   ".webp": "image/webp",
@@ -93,22 +93,7 @@ function parseArgs(argv) {
   };
 }
 
-async function probeDuration(file) {
-  const { stdout } = await run("ffprobe", [
-    "-v",
-    "error",
-    "-show_entries",
-    "format=duration",
-    "-of",
-    "csv=p=0",
-    file,
-  ]);
-  return Number(stdout.trim());
-}
-
 async function makeVideoPreview(file, tmpDir) {
-  const durationSec = await probeDuration(file);
-  const fps = Math.min(PREVIEW_MAX_FPS, PREVIEW_FRAMES / durationSec);
   const outFile = path.join(
     tmpDir,
     `${path.basename(file, path.extname(file))}.mp4`,
@@ -117,11 +102,13 @@ async function makeVideoPreview(file, tmpDir) {
     "-v",
     "error",
     "-y",
+    "-t",
+    String(PREVIEW_MAX_SEC),
     "-i",
     file,
     "-an",
     "-vf",
-    `scale=-2:${PREVIEW_HEIGHT},fps=${fps.toFixed(3)}`,
+    `scale=-2:${PREVIEW_HEIGHT},fps=${PREVIEW_FPS}`,
     "-c:v",
     "libx264",
     "-preset",
