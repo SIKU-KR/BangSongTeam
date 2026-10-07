@@ -60,7 +60,7 @@ describe("Miniflare/workerd 환경 Worker 및 D1 통합 테스트", () => {
   it("GET /api/backgrounds는 비로그인에게 기본 제공 배경을 준다", async () => {
     const res = await app.request("/api/backgrounds", {}, env);
     expect(res.status).toBe(200);
-    expect(res.headers.get("cache-control")).toBe("private, no-cache");
+    expect(res.headers.get("cache-control")).toBe("public, max-age=3600");
 
     expect(
       BackgroundListResponseSchema.safeParse(await res.json()).success,
