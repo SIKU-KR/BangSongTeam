@@ -185,6 +185,7 @@ export default tseslint.config(
       "**/node_modules/**",
       "**/dist/**",
       "**/.wrangler/**",
+      ".claude/**",
       "**/coverage/**",
       "**/worker-configuration.d.ts",
     ],
