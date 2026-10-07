@@ -3,9 +3,10 @@
  * 영상·이미지를 MiniMax 멀티모달 모델에 보여 주고 받은 설명을 매니페스트에 바로 써 넣는다.
  * 한 건씩 저장하므로 중간에 멈춰도 다시 돌리면 빈 항목만 이어서 한다.
  *
- * 영상은 base64 data URI 한도(50MB)를 넘는 경우가 많아, ffmpeg로 480p·무음 사본을 만들어
- * 보낸다. 길이와 상관없이 전체에서 프레임 24장 안팎을 고르게 뽑아(초당 2장 이하) 뒷부분
- * 장면과 움직임은 남기고 입력 토큰은 줄인다.
+ * 영상은 base64 data URI 한도(50MB)를 넘는 경우가 많아, ffmpeg로 480p·무음·초당 2프레임
+ * 사본을 만들어 보낸다. 움직임 속도를 그대로 보여 주려고 실제 속도를 유지하고 앞 60초만
+ * 쓴다. MiniMax는 일부 영상을 프레임이 듬성하다는 이유로 invalid params(2013)로 거부하므로
+ * (규칙은 공개돼 있지 않다), 그때는 초당 4프레임 사본으로 한 번 더 보낸다.
  *
  * 필요한 것: Node 22.18+, ffmpeg (`brew install ffmpeg`), `MINIMAX_API_KEY` 환경 변수.
  *
@@ -45,8 +46,8 @@ const DEFAULT_MODEL = "MiniMax-M3";
 const CONCURRENCY = 4;
 const MAX_ATTEMPTS = 3;
 const PREVIEW_HEIGHT = 480;
-const PREVIEW_MAX_FPS = 2;
-const PREVIEW_FRAMES = 24;
+const PREVIEW_FPS_STEPS = [2, 4];
+const PREVIEW_MAX_SEC = 60;
 const MAX_VIDEO_BYTES = 50 * 1024 * 1024;
 const IMAGE_TYPES = {
   ".webp": "image/webp",
@@ -93,22 +94,7 @@ function parseArgs(argv) {
   };
 }
 
-async function probeDuration(file) {
-  const { stdout } = await run("ffprobe", [
-    "-v",
-    "error",
-    "-show_entries",
-    "format=duration",
-    "-of",
-    "csv=p=0",
-    file,
-  ]);
-  return Number(stdout.trim());
-}
-
-async function makeVideoPreview(file, tmpDir) {
-  const durationSec = await probeDuration(file);
-  const fps = Math.min(PREVIEW_MAX_FPS, PREVIEW_FRAMES / durationSec);
+async function makeVideoPreview(file, tmpDir, fps) {
   const outFile = path.join(
     tmpDir,
     `${path.basename(file, path.extname(file))}.mp4`,
@@ -117,11 +103,13 @@ async function makeVideoPreview(file, tmpDir) {
     "-v",
     "error",
     "-y",
+    "-t",
+    String(PREVIEW_MAX_SEC),
     "-i",
     file,
     "-an",
     "-vf",
-    `scale=-2:${PREVIEW_HEIGHT},fps=${fps.toFixed(3)}`,
+    `scale=-2:${PREVIEW_HEIGHT},fps=${fps}`,
     "-c:v",
     "libx264",
     "-preset",
@@ -140,10 +128,10 @@ async function makeVideoPreview(file, tmpDir) {
   return bytes;
 }
 
-async function mediaPart(file, tmpDir) {
+async function mediaPart(file, tmpDir, fps) {
   const ext = path.extname(file).toLowerCase();
   if (ext === ".mp4") {
-    const bytes = await makeVideoPreview(file, tmpDir);
+    const bytes = await makeVideoPreview(file, tmpDir, fps);
     return {
       type: "video_url",
       video_url: { url: `data:video/mp4;base64,${bytes.toString("base64")}` },
@@ -175,8 +163,9 @@ function cleanText(content) {
     .trim();
 }
 
-async function describe(item, options, tmpDir) {
-  const media = await mediaPart(path.join(options.dir, item.file), tmpDir);
+class InvalidParamsError extends Error {}
+
+async function requestDescription(item, options, media) {
   const body = JSON.stringify({
     model: options.model,
     reasoning_split: true,
@@ -204,6 +193,9 @@ async function describe(item, options, tmpDir) {
       continue;
     }
     const json = await response.json().catch(() => null);
+    if (response.status === 400 && json?.error?.message?.includes("(2013)")) {
+      throw new InvalidParamsError(JSON.stringify(json.error));
+    }
     if (!response.ok || json?.base_resp?.status_code) {
       throw new Error(
         `MiniMax 요청 실패 (${response.status}): ${JSON.stringify(json?.base_resp ?? json)}`,
@@ -212,6 +204,22 @@ async function describe(item, options, tmpDir) {
     const text = cleanText(json?.choices?.[0]?.message?.content ?? "");
     if (!text) throw new Error("빈 설명을 받았습니다");
     return text;
+  }
+}
+
+async function describe(item, options, tmpDir) {
+  const file = path.join(options.dir, item.file);
+  for (const [index, fps] of PREVIEW_FPS_STEPS.entries()) {
+    try {
+      return await requestDescription(
+        item,
+        options,
+        await mediaPart(file, tmpDir, fps),
+      );
+    } catch (error) {
+      const last = index === PREVIEW_FPS_STEPS.length - 1;
+      if (!(error instanceof InvalidParamsError) || last) throw error;
+    }
   }
 }
 

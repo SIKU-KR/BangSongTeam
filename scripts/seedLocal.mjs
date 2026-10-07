@@ -12,6 +12,8 @@
  *      올리지 않는다.
  *   4. `src/db/seed/devSeed.ts`로 배경 행과 시드 계정·공유 라이브러리·폴더·세트를 다시
  *      만든다. 시드 계정의 데이터만 지우고 다시 만드므로 여러 번 돌려도 된다.
+ *   5. 이미지 배경을 임베딩해 로컬용 Vectorize 인덱스에 넣는다. 원격 Workers AI·Vectorize를
+ *      쓰므로 wrangler 로그인이 안 돼 있으면 경고만 남기고 넘어간다 (배경 검색만 안 된다).
  *
  * `pnpm dev`가 떠 있어도 돌릴 수 있다. 시드 계정은 새로 만들어지므로 다시 로그인한다.
  */
@@ -22,6 +24,7 @@ import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { runnerImport } from "vite";
 import { getPlatformProxy } from "wrangler";
+import { upsertBackgroundVectors } from "./backgroundVectors.mjs";
 
 const ROOT_DIR = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -58,9 +61,7 @@ function ensureDevVars() {
 }
 
 async function uploadDevBackgrounds(bucket) {
-  const { items } = JSON.parse(
-    fs.readFileSync(path.join(DEV_BACKGROUNDS_DIR, "manifest.json"), "utf-8"),
-  );
+  const { items } = readDevManifest();
   return Promise.all(
     items.map(async ({ file, ...meta }) => {
       const key = `images/dev/${file}`;
@@ -71,6 +72,27 @@ async function uploadDevBackgrounds(bucket) {
       return { ...meta, key, sizeBytes: bytes.byteLength };
     }),
   );
+}
+
+function readDevManifest() {
+  return JSON.parse(
+    fs.readFileSync(path.join(DEV_BACKGROUNDS_DIR, "manifest.json"), "utf-8"),
+  );
+}
+
+async function upsertDevBackgroundVectors(seedId) {
+  const { items } = readDevManifest();
+  try {
+    await upsertBackgroundVectors(
+      "local",
+      items.map((item, n) => ({ ...item, id: seedId("bg", n) })),
+    );
+    console.log(`배경 벡터 ${items.length}개를 로컬 인덱스에 넣었습니다.`);
+  } catch (error) {
+    console.warn(
+      `배경 벡터를 넣지 못했습니다. 배경 검색만 안 됩니다 (wrangler login 후 다시 실행).\n  ${error.stderr?.toString().trim() || error.message}`,
+    );
+  }
 }
 
 async function main() {
@@ -128,6 +150,7 @@ async function main() {
   } finally {
     await proxy.dispose();
   }
+  await upsertDevBackgroundVectors(seed.seedId);
 }
 
 main().catch((error) => {

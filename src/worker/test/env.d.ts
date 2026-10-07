@@ -10,6 +10,8 @@ declare module "cloudflare:test" {
   interface ProvidedEnv {
     DB: D1Database;
     MEDIA_BUCKET: R2Bucket;
+    AI: Ai;
+    BACKGROUND_INDEX: VectorizeIndex;
     BETTER_AUTH_SECRET?: string;
     BETTER_AUTH_URL?: string;
     KAKAO_CLIENT_ID?: string;
