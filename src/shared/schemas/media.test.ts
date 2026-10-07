@@ -4,7 +4,6 @@ import { BackgroundMediaSchema } from "./media";
 const VALID_BACKGROUND = {
   id: "a0eebc9996bb9bd380a11",
   title: "Warm Loop 01",
-  source: "service",
   kind: "video",
   mediaUrl: "/api/media/loops/warm_01.mp4",
   posterUrl: "/api/media/posters/warm_01.webp",
@@ -42,10 +41,7 @@ describe("BackgroundMediaSchema", () => {
     ).toThrow();
   });
 
-  it("알 수 없는 출처나 종류는 거절한다", () => {
-    expect(() =>
-      BackgroundMediaSchema.parse({ ...VALID_BACKGROUND, source: "catalog" }),
-    ).toThrow();
+  it("알 수 없는 종류는 거절한다", () => {
     expect(() =>
       BackgroundMediaSchema.parse({ ...VALID_BACKGROUND, kind: "gif" }),
     ).toThrow();

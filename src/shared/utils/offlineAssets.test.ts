@@ -21,7 +21,6 @@ function makeBackground(
   return {
     id: `b000000000000000000${index}0`,
     title: `배경 ${index}`,
-    source: "service",
     kind: "video",
     mediaUrl: `/api/media/loops/${index}.mp4`,
     posterUrl: `/api/media/posters/${index}.webp`,

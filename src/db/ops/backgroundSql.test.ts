@@ -57,7 +57,6 @@ describe("운영 SQL (배경)", () => {
     const [listed] = await listBackgrounds(testDb.db);
     expect(listed).toMatchObject({
       id: SERVICE,
-      source: "service",
       kind: "video",
       mediaUrl: `/api/media/loops/${SERVICE}.mp4`,
       posterUrl: `/api/media/posters/${SERVICE}.webp`,

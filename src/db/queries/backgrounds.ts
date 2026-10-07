@@ -11,10 +11,6 @@ import { runQueries } from "./batch";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type DbInstance = any;
 
-/**
- * 배경 행 → 공유 DTO. 모든 배경이 기본 제공 배경이라 `source`는 늘 `service`다.
- * 클라이언트가 예전 사용자 업로드 캐시를 거르는 데 아직 이 필드를 쓴다.
- */
 export function toBackgroundMedia(
   row: Background,
   keywords: string[] = [],
@@ -22,7 +18,6 @@ export function toBackgroundMedia(
   return {
     id: row.id,
     title: row.title,
-    source: "service",
     kind: row.kind,
     mediaUrl: mediaUrlForKey(row.r2Key),
     posterUrl: mediaUrlForKey(row.posterKey),

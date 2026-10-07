@@ -714,7 +714,6 @@ describe("FullscreenPresentRoute", () => {
   it("이미지 배경 곡은 정지 이미지로 그리고, 앞 곡의 영상을 남기지 않는다", async () => {
     const video = TEST_SERVICE_BACKGROUNDS[0];
     const image = makeBackground(8, {
-      source: "user",
       kind: "image",
       mediaUrl: "/api/media/uploads/u/8.png",
       posterUrl: "/api/media/uploads/u/8.png",

@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll } from "vitest";
 import { env } from "cloudflare:test";
-import { API_ERRORS, type BackgroundListResponse } from "#shared";
+import { API_ERRORS, BackgroundListResponseSchema } from "#shared";
 import app from "./index";
 import { meterD1 } from "./test/meteredD1";
 
@@ -62,8 +62,9 @@ describe("Miniflare/workerd 환경 Worker 및 D1 통합 테스트", () => {
     expect(res.status).toBe(200);
     expect(res.headers.get("cache-control")).toBe("private, no-cache");
 
-    const json = (await res.json()) as BackgroundListResponse;
-    expect(json.backgrounds.every((bg) => bg.source === "service")).toBe(true);
+    expect(
+      BackgroundListResponseSchema.safeParse(await res.json()).success,
+    ).toBe(true);
   });
 
   it("GET /api/media/:key streams full video from R2 bucket with 200 OK", async () => {

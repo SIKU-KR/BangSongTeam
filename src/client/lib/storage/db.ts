@@ -3,9 +3,10 @@ import type { BackgroundMedia, Deck, Folder, Presentation } from "#shared";
 import { ERROR_COPY } from "#copy/common";
 
 export const OFFLINE_DB_NAME = "worship-offline-db";
-export const OFFLINE_DB_VERSION = 4;
+export const OFFLINE_DB_VERSION = 5;
 
 const FIRST_NANOID_DB_VERSION = 3;
+const NO_USER_BACKGROUNDS_DB_VERSION = 5;
 
 export class PersistenceUnavailableError extends Error {
   constructor(cause?: unknown) {
@@ -30,19 +31,13 @@ export interface WorshipOfflineDB extends DBSchema {
   };
   backgrounds: {
     key: string;
-    value: StoredBackground;
+    value: BackgroundMedia;
   };
   auth_session: {
     key: string;
     value: CachedSession;
   };
 }
-
-/**
- * 로컬 배경 카탈로그 행. 교회 컴퓨터는 봉사자 여럿이 같이 쓰므로, 내가 올린 배경이
- * 다음 사람의 라이브러리에 보이지 않게 어느 계정으로 받은 목록인지 함께 적는다.
- */
-export type StoredBackground = BackgroundMedia & { cachedFor: string | null };
 
 export interface CachedSession {
   id: "current";
@@ -74,6 +69,12 @@ export function getOfflineDB(): Promise<IDBPDatabase<WorshipOfflineDB>> {
           for (const name of db.objectStoreNames) {
             void transaction.objectStore(name).clear();
           }
+        }
+        if (
+          oldVersion >= FIRST_NANOID_DB_VERSION &&
+          oldVersion < NO_USER_BACKGROUNDS_DB_VERSION
+        ) {
+          void transaction.objectStore("backgrounds").clear();
         }
         if (!db.objectStoreNames.contains("presentations")) {
           db.createObjectStore("presentations", { keyPath: "id" });

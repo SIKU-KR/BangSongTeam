@@ -46,7 +46,6 @@ describe("배경 쿼리 헬퍼", () => {
     it("R2 키를 미디어 프록시 URL로 바꿔 돌려준다", async () => {
       const list = await listBackgrounds(testDb.db);
       expect(list.find((bg) => bg.id === SERVICE_A)).toMatchObject({
-        source: "service",
         mediaUrl: `/api/media/loops/${SERVICE_A}.mp4`,
         posterUrl: `/api/media/posters/${SERVICE_A}.webp`,
       });
