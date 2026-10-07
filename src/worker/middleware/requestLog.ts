@@ -9,16 +9,16 @@ const TRACEPARENT = /^00-([0-9a-f]{32})-([0-9a-f]{16})-[0-9a-f]{2}$/;
 const ZERO_TRACE_ID = "0".repeat(32);
 
 /**
- * 요청의 상관 ID를 정한다. 브라우저가 보낸 W3C `traceparent`의 trace-id를 먼저 쓴다.
+ * 요청의 상관 ID를 정한다. 브라우저가 보낸 W3C `traceparent`의 trace-id를 쓰고,
+ * 없거나 형식이 틀리면 새로 만든다.
  *
  * 브라우저가 ID를 만들어야 응답을 받지 못한 요청(타임아웃·끊김)도 사용자 화면과 Worker
- * 로그를 같은 값으로 이을 수 있다. `traceparent`가 없거나 형식이 틀리면(예전 클라이언트,
- * 직접 호출) `cf-ray`, 그것도 없으면(로컬·테스트) 무작위 값을 쓴다.
+ * 로그를 같은 값으로 이을 수 있다.
  */
 export function resolveRequestId(headers: Headers): string {
   const traceId = TRACEPARENT.exec(headers.get("traceparent") ?? "")?.[1];
   if (traceId && traceId !== ZERO_TRACE_ID) return traceId;
-  return headers.get("cf-ray") ?? randomHex(16);
+  return randomHex(16);
 }
 
 async function hashUserId(userId: string): Promise<string> {
