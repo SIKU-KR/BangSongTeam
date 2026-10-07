@@ -5,12 +5,8 @@ import { Hono } from "hono";
 import { createApp } from "../index";
 import type { SessionReader } from "./auth";
 import type { AppEnv } from "../types";
-import {
-  describeError,
-  logServerError,
-  resolveRequestId,
-} from "../lib/requestLog";
-import { requestLog } from "./requestLog";
+import { describeError, logServerError } from "../lib/requestLog";
+import { requestLog, resolveRequestId } from "./requestLog";
 
 const TRACE_ID = "4bf92f3577b34da6a3ce929d0e0e4736";
 const TRACEPARENT = `00-${TRACE_ID}-00f067aa0ba902b7-01`;
