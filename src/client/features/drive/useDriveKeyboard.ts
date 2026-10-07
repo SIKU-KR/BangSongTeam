@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { onlyItem } from "#shared";
 import { useLatest } from "../../hooks/useLatest";
 import type { DriveContextValue } from "./driveContext";
 import { toItemRef, type DriveItem } from "./driveModel";
@@ -59,12 +60,14 @@ export function useDriveKeyboard(options: DriveKeyboardOptions): void {
       }
       const keys = items.map((item) => item.key);
       const selected = items.filter((item) => drive.selection.has(item.key));
+      const onlySelected = onlyItem(selected);
       const focus = visibleKey(keys, drive.focusKey);
       const mod = event.metaKey || event.ctrlKey;
       const plain = !mod && !event.altKey && !event.shiftKey;
 
-      if (event.key in STEP && !event.altKey) {
-        const next = stepFocus(keys, focus, STEP[event.key]);
+      const step = STEP[event.key];
+      if (step !== undefined && !event.altKey) {
+        const next = stepFocus(keys, focus, step);
         if (next === null) return;
         event.preventDefault();
         if (event.shiftKey) {
@@ -98,12 +101,12 @@ export function useDriveKeyboard(options: DriveKeyboardOptions): void {
         if (isTrash) drive.requestDeleteForever(selected.map(toItemRef));
         else drive.trash(selected.map(toItemRef));
       } else if (event.key === "Enter" && !mod) {
-        if (isControlTarget(event.target) || selected.length !== 1) return;
+        if (isControlTarget(event.target) || !onlySelected) return;
         event.preventDefault();
-        open(selected[0]);
-      } else if (event.key === "F2" && selected.length === 1 && !isTrash) {
+        open(onlySelected);
+      } else if (event.key === "F2" && onlySelected && !isTrash) {
         event.preventDefault();
-        drive.requestRename(toItemRef(selected[0]));
+        drive.requestRename(toItemRef(onlySelected));
       } else if (plain && isLetterKey(event, "z") && !isTrash) {
         if (selected.length === 0) return;
         event.preventDefault();

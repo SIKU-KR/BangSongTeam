@@ -16,8 +16,8 @@ const MAX_CAUSE_DEPTH = 3;
  * 직접 호출) `cf-ray`, 그것도 없으면(로컬·테스트) 무작위 값을 쓴다.
  */
 export function resolveRequestId(headers: Headers): string {
-  const match = TRACEPARENT.exec(headers.get("traceparent") ?? "");
-  if (match && match[1] !== ZERO_TRACE_ID) return match[1];
+  const traceId = TRACEPARENT.exec(headers.get("traceparent") ?? "")?.[1];
+  if (traceId && traceId !== ZERO_TRACE_ID) return traceId;
   return headers.get("cf-ray") ?? randomHex(16);
 }
 

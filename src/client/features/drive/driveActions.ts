@@ -1,6 +1,7 @@
 import {
   collectDescendantFolderIds,
   MAX_PRESENTATION_TITLE_LENGTH,
+  onlyItem,
   resolveFolderId,
   type Presentation,
 } from "#shared";
@@ -89,10 +90,9 @@ export function itemName(ref: DriveItemRef): string {
 
 /** 알림·확인 문구의 대상 표현. 하나면 이름을 따옴표로, 여럿이거나 이름이 비면 개수로 쓴다 */
 export function describeItems(refs: readonly DriveItemRef[]): string {
-  if (refs.length === 1) {
-    const name = itemName(refs[0]).trim();
-    if (name) return DRIVE_COPY.quoted(name);
-  }
+  const only = onlyItem(refs);
+  const name = only ? itemName(only).trim() : "";
+  if (name) return DRIVE_COPY.quoted(name);
   return DRIVE_COPY.itemCount(refs.length);
 }
 

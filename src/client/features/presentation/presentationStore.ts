@@ -3,6 +3,7 @@ import type { Deck, Presentation, PresentationItem, Slide } from "#shared";
 import {
   MAX_PRESENTATION_TITLE_LENGTH,
   createId,
+  cycleItem,
   createSlideId,
   mergeSlideLines,
   splitLinesAtCursor,
@@ -60,7 +61,7 @@ const EMPTY_PRESENTATION: Presentation = Object.freeze({
 }) as Presentation;
 
 function buildListSnapshot(s: PresentationStoreState): Presentation[] {
-  return s.order.map((id) => s.byId[id]).filter(Boolean);
+  return s.order.map((id) => s.byId[id]).filter((doc) => doc !== undefined);
 }
 
 let state: PresentationStoreState = createEmptyState();
@@ -336,12 +337,14 @@ function writeSongDeck(songIndex: number, changes: Partial<Deck>): void {
 export function addDeckToPresentation(deck: Deck): PresentationItem {
   pushHistory();
   const active = readActive();
-  const currentCount = active.items.length;
-  const serviceBackgrounds = getServiceBackgrounds();
+  const rotatedBackground = cycleItem(
+    getServiceBackgrounds(),
+    active.items.length,
+  );
   const assignedBackgroundId =
     deck.backgroundId ||
-    (!deck.style.backgroundColor && serviceBackgrounds.length > 0
-      ? serviceBackgrounds[currentCount % serviceBackgrounds.length].id
+    (!deck.style.backgroundColor && rotatedBackground
+      ? rotatedBackground.id
       : null);
 
   const now = new Date().toISOString();
@@ -359,7 +362,7 @@ export function addDeckToPresentation(deck: Deck): PresentationItem {
     id: createId(),
     presentationId: active.id,
     deckId: resolvedDeck.id,
-    order: currentCount,
+    order: active.items.length,
     deck: resolvedDeck,
   };
 
@@ -649,15 +652,15 @@ export function duplicateSlides(
 ): void {
   const slides = readSongSlides(songIndex);
   if (!slides) return;
-  const sorted = [...new Set(slideIndexes)]
-    .filter((index) => index >= 0 && index < slides.length)
-    .sort((a, b) => a - b);
-  if (sorted.length === 0) return;
+  const selected = new Set(slideIndexes);
+  const picked = slides.filter((_, index) => selected.has(index));
+  const last = picked.at(-1);
+  if (!last) return;
 
   insertSlides(
     songIndex,
-    sorted[sorted.length - 1] + 1,
-    sorted.map((index) => slides[index].lines),
+    slides.indexOf(last) + 1,
+    picked.map((slide) => slide.lines),
   );
 }
 
@@ -720,11 +723,12 @@ export function mergeSlideWithNext(
 }
 
 export function reorderSongs(fromIndex: number, toIndex: number): void {
+  const items = [...readActive().items];
+  const movedItem = items[fromIndex];
   if (
-    fromIndex < 0 ||
-    fromIndex >= readActive().items.length ||
+    !movedItem ||
     toIndex < 0 ||
-    toIndex >= readActive().items.length ||
+    toIndex >= items.length ||
     fromIndex === toIndex
   ) {
     return;
@@ -732,8 +736,7 @@ export function reorderSongs(fromIndex: number, toIndex: number): void {
 
   pushHistory();
 
-  const items = [...readActive().items];
-  const [movedItem] = items.splice(fromIndex, 1);
+  items.splice(fromIndex, 1);
   items.splice(toIndex, 0, movedItem);
   writeActiveItems(reindexOrder(items));
 }

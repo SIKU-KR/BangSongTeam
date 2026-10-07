@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { FolderIcon } from "lucide-react";
 import { cn } from "cn";
+import { onlyItem } from "#shared";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -267,15 +268,17 @@ export function MoveDialog({
   onCancel,
 }: MoveDialogProps): React.JSX.Element {
   const index = useFolderIndex();
-  const origin = refs.length > 0 ? parentOf(refs[0]) : null;
+  const [first] = refs;
+  const only = onlyItem(refs);
+  const origin = first ? parentOf(first) : null;
 
   return (
     <FolderPickerDialog
       testId="drive-move-dialog"
       confirmTestId="drive-move-confirm"
       title={
-        refs.length === 1
-          ? DRIVE_COPY.moveDialog.title(itemName(refs[0]))
+        only
+          ? DRIVE_COPY.moveDialog.title(itemName(only))
           : DRIVE_COPY.moveDialog.titleMany(refs.length)
       }
       description={DRIVE_COPY.moveDialog.currentLocation(

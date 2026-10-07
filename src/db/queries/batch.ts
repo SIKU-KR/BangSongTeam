@@ -36,7 +36,9 @@ export async function runQueries(
     for (const query of present) results.push((await query) as unknown[]);
   }
   let next = 0;
-  return queries.map((query) => (query === null ? [] : results[next++]));
+  return queries.map((query) =>
+    query === null ? [] : (results[next++] ?? []),
+  );
 }
 
 /**

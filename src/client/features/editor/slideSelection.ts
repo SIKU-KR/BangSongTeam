@@ -43,14 +43,15 @@ export function clickSelection(
   }
   if (mod) {
     const toggled = toggleKey(new Set(current.selected), target);
-    if (toggled.length === 0) {
+    const ordered = ids.filter((id) => toggled.includes(id));
+    const last = ordered.at(-1);
+    if (last === undefined) {
       return { selected: [target], anchor: target, focus: target };
     }
-    const ordered = ids.filter((id) => toggled.includes(id));
     return {
       selected: ordered,
       anchor: target,
-      focus: ordered.includes(target) ? target : ordered[ordered.length - 1],
+      focus: ordered.includes(target) ? target : last,
     };
   }
   return { selected: [target], anchor: target, focus: target };

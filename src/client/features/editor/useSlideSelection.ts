@@ -143,13 +143,15 @@ export function useSlideSelection({
 
   const selectSong = (target: number): void => {
     const targetIds = songSlidesAt(songs, target).map((s) => s.id);
-    if (targetIds.length === 0) return;
-    pick(target, targetIds, targetIds[0], targetIds[0]);
+    const [first] = targetIds;
+    if (!first) return;
+    pick(target, targetIds, first, first);
   };
 
   const selectAll = (): boolean => {
-    if (!currentId) return false;
-    pick(songIndex, ids, ids[0], currentId);
+    const [first] = ids;
+    if (!first || !currentId) return false;
+    pick(songIndex, ids, first, currentId);
     return true;
   };
 
@@ -205,9 +207,10 @@ export function useSlideSelection({
 
   const pickInserted = (at: number, count: number, focusLast: boolean) => {
     const inserted = slideIdsOf(songIndex).slice(at, at + count);
-    if (inserted.length === 0) return;
-    const focus = focusLast ? inserted[inserted.length - 1] : inserted[0];
-    pick(songIndex, inserted, inserted[0], focus);
+    const [first] = inserted;
+    const last = inserted.at(-1);
+    if (!first || !last) return;
+    pick(songIndex, inserted, first, focusLast ? last : first);
   };
 
   const duplicateSelection = (): boolean => {
@@ -225,7 +228,9 @@ export function useSlideSelection({
     if (!item || selectedIndexes.length === 0) return false;
     setClipboard({
       itemId: item.id,
-      lines: selectedIndexes.map((index) => [...slides[index].lines]),
+      lines: slides
+        .filter((slide) => selectedIds.includes(slide.id))
+        .map((slide) => [...slide.lines]),
     });
     return true;
   };

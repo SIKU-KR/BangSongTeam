@@ -73,11 +73,15 @@ export function stepFocus(
   focus: string | null,
   delta: number,
 ): string | null {
-  if (keys.length === 0) return null;
+  const last = keys.length - 1;
   const current = focus === null ? -1 : keys.indexOf(focus);
-  if (current === -1) return delta > 0 ? keys[0] : keys[keys.length - 1];
-  const next = Math.min(keys.length - 1, Math.max(0, current + delta));
-  return keys[next];
+  const next =
+    current === -1
+      ? delta > 0
+        ? 0
+        : last
+      : Math.min(last, Math.max(0, current + delta));
+  return keys[next] ?? null;
 }
 
 /** 드래그 선택 사각형과 겹치는 항목 (화면 좌표) */
