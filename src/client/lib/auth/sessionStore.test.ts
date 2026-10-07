@@ -7,16 +7,18 @@ import {
   revalidateSession,
   getSessionState,
   getCurrentUserId,
+  signInWithProvider,
   __setSessionFetcherForTests,
   __resetSessionForTests,
   type SessionFetcher,
 } from "./sessionStore";
 
 vi.mock("./authClient", () => ({
-  authClient: { getSession: vi.fn() },
+  authClient: { getSession: vi.fn(), signIn: { social: vi.fn() } },
 }));
 
 const getSession = vi.mocked(authClient.getSession);
+const signInSocial = vi.mocked(authClient.signIn.social);
 
 const HOUR = 60 * 60 * 1000;
 const USER_ID = "8f14e45fc1a2b3c4d5e6f";
@@ -334,6 +336,21 @@ describe("세션 스토어", () => {
       await new Promise((resolve) => setTimeout(resolve, 0));
 
       expect(fetcher).toHaveBeenCalled();
+    });
+  });
+
+  describe("signInWithProvider", () => {
+    it("서버가 로그인 시작을 거절하면 던져 화면이 안내하게 한다", async () => {
+      signInSocial.mockResolvedValueOnce({
+        data: null,
+        error: {
+          status: 404,
+          statusText: "Not Found",
+          message: "Provider not found",
+        },
+      } as never);
+
+      await expect(signInWithProvider("kakao")).rejects.toThrow();
     });
   });
 });
