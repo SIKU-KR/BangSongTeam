@@ -1,4 +1,5 @@
 import type { Context } from "hono";
+import { isAPIError } from "better-auth/api";
 import { createMiddleware } from "hono/factory";
 import { getAuth } from "../lib/auth";
 import type { AppEnv, Bindings } from "../types";
@@ -26,16 +27,24 @@ export type SessionReader = (input: {
  *
  * 쿠키 캐시(`session.cookieCache`)가 살아 있으면 D1을 읽지 않는다. 캐시가 만료돼
  * D1을 읽은 요청은 새 캐시 쿠키를 `setCookies`로 돌려준다.
+ *
+ * 쿠키가 없거나 만료·손상되면 Better Auth가 `null`을 준다. 갱신 중 세션이 지워진
+ * `UNAUTHORIZED`만 세션 없음으로 바꾸고, 그 밖의 예외(D1 장애 등)는 그대로 던져
+ * 5xx로 내린다. 401로 바꾸면 클라이언트가 서버 장애를 로그아웃으로 받는다.
  */
 export const readSessionFromBetterAuth: SessionReader = async ({
   headers,
   env,
 }) => {
   const auth = getAuth(env);
-  const { headers: responseHeaders, response } = await auth.api.getSession({
-    headers,
-    returnHeaders: true,
-  });
+  let result;
+  try {
+    result = await auth.api.getSession({ headers, returnHeaders: true });
+  } catch (error) {
+    if (isAPIError(error) && error.status === "UNAUTHORIZED") return null;
+    throw error;
+  }
+  const { headers: responseHeaders, response } = result;
   if (!response) return null;
 
   return {
@@ -50,23 +59,15 @@ function forwardCookies(c: Context<AppEnv>, setCookies?: string[]): void {
   }
 }
 
-/**
- * 세션이 없으면 401로 끊는 미들웨어.
- *
- * 세션 조회 중 예외가 나도 401로 내린다. 만료·손상된 쿠키는 '서버 오류'가
- * 아니라 '로그인 안 됨'이다. 500으로 새면 클라이언트가 재로그인 대신
- * 재시도 루프를 돈다.
- */
+/** 세션이 없으면 401로 끊는 미들웨어. */
 export function createRequireAuth(
   readSession: SessionReader = readSessionFromBetterAuth,
 ) {
   return createMiddleware<AppEnv>(async (c, next) => {
-    let session: SessionResult | null = null;
-    try {
-      session = await readSession({ headers: c.req.raw.headers, env: c.env });
-    } catch {
-      session = null;
-    }
+    const session = await readSession({
+      headers: c.req.raw.headers,
+      env: c.env,
+    });
 
     if (!session) {
       return c.json({ error: API_ERRORS.loginRequired }, 401);
@@ -82,18 +83,15 @@ export function createRequireAuth(
  * 세션이 있으면 `userId`를 채우고, 없으면 그대로 통과시키는 미들웨어.
  *
  * 로그인 없이도 열리지만 로그인하면 내 데이터가 더해지는 목록(배경 라이브러리)용이다.
- * 세션 조회 실패는 비로그인으로 취급한다.
  */
 export function createOptionalSession(
   readSession: SessionReader = readSessionFromBetterAuth,
 ) {
   return createMiddleware<AppEnv>(async (c, next) => {
-    let session: SessionResult | null = null;
-    try {
-      session = await readSession({ headers: c.req.raw.headers, env: c.env });
-    } catch {
-      session = null;
-    }
+    const session = await readSession({
+      headers: c.req.raw.headers,
+      env: c.env,
+    });
     c.set("userId", session?.userId);
     await next();
     forwardCookies(c, session?.setCookies);

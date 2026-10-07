@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { env } from "cloudflare:test";
 import { eq } from "drizzle-orm";
 import { makeSignature } from "better-auth/crypto";
@@ -66,6 +66,10 @@ async function deleteSessions(): Promise<void> {
     .where(eq(session.userId, USER_ID));
 }
 
+afterEach(() => {
+  vi.restoreAllMocks();
+});
+
 describe("세션 쿠키 캐시", () => {
   beforeEach(async () => {
     const db = createD1Client(env.DB);
@@ -98,5 +102,32 @@ describe("세션 쿠키 캐시", () => {
 
     const uncached = await listFolders(token);
     expect(uncached.status).toBe(401);
+  });
+
+  it("서명이 맞지 않는 세션 쿠키는 예외 없이 401로 끝난다", async () => {
+    const token = await login();
+    const res = await listFolders(token.replace(/.$/, "x"));
+
+    expect(res.status).toBe(401);
+  });
+
+  it("세션 저장소가 실패하면 로그아웃으로 오인되지 않게 401이 아니라 5xx로 내린다", async () => {
+    const token = await login();
+    const brokenDb = {
+      prepare: () => {
+        throw new Error("D1_ERROR: storage unavailable");
+      },
+    } as unknown as D1Database;
+    const brokenBindings: Bindings = { ...env, DB: brokenDb };
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.spyOn(console, "log").mockImplementation(() => {});
+
+    const res = await app.request(
+      "/api/folders",
+      { headers: { cookie: token } },
+      brokenBindings,
+    );
+
+    expect(res.status).toBeGreaterThanOrEqual(500);
   });
 });
