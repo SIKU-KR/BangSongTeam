@@ -34,7 +34,10 @@ import {
   INITIAL_POSITION,
   type ProjectionPosition,
 } from "../features/presentation";
-import { songIndexAfterReorder } from "../features/presentation/projectionState";
+import {
+  songIndexAfterReorder,
+  songSlidesAt,
+} from "../features/presentation/projectionState";
 import { useOpenedPresentation } from "../features/presentation/useOpenedPresentation";
 import { DEFAULT_DECK_STYLE, MAX_SLIDE_LINES } from "#shared";
 import type { DeckStyle } from "#shared";
@@ -262,7 +265,7 @@ function EditorScreen({
       clampPosition(
         {
           songIndex: lastSong,
-          slideIndex: (songs[lastSong]?.deck?.slides.length ?? 1) - 1,
+          slideIndex: songSlidesAt(songs, lastSong).length - 1,
         },
         songs,
       ),

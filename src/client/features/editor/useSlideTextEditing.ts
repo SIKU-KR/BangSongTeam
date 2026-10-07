@@ -9,6 +9,7 @@ import {
 import {
   breakHistoryCoalescing,
   getActivePresentation,
+  getSlideAt,
   mergeSlideWithNext,
   splitSlideAtCursor,
   updateSlideLines,
@@ -84,9 +85,6 @@ export function useSlideTextEditing({
     setTextEdit((prev) => (prev?.slideId === slideId ? null : prev));
   };
 
-  const slideIdAt = (songIdx: number, slideIdx: number): string | undefined =>
-    getActivePresentation().items[songIdx]?.deck?.slides[slideIdx]?.id;
-
   const splitOffset =
     isEditingText && caretOffset !== null
       ? caretOffset
@@ -104,9 +102,10 @@ export function useSlideTextEditing({
   const split = (offset: number): void => {
     const wasEditing = isEditingText;
     if (!splitSlideAtCursor(songIndex, slideIndex, offset)) return;
-    select({ songIndex, slideIndex: slideIndex + 1 });
+    const next = { songIndex, slideIndex: slideIndex + 1 };
+    select(next);
     if (wasEditing) {
-      start(slideIdAt(songIndex, slideIndex + 1), "start");
+      start(getSlideAt(next, getActivePresentation().items)?.id, "start");
     }
   };
 

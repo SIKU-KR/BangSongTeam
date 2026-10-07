@@ -192,8 +192,10 @@ describe("세트 링크 공유", () => {
       expect(shared.items[0].deck.lyricsRaw).toBe("시작됐네");
 
       const single = await getPresentationDocument(db, DOC_ID, MEMBER);
-      expect(single?.folderId).toBeNull();
-      expect(single?.access?.ownerName).toBe("인도자");
+      expect(single).toMatchObject({
+        folderId: null,
+        access: { ownerName: "인도자" },
+      });
     });
 
     it("공유받은 사람은 원본을 고치지 못한다", async () => {

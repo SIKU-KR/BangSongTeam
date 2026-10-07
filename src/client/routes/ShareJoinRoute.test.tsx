@@ -68,7 +68,9 @@ describe("ShareJoinRoute (/s/:token)", () => {
     expect(await screen.findByTestId("editor-probe")).toHaveTextContent(
       shared.id,
     );
-    expect(getPresentationById(shared.id)?.access?.ownerName).toBe("인도자");
+    expect(getPresentationById(shared.id)).toMatchObject({
+      access: { ownerName: "인도자" },
+    });
     expect(screen.getByTestId("editor-probe")).toHaveAttribute(
       "data-state",
       "null",

@@ -56,6 +56,7 @@ export {
   clampPosition,
   getSlideAt,
   getTotalSlideCount,
+  songSlidesAt,
   positionOfSlideNumber,
   slideNumberOfPosition,
   INITIAL_POSITION,

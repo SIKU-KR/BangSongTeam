@@ -14,8 +14,13 @@ export const INITIAL_POSITION: ProjectionPosition = {
 
 type Songs = readonly PresentationItem[];
 
+/** 곡의 슬라이드. 범위 밖 인덱스이거나 덱이 붙지 않은 항목이면 빈 배열 */
+export function songSlidesAt(songs: Songs, songIndex: number): Slide[] {
+  return songs[songIndex]?.deck?.slides ?? [];
+}
+
 function slideCountOf(songs: Songs, songIndex: number): number {
-  return songs[songIndex]?.deck?.slides.length ?? 0;
+  return songSlidesAt(songs, songIndex).length;
 }
 
 /** 세트 전체 슬라이드 수 (번호 점프의 상한) */
@@ -66,7 +71,7 @@ export function getSlideAt(
   position: ProjectionPosition,
   songs: Songs,
 ): Slide | null {
-  return songs[position.songIndex]?.deck?.slides[position.slideIndex] ?? null;
+  return songSlidesAt(songs, position.songIndex)[position.slideIndex] ?? null;
 }
 
 /**
