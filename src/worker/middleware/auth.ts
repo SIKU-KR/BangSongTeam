@@ -4,18 +4,22 @@ import { getAuth } from "../lib/auth";
 import type { AppEnv, Bindings } from "../types";
 import { API_ERRORS } from "#shared";
 
-/**
- * 세션 조회 결과.
- *
- * `setCookies`는 Better Auth가 조회 중에 갱신한 쿠키(세션 쿠키 캐시 등)다. 미들웨어가
- * 이를 응답에 실어 보내야 브라우저의 쿠키 캐시가 이어지고, 다음 요청도 D1을 거치지 않는다.
- */
 export interface SessionResult {
   userId: string;
+  /**
+   * Better Auth가 조회 중에 갱신한 쿠키(세션 쿠키 캐시 등).
+   *
+   * 응답에 실어 보내야 쿠키 캐시가 이어져 다음 요청이 D1을 읽지 않는다.
+   */
   setCookies?: string[];
 }
 
-/** 요청에서 세션 사용자를 읽어 오는 함수 (테스트에서 주입 가능) */
+/**
+ * 요청에서 세션 사용자를 읽는 함수. 테스트가 세션을 흉내 내려고 주입한다.
+ *
+ * `null`은 세션 없음(401)이다. 조회 자체가 실패하면 `null` 대신 예외를 던져야
+ * 5xx로 내려가고, 클라이언트가 서버 장애를 로그아웃으로 받지 않는다.
+ */
 export type SessionReader = (input: {
   headers: Headers;
   env: Bindings;
@@ -24,12 +28,8 @@ export type SessionReader = (input: {
 /**
  * Better Auth로 세션을 읽는 기본 구현.
  *
- * 쿠키 캐시(`session.cookieCache`)가 살아 있으면 D1을 읽지 않는다. 캐시가 만료돼
- * D1을 읽은 요청은 새 캐시 쿠키를 `setCookies`로 돌려준다.
- *
- * 쿠키가 없거나 만료·손상되면 Better Auth가 `null`을 준다. 갱신 중 세션이 지워진
- * `UNAUTHORIZED`만 세션 없음으로 바꾸고, 그 밖의 예외(D1 장애 등)는 그대로 던져
- * 5xx로 내린다. 401로 바꾸면 클라이언트가 서버 장애를 로그아웃으로 받는다.
+ * 갱신 중 세션이 지워지면 Better Auth가 `UNAUTHORIZED`를 던지므로 이것만 세션
+ * 없음으로 바꾸고, 그 밖의 예외(D1 장애 등)는 그대로 던진다.
  */
 export const readSessionFromBetterAuth: SessionReader = async ({
   headers,
