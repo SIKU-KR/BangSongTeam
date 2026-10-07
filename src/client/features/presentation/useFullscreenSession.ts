@@ -8,8 +8,8 @@ import {
 } from "./fullscreen";
 
 interface KeyboardLockApi {
-  lock?: (keyCodes?: string[]) => Promise<void>;
-  unlock?: () => void;
+  lock: (keyCodes?: string[]) => Promise<void>;
+  unlock: () => void;
 }
 
 const MODIFIER_KEYS = new Set(["Shift", "Control", "Alt", "Meta"]);
@@ -45,7 +45,7 @@ export function useFullscreenSession(isExitingRef: RefObject<boolean>): void {
     }
 
     const keyboard = keyboardLockApi();
-    keyboard?.lock?.(["Escape"]).catch(() => {});
+    keyboard?.lock(["Escape"]).catch(() => {});
 
     const reenter = (event: Event): void => {
       if (isExitingRef.current || isFullscreenActive()) return;
@@ -73,7 +73,7 @@ export function useFullscreenSession(isExitingRef: RefObject<boolean>): void {
       window.removeEventListener("keydown", handleKeyDown, true);
       window.removeEventListener("pointerdown", handlePointer, true);
       window.removeEventListener("pointerup", handlePointer, true);
-      keyboard?.unlock?.();
+      keyboard?.unlock();
       if (window.location.pathname !== mountedPath) {
         exitFullscreen().catch(() => {});
       }

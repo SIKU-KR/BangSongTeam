@@ -4,9 +4,11 @@ import {
   addSlideToSong,
   duplicateSlides,
   getActivePresentation,
+  getSlideAt,
   insertSlides,
   moveSlides,
   removeSlides,
+  songSlidesAt,
   type ProjectionPosition,
 } from "../presentation";
 import {
@@ -74,7 +76,7 @@ export function useSlideSelection({
 
   const { songIndex } = position;
   const item = songs[songIndex];
-  const slides = item?.deck?.slides ?? [];
+  const slides = songSlidesAt(songs, songIndex);
   const ids = slides.map((slide) => slide.id);
   const currentId = ids[position.slideIndex];
 
@@ -92,7 +94,7 @@ export function useSlideSelection({
   const canPaste = !!clipboard && !!item && clipboard.itemId === item.id;
 
   const slideIdsOf = (target: number): string[] =>
-    getActivePresentation().items[target]?.deck?.slides.map((s) => s.id) ?? [];
+    songSlidesAt(getActivePresentation().items, target).map((s) => s.id);
 
   const pick = (
     target: number,
@@ -120,7 +122,7 @@ export function useSlideSelection({
     slideIndex: number,
     modifiers: ClickModifiers,
   ): void => {
-    const targetId = songs[target]?.deck?.slides[slideIndex]?.id;
+    const targetId = getSlideAt({ songIndex: target, slideIndex }, songs)?.id;
     if (
       !targetId ||
       target !== songIndex ||
@@ -140,7 +142,7 @@ export function useSlideSelection({
   };
 
   const selectSong = (target: number): void => {
-    const targetIds = songs[target]?.deck?.slides.map((s) => s.id) ?? [];
+    const targetIds = songSlidesAt(songs, target).map((s) => s.id);
     if (targetIds.length === 0) return;
     pick(target, targetIds, targetIds[0], targetIds[0]);
   };

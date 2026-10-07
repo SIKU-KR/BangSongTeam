@@ -96,11 +96,11 @@ function syntheticEmail(provider: string, id: string | number): string {
 
 export function buildKakaoUser(profile: KakaoProfileLike): MappedSocialUser {
   const account = profile.kakao_account;
-  const nickname =
-    account?.profile?.nickname ?? profile.properties?.nickname ?? "";
+  const kakaoProfile = account?.profile;
+  const nickname = kakaoProfile?.nickname ?? profile.properties?.nickname ?? "";
   const image =
-    account?.profile?.profile_image_url ??
-    account?.profile?.thumbnail_image_url ??
+    kakaoProfile?.profile_image_url ??
+    kakaoProfile?.thumbnail_image_url ??
     profile.properties?.profile_image;
   const email = account?.email?.trim();
 

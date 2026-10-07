@@ -58,3 +58,7 @@ if (typeof HTMLCanvasElement !== "undefined") {
     value: () => null,
   });
 }
+
+if (typeof Element !== "undefined" && !Element.prototype.scrollIntoView) {
+  Element.prototype.scrollIntoView = () => {};
+}

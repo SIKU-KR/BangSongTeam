@@ -26,7 +26,7 @@ describe("PowerPoint 색 팔레트", () => {
       "#A6A6A6",
       "#808080",
     ]);
-    expect(THEME_COLOR_ROWS[1]?.[1]?.value).toBe("#808080");
+    expect(THEME_COLOR_ROWS[1][1].value).toBe("#808080");
   });
 
   it("모든 값은 #RRGGBB 대문자이고 칸마다 이름이 있다", () => {
@@ -34,7 +34,7 @@ describe("PowerPoint 색 팔레트", () => {
       expect(color.value).toMatch(/^#[0-9A-F]{6}$/);
       expect(color.label).not.toBe("");
     }
-    expect(THEME_COLOR_ROWS[1]?.[4]?.label).toBe("파랑, 80% 더 밝게");
-    expect(THEME_COLOR_ROWS[5]?.[4]?.label).toBe("파랑, 50% 더 어둡게");
+    expect(THEME_COLOR_ROWS[1][4].label).toBe("파랑, 80% 더 밝게");
+    expect(THEME_COLOR_ROWS[5][4].label).toBe("파랑, 50% 더 어둡게");
   });
 });

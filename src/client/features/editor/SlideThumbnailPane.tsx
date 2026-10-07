@@ -40,6 +40,7 @@ import {
 } from "#components/ui/tooltip";
 import { IconButton } from "#components/common/IconButton";
 import type { DeckOverflow, PresentationItem } from "#shared";
+import { getSlideAt, songSlidesAt } from "../presentation/projectionState";
 import {
   getBackgroundById,
   useBackgroundCatalog,
@@ -208,7 +209,7 @@ export function SlideThumbnailPane({
   }
 
   useEffect(() => {
-    activeThumbRef.current?.scrollIntoView?.({ block: "nearest" });
+    activeThumbRef.current?.scrollIntoView({ block: "nearest" });
   }, [activeSongIndex, activeSlideIndex]);
 
   const focusPane = () => paneRef.current?.focus({ preventScroll: true });
@@ -216,7 +217,7 @@ export function SlideThumbnailPane({
   const selectAndToggleSong = (songIndex: number, itemId: string) => {
     const willSelectAnother =
       songIndex !== activeSongIndex &&
-      (items[songIndex]?.deck?.slides.length ?? 0) > 0;
+      songSlidesAt(items, songIndex).length > 0;
     if (willSelectAnother) collapsedSongs.keepCollapsedOnActivate(itemId);
     collapsedSongs.toggle(itemId);
     focusPane();
@@ -366,7 +367,7 @@ export function SlideThumbnailPane({
     switch (target?.kind) {
       case "slide": {
         const { songIndex, slideIndex } = target;
-        const slideId = items[songIndex]?.deck?.slides[slideIndex]?.id ?? "";
+        const slideId = getSlideAt(target, items)?.id ?? "";
         if (!isSelected(songIndex, slideId)) {
           onClickSlide(songIndex, slideIndex, NO_MODIFIERS);
         }
@@ -407,9 +408,7 @@ export function SlideThumbnailPane({
   const draggedCount =
     dragging?.type === "slide" ? Math.max(1, selectedIds.length) : 0;
   const draggedSlide =
-    dragging?.type === "slide"
-      ? items[dragging.songIndex]?.deck?.slides[dragging.slideIndex]
-      : undefined;
+    dragging?.type === "slide" ? getSlideAt(dragging, items) : null;
   const draggedDeck = dragging ? items[dragging.songIndex]?.deck : undefined;
 
   return (

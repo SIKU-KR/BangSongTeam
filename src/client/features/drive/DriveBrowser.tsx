@@ -104,7 +104,7 @@ export function DriveBrowser({
       `[data-item-key="${key}"]`,
     );
     row?.focus();
-    row?.scrollIntoView?.({ block: "nearest" });
+    row?.scrollIntoView({ block: "nearest" });
   }, []);
 
   const targetsFor = (item: DriveItem): DriveItem[] => {
