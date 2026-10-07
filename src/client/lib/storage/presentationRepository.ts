@@ -11,6 +11,13 @@ export interface LoadResult<T> {
   corrupted: CorruptedRecord[];
 }
 
+/** 검증에 실패한 행에서 알아볼 수 있는 id만 꺼낸다. id조차 없으면 `(unknown)` */
+export function toCorruptedRecord(row: unknown): CorruptedRecord {
+  const id =
+    typeof row === "object" && row !== null && "id" in row ? row.id : null;
+  return { id: typeof id === "string" ? id : "(unknown)" };
+}
+
 /**
  * 프레젠테이션 문서 1건을 전체 교체(put)한다.
  * 부분 갱신을 쓰지 않는 이유: 마지막 쓰기가 유실돼도 직전 저장본이 온전히 남아야 한다.
@@ -39,12 +46,7 @@ export async function loadAllPresentations(): Promise<
     if (parsed.success) {
       valid.push(parsed.data);
     } else {
-      corrupted.push({
-        id:
-          typeof (row as { id?: unknown })?.id === "string"
-            ? (row as { id: string }).id
-            : "(unknown)",
-      });
+      corrupted.push(toCorruptedRecord(row));
     }
   }
 

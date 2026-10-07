@@ -41,9 +41,9 @@ export function buildFolderIndex<T extends FolderLink>(
 
     const path: string[] = [];
     const onPath = new Set<string>();
-    let cursor: string | null = start.id;
+    let cursor = start.id;
 
-    while (cursor !== null && !parentOf.has(cursor)) {
+    while (!parentOf.has(cursor)) {
       if (onPath.has(cursor)) {
         for (const member of path.slice(path.indexOf(cursor))) {
           parentOf.set(member, null);

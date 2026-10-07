@@ -1,6 +1,10 @@
 import { FolderSchema, type Folder } from "#shared";
 import { getOfflineDB } from "./db";
-import type { CorruptedRecord, LoadResult } from "./presentationRepository";
+import {
+  toCorruptedRecord,
+  type CorruptedRecord,
+  type LoadResult,
+} from "./presentationRepository";
 
 export async function saveFolder(folder: Folder): Promise<void> {
   const db = await getOfflineDB();
@@ -29,12 +33,7 @@ export async function loadAllFolders(): Promise<LoadResult<Folder>> {
     if (parsed.success) {
       valid.push(parsed.data);
     } else {
-      corrupted.push({
-        id:
-          typeof (row as { id?: unknown })?.id === "string"
-            ? (row as { id: string }).id
-            : "(unknown)",
-      });
+      corrupted.push(toCorruptedRecord(row));
     }
   }
 

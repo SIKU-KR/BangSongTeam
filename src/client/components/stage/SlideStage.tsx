@@ -64,7 +64,7 @@ export function SlideStage({
   } | null>(null);
 
   useEffect(() => {
-    if (containerDimensions?.width && containerDimensions?.height) {
+    if (containerDimensions?.width && containerDimensions.height) {
       return;
     }
     const elem = containerRef.current;
@@ -75,7 +75,7 @@ export function SlideStage({
         setMeasuredSize((prev) => {
           if (
             prev?.width === elem.clientWidth &&
-            prev?.height === elem.clientHeight
+            prev.height === elem.clientHeight
           ) {
             return prev;
           }
@@ -131,7 +131,7 @@ export function SlideStage({
     backgroundImageUrl ?? (backgroundUrl ? heldImageUrl : undefined);
 
   const effectiveDimensions =
-    containerDimensions?.width && containerDimensions?.height
+    containerDimensions?.width && containerDimensions.height
       ? containerDimensions
       : (measuredSize ?? undefined);
 

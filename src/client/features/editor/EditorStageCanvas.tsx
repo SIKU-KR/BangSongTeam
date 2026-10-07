@@ -178,7 +178,7 @@ export function EditorStageCanvas({
                 onPreview={(position, guides) =>
                   setDraft(position ? { position, guides } : null)
                 }
-                onCommit={(position) => onUpdateStyle?.({ position })}
+                onCommit={(position) => onUpdateStyle({ position })}
                 onDoubleClick={onRequestTextEdit}
               />
             </Suspense>

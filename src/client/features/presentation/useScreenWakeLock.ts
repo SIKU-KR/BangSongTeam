@@ -16,16 +16,16 @@ export function useScreenWakeLock(): void {
 
     let sentinel: WakeLockSentinel | null = null;
     let isRequesting = false;
-    let isDisposed = false;
+    const disposal = new AbortController();
 
     const acquire = async (): Promise<void> => {
-      if (isDisposed || isRequesting) return;
+      if (isRequesting) return;
       if (document.visibilityState !== "visible") return;
       if (sentinel && !sentinel.released) return;
       isRequesting = true;
       try {
         const next = await navigator.wakeLock.request("screen");
-        if (isDisposed) {
+        if (disposal.signal.aborted) {
           await next.release();
           return;
         }
@@ -39,7 +39,7 @@ export function useScreenWakeLock(): void {
     };
 
     const reacquire = (): void => {
-      void acquire();
+      if (!disposal.signal.aborted) void acquire();
     };
 
     void acquire();
@@ -47,7 +47,7 @@ export function useScreenWakeLock(): void {
     window.addEventListener("keydown", reacquire, true);
     window.addEventListener("pointerdown", reacquire, true);
     return () => {
-      isDisposed = true;
+      disposal.abort();
       document.removeEventListener("visibilitychange", reacquire);
       window.removeEventListener("keydown", reacquire, true);
       window.removeEventListener("pointerdown", reacquire, true);

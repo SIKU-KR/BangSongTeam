@@ -52,7 +52,7 @@ export function useStageScale(
   });
 
   useEffect(() => {
-    if (options?.width !== undefined && options?.height !== undefined) {
+    if (options?.width !== undefined && options.height !== undefined) {
       return;
     }
 
