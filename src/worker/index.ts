@@ -1,8 +1,6 @@
 import { Hono } from "hono";
-import { CLIENT_REPORTS_PATH } from "#shared";
 import type { AppEnv } from "./types";
 import type { AppDeps } from "./deps";
-import { AUTH_BASE_PATH } from "./lib/auth";
 import { isTransientStorageError } from "./lib/storageErrors";
 import { requestLog } from "./middleware/requestLog";
 import { createHealthRoute } from "./routes/health";
@@ -40,9 +38,9 @@ export function createApp(deps: AppDeps = {}) {
     .notFound((c) => c.json({ error: "Not Found" }, 404))
     .use("*", requestLog())
     .route("/api/health", createHealthRoute())
-    .route(AUTH_BASE_PATH, createAuthRoute())
+    .route("/api/auth", createAuthRoute())
     .route("/api/auth-config", createAuthConfigRoute())
-    .route(CLIENT_REPORTS_PATH, createClientReportsRoute())
+    .route("/api/client-reports", createClientReportsRoute())
     .route("/api/consent", createConsentRoute(deps))
     .route("/api/presentations", createPresentationsRoute(deps))
     .route("/api/folders", createFoldersRoute(deps))

@@ -11,14 +11,6 @@ import type { Bindings } from "../types";
 import { devSignIn } from "./devSignIn";
 
 /**
- * Better Auth 마운트 경로.
- *
- * `wrangler.jsonc`의 `assets.run_worker_first: ["/api/*"]`가 이 경로를 덮는다.
- * `/auth/*`로 옮기면 정적 자산 핸들러가 먼저 가로채 로그인이 조용히 깨진다.
- */
-export const AUTH_BASE_PATH = "/api/auth";
-
-/**
  * 소셜 프로바이더가 이메일을 주지 않을 때 쓰는 합성 도메인.
  *
  * 카카오 `account_email`은 비즈 앱 심사를 통과해야 내려온다. 이메일이 없다고
@@ -172,7 +164,7 @@ function buildAuth(env: Bindings) {
 
   return betterAuth({
     appName: APP_NAME,
-    basePath: AUTH_BASE_PATH,
+    basePath: "/api/auth",
     baseURL: env.BETTER_AUTH_URL,
     secret: env.BETTER_AUTH_SECRET,
     database: drizzleAdapter(db, {
@@ -202,6 +194,9 @@ const instances = new WeakMap<Bindings, AuthInstance>();
 /**
  * Better Auth 인스턴스 생성 또는 캐시 조회.
  *
+ * - `basePath`는 `index.ts`의 마운트 경로와 같아야 한다. `wrangler.jsonc`의
+ *   `assets.run_worker_first: ["/api/*"]`가 덮는 경로라, `/auth/*`로 옮기면 정적 자산
+ *   핸들러가 먼저 가로채 로그인이 조용히 깨진다.
  * - 로그인은 소셜 로그인뿐이다. 서버에 비밀번호 해시를 두지 않으려고 `emailAndPassword`는
  *   켜지 않는다. `pnpm dev`에서만 시드 계정 로그인(`devSignIn`)이 더해진다.
  * - 이메일이 검증된 소셜 계정끼리는 같은 이메일이면 한 사용자로 합쳐진다. 이메일이

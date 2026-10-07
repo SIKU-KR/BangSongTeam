@@ -1,7 +1,5 @@
 import { z } from "zod";
 
-export const CLIENT_REPORTS_PATH = "/api/client-reports" as const;
-
 /** 한 번에 보내는 보고 수의 상한. 브라우저가 모아 두는 버퍼도 이만큼만 둔다 */
 export const CLIENT_REPORT_MAX_COUNT = 20;
 

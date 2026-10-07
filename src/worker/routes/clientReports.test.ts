@@ -1,10 +1,6 @@
 import { describe, it, expect, afterEach, vi } from "vitest";
 import { env } from "cloudflare:test";
-import {
-  API_ERRORS,
-  CLIENT_REPORT_MAX_BYTES,
-  CLIENT_REPORTS_PATH,
-} from "#shared";
+import { API_ERRORS, CLIENT_REPORT_MAX_BYTES } from "#shared";
 import { createApp } from "../index";
 
 const TRACE_ID = "4bf92f3577b34da6a3ce929d0e0e4736";
@@ -17,7 +13,7 @@ function post(
 ): Promise<Response> {
   return Promise.resolve(
     app.request(
-      CLIENT_REPORTS_PATH,
+      "/api/client-reports",
       {
         method: "POST",
         headers: { "content-type": "application/json", ...headers },

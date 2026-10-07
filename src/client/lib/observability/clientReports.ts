@@ -1,12 +1,12 @@
 import {
   CLIENT_REPORT_MAX_COUNT,
-  CLIENT_REPORTS_PATH,
   ClientReportSchema,
   type ClientFailureKind,
   type ClientReport,
   type ClientReportBatch,
 } from "#shared";
 import { isProjectionPath } from "../../features/presentation/fullscreen";
+import { api } from "../api/client";
 import {
   OfflineError,
   ServerRejectedError,
@@ -134,7 +134,7 @@ export function flushClientReports(): void {
   let sent = false;
   try {
     sent = navigator.sendBeacon(
-      CLIENT_REPORTS_PATH,
+      api.api["client-reports"].$path(),
       new Blob([JSON.stringify(batch)], { type: "application/json" }),
     );
   } catch {

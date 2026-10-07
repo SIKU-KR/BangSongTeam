@@ -157,6 +157,12 @@ const WORKER_APP_SYNTAX = [
     message:
       "핸들러는 routes/에 팩토리로 두고 index.ts에서는 .route()로 마운트만 하세요.",
   },
+  {
+    selector:
+      "CallExpression[callee.property.name='route'][arguments.0.type!='Literal']",
+    message:
+      "마운트 경로는 상수 대신 문자열 리터럴로 쓰세요. 클라이언트는 RPC 클라이언트(api)로 경로를 얻습니다.",
+  },
 ];
 
 const HANGUL = /[가-힣]/;

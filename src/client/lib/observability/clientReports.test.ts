@@ -1,7 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import {
   CLIENT_REPORT_MAX_COUNT,
-  CLIENT_REPORTS_PATH,
   ClientReportBatchSchema,
   type ClientReportBatch,
 } from "#shared";
@@ -81,7 +80,7 @@ describe("reportApiFailure", () => {
 
     const [batch] = await sentBatches();
     expect(sendBeacon).toHaveBeenCalledWith(
-      CLIENT_REPORTS_PATH,
+      "/api/client-reports",
       expect.any(Blob),
     );
     expect((sendBeacon.mock.calls[0][1] as Blob).type).toBe("application/json");
