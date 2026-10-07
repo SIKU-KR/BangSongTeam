@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
 import { CircleAlertIcon } from "lucide-react";
 import { Alert, AlertDescription } from "#components/ui/alert";
 import { Button } from "#components/ui/button";
@@ -10,11 +10,9 @@ import {
   CardHeader,
   CardTitle,
 } from "#components/ui/card";
-import type { AuthConfigResponse } from "#shared";
 import {
   SOCIAL_PROVIDERS,
   signInWithProvider,
-  fetchAuthConfig,
   type SocialProvider,
 } from "../lib/auth";
 import { SocialLoginButton } from "../features/auth/SocialLoginButton";
@@ -38,24 +36,8 @@ export function LoginRoute({
   description = AUTH_COPY.defaultDescription,
   onCancel,
 }: LoginRouteProps = {}): React.JSX.Element {
-  const [config, setConfig] = useState<AuthConfigResponse | null>(null);
   const [pending, setPending] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    const controller = new AbortController();
-    void (async () => {
-      try {
-        const next = await fetchAuthConfig({ signal: controller.signal });
-        if (!controller.signal.aborted) setConfig(next);
-      } catch {
-        if (!controller.signal.aborted) {
-          setConfig({ providers: SOCIAL_PROVIDERS.map((p) => p.id) });
-        }
-      }
-    })();
-    return () => controller.abort();
-  }, []);
 
   const handleSignIn = async (provider: SocialProvider): Promise<void> => {
     setPending(provider);
@@ -68,10 +50,6 @@ export function LoginRoute({
     }
   };
 
-  const visibleProviders = SOCIAL_PROVIDERS.filter((provider) =>
-    config?.providers.includes(provider.id),
-  );
-
   return (
     <div className="flex min-h-screen items-center justify-center bg-muted/40 px-4">
       <Card className="w-full max-w-sm">
@@ -83,38 +61,18 @@ export function LoginRoute({
         </CardHeader>
 
         <CardContent className="flex flex-col gap-5">
-          {config === null ? (
-            <p
-              data-testid="login-loading"
-              className="text-center text-sm text-muted-foreground"
-            >
-              {AUTH_COPY.loadingProviders}
-            </p>
-          ) : (
-            <>
-              {visibleProviders.length > 0 && (
-                <div className="flex flex-col gap-2">
-                  {visibleProviders.map((provider) => (
-                    <SocialLoginButton
-                      key={provider.id}
-                      provider={provider.id}
-                      label={provider.label}
-                      pending={pending === provider.id}
-                      disabled={pending !== null}
-                      onClick={() => void handleSignIn(provider.id)}
-                    />
-                  ))}
-                </div>
-              )}
-
-              {visibleProviders.length === 0 && (
-                <Alert>
-                  <CircleAlertIcon />
-                  <AlertDescription>{AUTH_COPY.noProviders}</AlertDescription>
-                </Alert>
-              )}
-            </>
-          )}
+          <div className="flex flex-col gap-2">
+            {SOCIAL_PROVIDERS.map((provider) => (
+              <SocialLoginButton
+                key={provider.id}
+                provider={provider.id}
+                label={provider.label}
+                pending={pending === provider.id}
+                disabled={pending !== null}
+                onClick={() => void handleSignIn(provider.id)}
+              />
+            ))}
+          </div>
 
           {import.meta.env.DEV && (
             <div data-testid="dev-sign-in" className="flex flex-col gap-2">

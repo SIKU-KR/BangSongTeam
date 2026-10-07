@@ -1,12 +1,7 @@
 import { betterAuth } from "better-auth/minimal";
 import { drizzleAdapter } from "@better-auth/drizzle-adapter";
 import { createD1Client, user, session, account, verification } from "#db";
-import {
-  APP_NAME,
-  createId,
-  FALLBACK_USER_NAME,
-  type SocialProvider,
-} from "#shared";
+import { APP_NAME, createId, FALLBACK_USER_NAME } from "#shared";
 import type { Bindings } from "../types";
 import { devSignIn } from "./devSignIn";
 
@@ -116,21 +111,6 @@ export function buildNaverUser(profile: NaverProfileLike): MappedSocialUser {
     image: response?.profile_image,
     emailVerified: Boolean(email),
   };
-}
-
-/** 실제로 자격증명이 설정된 소셜 프로바이더 */
-export function configuredSocialProviders(env: Bindings): SocialProvider[] {
-  const providers: SocialProvider[] = [];
-  if (hasCredentials(env.KAKAO_CLIENT_ID, env.KAKAO_CLIENT_SECRET)) {
-    providers.push("kakao");
-  }
-  if (hasCredentials(env.NAVER_CLIENT_ID, env.NAVER_CLIENT_SECRET)) {
-    providers.push("naver");
-  }
-  if (hasCredentials(env.GOOGLE_CLIENT_ID, env.GOOGLE_CLIENT_SECRET)) {
-    providers.push("google");
-  }
-  return providers;
 }
 
 function buildAuth(env: Bindings) {

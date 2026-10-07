@@ -1,10 +1,5 @@
 import { useSyncExternalStore } from "react";
-import {
-  type AuthConfigResponse,
-  AuthConfigResponseSchema,
-  AuthSessionResponseSchema,
-  FALLBACK_USER_NAME,
-} from "#shared";
+import { AuthSessionResponseSchema, FALLBACK_USER_NAME } from "#shared";
 import {
   loadCachedSession,
   saveCachedSession,
@@ -12,7 +7,6 @@ import {
   type SessionUser,
 } from "./sessionCache";
 import { authClient, type SocialProvider } from "./authClient";
-import { fetchWithTimeout } from "../api/fetchWithTimeout";
 import { isProjectionPath } from "../../features/presentation/fullscreen";
 import { AUTH_COPY } from "#copy/auth";
 
@@ -170,19 +164,6 @@ export async function signInWithProvider(
     provider,
     callbackURL: pathname === "/" ? "/presentations" : `${pathname}${search}`,
   });
-}
-
-export async function fetchAuthConfig(options?: {
-  signal?: AbortSignal;
-  timeoutMs?: number;
-}): Promise<AuthConfigResponse> {
-  const response = await fetchWithTimeout("/api/auth-config", {
-    credentials: "include",
-    signal: options?.signal,
-    timeoutMs: options?.timeoutMs,
-  });
-  if (!response.ok) throw new Error(AUTH_COPY.configLoadFailed);
-  return AuthConfigResponseSchema.parse(await response.json());
 }
 
 export async function signOut(): Promise<void> {

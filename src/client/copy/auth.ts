@@ -24,12 +24,9 @@ export const AUTH_COPY = {
   },
   defaultDescription: "로그인하면 교회와 집 어디서든 이어서 작업할 수 있어요.",
   signInFailed: "로그인을 시작하지 못했어요. 잠시 후 다시 시도해 주세요.",
-  loadingProviders: "로그인 방법을 확인하는 중…",
-  noProviders: "지금은 로그인할 수 없어요. 잠시 후 다시 시도해 주세요.",
   cancel: "로그인 없이 돌아가기",
   optimizedFor: "데스크톱 Chrome에서 가장 잘 동작해요",
   sessionCheckFailed: "서버에 연결하지 못했어요",
-  configLoadFailed: "로그인 설정을 불러오지 못했어요",
   dev: {
     title: "개발용 계정",
     signInAs: (name: string) => `${name} 계정으로 로그인`,
