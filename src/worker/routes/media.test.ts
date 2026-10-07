@@ -2,9 +2,9 @@ import { describe, it, expect, beforeAll } from "vitest";
 import { env } from "cloudflare:test";
 import { Hono } from "hono";
 import type { AppEnv } from "../types";
-import { mediaRoute } from "./media";
+import { createMediaRoute } from "./media";
 
-const app = new Hono<AppEnv>().route("/api/media", mediaRoute);
+const app = new Hono<AppEnv>().route("/api/media", createMediaRoute());
 
 const KEY = "loops/test_loop.mp4";
 const BODY = "0123456789abcdef";

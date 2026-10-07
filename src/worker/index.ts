@@ -1,21 +1,23 @@
 import { Hono } from "hono";
+import { CLIENT_REPORTS_PATH } from "#shared";
 import type { AppEnv } from "./types";
-import { getAuth, AUTH_BASE_PATH } from "./lib/auth";
-import { createBackgroundsRoute } from "./routes/backgrounds";
-import { mediaRoute } from "./routes/media";
+import type { AppDeps } from "./deps";
+import { AUTH_BASE_PATH } from "./lib/auth";
+import { isTransientStorageError } from "./lib/storageErrors";
+import { requestLog } from "./middleware/requestLog";
+import { createHealthRoute } from "./routes/health";
+import { createAuthRoute } from "./routes/auth";
+import { createAuthConfigRoute } from "./routes/authConfig";
+import { createClientReportsRoute } from "./routes/clientReports";
+import { createConsentRoute } from "./routes/consent";
 import { createPresentationsRoute } from "./routes/presentations";
 import { createFoldersRoute } from "./routes/folders";
 import { createDecksRoute } from "./routes/decks";
 import { createCatalogRoute } from "./routes/catalog";
 import { createReportsRoute } from "./routes/reports";
 import { createShareRoute } from "./routes/share";
-import { authConfigRoute } from "./routes/authConfig";
-import { createConsentRoute } from "./routes/consent";
-import { createClientReportsRoute } from "./routes/clientReports";
-import type { AppDeps } from "./deps";
-import { isTransientStorageError } from "./lib/storageErrors";
-import { requestLog } from "./middleware/requestLog";
-import { CLIENT_REPORTS_PATH } from "#shared";
+import { createBackgroundsRoute } from "./routes/backgrounds";
+import { createMediaRoute } from "./routes/media";
 
 /**
  * Worker 앱을 조립한다.
@@ -31,37 +33,16 @@ export function createApp(deps: AppDeps = {}) {
     .onError((err, c) => {
       if (isTransientStorageError(err)) {
         c.header("Retry-After", "2");
-        return c.json(
-          {
-            error: "Service Unavailable",
-          },
-          503,
-        );
+        return c.json({ error: "Service Unavailable" }, 503);
       }
-      return c.json(
-        {
-          error: "Internal Server Error",
-        },
-        500,
-      );
+      return c.json({ error: "Internal Server Error" }, 500);
     })
-    .notFound((c) => {
-      return c.json(
-        {
-          error: "Not Found",
-        },
-        404,
-      );
-    })
+    .notFound((c) => c.json({ error: "Not Found" }, 404))
     .use("*", requestLog())
-    .get("/api/health", (c) => {
-      c.header("Cache-Control", "no-store");
-      return c.json({ status: "ok" as const }, 200);
-    })
-    .on(["GET", "POST"], `${AUTH_BASE_PATH}/*`, (c) => {
-      return getAuth(c.env).handler(c.req.raw);
-    })
-    .route("/api", authConfigRoute)
+    .route("/api/health", createHealthRoute())
+    .route(AUTH_BASE_PATH, createAuthRoute())
+    .route("/api/auth-config", createAuthConfigRoute())
+    .route(CLIENT_REPORTS_PATH, createClientReportsRoute())
     .route("/api/consent", createConsentRoute(deps))
     .route("/api/presentations", createPresentationsRoute(deps))
     .route("/api/folders", createFoldersRoute(deps))
@@ -70,8 +51,7 @@ export function createApp(deps: AppDeps = {}) {
     .route("/api/reports", createReportsRoute(deps))
     .route("/api/share", createShareRoute(deps))
     .route("/api/backgrounds", createBackgroundsRoute())
-    .route("/api/media", mediaRoute)
-    .route(CLIENT_REPORTS_PATH, createClientReportsRoute());
+    .route("/api/media", createMediaRoute());
 }
 
 export type AppType = ReturnType<typeof createApp>;
