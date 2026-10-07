@@ -116,11 +116,6 @@ describe("worker auth 인스턴스", () => {
       expect(auth.api).toBeDefined();
     });
 
-    it("같은 env로 두 번 부르면 인스턴스를 재사용한다", () => {
-      const env = makeEnv();
-      expect(getAuth(env)).toBe(getAuth(env));
-    });
-
     it("자격증명이 없어도 인스턴스 생성 자체는 실패하지 않는다", () => {
       const auth = getAuth(
         makeEnv({

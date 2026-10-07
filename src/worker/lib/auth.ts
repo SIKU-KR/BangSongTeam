@@ -169,10 +169,8 @@ function buildAuth(env: Bindings) {
 
 type AuthInstance = ReturnType<typeof buildAuth>;
 
-const instances = new WeakMap<Bindings, AuthInstance>();
-
 /**
- * Better Auth 인스턴스 생성 또는 캐시 조회.
+ * 요청마다 Better Auth 인스턴스를 만든다.
  *
  * - `basePath`는 `index.ts`의 마운트 경로와 같아야 한다. `wrangler.jsonc`의
  *   `assets.run_worker_first: ["/api/*"]`가 덮는 경로라, `/auth/*`로 옮기면 정적 자산
@@ -189,10 +187,5 @@ const instances = new WeakMap<Bindings, AuthInstance>();
  *   명시적으로 켠다. 저장소가 isolate 메모리라 부분 방어다.
  */
 export function getAuth(env: Bindings): AuthInstance {
-  const cached = instances.get(env);
-  if (cached) return cached;
-
-  const auth = buildAuth(env);
-  instances.set(env, auth);
-  return auth;
+  return buildAuth(env);
 }
