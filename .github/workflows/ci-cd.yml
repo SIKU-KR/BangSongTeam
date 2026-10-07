@@ -49,7 +49,7 @@ jobs:
               - 'vite.config.ts'
               - 'wrangler.jsonc'
               - 'eslint.config.mjs'
-              - '.github/workflows/ci-cd.yml'
+              - '.github/**'
 
   verify:
     name: Typecheck, Lint & Test
