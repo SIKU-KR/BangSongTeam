@@ -8,9 +8,13 @@
  *   - 있는 id: 파일은 그대로 두고 제목·설명·검색어만 고친다.
  *   - 매니페스트에 없는 행: 새 등록이 모두 성공했을 때만 D1 행을 지우고 R2 객체를 지운다.
  *     그 배경을 쓰던 곡은 `ON DELETE SET NULL`로 배경 없음이 된다.
+ *   - 매니페스트 전체를 임베딩해 대상의 Vectorize 인덱스에 넣고, 지운 배경의 벡터는 뺀다
+ *     (`backgroundVectors.mjs`). 임베딩 문서에는 `describeBackgrounds.mjs`가 채운
+ *     `searchText`가 들어간다.
  *
  * 필요한 도구: Node 22.18+ (`backgroundSql.ts`를 타입 제거로 바로 불러온다), ffmpeg·ffprobe,
- * cwebp (`brew install ffmpeg webp`). ffmpeg 빌드에 WebP 인코더가 없는 경우가 많아 포스터는
+ * cwebp (`brew install ffmpeg webp`), wrangler 로그인 (임베딩은 `--target=local`이어도 원격
+ * Workers AI로 만든다). ffmpeg 빌드에 WebP 인코더가 없는 경우가 많아 포스터는
  * PNG로 뽑아 cwebp로 바꾼다.
  *
  * 사용법:
@@ -19,7 +23,7 @@
  *   node scripts/importBackgrounds.mjs --dir=<영상 폴더> --target=remote --dry-run
  *   node scripts/importBackgrounds.mjs --dir=<영상 폴더> --target=remote --confirm
  *
- * `--target=remote`는 운영 D1·R2를 쓰고 지운다. 먼저 `--dry-run` 결과(지울 개수, 배경이
+ * `--target=remote`는 운영 D1·R2·Vectorize 인덱스를 쓰고 지운다. 먼저 `--dry-run` 결과(지울 개수, 배경이
  * 사라질 곡 수)를 확인받은 뒤에만 `--confirm`으로 실행한다.
  *
  * 옵션:
@@ -33,6 +37,10 @@ import path from "node:path";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { BACKGROUND_SQL } from "../src/db/ops/backgroundSql.ts";
+import {
+  deleteBackgroundVectors,
+  upsertBackgroundVectors,
+} from "./backgroundVectors.mjs";
 
 const ROOT_DIR = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -151,6 +159,8 @@ function loadManifest(manifestPath, dir) {
     if (!item.title?.trim()) throw new Error(`제목 없음: ${item.file}`);
     if (!Array.isArray(item.keywords))
       throw new Error(`keywords 없음: ${item.file}`);
+    if (item.searchText !== undefined && typeof item.searchText !== "string")
+      throw new Error(`searchText는 문자열이어야 합니다: ${item.file}`);
     if (!fs.existsSync(path.join(dir, item.file))) {
       throw new Error(`영상 파일 없음: ${path.join(dir, item.file)}`);
     }
@@ -233,7 +243,7 @@ function registerBackground(target, item, dir, tmpDir) {
   ]);
 }
 
-function main() {
+async function main() {
   const options = parseArgs(process.argv.slice(2));
   const { target, dir } = options;
   const manifest = loadManifest(options.manifestPath, dir);
@@ -254,6 +264,9 @@ function main() {
   console.log(`  메타데이터 갱신: ${toUpdate.length}개`);
   console.log(
     `  삭제: ${toDelete.length}개 (배경이 사라질 곡 ${affectedDecks}곡)`,
+  );
+  console.log(
+    `  벡터 갱신: ${manifest.items.length}개 (긴 설명 없음 ${manifest.items.filter((item) => !item.searchText).length}개)`,
   );
 
   if (options.dryRun) {
@@ -288,6 +301,9 @@ function main() {
   );
   console.log(`메타데이터 ${toUpdate.length}개를 갱신했습니다.`);
 
+  await upsertBackgroundVectors(target, manifest.items);
+  console.log(`벡터 ${manifest.items.length}개를 넣었습니다.`);
+
   if (failed.length > 0) {
     console.error(
       `등록 실패 ${failed.length}개 — 기존 배경은 지우지 않았습니다. 다시 실행하면 이어서 합니다.`,
@@ -313,11 +329,21 @@ function main() {
       );
     }
   }
+  try {
+    deleteBackgroundVectors(
+      target,
+      toDelete.map((row) => row.id),
+    );
+  } catch (error) {
+    console.warn(
+      `벡터 삭제 실패 (행은 이미 지움, 검색 결과에서는 걸러집니다)\n  ${error.stderr?.trim() || error.message}`,
+    );
+  }
   console.log(`기존 배경 ${toDelete.length}개를 지웠습니다.`);
 }
 
 try {
-  main();
+  await main();
 } catch (error) {
   console.error(error.stderr?.trim() || error.message);
   process.exit(1);

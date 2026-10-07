@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { BACKGROUND_INDEX_NAMES } from "../src/shared/utils/backgroundEmbedding";
 
 const rootDir = path.resolve(__dirname, "..");
 
@@ -43,7 +44,7 @@ describe("Cloudflare Worker 프로젝트 설정과 Wrangler 바인딩", () => {
     expect(pkg.scripts.types).toContain("wrangler types");
   });
 
-  it("wrangler.jsonc가 Worker 진입점, D1·R2 바인딩, 마이그레이션 경로를 정의한다", () => {
+  it("wrangler.jsonc가 Worker 진입점, D1·R2·AI·Vectorize 바인딩, 마이그레이션 경로를 정의한다", () => {
     const content = fs.readFileSync(wranglerJsoncPath, "utf-8");
     const cleanJson = content.replace(/^\s*\/\/.*$/gm, "");
     const config = JSON.parse(cleanJson);
@@ -66,14 +67,22 @@ describe("Cloudflare Worker 프로젝트 설정과 Wrangler 바인딩", () => {
     );
     expect(r2Bucket).toBeDefined();
 
-    expect(config.ai).toBeUndefined();
+    expect(config.ai).toEqual({ binding: "AI", remote: true });
+    expect(config.vectorize).toEqual([
+      {
+        binding: "BACKGROUND_INDEX",
+        index_name: BACKGROUND_INDEX_NAMES.remote,
+        remote: true,
+      },
+    ]);
   });
 
   it("worker-configuration.d.ts가 생성되어 있고 필수 바인딩을 포함한다", () => {
     const dtsContent = fs.readFileSync(workerConfigDtsPath, "utf-8");
     expect(dtsContent).toContain("DB: D1Database");
     expect(dtsContent).toContain("MEDIA_BUCKET: R2Bucket");
-    expect(dtsContent).not.toContain("AI: Ai");
+    expect(dtsContent).toContain("AI: Ai");
+    expect(dtsContent).toContain("BACKGROUND_INDEX: VectorizeIndex");
   });
 });
 

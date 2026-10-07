@@ -18,6 +18,8 @@ function makeEnv(overrides: Partial<Bindings> = {}): Bindings {
   return {
     DB: {} as D1Database,
     MEDIA_BUCKET: {} as R2Bucket,
+    AI: {} as Ai,
+    BACKGROUND_INDEX: {} as VectorizeIndex,
     BETTER_AUTH_SECRET: "test-secret-that-is-at-least-32-characters",
     BETTER_AUTH_URL: "http://localhost:5173",
     KAKAO_CLIENT_ID: "kakao-id",

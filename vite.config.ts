@@ -1,4 +1,9 @@
-import { defineConfig, mergeConfig, type UserConfig } from "vite";
+import {
+  defineConfig,
+  mergeConfig,
+  type ConfigEnv,
+  type UserConfig,
+} from "vite";
 import react from "@vitejs/plugin-react";
 import { cloudflare } from "@cloudflare/vite-plugin";
 import { VitePWA } from "vite-plugin-pwa";
@@ -18,6 +23,7 @@ import {
   POSTER_URL_PREFIX,
 } from "./src/shared/constants/projection";
 import { APP_NAME, APP_TAGLINE } from "./src/shared/copy/app";
+import { BACKGROUND_INDEX_NAMES } from "./src/shared/utils/backgroundEmbedding";
 
 /**
  * 오프라인 송출 보장을 위한 PWA 구성.
@@ -34,8 +40,10 @@ import { APP_NAME, APP_TAGLINE } from "./src/shared/copy/app";
  *   영상을 캐시본으로 재생한다. 갱신은 `prompt`라 사용자가 새로고침할 때만 SW가 바뀐다.
  * - `VITE_APP_VERSION`: 클라이언트 실패 보고에 실을 앱 버전. CI 빌드는 커밋 SHA 앞 7자리,
  *   그 밖에서는 `dev`다.
+ * - dev 서버는 배경 Vectorize 인덱스를 로컬용으로 바꾼다. 로컬 D1의 배경 id는 운영
+ *   인덱스에 없다. 빌드 산출물(배포 설정)은 운영 인덱스를 그대로 쓴다.
  */
-const appConfig: UserConfig = {
+const createAppConfig = ({ command }: ConfigEnv): UserConfig => ({
   publicDir: "src/client/public",
   define: {
     "import.meta.env.VITE_APP_VERSION": JSON.stringify(
@@ -49,7 +57,18 @@ const appConfig: UserConfig = {
     // 요구할 수 있어 토큰이 없는 사람은 로컬 개발을 시작하지 못한다. 테스트 설정도
     // remoteBindings: false이므로 개발·테스트 동작이 같아진다.
     // 원격 리소스를 붙여야 하면 CF_REMOTE_BINDINGS=true로 실행한다.
-    cloudflare({ remoteBindings: process.env.CF_REMOTE_BINDINGS === "true" }),
+    cloudflare({
+      remoteBindings: process.env.CF_REMOTE_BINDINGS === "true",
+      config: (worker) =>
+        command === "serve"
+          ? {
+              vectorize: worker.vectorize.map((index) => ({
+                ...index,
+                index_name: BACKGROUND_INDEX_NAMES.local,
+              })),
+            }
+          : {},
+    }),
     VitePWA({
       registerType: "prompt",
       // 등록은 src/client/pwa/registerServiceWorker.ts에서 직접 한다 (갱신 시점 통제).
@@ -227,7 +246,7 @@ const appConfig: UserConfig = {
       },
     },
   },
-};
+});
 
 /**
  * 테스트 프로젝트 세 개: worker(workerd + D1), client(jsdom), node(shared·db·config).
@@ -378,6 +397,6 @@ async function createTestConfig(): Promise<
   return { test };
 }
 
-export default defineConfig(async (): Promise<UserConfig> =>
-  process.env.VITEST ? await createTestConfig() : appConfig,
+export default defineConfig(async (env): Promise<UserConfig> =>
+  process.env.VITEST ? await createTestConfig() : createAppConfig(env),
 );
