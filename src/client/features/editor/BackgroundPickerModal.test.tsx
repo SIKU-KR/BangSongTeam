@@ -15,6 +15,8 @@ import { mediaCacheNameFor } from "#shared";
 import { BACKGROUND_COPY } from "#copy/backgrounds";
 import { resetFakeCacheStorage } from "../../test/fakeCacheStorage";
 import { __resetMediaCachingForTests } from "../../lib/offline/mediaCache";
+import { withQueryClient } from "../../test/queryClientFixture";
+import { installFakeApi } from "../../test/fakeApi";
 
 const { refreshBackgroundCatalog } = vi.hoisted(() => ({
   refreshBackgroundCatalog: vi.fn(async () => undefined),
@@ -39,14 +41,16 @@ function renderPicker(
   const onSelect = vi.fn();
   const onClose = vi.fn();
   render(
-    <MemoryRouter>
-      <BackgroundPickerModal
-        isOpen
-        onClose={onClose}
-        onSelect={onSelect}
-        {...props}
-      />
-    </MemoryRouter>,
+    withQueryClient(
+      <MemoryRouter>
+        <BackgroundPickerModal
+          isOpen
+          onClose={onClose}
+          onSelect={onSelect}
+          {...props}
+        />
+      </MemoryRouter>,
+    ),
   );
   return { onSelect, onClose };
 }
@@ -156,18 +160,39 @@ describe("BackgroundPickerModal", () => {
     expect(onSelect).toHaveBeenCalledWith({ backgroundId: WARM.id });
   });
 
-  it("검색어를 키워드로도 찾고, 맞는 배경이 없으면 알려 준다", () => {
-    renderPicker();
+  it("검색어는 서버 벡터 검색으로 찾고, 맞는 배경이 없으면 알려 준다", async () => {
+    const api = installFakeApi({
+      "GET /api/backgrounds/search": ({ url }) => ({
+        body: {
+          results:
+            url.searchParams.get("q") === "감사할 때 쓸 노을"
+              ? [{ id: WARM.id, score: 0.7 }]
+              : [],
+        },
+      }),
+    });
+    try {
+      renderPicker();
 
-    const input = screen.getByTestId("bg-picker-search-input");
-    fireEvent.change(input, { target: { value: "감사" } });
-    expect(screen.getByTestId(`bg-item-${WARM.id}`)).toBeInTheDocument();
-    expect(screen.queryByTestId(`bg-item-${STILL.id}`)).not.toBeInTheDocument();
+      const input = screen.getByTestId("bg-picker-search-input");
+      fireEvent.change(input, { target: { value: "감사할 때 쓸 노을" } });
+      expect(
+        screen.getByText(BACKGROUND_COPY.library.searching),
+      ).toBeInTheDocument();
+      expect(
+        await screen.findByTestId(`bg-item-${WARM.id}`),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByTestId(`bg-item-${STILL.id}`),
+      ).not.toBeInTheDocument();
 
-    fireEvent.change(input, { target: { value: "없는검색어" } });
-    expect(
-      screen.getByText(BACKGROUND_COPY.library.noMatch("없는검색어")),
-    ).toBeInTheDocument();
+      fireEvent.change(input, { target: { value: "없는검색어" } });
+      expect(
+        await screen.findByText(BACKGROUND_COPY.library.noMatch("없는검색어")),
+      ).toBeInTheDocument();
+    } finally {
+      api.restore();
+    }
   });
 
   it("영상은 마우스를 올리거나 키보드로 고른 카드만 재생한다", () => {

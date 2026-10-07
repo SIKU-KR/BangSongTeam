@@ -18,7 +18,8 @@ export const BACKGROUND_COPY = {
     media: "영상·이미지",
     cachedHint: "고른 배경은 이 기기에 저장해 두어 오프라인에서도 재생돼요",
     searchLabel: "배경 검색",
-    searchPlaceholder: "색, 분위기, 장면으로 찾기 (예: 잔잔한 파란색)",
+    searchPlaceholder:
+      "찾는 배경을 말하듯 적어 주세요 (예: 기도할 때 쓸 잔잔한 파란 배경)",
   },
   prepare: {
     title: "배경 영상을 준비하고 있어요",
@@ -48,5 +49,8 @@ export const BACKGROUND_COPY = {
   library: {
     noMatch: (query: string) => `‘${query}’에 맞는 배경이 없어요.`,
     noFilterMatch: "조건에 맞는 배경이 없어요.",
+    searching: "배경을 찾고 있어요.",
+    searchFailed:
+      "지금은 배경을 검색할 수 없어요. 인터넷 연결을 확인하고 다시 검색해 주세요.",
   },
 } as const;
