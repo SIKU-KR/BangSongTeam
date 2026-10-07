@@ -6,12 +6,9 @@ import {
   CLIENT_REPORTS_PATH,
 } from "#shared";
 import { createApp } from "../index";
-import type { SessionReader } from "../middleware/auth";
 
 const TRACE_ID = "4bf92f3577b34da6a3ce929d0e0e4736";
 const OTHER_TRACE_ID = "0af7651916cd43dd8448eb211c80319c";
-
-const noSession: SessionReader = async () => null;
 
 function post(
   app: ReturnType<typeof createApp>,
@@ -58,7 +55,7 @@ afterEach(() => {
 describe("POST /api/client-reports", () => {
   it("올바른 묶음은 204로 받고 보고마다 client_report 로그를 한 줄 남긴다", async () => {
     const log = vi.spyOn(console, "log").mockImplementation(() => {});
-    const app = createApp({ readSession: noSession });
+    const app = createApp();
 
     const res = await post(app, validBatch);
 
@@ -93,7 +90,7 @@ describe("POST /api/client-reports", () => {
 
   it("허용하지 않은 필드·갈래·경로는 400으로 거절한다", async () => {
     vi.spyOn(console, "log").mockImplementation(() => {});
-    const app = createApp({ readSession: noSession });
+    const app = createApp();
     const [report] = validBatch.reports;
 
     const invalid = [
@@ -111,7 +108,7 @@ describe("POST /api/client-reports", () => {
   });
 
   it("크기 제한을 넘는 본문은 413이다", async () => {
-    const app = createApp({ readSession: noSession });
+    const app = createApp();
 
     const res = await post(app, "x".repeat(CLIENT_REPORT_MAX_BYTES + 1));
 
@@ -123,7 +120,7 @@ describe("POST /api/client-reports", () => {
 
   it("같은 IP가 창 안에서 한도를 넘으면 429다", async () => {
     vi.spyOn(console, "log").mockImplementation(() => {});
-    const app = createApp({ readSession: noSession });
+    const app = createApp();
     const headers = { "cf-connecting-ip": "203.0.113.7" };
 
     for (let index = 0; index < 30; index += 1) {

@@ -78,22 +78,3 @@ export function createRequireAuth(
     forwardCookies(c, session.setCookies);
   });
 }
-
-/**
- * 세션이 있으면 `userId`를 채우고, 없으면 그대로 통과시키는 미들웨어.
- *
- * 로그인 없이도 열리지만 로그인하면 내 데이터가 더해지는 목록(배경 라이브러리)용이다.
- */
-export function createOptionalSession(
-  readSession: SessionReader = readSessionFromBetterAuth,
-) {
-  return createMiddleware<AppEnv>(async (c, next) => {
-    const session = await readSession({
-      headers: c.req.raw.headers,
-      env: c.env,
-    });
-    c.set("userId", session?.userId);
-    await next();
-    forwardCookies(c, session?.setCookies);
-  });
-}
