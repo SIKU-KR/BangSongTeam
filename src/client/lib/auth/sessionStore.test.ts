@@ -7,17 +7,18 @@ import {
   revalidateSession,
   getSessionState,
   getCurrentUserId,
-  fetchAuthConfig,
+  signInWithProvider,
   __setSessionFetcherForTests,
   __resetSessionForTests,
   type SessionFetcher,
 } from "./sessionStore";
 
 vi.mock("./authClient", () => ({
-  authClient: { getSession: vi.fn() },
+  authClient: { getSession: vi.fn(), signIn: { social: vi.fn() } },
 }));
 
 const getSession = vi.mocked(authClient.getSession);
+const signInSocial = vi.mocked(authClient.signIn.social);
 
 const HOUR = 60 * 60 * 1000;
 const USER_ID = "8f14e45fc1a2b3c4d5e6f";
@@ -338,58 +339,18 @@ describe("세션 스토어", () => {
     });
   });
 
-  describe("fetchAuthConfig", () => {
-    const originalFetch = globalThis.fetch;
+  describe("signInWithProvider", () => {
+    it("서버가 로그인 시작을 거절하면 던져 화면이 안내하게 한다", async () => {
+      signInSocial.mockResolvedValueOnce({
+        data: null,
+        error: {
+          status: 404,
+          statusText: "Not Found",
+          message: "Provider not found",
+        },
+      } as never);
 
-    afterEach(() => {
-      globalThis.fetch = originalFetch;
-      vi.restoreAllMocks();
-    });
-
-    it("정상 응답을 받으면 인증 설정을 파싱해 돌려준다", async () => {
-      globalThis.fetch = vi.fn(
-        async () =>
-          new Response(
-            JSON.stringify({
-              providers: ["kakao", "naver", "google"],
-            }),
-            {
-              status: 200,
-              headers: { "Content-Type": "application/json" },
-            },
-          ),
-      );
-
-      const config = await fetchAuthConfig();
-      expect(config.providers).toEqual(["kakao", "naver", "google"]);
-    });
-
-    it("응답이 멈춘 경우 데드라인이 지나면 타임아웃으로 실패한다", async () => {
-      vi.useFakeTimers();
-      let signal: AbortSignal | undefined;
-
-      globalThis.fetch = vi.fn(
-        (_input, init) =>
-          new Promise<Response>((_resolve, reject) => {
-            signal = init?.signal ?? undefined;
-            signal?.addEventListener("abort", () => {
-              reject(
-                signal?.reason ??
-                  new DOMException("The operation was aborted", "TimeoutError"),
-              );
-            });
-          }),
-      );
-
-      const promise = fetchAuthConfig({ timeoutMs: 1000 });
-      const assertion = expect(promise).rejects.toThrow();
-
-      await vi.advanceTimersByTimeAsync(1000);
-
-      await assertion;
-      expect(signal?.aborted).toBe(true);
-
-      vi.useRealTimers();
+      await expect(signInWithProvider("kakao")).rejects.toThrow();
     });
   });
 });

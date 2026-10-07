@@ -30,7 +30,6 @@ describe("fetchWithTimeout", () => {
       ["/api/presentations/123", "GET", DEFAULT_API_TIMEOUT_MS],
       ["/api/presentations/123", "PATCH", DEFAULT_API_TIMEOUT_MS],
       ["/api/decks/123", "PUT", DEFAULT_API_TIMEOUT_MS],
-      ["/api/auth-config", "GET", DEFAULT_API_TIMEOUT_MS],
       ["/api/consent", "GET", DEFAULT_API_TIMEOUT_MS],
       ["/api/reports", "POST", DEFAULT_API_TIMEOUT_MS],
       ["/api/health", "GET", HEALTH_API_TIMEOUT_MS],

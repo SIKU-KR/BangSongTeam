@@ -1,10 +1,5 @@
 import { useSyncExternalStore } from "react";
-import {
-  type AuthConfigResponse,
-  AuthConfigResponseSchema,
-  AuthSessionResponseSchema,
-  FALLBACK_USER_NAME,
-} from "#shared";
+import { AuthSessionResponseSchema, FALLBACK_USER_NAME } from "#shared";
 import {
   loadCachedSession,
   saveCachedSession,
@@ -12,7 +7,6 @@ import {
   type SessionUser,
 } from "./sessionCache";
 import { authClient, type SocialProvider } from "./authClient";
-import { fetchWithTimeout } from "../api/fetchWithTimeout";
 import { isProjectionPath } from "../../features/presentation/fullscreen";
 import { AUTH_COPY } from "#copy/auth";
 
@@ -161,28 +155,19 @@ export async function revalidateSession(): Promise<void> {
  * 소셜 로그인 후 원래 보던 주소로 돌아온다. 로그아웃 상태로 공유 링크를
  * 연 사람이 로그인하고 나서 링크로 다시 들어오게 하기 위해서다.
  * 첫 화면(`/`)에서 로그인하면 드라이브로 보낸다.
+ *
+ * better-auth 클라이언트는 실패를 던지지 않고 `error`로 돌려준다. 그대로 두면
+ * 이동도 오류도 없이 버튼이 로딩 상태로 멈추므로 던져서 화면이 안내하게 한다.
  */
 export async function signInWithProvider(
   provider: SocialProvider,
 ): Promise<void> {
   const { pathname, search } = window.location;
-  await authClient.signIn.social({
+  const { error } = await authClient.signIn.social({
     provider,
     callbackURL: pathname === "/" ? "/presentations" : `${pathname}${search}`,
   });
-}
-
-export async function fetchAuthConfig(options?: {
-  signal?: AbortSignal;
-  timeoutMs?: number;
-}): Promise<AuthConfigResponse> {
-  const response = await fetchWithTimeout("/api/auth-config", {
-    credentials: "include",
-    signal: options?.signal,
-    timeoutMs: options?.timeoutMs,
-  });
-  if (!response.ok) throw new Error(AUTH_COPY.configLoadFailed);
-  return AuthConfigResponseSchema.parse(await response.json());
+  if (error) throw new Error(AUTH_COPY.signInFailed);
 }
 
 export async function signOut(): Promise<void> {

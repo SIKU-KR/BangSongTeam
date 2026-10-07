@@ -5,7 +5,6 @@ import { isTransientStorageError } from "./lib/storageErrors";
 import { requestLog } from "./middleware/requestLog";
 import { createHealthRoute } from "./routes/health";
 import { createAuthRoute } from "./routes/auth";
-import { createAuthConfigRoute } from "./routes/authConfig";
 import { createClientReportsRoute } from "./routes/clientReports";
 import { createConsentRoute } from "./routes/consent";
 import { createPresentationsRoute } from "./routes/presentations";
@@ -39,7 +38,6 @@ export function createApp(deps: AppDeps = {}) {
     .use("*", requestLog())
     .route("/api/health", createHealthRoute())
     .route("/api/auth", createAuthRoute())
-    .route("/api/auth-config", createAuthConfigRoute())
     .route("/api/client-reports", createClientReportsRoute())
     .route("/api/consent", createConsentRoute(deps))
     .route("/api/presentations", createPresentationsRoute(deps))
