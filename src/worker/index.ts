@@ -69,9 +69,9 @@ export function createApp(deps: AppDeps = {}) {
     .route("/api/catalog", createCatalogRoute(deps))
     .route("/api/reports", createReportsRoute(deps))
     .route("/api/share", createShareRoute(deps))
-    .route("/api/backgrounds", createBackgroundsRoute(deps))
+    .route("/api/backgrounds", createBackgroundsRoute())
     .route("/api/media", mediaRoute)
-    .route(CLIENT_REPORTS_PATH, createClientReportsRoute(deps));
+    .route(CLIENT_REPORTS_PATH, createClientReportsRoute());
 }
 
 export type AppType = ReturnType<typeof createApp>;

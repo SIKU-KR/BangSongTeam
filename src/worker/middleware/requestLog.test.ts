@@ -5,12 +5,8 @@ import { Hono } from "hono";
 import { createApp } from "../index";
 import type { SessionReader } from "./auth";
 import type { AppEnv } from "../types";
-import {
-  describeError,
-  logServerError,
-  resolveRequestId,
-} from "../lib/requestLog";
-import { requestLog } from "./requestLog";
+import { describeError, logServerError } from "../lib/requestLog";
+import { requestLog, resolveRequestId } from "./requestLog";
 
 const TRACE_ID = "4bf92f3577b34da6a3ce929d0e0e4736";
 const TRACEPARENT = `00-${TRACE_ID}-00f067aa0ba902b7-01`;
@@ -58,24 +54,20 @@ describe("resolveRequestId", () => {
     );
   });
 
-  it("형식이 틀리거나 trace-id가 모두 0이면 cf-ray로 돌아간다", () => {
-    for (const traceparent of [
-      "garbage",
-      `00-${"0".repeat(32)}-00f067aa0ba902b7-01`,
-      `00-${TRACE_ID.toUpperCase()}-00f067aa0ba902b7-01`,
+  it("traceparent가 없거나 형식이 틀리면 32자리 무작위 16진수를 만든다", () => {
+    for (const headers of [
+      new Headers(),
+      new Headers({ traceparent: "garbage" }),
+      new Headers({ traceparent: `00-${"0".repeat(32)}-00f067aa0ba902b7-01` }),
+      new Headers({
+        traceparent: `00-${TRACE_ID.toUpperCase()}-00f067aa0ba902b7-01`,
+      }),
     ]) {
-      expect(
-        resolveRequestId(
-          new Headers({ traceparent, "cf-ray": "8a1b2c3d-ICN" }),
-        ),
-      ).toBe("8a1b2c3d-ICN");
+      expect(resolveRequestId(headers)).toMatch(/^[0-9a-f]{32}$/);
     }
-  });
-
-  it("둘 다 없으면 32자리 무작위 16진수를 만든다", () => {
-    const first = resolveRequestId(new Headers());
-    expect(first).toMatch(/^[0-9a-f]{32}$/);
-    expect(resolveRequestId(new Headers())).not.toBe(first);
+    expect(resolveRequestId(new Headers())).not.toBe(
+      resolveRequestId(new Headers()),
+    );
   });
 });
 
@@ -207,19 +199,22 @@ describe("requestLog 미들웨어", () => {
     expect(lines[0]).not.toHaveProperty("userHash");
   });
 
-  it("traceparent가 없으면 cf-ray를, 그것도 없으면 무작위 ID를 쓴다", async () => {
-    vi.spyOn(console, "log").mockImplementation(() => {});
+  it("traceparent가 없으면 무작위 ID를 쓰고 cf-ray는 cfRay에만 남긴다", async () => {
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
     const app = createApp();
 
-    const withRay = await app.request(
+    const res = await app.request(
       "/api/health",
       { headers: { "cf-ray": "8a1b2c3d-ICN" } },
       env,
     );
-    const bare = await app.request("/api/health", {}, env);
 
-    expect(withRay.headers.get("x-request-id")).toBe("8a1b2c3d-ICN");
-    expect(bare.headers.get("x-request-id")).toMatch(/^[0-9a-f]{32}$/);
+    const requestId = res.headers.get("x-request-id");
+    expect(requestId).toMatch(/^[0-9a-f]{32}$/);
+    expect(requestLines(log)[0]).toMatchObject({
+      requestId,
+      cfRay: "8a1b2c3d-ICN",
+    });
   });
 
   it("404와 Response를 직접 돌려주는 미디어 응답에도 x-request-id를 붙인다", async () => {

@@ -1,18 +1,11 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { env } from "cloudflare:test";
-import { inArray } from "drizzle-orm";
 import { BackgroundListResponseSchema } from "#shared";
-import { createD1Client, decks, user } from "#db";
+import { createD1Client, decks } from "#db";
 import { createApp } from "../index";
-import type { SessionReader } from "../middleware/auth";
 import { resetBackgrounds } from "../test/backgrounds";
 
-const MEMBER = "bbbbbbbb5000000000002";
-
-let currentUser: string | null = MEMBER;
-const fakeSession: SessionReader = async () =>
-  currentUser ? { userId: currentUser } : null;
-const app = createApp({ readSession: fakeSession });
+const app = createApp();
 
 async function list() {
   const res = await app.request("/api/backgrounds", {}, env);
@@ -24,25 +17,13 @@ describe("배경 갤러리 API", () => {
   let serviceIds: string[] = [];
 
   beforeEach(async () => {
-    const db = createD1Client(env.DB);
-    await db.delete(decks);
-    await db.delete(user).where(inArray(user.id, [MEMBER]));
-    await db.insert(user).values({
-      id: MEMBER,
-      name: "회원",
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    });
+    await createD1Client(env.DB).delete(decks);
     serviceIds = await resetBackgrounds(2);
-    currentUser = MEMBER;
   });
 
-  it("누구에게나 같은 기본 제공 배경 목록을 준다", async () => {
-    for (const who of [null, MEMBER]) {
-      currentUser = who;
-      const body = await list();
-      expect(body.backgrounds.map((bg) => bg.id)).toEqual(serviceIds);
-    }
+  it("로그인 없이 기본 제공 배경 목록을 준다", async () => {
+    const body = await list();
+    expect(body.backgrounds.map((bg) => bg.id)).toEqual(serviceIds);
   });
 
   it("앱에서 배경을 올리거나 지우는 경로는 없다 (등록과 정리는 스크립트로만)", async () => {

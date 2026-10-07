@@ -1,10 +1,6 @@
 import { describe, it, expect, afterEach, vi } from "vitest";
 import { Hono } from "hono";
-import {
-  createOptionalSession,
-  createRequireAuth,
-  type SessionReader,
-} from "./auth";
+import { createRequireAuth, type SessionReader } from "./auth";
 import type { AppEnv, Bindings } from "../types";
 
 const TEST_ENV = {
@@ -83,41 +79,5 @@ describe("requireAuth 미들웨어", () => {
     expect(readSession).toHaveBeenCalledTimes(1);
     const passed = readSession.mock.calls[0][0];
     expect(passed.headers.get("cookie")).toBe("better-auth.session_token=abc");
-  });
-});
-
-describe("optionalSession 미들웨어", () => {
-  function buildOptionalApp(readSession: SessionReader) {
-    return new Hono<AppEnv>().get(
-      "/open",
-      createOptionalSession(readSession),
-      (c) => c.json({ userId: c.get("userId") ?? null }, 200),
-    );
-  }
-
-  it("세션이 있으면 userId를 채운다", async () => {
-    const app = buildOptionalApp(async () => ({
-      userId: "8f14e45fc1a2b3c4d5e6f",
-    }));
-    const res = await app.request("/open", {}, TEST_ENV);
-    expect(await res.json()).toEqual({ userId: "8f14e45fc1a2b3c4d5e6f" });
-  });
-
-  it("세션이 없으면 비로그인으로 통과시킨다", async () => {
-    const res = await buildOptionalApp(async () => null).request(
-      "/open",
-      {},
-      TEST_ENV,
-    );
-    expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ userId: null });
-  });
-
-  it("세션 조회가 예외를 던지면 비로그인 결과 대신 5xx로 내린다", async () => {
-    vi.spyOn(console, "error").mockImplementation(() => {});
-    const res = await buildOptionalApp(async () => {
-      throw new Error("session store unavailable");
-    }).request("/open", {}, TEST_ENV);
-    expect(res.status).toBe(500);
   });
 });
