@@ -42,9 +42,12 @@ export type BackgroundListResponse = z.infer<
   typeof BackgroundListResponseSchema
 >;
 
+/** 배경 검색어 최대 길이. 클라이언트는 이보다 긴 입력을 잘라 보낸다 */
+export const BACKGROUND_SEARCH_MAX_LENGTH = 50;
+
 /** 배경 벡터 검색어 (`GET /api/backgrounds/search`) */
 export const SearchBackgroundsQuerySchema = z.object({
-  q: z.string().trim().min(1).max(50),
+  q: z.string().trim().min(1).max(BACKGROUND_SEARCH_MAX_LENGTH),
 });
 
 export const BackgroundSearchResultSchema = z.object({

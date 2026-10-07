@@ -1,7 +1,7 @@
 import React from "react";
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { act, render, screen, fireEvent } from "@testing-library/react";
-import type { BackgroundMedia } from "#shared";
+import { BACKGROUND_SEARCH_MAX_LENGTH, type BackgroundMedia } from "#shared";
 import { BackgroundLibraryView } from "./index";
 import { installFakeApi, type FakeApi } from "../../test/fakeApi";
 import { withQueryClient } from "../../test/queryClientFixture";
@@ -137,6 +137,24 @@ describe("BackgroundLibraryView", () => {
     expect(new URLSearchParams(searchCall?.search).get("q")).toBe(
       "뜨겁게 선포하는 배경",
     );
+  });
+
+  it("서버가 받는 길이보다 긴 검색어는 잘라 보낸다", async () => {
+    api = installFakeApi({
+      "GET /api/backgrounds": () => listResponse([LAKE, FIRE, STILL]),
+      "GET /api/backgrounds/search": () => ({
+        body: { results: [{ id: LAKE.id, score: 0.7 }] },
+      }),
+    });
+
+    await renderView("잔잔한 호수 ".repeat(10));
+    await screen.findByRole("img", { name: "고요한 호수 물결" });
+    const searchCall = api.calls.find(
+      (call) => call.path === "/api/backgrounds/search",
+    );
+    expect(
+      new URLSearchParams(searchCall?.search).get("q")?.length,
+    ).toBeLessThanOrEqual(BACKGROUND_SEARCH_MAX_LENGTH);
   });
 
   it("검색할 수 없으면 다시 검색하라고 안내한다", async () => {
