@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, afterEach, vi } from "vitest";
 import { Hono } from "hono";
 import {
   createOptionalSession,
@@ -11,6 +11,10 @@ const TEST_ENV = {
   DB: {} as D1Database,
   MEDIA_BUCKET: {} as R2Bucket,
 } as Bindings;
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 function buildApp(readSession: SessionReader, onHandler = vi.fn()) {
   return new Hono<AppEnv>().get(
@@ -51,7 +55,8 @@ describe("requireAuth 미들웨어", () => {
     expect(handler).toHaveBeenCalledTimes(1);
   });
 
-  it("세션 조회가 예외를 던지면 500이 아니라 401로 처리한다", async () => {
+  it("세션 조회가 예외를 던지면 로그아웃으로 오인되지 않게 401이 아니라 5xx로 내린다", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
     const handler = vi.fn();
     const app = buildApp(async () => {
       throw new Error("session store unavailable");
@@ -59,7 +64,7 @@ describe("requireAuth 미들웨어", () => {
 
     const res = await app.request("/protected", {}, TEST_ENV);
 
-    expect(res.status).toBe(401);
+    expect(res.status).toBe(500);
     expect(handler).not.toHaveBeenCalled();
   });
 
@@ -98,20 +103,21 @@ describe("optionalSession 미들웨어", () => {
     expect(await res.json()).toEqual({ userId: "8f14e45fc1a2b3c4d5e6f" });
   });
 
-  it("세션이 없거나 조회가 실패해도 비로그인으로 통과시킨다", async () => {
-    for (const readSession of [
-      async () => null,
-      async () => {
-        throw new Error("session store unavailable");
-      },
-    ] satisfies SessionReader[]) {
-      const res = await buildOptionalApp(readSession).request(
-        "/open",
-        {},
-        TEST_ENV,
-      );
-      expect(res.status).toBe(200);
-      expect(await res.json()).toEqual({ userId: null });
-    }
+  it("세션이 없으면 비로그인으로 통과시킨다", async () => {
+    const res = await buildOptionalApp(async () => null).request(
+      "/open",
+      {},
+      TEST_ENV,
+    );
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ userId: null });
+  });
+
+  it("세션 조회가 예외를 던지면 비로그인 결과 대신 5xx로 내린다", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const res = await buildOptionalApp(async () => {
+      throw new Error("session store unavailable");
+    }).request("/open", {}, TEST_ENV);
+    expect(res.status).toBe(500);
   });
 });
