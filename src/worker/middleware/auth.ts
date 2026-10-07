@@ -1,4 +1,3 @@
-import type { Context } from "hono";
 import { isAPIError } from "better-auth/api";
 import { createMiddleware } from "hono/factory";
 import { getAuth } from "../lib/auth";
@@ -53,12 +52,6 @@ export const readSessionFromBetterAuth: SessionReader = async ({
   };
 };
 
-function forwardCookies(c: Context<AppEnv>, setCookies?: string[]): void {
-  for (const cookie of setCookies ?? []) {
-    c.header("set-cookie", cookie, { append: true });
-  }
-}
-
 /** 세션이 없으면 401로 끊는 미들웨어. */
 export function createRequireAuth(
   readSession: SessionReader = readSessionFromBetterAuth,
@@ -75,6 +68,8 @@ export function createRequireAuth(
 
     c.set("userId", session.userId);
     await next();
-    forwardCookies(c, session.setCookies);
+    for (const cookie of session.setCookies ?? []) {
+      c.header("set-cookie", cookie, { append: true });
+    }
   });
 }
