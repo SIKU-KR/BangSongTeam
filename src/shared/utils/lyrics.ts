@@ -25,7 +25,7 @@ function wrapLyricLine(line: string): string[] {
   let space = -1;
   for (let i = 1; i <= MAX_SLIDE_LINE_LENGTH; i++) {
     if (
-      /\s/.test(text[i]) &&
+      /\s/.test(text.charAt(i)) &&
       (space < 0 || Math.abs(i - ideal) < Math.abs(space - ideal))
     ) {
       space = i;
@@ -139,21 +139,22 @@ export function splitLinesAtCursor(
   offset: number,
 ): [string[], string[]] | null {
   const text = lines.join("\n");
-  const before = text.slice(0, Math.max(0, offset)).split("\n");
-  const after = text.slice(Math.max(0, offset)).split("\n");
+  const cut = Math.max(0, offset);
+  const before = text
+    .slice(0, cut)
+    .split("\n")
+    .map((line, index, all) =>
+      index === all.length - 1 ? sanitizeLyricLine(line) : line,
+    );
+  const after = text
+    .slice(cut)
+    .split("\n")
+    .map((line, index) => (index === 0 ? sanitizeLyricLine(line) : line));
 
-  before[before.length - 1] = sanitizeLyricLine(before[before.length - 1]);
-  after[0] = sanitizeLyricLine(after[0]);
-
-  while (before.length > 0 && isBlankLine(before[before.length - 1])) {
-    before.pop();
-  }
-  while (after.length > 0 && isBlankLine(after[0])) {
-    after.shift();
-  }
-
-  if (before.length === 0 || after.length === 0) return null;
-  return [before, after];
+  const beforeEnd = before.findLastIndex((line) => !isBlankLine(line));
+  const afterStart = after.findIndex((line) => !isBlankLine(line));
+  if (beforeEnd === -1 || afterStart === -1) return null;
+  return [before.slice(0, beforeEnd + 1), after.slice(afterStart)];
 }
 
 /**

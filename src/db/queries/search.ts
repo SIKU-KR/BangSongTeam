@@ -85,7 +85,9 @@ function parseLines(raw: string | null): string[] {
   if (!raw) return [];
   try {
     const parsed = StoredSlideSchema.shape.lines.safeParse(JSON.parse(raw));
-    return parsed.success ? fitLinesToSlides(parsed.data)[0] : [];
+    if (!parsed.success) return [];
+    const [firstSlide = []] = fitLinesToSlides(parsed.data);
+    return firstSlide;
   } catch {
     return [];
   }

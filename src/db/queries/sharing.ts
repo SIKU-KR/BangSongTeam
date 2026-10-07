@@ -49,12 +49,15 @@ export type SetVisibilityResult =
   | { status: "taken_down" }
   | { status: "empty" };
 
-async function selectDeck(db: DbInstance, deckId: string): Promise<Deck> {
+async function selectDeck(
+  db: DbInstance,
+  deckId: string,
+): Promise<Deck | null> {
   const [row]: Deck[] = await db
     .select()
     .from(decks)
     .where(eq(decks.id, deckId));
-  return row;
+  return row ?? null;
 }
 
 /**
@@ -88,7 +91,9 @@ export async function setDeckVisibility(
     )
     .where(and(eq(decks.id, deckId), eq(decks.userId, userId)));
 
-  return { status: "ok", deck: toSharedDeck(await selectDeck(db, deckId)) };
+  const updated = await selectDeck(db, deckId);
+  if (!updated) return { status: "not_found" };
+  return { status: "ok", deck: toSharedDeck(updated) };
 }
 
 async function selectPublicDeck(
@@ -136,11 +141,9 @@ export async function forkPublicDeck(
   if (!source) return { status: "not_found" };
 
   if (source.userId === userId) {
-    return {
-      status: "ok",
-      deck: toSharedDeck(await selectDeck(db, sourceId)),
-      alreadyOwned: true,
-    };
+    const own = await selectDeck(db, sourceId);
+    if (!own) return { status: "not_found" };
+    return { status: "ok", deck: toSharedDeck(own), alreadyOwned: true };
   }
 
   const now = new Date();
@@ -173,6 +176,7 @@ export async function forkPublicDeck(
         isNull(decks.presentationId),
       ),
     );
+  if (!saved) return { status: "not_found" };
   return {
     status: "ok",
     deck: toSharedDeck(saved),

@@ -1,5 +1,6 @@
 import { inArray } from "drizzle-orm";
 import {
+  cycleItem,
   DEFAULT_DECK_STYLE,
   DEV_USERS,
   MAX_DECK_ARTIST_LENGTH,
@@ -321,7 +322,7 @@ export async function seedDevData(
 
   const backgroundIds = await upsertBackgrounds(db, seedBackgrounds, now);
   const backgroundAt = (n: number): string | null =>
-    backgroundIds.length > 0 ? backgroundIds[n % backgroundIds.length] : null;
+    cycleItem(backgroundIds, n) ?? null;
   const libraryAt = (n: number): Deck =>
     library[(n * 97) % library.length] as Deck;
 

@@ -197,14 +197,20 @@ export function SlideThumbnailPane({
   const activeItemId = items[activeSongIndex]?.id;
   const collapsedSongs = useCollapsedSongs(activeItemId);
   const measureText = useTextWidthMeasurer();
-  const overflows = items.map((item) =>
-    item.deck ? analyzeDeckOverflowCached(item.deck, measureText) : null,
-  );
-
-  const firstIndexes: number[] = [];
+  const songRows: {
+    item: PresentationItem;
+    firstIndex: number;
+    overflow: DeckOverflow | null;
+  }[] = [];
   let totalSlides = 0;
   for (const item of items) {
-    firstIndexes.push(totalSlides);
+    songRows.push({
+      item,
+      firstIndex: totalSlides,
+      overflow: item.deck
+        ? analyzeDeckOverflowCached(item.deck, measureText)
+        : null,
+    });
     totalSlides += item.deck?.slides.length ?? 0;
   }
 
@@ -386,7 +392,7 @@ export function SlideThumbnailPane({
           const lastSong = items.length - 1;
           onSetInsertion({
             songIndex: lastSong,
-            index: items[lastSong].deck?.slides.length ?? 0,
+            index: songSlidesAt(items, lastSong).length,
           });
           setMenuTarget({ kind: "gap" });
         } else {
@@ -470,18 +476,14 @@ export function SlideThumbnailPane({
               </Empty>
             )}
 
-            {items.map((item, songIndex) => {
+            {songRows.map(({ item, firstIndex, overflow }, songIndex) => {
               const deck = item.deck;
               const slides = deck?.slides ?? [];
               const isCollapsed = collapsedSongs.collapsedIds.has(item.id);
               const posterUrl = getBackgroundById(
                 deck?.backgroundId,
               )?.posterUrl;
-              const overflow = overflows[songIndex];
-              const songWarning = songOverflowWarning(
-                overflow,
-                firstIndexes[songIndex],
-              );
+              const songWarning = songOverflowWarning(overflow, firstIndex);
               const gapActive = (index: number) =>
                 (insertion?.songIndex === songIndex &&
                   insertion.index === index) ||
@@ -545,7 +547,7 @@ export function SlideThumbnailPane({
                               dragId={`slide:${item.id}:${slide.id}`}
                               songIndex={songIndex}
                               slideIndex={slideIndex}
-                              number={firstIndexes[songIndex] + slideIndex + 1}
+                              number={firstIndex + slideIndex + 1}
                               slide={slide}
                               style={deck?.style}
                               posterUrl={posterUrl}

@@ -410,8 +410,8 @@ async function drainQueue(): Promise<void> {
   }
   await Promise.resolve();
 
-  while (pending.size > 0 && !isOffline()) {
-    const [url] = pending;
+  for (const url of pending) {
+    if (isOffline()) break;
     pending.delete(url);
     await cacheOnce(url);
   }

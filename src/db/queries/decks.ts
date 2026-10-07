@@ -59,7 +59,7 @@ export async function upsertDeck(
     .select()
     .from(decks)
     .where(eq(decks.id, deck.id));
-  return toSharedDeck(saved);
+  return saved ? toSharedDeck(saved) : null;
 }
 
 /** 본인 소유 보관함 곡 삭제 */

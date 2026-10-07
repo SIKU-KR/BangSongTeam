@@ -118,22 +118,17 @@ export function analyzeDeckOverflow(
   });
 
   let tallestSlideIndex: number | null = null;
-  for (let index = 0; index < results.length; index += 1) {
-    if (
-      tallestSlideIndex === null ||
-      results[index].visualLineCount >
-        results[tallestSlideIndex].visualLineCount
-    ) {
+  let tallestLineCount = 0;
+  for (const [index, { visualLineCount }] of results.entries()) {
+    if (tallestSlideIndex === null || visualLineCount > tallestLineCount) {
       tallestSlideIndex = index;
+      tallestLineCount = visualLineCount;
     }
   }
 
   let exceedsStage = false;
   if (tallestSlideIndex !== null) {
-    const heightPx =
-      results[tallestSlideIndex].visualLineCount *
-      fontSizePx *
-      style.lineHeight;
+    const heightPx = tallestLineCount * fontSizePx * style.lineHeight;
     const topPx = boxTopPx(
       style.position.anchor,
       (style.position.yPercent * STAGE_HEIGHT_PX) / 100,

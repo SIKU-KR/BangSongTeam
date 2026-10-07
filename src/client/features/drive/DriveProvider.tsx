@@ -137,8 +137,9 @@ export function DriveProvider({
     (refs: DriveItemRef[], targetFolderId: string | null): void => {
       const label = describeItems(refs);
       const outcome = moveItems(refs, targetFolderId);
-      if (outcome.errors.length > 0 && outcome.moved.length === 0) {
-        showToast(outcome.errors[0]);
+      const [firstError] = outcome.errors;
+      if (firstError && outcome.moved.length === 0) {
+        showToast(firstError);
         return;
       }
       if (outcome.moved.length === 0) return;
@@ -157,14 +158,15 @@ export function DriveProvider({
   const duplicate = useCallback(
     (refs: DriveItemRef[]): void => {
       const copies = duplicateItems(refs);
-      if (copies.length === 0) return;
+      const [first] = copies;
+      if (!first) return;
       setSelection(
         copies.map((copy) => itemKey("file", copy.id)),
-        itemKey("file", copies[0].id),
+        itemKey("file", first.id),
       );
       showToast(
         copies.length === 1
-          ? DRIVE_COPY.toast.duplicated(copies[0].title)
+          ? DRIVE_COPY.toast.duplicated(first.title)
           : DRIVE_COPY.toast.duplicatedMany(copies.length),
       );
     },

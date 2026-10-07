@@ -17,7 +17,7 @@
     "build": "vite build",
     "deploy": "wrangler deploy",
     "types": "wrangler types src/worker/worker-configuration.d.ts",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit -p tsconfig.app.json && tsc --noEmit -p tsconfig.test.json",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md,yaml,yml}\"",

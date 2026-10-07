@@ -174,7 +174,7 @@ export function resolveUniqueName(
   if (!taken.has(folderNameKey(trimmed))) return trimmed;
 
   const match = NUMBERED_NAME.exec(trimmed);
-  const stem = match ? match[1] : trimmed;
+  const stem = match?.[1] ?? trimmed;
   let counter = match ? Number(match[2]) + 1 : 2;
 
   for (;;) {

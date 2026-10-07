@@ -5,6 +5,7 @@
  * 방지하기 위해 모든 요청에 요청 단위의 데드라인을 부여한다.
  */
 
+import { onlyItem } from "#shared";
 import {
   createTraceContext,
   rememberRequestMeta,
@@ -58,7 +59,8 @@ export function combineSignals(
   if (active.length === 0) {
     throw new Error("At least one signal required");
   }
-  if (active.length === 1) return active[0];
+  const only = onlyItem(active);
+  if (only) return only;
 
   for (const signal of active) {
     if (signal.aborted) {

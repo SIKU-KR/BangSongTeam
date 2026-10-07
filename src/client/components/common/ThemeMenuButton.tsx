@@ -25,6 +25,12 @@ interface ThemeOption {
   icon: LucideIcon;
 }
 
+const SYSTEM_OPTION: ThemeOption = {
+  mode: "system",
+  ...SHELL_COPY.theme.system,
+  icon: MonitorIcon,
+};
+
 const THEME_OPTIONS: ThemeOption[] = [
   {
     mode: "light",
@@ -36,11 +42,7 @@ const THEME_OPTIONS: ThemeOption[] = [
     ...SHELL_COPY.theme.dark,
     icon: MoonIcon,
   },
-  {
-    mode: "system",
-    ...SHELL_COPY.theme.system,
-    icon: MonitorIcon,
-  },
+  SYSTEM_OPTION,
 ];
 
 function isThemeMode(value: unknown): value is ThemeOption["mode"] {
@@ -51,7 +53,7 @@ function isThemeMode(value: unknown): value is ThemeOption["mode"] {
 export function ThemeMenuButton(): React.JSX.Element {
   const { theme, setTheme } = useTheme();
   const current =
-    THEME_OPTIONS.find((option) => option.mode === theme) ?? THEME_OPTIONS[2];
+    THEME_OPTIONS.find((option) => option.mode === theme) ?? SYSTEM_OPTION;
   const CurrentIcon = current.icon;
 
   return (
