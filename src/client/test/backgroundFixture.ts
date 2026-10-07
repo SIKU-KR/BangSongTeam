@@ -9,7 +9,6 @@ export function makeBackground(
   return {
     id,
     title: `배경 ${index}`,
-    source: "service",
     kind: "video",
     mediaUrl: `/api/media/loops/${id}.mp4`,
     posterUrl: `/api/media/posters/${id}.webp`,

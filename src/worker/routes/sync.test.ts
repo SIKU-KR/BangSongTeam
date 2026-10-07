@@ -499,6 +499,30 @@ describe("동기화 라우트 교차 사용자 격리", () => {
       expect(body.presentations[0].items[0].deck.style.overlayOpacity).toBe(65);
     });
 
+    it("저장된 사본을 모르는 배경으로 바꿔도 '배경 없음'으로 저장된다", async () => {
+      const doc = makeDoc(USER_A);
+      doc.items[0].deck.backgroundId = serviceIds[0];
+      await app.request(`/api/presentations/${DOC_ID}`, json(doc), env);
+
+      doc.items[0].deck.backgroundId = "b99999999999999999999";
+      doc.items[0].deck.title = "수정한 곡";
+      const put = await app.request(
+        `/api/presentations/${DOC_ID}`,
+        json(doc),
+        env,
+      );
+      expect(put.status).toBe(200);
+
+      const res = await app.request("/api/presentations", {}, env);
+      const body = (await res.json()) as {
+        presentations: PresentationDocument[];
+      };
+      expect(body.presentations[0].items[0].deck).toMatchObject({
+        title: "수정한 곡",
+        backgroundId: null,
+      });
+    });
+
     it("곡마다 배경이 다른 5곡 세트도 그대로 저장된다", async () => {
       const doc = makeDoc(USER_A);
       doc.items = serviceIds.map((backgroundId, index) => ({
@@ -535,9 +559,16 @@ describe("동기화 라우트 교차 사용자 격리", () => {
       const db = createD1Client(env.DB);
       await clearTables(decks, presentations, folders);
       await db.delete(user).where(eq(user.id, USER_A));
-      await db.insert(user).values([
-        { id: USER_A, name: "A", createdAt: new Date(), updatedAt: new Date() },
-      ]);
+      await db
+        .insert(user)
+        .values([
+          {
+            id: USER_A,
+            name: "A",
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          },
+        ]);
       currentUser = USER_A;
     });
 

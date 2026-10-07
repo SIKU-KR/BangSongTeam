@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from "vitest";
 import { eq } from "drizzle-orm";
 import { createTestDb } from "../test-utils";
 import { getMyLibraryDecks, upsertDeck, deleteDeckScoped } from "./decks";
-import { user, decks, presentations } from "../schema";
+import { user, decks, presentations, backgrounds } from "../schema";
 import { deckRow } from "../test-fixtures";
 import { DEFAULT_DECK_STYLE, DeckSchema, type Deck } from "#shared";
 import { toSharedDeck } from "./mappers";
@@ -148,6 +148,52 @@ describe("덱 쓰기 헬퍼 (보관함 동기화)", () => {
       await upsertDeck(db, strangerId, makeDeck(strangerId, { title: "탈취" })),
     ).toBeNull();
     expect((await readDeck(DECK_ID)).title).toBe("은혜로다");
+  });
+
+  describe("모르는 배경 (트리거)", () => {
+    const KNOWN = "svc000000000000000001";
+    const UNKNOWN = "gone00000000000000001";
+
+    beforeEach(async () => {
+      await db.insert(backgrounds).values({
+        id: KNOWN,
+        title: "구름",
+        r2Key: `loops/${KNOWN}.mp4`,
+        posterKey: `posters/${KNOWN}.webp`,
+        durationSec: 20,
+        createdAt: new Date(0),
+      });
+    });
+
+    it("있는 배경은 그대로 저장한다", async () => {
+      const saved = await upsertDeck(
+        db,
+        ownerId,
+        makeDeck(ownerId, { backgroundId: KNOWN }),
+      );
+      expect(saved?.backgroundId).toBe(KNOWN);
+    });
+
+    it("새 덱의 모르는 배경은 배경 없음으로 저장한다", async () => {
+      const saved = await upsertDeck(
+        db,
+        ownerId,
+        makeDeck(ownerId, { backgroundId: UNKNOWN }),
+      );
+      expect(saved?.title).toBe("은혜로다");
+      expect(saved?.backgroundId).toBeNull();
+    });
+
+    it("기존 덱을 모르는 배경으로 갱신하면 배경 없음으로 저장한다", async () => {
+      await upsertDeck(db, ownerId, makeDeck(ownerId, { backgroundId: KNOWN }));
+      const saved = await upsertDeck(
+        db,
+        ownerId,
+        makeDeck(ownerId, { title: "은혜로다 (수정)", backgroundId: UNKNOWN }),
+      );
+      expect(saved?.title).toBe("은혜로다 (수정)");
+      expect(saved?.backgroundId).toBeNull();
+    });
   });
 
   it("저장된 덱을 돌려준다", async () => {

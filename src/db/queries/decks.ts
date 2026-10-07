@@ -2,7 +2,6 @@ import { eq, and, desc, isNull } from "drizzle-orm";
 import type { Deck as SharedDeck } from "#shared";
 import { decks, type Deck } from "../schema";
 import { toDeckContent, toSharedDeck } from "./mappers";
-import { nullifyUnknownBackgrounds } from "./backgrounds";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type DbInstance = any;
@@ -44,7 +43,7 @@ export async function upsertDeck(
     return null;
   }
 
-  const [content] = await nullifyUnknownBackgrounds(db, [toDeckContent(deck)]);
+  const content = toDeckContent(deck);
 
   if (existing) {
     await db

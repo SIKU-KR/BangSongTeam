@@ -9,16 +9,16 @@ const initialSql = fs.readFileSync(
 );
 
 describe("0001_initial 마이그레이션", () => {
-  it("저널은 0001_initial 하나에서 시작한다 (다음 생성은 0002부터)", () => {
+  it("저널은 0001_initial에서 시작한다", () => {
     const journal = JSON.parse(
       fs.readFileSync(path.join(migrationsDir, "meta/_journal.json"), "utf-8"),
     ) as { entries: { idx: number; tag: string }[] };
-    expect(journal.entries).toEqual([
+    expect(journal.entries[0]).toEqual(
       expect.objectContaining({ idx: 1, tag: "0001_initial" }),
-    ]);
+    );
     expect(
       fs.readdirSync(migrationsDir).filter((name) => name.endsWith(".sql")),
-    ).toEqual(["0001_initial.sql"]);
+    ).toEqual(journal.entries.map((entry) => `${entry.tag}.sql`));
   });
 
   it("배경 행을 넣지 않는다 (R2 파일 없는 배경 금지)", () => {

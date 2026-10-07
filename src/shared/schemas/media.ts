@@ -2,8 +2,6 @@ import { z } from "zod";
 import { IdSchema } from "./id";
 import { MEDIA_URL_PREFIX } from "../constants/projection";
 
-export const BackgroundSourceSchema = z.enum(["service", "user"]);
-
 export const BackgroundKindSchema = z.enum(["video", "image"]);
 export type BackgroundKind = z.infer<typeof BackgroundKindSchema>;
 
@@ -24,7 +22,6 @@ const MediaUrlSchema = z.string().startsWith(MEDIA_URL_PREFIX);
 export const BackgroundMediaSchema = z.object({
   id: IdSchema,
   title: z.string().min(1),
-  source: BackgroundSourceSchema,
   kind: BackgroundKindSchema,
   mediaUrl: MediaUrlSchema,
   posterUrl: MediaUrlSchema,

@@ -136,4 +136,28 @@ describe("worship-offline-db", () => {
     expect([...db.objectStoreNames]).toContain("folders");
     expect(await db.count("presentations")).toBe(1);
   });
+
+  it("v4 DB를 v5로 올리면 예전 사용자 업로드가 섞인 배경 사본만 비운다", async () => {
+    const v4 = await openDB(OFFLINE_DB_NAME, 4, {
+      upgrade(db) {
+        db.createObjectStore("presentations", { keyPath: "id" });
+        db.createObjectStore("decks", { keyPath: "id" });
+        db.createObjectStore("folders", { keyPath: "id" });
+        db.createObjectStore("backgrounds", { keyPath: "id" });
+        db.createObjectStore("auth_session", { keyPath: "id" });
+      },
+    });
+    await v4.put("presentations", { id: "p0000000000000000000a" });
+    await v4.put("backgrounds", {
+      id: "bg0000000000000000001",
+      source: "user",
+      cachedFor: "userA0000000000000001",
+    });
+    v4.close();
+
+    const db = await getOfflineDB();
+    expect(db.version).toBe(OFFLINE_DB_VERSION);
+    expect(await db.count("backgrounds")).toBe(0);
+    expect(await db.count("presentations")).toBe(1);
+  });
 });
