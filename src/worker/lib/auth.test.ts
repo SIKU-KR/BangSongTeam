@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { DeckSchema } from "#shared";
 import {
-  createAuth,
+  getAuth,
   buildKakaoUser,
   buildNaverUser,
   hasCredentials,
@@ -114,20 +114,20 @@ describe("worker auth 인스턴스", () => {
     });
   });
 
-  describe("createAuth", () => {
+  describe("getAuth", () => {
     it("핸들러를 가진 인스턴스를 만든다", () => {
-      const auth = createAuth(makeEnv());
+      const auth = getAuth(makeEnv());
       expect(typeof auth.handler).toBe("function");
       expect(auth.api).toBeDefined();
     });
 
     it("같은 env로 두 번 부르면 인스턴스를 재사용한다", () => {
       const env = makeEnv();
-      expect(createAuth(env)).toBe(createAuth(env));
+      expect(getAuth(env)).toBe(getAuth(env));
     });
 
     it("자격증명이 없어도 인스턴스 생성 자체는 실패하지 않는다", () => {
-      const auth = createAuth(
+      const auth = getAuth(
         makeEnv({
           KAKAO_CLIENT_ID: undefined,
           KAKAO_CLIENT_SECRET: undefined,

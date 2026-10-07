@@ -213,7 +213,7 @@ const instances = new WeakMap<Bindings, AuthInstance>();
  * - rate limit은 `NODE_ENV=production`에서만 기본으로 켜지는데 Workers에는 그 값이 없어
  *   명시적으로 켠다. 저장소가 isolate 메모리라 부분 방어다.
  */
-export function createAuth(env: Bindings): AuthInstance {
+export function getAuth(env: Bindings): AuthInstance {
   const cached = instances.get(env);
   if (cached) return cached;
 

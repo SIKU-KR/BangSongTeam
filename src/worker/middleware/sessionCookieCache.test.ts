@@ -5,7 +5,7 @@ import { makeSignature } from "better-auth/crypto";
 import { createD1Client, session, user } from "#db";
 import { createId } from "#shared";
 import app from "../index";
-import { createAuth } from "../lib/auth";
+import { getAuth } from "../lib/auth";
 import type { Bindings } from "../types";
 
 const USER_ID = createId();
@@ -51,7 +51,7 @@ async function login(): Promise<string> {
       updatedAt: now,
     });
 
-  const ctx = await createAuth(bindings).$context;
+  const ctx = await getAuth(bindings).$context;
   const signed = `${token}.${await makeSignature(token, ctx.secret)}`;
   return `${ctx.authCookies.sessionToken.name}=${encodeURIComponent(signed)}`;
 }

@@ -1,6 +1,6 @@
 import type { Context } from "hono";
 import { createMiddleware } from "hono/factory";
-import { createAuth } from "../lib/auth";
+import { getAuth } from "../lib/auth";
 import type { AppEnv, Bindings } from "../types";
 import { API_ERRORS } from "#shared";
 
@@ -31,7 +31,7 @@ export const readSessionFromBetterAuth: SessionReader = async ({
   headers,
   env,
 }) => {
-  const auth = createAuth(env);
+  const auth = getAuth(env);
   const { headers: responseHeaders, response: session } =
     await auth.api.getSession({ headers, returnHeaders: true });
   const userId = session?.user?.id;
