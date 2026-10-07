@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import type { AppEnv } from "./types";
-import { createAuth, AUTH_BASE_PATH } from "./lib/auth";
+import { getAuth, AUTH_BASE_PATH } from "./lib/auth";
 import { createBackgroundsRoute } from "./routes/backgrounds";
 import { mediaRoute } from "./routes/media";
 import { createPresentationsRoute } from "./routes/presentations";
@@ -59,7 +59,7 @@ export function createApp(deps: AppDeps = {}) {
       return c.json({ status: "ok" as const }, 200);
     })
     .on(["GET", "POST"], `${AUTH_BASE_PATH}/*`, (c) => {
-      return createAuth(c.env).handler(c.req.raw);
+      return getAuth(c.env).handler(c.req.raw);
     })
     .route("/api", authConfigRoute)
     .route("/api/consent", createConsentRoute(deps))
