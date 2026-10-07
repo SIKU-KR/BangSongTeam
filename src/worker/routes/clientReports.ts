@@ -24,12 +24,11 @@ const REPORT_WINDOW_MS = 60_000;
  * 누구나 부를 수 있는 엔드포인트라 IP별 빈도(429), 본문 크기(413), 엄격한 스키마(400)를
  * 이 순서로 먼저 확인한다. 응답은 아무도 읽지 않으므로 204로 끝낸다.
  */
-export function createClientReportsRoute(
-  allow: (key: string) => boolean = createFixedWindowLimiter({
+export function createClientReportsRoute() {
+  const allow = createFixedWindowLimiter({
     limit: REPORTS_PER_WINDOW,
     windowMs: REPORT_WINDOW_MS,
-  }),
-) {
+  });
   const rateLimit = createMiddleware<AppEnv>(async (c, next) => {
     if (!allow(c.req.header("cf-connecting-ip") ?? "unknown")) {
       return c.json({ error: API_ERRORS.tooManyRequests }, 429);

@@ -1,4 +1,5 @@
 import { Hono, type Context } from "hono";
+import { basePath } from "hono/route";
 import { API_ERRORS } from "#shared";
 import { parseRangeHeader, resolveByteRange } from "../lib/byteRange";
 import type { AppEnv } from "../types";
@@ -46,52 +47,54 @@ async function serveWholeObject(
  * 바뀌면 HEAD로 검증한 범위가 새 객체에 맞지 않으므로, GET에 etag 조건을 걸어
  * 어긋나면 Range를 무시하고 새 객체 전체를 200으로 보낸다.
  */
-export const mediaRoute = new Hono<AppEnv>().get("/*", async (c) => {
-  const key = c.req.path.replace(/^\/api\/media\/?/, "");
-  if (!key) {
-    return c.json({ error: API_ERRORS.media.keyRequired }, 400);
-  }
+export function createMediaRoute() {
+  return new Hono<AppEnv>().get("/*", async (c) => {
+    const key = c.req.path.slice(`${basePath(c)}/`.length);
+    if (!key) {
+      return c.json({ error: API_ERRORS.media.keyRequired }, 400);
+    }
 
-  const rangeHeader = c.req.header("range");
-  const requested = rangeHeader ? parseRangeHeader(rangeHeader) : null;
+    const rangeHeader = c.req.header("range");
+    const requested = rangeHeader ? parseRangeHeader(rangeHeader) : null;
 
-  if (!requested) {
-    return serveWholeObject(c, key);
-  }
+    if (!requested) {
+      return serveWholeObject(c, key);
+    }
 
-  const head = await c.env.MEDIA_BUCKET.head(key);
-  if (!head) {
-    return mediaNotFound(c);
-  }
+    const head = await c.env.MEDIA_BUCKET.head(key);
+    if (!head) {
+      return mediaNotFound(c);
+    }
 
-  const resolved = resolveByteRange(requested, head.size);
-  if (!resolved) {
-    return new Response(null, {
-      status: 416,
-      headers: {
-        "content-range": `bytes */${head.size}`,
-        "accept-ranges": "bytes",
-      },
+    const resolved = resolveByteRange(requested, head.size);
+    if (!resolved) {
+      return new Response(null, {
+        status: 416,
+        headers: {
+          "content-range": `bytes */${head.size}`,
+          "accept-ranges": "bytes",
+        },
+      });
+    }
+
+    const length = resolved.end - resolved.start + 1;
+    const object = await c.env.MEDIA_BUCKET.get(key, {
+      range: { offset: resolved.start, length },
+      onlyIf: { etagMatches: head.etag },
     });
-  }
+    if (!object) {
+      return mediaNotFound(c);
+    }
+    if (!("body" in object)) {
+      return serveWholeObject(c, key);
+    }
 
-  const length = resolved.end - resolved.start + 1;
-  const object = await c.env.MEDIA_BUCKET.get(key, {
-    range: { offset: resolved.start, length },
-    onlyIf: { etagMatches: head.etag },
+    const headers = objectHeaders(object);
+    headers.set(
+      "content-range",
+      `bytes ${resolved.start}-${resolved.end}/${head.size}`,
+    );
+    headers.set("content-length", String(length));
+    return new Response(object.body, { status: 206, headers });
   });
-  if (!object) {
-    return mediaNotFound(c);
-  }
-  if (!("body" in object)) {
-    return serveWholeObject(c, key);
-  }
-
-  const headers = objectHeaders(object);
-  headers.set(
-    "content-range",
-    `bytes ${resolved.start}-${resolved.end}/${head.size}`,
-  );
-  headers.set("content-length", String(length));
-  return new Response(object.body, { status: 206, headers });
-});
+}

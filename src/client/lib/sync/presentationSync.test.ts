@@ -34,6 +34,7 @@ vi.mock("../api/client", () => ({
       presentations: {
         ":id": { $patch: api.patch, $delete: api.remove, $get: api.get },
       },
+      "client-reports": { $path: () => "/api/client-reports" },
     },
   },
 }));

@@ -6,7 +6,6 @@ import {
   buildNaverUser,
   hasCredentials,
   generateUserId,
-  AUTH_BASE_PATH,
   SYNTHETIC_EMAIL_DOMAIN,
   type KakaoProfileLike,
   type NaverProfileLike,
@@ -32,10 +31,6 @@ function makeEnv(overrides: Partial<Bindings> = {}): Bindings {
 }
 
 describe("worker auth 인스턴스", () => {
-  it("basePath가 /api/auth다 (wrangler run_worker_first가 덮는 경로)", () => {
-    expect(AUTH_BASE_PATH).toBe("/api/auth");
-  });
-
   it("사용자 id를 21자 NanoID로 만든다 (#shared의 IdSchema 통과)", () => {
     for (let i = 0; i < 20; i++) {
       expect(UserIdSchema.safeParse(generateUserId()).success).toBe(true);

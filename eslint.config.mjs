@@ -127,6 +127,44 @@ const UNNECESSARY_CONDITION_EXEMPT_FILES = [
   "src/client/components/ui/**",
 ];
 
+const ROUTE_FACTORY_ONLY =
+  "라우트는 routes/<name>.ts에서 create<Name>Route 팩토리 하나로 export하세요.";
+
+/**
+ * Worker 라우트는 한 방식으로만 정의하고 마운트한다. 그래야 index.ts가 마운트 목록으로만
+ * 읽히고, 라우트가 마운트 경로를 몰라 경로를 옮겨도 라우트 안을 고치지 않는다.
+ */
+const WORKER_ROUTE_MODULE_SYNTAX = [
+  {
+    selector: "ExportNamedDeclaration > VariableDeclaration",
+    message: ROUTE_FACTORY_ONLY,
+  },
+  {
+    selector:
+      "ExportNamedDeclaration > FunctionDeclaration[id.name!=/^create[A-Z]\\w*Route$/]",
+    message: ROUTE_FACTORY_ONLY,
+  },
+  {
+    selector: "Literal[value=/^\\/api(\\/|$)/]",
+    message:
+      "라우트 안 경로는 마운트 지점 기준 상대 경로로 쓰세요. 마운트 경로는 index.ts가 정합니다.",
+  },
+];
+const WORKER_APP_SYNTAX = [
+  {
+    selector:
+      "CallExpression[callee.property.name=/^(get|post|put|patch|delete|all|on)$/]",
+    message:
+      "핸들러는 routes/에 팩토리로 두고 index.ts에서는 .route()로 마운트만 하세요.",
+  },
+  {
+    selector:
+      "CallExpression[callee.property.name='route'][arguments.0.type!='Literal']",
+    message:
+      "마운트 경로는 상수 대신 문자열 리터럴로 쓰세요. 클라이언트는 RPC 클라이언트(api)로 경로를 얻습니다.",
+  },
+];
+
 const HANGUL = /[가-힣]/;
 const COPY_IN_COPY_MODULES =
   "사용자에게 보이는 문구는 src/client/copy/*(클라이언트)나 src/shared/copy/*(서버·검증)에 두고 가져다 쓰세요. 같은 문장이 이미 있으면 그 키를 재사용합니다.";
@@ -429,6 +467,19 @@ export default tseslint.config(
           ],
         },
       ],
+    },
+  },
+  {
+    files: ["src/worker/routes/*.ts"],
+    ignores: ["**/*.test.ts"],
+    rules: {
+      "no-restricted-syntax": ["error", ...WORKER_ROUTE_MODULE_SYNTAX],
+    },
+  },
+  {
+    files: ["src/worker/index.ts"],
+    rules: {
+      "no-restricted-syntax": ["error", ...WORKER_APP_SYNTAX],
     },
   },
 );
