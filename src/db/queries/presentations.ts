@@ -13,7 +13,6 @@ import {
   type NewDeck,
 } from "../schema";
 import { fromPresentationChanges, toPresentationDocument } from "./mappers";
-import { keepKnownBackgrounds, knownBackgroundsQuery } from "./backgrounds";
 import { chunkIds, runQueries, runStatements } from "./batch";
 import { clearTombstoneStatement, tombstoneStatements } from "./folders";
 
@@ -94,14 +93,14 @@ function editableDeckColumns(row: NewDeck): Partial<NewDeck> {
  * 조회에서 되살아나지 않게), 본문에 담긴 사본만 내용을 쓰고, 자리가 바뀐 사본만
  * 자리를 고친다. 가사 한 줄을 고친 저장이 곡 수와 상관없이 몇 행만 쓰게 하기 위해서다.
  *
- * D1 왕복은 두 번이다. 소유자·기존 사본·폴더·배경·원본 곡을 한 batch로 읽고, 쓰기는
+ * D1 왕복은 두 번이다. 소유자·기존 사본·폴더·원본 곡을 한 batch로 읽고, 쓰기는
  * 모두 `db.batch()` 하나로 묶는다. D1에는 대화형 트랜잭션이 없어서 루프로 N번
  * await하면 중간 실패 시 반쪽짜리 문서가 남는다. 두 왕복 사이에 끼어든 쓰기에도
  * 남의 행을 건드리지 않도록 갱신 문장마다 소유자 조건을 다시 건다.
  *
  * 사본의 `forked_from`은 내 곡을 가리킬 때만 남긴다. 아무 곡이나 남기면 저장 뒤
- * 값이 남았는지로 남의 비공개 곡 id가 있는지 알아낼 수 있다. 나머지는 배경처럼
- * 비워서 받는다 — FK 위반으로 batch 전체가 롤백되지 않게.
+ * 값이 남았는지로 남의 비공개 곡 id가 있는지 알아낼 수 있다. 나머지는 비워서
+ * 받는다 — FK 위반으로 batch 전체가 롤백되지 않게.
  *
  * 항목 id(`item_id`)는 전역 유일이다. 남아 있는 사본끼리 항목 id를 맞바꾸면 batch
  * 중간에 유일 제약에 걸리므로, 항목 id가 바뀌는 사본은 먼저 자기 덱 id로 비켜 둔다.
@@ -124,8 +123,9 @@ export async function savePresentationChanges(
       ),
     ),
   ]);
-  const [owners, existingCopies, ownedFolders, knownBackgrounds, ...lookups] =
-    (await runQueries(db, [
+  const [owners, existingCopies, ownedFolders, ...lookups] = (await runQueries(
+    db,
+    [
       db
         .select({ userId: presentations.userId })
         .from(presentations)
@@ -146,7 +146,6 @@ export async function savePresentationChanges(
               and(eq(folders.id, changes.folderId), eq(folders.userId, userId)),
             )
         : null,
-      knownBackgroundsQuery(db, changes.decks),
       ...sentDeckIdChunks.map((ids) =>
         db
           .select({
@@ -163,13 +162,13 @@ export async function savePresentationChanges(
           .from(decks)
           .where(and(inArray(decks.id, ids), eq(decks.userId, userId))),
       ),
-    ])) as [
-      { userId: string }[],
-      ExistingCopy[],
-      { id: string }[],
-      { id: string }[],
-      ...(SentDeckOwner[] | { id: string }[])[],
-    ];
+    ],
+  )) as [
+    { userId: string }[],
+    ExistingCopy[],
+    { id: string }[],
+    ...(SentDeckOwner[] | { id: string }[])[],
+  ];
   const sentDeckOwners = lookups
     .slice(0, sentDeckIdChunks.length)
     .flat() as SentDeckOwner[];
@@ -205,12 +204,7 @@ export async function savePresentationChanges(
   });
 
   const previous = new Map(existingCopies.map((copy) => [copy.id, copy]));
-  const sent = new Map(
-    keepKnownBackgrounds(sentDeckRows, knownBackgrounds).map((row) => [
-      row.id as string,
-      row,
-    ]),
-  );
+  const sent = new Map(sentDeckRows.map((row) => [row.id as string, row]));
   const missingDeck = slots.some(
     (slot) => !sent.has(slot.deckId) && !previous.has(slot.deckId),
   );

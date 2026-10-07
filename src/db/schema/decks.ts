@@ -24,6 +24,8 @@ import { presentations } from "./presentations";
  * - 한 사람은 같은 공개 곡을 보관함에 한 번만 가져온다 (`idx_decks_fork_once`).
  * - `fork_count`는 이 곡을 가져간 보관함 곡 수다. 공개 곡 정렬 인덱스에 쓰려고
  *   저장하며 앱이 아니라 트리거(`0001_initial`)가 유지한다.
+ * - 서버에 없는 `background_id`는 트리거(`0002_decks_unknown_background`)가 비운다.
+ *   배경 하나 때문에 곡·프레젠테이션 저장 전체가 FK 위반으로 롤백되지 않게 하려는 것이다.
  */
 export const decks = sqliteTable(
   "decks",

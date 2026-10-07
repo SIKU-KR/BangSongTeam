@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { createTestDb, type TestDbResult } from "../test-utils";
 import { backgroundKeywords, backgrounds, type NewBackground } from "../schema";
-import { listBackgrounds, nullifyUnknownBackgrounds } from "./backgrounds";
+import { listBackgrounds } from "./backgrounds";
 
 const SERVICE_A = "svc000000000000000001";
 const SERVICE_B = "svc000000000000000002";
@@ -76,14 +76,5 @@ describe("배경 쿼리 헬퍼", () => {
       description: "",
       keywords: [],
     });
-  });
-
-  it("nullifyUnknownBackgrounds는 모르는 id를 배경 없음으로 낮춘다", async () => {
-    const rows = await nullifyUnknownBackgrounds(testDb.db, [
-      { id: "1", backgroundId: SERVICE_A },
-      { id: "2", backgroundId: "gone00000000000000001" },
-      { id: "3", backgroundId: null },
-    ]);
-    expect(rows.map((r) => r.backgroundId)).toEqual([SERVICE_A, null, null]);
   });
 });
