@@ -59,15 +59,13 @@ const createAppConfig = ({ command }: ConfigEnv): UserConfig => ({
     // 원격 리소스를 붙여야 하면 CF_REMOTE_BINDINGS=true로 실행한다.
     cloudflare({
       remoteBindings: process.env.CF_REMOTE_BINDINGS === "true",
-      config: (worker) =>
-        command === "serve"
-          ? {
-              vectorize: worker.vectorize.map((index) => ({
-                ...index,
-                index_name: BACKGROUND_INDEX_NAMES.local,
-              })),
-            }
-          : {},
+      // 돌려준 값은 defu로 합쳐져 배열이 이어 붙는다(바인딩이 둘이 된다). 그래서 직접 고친다.
+      config: (worker) => {
+        if (command !== "serve") return;
+        for (const index of worker.vectorize) {
+          index.index_name = BACKGROUND_INDEX_NAMES.local;
+        }
+      },
     }),
     VitePWA({
       registerType: "prompt",
