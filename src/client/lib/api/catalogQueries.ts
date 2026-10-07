@@ -1,4 +1,3 @@
-import { useEffect, useState } from "react";
 import {
   keepPreviousData,
   useMutation,
@@ -13,6 +12,7 @@ import {
   submitReport,
 } from "./catalogApi";
 import { upsertLibraryDeck } from "../../features/editor/songLibraryStore";
+import { useDebouncedValue } from "#hooks/useDebouncedValue";
 
 const CATALOG_SEARCH_DEBOUNCE_MS = 250;
 
@@ -21,15 +21,6 @@ const catalogKeys = {
   search: (q: string) => ["catalog", "search", q] as const,
   deck: (id: string) => ["catalog", "deck", id] as const,
 };
-
-function useDebouncedValue<T>(value: T, delayMs: number): T {
-  const [debounced, setDebounced] = useState(value);
-  useEffect(() => {
-    const timer = setTimeout(() => setDebounced(value), delayMs);
-    return () => clearTimeout(timer);
-  }, [value, delayMs]);
-  return debounced;
-}
 
 /** 타이핑 중에는 이전 결과를 유지해 목록이 깜박이지 않게 한다 */
 export function useCatalogSearch(query: string, options: { enabled: boolean }) {
