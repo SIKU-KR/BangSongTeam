@@ -56,7 +56,7 @@ let dbPromise: Promise<IDBPDatabase<WorshipOfflineDB>> | null = null;
 
 export function isPersistenceAvailable(): boolean {
   try {
-    return typeof indexedDB !== "undefined" && indexedDB !== null;
+    return typeof indexedDB !== "undefined";
   } catch {
     return false;
   }

@@ -1,5 +1,6 @@
 import { collectPresentationFonts, type Presentation } from "#shared";
 import { loadWebFont, toCssFontFamily } from "../fonts/fontLoader";
+import { documentFonts } from "../browser/optionalApis";
 
 function sampleTextOf(presentation: Presentation): string {
   const chars = new Set<string>();
@@ -24,7 +25,8 @@ function sampleTextOf(presentation: Presentation): string {
 export async function warmPresentationFonts(
   presentation: Presentation,
 ): Promise<void> {
-  if (typeof document === "undefined" || !document.fonts?.load) return;
+  const fontSet = documentFonts();
+  if (!fontSet) return;
 
   const fonts = collectPresentationFonts(presentation);
   if (fonts.length === 0) return;
@@ -37,7 +39,7 @@ export async function warmPresentationFonts(
   await Promise.all(
     fonts.flatMap((fontFamily) =>
       ["400", "700"].map((weight) =>
-        document.fonts
+        fontSet
           .load(`${weight} 1rem ${toCssFontFamily(fontFamily)}`, sample)
           .catch(() => undefined),
       ),

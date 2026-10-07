@@ -43,20 +43,18 @@ export function LoginRoute({
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    let cancelled = false;
+    const controller = new AbortController();
     void (async () => {
       try {
-        const next = await fetchAuthConfig();
-        if (!cancelled) setConfig(next);
+        const next = await fetchAuthConfig({ signal: controller.signal });
+        if (!controller.signal.aborted) setConfig(next);
       } catch {
-        if (!cancelled) {
+        if (!controller.signal.aborted) {
           setConfig({ providers: SOCIAL_PROVIDERS.map((p) => p.id) });
         }
       }
     })();
-    return () => {
-      cancelled = true;
-    };
+    return () => controller.abort();
   }, []);
 
   const handleSignIn = async (provider: SocialProvider): Promise<void> => {

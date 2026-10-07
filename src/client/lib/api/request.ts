@@ -175,8 +175,10 @@ export async function callApi<T>(
   if (!response.ok) {
     let message: string | undefined;
     try {
-      const body = (await response.json()) as { error?: unknown };
-      if (typeof body?.error === "string") message = body.error;
+      const body: unknown = await response.json();
+      if (typeof body === "object" && body !== null && "error" in body) {
+        if (typeof body.error === "string") message = body.error;
+      }
     } catch (error) {
       if (isTimeoutError(error)) {
         markServerUnreachable();

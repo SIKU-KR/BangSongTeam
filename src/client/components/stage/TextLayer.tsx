@@ -1,5 +1,5 @@
 import React, { useEffect } from "react";
-import type { Slide, DeckStyle, GridAnchorPreset, TextBackdrop } from "#shared";
+import type { Slide, DeckStyle, TextBackdrop } from "#shared";
 import { GRID_ANCHOR_TRANSFORMS, TEXT_SHADOW_PRESETS } from "#shared";
 import { loadWebFont, toCssFontFamily } from "../../lib/fonts/fontLoader";
 
@@ -41,14 +41,13 @@ export function TextLayer({
   } = style;
 
   const transform =
-    GRID_ANCHOR_TRANSFORMS[
-      position.anchor as Exclude<GridAnchorPreset, "custom">
-    ] ?? "translate(-50%, -50%)";
+    position.anchor === "custom"
+      ? "translate(-50%, -50%)"
+      : GRID_ANCHOR_TRANSFORMS[position.anchor];
 
   const fontSizePx = fontSizeVw * 19.2;
 
-  const textShadow =
-    TEXT_SHADOW_PRESETS[textShadowLevel] ?? TEXT_SHADOW_PRESETS.medium;
+  const textShadow = TEXT_SHADOW_PRESETS[textShadowLevel];
 
   useEffect(() => {
     if (fontFamily) {

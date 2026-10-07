@@ -36,7 +36,7 @@ Object.defineProperty(globalThis, "localStorage", {
   configurable: true,
 });
 
-if (typeof window !== "undefined" && !window.matchMedia) {
+if (typeof window !== "undefined" && typeof window.matchMedia !== "function") {
   Object.defineProperty(window, "matchMedia", {
     writable: true,
     value: (query: string) => ({
@@ -59,6 +59,12 @@ if (typeof HTMLCanvasElement !== "undefined") {
   });
 }
 
-if (typeof Element !== "undefined" && !Element.prototype.scrollIntoView) {
-  Element.prototype.scrollIntoView = () => {};
+if (
+  typeof Element !== "undefined" &&
+  typeof Element.prototype.scrollIntoView !== "function"
+) {
+  Object.defineProperty(Element.prototype, "scrollIntoView", {
+    configurable: true,
+    value: () => {},
+  });
 }

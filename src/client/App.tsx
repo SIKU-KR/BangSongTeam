@@ -56,21 +56,19 @@ function useHydration(): boolean {
   const userId = session.user?.userId ?? null;
 
   useEffect(() => {
-    let cancelled = false;
+    const controller = new AbortController();
     void (async () => {
       await hydrateSession();
-      if (!cancelled) setIsSessionResolved(true);
+      if (!controller.signal.aborted) setIsSessionResolved(true);
     })();
-    return () => {
-      cancelled = true;
-    };
+    return () => controller.abort();
   }, []);
 
   useEffect(() => {
     if (session.status !== "authenticated" || !userId) return;
     if (bootstrappedUserId === userId) return;
 
-    let cancelled = false;
+    const controller = new AbortController();
     void (async () => {
       await Promise.all([
         hydrateFromStorage(),
@@ -78,14 +76,12 @@ function useHydration(): boolean {
         hydrateFoldersFromStorage(),
         hydrateBackgroundCatalog(),
       ]);
-      if (cancelled) return;
+      if (controller.signal.aborted) return;
       setBootstrappedUserId(userId);
 
       if (shouldRunBootSync(window.location.pathname)) void runBootSync();
     })();
-    return () => {
-      cancelled = true;
-    };
+    return () => controller.abort();
   }, [session.status, userId, bootstrappedUserId]);
 
   useFlushOnPageHide();
@@ -246,7 +242,7 @@ function ProjectionLatchGate({
   const hasLeft = onLeave !== undefined && !isOnProjection;
 
   useEffect(() => {
-    if (hasLeft) onLeave?.();
+    if (hasLeft) onLeave();
   }, [hasLeft, onLeave]);
 
   useEffect(() => {

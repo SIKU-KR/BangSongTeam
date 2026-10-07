@@ -8,6 +8,7 @@ import {
   type TextWidthMeasurer,
 } from "#shared";
 import { toCssFontFamily } from "../../lib/fonts/fontLoader";
+import { documentFonts } from "../../lib/browser/optionalApis";
 
 function createCanvasContext(): CanvasRenderingContext2D | null {
   if (typeof document === "undefined") return null;
@@ -19,8 +20,8 @@ function createCanvasContext(): CanvasRenderingContext2D | null {
 }
 
 function requestMissingGlyphs(font: string, text: string): void {
-  const fonts = typeof document === "undefined" ? undefined : document.fonts;
-  if (!fonts?.check || !fonts.load) return;
+  const fonts = documentFonts();
+  if (!fonts) return;
   try {
     if (fonts.check(font, text)) return;
   } catch {

@@ -242,7 +242,7 @@ export function useSlideSelection({
   };
 
   const paste = (): boolean => {
-    if (!canPaste || !clipboard) return false;
+    if (!canPaste) return false;
     const at = insertAt();
     insertSlides(songIndex, at, clipboard.lines);
     pickInserted(at, clipboard.lines.length, true);

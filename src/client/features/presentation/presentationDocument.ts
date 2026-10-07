@@ -21,7 +21,6 @@ export function repairDuplicateDeckIds(documents: Presentation[]): {
 
   const repaired = documents.map((doc) => {
     const seen = new Set<string>();
-    let changed = false;
 
     const items = doc.items.map((item) => {
       const deck = item.deck;
@@ -30,11 +29,9 @@ export function repairDuplicateDeckIds(documents: Presentation[]): {
       if (!seen.has(deck.id)) {
         seen.add(deck.id);
         if (item.deckId === deck.id) return item;
-        changed = true;
         return { ...item, deckId: deck.id };
       }
 
-      changed = true;
       const newId = createId();
       seen.add(newId);
       return {
@@ -44,6 +41,7 @@ export function repairDuplicateDeckIds(documents: Presentation[]): {
       };
     });
 
+    const changed = items.some((item, index) => item !== doc.items[index]);
     if (!changed) return doc;
     repairedIds.push(doc.id);
     return { ...doc, items };

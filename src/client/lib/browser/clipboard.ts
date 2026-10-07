@@ -1,3 +1,4 @@
+import { navigatorApi } from "./optionalApis";
 function copyWithSelection(text: string): boolean {
   const textarea = document.createElement("textarea");
   textarea.value = text;
@@ -30,9 +31,10 @@ function copyWithSelection(text: string): boolean {
  * 권한 거부) 선택 영역 복사로 한 번 더 시도한다.
  */
 export async function copyToClipboard(text: string): Promise<void> {
-  if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
+  const clipboard = navigatorApi("clipboard");
+  if (clipboard) {
     try {
-      await navigator.clipboard.writeText(text);
+      await clipboard.writeText(text);
       return;
     } catch {
       if (typeof document === "undefined") throw new Error("clipboard");

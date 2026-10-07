@@ -115,6 +115,18 @@ const STYLE_ALLOWED_FILES = [
   "src/client/features/drive/DriveBrowser.tsx",
 ];
 
+/**
+ * 타입 정보로 불필요한 조건을 잡는 규칙에서 뺄 파일. 테스트는 픽스처를 인덱스로 꺼내므로
+ * `noUncheckedIndexedAccess` 없이 검사해 인덱스 방어가 불필요해 보이고, `components/ui`는
+ * shadcn CLI가 만든 그대로 둔다.
+ */
+const UNNECESSARY_CONDITION_EXEMPT_FILES = [
+  "**/*.test.{ts,tsx}",
+  "src/**/test/**",
+  "src/db/test-utils.ts",
+  "src/client/components/ui/**",
+];
+
 const HANGUL = /[가-힣]/;
 const COPY_IN_COPY_MODULES =
   "사용자에게 보이는 문구는 src/client/copy/*(클라이언트)나 src/shared/copy/*(서버·검증)에 두고 가져다 쓰세요. 같은 문장이 이미 있으면 그 키를 재사용합니다.";
@@ -195,6 +207,8 @@ export default tseslint.config(
       parserOptions: {
         ecmaVersion: "latest",
         sourceType: "module",
+        projectService: true,
+        tsconfigRootDir: import.meta.dirname,
       },
       globals: {
         ...globals.browser,
@@ -203,6 +217,7 @@ export default tseslint.config(
       },
     },
     rules: {
+      "@typescript-eslint/no-unnecessary-condition": "error",
       "no-restricted-properties": [
         "error",
         {
@@ -212,6 +227,12 @@ export default tseslint.config(
             "엔터티 id는 #shared의 createId()(NanoID)로 만드세요. UUID는 IdSchema를 통과하지 못합니다.",
         },
       ],
+    },
+  },
+  {
+    files: UNNECESSARY_CONDITION_EXEMPT_FILES,
+    rules: {
+      "@typescript-eslint/no-unnecessary-condition": "off",
     },
   },
   {

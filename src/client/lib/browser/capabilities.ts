@@ -1,5 +1,6 @@
 import { resolveFullscreenStrategy } from "./fullscreen";
 import { SHELL_COPY } from "#copy/shell";
+import { navigatorApi } from "./optionalApis";
 
 type BrowserCapabilityId = "fullscreen" | "h264" | "offline";
 
@@ -67,7 +68,5 @@ export function canPresentReliably(): boolean {
 
 /** 서비스 워커가 지금 페이지를 제어하는지. 제어하면 미디어 요청이 SW 캐시 라우트를 지난다 */
 export function isServiceWorkerControlled(): boolean {
-  return (
-    typeof navigator !== "undefined" && !!navigator.serviceWorker?.controller
-  );
+  return Boolean(navigatorApi("serviceWorker")?.controller);
 }

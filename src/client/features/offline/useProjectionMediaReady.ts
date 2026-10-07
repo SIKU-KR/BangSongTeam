@@ -23,6 +23,7 @@ import {
 } from "../../lib/offline";
 import { useBackgroundLookup } from "../backgrounds/backgroundCatalog";
 import { useLatest } from "../../hooks/useLatest";
+import { navigatorApi } from "../../lib/browser/optionalApis";
 
 export type ProjectionMediaStatus =
   "checking" | "downloading" | "ready" | "failed";
@@ -104,10 +105,10 @@ function hitQuota(
  * 끝내 제어받지 못해도 그냥 진행한다.
  */
 async function waitForServiceWorker(): Promise<void> {
-  if (typeof navigator === "undefined" || !navigator.serviceWorker) return;
-  if (navigator.serviceWorker.controller) return;
+  const serviceWorker = navigatorApi("serviceWorker");
+  if (!serviceWorker || serviceWorker.controller) return;
   await Promise.race([
-    navigator.serviceWorker.ready.catch(() => undefined),
+    serviceWorker.ready.catch(() => undefined),
     new Promise((resolve) =>
       setTimeout(resolve, SERVICE_WORKER_READY_TIMEOUT_MS),
     ),

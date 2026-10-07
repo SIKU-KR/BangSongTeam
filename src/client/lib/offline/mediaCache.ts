@@ -18,6 +18,7 @@ import {
 } from "../observability/clientReports";
 import { BackoffTracker, type SyncRetryMode } from "../sync/backoff";
 import { requestPersistentStorage } from "./storagePersistence";
+import { navigatorApi } from "../browser/optionalApis";
 
 /** 받는 중인 파일의 진행 상황. `total`은 응답에 길이가 없으면 null이다 */
 interface MediaProgress {
@@ -37,7 +38,7 @@ export const MEDIA_STALL_TIMEOUT_MS = 30_000;
 
 export function isCacheStorageAvailable(): boolean {
   try {
-    return typeof caches !== "undefined" && caches !== null;
+    return typeof caches !== "undefined";
   } catch {
     return false;
   }
@@ -649,11 +650,10 @@ export async function findCachedMediaUrls(
 }
 
 async function estimateFreeBytes(): Promise<number | null> {
-  if (typeof navigator === "undefined" || !navigator.storage?.estimate) {
-    return null;
-  }
+  const storage = navigatorApi("storage");
+  if (!storage) return null;
   try {
-    const { quota, usage } = await navigator.storage.estimate();
+    const { quota, usage } = await storage.estimate();
     if (quota === undefined || usage === undefined) return null;
     return quota - usage;
   } catch {
