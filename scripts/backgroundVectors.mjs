@@ -46,10 +46,7 @@ async function embedDocuments(documents) {
       start += BACKGROUND_EMBEDDING_BATCH_SIZE
     ) {
       const { data } = await proxy.env.AI.run(BACKGROUND_EMBEDDING_MODEL, {
-        documents: documents.slice(
-          start,
-          start + BACKGROUND_EMBEDDING_BATCH_SIZE,
-        ),
+        text: documents.slice(start, start + BACKGROUND_EMBEDDING_BATCH_SIZE),
       });
       vectors.push(...data);
     }
