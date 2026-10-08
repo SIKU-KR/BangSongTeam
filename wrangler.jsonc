@@ -52,7 +52,7 @@
   "vectorize": [
     {
       "binding": "BACKGROUND_INDEX",
-      "index_name": "bangsongteam-backgrounds",
+      "index_name": "bangsongteam-backgrounds-gemma",
       "remote": true
     }
   ]

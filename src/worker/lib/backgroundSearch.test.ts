@@ -1,8 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import {
-  BACKGROUND_EMBEDDING_MODEL,
-  BACKGROUND_QUERY_INSTRUCTION,
-} from "#shared";
+import { BACKGROUND_EMBEDDING_MODEL } from "#shared";
 import type { Bindings } from "../types";
 import { searchBackgroundsWithVectorize } from "./backgroundSearch";
 
@@ -20,13 +17,12 @@ function fakeEnv(scores: number[]) {
 }
 
 describe("searchBackgroundsWithVectorize", () => {
-  it("검색어에 검색용 지시문을 붙여 임베딩하고 그 벡터로 인덱스를 찾는다", async () => {
+  it("검색어에 검색용 접두어를 붙여 임베딩하고 그 벡터로 인덱스를 찾는다", async () => {
     const { env, run, query } = fakeEnv([0.7]);
     await searchBackgroundsWithVectorize(env, "성탄");
 
     expect(run).toHaveBeenCalledWith(BACKGROUND_EMBEDDING_MODEL, {
-      queries: "성탄",
-      instruction: BACKGROUND_QUERY_INSTRUCTION,
+      text: "task: search result | query: 성탄",
     });
     expect(query).toHaveBeenCalledWith([0.1, 0.2], { topK: 50 });
   });
@@ -38,7 +34,7 @@ describe("searchBackgroundsWithVectorize", () => {
   });
 
   it("관련 없는 검색어처럼 점수가 모두 낮으면 아무것도 주지 않는다", async () => {
-    const { env } = fakeEnv([0.51, 0.49, 0.45]);
+    const { env } = fakeEnv([0.2, 0.18, 0.15]);
     expect(await searchBackgroundsWithVectorize(env, "고양이")).toEqual([]);
   });
 });
