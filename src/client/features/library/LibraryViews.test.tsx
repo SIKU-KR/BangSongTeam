@@ -1,7 +1,7 @@
 import React from "react";
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { act, render, screen, fireEvent } from "@testing-library/react";
-import type { BackgroundMedia } from "#shared";
+import { BACKGROUND_SEARCH_MAX_LENGTH, type BackgroundMedia } from "#shared";
 import { BackgroundLibraryView } from "./index";
 import { installFakeApi, type FakeApi } from "../../test/fakeApi";
 import { withQueryClient } from "../../test/queryClientFixture";
@@ -113,31 +113,65 @@ describe("BackgroundLibraryView", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("셸 검색어는 제목을 초성으로도 찾는다", async () => {
+  it("셸 검색어는 서버 벡터 검색 결과를 가까운 순서대로 보여 준다", async () => {
     api = installFakeApi({
       "GET /api/backgrounds": () => listResponse([LAKE, FIRE, STILL]),
+      "GET /api/backgrounds/search": () => ({
+        body: {
+          results: [
+            { id: FIRE.id, score: 0.72 },
+            { id: LAKE.id, score: 0.61 },
+          ],
+        },
+      }),
     });
 
-    await renderView("ㅎㅅ");
+    await renderView("뜨겁게 선포하는 배경");
+    await screen.findByRole("img", { name: "타오르는 불꽃" });
     expect(
-      await screen.findByRole("img", { name: "고요한 호수 물결" }),
+      screen.getAllByRole("img").map((img) => img.getAttribute("alt")),
+    ).toEqual(["타오르는 불꽃", "고요한 호수 물결"]);
+    const searchCall = api.calls.find(
+      (call) => call.path === "/api/backgrounds/search",
+    );
+    expect(new URLSearchParams(searchCall?.search).get("q")).toBe(
+      "뜨겁게 선포하는 배경",
+    );
+  });
+
+  it("서버가 받는 길이보다 긴 검색어는 잘라 보낸다", async () => {
+    api = installFakeApi({
+      "GET /api/backgrounds": () => listResponse([LAKE, FIRE, STILL]),
+      "GET /api/backgrounds/search": () => ({
+        body: { results: [{ id: LAKE.id, score: 0.7 }] },
+      }),
+    });
+
+    await renderView("잔잔한 호수 ".repeat(10));
+    await screen.findByRole("img", { name: "고요한 호수 물결" });
+    const searchCall = api.calls.find(
+      (call) => call.path === "/api/backgrounds/search",
+    );
+    expect(
+      new URLSearchParams(searchCall?.search).get("q")?.length,
+    ).toBeLessThanOrEqual(BACKGROUND_SEARCH_MAX_LENGTH);
+  });
+
+  it("검색할 수 없으면 다시 검색하라고 안내한다", async () => {
+    api = installFakeApi({
+      "GET /api/backgrounds": () => listResponse([LAKE, FIRE, STILL]),
+      "GET /api/backgrounds/search": () => ({
+        status: 503,
+        body: { error: "unavailable" },
+      }),
+    });
+
+    await renderView("성탄");
+    expect(
+      await screen.findByText(BACKGROUND_COPY.library.searchFailed),
     ).toBeInTheDocument();
     expect(
       screen.queryByRole("img", { name: "본당 성탄 배경" }),
-    ).not.toBeInTheDocument();
-  });
-
-  it("셸 검색어는 검색 키워드로도 찾는다", async () => {
-    api = installFakeApi({
-      "GET /api/backgrounds": () => listResponse([LAKE, FIRE, STILL]),
-    });
-
-    await renderView("선포");
-    expect(
-      await screen.findByRole("img", { name: "타오르는 불꽃" }),
-    ).toBeInTheDocument();
-    expect(
-      screen.queryByRole("img", { name: "고요한 호수 물결" }),
     ).not.toBeInTheDocument();
   });
 

@@ -10,7 +10,6 @@ export const SHELL_COPY = {
   searchPlaceholder: {
     trash: "휴지통에서 검색",
     drive: "폴더, 프레젠테이션, 곡 제목, 가사로 검색",
-    backgrounds: "색, 분위기, 장면으로 검색",
   },
   browserSupport: {
     label: "브라우저 호환성 안내",

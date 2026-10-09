@@ -1,7 +1,6 @@
 import { useMemo, useSyncExternalStore } from "react";
 import type { BackgroundMedia } from "#shared";
 import { loadAllBackgrounds, replaceAllBackgrounds } from "../../lib/storage";
-import { getCurrentUserId } from "../../lib/auth/sessionStore";
 
 /**
  * - `local`: IndexedDB 사본만 있다 (부팅 직후, 송출 화면)
@@ -61,7 +60,7 @@ async function persist(operation: () => Promise<void>): Promise<void> {
 export async function hydrateBackgroundCatalog(): Promise<void> {
   let backgrounds: BackgroundMedia[] = [];
   try {
-    backgrounds = await loadAllBackgrounds(getCurrentUserId());
+    backgrounds = await loadAllBackgrounds();
   } catch (error) {
     void error;
   }
@@ -76,7 +75,7 @@ export async function applyServerBackgroundCatalog(
   backgrounds: BackgroundMedia[],
 ): Promise<void> {
   setSnapshot({ backgrounds, status: "synced" });
-  await persist(() => replaceAllBackgrounds(backgrounds, getCurrentUserId()));
+  await persist(() => replaceAllBackgrounds(backgrounds));
 }
 
 export function markBackgroundCatalogStatus(
@@ -96,8 +95,8 @@ export function getBackgroundById(
   return id ? byId.get(id) : undefined;
 }
 
-export function getServiceBackgrounds(): BackgroundMedia[] {
-  return snapshot.backgrounds.filter((bg) => bg.source === "service");
+export function getBackgrounds(): BackgroundMedia[] {
+  return snapshot.backgrounds;
 }
 
 export function resolveBackgroundLayers(

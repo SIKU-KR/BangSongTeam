@@ -33,6 +33,8 @@ export const API_ERRORS = {
   media: {
     keyRequired: "배경 파일을 지정해 주세요",
     notFound: "배경 파일을 찾을 수 없어요",
+    searchUnavailable:
+      "지금은 배경을 검색할 수 없어요. 잠시 후 다시 시도해 주세요",
   },
   clientReport: {
     tooLarge: "보낸 내용이 너무 커요. 줄여서 다시 보내 주세요",

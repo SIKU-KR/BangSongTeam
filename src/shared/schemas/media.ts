@@ -2,8 +2,6 @@ import { z } from "zod";
 import { IdSchema } from "./id";
 import { MEDIA_URL_PREFIX } from "../constants/projection";
 
-export const BackgroundSourceSchema = z.enum(["service", "user"]);
-
 export const BackgroundKindSchema = z.enum(["video", "image"]);
 export type BackgroundKind = z.infer<typeof BackgroundKindSchema>;
 
@@ -24,7 +22,6 @@ const MediaUrlSchema = z.string().startsWith(MEDIA_URL_PREFIX);
 export const BackgroundMediaSchema = z.object({
   id: IdSchema,
   title: z.string().min(1),
-  source: BackgroundSourceSchema,
   kind: BackgroundKindSchema,
   mediaUrl: MediaUrlSchema,
   posterUrl: MediaUrlSchema,
@@ -43,4 +40,28 @@ export const BackgroundListResponseSchema = z.object({
 });
 export type BackgroundListResponse = z.infer<
   typeof BackgroundListResponseSchema
+>;
+
+/** 배경 검색어 최대 길이. 클라이언트는 이보다 긴 입력을 잘라 보낸다 */
+export const BACKGROUND_SEARCH_MAX_LENGTH = 50;
+
+/** 배경 벡터 검색어 (`GET /api/backgrounds/search`) */
+export const SearchBackgroundsQuerySchema = z.object({
+  q: z.string().trim().min(1).max(BACKGROUND_SEARCH_MAX_LENGTH),
+});
+
+export const BackgroundSearchResultSchema = z.object({
+  id: IdSchema,
+  score: z.number(),
+});
+export type BackgroundSearchResult = z.infer<
+  typeof BackgroundSearchResultSchema
+>;
+
+/** 검색어와 가까운 배경 id. 가까운 순서이고, 기준 점수에 못 미치는 배경은 빠진다 */
+export const SearchBackgroundsResponseSchema = z.object({
+  results: z.array(BackgroundSearchResultSchema),
+});
+export type SearchBackgroundsResponse = z.infer<
+  typeof SearchBackgroundsResponseSchema
 >;

@@ -108,6 +108,7 @@ function PickerDialog({
   selectedColor,
   onSelect,
 }: BackgroundPickerModalProps): React.JSX.Element {
+  const [draft, setDraft] = useState("");
   const [query, setQuery] = useState("");
   const {
     catalog,
@@ -168,10 +169,14 @@ function PickerDialog({
             </div>
             {hasAnyBackground && (
               <SearchInput
-                value={query}
-                onValueChange={setQuery}
+                value={draft}
+                onValueChange={(next) => {
+                  setDraft(next);
+                  if (next.trim() === "") setQuery("");
+                }}
+                onSubmit={() => setQuery(draft.trim())}
                 label={BACKGROUND_COPY.picker.searchLabel}
-                placeholder={BACKGROUND_COPY.picker.searchPlaceholder}
+                placeholder={BACKGROUND_COPY.searchPlaceholders}
                 testId="bg-picker-search-input"
               />
             )}
@@ -189,10 +194,7 @@ function PickerDialog({
                 <Empty className="col-span-full">
                   <EmptyHeader>
                     <EmptyDescription>
-                      {describeBackgroundGalleryEmpty(
-                        emptyReason,
-                        query.trim(),
-                      )}
+                      {describeBackgroundGalleryEmpty(emptyReason, query)}
                     </EmptyDescription>
                   </EmptyHeader>
                 </Empty>

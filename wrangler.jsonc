@@ -42,5 +42,18 @@
       "binding": "MEDIA_BUCKET",
       "bucket_name": "bangsongteam-media"
     }
+  ],
+  // 배경 벡터 검색. 둘 다 로컬 시뮬레이션이 없어 원격으로만 동작한다. `pnpm dev`는
+  // CF_REMOTE_BINDINGS=true일 때만 붙고, 이때 인덱스는 `vite.config.ts`가 로컬용으로 바꾼다.
+  "ai": {
+    "binding": "AI",
+    "remote": true
+  },
+  "vectorize": [
+    {
+      "binding": "BACKGROUND_INDEX",
+      "index_name": "bangsongteam-backgrounds-gemma",
+      "remote": true
+    }
   ]
 }

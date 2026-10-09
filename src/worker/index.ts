@@ -46,7 +46,7 @@ export function createApp(deps: AppDeps = {}) {
     .route("/api/catalog", createCatalogRoute(deps))
     .route("/api/reports", createReportsRoute(deps))
     .route("/api/share", createShareRoute(deps))
-    .route("/api/backgrounds", createBackgroundsRoute())
+    .route("/api/backgrounds", createBackgroundsRoute(deps))
     .route("/api/media", createMediaRoute());
 }
 

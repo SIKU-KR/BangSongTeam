@@ -21,7 +21,7 @@ import {
   scheduleDocumentPush,
   cancelDocumentPush,
 } from "../../lib/sync/syncScheduler";
-import { getServiceBackgrounds } from "../backgrounds/backgroundCatalog";
+import { getBackgrounds } from "../backgrounds/backgroundCatalog";
 import { COMMON_COPY } from "#copy/common";
 import {
   breakHistoryCoalescing,
@@ -338,7 +338,7 @@ export function addDeckToPresentation(deck: Deck): PresentationItem {
   pushHistory();
   const active = readActive();
   const rotatedBackground = cycleItem(
-    getServiceBackgrounds(),
+    getBackgrounds(),
     active.items.length,
   );
   const assignedBackgroundId =

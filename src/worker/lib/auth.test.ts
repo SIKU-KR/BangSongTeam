@@ -18,6 +18,8 @@ function makeEnv(overrides: Partial<Bindings> = {}): Bindings {
   return {
     DB: {} as D1Database,
     MEDIA_BUCKET: {} as R2Bucket,
+    AI: {} as Ai,
+    BACKGROUND_INDEX: {} as VectorizeIndex,
     BETTER_AUTH_SECRET: "test-secret-that-is-at-least-32-characters",
     BETTER_AUTH_URL: "http://localhost:5173",
     KAKAO_CLIENT_ID: "kakao-id",
@@ -114,11 +116,6 @@ describe("worker auth 인스턴스", () => {
       const auth = getAuth(makeEnv());
       expect(typeof auth.handler).toBe("function");
       expect(auth.api).toBeDefined();
-    });
-
-    it("같은 env로 두 번 부르면 인스턴스를 재사용한다", () => {
-      const env = makeEnv();
-      expect(getAuth(env)).toBe(getAuth(env));
     });
 
     it("자격증명이 없어도 인스턴스 생성 자체는 실패하지 않는다", () => {

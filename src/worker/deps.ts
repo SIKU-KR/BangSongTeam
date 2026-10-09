@@ -1,3 +1,4 @@
+import type { BackgroundSearcher } from "./lib/backgroundSearch";
 import {
   createRequireAuth,
   readSessionFromBetterAuth,
@@ -13,6 +14,8 @@ import {
  */
 export interface AppDeps {
   readSession?: SessionReader;
+  /** Workers AI·Vectorize는 테스트 런타임에 없으므로 배경 검색은 갈아 끼운다 */
+  searchBackgrounds?: BackgroundSearcher;
 }
 
 export function resolveRequireAuth(deps: AppDeps) {
