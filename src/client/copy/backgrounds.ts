@@ -10,14 +10,13 @@ export const BACKGROUND_COPY = {
   previewFailed: "미리보기를 불러오지 못했어요",
   noBackgrounds: "아직 배경이 없어요.",
   offline: "오프라인이라 저장해 둔 배경만 보여요",
-  searchExamples: [
-    "기도할 때 깔 잔잔한 물결",
-    "부활절에 어울리는 십자가",
-    "성탄 찬양에 쓸 따뜻한 전구 불빛",
-    "가사가 잘 보이는 어두운 별빛 하늘",
-    "신나는 찬양에 어울리는 알록달록한 배경",
+  searchPlaceholders: [
+    "예: 기도할 때 깔 잔잔한 물결",
+    "예: 부활절에 어울리는 십자가",
+    "예: 성탄 찬양에 쓸 따뜻한 전구 불빛",
+    "예: 가사가 잘 보이는 어두운 별빛 하늘",
+    "예: 신나는 찬양에 어울리는 알록달록한 배경",
   ],
-  searchExample: (example: string) => `예: ${example}`,
   picker: {
     title: "곡 배경 선택",
     description:

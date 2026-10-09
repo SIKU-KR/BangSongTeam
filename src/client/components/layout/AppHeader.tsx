@@ -9,12 +9,14 @@ import {
 import { SidebarTrigger } from "#components/ui/sidebar";
 import { isTypingTarget } from "../../lib/browser/keyboardTarget";
 import { ThemeMenuButton } from "../common/ThemeMenuButton";
+import { useRotatingPlaceholder } from "#hooks/useRotatingPlaceholder";
 import { COMMON_COPY } from "#copy/common";
 
 interface AppHeaderProps {
   /** 페이지 제목. `titleSlot`이 있으면 화면 읽기 프로그램용 제목으로만 쓴다 */
   title: string;
-  searchPlaceholder: string;
+  /** 여러 개면 검색창이 비어 있는 동안 돌려 가며 보여 준다 */
+  searchPlaceholder: string | readonly string[];
   searchQuery: string;
   onSearchQueryChange: (value: string) => void;
   /** 있으면 Enter나 '검색' 버튼으로 제출할 때만 검색한다 (배경 벡터 검색) */
@@ -40,6 +42,10 @@ export function AppHeader({
   actions,
 }: AppHeaderProps): React.JSX.Element {
   const inputRef = useRef<HTMLInputElement>(null);
+  const placeholder = useRotatingPlaceholder(
+    searchPlaceholder,
+    searchQuery !== "",
+  );
 
   useEffect(() => {
     const handleKey = (event: KeyboardEvent): void => {
@@ -87,7 +93,7 @@ export function AppHeader({
                 if (searchQuery) onSearchQueryChange("");
                 else e.currentTarget.blur();
               }}
-              placeholder={searchPlaceholder}
+              placeholder={placeholder}
             />
             {(searchQuery || onSearchSubmit) && (
               <InputGroupAddon align="inline-end">

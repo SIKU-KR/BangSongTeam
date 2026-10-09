@@ -21,7 +21,6 @@ import {
   describeBackgroundGalleryEmpty,
   useBackgroundGallery,
 } from "../backgrounds/useBackgroundGallery";
-import { useBackgroundSearchPlaceholder } from "../backgrounds/useBackgroundSearchPlaceholder";
 import type { BackgroundChoice } from "../presentation/presentationStore";
 import { ColorPalette } from "./ColorPalette";
 import { BACKGROUND_COPY } from "#copy/backgrounds";
@@ -111,7 +110,6 @@ function PickerDialog({
 }: BackgroundPickerModalProps): React.JSX.Element {
   const [draft, setDraft] = useState("");
   const [query, setQuery] = useState("");
-  const placeholder = useBackgroundSearchPlaceholder(draft === "");
   const {
     catalog,
     kind,
@@ -178,7 +176,7 @@ function PickerDialog({
                 }}
                 onSubmit={() => setQuery(draft.trim())}
                 label={BACKGROUND_COPY.picker.searchLabel}
-                placeholder={placeholder}
+                placeholder={BACKGROUND_COPY.searchPlaceholders}
                 testId="bg-picker-search-input"
               />
             )}

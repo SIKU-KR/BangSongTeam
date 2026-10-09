@@ -6,6 +6,7 @@ import {
   InputGroupButton,
   InputGroupInput,
 } from "#components/ui/input-group";
+import { useRotatingPlaceholder } from "#hooks/useRotatingPlaceholder";
 import { COMMON_COPY } from "#copy/common";
 
 interface SearchInputProps {
@@ -13,7 +14,8 @@ interface SearchInputProps {
   onValueChange: (next: string) => void;
   /** 보이는 레이블이 없어 `aria-label`로만 붙는 입력란 이름 */
   label: string;
-  placeholder?: string;
+  /** 여러 개면 입력란이 비어 있는 동안 돌려 가며 보여 준다 */
+  placeholder?: string | readonly string[];
   testId?: string;
   /** 있으면 Enter나 '검색' 버튼으로 제출할 때만 검색한다 (요청 비용이 큰 검색) */
   onSubmit?: () => void;
@@ -30,6 +32,7 @@ export function SearchInput({
   testId,
   onSubmit,
 }: SearchInputProps): React.JSX.Element {
+  const shownPlaceholder = useRotatingPlaceholder(placeholder, value !== "");
   const field = (
     <InputGroup>
       <InputGroupInput
@@ -38,7 +41,7 @@ export function SearchInput({
         aria-label={label}
         value={value}
         onChange={(e) => onValueChange(e.target.value)}
-        placeholder={placeholder}
+        placeholder={shownPlaceholder}
       />
       <InputGroupAddon>
         <SearchIcon />

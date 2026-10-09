@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import { Outlet, useLocation } from "react-router-dom";
 import { SidebarInset, SidebarProvider } from "#components/ui/sidebar";
 import { Toaster } from "#components/ui/sonner";
@@ -17,8 +17,8 @@ import {
   useDrive,
   useFolderIndex,
 } from "../features/drive";
-import { useBackgroundSearchPlaceholder } from "../features/backgrounds/useBackgroundSearchPlaceholder";
 import type { AppShellContextValue } from "./appShellContext";
+import { BACKGROUND_COPY } from "#copy/backgrounds";
 import { SHELL_COPY } from "#copy/shell";
 import { COMMON_COPY } from "#copy/common";
 
@@ -26,7 +26,7 @@ const MAIN_CONTENT_ID = "main-content";
 
 interface ShellPageMeta {
   title: string;
-  placeholder: string;
+  placeholder: string | readonly string[];
 }
 
 const TRASH_META: ShellPageMeta = {
@@ -37,9 +37,15 @@ const DRIVE_META: ShellPageMeta = {
   title: COMMON_COPY.myDrive,
   placeholder: SHELL_COPY.searchPlaceholder.drive,
 };
+const BACKGROUNDS_META: ShellPageMeta = {
+  title: SHELL_COPY.backgroundGallery,
+  placeholder: BACKGROUND_COPY.searchPlaceholders,
+};
 
 function metaFor(pathname: string): ShellPageMeta {
-  return pathname === TRASH_PATH ? TRASH_META : DRIVE_META;
+  if (pathname === TRASH_PATH) return TRASH_META;
+  if (pathname.startsWith("/backgrounds")) return BACKGROUNDS_META;
+  return DRIVE_META;
 }
 
 /**
@@ -73,24 +79,16 @@ function AppShellFrame(): React.JSX.Element {
   const onTrash = drive.isTrashView;
   const onBackgrounds = pathname.startsWith("/backgrounds");
   useFolderIndex();
-  const backgroundPlaceholder = useBackgroundSearchPlaceholder(
-    onBackgrounds && backgroundDraft === "",
-  );
-  const pageTitle = onBackgrounds
-    ? SHELL_COPY.backgroundGallery
-    : onDrive && !onTrash && drive.currentFolderId
+  const pageTitle =
+    onDrive && !onTrash && drive.currentFolderId
       ? (getFolder(drive.currentFolderId)?.name ?? COMMON_COPY.myDrive)
       : meta.title;
 
   const search: Pick<
     React.ComponentProps<typeof AppHeader>,
-    | "searchPlaceholder"
-    | "searchQuery"
-    | "onSearchQueryChange"
-    | "onSearchSubmit"
+    "searchQuery" | "onSearchQueryChange" | "onSearchSubmit"
   > = onBackgrounds
     ? {
-        searchPlaceholder: backgroundPlaceholder,
         searchQuery: backgroundDraft,
         onSearchQueryChange: (value) => {
           setBackgroundDraft(value);
@@ -99,14 +97,15 @@ function AppShellFrame(): React.JSX.Element {
         onSearchSubmit: () => setBackgroundQuery(backgroundDraft.trim()),
       }
     : {
-        searchPlaceholder: meta.placeholder,
         searchQuery,
         onSearchQueryChange: setSearchQuery,
       };
 
-  const context: AppShellContextValue = {
-    searchQuery: onBackgrounds ? backgroundQuery : searchQuery,
-  };
+  const routeQuery = onBackgrounds ? backgroundQuery : searchQuery;
+  const context = useMemo<AppShellContextValue>(
+    () => ({ searchQuery: routeQuery }),
+    [routeQuery],
+  );
 
   return (
     <SidebarProvider className="h-svh overflow-hidden">
@@ -129,6 +128,7 @@ function AppShellFrame(): React.JSX.Element {
 
         <AppHeader
           title={pageTitle}
+          searchPlaceholder={meta.placeholder}
           {...search}
           titleSlot={onDrive ? <DriveBreadcrumbs /> : undefined}
           actions={

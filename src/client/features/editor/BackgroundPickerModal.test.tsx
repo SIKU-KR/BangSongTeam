@@ -214,24 +214,15 @@ describe("BackgroundPickerModal", () => {
     try {
       renderPicker();
       const input = screen.getByTestId("bg-picker-search-input");
-      const [first, second] = BACKGROUND_COPY.searchExamples;
-      expect(input).toHaveAttribute(
-        "placeholder",
-        BACKGROUND_COPY.searchExample(first),
-      );
+      const [first, second] = BACKGROUND_COPY.searchPlaceholders;
+      expect(input).toHaveAttribute("placeholder", first);
 
       act(() => vi.advanceTimersByTime(3500));
-      expect(input).toHaveAttribute(
-        "placeholder",
-        BACKGROUND_COPY.searchExample(second),
-      );
+      expect(input).toHaveAttribute("placeholder", second);
 
       fireEvent.change(input, { target: { value: "노을" } });
       act(() => vi.advanceTimersByTime(7000));
-      expect(input).toHaveAttribute(
-        "placeholder",
-        BACKGROUND_COPY.searchExample(second),
-      );
+      expect(input).toHaveAttribute("placeholder", second);
     } finally {
       vi.useRealTimers();
     }
