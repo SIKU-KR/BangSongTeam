@@ -17,6 +17,8 @@ interface AppHeaderProps {
   searchPlaceholder: string;
   searchQuery: string;
   onSearchQueryChange: (value: string) => void;
+  /** 있으면 Enter나 '검색' 버튼으로 제출할 때만 검색한다 (배경 벡터 검색) */
+  onSearchSubmit?: () => void;
   /** 제목 대신 넣을 내용 (드라이브의 경로) */
   titleSlot?: React.ReactNode;
   /** 제목 줄 오른쪽 */
@@ -33,6 +35,7 @@ export function AppHeader({
   searchPlaceholder,
   searchQuery,
   onSearchQueryChange,
+  onSearchSubmit,
   titleSlot,
   actions,
 }: AppHeaderProps): React.JSX.Element {
@@ -60,39 +63,59 @@ export function AppHeader({
     <header className="shrink-0 bg-background">
       <div className="flex h-16 items-center gap-2 px-4 sm:px-6">
         <SidebarTrigger />
-        <InputGroup className="h-10 max-w-3xl">
-          <InputGroupAddon>
-            <SearchIcon />
-          </InputGroupAddon>
-          <InputGroupInput
-            ref={inputRef}
-            type="search"
-            aria-label={COMMON_COPY.search}
-            data-testid="shell-search-input"
-            value={searchQuery}
-            onChange={(e) => onSearchQueryChange(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key !== "Escape") return;
-              if (searchQuery) onSearchQueryChange("");
-              else e.currentTarget.blur();
-            }}
-            placeholder={searchPlaceholder}
-          />
-          {searchQuery && (
-            <InputGroupAddon align="inline-end">
-              <InputGroupButton
-                size="icon-xs"
-                aria-label={COMMON_COPY.clearSearch}
-                onClick={() => {
-                  onSearchQueryChange("");
-                  inputRef.current?.focus();
-                }}
-              >
-                <XIcon />
-              </InputGroupButton>
+        <form
+          role="search"
+          className="w-full max-w-3xl"
+          onSubmit={(e) => {
+            e.preventDefault();
+            onSearchSubmit?.();
+          }}
+        >
+          <InputGroup className="h-10">
+            <InputGroupAddon>
+              <SearchIcon />
             </InputGroupAddon>
-          )}
-        </InputGroup>
+            <InputGroupInput
+              ref={inputRef}
+              type="search"
+              aria-label={COMMON_COPY.search}
+              data-testid="shell-search-input"
+              value={searchQuery}
+              onChange={(e) => onSearchQueryChange(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key !== "Escape") return;
+                if (searchQuery) onSearchQueryChange("");
+                else e.currentTarget.blur();
+              }}
+              placeholder={searchPlaceholder}
+            />
+            {(searchQuery || onSearchSubmit) && (
+              <InputGroupAddon align="inline-end">
+                {searchQuery && (
+                  <InputGroupButton
+                    size="icon-xs"
+                    aria-label={COMMON_COPY.clearSearch}
+                    onClick={() => {
+                      onSearchQueryChange("");
+                      inputRef.current?.focus();
+                    }}
+                  >
+                    <XIcon />
+                  </InputGroupButton>
+                )}
+                {onSearchSubmit && (
+                  <InputGroupButton
+                    type="submit"
+                    variant="secondary"
+                    disabled={searchQuery.trim() === ""}
+                  >
+                    {COMMON_COPY.search}
+                  </InputGroupButton>
+                )}
+              </InputGroupAddon>
+            )}
+          </InputGroup>
+        </form>
         <div className="ml-auto">
           <ThemeMenuButton />
         </div>

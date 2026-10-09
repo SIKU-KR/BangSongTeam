@@ -15,6 +15,8 @@ interface SearchInputProps {
   label: string;
   placeholder?: string;
   testId?: string;
+  /** 있으면 Enter나 '검색' 버튼으로 제출할 때만 검색한다 (요청 비용이 큰 검색) */
+  onSubmit?: () => void;
 }
 
 /**
@@ -26,8 +28,9 @@ export function SearchInput({
   label,
   placeholder,
   testId,
+  onSubmit,
 }: SearchInputProps): React.JSX.Element {
-  return (
+  const field = (
     <InputGroup>
       <InputGroupInput
         type="text"
@@ -40,17 +43,40 @@ export function SearchInput({
       <InputGroupAddon>
         <SearchIcon />
       </InputGroupAddon>
-      {value && (
+      {(value || onSubmit) && (
         <InputGroupAddon align="inline-end">
-          <InputGroupButton
-            size="icon-xs"
-            aria-label={COMMON_COPY.clearSearch}
-            onClick={() => onValueChange("")}
-          >
-            <XIcon />
-          </InputGroupButton>
+          {value && (
+            <InputGroupButton
+              size="icon-xs"
+              aria-label={COMMON_COPY.clearSearch}
+              onClick={() => onValueChange("")}
+            >
+              <XIcon />
+            </InputGroupButton>
+          )}
+          {onSubmit && (
+            <InputGroupButton
+              type="submit"
+              variant="secondary"
+              disabled={value.trim() === ""}
+            >
+              {COMMON_COPY.search}
+            </InputGroupButton>
+          )}
         </InputGroupAddon>
       )}
     </InputGroup>
+  );
+  if (!onSubmit) return field;
+  return (
+    <form
+      role="search"
+      onSubmit={(e) => {
+        e.preventDefault();
+        onSubmit();
+      }}
+    >
+      {field}
+    </form>
   );
 }
