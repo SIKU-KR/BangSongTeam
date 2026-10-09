@@ -69,13 +69,13 @@ function markErrored(video: HTMLVideoElement): void {
 }
 
 describe("VideoLayer", () => {
-  let play: ReturnType<typeof vi.fn>;
-  let pause: ReturnType<typeof vi.fn>;
-  let load: ReturnType<typeof vi.fn>;
+  let play: ReturnType<typeof vi.fn<HTMLMediaElement["play"]>>;
+  let pause: ReturnType<typeof vi.fn<HTMLMediaElement["pause"]>>;
+  let load: ReturnType<typeof vi.fn<HTMLMediaElement["load"]>>;
 
   beforeEach(() => {
     vi.useFakeTimers();
-    play = vi.fn().mockResolvedValue(undefined);
+    play = vi.fn<HTMLMediaElement["play"]>().mockResolvedValue(undefined);
     pause = vi.fn();
     load = vi.fn();
     window.HTMLMediaElement.prototype.play = play;

@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { signInAsTestUser } from "../../test/sessionFixture";
-import { createId, DEFAULT_DECK_STYLE } from "#shared";
+import { createId, DEFAULT_DECK_STYLE, type Deck } from "#shared";
 import { closeOfflineDB, OFFLINE_DB_NAME } from "../../lib/storage/db";
 import {
   LEGACY_SONGS_KEY,
@@ -174,11 +174,11 @@ describe("songLibraryStore", () => {
   });
 
   describe("서버 동기화", () => {
-    let push: ReturnType<typeof vi.fn>;
-    let remove: ReturnType<typeof vi.fn>;
+    let push: ReturnType<typeof vi.fn<(deck: Deck) => Promise<Deck>>>;
+    let remove: ReturnType<typeof vi.fn<(id: string) => Promise<void>>>;
 
     beforeEach(() => {
-      push = vi.fn(async (deck) => deck);
+      push = vi.fn(async (deck: Deck) => deck);
       remove = vi.fn(async () => {});
       __setDeckTransportForTests({ push, remove });
       setDeckSyncEnabled(true);

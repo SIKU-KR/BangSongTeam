@@ -257,8 +257,8 @@ const createAppConfig = ({ command }: ConfigEnv): UserConfig => ({
 async function createTestConfig(): Promise<
   UserConfig & Pick<ViteUserConfig, "test">
 > {
-  const { defineWorkersProject, readD1Migrations } =
-    await import("@cloudflare/vitest-pool-workers/config");
+  const { cloudflareTest, readD1Migrations } =
+    await import("@cloudflare/vitest-plugin");
   const { defineConfig: defineVitestConfig } = await import("vitest/config");
 
   // wrangler는 설정을 읽을 때 assets.directory(./dist/client)가 존재해야 하고, 없으면
@@ -296,7 +296,22 @@ async function createTestConfig(): Promise<
     "default",
   ];
 
-  const workerProject = defineWorkersProject({
+  const workerProject = defineVitestConfig({
+    plugins: [
+      cloudflareTest({
+        wrangler: { configPath: "./wrangler.jsonc" },
+        remoteBindings: false,
+        miniflare: {
+          compatibilityFlags: [
+            "nodejs_compat",
+            // 다중 microtask에서 처리된 인증 오류를 미처리 오류로 오인하지 않게 한다.
+            // https://developers.cloudflare.com/workers/configuration/compatibility-flags/#defer-unhandled-rejection-processing-to-after-microtask-checkpoint
+            "unhandled_rejection_after_microtask_checkpoint",
+          ],
+          bindings: { TEST_MIGRATIONS: migrations },
+        },
+      }),
+    ],
     resolve: {
       alias: { "@better-auth/telemetry": telemetryEntry },
       conditions: workerConditions,
@@ -312,40 +327,15 @@ async function createTestConfig(): Promise<
       name: "worker",
       include: ["src/worker/**/*.test.ts"],
       setupFiles: ["./src/worker/test/setup.ts"],
-      // 외부 모듈로 남으면 workerd가 직접 해석하는데, nodejs_compat이 켜져 있어
-      // "node" export 조건이 매칭된다. better-auth 계열은 번들에 포함시켜
-      // 위의 워커 조건으로 해석되게 한다.
-      deps: {
-        optimizer: {
-          ssr: {
-            enabled: true,
-            include: [
-              "better-auth",
-              "better-auth/minimal",
-              "@better-auth/telemetry",
-            ],
-          },
-        },
-      },
-      poolOptions: {
-        workers: {
-          wrangler: { configPath: "./wrangler.jsonc" },
-          isolatedStorage: false,
-          // 스토리지를 공유하므로 파일을 병렬로 돌리면 서로의 D1 상태를 밟는다
-          // (sync.test.ts는 beforeEach에서 테이블을 비운다).
-          singleWorker: true,
-          remoteBindings: false,
-          miniflare: {
-            compatibilityFlags: ["nodejs_compat"],
-            bindings: { TEST_MIGRATIONS: migrations },
-          },
-        },
-      },
+      // 공유 D1을 사용하는 기존 순차 실행을 Vitest 4 설정으로 유지한다.
+      // https://developers.cloudflare.com/workers/testing/vitest-integration/migration-guides/migrate-from-vitest-3-to-vitest-4/
+      maxWorkers: 1,
+      sequence: { groupOrder: 1 },
+      fileParallelism: false,
+      isolate: false,
     },
   });
 
-  // vitest 3의 설정 타입은 Vite 7 기준이라 Vite 8용 react 플러그인을 바로 넣으면
-  // 타입이 맞지 않는다. 플러그인 쪽은 Vite 설정으로 따로 만들어 합친다.
   const clientProject = mergeConfig(
     {
       plugins: [react()],
