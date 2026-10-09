@@ -330,6 +330,7 @@ async function createTestConfig(): Promise<
       // 공유 D1을 사용하는 기존 순차 실행을 Vitest 4 설정으로 유지한다.
       // https://developers.cloudflare.com/workers/testing/vitest-integration/migration-guides/migrate-from-vitest-3-to-vitest-4/
       maxWorkers: 1,
+      sequence: { groupOrder: 1 },
       fileParallelism: false,
       isolate: false,
     },
