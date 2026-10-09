@@ -33,6 +33,8 @@ import { BackgroundsRoute } from "./BackgroundsRoute";
 import * as capabilities from "../lib/browser/capabilities";
 import { withQueryClient } from "../test/queryClientFixture";
 import { installFakeApi } from "../test/fakeApi";
+import { makeBackground } from "../test/backgroundFixture";
+import { resetBackgroundCatalogForTests } from "../features/backgrounds/backgroundCatalog";
 import { APP_NAME } from "#shared";
 import { COMMON_COPY } from "#copy/common";
 import { DRIVE_COPY } from "#copy/drive";
@@ -596,6 +598,51 @@ describe("AppShellLayout (드라이브형 홈)", () => {
       screen.getByRole("columnheader", { name: DRIVE_COPY.location }),
     ).toBeInTheDocument();
     expect(screen.getByTestId("drive-summary")).toHaveTextContent("검색 결과");
+  });
+
+  it("배경 갤러리 검색어는 드라이브 검색어와 따로 두고, 제출해야 벡터 검색을 부른다", async () => {
+    resetBackgroundCatalogForTests();
+    const sunset = makeBackground(1, { title: "따뜻한 노을" });
+    const lake = makeBackground(2, { title: "고요한 호수" });
+    const api = installFakeApi({
+      "GET /api/backgrounds": () => ({
+        body: { backgrounds: [sunset, lake] },
+      }),
+      "GET /api/backgrounds/search": () => ({
+        body: { results: [{ id: lake.id, score: 0.7 }] },
+      }),
+    });
+    try {
+      renderShell();
+      const input = (): HTMLElement => screen.getByTestId("shell-search-input");
+      fireEvent.change(input(), { target: { value: "주일" } });
+
+      fireEvent.click(screen.getByTestId("sidebar-nav-backgrounds"));
+      expect(input()).toHaveValue("");
+      await screen.findByRole("img", { name: sunset.title });
+
+      fireEvent.change(input(), { target: { value: "잔잔한 호수" } });
+      expect(
+        screen.getByRole("img", { name: sunset.title }),
+      ).toBeInTheDocument();
+      expect(
+        api.calls.some((call) => call.path === "/api/backgrounds/search"),
+      ).toBe(false);
+
+      fireEvent.click(screen.getByRole("button", { name: COMMON_COPY.search }));
+      expect(
+        await screen.findByRole("img", { name: lake.title }),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByRole("img", { name: sunset.title }),
+      ).not.toBeInTheDocument();
+
+      fireEvent.click(screen.getByTestId("sidebar-nav-home"));
+      expect(input()).toHaveValue("주일");
+    } finally {
+      api.restore();
+      resetBackgroundCatalogForTests();
+    }
   });
 
   it("없거나 휴지통에 있는 폴더 주소는 루트로 보낸다", () => {

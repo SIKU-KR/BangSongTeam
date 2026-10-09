@@ -10,6 +10,13 @@ export const BACKGROUND_COPY = {
   previewFailed: "미리보기를 불러오지 못했어요",
   noBackgrounds: "아직 배경이 없어요.",
   offline: "오프라인이라 저장해 둔 배경만 보여요",
+  searchPlaceholders: [
+    "예: 기도할 때 깔 잔잔한 물결",
+    "예: 부활절에 어울리는 십자가",
+    "예: 성탄 찬양에 쓸 따뜻한 전구 불빛",
+    "예: 가사가 잘 보이는 어두운 별빛 하늘",
+    "예: 신나는 찬양에 어울리는 알록달록한 배경",
+  ],
   picker: {
     title: "곡 배경 선택",
     description:
@@ -18,8 +25,6 @@ export const BACKGROUND_COPY = {
     media: "영상·이미지",
     cachedHint: "고른 배경은 이 기기에 저장해 두어 오프라인에서도 재생돼요",
     searchLabel: "배경 검색",
-    searchPlaceholder:
-      "찾는 배경을 말하듯 적어 주세요 (예: 기도할 때 쓸 잔잔한 파란 배경)",
   },
   prepare: {
     title: "배경 영상을 준비하고 있어요",
