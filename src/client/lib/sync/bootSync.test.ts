@@ -109,7 +109,7 @@ describe("shouldRunBootSync", () => {
 });
 
 describe("runBootSync — library decks", () => {
-  let push: ReturnType<typeof vi.fn>;
+  let push: ReturnType<typeof vi.fn<(deck: Deck) => Promise<Deck>>>;
 
   beforeEach(async () => {
     signInAsTestUser();

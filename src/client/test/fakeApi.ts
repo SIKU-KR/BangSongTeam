@@ -21,6 +21,19 @@ export function installFakeApi(
   options: { offline?: boolean } = {},
 ): FakeApi {
   const original = globalThis.fetch;
+  // jsdom의 AbortSignal.timeout은 Vitest 4 fake timer와 다른 Window 타이머를 쓴다.
+  // https://github.com/jsdom/jsdom/blob/30.1.0/lib/jsdom/living/aborting/AbortSignal-impl.js
+  const timeout = vi.isFakeTimers()
+    ? vi.spyOn(AbortSignal, "timeout").mockImplementation((milliseconds) => {
+        const controller = new AbortController();
+        setTimeout(() => {
+          controller.abort(
+            new DOMException("The operation timed out.", "TimeoutError"),
+          );
+        }, milliseconds);
+        return controller.signal;
+      })
+    : undefined;
   const calls: FakeApi["calls"] = [];
 
   const matchers = Object.entries(routes).map(([key, handler]) => {
@@ -105,6 +118,7 @@ export function installFakeApi(
     calls,
     restore: () => {
       globalThis.fetch = original;
+      timeout?.mockRestore();
     },
   };
 }
