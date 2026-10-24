@@ -28,7 +28,7 @@ export const BackgroundMediaSchema = z.object({
   durationSec: z.number().int().nonnegative(),
   sizeBytes: z.number().int().nonnegative(),
   license: z.string(),
-  createdAt: z.string().datetime(),
+  createdAt: z.iso.datetime(),
   description: z.string().default(""),
   keywords: z.array(z.string()).default([]),
 });

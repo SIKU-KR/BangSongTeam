@@ -55,10 +55,10 @@ export const DeckSchema = z.object({
 
   origin: LegacyDeckOriginSchema.optional(),
   forkedFromAuthorName: z.string().max(100).nullable().optional(),
-  publishedAt: z.string().datetime().nullable().optional(),
-  takedownAt: z.string().datetime().nullable().optional(),
+  publishedAt: z.iso.datetime().nullable().optional(),
+  takedownAt: z.iso.datetime().nullable().optional(),
 
-  createdAt: z.string().datetime(),
-  updatedAt: z.string().datetime(),
+  createdAt: z.iso.datetime(),
+  updatedAt: z.iso.datetime(),
 });
 export type Deck = z.infer<typeof DeckSchema>;

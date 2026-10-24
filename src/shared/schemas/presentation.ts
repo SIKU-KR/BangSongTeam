@@ -35,11 +35,11 @@ export const PresentationSchema = z.object({
   items: z.array(PresentationItemSchema).default([]),
 
   folderId: IdSchema.nullable().optional(),
-  trashedAt: z.string().datetime().nullable().optional(),
+  trashedAt: z.iso.datetime().nullable().optional(),
 
   access: PresentationAccessSchema.optional(),
 
-  createdAt: z.string().datetime(),
-  updatedAt: z.string().datetime(),
+  createdAt: z.iso.datetime(),
+  updatedAt: z.iso.datetime(),
 });
 export type Presentation = z.infer<typeof PresentationSchema>;

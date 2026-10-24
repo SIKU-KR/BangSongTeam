@@ -48,7 +48,7 @@ export const PublicDeckSummarySchema = z.object({
   backgroundId: IdSchema.nullable(),
   firstSlidePreview: z.array(z.string()),
   slideCount: z.number().int().nonnegative(),
-  updatedAt: z.string().datetime(),
+  updatedAt: z.iso.datetime(),
 });
 export type PublicDeckSummary = z.infer<typeof PublicDeckSummarySchema>;
 

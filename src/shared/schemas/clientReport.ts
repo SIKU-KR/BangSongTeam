@@ -29,30 +29,26 @@ export type ClientFailureKind = z.infer<typeof ClientFailureKindSchema>;
  * 실패 보고 1건. Worker 로그의 `requestId`로 같은 요청을 찾을 수 있게 하는 것이 목적이다.
  *
  * 경로는 원문이 아니라 패턴(`/api/presentations/:id`)만 받는다. id·공유 토큰이 섞이면
- * 로그로 누가 무엇을 열었는지 드러난다. `.strict()`라 허용한 필드 밖의 값(가사, 오류
+ * 로그로 누가 무엇을 열었는지 드러난다. `z.strictObject`라 허용한 필드 밖의 값(가사, 오류
  * 메시지 등)이 실려 오면 통째로 거절한다.
  */
-export const ClientReportSchema = z
-  .object({
-    requestId: z
-      .string()
-      .regex(/^[0-9a-f]{32}$/)
-      .optional(),
-    kind: ClientFailureKindSchema,
-    route: z
-      .string()
-      .max(80)
-      .regex(/^\/api(\/[a-z0-9:*_-]+)*$/),
-    online: z.boolean(),
-    swControlled: z.boolean(),
-  })
-  .strict();
+export const ClientReportSchema = z.strictObject({
+  requestId: z
+    .string()
+    .regex(/^[0-9a-f]{32}$/)
+    .optional(),
+  kind: ClientFailureKindSchema,
+  route: z
+    .string()
+    .max(80)
+    .regex(/^\/api(\/[a-z0-9:*_-]+)*$/),
+  online: z.boolean(),
+  swControlled: z.boolean(),
+});
 export type ClientReport = z.infer<typeof ClientReportSchema>;
 
-export const ClientReportBatchSchema = z
-  .object({
-    appVersion: z.string().regex(/^[\w.-]{1,40}$/),
-    reports: z.array(ClientReportSchema).min(1).max(CLIENT_REPORT_MAX_COUNT),
-  })
-  .strict();
+export const ClientReportBatchSchema = z.strictObject({
+  appVersion: z.string().regex(/^[\w.-]{1,40}$/),
+  reports: z.array(ClientReportSchema).min(1).max(CLIENT_REPORT_MAX_COUNT),
+});
 export type ClientReportBatch = z.infer<typeof ClientReportBatchSchema>;
