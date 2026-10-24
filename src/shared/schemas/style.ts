@@ -55,7 +55,7 @@ export const DeckStyleSchema = z.object({
   overlayOpacity: z.number().min(0).max(100).default(40),
   overlayColor: HexColorSchema.default("#000000"),
   backgroundColor: HexColorSchema.optional(),
-  textBackdrop: TextBackdropSchema.default({}),
+  textBackdrop: TextBackdropSchema.prefault({}),
 
   fontFamily: z.enum(NOONNU_SUPPORTED_FONT_NAMES).default("Pretendard"),
   fontSizeVw: z.number().min(2).max(10).default(4.2),

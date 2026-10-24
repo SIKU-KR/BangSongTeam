@@ -16,9 +16,9 @@ export const FolderSchema = z.object({
   userId: IdSchema,
   parentId: IdSchema.nullable(),
   name: z.string().trim().min(1).max(MAX_FOLDER_NAME_LENGTH),
-  trashedAt: z.string().datetime().nullable(),
-  createdAt: z.string().datetime(),
-  updatedAt: z.string().datetime(),
+  trashedAt: z.iso.datetime().nullable(),
+  createdAt: z.iso.datetime(),
+  updatedAt: z.iso.datetime(),
 });
 export type Folder = z.infer<typeof FolderSchema>;
 

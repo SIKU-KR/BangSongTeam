@@ -74,7 +74,7 @@ export const AuthSessionResponseSchema = z.object({
 
 /** 동의를 마치지 않은 사용자는 `agreedAt`이 null이고, 앱이 동의 모달로 막는다 */
 export const ConsentStatusResponseSchema = z.object({
-  agreedAt: z.string().datetime().nullable(),
+  agreedAt: z.iso.datetime().nullable(),
 });
 export type ConsentStatusResponse = z.infer<typeof ConsentStatusResponseSchema>;
 
