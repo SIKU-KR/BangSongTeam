@@ -1,6 +1,6 @@
 /**
  * 유형 1~4 (대중가요/팝, 키즈/동요, 성가대/클래식, Unknown) 아티스트 일괄 제거 스크립트
- * 
+ *
  * 실행: node scripts/removeNonWorshipArtists.mjs
  */
 
@@ -11,7 +11,12 @@ import { fileURLToPath } from "node:url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT_DIR = path.resolve(__dirname, "..");
 const CLEANED_WORSHIP_DIR = path.join(ROOT_DIR, "data", "cleaned", "worship");
-const CLEANED_WORSHIP_JSON = path.join(ROOT_DIR, "data", "cleaned", "worship.json");
+const CLEANED_WORSHIP_JSON = path.join(
+  ROOT_DIR,
+  "data",
+  "cleaned",
+  "worship.json",
+);
 
 // 제거 대상 아티스트 명단 (72개 아티스트)
 const REMOVE_ARTIST_SET = new Set([
@@ -137,7 +142,11 @@ async function main() {
   }
 
   // 3. 정제된 worship.json 다시 저장
-  await fs.writeFile(CLEANED_WORSHIP_JSON, JSON.stringify(keptSongs, null, 2), "utf-8");
+  await fs.writeFile(
+    CLEANED_WORSHIP_JSON,
+    JSON.stringify(keptSongs, null, 2),
+    "utf-8",
+  );
 
   console.log(`\n=== 제거 완료 결과 ===`);
   console.log(`- 기존 총 곡 수: ${initialCount}곡`);

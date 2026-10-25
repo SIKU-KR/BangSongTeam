@@ -1,0 +1,14 @@
+.git
+.github
+.claude
+.data
+.next
+node_modules
+coverage
+data
+dist
+*.log
+.env
+.env.*
+Dockerfile
+.dockerignore

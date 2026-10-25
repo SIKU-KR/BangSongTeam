@@ -11,11 +11,11 @@ export const BACKGROUND_COPY = {
   noBackgrounds: "아직 배경이 없어요.",
   offline: "오프라인이라 저장해 둔 배경만 보여요",
   searchPlaceholders: [
-    "예: 기도할 때 깔 잔잔한 물결",
-    "예: 부활절에 어울리는 십자가",
-    "예: 성탄 찬양에 쓸 따뜻한 전구 불빛",
-    "예: 가사가 잘 보이는 어두운 별빛 하늘",
-    "예: 신나는 찬양에 어울리는 알록달록한 배경",
+    "예: 물결",
+    "예: 십자가",
+    "예: 전구 불빛",
+    "예: 별빛 하늘",
+    "예: 노을",
   ],
   picker: {
     title: "곡 배경 선택",
@@ -54,8 +54,5 @@ export const BACKGROUND_COPY = {
   library: {
     noMatch: (query: string) => `‘${query}’에 맞는 배경이 없어요.`,
     noFilterMatch: "조건에 맞는 배경이 없어요.",
-    searching: "배경을 찾고 있어요.",
-    searchFailed:
-      "지금은 배경을 검색할 수 없어요. 인터넷 연결을 확인하고 다시 검색해 주세요.",
   },
 } as const;

@@ -1,7 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { env } from "cloudflare:test";
-import { inArray } from "drizzle-orm";
-import { createD1Client, user } from "#db";
+import { env } from "../test/env";
+import { clearDb, seedDocs, userDoc } from "../../db/test/fixtures";
 import { createApp } from "../index";
 import type { SessionReader } from "../middleware/auth";
 
@@ -37,13 +36,14 @@ async function status(): Promise<{ agreedAt: string | null }> {
 describe("/api/consent", () => {
   beforeEach(async () => {
     currentUser = USER_A;
-    const db = createD1Client(env.DB);
-    await db.delete(user).where(inArray(user.id, [USER_A, USER_B]));
+    await clearDb(env.DB);
     const now = new Date();
-    await db.insert(user).values([
-      { id: USER_A, name: "A", createdAt: now, updatedAt: now },
-      { id: USER_B, name: "B", createdAt: now, updatedAt: now },
-    ]);
+    await seedDocs(env.DB, {
+      users: [
+        { id: USER_A, name: "A", createdAt: now, updatedAt: now },
+        { id: USER_B, name: "B", createdAt: now, updatedAt: now },
+      ].map((row) => userDoc(row)),
+    });
   });
 
   it("로그인하지 않으면 401", async () => {

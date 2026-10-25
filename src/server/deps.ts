@@ -1,4 +1,3 @@
-import type { BackgroundSearcher } from "./lib/backgroundSearch";
 import {
   createRequireAuth,
   readSessionFromBetterAuth,
@@ -6,7 +5,7 @@ import {
 } from "./middleware/auth";
 
 /**
- * Worker 앱의 바깥 의존성. 테스트가 갈아 끼울 수 있는 것만 둔다.
+ * API 앱의 바깥 의존성. 테스트가 갈아 끼울 수 있는 것만 둔다.
  *
  * 라우트가 세션 검증을 모듈 전역으로 쓰면 테스트는 세션을 흉내 내려고
  * 핸들러를 통째로 복제해야 했다. 그러면 라우트가 바뀌어도 테스트가 모른다.
@@ -14,8 +13,6 @@ import {
  */
 export interface AppDeps {
   readSession?: SessionReader;
-  /** Workers AI·Vectorize는 테스트 런타임에 없으므로 배경 검색은 갈아 끼운다 */
-  searchBackgrounds?: BackgroundSearcher;
 }
 
 export function resolveRequireAuth(deps: AppDeps) {

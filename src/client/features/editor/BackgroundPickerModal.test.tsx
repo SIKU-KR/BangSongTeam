@@ -161,17 +161,8 @@ describe("BackgroundPickerModal", () => {
     expect(onSelect).toHaveBeenCalledWith({ backgroundId: WARM.id });
   });
 
-  it("검색어는 제출해야 서버 벡터 검색으로 찾고, 맞는 배경이 없으면 알려 준다", async () => {
-    const api = installFakeApi({
-      "GET /api/backgrounds/search": ({ url }) => ({
-        body: {
-          results:
-            url.searchParams.get("q") === "감사할 때 쓸 노을"
-              ? [{ id: WARM.id, score: 0.7 }]
-              : [],
-        },
-      }),
-    });
+  it("검색어를 제출하면 제목·키워드에 맞는 배경만 보여 주고, 맞는 배경이 없으면 알려 준다", async () => {
+    const api = installFakeApi({});
     try {
       renderPicker();
 
@@ -179,22 +170,21 @@ describe("BackgroundPickerModal", () => {
       const submit = screen.getByRole("button", { name: COMMON_COPY.search });
       expect(submit).toBeDisabled();
 
-      fireEvent.change(input, { target: { value: "감사할 때 쓸 노을" } });
+      fireEvent.change(input, { target: { value: "감사 노을" } });
       expect(screen.getByTestId(`bg-item-${STILL.id}`)).toBeInTheDocument();
-      expect(
-        api.calls.some((call) => call.path === "/api/backgrounds/search"),
-      ).toBe(false);
 
       fireEvent.click(submit);
-      expect(
-        screen.getByText(BACKGROUND_COPY.library.searching),
-      ).toBeInTheDocument();
       expect(
         await screen.findByTestId(`bg-item-${WARM.id}`),
       ).toBeInTheDocument();
       expect(
         screen.queryByTestId(`bg-item-${STILL.id}`),
       ).not.toBeInTheDocument();
+      expect(
+        api.calls.some((call) =>
+          call.path.startsWith("/api/backgrounds/search"),
+        ),
+      ).toBe(false);
 
       fireEvent.change(input, { target: { value: "없는검색어" } });
       fireEvent.submit(input);

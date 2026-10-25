@@ -2,16 +2,27 @@ import { Hono, type Context } from "hono";
 import { basePath } from "hono/route";
 import { API_ERRORS } from "#shared";
 import { parseRangeHeader, resolveByteRange } from "../lib/byteRange";
+import type { MediaObject } from "../lib/mediaStore";
 import type { AppEnv } from "../types";
 
 const IMMUTABLE_MEDIA_CACHE_CONTROL = "public, max-age=31536000, immutable";
 
-function objectHeaders(object: R2Object): Headers {
-  const headers = new Headers();
-  object.writeHttpMetadata(headers);
-  headers.set("etag", object.httpEtag);
-  headers.set("accept-ranges", "bytes");
-  headers.set("cache-control", IMMUTABLE_MEDIA_CACHE_CONTROL);
+/**
+ * Cloud Run은 `content-length`를 단 HTTP/1 응답을 32 MiB까지만 보낸다. 그보다 긴 본문은
+ * 길이를 빼고 chunked로 흘려보낸다. https://cloud.google.com/run/quotas
+ */
+const MAX_SIZED_RESPONSE_BYTES = 32 * 1024 * 1024 - 1;
+
+function objectHeaders(object: MediaObject, length: number): Headers {
+  const headers = new Headers({
+    "content-type": object.contentType,
+    etag: object.etag,
+    "accept-ranges": "bytes",
+    "cache-control": IMMUTABLE_MEDIA_CACHE_CONTROL,
+  });
+  if (length <= MAX_SIZED_RESPONSE_BYTES) {
+    headers.set("content-length", String(length));
+  }
   return headers;
 }
 
@@ -19,33 +30,17 @@ function mediaNotFound(c: Context<AppEnv>): Response {
   return c.json({ error: API_ERRORS.media.notFound }, 404);
 }
 
-async function serveWholeObject(
-  c: Context<AppEnv>,
-  key: string,
-): Promise<Response> {
-  const object = await c.env.MEDIA_BUCKET.get(key);
-  if (!object) {
-    return mediaNotFound(c);
-  }
-  const headers = objectHeaders(object);
-  headers.set("content-length", String(object.size));
-  return new Response(object.body, { status: 200, headers });
-}
-
 /**
- * R2 바인딩 기반 미디어 스트리밍 라우트 (HTTP Range 및 Partial Content 지원).
- * 로컬 개발(Miniflare) 및 커스텀 도메인 미연결 환경에서도 R2 비디오 직접 재생 보장.
+ * 미디어 저장소(GCS) 스트리밍 라우트 (HTTP Range 및 Partial Content 지원). 배경 영상을
+ * 앱과 같은 출처로 내보내야 서비스 워커가 Range 요청과 함께 캐시해 오프라인 송출을 한다.
  *
  * 배경은 모두 누구에게나 보이는 기본 제공 배경이라 인증 없이 서빙한다. 여기서
  * 세션을 검사하면 송출 중 세션이 만료되는 순간 배경이 꺼진다 — 예배 화면이 검게
  * 되는 쪽이 더 큰 사고다.
  *
- * Range는 R2에 그대로 넘기지 않고 직접 검증한다. 만족할 수 없는 범위는 R2가
- * InvalidRange로 던져 500이 되므로 416으로 답하고, 깨진 헤더는 무시하고 200으로 답한다.
- * 그래서 Range 요청마다 크기를 알기 위한 HEAD가 한 번 더 나간다. R2 오류 코드에 기대
- * 범위를 추측하는 대신 왕복 한 번을 감수한 의도된 비용이다. 두 호출 사이에 객체가
- * 바뀌면 HEAD로 검증한 범위가 새 객체에 맞지 않으므로, GET에 etag 조건을 걸어
- * 어긋나면 Range를 무시하고 새 객체 전체를 200으로 보낸다.
+ * 크기와 판을 먼저 확인하고 Range를 직접 검증한다. 만족할 수 없는 범위는 416, 깨진
+ * 헤더는 무시하고 200으로 답한다. 읽기는 확인한 판으로 고정해 그사이 객체가 바뀌어도
+ * 검증한 범위와 다른 바이트를 섞어 보내지 않는다.
  */
 export function createMediaRoute() {
   return new Hono<AppEnv>().get("/*", async (c) => {
@@ -54,47 +49,40 @@ export function createMediaRoute() {
       return c.json({ error: API_ERRORS.media.keyRequired }, 400);
     }
 
+    const object = await c.env.MEDIA.stat(key);
+    if (!object) {
+      return mediaNotFound(c);
+    }
+
     const rangeHeader = c.req.header("range");
     const requested = rangeHeader ? parseRangeHeader(rangeHeader) : null;
 
     if (!requested) {
-      return serveWholeObject(c, key);
+      return new Response(c.env.MEDIA.read(key, object), {
+        status: 200,
+        headers: objectHeaders(object, object.size),
+      });
     }
 
-    const head = await c.env.MEDIA_BUCKET.head(key);
-    if (!head) {
-      return mediaNotFound(c);
-    }
-
-    const resolved = resolveByteRange(requested, head.size);
+    const resolved = resolveByteRange(requested, object.size);
     if (!resolved) {
       return new Response(null, {
         status: 416,
         headers: {
-          "content-range": `bytes */${head.size}`,
+          "content-range": `bytes */${object.size}`,
           "accept-ranges": "bytes",
         },
       });
     }
 
-    const length = resolved.end - resolved.start + 1;
-    const object = await c.env.MEDIA_BUCKET.get(key, {
-      range: { offset: resolved.start, length },
-      onlyIf: { etagMatches: head.etag },
-    });
-    if (!object) {
-      return mediaNotFound(c);
-    }
-    if (!("body" in object)) {
-      return serveWholeObject(c, key);
-    }
-
-    const headers = objectHeaders(object);
+    const headers = objectHeaders(object, resolved.end - resolved.start + 1);
     headers.set(
       "content-range",
-      `bytes ${resolved.start}-${resolved.end}/${head.size}`,
+      `bytes ${resolved.start}-${resolved.end}/${object.size}`,
     );
-    headers.set("content-length", String(length));
-    return new Response(object.body, { status: 206, headers });
+    return new Response(c.env.MEDIA.read(key, object, resolved), {
+      status: 206,
+      headers,
+    });
   });
 }

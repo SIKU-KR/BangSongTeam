@@ -1,25 +1,20 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { createTestDb, type TestDbResult } from "../test-utils";
-import { user } from "../schema";
+import { describe, it, expect, beforeEach } from "vitest";
+import type { Db } from "../client";
+import { createTestDb, seedDocs, userDoc } from "../test/fixtures";
 import { agreeToTerms, getTermsAgreedAt } from "./consent";
 
 const A = "00000000000000000000a";
 const B = "00000000000000000000b";
 
 describe("consent queries", () => {
-  let testDb: TestDbResult;
-  let db: TestDbResult["db"];
+  let db: Db;
 
   beforeEach(async () => {
-    testDb = createTestDb();
-    db = testDb.db;
-    await db.insert(user).values([
-      { id: A, name: "A", createdAt: new Date(), updatedAt: new Date() },
-      { id: B, name: "B", createdAt: new Date(), updatedAt: new Date() },
-    ]);
+    db = createTestDb();
+    await seedDocs(db, {
+      users: [userDoc({ id: A, name: "A" }), userDoc({ id: B, name: "B" })],
+    });
   });
-
-  afterEach(() => testDb.sqlite.close());
 
   it("동의 전에는 null이다", async () => {
     expect(await getTermsAgreedAt(db, A)).toBeNull();
@@ -38,6 +33,11 @@ describe("consent queries", () => {
     expect(await agreeToTerms(db, A, new Date("2026-10-01T00:00:00Z"))).toEqual(
       first,
     );
+  });
+
+  it("Better Auth가 만든 사용자처럼 동의 필드가 없어도 null로 읽는다", async () => {
+    await db.collection("users").doc("C").set({ id: "C", name: "C" });
+    expect(await getTermsAgreedAt(db, "C")).toBeNull();
   });
 
   it("없는 사용자는 null이다", async () => {

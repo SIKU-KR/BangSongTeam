@@ -1,0 +1,119 @@
+# Google Cloud 배포 설정
+
+앱은 Cloud Run 서비스 하나(Next.js standalone 컨테이너)로 돌고, 데이터는 Firestore(Native
+모드), 배경 영상·포스터는 Cloud Storage 버킷에 둔다. `main`에 머지하면 CI가 이미지를 빌드해
+Artifact Registry에 올리고, Firestore 규칙·색인을 배포한 뒤 Cloud Run에 새 이미지를 올린다.
+아래는 처음 한 번만 하는 준비다. 예시 값(`asia-northeast3`, `bangsongteam`)은 바꿔도 된다.
+
+```bash
+PROJECT_ID=<Firebase 프로젝트 id>
+REGION=asia-northeast3
+SERVICE=bangsongteam
+BUCKET=${PROJECT_ID}-media
+REPO=bangsongteam
+gcloud config set project "$PROJECT_ID"
+```
+
+## 1. API와 Firestore
+
+```bash
+gcloud services enable run.googleapis.com artifactregistry.googleapis.com \
+  firestore.googleapis.com firebaserules.googleapis.com storage.googleapis.com \
+  secretmanager.googleapis.com iamcredentials.googleapis.com cloudbuild.googleapis.com
+gcloud firestore databases create --location="$REGION" --type=firestore-native
+```
+
+Firestore 규칙(`firestore.rules`)은 브라우저 접근을 모두 막는다. 서버는 서비스 계정 자격이라
+규칙을 거치지 않는다. 검색에 쓰는 복합 색인은 `firestore.indexes.json`에 있고 CI가 배포한다.
+처음 배포하면 색인이 만들어지는 몇 분 동안 공유 라이브러리 검색이 실패할 수 있다.
+
+## 2. 미디어 버킷과 이미지 저장소
+
+```bash
+gcloud storage buckets create "gs://$BUCKET" --location="$REGION" --uniform-bucket-level-access
+gcloud artifacts repositories create "$REPO" --repository-format=docker --location="$REGION"
+```
+
+배경은 `/api/media/*`가 같은 출처로 흘려보내므로 버킷을 공개할 필요가 없다.
+
+## 3. 서비스 계정
+
+```bash
+gcloud iam service-accounts create bangsongteam-run
+RUN_SA=bangsongteam-run@${PROJECT_ID}.iam.gserviceaccount.com
+gcloud projects add-iam-policy-binding "$PROJECT_ID" --member="serviceAccount:$RUN_SA" --role=roles/datastore.user
+gcloud storage buckets add-iam-policy-binding "gs://$BUCKET" --member="serviceAccount:$RUN_SA" --role=roles/storage.objectViewer
+gcloud projects add-iam-policy-binding "$PROJECT_ID" --member="serviceAccount:$RUN_SA" --role=roles/secretmanager.secretAccessor
+```
+
+## 4. 비밀값
+
+```bash
+printf '%s' "$(openssl rand -base64 32)" | gcloud secrets create better-auth-secret --data-file=-
+printf '%s' '<카카오 secret>' | gcloud secrets create kakao-client-secret --data-file=-
+printf '%s' '<네이버 secret>' | gcloud secrets create naver-client-secret --data-file=-
+printf '%s' '<구글 secret>' | gcloud secrets create google-client-secret --data-file=-
+```
+
+`BETTER_AUTH_SECRET`을 Cloudflare 때와 같은 값으로 두면 이전 뒤에도 기존 로그인 쿠키가 유효하다.
+
+## 5. 첫 배포 (서비스 설정)
+
+서비스 설정은 여기서 한 번 정한다. CI는 이미지만 바꾼다.
+
+```bash
+IMAGE=${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPO}/${SERVICE}:initial
+gcloud builds submit --tag "$IMAGE"
+gcloud run deploy "$SERVICE" --image "$IMAGE" --region "$REGION" \
+  --service-account "$RUN_SA" --allow-unauthenticated \
+  --timeout=3600 --memory=1Gi \
+  --set-env-vars "MEDIA_BUCKET=$BUCKET,BETTER_AUTH_URL=https://bangsongteam.siku-labs.com,KAKAO_CLIENT_ID=<id>,NAVER_CLIENT_ID=<id>,GOOGLE_CLIENT_ID=<id>" \
+  --set-secrets "BETTER_AUTH_SECRET=better-auth-secret:latest,KAKAO_CLIENT_SECRET=kakao-client-secret:latest,NAVER_CLIENT_SECRET=naver-client-secret:latest,GOOGLE_CLIENT_SECRET=google-client-secret:latest"
+```
+
+- `--timeout=3600`: 오프라인 송출용 배경 영상(수백 MB)을 느린 회선으로 받아도 끊기지 않게 한다.
+- 사용하지 않는 소셜 로그인은 id·secret을 빼면 로그인 화면에서 사라진다.
+- 도메인은 Cloud Run 도메인 매핑이나 외부 Application Load Balancer로 연결한다. 도메인이
+  같으면 OAuth Redirect URI(`/api/auth/callback/*`)는 바꾸지 않아도 된다.
+
+## 6. GitHub Actions (Workload Identity Federation)
+
+```bash
+gcloud iam service-accounts create github-deployer
+DEPLOY_SA=github-deployer@${PROJECT_ID}.iam.gserviceaccount.com
+for role in roles/run.admin roles/artifactregistry.writer roles/firebaserules.admin roles/datastore.indexAdmin \
+  roles/firebase.viewer roles/serviceusage.serviceUsageConsumer; do
+  gcloud projects add-iam-policy-binding "$PROJECT_ID" --member="serviceAccount:$DEPLOY_SA" --role="$role"
+done
+gcloud iam service-accounts add-iam-policy-binding "$RUN_SA" --member="serviceAccount:$DEPLOY_SA" --role=roles/iam.serviceAccountUser
+
+gcloud iam workload-identity-pools create github --location=global
+gcloud iam workload-identity-pools providers create-oidc github --location=global \
+  --workload-identity-pool=github --issuer-uri=https://token.actions.githubusercontent.com \
+  --attribute-mapping=google.subject=assertion.sub,attribute.repository=assertion.repository \
+  --attribute-condition="assertion.repository=='SIKU-KR/BangSongTeam'"
+POOL=$(gcloud iam workload-identity-pools describe github --location=global --format='value(name)')
+gcloud iam service-accounts add-iam-policy-binding "$DEPLOY_SA" --role=roles/iam.workloadIdentityUser \
+  --member="principalSet://iam.googleapis.com/${POOL}/attribute.repository/SIKU-KR/BangSongTeam"
+```
+
+저장소 Settings → Secrets and variables → Actions → **Variables**에 넣는다.
+`GCP_PROJECT_ID`가 비어 있으면 CI는 검증만 하고 배포하지 않는다.
+
+| 변수                             | 값                         |
+| -------------------------------- | -------------------------- |
+| `GCP_PROJECT_ID`                 | `$PROJECT_ID`              |
+| `GCP_REGION`                     | `$REGION`                  |
+| `CLOUD_RUN_SERVICE`              | `$SERVICE`                 |
+| `ARTIFACT_REPOSITORY`            | `$REPO`                    |
+| `GCP_WORKLOAD_IDENTITY_PROVIDER` | `${POOL}/providers/github` |
+| `GCP_DEPLOY_SERVICE_ACCOUNT`     | `$DEPLOY_SA`               |
+
+## 7. Cloudflare 데이터 옮기기
+
+1. 옮기는 동안 생긴 쓰기는 따라오지 않으므로 기존 서비스의 쓰기를 멈춘다.
+2. R2 객체를 같은 키로 버킷에 복사한다 (예: `rclone copy r2:bangsongteam-media gcs:$BUCKET`,
+   또는 Storage Transfer Service의 S3 호환 소스).
+3. `scripts/migrateFromCloudflare.mjs` 머리말의 순서대로 D1 테이블을 JSON으로 뽑아 로컬
+   에뮬레이터에서 확인한 뒤 `--target=remote --confirm`으로 운영 Firestore에 넣는다.
+4. 도메인을 Cloud Run으로 옮기고 Cloudflare Worker·D1·R2와 `CLOUDFLARE_*` 저장소 비밀값을 정리한다.

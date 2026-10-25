@@ -10,20 +10,14 @@ import {
   type PresentationDocument,
   type Folder as SharedFolder,
 } from "#shared";
-import type {
-  Deck as DeckRow,
-  Folder as FolderRow,
-  NewFolder,
-  NewDeck,
-  Presentation as PresentationRow,
-  NewPresentation,
-} from "../schema";
+import type { DeckDoc, FolderDoc, PresentationDoc } from "../collections";
+import { withDeckIndex } from "../deckIndex";
 
 /**
- * D1 행과 `#shared` DTO 사이의 변환을 한 곳에 모은다.
+ * Firestore 문서와 `#shared` DTO 사이의 변환을 한 곳에 모은다.
  *
- * 두 `Deck` 타입은 이름만 같고 실제로는 다르다:
- * - `#db`의 Deck: `slides`·`style`이 JSON TEXT(`string`), 타임스탬프가 `Date`
+ * 두 곡 타입은 모양이 다르다:
+ * - `#db`의 DeckDoc: `slides`·`style`이 JSON 문자열, 타임스탬프가 `Date`
  * - `#shared`의 Deck: `slides: Slide[]`, `style: DeckStyle`, 타임스탬프가 ISO 문자열
  *
  * 라우트마다 `JSON.parse`를 흩뿌리면 한쪽만 고쳐져 조용히 어긋난다.
@@ -75,12 +69,12 @@ function toDate(iso: string): Date {
 }
 
 /**
- * D1 덱 행 → 공유 Deck DTO.
+ * 곡 문서 → 공유 Deck DTO.
  *
  * `scope`는 `presentation_id`가 있는지로, `origin`은 원작 표시 스냅샷
  * (`forked_from_author_name`)이 있는지로 정한다. 둘 다 저장하지 않는 파생값이다.
  */
-export function toSharedDeck(row: DeckRow): SharedDeck {
+export function toSharedDeck(row: DeckDoc): SharedDeck {
   return {
     id: row.id,
     userId: row.userId,
@@ -105,13 +99,13 @@ export function toSharedDeck(row: DeckRow): SharedDeck {
 }
 
 /**
- * 공유 Deck DTO의 곡 내용 → D1 덱 컬럼. id·소유자·소속·공개 상태·가져온 곡 정보는
+ * 공유 Deck DTO의 곡 내용 → 곡 문서 필드. id·소유자·소속·공개 상태·가져온 곡 정보는
  * 넣지 않는다. 그 값은 호출자가 서버 기준으로 정해 덧붙인다.
  */
 export function toDeckContent(
   deck: SharedDeck,
 ): Pick<
-  NewDeck,
+  DeckDoc,
   | "title"
   | "artist"
   | "lyricsRaw"
@@ -133,10 +127,10 @@ export function toDeckContent(
   };
 }
 
-/** 머리 행 + 사본 덱 행(`position` 순) → 하이드레이션된 문서 */
+/** 머리 문서 + 사본 곡 문서(`position` 순) → 하이드레이션된 문서 */
 export function toPresentationDocument(
-  presentation: PresentationRow,
-  copies: DeckRow[],
+  presentation: PresentationDoc,
+  copies: DeckDoc[],
 ): PresentationDocument {
   return {
     id: presentation.id,
@@ -163,19 +157,26 @@ export interface PresentationSlot {
   position: number;
 }
 
+/** 저장 본문에서 온 머리 필드. 폴더·휴지통은 본문에 있을 때만 바꾼다 */
+export type PresentationHeader = Pick<
+  PresentationDoc,
+  "id" | "userId" | "title" | "serviceDate" | "createdAt" | "updatedAt"
+> &
+  Partial<Pick<PresentationDoc, "folderId" | "trashedAt">>;
+
 export interface DecomposedDocument {
-  presentation: NewPresentation;
+  presentation: PresentationHeader;
   slots: PresentationSlot[];
-  decks: NewDeck[];
+  decks: DeckDoc[];
 }
 
 /**
- * 변경분 저장 본문 → 정규화된 행들. `slots`는 항목 순서대로 매긴 자리이고,
+ * 변경분 저장 본문 → 머리 필드와 사본 곡 문서. `slots`는 항목 순서대로 매긴 자리이고,
  * `decks`에는 본문에 담겼고 자리가 있는 사본만 나온다.
  *
  * 사본의 소유자·소속·자리는 문서 헤더와 항목 기준으로 덮어쓴다. 본문이 보내온 값을
  * 그대로 믿으면 남의 계정으로 문서를 심거나, 보관함 곡을 사본으로 둔갑시킬 수 있다.
- * 사본은 공유 대상이 아니라 공개 상태 컬럼은 기본값(비공개)으로 둔다. `forkedFrom`
+ * 사본은 공유 대상이 아니라 언제나 비공개다. `forkedFrom`
  * (담아 온 보관함 곡)과 `forkedFromAuthorName`(원작 표시)은 편집기가 쓰는 값이라
  * 그대로 둔다.
  */
@@ -209,7 +210,7 @@ export function fromPresentationChanges(
       const slot = slotByDeck.get(deck.id);
       if (!slot) return [];
       return [
-        {
+        withDeckIndex({
           id: deck.id,
           ...toDeckContent(deck),
           userId: changes.userId,
@@ -218,14 +219,18 @@ export function fromPresentationChanges(
           position: slot.position,
           forkedFrom: deck.forkedFrom ?? null,
           forkedFromAuthorName: deck.forkedFromAuthorName ?? null,
-        },
+          visibility: "private" as const,
+          publishedAt: null,
+          takedownAt: null,
+          forkCount: 0,
+        }),
       ];
     }),
   };
 }
 
-/** D1 폴더 행 → 공유 Folder DTO */
-export function toSharedFolder(row: FolderRow | NewFolder): SharedFolder {
+/** 폴더 문서 → 공유 Folder DTO */
+export function toSharedFolder(row: FolderDoc): SharedFolder {
   return {
     id: row.id,
     userId: row.userId,
@@ -237,8 +242,8 @@ export function toSharedFolder(row: FolderRow | NewFolder): SharedFolder {
   };
 }
 
-/** 공유 Folder DTO → D1 폴더 행 */
-export function toFolderRow(folder: SharedFolder): NewFolder {
+/** 공유 Folder DTO → 폴더 문서 */
+export function toFolderDoc(folder: SharedFolder): FolderDoc {
   return {
     id: folder.id,
     userId: folder.userId,

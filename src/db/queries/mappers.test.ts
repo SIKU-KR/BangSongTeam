@@ -7,7 +7,8 @@ import {
   type Deck as SharedDeck,
   type PresentationDocument,
 } from "#shared";
-import type { Deck as DeckRow, NewDeck, Presentation } from "../schema";
+import type { DeckDoc, PresentationDoc } from "../collections";
+import { withDeckIndex } from "../deckIndex";
 import {
   toSharedDeck,
   toDeckContent,
@@ -68,9 +69,11 @@ function makeDocument(): PresentationDocument {
   });
 }
 
-/** 테이블 기본값을 채운 덱 행. DB가 채우는 값(`fork_count` 등)을 흉내 낸다. */
-function asRow(row: NewDeck): DeckRow {
-  return {
+/** 기본값을 채운 곡 문서 */
+function asRow(
+  row: Pick<DeckDoc, "id" | "userId"> & Partial<DeckDoc>,
+): DeckDoc {
+  return withDeckIndex({
     presentationId: null,
     itemId: null,
     position: null,
@@ -82,12 +85,18 @@ function asRow(row: NewDeck): DeckRow {
     takedownAt: null,
     forkCount: 0,
     artist: "",
+    title: "",
+    lyricsRaw: "",
+    slides: "[]",
+    style: "{}",
+    createdAt: new Date(0),
+    updatedAt: new Date(0),
     ...row,
-  } as DeckRow;
+  });
 }
 
 /** 공유 Deck DTO를 저장된 행으로 만든다 (보관함 곡이면 소속·자리 없음). */
-function toRow(deck: SharedDeck): DeckRow {
+function toRow(deck: SharedDeck): DeckDoc {
   return asRow({
     id: deck.id,
     userId: deck.userId,
@@ -109,12 +118,18 @@ function reassemble(doc: PresentationDocument): PresentationDocument {
     toPresentationChanges(doc),
   );
   return toPresentationDocument(
-    { folderId: null, trashedAt: null, ...presentation } as Presentation,
+    {
+      folderId: null,
+      trashedAt: null,
+      linkAccess: "off",
+      linkToken: null,
+      ...presentation,
+    } as PresentationDoc,
     decks.map(asRow),
   );
 }
 
-describe("행 ↔ DTO 매퍼", () => {
+describe("문서 ↔ DTO 매퍼", () => {
   describe("덱", () => {
     it("왕복해도 값이 보존된다", () => {
       const original = makeSharedDeck();
@@ -261,9 +276,13 @@ describe("행 ↔ DTO 매퍼", () => {
       });
 
       const { decks } = fromPresentationChanges(toPresentationChanges(doc));
-      expect(decks[0]).not.toHaveProperty("visibility");
-      expect(decks[0]).not.toHaveProperty("forkCount");
-      expect(decks[0]).not.toHaveProperty("publishedAt");
+      expect(decks[0]).toMatchObject({
+        visibility: "private",
+        forkCount: 0,
+        publishedAt: null,
+        listed: false,
+        searchGrams: [],
+      });
       expect(decks[0].forkedFrom).toBe("c00000000000000000009");
       expect(decks[0].forkedFromAuthorName).toBe("김찬양");
     });

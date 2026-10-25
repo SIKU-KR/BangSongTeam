@@ -1,23 +1,15 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { env } from "cloudflare:test";
-import { inArray } from "drizzle-orm";
+import { env } from "../test/env";
 import {
   DEFAULT_DECK_STYLE,
   PresentationDocumentSchema,
   toPresentationChanges,
   type PresentationDocument,
 } from "#shared";
-import {
-  createD1Client,
-  decks,
-  driveTombstones,
-  presentations,
-  user,
-} from "#db";
+import { decksCol } from "#db";
+import { clearDb, seedDocs, userDoc } from "../../db/test/fixtures";
 import { createApp } from "../index";
 import type { SessionReader } from "../middleware/auth";
-import { clearTables } from "../test/db";
-import { meterD1 } from "../test/meteredD1";
 
 const USER_A = "aaaaaaaa0000000000011";
 const USER_B = "bbbbbbbb0000000000012";
@@ -97,6 +89,24 @@ function request(method: "PUT" | "PATCH", body: unknown) {
   };
 }
 
+/** 사본 곡 문서마다 만든·마지막으로 쓴 시각 (다시 썼는지 확인용) */
+async function copyTimes(): Promise<
+  Map<string, { created: number; updated: number }>
+> {
+  const snapshot = await decksCol(env.DB)
+    .where("presentationId", "==", DOC_ID)
+    .get();
+  return new Map(
+    snapshot.docs.map((doc) => [
+      doc.id,
+      {
+        created: doc.createTime.toMillis(),
+        updated: doc.updateTime.toMillis(),
+      },
+    ]),
+  );
+}
+
 async function readSet(): Promise<PresentationDocument> {
   const res = await app.request(`/api/presentations/${DOC_ID}`, {}, env);
   return ((await res.json()) as { presentation: PresentationDocument })
@@ -105,13 +115,13 @@ async function readSet(): Promise<PresentationDocument> {
 
 describe("PATCH /api/presentations/:id (변경분 저장)", () => {
   beforeEach(async () => {
-    const db = createD1Client(env.DB);
-    await clearTables(decks, presentations, driveTombstones);
-    await db.delete(user).where(inArray(user.id, [USER_A, USER_B]));
-    await db.insert(user).values([
-      { id: USER_A, name: "A", createdAt: new Date(), updatedAt: new Date() },
-      { id: USER_B, name: "B", createdAt: new Date(), updatedAt: new Date() },
-    ]);
+    await clearDb(env.DB);
+    await seedDocs(env.DB, {
+      users: [
+        { id: USER_A, name: "A", createdAt: new Date(), updatedAt: new Date() },
+        { id: USER_B, name: "B", createdAt: new Date(), updatedAt: new Date() },
+      ].map((row) => userDoc(row)),
+    });
     currentUser = USER_A;
 
     const put = await app.request(
@@ -122,18 +132,18 @@ describe("PATCH /api/presentations/:id (변경분 저장)", () => {
     expect(put.status).toBe(200);
   });
 
-  it("10곡 세트에서 가사 한 줄을 고치면 덱 1개만 보내고 D1 왕복 2번·10행 미만으로 저장한다", async () => {
+  it("10곡 세트에서 가사 한 줄을 고치면 덱 1개만 보내고 그 사본 하나만 다시 쓴다", async () => {
     const edited = editOneLine(makeSet(USER_A));
     const changes = toPresentationChanges(
       edited,
       (deck) => deck.id === deckId(4),
     );
-    const { db, meter } = meterD1(env.DB);
+    const before = await copyTimes();
 
     const res = await app.request(
       `/api/presentations/${DOC_ID}`,
       request("PATCH", changes),
-      { ...env, DB: db },
+      env,
     );
 
     expect(res.status).toBe(200);
@@ -141,8 +151,10 @@ describe("PATCH /api/presentations/:id (변경분 저장)", () => {
     expect(JSON.stringify(changes).length).toBeLessThan(
       JSON.stringify(edited).length / 5,
     );
-    expect(meter.roundTrips).toBeLessThanOrEqual(2);
-    expect(meter.rowsWritten).toBeLessThan(10);
+    const after = await copyTimes();
+    expect(
+      [...after].filter(([id, t]) => before.get(id)?.updated !== t.updated),
+    ).toEqual([[deckId(4), expect.anything()]]);
 
     const restored = await readSet();
     expect(restored.items).toHaveLength(SONG_COUNT);
@@ -166,18 +178,21 @@ describe("PATCH /api/presentations/:id (변경분 저장)", () => {
     );
   });
 
-  it("문서 전체 PUT도 모든 곡을 지웠다 다시 넣지 않고 D1 왕복 2번에 끝낸다", async () => {
-    const { db, meter } = meterD1(env.DB);
+  it("문서 전체 PUT도 모든 곡을 지웠다 다시 넣지 않는다", async () => {
+    const before = await copyTimes();
 
     const res = await app.request(
       `/api/presentations/${DOC_ID}`,
       request("PUT", editOneLine(makeSet(USER_A))),
-      { ...env, DB: db },
+      env,
     );
 
     expect(res.status).toBe(200);
-    expect(meter.roundTrips).toBeLessThanOrEqual(2);
-    expect(meter.rowsWritten).toBeLessThanOrEqual(SONG_COUNT + 2);
+    const after = await copyTimes();
+    expect([...after.keys()].sort()).toEqual([...before.keys()].sort());
+    for (const [id, times] of after) {
+      expect(times.created, id).toBe(before.get(id)?.created);
+    }
   });
 
   it("서버에 없는 곡을 빼고 보내면 409이고 세트는 그대로다", async () => {

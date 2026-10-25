@@ -1,56 +1,66 @@
 import { describe, it, expect, beforeAll } from "vitest";
-import { env } from "cloudflare:test";
+import { env } from "./test/env";
 import { API_ERRORS, BackgroundListResponseSchema } from "#shared";
 import app from "./index";
-import { meterD1 } from "./test/meteredD1";
+import type { Db } from "#db";
+import type { MediaStore } from "./lib/mediaStore";
 
-describe("Miniflare/workerd 환경 Worker 및 D1 통합 테스트", () => {
-  beforeAll(async () => {
-    await env.MEDIA_BUCKET.put(
+describe("API 앱 통합 테스트 (Firestore 에뮬레이터)", () => {
+  beforeAll(() => {
+    env.MEDIA.put(
       "loops/warm_light_flow.mp4",
       new Uint8Array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9]),
-      {
-        httpMetadata: { contentType: "video/mp4" },
-      },
+      "video/mp4",
     );
   });
 
-  it("GET /api/health returns 200 OK with { status: 'ok' } in workerd runtime", async () => {
+  it("GET /api/health returns 200 OK with { status: 'ok' }", async () => {
     const res = await app.request("/api/health", {}, env);
     expect(res.status).toBe(200);
     const json = await res.json();
     expect(json).toEqual({ status: "ok" });
   });
 
-  it("GET /api/health는 세션 없이 D1에 가지 않고 캐시 금지로 답한다", async () => {
-    const { db, meter } = meterD1(env.DB);
+  it("GET /api/health는 세션 없이 Firestore에 가지 않고 캐시 금지로 답한다", async () => {
+    const untouchable = new Proxy(
+      {},
+      {
+        get() {
+          throw new Error("health check must not touch Firestore");
+        },
+      },
+    ) as Db;
 
-    const res = await app.request("/api/health", {}, { ...env, DB: db });
+    const res = await app.request(
+      "/api/health",
+      {},
+      { ...env, DB: untouchable },
+    );
 
     expect(res.status).toBe(200);
     expect(res.headers.get("cache-control")).toBe("no-store");
     expect(await res.json()).toEqual({ status: "ok" });
-    expect(meter.roundTrips).toBe(0);
   });
 
   it("처리되지 않은 오류는 내부 메시지를 숨기고 500을 준다", async () => {
-    const brokenBucket = {
-      get: async () => {
-        throw new Error("R2 internal: bangsongteam-media unreachable");
+    const brokenStore: MediaStore = {
+      stat: async () => {
+        throw new Error("GCS internal: bangsongteam-media unreachable");
       },
-    } as unknown as R2Bucket;
+      read: () => new ReadableStream(),
+    };
 
     const res = await app.request(
       "/api/media/loops/warm_light_flow.mp4",
       {},
-      { ...env, MEDIA_BUCKET: brokenBucket },
+      { ...env, MEDIA: brokenStore },
     );
 
     expect(res.status).toBe(500);
     expect(await res.json()).toEqual({ error: "Internal Server Error" });
   });
 
-  it("GET /api/unknown-path returns 404 in workerd runtime", async () => {
+  it("GET /api/unknown-path returns 404", async () => {
     const res = await app.request("/api/unknown-path", {}, env);
     expect(res.status).toBe(404);
     const json = await res.json();
@@ -67,7 +77,7 @@ describe("Miniflare/workerd 환경 Worker 및 D1 통합 테스트", () => {
     ).toBe(true);
   });
 
-  it("GET /api/media/:key streams full video from R2 bucket with 200 OK", async () => {
+  it("GET /api/media/:key streams the full video with 200 OK", async () => {
     const res = await app.request(
       "/api/media/loops/warm_light_flow.mp4",
       {},

@@ -1,30 +1,26 @@
 /**
  * 배경 매니페스트(`data/backgrounds/*.json`)로 배경 라이브러리를 맞추는 스크립트.
- * 앱에는 배경 업로드가 없다 — 배경 영상은 수백 MB라 Worker 요청 본문 한도를 넘는다.
+ * 앱에는 배경 업로드가 없다 — 배경 영상은 수백 MB라 API 요청 본문으로 받지 않는다.
  *
- * 매니페스트의 `id`를 기준으로 D1의 `backgrounds`와 비교해:
- *   - 새 id: ffprobe로 H.264·길이를 확인하고 포스터(960px WebP)를 만든 뒤, R2에 영상·포스터를
- *     먼저 올리고 D1 행을 넣는다. 한 건씩 넣으므로 중간에 멈춰도 다시 돌리면 이어서 한다.
+ * 매니페스트의 `id`를 기준으로 Firestore의 `backgrounds`와 비교해:
+ *   - 새 id: ffprobe로 H.264·길이를 확인하고 포스터(960px WebP)를 만든 뒤, 미디어 저장소에
+ *     영상·포스터를 먼저 올리고 배경 문서를 만든다. 한 건씩 넣으므로 중간에 멈춰도 다시
+ *     돌리면 이어서 한다.
  *   - 있는 id: 파일은 그대로 두고 제목·설명·검색어만 고친다.
- *   - 매니페스트에 없는 행: 새 등록이 모두 성공했을 때만 D1 행을 지우고 R2 객체를 지운다.
- *     그 배경을 쓰던 곡은 `ON DELETE SET NULL`로 배경 없음이 된다.
- *   - 매니페스트 전체를 임베딩해 대상의 Vectorize 인덱스에 넣고, 지운 배경의 벡터는 뺀다
- *     (`backgroundVectors.mjs`). 임베딩 문서에는 `describeBackgrounds.mjs`가 채운
- *     `searchText`가 들어간다.
+ *   - 매니페스트에 없는 문서: 새 등록이 모두 성공했을 때만 문서를 지우고 미디어 객체를
+ *     지운다. 그 배경을 쓰던 곡은 같은 트랜잭션에서 배경 없음이 된다.
  *
- * 필요한 도구: Node 22.18+ (`backgroundSql.ts`를 타입 제거로 바로 불러온다), ffmpeg·ffprobe,
- * cwebp (`brew install ffmpeg webp`), wrangler 로그인 (임베딩은 `--target=local`이어도 원격
- * Workers AI로 만든다). ffmpeg 빌드에 WebP 인코더가 없는 경우가 많아 포스터는
- * PNG로 뽑아 cwebp로 바꾼다.
+ * 필요한 도구: ffmpeg·ffprobe, cwebp (`brew install ffmpeg webp`). ffmpeg 빌드에 WebP 인코더가
+ * 없는 경우가 많아 포스터는 PNG로 뽑아 cwebp로 바꾼다. 대상별 준비는 `lib/targets.mjs`.
  *
  * 사용법:
  *   node scripts/importBackgrounds.mjs --dir=<영상 폴더> --dry-run
- *   node scripts/importBackgrounds.mjs --dir=<영상 폴더>                  # 로컬 D1·R2
+ *   node scripts/importBackgrounds.mjs --dir=<영상 폴더>                  # 로컬 에뮬레이터·폴더
  *   node scripts/importBackgrounds.mjs --dir=<영상 폴더> --target=remote --dry-run
  *   node scripts/importBackgrounds.mjs --dir=<영상 폴더> --target=remote --confirm
  *
- * `--target=remote`는 운영 D1·R2·Vectorize 인덱스를 쓰고 지운다. 먼저 `--dry-run` 결과(지울 개수, 배경이
- * 사라질 곡 수)를 확인받은 뒤에만 `--confirm`으로 실행한다.
+ * `--target=remote`는 운영 Firestore·GCS를 쓰고 지운다. 먼저 `--dry-run` 결과(지울 개수,
+ * 배경이 사라질 곡 수)를 확인받은 뒤에만 `--confirm`으로 실행한다.
  *
  * 옵션:
  *   --manifest=<경로>  매니페스트 JSON (기본값: data/backgrounds/storyloop.json)
@@ -35,40 +31,29 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
-import { fileURLToPath } from "node:url";
-import { BACKGROUND_SQL } from "../src/db/ops/backgroundSql.ts";
 import {
-  deleteBackgroundVectors,
-  upsertBackgroundVectors,
-} from "./backgroundVectors.mjs";
+  ROOT_DIR,
+  assertEmulatorUp,
+  importSource,
+  mediaTarget,
+  parseFlags,
+  applyTarget,
+} from "./lib/targets.mjs";
 
-const ROOT_DIR = path.resolve(
-  path.dirname(fileURLToPath(import.meta.url)),
-  "..",
-);
 const DEFAULT_MANIFEST = path.join(
   ROOT_DIR,
   "data",
   "backgrounds",
   "storyloop.json",
 );
-const MEDIA_BUCKET = "bangsongteam-media";
 const ID_PATTERN = /^[A-Za-z0-9_-]{21}$/;
 const POSTER_WIDTH = 960;
 const POSTER_SEEK_SEC = 1;
 const MAX_POSTER_BYTES = 2 * 1024 * 1024;
 
 function parseArgs(argv) {
-  const args = Object.fromEntries(
-    argv.map((arg) => {
-      const [key, value] = arg.replace(/^--/, "").split("=");
-      return [key, value ?? true];
-    }),
-  );
+  const args = parseFlags(argv);
   const target = args.target ?? "local";
-  if (target !== "local" && target !== "remote") {
-    throw new Error(`--target은 local 또는 remote여야 합니다: ${target}`);
-  }
   if (!args.dir) throw new Error("--dir=<영상 폴더>가 필요합니다");
   return {
     manifestPath: path.resolve(args.manifest ?? DEFAULT_MANIFEST),
@@ -88,67 +73,6 @@ function run(command, args) {
   });
 }
 
-function wrangler(args) {
-  return run("pnpm", ["exec", "wrangler", ...args]);
-}
-
-function sqlLiteral(value) {
-  if (typeof value === "number") return String(value);
-  return `'${String(value).replaceAll("'", "''")}'`;
-}
-
-/** `BACKGROUND_SQL`의 `:name` 자리에 값을 채운다. wrangler는 바인딩 파라미터를 받지 않는다 */
-function fillSql(template, params) {
-  return template.replace(/:([a-z0-9_]+)/g, (match, name) => {
-    if (!(name in params)) throw new Error(`SQL 파라미터 없음: ${name}`);
-    return sqlLiteral(params[name]);
-  });
-}
-
-function query(target, sql) {
-  const output = wrangler([
-    "d1",
-    "execute",
-    "DB",
-    `--${target}`,
-    "--json",
-    "--command",
-    sql,
-  ]);
-  const [result] = JSON.parse(output);
-  return result.results;
-}
-
-function execute(target, statements) {
-  if (statements.length === 0) return;
-  const file = path.join(
-    os.tmpdir(),
-    `bangsong-backgrounds-${process.pid}.sql`,
-  );
-  fs.writeFileSync(file, statements.join("\n"), "utf-8");
-  try {
-    wrangler(["d1", "execute", "DB", `--${target}`, `--file=${file}`]);
-  } finally {
-    fs.rmSync(file, { force: true });
-  }
-}
-
-function putObject(target, key, file, contentType) {
-  wrangler([
-    "r2",
-    "object",
-    "put",
-    `${MEDIA_BUCKET}/${key}`,
-    `--file=${file}`,
-    `--content-type=${contentType}`,
-    `--${target}`,
-  ]);
-}
-
-function deleteObject(target, key) {
-  wrangler(["r2", "object", "delete", `${MEDIA_BUCKET}/${key}`, `--${target}`]);
-}
-
 function loadManifest(manifestPath, dir) {
   const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf-8"));
   const ids = new Set();
@@ -159,8 +83,6 @@ function loadManifest(manifestPath, dir) {
     if (!item.title?.trim()) throw new Error(`제목 없음: ${item.file}`);
     if (!Array.isArray(item.keywords))
       throw new Error(`keywords 없음: ${item.file}`);
-    if (item.searchText !== undefined && typeof item.searchText !== "string")
-      throw new Error(`searchText는 문자열이어야 합니다: ${item.file}`);
     if (!fs.existsSync(path.join(dir, item.file))) {
       throw new Error(`영상 파일 없음: ${path.join(dir, item.file)}`);
     }
@@ -211,16 +133,15 @@ function makePoster(file, durationSec, outFile) {
   return size;
 }
 
-function metadataParams(item) {
+function metadata(item) {
   return {
-    id: item.id,
     title: item.title.trim(),
     description: item.description ?? "",
-    keywords: JSON.stringify(item.keywords),
+    keywords: item.keywords,
   };
 }
 
-function registerBackground(target, item, dir, tmpDir) {
+async function registerOne(ops, db, media, item, dir, tmpDir) {
   const videoFile = path.join(dir, item.file);
   const durationSec = probeVideo(videoFile);
   const posterFile = path.join(tmpDir, `${item.id}.webp`);
@@ -228,45 +149,51 @@ function registerBackground(target, item, dir, tmpDir) {
   const mediaKey = `loops/${item.id}.mp4`;
   const posterKey = `posters/${item.id}.webp`;
 
-  putObject(target, mediaKey, videoFile, "video/mp4");
-  putObject(target, posterKey, posterFile, "image/webp");
+  await media.put(mediaKey, videoFile, "video/mp4");
+  await media.put(posterKey, posterFile, "image/webp");
   fs.rmSync(posterFile, { force: true });
 
-  execute(target, [
-    fillSql(BACKGROUND_SQL.REGISTER_SERVICE_BACKGROUND, {
-      ...metadataParams(item),
-      r2_key: mediaKey,
-      poster_key: posterKey,
-      duration_sec: durationSec,
-      size_bytes: fs.statSync(videoFile).size + posterBytes,
-    }),
-  ]);
+  await ops.registerBackground(db, {
+    id: item.id,
+    ...metadata(item),
+    mediaKey,
+    posterKey,
+    durationSec,
+    sizeBytes: fs.statSync(videoFile).size + posterBytes,
+  });
 }
 
 async function main() {
   const options = parseArgs(process.argv.slice(2));
   const { target, dir } = options;
+  applyTarget(target);
+  await assertEmulatorUp();
   const manifest = loadManifest(options.manifestPath, dir);
   const manifestIds = new Set(manifest.items.map((item) => item.id));
 
-  const existing = query(target, BACKGROUND_SQL.LIST_BACKGROUNDS);
+  const [{ getFirestore }, ops] = await Promise.all([
+    importSource("src/db/client.ts"),
+    importSource("src/db/ops/backgrounds.ts"),
+  ]);
+  const db = getFirestore();
+  const media = await mediaTarget(target);
+
+  const existing = await ops.listBackgroundFiles(db);
   const existingIds = new Set(existing.map((row) => row.id));
   const toRegister = manifest.items.filter((item) => !existingIds.has(item.id));
   const toUpdate = manifest.items.filter((item) => existingIds.has(item.id));
   const toDelete = existing.filter((row) => !manifestIds.has(row.id));
-  const deleteIds = new Set(toDelete.map((row) => row.id));
-  const affectedDecks = query(target, BACKGROUND_SQL.COUNT_DECKS_BY_BACKGROUND)
-    .filter((row) => deleteIds.has(row.background_id))
-    .reduce((sum, row) => sum + row.decks, 0);
+  const usage = await ops.countDecksByBackground(
+    db,
+    toDelete.map((row) => row.id),
+  );
+  const affectedDecks = [...usage.values()].reduce((sum, n) => sum + n, 0);
 
-  console.log(`대상: ${target} D1·R2`);
+  console.log(`대상: ${target} Firestore · ${media.label}`);
   console.log(`  새로 등록: ${toRegister.length}개`);
   console.log(`  메타데이터 갱신: ${toUpdate.length}개`);
   console.log(
     `  삭제: ${toDelete.length}개 (배경이 사라질 곡 ${affectedDecks}곡)`,
-  );
-  console.log(
-    `  벡터 갱신: ${manifest.items.length}개 (긴 설명 없음 ${manifest.items.filter((item) => !item.searchText).length}개)`,
   );
 
   if (options.dryRun) {
@@ -275,37 +202,28 @@ async function main() {
   }
   if (target === "remote" && !options.confirmed) {
     throw new Error(
-      "운영 D1·R2를 바꾸려면 --dry-run 결과를 확인한 뒤 --confirm을 붙여 주세요",
+      "운영 Firestore·GCS를 바꾸려면 --dry-run 결과를 확인한 뒤 --confirm을 붙여 주세요",
     );
   }
 
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "bangsong-posters-"));
   const failed = [];
-  toRegister.forEach((item, index) => {
+  for (const [index, item] of toRegister.entries()) {
     process.stdout.write(`[${index + 1}/${toRegister.length}] ${item.file} … `);
     try {
-      registerBackground(target, item, dir, tmpDir);
+      await registerOne(ops, db, media, item, dir, tmpDir);
       console.log("완료");
     } catch (error) {
       failed.push(item.file);
       console.log(`실패\n  ${error.stderr?.trim() || error.message}`);
     }
-  });
+  }
   fs.rmSync(tmpDir, { recursive: true, force: true });
 
-  execute(
-    target,
-    toUpdate.map((item) =>
-      fillSql(BACKGROUND_SQL.UPDATE_BACKGROUND_METADATA, metadataParams(item)),
-    ),
-  );
+  for (const item of toUpdate) {
+    await ops.updateBackgroundMetadata(db, item.id, metadata(item));
+  }
   console.log(`메타데이터 ${toUpdate.length}개를 갱신했습니다.`);
-
-  const registered = manifest.items.filter(
-    (item) => !failed.includes(item.file),
-  );
-  await upsertBackgroundVectors(target, registered);
-  console.log(`벡터 ${registered.length}개를 넣었습니다.`);
 
   if (failed.length > 0) {
     console.error(
@@ -315,38 +233,24 @@ async function main() {
     return;
   }
 
-  execute(
-    target,
-    toDelete.map((row) =>
-      fillSql(BACKGROUND_SQL.DELETE_BACKGROUND, { id: row.id }),
-    ),
-  );
+  for (const row of toDelete) await ops.deleteBackground(db, row.id);
   for (const key of new Set(
-    toDelete.flatMap((row) => [row.r2_key, row.poster_key]),
+    toDelete.flatMap((row) => [row.mediaKey, row.posterKey]),
   )) {
     try {
-      deleteObject(target, key);
+      await media.remove(key);
     } catch (error) {
       console.warn(
-        `R2 객체 삭제 실패 (행은 이미 지움): ${key}\n  ${error.stderr?.trim() || error.message}`,
+        `미디어 객체 삭제 실패 (문서는 이미 지움): ${key}\n  ${error.message}`,
       );
     }
-  }
-  try {
-    deleteBackgroundVectors(
-      target,
-      toDelete.map((row) => row.id),
-    );
-  } catch (error) {
-    console.warn(
-      `벡터 삭제 실패 (행은 이미 지움, 검색 결과에서는 걸러집니다)\n  ${error.stderr?.trim() || error.message}`,
-    );
   }
   console.log(`기존 배경 ${toDelete.length}개를 지웠습니다.`);
 }
 
 try {
   await main();
+  process.exit(process.exitCode ?? 0);
 } catch (error) {
   console.error(error.stderr?.trim() || error.message);
   process.exit(1);

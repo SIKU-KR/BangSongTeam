@@ -1,18 +1,18 @@
 /**
  * 현재 정제/선별된 텍스트 파일들을 기반으로 최종 JSON을 생성하고 픽스하는 스크립트
- * 
+ *
  * 생성 파일:
  * 1. data/cleaned/hymns.json (새찬송가 639곡)
  * 2. data/cleaned/worship.json (핵심 워십 1,202곡)
  * 3. data/cleaned/songs.json (찬송가 + 워십 전체 통합 1,841곡)
- * 
+ *
  * 구조:
  * {
  *   "title": "곡 제목",
  *   "artist": "아티스트명",
  *   "lyrics": "가사 본문 (개행 문자 \\n)"
  * }
- * 
+ *
  * 실행: node scripts/buildFixedJson.mjs
  */
 
@@ -35,10 +35,7 @@ const OUTPUT_SONGS_JSON = path.join(CLEANED_DIR, "songs.json");
  * 텍스트 파일 가사 정규화 (CRLF -> LF, 앞뒤 공백 제거)
  */
 function normalizeLyrics(text) {
-  return text
-    .replace(/\r\n/g, "\n")
-    .replace(/\r/g, "\n")
-    .trim();
+  return text.replace(/\r\n/g, "\n").replace(/\r/g, "\n").trim();
 }
 
 async function buildHymnsJson() {
@@ -135,9 +132,21 @@ async function main() {
   console.log(`- 전체 통합 목록: ${allSongs.length}곡 생성`);
 
   // 4. JSON 파일 저장
-  await fs.writeFile(OUTPUT_HYMNS_JSON, JSON.stringify(hymns, null, 2), "utf-8");
-  await fs.writeFile(OUTPUT_WORSHIP_JSON, JSON.stringify(worship, null, 2), "utf-8");
-  await fs.writeFile(OUTPUT_SONGS_JSON, JSON.stringify(allSongs, null, 2), "utf-8");
+  await fs.writeFile(
+    OUTPUT_HYMNS_JSON,
+    JSON.stringify(hymns, null, 2),
+    "utf-8",
+  );
+  await fs.writeFile(
+    OUTPUT_WORSHIP_JSON,
+    JSON.stringify(worship, null, 2),
+    "utf-8",
+  );
+  await fs.writeFile(
+    OUTPUT_SONGS_JSON,
+    JSON.stringify(allSongs, null, 2),
+    "utf-8",
+  );
 
   console.log(`\n=== JSON 픽스 완료 ===`);
   console.log(`1. 새찬송가 JSON: ${OUTPUT_HYMNS_JSON} (${hymns.length}곡)`);

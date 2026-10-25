@@ -13,11 +13,11 @@ const MediaUrlSchema = z.string().startsWith(MEDIA_URL_PREFIX);
  * URL은 동일 출처 미디어 프록시(`/api/media/*`) 상대 경로다. 송출 화면은 이 값을
  * IndexedDB에서 읽어 그대로 재생하므로 서버에 다시 묻지 않는다.
  * `posterUrl`은 목록·썸네일용 축소본(폭 960px)이다. 포스터 없이 올라간 예전 이미지
- * 배경만 `mediaUrl`과 `posterUrl`이 같다 (운영 런북 1-4로 채운다).
+ * 배경만 `mediaUrl`과 `posterUrl`이 같다.
  *
  * `description`·`keywords`는 스틸컷을 보고 만든 검색 메타데이터다
- * (`data/backgrounds/*.json`). 이 필드가 생기기 전에 IndexedDB에 담긴 사본도
- * 송출 화면이 읽을 수 있게 빈 값을 기본으로 둔다.
+ * (`data/backgrounds/*.json`). 갤러리 검색은 이 값과 제목을 기기에서 비교한다. 이 필드가
+ * 생기기 전에 IndexedDB에 담긴 사본도 송출 화면이 읽을 수 있게 빈 값을 기본으로 둔다.
  */
 export const BackgroundMediaSchema = z.object({
   id: IdSchema,
@@ -40,28 +40,4 @@ export const BackgroundListResponseSchema = z.object({
 });
 export type BackgroundListResponse = z.infer<
   typeof BackgroundListResponseSchema
->;
-
-/** 배경 검색어 최대 길이. 클라이언트는 이보다 긴 입력을 잘라 보낸다 */
-export const BACKGROUND_SEARCH_MAX_LENGTH = 50;
-
-/** 배경 벡터 검색어 (`GET /api/backgrounds/search`) */
-export const SearchBackgroundsQuerySchema = z.object({
-  q: z.string().trim().min(1).max(BACKGROUND_SEARCH_MAX_LENGTH),
-});
-
-export const BackgroundSearchResultSchema = z.object({
-  id: IdSchema,
-  score: z.number(),
-});
-export type BackgroundSearchResult = z.infer<
-  typeof BackgroundSearchResultSchema
->;
-
-/** 검색어와 가까운 배경 id. 가까운 순서이고, 기준 점수에 못 미치는 배경은 빠진다 */
-export const SearchBackgroundsResponseSchema = z.object({
-  results: z.array(BackgroundSearchResultSchema),
-});
-export type SearchBackgroundsResponse = z.infer<
-  typeof SearchBackgroundsResponseSchema
 >;

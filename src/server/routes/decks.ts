@@ -2,7 +2,6 @@ import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { API_ERRORS, DeckSchema, VisibilityUpdateRequestSchema } from "#shared";
 import {
-  createD1Client,
   getMyLibraryDecks,
   upsertDeck,
   deleteDeckScoped,
@@ -25,7 +24,7 @@ export function createDecksRoute(deps: AppDeps = {}) {
   return new Hono<AppEnv>()
     .use("*", resolveRequireAuth(deps))
     .get("/", async (c) => {
-      const db = createD1Client(c.env.DB);
+      const db = c.env.DB;
       const rows = await getMyLibraryDecks(db, c.get("userId") as string);
       return c.json({ decks: rows.map(toSharedDeck) }, 200);
     })
@@ -40,7 +39,7 @@ export function createDecksRoute(deps: AppDeps = {}) {
         return c.json({ error: API_ERRORS.deck.libraryOnly }, 400);
       }
 
-      const db = createD1Client(c.env.DB);
+      const db = c.env.DB;
 
       let saved;
       try {
@@ -63,7 +62,7 @@ export function createDecksRoute(deps: AppDeps = {}) {
       "/:id/visibility",
       zValidator("json", VisibilityUpdateRequestSchema),
       async (c) => {
-        const db = createD1Client(c.env.DB);
+        const db = c.env.DB;
         const { visibility } = c.req.valid("json");
         const result = await setDeckVisibility(
           db,
@@ -92,7 +91,7 @@ export function createDecksRoute(deps: AppDeps = {}) {
       },
     )
     .post("/:id/fork", async (c) => {
-      const db = createD1Client(c.env.DB);
+      const db = c.env.DB;
       const result = await forkPublicDeck(
         db,
         c.get("userId") as string,
@@ -107,7 +106,7 @@ export function createDecksRoute(deps: AppDeps = {}) {
       );
     })
     .delete("/:id", async (c) => {
-      const db = createD1Client(c.env.DB);
+      const db = c.env.DB;
       const removed = await deleteDeckScoped(
         db,
         c.req.param("id"),

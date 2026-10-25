@@ -17,7 +17,7 @@ import { createBackgroundsRoute } from "./routes/backgrounds";
 import { createMediaRoute } from "./routes/media";
 
 /**
- * Worker 앱을 조립한다.
+ * API 앱을 조립한다.
  *
  * 테스트는 `createApp({ readSession })`으로 세션만 바꿔 실제 라우트를 그대로
  * 검증한다. 프로덕션은 기본 의존성으로 만든 `app`을 쓴다.
@@ -46,7 +46,7 @@ export function createApp(deps: AppDeps = {}) {
     .route("/api/catalog", createCatalogRoute(deps))
     .route("/api/reports", createReportsRoute(deps))
     .route("/api/share", createShareRoute(deps))
-    .route("/api/backgrounds", createBackgroundsRoute(deps))
+    .route("/api/backgrounds", createBackgroundsRoute())
     .route("/api/media", createMediaRoute());
 }
 

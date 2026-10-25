@@ -1,14 +1,12 @@
-import { getCloudflareContext } from "@opennextjs/cloudflare";
 import { app } from "../../../server";
-import type { Bindings } from "../../../server/types";
+import { getServerEnv } from "../../../server/env";
 
 /**
  * 모든 `/api/*` 요청을 Hono 앱(`src/server`)에 넘긴다. 라우팅·인증·검증은 Hono가 맡고,
- * 이 파일은 배포 환경의 바인딩(D1·R2·AI·Vectorize·비밀값)만 꺼내 준다.
+ * 이 파일은 Firestore·미디어 저장소·비밀값 바인딩만 붙인다.
  */
 async function handle(request: Request): Promise<Response> {
-  const { env, ctx } = await getCloudflareContext({ async: true });
-  return app.fetch(request, env as unknown as Bindings, ctx);
+  return app.fetch(request, getServerEnv());
 }
 
 export const dynamic = "force-dynamic";

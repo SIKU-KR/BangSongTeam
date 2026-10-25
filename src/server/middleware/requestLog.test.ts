@@ -1,11 +1,11 @@
 import { describe, it, expect, beforeAll, afterEach, vi } from "vitest";
-import { env } from "cloudflare:test";
-import { DrizzleQueryError } from "drizzle-orm";
+import { env } from "../test/env";
 import { Hono } from "hono";
 import { createApp } from "../index";
 import type { SessionReader } from "./auth";
 import type { AppEnv } from "../types";
 import { describeError, logServerError } from "../lib/requestLog";
+import type { MediaStore } from "../lib/mediaStore";
 import { requestLog, resolveRequestId } from "./requestLog";
 
 const TRACE_ID = "4bf92f3577b34da6a3ce929d0e0e4736";
@@ -17,7 +17,8 @@ const fakeSession: SessionReader = async () => ({ userId: USER_ID });
 interface LoggedLine {
   event?: string;
   requestId?: string;
-  cfRay?: string | null;
+  severity?: string;
+  trace?: string | null;
   method?: string;
   route?: string;
   status?: number;
@@ -28,18 +29,20 @@ interface LoggedLine {
 }
 
 function logLines(spy: ReturnType<typeof vi.spyOn>): LoggedLine[] {
-  return spy.mock.calls.map((call: unknown[]) => call[0] as LoggedLine);
+  return spy.mock.calls.map(
+    (call: unknown[]) => JSON.parse(call[0] as string) as LoggedLine,
+  );
 }
 
 function requestLines(spy: ReturnType<typeof vi.spyOn>): LoggedLine[] {
   return logLines(spy).filter((line) => line.event === "request");
 }
 
-beforeAll(async () => {
-  await env.MEDIA_BUCKET.put(
+beforeAll(() => {
+  env.MEDIA.put(
     "loops/warm_light_flow.mp4",
     new Uint8Array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9]),
-    { httpMetadata: { contentType: "video/mp4" } },
+    "video/mp4",
   );
 });
 
@@ -72,9 +75,9 @@ describe("resolveRequestId", () => {
 });
 
 describe("describeError", () => {
-  it("D1 오류를 감싼 cause 사슬의 이름과 메시지를 남긴다", () => {
-    const d1 = new Error("D1_ERROR: UNIQUE constraint failed: decks.id");
-    const wrapped = new Error("wrapped", { cause: d1 });
+  it("저장소 오류를 감싼 cause 사슬의 이름과 메시지를 남긴다", () => {
+    const storage = new Error("10 ABORTED: Transaction lock timeout.");
+    const wrapped = new Error("wrapped", { cause: storage });
 
     const described = describeError(wrapped);
 
@@ -83,32 +86,12 @@ describe("describeError", () => {
       message: "wrapped",
       cause: {
         name: "Error",
-        message: "D1_ERROR: UNIQUE constraint failed: decks.id",
+        message: "10 ABORTED: Transaction lock timeout.",
       },
     });
     expect(JSON.parse(JSON.stringify(described)).cause.message).toContain(
-      "D1_ERROR",
+      "ABORTED",
     );
-  });
-
-  it("Drizzle 쿼리 오류는 SQL 문과 원인만 남기고 바인딩 값(가사)은 남기지 않는다", () => {
-    const d1 = new Error("D1_ERROR: UNIQUE constraint failed: decks.id");
-    const query = 'insert into "decks" ("id", "slides") values (?, ?)';
-    const wrapped = new DrizzleQueryError(
-      query,
-      ["deck-1", JSON.stringify({ lyrics: "주 하나님 지으신 모든 세계" })],
-      d1,
-    );
-
-    const described = describeError(wrapped);
-
-    expect(described).toMatchObject({
-      name: "DrizzleQueryError",
-      message: `Failed query: ${query}`,
-      cause: { message: "D1_ERROR: UNIQUE constraint failed: decks.id" },
-    });
-    expect(described).not.toHaveProperty("stack");
-    expect(JSON.stringify(described)).not.toContain("주 하나님");
   });
 
   it("cause는 3단계까지만 따라간다", () => {
@@ -137,11 +120,9 @@ describe("logServerError", () => {
         logServerError(
           c,
           "thing upsert failed",
-          new DrizzleQueryError(
-            "insert into things values (?)",
-            [body],
-            new Error("D1_ERROR: busy"),
-          ),
+          new Error(`upsert failed for ${body.length} bytes`, {
+            cause: new Error("14 UNAVAILABLE: busy"),
+          }),
           { thingId: c.req.param("id"), songCount: 3 },
         );
         return c.json({ error: "x" }, 500);
@@ -166,7 +147,8 @@ describe("logServerError", () => {
       route: "/api/things/:id",
       thingId: "abc",
       songCount: 3,
-      error: { cause: { message: "D1_ERROR: busy" } },
+      severity: "ERROR",
+      error: { cause: { message: "14 UNAVAILABLE: busy" } },
     });
     expect(JSON.stringify(error.mock.calls)).not.toContain("주 하나님");
   });
@@ -179,7 +161,12 @@ describe("requestLog 미들웨어", () => {
 
     const res = await app.request(
       "/api/health",
-      { headers: { traceparent: TRACEPARENT, "cf-ray": "8a1b2c3d-ICN" } },
+      {
+        headers: {
+          traceparent: TRACEPARENT,
+          "x-cloud-trace-context": "105445aa7843bc8bf206b12000100000/1;o=1",
+        },
+      },
       env,
     );
 
@@ -188,9 +175,10 @@ describe("requestLog 미들웨어", () => {
     const lines = requestLines(log);
     expect(lines).toHaveLength(1);
     expect(lines[0]).toMatchObject({
+      severity: "INFO",
       event: "request",
       requestId: TRACE_ID,
-      cfRay: "8a1b2c3d-ICN",
+      trace: "105445aa7843bc8bf206b12000100000",
       method: "GET",
       route: "/api/health",
       status: 200,
@@ -199,13 +187,17 @@ describe("requestLog 미들웨어", () => {
     expect(lines[0]).not.toHaveProperty("userHash");
   });
 
-  it("traceparent가 없으면 무작위 ID를 쓰고 cf-ray는 cfRay에만 남긴다", async () => {
+  it("traceparent가 없으면 무작위 ID를 쓰고 Cloud Run trace id는 trace에만 남긴다", async () => {
     const log = vi.spyOn(console, "log").mockImplementation(() => {});
     const app = createApp();
 
     const res = await app.request(
       "/api/health",
-      { headers: { "cf-ray": "8a1b2c3d-ICN" } },
+      {
+        headers: {
+          "x-cloud-trace-context": "105445aa7843bc8bf206b12000100000/1;o=1",
+        },
+      },
       env,
     );
 
@@ -213,7 +205,7 @@ describe("requestLog 미들웨어", () => {
     expect(requestId).toMatch(/^[0-9a-f]{32}$/);
     expect(requestLines(log)[0]).toMatchObject({
       requestId,
-      cfRay: "8a1b2c3d-ICN",
+      trace: "105445aa7843bc8bf206b12000100000",
     });
   });
 
@@ -263,16 +255,17 @@ describe("requestLog 미들웨어", () => {
   it("처리되지 않은 오류는 일반 500 본문을 주고 원인을 console.error로 남긴다", async () => {
     const error = vi.spyOn(console, "error").mockImplementation(() => {});
     const log = vi.spyOn(console, "log").mockImplementation(() => {});
-    const brokenBucket = {
-      get: async () => {
-        throw new Error("R2 internal: bangsongteam-media unreachable");
+    const brokenStore: MediaStore = {
+      stat: async () => {
+        throw new Error("GCS internal: bangsongteam-media unreachable");
       },
-    } as unknown as R2Bucket;
+      read: () => new ReadableStream(),
+    };
 
     const res = await createApp().request(
       "/api/media/loops/warm_light_flow.mp4",
       { headers: { traceparent: TRACEPARENT } },
-      { ...env, MEDIA_BUCKET: brokenBucket },
+      { ...env, MEDIA: brokenStore },
     );
 
     expect(res.status).toBe(500);
@@ -285,6 +278,6 @@ describe("requestLog 미들웨어", () => {
       route: "/api/media/*",
       status: 500,
     });
-    expect(line.error?.message).toContain("R2 internal");
+    expect(line.error?.message).toContain("GCS internal");
   });
 });

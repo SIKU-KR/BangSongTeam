@@ -65,17 +65,19 @@ describe("PWA 설정", () => {
     expect(config).toContain('url.pathname.startsWith("/api/")');
   });
 
-  it("해시가 붙은 /_next/static/*만 immutable로 캐시하고 페이지·sw.js는 재검증한다", () => {
-    const headers = fs.readFileSync(
-      path.join(rootDir, "public/_headers"),
-      "utf-8",
-    );
-    const rules = headers
-      .split("\n")
-      .filter((line) => line.trim() && !line.startsWith("#"));
-    expect(rules).toEqual([
-      "/_next/static/*",
-      "  Cache-Control: public, max-age=31536000, immutable",
+  it("sw.js는 매번 재검증한다 (해시가 붙은 /_next/static/*은 Next.js가 immutable로 준다)", async () => {
+    const { default: nextConfig } = await import("../next.config");
+    const headers = await nextConfig.headers?.();
+    expect(headers).toEqual([
+      {
+        source: "/sw.js",
+        headers: [
+          {
+            key: "Cache-Control",
+            value: "no-cache, no-store, must-revalidate",
+          },
+        ],
+      },
     ]);
   });
 

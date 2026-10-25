@@ -38,7 +38,7 @@ export function parseRangeHeader(header: string): ByteRangeRequest | null {
  *
  * `null`이면 만족할 수 없는 범위이므로 라우트가 전체 크기만 담은 `Content-Range`와
  * 함께 416을 돌려줘야 한다(RFC 9110 §14.4). 결과는 항상 `end >= start`라 음수
- * content-length가 나오지 않고, R2에는 이미 검증한 범위만 넘어가 InvalidRange 예외가
+ * content-length가 나오지 않고, 저장소에는 이미 검증한 범위만 넘어가 범위 오류가
  * 500으로 번지지 않는다.
  */
 export function resolveByteRange(

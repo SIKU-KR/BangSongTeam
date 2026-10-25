@@ -8,7 +8,7 @@ on:
       - "docs/**"
       - ".gitignore"
       - ".prettierignore"
-      - "config/dev.vars.example"
+      - "config/env.example"
   # On pull_request, path filtering is handled by the `changes` job because the
   # repository ruleset requires "Typecheck, Lint & Test". Workflow-level paths-ignore
   # would prevent check runs from being created, leaving PRs blocked in a pending state.
@@ -48,10 +48,13 @@ jobs:
               - 'pnpm-workspace.yaml'
               - 'tsconfig*.json'
               - 'next.config.ts'
-              - 'open-next.config.ts'
               - 'vitest.config.ts'
-              - 'wrangler.jsonc'
               - 'eslint.config.mjs'
+              - 'Dockerfile'
+              - '.dockerignore'
+              - 'firebase.json'
+              - 'firestore.indexes.json'
+              - 'firestore.rules'
               - '.github/**'
 
   verify:
@@ -59,7 +62,7 @@ jobs:
     needs: [changes]
     if: always() && (github.event_name != 'pull_request' || needs.changes.result != 'success' || needs.changes.outputs.app == 'true')
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
 
     steps:
       - name: Checkout repository
@@ -77,6 +80,19 @@ jobs:
         with:
           node-version: 22
           cache: "pnpm"
+
+      # The Firestore emulator that server tests run against is a Java program.
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Cache Firestore emulator
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/firebase/emulators
+          key: firebase-emulators-${{ hashFiles('pnpm-lock.yaml') }}
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -90,72 +106,57 @@ jobs:
       - name: Test
         run: pnpm test
 
-      # Builds the Next.js app (and the service worker) and bundles it into
-      # .open-next/ for Workers. The dry run below validates that output.
+      # Same build the Docker image runs (Next.js standalone output + service worker).
       - name: Build web app
-        run: pnpm exec opennextjs-cloudflare build
-
-      - name: Verify Worker deployment (dry run)
-        run: pnpm exec wrangler deploy --dry-run | tee wrangler-dry-run.log
-
-      # Next.js on Workers is parsed on every cold start. Keep the compressed
-      # upload under 3 MiB, the Workers Free size limit.
-      - name: Check Worker bundle size
-        run: |
-          limit_kib=3072
-          gzip_kib=$(sed -n 's/.*gzip: \([0-9.]*\) KiB.*/\1/p' wrangler-dry-run.log | head -1)
-          if [ -z "$gzip_kib" ]; then
-            echo "::error::Could not read the Worker size from the dry run."
-            exit 1
-          fi
-          echo "Worker upload (gzip): ${gzip_kib} KiB (limit ${limit_kib} KiB)"
-          if awk "BEGIN { exit !($gzip_kib > $limit_kib) }"; then
-            echo "::error::Worker upload is ${gzip_kib} KiB gzip, over the ${limit_kib} KiB limit."
-            exit 1
-          fi
+        run: pnpm build
 
   deploy:
-    name: Migrate D1 & Deploy Worker
+    name: Deploy to Cloud Run
     needs: verify
     # `changes` is skipped on push, and the implicit success() also looks at
     # skipped ancestors, so without always() this job never runs on main.
     # https://github.com/actions/runner/issues/2205
-    if: always() && needs.verify.result == 'success' && github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    # Until the Google Cloud project is set up (docs/deploy-gcp.md), main pushes
+    # only verify and nothing is deployed.
+    if: always() && needs.verify.result == 'success' && github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && vars.GCP_PROJECT_ID != ''
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
 
     # Serialize production deploys across concurrent main pushes.
     concurrency:
       group: production
       cancel-in-progress: false
 
+    permissions:
+      contents: read
+      id-token: write
+
     env:
-      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+      REGION: ${{ vars.GCP_REGION }}
+      SERVICE: ${{ vars.CLOUD_RUN_SERVICE }}
+      IMAGE: ${{ vars.GCP_REGION }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/${{ vars.ARTIFACT_REPOSITORY }}/${{ vars.CLOUD_RUN_SERVICE }}:${{ github.sha }}
 
     steps:
-      - name: Verify Cloudflare credentials
-        run: |
-          missing=0
-          if [ -z "$CLOUDFLARE_API_TOKEN" ]; then
-            echo "::error::Repository secret CLOUDFLARE_API_TOKEN is not set."
-            missing=1
-          fi
-          if [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
-            echo "::error::Repository secret CLOUDFLARE_ACCOUNT_ID is not set."
-            missing=1
-          fi
-          if [ "$missing" -ne 0 ]; then
-            echo "Add them under Settings > Secrets and variables > Actions."
-            echo "The token needs Workers Scripts edit, D1 edit and R2 edit."
-            exit 1
-          fi
-
       - name: Checkout repository
         uses: actions/checkout@v7
 
-      # The version comes from "packageManager" in package.json; pinning it
-      # here as well makes the action fail whenever the two disagree.
+      # Keyless auth through Workload Identity Federation; no JSON key is stored.
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_DEPLOY_SERVICE_ACCOUNT }}
+
+      - name: Setup gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Build and push image
+        run: |
+          gcloud auth configure-docker "${REGION}-docker.pkg.dev" --quiet
+          docker build --build-arg GITHUB_SHA="${GITHUB_SHA}" -t "${IMAGE}" .
+          docker push "${IMAGE}"
+
       - name: Install pnpm
         uses: pnpm/action-setup@v6
         with:
@@ -170,13 +171,13 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Build web app
-        run: pnpm exec opennextjs-cloudflare build
+      # Runs before the deploy so new composite indexes start building before the
+      # new code serves traffic. Indexes only ever get added here; firebase never
+      # deletes an index that is missing from the file without --force.
+      - name: Deploy Firestore rules and indexes
+        run: pnpm exec firebase deploy --only firestore --project "${PROJECT_ID}" --non-interactive
 
-      # Runs before the deploy so the schema is in place when the new code
-      # starts serving traffic.
-      - name: Apply D1 production migrations
-        run: pnpm db:migrate:prod
-
-      - name: Deploy Cloudflare Worker
-        run: pnpm exec opennextjs-cloudflare deploy
+      # Service settings (env vars, secrets, service account, timeout) are set once
+      # when the service is created (docs/deploy-gcp.md); a deploy only swaps the image.
+      - name: Deploy Cloud Run service
+        run: gcloud run deploy "${SERVICE}" --image "${IMAGE}" --region "${REGION}" --quiet

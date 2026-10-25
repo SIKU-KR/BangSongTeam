@@ -1,6 +1,6 @@
 /**
  * 보유 곡 수가 3곡 미만인 아티스트(1~2곡)를 노이즈로 보고 일괄 제거하는 스크립트
- * 
+ *
  * 실행: node scripts/filterUnderThreeSongs.mjs
  */
 
@@ -11,7 +11,12 @@ import { fileURLToPath } from "node:url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT_DIR = path.resolve(__dirname, "..");
 const CLEANED_WORSHIP_DIR = path.join(ROOT_DIR, "data", "cleaned", "worship");
-const CLEANED_WORSHIP_JSON = path.join(ROOT_DIR, "data", "cleaned", "worship.json");
+const CLEANED_WORSHIP_JSON = path.join(
+  ROOT_DIR,
+  "data",
+  "cleaned",
+  "worship.json",
+);
 
 async function main() {
   console.log("=== 3곡 미만 아티스트 노이즈 제거 시작 ===");
@@ -37,7 +42,9 @@ async function main() {
 
   console.log(`- 전체 아티스트 수: ${Object.keys(artistCounts).length}개`);
   console.log(`- 3곡 이상 유지 아티스트 수: ${keepArtistsSet.size}개`);
-  console.log(`- 3곡 미만 제거 아티스트 수: ${Object.keys(artistCounts).length - keepArtistsSet.size}개`);
+  console.log(
+    `- 3곡 미만 제거 아티스트 수: ${Object.keys(artistCounts).length - keepArtistsSet.size}개`,
+  );
 
   // 3. 곡 필터링
   const keptSongs = [];
@@ -70,7 +77,11 @@ async function main() {
   }
 
   // 5. worship.json 갱신
-  await fs.writeFile(CLEANED_WORSHIP_JSON, JSON.stringify(keptSongs, null, 2), "utf-8");
+  await fs.writeFile(
+    CLEANED_WORSHIP_JSON,
+    JSON.stringify(keptSongs, null, 2),
+    "utf-8",
+  );
 
   console.log(`\n=== 제거 완료 결과 ===`);
   console.log(`- 기존 곡 수: ${initialCount}곡`);

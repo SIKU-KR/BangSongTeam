@@ -1,4 +1,3 @@
-import { DrizzleQueryError } from "drizzle-orm";
 import type { Context } from "hono";
 import { routePath } from "hono/route";
 import type { AppEnv } from "../types";
@@ -16,14 +15,11 @@ function describeAt(err: unknown, depth: number): LoggedError {
   if (!(err instanceof Error)) {
     return { name: typeof err, message: String(err) };
   }
-  const described: LoggedError =
-    err instanceof DrizzleQueryError
-      ? { name: "DrizzleQueryError", message: `Failed query: ${err.query}` }
-      : {
-          name: err.name,
-          message: err.message,
-          ...(err.stack ? { stack: err.stack } : {}),
-        };
+  const described: LoggedError = {
+    name: err.name,
+    message: err.message,
+    ...(err.stack ? { stack: err.stack } : {}),
+  };
   if (err.cause !== undefined && depth < MAX_CAUSE_DEPTH) {
     described.cause = describeAt(err.cause, depth + 1);
   }
@@ -33,12 +29,8 @@ function describeAt(err: unknown, depth: number): LoggedError {
 /**
  * 오류를 JSON 로그에 실을 수 있는 값으로 바꾼다. `cause`를 3단계까지 따라간다.
  *
- * `Error`를 그대로 넘기면 Workers Logs에 `{}`로 남는다. Drizzle은 D1 오류
- * (`D1_ERROR: ...`)를 `cause`에 감싸 던지므로, 따라가지 않으면 실제 원인이 빠진다.
- *
- * Drizzle의 `DrizzleQueryError`는 메시지와 스택 첫 줄에 바인딩 값(`params`)을 싣는다.
- * 덱 upsert면 그 값이 가사·슬라이드 JSON이므로, 이 오류는 SQL 문(값은 `?` 자리표시자)만
- * 남기고 스택은 버린다. 원인은 `cause`의 D1 오류가 알려 준다.
+ * `Error`를 그대로 `JSON.stringify`하면 `{}`로 남는다. 감싼 오류는 `cause`에 실제 원인이
+ * 있으므로 따라간다.
  */
 export function describeError(err: unknown): LoggedError {
   return describeAt(err, 0);
@@ -57,11 +49,27 @@ export function logServerError(
   error: unknown,
   context: Record<string, unknown> = {},
 ): void {
-  console.error({
+  writeLog("ERROR", {
     event,
     requestId: c.get("requestId"),
     route: routePath(c),
     error: describeError(error),
     ...context,
   });
+}
+
+export type LogSeverity = "INFO" | "WARNING" | "ERROR";
+
+/**
+ * 구조화 로그 한 줄을 남긴다. Cloud Run은 표준 출력의 한 줄 JSON을 Cloud Logging의
+ * `jsonPayload`로 받고 `severity`를 로그 수준으로 쓴다.
+ * https://cloud.google.com/run/docs/logging#writing_structured_logs
+ */
+export function writeLog(
+  severity: LogSeverity,
+  entry: Record<string, unknown>,
+): void {
+  const line = JSON.stringify({ severity, ...entry });
+  if (severity === "ERROR") console.error(line);
+  else console.log(line);
 }

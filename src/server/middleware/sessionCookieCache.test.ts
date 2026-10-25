@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { env } from "cloudflare:test";
-import { eq } from "drizzle-orm";
+import { env } from "../test/env";
 import { makeSignature } from "better-auth/crypto";
-import { createD1Client, session, user } from "#db";
+import { COLLECTIONS, type Db } from "#db";
+import { clearDb, seedDocs, userDoc } from "../../db/test/fixtures";
 import { createId } from "#shared";
 import app from "../index";
 import { getAuth } from "../lib/auth";
@@ -40,10 +40,11 @@ function cookieHeader(
 async function login(): Promise<string> {
   const now = new Date();
   const token = createId();
-  await createD1Client(env.DB)
-    .insert(session)
-    .values({
-      id: createId(),
+  const id = createId();
+  await env.DB.collection(COLLECTIONS.sessions)
+    .doc(id)
+    .set({
+      id,
       userId: USER_ID,
       token,
       expiresAt: new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000),
@@ -61,9 +62,10 @@ async function listFolders(cookie: string): Promise<Response> {
 }
 
 async function deleteSessions(): Promise<void> {
-  await createD1Client(env.DB)
-    .delete(session)
-    .where(eq(session.userId, USER_ID));
+  const sessions = await env.DB.collection(COLLECTIONS.sessions)
+    .where("userId", "==", USER_ID)
+    .get();
+  await Promise.all(sessions.docs.map((doc) => doc.ref.delete()));
 }
 
 afterEach(() => {
@@ -72,26 +74,26 @@ afterEach(() => {
 
 describe("세션 쿠키 캐시", () => {
   beforeEach(async () => {
-    const db = createD1Client(env.DB);
-    await db.delete(user).where(eq(user.id, USER_ID));
-    const now = new Date();
-    await db.insert(user).values({
-      id: USER_ID,
-      name: "쿠키 캐시",
-      email: "cookie-cache@example.com",
-      createdAt: now,
-      updatedAt: now,
+    await clearDb(env.DB);
+    await seedDocs(env.DB, {
+      users: [
+        userDoc({
+          id: USER_ID,
+          name: "쿠키 캐시",
+          email: "cookie-cache@example.com",
+        }),
+      ],
     });
   });
 
-  it("쿠키 캐시가 없어 D1을 읽은 요청은 새 쿠키 캐시를 응답에 싣는다", async () => {
+  it("쿠키 캐시가 없어 Firestore를 읽은 요청은 새 쿠키 캐시를 응답에 싣는다", async () => {
     const res = await listFolders(await login());
 
     expect(res.status).toBe(200);
     expect(hasCookie(cookiePairs(res), SESSION_DATA)).toBe(true);
   });
 
-  it("쿠키 캐시가 살아 있으면 D1의 세션을 읽지 않는다", async () => {
+  it("쿠키 캐시가 살아 있으면 Firestore의 세션을 읽지 않는다", async () => {
     const token = await login();
     const first = await listFolders(token);
     const cache = cookieHeader(cookiePairs(first), [SESSION_DATA]);
@@ -113,11 +115,22 @@ describe("세션 쿠키 캐시", () => {
 
   it("세션 저장소가 실패하면 로그아웃으로 오인되지 않게 401이 아니라 5xx로 내린다", async () => {
     const token = await login();
-    const brokenDb = {
-      prepare: () => {
-        throw new Error("D1_ERROR: storage unavailable");
+    const brokenDb = new Proxy(env.DB, {
+      get(target, prop) {
+        if (
+          ["collection", "runTransaction", "getAll", "batch"].includes(
+            String(prop),
+          )
+        ) {
+          return () => {
+            throw Object.assign(new Error("14 UNAVAILABLE: storage"), {
+              code: 14,
+            });
+          };
+        }
+        return Reflect.get(target, prop);
       },
-    } as unknown as D1Database;
+    }) as Db;
     const brokenBindings: Bindings = { ...env, DB: brokenDb };
     vi.spyOn(console, "error").mockImplementation(() => {});
     vi.spyOn(console, "log").mockImplementation(() => {});

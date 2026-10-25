@@ -1,156 +1,46 @@
 /**
- * 선별된 가사 텍스트 파일들을 BangSongTeam 공유 라이브러리(D1 DB)로 시드하는 스크립트
- * 
+ * 선별된 가사를 BangSongTeam 공유 라이브러리(Firestore)에 공식 봇 계정의 공개 곡으로 넣는다.
+ *
  * 사용법:
- *   1. data/extracted/selected/ 폴더에 업로드하고 싶은 .txt 파일들을 복사합니다.
- *   2. 로컬 D1에 적재:
+ *   1. data/cleaned/selected/ 폴더에 올리고 싶은 .txt 파일들을 복사합니다.
+ *   2. 로컬 에뮬레이터에 넣기 (다른 터미널에서 `pnpm emulators`):
  *      node scripts/seedSelected.mjs --target=local
- *   3. 원격(배포) D1에 적재:
- *      node scripts/seedSelected.mjs --target=remote
- * 
+ *   3. 운영 Firestore에 넣기 (운영 데이터를 쓰므로 실행 전에 확인받는다):
+ *      GOOGLE_CLOUD_PROJECT=... node scripts/seedSelected.mjs --target=remote
+ *
  * 옵션:
- *   --dir=<경로>    지정한 디렉터리의 txt 파일들을 읽어옵니다. (기본값: data/extracted/selected)
+ *   --dir=<경로>    지정한 디렉터리의 txt 파일들을 읽어옵니다. (기본값: data/cleaned/selected)
  *   --json=<경로>   txt 폴더 대신 `{ title, artist, lyrics }` 배열 JSON(예: data/cleaned/songs.json)을 읽어옵니다.
- *   --dry-run       DB에 실행하지 않고 SQL 파일(data/seed.sql)만 생성합니다.
+ *   --dry-run       Firestore에 쓰지 않고 넣을 곡 수만 셉니다.
+ *
+ * 봇 계정에 같은 제목·아티스트 곡이 이미 있으면 건너뛰므로 여러 번 돌려도 겹치지 않는다.
+ * 슬라이드 나누기와 기본 스타일은 앱과 같은 `#shared` 규칙을 쓴다.
  */
 
 import fs from "node:fs/promises";
 import path from "node:path";
-import { execSync } from "node:child_process";
-import { fileURLToPath } from "node:url";
 import { nanoid } from "nanoid";
+import {
+  ROOT_DIR,
+  assertEmulatorUp,
+  importSource,
+  parseFlags,
+  applyTarget,
+} from "./lib/targets.mjs";
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const ROOT_DIR = path.resolve(__dirname, "..");
 const SELECTED_DIR = path.join(ROOT_DIR, "data", "cleaned", "selected");
-const OUTPUT_SQL = path.join(ROOT_DIR, "data", "seed_decks.sql");
 
-// 시스템 공식 봇 계정 ID. 덱 응답의 userId가 IdSchema(21자)를 통과해야 해서 21자로 맞춘다.
+/** 시스템 공식 봇 계정. 덱 응답의 userId가 IdSchema(21자)를 통과해야 해서 21자로 맞춘다 */
 const SEED_BOT_USER_ID = "bot-seed-official-lib";
 const SEED_BOT_NAME = "공식 찬양 라이브러리";
-
-/**
- * src/shared/utils/id.ts의 createId·createSlideId와 같은 형식
- */
-function createId() {
-  return nanoid();
-}
-
-function createSlideId() {
-  return `s_${nanoid(10)}`;
-}
-
-/**
- * 앞뒤 공백 정리
- */
-function sanitizeLyricLine(line) {
-  return line.replace(/^[\s\u00A0\u3000\u200B\uFEFF]+|[\s\u00A0\u3000\u200B\uFEFF]+$/g, "");
-}
-
-const MAX_SLIDE_LINES = 4;
-const MAX_SLIDE_LINE_LENGTH = 80;
-
-function wrapLyricLine(line) {
-  if (line.length <= MAX_SLIDE_LINE_LENGTH) return [line];
-
-  const text = sanitizeLyricLine(line);
-  if (text.length <= MAX_SLIDE_LINE_LENGTH) return [text];
-
-  const ideal = text.length / Math.ceil(text.length / MAX_SLIDE_LINE_LENGTH);
-  let space = -1;
-  for (let i = 1; i <= MAX_SLIDE_LINE_LENGTH; i++) {
-    if (
-      /\s/.test(text[i]) &&
-      (space < 0 || Math.abs(i - ideal) < Math.abs(space - ideal))
-    ) {
-      space = i;
-    }
-  }
-  const cut = space < 0 ? MAX_SLIDE_LINE_LENGTH : space;
-
-  return [
-    sanitizeLyricLine(text.slice(0, cut)),
-    ...wrapLyricLine(sanitizeLyricLine(text.slice(cut))),
-  ];
-}
-
-function fitLinesToSlides(lines) {
-  const units = lines.map(wrapLyricLine);
-  const wrapped = units.flat();
-  if (wrapped.length <= MAX_SLIDE_LINES) return [wrapped];
-
-  const chunks = [];
-  let current = [];
-  for (const unit of units) {
-    if (current.length > 0 && current.length + unit.length > 2) {
-      chunks.push(current);
-      current = [];
-    }
-    for (const piece of unit) {
-      if (current.length === 2) {
-        chunks.push(current);
-        current = [];
-      }
-      current.push(piece);
-    }
-  }
-  if (current.length > 0) chunks.push(current);
-  return chunks;
-}
-
-/**
- * 슬라이드 분할 규칙 (src/shared/utils/lyrics.ts 동일)
- */
-function splitLyricsIntoSlides(rawText) {
-  const rawLines = rawText.split(/\r?\n/);
-  const blocks = [];
-  let currentBlock = [];
-
-  for (const rawLine of rawLines) {
-    const cleaned = sanitizeLyricLine(rawLine);
-    if (cleaned.length === 0) {
-      if (currentBlock.length > 0) {
-        blocks.push(currentBlock);
-        currentBlock = [];
-      }
-    } else {
-      currentBlock.push(cleaned);
-    }
-  }
-  if (currentBlock.length > 0) {
-    blocks.push(currentBlock);
-  }
-
-  return blocks
-    .flatMap(fitLinesToSlides)
-    .map((lines, order) => ({ id: createSlideId(), order, lines }));
-}
-
-/**
- * 기본 덱 스타일 (src/shared/schemas/style.ts 기본값)
- */
-const DEFAULT_DECK_STYLE = {
-  overlayOpacity: 40,
-  overlayColor: "#000000",
-  fontFamily: "Pretendard",
-  fontSizeVw: 4.2,
-  fontColor: "#FFFFFF",
-  textAlign: "center",
-  lineHeight: 1.4,
-  textShadowLevel: "medium",
-  position: {
-    anchor: "middle-center",
-    xPercent: 50,
-    yPercent: 50,
-    widthPercent: 80,
-  },
-};
 
 /**
  * 텍스트 파일 파싱 (헤더 메타데이터 또는 파일명에서 곡 정보 추출)
  */
 function parseTextFile(content, fileName = "") {
-  const delimiterIndex = content.indexOf("--------------------------------------------------");
+  const delimiterIndex = content.indexOf(
+    "--------------------------------------------------",
+  );
   let header = "";
   let body = "";
 
@@ -206,10 +96,6 @@ function parseTextFile(content, fileName = "") {
   };
 }
 
-function escapeSql(str) {
-  return str.replace(/'/g, "''");
-}
-
 /**
  * txt 폴더의 파일들을 `{ label, title, artist, lyricsRaw }`로 읽는다. 파일이 없으면 null.
  */
@@ -222,7 +108,9 @@ async function loadSongsFromDir(targetDir) {
   if (txtFiles.length === 0) {
     console.log(`선별된 .txt 파일이 없습니다.`);
     console.log(`경로: ${targetDir}`);
-    console.log(`\n팁: data/cleaned/hymns 또는 data/cleaned/worship 에서 원하는 곡들을`);
+    console.log(
+      `\n팁: data/cleaned/hymns 또는 data/cleaned/worship 에서 원하는 곡들을`,
+    );
     console.log(`    ${targetDir} 폴더로 복사한 후 다시 실행해 주세요.`);
     console.log(`    또는 특정 폴더를 직접 지정할 수도 있습니다:`);
     console.log(`    node scripts/seedSelected.mjs --dir=data/cleaned/hymns`);
@@ -251,78 +139,111 @@ async function loadSongsFromJson(jsonPath) {
 }
 
 async function main() {
-  const args = process.argv.slice(2);
-  const target = args.find((a) => a.startsWith("--target="))?.split("=")[1] || "local";
-  const customDir = args.find((a) => a.startsWith("--dir="))?.split("=")[1];
-  const jsonFile = args.find((a) => a.startsWith("--json="))?.split("=")[1];
-  const dryRun = args.includes("--dry-run");
-
-  const source = jsonFile
-    ? path.resolve(ROOT_DIR, jsonFile)
-    : customDir
-      ? path.resolve(ROOT_DIR, customDir)
+  const args = parseFlags(process.argv.slice(2));
+  const target = args.target ?? "local";
+  const dryRun = args["dry-run"] === true;
+  const source = args.json
+    ? path.resolve(ROOT_DIR, args.json)
+    : args.dir
+      ? path.resolve(ROOT_DIR, args.dir)
       : SELECTED_DIR;
-  const songs = jsonFile ? await loadSongsFromJson(source) : await loadSongsFromDir(source);
+  const songs = args.json
+    ? await loadSongsFromJson(source)
+    : await loadSongsFromDir(source);
   if (!songs) return;
 
-  console.log(`=== 시드 생성 시작 ===`);
+  applyTarget(target);
+  await assertEmulatorUp();
+  const [shared, client, collections, deckIndex] = await Promise.all([
+    importSource("src/shared/index.ts"),
+    importSource("src/db/client.ts"),
+    importSource("src/db/collections.ts"),
+    importSource("src/db/deckIndex.ts"),
+  ]);
+  const db = client.getFirestore();
+  const decks = collections.decksCol(db);
+
+  console.log(`=== 시드 시작 ===`);
   console.log(`- 원본: ${source}`);
   console.log(`- 처리할 곡: ${songs.length}개`);
-  console.log(`- 대상 데이터베이스: ${target === "remote" ? "원격(Remote)" : "로컬(Local)"}`);
-
-  const nowMs = Date.now();
-  const nowUnix = Math.floor(nowMs / 1000);
-  const sqlStatements = [];
-
-  // 1. 공식 봇 유저 생성 (없을 경우 INSERT OR IGNORE)
-  sqlStatements.push(`-- 1. 시드용 시스템 봇 유저 보장`);
-  sqlStatements.push(
-    `INSERT OR IGNORE INTO user (id, name, email, email_verified, image, created_at, updated_at) VALUES ('${SEED_BOT_USER_ID}', '${escapeSql(SEED_BOT_NAME)}', 'library@worship.local', 1, NULL, ${nowUnix}, ${nowUnix});`,
+  console.log(
+    `- 대상: ${target === "remote" ? "운영 Firestore" : "로컬 에뮬레이터"}`,
   );
 
-  // 2. 각 곡별 덱 SQL 생성. 봇 계정에 같은 제목·아티스트 곡이 있으면 건너뛰어 다시 실행해도 중복되지 않는다.
-  sqlStatements.push(`\n-- 2. 선별 덱 삽입`);
+  const existing = await decks
+    .where("userId", "==", SEED_BOT_USER_ID)
+    .where("presentationId", "==", null)
+    .get();
+  const seen = new Set(
+    existing.docs.map((doc) => `${doc.data().title}\u0000${doc.data().artist}`),
+  );
 
-  let count = 0;
+  const now = new Date();
+  const rows = [];
   for (const { label, title, artist, lyricsRaw } of songs) {
     if (!lyricsRaw || lyricsRaw.length < 5) {
       console.warn(`[건너뜀] 가사 내용 부족: ${label}`);
       continue;
     }
-
-    const slides = splitLyricsIntoSlides(lyricsRaw);
-    const deckId = createId();
-
-    const sql = `INSERT INTO decks (id, user_id, title, artist, lyrics_raw, slides, style, visibility, published_at, created_at, updated_at) SELECT '${deckId}', '${SEED_BOT_USER_ID}', '${escapeSql(title)}', '${escapeSql(artist)}', '${escapeSql(lyricsRaw)}', '${escapeSql(JSON.stringify(slides))}', '${escapeSql(JSON.stringify(DEFAULT_DECK_STYLE))}', 'public', ${nowMs}, ${nowMs}, ${nowMs} WHERE NOT EXISTS (SELECT 1 FROM decks WHERE user_id = '${SEED_BOT_USER_ID}' AND presentation_id IS NULL AND title = '${escapeSql(title)}' AND artist = '${escapeSql(artist)}');`;
-
-    sqlStatements.push(sql);
-    count++;
+    const key = `${title}\u0000${artist}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    rows.push(
+      deckIndex.withDeckIndex({
+        id: nanoid(),
+        userId: SEED_BOT_USER_ID,
+        presentationId: null,
+        itemId: null,
+        position: null,
+        title,
+        artist,
+        lyricsRaw,
+        slides: JSON.stringify(shared.splitLyricsIntoSlides(lyricsRaw)),
+        style: JSON.stringify(shared.DEFAULT_DECK_STYLE),
+        backgroundId: null,
+        forkedFrom: null,
+        forkedFromAuthorName: null,
+        visibility: "public",
+        publishedAt: now,
+        takedownAt: null,
+        forkCount: 0,
+        createdAt: now,
+        updatedAt: now,
+      }),
+    );
   }
 
-  const finalSql = sqlStatements.join("\n");
-  await fs.writeFile(OUTPUT_SQL, finalSql, "utf-8");
-
-  console.log(`\nSQL 배치 파일 생성 완료: ${OUTPUT_SQL} (총 ${count}곡)`);
-
+  console.log(`\n새로 넣을 곡: ${rows.length}개 (이미 있는 곡 제외)`);
   if (dryRun) {
-    console.log(`--dry-run 모드이므로 DB 실행을 건너뜁니다.`);
+    console.log(`--dry-run 모드이므로 Firestore에 쓰지 않습니다.`);
     return;
   }
 
-  // 3. wrangler d1 execute 실행
-  console.log(`\nD1에 시드 주입 중... (wrangler d1 execute DB)`);
-  const wranglerCmd = `pnpm exec wrangler d1 execute DB ${target === "remote" ? "--remote" : "--local"} --file=${OUTPUT_SQL}`;
-
-  try {
-    execSync(wranglerCmd, { stdio: "inherit", cwd: ROOT_DIR });
-    console.log(`\n성공적으로 ${count}곡이 D1 데이터베이스에 시드되었습니다!`);
-    console.log(`FTS5 전문 검색 색인도 자동으로 반영되었습니다.`);
-  } catch (err) {
-    console.error(`\nD1 적재 중 오류 발생:`, err.message);
-  }
+  await client.runBulk(db, (writer) => [
+    writer.set(
+      collections.usersCol(db).doc(SEED_BOT_USER_ID),
+      {
+        id: SEED_BOT_USER_ID,
+        name: SEED_BOT_NAME,
+        email: "library@worship.local",
+        emailVerified: true,
+        image: null,
+        termsAgreedAt: now,
+        createdAt: now,
+        updatedAt: now,
+      },
+      { merge: true },
+    ),
+    ...rows.map((row) => writer.set(decks.doc(row.id), row)),
+  ]);
+  console.log(
+    `${rows.length}곡을 공유 라이브러리에 넣었습니다. 검색 색인도 함께 들어갔습니다.`,
+  );
 }
 
-main().catch((err) => {
-  console.error("실행 실패:", err);
-  process.exit(1);
-});
+main()
+  .then(() => process.exit(0))
+  .catch((err) => {
+    console.error("실행 실패:", err);
+    process.exit(1);
+  });

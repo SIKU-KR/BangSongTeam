@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { createD1Client, getSharedDocumentByToken, joinByToken } from "#db";
+import { getSharedDocumentByToken, joinByToken } from "#db";
 import type { AppEnv } from "../types";
 import { resolveRequireAuth, type AppDeps } from "../deps";
 import { API_ERRORS } from "#shared";
@@ -17,7 +17,7 @@ export function createShareRoute(deps: AppDeps = {}) {
   return new Hono<AppEnv>()
     .get("/:token", async (c) => {
       const document = await getSharedDocumentByToken(
-        createD1Client(c.env.DB),
+        c.env.DB,
         c.req.param("token"),
       );
       c.header("cache-control", "private, no-store");
@@ -27,7 +27,7 @@ export function createShareRoute(deps: AppDeps = {}) {
     })
     .post("/:token/join", requireAuth, async (c) => {
       const result = await joinByToken(
-        createD1Client(c.env.DB),
+        c.env.DB,
         c.req.param("token"),
         c.get("userId") as string,
       );

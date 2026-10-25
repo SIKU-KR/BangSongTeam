@@ -1,19 +1,19 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { eq } from "drizzle-orm";
 import {
   DEV_USERS,
   DeckSchema,
   ID_PATTERN,
   PresentationDocumentSchema,
 } from "#shared";
-import { createTestDb } from "../test-utils";
+import type { Db } from "../client";
 import {
-  backgrounds,
-  decks,
-  folders,
-  presentationMembers,
-  user,
-} from "../schema";
+  backgroundsCol,
+  decksCol,
+  foldersCol,
+  presentationMembersCol,
+  usersCol,
+} from "../collections";
+import { createTestDb, folderDoc, seedDocs, userDoc } from "../test/fixtures";
 import {
   getMyLibraryDecks,
   getPresentationDocumentsByUserId,
@@ -51,10 +51,10 @@ const INPUT: DevSeedInput = {
 };
 
 describe("seedDevData", () => {
-  let db: ReturnType<typeof createTestDb>["db"];
+  let db: Db;
 
   beforeEach(() => {
-    db = createTestDb().db;
+    db = createTestDb();
   });
 
   it("시드 id는 IdSchema를 통과한다", () => {
@@ -76,14 +76,14 @@ describe("seedDevData", () => {
     const summary = await seedDevData(db, INPUT, NOW);
     expect(summary.libraryDecks).toBe(SONGS.length);
 
-    const library = await db
-      .select()
-      .from(decks)
-      .where(eq(decks.userId, SEED_LIBRARY_USER.id));
+    const library = (
+      await decksCol(db).where("userId", "==", SEED_LIBRARY_USER.id).get()
+    ).docs.map((doc) => doc.data());
     expect(library).toHaveLength(SONGS.length);
     for (const row of library) {
       expect(DeckSchema.safeParse(toSharedDeck(row)).success).toBe(true);
       expect(row.visibility).toBe("public");
+      expect(row.listed).toBe(true);
     }
 
     const found = await searchPublicDecks(db, "시드 곡 7");
@@ -101,11 +101,10 @@ describe("seedDevData", () => {
     expect(ownerDocs.some((doc) => doc.trashedAt !== null)).toBe(true);
     expect(ownerDocs.some((doc) => doc.folderId !== null)).toBe(true);
 
-    const ownerFolders = await db
-      .select()
-      .from(folders)
-      .where(eq(folders.userId, OWNER.id));
-    expect(ownerFolders).toHaveLength(summary.folders);
+    const ownerFolders = await foldersCol(db)
+      .where("userId", "==", OWNER.id)
+      .get();
+    expect(ownerFolders.size).toBe(summary.folders);
 
     expect(summary.shareToken).not.toBeNull();
     const shared = await getSharedPresentationDocuments(db, MEMBER.id);
@@ -122,8 +121,8 @@ describe("seedDevData", () => {
     const summary = await seedDevData(db, INPUT, NOW);
     expect(summary.backgrounds).toBe(INPUT.backgrounds.length);
 
-    const rows = await db.select().from(backgrounds);
-    expect(rows.map((row) => [row.kind, row.r2Key, row.posterKey])).toEqual([
+    const rows = (await backgroundsCol(db).get()).docs.map((doc) => doc.data());
+    expect(rows.map((row) => [row.kind, row.mediaKey, row.posterKey])).toEqual([
       ["image", "images/dawn.webp", "images/dawn.webp"],
       ["image", "images/sea.webp", "images/sea.webp"],
     ]);
@@ -137,44 +136,47 @@ describe("seedDevData", () => {
 
   it("약관 동의 전 계정을 남겨 동의 모달을 볼 수 있게 한다", async () => {
     await seedDevData(db, INPUT, NOW);
-    const [newbie] = await db.select().from(user).where(eq(user.id, NEWBIE.id));
+    const newbie = (await usersCol(db).doc(NEWBIE.id).get()).data();
     expect(newbie?.termsAgreedAt).toBeNull();
   });
 
   it("다시 돌려도 같은 데이터가 되고 다른 계정은 건드리지 않는다", async () => {
-    await db.insert(user).values({
-      id: OTHER_USER,
-      name: "다른 사용자",
-      createdAt: NOW,
-      updatedAt: NOW,
+    await seedDocs(db, {
+      users: [userDoc({ id: OTHER_USER, name: "다른 사용자" })],
+      folders: [
+        folderDoc({
+          id: "otherfolder0000000001",
+          userId: OTHER_USER,
+          name: "내 폴더",
+        }),
+      ],
     });
-    await db.insert(folders).values({
-      id: "otherfolder0000000001",
-      userId: OTHER_USER,
-      parentId: null,
-      name: "내 폴더",
-      createdAt: NOW,
-      updatedAt: NOW,
-    });
+    const deckIds = async () =>
+      (await decksCol(db).get()).docs.map((doc) => doc.id).sort();
 
     await seedDevData(db, INPUT, NOW);
-    const first = await db.select({ id: decks.id }).from(decks);
-    const firstMembers = await db.select().from(presentationMembers);
+    const first = await deckIds();
+    const firstMembers = (await presentationMembersCol(db).get()).size;
+    const firstForkCounts = (
+      await decksCol(db).where("forkCount", ">", 0).get()
+    ).docs.map((doc) => [doc.id, doc.data().forkCount]);
 
     await seedDevData(db, INPUT, NOW);
-    const second = await db.select({ id: decks.id }).from(decks);
-    const secondMembers = await db.select().from(presentationMembers);
 
-    expect(second.map((d) => d.id).sort()).toEqual(
-      first.map((d) => d.id).sort(),
-    );
-    expect(secondMembers).toHaveLength(firstMembers.length);
-    expect(await db.select().from(backgrounds)).toHaveLength(
+    expect(await deckIds()).toEqual(first);
+    expect((await presentationMembersCol(db).get()).size).toBe(firstMembers);
+    expect(
+      (await decksCol(db).where("forkCount", ">", 0).get()).docs.map((doc) => [
+        doc.id,
+        doc.data().forkCount,
+      ]),
+    ).toEqual(firstForkCounts);
+    expect((await backgroundsCol(db).get()).size).toBe(
       INPUT.backgrounds.length,
     );
     expect(
-      await db.select().from(folders).where(eq(folders.userId, OTHER_USER)),
-    ).toHaveLength(1);
+      (await foldersCol(db).where("userId", "==", OTHER_USER).get()).size,
+    ).toBe(1);
   });
 
   it("곡이 없으면 아무것도 지우지 않고 멈춘다", async () => {
@@ -182,6 +184,6 @@ describe("seedDevData", () => {
     await expect(
       seedDevData(db, { ...INPUT, songs: [] }, NOW),
     ).rejects.toThrow();
-    expect(await db.select().from(user)).toHaveLength(DEV_USERS.length + 1);
+    expect((await usersCol(db).get()).size).toBe(DEV_USERS.length + 1);
   });
 });

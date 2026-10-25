@@ -1,7 +1,7 @@
 /**
  * 새찬송가 1장~645장 전곡 가사 수집 스크립트
  * 출처: 다국어 성경 HolyBible (http://www.holybible.or.kr)
- * 
+ *
  * 실행: node scripts/extractHymns.mjs
  */
 
@@ -29,7 +29,9 @@ async function fetchHymn(num) {
 
   // 제목 및 구 찬송가 번호 추출
   // 예: <b>288. 예수를 나의 구주 삼고</b>\n [(구)204장]
-  const titleMatch = html.match(/<b>(\d+)\.\s*([^<]+)<\/b>(?:\s*\[([^\]]+)\])?/);
+  const titleMatch = html.match(
+    /<b>(\d+)\.\s*([^<]+)<\/b>(?:\s*\[([^\]]+)\])?/,
+  );
   if (!titleMatch) {
     throw new Error(`Title not found for Hymn ${num}`);
   }
@@ -49,8 +51,14 @@ async function fetchHymn(num) {
   const rawSectionsText = [];
 
   for (const r of rows) {
-    let label = r[1].replace(/<[^>]+>/g, "").replace(/&nbsp;?/g, " ").trim();
-    const text = r[2].replace(/<[^>]+>/g, "").replace(/&nbsp;?/g, " ").trim();
+    let label = r[1]
+      .replace(/<[^>]+>/g, "")
+      .replace(/&nbsp;?/g, " ")
+      .trim();
+    const text = r[2]
+      .replace(/<[^>]+>/g, "")
+      .replace(/&nbsp;?/g, " ")
+      .trim();
 
     if (label.endsWith(".")) {
       label = `[${label.slice(0, -1)}절]`;
@@ -127,7 +135,9 @@ async function main() {
 
     completed += chunk.length;
     if (completed % 50 === 0 || completed === total) {
-      console.log(`진행률: ${completed} / ${total} 장 (${Math.round((completed / total) * 100)}%)`);
+      console.log(
+        `진행률: ${completed} / ${total} 장 (${Math.round((completed / total) * 100)}%)`,
+      );
     }
 
     // 서버 부하 방지를 위한 딜레이

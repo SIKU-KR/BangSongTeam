@@ -1,6 +1,5 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { env } from "cloudflare:test";
-import { eq, inArray } from "drizzle-orm";
+import { env } from "../test/env";
 import {
   DEFAULT_DECK_STYLE,
   DeckSchema,
@@ -9,10 +8,10 @@ import {
   type Deck,
   type SearchCatalogResponse,
 } from "#shared";
-import { createD1Client, decks, presentations, reports, user } from "#db";
+import { takedownDeck } from "../../db/ops/moderation";
+import { clearDb, seedDocs, userDoc } from "../../db/test/fixtures";
 import { createApp } from "../index";
 import type { SessionReader } from "../middleware/auth";
-import { clearTables } from "../test/db";
 import { resetBackgrounds } from "../test/backgrounds";
 
 const A = "aaaaaaaa3000000000001";
@@ -81,24 +80,18 @@ const publish = (id: string) =>
   });
 
 async function takeDown(deckId: string): Promise<void> {
-  await createD1Client(env.DB)
-    .update(decks)
-    .set({ visibility: "private", takedownAt: new Date() })
-    .where(eq(decks.id, deckId));
+  await takedownDeck(env.DB, deckId);
 }
 
 describe("공유 라이브러리 API", () => {
   beforeEach(async () => {
-    await clearTables(reports, decks, presentations);
-    await createD1Client(env.DB)
-      .delete(user)
-      .where(inArray(user.id, [A, B]));
-    await createD1Client(env.DB)
-      .insert(user)
-      .values([
+    await clearDb(env.DB);
+    await seedDocs(env.DB, {
+      users: [
         { id: A, name: "김찬양", createdAt: new Date(), updatedAt: new Date() },
         { id: B, name: "이예배", createdAt: new Date(), updatedAt: new Date() },
-      ]);
+      ].map((row) => userDoc(row)),
+    });
 
     currentUser = A;
     await request("PUT", `/api/decks/${PUB}`, deck(PUB));

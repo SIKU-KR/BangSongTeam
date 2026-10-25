@@ -19,17 +19,17 @@ PR #$ARGUMENTS 를 리뷰해 주세요.
 
 ### 보안과 데이터 격리
 
-- D1에는 row-level security가 없어요. 비공개 데이터를 읽거나 쓰는 쿼리는 모두 세션의 `user_id`로 필터링해야 해요.
-- 공개 라이브러리 쿼리는 `publicDeckCondition()`(`src/db/queries/publicScope.ts`)을 거쳐야 해요.
+- Firestore에는 사용자별 접근 규칙이 없어요(서버만 읽고 써요). 비공개 데이터를 읽거나 쓰는 쿼리는 모두 세션의 사용자 id로 거르거나 소유자를 확인해야 해요.
+- 공개 라이브러리 쿼리는 `listed == true`로 걸러야 하고, 곡을 쓰는 경로는 최종 문서를 `withDeckIndex`(`src/db/deckIndex.ts`)에 통과시켜야 해요.
 - `src/server/routes/*`의 새 엔드포인트에 인증 미들웨어와 Zod 입력 검증이 붙어 있는지 봐요.
 - 비밀값이 클라이언트 번들, 로그, 응답에 노출되지 않는지 봐요.
 
-### D1 마이그레이션
+### Firestore 데이터
 
-- 부모 테이블(`decks`, `presentations` 등)을 drop하거나 recreate하면 안 돼요. D1은 마이그레이션에서 `PRAGMA foreign_keys=OFF`를 무시해서 자식 행이 cascade로 지워져요.
-- 변경은 additive여야 해요. CI가 배포 전에 마이그레이션을 적용하므로, 이전 릴리스가 잠시 새 스키마에서 돌아요. 컬럼 drop이나 rename은 코드가 그 컬럼을 더 쓰지 않게 된 뒤에만 해요.
-- drizzle-kit이 빼먹는 `ON DELETE SET NULL`이 생성된 SQL에 손으로 들어갔는지 봐요.
-- `src/db/schema/*`를 바꿨는데 마이그레이션이 없거나, 그 반대인 경우를 잡아요.
+- 외래키·트리거가 하던 정리(사본·멤버 cascade, `forkedFrom`·신고 `deckId` 비우기, `forkCount`)가 같은 트랜잭션 안에 있는지 봐요. 트랜잭션은 모든 읽기가 쓰기보다 먼저여야 해요.
+- 저장하는 문서가 빈 값을 필드 생략이 아니라 `null`로 쓰는지 봐요. 생략한 필드는 `== null` 쿼리에 걸리지 않아요.
+- 여러 필드로 정렬·범위 조건을 거는 새 쿼리에 맞는 복합 색인이 `firestore.indexes.json`에 있는지 봐요. 에뮬레이터는 색인 없이도 통과시켜요.
+- 문서 모양을 바꾸면 이전 릴리스와 옛 문서가 함께 읽힐 수 있어요. 새 필드는 없을 때의 기본값을 두고 읽는지 봐요.
 
 ### 정확성
 
@@ -79,7 +79,7 @@ PR #$ARGUMENTS 를 리뷰해 주세요.
 - 무거운 의존성이나 특정 화면에서만 쓰는 코드는 `next/dynamic`이나 동적 import로 나눠요.
 - `NEXT_PUBLIC_` 변수로 비밀값이 클라이언트에 들어가지 않는지 봐요.
 - 새 동적 경로가 `OFFLINE_SHELL_PARAM`으로 `generateStaticParams`를 내보내는지 봐요. 없으면 그 화면은 오프라인에서 열리지 않아요.
-- API 코드(`src/server/*`)는 OpenNext로 Cloudflare Workers에서 돌아요. Node 전용 API를 쓰지 않는지, Worker 업로드 크기(gzip 3 MiB)를 키울 의존성을 추가하지 않는지 봐요.
+- API 코드(`src/server/*`)는 Cloud Run의 Node 컨테이너에서 돌아요. 인스턴스 메모리 상태(빈도 제한 등)는 인스턴스마다 따로라 최선 노력으로만 쓰는지, 32 MiB 넘는 응답에 `content-length`를 붙이지 않는지 봐요.
 
 ## 지적하지 않을 것
 

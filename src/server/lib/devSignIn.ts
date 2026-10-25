@@ -12,7 +12,7 @@ export const DEV_SIGN_IN_REDIRECT = "/presentations";
  * `GET /api/auth/dev/sign-in?userId=<id>`가 세션 쿠키를 심고 드라이브로 보낸다.
  *
  * `getAuth`가 운영 빌드(`NODE_ENV=production`)에서는 등록하지 않으므로 운영 서버에는
- * 이 엔드포인트가 없다. 시드 계정 id만 받으므로 `CF_REMOTE_BINDINGS=true`로 운영 D1에
+ * 이 엔드포인트가 없다. 시드 계정 id만 받으므로 운영 Firestore에
  * 붙인 개발 서버에서도 실제 사용자로 들어갈 수 없다.
  */
 export function devSignIn(): BetterAuthPlugin {

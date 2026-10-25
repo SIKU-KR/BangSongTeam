@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { API_ERRORS, SearchCatalogQuerySchema } from "#shared";
-import { createD1Client, getPublicDeckDetail, searchPublicDecks } from "#db";
+import { getPublicDeckDetail, searchPublicDecks } from "#db";
 import type { AppEnv } from "../types";
 import { resolveRequireAuth, type AppDeps } from "../deps";
 
@@ -23,7 +23,7 @@ export function createCatalogRoute(deps: AppDeps = {}) {
       zValidator("query", SearchCatalogQuerySchema),
       async (c) => {
         const { q, limit } = c.req.valid("query");
-        const db = createD1Client(c.env.DB);
+        const db = c.env.DB;
 
         const decks = await searchPublicDecks(db, q, limit);
 
@@ -32,7 +32,7 @@ export function createCatalogRoute(deps: AppDeps = {}) {
       },
     )
     .get("/decks/:id", requireAuth, async (c) => {
-      const db = createD1Client(c.env.DB);
+      const db = c.env.DB;
       const detail = await getPublicDeckDetail(db, c.req.param("id"));
       if (!detail) {
         return c.json({ error: API_ERRORS.deck.notPublished }, 404);

@@ -1,3 +1,5 @@
 export * from "./client";
-export * from "./schema";
+export * from "./collections";
+export * from "./deckIndex";
 export * from "./queries";
+export * from "./auth/firestoreAdapter";

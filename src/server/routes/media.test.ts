@@ -1,7 +1,8 @@
 import { describe, it, expect, beforeAll } from "vitest";
-import { env } from "cloudflare:test";
+import { env } from "../test/env";
 import { Hono } from "hono";
 import type { AppEnv } from "../types";
+import type { MediaObject, MediaStore } from "../lib/mediaStore";
 import { createMediaRoute } from "./media";
 
 const app = new Hono<AppEnv>().route("/api/media", createMediaRoute());
@@ -11,9 +12,11 @@ const BODY = "0123456789abcdef";
 const EMPTY_KEY = "loops/empty.mp4";
 const IMMUTABLE = "public, max-age=31536000, immutable";
 
-beforeAll(async () => {
-  await env.MEDIA_BUCKET.put(KEY, BODY);
-  await env.MEDIA_BUCKET.put(EMPTY_KEY, "");
+const encode = (text: string) => new TextEncoder().encode(text);
+
+beforeAll(() => {
+  env.MEDIA.put(KEY, encode(BODY));
+  env.MEDIA.put(EMPTY_KEY, encode(""));
 });
 
 const requestRange = async (range: string, key = KEY): Promise<Response> =>
@@ -119,29 +122,61 @@ describe("GET /api/media/*", () => {
     expect(res.status).toBe(404);
   });
 
-  it("HEAD와 GET 사이에 객체가 작게 바뀌면 500 대신 새 객체 전체를 200으로 돌려준다", async () => {
-    const raceKey = "loops/replaced.mp4";
-    const replacement = "xyz";
-    await env.MEDIA_BUCKET.put(raceKey, BODY);
-    const bucket = env.MEDIA_BUCKET;
-    const racingBucket = Object.assign(Object.create(bucket) as R2Bucket, {
-      head: async (key: string): Promise<R2Object | null> => {
-        const head = await bucket.head(key);
-        await bucket.put(key, replacement);
-        return head;
+  it("확인한 판(stat 결과)을 그대로 넘겨 그 판만 읽는다", async () => {
+    const reads: MediaObject[] = [];
+    const store: MediaStore = {
+      stat: env.MEDIA.stat,
+      read: (key, object, range) => {
+        reads.push(object);
+        return env.MEDIA.read(key, object, range);
       },
-      get: bucket.get.bind(bucket),
-    });
+    };
 
     const res = await app.request(
-      `/api/media/${raceKey}`,
-      { headers: { range: "bytes=10-15" } },
-      { ...env, MEDIA_BUCKET: racingBucket },
+      `/api/media/${KEY}`,
+      { headers: { range: "bytes=0-3" } },
+      { ...env, MEDIA: store },
     );
 
-    expect(res.status).toBe(200);
-    expect(res.headers.get("content-range")).toBeNull();
-    expect(await res.text()).toBe(replacement);
+    expect(await res.text()).toBe("0123");
+    expect(reads).toEqual([await env.MEDIA.stat(KEY)]);
+    expect(res.headers.get("etag")).toBe(reads[0]?.etag);
+  });
+
+  it("32 MiB를 넘는 본문은 길이 없이 흘려보낸다 (Cloud Run 응답 한도)", async () => {
+    const huge: MediaObject = {
+      size: 300 * 1024 * 1024,
+      etag: '"big"',
+      contentType: "video/mp4",
+      version: "1",
+    };
+    const store: MediaStore = {
+      stat: async () => huge,
+      read: () =>
+        new ReadableStream({
+          start(controller) {
+            controller.enqueue(encode("x"));
+            controller.close();
+          },
+        }),
+    };
+
+    const whole = await app.request(
+      `/api/media/${KEY}`,
+      {},
+      { ...env, MEDIA: store },
+    );
+    expect(whole.status).toBe(200);
+    expect(whole.headers.get("content-length")).toBeNull();
+    expect(whole.headers.get("content-type")).toBe("video/mp4");
+
+    const head = await app.request(
+      `/api/media/${KEY}`,
+      { headers: { range: "bytes=0-1023" } },
+      { ...env, MEDIA: store },
+    );
+    expect(head.status).toBe(206);
+    expect(head.headers.get("content-length")).toBe("1024");
   });
 
   it("빈 객체에 Range를 보내면 416과 크기 0을 돌려준다", async () => {

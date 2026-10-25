@@ -1,6 +1,5 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { env } from "cloudflare:test";
-import { count, eq, inArray } from "drizzle-orm";
+import { env } from "../test/env";
 import {
   DEFAULT_DECK_STYLE,
   DeckSchema,
@@ -10,17 +9,10 @@ import {
   type Deck,
   type PresentationDocument,
 } from "#shared";
-import {
-  createD1Client,
-  decks,
-  decksFts,
-  folders,
-  presentations,
-  user,
-} from "#db";
+import { decksCol, type Db } from "#db";
+import { clearDb, seedDocs, userDoc } from "../../db/test/fixtures";
 import { createApp } from "../index";
 import type { SessionReader } from "../middleware/auth";
-import { clearTables } from "../test/db";
 import { resetBackgrounds, serviceBackgroundId } from "../test/backgrounds";
 
 const USER_A = "aaaaaaaa0000000000001";
@@ -96,14 +88,14 @@ function patchJson(body: unknown) {
 
 describe("동기화 라우트 교차 사용자 격리", () => {
   beforeEach(async () => {
-    const db = createD1Client(env.DB);
-    await clearTables(decks, presentations);
-    await db.delete(user).where(inArray(user.id, [USER_A, USER_B]));
+    await clearDb(env.DB);
 
-    await db.insert(user).values([
-      { id: USER_A, name: "A", createdAt: new Date(), updatedAt: new Date() },
-      { id: USER_B, name: "B", createdAt: new Date(), updatedAt: new Date() },
-    ]);
+    await seedDocs(env.DB, {
+      users: [
+        { id: USER_A, name: "A", createdAt: new Date(), updatedAt: new Date() },
+        { id: USER_B, name: "B", createdAt: new Date(), updatedAt: new Date() },
+      ].map((row) => userDoc(row)),
+    });
     currentUser = USER_A;
   });
 
@@ -251,28 +243,14 @@ describe("동기화 라우트 교차 사용자 격리", () => {
         .status,
     ).toBe(200);
 
-    const db = createD1Client(env.DB);
-    const row = await db
-      .select({
-        visibility: decks.visibility,
-        forkCount: decks.forkCount,
-        publishedAt: decks.publishedAt,
-      })
-      .from(decks)
-      .where(eq(decks.id, DECK_ID))
-      .get();
-    expect(row).toEqual({
+    const row = (await decksCol(env.DB).doc(DECK_ID).get()).data();
+    expect(row).toMatchObject({
       visibility: "private",
       forkCount: 0,
       publishedAt: null,
+      listed: false,
+      searchGrams: [],
     });
-
-    const indexed = await db
-      .select({ n: count() })
-      .from(decksFts)
-      .where(eq(decksFts.deckId, DECK_ID))
-      .get();
-    expect(indexed?.n).toBe(0);
   });
 
   it("보관함 PUT으로는 공개·가져간 횟수를 바꿀 수 없다", async () => {
@@ -285,12 +263,8 @@ describe("동기화 라우트 교차 사용자 격리", () => {
     });
     await app.request(`/api/decks/${LIB_DECK_ID}`, json(libraryDeck), env);
 
-    const row = await createD1Client(env.DB)
-      .select({ visibility: decks.visibility, forkCount: decks.forkCount })
-      .from(decks)
-      .where(eq(decks.id, LIB_DECK_ID))
-      .get();
-    expect(row).toEqual({ visibility: "private", forkCount: 0 });
+    const row = (await decksCol(env.DB).doc(LIB_DECK_ID).get()).data();
+    expect(row).toMatchObject({ visibility: "private", forkCount: 0 });
   });
 
   it("본문의 userId를 믿지 않는다", async () => {
@@ -556,19 +530,17 @@ describe("동기화 라우트 교차 사용자 격리", () => {
 
   describe("동기화 라우트 멱등성 및 일시 오류", () => {
     beforeEach(async () => {
-      const db = createD1Client(env.DB);
-      await clearTables(decks, presentations, folders);
-      await db.delete(user).where(eq(user.id, USER_A));
-      await db
-        .insert(user)
-        .values([
+      await clearDb(env.DB);
+      await seedDocs(env.DB, {
+        users: [
           {
             id: USER_A,
             name: "A",
             createdAt: new Date(),
             updatedAt: new Date(),
           },
-        ]);
+        ].map((row) => userDoc(row)),
+      });
       currentUser = USER_A;
     });
 
@@ -673,18 +645,24 @@ describe("동기화 라우트 교차 사용자 격리", () => {
       expect(firstBody).toEqual(secondBody);
     });
 
-    it("D1 일시 장애(SQLITE_BUSY 등) 시 503과 Retry-After를 반환한다", async () => {
+    it("Firestore 일시 장애(트랜잭션 경합 등) 시 503과 Retry-After를 반환한다", async () => {
       const brokenEnv = {
         ...env,
-        DB: {
-          ...env.DB,
-          prepare() {
-            throw new Error("SQLITE_BUSY: database is locked");
+        DB: new Proxy(env.DB, {
+          get(target, prop) {
+            if (prop === "runTransaction") {
+              return async () => {
+                throw Object.assign(
+                  new Error(
+                    "10 ABORTED: Too much contention on these documents.",
+                  ),
+                  { code: 10 },
+                );
+              };
+            }
+            return Reflect.get(target, prop);
           },
-          batch() {
-            throw new Error("SQLITE_BUSY: database is locked");
-          },
-        },
+        }) as Db,
       };
 
       const res = await app.request(

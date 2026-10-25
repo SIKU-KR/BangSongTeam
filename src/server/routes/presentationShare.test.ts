@@ -1,6 +1,5 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { env } from "cloudflare:test";
-import { count, eq, inArray } from "drizzle-orm";
+import { env } from "../test/env";
 import {
   DEFAULT_DECK_STYLE,
   PresentationDocumentSchema,
@@ -9,16 +8,10 @@ import {
   type SharePreviewResponse,
   type ShareSettings,
 } from "#shared";
-import {
-  createD1Client,
-  decks,
-  presentationMembers,
-  presentations,
-  user,
-} from "#db";
+import { presentationMembersCol } from "#db";
+import { clearDb, seedDocs, userDoc } from "../../db/test/fixtures";
 import { createApp } from "../index";
 import type { SessionReader } from "../middleware/auth";
-import { clearTables } from "../test/db";
 
 const OWNER = "aaaaaaaa0000000000011";
 const MEMBER = "bbbbbbbb0000000000012";
@@ -101,13 +94,9 @@ async function shareAndJoin(): Promise<string> {
 
 describe("세트 링크 공유 라우트", () => {
   beforeEach(async () => {
-    await clearTables(decks, presentations);
-    await createD1Client(env.DB)
-      .delete(user)
-      .where(inArray(user.id, [OWNER, MEMBER]));
-    await createD1Client(env.DB)
-      .insert(user)
-      .values([
+    await clearDb(env.DB);
+    await seedDocs(env.DB, {
+      users: [
         {
           id: OWNER,
           name: "인도자",
@@ -120,7 +109,8 @@ describe("세트 링크 공유 라우트", () => {
           createdAt: new Date(),
           updatedAt: new Date(),
         },
-      ]);
+      ].map((row) => userDoc(row)),
+    });
     await as(OWNER, `/api/presentations/${DOC_ID}`, send("PUT", makeDoc()));
   });
 
@@ -211,16 +201,14 @@ describe("세트 링크 공유 라우트", () => {
     expect(mine.body.presentation.title).toBe("주일 1부 예배");
   });
 
-  it("세트를 지우면 멤버 기록도 함께 지워진다 (FK cascade)", async () => {
+  it("세트를 지우면 멤버 기록도 함께 지워진다", async () => {
     await shareAndJoin();
     await as(OWNER, `/api/presentations/${DOC_ID}`, send("DELETE"));
 
-    const members = await createD1Client(env.DB)
-      .select({ n: count() })
-      .from(presentationMembers)
-      .where(eq(presentationMembers.presentationId, DOC_ID))
+    const members = await presentationMembersCol(env.DB)
+      .where("presentationId", "==", DOC_ID)
       .get();
-    expect(members?.n).toBe(0);
+    expect(members.size).toBe(0);
   });
 
   it("로그인하지 않아도 링크로 볼 수 있지만 멤버로 기록되지 않는다", async () => {
@@ -239,12 +227,10 @@ describe("세트 링크 공유 라우트", () => {
     expect(body.document.access).toEqual({ ownerName: "인도자" });
     expect(body.document.folderId).toBeNull();
 
-    const rows = await env.DB.prepare(
-      "SELECT COUNT(*) AS n FROM presentation_members WHERE presentation_id = ?",
-    )
-      .bind(DOC_ID)
-      .first<{ n: number }>();
-    expect(rows?.n).toBe(0);
+    const rows = await presentationMembersCol(env.DB)
+      .where("presentationId", "==", DOC_ID)
+      .get();
+    expect(rows.size).toBe(0);
   });
 
   it("꺼진 링크·휴지통의 세트는 로그인 없이도 볼 수 없다", async () => {

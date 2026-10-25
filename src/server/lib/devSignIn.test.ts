@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { env } from "cloudflare:test";
-import { inArray } from "drizzle-orm";
+import { env } from "../test/env";
 import { DEV_USERS } from "#shared";
-import { createD1Client, user } from "#db";
+import { usersCol } from "#db";
+import { clearDb, seedDocs, userDoc } from "../../db/test/fixtures";
 import { createApp } from "../index";
 import { DEV_SIGN_IN_REDIRECT } from "./devSignIn";
 
@@ -23,15 +23,12 @@ function sessionCookie(res: Response): string {
 
 describe("GET /api/auth/dev/sign-in", () => {
   beforeEach(async () => {
-    const db = createD1Client(env.DB);
-    const ids = [OWNER.id, MEMBER.id, REGULAR_USER];
-    await db.delete(user).where(inArray(user.id, ids));
-    const now = new Date();
-    await db
-      .insert(user)
-      .values(
-        ids.map((id) => ({ id, name: id, createdAt: now, updatedAt: now })),
-      );
+    await clearDb(env.DB);
+    await seedDocs(env.DB, {
+      users: [OWNER.id, MEMBER.id, REGULAR_USER].map((id) =>
+        userDoc({ id, name: id }),
+      ),
+    });
   });
 
   it("시드 계정 세션 쿠키를 심고 드라이브로 보낸다", async () => {
@@ -65,10 +62,8 @@ describe("GET /api/auth/dev/sign-in", () => {
     expect(res.headers.getSetCookie()).toEqual([]);
   });
 
-  it("시드하지 않은 D1에서는 404", async () => {
-    await createD1Client(env.DB)
-      .delete(user)
-      .where(inArray(user.id, [OWNER.id]));
+  it("시드하지 않은 Firestore에서는 404", async () => {
+    await usersCol(env.DB).doc(OWNER.id).delete();
     const res = await signIn();
     expect(res.status).toBe(404);
   });

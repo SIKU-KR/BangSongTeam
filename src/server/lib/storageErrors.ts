@@ -1,5 +1,12 @@
+/** DEADLINE_EXCEEDED, RESOURCE_EXHAUSTED, ABORTED(트랜잭션 경합), UNAVAILABLE */
+const TRANSIENT_GRPC_CODES = new Set([4, 8, 10, 14]);
+const TRANSIENT_HTTP_STATUSES = new Set([429, 502, 503, 504]);
+
 /**
- * D1·R2의 일시 장애(잠금, 타임아웃, 네트워크 실패, 과부하)와 코드 결함(500)을 구분한다.
+ * Firestore·GCS의 일시 장애(경합, 타임아웃, 네트워크 실패, 과부하)와 코드 결함(500)을
+ * 구분한다.
+ *
+ * Firestore 오류의 `code`는 gRPC 상태 번호, GCS 오류의 `code`는 HTTP 상태다.
  */
 export function isTransientStorageError(error: unknown): boolean {
   if (!error || typeof error !== "object") return false;
@@ -9,6 +16,7 @@ export function isTransientStorageError(error: unknown): boolean {
     message?: string;
     cause?: unknown;
     status?: number;
+    code?: unknown;
   };
 
   if (
@@ -24,23 +32,15 @@ export function isTransientStorageError(error: unknown): boolean {
     return true;
   }
 
+  if (typeof err.code === "number") {
+    if (TRANSIENT_GRPC_CODES.has(err.code)) return true;
+    if (TRANSIENT_HTTP_STATUSES.has(err.code)) return true;
+  }
+
   const message = (err.message ?? "").toLowerCase();
   const name = (err.name ?? "").toLowerCase();
 
-  if (
-    message.includes("constraint failed") ||
-    message.includes("syntax error") ||
-    message.includes("no such table") ||
-    message.includes("no such column")
-  ) {
-    return false;
-  }
-
   const transientIndicators = [
-    "sqlite_busy",
-    "sqlite_locked",
-    "database is locked",
-    "database table is locked",
     "timeout",
     "timed out",
     "temporarily unavailable",

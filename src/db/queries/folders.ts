@@ -1,4 +1,3 @@
-import { and, asc, eq, inArray } from "drizzle-orm";
 import {
   buildFolderIndex,
   collectDescendantFolderIds,
@@ -6,24 +5,37 @@ import {
   type DriveTombstones,
   type Folder as SharedFolder,
 } from "#shared";
-import { folders, presentations, driveTombstones } from "../schema";
-import { toFolderRow, toSharedFolder } from "./mappers";
-import { chunkIds, runStatements } from "./batch";
+import type { Db } from "../client";
+import {
+  driveTombstonesCol,
+  foldersCol,
+  presentationsCol,
+  type FolderDoc,
+} from "../collections";
+import { toFolderDoc, toSharedFolder } from "./mappers";
+import {
+  prepareClearTombstone,
+  readPresentationDependents,
+  writeTombstones,
+} from "./cascade";
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type DbInstance = any;
+function byCreatedAtAsc(a: FolderDoc, b: FolderDoc): number {
+  return (
+    a.createdAt.getTime() - b.createdAt.getTime() ||
+    (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)
+  );
+}
 
 /** 본인 폴더 전체 (생성 순) */
 export async function getFoldersByUserId(
-  db: DbInstance,
+  db: Db,
   userId: string,
 ): Promise<SharedFolder[]> {
-  const rows = await db
-    .select()
-    .from(folders)
-    .where(eq(folders.userId, userId))
-    .orderBy(asc(folders.createdAt));
-  return rows.map(toSharedFolder);
+  const snapshot = await foldersCol(db).where("userId", "==", userId).get();
+  return snapshot.docs
+    .map((doc) => doc.data())
+    .sort(byCreatedAtAsc)
+    .map(toSharedFolder);
 }
 
 /**
@@ -38,48 +50,53 @@ export async function getFoldersByUserId(
  * 보정된 확정본을 돌려준다. 클라이언트는 이것을 반영한다.
  */
 export async function upsertFolder(
-  db: DbInstance,
+  db: Db,
   userId: string,
   folder: SharedFolder,
 ): Promise<SharedFolder | null> {
-  const [existing] = await db
-    .select({ userId: folders.userId })
-    .from(folders)
-    .where(eq(folders.id, folder.id));
+  return db.runTransaction(async (tx) => {
+    const ref = foldersCol(db).doc(folder.id);
+    const [existingSnapshot, ownFolders, clearTombstone] = await Promise.all([
+      tx.get(ref),
+      folder.parentId === null
+        ? Promise.resolve(null)
+        : tx.get(foldersCol(db).where("userId", "==", userId)),
+      prepareClearTombstone(tx, db, userId, folder.id),
+    ]);
+    const existing = existingSnapshot.data();
+    if (existing && existing.userId !== userId) return null;
 
-  if (existing && existing.userId !== userId) return null;
-
-  let parentId = folder.parentId;
-  if (parentId !== null) {
-    const index = buildFolderIndex(await getFoldersByUserId(db, userId));
-    if (
-      !index.byId.has(parentId) ||
-      wouldCreateCycle(index, folder.id, parentId)
-    ) {
-      parentId = null;
+    let parentId = folder.parentId;
+    if (parentId !== null && ownFolders) {
+      const index = buildFolderIndex(
+        ownFolders.docs.map((doc) => toSharedFolder(doc.data())),
+      );
+      if (
+        !index.byId.has(parentId) ||
+        wouldCreateCycle(index, folder.id, parentId)
+      ) {
+        parentId = null;
+      }
     }
-  }
 
-  const saved: SharedFolder = { ...folder, userId, parentId };
-  const row = toFolderRow(saved);
+    const saved: SharedFolder = { ...folder, userId, parentId };
+    const next = toFolderDoc(saved);
 
-  await clearTombstone(db, userId, folder.id);
-
-  if (existing) {
-    await db
-      .update(folders)
-      .set({
-        parentId: row.parentId,
-        name: row.name,
-        trashedAt: row.trashedAt,
-        updatedAt: row.updatedAt,
-      })
-      .where(and(eq(folders.id, folder.id), eq(folders.userId, userId)));
-  } else {
-    await db.insert(folders).values(row);
-  }
-
-  return saved;
+    clearTombstone();
+    tx.set(
+      ref,
+      existing
+        ? {
+            ...existing,
+            parentId: next.parentId,
+            name: next.name,
+            trashedAt: next.trashedAt,
+            updatedAt: next.updatedAt,
+          }
+        : next,
+    );
+    return saved;
+  });
 }
 
 export interface DeletedFolderTree {
@@ -90,133 +107,61 @@ export interface DeletedFolderTree {
 /**
  * 폴더를 하위 폴더·프레젠테이션과 함께 영구 삭제한다 (휴지통 비우기).
  *
- * 프레젠테이션은 명시적으로 지운다. `presentations.folder_id`는 안전망으로
- * SET NULL이라 cascade로는 파일이 루트로 떨어질 뿐 지워지지 않는다. 프레젠테이션에
- * 담긴 사본 덱과 멤버는 외래키 cascade로 함께 지워진다.
+ * 프레젠테이션은 담긴 사본 곡·공유 멤버와 함께 지우고, 지운 폴더·프레젠테이션마다 영구
+ * 삭제 기록을 남긴다. 모두 한 트랜잭션이라 중간에 실패해도 반쪽 트리가 남지 않는다.
  *
  * 없거나 남의 폴더면 `null` (→ 404).
  */
 export async function deleteFolderTree(
-  db: DbInstance,
+  db: Db,
   userId: string,
   folderId: string,
 ): Promise<DeletedFolderTree | null> {
-  const index = buildFolderIndex(await getFoldersByUserId(db, userId));
-  if (!index.byId.has(folderId)) return null;
-
-  const folderIds = [...collectDescendantFolderIds(index, folderId)];
-
-  const presentationIds: string[] = [];
-  for (const chunk of chunkIds(folderIds)) {
-    const rows = await db
-      .select({ id: presentations.id })
-      .from(presentations)
-      .where(
-        and(
-          eq(presentations.userId, userId),
-          inArray(presentations.folderId, chunk),
-        ),
-      );
-    for (const row of rows as Array<{ id: string }>) {
-      presentationIds.push(row.id);
-    }
-  }
-
-  const statements: unknown[] = [];
-  for (const chunk of chunkIds(presentationIds)) {
-    statements.push(
-      db
-        .delete(presentations)
-        .where(
-          and(
-            eq(presentations.userId, userId),
-            inArray(presentations.id, chunk),
-          ),
-        ),
+  return db.runTransaction(async (tx) => {
+    const ownFolders = await tx.get(
+      foldersCol(db).where("userId", "==", userId),
     );
-  }
-  for (const chunk of chunkIds(folderIds)) {
-    statements.push(
-      db
-        .delete(folders)
-        .where(and(eq(folders.userId, userId), inArray(folders.id, chunk))),
+    const index = buildFolderIndex(
+      ownFolders.docs.map((doc) => toSharedFolder(doc.data())),
     );
-  }
-  statements.push(
-    ...tombstoneStatements(db, userId, "folder", folderIds),
-    ...tombstoneStatements(db, userId, "presentation", presentationIds),
-  );
+    if (!index.byId.has(folderId)) return null;
 
-  await runStatements(db, statements);
-  return { folderIds, presentationIds };
+    const folderIds = [...collectDescendantFolderIds(index, folderId)];
+    const inTree = new Set(folderIds);
+    const ownPresentations = await tx.get(
+      presentationsCol(db).where("userId", "==", userId),
+    );
+    const presentationIds = ownPresentations.docs
+      .filter((doc) => inTree.has(doc.data().folderId ?? ""))
+      .map((doc) => doc.id);
+    const dependents = await readPresentationDependents(
+      tx,
+      db,
+      presentationIds,
+    );
+
+    for (const ref of dependents) tx.delete(ref);
+    for (const id of presentationIds) tx.delete(presentationsCol(db).doc(id));
+    for (const id of folderIds) tx.delete(foldersCol(db).doc(id));
+    writeTombstones(tx, db, userId, "folder", folderIds);
+    writeTombstones(tx, db, userId, "presentation", presentationIds);
+    return { folderIds, presentationIds };
+  });
 }
 
 /** 본인이 영구 삭제한 폴더·프레젠테이션 id (다른 기기의 부팅 병합용) */
 export async function getDriveTombstones(
-  db: DbInstance,
+  db: Db,
   userId: string,
 ): Promise<DriveTombstones> {
-  const rows = (await db
-    .select({ itemId: driveTombstones.itemId, kind: driveTombstones.kind })
-    .from(driveTombstones)
-    .where(eq(driveTombstones.userId, userId))) as Array<{
-    itemId: string;
-    kind: "folder" | "presentation";
-  }>;
-
+  const snapshot = await driveTombstonesCol(db)
+    .where("userId", "==", userId)
+    .get();
+  const rows = snapshot.docs.map((doc) => doc.data());
   return {
     folderIds: rows.filter((r) => r.kind === "folder").map((r) => r.itemId),
     presentationIds: rows
       .filter((r) => r.kind === "presentation")
       .map((r) => r.itemId),
   };
-}
-
-const TOMBSTONES_PER_STATEMENT = 20;
-
-/** 영구 삭제 기록을 남기는 문장들 (호출자가 batch에 넣는다) */
-export function tombstoneStatements(
-  db: DbInstance,
-  userId: string,
-  kind: "folder" | "presentation",
-  ids: readonly string[],
-): unknown[] {
-  const statements: unknown[] = [];
-  for (let i = 0; i < ids.length; i += TOMBSTONES_PER_STATEMENT) {
-    const rows = ids
-      .slice(i, i + TOMBSTONES_PER_STATEMENT)
-      .map((itemId) => ({ itemId, userId, kind }));
-    statements.push(
-      db.insert(driveTombstones).values(rows).onConflictDoUpdate({
-        target: driveTombstones.itemId,
-        set: { kind },
-      }),
-    );
-  }
-  return statements;
-}
-
-/** 같은 id를 다시 저장하면 영구 삭제 기록을 지운다 (호출자가 batch에 넣는다) */
-export function clearTombstoneStatement(
-  db: DbInstance,
-  userId: string,
-  itemId: string,
-): unknown {
-  return db
-    .delete(driveTombstones)
-    .where(
-      and(
-        eq(driveTombstones.itemId, itemId),
-        eq(driveTombstones.userId, userId),
-      ),
-    );
-}
-
-/** 같은 id를 다시 저장하면 영구 삭제 기록을 지운다 */
-export async function clearTombstone(
-  db: DbInstance,
-  userId: string,
-  itemId: string,
-): Promise<void> {
-  await clearTombstoneStatement(db, userId, itemId);
 }

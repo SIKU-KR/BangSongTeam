@@ -16,10 +16,8 @@ const UserIdSchema = DeckSchema.shape.userId;
 
 function makeEnv(overrides: Partial<Bindings> = {}): Bindings {
   return {
-    DB: {} as D1Database,
-    MEDIA_BUCKET: {} as R2Bucket,
-    AI: {} as Ai,
-    BACKGROUND_INDEX: {} as VectorizeIndex,
+    DB: {} as Bindings["DB"],
+    MEDIA: {} as Bindings["MEDIA"],
     BETTER_AUTH_SECRET: "test-secret-that-is-at-least-32-characters",
     BETTER_AUTH_URL: "http://localhost:5173",
     KAKAO_CLIENT_ID: "kakao-id",
@@ -32,7 +30,7 @@ function makeEnv(overrides: Partial<Bindings> = {}): Bindings {
   };
 }
 
-describe("worker auth 인스턴스", () => {
+describe("auth 인스턴스", () => {
   it("사용자 id를 21자 NanoID로 만든다 (#shared의 IdSchema 통과)", () => {
     for (let i = 0; i < 20; i++) {
       expect(UserIdSchema.safeParse(generateUserId()).success).toBe(true);

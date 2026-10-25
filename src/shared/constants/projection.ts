@@ -36,12 +36,12 @@ export const POSTER_CACHE_NAME = "worship-posters-cache";
 
 /**
  * 배경 영상·포스터를 중계하는 동일 출처 프록시 경로 접두사.
- * 배경 URL은 `mediaUrlForKey`가 이 값으로 만든다. R2 커스텀 도메인 직통으로
+ * 배경 URL은 `mediaUrlForKey`가 이 값으로 만든다. GCS·CDN 직통으로
  * 바꾸게 되면 이 값과 Workbox `urlPattern`만 바뀐다.
  */
 export const MEDIA_URL_PREFIX = "/api/media/";
 
-/** 포스터 R2 키 접두사를 포함한 프록시 경로 */
+/** 포스터 저장소 키 접두사를 포함한 프록시 경로 */
 export const POSTER_URL_PREFIX = `${MEDIA_URL_PREFIX}posters/`;
 
 /** 미디어 URL이 담기는 런타임 캐시. Workbox `urlPattern`과 같은 기준으로 나눈다 */

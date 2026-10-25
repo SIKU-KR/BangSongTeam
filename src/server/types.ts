@@ -1,11 +1,13 @@
+import type { Db } from "#db";
+import type { MediaStore } from "./lib/mediaStore";
+
 /**
- * Cloudflare Worker Bindings and Context Types for Hono.
+ * API 앱이 요청마다 받는 바깥 자원과 비밀값. 운영·개발은 `env.ts`가 프로세스 환경 변수로
+ * 한 번 만들고, 테스트는 에뮬레이터 Firestore와 메모리 미디어 저장소를 넣는다.
  */
 export interface Bindings {
-  DB: D1Database;
-  MEDIA_BUCKET: R2Bucket;
-  AI: Ai;
-  BACKGROUND_INDEX: VectorizeIndex;
+  DB: Db;
+  MEDIA: MediaStore;
   BETTER_AUTH_SECRET?: string;
   BETTER_AUTH_URL?: string;
   KAKAO_CLIENT_ID?: string;

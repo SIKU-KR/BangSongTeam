@@ -1,13 +1,13 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { eq } from "drizzle-orm";
 import {
   DEFAULT_DECK_STYLE,
   PresentationDocumentSchema,
   type Folder,
   type PresentationDocument,
 } from "#shared";
-import { createTestDb } from "../test-utils";
-import { user, decks, presentations } from "../schema";
+import type { Db } from "../client";
+import { decksCol, presentationsCol } from "../collections";
+import { createTestDb, seedDocs, userDoc } from "../test/fixtures";
 import {
   deleteFolderTree,
   getDriveTombstones,
@@ -83,14 +83,16 @@ function makeDoc(
 }
 
 describe("드라이브 폴더 쿼리", () => {
-  let db: ReturnType<typeof createTestDb>["db"];
+  let db: Db;
 
   beforeEach(async () => {
-    db = createTestDb().db;
-    await db.insert(user).values([
-      { id: USER_A, name: "A", createdAt: new Date(), updatedAt: new Date() },
-      { id: USER_B, name: "B", createdAt: new Date(), updatedAt: new Date() },
-    ]);
+    db = createTestDb();
+    await seedDocs(db, {
+      users: [
+        userDoc({ id: USER_A, name: "A" }),
+        userDoc({ id: USER_B, name: "B" }),
+      ],
+    });
   });
 
   describe("upsertFolder / getFoldersByUserId", () => {
@@ -205,11 +207,10 @@ describe("드라이브 폴더 쿼리", () => {
       );
 
       for (const id of [inRoot.id, inChild.id]) {
-        const orphanCopies = await db
-          .select()
-          .from(decks)
-          .where(eq(decks.presentationId, id));
-        expect(orphanCopies).toHaveLength(0);
+        const orphanCopies = await decksCol(db)
+          .where("presentationId", "==", id)
+          .get();
+        expect(orphanCopies.size).toBe(0);
       }
     });
 
@@ -225,7 +226,7 @@ describe("드라이브 폴더 쿼리", () => {
       expect(await deleteFolderTree(db, USER_A, theirs.id)).toBeNull();
       expect(await deleteFolderTree(db, USER_A, nextId())).toBeNull();
       expect(await getFoldersByUserId(db, USER_B)).toHaveLength(1);
-      expect(await db.select().from(presentations)).toHaveLength(1);
+      expect((await presentationsCol(db).get()).size).toBe(1);
     });
   });
 
@@ -357,7 +358,7 @@ describe("드라이브 폴더 쿼리", () => {
       expect(await getFoldersByUserId(db, USER_A)).toHaveLength(1);
     });
 
-    it("많은 항목을 지워도 문장당 바인딩 제한 안에서 기록한다", async () => {
+    it("in 조건 한도(30)를 넘는 항목을 지워도 모두 기록한다", async () => {
       const root = makeFolder(USER_A);
       await upsertFolder(db, USER_A, root);
       const children = Array.from({ length: 45 }, () =>

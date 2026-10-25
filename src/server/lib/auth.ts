@@ -1,6 +1,5 @@
 import { betterAuth } from "better-auth/minimal";
-import { drizzleAdapter } from "@better-auth/drizzle-adapter";
-import { createD1Client, user, session, account, verification } from "#db";
+import { firestoreAdapter } from "#db";
 import { APP_NAME, createId, FALLBACK_USER_NAME } from "#shared";
 import type { Bindings } from "../types";
 import { devSignIn } from "./devSignIn";
@@ -17,7 +16,7 @@ export const SYNTHETIC_EMAIL_DOMAIN = "users.noreply.worship-slide.local";
 /**
  * 세션 쿠키 캐시 유효 시간(초).
  *
- * 이 시간 동안은 서명된 `session_data` 쿠키로 세션을 확인하고 D1의 `session`·`user`를
+ * 이 시간 동안은 서명된 `session_data` 쿠키로 세션을 확인하고 Firestore의 `sessions`·`users`를
  * 읽지 않는다. 그 대가로 다른 기기에서의 세션 폐기·계정 삭제는 최대 이 시간만큼 늦게
  * 반영된다. 같은 브라우저의 로그아웃은 쿠키를 함께 지우므로 바로 반영된다.
  */
@@ -114,8 +113,6 @@ export function buildNaverUser(profile: NaverProfileLike): MappedSocialUser {
 }
 
 function buildAuth(env: Bindings) {
-  const db = createD1Client(env.DB);
-
   const socialProviders: Record<string, unknown> = {};
 
   if (hasCredentials(env.KAKAO_CLIENT_ID, env.KAKAO_CLIENT_SECRET)) {
@@ -147,10 +144,7 @@ function buildAuth(env: Bindings) {
     basePath: "/api/auth",
     baseURL: env.BETTER_AUTH_URL,
     secret: env.BETTER_AUTH_SECRET,
-    database: drizzleAdapter(db, {
-      provider: "sqlite",
-      schema: { user, session, account, verification },
-    }),
+    database: firestoreAdapter(env.DB),
     session: {
       cookieCache: { enabled: true, maxAge: SESSION_COOKIE_CACHE_SECONDS },
     },
@@ -159,7 +153,7 @@ function buildAuth(env: Bindings) {
     socialProviders,
     plugins: process.env.NODE_ENV === "production" ? [] : [devSignIn()],
     advanced: {
-      ipAddress: { ipAddressHeaders: ["cf-connecting-ip"] },
+      ipAddress: { ipAddressHeaders: ["x-forwarded-for"] },
       database: {
         generateId: () => generateUserId(),
       },

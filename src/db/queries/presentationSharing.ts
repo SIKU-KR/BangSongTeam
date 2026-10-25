@@ -1,87 +1,86 @@
-import { and, desc, eq, isNull, ne } from "drizzle-orm";
+import type { DocumentSnapshot } from "@google-cloud/firestore";
 import {
   createId,
   type LinkAccess,
   type PresentationDocument,
   type ShareSettings,
 } from "#shared";
-import { presentations, presentationMembers, user } from "../schema";
-import { hydratePresentationDocuments } from "./presentations";
-import { runStatements } from "./batch";
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type DbInstance = any;
+import type { Db } from "../client";
+import {
+  memberDocId,
+  presentationMembersCol,
+  presentationsCol,
+  usersCol,
+  type PresentationDoc,
+} from "../collections";
+import {
+  byServiceDateDesc,
+  hydratePresentationDocuments,
+} from "./presentations";
 
 export type PresentationRole = "owner" | "viewer";
 
-/**
- * 링크 공유가 살아 있는 세트만 고르는 조건.
- * 휴지통에 들어간 세트는 링크가 멈춘다.
- */
-function linkActiveCondition() {
-  return and(
-    ne(presentations.linkAccess, "off"),
-    isNull(presentations.trashedAt),
-  );
+/** 링크 공유가 살아 있는 세트인지. 휴지통에 들어간 세트는 링크가 멈춘다 */
+function isLinkActive(presentation: PresentationDoc): boolean {
+  return presentation.linkAccess !== "off" && presentation.trashedAt === null;
 }
 
 /**
  * 세트 접근 권한을 한 곳에서 판정한다.
  *
- * 소유자가 아니면 멤버 행이 있고 링크가 살아 있을 때만 보기 권한을 준다.
+ * 소유자가 아니면 멤버 문서가 있고 링크가 살아 있을 때만 보기 권한을 준다.
  * 소유자가 링크를 끄거나 세트를 휴지통에 넣으면 다음 요청부터 막힌다.
  */
 export async function resolvePresentationAccess(
-  db: DbInstance,
+  db: Db,
   presentationId: string,
   userId: string,
 ): Promise<PresentationRole | null> {
-  const [row] = await db
-    .select({
-      ownerId: presentations.userId,
-      linkAccess: presentations.linkAccess,
-      trashedAt: presentations.trashedAt,
-      memberId: presentationMembers.userId,
-    })
-    .from(presentations)
-    .leftJoin(
-      presentationMembers,
-      and(
-        eq(presentationMembers.presentationId, presentations.id),
-        eq(presentationMembers.userId, userId),
-      ),
-    )
-    .where(eq(presentations.id, presentationId));
-
-  if (!row) return null;
-  if (row.ownerId === userId) return "owner";
-  if (!row.memberId || row.trashedAt || row.linkAccess === "off") return null;
+  const [presentationSnapshot, memberSnapshot] = await Promise.all([
+    presentationsCol(db).doc(presentationId).get(),
+    presentationMembersCol(db).doc(memberDocId(presentationId, userId)).get(),
+  ]);
+  const presentation = presentationSnapshot.data();
+  if (!presentation) return null;
+  if (presentation.userId === userId) return "owner";
+  if (!memberSnapshot.exists || !isLinkActive(presentation)) return null;
   return "viewer";
+}
+
+async function ownerNames(
+  db: Db,
+  presentations: PresentationDoc[],
+): Promise<Map<string, string>> {
+  const ids = [...new Set(presentations.map((p) => p.userId))];
+  if (ids.length === 0) return new Map();
+  const users = await db.getAll(...ids.map((id) => usersCol(db).doc(id)));
+  return new Map(
+    users.flatMap((snapshot) => {
+      const user = snapshot.data();
+      return user ? [[snapshot.id, user.name] as const] : [];
+    }),
+  );
 }
 
 /** 소유자면 문서 그대로, 공유받은 사람이면 `access`를 붙여 돌려준다. */
 export async function getPresentationDocument(
-  db: DbInstance,
+  db: Db,
   presentationId: string,
   userId: string,
 ): Promise<PresentationDocument | null> {
   const role = await resolvePresentationAccess(db, presentationId, userId);
   if (!role) return null;
 
-  const [header] = await db
-    .select({ presentation: presentations, ownerName: user.name })
-    .from(presentations)
-    .innerJoin(user, eq(user.id, presentations.userId))
-    .where(eq(presentations.id, presentationId));
+  const header = (await presentationsCol(db).doc(presentationId).get()).data();
   if (!header) return null;
+  const ownerName = (await ownerNames(db, [header])).get(header.userId);
+  if (ownerName === undefined) return null;
 
-  const [document] = await hydratePresentationDocuments(db, [
-    header.presentation,
-  ]);
+  const [document] = await hydratePresentationDocuments(db, [header]);
   if (!document) return null;
   return role === "owner"
     ? document
-    : toSharedDocument(document, header.ownerName, userId);
+    : toSharedDocument(document, ownerName, userId);
 }
 
 /**
@@ -101,25 +100,33 @@ function toSharedDocument(
   };
 }
 
+async function findActiveByToken(
+  db: Db,
+  token: string,
+): Promise<PresentationDoc | null> {
+  const snapshot = await presentationsCol(db)
+    .where("linkToken", "==", token)
+    .limit(1)
+    .get();
+  const presentation = snapshot.docs[0]?.data();
+  return presentation && isLinkActive(presentation) ? presentation : null;
+}
+
 /**
  * 로그인 없이 링크로 보는 세트. 멤버로 기록하지 않으므로 드라이브·목록 조회에는
  * 이어지지 않고, 링크가 살아 있는 동안 토큰을 아는 사람에게만 문서를 준다.
  */
 export async function getSharedDocumentByToken(
-  db: DbInstance,
+  db: Db,
   token: string,
 ): Promise<PresentationDocument | null> {
-  const [header] = await db
-    .select({ presentation: presentations, ownerName: user.name })
-    .from(presentations)
-    .innerJoin(user, eq(user.id, presentations.userId))
-    .where(and(eq(presentations.linkToken, token), linkActiveCondition()));
+  const header = await findActiveByToken(db, token);
   if (!header) return null;
+  const ownerName = (await ownerNames(db, [header])).get(header.userId);
+  if (ownerName === undefined) return null;
 
-  const [document] = await hydratePresentationDocuments(db, [
-    header.presentation,
-  ]);
-  return document ? toSharedDocument(document, header.ownerName) : null;
+  const [document] = await hydratePresentationDocuments(db, [header]);
+  return document ? toSharedDocument(document, ownerName) : null;
 }
 
 /**
@@ -127,76 +134,70 @@ export async function getSharedDocumentByToken(
  * 폴더·휴지통은 소유자의 드라이브 배치라 공유받은 사람에게는 비워서 준다.
  */
 export async function getSharedPresentationDocuments(
-  db: DbInstance,
+  db: Db,
   userId: string,
 ): Promise<PresentationDocument[]> {
-  const headers: Array<{
-    presentation: typeof presentations.$inferSelect;
-    ownerName: string;
-  }> = await db
-    .select({ presentation: presentations, ownerName: user.name })
-    .from(presentationMembers)
-    .innerJoin(
-      presentations,
-      eq(presentations.id, presentationMembers.presentationId),
-    )
-    .innerJoin(user, eq(user.id, presentations.userId))
-    .where(
-      and(
-        eq(presentationMembers.userId, userId),
-        ne(presentations.userId, userId),
-        linkActiveCondition(),
-      ),
-    )
-    .orderBy(desc(presentations.serviceDate), desc(presentations.createdAt));
+  const memberships = await presentationMembersCol(db)
+    .where("userId", "==", userId)
+    .get();
+  if (memberships.empty) return [];
 
-  const documents = await hydratePresentationDocuments(
-    db,
-    headers.map((h) => h.presentation),
-  );
+  const presentations = (await db.getAll(
+    ...memberships.docs.map((doc) =>
+      presentationsCol(db).doc(doc.data().presentationId),
+    ),
+  )) as DocumentSnapshot<PresentationDoc>[];
+  const visible = presentations
+    .flatMap((snapshot) => {
+      const presentation = snapshot.data();
+      return presentation ? [presentation] : [];
+    })
+    .filter((p) => p.userId !== userId && isLinkActive(p));
+  const names = await ownerNames(db, visible);
+  const headers = visible
+    .filter((p) => names.has(p.userId))
+    .sort(byServiceDateDesc);
 
+  const documents = await hydratePresentationDocuments(db, headers);
   return documents.map((document, index) =>
-    toSharedDocument(document, headers[index]?.ownerName ?? "", userId),
+    toSharedDocument(
+      document,
+      names.get(headers[index]?.userId ?? "") ?? "",
+      userId,
+    ),
   );
 }
 
 /** 소유자만 볼 수 있다. 소유자가 아니면 null. */
 export async function getShareSettings(
-  db: DbInstance,
+  db: Db,
   presentationId: string,
   ownerId: string,
 ): Promise<ShareSettings | null> {
-  const [row] = await db
-    .select({
-      access: presentations.linkAccess,
-      token: presentations.linkToken,
-    })
-    .from(presentations)
-    .where(
-      and(
-        eq(presentations.id, presentationId),
-        eq(presentations.userId, ownerId),
-      ),
-    );
-  return row ?? null;
+  const presentation = (
+    await presentationsCol(db).doc(presentationId).get()
+  ).data();
+  if (presentation?.userId !== ownerId) return null;
+  return { access: presentation.linkAccess, token: presentation.linkToken };
 }
 
 /** 링크를 처음 켤 때 토큰을 만든다. 끄더라도 토큰과 멤버는 남겨 다시 켜면 이어진다. */
 export async function setLinkAccess(
-  db: DbInstance,
+  db: Db,
   presentationId: string,
   ownerId: string,
   access: LinkAccess,
 ): Promise<ShareSettings | null> {
-  const current = await getShareSettings(db, presentationId, ownerId);
-  if (!current) return null;
+  return db.runTransaction(async (tx) => {
+    const ref = presentationsCol(db).doc(presentationId);
+    const presentation = (await tx.get(ref)).data();
+    if (presentation?.userId !== ownerId) return null;
 
-  const token = current.token ?? (access === "off" ? null : createId());
-  await db
-    .update(presentations)
-    .set({ linkAccess: access, linkToken: token })
-    .where(eq(presentations.id, presentationId));
-  return { access, token };
+    const token =
+      presentation.linkToken ?? (access === "off" ? null : createId());
+    tx.update(ref, { linkAccess: access, linkToken: token });
+    return { access, token };
+  });
 }
 
 /**
@@ -204,24 +205,30 @@ export async function setLinkAccess(
  * 들어온 사람의 접근을 끊는다.
  */
 export async function resetLinkToken(
-  db: DbInstance,
+  db: Db,
   presentationId: string,
   ownerId: string,
 ): Promise<ShareSettings | null> {
-  const current = await getShareSettings(db, presentationId, ownerId);
-  if (!current) return null;
+  return db.runTransaction(async (tx) => {
+    const ref = presentationsCol(db).doc(presentationId);
+    const [presentationSnapshot, members] = await Promise.all([
+      tx.get(ref),
+      tx.get(
+        presentationMembersCol(db).where(
+          "presentationId",
+          "==",
+          presentationId,
+        ),
+      ),
+    ]);
+    const presentation = presentationSnapshot.data();
+    if (presentation?.userId !== ownerId) return null;
 
-  const token = createId();
-  await runStatements(db, [
-    db
-      .update(presentations)
-      .set({ linkToken: token })
-      .where(eq(presentations.id, presentationId)),
-    db
-      .delete(presentationMembers)
-      .where(eq(presentationMembers.presentationId, presentationId)),
-  ]);
-  return { access: current.access, token };
+    const token = createId();
+    tx.update(ref, { linkToken: token });
+    for (const member of members.docs) tx.delete(member.ref);
+    return { access: presentation.linkAccess, token };
+  });
 }
 
 export interface JoinResult {
@@ -232,21 +239,17 @@ export interface JoinResult {
 
 /** 링크가 살아 있으면 멤버로 기록하고 문서를 돌려준다. 소유자는 기록하지 않는다. */
 export async function joinByToken(
-  db: DbInstance,
+  db: Db,
   token: string,
   userId: string,
 ): Promise<JoinResult | null> {
-  const [target] = await db
-    .select({ id: presentations.id, ownerId: presentations.userId })
-    .from(presentations)
-    .where(and(eq(presentations.linkToken, token), linkActiveCondition()));
+  const target = await findActiveByToken(db, token);
   if (!target) return null;
 
-  if (target.ownerId !== userId) {
-    await db
-      .insert(presentationMembers)
-      .values({ presentationId: target.id, userId })
-      .onConflictDoNothing();
+  if (target.userId !== userId) {
+    await presentationMembersCol(db)
+      .doc(memberDocId(target.id, userId))
+      .set({ presentationId: target.id, userId });
   }
 
   const role = await resolvePresentationAccess(db, target.id, userId);

@@ -4,8 +4,8 @@ import { createRequireAuth, type SessionReader } from "./auth";
 import type { AppEnv, Bindings } from "../types";
 
 const TEST_ENV = {
-  DB: {} as D1Database,
-  MEDIA_BUCKET: {} as R2Bucket,
+  DB: {} as Bindings["DB"],
+  MEDIA: {} as Bindings["MEDIA"],
 } as Bindings;
 
 afterEach(() => {

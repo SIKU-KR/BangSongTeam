@@ -1,10 +1,5 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import {
-  env,
-  createExecutionContext,
-  waitOnExecutionContext,
-} from "cloudflare:test";
-import {
   DEFAULT_DECK_STYLE,
   DeckSchema,
   PresentationDocumentSchema,
@@ -12,11 +7,10 @@ import {
   type Deck,
   type PresentationDocument,
 } from "#shared";
-import { createD1Client, decks, presentations, reports, user } from "#db";
-import { inArray } from "drizzle-orm";
+import { env } from "../test/env";
+import { clearDb, seedDocs, userDoc } from "../../db/test/fixtures";
 import { createApp } from "../index";
 import type { SessionReader } from "../middleware/auth";
-import { clearTables } from "../test/db";
 
 const A = "aaaaaaaa6000000000001";
 const B = "bbbbbbbb6000000000002";
@@ -29,8 +23,7 @@ const readSession: SessionReader = async () => ({ userId: currentUser });
 const app = createApp({ readSession });
 
 async function call(method: string, path: string, body?: unknown) {
-  const ctx = createExecutionContext();
-  const res = await app.request(
+  return app.request(
     path,
     {
       method,
@@ -38,10 +31,7 @@ async function call(method: string, path: string, body?: unknown) {
       body: body ? JSON.stringify(body) : undefined,
     },
     env,
-    ctx,
   );
-  await waitOnExecutionContext(ctx);
-  return res;
 }
 
 const A_LYRICS = [
@@ -81,13 +71,9 @@ function librarySong(
 
 describe("2계정 공유 라이브러리 E2E", () => {
   beforeEach(async () => {
-    await clearTables(reports, decks, presentations);
-    await createD1Client(env.DB)
-      .delete(user)
-      .where(inArray(user.id, [A, B]));
-    await createD1Client(env.DB)
-      .insert(user)
-      .values([
+    await clearDb(env.DB);
+    await seedDocs(env.DB, {
+      users: [
         {
           id: A,
           name: "A교회 찬양팀",
@@ -100,7 +86,8 @@ describe("2계정 공유 라이브러리 E2E", () => {
           createdAt: new Date(),
           updatedAt: new Date(),
         },
-      ]);
+      ].map((row) => userDoc(row)),
+    });
     currentUser = A;
   });
 

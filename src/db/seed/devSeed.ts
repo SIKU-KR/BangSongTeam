@@ -1,4 +1,4 @@
-import { inArray } from "drizzle-orm";
+import { FieldValue } from "@google-cloud/firestore";
 import {
   cycleItem,
   DEFAULT_DECK_STYLE,
@@ -11,16 +11,19 @@ import {
   type Folder,
   type PresentationDocument,
 } from "#shared";
+import { runBulk, type Db } from "../client";
 import {
-  backgroundKeywords,
-  backgrounds,
-  decks,
-  reports,
-  user,
-  type NewDeck,
-} from "../schema";
+  backgroundsCol,
+  COLLECTIONS,
+  chunkIds,
+  decksCol,
+  usersCol,
+  type DeckDoc,
+} from "../collections";
+import { withDeckIndex } from "../deckIndex";
 import {
   joinByToken,
+  libraryDeckDefaults,
   setDeckVisibility,
   setLinkAccess,
   toDeckContent,
@@ -28,10 +31,6 @@ import {
   upsertFolder,
   upsertPresentationDocument,
 } from "../queries";
-import { runStatements } from "../queries/batch";
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type DbInstance = any;
 
 /** `data/cleaned/*.json`의 곡 한 개 */
 export interface SeedSong {
@@ -41,8 +40,8 @@ export interface SeedSong {
 }
 
 /**
- * `data/backgrounds/dev/`의 이미지 배경 한 장. R2 객체(`key`)는 호출자가 먼저 올린다.
- * 파일 없는 행이 있으면 편집기·송출이 깨진 배경을 그린다.
+ * `data/backgrounds/dev/`의 이미지 배경 한 장. 미디어 객체(`key`)는 호출자가 먼저 올린다.
+ * 파일 없는 문서가 있으면 편집기·송출이 깨진 배경을 그린다.
  */
 export interface SeedBackground {
   key: string;
@@ -66,7 +65,7 @@ export interface DevSeedSummary {
 }
 
 /**
- * 공유 라이브러리 곡을 올린 계정. `scripts/seedSelected.mjs`가 운영 D1에 쓰는 봇 계정과
+ * 공유 라이브러리 곡을 올린 계정. `scripts/seedSelected.mjs`가 운영 Firestore에 쓰는 봇 계정과
  * 같은 id라 로컬 라이브러리가 운영과 같은 작성자로 보인다.
  */
 export const SEED_LIBRARY_USER = {
@@ -77,9 +76,6 @@ export const SEED_LIBRARY_USER = {
 
 const [OWNER, MEMBER] = DEV_USERS;
 const SEED_USER_IDS = [SEED_LIBRARY_USER.id, ...DEV_USERS.map((u) => u.id)];
-const ROWS_PER_INSERT = 5;
-const KEYWORDS_PER_INSERT = 40;
-const STATEMENTS_PER_BATCH = 50;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 /**
@@ -136,132 +132,122 @@ function toLibraryDeck(song: SeedSong, index: number, now: Date): Deck {
   };
 }
 
-async function resetSeedUsers(db: DbInstance): Promise<void> {
-  await db.delete(reports).where(inArray(reports.reporterId, SEED_USER_IDS));
-  await db.delete(user).where(inArray(user.id, SEED_USER_IDS));
+/** 시드 계정이 가진 데이터를 모두 지운다. 외래키 cascade가 없어 컬렉션마다 찾아 지운다 */
+async function resetSeedUsers(db: Db): Promise<void> {
+  const owned = [
+    COLLECTIONS.decks,
+    COLLECTIONS.presentations,
+    COLLECTIONS.presentationMembers,
+    COLLECTIONS.folders,
+    COLLECTIONS.driveTombstones,
+    COLLECTIONS.sessions,
+    COLLECTIONS.accounts,
+  ];
+  const snapshots = await Promise.all(
+    chunkIds(SEED_USER_IDS).flatMap((ids) => [
+      ...owned.map((name) =>
+        db.collection(name).where("userId", "in", ids).get(),
+      ),
+      db.collection(COLLECTIONS.reports).where("reporterId", "in", ids).get(),
+    ]),
+  );
+  await runBulk(db, (writer) => [
+    ...snapshots.flatMap((snapshot) =>
+      snapshot.docs.map((doc) => writer.delete(doc.ref)),
+    ),
+    ...SEED_USER_IDS.map((id) => writer.delete(usersCol(db).doc(id))),
+  ]);
 }
 
 async function upsertBackgrounds(
-  db: DbInstance,
+  db: Db,
   items: readonly SeedBackground[],
   now: Date,
 ): Promise<string[]> {
-  const rows = items.map((item, n) => ({
-    id: seedId("bg", n),
-    title: item.title,
-    r2Key: item.key,
-    posterKey: item.key,
-    durationSec: 0,
-    kind: "image" as const,
-    sizeBytes: item.sizeBytes,
-    description: item.description,
-    createdAt: now,
-  }));
-  const ids = rows.map((row) => row.id);
-  const keywords = items.flatMap((item, n) =>
-    [...new Set(item.keywords)].map((keyword) => ({
-      backgroundId: seedId("bg", n),
-      keyword,
-    })),
+  const ids = items.map((_, n) => seedId("bg", n));
+  await runBulk(db, (writer) =>
+    items.map((item, n) =>
+      writer.set(backgroundsCol(db).doc(seedId("bg", n)), {
+        id: seedId("bg", n),
+        title: item.title,
+        kind: "image",
+        mediaKey: item.key,
+        posterKey: item.key,
+        durationSec: 0,
+        sizeBytes: item.sizeBytes,
+        license: "",
+        description: item.description,
+        keywords: [...new Set(item.keywords)],
+        createdAt: now,
+      }),
+    ),
   );
-  await runStatements(db, [
-    ...rows.map((row) =>
-      db
-        .insert(backgrounds)
-        .values(row)
-        .onConflictDoUpdate({
-          target: backgrounds.id,
-          set: {
-            title: row.title,
-            r2Key: row.r2Key,
-            posterKey: row.posterKey,
-            sizeBytes: row.sizeBytes,
-            description: row.description,
-          },
-        }),
-    ),
-    ...(ids.length > 0
-      ? [
-          db
-            .delete(backgroundKeywords)
-            .where(inArray(backgroundKeywords.backgroundId, ids)),
-        ]
-      : []),
-    ...Array.from(
-      { length: Math.ceil(keywords.length / KEYWORDS_PER_INSERT) },
-      (_, i) =>
-        db
-          .insert(backgroundKeywords)
-          .values(
-            keywords.slice(
-              i * KEYWORDS_PER_INSERT,
-              (i + 1) * KEYWORDS_PER_INSERT,
-            ),
-          ),
-    ),
-  ]);
   return ids;
 }
 
-async function insertUsers(db: DbInstance, now: Date): Promise<void> {
-  await db.insert(user).values([
+async function insertUsers(db: Db, now: Date): Promise<void> {
+  const users = [
     {
       ...SEED_LIBRARY_USER,
-      emailVerified: true,
       termsAgreedAt: now,
-      createdAt: now,
-      updatedAt: now,
     },
     ...DEV_USERS.map((dev) => ({
       id: dev.id,
       name: dev.name,
       email: dev.email,
-      emailVerified: true,
       termsAgreedAt: dev.termsAgreed ? now : null,
-      createdAt: now,
-      updatedAt: now,
     })),
-  ]);
+  ];
+  await runBulk(db, (writer) =>
+    users.map((user) =>
+      writer.set(usersCol(db).doc(user.id), {
+        ...user,
+        emailVerified: true,
+        image: null,
+        createdAt: now,
+        updatedAt: now,
+      }),
+    ),
+  );
 }
 
-function toLibraryRow(deck: Deck): NewDeck {
-  return {
-    id: deck.id,
-    userId: deck.userId,
+function toLibraryDoc(deck: Deck): DeckDoc {
+  return withDeckIndex({
+    ...libraryDeckDefaults(deck.id, deck.userId),
     ...toDeckContent(deck),
     visibility: deck.visibility,
     publishedAt: deck.publishedAt ? new Date(deck.publishedAt) : null,
-  };
+  });
 }
 
-async function insertLibrary(db: DbInstance, library: Deck[]): Promise<void> {
-  const statements: unknown[] = [];
-  for (let i = 0; i < library.length; i += ROWS_PER_INSERT) {
-    statements.push(
-      db
-        .insert(decks)
-        .values(library.slice(i, i + ROWS_PER_INSERT).map(toLibraryRow)),
-    );
-  }
-  for (let i = 0; i < statements.length; i += STATEMENTS_PER_BATCH) {
-    await runStatements(db, statements.slice(i, i + STATEMENTS_PER_BATCH));
-  }
+async function insertLibrary(db: Db, library: Deck[]): Promise<void> {
+  await runBulk(db, (writer) =>
+    library.map((deck) =>
+      writer.set(decksCol(db).doc(deck.id), toLibraryDoc(deck)),
+    ),
+  );
 }
 
+/** 고정 id로 가져온 곡을 만들고 원본의 가져간 횟수를 올린다 (`forkPublicDeck`과 같은 결과) */
 async function insertFork(
-  db: DbInstance,
+  db: Db,
   userId: string,
   source: Deck,
   authorName: string,
   n: number,
 ): Promise<void> {
-  await db.insert(decks).values({
-    id: seedId("fork", n),
-    userId,
+  const fork = withDeckIndex({
+    ...libraryDeckDefaults(seedId("fork", n), userId),
     ...toDeckContent(source),
     forkedFrom: source.id,
     forkedFromAuthorName: authorName,
   });
+  const batch = db.batch();
+  batch.set(decksCol(db).doc(fork.id), fork);
+  batch.update(decksCol(db).doc(source.id), {
+    forkCount: FieldValue.increment(1),
+  });
+  await batch.commit();
 }
 
 const OWNER_STYLES: DeckStyle[] = [
@@ -296,19 +282,19 @@ const OWNER_STYLES: DeckStyle[] = [
 ];
 
 /**
- * 로컬 D1에 개발용 데이터를 만든다. 시드 계정(`SEED_LIBRARY_USER`, `DEV_USERS`)만
+ * 로컬 Firestore(에뮬레이터)에 개발용 데이터를 만든다. 시드 계정(`SEED_LIBRARY_USER`, `DEV_USERS`)만
  * 지우고 다시 만들며, OAuth로 로그인해 생긴 다른 계정의 데이터는 건드리지 않는다.
  *
  * 곡·폴더·세트는 앱의 저장 쿼리(`upsertDeck`, `upsertFolder`,
  * `upsertPresentationDocument` …)로 넣어 편집기에서 만든 데이터와 같은 모양이 되게 한다.
  * id는 모두 `seedId`로 고정한다. 가져온 곡은 `forkPublicDeck`이 새 id를 만들어서
- * 직접 넣는다. 원본의 가져간 횟수는 트리거가 올린다.
+ * 직접 넣는다.
  *
  * 배경은 repo에 든 가벼운 이미지(`SeedBackground`)만 등록하고 곡에 입힌다. 운영 배경
- * 영상은 수 GB라 로컬 R2에 올리지 않는다.
+ * 영상은 수 GB라 로컬 미디어 저장소에 올리지 않는다.
  */
 export async function seedDevData(
-  db: DbInstance,
+  db: Db,
   { songs, backgrounds: seedBackgrounds }: DevSeedInput,
   now: Date = new Date(),
 ): Promise<DevSeedSummary> {

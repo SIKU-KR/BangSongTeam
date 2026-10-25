@@ -1,8 +1,8 @@
 /**
- * 로컬 개발용 시드 계정. `pnpm db:seed:local`이 로컬 D1에 만들고, `pnpm dev`의
+ * 로컬 개발용 시드 계정. `pnpm db:seed:local`이 로컬 Firestore 에뮬레이터에 만들고, `pnpm dev`의
  * 로그인 화면이 OAuth 없이 이 계정으로 들어가는 버튼을 보여 준다.
  *
- * id는 `IdSchema`(21자)를 통과해야 한다. 운영 D1에는 이 계정이 없고, 개발용
+ * id는 `IdSchema`(21자)를 통과해야 한다. 운영 Firestore에는 이 계정이 없고, 개발용
  * 로그인 엔드포인트는 운영 번들에서 빠진다(`src/server/lib/devSignIn.ts`).
  */
 export const DEV_USERS = [

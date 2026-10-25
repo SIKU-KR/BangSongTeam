@@ -2,7 +2,6 @@ import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { API_ERRORS, FolderSchema } from "#shared";
 import {
-  createD1Client,
   getFoldersByUserId,
   getDriveTombstones,
   upsertFolder,
@@ -18,13 +17,13 @@ import { logServerError } from "../lib/requestLog";
  *
  * 폴더는 1건 단위로 주고받는다. 휴지통은 `trashedAt`을 담은 PUT이고, DELETE는
  * 휴지통 비우기·영구 삭제 전용이다 (하위 폴더·프레젠테이션까지 지운다).
- * `userId`는 언제나 세션에서 가져온다 (D1에 RLS 없음).
+ * `userId`는 언제나 세션에서 가져온다 (Firestore에 사용자별 접근 규칙이 없다).
  */
 export function createFoldersRoute(deps: AppDeps = {}) {
   return new Hono<AppEnv>()
     .use("*", resolveRequireAuth(deps))
     .get("/", async (c) => {
-      const db = createD1Client(c.env.DB);
+      const db = c.env.DB;
       const userId = c.get("userId") as string;
       const [folders, tombstones] = await Promise.all([
         getFoldersByUserId(db, userId),
@@ -40,7 +39,7 @@ export function createFoldersRoute(deps: AppDeps = {}) {
         return c.json({ error: API_ERRORS.idMismatch }, 400);
       }
 
-      const db = createD1Client(c.env.DB);
+      const db = c.env.DB;
 
       let saved;
       try {
@@ -62,7 +61,7 @@ export function createFoldersRoute(deps: AppDeps = {}) {
       return c.json({ folder: saved }, 200);
     })
     .delete("/:id", async (c) => {
-      const db = createD1Client(c.env.DB);
+      const db = c.env.DB;
       const deleted = await deleteFolderTree(
         db,
         c.get("userId") as string,

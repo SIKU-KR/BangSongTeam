@@ -3,7 +3,7 @@ import { createMiddleware } from "hono/factory";
 import { routePath } from "hono/route";
 import { bytesToHex, randomHex } from "#shared";
 import type { AppEnv } from "../types";
-import { describeError } from "../lib/requestLog";
+import { describeError, writeLog } from "../lib/requestLog";
 
 const TRACEPARENT = /^00-([0-9a-f]{32})-([0-9a-f]{16})-[0-9a-f]{2}$/;
 const ZERO_TRACE_ID = "0".repeat(32);
@@ -28,6 +28,7 @@ async function hashUserId(userId: string): Promise<string> {
 
 /**
  * 요청마다 구조화 로그 한 줄을 남기고 응답에 상관 ID(`x-request-id`)를 붙인다.
+ * `trace`는 Cloud Run 앞단이 붙이는 trace id라 같은 요청의 플랫폼 로그와 이어 볼 수 있다.
  * 사용자는 SHA-256 앞 16자리로만 남긴다.
  * 운영자가 문의한 사용자의 id를 같은 방식으로 해시해 그 사용자의 요청만 골라 볼 수 있다.
  */
@@ -44,7 +45,7 @@ export function requestLog(): MiddlewareHandler<AppEnv> {
     const entry = {
       event: "request",
       requestId,
-      cfRay: c.req.header("cf-ray") ?? null,
+      trace: c.req.header("x-cloud-trace-context")?.split("/")[0] ?? null,
       method: c.req.method,
       route: routePath(c),
       status: c.res.status,
@@ -52,12 +53,12 @@ export function requestLog(): MiddlewareHandler<AppEnv> {
       ...(userId ? { userHash: await hashUserId(userId) } : {}),
     };
     if (entry.status >= 500) {
-      console.error({
+      writeLog("ERROR", {
         ...entry,
         ...(c.error ? { error: describeError(c.error) } : {}),
       });
     } else {
-      console.log(entry);
+      writeLog("INFO", entry);
     }
   });
 }

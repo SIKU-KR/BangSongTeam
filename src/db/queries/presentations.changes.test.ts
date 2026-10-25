@@ -1,8 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { eq } from "drizzle-orm";
-import { createTestDb } from "../test-utils";
-import { user, decks, driveTombstones } from "../schema";
-import { deckRow } from "../test-fixtures";
+import type { Db } from "../client";
+import { decksCol, driveTombstonesCol } from "../collections";
+import { createTestDb, deckDoc, seedDocs, userDoc } from "../test/fixtures";
 import {
   DEFAULT_DECK_STYLE,
   PresentationDocumentSchema,
@@ -14,8 +13,6 @@ import {
   savePresentationChanges,
   upsertPresentationDocument,
 } from "./presentations";
-import { tombstoneStatements } from "./folders";
-import { runStatements } from "./batch";
 
 const USER_A = "000000000000000000001";
 const USER_B = "000000000000000000002";
@@ -78,7 +75,7 @@ function withLyrics(
 }
 
 describe("세트 변경분 저장", () => {
-  let db: ReturnType<typeof createTestDb>["db"];
+  let db: Db;
 
   async function readSet(userId = USER_A): Promise<PresentationDocument> {
     const [doc] = await getPresentationDocumentsByUserId(db, userId);
@@ -86,11 +83,13 @@ describe("세트 변경분 저장", () => {
   }
 
   beforeEach(async () => {
-    db = createTestDb().db;
-    await db.insert(user).values([
-      { id: USER_A, name: "A", createdAt: new Date(), updatedAt: new Date() },
-      { id: USER_B, name: "B", createdAt: new Date(), updatedAt: new Date() },
-    ]);
+    db = createTestDb();
+    await seedDocs(db, {
+      users: [
+        userDoc({ id: USER_A, name: "A" }),
+        userDoc({ id: USER_B, name: "B" }),
+      ],
+    });
     await upsertPresentationDocument(db, USER_A, makeSet(USER_A, 10));
   });
 
@@ -127,11 +126,7 @@ describe("세트 변경분 저장", () => {
     expect(restored.items.map((item) => item.order)).toEqual([
       0, 1, 2, 3, 4, 5, 6, 7, 8,
     ]);
-    const orphan = await db
-      .select()
-      .from(decks)
-      .where(eq(decks.id, deckId(5)));
-    expect(orphan).toHaveLength(0);
+    expect((await decksCol(db).doc(deckId(5)).get()).exists).toBe(false);
   });
 
   it("덱 없이 순서만 보내도 곡 순서가 바뀐다", async () => {
@@ -235,10 +230,9 @@ describe("세트 변경분 저장", () => {
   });
 
   it("영구 삭제 기록을 지운다", async () => {
-    await runStatements(
-      db,
-      tombstoneStatements(db, USER_A, "presentation", [DOC_ID]),
-    );
+    await driveTombstonesCol(db)
+      .doc(DOC_ID)
+      .set({ itemId: DOC_ID, userId: USER_A, kind: "presentation" });
 
     await savePresentationChanges(
       db,
@@ -246,20 +240,29 @@ describe("세트 변경분 저장", () => {
       toPresentationChanges(makeSet(USER_A, 10), () => false),
     );
 
-    const rows = await db
-      .select()
-      .from(driveTombstones)
-      .where(eq(driveTombstones.itemId, DOC_ID));
-    expect(rows).toHaveLength(0);
+    expect((await driveTombstonesCol(db).doc(DOC_ID).get()).exists).toBe(false);
+  });
+
+  it("남의 영구 삭제 기록은 지우지 않는다", async () => {
+    const other = "100000000000000000009";
+    await driveTombstonesCol(db)
+      .doc(other)
+      .set({ itemId: other, userId: USER_B, kind: "presentation" });
+
+    await savePresentationChanges(
+      db,
+      USER_A,
+      toPresentationChanges({ ...makeSet(USER_A, 0), id: other }),
+    );
+
+    expect((await driveTombstonesCol(db).doc(other).get()).exists).toBe(true);
   });
 
   it("바뀌지 않은 사본은 다시 쓰지 않는다 (자리·내용 유지)", async () => {
-    const copies = () =>
-      db
-        .select()
-        .from(decks)
-        .where(eq(decks.presentationId, DOC_ID))
-        .orderBy(decks.position);
+    const copies = async () =>
+      (await decksCol(db).where("presentationId", "==", DOC_ID).get()).docs
+        .map((doc) => ({ ...doc.data(), writtenAt: doc.updateTime.toMillis() }))
+        .sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
     const before = await copies();
 
     await savePresentationChanges(
@@ -311,12 +314,12 @@ describe("세트 변경분 저장", () => {
   });
 
   it("forkedFrom은 내 곡을 가리킬 때만 남긴다 (남의 곡 id 존재 여부를 흘리지 않는다)", async () => {
-    await db
-      .insert(decks)
-      .values([
-        deckRow({ id: "library-song", userId: USER_A }),
-        deckRow({ id: "others-song", userId: USER_B }),
-      ]);
+    await seedDocs(db, {
+      decks: [
+        deckDoc({ id: "library-song", userId: USER_A }),
+        deckDoc({ id: "others-song", userId: USER_B }),
+      ],
+    });
     const doc = makeSet(USER_A, 13);
     doc.items[10].deck.forkedFrom = "library-song";
     doc.items[11].deck.forkedFrom = "c0000000000000000dead";

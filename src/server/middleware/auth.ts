@@ -9,7 +9,7 @@ export interface SessionResult {
   /**
    * Better Auth가 조회 중에 갱신한 쿠키(세션 쿠키 캐시 등).
    *
-   * 응답에 실어 보내야 쿠키 캐시가 이어져 다음 요청이 D1을 읽지 않는다.
+   * 응답에 실어 보내야 쿠키 캐시가 이어져 다음 요청이 Firestore를 읽지 않는다.
    */
   setCookies?: string[];
 }
@@ -29,7 +29,7 @@ export type SessionReader = (input: {
  * Better Auth로 세션을 읽는 기본 구현.
  *
  * 갱신 중 세션이 지워지면 Better Auth가 `UNAUTHORIZED`를 던지므로 이것만 세션
- * 없음으로 바꾸고, 그 밖의 예외(D1 장애 등)는 그대로 던진다.
+ * 없음으로 바꾸고, 그 밖의 예외(Firestore 장애 등)는 그대로 던진다.
  */
 export const readSessionFromBetterAuth: SessionReader = async ({
   headers,

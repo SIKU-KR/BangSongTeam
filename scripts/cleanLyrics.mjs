@@ -1,13 +1,13 @@
 /**
  * 수집된 가사 텍스트 데이터 전처리 스크립트
- * 
+ *
  * 전처리 규칙:
  * 1. 상단 메타데이터 헤더(제목, 아티스트, 출처, 구분선) 완전 제거
  * 2. 찬송가 및 가사 내 [1절], [2절], [후렴] 등 섹션 라벨 제거
  * 3. 각 줄의 앞뒤 공백 및 전각 공백 정리
  * 4. 모든 빈 줄(공백 라인/줄바꿈 라인) 제거하여 순수 가사 줄만 연속되도록 정제
  * 5. 원본(data/extracted/)은 보존하고 data/cleaned/ 폴더에 저장
- * 
+ *
  * 실행: node scripts/cleanLyrics.mjs
  */
 
@@ -31,7 +31,10 @@ const WORSHIP_DEST = path.join(CLEANED_DIR, "worship");
  * 앞뒤 일반 공백 및 전각 공백(\u3000), 특수 공백(\u00A0, \uFEFF 등) 제거
  */
 function sanitizeLyricLine(line) {
-  return line.replace(/^[\s\u00A0\u3000\u200B\uFEFF]+|[\s\u00A0\u3000\u200B\uFEFF]+$/g, "");
+  return line.replace(
+    /^[\s\u00A0\u3000\u200B\uFEFF]+|[\s\u00A0\u3000\u200B\uFEFF]+$/g,
+    "",
+  );
 }
 
 /**
@@ -39,8 +42,11 @@ function sanitizeLyricLine(line) {
  */
 function cleanLyricsText(rawContent) {
   // 1. 메타데이터 구분선 이후 본문만 추출
-  const delimiterIndex = rawContent.indexOf("--------------------------------------------------");
-  const bodyText = delimiterIndex !== -1 ? rawContent.slice(delimiterIndex + 50) : rawContent;
+  const delimiterIndex = rawContent.indexOf(
+    "--------------------------------------------------",
+  );
+  const bodyText =
+    delimiterIndex !== -1 ? rawContent.slice(delimiterIndex + 50) : rawContent;
 
   const rawLines = bodyText.split(/\r?\n/);
   const cleanedLines = [];
@@ -104,7 +110,11 @@ async function processJsonFiles() {
     });
 
     const destPath = path.join(CLEANED_DIR, "hymns.json");
-    await fs.writeFile(destPath, JSON.stringify(cleanedHymns, null, 2), "utf-8");
+    await fs.writeFile(
+      destPath,
+      JSON.stringify(cleanedHymns, null, 2),
+      "utf-8",
+    );
     console.log(`[새찬송가 JSON] 전처리 완료 -> ${destPath}`);
   } catch (err) {
     console.warn(`[찬송가 JSON 처리 경고]:`, err.message);
@@ -125,7 +135,11 @@ async function processJsonFiles() {
     });
 
     const destPath = path.join(CLEANED_DIR, "worship.json");
-    await fs.writeFile(destPath, JSON.stringify(cleanedWorship, null, 2), "utf-8");
+    await fs.writeFile(
+      destPath,
+      JSON.stringify(cleanedWorship, null, 2),
+      "utf-8",
+    );
     console.log(`[워십/CCM JSON] 전처리 완료 -> ${destPath}`);
   } catch (err) {
     console.warn(`[워십 JSON 처리 경고]:`, err.message);
@@ -141,7 +155,11 @@ async function main() {
   console.log(`- 결과 폴더: ${CLEANED_DIR}\n`);
 
   const hymnsCount = await processDirectory(HYMNS_SRC, HYMNS_DEST, "새찬송가");
-  const worshipCount = await processDirectory(WORSHIP_SRC, WORSHIP_DEST, "워십/CCM");
+  const worshipCount = await processDirectory(
+    WORSHIP_SRC,
+    WORSHIP_DEST,
+    "워십/CCM",
+  );
   await processJsonFiles();
 
   console.log(`\n=== 전처리 최종 완료 ===`);

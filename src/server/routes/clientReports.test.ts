@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach, vi } from "vitest";
-import { env } from "cloudflare:test";
+import { env } from "../test/env";
 import { API_ERRORS, CLIENT_REPORT_MAX_BYTES } from "#shared";
 import { createApp } from "../index";
 
@@ -58,10 +58,11 @@ describe("POST /api/client-reports", () => {
     expect(res.status).toBe(204);
     const reportId = res.headers.get("x-request-id");
     const lines = log.mock.calls
-      .map((call) => call[0] as Record<string, unknown>)
+      .map((call) => JSON.parse(call[0] as string) as Record<string, unknown>)
       .filter((line) => line.event === "client_report");
     expect(lines).toEqual([
       {
+        severity: "INFO",
         event: "client_report",
         requestId: TRACE_ID,
         reportRequestId: reportId,
@@ -72,6 +73,7 @@ describe("POST /api/client-reports", () => {
         appVersion: "abc1234",
       },
       {
+        severity: "INFO",
         event: "client_report",
         requestId: OTHER_TRACE_ID,
         reportRequestId: reportId,
@@ -117,14 +119,14 @@ describe("POST /api/client-reports", () => {
   it("같은 IP가 창 안에서 한도를 넘으면 429다", async () => {
     vi.spyOn(console, "log").mockImplementation(() => {});
     const app = createApp();
-    const headers = { "cf-connecting-ip": "203.0.113.7" };
+    const headers = { "x-forwarded-for": "203.0.113.7" };
 
     for (let index = 0; index < 30; index += 1) {
       expect((await post(app, validBatch, headers)).status).toBe(204);
     }
     const limited = await post(app, validBatch, headers);
     const otherIp = await post(app, validBatch, {
-      "cf-connecting-ip": "203.0.113.8",
+      "x-forwarded-for": "203.0.113.8",
     });
 
     expect(limited.status).toBe(429);

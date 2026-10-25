@@ -1,23 +1,14 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { env } from "cloudflare:test";
-import { eq, inArray } from "drizzle-orm";
+import { env } from "../test/env";
 import {
   DEFAULT_DECK_STYLE,
   PresentationDocumentSchema,
   type Folder,
   type PresentationDocument,
 } from "#shared";
-import {
-  createD1Client,
-  decks,
-  driveTombstones,
-  folders,
-  presentations,
-  user,
-} from "#db";
+import { clearDb, seedDocs, userDoc } from "../../db/test/fixtures";
 import { createApp } from "../index";
 import type { SessionReader } from "../middleware/auth";
-import { clearTables } from "../test/db";
 
 const USER_A = "aaaaaaaa00000000000f1";
 const USER_B = "bbbbbbbb00000000000f2";
@@ -118,16 +109,13 @@ async function listDocs(): Promise<PresentationDocument[]> {
 
 describe("드라이브 폴더 API", () => {
   beforeEach(async () => {
-    await clearTables(decks, presentations, folders, driveTombstones);
-    await createD1Client(env.DB)
-      .delete(user)
-      .where(inArray(user.id, [USER_A, USER_B]));
-    await createD1Client(env.DB)
-      .insert(user)
-      .values([
+    await clearDb(env.DB);
+    await seedDocs(env.DB, {
+      users: [
         { id: USER_A, name: "A", createdAt: new Date(), updatedAt: new Date() },
         { id: USER_B, name: "B", createdAt: new Date(), updatedAt: new Date() },
-      ]);
+      ].map((row) => userDoc(row)),
+    });
     currentUser = USER_A;
   });
 
@@ -233,21 +221,6 @@ describe("드라이브 폴더 API", () => {
     const docs = await listDocs();
     expect(docs.map((d) => d.id)).toEqual([inKeep.id]);
     expect(docs[0].folderId).toBe(keep.id);
-  });
-
-  it("폴더 행이 사라지면 외래키가 파일을 루트로 떨어뜨린다 (SET NULL 안전망)", async () => {
-    const folder = makeFolder();
-    await putFolder(folder);
-    const doc = makeDoc(folder.id);
-    await app.request(`/api/presentations/${doc.id}`, put(doc), env);
-
-    await createD1Client(env.DB)
-      .delete(folders)
-      .where(eq(folders.id, folder.id));
-
-    const [restored] = await listDocs();
-    expect(restored.id).toBe(doc.id);
-    expect(restored.folderId).toBeNull();
   });
 
   it("남의 폴더를 가리키는 프레젠테이션은 루트로 보정된다", async () => {

@@ -17,7 +17,7 @@ import { APP_NAME } from "#shared";
 /**
  * 개인정보 처리방침 (개인정보 보호법 제30조).
  *
- * 수집 항목은 `src/db/schema/auth.ts`와 `src/server/lib/auth.ts`의 소셜 프로필
+ * 수집 항목은 `src/db/collections.ts`의 사용자 문서와 `src/server/lib/auth.ts`의 소셜 프로필
  * 매핑을 따른다. 저장하는 값이 바뀌면 이 글도 함께 고친다.
  */
 export function PrivacyRoute(): React.JSX.Element {
@@ -91,14 +91,15 @@ export function PrivacyRoute(): React.JSX.Element {
         </p>
         <LegalList>
           <li>
-            이전받는 자: Cloudflare, Inc. (privacyquestions@cloudflare.com)
+            이전받는 자: Google LLC
+            (https://support.google.com/policies/contact/general_privacy_form)
           </li>
-          <li>이전 국가: 미국 등 Cloudflare 데이터센터가 있는 국가</li>
+          <li>이전 국가: 미국 등 Google Cloud 데이터센터가 있는 국가</li>
           <li>이전 일시와 방법: 서비스를 이용할 때 네트워크를 통해 전송</li>
           <li>이전 항목: 1항의 모든 항목</li>
           <li>
-            이전 목적: 서비스 호스팅과 데이터 저장(Workers, D1 데이터베이스, R2
-            저장소)
+            이전 목적: 서비스 호스팅과 데이터 저장(Cloud Run, Firestore
+            데이터베이스, Cloud Storage 저장소)
           </li>
           <li>보유 기간: 4항과 같음</li>
           <li>

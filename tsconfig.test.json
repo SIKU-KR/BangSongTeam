@@ -9,8 +9,7 @@
     "**/*.test.ts",
     "**/*.test.tsx",
     "src/**/test",
-    "src/db/test-utils.ts",
     "src/**/*.d.ts"
   ],
-  "exclude": ["node_modules", ".next", ".open-next", ".wrangler"]
+  "exclude": ["node_modules", ".next"]
 }
