@@ -1,3 +1,5 @@
+"use client";
+
 import React from "react";
 import {
   LegalDocument,
@@ -15,7 +17,7 @@ import { APP_NAME } from "#shared";
 /**
  * 개인정보 처리방침 (개인정보 보호법 제30조).
  *
- * 수집 항목은 `src/db/schema/auth.ts`와 `src/worker/lib/auth.ts`의 소셜 프로필
+ * 수집 항목은 `src/db/schema/auth.ts`와 `src/server/lib/auth.ts`의 소셜 프로필
  * 매핑을 따른다. 저장하는 값이 바뀌면 이 글도 함께 고친다.
  */
 export function PrivacyRoute(): React.JSX.Element {

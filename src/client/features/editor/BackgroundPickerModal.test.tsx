@@ -1,6 +1,6 @@
 import React from "react";
 import { act, render, screen, fireEvent, within } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter } from "../../test/router";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { BackgroundPickerModal } from "./BackgroundPickerModal";
 import {

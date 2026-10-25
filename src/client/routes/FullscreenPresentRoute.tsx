@@ -1,10 +1,9 @@
+"use client";
+
 import React, { useState, useCallback, useEffect, useRef } from "react";
-import {
-  useLocation,
-  useNavigate,
-  useParams,
-  Navigate,
-} from "react-router-dom";
+import { useParams } from "next/navigation";
+import { useNavigate } from "#hooks/useNavigate";
+import { Navigate } from "../components/common/Navigate";
 import { cn } from "cn";
 import { Button } from "#components/ui/button";
 import { Kbd } from "#components/ui/kbd";
@@ -18,7 +17,7 @@ import { useProjectionMediaReady } from "../features/offline/useProjectionMediaR
 import { useBackgroundLayers } from "../features/backgrounds/backgroundCatalog";
 import {
   exitFullscreen,
-  resolvePresentReturnPath,
+  loadPresentReturnPath,
   DEFAULT_PRESENT_RETURN_PATH,
 } from "../features/presentation/fullscreen";
 import {
@@ -76,7 +75,7 @@ const preventDefault = (event: React.SyntheticEvent): void => {
  * 프레젠테이션이 한 번 보인 뒤 다른 곳에서 사라지면 마지막으로 받은 내용으로 송출을 이어 간다.
  */
 export function FullscreenPresentRoute(): React.JSX.Element {
-  const { presentationId } = useParams<{ presentationId: string }>();
+  const { presentationId } = useParams<{ presentationId?: string }>();
   const { found } = useOpenedPresentation(presentationId);
   const [lastShown, setLastShown] = useState(found);
   if (found && found !== lastShown) setLastShown(found);
@@ -98,7 +97,7 @@ function ProjectionRedirect(): React.JSX.Element {
   useEffect(() => {
     exitFullscreen().catch(() => {});
   }, []);
-  return <Navigate to={DEFAULT_PRESENT_RETURN_PATH} replace />;
+  return <Navigate to={DEFAULT_PRESENT_RETURN_PATH} />;
 }
 
 function exitFullscreenWithin(ms: number): Promise<void> {
@@ -123,8 +122,7 @@ function ProjectionSession({
   presentation: shown,
 }: ProjectionSessionProps): React.JSX.Element {
   const navigate = useNavigate();
-  const location = useLocation();
-  const returnPath = resolvePresentReturnPath(location.state);
+  const [returnPath] = useState(() => loadPresentReturnPath(presentationId));
   const songs = shown.items;
 
   const [resume] = useState(() => loadProjectionResume(presentationId));

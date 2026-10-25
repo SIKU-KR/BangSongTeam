@@ -11,13 +11,24 @@
     "noUncheckedIndexedAccess": true,
     "noImplicitAny": true,
     "skipLibCheck": true,
+    "allowJs": true,
     "esModuleInterop": true,
     "resolveJsonModule": true,
     "isolatedModules": true,
-    "noEmit": true
+    "incremental": true,
+    "noEmit": true,
+    "plugins": [{ "name": "next" }]
   },
-  "include": ["src", "config", "*.ts"],
+  "include": [
+    "next-env.d.ts",
+    "src",
+    "config",
+    "*.ts",
+    ".next/types/**/*.ts",
+    ".next/dev/types/**/*.ts"
+  ],
   "exclude": [
+    "node_modules",
     "**/*.test.ts",
     "**/*.test.tsx",
     "src/**/test",

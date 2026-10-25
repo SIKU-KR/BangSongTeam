@@ -2,19 +2,20 @@ import js from "@eslint/js";
 import betterTailwindcss from "eslint-plugin-better-tailwindcss";
 import globals from "globals";
 import jsxA11y from "eslint-plugin-jsx-a11y";
+import nextVitals from "eslint-config-next/core-web-vitals";
 import tseslint from "typescript-eslint";
 
 const DB_IS_WORKER_ONLY =
-  "src/db는 Worker 전용이다. 프론트엔드는 Hono RPC 클라이언트(lib/api)로 서버와 통신한다.";
+  "src/db는 서버 전용이다. 프론트엔드는 Hono RPC 클라이언트(lib/api)로 서버와 통신한다.";
 
 const CLIENT_BOUNDARY = [
   { regex: "^#db(/|$)", message: DB_IS_WORKER_ONLY },
   { regex: "^(\\.\\./)+db(/|$)", message: DB_IS_WORKER_ONLY },
   {
-    regex: "^(\\.\\./)+worker(/|$)",
+    regex: "^(\\.\\./)+server(/|$)",
     allowTypeImports: true,
     message:
-      "Worker 코드를 SPA 번들에 넣지 않는다. 타입(AppType)만 `import type`으로 가져온다.",
+      "서버 코드를 클라이언트 번들에 넣지 않는다. 타입(AppType)만 `import type`으로 가져온다.",
   },
 ];
 
@@ -131,7 +132,7 @@ const ROUTE_FACTORY_ONLY =
   "라우트는 routes/<name>.ts에서 create<Name>Route 팩토리 하나로 export하세요.";
 
 /**
- * Worker 라우트는 한 방식으로만 정의하고 마운트한다. 그래야 index.ts가 마운트 목록으로만
+ * API 라우트는 한 방식으로만 정의하고 마운트한다. 그래야 index.ts가 마운트 목록으로만
  * 읽히고, 라우트가 마운트 경로를 몰라 경로를 옮겨도 라우트 안을 고치지 않는다.
  */
 const WORKER_ROUTE_MODULE_SYNTAX = [
@@ -211,7 +212,7 @@ const COPY_EXEMPT_FILES = [
 ];
 
 /**
- * 한 배포 단위(Worker + SPA)를 단일 패키지로 두므로, 패키지 경계가 하던
+ * 한 배포 단위(API 서버 + 클라이언트)를 단일 패키지로 두므로, 패키지 경계가 하던
  * 레이어 격리를 import 규칙으로 대신 강제한다.
  *
  * flat config는 같은 규칙의 옵션을 파일별로 '덮어쓴다'. 그래서 송출 파일 블록은
@@ -223,6 +224,12 @@ export default tseslint.config(
       "**/node_modules/**",
       "**/dist/**",
       "**/.wrangler/**",
+      ".next/**",
+      ".open-next/**",
+      "next-env.d.ts",
+      "public/sw.js",
+      "public/sw-shell.js",
+      "public/workbox-*.js",
       ".claude/**",
       "**/coverage/**",
       "**/worker-configuration.d.ts",
@@ -230,6 +237,7 @@ export default tseslint.config(
   },
   js.configs.recommended,
   ...tseslint.configs.recommended,
+  ...nextVitals,
   {
     files: ["**/*.{js,cjs,mjs}"],
     languageOptions: {
@@ -237,6 +245,22 @@ export default tseslint.config(
         ...globals.node,
         ...globals.es2022,
       },
+    },
+    rules: {
+      "no-redeclare": ["error", { builtinGlobals: false }],
+    },
+  },
+  /**
+   * eslint-config-next가 켜는 React Compiler 대비 규칙은 끈다. 이 앱은 React Compiler를 쓰지
+   * 않고, 송출·편집 화면의 렌더 타이밍을 바꾸는 리팩터링이라 프레임워크 이전과 따로 한다.
+   * 배경·포스터는 서비스 워커가 원본 URL로 캐시해 오프라인 송출에 쓰므로 `next/image`
+   * 최적화 URL로 바꾸지 않는다.
+   */
+  {
+    rules: {
+      "react-hooks/refs": "off",
+      "react-hooks/set-state-in-effect": "off",
+      "@next/next/no-img-element": "off",
     },
   },
   {
@@ -317,7 +341,6 @@ export default tseslint.config(
   {
     files: ["src/client/**/*.tsx"],
     ignores: ["**/*.test.tsx", "src/client/components/ui/**"],
-    ...jsxA11y.flatConfigs.recommended,
     rules: {
       ...jsxA11y.flatConfigs.recommended.rules,
       "jsx-a11y/anchor-has-content": "off",
@@ -426,10 +449,10 @@ export default tseslint.config(
             {
               regex: "^(?!(zod|nanoid|es-hangul)$|\\.\\.?/)",
               message:
-                "src/shared는 브라우저·Worker 양쪽에서 도는 순수 TypeScript다. zod·nanoid·es-hangul 외의 모듈을 쓰지 않는다.",
+                "src/shared는 브라우저·서버 양쪽에서 도는 순수 TypeScript다. zod·nanoid·es-hangul 외의 모듈을 쓰지 않는다.",
             },
             {
-              regex: "^(\\.\\./)+(client|worker|db)(/|$)",
+              regex: "^(\\.\\./)+(client|server|db)(/|$)",
               message: "src/shared는 다른 레이어를 import하지 않는다.",
             },
           ],
@@ -445,7 +468,7 @@ export default tseslint.config(
         {
           patterns: [
             {
-              regex: "^(\\.\\./)+(client/|worker(/|$))",
+              regex: "^(\\.\\./)+(client/|server(/|$))",
               message: "src/db는 #shared 외의 레이어를 import하지 않는다.",
             },
           ],
@@ -454,7 +477,7 @@ export default tseslint.config(
     },
   },
   {
-    files: ["src/worker/**/*.ts"],
+    files: ["src/server/**/*.ts"],
     rules: {
       "@typescript-eslint/no-restricted-imports": [
         "error",
@@ -462,7 +485,7 @@ export default tseslint.config(
           patterns: [
             {
               regex: "^(\\.\\./)+client/",
-              message: "Worker는 SPA 코드를 import하지 않는다.",
+              message: "서버는 클라이언트 코드를 import하지 않는다.",
             },
           ],
         },
@@ -470,14 +493,14 @@ export default tseslint.config(
     },
   },
   {
-    files: ["src/worker/routes/*.ts"],
+    files: ["src/server/routes/*.ts"],
     ignores: ["**/*.test.ts"],
     rules: {
       "no-restricted-syntax": ["error", ...WORKER_ROUTE_MODULE_SYNTAX],
     },
   },
   {
-    files: ["src/worker/index.ts"],
+    files: ["src/server/index.ts"],
     rules: {
       "no-restricted-syntax": ["error", ...WORKER_APP_SYNTAX],
     },

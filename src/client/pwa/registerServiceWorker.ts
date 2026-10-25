@@ -1,6 +1,6 @@
-import { registerSW } from "virtual:pwa-register";
+import { registerWithWorkbox } from "./workboxRegistrar";
 
-/** vite-plugin-pwa의 `registerSW` 시그니처 (테스트 주입용) */
+/** 서비스 워커 등록 함수의 시그니처 (테스트 주입용). 기본 구현은 `workboxRegistrar.ts`다 */
 export type ServiceWorkerRegistrar = (options: {
   onNeedReload?: () => void;
   onRegisteredSW?: (
@@ -49,8 +49,22 @@ function startUpdateChecks(registration: ServiceWorkerRegistration): void {
   };
 }
 
+/** 배포로 사라진 옛 청크를 불러오지 못한 오류인지 (webpack·Turbopack 청크 로더의 메시지) */
+export function isChunkLoadError(reason: unknown): boolean {
+  return (
+    reason instanceof Error &&
+    (reason.name === "ChunkLoadError" ||
+      /Failed to load chunk|Loading chunk \S+ failed/.test(reason.message))
+  );
+}
+
+function handleChunkError(event: ErrorEvent | PromiseRejectionEvent): void {
+  const reason = "reason" in event ? event.reason : event.error;
+  if (isChunkLoadError(reason)) reloadOnStaleChunk();
+}
+
 /**
- * 지워진 옛 청크를 불러오지 못했을 때(`vite:preloadError`) 새 버전으로 새로고침한다.
+ * 지워진 옛 청크를 불러오지 못했을 때 새 버전으로 새로고침한다.
  *
  * 다른 탭이 새 버전을 적용하면 새 SW가 옛 프리캐시를 지우고, 새 배포 서버에도 옛 해시
  * 청크가 없다. 새로고침하지 않고 남은 탭은 지연 로드 화면으로 이동할 때 오류 화면에
@@ -129,14 +143,15 @@ export async function reloadIfUncontrolled(): Promise<void> {
  * `reloadOnStaleChunk`가 다룬다.
  */
 export function registerServiceWorker(
-  registrar: ServiceWorkerRegistrar = registerSW,
+  registrar: ServiceWorkerRegistrar = registerWithWorkbox,
 ): void {
   if (registered) return;
   if (typeof navigator === "undefined" || !("serviceWorker" in navigator)) {
     return;
   }
   registered = true;
-  window.addEventListener("vite:preloadError", reloadOnStaleChunk);
+  window.addEventListener("error", handleChunkError);
+  window.addEventListener("unhandledrejection", handleChunkError);
 
   applyUpdate = registrar({
     onNeedReload: () => {
@@ -165,5 +180,6 @@ export function __resetServiceWorkerStateForTests(): void {
   updateRequestedAt = null;
   stopUpdateChecks?.();
   stopUpdateChecks = null;
-  window.removeEventListener("vite:preloadError", reloadOnStaleChunk);
+  window.removeEventListener("error", handleChunkError);
+  window.removeEventListener("unhandledrejection", handleChunkError);
 }

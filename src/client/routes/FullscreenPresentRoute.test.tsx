@@ -14,9 +14,10 @@ import {
   Routes,
   Route,
   useNavigationType,
-} from "react-router-dom";
+} from "../test/router";
 import type { Presentation } from "#shared";
 import { FullscreenPresentRoute } from "./FullscreenPresentRoute";
+import { savePresentReturnPath } from "../features/presentation/fullscreen";
 
 import {
   __loadDocumentsForTests,
@@ -60,10 +61,11 @@ function withItems(
 
 function renderPresent(
   path = `/present/${DOC_ID}/fullscreen`,
-  state?: unknown,
+  launch?: { returnTo: string },
 ) {
+  if (launch) savePresentReturnPath(DOC_ID, launch.returnTo);
   return render(
-    <MemoryRouter initialEntries={[{ pathname: path, state }]}>
+    <MemoryRouter initialEntries={[path]}>
       <Routes>
         <Route
           path="/present/:presentationId/fullscreen"
@@ -371,7 +373,12 @@ describe("FullscreenPresentRoute", () => {
         configurable: true,
       });
       Object.defineProperty(document, "exitFullscreen", {
-        value: vi.fn().mockResolvedValue(undefined),
+        value: vi.fn(async () => {
+          Object.defineProperty(document, "fullscreenElement", {
+            value: null,
+            configurable: true,
+          });
+        }),
         configurable: true,
         writable: true,
       });
@@ -479,8 +486,9 @@ describe("FullscreenPresentRoute", () => {
 
     function renderInBrowser() {
       window.history.replaceState({ idx: 0, key: "start" }, "", EDITOR_PATH);
+      savePresentReturnPath(DOC_ID, EDITOR_PATH);
       window.history.pushState(
-        { usr: { returnTo: EDITOR_PATH }, idx: 1, key: "present" },
+        { idx: 1, key: "present" },
         "",
         `/present/${DOC_ID}/fullscreen`,
       );

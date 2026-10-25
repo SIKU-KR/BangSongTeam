@@ -157,7 +157,7 @@ function buildAuth(env: Bindings) {
     rateLimit: { enabled: true },
     telemetry: { enabled: false },
     socialProviders,
-    plugins: import.meta.env.DEV ? [devSignIn()] : [],
+    plugins: process.env.NODE_ENV === "production" ? [] : [devSignIn()],
     advanced: {
       ipAddress: { ipAddressHeaders: ["cf-connecting-ip"] },
       database: {
@@ -172,11 +172,11 @@ type AuthInstance = ReturnType<typeof buildAuth>;
 /**
  * 요청마다 Better Auth 인스턴스를 만든다.
  *
- * - `basePath`는 `index.ts`의 마운트 경로와 같아야 한다. `wrangler.jsonc`의
- *   `assets.run_worker_first: ["/api/*"]`가 덮는 경로라, `/auth/*`로 옮기면 정적 자산
- *   핸들러가 먼저 가로채 로그인이 조용히 깨진다.
- * - rate limit은 `NODE_ENV=production`에서만 기본으로 켜지는데 Workers에는 그 값이 없어
- *   명시적으로 켠다. 저장소가 isolate 메모리라 부분 방어다.
+ * - `basePath`는 `index.ts`의 마운트 경로와 같아야 한다. API는 Next.js의
+ *   `src/app/api/[[...route]]` 라우트가 받으므로, `/auth/*`로 옮기면 페이지 라우트가
+ *   가로채 로그인이 조용히 깨진다.
+ * - rate limit은 `NODE_ENV=production`에서만 기본으로 켜지므로 개발·테스트에서도 같게
+ *   명시적으로 켠다. 저장소가 인스턴스 메모리라 부분 방어다.
  */
 export function getAuth(env: Bindings): AuthInstance {
   return buildAuth(env);

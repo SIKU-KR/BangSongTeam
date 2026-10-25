@@ -1,5 +1,5 @@
 import React from "react";
-import { Link } from "react-router-dom";
+import Link from "next/link";
 import { Button } from "#components/ui/button";
 import { LEGAL_COPY } from "#copy/auth";
 import { APP_NAME } from "#shared";
@@ -22,7 +22,7 @@ export function LegalDocument({
             variant="link"
             size="xs"
             nativeButton={false}
-            render={<Link to="/" />}
+            render={<Link href="/" />}
             className="self-start"
           >
             {APP_NAME}

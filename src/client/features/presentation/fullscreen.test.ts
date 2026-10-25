@@ -4,6 +4,7 @@ import {
   exitFullscreen,
   isProjectionPath,
   launchPresentation,
+  loadPresentReturnPath,
   resolvePresentReturnPath,
 } from "./fullscreen";
 import { loadProjectionResume, saveProjectionResume } from "./projectionResume";
@@ -142,12 +143,8 @@ describe("fullscreen utilities", () => {
       launchPresentation(navigateMock, "pres-123", "/editor/pres-123");
 
       expect(requestFullscreenMock).toHaveBeenCalled();
-      expect(navigateMock).toHaveBeenCalledWith(
-        "/present/pres-123/fullscreen",
-        {
-          state: { returnTo: "/editor/pres-123" },
-        },
-      );
+      expect(navigateMock).toHaveBeenCalledWith("/present/pres-123/fullscreen");
+      expect(loadPresentReturnPath("pres-123")).toBe("/editor/pres-123");
     });
 
     it("should request fullscreen before navigating (user activation)", () => {
@@ -208,27 +205,28 @@ describe("fullscreen utilities", () => {
   });
 
   describe("resolvePresentReturnPath", () => {
-    it("state의 앱 내부 경로를 그대로 돌려준다", () => {
-      expect(resolvePresentReturnPath({ returnTo: "/editor/abc" })).toBe(
-        "/editor/abc",
+    it("앱 내부 경로를 그대로 돌려준다", () => {
+      expect(resolvePresentReturnPath("/editor/abc")).toBe("/editor/abc");
+      expect(resolvePresentReturnPath("/presentations/folders/f1")).toBe(
+        "/presentations/folders/f1",
       );
-      expect(
-        resolvePresentReturnPath({ returnTo: "/presentations/folders/f1" }),
-      ).toBe("/presentations/folders/f1");
     });
 
     it.each([
       null,
       undefined,
-      "/editor/abc",
-      {},
-      { returnTo: 42 },
-      { returnTo: "" },
-      { returnTo: "editor/abc" },
-      { returnTo: "//evil.example" },
-      { returnTo: "https://evil.example" },
-    ])("복귀 경로가 없거나 잘못되면 드라이브로 돌아간다 (%j)", (state) => {
-      expect(resolvePresentReturnPath(state)).toBe("/presentations");
+      42,
+      "",
+      "editor/abc",
+      "//evil.example",
+      "https://evil.example",
+    ])("복귀 경로가 없거나 잘못되면 드라이브로 돌아간다 (%j)", (returnTo) => {
+      expect(resolvePresentReturnPath(returnTo)).toBe("/presentations");
+    });
+
+    it("이 탭에서 시작한 송출이 아니면(주소 직접 진입) 드라이브로 돌아간다", () => {
+      window.sessionStorage.clear();
+      expect(loadPresentReturnPath("never-launched")).toBe("/presentations");
     });
   });
 });

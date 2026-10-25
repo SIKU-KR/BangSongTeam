@@ -22,7 +22,7 @@ import {
   waitFor,
 } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { MemoryRouter, Routes, Route } from "react-router-dom";
+import { MemoryRouter, Routes, Route } from "../test/router";
 import type { Folder } from "#shared";
 import { ThemeProvider } from "#components/theme-provider";
 import { AppShellLayout } from "./AppShellLayout";
@@ -48,7 +48,7 @@ function renderShell(initialPath = "/presentations") {
       <ThemeProvider>
         <MemoryRouter initialEntries={[initialPath]}>
           <Routes>
-            <Route element={<AppShellLayout />}>
+            <Route layout={AppShellLayout}>
               <Route path="/presentations" element={<PresentationsRoute />} />
               <Route
                 path="/presentations/folders/:folderId"

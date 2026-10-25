@@ -1,5 +1,5 @@
 ---
-description: PR을 이 레포 규칙과 TypeScript·React·Vite 관점에서 리뷰해요
+description: PR을 이 레포 규칙과 TypeScript·React·Next.js 관점에서 리뷰해요
 argument-hint: <PR 번호>
 ---
 
@@ -21,7 +21,7 @@ PR #$ARGUMENTS 를 리뷰해 주세요.
 
 - D1에는 row-level security가 없어요. 비공개 데이터를 읽거나 쓰는 쿼리는 모두 세션의 `user_id`로 필터링해야 해요.
 - 공개 라이브러리 쿼리는 `publicDeckCondition()`(`src/db/queries/publicScope.ts`)을 거쳐야 해요.
-- `src/worker/routes/*`의 새 엔드포인트에 인증 미들웨어와 Zod 입력 검증이 붙어 있는지 봐요.
+- `src/server/routes/*`의 새 엔드포인트에 인증 미들웨어와 Zod 입력 검증이 붙어 있는지 봐요.
 - 비밀값이 클라이언트 번들, 로그, 응답에 노출되지 않는지 봐요.
 
 ### D1 마이그레이션
@@ -74,12 +74,12 @@ PR #$ARGUMENTS 를 리뷰해 주세요.
 - 송출과 편집기 같은 핫패스에서 불필요한 리렌더나 무거운 계산이 없는지 봐요.
 - 접근성을 봐요: 클릭 가능한 `div` 대신 `button`, 폼 라벨, 이미지 `alt`, 키보드 조작.
 
-### Vite와 번들
+### Next.js와 번들
 
-- 무거운 의존성이나 특정 화면에서만 쓰는 코드는 `lazy()`나 동적 import로 나눠요.
-- `import.meta.env`나 `VITE_` 변수로 비밀값이 클라이언트에 들어가지 않는지 봐요.
-- 에셋은 가능하면 import해서 해시가 붙게 해요.
-- Worker 코드(`src/worker/*`)는 Cloudflare Workers 런타임에서 돌아요. Node 전용 API를 쓰지 않는지, Worker JS 1 MiB 한도를 키울 의존성을 추가하지 않는지 봐요.
+- 무거운 의존성이나 특정 화면에서만 쓰는 코드는 `next/dynamic`이나 동적 import로 나눠요.
+- `NEXT_PUBLIC_` 변수로 비밀값이 클라이언트에 들어가지 않는지 봐요.
+- 새 동적 경로가 `OFFLINE_SHELL_PARAM`으로 `generateStaticParams`를 내보내는지 봐요. 없으면 그 화면은 오프라인에서 열리지 않아요.
+- API 코드(`src/server/*`)는 OpenNext로 Cloudflare Workers에서 돌아요. Node 전용 API를 쓰지 않는지, Worker 업로드 크기(gzip 3 MiB)를 키울 의존성을 추가하지 않는지 봐요.
 
 ## 지적하지 않을 것
 

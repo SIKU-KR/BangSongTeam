@@ -2,7 +2,7 @@
  * 글꼴 드롭다운 미리보기 이미지 생성기.
  *
  * 드롭다운이 목록의 글꼴 파일(한글 전체 폰트, 1~5 MB)을 모두 받지 않도록, 각 글꼴의
- * 이름을 그 글꼴로 그린 흰 글씨·투명 배경 WebP를 `src/client/public/font-previews/<id>.webp`
+ * 이름을 그 글꼴로 그린 흰 글씨·투명 배경 WebP를 `public/font-previews/<id>.webp`
  * 로 만든다. 앱은 이 이미지를 CSS mask로 써서 테마 글자색으로 칠한다.
  *
  * 눈누 카탈로그(`src/shared/constants/noonnuFontCatalog.ts`)가 바뀌면 다시 실행해 결과를 커밋한다.
@@ -28,7 +28,7 @@ import { fileURLToPath } from "node:url";
 import { NOONNU_FONTS } from "../src/shared/constants/noonnuFontCatalog.ts";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const OUT_DIR = path.join(ROOT, "src/client/public/font-previews");
+const OUT_DIR = path.join(ROOT, "public/font-previews");
 const CHROME_PATH =
   process.env.CHROME_PATH ??
   "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";

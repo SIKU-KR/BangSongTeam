@@ -1,5 +1,8 @@
+"use client";
+
 import React, { useEffect, useRef, useState } from "react";
-import { useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { useParams, useSearchParams } from "next/navigation";
+import { useNavigate } from "#hooks/useNavigate";
 import { DRIVE_ROOT_PATH } from "../features/drive/drivePaths";
 import {
   editorPath,
@@ -11,8 +14,8 @@ import {
   ShareLinkLoading,
 } from "../features/sharing/ShareLinkStatus";
 import {
-  MAKE_COPY_STATE,
   SHARE_COPY_PARAM,
+  withMakeCopyRequest,
 } from "../features/sharing/shareLink";
 import { joinSharedPresentation } from "../lib/api/shareApi";
 import { describeApiError } from "../lib/api/request";
@@ -30,8 +33,8 @@ import { SHARE_LINK_COPY } from "#copy/shareLink";
  * 편집기에서 사본 만들기 창을 바로 연다.
  */
 export function ShareJoinRoute(): React.JSX.Element {
-  const { token = "" } = useParams<{ token: string }>();
-  const [searchParams] = useSearchParams();
+  const { token = "" } = useParams<{ token?: string }>();
+  const searchParams = useSearchParams();
   const navigate = useNavigate();
   const [error, setError] = useState<string | null>(null);
   const startedFor = useRef<string | null>(null);
@@ -50,13 +53,13 @@ export function ShareJoinRoute(): React.JSX.Element {
         ) {
           replaceWithServerDocument(joined.document);
         }
-        navigate(editorPath(joined.presentationId), {
-          replace: true,
-          state:
-            continueCopy && joined.role === "viewer"
-              ? MAKE_COPY_STATE
-              : undefined,
-        });
+        const editor = editorPath(joined.presentationId);
+        navigate(
+          continueCopy && joined.role === "viewer"
+            ? withMakeCopyRequest(editor)
+            : editor,
+          { replace: true },
+        );
       } catch (err) {
         setError(describeApiError(err));
       }

@@ -14,7 +14,7 @@ export const BACKGROUND_EMBEDDING_BATCH_SIZE = 50;
 
 /**
  * 대상별 Vectorize 인덱스(768차원, cosine). Vectorize는 로컬 시뮬레이션이 없어 로컬 D1의
- * 배경은 운영과 다른 원격 인덱스에 둔다. `vite.config.ts`가 dev 서버에서 바인딩을 `local`로
+ * 배경은 운영과 다른 원격 인덱스에 둔다. `next.config.ts`가 dev 서버에서 바인딩을 `local`로
  * 바꾼다. 인덱스 차원은 만든 뒤 바꿀 수 없어서 모델을 바꾸면 이름도 새로 짓는다.
  */
 export const BACKGROUND_INDEX_NAMES = {

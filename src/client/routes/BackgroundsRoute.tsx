@@ -1,3 +1,5 @@
+"use client";
+
 import React from "react";
 import { BackgroundLibraryView } from "../features/library";
 import { useAppShell } from "./appShellContext";

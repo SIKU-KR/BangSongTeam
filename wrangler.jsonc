@@ -1,15 +1,15 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "bangsongteam",
-  "main": "src/worker/index.ts",
+  // `opennextjs-cloudflare build`가 Next.js 빌드를 Worker로 묶은 진입점
+  "main": ".open-next/worker.js",
   "compatibility_date": "2025-02-14",
-  "compatibility_flags": ["nodejs_compat"],
+  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
   // 운영 오류 추적용 Workers Logs. console.error가 대시보드에 남는다.
   "observability": {
     "enabled": true
   },
-  // Worker 번들은 압축해서 올린다(vite.config.ts). 소스맵을 함께 올려야 로그의
-  // 스택 트레이스가 원래 파일·줄 번호로 보인다.
+  // 소스맵을 함께 올려야 로그의 스택 트레이스가 원래 파일·줄 번호로 보인다.
   "upload_source_maps": true,
   // 운영 주소는 custom domain 하나뿐이다. workers.dev를 끄는 이유: 출처가 둘이면
   // PWA 캐시·IndexedDB·로그인 쿠키가 둘로 갈린다. 로컬 개발은 .dev.vars(.env)의
@@ -21,13 +21,11 @@
   "vars": {
     "BETTER_AUTH_URL": "https://bangsongteam.siku-labs.com"
   },
-  // SPA 폴백: /presentations, /editor/:id, /present/:id/fullscreen 같은 클라이언트
-  // 경로를 직접 열거나 새로고침해도 index.html 이 서빙되도록 한다.
-  // run_worker_first 로 /api/* 만 Worker 가 먼저 처리한다 (그 외는 정적 자산 우선).
+  // 정적 자산(`/_next/static`, `public/`)은 자산 핸들러가 먼저 서빙하고, 나머지 페이지와
+  // /api/*는 Next.js Worker가 처리한다.
   "assets": {
-    "directory": "./dist/client",
-    "not_found_handling": "single-page-application",
-    "run_worker_first": ["/api/*"]
+    "directory": ".open-next/assets",
+    "binding": "ASSETS"
   },
   "d1_databases": [
     {
@@ -44,7 +42,7 @@
     }
   ],
   // 배경 벡터 검색. 둘 다 로컬 시뮬레이션이 없어 원격으로만 동작한다. `pnpm dev`는
-  // CF_REMOTE_BINDINGS=true일 때만 붙고, 이때 인덱스는 `vite.config.ts`가 로컬용으로 바꾼다.
+  // CF_REMOTE_BINDINGS=true일 때만 붙고, 이때 인덱스는 `next.config.ts`가 로컬용으로 바꾼다.
   "ai": {
     "binding": "AI",
     "remote": true

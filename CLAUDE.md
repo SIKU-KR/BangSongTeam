@@ -2,13 +2,14 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-A web slide tool for church worship teams: song decks and sets, fullscreen projection over looping video backgrounds, and a public deck library.
+A web slide tool for church worship teams: song decks and sets, fullscreen projection over looping video backgrounds, and a public deck library. Next.js (App Router) with a Hono API under `/api`, deployed to Cloudflare Workers through OpenNext.
 
 ## Workflow
 
 ```bash
 pnpm db:seed:local   # creates .dev.vars if missing, migrates the local D1, reseeds dev accounts, the public library and presentations
-pnpm dev             # sign in with a dev account on the login screen; fill in an OAuth client in .dev.vars only to test social login
+pnpm dev             # http://localhost:5173. Sign in with a dev account on the login screen; fill in an OAuth client in .dev.vars only to test social login
+pnpm build && pnpm start   # production build with the service worker, served with local bindings (offline testing)
 
 pnpm typecheck && pnpm lint && pnpm test   # must pass before pushing (the CI gate)
 ```
@@ -63,7 +64,11 @@ pnpm typecheck && pnpm lint && pnpm test   # must pass before pushing (the CI ga
 
 ## Gotchas
 
-- Main-chunk modules (`App.tsx`, the projection route, stores) import feature files directly, never a feature barrel (`features/editor`, `features/drive`). Rolldown treats everything behind a barrel as reachable and pulls the editor and drive chunks (react-moveable, @dnd-kit) back into the first load.
+- `src/app` files only map URLs to client routes in `src/client/routes`. The server renders just the loading screen: `App` waits for the session and IndexedDB before drawing a page, so don't fetch data in pages or layouts.
+- Every dynamic route exports `generateStaticParams` returning `OFFLINE_SHELL_PARAM`. `scripts/buildServiceWorker.mjs` precaches that HTML and serves it for any id, offline included. One dynamic segment per route.
+- Keep `cacheComponents` off. It keeps routes you leave mounted but hidden and restores their state on the way back, so a projection or editor reopened from history would resume stale state (slide position, return path, open dialogs).
+- The Next router has no history state. Pass navigation data in the query (`?copy=1`) or sessionStorage (the projection return path).
+- Root-layout modules (`App.tsx`, stores) import feature files directly, never a feature barrel (`features/editor`, `features/drive`), so the editor and drive code (react-moveable, @dnd-kit) stays out of every page's first load.
 - Import `betterAuth` from `better-auth/minimal`. The default entry bundles Kysely and its dialects, which the Drizzle adapter doesn't use.
 - D1 migrations:
   - All history is squashed into `0001_initial.sql`. A D1 that applied older migration files must be recreated; locally, delete `.wrangler/state/v3/d1` and run `pnpm db:migrate:local`.

@@ -4,4 +4,8 @@ src/db/migrations/meta/
 src/client/components/ui/
 src/client/hooks/use-mobile.ts
 data/
-
+.next/
+.open-next/
+public/sw.js*
+public/sw-shell.js
+public/workbox-*.js*

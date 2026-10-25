@@ -41,12 +41,15 @@ jobs:
             app:
               - 'src/**'
               - 'config/**'
-              - 'index.html'
+              - 'public/**'
+              - 'scripts/**'
               - 'package.json'
               - 'pnpm-lock.yaml'
               - 'pnpm-workspace.yaml'
               - 'tsconfig*.json'
-              - 'vite.config.ts'
+              - 'next.config.ts'
+              - 'open-next.config.ts'
+              - 'vitest.config.ts'
               - 'wrangler.jsonc'
               - 'eslint.config.mjs'
               - '.github/**'
@@ -56,7 +59,7 @@ jobs:
     needs: [changes]
     if: always() && (github.event_name != 'pull_request' || needs.changes.result != 'success' || needs.changes.outputs.app == 'true')
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
 
     steps:
       - name: Checkout repository
@@ -87,26 +90,29 @@ jobs:
       - name: Test
         run: pnpm test
 
-      # Must run before the dry run: the Cloudflare Vite plugin emits
-      # dist/client plus the generated wrangler.json that carries the assets
-      # binding. Without it the dry run validates a Worker with no frontend.
+      # Builds the Next.js app (and the service worker) and bundles it into
+      # .open-next/ for Workers. The dry run below validates that output.
       - name: Build web app
-        run: pnpm build
-
-      # The Worker's JS is parsed on every cold start, so keep it under 1 MiB
-      # (source maps are uploaded separately and don't count).
-      - name: Check Worker bundle size
-        run: |
-          limit=1048576
-          size=$(find dist/bangsongteam -name '*.js' -not -path '*/.vite/*' -exec cat {} + | wc -c)
-          echo "Worker JS: ${size} bytes (limit ${limit})"
-          if [ "$size" -gt "$limit" ]; then
-            echo "::error::Worker bundle is ${size} bytes, over the ${limit}-byte limit."
-            exit 1
-          fi
+        run: pnpm exec opennextjs-cloudflare build
 
       - name: Verify Worker deployment (dry run)
-        run: pnpm exec wrangler deploy --dry-run
+        run: pnpm exec wrangler deploy --dry-run | tee wrangler-dry-run.log
+
+      # Next.js on Workers is parsed on every cold start. Keep the compressed
+      # upload under 3 MiB, the Workers Free size limit.
+      - name: Check Worker bundle size
+        run: |
+          limit_kib=3072
+          gzip_kib=$(sed -n 's/.*gzip: \([0-9.]*\) KiB.*/\1/p' wrangler-dry-run.log | head -1)
+          if [ -z "$gzip_kib" ]; then
+            echo "::error::Could not read the Worker size from the dry run."
+            exit 1
+          fi
+          echo "Worker upload (gzip): ${gzip_kib} KiB (limit ${limit_kib} KiB)"
+          if awk "BEGIN { exit !($gzip_kib > $limit_kib) }"; then
+            echo "::error::Worker upload is ${gzip_kib} KiB gzip, over the ${limit_kib} KiB limit."
+            exit 1
+          fi
 
   deploy:
     name: Migrate D1 & Deploy Worker
@@ -165,7 +171,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Build web app
-        run: pnpm build
+        run: pnpm exec opennextjs-cloudflare build
 
       # Runs before the deploy so the schema is in place when the new code
       # starts serving traffic.
@@ -173,8 +179,4 @@ jobs:
         run: pnpm db:migrate:prod
 
       - name: Deploy Cloudflare Worker
-        uses: cloudflare/wrangler-action@v4
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: deploy
+        run: pnpm exec opennextjs-cloudflare deploy

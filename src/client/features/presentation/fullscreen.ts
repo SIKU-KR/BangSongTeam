@@ -97,15 +97,24 @@ export function isProjectionPath(pathname: string): boolean {
 /** 송출 종료 후 돌아갈 곳을 모를 때(주소 직접 진입·새로고침)의 복귀 경로 */
 export const DEFAULT_PRESENT_RETURN_PATH = DRIVE_ROOT_PATH;
 
-/** 송출 라우트로 넘기는 history state. 송출을 시작한 화면의 경로를 담는다. */
-export interface PresentLaunchState {
-  returnTo: string;
-}
+const RETURN_PATH_KEY_PREFIX = "chiton:present-return:";
 
-export type PresentNavigate = (
-  to: string,
-  options: { state: PresentLaunchState },
-) => void;
+export type PresentNavigate = (to: string) => void;
+
+/** 송출을 끝내면 돌아갈 곳을 이 탭에 남긴다 */
+export function savePresentReturnPath(
+  presentationId: string,
+  returnTo: string,
+): void {
+  try {
+    window.sessionStorage.setItem(
+      `${RETURN_PATH_KEY_PREFIX}${presentationId}`,
+      returnTo,
+    );
+  } catch {
+    return;
+  }
+}
 
 /**
  * 이 호출 앞에 await를 끼워 넣으면 User Activation이 소실되어 브라우저가 전체화면 요청을 거부한다.
@@ -113,6 +122,7 @@ export type PresentNavigate = (
  * (송출 대상이 활성 문서와 어긋나는 사고를 구조적으로 방지).
  *
  * `returnTo`는 송출 종료 시 돌아갈 출발 화면 경로다 (편집기에서 시작하면 편집기, 드라이브에서 시작하면 드라이브).
+ * 탭마다 따로인 sessionStorage에 두어 송출 화면을 새로고침해도 돌아갈 곳을 잃지 않는다.
  *
  * 새로 시작하는 송출은 첫 슬라이드부터 띄우도록 같은 탭에 남은 이어 보기 상태를 지운다.
  * 이어 보기는 송출 화면을 새로고침했을 때만 쓴다.
@@ -126,19 +136,16 @@ export function launchPresentation(
     typeof document !== "undefined" ? document.documentElement : undefined,
   ).catch(() => {});
   clearProjectionResume(presentationId);
+  savePresentReturnPath(presentationId, returnTo);
 
-  navigate(`/present/${presentationId}/fullscreen`, { state: { returnTo } });
+  navigate(`/present/${presentationId}/fullscreen`);
 }
 
 /**
- * 송출 라우트의 history state에서 복귀 경로를 꺼낸다.
+ * 복귀 경로 후보를 검사한다.
  * 앱 내부 경로(`/`로 시작하고 `//`가 아닌 것)만 받아 외부 주소로 튕겨 나가지 않게 한다.
  */
-export function resolvePresentReturnPath(state: unknown): string {
-  if (typeof state !== "object" || state === null) {
-    return DEFAULT_PRESENT_RETURN_PATH;
-  }
-  const returnTo = (state as Partial<PresentLaunchState>).returnTo;
+export function resolvePresentReturnPath(returnTo: unknown): string {
   if (
     typeof returnTo !== "string" ||
     !returnTo.startsWith("/") ||
@@ -147,4 +154,17 @@ export function resolvePresentReturnPath(state: unknown): string {
     return DEFAULT_PRESENT_RETURN_PATH;
   }
   return returnTo;
+}
+
+/** `launchPresentation`이 이 탭에 남긴 복귀 경로. 주소로 바로 들어왔으면 기본 경로다 */
+export function loadPresentReturnPath(presentationId: string): string {
+  try {
+    return resolvePresentReturnPath(
+      window.sessionStorage.getItem(
+        `${RETURN_PATH_KEY_PREFIX}${presentationId}`,
+      ),
+    );
+  } catch {
+    return DEFAULT_PRESENT_RETURN_PATH;
+  }
 }

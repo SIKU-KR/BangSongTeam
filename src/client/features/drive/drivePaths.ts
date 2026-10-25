@@ -2,9 +2,7 @@
 export const DRIVE_ROOT_PATH = "/presentations";
 export const TRASH_PATH = `${DRIVE_ROOT_PATH}/trash`;
 
-/** 폴더 화면의 라우트 패턴 (`useMatch`용). `drivePath`가 만드는 경로와 짝을 이룬다 */
-export const DRIVE_FOLDER_ROUTE = `${DRIVE_ROOT_PATH}/folders/:folderId`;
-
+/** 폴더 화면 주소. `src/app/(shell)/presentations/folders/[folderId]` 라우트와 짝을 이룬다 */
 export function drivePath(folderId: string | null | undefined): string {
   return folderId ? `${DRIVE_ROOT_PATH}/folders/${folderId}` : DRIVE_ROOT_PATH;
 }

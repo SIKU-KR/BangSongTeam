@@ -49,3 +49,11 @@ data/cleaned/worship/
 data/cleaned/selected/
 data/seed_*.sql
 
+
+# Next.js & OpenNext build outputs
+.open-next/
+next-env.d.ts
+*.tsbuildinfo
+public/sw.js*
+public/sw-shell.js
+public/workbox-*.js*

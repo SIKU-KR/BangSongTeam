@@ -5,12 +5,12 @@ import { BACKGROUND_INDEX_NAMES } from "../src/shared/utils/backgroundEmbedding"
 
 const rootDir = path.resolve(__dirname, "..");
 
-describe("Cloudflare Worker 프로젝트 설정과 Wrangler 바인딩", () => {
+describe("Next.js·OpenNext 프로젝트 설정과 Wrangler 바인딩", () => {
   const packageJsonPath = path.join(rootDir, "package.json");
   const wranglerJsoncPath = path.join(rootDir, "wrangler.jsonc");
   const workerConfigDtsPath = path.join(
     rootDir,
-    "src/worker/worker-configuration.d.ts",
+    "src/server/worker-configuration.d.ts",
   );
 
   it("package.json이 필수 의존성·스크립트와 레이어 import 별칭을 갖는다", () => {
@@ -38,19 +38,26 @@ describe("Cloudflare Worker 프로젝트 설정과 Wrangler 바인딩", () => {
       expect(fs.existsSync(path.join(rootDir, existing))).toBe(true);
     }
 
-    expect(pkg.scripts).toHaveProperty("dev");
-    expect(pkg.scripts).toHaveProperty("deploy");
+    expect(pkg.scripts.dev).toContain("next dev");
+    expect(pkg.scripts.build).toContain("next build");
+    expect(pkg.scripts.build).toContain("scripts/buildServiceWorker.mjs");
+    expect(pkg.scripts.deploy).toContain("opennextjs-cloudflare deploy");
     expect(pkg.scripts).toHaveProperty("types");
     expect(pkg.scripts.types).toContain("wrangler types");
   });
 
-  it("wrangler.jsonc가 Worker 진입점, D1·R2·AI·Vectorize 바인딩, 마이그레이션 경로를 정의한다", () => {
+  it("wrangler.jsonc가 OpenNext Worker 진입점, D1·R2·AI·Vectorize 바인딩, 마이그레이션 경로를 정의한다", () => {
     const content = fs.readFileSync(wranglerJsoncPath, "utf-8");
     const cleanJson = content.replace(/^\s*\/\/.*$/gm, "");
     const config = JSON.parse(cleanJson);
 
-    expect(config.main).toBe("src/worker/index.ts");
-    expect(fs.existsSync(path.join(rootDir, config.main))).toBe(true);
+    expect(config.main).toBe(".open-next/worker.js");
+    expect(config.assets).toEqual({
+      directory: ".open-next/assets",
+      binding: "ASSETS",
+    });
+    expect(config.compatibility_flags).toContain("nodejs_compat");
+    expect(fs.existsSync(path.join(rootDir, "open-next.config.ts"))).toBe(true);
 
     const d1Db = config.d1_databases.find(
       (d: { binding: string }) => d.binding === "DB",

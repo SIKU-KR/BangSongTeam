@@ -1,5 +1,6 @@
 import React, { useId, useState } from "react";
-import { useMatch } from "react-router-dom";
+import { usePathname } from "next/navigation";
+import { isProjectionPath } from "../presentation/fullscreen";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -38,6 +39,9 @@ const ITEMS: { id: ConsentItem; label: string; href?: string }[] = [
   },
 ];
 
+/** 모달의 '보기'로 여는 약관 화면. 동의 모달이 그 위를 가리면 안 된다 */
+const LEGAL_PATHS: ReadonlySet<string> = new Set(["/terms", "/privacy"]);
+
 const NONE_CHECKED: Record<ConsentItem, boolean> = {
   ageOver14: false,
   terms: false,
@@ -53,12 +57,16 @@ const NONE_CHECKED: Record<ConsentItem, boolean> = {
  * 페이지는 모달의 '보기'로 여는 곳이라 건너뛴다.
  */
 export function ConsentGate(): React.JSX.Element | null {
-  const isFullscreen = useMatch("/present/:presentationId/fullscreen");
-  const isTerms = useMatch("/terms");
-  const isPrivacy = useMatch("/privacy");
+  const pathname = usePathname();
   const session = useSession();
 
-  if (isFullscreen || isTerms || isPrivacy || !session.user) return null;
+  if (
+    isProjectionPath(pathname) ||
+    LEGAL_PATHS.has(pathname) ||
+    !session.user
+  ) {
+    return null;
+  }
   return <ConsentCheck userId={session.user.userId} />;
 }
 

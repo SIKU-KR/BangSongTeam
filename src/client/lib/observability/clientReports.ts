@@ -15,7 +15,7 @@ import {
 import { isServiceWorkerControlled } from "../browser/capabilities";
 
 /** 빌드한 커밋의 짧은 SHA. CI 밖(개발 서버·테스트)에서는 `dev`다 */
-export const APP_VERSION = import.meta.env.VITE_APP_VERSION ?? "dev";
+export const APP_VERSION = process.env.NEXT_PUBLIC_APP_VERSION ?? "dev";
 
 const PENDING_STORAGE_KEY = "client-reports-pending";
 

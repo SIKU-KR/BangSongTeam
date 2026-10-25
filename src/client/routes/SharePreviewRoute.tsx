@@ -1,5 +1,8 @@
+"use client";
+
 import React, { useEffect } from "react";
-import { useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { useParams, useSearchParams } from "next/navigation";
+import { useNavigate } from "#hooks/useNavigate";
 import {
   showSharedPreview,
   usePresentationById,
@@ -16,7 +19,8 @@ import {
 import { useSharePreview } from "../lib/api/shareQueries";
 import { describeApiError } from "../lib/api/request";
 import { refreshBackgroundCatalog } from "../lib/sync";
-import { EditorRoute, LoginRoute, preloadEditorRoute } from "./lazyRoutes";
+import { EditorRoute } from "./EditorRoute";
+import { LoginRoute } from "./LoginRoute";
 import { SHARE_LINK_COPY } from "#copy/shareLink";
 
 /**
@@ -28,8 +32,8 @@ import { SHARE_LINK_COPY } from "#copy/shareLink";
  * `ShareJoinRoute`가 사본 만들기 창을 이어서 연다.
  */
 export function SharePreviewRoute(): React.JSX.Element {
-  const { token = "" } = useParams<{ token: string }>();
-  const [searchParams] = useSearchParams();
+  const { token = "" } = useParams<{ token?: string }>();
+  const searchParams = useSearchParams();
   const navigate = useNavigate();
   const preview = useSharePreview(token);
   const document = preview.data;
@@ -41,7 +45,6 @@ export function SharePreviewRoute(): React.JSX.Element {
 
   useEffect(() => {
     void refreshBackgroundCatalog();
-    preloadEditorRoute();
   }, []);
 
   if (searchParams.has(SHARE_COPY_PARAM)) {
