@@ -105,10 +105,11 @@ export function shouldRunBootSync(pathname: string): boolean {
  * 송출 화면에 있는 동안에는 다시 받지 않고 송출을 마친 뒤로 미룬다. 송출 중에는
  * API·데이터 요청이 0건이어야 하고, 받은 결과를 병합하면 띄운 문서가 바뀔 수 있다.
  *
- * 항목마다 올리기 직전과 큐에 넘길 때 지금 저장소에 있는 것을 다시 찾아 쓰고, 그사이
- * 지워졌으면 건너뛴다. 부팅 병합 때의 사본을 올리면 앞 항목을 올리는 동안 사용자가 지운
- * 곡이 되살아나고, 바로 올리기는 큐에 대기 중인 같은 항목을 버리므로 그사이 고친 내용
- * (폴더 이름 등)이 다음 부팅까지 서버에 가지 않는다.
+ * 항목마다 올리기 직전과 큐에 넘기거나 실패로 남길 때 지금 저장소에 있는 것을 다시 찾아
+ * 쓰고, 그사이 지워졌으면 건너뛴다. 부팅 병합 때의 사본을 올리면 앞 항목을 올리는 동안
+ * 사용자가 지운 곡이 되살아나고, 바로 올리기는 큐에 대기 중인 같은 항목을 버리므로 그사이
+ * 고친 내용(폴더 이름 등)이 다음 부팅까지 서버에 가지 않는다. 올리는 동안 지운 항목의 실패를
+ * 남기면 '다시 시도'가 다시 올릴 항목이 없어 그 실패가 세션 내내 남는다.
  *
  * 병합 결과는 각 스토어의 저장 줄로 저장한다 (`applyServerDocuments` 등). 병합하자마자 기다림
  * 없이 지운 항목과 서버 사본이 이긴 항목의 대기 중인 push를 버린다. 대기 중인 사본은 방금
@@ -440,7 +441,8 @@ async function pushLatestEach<T extends { id: string }>(
         if (latest) target.requeue(latest);
       } else {
         const latest = findLatest(target.current, id);
-        if (latest) target.hold(latest);
+        if (!latest) continue;
+        target.hold(latest);
         recordSyncFailure({
           id: item.id,
           title: target.titleOf(item),

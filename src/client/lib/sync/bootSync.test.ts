@@ -53,6 +53,7 @@ import {
 import { listPresentations } from "../../features/presentation";
 import {
   __loadDocumentsForTests,
+  removePresentationsLocally,
   renamePresentation,
   resetPresentationStore,
 } from "../../features/presentation/presentationStore";
@@ -568,6 +569,47 @@ describe("runBootSync — 동기화 상태", () => {
     expect(push).toHaveBeenCalledTimes(1);
     expect(remove).toHaveBeenCalledWith(local.id);
     expect(getSyncSnapshot().status).toBe("synced");
+  });
+
+  it("부팅이 올리던 곡을 그사이 지웠으면 거절돼도 실패로 남기지 않는다", async () => {
+    const remove = vi.fn(async () => undefined);
+    const push = vi.fn(async (deck: Deck): Promise<Deck> => {
+      deleteUserSong(deck.id);
+      await flushDeckSync();
+      throw new ServerRejectedError(400, "거절");
+    });
+    __setDeckTransportForTests({ push, remove });
+    const local = saveSongToLibrary({ title: "곧 지울 곡", lyricsRaw: "가사" });
+
+    await runBootSync();
+    await retryDeckSyncNow("manual");
+
+    expect(push).toHaveBeenCalledTimes(1);
+    expect(remove).toHaveBeenCalledWith(local.id);
+    expect(getUserSongs()).toEqual([]);
+    expect(getSyncSnapshot()).toMatchObject({
+      status: "synced",
+      lastFailure: null,
+    });
+  });
+
+  it("부팅이 올리던 세트를 그사이 영구 삭제했으면 거절돼도 실패로 남기지 않는다", async () => {
+    __loadDocumentsForTests([presentation(DOC)]);
+    presentationSync.pushPresentation.mockImplementationOnce(async () => {
+      await removePresentationsLocally([DOC]);
+      throw new ServerRejectedError(400, "거절");
+    });
+
+    await runBootSync();
+    retryPendingSyncNow("manual");
+    await flushPendingSync();
+
+    expect(presentationSync.pushPresentation).toHaveBeenCalledTimes(1);
+    expect(listPresentations()).toEqual([]);
+    expect(getSyncSnapshot()).toMatchObject({
+      status: "synced",
+      lastFailure: null,
+    });
   });
 
   it("부팅이 큐에 넘긴 세트를 큐가 먼저 올렸으면 오프라인으로 남지 않는다", async () => {

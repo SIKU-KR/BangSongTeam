@@ -68,6 +68,8 @@ async function resetDatabase(): Promise<void> {
 }
 
 describe("presentationStore 영속성", () => {
+  const OTHER_USER = "999999999999999999999";
+
   beforeEach(async () => {
     localStorage.clear();
     clearPersistenceError();
@@ -225,8 +227,6 @@ describe("presentationStore 영속성", () => {
   });
 
   describe("하이드레이션", () => {
-    const OTHER_USER = "999999999999999999999";
-
     it("저장본을 읽지 못하면 부팅 병합이 서버 사본으로 덮지 않는다", async () => {
       const [seed] = SEED_PRESENTATIONS;
       await savePresentation({
@@ -252,9 +252,9 @@ describe("presentationStore 영속성", () => {
       );
     });
 
-    it("다른 계정으로 바꿀 때 저장본을 읽지 못하면 앞 계정의 세트를 메모리에 남기지 않는다", async () => {
+    it("다른 계정으로 바꿀 때 저장본을 읽지 못하면 앞 계정의 세트와 되돌리기 기록을 메모리에 남기지 않는다", async () => {
       await hydrateFromStorage();
-      createNewPresentation();
+      const previous = createNewPresentation();
       updatePresentationTitle("앞 계정의 세트");
       await flushPendingWrites();
 
@@ -266,8 +266,13 @@ describe("presentationStore 영속성", () => {
 
       expect(listPresentations()).toEqual([]);
       expect(getActivePresentation().id).toBe("");
-      expect(canUndo()).toBe(false);
       expect(getPersistenceError()).not.toBeNull();
+
+      applyServerDocuments([
+        { ...previous, access: { ownerName: "앞 계정", memberId: OTHER_USER } },
+      ]);
+      openPresentation(previous.id);
+      expect(canUndo()).toBe(false);
     });
 
     it("저장본을 불러와도 열린 세트를 서버에 올리지 않는다", async () => {
@@ -334,6 +339,30 @@ describe("presentationStore 영속성", () => {
       );
     });
 
+    it("공유받은 세트는 updatedAt과 folderId가 같아도 다시 쓴다", async () => {
+      const shared: Presentation = {
+        ...SEED_PRESENTATIONS[4],
+        userId: OTHER_USER,
+        access: { ownerName: "인도자", memberId: SEED_USER_ID },
+      };
+      await seedPresentationsIntoStorage([shared]);
+      await hydrateFromStorage();
+      vi.mocked(savePresentation).mockClear();
+
+      applyServerDocuments([
+        serverCopy(shared, {
+          access: { ownerName: "이름을 바꾼 인도자", memberId: SEED_USER_ID },
+        }),
+      ]);
+      await flushPendingWrites();
+
+      expect(writtenIds()).toEqual([shared.id]);
+      const { valid } = await loadAllPresentations();
+      expect(valid.find((p) => p.id === shared.id)?.access?.ownerName).toBe(
+        "이름을 바꾼 인도자",
+      );
+    });
+
     it("지운 세트의 대기 중인 push와 저장을 버리고 저장본에서도 지운다", async () => {
       const pusher = vi.fn(async (doc: Presentation) => Boolean(doc.id));
       __setPusherForTests(pusher);
@@ -381,6 +410,46 @@ describe("presentationStore 영속성", () => {
 
       const { valid } = await loadAllPresentations();
       expect(valid.map((p) => p.id)).not.toContain(gone.id);
+    });
+
+    it("병합 결과에 있는 세트는 지운 목록에 있어도 저장본과 대기 중인 push를 남긴다", async () => {
+      const pusher = vi.fn(async (doc: Presentation) => Boolean(doc.id));
+      __setPusherForTests(pusher);
+      setSyncEnabled(true);
+      await hydrateFromStorage();
+      const doc = createNewPresentation();
+      await flushPendingWrites();
+
+      renamePresentation(doc.id, "아직 올리지 않은 제목");
+      applyServerDocuments([getPresentationById(doc.id)!], [doc.id]);
+      await flushPendingWrites();
+      await flushPendingSync();
+
+      expect(listPresentations().map((p) => p.id)).toEqual([doc.id]);
+      expect(pusher.mock.calls.map(([pushed]) => pushed.title)).toContain(
+        "아직 올리지 않은 제목",
+      );
+      const { valid } = await loadAllPresentations();
+      expect(valid.find((p) => p.id === doc.id)?.title).toBe(
+        "아직 올리지 않은 제목",
+      );
+    });
+
+    it("지운 세트의 되돌리기 기록을 버려 다시 받아도 되돌릴 수 없다", async () => {
+      await hydrateFromStorage();
+      const kept = createNewPresentation();
+      const gone = createNewPresentation();
+      updatePresentationTitle("지우기 전에 바꾼 제목");
+      await flushPendingWrites();
+      expect(canUndo()).toBe(true);
+      const returned = getPresentationById(gone.id)!;
+
+      applyServerDocuments([getPresentationById(kept.id)!], [gone.id]);
+      applyServerDocuments([getPresentationById(kept.id)!, returned]);
+      await flushPendingWrites();
+      openPresentation(gone.id);
+
+      expect(canUndo()).toBe(false);
     });
 
     it("저장소에 쓰지 못하면 경고를 올린다", async () => {
