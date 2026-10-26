@@ -2,21 +2,23 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-A web slide tool for church worship teams: song decks and sets, fullscreen projection over looping video backgrounds, and a public deck library.
+A web slide tool for church worship teams: song decks and sets, fullscreen projection over looping video backgrounds, and a public deck library. Next.js (App Router) with a Hono API under `/api`, running as one Cloud Run container on Firestore and Cloud Storage (`docs/deploy-gcp.md`).
 
 ## Workflow
 
 ```bash
-pnpm db:seed:local   # creates .dev.vars if missing, migrates the local D1, reseeds dev accounts, the public library and presentations
-pnpm dev             # sign in with a dev account on the login screen; fill in an OAuth client in .dev.vars only to test social login
+pnpm emulators       # Firestore emulator on :8080 (needs Java 21); keeps data in .data/firestore between runs. Leave it running
+pnpm db:seed:local   # creates .env.local if missing, reseeds dev accounts, the public library, presentations and image backgrounds (.data/media)
+pnpm dev             # http://localhost:5173. Sign in with a dev account on the login screen; fill in an OAuth client in .env.local only to test social login
+pnpm build && pnpm start   # production build with the service worker, against the emulator (offline testing)
 
-pnpm typecheck && pnpm lint && pnpm test   # must pass before pushing (the CI gate)
+pnpm typecheck && pnpm lint && pnpm test   # must pass before pushing (the CI gate). Tests start their own emulator on :8085
 ```
 
-- Run `pnpm db:generate` after editing `src/db/schema/*`, `pnpm types` after editing `wrangler.jsonc` (needs `.dev.vars`, or the secrets drop out of `Env`), and `pnpm fonts:previews` after editing `noonnuFontCatalog.ts`.
+- Run `pnpm fonts:previews` after editing `noonnuFontCatalog.ts`.
 - For UI changes, check the real rendering in Chrome against `pnpm dev`.
-- Deploys and production migrations run only in CI on push to `main`. Don't run `pnpm deploy` or `pnpm db:migrate:prod` locally.
-- `scripts/seedSelected.mjs --target=remote` writes to the production D1. Ask before running it.
+- Deploys (image, Firestore rules and indexes) run only in CI on push to `main`.
+- Scripts with `--target=remote` (`seedSelected`, `importBackgrounds`, `moderation`, `migrateFromCloudflare`) write to production Firestore or GCS. Ask before running them.
 
 ## Conventions
 
@@ -46,12 +48,13 @@ pnpm typecheck && pnpm lint && pnpm test   # must pass before pushing (the CI ga
 - Server data goes through TanStack Query (invalidate after mutations); UI state lives in React state/context and the feature stores.
 - When simplifying a screen, cut helpers that duplicate a direct-manipulation path instead of relocating them. Confirm before removing a whole product area.
 
-### Database (Drizzle ORM)
+### Database (Firestore)
 
-- Use the ORM as far as it goes. Queries, test fixtures and schema changes go through Drizzle (`src/db/queries/`, `src/db/schema/*` + `pnpm db:generate`).
-- Raw `sql` only where Drizzle has no API (FTS5 `MATCH`, column arithmetic, SQLite JSON functions, schema defaults, CHECK constraints), with table and column objects interpolated, never string column names or `sql.raw`.
-- Keep the schema normalized. One entity lives in one table, with subtype rules as CHECK constraints (`decks` holds library songs and presentation copies). Derived values such as counts are views; promote one to a trigger-maintained column only when a hot query sorts or filters on it (`decks.fork_count`), and back every hot query with an index.
-- D1 has no row-level security. Every private query or mutation filters by the session's `user_id`, and every public-library query reads the `public_decks` view, the single definition of public scope.
+- Collections, document types and typed accessors live in `src/db/collections.ts`; queries in `src/db/queries/`, operator tasks in `src/db/ops/`. Store empty values as `null`, never omit the field: `where(field, "==", null)` doesn't match a missing field.
+- Firestore has no foreign keys, CHECK constraints or triggers. A write that used to rely on them does the work itself in the same transaction: deleting a presentation deletes its copies and members (`queries/cascade.ts`), deleting a song clears `forkedFrom`/report `deckId` pointing at it, forking bumps `forkCount`, unknown `backgroundId`s are saved as `null`. Read everything first, then write (a transaction can't read after writing).
+- Every song write passes the final document through `withDeckIndex` (`src/db/deckIndex.ts`). It sets `listed`, the single definition of public scope that every public-library query filters on, and `searchGrams`, the bigram index the library search narrows candidates with.
+- Queries that order or range over more than one field need a composite index in `firestore.indexes.json` (the emulator doesn't check). Prefer equality filters plus sorting in memory for per-user lists so they need no index.
+- There is no row-level security. Every private query or mutation filters by the session's user id. `firestore.rules` denies all browser access; only the server (service account) reads and writes.
 
 ### UI
 
@@ -63,9 +66,11 @@ pnpm typecheck && pnpm lint && pnpm test   # must pass before pushing (the CI ga
 
 ## Gotchas
 
-- Main-chunk modules (`App.tsx`, the projection route, stores) import feature files directly, never a feature barrel (`features/editor`, `features/drive`). Rolldown treats everything behind a barrel as reachable and pulls the editor and drive chunks (react-moveable, @dnd-kit) back into the first load.
-- Import `betterAuth` from `better-auth/minimal`. The default entry bundles Kysely and its dialects, which the Drizzle adapter doesn't use.
-- D1 migrations:
-  - All history is squashed into `0001_initial.sql`. A D1 that applied older migration files must be recreated; locally, delete `.wrangler/state/v3/d1` and run `pnpm db:migrate:local`.
-  - Never drop or recreate a parent table (`decks`, `presentations`, …). D1 ignores `PRAGMA foreign_keys=OFF` in migrations, so the drop cascades deletes into child rows. Use `ALTER TABLE … ADD COLUMN`.
-  - CI applies migrations before deploying, so the previous release briefly runs on the new schema. Keep changes additive, and drop or rename a column only after the code stops using it.
+- `src/app` files only map URLs to client routes in `src/client/routes`. The server renders just the loading screen: `App` waits for the session and IndexedDB before drawing a page, so don't fetch data in pages or layouts.
+- Every dynamic route exports `generateStaticParams` returning `OFFLINE_SHELL_PARAM`. `scripts/buildServiceWorker.mjs` precaches that HTML and serves it for any id, offline included. One dynamic segment per route.
+- Keep `cacheComponents` off. It keeps routes you leave mounted but hidden and restores their state on the way back, so a projection or editor reopened from history would resume stale state (slide position, return path, open dialogs).
+- The Next router has no history state. Pass navigation data in the query (`?copy=1`) or sessionStorage (the projection return path).
+- Root-layout modules (`App.tsx`, stores) import feature files directly, never a feature barrel (`features/editor`, `features/drive`), so the editor and drive code (react-moveable, @dnd-kit) stays out of every page's first load.
+- Import `betterAuth` from `better-auth/minimal`. The default entry bundles Kysely and its dialects; auth data goes through the Firestore adapter (`src/db/auth/firestoreAdapter.ts`).
+- Changing a stored field: the previous release keeps running on the same Firestore while a deploy rolls out, and old documents keep their old shape. Keep changes additive, read missing fields with a fallback, and backfill with a script before relying on a new field.
+- Media responses over 32 MiB go out without `content-length` (chunked). Cloud Run caps sized HTTP/1 responses at 32 MiB, and background videos are hundreds of MB.

@@ -7,7 +7,7 @@ import {
   screen,
   waitFor,
 } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter } from "../../test/router";
 import { TooltipProvider } from "#components/ui/tooltip";
 import { EditorHeader } from "./EditorHeader";
 import { EDITOR_COPY } from "#copy/editor";

@@ -5,11 +5,11 @@
     "noUncheckedIndexedAccess": false
   },
   "include": [
+    "next-env.d.ts",
     "**/*.test.ts",
     "**/*.test.tsx",
     "src/**/test",
-    "src/db/test-utils.ts",
     "src/**/*.d.ts"
   ],
-  "exclude": ["node_modules", "dist", ".wrangler"]
+  "exclude": ["node_modules", ".next"]
 }

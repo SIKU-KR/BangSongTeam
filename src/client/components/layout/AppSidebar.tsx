@@ -1,5 +1,6 @@
 import React, { useState } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { usePathname } from "next/navigation";
+import { useNavigate } from "#hooks/useNavigate";
 import {
   FolderIcon,
   ImageIcon,
@@ -125,7 +126,7 @@ function AccountMenuItem(): React.JSX.Element {
 /** 좌측 내비게이션 사이드바 */
 export function AppSidebar(): React.JSX.Element {
   const navigate = useNavigate();
-  const { pathname } = useLocation();
+  const pathname = usePathname();
 
   const isDrive = isDrivePath(pathname);
   const isBackgrounds =

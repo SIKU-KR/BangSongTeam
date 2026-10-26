@@ -1,7 +1,7 @@
 import React from "react";
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { MemoryRouter, Route, Routes } from "../test/router";
 import type { PresentationDocument } from "#shared";
 import { signOutForTests } from "../test/sessionFixture";
 import { withQueryClient } from "../test/queryClientFixture";

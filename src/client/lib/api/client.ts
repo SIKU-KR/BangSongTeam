@@ -1,6 +1,6 @@
 import { hc } from "hono/client";
 import { fetchWithTimeout } from "./fetchWithTimeout";
-import type { AppType } from "../../../worker/index";
+import type { AppType } from "../../../server/index";
 
 /**
  * Hono RPC 클라이언트.

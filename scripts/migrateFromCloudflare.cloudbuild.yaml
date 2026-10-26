@@ -1,0 +1,75 @@
+# Cloudflare(D1·R2) → Firestore·GCS 이전 (scripts/migrateFromCloudflare.mjs).
+# 데이터가 로컬을 거치지 않고 Cloud Build 안에서 바로 옮겨진다.
+#
+# Secret Manager의 cloudflare-migration-token: Cloudflare 계정 API 토큰
+# (Account › D1 › Read, Account › Workers R2 Storage › Read). R2 S3 자격 증명은 이 토큰에서
+# 만든다 (Access Key ID = 토큰 id, Secret = 토큰 값의 SHA-256).
+# https://developers.cloudflare.com/r2/api/tokens/#get-s3-api-credentials-from-an-api-token
+#
+# 기본은 미리보기(_APPLY=false)로 복사할 객체와 옮길 문서 수만 보여 준다.
+#   git archive --format=tar.gz -o /tmp/src.tgz HEAD
+#   gcloud builds submit /tmp/src.tgz --config=scripts/migrateFromCloudflare.cloudbuild.yaml
+#   gcloud builds submit /tmp/src.tgz --config=scripts/migrateFromCloudflare.cloudbuild.yaml \
+#     --substitutions=_APPLY=true
+
+substitutions:
+  _APPLY: "false"
+  _CF_ACCOUNT_ID: a74e29b2c6cac2b0bbef65ea746e27c6
+  _D1_DATABASE_ID: 5a48a9a7-6b5a-4914-89ac-1b7da45e8d4b
+  _R2_BUCKET: bangsongteam-media
+  _MEDIA_BUCKET: ${PROJECT_ID}-media
+
+availableSecrets:
+  secretManager:
+    - versionName: projects/${PROJECT_ID}/secrets/cloudflare-migration-token/versions/latest
+      env: CLOUDFLARE_API_TOKEN
+
+steps:
+  - id: media
+    name: alpine:3.20
+    waitFor: ["-"]
+    secretEnv: [CLOUDFLARE_API_TOKEN]
+    env:
+      - RCLONE_CONFIG_R2_TYPE=s3
+      - RCLONE_CONFIG_R2_PROVIDER=Cloudflare
+      - RCLONE_CONFIG_R2_ENDPOINT=https://${_CF_ACCOUNT_ID}.r2.cloudflarestorage.com
+      - RCLONE_CONFIG_GCS_TYPE=google cloud storage
+      - RCLONE_CONFIG_GCS_ENV_AUTH=true
+      - RCLONE_CONFIG_GCS_BUCKET_POLICY_ONLY=true
+    script: |
+      set -euo pipefail
+      apk add --no-cache curl jq rclone >/dev/null
+      api=https://api.cloudflare.com/client/v4
+      auth="Authorization: Bearer $CLOUDFLARE_API_TOKEN"
+      token_id=$(curl -fsS -H "$auth" "$api/accounts/${_CF_ACCOUNT_ID}/tokens/verify" | jq -r .result.id) \
+        || token_id=$(curl -fsS -H "$auth" "$api/user/tokens/verify" | jq -r .result.id)
+      export RCLONE_CONFIG_R2_ACCESS_KEY_ID="$token_id"
+      export RCLONE_CONFIG_R2_SECRET_ACCESS_KEY=$(printf '%s' "$CLOUDFLARE_API_TOKEN" | sha256sum | cut -d' ' -f1)
+      rclone size "r2:${_R2_BUCKET}"
+      if [ "${_APPLY}" = true ]; then
+        rclone copy "r2:${_R2_BUCKET}" "gcs:${_MEDIA_BUCKET}" --transfers=8 --stats=30s --stats-one-line
+        rclone check "r2:${_R2_BUCKET}" "gcs:${_MEDIA_BUCKET}" --one-way
+      else
+        rclone copy "r2:${_R2_BUCKET}" "gcs:${_MEDIA_BUCKET}" --dry-run
+      fi
+
+  - id: firestore
+    name: node:22
+    waitFor: ["-"]
+    secretEnv: [CLOUDFLARE_API_TOKEN]
+    env:
+      - GOOGLE_CLOUD_PROJECT=${PROJECT_ID}
+      - CLOUDFLARE_ACCOUNT_ID=${_CF_ACCOUNT_ID}
+      - COREPACK_ENABLE_DOWNLOAD_PROMPT=0
+    script: |
+      set -eu
+      corepack enable
+      pnpm install --frozen-lockfile --reporter=silent
+      if [ "${_APPLY}" = true ]; then mode=--confirm; else mode=--dry-run; fi
+      node scripts/migrateFromCloudflare.mjs --d1=${_D1_DATABASE_ID} --target=remote "$mode"
+
+timeout: 3600s
+options:
+  logging: CLOUD_LOGGING_ONLY
+  dynamicSubstitutions: true
+  automapSubstitutions: true

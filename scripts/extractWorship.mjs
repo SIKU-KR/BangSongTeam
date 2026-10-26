@@ -1,7 +1,7 @@
 /**
  * 한국 인기 CCM 및 워십곡 가사 대량 수집 스크립트
  * 출처: 벅스 (Bugs Music)
- * 
+ *
  * 실행: node scripts/extractWorship.mjs
  */
 
@@ -110,7 +110,8 @@ async function searchTracks(keyword) {
     const html = await res.text();
 
     const trackIds = [];
-    const regex = /<a href="https:\/\/music\.bugs\.co\.kr\/track\/(\d+)[^"]*"\s+class="trackInfo"/g;
+    const regex =
+      /<a href="https:\/\/music\.bugs\.co\.kr\/track\/(\d+)[^"]*"\s+class="trackInfo"/g;
     let match;
     while ((match = regex.exec(html)) !== null) {
       trackIds.push(match[1]);
@@ -131,9 +132,15 @@ async function fetchTrackDetail(trackId) {
     if (!res.ok) return null;
     const html = await res.text();
 
-    const titleMatch = html.match(/<meta property="sc:track_title" content="([^"]+)"\/>/);
-    const artistMatch = html.match(/<meta property="sc:artist_nm" content="([^"]+)"\/>/);
-    const albumMatch = html.match(/<meta property="sc:album_title" content="([^"]+)"\/>/);
+    const titleMatch = html.match(
+      /<meta property="sc:track_title" content="([^"]+)"\/>/,
+    );
+    const artistMatch = html.match(
+      /<meta property="sc:artist_nm" content="([^"]+)"\/>/,
+    );
+    const albumMatch = html.match(
+      /<meta property="sc:album_title" content="([^"]+)"\/>/,
+    );
     const xmpMatch = html.match(/<xmp>([\s\S]*?)<\/xmp>/);
 
     const title = titleMatch ? titleMatch[1].trim() : "";
@@ -176,7 +183,9 @@ async function main() {
   const uniqueTrackIds = new Set();
   for (let i = 0; i < SEARCH_KEYWORDS.length; i++) {
     const kw = SEARCH_KEYWORDS[i];
-    process.stdout.write(`[${i + 1}/${SEARCH_KEYWORDS.length}] 키워드 '${kw}' 검색 중... `);
+    process.stdout.write(
+      `[${i + 1}/${SEARCH_KEYWORDS.length}] 키워드 '${kw}' 검색 중... `,
+    );
     const tracks = await searchTracks(kw);
     let added = 0;
     for (const tid of tracks) {
@@ -185,7 +194,9 @@ async function main() {
         added++;
       }
     }
-    console.log(`발견 ${tracks.length}곡 (신규 ${added}곡, 누적 ${uniqueTrackIds.size}곡)`);
+    console.log(
+      `발견 ${tracks.length}곡 (신규 ${added}곡, 누적 ${uniqueTrackIds.size}곡)`,
+    );
     await new Promise((r) => setTimeout(r, 120));
   }
 
@@ -245,10 +256,16 @@ async function main() {
   worshipSongs.sort((a, b) => a.title.localeCompare(b.title, "ko"));
 
   // 통합 JSON 저장
-  await fs.writeFile(WORSHIP_JSON, JSON.stringify(worshipSongs, null, 2), "utf-8");
+  await fs.writeFile(
+    WORSHIP_JSON,
+    JSON.stringify(worshipSongs, null, 2),
+    "utf-8",
+  );
 
   console.log(`\n=== 워십/CCM 수집 완료! ===`);
-  console.log(`- 유효 수집 곡 수: ${worshipSongs.length}곡 (가사 없는 곡 제외됨)`);
+  console.log(
+    `- 유효 수집 곡 수: ${worshipSongs.length}곡 (가사 없는 곡 제외됨)`,
+  );
   console.log(`- 개별 파일 폴더: ${WORSHIP_DIR}`);
   console.log(`- 통합 JSON 파일: ${WORSHIP_JSON}`);
 }

@@ -9,10 +9,10 @@ out/
 .next/
 .output/
 
-# Cloudflare Wrangler & dev vars
-.wrangler/
-.dev.vars
-.dev.vars.local
+# Local Firestore emulator data and media (pnpm emulators, pnpm db:seed:local)
+.data/
+firebase-debug.log
+firestore-debug.log
 
 # Logs
 logs/
@@ -25,7 +25,6 @@ pnpm-debug.log*
 .env
 .env.*
 !.env.example
-!config/dev.vars.example
 
 # Testing & Coverage
 coverage/
@@ -49,3 +48,10 @@ data/cleaned/worship/
 data/cleaned/selected/
 data/seed_*.sql
 
+
+# Next.js build outputs
+next-env.d.ts
+*.tsbuildinfo
+public/sw.js*
+public/sw-shell.js
+public/workbox-*.js*

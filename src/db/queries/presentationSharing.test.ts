@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { eq } from "drizzle-orm";
-import { createTestDb } from "../test-utils";
-import { decks, folders, presentations, user } from "../schema";
+import type { Db } from "../client";
+import { decksCol, presentationsCol } from "../collections";
+import { createTestDb, folderDoc, seedDocs, userDoc } from "../test/fixtures";
 import {
   DEFAULT_DECK_STYLE,
   PresentationDocumentSchema,
@@ -65,22 +65,17 @@ function makeDoc(
 }
 
 describe("세트 링크 공유", () => {
-  let db: ReturnType<typeof createTestDb>["db"];
+  let db: Db;
 
   beforeEach(async () => {
-    db = createTestDb().db;
-    const now = new Date();
-    await db.insert(user).values([
-      { id: OWNER, name: "인도자", createdAt: now, updatedAt: now },
-      { id: MEMBER, name: "반주자", createdAt: now, updatedAt: now },
-      { id: STRANGER, name: "외부인", createdAt: now, updatedAt: now },
-    ]);
-    await db.insert(folders).values({
-      id: FOLDER_ID,
-      userId: OWNER,
-      name: "9월",
-      createdAt: now,
-      updatedAt: now,
+    db = createTestDb();
+    await seedDocs(db, {
+      users: [
+        userDoc({ id: OWNER, name: "인도자" }),
+        userDoc({ id: MEMBER, name: "반주자" }),
+        userDoc({ id: STRANGER, name: "외부인" }),
+      ],
+      folders: [folderDoc({ id: FOLDER_ID, userId: OWNER, name: "9월" })],
     });
     await upsertPresentationDocument(
       db,
@@ -157,10 +152,7 @@ describe("세트 링크 공유", () => {
 
     it("휴지통에 들어간 세트는 링크가 멈춘다", async () => {
       const token = await shareAndJoin();
-      await db
-        .update(presentations)
-        .set({ trashedAt: new Date() })
-        .where(eq(presentations.id, DOC_ID));
+      await presentationsCol(db).doc(DOC_ID).update({ trashedAt: new Date() });
 
       expect(await resolvePresentationAccess(db, DOC_ID, MEMBER)).toBeNull();
       expect(await joinByToken(db, token, STRANGER)).toBeNull();
@@ -220,8 +212,8 @@ describe("세트 링크 공유", () => {
 
       const original = await getPresentationDocument(db, DOC_ID, OWNER);
       expect(original?.title).toBe("주일 1부 예배");
-      const [deck] = await db.select().from(decks).where(eq(decks.id, DECK_ID));
-      expect(deck.userId).toBe(OWNER);
+      const deck = (await decksCol(db).doc(DECK_ID).get()).data();
+      expect(deck?.userId).toBe(OWNER);
     });
 
     it("서버에 없는 공유 문서는 되살리지 않는다", async () => {

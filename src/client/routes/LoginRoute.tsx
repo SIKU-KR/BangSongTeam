@@ -1,3 +1,5 @@
+"use client";
+
 import React, { useState } from "react";
 import { CircleAlertIcon } from "lucide-react";
 import { Alert, AlertDescription } from "#components/ui/alert";
@@ -74,7 +76,7 @@ export function LoginRoute({
             ))}
           </div>
 
-          {import.meta.env.DEV && (
+          {process.env.NODE_ENV !== "production" && (
             <div data-testid="dev-sign-in" className="flex flex-col gap-2">
               <p className="text-center text-xs text-muted-foreground">
                 {AUTH_COPY.dev.title}

@@ -1,5 +1,8 @@
+"use client";
+
 import React from "react";
-import { Navigate, useParams } from "react-router-dom";
+import { useParams } from "next/navigation";
+import { Navigate } from "../components/common/Navigate";
 import {
   DRIVE_ROOT_PATH,
   DriveBrowser,
@@ -15,7 +18,7 @@ export function PresentationsRoute(): React.JSX.Element {
   useFolderIndex();
 
   if (folderId && !isFolderAvailable(folderId)) {
-    return <Navigate to={DRIVE_ROOT_PATH} replace />;
+    return <Navigate to={DRIVE_ROOT_PATH} />;
   }
   return (
     <DriveBrowser

@@ -1,7 +1,7 @@
 import React from "react";
 import { render, screen, fireEvent } from "@testing-library/react";
 import { describe, it, expect } from "vitest";
-import { MemoryRouter, Routes, Route } from "react-router-dom";
+import { MemoryRouter, Routes, Route } from "../test/router";
 import { LandingRoute } from "./LandingRoute";
 import { APP_NAME, APP_TAGLINE } from "#shared";
 

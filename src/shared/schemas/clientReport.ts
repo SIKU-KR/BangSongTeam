@@ -13,7 +13,7 @@ export const CLIENT_REPORT_MAX_BYTES = 8 * 1024;
  * - `server_error`: 서버가 5xx로 답했다
  * - `stalled`: 미디어를 받다가 새 바이트가 오지 않아 끊었다. 본문을 다 받은 뒤 Cache Storage가
  *   멈춘 것은 서버와 상관없어 담지 않는다
- * - `interrupted`: 미디어 응답(200)은 왔는데 본문을 받다가 연결이 끊겼다. Worker 로그에는
+ * - `interrupted`: 미디어 응답(200)은 왔는데 본문을 받다가 연결이 끊겼다. 서버 로그에는
  *   200으로 남으므로 `unreachable`과 나눠야 운영자가 서버 쪽 실패를 찾지 않는다
  */
 export const ClientFailureKindSchema = z.enum([
@@ -26,7 +26,7 @@ export const ClientFailureKindSchema = z.enum([
 export type ClientFailureKind = z.infer<typeof ClientFailureKindSchema>;
 
 /**
- * 실패 보고 1건. Worker 로그의 `requestId`로 같은 요청을 찾을 수 있게 하는 것이 목적이다.
+ * 실패 보고 1건. 서버 로그의 `requestId`로 같은 요청을 찾을 수 있게 하는 것이 목적이다.
  *
  * 경로는 원문이 아니라 패턴(`/api/presentations/:id`)만 받는다. id·공유 토큰이 섞이면
  * 로그로 누가 무엇을 열었는지 드러난다. `z.strictObject`라 허용한 필드 밖의 값(가사, 오류

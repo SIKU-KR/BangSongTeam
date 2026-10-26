@@ -1,10 +1,9 @@
+"use client";
+
 import React, { useState, useEffect } from "react";
-import {
-  useNavigate,
-  useParams,
-  useSearchParams,
-  Navigate,
-} from "react-router-dom";
+import { useParams, useSearchParams } from "next/navigation";
+import { useNavigate } from "#hooks/useNavigate";
+import { Navigate } from "../components/common/Navigate";
 import { CopyIcon, EyeIcon } from "lucide-react";
 import { Alert, AlertAction, AlertDescription } from "#components/ui/alert";
 import { Button } from "#components/ui/button";
@@ -117,10 +116,10 @@ function EditorScreen({
   guest?: EditorGuestOptions;
 }): React.JSX.Element {
   const navigate = useNavigate();
-  const params = useParams<{ presentationId: string }>();
+  const params = useParams<{ presentationId?: string }>();
   const presentationId = guest?.presentationId ?? params.presentationId;
   const isGuest = guest !== undefined;
-  const [searchParams] = useSearchParams();
+  const searchParams = useSearchParams();
   const { found, presentation } = useOpenedPresentation(presentationId);
   const [songPickerMode, setSongPickerMode] = useState<SongPickerMode | null>(
     null,
@@ -347,7 +346,7 @@ function EditorScreen({
 
   const overflowMessages = getOverflowMessages(currentOverflow, safeSlideIndex);
 
-  if (!found) return <Navigate to={drivePath(null)} replace />;
+  if (!found) return <Navigate to={drivePath(null)} />;
 
   return (
     <div

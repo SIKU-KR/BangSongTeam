@@ -1,5 +1,7 @@
+"use client";
+
 import React, { useMemo, useState } from "react";
-import { Outlet, useLocation } from "react-router-dom";
+import { usePathname } from "next/navigation";
 import { SidebarInset, SidebarProvider } from "#components/ui/sidebar";
 import { Toaster } from "#components/ui/sonner";
 import { TooltipProvider } from "#components/ui/tooltip";
@@ -17,7 +19,7 @@ import {
   useDrive,
   useFolderIndex,
 } from "../features/drive";
-import type { AppShellContextValue } from "./appShellContext";
+import { AppShellContext, type AppShellContextValue } from "./appShellContext";
 import { BACKGROUND_COPY } from "#copy/backgrounds";
 import { SHELL_COPY } from "#copy/shell";
 import { COMMON_COPY } from "#copy/common";
@@ -56,18 +58,26 @@ function metaFor(pathname: string): ShellPageMeta {
  * 서버 벡터 검색을 부르므로, 드라이브에서 친 검색어가 넘어가 요청이 나가지 않게 하고
  * 제출한 검색어만 갤러리에 넘긴다.
  */
-export function AppShellLayout(): React.JSX.Element {
+export function AppShellLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}): React.JSX.Element {
   return (
     <TooltipProvider>
       <DriveProvider>
-        <AppShellFrame />
+        <AppShellFrame>{children}</AppShellFrame>
       </DriveProvider>
     </TooltipProvider>
   );
 }
 
-function AppShellFrame(): React.JSX.Element {
-  const { pathname } = useLocation();
+function AppShellFrame({
+  children,
+}: {
+  children: React.ReactNode;
+}): React.JSX.Element {
+  const pathname = usePathname();
   const drive = useDrive();
 
   const [searchQuery, setSearchQuery] = useState<string>("");
@@ -140,15 +150,15 @@ function AppShellFrame(): React.JSX.Element {
           }
         />
 
-        {onDrive ? (
-          <div className="flex min-h-0 flex-1 flex-col">
-            <Outlet context={context} />
-          </div>
-        ) : (
-          <div className="min-h-0 flex-1 overflow-y-auto p-4 sm:px-6">
-            <Outlet context={context} />
-          </div>
-        )}
+        <AppShellContext.Provider value={context}>
+          {onDrive ? (
+            <div className="flex min-h-0 flex-1 flex-col">{children}</div>
+          ) : (
+            <div className="min-h-0 flex-1 overflow-y-auto p-4 sm:px-6">
+              {children}
+            </div>
+          )}
+        </AppShellContext.Provider>
       </SidebarInset>
 
       <Toaster position="bottom-left" />

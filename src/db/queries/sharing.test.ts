@@ -1,14 +1,14 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { eq } from "drizzle-orm";
-import { createTestDb, type TestDbResult } from "../test-utils";
+import { describe, it, expect, beforeEach } from "vitest";
+import type { Db } from "../client";
+import { decksCol, type DeckDoc } from "../collections";
 import {
-  decks,
-  presentations,
-  publicDecks,
-  user,
-  type NewDeck,
-} from "../schema";
-import { deckRow } from "../test-fixtures";
+  createTestDb,
+  deckDoc,
+  presentationDoc,
+  seedDocs,
+  userDoc,
+} from "../test/fixtures";
+import { deleteDeckScoped } from "./decks";
 import {
   forkPublicDeck,
   getPublicDeckDetail,
@@ -25,8 +25,8 @@ const SLIDES = JSON.stringify([
   { id: "s1", order: 0, lines: ["첫 줄", "둘째 줄"] },
 ]);
 
-function row(overrides: Partial<NewDeck> = {}): NewDeck {
-  return deckRow({
+function row(overrides: Partial<DeckDoc> = {}): DeckDoc {
+  return deckDoc({
     id: DECK,
     userId: A,
     title: "은혜로다",
@@ -38,30 +38,30 @@ function row(overrides: Partial<NewDeck> = {}): NewDeck {
 }
 
 describe("공유 쿼리 헬퍼", () => {
-  let testDb: TestDbResult;
-  let db: TestDbResult["db"];
+  let db: Db;
 
   beforeEach(async () => {
-    testDb = createTestDb();
-    db = testDb.db;
-    await db.insert(user).values([
-      { id: A, name: "김찬양", createdAt: new Date(), updatedAt: new Date() },
-      { id: B, name: "이예배", createdAt: new Date(), updatedAt: new Date() },
-    ]);
+    db = createTestDb();
+    await seedDocs(db, {
+      users: [
+        userDoc({ id: A, name: "김찬양" }),
+        userDoc({ id: B, name: "이예배" }),
+      ],
+    });
   });
 
-  afterEach(() => testDb.sqlite.close());
-
-  async function readRow(id: string) {
-    const [r] = await db.select().from(decks).where(eq(decks.id, id));
+  async function readRow(id: string): Promise<DeckDoc> {
+    const r = (await decksCol(db).doc(id).get()).data();
+    if (!r) throw new Error(`no deck ${id}`);
     return r;
   }
 
   describe("toPublicDeckSummary", () => {
     it("keeps only the first slide and never the owner id", async () => {
-      await db.insert(decks).values(row({ visibility: "public" }));
-      const [publicRow] = await db.select().from(publicDecks);
-      const summary = toPublicDeckSummary(publicRow);
+      const summary = toPublicDeckSummary({
+        ...row({ visibility: "public" }),
+        authorName: "김찬양",
+      });
       expect(summary.firstSlidePreview).toEqual(["첫 줄", "둘째 줄"]);
       expect(summary.slideCount).toBe(2);
       expect(summary.authorName).toBe("김찬양");
@@ -72,7 +72,7 @@ describe("공유 쿼리 헬퍼", () => {
 
   describe("setDeckVisibility", () => {
     beforeEach(async () => {
-      await db.insert(decks).values(row());
+      await seedDocs(db, { decks: [row()] });
     });
 
     it("publishes my library deck and records the consent time", async () => {
@@ -81,12 +81,18 @@ describe("공유 쿼리 헬퍼", () => {
       const saved = await readRow(DECK);
       expect(saved.visibility).toBe("public");
       expect(saved.publishedAt).toBeInstanceOf(Date);
+      expect(saved.listed).toBe(true);
+      expect(saved.searchGrams).toContain("은혜");
     });
 
     it("goes back to private", async () => {
       await setDeckVisibility(db, A, DECK, "public");
       await setDeckVisibility(db, A, DECK, "private");
-      expect((await readRow(DECK)).visibility).toBe("private");
+      expect(await readRow(DECK)).toMatchObject({
+        visibility: "private",
+        listed: false,
+        searchGrams: [],
+      });
     });
 
     it("treats someone else's deck as not found", async () => {
@@ -97,21 +103,14 @@ describe("공유 쿼리 헬퍼", () => {
     });
 
     it("refuses presentation clones, taken-down decks and empty decks", async () => {
-      await db.insert(presentations).values({
-        id: "p1",
-        userId: A,
-        title: "세트",
-        serviceDate: "2026-09-27",
-        createdAt: new Date(0),
-        updatedAt: new Date(0),
-      });
-      await db
-        .insert(decks)
-        .values([
+      await seedDocs(db, {
+        presentations: [presentationDoc({ id: "p1", userId: A })],
+        decks: [
           row({ id: "clone", presentationId: "p1", itemId: "i1", position: 0 }),
           row({ id: "down", takedownAt: new Date() }),
           row({ id: "empty", slides: "[]" }),
-        ]);
+        ],
+      });
       expect((await setDeckVisibility(db, A, "clone", "public")).status).toBe(
         "not_library",
       );
@@ -129,7 +128,7 @@ describe("공유 쿼리 헬퍼", () => {
 
   describe("getPublicDeckDetail", () => {
     it("returns full lyrics for public decks only", async () => {
-      await db.insert(decks).values(row());
+      await seedDocs(db, { decks: [row()] });
       expect(await getPublicDeckDetail(db, DECK)).toBeNull();
 
       await setDeckVisibility(db, A, DECK, "public");
@@ -142,7 +141,7 @@ describe("공유 쿼리 헬퍼", () => {
 
   describe("forkPublicDeck", () => {
     beforeEach(async () => {
-      await db.insert(decks).values(row({ visibility: "public" }));
+      await seedDocs(db, { decks: [row({ visibility: "public" })] });
     });
 
     it("creates a private fork in my library and bumps the fork count once", async () => {
@@ -166,6 +165,17 @@ describe("공유 쿼리 헬퍼", () => {
       expect((await readRow(DECK)).forkCount).toBe(1);
     });
 
+    it("동시에 가져와도 포크는 하나만 생기고 한 번만 센다", async () => {
+      const results = await Promise.all(
+        Array.from({ length: 4 }, () => forkPublicDeck(db, B, DECK)),
+      );
+      const ids = new Set(
+        results.map((r) => (r.status === "ok" ? r.deck.id : null)),
+      );
+      expect(ids.size).toBe(1);
+      expect((await readRow(DECK)).forkCount).toBe(1);
+    });
+
     it("is idempotent: a second fork returns the first and does not count again", async () => {
       const first = await forkPublicDeck(db, B, DECK);
       const second = await forkPublicDeck(db, B, DECK);
@@ -184,12 +194,12 @@ describe("공유 쿼리 헬퍼", () => {
     });
 
     it("cannot fork private, taken-down or unknown decks", async () => {
-      await db
-        .insert(decks)
-        .values([
+      await seedDocs(db, {
+        decks: [
           row({ id: "priv" }),
-          row({ id: "down", takedownAt: new Date() }),
-        ]);
+          row({ id: "down", visibility: "public", takedownAt: new Date() }),
+        ],
+      });
       for (const id of ["priv", "down", "nope"]) {
         expect((await forkPublicDeck(db, B, id)).status).toBe("not_found");
       }
@@ -198,7 +208,7 @@ describe("공유 쿼리 헬퍼", () => {
     it("keeps the fork and its credit when the original is deleted", async () => {
       const result = await forkPublicDeck(db, B, DECK);
       if (result.status !== "ok") throw new Error();
-      await db.delete(decks).where(eq(decks.id, DECK));
+      expect(await deleteDeckScoped(db, DECK, A)).toBe(true);
       expect(await readRow(result.deck.id)).toMatchObject({
         forkedFrom: null,
         forkedFromAuthorName: "김찬양",
@@ -210,7 +220,7 @@ describe("공유 쿼리 헬퍼", () => {
       if (result.status !== "ok") throw new Error();
       expect((await readRow(DECK)).forkCount).toBe(1);
 
-      await db.delete(decks).where(eq(decks.id, result.deck.id));
+      expect(await deleteDeckScoped(db, result.deck.id, B)).toBe(true);
       expect((await readRow(DECK)).forkCount).toBe(0);
 
       const again = await forkPublicDeck(db, B, DECK);

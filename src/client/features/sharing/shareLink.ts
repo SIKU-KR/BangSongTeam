@@ -19,13 +19,7 @@ export function shareCopyPath(token: string): string {
   return `${sharePath(token)}?${SHARE_COPY_PARAM}=1`;
 }
 
-/** 편집기를 열자마자 사본 만들기 창을 띄우라는 history state */
-export const MAKE_COPY_STATE = { makeCopy: true } as const;
-
-export function wantsMakeCopy(state: unknown): boolean {
-  return (
-    typeof state === "object" &&
-    state !== null &&
-    (state as { makeCopy?: unknown }).makeCopy === true
-  );
+/** 편집기를 열자마자 사본 만들기 창을 띄우라는 표시를 편집기 주소에 붙인다 */
+export function withMakeCopyRequest(path: string): string {
+  return `${path}?${SHARE_COPY_PARAM}=1`;
 }

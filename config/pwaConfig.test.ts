@@ -2,13 +2,18 @@ import { describe, it, expect } from "vitest";
 import * as fs from "node:fs";
 import { createRequire } from "node:module";
 import * as path from "node:path";
+import { collectShells, matchShell } from "../scripts/buildServiceWorker.mjs";
+import { OFFLINE_SHELL_PARAM } from "../src/shared/constants/projection";
 
 describe("PWA 설정", () => {
   const rootDir = path.resolve(__dirname, "..");
-  const config = fs.readFileSync(path.join(rootDir, "vite.config.ts"), "utf-8");
+  const config = fs.readFileSync(
+    path.join(rootDir, "scripts/buildServiceWorker.mjs"),
+    "utf-8",
+  );
 
   it("미디어 캐시 이름과 경로를 공용 상수에서 가져온다", () => {
-    expect(config).toContain('from "./src/shared/constants/projection"');
+    expect(config).toContain('from "../src/shared/constants/projection.ts"');
     expect(config).toContain("cacheName: MEDIA_CACHE_NAME");
     expect(config).toContain("new RegExp(MEDIA_URL_PREFIX");
     expect(config).not.toMatch(/const MEDIA_(CACHE_NAME|URL_PREFIX) =/);
@@ -23,7 +28,7 @@ describe("PWA 설정", () => {
 
     const mediaOptions = config.slice(
       config.indexOf("cacheName: MEDIA_CACHE_NAME"),
-      config.indexOf("devOptions"),
+      config.indexOf("for (const warning of warnings)"),
     );
     expect(mediaOptions).not.toContain("expiration");
   });
@@ -41,36 +46,38 @@ describe("PWA 설정", () => {
 
   it("글꼴 미리보기 이미지는 프리캐시하지 않고 런타임에 본 것만 캐시한다", () => {
     expect(config).toContain('cacheName: "worship-font-previews-cache"');
-    expect(config).toMatch(/globPatterns: \[[^\]]*\]/);
-    expect(config.match(/globPatterns: \[[^\]]*\]/)?.[0]).not.toMatch(
-      /webp|font-previews/,
-    );
-  });
-
-  it("오프라인 새로고침을 위한 navigateFallback이 있고 /api는 제외된다", () => {
-    expect(config).toContain('navigateFallback: "index.html"');
-    expect(config).toContain("navigateFallbackDenylist");
-  });
-
-  it("송출 중 자동 갱신을 막기 위해 registerType이 prompt다", () => {
-    expect(config).toContain('registerType: "prompt"');
+    const globPatterns = config.match(/globPatterns: \[[^\]]*\]/)?.[0];
+    expect(globPatterns).toBeDefined();
+    expect(globPatterns).not.toMatch(/webp|font-previews|woff/);
   });
 
   it("나뉜 JS 청크도 모두 프리캐시해 오프라인에서 각 화면이 열린다", () => {
-    expect(config).toContain('globPatterns: ["**/*.{js,');
+    expect(config).toContain('globPatterns: [".next/static/**/*.{js,css}"');
+    expect(config).toContain('".next/static/": "/_next/static/"');
   });
 
-  it("해시가 붙은 /assets/*만 immutable로 캐시하고 index.html·sw.js는 재검증한다", () => {
-    const headers = fs.readFileSync(
-      path.join(rootDir, "src/client/public/_headers"),
-      "utf-8",
-    );
-    const rules = headers
-      .split("\n")
-      .filter((line) => line.trim() && !line.startsWith("#"));
-    expect(rules).toEqual([
-      "/assets/*",
-      "  Cache-Control: public, max-age=31536000, immutable",
+  it("송출 중 자동 갱신을 막기 위해 새 SW가 스스로 대기를 건너뛰지 않는다", () => {
+    expect(config).toContain("skipWaiting: false");
+  });
+
+  it("화면 이동은 프리캐시한 셸로 답하고 /api는 제외한다", () => {
+    expect(config).toContain("importScripts: [`/${SHELL_SCRIPT}`]");
+    expect(config).toContain('url.pathname.startsWith("/api/")');
+  });
+
+  it("sw.js는 매번 재검증한다 (해시가 붙은 /_next/static/*은 Next.js가 immutable로 준다)", async () => {
+    const { default: nextConfig } = await import("../next.config");
+    const headers = await nextConfig.headers?.();
+    expect(headers).toEqual([
+      {
+        source: "/sw.js",
+        headers: [
+          {
+            key: "Cache-Control",
+            value: "no-cache, no-store, must-revalidate",
+          },
+        ],
+      },
     ]);
   });
 
@@ -125,9 +132,68 @@ describe("PWA 설정", () => {
   });
 
   it("PWA 아이콘 파일이 실제로 존재한다", () => {
-    const iconsDir = path.join(rootDir, "src/client/public/icons");
+    const iconsDir = path.join(rootDir, "public/icons");
     for (const file of ["icon-192.png", "icon-512.png", "maskable-512.png"]) {
       expect(fs.existsSync(path.join(iconsDir, file))).toBe(true);
     }
+  });
+});
+
+describe("오프라인 화면 셸", () => {
+  const P = OFFLINE_SHELL_PARAM;
+  const shells = collectShells(
+    {
+      "/": { dataRoute: "/index.rsc" },
+      "/_not-found": { dataRoute: "/_not-found.rsc" },
+      "/manifest.webmanifest": { dataRoute: null },
+      "/presentations": { dataRoute: "/presentations.rsc" },
+      "/presentations/trash": { dataRoute: "/presentations/trash.rsc" },
+      [`/presentations/folders/${P}`]: { dataRoute: "/x.rsc" },
+      [`/editor/${P}`]: { dataRoute: "/x.rsc" },
+      [`/present/${P}/fullscreen`]: { dataRoute: "/x.rsc" },
+    },
+    P,
+  );
+
+  it("미리 렌더한 화면만 셸로 모으고 Next.js 내부 페이지는 뺀다", () => {
+    expect(shells.map((shell: { route: string }) => shell.route)).toEqual([
+      "/",
+      "/presentations",
+      "/presentations/trash",
+      `/presentations/folders/${P}`,
+      `/editor/${P}`,
+      `/present/${P}/fullscreen`,
+    ]);
+    expect(shells[0]).toMatchObject({ file: "index.html" });
+    expect(shells[4]).toMatchObject({ file: `editor/${P}.html` });
+  });
+
+  it("정적 화면은 그 셸로, 동적 화면은 자리 값과 함께 맞춘다", () => {
+    expect(matchShell("/", shells, P)).toEqual({ route: "/", value: null });
+    expect(matchShell("/presentations/trash", shells, P)).toEqual({
+      route: "/presentations/trash",
+      value: null,
+    });
+    expect(matchShell("/editor/abc_DEF-123", shells, P)).toEqual({
+      route: `/editor/${P}`,
+      value: "abc_DEF-123",
+    });
+    expect(matchShell("/present/p1/fullscreen", shells, P)).toEqual({
+      route: `/present/${P}/fullscreen`,
+      value: "p1",
+    });
+  });
+
+  it("모르는 주소, 끝 슬래시, 셸에 그대로 넣을 수 없는 값은 맞추지 않는다", () => {
+    expect(matchShell("/unknown", shells, P)).toBeNull();
+    expect(matchShell("/presentations/", shells, P)).toBeNull();
+    expect(matchShell("/editor/a%22b", shells, P)).toBeNull();
+    expect(matchShell("/present/p1", shells, P)).toBeNull();
+  });
+
+  it("동적 자리가 둘 이상인 화면은 빌드를 멈춘다", () => {
+    expect(() =>
+      collectShells({ [`/a/${P}/${P}`]: { dataRoute: "/x.rsc" } }, P),
+    ).toThrow();
   });
 });

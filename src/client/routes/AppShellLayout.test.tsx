@@ -22,7 +22,7 @@ import {
   waitFor,
 } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { MemoryRouter, Routes, Route } from "react-router-dom";
+import { MemoryRouter, Routes, Route } from "../test/router";
 import type { Folder } from "#shared";
 import { ThemeProvider } from "#components/theme-provider";
 import { AppShellLayout } from "./AppShellLayout";
@@ -48,7 +48,7 @@ function renderShell(initialPath = "/presentations") {
       <ThemeProvider>
         <MemoryRouter initialEntries={[initialPath]}>
           <Routes>
-            <Route element={<AppShellLayout />}>
+            <Route layout={AppShellLayout}>
               <Route path="/presentations" element={<PresentationsRoute />} />
               <Route
                 path="/presentations/folders/:folderId"
@@ -600,16 +600,13 @@ describe("AppShellLayout (드라이브형 홈)", () => {
     expect(screen.getByTestId("drive-summary")).toHaveTextContent("검색 결과");
   });
 
-  it("배경 갤러리 검색어는 드라이브 검색어와 따로 두고, 제출해야 벡터 검색을 부른다", async () => {
+  it("배경 갤러리 검색어는 드라이브 검색어와 따로 두고, 제출해야 거른다", async () => {
     resetBackgroundCatalogForTests();
     const sunset = makeBackground(1, { title: "따뜻한 노을" });
     const lake = makeBackground(2, { title: "고요한 호수" });
     const api = installFakeApi({
       "GET /api/backgrounds": () => ({
         body: { backgrounds: [sunset, lake] },
-      }),
-      "GET /api/backgrounds/search": () => ({
-        body: { results: [{ id: lake.id, score: 0.7 }] },
       }),
     });
     try {
@@ -621,12 +618,14 @@ describe("AppShellLayout (드라이브형 홈)", () => {
       expect(input()).toHaveValue("");
       await screen.findByRole("img", { name: sunset.title });
 
-      fireEvent.change(input(), { target: { value: "잔잔한 호수" } });
+      fireEvent.change(input(), { target: { value: "호수" } });
       expect(
         screen.getByRole("img", { name: sunset.title }),
       ).toBeInTheDocument();
       expect(
-        api.calls.some((call) => call.path === "/api/backgrounds/search"),
+        api.calls.some((call) =>
+          call.path.startsWith("/api/backgrounds/search"),
+        ),
       ).toBe(false);
 
       fireEvent.click(screen.getByRole("button", { name: COMMON_COPY.search }));

@@ -3,7 +3,7 @@ import { mediaUrlForKey } from "./backgrounds";
 import { MEDIA_URL_PREFIX } from "./projection";
 
 describe("mediaUrlForKey", () => {
-  it("R2 키를 동일 출처 미디어 프록시 경로로 바꾼다", () => {
+  it("저장소 키를 동일 출처 미디어 프록시 경로로 바꾼다", () => {
     expect(mediaUrlForKey("loops/warm.mp4")).toBe("/api/media/loops/warm.mp4");
   });
 

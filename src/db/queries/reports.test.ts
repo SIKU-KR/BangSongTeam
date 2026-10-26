@@ -1,35 +1,32 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { createTestDb, type TestDbResult } from "../test-utils";
-import { eq } from "drizzle-orm";
-import { decks, reports, user } from "../schema";
-import { deckRow } from "../test-fixtures";
+import { describe, it, expect, beforeEach } from "vitest";
+import type { Db } from "../client";
+import { reportsCol } from "../collections";
+import { createTestDb, deckDoc, seedDocs, userDoc } from "../test/fixtures";
 import { createReport } from "./reports";
+import { deleteDeckScoped } from "./decks";
 
 const A = "00000000000000000000a";
 const B = "00000000000000000000b";
 const PUB = "c00000000000000000001";
 const PRIV = "c00000000000000000002";
 
+async function allReports(db: Db) {
+  return (await reportsCol(db).get()).docs.map((doc) => doc.data());
+}
+
 describe("createReport", () => {
-  let testDb: TestDbResult;
-  let db: TestDbResult["db"];
+  let db: Db;
 
   beforeEach(async () => {
-    testDb = createTestDb();
-    db = testDb.db;
-    await db.insert(user).values([
-      { id: A, name: "A", createdAt: new Date(), updatedAt: new Date() },
-      { id: B, name: "B", createdAt: new Date(), updatedAt: new Date() },
-    ]);
-    await db
-      .insert(decks)
-      .values([
-        deckRow({ id: PUB, userId: A, visibility: "public" }),
-        deckRow({ id: PRIV, userId: A }),
-      ]);
+    db = createTestDb();
+    await seedDocs(db, {
+      users: [userDoc({ id: A, name: "A" }), userDoc({ id: B, name: "B" })],
+      decks: [
+        deckDoc({ id: PUB, userId: A, visibility: "public" }),
+        deckDoc({ id: PRIV, userId: A }),
+      ],
+    });
   });
-
-  afterEach(() => testDb.sqlite.close());
 
   it("records a pending report with the reporter and details", async () => {
     const result = await createReport(db, B, {
@@ -39,7 +36,7 @@ describe("createReport", () => {
       details: "  2절 가사가 틀렸어요 ",
     });
     expect(result.status).toBe("ok");
-    const [saved] = await db.select().from(reports);
+    const [saved] = await allReports(db);
     expect(saved).toMatchObject({
       reporterId: B,
       deckId: PUB,
@@ -75,18 +72,30 @@ describe("createReport", () => {
     expect((await createReport(db, A, input)).status).toBe("ok");
   });
 
-  it("keeps the report when the reporter or the deck is deleted", async () => {
+  it("동시에 같은 신고를 보내도 처리 대기 신고는 하나만 남는다", async () => {
+    const input = {
+      targetType: "deck" as const,
+      targetId: PUB,
+      reason: "copyright" as const,
+    };
+    const results = await Promise.all(
+      Array.from({ length: 4 }, () => createReport(db, B, input)),
+    );
+    expect(results.filter((r) => r.status === "ok")).toHaveLength(1);
+    expect(await allReports(db)).toHaveLength(1);
+  });
+
+  it("keeps the report when the deck is deleted", async () => {
     await createReport(db, B, {
       targetType: "deck",
       targetId: PUB,
       reason: "copyright",
     });
-    await db.delete(user).where(eq(user.id, B));
-    await db.delete(decks).where(eq(decks.id, PUB));
+    expect(await deleteDeckScoped(db, PUB, A)).toBe(true);
 
-    const [saved] = await db.select().from(reports);
+    const [saved] = await allReports(db);
     expect(saved).toMatchObject({
-      reporterId: null,
+      reporterId: B,
       deckId: null,
       reason: "copyright",
     });

@@ -1,5 +1,6 @@
 import React from "react";
-import { Link, useNavigate } from "react-router-dom";
+import Link from "next/link";
+import { useNavigate } from "#hooks/useNavigate";
 import {
   ChevronDownIcon,
   FolderInputIcon,
@@ -58,7 +59,7 @@ function Crumb({
       ) : (
         <BreadcrumbLink
           data-testid={testId}
-          render={<Link to={drivePath(folderId)} />}
+          render={<Link href={drivePath(folderId)} />}
         >
           {label}
         </BreadcrumbLink>

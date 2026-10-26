@@ -1,8 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { eq } from "drizzle-orm";
-import { createTestDb } from "../test-utils";
-import { user, decks, presentations } from "../schema";
-import { deckRow } from "../test-fixtures";
+import type { Db } from "../client";
+import { decksCol, presentationsCol } from "../collections";
+import { createTestDb, deckDoc, seedDocs, userDoc } from "../test/fixtures";
 import {
   DEFAULT_DECK_STYLE,
   PresentationDocumentSchema,
@@ -58,63 +57,44 @@ function makeDoc(
 }
 
 describe("프레젠테이션 쿼리", () => {
-  let db: ReturnType<typeof createTestDb>["db"];
+  let db: Db;
 
   const userAId = "000000000000000000001";
   const userBId = "000000000000000000002";
 
   beforeEach(async () => {
-    const testDb = createTestDb();
-    db = testDb.db;
-
-    await db.insert(user).values([
-      {
-        id: userAId,
-        name: "Worship Leader",
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      },
-      {
-        id: userBId,
-        name: "Other User",
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      },
-    ]);
+    db = createTestDb();
+    await seedDocs(db, {
+      users: [
+        userDoc({ id: userAId, name: "Worship Leader" }),
+        userDoc({ id: userBId, name: "Other User" }),
+      ],
+    });
   });
 
   describe("deletePresentation", () => {
     it("should delete presentation and cascade-delete its copy decks (no orphans)", async () => {
-      await db.insert(decks).values(
-        deckRow({
-          id: "deck-song-1",
-          userId: userAId,
-          title: "Song 1: 꽃들도",
-          lyricsRaw: "이곳에 생명샘 솟아나",
-          visibility: "public",
-        }),
-      );
+      await seedDocs(db, {
+        decks: [
+          deckDoc({
+            id: "deck-song-1",
+            userId: userAId,
+            title: "Song 1: 꽃들도",
+            lyricsRaw: "이곳에 생명샘 솟아나",
+            visibility: "public",
+          }),
+        ],
+      });
       await upsertPresentationDocument(db, userAId, makeDoc(userAId));
       const clonedDeckId = "c00000000000000000001";
 
-      expect(
-        await db.select().from(decks).where(eq(decks.id, clonedDeckId)),
-      ).toHaveLength(1);
+      expect((await decksCol(db).doc(clonedDeckId).get()).exists).toBe(true);
 
       await deletePresentation(db, DOC_ID, userAId);
 
-      expect(
-        await db
-          .select()
-          .from(presentations)
-          .where(eq(presentations.id, DOC_ID)),
-      ).toHaveLength(0);
-      expect(
-        await db.select().from(decks).where(eq(decks.id, clonedDeckId)),
-      ).toHaveLength(0);
-      expect(
-        await db.select().from(decks).where(eq(decks.id, "deck-song-1")),
-      ).toHaveLength(1);
+      expect((await presentationsCol(db).doc(DOC_ID).get()).exists).toBe(false);
+      expect((await decksCol(db).doc(clonedDeckId).get()).exists).toBe(false);
+      expect((await decksCol(db).doc("deck-song-1").get()).exists).toBe(true);
     });
   });
 
@@ -160,11 +140,10 @@ describe("프레젠테이션 쿼리", () => {
       const [restored] = await getPresentationDocumentsByUserId(db, userAId);
       expect(restored.items).toHaveLength(0);
 
-      const orphans = await db
-        .select()
-        .from(decks)
-        .where(eq(decks.presentationId, DOC_ID));
-      expect(orphans).toHaveLength(0);
+      const orphans = await decksCol(db)
+        .where("presentationId", "==", DOC_ID)
+        .get();
+      expect(orphans.size).toBe(0);
     });
 
     it("본문의 userId를 믿지 않고 세션 소유자로 강제한다", async () => {

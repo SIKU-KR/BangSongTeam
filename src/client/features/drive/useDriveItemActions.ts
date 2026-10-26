@@ -1,5 +1,6 @@
 import { useCallback } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { usePathname } from "next/navigation";
+import { useNavigate } from "#hooks/useNavigate";
 import {
   CopyIcon,
   FolderInputIcon,
@@ -43,7 +44,7 @@ export function useDriveItemActions({
   trashCount,
 }: DriveItemActionsOptions): DriveItemActions {
   const navigate = useNavigate();
-  const { pathname } = useLocation();
+  const pathname = usePathname();
   const drive = useDrive();
 
   const present = useCallback(

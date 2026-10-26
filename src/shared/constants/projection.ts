@@ -1,11 +1,20 @@
 /**
  * 송출(Projection) 계층 공용 상수.
  *
- * 오프라인 캐시는 브라우저 코드와 빌드 설정(`vite.config.ts`) 양쪽에서 같은
- * 값을 봐야 한다. 캐시 이름이 한 글자라도 어긋나면 예배 당일에 배경이 안
- * 나온다. 그래서 `vite.config.ts`가 이 파일을 상대 경로로 직접 import한다.
- * Vite 설정 로더가 함께 번들하므로 이 파일은 다른 모듈을 import하지 않는다.
+ * 오프라인 캐시는 브라우저 코드와 서비스 워커 빌드(`scripts/buildServiceWorker.mjs`)
+ * 양쪽에서 같은 값을 봐야 한다. 캐시 이름이 한 글자라도 어긋나면 예배 당일에 배경이
+ * 안 나온다. 그래서 빌드 스크립트가 이 파일을 Node 타입 제거로 직접 import한다.
+ * 이 파일은 다른 모듈을 import하지 않는다.
  */
+
+/**
+ * 오프라인 화면 셸을 미리 렌더할 때 동적 경로 자리(`[presentationId]` 등)에 넣는 값.
+ *
+ * 서버는 어느 화면이든 로딩 화면만 그리므로, 동적 경로마다 이 값으로 한 장씩 미리
+ * 렌더해 서비스 워커가 프리캐시한다. 오프라인에서 `/editor/abc`를 열면 서비스 워커가
+ * `/editor/__shell__` 셸의 이 값을 `abc`로 바꿔 돌려준다.
+ */
+export const OFFLINE_SHELL_PARAM = "__shell__";
 
 /**
  * 배경 영상·이미지 원본의 Workbox 런타임 캐시 이름.
@@ -27,12 +36,12 @@ export const POSTER_CACHE_NAME = "worship-posters-cache";
 
 /**
  * 배경 영상·포스터를 중계하는 동일 출처 프록시 경로 접두사.
- * 배경 URL은 `mediaUrlForKey`가 이 값으로 만든다. R2 커스텀 도메인 직통으로
+ * 배경 URL은 `mediaUrlForKey`가 이 값으로 만든다. GCS·CDN 직통으로
  * 바꾸게 되면 이 값과 Workbox `urlPattern`만 바뀐다.
  */
 export const MEDIA_URL_PREFIX = "/api/media/";
 
-/** 포스터 R2 키 접두사를 포함한 프록시 경로 */
+/** 포스터 저장소 키 접두사를 포함한 프록시 경로 */
 export const POSTER_URL_PREFIX = `${MEDIA_URL_PREFIX}posters/`;
 
 /** 미디어 URL이 담기는 런타임 캐시. Workbox `urlPattern`과 같은 기준으로 나눈다 */

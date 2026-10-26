@@ -1,13 +1,8 @@
 import React from "react";
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { render, screen } from "@testing-library/react";
-import {
-  MemoryRouter,
-  Route,
-  Routes,
-  useLocation,
-  useParams,
-} from "react-router-dom";
+import { useParams, useSearchParams } from "next/navigation";
+import { MemoryRouter, Route, Routes } from "../test/router";
 import type { PresentationDocument } from "#shared";
 import { signInAsTestUser } from "../test/sessionFixture";
 import { installFakeApi, type FakeApi } from "../test/fakeApi";
@@ -22,10 +17,10 @@ import { SEED_PRESENTATIONS, SEED_USER_ID } from "../test/presentationFixture";
 const OWNER = "0000000000000000owner";
 
 function EditorProbe(): React.JSX.Element {
-  const { presentationId } = useParams();
-  const location = useLocation();
+  const { presentationId } = useParams<{ presentationId?: string }>();
+  const search = useSearchParams().toString();
   return (
-    <p data-testid="editor-probe" data-state={JSON.stringify(location.state)}>
+    <p data-testid="editor-probe" data-search={search}>
       {presentationId}
     </p>
   );
@@ -72,8 +67,8 @@ describe("ShareJoinRoute (/s/:token)", () => {
       access: { ownerName: "인도자" },
     });
     expect(screen.getByTestId("editor-probe")).toHaveAttribute(
-      "data-state",
-      "null",
+      "data-search",
+      "",
     );
   });
 
@@ -86,8 +81,8 @@ describe("ShareJoinRoute (/s/:token)", () => {
     renderAt("/s/tok-first?copy=1");
 
     expect(await screen.findByTestId("editor-probe")).toHaveAttribute(
-      "data-state",
-      JSON.stringify({ makeCopy: true }),
+      "data-search",
+      "copy=1",
     );
   });
 

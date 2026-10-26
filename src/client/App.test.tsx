@@ -1,7 +1,6 @@
-import React from "react";
-import { render, screen, act, fireEvent } from "@testing-library/react";
+import { screen, act, fireEvent } from "@testing-library/react";
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { App } from "./App";
+import { renderApp } from "./test/nextApp";
 import { resetPresentationStore } from "./features/presentation/presentationStore";
 import { closeOfflineDB, OFFLINE_DB_NAME } from "./lib/storage/db";
 import { __setSessionForTests } from "./lib/auth/sessionStore";
@@ -21,8 +20,7 @@ import {
 const DOC_ID = SEED_PRESENTATION_IDS[0];
 
 function renderAt(path: string) {
-  window.history.pushState({}, "", path);
-  return render(<App />);
+  return renderApp(path);
 }
 
 describe("App Route Integration", () => {

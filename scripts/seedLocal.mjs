@@ -1,48 +1,42 @@
 /**
- * `pnpm dev`에서 바로 작업할 수 있게 로컬 D1·R2를 채운다. 운영 D1·R2는 건드리지 않는다.
+ * `pnpm dev`에서 바로 작업할 수 있게 로컬 Firestore 에뮬레이터와 미디어 폴더를 채운다.
+ * 운영 Firestore·GCS는 건드리지 않는다.
  *
- * 사용법:
+ * 사용법 (다른 터미널에서 `pnpm emulators`를 먼저 띄운다):
  *   pnpm db:seed:local
  *   pnpm db:seed:local --songs=200   # 공유 라이브러리 곡 수를 줄인다 (기본: 전체)
  *
  * 순서:
- *   1. `.dev.vars`가 없으면 `config/dev.vars.example`로 만든다.
- *   2. 로컬 D1 마이그레이션을 적용한다.
- *   3. `data/backgrounds/dev/`의 이미지 배경을 로컬 R2에 올린다. 운영 배경 영상은 수 GB라
- *      올리지 않는다.
- *   4. `src/db/seed/devSeed.ts`로 배경 행과 시드 계정·공유 라이브러리·폴더·세트를 다시
+ *   1. `.env.local`이 없으면 `config/env.example`로 만든다.
+ *   2. `data/backgrounds/dev/`의 이미지 배경을 `.data/media`에 복사한다. 운영 배경 영상은
+ *      수 GB라 넣지 않는다.
+ *   3. `src/db/seed/devSeed.ts`로 배경 문서와 시드 계정·공유 라이브러리·폴더·세트를 다시
  *      만든다. 시드 계정의 데이터만 지우고 다시 만드므로 여러 번 돌려도 된다.
- *   5. 이미지 배경을 임베딩해 로컬용 Vectorize 인덱스에 넣는다. 원격 Workers AI·Vectorize를
- *      쓰므로 wrangler 로그인이 안 돼 있으면 경고만 남기고 넘어간다 (배경 검색만 안 된다).
  *
- * `pnpm dev`가 떠 있어도 돌릴 수 있다. 시드 계정은 새로 만들어지므로 다시 로그인한다.
+ * 에뮬레이터 데이터는 `pnpm emulators`가 끝날 때 `.data/firestore`에 저장되고 다음 실행에
+ * 다시 불러온다. `pnpm dev`가 떠 있어도 돌릴 수 있다. 시드 계정은 새로 만들어지므로 다시
+ * 로그인한다.
  */
 
 import fs from "node:fs";
 import path from "node:path";
-import { execFileSync } from "node:child_process";
-import { fileURLToPath } from "node:url";
-import { runnerImport } from "vite";
-import { getPlatformProxy } from "wrangler";
-import { upsertBackgroundVectors } from "./backgroundVectors.mjs";
+import {
+  LOCAL_MEDIA_DIR,
+  ROOT_DIR,
+  assertEmulatorUp,
+  importSource,
+  parseFlags,
+  applyTarget,
+} from "./lib/targets.mjs";
 
-const ROOT_DIR = path.resolve(
-  path.dirname(fileURLToPath(import.meta.url)),
-  "..",
-);
-const DEV_VARS = path.join(ROOT_DIR, ".dev.vars");
-const DEV_VARS_EXAMPLE = path.join(ROOT_DIR, "config", "dev.vars.example");
+const ENV_FILE = path.join(ROOT_DIR, ".env.local");
+const ENV_EXAMPLE = path.join(ROOT_DIR, "config", "env.example");
 const SONGS_JSON = path.join(ROOT_DIR, "data", "cleaned", "songs.json");
 const DEV_BACKGROUNDS_DIR = path.join(ROOT_DIR, "data", "backgrounds", "dev");
 const DEV_ORIGIN = "http://localhost:5173";
 
 function parseArgs(argv) {
-  const args = Object.fromEntries(
-    argv.map((arg) => {
-      const [key, ...rest] = arg.replace(/^--/, "").split("=");
-      return [key, rest.length > 0 ? rest.join("=") : true];
-    }),
-  );
+  const args = parseFlags(argv);
   const songs = args.songs === undefined ? undefined : Number(args.songs);
   if (songs !== undefined && !(Number.isInteger(songs) && songs > 0)) {
     throw new Error(`--songs는 1 이상의 정수여야 합니다: ${args.songs}`);
@@ -50,110 +44,69 @@ function parseArgs(argv) {
   return { songs };
 }
 
-function run(command, args) {
-  execFileSync(command, args, { cwd: ROOT_DIR, stdio: "inherit" });
+function ensureEnvFile() {
+  if (fs.existsSync(ENV_FILE)) return;
+  fs.copyFileSync(ENV_EXAMPLE, ENV_FILE);
+  console.log(".env.local을 만들었습니다.");
 }
 
-function ensureDevVars() {
-  if (fs.existsSync(DEV_VARS)) return;
-  fs.copyFileSync(DEV_VARS_EXAMPLE, DEV_VARS);
-  console.log(".dev.vars를 만들었습니다.");
-}
-
-async function uploadDevBackgrounds(bucket) {
-  const { items } = readDevManifest();
-  return Promise.all(
-    items.map(async ({ file, ...meta }) => {
-      const key = `images/dev/${file}`;
-      const bytes = fs.readFileSync(path.join(DEV_BACKGROUNDS_DIR, file));
-      await bucket.put(key, bytes, {
-        httpMetadata: { contentType: "image/webp" },
-      });
-      return { ...meta, key, sizeBytes: bytes.byteLength };
-    }),
-  );
-}
-
-function readDevManifest() {
-  return JSON.parse(
+function copyDevBackgrounds() {
+  const { items } = JSON.parse(
     fs.readFileSync(path.join(DEV_BACKGROUNDS_DIR, "manifest.json"), "utf-8"),
   );
-}
-
-async function upsertDevBackgroundVectors(seedId) {
-  const { items } = readDevManifest();
-  try {
-    await upsertBackgroundVectors(
-      "local",
-      items.map((item, n) => ({ ...item, id: seedId("bg", n) })),
-    );
-    console.log(`배경 벡터 ${items.length}개를 로컬 인덱스에 넣었습니다.`);
-  } catch (error) {
-    console.warn(
-      `배경 벡터를 넣지 못했습니다. 배경 검색만 안 됩니다 (wrangler login 후 다시 실행).\n  ${error.stderr?.toString().trim() || error.message}`,
-    );
-  }
+  return items.map(({ file, ...meta }) => {
+    const key = `images/dev/${file}`;
+    const source = path.join(DEV_BACKGROUNDS_DIR, file);
+    const out = path.join(LOCAL_MEDIA_DIR, key);
+    fs.mkdirSync(path.dirname(out), { recursive: true });
+    fs.copyFileSync(source, out);
+    return { ...meta, key, sizeBytes: fs.statSync(source).size };
+  });
 }
 
 async function main() {
   const options = parseArgs(process.argv.slice(2));
-  const [{ module: seed }, { module: devUsers }, { module: db }] =
-    await Promise.all([
-      runnerImport(path.join(ROOT_DIR, "src/db/seed/devSeed.ts")),
-      runnerImport(path.join(ROOT_DIR, "src/shared/constants/devUsers.ts")),
-      runnerImport(path.join(ROOT_DIR, "src/db/client.ts")),
-    ]);
-  const { DEV_USERS } = devUsers;
+  ensureEnvFile();
+  applyTarget("local");
+  await assertEmulatorUp();
 
-  ensureDevVars();
-  run("pnpm", [
-    "exec",
-    "wrangler",
-    "d1",
-    "migrations",
-    "apply",
-    "DB",
-    "--local",
+  const [seed, devUsers, client] = await Promise.all([
+    importSource("src/db/seed/devSeed.ts"),
+    importSource("src/shared/constants/devUsers.ts"),
+    importSource("src/db/client.ts"),
   ]);
+  const { DEV_USERS } = devUsers;
 
   const allSongs = JSON.parse(fs.readFileSync(SONGS_JSON, "utf-8"));
   const songs = allSongs.slice(0, options.songs ?? allSongs.length);
 
-  const proxy = await getPlatformProxy({
-    configPath: path.join(ROOT_DIR, "wrangler.jsonc"),
-    persist: true,
-    remoteBindings: false,
+  const backgrounds = copyDevBackgrounds();
+  const summary = await seed.seedDevData(client.getFirestore(), {
+    songs,
+    backgrounds,
   });
-  try {
-    const backgrounds = await uploadDevBackgrounds(proxy.env.MEDIA_BUCKET);
-    const summary = await seed.seedDevData(db.createD1Client(proxy.env.DB), {
-      songs,
-      backgrounds,
-    });
-    console.log(
-      [
-        "",
-        "로컬 시드를 마쳤습니다.",
-        `  공유 라이브러리 ${summary.libraryDecks}곡, 폴더 ${summary.folders}개, 프레젠테이션 ${summary.presentations}개`,
-        `  이미지 배경 ${summary.backgrounds}개`,
-        "",
-        "pnpm dev 뒤 로그인 화면의 개발용 계정 버튼이나 아래 주소로 로그인합니다:",
-        ...DEV_USERS.map(
-          (dev) =>
-            `  ${dev.name}${dev.termsAgreed ? "" : " (약관 동의 전)"}: ${DEV_ORIGIN}/api/auth/dev/sign-in?userId=${dev.id}`,
-        ),
-        summary.shareToken
-          ? `  공유 링크(보기 전용): ${DEV_ORIGIN}/s/${summary.shareToken}`
-          : "",
-      ].join("\n"),
-    );
-  } finally {
-    await proxy.dispose();
-  }
-  await upsertDevBackgroundVectors(seed.seedId);
+  console.log(
+    [
+      "",
+      "로컬 시드를 마쳤습니다.",
+      `  공유 라이브러리 ${summary.libraryDecks}곡, 폴더 ${summary.folders}개, 프레젠테이션 ${summary.presentations}개`,
+      `  이미지 배경 ${summary.backgrounds}개`,
+      "",
+      "pnpm dev 뒤 로그인 화면의 개발용 계정 버튼이나 아래 주소로 로그인합니다:",
+      ...DEV_USERS.map(
+        (dev) =>
+          `  ${dev.name}${dev.termsAgreed ? "" : " (약관 동의 전)"}: ${DEV_ORIGIN}/api/auth/dev/sign-in?userId=${dev.id}`,
+      ),
+      summary.shareToken
+        ? `  공유 링크(보기 전용): ${DEV_ORIGIN}/s/${summary.shareToken}`
+        : "",
+    ].join("\n"),
+  );
 }
 
-main().catch((error) => {
-  console.error(error.stderr?.toString().trim() || error.message);
-  process.exit(1);
-});
+main()
+  .then(() => process.exit(0))
+  .catch((error) => {
+    console.error(error.stderr?.toString().trim() || error.message);
+    process.exit(1);
+  });

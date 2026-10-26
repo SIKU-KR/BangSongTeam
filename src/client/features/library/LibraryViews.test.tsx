@@ -1,7 +1,7 @@
 import React from "react";
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { act, render, screen, fireEvent } from "@testing-library/react";
-import { BACKGROUND_SEARCH_MAX_LENGTH, type BackgroundMedia } from "#shared";
+import type { BackgroundMedia } from "#shared";
 import { BackgroundLibraryView } from "./index";
 import { installFakeApi, type FakeApi } from "../../test/fakeApi";
 import { withQueryClient } from "../../test/queryClientFixture";
@@ -113,66 +113,30 @@ describe("BackgroundLibraryView", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("셸 검색어는 서버 벡터 검색 결과를 가까운 순서대로 보여 준다", async () => {
+  it("셸 검색어로 제목·키워드에 맞는 배경만 보여 준다", async () => {
     api = installFakeApi({
       "GET /api/backgrounds": () => listResponse([LAKE, FIRE, STILL]),
-      "GET /api/backgrounds/search": () => ({
-        body: {
-          results: [
-            { id: FIRE.id, score: 0.72 },
-            { id: LAKE.id, score: 0.61 },
-          ],
-        },
-      }),
     });
 
-    await renderView("뜨겁게 선포하는 배경");
+    await renderView("선포");
     await screen.findByRole("img", { name: "타오르는 불꽃" });
     expect(
       screen.getAllByRole("img").map((img) => img.getAttribute("alt")),
-    ).toEqual(["타오르는 불꽃", "고요한 호수 물결"]);
-    const searchCall = api.calls.find(
-      (call) => call.path === "/api/backgrounds/search",
-    );
-    expect(new URLSearchParams(searchCall?.search).get("q")).toBe(
-      "뜨겁게 선포하는 배경",
-    );
+    ).toEqual(["타오르는 불꽃"]);
+    expect(
+      api.calls.some((call) => call.path.startsWith("/api/backgrounds/search")),
+    ).toBe(false);
   });
 
-  it("서버가 받는 길이보다 긴 검색어는 잘라 보낸다", async () => {
+  it("맞는 배경이 없으면 알려 준다", async () => {
     api = installFakeApi({
       "GET /api/backgrounds": () => listResponse([LAKE, FIRE, STILL]),
-      "GET /api/backgrounds/search": () => ({
-        body: { results: [{ id: LAKE.id, score: 0.7 }] },
-      }),
     });
 
-    await renderView("잔잔한 호수 ".repeat(10));
-    await screen.findByRole("img", { name: "고요한 호수 물결" });
-    const searchCall = api.calls.find(
-      (call) => call.path === "/api/backgrounds/search",
-    );
+    await renderView("부활절");
     expect(
-      new URLSearchParams(searchCall?.search).get("q")?.length,
-    ).toBeLessThanOrEqual(BACKGROUND_SEARCH_MAX_LENGTH);
-  });
-
-  it("검색할 수 없으면 다시 검색하라고 안내한다", async () => {
-    api = installFakeApi({
-      "GET /api/backgrounds": () => listResponse([LAKE, FIRE, STILL]),
-      "GET /api/backgrounds/search": () => ({
-        status: 503,
-        body: { error: "unavailable" },
-      }),
-    });
-
-    await renderView("성탄");
-    expect(
-      await screen.findByText(BACKGROUND_COPY.library.searchFailed),
+      await screen.findByText(BACKGROUND_COPY.library.noMatch("부활절")),
     ).toBeInTheDocument();
-    expect(
-      screen.queryByRole("img", { name: "본당 성탄 배경" }),
-    ).not.toBeInTheDocument();
   });
 
   it("서버에 닿지 않으면 저장된 목록을 보여 준다", async () => {

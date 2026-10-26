@@ -38,17 +38,17 @@ data/
 
 ---
 
-## 🚀 선별 및 D1 데이터베이스 시드(Seed) 방법
+## 🚀 선별 및 Firestore 시드(Seed) 방법
 
 ### 방법 1: 원하는 곡만 선별하여 시드하기 (권장)
 1. `data/cleaned/hymns/` 또는 `data/cleaned/worship/`에서 등록하고 싶은 곡의 `.txt` 파일들을 **`data/cleaned/selected/`** 폴더로 복사합니다.
-2. 로컬 D1에 주입 테스트:
+2. 로컬 Firestore 에뮬레이터(`pnpm emulators`)에 주입 테스트:
    ```bash
    node scripts/seedSelected.mjs --target=local
    ```
-3. 확인 후 프로덕션 D1에 적재:
+3. 확인 후 프로덕션 Firestore에 적재 (운영 데이터를 쓰므로 실행 전에 확인받는다):
    ```bash
-   node scripts/seedSelected.mjs --target=remote
+   GOOGLE_CLOUD_PROJECT=<프로젝트 id> node scripts/seedSelected.mjs --target=remote
    ```
 
 ### 방법 2: 폴더 단위 일괄 업로드

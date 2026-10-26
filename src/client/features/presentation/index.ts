@@ -47,6 +47,7 @@ export {
   launchPresentation,
   editorPath,
   resolvePresentReturnPath,
+  loadPresentReturnPath,
   DEFAULT_PRESENT_RETURN_PATH,
   type PresentNavigate,
 } from "./fullscreen";

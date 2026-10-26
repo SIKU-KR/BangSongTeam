@@ -4,7 +4,7 @@ import path from "node:path";
 
 describe("Global Styles & Local Pretendard Webfont Configuration", () => {
   const cssPath = path.resolve(__dirname, "index.css");
-  const mainPath = path.resolve(__dirname, "main.tsx");
+  const rootLayoutPath = path.resolve(__dirname, "../app/layout.tsx");
 
   it("should have index.css that imports local pretendard without external CDNs", () => {
     expect(fs.existsSync(cssPath)).toBe(true);
@@ -30,9 +30,9 @@ describe("Global Styles & Local Pretendard Webfont Configuration", () => {
     expect(cssContent).not.toMatch(/@fontsource\//);
   });
 
-  it("should import index.css in main.tsx", () => {
-    const mainContent = fs.readFileSync(mainPath, "utf-8");
-    expect(mainContent).toMatch(/import\s+['"].\/index\.css['"]/);
+  it("should import index.css in the root layout", () => {
+    const layoutContent = fs.readFileSync(rootLayoutPath, "utf-8");
+    expect(layoutContent).toMatch(/import\s+['"]\.\.\/client\/index\.css['"]/);
   });
 });
 

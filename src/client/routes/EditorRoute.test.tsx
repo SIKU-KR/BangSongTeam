@@ -10,8 +10,9 @@ import {
   waitFor,
 } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { MemoryRouter, Routes, Route } from "react-router-dom";
+import { MemoryRouter, Routes, Route } from "../test/router";
 import { EditorRoute } from "./EditorRoute";
+import { loadPresentReturnPath } from "../features/presentation/fullscreen";
 import {
   getActivePresentation,
   replaceWithServerDocument,
@@ -29,12 +30,10 @@ import {
 
 const DOC_ID = SEED_PRESENTATION_IDS[0];
 
-function renderEditor(path = `/editor/${DOC_ID}`, state: unknown = null) {
+function renderEditor(path = `/editor/${DOC_ID}`) {
   return render(
     withQueryClient(
-      <MemoryRouter
-        initialEntries={[state === null ? path : { pathname: path, state }]}
-      >
+      <MemoryRouter initialEntries={[path]}>
         <Routes>
           <Route path="/editor/:presentationId" element={<EditorRoute />} />
           <Route
@@ -95,13 +94,9 @@ function placeCaret(textarea: HTMLTextAreaElement, offset: number): void {
 }
 
 const mockNavigate = vi.fn();
-vi.mock("react-router-dom", async () => {
-  const actual = await vi.importActual("react-router-dom");
-  return {
-    ...actual,
-    useNavigate: () => mockNavigate,
-  };
-});
+vi.mock("#hooks/useNavigate", () => ({
+  useNavigate: () => mockNavigate,
+}));
 
 describe("EditorRoute (PowerPoint식 프레젠테이션 편집기)", () => {
   beforeEach(() => {
@@ -140,9 +135,8 @@ describe("EditorRoute (PowerPoint식 프레젠테이션 편집기)", () => {
     const presentBtn = screen.getByTestId("header-present-btn");
     fireEvent.click(presentBtn);
 
-    expect(mockNavigate).toHaveBeenCalledWith(`/present/${DOC_ID}/fullscreen`, {
-      state: { returnTo: `/editor/${DOC_ID}` },
-    });
+    expect(mockNavigate).toHaveBeenCalledWith(`/present/${DOC_ID}/fullscreen`);
+    expect(loadPresentReturnPath(DOC_ID)).toBe(`/editor/${DOC_ID}`);
   });
 
   it("should switch active slide when clicking a slide thumbnail", () => {
@@ -561,9 +555,8 @@ describe("EditorRoute (PowerPoint식 프레젠테이션 편집기)", () => {
 
     fireEvent.keyDown(window, { key: "F5" });
 
-    expect(mockNavigate).toHaveBeenCalledWith(`/present/${DOC_ID}/fullscreen`, {
-      state: { returnTo: `/editor/${DOC_ID}` },
-    });
+    expect(mockNavigate).toHaveBeenCalledWith(`/present/${DOC_ID}/fullscreen`);
+    expect(loadPresentReturnPath(DOC_ID)).toBe(`/editor/${DOC_ID}`);
   });
 
   it("should open file menu and handle actions in EditorHeader", () => {
@@ -1118,15 +1111,13 @@ describe("EditorRoute (PowerPoint식 프레젠테이션 편집기)", () => {
     });
 
     it("로그인하고 돌아오면 사본 만들기 창을 바로 연다", async () => {
-      renderEditor(`/editor/${SHARED_ID}`, { makeCopy: true });
+      renderEditor(`/editor/${SHARED_ID}?copy=1`);
 
       expect(
         await screen.findByTestId("copy-picker-dialog"),
       ).toBeInTheDocument();
-      expect(mockNavigate).toHaveBeenCalledWith(`/editor/${SHARED_ID}`, {
-        replace: true,
-        state: null,
-      });
+      expect(window.location.pathname).toBe(`/editor/${SHARED_ID}`);
+      expect(window.location.search).toBe("");
     });
 
     it("그냥 열면 사본 만들기 창을 띄우지 않는다", () => {

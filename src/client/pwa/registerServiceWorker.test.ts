@@ -302,14 +302,25 @@ describe("reloadOnStaleChunk", () => {
     expect(reload).not.toHaveBeenCalled();
   });
 
-  it("등록하면 청크 로드 실패 이벤트에 새로고침을 건다", () => {
+  it("등록하면 청크 로드 실패에 새로고침을 건다", () => {
     stubServiceWorker({ controlled: true });
     const reload = stubLocation("/editor/p1");
     registerServiceWorker(makeRegistrar().registrar);
 
-    window.dispatchEvent(new Event("vite:preloadError"));
+    const error = new Error("Failed to load chunk /_next/static/chunks/a.js");
+    window.dispatchEvent(new ErrorEvent("error", { error }));
 
     expect(reload).toHaveBeenCalledTimes(1);
+  });
+
+  it("청크 로드 실패가 아닌 오류에는 새로고침하지 않는다", () => {
+    stubServiceWorker({ controlled: true });
+    const reload = stubLocation("/editor/p1");
+    registerServiceWorker(makeRegistrar().registrar);
+
+    window.dispatchEvent(new ErrorEvent("error", { error: new Error("boom") }));
+
+    expect(reload).not.toHaveBeenCalled();
   });
 });
 

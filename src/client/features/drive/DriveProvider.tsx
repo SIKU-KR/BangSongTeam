@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { useLocation, useMatch, useNavigate } from "react-router-dom";
+import { useParams, usePathname } from "next/navigation";
+import { useNavigate } from "#hooks/useNavigate";
 import { FolderIcon, PresentationIcon } from "lucide-react";
 import { Badge } from "#components/ui/badge";
 import {
@@ -39,7 +40,7 @@ import {
   type DriveTypeFilter,
   type SortOrder,
 } from "./driveModel";
-import { DRIVE_FOLDER_ROUTE, TRASH_PATH } from "./drivePaths";
+import { TRASH_PATH } from "./drivePaths";
 import { DriveDialogHost, type DriveDialogState } from "./DriveDialogHost";
 import { useUndoToast } from "./useUndoToast";
 import { DRIVE_COPY } from "#copy/drive";
@@ -71,9 +72,8 @@ export function DriveProvider({
   children: React.ReactNode;
 }): React.JSX.Element {
   const navigate = useNavigate();
-  const { pathname } = useLocation();
-  const folderMatch = useMatch(DRIVE_FOLDER_ROUTE);
-  const currentFolderId = folderMatch?.params.folderId ?? null;
+  const pathname = usePathname();
+  const currentFolderId = useParams<{ folderId?: string }>().folderId ?? null;
   const isTrashView = pathname === TRASH_PATH;
 
   const [selection, setSelectionState] = useState<ReadonlySet<string>>(

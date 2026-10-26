@@ -14,7 +14,7 @@ import {
   ContextMenuContent,
   ContextMenuTrigger,
 } from "#components/ui/context-menu";
-import { useNavigate } from "react-router-dom";
+import { useNavigate } from "#hooks/useNavigate";
 import { editorPath } from "../presentation";
 import { useDrive } from "./driveContext";
 import { TRASH_PATH } from "./drivePaths";
