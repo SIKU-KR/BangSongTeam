@@ -5,3 +5,8 @@ allowBuilds:
   re2: false
   sharp: true
   unrs-resolver: false
+
+supportedArchitectures:
+  os: [current, linux]
+  cpu: [current, x64]
+  libc: [current, glibc]
