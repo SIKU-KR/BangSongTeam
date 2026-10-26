@@ -47,6 +47,20 @@ describe("GET /api/catalog/search", () => {
     expect(otherIp.status).toBe(200);
   });
 
+  it("IPv6는 /64 대역 하나를 한 IP로 세어 주소를 바꿔도 한도를 넘지 못한다", async () => {
+    const app = createApp();
+
+    for (let index = 1; index <= 120; index += 1) {
+      const ip = `2001:db8:abcd:12::${index.toString(16)}`;
+      expect((await search(app, "z", ip)).status).toBe(200);
+    }
+    const sameSubnet = await search(app, "z", "2001:db8:abcd:12:ffff::1");
+    const otherSubnet = await search(app, "z", "2001:db8:abcd:13::1");
+
+    expect(sameSubnet.status).toBe(429);
+    expect(otherSubnet.status).toBe(200);
+  });
+
   it("후보 수를 세지 못해도 검색 결과를 주고 경고 로그를 남긴다", async () => {
     await seedDocs(env.DB, {
       users: [userDoc({ id: AUTHOR, name: "김찬양" })],

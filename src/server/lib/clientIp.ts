@@ -1,4 +1,5 @@
 import { createHash, timingSafeEqual } from "node:crypto";
+import { isIPv4, isIPv6 } from "node:net";
 import { writeLog } from "./requestLog";
 
 /** 앞단 프록시(Cloudflare Worker)가 자신을 증명하려고 붙이는 비밀값 헤더 */
@@ -16,6 +17,51 @@ export const PROXY_CLIENT_IP_HEADER = "x-bst-client-ip";
  */
 export function clientIp(headers: Headers): string {
   return headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+}
+
+function hextetsOf(part: string): string[] {
+  if (!part) return [];
+  const groups = part.split(":");
+  const last = groups.at(-1) ?? "";
+  if (!isIPv4(last)) return groups;
+  const [a = 0, b = 0, c = 0, d = 0] = last.split(".").map(Number);
+  return [
+    ...groups.slice(0, -1),
+    ((a << 8) | b).toString(16),
+    ((c << 8) | d).toString(16),
+  ];
+}
+
+function expandIPv6(ip: string): string[] {
+  const [head = "", tail] = ip.toLowerCase().split("::");
+  const left = hextetsOf(head);
+  const right = tail === undefined ? [] : hextetsOf(tail);
+  const zeros = Array<string>(8 - left.length - right.length).fill("0");
+  return [...left, ...zeros, ...right].map((group) => group.padStart(4, "0"));
+}
+
+/**
+ * 빈도 제한을 셀 IP 단위. IPv6는 앞 64비트(/64) 대역으로 묶고, IPv4를 담은 IPv6
+ * (`::ffff:192.0.2.1`)는 IPv4로 센다.
+ *
+ * IPv6 사용자는 대개 /64 대역을 통째로 받아 그 안에서 주소를 마음대로 바꿀 수 있어, 주소마다
+ * 따로 세면 주소를 바꿔 가며 한도를 피한다. Better Auth도 같은 까닭에 /64로 묶어 센다
+ * (`ipv6Subnet` 기본값).
+ */
+export function rateLimitKey(ip: string): string {
+  if (!isIPv6(ip)) return ip;
+  const groups = expandIPv6(ip);
+  const mapsIPv4 =
+    groups.slice(0, 5).every((group) => group === "0000") &&
+    groups[5] === "ffff";
+  if (mapsIPv4) {
+    return groups
+      .slice(6)
+      .flatMap((group) => [group.slice(0, 2), group.slice(2)])
+      .map((byte) => Number.parseInt(byte, 16))
+      .join(".");
+  }
+  return `${groups.slice(0, 4).join(":")}::/64`;
 }
 
 function sameSecret(received: string, expected: string): boolean {

@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { Query } from "@google-cloud/firestore";
 import type { Db } from "../client";
 import { decksCol, type DeckDoc } from "../collections";
+import { bigramsOf } from "../deckIndex";
 import {
   createTestDb,
   deckDoc,
@@ -25,6 +26,21 @@ function publicDeck(overrides: Partial<DeckDoc> & { id: string }): DeckDoc {
     slides: JSON.stringify([{ id: "s", order: 0, lines: ["가사"] }]),
     ...overrides,
   });
+}
+
+function indexedBeforeInitials(deck: DeckDoc): DeckDoc {
+  return {
+    ...deck,
+    searchGrams: [
+      ...new Set([deck.title, deck.artist, deck.lyricsRaw].flatMap(bigramsOf)),
+    ],
+  };
+}
+
+function popularGraceDecks(count: number): DeckDoc[] {
+  return Array.from({ length: count }, (_, n) =>
+    publicDeck({ id: `grace${n}`, title: `은혜 ${n}`, forkCount: 100 + n }),
+  );
 }
 
 async function seedMany(db: Db, decks: DeckDoc[]): Promise<void> {
@@ -72,6 +88,7 @@ describe("planSearch", () => {
       kind: "search",
       tokens: ["주", "은혜로"],
       grams: ["은혜", "혜로"],
+      initials: false,
     });
     expect(planSearch("사랑 은혜로")).toMatchObject({
       grams: ["은혜", "사랑", "혜로"],
@@ -91,24 +108,40 @@ describe("planSearch", () => {
       kind: "search",
       tokens: ["grace"],
       grams: ["gr", "ra", "ac", "ce"],
+      initials: false,
     });
     expect(planSearch("주 빛")).toEqual({
       kind: "search",
       tokens: ["주", "빛"],
       grams: [],
+      initials: false,
     });
   });
 
-  it("초성만으로 된 낱말은 두 글자 묶음을 고를 때 뺀다", () => {
+  it("초성 낱말의 초성 묶음은 다른 낱말에서 묶음을 고를 수 없을 때만 쓴다", () => {
     expect(planSearch("ㅈㄴ 사랑")).toEqual({
       kind: "search",
       tokens: ["ㅈㄴ", "사랑"],
       grams: ["사랑"],
+      initials: false,
     });
     expect(planSearch("ㅈㄴㅇ")).toEqual({
       kind: "search",
       tokens: ["ㅈㄴㅇ"],
+      grams: ["ㅈㄴ", "ㄴㅇ"],
+      initials: true,
+    });
+    expect(planSearch("ㅈㄴ 빛 ㅅㄹ")).toEqual({
+      kind: "search",
+      tokens: ["ㅈㄴ", "빛", "ㅅㄹ"],
+      grams: ["ㅈㄴ", "ㅅㄹ"],
+      initials: true,
+    });
+    expect(planSearch("ㅈ 빛")).toEqual({
+      kind: "search",
+      tokens: ["ㅈ", "빛"],
       grams: [],
+      initials: false,
     });
   });
 
@@ -117,6 +150,7 @@ describe("planSearch", () => {
       kind: "search",
       tokens: ["주님"],
       grams: ["주님"],
+      initials: false,
     });
     expect(planSearch("은혜 사ㄹ")).toMatchObject({ tokens: ["은혜", "사"] });
   });
@@ -273,7 +307,7 @@ describe("searchPublicDecks", () => {
       decks: Array.from({ length: 150 }, (_, n) =>
         publicDeck({
           id: `noise${n}`,
-          title: `은혜 ${n}`,
+          title: `은혜로 로운 ${n}`,
           forkCount: 1000 + n,
         }),
       ),
@@ -304,7 +338,7 @@ describe("searchPublicDecks", () => {
     ]);
   });
 
-  it("후보 수를 세지 못하면 가장 긴 낱말의 첫 두 글자로 찾고 실패를 알린다", async () => {
+  it("후보 수를 모두 세지 못하면 가장 긴 낱말의 첫 두 글자로 찾고 실패를 알린다", async () => {
     const failure = new Error("index not ready");
     const aggregateQuery: { get: () => Promise<unknown> } =
       Object.getPrototypeOf(decksCol(db).count());
@@ -314,6 +348,26 @@ describe("searchPublicDecks", () => {
     expect(
       ids(await searchPublicDecks(db, "은혜로운 사랑", 20, { onCountError })),
     ).toEqual(["s1"]);
+    expect(onCountError).toHaveBeenCalledTimes(1);
+    expect(onCountError).toHaveBeenCalledWith(failure);
+  });
+
+  it("일부 묶음만 세지 못하면 센 묶음 중 가장 드문 것으로 찾고 실패를 알린다", async () => {
+    const failure = new Error("deadline exceeded");
+    const aggregateQuery: { get: () => Promise<unknown> } =
+      Object.getPrototypeOf(decksCol(db).count());
+    vi.spyOn(aggregateQuery, "get").mockRejectedValueOnce(failure);
+    const onCountError = vi.fn();
+
+    let found: { id: string }[] = [];
+    const read = await documentsReadBy(async () => {
+      found = await searchPublicDecks(db, "은혜로운 사랑", 20, {
+        onCountError,
+      });
+    });
+
+    expect(ids(found)).toEqual(["s1"]);
+    expect(read).toBe(1);
     expect(onCountError).toHaveBeenCalledTimes(1);
     expect(onCountError).toHaveBeenCalledWith(failure);
   });
@@ -332,6 +386,31 @@ describe("searchPublicDecks", () => {
     expect(ids(await searchPublicDecks(db, "ㅇㄴㅇㅌ"))).toEqual(["s1"]);
   });
 
+  it("초성만 친 낱말은 인기순 한 페이지 밖의 곡도 찾는다", async () => {
+    await seedMany(db, popularGraceDecks(150));
+    await seedDocs(db, {
+      decks: [publicDeck({ id: "p1", title: "주님의 사랑" })],
+    });
+
+    expect(ids(await searchPublicDecks(db, "ㅈㄴ"))).toEqual(["p1"]);
+    expect(ids(await searchPublicDecks(db, "ㅈㄴㅇ ㅅㄹ"))).toEqual(["p1"]);
+  });
+
+  it("초성 색인이 생기기 전에 저장된 곡도 인기순 한 페이지 안에서는 초성으로 찾는다", async () => {
+    await seedMany(db, popularGraceDecks(150));
+    await seedDocs(db, {
+      decks: [
+        indexedBeforeInitials(
+          publicDeck({ id: "old", title: "주님의 평강", forkCount: 500 }),
+        ),
+        publicDeck({ id: "new", title: "주님 곁에", forkCount: 1 }),
+      ],
+    });
+
+    expect(ids(await searchPublicDecks(db, "ㅈㄴ"))).toEqual(["old", "new"]);
+    expect(ids(await searchPublicDecks(db, "ㅇㅍㄱ"))).toEqual(["old"]);
+  });
+
   it("초성은 가사에서 찾지 않는다", async () => {
     expect(await searchPublicDecks(db, "ㅂㅍㅅㅅ")).toEqual([]);
   });
@@ -347,16 +426,7 @@ describe("searchPublicDecks", () => {
 
   describe("읽는 곡 문서 수", () => {
     beforeEach(async () => {
-      await seedMany(
-        db,
-        Array.from({ length: 400 }, (_, n) =>
-          publicDeck({
-            id: `grace${n}`,
-            title: `은혜 ${n}`,
-            forkCount: 100 + n,
-          }),
-        ),
-      );
+      await seedMany(db, popularGraceDecks(400));
     });
 
     it("두 글자 묶음으로 고른 후보도 300곡까지만 확인한다", async () => {
@@ -367,6 +437,16 @@ describe("searchPublicDecks", () => {
 
       expect(found).toEqual([]);
       expect(read).toBeLessThanOrEqual(300);
+    });
+
+    it("초성 묶음으로 고른 후보도 300곡까지 확인하고, 모자라면 인기순 한 페이지를 더 본다", async () => {
+      let found: unknown;
+      const read = await documentsReadBy(async () => {
+        found = await searchPublicDecks(db, "ㅇㅎ ㅋ");
+      });
+
+      expect(found).toEqual([]);
+      expect(read).toBe(400);
     });
 
     it("두 글자 묶음이 없는 검색은 인기순 100곡만 확인한다", async () => {
