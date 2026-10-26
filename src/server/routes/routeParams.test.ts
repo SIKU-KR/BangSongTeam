@@ -6,7 +6,9 @@ import {
   DeckSchema,
   FolderSchema,
   PresentationDocumentSchema,
+  toPresentationChanges,
   type Deck,
+  type PresentationDocument,
 } from "#shared";
 import { clearDb, seedDocs, userDoc } from "../../db/test/fixtures";
 import { createApp } from "../index";
@@ -14,6 +16,9 @@ import type { SessionReader } from "../middleware/auth";
 
 const USER = "aaaaaaaa00000000000p1";
 const DECK_ID = "c000000000000000000p1";
+const SET_ID = "1000000000000000000p1";
+const COPY_ID = "c000000000000000000p2";
+const ITEM_ID = "3000000000000000000p1";
 const SLASHED = "a%2Fb";
 const RESERVED = "__abcdefghijklmnopq__";
 const LONG_TOKEN = "x".repeat(1600);
@@ -49,6 +54,25 @@ function emptyPresentation(id: string) {
   });
 }
 
+function presentationWithSong(
+  copy: Partial<Deck> = {},
+  overrides: Partial<PresentationDocument> = {},
+): PresentationDocument {
+  const deck = libraryDeck({
+    id: COPY_ID,
+    scope: "presentation",
+    presentationId: SET_ID,
+    ...copy,
+  });
+  return PresentationDocumentSchema.parse({
+    ...emptyPresentation(SET_ID),
+    items: [
+      { id: ITEM_ID, presentationId: SET_ID, deckId: deck.id, order: 0, deck },
+    ],
+    ...overrides,
+  });
+}
+
 function send(method: string, path: string, body?: unknown) {
   return app.request(
     path,
@@ -64,21 +88,23 @@ function send(method: string, path: string, body?: unknown) {
   );
 }
 
+let errorLog: ReturnType<typeof vi.spyOn>;
+
+beforeEach(async () => {
+  await clearDb(env.DB);
+  await seedDocs(env.DB, {
+    users: [userDoc({ id: USER, name: "인도자", termsAgreedAt: new Date() })],
+  });
+  errorLog = vi.spyOn(console, "error").mockImplementation(() => {});
+});
+
+afterEach(() => {
+  const errorLines = errorLog.mock.calls.length;
+  vi.restoreAllMocks();
+  expect(errorLines).toBe(0);
+});
+
 describe("경로 id·공유 토큰 검사", () => {
-  let errorLog: ReturnType<typeof vi.spyOn>;
-
-  beforeEach(async () => {
-    await clearDb(env.DB);
-    await seedDocs(env.DB, { users: [userDoc({ id: USER, name: "인도자" })] });
-    errorLog = vi.spyOn(console, "error").mockImplementation(() => {});
-  });
-
-  afterEach(() => {
-    const errorLines = errorLog.mock.calls.length;
-    vi.restoreAllMocks();
-    expect(errorLines).toBe(0);
-  });
-
   it.each([
     ["GET", `/api/catalog/decks/${SLASHED}`, API_ERRORS.deck.notPublished],
     ["GET", `/api/catalog/decks/${RESERVED}`, API_ERRORS.deck.notPublished],
@@ -170,4 +196,82 @@ describe("경로 id·공유 토큰 검사", () => {
     const { deck } = (await res.json()) as { deck: Deck };
     expect(deck.createdAt).toBe("1970-01-01T00:00:00.000Z");
   });
+});
+
+describe("본문 id 검사", () => {
+  async function savedPresentation(): Promise<PresentationDocument> {
+    const res = await send("GET", `/api/presentations/${SET_ID}`);
+    expect(res.status).toBe(200);
+    return ((await res.json()) as { presentation: PresentationDocument })
+      .presentation;
+  }
+
+  it("신고할 곡 id가 Firestore 예약 id면 없는 곡의 404다", async () => {
+    const res = await send("POST", "/api/reports", {
+      targetType: "deck",
+      targetId: RESERVED,
+      reason: "copyright",
+    });
+
+    expect(res.status).toBe(404);
+    expect(await res.json()).toEqual({
+      error: API_ERRORS.report.targetNotFound,
+    });
+  });
+
+  it("보관함 곡의 배경 id가 Firestore 예약 id면 배경 없이 저장한다", async () => {
+    const res = await send(
+      "PUT",
+      `/api/decks/${DECK_ID}`,
+      libraryDeck({ backgroundId: RESERVED }),
+    );
+
+    expect(res.status).toBe(200);
+    const { deck } = (await res.json()) as { deck: Deck };
+    expect(deck.backgroundId).toBeNull();
+  });
+
+  it("프레젠테이션이 가리키는 폴더·배경·원본 곡이 Firestore 예약 id면 없는 것으로 보고 저장한다", async () => {
+    const res = await send(
+      "PUT",
+      `/api/presentations/${SET_ID}`,
+      presentationWithSong(
+        { backgroundId: RESERVED, forkedFrom: RESERVED },
+        { folderId: RESERVED },
+      ),
+    );
+
+    expect(res.status).toBe(200);
+    const presentation = await savedPresentation();
+    expect(presentation.folderId).toBeNull();
+    expect(presentation.items[0]?.deck.backgroundId).toBeNull();
+    expect(presentation.items[0]?.deck.forkedFrom).toBeNull();
+  });
+
+  it("문서 경로가 아닌 항목 id는 Firestore 예약 꼴이어도 그대로 저장한다", async () => {
+    const document = presentationWithSong();
+    const res = await send("PUT", `/api/presentations/${SET_ID}`, {
+      ...document,
+      items: document.items.map((item) => ({ ...item, id: RESERVED })),
+    });
+
+    expect(res.status).toBe(200);
+    expect((await savedPresentation()).items[0]?.id).toBe(RESERVED);
+  });
+
+  it.each([
+    ["PUT", presentationWithSong({ id: RESERVED })],
+    ["PATCH", toPresentationChanges(presentationWithSong({ id: RESERVED }))],
+  ])(
+    "%s로 보낸 곡 id가 Firestore 예약 id면 저장하지 않고 400이다",
+    async (method, body) => {
+      const res = await send(method, `/api/presentations/${SET_ID}`, body);
+
+      expect(res.status).toBe(400);
+      expect(await res.json()).toEqual({ error: API_ERRORS.idMismatch });
+      expect((await send("GET", `/api/presentations/${SET_ID}`)).status).toBe(
+        404,
+      );
+    },
+  );
 });

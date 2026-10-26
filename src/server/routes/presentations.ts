@@ -2,6 +2,7 @@ import { Hono, type Context } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import {
   API_ERRORS,
+  isReservedDocumentId,
   toPresentationChanges,
   type PresentationChanges,
   PresentationChangesSchema,
@@ -26,7 +27,10 @@ import { logServerError } from "../lib/requestLog";
 import { idParam } from "../lib/params";
 
 async function save(c: Context<AppEnv>, changes: PresentationChanges) {
-  if (changes.id !== c.req.param("id")) {
+  if (
+    changes.id !== c.req.param("id") ||
+    changes.decks.some((deck) => isReservedDocumentId(deck.id))
+  ) {
     return c.json({ error: API_ERRORS.idMismatch }, 400);
   }
 

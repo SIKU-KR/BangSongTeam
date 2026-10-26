@@ -1,13 +1,11 @@
 import type { MiddlewareHandler, TypedResponse } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
-import { IdSchema } from "#shared";
+import { IdSchema, isReservedDocumentId } from "#shared";
 import type { AppEnv } from "../types";
 
-const FIRESTORE_RESERVED_ID = /^__.*__$/;
-
 const IdParamSchema = z.object({
-  id: IdSchema.refine((id) => !FIRESTORE_RESERVED_ID.test(id)),
+  id: IdSchema.refine((id) => !isReservedDocumentId(id)),
 });
 
 const TokenParamSchema = z.object({

@@ -1,4 +1,8 @@
-import { createId, type CreateReportRequest } from "#shared";
+import {
+  createId,
+  isReservedDocumentId,
+  type CreateReportRequest,
+} from "#shared";
 import type { Db } from "../client";
 import { decksCol, reportsCol } from "../collections";
 
@@ -20,6 +24,7 @@ export async function createReport(
   userId: string,
   input: CreateReportRequest,
 ): Promise<CreateReportResult> {
+  if (isReservedDocumentId(input.targetId)) return { status: "not_found" };
   return db.runTransaction(async (tx) => {
     const [target, pending] = await Promise.all([
       tx.get(decksCol(db).doc(input.targetId)),

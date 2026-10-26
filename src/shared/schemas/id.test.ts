@@ -1,5 +1,15 @@
 import { describe, it, expect } from "vitest";
-import { IdSchema, ID_PATTERN } from "./id";
+import { IdSchema, ID_PATTERN, isReservedDocumentId } from "./id";
+
+describe("isReservedDocumentId", () => {
+  it("앞뒤가 모두 __인 id만 Firestore 예약 꼴로 본다", () => {
+    expect(isReservedDocumentId("__abcdefghijklmnopq__")).toBe(true);
+    expect(isReservedDocumentId("____")).toBe(true);
+    expect(isReservedDocumentId("__abcdefghijklmnopqr_")).toBe(false);
+    expect(isReservedDocumentId("_abcdefghijklmnopqr__")).toBe(false);
+    expect(isReservedDocumentId("V1StGXR8_Z5jdHi6B-myT")).toBe(false);
+  });
+});
 
 describe("IdSchema", () => {
   it("21자 NanoID를 통과시킨다", () => {
