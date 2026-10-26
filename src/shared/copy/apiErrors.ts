@@ -4,6 +4,8 @@
  */
 export const API_ERRORS = {
   loginRequired: "로그인이 필요해요",
+  consentRequired:
+    "이용 동의를 마쳐야 쓸 수 있어요. 동의한 뒤 다시 시도해 주세요",
   userNotFound: "사용자를 찾을 수 없어요",
   idMismatch: "요청이 올바르지 않아요. 새로고침한 뒤 다시 시도해 주세요",
   tooManyRequests: "요청이 너무 많아요. 잠시 후 다시 시도해 주세요",

@@ -14,6 +14,7 @@ import { resolveRequireAuth, type AppDeps } from "../deps";
 import { isTransientStorageError } from "../lib/storageErrors";
 import { logServerError } from "../lib/requestLog";
 import { idParam } from "../lib/params";
+import { hasAgreedToTerms, requireConsent } from "../middleware/consent";
 
 /**
  * 곡 보관함(scope: 'library') 동기화 API.
@@ -69,6 +70,9 @@ export function createDecksRoute(deps: AppDeps = {}) {
       async (c) => {
         const db = c.env.DB;
         const { visibility } = c.req.valid("json");
+        if (visibility === "public" && !(await hasAgreedToTerms(c))) {
+          return c.json({ error: API_ERRORS.consentRequired }, 403);
+        }
         const result = await setDeckVisibility(
           db,
           c.get("userId") as string,
@@ -95,7 +99,7 @@ export function createDecksRoute(deps: AppDeps = {}) {
         }
       },
     )
-    .post("/:id/fork", publicDeckId, async (c) => {
+    .post("/:id/fork", publicDeckId, requireConsent, async (c) => {
       const db = c.env.DB;
       const result = await forkPublicDeck(
         db,

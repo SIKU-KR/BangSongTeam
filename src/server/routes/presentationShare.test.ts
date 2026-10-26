@@ -112,7 +112,7 @@ describe("세트 링크 공유 라우트", () => {
           createdAt: new Date(),
           updatedAt: new Date(),
         },
-      ].map((row) => userDoc(row)),
+      ].map((row) => userDoc({ ...row, termsAgreedAt: new Date() })),
     });
     await as(OWNER, `/api/presentations/${DOC_ID}`, send("PUT", makeDoc()));
   });

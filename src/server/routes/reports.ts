@@ -4,6 +4,7 @@ import { API_ERRORS, CreateReportRequestSchema } from "#shared";
 import { createReport } from "#db";
 import type { AppEnv } from "../types";
 import { resolveRequireAuth, type AppDeps } from "../deps";
+import { requireConsent } from "../middleware/consent";
 
 /**
  * 신고 접수. 처리는 `scripts/moderation.mjs`로 한다 — 관리자 화면은 두지 않는다.
@@ -11,6 +12,7 @@ import { resolveRequireAuth, type AppDeps } from "../deps";
 export function createReportsRoute(deps: AppDeps = {}) {
   return new Hono<AppEnv>()
     .use("*", resolveRequireAuth(deps))
+    .use("*", requireConsent)
     .post("/", zValidator("json", CreateReportRequestSchema), async (c) => {
       const db = c.env.DB;
       const result = await createReport(

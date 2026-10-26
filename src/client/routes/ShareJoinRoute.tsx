@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useParams, useSearchParams } from "next/navigation";
 import { useNavigate } from "#hooks/useNavigate";
 import { DRIVE_ROOT_PATH } from "../features/drive/drivePaths";
@@ -18,7 +19,13 @@ import {
   withMakeCopyRequest,
 } from "../features/sharing/shareLink";
 import { joinSharedPresentation } from "../lib/api/shareApi";
+import {
+  isConsentRequiredError,
+  refreshConsentStatus,
+  useConsentStatus,
+} from "../lib/api/consentQueries";
 import { describeApiError } from "../lib/api/request";
+import { useSession } from "../lib/auth";
 import { SHARE_LINK_COPY } from "#copy/shareLink";
 
 /**
@@ -31,16 +38,28 @@ import { SHARE_LINK_COPY } from "#copy/shareLink";
  *
  * 로그인 전에 '사본 만들기'를 눌러 로그인하고 돌아왔으면(`?copy=1`)
  * 편집기에서 사본 만들기 창을 바로 연다.
+ *
+ * 링크로 처음 가입한 사람은 동의 모달이 떠 있는 동안 참여하지 않고 동의를 마친 뒤 참여한다.
+ * 서버가 동의 전 참여를 막기 때문이다. 동의 상태를 확인하지 못하면(오프라인 등) 기다리지 않고
+ * 서버가 정하게 두고, 서버가 동의 전이라 거절하면 동의 상태를 다시 받아 모달을 띄운 뒤 동의하면
+ * 다시 참여한다.
  */
 export function ShareJoinRoute(): React.JSX.Element {
   const { token = "" } = useParams<{ token?: string }>();
   const searchParams = useSearchParams();
   const navigate = useNavigate();
+  const session = useSession();
+  const queryClient = useQueryClient();
+  const consent = useConsentStatus(session.user?.userId ?? "");
   const [error, setError] = useState<string | null>(null);
   const startedFor = useRef<string | null>(null);
   const continueCopy = searchParams.has(SHARE_COPY_PARAM);
+  const waitingForConsent =
+    consent.data?.agreedAt === null ||
+    (consent.isPending && consent.fetchStatus === "fetching");
 
   useEffect(() => {
+    if (waitingForConsent) return;
     if (startedFor.current === token) return;
     startedFor.current = token;
 
@@ -61,10 +80,14 @@ export function ShareJoinRoute(): React.JSX.Element {
           { replace: true },
         );
       } catch (err) {
+        if (isConsentRequiredError(err)) {
+          startedFor.current = null;
+          void refreshConsentStatus(queryClient);
+        }
         setError(describeApiError(err));
       }
     })();
-  }, [token, navigate, continueCopy]);
+  }, [token, navigate, continueCopy, waitingForConsent, queryClient]);
 
   if (error) {
     return (

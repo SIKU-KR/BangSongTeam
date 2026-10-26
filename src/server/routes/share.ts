@@ -4,6 +4,7 @@ import type { AppEnv } from "../types";
 import { resolveRequireAuth, type AppDeps } from "../deps";
 import { API_ERRORS } from "#shared";
 import { tokenParam } from "../lib/params";
+import { requireConsent } from "../middleware/consent";
 
 /**
  * 공유 링크(`/s/:token`) API.
@@ -27,7 +28,7 @@ export function createShareRoute(deps: AppDeps = {}) {
         return c.json({ error: API_ERRORS.share.linkUnavailable }, 404);
       return c.json({ document }, 200);
     })
-    .post("/:token/join", requireAuth, linkToken, async (c) => {
+    .post("/:token/join", requireAuth, linkToken, requireConsent, async (c) => {
       const result = await joinByToken(
         c.env.DB,
         c.req.param("token"),

@@ -89,7 +89,7 @@ describe("2계정 공유 라이브러리 E2E", () => {
           createdAt: new Date(),
           updatedAt: new Date(),
         },
-      ].map((row) => userDoc(row)),
+      ].map((row) => userDoc({ ...row, termsAgreedAt: new Date() })),
     });
     currentUser = A;
   });
