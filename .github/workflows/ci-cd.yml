@@ -41,6 +41,7 @@ jobs:
             app:
               - 'src/**'
               - 'config/**'
+              - 'infra/**'
               - 'public/**'
               - 'scripts/**'
               - 'package.json'
