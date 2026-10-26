@@ -53,6 +53,7 @@ jobs:
               - 'eslint.config.mjs'
               - 'Dockerfile'
               - '.dockerignore'
+              - '.gitignore'
               - 'firebase.json'
               - 'firestore.indexes.json'
               - 'firestore.rules'

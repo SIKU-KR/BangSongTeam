@@ -42,12 +42,15 @@ describe("GitHub Actions 워크플로", () => {
 describe("CI/CD 워크플로", () => {
   const ciCd = readWorkflow("ci-cd.yml");
 
-  it("Cloudflare Worker만 바꾼 PR도 필수 검사를 건너뛰지 않는다", () => {
+  it.each([
+    { change: "Cloudflare Worker", filter: "infra/**" },
+    { change: "테스트가 읽는 .gitignore", filter: ".gitignore" },
+  ])("$change만 바꾼 PR도 필수 검사를 건너뛰지 않는다", ({ filter }) => {
     const filters = [
       ...jobOf(ciCd, "changes").matchAll(/^\s+- '([^']+)'$/gm),
     ].map((match) => match[1]);
     expect(filters).toContain("src/**");
-    expect(filters).toContain("infra/**");
+    expect(filters).toContain(filter);
   });
 
   describe("Cloud Run 배포", () => {
