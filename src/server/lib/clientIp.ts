@@ -1,4 +1,5 @@
 import { createHash, timingSafeEqual } from "node:crypto";
+import { writeLog } from "./requestLog";
 
 /** 앞단 프록시(Cloudflare Worker)가 자신을 증명하려고 붙이는 비밀값 헤더 */
 export const PROXY_SECRET_HEADER = "x-bst-proxy-secret";
@@ -23,6 +24,18 @@ function sameSecret(received: string, expected: string): boolean {
   return timingSafeEqual(digest(received), digest(expected));
 }
 
+let warnedSecretMismatch = false;
+
+function warnSecretMismatchOnce(configured: boolean): void {
+  if (warnedSecretMismatch) return;
+  warnedSecretMismatch = true;
+  writeLog("WARNING", { event: "proxy_secret_mismatch", configured });
+}
+
+export function __resetProxySecretWarningForTests(): void {
+  warnedSecretMismatch = false;
+}
+
 /**
  * 프록시를 거친 요청의 `x-forwarded-for`를 프록시가 알려 준 사용자 IP 하나로 바꾼다.
  *
@@ -31,6 +44,11 @@ function sameSecret(received: string, expected: string): boolean {
  * 맞을 때만 프록시 헤더를 믿는다. 아무나 Cloudflare Worker로 run.app에 직접 요청할 수 있어
  * Cloudflare IP 대역을 믿는 방식은 위조를 막지 못한다. 프록시 헤더는 비밀값이 맞든 틀리든
  * 지워서 뒤쪽 코드에 닿지 않게 한다.
+ *
+ * 프록시 헤더가 왔는데 비밀값이 없거나 틀리면 `proxy_secret_mismatch` WARNING을 프로세스마다
+ * 한 번 남긴다. Worker와 Cloud Run의 비밀값이 어긋나면(교체 중 한쪽만 바꾼 경우 등) 모든 사용자가
+ * 로그인 빈도 제한 하나를 나눠 써 429가 나는데, 응답만으로는 알 수 없다. 누구나 run.app에 이
+ * 헤더를 보낼 수 있으므로 요청마다 남기지 않는다.
  */
 export function withTrustedClientIp(
   request: Request,
@@ -43,7 +61,9 @@ export function withTrustedClientIp(
   const headers = new Headers(request.headers);
   headers.delete(PROXY_SECRET_HEADER);
   headers.delete(PROXY_CLIENT_IP_HEADER);
-  if (proxySecret && secret && ip && sameSecret(secret, proxySecret)) {
+  if (!proxySecret || !secret || !sameSecret(secret, proxySecret)) {
+    warnSecretMismatchOnce(Boolean(proxySecret));
+  } else if (ip) {
     headers.set("x-forwarded-for", ip);
   }
   return new Request(request, { headers });

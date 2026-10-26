@@ -50,12 +50,16 @@ gcloud projects add-iam-policy-binding "$PROJECT_ID" --member="serviceAccount:$R
 
 ```bash
 printf '%s' "$(openssl rand -base64 32)" | gcloud secrets create better-auth-secret --data-file=-
+printf '%s' "$(openssl rand -base64 32)" | gcloud secrets create proxy-secret --data-file=-
 printf '%s' '<카카오 secret>' | gcloud secrets create kakao-client-secret --data-file=-
 printf '%s' '<네이버 secret>' | gcloud secrets create naver-client-secret --data-file=-
 printf '%s' '<구글 secret>' | gcloud secrets create google-client-secret --data-file=-
 ```
 
 `BETTER_AUTH_SECRET`을 Cloudflare 때와 같은 값으로 두면 이전 뒤에도 기존 로그인 쿠키가 유효하다.
+`proxy-secret`은 Cloudflare Worker의 `PROXY_SECRET`에도 같은 값으로 넣는다
+(`infra/cloudflare-proxy/wrangler.jsonc`). 두 값이 다르면 서버가 `proxy_secret_mismatch`
+경고를 남기고, 모든 사용자가 로그인 빈도 제한 하나를 나눠 쓴다.
 
 ## 5. 첫 배포 (서비스 설정)
 

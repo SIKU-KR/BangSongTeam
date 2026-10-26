@@ -1,5 +1,6 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, afterEach, beforeEach, vi } from "vitest";
 import {
+  __resetProxySecretWarningForTests,
   clientIp,
   PROXY_CLIENT_IP_HEADER,
   PROXY_SECRET_HEADER,
@@ -82,5 +83,85 @@ describe("withTrustedClientIp", () => {
 
     expect(request.method).toBe("POST");
     await expect(request.json()).resolves.toEqual({ email: "a@example.com" });
+  });
+});
+
+describe("프록시 비밀값 불일치 경고", () => {
+  let log: ReturnType<typeof vi.spyOn>;
+
+  function warnings(): Record<string, unknown>[] {
+    return log.mock.calls
+      .map((call: unknown[]) => JSON.parse(call[0] as string))
+      .filter(
+        (line: Record<string, unknown>) =>
+          line.event === "proxy_secret_mismatch",
+      );
+  }
+
+  beforeEach(() => {
+    __resetProxySecretWarningForTests();
+    log = vi.spyOn(console, "log").mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("비밀값이 틀린 프록시 요청은 프로세스마다 한 번만 WARNING으로 남기고 헤더는 믿지 않는다", () => {
+    const forged = () =>
+      withTrustedClientIp(
+        proxied({
+          [PROXY_SECRET_HEADER]: "wrong-secret-value",
+          [PROXY_CLIENT_IP_HEADER]: "192.0.2.10",
+        }),
+        SECRET,
+      );
+
+    const first = forged();
+    forged();
+
+    expect(warnings()).toEqual([
+      {
+        severity: "WARNING",
+        event: "proxy_secret_mismatch",
+        configured: true,
+      },
+    ]);
+    expect(JSON.stringify(log.mock.calls)).not.toContain("wrong-secret-value");
+    expect(JSON.stringify(log.mock.calls)).not.toContain(SECRET);
+    expect(first.headers.get("x-forwarded-for")).toBe(
+      "198.51.100.7, 203.0.113.9",
+    );
+  });
+
+  it("서버에 비밀값이 없는데 프록시 헤더가 오면 설정되지 않았다고 남긴다", () => {
+    withTrustedClientIp(
+      proxied({
+        [PROXY_SECRET_HEADER]: SECRET,
+        [PROXY_CLIENT_IP_HEADER]: "192.0.2.10",
+      }),
+      undefined,
+    );
+
+    expect(warnings()).toEqual([
+      {
+        severity: "WARNING",
+        event: "proxy_secret_mismatch",
+        configured: false,
+      },
+    ]);
+  });
+
+  it("비밀값이 맞거나 프록시 헤더가 없으면 남기지 않는다", () => {
+    withTrustedClientIp(
+      proxied({
+        [PROXY_SECRET_HEADER]: SECRET,
+        [PROXY_CLIENT_IP_HEADER]: "192.0.2.10",
+      }),
+      SECRET,
+    );
+    withTrustedClientIp(proxied({}), SECRET);
+
+    expect(warnings()).toEqual([]);
   });
 });
