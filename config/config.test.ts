@@ -104,6 +104,15 @@ describe("Next.js·Cloud Run 프로젝트 설정", () => {
     expect(dockerfile).toContain('CMD ["boot.mjs"]');
     expect(dockerfile).not.toContain('CMD ["server.js"]');
   });
+
+  it("google-github-actions/auth가 작업 공간에 쓰는 자격 증명 파일을 이미지 빌드와 커밋에서 뺀다", () => {
+    const lines = (file: string) =>
+      read(file)
+        .split("\n")
+        .map((line) => line.trim());
+    expect(lines(".dockerignore")).toContain("gha-creds-*.json");
+    expect(lines(".gitignore")).toContain("gha-creds-*.json");
+  });
 });
 
 describe("응답 보안 헤더", () => {

@@ -10,5 +10,7 @@ dist
 *.log
 .env
 .env.*
+# google-github-actions/auth가 작업 공간에 쓰는 자격 증명 파일
+gha-creds-*.json
 Dockerfile
 .dockerignore
