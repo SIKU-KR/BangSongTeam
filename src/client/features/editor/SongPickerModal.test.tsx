@@ -2,7 +2,13 @@ import React from "react";
 import { signInAsTestUser } from "../../test/sessionFixture";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
-import { API_ERRORS, type Deck, DEFAULT_DECK_STYLE } from "#shared";
+import {
+  API_ERRORS,
+  type Deck,
+  DEFAULT_DECK_STYLE,
+  MAX_SEARCH_QUERY_LENGTH,
+  clampSearchQuery,
+} from "#shared";
 import { closeOfflineDB, OFFLINE_DB_NAME } from "../../lib/storage/db";
 import { withQueryClient } from "../../test/queryClientFixture";
 import { installFakeApi, type FakeApi } from "../../test/fakeApi";
@@ -18,6 +24,7 @@ import { COMMON_COPY } from "#copy/common";
 import { SEED_USER_ID } from "../../test/presentationFixture";
 
 const SHARED_ID = "c00000005000000000001";
+const LYRIC_MATCH_ID = "c00000005000000000002";
 const FORK_ID = "c000000050000000000f0";
 const NOW = "2026-09-23T00:00:00.000Z";
 
@@ -199,6 +206,40 @@ describe("SongPickerModal", () => {
       await screen.findByTestId(`song-item-${SHARED_ID}`),
     ).toBeInTheDocument();
     expect(screen.queryByText("소원")).not.toBeInTheDocument();
+  });
+
+  it("가사를 길게 붙여 넣어도 앞 50자로 검색해 연결 실패로 보이지 않는다", async () => {
+    const lyricMatch = { ...sharedSummary, id: LYRIC_MATCH_ID };
+    api.restore();
+    api = installFakeApi({
+      "GET /api/catalog/search": ({ url }) => {
+        const q = url.searchParams.get("q") ?? "";
+        if (q.length > MAX_SEARCH_QUERY_LENGTH) {
+          return { status: 400, body: { success: false, error: {} } };
+        }
+        return { body: { decks: q ? [lyricMatch] : [sharedSummary] } };
+      },
+    });
+    renderPicker();
+    await screen.findByTestId(`song-item-${SHARED_ID}`);
+
+    const lyrics =
+      "주 하나님 지으신 모든 세계 내 마음 속에 그리어 볼 때 하늘의 별 울려 퍼지는 뇌성 주님의 권능 우주에 찼네";
+    expect(lyrics.length).toBeGreaterThan(MAX_SEARCH_QUERY_LENGTH);
+    fireEvent.change(screen.getByTestId("song-picker-search-input"), {
+      target: { value: lyrics },
+    });
+
+    expect(
+      await screen.findByTestId(`song-item-${LYRIC_MATCH_ID}`),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("song-picker-offline-notice"),
+    ).not.toBeInTheDocument();
+    const searched = api.calls
+      .filter((call) => call.path === "/api/catalog/search")
+      .map((call) => new URLSearchParams(call.search).get("q"));
+    expect(searched).toEqual(["", clampSearchQuery(lyrics)]);
   });
 
   it("곡 항목은 키보드 Enter로도 고를 수 있다", async () => {
