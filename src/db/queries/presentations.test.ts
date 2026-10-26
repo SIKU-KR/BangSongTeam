@@ -176,18 +176,20 @@ describe("프레젠테이션 쿼리", () => {
       expect(orphans.size).toBe(0);
     });
 
-    it("본문의 userId를 믿지 않고 세션 소유자로 강제한다", async () => {
-      await upsertPresentationDocument(
-        db,
-        userAId,
-        makeDoc(userBId, { userId: userBId }),
-      );
+    it("본문의 userId가 세션 사용자와 다르면 쓰지 않는다", async () => {
+      expect(
+        await upsertPresentationDocument(db, userAId, makeDoc(userBId)),
+      ).toBe(false);
 
+      expect(await getPresentationDocumentsByUserId(db, userAId)).toHaveLength(
+        0,
+      );
       expect(await getPresentationDocumentsByUserId(db, userBId)).toHaveLength(
         0,
       );
-      const [mine] = await getPresentationDocumentsByUserId(db, userAId);
-      expect(mine.userId).toBe(userAId);
+      expect(
+        (await decksCol(db).where("presentationId", "==", DOC_ID).get()).size,
+      ).toBe(0);
     });
 
     it("남의 문서는 덮어쓰지 못한다", async () => {

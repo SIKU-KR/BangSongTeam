@@ -1,4 +1,4 @@
-import { Hono } from "hono";
+import { Hono, type Context } from "hono";
 import { API_ERRORS, DeckSchema, VisibilityUpdateRequestSchema } from "#shared";
 import {
   getMyLibraryDecks,
@@ -7,10 +7,14 @@ import {
   toSharedDeck,
   setDeckVisibility,
   forkPublicDeck,
+  type SetVisibilityResult,
 } from "#db";
 import type { AppEnv } from "../types";
 import { resolveRequireAuth, type AppDeps } from "../deps";
-import { isTransientStorageError } from "../lib/storageErrors";
+import {
+  isStorageLimitError,
+  isTransientStorageError,
+} from "../lib/storageErrors";
 import { logServerError } from "../lib/requestLog";
 import { idParam } from "../lib/params";
 import { jsonBody } from "../lib/jsonBody";
@@ -19,6 +23,16 @@ import {
   SMALL_BODY_MAX_BYTES,
 } from "../middleware/bodyLimit";
 import { hasAgreedToTerms, requireConsent } from "../middleware/consent";
+
+function storageFailure(c: Context<AppEnv>, error: unknown) {
+  if (isStorageLimitError(error)) {
+    return c.json({ error: API_ERRORS.deck.tooLarge }, 413);
+  }
+  if (isTransientStorageError(error)) {
+    return c.json({ error: API_ERRORS.deck.saveFailed }, 503);
+  }
+  return c.json({ error: API_ERRORS.deck.saveFailed }, 500);
+}
 
 /**
  * 곡 보관함(scope: 'library') 동기화 API.
@@ -60,10 +74,7 @@ export function createDecksRoute(deps: AppDeps = {}) {
         }
       } catch (error) {
         logServerError(c, "deck upsert failed", error, { deckId: deck.id });
-        if (isTransientStorageError(error)) {
-          return c.json({ error: API_ERRORS.deck.saveFailed }, 503);
-        }
-        return c.json({ error: API_ERRORS.deck.saveFailed }, 500);
+        return storageFailure(c, error);
       }
 
       return c.json({ ok: true as const, deck: saved }, 200);
@@ -78,12 +89,21 @@ export function createDecksRoute(deps: AppDeps = {}) {
         if (visibility === "public" && !(await hasAgreedToTerms(c))) {
           return c.json({ error: API_ERRORS.consentRequired }, 403);
         }
-        const result = await setDeckVisibility(
-          db,
-          c.get("userId") as string,
-          c.req.param("id"),
-          visibility,
-        );
+        let result: SetVisibilityResult;
+        try {
+          result = await setDeckVisibility(
+            db,
+            c.get("userId") as string,
+            c.req.param("id"),
+            visibility,
+          );
+        } catch (error) {
+          logServerError(c, "deck visibility update failed", error, {
+            deckId: c.req.param("id"),
+            visibility,
+          });
+          return storageFailure(c, error);
+        }
 
         switch (result.status) {
           case "ok":

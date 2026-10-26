@@ -94,12 +94,16 @@ export function libraryDeckDefaults(
  *
  * 공개 상태·가져온 곡 정보·가져간 횟수는 공개 설정·가져오기 API가 정하는 값이라 이 경로로는
  * 바뀌지 않는다. 남의 곡이거나 프레젠테이션 사본이면 null이다.
+ *
+ * 본문의 `userId`가 세션 사용자가 아니어도 아무것도 쓰지 않고 null이다. 아직 A라고 믿는 탭이나
+ * A가 남긴 대기열이 보낸 곡을 지금 쿠키의 주인인 B의 보관함에 만들면 안 된다.
  */
 export async function upsertDeck(
   db: Db,
   userId: string,
   deck: SharedDeck,
 ): Promise<SharedDeck | null> {
+  if (deck.userId !== userId) return null;
   return db.runTransaction(async (tx) => {
     const ref = decksCol(db).doc(deck.id);
     const existing = (await tx.get(ref)).data();

@@ -56,7 +56,9 @@ export async function deletePresentation(
 /**
  * `savePresentationChanges` 결과.
  *
- * - `forbidden`: 남의 세트, 공유받은 세트(`access`), 또는 다른 곳에 속한 덱 id
+ * - `forbidden`: 남의 세트, 공유받은 세트(`access`), 다른 곳에 속한 덱 id, 또는 본문의
+ *   `userId`가 세션 사용자가 아닌 세트. 아직 A라고 믿는 탭이나 A가 남긴 대기열이 보낸 문서를
+ *   지금 쿠키의 주인인 B의 계정에 만들면 안 된다
  * - `stale`: 항목이 가리키는 덱이 본문에도 서버에도 없다. 클라이언트가 서버 상태를
  *   잘못 알고 있으므로 모든 덱을 담아 다시 보내야 한다.
  */
@@ -104,6 +106,7 @@ export async function savePresentationChanges(
   changes: PresentationChanges,
 ): Promise<SavePresentationResult> {
   if (changes.access) return "forbidden";
+  if (changes.userId !== userId) return "forbidden";
 
   const sentDeckIds = changes.decks.map((deck) => deck.id);
   const forkedFromIds = [
@@ -264,7 +267,8 @@ export async function savePresentationChanges(
 
 /**
  * 프레젠테이션 문서 업서트 (문서 단위 전체 교체). 모든 덱을 담은 변경분 저장과 같다.
- * 소유자가 다르거나 공유받은 세트면 아무것도 쓰지 않고 false를 돌린다.
+ * 소유자가 다르거나, 공유받은 세트거나, 문서의 `userId`가 세션 사용자가 아니면 아무것도
+ * 쓰지 않고 false를 돌린다.
  */
 export async function upsertPresentationDocument(
   db: Db,

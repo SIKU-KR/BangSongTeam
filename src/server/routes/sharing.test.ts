@@ -1,16 +1,19 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { env } from "../test/env";
 import {
+  API_ERRORS,
   DEFAULT_DECK_STYLE,
   DeckSchema,
+  ForkDeckResponseSchema,
   MAX_SEARCH_QUERY_LENGTH,
   PresentationDocumentSchema,
   SearchCatalogResponseSchema,
   type Deck,
   type SearchCatalogResponse,
 } from "#shared";
+import { decksCol, type Db } from "#db";
 import { takedownDeck } from "../../db/ops/moderation";
-import { clearDb, seedDocs, userDoc } from "../../db/test/fixtures";
+import { clearDb, deckDoc, seedDocs, userDoc } from "../../db/test/fixtures";
 import { createApp } from "../index";
 import type { SessionReader } from "../middleware/auth";
 import { resetBackgrounds } from "../test/backgrounds";
@@ -87,7 +90,19 @@ async function takeDown(deckId: string): Promise<void> {
   await takedownDeck(env.DB, deckId);
 }
 
+function syllables(count: number): string {
+  let seed = 1;
+  return Array.from({ length: count }, () => {
+    seed = (seed * 48271) % 2147483647;
+    return String.fromCharCode(0xac00 + (seed % 11172));
+  }).join("");
+}
+
 describe("공유 라이브러리 API", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   beforeEach(async () => {
     await clearDb(env.DB);
     await seedDocs(env.DB, {
@@ -137,6 +152,78 @@ describe("공유 라이브러리 API", () => {
     it("requires a session", async () => {
       currentUser = null;
       expect((await publish(PUB)).status).toBe(401);
+    });
+
+    it("검색 색인까지 더해 Firestore 문서 한도를 넘는 곡은 공개하지 않고 413으로 답한다", async () => {
+      const bigId = "c00000003000000000008";
+      await seedDocs(env.DB, {
+        decks: [
+          deckDoc({
+            id: bigId,
+            userId: A,
+            title: "긴 곡",
+            lyricsRaw: syllables(120_000),
+            slides: JSON.stringify([{ id: "s1", order: 0, lines: ["시작"] }]),
+          }),
+        ],
+      });
+
+      const res = await publish(bigId);
+
+      expect(res.status).toBe(413);
+      expect(await res.json()).toEqual({ error: API_ERRORS.deck.tooLarge });
+      expect((await decksCol(env.DB).doc(bigId).get()).data()).toMatchObject({
+        visibility: "private",
+        listed: false,
+      });
+    });
+
+    it("공개 전환 중 저장소 일시 장애는 503, 그 밖의 오류는 한국어 500으로 답한다", async () => {
+      vi.spyOn(console, "error").mockImplementation(() => {});
+      const failingWith = (error: Error) => ({
+        ...env,
+        DB: new Proxy(env.DB, {
+          get(target, prop) {
+            if (prop === "runTransaction") {
+              return async () => {
+                throw error;
+              };
+            }
+            return Reflect.get(target, prop);
+          },
+        }) as Db,
+      });
+      const publishWith = (failure: Error) =>
+        app.request(
+          `/api/decks/${PUB}/visibility`,
+          {
+            method: "PATCH",
+            headers: {
+              "sec-fetch-site": "same-origin",
+              "content-type": "application/json",
+            },
+            body: JSON.stringify({
+              visibility: "public",
+              acceptedCopyrightNotice: true,
+            }),
+          },
+          failingWith(failure),
+        );
+
+      const busy = await publishWith(
+        Object.assign(new Error("14 UNAVAILABLE: connection dropped"), {
+          code: 14,
+        }),
+      );
+      expect(busy.status).toBe(503);
+      expect(busy.headers.get("Retry-After")).not.toBeNull();
+      expect(await busy.json()).toEqual({ error: API_ERRORS.deck.saveFailed });
+
+      const broken = await publishWith(new Error("unexpected"));
+      expect(broken.status).toBe(500);
+      expect(await broken.json()).toEqual({
+        error: API_ERRORS.deck.saveFailed,
+      });
     });
   });
 
@@ -296,6 +383,32 @@ describe("공유 라이브러리 API", () => {
         decks: Deck[];
       };
       expect(mine.decks.map((d) => d.id)).toEqual([fork.id]);
+    });
+
+    it("제목이 100자를 넘게 저장된 공개 곡도 가져오면 응답 스키마를 통과한다", async () => {
+      const longId = "c00000003000000000009";
+      await seedDocs(env.DB, {
+        decks: [
+          deckDoc({
+            id: longId,
+            userId: A,
+            visibility: "public",
+            title: "가".repeat(153),
+            lyricsRaw: "시작됐네",
+            slides: JSON.stringify([
+              { id: "s1", order: 0, lines: ["시작됐네"] },
+            ]),
+          }),
+        ],
+      });
+
+      currentUser = B;
+      const res = await request("POST", `/api/decks/${longId}/fork`);
+
+      expect(res.status).toBe(200);
+      const body = ForkDeckResponseSchema.parse(await res.json());
+      expect(body.deck.title).toBe("가".repeat(100));
+      expect(body.deck.forkedFromAuthorName).toBe("김찬양");
     });
 
     it("B cannot change A's deck through the sync PUT either", async () => {

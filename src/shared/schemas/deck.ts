@@ -9,6 +9,9 @@ export const MAX_DECK_TITLE_LENGTH = 100;
 /** 곡 아티스트 최대 길이. 서버 스키마와 클라이언트 입력 제한이 모두 이 값을 따른다. */
 export const MAX_DECK_ARTIST_LENGTH = 100;
 
+/** 가져온 곡에 남기는 원작자 이름(`forkedFromAuthorName`) 최대 길이 */
+export const MAX_FORKED_FROM_AUTHOR_NAME_LENGTH = 100;
+
 export const DeckVisibilitySchema = z.enum(["private", "public"]);
 export type DeckVisibility = z.infer<typeof DeckVisibilitySchema>;
 
@@ -54,7 +57,11 @@ export const DeckSchema = z.object({
   forkCount: z.number().int().nonnegative().default(0),
 
   origin: LegacyDeckOriginSchema.optional(),
-  forkedFromAuthorName: z.string().max(100).nullable().optional(),
+  forkedFromAuthorName: z
+    .string()
+    .max(MAX_FORKED_FROM_AUTHOR_NAME_LENGTH)
+    .nullable()
+    .optional(),
   publishedAt: z.iso.datetime().nullable().optional(),
   takedownAt: z.iso.datetime().nullable().optional(),
 

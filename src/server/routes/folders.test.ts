@@ -170,6 +170,15 @@ describe("드라이브 폴더 API", () => {
     expect(still.name).toBe("2026 주일");
   });
 
+  it("본문의 userId가 세션 사용자와 다르면 403으로 거절하고 만들지 않는다", async () => {
+    const res = await putFolder(makeFolder({ userId: USER_B }));
+
+    expect(res.status).toBe(403);
+    expect(await listFolders()).toEqual([]);
+    currentUser = USER_B;
+    expect(await listFolders()).toEqual([]);
+  });
+
   it("사이클을 만드는 이동은 루트로 보정해 돌려준다", async () => {
     const a = makeFolder({ name: "a" });
     const b = makeFolder({ name: "b", parentId: a.id });

@@ -42,6 +42,8 @@ export async function getFoldersByUserId(
  * 폴더 1건 업서트.
  *
  * - 남의 폴더면 아무것도 쓰지 않고 `null` (→ 403).
+ * - 본문의 `userId`가 세션 사용자가 아니어도 `null` (→ 403). 아직 A라고 믿는 탭이나 A가 남긴
+ *   대기열이 보낸 폴더를 지금 쿠키의 주인인 B의 드라이브에 만들면 안 된다.
  * - 부모가 없거나, 남의 것이거나, 옮기면 사이클이 생기면 **루트로 보정**한다.
  *   오프라인 기기 두 대가 서로 반대로 옮기거나 다른 기기에서 부모를 영구
  *   삭제하면 생기는 일이다. 거절하면 그 폴더는 영영 동기화되지 않으므로,
@@ -54,6 +56,7 @@ export async function upsertFolder(
   userId: string,
   folder: SharedFolder,
 ): Promise<SharedFolder | null> {
+  if (folder.userId !== userId) return null;
   return db.runTransaction(async (tx) => {
     const ref = foldersCol(db).doc(folder.id);
     const [existingSnapshot, ownFolders, clearTombstone] = await Promise.all([

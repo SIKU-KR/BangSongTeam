@@ -121,9 +121,9 @@ describe("덱 쓰기 헬퍼 (보관함 동기화)", () => {
     expect((await readDeck(DECK_ID)).title).toBe("은혜로다 (수정)");
   });
 
-  it("본문의 userId를 믿지 않고 세션 소유자로 강제한다", async () => {
-    await upsertDeck(db, ownerId, makeDeck(strangerId));
-    expect((await readDeck(DECK_ID)).userId).toBe(ownerId);
+  it("본문의 userId가 세션 사용자와 다르면 쓰지 않는다", async () => {
+    expect(await upsertDeck(db, ownerId, makeDeck(strangerId))).toBeNull();
+    expect((await decksCol(db).doc(DECK_ID).get()).exists).toBe(false);
   });
 
   it("남의 덱은 덮어쓰지 못한다", async () => {

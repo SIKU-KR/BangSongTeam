@@ -2,7 +2,10 @@ import { describe, it, expect } from "vitest";
 import {
   DEFAULT_DECK_STYLE,
   DeckSchema,
+  DeckStyleSchema,
+  FALLBACK_USER_NAME,
   PresentationDocumentSchema,
+  UNTITLED_SONG,
   toPresentationChanges,
   type Deck as SharedDeck,
   type PresentationDocument,
@@ -10,6 +13,7 @@ import {
 import type { DeckDoc, PresentationDoc } from "../collections";
 import { withDeckIndex } from "../deckIndex";
 import {
+  parseStyle,
   toSharedDeck,
   toDeckContent,
   toFolderDoc,
@@ -234,6 +238,73 @@ describe("문서 ↔ DTO 매퍼", () => {
       );
       expect(DeckSchema.safeParse(deck).success).toBe(true);
     });
+
+    it("한도를 넘는 제목·아티스트·원작자와 음수 가져간 횟수도 스키마에 맞게 읽는다", () => {
+      const deck = toSharedDeck(
+        asRow({
+          id: DECK_ID,
+          userId: USER_ID,
+          title: "가".repeat(153),
+          artist: "나".repeat(150),
+          forkedFromAuthorName: "x".repeat(150),
+          forkCount: -1,
+        }),
+      );
+
+      expect(DeckSchema.safeParse(deck).success).toBe(true);
+      expect(deck.title).toHaveLength(100);
+      expect(deck.artist).toHaveLength(100);
+      expect(deck.forkedFromAuthorName).toHaveLength(100);
+      expect(deck.forkCount).toBe(0);
+    });
+
+    it("가져간 횟수가 없거나 숫자가 아니면 0으로 읽는다", () => {
+      for (const forkCount of [undefined, NaN, "3"]) {
+        const deck = toSharedDeck({
+          ...asRow({ id: DECK_ID, userId: USER_ID, title: "은혜로다" }),
+          forkCount: forkCount as number,
+        });
+        expect(deck.forkCount).toBe(0);
+        expect(DeckSchema.safeParse(deck).success).toBe(true);
+      }
+    });
+
+    it("문자열이 아닌 원작자 이름은 기본 이름으로 읽고 가져온 곡으로 둔다", () => {
+      const deck = toSharedDeck({
+        ...asRow({ id: DECK_ID, userId: USER_ID, title: "은혜로다" }),
+        forkedFromAuthorName: 12345 as unknown as string,
+      });
+
+      expect(deck).toMatchObject({
+        forkedFromAuthorName: FALLBACK_USER_NAME.default,
+        origin: "fork",
+      });
+      expect(DeckSchema.safeParse(deck).success).toBe(true);
+    });
+
+    it("빈 제목은 '(제목 없음)'으로 읽는다", () => {
+      const deck = toSharedDeck(
+        asRow({ id: DECK_ID, userId: USER_ID, title: "" }),
+      );
+
+      expect(deck.title).toBe(UNTITLED_SONG);
+      expect(DeckSchema.safeParse(deck).success).toBe(true);
+    });
+
+    it("스타일의 한 필드만 틀리면 그 필드만 기본값으로 읽는다", () => {
+      const style = parseStyle(
+        JSON.stringify({ fontFamily: "NotAFont", fontSizeVw: 6 }),
+      );
+
+      expect(style.fontSizeVw).toBe(6);
+      expect(style.fontFamily).toBe("Pretendard");
+      expect(DeckStyleSchema.safeParse(style).success).toBe(true);
+    });
+
+    it("스타일이 객체가 아니거나 JSON이 깨졌으면 기본 스타일로 읽는다", () => {
+      expect(parseStyle("[]")).toEqual(DEFAULT_DECK_STYLE);
+      expect(parseStyle("not json")).toEqual(DEFAULT_DECK_STYLE);
+    });
   });
 
   describe("프레젠테이션 문서", () => {
@@ -275,6 +346,32 @@ describe("문서 ↔ DTO 매퍼", () => {
       expect(presentation.trashedAt).toEqual(new Date(0));
       expect(folder.createdAt).toEqual(new Date(0));
       expect(folder.updatedAt.toISOString()).toBe("2026-09-21T00:00:00.000Z");
+    });
+
+    it("머리 문서의 제목이 너무 길거나 문자열이 아니어도 문서 스키마에 맞게 읽는다", () => {
+      const header: PresentationDoc = {
+        id: PRESENTATION_ID,
+        userId: USER_ID,
+        title: "가".repeat(150),
+        serviceDate: "2026-09-27",
+        folderId: null,
+        trashedAt: null,
+        linkAccess: "off",
+        linkToken: null,
+        createdAt: new Date(0),
+        updatedAt: new Date(0),
+      };
+
+      const long = toPresentationDocument(header, []);
+      const numeric = toPresentationDocument(
+        { ...header, title: 42 as unknown as string },
+        [],
+      );
+
+      expect(PresentationDocumentSchema.safeParse(long).success).toBe(true);
+      expect(long.title).toBe("가".repeat(100));
+      expect(PresentationDocumentSchema.safeParse(numeric).success).toBe(true);
+      expect(numeric.title).toBe(UNTITLED_SONG);
     });
 
     it("드라이브 필드가 없으면 행에도 넣지 않는다 (업서트가 기존 값을 유지)", () => {

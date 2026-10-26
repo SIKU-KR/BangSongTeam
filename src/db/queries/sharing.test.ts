@@ -1,6 +1,16 @@
 import { describe, it, expect, beforeEach } from "vitest";
+import {
+  FALLBACK_USER_NAME,
+  ForkDeckResponseSchema,
+  SearchCatalogResponseSchema,
+} from "#shared";
 import type { Db } from "../client";
-import { decksCol, type DeckDoc } from "../collections";
+import {
+  COLLECTIONS,
+  decksCol,
+  type DeckDoc,
+  type UserDoc,
+} from "../collections";
 import {
   createTestDb,
   deckDoc,
@@ -9,6 +19,7 @@ import {
   userDoc,
 } from "../test/fixtures";
 import { deleteDeckScoped } from "./decks";
+import { searchPublicDecks } from "./search";
 import {
   forkPublicDeck,
   getPublicDeckDetail,
@@ -67,6 +78,108 @@ describe("공유 쿼리 헬퍼", () => {
       expect(summary.authorName).toBe("김찬양");
       expect(summary).not.toHaveProperty("userId");
       expect(summary).not.toHaveProperty("lyricsRaw");
+    });
+
+    it("원작자 필드가 저장돼 있지 않아도 키를 null로 채운다", () => {
+      const { forkedFromAuthorName, ...stored } = row({ visibility: "public" });
+      void forkedFromAuthorName;
+
+      const summary = toPublicDeckSummary({
+        ...(stored as DeckDoc),
+        authorName: "김찬양",
+      });
+
+      expect(summary).toHaveProperty("forkedFromAuthorName", null);
+    });
+  });
+
+  describe("저장된 이름·곡이 스키마 한도를 벗어날 때", () => {
+    const AUTHORS = [
+      "0000000000000000000o1",
+      "0000000000000000000o2",
+      "0000000000000000000o3",
+      "0000000000000000000o4",
+    ] as const;
+
+    async function seedOddAuthors(): Promise<void> {
+      const [zero, object, long, nameless] = AUTHORS;
+      await seedDocs(db, {
+        users: [
+          { ...userDoc({ id: zero }), name: 0 as unknown as string },
+          { ...userDoc({ id: object }), name: { x: 1 } as unknown as string },
+          userDoc({ id: long, name: "a".repeat(200) }),
+        ],
+        decks: AUTHORS.map((userId, n) =>
+          row({
+            id: `c0000000000000000000${n}`,
+            userId,
+            visibility: "public",
+            title: "가".repeat(153),
+            artist: "나".repeat(150),
+            forkedFromAuthorName: "x".repeat(150),
+            forkCount: -1,
+          }),
+        ),
+      });
+      const { name, ...withoutName } = userDoc({ id: nameless });
+      void name;
+      await db
+        .collection(COLLECTIONS.users)
+        .doc(nameless)
+        .set(withoutName as Omit<UserDoc, "name">);
+    }
+
+    it("이름이 문자열이 아니거나 길거나 없는 작성자의 곡도 검색 응답 스키마를 통과한다", async () => {
+      await seedOddAuthors();
+
+      const decks = await searchPublicDecks(db, "");
+      const parsed = SearchCatalogResponseSchema.parse({ decks });
+
+      expect(parsed.decks).toHaveLength(AUTHORS.length);
+      expect(parsed.decks.map((deck) => deck.authorName).sort()).toEqual(
+        [
+          FALLBACK_USER_NAME.default,
+          FALLBACK_USER_NAME.default,
+          FALLBACK_USER_NAME.default,
+          "a".repeat(50),
+        ].sort(),
+      );
+      for (const deck of parsed.decks) {
+        expect(deck.title).toHaveLength(100);
+        expect(deck.artist).toHaveLength(100);
+        expect(deck.forkedFromAuthorName).toHaveLength(100);
+        expect(deck.forkCount).toBe(0);
+      }
+    });
+
+    it("공개 덱 상세도 작성자 이름을 표시 이름으로 다듬는다", async () => {
+      await seedOddAuthors();
+
+      const detail = await getPublicDeckDetail(db, "c00000000000000000000");
+
+      expect(detail?.authorName).toBe(FALLBACK_USER_NAME.default);
+    });
+
+    it("긴 제목의 곡을 긴 이름의 작성자에게서 가져와도 응답과 저장값이 한도 안이다", async () => {
+      await seedDocs(db, {
+        users: [userDoc({ id: A, name: "김".repeat(150) })],
+        decks: [row({ visibility: "public", title: "가".repeat(153) })],
+      });
+
+      const result = await forkPublicDeck(db, B, DECK);
+      if (result.status !== "ok") throw new Error("fork failed");
+
+      expect(
+        ForkDeckResponseSchema.safeParse({
+          deck: result.deck,
+          alreadyOwned: result.alreadyOwned,
+        }).success,
+      ).toBe(true);
+      const stored = await readRow(result.deck.id);
+      expect(stored.title).toHaveLength(100);
+      expect(stored.forkedFromAuthorName?.length).toBeLessThanOrEqual(50);
+      expect(stored.listed).toBe(false);
+      expect((await readRow(DECK)).forkCount).toBe(1);
     });
   });
 

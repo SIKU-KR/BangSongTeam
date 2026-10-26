@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import { NOONNU_FONTS } from "../constants/noonnuFontCatalog";
 import {
   DeckStyleSchema,
   GridAnchorPresetSchema,
@@ -147,6 +148,17 @@ describe("Style Schemas", () => {
         );
       }
       expect(() => DeckStyleSchema.parse({ fontFamily: "Arial" })).toThrow();
+    });
+
+    it("글꼴 카탈로그의 모든 이름과 카드 패밀리를 받는다", () => {
+      const rejected = NOONNU_FONTS.flatMap((font) => [
+        font.name,
+        font.cardFamily,
+      ]).filter(
+        (name) => !DeckStyleSchema.shape.fontFamily.safeParse(name).success,
+      );
+
+      expect(rejected).toEqual([]);
     });
 
     it("validates fontSizeVw range 2-10", () => {

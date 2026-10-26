@@ -1,8 +1,10 @@
 import { describe, it, expect, beforeEach } from "vitest";
+import { DeckSchema } from "#shared";
 import type { Db } from "../client";
-import { COLLECTIONS, usersCol } from "../collections";
+import { COLLECTIONS, usersCol, type DeckDoc } from "../collections";
 import { listBackgrounds } from "../queries/backgrounds";
 import { getMyLibraryDecks } from "../queries/decks";
+import { toSharedDeck } from "../queries/mappers";
 import { getDriveTombstones } from "../queries/folders";
 import { getPresentationDocumentsByUserId } from "../queries/presentations";
 import { getSharedPresentationDocuments } from "../queries/presentationSharing";
@@ -182,6 +184,39 @@ describe("D1 내보내기 옮기기", () => {
     expect(background).toMatchObject({
       mediaUrl: "/api/media/loops/bg1.mp4",
       keywords: ["노을", "주황"],
+    });
+  });
+
+  it("제목이 100자를 넘는 메들리처럼 한도를 벗어난 곡도 앱의 덱 스키마로 읽힌다", async () => {
+    const medleyDb = createTestDb();
+    const [song] = EXPORT.decks ?? [];
+    await writeImportedDocs(
+      medleyDb,
+      convertD1Export({
+        user: EXPORT.user,
+        decks: [
+          {
+            ...song,
+            id: "dmedley00000000000001",
+            background_id: null,
+            title: "가".repeat(153),
+            artist: "나".repeat(150),
+            forked_from_author_name: "x".repeat(150),
+            fork_count: -1,
+          },
+        ],
+      }),
+    );
+
+    const [medley] = await getMyLibraryDecks(medleyDb, OWNER);
+    const deck = toSharedDeck(medley as DeckDoc);
+
+    expect(DeckSchema.safeParse(deck).success).toBe(true);
+    expect(deck).toMatchObject({
+      title: "가".repeat(100),
+      artist: "나".repeat(100),
+      forkedFromAuthorName: "x".repeat(100),
+      forkCount: 0,
     });
   });
 });
