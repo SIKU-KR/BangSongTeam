@@ -93,8 +93,16 @@ describe("Next.js·Cloud Run 프로젝트 설정", () => {
     expect(dockerfile).toContain("/app/.next/static ./.next/static");
     expect(dockerfile).toContain("/app/public ./public");
     expect(dockerfile).toMatch(/PORT=8080/);
-    expect(dockerfile).toContain('CMD ["server.js"]');
     expect(read(".dockerignore")).toMatch(/^\.data$/m);
+  });
+
+  it("Dockerfile은 운영 필수 환경 변수를 확인하는 boot.mjs로 서버를 띄운다", () => {
+    const dockerfile = read("Dockerfile");
+    expect(dockerfile).toContain(
+      "COPY --from=build --chown=nonroot:nonroot /app/scripts/cloudRunBoot.mjs ./boot.mjs",
+    );
+    expect(dockerfile).toContain('CMD ["boot.mjs"]');
+    expect(dockerfile).not.toContain('CMD ["server.js"]');
   });
 });
 
