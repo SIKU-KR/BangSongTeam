@@ -13,8 +13,8 @@
             "crossSeriesReducer": "REDUCE_SUM"
           }
         ],
-        "comparison": "COMPARISON_GE",
-        "thresholdValue": 1,
+        "comparison": "COMPARISON_GT",
+        "thresholdValue": 0,
         "duration": "60s",
         "trigger": { "count": 1 },
         "evaluationMissingData": "EVALUATION_MISSING_DATA_INACTIVE"

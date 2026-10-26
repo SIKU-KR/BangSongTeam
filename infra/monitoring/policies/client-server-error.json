@@ -14,8 +14,8 @@
             "groupByFields": ["metric.label.app_version"]
           }
         ],
-        "comparison": "COMPARISON_GE",
-        "thresholdValue": 10,
+        "comparison": "COMPARISON_GT",
+        "thresholdValue": 9,
         "duration": "60s",
         "trigger": { "count": 1 },
         "evaluationMissingData": "EVALUATION_MISSING_DATA_INACTIVE"

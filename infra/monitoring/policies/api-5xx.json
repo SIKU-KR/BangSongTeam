@@ -13,8 +13,8 @@
             "crossSeriesReducer": "REDUCE_SUM"
           }
         ],
-        "comparison": "COMPARISON_GE",
-        "thresholdValue": 5,
+        "comparison": "COMPARISON_GT",
+        "thresholdValue": 4,
         "duration": "60s",
         "trigger": { "count": 1 },
         "evaluationMissingData": "EVALUATION_MISSING_DATA_INACTIVE"
@@ -31,8 +31,8 @@
             "crossSeriesReducer": "REDUCE_SUM"
           }
         ],
-        "comparison": "COMPARISON_GE",
-        "thresholdValue": 5,
+        "comparison": "COMPARISON_GT",
+        "thresholdValue": 4,
         "duration": "60s",
         "trigger": { "count": 1 },
         "evaluationMissingData": "EVALUATION_MISSING_DATA_INACTIVE"

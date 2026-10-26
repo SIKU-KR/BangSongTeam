@@ -3,12 +3,12 @@
   "combiner": "OR",
   "conditions": [
     {
-      "displayName": "report_created 1분 합계",
+      "displayName": "report_created 5분 합계",
       "conditionThreshold": {
         "filter": "metric.type=\"logging.googleapis.com/user/bst_report_created\" AND resource.type=\"cloud_run_revision\" AND resource.labels.service_name=\"__SERVICE__\"",
         "aggregations": [
           {
-            "alignmentPeriod": "60s",
+            "alignmentPeriod": "300s",
             "perSeriesAligner": "ALIGN_SUM",
             "crossSeriesReducer": "REDUCE_SUM"
           }
@@ -24,6 +24,6 @@
   "alertStrategy": { "autoClose": "1800s" },
   "documentation": {
     "mimeType": "text/markdown",
-    "content": "새 곡 신고가 접수됐다. 저작권 게시 중단 요청이면 지체 없이 처리한다.\n\n- 신고 id와 사유는 로그의 `jsonPayload.reportId`, `jsonPayload.reason`에 있다.\n- 처리: `node scripts/moderation.mjs list --target=remote`로 대기 신고를 보고, `node scripts/moderation.mjs takedown <곡 id> --note=<사유> --target=remote`로 게시를 중단한다. 운영 Firestore를 건드리니 실행 전에 확인한다."
+    "content": "새 곡 신고가 접수됐다. 저작권 게시 중단 요청이면 지체 없이 처리한다.\n\n- 신고 id와 사유는 로그 `jsonPayload.event=\"report_created\"` 줄에 있다.\n- 처리: `node scripts/moderation.mjs list --target=remote`로 대기 신고를 보고, `node scripts/moderation.mjs takedown <곡 id> --note=<사유> --target=remote`로 게시를 중단한다. 운영 Firestore를 건드리니 실행 전에 확인한다."
   }
 }

@@ -112,7 +112,7 @@ apply_budget() {
   fi
   number=$(gcloud projects describe "$PROJECT_ID" --format='value(projectNumber)')
   gcloud billing budgets create --billing-account="$account" --display-name="$BUDGET_NAME" \
-    --budget-amount="$BUDGET_AMOUNT" --filter-projects="projects/${number}" \
+    --budget-amount="$BUDGET_AMOUNT" --calendar-period=month --filter-projects="projects/${number}" \
     --threshold-rule=percent=0.5 --threshold-rule=percent=0.9 --threshold-rule=percent=1.0 \
     --threshold-rule=percent=1.0,basis=forecasted-spend \
     --notifications-rule-monitoring-notification-channels="$channel"

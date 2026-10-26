@@ -35,6 +35,18 @@ describe("배포 문서의 서비스 설정", () => {
     );
   });
 
+  it("이미 만든 서비스를 고정하는 명령도 5절의 비밀값을 모두 적는다", () => {
+    const pin = /--update-secrets\s+(\S*BETTER_AUTH_SECRET=\S+)/.exec(
+      section(4),
+    )?.[1];
+    const pinned = (pin ?? "").split(",").map((entry) => entry.split("=")[0]);
+
+    expect(pin).toBeDefined();
+    expect(secretMappings().filter(({ env }) => !pinned.includes(env))).toEqual(
+      [],
+    );
+  });
+
   it("서비스가 참조하는 비밀값을 모두 4절에서 만든다", () => {
     const created = [
       ...section(4).matchAll(/gcloud secrets create ([a-z0-9-]+)/g),
@@ -126,6 +138,18 @@ describe("배포 문서의 Workload Identity", () => {
     );
     expect(identity).toMatch(
       /providers update-oidc .*--attribute-condition="\$CONDITION"/,
+    );
+  });
+
+  it("조건 변수는 공급자를 만들고 바꾸는 명령보다 먼저 정하고, 비면 바꾸기 전에 멈춘다", () => {
+    const identity = section(6);
+    const defined = identity.indexOf("CONDITION=");
+
+    expect(defined).toBeGreaterThan(-1);
+    expect(defined).toBeLessThan(identity.indexOf("providers create-oidc"));
+    expect(defined).toBeLessThan(identity.indexOf("providers update-oidc"));
+    expect(identity).toMatch(
+      /: "\$\{CONDITION:\?[^}]*\}" &&\s+gcloud [^\n]*providers update-oidc/,
     );
   });
 });

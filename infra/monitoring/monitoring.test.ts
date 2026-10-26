@@ -20,6 +20,8 @@ interface AlertPolicy {
   conditions: {
     conditionThreshold: {
       filter: string;
+      aggregations: { alignmentPeriod: string }[];
+      comparison: string;
       duration: string;
       evaluationMissingData?: string;
     };
@@ -44,6 +46,10 @@ const policyFiles = jsonFiles("policies");
 const policies = policyFiles.map((file) =>
   readJson<AlertPolicy>(`policies/${file}`),
 );
+const thresholds = policies.flatMap((policy) =>
+  policy.conditions.map(({ conditionThreshold }) => conditionThreshold),
+);
+const seconds = (duration: string): number => Number.parseInt(duration, 10);
 
 describe("로그 기반 지표 정의", () => {
   it.each(metricNames)(
@@ -62,11 +68,7 @@ describe("로그 기반 지표 정의", () => {
 });
 
 describe("알림 정책 정의", () => {
-  const filters = policies.flatMap((policy) =>
-    policy.conditions.map(
-      ({ conditionThreshold }) => conditionThreshold.filter,
-    ),
-  );
+  const filters = thresholds.map(({ filter }) => filter);
 
   it("정책 이름은 겹치지 않고 알림 채널은 적용 스크립트가 붙인다", () => {
     const names = policies.map(({ displayName }) => displayName);
@@ -100,17 +102,48 @@ describe("알림 정책 정의", () => {
   });
 
   it("데이터가 끊길 때의 평가 방식은 지속 시간이 60초 이상인 조건에만 지정한다", () => {
-    const conditions = policies.flatMap((policy) =>
-      policy.conditions.map(({ conditionThreshold }) => conditionThreshold),
-    );
-    const withMissingDataControl = conditions.filter(
+    const withMissingDataControl = thresholds.filter(
       ({ evaluationMissingData }) => evaluationMissingData !== undefined,
     );
 
     expect(withMissingDataControl.length).toBeGreaterThan(0);
     expect(
-      withMissingDataControl.filter(
-        ({ duration }) => Number.parseInt(duration, 10) < 60,
+      withMissingDataControl.filter(({ duration }) => seconds(duration) < 60),
+    ).toEqual([]);
+  });
+
+  it("임계값 비교는 API가 받는 초과와 미만뿐이다", () => {
+    expect(
+      thresholds.filter(
+        ({ comparison }) =>
+          comparison !== "COMPARISON_GT" && comparison !== "COMPARISON_LT",
+      ),
+    ).toEqual([]);
+  });
+
+  it("지속 시간은 분 단위이고 정렬 주기는 60초 이상이다", () => {
+    expect(
+      thresholds.filter(({ duration }) => seconds(duration) % 60 !== 0),
+    ).toEqual([]);
+    expect(
+      thresholds
+        .flatMap(({ aggregations }) => aggregations)
+        .filter(({ alignmentPeriod }) => seconds(alignmentPeriod) < 60),
+    ).toEqual([]);
+  });
+
+  it("로그 기반 지표를 세는 조건은 사건 하나가 지속 시간보다 오래 임계값 위에 머문다", () => {
+    const counted = thresholds.filter(({ filter }) =>
+      filter.includes("logging.googleapis.com/user/"),
+    );
+
+    expect(counted.length).toBeGreaterThan(0);
+    expect(
+      counted.filter(({ aggregations, duration }) =>
+        aggregations.some(
+          ({ alignmentPeriod }) =>
+            seconds(alignmentPeriod) <= seconds(duration),
+        ),
       ),
     ).toEqual([]);
   });
@@ -327,6 +360,7 @@ esac`;
     for (const part of [
       "--billing-account=AAAAAA-BBBBBB-CCCCCC",
       "--budget-amount=10000KRW",
+      "--calendar-period=month",
       "--filter-projects=projects/123456789",
       "--threshold-rule=percent=1.0,basis=forecasted-spend",
       `--notifications-rule-monitoring-notification-channels=${CHANNEL}`,

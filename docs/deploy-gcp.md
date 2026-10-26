@@ -93,13 +93,15 @@ gcloud run services update "$SERVICE" --region "$REGION" --update-secrets PROXY_
   프록시가 넘긴 사용자 IP를 믿지 않고, `REQUIRE_PROXY`가 켜져 있으면 API가 잠깐 403이다.
 
 이미 `:latest`로 만든 서비스는 지금 `latest`가 가리키는 번호로 한 번 고정한다. 값이 그대로라
-로그아웃되지 않는다. 번호는 비밀값마다 `versions describe latest`가 돌려주는 이름의 끝 숫자이고,
+로그아웃되지 않는다. 서비스가 쓰는 비밀값을 모두 적고(쓰지 않는 소셜 로그인의 비밀값은 뺀다),
 고정한 뒤 `describe --format=export`의 `secretKeyRef`가 모두 숫자 `key`인지 본다.
 
 ```bash
-gcloud secrets versions describe latest --secret=better-auth-secret --format='value(name)'
-gcloud run services update "$SERVICE" --region "$REGION" \
-  --update-secrets BETTER_AUTH_SECRET=better-auth-secret:<번호>,PROXY_SECRET=proxy-secret:<번호>
+for secret in better-auth-secret proxy-secret google-client-secret kakao-client-secret naver-client-secret; do
+  echo "$secret:$(gcloud secrets versions describe latest --secret="$secret" --format='value(name.basename())')"
+done
+gcloud run services update "$SERVICE" --region "$REGION" --update-secrets \
+  BETTER_AUTH_SECRET=better-auth-secret:<번호>,PROXY_SECRET=proxy-secret:<번호>,GOOGLE_CLIENT_SECRET=google-client-secret:<번호>,KAKAO_CLIENT_SECRET=kakao-client-secret:<번호>,NAVER_CLIENT_SECRET=naver-client-secret:<번호>
 gcloud run services describe "$SERVICE" --region "$REGION" --format=export
 ```
 
@@ -142,6 +144,15 @@ gcloud run deploy "$SERVICE" --image "$IMAGE" --region "$REGION" \
 
 ## 6. GitHub Actions (Workload Identity Federation)
 
+공급자는 저장소 전체가 아니라 `main`에서 도는 `ci-cd.yml`의 토큰만 받아들인다. 저장소 전체로 묶으면
+`main`에서만 배포한다는 확인이 워크플로 파일 안에 있어서, 다른 브랜치에서 그 파일을 고쳐 돌린 작업도
+배포 계정을 받는다. 아래 두 줄이 그 조건이고, 공급자를 만들 때도 바꿀 때도 쓴다.
+
+```bash
+REPO_ID=$(gh api repos/SIKU-KR/BangSongTeam --jq .id)
+CONDITION="assertion.repository_id=='${REPO_ID}' && assertion.ref=='refs/heads/main' && assertion.workflow_ref=='SIKU-KR/BangSongTeam/.github/workflows/ci-cd.yml@refs/heads/main'"
+```
+
 ```bash
 gcloud iam service-accounts create github-deployer
 DEPLOY_SA=github-deployer@${PROJECT_ID}.iam.gserviceaccount.com
@@ -151,8 +162,6 @@ for role in roles/run.admin roles/artifactregistry.writer roles/firebaserules.ad
 done
 gcloud iam service-accounts add-iam-policy-binding "$RUN_SA" --member="serviceAccount:$DEPLOY_SA" --role=roles/iam.serviceAccountUser
 
-REPO_ID=$(gh api repos/SIKU-KR/BangSongTeam --jq .id)
-CONDITION="assertion.repository_id=='${REPO_ID}' && assertion.ref=='refs/heads/main' && assertion.workflow_ref=='SIKU-KR/BangSongTeam/.github/workflows/ci-cd.yml@refs/heads/main'"
 gcloud iam workload-identity-pools create github --location=global
 gcloud iam workload-identity-pools providers create-oidc github --location=global \
   --workload-identity-pool=github --issuer-uri=https://token.actions.githubusercontent.com \
@@ -163,13 +172,13 @@ gcloud iam service-accounts add-iam-policy-binding "$DEPLOY_SA" --role=roles/iam
   --member="principalSet://iam.googleapis.com/${POOL}/attribute.repository/SIKU-KR/BangSongTeam"
 ```
 
-조건은 저장소 전체가 아니라 `main`에서 도는 `ci-cd.yml`로 좁다. 저장소 전체로 묶으면 `main`에서만
-배포한다는 확인이 워크플로 파일 안에 있어서, 다른 브랜치에서 그 파일을 고쳐 돌린 작업도 배포 계정을
-받는다. 이미 만든 공급자는 같은 조건으로 한 번 바꾼다. `main`에 푸시하는 배포는 그대로 통과한다.
+이미 만든 공급자는 같은 조건으로 한 번 바꾼다. 새 셸이면 위의 두 줄을 먼저 실행한다. `CONDITION`이
+비면 조건이 지워지므로 비어 있을 때는 멈춘다. `main`에 푸시하는 배포는 그대로 통과한다.
 
 ```bash
-gcloud iam workload-identity-pools providers update-oidc github --location=global \
-  --workload-identity-pool=github --attribute-condition="$CONDITION"
+: "${CONDITION:?CONDITION이 필요합니다}" &&
+  gcloud iam workload-identity-pools providers update-oidc github --location=global \
+    --workload-identity-pool=github --attribute-condition="$CONDITION"
 ```
 
 저장소 Settings → Secrets and variables → Actions → **Variables**에 넣는다.
