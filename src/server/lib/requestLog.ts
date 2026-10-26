@@ -1,6 +1,7 @@
 import type { Context } from "hono";
 import { routePath } from "hono/route";
 import type { AppEnv } from "../types";
+import { CLOUD_TRACE_LOG_FIELD } from "./cloudTrace";
 
 const MAX_CAUSE_DEPTH = 3;
 
@@ -52,6 +53,7 @@ export function logServerError(
   writeLog("ERROR", {
     event,
     requestId: c.get("requestId"),
+    [CLOUD_TRACE_LOG_FIELD]: c.get("logTrace"),
     route: routePath(c),
     error: describeError(error),
     ...context,

@@ -6,11 +6,15 @@ import { createApp } from "../index";
 import type { SessionReader } from "./auth";
 import type { AppEnv } from "../types";
 import { describeError, logServerError } from "../lib/requestLog";
+import { __resetCloudTraceProjectForTests } from "../lib/cloudTrace";
 import type { MediaStore } from "../lib/mediaStore";
 import { requestLog, resolveRequestId } from "./requestLog";
 
 const TRACE_ID = "4bf92f3577b34da6a3ce929d0e0e4736";
 const TRACEPARENT = `00-${TRACE_ID}-00f067aa0ba902b7-01`;
+const CLOUD_TRACE_ID = "105445aa7843bc8bf206b12000100000";
+const CLOUD_TRACE_CONTEXT = `${CLOUD_TRACE_ID}/1;o=1`;
+const CLOUD_TRACE_FIELD = "logging.googleapis.com/trace";
 const USER_ID = "aaaaaaaa00000000000r1";
 
 const fakeSession: SessionReader = async () => ({ userId: USER_ID });
@@ -49,6 +53,9 @@ beforeAll(() => {
 
 afterEach(() => {
   vi.restoreAllMocks();
+  vi.unstubAllEnvs();
+  vi.unstubAllGlobals();
+  __resetCloudTraceProjectForTests();
 });
 
 describe("resolveRequestId", () => {
@@ -129,11 +136,15 @@ describe("logServerError", () => {
         return c.json({ error: "x" }, 500);
       });
 
+    vi.stubEnv("GOOGLE_CLOUD_PROJECT", "p");
     const res = await app.request(
       "/api/things/abc",
       {
         method: "PUT",
-        headers: { traceparent: TRACEPARENT },
+        headers: {
+          traceparent: TRACEPARENT,
+          "x-cloud-trace-context": CLOUD_TRACE_CONTEXT,
+        },
         body: JSON.stringify({ lyrics: "주 하나님 지으신 모든 세계" }),
       },
       env,
@@ -150,6 +161,7 @@ describe("logServerError", () => {
       songCount: 3,
       severity: "ERROR",
       error: { cause: { message: "14 UNAVAILABLE: busy" } },
+      [CLOUD_TRACE_FIELD]: `projects/p/traces/${CLOUD_TRACE_ID}`,
     });
     expect(JSON.stringify(error.mock.calls)).not.toContain("주 하나님");
   });
@@ -280,5 +292,74 @@ describe("requestLog 미들웨어", () => {
       status: 500,
     });
     expect(line.error?.message).toContain("GCS internal");
+  });
+
+  it("Cloud Run 요청 로그 아래에 묶이도록 trace 리소스 이름을 싣는다", async () => {
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    vi.stubEnv("GOOGLE_CLOUD_PROJECT", "p");
+
+    await createApp().request(
+      "/api/health",
+      { headers: { "x-cloud-trace-context": CLOUD_TRACE_CONTEXT } },
+      env,
+    );
+    await createApp().request("/api/health", {}, env);
+
+    const [traced, untraced] = requestLines(log);
+    expect(traced).toMatchObject({
+      trace: CLOUD_TRACE_ID,
+      [CLOUD_TRACE_FIELD]: `projects/p/traces/${CLOUD_TRACE_ID}`,
+    });
+    expect(untraced).not.toHaveProperty(CLOUD_TRACE_FIELD);
+  });
+
+  it("Cloud Run에서 프로젝트 환경 변수가 없으면 메타데이터 서버에 한 번만 묻는다", async () => {
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    vi.stubEnv("GOOGLE_CLOUD_PROJECT", "");
+    vi.stubEnv("K_SERVICE", "bangsongteam");
+    const metadata = vi.fn<typeof fetch>(
+      async () => new Response("bangsongteam-prod\n"),
+    );
+    vi.stubGlobal("fetch", metadata);
+    const app = createApp();
+
+    for (let index = 0; index < 2; index += 1) {
+      await app.request(
+        "/api/health",
+        { headers: { "x-cloud-trace-context": CLOUD_TRACE_CONTEXT } },
+        env,
+      );
+    }
+
+    expect(metadata).toHaveBeenCalledTimes(1);
+    const [url, init] = metadata.mock.calls[0];
+    expect(String(url)).toBe(
+      "http://metadata.google.internal/computeMetadata/v1/project/project-id",
+    );
+    expect(new Headers(init?.headers).get("metadata-flavor")).toBe("Google");
+    for (const line of requestLines(log)) {
+      expect(line[CLOUD_TRACE_FIELD]).toBe(
+        `projects/bangsongteam-prod/traces/${CLOUD_TRACE_ID}`,
+      );
+    }
+  });
+
+  it("Cloud Run 밖에서 프로젝트를 모르면 trace 리소스 이름 없이 남긴다", async () => {
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    vi.stubEnv("GOOGLE_CLOUD_PROJECT", "");
+    vi.stubEnv("K_SERVICE", "");
+    const metadata = vi.fn();
+    vi.stubGlobal("fetch", metadata);
+
+    await createApp().request(
+      "/api/health",
+      { headers: { "x-cloud-trace-context": CLOUD_TRACE_CONTEXT } },
+      env,
+    );
+
+    expect(metadata).not.toHaveBeenCalled();
+    const [line] = requestLines(log);
+    expect(line.trace).toBe(CLOUD_TRACE_ID);
+    expect(line).not.toHaveProperty(CLOUD_TRACE_FIELD);
   });
 });
