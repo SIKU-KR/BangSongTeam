@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, afterEach, vi } from "vitest";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import loadCustomRoutes from "next/dist/lib/load-custom-routes";
@@ -83,6 +83,23 @@ describe("Next.js·Cloud Run 프로젝트 설정", () => {
 
   it("Next.js가 아는 옵션만 쓴다 (모르는 옵션은 빌드가 경고만 하고 무시한다)", () => {
     expect(configSchema.safeParse(nextConfig).error?.issues ?? []).toEqual([]);
+  });
+
+  describe("클라이언트 실패 보고에 싣는 앱 버전", () => {
+    afterEach(() => {
+      vi.unstubAllEnvs();
+    });
+
+    it.each([
+      [undefined, "dev"],
+      ["", "dev"],
+      ["3a0fbb1c0ffee", "3a0fbb1"],
+    ])("GITHUB_SHA가 %j이면 %s다", async (sha, version) => {
+      vi.stubEnv("GITHUB_SHA", sha);
+      vi.resetModules();
+      const { default: config } = await import("../next.config");
+      expect(config.env?.NEXT_PUBLIC_APP_VERSION).toBe(version);
+    });
   });
 
   it("Dockerfile이 standalone 서버와 정적 파일을 담아 8080에서 띄운다", () => {
