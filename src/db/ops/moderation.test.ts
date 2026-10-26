@@ -388,35 +388,6 @@ describe("신고·게시 중단 운영 작업", () => {
       ).toBe("source_taken_down");
     });
 
-    it("원본이 아직 게시 중단돼 있으면 운영자의 다시 공개도 막고, 원본을 풀면 공개한다", async () => {
-      const fork = await forkPublicDeck(db, C, DECK);
-      if (fork.status !== "ok") throw new Error(fork.status);
-      await takedownDeck(db, DECK);
-      await takedownForks(db, DECK);
-      const restoreEvents = async () =>
-        (await events()).filter((event) => event.action === "restore");
-
-      await expect(
-        restoreDeck(db, fork.deck.id, { republish: true }),
-      ).rejects.toThrow(OPS_ERRORS.restore.sourceTakenDown);
-
-      expect(await deckState(fork.deck.id)).toEqual({
-        visibility: "private",
-        takedownAt: expect.any(Date),
-      });
-      expect(await restoreEvents()).toEqual([]);
-
-      await restoreDeck(db, DECK);
-      expect(await restoreDeck(db, fork.deck.id, { republish: true })).toBe(
-        true,
-      );
-
-      expect(await deckState(fork.deck.id)).toEqual({
-        visibility: "public",
-        takedownAt: null,
-      });
-    });
-
     it("가져간 곡마다 공개를 막는 가장 가까운 게시 중단된 원본을 알려 준다", async () => {
       await seedForkTree();
       await takedownDeck(db, DECK);
@@ -814,7 +785,6 @@ describe("신고·게시 중단 운영 작업", () => {
 
     it("brings a taken-down song of an account nobody can sign in to back into the library", async () => {
       await takedownDeck(db, BOT_DECK);
-      await restoreDeck(db, BOT_DECK);
       expect(await searchIds()).not.toContain(BOT_DECK);
 
       const now = new Date(5000);
@@ -850,6 +820,61 @@ describe("신고·게시 중단 운영 작업", () => {
         visibility: "private",
         takedownAt: new Date(1),
       });
+    });
+
+    it("refuses to publish a deck that was never taken down", async () => {
+      await seedDocs(db, {
+        decks: [
+          deckDoc({
+            id: PRIVATE_DECK,
+            userId: A,
+            slides: JSON.stringify([{ id: "s", order: 0, lines: ["시선"] }]),
+          }),
+        ],
+      });
+
+      await expect(
+        restoreDeck(db, PRIVATE_DECK, { republish: true }),
+      ).rejects.toThrow(OPS_ERRORS.deck.notTakenDown);
+
+      expect(await deckState(PRIVATE_DECK)).toEqual({
+        visibility: "private",
+        takedownAt: null,
+      });
+      expect((await decksCol(db).doc(PRIVATE_DECK).get()).data()?.listed).toBe(
+        false,
+      );
+    });
+
+    it("needs a new takedown before it republishes a song whose takedown was already lifted", async () => {
+      await takedownDeck(db, BOT_DECK);
+      await restoreDeck(db, BOT_DECK);
+      expect(await searchIds()).not.toContain(BOT_DECK);
+
+      await expect(
+        restoreDeck(db, BOT_DECK, { republish: true }),
+      ).rejects.toThrow(OPS_ERRORS.deck.notTakenDown);
+
+      await takedownDeck(db, BOT_DECK);
+      expect(await restoreDeck(db, BOT_DECK, { republish: true })).toBe(true);
+      expect(await searchIds()).toContain(BOT_DECK);
+    });
+
+    it("가져온 원본이 아직 게시 중단이면 가져간 곡을 다시 공개하지 않는다", async () => {
+      await takedownDeck(db, DECK);
+      await takedownForks(db, DECK);
+
+      await expect(restoreDeck(db, FORK, { republish: true })).rejects.toThrow(
+        OPS_ERRORS.deck.sourceTakenDown,
+      );
+      expect(await deckState(FORK)).toEqual({
+        visibility: "private",
+        takedownAt: expect.any(Date),
+      });
+
+      await restoreDeck(db, DECK);
+      expect(await restoreDeck(db, FORK, { republish: true })).toBe(true);
+      expect(await searchIds()).toContain(FORK);
     });
 
     it("does not touch presentation copies", async () => {
@@ -1142,6 +1167,70 @@ describe("신고·게시 중단 운영 작업", () => {
       });
       expect((await deckState(DECK)).takedownAt).not.toBeNull();
       expect((await deckState(PRESENTATION_COPY)).takedownAt).toBeNull();
+    });
+
+    it("keeps taking down the rest when some ids cannot be document ids", async () => {
+      const ids = Array.from({ length: 45 }, (_, i) => `bulk-deck-${i}`);
+      await seedDocs(db, {
+        decks: ids.map((id) => deckDoc({ id, userId: A })),
+      });
+      const malformed = ["https://example.com/d/abc", "", "..", "__id__"];
+
+      const result = await takedownDecks(db, [
+        ids[0] as string,
+        ...malformed,
+        ...ids.slice(1),
+      ]);
+
+      expect(result.takenDown).toEqual(ids);
+      expect(result.notLibrary).toEqual(malformed);
+      const takenDown = (await decksCol(db).get()).docs.filter(
+        (doc) => doc.data().takedownAt !== null,
+      );
+      expect(takenDown).toHaveLength(ids.length);
+    });
+
+    it("treats an id that cannot be a document id as one that does not exist", async () => {
+      for (const id of ["", "a/b", "a//b", ".", "..", "__id__"]) {
+        expect(await takedownDeck(db, id)).toBe(false);
+        expect(await restoreDeck(db, id)).toBe(false);
+        expect(await disableShareLink(db, id)).toBe(false);
+        await expect(resolveReport(db, id, "처리")).rejects.toThrow(
+          OPS_ERRORS.report.notFound,
+        );
+      }
+    });
+
+    it("waits for the transactions in flight before it rejects a failed batch", async () => {
+      const ids = Array.from({ length: 45 }, (_, i) => `bulk-deck-${i}`);
+      await seedDocs(db, {
+        decks: ids.map((id) => deckDoc({ id, userId: A })),
+      });
+      const runTransaction = db.runTransaction.bind(db);
+      let started = 0;
+      let settled = 0;
+      vi.spyOn(db, "runTransaction").mockImplementation(
+        async (update, options) => {
+          started += 1;
+          if (started === 1) throw new Error("연결이 끊겼어요");
+          try {
+            return await runTransaction(update, options);
+          } finally {
+            settled += 1;
+          }
+        },
+      );
+      let settledWhenRejected = -1;
+
+      await expect(
+        takedownDecks(db, ids).catch((error: unknown) => {
+          settledWhenRejected = settled;
+          throw error;
+        }),
+      ).rejects.toThrow("연결이 끊겼어요");
+
+      expect(started).toBeLessThan(ids.length);
+      expect(settledWhenRejected).toBe(started - 1);
     });
 
     it("revokes only the sessions of that account", async () => {

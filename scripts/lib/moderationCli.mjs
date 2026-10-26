@@ -17,9 +17,22 @@ const FLAG_TYPES = {
 
 const SHARE_URL = /\/s\/([\w-]+)/;
 
+const ID_SHAPE = /^[\w-]{21}$/;
+
+const isOption = (arg) => arg.startsWith("--") && !ID_SHAPE.test(arg);
+
 const noteOf = (flags) => (typeof flags.note === "string" ? flags.note : "");
 
 const eventNoteOf = (flags) => noteOf(flags).trim() || null;
+
+async function resolvePresentationId(db, ops, target) {
+  const shared = SHARE_URL.exec(target);
+  const found = await ops.findPresentationIdByLinkToken(
+    db,
+    shared ? shared[1] : target,
+  );
+  return found ?? (shared ? null : target);
+}
 
 const COMMANDS = {
   list: {
@@ -127,7 +140,7 @@ const COMMANDS = {
       for (const userId of ids) {
         const count = await ops.revokeSessions(db, userId);
         out.log(
-          `${userId}: 세션 ${count}개를 지웠어요. 이미 열린 화면은 세션 쿠키 캐시가 끝나면 로그아웃돼요.`,
+          `${userId}: 세션 ${count}개를 지웠어요. 로그인한 기기는 최대 5분 더 쓸 수 있어요. 계정을 정리하는 중이면 5분 뒤 takedown-user를 한 번 더 실행해 주세요.`,
         );
       }
     },
@@ -245,21 +258,44 @@ const COMMANDS = {
     ids: "many",
     async run({ ids }, { db, ops, out }) {
       const missing = [];
-      for (const target of ids) {
-        const token = SHARE_URL.exec(target)?.[1] ?? target;
-        const presentationId =
-          (await ops.findPresentationIdByLinkToken(db, token)) ?? target;
-        if (await ops.disableShareLink(db, presentationId)) {
-          out.log(
-            `${target}: 공유 링크를 막고 링크로 들어온 사람의 접근을 끊었어요.`,
-          );
-        } else {
+      const failed = [];
+      const targets = new Map();
+      for (const target of new Set(ids)) {
+        const presentationId = await resolvePresentationId(db, ops, target);
+        if (presentationId === null) {
           missing.push(target);
+        } else if (!targets.has(presentationId)) {
+          targets.set(presentationId, target);
         }
       }
-      if (missing.length > 0) {
-        throw new Error(`프레젠테이션을 찾을 수 없어요: ${missing.join(", ")}`);
+      for (const [presentationId, target] of targets) {
+        if (presentationId !== target) {
+          out.log(`${target} → 프레젠테이션 ${presentationId}`);
+        }
+        try {
+          if (await ops.disableShareLink(db, presentationId)) {
+            out.log(
+              `${presentationId}: 공유 링크를 막고 링크로 들어온 사람의 접근을 끊었어요.`,
+            );
+          } else {
+            missing.push(target);
+          }
+        } catch (error) {
+          failed.push(`${presentationId} (${error.message})`);
+        }
       }
+      const problems = [];
+      if (missing.length > 0) {
+        problems.push(
+          `프레젠테이션을 찾을 수 없어요: ${missing.join(", ")}. id나 주소가 틀렸거나 이미 막은 링크일 수 있어요. 막다가 멈췄다면 앞서 출력한 프레젠테이션 id로 다시 실행해 주세요.`,
+        );
+      }
+      if (failed.length > 0) {
+        problems.push(
+          `링크를 다 막지 못했어요: ${failed.join(", ")}. 같은 프레젠테이션 id로 다시 실행해 주세요.`,
+        );
+      }
+      if (problems.length > 0) throw new Error(problems.join("\n"));
     },
   },
 };
@@ -288,10 +324,14 @@ function checkFlags(command, allowed, flags) {
  * 명령줄을 `{ command, ids, flags }`로 나눈다. 모르는 명령, id 개수, 명령에 맞지 않는 옵션은
  * Firestore에 연결하기 전에 막는다. `--tagret=remote`처럼 틀린 옵션이 조용히 무시되어 다른
  * 대상에 쓰는 일이 없도록 모르는 옵션도 오류로 본다.
+ *
+ * id는 NanoID(21자, `A-Za-z0-9_-`)라 `--`로 시작할 수 있다. 긴 목록이 id 하나 때문에 통째로
+ * 거절되지 않도록 그 모양(`ID_PATTERN`)인 인자는 옵션이 아니라 id로 읽는다. 옵션 이름은 모두
+ * 21자보다 짧거나 `=`가 들어가 id와 겹치지 않는다.
  */
 export function parseModerationArgs(argv) {
-  const [command, ...ids] = argv.filter((arg) => !arg.startsWith("--"));
-  const flags = parseFlags(argv.filter((arg) => arg.startsWith("--")));
+  const [command, ...ids] = argv.filter((arg) => !isOption(arg));
+  const flags = parseFlags(argv.filter(isOption));
   if (command === undefined || !Object.hasOwn(COMMANDS, command)) {
     throw new Error(
       `알 수 없는 명령이에요${command === undefined ? "" : `: ${command}`}. 명령: ${Object.keys(COMMANDS).join(" | ")}`,

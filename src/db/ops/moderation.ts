@@ -3,7 +3,12 @@ import type {
   Query,
   Transaction,
 } from "@google-cloud/firestore";
-import { API_ERRORS, OFFICIAL_LIBRARY_USER_ID, OPS_ERRORS } from "#shared";
+import {
+  API_ERRORS,
+  isReservedDocumentId,
+  OFFICIAL_LIBRARY_USER_ID,
+  OPS_ERRORS,
+} from "#shared";
 import { runBulk, type Db } from "../client";
 import {
   chunkIds,
@@ -35,8 +40,13 @@ import {
  *
  * 스크립트는 오류를 찍고 곧바로 끝나므로 트랜잭션 콜백은 던지지 않고 거절을 반환값으로 알린다.
  * Firestore SDK는 콜백이 던져도 롤백 요청을 기다리지 않고 보내서, 요청이 나가기 전에 프로세스가
- * 끝나면 그 문서의 잠금이 한참 남는다. 여러 신고를 닫을 때는 범위 조회를 트랜잭션 밖에서 하고
- * 문서 단위로만 다시 읽어, 동시에 도는 작업끼리 서로 잠가 재시도가 늘지 않게 한다.
+ * 끝나면 그 문서의 잠금이 한참 남는다. 같은 까닭으로 여러 곡을 나눠 처리하다 하나가 실패하면
+ * 새 작업은 시작하지 않고, 진행 중인 작업이 모두 끝난 뒤에 오류를 던진다. 여러 신고를 닫을 때는
+ * 범위 조회를 트랜잭션 밖에서 하고 문서 단위로만 다시 읽어, 동시에 도는 작업끼리 서로 잠가
+ * 재시도가 늘지 않게 한다.
+ *
+ * 운영자가 붙여 넣은 값이 문서 id가 될 수 없으면(빈 값, `/`가 든 주소, `.`·`..`, `__…__`) SDK가
+ * 던지거나 서버가 거절해 목록 전체가 멈추므로, 그런 값은 문서를 읽기 전에 "없는 id"로 다룬다.
  */
 
 /** Firestore 한 번의 쓰기(트랜잭션·배치)가 담을 수 있는 문서 수 */
@@ -45,29 +55,39 @@ const MAX_BATCH_WRITES = 500;
 /** 곡·신고 여러 개를 처리할 때 동시에 보내는 요청 수. 계정 하나의 곡이 수천 개여도 연결을 다 쓰지 않게 한다 */
 const CONCURRENCY = 20;
 
+function isDocumentId(id: string): boolean {
+  return (
+    id !== "" &&
+    id !== "." &&
+    id !== ".." &&
+    !id.includes("/") &&
+    !isReservedDocumentId(id)
+  );
+}
+
 async function mapWithConcurrency<T, R>(
   items: readonly T[],
   limit: number,
   run: (item: T) => Promise<R>,
 ): Promise<R[]> {
   const results: R[] = new Array<R>(items.length);
+  const failures: unknown[] = [];
   let next = 0;
-  let failed = false;
   const workers = Array.from(
     { length: Math.min(limit, items.length) },
     async () => {
-      while (!failed && next < items.length) {
+      while (failures.length === 0 && next < items.length) {
         const index = next++;
         try {
           results[index] = await run(items[index] as T);
         } catch (error) {
-          failed = true;
-          throw error;
+          failures.push(error);
         }
       }
     },
   );
   await Promise.all(workers);
+  if (failures.length > 0) throw failures[0];
   return results;
 }
 
@@ -144,9 +164,12 @@ type DeckChange = Partial<
   Pick<DeckDoc, "visibility" | "takedownAt" | "publishedAt">
 >;
 
-type Refusal = "noSlides" | "sourceTakenDown";
+type Refusal = { refusal: string };
 
-type LibraryUpdate = "updated" | "notLibrary" | Refusal;
+type LibraryUpdate =
+  | { status: "updated" }
+  | { status: "notLibrary" }
+  | { status: "refused"; reason: string };
 
 async function updateLibraryDeck(
   db: Db,
@@ -156,12 +179,13 @@ async function updateLibraryDeck(
   now: Date,
   cause: EventCause,
 ): Promise<LibraryUpdate> {
+  if (!isDocumentId(deckId)) return { status: "notLibrary" };
+  const ref = decksCol(db).doc(deckId);
   return db.runTransaction(async (tx): Promise<LibraryUpdate> => {
-    const ref = decksCol(db).doc(deckId);
     const deck = (await tx.get(ref)).data();
-    if (!deck || deck.presentationId !== null) return "notLibrary";
+    if (!deck || deck.presentationId !== null) return { status: "notLibrary" };
     const next = await change(deck, tx);
-    if (typeof next === "string") return next;
+    if ("refusal" in next) return { status: "refused", reason: next.refusal };
     tx.set(ref, withDeckIndex({ ...deck, ...next }));
     recordModerationEvent(tx, db, {
       action,
@@ -171,7 +195,7 @@ async function updateLibraryDeck(
       title: deck.title,
       at: now,
     });
-    return "updated";
+    return { status: "updated" };
   });
 }
 
@@ -192,7 +216,7 @@ async function takeDown(
     now,
     cause,
   );
-  return result === "updated";
+  return result.status === "updated";
 }
 
 /**
@@ -223,9 +247,9 @@ export interface RestoreOptions {
  * 게시 중단도 그대로 남는다(`listDescendants`).
  *
  * 공식 라이브러리 곡처럼 로그인할 수 없는 계정이 주인이면 다시 공개할 사람이 없어 곡이
- * 영영 돌아오지 못하므로, `republish`로 운영자가 대신 공개한다. 슬라이드가 없는 곡은
- * 사용자 공개와 같은 규칙으로 막고, 원본이 아직 게시 중단돼 있는 곡도 막는다. 막지 않으면 게시
- * 중단한 가사가 사본으로 다시 올라온다(`setDeckVisibility`).
+ * 영영 돌아오지 못하므로, `republish`로 운영자가 대신 공개한다. 잘못 넣은 id로 남의 비공개
+ * 곡이 공개되지 않도록 게시를 중단한 적 없는 곡은 막고, 슬라이드가 없는 곡과 가져온 원본이
+ * 게시 중단된 곡은 사용자 공개(`setDeckVisibility`)와 같은 규칙으로 막는다.
  */
 export async function restoreDeck(
   db: Db,
@@ -237,19 +261,23 @@ export async function restoreDeck(
     deckId,
     async (deck, tx) => {
       if (!republish) return { takedownAt: null };
-      if (parseSlides(deck.slides).length === 0) return "noSlides";
-      if (await findTakenDownSource(tx, db, deck)) return "sourceTakenDown";
+      if (deck.takedownAt === null) {
+        return { refusal: OPS_ERRORS.deck.notTakenDown };
+      }
+      if (parseSlides(deck.slides).length === 0) {
+        return { refusal: API_ERRORS.deck.noSlides };
+      }
+      if (await findTakenDownSource(tx, db, deck)) {
+        return { refusal: OPS_ERRORS.deck.sourceTakenDown };
+      }
       return { takedownAt: null, visibility: "public", publishedAt: now };
     },
     "restore",
     now,
     directCause(note),
   );
-  if (result === "noSlides") throw new Error(API_ERRORS.deck.noSlides);
-  if (result === "sourceTakenDown") {
-    throw new Error(OPS_ERRORS.restore.sourceTakenDown);
-  }
-  return result === "updated";
+  if (result.status === "refused") throw new Error(result.reason);
+  return result.status === "updated";
 }
 
 /** 이 곡에서 가져간 보관함 곡 하나 (`listDescendants`) */
@@ -376,8 +404,10 @@ export async function takedownForks(
 }
 
 /**
- * 곡 여러 개를 게시 중단한다. 보관함 곡이 아니거나 없는 id는 건너뛰고 따로 알려 줘, 목록
- * 일부가 틀려도 나머지는 처리된다.
+ * 곡 여러 개를 게시 중단한다. 보관함 곡이 아니거나 없는 id(문서 id가 될 수 없는 값 포함)는
+ * 건너뛰고 따로 알려 줘, 목록 일부가 틀려도 나머지는 처리된다. 요청이 실패하면 새 곡은
+ * 시작하지 않고 진행 중인 곡이 끝난 뒤 오류를 던진다. 이미 중단한 곡은 처음 기록을 유지하므로
+ * 같은 목록으로 다시 실행해도 된다.
  */
 export async function takedownDecks(
   db: Db,
@@ -437,7 +467,8 @@ export async function listUserDecks(
  * 한 계정의 보관함 곡을 모두 게시 중단한다. 비공개 곡도 포함해, 계정이 나중에 그 곡을 다시
  * 공개하지 못하게 한다. 곡마다 `takedownDeck`을 거치므로 색인과 프레젠테이션 사본 제외
  * 규칙이 그대로 적용된다. 이미 게시 중단된 곡은 건너뛰어 다시 실행해도 운영 기록이 겹치지
- * 않는다. 새로 게시 중단한 곡 수를 돌려준다.
+ * 않는다. 중단 전 공개 범위는 남기지 않으므로 나중에 `restoreDeck`의 `republish`로 되살리면
+ * 원래 비공개였던 곡도 공개된다. 새로 게시 중단한 곡 수를 돌려준다.
  */
 export async function takedownUserDecks(
   db: Db,
@@ -456,9 +487,11 @@ export async function takedownUserDecks(
 }
 
 /**
- * 한 계정의 로그인을 모두 끊는다. 세션 문서를 지우므로 새 요청은 바로 막히지만, 이미 받은
- * 세션 쿠키 캐시(`SESSION_COOKIE_CACHE_SECONDS`)가 끝날 때까지 다른 기기에서는 몇 분 더 쓸
- * 수 있다. 계정 자체는 막지 않아 다시 로그인할 수 있다. 지운 세션 수를 돌려준다.
+ * 한 계정의 세션 문서를 모두 지운다. 로그인한 기기는 세션 쿠키 캐시
+ * (`SESSION_COOKIE_CACHE_SECONDS`, 5분) 동안 세션을 DB에서 다시 확인하지 않아 그동안 계속
+ * 쓸 수 있으니, 바로 끊기지는 않는다. 계정을 정리할 때는 5분 뒤 `takedownUserDecks`를 한 번 더
+ * 실행해 그사이 올린 곡까지 중단한다. 계정 자체는 막지 않아 다시 로그인할 수 있다. 지운 세션
+ * 수를 돌려준다.
  */
 export async function revokeSessions(db: Db, userId: string): Promise<number> {
   const snapshot = await db
@@ -658,9 +691,10 @@ async function closeReport(
   note: string,
   { now = new Date(), force = false }: CloseReportOptions,
 ): Promise<void> {
+  if (!isDocumentId(reportId)) throw new Error(OPS_ERRORS.report.notFound);
+  const ref = reportsCol(db).doc(reportId);
   const failure = await db.runTransaction(
     async (tx): Promise<string | null> => {
-      const ref = reportsCol(db).doc(reportId);
       const report = (await tx.get(ref)).data();
       if (!report) return OPS_ERRORS.report.notFound;
       if (report.status !== "pending" && !force) {
@@ -718,14 +752,16 @@ export async function findPresentationIdByLinkToken(
  * 로그인 없이 읽는 `GET /api/share/:token`은 토큰만 보므로 퍼진 주소는 바로 죽고, 멤버를
  * 지워 둬서 소유자가 다시 공유해도(새 토큰이 만들어진다) 예전 멤버가 접근을 되찾지 못한다.
  * 퍼진 링크는 멤버가 한 번에 쓸 수 있는 문서 수를 넘을 수 있어, 접근부터 끊은 다음 멤버를
- * 나눠 지운다. 중간에 멈추면 같은 명령을 다시 실행한다. 프레젠테이션이 없으면 false다.
+ * 나눠 지운다. 중간에 멈추면 토큰이 이미 지워져 링크 주소로는 찾을 수 없으니 같은
+ * 프레젠테이션 id로 다시 실행한다. 프레젠테이션이 없으면(문서 id가 될 수 없는 값 포함) false다.
  */
 export async function disableShareLink(
   db: Db,
   presentationId: string,
 ): Promise<boolean> {
+  if (!isDocumentId(presentationId)) return false;
+  const ref = presentationsCol(db).doc(presentationId);
   const disabled = await db.runTransaction(async (tx) => {
-    const ref = presentationsCol(db).doc(presentationId);
     if (!(await tx.get(ref)).exists) return false;
     tx.update(ref, { linkAccess: "off", linkToken: null });
     return true;

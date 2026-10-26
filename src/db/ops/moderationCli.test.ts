@@ -9,6 +9,7 @@ import {
   COLLECTIONS,
   decksCol,
   moderationEventsCol,
+  presentationMembersCol,
   presentationsCol,
   reportsCol,
   usersCol,
@@ -29,6 +30,8 @@ const DECK = "c00000000000000000001";
 const OTHER = "c00000000000000000002";
 const B_DECK = "c00000000000000000003";
 const PRESENTATION = "p00000000000000000001";
+const OTHER_PRESENTATION = "p00000000000000000002";
+const DASHED = `--${"x8Jk".padEnd(19, "0")}`;
 
 const SLIDES = JSON.stringify([{ id: "s", order: 0, lines: ["시선"] }]);
 
@@ -38,16 +41,17 @@ describe("moderation 명령줄", () => {
   let warnings: string[];
   let tables: unknown[];
 
-  const run = (...argv: string[]) =>
+  const runWith = (commandOps: typeof ops, ...argv: string[]) =>
     runModeration(parseModerationArgs(argv), {
       db,
-      ops,
+      ops: commandOps,
       out: {
         log: (message: string) => logs.push(message),
         warn: (message: string) => warnings.push(message),
         table: (rows: unknown) => tables.push(rows),
       },
     });
+  const run = (...argv: string[]) => runWith(ops, ...argv);
 
   const report = async (id: string) => {
     const row = (await reportsCol(db).doc(id).get()).data();
@@ -116,6 +120,20 @@ describe("moderation 명령줄", () => {
         ids: ["a", "b"],
         flags: { note: "사유", target: "remote" },
       });
+    });
+
+    it("--로 시작하는 id도 id로 읽고 옵션 오타는 계속 막는다", () => {
+      expect(DASHED).toHaveLength(21);
+      expect(
+        parseModerationArgs(["takedown", DASHED, "b", "--note=사유"]),
+      ).toEqual({
+        command: "takedown",
+        ids: [DASHED, "b"],
+        flags: { note: "사유" },
+      });
+      expect(() => parseModerationArgs(["takedown", "a", "--forse"])).toThrow(
+        "--forse",
+      );
     });
 
     it("모르는 명령이나 id 개수가 맞지 않는 입력은 연결하기 전에 멈춘다", () => {
@@ -244,6 +262,34 @@ describe("moderation 명령줄", () => {
 
       expect((await decksCol(db).doc(DECK).get()).data()?.listed).toBe(false);
     });
+
+    it("주소를 붙여 넣는 등 곡 id가 아닌 값이 섞여도 나머지를 처리하고 그 값을 알린다", async () => {
+      const pasted = "https://bangsongteam.example/library/songs/abc";
+
+      await expect(run("takedown", pasted, "", DECK)).rejects.toThrow(pasted);
+
+      expect((await decksCol(db).doc(DECK).get()).data()?.listed).toBe(false);
+    });
+
+    it("--로 시작하는 id의 곡도 중단한다", async () => {
+      await seedDocs(db, {
+        decks: [
+          deckDoc({
+            id: DASHED,
+            userId: A,
+            visibility: "public",
+            slides: SLIDES,
+          }),
+        ],
+      });
+
+      await run("takedown", DECK, DASHED);
+
+      expect((await decksCol(db).doc(DASHED).get()).data()).toMatchObject({
+        listed: false,
+      });
+      expect((await decksCol(db).doc(DECK).get()).data()?.listed).toBe(false);
+    });
   });
 
   describe("계정 정리", () => {
@@ -285,6 +331,13 @@ describe("moderation 명령줄", () => {
 
       expect((await sessions.get()).docs.map((doc) => doc.id)).toEqual(["sb"]);
       expect(logs[0]).toContain("1개");
+    });
+
+    it("세션을 지워도 로그인한 기기는 몇 분 더 쓸 수 있다고 알린다", async () => {
+      await run("revoke-sessions", A);
+
+      expect(logs[0]).toContain("5분");
+      expect(logs[0]).toContain("takedown-user");
     });
   });
 
@@ -349,8 +402,20 @@ describe("moderation 명령줄", () => {
       );
     });
 
+    it("게시를 중단한 적 없는 곡은 --republish로 공개하지 않는다", async () => {
+      await expect(run("restore", OTHER, "--republish")).rejects.toThrow(
+        OPS_ERRORS.deck.notTakenDown,
+      );
+
+      expect((await decksCol(db).doc(OTHER).get()).data()).toMatchObject({
+        visibility: "private",
+        listed: false,
+      });
+    });
+
     it("보관함 곡이 아니면 실패한다", async () => {
       await expect(run("restore", "nope")).rejects.toThrow("nope");
+      await expect(run("restore", "a/b")).rejects.toThrow("a/b");
     });
 
     describe("가져간 곡", () => {
@@ -391,7 +456,7 @@ describe("moderation 명령줄", () => {
 
       it("원곡이 아직 게시 중단돼 있으면 --republish로도 공개하지 않는다", async () => {
         await expect(run("restore", FORK, "--republish")).rejects.toThrow(
-          OPS_ERRORS.restore.sourceTakenDown,
+          OPS_ERRORS.deck.sourceTakenDown,
         );
 
         expect((await decksCol(db).doc(FORK).get()).data()).toMatchObject({
@@ -479,6 +544,96 @@ describe("moderation 명령줄", () => {
         "nope",
       );
       expect(await linkOf()).toMatchObject({ linkToken: null });
+    });
+
+    it("찾지 못한 /s/ 주소가 있어도 나머지 링크는 막고 그 주소를 알린다", async () => {
+      await share();
+      const unknown = "https://bangsongteam.example/s/unknownTokenXYZ";
+
+      await expect(run("disable-link", unknown, PRESENTATION)).rejects.toThrow(
+        unknown,
+      );
+
+      expect(await linkOf()).toMatchObject({
+        linkAccess: "off",
+        linkToken: null,
+      });
+    });
+
+    it("프레젠테이션 id로 쓸 수 없는 값도 찾을 수 없다고 알리고 나머지를 처리한다", async () => {
+      await share();
+
+      await expect(run("disable-link", "a/b", PRESENTATION)).rejects.toThrow(
+        "a/b",
+      );
+
+      expect(await linkOf()).toMatchObject({ linkToken: null });
+    });
+
+    it("이미 막은 주소를 다시 넣으면 Firestore 오류 대신 찾을 수 없다고 알린다", async () => {
+      const url = `https://bangsongteam.example/s/${await share()}`;
+      await run("disable-link", url);
+
+      const error = await run("disable-link", url).catch((e: Error) => e);
+
+      expect(error).toBeInstanceOf(Error);
+      expect((error as Error).message).toContain("찾을 수 없어요");
+      expect((error as Error).message).toContain(url);
+      expect((error as Error).message).not.toContain("documentPath");
+    });
+
+    it("같은 링크를 주소와 id로 여러 번 적어도 한 번만 막고 실패로 알리지 않는다", async () => {
+      const url = `https://bangsongteam.example/s/${await share()}`;
+
+      await run("disable-link", url, url, PRESENTATION);
+
+      expect(await linkOf()).toMatchObject({
+        linkAccess: "off",
+        linkToken: null,
+      });
+      expect(logs.filter((line) => line.includes("공유 링크를 막고"))).toEqual([
+        expect.stringContaining(PRESENTATION),
+      ]);
+    });
+
+    it("토큰이나 주소로 막으면 어느 프레젠테이션인지 id를 보여 준다", async () => {
+      const token = await share();
+
+      await run("disable-link", `https://bangsongteam.example/s/${token}`);
+
+      expect(logs.join("\n")).toContain(PRESENTATION);
+    });
+
+    it("링크를 막다 멈춘 프레젠테이션은 id로 다시 실행해 남은 멤버를 지운다", async () => {
+      await seedDocs(db, {
+        members: [{ presentationId: PRESENTATION, userId: B }],
+      });
+
+      await run("disable-link", PRESENTATION);
+
+      expect((await presentationMembersCol(db).get()).size).toBe(0);
+    });
+
+    it("한 링크를 막다 실패해도 나머지를 처리하고 다시 실행할 id를 알린다", async () => {
+      await seedDocs(db, {
+        presentations: [presentationDoc({ id: OTHER_PRESENTATION, userId: A })],
+      });
+      await setLinkAccess(db, OTHER_PRESENTATION, A, "view");
+      const failing = {
+        ...ops,
+        disableShareLink: (database: Db, id: string) =>
+          id === PRESENTATION
+            ? Promise.reject(new Error("멤버를 지우지 못했어요"))
+            : ops.disableShareLink(database, id),
+      };
+
+      await expect(
+        runWith(failing, "disable-link", PRESENTATION, OTHER_PRESENTATION),
+      ).rejects.toThrow(PRESENTATION);
+
+      expect(
+        (await presentationsCol(db).doc(OTHER_PRESENTATION).get()).data(),
+      ).toMatchObject({ linkAccess: "off", linkToken: null });
     });
   });
 });
