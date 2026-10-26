@@ -1,7 +1,13 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import type { Db } from "../client";
 import { decksCol, presentationsCol } from "../collections";
-import { createTestDb, deckDoc, seedDocs, userDoc } from "../test/fixtures";
+import {
+  createTestDb,
+  deckDoc,
+  presentationsWithCopies,
+  seedDocs,
+  userDoc,
+} from "../test/fixtures";
 import {
   DEFAULT_DECK_STYLE,
   PresentationDocumentSchema,
@@ -69,6 +75,30 @@ describe("프레젠테이션 쿼리", () => {
         userDoc({ id: userAId, name: "Worship Leader" }),
         userDoc({ id: userBId, name: "Other User" }),
       ],
+    });
+  });
+
+  describe("in 조건 한도(30)를 넘는 목록", () => {
+    it("프레젠테이션이 30개를 넘어도 모두 제 사본 곡을 자리순으로 붙여 돌려준다", async () => {
+      const seeded = presentationsWithCopies(userAId, 65, 2);
+      await seedDocs(db, seeded);
+      const expectedDeckIds = new Map<string, string[]>();
+      for (const deck of [...seeded.decks].sort(
+        (a, b) => (a.position ?? 0) - (b.position ?? 0),
+      )) {
+        const id = deck.presentationId as string;
+        expectedDeckIds.set(id, [...(expectedDeckIds.get(id) ?? []), deck.id]);
+      }
+
+      const documents = await getPresentationDocumentsByUserId(db, userAId);
+
+      expect(documents).toHaveLength(65);
+      for (const document of documents) {
+        expect(document.items.map((item) => item.order)).toEqual([0, 1]);
+        expect(document.items.map((item) => item.deckId)).toEqual(
+          expectedDeckIds.get(document.id),
+        );
+      }
     });
   });
 
