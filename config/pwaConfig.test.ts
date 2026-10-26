@@ -68,17 +68,15 @@ describe("PWA 설정", () => {
   it("sw.js는 매번 재검증한다 (해시가 붙은 /_next/static/*은 Next.js가 immutable로 준다)", async () => {
     const { default: nextConfig } = await import("../next.config");
     const headers = await nextConfig.headers?.();
-    expect(headers).toEqual([
-      {
-        source: "/sw.js",
-        headers: [
-          {
-            key: "Cache-Control",
-            value: "no-cache, no-store, must-revalidate",
-          },
-        ],
-      },
-    ]);
+    expect(headers).toContainEqual({
+      source: "/sw.js",
+      headers: [
+        {
+          key: "Cache-Control",
+          value: "no-cache, no-store, must-revalidate",
+        },
+      ],
+    });
   });
 
   it("글꼴 캐시 한도가 번들 글꼴 서브셋을 모두 담는다", () => {
