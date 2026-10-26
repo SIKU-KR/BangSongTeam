@@ -1,6 +1,7 @@
 // 배포: pnpm dlx wrangler deploy -c infra/cloudflare-proxy/wrangler.jsonc
 // 비밀값: Secret Manager의 proxy-secret과 같은 값을 PROXY_SECRET으로 넣는다
 //   (pnpm dlx wrangler secret put PROXY_SECRET -c infra/cloudflare-proxy/wrangler.jsonc).
+// ORIGIN_HOST에는 이 프로젝트의 번호가 들어 있다. 다른 프로젝트에서는 바꾼다 (docs/deploy-gcp.md 9절).
 {
   "name": "bangsongteam-proxy",
   "main": "worker.js",

@@ -1,8 +1,8 @@
 import { afterEach, describe, it, expect } from "vitest";
-import { execFileSync, spawnSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import { findJqDir, runWithStubs, writeStub } from "./shellStubs";
 
 const workflowDir = path.resolve(__dirname, "../.github/workflows");
 const readWorkflow = (file: string): string =>
@@ -31,16 +31,6 @@ function runScriptOf(job: string, stepName: string): string {
     body.push(line.slice(indent));
   }
   return body.join("\n");
-}
-
-function findJq(): string | null {
-  try {
-    return execFileSync("sh", ["-c", "command -v jq"], { encoding: "utf-8" })
-      .trim()
-      .replace(/\/jq$/, "");
-  } catch {
-    return null;
-  }
 }
 
 describe("GitHub Actions 워크플로", () => {
@@ -74,6 +64,7 @@ describe("CI/CD 워크플로", () => {
   it.each([
     { change: "Cloudflare Worker", filter: "infra/**" },
     { change: "테스트가 읽는 .gitignore", filter: ".gitignore" },
+    { change: "테스트가 읽는 배포 문서", filter: "docs/deploy-gcp.md" },
   ])("$change만 바꾼 PR도 필수 검사를 건너뛰지 않는다", ({ filter }) => {
     const filters = [
       ...jobOf(ciCd, "changes").matchAll(/^\s+- '([^']+)'$/gm),
@@ -118,7 +109,7 @@ describe("CI/CD 워크플로", () => {
       ).toEqual([]);
     });
 
-    describe.skipIf(!findJq())("candidate 확인 스크립트", () => {
+    describe.skipIf(!findJqDir())("candidate 확인 스크립트", () => {
       const smokeScript = (): string =>
         runScriptOf(jobOf(ciCd, "deploy"), "Smoke test candidate revision");
       const workDirs: string[] = [];
@@ -143,7 +134,6 @@ describe("CI/CD 워크플로", () => {
         const dir = fs.mkdtempSync(path.join(os.tmpdir(), "ci-smoke-"));
         workDirs.push(dir);
         const files = {
-          calls: path.join(dir, "calls.log"),
           service: path.join(dir, "service.json"),
           script: path.join(dir, "smoke.sh"),
         };
@@ -166,13 +156,8 @@ describe("CI/CD 워크플로", () => {
           }),
         );
         fs.writeFileSync(files.script, smokeScript());
-        const stub = (name: string, body: string) =>
-          fs.writeFileSync(
-            path.join(dir, name),
-            `#!/usr/bin/env bash\necho "${name} $*" >> "$CALLS"\n${body}\n`,
-            { mode: 0o755 },
-          );
-        stub(
+        writeStub(
+          dir,
           "gcloud",
           `case "$*" in
   "run services describe "*) cat "$SERVICE_JSON" ;;
@@ -180,7 +165,8 @@ describe("CI/CD 워크플로", () => {
   *) echo "unexpected gcloud $*" >&2; exit 64 ;;
 esac`,
         );
-        stub(
+        writeStub(
+          dir,
           "curl",
           `[ -n "\${SERVER_REQUIRES-}" ] || exit 0
 url="\${!#}"
@@ -188,27 +174,13 @@ url="\${!#}"
 case "$*" in *"x-bst-proxy-secret: $SERVER_REQUIRES"*) ;; *) exit 22 ;; esac`,
         );
 
-        const result = spawnSync(
-          "/bin/bash",
-          ["-eo", "pipefail", files.script],
-          {
-            encoding: "utf-8",
-            env: {
-              NODE_ENV: "test",
-              PATH: [dir, findJq(), "/usr/bin", "/bin"].join(":"),
-              SERVICE: "svc",
-              REGION: "asia-northeast3",
-              CALLS: files.calls,
-              SERVICE_JSON: files.service,
-              PROXY_SECRET_VALUE: options.proxySecret ?? "",
-              SERVER_REQUIRES: options.serverRequires ?? "",
-            },
-          },
-        );
-        const calls = fs.existsSync(files.calls)
-          ? fs.readFileSync(files.calls, "utf-8").split("\n").filter(Boolean)
-          : [];
-        return { ...result, calls };
+        return runWithStubs(files.script, dir, {
+          SERVICE: "svc",
+          REGION: "asia-northeast3",
+          SERVICE_JSON: files.service,
+          PROXY_SECRET_VALUE: options.proxySecret ?? "",
+          SERVER_REQUIRES: options.serverRequires ?? "",
+        });
       }
 
       it.each(["1", "true", "TRUE"])(

@@ -1,0 +1,30 @@
+{
+  "displayName": "[방송팀] Cloud Run 메모리 부족 우려",
+  "combiner": "OR",
+  "conditions": [
+    {
+      "displayName": "메모리 사용률 p99 90% 초과",
+      "conditionThreshold": {
+        "filter": "metric.type=\"run.googleapis.com/container/memory/utilizations\" AND resource.type=\"cloud_run_revision\" AND resource.labels.service_name=\"__SERVICE__\"",
+        "aggregations": [
+          {
+            "alignmentPeriod": "60s",
+            "perSeriesAligner": "ALIGN_PERCENTILE_99",
+            "crossSeriesReducer": "REDUCE_MAX",
+            "groupByFields": ["resource.label.service_name"]
+          }
+        ],
+        "comparison": "COMPARISON_GT",
+        "thresholdValue": 0.9,
+        "duration": "300s",
+        "trigger": { "count": 1 },
+        "evaluationMissingData": "EVALUATION_MISSING_DATA_INACTIVE"
+      }
+    }
+  ],
+  "alertStrategy": { "autoClose": "1800s" },
+  "documentation": {
+    "mimeType": "text/markdown",
+    "content": "Cloud Run 컨테이너 메모리 사용률(p99)이 5분 넘게 90%를 넘었다. 한도를 넘으면 인스턴스가 종료돼 요청이 끊긴다.\n\n- 사용량이 계속 늘면 메모리를 쓰는 코드(캐시 등)를 찾는다. 급하면 `gcloud run services update <서비스> --memory=<값>`으로 한도를 올린다.\n- 컨테이너 오류 알림이 함께 왔다면 이미 종료된 인스턴스가 있다."
+  }
+}

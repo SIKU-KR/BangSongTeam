@@ -41,6 +41,7 @@ jobs:
             app:
               - 'src/**'
               - 'config/**'
+              - 'docs/deploy-gcp.md'
               - 'infra/**'
               - 'public/**'
               - 'scripts/**'
