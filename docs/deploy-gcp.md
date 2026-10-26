@@ -73,8 +73,10 @@ gcloud run deploy "$SERVICE" --image "$IMAGE" --region "$REGION" \
 
 - `--timeout=3600`: 오프라인 송출용 배경 영상(수백 MB)을 느린 회선으로 받아도 끊기지 않게 한다.
 - 사용하지 않는 소셜 로그인은 id·secret을 빼면 로그인 화면에서 사라진다.
-- 도메인은 Cloud Run 도메인 매핑이나 외부 Application Load Balancer로 연결한다. 도메인이
-  같으면 OAuth Redirect URI(`/api/auth/callback/*`)는 바꾸지 않아도 된다.
+- 서울 리전은 Cloud Run 도메인 매핑을 지원하지 않아, 도메인은 Cloudflare Worker 프록시
+  (`infra/cloudflare-proxy`)가 run.app으로 넘긴다. Worker와 Cloud Run에 같은 `PROXY_SECRET`을
+  넣어야 서버가 프록시가 넘긴 사용자 IP를 믿는다
+  (`--set-secrets PROXY_SECRET=proxy-secret:latest`).
 
 ## 6. GitHub Actions (Workload Identity Federation)
 

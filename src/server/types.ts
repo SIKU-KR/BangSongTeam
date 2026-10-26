@@ -16,6 +16,8 @@ export interface Bindings {
   NAVER_CLIENT_SECRET?: string;
   GOOGLE_CLIENT_ID?: string;
   GOOGLE_CLIENT_SECRET?: string;
+  /** 앞단 Cloudflare Worker와 나눠 가진 비밀값. 있을 때만 프록시가 넘긴 사용자 IP를 믿는다 */
+  PROXY_SECRET?: string;
 }
 
 export interface Variables {
