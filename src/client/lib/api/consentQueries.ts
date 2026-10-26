@@ -38,7 +38,7 @@ export function useAgreeConsent(userId: string) {
 
 /**
  * 서버가 가입 동의 전이라 거절했는지. 동의 모달은 동의 상태를 확인하지 못하면 막지 않으므로,
- * 서버가 공개·가져오기·신고·링크 참여를 막으면 이 거절로 알게 된다.
+ * 서버가 공개·링크 공유·가져오기·신고·링크 참여를 막으면 이 거절로 알게 된다.
  */
 export function isConsentRequiredError(err: unknown): boolean {
   return (

@@ -25,6 +25,7 @@ import { resolveRequireAuth, type AppDeps } from "../deps";
 import { isTransientStorageError } from "../lib/storageErrors";
 import { logServerError } from "../lib/requestLog";
 import { idParam } from "../lib/params";
+import { hasAgreedToTerms } from "../middleware/consent";
 
 async function save(c: Context<AppEnv>, changes: PresentationChanges) {
   if (
@@ -131,11 +132,15 @@ export function createPresentationsRoute(deps: AppDeps = {}) {
       presentationId,
       zValidator("json", UpdateShareSettingsRequestSchema),
       async (c) => {
+        const { access } = c.req.valid("json");
+        if (access !== "off" && !(await hasAgreedToTerms(c))) {
+          return c.json({ error: API_ERRORS.consentRequired }, 403);
+        }
         const settings = await setLinkAccess(
           c.env.DB,
           c.req.param("id"),
           c.get("userId") as string,
-          c.req.valid("json").access,
+          access,
         );
         if (!settings)
           return c.json({ error: API_ERRORS.presentation.notAccessible }, 404);

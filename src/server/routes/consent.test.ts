@@ -91,7 +91,20 @@ describe("/api/consent", () => {
 
 const A_DECK = "c0000000000000000c0a1";
 const B_DECK = "c0000000000000000c0b1";
+const A_SET = "10000000000000000c0a1";
 const B_SET = "10000000000000000c0b1";
+
+function emptySet(id: string, userId: string) {
+  return PresentationDocumentSchema.parse({
+    id,
+    userId,
+    title: "주일 예배",
+    serviceDate: "2026-09-27",
+    items: [],
+    createdAt: "2026-09-20T00:00:00.000Z",
+    updatedAt: "2026-09-21T00:00:00.000Z",
+  });
+}
 
 function libraryDeck(id: string, userId: string): Deck {
   return DeckSchema.parse({
@@ -237,17 +250,45 @@ describe("가입 동의 전에 막는 일", () => {
     );
   });
 
+  it("동의 전에는 링크 공유를 켜지 못하고, 끄는 일은 막지 않는다", async () => {
+    expect(
+      (
+        await call(
+          USER_A,
+          "PUT",
+          `/api/presentations/${A_SET}`,
+          emptySet(A_SET, USER_A),
+        )
+      ).status,
+    ).toBe(200);
+    const share = (access: string): Promise<Response> =>
+      call(USER_A, "PUT", `/api/presentations/${A_SET}/share`, { access });
+
+    const refused = await share("view");
+
+    expect(refused.status).toBe(403);
+    expect(await refused.json()).toEqual({ error: API_ERRORS.consentRequired });
+    const settings = await call(
+      USER_A,
+      "GET",
+      `/api/presentations/${A_SET}/share`,
+    );
+    expect(await settings.json()).toEqual({ access: "off", token: null });
+    expect((await share("off")).status).toBe(200);
+
+    await call(USER_A, "POST", "/api/consent", AGREE_ALL);
+    const shared = await share("view");
+    expect(shared.status).toBe(200);
+    expect(((await shared.json()) as ShareSettings).access).toBe("view");
+  });
+
   it("동의 전에는 공유 링크로 참여하지 못한다", async () => {
-    const set = PresentationDocumentSchema.parse({
-      id: B_SET,
-      userId: USER_B,
-      title: "주일 예배",
-      serviceDate: "2026-09-27",
-      items: [],
-      createdAt: "2026-09-20T00:00:00.000Z",
-      updatedAt: "2026-09-21T00:00:00.000Z",
-    });
-    await call(USER_B, "PUT", `/api/presentations/${B_SET}`, set);
+    await call(
+      USER_B,
+      "PUT",
+      `/api/presentations/${B_SET}`,
+      emptySet(B_SET, USER_B),
+    );
     const { token } = (await (
       await call(USER_B, "PUT", `/api/presentations/${B_SET}/share`, {
         access: "view",
