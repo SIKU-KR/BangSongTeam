@@ -26,6 +26,7 @@ import { nanoid } from "nanoid";
 import {
   ROOT_DIR,
   assertEmulatorUp,
+  describeTarget,
   importSource,
   parseFlags,
   applyTarget,
@@ -166,9 +167,7 @@ async function main() {
   console.log(`=== 시드 시작 ===`);
   console.log(`- 원본: ${source}`);
   console.log(`- 처리할 곡: ${songs.length}개`);
-  console.log(
-    `- 대상: ${target === "remote" ? "운영 Firestore" : "로컬 에뮬레이터"}`,
-  );
+  console.log(`- 대상: ${describeTarget(target)}`);
 
   const fitTitle = (title) =>
     shared.clampText(title, shared.MAX_DECK_TITLE_LENGTH) || "제목 없음";

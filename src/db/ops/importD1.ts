@@ -1,4 +1,5 @@
 import type { DocumentData } from "@google-cloud/firestore";
+import { OPS_ERRORS } from "#shared";
 import { runBulk, type Db } from "../client";
 import { COLLECTIONS, memberDocId, type DeckDoc } from "../collections";
 import { withDeckIndex } from "../deckIndex";
@@ -167,11 +168,27 @@ export function convertD1Export(tables: D1Export): ImportedDoc[] {
   return docs;
 }
 
-/** 바꾼 문서를 모두 쓴다. 같은 id가 있으면 덮어써서 여러 번 돌려도 결과가 같다 */
+/**
+ * 대상 Firestore에 사용자가 하나도 없는지 확인한다. 이전 뒤에는 사용자가 새 서비스에서 데이터를
+ * 쓰므로, 이미 사용자가 있으면 다시 옮기는 일이 그 뒤의 쓰기와 게시 중단을 D1의 옛 값으로
+ * 덮어쓴다.
+ */
+export async function assertImportTargetEmpty(db: Db): Promise<void> {
+  const existing = await db.collection(COLLECTIONS.users).limit(1).get();
+  if (!existing.empty) throw new Error(OPS_ERRORS.importTargetNotEmpty);
+}
+
+/**
+ * 바꾼 문서를 모두 쓴다. 같은 id가 있으면 덮어쓰므로 대상이 비어 있는 동안에는 여러 번 돌려도
+ * 결과가 같다. 하지만 이전 뒤 새 서비스에서 생긴 쓰기까지 되돌리므로 기본으로는 사용자가 이미
+ * 있는 대상에 쓰지 않는다. 롤백한 뒤 다시 옮기거나 멈춘 이전을 이어 갈 때만 `overwriteExisting`을 쓴다.
+ */
 export async function writeImportedDocs(
   db: Db,
   docs: readonly ImportedDoc[],
+  { overwriteExisting = false }: { overwriteExisting?: boolean } = {},
 ): Promise<void> {
+  if (!overwriteExisting) await assertImportTargetEmpty(db);
   await runBulk(db, (writer) =>
     docs.map(({ collection, id, data }) =>
       writer.set(db.collection(collection).doc(id), data),

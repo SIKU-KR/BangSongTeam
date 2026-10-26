@@ -24,23 +24,50 @@ export const LOCAL_PROJECT_ID = "demo-bangsongteam";
 export const LOCAL_EMULATOR_HOST = "127.0.0.1:8080";
 export const LOCAL_MEDIA_DIR = path.join(ROOT_DIR, ".data", "media");
 
-/** `--target` 값을 확인하고 그 대상의 Firestore 연결 환경 변수를 맞춘다 */
+/**
+ * `--target` 값을 확인하고 그 대상의 Firestore 연결 환경 변수를 맞춘다.
+ *
+ * - local: 비어 있는 값도 없는 값으로 보고 기본값을 채운다(`||=`). Firestore SDK는 빈
+ *   `FIRESTORE_EMULATOR_HOST`를 설정 없음으로 읽어 운영 Firestore에 붙으므로, `??=`로는
+ *   `FIRESTORE_EMULATOR_HOST=`가 내보내진 셸에서 시드가 운영 데이터를 지운다.
+ *   `GCLOUD_PROJECT`는 google-auth-library가 `GOOGLE_CLOUD_PROJECT`보다 먼저 읽어서 지운다.
+ * - remote: 두 프로젝트 변수가 서로 다른 프로젝트를 가리키면 어느 쪽에 쓸지 알 수 없어 멈춘다.
+ */
 export function applyTarget(target) {
   if (target === "local") {
-    process.env.FIRESTORE_EMULATOR_HOST ??= LOCAL_EMULATOR_HOST;
-    process.env.GOOGLE_CLOUD_PROJECT ??= LOCAL_PROJECT_ID;
-    process.env.METADATA_SERVER_DETECTION ??= "none";
+    process.env.FIRESTORE_EMULATOR_HOST ||= LOCAL_EMULATOR_HOST;
+    process.env.GOOGLE_CLOUD_PROJECT ||= LOCAL_PROJECT_ID;
+    process.env.METADATA_SERVER_DETECTION ||= "none";
+    delete process.env.GCLOUD_PROJECT;
     return;
   }
   if (target !== "remote") {
     throw new Error(`--target은 local 또는 remote여야 합니다: ${target}`);
   }
   delete process.env.FIRESTORE_EMULATOR_HOST;
-  if (!process.env.GOOGLE_CLOUD_PROJECT) {
+  const project = process.env.GOOGLE_CLOUD_PROJECT;
+  if (!project) {
     throw new Error(
       "--target=remote에는 GOOGLE_CLOUD_PROJECT 환경 변수가 필요합니다",
     );
   }
+  const legacyProject = process.env.GCLOUD_PROJECT;
+  if (legacyProject && legacyProject !== project) {
+    throw new Error(
+      `GCLOUD_PROJECT(${legacyProject})와 GOOGLE_CLOUD_PROJECT(${project})가 다릅니다. 하나만 남기거나 같은 값으로 맞춰 주세요`,
+    );
+  }
+}
+
+/**
+ * `applyTarget` 뒤에 어느 Firestore에 쓰는지 한 줄로 알려 준다. 스크립트는 쓰기 전에
+ * 이 줄을 출력해, `--confirm`을 붙이기 전에 프로젝트를 눈으로 확인하게 한다.
+ */
+export function describeTarget(target) {
+  const project = process.env.GOOGLE_CLOUD_PROJECT;
+  return target === "local"
+    ? `로컬 에뮬레이터 ${process.env.FIRESTORE_EMULATOR_HOST} (프로젝트 ${project})`
+    : `운영 Firestore (프로젝트 ${project})`;
 }
 
 /** 로컬 에뮬레이터가 떠 있는지 확인한다 */

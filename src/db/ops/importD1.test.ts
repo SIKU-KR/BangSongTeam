@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { DeckSchema } from "#shared";
+import { DeckSchema, OPS_ERRORS } from "#shared";
 import type { Db } from "../client";
-import { COLLECTIONS, usersCol, type DeckDoc } from "../collections";
+import { COLLECTIONS, decksCol, usersCol, type DeckDoc } from "../collections";
 import { listBackgrounds } from "../queries/backgrounds";
 import { getMyLibraryDecks } from "../queries/decks";
 import { toSharedDeck } from "../queries/mappers";
@@ -10,7 +10,13 @@ import { getPresentationDocumentsByUserId } from "../queries/presentations";
 import { getSharedPresentationDocuments } from "../queries/presentationSharing";
 import { searchPublicDecks } from "../queries/search";
 import { createTestDb } from "../test/fixtures";
-import { convertD1Export, writeImportedDocs, type D1Export } from "./importD1";
+import {
+  assertImportTargetEmpty,
+  convertD1Export,
+  writeImportedDocs,
+  type D1Export,
+} from "./importD1";
+import { takedownDeck } from "./moderation";
 
 const OWNER = "aaaaaaaa0000000000001";
 const VIEWER = "bbbbbbbb0000000000002";
@@ -217,6 +223,42 @@ describe("D1 내보내기 옮기기", () => {
       artist: "나".repeat(100),
       forkedFromAuthorName: "x".repeat(100),
       forkCount: 0,
+    });
+  });
+
+  describe("이미 쓰고 있는 대상", () => {
+    const listedD1 = async (): Promise<boolean | undefined> =>
+      (await decksCol(db).doc("d1").get()).data()?.listed;
+
+    it("사용자가 있는 대상은 비어 있지 않다고 멈춘다", async () => {
+      await expect(assertImportTargetEmpty(db)).rejects.toThrow(
+        OPS_ERRORS.importTargetNotEmpty,
+      );
+    });
+
+    it("비어 있는 대상은 통과한다", async () => {
+      await expect(
+        assertImportTargetEmpty(createTestDb()),
+      ).resolves.toBeUndefined();
+    });
+
+    it("다시 옮기면 옮긴 뒤의 게시 중단을 되돌리므로 기본으로는 쓰지 않는다", async () => {
+      await takedownDeck(db, "d1");
+      expect(await listedD1()).toBe(false);
+
+      await expect(
+        writeImportedDocs(db, convertD1Export(EXPORT)),
+      ).rejects.toThrow(OPS_ERRORS.importTargetNotEmpty);
+      expect(await listedD1()).toBe(false);
+    });
+
+    it("overwriteExisting을 주면 롤백 뒤 다시 옮길 때처럼 덮어쓴다", async () => {
+      await takedownDeck(db, "d1");
+
+      await writeImportedDocs(db, convertD1Export(EXPORT), {
+        overwriteExisting: true,
+      });
+      expect(await listedD1()).toBe(true);
     });
   });
 });

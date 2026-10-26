@@ -1,15 +1,30 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { Transaction } from "@google-cloud/firestore";
-import { OFFICIAL_LIBRARY_NAME, OFFICIAL_LIBRARY_USER_ID } from "#shared";
-import type { Db } from "../client";
+import {
+  API_ERRORS,
+  OFFICIAL_LIBRARY_NAME,
+  OFFICIAL_LIBRARY_USER_ID,
+  OPS_ERRORS,
+} from "#shared";
+import { runBulk, type Db } from "../client";
 import {
   COLLECTIONS,
   decksCol,
+  memberDocId,
   moderationEventsCol,
+  presentationMembersCol,
+  presentationsCol,
   reportsCol,
   usersCol,
+  type ReportDoc,
 } from "../collections";
 import { deleteDeckScoped } from "../queries/decks";
+import {
+  getSharedDocumentByToken,
+  joinByToken,
+  resolvePresentationAccess,
+  setLinkAccess,
+} from "../queries/presentationSharing";
 import { createReport } from "../queries/reports";
 import { searchPublicDecks } from "../queries/search";
 import { forkPublicDeck, setDeckVisibility } from "../queries/sharing";
@@ -22,15 +37,24 @@ import {
 } from "../test/fixtures";
 import {
   banUser,
+  countPendingReports,
+  disableShareLink,
   findBlockingSource,
+  findPresentationIdByLinkToken,
   listDescendants,
   listPendingReports,
+  listUserDecks,
   rejectReport,
+  rejectReportsByReporter,
   resolveReport,
+  resolveReportsForDecks,
   resolveReportsForTarget,
   restoreDeck,
+  revokeSessions,
   takedownDeck,
+  takedownDecks,
   takedownForks,
+  takedownUserDecks,
   unbanUser,
 } from "./moderation";
 
@@ -40,6 +64,10 @@ const C = "00000000000000000000c";
 const NOBODY = "000000000000000000zzz";
 const DECK = "c00000000000000000001";
 const FORK = "c00000000000000000002";
+const PRIVATE_DECK = "c00000000000000000003";
+const PRESENTATION_COPY = "c00000000000000000004";
+const BOT_DECK = "c00000000000000000005";
+const PRESENTATION = "p00000000000000000001";
 const SLIDES = JSON.stringify([{ id: "s", order: 0, lines: ["시선"] }]);
 
 describe("신고·게시 중단 운영 작업", () => {
@@ -52,6 +80,25 @@ describe("신고·게시 중단 운영 작업", () => {
   const report = async (id: string) => {
     const row = (await reportsCol(db).doc(id).get()).data();
     return { status: row?.status, resolutionNote: row?.resolutionNote };
+  };
+  const addReport = async (
+    id: string,
+    row: Pick<ReportDoc, "reporterId" | "deckId"> & Partial<ReportDoc>,
+  ) => {
+    await reportsCol(db)
+      .doc(id)
+      .set({
+        details: null,
+        reason: "copyright",
+        status: "pending",
+        resolvedAt: null,
+        resolutionNote: null,
+        targetUserId: null,
+        targetTitle: null,
+        createdAt: new Date(2),
+        ...row,
+        id,
+      });
   };
   const events = async () =>
     (await moderationEventsCol(db).get()).docs
@@ -206,7 +253,7 @@ describe("신고·게시 중단 운영 작업", () => {
 
   it("게시 중단을 풀어도 운영 기록에 남고, 사유가 없으면 null로 남긴다", async () => {
     await takedownDeck(db, DECK, new Date(1));
-    await restoreDeck(db, DECK, new Date(2), "권리자 철회");
+    await restoreDeck(db, DECK, { now: new Date(2), note: "권리자 철회" });
 
     expect(
       (await events()).map(({ action, cause, note }) => [action, cause, note]),
@@ -339,6 +386,35 @@ describe("신고·게시 중단 운영 작업", () => {
       expect(
         (await setDeckVisibility(db, C, fork.deck.id, "public")).status,
       ).toBe("source_taken_down");
+    });
+
+    it("원본이 아직 게시 중단돼 있으면 운영자의 다시 공개도 막고, 원본을 풀면 공개한다", async () => {
+      const fork = await forkPublicDeck(db, C, DECK);
+      if (fork.status !== "ok") throw new Error(fork.status);
+      await takedownDeck(db, DECK);
+      await takedownForks(db, DECK);
+      const restoreEvents = async () =>
+        (await events()).filter((event) => event.action === "restore");
+
+      await expect(
+        restoreDeck(db, fork.deck.id, { republish: true }),
+      ).rejects.toThrow(OPS_ERRORS.restore.sourceTakenDown);
+
+      expect(await deckState(fork.deck.id)).toEqual({
+        visibility: "private",
+        takedownAt: expect.any(Date),
+      });
+      expect(await restoreEvents()).toEqual([]);
+
+      await restoreDeck(db, DECK);
+      expect(await restoreDeck(db, fork.deck.id, { republish: true })).toBe(
+        true,
+      );
+
+      expect(await deckState(fork.deck.id)).toEqual({
+        visibility: "public",
+        takedownAt: null,
+      });
     });
 
     it("가져간 곡마다 공개를 막는 가장 가까운 게시 중단된 원본을 알려 준다", async () => {
@@ -699,6 +775,452 @@ describe("신고·게시 중단 운영 작업", () => {
         "unban",
       ]);
       expect(await unbanUser(db, NOBODY)).toBe(false);
+    });
+  });
+
+  describe("takedown time", () => {
+    it("keeps the first takedown time when a deck is taken down again", async () => {
+      await takedownDeck(db, DECK, new Date(1000));
+      await takedownDeck(db, DECK, new Date(2000));
+
+      expect((await deckState(DECK)).takedownAt).toEqual(new Date(1000));
+    });
+  });
+
+  describe("restore with republish", () => {
+    beforeEach(async () => {
+      await seedDocs(db, {
+        users: [
+          userDoc({
+            id: OFFICIAL_LIBRARY_USER_ID,
+            name: OFFICIAL_LIBRARY_NAME,
+          }),
+        ],
+        decks: [
+          deckDoc({
+            id: BOT_DECK,
+            userId: OFFICIAL_LIBRARY_USER_ID,
+            title: "시선",
+            visibility: "public",
+            publishedAt: new Date(1000),
+            slides: SLIDES,
+          }),
+        ],
+      });
+    });
+
+    const searchIds = async () =>
+      (await searchPublicDecks(db, "시선")).map((d) => d.id);
+
+    it("brings a taken-down song of an account nobody can sign in to back into the library", async () => {
+      await takedownDeck(db, BOT_DECK);
+      await restoreDeck(db, BOT_DECK);
+      expect(await searchIds()).not.toContain(BOT_DECK);
+
+      const now = new Date(5000);
+      expect(await restoreDeck(db, BOT_DECK, { republish: true, now })).toBe(
+        true,
+      );
+
+      const stored = (await decksCol(db).doc(BOT_DECK).get()).data();
+      expect(stored).toMatchObject({
+        visibility: "public",
+        takedownAt: null,
+        publishedAt: now,
+        listed: true,
+      });
+      expect(await searchIds()).toContain(BOT_DECK);
+    });
+
+    it("refuses to republish a deck without slides", async () => {
+      await seedDocs(db, {
+        decks: [
+          deckDoc({
+            id: PRIVATE_DECK,
+            userId: A,
+            takedownAt: new Date(1),
+          }),
+        ],
+      });
+
+      await expect(
+        restoreDeck(db, PRIVATE_DECK, { republish: true }),
+      ).rejects.toThrow(API_ERRORS.deck.noSlides);
+      expect(await deckState(PRIVATE_DECK)).toEqual({
+        visibility: "private",
+        takedownAt: new Date(1),
+      });
+    });
+
+    it("does not touch presentation copies", async () => {
+      await seedDocs(db, {
+        decks: [
+          deckDoc({
+            id: PRESENTATION_COPY,
+            userId: A,
+            presentationId: PRESENTATION,
+            itemId: "i1",
+            position: 0,
+          }),
+        ],
+      });
+
+      expect(
+        await restoreDeck(db, PRESENTATION_COPY, { republish: true }),
+      ).toBe(false);
+      expect((await deckState(PRESENTATION_COPY)).visibility).toBe("private");
+    });
+  });
+
+  describe("closing reports", () => {
+    it("does not overwrite a report that is already closed", async () => {
+      await resolveReport(db, "r1", "권리자 요청");
+      const closedAt = (await reportsCol(db).doc("r1").get()).data()
+        ?.resolvedAt;
+
+      await expect(rejectReport(db, "r1", "오타")).rejects.toThrow(
+        OPS_ERRORS.report.alreadyResolved,
+      );
+      await expect(resolveReport(db, "r1", "다시")).rejects.toThrow(
+        OPS_ERRORS.report.alreadyResolved,
+      );
+
+      expect(await report("r1")).toEqual({
+        status: "resolved",
+        resolutionNote: "권리자 요청",
+      });
+      expect((await reportsCol(db).doc("r1").get()).data()?.resolvedAt).toEqual(
+        closedAt,
+      );
+    });
+
+    it("names the earlier outcome when a rejected report is closed again", async () => {
+      await rejectReport(db, "r2", "오류 아님");
+
+      await expect(resolveReport(db, "r2", "처리")).rejects.toThrow(
+        OPS_ERRORS.report.alreadyRejected,
+      );
+      expect(await report("r2")).toEqual({
+        status: "rejected",
+        resolutionNote: "오류 아님",
+      });
+    });
+
+    it("lets a forced close correct a report that is already closed", async () => {
+      await resolveReport(db, "r1", "권리자 요청");
+
+      await rejectReport(db, "r1", "오타였음", { force: true });
+
+      expect(await report("r1")).toEqual({
+        status: "rejected",
+        resolutionNote: "오타였음",
+      });
+    });
+
+    it("says so when the report does not exist", async () => {
+      await expect(resolveReport(db, "nope", "처리")).rejects.toThrow(
+        OPS_ERRORS.report.notFound,
+      );
+      await expect(
+        resolveReport(db, "nope", "처리", { force: true }),
+      ).rejects.toThrow(OPS_ERRORS.report.notFound);
+    });
+
+    it("leaves closed reports alone when closing the reports of a deck", async () => {
+      await rejectReport(db, "r1", "오류 아님");
+      await addReport("r3", { reporterId: A, deckId: DECK });
+
+      expect(await resolveReportsForTarget(db, DECK, "권리자 요청")).toBe(1);
+
+      expect(await report("r1")).toEqual({
+        status: "rejected",
+        resolutionNote: "오류 아님",
+      });
+      expect(await report("r3")).toEqual({
+        status: "resolved",
+        resolutionNote: "권리자 요청",
+      });
+    });
+
+    it("closes the pending reports of several decks at once", async () => {
+      expect(await resolveReportsForDecks(db, [DECK, FORK], "계정 정리")).toBe(
+        2,
+      );
+
+      expect(await report("r1")).toEqual({
+        status: "resolved",
+        resolutionNote: "계정 정리",
+      });
+      expect(await report("r2")).toEqual({
+        status: "resolved",
+        resolutionNote: "계정 정리",
+      });
+      expect(await resolveReportsForDecks(db, [], "없음")).toBe(0);
+    });
+  });
+
+  describe("report queue", () => {
+    it("shows who reported and who owns the deck", async () => {
+      expect(await listPendingReports(db)).toEqual([
+        expect.objectContaining({ id: "r1", reporterId: B, targetUserId: A }),
+        expect.objectContaining({ id: "r2", reporterId: A, targetUserId: B }),
+      ]);
+    });
+
+    it("keeps the owner empty when the deck is gone", async () => {
+      await addReport("r3", { reporterId: A, deckId: null });
+
+      const rows = await listPendingReports(db);
+
+      expect(rows.at(-1)).toMatchObject({
+        id: "r3",
+        targetUserId: null,
+        targetTitle: null,
+      });
+    });
+
+    it("lists only the oldest reports when asked for a limit and counts them all", async () => {
+      await addReport("r3", { reporterId: B, deckId: FORK });
+
+      expect(
+        (await listPendingReports(db, { limit: 2 })).map((r) => r.id),
+      ).toEqual(["r1", "r2"]);
+      expect(await countPendingReports(db)).toBe(3);
+    });
+
+    it("rejects every pending report of one reporter and leaves the rest", async () => {
+      await addReport("r3", {
+        reporterId: B,
+        deckId: FORK,
+        reason: "inappropriate",
+      });
+
+      expect(await rejectReportsByReporter(db, B, "도배")).toBe(2);
+
+      expect(await report("r1")).toEqual({
+        status: "rejected",
+        resolutionNote: "도배",
+      });
+      expect(await report("r3")).toEqual({
+        status: "rejected",
+        resolutionNote: "도배",
+      });
+      expect(await report("r2")).toEqual({
+        status: "pending",
+        resolutionNote: null,
+      });
+      expect(await listPendingReports(db)).toEqual([
+        expect.objectContaining({ id: "r2", reporterId: A }),
+      ]);
+    });
+
+    it("does not reopen reports of that reporter that were already closed", async () => {
+      await resolveReport(db, "r1", "권리자 요청");
+
+      expect(await rejectReportsByReporter(db, B, "도배")).toBe(0);
+      expect(await report("r1")).toEqual({
+        status: "resolved",
+        resolutionNote: "권리자 요청",
+      });
+    });
+
+    it("rejects more reports than one write batch holds", async () => {
+      const spammer = "00000000000000spammer";
+      const ids = Array.from({ length: 501 }, (_, i) => `spam-${i}`);
+      await runBulk(db, (writer) =>
+        ids.map((id) =>
+          writer.set(reportsCol(db).doc(id), {
+            id,
+            reporterId: spammer,
+            deckId: DECK,
+            reason: "copyright",
+            details: null,
+            status: "pending",
+            resolvedAt: null,
+            resolutionNote: null,
+            targetUserId: null,
+            targetTitle: null,
+            createdAt: new Date(10),
+          }),
+        ),
+      );
+
+      expect(await rejectReportsByReporter(db, spammer, "도배")).toBe(501);
+
+      expect((await listPendingReports(db)).map((r) => r.id)).toEqual([
+        "r1",
+        "r2",
+      ]);
+    });
+  });
+
+  describe("one account's decks", () => {
+    beforeEach(async () => {
+      await seedDocs(db, {
+        decks: [
+          deckDoc({ id: PRIVATE_DECK, userId: A, title: "비공개 곡" }),
+          deckDoc({
+            id: PRESENTATION_COPY,
+            userId: A,
+            title: "시선",
+            presentationId: PRESENTATION,
+            itemId: "i1",
+            position: 0,
+          }),
+        ],
+      });
+    });
+
+    it("lists the library decks of an account without presentation copies", async () => {
+      const decks = await listUserDecks(db, A);
+
+      expect(decks.map((d) => d.id).sort()).toEqual([DECK, PRIVATE_DECK]);
+      expect(decks.find((d) => d.id === DECK)).toMatchObject({
+        title: "시선",
+        visibility: "public",
+        listed: true,
+        takedownAt: null,
+      });
+      expect(await listUserDecks(db, "nobody")).toEqual([]);
+    });
+
+    it("takes down every library deck of an account and nothing else", async () => {
+      const now = new Date(5000);
+
+      expect(await takedownUserDecks(db, A, now)).toBe(2);
+
+      for (const id of [DECK, PRIVATE_DECK]) {
+        const deck = (await decksCol(db).doc(id).get()).data();
+        expect(deck).toMatchObject({ takedownAt: now, listed: false });
+      }
+      for (const id of [PRESENTATION_COPY, FORK]) {
+        const deck = (await decksCol(db).doc(id).get()).data();
+        expect(deck?.takedownAt).toBeNull();
+      }
+      expect((await decksCol(db).doc(FORK).get()).data()?.listed).toBe(true);
+      expect(await takedownUserDecks(db, "nobody")).toBe(0);
+    });
+
+    it("다시 실행하면 그사이 생긴 곡만 중단하고 운영 기록을 겹쳐 남기지 않는다", async () => {
+      const later = "c00000000000000000008";
+      await takedownUserDecks(db, A, new Date(5000), "계정 정리");
+      await seedDocs(db, {
+        decks: [deckDoc({ id: later, userId: A, visibility: "public" })],
+      });
+
+      expect(await takedownUserDecks(db, A, new Date(6000), "계정 정리")).toBe(
+        1,
+      );
+
+      expect(
+        (await events()).map(({ deckId, cause, note }) => [
+          deckId,
+          cause,
+          note,
+        ]),
+      ).toEqual(
+        expect.arrayContaining([
+          [DECK, "direct", "계정 정리"],
+          [PRIVATE_DECK, "direct", "계정 정리"],
+          [later, "direct", "계정 정리"],
+        ]),
+      );
+      expect(await events()).toHaveLength(3);
+    });
+
+    it("takes down several decks and names the ids that are not library decks", async () => {
+      const result = await takedownDecks(db, [
+        DECK,
+        PRESENTATION_COPY,
+        "missing",
+        DECK,
+      ]);
+
+      expect(result).toEqual({
+        takenDown: [DECK],
+        notLibrary: [PRESENTATION_COPY, "missing"],
+      });
+      expect((await deckState(DECK)).takedownAt).not.toBeNull();
+      expect((await deckState(PRESENTATION_COPY)).takedownAt).toBeNull();
+    });
+
+    it("revokes only the sessions of that account", async () => {
+      const sessions = db.collection(COLLECTIONS.sessions);
+      const base = { expiresAt: new Date(9_000_000_000_000) };
+      await sessions.doc("sa1").set({ ...base, id: "sa1", userId: A });
+      await sessions.doc("sa2").set({ ...base, id: "sa2", userId: A });
+      await sessions.doc("sb1").set({ ...base, id: "sb1", userId: B });
+
+      expect(await revokeSessions(db, A)).toBe(2);
+
+      expect((await sessions.get()).docs.map((d) => d.id)).toEqual(["sb1"]);
+      expect(await revokeSessions(db, A)).toBe(0);
+    });
+  });
+
+  describe("share link switch", () => {
+    beforeEach(async () => {
+      await seedDocs(db, {
+        presentations: [presentationDoc({ id: PRESENTATION, userId: A })],
+      });
+    });
+
+    it("kills a spread link, drops its members and keeps the old token dead after the owner shares again", async () => {
+      const token = (await setLinkAccess(db, PRESENTATION, A, "view"))
+        ?.token as string;
+      await joinByToken(db, token, B);
+      expect(await resolvePresentationAccess(db, PRESENTATION, B)).toBe(
+        "viewer",
+      );
+
+      expect(await disableShareLink(db, PRESENTATION)).toBe(true);
+
+      expect(await getSharedDocumentByToken(db, token)).toBeNull();
+      expect(await resolvePresentationAccess(db, PRESENTATION, B)).toBeNull();
+      expect(
+        (await presentationsCol(db).doc(PRESENTATION).get()).data(),
+      ).toMatchObject({ linkAccess: "off", linkToken: null });
+
+      const again = await setLinkAccess(db, PRESENTATION, A, "view");
+      expect(again?.token).not.toBe(token);
+      expect(await getSharedDocumentByToken(db, token)).toBeNull();
+    });
+
+    it("drops more members than one write batch holds", async () => {
+      const token = (await setLinkAccess(db, PRESENTATION, A, "view"))
+        ?.token as string;
+      const viewers = Array.from({ length: 501 }, (_, i) => `viewer-${i}`);
+      await runBulk(db, (writer) =>
+        viewers.map((userId) =>
+          writer.set(
+            presentationMembersCol(db).doc(memberDocId(PRESENTATION, userId)),
+            { presentationId: PRESENTATION, userId },
+          ),
+        ),
+      );
+      await seedDocs(db, {
+        members: [{ presentationId: PRESENTATION, userId: B }],
+      });
+
+      expect(await disableShareLink(db, PRESENTATION)).toBe(true);
+
+      expect((await presentationMembersCol(db).get()).size).toBe(0);
+      await setLinkAccess(db, PRESENTATION, A, "view");
+      expect(await resolvePresentationAccess(db, PRESENTATION, B)).toBeNull();
+      expect(await getSharedDocumentByToken(db, token)).toBeNull();
+    });
+
+    it("says no when the presentation does not exist", async () => {
+      expect(await disableShareLink(db, "nope")).toBe(false);
+    });
+
+    it("finds the presentation behind a link token, even when the link is off", async () => {
+      const token = (await setLinkAccess(db, PRESENTATION, A, "view"))
+        ?.token as string;
+      await setLinkAccess(db, PRESENTATION, A, "off");
+
+      expect(await findPresentationIdByLinkToken(db, token)).toBe(PRESENTATION);
+      expect(await findPresentationIdByLinkToken(db, "unknown")).toBeNull();
     });
   });
 });

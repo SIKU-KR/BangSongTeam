@@ -24,6 +24,7 @@ import {
   LOCAL_MEDIA_DIR,
   ROOT_DIR,
   assertEmulatorUp,
+  describeTarget,
   importSource,
   parseFlags,
   applyTarget,
@@ -69,6 +70,7 @@ async function main() {
   ensureEnvFile();
   applyTarget("local");
   await assertEmulatorUp();
+  console.log(`대상: ${describeTarget("local")}`);
 
   const [seed, devUsers, client] = await Promise.all([
     importSource("src/db/seed/devSeed.ts"),

@@ -122,6 +122,10 @@ gcloud iam service-accounts add-iam-policy-binding "$DEPLOY_SA" --role=roles/iam
 `scripts/migrateFromCloudflare.cloudbuild.yaml`이 Cloud Build 안에서 R2 객체를 버킷으로 복사하고
 D1 테이블을 운영 Firestore에 쓴다. 필요한 토큰과 실행 명령은 그 파일 머리말에 있다.
 
-1. 미리보기(`_APPLY=false`)로 복사할 객체와 옮길 문서 수를 확인한다.
-2. 옮기는 동안 생긴 쓰기는 따라오지 않으므로 기존 서비스의 쓰기를 멈추고 `_APPLY=true`로 돌린다.
+1. 미리보기(`_APPLY_MEDIA`·`_APPLY_FIRESTORE`가 `false`)로 복사할 객체와 옮길 문서 수를 확인한다.
+2. 옮기는 동안 생긴 쓰기는 따라오지 않으므로 기존 서비스의 쓰기를 멈추고 `_APPLY_MEDIA=true,_APPLY_FIRESTORE=true`로 돌린다.
 3. 도메인을 Cloud Run으로 옮기고 Cloudflare Worker·D1·R2와 `CLOUDFLARE_*` 저장소 비밀값을 정리한다.
+
+도메인을 옮긴 뒤에는 `_APPLY_FIRESTORE`를 다시 켜지 않는다. 새 서비스에서 생긴 쓰기와 게시 중단이 D1의
+옛 값으로 돌아가서, Firestore에 사용자가 이미 있으면 스크립트가 멈춘다. 미디어만 다시 복사하려면
+`_APPLY_MEDIA`만 켠다.

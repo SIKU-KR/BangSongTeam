@@ -35,6 +35,7 @@ import { fileURLToPath } from "node:url";
 import {
   ROOT_DIR,
   assertEmulatorUp,
+  describeTarget,
   importSource,
   mediaTarget,
   parseFlags,
@@ -212,7 +213,7 @@ async function main() {
   );
   const affectedDecks = [...usage.values()].reduce((sum, n) => sum + n, 0);
 
-  console.log(`대상: ${target} Firestore · ${media.label}`);
+  console.log(`대상: ${describeTarget(target)} · ${media.label}`);
   console.log(`  새로 등록: ${toRegister.length}개`);
   console.log(`  메타데이터 갱신: ${toUpdate.length}개`);
   console.log(

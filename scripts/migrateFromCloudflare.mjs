@@ -14,14 +14,18 @@
  *      node scripts/migrateFromCloudflare.mjs --dir=.data/d1-export --dry-run
  *      node scripts/migrateFromCloudflare.mjs --dir=.data/d1-export
  *
- * 문서 id는 D1 행 id 그대로라 여러 번 돌려도 같은 결과가 된다. 옮기는 동안 기존 서비스에서
- * 생긴 쓰기는 따라오지 않으므로, 운영 이전은 쓰기를 멈춘 상태에서 한 번에 한다.
+ * 문서 id는 D1 행 id 그대로라 대상이 비어 있는 동안에는 여러 번 돌려도 같은 결과가 된다. 옮기는
+ * 동안 기존 서비스에서 생긴 쓰기는 따라오지 않으므로, 운영 이전은 쓰기를 멈춘 상태에서 한 번에 한다.
+ * 도메인을 옮겨 새 서비스에 사용자가 생긴 뒤에 다시 돌리면 그 뒤의 쓰기와 게시 중단을 D1의 옛 값으로
+ * 덮어쓰므로, 대상에 사용자가 이미 있으면 쓰지 않고 멈춘다. 롤백한 뒤 다시 옮기거나 멈춘 이전을 이어
+ * 갈 때만 `--overwrite-existing`을 붙인다.
  */
 
 import fs from "node:fs";
 import path from "node:path";
 import {
   assertEmulatorUp,
+  describeTarget,
   importSource,
   parseFlags,
   applyTarget,
@@ -72,6 +76,7 @@ async function main() {
       "--dir=<D1 내보내기 폴더> 또는 --d1=<D1 데이터베이스 id>가 필요합니다",
     );
   }
+  applyTarget(target);
 
   const importer = await importSource("src/db/ops/importD1.ts");
   const tables = {};
@@ -90,7 +95,7 @@ async function main() {
   for (const { collection } of docs) {
     counts[collection] = (counts[collection] ?? 0) + 1;
   }
-  console.log(`대상: ${target} Firestore`);
+  console.log(`대상: ${describeTarget(target)}`);
   console.table(counts);
 
   if (args["dry-run"]) {
@@ -103,10 +108,11 @@ async function main() {
     );
   }
 
-  applyTarget(target);
   await assertEmulatorUp();
   const { getFirestore } = await importSource("src/db/client.ts");
-  await importer.writeImportedDocs(getFirestore(), docs);
+  await importer.writeImportedDocs(getFirestore(), docs, {
+    overwriteExisting: args["overwrite-existing"] === true,
+  });
   console.log(`문서 ${docs.length}개를 옮겼습니다.`);
 }
 
