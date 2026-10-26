@@ -12,6 +12,7 @@ import { withDeckIndex } from "../deckIndex";
 import {
   toSharedDeck,
   toDeckContent,
+  toFolderDoc,
   toPresentationDocument,
   fromPresentationChanges,
 } from "./mappers";
@@ -149,6 +150,23 @@ describe("문서 ↔ DTO 매퍼", () => {
       expect(toSharedDeck(row).createdAt).toBe("2026-09-20T00:00:00.000Z");
     });
 
+    it("Firestore가 담지 못하는 0000년 시각은 시각 0으로 낮춘다", () => {
+      const content = toDeckContent(
+        makeSharedDeck({
+          createdAt: "0000-01-01T00:00:00.000Z",
+          updatedAt: "0000-12-31T23:59:59.999Z",
+        }),
+      );
+
+      expect(content.createdAt).toEqual(new Date(0));
+      expect(content.updatedAt).toEqual(new Date(0));
+      expect(
+        toDeckContent(
+          makeSharedDeck({ createdAt: "0001-01-01T00:00:00.000Z" }),
+        ).createdAt.toISOString(),
+      ).toBe("0001-01-01T00:00:00.000Z");
+    });
+
     it("슬라이드 JSON이 깨져 있어도 던지지 않고 빈 배열로 복구한다", () => {
       const row = { ...toRow(makeSharedDeck()), slides: "{not json" };
       const deck = toSharedDeck(row);
@@ -235,6 +253,28 @@ describe("문서 ↔ DTO 매퍼", () => {
         trashedAt: "2026-09-24T01:02:03.456Z",
       };
       expect(reassemble(doc)).toEqual(doc);
+    });
+
+    it("머리 문서와 폴더의 0000년 시각도 시각 0으로 낮춘다", () => {
+      const { presentation } = fromPresentationChanges({
+        ...toPresentationChanges(makeDocument()),
+        createdAt: "0000-01-01T00:00:00.000Z",
+        trashedAt: "0000-06-01T00:00:00.000Z",
+      });
+      const folder = toFolderDoc({
+        id: "f00000000000000000001",
+        userId: USER_ID,
+        parentId: null,
+        name: "폴더",
+        trashedAt: null,
+        createdAt: "0000-01-01T00:00:00.000Z",
+        updatedAt: "2026-09-21T00:00:00.000Z",
+      });
+
+      expect(presentation.createdAt).toEqual(new Date(0));
+      expect(presentation.trashedAt).toEqual(new Date(0));
+      expect(folder.createdAt).toEqual(new Date(0));
+      expect(folder.updatedAt.toISOString()).toBe("2026-09-21T00:00:00.000Z");
     });
 
     it("드라이브 필드가 없으면 행에도 넣지 않는다 (업서트가 기존 값을 유지)", () => {

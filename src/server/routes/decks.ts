@@ -13,6 +13,7 @@ import type { AppEnv } from "../types";
 import { resolveRequireAuth, type AppDeps } from "../deps";
 import { isTransientStorageError } from "../lib/storageErrors";
 import { logServerError } from "../lib/requestLog";
+import { idParam } from "../lib/params";
 
 /**
  * 곡 보관함(scope: 'library') 동기화 API.
@@ -21,6 +22,10 @@ import { logServerError } from "../lib/requestLog";
  * 여기서는 다루지 않는다 (`/api/presentations`).
  */
 export function createDecksRoute(deps: AppDeps = {}) {
+  const savedId = idParam(API_ERRORS.idMismatch, 400);
+  const deckId = idParam(API_ERRORS.deck.notAccessible, 404);
+  const publicDeckId = idParam(API_ERRORS.deck.notPublished, 404);
+
   return new Hono<AppEnv>()
     .use("*", resolveRequireAuth(deps))
     .get("/", async (c) => {
@@ -28,7 +33,7 @@ export function createDecksRoute(deps: AppDeps = {}) {
       const rows = await getMyLibraryDecks(db, c.get("userId") as string);
       return c.json({ decks: rows.map(toSharedDeck) }, 200);
     })
-    .put("/:id", zValidator("json", DeckSchema), async (c) => {
+    .put("/:id", savedId, zValidator("json", DeckSchema), async (c) => {
       const userId = c.get("userId") as string;
       const deck = c.req.valid("json");
 
@@ -59,6 +64,7 @@ export function createDecksRoute(deps: AppDeps = {}) {
     })
     .patch(
       "/:id/visibility",
+      deckId,
       zValidator("json", VisibilityUpdateRequestSchema),
       async (c) => {
         const db = c.env.DB;
@@ -89,7 +95,7 @@ export function createDecksRoute(deps: AppDeps = {}) {
         }
       },
     )
-    .post("/:id/fork", async (c) => {
+    .post("/:id/fork", publicDeckId, async (c) => {
       const db = c.env.DB;
       const result = await forkPublicDeck(
         db,
@@ -104,7 +110,7 @@ export function createDecksRoute(deps: AppDeps = {}) {
         200,
       );
     })
-    .delete("/:id", async (c) => {
+    .delete("/:id", deckId, async (c) => {
       const db = c.env.DB;
       const removed = await deleteDeckScoped(
         db,

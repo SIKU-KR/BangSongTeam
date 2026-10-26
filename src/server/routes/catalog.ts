@@ -4,6 +4,7 @@ import { API_ERRORS, SearchCatalogQuerySchema } from "#shared";
 import { getPublicDeckDetail, searchPublicDecks } from "#db";
 import type { AppEnv } from "../types";
 import { resolveRequireAuth, type AppDeps } from "../deps";
+import { idParam } from "../lib/params";
 
 const SEARCH_CACHE_SECONDS = 30;
 
@@ -16,6 +17,7 @@ const SEARCH_CACHE_SECONDS = 30;
  */
 export function createCatalogRoute(deps: AppDeps = {}) {
   const requireAuth = resolveRequireAuth(deps);
+  const publicDeckId = idParam(API_ERRORS.deck.notPublished, 404);
 
   return new Hono<AppEnv>()
     .get(
@@ -31,7 +33,7 @@ export function createCatalogRoute(deps: AppDeps = {}) {
         return c.json({ decks }, 200);
       },
     )
-    .get("/decks/:id", requireAuth, async (c) => {
+    .get("/decks/:id", requireAuth, publicDeckId, async (c) => {
       const db = c.env.DB;
       const detail = await getPublicDeckDetail(db, c.req.param("id"));
       if (!detail) {

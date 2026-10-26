@@ -11,6 +11,7 @@ import type { AppEnv } from "../types";
 import { resolveRequireAuth, type AppDeps } from "../deps";
 import { isTransientStorageError } from "../lib/storageErrors";
 import { logServerError } from "../lib/requestLog";
+import { idParam } from "../lib/params";
 
 /**
  * 드라이브 폴더 동기화 API (홈 `/presentations`의 폴더 트리).
@@ -20,6 +21,9 @@ import { logServerError } from "../lib/requestLog";
  * `userId`는 언제나 세션에서 가져온다 (Firestore에 사용자별 접근 규칙이 없다).
  */
 export function createFoldersRoute(deps: AppDeps = {}) {
+  const savedId = idParam(API_ERRORS.idMismatch, 400);
+  const folderId = idParam(API_ERRORS.folder.notAccessible, 404);
+
   return new Hono<AppEnv>()
     .use("*", resolveRequireAuth(deps))
     .get("/", async (c) => {
@@ -31,7 +35,7 @@ export function createFoldersRoute(deps: AppDeps = {}) {
       ]);
       return c.json({ folders, tombstones }, 200);
     })
-    .put("/:id", zValidator("json", FolderSchema), async (c) => {
+    .put("/:id", savedId, zValidator("json", FolderSchema), async (c) => {
       const userId = c.get("userId") as string;
       const folder = c.req.valid("json");
 
@@ -59,7 +63,7 @@ export function createFoldersRoute(deps: AppDeps = {}) {
 
       return c.json({ folder: saved }, 200);
     })
-    .delete("/:id", async (c) => {
+    .delete("/:id", folderId, async (c) => {
       const db = c.env.DB;
       const deleted = await deleteFolderTree(
         db,

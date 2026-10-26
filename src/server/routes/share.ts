@@ -3,6 +3,7 @@ import { getSharedDocumentByToken, joinByToken } from "#db";
 import type { AppEnv } from "../types";
 import { resolveRequireAuth, type AppDeps } from "../deps";
 import { API_ERRORS } from "#shared";
+import { tokenParam } from "../lib/params";
 
 /**
  * 공유 링크(`/s/:token`) API.
@@ -13,9 +14,10 @@ import { API_ERRORS } from "#shared";
  */
 export function createShareRoute(deps: AppDeps = {}) {
   const requireAuth = resolveRequireAuth(deps);
+  const linkToken = tokenParam(API_ERRORS.share.linkUnavailable);
 
   return new Hono<AppEnv>()
-    .get("/:token", async (c) => {
+    .get("/:token", linkToken, async (c) => {
       const document = await getSharedDocumentByToken(
         c.env.DB,
         c.req.param("token"),
@@ -25,7 +27,7 @@ export function createShareRoute(deps: AppDeps = {}) {
         return c.json({ error: API_ERRORS.share.linkUnavailable }, 404);
       return c.json({ document }, 200);
     })
-    .post("/:token/join", requireAuth, async (c) => {
+    .post("/:token/join", requireAuth, linkToken, async (c) => {
       const result = await joinByToken(
         c.env.DB,
         c.req.param("token"),

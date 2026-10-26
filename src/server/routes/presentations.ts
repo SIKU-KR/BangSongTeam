@@ -23,6 +23,7 @@ import type { AppEnv } from "../types";
 import { resolveRequireAuth, type AppDeps } from "../deps";
 import { isTransientStorageError } from "../lib/storageErrors";
 import { logServerError } from "../lib/requestLog";
+import { idParam } from "../lib/params";
 
 async function save(c: Context<AppEnv>, changes: PresentationChanges) {
   if (changes.id !== c.req.param("id")) {
@@ -67,6 +68,11 @@ async function save(c: Context<AppEnv>, changes: PresentationChanges) {
  * 저장은 소유자만 할 수 있다.
  */
 export function createPresentationsRoute(deps: AppDeps = {}) {
+  const savedId = idParam(API_ERRORS.idMismatch, 400);
+  const presentationId = idParam(API_ERRORS.presentation.notAccessible, 404);
+  const documentBody = zValidator("json", PresentationDocumentSchema);
+  const changesBody = zValidator("json", PresentationChangesSchema);
+
   return new Hono<AppEnv>()
     .use("*", resolveRequireAuth(deps))
     .get("/", async (c) => {
@@ -78,7 +84,7 @@ export function createPresentationsRoute(deps: AppDeps = {}) {
       ]);
       return c.json({ presentations: [...own, ...shared] }, 200);
     })
-    .get("/:id", async (c) => {
+    .get("/:id", presentationId, async (c) => {
       const db = c.env.DB;
       const document = await getPresentationDocument(
         db,
@@ -89,14 +95,14 @@ export function createPresentationsRoute(deps: AppDeps = {}) {
         return c.json({ error: API_ERRORS.presentation.notAccessible }, 404);
       return c.json({ presentation: document }, 200);
     })
-    .put("/:id", zValidator("json", PresentationDocumentSchema), async (c) => {
+    .put("/:id", savedId, documentBody, async (c) => {
       const document = c.req.valid("json");
       return save(c, toPresentationChanges(document));
     })
-    .patch("/:id", zValidator("json", PresentationChangesSchema), async (c) =>
+    .patch("/:id", savedId, changesBody, async (c) =>
       save(c, c.req.valid("json")),
     )
-    .delete("/:id", async (c) => {
+    .delete("/:id", presentationId, async (c) => {
       const removed = await deletePresentation(
         c.env.DB,
         c.req.param("id"),
@@ -106,7 +112,7 @@ export function createPresentationsRoute(deps: AppDeps = {}) {
         return c.json({ error: API_ERRORS.presentation.notAccessible }, 404);
       return c.json({ ok: true as const }, 200);
     })
-    .get("/:id/share", async (c) => {
+    .get("/:id/share", presentationId, async (c) => {
       const settings = await getShareSettings(
         c.env.DB,
         c.req.param("id"),
@@ -118,6 +124,7 @@ export function createPresentationsRoute(deps: AppDeps = {}) {
     })
     .put(
       "/:id/share",
+      presentationId,
       zValidator("json", UpdateShareSettingsRequestSchema),
       async (c) => {
         const settings = await setLinkAccess(
@@ -131,7 +138,7 @@ export function createPresentationsRoute(deps: AppDeps = {}) {
         return c.json(settings, 200);
       },
     )
-    .post("/:id/share/reset", async (c) => {
+    .post("/:id/share/reset", presentationId, async (c) => {
       const settings = await resetLinkToken(
         c.env.DB,
         c.req.param("id"),
