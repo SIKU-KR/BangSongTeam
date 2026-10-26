@@ -24,22 +24,29 @@ const DECK_SYNC_DEBOUNCE_MS = 2000;
 type DeckPusher = (deck: Deck) => Promise<Deck>;
 type DeckDeleter = (id: string) => Promise<void>;
 type ServerDeckListener = (deck: Deck) => void;
+type DeckGoneListener = (id: string) => void;
 
 type PendingOp = { kind: "push"; deck: Deck } | { kind: "delete"; id: string };
 
 let pusher: DeckPusher = pushDeck;
 let deleter: DeckDeleter = deleteDeckRemote;
 let listener: ServerDeckListener | null = null;
+let goneListener: DeckGoneListener | null = null;
 let enabled = false;
 let pending = new Map<string, PendingOp>();
 let failed = new Map<string, PendingOp>();
 const waitingOnServer = new Set<string>();
+const deletedIds = new Set<string>();
 let timer: ReturnType<typeof setTimeout> | null = null;
 let inFlight: Promise<void> = Promise.resolve();
 const runningBatches = new Set<Promise<void>>();
 const backoff = new BackoffTracker();
 
-/** 로그인·하이드레이션이 끝난 뒤에만 켠다 (송출 화면에서는 켜지 않는다) */
+/**
+ * 로그인·하이드레이션이 끝난 뒤에만 켠다 (송출 화면에서는 켜지 않는다).
+ * 끄면 대기 중인 일은 버리지만 지운 곡 목록(`deletedDeckIds`)은 남긴다. id는 다시 쓰이지
+ * 않으므로 남겨도 다른 곡을 가리지 않는다.
+ */
 export function setDeckSyncEnabled(next: boolean): void {
   enabled = next;
   if (!next) clearPending();
@@ -47,6 +54,57 @@ export function setDeckSyncEnabled(next: boolean): void {
 
 export function setServerDeckListener(next: ServerDeckListener | null): void {
   listener = next;
+}
+
+/**
+ * 큐가 올린 곡을 서버가 이미 지운 곡이라고 답하면(410) 그 id를 알린다. 다른 기기나 탭에서
+ * 지운 곡이라, 받는 쪽은 DELETE를 다시 보내지 않고 보관함에서만 내려놓는다.
+ */
+export function setDeckGoneListener(next: DeckGoneListener | null): void {
+  goneListener = next;
+}
+
+/**
+ * 서버가 이 계정에서 이미 지운 곡이라고 답했다(410). 실패가 아니라 삭제가 끝났다는 뜻이라
+ * 실패로 남기지 않고 곡을 내려놓는다.
+ */
+export function isDeckDeletedError(err: unknown): boolean {
+  return err instanceof ServerRejectedError && err.status === 410;
+}
+
+/**
+ * 이 페이지에서 지웠거나 서버가 지운 곡이라고 답한 곡 id. 부팅 병합은 이 곡을 서버 목록에서
+ * 받지도, 로컬에서 올리지도 않는다. DELETE가 닿기 전이나 닿은 직후에 받은 목록에는 지운 곡이
+ * 아직 들어 있을 수 있다.
+ */
+export function deletedDeckIds(): ReadonlySet<string> {
+  return deletedIds;
+}
+
+/** 이 페이지에서 지운 곡으로 아는지 (`deletedDeckIds` 참고) */
+export function wasDeckDeleted(id: string): boolean {
+  return deletedIds.has(id);
+}
+
+/**
+ * DELETE를 보내지 않고 지운 곡으로만 기억한다. 서버가 이미 지운 곡(410)이나 다른 탭에서
+ * 지운 곡처럼 이 페이지가 서버에서 지울 필요가 없는 곡에 쓴다.
+ */
+export function markDeckDeleted(id: string): void {
+  deletedIds.add(id);
+}
+
+function resetDeckState(id: string): void {
+  backoff.reset(id);
+  waitingOnServer.delete(id);
+  clearSyncFailure("deck", id);
+}
+
+function forgetDeletedDeck(id: string): void {
+  deletedIds.add(id);
+  if (pending.get(id)?.kind === "push") pending.delete(id);
+  if (failed.get(id)?.kind === "push") failed.delete(id);
+  resetDeckState(id);
 }
 
 function clearPending(): void {
@@ -73,6 +131,7 @@ async function runOps(ops: PendingOp[]): Promise<void> {
     try {
       if (op.kind === "push") {
         const saved = await pusher(op.deck);
+        if (deletedIds.has(key)) continue;
         listener?.(saved);
       } else {
         await deleter(op.id);
@@ -82,6 +141,12 @@ async function runOps(ops: PendingOp[]): Promise<void> {
       failed.delete(key);
       clearSyncFailure("deck", key);
     } catch (err) {
+      if (op.kind === "push" && deletedIds.has(key)) continue;
+      if (op.kind === "push" && isDeckDeletedError(err)) {
+        forgetDeletedDeck(key);
+        goneListener?.(key);
+        continue;
+      }
       if (err instanceof SessionExpiredError) {
         sessionExpired = true;
         pending.delete(key);
@@ -174,11 +239,48 @@ export function scheduleDeckPush(deck: Deck): void {
   schedule(deck.id, { kind: "push", deck });
 }
 
-/** 대기 중인 push와 그 push의 실패 기록은 버린다 (지운 곡을 올릴 일은 없다) */
+/**
+ * 대기 중인 push와 그 push의 실패 기록은 버린다 (지운 곡을 올릴 일은 없다).
+ *
+ * 동기화가 꺼져 있어도 지운 곡으로 기억한다(`deletedDeckIds`). 그 곡을 올리던 요청은 결과가
+ * 와도 성공이든 실패든 버린다. push와 DELETE는 같은 키로 대기·백오프·실패 기록을 나눠 쓰므로,
+ * push의 실패 처리가 대기 중인 DELETE를 지우거나 push를 다시 넣어 지운 곡을 되살린다.
+ */
 export function scheduleDeckDelete(id: string): void {
-  backoff.reset(id);
-  clearSyncFailure("deck", id);
+  deletedIds.add(id);
+  resetDeckState(id);
   schedule(id, { kind: "delete", id });
+}
+
+/**
+ * 대기 중이거나 영구 실패로 맡긴 그 곡의 push를 버린다 (부팅 병합에서 서버 사본이 이겼거나
+ * 지워진 곡). 남겨 두면 연결이 돌아올 때 옛 사본이 서버의 새 사본을 덮거나 지운 곡을 되살린다.
+ *
+ * 그 곡의 DELETE가 대기 중이거나 실패로 남아 있으면 건드리지 않는다. 같은 키의 대기·백오프·
+ * 실패 기록을 비우면 서버가 기다리라고 한 DELETE가 일찍 나가거나 DELETE 실패가 가려진다.
+ */
+export function cancelDeckPush(id: string): void {
+  const queued = pending.get(id);
+  const held = failed.get(id);
+  if (queued?.kind !== "push" && held?.kind !== "push") return;
+  if (queued?.kind === "push") pending.delete(id);
+  if (held?.kind === "push") failed.delete(id);
+  resetDeckState(id);
+}
+
+/**
+ * 아직 보내지 않았거나 영구 실패로 맡긴 그 곡의 DELETE를 버리고 지운 곡 목록에서 뺀다.
+ * 지운 곡을 다시 넣을 때 부른다. 공유 곡을 다시 가져오면 서버는 남아 있는 첫 사본을 돌려주므로,
+ * DELETE가 뒤늦게 나가면 다시 가져온 곡이 서버에서 지워진다.
+ */
+export function cancelDeckDelete(id: string): void {
+  deletedIds.delete(id);
+  const queued = pending.get(id);
+  const held = failed.get(id);
+  if (queued?.kind !== "delete" && held?.kind !== "delete") return;
+  if (queued?.kind === "delete") pending.delete(id);
+  if (held?.kind === "delete") failed.delete(id);
+  resetDeckState(id);
 }
 
 /**
@@ -186,13 +288,25 @@ export function scheduleDeckDelete(id: string): void {
  *
  * 공개 전환처럼 '서버에 이 내용이 있어야 다음 단계를 할 수 있는' 사용자 동작에서
  * 쓴다. 자동 동기화가 꺼져 있어도 동작하며, 실패는 호출자에게 그대로 던진다.
+ *
+ * 서버가 이미 지운 곡이라고 답하면(410) 지운 곡으로 기억하고 남은 push를 버린 뒤 그대로
+ * 던진다. 큐가 꺼진 화면(송출 주소로 연 탭)에서도 불리므로 곡은 호출자가 내려놓는다.
+ * 보내는 동안 사용자가 지운 곡이면 응답을 보관함에 넘기지 않는다.
  */
 export async function pushDeckNow(deck: Deck): Promise<Deck> {
-  pending.delete(deck.id);
-  waitingOnServer.delete(deck.id);
-  backoff.reset(deck.id);
+  if (pending.get(deck.id)?.kind !== "delete") {
+    pending.delete(deck.id);
+    waitingOnServer.delete(deck.id);
+    backoff.reset(deck.id);
+  }
   await inFlight;
-  const saved = await pusher(deck);
+  const saved = await pusher(deck).catch((err: unknown) => {
+    if (isDeckDeletedError(err) && !deletedIds.has(deck.id)) {
+      forgetDeletedDeck(deck.id);
+    }
+    throw err;
+  });
+  if (deletedIds.has(deck.id)) return saved;
   listener?.(saved);
   failed.delete(deck.id);
   clearSyncFailure("deck", deck.id);
@@ -261,6 +375,8 @@ export function __resetDeckSyncForTests(): void {
   pusher = pushDeck;
   deleter = deleteDeckRemote;
   listener = null;
+  goneListener = null;
+  deletedIds.clear();
   clearPending();
   inFlight = Promise.resolve();
   runningBatches.clear();

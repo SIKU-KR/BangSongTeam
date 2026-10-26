@@ -93,3 +93,15 @@ export const DeckWriteSchema = DeckSchema.extend({
   lyricsRaw: z.string().max(MAX_WRITE_LYRICS_LENGTH),
   slides: z.array(SlideWriteSchema).max(MAX_WRITE_SLIDES),
 });
+
+/**
+ * 내 보관함 곡 전체 목록(`GET /api/decks`)과 이 계정에서 지운 곡 id.
+ *
+ * 곡 삭제 기록을 남기기 전의 서버는 `deletedIds`를 보내지 않는다. 없으면 지운 곡이 없는
+ * 것으로 읽는다.
+ */
+export const DeckListResponseSchema = z.object({
+  decks: z.array(DeckSchema),
+  deletedIds: z.array(IdSchema).optional(),
+});
+export type DeckListResponse = z.infer<typeof DeckListResponseSchema>;

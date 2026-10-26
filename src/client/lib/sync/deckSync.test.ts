@@ -8,6 +8,13 @@ import {
   retryDeckSyncNow,
   setDeckSyncEnabled,
   setServerDeckListener,
+  setDeckGoneListener,
+  cancelDeckPush,
+  cancelDeckDelete,
+  deletedDeckIds,
+  wasDeckDeleted,
+  markDeckDeleted,
+  isDeckDeletedError,
   __setDeckTransportForTests,
   __setDeckBackoffRandomForTests,
   __resetDeckSyncForTests,
@@ -408,5 +415,272 @@ describe("보관함 push 큐", () => {
     await pushDeckNow(deck("공개"));
 
     expect(getSyncSnapshot().status).toBe("offline");
+  });
+
+  describe("지운 곡", () => {
+    function deferPushOnce(): {
+      resolve: (saved: Deck) => void;
+      reject: (err: unknown) => void;
+    } {
+      let settle: {
+        resolve: (saved: Deck) => void;
+        reject: (err: unknown) => void;
+      } | null = null;
+      push.mockImplementationOnce(
+        () =>
+          new Promise<Deck>((resolve, reject) => {
+            settle = { resolve, reject };
+          }),
+      );
+      return {
+        resolve: (saved) => settle?.resolve(saved),
+        reject: (err) => settle?.reject(err),
+      };
+    }
+
+    it("410은 이미 지운 곡이라 실패로 남기지 않고 알린 뒤 다시 올리지 않는다", async () => {
+      const gone = vi.fn<(id: string) => void>();
+      setDeckGoneListener(gone);
+      push.mockRejectedValueOnce(new ServerRejectedError(410, "이미 지운 곡"));
+
+      scheduleDeckPush(deck());
+      await flushDeckSync();
+
+      expect(gone).toHaveBeenCalledWith(A);
+      expect(wasDeckDeleted(A)).toBe(true);
+      expect(getSyncSnapshot()).toMatchObject({
+        status: "synced",
+        lastFailure: null,
+      });
+
+      await flushDeckSync();
+      await retryDeckSyncNow("manual");
+      expect(push).toHaveBeenCalledTimes(1);
+    });
+
+    it("410을 받는 동안 고친 같은 곡도 올리지 않는다", async () => {
+      const pending = deferPushOnce();
+      scheduleDeckPush(deck("처음"));
+      const flushing = flushDeckSync();
+      await vi.waitFor(() => expect(push).toHaveBeenCalledTimes(1));
+
+      scheduleDeckPush(deck("고친 곡"));
+      pending.reject(new ServerRejectedError(410));
+      await flushing;
+      await flushDeckSync();
+
+      expect(push).toHaveBeenCalledTimes(1);
+    });
+
+    it("pushDeckNow는 410이면 던지되 실패로 남기지 않고 알리지 않으며 맡긴 push를 버린다", async () => {
+      const gone = vi.fn<(id: string) => void>();
+      setDeckGoneListener(gone);
+      push.mockRejectedValueOnce(new ServerRejectedError(400, "잘못된 덱"));
+      scheduleDeckPush(deck());
+      await flushDeckSync();
+      expect(getSyncSnapshot().status).toBe("error");
+
+      push.mockRejectedValueOnce(new ServerRejectedError(410));
+      const error = await pushDeckNow(deck()).catch((err: unknown) => err);
+
+      expect(isDeckDeletedError(error)).toBe(true);
+      expect(gone).not.toHaveBeenCalled();
+      expect(wasDeckDeleted(A)).toBe(true);
+      expect(getSyncSnapshot().lastFailure).toBeNull();
+
+      await retryDeckSyncNow("manual");
+      expect(push).toHaveBeenCalledTimes(2);
+    });
+
+    const failedPushCases: {
+      reason: string;
+      batched: boolean;
+      makeError: () => Error;
+    }[] = [
+      {
+        reason: "거절(400)",
+        batched: false,
+        makeError: () => new ServerRejectedError(400, "거절"),
+      },
+      {
+        reason: "거절(400)",
+        batched: true,
+        makeError: () => new ServerRejectedError(400, "거절"),
+      },
+      {
+        reason: "오프라인",
+        batched: false,
+        makeError: () => new OfflineError(),
+      },
+      {
+        reason: "오프라인",
+        batched: true,
+        makeError: () => new OfflineError(),
+      },
+    ];
+
+    it.each(failedPushCases)(
+      "올리는 중에 지운 곡은 push가 $reason로 실패해도 DELETE를 보내고 push는 다시 보내지 않는다 (DELETE를 다음 묶음에 넣음: $batched)",
+      async ({ batched, makeError }) => {
+        const pending = deferPushOnce();
+        scheduleDeckPush(deck());
+        const first = flushDeckSync();
+        await vi.waitFor(() => expect(push).toHaveBeenCalledTimes(1));
+
+        scheduleDeckDelete(A);
+        const second = batched ? flushDeckSync() : first;
+        pending.reject(makeError());
+        await second;
+        expect(getSyncSnapshot().lastFailure).toBeNull();
+        await flushDeckSync();
+        await retryDeckSyncNow("manual");
+
+        expect(remove).toHaveBeenCalledTimes(1);
+        expect(remove).toHaveBeenCalledWith(A);
+        expect(push).toHaveBeenCalledTimes(1);
+        expect(getSyncSnapshot()).toMatchObject({
+          status: "synced",
+          lastFailure: null,
+        });
+      },
+    );
+
+    it("올리는 중에 지운 곡은 push가 성공해도 결과를 보관함에 넘기지 않는다", async () => {
+      const received = vi.fn<(saved: Deck) => void>();
+      setServerDeckListener(received);
+      const pending = deferPushOnce();
+      scheduleDeckPush(deck());
+      const flushing = flushDeckSync();
+      await vi.waitFor(() => expect(push).toHaveBeenCalledTimes(1));
+
+      scheduleDeckDelete(A);
+      pending.resolve({ ...deck(), forkCount: 3 });
+      await flushing;
+      await flushDeckSync();
+
+      expect(received).not.toHaveBeenCalled();
+      expect(remove).toHaveBeenCalledWith(A);
+    });
+
+    it("pushDeckNow 도중에 지운 곡은 성공해도 보관함에 넘기지 않는다", async () => {
+      const received = vi.fn<(saved: Deck) => void>();
+      setServerDeckListener(received);
+      const pending = deferPushOnce();
+      const pushing = pushDeckNow(deck());
+      await vi.waitFor(() => expect(push).toHaveBeenCalledTimes(1));
+
+      scheduleDeckDelete(A);
+      pending.resolve(deck());
+      await pushing;
+      await flushDeckSync();
+
+      expect(received).not.toHaveBeenCalled();
+      expect(remove).toHaveBeenCalledWith(A);
+    });
+
+    it("cancelDeckPush는 대기 중인 push만 버린다", async () => {
+      scheduleDeckPush(deck());
+      cancelDeckPush(A);
+      await flushDeckSync();
+
+      expect(push).not.toHaveBeenCalled();
+    });
+
+    it("cancelDeckPush는 서버가 기다리라고 한 DELETE의 대기와 백오프를 건드리지 않는다", async () => {
+      vi.useFakeTimers();
+      try {
+        remove
+          .mockRejectedValueOnce(new ServerRejectedError(503, "과부하", 30_000))
+          .mockResolvedValue(undefined);
+        scheduleDeckDelete(A);
+        await vi.advanceTimersByTimeAsync(2000);
+        expect(remove).toHaveBeenCalledTimes(1);
+
+        cancelDeckPush(A);
+        await retryDeckSyncNow("wake");
+        await vi.advanceTimersByTimeAsync(29_000);
+        expect(remove).toHaveBeenCalledTimes(1);
+
+        await vi.advanceTimersByTimeAsync(1000);
+        expect(remove).toHaveBeenCalledTimes(2);
+        expect(getSyncSnapshot().status).toBe("synced");
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("cancelDeckPush는 영구 실패로 맡긴 DELETE와 그 실패 기록을 남긴다", async () => {
+      remove.mockRejectedValueOnce(new ServerRejectedError(400, "거절"));
+      scheduleDeckDelete(A);
+      await flushDeckSync();
+      expect(getSyncSnapshot().lastFailure).toMatchObject({ id: A });
+
+      cancelDeckPush(A);
+      expect(getSyncSnapshot().lastFailure).toMatchObject({ id: A });
+
+      await retryDeckSyncNow("manual");
+      expect(remove).toHaveBeenCalledTimes(2);
+      expect(getSyncSnapshot().lastFailure).toBeNull();
+    });
+
+    it("cancelDeckPush는 영구 실패로 맡긴 push와 그 실패 기록을 지운다", async () => {
+      push.mockRejectedValueOnce(new ServerRejectedError(400, "거절"));
+      scheduleDeckPush(deck());
+      await flushDeckSync();
+      expect(getSyncSnapshot().lastFailure).toMatchObject({ id: A });
+
+      cancelDeckPush(A);
+      expect(getSyncSnapshot().lastFailure).toBeNull();
+
+      await retryDeckSyncNow("manual");
+      expect(push).toHaveBeenCalledTimes(1);
+    });
+
+    it("cancelDeckDelete는 대기 중인 DELETE를 버리고 지운 곡 목록에서 뺀다", async () => {
+      scheduleDeckDelete(A);
+      expect(deletedDeckIds().has(A)).toBe(true);
+
+      cancelDeckDelete(A);
+      await flushDeckSync();
+
+      expect(deletedDeckIds().has(A)).toBe(false);
+      expect(remove).not.toHaveBeenCalled();
+    });
+
+    it("cancelDeckDelete는 영구 실패로 맡긴 DELETE와 그 실패 기록을 지운다", async () => {
+      remove.mockRejectedValueOnce(new ServerRejectedError(400, "거절"));
+      scheduleDeckDelete(A);
+      await flushDeckSync();
+      expect(getSyncSnapshot().lastFailure).toMatchObject({ id: A });
+
+      cancelDeckDelete(A);
+      expect(getSyncSnapshot().lastFailure).toBeNull();
+
+      await retryDeckSyncNow("manual");
+      expect(remove).toHaveBeenCalledTimes(1);
+    });
+
+    it("동기화가 꺼져 있어도 지운 곡을 기억하고, 껐다 켜도 잊지 않는다", () => {
+      setDeckSyncEnabled(false);
+      scheduleDeckDelete(A);
+      expect(wasDeckDeleted(A)).toBe(true);
+
+      setDeckSyncEnabled(true);
+      expect(deletedDeckIds().has(A)).toBe(true);
+    });
+
+    it("markDeckDeleted는 DELETE를 보내지 않고 지운 곡으로만 기억한다", async () => {
+      markDeckDeleted(A);
+      await flushDeckSync();
+
+      expect(wasDeckDeleted(A)).toBe(true);
+      expect(remove).not.toHaveBeenCalled();
+    });
+
+    it("410만 지운 곡 오류로 본다", () => {
+      expect(isDeckDeletedError(new ServerRejectedError(410))).toBe(true);
+      expect(isDeckDeletedError(new ServerRejectedError(404))).toBe(false);
+      expect(isDeckDeletedError(new OfflineError())).toBe(false);
+    });
   });
 });

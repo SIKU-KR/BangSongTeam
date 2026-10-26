@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { DEFAULT_DECK_STYLE, DeckSchema, type Deck } from "#shared";
-import { mergeLibraryDecks } from "./mergeLibraryDecks";
+import { hasSameServerFields, mergeLibraryDecks } from "./mergeLibraryDecks";
 
 const USER = "00000000x000000000001";
 
@@ -86,5 +86,60 @@ describe("mergeLibraryDecks", () => {
       [deck(B, { updatedAt: "2026-09-25T00:00:00.000Z" })],
     );
     expect(decks.map((d) => d.id)).toEqual([B, A]);
+  });
+
+  it("지운 곡은 로컬에만 있어도 올리지 않고 지울 곡으로 돌려준다", () => {
+    const result = mergeLibraryDecks([deck(A)], [], { deletedIds: [A] });
+
+    expect(result).toEqual({ decks: [], needsPush: [], removedIds: [A] });
+  });
+
+  it("지운 곡은 로컬 사본이 더 새로워도 지운다", () => {
+    const result = mergeLibraryDecks(
+      [deck(A, { updatedAt: "2026-09-23T00:00:00.000Z" })],
+      [deck(A)],
+      { deletedIds: new Set([A]) },
+    );
+
+    expect(result).toEqual({ decks: [], needsPush: [], removedIds: [A] });
+  });
+
+  it("지운 곡은 서버 목록에 다시 있어도 받지 않는다", () => {
+    const result = mergeLibraryDecks([], [deck(A), deck(B)], {
+      deletedIds: [A],
+    });
+
+    expect(result.decks.map((d) => d.id)).toEqual([B]);
+    expect(result.removedIds).toEqual([]);
+  });
+
+  it("지운 곡이 없으면 지울 곡도 없다", () => {
+    expect(mergeLibraryDecks([deck(A)], [deck(B)]).removedIds).toEqual([]);
+  });
+});
+
+describe("hasSameServerFields", () => {
+  it("서버가 정하는 필드가 같으면 내용이 달라도 같다고 본다", () => {
+    expect(
+      hasSameServerFields(
+        deck(A, { title: "로컬", forkCount: 2 }),
+        deck(A, { title: "서버", forkCount: 2 }),
+      ),
+    ).toBe(true);
+  });
+
+  it("가져간 횟수가 다르면 다르다고 본다", () => {
+    expect(
+      hasSameServerFields(deck(A, { forkCount: 0 }), deck(A, { forkCount: 1 })),
+    ).toBe(false);
+  });
+
+  it("값이 없는 필드와 null은 같게 본다", () => {
+    expect(
+      hasSameServerFields(
+        deck(A, { publishedAt: undefined, forkedFrom: undefined }),
+        deck(A, { publishedAt: null, forkedFrom: null }),
+      ),
+    ).toBe(true);
   });
 });

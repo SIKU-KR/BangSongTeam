@@ -26,6 +26,13 @@ const api = vi.hoisted(() => ({
       json: () => Promise<unknown>;
     }>
   >(),
+  listDecks: vi.fn<
+    () => Promise<{
+      status: number;
+      ok: boolean;
+      json: () => Promise<unknown>;
+    }>
+  >(),
 }));
 
 vi.mock("../api/client", () => ({
@@ -34,6 +41,7 @@ vi.mock("../api/client", () => ({
       presentations: {
         ":id": { $patch: api.patch, $delete: api.remove, $get: api.get },
       },
+      decks: { $get: api.listDecks },
       "client-reports": { $path: () => "/api/client-reports" },
     },
   },
@@ -43,6 +51,7 @@ import {
   __resetServerDecksForTests,
   deletePresentationRemote,
   endSharedPresentationRefresh,
+  pullDecks,
   pushPresentation,
   refreshSharedPresentation,
   rememberServerDocuments,
@@ -258,6 +267,58 @@ describe("동기화 실패 보고", () => {
     expect(await flushedReports()).toEqual([
       expect.objectContaining({ kind: "unreachable", route: ROUTE }),
     ]);
+  });
+});
+
+describe("보관함 곡 받기", () => {
+  const DELETED = "c000000000000000000d1";
+  const libraryDeck = {
+    id: deckId(1),
+    userId: USER,
+    scope: "library",
+    title: "곡",
+    lyricsRaw: "가사",
+    slides: [],
+    backgroundId: null,
+    style: DEFAULT_DECK_STYLE,
+    createdAt: "2026-09-20T00:00:00.000Z",
+    updatedAt: "2026-09-21T00:00:00.000Z",
+  };
+
+  function respondWith(body: unknown) {
+    return { status: 200, ok: true, json: async () => body };
+  }
+
+  beforeEach(() => {
+    api.listDecks.mockReset();
+  });
+
+  it("지운 곡 목록을 보내지 않는 서버의 응답은 지운 곡이 없는 것으로 읽는다", async () => {
+    api.listDecks.mockResolvedValueOnce(respondWith({ decks: [libraryDeck] }));
+
+    await expect(pullDecks()).resolves.toEqual({
+      decks: [libraryDeck],
+      deletedIds: [],
+    });
+  });
+
+  it("지운 곡 목록에서 id 형식이 아닌 값은 버린다", async () => {
+    api.listDecks.mockResolvedValueOnce(
+      respondWith({ decks: [], deletedIds: [DELETED, "짧은 id", 42, null] }),
+    );
+
+    await expect(pullDecks()).resolves.toEqual({
+      decks: [],
+      deletedIds: [DELETED],
+    });
+  });
+
+  it("지운 곡 목록이 배열이 아니면 지운 곡이 없는 것으로 읽는다", async () => {
+    api.listDecks.mockResolvedValueOnce(
+      respondWith({ decks: [], deletedIds: DELETED }),
+    );
+
+    await expect(pullDecks()).resolves.toEqual({ decks: [], deletedIds: [] });
   });
 });
 

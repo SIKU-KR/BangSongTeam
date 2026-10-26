@@ -1,11 +1,15 @@
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import type { Deck } from "#shared";
 import { signInAsTestUser } from "../../test/sessionFixture";
 import {
   getLibraryDeck,
+  getUserSongs,
+  hydrateSongLibrary,
   resetSongLibraryStore,
   saveSongToLibrary,
 } from "../editor/songLibraryStore";
+import { ServerRejectedError } from "../../lib/api/request";
+import { __resetDeckSyncForTests } from "../../lib/sync/deckSync";
 import {
   publishLibraryDeck,
   unpublishLibraryDeck,
@@ -30,7 +34,12 @@ function fakeDeps(): PublishDeps & {
 describe("내 보관함 곡 공개", () => {
   beforeEach(async () => {
     signInAsTestUser();
+    __resetDeckSyncForTests();
     await resetSongLibraryStore();
+  });
+
+  afterEach(() => {
+    __resetDeckSyncForTests();
   });
 
   function addLibrarySong(): Deck {
@@ -79,5 +88,56 @@ describe("내 보관함 곡 공개", () => {
     await publishLibraryDeck(master.id, deps);
     await unpublishLibraryDeck(master.id, deps);
     expect(getLibraryDeck(master.id)?.visibility).toBe("private");
+  });
+
+  it("다른 기기에서 지운 곡이라 올리기가 410이면 보관함에서 내려놓고 공개하지 않는다", async () => {
+    const master = addLibrarySong();
+    const deps = fakeDeps();
+    deps.push.mockRejectedValueOnce(new ServerRejectedError(410, "지운 곡"));
+
+    await expect(publishLibraryDeck(master.id, deps)).rejects.toBeInstanceOf(
+      ServerRejectedError,
+    );
+
+    expect(deps.setVisibility).not.toHaveBeenCalled();
+    expect(getLibraryDeck(master.id)).toBeUndefined();
+    await hydrateSongLibrary();
+    expect(getUserSongs()).toEqual([]);
+  });
+
+  it("공개 전환이 410이면 보관함에서 내려놓는다", async () => {
+    const master = addLibrarySong();
+    const deps = fakeDeps();
+    deps.setVisibility.mockRejectedValueOnce(new ServerRejectedError(410));
+
+    await expect(publishLibraryDeck(master.id, deps)).rejects.toBeInstanceOf(
+      ServerRejectedError,
+    );
+
+    expect(getLibraryDeck(master.id)).toBeUndefined();
+  });
+
+  it("공개를 거두다 410이면 보관함에서 내려놓는다", async () => {
+    const master = addLibrarySong();
+    const deps = fakeDeps();
+    deps.setVisibility.mockRejectedValueOnce(new ServerRejectedError(410));
+
+    await expect(unpublishLibraryDeck(master.id, deps)).rejects.toBeInstanceOf(
+      ServerRejectedError,
+    );
+
+    expect(getLibraryDeck(master.id)).toBeUndefined();
+  });
+
+  it("410이 아닌 거절은 곡을 그대로 둔다", async () => {
+    const master = addLibrarySong();
+    const deps = fakeDeps();
+    deps.setVisibility.mockRejectedValueOnce(new ServerRejectedError(403));
+
+    await expect(unpublishLibraryDeck(master.id, deps)).rejects.toBeInstanceOf(
+      ServerRejectedError,
+    );
+
+    expect(getLibraryDeck(master.id)?.id).toBe(master.id);
   });
 });

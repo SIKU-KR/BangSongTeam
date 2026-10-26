@@ -1,7 +1,6 @@
 import {
   listPresentations,
   applyServerDocuments,
-  removePersistedPresentation,
 } from "../../features/presentation";
 import {
   getFolders,
@@ -10,16 +9,18 @@ import {
 } from "../../features/drive/folderStore";
 import {
   sortFoldersParentFirst,
+  type Deck,
   type DriveTombstones,
   type Folder,
 } from "#shared";
-import { savePresentation } from "../storage";
 import { planBootMerge } from "./mergeDocuments";
 import { mergeFolders } from "./mergeFolders";
 import {
   getUserSongs,
+  getDeletedSongIds,
   applyServerLibraryDecks,
   applyServerDeckFields,
+  dropDeletedLibraryDeck,
 } from "../../features/editor/songLibraryStore";
 import { mergeLibraryDecks } from "./mergeLibraryDecks";
 import { sharedPresentationListener } from "./sharedPresentationListener";
@@ -51,6 +52,7 @@ import {
   hasPendingFolderPush,
   holdFailedFolderPush,
   scheduleFolderPush,
+  cancelFolderPush,
 } from "./folderSync";
 import {
   getSyncDomainStatus,
@@ -61,6 +63,7 @@ import {
   type SyncStatus,
 } from "./syncStatus";
 import {
+  cancelDocumentPush,
   hasPendingDocumentPush,
   holdFailedDocumentPush,
   scheduleDocumentPush,
@@ -69,10 +72,13 @@ import {
 import {
   setDeckSyncEnabled,
   setServerDeckListener,
+  setDeckGoneListener,
   pushDeckNow,
   hasPendingDeckSync,
   holdFailedDeckPush,
   scheduleDeckPush,
+  cancelDeckPush,
+  isDeckDeletedError,
 } from "./deckSync";
 import { refreshBackgroundCatalog } from "./backgroundSync";
 import { isProjectionPath } from "../../features/presentation/fullscreen";
@@ -104,6 +110,12 @@ export function shouldRunBootSync(pathname: string): boolean {
  * 곡이 되살아나고, 바로 올리기는 큐에 대기 중인 같은 항목을 버리므로 그사이 고친 내용
  * (폴더 이름 등)이 다음 부팅까지 서버에 가지 않는다.
  *
+ * 병합 결과는 각 스토어의 저장 줄로 저장한다 (`applyServerDocuments` 등). 병합하자마자 기다림
+ * 없이 지운 항목과 서버 사본이 이긴 항목의 대기 중인 push를 버린다. 대기 중인 사본은 방금
+ * 서버와 견준 메모리보다 새로울 수 없으므로, 남겨 두면 연결이 돌아올 때 지운 항목을 서버에서
+ * 되살리거나 서버의 새 사본을 옛 사본으로 덮는다. 지운 곡은 서버의 삭제 기록과 이 페이지에서
+ * 지운 곡을 모두 병합에서 뺀다.
+ *
  * 결과는 폴더·프레젠테이션·곡 도메인별로 따로 남기고, 올리지 못한 항목은 항목별
  * 실패로 남긴다. 도메인 단계만 바꾸면 같은 도메인 큐의 다음 성공이 그 실패를 덮는다.
  * 도메인 큐가 아직 끝내지 못한 일(보내는 중이거나 다시 시도할 것)이 있으면 그 결과는
@@ -123,6 +135,7 @@ export async function runBootSync(): Promise<void> {
   setSyncEnabled(true);
   setDeckSyncEnabled(true);
   setServerDeckListener(applyServerDeckFields);
+  setDeckGoneListener(dropDeletedLibraryDeck);
   setFolderSyncEnabled(true);
   setServerFolderListener(applyServerFolder);
   void refreshBackgroundCatalog();
@@ -169,19 +182,8 @@ async function syncDriveAndDecks(): Promise<void> {
     tombstones.presentationIds,
     knownBeforePull,
   );
-
-  applyServerDocuments(documents);
-  for (const id of removedIds) {
-    await removePersistedPresentation(id);
-  }
-
-  for (const document of documents) {
-    try {
-      await savePresentation(document);
-    } catch (error) {
-      void error;
-    }
-  }
+  cancelPushesOfServerWins(documents, needsPush, cancelDocumentPush);
+  applyServerDocuments(documents, removedIds);
 
   const presentationStatus = await pushLatestEach(
     {
@@ -301,6 +303,17 @@ export async function retryBootSyncIfNeeded(
   return true;
 }
 
+function cancelPushesOfServerWins(
+  merged: readonly { id: string }[],
+  needsPush: readonly string[],
+  cancel: (id: string) => void,
+): void {
+  const localWins = new Set(needsPush);
+  for (const { id } of merged) {
+    if (!localWins.has(id)) cancel(id);
+  }
+}
+
 async function syncFolders(
   serverFolders: Folder[],
   tombstones: DriveTombstones,
@@ -312,6 +325,7 @@ async function syncFolders(
     local.filter((folder) => !deletedIds.has(folder.id)),
     serverFolders,
   );
+  cancelPushesOfServerWins(folders, needsPush, cancelFolderPush);
   await applyServerFolders(
     folders,
     local.filter((folder) => deletedIds.has(folder.id)).map((f) => f.id),
@@ -335,11 +349,20 @@ async function syncFolders(
   );
 }
 
+async function pushLibraryDeckAtBoot(deck: Deck): Promise<void> {
+  try {
+    await pushDeckNow(deck);
+  } catch (err) {
+    if (!isDeckDeletedError(err)) throw err;
+    dropDeletedLibraryDeck(deck.id);
+  }
+}
+
 async function syncLibraryDecks(): Promise<void> {
   const generation = bootGeneration;
-  let serverDecks;
+  let pull;
   try {
-    serverDecks = await pullDecks();
+    pull = await pullDecks();
     if (generation !== bootGeneration) return;
     retryBackoff.reset();
   } catch (err) {
@@ -352,14 +375,21 @@ async function syncLibraryDecks(): Promise<void> {
     return;
   }
 
-  const { decks, needsPush } = mergeLibraryDecks(getUserSongs(), serverDecks);
-  await applyServerLibraryDecks(decks);
+  const deletedIds = new Set([...pull.deletedIds, ...getDeletedSongIds()]);
+  const { decks, needsPush, removedIds } = mergeLibraryDecks(
+    getUserSongs(),
+    pull.decks,
+    { deletedIds },
+  );
+  for (const id of deletedIds) cancelDeckPush(id);
+  cancelPushesOfServerWins(decks, needsPush, cancelDeckPush);
+  await applyServerLibraryDecks(decks, removedIds);
 
   const deckStatus = await pushLatestEach(
     {
       domain: "deck",
       current: getUserSongs,
-      push: pushDeckNow,
+      push: pushLibraryDeckAtBoot,
       requeue: scheduleDeckPush,
       hold: holdFailedDeckPush,
       titleOf: (deck) => deck.title,

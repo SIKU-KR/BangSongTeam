@@ -1,7 +1,8 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import type { Folder } from "#shared";
 import { signInAsTestUser } from "../../test/sessionFixture";
 import { closeOfflineDB, OFFLINE_DB_NAME } from "../../lib/storage/db";
+import { deleteFolders, loadAllFolders, saveFolders } from "../../lib/storage";
 import {
   __resetFolderSyncForTests,
   __setFolderPusherForTests,
@@ -27,6 +28,16 @@ import {
 } from "./folderStore";
 import { FOLDER_COPY } from "#copy/folders";
 import { SEED_USER_ID } from "../../test/presentationFixture";
+
+vi.mock("../../lib/storage", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../lib/storage")>();
+  return {
+    ...actual,
+    loadAllFolders: vi.fn(actual.loadAllFolders),
+    saveFolders: vi.fn(actual.saveFolders),
+    deleteFolders: vi.fn(actual.deleteFolders),
+  };
+});
 
 async function resetDatabase(): Promise<void> {
   closeOfflineDB();
@@ -265,6 +276,54 @@ describe("folderStore", () => {
       resetFolderStore();
       await hydrateFoldersFromStorage();
       expect(getFolders()).toEqual([]);
+    });
+
+    it("병합에서 영구 삭제된 폴더의 대기 중인 push를 버린다", async () => {
+      const pushed: Folder[] = [];
+      __setFolderPusherForTests(async (f) => {
+        pushed.push(f);
+        return f;
+      });
+      setFolderSyncEnabled(true);
+      const kept = createFolder(null, "남길 폴더");
+      const gone = createFolder(null, "지울 폴더");
+
+      await applyServerFolders([kept], [gone.id]);
+      await flushFolderSync();
+
+      expect(pushed.map((f) => f.id)).toEqual([kept.id]);
+    });
+
+    it("폴더 저장본을 읽지 못했으면 applyServerFolders가 저장소에 쓰지 않는다", async () => {
+      const unreadable = createFolder(null, "읽지 못한 폴더");
+      await flushFolderWrites();
+      vi.mocked(loadAllFolders).mockRejectedValueOnce(new Error("읽기 실패"));
+      await hydrateFoldersFromStorage();
+      vi.mocked(saveFolders).mockClear();
+      vi.mocked(deleteFolders).mockClear();
+
+      const kept = "a0000000000000000000c";
+      await applyServerFolders([folder(kept)], [unreadable.id]);
+      await flushFolderWrites();
+
+      expect(getFolders().map((f) => f.id)).toEqual([kept]);
+      expect(saveFolders).not.toHaveBeenCalled();
+      expect(deleteFolders).not.toHaveBeenCalled();
+      const { valid } = await loadAllFolders();
+      expect(valid.map((f) => f.id)).toEqual([unreadable.id]);
+    });
+
+    it("폴더 저장본을 다시 읽으면 병합 결과를 다시 저장한다", async () => {
+      vi.mocked(loadAllFolders).mockRejectedValueOnce(new Error("읽기 실패"));
+      await hydrateFoldersFromStorage();
+      await hydrateFoldersFromStorage();
+
+      const kept = "a0000000000000000000c";
+      await applyServerFolders([folder(kept)]);
+
+      resetFolderStore();
+      await hydrateFoldersFromStorage();
+      expect(getFolders().map((f) => f.id)).toEqual([kept]);
     });
   });
 });

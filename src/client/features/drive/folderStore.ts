@@ -42,6 +42,7 @@ let folders: Folder[] = [];
 let index: FolderIndex<Folder> = buildFolderIndex(folders);
 const listeners = new Set<() => void>();
 let writes: Promise<void> = Promise.resolve();
+let hydrationFailed = false;
 
 function setFolders(next: Folder[]): void {
   folders = next;
@@ -229,10 +230,12 @@ export async function hydrateFoldersFromStorage(): Promise<void> {
   try {
     const { valid, corrupted } = await loadAllFolders();
     reportCorruptedRecords(corrupted);
+    hydrationFailed = false;
     setFolders(
       userId ? valid.filter((folder) => folder.userId === userId) : [],
     );
   } catch (err) {
+    hydrationFailed = true;
     reportPersistenceError(err);
     setFolders([]);
   }
@@ -240,15 +243,21 @@ export async function hydrateFoldersFromStorage(): Promise<void> {
 
 /**
  * 서버와 병합한 폴더 목록으로 교체하고 저장한다 (부팅 동기화).
- * `removedIds`는 다른 기기에서 영구 삭제된 폴더다 — 로컬 저장본에서도 지운다.
+ * `removedIds`는 다른 기기에서 영구 삭제된 폴더다 — 대기 중인 push를 버리고 로컬
+ * 저장본에서도 지운다. push가 남으면 연결이 돌아올 때 서버에서 되살아난다.
+ *
+ * 저장본을 읽지 못했으면 메모리만 바꾸고 저장소에는 쓰지 않는다. 읽지 못한 저장본을 병합
+ * 결과로 덮으면 그 안에 있던, 아직 올리지 못한 폴더를 잃는다.
  */
 export async function applyServerFolders(
   next: Folder[],
   removedIds: readonly string[] = [],
 ): Promise<void> {
+  for (const id of removedIds) cancelFolderPush(id);
   const userId = getCurrentUserId();
   const mine = userId ? next.filter((folder) => folder.userId === userId) : [];
   setFolders(mine);
+  if (hydrationFailed) return;
   queueWrite(async () => {
     await saveFolders(mine);
     await deleteFolders(removedIds);
@@ -298,6 +307,7 @@ export function flushFolderWrites(): Promise<void> {
 /** 테스트 격리 전용 */
 export function resetFolderStore(): void {
   writes = Promise.resolve();
+  hydrationFailed = false;
   setFolders([]);
 }
 

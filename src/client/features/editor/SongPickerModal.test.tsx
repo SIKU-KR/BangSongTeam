@@ -26,6 +26,11 @@ import {
   saveSongToLibrary,
   upsertLibraryDeck,
 } from "./songLibraryStore";
+import {
+  __resetDeckSyncForTests,
+  flushDeckSync,
+  setDeckSyncEnabled,
+} from "../../lib/sync/deckSync";
 import { EDITOR_COPY } from "#copy/editor";
 import { COMMON_COPY } from "#copy/common";
 import { SEED_USER_ID } from "../../test/presentationFixture";
@@ -157,6 +162,7 @@ describe("SongPickerModal", () => {
 
   afterEach(() => {
     api.restore();
+    __resetDeckSyncForTests();
     closeOfflineDB();
   });
 
@@ -422,6 +428,44 @@ describe("SongPickerModal", () => {
       expect(onCloseMock).not.toHaveBeenCalled();
     });
 
+    it("공개하려는 곡을 서버가 이미 지운 곡이라고 하면 목록에서 빼고 남은 곡 미리보기에 대화 상자와 오류를 남기지 않는다", async () => {
+      api.restore();
+      api = installFakeApi({
+        "GET /api/catalog/search": () => ({ body: { decks: [] } }),
+        "PUT /api/decks/*": () => ({
+          status: 410,
+          body: { error: "이미 지운 곡이에요" },
+        }),
+      });
+      const kept = seedMySong("남는 곡");
+      const gone = seedMySong("다른 기기에서 지운 곡");
+      renderPicker();
+      expect(screen.getByTestId(`song-item-${gone.id}`)).toHaveAttribute(
+        "aria-pressed",
+        "true",
+      );
+
+      fireEvent.click(screen.getByTestId("song-share-publish-btn"));
+      fireEvent.click(screen.getByTestId("publish-accept-checkbox"));
+      fireEvent.click(screen.getByTestId("publish-confirm-btn"));
+
+      await waitFor(() =>
+        expect(
+          screen.queryByTestId(`song-item-${gone.id}`),
+        ).not.toBeInTheDocument(),
+      );
+      expect(getUserSongs().map((deck) => deck.id)).toEqual([kept.id]);
+      expect(screen.getByTestId(`song-item-${kept.id}`)).toHaveAttribute(
+        "aria-pressed",
+        "true",
+      );
+      expect(screen.queryByTestId("publish-dialog")).not.toBeInTheDocument();
+      expect(screen.queryByText("이미 지운 곡이에요")).not.toBeInTheDocument();
+      expect(screen.getByTestId("song-share-status")).toHaveTextContent(
+        "비공개",
+      );
+    });
+
     it("공개한 곡을 지우려 하면 공유 라이브러리에서도 내려간다고 알린다", () => {
       upsertLibraryDeck(
         { ...seedMySong(), visibility: "public" },
@@ -487,6 +531,55 @@ describe("SongPickerModal", () => {
 
       expect(onSelectSongMock.mock.calls[0][0].id).toBe(FORK_ID);
       expect(api.calls.some((c) => c.path.endsWith("/fork"))).toBe(false);
+    });
+
+    it("가져온 곡을 지우고 지우기를 보내기 전에 다시 가져오면 서버에서 지우지 않는다", async () => {
+      setDeckSyncEnabled(true);
+      api.restore();
+      let alreadyOwned = false;
+      api = installFakeApi({
+        "GET /api/catalog/search": () => ({ body: { decks: [sharedSummary] } }),
+        "GET /api/catalog/decks/*": () => ({
+          status: 404,
+          body: { error: "x" },
+        }),
+        "POST /api/decks/*/fork": () => {
+          const body = { deck: forkedDeck(), alreadyOwned };
+          alreadyOwned = true;
+          return { body };
+        },
+        "DELETE /api/decks/*": () => ({ body: { ok: true } }),
+      });
+      renderPicker();
+
+      fireEvent.click(await screen.findByTestId(`song-item-${SHARED_ID}`));
+      fireEvent.click(screen.getByTestId("song-picker-add-btn"));
+      await waitFor(() =>
+        expect(getUserSongs().map((deck) => deck.id)).toEqual([FORK_ID]),
+      );
+
+      fireEvent.click(screen.getByTestId(`song-item-${FORK_ID}`));
+      fireEvent.click(screen.getByTestId("song-picker-delete-btn"));
+      fireEvent.click(screen.getByTestId("drive-confirm-btn"));
+      expect(getUserSongs()).toEqual([]);
+
+      fireEvent.click(screen.getByTestId(`song-item-${SHARED_ID}`));
+      fireEvent.click(screen.getByTestId("song-picker-add-btn"));
+      await waitFor(() =>
+        expect(getUserSongs().map((deck) => deck.id)).toEqual([FORK_ID]),
+      );
+      await flushDeckSync();
+
+      expect(
+        api.calls.some(
+          (call) =>
+            call.method === "DELETE" && call.path === `/api/decks/${FORK_ID}`,
+        ),
+      ).toBe(false);
+      expect(getUserSongs()[0]).toMatchObject({
+        forkedFrom: SHARED_ID,
+        origin: "fork",
+      });
     });
 
     it("가져오기가 실패하면 이유를 보여 주고 세트에 넣지 않는다", async () => {
