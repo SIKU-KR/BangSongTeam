@@ -19,8 +19,7 @@ import type { NextConfig } from "next";
  *   누구나 `/api/media` 영상을 요청마다 50MB까지 서버 메모리로 끌어오게 하고, 주소 변형마다
  *   변환 결과를 메모리 파일 시스템에 캐시하게 할 수 있다.
  * - `poweredByHeader: false`: `X-Powered-By: Next.js`로 서버 구성을 알리지 않는다.
- * - 모든 응답에 보안 헤더를 붙인다. Next.js는 경로를 엄격하게 맞춰 `/:path*`가 `/`에 맞지
- *   않으므로 `/(.*)`로 건다. 같은 헤더는 뒤 규칙이 앞 규칙을 덮는다.
+ * - 모든 응답에 보안 헤더를 붙인다. 같은 헤더는 뒤 규칙이 앞 규칙을 덮는다.
  *   - `X-Frame-Options: DENY`와 CSP `frame-ancestors 'none'`: 다른 페이지가 앱을 프레임에
  *     넣지 못하게 한다. 앱은 프레임을 쓰지 않는다.
  *   - CSP는 `base-uri`·`object-src`만 제한하고 `script-src`는 두지 않는다. 미리 렌더한 셸에

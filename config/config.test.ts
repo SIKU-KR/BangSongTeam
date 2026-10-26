@@ -1,7 +1,9 @@
 import { describe, it, expect } from "vitest";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { getPathMatch } from "next/dist/shared/lib/router/utils/path-match";
+import loadCustomRoutes from "next/dist/lib/load-custom-routes";
+import { configSchema } from "next/dist/server/config-schema";
+import { buildCustomRoute } from "next/dist/server/lib/router-utils/filesystem";
 import nextConfig from "../next.config";
 
 const rootDir = path.resolve(__dirname, "..");
@@ -11,14 +13,10 @@ const read = (file: string) =>
 async function responseHeadersFor(
   pathname: string,
 ): Promise<Record<string, string>> {
-  const rules = (await nextConfig.headers?.()) ?? [];
+  const { headers: rules } = await loadCustomRoutes(nextConfig);
   const headers: Record<string, string> = {};
   for (const rule of rules) {
-    const matches = getPathMatch(rule.source, {
-      strict: true,
-      removeUnnamedParams: true,
-    });
-    if (!matches(pathname)) continue;
+    if (!buildCustomRoute("header", rule).match(pathname)) continue;
     for (const { key, value } of rule.headers) {
       headers[key.toLowerCase()] = value;
     }
@@ -81,6 +79,10 @@ describe("Next.js·Cloud Run 프로젝트 설정", () => {
 
   it("쓰지 않는 이미지 최적화 경로(/_next/image)를 닫는다", () => {
     expect(nextConfig.images?.unoptimized).toBe(true);
+  });
+
+  it("Next.js가 아는 옵션만 쓴다 (모르는 옵션은 빌드가 경고만 하고 무시한다)", () => {
+    expect(configSchema.safeParse(nextConfig).error?.issues ?? []).toEqual([]);
   });
 
   it("Dockerfile이 standalone 서버와 정적 파일을 담아 8080에서 띄운다", () => {
