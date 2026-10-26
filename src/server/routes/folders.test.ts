@@ -160,7 +160,7 @@ describe("드라이브 폴더 API", () => {
     expect((await putFolder({ ...folder, name: "탈취" })).status).toBe(403);
     const del = await app.request(
       `/api/folders/${folder.id}`,
-      { method: "DELETE" },
+      { method: "DELETE", headers: { "sec-fetch-site": "same-origin" } },
       env,
     );
     expect(del.status).toBe(404);
@@ -201,7 +201,7 @@ describe("드라이브 폴더 API", () => {
 
     const del = await app.request(
       `/api/folders/${root.id}`,
-      { method: "DELETE" },
+      { method: "DELETE", headers: { "sec-fetch-site": "same-origin" } },
       env,
     );
     expect(del.status).toBe(200);

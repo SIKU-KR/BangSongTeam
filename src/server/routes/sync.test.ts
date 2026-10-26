@@ -169,7 +169,7 @@ describe("동기화 라우트 교차 사용자 격리", () => {
     currentUser = USER_B;
     const res = await app.request(
       `/api/presentations/${DOC_ID}`,
-      { method: "DELETE" },
+      { method: "DELETE", headers: { "sec-fetch-site": "same-origin" } },
       env,
     );
     expect(res.status).toBe(404);

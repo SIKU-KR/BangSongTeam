@@ -11,6 +11,7 @@ import {
 } from "./middleware/bodyLimit";
 import { requestLog } from "./middleware/requestLog";
 import { retryAfterOnUnavailable } from "./middleware/retryAfter";
+import { sameOriginWrites } from "./middleware/sameOrigin";
 import { createHealthRoute } from "./routes/health";
 import { createAuthRoute } from "./routes/auth";
 import { createClientReportsRoute } from "./routes/clientReports";
@@ -56,6 +57,7 @@ export function createApp(deps: AppDeps = {}) {
     .notFound((c) => c.json({ error: API_ERRORS.notFound }, 404))
     .use("*", requestLog())
     .use("*", retryAfterOnUnavailable())
+    .use("/api/*", sameOriginWrites())
     .use("/api/auth/*", limitBody(AUTH_BODY_MAX_BYTES))
     .use("/api/*", limitBody(API_BODY_MAX_BYTES))
     .route("/api/health", createHealthRoute())

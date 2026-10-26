@@ -358,7 +358,7 @@ describe("API 앱 통합 테스트 (Firestore 에뮬레이터)", () => {
 
       const del = await app.request(
         `/api/decks/${id}`,
-        { method: "DELETE" },
+        { method: "DELETE", headers: { "sec-fetch-site": "same-origin" } },
         env,
       );
       expect(del.status).toBe(401);

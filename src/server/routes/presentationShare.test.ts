@@ -64,10 +64,13 @@ function makeDoc(
 
 function send(method: string, body?: unknown): RequestInit {
   return body === undefined
-    ? { method }
+    ? { method, headers: { "sec-fetch-site": "same-origin" } }
     : {
         method,
-        headers: { "content-type": "application/json" },
+        headers: {
+          "sec-fetch-site": "same-origin",
+          "content-type": "application/json",
+        },
         body: JSON.stringify(body),
       };
 }

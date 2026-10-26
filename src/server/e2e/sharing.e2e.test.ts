@@ -27,7 +27,10 @@ async function call(method: string, path: string, body?: unknown) {
     path,
     {
       method,
-      headers: body ? { "content-type": "application/json" } : undefined,
+      headers: {
+        "sec-fetch-site": "same-origin",
+        ...(body ? { "content-type": "application/json" } : {}),
+      },
       body: body ? JSON.stringify(body) : undefined,
     },
     env,
