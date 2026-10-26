@@ -111,9 +111,9 @@ gcloud iam service-accounts add-iam-policy-binding "$DEPLOY_SA" --role=roles/iam
 
 ## 7. Cloudflare 데이터 옮기기
 
-1. 옮기는 동안 생긴 쓰기는 따라오지 않으므로 기존 서비스의 쓰기를 멈춘다.
-2. R2 객체를 같은 키로 버킷에 복사한다 (예: `rclone copy r2:bangsongteam-media gcs:$BUCKET`,
-   또는 Storage Transfer Service의 S3 호환 소스).
-3. `scripts/migrateFromCloudflare.mjs` 머리말의 순서대로 D1 테이블을 JSON으로 뽑아 로컬
-   에뮬레이터에서 확인한 뒤 `--target=remote --confirm`으로 운영 Firestore에 넣는다.
-4. 도메인을 Cloud Run으로 옮기고 Cloudflare Worker·D1·R2와 `CLOUDFLARE_*` 저장소 비밀값을 정리한다.
+`scripts/migrateFromCloudflare.cloudbuild.yaml`이 Cloud Build 안에서 R2 객체를 버킷으로 복사하고
+D1 테이블을 운영 Firestore에 쓴다. 필요한 토큰과 실행 명령은 그 파일 머리말에 있다.
+
+1. 미리보기(`_APPLY=false`)로 복사할 객체와 옮길 문서 수를 확인한다.
+2. 옮기는 동안 생긴 쓰기는 따라오지 않으므로 기존 서비스의 쓰기를 멈추고 `_APPLY=true`로 돌린다.
+3. 도메인을 Cloud Run으로 옮기고 Cloudflare Worker·D1·R2와 `CLOUDFLARE_*` 저장소 비밀값을 정리한다.

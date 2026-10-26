@@ -1,19 +1,18 @@
 /**
- * Cloudflare D1에서 뽑은 데이터를 Firestore로 옮긴다 (한 번 쓰는 이전 도구).
+ * Cloudflare(D1·R2) 데이터를 Firestore·GCS로 옮긴다 (한 번 쓰는 이전 도구).
  *
- * 1. D1 테이블마다 JSON으로 뽑는다 (FTS 가상 테이블 때문에 `wrangler d1 export`는 쓰지 않는다):
+ * 운영 이전은 `scripts/migrateFromCloudflare.cloudbuild.yaml`로 Cloud Build에서 돌린다. R2 객체를
+ * 같은 키로 GCS 버킷에 복사하고, 이 스크립트가 D1 HTTP API(`--d1=<데이터베이스 id>`)로 테이블을
+ * 읽어 운영 Firestore에 쓴다. 로컬 에뮬레이터로 확인할 때는 테이블마다 뽑은 JSON 폴더를 넘긴다
+ * (FTS 가상 테이블 때문에 `wrangler d1 export`는 쓰지 않는다):
  *      mkdir -p .data/d1-export
  *      for t in user session account verification folders presentations decks \
  *               presentation_members drive_tombstones backgrounds background_keywords reports; do
  *        pnpm dlx wrangler d1 execute bangsongteam-db-v2 --remote --json \
  *          --command "SELECT * FROM \"$t\"" > .data/d1-export/$t.json
  *      done
- * 2. R2 배경 객체를 같은 키로 GCS 버킷에 복사한다 (예: rclone `copy r2:bangsongteam-media gcs:<버킷>`,
- *    또는 Storage Transfer Service의 S3 호환 소스).
- * 3. 먼저 로컬 에뮬레이터에 넣어 확인한 뒤 운영 Firestore에 넣는다:
  *      node scripts/migrateFromCloudflare.mjs --dir=.data/d1-export --dry-run
- *      node scripts/migrateFromCloudflare.mjs --dir=.data/d1-export                 # 로컬
- *      node scripts/migrateFromCloudflare.mjs --dir=.data/d1-export --target=remote --confirm
+ *      node scripts/migrateFromCloudflare.mjs --dir=.data/d1-export
  *
  * 문서 id는 D1 행 id 그대로라 여러 번 돌려도 같은 결과가 된다. 옮기는 동안 기존 서비스에서
  * 생긴 쓰기는 따라오지 않으므로, 운영 이전은 쓰기를 멈춘 상태에서 한 번에 한다.
@@ -38,16 +37,50 @@ function readRows(file) {
   throw new Error(`알 수 없는 JSON 형식: ${file}`);
 }
 
+/** D1 HTTP API로 테이블 전체를 읽는다. `CLOUDFLARE_ACCOUNT_ID`·`CLOUDFLARE_API_TOKEN`(D1 읽기)이 필요하다 */
+async function fetchD1Rows(databaseId, table) {
+  const { CLOUDFLARE_ACCOUNT_ID: account, CLOUDFLARE_API_TOKEN: token } =
+    process.env;
+  if (!account || !token) {
+    throw new Error(
+      "--d1에는 CLOUDFLARE_ACCOUNT_ID와 CLOUDFLARE_API_TOKEN 환경 변수가 필요합니다",
+    );
+  }
+  const response = await fetch(
+    `https://api.cloudflare.com/client/v4/accounts/${account}/d1/database/${databaseId}/query`,
+    {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${token}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ sql: `SELECT * FROM "${table}"` }),
+    },
+  );
+  const body = await response.json();
+  if (!response.ok || !body.success) {
+    throw new Error(`D1 ${table} 읽기 실패: ${JSON.stringify(body.errors)}`);
+  }
+  return body.result.flatMap((entry) => entry.results);
+}
+
 async function main() {
   const args = parseFlags(process.argv.slice(2));
   const target = args.target ?? "local";
-  if (!args.dir) throw new Error("--dir=<D1 내보내기 폴더>가 필요합니다");
-  const dir = path.resolve(args.dir);
+  if (!args.dir && !args.d1) {
+    throw new Error(
+      "--dir=<D1 내보내기 폴더> 또는 --d1=<D1 데이터베이스 id>가 필요합니다",
+    );
+  }
 
   const importer = await importSource("src/db/ops/importD1.ts");
   const tables = {};
   for (const table of importer.D1_TABLES) {
-    const file = path.join(dir, `${table}.json`);
+    if (args.d1) {
+      tables[table] = await fetchD1Rows(args.d1, table);
+      continue;
+    }
+    const file = path.join(path.resolve(args.dir), `${table}.json`);
     if (fs.existsSync(file)) tables[table] = readRows(file);
     else console.warn(`[없음] ${table}.json — 이 테이블은 건너뜁니다`);
   }
