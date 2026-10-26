@@ -50,7 +50,6 @@ export function createDecksRoute(deps: AppDeps = {}) {
       } catch (error) {
         logServerError(c, "deck upsert failed", error, { deckId: deck.id });
         if (isTransientStorageError(error)) {
-          c.header("Retry-After", "2");
           return c.json({ error: API_ERRORS.deck.saveFailed }, 503);
         }
         return c.json({ error: API_ERRORS.deck.saveFailed }, 500);

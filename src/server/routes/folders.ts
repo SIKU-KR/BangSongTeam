@@ -52,7 +52,6 @@ export function createFoldersRoute(deps: AppDeps = {}) {
           folderId: folder.id,
         });
         if (isTransientStorageError(error)) {
-          c.header("Retry-After", "2");
           return c.json({ error: API_ERRORS.folder.saveFailed }, 503);
         }
         return c.json({ error: API_ERRORS.folder.saveFailed }, 500);

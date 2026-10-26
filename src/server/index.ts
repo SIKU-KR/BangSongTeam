@@ -10,6 +10,7 @@ import {
   limitBody,
 } from "./middleware/bodyLimit";
 import { requestLog } from "./middleware/requestLog";
+import { retryAfterOnUnavailable } from "./middleware/retryAfter";
 import { createHealthRoute } from "./routes/health";
 import { createAuthRoute } from "./routes/auth";
 import { createClientReportsRoute } from "./routes/clientReports";
@@ -34,7 +35,8 @@ import { createMediaRoute } from "./routes/media";
  *
  * 오류 응답은 모두 `{ error }`에 한국어 문장을 담는다. 클라이언트가 그 문장을 그대로 보여 준다.
  * Hono가 4xx로 던진 예외(깨진 JSON 400 등)는 상태를 그대로 살려 서버 오류로 남기지 않는다.
- * 그 밖의 예외는 저장소 일시 장애면 503, 아니면 500이다.
+ * 그 밖의 예외는 저장소 일시 장애면 503, 아니면 500이다. 503의 `Retry-After`는
+ * `retryAfterOnUnavailable`이 단다.
  */
 export function createApp(deps: AppDeps = {}) {
   return new Hono<AppEnv>()
@@ -47,13 +49,13 @@ export function createApp(deps: AppDeps = {}) {
         return c.json({ error }, err.status);
       }
       if (isTransientStorageError(err)) {
-        c.header("Retry-After", "2");
         return c.json({ error: API_ERRORS.serverBusy }, 503);
       }
       return c.json({ error: API_ERRORS.requestFailed }, 500);
     })
     .notFound((c) => c.json({ error: API_ERRORS.notFound }, 404))
     .use("*", requestLog())
+    .use("*", retryAfterOnUnavailable())
     .use("/api/auth/*", limitBody(AUTH_BODY_MAX_BYTES))
     .use("/api/*", limitBody(API_BODY_MAX_BYTES))
     .route("/api/health", createHealthRoute())

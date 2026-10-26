@@ -43,7 +43,6 @@ async function save(c: Context<AppEnv>, changes: PresentationChanges) {
       sentDeckCount: changes.decks.length,
     });
     if (isTransientStorageError(error)) {
-      c.header("Retry-After", "2");
       return c.json({ error: API_ERRORS.presentation.saveFailed }, 503);
     }
     return c.json({ error: API_ERRORS.presentation.saveFailed }, 500);

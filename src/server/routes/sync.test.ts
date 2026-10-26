@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { env } from "../test/env";
 import {
   DEFAULT_DECK_STYLE,
@@ -544,6 +544,10 @@ describe("동기화 라우트 교차 사용자 격리", () => {
       currentUser = USER_A;
     });
 
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
     it("PUT /api/presentations/:id 를 같은 본문으로 두 번 보내도 결과가 같다", async () => {
       const doc = makeDoc(USER_A);
       const first = await app.request(
@@ -645,7 +649,9 @@ describe("동기화 라우트 교차 사용자 격리", () => {
       expect(firstBody).toEqual(secondBody);
     });
 
-    it("Firestore 일시 장애(트랜잭션 경합 등) 시 503과 Retry-After를 반환한다", async () => {
+    it("Firestore 일시 장애(트랜잭션 경합 등)가 이어지면 503의 Retry-After가 2초에 머물지 않고 늘어난다", async () => {
+      vi.spyOn(Math, "random").mockReturnValue(1);
+      const freshApp = createApp({ readSession: fakeSession });
       const brokenEnv = {
         ...env,
         DB: new Proxy(env.DB, {
@@ -665,14 +671,18 @@ describe("동기화 라우트 교차 사용자 격리", () => {
         }) as Db,
       };
 
-      const res = await app.request(
-        `/api/presentations/${DOC_ID}`,
-        json(makeDoc(USER_A)),
-        brokenEnv,
-      );
+      const retryAfters: (string | null)[] = [];
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        const res = await freshApp.request(
+          `/api/presentations/${DOC_ID}`,
+          json(makeDoc(USER_A)),
+          brokenEnv,
+        );
+        expect(res.status).toBe(503);
+        retryAfters.push(res.headers.get("Retry-After"));
+      }
 
-      expect(res.status).toBe(503);
-      expect(res.headers.get("Retry-After")).toBe("2");
+      expect(retryAfters).toEqual(["4", "8", "16"]);
     });
   });
 });
