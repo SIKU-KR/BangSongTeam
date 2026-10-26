@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll, afterEach, vi } from "vitest";
 import { env } from "../test/env";
 import { Hono } from "hono";
+import { API_ERRORS } from "#shared";
 import { createApp } from "../index";
 import type { SessionReader } from "./auth";
 import type { AppEnv } from "../types";
@@ -269,7 +270,7 @@ describe("requestLog 미들웨어", () => {
     );
 
     expect(res.status).toBe(500);
-    expect(await res.json()).toEqual({ error: "Internal Server Error" });
+    expect(await res.json()).toEqual({ error: API_ERRORS.requestFailed });
     expect(res.headers.get("x-request-id")).toBe(TRACE_ID);
     expect(requestLines(log)).toHaveLength(0);
     const [line] = requestLines(error);

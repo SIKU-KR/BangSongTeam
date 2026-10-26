@@ -1,4 +1,5 @@
 import { vi } from "vitest";
+import { API_ERRORS } from "#shared";
 
 export type FakeRoute = (request: {
   url: URL;
@@ -91,7 +92,7 @@ export function installFakeApi(
           Promise.resolve(
             route
               ? route.handler({ url, method, body })
-              : { status: 404, body: { error: "Not Found" } },
+              : { status: 404, body: { error: API_ERRORS.notFound } },
           )
             .then((res) => {
               if (done) return;

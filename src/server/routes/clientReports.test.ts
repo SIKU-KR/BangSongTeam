@@ -112,8 +112,22 @@ describe("POST /api/client-reports", () => {
 
     expect(res.status).toBe(413);
     expect(await res.json()).toEqual({
-      error: API_ERRORS.clientReport.tooLarge,
+      error: API_ERRORS.payloadTooLarge,
     });
+  });
+
+  it("JSON이 아닌 본문은 서버 오류가 아니라 400이고 오류 로그를 남기지 않는다", async () => {
+    const errorLog = vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    const app = createApp();
+
+    for (const body of ["{", "{not json"]) {
+      const res = await post(app, body);
+
+      expect(res.status).toBe(400);
+      expect(await res.json()).toEqual({ error: API_ERRORS.idMismatch });
+    }
+    expect(errorLog).not.toHaveBeenCalled();
   });
 
   it("같은 IP가 창 안에서 한도를 넘으면 429다", async () => {
