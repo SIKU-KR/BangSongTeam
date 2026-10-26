@@ -23,6 +23,7 @@ export function getServerEnv(): Bindings {
     NAVER_CLIENT_SECRET: process.env.NAVER_CLIENT_SECRET,
     GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID,
     GOOGLE_CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET,
+    PROXY_SECRET: process.env.PROXY_SECRET,
   };
   return cached;
 }
