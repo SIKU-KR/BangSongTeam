@@ -12,6 +12,9 @@ vi.mock("../lib/auth", async () => {
   );
   return {
     SOCIAL_PROVIDERS: actual.SOCIAL_PROVIDERS,
+    EmailAuthError: Error,
+    signInWithEmail: vi.fn(),
+    signUpWithEmail: vi.fn(),
     signInWithProvider: (...args: unknown[]) => signInWithProvider(...args),
   };
 });
@@ -87,5 +90,14 @@ describe("LoginRoute", () => {
         screen.getByRole("button", { name: /네이버 로그인/ }),
       ).toBeEnabled();
     });
+  });
+
+  it("소셜 로그인과 함께 이메일 로그인 폼을 보여 준다", async () => {
+    render(<LoginRoute />);
+
+    expect(await screen.findByTestId("email-login-form")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: AUTH_COPY.email.submitSignIn }),
+    ).toBeEnabled();
   });
 });

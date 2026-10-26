@@ -1,5 +1,9 @@
 import { useSyncExternalStore } from "react";
-import { AuthSessionResponseSchema, FALLBACK_USER_NAME } from "#shared";
+import {
+  AuthSessionResponseSchema,
+  FALLBACK_USER_NAME,
+  type EmailSignUpRequest,
+} from "#shared";
 import {
   loadCachedSession,
   saveCachedSession,
@@ -168,6 +172,62 @@ export async function signInWithProvider(
     callbackURL: pathname === "/" ? "/presentations" : `${pathname}${search}`,
   });
   if (error) throw new Error(AUTH_COPY.signInFailed);
+}
+
+export type EmailAuthFailure =
+  | "invalidCredentials"
+  | "alreadyExists"
+  | "invalidInput"
+  | "rateLimited"
+  | "network"
+  | "unknown";
+
+/** 이메일 로그인·가입 실패. 화면 문구는 `reason`으로 고른다. */
+export class EmailAuthError extends Error {
+  constructor(readonly reason: EmailAuthFailure) {
+    super(reason);
+    this.name = "EmailAuthError";
+  }
+}
+
+function failureFromStatus(status: number | undefined): EmailAuthFailure {
+  switch (status) {
+    case undefined:
+    case 0:
+      return "network";
+    case 400:
+      return "invalidInput";
+    case 401:
+      return "invalidCredentials";
+    case 422:
+      return "alreadyExists";
+    case 429:
+      return "rateLimited";
+    default:
+      return "unknown";
+  }
+}
+
+/** 이메일·비밀번호로 로그인한다. 성공하면 서버 세션으로 세션 스토어를 갱신한다. */
+export async function signInWithEmail(
+  email: string,
+  password: string,
+): Promise<void> {
+  const { error } = await authClient.signIn.email({ email, password });
+  if (error) throw new EmailAuthError(failureFromStatus(error.status));
+  await revalidateSession();
+}
+
+/**
+ * 이메일·비밀번호로 가입한다. 메일 인증이 없어 가입과 동시에 로그인된다.
+ * 같은 이메일로 이미 가입했으면 `alreadyExists`로 던진다.
+ */
+export async function signUpWithEmail(
+  input: EmailSignUpRequest,
+): Promise<void> {
+  const { error } = await authClient.signUp.email(input);
+  if (error) throw new EmailAuthError(failureFromStatus(error.status));
+  await revalidateSession();
 }
 
 export async function signOut(): Promise<void> {

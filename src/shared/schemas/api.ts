@@ -85,3 +85,16 @@ export const AgreeConsentRequestSchema = z.object({
   privacy: z.literal(true),
 });
 export type AgreeConsentRequest = z.infer<typeof AgreeConsentRequestSchema>;
+
+/** 비밀번호 길이 범위. 서버(Better Auth)와 가입 폼이 같은 값을 쓴다 */
+export const PASSWORD_MIN_LENGTH = 8;
+export const PASSWORD_MAX_LENGTH = 128;
+export const USER_NAME_MAX_LENGTH = 50;
+
+/** 이메일 가입 폼 입력. 서버 검증은 Better Auth가 따로 한다 */
+export const EmailSignUpRequestSchema = z.object({
+  name: z.string().trim().min(1).max(USER_NAME_MAX_LENGTH),
+  email: z.email(),
+  password: z.string().min(PASSWORD_MIN_LENGTH).max(PASSWORD_MAX_LENGTH),
+});
+export type EmailSignUpRequest = z.infer<typeof EmailSignUpRequestSchema>;

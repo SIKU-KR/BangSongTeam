@@ -1,8 +1,15 @@
 import { betterAuth } from "better-auth/minimal";
 import { firestoreAdapter } from "#db";
-import { APP_NAME, createId, FALLBACK_USER_NAME } from "#shared";
+import {
+  APP_NAME,
+  createId,
+  FALLBACK_USER_NAME,
+  PASSWORD_MAX_LENGTH,
+  PASSWORD_MIN_LENGTH,
+} from "#shared";
 import type { Bindings } from "../types";
 import { devSignIn } from "./devSignIn";
+import { hashPassword, verifyPassword } from "./password";
 
 /**
  * 소셜 프로바이더가 이메일을 주지 않을 때 쓰는 합성 도메인.
@@ -112,6 +119,25 @@ export function buildNaverUser(profile: NaverProfileLike): MappedSocialUser {
   };
 }
 
+/**
+ * 소셜 로그인을 같은 이메일의 기존 계정에 묶을 때, 그 계정의 이메일이 인증됐는지도 따진다.
+ *
+ * 이메일·비밀번호 가입은 메일 인증을 거치지 않아서, 남의 이메일로 먼저 가입해 둔 사람이
+ * 피해자가 나중에 Google로 로그인할 때 그 계정에 합류하는 선점 탈취가 가능하다. Better Auth는
+ * `requireLocalEmailVerified`(기본 true)가 켜져 있으면 소셜 쪽 이메일이 인증됐더라도
+ * 인증되지 않은 기존 사용자와는 묶지 않는다(`oauth2/link-account.mjs`의
+ * `handleOAuthUserInfo`). 기본값에 기대지 않고 명시해, 누가 끄면 테스트가 잡도록 한다.
+ *
+ * `disableImplicitLinking`은 쓰지 않는다. 이미 연결된 소셜 계정의 재로그인은 이 검사를
+ * 거치지 않아 기존 소셜 사용자에게 영향이 없고, 인증된 이메일끼리의 소셜 간 연결도 유지된다.
+ * 대가로 선점된 주소의 실제 주인은 소셜 로그인으로 들어오지 못한다. 비밀번호 재설정이
+ * 없는 지금은 이쪽이 안전하다.
+ */
+export const ACCOUNT_LINKING = {
+  enabled: true,
+  requireLocalEmailVerified: true,
+} as const;
+
 function buildAuth(env: Bindings) {
   const socialProviders: Record<string, unknown> = {};
 
@@ -150,6 +176,15 @@ function buildAuth(env: Bindings) {
     },
     rateLimit: { enabled: true },
     telemetry: { enabled: false },
+    emailAndPassword: {
+      enabled: true,
+      autoSignIn: true,
+      requireEmailVerification: false,
+      minPasswordLength: PASSWORD_MIN_LENGTH,
+      maxPasswordLength: PASSWORD_MAX_LENGTH,
+      password: { hash: hashPassword, verify: verifyPassword },
+    },
+    account: { accountLinking: ACCOUNT_LINKING },
     socialProviders,
     plugins: process.env.NODE_ENV === "production" ? [] : [devSignIn()],
     advanced: {

@@ -4,6 +4,7 @@ import React, { useState } from "react";
 import { CircleAlertIcon } from "lucide-react";
 import { Alert, AlertDescription } from "#components/ui/alert";
 import { Button } from "#components/ui/button";
+import { Separator } from "#components/ui/separator";
 import {
   Card,
   CardContent,
@@ -17,6 +18,7 @@ import {
   signInWithProvider,
   type SocialProvider,
 } from "../lib/auth";
+import { EmailLoginForm } from "../features/auth/EmailLoginForm";
 import { SocialLoginButton } from "../features/auth/SocialLoginButton";
 import { AUTH_COPY, LEGAL_COPY } from "#copy/auth";
 import { APP_NAME, DEV_USERS } from "#shared";
@@ -75,6 +77,16 @@ export function LoginRoute({
               />
             ))}
           </div>
+
+          <div className="flex items-center gap-3">
+            <Separator className="flex-1" />
+            <span className="text-xs text-muted-foreground">
+              {AUTH_COPY.email.divider}
+            </span>
+            <Separator className="flex-1" />
+          </div>
+
+          <EmailLoginForm disabled={pending !== null} />
 
           {process.env.NODE_ENV !== "production" && (
             <div data-testid="dev-sign-in" className="flex flex-col gap-2">
