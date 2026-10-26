@@ -110,6 +110,58 @@ describe("Cloudflare Worker 프록시", () => {
     },
   );
 
+  it.each(["GET", "HEAD"])(
+    "%s /api/media/*는 쿼리 문자열을 떼고 요청해 캐시 키에 쿼리가 남지 않는다",
+    async (method) => {
+      stubUpstream();
+      await proxy.fetch(
+        new Request("https://pub.example/api/media/loops/a.mp4?r=1&v=x", {
+          method,
+        }),
+        ENV,
+      );
+
+      const { url, init } = upstreamCall();
+      expect(url).toBe("https://o.run.app/api/media/loops/a.mp4");
+      expect(init.cf).toEqual({ cacheEverything: true });
+    },
+  );
+
+  it("쿼리만 다른 미디어 요청은 같은 주소로 원본에 요청한다", async () => {
+    stubUpstream();
+    const fetchWith = (query: string) =>
+      proxy.fetch(
+        new Request(`https://pub.example/api/media/posters/p.webp${query}`),
+        ENV,
+      );
+
+    await fetchWith("");
+    await fetchWith("?r=1");
+    await fetchWith("?r=2");
+
+    expect(upstream.mock.calls.map(([url]) => url.toString())).toEqual([
+      "https://o.run.app/api/media/posters/p.webp",
+      "https://o.run.app/api/media/posters/p.webp",
+      "https://o.run.app/api/media/posters/p.webp",
+    ]);
+  });
+
+  it.each([
+    ["GET", "/api/catalog/search?q=x"],
+    ["GET", "/api/backgrounds?page=2"],
+    ["POST", "/api/media/loops/a.mp4?r=1"],
+  ])("%s %s는 캐시하지 않고 쿼리도 그대로 둔다", async (method, target) => {
+    stubUpstream();
+    await proxy.fetch(
+      new Request(`https://pub.example${target}`, { method }),
+      ENV,
+    );
+
+    const { url, init } = upstreamCall();
+    expect(url).toBe(`https://o.run.app${target}`);
+    expect(init.cf).toBeUndefined();
+  });
+
   it.each([
     ["GET", "/api/backgrounds"],
     ["POST", "/api/media/loops/a.mp4"],

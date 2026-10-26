@@ -8,6 +8,8 @@
  * - 사용자 IP는 비밀값과 함께 넘긴다. 서버(`src/server/lib/clientIp.ts`)가 비밀값을 확인한 뒤에만
  *   이 IP로 빈도 제한을 건다.
  * - 배경 미디어(`/api/media/*`)는 키가 바뀌지 않으므로 Cloudflare에 캐시해 GCP 송신을 줄인다.
+ *   캐시 키는 쿼리 문자열까지 포함한 URL이라 `?r=<난수>`만 붙여도 매번 원본에서 영상을 받게
+ *   된다. 미디어 라우트는 쿼리를 쓰지 않으므로 캐시하는 요청에서는 쿼리를 뗀다.
  * - 응답의 `location`이 run.app을 가리키면 공개 도메인으로 바꾼다.
  */
 
@@ -32,6 +34,7 @@ const proxy = {
     const cacheable =
       (request.method === "GET" || request.method === "HEAD") &&
       url.pathname.startsWith(MEDIA_PREFIX);
+    if (cacheable) url.search = "";
 
     const response = await fetch(url, {
       method: request.method,

@@ -1,4 +1,5 @@
 import { describe, it, expect, afterEach, beforeEach, vi } from "vitest";
+import { API_ERRORS } from "#shared";
 import {
   __resetProxySecretWarningForTests,
   clientIp,
@@ -6,6 +7,7 @@ import {
   PROXY_CLIENT_IP_HEADER,
   PROXY_SECRET_HEADER,
   rateLimitKey,
+  rejectUnproxied,
   withTrustedClientIp,
 } from "./clientIp";
 
@@ -228,5 +230,63 @@ describe("프록시 비밀값 불일치 경고", () => {
     withTrustedClientIp(proxied({}), SECRET);
 
     expect(warnings()).toEqual([]);
+  });
+});
+
+describe("rejectUnproxied", () => {
+  const required = { PROXY_SECRET: SECRET, REQUIRE_PROXY: true };
+
+  function direct(path: string, headers: Record<string, string> = {}) {
+    return new Request(`https://example.run.app${path}`, { headers });
+  }
+
+  it.each([
+    ["프록시 비밀값이 없으면", {}],
+    ["프록시 비밀값이 틀리면", { [PROXY_SECRET_HEADER]: "wrong" }],
+  ])("켜 두면 %s 403으로 막고 캐시하지 못하게 한다", async (_, headers) => {
+    const response = rejectUnproxied(
+      direct("/api/media/loops/a.mp4", headers),
+      required,
+    );
+
+    expect(response?.status).toBe(403);
+    expect(response?.headers.get("cache-control")).toBe("no-store");
+    await expect(response?.json()).resolves.toEqual({
+      error: API_ERRORS.proxyRequired,
+    });
+  });
+
+  it("프록시 비밀값이 맞으면 통과시킨다", () => {
+    expect(
+      rejectUnproxied(
+        direct("/api/media/loops/a.mp4", { [PROXY_SECRET_HEADER]: SECRET }),
+        required,
+      ),
+    ).toBeNull();
+  });
+
+  it.each(["/api/health", "/api/health?probe=1"])(
+    "%s는 비밀값 없이도 통과시킨다",
+    (path) => {
+      expect(rejectUnproxied(direct(path), required)).toBeNull();
+    },
+  );
+
+  it.each(["/api/healthz", "/api/health/extra", "/api/backgrounds"])(
+    "%s는 비밀값이 없으면 막는다",
+    (path) => {
+      expect(rejectUnproxied(direct(path), required)?.status).toBe(403);
+    },
+  );
+
+  it.each([
+    ["플래그가 꺼져 있으면", { PROXY_SECRET: SECRET }],
+    [
+      "플래그를 명시적으로 껐으면",
+      { PROXY_SECRET: SECRET, REQUIRE_PROXY: false },
+    ],
+    ["서버에 비밀값이 없으면", { REQUIRE_PROXY: true }],
+  ])("%s 아무것도 막지 않는다", (_, env) => {
+    expect(rejectUnproxied(direct("/api/media/loops/a.mp4"), env)).toBeNull();
   });
 });

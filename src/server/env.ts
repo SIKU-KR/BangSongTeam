@@ -4,6 +4,10 @@ import { createMediaStore } from "./lib/mediaStore";
 
 let cached: Bindings | undefined;
 
+function isFlagOn(value: string | undefined): boolean {
+  return value === "1" || value?.toLowerCase() === "true";
+}
+
 /**
  * 프로세스 환경 변수로 API 바인딩을 만든다. 클라이언트와 저장소 연결은 프로세스 하나가
  * 함께 쓰므로 처음 한 번만 만든다.
@@ -24,6 +28,7 @@ export function getServerEnv(): Bindings {
     GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID,
     GOOGLE_CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET,
     PROXY_SECRET: process.env.PROXY_SECRET,
+    REQUIRE_PROXY: isFlagOn(process.env.REQUIRE_PROXY),
   };
   return cached;
 }

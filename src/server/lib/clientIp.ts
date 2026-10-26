@@ -1,6 +1,10 @@
 import { createHash, timingSafeEqual } from "node:crypto";
 import { isIPv4, isIPv6 } from "node:net";
+import { API_ERRORS } from "#shared";
+import type { Bindings } from "../types";
 import { writeLog } from "./requestLog";
+
+const HEALTH_PATH = "/api/health";
 
 /** 앞단 프록시(Cloudflare Worker)가 자신을 증명하려고 붙이는 비밀값 헤더 */
 export const PROXY_SECRET_HEADER = "x-bst-proxy-secret";
@@ -103,6 +107,33 @@ function warnSecretMismatchOnce(configured: boolean): void {
 
 export function __resetProxySecretWarningForTests(): void {
   warnedSecretMismatch = false;
+}
+
+/**
+ * `REQUIRE_PROXY`가 켜져 있을 때, 프록시를 거치지 않고 run.app으로 곧장 들어온 요청을 403으로
+ * 막는다. 그런 요청은 Cloudflare의 캐시를 건너뛰어 배경 영상이 요청마다 GCP 송신 비용이 된다.
+ *
+ * 기본은 꺼짐이다. Worker와 서버의 `PROXY_SECRET`이 어긋난 채 켜면 모든 API가 막히므로 운영자가
+ * 값이 같은 것을 확인한 뒤에 켠다(`docs/deploy-gcp.md`). 서버에 비밀값이 없으면(개발·테스트)
+ * 켜져 있어도 막지 않는다. `/api/health`는 Cloud Run 시작 프로브와 배포 확인이 비밀값 없이
+ * 부르므로 열어 둔다.
+ *
+ * 비밀값 헤더는 `withTrustedClientIp`가 지우므로 그보다 먼저 불러야 한다.
+ */
+export function rejectUnproxied(
+  request: Request,
+  env: Pick<Bindings, "PROXY_SECRET" | "REQUIRE_PROXY">,
+): Response | null {
+  const { PROXY_SECRET: proxySecret, REQUIRE_PROXY: required } = env;
+  if (!required || !proxySecret) return null;
+  if (new URL(request.url).pathname === HEALTH_PATH) return null;
+
+  const secret = request.headers.get(PROXY_SECRET_HEADER);
+  if (secret && sameSecret(secret, proxySecret)) return null;
+  return Response.json(
+    { error: API_ERRORS.proxyRequired },
+    { status: 403, headers: { "cache-control": "no-store" } },
+  );
 }
 
 /**
