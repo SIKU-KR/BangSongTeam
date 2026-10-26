@@ -71,6 +71,7 @@ gcloud builds submit --tag "$IMAGE"
 gcloud run deploy "$SERVICE" --image "$IMAGE" --region "$REGION" \
   --service-account "$RUN_SA" --allow-unauthenticated \
   --timeout=3600 --cpu=1 --memory=2Gi \
+  --startup-probe=httpGet.path=/api/health,httpGet.port=8080,periodSeconds=5,timeoutSeconds=3,failureThreshold=24 \
   --set-env-vars "MEDIA_BUCKET=$BUCKET,BETTER_AUTH_URL=https://bangsongteam.siku-labs.com,KAKAO_CLIENT_ID=<id>,NAVER_CLIENT_ID=<id>,GOOGLE_CLIENT_ID=<id>" \
   --set-secrets "BETTER_AUTH_SECRET=better-auth-secret:latest,KAKAO_CLIENT_SECRET=kakao-client-secret:latest,NAVER_CLIENT_SECRET=naver-client-secret:latest,GOOGLE_CLIENT_SECRET=google-client-secret:latest,PROXY_SECRET=proxy-secret:latest"
 ```
@@ -79,6 +80,15 @@ gcloud run deploy "$SERVICE" --image "$IMAGE" --region "$REGION" \
 - 컨테이너는 `MEDIA_BUCKET`·`BETTER_AUTH_URL`·`BETTER_AUTH_SECRET`·`PROXY_SECRET` 중 하나라도
   비어 있으면 뜨지 않는다(`scripts/cloudRunBoot.mjs`). 나중에 바꿀 때 `--set-env-vars`·`--set-secrets`는
   나머지 변수·비밀값을 모두 지우므로 `--update-env-vars`·`--update-secrets`를 쓴다.
+- `--startup-probe`: 기본 TCP 프로브는 Next.js가 포트를 열기만 하면 통과해, API 번들에서 빠진
+  파일이나 잘못된 환경 변수는 요청을 받아야 드러난다. `/api/health`는 API 번들과 서버 환경을
+  불러오므로 이런 리비전은 준비되지 못하고 배포가 실패한다. 이미 만든 서비스에는 한 번 넣는다.
+
+  ```bash
+  gcloud run services update "$SERVICE" --region "$REGION" \
+    --startup-probe=httpGet.path=/api/health,httpGet.port=8080,periodSeconds=5,timeoutSeconds=3,failureThreshold=24
+  ```
+
 - 사용하지 않는 소셜 로그인은 id·secret을 빼면 로그인 화면에서 사라진다.
 - 서울 리전은 Cloud Run 도메인 매핑을 지원하지 않아, 도메인은 Cloudflare Worker 프록시
   (`infra/cloudflare-proxy`)가 run.app으로 넘긴다. Worker와 Cloud Run에 같은 `PROXY_SECRET`을
@@ -130,7 +140,23 @@ D1 테이블을 운영 Firestore에 쓴다. 필요한 토큰과 실행 명령은
 옛 값으로 돌아가서, Firestore에 사용자가 이미 있으면 스크립트가 멈춘다. 미디어만 다시 복사하려면
 `_APPLY_MEDIA`만 켠다.
 
-## 8. 회원 탈퇴
+## 8. 배포 확인과 되돌리기
+
+CI는 새 리비전을 트래픽 없이 `candidate` 태그로 올리고, 태그 주소의 `/api/health`와
+`/api/backgrounds`가 응답해야 트래픽을 옮긴다. 확인에 실패하면 트래픽은 이전 리비전에 남고, 실패한
+리비전은 태그 주소(`gcloud run services describe`의 `candidate` URL)로 살펴볼 수 있다.
+
+트래픽을 받은 뒤에 문제가 드러나면 이전 리비전으로 되돌린다.
+
+```bash
+gcloud run revisions list --service "$SERVICE" --region "$REGION"
+gcloud run services update-traffic "$SERVICE" --region "$REGION" --to-revisions=<이전 리비전>=100
+```
+
+다음 CI 배포는 확인을 통과하면 트래픽을 다시 최신 리비전으로 옮긴다. 문제를 고치기 전에 다른 PR을
+머지하면 문제가 남은 코드로 돌아가므로, 문제 커밋을 되돌리는 PR이나 고친 PR을 먼저 머지한다.
+
+## 9. 회원 탈퇴
 
 탈퇴 요청은 본인 확인 뒤 `scripts/deleteUser.mjs <사용자 id> --target=remote`로 지울 데이터를 세고
 `--apply`를 붙여 지운다. 순서와 남기는 것은 그 파일 머리말에 있다.
