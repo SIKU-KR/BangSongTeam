@@ -1,5 +1,6 @@
 export {
   savePresentation,
+  savePresentationIfStoredAt,
   savePresentationIfUnchanged,
   loadAllPresentations,
   loadPresentation,

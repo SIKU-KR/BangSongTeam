@@ -168,18 +168,36 @@ export async function savePresentation(
 export async function savePresentationIfUnchanged(
   presentation: Presentation,
 ): Promise<boolean> {
+  return savePresentationIfStoredAt(presentation, presentation.updatedAt);
+}
+
+/**
+ * 저장본의 `updatedAt`이 `expectedUpdatedAt`일 때만 쓰고, 썼으면 true다(compare-and-set). 저장본이
+ * 없어도 쓰지 않는다. 공유받은 사본은 그 자리에 소유자 자신의 저장본이 있으면 쓰지 않는다.
+ *
+ * 이 탭이 마지막으로 쓴 판을 동기화 결과(기준 판 옮기기 등)로만 바꿔 다시 쓸 때 쓴다. 다른 탭이 그
+ * 사이 쓰거나 지운 저장본을 이 탭이 아직 다시 읽지 못했으면, 그 탭의 올리지 않은 편집을 덮거나 지운
+ * 세트를 되살리지 않는다. 읽기와 쓰기를 한 readwrite 트랜잭션에서 하고, 읽지 못한 자리를 덮을 때는
+ * `savePresentation`처럼 먼저 보관한다.
+ */
+export async function savePresentationIfStoredAt(
+  presentation: Presentation,
+  expectedUpdatedAt: string,
+): Promise<boolean> {
   const db = await getOfflineDB();
   const tx = db.transaction("presentations", "readwrite");
   const write = (async (): Promise<boolean> => {
     const stored: unknown = await tx.store.get(presentation.id);
-    if (!isRecord(stored) || stored.updatedAt !== presentation.updatedAt) {
+    if (!isRecord(stored) || stored.updatedAt !== expectedUpdatedAt) {
       return false;
     }
     if (presentation.access && !stored.access) return false;
+    await keepUnreadableRow(tx.store, stored, presentation);
     await tx.store.put(presentation);
     return true;
   })();
   const [written] = await Promise.all([write, tx.done]);
+  if (written) unreadableAtLoad.delete(presentation.id);
   return written;
 }
 

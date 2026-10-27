@@ -221,7 +221,7 @@ describe("ownPresentationListener — 올리기 결과", () => {
     ]);
   });
 
-  it("다른 곳에서 영구 삭제한 세트는 지우고, 올리지 않은 편집이 있으면 사본으로 남겼다고 알린다", () => {
+  it("다른 곳에서 영구 삭제한 세트는 지우고, 올리지 않은 편집이 있으면 사본으로 남겼다고 알린다", async () => {
     ownPresentationListener.gone(FIRST.id);
     ownPresentationListener.gone(SECOND.id);
 
@@ -231,16 +231,18 @@ describe("ownPresentationListener — 올리기 결과", () => {
       (doc) => doc.title === `${FIRST.title}${COMMON_COPY.copySuffix}`,
     );
     expect(copy?.baseUpdatedAt).toBeNull();
-    expect(info.mock.calls).toEqual([
-      [
-        PRESENTATION_COPY.deletedSavedAsCopy(copy!.title),
-        { id: "presentation-gone" },
-      ],
-      [PRESENTATION_COPY.deletedElsewhere, { id: "presentation-gone" }],
-    ]);
+    await vi.waitFor(() =>
+      expect(info.mock.calls).toEqual([
+        [
+          PRESENTATION_COPY.deletedSavedAsCopy(copy!.title),
+          { id: "presentation-gone" },
+        ],
+        [PRESENTATION_COPY.deletedElsewhere, { id: "presentation-gone" }],
+      ]),
+    );
   });
 
-  it("영구 삭제하는 동안의 세트는 사본도 알림도 없이 서버 판을 받거나 지우고, 영구 삭제를 마치면 다시 알린다", () => {
+  it("영구 삭제하는 동안의 세트는 사본도 알림도 없이 서버 판을 받거나 지우고, 영구 삭제를 마치면 다시 알린다", async () => {
     const end = beginPermanentDelete([FIRST.id, SECOND.id, THIRD.id]);
     const before = listPresentations().length;
 
@@ -257,9 +259,11 @@ describe("ownPresentationListener — 올리기 결과", () => {
     end();
     ownPresentationListener.gone(SECOND.id);
 
-    expect(info).toHaveBeenCalledExactlyOnceWith(
-      PRESENTATION_COPY.deletedElsewhere,
-      { id: "presentation-gone" },
+    await vi.waitFor(() =>
+      expect(info).toHaveBeenCalledExactlyOnceWith(
+        PRESENTATION_COPY.deletedElsewhere,
+        { id: "presentation-gone" },
+      ),
     );
   });
 });

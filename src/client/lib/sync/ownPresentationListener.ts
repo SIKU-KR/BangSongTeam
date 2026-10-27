@@ -3,9 +3,9 @@ import type { Presentation } from "#shared";
 import {
   adoptServerPresentation,
   getPresentationById,
-  keepUnsyncedCopy,
   markPresentationSynced,
   rebasePresentation,
+  removeGonePresentation,
   removePresentationsLocally,
   resolvePresentationConflict,
 } from "../../features/presentation/presentationStore";
@@ -82,7 +82,9 @@ function deferredWhileProjecting(id: string): boolean {
  * 바꾸므로 송출 중에도 한다.
  *
  * 엇갈린 세트의 사본을 만들었거나 다른 곳에서 영구 삭제한 세트를 지웠으면 알림 하나로 알린다. 여러
- * 세트가 한꺼번에 그러면 같은 알림을 바꿔 띄운다.
+ * 세트가 한꺼번에 그러면 같은 알림을 바꿔 띄운다. 영구 삭제한 세트는 사본을 저장하고 원래 세트를
+ * 지운 뒤에, 이 탭과 건너뛴 다른 탭의 편집으로 남긴 사본 이름을 모두 담아 알린다
+ * (`removeGonePresentation`).
  */
 export const ownPresentationListener: OwnPresentationListener = {
   current: (id) => getPresentationById(id),
@@ -120,13 +122,15 @@ export const ownPresentationListener: OwnPresentationListener = {
       void removePresentationsLocally([id]);
       return;
     }
-    const copy = keepUnsyncedCopy(id);
-    void removePresentationsLocally([id]);
-    toast.info(
-      copy
-        ? PRESENTATION_COPY.deletedSavedAsCopy(copy.title)
-        : PRESENTATION_COPY.deletedElsewhere,
-      { id: GONE_TOAST_ID },
-    );
+    void removeGonePresentation(id).then((copies) => {
+      toast.info(
+        copies.length > 0
+          ? PRESENTATION_COPY.deletedSavedAsCopy(
+              ...new Set(copies.map((copy) => copy.title)),
+            )
+          : PRESENTATION_COPY.deletedElsewhere,
+        { id: GONE_TOAST_ID },
+      );
+    });
   },
 };

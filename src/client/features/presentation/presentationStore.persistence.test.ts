@@ -1,4 +1,13 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import {
+  describe,
+  it,
+  expect,
+  beforeEach,
+  afterEach,
+  onTestFinished,
+  vi,
+} from "vitest";
+import { toast } from "sonner";
 import {
   API_ERRORS,
   laterThan,
@@ -6,6 +15,7 @@ import {
   type PresentationChanges,
 } from "#shared";
 import { COMMON_COPY } from "#copy/common";
+import { PRESENTATION_COPY } from "#copy/presentation";
 import {
   seedPresentationsIntoStorage,
   signInAsTestUser,
@@ -84,9 +94,11 @@ import { installFakeApi, type FakeApi } from "../../test/fakeApi";
 import {
   __resetSyncSchedulerForTests,
   __setPusherForTests,
+  cancelDocumentPush,
   flushPendingSync,
   hasPendingDocumentPush,
   isDocumentQueued,
+  scheduleDocumentPush,
   setSyncEnabled,
 } from "../../lib/sync/syncScheduler";
 import {
@@ -352,6 +364,32 @@ describe("presentationStore 영속성", () => {
 
     expect(listPresentations().map((p) => p.id)).toContain(healthy.id);
     expect(listPresentations().map((p) => p.id)).not.toContain("broken-doc");
+  });
+
+  it("저장하는 중에 지운 세트는 그 저장이 끝난 뒤에 지워 저장본이 되살아나지 않는다", async () => {
+    await hydrateFromStorage();
+    const doc = createNewPresentation();
+    await flushPendingWrites();
+    let release: () => void = () => undefined;
+    const started = new Promise<void>((resolve) => {
+      storageHooks.beforeSave = () => {
+        resolve();
+        return new Promise<void>((done) => {
+          release = done;
+        });
+      };
+    });
+    renamePresentation(doc.id, "저장하는 중인 이름");
+    const writing = flushPendingWrites();
+    await started;
+
+    const removing = removePresentationsLocally([doc.id]);
+    release();
+    await removing;
+    await writing;
+
+    const { valid } = await loadAllPresentations();
+    expect(valid.map(({ id }) => id)).not.toContain(doc.id);
   });
 
   it("저장에 실패하면 경고 상태를 올리고 편집은 계속 가능하다", async () => {
@@ -1422,6 +1460,209 @@ describe("presentationStore 영속성", () => {
               baseUpdatedAt: T2,
             });
           });
+
+          it("412의 서버 판이 이 탭이 만든 판이라 다시 얹어 보내도, 건너뛴 다른 탭의 저장본을 덮지 않고 받은 뒤에 그 저장본을 다시 읽는다", async () => {
+            await hydrateWith({ ...FIRST, updatedAt: T1, baseUpdatedAt: T1 });
+            setSyncEnabled(true);
+            renamePresentation(FIRST.id, "이 탭의 첫 이름");
+            await flushPendingWrites();
+            stored = {
+              ...structuredClone(FIRST),
+              title: "이 탭의 첫 이름",
+              updatedAt: T2,
+            };
+            renamePresentation(FIRST.id, "이 탭의 두 번째 이름");
+            await flushPendingWrites();
+            const otherTab = {
+              ...getPresentationById(FIRST.id)!,
+              title: "다른 탭에서 바꾼 이름",
+            };
+            await writeFromOtherTab(otherTab);
+            await reloadPresentationsFromStorage([FIRST.id]);
+
+            await flushPendingSync();
+            await vi.waitFor(() =>
+              expect(getPresentationById(FIRST.id)?.title).toBe(
+                "다른 탭에서 바꾼 이름",
+              ),
+            );
+            await flushPendingWrites();
+
+            expect(
+              fake.calls
+                .map(({ body }) => body as PresentationChanges)
+                .filter((changes) => changes.id === FIRST.id)
+                .map((changes) => [changes.title, changes.baseUpdatedAt]),
+            ).toEqual([
+              ["이 탭의 두 번째 이름", T1],
+              ["이 탭의 두 번째 이름", T2],
+            ]);
+            expect(stored.title).toBe("이 탭의 두 번째 이름");
+            expect(await storedById(FIRST.id)).toEqual(otherTab);
+          });
+        });
+      });
+
+      describe("부팅 병합 결과", () => {
+        async function skipOtherTabRecord(): Promise<Presentation> {
+          await hydrateWith({ ...FIRST, updatedAt: T1, baseUpdatedAt: T1 });
+          __setPusherForTests(vi.fn(async () => undefined));
+          setSyncEnabled(true);
+          scheduleDocumentPush(getPresentationById(FIRST.id)!);
+          const otherTab = {
+            ...withExtraSong(FIRST),
+            updatedAt: T3,
+            baseUpdatedAt: T1,
+          };
+          await writeFromOtherTab(otherTab);
+          await reloadPresentationsFromStorage([FIRST.id]);
+          return otherTab;
+        }
+
+        it("서버 판을 받은 세트라도 올리기를 기다리느라 건너뛴 다른 탭의 저장본은 덮지 않고 다시 읽는다", async () => {
+          const otherTab = await skipOtherTabRecord();
+          const server = {
+            ...structuredClone(FIRST),
+            title: "다른 기기에서 바꾼 이름",
+            updatedAt: T2,
+            baseUpdatedAt: T2,
+          };
+
+          cancelDocumentPush(FIRST.id);
+          applyServerDocuments([server, getPresentationById(SECOND.id)!]);
+          await vi.waitFor(() =>
+            expect(getPresentationById(FIRST.id)).toEqual(otherTab),
+          );
+          await flushPendingWrites();
+
+          expect(await storedById(FIRST.id)).toEqual(otherTab);
+        });
+
+        it("지운 세트라도 건너뛴 다른 탭의 저장본은 지우지 않고 다시 읽는다", async () => {
+          const otherTab = await skipOtherTabRecord();
+
+          cancelDocumentPush(FIRST.id);
+          applyServerDocuments([getPresentationById(SECOND.id)!], [FIRST.id]);
+          await vi.waitFor(() =>
+            expect(getPresentationById(FIRST.id)).toEqual(otherTab),
+          );
+          await flushPendingWrites();
+
+          expect(await storedById(FIRST.id)).toEqual(otherTab);
+        });
+      });
+
+      describe("다른 곳에서 영구 삭제한 세트(410)", () => {
+        let fake: FakeApi;
+
+        function storedTitles(): Promise<string[]> {
+          return loadAllPresentations().then(({ valid }) =>
+            valid.map((doc) => doc.title).sort(),
+          );
+        }
+
+        beforeEach(() => {
+          __setPusherForTests(null);
+          __resetServerDecksForTests();
+          fake = installFakeApi({
+            "PATCH /api/presentations/*": ({ body }) => {
+              const changes = body as PresentationChanges;
+              return changes.id === FIRST.id
+                ? {
+                    status: 410,
+                    body: { error: API_ERRORS.presentation.deleted },
+                  }
+                : { body: { ok: true, updatedAt: changes.updatedAt } };
+            },
+          });
+          setOwnPresentationListener(ownPresentationListener);
+        });
+
+        afterEach(() => {
+          setOwnPresentationListener(null);
+          fake.restore();
+        });
+
+        it("사본을 저장소에 쓴 뒤에 원래 세트를 지워, 그사이 탭이 닫혀도 올리지 못한 편집이 저장소에 남는다", async () => {
+          await hydrateWith({ ...FIRST, updatedAt: T1, baseUpdatedAt: T1 });
+          renamePresentation(FIRST.id, "올리지 못한 편집");
+          await flushPendingWrites();
+          const deleteOriginal = vi
+            .mocked(deletePresentation)
+            .getMockImplementation()!;
+          let storedWhenDeleting: string[] = [];
+          vi.mocked(deletePresentation).mockImplementationOnce(async (id) => {
+            storedWhenDeleting = await storedTitles();
+            await deleteOriginal(id);
+          });
+
+          ownPresentationListener.gone(FIRST.id);
+          await vi.waitFor(() => expect(deletePresentation).toHaveBeenCalled());
+          await flushPendingWrites();
+
+          expect(storedWhenDeleting).toContain(
+            `올리지 못한 편집${COMMON_COPY.copySuffix}`,
+          );
+          expect(await storedTitles()).toEqual(
+            [SECOND.title, `올리지 못한 편집${COMMON_COPY.copySuffix}`].sort(),
+          );
+        });
+
+        it("올리기를 기다리느라 건너뛴 다른 탭의 올리지 않은 편집도 사본으로 남기고 두 사본을 알린다", async () => {
+          const info = vi.spyOn(toast, "info");
+          onTestFinished(() => info.mockRestore());
+          await hydrateWith({ ...FIRST, updatedAt: T1, baseUpdatedAt: T1 });
+          setSyncEnabled(true);
+          renamePresentation(FIRST.id, "이 탭의 편집");
+          await flushPendingWrites();
+          await writeFromOtherTab({
+            ...getPresentationById(FIRST.id)!,
+            title: "다른 탭이 더 고친 편집",
+            updatedAt: T3,
+          });
+          await reloadPresentationsFromStorage([FIRST.id]);
+
+          await flushPendingSync();
+          await vi.waitFor(() => expect(info).toHaveBeenCalled());
+          await flushPendingWrites();
+
+          expect(getPresentationById(FIRST.id)).toBeUndefined();
+          expect(await storedTitles()).toEqual(
+            [
+              SECOND.title,
+              `이 탭의 편집${COMMON_COPY.copySuffix}`,
+              `다른 탭이 더 고친 편집${COMMON_COPY.copySuffix}`,
+            ].sort(),
+          );
+          expect(info).toHaveBeenCalledExactlyOnceWith(
+            PRESENTATION_COPY.deletedSavedAsCopy(
+              `이 탭의 편집${COMMON_COPY.copySuffix}`,
+              `다른 탭이 더 고친 편집${COMMON_COPY.copySuffix}`,
+            ),
+            { id: "presentation-gone" },
+          );
+        });
+
+        it("건너뛴 다른 탭의 저장본이 이 탭의 판과 내용이 같으면 사본을 하나만 남긴다", async () => {
+          await hydrateWith({ ...FIRST, updatedAt: T1, baseUpdatedAt: T1 });
+          setSyncEnabled(true);
+          renamePresentation(FIRST.id, "이 탭의 편집");
+          await flushPendingWrites();
+          await writeFromOtherTab({
+            ...getPresentationById(FIRST.id)!,
+            updatedAt: T3,
+          });
+          await reloadPresentationsFromStorage([FIRST.id]);
+
+          await flushPendingSync();
+          await vi.waitFor(async () =>
+            expect(await storedById(FIRST.id)).toBeUndefined(),
+          );
+          await flushPendingWrites();
+
+          expect(await storedTitles()).toEqual(
+            [SECOND.title, `이 탭의 편집${COMMON_COPY.copySuffix}`].sort(),
+          );
         });
       });
     });
@@ -1540,8 +1781,9 @@ describe("presentationStore 영속성", () => {
       await started;
       vi.mocked(deletePresentation).mockRejectedValueOnce(new Error("disk"));
 
-      await removePresentationsLocally([gone.id]);
+      const removing = removePresentationsLocally([gone.id]);
       release();
+      await removing;
       await writing;
 
       expect(getPersistenceError("presentation")?.kind).toBe("unknown");

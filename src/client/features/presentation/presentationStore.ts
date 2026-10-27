@@ -15,6 +15,7 @@ import {
 } from "#shared";
 import {
   savePresentation,
+  savePresentationIfStoredAt,
   savePresentationIfUnchanged,
   saveSharedPresentation,
   loadAllPresentations,
@@ -178,6 +179,7 @@ let pendingIds = new Set<string>();
 const writingIds = new Map<string, number>();
 const skippedReloads = new Set<string>();
 const repairedVersions = new Map<string, Presentation>();
+const syncWrites = new Map<string, { doc: Presentation; storedAt: string }>();
 let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 let inFlight: Promise<void> = Promise.resolve();
 
@@ -225,11 +227,17 @@ function hasUnpersistedWrite(id: string): boolean {
   return pendingIds.has(id) || writingIds.has(id) || writeRetry.has(id);
 }
 
+function holdsSkippedRecord(id: string): boolean {
+  return skippedReloads.has(id) && !hasUnpersistedWrite(id);
+}
+
 async function writeDocument(
   doc: Presentation,
   repaired: boolean,
+  storedAt: string | undefined,
 ): Promise<boolean> {
   if (repaired) return savePresentationIfUnchanged(doc);
+  if (storedAt !== undefined) return savePresentationIfStoredAt(doc, storedAt);
   await (doc.access ? saveSharedPresentation(doc) : savePresentation(doc));
   return true;
 }
@@ -240,13 +248,19 @@ async function writeDocuments(ids: string[]): Promise<void> {
   for (const id of ids) {
     const doc = state.byId[id];
     const repaired = doc !== undefined && repairedVersions.get(id) === doc;
+    const syncWrite = syncWrites.get(id);
+    const storedAt =
+      doc !== undefined && syncWrite?.doc === doc
+        ? syncWrite.storedAt
+        : undefined;
     repairedVersions.delete(id);
+    syncWrites.delete(id);
     try {
       if (!doc) {
         writeRetry.succeeded(id, "save");
         continue;
       }
-      if (!(await writeDocument(doc, repaired))) {
+      if (!(await writeDocument(doc, repaired, storedAt))) {
         superseded.push(id);
         writeRetry.succeeded(id);
         continue;
@@ -259,6 +273,9 @@ async function writeDocuments(ids: string[]): Promise<void> {
       }
     } catch (err) {
       if (repaired) repairedVersions.set(id, doc);
+      if (doc && storedAt !== undefined) {
+        syncWrites.set(id, { doc, storedAt });
+      }
       writeRetry.failed(id, "save", err);
     } finally {
       doneWriting(id);
@@ -331,6 +348,7 @@ export async function hydrateFromStorage(): Promise<void> {
   persistenceEnabled = false;
   skippedReloads.clear();
   repairedVersions.clear();
+  syncWrites.clear();
   const userId = getCurrentUserId();
 
   try {
@@ -439,6 +457,7 @@ function resetPersistenceForTests(): void {
   writingIds.clear();
   skippedReloads.clear();
   repairedVersions.clear();
+  syncWrites.clear();
   if (debounceTimer) {
     clearTimeout(debounceTimer);
     debounceTimer = null;
@@ -487,6 +506,11 @@ function isServerChange(
  * 지운다. push가 남으면 연결이 돌아올 때 서버에서 되살아나고, 줄을 선 저장이 뒤에 오면 저장본이
  * 되살아난다. 공유받은 세트는 같은 자리에 소유자 자신의 저장본이 없을 때만 쓰고 지운다. 한
  * 브라우저를 함께 쓰는 소유자의 저장본을 공유받은 사람의 병합이 덮거나 지우면 안 된다.
+ *
+ * 이 탭이 올리기를 기다리느라 다른 탭이 쓴 저장본을 다시 읽지 않고 건너뛴 내 세트
+ * (`reloadPresentationsFromStorage`)는, 병합이 서버 판으로 바꾸거나 지워도 그 저장본에 쓰거나 지우지
+ * 않고 다시 읽는다(송출 중에는 그대로 둔다). 그 저장본은 다른 탭이 아직 올리지 못한 편집일 수 있어,
+ * 덮거나 지우면 그 탭이 올리기 전에 닫힐 때 그 편집이 사라진다. 올리는 일은 그 탭이 한다.
  */
 export function applyServerDocuments(
   documents: Presentation[],
@@ -495,15 +519,26 @@ export function applyServerDocuments(
   const previous = state.byId;
   const previousActive = state.activeId;
   const byId = Object.fromEntries(documents.map((doc) => [doc.id, doc]));
+  const changed = documents.filter((doc) =>
+    isServerChange(previous[doc.id], doc),
+  );
+  const removed = removedIds.filter((id) => !byId[id]);
+  const skipped = new Set(
+    [
+      ...changed.filter((doc) => !doc.access).map((doc) => doc.id),
+      ...removed,
+    ].filter(
+      (id) =>
+        previous[id] !== undefined &&
+        !previous[id].access &&
+        holdsSkippedRecord(id),
+    ),
+  );
   commit({
     byId,
     order: documents.map((doc) => doc.id),
     activeId: byId[previousActive] ? previousActive : (documents[0]?.id ?? ""),
   });
-  const changed = documents.filter((doc) =>
-    isServerChange(previous[doc.id], doc),
-  );
-  const removed = removedIds.filter((id) => !byId[id]);
   for (const doc of changed) {
     const stored = previous[doc.id];
     clearHistory(doc.id);
@@ -523,12 +558,18 @@ export function applyServerDocuments(
   notifyListeners();
 
   if (!persistenceEnabled) return;
-  for (const doc of changed) pendingIds.add(doc.id);
+  for (const doc of changed) {
+    if (!skipped.has(doc.id)) pendingIds.add(doc.id);
+  }
   runPendingWrites();
   for (const id of removed) {
     const doc = previous[id];
-    if (doc) inFlight = inFlight.then(() => removePersisted(doc));
+    if (doc && !skipped.has(id)) {
+      inFlight = inFlight.then(() => removePersisted(doc));
+    }
   }
+  if (isProjecting()) return;
+  for (const id of skipped) void reloadSkippedRecord(id);
 }
 
 /**
@@ -1156,14 +1197,27 @@ export function duplicatePresentation(
 }
 
 function defersSyncOutcome(id: string): boolean {
-  if (!skippedReloads.has(id) || hasUnpersistedWrite(id)) return false;
+  if (!holdsSkippedRecord(id)) return false;
   if (!isProjecting()) void reloadSkippedRecord(id);
   return true;
 }
 
-function writeSyncOutcome(next: Presentation): void {
+function storedUpdatedAtOf(current: Presentation): string | undefined {
+  const pending = syncWrites.get(current.id);
+  if (pending?.doc === current) return pending.storedAt;
+  if (repairedVersions.get(current.id) === current) return current.updatedAt;
+  return hasUnpersistedWrite(current.id) ? undefined : current.updatedAt;
+}
+
+function writeSyncOutcome(current: Presentation, next: Presentation): void {
   commit({ ...state, byId: { ...state.byId, [next.id]: next } });
-  schedulePersist(next.id);
+  if (!holdsSkippedRecord(next.id)) {
+    const storedAt = storedUpdatedAtOf(current);
+    if (persistenceEnabled && storedAt !== undefined) {
+      syncWrites.set(next.id, { doc: next, storedAt });
+    }
+    schedulePersist(next.id);
+  }
   notifyListeners();
 }
 
@@ -1207,7 +1261,9 @@ async function reloadSkippedRecord(id: string): Promise<void> {
  * 만든다). 기준 판은 뒤로 옮기지 않는다. 그사이 더 새 서버 판을 받았으면 아무것도 바꾸지 않는다.
  *
  * 이 탭이 올리기를 기다리느라 다른 탭이 쓴 저장본을 다시 읽지 않고 건너뛰었으면, 그 저장본을 이
- * 탭의 판으로 덮지 않고 다시 읽는다(송출 중에는 그대로 둔다). 그 판은 다른 탭이 올린다.
+ * 탭의 판으로 덮지 않고 다시 읽는다(송출 중에는 그대로 둔다). 그 판은 다른 탭이 올린다. 그 밖에는
+ * 저장본이 이 탭이 마지막으로 쓴 판일 때만 쓰고(`savePresentationIfStoredAt`), 아니면 쓰지 않고 다시
+ * 읽는다. 알림이 아직 오지 않은 다른 탭의 저장본도 동기화 결과로 덮지 않는다.
  */
 export function markPresentationSynced(
   id: string,
@@ -1223,6 +1279,7 @@ export function markPresentationSynced(
   confirmVersion(sent);
   if (defersSyncOutcome(id)) return;
   writeSyncOutcome(
+    current,
     current === sent
       ? { ...current, updatedAt: stored, baseUpdatedAt: stored }
       : {
@@ -1236,23 +1293,21 @@ export function markPresentationSynced(
 /**
  * 412가 돌려준 서버 판이 이 탭이 만든 판일 때, 지금 판을 그 판 위에 다시 얹는다. 기준 판을 `base`로
  * 옮기고 수정 시각을 그보다 늦게 둬, 다시 보낼 올리지 않은 편집으로 남긴다.
+ *
+ * 이 탭이 올리기를 기다리느라 다른 탭이 쓴 저장본을 건너뛰었으면 메모리에만 얹고 저장하지 않는다.
+ * 얹은 판을 저장하면 그 탭의 올리지 않은 편집을 덮고 건너뛴 표시도 지워, 다시 보낸 결과가 그 저장본을
+ * 다시 읽지 않고 이 탭의 판을 또 쓴다. 다시 보낸 결과가 그 저장본을 다시 읽는다
+ * (`markPresentationSynced`, `adoptServerPresentation`). 그 밖의 저장은 `markPresentationSynced`처럼
+ * 저장본이 이 탭이 마지막으로 쓴 판일 때만 한다.
  */
 export function rebasePresentation(id: string, base: string): void {
   const current = state.byId[id];
   if (!current || current.access) return;
-  commit({
-    ...state,
-    byId: {
-      ...state.byId,
-      [id]: {
-        ...current,
-        updatedAt: laterThan(base, current.updatedAt),
-        baseUpdatedAt: base,
-      },
-    },
+  writeSyncOutcome(current, {
+    ...current,
+    updatedAt: laterThan(base, current.updatedAt),
+    baseUpdatedAt: base,
   });
-  schedulePersist(id);
-  notifyListeners();
 }
 
 /**
@@ -1283,7 +1338,7 @@ export function adoptServerPresentation(server: Presentation): void {
   if (defersSyncOutcome(server.id)) return;
   clearHistory(server.id);
   resetLineage(adopted);
-  writeSyncOutcome(adopted);
+  writeSyncOutcome(current, adopted);
 }
 
 /**
@@ -1298,10 +1353,14 @@ export function adoptServerPresentation(server: Presentation): void {
 export function keepUnsyncedCopy(id: string): Presentation | null {
   const current = state.byId[id];
   if (!current || current.access || !hasUnsyncedEdits(current)) return null;
-  const copy = buildPresentationCopy(current, {
-    userId: current.userId,
-    folderId: current.folderId ?? null,
-    trashedAt: current.trashedAt ?? null,
+  return insertUnsyncedCopy(current);
+}
+
+function insertUnsyncedCopy(source: Presentation): Presentation {
+  const copy = buildPresentationCopy(source, {
+    userId: source.userId,
+    folderId: source.folderId ?? null,
+    trashedAt: source.trashedAt ?? null,
     now: new Date().toISOString(),
   });
   commit({
@@ -1311,6 +1370,60 @@ export function keepUnsyncedCopy(id: string): Presentation | null {
   });
   notifyDocument(copy);
   return copy;
+}
+
+/**
+ * 다른 곳에서 영구 삭제한 세트(410)를 이 탭과 저장소에서 지운다. 이 탭의 올리지 않은 편집은
+ * 사본으로 남기고(`keepUnsyncedCopy`), 만든 사본을 돌려준다.
+ *
+ * 이 탭이 올리기를 기다리느라 다른 탭이 쓴 저장본을 건너뛰었으면(`reloadPresentationsFromStorage`)
+ * 그 저장본을 읽어, 이 탭의 판과 다른 올리지 않은 편집이면 그것도 사본으로 남긴다. 저장본을 지우면
+ * 그 탭은 다른 곳에서 지운 세트로 보고 메모리에서 빼며 올리기를 버리므로, 남기지 않으면 그 탭의 편집이
+ * 조용히 사라진다. 지우기 전에 다른 탭의 알림으로 그 세트를 다시 실었으면(그 탭이 방금 고쳐 씀) 그
+ * 저장본은 사본으로 남기지도 지우지도 않는다. 그 탭이 올려 410을 받고 같은 일을 한다.
+ *
+ * 사본을 저장소에 쓴 뒤에 원래 저장본을 지운다. 사본 저장을 디바운스에 맡긴 채 먼저 지우면, 그사이
+ * 탭이 닫히거나 멈출 때(모바일 브라우저는 숨긴 탭을 멈춘다) 이미 저장했던 편집까지 저장소에서 사라진다.
+ */
+export async function removeGonePresentation(
+  id: string,
+): Promise<Presentation[]> {
+  const current = state.byId[id];
+  if (!current || current.access) return [];
+  const readsSkippedRecord = skippedReloads.has(id);
+  const kept = keepUnsyncedCopy(id);
+  const copies = kept ? [kept] : [];
+  forgetPresentations([id]);
+  notifyListeners();
+  if (readsSkippedRecord) {
+    const other = await loadOtherTabsEdit(current);
+    if (other && !state.byId[id]) copies.push(insertUnsyncedCopy(other));
+  }
+  runPendingWrites();
+  inFlight = inFlight.then(() =>
+    state.byId[id] ? undefined : removePersistedPresentation(id),
+  );
+  await inFlight;
+  return copies;
+}
+
+async function loadOtherTabsEdit(
+  mine: Presentation,
+): Promise<Presentation | null> {
+  let record: LoadedRecord<Presentation>;
+  try {
+    record = await loadPresentation(mine.id);
+  } catch {
+    return null;
+  }
+  if (record.status !== "ok") return null;
+  const stored = record.value;
+  return stored.userId === getCurrentUserId() &&
+    !stored.access &&
+    hasUnsyncedEdits(stored) &&
+    contentFingerprint(stored) !== contentFingerprint(mine)
+    ? stored
+    : null;
 }
 
 /**
@@ -1374,6 +1487,9 @@ function putSharedDocument(doc: Presentation): void {
  * 서버 삭제가 성공한 뒤에만 부른다. 대기 중인 로컬 저장·서버 push도 취소한다 —
  * 늦게 도착한 push가 서버에서 문서를 되살리면 안 된다. 공유가 끝난 사본은 그 자리에 소유자
  * 자신의 저장본이 없을 때만 저장소에서 지운다(`removePersistedSharedPresentation`).
+ *
+ * 저장소에서 지우기는 저장 줄에 이미 선 쓰기를 마친 뒤에 한다. 그 세트를 저장하던 쓰기가 지운 뒤에
+ * 끝나면 저장본이 되살아나, 다음 부팅이 지운 세트를 다시 싣고 올린다.
  */
 export async function removePresentationsLocally(
   ids: readonly string[],
@@ -1381,10 +1497,11 @@ export async function removePresentationsLocally(
   const removed = forgetPresentations(ids);
   if (removed.length === 0) return;
   notifyListeners();
-
+  runPendingWrites();
   for (const doc of removed) {
-    await removePersisted(doc);
+    inFlight = inFlight.then(() => removePersisted(doc));
   }
+  await inFlight;
 }
 
 function forgetPresentations(ids: readonly string[]): Presentation[] {
