@@ -133,3 +133,55 @@ export function parseFlags(argv) {
     }),
   );
 }
+
+const ID_SHAPE = /^[\w-]{21}$/;
+
+/**
+ * 명령줄을 위치 인자와 옵션으로 나눈다. `spec`에 적은 옵션(`"boolean"` 또는 `"string"`)과
+ * `--target`만 받고, 그 밖의 옵션은 Firestore에 연결하기 전에 막는다. `--aply`나
+ * `--tagret=remote` 같은 오타가 조용히 무시되면 미리보기로 끝나거나 엉뚱한 대상에 쓴다.
+ *
+ * id는 NanoID(21자, `A-Za-z0-9_-`)라 `--`로 시작할 수 있어 그 모양인 인자는 위치 인자로 읽는다.
+ * 옵션 이름은 모두 21자보다 짧거나 `=`가 들어가 id와 겹치지 않는다.
+ */
+export function parseOptions(argv, spec) {
+  const types = { target: "string", ...spec };
+  const isOption = (arg) => arg.startsWith("--") && !ID_SHAPE.test(arg);
+  const flags = parseFlags(argv.filter(isOption));
+  for (const [name, value] of Object.entries(flags)) {
+    const type = Object.hasOwn(types, name) ? types[name] : undefined;
+    if (type === undefined) throw new Error(`모르는 옵션이에요: --${name}`);
+    if (type === "boolean" && value !== true) {
+      throw new Error(`--${name}에는 값을 붙이지 않아요`);
+    }
+    if (type === "string" && typeof value !== "string") {
+      throw new Error(`--${name}=<값> 형식으로 써 주세요`);
+    }
+  }
+  return { positionals: argv.filter((arg) => !isOption(arg)), flags };
+}
+
+/**
+ * 스크립트의 `main`을 돌리고 프로세스를 끝낸다. 실패하면 오류 문장만 찍고 1로 끝낸다.
+ *
+ * 파이프로 이어진 stdout은 비동기라 곧바로 `process.exit()`하면 뒤쪽 출력이 잘린다
+ * (`… | less`). 남은 출력을 다 보낸 뒤에 끝낸다.
+ * https://nodejs.org/api/process.html#a-note-on-process-io
+ */
+export function runScript(main) {
+  process.stdout.on("error", (error) => {
+    if (error.code !== "EPIPE") throw error;
+  });
+  const flush = (stream) => new Promise((resolve) => stream.write("", resolve));
+  const exit = async (code) => {
+    await Promise.all([flush(process.stdout), flush(process.stderr)]);
+    process.exit(code);
+  };
+  main().then(
+    () => exit(process.exitCode ?? 0),
+    (error) => {
+      console.error(error.stderr?.trim() || error.message);
+      return exit(1);
+    },
+  );
+}

@@ -4,6 +4,7 @@ import {
   LOCAL_PROJECT_ID,
   applyTarget,
   describeTarget,
+  parseOptions,
 } from "./targets.mjs";
 
 const ENV_KEYS = [
@@ -121,6 +122,41 @@ describe("운영 스크립트 대상 설정", () => {
       expect(describeTarget("remote")).toBe(
         "운영 Firestore (프로젝트 bangsongteam)",
       );
+    });
+  });
+});
+
+describe("parseOptions", () => {
+  const SPEC = { apply: "boolean", email: "string" } as const;
+
+  it("위치 인자와 정해 둔 옵션을 나누고 --target은 언제나 받는다", () => {
+    expect(
+      parseOptions(
+        ["user-1", "--apply", "--email=a=b@example.com", "--target=remote"],
+        SPEC,
+      ),
+    ).toEqual({
+      positionals: ["user-1"],
+      flags: { apply: true, email: "a=b@example.com", target: "remote" },
+    });
+  });
+
+  it("모르는 옵션은 오타로 보고 막는다", () => {
+    expect(() => parseOptions(["--aply"], SPEC)).toThrow("--aply");
+    expect(() => parseOptions(["--tagret=remote"], SPEC)).toThrow("--tagret");
+  });
+
+  it("값을 붙이면 안 되는 옵션과 값이 있어야 하는 옵션을 가린다", () => {
+    expect(() => parseOptions(["--apply=yes"], SPEC)).toThrow("--apply");
+    expect(() => parseOptions(["--email"], SPEC)).toThrow("--email");
+  });
+
+  it("--로 시작하는 NanoID는 옵션이 아니라 위치 인자로 읽는다", () => {
+    const id = `--${"x8Jk".padEnd(19, "0")}`;
+
+    expect(parseOptions([id, "--apply"], SPEC)).toEqual({
+      positionals: [id],
+      flags: { apply: true },
     });
   });
 });
