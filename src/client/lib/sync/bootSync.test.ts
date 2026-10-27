@@ -94,18 +94,29 @@ import {
   flushPendingWrites,
   getPresentationById,
   hydrateFromStorage,
+  reloadPresentationsFromStorage,
   removePresentationsLocally,
   renamePresentation,
   resetPresentationStore,
+  undo,
+  updateSongInfo,
 } from "../../features/presentation/presentationStore";
 import { ownPresentationListener } from "./ownPresentationListener";
-import { SEED_USER_ID as TEST_USER_ID } from "../../test/presentationFixture";
+import {
+  mockDecks,
+  mockPresentation,
+  SEED_USER_ID as TEST_USER_ID,
+} from "../../test/presentationFixture";
+import { installFakeApi, type FakeApi } from "../../test/fakeApi";
 import {
   OfflineError,
   ServerRejectedError,
   SessionExpiredError,
 } from "../api/request";
-import { UnsyncableDocumentError } from "./presentationSync";
+import {
+  __resetServerDecksForTests,
+  UnsyncableDocumentError,
+} from "./presentationSync";
 import { ERROR_COPY } from "#copy/common";
 import { BASE_BACKOFF_MS, MAX_BACKOFF_MS } from "./backoff";
 import {
@@ -270,6 +281,44 @@ function presentation(id: string): Presentation {
 const PARENT = "a00000000000000000001";
 const CHILD = "b00000000000000000002";
 const DOC = "d00000000000000000003";
+const SONG = mockDecks[0];
+
+function songSet(updatedAt: string): Presentation {
+  return { ...mockPresentation, updatedAt };
+}
+
+async function pushPresentationsTo(
+  storedRevisions: readonly string[],
+): Promise<FakeApi> {
+  const actual =
+    await vi.importActual<typeof import("./presentationSync")>(
+      "./presentationSync",
+    );
+  __resetServerDecksForTests();
+  presentationSync.pushPresentation.mockImplementation((doc) =>
+    actual.pushPresentation(doc as Presentation),
+  );
+  const revisions = [...storedRevisions];
+  return installFakeApi({
+    "PATCH /api/presentations/*": () => ({
+      body: { ok: true, updatedAt: revisions.shift() },
+    }),
+  });
+}
+
+function lastPatchBody(fake: FakeApi): unknown {
+  return fake.calls.filter((call) => call.method === "PATCH").at(-1)?.body;
+}
+
+async function resetOfflineDatabase(): Promise<void> {
+  closeOfflineDB();
+  await new Promise<void>((resolve) => {
+    const req = indexedDB.deleteDatabase(OFFLINE_DB_NAME);
+    req.onsuccess = () => resolve();
+    req.onerror = () => resolve();
+    req.onblocked = () => resolve();
+  });
+}
 
 describe("runBootSync — drive folders", () => {
   let pushFolder: ReturnType<typeof vi.fn<(f: Folder) => Promise<Folder>>>;
@@ -1346,6 +1395,33 @@ describe("runBootSync — 기준 판으로 맞추기", () => {
     expect(presentationSync.pushPresentation).toHaveBeenCalledTimes(1);
   });
 
+  it("받는 동안 올려 확정한 판은 그보다 먼저 받은 서버 목록이 덱 기준을 되돌리지 않아, 되돌린 곡도 올린다", async () => {
+    const fake = await pushPresentationsTo([T2, T3]);
+    try {
+      __loadDocumentsForTests([{ ...songSet(T1), baseUpdatedAt: T1 }]);
+      const pulling = deferred<Presentation[]>();
+      presentationSync.pullPresentations.mockReturnValueOnce(pulling.promise);
+
+      const booting = runBootSync();
+      await vi.waitFor(() =>
+        expect(presentationSync.pullPresentations).toHaveBeenCalled(),
+      );
+      updateSongInfo(0, { title: "받는 동안 고친 제목", artist: SONG.artist });
+      await flushPendingSync();
+      pulling.resolve([songSet(T1)]);
+      await booting;
+      undo();
+      await flushPendingSync();
+
+      expect(lastPatchBody(fake)).toMatchObject({
+        baseUpdatedAt: T2,
+        decks: [{ id: SONG.id, title: SONG.title }],
+      });
+    } finally {
+      fake.restore();
+    }
+  });
+
   it("병합이 지운 세트의 대기 중인 push를 버린다", async () => {
     __loadDocumentsForTests([presentation(DOC)]);
     setSyncEnabled(true);
@@ -1568,13 +1644,7 @@ describe("runBootSync — 한 브라우저의 소유자 저장본과 공유받�
   }
 
   beforeEach(async () => {
-    closeOfflineDB();
-    await new Promise<void>((resolve) => {
-      const req = indexedDB.deleteDatabase(OFFLINE_DB_NAME);
-      req.onsuccess = () => resolve();
-      req.onerror = () => resolve();
-      req.onblocked = () => resolve();
-    });
+    await resetOfflineDatabase();
     await resetSongLibraryStore();
     resetFolderStore();
     resetPresentationStore();
@@ -2114,6 +2184,7 @@ describe("stopSync — 계정이 끝난 탭", () => {
 describe("refreshOwnDataIfStale — 열려 있는 탭이 내 데이터를 다시 받기", () => {
   const T1 = "2026-10-01T00:00:00.000Z";
   const T2 = "2026-10-01T00:10:00.000Z";
+  const T3 = "2026-10-01T00:20:00.000Z";
   const LATER = "2026-09-25T00:00:00.000Z";
   let pushFolder: ReturnType<typeof vi.fn<(f: Folder) => Promise<Folder>>>;
   let pushDeck: ReturnType<typeof vi.fn<(deck: Deck) => Promise<Deck>>>;
@@ -2372,6 +2443,80 @@ describe("refreshOwnDataIfStale — 열려 있는 탭이 내 데이터를 다시
     expect(pushDeck.mock.calls.map(([deck]) => [deck.id, deck.title])).toEqual([
       [editedDeck.id, "이 탭에서 고친 제목"],
     ]);
+  });
+
+  it("받는 사이 올려 확정한 판은 먼저 받은 서버 목록이 덱 기준을 되돌리지 않아, 되돌린 곡도 올린다", async () => {
+    const fake = await pushPresentationsTo([T2, T3]);
+    try {
+      presentationSync.pullPresentations.mockResolvedValue([songSet(T1)]);
+      await runBootSync();
+      const pulling = deferred<Presentation[]>();
+      presentationSync.pullPresentations.mockReturnValueOnce(pulling.promise);
+
+      const refreshing = refreshOwnDataIfStale("manual");
+      updateSongInfo(0, { title: "받는 사이 고친 제목", artist: SONG.artist });
+      await flushPendingSync();
+      pulling.resolve([songSet(T1)]);
+      await refreshing;
+      undo();
+      await flushPendingSync();
+
+      expect(lastPatchBody(fake)).toMatchObject({
+        baseUpdatedAt: T2,
+        decks: [{ id: SONG.id, title: SONG.title }],
+      });
+    } finally {
+      fake.restore();
+    }
+  });
+
+  it("올리기를 기다리느라 다른 탭의 저장본을 건너뛴 세트는 올리기를 마쳐도 서버 판으로 바꾸거나 저장본에 쓰지 않는다", async () => {
+    const otherTabEdit: Presentation = {
+      ...v1(),
+      title: "다른 탭에서 고친 제목",
+      baseUpdatedAt: T1,
+      updatedAt: "2026-10-01T00:01:00.000Z",
+    };
+    await resetOfflineDatabase();
+    await savePresentation({ ...v1(), baseUpdatedAt: T1 });
+    await hydrateFromStorage();
+    await runBootSync();
+    scheduleDocumentPush(getPresentationById(DOC)!);
+    await savePresentation(otherTabEdit);
+    await reloadPresentationsFromStorage([DOC]);
+    await flushPendingSync();
+    presentationSync.pullPresentations.mockResolvedValue([v2()]);
+
+    await refreshOwnDataIfStale("manual");
+    await flushPendingWrites();
+
+    expect(getPresentationById(DOC)?.title).toBe("v1");
+    expect((await loadAllPresentations()).valid).toEqual([otherTabEdit]);
+  });
+
+  it("부팅이 거절돼 받기를 포기했어도 창으로 돌아오면 다시 받는다", async () => {
+    presentationSync.pullDecks.mockRejectedValueOnce(
+      new ServerRejectedError(400),
+    );
+    await runBootSync();
+    expect(getSyncDomainStatus("deck")).toBe("error");
+    presentationSync.pullPresentations.mockResolvedValue([v2()]);
+
+    elapse(FRESHNESS_MS);
+    await refreshOwnDataIfStale("wake");
+
+    expect(getPresentationById(DOC)?.title).toBe(v2().title);
+  });
+
+  it("받은 뒤 기기 시계가 뒤로 돌아가도 창으로 돌아오면 다시 받는다", async () => {
+    await runBootSync();
+    clearPulls();
+
+    elapse(-HOUR);
+    await refreshOwnDataIfStale("wake");
+    await refreshOwnDataIfStale("wake");
+
+    expect(pulls()).toBe(1);
   });
 
   it("받지 못해도 동기화 상태를 바꾸거나 다시 받기를 예약하지 않는다", async () => {

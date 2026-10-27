@@ -608,6 +608,38 @@ describe("기준 판과 서버의 거절 (412·410)", () => {
     }
   });
 
+  it("올려 확정한 판보다 먼저 받은 서버 목록으로는 덱 기준을 되돌리지 않고, 더 새 서버 목록으로는 바꾼다", async () => {
+    const original = makeSet();
+    const fromOtherDevice = withLyrics(original, 1, "다른 기기에서 고친 가사");
+    rememberServerDocuments([original]);
+    api.patch
+      .mockResolvedValueOnce(storedAt(S))
+      .mockResolvedValueOnce(storedAt(S2))
+      .mockResolvedValueOnce(storedAt(laterThan(S3, S3)));
+
+    current = {
+      ...withLyrics(original, 0, "고친 가사"),
+      baseUpdatedAt: B,
+      updatedAt: B1,
+    };
+    await pushPresentation(current);
+    rememberServerDocuments([original]);
+    current = { ...original, baseUpdatedAt: S, updatedAt: laterThan(S, S) };
+    await pushPresentation(current);
+    rememberServerDocuments([{ ...fromOtherDevice, updatedAt: S3 }]);
+    current = {
+      ...fromOtherDevice,
+      title: "새 제목",
+      baseUpdatedAt: S3,
+      updatedAt: laterThan(S3, S3),
+    };
+    await pushPresentation(current);
+
+    expect(sentDeckIds(0)).toEqual([deckId(0)]);
+    expect(sentDeckIds(1)).toEqual([deckId(0)]);
+    expect(sentDeckIds(2)).toEqual([]);
+  });
+
   it("모든 곡을 다시 보낸 뒤 받은 412도 견준다", async () => {
     rememberServerDocuments([makeSet()]);
     current = dirty({ title: "이 기기의 제목" });

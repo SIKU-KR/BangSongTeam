@@ -689,10 +689,12 @@ export const FRESHNESS_MS = 60_000;
 export const RECONNECT_REFRESH_MS = 15_000;
 
 function canRefresh(mode: SyncRetryMode): boolean {
-  if (syncStopped || !bootPulled || retryStep || isProjecting()) return false;
+  if (syncStopped || retryStep || isProjecting()) return false;
+  if (!bootPulled && !abandonedStep) return false;
   if (mode === "manual") return true;
   const interval = mode === "reconnect" ? RECONNECT_REFRESH_MS : FRESHNESS_MS;
-  return Date.now() - lastPulledAt >= interval;
+  const elapsed = Date.now() - lastPulledAt;
+  return elapsed < 0 || elapsed >= interval;
 }
 
 /**
@@ -710,12 +712,14 @@ function canRefresh(mode: SyncRetryMode): boolean {
  * 한 번에 하나만 받는다. 창으로 돌아오기·주소 이동·5분마다 확인(`wake`)은 받은 지 `FRESHNESS_MS`,
  * 연결 회복(`reconnect`)은 `RECONNECT_REFRESH_MS`가 지나야 받고, '다시 시도'(`manual`)는 곧바로
  * 받는다. 받기 시작한 때부터 세어, 받지 못해도 그 간격 안에는 장애 중인 서버에 다시 묻지 않는다. 다른
- * 탭이 받았다고 알리면 그때부터 센다(`noteRemotePull`).
+ * 탭이 받았다고 알리면 그때부터 센다(`noteRemotePull`). 기기 시계가 뒤로 돌아가 받은 때가 앞날이 되면
+ * 오래된 것으로 본다. 시계를 맞춘 만큼 다시 받지 않으면 그동안 지난 판을 띄운다.
  *
  * 부팅 동기화가 첫 받기를 마치기 전(송출 화면에서 부팅해 미뤄 둔 부팅도), 받지 못한 부팅 단계가 다시
  * 받기를 기다리는 동안, 동기화를 끈 뒤(`stopSync`), 송출 중에는 받지 않는다. 그동안은 부팅 병합과 그
- * 재시도가 서버와 맞추고, 송출 중에는 요청이 0건이어야 한다. 받는 사이 송출을 시작했거나 계정·부팅이
- * 바뀌었으면 받은 것을 버린다. 송출 중인 프레젠테이션이 바뀌면 안 된다.
+ * 재시도가 서버와 맞추고, 송출 중에는 요청이 0건이어야 한다. 부팅이 거절돼 받기를 포기했으면 '다시
+ * 시도'만 그 단계를 다시 받으므로, 그때부터는 이 다시 받기가 맞춘다. 받는 사이 송출을 시작했거나
+ * 계정·부팅이 바뀌었으면 받은 것을 버린다. 송출 중인 프레젠테이션이 바뀌면 안 된다.
  */
 export function refreshOwnDataIfStale(mode: SyncRetryMode): Promise<void> {
   if (refreshInFlight) return refreshInFlight;
