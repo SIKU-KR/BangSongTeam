@@ -55,8 +55,11 @@ export function repairDuplicateDeckIds(documents: Presentation[]): {
 }
 
 /**
- * 되돌리기 기록의 문서에 지금 문서의 폴더·휴지통 배치를 입힌다. 이동·휴지통은
+ * 되돌리기 기록의 문서에 지금 문서의 폴더·휴지통 배치와 기준 판을 입힌다. 이동·휴지통은
  * 편집 기록을 남기지 않으므로, 되돌리기가 문서를 다른 폴더로 옮기면 안 된다.
+ *
+ * 기준 판은 기록할 때의 판이 아니라 지금 판이 바탕으로 삼은 서버 판이다. 기록의 옛 기준 판을
+ * 실어 보내면 그사이 이 탭이 올린 판과 엇갈려 자기 수정끼리 충돌한다.
  */
 export function withCurrentPlacement(
   snapshot: Presentation,
@@ -65,9 +68,40 @@ export function withCurrentPlacement(
   const next: Presentation = { ...snapshot };
   delete next.folderId;
   delete next.trashedAt;
+  delete next.baseUpdatedAt;
   if (current.folderId !== undefined) next.folderId = current.folderId;
   if (current.trashedAt !== undefined) next.trashedAt = current.trashedAt;
+  if (current.baseUpdatedAt !== undefined) {
+    next.baseUpdatedAt = current.baseUpdatedAt;
+  }
   return next;
+}
+
+/**
+ * 서버가 확정한 판 그대로인지: 기준 판이 있고 수정 시각이 기준 판과 같다. 올릴 것이 없다.
+ *
+ * 편집은 언제나 기준 판보다 늦은 시각으로 찍으므로, 서버가 확정한 뒤 고친 판은 시각이 앞선다.
+ */
+export function isSyncedWithServer(doc: Presentation): boolean {
+  const base = doc.baseUpdatedAt;
+  return (
+    typeof base === "string" && Date.parse(base) === Date.parse(doc.updatedAt)
+  );
+}
+
+/**
+ * 서버에 올리지 않은 편집이 있다고 확실히 말할 수 있는지: 서버가 확정한 적 없는 판(기준 판
+ * `null`)이거나 기준 판 뒤에 고친 판이다. 기준 판이 없는 이전 저장본은 알 수 없어 아니다.
+ *
+ * 다른 기기와 엇갈렸거나 다른 기기에서 영구 삭제한 세트를 지우기 전에, 이 기기의 편집을 사본으로
+ * 남길지 정한다.
+ */
+export function hasUnsyncedEdits(doc: Presentation): boolean {
+  const base = doc.baseUpdatedAt;
+  if (base === null) return true;
+  return (
+    typeof base === "string" && Date.parse(doc.updatedAt) > Date.parse(base)
+  );
 }
 
 /**
@@ -99,15 +133,24 @@ export function forkDeckIntoPresentation(
  * "제목 (사본)"인 새 문서를 만든다. 제목은 사본 표시를 붙여도 최대 길이를 넘지 않게
  * 자른다. 항목·덱 id를 모두 새로 발급한다. 덱 id가 원본과 같으면 서버의 `decks`
  * 기본키를 위반해 사본이 영영 저장되지 않는다. 공유 정보(`access`)는 떼어 내 내
- * 소유의 독립 문서가 된다.
+ * 소유의 독립 문서가 된다. 서버가 확정한 적 없는 새 판(기준 판 `null`)이다.
+ *
+ * `trashedAt`은 휴지통에 있던 세트의 편집을 사본으로 남길 때 그 자리를 지키려고 받는다. 주지
+ * 않으면 휴지통 밖이다.
  */
 export function buildPresentationCopy(
   source: Presentation,
   {
     userId,
     folderId,
+    trashedAt = null,
     now,
-  }: { userId: string; folderId: string | null; now: string },
+  }: {
+    userId: string;
+    folderId: string | null;
+    trashedAt?: string | null;
+    now: string;
+  },
 ): Presentation {
   const newId = createId();
   const items = source.items.map((item): PresentationItem => {
@@ -141,9 +184,10 @@ export function buildPresentationCopy(
     ),
     items,
     folderId,
-    trashedAt: null,
+    trashedAt,
     createdAt: now,
     updatedAt: now,
+    baseUpdatedAt: null,
   };
   delete copy.access;
   return copy;

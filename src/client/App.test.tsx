@@ -54,13 +54,15 @@ import {
   seedPresentationsIntoStorage,
 } from "./test/sessionFixture";
 import {
+  API_ERRORS,
   APP_NAME,
   MEDIA_URL_PREFIX,
   type FolderListResponse,
   type Presentation,
 } from "#shared";
 import { SHELL_COPY } from "#copy/shell";
-import { ERROR_COPY } from "#copy/common";
+import { COMMON_COPY, ERROR_COPY } from "#copy/common";
+import { PRESENTATION_COPY } from "#copy/presentation";
 import { SHARING_COPY } from "#copy/sharing";
 import {
   SEED_PRESENTATION_IDS,
@@ -983,6 +985,58 @@ describe("App Route Integration", () => {
       expect(
         await screen.findByText(SHARING_COPY.link.copyFailed),
       ).toBeInTheDocument();
+    });
+
+    it("편집기에서 고친 세트가 다른 기기와 엇갈리면 이 기기의 편집을 사본으로 남겼다고 편집기 화면에 알린다", async () => {
+      const later = new Date(Date.now() + HOUR).toISOString();
+      let conflicted = false;
+      api = installFakeApi(
+        bootRoutes({
+          "PATCH /api/presentations/*": ({ url, body }) => {
+            if (!conflicted && url.pathname.endsWith(DOC_ID)) {
+              conflicted = true;
+              return {
+                status: 412,
+                body: {
+                  error: API_ERRORS.presentation.conflict,
+                  presentation: {
+                    ...SEED_PRESENTATIONS[0],
+                    title: "다른 기기에서 고친 제목",
+                    updatedAt: later,
+                  },
+                },
+              };
+            }
+            return {
+              body: {
+                ok: true,
+                updatedAt: (body as { updatedAt: string }).updatedAt,
+              },
+            };
+          },
+        }),
+      );
+      renderAt(`/editor/${DOC_ID}`);
+      await screen.findByTestId("editor-stage-canvas");
+      await waitFor(() => expect(getSyncSnapshot().status).toBe("synced"));
+
+      act(() => {
+        renamePresentation(DOC_ID, "이 기기에서 고친 제목");
+      });
+      await act(async () => {
+        await flushPendingSync();
+      });
+
+      expect(
+        await screen.findByText(
+          PRESENTATION_COPY.conflictSavedAsCopy(
+            `이 기기에서 고친 제목${COMMON_COPY.copySuffix}`,
+          ),
+        ),
+      ).toBeInTheDocument();
+      expect(getPresentationById(DOC_ID)?.title).toBe(
+        "다른 기기에서 고친 제목",
+      );
     });
 
     it("로그인하지 않은 화면에서도 알림을 띄운다", async () => {

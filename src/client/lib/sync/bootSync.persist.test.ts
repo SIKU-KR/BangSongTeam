@@ -298,22 +298,27 @@ describe("runBootSync — 병합 결과 저장", () => {
   });
 
   it("서버와 같은 세트는 다시 쓰지 않고 서버에서 바뀐 세트만 쓴다", async () => {
-    const synced = copyOf(DOC);
+    const NEWER = SEED_PRESENTATIONS[4];
+    const synced = copyOf(DOC, { baseUpdatedAt: DOC.updatedAt });
     const localWon = copyOf(OTHER, {
       title: "로컬에서 고침",
       updatedAt: LATER,
+      baseUpdatedAt: OTHER.updatedAt,
     });
-    const moved = copyOf(MOVED, { folderId: "a00000000000000000001" });
-    const newer = SEED_PRESENTATIONS[4];
+    const moved = copyOf(MOVED, {
+      folderId: "a00000000000000000001",
+      baseUpdatedAt: MOVED.updatedAt,
+    });
+    const newer = copyOf(NEWER, { baseUpdatedAt: NEWER.updatedAt });
     await seedPresentationsIntoStorage([synced, localWon, moved, newer]);
     await hydrateFromStorage();
     vi.mocked(savePresentation).mockClear();
     vi.mocked(saveSharedPresentation).mockClear();
     presentationSync.pullPresentations.mockResolvedValue([
-      copyOf(synced),
+      copyOf(DOC),
       copyOf(OTHER),
-      copyOf(moved, { folderId: null }),
-      copyOf(newer, { title: "서버에서 고침", updatedAt: LATER }),
+      copyOf(MOVED, { folderId: null }),
+      copyOf(NEWER, { title: "서버에서 고침", updatedAt: LATER }),
       {
         ...copyOf(SHARED),
         id: "1s0000000000000000001",
@@ -325,10 +330,33 @@ describe("runBootSync — 병합 결과 저장", () => {
     await flushPendingWrites();
 
     expect(writtenPresentationIds()).toEqual(
-      [moved.id, newer.id, "1s0000000000000000001"].sort(),
+      [MOVED.id, NEWER.id, "1s0000000000000000001"].sort(),
     );
     expect(await storedTitle(localWon.id)).toBe("로컬에서 고침");
-    expect(await storedTitle(newer.id)).toBe("서버에서 고침");
+    expect(await storedTitle(NEWER.id)).toBe("서버에서 고침");
+  });
+
+  it("기준 판이 없는 이전 저장본은 서버와 같으면 기준 판만 붙이고 다시 쓰거나 올리지 않는다", async () => {
+    await seedPresentationsIntoStorage([copyOf(DOC)]);
+    await hydrateFromStorage();
+    vi.mocked(savePresentation).mockClear();
+    presentationSync.pullPresentations.mockResolvedValue([copyOf(DOC)]);
+
+    await runBootSync();
+    await flushPendingWrites();
+
+    expect(getPresentationById(DOC.id)?.baseUpdatedAt).toBe(DOC.updatedAt);
+    expect(writtenPresentationIds()).toEqual([]);
+    expect(presentationSync.pushPresentation).not.toHaveBeenCalled();
+
+    renamePresentation(DOC.id, "기준 판을 붙인 뒤 고친 제목");
+    await flushPendingWrites();
+
+    const { valid } = await loadAllPresentations();
+    expect(valid[0]).toMatchObject({
+      title: "기준 판을 붙인 뒤 고친 제목",
+      baseUpdatedAt: DOC.updatedAt,
+    });
   });
 
   it("서버와 같은 곡은 다시 쓰지 않고, 같은 시각이어도 가져간 횟수가 바뀐 곡은 쓴다", async () => {

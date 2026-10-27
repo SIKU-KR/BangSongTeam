@@ -163,6 +163,39 @@ describe("request", () => {
       expect(err).toBeInstanceOf(TimeoutError);
       expect(err).toBeInstanceOf(OfflineError);
     });
+
+    it("거절 응답의 JSON 본문을 오류에 싣는다 (412의 저장된 판)", async () => {
+      const body = {
+        error: "다른 곳에서 먼저 바꾼 내용이 있어요",
+        presentation: { id: "100000000000000000001", title: "저장된 판" },
+      };
+      const response = { status: 412, ok: false, json: async () => body };
+
+      const err = await callApi(async () => response).catch((e: unknown) => e);
+
+      expect(err).toBeInstanceOf(ServerRejectedError);
+      if (err instanceof ServerRejectedError) {
+        expect(err.status).toBe(412);
+        expect(err.message).toBe(body.error);
+        expect(err.body).toEqual(body);
+      }
+    });
+
+    it("본문을 읽지 못한 거절과 직접 만든 거절에는 본문이 없다", async () => {
+      const response = {
+        status: 502,
+        ok: false,
+        json: async () => {
+          throw new SyntaxError("Unexpected token <");
+        },
+      };
+
+      const err = await callApi(async () => response).catch((e: unknown) => e);
+
+      expect(err).toBeInstanceOf(ServerRejectedError);
+      expect((err as ServerRejectedError).body).toBeUndefined();
+      expect(new ServerRejectedError(409).body).toBeUndefined();
+    });
   });
 
   describe("callApi 연결 상태", () => {

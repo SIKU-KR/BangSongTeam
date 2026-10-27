@@ -56,5 +56,16 @@ export const PresentationSchema = z.object({
 
   createdAt: z.iso.datetime(),
   updatedAt: z.iso.datetime(),
+
+  /**
+   * 이 판이 바탕으로 삼은 서버 판(서버가 확정한 `updatedAt`). 클라이언트가 저장본에 두고 저장
+   * 요청에 실어 보내며, 서버는 저장된 판과 견주기만 하고 돌려주지 않는다.
+   *
+   * - 문자열: 그 서버 판 위에서 고친 판. `updatedAt`과 같으면 서버와 맞춘 판이고, 더 늦으면 아직
+   *   올리지 않은 편집이 있다.
+   * - `null`: 서버가 확정한 적 없는 판(새 프레젠테이션·사본).
+   * - 없음: 기준 판을 모르던 이전 버전이 남긴 저장본. 다음 부팅 병합이 서버본과 견줘 정한다.
+   */
+  baseUpdatedAt: z.iso.datetime().nullable().optional(),
 });
 export type Presentation = z.infer<typeof PresentationSchema>;

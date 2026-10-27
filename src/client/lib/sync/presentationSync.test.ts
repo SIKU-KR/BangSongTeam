@@ -3,6 +3,7 @@ import {
   API_ERRORS,
   DEFAULT_DECK_STYLE,
   PresentationDocumentSchema,
+  laterThan,
   toPresentationChanges,
   type Presentation,
   type PresentationChanges,
@@ -77,7 +78,12 @@ import {
   UnsyncableDocumentError,
 } from "./presentationSync";
 import { getSyncSnapshot, resetSyncStatus, setSyncStatus } from "./syncStatus";
-import { OfflineError, ServerRejectedError } from "../api/request";
+import {
+  isRetryableApiError,
+  OfflineError,
+  ServerRejectedError,
+} from "../api/request";
+import { __resetLineageForTests } from "./presentationLineage";
 import { rememberRequestMeta } from "../api/traceContext";
 import { installFakeApi, type FakeApi } from "../../test/fakeApi";
 import {
@@ -283,19 +289,27 @@ describe("세트 변경분 push", () => {
   });
 });
 
-describe("스토어의 지금 판 올리기", () => {
-  const startPath = window.location.pathname;
-  const listener = {
+function listenerMock() {
+  return {
     current: vi.fn<(id: string) => Presentation | undefined>(),
     requeue: vi.fn<(id: string) => void>(),
+    saved: vi.fn<(sent: Presentation, stored: string) => void>(),
+    rebase: vi.fn<(id: string, base: string) => void>(),
+    adopt: vi.fn<(server: Presentation) => void>(),
+    conflict: vi.fn<(server: Presentation) => void>(),
+    gone: vi.fn<(id: string) => void>(),
   };
+}
+
+describe("스토어의 지금 판 올리기", () => {
+  const startPath = window.location.pathname;
+  const listener = listenerMock();
 
   beforeEach(() => {
     __resetServerDecksForTests();
     api.patch.mockReset();
     api.patch.mockResolvedValue(respond(200));
-    listener.current.mockReset();
-    listener.requeue.mockReset();
+    for (const fn of Object.values(listener)) fn.mockReset();
     setOwnPresentationListener(listener);
   });
 
@@ -314,7 +328,9 @@ describe("스토어의 지금 판 올리기", () => {
 
     expect(listener.current).toHaveBeenCalledWith(DOC_ID);
     expect(api.patch).toHaveBeenCalledTimes(1);
-    expect(api.patch.mock.calls[0][0].json.title).toBe("큐에 넣은 뒤 고친 제목");
+    expect(api.patch.mock.calls[0][0].json.title).toBe(
+      "큐에 넣은 뒤 고친 제목",
+    );
     expect(
       api.patch.mock.calls[0][0].json.decks.find(
         (deck) => deck.id === deckId(1),
@@ -363,6 +379,280 @@ describe("스토어의 지금 판 올리기", () => {
 
     expect(listener.requeue).not.toHaveBeenCalled();
     expect(sentDeckIds(1)).toEqual([deckId(0), deckId(1), deckId(2)]);
+  });
+});
+
+describe("기준 판과 서버의 거절 (412·410)", () => {
+  const startPath = window.location.pathname;
+  const B = "2026-09-21T00:00:00.000Z";
+  const B1 = "2026-09-21T00:00:00.001Z";
+  const EDITED_AT = "2026-09-21T00:01:00.000Z";
+  const S = "2026-09-21T00:05:00.000Z";
+  const S2 = "2026-09-21T00:06:00.000Z";
+  const S3 = "2026-09-21T00:07:00.000Z";
+  const listener = listenerMock();
+  let current: Presentation | undefined;
+
+  function respondWith(status: number, body: unknown) {
+    return {
+      status,
+      ok: status >= 200 && status < 300,
+      json: async () => body,
+    };
+  }
+
+  function storedAt(updatedAt: string) {
+    return respondWith(200, { ok: true, updatedAt });
+  }
+
+  function conflictWith(server: Presentation) {
+    return respondWith(412, {
+      error: API_ERRORS.presentation.conflict,
+      presentation: server,
+    });
+  }
+
+  function dirty(changes: Partial<Presentation> = {}): Presentation {
+    return { ...makeSet(), baseUpdatedAt: B, updatedAt: B1, ...changes };
+  }
+
+  function serverCopy(changes: Partial<Presentation>): Presentation {
+    return { ...makeSet(), ...changes };
+  }
+
+  async function loseResponseOf(sent: Presentation): Promise<void> {
+    api.patch.mockRejectedValueOnce(
+      new DOMException("The operation timed out.", "TimeoutError"),
+    );
+    await expect(pushPresentation(sent)).rejects.toBeInstanceOf(OfflineError);
+  }
+
+  beforeEach(() => {
+    __resetServerDecksForTests();
+    __resetLineageForTests();
+    api.patch.mockReset();
+    for (const fn of Object.values(listener)) fn.mockReset();
+    current = dirty();
+    listener.current.mockImplementation((id) =>
+      current?.id === id ? current : undefined,
+    );
+    listener.rebase.mockImplementation((id, base) => {
+      if (current?.id !== id) return;
+      current = {
+        ...current,
+        baseUpdatedAt: base,
+        updatedAt: laterThan(base, current.updatedAt),
+      };
+    });
+    setOwnPresentationListener(listener);
+  });
+
+  afterEach(() => {
+    setOwnPresentationListener(null);
+    window.history.pushState({}, "", startPath);
+  });
+
+  it("기준 판을 실어 보내고, 서버와 맞춘 판은 요청 없이 끝낸다", async () => {
+    api.patch.mockResolvedValue(storedAt(S));
+
+    await pushPresentation(current!);
+    current = dirty({ updatedAt: B });
+    await pushPresentation(current);
+
+    expect(api.patch).toHaveBeenCalledTimes(1);
+    expect(api.patch.mock.calls[0][0].json.baseUpdatedAt).toBe(B);
+  });
+
+  it("200이면 보낸 판을 서버가 남긴 판으로 확정하고, 판을 주지 않는 서버면 보낸 시각으로 확정한다", async () => {
+    const sent = current!;
+    api.patch
+      .mockResolvedValueOnce(storedAt(S))
+      .mockResolvedValueOnce(respondWith(200, { ok: true }))
+      .mockResolvedValueOnce(storedAt("어제"));
+
+    await pushPresentation(sent);
+    await pushPresentation(sent);
+    await pushPresentation(sent);
+
+    expect(listener.saved.mock.calls).toEqual([
+      [sent, S],
+      [sent, sent.updatedAt],
+      [sent, sent.updatedAt],
+    ]);
+    expect(listener.saved.mock.calls[0][0]).toBe(sent);
+  });
+
+  it("두 기기가 같은 기준 판에서 같은 시각을 찍었어도 내용이 다르면 엇갈린 판으로 보고, 같으면 맞춘 판으로 본다", async () => {
+    current = dirty({ title: "이 기기의 제목" });
+    api.patch
+      .mockResolvedValueOnce(
+        conflictWith(serverCopy({ title: "다른 기기의 제목", updatedAt: B1 })),
+      )
+      .mockResolvedValueOnce(
+        conflictWith(serverCopy({ title: "이 기기의 제목", updatedAt: B1 })),
+      );
+
+    await pushPresentation(current);
+    expect(listener.conflict).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({ title: "다른 기기의 제목", updatedAt: B1 }),
+    );
+    expect(listener.saved).not.toHaveBeenCalled();
+
+    await pushPresentation(current);
+    expect(listener.saved).toHaveBeenCalledExactlyOnceWith(current, B1);
+    expect(listener.conflict).toHaveBeenCalledTimes(1);
+    expect(api.patch).toHaveBeenCalledTimes(2);
+  });
+
+  it("응답을 잃은 저장 뒤 고친 판은 412의 서버 판이 그 저장이면 기준 판을 옮겨 다시 보내고 사본을 만들지 않는다", async () => {
+    const lost = dirty({ title: "응답을 잃은 판" });
+    current = lost;
+    await loseResponseOf(lost);
+    current = { ...lost, title: "그 뒤에 고친 판", updatedAt: EDITED_AT };
+    api.patch
+      .mockResolvedValueOnce(conflictWith({ ...lost, updatedAt: S }))
+      .mockResolvedValueOnce(storedAt(S2));
+
+    await pushPresentation(current);
+
+    expect(listener.rebase).toHaveBeenCalledExactlyOnceWith(DOC_ID, S);
+    expect(api.patch).toHaveBeenCalledTimes(3);
+    expect(api.patch.mock.calls[2][0].json).toMatchObject({
+      title: "그 뒤에 고친 판",
+      baseUpdatedAt: S,
+    });
+    expect(listener.saved).toHaveBeenCalledExactlyOnceWith(current, S2);
+    expect(listener.conflict).not.toHaveBeenCalled();
+    expect(listener.adopt).not.toHaveBeenCalled();
+  });
+
+  it("다시 보내도 잇달아 412면 기준 판은 두 번까지만 옮기고 세 번째는 실패로 남긴다", async () => {
+    const lost = dirty({ title: "응답을 잃은 판" });
+    current = lost;
+    await loseResponseOf(lost);
+    current = { ...lost, title: "그 뒤에 고친 판", updatedAt: EDITED_AT };
+    api.patch
+      .mockResolvedValueOnce(conflictWith({ ...lost, updatedAt: S }))
+      .mockResolvedValueOnce(conflictWith({ ...lost, updatedAt: S2 }))
+      .mockResolvedValueOnce(conflictWith({ ...lost, updatedAt: S3 }));
+
+    const err = await pushPresentation(current).catch((e: unknown) => e);
+
+    expect(err).toBeInstanceOf(ServerRejectedError);
+    expect((err as ServerRejectedError).status).toBe(412);
+    expect(isRetryableApiError(err)).toBe(false);
+    expect(listener.rebase).toHaveBeenCalledTimes(2);
+    expect(api.patch).toHaveBeenCalledTimes(4);
+  });
+
+  it("기준 판을 옮기지 못했으면(그사이 지웠거나 취소한 push) 다시 보내지 않는다", async () => {
+    const lost = dirty({ title: "응답을 잃은 판" });
+    current = lost;
+    await loseResponseOf(lost);
+    current = { ...lost, title: "그 뒤에 고친 판", updatedAt: EDITED_AT };
+    listener.rebase.mockImplementation(() => undefined);
+    api.patch.mockResolvedValueOnce(conflictWith({ ...lost, updatedAt: S }));
+
+    await expect(pushPresentation(current)).resolves.toBeUndefined();
+
+    expect(listener.rebase).toHaveBeenCalledTimes(1);
+    expect(api.patch).toHaveBeenCalledTimes(2);
+  });
+
+  it("송출 중에는 이 탭이 앞선 판도 다시 보내지 않고 큐에 다시 넣는다", async () => {
+    const lost = dirty({ title: "응답을 잃은 판" });
+    current = lost;
+    await loseResponseOf(lost);
+    current = { ...lost, title: "그 뒤에 고친 판", updatedAt: EDITED_AT };
+    api.patch.mockResolvedValueOnce(conflictWith({ ...lost, updatedAt: S }));
+    window.history.pushState({}, "", `/present/${DOC_ID}/fullscreen`);
+
+    await pushPresentation(current);
+
+    expect(listener.requeue).toHaveBeenCalledExactlyOnceWith(DOC_ID);
+    expect(listener.rebase).not.toHaveBeenCalled();
+    expect(api.patch).toHaveBeenCalledTimes(2);
+  });
+
+  it("고친 것이 없는 판이 보내는 사이 서버보다 뒤처졌으면 서버 판을 받는다", async () => {
+    const sent = current!;
+    const server = serverCopy({ title: "다른 기기의 제목", updatedAt: S });
+    listener.current
+      .mockReturnValueOnce(sent)
+      .mockReturnValueOnce(dirty({ updatedAt: B }));
+    api.patch.mockResolvedValueOnce(conflictWith(server));
+
+    await pushPresentation(sent);
+
+    expect(listener.adopt).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({ title: "다른 기기의 제목", updatedAt: S }),
+    );
+  });
+
+  it("이 탭이 이미 더 새 판을 받았으면 늦게 온 412로 아무것도 바꾸지 않는다", async () => {
+    current = dirty({ baseUpdatedAt: S, updatedAt: S2 });
+    api.patch.mockResolvedValueOnce(
+      conflictWith(serverCopy({ title: "옛 서버 판", updatedAt: B1 })),
+    );
+
+    await expect(pushPresentation(current)).resolves.toBeUndefined();
+
+    for (const outcome of [
+      listener.saved,
+      listener.rebase,
+      listener.adopt,
+      listener.conflict,
+      listener.gone,
+    ]) {
+      expect(outcome).not.toHaveBeenCalled();
+    }
+  });
+
+  it("모든 곡을 다시 보낸 뒤 받은 412도 견준다", async () => {
+    rememberServerDocuments([makeSet()]);
+    current = dirty({ title: "이 기기의 제목" });
+    api.patch
+      .mockResolvedValueOnce(respond(409))
+      .mockResolvedValueOnce(
+        conflictWith(serverCopy({ title: "다른 기기의 제목", updatedAt: S })),
+      );
+
+    await pushPresentation(current);
+
+    expect(sentDeckIds(1)).toHaveLength(3);
+    expect(listener.conflict).toHaveBeenCalledTimes(1);
+  });
+
+  it("영구 삭제한 세트라는 답(410)을 받으면 알리고 기억한 덱을 잊는다", async () => {
+    rememberServerDocuments([makeSet()]);
+    api.patch
+      .mockResolvedValueOnce(
+        respondWith(410, { error: API_ERRORS.presentation.deleted }),
+      )
+      .mockResolvedValueOnce(storedAt(S));
+
+    await expect(pushPresentation(current!)).resolves.toBeUndefined();
+    expect(listener.gone).toHaveBeenCalledExactlyOnceWith(DOC_ID);
+
+    await pushPresentation(current!);
+    expect(sentDeckIds(0)).toEqual([]);
+    expect(sentDeckIds(1)).toHaveLength(3);
+  });
+
+  it("412의 서버 판을 읽을 수 없으면 다시 시도하지 않는 실패로 남긴다", async () => {
+    api.patch.mockResolvedValueOnce(
+      respondWith(412, {
+        error: API_ERRORS.presentation.conflict,
+        presentation: { id: DOC_ID, title: 42 },
+      }),
+    );
+
+    const err = await pushPresentation(current!).catch((e: unknown) => e);
+
+    expect(err).toBeInstanceOf(ServerRejectedError);
+    expect((err as ServerRejectedError).status).toBe(412);
+    expect(isRetryableApiError(err)).toBe(false);
+    expect(listener.conflict).not.toHaveBeenCalled();
   });
 });
 

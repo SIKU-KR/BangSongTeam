@@ -1,12 +1,34 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { API_ERRORS, type Folder, type Presentation } from "#shared";
+import {
+  describe,
+  it,
+  expect,
+  beforeEach,
+  afterEach,
+  vi,
+  type MockInstance,
+} from "vitest";
+import { toast } from "sonner";
+import {
+  API_ERRORS,
+  type Folder,
+  type Presentation,
+  type PresentationChanges,
+} from "#shared";
 import { signInAsTestUser } from "../../test/sessionFixture";
+import { installFakeApi, type FakeApi } from "../../test/fakeApi";
 import {
   getPresentationById,
   listPresentations,
   movePresentation,
   renamePresentation,
+  trashPresentation,
 } from "../presentation";
+import {
+  __resetServerDecksForTests,
+  setOwnPresentationListener,
+} from "../../lib/sync/presentationSync";
+import { ownPresentationListener } from "../../lib/sync/ownPresentationListener";
+import { COMMON_COPY } from "#copy/common";
 import * as capabilities from "../../lib/browser/capabilities";
 import {
   __loadDocumentsForTests,
@@ -391,6 +413,169 @@ describe("driveActions", () => {
         expect(sync.deleteFolderRemote).not.toHaveBeenCalled();
         expect(getPresentationById(SEED0.id)).toBeDefined();
         expect(getFolders()).toHaveLength(3);
+      });
+    });
+
+    describe("지우기 전에 올린 세트의 결과", () => {
+      const SYNCED_AT = "2026-09-25T00:00:00.000Z";
+      const SERVER_AT = "2026-09-26T00:00:00.000Z";
+      let fake: FakeApi | null = null;
+      let info: MockInstance<typeof toast.info>;
+
+      function respondToPatch(
+        reply: (body: PresentationChanges) => {
+          status?: number;
+          body: unknown;
+        },
+      ): void {
+        fake = installFakeApi({
+          "PATCH /api/presentations/*": ({ body }) =>
+            reply(body as PresentationChanges),
+          "PUT /api/folders/*": ({ body }) => ({ body: { folder: body } }),
+        });
+      }
+
+      function serverCopyOf(doc: Presentation): Presentation {
+        return {
+          ...structuredClone(doc),
+          title: "다른 기기에서 고친 제목",
+          updatedAt: SERVER_AT,
+        };
+      }
+
+      function copies(): Presentation[] {
+        return listPresentations().filter((doc) =>
+          doc.title.endsWith(COMMON_COPY.copySuffix),
+        );
+      }
+
+      beforeEach(() => {
+        __resetFolderSyncForTests();
+        __resetSyncSchedulerForTests();
+        __resetServerDecksForTests();
+        setFolderSyncEnabled(true);
+        setSyncEnabled(true);
+        setOwnPresentationListener(ownPresentationListener);
+        info = vi.spyOn(toast, "info");
+        __loadDocumentsForTests([
+          {
+            ...SEED_PRESENTATIONS[0],
+            folderId: CHILD,
+            baseUpdatedAt: SYNCED_AT,
+            updatedAt: SYNCED_AT,
+          },
+          {
+            ...SEED_PRESENTATIONS[2],
+            baseUpdatedAt: SYNCED_AT,
+            updatedAt: SYNCED_AT,
+          },
+        ]);
+      });
+
+      afterEach(() => {
+        info.mockRestore();
+        fake?.restore();
+        fake = null;
+        setOwnPresentationListener(null);
+        __resetFolderSyncForTests();
+        __resetSyncSchedulerForTests();
+      });
+
+      it("휴지통을 비우며 올린 세트가 다른 기기와 엇갈려도(412) 사본을 남기지 않는다", async () => {
+        respondToPatch(() => ({
+          status: 412,
+          body: {
+            error: API_ERRORS.presentation.conflict,
+            presentation: serverCopyOf(SEED2),
+          },
+        }));
+        trashPresentation(SEED2.id);
+
+        await deleteItemsForever([{ kind: "file", id: SEED2.id }]);
+
+        expect(fake?.calls.map(({ method }) => method)).toEqual(["PATCH"]);
+        expect(copies()).toEqual([]);
+        expect(getPresentationById(SEED2.id)).toBeUndefined();
+        expect(info).not.toHaveBeenCalled();
+      });
+
+      it("지우는 폴더 안의 세트가 엇갈려도 사본을 남기지 않는다", async () => {
+        respondToPatch(() => ({
+          status: 412,
+          body: {
+            error: API_ERRORS.presentation.conflict,
+            presentation: { ...serverCopyOf(SEED0), folderId: CHILD },
+          },
+        }));
+        renamePresentation(SEED0.id, "지우기 전에 고친 제목");
+        trashFolder(ROOT);
+
+        await deleteItemsForever([{ kind: "folder", id: ROOT }]);
+
+        expect(copies()).toEqual([]);
+        expect(info).not.toHaveBeenCalled();
+      });
+
+      it("올린 세트를 서버가 이미 영구 삭제했다고 하면(410) 사본도 알림도 없이 지운다", async () => {
+        respondToPatch(() => ({
+          status: 410,
+          body: { error: API_ERRORS.presentation.deleted },
+        }));
+        trashPresentation(SEED2.id);
+
+        await deleteItemsForever([{ kind: "file", id: SEED2.id }]);
+
+        expect(copies()).toEqual([]);
+        expect(getPresentationById(SEED2.id)).toBeUndefined();
+        expect(info).not.toHaveBeenCalled();
+      });
+
+      it("휴지통에 넣고 3초 안에 비워도 휴지통에 넣은 판을 먼저 올리고 지운다", async () => {
+        respondToPatch((body) => ({
+          body: { ok: true, updatedAt: body.updatedAt },
+        }));
+        trashPresentation(SEED2.id);
+
+        await deleteItemsForever([{ kind: "file", id: SEED2.id }]);
+
+        expect(fake?.calls).toHaveLength(1);
+        expect(fake?.calls[0].body).toMatchObject({
+          id: SEED2.id,
+          trashedAt: expect.any(String),
+        });
+        expect(sync.deletePresentationRemote).toHaveBeenCalledExactlyOnceWith(
+          SEED2.id,
+        );
+        expect(getPresentationById(SEED2.id)).toBeUndefined();
+      });
+
+      it("영구 삭제를 마친 뒤의 엇갈림은 다시 사본을 남긴다", async () => {
+        sync.deletePresentationRemote.mockRejectedValueOnce(
+          new ServerRejectedError(409, API_ERRORS.trashChanged),
+        );
+        respondToPatch((body) => ({
+          body: { ok: true, updatedAt: body.updatedAt },
+        }));
+        trashPresentation(SEED2.id);
+        await deleteItemsForever([{ kind: "file", id: SEED2.id }]).catch(
+          () => undefined,
+        );
+        fake?.restore();
+        const later = new Date(Date.now() + 60_000).toISOString();
+        respondToPatch(() => ({
+          status: 412,
+          body: {
+            error: API_ERRORS.presentation.conflict,
+            presentation: { ...serverCopyOf(SEED2), updatedAt: later },
+          },
+        }));
+
+        renamePresentation(SEED2.id, "영구 삭제를 마친 뒤 고친 제목");
+        await flushPendingSync();
+
+        expect(copies().map((doc) => doc.title)).toEqual([
+          `영구 삭제를 마친 뒤 고친 제목${COMMON_COPY.copySuffix}`,
+        ]);
       });
     });
   });

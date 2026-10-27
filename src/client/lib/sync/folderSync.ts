@@ -23,9 +23,11 @@ const FOLDER_SYNC_DEBOUNCE_MS = 2000;
 
 type FolderPusher = (folder: Folder) => Promise<Folder>;
 type ServerFolderListener = (folder: Folder) => void;
+type FolderGoneListener = (ids: readonly string[]) => unknown;
 
 let pusher: FolderPusher = pushFolder;
 let listener: ServerFolderListener | null = null;
+let goneListener: FolderGoneListener | null = null;
 let enabled = false;
 let pending = new Map<string, Folder>();
 let failed = new Map<string, Folder>();
@@ -52,6 +54,29 @@ export function setServerFolderListener(
   next: ServerFolderListener | null,
 ): void {
   listener = next;
+}
+
+/**
+ * 다른 곳에서 영구 삭제한 폴더(올렸더니 410)를 받을 곳을 등록한다. 부팅 동기화가 등록하고
+ * `stopSync`가 뗀다.
+ *
+ * 서버는 영구 삭제한 폴더를 되살리지 않으므로, 이 기기에서도 지워야 다음 편집마다 같은 거절을 받지
+ * 않는다. 그 폴더는 실패로 남기지도 다시 올리지도 않는다.
+ */
+export function setFolderGoneListener(next: FolderGoneListener | null): void {
+  goneListener = next;
+}
+
+function isFolderGone(err: unknown): boolean {
+  return err instanceof ServerRejectedError && err.status === 410;
+}
+
+function forgetGoneFolder(id: string): void {
+  pending.delete(id);
+  failed.delete(id);
+  backoff.reset(id);
+  clearSyncFailure("folder", id);
+  void goneListener?.([id]);
 }
 
 function clearPending(): void {
@@ -83,6 +108,10 @@ async function pushAll(folders: Folder[]): Promise<void> {
       failed.delete(folder.id);
       clearSyncFailure("folder", folder.id);
     } catch (err) {
+      if (isFolderGone(err)) {
+        forgetGoneFolder(folder.id);
+        continue;
+      }
       const expired = err instanceof SessionExpiredError;
       if (
         err instanceof OfflineError ||
@@ -168,12 +197,20 @@ export function cancelFolderPush(id: string): void {
 /**
  * 폴더 1건을 지금 바로 올리고 서버 확정본을 돌려준다 (부팅 동기화).
  * 앞서 나간 같은 폴더의 push가 늦게 도착해 이번 것을 덮지 않도록 줄을 선다.
+ * 다른 곳에서 영구 삭제한 폴더면(410) 지웠다고 알리고(`setFolderGoneListener`) `null`이다.
  */
-export async function pushFolderNow(folder: Folder): Promise<Folder> {
+export async function pushFolderNow(folder: Folder): Promise<Folder | null> {
   pending.delete(folder.id);
   backoff.reset(folder.id);
   await inFlight;
-  const saved = await pusher(folder);
+  let saved: Folder;
+  try {
+    saved = await pusher(folder);
+  } catch (err) {
+    if (!isFolderGone(err)) throw err;
+    forgetGoneFolder(folder.id);
+    return null;
+  }
   listener?.(saved);
   failed.delete(folder.id);
   clearSyncFailure("folder", folder.id);
@@ -239,6 +276,7 @@ export function __resetFolderSyncForTests(): void {
   enabled = false;
   pusher = pushFolder;
   listener = null;
+  goneListener = null;
   clearPending();
   inFlight = Promise.resolve();
   runningBatches.clear();

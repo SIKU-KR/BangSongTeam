@@ -288,6 +288,17 @@ export function cancelDocumentPush(id: string): void {
   scheduleNextTimer();
 }
 
+/**
+ * 그 세트의 보내는 중인 push를 취소했는지(`cancelDocumentPush`). 그 push가 끝나거나 그 세트를 다시
+ * 넣으면 거짓이 된다.
+ *
+ * 취소한 push의 결과(서버 판 받기, 사본 남기기)는 반영하지 않는다. 지운 세트를 되살리거나 영구 삭제하는
+ * 세트의 사본을 휴지통에 남기게 된다.
+ */
+export function isDocumentPushCancelled(id: string): boolean {
+  return cancelledInFlight.has(id);
+}
+
 /** 큐가 아직 끝내지 못한 프레젠테이션이 있는지 (보내는 중이거나 다시 시도할 것 포함) */
 export function hasPendingDocumentPush(): boolean {
   return pending.size > 0 || inFlightDocs.size > 0;

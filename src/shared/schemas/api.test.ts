@@ -129,7 +129,7 @@ describe("API Schemas", () => {
       expect(PresentationSchema.safeParse(withoutDeck).success).toBe(true);
     });
 
-    it("기준 판(baseUpdatedAt)은 저장 요청 스키마만 받고 문서·모델 스키마는 버린다", () => {
+    it("기준 판(baseUpdatedAt)은 저장 요청 스키마와 클라이언트 모델·문서 스키마가 모두 지닌다", () => {
       const changes = toPresentationChanges(
         PresentationDocumentSchema.parse(document),
       );
@@ -146,15 +146,25 @@ describe("API Schemas", () => {
             .baseUpdatedAt,
         ).toBe(baseUpdatedAt);
         expect(
-          PresentationDocumentSchema.parse({ ...document, baseUpdatedAt }),
-        ).not.toHaveProperty("baseUpdatedAt");
+          PresentationDocumentSchema.parse({ ...document, baseUpdatedAt })
+            .baseUpdatedAt,
+        ).toBe(baseUpdatedAt);
         expect(
-          PresentationSchema.parse({ ...document, baseUpdatedAt }),
-        ).not.toHaveProperty("baseUpdatedAt");
+          PresentationSchema.parse({ ...document, baseUpdatedAt })
+            .baseUpdatedAt,
+        ).toBe(baseUpdatedAt);
+        expect(
+          toPresentationChanges(
+            PresentationDocumentSchema.parse({ ...document, baseUpdatedAt }),
+          ).baseUpdatedAt,
+        ).toBe(baseUpdatedAt);
       }
       expect(
         PresentationChangesRequestSchema.parse(changes),
       ).not.toHaveProperty("baseUpdatedAt");
+      expect(PresentationSchema.parse(document)).not.toHaveProperty(
+        "baseUpdatedAt",
+      );
       expect(
         PresentationChangesRequestSchema.safeParse({
           ...changes,

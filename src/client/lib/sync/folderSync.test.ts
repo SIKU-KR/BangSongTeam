@@ -10,7 +10,9 @@ import {
   scheduleFolderPush,
   flushFolderSync,
   hasPendingFolderPush,
+  pushFolderNow,
   retryFolderSyncNow,
+  setFolderGoneListener,
   setFolderSyncEnabled,
   setServerFolderListener,
   __setFolderPusherForTests,
@@ -243,6 +245,50 @@ describe("폴더 push 큐", () => {
     await vi.advanceTimersByTimeAsync(60_000);
     expect(push).toHaveBeenCalledTimes(1);
     vi.useRealTimers();
+  });
+
+  describe("다른 곳에서 영구 삭제한 폴더(410)", () => {
+    const gone = vi.fn<(ids: readonly string[]) => void>();
+    const deleted = new ServerRejectedError(410, API_ERRORS.folder.deleted);
+
+    beforeEach(() => {
+      gone.mockReset();
+      setFolderGoneListener(gone);
+    });
+
+    afterEach(() => {
+      setFolderGoneListener(null);
+    });
+
+    it("큐가 올린 폴더가 410이면 지웠다고 알리고, 실패로 남기거나 다시 올리지 않는다", async () => {
+      push.mockImplementation(async (f) => {
+        if (f.id === CHILD) throw deleted;
+        return f;
+      });
+
+      scheduleFolderPush(folder(PARENT, null));
+      scheduleFolderPush(folder(CHILD, PARENT));
+      await flushFolderSync();
+
+      expect(gone).toHaveBeenCalledExactlyOnceWith([CHILD]);
+      expect(getSyncSnapshot()).toMatchObject({
+        status: "synced",
+        lastFailure: null,
+      });
+      expect(hasPendingFolderPush()).toBe(false);
+
+      await retryFolderSyncNow("manual");
+      expect(push).toHaveBeenCalledTimes(2);
+    });
+
+    it("바로 올린 폴더가 410이면 지웠다고 알리고 null을 돌려준다", async () => {
+      push.mockRejectedValueOnce(deleted);
+
+      await expect(pushFolderNow(folder(PARENT, null))).resolves.toBeNull();
+
+      expect(gone).toHaveBeenCalledExactlyOnceWith([PARENT]);
+      expect(getSyncSnapshot().lastFailure).toBeNull();
+    });
   });
 
   it("서버가 거절하며 준 문장을 실패 이유로 남긴다", async () => {
