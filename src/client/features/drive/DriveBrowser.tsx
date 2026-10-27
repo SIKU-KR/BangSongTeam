@@ -66,7 +66,9 @@ interface DriveBrowserProps {
  *
  * 우클릭·길게 누르기 메뉴의 항목은 메뉴가 열리는 순간 누른 곳으로 만든다. iOS는 길게 눌러도
  * `contextmenu`를 보내지 않아 Base UI가 터치 타이머로 메뉴를 여는데, 그때는 `onContextMenu`가
- * 불리지 않아 미리 만든 항목이 비어 있거나 앞서 우클릭한 행의 것이다.
+ * 불리지 않아 미리 만든 항목이 비어 있거나 앞서 우클릭한 행의 것이다. 행의 ⋮ 메뉴 같은 팝업은
+ * DOM에서는 목록 밖이어도 React 트리에서는 행의 자식이라 그 안의 터치가 목록의 길게 누르기
+ * 타이머에 닿으므로, 목록 안에서 시작하지 않은 누름은 메뉴를 열지 않는다.
  *
  * 검색·유형 필터·이동으로 목록에서 빠진 항목은 선택에서도 뺀다. 가려진 항목이 선택에 남으면
  * 끌기(선택 전체)와 도구 모음·키보드(보이는 선택)가 서로 다른 항목에 듣는다.
@@ -192,12 +194,13 @@ export function DriveBrowser({
     target: EventTarget | null,
   ): MenuAction[] | null => {
     const element = target instanceof Element ? target : null;
+    if (!element || !containerRef.current?.contains(element)) return null;
     const rowKey = element
-      ?.closest("[data-item-key]")
+      .closest("[data-item-key]")
       ?.getAttribute("data-item-key");
     const item = items.find((candidate) => candidate.key === rowKey);
     if (item) return actionsFor(targetsFor(item));
-    if (element?.closest("[data-trash-folder]")) {
+    if (element.closest("[data-trash-folder]")) {
       drive.clearSelection();
       return trashFolderActions;
     }

@@ -1528,6 +1528,21 @@ describe("AppShellLayout (터치)", () => {
     expect(listPresentations()).toHaveLength(before + 1);
   });
 
+  it("⋮ 메뉴 항목을 길게 눌러도 그 위에 새로 만들기 메뉴가 겹쳐 열리거나 행 선택이 풀리지 않는다", async () => {
+    renderShell();
+    const row = card(SEED_PRESENTATIONS[0].title);
+    fireEvent.click(within(row).getByTestId("item-more-btn"));
+    const duplicate = await screen.findByTestId("action-duplicate");
+    vi.useFakeTimers();
+
+    longPress(duplicate);
+
+    expect(screen.getAllByTestId("drive-menu")).toHaveLength(1);
+    expect(screen.queryByTestId("new-menu-folder")).not.toBeInTheDocument();
+    expect(row).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByTestId("selection-bar")).toHaveTextContent("1개 선택됨");
+  });
+
   it("행의 편집 버튼도 터치로 누를 때 손가락이 굴러도 눌린다", () => {
     renderShell();
     const edit = within(card(SEED_PRESENTATIONS[0].title)).getByTestId(
