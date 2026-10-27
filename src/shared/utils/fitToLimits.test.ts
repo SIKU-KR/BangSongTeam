@@ -40,6 +40,38 @@ describe("toDisplayName", () => {
     expect(toDisplayName("a".repeat(200))).toBe("a".repeat(50));
     expect(toDisplayName("김찬양")).toBe("김찬양");
   });
+
+  it("채움 문자나 폭 없는 문자처럼 보이지 않는 글자뿐이면 기본 이름을 쓴다", () => {
+    for (const raw of [
+      "\u3164",
+      "\u200B",
+      "\u115F\u200B",
+      "\u1160\uFFA0",
+      "\u2060\uFE0F\u2800",
+      " \u3164 \u200D ",
+    ]) {
+      expect(toDisplayName(raw)).toBe(FALLBACK_USER_NAME.default);
+    }
+  });
+
+  it("뒤따르는 글의 방향을 바꾸는 제어 문자를 뺀다", () => {
+    expect(toDisplayName("\u202E관리자")).toBe("관리자");
+    expect(toDisplayName("김\u2067찬양\u2069")).toBe("김찬양");
+    expect(toDisplayName("\u202E \u2066")).toBe(FALLBACK_USER_NAME.default);
+  });
+
+  it("보이는 글자와 함께 있는 이모지 결합 문자는 그대로 둔다", () => {
+    const family = "\u{1F468}\u200D\u{1F469}\u200D\u{1F467}";
+
+    expect(toDisplayName(`찬양팀 ${family}`)).toBe(`찬양팀 ${family}`);
+    expect(toDisplayName("\u200B김찬양")).toBe("\u200B김찬양");
+  });
+
+  it("50자로 줄인 뒤 보이는 글자가 남지 않으면 기본 이름을 쓴다", () => {
+    expect(toDisplayName(`${"\u3164".repeat(50)}김`)).toBe(
+      FALLBACK_USER_NAME.default,
+    );
+  });
 });
 
 describe("fitDeckText", () => {

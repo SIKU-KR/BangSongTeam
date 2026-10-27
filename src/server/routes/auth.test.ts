@@ -176,6 +176,30 @@ describe("표시 이름", () => {
     );
   });
 
+  it("채움 문자와 폭 없는 문자뿐인 이름도 기본 이름으로 저장한다", async () => {
+    const res = await signUpNamed(
+      "filler@example.com",
+      "\u200B\u3164\u115F",
+      "10.0.1.5",
+    );
+
+    expect(res.status).toBe(200);
+    expect(await storedName("filler@example.com")).toBe(
+      FALLBACK_USER_NAME.default,
+    );
+  });
+
+  it("글 방향을 바꾸는 제어 문자는 빼고 저장한다", async () => {
+    const res = await signUpNamed(
+      "bidi@example.com",
+      "\u202E관리자",
+      "10.0.1.6",
+    );
+
+    expect(res.status).toBe(200);
+    expect(await storedName("bidi@example.com")).toBe("관리자");
+  });
+
   it("쓰지 않는 /update-user는 404이고 이름을 바꾸지 않는다", async () => {
     const created = await signUpNamed("keep@example.com", "찬양팀", "10.0.1.3");
     const res = await app.request(
