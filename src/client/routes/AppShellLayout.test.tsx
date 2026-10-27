@@ -1373,6 +1373,37 @@ describe("AppShellLayout (끌어 옮기기와 선택 범위)", () => {
     expect(getPresentationById(hidden.id)?.trashedAt ?? null).toBeNull();
   });
 
+  it("사본을 만들면 새로 보이게 된 사본이 선택에서 빠지지 않고 선택된 채 남는다", () => {
+    renderShell();
+    const before = new Set(listPresentations().map((doc) => doc.id));
+
+    fireEvent.contextMenu(card(SEED_PRESENTATIONS[0].title));
+    fireEvent.click(screen.getByTestId("action-duplicate"));
+
+    const [copy] = listPresentations().filter((doc) => !before.has(doc.id));
+    expect(copy).toBeDefined();
+    expect(screen.getByTestId("selection-bar")).toHaveTextContent("1개 선택됨");
+    expect(
+      screen.getByRole("option", {
+        name: `${DRIVE_COPY.kind.file} ${copy?.title}`,
+      }),
+    ).toHaveAttribute("aria-selected", "true");
+  });
+
+  it("새 폴더를 만들면 만든 폴더가 선택된 채 남는다", () => {
+    renderShell();
+
+    fireEvent.click(screen.getByTestId("sidebar-create-presentation-btn"));
+    fireEvent.click(screen.getByTestId("new-menu-folder"));
+    fireEvent.change(screen.getByTestId("drive-name-input"), {
+      target: { value: "성탄절" },
+    });
+    fireEvent.click(screen.getByTestId("drive-name-confirm"));
+
+    expect(card("폴더 성탄절")).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByTestId("selection-bar")).toHaveTextContent("1개 선택됨");
+  });
+
   it("검색창에 글자를 친 채 빈 곳을 끌어 고르면 검색창에서 벗어나, Delete가 고른 항목을 휴지통에 보낸다", () => {
     renderShell();
     const input = screen.getByTestId("shell-search-input");
@@ -1574,6 +1605,33 @@ describe("AppShellLayout (검색어)", () => {
     expect(screen.getByTestId("drive-summary")).not.toHaveTextContent(
       "검색 결과",
     );
+  });
+
+  it("배경 갤러리를 거쳐 드라이브의 다른 위치로 오면 이전 위치의 검색어를 되살리지 않는다", async () => {
+    resetBackgroundCatalogForTests();
+    const sunset = makeBackground(1, { title: "따뜻한 노을" });
+    const api = installFakeApi({
+      "GET /api/backgrounds": () => ({ body: { backgrounds: [sunset] } }),
+    });
+    try {
+      __loadFoldersForTests([folder(WORSHIP, "주일 대예배")]);
+      renderShell();
+      fireEvent.change(searchInput(), { target: { value: "예배" } });
+      fireEvent.click(screen.getByTestId("sidebar-nav-backgrounds"));
+      await screen.findByRole("img", { name: sunset.title });
+
+      act(() => {
+        testRouter.push(`/presentations/folders/${WORSHIP}`);
+      });
+
+      expect(searchInput()).toHaveValue("");
+      expect(screen.getByTestId("drive-summary")).not.toHaveTextContent(
+        "검색 결과",
+      );
+    } finally {
+      api.restore();
+      resetBackgroundCatalogForTests();
+    }
   });
 
   it("같은 위치에서 검색어를 바꾸는 동안에는 비우지 않는다", () => {
