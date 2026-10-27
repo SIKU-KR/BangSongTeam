@@ -447,7 +447,7 @@ describe("드라이브 폴더 쿼리", () => {
     });
 
     it("휴지통에 있는 폴더도 영구 삭제하기 전에는 세고, 지우면 다시 만들 수 있다", async () => {
-      await seedFolders(USER_A, MAX_FOLDERS_PER_USER - 1);
+      const [parent] = await seedFolders(USER_A, MAX_FOLDERS_PER_USER - 1);
       const [trashed] = await seedFolders(USER_A, 1, {
         trashedAt: new Date(TRASHED_AT),
       });
@@ -455,6 +455,13 @@ describe("드라이브 폴더 쿼리", () => {
       expect(await upsertFolder(db, USER_A, fresh)).toEqual({
         status: "limitReached",
       });
+      expect(
+        await upsertFolder(
+          db,
+          USER_A,
+          makeFolder(USER_A, { parentId: parent.id }),
+        ),
+      ).toEqual({ status: "limitReached" });
 
       expect((await deleteFolderTree(db, USER_A, trashed.id)).status).toBe(
         "deleted",

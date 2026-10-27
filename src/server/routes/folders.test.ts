@@ -300,11 +300,16 @@ describe("드라이브 폴더 API", () => {
       folderDoc({ id: nextId(), userId: USER_A }),
     );
     await seedDocs(env.DB, { folders: seeded });
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    const rootFolder = makeFolder();
+    const nestedFolder = makeFolder({ parentId: seeded[0].id });
 
-    const root = await putFolder(makeFolder());
-    const nested = await putFolder(makeFolder({ parentId: seeded[0].id }));
+    const refused = [
+      await putFolder(rootFolder),
+      await putFolder(nestedFolder),
+    ];
 
-    for (const res of [root, nested]) {
+    for (const res of refused) {
       expect(res.status).toBe(403);
       expect(await res.json()).toEqual({
         error: API_ERRORS.folder.limitReached,
@@ -317,6 +322,18 @@ describe("드라이브 폴더 API", () => {
       updatedAt: "2026-09-25T00:00:00.000Z",
     });
     expect((await putFolder(renamed)).status).toBe(200);
+    expect(eventLines(log, "folder_save_limit_reached")).toEqual([
+      expect.objectContaining({
+        severity: "INFO",
+        folderId: rootFolder.id,
+        route: "/api/folders/:id",
+      }),
+      expect.objectContaining({
+        severity: "INFO",
+        folderId: nestedFolder.id,
+        route: "/api/folders/:id",
+      }),
+    ]);
   });
 
   it("사이클을 만드는 이동은 루트로 보정해 돌려준다", async () => {
