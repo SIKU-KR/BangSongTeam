@@ -1,5 +1,10 @@
 import { FieldValue, type Transaction } from "@google-cloud/firestore";
-import { isReservedDocumentId, type Deck as SharedDeck } from "#shared";
+import {
+  clampToClock,
+  isOutdatedWrite,
+  isReservedDocumentId,
+  type Deck as SharedDeck,
+} from "#shared";
 import type { Db } from "../client";
 import {
   backgroundsCol,
@@ -10,7 +15,7 @@ import {
 } from "../collections";
 import { withDeckIndex } from "../deckIndex";
 import { prepareTombstones, readTombstone } from "./cascade";
-import { toDeckContent, toSharedDeck } from "./mappers";
+import { parseSlides, toDeckContent, toSharedDeck } from "./mappers";
 import { findTakenDownSource, recordModerationEvent } from "./takedowns";
 
 /** 최근 수정순 (같으면 id순) */
@@ -134,7 +139,8 @@ async function takedownToPassOn(
 export type UpsertDeckResult =
   | { status: "saved"; deck: SharedDeck }
   | { status: "forbidden" }
-  | { status: "deleted" };
+  | { status: "deleted" }
+  | { status: "empty" };
 
 /**
  * 보관함 곡 업서트. 클라이언트가 보낸 곡 내용만 쓴다.
@@ -150,11 +156,22 @@ export type UpsertDeckResult =
  * 올리는데, 받아 주면 지운 곡이 원작 표시 없이 비공개로 되살아나 모든 기기로 퍼진다. 남이 지운
  * id에 곡을 새로 만드는 저장은 `forbidden`이다. id는 다시 쓰이지 않으므로(가져오기는 새 id를
  * 만든다) 정상 저장이 아니고, 받아 주면 그 곡을 지울 때 기록을 남기지 못한다.
+ *
+ * 시각:
+ * - 수정 시각은 서버 시계 + 5분까지로 줄인다(`clampToClock`). 공유 라이브러리는 가져간 횟수가 같으면
+ *   수정 시각순이라, 미래 시각을 보내 곡을 맨 위에 박아 두지 못하게 한다.
+ * - 만든 시각은 처음 저장한 값을 지키고, 처음 저장할 때도 줄인다.
+ * - 저장된 곡이 들어온 것보다 늦게 고친 것이면 쓰지 않고 저장된 곡을 돌려준다(`isOutdatedWrite`).
+ *   오프라인 대기열이 늦게 올린 옛 수정이 다른 기기의 새 수정을 덮지 않게 한다. 시각이 같으면 쓴다.
+ *
+ * 공개 중인 곡을 슬라이드 없이 저장하면 `empty`다. 공개 설정(`setDeckVisibility`)이 빈 곡의 공개를
+ * 막는데, 이 경로로 비우면 빈 카드가 공유 라이브러리에 남는다.
  */
 export async function upsertDeck(
   db: Db,
   userId: string,
   deck: SharedDeck,
+  now: Date = new Date(),
 ): Promise<UpsertDeckResult> {
   if (deck.userId !== userId) return { status: "forbidden" };
   return db.runTransaction(async (tx) => {
@@ -170,11 +187,32 @@ export async function upsertDeck(
       return { status: "forbidden" };
     }
 
-    const content = toDeckContent(deck);
+    const nowMs = now.getTime();
+    const updatedAt = clampToClock(deck.updatedAt, nowMs);
+    if (
+      existing &&
+      isOutdatedWrite(existing.updatedAt.toISOString(), updatedAt, nowMs)
+    ) {
+      return { status: "saved", deck: toSharedDeck(existing) };
+    }
+
+    const content = toDeckContent({
+      ...deck,
+      createdAt: clampToClock(deck.createdAt, nowMs),
+      updatedAt,
+    });
+    if (
+      existing?.visibility === "public" &&
+      parseSlides(content.slides).length === 0
+    ) {
+      return { status: "empty" };
+    }
+
     const known = await existingBackgroundIds(tx, db, [content.backgroundId]);
     const saved = withDeckIndex({
       ...(existing ?? libraryDeckDefaults(deck.id, userId)),
       ...content,
+      createdAt: existing?.createdAt ?? content.createdAt,
       backgroundId:
         content.backgroundId && known.has(content.backgroundId)
           ? content.backgroundId

@@ -302,18 +302,33 @@ export async function runDeletionPasses(
 }
 
 /**
- * 같은 id를 다시 저장하면 영구 삭제 기록을 지운다. 남의 기록은 건드리지 않도록 읽고
- * 지우므로, 트랜잭션의 다른 읽기와 함께 먼저 부르고 돌려받은 함수를 쓰기 단계에서 부른다.
+ * 폴더·프레젠테이션 저장이 볼 내 영구 삭제 기록을 읽는다. 트랜잭션은 쓴 뒤에 읽지 못하므로 다른
+ * 읽기와 함께 먼저 부른다.
+ *
+ * - `exists`는 부른 사용자가 남긴 기록만 센다. 기록 문서 id는 모든 사용자가 한 id 공간을 쓰므로,
+ *   남의 기록은 없는 것과 같다. 폴더와 프레젠테이션도 한 id 공간을 쓰므로 종류는 가리지 않고, 내가
+ *   영구 삭제한 id로는 어느 것도 다시 만들지 않는다.
+ * - 없는 id의 저장은 기록을 지우지 않는다. 부르는 쪽이 `deleted`(410)로 거절해 영구 삭제가 이긴다.
+ *   지운 항목을 아직 가진 기기·캐시된 옛 앱이 늦게 올린 저장이 그 항목을 되살리고 기록까지 지워,
+ *   모든 기기에 다시 퍼뜨리지 않게 하기 위해서다.
+ * - `clear`는 그 기록만 지운다. 문서가 있는데 기록도 남은 경우(배포 중 옛 리비전이 되살린 항목)의
+ *   쓰기 단계에서 부른다.
  */
-export async function prepareClearTombstone(
+export async function readOwnTombstone(
   tx: Transaction,
   db: Db,
   userId: string,
+  kind: "folder" | "presentation",
   itemId: string,
-): Promise<() => void> {
-  const ref = driveTombstonesCol(db).doc(itemId);
-  const tombstone = (await tx.get(ref)).data();
-  return () => {
-    if (tombstone?.userId === userId) tx.delete(ref);
+): Promise<{ exists: boolean; clear: () => void }> {
+  const record = await readTombstone(tx, db, kind, itemId);
+  const exists = record?.userId === userId;
+  return {
+    exists,
+    clear: () => {
+      if (exists) {
+        tx.delete(driveTombstonesCol(db).doc(tombstoneDocId(kind, itemId)));
+      }
+    },
   };
 }

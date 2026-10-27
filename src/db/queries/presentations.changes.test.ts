@@ -1,17 +1,22 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import type { Db } from "../client";
-import { decksCol, driveTombstonesCol } from "../collections";
+import { decksCol, driveTombstonesCol, presentationsCol } from "../collections";
 import { createTestDb, deckDoc, seedDocs, userDoc } from "../test/fixtures";
 import {
   DEFAULT_DECK_STYLE,
+  MAX_CLOCK_SKEW_MS,
   PresentationDocumentSchema,
   toPresentationChanges,
+  type Deck,
+  type PresentationChangesRequest,
   type PresentationDocument,
 } from "#shared";
 import {
+  deletePresentation,
   getPresentationDocumentsByUserId,
   savePresentationChanges,
   upsertPresentationDocument,
+  type SavePresentationResult,
 } from "./presentations";
 
 const USER_A = "000000000000000000001";
@@ -100,7 +105,9 @@ describe("세트 변경분 저장", () => {
       (deck) => deck.id === deckId(3),
     );
 
-    expect(await savePresentationChanges(db, USER_A, changes)).toBe("saved");
+    expect(await savePresentationChanges(db, USER_A, changes)).toMatchObject({
+      status: "saved",
+    });
 
     const restored = await readSet();
     expect(restored.items).toHaveLength(10);
@@ -119,7 +126,7 @@ describe("세트 변경분 저장", () => {
         USER_A,
         toPresentationChanges(removed, () => false),
       ),
-    ).toBe("saved");
+    ).toMatchObject({ status: "saved" });
 
     const restored = await readSet();
     expect(restored.items.map((item) => item.deck.id)).not.toContain(deckId(5));
@@ -177,7 +184,7 @@ describe("세트 변경분 저장", () => {
         USER_A,
         toPresentationChanges(doc, (deck) => deck.id === deckId(0)),
       ),
-    ).toBe("stale");
+    ).toEqual({ status: "stale" });
 
     const restored = await readSet();
     expect(restored.items).toHaveLength(10);
@@ -193,7 +200,7 @@ describe("세트 변경분 저장", () => {
         USER_B,
         toPresentationChanges(other, () => false),
       ),
-    ).toBe("stale");
+    ).toEqual({ status: "stale" });
   });
 
   it("남의 세트는 변경분으로도 덮어쓰지 못한다", async () => {
@@ -205,7 +212,7 @@ describe("세트 변경분 저장", () => {
         USER_B,
         toPresentationChanges(doc, (deck) => deck.id === deckId(0)),
       ),
-    ).toBe("forbidden");
+    ).toEqual({ status: "forbidden" });
     expect((await readSet()).items[0].deck.lyricsRaw).toBe("가사 0");
   });
 
@@ -217,7 +224,7 @@ describe("세트 변경분 저장", () => {
         ...toPresentationChanges(edited),
         userId: USER_B,
       }),
-    ).toBe("forbidden");
+    ).toEqual({ status: "forbidden" });
 
     const restored = await readSet();
     expect(restored.items).toHaveLength(10);
@@ -234,7 +241,7 @@ describe("세트 변경분 저장", () => {
 
     expect(
       await savePresentationChanges(db, USER_A, toPresentationChanges(other)),
-    ).toBe("forbidden");
+    ).toEqual({ status: "forbidden" });
     expect((await readSet()).items[0].deck.lyricsRaw).toBe("가사 0");
   });
 
@@ -243,7 +250,7 @@ describe("세트 변경분 저장", () => {
 
     expect(
       await savePresentationChanges(db, USER_A, toPresentationChanges(shared)),
-    ).toBe("forbidden");
+    ).toEqual({ status: "forbidden" });
   });
 
   it("영구 삭제 기록을 지운다", async () => {
@@ -266,11 +273,13 @@ describe("세트 변경분 저장", () => {
       .doc(other)
       .set({ itemId: other, userId: USER_B, kind: "presentation" });
 
-    await savePresentationChanges(
-      db,
-      USER_A,
-      toPresentationChanges({ ...makeSet(USER_A, 0), id: other }),
-    );
+    expect(
+      await savePresentationChanges(
+        db,
+        USER_A,
+        toPresentationChanges({ ...makeSet(USER_A, 0), id: other }),
+      ),
+    ).toMatchObject({ status: "saved" });
 
     expect((await driveTombstonesCol(db).doc(other).get()).exists).toBe(true);
   });
@@ -319,7 +328,7 @@ describe("세트 변경분 저장", () => {
         USER_A,
         toPresentationChanges(swapped, () => false),
       ),
-    ).toBe("saved");
+    ).toMatchObject({ status: "saved" });
 
     const restored = await readSet();
     expect(
@@ -350,11 +359,210 @@ describe("세트 변경분 저장", () => {
           [deckId(10), deckId(11), deckId(12)].includes(deck.id),
         ),
       ),
-    ).toBe("saved");
+    ).toMatchObject({ status: "saved" });
 
     const restored = await readSet();
     expect(restored.items[10].deck.forkedFrom).toBe("library-song");
     expect(restored.items[11].deck.forkedFrom).toBeNull();
     expect(restored.items[12].deck.forkedFrom).toBeNull();
+  });
+});
+
+describe("기준 판으로 거르는 저장과 늘 커지는 판", () => {
+  const T1 = "2026-09-21T00:00:00.000Z";
+  const T2 = "2026-09-22T00:00:00.000Z";
+  const T3 = "2026-09-23T00:00:00.000Z";
+  const T4 = "2026-09-24T00:00:00.000Z";
+  const NOW = new Date("2026-09-25T00:00:00.000Z");
+  let db: Db;
+
+  function plus(iso: string, ms: number): string {
+    return new Date(Date.parse(iso) + ms).toISOString();
+  }
+
+  function version(
+    songCount: number,
+    updatedAt: string,
+    overrides: Partial<PresentationDocument> = {},
+  ): PresentationDocument {
+    return { ...makeSet(USER_A, songCount), updatedAt, ...overrides };
+  }
+
+  function changesOf(
+    doc: PresentationDocument,
+    baseUpdatedAt: string | null,
+    includeDeck: (deck: Deck) => boolean = () => true,
+  ): PresentationChangesRequest {
+    return { ...toPresentationChanges(doc, includeDeck), baseUpdatedAt };
+  }
+
+  function save(
+    changes: PresentationChangesRequest,
+    userId = USER_A,
+  ): Promise<SavePresentationResult> {
+    return savePresentationChanges(db, userId, changes, NOW);
+  }
+
+  async function readSet(): Promise<PresentationDocument | undefined> {
+    const [doc] = await getPresentationDocumentsByUserId(db, USER_A);
+    return doc;
+  }
+
+  async function copyIds(): Promise<string[]> {
+    const snapshot = await decksCol(db)
+      .where("presentationId", "==", DOC_ID)
+      .get();
+    return snapshot.docs.map((doc) => doc.id).sort();
+  }
+
+  beforeEach(async () => {
+    db = createTestDb();
+    await seedDocs(db, {
+      users: [
+        userDoc({ id: USER_A, name: "A" }),
+        userDoc({ id: USER_B, name: "B" }),
+      ],
+    });
+  });
+
+  it("낡은 기준으로 보낸 저장은 쓰지 않고 저장된 판을 돌려준다 (다른 기기가 넣은 곡이 남는다)", async () => {
+    expect(await save(changesOf(version(3, T1), null))).toEqual({
+      status: "saved",
+      updatedAt: new Date(T1),
+    });
+    expect(
+      await save(
+        changesOf(version(4, T3), T1, (deck) => deck.id === deckId(3)),
+      ),
+    ).toEqual({ status: "saved", updatedAt: new Date(T3) });
+
+    const stale = await save(changesOf(version(3, T4), T1, () => false));
+
+    const stored = await readSet();
+    expect(stale).toEqual({ status: "conflict", current: stored });
+    expect(stored?.items).toHaveLength(4);
+    expect(stored?.updatedAt).toBe(T3);
+    expect((await decksCol(db).doc(deckId(3)).get()).exists).toBe(true);
+  });
+
+  it("기준이 저장된 판과 같으면 쓰고 보낸 시각을 판으로 남긴다", async () => {
+    await save(changesOf(version(3, T1), null));
+    const edited = withLyrics(version(3, T1), 1, "고친 가사");
+
+    expect(
+      await save(changesOf(edited, T1, (deck) => deck.id === deckId(1))),
+    ).toEqual({ status: "saved", updatedAt: new Date(T2) });
+
+    const stored = await readSet();
+    expect(stored?.updatedAt).toBe(T2);
+    expect(stored?.items[1].deck.lyricsRaw).toBe("고친 가사");
+  });
+
+  it("보낸 시각이 저장된 판보다 이르거나 같으면 저장된 판 + 1ms로 남긴다", async () => {
+    await save(changesOf(version(3, T2), null));
+
+    expect(
+      await save(changesOf(version(3, T2, { title: "같은 시각" }), T2)),
+    ).toEqual({ status: "saved", updatedAt: new Date(plus(T2, 1)) });
+    expect(
+      await save(
+        changesOf(version(3, T1, { title: "이른 시각" }), plus(T2, 1)),
+      ),
+    ).toEqual({ status: "saved", updatedAt: new Date(plus(T2, 2)) });
+
+    expect(await readSet()).toMatchObject({
+      title: "이른 시각",
+      updatedAt: plus(T2, 2),
+    });
+  });
+
+  it("서버 시계 + 5분보다 늦은 시각은 줄여서 남긴다", async () => {
+    const limit = new Date(NOW.getTime() + MAX_CLOCK_SKEW_MS);
+
+    expect(
+      await save(changesOf(version(3, "9999-12-31T00:00:00.000Z"), null)),
+    ).toEqual({ status: "saved", updatedAt: limit });
+    expect((await readSet())?.updatedAt).toBe(limit.toISOString());
+  });
+
+  it("서버에 있는 세트를 기준 null로 보내면 충돌이다", async () => {
+    await save(changesOf(version(3, T1), null));
+
+    const result = await save(
+      changesOf(version(3, T2, { title: "다른 기기의 새 세트" }), null),
+    );
+
+    expect(result).toEqual({ status: "conflict", current: await readSet() });
+    expect((await readSet())?.title).toBe("주일 1부 예배");
+  });
+
+  it("기준이 낡으면 서버에 없는 덱을 빼고 보내도 stale이 아니라 충돌이다 (지운 곡을 다시 보내지 않는다)", async () => {
+    await save(changesOf(version(3, T1), null));
+    await save(changesOf(version(2, T2), T1, () => false));
+
+    const result = await save(changesOf(version(3, T3), T1, () => false));
+
+    expect(result).toMatchObject({ status: "conflict" });
+    expect(await copyIds()).toEqual([deckId(0), deckId(1)]);
+  });
+
+  it("남의 세트에는 기준을 실어 보내도 충돌이 아니라 forbidden이다", async () => {
+    await save(changesOf(version(3, T1), null));
+    const theirs = { ...makeSet(USER_B, 3), updatedAt: T2 };
+
+    for (const base of [T1, null, "2026-09-01T00:00:00.000Z"]) {
+      expect(await save(changesOf(theirs, base), USER_B)).toEqual({
+        status: "forbidden",
+      });
+    }
+    expect((await readSet())?.updatedAt).toBe(T1);
+  });
+
+  it("서버에 없고 영구 삭제 기록도 없는 세트는 기준과 상관없이 만든다", async () => {
+    expect(await save(changesOf(version(3, T2), T1))).toEqual({
+      status: "saved",
+      updatedAt: new Date(T2),
+    });
+    expect((await readSet())?.items).toHaveLength(3);
+  });
+
+  it("기준 없이 보낸 옛 시각의 저장(되돌리기)도 받고 판은 앞 판 + 1ms로 남긴다", async () => {
+    await save(toPresentationChanges(version(3, T1)));
+    await save(toPresentationChanges(version(2, T2), () => false));
+
+    const undo = await save(toPresentationChanges(version(3, T1)));
+
+    expect(undo).toEqual({ status: "saved", updatedAt: new Date(plus(T2, 1)) });
+    const stored = await readSet();
+    expect(stored?.items).toHaveLength(3);
+    expect(stored?.updatedAt).toBe(plus(T2, 1));
+  });
+
+  it("영구 삭제한 프레젠테이션은 기준이 있든 없든 다시 만들지 않고 영구 삭제 기록을 남긴다", async () => {
+    await save(changesOf(version(3, T1), null));
+    await save(changesOf(version(3, T2, { trashedAt: T2 }), T1));
+    expect(await deletePresentation(db, DOC_ID, USER_A)).toEqual({
+      status: "deleted",
+    });
+
+    for (const changes of [
+      toPresentationChanges(version(3, T3)),
+      toPresentationChanges(version(3, T3), () => false),
+      changesOf(version(3, T3), null),
+      changesOf(version(3, T3), T2),
+    ]) {
+      expect(await save(changes)).toEqual({ status: "deleted" });
+    }
+    expect(await upsertPresentationDocument(db, USER_A, version(3, T3))).toBe(
+      false,
+    );
+
+    expect((await presentationsCol(db).doc(DOC_ID).get()).exists).toBe(false);
+    expect(await copyIds()).toEqual([]);
+    expect((await driveTombstonesCol(db).doc(DOC_ID).get()).data()).toEqual({
+      itemId: DOC_ID,
+      userId: USER_A,
+      kind: "presentation",
+    });
   });
 });

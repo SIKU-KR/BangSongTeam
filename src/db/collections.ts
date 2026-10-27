@@ -86,6 +86,8 @@ export interface UserEmailDoc {
  * - `forkCount`는 `forkedFrom`이 이 곡인 보관함 곡 수다. 가져오기·삭제 트랜잭션이 함께 고친다.
  * - `backgroundId`는 서버에 있는 배경만 가리킨다. 모르는 배경은 저장할 때 `null`로 낮춘다.
  * - `listed`·`searchGrams`는 공개 범위와 검색 색인이다. `withDeckIndex`만 정한다.
+ * - 보관함 곡의 `updatedAt`·`createdAt`은 서버 시계 + 5분까지로 줄여 쓰고, `createdAt`은 처음
+ *   저장한 값을 지킨다(`upsertDeck`). 공유 라이브러리가 `updatedAt`으로 줄을 세운다.
  */
 export interface DeckDoc {
   id: string;
@@ -124,6 +126,10 @@ export interface PresentationDoc {
   linkAccess: LinkAccess;
   linkToken: string | null;
   createdAt: Date;
+  /**
+   * 문서의 판. 받은 저장마다 커지기만 한다(`savePresentationChanges`가 서버 시계 + 5분까지로 줄인
+   * 보낸 시각이나 앞 판 + 1ms로 쓴다). 저장 요청의 기준 판(`baseUpdatedAt`)을 이 값과 견준다.
+   */
   updatedAt: Date;
 }
 
@@ -136,7 +142,10 @@ export interface PresentationMemberDoc {
   userId: string;
 }
 
-/** 드라이브 폴더 트리 인접 리스트 */
+/**
+ * 드라이브 폴더 트리 인접 리스트. `updatedAt`과 처음 저장한 `createdAt`은 서버 시계 + 5분까지로 줄여
+ * 쓴다(`upsertFolder`). 저장은 `updatedAt`이 늦은 쪽이 이긴다.
+ */
 export interface FolderDoc {
   id: string;
   userId: string;
@@ -153,6 +162,9 @@ export interface FolderDoc {
  * 폴더·프레젠테이션 기록의 문서 id는 항목 id다. 보관함 곡 기록은 `deckTombstoneDocId`로
  * 접두사를 붙여 드라이브 기록과 id를 나누지 않는다. 그래서 드라이브 쪽 쓰기·읽기는 곡 기록을
  * 덮거나 지우지 않고, 곡을 지우는 요청이 남의 프레젠테이션 기록 자리를 먼저 차지하지도 못한다.
+ *
+ * 기록의 주인이 같은 id로 보낸 저장은 그 항목을 다시 만들지 않는다(410, `readOwnTombstone`,
+ * `upsertDeck`).
  */
 export interface DriveTombstoneDoc {
   itemId: string;

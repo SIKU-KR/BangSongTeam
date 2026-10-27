@@ -50,6 +50,9 @@ function storageFailure(c: Context<AppEnv>, error: unknown) {
  * 쓰기 한도(`DeckWriteSchema`)나 Firestore 저장 한도를 넘는 곡은 400·500 대신 413과 가사를
  * 나누라는 문장으로 답한다.
  *
+ * PUT은 서버에 저장된 곡을 돌려준다. 미래 시각은 서버 시계 + 5분까지로 줄이고, 저장된 곡이 더 나중에
+ * 고친 것이면 쓰지 않고 그 곡으로 200이다. 공개 중인 곡을 슬라이드 없이 저장하면 400이다.
+ *
  * 지운 곡은 삭제 기록으로 남는다(`deleteDeckScoped`). 목록은 기록된 id를 빼고 `deletedIds`로
  * 알려, 다른 기기의 부팅 병합이 그 곡을 다시 올리지 않게 한다. 그 id로 오는 저장·공개 설정은
  * 410이다. 옛 리비전이 기록 옆에 다시 만든 문서는 주인이 목록을 받을 때 지운다. 지우기는
@@ -122,6 +125,8 @@ export function createDecksRoute(deps: AppDeps = {}) {
           return c.json({ error: API_ERRORS.deck.notAccessible }, 403);
         case "deleted":
           return c.json({ error: API_ERRORS.deck.deleted }, 410);
+        case "empty":
+          return c.json({ error: API_ERRORS.deck.noSlides }, 400);
         case "saved":
           return c.json({ ok: true as const, deck: result.deck }, 200);
       }

@@ -5,6 +5,7 @@ import {
   DEFAULT_DECK_STYLE,
   DeckSchema,
   FolderSchema,
+  MAX_CLOCK_SKEW_MS,
   PresentationDocumentSchema,
   toPresentationChanges,
   type Deck,
@@ -553,6 +554,88 @@ describe("동기화 라우트 교차 사용자 격리", () => {
         deckId: LIB_DECK_ID,
       });
       expect((await decksCol(env.DB).doc(LIB_DECK_ID).get()).exists).toBe(true);
+    });
+  });
+
+  describe("보관함 곡의 시각과 빈 공개 곡", () => {
+    const libraryDeck = (overrides: Partial<Deck> = {}): Deck =>
+      makeDeck(USER_A, {
+        id: LIB_DECK_ID,
+        scope: "library",
+        presentationId: null,
+        ...overrides,
+      });
+
+    const putDeck = (deck: Deck) =>
+      app.request(`/api/decks/${deck.id}`, json(deck), env);
+
+    it("미래 시각은 서버 시계 + 5분까지로 줄여 저장하고 줄인 곡을 돌려준다", async () => {
+      const before = Date.now();
+      const res = await putDeck(
+        libraryDeck({
+          createdAt: "9999-12-31T00:00:00.000Z",
+          updatedAt: "9999-12-31T00:00:00.000Z",
+        }),
+      );
+      const after = Date.now();
+
+      expect(res.status).toBe(200);
+      const { deck } = (await res.json()) as { deck: Deck };
+      const row = (await decksCol(env.DB).doc(LIB_DECK_ID).get()).data();
+      for (const time of [
+        Date.parse(deck.createdAt),
+        Date.parse(deck.updatedAt),
+        row?.createdAt.getTime() ?? 0,
+        row?.updatedAt.getTime() ?? 0,
+      ]) {
+        expect(time).toBeGreaterThanOrEqual(before + MAX_CLOCK_SKEW_MS);
+        expect(time).toBeLessThanOrEqual(after + MAX_CLOCK_SKEW_MS);
+      }
+    });
+
+    it("늦게 도착한 옛 수정은 200과 저장된 새 곡으로 답한다", async () => {
+      expect((await putDeck(libraryDeck())).status).toBe(200);
+      const newer = await putDeck(
+        libraryDeck({
+          title: "새 제목",
+          updatedAt: "2026-09-23T00:00:00.000Z",
+        }),
+      );
+      const stored = (await newer.json()) as { ok: true; deck: Deck };
+
+      const late = await putDeck(
+        libraryDeck({
+          title: "옛 제목",
+          updatedAt: "2026-09-22T00:00:00.000Z",
+        }),
+      );
+
+      expect(late.status).toBe(200);
+      expect(await late.json()).toEqual(stored);
+      expect(stored.deck.title).toBe("새 제목");
+    });
+
+    it("공개 중인 곡을 슬라이드 없이 PUT하면 400이고 공개 곡은 그대로다", async () => {
+      await seedDocs(env.DB, {
+        users: [userDoc({ id: USER_A, name: "A", termsAgreedAt: new Date() })],
+      });
+      expect((await putDeck(libraryDeck())).status).toBe(200);
+      const publish = await app.request(
+        `/api/decks/${LIB_DECK_ID}/visibility`,
+        patchJson({ visibility: "public", acceptedCopyrightNotice: true }),
+        env,
+      );
+      expect(publish.status).toBe(200);
+
+      const res = await putDeck(
+        libraryDeck({ slides: [], updatedAt: "2026-09-22T00:00:00.000Z" }),
+      );
+
+      expect(res.status).toBe(400);
+      expect(await res.json()).toEqual({ error: API_ERRORS.deck.noSlides });
+      const row = (await decksCol(env.DB).doc(LIB_DECK_ID).get()).data();
+      expect(row).toMatchObject({ visibility: "public", listed: true });
+      expect(JSON.parse(row?.slides ?? "[]")).toHaveLength(1);
     });
   });
 

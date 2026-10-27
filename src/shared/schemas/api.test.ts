@@ -4,11 +4,14 @@ import {
   EmailSignUpRequestSchema,
   SearchCatalogQuerySchema,
   SearchCatalogResponseSchema,
+  PresentationChangesRequestSchema,
+  PresentationDocumentRequestSchema,
   PresentationDocumentSchema,
   clampSearchQuery,
 } from "./api";
 import { DeckStyleSchema } from "./style";
 import { PresentationSchema } from "./presentation";
+import { toPresentationChanges } from "../utils/presentationChanges";
 
 describe("API Schemas", () => {
   it("validates SearchCatalogQuerySchema and coerces limit", () => {
@@ -124,6 +127,40 @@ describe("API Schemas", () => {
         false,
       );
       expect(PresentationSchema.safeParse(withoutDeck).success).toBe(true);
+    });
+
+    it("기준 판(baseUpdatedAt)은 저장 요청 스키마만 받고 문서·모델 스키마는 버린다", () => {
+      const changes = toPresentationChanges(
+        PresentationDocumentSchema.parse(document),
+      );
+
+      for (const baseUpdatedAt of ["2026-09-22T00:00:00.000Z", null]) {
+        expect(
+          PresentationDocumentRequestSchema.parse({
+            ...document,
+            baseUpdatedAt,
+          }).baseUpdatedAt,
+        ).toBe(baseUpdatedAt);
+        expect(
+          PresentationChangesRequestSchema.parse({ ...changes, baseUpdatedAt })
+            .baseUpdatedAt,
+        ).toBe(baseUpdatedAt);
+        expect(
+          PresentationDocumentSchema.parse({ ...document, baseUpdatedAt }),
+        ).not.toHaveProperty("baseUpdatedAt");
+        expect(
+          PresentationSchema.parse({ ...document, baseUpdatedAt }),
+        ).not.toHaveProperty("baseUpdatedAt");
+      }
+      expect(
+        PresentationChangesRequestSchema.parse(changes),
+      ).not.toHaveProperty("baseUpdatedAt");
+      expect(
+        PresentationChangesRequestSchema.safeParse({
+          ...changes,
+          baseUpdatedAt: "어제",
+        }).success,
+      ).toBe(false);
     });
   });
 });

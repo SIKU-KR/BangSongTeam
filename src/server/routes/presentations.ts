@@ -4,8 +4,8 @@ import {
   isReservedDocumentId,
   toPresentationChanges,
   type Deck,
-  type PresentationChanges,
-  PresentationChangesSchema,
+  type PresentationChangesRequest,
+  PresentationChangesRequestSchema,
   PresentationDocumentRequestSchema,
   UpdateShareSettingsRequestSchema,
 } from "#shared";
@@ -26,7 +26,7 @@ import {
   isStorageLimitError,
   isTransientStorageError,
 } from "../lib/storageErrors";
-import { logServerError } from "../lib/requestLog";
+import { logRequestEvent, logServerError } from "../lib/requestLog";
 import { idParam } from "../lib/params";
 import { jsonBody } from "../lib/jsonBody";
 import { rejectOverLimit, type WriteLimitBreach } from "../lib/writeLimits";
@@ -57,7 +57,7 @@ function largestSongTitle(decks: readonly Deck[]): string | null {
   return largest?.title ?? null;
 }
 
-async function save(c: Context<AppEnv>, changes: PresentationChanges) {
+async function save(c: Context<AppEnv>, changes: PresentationChangesRequest) {
   if (
     changes.id !== c.req.param("id") ||
     changes.decks.some((deck) => isReservedDocumentId(deck.id))
@@ -95,15 +95,35 @@ async function save(c: Context<AppEnv>, changes: PresentationChanges) {
     return c.json({ error: API_ERRORS.presentation.saveFailed }, 500);
   }
 
-  if (result === "forbidden")
-    return c.json({ error: API_ERRORS.presentation.notAccessible }, 403);
-  if (result === "stale") {
-    return c.json({ error: API_ERRORS.presentation.fullSyncRequired }, 409);
+  switch (result.status) {
+    case "saved":
+      return c.json(
+        { ok: true as const, updatedAt: result.updatedAt.toISOString() },
+        200,
+      );
+    case "forbidden":
+      return c.json({ error: API_ERRORS.presentation.notAccessible }, 403);
+    case "stale":
+      return c.json({ error: API_ERRORS.presentation.fullSyncRequired }, 409);
+    case "tooLarge":
+      return c.json({ error: API_ERRORS.presentation.tooLarge }, 413);
+    case "deleted":
+      logRequestEvent(c, "INFO", "presentation_save_deleted", {
+        presentationId: changes.id,
+      });
+      return c.json({ error: API_ERRORS.presentation.deleted }, 410);
+    case "conflict":
+      logRequestEvent(c, "INFO", "presentation_save_conflict", {
+        presentationId: changes.id,
+      });
+      return c.json(
+        {
+          error: API_ERRORS.presentation.conflict,
+          presentation: result.current,
+        },
+        412,
+      );
   }
-  if (result === "tooLarge") {
-    return c.json({ error: API_ERRORS.presentation.tooLarge }, 413);
-  }
-  return c.json({ ok: true as const }, 200);
 }
 
 function writeLimitMessage(breach: WriteLimitBreach): string {
@@ -118,6 +138,10 @@ function writeLimitMessage(breach: WriteLimitBreach): string {
  * 조회는 로컬 IndexedDB가 문서 1건을 통째로 put하는 것과 같은 단위로 주고받는다.
  * 저장은 문서 전체(`PUT`, 이전 버전 클라이언트와 부팅 동기화)나 바뀐 덱만 담은
  * 변경분(`PATCH`)으로 받으며, 결과는 둘 다 문서 단위 전체 교체와 같다.
+ * 저장이 성공하면 서버가 남긴 판(`updatedAt`)을 돌려준다. 판은 받은 저장마다 커지므로 보낸 시각과
+ * 다를 수 있다. 본문의 기준 판(`baseUpdatedAt`)이 저장된 판과 다르면 아무것도 쓰지 않고 412와 저장된
+ * 문서(`presentation`)로 답한다. 영구 삭제한 프레젠테이션에 늦게 온 저장은 되살리지 않고 410이다.
+ * 412·410은 얼마나 자주 일어나는지 보려고 INFO 로그로 남긴다(id만, 가사는 남기지 않는다).
  * `userId`는 세션에서 가져오고, 본문의 userId가 세션 사용자와 다르면 403으로 거절한다 (다른
  * 계정으로 바뀐 탭·남은 대기열이 보낸 문서를 지금 쿠키의 계정에 만들지 않는다. Firestore에
  * 사용자별 접근 규칙이 없다).
@@ -139,7 +163,7 @@ export function createPresentationsRoute(deps: AppDeps = {}) {
     overLimit,
   );
   const changesBody = jsonBody(
-    PresentationChangesSchema,
+    PresentationChangesRequestSchema,
     PRESENTATION_BODY_MAX_BYTES,
     overLimit,
   );
@@ -168,7 +192,10 @@ export function createPresentationsRoute(deps: AppDeps = {}) {
     })
     .put("/:id", savedId, documentBody, async (c) => {
       const document = c.req.valid("json");
-      return save(c, toPresentationChanges(document));
+      return save(c, {
+        ...toPresentationChanges(document),
+        baseUpdatedAt: document.baseUpdatedAt,
+      });
     })
     .patch("/:id", savedId, changesBody, async (c) =>
       save(c, c.req.valid("json")),

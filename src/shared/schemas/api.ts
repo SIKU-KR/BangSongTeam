@@ -51,19 +51,26 @@ export const PresentationDocumentSchema = PresentationSchema.extend({
 });
 export type PresentationDocument = z.infer<typeof PresentationDocumentSchema>;
 
+const BaseUpdatedAtSchema = z.iso.datetime().nullable().optional();
+
 /**
  * 프레젠테이션 문서 전체 저장 본문(`PUT /api/presentations/:id`). `PresentationDocumentSchema`에
- * 곡 수 상한과 곡마다의 쓰기 한도(`DeckWriteSchema`)를 더한다.
+ * 곡 수 상한과 곡마다의 쓰기 한도(`DeckWriteSchema`), 기준 판(`baseUpdatedAt`,
+ * `PresentationChangesRequestSchema` 참고)을 더한다.
  *
  * 서버가 쓰기 요청을 검사할 때만 쓴다. 문서 스키마는 IndexedDB 저장본과 조회 응답도 읽으므로
- * 한도를 두지 않는다.
+ * 한도와 기준 판을 두지 않는다.
  */
 export const PresentationDocumentRequestSchema =
   PresentationDocumentSchema.extend({
     items: z
       .array(PresentationItemSchema.extend({ deck: DeckWriteSchema }))
       .max(MAX_PRESENTATION_SONGS),
+    baseUpdatedAt: BaseUpdatedAtSchema,
   });
+export type PresentationDocumentRequest = z.infer<
+  typeof PresentationDocumentRequestSchema
+>;
 
 export const PresentationChangeItemSchema = z.object({
   id: IdSchema,
@@ -92,6 +99,24 @@ export const PresentationChangesSchema = PresentationSchema.omit({
   decks: z.array(DeckWriteSchema).max(MAX_PRESENTATION_SONGS),
 });
 export type PresentationChanges = z.infer<typeof PresentationChangesSchema>;
+
+/**
+ * 변경분 저장 요청 본문(`PATCH /api/presentations/:id`). `PresentationChangesSchema`에 기준 판
+ * `baseUpdatedAt`을 더한다. 기준 판은 보내는 판이 바탕으로 삼은 서버 판(서버가 확정한 `updatedAt`)이다.
+ *
+ * - 문자열: 서버가 저장된 판과 견줘, 그사이 다른 곳에서 바꿨으면 쓰지 않고 412로 답한다.
+ * - `null`: 서버가 확정한 적 없는 판(새 프레젠테이션·사본). 서버에 이미 있으면 412다.
+ * - 없음: 이 필드를 모르는 이전 클라이언트. 견주지 않고 받는다.
+ *
+ * 저장 요청에만 싣고 서버는 돌려주지 않는다. 클라이언트 모델(`PresentationSchema`)과 IndexedDB
+ * 저장본에는 아직 없어, 그 스키마로 읽는 탭은 이 값을 버리고 다시 보내지 않는다. 앞으로 나아가지 않는
+ * 기준을 실어 보내면 첫 저장 뒤로 모두 412가 된다.
+ */
+export const PresentationChangesRequestSchema =
+  PresentationChangesSchema.extend({ baseUpdatedAt: BaseUpdatedAtSchema });
+export type PresentationChangesRequest = z.infer<
+  typeof PresentationChangesRequestSchema
+>;
 
 /** 로그인 화면에 버튼이 나오는 순서이기도 하다 */
 export const SocialProviderSchema = z.enum(["kakao", "naver", "google"]);

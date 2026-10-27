@@ -48,10 +48,14 @@ export const API_ERRORS = {
   folder: {
     notAccessible: "이 폴더를 열 수 없어요",
     saveFailed: "폴더를 저장하지 못했어요",
+    deleted: "이미 영구 삭제한 폴더예요. 새로고침해 주세요",
   },
   presentation: {
     notAccessible: "이 프레젠테이션을 열 수 없어요",
     saveFailed: "프레젠테이션을 저장하지 못했어요",
+    conflict:
+      "다른 곳에서 먼저 바꾼 내용이 있어요. 새로고침한 뒤 다시 시도해 주세요",
+    deleted: "이미 영구 삭제한 프레젠테이션이에요. 새로고침해 주세요",
     fullSyncRequired:
       "서버에 없는 곡이 있어 프레젠테이션 전체를 다시 보내야 해요",
     songTooLarge: (title: string) =>
