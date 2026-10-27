@@ -53,7 +53,8 @@ function storageFailure(c: Context<AppEnv>, error: unknown) {
  * 지운 곡은 삭제 기록으로 남는다(`deleteDeckScoped`). 목록은 기록된 id를 빼고 `deletedIds`로
  * 알려, 다른 기기의 부팅 병합이 그 곡을 다시 올리지 않게 한다. 그 id로 오는 저장·공개 설정은
  * 410이다. 옛 리비전이 기록 옆에 다시 만든 문서는 주인이 목록을 받을 때 지운다. 지우기는
- * 멱등이라 서버에 없던 id도 기록하고 200이며, 남의 곡·프레젠테이션 사본·남이 기록한 id만 404다.
+ * 멱등이라 서버에 없던 id도 기록하고 200이며, 남의 곡·프레젠테이션 사본, 서버에 곡이 없는데 남이
+ * 기록한 id만 404다.
  */
 export function createDecksRoute(deps: AppDeps = {}) {
   const savedId = idParam(API_ERRORS.idMismatch, 400);

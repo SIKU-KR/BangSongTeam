@@ -393,7 +393,7 @@ describe("덱 쓰기 헬퍼 (보관함 동기화)", () => {
       expect(await getDeletedDeckIds(db, strangerId)).toEqual([]);
     });
 
-    it("남이 남긴 기록은 내가 가진 곡의 저장·공개·삭제를 막지 않고 그대로 남는다", async () => {
+    it("남이 남긴 기록은 내가 가진 곡의 저장·공개·삭제를 막지 않고 그대로 남아, 지운 뒤 다시 올리면 forbidden이다", async () => {
       const strangerRecord = {
         itemId: DECK_ID,
         userId: strangerId,
@@ -413,6 +413,11 @@ describe("덱 쓰기 헬퍼 (보관함 동기화)", () => {
       expect((await decksCol(db).doc(DECK_ID).get()).exists).toBe(false);
       expect(await readRecord(`deck:${DECK_ID}`)).toEqual(strangerRecord);
       expect(await getDeletedDeckIds(db, ownerId)).toEqual([]);
+
+      expect(await upsertDeck(db, ownerId, makeDeck(ownerId))).toEqual({
+        status: "forbidden",
+      });
+      expect((await decksCol(db).doc(DECK_ID).get()).exists).toBe(false);
     });
 
     it("곡 기록은 드라이브 기록과 id를 나누지 않는다", async () => {
