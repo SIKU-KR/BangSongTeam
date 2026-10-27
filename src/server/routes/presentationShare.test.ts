@@ -207,7 +207,18 @@ describe("세트 링크 공유 라우트", () => {
 
   it("세트를 지우면 멤버 기록도 함께 지워진다", async () => {
     await shareAndJoin();
-    await as(OWNER, `/api/presentations/${DOC_ID}`, send("DELETE"));
+    await as(
+      OWNER,
+      `/api/presentations/${DOC_ID}`,
+      send("PUT", makeDoc({ trashedAt: "2026-09-22T00:00:00.000Z" })),
+    );
+    expect(
+      (await as(MEMBER, `/api/presentations/${DOC_ID}`, send("DELETE"))).status,
+    ).toBe(404);
+
+    expect(
+      (await as(OWNER, `/api/presentations/${DOC_ID}`, send("DELETE"))).status,
+    ).toBe(200);
 
     const members = await presentationMembersCol(env.DB)
       .where("presentationId", "==", DOC_ID)

@@ -15,6 +15,13 @@ export const AUTH_BODY_MAX_BYTES = 64 * 1024;
 export const SMALL_BODY_MAX_BYTES = 64 * 1024;
 
 /**
+ * 폴더 영구 삭제 본문 상한(바이트). 그 기기가 본 하위 폴더·프레젠테이션 id(`expected`)를 모두
+ * 담는다. id 하나가 25바이트 남짓이라 4만 개가 넘게 들어간다. 이 상한에 걸리는 폴더는 그 기기에서
+ * 영구 삭제할 수 없으므로 폴더 저장 본문보다 넉넉히 둔다.
+ */
+export const FOLDER_DELETE_BODY_MAX_BYTES = 1024 * 1024;
+
+/**
  * 보관함 곡 저장 본문 상한(바이트). 곡 하나가 Firestore 문서 하나라 1 MiB를 넘는 곡은 어차피
  * 저장하지 못한다.
  */

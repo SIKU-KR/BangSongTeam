@@ -183,6 +183,41 @@ describe("동기화 라우트 교차 사용자 격리", () => {
     expect(body.presentations).toHaveLength(1);
   });
 
+  it("휴지통에 없는 프레젠테이션은 409로 거절하고, 휴지통에 넣은 뒤에는 지운다", async () => {
+    const remove = () =>
+      app.request(
+        `/api/presentations/${DOC_ID}`,
+        { method: "DELETE", headers: { "sec-fetch-site": "same-origin" } },
+        env,
+      );
+    const listIds = async () => {
+      const res = await app.request("/api/presentations", {}, env);
+      const body = (await res.json()) as {
+        presentations: PresentationDocument[];
+      };
+      return body.presentations.map((presentation) => presentation.id);
+    };
+    await app.request(
+      `/api/presentations/${DOC_ID}`,
+      json(makeDoc(USER_A)),
+      env,
+    );
+
+    const refused = await remove();
+    expect(refused.status).toBe(409);
+    expect(await refused.json()).toEqual({ error: API_ERRORS.trashChanged });
+    expect(await listIds()).toEqual([DOC_ID]);
+
+    await app.request(
+      `/api/presentations/${DOC_ID}`,
+      json({ ...makeDoc(USER_A), trashedAt: "2026-09-25T00:00:00.000Z" }),
+      env,
+    );
+    const removed = await remove();
+    expect(removed.status).toBe(200);
+    expect(await listIds()).toEqual([]);
+  });
+
   it("미로그인은 모든 동기화 경로에서 401이다", async () => {
     currentUser = null;
 

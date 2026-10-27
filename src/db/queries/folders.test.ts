@@ -22,6 +22,7 @@ import {
   getDriveTombstones,
   getFoldersByUserId,
   upsertFolder,
+  type DeleteFolderTreeResult,
 } from "./folders";
 import {
   deletePresentation,
@@ -31,6 +32,8 @@ import {
 
 const USER_A = "00000000000000000000a";
 const USER_B = "00000000000000000000b";
+const TRASHED_AT = "2026-09-25T00:00:00.000Z";
+const NO_TOMBSTONES = { folderIds: [], presentationIds: [] };
 
 let seq = 0;
 function nextId(): string {
@@ -89,6 +92,16 @@ function makeDoc(
     updatedAt: "2026-09-21T00:00:00.000Z",
     ...overrides,
   });
+}
+
+function sortedIds(result: DeleteFolderTreeResult): DeleteFolderTreeResult {
+  return result.status === "deleted"
+    ? {
+        status: "deleted",
+        folderIds: [...result.folderIds].sort(),
+        presentationIds: [...result.presentationIds].sort(),
+      }
+    : result;
 }
 
 describe("드라이브 폴더 쿼리", () => {
@@ -185,7 +198,7 @@ describe("드라이브 폴더 쿼리", () => {
 
   describe("deleteFolderTree", () => {
     it("하위 폴더와 그 안의 프레젠테이션·덱·항목을 함께 지운다", async () => {
-      const root = makeFolder(USER_A, { name: "root" });
+      const root = makeFolder(USER_A, { name: "root", trashedAt: TRASHED_AT });
       const child = makeFolder(USER_A, { name: "child", parentId: root.id });
       const sibling = makeFolder(USER_A, { name: "sibling" });
       for (const folder of [root, child, sibling]) {
@@ -201,10 +214,11 @@ describe("드라이브 폴더 쿼리", () => {
       }
 
       const result = await deleteFolderTree(db, USER_A, root.id);
-      expect(result?.folderIds.sort()).toEqual([root.id, child.id].sort());
-      expect(result?.presentationIds.sort()).toEqual(
-        [inRoot.id, inChild.id].sort(),
-      );
+      expect(sortedIds(result)).toEqual({
+        status: "deleted",
+        folderIds: [root.id, child.id].sort(),
+        presentationIds: [inRoot.id, inChild.id].sort(),
+      });
 
       const folders = await getFoldersByUserId(db, USER_A);
       expect(folders.map((f) => f.id)).toEqual([sibling.id]);
@@ -222,8 +236,8 @@ describe("드라이브 폴더 쿼리", () => {
       }
     });
 
-    it("남의 폴더·없는 폴더는 null이고 아무것도 지우지 않는다", async () => {
-      const theirs = makeFolder(USER_B);
+    it("남의 폴더·없는 폴더는 notFound이고 아무것도 지우지 않는다", async () => {
+      const theirs = makeFolder(USER_B, { trashedAt: TRASHED_AT });
       await upsertFolder(db, USER_B, theirs);
       await upsertPresentationDocument(
         db,
@@ -231,10 +245,157 @@ describe("드라이브 폴더 쿼리", () => {
         makeDoc(USER_B, { folderId: theirs.id }),
       );
 
-      expect(await deleteFolderTree(db, USER_A, theirs.id)).toBeNull();
-      expect(await deleteFolderTree(db, USER_A, nextId())).toBeNull();
+      expect(await deleteFolderTree(db, USER_A, theirs.id)).toEqual({
+        status: "notFound",
+      });
+      expect(await deleteFolderTree(db, USER_A, nextId())).toEqual({
+        status: "notFound",
+      });
       expect(await getFoldersByUserId(db, USER_B)).toHaveLength(1);
       expect((await presentationsCol(db).get()).size).toBe(1);
+    });
+
+    it("휴지통에 없는 폴더는 영구 삭제하지 않는다", async () => {
+      const folder = makeFolder(USER_A);
+      await upsertFolder(db, USER_A, folder);
+      const doc = makeDoc(USER_A, { folderId: folder.id });
+      await upsertPresentationDocument(db, USER_A, doc);
+
+      expect(await deleteFolderTree(db, USER_A, folder.id)).toEqual({
+        status: "conflict",
+        partial: false,
+      });
+
+      expect(await getFoldersByUserId(db, USER_A)).toEqual([folder]);
+      expect(
+        (await getPresentationDocumentsByUserId(db, USER_A)).map((d) => d.id),
+      ).toEqual([doc.id]);
+      expect(
+        (await decksCol(db).where("presentationId", "==", doc.id).get()).size,
+      ).toBe(1);
+      expect(await getDriveTombstones(db, USER_A)).toEqual(NO_TOMBSTONES);
+    });
+
+    it("다른 기기에서 복원한 폴더는 영구 삭제하지 않는다", async () => {
+      const folder = makeFolder(USER_A);
+      await upsertFolder(db, USER_A, {
+        ...folder,
+        trashedAt: TRASHED_AT,
+        updatedAt: TRASHED_AT,
+      });
+      const doc = makeDoc(USER_A, { folderId: folder.id });
+      await upsertPresentationDocument(db, USER_A, doc);
+      const restored = {
+        ...folder,
+        trashedAt: null,
+        updatedAt: "2026-09-26T00:00:00.000Z",
+      };
+      await upsertFolder(db, USER_A, restored);
+
+      expect(await deleteFolderTree(db, USER_A, folder.id)).toEqual({
+        status: "conflict",
+        partial: false,
+      });
+
+      expect(await getFoldersByUserId(db, USER_A)).toEqual([restored]);
+      expect(
+        (await getPresentationDocumentsByUserId(db, USER_A)).map((d) => d.id),
+      ).toEqual([doc.id]);
+      expect(await getDriveTombstones(db, USER_A)).toEqual(NO_TOMBSTONES);
+    });
+
+    it("조상이 휴지통에 있으면 하위 폴더와 안의 프레젠테이션을 지운다", async () => {
+      const parent = makeFolder(USER_A, { trashedAt: TRASHED_AT });
+      const child = makeFolder(USER_A, { parentId: parent.id });
+      const grandchild = makeFolder(USER_A, { parentId: child.id });
+      for (const folder of [parent, child, grandchild]) {
+        await upsertFolder(db, USER_A, folder);
+      }
+      const inParent = makeDoc(USER_A, { folderId: parent.id });
+      const inGrandchild = makeDoc(USER_A, { folderId: grandchild.id });
+      for (const doc of [inParent, inGrandchild]) {
+        await upsertPresentationDocument(db, USER_A, doc);
+      }
+
+      const result = await deleteFolderTree(db, USER_A, child.id);
+
+      expect(sortedIds(result)).toEqual({
+        status: "deleted",
+        folderIds: [child.id, grandchild.id].sort(),
+        presentationIds: [inGrandchild.id],
+      });
+      expect(await getFoldersByUserId(db, USER_A)).toEqual([parent]);
+      expect(
+        (await getPresentationDocumentsByUserId(db, USER_A)).map((d) => d.id),
+      ).toEqual([inParent.id]);
+    });
+
+    describe("기기가 본 하위 트리(expected)", () => {
+      async function seedTrashedTree(): Promise<{
+        parent: Folder;
+        child: Folder;
+        doc: PresentationDocument;
+      }> {
+        const parent = makeFolder(USER_A, { trashedAt: TRASHED_AT });
+        const child = makeFolder(USER_A, { parentId: parent.id });
+        await upsertFolder(db, USER_A, parent);
+        await upsertFolder(db, USER_A, child);
+        const doc = makeDoc(USER_A, { folderId: child.id });
+        await upsertPresentationDocument(db, USER_A, doc);
+        return { parent, child, doc };
+      }
+
+      it("보지 못한 하위 폴더가 서버 트리에 있으면 아무것도 지우지 않는다", async () => {
+        const { parent, child, doc } = await seedTrashedTree();
+
+        expect(
+          await deleteFolderTree(db, USER_A, parent.id, {
+            folderIds: [parent.id],
+            presentationIds: [],
+          }),
+        ).toEqual({ status: "conflict", partial: false });
+
+        expect(
+          (await getFoldersByUserId(db, USER_A)).map((f) => f.id).sort(),
+        ).toEqual([parent.id, child.id].sort());
+        expect(
+          (await getPresentationDocumentsByUserId(db, USER_A)).map((d) => d.id),
+        ).toEqual([doc.id]);
+        expect(await getDriveTombstones(db, USER_A)).toEqual(NO_TOMBSTONES);
+      });
+
+      it("보지 못한 프레젠테이션이 서버 트리에 있으면 아무것도 지우지 않는다", async () => {
+        const { parent, child, doc } = await seedTrashedTree();
+
+        expect(
+          await deleteFolderTree(db, USER_A, parent.id, {
+            folderIds: [parent.id, child.id],
+            presentationIds: [],
+          }),
+        ).toEqual({ status: "conflict", partial: false });
+
+        expect(await getFoldersByUserId(db, USER_A)).toHaveLength(2);
+        expect(
+          (await getPresentationDocumentsByUserId(db, USER_A)).map((d) => d.id),
+        ).toEqual([doc.id]);
+        expect(await getDriveTombstones(db, USER_A)).toEqual(NO_TOMBSTONES);
+      });
+
+      it("서버에 없는 id나 형식이 다른 id가 더 있어도 지운다", async () => {
+        const { parent, child, doc } = await seedTrashedTree();
+
+        const result = await deleteFolderTree(db, USER_A, parent.id, {
+          folderIds: [parent.id, child.id, nextId(), "legacy-folder"],
+          presentationIds: [doc.id, "550e8400-e29b-41d4-a716-446655440000"],
+        });
+
+        expect(sortedIds(result)).toEqual({
+          status: "deleted",
+          folderIds: [parent.id, child.id].sort(),
+          presentationIds: [doc.id],
+        });
+        expect(await getFoldersByUserId(db, USER_A)).toEqual([]);
+      });
     });
   });
 
@@ -320,7 +481,7 @@ describe("드라이브 폴더 쿼리", () => {
 
   describe("영구 삭제 기록 (tombstone)", () => {
     it("폴더 트리 삭제는 지운 폴더·프레젠테이션을 기록한다 (본인 것만 보인다)", async () => {
-      const root = makeFolder(USER_A);
+      const root = makeFolder(USER_A, { trashedAt: TRASHED_AT });
       const child = makeFolder(USER_A, { parentId: root.id });
       await upsertFolder(db, USER_A, root);
       await upsertFolder(db, USER_A, child);
@@ -332,14 +493,11 @@ describe("드라이브 폴더 쿼리", () => {
       const tombstones = await getDriveTombstones(db, USER_A);
       expect(tombstones.folderIds.sort()).toEqual([root.id, child.id].sort());
       expect(tombstones.presentationIds).toEqual([doc.id]);
-      expect(await getDriveTombstones(db, USER_B)).toEqual({
-        folderIds: [],
-        presentationIds: [],
-      });
+      expect(await getDriveTombstones(db, USER_B)).toEqual(NO_TOMBSTONES);
     });
 
     it("프레젠테이션 영구 삭제도 기록한다", async () => {
-      const doc = makeDoc(USER_A);
+      const doc = makeDoc(USER_A, { trashedAt: TRASHED_AT });
       await upsertPresentationDocument(db, USER_A, doc);
       await deletePresentation(db, doc.id, USER_A);
 
@@ -349,9 +507,9 @@ describe("드라이브 폴더 쿼리", () => {
     });
 
     it("같은 id를 다시 저장하면 기록을 지우고 되살린다", async () => {
-      const folder = makeFolder(USER_A);
+      const folder = makeFolder(USER_A, { trashedAt: TRASHED_AT });
       await upsertFolder(db, USER_A, folder);
-      const doc = makeDoc(USER_A);
+      const doc = makeDoc(USER_A, { trashedAt: TRASHED_AT });
       await upsertPresentationDocument(db, USER_A, doc);
       await deleteFolderTree(db, USER_A, folder.id);
       await deletePresentation(db, doc.id, USER_A);
@@ -359,15 +517,12 @@ describe("드라이브 폴더 쿼리", () => {
       await upsertFolder(db, USER_A, folder);
       await upsertPresentationDocument(db, USER_A, doc);
 
-      expect(await getDriveTombstones(db, USER_A)).toEqual({
-        folderIds: [],
-        presentationIds: [],
-      });
+      expect(await getDriveTombstones(db, USER_A)).toEqual(NO_TOMBSTONES);
       expect(await getFoldersByUserId(db, USER_A)).toHaveLength(1);
     });
 
     it("in 조건 한도(30)를 넘는 항목을 지워도 모두 기록한다", async () => {
-      const root = makeFolder(USER_A);
+      const root = makeFolder(USER_A, { trashedAt: TRASHED_AT });
       await upsertFolder(db, USER_A, root);
       const children = Array.from({ length: 45 }, () =>
         makeFolder(USER_A, { parentId: root.id }),
@@ -375,12 +530,12 @@ describe("드라이브 폴더 쿼리", () => {
       for (const child of children) await upsertFolder(db, USER_A, child);
 
       const result = await deleteFolderTree(db, USER_A, root.id);
-      expect(result?.folderIds).toHaveLength(46);
+      expect(result.status === "deleted" && result.folderIds).toHaveLength(46);
       expect((await getDriveTombstones(db, USER_A)).folderIds).toHaveLength(46);
     });
 
     it("in 조건 한도(30)를 넘는 프레젠테이션을 담은 폴더도 사본 곡·공유 멤버까지 모두 지운다", async () => {
-      const folder = makeFolder(USER_A);
+      const folder = makeFolder(USER_A, { trashedAt: TRASHED_AT });
       await upsertFolder(db, USER_A, folder);
       const seeded = presentationsWithCopies(USER_A, 31, 2, {
         folderId: folder.id,
@@ -395,7 +550,9 @@ describe("드라이브 폴더 쿼리", () => {
 
       const result = await deleteFolderTree(db, USER_A, folder.id);
 
-      expect(result?.presentationIds).toHaveLength(31);
+      expect(
+        result.status === "deleted" && result.presentationIds,
+      ).toHaveLength(31);
       expect(
         (await decksCol(db).where("userId", "==", USER_A).get()).size,
       ).toBe(0);
