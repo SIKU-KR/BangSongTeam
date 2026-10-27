@@ -3,12 +3,14 @@
  * 앱에는 배경 업로드가 없다 — 배경 영상은 수백 MB라 API 요청 본문으로 받지 않는다.
  *
  * 매니페스트의 `id`를 기준으로 Firestore의 `backgrounds`와 비교해:
- *   - 새 id: ffprobe로 H.264·길이를 확인하고 포스터(960px WebP)를 만든 뒤, 미디어 저장소에
- *     영상·포스터를 먼저 올리고 배경 문서를 만든다. 한 건씩 넣으므로 중간에 멈춰도 다시
- *     돌리면 이어서 한다.
- *   - 있는 id: 파일은 그대로 두고 제목·설명·검색어만 고친다.
+ *   - 새 id: ffprobe로 브라우저가 재생할 수 있는 H.264(8비트 4:2:0)인지와 길이를 확인하고
+ *     포스터(960px WebP)를 만든 뒤, 미디어 저장소에 영상·포스터를 먼저 올리고 배경 문서를
+ *     만든다. 한 건씩 넣으므로 중간에 멈춰도 다시 돌리면 이어서 한다.
+ *   - 있는 id: 파일은 그대로 두고 제목·설명·검색어만 고친다. 영상 파일이 없어도 된다.
  *   - 매니페스트에 없는 문서: 새 등록이 모두 성공했을 때만 문서를 지우고 미디어 객체를
- *     지운다. 그 배경을 쓰던 곡은 같은 트랜잭션에서 배경 없음이 된다.
+ *     지운다. 그 배경을 쓰던 곡은 같은 트랜잭션에서 배경 없음이 되고, 같은 id로 다시 등록해도
+ *     배경을 되찾지 않는다. 실수로 지웠을 때 어느 곡을 되돌려야 하는지 알 수 있게 지운 배경마다
+ *     쓰던 곡 id를 `--links-file`에 남긴다.
  *
  * 필요한 도구: ffmpeg·ffprobe, cwebp (`brew install ffmpeg webp`). ffmpeg 빌드에 WebP 인코더가
  * 없는 경우가 많아 포스터는 PNG로 뽑아 cwebp로 바꾼다. 대상별 준비는 `lib/targets.mjs`.
@@ -23,8 +25,11 @@
  * 배경이 사라질 곡 수)를 확인받은 뒤에만 `--confirm`으로 실행한다.
  *
  * 옵션:
- *   --manifest=<경로>  매니페스트 JSON (기본값: data/backgrounds/storyloop.json)
- *   --dir=<경로>       매니페스트의 `file`이 들어 있는 영상 폴더 (필수)
+ *   --manifest=<경로>    매니페스트 JSON (기본값: data/backgrounds/storyloop.json)
+ *   --dir=<경로>         매니페스트의 `file`이 들어 있는 영상 폴더 (필수). 새로 등록할 배경의
+ *                        영상만 있으면 된다
+ *   --links-file=<경로>  지운 배경과 그 배경을 쓰던 곡 id 기록
+ *                        (기본값: .data/removed-background-links-<시각>.json)
  */
 
 import fs from "node:fs";
@@ -41,6 +46,7 @@ import {
   parseFlags,
   applyTarget,
 } from "./lib/targets.mjs";
+import { PROBE_ENTRIES, checkProbedVideo } from "./lib/videoProbe.mjs";
 
 const DEFAULT_MANIFEST = path.join(
   ROOT_DIR,
@@ -57,9 +63,14 @@ function parseArgs(argv) {
   const args = parseFlags(argv);
   const target = args.target ?? "local";
   if (!args.dir) throw new Error("--dir=<영상 폴더>가 필요합니다");
+  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
   return {
     manifestPath: path.resolve(args.manifest ?? DEFAULT_MANIFEST),
     dir: path.resolve(args.dir.replace(/^~(?=\/)/, os.homedir())),
+    linksFile: path.resolve(
+      args["links-file"] ??
+        path.join(ROOT_DIR, ".data", `removed-background-links-${stamp}.json`),
+    ),
     target,
     dryRun: args["dry-run"] === true,
     confirmed: args.confirm === true,
@@ -79,8 +90,11 @@ function run(command, args) {
  * 매니페스트를 읽고 올리기 전에 항목을 확인한다. 앱은 배경 목록을 행마다 검증하므로 형식을
  * 어긴 배경(숫자 검색어, 문자열이 아닌 제목·설명)은 갤러리와 송출에서 빠진다. 손으로 고친
  * 매니페스트의 실수를 여기서 막는다.
+ *
+ * 영상 파일은 확인하지 않는다. 이미 등록한 배경의 제목·설명·검색어는 영상 파일 없이 고칠 수
+ * 있어야 하므로, 새로 등록할 항목의 파일만 따로 확인한다.
  */
-export function loadManifest(manifestPath, dir) {
+export function loadManifest(manifestPath) {
   const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf-8"));
   const ids = new Set();
   for (const item of manifest.items) {
@@ -95,23 +109,17 @@ export function loadManifest(manifestPath, dir) {
       throw new Error(`keywords에 문자열이 아닌 값: ${item.file}`);
     if (item.description != null && typeof item.description !== "string")
       throw new Error(`description이 문자열이 아님: ${item.file}`);
-    if (!fs.existsSync(path.join(dir, item.file))) {
-      throw new Error(`영상 파일 없음: ${path.join(dir, item.file)}`);
-    }
   }
   return manifest;
 }
 
-/**
- * ffprobe 결과의 영상 길이(초, 반올림). 길이를 읽지 못하면 등록을 멈춘다. NaN은 Firestore에
- * 그대로 남고 JSON으로는 null이 되어 앱이 그 배경을 버린다.
- */
-export function durationOf(probed, file) {
-  const durationSec = Math.round(Number(probed.format?.duration));
-  if (!Number.isFinite(durationSec) || durationSec < 0) {
-    throw new Error(`영상 길이를 읽지 못함: ${file}`);
+function assertVideosExist(items, dir) {
+  const missing = items
+    .map((item) => path.join(dir, item.file))
+    .filter((file) => !fs.existsSync(file));
+  if (missing.length > 0) {
+    throw new Error(`영상 파일 없음: ${missing.join(", ")}`);
   }
-  return durationSec;
 }
 
 function probeVideo(file) {
@@ -121,15 +129,12 @@ function probeVideo(file) {
     "-select_streams",
     "v:0",
     "-show_entries",
-    "stream=codec_name:format=duration",
+    PROBE_ENTRIES,
     "-of",
     "json",
     file,
   ]);
-  const probed = JSON.parse(output);
-  const codec = probed.streams?.[0]?.codec_name;
-  if (codec !== "h264") throw new Error(`H.264가 아닙니다 (${codec}): ${file}`);
-  return durationOf(probed, file);
+  return checkProbedVideo(JSON.parse(output), file);
 }
 
 function makePoster(file, durationSec, outFile) {
@@ -192,7 +197,7 @@ async function main() {
   const { target, dir } = options;
   applyTarget(target);
   await assertEmulatorUp();
-  const manifest = loadManifest(options.manifestPath, dir);
+  const manifest = loadManifest(options.manifestPath);
   const manifestIds = new Set(manifest.items.map((item) => item.id));
 
   const [{ getFirestore }, ops] = await Promise.all([
@@ -206,6 +211,7 @@ async function main() {
   const existingIds = new Set(existing.map((row) => row.id));
   const toRegister = manifest.items.filter((item) => !existingIds.has(item.id));
   const toUpdate = manifest.items.filter((item) => existingIds.has(item.id));
+  assertVideosExist(toRegister, dir);
   const toDelete = existing.filter((row) => !manifestIds.has(row.id));
   const usage = await ops.countDecksByBackground(
     db,
@@ -257,7 +263,15 @@ async function main() {
     return;
   }
 
-  for (const row of toDelete) await ops.deleteBackground(db, row.id);
+  const removedLinks = {};
+  for (const row of toDelete) {
+    removedLinks[row.id] = await ops.deleteBackground(db, row.id);
+    fs.mkdirSync(path.dirname(options.linksFile), { recursive: true });
+    fs.writeFileSync(options.linksFile, JSON.stringify(removedLinks, null, 2));
+  }
+  if (toDelete.length > 0) {
+    console.log(`지운 배경을 쓰던 곡 id를 남겼어요: ${options.linksFile}`);
+  }
   for (const key of new Set(
     toDelete.flatMap((row) => [row.mediaKey, row.posterKey]),
   )) {
