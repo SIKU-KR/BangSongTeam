@@ -1,17 +1,19 @@
 import React from "react";
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { onlineManager } from "@tanstack/react-query";
+import { onlineManager, type QueryClient } from "@tanstack/react-query";
 import {
   act,
   render,
   screen,
   fireEvent,
   waitFor,
+  within,
 } from "@testing-library/react";
 import { API_ERRORS, type ShareSettings } from "#shared";
 import { withQueryClient } from "../../test/queryClientFixture";
 import { installFakeApi, type FakeApi } from "../../test/fakeApi";
 import { signInAsTestUser } from "../../test/sessionFixture";
+import { createAppQueryClient } from "../../lib/api/queryClient";
 import {
   createNewPresentation,
   resetPresentationStore,
@@ -23,6 +25,7 @@ import {
 } from "../../lib/sync/syncScheduler";
 import { PresentationShareDialog } from "./PresentationShareDialog";
 import { SHARING_COPY } from "#copy/sharing";
+import { ERROR_COPY } from "#copy/common";
 
 const ID = "p0000000000000000000a";
 
@@ -56,7 +59,7 @@ describe("PresentationShareDialog (세트 링크 공유)", () => {
     onlineManager.setOnline(true);
   });
 
-  function renderDialog(presentationId = ID) {
+  function renderDialog(presentationId = ID, client?: QueryClient) {
     return render(
       withQueryClient(
         <PresentationShareDialog
@@ -65,8 +68,17 @@ describe("PresentationShareDialog (세트 링크 공유)", () => {
           isOpen
           onClose={() => {}}
         />,
+        client,
       ),
     );
+  }
+
+  async function chooseAccess(label: string): Promise<void> {
+    fireEvent.click(await screen.findByTestId("share-access-select"));
+    const option = await screen.findByRole("option", { name: label });
+    fireEvent.pointerDown(option);
+    fireEvent.mouseUp(option);
+    fireEvent.click(option);
   }
 
   it("링크가 꺼져 있으면 주소를 보여 주지 않는다", async () => {
@@ -93,13 +105,7 @@ describe("PresentationShareDialog (세트 링크 공유)", () => {
 
   it("보기 가능으로 바꾸면 /s/ 링크가 나타난다", async () => {
     renderDialog();
-    fireEvent.click(await screen.findByTestId("share-access-select"));
-    const option = await screen.findByRole("option", {
-      name: SHARING_COPY.link.accessOptions.view,
-    });
-    fireEvent.pointerDown(option);
-    fireEvent.mouseUp(option);
-    fireEvent.click(option);
+    await chooseAccess(SHARING_COPY.link.accessOptions.view);
 
     await waitFor(() =>
       expect(screen.getByTestId("share-link-input")).toHaveValue(
@@ -133,6 +139,27 @@ describe("PresentationShareDialog (세트 링크 공유)", () => {
     expect(hint).toHaveTextContent("로그인하지 않아도");
     expect(hint).toHaveTextContent("누구나");
     expect(hint).not.toHaveTextContent("로그인한 사람은");
+  });
+
+  it("설정을 불러오지 못하면 링크가 꺼졌다고 지어내지 않고 오류만 알린다", async () => {
+    api.restore();
+    api = installFakeApi({
+      "GET /api/presentations/*/share": () => ({
+        status: 503,
+        body: { error: API_ERRORS.serverBusy },
+      }),
+    });
+
+    renderDialog();
+
+    expect(await screen.findByText(API_ERRORS.serverBusy)).toBeInTheDocument();
+    expect(screen.queryByTestId("share-access-select")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(SHARING_COPY.link.accessHints.off),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("share-settings-skeleton"),
+    ).not.toBeInTheDocument();
   });
 
   describe("서버에 아직 없는 프레젠테이션", () => {
@@ -197,9 +224,12 @@ describe("PresentationShareDialog (세트 링크 공유)", () => {
       expect(
         screen.queryByText(API_ERRORS.presentation.notAccessible),
       ).not.toBeInTheDocument();
-      const select = screen.getByTestId("share-access-select");
-      expect(select).toBeDisabled();
-      expect(select).toHaveAttribute("data-disabled");
+      expect(
+        screen.queryByTestId("share-access-select"),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByText(SHARING_COPY.link.accessHints.off),
+      ).not.toBeInTheDocument();
     });
 
     it("올리던 변경이 끝나기 전에 대화 상자가 사라지면 공유 설정을 읽으러 가지 않는다", async () => {
@@ -296,6 +326,130 @@ describe("PresentationShareDialog (세트 링크 공유)", () => {
         await screen.findByText(SHARING_COPY.library.onlineOnly),
       ).toBeInTheDocument();
       expect(screen.getByTestId("share-reset-btn")).toBeDisabled();
+    });
+
+    it("offline 이벤트 없이 오프라인으로 시작해도 설정을 읽으러 가지 않고 링크 상태를 지어내지 않는다", async () => {
+      settings = { access: "view", token: "tok-first" };
+      api.restore();
+      api = installFakeApi({}, { offline: true });
+      vi.spyOn(navigator, "onLine", "get").mockReturnValue(false);
+
+      renderDialog(ID, createAppQueryClient());
+
+      expect(
+        await screen.findByText(SHARING_COPY.library.onlineOnly),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByTestId("share-access-select"),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByText(SHARING_COPY.link.accessHints.off),
+      ).not.toBeInTheDocument();
+      expect(screen.queryByText(ERROR_COPY.offline)).not.toBeInTheDocument();
+      expect(api.calls).toEqual([]);
+
+      api.restore();
+      api = installFakeApi({
+        "GET /api/presentations/*/share": () => ({ body: settings }),
+      });
+      goOnline();
+
+      expect(
+        await screen.findByTestId("share-access-select"),
+      ).toHaveTextContent(SHARING_COPY.link.accessOptions.view);
+      expect(
+        screen.queryByText(SHARING_COPY.library.onlineOnly),
+      ).not.toBeInTheDocument();
+    });
+
+    it("설정을 읽지 못한 채 오프라인이 되면 지난 오류 대신 온라인에서만 된다고만 알린다", async () => {
+      api.restore();
+      api = installFakeApi({
+        "GET /api/presentations/*/share": () => ({
+          status: 503,
+          body: { error: API_ERRORS.serverBusy },
+        }),
+      });
+      renderDialog();
+      expect(
+        await screen.findByText(API_ERRORS.serverBusy),
+      ).toBeInTheDocument();
+
+      goOffline();
+
+      expect(
+        await screen.findByText(SHARING_COPY.library.onlineOnly),
+      ).toBeInTheDocument();
+      expect(screen.queryByText(API_ERRORS.serverBusy)).not.toBeInTheDocument();
+    });
+
+    it("재설정 확인 창을 연 채 오프라인이 되면 재설정하지 못하게 하고 온라인이 돼도 보내지 않는다", async () => {
+      settings = { access: "view", token: "tok-first" };
+      renderDialog();
+      fireEvent.click(await screen.findByTestId("share-reset-btn"));
+      expect(
+        await screen.findByTestId("share-reset-confirm-btn"),
+      ).toBeEnabled();
+
+      goOffline();
+
+      const confirm = screen.getByTestId("share-reset-confirm-btn");
+      expect(confirm).toBeDisabled();
+      expect(
+        within(screen.getByRole("alertdialog")).getByText(
+          SHARING_COPY.library.onlineOnly,
+        ),
+      ).toBeInTheDocument();
+      fireEvent.click(confirm);
+      goOnline();
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      });
+      expect(
+        api.calls.filter((call) => call.path.endsWith("/share/reset")),
+      ).toEqual([]);
+    });
+
+    it("연결이 끊긴 것을 모르고 바꾼 링크 설정은 멈춰 두지 않고 곧바로 실패를 알리며, 온라인이 돼도 보내지 않는다", async () => {
+      renderDialog();
+      expect(await screen.findByTestId("share-access-select")).toBeEnabled();
+      api.restore();
+      api = installFakeApi({}, { offline: true });
+      act(() => onlineManager.setOnline(false));
+
+      await chooseAccess(SHARING_COPY.link.accessOptions.view);
+
+      expect(await screen.findByText(ERROR_COPY.offline)).toBeInTheDocument();
+      const updates = (): number =>
+        api.calls.filter((call) => call.method === "PUT").length;
+      expect(updates()).toBe(1);
+      act(() => onlineManager.setOnline(true));
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      });
+      expect(updates()).toBe(1);
+    });
+
+    it("연결이 끊긴 것을 모르고 누른 링크 재설정도 멈춰 두지 않고 곧바로 실패를 알리며, 온라인이 돼도 보내지 않는다", async () => {
+      settings = { access: "view", token: "tok-first" };
+      renderDialog();
+      fireEvent.click(await screen.findByTestId("share-reset-btn"));
+      const confirm = await screen.findByTestId("share-reset-confirm-btn");
+      api.restore();
+      api = installFakeApi({}, { offline: true });
+      act(() => onlineManager.setOnline(false));
+
+      fireEvent.click(confirm);
+
+      expect(await screen.findByText(ERROR_COPY.offline)).toBeInTheDocument();
+      const resets = (): number =>
+        api.calls.filter((call) => call.path.endsWith("/share/reset")).length;
+      expect(resets()).toBe(1);
+      act(() => onlineManager.setOnline(true));
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      });
+      expect(resets()).toBe(1);
     });
   });
 });

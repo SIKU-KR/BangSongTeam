@@ -82,8 +82,12 @@ function describeShareError(error: unknown): string {
  * 만든 세트는 서버가 아직 몰라 설정을 읽을 수 없다(404). 그래도 서버에 없으면 열 수 없다고
  * 하지 않고 동기화가 끝난 뒤 다시 열라고 알린다.
  *
- * 오프라인이면 요청을 멈춰 두는 대신 온라인에서만 된다고 알리고, 링크를 켜고 끄거나 재설정하지
- * 못하게 한다. 멈춰 둔 요청은 대화 상자를 닫은 뒤 연결이 돌아올 때 링크를 바꿀 수 있다.
+ * 설정을 읽지 못하면 링크 상태를 그리지 않는다. 모르는 상태를 '나만 보기'로 그리면 켜진 링크를
+ * 꺼졌다고 믿게 된다.
+ *
+ * 브라우저가 오프라인이라고 알면(`useIsOnline`) 설정을 읽으러 가지 않고 온라인에서만 된다고만
+ * 알리며, 링크를 켜고 끄거나 재설정하지 못하게 한다. TanStack의 멈춤에 맡기지 않는 까닭은
+ * 오프라인으로 켠 브라우저가 `offline` 이벤트를 내지 않아 TanStack은 온라인으로 알기 때문이다.
  */
 export function PresentationShareDialog({
   presentationId,
@@ -93,7 +97,7 @@ export function PresentationShareDialog({
 }: PresentationShareDialogProps): React.JSX.Element {
   const isOnline = useIsOnline();
   const settings = useShareSettings(presentationId, {
-    enabled: isOpen,
+    enabled: isOpen && isOnline,
     beforeFetch: flushPendingSync,
   });
   const update = useUpdateShareSettings(presentationId);
@@ -127,7 +131,8 @@ export function PresentationShareDialog({
           <DialogDescription className="truncate">{title}</DialogDescription>
         </DialogHeader>
 
-        {settings.isPending ? (
+        {!settings.data ? (
+          settings.isPending &&
           isOnline && (
             <Skeleton
               data-testid="share-settings-skeleton"
@@ -193,10 +198,11 @@ export function PresentationShareDialog({
           </>
         )}
 
-        {!isOnline && (
+        {isOnline ? (
+          error && <FieldError>{describeShareError(error)}</FieldError>
+        ) : (
           <FieldDescription>{SHARING_COPY.library.onlineOnly}</FieldDescription>
         )}
-        {error && <FieldError>{describeShareError(error)}</FieldError>}
 
         <DialogFooter>
           {url && (
@@ -220,7 +226,9 @@ export function PresentationShareDialog({
           <AlertDialogHeader>
             <AlertDialogTitle>{SHARING_COPY.link.resetTitle}</AlertDialogTitle>
             <AlertDialogDescription>
-              {SHARING_COPY.link.resetDescription}
+              {isOnline
+                ? SHARING_COPY.link.resetDescription
+                : SHARING_COPY.library.onlineOnly}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -228,6 +236,7 @@ export function PresentationShareDialog({
             <AlertDialogAction
               data-testid="share-reset-confirm-btn"
               variant="destructive"
+              disabled={!isOnline}
               onClick={() => {
                 reset.mutate(undefined, {
                   onSuccess: () => toast.success(SHARING_COPY.link.regenerated),

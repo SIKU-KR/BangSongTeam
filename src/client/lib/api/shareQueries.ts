@@ -2,6 +2,7 @@ import {
   useMutation,
   useQuery,
   useQueryClient,
+  type UseMutationResult,
   type UseQueryResult,
 } from "@tanstack/react-query";
 import type { LinkAccess, ShareSettings } from "#shared";
@@ -48,20 +49,36 @@ export function useShareSettings(
   });
 }
 
-export function useUpdateShareSettings(id: string) {
+/**
+ * 링크 공개 범위를 바꾼다. 오프라인이라고 멈춰 두지 않고 곧바로 보내(`networkMode: 'always'`)
+ * 닿지 못하면 `OfflineError`로 바로 실패한다. 멈춰 두면 대화 상자를 닫은 뒤, 송출 중에라도
+ * 연결이 돌아오는 순간 링크가 켜지거나 꺼진다.
+ */
+export function useUpdateShareSettings(
+  id: string,
+): UseMutationResult<ShareSettings, Error, LinkAccess> {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (access: LinkAccess) => updateShareSettings(id, access),
+    networkMode: "always",
     onSuccess: (settings: ShareSettings) => {
       queryClient.setQueryData(shareKeys.settings(id), settings);
     },
   });
 }
 
-export function useResetShareLink(id: string) {
+/**
+ * 링크를 새로 만들어 지금 링크로 들어온 사람을 모두 내보낸다. `useUpdateShareSettings`와 같은
+ * 까닭으로 멈춰 두지 않는다(`networkMode: 'always'`). 멈춰 둔 재설정이 나중에 나가면 소유자가
+ * 모르는 때에 멤버가 쫓겨난다.
+ */
+export function useResetShareLink(
+  id: string,
+): UseMutationResult<ShareSettings, Error, void> {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: () => resetShareLink(id),
+    networkMode: "always",
     onSuccess: (settings: ShareSettings) => {
       queryClient.setQueryData(shareKeys.settings(id), settings);
     },
