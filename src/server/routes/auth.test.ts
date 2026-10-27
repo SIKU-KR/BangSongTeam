@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Query } from "@google-cloud/firestore";
 import { handleOAuthUserInfo } from "better-auth/oauth2";
-import { FALLBACK_USER_NAME } from "#shared";
+import { FALLBACK_USER_NAME, OFFICIAL_LIBRARY_NAME } from "#shared";
 import { COLLECTIONS, runBulk, type Db } from "#db";
 import { env } from "../test/env";
 import { clearDb } from "../../db/test/fixtures";
@@ -579,6 +579,49 @@ describe("표시 이름", () => {
     await context.internalAdapter.updateUser(id, { name: "  새 이름  " });
     await context.internalAdapter.updateUser(id, { emailVerified: true });
     expect(await storedName("update@example.com")).toBe("새 이름");
+  });
+
+  it.each([
+    [OFFICIAL_LIBRARY_NAME, "10.0.6.1"],
+    [" 공식찬양라이브러리 ", "10.0.6.2"],
+    ["공식\u200b찬양 라이브러리", "10.0.6.3"],
+  ])(
+    "공식 라이브러리처럼 보이는 이름 %j로 가입하면 그 이름 대신 기본 이름을 저장한다",
+    async (name, ip) => {
+      const email = `impostor-${ip}@example.com`;
+      const res = await signUpNamed(email, name, ip);
+
+      expect(res.status).toBe(200);
+      expect(await storedName(email)).toBe(FALLBACK_USER_NAME.default);
+    },
+  );
+
+  it("소셜 프로필 이름이 공식 라이브러리 이름이어도 로그인은 되고 그 이름은 저장하지 않는다", async () => {
+    expect(
+      await socialSignIn("google", "google-sub-official", {
+        email: "official-name@example.com",
+        name: OFFICIAL_LIBRARY_NAME,
+        emailVerified: true,
+      }),
+    ).toBeUndefined();
+    expect(await storedName("official-name@example.com")).toBe(
+      FALLBACK_USER_NAME.default,
+    );
+  });
+
+  it("다른 경로로 이름을 바꿀 때도 공식 라이브러리 이름은 저장하지 않는다", async () => {
+    await signUpNamed("rename@example.com", "찬양팀", "10.0.6.4");
+    const context = await getAuth(env).$context;
+    const found =
+      await context.internalAdapter.findUserByEmail("rename@example.com");
+
+    await context.internalAdapter.updateUser(found?.user.id ?? "", {
+      name: OFFICIAL_LIBRARY_NAME,
+    });
+
+    expect(await storedName("rename@example.com")).toBe(
+      FALLBACK_USER_NAME.default,
+    );
   });
 });
 

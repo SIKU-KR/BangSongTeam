@@ -8,12 +8,12 @@ import {
   PASSWORD_MAX_LENGTH,
   PASSWORD_MIN_LENGTH,
   SocialProviderSchema,
-  toDisplayName,
   type SocialProvider,
 } from "#shared";
 import type { Bindings } from "../types";
 import { devSignIn } from "./devSignIn";
 import { hashPassword, verifyPassword } from "./password";
+import { toAccountName } from "./userNames";
 
 /**
  * 소셜 프로바이더가 이메일을 주지 않을 때 쓰는 합성 도메인.
@@ -285,14 +285,14 @@ function buildAuth(env: Bindings) {
       user: {
         create: {
           before: async (user) => ({
-            data: { name: toDisplayName(user.name) },
+            data: { name: toAccountName(user.name) },
           }),
         },
         update: {
           before: async (data) =>
             data.name === undefined
               ? undefined
-              : { data: { name: toDisplayName(data.name) } },
+              : { data: { name: toAccountName(data.name) } },
         },
       },
     },
@@ -316,11 +316,11 @@ type AuthInstance = ReturnType<typeof buildAuth>;
  *   가로채 로그인이 조용히 깨진다.
  * - rate limit은 `NODE_ENV=production`에서만 기본으로 켜지므로 개발·테스트에서도 같게
  *   명시적으로 켠다. 저장소가 인스턴스 메모리라 부분 방어다.
- * - 사용자 이름은 저장하기 전에 `toDisplayName`으로 다듬는다(50자, 보이는 글자가 없으면
- *   기본 이름). 이 이름은 다른 사용자의 곡(원작 표시)·공유 라이브러리 카드·공유받은
- *   프레젠테이션에 복사되는데, Better Auth는 가입 이름의 길이도, `update-user` 본문의 타입도
- *   검사하지 않는다. 거절하지 않고 다듬어서 긴 소셜 프로필 이름으로도 로그인이 막히지 않는다.
- *   앱이 부르지 않는 `/update-user`는 막는다(404).
+ * - 사용자 이름은 저장하기 전에 `toAccountName`으로 다듬는다(50자, 보이는 글자가 없거나
+ *   공식 라이브러리 이름이면 기본 이름). 이 이름은 다른 사용자의 곡(원작 표시)·공유 라이브러리
+ *   카드·공유받은 프레젠테이션에 복사되는데, Better Auth는 가입 이름의 길이도, `update-user`
+ *   본문의 타입도 검사하지 않는다. 거절하지 않고 다듬어서 긴 소셜 프로필 이름으로도 로그인이
+ *   막히지 않는다. 앱이 부르지 않는 `/update-user`는 막는다(404).
  * - 이메일 가입 요청은 먼저 그 이메일의 반쯤 끝난 가입(비밀번호 계정 저장이 실패해 남은 사용자)을
  *   치운다(`releaseAbandonedSignUp`). 그대로 두면 그 이메일로는 가입도 로그인도 못 한다.
  */

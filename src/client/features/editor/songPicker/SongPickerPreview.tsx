@@ -215,7 +215,12 @@ export function SharedDeckPreview({
       <PreviewHeader
         title={summary.title}
         badge={
-          <Badge variant="outline">{EDITOR_COPY.preview.sharedBadge}</Badge>
+          <>
+            {summary.official && (
+              <Badge variant="secondary">{EDITOR_COPY.song.official}</Badge>
+            )}
+            <Badge variant="outline">{EDITOR_COPY.preview.sharedBadge}</Badge>
+          </>
         }
         meta={
           <>

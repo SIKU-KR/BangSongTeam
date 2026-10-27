@@ -43,6 +43,7 @@ describe("API Schemas", () => {
           firstSlidePreview: ["시작됐네 우리 주님의 능력이"],
           slideCount: 6,
           updatedAt: "2026-09-23T00:00:00.000Z",
+          official: false,
         },
       ],
     };

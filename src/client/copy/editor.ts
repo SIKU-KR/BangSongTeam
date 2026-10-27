@@ -23,6 +23,7 @@ const SONG = {
   editInfo: "제목·아티스트 수정",
   newLyrics: "새 가사 입력",
   myLibrary: "내 보관함",
+  official: "공식",
 } as const;
 
 const SPLIT_RULE =

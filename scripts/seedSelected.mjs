@@ -33,10 +33,6 @@ import {
 
 const SELECTED_DIR = path.join(ROOT_DIR, "data", "cleaned", "selected");
 
-/** 시스템 공식 봇 계정. 덱 응답의 userId가 IdSchema(21자)를 통과해야 해서 21자로 맞춘다 */
-const SEED_BOT_USER_ID = "bot-seed-official-lib";
-const SEED_BOT_NAME = "공식 찬양 라이브러리";
-
 /**
  * 텍스트 파일 파싱 (헤더 메타데이터 또는 파일명에서 곡 정보 추출)
  */
@@ -165,6 +161,7 @@ async function main() {
   ]);
   const db = client.getFirestore();
   const decks = collections.decksCol(db);
+  const botId = shared.OFFICIAL_LIBRARY_USER_ID;
 
   console.log(`=== 시드 시작 ===`);
   console.log(`- 원본: ${source}`);
@@ -181,7 +178,7 @@ async function main() {
     `${fitTitle(title)}\u0000${fitArtist(artist ?? "")}`;
 
   const existing = await decks
-    .where("userId", "==", SEED_BOT_USER_ID)
+    .where("userId", "==", botId)
     .where("presentationId", "==", null)
     .get();
   const seen = new Set(
@@ -204,7 +201,7 @@ async function main() {
     rows.push(
       deckIndex.withDeckIndex({
         id: nanoid(),
-        userId: SEED_BOT_USER_ID,
+        userId: botId,
         presentationId: null,
         itemId: null,
         position: null,
@@ -234,10 +231,10 @@ async function main() {
 
   await client.runBulk(db, (writer) => [
     writer.set(
-      collections.usersCol(db).doc(SEED_BOT_USER_ID),
+      collections.usersCol(db).doc(botId),
       {
-        id: SEED_BOT_USER_ID,
-        name: SEED_BOT_NAME,
+        id: botId,
+        name: shared.OFFICIAL_LIBRARY_NAME,
         email: "library@worship.local",
         emailVerified: true,
         image: null,

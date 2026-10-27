@@ -3,6 +3,7 @@ import {
   createId,
   firstSlidePreview,
   fitDeckText,
+  OFFICIAL_LIBRARY_USER_ID,
   toDisplayName,
   toNonNegativeInt,
   type Deck as SharedDeck,
@@ -39,6 +40,7 @@ export function toPublicDeckSummary(row: PublicDeck): PublicDeckSummary {
     firstSlidePreview: firstSlidePreview(slides),
     slideCount: slides.length,
     updatedAt: row.updatedAt.toISOString(),
+    official: row.userId === OFFICIAL_LIBRARY_USER_ID,
   };
 }
 

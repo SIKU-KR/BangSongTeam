@@ -2,6 +2,8 @@ import { describe, it, expect, beforeEach } from "vitest";
 import {
   FALLBACK_USER_NAME,
   ForkDeckResponseSchema,
+  OFFICIAL_LIBRARY_NAME,
+  OFFICIAL_LIBRARY_USER_ID,
   SearchCatalogResponseSchema,
 } from "#shared";
 import type { Db } from "../client";
@@ -78,6 +80,21 @@ describe("공유 쿼리 헬퍼", () => {
       expect(summary.authorName).toBe("김찬양");
       expect(summary).not.toHaveProperty("userId");
       expect(summary).not.toHaveProperty("lyricsRaw");
+    });
+
+    it("공식 라이브러리 계정이 올린 곡만 공식 곡으로 표시한다", () => {
+      const official = toPublicDeckSummary({
+        ...row({ userId: OFFICIAL_LIBRARY_USER_ID, visibility: "public" }),
+        authorName: OFFICIAL_LIBRARY_NAME,
+      });
+      const lookalike = toPublicDeckSummary({
+        ...row({ visibility: "public" }),
+        authorName: OFFICIAL_LIBRARY_NAME,
+      });
+
+      expect(official.official).toBe(true);
+      expect(lookalike.official).toBe(false);
+      expect(lookalike.authorName).toBe(official.authorName);
     });
 
     it("원작자 필드가 저장돼 있지 않아도 키를 null로 채운다", () => {

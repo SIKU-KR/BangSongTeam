@@ -5,6 +5,8 @@ import {
   DEV_USERS,
   MAX_DECK_ARTIST_LENGTH,
   MAX_DECK_TITLE_LENGTH,
+  OFFICIAL_LIBRARY_NAME,
+  OFFICIAL_LIBRARY_USER_ID,
   splitLyricsIntoSlides,
   type Deck,
   type DeckStyle,
@@ -66,11 +68,11 @@ export interface DevSeedSummary {
 
 /**
  * 공유 라이브러리 곡을 올린 계정. `scripts/seedSelected.mjs`가 운영 Firestore에 쓰는 봇 계정과
- * 같은 id라 로컬 라이브러리가 운영과 같은 작성자로 보인다.
+ * 같은 id라 로컬 라이브러리가 운영과 같은 작성자로 보이고 공식 곡으로 표시된다.
  */
 export const SEED_LIBRARY_USER = {
-  id: "bot-seed-official-lib",
-  name: "공식 찬양 라이브러리",
+  id: OFFICIAL_LIBRARY_USER_ID,
+  name: OFFICIAL_LIBRARY_NAME,
   email: "library@worship.local",
 } as const;
 

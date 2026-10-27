@@ -41,6 +41,7 @@ function makeSummary(
     firstSlidePreview: [],
     slideCount: 0,
     updatedAt: NOW,
+    official: false,
     ...overrides,
   };
 }
