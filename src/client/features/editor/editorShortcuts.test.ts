@@ -7,6 +7,7 @@ import {
 
 const idle: EditorShortcutContext = {
   typing: false,
+  historyText: false,
   modalOpen: false,
   onButton: false,
   canvasFocused: true,
@@ -105,7 +106,7 @@ describe("resolveEditorShortcut", () => {
     expect(resolveEditorShortcut(key({ key: "F5" }), idle)).toBe("present");
   });
 
-  it("입력 중에는 탐색·삭제·복제를 막고 되돌리기·새 슬라이드·글자 크기는 둔다", () => {
+  it("입력 중에는 탐색·삭제·복제를 막고 새 슬라이드·글자 크기는 둔다", () => {
     const typing = { ...idle, typing: true, canvasFocused: false };
     for (const k of ["ArrowRight", " ", "Delete", "Home", "F2", "Enter"]) {
       expect(resolveEditorShortcut(key({ key: k }), typing)).toBeNull();
@@ -118,12 +119,6 @@ describe("resolveEditorShortcut", () => {
     ).toBeNull();
     expect(
       resolveEditorShortcut(
-        key({ key: "z", code: "KeyZ", ctrlKey: true }),
-        typing,
-      ),
-    ).toBe("undo");
-    expect(
-      resolveEditorShortcut(
         key({ key: "m", code: "KeyM", ctrlKey: true }),
         typing,
       ),
@@ -134,6 +129,64 @@ describe("resolveEditorShortcut", () => {
         typing,
       ),
     ).toBe("fontSizeUp");
+  });
+
+  it("글이 실행 취소 기록에 담기지 않는 입력칸에서는 되돌리기·다시 실행을 브라우저에 맡긴다", () => {
+    const typing = { ...idle, typing: true, canvasFocused: false };
+    const undoKeys = [
+      key({ key: "z", code: "KeyZ", ctrlKey: true }),
+      key({ key: "ㅋ", code: "KeyZ", metaKey: true }),
+    ];
+    const redoKeys = [
+      key({ key: "Z", code: "KeyZ", ctrlKey: true, shiftKey: true }),
+      key({ key: "Z", code: "KeyZ", metaKey: true, shiftKey: true }),
+      key({ key: "y", code: "KeyY", ctrlKey: true }),
+    ];
+    for (const event of [...undoKeys, ...redoKeys]) {
+      expect(resolveEditorShortcut(event, typing)).toBeNull();
+    }
+  });
+
+  it("글이 실행 취소 기록에 담기는 가사 편집기에서는 입력 중에도 기록을 되돌리고 다시 실행한다", () => {
+    const lyrics = {
+      ...idle,
+      typing: true,
+      historyText: true,
+      canvasFocused: false,
+    };
+    expect(
+      resolveEditorShortcut(
+        key({ key: "z", code: "KeyZ", ctrlKey: true }),
+        lyrics,
+      ),
+    ).toBe("undo");
+    expect(
+      resolveEditorShortcut(
+        key({ key: "Z", code: "KeyZ", metaKey: true, shiftKey: true }),
+        lyrics,
+      ),
+    ).toBe("redo");
+    expect(
+      resolveEditorShortcut(
+        key({ key: "y", code: "KeyY", ctrlKey: true }),
+        lyrics,
+      ),
+    ).toBe("redo");
+  });
+
+  it("입력칸이 아닌 곳에서는 되돌리기·다시 실행이 기록을 되돌린다", () => {
+    expect(
+      resolveEditorShortcut(
+        key({ key: "z", code: "KeyZ", ctrlKey: true }),
+        idle,
+      ),
+    ).toBe("undo");
+    expect(
+      resolveEditorShortcut(
+        key({ key: "y", code: "KeyY", ctrlKey: true }),
+        pane,
+      ),
+    ).toBe("redo");
   });
 
   it("모달이 떠 있거나 IME 조합 중이면 아무것도 하지 않는다", () => {

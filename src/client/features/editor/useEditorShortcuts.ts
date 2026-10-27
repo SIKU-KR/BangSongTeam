@@ -18,6 +18,26 @@ const MODAL_SELECTOR =
 const KEY_HANDLING_WIDGET_SELECTOR =
   '[role="combobox"], [role="listbox"], [role="menu"], [role="slider"], [role="dialog"]';
 
+const HISTORY_TEXT_SELECTOR = "[data-editor-history]";
+
+const NATIVE_UNDO_INPUT_TYPES: ReadonlySet<string> = new Set([
+  "text",
+  "search",
+  "url",
+  "tel",
+  "email",
+  "password",
+  "number",
+]);
+
+function hasNativeTextUndo(element: Element | null): boolean {
+  if (element instanceof HTMLTextAreaElement) return true;
+  if (element instanceof HTMLInputElement) {
+    return NATIVE_UNDO_INPUT_TYPES.has(element.type);
+  }
+  return element instanceof HTMLElement && element.isContentEditable;
+}
+
 function readContext(): EditorShortcutContext {
   const active = document.activeElement;
   const paneFocused =
@@ -33,6 +53,10 @@ function readContext(): EditorShortcutContext {
           active.closest(KEY_HANDLING_WIDGET_SELECTOR) !== null)));
   return {
     typing,
+    historyText:
+      !hasNativeTextUndo(active) ||
+      (active instanceof HTMLElement &&
+        active.closest(HISTORY_TEXT_SELECTOR) !== null),
     paneFocused,
     modalOpen: document.querySelector(MODAL_SELECTOR) !== null,
     onButton:

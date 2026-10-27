@@ -16,6 +16,9 @@ interface LibraryShareControlsProps {
 /**
  * 내 보관함 곡의 공유 라이브러리 공개 설정. 곡 추가 창의 보관함 미리보기에서만
  * 쓴다. 공개 대상은 보관함 원본이며 세트 복제본의 수정은 반영하지 않는다.
+ *
+ * 요청은 `networkMode: 'always'`로 곧바로 보낸다. 오프라인이라고 멈춰 두면 대화 상자를 닫은
+ * 뒤 온라인이 되는 순간 곡이 공개되거나 내려간다. 닿지 못하면 `OfflineError`로 바로 알린다.
  */
 export function LibraryShareControls({
   deck,
@@ -26,10 +29,12 @@ export function LibraryShareControls({
 
   const publish = useMutation({
     mutationFn: () => publishLibraryDeck(deck.id),
+    networkMode: "always",
     onSuccess: () => setIsPublishOpen(false),
   });
   const unpublish = useMutation({
     mutationFn: () => unpublishLibraryDeck(deck.id),
+    networkMode: "always",
   });
 
   const isPublic = deck.visibility === "public";

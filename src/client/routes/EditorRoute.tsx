@@ -17,6 +17,7 @@ import {
   reorderSongs,
   removeSongFromPresentation,
   addDeckToPresentation,
+  getActivePresentation,
   duplicateSongInPresentation,
   undo,
   redo,
@@ -584,6 +585,7 @@ function EditorScreen({
         initialMode={songPickerMode ?? "browse"}
         onClose={() => setSongPickerMode(null)}
         onSelectSong={(newDeck) => {
+          if (getActivePresentation().id !== presentation.id) return;
           addDeckToPresentation(newDeck);
           selection.select({
             songIndex: presentation.items.length,

@@ -9,10 +9,12 @@ import {
   within,
   waitFor,
 } from "@testing-library/react";
+import { flushSync } from "react-dom";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import type { Presentation } from "#shared";
+import { DEFAULT_DECK_STYLE, type Deck, type Presentation } from "#shared";
 import { MemoryRouter, Routes, Route } from "../test/router";
-import { installFakeApi } from "../test/fakeApi";
+import { testRouter } from "../test/next/navigation";
+import { installFakeApi, type FakeApi } from "../test/fakeApi";
 import { resetFakeCacheStorage } from "../test/fakeCacheStorage";
 import {
   installServiceWorker,
@@ -28,14 +30,21 @@ import {
 } from "../features/backgrounds/backgroundCatalog";
 import { AUTO_CACHE_DELAY_MS } from "../features/offline/useBackgroundAutoCache";
 import { __resetMediaCachingForTests } from "../lib/offline/mediaCache";
+import {
+  getUserSongs,
+  resetSongLibraryStore,
+} from "../features/editor/songLibraryStore";
 import { EditorRoute } from "./EditorRoute";
 import { loadPresentReturnPath } from "../features/presentation/fullscreen";
 import {
   applyServerDocuments,
+  canRedo,
+  canUndo,
   getActivePresentation,
   getPresentationById,
   replaceWithServerDocument,
   updatePresentationTitle,
+  updateSlideLines,
 } from "../features/presentation";
 import {
   __loadDocumentsForTests,
@@ -124,6 +133,12 @@ function placeCaret(textarea: HTMLTextAreaElement, offset: number): void {
     textarea.setSelectionRange(offset, offset);
     fireEvent.select(textarea);
   });
+}
+
+function flushReactBeforeWindowListeners(): () => void {
+  const flush = (): void => flushSync(() => undefined);
+  document.addEventListener("keydown", flush);
+  return () => document.removeEventListener("keydown", flush);
 }
 
 const mockNavigate = vi.fn();
@@ -656,6 +671,290 @@ describe("EditorRoute (PowerPoint식 프레젠테이션 편집기)", () => {
 
     expect(mockNavigate).toHaveBeenCalledWith(`/present/${DOC_ID}/fullscreen`);
     expect(loadPresentReturnPath(DOC_ID)).toBe(`/editor/${DOC_ID}`);
+  });
+
+  describe("입력칸에 포커스가 있을 때 키 처리", () => {
+    let stopFlushing: () => void;
+
+    beforeEach(() => {
+      stopFlushing = flushReactBeforeWindowListeners();
+    });
+
+    afterEach(() => {
+      stopFlushing();
+    });
+
+    function openTitleInput(): HTMLInputElement {
+      fireEvent.click(screen.getByTestId("header-title-btn"));
+      return screen.getByLabelText(
+        EDITOR_COPY.header.titleLabel,
+      ) as HTMLInputElement;
+    }
+
+    it("제목 입력칸의 Ctrl/⌘+Z는 입력한 글만 되돌리고 앞서 고친 가사는 되돌리지 않는다", () => {
+      renderEditor();
+      act(() => {
+        updateSlideLines(0, 1, ["고친 가사"]);
+      });
+      const input = openTitleInput();
+      fireEvent.change(input, { target: { value: "새 제목 오타" } });
+
+      const nativeUndoKept = [
+        fireEvent.keyDown(input, { key: "z", code: "KeyZ", ctrlKey: true }),
+        fireEvent.keyDown(input, { key: "ㅋ", code: "KeyZ", metaKey: true }),
+        fireEvent.keyDown(input, {
+          key: "Z",
+          code: "KeyZ",
+          metaKey: true,
+          shiftKey: true,
+        }),
+        fireEvent.keyDown(input, { key: "y", code: "KeyY", ctrlKey: true }),
+      ];
+
+      expect(nativeUndoKept).toEqual([true, true, true, true]);
+      expect(firstSong().slides[1].lines).toEqual(["고친 가사"]);
+      expect(canUndo()).toBe(true);
+      expect(canRedo()).toBe(false);
+    });
+
+    it("글자 크기 입력칸의 Ctrl/⌘+Z도 입력한 글만 되돌리고 앞서 고친 가사는 되돌리지 않는다", () => {
+      renderEditor();
+      act(() => {
+        updateSlideLines(0, 1, ["고친 가사"]);
+      });
+      const size = screen.getByLabelText(EDITOR_COPY.ribbon.fontSize);
+      size.focus();
+      fireEvent.change(size, { target: { value: "6" } });
+
+      const nativeUndoKept = fireEvent.keyDown(size, {
+        key: "z",
+        code: "KeyZ",
+        ctrlKey: true,
+      });
+
+      expect(nativeUndoKept).toBe(true);
+      expect(firstSong().slides[1].lines).toEqual(["고친 가사"]);
+      expect(canUndo()).toBe(true);
+    });
+
+    it("가사 편집기의 Ctrl/⌘+Z·Y는 입력 중에도 가사 편집을 되돌리고 다시 실행한다", () => {
+      renderEditor();
+      const original = firstSong().slides[0].lines;
+      const textarea = startLyricsEdit();
+      typeLyrics(textarea, "고친 가사");
+
+      const undoHandled = !fireEvent.keyDown(textarea, {
+        key: "z",
+        code: "KeyZ",
+        ctrlKey: true,
+      });
+      expect(undoHandled).toBe(true);
+      expect(firstSong().slides[0].lines).toEqual(original);
+
+      const redoHandled = !fireEvent.keyDown(textarea, {
+        key: "y",
+        code: "KeyY",
+        ctrlKey: true,
+      });
+      expect(redoHandled).toBe(true);
+      expect(firstSong().slides[0].lines).toEqual(["고친 가사"]);
+    });
+
+    it("슬라이더에 포커스가 있을 때 Ctrl/⌘+Z는 슬라이더로 바꾼 서식을 되돌린다", () => {
+      renderEditor();
+      const original = firstSong().style.overlayOpacity;
+      fireEvent.click(screen.getByTestId("overlay-btn"));
+      const slider = screen.getByLabelText(EDITOR_COPY.ribbon.overlayOpacity, {
+        selector: "input",
+      });
+      act(() => {
+        fireEvent.change(slider, { target: { value: "75" } });
+      });
+      expect(firstSong().style.overlayOpacity).toBe(75);
+      slider.focus();
+
+      const undoHandled = !fireEvent.keyDown(slider, {
+        key: "z",
+        code: "KeyZ",
+        ctrlKey: true,
+      });
+
+      expect(undoHandled).toBe(true);
+      expect(firstSong().style.overlayOpacity).toBe(original);
+    });
+
+    it("제목을 Enter로 저장하면 그 키가 가사 편집을 열지 않는다", () => {
+      renderEditor();
+      const input = openTitleInput();
+      fireEvent.change(input, { target: { value: "새 제목" } });
+
+      fireEvent.keyDown(input, { key: "Enter" });
+
+      expect(getActivePresentation().title).toBe("새 제목");
+      expect(screen.getByTestId("header-title-btn")).toHaveTextContent(
+        "새 제목",
+      );
+      expect(
+        screen.queryByTestId("stage-lyrics-editor"),
+      ).not.toBeInTheDocument();
+    });
+
+    it("제목을 저장하는 Enter는 단축키 처리기까지 올라가지 않는다", () => {
+      renderEditor();
+      const input = openTitleInput();
+      fireEvent.change(input, { target: { value: "새 제목" } });
+      const reachedWindow = vi.fn();
+      window.addEventListener("keydown", reachedWindow);
+
+      try {
+        fireEvent.keyDown(input, { key: "Enter" });
+      } finally {
+        window.removeEventListener("keydown", reachedWindow);
+      }
+
+      expect(reachedWindow).not.toHaveBeenCalled();
+    });
+
+    it("한글 조합 중의 Enter는 저장하지 않고, 조합이 끝난 뒤 Enter로 저장해도 가사 편집을 열지 않는다", () => {
+      renderEditor();
+      const input = openTitleInput();
+      fireEvent.change(input, { target: { value: "새 제목" } });
+
+      fireEvent.keyDown(input, { key: "Enter", isComposing: true });
+
+      expect(input).toBeInTheDocument();
+      expect(input).toHaveFocus();
+      expect(getActivePresentation().title).toBe("2026 주일 3부 예배");
+
+      fireEvent.keyDown(document.activeElement as HTMLElement, {
+        key: "Enter",
+      });
+
+      expect(getActivePresentation().title).toBe("새 제목");
+      expect(
+        screen.queryByTestId("stage-lyrics-editor"),
+      ).not.toBeInTheDocument();
+    });
+
+    it("한글 조합 중의 Esc는 제목 편집을 끝내지 않는다", () => {
+      renderEditor();
+      const input = openTitleInput();
+      fireEvent.change(input, { target: { value: "새 제목" } });
+
+      fireEvent.keyDown(input, { key: "Escape", isComposing: true });
+
+      expect(input).toBeInTheDocument();
+      expect(input).toHaveValue("새 제목");
+    });
+  });
+
+  describe("곡 추가 창에서 공유 곡을 가져오는 중", () => {
+    const SHARED_ID = "c00000005000000000001";
+    const FORK_ID = "c000000050000000000f0";
+    const NOW = "2026-09-23T00:00:00.000Z";
+    const SHARED_LYRICS = "당신은 시간을 뚫고\n이 땅 가운데 오셨네";
+    let api: FakeApi | undefined;
+
+    const sharedSummary = {
+      id: SHARED_ID,
+      title: "시간을 뚫고",
+      artist: "WELOVE",
+      authorName: "김찬양",
+      forkedFromAuthorName: null,
+      forkCount: 42,
+      backgroundId: null,
+      firstSlidePreview: ["당신은 시간을 뚫고", "이 땅 가운데 오셨네"],
+      slideCount: 1,
+      updatedAt: NOW,
+    };
+
+    function forkedDeck(): Deck {
+      return {
+        id: FORK_ID,
+        userId: SEED_PRESENTATIONS[0].userId,
+        scope: "library",
+        presentationId: null,
+        title: "시간을 뚫고",
+        artist: "WELOVE",
+        lyricsRaw: SHARED_LYRICS,
+        slides: [
+          {
+            id: "s1",
+            order: 0,
+            lines: ["당신은 시간을 뚫고", "이 땅 가운데 오셨네"],
+          },
+        ],
+        backgroundId: null,
+        style: DEFAULT_DECK_STYLE,
+        visibility: "private",
+        forkedFrom: SHARED_ID,
+        forkedFromAuthorName: "김찬양",
+        forkCount: 0,
+        origin: "fork",
+        publishedAt: null,
+        takedownAt: null,
+        createdAt: NOW,
+        updatedAt: NOW,
+      };
+    }
+
+    beforeEach(async () => {
+      await resetSongLibraryStore();
+    });
+
+    afterEach(async () => {
+      api?.restore();
+      await resetSongLibraryStore();
+    });
+
+    it("다른 프레젠테이션으로 바뀌면 가져온 곡을 그 프레젠테이션에 넣지 않고 보관함에만 남긴다", async () => {
+      let resolveFork: () => void = () => undefined;
+      const server = installFakeApi({
+        "GET /api/catalog/search": () => ({ body: { decks: [sharedSummary] } }),
+        "GET /api/catalog/decks/*": () => ({
+          body: {
+            deck: {
+              ...sharedSummary,
+              lyricsRaw: SHARED_LYRICS,
+              slides: forkedDeck().slides,
+              style: DEFAULT_DECK_STYLE,
+            },
+          },
+        }),
+        "POST /api/decks/*/fork": () =>
+          new Promise((resolve) => {
+            resolveFork = () =>
+              resolve({ body: { deck: forkedDeck(), alreadyOwned: false } });
+          }),
+      });
+      api = server;
+      renderEditor();
+      fireEvent.click(screen.getByTestId("add-song-btn"));
+      fireEvent.click(await screen.findByTestId(`song-item-${SHARED_ID}`));
+      fireEvent.click(screen.getByTestId("song-picker-add-btn"));
+      await waitFor(() =>
+        expect(
+          server.calls.filter((call) => call.path.endsWith("/fork")),
+        ).toHaveLength(1),
+      );
+      const otherId = SEED_PRESENTATION_IDS[3];
+      const songCounts = () =>
+        [DOC_ID, otherId].map((id) => getPresentationById(id)?.items.length);
+      const before = songCounts();
+
+      act(() => {
+        testRouter.push(`/editor/${otherId}`);
+      });
+      expect(getActivePresentation().id).toBe(otherId);
+      await act(async () => {
+        resolveFork();
+      });
+
+      await waitFor(() =>
+        expect(getUserSongs().map((deck) => deck.id)).toEqual([FORK_ID]),
+      );
+      expect(songCounts()).toEqual(before);
+    });
   });
 
   it("should open file menu and handle actions in EditorHeader", () => {

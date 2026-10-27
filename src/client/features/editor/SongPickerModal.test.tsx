@@ -2,12 +2,14 @@ import React from "react";
 import { signInAsTestUser } from "../../test/sessionFixture";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import {
+  act,
   render,
   screen,
   fireEvent,
   waitFor,
   within,
 } from "@testing-library/react";
+import { onlineManager } from "@tanstack/react-query";
 import {
   API_ERRORS,
   type Deck,
@@ -20,7 +22,10 @@ import {
   clampSearchQuery,
 } from "#shared";
 import { closeOfflineDB, OFFLINE_DB_NAME } from "../../lib/storage/db";
-import { withQueryClient } from "../../test/queryClientFixture";
+import {
+  createTestQueryClient,
+  withQueryClient,
+} from "../../test/queryClientFixture";
 import { installFakeApi, type FakeApi } from "../../test/fakeApi";
 import { SongPickerModal } from "./SongPickerModal";
 import {
@@ -35,7 +40,7 @@ import {
   setDeckSyncEnabled,
 } from "../../lib/sync/deckSync";
 import { EDITOR_COPY } from "#copy/editor";
-import { COMMON_COPY } from "#copy/common";
+import { COMMON_COPY, ERROR_COPY } from "#copy/common";
 import { SEED_USER_ID } from "../../test/presentationFixture";
 
 const SHARED_ID = "c00000005000000000001";
@@ -164,6 +169,7 @@ describe("SongPickerModal", () => {
   });
 
   afterEach(() => {
+    onlineManager.setOnline(true);
     api.restore();
     __resetDeckSyncForTests();
     closeOfflineDB();
@@ -414,6 +420,29 @@ describe("SongPickerModal", () => {
       expect(onCloseMock).not.toHaveBeenCalled();
     });
 
+    it("공개 요청이 나가는 동안 Esc는 동의 창도 곡 추가 창도 닫지 않는다", async () => {
+      api.restore();
+      api = installFakeApi({
+        "GET /api/catalog/search": () => ({ body: { decks: [] } }),
+        "PUT /api/decks/*": ({ body }) => ({ body: { ok: true, deck: body } }),
+        "PATCH /api/decks/*/visibility": () => new Promise(() => undefined),
+      });
+      seedMySong();
+      renderPicker();
+      fireEvent.click(screen.getByTestId("song-share-publish-btn"));
+      fireEvent.click(screen.getByTestId("publish-accept-checkbox"));
+      fireEvent.click(screen.getByTestId("publish-confirm-btn"));
+      await waitFor(() =>
+        expect(api.calls.some((call) => call.method === "PATCH")).toBe(true),
+      );
+
+      fireEvent.keyDown(document, { key: "Escape" });
+
+      expect(screen.getByTestId("publish-dialog")).toBeInTheDocument();
+      expect(screen.getByTestId("song-picker-modal")).toBeInTheDocument();
+      expect(onCloseMock).not.toHaveBeenCalled();
+    });
+
     it("확인을 거쳐 보관함에서 삭제한다", () => {
       const mine = seedMySong();
       renderPicker();
@@ -607,6 +636,167 @@ describe("SongPickerModal", () => {
       expect(
         await screen.findByText(API_ERRORS.deck.notPublished),
       ).toBeInTheDocument();
+      expect(onSelectSongMock).not.toHaveBeenCalled();
+    });
+
+    describe("가져오는 중에 창을 벗어날 때", () => {
+      function ClosablePicker(): React.JSX.Element {
+        const [isOpen, setIsOpen] = React.useState(true);
+        return (
+          <SongPickerModal
+            isOpen={isOpen}
+            onClose={() => setIsOpen(false)}
+            onSelectSong={onSelectSongMock}
+          />
+        );
+      }
+
+      function installDeferredFork(): {
+        release: () => Promise<void>;
+        forkCalls: () => number;
+      } {
+        api.restore();
+        let resolveFork: () => void = () => undefined;
+        api = installFakeApi({
+          "GET /api/catalog/search": () => ({
+            body: { decks: [sharedSummary] },
+          }),
+          "GET /api/catalog/decks/*": () => ({
+            body: {
+              deck: {
+                ...sharedSummary,
+                lyricsRaw: SHARED_LYRICS,
+                slides: forkedDeck().slides,
+                style: DEFAULT_DECK_STYLE,
+              },
+            },
+          }),
+          "POST /api/decks/*/fork": () =>
+            new Promise((resolve) => {
+              resolveFork = () =>
+                resolve({
+                  body: { deck: forkedDeck(), alreadyOwned: false },
+                });
+            }),
+        });
+        return {
+          release: () =>
+            act(async () => {
+              resolveFork();
+            }),
+          forkCalls: () =>
+            api.calls.filter((call) => call.path.endsWith("/fork")).length,
+        };
+      }
+
+      async function startFork(forkCalls: () => number): Promise<void> {
+        fireEvent.click(await screen.findByTestId(`song-item-${SHARED_ID}`));
+        fireEvent.click(screen.getByTestId("song-picker-add-btn"));
+        await waitFor(() => expect(forkCalls()).toBe(1));
+      }
+
+      async function expectForkKeptOnlyInLibrary(): Promise<void> {
+        await waitFor(() =>
+          expect(getUserSongs().map((deck) => deck.id)).toEqual([FORK_ID]),
+        );
+        expect(onSelectSongMock).not.toHaveBeenCalled();
+      }
+
+      const actionBarClose = (): HTMLElement =>
+        screen
+          .getAllByRole("button", { name: COMMON_COPY.close })
+          .find(
+            (button) => button.dataset.slot !== "dialog-close",
+          ) as HTMLElement;
+
+      it.each([
+        ["닫기 버튼을 눌러", () => fireEvent.click(actionBarClose())],
+        ["Esc를 눌러", () => fireEvent.keyDown(document, { key: "Escape" })],
+      ])(
+        "가져오는 중에 %s 창을 닫으면 가져온 곡을 세트에 넣지 않고 보관함에만 남긴다",
+        async (_name, dismiss) => {
+          const fork = installDeferredFork();
+          render(withQueryClient(<ClosablePicker />));
+          await startFork(fork.forkCalls);
+
+          dismiss();
+          await waitFor(() =>
+            expect(
+              screen.queryByTestId("song-picker-modal"),
+            ).not.toBeInTheDocument(),
+          );
+          await fork.release();
+
+          await expectForkKeptOnlyInLibrary();
+        },
+      );
+
+      it("가져오는 중에 창을 닫았다 다시 열어도 앞서 시작한 가져오기는 세트에 넣지 않는다", async () => {
+        const fork = installDeferredFork();
+        const client = createTestQueryClient();
+        const picker = (isOpen: boolean) =>
+          withQueryClient(
+            <SongPickerModal
+              isOpen={isOpen}
+              onClose={onCloseMock}
+              onSelectSong={onSelectSongMock}
+            />,
+            client,
+          );
+        const view = render(picker(true));
+        await startFork(fork.forkCalls);
+
+        view.rerender(picker(false));
+        view.rerender(picker(true));
+        await fork.release();
+
+        await expectForkKeptOnlyInLibrary();
+      });
+
+      it("가져오는 중에 화면을 떠나도 가져온 곡을 세트에 넣지 않는다", async () => {
+        const fork = installDeferredFork();
+        const view = renderPicker();
+        await startFork(fork.forkCalls);
+
+        view.unmount();
+        await fork.release();
+
+        await expectForkKeptOnlyInLibrary();
+      });
+
+      it("창을 닫지 않았다면 가져온 곡을 세트에 넣고 창을 닫는다", async () => {
+        const fork = installDeferredFork();
+        renderPicker();
+        await startFork(fork.forkCalls);
+
+        await fork.release();
+
+        await waitFor(() => expect(onSelectSongMock).toHaveBeenCalledTimes(1));
+        expect(onSelectSongMock.mock.calls[0][0]).toMatchObject({
+          id: FORK_ID,
+        });
+        expect(onCloseMock).toHaveBeenCalledTimes(1);
+      });
+    });
+
+    it("오프라인이면 가져오기를 멈춰 두지 않고 곧바로 실패를 알리며, 온라인이 돼도 보내지 않는다", async () => {
+      renderPicker();
+      fireEvent.click(await screen.findByTestId(`song-item-${SHARED_ID}`));
+      api.restore();
+      api = installFakeApi({}, { offline: true });
+      onlineManager.setOnline(false);
+
+      fireEvent.click(screen.getByTestId("song-picker-add-btn"));
+
+      const forkCalls = () =>
+        api.calls.filter((call) => call.path.endsWith("/fork")).length;
+      expect(await screen.findByText(ERROR_COPY.offline)).toBeInTheDocument();
+      expect(forkCalls()).toBe(1);
+      onlineManager.setOnline(true);
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      });
+      expect(forkCalls()).toBe(1);
       expect(onSelectSongMock).not.toHaveBeenCalled();
     });
 

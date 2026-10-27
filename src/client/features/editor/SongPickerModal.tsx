@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeftIcon, PlusIcon } from "lucide-react";
 import { Badge } from "#components/ui/badge";
 import { Button } from "#components/ui/button";
@@ -100,6 +100,7 @@ export function SongPickerModal({
     enabled: isOpen && isOnline,
   });
   const fork = useForkDeck();
+  const openSession = useRef<object | null>(null);
 
   useEffect(() => {
     if (isOpen) {
@@ -109,6 +110,14 @@ export function SongPickerModal({
       setActionError(null);
     }
   }, [isOpen, initialMode]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    openSession.current = {};
+    return () => {
+      openSession.current = null;
+    };
+  }, [isOpen]);
 
   const entries = useMemo<PickerEntry[]>(
     () =>
@@ -138,14 +147,15 @@ export function SongPickerModal({
   const handleAddSelected = async (): Promise<void> => {
     if (!selected) return;
     setActionError(null);
+    const session = openSession.current;
     try {
       if (selected.kind === "mine") {
         addDeck(selected.deck);
+      } else if (selected.ownedCopy) {
+        addDeck(selected.ownedCopy);
       } else {
-        addDeck(
-          selected.ownedCopy ??
-            (await fork.mutateAsync(selected.summary.id)).deck,
-        );
+        const { deck } = await fork.mutateAsync(selected.summary.id);
+        if (openSession.current === session) addDeck(deck);
       }
     } catch (err) {
       setActionError(describeApiError(err));

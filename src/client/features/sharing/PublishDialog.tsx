@@ -25,6 +25,9 @@ interface PublishDialogProps {
 
 /**
  * 공개 전 저작권 안내와 동의 대화상자.
+ *
+ * 요청이 나가는 동안(`isPending`)에는 닫을 수 없다. 이미 나간 요청은 닫아도 멈추지 않아서,
+ * 취소했는데도 곡이 공개되기 때문이다.
  */
 export function PublishDialog({
   isOpen,
@@ -41,10 +44,14 @@ export function PublishDialog({
     <Dialog
       open={isOpen}
       onOpenChange={(open) => {
-        if (!open) onCancel();
+        if (!open && !isPending) onCancel();
       }}
     >
-      <DialogContent data-testid="publish-dialog" className="sm:max-w-md">
+      <DialogContent
+        data-testid="publish-dialog"
+        className="sm:max-w-md"
+        showCloseButton={!isPending}
+      >
         <DialogHeader>
           <DialogTitle>{SHARING_COPY.library.publish}</DialogTitle>
           <DialogDescription className="truncate">
@@ -73,7 +80,10 @@ export function PublishDialog({
         {error && <FieldError>{error}</FieldError>}
 
         <DialogFooter>
-          <DialogClose render={<Button variant="outline" />}>
+          <DialogClose
+            disabled={isPending}
+            render={<Button variant="outline" />}
+          >
             {COMMON_COPY.cancel}
           </DialogClose>
           <Button

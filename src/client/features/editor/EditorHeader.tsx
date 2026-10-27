@@ -351,7 +351,14 @@ function PresentationTitleField({
         onChange={(e) => setTempTitle(e.target.value)}
         onBlur={handleTitleSubmit}
         onKeyDown={(e) => {
-          if (e.key === "Enter") handleTitleSubmit();
+          if (e.nativeEvent.isComposing) return;
+          if (e.key === "Enter") {
+            // 리스너 하나가 끝날 때마다 마이크로태스크가 돌아 React가 입력칸을 지운 뒤 window의
+            // 단축키 처리기가 이 키를 포커스 없는 Enter로 읽는다.
+            // https://html.spec.whatwg.org/multipage/webappapis.html#clean-up-after-running-script
+            e.stopPropagation();
+            handleTitleSubmit();
+          }
           if (e.key === "Escape") {
             setIsEditingTitle(false);
             setTempTitle(title);

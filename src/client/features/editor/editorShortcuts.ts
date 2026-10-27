@@ -29,6 +29,13 @@ export type EditorShortcutAction =
 export interface EditorShortcutContext {
   /** 입력칸이나 방향키를 스스로 쓰는 위젯(콤보박스·메뉴·슬라이더·팝오버)에 포커스가 있다 */
   typing: boolean;
+  /**
+   * 입력 중에도 되돌리기·다시 실행(Ctrl/⌘+Z·Y)이 브라우저가 아니라 실행 취소 기록을 움직인다.
+   * 글이 기록에 담기는 가사 편집기와, 되돌릴 글이 없는 슬라이더·메뉴가 그렇다. 확정 전의 글을
+   * 칸이 따로 들고 있는 제목·글자 크기 입력은 아니다. 그곳에서 가로채면 칸의 글은 그대로인데
+   * 앞서 고친 문서가 조용히 되돌아간다
+   */
+  historyText: boolean;
   /** 모달 대화 상자(Dialog·AlertDialog)가 떠 있다. 리본 팝오버는 모달이 아니다 */
   modalOpen: boolean;
   /** 버튼·메뉴 항목에 포커스가 있다 (Space가 그 버튼을 누른다) */
@@ -57,8 +64,13 @@ export function resolveEditorShortcut(
 
   const mod = event.ctrlKey || event.metaKey;
   if (mod && !event.altKey) {
-    if (event.code === "KeyZ") return event.shiftKey ? "redo" : "undo";
-    if (event.code === "KeyY" && !event.shiftKey) return "redo";
+    const isUndoKey = event.code === "KeyZ";
+    const isRedoKey = event.code === "KeyY" && !event.shiftKey;
+    if ((isUndoKey || isRedoKey) && context.typing && !context.historyText) {
+      return null;
+    }
+    if (isUndoKey) return event.shiftKey ? "redo" : "undo";
+    if (isRedoKey) return "redo";
     if (event.code === "KeyM" && !event.shiftKey) return "newSlide";
     if (event.shiftKey && event.code === "Period") return "fontSizeUp";
     if (event.shiftKey && event.code === "Comma") return "fontSizeDown";
