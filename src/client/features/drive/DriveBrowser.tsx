@@ -1,4 +1,4 @@
-import React, { useCallback, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { FolderIcon, SearchIcon, Trash2Icon } from "lucide-react";
 import { Button } from "#components/ui/button";
 import {
@@ -63,6 +63,9 @@ interface DriveBrowserProps {
  * - 빈 곳에서 끌기: 드래그 선택 · 우클릭·⋮: 메뉴 · 머리글: 정렬
  * - 끌어서 폴더·경로·고정된 휴지통 폴더에 놓기
  * - 키보드는 `useDriveKeyboard`
+ *
+ * 검색·유형 필터·이동으로 목록에서 빠진 항목은 선택에서도 뺀다. 가려진 항목이 선택에 남으면
+ * 끌기(선택 전체)와 도구 모음·키보드(보이는 선택)가 서로 다른 항목에 듣는다.
  */
 export function DriveBrowser({
   mode,
@@ -92,8 +95,15 @@ export function DriveBrowser({
     sortOrder,
     typeFilter,
   });
-  const selectedItems = items.filter((item) => drive.selection.has(item.key));
+  const { selection, setSelection } = drive;
+  const selectedItems = items.filter((item) => selection.has(item.key));
   const tabStopKey = visibleKey(keys, drive.focusKey) ?? keys[0] ?? null;
+
+  useEffect(() => {
+    const listed = new Set(keys);
+    const visible = [...selection].filter((key) => listed.has(key));
+    if (visible.length < selection.size) setSelection(visible);
+  }, [keys, selection, setSelection]);
 
   const { present, open, trashFolderActions, actionsFor } = useDriveItemActions(
     { isTrash, trashCount },

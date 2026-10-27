@@ -65,6 +65,9 @@ const followCursor: Modifier = ({
  *
  * 사이드바, 헤더 브레드크럼, 본문 목록이 같은 선택·드래그 상태를
  * 봐야 하므로 셸 한 곳에 둔다. 대화 상자와 알림(실행 취소)도 여기서 띄운다.
+ *
+ * 끌어서 옮기거나 버린 뒤에는 선택을 푼다. 목록에서 사라진 항목이 선택에 남으면 다음 끌기에
+ * 함께 딸려 간다.
  */
 export function DriveProvider({
   children,
@@ -201,8 +204,12 @@ export function DriveProvider({
     setActiveDrag(null);
     const target = over?.data.current as DropTarget | undefined;
     if (!refs || !target || !canDropOn(refs, target)) return;
-    if (target.kind === "trash") trash(refs);
-    else move(refs, target.folderId);
+    if (target.kind === "trash") {
+      trash(refs);
+      return;
+    }
+    clearSelection();
+    move(refs, target.folderId);
   };
 
   const value = useMemo<DriveContextValue>(

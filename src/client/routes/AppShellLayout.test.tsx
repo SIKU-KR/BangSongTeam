@@ -24,6 +24,11 @@ import {
   waitFor,
 } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import type {
+  DndContextProps,
+  DragEndEvent,
+  DragStartEvent,
+} from "@dnd-kit/core";
 import { MemoryRouter, Routes, Route } from "../test/router";
 import { testRouter } from "../test/next/navigation";
 import type { Folder } from "#shared";
@@ -49,6 +54,8 @@ import { AUTH_COPY } from "#copy/auth";
 import { SEED_PRESENTATIONS, SEED_USER_ID } from "../test/presentationFixture";
 import { authClient } from "../lib/auth/authClient";
 import { getSessionState } from "../lib/auth/sessionStore";
+import { itemKey, parseItemKey } from "../features/drive/driveModel";
+import type { DropTarget } from "../features/drive/driveContext";
 
 // better-auth 클라이언트는 만들 때 fetch를 잡아 두어 로그아웃 요청을 가짜 응답으로 바꿀 수 없다.
 // better-auth@1.7.12 dist/client/config.mjs (`customFetchImpl: fetch`)
@@ -61,6 +68,20 @@ vi.mock("../lib/auth/authClient", async (importOriginal) => ({
     signOut: vi.fn(async () => ({ data: { success: true }, error: null })),
   },
 }));
+
+const dnd = vi.hoisted(() => ({ props: null as DndContextProps | null }));
+
+vi.mock("@dnd-kit/core", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@dnd-kit/core")>();
+  const { createElement } = await import("react");
+  return {
+    ...actual,
+    DndContext: (props: DndContextProps) => {
+      dnd.props = props;
+      return createElement(actual.DndContext, props);
+    },
+  };
+});
 
 function renderShell(initialPath = "/presentations") {
   return render(
@@ -122,6 +143,32 @@ function card(name: string): HTMLElement {
 function openTrashFolder(): void {
   act(() => {
     fireEvent.doubleClick(screen.getByTestId("drive-trash-folder"));
+  });
+}
+
+function startDrag(key: string): void {
+  act(() => {
+    dnd.props?.onDragStart?.({ active: { id: key } } as DragStartEvent);
+  });
+}
+
+function dropOn(target: DropTarget): void {
+  act(() => {
+    dnd.props?.onDragEnd?.({
+      over: { data: { current: target } },
+    } as unknown as DragEndEvent);
+  });
+}
+
+function stackRows(): void {
+  screen.getAllByRole("option").forEach((option, i) => {
+    option.getBoundingClientRect = () =>
+      ({
+        left: 0,
+        right: 800,
+        top: i * 50,
+        bottom: i * 50 + 48,
+      }) as DOMRect;
   });
 }
 
@@ -1193,5 +1240,108 @@ describe("AppShellLayout (구글 드라이브식 조작)", () => {
     await waitFor(() => expect(items[0]).toHaveFocus());
     fireEvent.keyDown(items[0], { key: "Escape" });
     await waitFor(() => expect(screen.queryByTestId("drive-menu")).toBeNull());
+  });
+});
+
+describe("AppShellLayout (끌어 옮기기와 선택 범위)", () => {
+  beforeEach(() => {
+    signInAsTestUser();
+    resetPresentationStore();
+    resetFolderStore();
+    window.localStorage.clear();
+    __loadDocumentsForTests(SEED_PRESENTATIONS);
+    vi.restoreAllMocks();
+  });
+
+  it("끌어서 폴더로 옮긴 뒤에는 선택을 풀어, 사라진 항목이 다음 끌기에 딸려 가지 않는다", () => {
+    __loadFoldersForTests([
+      folder(WORSHIP, "2026 주일 대예배"),
+      folder(YOUTH, "청년부"),
+    ]);
+    renderShell();
+    const [moved, second, third] = SEED_PRESENTATIONS;
+
+    fireEvent.mouseDown(card(moved.title));
+    startDrag(itemKey("file", moved.id));
+    dropOn({ kind: "folder", folderId: WORSHIP });
+    expect(getPresentationById(moved.id)?.folderId).toBe(WORSHIP);
+    expect(screen.queryByTestId("selection-bar")).not.toBeInTheDocument();
+
+    fireEvent.click(card(second.title), { ctrlKey: true });
+    fireEvent.click(card(third.title), { ctrlKey: true });
+    expect(screen.getByTestId("selection-bar")).toHaveTextContent("2개 선택됨");
+    startDrag(itemKey("file", second.id));
+    dropOn({ kind: "folder", folderId: YOUTH });
+
+    expect(getPresentationById(moved.id)?.folderId).toBe(WORSHIP);
+    expect(getPresentationById(second.id)?.folderId).toBe(YOUTH);
+    expect(getPresentationById(third.id)?.folderId).toBe(YOUTH);
+  });
+
+  it("검색으로 가려진 선택 항목은 끌 때 함께 옮기지 않고, 옮긴 뒤에는 선택을 푼다", () => {
+    __loadFoldersForTests([folder(WORSHIP, "2026 주일 대예배")]);
+    renderShell();
+    const [hidden, found] = SEED_PRESENTATIONS;
+
+    fireEvent.click(card(hidden.title));
+    fireEvent.click(card(found.title), { ctrlKey: true });
+    fireEvent.change(screen.getByTestId("shell-search-input"), {
+      target: { value: found.title },
+    });
+    expect(
+      screen.queryByRole("option", { name: new RegExp(hidden.title) }),
+    ).toBeNull();
+    expect(screen.getByTestId("selection-bar")).toHaveTextContent("1개 선택됨");
+
+    startDrag(itemKey("file", found.id));
+    dropOn({ kind: "folder", folderId: WORSHIP });
+
+    expect(getPresentationById(found.id)?.folderId).toBe(WORSHIP);
+    expect(getPresentationById(hidden.id)?.folderId ?? null).toBeNull();
+    expect(screen.queryByTestId("selection-bar")).not.toBeInTheDocument();
+  });
+
+  it("검색어를 바꿔 가려진 항목은 선택에서도 빠져, 휴지통으로 끌어도 함께 버리지 않는다", () => {
+    renderShell();
+    const [hidden, found] = SEED_PRESENTATIONS;
+
+    fireEvent.click(card(hidden.title));
+    fireEvent.click(card(found.title), { ctrlKey: true });
+    fireEvent.change(screen.getByTestId("shell-search-input"), {
+      target: { value: found.title },
+    });
+    startDrag(itemKey("file", found.id));
+    dropOn({ kind: "trash" });
+
+    expect(getPresentationById(found.id)?.trashedAt).toBeTruthy();
+    expect(getPresentationById(hidden.id)?.trashedAt ?? null).toBeNull();
+  });
+
+  it("검색창에 글자를 친 채 빈 곳을 끌어 고르면 검색창에서 벗어나, Delete가 고른 항목을 휴지통에 보낸다", () => {
+    renderShell();
+    const input = screen.getByTestId("shell-search-input");
+    input.focus();
+    fireEvent.change(input, { target: { value: "예배" } });
+    stackRows();
+    const listed = screen.getAllByRole("option");
+    expect(listed.length).toBeGreaterThanOrEqual(2);
+    const picked = listed
+      .slice(0, 2)
+      .map((option) => parseItemKey(option.dataset.itemKey ?? "").id);
+    const area = screen.getByTestId("drive-scroll-area");
+
+    fireEvent.mouseDown(area, { clientX: 820, clientY: 10, button: 0 });
+    fireEvent.mouseMove(window, { clientX: 700, clientY: 70 });
+    fireEvent.mouseUp(window);
+    fireEvent.click(area);
+    expect(input).not.toHaveFocus();
+    fireEvent.keyDown(document.activeElement ?? document.body, {
+      key: "Delete",
+    });
+
+    for (const id of picked) {
+      expect(getPresentationById(id)?.trashedAt).toBeTruthy();
+    }
+    expect(input).toHaveValue("예배");
   });
 });
