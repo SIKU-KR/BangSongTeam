@@ -4,6 +4,7 @@ import {
   API_ERRORS,
   DEFAULT_DECK_STYLE,
   PresentationDocumentSchema,
+  type Folder,
   type JoinShareResponse,
   type PresentationDocument,
   type SharePreviewResponse,
@@ -18,6 +19,7 @@ const OWNER = "aaaaaaaa0000000000011";
 const MEMBER = "bbbbbbbb0000000000012";
 const DOC_ID = "1000000000000000000cc";
 const DECK_ID = "c000000000000000000cc";
+const FOLDER_ID = "f000000000000000000cc";
 
 let currentUser: string | null = OWNER;
 const fakeSession: SessionReader = async () =>
@@ -61,6 +63,19 @@ function makeDoc(
     updatedAt: "2026-09-21T00:00:00.000Z",
     ...overrides,
   });
+}
+
+function makeFolder(overrides: Partial<Folder> = {}): Folder {
+  return {
+    id: FOLDER_ID,
+    userId: OWNER,
+    parentId: null,
+    name: "9월",
+    trashedAt: null,
+    createdAt: "2026-09-20T00:00:00.000Z",
+    updatedAt: "2026-09-20T00:00:00.000Z",
+    ...overrides,
+  };
 }
 
 function send(method: string, body?: unknown): RequestInit {
@@ -273,6 +288,57 @@ describe("세트 링크 공유 라우트", () => {
     expect((await app.request(`/api/share/${token}`, {}, env)).status).toBe(
       404,
     );
+  });
+
+  it("휴지통에 넣은 폴더 안의 프레젠테이션은 링크로도 멤버로도 볼 수 없고, 폴더를 복원하면 다시 보인다", async () => {
+    await as(OWNER, `/api/folders/${FOLDER_ID}`, send("PUT", makeFolder()));
+    await as(
+      OWNER,
+      `/api/presentations/${DOC_ID}`,
+      send("PUT", makeDoc({ folderId: FOLDER_ID })),
+    );
+    const token = await shareAndJoin();
+
+    const trashed = await as(
+      OWNER,
+      `/api/folders/${FOLDER_ID}`,
+      send(
+        "PUT",
+        makeFolder({
+          trashedAt: "2026-09-22T00:00:00.000Z",
+          updatedAt: "2026-09-22T00:00:00.000Z",
+        }),
+      ),
+    );
+    expect(trashed.status).toBe(200);
+
+    currentUser = null;
+    expect((await app.request(`/api/share/${token}`, {}, env)).status).toBe(
+      404,
+    );
+    expect((await as(MEMBER, `/api/presentations/${DOC_ID}`)).status).toBe(404);
+    const list = await as<{ presentations: PresentationDocument[] }>(
+      MEMBER,
+      "/api/presentations",
+    );
+    expect(list.body.presentations).toEqual([]);
+    expect(
+      (await as(MEMBER, `/api/share/${token}/join`, send("POST"))).status,
+    ).toBe(404);
+
+    await as(
+      OWNER,
+      `/api/folders/${FOLDER_ID}`,
+      send(
+        "PUT",
+        makeFolder({ trashedAt: null, updatedAt: "2026-09-23T00:00:00.000Z" }),
+      ),
+    );
+    currentUser = null;
+    expect((await app.request(`/api/share/${token}`, {}, env)).status).toBe(
+      200,
+    );
+    expect((await as(MEMBER, `/api/presentations/${DOC_ID}`)).status).toBe(200);
   });
 
   it("로그인하지 않으면 링크로 들어오지 못한다", async () => {

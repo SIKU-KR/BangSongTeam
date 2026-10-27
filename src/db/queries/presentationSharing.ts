@@ -8,12 +8,15 @@ import {
 } from "#shared";
 import type { Db } from "../client";
 import {
+  foldersCol,
   memberDocId,
   presentationMembersCol,
   presentationsCol,
   usersCol,
+  type FolderDoc,
   type PresentationDoc,
 } from "../collections";
+import { isPresentationInTrash } from "./folders";
 import {
   byServiceDateDesc,
   hydratePresentationDocuments,
@@ -21,16 +24,45 @@ import {
 
 export type PresentationRole = "owner" | "viewer";
 
-/** 링크 공유가 살아 있는 세트인지. 휴지통에 들어간 세트는 링크가 멈춘다 */
-function isLinkActive(presentation: PresentationDoc): boolean {
-  return presentation.linkAccess !== "off" && presentation.trashedAt === null;
+type FolderReader = (id: string) => Promise<FolderDoc | undefined>;
+
+function readFolderDoc(db: Db): FolderReader {
+  return async (id) => (await foldersCol(db).doc(id).get()).data();
+}
+
+function memoizeFolderReads(read: FolderReader): FolderReader {
+  const reads = new Map<string, Promise<FolderDoc | undefined>>();
+  return (id) => {
+    const known = reads.get(id);
+    if (known) return known;
+    const pending = read(id);
+    reads.set(id, pending);
+    return pending;
+  };
 }
 
 /**
- * 세트 접근 권한을 한 곳에서 판정한다.
+ * 링크 공유가 살아 있는 프레젠테이션인지. 프레젠테이션이나 담긴 폴더(조상 포함)가 휴지통에
+ * 있으면 링크가 멈춘다. 폴더를 휴지통에 넣으면 폴더 문서만 바뀌므로 폴더를 따라 읽는다
+ * (`isPresentationInTrash`). 폴더는 링크가 켜져 있고 자신은 휴지통 밖인 프레젠테이션일 때만 읽고,
+ * 이 확인에만 쓰고 돌려주지 않는다. 멤버 기록은 남아 폴더를 복원하면 링크가 다시 열린다.
+ */
+async function isLinkActive(
+  presentation: PresentationDoc,
+  readFolder: FolderReader,
+): Promise<boolean> {
+  return (
+    presentation.linkAccess !== "off" &&
+    presentation.trashedAt === null &&
+    !(await isPresentationInTrash(readFolder, presentation))
+  );
+}
+
+/**
+ * 프레젠테이션 접근 권한을 한 곳에서 판정한다.
  *
- * 소유자가 아니면 멤버 문서가 있고 링크가 살아 있을 때만 보기 권한을 준다.
- * 소유자가 링크를 끄거나 세트를 휴지통에 넣으면 다음 요청부터 막힌다.
+ * 소유자가 아니면 멤버 문서가 있고 링크가 살아 있을 때만 보기 권한을 준다. 소유자가 링크를
+ * 끄거나 프레젠테이션이나 담긴 폴더(조상 포함)를 휴지통에 넣으면 다음 요청부터 막힌다.
  */
 export async function resolvePresentationAccess(
   db: Db,
@@ -44,8 +76,10 @@ export async function resolvePresentationAccess(
   const presentation = presentationSnapshot.data();
   if (!presentation) return null;
   if (presentation.userId === userId) return "owner";
-  if (!memberSnapshot.exists || !isLinkActive(presentation)) return null;
-  return "viewer";
+  if (!memberSnapshot.exists) return null;
+  return (await isLinkActive(presentation, readFolderDoc(db)))
+    ? "viewer"
+    : null;
 }
 
 async function ownerNames(
@@ -110,7 +144,9 @@ async function findActiveByToken(
     .limit(1)
     .get();
   const presentation = snapshot.docs[0]?.data();
-  return presentation && isLinkActive(presentation) ? presentation : null;
+  return presentation && (await isLinkActive(presentation, readFolderDoc(db)))
+    ? presentation
+    : null;
 }
 
 /**
@@ -131,8 +167,12 @@ export async function getSharedDocumentByToken(
 }
 
 /**
- * 링크로 들어와 아직 접근할 수 있는 세트 목록.
+ * 링크로 들어와 아직 접근할 수 있는 프레젠테이션 목록.
  * 폴더·휴지통은 소유자의 드라이브 배치라 공유받은 사람에게는 비워서 준다.
+ *
+ * 휴지통에 넣은 폴더 안의 프레젠테이션은 뺀다. 소유자의 폴더는 이 확인에만 읽고, 한 요청 안에서
+ * 같은 폴더는 한 번만 읽는다. 같은 폴더에 담긴 프레젠테이션을 여러 개 받았으면 프레젠테이션마다
+ * 같은 조상을 다시 읽게 되기 때문이다.
  */
 export async function getSharedPresentationDocuments(
   db: Db,
@@ -148,12 +188,17 @@ export async function getSharedPresentationDocuments(
       presentationsCol(db).doc(doc.data().presentationId),
     ),
   )) as DocumentSnapshot<PresentationDoc>[];
-  const visible = presentations
+  const others = presentations
     .flatMap((snapshot) => {
       const presentation = snapshot.data();
       return presentation ? [presentation] : [];
     })
-    .filter((p) => p.userId !== userId && isLinkActive(p));
+    .filter((p) => p.userId !== userId);
+  const readFolder = memoizeFolderReads(readFolderDoc(db));
+  const active = await Promise.all(
+    others.map((presentation) => isLinkActive(presentation, readFolder)),
+  );
+  const visible = others.filter((_, index) => active[index]);
   const names = await ownerNames(db, visible);
   const headers = visible
     .filter((p) => names.has(p.userId))
