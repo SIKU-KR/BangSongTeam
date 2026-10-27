@@ -35,6 +35,15 @@
       "collectionGroup": "decks",
       "fieldPath": "style",
       "indexes": []
+    },
+    {
+      "collectionGroup": "verifications",
+      "fieldPath": "expiresAt",
+      "ttl": true,
+      "indexes": [
+        { "order": "ASCENDING", "queryScope": "COLLECTION" },
+        { "order": "DESCENDING", "queryScope": "COLLECTION" }
+      ]
     }
   ]
 }

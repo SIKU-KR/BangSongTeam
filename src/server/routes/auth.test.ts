@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { Query } from "@google-cloud/firestore";
 import { handleOAuthUserInfo } from "better-auth/oauth2";
 import { FALLBACK_USER_NAME } from "#shared";
+import { COLLECTIONS, runBulk } from "#db";
 import { env } from "../test/env";
 import { clearDb } from "../../db/test/fixtures";
 import app from "../index";
@@ -160,6 +162,69 @@ describe("이메일·비밀번호 인증", () => {
     expect(duplicate.status).toBeGreaterThanOrEqual(400);
     expect(sessionCookie(duplicate)).toBe("");
     expect(short.status).toBe(400);
+  });
+});
+
+describe("OAuth 콜백", () => {
+  const MINUTE_MS = 60_000;
+
+  beforeEach(async () => {
+    await clearDb(env.DB);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  async function seedStates(
+    count: number,
+    expiresAt: Date,
+    prefix: string,
+  ): Promise<void> {
+    await runBulk(env.DB, (writer) =>
+      Array.from({ length: count }, (_, i) =>
+        writer.set(
+          env.DB.collection(COLLECTIONS.verifications).doc(`${prefix}-${i}`),
+          {
+            id: `${prefix}-${i}`,
+            identifier: `${prefix}-state-${i}`,
+            value: "{}",
+            expiresAt,
+            createdAt: new Date(expiresAt.getTime() - 10 * MINUTE_MS),
+            updatedAt: new Date(expiresAt.getTime() - 10 * MINUTE_MS),
+          },
+        ),
+      ),
+    );
+  }
+
+  it("만료된 state를 지우려고 쌓인 state를 모두 읽지 않는다", async () => {
+    await seedStates(150, new Date(Date.now() - MINUTE_MS), "old");
+    await seedStates(150, new Date(Date.now() + MINUTE_MS), "live");
+    const sizes: number[] = [];
+    const get = Query.prototype.get;
+    vi.spyOn(Query.prototype, "get").mockImplementation(async function (
+      this: Query,
+    ) {
+      const snapshot = await get.call(this);
+      sizes.push(snapshot.size);
+      return snapshot;
+    });
+    vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const res = await app.request(
+      "/api/auth/callback/google?state=missing&code=x",
+      { headers: { "x-forwarded-for": "10.0.4.1" } },
+      { ...env, GOOGLE_CLIENT_ID: "google-id", GOOGLE_CLIENT_SECRET: "secret" },
+    );
+
+    expect(res.status).toBe(302);
+    expect(res.headers.get("location")).toContain("error=state_mismatch");
+    expect(Math.max(0, ...sizes)).toBeLessThanOrEqual(1);
+    expect(
+      (await env.DB.collection(COLLECTIONS.verifications).count().get()).data()
+        .count,
+    ).toBe(300);
   });
 });
 

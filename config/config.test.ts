@@ -154,7 +154,27 @@ describe("Firestore 설정", () => {
       collectionGroup: string;
       fields: { fieldPath: string; order?: string; arrayConfig?: string }[];
     }[];
+    fieldOverrides: {
+      collectionGroup: string;
+      fieldPath: string;
+      ttl?: boolean;
+      indexes: { order?: string; queryScope?: string }[];
+    }[];
   };
+
+  it("만료된 OAuth state는 콜백 대신 TTL 정책이 지우고, 만료 시각 범위 조회는 그대로 된다", () => {
+    const expiresAt = indexes.fieldOverrides.find(
+      (field) =>
+        field.collectionGroup === "verifications" &&
+        field.fieldPath === "expiresAt",
+    );
+
+    expect(expiresAt?.ttl).toBe(true);
+    expect(expiresAt?.indexes).toEqual([
+      { order: "ASCENDING", queryScope: "COLLECTION" },
+      { order: "DESCENDING", queryScope: "COLLECTION" },
+    ]);
+  });
 
   it("공유 라이브러리 정렬·검색 쿼리에 맞는 복합 색인이 있다", () => {
     const fieldsOf = (paths: string[]) =>

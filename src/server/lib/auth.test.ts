@@ -105,9 +105,9 @@ describe("auth 인스턴스", () => {
       expect(
         verified({ email: "v@example.com", is_email_verified: true }),
       ).toBe(false);
-      expect(
-        verified({ email: "v@example.com", is_email_valid: true }),
-      ).toBe(false);
+      expect(verified({ email: "v@example.com", is_email_valid: true })).toBe(
+        false,
+      );
     });
   });
 

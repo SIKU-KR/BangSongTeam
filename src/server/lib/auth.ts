@@ -45,6 +45,17 @@ const SESSION_UPDATE_AGE_SECONDS = 24 * 60 * 60;
 const SESSION_COOKIE_CACHE_SECONDS = 5 * 60;
 
 /**
+ * OAuth state 같은 한 번 쓰는 값(`verifications`) 설정. 만료된 값은 콜백마다 찾아 지우지 않고
+ * Firestore TTL 정책(`firestore.indexes.json`의 `verifications.expiresAt`)이 지운다.
+ *
+ * Better Auth 기본값은 OAuth 콜백마다 만료된 값을 모두 찾아 지운다. 그런데 로그인하지 않은
+ * 요청도 소셜 로그인 시작으로 값을 하나씩 쌓을 수 있어, 그대로 두면 쌓인 만큼 Google 로그인이
+ * 느려지고 비싸진다. 만료된 state는 Better Auth가 값 안의 만료 시각으로 따로 거절하므로,
+ * TTL이 지우기 전까지 남아 있어도 쓰이지 않는다.
+ */
+const VERIFICATION_OPTIONS = { disableCleanup: true };
+
+/**
  * Better Auth 빈도 제한에서 기본값을 바꾸는 경로. 기본은 `/sign-in*`·`/sign-up*` 모두 IP마다
  * 10초에 3번이다.
  *
@@ -248,6 +259,7 @@ function buildAuth(env: Bindings) {
       cookieCache: { enabled: true, maxAge: SESSION_COOKIE_CACHE_SECONDS },
     },
     rateLimit: { enabled: true, customRules: RATE_LIMIT_RULES },
+    verification: VERIFICATION_OPTIONS,
     telemetry: { enabled: false },
     emailAndPassword: {
       enabled: true,
