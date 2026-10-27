@@ -1,5 +1,18 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  onTestFinished,
+  vi,
+} from "vitest";
 import type { Deck, Folder, Presentation } from "#shared";
+import { signInAsTestUser, signOutForTests } from "../../test/sessionFixture";
+import {
+  listPendingDeckDeletes,
+  rememberDeckDelete,
+} from "./pendingDeckDeletes";
 import {
   __resetConnectivityForTests,
   isServerReachable,
@@ -508,6 +521,28 @@ describe("동기화 회복", () => {
       );
     },
   );
+
+  it("닫힌 탭이 보내지 못하고 남긴 곡 삭제는 열려 있는 탭이 연결을 되찾을 때 보낸다", async () => {
+    const LEFT_BEHIND = "00000000c000000000002";
+    localStorage.clear();
+    signInAsTestUser(USER);
+    onTestFinished(() => {
+      localStorage.clear();
+      signOutForTests();
+    });
+    const remove = vi.fn(async () => true);
+    __setDeckTransportForTests({ remove });
+    setDeckSyncEnabled(true);
+    rememberDeckDelete(USER, LEFT_BEHIND);
+    start();
+
+    window.dispatchEvent(new Event("online"));
+    await __waitForSyncRecoveryForTests();
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(remove).toHaveBeenCalledExactlyOnceWith(LEFT_BEHIND);
+    expect(listPendingDeckDeletes(USER)).toEqual([]);
+  });
 
   it("받지 못한 부팅 단계를 지금 다시 받았으면 내 데이터를 따로 다시 받지 않는다", async () => {
     recoveryDeps.retryBootSyncIfNeeded.mockResolvedValueOnce(true);

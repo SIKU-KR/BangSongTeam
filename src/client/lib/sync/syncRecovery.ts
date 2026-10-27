@@ -12,6 +12,7 @@ import { refreshOwnDataIfStale, retryBootSyncIfNeeded } from "./bootSync";
 import { retryDeckSyncNow } from "./deckSync";
 import { retryFolderSyncNow } from "./folderSync";
 import { retryPendingSyncNow } from "./syncScheduler";
+import { resumeOtherTabsSongDeletes } from "../../features/editor/songLibraryStore";
 
 interface SyncRecoveryOptions {
   /** true인 동안에는 요청을 보내지 않는다 (송출 화면) */
@@ -135,6 +136,7 @@ async function runResume(mode: SyncRetryMode): Promise<void> {
   const repulled = await retryBootSyncIfNeeded(mode).catch(() => false);
   void retryFolderSyncNow(mode).catch(() => undefined);
   retryPendingSyncNow(mode);
+  resumeOtherTabsSongDeletes();
   void retryDeckSyncNow(mode).catch(() => undefined);
   if (!repulled) void refreshOwnDataIfStale(mode);
 }
@@ -223,7 +225,8 @@ function handleVisibilityChange(): void {
  * 받지 못한 배경 목록(`retryBackgroundCatalogIfNeeded`)을 곧바로 다시 돌린다. `online`,
  * 탭 복귀(`visibilitychange` → visible), 포커스도 같은 경로를 탄다. 닿는 중이면 확인 없이
  * 대기 중인 쓰기를 곧바로 보낸다 (TanStack Query의
- * `refetchOnReconnect`·`refetchOnWindowFocus`와 같은 원칙).
+ * `refetchOnReconnect`·`refetchOnWindowFocus`와 같은 원칙). 곡 큐에는 같은 브라우저의 다른
+ * 탭이 보내지 못하고 남긴 곡 삭제도 넣는다(`resumeOtherTabsSongDeletes`).
  *
  * 큐를 돌린 뒤에는 내 데이터를 다시 받는다(`refreshOwnDataIfStale`). 부팅 때만 받으면 며칠 열어 둔
  * 탭이 다른 기기에서 고친 판을 모른 채 띄우고 송출한다. 받지 못했던 부팅 단계를 방금 다시 받았으면

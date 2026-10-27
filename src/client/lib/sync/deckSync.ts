@@ -40,8 +40,8 @@ type ServerDeckListener = (deck: Deck) => void;
 type DeckGoneListener = (id: string) => void;
 type FailedDeckResolver = (id: string) => Deck | undefined;
 
-type PendingOp =
-  { kind: "push"; deck: Deck } | { kind: "delete"; id: string; userId: string };
+type DeleteOp = { kind: "delete"; id: string; userId: string };
+type PendingOp = { kind: "push"; deck: Deck } | DeleteOp;
 
 let pusher: DeckPusher = pushDeck;
 let deleter: DeckDeleter = deleteDeckRemote;
@@ -51,6 +51,8 @@ let resolveFailed: FailedDeckResolver | null = null;
 let enabled = false;
 let pending = new Map<string, PendingOp>();
 let failed = new Map<string, PendingOp>();
+const waitingDeletes = new Map<string, DeleteOp>();
+const recordedDeletes = new Set<string>();
 const waitingOnServer = new Set<string>();
 const deletedIds = new Set<string>();
 const deletedElsewhere = new Set<string>();
@@ -162,9 +164,22 @@ function forgetDeletedDeck(id: string): void {
   resetDeckState(id);
 }
 
+function forgetRecordedDelete(op: DeleteOp): void {
+  forgetDeckDelete(op.userId, op.id);
+  recordedDeletes.delete(op.id);
+}
+
+function takeWaitingDelete(op: DeleteOp): boolean {
+  if (waitingDeletes.get(op.id) !== op) return false;
+  waitingDeletes.delete(op.id);
+  return true;
+}
+
 function clearPending(): void {
   pending = new Map();
   failed = new Map();
+  waitingDeletes.clear();
+  recordedDeletes.clear();
   waitingOnServer.clear();
   if (timer) {
     clearTimeout(timer);
@@ -198,6 +213,7 @@ async function runOps(ops: PendingOp[]): Promise<void> {
   for (const op of ops) {
     if (!enabled) return;
     const key = op.kind === "push" ? op.deck.id : op.id;
+    if (op.kind === "delete" && !takeWaitingDelete(op)) continue;
     try {
       if (op.kind === "push") {
         const saved = await pusher(op.deck);
@@ -205,7 +221,7 @@ async function runOps(ops: PendingOp[]): Promise<void> {
         listener?.(saved);
       } else {
         const removed = await deleter(op.id);
-        if (removed !== false) forgetDeckDelete(op.userId, op.id);
+        if (removed !== false) forgetRecordedDelete(op);
       }
       backoff.reset(key);
       waitingOnServer.delete(key);
@@ -244,9 +260,7 @@ async function runOps(ops: PendingOp[]): Promise<void> {
         waitingOnServer.delete(key);
         backoff.reset(key);
         if (!pending.has(key)) failed.set(key, op);
-        if (op.kind === "delete" && !expired) {
-          forgetDeckDelete(op.userId, op.id);
-        }
+        if (op.kind === "delete" && !expired) forgetRecordedDelete(op);
         const failure = failureOf(op, key, err);
         console.error("Deck push failed permanently", failure);
         recordSyncFailure(failure);
@@ -272,6 +286,9 @@ async function runOps(ops: PendingOp[]): Promise<void> {
 }
 
 function startBatch(ops: PendingOp[]): void {
+  for (const op of ops) {
+    if (op.kind === "delete") waitingDeletes.set(op.id, op);
+  }
   const batch = inFlight.then(() => runOps(ops));
   runningBatches.add(batch);
   inFlight = batch.finally(() => {
@@ -333,7 +350,8 @@ export function scheduleDeckPush(deck: Deck): void {
  * 아니라 이 탭의 로그인이 끝난 것이라, 그 계정으로 다시 로그인한 부팅이 지우면 된다.
  */
 export function scheduleDeckDelete(id: string, userId: string): void {
-  rememberDeckDelete(userId, id);
+  if (rememberDeckDelete(userId, id)) recordedDeletes.add(id);
+  else recordedDeletes.delete(id);
   deletedIds.add(id);
   deletedElsewhere.delete(id);
   resetDeckState(id);
@@ -349,6 +367,52 @@ export function resumePendingDeckDeletes(userId: string): void {
   for (const id of listPendingDeckDeletes(userId)) {
     scheduleDeckDelete(id, userId);
   }
+}
+
+/**
+ * 같은 브라우저의 다른 탭이 남긴 `userId`의 삭제 기록 가운데 이 페이지가 지운 적 없는 곡의 DELETE를
+ * 이 페이지 큐에 넣는다. 연결 회복 신호(`syncRecovery`)마다 부른다. 큐가 꺼져 있으면 하지 않는다.
+ *
+ * DELETE는 지운 탭의 메모리 큐에만 있다. 그 탭이 오프라인에서 보내지 못한 채 닫히면, 열려 있는 탭은
+ * 그 곡을 지운 곡으로 감추기만 하고 다음 부팅까지 아무도 보내지 않아 곡이 서버와 공유 라이브러리에
+ * 남는다. DELETE는 몇 번 받아도 결과가 같아, 아직 열려 있는 탭의 DELETE와 겹쳐도 된다. 이 페이지가
+ * 지운 곡은 이 페이지 큐가 맡고 있거나, 서버가 이 계정의 곡이 아니라고 답해(404) 다음 부팅에 다시
+ * 보낼 곡이라 넣지 않는다.
+ */
+export function resumeOtherTabsDeckDeletes(userId: string): void {
+  if (!enabled) return;
+  for (const id of listPendingDeckDeletes(userId)) {
+    if (deletedIds.has(id) && !deletedElsewhere.has(id)) continue;
+    scheduleDeckDelete(id, userId);
+  }
+}
+
+function unsentDeleteOf(id: string): DeleteOp | undefined {
+  for (const op of [pending.get(id), failed.get(id), waitingDeletes.get(id)]) {
+    if (op?.kind === "delete") return op;
+  }
+  return undefined;
+}
+
+/**
+ * 다른 탭이 이 페이지가 지운 곡을 다시 넣었으면 아직 보내지 않은 그 곡의 DELETE를 거두고 true를
+ * 돌려준다. 다른 탭이 쓴 그 곡의 저장본을 다시 읽을 때(`reloadSongsFromStorage`) 부른다.
+ *
+ * 공유 곡을 다시 가져오면 서버는 남아 있는 첫 사본을 같은 id로 돌려주고, 다시 넣은 탭은 삭제 기록에서
+ * 그 곡을 뺀다(`cancelDeckDelete`). 그 탭은 자기 큐만 거두므로 이 페이지의 DELETE가 나가면 다시
+ * 가져온 곡이 서버에서 지워진다. 기다리거나, 다시 시도나 '다시 시도'를 기다리거나, 보내는 묶음에서
+ * 차례를 기다리는 DELETE만 거둔다. 이미 보낸 DELETE는 서버가 지우므로 그대로 둔다.
+ *
+ * 이 페이지가 삭제 기록에 남긴 곡이 지금 기록에 없을 때만 다시 넣은 것으로 본다. 기록에 남아 있으면
+ * 다른 탭의 늦은 쓰기다. 저장소를 쓸 수 없어 남기지 못했거나 영구 실패로 이 페이지가 기록을 지웠으면,
+ * 기록이 없다는 것만으로는 다시 넣었는지 알 수 없어 거두지 않는다.
+ */
+export function cancelDeckDeleteReaddedElsewhere(id: string): boolean {
+  const op = unsentDeleteOf(id);
+  if (!op || !recordedDeletes.has(id)) return false;
+  if (listPendingDeckDeletes(op.userId).includes(id)) return false;
+  cancelDeckDelete(id, op.userId);
+  return true;
 }
 
 /**
@@ -369,16 +433,19 @@ export function cancelDeckPush(id: string): void {
 
 /**
  * 아직 보내지 않았거나 영구 실패로 맡긴 그 곡의 DELETE를 버리고 지운 곡 목록과 `userId`의
- * 삭제 기록에서 뺀다. 지운 곡을 다시 넣을 때 부른다. 공유 곡을 다시 가져오면 서버는 남아 있는
- * 첫 사본을 돌려주므로, DELETE가 뒤늦게 나가면 다시 가져온 곡이 서버에서 지워진다.
+ * 삭제 기록에서 뺀다. 보내는 묶음에서 앞 곡을 기다리는 DELETE도 차례가 와도 보내지 않는다. 지운
+ * 곡을 다시 넣을 때 부른다. 공유 곡을 다시 가져오면 서버는 남아 있는 첫 사본을 돌려주므로,
+ * DELETE가 뒤늦게 나가면 다시 가져온 곡이 서버에서 지워진다.
  */
 export function cancelDeckDelete(id: string, userId: string): void {
   forgetDeckDelete(userId, id);
+  recordedDeletes.delete(id);
   deletedIds.delete(id);
   deletedElsewhere.delete(id);
+  const waiting = waitingDeletes.delete(id);
   const queued = pending.get(id);
   const held = failed.get(id);
-  if (queued?.kind !== "delete" && held?.kind !== "delete") return;
+  if (queued?.kind !== "delete" && held?.kind !== "delete" && !waiting) return;
   if (queued?.kind === "delete") pending.delete(id);
   if (held?.kind === "delete") failed.delete(id);
   resetDeckState(id);
@@ -482,8 +549,11 @@ function requeueFailedOps(): void {
     const current = currentOpOf(op);
     if (!current) continue;
     pending.set(key, current);
-    if (current.kind === "delete") {
-      rememberDeckDelete(current.userId, current.id);
+    if (
+      current.kind === "delete" &&
+      rememberDeckDelete(current.userId, current.id)
+    ) {
+      recordedDeletes.add(current.id);
     }
   }
   failed = new Map();

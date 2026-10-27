@@ -25,9 +25,11 @@ import { announceStorageChange } from "../../lib/storage/storageChannel";
 import { getCurrentUserId } from "../../lib/auth/sessionStore";
 import {
   cancelDeckDelete,
+  cancelDeckDeleteReaddedElsewhere,
   cancelDeckPush,
   deletedDeckIds,
   markDeckDeleted,
+  resumeOtherTabsDeckDeletes,
   resumePendingDeckDeletes,
   scheduleDeckPush,
   scheduleDeckDelete,
@@ -268,9 +270,11 @@ export function dropDeletedLibraryDeck(id: string): void {
  * 곡(`pendingDeckDeletes`)도 저장본이 남아 있으면 같게 본다. 하이드레이션도 그 곡을 싣지 않는다.
  *
  * 이 탭이 지웠거나 서버가 지웠다고 답한 곡은 저장본이 다시 생겨도 보관함에 넣지 않는다. 그 저장본은
- * 다른 탭의 늦은 쓰기(push 응답 등)라, 넣으면 서버에서 지운 곡이 이 탭에만 남는다. 다른 탭에서 지운
- * 곡으로만 기억한 곡은 저장본이 다시 생기면 기억을 지우고 싣는다(`unmarkDeckDeleted`). 지운 탭이 같은
- * 공유 곡을 다시 가져온 것이라, 기억을 남기면 이 탭의 다음 보관함 병합이 그 곡을 지운다.
+ * 다른 탭의 늦은 쓰기(push 응답 등)라, 넣으면 서버에서 지운 곡이 이 탭에만 남는다. 다만 이 탭이 지운
+ * 곡을 다른 탭이 다시 가져와 삭제 기록에서 뺐고 이 탭의 DELETE가 아직 나가지 않았으면, 그 DELETE를
+ * 거두고 싣는다(`cancelDeckDeleteReaddedElsewhere`). 거두지 않으면 다시 가져온 곡을 서버에서 지운다.
+ * 다른 탭에서 지운 곡으로만 기억한 곡은 저장본이 다시 생기면 기억을 지우고 싣는다(`unmarkDeckDeleted`).
+ * 지운 탭이 같은 공유 곡을 다시 가져온 것이라, 기억을 남기면 이 탭의 다음 보관함 병합이 그 곡을 지운다.
  *
  * 이 탭이 아직 저장하지 않았거나 저장하는 중인 곡은 건너뛴다(읽는 동안 고친 곡도 같다). 곧 이 탭의
  * 쓰기가 저장본을 다시 쓰고, 지운 곡을 이 탭에서 다시 가져오는 중이면 다시 넣은 곡을 지운 알림이
@@ -314,7 +318,9 @@ export async function reloadSongsFromStorage(
       }
       continue;
     }
-    if (!unmarkDeckDeleted(id)) continue;
+    if (!unmarkDeckDeleted(id) && !cancelDeckDeleteReaddedElsewhere(id)) {
+      continue;
+    }
     putInCache(record.value);
     changed = true;
   }
@@ -340,6 +346,16 @@ export function getDeletedSongIds(): ReadonlySet<string> {
 export function resumeSongDeletes(): void {
   const userId = getCurrentUserId();
   if (userId) resumePendingDeckDeletes(userId);
+}
+
+/**
+ * 같은 브라우저의 다른 탭이 지우고 서버에 보내지 못한 지금 계정의 곡을 이 탭이 서버에서 지운다
+ * (`resumeOtherTabsDeckDeletes`). 연결 회복 신호마다 부른다. 지운 탭이 보내지 못하고 닫혔으면 열려 있는
+ * 탭은 그 곡을 감추기만 해, 다음 부팅까지 서버와 공유 라이브러리에 남는다.
+ */
+export function resumeOtherTabsSongDeletes(): void {
+  const userId = getCurrentUserId();
+  if (userId) resumeOtherTabsDeckDeletes(userId);
 }
 
 /**

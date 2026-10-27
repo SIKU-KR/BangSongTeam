@@ -17,6 +17,7 @@ import {
   unmarkDeckDeleted,
   isDeckDeletedError,
   hasPendingDeckSync,
+  resumeOtherTabsDeckDeletes,
   resumePendingDeckDeletes,
   setFailedDeckResolver,
   __setDeckTransportForTests,
@@ -1169,6 +1170,34 @@ describe("보관함 push 큐", () => {
       expect(listPendingDeckDeletes(OTHER_USER)).toEqual([
         "c0000000000000000000c",
       ]);
+    });
+
+    it("resumeOtherTabsDeckDeletes는 다른 탭이 남긴 기록만 한 번 보내고, 이 페이지가 지운 곡은 다시 넣지 않는다", async () => {
+      remove.mockImplementation(async (id) => id !== B);
+      scheduleDeckDelete(B, USER);
+      await flushDeckSync();
+      rememberDeckDelete(USER, A);
+      markDeckDeleted(A);
+
+      resumeOtherTabsDeckDeletes(USER);
+      await flushDeckSync();
+      resumeOtherTabsDeckDeletes(USER);
+      await flushDeckSync();
+
+      expect(remove.mock.calls.map(([id]) => id)).toEqual([B, A]);
+      expect(listPendingDeckDeletes(USER)).toEqual([B]);
+    });
+
+    it("resumeOtherTabsDeckDeletes는 큐가 꺼져 있으면 아무것도 하지 않는다", async () => {
+      rememberDeckDelete(USER, A);
+      setDeckSyncEnabled(false);
+
+      resumeOtherTabsDeckDeletes(USER);
+      setDeckSyncEnabled(true);
+      await flushDeckSync();
+
+      expect(remove).not.toHaveBeenCalled();
+      expect(wasDeckDeleted(A)).toBe(false);
     });
   });
 
