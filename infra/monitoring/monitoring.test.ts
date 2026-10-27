@@ -20,7 +20,7 @@ interface AlertPolicy {
   conditions: {
     conditionThreshold: {
       filter: string;
-      aggregations: { alignmentPeriod: string }[];
+      aggregations: { alignmentPeriod: string; groupByFields?: string[] }[];
       comparison: string;
       duration: string;
       evaluationMissingData?: string;
@@ -148,6 +148,17 @@ describe("알림 정책 정의", () => {
     ).toEqual([]);
   });
 
+  it("로그 기반 지표 조건은 라벨로 나누지 않아, 익명 요청이 지어낸 앱 버전마다 알림이 열리지 않는다", () => {
+    expect(
+      thresholds
+        .filter(({ filter }) => filter.includes("logging.googleapis.com/user/"))
+        .flatMap(({ aggregations }) =>
+          aggregations.flatMap(({ groupByFields }) => groupByFields ?? []),
+        )
+        .filter((field) => field.startsWith("metric.label")),
+    ).toEqual([]);
+  });
+
   it("모든 정책이 알림을 받은 사람이 할 일을 문서로 갖는다", () => {
     expect(
       policies.filter(({ documentation }) => documentation.content === ""),
@@ -260,6 +271,7 @@ case "$*" in
   "logging metrics describe "*) [ "$EXISTS" = 1 ] ;;
   "monitoring uptime create "*) [ -n "\${UPTIME_LOST-}" ] || touch "$STATE/uptime" ;;
   "monitoring uptime list-configs "*)
+    [ -z "\${FAIL_UPTIME_LIST-}" ] || exit 1
     if [ "$EXISTS" = 1 ] || [ -e "$STATE/uptime" ]; then echo projects/demo/uptimeCheckConfigs/check-1; fi ;;
   "monitoring policies list "*)
     if [ "$EXISTS" = 1 ]; then echo projects/demo/alertPolicies/1; fi ;;
@@ -267,14 +279,22 @@ case "$*" in
     copy_policy "$@"
     if [ -n "\${FAIL_FIRST_POLICY-}" ] && [ ! -e "$STATE/failed" ]; then touch "$STATE/failed"; exit 1; fi ;;
   "billing budgets list "*)
+    [ -z "\${FAIL_BUDGET_LIST-}" ] || exit 1
     if [ "$EXISTS" = 1 ]; then echo billingAccounts/AAAAAA-BBBBBB-CCCCCC/budgets/1; fi ;;
   "services enable "*|"logging metrics "*|"billing budgets create "*) ;;
   *) echo "unexpected gcloud $*" >&2; exit 64 ;;
 esac`;
 
   const CURL_STUB = `case "$*" in
-  *"-X POST"*) echo '{"name":"projects/demo/notificationChannels/chan-1"}' ;;
+  *"-X POST"*)
+    case "\${CURL_FAIL-}" in all|post) exit 22 ;; esac
+    if [ -n "\${CURL_POST_BODY-}" ]; then
+      echo "$CURL_POST_BODY"
+    else
+      echo '{"name":"projects/demo/notificationChannels/chan-1"}'
+    fi ;;
   *)
+    [ "\${CURL_FAIL-}" != all ] || exit 22
     if [ "$EXISTS" = 1 ]; then
       echo '{"notificationChannels":[{"name":"projects/demo/notificationChannels/chan-1","type":"email","labels":{"email_address":"ops@example.com"}}]}'
     else
@@ -411,6 +431,41 @@ esac`;
     expect(run.status).not.toBe(0);
     expect(run.stderr).toContain("가동 확인을 찾지 못했습니다");
     expect(run.gcloud("monitoring policies create")).toEqual([]);
+  });
+
+  it.each([
+    ["알림 채널 목록을 읽지 못하면", { env: { CURL_FAIL: "all" } }],
+    [
+      "다시 실행할 때 알림 채널 목록을 읽지 못하면",
+      { exists: true, env: { CURL_FAIL: "all" } },
+    ],
+    ["알림 채널을 만들지 못하면", { env: { CURL_FAIL: "post" } }],
+    ["만든 알림 채널의 이름을 받지 못하면", { env: { CURL_POST_BODY: "{}" } }],
+  ])(
+    "%s 정책의 알림 채널을 비우지 않고 아무 정책·예산도 만들거나 고치지 않은 채 멈춘다",
+    (_, options) => {
+      const run = runApply(options);
+
+      expect(run.status).not.toBe(0);
+      expect(run.gcloud("monitoring policies create")).toEqual([]);
+      expect(run.gcloud("monitoring policies update")).toEqual([]);
+      expect(run.gcloud("billing budgets create")).toEqual([]);
+    },
+  );
+
+  it("가동 확인 목록을 읽지 못하면 있는지 모르는 가동 확인을 또 만들지 않고 멈춘다", () => {
+    const run = runApply({ env: { FAIL_UPTIME_LIST: "1" } });
+
+    expect(run.status).not.toBe(0);
+    expect(run.gcloud("monitoring uptime create")).toEqual([]);
+    expect(run.gcloud("monitoring policies create")).toEqual([]);
+  });
+
+  it("예산 목록을 읽지 못하면 있는지 모르는 예산을 또 만들지 않고 멈춘다", () => {
+    const run = runApply({ env: { FAIL_BUDGET_LIST: "1" } });
+
+    expect(run.status).not.toBe(0);
+    expect(run.gcloud("billing budgets create")).toEqual([]);
   });
 
   it("방금 만든 지표를 정책이 아직 못 찾아 실패하면 다시 시도한다", () => {

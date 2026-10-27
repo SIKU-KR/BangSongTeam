@@ -115,8 +115,11 @@ export function __resetProxySecretWarningForTests(): void {
  *
  * 기본은 꺼짐이다. Worker와 서버의 `PROXY_SECRET`이 어긋난 채 켜면 모든 API가 막히므로 운영자가
  * 값이 같은 것을 확인한 뒤에 켠다(`docs/deploy-gcp.md`). 서버에 비밀값이 없으면(개발·테스트)
- * 켜져 있어도 막지 않는다. `/api/health`는 Cloud Run 시작 프로브와 배포 확인이 비밀값 없이
- * 부르므로 열어 둔다.
+ * 켜져 있어도 막지 않는다.
+ *
+ * `/api/health`는 비밀값 헤더가 없을 때만 열어 둔다. Cloud Run 시작 프로브와 배포 확인은 헤더
+ * 없이 부른다. 헤더가 틀리면 `/api/health`도 막아서, Worker의 비밀값이 어긋나면 Worker를 거치는
+ * 도메인 가동 확인(`infra/monitoring`)이 실패해 운영자에게 알린다.
  *
  * 비밀값 헤더는 `withTrustedClientIp`가 지우므로 그보다 먼저 불러야 한다.
  */
@@ -126,10 +129,12 @@ export function rejectUnproxied(
 ): Response | null {
   const { PROXY_SECRET: proxySecret, REQUIRE_PROXY: required } = env;
   if (!required || !proxySecret) return null;
-  if (new URL(request.url).pathname === HEALTH_PATH) return null;
 
   const secret = request.headers.get(PROXY_SECRET_HEADER);
-  if (secret && sameSecret(secret, proxySecret)) return null;
+  if (secret === null && new URL(request.url).pathname === HEALTH_PATH) {
+    return null;
+  }
+  if (secret !== null && sameSecret(secret, proxySecret)) return null;
   return Response.json(
     { error: API_ERRORS.proxyRequired },
     { status: 403, headers: { "cache-control": "no-store" } },

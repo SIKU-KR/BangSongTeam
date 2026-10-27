@@ -266,11 +266,35 @@ describe("rejectUnproxied", () => {
   });
 
   it.each(["/api/health", "/api/health?probe=1"])(
-    "%s는 비밀값 없이도 통과시킨다",
+    "%s는 비밀값 헤더가 없으면 통과시킨다",
     (path) => {
       expect(rejectUnproxied(direct(path), required)).toBeNull();
     },
   );
+
+  it.each([
+    ["틀리면", "wrong"],
+    ["비어 있으면", ""],
+  ])(
+    "/api/health도 비밀값 헤더가 %s 막아 Worker와 어긋난 비밀값이 가동 확인에 드러난다",
+    (_, secret) => {
+      const response = rejectUnproxied(
+        direct("/api/health", { [PROXY_SECRET_HEADER]: secret }),
+        required,
+      );
+
+      expect(response?.status).toBe(403);
+    },
+  );
+
+  it("/api/health는 비밀값이 맞아도 통과시킨다", () => {
+    expect(
+      rejectUnproxied(
+        direct("/api/health", { [PROXY_SECRET_HEADER]: SECRET }),
+        required,
+      ),
+    ).toBeNull();
+  });
 
   it.each(["/api/healthz", "/api/health/extra", "/api/backgrounds"])(
     "%s는 비밀값이 없으면 막는다",

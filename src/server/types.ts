@@ -19,8 +19,8 @@ export interface Bindings {
   /** 앞단 Cloudflare Worker와 나눠 가진 비밀값. 있을 때만 프록시가 넘긴 사용자 IP를 믿는다 */
   PROXY_SECRET?: string;
   /**
-   * 켜면 `PROXY_SECRET`이 맞는 요청만 받는다(`/api/health` 제외). run.app 주소로 곧장 들어오는
-   * 요청을 막는 운영자 선택 사항이라 기본은 꺼짐이다
+   * 켜면 `PROXY_SECRET`이 맞는 요청만 받는다(비밀값 헤더 없는 `/api/health` 제외). run.app
+   * 주소로 곧장 들어오는 요청을 막는 운영자 선택 사항이라 기본은 꺼짐이다
    */
   REQUIRE_PROXY?: boolean;
 }

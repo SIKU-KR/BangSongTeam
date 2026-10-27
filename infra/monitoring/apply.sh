@@ -43,14 +43,19 @@ monitoring_api() {
     -H "Content-Type: application/json" "$@"
 }
 
+# bash는 $(…) 안에서 set -e를 끈다(bash 매뉴얼 'Command Execution Environment', inherit_errexit).
+# 그래서 $(…)로 부르는 함수는 실패를 || return 1로 직접 돌려준다. 실패한 조회를 '없음'으로 읽으면
+# 알림 채널 없는 정책을 만들거나 기존 정책의 채널을 비우고, 가동 확인을 또 만든다.
 notification_channel() {
   local api="https://monitoring.googleapis.com/v3/projects/${PROJECT_ID}/notificationChannels"
   local name
   name=$(monitoring_api "$api" | jq -r --arg email "$ALERT_EMAIL" \
-    'first((.notificationChannels // [])[] | select(.type == "email" and .labels.email_address == $email) | .name) // empty')
+    'first((.notificationChannels // [])[] | select(.type == "email" and .labels.email_address == $email) | .name) // empty') ||
+    return 1
   if [ -z "$name" ]; then
     name=$(monitoring_api -X POST "$api" -d "$(jq -nc --arg email "$ALERT_EMAIL" \
-      '{type: "email", displayName: "방송팀 운영 알림", labels: {email_address: $email}}')" | jq -r .name)
+      '{type: "email", displayName: "방송팀 운영 알림", labels: {email_address: $email}}')" | jq -r .name) ||
+      return 1
   fi
   echo "$name"
 }
@@ -70,13 +75,14 @@ uptime_check_name() {
 
 apply_uptime_check() {
   local name
-  if [ -z "$(uptime_check_name)" ]; then
+  name=$(uptime_check_name) || return 1
+  if [ -z "$name" ]; then
     gcloud monitoring uptime create "$UPTIME_NAME" \
       --resource-type=uptime-url --resource-labels="host=${DOMAIN},project_id=${PROJECT_ID}" \
       --protocol=https --path=/api/health --matcher-content='"status":"ok"' \
-      --period=5 --timeout=10 --regions=asia-pacific,europe,usa-oregon
+      --period=5 --timeout=10 --regions=asia-pacific,europe,usa-oregon || return 1
+    name=$(uptime_check_name) || return 1
   fi
-  name=$(uptime_check_name)
   if [ -z "$name" ]; then
     log "가동 확인을 찾지 못했습니다: ${UPTIME_NAME}"
     return 1
@@ -102,11 +108,12 @@ apply_policies() {
 }
 
 apply_budget() {
-  local channel=$1 account number
+  local channel=$1 account existing number
   account=${BILLING_ACCOUNT:-$(gcloud billing projects describe "$PROJECT_ID" --format='value(billingAccountName)')}
   account=${account#billingAccounts/}
-  if [ -n "$(gcloud billing budgets list --billing-account="$account" \
-    --filter="displayName=\"${BUDGET_NAME}\"" --limit=1 --format='value(name)')" ]; then
+  existing=$(gcloud billing budgets list --billing-account="$account" \
+    --filter="displayName=\"${BUDGET_NAME}\"" --limit=1 --format='value(name)')
+  if [ -n "$existing" ]; then
     log "예산이 이미 있습니다: ${BUDGET_NAME}"
     return
   fi
@@ -121,9 +128,13 @@ apply_budget() {
 gcloud services enable monitoring.googleapis.com logging.googleapis.com \
   cloudbilling.googleapis.com billingbudgets.googleapis.com
 TOKEN=$(gcloud auth print-access-token)
-channel=$(notification_channel)
+channel=$(notification_channel) || exit 1
+if [[ $channel != projects/*/notificationChannels/* ]]; then
+  log "알림 채널을 찾거나 만들지 못했습니다: ${channel}"
+  exit 1
+fi
 apply_metrics
-check_id=$(apply_uptime_check)
+check_id=$(apply_uptime_check) || exit 1
 apply_policies "$channel" "$check_id"
 apply_budget "$channel"
 log "적용을 마쳤습니다. 알림 채널: ${channel}"

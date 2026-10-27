@@ -30,11 +30,13 @@ gcloud firestore backups schedules create --database='(default)' --recurrence=da
 이 둘뿐이다. `--delete-protection`은 데이터베이스를 통째로 지우는 명령을 막는다. 복구는 10절을
 따른다.
 
-이미 만든 데이터베이스에는 한 번만 켠다. 켠 뒤 `describe`의 `pointInTimeRecoveryEnablement`와
-`deleteProtectionState`가 `ENABLED`로 끝나는지, `schedules list`에 일정이 있는지 본다.
+이미 만든 데이터베이스에는 한 번만 켜고 백업 일정을 만든다. 그 뒤 `describe`의
+`pointInTimeRecoveryEnablement`와 `deleteProtectionState`가 `ENABLED`로 끝나는지, `schedules list`에
+일정이 있는지 본다.
 
 ```bash
 gcloud firestore databases update --database='(default)' --enable-pitr --delete-protection
+gcloud firestore backups schedules create --database='(default)' --recurrence=daily --retention=14d
 gcloud firestore databases describe --database='(default)'
 gcloud firestore backups schedules list --database='(default)'
 ```
@@ -90,7 +92,14 @@ gcloud run services update "$SERVICE" --region "$REGION" --update-secrets PROXY_
 
 - `BETTER_AUTH_SECRET`을 바꾸면 모든 사용자가 로그아웃된다.
 - `PROXY_SECRET`은 Cloud Run을 바꾼 직후 Worker에도 같은 값을 넣는다(9절). 그 사이에는 서버가
-  프록시가 넘긴 사용자 IP를 믿지 않고, `REQUIRE_PROXY`가 켜져 있으면 API가 잠깐 403이다.
+  프록시가 넘긴 사용자 IP를 믿지 않는다. `REQUIRE_PROXY`를 켰다면 그 사이 API가 모두 403이 되고,
+  앱은 403을 다시 보내지 않아 그동안 한 편집이 동기화 실패로 남는다. 그래서 플래그를 끄는 명령에서
+  비밀값을 바꾸고, Worker에 같은 값을 넣은 뒤 9절대로 다시 켠다.
+
+  ```bash
+  gcloud run services update "$SERVICE" --region "$REGION" --remove-env-vars REQUIRE_PROXY \
+    --update-secrets PROXY_SECRET=proxy-secret:<새 번호>
+  ```
 
 이미 `:latest`로 만든 서비스는 지금 `latest`가 가리키는 번호로 한 번 고정한다. 값이 그대로라
 로그아웃되지 않는다. 서비스가 쓰는 비밀값을 모두 적고(쓰지 않는 소셜 로그인의 비밀값은 뺀다),
@@ -146,11 +155,13 @@ gcloud run deploy "$SERVICE" --image "$IMAGE" --region "$REGION" \
 
 공급자는 저장소 전체가 아니라 `main`에서 도는 `ci-cd.yml`의 토큰만 받아들인다. 저장소 전체로 묶으면
 `main`에서만 배포한다는 확인이 워크플로 파일 안에 있어서, 다른 브랜치에서 그 파일을 고쳐 돌린 작업도
-배포 계정을 받는다. 아래 두 줄이 그 조건이고, 공급자를 만들 때도 바꿀 때도 쓴다.
+배포 계정을 받는다. 아래가 그 조건이고, 공급자를 만들 때도 바꿀 때도 쓴다. `gh`가 저장소 id를 읽지
+못하면(로그인 전 등) 어떤 토큰도 맞지 않는 조건이 되므로, 그때는 `CONDITION`을 만들지 않는다.
 
 ```bash
 REPO_ID=$(gh api repos/SIKU-KR/BangSongTeam --jq .id)
-CONDITION="assertion.repository_id=='${REPO_ID}' && assertion.ref=='refs/heads/main' && assertion.workflow_ref=='SIKU-KR/BangSongTeam/.github/workflows/ci-cd.yml@refs/heads/main'"
+[[ $REPO_ID =~ ^[0-9]+$ ]] &&
+  CONDITION="assertion.repository_id=='${REPO_ID}' && assertion.ref=='refs/heads/main' && assertion.workflow_ref=='SIKU-KR/BangSongTeam/.github/workflows/ci-cd.yml@refs/heads/main'"
 ```
 
 ```bash
@@ -163,17 +174,18 @@ done
 gcloud iam service-accounts add-iam-policy-binding "$RUN_SA" --member="serviceAccount:$DEPLOY_SA" --role=roles/iam.serviceAccountUser
 
 gcloud iam workload-identity-pools create github --location=global
-gcloud iam workload-identity-pools providers create-oidc github --location=global \
-  --workload-identity-pool=github --issuer-uri=https://token.actions.githubusercontent.com \
-  --attribute-mapping=google.subject=assertion.sub,attribute.repository=assertion.repository \
-  --attribute-condition="$CONDITION"
+: "${CONDITION:?CONDITION이 필요합니다}" &&
+  gcloud iam workload-identity-pools providers create-oidc github --location=global \
+    --workload-identity-pool=github --issuer-uri=https://token.actions.githubusercontent.com \
+    --attribute-mapping=google.subject=assertion.sub,attribute.repository=assertion.repository \
+    --attribute-condition="$CONDITION"
 POOL=$(gcloud iam workload-identity-pools describe github --location=global --format='value(name)')
 gcloud iam service-accounts add-iam-policy-binding "$DEPLOY_SA" --role=roles/iam.workloadIdentityUser \
   --member="principalSet://iam.googleapis.com/${POOL}/attribute.repository/SIKU-KR/BangSongTeam"
 ```
 
-이미 만든 공급자는 같은 조건으로 한 번 바꾼다. 새 셸이면 위의 두 줄을 먼저 실행한다. `CONDITION`이
-비면 조건이 지워지므로 비어 있을 때는 멈춘다. `main`에 푸시하는 배포는 그대로 통과한다.
+이미 만든 공급자는 같은 조건으로 한 번 바꾼다. 새 셸이면 조건을 만드는 블록을 먼저 실행한다.
+`CONDITION`이 비면 조건이 지워지므로 비어 있을 때는 멈춘다. `main`에 푸시하는 배포는 그대로 통과한다.
 
 ```bash
 : "${CONDITION:?CONDITION이 필요합니다}" &&
@@ -247,9 +259,11 @@ gcloud secrets versions access <번호> --secret=proxy-secret \
 Cloudflare 알림에서 Workers 사용량 알림을 켠다.
 
 **run.app 직접 접근.** run.app 주소로 곧장 들어오는 요청은 Worker와 캐시를 건너뛴다. 막으려면 서비스에
-`REQUIRE_PROXY=1`을 넣는다. 켜면 프록시 비밀값이 맞지 않는 `/api` 요청은 `/api/health`를 빼고 403이다.
-페이지와 정적 파일은 막지 않는다. 배포 계정이 후보 리비전 확인에서 `proxy-secret`을 읽을 수 있어야
-하고(켜진 서비스에서만 읽는다), 켠 직후 도메인은 200, run.app 주소는 403인지 본다.
+`REQUIRE_PROXY=1`을 넣는다. 켜면 프록시 비밀값이 맞지 않는 `/api` 요청은 403이고, 비밀값 헤더가 없는
+`/api/health`만 통과한다(시작 프로브, 배포 확인). 그래서 Worker의 비밀값이 어긋나면 도메인 가동 확인도
+실패해 알림이 온다(11절). 페이지와 정적 파일은 막지 않는다. 배포 계정이 후보 리비전 확인에서
+`proxy-secret`을 읽을 수 있어야 하고(켜진 서비스에서만 읽는다), 켠 직후 도메인은 200, run.app 주소는
+403인지 본다.
 
 ```bash
 gcloud secrets add-iam-policy-binding proxy-secret \
@@ -267,32 +281,41 @@ gcloud run services update "$SERVICE" --region "$REGION" --remove-env-vars REQUI
 
 ## 10. 데이터 복구
 
-사용자가 잃은 데이터는 운영 데이터베이스를 덮어쓰지 않고 별도 데이터베이스로 복구한 뒤, 그 사용자의
-빠진 문서만 옮긴다.
+사용자가 잃은 데이터는 운영 데이터베이스를 덮어쓰지 않고 별도 데이터베이스(`restore-1`)로 복구한 뒤,
+그 사용자의 빠진 문서만 옮긴다. 복구본은 둘 중 하나로 만든다.
+
+최근 7일 안의 시점(분 단위)으로 만들 때:
 
 ```bash
 gcloud firestore databases clone --source-database="projects/$PROJECT_ID/databases/(default)" \
   --snapshot-time=<UTC 분 단위 시각, 예 2026-10-27T01:20:00Z> --destination-database=restore-1
+```
+
+일일 백업(14일)으로 만들 때:
+
+```bash
 gcloud firestore backups list --location="$REGION" --format='table(name,snapshotTime,state)'
 gcloud firestore databases restore --source-backup=<백업 이름> --destination-database=restore-1
 ```
 
-`clone`은 최근 7일 안의 시점으로, `restore`는 고른 백업으로 복구본을 만든다. 복구본은 콘솔 Firestore에서
-`restore-1`을 골라 열고, 읽어서 옮기는 일회용 스크립트는 `createFirestore({ databaseId: "restore-1" })`로
-읽는다.
+복구본은 콘솔 Firestore에서 `restore-1`을 골라 열고, 읽어서 옮기는 일회용 스크립트는
+`createFirestore({ databaseId: "restore-1" })`로 읽는다.
 
-운영 데이터베이스에는 앱의 쓰기 함수로만 쓴다. 폴더는 부모부터 `upsertFolder`, 프레젠테이션은 곡 사본과
-함께 `savePresentationChanges`, 보관함 곡은 `upsertDeck`이다. 이 함수들이 영구 삭제 기록을 지우고 곡
-색인(`withDeckIndex`)을 채운다. 문서를 그대로 복사하면 삭제 기록이 남아 다른 기기가 복구한 항목을 다시
-지운다. 다 쓰면 `gcloud firestore databases delete --database=restore-1`로 복구본을 지운다.
+운영 데이터베이스에는 앱의 쓰기 함수로만 쓴다. 쓰기 함수는 그 사용자가 영구 삭제한 id를 되살리지 않고
+`deleted`를 돌려주므로, 스크립트는 옮길 id마다 `driveTombstones`의 기록을 먼저 지운다. 문서 id는 폴더와
+프레젠테이션이면 그 id, 보관함 곡이면 `deckTombstoneDocId(곡 id)`이고, 기록의 `userId`가 그 사용자일 때만
+지운다. 그다음 폴더는 부모부터 `upsertFolder`, 프레젠테이션은 곡 사본을 모두 담아
+`savePresentationChanges`, 보관함 곡은 `upsertDeck`으로 쓰고, 결과가 `saved`가 아니면 멈춘다. 문서를
+그대로 복사하면 곡 색인(`withDeckIndex`)과 부모 폴더 보정이 빠진다. 다 쓰면
+`gcloud firestore databases delete --database=restore-1`로 복구본을 지운다.
 
 ## 11. 알림
 
 `infra/monitoring`에 로그 기반 지표(`metrics/`)와 알림 정책(`policies/`)이 있다. 서버 5xx, 컨테이너
-오류·메모리, 클라이언트가 보낸 `server_error` 보고, 새 신고(`report_created`), 도메인 가동 확인
-(`/api/health`)을 이메일로 알리고, 월 예산 알림이 없으면 만든다. 처음 한 번 실행하고, 지표·정책 정의를
-바꾸면 다시 실행한다. 지표와 정책은 정의대로 고치고 가동 확인과 예산은 없을 때만 만들어서, 여러 번
-실행해도 같은 결과다.
+오류·메모리, 클라이언트가 보낸 `server_error` 보고, 새 신고(`report_created`), 프록시 비밀값 불일치
+(`proxy_secret_mismatch`), 도메인 가동 확인(`/api/health`)을 이메일로 알리고, 월 예산 알림이 없으면
+만든다. 처음 한 번 실행하고, 지표·정책 정의를 바꾸면 다시 실행한다. 지표와 정책은 정의대로 고치고 가동
+확인과 예산은 없을 때만 만들어서, 여러 번 실행해도 같은 결과다.
 
 ```bash
 PROJECT_ID=$PROJECT_ID ALERT_EMAIL=<받을 메일> infra/monitoring/apply.sh

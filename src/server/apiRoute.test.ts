@@ -53,6 +53,24 @@ describe("API 라우트의 프록시 강제", () => {
     expect((await HEAD(direct("/api/health"))).status).toBe(200);
   });
 
+  it("켜 두면 비밀값이 틀린 /api/health는 막고 맞는 것은 답한다", async () => {
+    const { GET } = await loadRoute({
+      PROXY_SECRET: SECRET,
+      REQUIRE_PROXY: "1",
+    });
+
+    const stale = await GET(
+      direct("/api/health", { [PROXY_SECRET_HEADER]: "old-secret" }),
+    );
+    expect(stale.status).toBe(403);
+    expect(await stale.json()).toEqual({ error: API_ERRORS.proxyRequired });
+
+    const proxied = await GET(
+      direct("/api/health", { [PROXY_SECRET_HEADER]: SECRET }),
+    );
+    expect(proxied.status).toBe(200);
+  });
+
   it.each([undefined, "", "0", "false"])(
     "REQUIRE_PROXY가 %j이면 비밀값 없는 요청도 받는다",
     async (flag) => {
