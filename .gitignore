@@ -54,4 +54,5 @@ next-env.d.ts
 *.tsbuildinfo
 public/sw.js*
 public/sw-shell.js
+public/offline-rsc/
 public/workbox-*.js*

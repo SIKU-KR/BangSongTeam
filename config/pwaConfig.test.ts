@@ -65,6 +65,14 @@ describe("PWA 설정", () => {
     expect(config).toContain('url.pathname.startsWith("/api/")');
   });
 
+  it("앱 안 이동에 쓰도록 화면마다 미리 렌더한 RSC를 공개 경로에 복사해 함께 프리캐시한다", () => {
+    expect(config).toContain("copyShellRscFiles(shells);");
+    expect(config).toContain("url: OFFLINE_RSC_PREFIX + shell.rsc,");
+    expect(
+      fs.readFileSync(path.join(rootDir, ".gitignore"), "utf-8"),
+    ).toContain("public/offline-rsc/");
+  });
+
   it("sw.js는 매번 재검증한다 (해시가 붙은 /_next/static/*은 Next.js가 immutable로 준다)", async () => {
     const { default: nextConfig } = await import("../next.config");
     const headers = await nextConfig.headers?.();
@@ -162,8 +170,11 @@ describe("오프라인 화면 셸", () => {
       `/editor/${P}`,
       `/present/${P}/fullscreen`,
     ]);
-    expect(shells[0]).toMatchObject({ file: "index.html" });
-    expect(shells[4]).toMatchObject({ file: `editor/${P}.html` });
+    expect(shells[0]).toMatchObject({ file: "index.html", rsc: "/index.rsc" });
+    expect(shells[4]).toMatchObject({
+      file: `editor/${P}.html`,
+      rsc: "/x.rsc",
+    });
   });
 
   it("정적 화면은 그 셸로, 동적 화면은 자리 값과 함께 맞춘다", () => {

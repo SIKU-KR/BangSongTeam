@@ -9,6 +9,9 @@
  * - 화면 이동은 언제나 프리캐시한 셸로 답한다(`public/sw-shell.js`). 서버는 어느 화면이든
  *   로딩 화면만 그리므로 셸이 서버 응답과 같고, 네트워크가 끊긴 상태에서 `/present/...`를
  *   새로고침해도 앱이 뜬다. 동적 경로 셸은 `OFFLINE_SHELL_PARAM` 자리를 실제 값으로 바꾼다.
+ * - 앱 안 이동(`router.push`)이 서버에 묻는 RSC 응답도 화면별로 미리 렌더한 `.rsc`를
+ *   `public/offline-rsc/`에 복사해 프리캐시하고, 서버에 닿지 못하면 그것으로 답한다
+ *   (`shellWorkerSource`).
  * - `skipWaiting`을 켜지 않는다. 배포가 나간 순간 송출 중인 페이지가 새 버전으로 바뀌면
  *   예배가 끊긴다. 새 버전은 사용자가 송출 화면이 아닌 곳을 새로고침할 때 적용한다
  *   (`src/client/pwa/registerServiceWorker.ts`).
@@ -22,7 +25,13 @@
  */
 
 import { createHash } from "node:crypto";
-import { readFileSync, writeFileSync } from "node:fs";
+import {
+  copyFileSync,
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { generateSW } from "workbox-build";
@@ -50,8 +59,23 @@ const SHELL_SCRIPT = "sw-shell.js";
 const INTERNAL_ROUTES = new Set(["/_not-found", "/_global-error"]);
 
 /**
+ * 화면별로 미리 렌더한 RSC(`.next/server/app/*.rsc`)를 복사해 두는 공개 경로. 프리캐시는
+ * 서버에서 받아야 하는데, 서버는 `.rsc` 주소를 그 화면의 RSC로 답하지 않는다.
+ */
+export const OFFLINE_RSC_PREFIX = "/offline-rsc";
+
+/**
+ * 앱 안 이동의 RSC 요청이 서버 응답을 기다리는 최대 시간. 넘기면 셸 RSC로 답한다.
+ * 연결은 됐는데 응답이 오지 않는 와이파이에서 송출 버튼을 눌러도 한참 아무 일도 일어나지
+ * 않는 것을 막는다. 서버도 로딩 화면만 그려 셸 RSC와 같은 응답을 주므로 일찍 끊어도 잃는
+ * 것이 없다.
+ */
+export const RSC_NETWORK_TIMEOUT_MS = 3000;
+
+/**
  * 미리 렌더한 HTML 셸 목록. 동적 경로는 `OFFLINE_SHELL_PARAM`으로 한 장씩 렌더돼 있다.
  * 한 경로에 동적 자리가 둘 이상이면 어느 값을 어디에 넣을지 알 수 없어 빌드를 멈춘다.
+ * `rsc`는 같은 셸의 RSC 파일(prerender manifest의 `dataRoute`)이다.
  */
 export function collectShells(prerenderRoutes, placeholder) {
   const shells = [];
@@ -65,7 +89,7 @@ export function collectShells(prerenderRoutes, placeholder) {
       );
     }
     const file = route === "/" ? "index.html" : `${route.slice(1)}.html`;
-    shells.push({ route, segments, file });
+    shells.push({ route, segments, file, rsc: info.dataRoute });
   }
   return shells;
 }
@@ -101,38 +125,110 @@ export function matchShell(pathname, shells, placeholder) {
 }
 
 /**
- * 화면 이동 요청을 프리캐시한 셸로 답하는 fetch 핸들러. generateSW가 만드는
- * Workbox 라우트보다 먼저 등록되도록 `importScripts`로 붙는다.
+ * 화면 이동 요청을 프리캐시한 셸로 답하는 fetch 핸들러(`public/sw-shell.js`)의 소스.
+ * generateSW가 만드는 Workbox 라우트보다 먼저 등록되도록 `importScripts`로 붙는다.
+ *
+ * - 주소창 이동(`navigate`)은 언제나 셸 HTML로 답한다.
+ * - 앱 안 이동(`router.push`)의 RSC 요청은 서버에 먼저 묻고, 닿지 못하거나 RSC가 아닌
+ *   응답(프록시·서버 오류 페이지)이 오거나 `RSC_NETWORK_TIMEOUT_MS` 안에 답이 없으면 셸
+ *   RSC로 답한다. Next.js는 RSC 요청이 실패하면 브라우저 이동(전체 새로고침)으로 넘어가는데,
+ *   그러면 송출을 시작할 때 들어간 전체화면이 풀리고 메모리에만 있는 동기화 큐가 사라진다.
+ *   셸 RSC는 같은 빌드에서 나와 빌드 id가 페이지와 같다.
+ * - 미리 받기(prefetch) 요청은 응답 형식이 달라 답하지 않는다. 실패해도 Next.js가 이동할 때
+ *   위의 RSC 요청을 다시 보낸다.
  */
-function shellWorkerSource(shells, placeholder) {
+export function shellWorkerSource(shells, placeholder) {
+  const shellRscPaths = Object.fromEntries(
+    shells.map(({ route, rsc }) => [route, OFFLINE_RSC_PREFIX + rsc]),
+  );
   return `/* 빌드 산출물: scripts/buildServiceWorker.mjs */
 const SHELLS = ${JSON.stringify(shells.map(({ route, segments }) => ({ route, segments })))};
+const SHELL_RSC_PATHS = ${JSON.stringify(shellRscPaths)};
 const PLACEHOLDER = ${JSON.stringify(placeholder)};
 const PRECACHE = "workbox-precache-v2-" + self.registration.scope;
+const RSC_CONTENT_TYPE = "text/x-component";
+const RSC_NETWORK_TIMEOUT_MS = ${RSC_NETWORK_TIMEOUT_MS};
 const matchShell = ${matchShell.toString()};
 
-async function serveShell(request, shell) {
-  const cached = await caches.match(new URL(shell.route, self.location.origin).href, {
+function precached(pathname) {
+  return caches.match(new URL(pathname, self.location.origin).href, {
     cacheName: PRECACHE,
     ignoreSearch: true,
   });
+}
+
+function fillPlaceholder(text, shell) {
+  return shell.value === null ? text : text.split(PLACEHOLDER).join(shell.value);
+}
+
+async function serveShell(request, shell) {
+  const cached = await precached(shell.route);
   if (!cached) return fetch(request);
   if (shell.value === null) return cached;
-  const html = (await cached.text()).split(PLACEHOLDER).join(shell.value);
+  const html = fillPlaceholder(await cached.text(), shell);
   const headers = new Headers(cached.headers);
   headers.delete("content-length");
   return new Response(html, { status: 200, headers });
 }
 
+async function shellRsc(shell) {
+  const cached = await precached(SHELL_RSC_PATHS[shell.route]);
+  if (!cached) return null;
+  return new Response(fillPlaceholder(await cached.text(), shell), {
+    status: 200,
+    headers: { "content-type": RSC_CONTENT_TYPE },
+  });
+}
+
+function isFlightResponse(response) {
+  const contentType = response.headers.get("content-type") || "";
+  return response.ok && contentType.startsWith(RSC_CONTENT_TYPE);
+}
+
+async function serveRsc(request, shell) {
+  let timer;
+  const network = fetch(request).catch(() => null);
+  const timedOut = new Promise((resolve) => {
+    timer = setTimeout(() => resolve(null), RSC_NETWORK_TIMEOUT_MS);
+  });
+  const answered = await Promise.race([network, timedOut]);
+  clearTimeout(timer);
+  if (answered && isFlightResponse(answered)) return answered;
+  const fallback = await shellRsc(shell);
+  if (fallback) return fallback;
+  return answered || (await network) || Response.error();
+}
+
+function isRscNavigation(request) {
+  return (
+    request.headers.get("RSC") === "1" &&
+    !request.headers.has("Next-Router-Prefetch") &&
+    !request.headers.has("Next-Router-Segment-Prefetch")
+  );
+}
+
 self.addEventListener("fetch", (event) => {
   const { request } = event;
-  if (request.mode !== "navigate" || request.method !== "GET") return;
+  if (request.method !== "GET") return;
+  const isNavigation = request.mode === "navigate";
+  if (!isNavigation && !isRscNavigation(request)) return;
   const url = new URL(request.url);
   if (url.origin !== self.location.origin || url.pathname.startsWith("/api/")) return;
   const shell = matchShell(url.pathname, SHELLS, PLACEHOLDER);
-  if (shell) event.respondWith(serveShell(request, shell));
+  if (!shell) return;
+  event.respondWith(isNavigation ? serveShell(request, shell) : serveRsc(request, shell));
 });
 `;
+}
+
+function copyShellRscFiles(shells) {
+  const dir = path.join(PUBLIC_DIR, OFFLINE_RSC_PREFIX);
+  rmSync(dir, { recursive: true, force: true });
+  for (const shell of shells) {
+    const target = path.join(dir, shell.rsc);
+    mkdirSync(path.dirname(target), { recursive: true });
+    copyFileSync(path.join(NEXT_DIR, "server/app", shell.rsc), target);
+  }
 }
 
 function revisionOf(file) {
@@ -146,6 +242,7 @@ async function main() {
   const shells = collectShells(manifest.routes, OFFLINE_SHELL_PARAM);
   const shellScript = shellWorkerSource(shells, OFFLINE_SHELL_PARAM);
   writeFileSync(path.join(PUBLIC_DIR, SHELL_SCRIPT), shellScript);
+  copyShellRscFiles(shells);
 
   const { count, size, warnings } = await generateSW({
     swDest: path.join(PUBLIC_DIR, "sw.js"),
@@ -157,6 +254,10 @@ async function main() {
       ...shells.map((shell) => ({
         url: shell.route,
         revision: revisionOf(path.join(NEXT_DIR, "server/app", shell.file)),
+      })),
+      ...shells.map((shell) => ({
+        url: OFFLINE_RSC_PREFIX + shell.rsc,
+        revision: revisionOf(path.join(NEXT_DIR, "server/app", shell.rsc)),
       })),
       {
         url: "/manifest.webmanifest",
