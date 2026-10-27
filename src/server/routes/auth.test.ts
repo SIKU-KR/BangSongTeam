@@ -585,6 +585,10 @@ describe("표시 이름", () => {
     [OFFICIAL_LIBRARY_NAME, "10.0.6.1"],
     [" 공식찬양라이브러리 ", "10.0.6.2"],
     ["공식\u200b찬양 라이브러리", "10.0.6.3"],
+    ["공식 \u3164찬양 라이브러리", "10.0.6.5"],
+    ["공식 \u115f찬양 라이브러리", "10.0.6.6"],
+    ["공식 \u1160찬양 라이브러리", "10.0.6.7"],
+    ["공식 \uffa0찬양 라이브러리", "10.0.6.8"],
   ])(
     "공식 라이브러리처럼 보이는 이름 %j로 가입하면 그 이름 대신 기본 이름을 저장한다",
     async (name, ip) => {
@@ -595,6 +599,19 @@ describe("표시 이름", () => {
       expect(await storedName(email)).toBe(FALLBACK_USER_NAME.default);
     },
   );
+
+  it("가입 이름의 방향 제어 문자는 빼고 저장해 거꾸로 적은 이름이 공식 라이브러리 이름으로 보이지 않는다", async () => {
+    const res = await signUpNamed(
+      "reversed@example.com",
+      "\u202e리러브이라 양찬 식공\u202c",
+      "10.0.6.9",
+    );
+
+    expect(res.status).toBe(200);
+    expect(await storedName("reversed@example.com")).toBe(
+      "리러브이라 양찬 식공",
+    );
+  });
 
   it("소셜 프로필 이름이 공식 라이브러리 이름이어도 로그인은 되고 그 이름은 저장하지 않는다", async () => {
     expect(
