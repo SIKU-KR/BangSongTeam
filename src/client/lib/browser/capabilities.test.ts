@@ -1,5 +1,9 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { canPresentReliably, getMissingCapabilities } from "./capabilities";
+import {
+  canPresentReliably,
+  canStoreMediaOffline,
+  getMissingCapabilities,
+} from "./capabilities";
 
 function stubCanPlayType(result: CanPlayTypeResult): void {
   vi.spyOn(HTMLMediaElement.prototype, "canPlayType").mockReturnValue(result);
@@ -56,5 +60,25 @@ describe("browser capabilities", () => {
 
     expect(getMissingCapabilities().map(({ id }) => id)).toEqual(["offline"]);
     expect(canPresentReliably()).toBe(true);
+  });
+
+  it("서비스 워커 접근을 거절하는 문서에서는 배너와 송출 준비가 똑같이 오프라인 송출을 못 한다고 본다", () => {
+    stubFullscreen(true);
+    stubCanPlayType("probably");
+    Object.defineProperty(navigator, "serviceWorker", {
+      get() {
+        throw new DOMException("sandboxed", "SecurityError");
+      },
+      configurable: true,
+    });
+
+    expect(getMissingCapabilities().map(({ id }) => id)).toEqual(["offline"]);
+    expect(canStoreMediaOffline()).toBe(false);
+  });
+
+  it("서비스 워커와 Cache Storage가 있으면 배경을 받아 두었다가 인터넷 없이 재생할 수 있다", () => {
+    stubServiceWorker(true);
+
+    expect(canStoreMediaOffline()).toBe(true);
   });
 });

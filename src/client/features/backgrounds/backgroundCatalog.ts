@@ -70,12 +70,27 @@ export async function hydrateBackgroundCatalog(): Promise<void> {
   });
 }
 
-/** 서버가 준 목록으로 통째로 바꾼다 (지워진 배경이 남지 않게) */
+/**
+ * 서버가 준 목록으로 통째로 바꾼다 (지워진 배경이 남지 않게).
+ *
+ * `unreadableIds`는 서버에 있지만 형식이 어긋나 이 기기가 읽지 못한 배경이다. 가진 사본이
+ * 있으면 남긴다. 배포가 엇갈리거나 운영자가 여러 배경을 한꺼번에 잘못 고쳤을 때 그 배경이
+ * 모든 기기의 카탈로그와 송출용 사본에서 사라지면, 그 배경을 쓰는 곡이 예배 중에 배경 없이
+ * 송출된다.
+ */
 export async function applyServerBackgroundCatalog(
   backgrounds: BackgroundMedia[],
+  unreadableIds: readonly string[] = [],
 ): Promise<void> {
-  setSnapshot({ backgrounds, status: "synced" });
-  await persist(() => replaceAllBackgrounds(backgrounds));
+  const read = new Set(backgrounds.map((background) => background.id));
+  const kept = unreadableIds.flatMap((id) => {
+    const local = byId.get(id);
+    return local && !read.has(id) ? [local] : [];
+  });
+  const next =
+    kept.length > 0 ? byTitle([...backgrounds, ...kept]) : backgrounds;
+  setSnapshot({ backgrounds: next, status: "synced" });
+  await persist(() => replaceAllBackgrounds(next));
 }
 
 export function markBackgroundCatalogStatus(

@@ -14,7 +14,11 @@ import {
   toRoutePattern,
   type TraceContext,
 } from "../api/traceContext";
-import { isServiceWorkerControlled } from "../browser/capabilities";
+import {
+  canStoreMediaOffline,
+  isCacheStorageAvailable,
+  isServiceWorkerControlled,
+} from "../browser/capabilities";
 import { isQuotaExceededError } from "../browser/quotaError";
 import {
   recordClientFailure,
@@ -39,14 +43,6 @@ const SW_CACHE_POLL_BYTES_PER_EXTRA = 2 * 1024 * 1024;
  * 영영 끝나지 않아, 다시 시도해도 같은 다운로드(`inFlight`)를 기다리기만 한다.
  */
 export const MEDIA_STALL_TIMEOUT_MS = 30_000;
-
-export function isCacheStorageAvailable(): boolean {
-  try {
-    return typeof caches !== "undefined";
-  } catch {
-    return false;
-  }
-}
 
 function isOffline(): boolean {
   return typeof navigator !== "undefined" && navigator.onLine === false;
@@ -443,28 +439,6 @@ function startDrain(): void {
       draining = null;
       if (pending.size > 0 && !isOffline()) startDrain();
     });
-}
-
-/**
- * 이 브라우저가 배경을 받아 두었다가 인터넷 없이 재생할 수 있는지.
- *
- * `<video>`·`<img>` 요청에 Cache Storage의 사본으로 답하는 것은 서비스 워커뿐이다. 서비스
- * 워커가 없는 브라우저(App-Bound Domain이 아닌 iOS 앱 안 WebView 등)에서는 받아 둔 사본을
- * 재생에 쓰지 못하고 재생이 같은 파일을 한 번 더 받으므로, 큐도 곧바로 받기도 받지 않는다.
- * 지원은 하지만 아직 페이지를 제어하지 않을 때(첫 방문, 강력 새로고침)는 받는다. 다음
- * 로드부터 서비스 워커가 그 사본으로 답한다.
- *
- * 렌더 중에도 부르므로 던지지 않는다. 샌드박스 문서처럼 브라우저가 `navigator.serviceWorker`
- * 접근을 `SecurityError`로 거절하면 지원하지 않는 것으로 본다.
- */
-export function canStoreMediaOffline(): boolean {
-  try {
-    return (
-      navigatorApi("serviceWorker") !== undefined && isCacheStorageAvailable()
-    );
-  } catch {
-    return false;
-  }
 }
 
 function canCacheInBackground(): boolean {

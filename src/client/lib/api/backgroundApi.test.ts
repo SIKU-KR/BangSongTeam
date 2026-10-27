@@ -18,7 +18,50 @@ describe("fetchBackgroundList", () => {
       }),
     });
 
-    expect(await fetchBackgroundList()).toEqual({ backgrounds: [valid] });
+    expect(await fetchBackgroundList()).toEqual({
+      backgrounds: [valid],
+      unreadableIds: [numericKeyword.id, missingDuration.id],
+    });
+  });
+
+  it("배경이 있는데 하나도 읽지 못하면 받지 못한 것으로 본다", async () => {
+    api = installFakeApi({
+      "GET /api/backgrounds": () => ({
+        body: {
+          backgrounds: [
+            { ...makeBackground(1), license: undefined },
+            { ...makeBackground(2), durationSec: "20" },
+          ],
+        },
+      }),
+    });
+
+    await expect(fetchBackgroundList()).rejects.toThrow();
+  });
+
+  it("배경이 하나도 없는 목록은 그대로 받는다", async () => {
+    api = installFakeApi({
+      "GET /api/backgrounds": () => ({ body: { backgrounds: [] } }),
+    });
+
+    expect(await fetchBackgroundList()).toEqual({
+      backgrounds: [],
+      unreadableIds: [],
+    });
+  });
+
+  it("id도 읽지 못한 배경은 남길 사본을 찾을 수 없으므로 빼기만 한다", async () => {
+    const valid = makeBackground(1);
+    api = installFakeApi({
+      "GET /api/backgrounds": () => ({
+        body: { backgrounds: [valid, { title: "id 없음" }, "문자열"] },
+      }),
+    });
+
+    expect(await fetchBackgroundList()).toEqual({
+      backgrounds: [valid],
+      unreadableIds: [],
+    });
   });
 
   it("목록 자체가 없는 응답은 받지 못한 것으로 본다", async () => {

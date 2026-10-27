@@ -7,7 +7,10 @@ import { installFakeApi, type FakeApi } from "../../test/fakeApi";
 import { withQueryClient } from "../../test/queryClientFixture";
 import { makeBackground } from "../../test/backgroundFixture";
 import { resetBackgroundCatalogForTests } from "../backgrounds/backgroundCatalog";
-import { refreshBackgroundCatalog } from "../../lib/sync/backgroundSync";
+import {
+  __resetBackgroundSyncForTests,
+  refreshBackgroundCatalog,
+} from "../../lib/sync/backgroundSync";
 import { BACKGROUND_COPY } from "#copy/backgrounds";
 import { COMMON_COPY } from "#copy/common";
 
@@ -37,9 +40,11 @@ describe("BackgroundLibraryView", () => {
 
   beforeEach(() => {
     resetBackgroundCatalogForTests();
+    __resetBackgroundSyncForTests();
   });
 
   afterEach(() => {
+    __resetBackgroundSyncForTests();
     api?.restore();
   });
 

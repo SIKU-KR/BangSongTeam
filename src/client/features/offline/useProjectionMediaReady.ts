@@ -12,7 +12,6 @@ import {
 } from "#shared";
 import {
   cacheMediaFirst,
-  canStoreMediaOffline,
   ensureMediaSpace,
   findCachedMediaUrls,
   getMediaCacheFailure,
@@ -27,6 +26,7 @@ import {
   useBackgroundLookup,
 } from "../backgrounds/backgroundCatalog";
 import { useLatest } from "../../hooks/useLatest";
+import { canStoreMediaOffline } from "../../lib/browser/capabilities";
 import { navigatorApi } from "../../lib/browser/optionalApis";
 
 export type ProjectionMediaStatus =

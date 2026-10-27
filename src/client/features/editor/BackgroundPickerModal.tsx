@@ -26,6 +26,8 @@ import {
   useBackgroundGallery,
 } from "../backgrounds/useBackgroundGallery";
 import type { BackgroundChoice } from "../presentation/presentationStore";
+import { canStoreMediaOffline } from "../../lib/browser/capabilities";
+import { prefersReducedData } from "../../lib/browser/optionalApis";
 import { ColorPalette } from "./ColorPalette";
 import { BACKGROUND_COPY } from "#copy/backgrounds";
 import { COMMON_COPY } from "#copy/common";
@@ -96,9 +98,20 @@ function PickerTile({
   );
 }
 
+function storageHint(): string {
+  if (!canStoreMediaOffline()) return BACKGROUND_COPY.picker.streamedHint;
+  if (prefersReducedData()) return BACKGROUND_COPY.picker.dataSaverHint;
+  return BACKGROUND_COPY.picker.cachedHint;
+}
+
 /**
  * 곡 배경 선택 창. 위쪽의 단색 팔레트나 아래 배경 갤러리(종류·검색어로 거름)에서 고른다.
  * 고르는 즉시 편집 미리보기에 반영되고 창이 닫힌다.
+ *
+ * 아래쪽 안내는 고른 배경을 이 기기에 저장하는지를 실제 동작대로 알린다. 서비스 워커가 없는
+ * 브라우저는 받아 두지 않고 인터넷으로 재생하며, 데이터 절약 모드의 편집기는 영상을 받아 두지
+ * 않고 송출을 시작할 때 받는다(`EditorRoute`). 오프라인에서도 재생된다고 알리면 믿고 송출했다가
+ * 예배 중 연결이 끊길 때 배경을 잃는다.
  */
 export function BackgroundPickerModal(
   props: BackgroundPickerModalProps,
@@ -214,7 +227,7 @@ function PickerDialog({
           <span className="text-xs text-muted-foreground">
             {catalog.status === "offline"
               ? BACKGROUND_COPY.offline
-              : BACKGROUND_COPY.picker.cachedHint}
+              : storageHint()}
           </span>
           <DialogClose
             data-testid="close-bg-modal-btn"

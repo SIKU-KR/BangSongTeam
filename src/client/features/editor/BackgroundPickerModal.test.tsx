@@ -1,7 +1,7 @@
 import React from "react";
 import { act, render, screen, fireEvent, within } from "@testing-library/react";
 import { MemoryRouter } from "../../test/router";
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { BackgroundPickerModal } from "./BackgroundPickerModal";
 import {
   resetBackgroundCatalogForTests,
@@ -18,12 +18,22 @@ import { resetFakeCacheStorage } from "../../test/fakeCacheStorage";
 import { __resetMediaCachingForTests } from "../../lib/offline/mediaCache";
 import { withQueryClient } from "../../test/queryClientFixture";
 import { installFakeApi } from "../../test/fakeApi";
+import {
+  installServiceWorker,
+  removeServiceWorker,
+} from "../../test/serviceWorkerFixture";
 
-const { refreshBackgroundCatalog } = vi.hoisted(() => ({
-  refreshBackgroundCatalog: vi.fn(async () => undefined),
+const { refreshBackgroundCatalog, retryBackgroundCatalogIfNeeded } = vi.hoisted(
+  () => ({
+    refreshBackgroundCatalog: vi.fn(async () => undefined),
+    retryBackgroundCatalogIfNeeded: vi.fn(),
+  }),
+);
+
+vi.mock("../../lib/sync/backgroundSync", () => ({
+  refreshBackgroundCatalog,
+  retryBackgroundCatalogIfNeeded,
 }));
-
-vi.mock("../../lib/sync/backgroundSync", () => ({ refreshBackgroundCatalog }));
 
 const WARM = makeBackground(6, {
   title: "따뜻한 노을",
@@ -59,6 +69,7 @@ function renderPicker(
 describe("BackgroundPickerModal", () => {
   beforeEach(() => {
     refreshBackgroundCatalog.mockClear();
+    retryBackgroundCatalogIfNeeded.mockClear();
     resetFakeCacheStorage();
     __resetMediaCachingForTests();
     setBackgroundCatalogForTests([...TEST_SERVICE_BACKGROUNDS, WARM, STILL]);
@@ -265,7 +276,7 @@ describe("BackgroundPickerModal", () => {
 
     fireEvent.click(screen.getByRole("button", { name: COMMON_COPY.retry }));
 
-    expect(refreshBackgroundCatalog).toHaveBeenCalledTimes(2);
+    expect(retryBackgroundCatalogIfNeeded).toHaveBeenCalledWith("manual");
   });
 
   it("목록이 비었는데 서버가 주지 못했으면 배경이 없다고 하지 않는다", () => {
@@ -274,5 +285,45 @@ describe("BackgroundPickerModal", () => {
 
     expect(screen.getByText(BACKGROUND_COPY.catalogFailed)).toBeInTheDocument();
     expect(screen.queryByText(BACKGROUND_COPY.noBackgrounds)).toBeNull();
+  });
+
+  describe("고른 배경을 저장하는지 알리는 안내", () => {
+    afterEach(() => {
+      removeServiceWorker();
+      Reflect.deleteProperty(navigator, "connection");
+    });
+
+    it("받아 두는 브라우저에선 오프라인에서도 재생된다고 알린다", () => {
+      installServiceWorker();
+      renderPicker();
+
+      expect(
+        screen.getByText(BACKGROUND_COPY.picker.cachedHint),
+      ).toBeInTheDocument();
+    });
+
+    it("데이터 절약 모드에선 지금 받지 않고 송출을 시작할 때 저장한다고 알린다", () => {
+      installServiceWorker();
+      Object.defineProperty(navigator, "connection", {
+        value: { saveData: true },
+        configurable: true,
+      });
+      renderPicker();
+
+      expect(
+        screen.getByText(BACKGROUND_COPY.picker.dataSaverHint),
+      ).toBeInTheDocument();
+      expect(screen.queryByText(BACKGROUND_COPY.picker.cachedHint)).toBeNull();
+    });
+
+    it("서비스 워커가 없는 브라우저에선 저장한다고 하지 않고 인터넷으로 재생한다고 알린다", () => {
+      removeServiceWorker();
+      renderPicker();
+
+      expect(
+        screen.getByText(BACKGROUND_COPY.picker.streamedHint),
+      ).toBeInTheDocument();
+      expect(screen.queryByText(BACKGROUND_COPY.picker.cachedHint)).toBeNull();
+    });
   });
 });

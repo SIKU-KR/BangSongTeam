@@ -1,6 +1,5 @@
 export {
   cacheMediaFirst,
-  canStoreMediaOffline,
   ensureMediaSpace,
   findCachedMediaUrls,
   getMediaCacheFailure,

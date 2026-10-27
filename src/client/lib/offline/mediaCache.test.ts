@@ -7,7 +7,6 @@ import {
 } from "../../test/serviceWorkerFixture";
 import {
   cacheMediaFirst,
-  canStoreMediaOffline,
   ensureMediaSpace,
   findCachedMediaUrls,
   getMediaCacheFailure,
@@ -19,7 +18,6 @@ import {
   scheduleMediaCaching,
   subscribeMediaProgress,
   shouldWaitForMediaCache,
-  isCacheStorageAvailable,
   MAX_MEDIA_RETRIES,
   MEDIA_PROGRESS_NOTIFY_MS,
   MEDIA_STALL_TIMEOUT_MS,
@@ -27,6 +25,10 @@ import {
   __setMediaRetryRandomForTests,
   __waitForMediaCachingForTests,
 } from "./mediaCache";
+import {
+  canStoreMediaOffline,
+  isCacheStorageAvailable,
+} from "../browser/capabilities";
 import {
   __resetClientReportsForTests,
   flushClientReports,

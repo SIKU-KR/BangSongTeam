@@ -8,7 +8,10 @@ import {
   filterBackgrounds,
   type BackgroundKindFilterValue,
 } from "./backgroundSearch";
-import { refreshBackgroundCatalog } from "../../lib/sync/backgroundSync";
+import {
+  refreshBackgroundCatalog,
+  retryBackgroundCatalogIfNeeded,
+} from "../../lib/sync/backgroundSync";
 import { BACKGROUND_COPY } from "#copy/backgrounds";
 
 /**
@@ -43,7 +46,7 @@ interface BackgroundGallery {
 }
 
 const retryLoad = (): void => {
-  void refreshBackgroundCatalog();
+  retryBackgroundCatalogIfNeeded("manual");
 };
 
 /**
@@ -52,7 +55,8 @@ const retryLoad = (): void => {
  *
  * 서버가 목록을 주지 못했으면(`loadFailed`) 가진 목록이 비어 있어도 `noBackgrounds`로 보지
  * 않는다. 배경이 없는 것이 아니라 받지 못한 것이라, 화면은 그 사실과 다시 받기(`retryLoad`)를
- * 보여 준다.
+ * 보여 준다. 다시 받기는 '다시 시도'(`manual`)라서 여러 번 받지 못해 스스로 다시 받기를 멈춘
+ * 목록도 백오프를 비우고 다시 받는다. 그래야 그 뒤에 또 실패해도 서버가 돌아오면 스스로 받는다.
  */
 export function useBackgroundGallery(query: string): BackgroundGallery {
   const catalog = useBackgroundCatalog();
