@@ -8,6 +8,8 @@ import {
   type SessionUser,
 } from "./sessionCache";
 import {
+  EmailAuthError,
+  finishPendingSignOut,
   hydrateSession,
   revalidateSession,
   getSessionState,
@@ -26,6 +28,7 @@ import {
   type SessionFetcher,
 } from "./sessionStore";
 import { installFakeBroadcastChannel } from "../../test/fakeBroadcastChannel";
+import { AUTH_COPY } from "#copy/auth";
 
 vi.mock("./authClient", () => ({
   authClient: {
@@ -77,6 +80,7 @@ const USER_ID = "8f14e45fc1a2b3c4d5e6f";
 const OTHER_USER_ID = "bbbbbbbbc1a2b3c4d5e6f";
 const SESSION_END_KEY = "chiton:session-end";
 const SESSION_CHANNEL = "chiton:session";
+const SIGN_OUT_PENDING_KEY = "chiton:sign-out-pending";
 
 function makeUser(overrides = {}) {
   return {
@@ -201,6 +205,8 @@ describe("세션 스토어", () => {
     getSession.mockReset();
     authSignOut.mockReset();
     signInEmail.mockReset();
+    signUpEmail.mockReset();
+    signInSocial.mockReset();
     vi.restoreAllMocks();
     window.history.replaceState({}, "", "/");
     window.sessionStorage.clear();
@@ -1128,6 +1134,337 @@ describe("세션 스토어", () => {
 
       expect((await loadCachedSession())?.userId).toBe(OTHER_USER_ID);
       expect(reload).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe("서버가 확인하지 않은 로그아웃", () => {
+    function pendingMarker(): string | null {
+      return window.localStorage.getItem(SIGN_OUT_PENDING_KEY);
+    }
+
+    function reloadPage(): void {
+      const marker = pendingMarker();
+      const endReason = window.sessionStorage.getItem(SESSION_END_KEY);
+      __resetSessionForTests();
+      __setPageReloadForTests(reload);
+      if (marker !== null) {
+        window.localStorage.setItem(SIGN_OUT_PENDING_KEY, marker);
+      }
+      if (endReason !== null) {
+        window.sessionStorage.setItem(SESSION_END_KEY, endReason);
+      }
+    }
+
+    function blockLocalStorageWrites(): void {
+      const blocked = (): never => {
+        throw new DOMException("blocked", "SecurityError");
+      };
+      vi.spyOn(window.localStorage, "setItem").mockImplementation(blocked);
+      vi.spyOn(window.localStorage, "removeItem").mockImplementation(blocked);
+    }
+
+    function nextTask(): Promise<void> {
+      return new Promise((resolve) => setTimeout(resolve, 0));
+    }
+
+    it("서버에 닿지 못하면 표시를 남긴 채 로그아웃하고, 다음 부팅은 세션을 믿지 않고 로그아웃을 마친다", async () => {
+      await signInAsCachedUser();
+      authSignOut.mockRejectedValueOnce(new TypeError("Failed to fetch"));
+
+      await signOut();
+
+      expect(pendingMarker()).not.toBeNull();
+      expect(await loadCachedSession()).toBeNull();
+      expect(reload).toHaveBeenCalledTimes(1);
+
+      reloadPage();
+      const fetcher = vi.fn<SessionFetcher>(async () => makeUser());
+      __setSessionFetcherForTests(fetcher);
+      await hydrateSession();
+
+      expect(getSessionState()).toEqual({
+        status: "unauthenticated",
+        user: null,
+      });
+      expect(fetcher).not.toHaveBeenCalled();
+      expect(authSignOut).toHaveBeenCalledTimes(2);
+      await vi.waitFor(() => expect(pendingMarker()).toBeNull());
+
+      reloadPage();
+      __setSessionFetcherForTests(fetcher);
+      await hydrateSession();
+
+      expect(getSessionState().status).toBe("authenticated");
+      expect(fetcher).toHaveBeenCalledTimes(1);
+    });
+
+    it("로그아웃 요청을 보내기 전에 표시를 남기고, 서버가 확인하면 지운다", async () => {
+      await signInAsCachedUser();
+      let markedWhileSending = false;
+      authSignOut.mockImplementationOnce(async () => {
+        markedWhileSending = pendingMarker() !== null;
+        return { data: { success: true }, error: null } as SignOutResult;
+      });
+
+      await signOut();
+
+      expect(markedWhileSending).toBe(true);
+      expect(pendingMarker()).toBeNull();
+      expect(reload).toHaveBeenCalledTimes(1);
+    });
+
+    it.each([
+      ["503", { data: null, error: { status: 503, statusText: "" } }],
+      ["성공 표시가 없는 200", { data: {}, error: null }],
+    ])(
+      "서버가 로그아웃을 확인하지 않으면(%s) 표시를 남긴다",
+      async (_, answer) => {
+        await signInAsCachedUser();
+        authSignOut.mockResolvedValueOnce(answer as SignOutResult);
+
+        await signOut();
+
+        expect(pendingMarker()).not.toBeNull();
+        expect(reload).toHaveBeenCalledTimes(1);
+      },
+    );
+
+    it("로그아웃 요청에 5초 시간 제한을 걸고, 시간이 지나면 표시를 남긴 채 로그아웃한다", async () => {
+      await signInAsCachedUser();
+      const deadline = new AbortController();
+      const timeout = vi
+        .spyOn(AbortSignal, "timeout")
+        .mockReturnValue(deadline.signal);
+      authSignOut.mockImplementationOnce(
+        ((options: { fetchOptions: { signal: AbortSignal } }) =>
+          new Promise((_, reject) => {
+            options.fetchOptions.signal.addEventListener("abort", () =>
+              reject(options.fetchOptions.signal.reason),
+            );
+          })) as never,
+      );
+
+      const signingOut = signOut();
+      await vi.waitFor(() => expect(authSignOut).toHaveBeenCalledTimes(1));
+      expect(timeout).toHaveBeenCalledWith(5000);
+      expect(reload).not.toHaveBeenCalled();
+
+      deadline.abort(new DOMException("timeout", "TimeoutError"));
+      await signingOut;
+
+      expect(pendingMarker()).not.toBeNull();
+      expect(reload).toHaveBeenCalledTimes(1);
+    });
+
+    it("송출 화면에서 부팅하면 표시가 있을 때 요청 없이 로그아웃 상태로 둔다", async () => {
+      window.history.replaceState({}, "", "/present/abc/fullscreen");
+      await saveCachedSession(makeUser());
+      window.localStorage.setItem(SIGN_OUT_PENDING_KEY, String(Date.now()));
+      const fetcher = vi.fn<SessionFetcher>(async () => makeUser());
+      __setSessionFetcherForTests(fetcher);
+
+      await hydrateSession();
+      await nextTask();
+
+      expect(getSessionState()).toEqual({
+        status: "unauthenticated",
+        user: null,
+      });
+      expect(fetcher).not.toHaveBeenCalled();
+      expect(authSignOut).not.toHaveBeenCalled();
+      expect(await loadCachedSession()).toBeNull();
+      expect(pendingMarker()).not.toBeNull();
+    });
+
+    it("이메일 로그인은 진행 중인 로그아웃 마무리를 기다린 뒤 보내고, 성공하면 표시를 지운다", async () => {
+      window.localStorage.setItem(SIGN_OUT_PENDING_KEY, String(Date.now()));
+      const finishing = deferred<SignOutResult>();
+      authSignOut.mockReturnValueOnce(finishing.promise);
+      __setSessionFetcherForTests(async () => null);
+      await hydrateSession();
+      expect(authSignOut).toHaveBeenCalledTimes(1);
+
+      signInEmail.mockResolvedValueOnce({ data: {}, error: null } as never);
+      __setSessionFetcherForTests(async () => makeUser());
+      const signingIn = signInWithEmail("team@example.com", "password-1234");
+      await nextTask();
+
+      expect(signInEmail).not.toHaveBeenCalled();
+
+      finishing.resolve({
+        data: null,
+        error: { status: 503, statusText: "" },
+      } as SignOutResult);
+      await signingIn;
+
+      expect(signInEmail).toHaveBeenCalledTimes(1);
+      expect(pendingMarker()).toBeNull();
+      expect(getCurrentUserId()).toBe(USER_ID);
+    });
+
+    it("이메일 로그인 중에는 연결 회복이 불러도 로그아웃 마무리를 보내지 않는다", async () => {
+      window.localStorage.setItem(SIGN_OUT_PENDING_KEY, String(Date.now()));
+      authSignOut.mockRejectedValueOnce(new TypeError("Failed to fetch"));
+      __setSessionFetcherForTests(async () => null);
+      await hydrateSession();
+      await nextTask();
+      expect(authSignOut).toHaveBeenCalledTimes(1);
+
+      const sent = deferred<unknown>();
+      signInEmail.mockReturnValueOnce(sent.promise as never);
+      __setSessionFetcherForTests(async () => makeUser());
+      const signingIn = signInWithEmail("team@example.com", "password-1234");
+      await vi.waitFor(() => expect(signInEmail).toHaveBeenCalledTimes(1));
+
+      await expect(finishPendingSignOut()).resolves.toBe(false);
+      expect(authSignOut).toHaveBeenCalledTimes(1);
+
+      sent.resolve({ data: {}, error: null });
+      await signingIn;
+
+      expect(pendingMarker()).toBeNull();
+      await expect(finishPendingSignOut()).resolves.toBe(true);
+      expect(authSignOut).toHaveBeenCalledTimes(1);
+    });
+
+    it("로그아웃 마무리는 겹쳐 불러도 한 번만 보낸다", async () => {
+      window.localStorage.setItem(SIGN_OUT_PENDING_KEY, String(Date.now()));
+      const finishing = deferred<SignOutResult>();
+      authSignOut.mockReturnValueOnce(finishing.promise);
+
+      const first = finishPendingSignOut();
+      const second = finishPendingSignOut();
+      finishing.resolve({
+        data: { success: true },
+        error: null,
+      } as SignOutResult);
+
+      await expect(Promise.all([first, second])).resolves.toEqual([true, true]);
+      expect(authSignOut).toHaveBeenCalledTimes(1);
+      expect(pendingMarker()).toBeNull();
+    });
+
+    it("표시가 남아 있으면 소셜 로그인 전에 로그아웃을 마치고, 마치지 못하면 로그인을 시작하지 않는다", async () => {
+      window.localStorage.setItem(SIGN_OUT_PENDING_KEY, String(Date.now()));
+      authSignOut.mockRejectedValueOnce(new TypeError("Failed to fetch"));
+
+      await expect(signInWithProvider("kakao")).rejects.toThrow(
+        AUTH_COPY.signInFailed,
+      );
+      expect(signInSocial).not.toHaveBeenCalled();
+      expect(pendingMarker()).not.toBeNull();
+
+      signInSocial.mockResolvedValueOnce({ data: {}, error: null } as never);
+      await signInWithProvider("kakao");
+
+      expect(authSignOut).toHaveBeenCalledTimes(2);
+      expect(signInSocial).toHaveBeenCalledTimes(1);
+      expect(authSignOut.mock.invocationCallOrder[1]).toBeLessThan(
+        signInSocial.mock.invocationCallOrder[0],
+      );
+      expect(pendingMarker()).toBeNull();
+    });
+
+    it("표시를 남길 수 없고 서버도 확인하지 않으면 아무것도 바꾸지 않고 로그아웃하지 못했다고 던진다", async () => {
+      await signInAsCachedUser();
+      const stopAccountSync = vi.fn(async () => undefined);
+      setAccountHooks({
+        flushBeforeSignOut: vi.fn(async () => undefined),
+        stopAccountSync,
+      });
+      blockLocalStorageWrites();
+      authSignOut.mockRejectedValueOnce(new TypeError("Failed to fetch"));
+
+      await expect(signOut()).rejects.toThrow(AUTH_COPY.signOutFailed);
+
+      expect(getSessionState().status).toBe("authenticated");
+      expect(getCurrentUserId()).toBe(USER_ID);
+      expect((await loadCachedSession())?.userId).toBe(USER_ID);
+      expect(reload).not.toHaveBeenCalled();
+      expect(stopAccountSync).not.toHaveBeenCalled();
+      expect(window.sessionStorage.getItem(SESSION_END_KEY)).toBeNull();
+
+      await signOut();
+
+      expect(authSignOut).toHaveBeenCalledTimes(2);
+      expect(reload).toHaveBeenCalledTimes(1);
+    });
+
+    it("표시를 남길 수 없어도 서버가 확인하면 로그아웃한다", async () => {
+      await signInAsCachedUser();
+      blockLocalStorageWrites();
+
+      await signOut();
+
+      expect(await loadCachedSession()).toBeNull();
+      expect(reload).toHaveBeenCalledTimes(1);
+      expect(window.sessionStorage.getItem(SESSION_END_KEY)).toBe("signedOut");
+    });
+  });
+
+  describe.each([
+    {
+      flow: "로그인",
+      request: signInEmail,
+      run: () => signInWithEmail("team@example.com", "password-1234"),
+    },
+    {
+      flow: "가입",
+      request: signUpEmail,
+      run: () =>
+        signUpWithEmail({
+          name: "찬양팀",
+          email: "team@example.com",
+          password: "password-1234",
+        }),
+    },
+  ])("이메일 $flow 뒤의 세션 확인과 네트워크 실패", ({ request, run }) => {
+    beforeEach(async () => {
+      __setSessionFetcherForTests(async () => null);
+      await hydrateSession();
+    });
+
+    it("요청에 시간 제한을 걸고, 들어온 뒤의 세션 확인은 첫 로그인처럼 오래 기다린다", async () => {
+      request.mockResolvedValueOnce({ data: {}, error: null } as never);
+      const fetcher = vi.fn<SessionFetcher>(async (timeoutMs) => {
+        if (timeoutMs < 6000) throw new Error("timeout");
+        return makeUser();
+      });
+      __setSessionFetcherForTests(fetcher);
+
+      await run();
+
+      expect(request).toHaveBeenCalledWith(
+        expect.objectContaining({
+          fetchOptions: { signal: expect.any(AbortSignal) },
+        }),
+      );
+      expect(fetcher).toHaveBeenCalledWith(15000);
+      expect(getSessionState().status).toBe("authenticated");
+    });
+
+    it("들어온 뒤 세션을 확인하지 못하면 네트워크 실패로 알린다", async () => {
+      request.mockResolvedValueOnce({ data: {}, error: null } as never);
+      __setSessionFetcherForTests(offlineFetcher);
+
+      await expect(run()).rejects.toMatchObject({ reason: "network" });
+      expect(getSessionState().status).toBe("unauthenticated");
+    });
+
+    it("요청이 서버에 닿지 못하면 네트워크 실패로 알린다", async () => {
+      request.mockRejectedValueOnce(new TypeError("Failed to fetch"));
+
+      const error = await run().catch((err: unknown) => err);
+
+      expect(error).toBeInstanceOf(EmailAuthError);
+      expect(error).toMatchObject({ reason: "network" });
+    });
+
+    it("들어온 뒤 서버가 세션 없음을 답하면 다시 시도하라고 알린다", async () => {
+      request.mockResolvedValueOnce({ data: {}, error: null } as never);
+
+      await expect(run()).rejects.toMatchObject({ reason: "unknown" });
+      expect(getSessionState().status).toBe("unauthenticated");
     });
   });
 

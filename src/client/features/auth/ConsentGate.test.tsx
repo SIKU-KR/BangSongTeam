@@ -1,7 +1,14 @@
 import React from "react";
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import {
+  render,
+  screen,
+  fireEvent,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { MemoryRouter } from "../../test/router";
+import { AUTH_COPY } from "#copy/auth";
 import { signOut } from "../../lib/auth";
 import { signInAsTestUser } from "../../test/sessionFixture";
 import { withQueryClient } from "../../test/queryClientFixture";
@@ -100,5 +107,21 @@ describe("ConsentGate (가입 동의 모달)", () => {
     fireEvent.click(await screen.findByTestId("consent-decline"));
 
     expect(signOut).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText(AUTH_COPY.signOutFailed)).not.toBeInTheDocument();
+  });
+
+  it("동의하지 않음으로 로그아웃하지 못하면 대화 상자에서 알린다", async () => {
+    vi.mocked(signOut).mockRejectedValueOnce(
+      new Error(AUTH_COPY.signOutFailed),
+    );
+    renderGate();
+
+    fireEvent.click(await screen.findByTestId("consent-decline"));
+
+    expect(
+      await within(screen.getByTestId("consent-dialog")).findByText(
+        AUTH_COPY.signOutFailed,
+      ),
+    ).toBeInTheDocument();
   });
 });

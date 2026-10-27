@@ -3,6 +3,7 @@ import { getOfflineDB, type CachedSession } from "../storage/db";
 
 const CURRENT_KEY = "current" as const;
 const SESSION_END_KEY = "chiton:session-end";
+const SIGN_OUT_PENDING_KEY = "chiton:sign-out-pending";
 
 export interface SessionUser {
   userId: string;
@@ -55,6 +56,43 @@ export async function clearCachedSession(): Promise<void> {
 export function rememberSessionEnd(reason: SessionEndReason): void {
   try {
     window.sessionStorage.setItem(SESSION_END_KEY, reason);
+  } catch {
+    return;
+  }
+}
+
+/**
+ * 서버가 아직 확인하지 않은 로그아웃을 이 브라우저에 남긴다. 남겼으면 true, 저장소를 쓸 수
+ * 없으면 false다.
+ *
+ * 세션 쿠키는 HttpOnly라 서버의 로그아웃 응답만 지운다. 오프라인이거나 서버가 답하지 않은 채
+ * 로그아웃하면 쿠키와 서버 세션이 그대로 남아, 다음에 이 브라우저를 여는 사람이 앞 사람의
+ * 계정으로 들어간다. 그래서 이 표시가 있는 동안에는 캐시된 세션도 쿠키의 세션도 믿지 않고 먼저
+ * 로그아웃을 마친다. 쿠키는 모든 탭과 다음 방문이 함께 쓰므로 sessionStorage가 아니라
+ * localStorage에 둔다. 값은 남긴 시각이다.
+ */
+export function markSignOutPending(): boolean {
+  try {
+    window.localStorage.setItem(SIGN_OUT_PENDING_KEY, String(Date.now()));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** 마치지 못한 로그아웃이 남아 있는지. 저장소를 읽을 수 없으면 남은 것이 없다고 본다 */
+export function hasPendingSignOut(): boolean {
+  try {
+    return window.localStorage.getItem(SIGN_OUT_PENDING_KEY) !== null;
+  } catch {
+    return false;
+  }
+}
+
+/** 서버가 로그아웃을 확인했거나 이메일로 새로 로그인해 쿠키가 바뀌었을 때 표시를 지운다 */
+export function clearPendingSignOut(): void {
+  try {
+    window.localStorage.removeItem(SIGN_OUT_PENDING_KEY);
   } catch {
     return;
   }

@@ -65,6 +65,20 @@ describe("EmailLoginForm", () => {
     ).toBeInTheDocument();
   });
 
+  it("서버에 닿지 못하면 네트워크를 확인하라고 알린다", async () => {
+    signInWithEmail.mockRejectedValue(new EmailAuthError("network"));
+    render(<EmailLoginForm />);
+
+    fill(COPY.emailField, "team@example.com");
+    fill(COPY.password, "password-1234");
+    fireEvent.click(screen.getByRole("button", { name: COPY.submitSignIn }));
+
+    expect(await screen.findByText(COPY.failures.network)).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: COPY.submitSignIn }),
+    ).toBeEnabled();
+  });
+
   it("가입은 이름까지 받아 가입 요청을 보낸다", async () => {
     render(<EmailLoginForm />);
 

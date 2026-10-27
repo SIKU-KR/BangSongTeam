@@ -82,6 +82,7 @@ function ConsentCheck({
 
 function ConsentDialog({ userId }: { userId: string }): React.JSX.Element {
   const [checked, setChecked] = useState(NONE_CHECKED);
+  const [signOutFailed, setSignOutFailed] = useState(false);
   const agree = useAgreeConsent(userId);
   const idPrefix = useId();
   const allChecked = ITEMS.every((item) => checked[item.id]);
@@ -149,13 +150,14 @@ function ConsentDialog({ userId }: { userId: string }): React.JSX.Element {
         {agree.error && (
           <FieldError>{describeApiError(agree.error)}</FieldError>
         )}
+        {signOutFailed && <FieldError>{AUTH_COPY.signOutFailed}</FieldError>}
 
         <AlertDialogFooter>
           <AlertDialogAction
             variant="outline"
             data-testid="consent-decline"
             disabled={agree.isPending}
-            onClick={() => void signOut()}
+            onClick={() => void signOut().catch(() => setSignOutFailed(true))}
           >
             {AUTH_COPY.consent.decline}
           </AlertDialogAction>

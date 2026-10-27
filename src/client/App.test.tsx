@@ -38,6 +38,7 @@ import {
   __waitForSyncRecoveryForTests,
 } from "./lib/sync/syncRecovery";
 import { getSyncSnapshot, resetSyncStatus } from "./lib/sync/syncStatus";
+import { __resetConnectivityForTests } from "./lib/api/connectivity";
 import { installFakeApi, type FakeApi, type FakeRoute } from "./test/fakeApi";
 import { installFakeBroadcastChannel } from "./test/fakeBroadcastChannel";
 import {
@@ -90,6 +91,7 @@ vi.mock("./features/backgrounds/backgroundCatalog", async (importOriginal) => {
 const DOC_ID = SEED_PRESENTATION_IDS[0];
 const OTHER_USER_ID = "999999999999999999999";
 const SESSION_END_KEY = "chiton:session-end";
+const SIGN_OUT_PENDING_KEY = "chiton:sign-out-pending";
 const HOUR = 60 * 60 * 1000;
 
 const EMPTY_FOLDER_LIST: FolderListResponse = {
@@ -698,6 +700,37 @@ describe("App Route Integration", () => {
       expect(await loadCachedSession()).toBeNull();
       expect(window.sessionStorage.getItem(SESSION_END_KEY)).toBe("otherTab");
       other.close();
+    });
+
+    it("로그아웃을 마치지 못한 채 연 앱은 연결이 돌아오면 로그아웃을 마치고 표시를 지운다", async () => {
+      signOutForTests();
+      __resetConnectivityForTests();
+      api = installFakeApi(bootRoutes());
+      window.localStorage.setItem(SIGN_OUT_PENDING_KEY, String(Date.now()));
+      vi.mocked(authClient.signOut).mockRejectedValueOnce(
+        new TypeError("Failed to fetch"),
+      );
+
+      renderAt("/presentations");
+
+      expect(
+        await screen.findByRole("button", { name: /카카오 로그인/ }),
+      ).toBeInTheDocument();
+      await waitFor(() => expect(authClient.signOut).toHaveBeenCalledTimes(1));
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      });
+      expect(window.localStorage.getItem(SIGN_OUT_PENDING_KEY)).not.toBeNull();
+
+      vi.mocked(authClient.signOut).mockClear();
+      act(() => {
+        window.dispatchEvent(new Event("online"));
+      });
+
+      await waitFor(() =>
+        expect(window.localStorage.getItem(SIGN_OUT_PENDING_KEY)).toBeNull(),
+      );
+      expect(authClient.signOut).toHaveBeenCalledTimes(1);
     });
 
     it("송출 중에 다른 계정으로 바뀌어도 송출 화면을 그대로 두고, 송출을 마치면 부팅 없이 새로고침한다", async () => {

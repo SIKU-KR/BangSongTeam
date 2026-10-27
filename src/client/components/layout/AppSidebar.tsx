@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { usePathname } from "next/navigation";
+import { toast } from "sonner";
 import { useNavigate } from "#hooks/useNavigate";
 import {
   FolderIcon,
@@ -30,6 +31,7 @@ import {
 } from "../../features/drive";
 import { SHELL_COPY } from "#copy/shell";
 import { COMMON_COPY } from "#copy/common";
+import { AUTH_COPY } from "#copy/auth";
 import { APP_NAME, APP_TAGLINE, FALLBACK_USER_NAME } from "#shared";
 
 interface NavItem {
@@ -95,6 +97,8 @@ function AccountMenuItem(): React.JSX.Element {
     setSigningOut(true);
     try {
       await signOut();
+    } catch {
+      toast.error(AUTH_COPY.signOutFailed);
     } finally {
       setSigningOut(false);
     }

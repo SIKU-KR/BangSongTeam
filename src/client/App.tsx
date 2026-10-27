@@ -15,6 +15,7 @@ import { hydrateSongLibrary } from "./features/editor/songLibraryStore";
 import { hydrateFoldersFromStorage } from "./features/drive/folderStore";
 import { hydrateBackgroundCatalog } from "./features/backgrounds/backgroundCatalog";
 import {
+  finishPendingSignOut,
   getCurrentUserId,
   hydrateSession,
   listenToOtherTabs,
@@ -37,6 +38,7 @@ import {
   stopAccountSync,
   startSyncRecovery,
   resumeDeferredSyncRecovery,
+  subscribeSyncRecovery,
 } from "./lib/sync";
 import { THEME_STORAGE_KEY } from "#lib/theme";
 import { SHELL_COPY } from "#copy/shell";
@@ -128,6 +130,7 @@ function useSyncRecovery(): void {
       }),
     [],
   );
+  useEffect(() => subscribeSyncRecovery(() => void finishPendingSignOut()), []);
 }
 
 /** 손님에게도 열리는 주소. 랜딩, 공유 링크 보기와 그 세트의 송출, 약관 */
@@ -155,6 +158,8 @@ function isGuestPath(pathname: string): boolean {
  * 트리의 서버 데이터가 남지 않게 한다. 계정이 끝날 때 할 동기화 쪽 일은 세션 스토어가
  * `lib/sync`를 가져오지 못해 여기서 등록한다(`setAccountHooks`). 다른 탭의 로그인 변화는 세션을
  * 복원하기 전부터 듣는다(`listenToOtherTabs`). 부팅 중인 탭도 바뀌기 전의 캐시를 읽었을 수 있다.
+ * 서버가 확인하지 않은 로그아웃은 연결이 돌아올 때마다 마저 끝낸다(`finishPendingSignOut`). 열린
+ * 채로 남은 교회 PC의 탭에서도 남은 쿠키를 지워야 한다.
  */
 export function App({
   children,

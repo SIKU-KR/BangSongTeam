@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from "react";
 import {
   AuthSessionResponseSchema,
+  AuthSignOutResponseSchema,
   FALLBACK_USER_NAME,
   SessionBroadcastSchema,
   type EmailSignUpRequest,
@@ -11,6 +12,9 @@ import {
   loadCachedSession,
   saveCachedSession,
   clearCachedSession,
+  clearPendingSignOut,
+  hasPendingSignOut,
+  markSignOutPending,
   rememberSessionEnd,
   takeSessionEnd,
   type SessionUser,
@@ -49,6 +53,8 @@ export interface AccountHooks {
 
 const CACHED_SESSION_CHECK_TIMEOUT_MS = 5000;
 const FIRST_SESSION_CHECK_TIMEOUT_MS = 15000;
+const SIGN_OUT_TIMEOUT_MS = 5000;
+const EMAIL_AUTH_TIMEOUT_MS = 20_000;
 const SESSION_CHANNEL = "chiton:session";
 
 const fetchFromServer: SessionFetcher = async (timeoutMs) => {
@@ -89,6 +95,7 @@ let accountEndReason: SessionEndReason | null = null;
 let leaving: Promise<void> | null = null;
 let hydration: Promise<SessionState> | null = null;
 let revalidation: Promise<void> | null = null;
+let finishing: Promise<boolean> | null = null;
 let otherTabs: Broadcast<SessionBroadcast> | null = null;
 
 function setState(next: SessionState): void {
@@ -263,6 +270,10 @@ function followOtherTab({ userId }: SessionBroadcast): void {
 /**
  * 앱 초기화 시 캐시된 세션 또는 서버 세션을 복원한다. 겹쳐 불러도 한 번만 복원한다.
  *
+ * - 서버가 확인하지 않은 로그아웃이 남아 있으면(`hasPendingSignOut`) 무엇보다 먼저 캐시를 지우고,
+ *   로그아웃을 마치러 보내고(`finishPendingSignOut`), 로그인하지 않은 상태로 둔다. 캐시도 쿠키의
+ *   세션도 로그아웃한 사람의 것이다. 마무리를 기다리지 않고 로그인 화면을 그린다. 송출 화면에서는
+ *   보내지 않는다.
  * - 유효한 캐시는 서버를 기다리지 않고 통과시킨다.
  * - 송출 화면에서 부팅했으면 캐시가 만료됐어도 통과시키고 서버에 묻지 않는다. 송출 중
  *   새로고침이 서버 요청을 만들거나, 응답을 기다리며 검은 화면을 늘리거나, 로그아웃으로
@@ -293,6 +304,14 @@ export function hydrateSession(): Promise<SessionState> {
 async function restoreSession(): Promise<SessionState> {
   const started = epoch;
   const endReason = takeSessionEnd();
+  if (hasPendingSignOut()) {
+    await forget();
+    if (!isProjecting()) void finishPendingSignOut();
+    if (started !== epoch) return state;
+    setState(signedOutState(false));
+    return state;
+  }
+
   let cached: SessionUser | null = null;
   try {
     cached = await loadCachedSession();
@@ -401,6 +420,41 @@ async function checkSession(): Promise<void> {
   setState({ status: "authenticated", user });
 }
 
+async function requestSignOut(): Promise<boolean> {
+  try {
+    const { data, error } = await authClient.signOut({
+      fetchOptions: { signal: AbortSignal.timeout(SIGN_OUT_TIMEOUT_MS) },
+    });
+    return error === null && AuthSignOutResponseSchema.safeParse(data).success;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * 서버가 확인하지 않은 로그아웃(`markSignOutPending`)을 마친다. 마쳤거나 남은 로그아웃이 없으면
+ * true다. 한 번에 하나만 보낸다.
+ *
+ * 부팅, 연결 회복(`App`이 `subscribeSyncRecovery`에 붙인다), 소셜 로그인 직전에 부른다. 교회 PC의
+ * 탭이 열린 채로 남아도 연결이 돌아오면 남은 쿠키와 서버 세션을 지운다. 서버의 로그아웃은 쿠키가
+ * 없어도 성공으로 답하므로 여러 번 보내도 된다.
+ *
+ * 로그인·로그아웃 중에는 보내지 않고 false다. 로그인 중에 보내면 늦게 온 로그아웃 응답의 쿠키
+ * 만료가 방금 로그인한 새 세션의 쿠키를 지운다. 로그아웃 중에는 그 로그아웃이 이미 보내고 있다.
+ */
+export function finishPendingSignOut(): Promise<boolean> {
+  if (!hasPendingSignOut()) return Promise.resolve(true);
+  if (transitioning) return Promise.resolve(false);
+  finishing ??= (async (): Promise<boolean> => {
+    const confirmed = await requestSignOut();
+    if (confirmed) clearPendingSignOut();
+    return confirmed;
+  })().finally(() => {
+    finishing = null;
+  });
+  return finishing;
+}
+
 /**
  * 소셜 로그인 후 원래 보던 주소로 돌아온다. 로그아웃 상태로 공유 링크를
  * 연 사람이 로그인하고 나서 링크로 다시 들어오게 하기 위해서다.
@@ -408,10 +462,17 @@ async function checkSession(): Promise<void> {
  *
  * better-auth 클라이언트는 실패를 던지지 않고 `error`로 돌려준다. 그대로 두면
  * 이동도 오류도 없이 버튼이 로딩 상태로 멈추므로 던져서 화면이 안내하게 한다.
+ *
+ * 서버가 확인하지 않은 로그아웃이 남아 있으면 먼저 마치고, 마치지 못하면 로그인을 시작하지 않는다.
+ * 그대로 시작하면 돌아온 부팅이 남은 표시를 보고 방금 로그인한 세션을 로그아웃시키고, 늦게 온
+ * 로그아웃 응답이 새 쿠키를 지울 수도 있다.
  */
 export async function signInWithProvider(
   provider: SocialProvider,
 ): Promise<void> {
+  if (!(await finishPendingSignOut())) {
+    throw new Error(AUTH_COPY.signInFailed);
+  }
   const { pathname, search } = window.location;
   const { error } = await authClient.signIn.social({
     provider,
@@ -436,11 +497,13 @@ export class EmailAuthError extends Error {
   }
 }
 
+interface EmailAuthRejection {
+  status?: number;
+  code?: string;
+}
+
 function failureFromStatus(status: number | undefined): EmailAuthFailure {
   switch (status) {
-    case undefined:
-    case 0:
-      return "network";
     case 400:
       return "invalidInput";
     case 401:
@@ -454,10 +517,7 @@ function failureFromStatus(status: number | undefined): EmailAuthFailure {
   }
 }
 
-function signUpFailure(error: {
-  status?: number;
-  code?: string;
-}): EmailAuthFailure {
+function signUpFailure(error: EmailAuthRejection): EmailAuthFailure {
   if (error.status === 422) {
     return error.code === "USER_ALREADY_EXISTS_USE_ANOTHER_EMAIL"
       ? "alreadyExists"
@@ -466,11 +526,22 @@ function signUpFailure(error: {
   return failureFromStatus(error.status);
 }
 
-async function signInThen(request: () => Promise<void>): Promise<void> {
+async function signInThen(
+  send: (signal: AbortSignal) => Promise<{ error: EmailAuthRejection | null }>,
+  failureOf: (error: EmailAuthRejection) => EmailAuthFailure,
+): Promise<void> {
   transitioning = true;
   epoch += 1;
   try {
-    await request();
+    if (finishing) await finishing;
+    let result: { error: EmailAuthRejection | null };
+    try {
+      result = await send(AbortSignal.timeout(EMAIL_AUTH_TIMEOUT_MS));
+    } catch {
+      throw new EmailAuthError("network");
+    }
+    if (result.error) throw new EmailAuthError(failureOf(result.error));
+    clearPendingSignOut();
     await adoptSignedInSession();
   } finally {
     transitioning = false;
@@ -482,18 +553,13 @@ async function adoptSignedInSession(): Promise<void> {
   const started = epoch;
   let user: SessionUser | null;
   try {
-    user = await fetcher(CACHED_SESSION_CHECK_TIMEOUT_MS);
+    user = await fetcher(FIRST_SESSION_CHECK_TIMEOUT_MS);
   } catch {
-    return;
+    if (started !== epoch) return;
+    throw new EmailAuthError("network");
   }
   if (started !== epoch) return;
-
-  if (!user) {
-    await forget();
-    if (started !== epoch) return;
-    setState(signedOutState(false));
-    return;
-  }
+  if (!user) throw new EmailAuthError("unknown");
 
   await persist(user);
   if (started !== epoch) return;
@@ -507,20 +573,30 @@ async function adoptSignedInSession(): Promise<void> {
  * 새로고침 없이 그 자리에서 들어간다. 계정이 끝나면 늘 새로고침하므로 로그인 화면을 보이는
  * 페이지에는 다른 계정의 큐·스토어가 남아 있지 않다. 그사이 시작된 세션 확인의 늦은 결과가
  * 새 세션을 덮지 않게 epoch를 올린다.
+ *
+ * 요청은 20초, 들어온 뒤의 세션 확인은 첫 로그인처럼 15초까지 기다린다. 느린 교회 Wi‑Fi에서
+ * 캐시 확인용 5초로 자르면 로그인은 됐는데 화면이 그대로 남는다. 서버에 닿지 못하거나 세션을
+ * 확인하지 못하면 `network`, 들어온 뒤 서버가 세션이 없다고 하면 `unknown`으로 던져 화면이
+ * 알리게 한다. 확인하지 못한 로그인을 조용히 넘기면 사용자는 비밀번호가 틀린 줄 알고 다시 보낸다.
+ *
+ * 서버가 확인하지 않은 로그아웃(`finishPendingSignOut`)이 보내는 중이면 끝난 뒤에 보낸다. 늦게 온
+ * 로그아웃 응답이 새 쿠키를 지우면 안 된다. 로그인에 성공하면 쿠키가 새 세션으로 바뀌었으므로
+ * 남은 로그아웃 표시를 지운다.
  */
 export async function signInWithEmail(
   email: string,
   password: string,
 ): Promise<void> {
-  await signInThen(async () => {
-    const { error } = await authClient.signIn.email({ email, password });
-    if (error) throw new EmailAuthError(failureFromStatus(error.status));
-  });
+  await signInThen(
+    (signal) =>
+      authClient.signIn.email({ email, password, fetchOptions: { signal } }),
+    (error) => failureFromStatus(error.status),
+  );
 }
 
 /**
  * 이메일·비밀번호로 가입한다. 메일 인증이 없어 가입과 동시에 로그인된다(`signInWithEmail`처럼
- * 그 자리에서 들어간다).
+ * 그 자리에서 들어가고, 시간 제한·실패 안내·남은 로그아웃 표시도 같다).
  * 같은 이메일로 이미 가입했으면 `alreadyExists`로 던진다. 서버가 사용자를 만들지 못한
  * 422(`FAILED_TO_CREATE_USER`: 저장 실패, 같은 이메일로 동시에 보낸 가입)와 같은 이메일의 가입이
  * 아직 끝나지 않았다는 409(`SIGN_UP_IN_PROGRESS`)는 `unknown`이라 잠시 뒤 다시 가입하게 한다.
@@ -529,10 +605,10 @@ export async function signInWithEmail(
 export async function signUpWithEmail(
   input: EmailSignUpRequest,
 ): Promise<void> {
-  await signInThen(async () => {
-    const { error } = await authClient.signUp.email(input);
-    if (error) throw new EmailAuthError(signUpFailure(error));
-  });
+  await signInThen(
+    (signal) => authClient.signUp.email({ ...input, fetchOptions: { signal } }),
+    signUpFailure,
+  );
 }
 
 /**
@@ -541,8 +617,13 @@ export async function signUpWithEmail(
  * 이미 끝났으면 아무것도 하지 않는다.
  *
  * 보내기는 쿠키가 아직 유효할 때 한다. 로그아웃 뒤의 요청은 401로 버려진다. 시작하자마자 epoch를
- * 올려, 그 전에 시작한 세션 확인이 늦게 끝나며 지운 캐시에 이 계정을 다시 쓰지 않게 한다. 서버에
- * 알리지 못해도 이 탭은 로그아웃한다. 공용 PC에서 다음 사람에게 계정이 남으면 안 된다.
+ * 올려, 그 전에 시작한 세션 확인이 늦게 끝나며 지운 캐시에 이 계정을 다시 쓰지 않게 한다.
+ *
+ * 세션 쿠키는 서버의 로그아웃 응답만 지운다. 서버가 5초 안에 `{ success: true }`로 확인해야
+ * 로그아웃이 끝난 것으로 본다. 확인하지 않으면(오프라인·5xx·응답 없음) 요청 전에 남긴 표시
+ * (`markSignOutPending`)로 다음 부팅·연결 회복·소셜 로그인 전에 마저 끝내고, 이 탭은 로그아웃한다.
+ * 표시도 남길 수 없으면 아무것도 바꾸지 않고 `AUTH_COPY.signOutFailed`로 던진다. 쿠키가 남은 채
+ * 로그인 화면을 보이면 공용 PC의 다음 사람이 앞 사람의 계정으로 들어간다.
  *
  * 그사이 다른 탭의 로그인 변화를 받았으면(`listenToOtherTabs`) 따른다. 보내는 동안 받았으면 서버에
  * 알리지 않고 그 탭을 따라 계정을 끝낸다(`otherTab`). 지금 쿠키는 다른 탭이 로그인한 계정일 수
@@ -558,7 +639,10 @@ export async function signOut(): Promise<void> {
       await leaveAccount("otherTab");
       return;
     }
-    await authClient.signOut().catch(() => undefined);
+    const marked = markSignOutPending();
+    const confirmed = await requestSignOut();
+    if (confirmed) clearPendingSignOut();
+    else if (!marked) throw new Error(AUTH_COPY.signOutFailed);
     if (!otherTabChanged()) await forget();
     announce(null);
     await leaveAccount("signedOut");
@@ -615,6 +699,8 @@ export function __resetSessionForTests(): void {
   leaving = null;
   hydration = null;
   revalidation = null;
+  finishing = null;
   takeSessionEnd();
+  clearPendingSignOut();
   setState({ status: "loading", user: null });
 }
