@@ -25,6 +25,7 @@ import {
   BASE_BACKOFF_MS,
   MAX_BACKOFF_MS,
   MAX_RETRY_ATTEMPTS,
+  SLOW_RETRY_MS,
   type SyncRetryMode,
 } from "./backoff";
 import { isProjecting } from "../../features/presentation/fullscreen";
@@ -141,6 +142,40 @@ function scheduleNextTimer(): void {
   timer = setTimeout(() => dispatch(), delay);
 }
 
+function requeueAfter(
+  document: Presentation,
+  delay: number,
+  waitingOnServer: boolean,
+): void {
+  const now = Date.now();
+  const existing = pending.get(document.id);
+  if (existing) {
+    existing.readyAt = Math.max(existing.readyAt, now + delay);
+    existing.waitingOnServer = waitingOnServer;
+    return;
+  }
+  pending.set(document.id, {
+    document,
+    firstScheduledAt: now,
+    readyAt: now + delay,
+    waitingOnServer,
+    heldForFolder: false,
+  });
+}
+
+function failureOf(document: Presentation, err: unknown): SyncFailure {
+  return {
+    id: document.id,
+    title: document.title,
+    kind: "presentation",
+    status: err instanceof ServerRejectedError ? err.status : undefined,
+    message: err instanceof Error ? err.message : String(err),
+    failedAt: Date.now(),
+    requestId: requestIdOfError(err),
+    reason: syncFailureReasonOf(err),
+  };
+}
+
 function startPush(document: Presentation): void {
   setSyncStatus("presentation", "syncing");
   const task = (async (): Promise<void> => {
@@ -166,37 +201,20 @@ function startPush(document: Presentation): void {
         ((isRetryableApiError(err) || sessionExpired) &&
           backoff.getServerAttempt(document.id) < MAX_RETRY_ATTEMPTS)
       ) {
-        const delay = backoff.getDelay(document.id, err);
-        const now = Date.now();
-        const waitingOnServer =
-          err instanceof ServerRejectedError || sessionExpired;
-        const existing = pending.get(document.id);
-        if (existing) {
-          existing.readyAt = Math.max(existing.readyAt, now + delay);
-          existing.waitingOnServer = waitingOnServer;
-        } else {
-          pending.set(document.id, {
-            document,
-            firstScheduledAt: now,
-            readyAt: now + delay,
-            waitingOnServer,
-            heldForFolder: false,
-          });
-        }
+        requeueAfter(
+          document,
+          backoff.getDelay(document.id, err),
+          err instanceof ServerRejectedError || sessionExpired,
+        );
         setSyncStatus("presentation", sessionExpired ? "error" : "offline");
+      } else if (isRetryableApiError(err)) {
+        requeueAfter(document, SLOW_RETRY_MS, true);
+        recordSyncFailure(failureOf(document, err));
+        setSyncStatus("presentation", "offline");
       } else {
         backoff.reset(document.id);
         if (!pending.has(document.id)) failed.set(document.id, document);
-        const failure: SyncFailure = {
-          id: document.id,
-          title: document.title,
-          kind: "presentation",
-          status: err instanceof ServerRejectedError ? err.status : undefined,
-          message: err instanceof Error ? err.message : String(err),
-          failedAt: Date.now(),
-          requestId: requestIdOfError(err),
-          reason: syncFailureReasonOf(err),
-        };
+        const failure = failureOf(document, err);
         console.error("Presentation push failed permanently", failure);
         recordSyncFailure(failure);
       }
@@ -256,15 +274,17 @@ function dispatch(concurrency = PUSH_CONCURRENCY): void {
  * `wake`(포커스·탭 복귀·상태 확인 성공)는 서버가 거절해(5xx·429·401) 기다리는 항목을 앞당기지
  * 않고 백오프 횟수도 그대로 둔다. 그래야 `Retry-After`를 지키고 서버 재시도 한도에 이른다.
  * `reconnect`·`manual`은 백오프를 비우고 모두 보낸다. 회복 뒤 다시 실패하면 짧은 간격부터
- * 다시 센다. `manual`은 영구 실패로 남긴 항목도 실패 기록을 지우고 다시 넣는다. 송출 중에는
+ * 다시 센다. `manual`은 영구 실패로 남긴 항목도 다시 넣고, 다시 보내는 항목의 실패 기록을
+ * 지운다. 재시도 한도를 넘겨 `SLOW_RETRY_MS`마다 다시 보내던 항목도 곧바로 보낸다. 송출 중에는
  * 앞당긴 항목도 송출을 마칠 때까지 보내지 않는다(`flushPendingSync` 참고).
  */
 export function retryPendingSyncNow(mode: SyncRetryMode): void {
   if (!enabled) return;
   if (mode === "manual") requeueFailedDocuments();
   if (mode !== "wake") backoff.reset();
-  for (const item of pending.values()) {
+  for (const [id, item] of pending) {
     if (mode === "wake" && item.waitingOnServer) continue;
+    if (mode === "manual") clearSyncFailure("presentation", id);
     item.readyAt = 0;
   }
   dispatch();

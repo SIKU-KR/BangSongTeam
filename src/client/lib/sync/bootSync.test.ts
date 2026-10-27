@@ -112,13 +112,19 @@ import {
   OfflineError,
   ServerRejectedError,
   SessionExpiredError,
+  TimeoutError,
 } from "../api/request";
 import {
   __resetServerDecksForTests,
   UnsyncableDocumentError,
 } from "./presentationSync";
 import { ERROR_COPY } from "#copy/common";
-import { BASE_BACKOFF_MS, MAX_BACKOFF_MS } from "./backoff";
+import {
+  BASE_BACKOFF_MS,
+  MAX_BACKOFF_MS,
+  MAX_RETRY_ATTEMPTS,
+  SLOW_RETRY_MS,
+} from "./backoff";
 import {
   getSyncDomainStatus,
   getSyncSnapshot,
@@ -690,6 +696,54 @@ describe("runBootSync — 동기화 상태", () => {
     await expect(retryBootSyncIfNeeded("manual")).resolves.toBe(true);
 
     expect(getSyncSnapshot().status).toBe("synced");
+  });
+
+  it("목록 받기가 시간 초과로 이어지면 재시도 한도에서 멈추고, 포커스에는 다시 받지 않으며 다시 시도에만 다시 받는다", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+    try {
+      presentationSync.pullPresentations.mockClear();
+      presentationSync.pullPresentations.mockRejectedValue(new TimeoutError());
+
+      await runBootSync();
+      await expect(retryBootSyncIfNeeded("wake")).resolves.toBe(false);
+      await vi.advanceTimersByTimeAsync(SLOW_RETRY_MS * 3);
+
+      expect(presentationSync.pullPresentations).toHaveBeenCalledTimes(
+        MAX_RETRY_ATTEMPTS + 1,
+      );
+      expect(getSyncDomainStatus("presentation")).toBe("error");
+
+      await expect(retryBootSyncIfNeeded("wake")).resolves.toBe(false);
+      await expect(retryBootSyncIfNeeded("manual")).resolves.toBe(true);
+
+      expect(presentationSync.pullPresentations).toHaveBeenCalledTimes(
+        MAX_RETRY_ATTEMPTS + 2,
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("서버가 몇 분 동안 503을 주다 회복하면 받지 못한 단계를 다시 시도 없이 다시 받아 동기화됨으로 돌아온다", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+    try {
+      const recoversAt = Date.now() + 5 * 60_000;
+      presentationSync.pullFolders.mockImplementation(async () => {
+        if (Date.now() < recoversAt) {
+          throw new ServerRejectedError(503, API_ERRORS.serverBusy, 2000);
+        }
+        return EMPTY_FOLDER_LIST;
+      });
+
+      await runBootSync();
+      expect(getSyncSnapshot().status).toBe("offline");
+
+      await vi.advanceTimersByTimeAsync(12 * 60_000);
+
+      expect(getSyncSnapshot().status).toBe("synced");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("받기를 끝내 실패하면 그 요청의 상관 ID를 문의 코드로 남긴다", async () => {

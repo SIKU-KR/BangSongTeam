@@ -16,6 +16,7 @@ import {
 import {
   BackoffTracker,
   MAX_RETRY_ATTEMPTS,
+  SLOW_RETRY_MS,
   type SyncRetryMode,
 } from "./backoff";
 
@@ -140,6 +141,19 @@ function isQueuedAfter(id: string, batch: ReadonlySet<string>): boolean {
   return false;
 }
 
+function failureOf(folder: Folder, err: unknown): SyncFailure {
+  return {
+    id: folder.id,
+    title: folder.name,
+    kind: "folder",
+    status: err instanceof ServerRejectedError ? err.status : undefined,
+    message: err instanceof Error ? err.message : String(err),
+    failedAt: Date.now(),
+    requestId: requestIdOfError(err),
+    reason: syncFailureReasonOf(err),
+  };
+}
+
 function waitsOnRetry(id: string): boolean {
   const seen = new Set<string>();
   let current: string | null = id;
@@ -160,6 +174,7 @@ async function pushAll(
   setSyncStatus("folder", "syncing");
   let offline = false;
   let sessionExpired = false;
+  let slowRetry = false;
   let serverRejected = false;
   let deferred = false;
   let deferredBehindRetry = false;
@@ -200,32 +215,30 @@ async function pushAll(
         if (!pending.has(folder.id)) pending.set(folder.id, folder);
         const delay = backoff.getDelay(folder.id, err);
         if (delay < minRetryDelay) minRetryDelay = delay;
+      } else if (isRetryableApiError(err)) {
+        slowRetry = true;
+        serverRejected = true;
+        retrying.add(folder.id);
+        if (!pending.has(folder.id)) pending.set(folder.id, folder);
+        if (SLOW_RETRY_MS < minRetryDelay) minRetryDelay = SLOW_RETRY_MS;
+        recordSyncFailure(failureOf(folder, err));
       } else {
         retrying.delete(folder.id);
         backoff.reset(folder.id);
         if (!pending.has(folder.id)) failed.set(folder.id, folder);
-        const failure: SyncFailure = {
-          id: folder.id,
-          title: folder.name,
-          kind: "folder",
-          status: err instanceof ServerRejectedError ? err.status : undefined,
-          message: err instanceof Error ? err.message : String(err),
-          failedAt: Date.now(),
-          requestId: requestIdOfError(err),
-          reason: syncFailureReasonOf(err),
-        };
+        const failure = failureOf(folder, err);
         console.error("Folder push failed permanently", failure);
         recordSyncFailure(failure);
       }
     }
   }
 
-  const failedRetryably = offline || sessionExpired;
+  const failedRetryably = offline || sessionExpired || slowRetry;
   if (failedRetryably) waitingOnServer = serverRejected;
   else if (!deferred) waitingOnServer = false;
   if (sessionExpired) {
     setSyncStatus("folder", "error");
-  } else if (offline || deferredBehindRetry) {
+  } else if (offline || slowRetry || deferredBehindRetry) {
     setSyncStatus("folder", "offline");
   } else if (!deferred) {
     backoff.reset();
@@ -403,11 +416,15 @@ export function flushFolderSync(): Promise<void> {
  * `reconnect`·`manual`은 백오프를 비우고 모두 보낸다(`syncScheduler`와 같다). 비우지
  * 않으면 '다시 시도' 뒤 한 번 더 실패한 폴더가 지난 횟수 때문에 곧바로 영구 실패가 된다.
  *
- * `manual`은 영구 실패로 남긴 폴더도 실패 기록을 지우고 다시 넣는다. 실패한 사본이 아니라 지금
- * 폴더를 넣고(`setFailedFolderResolver`), 그사이 없어진 폴더는 버린다.
+ * `manual`은 영구 실패로 남긴 폴더도 다시 넣고, 다시 보내는 폴더의 실패 기록을 지운다. 실패한
+ * 사본이 아니라 지금 폴더를 넣고(`setFailedFolderResolver`), 그사이 없어진 폴더는 버린다. 재시도
+ * 한도를 넘겨 `SLOW_RETRY_MS`마다 다시 보내던 폴더도 곧바로 보낸다.
  */
 export function retryFolderSyncNow(mode: SyncRetryMode): Promise<void> {
-  if (mode === "manual") requeueFailedFolders();
+  if (mode === "manual") {
+    for (const id of pending.keys()) clearSyncFailure("folder", id);
+    requeueFailedFolders();
+  }
   if (mode !== "wake") backoff.reset();
   if (mode === "wake" && waitingOnServer) return inFlight;
   return flushFolderSync();

@@ -20,6 +20,7 @@ import {
 import {
   BackoffTracker,
   MAX_RETRY_ATTEMPTS,
+  SLOW_RETRY_MS,
   type SyncRetryMode,
 } from "./backoff";
 import {
@@ -169,12 +170,26 @@ function clearPending(): void {
   backoff.reset();
 }
 
+function failureOf(op: PendingOp, key: string, err: unknown): SyncFailure {
+  return {
+    id: key,
+    title: op.kind === "push" ? op.deck.title : undefined,
+    kind: "deck",
+    status: err instanceof ServerRejectedError ? err.status : undefined,
+    message: err instanceof Error ? err.message : String(err),
+    failedAt: Date.now(),
+    requestId: requestIdOfError(err),
+    reason: syncFailureReasonOf(err),
+  };
+}
+
 async function runOps(ops: PendingOp[]): Promise<void> {
   if (ops.length === 0) return;
 
   setSyncStatus("deck", "syncing");
   let offline = false;
   let sessionExpired = false;
+  let slowRetry = false;
   let minRetryDelay = Infinity;
 
   for (const op of ops) {
@@ -216,6 +231,12 @@ async function runOps(ops: PendingOp[]): Promise<void> {
         if (!pending.has(key)) pending.set(key, op);
         const delay = backoff.getDelay(key, err);
         if (delay < minRetryDelay) minRetryDelay = delay;
+      } else if (isRetryableApiError(err)) {
+        slowRetry = true;
+        waitingOnServer.add(key);
+        if (!pending.has(key)) pending.set(key, op);
+        if (SLOW_RETRY_MS < minRetryDelay) minRetryDelay = SLOW_RETRY_MS;
+        recordSyncFailure(failureOf(op, key, err));
       } else {
         waitingOnServer.delete(key);
         backoff.reset(key);
@@ -223,16 +244,7 @@ async function runOps(ops: PendingOp[]): Promise<void> {
         if (op.kind === "delete" && !expired) {
           forgetDeckDelete(op.userId, op.id);
         }
-        const failure: SyncFailure = {
-          id: key,
-          title: op.kind === "push" ? op.deck.title : undefined,
-          kind: "deck",
-          status: err instanceof ServerRejectedError ? err.status : undefined,
-          message: err instanceof Error ? err.message : String(err),
-          failedAt: Date.now(),
-          requestId: requestIdOfError(err),
-          reason: syncFailureReasonOf(err),
-        };
+        const failure = failureOf(op, key, err);
         console.error("Deck push failed permanently", failure);
         recordSyncFailure(failure);
       }
@@ -247,7 +259,11 @@ async function runOps(ops: PendingOp[]): Promise<void> {
     backoff.reset();
     setSyncStatus("deck", "synced");
   }
-  if ((offline || sessionExpired) && !timer && minRetryDelay !== Infinity) {
+  if (
+    (offline || sessionExpired || slowRetry) &&
+    !timer &&
+    minRetryDelay !== Infinity
+  ) {
     timer = setTimeout(run, minRetryDelay);
   }
 }
@@ -418,13 +434,17 @@ export function holdFailedDeckPush(deck: Deck): void {
  * 곡 변경끼리는 순서가 없으므로 오프라인으로 밀린 곡까지 함께 기다릴 까닭이 없다.
  * `reconnect`·`manual`은 백오프를 비우고 모두 보낸다(`syncScheduler`와 같다). 비우지
  * 않으면 '다시 시도' 뒤 한 번 더 실패한 곡이 지난 횟수 때문에 곧바로 영구 실패가 된다.
- * `manual`은 영구 실패로 남긴 곡 변경도 실패 기록을 지우고 다시 넣는다. 곡 push는 실패한 사본이
- * 아니라 지금 보관함의 곡을 넣고(`setFailedDeckResolver`), 그사이 없어진 곡은 버린다. 다시 넣는
- * DELETE는 영구 실패 때 지운 삭제 기록(`pendingDeckDeletes`)에도 다시 남긴다. 사용자가 다시
+ * `manual`은 영구 실패로 남긴 곡 변경도 다시 넣고, 다시 보내는 곡 변경의 실패 기록을 지운다.
+ * 재시도 한도를 넘겨 `SLOW_RETRY_MS`마다 다시 보내던 곡 변경도 곧바로 보낸다. 곡 push는 실패한
+ * 사본이 아니라 지금 보관함의 곡을 넣고(`setFailedDeckResolver`), 그사이 없어진 곡은 버린다. 다시
+ * 넣는 DELETE는 영구 실패 때 지운 삭제 기록(`pendingDeckDeletes`)에도 다시 남긴다. 사용자가 다시
  * 지우겠다고 한 것이라, 이번에 오프라인으로 밀린 채 탭을 닫아도 다음 부팅이 다시 보낸다.
  */
 export function retryDeckSyncNow(mode: SyncRetryMode): Promise<void> {
-  if (mode === "manual") requeueFailedOps();
+  if (mode === "manual") {
+    for (const key of pending.keys()) clearSyncFailure("deck", key);
+    requeueFailedOps();
+  }
   if (mode !== "wake") backoff.reset();
   if (mode === "wake" && waitingOnServer.size > 0) {
     runNotWaitingOnServer();

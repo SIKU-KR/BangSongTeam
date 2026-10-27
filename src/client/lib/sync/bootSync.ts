@@ -49,11 +49,13 @@ import {
   OfflineError,
   ServerRejectedError,
   SessionExpiredError,
+  TimeoutError,
 } from "../api/request";
 import {
   BackoffTracker,
   BASE_BACKOFF_MS,
   MAX_RETRY_ATTEMPTS,
+  SLOW_RETRY_MS,
   type SyncRetryMode,
 } from "./backoff";
 import {
@@ -456,21 +458,36 @@ function cancelBootRetry(): void {
   retryBackoff.reset();
 }
 
-function retryPullLater(step: () => Promise<void>, err: unknown): SyncStatus {
-  if (
-    !isRetryableApiError(err) ||
-    (!(err instanceof OfflineError) &&
-      retryBackoff.getServerAttempt() >= MAX_RETRY_ATTEMPTS)
-  ) {
-    retryBackoff.reset();
-    abandonedStep = step;
-    return "error";
-  }
+function abandonPull(step: () => Promise<void>): SyncStatus {
+  retryBackoff.reset();
+  abandonedStep = step;
+  return "error";
+}
+
+function retryPullAfter(
+  step: () => Promise<void>,
+  delay: number,
+  waitsOnServer: boolean,
+): void {
   abandonedStep = null;
   retryStep = step;
-  retryWaitsOnServer = !(err instanceof OfflineError);
+  retryWaitsOnServer = waitsOnServer;
   if (retryTimer) clearTimeout(retryTimer);
-  retryTimer = setTimeout(runRetry, retryBackoff.getDelay(err));
+  retryTimer = setTimeout(runRetry, delay);
+}
+
+function retryPullLater(step: () => Promise<void>, err: unknown): SyncStatus {
+  if (!isRetryableApiError(err)) return abandonPull(step);
+  const timedOut = err instanceof TimeoutError;
+  const waitsOnServer = timedOut || !(err instanceof OfflineError);
+  if (waitsOnServer && retryBackoff.getServerAttempt() >= MAX_RETRY_ATTEMPTS) {
+    if (timedOut) return abandonPull(step);
+    retryPullAfter(step, SLOW_RETRY_MS, true);
+    return "error";
+  }
+  const delay = retryBackoff.getDelay(err);
+  if (timedOut) retryBackoff.countServerAttempt();
+  retryPullAfter(step, delay, waitsOnServer);
   return "offline";
 }
 
@@ -504,9 +521,15 @@ function runRetry(): Promise<void> | null {
  * 들어 있지 않아, 회복을 알아도 백오프 타이머가 끝날 때까지(최대 1분) 헤더가
  * '오프라인'으로 남는다. 먼저 받아 병합해야 큐가 병합 결과를 올린다.
  *
- * `wake`는 서버가 거절해(5xx·429) 기다리는 단계를 앞당기지 않고 백오프 횟수도 그대로
- * 둔다. 포커스마다 목록 전체를 다시 받으면 장애 중인 서버를 더 누른다. `manual`은 서버
- * 재시도 한도에 이르렀거나 거절돼 포기한 단계도 다시 받는다.
+ * `wake`는 서버가 거절해(5xx·429) 기다리거나 받다 시간을 넘겨 기다리는 단계를 앞당기지 않고
+ * 백오프 횟수도 그대로 둔다. 포커스마다 목록 전체를 다시 받으면 장애 중인 서버를 더 누른다.
+ *
+ * 받다 시간을 넘기면 서버가 거절한 것처럼 재시도 한도에 센다. 느린 회선에서 큰 목록은 매번 처음부터
+ * 다시 받으므로, 끝나지 않는 받기를 한도 없이 되풀이하면 기록 전체를 1분마다 다시 읽는다. 한도에
+ * 이르면 포기하고 `manual`만 다시 받는다. 서버의 일시 장애(408·429·5xx)는 한도를 넘겨도 포기하지
+ * 않고 `SLOW_RETRY_MS`마다 다시 받는다. 장애가 끝나면 '다시 시도'를 누르지 않아도 부팅 병합을
+ * 마쳐, 이 기기에만 있는 변경을 올리고 다른 기기에서 고친 판을 받는다. `manual`은 거절돼 포기한
+ * 단계도 다시 받는다.
  */
 export async function retryBootSyncIfNeeded(
   mode: SyncRetryMode,

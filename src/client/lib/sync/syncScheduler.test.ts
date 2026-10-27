@@ -17,7 +17,7 @@ import {
   __setPusherForTests,
   __setBackoffRandomForTests,
 } from "./syncScheduler";
-import { BASE_BACKOFF_MS, MAX_RETRY_ATTEMPTS } from "./backoff";
+import { BASE_BACKOFF_MS, MAX_RETRY_ATTEMPTS, SLOW_RETRY_MS } from "./backoff";
 import { getSyncSnapshot, resetSyncStatus } from "./syncStatus";
 import { __resetServerDecksForTests } from "./presentationSync";
 import {
@@ -1088,7 +1088,7 @@ describe("서버 push 스케줄러", () => {
     vi.useRealTimers();
   });
 
-  it("재시도 한도(MAX_RETRY_ATTEMPTS)를 초과하면 재시도를 중단하고 error 상태가 된다", async () => {
+  it("재시도 한도를 넘긴 일시 장애(503)는 동기화 실패로 보이되 버리지 않고 SLOW_RETRY_MS 뒤에 다시 보낸다", async () => {
     push.mockRejectedValue(new ServerRejectedError(503, "지속 과부하"));
     __setBackoffRandomForTests(() => 1);
     vi.useFakeTimers();
@@ -1107,9 +1107,90 @@ describe("서버 push 스케줄러", () => {
       kind: "presentation",
       status: 503,
     });
+    expect(hasPendingDocumentPush()).toBe(true);
 
-    await vi.advanceTimersByTimeAsync(60_000);
+    await vi.advanceTimersByTimeAsync(30_000);
+    retryPendingSyncNow("wake");
+    await vi.advanceTimersByTimeAsync(0);
     expect(push).toHaveBeenCalledTimes(11);
+
+    push.mockResolvedValue(true);
+    await vi.advanceTimersByTimeAsync(SLOW_RETRY_MS);
+
+    expect(push).toHaveBeenCalledTimes(12);
+    expect(getSyncSnapshot()).toMatchObject({
+      status: "synced",
+      lastFailure: null,
+    });
+
+    vi.useRealTimers();
+  });
+
+  it("서버가 몇 분 동안 503을 주다 회복하면 다시 시도를 누르지 않아도 미뤄 둔 세트를 올린다", async () => {
+    vi.useFakeTimers();
+    __setBackoffRandomForTests(() => 0);
+    const recoversAt = Date.now() + 5 * 60_000;
+    push.mockImplementation(async () => {
+      if (Date.now() < recoversAt) {
+        throw new ServerRejectedError(503, "", 2000);
+      }
+      return true;
+    });
+
+    scheduleDocumentPush(doc("a"));
+    await vi.advanceTimersByTimeAsync(12 * 60_000);
+
+    expect(getSyncSnapshot()).toMatchObject({
+      status: "synced",
+      lastFailure: null,
+    });
+    expect(hasPendingDocumentPush()).toBe(false);
+
+    vi.useRealTimers();
+  });
+
+  it("Retry-After가 늘 2초여도 시도할수록 간격을 늘려 90초 동안 7번을 넘게 보내지 않는다", async () => {
+    vi.useFakeTimers();
+    __setBackoffRandomForTests(() => 1);
+    push.mockRejectedValue(new ServerRejectedError(503, "과부하", 2000));
+
+    scheduleDocumentPush(doc("a"));
+    await vi.advanceTimersByTimeAsync(90_000);
+
+    expect(getSyncSnapshot().status).toBe("offline");
+    expect(push.mock.calls.length).toBeLessThanOrEqual(7);
+
+    vi.useRealTimers();
+  });
+
+  it("재시도 한도를 넘겨 천천히 다시 보내던 세트는 다시 시도하면 곧바로 보내고 실패 표시를 지운다", async () => {
+    vi.useFakeTimers();
+    __setBackoffRandomForTests(() => 0);
+    push.mockRejectedValue(new ServerRejectedError(503, "지속 과부하"));
+    scheduleDocumentPush(doc("a"));
+    await vi.advanceTimersByTimeAsync(SYNC_DEBOUNCE_MS);
+    expect(push).toHaveBeenCalledTimes(MAX_RETRY_ATTEMPTS + 1);
+    expect(getSyncSnapshot().status).toBe("error");
+
+    let release: () => void = () => undefined;
+    push.mockImplementation(
+      () =>
+        new Promise<boolean>((resolve) => {
+          release = () => resolve(true);
+        }),
+    );
+    retryPendingSyncNow("manual");
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(push).toHaveBeenCalledTimes(MAX_RETRY_ATTEMPTS + 2);
+    expect(getSyncSnapshot()).toMatchObject({
+      status: "syncing",
+      lastFailure: null,
+    });
+
+    release();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(getSyncSnapshot().status).toBe("synced");
 
     vi.useRealTimers();
   });

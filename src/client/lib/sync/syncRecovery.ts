@@ -173,8 +173,10 @@ function wake(mode: SyncRetryMode): void {
     void resume(mode);
     return;
   }
-  if (mode !== "wake") modeOnReachable = stronger(modeOnReachable, mode);
-  probeBackoff.reset();
+  if (mode !== "wake") {
+    modeOnReachable = stronger(modeOnReachable, mode);
+    probeBackoff.reset();
+  }
   void runProbe();
 }
 
@@ -224,9 +226,11 @@ function handleVisibilityChange(): void {
  * 포커스·탭 복귀·상태 확인 성공은 자주 오므로 큐의 백오프 횟수와 서버가 준 대기를 비우지
  * 않는다(`SyncRetryMode`의 `wake`). 다만 닿지 못하다 다시 닿았으면 배경 다운로드에는
  * 그 사실(`afterOutage`)을 함께 넘겨, 끊긴 동안 재시도를 다 쓴 영상을 다시 받게 한다. 상태 확인의 백오프도 회복 때 비우지 않고, 닿는 상태가
- * `STABLE_REACHABLE_MS` 이상 이어진 뒤 다시 끊겼을 때만 비운다. 상태 확인은 닿는데 무거운
- * 요청만 시간을 넘기는 느린 연결에서, 회복할 때마다 처음 간격으로 돌아가 같은 요청을 쉬지
- * 않고 다시 보내지 않게 하려는 것이다.
+ * `STABLE_REACHABLE_MS` 이상 이어진 뒤 다시 끊겼을 때만 비운다. 포커스·탭 복귀는 닿지 못하는
+ * 중이면 상태를 곧바로 한 번 확인하되 그 간격도 처음으로 되돌리지 않는다. `online`과 '다시
+ * 시도'만 되돌린다. 상태 확인은 닿는데 무거운 요청만 시간을 넘기는 느린 연결이나 저장소 장애에서,
+ * 회복하거나 창을 오갈 때마다 처음 간격으로 돌아가 같은 요청을 쉬지 않고 다시 보내지 않게 하려는
+ * 것이다.
  *
  * `isPaused`가 true인 동안(송출 화면)에는 상태 확인도 큐 재시도도 다시 받기도 보내지 않고, 들어온
  * 신호만 기억했다가 송출을 마친 뒤(`resumeDeferredSyncRecovery`) 한 번 돌린다. 송출
