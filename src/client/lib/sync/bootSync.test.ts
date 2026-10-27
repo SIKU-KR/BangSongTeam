@@ -1680,6 +1680,93 @@ describe("runBootSync — 부팅 중에 시작한 송출", () => {
     );
   });
 
+  it("부팅이 폴더를 올리는 중에 송출을 시작하면 프레젠테이션 목록을 송출을 마친 뒤에 받는다", async () => {
+    const pushing = deferred<Folder>();
+    const pushFolder = vi.fn<(f: Folder) => Promise<Folder>>(
+      () => pushing.promise,
+    );
+    __setFolderPusherForTests(pushFolder);
+    __loadFoldersForTests([folder(PARENT)]);
+
+    const booting = runBootSync();
+    await vi.waitFor(() => expect(pushFolder).toHaveBeenCalledTimes(1));
+    window.history.pushState({}, "", "/present/abc/fullscreen");
+    pushing.resolve(folder(PARENT));
+    await booting;
+
+    expect(presentationSync.pullPresentations).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(MAX_BACKOFF_MS);
+
+    expect(presentationSync.pullFolders).toHaveBeenCalledTimes(1);
+    expect(presentationSync.pullPresentations).not.toHaveBeenCalled();
+
+    window.history.pushState({}, "", "/presentations");
+    await vi.advanceTimersByTimeAsync(BASE_BACKOFF_MS);
+    await vi.waitFor(() =>
+      expect(presentationSync.pullPresentations).toHaveBeenCalledTimes(1),
+    );
+
+    expect(presentationSync.pullFolders).toHaveBeenCalledTimes(2);
+  });
+
+  it("프레젠테이션 목록을 받는 중에 송출을 시작하면 병합과 곡 목록 받기를 송출을 마칠 때까지 미룬다", async () => {
+    const presentations = deferred<Presentation[]>();
+    presentationSync.pullPresentations.mockReturnValueOnce(
+      presentations.promise,
+    );
+
+    const booting = runBootSync();
+    await vi.waitFor(() =>
+      expect(presentationSync.pullPresentations).toHaveBeenCalledTimes(1),
+    );
+    window.history.pushState({}, "", "/present/abc/fullscreen");
+    presentations.resolve([presentation(DOC)]);
+    await booting;
+
+    expect(listPresentations()).toEqual([]);
+    expect(presentationSync.pullDecks).not.toHaveBeenCalled();
+    expect(isBootPullPending("presentation")).toBe(false);
+
+    await vi.advanceTimersByTimeAsync(MAX_BACKOFF_MS);
+
+    expect(listPresentations()).toEqual([]);
+    expect(presentationSync.pullDecks).not.toHaveBeenCalled();
+    expect(presentationSync.pullPresentations).toHaveBeenCalledTimes(1);
+
+    presentationSync.pullPresentations.mockResolvedValue([presentation(DOC)]);
+    window.history.pushState({}, "", "/presentations");
+    await vi.advanceTimersByTimeAsync(BASE_BACKOFF_MS);
+    await vi.waitFor(() =>
+      expect(listPresentations().map((doc) => doc.id)).toEqual([DOC]),
+    );
+
+    expect(presentationSync.pullFolders).toHaveBeenCalledTimes(2);
+  });
+
+  it("부팅이 프레젠테이션을 올리는 중에 송출을 시작하면 곡 목록을 송출을 마친 뒤에 받는다", async () => {
+    const pushing = deferred<boolean>();
+    presentationSync.pushPresentation.mockReturnValueOnce(pushing.promise);
+    __loadDocumentsForTests([presentation(DOC)]);
+
+    const booting = runBootSync();
+    await vi.waitFor(() =>
+      expect(presentationSync.pushPresentation).toHaveBeenCalledTimes(1),
+    );
+    window.history.pushState({}, "", "/present/abc/fullscreen");
+    pushing.resolve(true);
+    await booting;
+    await vi.advanceTimersByTimeAsync(MAX_BACKOFF_MS);
+
+    expect(presentationSync.pullDecks).not.toHaveBeenCalled();
+
+    window.history.pushState({}, "", "/presentations");
+    await vi.advanceTimersByTimeAsync(BASE_BACKOFF_MS);
+    await vi.waitFor(() =>
+      expect(presentationSync.pullDecks).toHaveBeenCalledTimes(1),
+    );
+  });
+
   it("곡 목록을 받는 중에 송출을 시작하면 곡 병합을 송출을 마칠 때까지 미룬다", async () => {
     const decks = deferred<{ decks: Deck[]; deletedIds: string[] }>();
     presentationSync.pullDecks.mockReturnValueOnce(decks.promise);

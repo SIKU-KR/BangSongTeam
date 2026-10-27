@@ -220,10 +220,10 @@ export function useBootPullPending(domain: BootPullDomain): boolean {
  * '오프라인'으로 남아, 연결이 돌아와 저장이 다 끝나도 헤더가 초록색으로 돌아오지 않는다.
  * 송출 화면에 있는 동안에는 다시 받지 않고 송출을 마친 뒤로 미룬다. 송출 중에는
  * API·데이터 요청이 0건이어야 하고, 받은 결과를 병합하면 띄운 문서가 바뀔 수 있다.
- * 부팅 도중에 송출을 시작해도 같다. 각 단계의 시작과 받기 직후에 송출 중이면 그 단계를
+ * 부팅 도중에 송출을 시작해도 같다. 받기마다 그 직전과 받은 직후에 송출 중이면 그 단계를
  * 받은 결과와 함께 내려놓고, 송출을 마친 뒤 처음부터 다시 받는다. 송출 화면은 지금 띄운
  * 프레젠테이션의 변경을 따라 그리므로, 그대로 병합하면 송출 중인 화면이 바뀌고 다음 요청이
- * 나간다. 이미 보낸 올리기는 끝까지 기다린다.
+ * 나간다. 병합을 마친 단계는 송출 중이어도 올릴 항목을 끝까지 올린다.
  *
  * 항목마다 올리기 직전과 큐에 넘기거나 실패로 남길 때 지금 저장소에 있는 것을 다시 찾아
  * 쓰고, 그사이 지워졌으면 건너뛴다. 부팅 병합 때의 사본을 올리면 앞 항목을 올리는 동안
@@ -294,6 +294,7 @@ async function syncDriveAndDecks(): Promise<void> {
       generation,
     );
     if (generation !== bootGeneration) return;
+    if (parkWhileProjecting(syncDriveAndDecks)) return;
     settleSyncStatus("folder", folderStatus);
     unsynced = ["presentation", "deck"];
     serverDocuments = await pullPresentations();
