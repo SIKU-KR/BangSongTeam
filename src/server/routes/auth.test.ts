@@ -2,6 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Query } from "@google-cloud/firestore";
 import { handleOAuthUserInfo } from "better-auth/oauth2";
 import {
+  API_ERRORS,
+  DAILY_SIGN_UP_LIMIT_CODE,
   FALLBACK_USER_NAME,
   OFFICIAL_LIBRARY_NAME,
   SIGN_UP_IN_PROGRESS,
@@ -874,6 +876,10 @@ describe("이메일 가입 하루 한도", () => {
     const blocked = await signUp("cap@example.com", "10.0.7.1");
 
     expect(blocked.status).toBe(429);
+    expect(await blocked.json()).toMatchObject({
+      code: DAILY_SIGN_UP_LIMIT_CODE,
+      message: API_ERRORS.auth.dailySignUpLimit,
+    });
     expect(sessionCookie(blocked)).toBe("");
     expect(await usersWithEmail("cap@example.com")).toBe(0);
     expect((await signUp("cap@example.com", "10.0.7.2")).status).toBe(200);

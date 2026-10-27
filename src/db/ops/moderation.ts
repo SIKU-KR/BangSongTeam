@@ -1,11 +1,9 @@
-import type { Transaction } from "@google-cloud/firestore";
-import { createId } from "#shared";
+import { OFFICIAL_LIBRARY_USER_ID } from "#shared";
 import { runBulk, type Db } from "../client";
 import {
   chunkIds,
   COLLECTIONS,
   decksCol,
-  moderationEventsCol,
   reportsCol,
   usersCol,
   type ModerationEventDoc,
@@ -13,6 +11,7 @@ import {
 } from "../collections";
 import { withDeckIndex } from "../deckIndex";
 import { isBannedUser } from "../queries/limits";
+import { recordModerationEvent } from "../queries/takedowns";
 
 /**
  * 신고·게시 중단 운영 작업. 관리자 화면 없이 `scripts/moderation.mjs`로 실행한다.
@@ -71,13 +70,10 @@ export async function listPendingReports(db: Db): Promise<PendingReport[]> {
   });
 }
 
-function recordEvent(
-  tx: Transaction,
-  db: Db,
-  event: Omit<ModerationEventDoc, "id">,
-): void {
-  const id = createId();
-  tx.set(moderationEventsCol(db).doc(id), { id, ...event });
+type EventCause = Pick<ModerationEventDoc, "cause" | "sourceDeckId" | "note">;
+
+function directCause(note: string | null): EventCause {
+  return { cause: "direct", sourceDeckId: null, note };
 }
 
 async function updateLibraryDeck(
@@ -86,14 +82,16 @@ async function updateLibraryDeck(
   change: { visibility?: "private"; takedownAt: Date | null },
   action: "takedown" | "restore",
   now: Date,
+  cause: EventCause,
 ): Promise<boolean> {
   return db.runTransaction(async (tx) => {
     const ref = decksCol(db).doc(deckId);
     const deck = (await tx.get(ref)).data();
     if (!deck || deck.presentationId !== null) return false;
     tx.set(ref, withDeckIndex({ ...deck, ...change }));
-    recordEvent(tx, db, {
+    recordModerationEvent(tx, db, {
       action,
+      ...cause,
       userId: deck.userId,
       deckId,
       title: deck.title,
@@ -103,11 +101,11 @@ async function updateLibraryDeck(
   });
 }
 
-/** 게시 중단: 비공개로 돌리고 공유 라이브러리·검색에서 뺀다. 소유자는 다시 공개할 수 없다 */
-export async function takedownDeck(
+function takeDown(
   db: Db,
   deckId: string,
-  now: Date = new Date(),
+  now: Date,
+  cause: EventCause,
 ): Promise<boolean> {
   return updateLibraryDeck(
     db,
@@ -115,7 +113,18 @@ export async function takedownDeck(
     { visibility: "private", takedownAt: now },
     "takedown",
     now,
+    cause,
   );
+}
+
+/** 게시 중단: 비공개로 돌리고 공유 라이브러리·검색에서 뺀다. 소유자는 다시 공개할 수 없다 */
+export async function takedownDeck(
+  db: Db,
+  deckId: string,
+  now: Date = new Date(),
+  note: string | null = null,
+): Promise<boolean> {
+  return takeDown(db, deckId, now, directCause(note));
 }
 
 /** 게시 중단 해제. 비공개로 둔 채 소유자가 다시 공개할 수 있게만 한다 */
@@ -123,8 +132,16 @@ export async function restoreDeck(
   db: Db,
   deckId: string,
   now: Date = new Date(),
+  note: string | null = null,
 ): Promise<boolean> {
-  return updateLibraryDeck(db, deckId, { takedownAt: null }, "restore", now);
+  return updateLibraryDeck(
+    db,
+    deckId,
+    { takedownAt: null },
+    "restore",
+    now,
+    directCause(note),
+  );
 }
 
 /** 이 곡에서 가져간 보관함 곡 하나 (`listDescendants`) */
@@ -189,16 +206,19 @@ export async function listDescendants(
 /**
  * 이 곡에서 가져간 보관함 곡(`listDescendants`)을 모두 게시 중단하고, 그렇게 한 곡 id를 돌려준다.
  * 이미 게시 중단된 곡은 건너뛴다. 사본은 지우지 않으므로 주인은 계속 쓸 수 있고 공개만 못 한다.
+ * 운영 기록에는 이 곡 때문에 막은 곡(`cause: "fork"`)으로 남긴다.
  */
 export async function takedownForks(
   db: Db,
   deckId: string,
   now: Date = new Date(),
+  note: string | null = null,
 ): Promise<string[]> {
   const takenDown: string[] = [];
   for (const deck of await listDescendants(db, deckId)) {
     if (deck.takenDown) continue;
-    if (await takedownDeck(db, deck.id, now)) takenDown.push(deck.id);
+    const cause: EventCause = { cause: "fork", sourceDeckId: deckId, note };
+    if (await takeDown(db, deck.id, now, cause)) takenDown.push(deck.id);
   }
   return takenDown;
 }
@@ -214,12 +234,16 @@ async function revokeSessionsOf(db: Db, userId: string): Promise<number> {
   return sessions.size;
 }
 
-export interface BanResult {
-  /** 게시 중단한 곡: 제한할 때 공개 중이던 보관함 곡 */
-  takenDownDeckIds: string[];
-  /** 끊은 로그인 세션 수 */
-  revokedSessions: number;
-}
+export type BanResult =
+  | {
+      status: "banned";
+      /** 게시 중단한 곡: 제한할 때 공개 중이던 보관함 곡 */
+      takenDownDeckIds: string[];
+      /** 끊은 로그인 세션 수 */
+      revokedSessions: number;
+    }
+  | { status: "not_found" }
+  | { status: "official" };
 
 /**
  * 계정 제한(이용약관 제6조). 이 계정은 공유 라이브러리에 곡을 공개하거나, 새로 가져오거나,
@@ -228,21 +252,27 @@ export interface BanResult {
  * 비공개 곡과 프레젠테이션은 그대로 쓸 수 있다.
  *
  * 제한 시각을 먼저 쓰고 공개 곡을 찾으므로 그사이 공개한 곡도 빠지지 않는다. 다시 불러도 처음
- * 제한한 시각을 지키고, 남은 공개 곡과 세션만 처리한다. 사용자가 없으면 `null`이다.
+ * 제한한 시각을 지키고, 남은 공개 곡과 세션만 처리한다.
+ *
+ * 공식 라이브러리 계정(`OFFICIAL_LIBRARY_USER_ID`)은 아무것도 하지 않고 `official`이다. 제한하면
+ * 공식 곡 전부가 게시 중단되고, 푸는 길은 `restoreDeck`을 곡마다 부르는 것뿐이다.
  */
 export async function banUser(
   db: Db,
   userId: string,
   now: Date = new Date(),
-): Promise<BanResult | null> {
+  note: string | null = null,
+): Promise<BanResult> {
+  if (userId === OFFICIAL_LIBRARY_USER_ID) return { status: "official" };
   const found = await db.runTransaction(async (tx) => {
     const ref = usersCol(db).doc(userId);
     const user = (await tx.get(ref)).data();
     if (!user) return false;
     if (!isBannedUser(user)) {
       tx.update(ref, { bannedAt: now });
-      recordEvent(tx, db, {
+      recordModerationEvent(tx, db, {
         action: "ban",
+        ...directCause(note),
         userId,
         deckId: null,
         title: null,
@@ -251,17 +281,19 @@ export async function banUser(
     }
     return true;
   });
-  if (!found) return null;
+  if (!found) return { status: "not_found" };
 
   const listed = await decksCol(db)
     .where("userId", "==", userId)
     .where("listed", "==", true)
     .get();
+  const cause: EventCause = { cause: "ban", sourceDeckId: null, note };
   const takenDownDeckIds: string[] = [];
   for (const doc of listed.docs) {
-    if (await takedownDeck(db, doc.id, now)) takenDownDeckIds.push(doc.id);
+    if (await takeDown(db, doc.id, now, cause)) takenDownDeckIds.push(doc.id);
   }
   return {
+    status: "banned",
     takenDownDeckIds,
     revokedSessions: await revokeSessionsOf(db, userId),
   };
@@ -275,6 +307,7 @@ export async function unbanUser(
   db: Db,
   userId: string,
   now: Date = new Date(),
+  note: string | null = null,
 ): Promise<boolean> {
   return db.runTransaction(async (tx) => {
     const ref = usersCol(db).doc(userId);
@@ -282,8 +315,9 @@ export async function unbanUser(
     if (!user) return false;
     if (isBannedUser(user)) {
       tx.update(ref, { bannedAt: null });
-      recordEvent(tx, db, {
+      recordModerationEvent(tx, db, {
         action: "unban",
+        ...directCause(note),
         userId,
         deckId: null,
         title: null,

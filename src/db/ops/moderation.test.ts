@@ -1,4 +1,6 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { Transaction } from "@google-cloud/firestore";
+import { OFFICIAL_LIBRARY_NAME, OFFICIAL_LIBRARY_USER_ID } from "#shared";
 import type { Db } from "../client";
 import {
   COLLECTIONS,
@@ -57,6 +59,10 @@ describe("신고·게시 중단 운영 작업", () => {
         (a, b) =>
           a.at.getTime() - b.at.getTime() || a.action.localeCompare(b.action),
       );
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
 
   beforeEach(async () => {
     db = createTestDb();
@@ -180,12 +186,15 @@ describe("신고·게시 중단 운영 작업", () => {
 
   it("게시 중단은 운영 기록으로 남아 곡을 지워도 누구의 무슨 곡이었는지 남는다", async () => {
     const at = new Date("2026-09-23T00:00:00.000Z");
-    expect(await takedownDeck(db, DECK, at)).toBe(true);
+    expect(await takedownDeck(db, DECK, at, "권리자 요청")).toBe(true);
     expect(await deleteDeckScoped(db, DECK, A)).toBe(true);
 
     expect(await events()).toEqual([
       expect.objectContaining({
         action: "takedown",
+        cause: "direct",
+        sourceDeckId: null,
+        note: "권리자 요청",
         userId: A,
         deckId: DECK,
         title: "시선",
@@ -194,13 +203,15 @@ describe("신고·게시 중단 운영 작업", () => {
     ]);
   });
 
-  it("게시 중단을 풀어도 운영 기록에 남는다", async () => {
+  it("게시 중단을 풀어도 운영 기록에 남고, 사유가 없으면 null로 남긴다", async () => {
     await takedownDeck(db, DECK, new Date(1));
-    await restoreDeck(db, DECK, new Date(2));
+    await restoreDeck(db, DECK, new Date(2), "권리자 철회");
 
-    expect((await events()).map((event) => event.action)).toEqual([
-      "takedown",
-      "restore",
+    expect(
+      (await events()).map(({ action, cause, note }) => [action, cause, note]),
+    ).toEqual([
+      ["takedown", "direct", null],
+      ["restore", "direct", "권리자 철회"],
     ]);
   });
 
@@ -215,6 +226,7 @@ describe("신고·게시 중단 운영 작업", () => {
     const PRIVATE_FORK = "c00000000000000000004";
     const GRANDCHILD = "c00000000000000000005";
     const COPY = "c00000000000000000006";
+    const GREAT_GRANDCHILD = "c00000000000000000007";
 
     async function seedForkTree(): Promise<void> {
       await seedDocs(db, {
@@ -267,13 +279,56 @@ describe("신고·게시 중단 운영 작업", () => {
       ).toBe("ok");
     });
 
+    it("원본이 게시 중단되면 가져간 곡을 다시 가져간 곡도 공개하지 못한다", async () => {
+      const grandchild = await forkPublicDeck(db, C, FORK);
+      if (grandchild.status !== "ok") throw new Error(grandchild.status);
+      expect((await setDeckVisibility(db, B, FORK, "private")).status).toBe(
+        "ok",
+      );
+      await takedownDeck(db, DECK);
+
+      expect((await setDeckVisibility(db, B, FORK, "public")).status).toBe(
+        "taken_down",
+      );
+      expect(
+        (await setDeckVisibility(db, C, grandchild.deck.id, "public")).status,
+      ).toBe("taken_down");
+      expect(await searchPublicDecks(db, "시선")).toEqual([]);
+
+      await restoreDeck(db, DECK);
+      expect(
+        (await setDeckVisibility(db, C, grandchild.deck.id, "public")).status,
+      ).toBe("ok");
+    });
+
+    it("가져간 곡을 여러 번 거쳐 가져온 곡도 맨 처음 원본이 게시 중단되면 공개하지 못한다", async () => {
+      await seedForkTree();
+      await seedDocs(db, {
+        decks: [
+          deckDoc({
+            id: GREAT_GRANDCHILD,
+            userId: B,
+            slides: SLIDES,
+            forkedFrom: GRANDCHILD,
+            forkedFromAuthorName: "C",
+          }),
+        ],
+      });
+      await takedownDeck(db, DECK);
+
+      expect(
+        (await setDeckVisibility(db, B, GREAT_GRANDCHILD, "public")).status,
+      ).toBe("taken_down");
+    });
+
     it("게시 중단한 곡을 주인이 지워도 가져간 비공개 곡은 공개하지 못하고, 공개 중인 곡은 그대로 둔다", async () => {
       const fork = await forkPublicDeck(db, C, DECK);
       if (fork.status !== "ok") throw new Error(fork.status);
       const at = new Date("2026-09-23T00:00:00.000Z");
+      const deletedAt = new Date("2026-09-24T00:00:00.000Z");
       await takedownDeck(db, DECK, at);
 
-      expect(await deleteDeckScoped(db, DECK, A)).toBe(true);
+      expect(await deleteDeckScoped(db, DECK, A, deletedAt)).toBe(true);
 
       expect(await deckState(fork.deck.id)).toEqual({
         visibility: "private",
@@ -286,6 +341,64 @@ describe("신고·게시 중단 운영 작업", () => {
         forkedFrom: null,
         listed: true,
         takedownAt: null,
+      });
+      expect((await events()).filter((event) => event.deckId !== DECK)).toEqual(
+        [
+          expect.objectContaining({
+            action: "takedown",
+            cause: "fork",
+            sourceDeckId: DECK,
+            note: null,
+            userId: C,
+            deckId: fork.deck.id,
+            title: "시선",
+            at: deletedAt,
+          }),
+        ],
+      );
+    });
+
+    it("가져간 곡을 지우면, 거기서 다시 가져간 비공개 곡이 게시 중단된 맨 처음 원본을 이어받는다", async () => {
+      const grandchild = await forkPublicDeck(db, C, FORK);
+      if (grandchild.status !== "ok") throw new Error(grandchild.status);
+      await setDeckVisibility(db, B, FORK, "private");
+      const at = new Date("2026-09-23T00:00:00.000Z");
+      await takedownDeck(db, DECK, at);
+
+      expect(await deleteDeckScoped(db, FORK, B)).toBe(true);
+
+      expect(await deckState(grandchild.deck.id)).toEqual({
+        visibility: "private",
+        takedownAt: at,
+      });
+      expect(
+        (await setDeckVisibility(db, C, grandchild.deck.id, "public")).status,
+      ).toBe("taken_down");
+      expect(
+        (await events()).find((event) => event.deckId === grandchild.deck.id),
+      ).toMatchObject({ cause: "fork", sourceDeckId: DECK, userId: C });
+    });
+
+    it("게시 중단 시각을 이어받는 곡은 문서를 통째로 다시 쓰지 않고 바뀌는 필드만 고친다", async () => {
+      const fork = await forkPublicDeck(db, C, DECK);
+      if (fork.status !== "ok") throw new Error(fork.status);
+      const at = new Date("2026-09-23T00:00:00.000Z");
+      await takedownDeck(db, DECK, at);
+      const forkRef = decksCol(db).doc(fork.deck.id);
+      const before = (await forkRef.get()).data();
+      const set = vi.spyOn(Transaction.prototype, "set");
+
+      expect(await deleteDeckScoped(db, DECK, A)).toBe(true);
+
+      expect(set.mock.calls.map(([ref]) => ref.path)).not.toContain(
+        forkRef.path,
+      );
+      expect((await forkRef.get()).data()).toEqual({
+        ...before,
+        forkedFrom: null,
+        takedownAt: at,
+        listed: false,
+        searchGrams: [],
       });
     });
 
@@ -331,6 +444,38 @@ describe("신고·게시 중단 운영 작업", () => {
           takenDown: false,
         },
       ]);
+    });
+
+    it("가져간 곡을 모두 게시 중단하고 원본 때문에 막은 곡으로 기록한다", async () => {
+      await seedForkTree();
+
+      await takedownForks(db, DECK, new Date(), "권리자 요청");
+
+      expect(
+        (await events())
+          .map(({ action, deckId, userId, cause, sourceDeckId, note }) => ({
+            action,
+            deckId,
+            userId,
+            cause,
+            sourceDeckId,
+            note,
+          }))
+          .sort((a, b) => String(a.deckId).localeCompare(String(b.deckId))),
+      ).toEqual(
+        [
+          [FORK, B],
+          [PRIVATE_FORK, C],
+          [GRANDCHILD, C],
+        ].map(([deckId, userId]) => ({
+          action: "takedown",
+          deckId,
+          userId,
+          cause: "fork",
+          sourceDeckId: DECK,
+          note: "권리자 요청",
+        })),
+      );
     });
 
     it("가져간 곡을 모두 게시 중단하고 사본은 지우지 않는다", async () => {
@@ -397,7 +542,8 @@ describe("신고·게시 중단 운영 작업", () => {
     it("공개 중인 곡을 게시 중단하고 세션을 끊으며 공개·가져오기·신고를 막는다", async () => {
       const at = new Date("2026-10-27T00:00:00.000Z");
 
-      expect(await banUser(db, A, at)).toEqual({
+      expect(await banUser(db, A, at, "같은 곡 반복 게시")).toEqual({
+        status: "banned",
         takenDownDeckIds: [DECK],
         revokedSessions: 2,
       });
@@ -431,18 +577,54 @@ describe("신고·게시 중단 운영 작업", () => {
         ).status,
       ).toBe("banned");
       expect(
-        (await events()).map((event) => [event.action, event.deckId]),
+        (await events()).map(({ action, deckId, cause, note }) => [
+          action,
+          deckId,
+          cause,
+          note,
+        ]),
       ).toEqual([
-        ["ban", null],
-        ["takedown", DECK],
+        ["ban", null, "direct", "같은 곡 반복 게시"],
+        ["takedown", DECK, "ban", "같은 곡 반복 게시"],
       ]);
     });
 
-    it("다시 제한해도 처음 제한한 시각을 지키고, 없는 사용자는 null이다", async () => {
+    it("공식 라이브러리 계정은 제한하지 않는다", async () => {
+      const official = "c00000000000000000012";
+      await seedDocs(db, {
+        users: [
+          userDoc({
+            id: OFFICIAL_LIBRARY_USER_ID,
+            name: OFFICIAL_LIBRARY_NAME,
+          }),
+        ],
+        decks: [
+          deckDoc({
+            id: official,
+            userId: OFFICIAL_LIBRARY_USER_ID,
+            visibility: "public",
+            slides: SLIDES,
+          }),
+        ],
+      });
+
+      expect(await banUser(db, OFFICIAL_LIBRARY_USER_ID)).toEqual({
+        status: "official",
+      });
+
+      expect(await bannedAt(OFFICIAL_LIBRARY_USER_ID)).toBeNull();
+      expect((await decksCol(db).doc(official).get()).data()?.listed).toBe(
+        true,
+      );
+      expect(await events()).toEqual([]);
+    });
+
+    it("다시 제한해도 처음 제한한 시각을 지키고, 없는 사용자는 not_found다", async () => {
       const first = new Date(1000);
       await banUser(db, A, first);
 
       expect(await banUser(db, A, new Date(2000))).toEqual({
+        status: "banned",
         takenDownDeckIds: [],
         revokedSessions: 0,
       });
@@ -450,7 +632,7 @@ describe("신고·게시 중단 운영 작업", () => {
       expect(
         (await events()).filter((event) => event.action === "ban"),
       ).toHaveLength(1);
-      expect(await banUser(db, NOBODY)).toBeNull();
+      expect(await banUser(db, NOBODY)).toEqual({ status: "not_found" });
     });
 
     it("제한을 풀면 다시 공개할 수 있고, 게시 중단한 곡은 그대로 둔다", async () => {

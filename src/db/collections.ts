@@ -201,13 +201,24 @@ export interface ReportDoc {
 }
 
 /**
- * 운영 기록: 게시 중단·해제와 계정 제한·해제. `ops/moderation.ts`가 그 일과 같은 트랜잭션에서
- * 쓴다. 곡이 지워져도 남아, 누구의 곡을 무슨 제목으로 게시 중단했는지 보고 같은 사람이 다시 올린
- * 곡을 알아본다. 문서 id는 `createId()`다.
+ * 운영 기록: 게시 중단·해제와 계정 제한·해제. 그 일과 같은 트랜잭션에서 쓴다
+ * (`queries/takedowns.ts`의 `recordModerationEvent`). 곡이 지워져도 남아, 누구의 곡을 무슨 제목으로
+ * 게시 중단했는지 보고 같은 사람이 다시 올린 곡을 알아본다. 문서 id는 `createId()`다.
  */
 export interface ModerationEventDoc {
   id: string;
   action: "takedown" | "restore" | "ban" | "unban";
+  /**
+   * 왜 한 일인지. `direct`는 운영자가 이 곡이나 계정을 골라 한 일, `fork`는 가져온 원본
+   * (`sourceDeckId`)이 게시 중단돼 함께 막은 곡, `ban`은 주인의 계정을 제한하며 함께 막은 곡이다.
+   * `fork`로 막힌 곡의 주인은 원본을 가져갔을 뿐 그 가사를 올린 사람이 아니므로, 같은 사람이 다시
+   * 올린 곡을 찾을 때는 빼고 본다.
+   */
+  cause: "direct" | "fork" | "ban";
+  /** `fork`일 때 게시 중단된 원본 곡 id. 아니면 `null` */
+  sourceDeckId: string | null;
+  /** 운영자가 남긴 사유(`scripts/moderation.mjs`의 `--note`). 없으면 `null` */
+  note: string | null;
   /** 곡 주인이나 제한한 계정 */
   userId: string;
   /** 곡에 한 일이면 곡 id와 그때의 제목, 계정에 한 일이면 `null` */

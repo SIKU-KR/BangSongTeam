@@ -25,6 +25,8 @@ export const API_ERRORS = {
   auth: {
     signUpInProgress:
       "이 이메일로 가입하는 중이에요. 잠시 후 다시 시도해 주세요",
+    dailySignUpLimit:
+      "오늘은 이 네트워크에서 더 가입할 수 없어요. 내일 다시 가입하거나 소셜 계정으로 로그인해 주세요",
   },
   deck: {
     libraryOnly: "보관함 곡만 저장할 수 있어요",

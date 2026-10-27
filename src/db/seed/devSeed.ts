@@ -19,6 +19,7 @@ import {
   COLLECTIONS,
   chunkIds,
   decksCol,
+  signUpQuotasCol,
   usersCol,
   type DeckDoc,
 } from "../collections";
@@ -162,6 +163,13 @@ async function resetSeedUsers(db: Db): Promise<void> {
   ]);
 }
 
+async function clearSignUpQuotas(db: Db): Promise<void> {
+  const snapshot = await signUpQuotasCol(db).get();
+  await runBulk(db, (writer) =>
+    snapshot.docs.map((doc) => writer.delete(doc.ref)),
+  );
+}
+
 async function upsertBackgrounds(
   db: Db,
   items: readonly SeedBackground[],
@@ -296,6 +304,9 @@ const OWNER_STYLES: DeckStyle[] = [
  *
  * 배경은 repo에 든 가벼운 이미지(`SeedBackground`)만 등록하고 곡에 입힌다. 운영 배경
  * 영상은 수 GB라 로컬 미디어 저장소에 올리지 않는다.
+ *
+ * 이메일 가입 하루 한도(`signUpQuotas`)도 비운다. 로컬 개발 서버는 모든 가입을 루프백 주소 하나로
+ * 세어(`limitEmailSignUps`) 가입을 여러 번 시험하면 그날은 더 가입하지 못한다.
  */
 export async function seedDevData(
   db: Db,
@@ -304,7 +315,7 @@ export async function seedDevData(
 ): Promise<DevSeedSummary> {
   if (songs.length === 0) throw new Error("시드할 곡이 없습니다");
 
-  await resetSeedUsers(db);
+  await Promise.all([resetSeedUsers(db), clearSignUpQuotas(db)]);
   await insertUsers(db, now);
 
   const library = songs.map((song, index) => toLibraryDeck(song, index, now));

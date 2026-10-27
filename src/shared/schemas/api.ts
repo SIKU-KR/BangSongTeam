@@ -180,3 +180,10 @@ export type EmailSignUpRequest = z.infer<typeof EmailSignUpRequestSchema>;
  * 다시 가입하게 안내한다.
  */
 export const SIGN_UP_IN_PROGRESS = "SIGN_UP_IN_PROGRESS";
+
+/**
+ * IP 하나에서 받는 그날 이메일 가입 수를 다 썼을 때 가입 응답(429)에 싣는 `code`. 이 한도는 한국 시간
+ * 0시에야 풀려 '잠시 후 다시'가 맞지 않으므로 다른 빈도 제한과 나눠 알린다. 상태 코드만 보는 옛
+ * 클라이언트는 다른 429와 같게 다룬다.
+ */
+export const DAILY_SIGN_UP_LIMIT_CODE = "DAILY_SIGN_UP_LIMIT";
