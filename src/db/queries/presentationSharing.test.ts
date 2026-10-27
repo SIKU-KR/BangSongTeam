@@ -327,21 +327,27 @@ describe("세트 링크 공유", () => {
       ).toBe("viewer");
     });
 
-    it("예전 링크로 들어오는 참여가 링크 재설정과 겹쳐도 멤버가 남지 않는다", async () => {
-      const oldToken = await shareAndJoin();
-      const resetDone = resetAfterFirstTokenLookup();
+    it.each([
+      ["이미 들어와 있던", MEMBER],
+      ["처음 들어오는", STRANGER],
+    ])(
+      "%s 사람의 예전 링크 참여가 링크 재설정과 겹쳐도 멤버로 남지 않는다",
+      async (_, userId) => {
+        const oldToken = await shareAndJoin();
+        const resetDone = resetAfterFirstTokenLookup();
 
-      await joinByToken(db, oldToken, MEMBER);
-      await resetDone();
-      vi.restoreAllMocks();
+        await joinByToken(db, oldToken, userId);
+        await resetDone();
+        vi.restoreAllMocks();
 
-      expect((await getShareSettings(db, DOC_ID, OWNER))?.token).not.toBe(
-        oldToken,
-      );
-      expect(await memberExists(MEMBER)).toBe(false);
-      expect(await resolvePresentationAccess(db, DOC_ID, MEMBER)).toBeNull();
-      expect(await getSharedPresentationDocuments(db, MEMBER)).toEqual([]);
-    });
+        expect((await getShareSettings(db, DOC_ID, OWNER))?.token).not.toBe(
+          oldToken,
+        );
+        expect(await memberExists(userId)).toBe(false);
+        expect(await resolvePresentationAccess(db, DOC_ID, userId)).toBeNull();
+        expect(await getSharedPresentationDocuments(db, userId)).toEqual([]);
+      },
+    );
   });
 
   describe("공유 목록의 폴더 읽기", () => {
