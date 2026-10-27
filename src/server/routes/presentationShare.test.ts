@@ -11,7 +11,7 @@ import {
   type ShareSettings,
 } from "#shared";
 import { presentationMembersCol } from "#db";
-import { clearDb, seedDocs, userDoc } from "../../db/test/fixtures";
+import { clearDb, deckDoc, seedDocs, userDoc } from "../../db/test/fixtures";
 import { createApp } from "../index";
 import type { SessionReader } from "../middleware/auth";
 
@@ -19,6 +19,8 @@ const OWNER = "aaaaaaaa0000000000011";
 const MEMBER = "bbbbbbbb0000000000012";
 const DOC_ID = "1000000000000000000cc";
 const DECK_ID = "c000000000000000000cc";
+const SOURCED_COPY_ID = "c000000000000000000dd";
+const LIBRARY_DECK_ID = "d000000000000000000cc";
 const FOLDER_ID = "f000000000000000000cc";
 
 let currentUser: string | null = OWNER;
@@ -339,6 +341,68 @@ describe("세트 링크 공유 라우트", () => {
       200,
     );
     expect((await as(MEMBER, `/api/presentations/${DOC_ID}`)).status).toBe(200);
+  });
+
+  it("공유받은 사람에게는 사본이 담아 온 소유자의 보관함 곡 id를 주지 않는다", async () => {
+    await seedDocs(env.DB, {
+      decks: [
+        deckDoc({ id: LIBRARY_DECK_ID, userId: OWNER, visibility: "private" }),
+      ],
+    });
+    const plain = makeDoc();
+    await as(
+      OWNER,
+      `/api/presentations/${DOC_ID}`,
+      send(
+        "PUT",
+        makeDoc({
+          items: plain.items.map((item) => ({
+            ...item,
+            deckId: SOURCED_COPY_ID,
+            deck: {
+              ...item.deck,
+              id: SOURCED_COPY_ID,
+              forkedFrom: LIBRARY_DECK_ID,
+            },
+          })),
+        }),
+      ),
+    );
+    const mine = await as<{ presentation: PresentationDocument }>(
+      OWNER,
+      `/api/presentations/${DOC_ID}`,
+    );
+    expect(mine.body.presentation.items[0].deck.forkedFrom).toBe(
+      LIBRARY_DECK_ID,
+    );
+
+    const { body: settings } = await as<ShareSettings>(
+      OWNER,
+      `/api/presentations/${DOC_ID}/share`,
+      send("PUT", { access: "view" }),
+    );
+    currentUser = null;
+    const preview = (await (
+      await app.request(`/api/share/${settings.token}`, {}, env)
+    ).json()) as SharePreviewResponse;
+    const joined = await as<JoinShareResponse>(
+      MEMBER,
+      `/api/share/${settings.token}/join`,
+      send("POST"),
+    );
+    const single = await as<{ presentation: PresentationDocument }>(
+      MEMBER,
+      `/api/presentations/${DOC_ID}`,
+    );
+    const list = await as<{ presentations: PresentationDocument[] }>(
+      MEMBER,
+      "/api/presentations",
+    );
+
+    expect(preview.document.items[0].deck.forkedFrom).toBeNull();
+    expect(joined.body.document.items[0].deck.forkedFrom).toBeNull();
+    expect(single.body.presentation.items[0].deck.forkedFrom).toBeNull();
+    expect(list.body.presentations[0].items[0].deck.forkedFrom).toBeNull();
   });
 
   it("로그인하지 않으면 링크로 들어오지 못한다", async () => {

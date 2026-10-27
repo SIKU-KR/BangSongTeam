@@ -119,7 +119,9 @@ export async function getPresentationDocument(
 }
 
 /**
- * 공유받은 사람에게 주는 모양. 폴더·휴지통은 소유자의 드라이브 배치라 비운다.
+ * 공유받은 사람에게 주는 모양. 폴더·휴지통은 소유자의 드라이브 배치라 비운다. 사본이 담아 온
+ * 보관함 곡(`forkedFrom`)도 소유자의 보관함이라 비운다. 서버는 저장한 사람 자신의 곡을 가리킬
+ * 때만 남기므로, 그대로 주면 소유자의 비공개 곡 id가 링크를 아는 누구에게나 드러난다.
  * `memberId`가 없으면 로그인하지 않고 링크로 보는 사람이다.
  */
 function toSharedDocument(
@@ -131,6 +133,10 @@ function toSharedDocument(
     ...document,
     folderId: null,
     trashedAt: null,
+    items: document.items.map((item) => ({
+      ...item,
+      deck: { ...item.deck, forkedFrom: null },
+    })),
     access: memberId ? { ownerName, memberId } : { ownerName },
   };
 }
