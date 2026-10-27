@@ -20,9 +20,13 @@ export interface LoadResult<T> {
   corrupted: CorruptedRecord[];
 }
 
-/** 프레젠테이션 저장본 전체를 읽은 결과. `repairedIds`는 글 한도에 맞춰 줄여 읽은 저장본의 id다 */
+/**
+ * 프레젠테이션 저장본 전체를 읽은 결과. `repairedIds`는 글 한도에 맞춰 줄여 읽은 저장본의 id,
+ * `restoredIds`는 보관본에서 되살려 그 자리에 다시 쓴 저장본의 id다
+ */
 export interface PresentationLoadResult extends LoadResult<Presentation> {
   repairedIds: string[];
+  restoredIds: string[];
 }
 
 /**
@@ -72,6 +76,7 @@ interface ReadPresentation {
 interface HealedRow {
   row: unknown;
   keptRemain: boolean;
+  restored: boolean;
 }
 
 const KEPT_COPY_MARK = "#kept#";
@@ -186,10 +191,12 @@ async function healKeptCopies(db: OfflineDB, id: string): Promise<HealedRow> {
     const copies: unknown[] = await tx.store.getAll(keptRange(id));
     if (stored === undefined) {
       await tx.store.delete(keptRange(id));
-      return { row: undefined, keptRemain: false };
+      return { row: undefined, keptRemain: false, restored: false };
     }
     const current = readPresentation(stored);
-    if (!current) return { row: stored, keptRemain: keys.length > 0 };
+    if (!current) {
+      return { row: stored, keptRemain: keys.length > 0, restored: false };
+    }
 
     let newest = current.presentation;
     let keptRemain = false;
@@ -204,9 +211,11 @@ async function healKeptCopies(db: OfflineDB, id: string): Promise<HealedRow> {
       if (read.presentation.access && !current.presentation.access) continue;
       if (isNewer(read.presentation, newest)) newest = read.presentation;
     }
-    if (newest === current.presentation) return { row: stored, keptRemain };
+    if (newest === current.presentation) {
+      return { row: stored, keptRemain, restored: false };
+    }
     await tx.store.put(newest);
-    return { row: newest, keptRemain };
+    return { row: newest, keptRemain, restored: true };
   })();
   const [healed] = await Promise.all([heal, tx.done]);
   return healed;
@@ -239,6 +248,8 @@ function replaceRow(rows: unknown[], id: string, row: unknown): void {
  *   서버 사본을 고르는 것과 같은 나중 쓰기 우선이다. 다만 공유받은 사본은 소유자 자신의 저장본
  *   자리에 되살리지 않는다(`saveSharedPresentation`). 아직 읽지 못한 보관본은 남기고 원래 id로
  *   한 번만 알린다. 고치지 못하면(트랜잭션 실패) 보관본을 그대로 두고 알린다.
+ * - 되살려 다시 쓴 저장본의 id는 `restoredIds`로 돌려준다. 다른 탭은 되살리기 전 판을 메모리에
+ *   들고 있으므로 부른 쪽이 알린다.
  *
  * 보관본 고치기 말고는 쓰지 않는다.
  */
@@ -255,11 +266,13 @@ export async function loadAllPresentations(): Promise<PresentationLoadResult> {
   }
 
   const keptUnread = new Set<string>();
+  const restoredIds: string[] = [];
   for (const id of keptOwners) {
     try {
       const healed = await healKeptCopies(db, id);
       replaceRow(rows, id, healed.row);
       if (healed.keptRemain) keptUnread.add(id);
+      if (healed.restored) restoredIds.push(id);
     } catch {
       keptUnread.add(id);
     }
@@ -284,7 +297,7 @@ export async function loadAllPresentations(): Promise<PresentationLoadResult> {
   }
   unreadableAtLoad = unreadable;
 
-  return { valid, corrupted, repairedIds };
+  return { valid, corrupted, repairedIds, restoredIds };
 }
 
 /**

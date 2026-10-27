@@ -273,6 +273,11 @@ export async function flushPendingWrites(): Promise<void> {
  * 그 저장본을 다시 싣는다. 그 전에 고친 세트는 고친 판을 그대로 저장한다. 다른 계정의 저장본은
  * 싣지 않으므로 다시 쓰지도 않는다.
  *
+ * 읽으면서 보관본에서 되살린 프레젠테이션(`loadAllPresentations`의 `restoredIds`)은 싣고 나서 다른
+ * 탭에 알린다. 되살리기는 저장 줄 밖의 쓰기라, 알리지 않으면 다른 탭이 되살리기 전 판을 메모리에 든
+ * 채 다음 편집으로 덮고, 보관본은 이미 지워져 되살린 판을 잃는다. 알림에는 세션 사용자 id가 붙으므로
+ * 이 탭이 실은 프레젠테이션만 알린다.
+ *
  * 읽지 못하면 메모리를 비우고 저장을 끈다. 앞 계정의 세트가 남으면 다음 병합이 그 세트를 새
  * 계정에 올리고, 저장을 켜 두면 읽지 못한 저장본을 병합 결과로 덮는다.
  */
@@ -287,6 +292,7 @@ export async function hydrateFromStorage(): Promise<void> {
       valid,
       corrupted,
       repairedIds: fittedIds,
+      restoredIds,
     } = await loadAllPresentations();
     reportCorruptedRecords(corrupted);
 
@@ -299,6 +305,10 @@ export async function hydrateFromStorage(): Promise<void> {
     replaceAll(documents);
     clearHistory();
     notifyListeners();
+    announceStorageChange(
+      "presentations",
+      restoredIds.filter((id) => state.byId[id] !== undefined),
+    );
 
     persistenceEnabled = true;
     clearPersistenceError();

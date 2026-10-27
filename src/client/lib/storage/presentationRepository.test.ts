@@ -403,7 +403,7 @@ describe("presentationRepository", () => {
         await savePresentation(makePresentation({ id, updatedAt: T1 }));
         await seedRawRecord({ ...overLimitRow(id, T2), id: keptKey(id, T2) });
 
-        const { valid, corrupted } = await loadAllPresentations();
+        const { valid, corrupted, restoredIds } = await loadAllPresentations();
 
         expect(valid).toHaveLength(1);
         expect(valid[0]).toMatchObject({
@@ -412,6 +412,7 @@ describe("presentationRepository", () => {
           title: FITTED_TITLE,
         });
         expect(corrupted).toEqual([]);
+        expect(restoredIds).toEqual([id]);
         expect(await storedKeys()).toEqual([id]);
         expect(await rowAt(id)).toEqual(valid[0]);
       });
@@ -422,11 +423,46 @@ describe("presentationRepository", () => {
         await savePresentation(current);
         await seedRawRecord({ ...overLimitRow(id, T2), id: keptKey(id, T2) });
 
-        const { valid, corrupted } = await loadAllPresentations();
+        const { valid, corrupted, restoredIds } = await loadAllPresentations();
 
         expect(valid).toEqual([current]);
         expect(corrupted).toEqual([]);
+        expect(restoredIds).toEqual([]);
         expect(await storedKeys()).toEqual([id]);
+      });
+
+      it("지금 저장본을 읽지 못하면 읽을 수 있는 보관본도 그대로 두고, 그 자리를 덮은 다음에 되살린다", async () => {
+        const id = createId();
+        const unreadable = unreadableRow(id, T3);
+        const keptAtT2 = { ...overLimitRow(id, T2), id: keptKey(id, T2) };
+        await seedRawRecord(unreadable);
+        await seedRawRecord(keptAtT2);
+
+        const first = await loadAllPresentations();
+
+        expect(first.valid).toEqual([]);
+        expect(first.corrupted).toEqual([{ id }]);
+        expect(first.restoredIds).toEqual([]);
+        expect(await rowAt(id)).toEqual(unreadable);
+        expect(await rowAt(keptKey(id, T2))).toEqual(keptAtT2);
+
+        await savePresentation(makePresentation({ id, updatedAt: T1 }));
+        const second = await loadAllPresentations();
+
+        expect(second.valid).toHaveLength(1);
+        expect(second.valid[0]).toMatchObject({
+          id,
+          updatedAt: T2,
+          title: FITTED_TITLE,
+        });
+        expect(second.corrupted).toEqual([{ id }]);
+        expect(second.restoredIds).toEqual([id]);
+        expect(await rowAt(id)).toEqual(second.valid[0]);
+        expect(await rowAt(keptKey(id, T3))).toEqual({
+          ...unreadable,
+          id: keptKey(id, T3),
+        });
+        expect(await storedKeys()).toEqual([id, keptKey(id, T3)].sort());
       });
 
       it("아직 읽지 못하는 보관본은 남기고 원래 id로 한 번만 알린다", async () => {
@@ -458,10 +494,11 @@ describe("presentationRepository", () => {
           id: keptKey(id, T2),
         });
 
-        const { valid, corrupted } = await loadAllPresentations();
+        const { valid, corrupted, restoredIds } = await loadAllPresentations();
 
         expect(valid).toEqual([owned]);
         expect(corrupted).toEqual([]);
+        expect(restoredIds).toEqual([]);
         expect(await storedKeys()).toEqual([id]);
       });
 
@@ -494,6 +531,7 @@ describe("presentationRepository", () => {
 
         expect(first.valid).toEqual([kept]);
         expect(second.valid).toEqual([kept]);
+        expect([...first.restoredIds, ...second.restoredIds]).toEqual([id]);
         expect(await storedKeys()).toEqual([id]);
         expect(await rowAt(id)).toEqual(kept);
       });

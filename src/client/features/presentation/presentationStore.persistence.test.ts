@@ -1386,6 +1386,38 @@ describe("presentationStore 영속성", () => {
       other.close();
     });
 
+    it("싣다가 보관본에서 되살린 세션 사용자의 프레젠테이션은 그 id를 알린다", async () => {
+      const other = tabs.otherTab(CHANNEL);
+      const RESTORED_AT = "2026-10-01T00:00:00.000Z";
+      const [mine, seeded] = SEED_PRESENTATIONS;
+      const theirs: Presentation = { ...seeded, userId: OTHER_USER };
+      await seedPresentationsIntoStorage([mine, theirs]);
+      for (const doc of [mine, theirs]) {
+        await putRawRecord({
+          ...doc,
+          id: `${doc.id}#kept#${RESTORED_AT}`,
+          title: "보관본에서 되살린 제목",
+          updatedAt: RESTORED_AT,
+        });
+      }
+
+      await hydrateFromStorage();
+      await nextTask();
+
+      expect(getPresentationById(mine.id)?.title).toBe(
+        "보관본에서 되살린 제목",
+      );
+      expect(other.received).toEqual([
+        {
+          v: 1,
+          userId: SEED_USER_ID,
+          kind: "presentations",
+          ids: [mine.id],
+        },
+      ]);
+      other.close();
+    });
+
     it("저장소에 쓰지 못한 세트는 알리지 않는다", async () => {
       const other = tabs.otherTab(CHANNEL);
       await hydrateFromStorage();
