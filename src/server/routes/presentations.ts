@@ -1,5 +1,4 @@
 import { Hono, type Context } from "hono";
-import { zValidator } from "@hono/zod-validator";
 import {
   API_ERRORS,
   isReservedDocumentId,
@@ -25,6 +24,11 @@ import { resolveRequireAuth, type AppDeps } from "../deps";
 import { isTransientStorageError } from "../lib/storageErrors";
 import { logServerError } from "../lib/requestLog";
 import { idParam } from "../lib/params";
+import { jsonBody } from "../lib/jsonBody";
+import {
+  PRESENTATION_BODY_MAX_BYTES,
+  SMALL_BODY_MAX_BYTES,
+} from "../middleware/bodyLimit";
 import { hasAgreedToTerms } from "../middleware/consent";
 
 async function save(c: Context<AppEnv>, changes: PresentationChanges) {
@@ -75,8 +79,14 @@ async function save(c: Context<AppEnv>, changes: PresentationChanges) {
 export function createPresentationsRoute(deps: AppDeps = {}) {
   const savedId = idParam(API_ERRORS.idMismatch, 400);
   const presentationId = idParam(API_ERRORS.presentation.notAccessible, 404);
-  const documentBody = zValidator("json", PresentationDocumentSchema);
-  const changesBody = zValidator("json", PresentationChangesSchema);
+  const documentBody = jsonBody(
+    PresentationDocumentSchema,
+    PRESENTATION_BODY_MAX_BYTES,
+  );
+  const changesBody = jsonBody(
+    PresentationChangesSchema,
+    PRESENTATION_BODY_MAX_BYTES,
+  );
 
   return new Hono<AppEnv>()
     .use("*", resolveRequireAuth(deps))
@@ -130,7 +140,7 @@ export function createPresentationsRoute(deps: AppDeps = {}) {
     .put(
       "/:id/share",
       presentationId,
-      zValidator("json", UpdateShareSettingsRequestSchema),
+      jsonBody(UpdateShareSettingsRequestSchema, SMALL_BODY_MAX_BYTES),
       async (c) => {
         const { access } = c.req.valid("json");
         if (access !== "off" && !(await hasAgreedToTerms(c))) {

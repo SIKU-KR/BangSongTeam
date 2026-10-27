@@ -1,5 +1,4 @@
 import { Hono } from "hono";
-import { zValidator } from "@hono/zod-validator";
 import { API_ERRORS, FolderSchema } from "#shared";
 import {
   getFoldersByUserId,
@@ -12,6 +11,8 @@ import { resolveRequireAuth, type AppDeps } from "../deps";
 import { isTransientStorageError } from "../lib/storageErrors";
 import { logServerError } from "../lib/requestLog";
 import { idParam } from "../lib/params";
+import { jsonBody } from "../lib/jsonBody";
+import { SMALL_BODY_MAX_BYTES } from "../middleware/bodyLimit";
 
 /**
  * 드라이브 폴더 동기화 API (홈 `/presentations`의 폴더 트리).
@@ -23,6 +24,7 @@ import { idParam } from "../lib/params";
 export function createFoldersRoute(deps: AppDeps = {}) {
   const savedId = idParam(API_ERRORS.idMismatch, 400);
   const folderId = idParam(API_ERRORS.folder.notAccessible, 404);
+  const folderBody = jsonBody(FolderSchema, SMALL_BODY_MAX_BYTES);
 
   return new Hono<AppEnv>()
     .use("*", resolveRequireAuth(deps))
@@ -35,7 +37,7 @@ export function createFoldersRoute(deps: AppDeps = {}) {
       ]);
       return c.json({ folders, tombstones }, 200);
     })
-    .put("/:id", savedId, zValidator("json", FolderSchema), async (c) => {
+    .put("/:id", savedId, folderBody, async (c) => {
       const userId = c.get("userId") as string;
       const folder = c.req.valid("json");
 

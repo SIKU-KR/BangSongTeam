@@ -149,4 +149,35 @@ describe("POST /api/client-reports", () => {
     });
     expect(otherIp.status).toBe(204);
   });
+
+  it("빈도 제한에 걸린 보고는 본문을 읽지 않고 429다", async () => {
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    const app = createApp();
+    const headers = { "x-forwarded-for": "203.0.113.9" };
+    for (let index = 0; index < 30; index += 1) {
+      expect((await post(app, validBatch, headers)).status).toBe(204);
+    }
+    let pulled = 0;
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        pulled += 16 * 1024;
+        controller.enqueue(new Uint8Array(16 * 1024).fill(0x20));
+        if (pulled >= 3 * 1024 * 1024) controller.close();
+      },
+    });
+
+    const res = await app.request(
+      "/api/client-reports",
+      {
+        method: "POST",
+        headers: { "content-type": "application/json", ...headers },
+        body,
+        duplex: "half",
+      } as RequestInit,
+      env,
+    );
+
+    expect(res.status).toBe(429);
+    expect(pulled).toBeLessThan(CLIENT_REPORT_MAX_BYTES * 8);
+  });
 });

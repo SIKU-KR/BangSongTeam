@@ -1,6 +1,5 @@
 import { Hono } from "hono";
 import { createMiddleware } from "hono/factory";
-import { zValidator } from "@hono/zod-validator";
 import {
   API_ERRORS,
   CLIENT_REPORT_MAX_BYTES,
@@ -10,7 +9,7 @@ import type { AppEnv } from "../types";
 import { createFixedWindowLimiter } from "../lib/rateLimit";
 import { clientIp } from "../lib/clientIp";
 import { writeLog } from "../lib/requestLog";
-import { limitBody } from "../middleware/bodyLimit";
+import { jsonBody } from "../lib/jsonBody";
 
 const REPORTS_PER_WINDOW = 30;
 const REPORT_WINDOW_MS = 60_000;
@@ -41,8 +40,7 @@ export function createClientReportsRoute() {
   return new Hono<AppEnv>().post(
     "/",
     rateLimit,
-    limitBody(CLIENT_REPORT_MAX_BYTES),
-    zValidator("json", ClientReportBatchSchema),
+    jsonBody(ClientReportBatchSchema, CLIENT_REPORT_MAX_BYTES),
     (c) => {
       const { appVersion, reports } = c.req.valid("json");
       for (const report of reports) {
