@@ -1,4 +1,4 @@
-import type { Deck } from "#shared";
+import { isFarFuture, type Deck } from "#shared";
 
 interface LibraryMergeResult {
   decks: Deck[];
@@ -45,12 +45,40 @@ export function hasSameServerFields(a: Deck, b: Deck): boolean {
   );
 }
 
+const NON_CONTENT_DECK_KEYS: ReadonlySet<string> = new Set([
+  ...SERVER_OWNED_DECK_KEYS,
+  "createdAt",
+  "updatedAt",
+]);
+
+/**
+ * 곡 내용이 모두 같은지. 서버가 정하는 공유 필드와 시각을 뺀 모든 필드를 견주고, 값이 없는 필드는
+ * null로 본다.
+ *
+ * 서버는 기기가 보낸 시각을 줄이고 만든 시각은 처음 값을 지켜, 받은 내용 그대로인 곡을 다른 시각으로
+ * 돌려준다. 빼지 않은 필드는 모두 견주므로, 나중에 곡에 고칠 수 있는 필드가 생겨도 그 수정을 같은
+ * 내용으로 보고 덮지 않는다. 슬라이드·서식은 스키마로 읽은 값이라 JSON으로 견준다.
+ */
+export function hasSameDeckContent(a: Deck, b: Deck): boolean {
+  const keys = new Set([...Object.keys(a), ...Object.keys(b)]);
+  return [...keys].every(
+    (key) =>
+      NON_CONTENT_DECK_KEYS.has(key) ||
+      JSON.stringify(a[key as keyof Deck] ?? null) ===
+        JSON.stringify(b[key as keyof Deck] ?? null),
+  );
+}
+
 /**
  * 보관함 곡 병합.
  *
  * 가사·슬라이드·스타일 같은 내용은 곡 단위 Last-Write-Wins로 고른다
  * (`mergeDocuments`와 같은 이유로 필드 단위로 섞지 않는다). 공유 필드는
  * `updatedAt`과 무관하게 항상 서버 값이다.
+ *
+ * 로컬 시각이 기기 시계보다 한참 앞서면(`isFarFuture`) 로컬 사본이 더 늦어도 서버 사본을 고른다.
+ * 빠른 시계가 남긴 값이라, 이기게 두면 부팅마다 다시 올라가고 서버가 줄인 시각이 그동안 다른 기기의
+ * 수정을 옛 수정으로 막는다.
  *
  * 지운 곡(`deletedIds`: 서버의 삭제 기록과 이 페이지에서 지운 곡)은 양쪽에서 뺀다. 지우기가
  * 로컬에만 있는 사본이나 더 새로운 로컬 사본보다 우선한다. 오래된 기기·탭이 다시 올린 서버
@@ -84,7 +112,10 @@ export function mergeLibraryDecks(
       continue;
     }
 
-    if (localDeck.updatedAt > serverDeck.updatedAt) {
+    if (
+      localDeck.updatedAt > serverDeck.updatedAt &&
+      !isFarFuture(localDeck.updatedAt)
+    ) {
       byId.set(localDeck.id, withServerFields(localDeck, serverDeck));
       needsPush.push(localDeck.id);
     }
