@@ -8,6 +8,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { decodeHtmlEntities, worshipFileName } from "./lib/songText.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT_DIR = path.resolve(__dirname, "..");
@@ -16,10 +17,6 @@ const WORSHIP_JSON = path.join(ROOT_DIR, "data", "extracted", "worship.json");
 
 const USER_AGENT =
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
-
-function sanitizeFilename(name) {
-  return name.replace(/[\\/:*?"<>|]/g, "_").trim();
-}
 
 const SEARCH_KEYWORDS = [
   // 1. 대표 워십팀
@@ -143,10 +140,10 @@ async function fetchTrackDetail(trackId) {
     );
     const xmpMatch = html.match(/<xmp>([\s\S]*?)<\/xmp>/);
 
-    const title = titleMatch ? titleMatch[1].trim() : "";
-    const artist = artistMatch ? artistMatch[1].trim() : "";
-    const album = albumMatch ? albumMatch[1].trim() : "";
-    const rawLyrics = xmpMatch ? xmpMatch[1].trim() : "";
+    const title = titleMatch ? decodeHtmlEntities(titleMatch[1]).trim() : "";
+    const artist = artistMatch ? decodeHtmlEntities(artistMatch[1]).trim() : "";
+    const album = albumMatch ? decodeHtmlEntities(albumMatch[1]).trim() : "";
+    const rawLyrics = xmpMatch ? decodeHtmlEntities(xmpMatch[1]).trim() : "";
 
     // 가사가 없거나 MR, Inst는 건너뜀
     if (!rawLyrics || rawLyrics.length < 20) return null;
@@ -221,11 +218,7 @@ async function main() {
       }
       worshipSongs.push(song);
 
-      // 파일명: [아티스트] 제목.txt
-      const safeArtist = sanitizeFilename(song.artist || "Unknown");
-      const safeTitle = sanitizeFilename(song.title);
-      const filename = `[${safeArtist}] ${safeTitle}.txt`;
-      const filePath = path.join(WORSHIP_DIR, filename);
+      const filePath = path.join(WORSHIP_DIR, worshipFileName(song));
 
       const fileContent = [
         `제목: ${song.title}`,

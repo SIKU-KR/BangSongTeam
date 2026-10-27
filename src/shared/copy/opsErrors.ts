@@ -12,6 +12,10 @@ export const OPS_ERRORS = {
       "가져온 원본이 게시 중단된 곡이라 다시 공개할 수 없어요. 원본의 게시 중단을 먼저 풀어 주세요",
     nothingToRestore: "게시 중단된 곡이 아니에요. 곡 id를 확인해 주세요",
   },
+  libraryFix: {
+    invalidFile:
+      "고칠 곡 목록의 형식이 맞지 않아요. 곡마다 title·artist와 함께 nextTitle이나 lyrics(from·to)를 적어 주세요",
+  },
   report: {
     notFound: "신고를 찾을 수 없어요",
     alreadyResolved:
