@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach } from "vitest";
 import { OFFICIAL_LIBRARY_NAME, OFFICIAL_LIBRARY_USER_ID } from "#shared";
 import type { Db } from "../client";
 import {
+  COLLECTIONS,
   decksCol,
   driveTombstonesCol,
   memberDocId,
@@ -116,9 +117,18 @@ describe("다른 계정으로 데이터 옮기기", () => {
       ],
       members: [
         { presentationId: OWN, userId: O },
+        { presentationId: OWN, userId: B },
         { presentationId: SHARED, userId: A },
       ],
     });
+    await Promise.all(
+      [A, B].map((userId) =>
+        db
+          .collection(COLLECTIONS.sessions)
+          .doc(`s-${userId}`)
+          .set({ id: `s-${userId}`, userId }),
+      ),
+    );
     await driveTombstonesCol(db)
       .doc("gone")
       .set({ itemId: "gone", userId: A, kind: "presentation" });
@@ -143,7 +153,7 @@ describe("다른 계정으로 데이터 옮기기", () => {
     expect(await reassignUserData(db, { fromUserId: A, toUserId: B })).toEqual({
       status: "ready",
       counts: {
-        sessions: 0,
+        sessions: 1,
         folders: 1,
         presentations: 1,
         libraryDecks: 1,
@@ -155,6 +165,27 @@ describe("다른 계정으로 데이터 옮기기", () => {
       },
     });
     expect(await getMyLibraryDecks(db, B)).toEqual([]);
+    expect(
+      (await db.collection(COLLECTIONS.sessions).doc(`s-${A}`).get()).exists,
+    ).toBe(true);
+  });
+
+  it("옛 계정의 세션만 끊고, 새 계정이 갖게 된 프레젠테이션의 멤버 기록은 지운다", async () => {
+    const result = await reassignUserData(db, {
+      fromUserId: A,
+      toUserId: B,
+      apply: true,
+    });
+
+    expect(result).toMatchObject({ status: "moved", counts: { sessions: 1 } });
+    const session = (userId: string) =>
+      db.collection(COLLECTIONS.sessions).doc(`s-${userId}`).get();
+    expect((await session(A)).exists).toBe(false);
+    expect((await session(B)).exists).toBe(true);
+    const member = (userId: string) =>
+      presentationMembersCol(db).doc(memberDocId(OWN, userId)).get();
+    expect((await member(B)).exists).toBe(false);
+    expect((await member(O)).exists).toBe(true);
   });
 
   it("폴더·프레젠테이션과 사본·보관함 곡을 새 계정으로 옮기고 색인과 가져간 횟수는 그대로 둔다", async () => {

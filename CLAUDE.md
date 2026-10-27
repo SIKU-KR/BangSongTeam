@@ -18,7 +18,7 @@ pnpm typecheck && pnpm lint && pnpm test   # must pass before pushing (the CI ga
 - Run `pnpm fonts:previews` after editing `noonnuFontCatalog.ts`.
 - For UI changes, check the real rendering in Chrome against `pnpm dev`.
 - Deploys (image, Firestore rules and indexes) run only in CI on push to `main`.
-- Scripts with `--target=remote` (`seedSelected`, `importBackgrounds`, `moderation`, `migrateFromCloudflare`, `reindexDecks`) write to production Firestore or GCS. Ask before running them.
+- Any script run with `--target=remote` reads or writes production Firestore or GCS, and some delete or move user data. Ask before every such run, previews included.
 
 ## Conventions
 

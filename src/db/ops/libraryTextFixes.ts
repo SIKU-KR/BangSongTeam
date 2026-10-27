@@ -100,11 +100,32 @@ function textChanges(deck: DeckDoc, fix: LibraryTextFix): TextChanges | null {
   return Object.keys(changes).length > 0 ? changes : null;
 }
 
+function songKey(title: string, artist: string): string {
+  return `${clampText(title, MAX_DECK_TITLE_LENGTH)}\u0000${clampText(artist, MAX_DECK_ARTIST_LENGTH)}`;
+}
+
 /**
- * 공식 라이브러리 곡을 제목·아티스트로 찾는다. 운영에는 100자로 줄이기 전에 넣은 곡과 줄여 넣은
- * 곡이 섞여 있어 두 모양을 모두 찾는다. 주인·제목의 같음 조건만 써서 복합 색인이 필요 없고,
- * 아티스트·사본 여부는 받아 온 뒤 거른다. 사용자가 가져간 곡은 제목이 같아도 읽지 않는다.
+ * 고칠 목록의 옛 제목을 고친 제목으로 바꾸는 함수를 만든다. 목록에 없는 곡은 받은 제목 그대로다.
+ * `scripts/seedSelected.mjs`가 쓴다.
+ *
+ * 시드는 제목·아티스트가 같은 곡을 건너뛰어 여러 번 돌려도 곡이 겹치지 않는다. 그런데 고친 원본
+ * (`data/cleaned/songs.json`)을 `fixLibraryText`보다 먼저 시드하면 고친 제목이 운영에 남은 옛 제목과
+ * 달라 같은 곡이 하나 더 들어가고, 뒤에 옛 곡을 고치면 제목·아티스트까지 같은 곡이 둘이 된다. 그래서
+ * 시드는 들어간 곡과 넣을 곡을 모두 고친 제목으로 견주고, 옛 제목으로 들어온 곡도 고친 제목으로 넣는다.
+ * 운영에는 100자로 줄이기 전에 넣은 곡과 줄여 넣은 곡이 섞여 있어 줄인 제목·아티스트끼리 견준다.
  */
+export function libraryTitleCorrector(
+  fixes: readonly LibraryTextFix[],
+): (title: string, artist: string) => string {
+  const nextTitles = new Map<string, string>();
+  for (const fix of fixes) {
+    if (fix.nextTitle !== undefined) {
+      nextTitles.set(songKey(fix.title, fix.artist), fix.nextTitle);
+    }
+  }
+  return (title, artist) => nextTitles.get(songKey(title, artist)) ?? title;
+}
+
 async function findOfficialDecks(
   db: Db,
   title: string,
@@ -150,11 +171,13 @@ async function applyFix(
  *
  * 시드 원본(`data/cleaned/songs.json`)에 남았던 HTML 엔티티(`Love &amp; Grace`)와 파일 이름용으로
  * 바꾼 글자(`John 1_12`)가 그대로 운영에 들어가 모든 사용자에게 보인다. 원본을 고쳐도 시드 스크립트는
- * 제목·아티스트가 같은 곡만 건너뛰므로 다시 돌리면 고친 제목으로 곡이 하나 더 생긴다. 그래서 이미
- * 들어간 곡을 제자리에서 고친다.
+ * 이미 들어간 곡을 건너뛰기만 하므로(`libraryTitleCorrector`), 들어간 곡은 제자리에서 고친다.
  *
  * - 공식 계정의 보관함 곡만 고친다. 사용자가 가져간 곡과 같은 제목의 사용자 곡은 그 사람의 사본이라
  *   그대로 둔다.
+ * - 곡은 운영에 넣은 그대로의 제목·아티스트로 찾는다. 운영에는 100자로 줄이기 전에 넣은 곡과 줄여
+ *   넣은 곡이 섞여 있어 두 모양을 모두 찾는다. 주인·제목의 같음 조건만 써서 복합 색인이 필요 없고,
+ *   아티스트와 사본 여부는 받아 온 뒤 거른다.
  * - 곡마다 트랜잭션 하나에서 다시 읽고 고치며, 고친 문서를 `withDeckIndex`에 통과시키고 바뀌는
  *   필드만 쓴다. 가사는 원문(`lyricsRaw`)과 슬라이드 줄에서 같은 글을 바꿔 슬라이드 나눔과 id를
  *   지킨다.

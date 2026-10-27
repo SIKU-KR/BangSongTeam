@@ -22,15 +22,6 @@ import {
 import { withDeckIndex } from "../deckIndex";
 import { isBannedUser } from "../queries/limits";
 
-/**
- * 계정을 잃은 사용자를 돕는 운영 작업. `scripts/accountRecovery.mjs`가 쓴다.
- *
- * Cloudflare(D1)에서 옮겨 온 사용자는 카카오·네이버·Google로만 가입했다. 운영에서 카카오·네이버
- * 로그인을 켜지 않으면 그 사람들은 들어올 길이 없고, 이메일로 새로 가입하면 빈 계정이 생긴다. 그래서
- * 본인 확인을 마친 한 사람에게 이메일·비밀번호 로그인을 더하거나(`addPasswordLogin`), 새로 만든
- * 계정으로 데이터를 옮긴다(`reassignUserData`). 둘 다 기본은 미리보기다.
- */
-
 const SOCIAL_ONLY_PROVIDERS = new Set(["kakao", "naver"]);
 
 const CHUNK_SIZE = 200;
@@ -61,7 +52,12 @@ export interface SocialOnlyUsers {
 
 /**
  * 카카오·네이버 계정만 연결돼, 그 로그인을 켜지 않은 운영에서는 들어올 수 없는 사용자를 센다.
- * 읽기만 한다. 로그인을 다시 켤지 정하기 전에 몇 명이 막혔는지 본다.
+ * 읽기만 한다. `scripts/accountRecovery.mjs`의 `social-only` 명령이 쓴다.
+ *
+ * Cloudflare(D1)에서 옮겨 온 사용자는 카카오·네이버·Google로만 가입했다. 카카오·네이버 로그인을 켜지
+ * 않은 운영에서 그 사람들은 들어올 길이 없고, 이메일로 새로 가입하면 빈 계정이 생긴다. 로그인을 다시
+ * 켤지, 본인 확인을 마친 한 사람씩 로그인을 더하거나(`addPasswordLogin`) 새 계정으로 데이터를
+ * 옮길지(`reassignUserData`) 정하기 전에 몇 명이 막혔는지 본다.
  */
 export async function countSocialOnlyUsers(
   db: Db,
@@ -141,7 +137,7 @@ export type AddPasswordLoginOptions = {
 /**
  * 카카오·네이버로만 들어오던 사용자에게 이메일·비밀번호 로그인을 더한다. 계정과 데이터는 그대로라
  * 그 이메일과 비밀번호로 로그인하면 원래 계정으로 들어온다. 본인 확인은 부르는 쪽(운영자)이 먼저
- * 한다.
+ * 한다. `scripts/accountRecovery.mjs`의 `add-password` 명령이 쓴다.
  *
  * - 사용자의 이메일을 받은 주소(소문자)로 바꾸고 이메일 예약을 옮긴다. 다른 사용자가 그 이메일을
  *   쓰고 있으면(`email_taken`) 아무것도 쓰지 않는다. 이메일 인증 여부는 바꾸지 않는다.
@@ -301,7 +297,6 @@ async function refsOf(query: Query): Promise<DocumentReference[]> {
   return (await query.select().get()).docs.map((doc) => doc.ref);
 }
 
-/** 문서 필드 하나를 옛 사용자 id에서 새 id로 바꾼다. 묶음마다 다시 읽어 아직 옛 id인 문서만 쓴다 */
 async function reassignField(
   db: Db,
   collection: string,
@@ -421,6 +416,7 @@ async function moveMemberships(
 /**
  * 한 사용자의 데이터를 다른 계정으로 옮긴다. 옛 계정으로 들어올 수 없는 사람이 새로 가입한 계정에서
  * 자기 데이터를 다시 쓰게 한다. 본인 확인은 부르는 쪽(운영자)이 먼저 한다. 기본은 미리보기다.
+ * `scripts/accountRecovery.mjs`의 `reassign` 명령이 쓴다.
  *
  * - 옛 계정의 로그인 세션을 먼저 끊는다. 이미 로그인한 기기는 세션 쿠키 캐시(5분) 동안 옛 계정에
  *   계속 쓸 수 있으니, 그런 기기가 있으면 5분 뒤 다시 실행해 그사이 생긴 것까지 옮긴다.

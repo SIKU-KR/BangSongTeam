@@ -1,8 +1,8 @@
 /**
  * 공식 라이브러리 곡의 제목·가사를 고친다 (`src/db/ops/libraryTextFixes.ts`). 고칠 목록은
  * `data/officialLibraryFixes.json`이고, 고친 원본 `data/cleaned/songs.json`과 같은 내용이다.
- * 원본을 고쳤다고 `seedSelected.mjs`를 다시 돌리면 고친 제목으로 곡이 하나 더 생기므로 이 스크립트로
- * 이미 넣은 곡을 제자리에서 고친다. 대상별 준비는 `lib/targets.mjs`를 따른다.
+ * 시드(`seedSelected.mjs`)는 이미 넣은 곡을 건너뛰기만 하므로, 원본을 고친 뒤 이미 넣은 곡은 이
+ * 스크립트로 제자리에서 고친다. 대상별 준비는 `lib/targets.mjs`를 따른다.
  *
  * 사용법:
  *   node scripts/fixLibraryText.mjs                          # 로컬 에뮬레이터에서 고칠 곡만 보여 준다

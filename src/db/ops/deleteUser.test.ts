@@ -38,6 +38,8 @@ const D2 = "c0000000000000000002d";
 const F1 = "c0000000000000000000f";
 const P1 = "c0000000000000000000p";
 const C1 = "c0000000000000000000c";
+const C2 = "c0000000000000000002c";
+const F2 = "c0000000000000000002f";
 const X1 = "p0000000000000000000x";
 const Y1 = "p0000000000000000000y";
 const G1 = "g0000000000000000000g";
@@ -288,6 +290,43 @@ describe("계정 삭제", () => {
       { userId: U, deckId: D1, cause: "direct" },
     ]);
     expect((await decksCol(db).doc(F1).get()).data()?.takedownAt).toEqual(NOW);
+  });
+
+  it("이미 없는 프레젠테이션을 가리키던 사본도 지우고, 그 사본을 가리키던 다른 사용자의 사본은 연결만 끊는다", async () => {
+    await seedDocs(db, {
+      decks: [
+        deckDoc({
+          id: C2,
+          userId: U,
+          presentationId: "p0000000000000000000z",
+          itemId: "i2",
+          position: 0,
+          slides: SLIDES,
+        }),
+        deckDoc({
+          id: F2,
+          userId: O,
+          presentationId: Y1,
+          itemId: "i3",
+          position: 0,
+          slides: SLIDES,
+          forkedFrom: C2,
+        }),
+      ],
+    });
+
+    expect(await deleteUserData(db, U, NOW)).toMatchObject({
+      status: "deleted",
+      before: { otherDecks: 2 },
+      remaining: NOTHING,
+    });
+
+    expect((await decksCol(db).doc(C2).get()).exists).toBe(false);
+    expect((await decksCol(db).doc(F2).get()).data()).toMatchObject({
+      userId: O,
+      presentationId: Y1,
+      forkedFrom: null,
+    });
   });
 
   it("in 조건 한도를 넘는 프레젠테이션과 사본도 모두 지운다", async () => {

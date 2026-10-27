@@ -11,6 +11,7 @@ import { searchPublicDecks } from "../queries/search";
 import { createTestDb, deckDoc, seedDocs, userDoc } from "../test/fixtures";
 import {
   fixLibraryText,
+  libraryTitleCorrector,
   parseLibraryTextFixes,
   type LibraryTextFix,
 } from "./libraryTextFixes";
@@ -183,6 +184,29 @@ describe("공식 라이브러리 곡 글 고치기", () => {
       expect(() => parseLibraryTextFixes(invalid)).toThrow(
         OPS_ERRORS.libraryFix.invalidFile,
       );
+    }
+  });
+});
+
+describe("시드가 견줄 고친 제목", () => {
+  const correct = libraryTitleCorrector(FIXES);
+
+  it("옛 제목은 줄이기 전이든 뒤든 고친 제목으로 바꾼다", () => {
+    expect(correct("Love &amp; Grace", "천관웅")).toBe("Love & Grace");
+    expect(correct(MEDLEY_TITLE, "박종호")).toBe(FIXES[2]?.nextTitle);
+    expect(correct(MEDLEY_TITLE.slice(0, 100), "박종호")).toBe(
+      FIXES[2]?.nextTitle,
+    );
+  });
+
+  it("고친 제목, 다른 아티스트의 같은 제목, 가사만 고치는 곡, 목록에 없는 곡은 그대로 둔다", () => {
+    for (const [title, artist] of [
+      ["Love & Grace", "천관웅"],
+      ["Love &amp; Grace", "다른 가수"],
+      ["성령이 오셨네", "김도현"],
+      ["목록에 없는 곡", "천관웅"],
+    ] as const) {
+      expect(correct(title, artist)).toBe(title);
     }
   });
 });
