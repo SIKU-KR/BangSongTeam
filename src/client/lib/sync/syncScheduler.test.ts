@@ -838,6 +838,11 @@ describe("서버 push 스케줄러", () => {
 
       await vi.advanceTimersByTimeAsync(2000);
 
+      expect(pushFolder).toHaveBeenCalledTimes(2);
+      expect(push).not.toHaveBeenCalled();
+
+      await vi.advanceTimersByTimeAsync(30_000);
+
       expect(pushFolder).toHaveBeenCalledTimes(3);
       expect(push).toHaveBeenCalledExactlyOnceWith(
         expect.objectContaining({ id: "a", folderId: FOLDER }),

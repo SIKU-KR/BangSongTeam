@@ -756,6 +756,85 @@ describe("폴더 push 큐", () => {
     },
   );
 
+  describe("서버가 기다리라고 한 폴더", () => {
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    function recordSends(rejectParent: () => Error | null): string[] {
+      const start = Date.now();
+      const sent: string[] = [];
+      push.mockImplementation(async (f: Folder) => {
+        sent.push(`${f.id}@${Date.now() - start}`);
+        const err = f.id === PARENT ? rejectParent() : null;
+        if (err) throw err;
+        return f;
+      });
+      return sent;
+    }
+
+    it("다른 폴더를 고쳐도 Retry-After를 지키고, 그 안에 만든 폴더는 그 폴더가 오른 뒤에 올린다", async () => {
+      vi.useFakeTimers();
+      let rejected = false;
+      const sent = recordSends(() => {
+        if (rejected) return null;
+        rejected = true;
+        return new ServerRejectedError(503, undefined, 30_000);
+      });
+      scheduleFolderPush(folder(PARENT, null));
+      await vi.advanceTimersByTimeAsync(2000);
+
+      scheduleFolderPush(folder(OTHER_ROOT, null));
+      scheduleFolderPush(folder(CHILD, PARENT));
+      await vi.advanceTimersByTimeAsync(2000);
+
+      expect(sent).toEqual([`${PARENT}@2000`, `${OTHER_ROOT}@4000`]);
+      expect(getSyncSnapshot().status).toBe("offline");
+
+      await vi.advanceTimersByTimeAsync(28_000 - 1);
+      expect(sent).toHaveLength(2);
+      await vi.advanceTimersByTimeAsync(1);
+
+      expect(sent).toEqual([
+        `${PARENT}@2000`,
+        `${OTHER_ROOT}@4000`,
+        `${PARENT}@32000`,
+        `${CHILD}@32000`,
+      ]);
+      expect(hasPendingFolderPush()).toBe(false);
+      expect(getSyncSnapshot().status).toBe("synced");
+    });
+
+    it("재시도 한도를 넘겨 천천히 다시 보내는 폴더도 다른 폴더를 고쳐 보내는 사이에는 다시 보내지 않는다", async () => {
+      vi.useFakeTimers();
+      __setFolderBackoffRandomForTests(() => 1);
+      const sent = recordSends(
+        () => new ServerRejectedError(503, "지속 과부하"),
+      );
+      scheduleFolderPush(folder(PARENT, null));
+      await vi.advanceTimersByTimeAsync(2000);
+      for (let i = 0; i < MAX_RETRY_ATTEMPTS; i++) {
+        await vi.advanceTimersByTimeAsync(60_000);
+      }
+      const slowRetries = sent.length;
+      expect(slowRetries).toBe(MAX_RETRY_ATTEMPTS + 1);
+
+      scheduleFolderPush(folder(OTHER_ROOT, null, "1"));
+      await vi.advanceTimersByTimeAsync(2000);
+      scheduleFolderPush(folder(OTHER_ROOT, null, "2"));
+      await vi.advanceTimersByTimeAsync(2000);
+
+      expect(
+        sent.slice(slowRetries).map((entry) => entry.split("@")[0]),
+      ).toEqual([OTHER_ROOT, OTHER_ROOT]);
+
+      await vi.advanceTimersByTimeAsync(SLOW_RETRY_MS);
+      expect(
+        sent.slice(slowRetries).map((entry) => entry.split("@")[0]),
+      ).toEqual([OTHER_ROOT, OTHER_ROOT, PARENT]);
+    });
+  });
+
   it("재시도 한도를 넘긴 일시 장애(503)는 동기화 실패로 보이되 버리지 않고 SLOW_RETRY_MS 뒤에 다시 보낸다", async () => {
     push.mockRejectedValue(new ServerRejectedError(503, "지속 과부하"));
     __setFolderBackoffRandomForTests(() => 1);

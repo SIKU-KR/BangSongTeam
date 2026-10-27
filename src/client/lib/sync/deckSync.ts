@@ -53,10 +53,11 @@ let pending = new Map<string, PendingOp>();
 let failed = new Map<string, PendingOp>();
 const waitingDeletes = new Map<string, DeleteOp>();
 const recordedDeletes = new Set<string>();
-const waitingOnServer = new Set<string>();
+const waitingOnServer = new Map<string, number>();
 const deletedIds = new Set<string>();
 const deletedElsewhere = new Set<string>();
 let timer: ReturnType<typeof setTimeout> | null = null;
+let timerDueAt = Infinity;
 let inFlight: Promise<void> = Promise.resolve();
 const runningBatches = new Set<Promise<void>>();
 const backoff = new BackoffTracker();
@@ -175,16 +176,26 @@ function takeWaitingDelete(op: DeleteOp): boolean {
   return true;
 }
 
+function clearTimer(): void {
+  if (timer) clearTimeout(timer);
+  timer = null;
+  timerDueAt = Infinity;
+}
+
+function runBy(dueAt: number): void {
+  if (timer && timerDueAt <= dueAt) return;
+  if (timer) clearTimeout(timer);
+  timerDueAt = dueAt;
+  timer = setTimeout(run, Math.max(0, dueAt - Date.now()));
+}
+
 function clearPending(): void {
   pending = new Map();
   failed = new Map();
   waitingDeletes.clear();
   recordedDeletes.clear();
   waitingOnServer.clear();
-  if (timer) {
-    clearTimeout(timer);
-    timer = null;
-  }
+  clearTimer();
   backoff.reset();
 }
 
@@ -248,17 +259,17 @@ async function runOps(ops: PendingOp[]): Promise<void> {
       ) {
         if (expired) sessionExpired = true;
         else offline = true;
+        const delay = backoff.getDelay(key, err);
         if (err instanceof ServerRejectedError || expired) {
-          waitingOnServer.add(key);
+          waitingOnServer.set(key, Date.now() + delay);
         } else {
           waitingOnServer.delete(key);
         }
         if (!pending.has(key)) pending.set(key, op);
-        const delay = backoff.getDelay(key, err);
         if (delay < minRetryDelay) minRetryDelay = delay;
       } else if (isTransientServerError(err)) {
         slowRetry = true;
-        waitingOnServer.add(key);
+        waitingOnServer.set(key, Date.now() + SLOW_RETRY_MS);
         if (!pending.has(key)) pending.set(key, op);
         if (SLOW_RETRY_MS < minRetryDelay) minRetryDelay = SLOW_RETRY_MS;
         recordSyncFailure(failureOf(op, key, err));
@@ -282,14 +293,10 @@ async function runOps(ops: PendingOp[]): Promise<void> {
     backoff.reset();
     setSyncStatus("deck", "synced");
   }
-  if (
-    (offline || sessionExpired || slowRetry) &&
-    !timer &&
-    minRetryDelay !== Infinity
-  ) {
-    timer = setTimeout(run, minRetryDelay);
+  if ((offline || sessionExpired || slowRetry) && minRetryDelay !== Infinity) {
+    runBy(Date.now() + minRetryDelay);
   }
-  if (deferred && !timer) timer = setTimeout(run, BASE_BACKOFF_MS);
+  if (deferred) runBy(Date.now() + BASE_BACKOFF_MS);
 }
 
 function startBatch(ops: PendingOp[]): void {
@@ -303,45 +310,50 @@ function startBatch(ops: PendingOp[]): void {
   });
 }
 
-function run(): void {
-  if (timer) {
-    clearTimeout(timer);
-    timer = null;
-  }
+function send(all: boolean): void {
+  clearTimer();
   if (!enabled || pending.size === 0) return;
   if (isProjecting()) {
-    timer = setTimeout(run, BASE_BACKOFF_MS);
+    runBy(Date.now() + BASE_BACKOFF_MS);
     return;
   }
 
-  const ops = [...pending.values()];
-  pending = new Map();
-  startBatch(ops);
-}
-
-function runNotWaitingOnServer(): void {
-  if (isProjecting()) {
-    if (!timer) timer = setTimeout(run, BASE_BACKOFF_MS);
-    return;
-  }
+  const now = Date.now();
   const ops: PendingOp[] = [];
+  let nextWaitEnds = Infinity;
   for (const [key, op] of pending) {
-    if (waitingOnServer.has(key)) continue;
+    const waitEnds = waitingOnServer.get(key) ?? 0;
+    if (!all && waitEnds > now) {
+      nextWaitEnds = Math.min(nextWaitEnds, waitEnds);
+      continue;
+    }
     pending.delete(key);
     ops.push(op);
   }
   if (ops.length > 0) startBatch(ops);
+  if (nextWaitEnds !== Infinity) runBy(nextWaitEnds);
+}
+
+function run(): void {
+  send(false);
 }
 
 function schedule(key: string, op: PendingOp): void {
   if (!enabled) return;
   failed.delete(key);
   pending.set(key, op);
-  if (timer) clearTimeout(timer);
-  timer = setTimeout(run, DECK_SYNC_DEBOUNCE_MS);
+  clearTimer();
+  runBy(Date.now() + DECK_SYNC_DEBOUNCE_MS);
 }
 
-/** 같은 곡을 연달아 고치면 마지막 것만 올린다 */
+/**
+ * 같은 곡을 연달아 고치면 마지막 것만 올린다.
+ *
+ * 서버가 기다리라고 한 곡(5xx·429·401의 백오프와 `Retry-After`, 재시도 한도를 넘긴 느린 재시도)은 고쳐도
+ * 그 대기가 끝난 뒤에 보내고, 다른 곡을 고쳐 디바운스 뒤에 보낼 때도 함께 보내지 않는다. 함께 보내면
+ * 장애 중에 곡을 고칠 때마다 기다리던 곡을 모두 다시 보내 재시도 한도를 곧 다 쓰고, 느린 재시도가
+ * 무른다.
+ */
 export function scheduleDeckPush(deck: Deck): void {
   schedule(deck.id, { kind: "push", deck });
 }
@@ -509,7 +521,7 @@ export function hasPendingDeckSync(): boolean {
  * 기록(`pendingDeckDeletes`)에, 고친 곡은 저장소에 남아 있어 탭을 닫아도 다음 부팅이 보낸다.
  */
 export function flushDeckSync(): Promise<void> {
-  run();
+  send(true);
   return inFlight;
 }
 
@@ -543,11 +555,8 @@ export function retryDeckSyncNow(mode: SyncRetryMode): Promise<void> {
     requeueFailedOps();
   }
   if (mode !== "wake") backoff.reset();
-  if (mode === "wake" && waitingOnServer.size > 0) {
-    runNotWaitingOnServer();
-    return inFlight;
-  }
-  return flushDeckSync();
+  send(mode !== "wake");
+  return inFlight;
 }
 
 function currentOpOf(op: PendingOp): PendingOp | null {
