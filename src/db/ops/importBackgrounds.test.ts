@@ -1,50 +1,30 @@
-import { spawn } from "node:child_process";
-import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createId } from "#shared";
-import { createFirestore, type Db } from "../client";
+import type { Db } from "../client";
 import { backgroundsCol, decksCol } from "../collections";
-import { deckDoc, seedDocs, userDoc } from "../test/fixtures";
+import {
+  createTestDb,
+  deckDoc,
+  seedDocs,
+  spawnScript,
+  userDoc,
+} from "../test/fixtures";
 import { registerBackground } from "./backgrounds";
 
-const ROOT_DIR = path.resolve(import.meta.dirname, "..", "..", "..");
-const SCRIPT = path.join(ROOT_DIR, "scripts", "importBackgrounds.mjs");
 const OWNER = "00000000000000000000a";
 const DECK = "c00000000000000000001";
 
-interface RunResult {
-  code: number | null;
-  stdout: string;
-  stderr: string;
-}
-
 describe("scripts/importBackgrounds.mjs", () => {
-  let projectId: string;
   let db: Db;
   let workDir: string;
   let videoDir: string;
   let existing: string;
 
-  const run = (...args: string[]): Promise<RunResult> =>
-    new Promise((resolve, reject) => {
-      const child = spawn(process.execPath, [SCRIPT, ...args], {
-        cwd: ROOT_DIR,
-        env: { ...process.env, GOOGLE_CLOUD_PROJECT: projectId },
-      });
-      let stdout = "";
-      let stderr = "";
-      child.stdout.on("data", (chunk: Buffer) => {
-        stdout += chunk.toString();
-      });
-      child.stderr.on("data", (chunk: Buffer) => {
-        stderr += chunk.toString();
-      });
-      child.on("error", reject);
-      child.on("close", (code) => resolve({ code, stdout, stderr }));
-    });
+  const run = (...args: string[]) =>
+    spawnScript(db, "importBackgrounds.mjs", args);
 
   const writeManifest = (items: unknown[]): string => {
     const file = path.join(workDir, "manifest.json");
@@ -61,8 +41,7 @@ describe("scripts/importBackgrounds.mjs", () => {
   });
 
   beforeEach(async () => {
-    projectId = `test-${randomUUID()}`;
-    db = createFirestore({ projectId });
+    db = createTestDb();
     workDir = fs.mkdtempSync(path.join(os.tmpdir(), "import-backgrounds-"));
     videoDir = path.join(workDir, "videos");
     fs.mkdirSync(videoDir);

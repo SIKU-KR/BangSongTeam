@@ -21,8 +21,16 @@ const LOVE = "c00000000000000000001";
 const USER_LOVE = "c00000000000000000002";
 const SPIRIT = "c00000000000000000003";
 const MEDLEY = "c00000000000000000004";
+const RENAMED = "c00000000000000000005";
 const SEEDED_AT = new Date("2026-08-01T00:00:00.000Z");
 const MEDLEY_TITLE = `${"가".repeat(95)} _ 나 _ 다`;
+const OFFICIAL = {
+  userId: OFFICIAL_LIBRARY_USER_ID,
+  visibility: "public",
+  publishedAt: SEEDED_AT,
+  createdAt: SEEDED_AT,
+  updatedAt: SEEDED_AT,
+} as const;
 
 const slides = (...lines: string[]) =>
   JSON.stringify(
@@ -51,13 +59,6 @@ describe("공식 라이브러리 곡 글 고치기", () => {
 
   beforeEach(async () => {
     db = createTestDb();
-    const official = {
-      userId: OFFICIAL_LIBRARY_USER_ID,
-      visibility: "public",
-      publishedAt: SEEDED_AT,
-      createdAt: SEEDED_AT,
-      updatedAt: SEEDED_AT,
-    } as const;
     await seedDocs(db, {
       users: [
         userDoc({ id: OFFICIAL_LIBRARY_USER_ID, name: OFFICIAL_LIBRARY_NAME }),
@@ -65,7 +66,7 @@ describe("공식 라이브러리 곡 글 고치기", () => {
       ],
       decks: [
         deckDoc({
-          ...official,
+          ...OFFICIAL,
           id: LOVE,
           title: "Love &amp; Grace",
           artist: "천관웅",
@@ -79,7 +80,7 @@ describe("공식 라이브러리 곡 글 고치기", () => {
           artist: "천관웅",
         }),
         deckDoc({
-          ...official,
+          ...OFFICIAL,
           id: SPIRIT,
           title: "성령이 오셨네",
           artist: "김도현",
@@ -90,7 +91,7 @@ describe("공식 라이브러리 곡 글 고치기", () => {
           ),
         }),
         deckDoc({
-          ...official,
+          ...OFFICIAL,
           id: MEDLEY,
           title: MEDLEY_TITLE.slice(0, 100),
           artist: "박종호",
@@ -170,6 +171,50 @@ describe("공식 라이브러리 곡 글 고치기", () => {
       changed: [],
       alreadyFixed: 3,
       unmatched: [FIXES[3]],
+    });
+  });
+
+  it("제목은 이미 고친 곡도 고친 제목으로 찾아 남은 가사를 고친다", async () => {
+    await seedDocs(db, {
+      decks: [
+        deckDoc({
+          ...OFFICIAL,
+          id: RENAMED,
+          title: "Grace & Truth",
+          artist: "김도현",
+          lyricsRaw: "진리&#47504; 영이신 성령",
+          slides: slides("진리&#47504; 영이신 성령"),
+        }),
+      ],
+    });
+    const fix: LibraryTextFix = {
+      title: "Grace &amp; Truth",
+      artist: "김도현",
+      nextTitle: "Grace & Truth",
+      lyrics: { from: "진리&#47504; 영이신", to: "진리의 영이신" },
+    };
+
+    expect(await fixLibraryText(db, [fix], { apply: true })).toEqual({
+      changed: [
+        {
+          id: RENAMED,
+          title: "Grace & Truth",
+          nextTitle: "Grace & Truth",
+          lyrics: true,
+        },
+      ],
+      alreadyFixed: 0,
+      unmatched: [],
+    });
+    const renamed = await deck(RENAMED);
+    expect(renamed?.lyricsRaw).toBe("진리의 영이신 성령");
+    expect(JSON.parse(renamed?.slides ?? "[]")).toEqual([
+      { id: "s0", order: 0, lines: ["진리의 영이신 성령"] },
+    ]);
+    expect(await fixLibraryText(db, [fix], { apply: true })).toEqual({
+      changed: [],
+      alreadyFixed: 1,
+      unmatched: [],
     });
   });
 

@@ -21,12 +21,14 @@ import {
   presentationsWithCopies,
   seedDocs,
   seedUserQuota,
+  spawnScript,
   userDoc,
 } from "../test/fixtures";
 import { takedownDeck } from "./moderation";
 import {
   countUserData,
   deleteUserData,
+  getAccountIdentity,
   revokeUserAccess,
   type UserDataCounts,
 } from "./deleteUser";
@@ -45,11 +47,13 @@ const Y1 = "p0000000000000000000y";
 const G1 = "g0000000000000000000g";
 const SLIDES = JSON.stringify([{ id: "s", order: 0, lines: ["시선"] }]);
 const NOW = new Date("2026-10-27T00:00:00.000Z");
+const JOINED_AT = new Date("2026-03-01T09:00:00.000Z");
 
 const NOTHING: UserDataCounts = {
   user: 0,
   sessions: 0,
   accounts: 0,
+  emailReservations: 0,
   presentations: 0,
   libraryDecks: 0,
   otherDecks: 0,
@@ -78,7 +82,12 @@ describe("계정 삭제", () => {
     } as const;
     await seedDocs(db, {
       users: [
-        userDoc({ id: U, name: "지울 사람", email: "u@example.com" }),
+        userDoc({
+          id: U,
+          name: "지울 사람",
+          email: "u@example.com",
+          createdAt: JOINED_AT,
+        }),
         userDoc({ id: O, name: "남을 사람", email: "o@example.com" }),
       ],
       folders: [folderDoc({ id: G1, userId: U })],
@@ -178,6 +187,7 @@ describe("계정 삭제", () => {
       user: 1,
       sessions: 1,
       accounts: 1,
+      emailReservations: 1,
       presentations: 1,
       libraryDecks: 2,
       otherDecks: 1,
@@ -275,6 +285,28 @@ describe("계정 삭제", () => {
     });
   });
 
+  it("사용자 문서가 먼저 지워졌어도 그 사용자를 가리키는 이메일 예약을 세고 지운다", async () => {
+    await db.collection(COLLECTIONS.users).doc(U).delete();
+    await userEmailsCol(db)
+      .doc(userEmailDocId("old-u@example.com"))
+      .set({ userId: U });
+
+    expect(await deleteUserData(db, U, NOW)).toMatchObject({
+      status: "deleted",
+      before: { user: 0, emailReservations: 2 },
+      remaining: NOTHING,
+    });
+
+    expect((await userEmailsCol(db).where("userId", "==", U).get()).size).toBe(
+      0,
+    );
+    expect(
+      (
+        await userEmailsCol(db).doc(userEmailDocId("o@example.com")).get()
+      ).data(),
+    ).toEqual({ userId: O });
+  });
+
   it("게시 중단 운영 기록은 남기고, 가져간 비공개 곡은 게시 중단을 이어받는다", async () => {
     await takedownDeck(db, D1, NOW, "권리자 요청");
 
@@ -338,6 +370,42 @@ describe("계정 삭제", () => {
     expect(await sizeByUser(COLLECTIONS.presentations)).toBe(0);
     expect(await sizeByUser(COLLECTIONS.decks)).toBe(0);
   });
+
+  it("본인 확인에 견줄 계정 정보를 읽고, 없거나 Firestore가 예약한 꼴의 id는 없는 계정으로 본다", async () => {
+    expect(await getAccountIdentity(db, U)).toEqual({
+      name: "지울 사람",
+      email: "u@example.com",
+      createdAt: JOINED_AT,
+    });
+    expect(await getAccountIdentity(db, "000000000000000nobody")).toBeNull();
+    expect(await getAccountIdentity(db, `__${"0".repeat(17)}__`)).toBeNull();
+  });
+
+  it("스크립트 미리보기는 누구의 계정인지와 지울 데이터 수를 보여 주고 아무것도 지우지 않는다", async () => {
+    const result = await spawnScript(db, "deleteUser.mjs", [U]);
+
+    expect(result.code, result.stderr).toBe(0);
+    expect(result.stdout).toContain(
+      `계정: ${U} 지울 사람 · u@example.com · ${JOINED_AT.toISOString()} 가입`,
+    );
+    expect(result.stdout).toContain("이메일 예약: 1");
+    expect(await countUserData(db, U)).toMatchObject({
+      user: 1,
+      emailReservations: 1,
+      libraryDecks: 2,
+    });
+  }, 60_000);
+
+  it("스크립트에 --apply를 붙이면 모두 지우고, 지운 뒤의 미리보기는 사용자 문서가 없다고 알린다", async () => {
+    const applied = await spawnScript(db, "deleteUser.mjs", [U, "--apply"]);
+
+    expect(applied.code, applied.stderr).toBe(0);
+    expect(applied.stdout).toContain("계정과 데이터를 모두 지웠어요.");
+    expect(await countUserData(db, U)).toEqual(NOTHING);
+
+    const preview = await spawnScript(db, "deleteUser.mjs", [U]);
+    expect(preview.stdout).toContain(`계정: ${U} (사용자 문서 없음)`);
+  }, 60_000);
 
   it("공식 라이브러리 계정은 지우지 않는다", async () => {
     await seedDocs(db, {

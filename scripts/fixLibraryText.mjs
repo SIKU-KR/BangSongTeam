@@ -14,7 +14,8 @@
  *   --fixes=<경로>  고칠 목록 JSON (기본값: data/officialLibraryFixes.json)
  *
  * `--target=remote`는 미리보기라도 주인에게 먼저 확인받고, 미리보기 결과를 보여 준 뒤에만
- * `--apply`를 붙인다. 고친 곡은 옛 제목으로 찾지 못하므로 다시 실행해도 겹쳐 쓰지 않는다.
+ * `--apply`를 붙인다. 고친 곡은 바꿀 글이 없어 다시 실행해도 겹쳐 쓰지 않는다. 제목을 이미 고친
+ * 곡은 고친 제목으로 찾아 남은 가사를 고친다.
  */
 
 import fs from "node:fs/promises";

@@ -53,6 +53,9 @@ describe("이메일·비밀번호 로그인 더하기", () => {
       ?.id;
   };
 
+  const reservation = async (email: string) =>
+    (await userEmailsCol(db).doc(userEmailDocId(email)).get()).data();
+
   beforeEach(async () => {
     await clearDb(db);
     await seedDocs(db, {
@@ -61,6 +64,9 @@ describe("이메일·비밀번호 로그인 더하기", () => {
       ],
     });
     await seedAccount(db, KAKAO_USER, "kakao");
+    await userEmailsCol(db)
+      .doc(userEmailDocId(SYNTHETIC))
+      .set({ userId: KAKAO_USER });
   });
 
   it("미리보기는 바꿀 이메일만 알려 주고 아무것도 쓰지 않는다", async () => {
@@ -75,6 +81,8 @@ describe("이메일·비밀번호 로그인 더하기", () => {
     expect((await usersCol(db).doc(KAKAO_USER).get()).data()?.email).toBe(
       SYNTHETIC,
     );
+    expect(await reservation(SYNTHETIC)).toEqual({ userId: KAKAO_USER });
+    expect(await reservation(EMAIL)).toBeUndefined();
     expect((await signIn(EMAIL, PASSWORD, "10.9.0.1")).status).toBe(401);
   });
 
@@ -96,9 +104,8 @@ describe("이메일·비밀번호 로그인 더하기", () => {
     const res = await signIn(EMAIL, PASSWORD, "10.9.0.2");
     expect(res.status).toBe(200);
     expect(await sessionUserId(res)).toBe(KAKAO_USER);
-    expect(
-      (await userEmailsCol(db).doc(userEmailDocId(EMAIL)).get()).data(),
-    ).toEqual({ userId: KAKAO_USER });
+    expect(await reservation(EMAIL)).toEqual({ userId: KAKAO_USER });
+    expect(await reservation(SYNTHETIC)).toBeUndefined();
     expect((await usersCol(db).doc(KAKAO_USER).get()).data()).toMatchObject({
       email: EMAIL,
       emailVerified: false,

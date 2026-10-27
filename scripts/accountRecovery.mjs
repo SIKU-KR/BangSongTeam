@@ -9,7 +9,8 @@
  *   node scripts/accountRecovery.mjs reassign <옛 사용자 id> <새 사용자 id> [--apply]    # 새로 가입한 계정으로 데이터 옮기기
  *
  * 바꾸기 전에 요청한 사람이 그 계정의 주인인지 확인한다. 예를 들어 그 계정에만 있는 프레젠테이션
- * 제목·날짜를 묻고, 옛 계정의 이메일이 실제 주소면 그 주소에서 온 요청인지 본다.
+ * 제목·날짜를 묻고, 옛 계정의 이메일이 실제 주소면 그 주소에서 온 요청인지 본다. 미리보기 첫머리에
+ * 나오는 계정(reassign은 두 계정)의 이름·이메일·가입 시각이 확인한 사람과 맞는지도 본다.
  *
  * - add-password: 그 계정 그대로 받은 이메일과 임시 비밀번호로 로그인하게 한다. `--apply`면 임시
  *   비밀번호를 한 번만 출력하니 본인에게 안전한 길로 전한다. 앱에는 비밀번호 바꾸기가 없어 그
@@ -22,6 +23,7 @@
  */
 
 import { randomBytes } from "node:crypto";
+import { describeAccount } from "./lib/accounts.mjs";
 import {
   applyTarget,
   assertEmulatorUp,
@@ -104,7 +106,10 @@ const COMMANDS = {
       if (flags.email === undefined)
         throw new Error("--email=<주소>가 필요해요");
     },
-    async run({ db, ops, ids: [userId], flags }) {
+    async run({ db, ops, getAccountIdentity, ids: [userId], flags }) {
+      console.log(
+        `계정: ${describeAccount(userId, await getAccountIdentity(db, userId))}`,
+      );
       const apply = flags.apply === true;
       let password;
       let passwordHash;
@@ -141,7 +146,18 @@ const COMMANDS = {
   reassign: {
     options: { apply: "boolean" },
     check: (ids) => requireUserIds(ids, 2),
-    async run({ db, ops, ids: [fromUserId, toUserId], flags }) {
+    async run({
+      db,
+      ops,
+      getAccountIdentity,
+      ids: [fromUserId, toUserId],
+      flags,
+    }) {
+      const [from, to] = await Promise.all(
+        [fromUserId, toUserId].map((id) => getAccountIdentity(db, id)),
+      );
+      console.log(`옛 계정: ${describeAccount(fromUserId, from)}`);
+      console.log(`새 계정: ${describeAccount(toUserId, to)}`);
       const apply = flags.apply === true;
       const result = await ops.reassignUserData(db, {
         fromUserId,
@@ -185,12 +201,13 @@ async function main() {
   applyTarget(target);
   await assertEmulatorUp();
 
-  const [{ getFirestore }, ops] = await Promise.all([
+  const [{ getFirestore }, ops, { getAccountIdentity }] = await Promise.all([
     importSource("src/db/client.ts"),
     importSource("src/db/ops/accountRecovery.ts"),
+    importSource("src/db/ops/deleteUser.ts"),
   ]);
   console.log(`대상: ${describeTarget(target)}`);
-  await spec.run({ db: getFirestore(), ops, ids, flags });
+  await spec.run({ db: getFirestore(), ops, getAccountIdentity, ids, flags });
 }
 
 runScript(main);

@@ -1,24 +1,25 @@
 /**
  * 회원 탈퇴 요청을 처리한다: 한 사용자의 계정과 데이터를 모두 지운다
  * (`src/db/ops/deleteUser.ts`). 개인정보처리방침이 약속한 파기다. 요청한 사람이 그 계정의 주인인지는
- * 먼저 따로 확인한다(요청 메일이 그 계정의 이메일에서 왔는지 등). 대상별 준비는 `lib/targets.mjs`를
- * 따른다.
+ * 먼저 따로 확인한다(요청 메일이 그 계정의 이메일에서 왔는지 등). 미리보기 첫머리에 나오는 계정의
+ * 이름·이메일·가입 시각이 확인한 사람과 맞는지도 본다. 대상별 준비는 `lib/targets.mjs`를 따른다.
  *
  * 사용법:
- *   node scripts/deleteUser.mjs <사용자 id>                          # 지울 데이터 수만 센다
+ *   node scripts/deleteUser.mjs <사용자 id>                          # 지울 계정과 데이터 수만 보여 준다
  *   node scripts/deleteUser.mjs <사용자 id> --apply                  # 로컬 에뮬레이터에서 지운다
  *   node scripts/deleteUser.mjs <사용자 id> --target=remote          # 운영 Firestore에서 센다
  *   node scripts/deleteUser.mjs <사용자 id> --target=remote --apply  # 운영 Firestore에서 지운다
  *
- * `--apply`는 먼저 로그인 수단(세션·연결된 로그인·사용자 문서)을 지우고, 이미 로그인한 기기의 세션
- * 쿠키 캐시가 끝날 때까지 기다린 뒤 데이터를 지운다. 그사이 그 기기가 저장하거나 다시 올린 데이터까지
- * 지우기 위해서다. 로컬 에뮬레이터는 기다리지 않는다. 끝나면 남은 데이터를 다시 세고, 남았으면 1로
- * 끝난다. 중간에 멈춰도 같은 명령을 다시 실행하면 이어서 지운다.
+ * `--apply`는 먼저 로그인 수단(세션·연결된 로그인·사용자 문서·이메일 예약)을 지우고, 이미 로그인한
+ * 기기의 세션 쿠키 캐시가 끝날 때까지 기다린 뒤 데이터를 지운다. 그사이 그 기기가 저장하거나 다시 올린
+ * 데이터까지 지우기 위해서다. 로컬 에뮬레이터는 기다리지 않는다. 끝나면 남은 데이터를 다시 세고,
+ * 남았으면 1로 끝난다. 중간에 멈춰도 같은 명령을 다시 실행하면 이어서 지운다.
  *
  * 다른 사용자가 가져간 곡은 그 사람의 것이라 남기고 원본 연결만 끊는다. 게시 중단 운영 기록은 남긴다.
  * `--target=remote`는 세기만 하더라도 주인에게 먼저 확인받는다.
  */
 
+import { describeAccount } from "./lib/accounts.mjs";
 import {
   applyTarget,
   assertEmulatorUp,
@@ -36,6 +37,7 @@ const LABELS = {
   user: "사용자 문서",
   sessions: "로그인 세션",
   accounts: "연결된 로그인",
+  emailReservations: "이메일 예약",
   presentations: "프레젠테이션",
   libraryDecks: "보관함 곡",
   otherDecks: "프레젠테이션 사본",
@@ -80,6 +82,9 @@ async function main() {
   }
   const db = getFirestore();
   console.log(`대상: ${describeTarget(target)}`);
+  console.log(
+    `계정: ${describeAccount(userId, await ops.getAccountIdentity(db, userId))}`,
+  );
   printCounts(`${userId}의 데이터`, await ops.countUserData(db, userId));
   if (!apply) {
     console.log(

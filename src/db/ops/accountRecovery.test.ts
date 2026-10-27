@@ -9,6 +9,7 @@ import {
   moderationEventsCol,
   presentationMembersCol,
   reportsCol,
+  usersCol,
 } from "../collections";
 import { getMyLibraryDecks } from "../queries/decks";
 import { getFoldersByUserId } from "../queries/folders";
@@ -20,6 +21,7 @@ import {
   presentationDoc,
   seedAccount,
   seedDocs,
+  spawnScript,
   userDoc,
 } from "../test/fixtures";
 import { takedownDeck } from "./moderation";
@@ -132,21 +134,36 @@ describe("다른 계정으로 데이터 옮기기", () => {
     await driveTombstonesCol(db)
       .doc("gone")
       .set({ itemId: "gone", userId: A, kind: "presentation" });
-    await reportsCol(db)
-      .doc("r1")
-      .set({
-        id: "r1",
-        reporterId: A,
-        deckId: FORK,
-        targetUserId: O,
-        targetTitle: "song",
-        reason: "lyrics_error",
-        details: null,
-        status: "pending",
-        resolvedAt: null,
-        resolutionNote: null,
-        createdAt: new Date(2),
-      });
+    const report = {
+      reason: "lyrics_error",
+      details: null,
+      status: "pending",
+      resolvedAt: null,
+      resolutionNote: null,
+      createdAt: new Date(2),
+    } as const;
+    await Promise.all([
+      reportsCol(db)
+        .doc("r1")
+        .set({
+          ...report,
+          id: "r1",
+          reporterId: A,
+          deckId: FORK,
+          targetUserId: O,
+          targetTitle: "song",
+        }),
+      reportsCol(db)
+        .doc("r2")
+        .set({
+          ...report,
+          id: "r2",
+          reporterId: O,
+          deckId: DECK,
+          targetUserId: A,
+          targetTitle: "옮길 곡",
+        }),
+    ]);
   });
 
   it("미리보기는 옮길 데이터 수만 세고 아무것도 옮기지 않는다", async () => {
@@ -160,7 +177,7 @@ describe("다른 계정으로 데이터 옮기기", () => {
         memberships: 1,
         tombstones: 1,
         reports: 1,
-        reportTargets: 0,
+        reportTargets: 1,
         moderationEvents: 0,
       },
     });
@@ -212,8 +229,10 @@ describe("다른 계정으로 데이터 옮기기", () => {
     expect((await decksCol(db).doc(FORK).get()).data()?.forkedFrom).toBe(DECK);
   });
 
-  it("링크로 들어간 프레젠테이션·영구 삭제 기록·신고도 새 계정으로 옮긴다", async () => {
-    await reassignUserData(db, { fromUserId: A, toUserId: B, apply: true });
+  it("링크로 들어간 프레젠테이션·영구 삭제 기록·낸 신고와 받은 신고도 새 계정으로 옮긴다", async () => {
+    expect(
+      await reassignUserData(db, { fromUserId: A, toUserId: B, apply: true }),
+    ).toMatchObject({ counts: { reports: 1, reportTargets: 1 } });
 
     const member = (id: string) => presentationMembersCol(db).doc(id).get();
     expect((await member(memberDocId(SHARED, A))).exists).toBe(false);
@@ -226,6 +245,11 @@ describe("다른 계정으로 데이터 옮기기", () => {
       (await driveTombstonesCol(db).doc("gone").get()).data()?.userId,
     ).toBe(B);
     expect((await reportsCol(db).doc("r1").get()).data()?.reporterId).toBe(B);
+    expect((await reportsCol(db).doc("r2").get()).data()).toMatchObject({
+      reporterId: O,
+      targetUserId: B,
+      deckId: DECK,
+    });
   });
 
   it("옮긴 곡의 게시 중단 기록도 새 계정으로 옮기고, 다시 실행하면 옮길 것이 없다", async () => {
@@ -281,4 +305,64 @@ describe("다른 계정으로 데이터 옮기기", () => {
       DECK,
     ]);
   });
+});
+
+describe("scripts/accountRecovery.mjs", () => {
+  const OLD = "00000000000000000000a";
+  const NEW = "00000000000000000000b";
+  const OLD_EMAIL = `kakao_42@${SYNTHETIC_DOMAIN}`;
+  const OLD_JOINED_AT = new Date("2025-05-01T09:00:00.000Z");
+  const NEW_JOINED_AT = new Date("2026-10-26T09:00:00.000Z");
+  let db: Db;
+
+  beforeEach(async () => {
+    db = createTestDb();
+    await seedDocs(db, {
+      users: [
+        userDoc({
+          id: OLD,
+          name: "카카오 사용자",
+          email: OLD_EMAIL,
+          createdAt: OLD_JOINED_AT,
+        }),
+        userDoc({
+          id: NEW,
+          name: "새로 가입한 사용자",
+          email: "member@example.com",
+          createdAt: NEW_JOINED_AT,
+        }),
+      ],
+    });
+    await seedAccount(db, OLD, "kakao");
+  });
+
+  it("데이터 옮기기 미리보기는 두 계정이 누구의 것인지 함께 보여 준다", async () => {
+    const result = await spawnScript(db, "accountRecovery.mjs", [
+      "reassign",
+      OLD,
+      NEW,
+    ]);
+
+    expect(result.code, result.stderr).toBe(0);
+    expect(result.stdout).toContain(
+      `옛 계정: ${OLD} 카카오 사용자 · ${OLD_EMAIL} · ${OLD_JOINED_AT.toISOString()} 가입`,
+    );
+    expect(result.stdout).toContain(
+      `새 계정: ${NEW} 새로 가입한 사용자 · member@example.com · ${NEW_JOINED_AT.toISOString()} 가입`,
+    );
+  }, 60_000);
+
+  it("로그인 더하기 미리보기는 누구의 계정인지 보여 주고 아무것도 바꾸지 않는다", async () => {
+    const result = await spawnScript(db, "accountRecovery.mjs", [
+      "add-password",
+      OLD,
+      "--email=old-member@example.com",
+    ]);
+
+    expect(result.code, result.stderr).toBe(0);
+    expect(result.stdout).toContain(
+      `계정: ${OLD} 카카오 사용자 · ${OLD_EMAIL} · ${OLD_JOINED_AT.toISOString()} 가입`,
+    );
+    expect((await usersCol(db).doc(OLD).get()).data()?.email).toBe(OLD_EMAIL);
+  }, 60_000);
 });

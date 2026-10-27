@@ -17,7 +17,6 @@ import {
   userQuotasCol,
   usersCol,
 } from "../collections";
-import { reservationsHeldBy } from "../auth/userEmails";
 import { prepareDeletionPass, runDeletionPasses } from "../queries/cascade";
 import { deleteDeckScoped } from "../queries/decks";
 
@@ -31,6 +30,8 @@ export interface UserDataCounts {
   user: number;
   sessions: number;
   accounts: number;
+  /** 이메일 예약(`userEmails`). 사용자 문서가 먼저 지워졌어도 남을 수 있어 따로 센다 */
+  emailReservations: number;
   presentations: number;
   libraryDecks: number;
   /** 보관함 곡이 아닌 곡: 프레젠테이션 사본 */
@@ -43,6 +44,13 @@ export interface UserDataCounts {
   reports: number;
   quotas: number;
   forksByOthers: number;
+}
+
+/** 운영자가 본인 확인한 사람과 견줄 계정 정보 */
+export interface AccountIdentity {
+  name: string;
+  email: string | null;
+  createdAt: Date;
 }
 
 export type RevokeUserAccessResult =
@@ -84,6 +92,22 @@ async function countForksByOthers(db: Db, userId: string): Promise<number> {
   return forks;
 }
 
+/**
+ * 지우거나 바꿀 계정의 이름·이메일·가입 시각. 사용자 문서가 없으면 `null`이다.
+ * `scripts/deleteUser.mjs`와 `scripts/accountRecovery.mjs`가 미리보기 첫머리에 보여 준다. 데이터 수만
+ * 보여 주면 id를 잘못 적어 다른 사람의 계정을 골라도 알아채기 어렵다.
+ */
+export async function getAccountIdentity(
+  db: Db,
+  userId: string,
+): Promise<AccountIdentity | null> {
+  if (!isUserId(userId)) return null;
+  const user = (await usersCol(db).doc(userId).get()).data();
+  return user
+    ? { name: user.name, email: user.email, createdAt: user.createdAt }
+    : null;
+}
+
 /** 한 사용자의 데이터가 얼마나 남았는지 센다. 읽기만 한다 */
 export async function countUserData(
   db: Db,
@@ -93,6 +117,7 @@ export async function countUserData(
     user,
     sessions,
     accounts,
+    emailReservations,
     presentations,
     decks,
     libraryDecks,
@@ -111,6 +136,7 @@ export async function countUserData(
       : 0,
     count(byUser(db, COLLECTIONS.sessions, userId)),
     count(byUser(db, COLLECTIONS.accounts, userId)),
+    count(byUser(db, COLLECTIONS.userEmails, userId)),
     count(presentationsCol(db).where("userId", "==", userId)),
     count(decksCol(db).where("userId", "==", userId)),
     count(libraryDecksOf(db, userId)),
@@ -125,6 +151,7 @@ export async function countUserData(
     user,
     sessions,
     accounts,
+    emailReservations,
     presentations,
     libraryDecks,
     otherDecks: decks - libraryDecks,
@@ -141,31 +168,30 @@ async function deleteSignIn(
   db: Db,
   userId: string,
 ): Promise<{ sessions: number; accounts: number; user: boolean }> {
-  const [sessions, accounts, user] = await Promise.all([
+  const [sessions, accounts, reservations, user] = await Promise.all([
     byUser(db, COLLECTIONS.sessions, userId).select().get(),
     byUser(db, COLLECTIONS.accounts, userId).select().get(),
+    byUser(db, COLLECTIONS.userEmails, userId).select().get(),
     isUserId(userId) ? usersCol(db).doc(userId).get() : null,
   ]);
-  const userData = user?.data();
-  const reservations = userData
-    ? await reservationsHeldBy(db, [{ id: userId, email: userData.email }])
-    : [];
   await runBulk(db, (writer) => [
-    ...sessions.docs.map((doc) => writer.delete(doc.ref)),
-    ...accounts.docs.map((doc) => writer.delete(doc.ref)),
-    ...reservations.map((ref) => writer.delete(ref)),
-    ...(user && userData ? [writer.delete(user.ref)] : []),
+    ...[...sessions.docs, ...accounts.docs, ...reservations.docs].map((doc) =>
+      writer.delete(doc.ref),
+    ),
+    ...(user?.exists ? [writer.delete(user.ref)] : []),
   ]);
   return {
     sessions: sessions.size,
     accounts: accounts.size,
-    user: Boolean(userData),
+    user: user?.exists === true,
   };
 }
 
 /**
  * 계정 삭제 첫 단계: 그 계정으로 다시 들어오는 길을 끊는다. 세션·연결된 로그인(비밀번호·소셜)·
  * 사용자 문서·이메일 예약을 지운다. 사용자 문서에 있는 약관 동의 기록도 함께 사라진다.
+ * 이메일 예약은 사용자 문서의 이메일이 아니라 예약이 가리키는 사용자 id로 찾는다. 사용자 문서를
+ * 콘솔에서 먼저 지웠거나 지우다 멈췄어도 이메일 해시와 사용자 id를 담은 예약이 남지 않게 한다.
  *
  * 이미 로그인한 기기는 세션 쿠키 캐시(`SESSION_COOKIE_CACHE_SECONDS`, 5분) 동안 세션을 다시
  * 확인하지 않아 계속 쓸 수 있다. 외래키가 없어 Firestore는 지운 사용자 id로 오는 쓰기도 받으므로,

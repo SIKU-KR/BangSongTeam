@@ -45,7 +45,7 @@ export interface LibraryTextChange {
 
 export interface LibraryTextFixResult {
   changed: LibraryTextChange[];
-  /** 이미 고친 곡 수. 고친 제목으로 찾았거나, 찾았지만 바꿀 글이 없었다 */
+  /** 이미 고친 곡 수. 찾았지만 바꿀 글이 없었다 */
   alreadyFixed: number;
   /** 공식 라이브러리에 옛 제목으로도 고친 제목으로도 없는 항목 */
   unmatched: LibraryTextFix[];
@@ -128,11 +128,19 @@ export function libraryTitleCorrector(
 
 async function findOfficialDecks(
   db: Db,
-  title: string,
-  artist: string,
+  fix: LibraryTextFix,
 ): Promise<DeckDoc[]> {
-  const artists = new Set([artist, clampText(artist, MAX_DECK_ARTIST_LENGTH)]);
-  const titles = new Set([title, clampText(title, MAX_DECK_TITLE_LENGTH)]);
+  const artists = new Set([
+    fix.artist,
+    clampText(fix.artist, MAX_DECK_ARTIST_LENGTH),
+  ]);
+  const titles = new Set(
+    [fix.title, fix.nextTitle].flatMap((title) =>
+      title === undefined
+        ? []
+        : [title, clampText(title, MAX_DECK_TITLE_LENGTH)],
+    ),
+  );
   const found = new Map<string, DeckDoc>();
   for (const candidate of titles) {
     const snapshot = await decksCol(db)
@@ -175,15 +183,16 @@ async function applyFix(
  *
  * - 공식 계정의 보관함 곡만 고친다. 사용자가 가져간 곡과 같은 제목의 사용자 곡은 그 사람의 사본이라
  *   그대로 둔다.
- * - 곡은 운영에 넣은 그대로의 제목·아티스트로 찾는다. 운영에는 100자로 줄이기 전에 넣은 곡과 줄여
- *   넣은 곡이 섞여 있어 두 모양을 모두 찾는다. 주인·제목의 같음 조건만 써서 복합 색인이 필요 없고,
- *   아티스트와 사본 여부는 받아 온 뒤 거른다.
+ * - 곡은 운영에 넣은 그대로의 제목과 고친 제목으로 모두 찾는다. 예전 목록으로 고쳤거나 고친 원본으로
+ *   시드했거나 콘솔에서 고쳐 제목은 이미 바뀐 곡도 가사는 아직 그대로일 수 있어서다. 운영에는 100자로
+ *   줄이기 전에 넣은 곡과 줄여 넣은 곡이 섞여 있어 두 모양을 모두 찾는다. 주인·제목의 같음 조건만
+ *   써서 복합 색인이 필요 없고, 아티스트와 사본 여부는 받아 온 뒤 거른다.
  * - 곡마다 트랜잭션 하나에서 다시 읽고 고치며, 고친 문서를 `withDeckIndex`에 통과시키고 바뀌는
  *   필드만 쓴다. 가사는 원문(`lyricsRaw`)과 슬라이드 줄에서 같은 글을 바꿔 슬라이드 나눔과 id를
  *   지킨다.
  * - 수정 시각은 그대로 둔다. 곡 주인이 고친 것이 아니고, 공유 라이브러리가 가져간 횟수가 같은 곡을
  *   수정 시각순으로 세우는데 고친 곡만 맨 위로 올라가면 안 된다.
- * - 고친 곡은 옛 제목으로 찾지 못하고 바꿀 글도 없으므로 다시 실행해도 쓰지 않는다.
+ * - 고친 곡은 바꿀 글이 없으므로 다시 실행해도 쓰지 않는다.
  */
 export async function fixLibraryText(
   db: Db,
@@ -196,13 +205,9 @@ export async function fixLibraryText(
     unmatched: [],
   };
   for (const fix of fixes) {
-    const decks = await findOfficialDecks(db, fix.title, fix.artist);
+    const decks = await findOfficialDecks(db, fix);
     if (decks.length === 0) {
-      const fixed =
-        fix.nextTitle !== undefined &&
-        (await findOfficialDecks(db, fix.nextTitle, fix.artist)).length > 0;
-      if (fixed) result.alreadyFixed += 1;
-      else result.unmatched.push(fix);
+      result.unmatched.push(fix);
       continue;
     }
     for (const deck of decks) {
