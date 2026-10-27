@@ -1,5 +1,7 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
+import { disassemble } from "es-hangul";
 import { buildFolderIndex, type Folder, type Presentation } from "#shared";
+import { SEED_PRESENTATIONS } from "../../test/presentationFixture";
 import {
   canDropInto,
   filterByType,
@@ -11,6 +13,11 @@ import {
   searchDrive,
   type SortOrder,
 } from "./driveModel";
+
+vi.mock("es-hangul", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("es-hangul")>();
+  return { ...actual, disassemble: vi.fn(actual.disassemble) };
+});
 
 const USER = "000000000000000000001";
 const NAME_ASC: SortOrder = { key: "name", direction: "asc" };
@@ -143,6 +150,27 @@ describe("searchDrive", () => {
   it("휴지통에 있거나 휴지통 폴더 안에 있는 항목은 찾지 않는다", () => {
     expect(searchDrive(index, DOCS, "청년", NAME_ASC)).toEqual([]);
     expect(searchDrive(index, DOCS, "버린", NAME_ASC)).toEqual([]);
+  });
+
+  it("같은 프레젠테이션을 다시 찾을 때 곡의 가사를 다시 분해하지 않는다", () => {
+    const presentations = structuredClone(SEED_PRESENTATIONS);
+    const lyrics = new Set(
+      presentations.flatMap((presentation) =>
+        presentation.items.map((item) => item.deck?.lyricsRaw.toLowerCase()),
+      ),
+    );
+    const disassembledLyrics = (): number =>
+      vi.mocked(disassemble).mock.calls.filter(([text]) => lyrics.has(text))
+        .length;
+
+    vi.mocked(disassemble).mockClear();
+    searchDrive(index, presentations, "없는말", RECENT);
+    expect(disassembledLyrics()).toBeGreaterThan(0);
+
+    vi.mocked(disassemble).mockClear();
+    const again = searchDrive(index, presentations, "없는말", RECENT);
+    expect(again).toEqual([]);
+    expect(disassembledLyrics()).toBe(0);
   });
 });
 

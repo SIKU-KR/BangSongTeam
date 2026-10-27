@@ -56,6 +56,7 @@ import { authClient } from "../lib/auth/authClient";
 import { getSessionState } from "../lib/auth/sessionStore";
 import { itemKey, parseItemKey } from "../features/drive/driveModel";
 import type { DropTarget } from "../features/drive/driveContext";
+import { DRIVE_ROOT_PATH, TRASH_PATH } from "../features/drive/drivePaths";
 
 // better-auth 클라이언트는 만들 때 fetch를 잡아 두어 로그아웃 요청을 가짜 응답으로 바꿀 수 없다.
 // better-auth@1.7.12 dist/client/config.mjs (`customFetchImpl: fetch`)
@@ -1470,5 +1471,72 @@ describe("AppShellLayout (터치)", () => {
     touchRoll(card(target.title));
 
     expect(dnd.started).toEqual([itemKey("file", target.id)]);
+  });
+});
+
+describe("AppShellLayout (검색어)", () => {
+  beforeEach(() => {
+    signInAsTestUser();
+    resetPresentationStore();
+    resetFolderStore();
+    window.localStorage.clear();
+    __loadDocumentsForTests(SEED_PRESENTATIONS);
+    vi.restoreAllMocks();
+  });
+
+  const searchInput = (): HTMLElement =>
+    screen.getByTestId("shell-search-input");
+
+  it("검색 결과에서 폴더를 열면 검색어를 비우고 그 폴더의 내용을 보여 준다", () => {
+    __loadFoldersForTests([folder(WORSHIP, "주일 대예배")]);
+    const inside = { ...SEED_PRESENTATIONS[0], folderId: WORSHIP };
+    __loadDocumentsForTests([inside, ...SEED_PRESENTATIONS.slice(1)]);
+    renderShell();
+    fireEvent.change(searchInput(), { target: { value: "주일" } });
+    expect(screen.getByTestId("drive-summary")).toHaveTextContent("검색 결과");
+
+    act(() => {
+      fireEvent.doubleClick(card("폴더 주일 대예배"));
+    });
+
+    expect(window.location.pathname).toBe(`/presentations/folders/${WORSHIP}`);
+    expect(searchInput()).toHaveValue("");
+    expect(screen.getByTestId("drive-summary")).not.toHaveTextContent(
+      "검색 결과",
+    );
+    const options = screen.getAllByRole("option");
+    expect(options).toHaveLength(1);
+    expect(options[0]).toHaveAccessibleName(
+      `${DRIVE_COPY.kind.file} ${inside.title}`,
+    );
+  });
+
+  it("드라이브 안에서 위치가 바뀌면 검색어를 비우고 돌아와도 되살리지 않는다", () => {
+    __loadFoldersForTests([folder(WORSHIP, "주일 대예배")]);
+    renderShell();
+    fireEvent.change(searchInput(), { target: { value: "예배" } });
+
+    act(() => {
+      testRouter.push(TRASH_PATH);
+    });
+    expect(searchInput()).toHaveValue("");
+
+    act(() => {
+      testRouter.push(DRIVE_ROOT_PATH);
+    });
+    expect(searchInput()).toHaveValue("");
+    expect(screen.getByTestId("drive-summary")).not.toHaveTextContent(
+      "검색 결과",
+    );
+  });
+
+  it("같은 위치에서 검색어를 바꾸는 동안에는 비우지 않는다", () => {
+    renderShell();
+
+    fireEvent.change(searchInput(), { target: { value: "예" } });
+    fireEvent.change(searchInput(), { target: { value: "예배" } });
+
+    expect(searchInput()).toHaveValue("예배");
+    expect(screen.getByTestId("drive-summary")).toHaveTextContent("검색 결과");
   });
 });

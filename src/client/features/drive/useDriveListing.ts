@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useDeferredValue, useMemo } from "react";
 import { canEditPresentation, usePresentationList } from "../presentation";
 import { useFolderIndex } from "./folderStore";
 import {
@@ -21,7 +21,7 @@ interface DriveListingOptions {
 }
 
 interface DriveListing {
-  /** 앞뒤 공백을 뺀 검색어. 비어 있으면 폴더 내용을 보여 준다 */
+  /** 목록에 반영한 검색어(앞뒤 공백을 뺀다). 비어 있으면 폴더 내용을 보여 준다 */
   query: string;
   items: DriveItem[];
   keys: string[];
@@ -37,6 +37,10 @@ interface DriveListing {
  *
  * 링크로 공유받은 프레젠테이션은 보기 전용이라 내 드라이브에 섞지 않는다.
  * 휴지통 개수는 휴지통 폴더나 휴지통 화면이 보일 때만 센다.
+ *
+ * 검색 결과는 입력보다 늦게 그린다(`useDeferredValue`). 곡이 많으면 글자마다 찾고 수백 행을 다시
+ * 그리는 일이 입력창을 붙잡는다. 검색어를 지우는 것은 늦추지 않는다. 늦추면 폴더 안으로 옮겨
+ * 가거나 검색을 끝낸 뒤에 옛 검색 결과가 한 번 더 비친다.
  */
 export function useDriveListing({
   isTrash,
@@ -55,7 +59,9 @@ export function useDriveListing({
   );
   const index = useFolderIndex();
 
-  const query = searchQuery.trim();
+  const typed = searchQuery.trim();
+  const deferredQuery = useDeferredValue(typed);
+  const query = typed === "" ? "" : deferredQuery;
   const items = useMemo(() => {
     if (isTrash) return listTrash(index, presentations, query);
     const listed = query
