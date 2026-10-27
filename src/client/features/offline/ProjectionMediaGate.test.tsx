@@ -23,10 +23,20 @@ function readiness(
   };
 }
 
-function renderGate(state: ProjectionMediaReadiness): { onStart: () => void } {
+function renderGate(state: ProjectionMediaReadiness): {
+  onStart: () => void;
+  onRetry: () => void;
+} {
   const onStart = vi.fn();
-  render(<ProjectionMediaGate readiness={state} onStartWithSaved={onStart} />);
-  return { onStart };
+  const onRetry = vi.fn();
+  render(
+    <ProjectionMediaGate
+      readiness={state}
+      onRetry={onRetry}
+      onStartWithSaved={onStart}
+    />,
+  );
+  return { onStart, onRetry };
 }
 
 describe("ProjectionMediaGate", () => {
@@ -75,13 +85,14 @@ describe("ProjectionMediaGate", () => {
   });
 
   it("받지 못했으면 다시 시도할 수 있다", () => {
-    const state = readiness({ status: "failed", failure: "network" });
-    renderGate(state);
+    const { onRetry } = renderGate(
+      readiness({ status: "failed", failure: "network" }),
+    );
 
     expect(screen.getByRole("alert")).toHaveTextContent(
       BACKGROUND_COPY.prepare.failed.network,
     );
     fireEvent.click(screen.getByTestId("projection-media-retry"));
-    expect(state.retry).toHaveBeenCalledTimes(1);
+    expect(onRetry).toHaveBeenCalledTimes(1);
   });
 });

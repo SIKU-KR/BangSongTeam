@@ -16,6 +16,7 @@ import { useProjectionMediaCache } from "../features/offline/useBackgroundAutoCa
 import { useProjectionMediaReady } from "../features/offline/useProjectionMediaReady";
 import { useBackgroundLayers } from "../features/backgrounds/backgroundCatalog";
 import {
+  enterFullscreen,
   exitFullscreen,
   isProjectionPath,
   loadPresentReturnPath,
@@ -59,6 +60,9 @@ const preventDefault = (event: React.SyntheticEvent): void => {
  *
  * 세트의 배경 영상을 모두 이 기기에 저장하거나 운영자가 저장된 배경으로 시작하기 전에는
  * 슬라이드 대신 준비 카드를 띄우고 슬라이드 이동을 막는다(`useProjectionMediaReady`).
+ * 준비 카드의 버튼은 누를 때 풀린 전체화면도 다시 요청한다. 전체화면 복구
+ * (`useFullscreenSession`)는 버튼 위의 입력을 버튼에 맡기는데, 새로 뜬 송출 화면에서
+ * 운영자가 처음 누르는 것이 이 버튼이라 그대로 두면 창 안에서 송출이 시작된다.
  * 한 번 시작한 뒤에는 세트가 바뀌어도 다시 가리지 않는다 — 예배 중에 화면이 준비 카드로
  * 바뀌면 안 되므로, 남은 배경과 새로 생긴 배경은 지금·다음 곡을 먼저 받는 백그라운드
  * 큐(`useProjectionMediaCache`)에 맡긴다. 준비 카드가 세트 순서대로 계속 받으면 송출 중인
@@ -248,6 +252,10 @@ function ProjectionSession({
   useScreenWakeLock();
   const isPointerActive = useIdlePointer();
 
+  const restoreFullscreen = (): void => {
+    if (!isExitingRef.current) enterFullscreen().catch(() => {});
+  };
+
   return (
     <div
       data-testid="fullscreen-present-route"
@@ -260,7 +268,14 @@ function ProjectionSession({
       {isPreparing ? (
         <ProjectionMediaGate
           readiness={mediaReadiness}
-          onStartWithSaved={() => setHasStarted(true)}
+          onRetry={() => {
+            restoreFullscreen();
+            mediaReadiness.retry();
+          }}
+          onStartWithSaved={() => {
+            restoreFullscreen();
+            setHasStarted(true);
+          }}
         />
       ) : (
         <ProjectionErrorBoundary

@@ -830,6 +830,52 @@ describe("FullscreenPresentRoute", () => {
       ).toBeInTheDocument();
     });
 
+    it("준비 카드의 버튼은 송출 단축키에 막히지 않아 Enter·Space로 누를 수 있다", async () => {
+      vi.mocked(globalThis.fetch).mockImplementation(
+        () => new Promise<Response>(() => {}),
+      );
+      renderPresent();
+      await waitFor(() => expect(globalThis.fetch).toHaveBeenCalled());
+
+      const startSaved = screen.getByTestId("projection-media-start-saved");
+      startSaved.focus();
+
+      expect(
+        fireEvent.keyDown(startSaved, { key: "Enter", code: "Enter" }),
+      ).toBe(true);
+      expect(fireEvent.keyDown(startSaved, { key: " ", code: "Space" })).toBe(
+        true,
+      );
+      expect(screen.getByTestId("projection-media-gate")).toBeInTheDocument();
+      expect(fireEvent.keyDown(window, { key: " ", code: "Space" })).toBe(
+        false,
+      );
+    });
+
+    it("준비 카드에서 다시 시도하거나 시작하면 풀린 전체화면을 다시 요청한다", async () => {
+      const requestFullscreenMock = vi.fn().mockResolvedValue(undefined);
+      Object.defineProperty(document.documentElement, "requestFullscreen", {
+        value: requestFullscreenMock,
+        configurable: true,
+        writable: true,
+      });
+      mockMediaFetch(500);
+      renderPresent();
+      expect(await screen.findByRole("alert")).toHaveTextContent(
+        "배경 영상을 받지 못했어요",
+      );
+      requestFullscreenMock.mockClear();
+
+      fireEvent.click(screen.getByTestId("projection-media-retry"));
+      expect(requestFullscreenMock).toHaveBeenCalledTimes(1);
+
+      fireEvent.click(screen.getByTestId("projection-media-start-saved"));
+      expect(requestFullscreenMock).toHaveBeenCalledTimes(2);
+      expect(
+        screen.getByText("시작됐네 우리 주님의 능력이"),
+      ).toBeInTheDocument();
+    });
+
     it("이미 저장된 세트는 곧바로 시작한다", async () => {
       await storeMedia(first.mediaUrl, second.mediaUrl);
       renderPresent();
