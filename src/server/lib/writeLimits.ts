@@ -22,12 +22,27 @@ function fieldOf(value: unknown, key: string): unknown {
     : undefined;
 }
 
+function codePointLength(text: string): number {
+  let count = text.length;
+  for (let i = 0; i < text.length - 1; i += 1) {
+    if (
+      (text.charCodeAt(i) & 0xfc00) === 0xd800 &&
+      (text.charCodeAt(i + 1) & 0xfc00) === 0xdc00
+    ) {
+      count -= 1;
+      i += 1;
+    }
+  }
+  return count;
+}
+
 function isSongOverLimit(song: unknown): boolean {
   const lyricsRaw = fieldOf(song, "lyricsRaw");
   const slides = fieldOf(song, "slides");
   return (
     (typeof lyricsRaw === "string" &&
-      lyricsRaw.length > MAX_WRITE_LYRICS_LENGTH) ||
+      lyricsRaw.length > MAX_WRITE_LYRICS_LENGTH &&
+      codePointLength(lyricsRaw) > MAX_WRITE_LYRICS_LENGTH) ||
     (Array.isArray(slides) && slides.length > MAX_WRITE_SLIDES)
   );
 }
@@ -65,7 +80,9 @@ function findWriteLimitBreach(body: unknown): WriteLimitBreach | null {
  *
  * `jsonBody`는 첫 문제에서 검사를 멈춰 문제 목록이 없으므로, 받은 본문에서 곡(본문 자체,
  * `decks`의 곡, `items`의 `deck`)과 곡 목록의 길이를 직접 본다. 곡 수가 한도 안일 때만 곡을
- * 훑으므로 큰 본문에서도 곡 200개 남짓만 본다.
+ * 훑으므로 큰 본문에서도 곡 200개 남짓만 본다. 가사 길이는 스키마(Zod `.max()`)처럼 코드
+ * 포인트로 센다(짝이 맞는 서로게이트 쌍은 한 글자). UTF-16 길이로 세면 이모지가 많은 가사가 든
+ * 틀린 본문을 400 대신 413으로 답한다.
  */
 export function rejectOverLimit(
   message: (breach: WriteLimitBreach) => string,

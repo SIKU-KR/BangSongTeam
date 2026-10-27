@@ -332,6 +332,30 @@ describe("저장 본문의 쓰기 한도", () => {
     expect((await savePresentation("PATCH", longTitle)).status).toBe(400);
   });
 
+  it("가사 길이는 스키마처럼 코드 포인트로 세어, UTF-16 길이만 한도를 넘는 이모지 가사는 쓰기 한도로 보지 않는다", async () => {
+    const emojiLyrics = "😀".repeat(MAX_WRITE_LYRICS_LENGTH);
+    const withLongSlideId = presentation([
+      song(0, {
+        title: "이모지 곡",
+        lyricsRaw: emojiLyrics,
+        slides: [
+          { id: "s".repeat(MAX_SLIDE_ID_LENGTH + 1), order: 0, lines: ["가"] },
+        ],
+      }),
+    ]);
+    const fits = presentation([
+      song(0, { title: "이모지 곡", lyricsRaw: emojiLyrics }),
+    ]);
+
+    expect(
+      (await savePresentation("PATCH", toPresentationChanges(withLongSlideId)))
+        .status,
+    ).toBe(400);
+    expect(
+      (await savePresentation("PATCH", toPresentationChanges(fits))).status,
+    ).toBe(200);
+  });
+
   it("보관함 곡도 가사·슬라이드 한도를 넘으면 413이고 한도에 꼭 맞으면 저장된다", async () => {
     const library = (overrides: Partial<Deck>) =>
       song(0, {
