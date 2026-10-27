@@ -12,6 +12,7 @@ import {
   isSyncedWithServer,
   repairDuplicateDeckIds,
   withCurrentPlacement,
+  withEditStamp,
 } from "./presentationDocument";
 
 const SOURCE = SEED_PRESENTATIONS[0];
@@ -141,6 +142,64 @@ describe("서버와 맞춘 판인지", () => {
   it("기준 판이 없는 이전 저장본은 어느 쪽인지 알 수 없다", () => {
     expect(isSyncedWithServer(at(NOW))).toBe(false);
     expect(hasUnsyncedEdits(at(NOW))).toBe(false);
+  });
+
+  it("기준 판보다 이른 시각의 판도 올리지 않은 편집이 있다", () => {
+    expect(isSyncedWithServer(at(OLDER_BASE, NOW))).toBe(false);
+    expect(hasUnsyncedEdits(at(OLDER_BASE, NOW))).toBe(true);
+  });
+});
+
+describe("withEditStamp", () => {
+  const BASE = "2026-10-01T12:00:00.000Z";
+  const HOUR_BEHIND = Date.parse("2026-10-01T11:00:00.000Z");
+  const clean: Presentation = {
+    ...SOURCE,
+    updatedAt: BASE,
+    baseUpdatedAt: BASE,
+  };
+
+  it("바뀐 것이 없으면 같은 객체를 돌려준다", () => {
+    expect(withEditStamp(clean, clean, HOUR_BEHIND)).toBe(clean);
+  });
+
+  it("기기 시계가 기준 판보다 한참 늦어도 기준 판보다 늦게 찍는다", () => {
+    const edited = withEditStamp(
+      clean,
+      { ...clean, title: "고친 제목" },
+      HOUR_BEHIND,
+    );
+
+    expect(edited).toMatchObject({
+      title: "고친 제목",
+      updatedAt: "2026-10-01T12:00:00.001Z",
+      baseUpdatedAt: BASE,
+    });
+    expect(hasUnsyncedEdits(edited)).toBe(true);
+  });
+
+  it("시계가 맞으면 지금으로 찍는다", () => {
+    const edited = withEditStamp(
+      clean,
+      { ...clean, title: "고친 제목" },
+      Date.parse("2026-10-01T13:00:00.000Z"),
+    );
+
+    expect(edited.updatedAt).toBe("2026-10-01T13:00:00.000Z");
+  });
+
+  it("기준 판이 없거나 서버가 확정한 적 없는 판은 기기 시계 + 5분 뒤로 넘기지 않는다", () => {
+    const legacy: Presentation = { ...SOURCE, updatedAt: BASE };
+    const created: Presentation = { ...legacy, baseUpdatedAt: null };
+
+    expect(
+      withEditStamp(legacy, { ...legacy, title: "고친 제목" }, HOUR_BEHIND)
+        .updatedAt,
+    ).toBe("2026-10-01T11:05:00.001Z");
+    expect(
+      withEditStamp(created, { ...created, title: "고친 제목" }, HOUR_BEHIND)
+        .updatedAt,
+    ).toBe("2026-10-01T11:05:00.001Z");
   });
 });
 

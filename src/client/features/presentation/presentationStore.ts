@@ -8,7 +8,6 @@ import {
   createId,
   cycleItem,
   createSlideId,
-  editTimestamp,
   laterThan,
   mergeSlideLines,
   splitLinesAtCursor,
@@ -59,6 +58,7 @@ import {
   isSyncedWithServer,
   repairDuplicateDeckIds,
   withCurrentPlacement,
+  withEditStamp,
 } from "./presentationDocument";
 
 interface PresentationStoreState {
@@ -111,15 +111,6 @@ export function canEditPresentation(doc: Presentation): boolean {
   return doc.access === undefined;
 }
 
-function withEditStamp(
-  current: Presentation,
-  next: Presentation,
-): Presentation {
-  return next === current
-    ? next
-    : { ...next, updatedAt: editTimestamp(current.updatedAt) };
-}
-
 function writeActive(next: Presentation): void {
   const current = readActive();
   if (!canEditPresentation(current)) return;
@@ -147,7 +138,7 @@ export function canRedo(): boolean {
 
 /**
  * 되돌리기. 되돌린 판도 새 편집이라 수정 시각은 기록의 옛 시각이 아니라 지금 판보다 뒤로 찍는다
- * (`editTimestamp`). 옛 시각으로 올리면 그사이의 판을 이미 받은 다른 기기가 다음 부팅 병합에서
+ * (`withEditStamp`). 옛 시각으로 올리면 그사이의 판을 이미 받은 다른 기기가 다음 부팅 병합에서
  * 자기 판이 더 새롭다고 보고, 되돌린 내용을 모든 기기에서 다시 되돌린다.
  */
 export function undo(): boolean {
@@ -1045,14 +1036,15 @@ export function duplicatePresentation(
   return copy;
 }
 
+function defersSyncOutcome(id: string): boolean {
+  if (!skippedReloads.has(id) || hasUnpersistedWrite(id)) return false;
+  if (!isProjecting()) void reloadSkippedRecord(id);
+  return true;
+}
+
 function writeSyncOutcome(next: Presentation): void {
-  const id = next.id;
-  if (skippedReloads.has(id) && !hasUnpersistedWrite(id)) {
-    if (!isProjecting()) void reloadSkippedRecord(id);
-    return;
-  }
-  commit({ ...state, byId: { ...state.byId, [id]: next } });
-  schedulePersist(id);
+  commit({ ...state, byId: { ...state.byId, [next.id]: next } });
+  schedulePersist(next.id);
   notifyListeners();
 }
 
@@ -1110,6 +1102,7 @@ export function markPresentationSynced(
     return;
   }
   confirmVersion(sent);
+  if (defersSyncOutcome(id)) return;
   writeSyncOutcome(
     current === sent
       ? { ...current, updatedAt: stored, baseUpdatedAt: stored }
@@ -1147,9 +1140,14 @@ export function rebasePresentation(id: string, base: string): void {
  * 서버 판을 그 세트의 지금 판으로 받는다. 기준 판은 그 서버 판이다.
  *
  * 이 탭에 없는 세트나 지금 사용자의 것이 아닌 판은 넣지 않는다. 늦게 온 응답이 지운 세트를
- * 되살리거나, 로그아웃한 앞 계정의 세트를 다음 계정의 드라이브에 넣으면 안 된다. 받기 전의 판들인
- * 되돌리기 기록과 대기 중인 push는 버리고, 계보는 그 판에서 새로 시작한다. 저장 줄로 저장해 다른
- * 탭에 알리되, 다른 탭의 저장본을 건너뛰었으면 덮지 않고 다시 읽는다(`markPresentationSynced`).
+ * 되살리거나, 로그아웃한 앞 계정의 세트를 다음 계정의 드라이브에 넣으면 안 된다. 대기 중인 push는
+ * 버린다. 받기 전의 판들인 되돌리기 기록도 버리고, 계보는 그 판에서 새로 시작한다. 저장 줄로 저장해
+ * 다른 탭에 알린다.
+ *
+ * 다른 탭의 저장본을 건너뛰었으면 받지 않고 그 저장본을 다시 읽는다(`markPresentationSynced`). 그때
+ * 되돌리기 기록과 계보는 다시 읽기가 바꿀 때까지 그대로 둔다. 읽는 동안 고쳤거나 저장본을 읽지 못해
+ * 이 탭의 판이 남았는데 계보만 서버 판에서 시작하면, 다음 412가 그 서버 판을 이 탭이 만든 판으로 보고
+ * 그 위에 다시 보내 다른 기기의 수정을 덮는다.
  */
 export function adoptServerPresentation(server: Presentation): void {
   const current = state.byId[server.id];
@@ -1163,6 +1161,7 @@ export function adoptServerPresentation(server: Presentation): void {
   }
   const adopted: Presentation = { ...server, baseUpdatedAt: server.updatedAt };
   cancelDocumentPush(server.id);
+  if (defersSyncOutcome(server.id)) return;
   clearHistory(server.id);
   resetLineage(adopted);
   writeSyncOutcome(adopted);

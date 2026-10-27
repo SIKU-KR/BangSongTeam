@@ -1148,4 +1148,61 @@ describe("서버가 확정한 판 (기준 판)", () => {
 
     expect(keepUnsyncedCopy(SEED.id)).toBeNull();
   });
+
+  describe("시계가 서버보다 한참 늦은 기기", () => {
+    const BASE = "2026-10-01T12:00:00.000Z";
+    const EDITED_TITLE = "늦은 시계로 고친 제목";
+
+    beforeEach(() => {
+      vi.useFakeTimers({ toFake: ["Date"] });
+      vi.setSystemTime(new Date("2026-10-01T11:00:00.000Z"));
+      load({ baseUpdatedAt: BASE, updatedAt: BASE });
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it("고친 판을 기준 판보다 늦게 찍어 올리지 않은 편집으로 남긴다", () => {
+      renamePresentation(SEED.id, EDITED_TITLE);
+
+      const edited = getPresentationById(SEED.id)!;
+      expect(edited.baseUpdatedAt).toBe(BASE);
+      expect(Date.parse(edited.updatedAt)).toBeGreaterThan(Date.parse(BASE));
+      expect(hasUnsyncedEdits(edited)).toBe(true);
+    });
+
+    it("다른 기기와 엇갈리면 고친 내용을 '(사본)'으로 남기고 서버 판을 받는다", () => {
+      renamePresentation(SEED.id, EDITED_TITLE);
+
+      const copy = resolvePresentationConflict(
+        serverCopy({ updatedAt: "2026-10-01T12:30:00.000Z" }),
+      );
+
+      expect(copy?.title).toBe(`${EDITED_TITLE}${COMMON_COPY.copySuffix}`);
+      expect(getPresentationById(SEED.id)?.title).toBe(
+        "다른 기기에서 고친 제목",
+      );
+    });
+
+    it("다른 기기에서 영구 삭제한 세트도 고친 내용을 '(사본)'으로 남긴다", () => {
+      renamePresentation(SEED.id, EDITED_TITLE);
+
+      expect(keepUnsyncedCopy(SEED.id)?.title).toBe(
+        `${EDITED_TITLE}${COMMON_COPY.copySuffix}`,
+      );
+    });
+
+    it("기준 판보다 이른 시각으로 남은 판도 올리지 않은 편집으로 보고 '(사본)'으로 남긴다", () => {
+      load({
+        title: EDITED_TITLE,
+        baseUpdatedAt: BASE,
+        updatedAt: "2026-10-01T11:05:00.001Z",
+      });
+
+      expect(keepUnsyncedCopy(SEED.id)?.title).toBe(
+        `${EDITED_TITLE}${COMMON_COPY.copySuffix}`,
+      );
+    });
+  });
 });

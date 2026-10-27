@@ -441,6 +441,19 @@ describe("부팅 병합 계획 — 기준 판", () => {
     expect(removedIds).toEqual([]);
   });
 
+  it("영구 삭제 기록이 있어도 기준 판보다 이른 시각으로 고친 세트는 남기고 올린다", () => {
+    const edited = doc("a", T1, {
+      title: "시계가 늦은 기기의 편집",
+      baseUpdatedAt: T2,
+    });
+
+    const { documents, needsPush, removedIds } = plan([edited], [], ["a"]);
+
+    expect(documents).toEqual([edited]);
+    expect(needsPush).toEqual(["a"]);
+    expect(removedIds).toEqual([]);
+  });
+
   it("받기 전부터 알던 내 세트가 그사이 사라졌으면 서버 목록에 있어도 다시 넣지 않는다", () => {
     const { documents, needsPush } = plan(
       [],
