@@ -311,8 +311,8 @@ export async function runDeletionPasses(
  * - 없는 id의 저장은 기록을 지우지 않는다. 부르는 쪽이 `deleted`(410)로 거절해 영구 삭제가 이긴다.
  *   지운 항목을 아직 가진 기기·캐시된 옛 앱이 늦게 올린 저장이 그 항목을 되살리고 기록까지 지워,
  *   모든 기기에 다시 퍼뜨리지 않게 하기 위해서다.
- * - `clear`는 그 기록만 지운다. 문서가 있는데 기록도 남은 경우(배포 중 옛 리비전이 되살린 항목)의
- *   쓰기 단계에서 부른다.
+ * - `clear`는 그 기록만 지운다. 문서가 있는데 기록도 남은 경우(같은 id를 폴더와 프레젠테이션이 함께
+ *   쓴 경우)의 쓰기 단계에서 부른다.
  */
 export async function readOwnTombstone(
   tx: Transaction,

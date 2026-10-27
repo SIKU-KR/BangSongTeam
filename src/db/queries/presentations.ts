@@ -2,6 +2,7 @@ import {
   clampToClock,
   isReservedDocumentId,
   laterThan,
+  MAX_FIRESTORE_TIME,
   MAX_PRESENTATION_TEXT_BYTES,
   toPresentationChanges,
   type PresentationChangesRequest,
@@ -16,11 +17,7 @@ import {
   type DeckDoc,
   type PresentationDoc,
 } from "../collections";
-import {
-  fromPresentationChanges,
-  MAX_FIRESTORE_TIME,
-  toPresentationDocument,
-} from "./mappers";
+import { fromPresentationChanges, toPresentationDocument } from "./mappers";
 import { existingBackgroundIds } from "./decks";
 import { isPresentationInTrash } from "./folders";
 import {

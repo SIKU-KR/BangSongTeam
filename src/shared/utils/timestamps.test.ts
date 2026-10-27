@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   MAX_CLOCK_SKEW_MS,
+  MAX_FIRESTORE_TIME,
   clampToClock,
   editTimestamp,
   isFarFuture,
@@ -14,6 +15,12 @@ const at = (ms: number): string => new Date(ms).toISOString();
 describe("MAX_CLOCK_SKEW_MS", () => {
   it("5분이다", () => {
     expect(MAX_CLOCK_SKEW_MS).toBe(5 * 60_000);
+  });
+});
+
+describe("MAX_FIRESTORE_TIME", () => {
+  it("9999년의 마지막 밀리초다", () => {
+    expect(at(MAX_FIRESTORE_TIME)).toBe("9999-12-31T23:59:59.999Z");
   });
 });
 
@@ -63,10 +70,27 @@ describe("editTimestamp", () => {
     );
   });
 
-  it("앞 판이 9999년이면 지금 + 5분 + 1ms로 줄인다", () => {
+  it("시계가 앞 판보다 5분 넘게 뒤처져도 앞 판보다 늦다", () => {
+    for (const lag of [MAX_CLOCK_SKEW_MS + 1, 6 * 60_000, 30 * 60_000]) {
+      expect(editTimestamp(at(NOW + lag), NOW)).toBe(at(NOW + lag + 1));
+    }
+  });
+
+  it("앞 판이 9999년이어도 그보다 1ms 뒤이고, 담길 수 있는 마지막 시각을 넘지 않는다", () => {
     expect(editTimestamp("9999-12-31T00:00:00.000Z", NOW)).toBe(
-      at(NOW + MAX_CLOCK_SKEW_MS + 1),
+      "9999-12-31T00:00:00.001Z",
     );
+    expect(editTimestamp(at(MAX_FIRESTORE_TIME - 1), NOW)).toBe(
+      at(MAX_FIRESTORE_TIME),
+    );
+    expect(editTimestamp(at(MAX_FIRESTORE_TIME), NOW)).toBe(
+      at(MAX_FIRESTORE_TIME),
+    );
+  });
+
+  it("앞 판을 읽지 못하면 지금이다", () => {
+    expect(editTimestamp("", NOW)).toBe(at(NOW));
+    expect(editTimestamp("not a date", NOW)).toBe(at(NOW));
   });
 });
 

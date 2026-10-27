@@ -97,7 +97,7 @@ function toSyncableDocument(presentation: Presentation): PresentationDocument {
  * 문서 id → (덱 id → 서버에 있다고 아는 덱의 지문). 메모리에만 둔다.
  *
  * 바뀐 덱만 올리는 기준이다. 모르는 문서(새로고침 직후 부팅 동기화 전 등)는
- * 모든 덱을 보낸다. 서버가 실제로 덱을 잃었으면(다른 기기에서 영구 삭제 등) 409를
+ * 모든 덱을 보낸다. 서버가 실제로 덱을 잃었으면(다른 기기에서 곡을 뺀 경우 등) 409를
  * 받고 모든 덱을 담아 다시 보내므로, 이 표가 틀려도 곡이 빠지지는 않는다.
  */
 const serverDecks = new Map<string, Map<string, string>>();

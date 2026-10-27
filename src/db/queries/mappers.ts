@@ -4,6 +4,7 @@ import {
   DeckStyleSchema,
   fitDeckText,
   fitSlidesToLimits,
+  MAX_FIRESTORE_TIME,
   MAX_PRESENTATION_TITLE_LENGTH,
   StoredSlideSchema,
   toNonNegativeInt,
@@ -101,9 +102,6 @@ function toDateOrNull(iso: string | null | undefined): Date | null {
  * https://github.com/protocolbuffers/protobuf/blob/main/src/google/protobuf/timestamp.proto
  */
 const MIN_FIRESTORE_TIME = Date.parse("0001-01-01T00:00:00.000Z");
-
-/** Firestore Timestamp가 담는 마지막 시각(ms). 이보다 늦은 값은 `toDate`가 1970년으로 바꿔 쓴다 */
-export const MAX_FIRESTORE_TIME = Date.parse("9999-12-31T23:59:59.999Z");
 
 function toDate(iso: string): Date {
   const time = new Date(iso).getTime();

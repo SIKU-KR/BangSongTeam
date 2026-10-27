@@ -5,6 +5,12 @@
 export const MAX_CLOCK_SKEW_MS = 5 * 60_000;
 
 /**
+ * 시각이 담길 수 있는 마지막 값(ms). Firestore Timestamp와 스키마의 ISO 시각(네 자리 연도)이 여기서
+ * 끝난다. 더 늦은 값은 스키마가 거절하고, 서버의 `toDate`는 1970년으로 바꿔 쓴다.
+ */
+export const MAX_FIRESTORE_TIME = Date.parse("9999-12-31T23:59:59.999Z");
+
+/**
  * 기기가 보낸 시각을 서버 시계(`nowMs`) + 5분까지로 줄인다.
  *
  * 빠른 시계나 꾸민 요청이 미래 시각을 남기면 시각으로 판을 고르는 병합과 서버의 옛 쓰기 거르기에서
@@ -33,19 +39,24 @@ export function laterThan(
 }
 
 /**
- * 기기가 본 판(`previousIso`)을 고친 판의 시각: 지금이되 본 판보다 적어도 1ms 뒤다. 본 판은 먼저
- * `clampToClock`으로 줄인다.
+ * 기기가 본 판(`previousIso`)을 고친 판의 시각: 지금이되 본 판보다 적어도 1ms 뒤다. 담길 수 있는
+ * 마지막 시각(`MAX_FIRESTORE_TIME`)은 넘지 않아, 본 판이 그 시각이면 본 판과 같다.
  *
- * 고친 판은 그것이 바꾸는 판보다 늦어야 한다. 서버가 찍은 시각(가져오기, 서버가 줄인 값)보다 시계가
- * 뒤처진 기기가 지금으로 찍으면 서버가 옛 쓰기로 보고 그 수정을 버린다. 본 판이 미래에 박혀 있어도
- * 지금 + 5분 + 1ms를 넘지 않는다.
+ * 고친 판은 그것이 바꾸는 판보다 늦어야 한다. 서버는 저장본보다 이른 폴더·보관함 곡 쓰기를 늦게 온 옛
+ * 수정으로 보고 버리고(`isOutdatedWrite`), 시각으로 판을 고르는 병합도 이른 쪽을 옛 판으로 본다. 본
+ * 판은 다른 기기나 서버(가져오기)가 찍은 시각이라 이 기기 시계보다 몇십 분 앞설 수 있다. 기기는 제
+ * 시계가 뒤처진 것과 본 판이 미래에 박힌 것을 가리지 못하므로 본 판을 기기 시계로 줄이지 않는다.
+ * 미래에 박힌 판 뒤로 찍은 시각은 서버가 서버 시계 + 5분까지로 줄여 받는다(`clampToClock`).
  */
 export function editTimestamp(
   previousIso: string | null | undefined,
   nowMs: number = Date.now(),
 ): string {
+  const seen = Date.parse(previousIso ?? "");
   return laterThan(
-    previousIso && clampToClock(previousIso, nowMs),
+    Number.isNaN(seen)
+      ? null
+      : new Date(Math.min(seen, MAX_FIRESTORE_TIME - 1)).toISOString(),
     new Date(nowMs).toISOString(),
   );
 }
@@ -53,7 +64,8 @@ export function editTimestamp(
 /**
  * 기기 시계 + 10분(서버가 받아 주는 앞섬의 두 배)보다 늦은 시각인지. 시각을 줄이기 전에 빠른 시계가
  * 남긴 값이라, 이런 로컬 판은 병합에서 서버 판을 이기지 못하게 한다. 두 배로 잡아서, 서버가 줄인 값
- * 바로 뒤로 찍은 새 수정은 걸리지 않는다.
+ * 바로 뒤로 찍은 새 수정은 기기 시계가 서버보다 5분 넘게 뒤처지지 않으면 걸리지 않는다. 그보다
+ * 뒤처진 기기에서는 본 판 뒤로 찍은 제 수정(`editTimestamp`)도 걸릴 수 있다.
  */
 export function isFarFuture(iso: string, nowMs: number = Date.now()): boolean {
   return Date.parse(iso) > nowMs + 2 * MAX_CLOCK_SKEW_MS;

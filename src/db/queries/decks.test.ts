@@ -25,6 +25,7 @@ import { takedownDeck } from "../ops/moderation";
 import {
   DEFAULT_DECK_STYLE,
   DeckSchema,
+  editTimestamp,
   MAX_CLOCK_SKEW_MS,
   type Deck,
 } from "#shared";
@@ -169,6 +170,31 @@ describe("덱 쓰기 헬퍼 (보관함 동기화)", () => {
     expect(late).toEqual(newer);
     expect(instrument.writesPerAttempt).toEqual([0]);
     expect((await readDeck(DECK_ID)).title).toBe("은혜로다 (새 제목)");
+  });
+
+  it("시계가 30분 뒤처진 기기가 1분 전에 저장된 곡을 고쳐도 쓴다", async () => {
+    const now = new Date("2026-09-25T00:00:00.000Z");
+    const elsewhere = makeDeck(ownerId, {
+      title: "다른 기기",
+      updatedAt: new Date(now.getTime() - 60_000).toISOString(),
+    });
+    await upsertDeck(db, ownerId, elsewhere, now);
+    const renamed = makeDeck(ownerId, {
+      title: "새 제목",
+      updatedAt: editTimestamp(
+        elsewhere.updatedAt,
+        now.getTime() - 30 * 60_000,
+      ),
+    });
+
+    expect(await upsertDeck(db, ownerId, renamed, now)).toMatchObject({
+      status: "saved",
+      deck: { title: "새 제목", updatedAt: renamed.updatedAt },
+    });
+    expect(await readDeck(DECK_ID)).toMatchObject({
+      title: "새 제목",
+      updatedAt: renamed.updatedAt,
+    });
   });
 
   it("서버 시계 + 5분보다 늦은 시각은 줄이고, 만든 시각은 처음 저장한 값을 지킨다", async () => {

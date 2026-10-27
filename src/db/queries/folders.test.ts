@@ -2,6 +2,7 @@ import { describe, it, expect, afterEach, beforeEach } from "vitest";
 import {
   buildFolderIndex,
   DEFAULT_DECK_STYLE,
+  editTimestamp,
   isFolderTrashed,
   MAX_CLOCK_SKEW_MS,
   PresentationDocumentSchema,
@@ -12,6 +13,7 @@ import {
 import type { Db } from "../client";
 import {
   decksCol,
+  driveTombstonesCol,
   foldersCol,
   presentationMembersCol,
   presentationsCol,
@@ -209,6 +211,29 @@ describe("드라이브 폴더 쿼리", () => {
 
       expect(late).toEqual({ status: "saved", folder: newer });
       expect(await getFoldersByUserId(db, USER_A)).toEqual([newer]);
+    });
+
+    it("시계가 30분 뒤처진 기기가 1분 전에 저장된 폴더를 고쳐도 쓴다", async () => {
+      const now = new Date("2026-09-25T00:00:00.000Z");
+      const elsewhere = makeFolder(USER_A, {
+        name: "다른 기기",
+        updatedAt: new Date(now.getTime() - 60_000).toISOString(),
+      });
+      await upsertFolder(db, USER_A, elsewhere, now);
+      const renamed = {
+        ...elsewhere,
+        name: "새 이름",
+        updatedAt: editTimestamp(
+          elsewhere.updatedAt,
+          now.getTime() - 30 * 60_000,
+        ),
+      };
+
+      expect(await upsertFolder(db, USER_A, renamed, now)).toEqual({
+        status: "saved",
+        folder: renamed,
+      });
+      expect(await getFoldersByUserId(db, USER_A)).toEqual([renamed]);
     });
 
     it("수정 시각이 같으면 다시 쓴다", async () => {
@@ -928,6 +953,38 @@ describe("드라이브 폴더 쿼리", () => {
       });
       expect(await getFoldersByUserId(db, USER_A)).toEqual([]);
       expect(await getPresentationDocumentsByUserId(db, USER_A)).toEqual([]);
+    });
+
+    it("폴더가 있으면 같은 id의 내 영구 삭제 기록을 지우고 저장한다", async () => {
+      const folder = makeFolder(USER_A);
+      await upsertFolder(db, USER_A, folder);
+      await driveTombstonesCol(db)
+        .doc(folder.id)
+        .set({ itemId: folder.id, userId: USER_A, kind: "folder" });
+      const renamed = { ...folder, name: "새 이름" };
+
+      expect(await upsertFolder(db, USER_A, renamed)).toEqual({
+        status: "saved",
+        folder: renamed,
+      });
+      expect((await getDriveTombstones(db, USER_A)).folderIds).toEqual([]);
+    });
+
+    it("폴더가 있어도 같은 id의 남의 영구 삭제 기록은 지우지 않는다", async () => {
+      const folder = makeFolder(USER_A);
+      await upsertFolder(db, USER_A, folder);
+      await driveTombstonesCol(db)
+        .doc(folder.id)
+        .set({ itemId: folder.id, userId: USER_B, kind: "folder" });
+      const renamed = { ...folder, name: "새 이름" };
+
+      expect(await upsertFolder(db, USER_A, renamed)).toEqual({
+        status: "saved",
+        folder: renamed,
+      });
+      expect((await getDriveTombstones(db, USER_B)).folderIds).toEqual([
+        folder.id,
+      ]);
     });
 
     it("내가 영구 삭제한 프레젠테이션의 id로는 폴더도 다시 만들지 않는다", async () => {
