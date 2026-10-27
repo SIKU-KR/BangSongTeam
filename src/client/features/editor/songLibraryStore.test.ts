@@ -28,6 +28,7 @@ import {
   applyServerDeckFields,
   applyServerLibraryDecks,
   dropDeletedLibraryDeck,
+  flushSongWrites,
   getDeletedSongIds,
   getLibraryDeck,
   reloadSongsFromStorage,
@@ -1078,6 +1079,54 @@ describe("songLibraryStore", () => {
       ).toEqual(["마지막 수정"]);
       expect(await storedTitle(SONG)).toBe("마지막 수정");
       expect(getPersistenceError()).toBeNull();
+    });
+
+    it("창을 닫거나 계정이 끝나 저장 줄을 비우면, 저장하지 못한 곡도 다시 시도를 기다리지 않고 다시 쓴다", async () => {
+      vi.mocked(saveSong).mockRejectedValueOnce(quotaError());
+      updateLibrarySongInfo(SONG, { title: "저장하지 못한 수정", artist: "" });
+      await loadAllSongs();
+      expect(getPersistenceError("deck")?.kind).toBe("quota");
+
+      await flushSongWrites();
+
+      expect(await storedTitle(SONG)).toBe("저장하지 못한 수정");
+      expect(getPersistenceError()).toBeNull();
+    });
+
+    it("저장 줄을 비우면 지우지 못한 곡도 다시 시도를 기다리지 않고 다시 지운다", async () => {
+      vi.mocked(deleteSong).mockRejectedValueOnce(new Error("disk"));
+      deleteUserSong(SONG);
+      await loadAllSongs();
+      expect(await storedSongIds()).toContain(SONG);
+
+      await flushSongWrites();
+
+      expect(await storedSongIds()).not.toContain(SONG);
+      expect(getPersistenceError()).toBeNull();
+    });
+
+    it("저장 줄을 비우면 저장소에 쓰는 중인 곡을 다 쓴 뒤에 끝난다", async () => {
+      const save = vi.mocked(saveSong).getMockImplementation()!;
+      let release: () => void = () => undefined;
+      const held = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      vi.mocked(saveSong).mockImplementationOnce(async (deck) => {
+        await held;
+        await save(deck);
+      });
+      updateLibrarySongInfo(SONG, { title: "쓰는 중인 수정", artist: "" });
+
+      let flushed = false;
+      const flushing = flushSongWrites().then(() => {
+        flushed = true;
+      });
+      await loadAllSongs();
+      expect(flushed).toBe(false);
+      release();
+      await flushing;
+
+      expect(await storedTitle(SONG)).toBe("쓰는 중인 수정");
     });
 
     it("지우지 못한 곡은 지우기로 다시 시도한다", async () => {

@@ -13,8 +13,14 @@ import {
   flushPendingWrites,
 } from "./features/presentation";
 import { isProjectionPath } from "./features/presentation/fullscreen";
-import { hydrateSongLibrary } from "./features/editor/songLibraryStore";
-import { hydrateFoldersFromStorage } from "./features/drive/folderStore";
+import {
+  flushSongWrites,
+  hydrateSongLibrary,
+} from "./features/editor/songLibraryStore";
+import {
+  flushFolderWrites,
+  hydrateFoldersFromStorage,
+} from "./features/drive/folderStore";
 import { hydrateBackgroundCatalog } from "./features/backgrounds/backgroundCatalog";
 import {
   finishPendingSignOut,
@@ -123,6 +129,8 @@ function useFlushOnPageHide(): void {
   useEffect(() => {
     const flush = (): void => {
       void flushPendingWrites();
+      void flushFolderWrites();
+      void flushSongWrites();
       void flushFolderSync();
       void flushPendingSync();
       void flushDeckSync();

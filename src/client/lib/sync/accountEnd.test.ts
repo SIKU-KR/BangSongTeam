@@ -35,16 +35,75 @@ import {
   __resetConnectivityForTests,
   markServerUnreachable,
 } from "../api/connectivity";
-import { loadAllPresentations } from "../storage";
+import { loadAllFolders, loadAllPresentations, loadAllSongs } from "../storage";
 import { closeOfflineDB, OFFLINE_DB_NAME } from "../storage/db";
+import {
+  __resetPersistenceStatusForTests,
+  getPersistenceError,
+} from "../storage/persistenceStatus";
 import { signInAsTestUser } from "../../test/sessionFixture";
 import { SEED_USER_ID } from "../../test/presentationFixture";
 import {
   createNewPresentation,
+  flushPendingWrites,
   hydrateFromStorage,
+  renamePresentation,
   resetPresentationStore,
 } from "../../features/presentation/presentationStore";
-import { resetFolderStore } from "../../features/drive/folderStore";
+import {
+  createFolder,
+  flushFolderWrites,
+  hydrateFoldersFromStorage,
+  resetFolderStore,
+} from "../../features/drive/folderStore";
+import {
+  flushSongWrites,
+  hydrateSongLibrary,
+  resetSongLibraryStore,
+  saveSongToLibrary,
+} from "../../features/editor/songLibraryStore";
+
+const storageHooks = vi.hoisted(() => ({
+  failPresentationSaves: 0,
+  failFolderSaves: 0,
+  failSongSaves: 0,
+  holdSongSave: null as Promise<void> | null,
+}));
+
+vi.mock("../storage", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../storage")>();
+  const quotaError = (): DOMException =>
+    new DOMException("가득 참", "QuotaExceededError");
+  return {
+    ...actual,
+    savePresentation: vi.fn(
+      async (doc: Parameters<typeof actual.savePresentation>[0]) => {
+        if (storageHooks.failPresentationSaves > 0) {
+          storageHooks.failPresentationSaves -= 1;
+          throw quotaError();
+        }
+        await actual.savePresentation(doc);
+      },
+    ),
+    saveFolder: vi.fn(
+      async (saved: Parameters<typeof actual.saveFolder>[0]) => {
+        if (storageHooks.failFolderSaves > 0) {
+          storageHooks.failFolderSaves -= 1;
+          throw quotaError();
+        }
+        await actual.saveFolder(saved);
+      },
+    ),
+    saveSong: vi.fn(async (deck: Parameters<typeof actual.saveSong>[0]) => {
+      if (storageHooks.holdSongSave) await storageHooks.holdSongSave;
+      if (storageHooks.failSongSaves > 0) {
+        storageHooks.failSongSaves -= 1;
+        throw quotaError();
+      }
+      await actual.saveSong(deck);
+    }),
+  };
+});
 
 const SONG = "c0000000000000000000a";
 
@@ -117,10 +176,16 @@ describe("계정이 끝날 때의 동기화", () => {
 
   beforeEach(async () => {
     localStorage.clear();
+    storageHooks.failPresentationSaves = 0;
+    storageHooks.failFolderSaves = 0;
+    storageHooks.failSongSaves = 0;
+    storageHooks.holdSongSave = null;
     await resetDatabase();
+    __resetPersistenceStatusForTests();
     signInAsTestUser();
     resetPresentationStore();
     resetFolderStore();
+    await resetSongLibraryStore();
     resetQueues();
     __resetConnectivityForTests();
     pushPresentation = vi.fn(async () => true);
@@ -135,14 +200,70 @@ describe("계정이 끝날 때의 동기화", () => {
     setFolderSyncEnabled(true);
   });
 
-  afterEach(() => {
+  afterEach(async () => {
+    storageHooks.holdSongSave = null;
     vi.useRealTimers();
     resetQueues();
     resetPresentationStore();
+    resetFolderStore();
+    await resetSongLibraryStore();
     __resetConnectivityForTests();
     localStorage.clear();
     closeOfflineDB();
   });
+
+  async function failOnceInEveryStore(): Promise<{
+    presentationId: string;
+    folderId: string;
+    songId: string;
+  }> {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    await Promise.all([
+      hydrateFromStorage(),
+      hydrateFoldersFromStorage(),
+      hydrateSongLibrary(),
+    ]);
+    const created = createNewPresentation();
+    await flushPendingWrites();
+    storageHooks.failPresentationSaves = 1;
+    storageHooks.failFolderSaves = 1;
+    storageHooks.failSongSaves = 1;
+    renamePresentation(created.id, "저장하지 못한 이름");
+    await flushPendingWrites();
+    const madeFolder = createFolder(null, "저장하지 못한 폴더");
+    await flushFolderWrites();
+    const song = saveSongToLibrary({
+      title: "저장하지 못한 곡",
+      lyricsRaw: "가사",
+    });
+    await flushSongWrites();
+    expect(getPersistenceError("presentation")?.kind).toBe("quota");
+    expect(getPersistenceError("folder")?.kind).toBe("quota");
+    expect(getPersistenceError("deck")?.kind).toBe("quota");
+    return {
+      presentationId: created.id,
+      folderId: madeFolder.id,
+      songId: song.id,
+    };
+  }
+
+  async function expectStored(ids: {
+    presentationId: string;
+    folderId: string;
+    songId: string;
+  }): Promise<void> {
+    const [presentations, folders, songs] = await Promise.all([
+      loadAllPresentations(),
+      loadAllFolders(),
+      loadAllSongs(),
+    ]);
+    expect(
+      presentations.valid.find((doc) => doc.id === ids.presentationId)?.title,
+    ).toBe("저장하지 못한 이름");
+    expect(folders.valid.map((saved) => saved.id)).toContain(ids.folderId);
+    expect(songs.valid.map((deck) => deck.id)).toContain(ids.songId);
+    expect(getPersistenceError()).toBeNull();
+  }
 
   describe("flushBeforeSignOut", () => {
     it("디바운스 중인 프레젠테이션과 대기 중인 곡 삭제를 보낸 뒤 끝난다", async () => {
@@ -166,6 +287,15 @@ describe("계정이 끝날 때의 동기화", () => {
 
       expect(pushPresentation).not.toHaveBeenCalled();
       expect(removeDeck).not.toHaveBeenCalled();
+    });
+
+    it("서버에 닿지 못해도 저장본에 쓰지 못한 프레젠테이션·폴더·곡을 다시 쓴 뒤 끝난다", async () => {
+      const ids = await failOnceInEveryStore();
+      markServerUnreachable();
+
+      await flushBeforeSignOut();
+
+      await expectStored(ids);
     });
 
     it("서버가 답하지 않아도 3초 안에 끝낸다", async () => {
@@ -214,6 +344,38 @@ describe("계정이 끝날 때의 동기화", () => {
       const { valid } = await loadAllPresentations();
       expect(valid.map((doc) => doc.id)).toContain(created.id);
       expect(pushPresentation).not.toHaveBeenCalled();
+    });
+
+    it("저장본에 쓰지 못해 다시 시도를 기다리는 프레젠테이션·폴더·곡을 다시 쓴 뒤 끝난다", async () => {
+      const ids = await failOnceInEveryStore();
+
+      await stopAccountSync();
+
+      await expectStored(ids);
+    });
+
+    it("저장본에 쓰는 중인 곡을 다 쓴 뒤 끝난다", async () => {
+      await hydrateSongLibrary();
+      let release: () => void = () => undefined;
+      storageHooks.holdSongSave = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      const song = saveSongToLibrary({
+        title: "쓰는 중인 곡",
+        lyricsRaw: "가사",
+      });
+
+      let stopped = false;
+      const stopping = stopAccountSync().then(() => {
+        stopped = true;
+      });
+      await loadAllSongs();
+      expect(stopped).toBe(false);
+      release();
+      await stopping;
+
+      const { valid } = await loadAllSongs();
+      expect(valid.map((deck) => deck.id)).toContain(song.id);
     });
   });
 });

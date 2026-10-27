@@ -550,8 +550,10 @@ describe("folderStore", () => {
       await flushFolderWrites();
       expect(getPersistenceError("folder")?.kind).toBe("quota");
 
-      createFolder(null, "저장한 폴더");
-      await flushFolderWrites();
+      const saved = createFolder(null, "저장한 폴더");
+      await vi.waitFor(async () =>
+        expect(await storedName(saved.id)).toBe("저장한 폴더"),
+      );
 
       expect(getPersistenceError("folder")?.kind).toBe("quota");
       expect(await storedName(failing.id)).toBe("처음 이름");
@@ -559,6 +561,33 @@ describe("folderStore", () => {
       await retryFailedWrites();
 
       expect(await storedName(failing.id)).toBe("마지막 이름");
+      expect(getPersistenceError()).toBeNull();
+    });
+
+    it("창을 닫거나 계정이 끝나 저장 줄을 비우면, 저장하지 못한 폴더도 다시 시도를 기다리지 않고 다시 쓴다", async () => {
+      const kept = createFolder(null, "처음 이름");
+      await flushFolderWrites();
+      vi.mocked(saveFolder).mockRejectedValueOnce(quotaError());
+      renameFolder(kept.id, "저장하지 못한 이름");
+      await flushFolderWrites();
+      expect(await storedName(kept.id)).toBe("처음 이름");
+
+      await flushFolderWrites();
+
+      expect(await storedName(kept.id)).toBe("저장하지 못한 이름");
+      expect(getPersistenceError()).toBeNull();
+    });
+
+    it("저장 줄을 비우면 지우지 못한 폴더도 다시 시도를 기다리지 않고 다시 지운다", async () => {
+      const gone = createFolder(null, "지울 폴더");
+      await flushFolderWrites();
+      vi.mocked(deleteFolders).mockRejectedValueOnce(new Error("disk"));
+      await removeFoldersLocally([gone.id]);
+      expect(await storedName(gone.id)).toBe("지울 폴더");
+
+      await flushFolderWrites();
+
+      expect(await storedName(gone.id)).toBeUndefined();
       expect(getPersistenceError()).toBeNull();
     });
 

@@ -49,6 +49,7 @@ import { createSongDeck } from "./songDeck";
 let userSongsCache: Deck[] = [];
 let hydrationFailed = false;
 const unpersisted = new Map<string, number>();
+const writing = new Set<Promise<void>>();
 const listeners = new Set<() => void>();
 
 const writeRetry = createWriteRetry("deck", (failed) => {
@@ -401,7 +402,30 @@ export function deleteUserSong(id: string): void {
   void persist(id, "delete", () => deleteSong(id));
 }
 
-async function persist(
+/**
+ * 저장소에 쓰는 중인 곡 쓰기가 모두 끝날 때까지 기다린다. 창을 닫거나 숨길 때, 로그아웃하기 전,
+ * 계정이 끝나 새로고침하기 전의 마지막 저장이라, 앞서 쓰지 못해 다시 시도를 기다리는 저장·지우기도
+ * 백오프를 기다리지 않고 지금 다시 한다. 새로고침은 끝나지 않은 쓰기를 버리고, 다시 시도는 최대 1분
+ * 뒤라 그사이 페이지가 사라지면 서버에 올리지 못한 곡을 잃는다. 바뀔 때마다 하는 쓰기는 실패한 쓰기를
+ * 함께 하지 않는다.
+ */
+export async function flushSongWrites(): Promise<void> {
+  writeRetry.retryNow();
+  while (writing.size > 0) await Promise.all(writing);
+}
+
+function persist(
+  id: string,
+  op: WriteOp,
+  operation: () => Promise<void>,
+): Promise<void> {
+  const write = writeSong(id, op, operation);
+  writing.add(write);
+  void write.finally(() => writing.delete(write));
+  return write;
+}
+
+async function writeSong(
   id: string,
   op: WriteOp,
   operation: () => Promise<void>,
@@ -433,6 +457,7 @@ export async function resetSongLibraryStore(): Promise<void> {
   userSongsCache = [];
   hydrationFailed = false;
   unpersisted.clear();
+  writing.clear();
   writeRetry.reset();
   emitChange();
   try {

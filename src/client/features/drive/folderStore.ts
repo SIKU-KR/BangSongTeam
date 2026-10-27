@@ -476,8 +476,14 @@ export async function reloadFoldersFromStorage(
   return [];
 }
 
-/** 대기 중인 저장이 끝날 때까지 기다린다 (테스트·언로드용) */
+/**
+ * 대기 중인 저장이 끝날 때까지 기다린다. 창을 닫거나 숨길 때, 로그아웃하기 전, 계정이 끝나
+ * 새로고침하기 전의 마지막 저장이라, 앞서 쓰지 못해 다시 시도를 기다리는 저장·지우기도 백오프를
+ * 기다리지 않고 지금 다시 한다. 그 다시 시도는 최대 1분 뒤라, 그사이 페이지가 사라지면 서버에 올리지
+ * 못한 폴더 변경을 잃는다. 바뀔 때마다 하는 쓰기는 실패한 쓰기를 함께 하지 않는다.
+ */
 export function flushFolderWrites(): Promise<void> {
+  writeRetry.retryNow();
   return writes;
 }
 
