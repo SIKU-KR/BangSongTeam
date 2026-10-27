@@ -1906,8 +1906,9 @@ describe("AppShellLayout (안내 배너)", () => {
   });
 
   it("약관이 바뀌기 전에는 드라이브 위에 바뀐다는 안내를 띄우고, 시행일부터는 띄우지 않는다", () => {
+    const effectiveAt = new Date(`${LEGAL_EFFECTIVE_DATE}T00:00:00+09:00`);
     vi.useFakeTimers({ toFake: ["Date"] });
-    vi.setSystemTime(new Date("2026-11-02T12:00:00+09:00"));
+    vi.setSystemTime(new Date(effectiveAt.getTime() - 12 * 60 * 60_000));
     const { unmount } = renderShell();
 
     expect(screen.getByTestId("legal-change-notice")).toHaveTextContent(
@@ -1915,7 +1916,7 @@ describe("AppShellLayout (안내 배너)", () => {
     );
     unmount();
 
-    vi.setSystemTime(new Date("2026-11-03T00:00:00+09:00"));
+    vi.setSystemTime(effectiveAt);
     renderShell();
 
     expect(screen.queryByTestId("legal-change-notice")).toBeNull();

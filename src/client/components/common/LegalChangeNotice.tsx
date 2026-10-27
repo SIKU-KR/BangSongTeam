@@ -6,7 +6,7 @@ import {
   AlertDescription,
   AlertTitle,
 } from "#components/ui/alert";
-import { Button } from "#components/ui/button";
+import { Button, buttonVariants } from "#components/ui/button";
 import { COMMON_COPY } from "#copy/common";
 import { LEGAL_COPY, LEGAL_EFFECTIVE_DATE } from "#copy/auth";
 
@@ -60,13 +60,14 @@ export function LegalChangeNotice(): React.JSX.Element | null {
       <AlertTitle>{LEGAL_COPY.change.title(LEGAL_EFFECTIVE_DATE)}</AlertTitle>
       <AlertDescription>
         {LEGAL_COPY.change.description}
-        <div className="mt-1 flex gap-3">
+        <div className="mt-1 -ml-2 flex gap-1">
           {LINKS.map((link) => (
             <a
               key={link.href}
               href={link.href}
               target="_blank"
               rel="noopener noreferrer"
+              className={buttonVariants({ variant: "link", size: "xs" })}
             >
               {link.label}
             </a>

@@ -37,10 +37,18 @@ describe("개인정보 처리방침", () => {
     expect(
       screen.getByText(LEGAL_COPY.effectiveDate(LEGAL_EFFECTIVE_DATE)),
     ).toBeInTheDocument();
-    expect(LEGAL_COPY.effectiveDate(LEGAL_EFFECTIVE_DATE)).toBe(
+    expect(document.body.textContent).not.toMatch(/세트/);
+  });
+});
+
+describe("시행일 표기", () => {
+  it("YYYY-MM-DD 시행일을 한국어 날짜로 적는다", () => {
+    expect(LEGAL_COPY.effectiveDate("2026-11-03")).toBe(
       "시행일: 2026년 11월 3일",
     );
-    expect(document.body.textContent).not.toMatch(/세트/);
+    expect(LEGAL_COPY.change.title("2027-01-10")).toMatch(
+      /^2027년 1월 10일부터/,
+    );
   });
 });
 
@@ -54,7 +62,9 @@ describe("이용약관", () => {
   it("바뀐 시행일을 보이고 세트라는 말을 쓰지 않는다", () => {
     render(<TermsRoute />);
 
-    expect(screen.getByText("시행일: 2026년 11월 3일")).toBeInTheDocument();
+    expect(
+      screen.getByText(LEGAL_COPY.effectiveDate(LEGAL_EFFECTIVE_DATE)),
+    ).toBeInTheDocument();
     expect(document.body.textContent).not.toMatch(/세트/);
   });
 });
