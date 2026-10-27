@@ -382,7 +382,13 @@ describe("API 앱 통합 테스트 (Firestore 에뮬레이터)", () => {
           headers: { "content-type": "application/json" },
           body: JSON.stringify({
             ...libraryDeck(),
-            slides: Array.from({ length: 20_000 }, () => ({})),
+            slides: [
+              {
+                id: "s1",
+                order: 0,
+                lines: Array.from({ length: 20_000 }, () => ({})),
+              },
+            ],
           }),
         },
         env,

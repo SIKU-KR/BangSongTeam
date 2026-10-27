@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { IdSchema } from "./id";
-import { SlideSchema } from "./slide";
+import { SlideSchema, SlideWriteSchema } from "./slide";
 import { DeckStyleSchema } from "./style";
 
 /** 곡 제목 최대 길이. 서버 스키마와 클라이언트 입력 제한이 모두 이 값을 따른다. */
@@ -11,6 +11,15 @@ export const MAX_DECK_ARTIST_LENGTH = 100;
 
 /** 가져온 곡에 남기는 원작자 이름(`forkedFromAuthorName`) 최대 길이 */
 export const MAX_FORKED_FROM_AUTHOR_NAME_LENGTH = 100;
+
+/**
+ * 저장 요청이 곡 하나에 담을 수 있는 가사 길이(코드 포인트). 공유 라이브러리에서 가장 긴 곡
+ * (약 1,600자)의 30배쯤이라 실제 곡은 걸리지 않는다.
+ */
+export const MAX_WRITE_LYRICS_LENGTH = 50_000;
+
+/** 저장 요청이 곡 하나에 담을 수 있는 슬라이드 수. 가장 긴 곡(43장)의 10배가 넘는다 */
+export const MAX_WRITE_SLIDES = 500;
 
 export const DeckVisibilitySchema = z.enum(["private", "public"]);
 export type DeckVisibility = z.infer<typeof DeckVisibilitySchema>;
@@ -69,3 +78,18 @@ export const DeckSchema = z.object({
   updatedAt: z.iso.datetime(),
 });
 export type Deck = z.infer<typeof DeckSchema>;
+
+/**
+ * 저장 요청 본문의 곡(`PUT /api/decks/:id`, 프레젠테이션 저장에 담긴 곡). `DeckSchema`에 가사
+ * 길이·슬라이드 수·슬라이드 id 길이 상한을 더한다.
+ *
+ * 서버가 쓰기 요청을 검사할 때만 쓴다. `DeckSchema`는 IndexedDB 저장본과 서버 응답도 읽으므로,
+ * 거기에 한도를 두면 이미 저장된 긴 곡과 그 곡이 든 프레젠테이션을 통째로 읽지 못한다. 한도는
+ * 실제 곡이 걸리지 않게 넉넉히 두고, 곡 하나가 차지하는 크기를 묶어 대부분의 곡이 Firestore 문서
+ * 한도(1 MiB)에 닿기 전에 무엇을 줄일지 알려 준다. 한도 안인데도 문서 한도를 넘는 곡은 저장
+ * 라우트가 Firestore 오류를 413으로 바꿔 답한다.
+ */
+export const DeckWriteSchema = DeckSchema.extend({
+  lyricsRaw: z.string().max(MAX_WRITE_LYRICS_LENGTH),
+  slides: z.array(SlideWriteSchema).max(MAX_WRITE_SLIDES),
+});

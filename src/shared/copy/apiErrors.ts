@@ -34,6 +34,8 @@ export const API_ERRORS = {
       "서버에 없는 곡이 있어 프레젠테이션 전체를 다시 보내야 해요",
     songTooLarge: (title: string) =>
       `‘${title}’ 곡이 너무 커요. 프레젠테이션에서 이 곡을 빼 주세요`,
+    tooLarge:
+      "프레젠테이션이 너무 커요. 곡을 몇 개 빼거나 프레젠테이션을 나눠 주세요",
   },
   report: {
     targetNotFound: "신고할 곡을 찾을 수 없어요",

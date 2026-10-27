@@ -668,7 +668,7 @@ describe("동기화 라우트 교차 사용자 격리", () => {
       expect(firstBody).toEqual(secondBody);
     });
 
-    it("Firestore 문서 한도를 넘는 곡이 든 프레젠테이션 저장은 그 곡을 짚어 413으로 답하고 아무것도 쓰지 않는다", async () => {
+    it("저장할 수 없을 만큼 큰 곡이 든 프레젠테이션 저장은 그 곡을 짚어 413으로 답하고 아무것도 쓰지 않는다", async () => {
       const base = toPresentationChanges(makeDoc(USER_A));
       const longDeck = makeDeck(USER_A, {
         id: "c000000000000000000ab",

@@ -6,7 +6,7 @@ import {
   type Deck,
   type PresentationChanges,
   PresentationChangesSchema,
-  PresentationDocumentSchema,
+  PresentationDocumentRequestSchema,
   UpdateShareSettingsRequestSchema,
 } from "#shared";
 import {
@@ -29,6 +29,7 @@ import {
 import { logServerError } from "../lib/requestLog";
 import { idParam } from "../lib/params";
 import { jsonBody } from "../lib/jsonBody";
+import { rejectOverLimit, type WriteLimitBreach } from "../lib/writeLimits";
 import {
   PRESENTATION_BODY_MAX_BYTES,
   SMALL_BODY_MAX_BYTES,
@@ -99,7 +100,16 @@ async function save(c: Context<AppEnv>, changes: PresentationChanges) {
   if (result === "stale") {
     return c.json({ error: API_ERRORS.presentation.fullSyncRequired }, 409);
   }
+  if (result === "tooLarge") {
+    return c.json({ error: API_ERRORS.presentation.tooLarge }, 413);
+  }
   return c.json({ ok: true as const }, 200);
+}
+
+function writeLimitMessage(breach: WriteLimitBreach): string {
+  return breach.kind === "song"
+    ? API_ERRORS.presentation.songTooLarge(breach.title)
+    : API_ERRORS.presentation.tooLarge;
 }
 
 /**
@@ -113,17 +123,22 @@ async function save(c: Context<AppEnv>, changes: PresentationChanges) {
  * 사용자별 접근 규칙이 없다).
  * 목록·단건 조회에는 링크로 공유받은 세트(`access`가 붙음, 보기 전용)도 온다.
  * 저장은 소유자만 할 수 있다.
+ * 저장할 수 없을 만큼 큰 본문(곡마다의 가사·슬라이드, 곡 수, 곡 글 전체, Firestore 저장 한도)은
+ * 400·500 대신 413과 무엇을 줄일지 말하는 문장으로 답한다.
  */
 export function createPresentationsRoute(deps: AppDeps = {}) {
   const savedId = idParam(API_ERRORS.idMismatch, 400);
   const presentationId = idParam(API_ERRORS.presentation.notAccessible, 404);
+  const overLimit = rejectOverLimit(writeLimitMessage);
   const documentBody = jsonBody(
-    PresentationDocumentSchema,
+    PresentationDocumentRequestSchema,
     PRESENTATION_BODY_MAX_BYTES,
+    overLimit,
   );
   const changesBody = jsonBody(
     PresentationChangesSchema,
     PRESENTATION_BODY_MAX_BYTES,
+    overLimit,
   );
 
   return new Hono<AppEnv>()

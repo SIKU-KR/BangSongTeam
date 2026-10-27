@@ -328,6 +328,7 @@ describe("isRetryableApiError", () => {
     expect(isRetryableApiError(new ServerRejectedError(403))).toBe(false);
     expect(isRetryableApiError(new ServerRejectedError(404))).toBe(false);
     expect(isRetryableApiError(new ServerRejectedError(409))).toBe(false);
+    expect(isRetryableApiError(new ServerRejectedError(413))).toBe(false);
     expect(isRetryableApiError(new ServerRejectedError(422))).toBe(false);
   });
 

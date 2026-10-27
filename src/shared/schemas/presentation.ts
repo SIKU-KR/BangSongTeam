@@ -5,6 +5,18 @@ import { DeckSchema } from "./deck";
 /** 프레젠테이션 제목 최대 길이. 서버 스키마와 클라이언트 입력 제한이 모두 이 값을 따른다. */
 export const MAX_PRESENTATION_TITLE_LENGTH = 100;
 
+/** 저장 요청이 프레젠테이션 하나에 담을 수 있는 곡 수 */
+export const MAX_PRESENTATION_SONGS = 200;
+
+/**
+ * 프레젠테이션 하나에 담긴 곡 글(가사와 슬라이드 JSON)의 저장 상한(UTF-8 바이트).
+ *
+ * API 요청 본문 상한(2 MiB)과 같다. 본문은 곡 글보다 크므로, 한 번에 통째로 보낼 수 있는
+ * 프레젠테이션은 언제나 이 상한 안이다. 바뀐 곡만 보내는 저장을 여러 번 해 이보다 키우는 것만
+ * 막아, 링크로 공유한 프레젠테이션을 로그인 없이 한 번 볼 때 서버가 읽고 보내는 양을 묶는다.
+ */
+export const MAX_PRESENTATION_TEXT_BYTES = 2 * 1024 * 1024;
+
 export const PresentationItemSchema = z.object({
   id: IdSchema,
   presentationId: IdSchema,

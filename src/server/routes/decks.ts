@@ -1,5 +1,9 @@
 import { Hono, type Context } from "hono";
-import { API_ERRORS, DeckSchema, VisibilityUpdateRequestSchema } from "#shared";
+import {
+  API_ERRORS,
+  DeckWriteSchema,
+  VisibilityUpdateRequestSchema,
+} from "#shared";
 import {
   getMyLibraryDecks,
   upsertDeck,
@@ -18,6 +22,7 @@ import {
 import { logServerError } from "../lib/requestLog";
 import { idParam } from "../lib/params";
 import { jsonBody } from "../lib/jsonBody";
+import { rejectOverLimit } from "../lib/writeLimits";
 import {
   DECK_BODY_MAX_BYTES,
   SMALL_BODY_MAX_BYTES,
@@ -39,12 +44,19 @@ function storageFailure(c: Context<AppEnv>, error: unknown) {
  *
  * 프레젠테이션에 속한 덱은 프레젠테이션 문서에 임베드되어 함께 저장되므로
  * 여기서는 다루지 않는다 (`/api/presentations`).
+ *
+ * 쓰기 한도(`DeckWriteSchema`)나 Firestore 저장 한도를 넘는 곡은 400·500 대신 413과 가사를
+ * 나누라는 문장으로 답한다.
  */
 export function createDecksRoute(deps: AppDeps = {}) {
   const savedId = idParam(API_ERRORS.idMismatch, 400);
   const deckId = idParam(API_ERRORS.deck.notAccessible, 404);
   const publicDeckId = idParam(API_ERRORS.deck.notPublished, 404);
-  const deckBody = jsonBody(DeckSchema, DECK_BODY_MAX_BYTES);
+  const deckBody = jsonBody(
+    DeckWriteSchema,
+    DECK_BODY_MAX_BYTES,
+    rejectOverLimit(() => API_ERRORS.deck.tooLarge),
+  );
 
   return new Hono<AppEnv>()
     .use("*", resolveRequireAuth(deps))
