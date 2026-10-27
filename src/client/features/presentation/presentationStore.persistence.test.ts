@@ -41,6 +41,7 @@ import {
   listPresentations,
   getActivePresentation,
   canUndo,
+  canRedo,
   undo,
   showSharedPreview,
   getPresentationById,
@@ -232,6 +233,31 @@ describe("presentationStore 영속성", () => {
     expect(getActivePresentation()).toBe(shown);
     const { valid } = await loadAllPresentations();
     expect(valid.some((p) => p.id === preview.id)).toBe(false);
+  });
+
+  it("이 탭에서 편집한 프레젠테이션을 로그아웃한 뒤 링크로 보면 남은 되돌리기 기록으로 되돌리거나 다시 하지 않는다", async () => {
+    await hydrateFromStorage();
+    const own = createNewPresentation();
+    updatePresentationTitle("첫 수정");
+    updatePresentationTitle("두 번째 수정");
+    undo();
+    await flushPendingWrites();
+    signOutForTests();
+    showSharedPreview({
+      ...getPresentationById(own.id)!,
+      access: { ownerName: "인도자" },
+    });
+    openPresentation(own.id);
+    const shown = getActivePresentation();
+    expect(canUndo()).toBe(true);
+    expect(canRedo()).toBe(true);
+
+    expect(undo()).toBe(false);
+    expect(redo()).toBe(false);
+
+    expect(getActivePresentation()).toBe(shown);
+    expect(canUndo()).toBe(true);
+    expect(canRedo()).toBe(true);
   });
 
   it("새 문서를 만들면 그 문서도 저장된다", async () => {

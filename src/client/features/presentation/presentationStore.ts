@@ -111,8 +111,8 @@ function readActive(): Presentation {
  * 화면에서 버튼을 빠뜨려도 문서가 바뀌지 않는다.
  *
  * 막힌 편집은 저장하지도 알리지도 않고, 바꾼 것이 있는지 돌려주는 편집 함수는 `false`를 돌려준다.
- * 로그인 없이 링크로 보는 세트(`showSharedPreview`)를 저장하면 소유자 id가 달린 보기 전용 세트가
- * 남아, 소유자가 이 브라우저에서 아직 올리지 못한 자기 세트를 잃고 보기 전용으로 연다.
+ * 로그인 없이 링크로 보는 프레젠테이션(`showSharedPreview`)을 저장하면 소유자 id가 달린 보기 전용
+ * 저장본이 남아, 소유자가 이 브라우저에서 로그인하면 자기 프레젠테이션을 보기 전용으로 연다.
  */
 export function canEditPresentation(doc: Presentation): boolean {
   return doc.access === undefined;
