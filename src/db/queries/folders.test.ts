@@ -446,6 +446,29 @@ describe("드라이브 폴더 쿼리", () => {
       expect(await countFolders(USER_A)).toBe(MAX_FOLDERS_PER_USER);
     });
 
+    it.each([
+      ["루트", false],
+      ["하위", true],
+    ])(
+      "상한보다 하나 모자랄 때 새 %s 폴더가 동시에 와도 하나만 만든다",
+      async (_, nested) => {
+        const [parent] = await seedFolders(USER_A, MAX_FOLDERS_PER_USER - 1);
+        const fresh = Array.from({ length: 6 }, () =>
+          makeFolder(USER_A, { parentId: nested ? parent.id : null }),
+        );
+
+        const results = await Promise.all(
+          fresh.map((folder) => upsertFolder(db, USER_A, folder)),
+        );
+
+        expect(results.filter((r) => r.status === "saved")).toHaveLength(1);
+        expect(results.filter((r) => r.status === "limitReached")).toHaveLength(
+          fresh.length - 1,
+        );
+        expect(await countFolders(USER_A)).toBe(MAX_FOLDERS_PER_USER);
+      },
+    );
+
     it("휴지통에 있는 폴더도 영구 삭제하기 전에는 세고, 지우면 다시 만들 수 있다", async () => {
       const [parent] = await seedFolders(USER_A, MAX_FOLDERS_PER_USER - 1);
       const [trashed] = await seedFolders(USER_A, 1, {
