@@ -37,6 +37,11 @@ async function store(url: string): Promise<void> {
   await cache.put(url, new Response("media"));
 }
 
+async function isStored(url: string): Promise<boolean> {
+  const cache = await caches.open(MEDIA_CACHE_NAME);
+  return (await cache.match(url)) !== undefined;
+}
+
 function mockFetch(status = 200) {
   const fetchMock = vi.fn(
     async () =>
@@ -119,6 +124,20 @@ describe("useProjectionMediaReady", () => {
     await waitFor(() => expect(result.current.failure).toBe("quota"));
     expect(result.current.status).toBe("failed");
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("다른 프레젠테이션의 영상이 크기 헤더 없이 담겨 있어도 카탈로그 크기로 세어 필요한 만큼만 지우고 받는다", async () => {
+    const [, , THIRD, FOURTH] = TEST_SERVICE_BACKGROUNDS;
+    await store(THIRD.mediaUrl);
+    await store(FOURTH.mediaUrl);
+    mockEstimate(10_000_000, 8_500_000);
+    mockFetch();
+
+    const { result } = renderHook(() => useProjectionMediaReady(PRESENTATION));
+
+    await waitFor(() => expect(result.current.status).toBe("ready"));
+    expect(await isStored(THIRD.mediaUrl)).toBe(false);
+    expect(await isStored(FOURTH.mediaUrl)).toBe(true);
   });
 
   it("오프라인이면 받지 않고 offline으로 실패한다", async () => {
@@ -251,6 +270,30 @@ describe("useProjectionMediaReady", () => {
       timeout: PASSIVE_RECHECK_MS * 2,
     });
     expect(result.current.failure).toBeNull();
+  });
+
+  it("passive에서 다시 시도할 때도 크기 헤더 없이 담긴 다른 프레젠테이션의 영상을 카탈로그 크기로 세어 필요한 만큼만 지운다", async () => {
+    const [, , THIRD, FOURTH] = TEST_SERVICE_BACKGROUNDS;
+    mockFetch();
+    const put = await rejectPutWithQuota();
+    expect(await cacheMediaFirst(FIRST.mediaUrl)).toBe(false);
+    put.mockRestore();
+    await store(THIRD.mediaUrl);
+    await store(FOURTH.mediaUrl);
+    mockEstimate(10_000_000, 8_500_000);
+
+    const { result } = renderHook(() =>
+      useProjectionMediaReady(PRESENTATION, { passive: true }),
+    );
+    await waitFor(() => expect(result.current.failure).toBe("quota"));
+
+    act(() => result.current.retry());
+
+    await waitFor(() => expect(result.current.status).toBe("ready"), {
+      timeout: PASSIVE_RECHECK_MS * 2,
+    });
+    expect(await isStored(THIRD.mediaUrl)).toBe(false);
+    expect(await isStored(FOURTH.mediaUrl)).toBe(true);
   });
 
   it("passive에서 다시 시도해도 세트 밖 영상을 다 지워 자리가 없으면 다시 받지 않고 저장 공간 부족을 남긴다", async () => {

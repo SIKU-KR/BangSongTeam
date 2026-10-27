@@ -21,7 +21,10 @@ import {
   scheduleMediaCaching,
   subscribeMediaProgress,
 } from "../../lib/offline";
-import { useBackgroundLookup } from "../backgrounds/backgroundCatalog";
+import {
+  getBackgrounds,
+  useBackgroundLookup,
+} from "../backgrounds/backgroundCatalog";
 import { useLatest } from "../../hooks/useLatest";
 import { navigatorApi } from "../../lib/browser/optionalApis";
 
@@ -115,13 +118,23 @@ async function waitForServiceWorker(): Promise<void> {
   ]);
 }
 
+function catalogMediaSize(): (path: string) => number | undefined {
+  const sizes = new Map(
+    getBackgrounds().map((background) => [
+      background.mediaUrl,
+      background.sizeBytes,
+    ]),
+  );
+  return (path) => sizes.get(path);
+}
+
 async function requeueMissing(files: readonly MediaFile[]): Promise<void> {
   const urls = files.map((file) => file.url);
   const cached = new Set(await findCachedMediaUrls(urls));
   const missing = files.filter((file) => !cached.has(file.url));
   if (missing.length === 0) return;
   const neededBytes = missing.reduce((sum, file) => sum + file.sizeBytes, 0);
-  if (!(await ensureMediaSpace(neededBytes, urls))) return;
+  if (!(await ensureMediaSpace(neededBytes, urls, catalogMediaSize()))) return;
   scheduleMediaCaching(
     missing.map((file) => file.url),
     { priority: true },
@@ -163,7 +176,8 @@ function useMediaProgressVersion(): number {
  * 배경 영상은 하나에 수백 MB일 수 있어, 받는 도중에 송출을 시작하면 예배 중에
  * 네트워크가 끊겼을 때 배경이 멈춘다. 그래서 송출 화면은 `ready`가 되거나 운영자가
  * 저장된 배경으로 시작할 때까지 슬라이드를 띄우지 않는다. 받기 전에 모자란 저장 공간을 세트 밖의 영상을 지워 확보한다
- * (`ensureMediaSpace`). 포스터는 작아서 기다리지 않는다 — 기존 백그라운드 큐가 받는다.
+ * (`ensureMediaSpace`). 길이 헤더 없이 담긴 영상은 카탈로그의 `sizeBytes`로 센다. 포스터는
+ * 작아서 기다리지 않는다 — 기존 백그라운드 큐가 받는다.
  *
  * 총 용량은 카탈로그의 `sizeBytes`(영상+포스터)로 먼저 잡고, 받기 시작하면 응답
  * 길이로 바꾼다.
@@ -256,7 +270,7 @@ export function useProjectionMediaReady(
         (sum, file) => sum + file.sizeBytes,
         0,
       );
-      if (!(await ensureMediaSpace(neededBytes, urls))) {
+      if (!(await ensureMediaSpace(neededBytes, urls, catalogMediaSize()))) {
         update({ status: "failed", failure: "quota", readyUrls });
         return;
       }

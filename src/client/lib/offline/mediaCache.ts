@@ -1,4 +1,8 @@
-import { MEDIA_CACHE_NAME, mediaCacheNameFor } from "#shared";
+import {
+  MEDIA_CACHE_NAME,
+  MEDIA_SIZE_HEADER,
+  mediaCacheNameFor,
+} from "#shared";
 import {
   isRetryableApiError,
   OfflineError,
@@ -81,9 +85,12 @@ export function getMediaProgress(url: string): MediaProgress | undefined {
   return progress.get(url);
 }
 
-function contentLength(response: Response): number | null {
-  const length = Number(response.headers.get("content-length"));
-  return Number.isFinite(length) && length > 0 ? length : null;
+function knownSize(response: Response): number | null {
+  for (const header of ["content-length", MEDIA_SIZE_HEADER]) {
+    const size = Number(response.headers.get(header));
+    if (Number.isFinite(size) && size > 0) return size;
+  }
+  return null;
 }
 
 interface StallWatchdog {
@@ -114,7 +121,7 @@ function countingBody(
   response: Response,
   watchdog: StallWatchdog,
 ): CountingBody {
-  const total = contentLength(response);
+  const total = knownSize(response);
   let received = 0;
   reportProgress(url, { received, total });
   const body =
@@ -221,7 +228,7 @@ async function cacheOne(
   const { body, received } = countingBody(url, response, watchdog);
   if (isServiceWorkerControlled()) {
     await drain(body);
-    const bytes = contentLength(response);
+    const bytes = knownSize(response) ?? (received() > 0 ? received() : null);
     if (!(await waitForCacheEntry(cache, url, bytes, watchdog))) {
       if (bytes !== null && received() >= bytes) {
         const free = await estimateFreeBytes();
@@ -581,9 +588,14 @@ export function getMediaQueueState(url: string): MediaQueueState | null {
  *
  * 실패하면 던지지 않고 false를 돌려주되, 저장 공간 부족(`QuotaExceededError`)인지 다른
  * 실패인지를 `getMediaCacheFailure`로 남긴다. SW가 담을 때는 SW 안에서 난 오류가 페이지에
- * 오지 않는다. 그래서 응답 길이만큼 본문이 다 왔는데도 SW가 끝내 담지 않았으면, Safari처럼
+ * 오지 않는다. 그래서 본문이 끝까지 왔는데도 SW가 끝내 담지 않았으면, Safari처럼
  * `navigator.storage.estimate()`로 남은 용량을 알 수 없거나 알려 준 남은 용량이 파일보다 작을
- * 때만 공간 부족으로 본다. 큰 파일의 쓰기가 기다리는 시간을 넘기거나 쓰는 도중 SW가 멈춘
+ * 때만 공간 부족으로 본다. 파일 크기는 응답 길이(`content-length`, 32 MiB를 넘어 길이 없이 오는
+ * 영상은 `MEDIA_SIZE_HEADER`)로 보고, 둘 다 없는 응답(그 헤더를 붙이기 전의 Cloudflare 캐시본)은
+ * 오류 없이 다 읽은 바이트 수로 본다. 길이 없는 응답도 중간에 끊기면 본문 스트림이 오류로
+ * 끝나기 때문이다. SW의 쓰기를 기다리는 시간도 이 크기에 비례해 늘린다. 크기를 모른다고 0으로
+ * 두면 공간 부족을 `network`로 남겨 수백 MB를 재시도 한도까지 다시 받는다.
+ * 큰 파일의 쓰기가 기다리는 시간을 넘기거나 쓰는 도중 SW가 멈춘
  * 것까지 공간 부족으로 치면, 다시 받지 않고 '저장 공간 부족'을 잘못 알린다. 그 대신 브라우저가
  * 남은 용량을 부풀려 알려 주면 실제 부족도 `network`로 남아 큐와 `useCacheFirstVideo`의
  * 재시도 한도까지 다시 받는다.
@@ -674,6 +686,11 @@ function pathOf(url: string): string {
  * 순서(`cache.keys()` 순서)로 지운다. 배경 교체로 목록에서 사라진 영상도 이렇게
  * 정리된다. 지우다가 Cache Storage가 실패하면 던지지 않고 자리가 없다고 본다.
  *
+ * 담긴 영상의 크기는 응답 길이(`content-length`, 없으면 `MEDIA_SIZE_HEADER`)로 세고, 둘 다
+ * 없으면(그 헤더를 붙이기 전에 담긴 32 MiB 넘는 영상) `sizeOf`(카탈로그의 `sizeBytes`)로
+ * 센다. 0으로 세면 `keepUrls` 밖의 영상을 모두 지우고도 자리가 없다고 답한다. 크기를 끝내
+ * 모르는 영상까지 지웠는데 모자라 보이면, 그렇게 답하기 전에 남은 용량을 한 번 더 묻는다.
+ *
  * Safari·iOS처럼 브라우저가 용량을 알려 주지 않거나, 이 세션에서 `keepUrls`의 영상이
  * 이미 저장 공간 부족을 겪어 알려 준 용량을 믿을 수 없으면 미디어에
  * `UNKNOWN_QUOTA_MEDIA_BUDGET_BYTES`만 쓸 수 있다고 보고 세트 밖 영상을 미리 지운다.
@@ -697,6 +714,7 @@ function pathOf(url: string): string {
 export async function ensureMediaSpace(
   neededBytes: number,
   keepUrls: readonly string[],
+  sizeOf: (path: string) => number | undefined = () => undefined,
 ): Promise<boolean> {
   const distrust = keepUrls.some((url) => quotaHits.has(url));
   const reported = await estimateFreeBytes();
@@ -710,10 +728,11 @@ export async function ensureMediaSpace(
     const entries = await Promise.all(
       (await cache.keys()).map(async (request) => {
         const cached = await cache.match(request);
+        const path = pathOf(request.url);
         return {
           request,
-          path: pathOf(request.url),
-          bytes: cached ? (contentLength(cached) ?? 0) : 0,
+          path,
+          bytes: (cached ? knownSize(cached) : null) ?? sizeOf(path) ?? 0,
         };
       }),
     );
@@ -723,14 +742,19 @@ export async function ensureMediaSpace(
           entries.reduce((sum, entry) => sum + entry.bytes, 0)
         : Infinity;
     let freed = 0;
+    let deleted = 0;
     for (const entry of entries) {
       if (Math.min(reported ?? Infinity, budget) + freed >= neededBytes) break;
       if (keep.has(entry.path)) continue;
       await cache.delete(entry.request);
       knownCached.delete(entry.path);
       freed += entry.bytes;
+      deleted += 1;
     }
-    return reported === null || reported + freed >= neededBytes;
+    if (reported === null || reported + freed >= neededBytes) return true;
+    if (deleted === 0) return false;
+    const after = await estimateFreeBytes();
+    return after !== null && after >= neededBytes;
   } catch {
     return !short;
   }

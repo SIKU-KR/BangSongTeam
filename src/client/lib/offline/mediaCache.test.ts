@@ -186,6 +186,20 @@ describe("cacheMediaFirst 진행률과 캐시 분리", () => {
     expect(getMediaProgress(VIDEO)).toEqual({ received: 64, total: 64 });
   });
 
+  it("길이 없이 온 큰 영상은 x-media-size를 전체 크기로 알린다", async () => {
+    mockFetch(
+      async () =>
+        new Response(new ArrayBuffer(64), {
+          status: 200,
+          headers: { "x-media-size": "64" },
+        }),
+    );
+
+    await cacheAll([VIDEO]);
+
+    expect(getMediaProgress(VIDEO)).toEqual({ received: 64, total: 64 });
+  });
+
   it("포스터는 영상 캐시가 아닌 포스터 캐시에 담는다", async () => {
     mockFetch();
 
@@ -265,6 +279,43 @@ describe("cacheMediaFirst (서비스 워커 제어 중)", () => {
 
     expect(await pendingResult).toEqual([]);
     expect(getMediaCacheFailure(VIDEO)).toBe("quota");
+  });
+
+  it.each([
+    ["응답 길이가 전혀 없어도", {}],
+    ["x-media-size만 있어도", { "x-media-size": "16" }],
+  ])(
+    "%s 끝까지 받은 본문을 SW가 담지 않고 남은 용량이 그보다 작으면 저장 공간 부족으로 남긴다",
+    async (_label, headers) => {
+      vi.useFakeTimers();
+      controlByServiceWorker();
+      mockEstimate(100, 92);
+      mockFetch(
+        async () => new Response(new ArrayBuffer(16), { status: 200, headers }),
+      );
+
+      const pendingResult = cacheAll([VIDEO]);
+      await vi.runAllTimersAsync();
+
+      expect(await pendingResult).toEqual([]);
+      expect(getMediaCacheFailure(VIDEO)).toBe("quota");
+    },
+  );
+
+  it("응답 길이가 없어도 받은 크기만큼 SW의 쓰기를 더 기다린다", async () => {
+    vi.useFakeTimers();
+    controlByServiceWorker();
+    mockFetch(async (url) => {
+      const cache = await caches.open(mediaCacheNameFor(url));
+      setTimeout(() => void cache.put(url, new Response("media")), 5_500);
+      return new Response(new ArrayBuffer(20 * 1024 * 1024), { status: 200 });
+    });
+
+    const pendingResult = cacheAll([VIDEO]);
+    await vi.runAllTimersAsync();
+
+    expect(await pendingResult).toEqual([VIDEO]);
+    expect(getMediaCacheFailure(VIDEO)).toBeUndefined();
   });
 });
 
@@ -628,6 +679,82 @@ describe("ensureMediaSpace", () => {
       }),
     );
   }
+
+  async function seedUnsizedVideo(
+    url: string,
+    headers: Record<string, string> = {},
+  ): Promise<void> {
+    const cache = await caches.open(MEDIA_CACHE_NAME);
+    await cache.put(url, new Response("media", { status: 200, headers }));
+  }
+
+  async function cachedVideoCount(): Promise<number> {
+    const cache = await caches.open(MEDIA_CACHE_NAME);
+    return (await cache.keys()).length;
+  }
+
+  it("길이 없이 담긴 큰 영상은 x-media-size로 세어 필요한 만큼만 지운다", async () => {
+    for (let i = 0; i < 6; i += 1) {
+      await seedUnsizedVideo(`/api/media/loops/other-${i}.mp4`, {
+        "x-media-size": String(300 * MIB),
+      });
+    }
+    mockEstimate(10_000 * MIB, 10_000 * MIB - 400 * MIB);
+
+    expect(await ensureMediaSpace(600 * MIB, [VIDEO])).toBe(true);
+    expect(await cachedVideoCount()).toBe(5);
+  });
+
+  it("크기 헤더 없이 담긴 영상은 카탈로그 크기로 세어 필요한 만큼만 지운다", async () => {
+    await seedUnsizedVideo(OTHER);
+    await seedUnsizedVideo(LARGE);
+    mockEstimate(200 * MIB, 0);
+
+    expect(await ensureMediaSpace(300 * MIB, [VIDEO], () => 300 * MIB)).toBe(
+      true,
+    );
+    expect(await cachedVideoCount()).toBe(1);
+  });
+
+  it("지금 프레젠테이션의 영상은 남기고 그 밖의 영상을 카탈로그 크기로 센다", async () => {
+    const THIRD = "/api/media/loops/third.mp4";
+    for (const url of [OTHER, THIRD, VIDEO]) {
+      const cache = await caches.open(MEDIA_CACHE_NAME);
+      await cache.put(url, new Response(new ArrayBuffer(400), { status: 200 }));
+    }
+    mockEstimate(1000, 900);
+
+    expect(await ensureMediaSpace(500, [VIDEO], () => 400)).toBe(true);
+    expect(await isCached(OTHER)).toBe(false);
+    expect(await isCached(THIRD)).toBe(true);
+    expect(await isCached(VIDEO)).toBe(true);
+  });
+
+  it("브라우저가 용량을 알려 주지 않으면 크기 헤더 없는 영상도 카탈로그 크기로 예산에 넣는다", async () => {
+    await seedUnsizedVideo(OTHER);
+    await seedUnsizedVideo(VIDEO);
+
+    expect(await ensureMediaSpace(300 * MIB, [VIDEO], () => 300 * MIB)).toBe(
+      true,
+    );
+    expect(await isCached(OTHER)).toBe(false);
+    expect(await isCached(VIDEO)).toBe(true);
+  });
+
+  it("크기를 모르는 영상을 지웠으면 모자라다고 하기 전에 남은 용량을 다시 묻는다", async () => {
+    await seedUnsizedVideo(OTHER);
+    const estimate = vi
+      .fn()
+      .mockResolvedValueOnce({ quota: 1000, usage: 900 })
+      .mockResolvedValue({ quota: 1000, usage: 300 });
+    Object.defineProperty(navigator, "storage", {
+      value: { estimate },
+      configurable: true,
+    });
+
+    expect(await ensureMediaSpace(500, [VIDEO])).toBe(true);
+    expect(await isCached(OTHER)).toBe(false);
+  });
 
   it("자리가 있으면 아무것도 지우지 않는다", async () => {
     mockFetch(async () => okResponse(100));
