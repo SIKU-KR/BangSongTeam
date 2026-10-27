@@ -19,6 +19,7 @@ import {
   deleteDeckScoped,
 } from "./decks";
 import { getDriveTombstones } from "./folders";
+import { setDeckVisibility } from "./sharing";
 import { DEFAULT_DECK_STYLE, DeckSchema, type Deck } from "#shared";
 import { toSharedDeck } from "./mappers";
 
@@ -390,6 +391,28 @@ describe("덱 쓰기 헬퍼 (보관함 동기화)", () => {
       expect((await decksCol(db).doc(DECK_ID).get()).exists).toBe(false);
       expect((await readRecord(`deck:${DECK_ID}`))?.userId).toBe(ownerId);
       expect(await getDeletedDeckIds(db, strangerId)).toEqual([]);
+    });
+
+    it("남이 남긴 기록은 내가 가진 곡의 저장·공개·삭제를 막지 않고 그대로 남는다", async () => {
+      const strangerRecord = {
+        itemId: DECK_ID,
+        userId: strangerId,
+        kind: "deck" as const,
+      };
+      await upsertDeck(db, ownerId, makeDeck(ownerId));
+      await driveTombstonesCol(db).doc(`deck:${DECK_ID}`).set(strangerRecord);
+
+      expect(
+        await upsertDeck(db, ownerId, makeDeck(ownerId, { title: "수정" })),
+      ).toMatchObject({ status: "saved", deck: { title: "수정" } });
+      expect(
+        (await setDeckVisibility(db, ownerId, DECK_ID, "public")).status,
+      ).toBe("ok");
+      expect(await deleteDeckScoped(db, DECK_ID, ownerId)).toBe(true);
+
+      expect((await decksCol(db).doc(DECK_ID).get()).exists).toBe(false);
+      expect(await readRecord(`deck:${DECK_ID}`)).toEqual(strangerRecord);
+      expect(await getDeletedDeckIds(db, ownerId)).toEqual([]);
     });
 
     it("곡 기록은 드라이브 기록과 id를 나누지 않는다", async () => {

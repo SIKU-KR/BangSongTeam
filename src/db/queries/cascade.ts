@@ -130,9 +130,11 @@ export async function readTombstone(
  * 부르고, 돌려받은 `write`를 쓰기 단계에서 부른다.
  *
  * 기록 문서 id(`tombstoneDocId`)는 모든 사용자가 한 id 공간을 쓴다. 그래서 기록이 없거나 내
- * 기록일 때만 쓴다. 남의 기록을 덮으면 그 사람의 다른 기기가 영구 삭제한 항목을 다시 올린다. 남이
- * 같은 id로 먼저 기록을 차지하는 길은 `upsertFolder`가 막는다(새 폴더 id가 프레젠테이션 id면
- * 거절). 같은 문서 id가 두 번 오면 처음 것만 쓴다.
+ * 기록일 때만 쓴다. 남의 기록을 덮으면 그 사람의 다른 기기가 영구 삭제한 항목을 다시 올린다.
+ * 폴더·프레젠테이션 기록을 남이 같은 id로 먼저 차지하는 길은 `upsertFolder`가 막는다(새 폴더 id가
+ * 프레젠테이션 id면 거절). 보관함 곡 기록(`deckTombstoneDocId`)은 서버에 없는 id를 먼저 지운
+ * 사람의 것이 되고, 그 뒤로 다른 사람이 그 id로 곡을 새로 만드는 저장은 `upsertDeck`이
+ * `forbidden`으로 거절한다. 같은 문서 id가 두 번 오면 처음 것만 쓴다.
  */
 export async function prepareTombstones(
   tx: Transaction,
