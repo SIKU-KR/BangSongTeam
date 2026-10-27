@@ -104,9 +104,7 @@ function useHydration(): boolean {
       startStorageSync();
       startBootSync(window.location.pathname);
       setBootstrappedUserId(userId);
-      if (!isProjectionPath(window.location.pathname)) {
-        void requestPersistentStorage();
-      }
+      void requestPersistentStorage();
     })();
     return () => controller.abort();
   }, [session.status, userId, bootstrappedUserId]);
@@ -183,8 +181,7 @@ function isGuestPath(pathname: string): boolean {
  *
  * 로그인한 사용자의 저장소를 불러오면 브라우저에 영구 저장을 요청한다(`requestPersistentStorage`).
  * 허락받지 못하면 기기 저장 공간이 모자랄 때 오프라인 저장본이 예고 없이 지워질 수 있어 드라이브가
- * 안내한다. 송출 주소로 부팅했으면 묻지 않는다. Firefox는 허락을 묻는 창을 띄우는데, 송출 중에
- * 띄우면 안 된다.
+ * 안내한다. 송출 주소로 부팅했으면 묻지 않는다(그 규칙은 `requestPersistentStorage`가 지킨다).
  *
  * 송출 화면이 아닌 주소로 옮길 때마다 내 데이터가 오래됐으면 다시 받는다(`refreshOwnDataIfStale`).
  * 오래 열어 둔 탭에서 편집기를 열면 다른 기기에서 고친 판으로 고치고 송출해야 한다. 송출을 마치고

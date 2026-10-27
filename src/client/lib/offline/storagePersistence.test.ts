@@ -20,6 +20,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  window.history.pushState(null, "", "/");
   if (original) {
     Object.defineProperty(navigator, "storage", original);
   } else {
@@ -73,6 +74,17 @@ describe("requestPersistentStorage", () => {
     });
 
     await expect(requestPersistentStorage()).resolves.toBeNull();
+    expect(persist).not.toHaveBeenCalled();
+  });
+
+  it("송출 화면에서는 묻지 않고 마지막으로 확인한 상태를 돌려준다", async () => {
+    const persist = vi.fn(async () => false);
+    setStorage({ persisted: async () => false, persist });
+    await requestPersistentStorage();
+    persist.mockClear();
+    window.history.pushState(null, "", "/present/abc/fullscreen");
+
+    await expect(requestPersistentStorage()).resolves.toBe(false);
     expect(persist).not.toHaveBeenCalled();
   });
 

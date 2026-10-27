@@ -1,7 +1,9 @@
 import {
   MEDIA_CACHE_NAME,
   MEDIA_SIZE_HEADER,
+  MediaCacheChangeSchema,
   mediaCacheNameFor,
+  type MediaCacheChange,
 } from "#shared";
 import {
   isRetryableApiError,
@@ -27,6 +29,7 @@ import {
 import { BackoffTracker, type SyncRetryMode } from "../sync/backoff";
 import { requestPersistentStorage } from "./storagePersistence";
 import { navigatorApi } from "../browser/optionalApis";
+import { createBroadcast, type Broadcast } from "../browser/broadcast";
 
 /** 받는 중인 파일의 진행 상황. `total`은 응답에 길이가 없으면 null이다 */
 interface MediaProgress {
@@ -275,6 +278,7 @@ function recordFailure(url: string, err: unknown): void {
 }
 
 function recordCached(url: string): void {
+  openMediaChannel();
   knownCached.add(url);
   failures.delete(url);
   quotaHits.delete(url);
@@ -349,6 +353,7 @@ const backoff = new BackoffTracker();
 const retryTimers = new Map<string, ReturnType<typeof setTimeout>>();
 const waitingOnServer = new Set<string>();
 const retained = new Map<string, number>();
+const retainLocks = new Map<string, () => void>();
 let draining: Promise<void> | null = null;
 let persistenceRequested = false;
 
@@ -494,10 +499,18 @@ export function scheduleMediaCaching(
  * 취소하고 시도 횟수와 네트워크 실패 기록을 비운다. 세트를 다시 열 때 지난 실패가 '저장
  * 실패'로 먼저 보이지 않게 하려는 것이다. 저장 공간 부족 기록은 남긴다. 이미 큐에 들어간
  * 항목은 그대로 받는다.
+ *
+ * 붙잡는 동안 URL마다 공유 Web Lock(`chiton:media:<경로>`)도 잡는다. 붙잡은 목록은 탭마다
+ * 따로라서, 드라이브에서 저장한 영상을 지울 때(`clearUnusedMediaCache`) 다른 창에서 송출·편집
+ * 중인 영상을 알아보려면 탭 밖에서도 보이는 표시가 있어야 한다.
  */
 export function retainMediaUrls(urls: readonly string[]): () => void {
   const held = [...new Set(urls)];
-  for (const url of held) retained.set(url, (retained.get(url) ?? 0) + 1);
+  for (const url of held) {
+    const count = retained.get(url) ?? 0;
+    retained.set(url, count + 1);
+    if (count === 0) retainLocks.set(url, holdMediaLock(url));
+  }
   let released = false;
   return () => {
     if (released) return;
@@ -510,6 +523,8 @@ export function retainMediaUrls(urls: readonly string[]): () => void {
         continue;
       }
       retained.delete(url);
+      retainLocks.get(url)?.();
+      retainLocks.delete(url);
       backoff.reset(url);
       if (failures.get(url) === "network") failures.delete(url);
       if (clearRetry(url)) changed = true;
@@ -767,32 +782,106 @@ export async function ensureMediaSpace(
   }
 }
 
+const MEDIA_CACHE_CHANNEL = "chiton:media-cache";
+const MEDIA_LOCK_PREFIX = "chiton:media:";
+
+let mediaChannel: Broadcast<MediaCacheChange> | null = null;
+
+function openMediaChannel(): Broadcast<MediaCacheChange> {
+  if (!mediaChannel) {
+    mediaChannel = createBroadcast(MEDIA_CACHE_CHANNEL, MediaCacheChangeSchema);
+    mediaChannel.subscribe(({ deleted }) => forgetDeletedMedia(deleted));
+  }
+  return mediaChannel;
+}
+
+function forgetDeletedMedia(paths: readonly string[]): void {
+  const deleted = new Set(paths);
+  const forgotten = [...knownCached].filter((url) => deleted.has(pathOf(url)));
+  if (forgotten.length === 0) return;
+  for (const url of forgotten) knownCached.delete(url);
+  notify();
+  scheduleMediaCaching(forgotten.filter((url) => retained.has(url)));
+}
+
+function holdMediaLock(url: string): () => void {
+  const locks = navigatorApi("locks");
+  if (!locks) return () => undefined;
+  let release = (): void => undefined;
+  const released = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  try {
+    locks
+      .request(
+        MEDIA_LOCK_PREFIX + pathOf(url),
+        { mode: "shared" },
+        () => released,
+      )
+      .catch(() => undefined);
+  } catch {
+    return () => undefined;
+  }
+  return release;
+}
+
+async function mediaPathsInUse(): Promise<Set<string> | null> {
+  const locks = navigatorApi("locks");
+  if (!locks) return null;
+  try {
+    const { held = [], pending = [] } = await locks.query();
+    const paths = new Set([...retained.keys()].map(pathOf));
+    for (const { name } of [...held, ...pending]) {
+      if (name?.startsWith(MEDIA_LOCK_PREFIX)) {
+        paths.add(name.slice(MEDIA_LOCK_PREFIX.length));
+      }
+    }
+    return paths;
+  } catch {
+    return null;
+  }
+}
+
+async function deleteMediaOutside(
+  inUse: ReadonlySet<string>,
+  deleted: string[],
+): Promise<void> {
+  const cache = await caches.open(MEDIA_CACHE_NAME);
+  for (const request of await cache.keys()) {
+    const path = pathOf(request.url);
+    if (!inUse.has(path) && (await cache.delete(request))) deleted.push(path);
+  }
+}
+
 /**
- * 지금 열린 편집기·송출 화면이 붙잡지 않은(`retainMediaUrls`) 배경 영상을 캐시에서 모두 지우고
- * 지운 수를 돌려준다. 포스터는 작아서 남긴다.
+ * 이 브라우저의 어느 창도 붙잡지 않은(`retainMediaUrls`) 배경 영상을 캐시에서 모두 지우고 지운
+ * 수를 돌려준다. 포스터는 작아서 남긴다.
  *
  * 기기 저장 공간이 가득 차 작업을 저장하지 못할 때 사용자가 고르는 정리다(`StorageWarningBanner`).
  * 영상은 한 편에 수백 MB라 오리진 용량을 가장 많이 쓰고 서버에서 다시 받을 수 있지만, 프레젠테이션·
  * 곡 저장본은 몇 KB라 휴지통을 비워도 거의 비지 않는다. 지운 영상은 그 프레젠테이션을 다시 열 때
- * 다시 받는다. Cache Storage를 열지 못하면 던지지 않고 0이다.
+ * 다시 받는다.
+ *
+ * 붙잡은 목록은 탭마다 따로라, 다른 창이 붙잡은 영상은 그 창이 잡은 Web Lock으로 알아보고 남긴다.
+ * 다른 창에서 송출 중인 영상을 지우면 그 송출이 남은 구간을 서버에서 받아, 오프라인이면 배경이
+ * 멈춘다. Web Locks가 없어 다른 창이 무엇을 쓰는지 알 수 없으면 지우지 않고 0이다. 지운 경로는 다른
+ * 탭에도 알려(`MediaCacheChangeSchema`) 그 탭이 담겼다고 기억한 영상을 다시 확인하게 한다. 알리지
+ * 않으면 그 탭의 송출 준비가 빈 캐시를 두고 준비됐다고 알리고, 다시 열어도 받지 않는다. 받은 탭은
+ * 지운 영상 가운데 자기가 붙잡은 것(잠금을 확인한 뒤에 붙잡았다)을 다시 받는다.
+ *
+ * Cache Storage가 실패하면 던지지 않고 그때까지 지운 수를 돌려준다.
  */
 export async function clearUnusedMediaCache(): Promise<number> {
   if (!isCacheStorageAvailable()) return 0;
-  const keep = new Set([...retained.keys()].map(pathOf));
-  try {
-    const cache = await caches.open(MEDIA_CACHE_NAME);
-    let deleted = 0;
-    for (const request of await cache.keys()) {
-      const path = pathOf(request.url);
-      if (keep.has(path)) continue;
-      if (await cache.delete(request)) deleted += 1;
-      knownCached.delete(path);
-    }
-    if (deleted > 0) notify();
-    return deleted;
-  } catch {
-    return 0;
+  const inUse = await mediaPathsInUse();
+  if (!inUse) return 0;
+  const deleted: string[] = [];
+  await deleteMediaOutside(inUse, deleted).catch(() => undefined);
+  if (deleted.length > 0) {
+    forgetDeletedMedia(deleted);
+    openMediaChannel().post({ v: 1, deleted });
   }
+  return deleted.length;
 }
 
 export async function __waitForMediaCachingForTests(): Promise<void> {
@@ -810,6 +899,10 @@ export function __resetMediaCachingForTests(): void {
   retryTimers.clear();
   waitingOnServer.clear();
   retained.clear();
+  for (const release of retainLocks.values()) release();
+  retainLocks.clear();
+  mediaChannel?.close();
+  mediaChannel = null;
   backoff.reset();
   backoff.__setRandomForTests(Math.random);
   pending.clear();

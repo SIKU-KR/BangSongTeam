@@ -6,12 +6,16 @@ import {
   screen,
   waitFor,
 } from "@testing-library/react";
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { toast } from "sonner";
 import { MEDIA_CACHE_NAME } from "#shared";
 import { ERROR_COPY } from "#copy/common";
 import { SHELL_COPY } from "#copy/shell";
 import { resetFakeCacheStorage } from "../../test/fakeCacheStorage";
+import {
+  installFakeLockManager,
+  removeFakeLockManager,
+} from "../../test/fakeLockManager";
 import { StorageWarningBanner } from "./StorageWarningBanner";
 import {
   reportPersistenceError,
@@ -122,12 +126,17 @@ describe("StorageWarningBanner", () => {
 
     beforeEach(() => {
       resetFakeCacheStorage();
+      installFakeLockManager();
       vi.mocked(toast.success).mockClear();
       vi.mocked(toast.info).mockClear();
       reportPersistenceError(
         new DOMException("quota", "QuotaExceededError"),
         "presentation",
       );
+    });
+
+    afterEach(() => {
+      removeFakeLockManager();
     });
 
     it("휴지통을 비우라고 하지 않고, 저장한 배경 영상을 지울 수 있게 한다", async () => {

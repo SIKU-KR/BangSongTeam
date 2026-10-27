@@ -48,6 +48,16 @@ import {
 import { getSyncSnapshot, resetSyncStatus } from "./lib/sync/syncStatus";
 import { __resetConnectivityForTests } from "./lib/api/connectivity";
 import { __resetStoragePersistenceForTests } from "./lib/offline/storagePersistence";
+import { __resetMediaCachingForTests } from "./lib/offline/mediaCache";
+import { replaceAllBackgrounds } from "./lib/storage";
+import {
+  installServiceWorker,
+  removeServiceWorker,
+} from "./test/serviceWorkerFixture";
+import {
+  __resetServiceWorkerStateForTests,
+  registerServiceWorker,
+} from "./pwa/registerServiceWorker";
 import { installFakeApi, type FakeApi, type FakeRoute } from "./test/fakeApi";
 import { installFakeBroadcastChannel } from "./test/fakeBroadcastChannel";
 import {
@@ -59,6 +69,7 @@ import {
   API_ERRORS,
   APP_NAME,
   MEDIA_URL_PREFIX,
+  type BackgroundMedia,
   type FolderListResponse,
   type Presentation,
 } from "#shared";
@@ -833,9 +844,39 @@ describe("App Route Integration", () => {
       });
     }
 
+    const PROJECTION_BACKGROUND: BackgroundMedia = {
+      id: "b00000000000000000001",
+      title: "따뜻한 빛",
+      kind: "video",
+      mediaUrl: `${MEDIA_URL_PREFIX}loops/warm_light_flow.mp4`,
+      posterUrl: `${MEDIA_URL_PREFIX}posters/warm_light_flow.webp`,
+      durationSec: 30,
+      sizeBytes: 1024,
+      license: "CC0",
+      createdAt: "2026-10-01T00:00:00.000Z",
+      description: "",
+      keywords: [],
+    };
+
+    function withBackground(presentation: Presentation): Presentation {
+      return {
+        ...presentation,
+        items: presentation.items.map((item) => ({
+          ...item,
+          deck: item.deck && {
+            ...item.deck,
+            backgroundId: PROJECTION_BACKGROUND.id,
+          },
+        })),
+      };
+    }
+
+    let api: FakeApi | null = null;
+
     beforeEach(() => {
       localStorage.clear();
       __resetStoragePersistenceForTests();
+      __resetMediaCachingForTests();
     });
 
     afterEach(() => {
@@ -844,6 +885,11 @@ describe("App Route Integration", () => {
       } else {
         Reflect.deleteProperty(navigator, "storage");
       }
+      api?.restore();
+      api = null;
+      __resetServiceWorkerStateForTests();
+      removeServiceWorker();
+      __resetMediaCachingForTests();
       __resetStoragePersistenceForTests();
     });
 
@@ -870,11 +916,23 @@ describe("App Route Integration", () => {
       expect(screen.queryByTestId("storage-persistence-notice")).toBeNull();
     });
 
-    it("송출 주소로 부팅하면 송출 중에는 허락을 묻지 않는다", async () => {
+    it("송출 주소로 부팅하면 송출 화면이 배경을 받는 동안에도 허락을 묻지 않는다", async () => {
       const persist = stubStorage(false);
+      api = installFakeApi(bootRoutes());
+      installServiceWorker();
+      registerServiceWorker(() => async () => undefined);
+      await replaceAllBackgrounds([PROJECTION_BACKGROUND]);
+      await seedPresentationsIntoStorage([
+        withBackground(SEED_PRESENTATIONS[0]),
+      ]);
 
       renderAt(`/present/${DOC_ID}/fullscreen`);
       await screen.findByTestId("fullscreen-present-route");
+      await waitFor(() =>
+        expect(api?.calls.map(({ path }) => path)).toContain(
+          PROJECTION_BACKGROUND.mediaUrl,
+        ),
+      );
       await settle();
 
       expect(persist).not.toHaveBeenCalled();

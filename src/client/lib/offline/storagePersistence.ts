@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from "react";
 import { navigatorApi } from "../browser/optionalApis";
+import { isProjecting } from "../../features/presentation/fullscreen";
 
 /**
  * 브라우저가 이 사이트의 저장소를 지우지 않게 했는지. `true`면 지우지 않고, `false`면 기기 저장
@@ -36,8 +37,12 @@ async function ask(): Promise<StoragePersistence> {
  * 브라우저가 오프라인 송출에 쓸 저장본을 예고 없이 지울 수 있어, 결과를 `useStoragePersistence`로
  * 알려 안내하게 한다(`StoragePersistenceNotice`). Firefox는 요청마다 허락을 묻는 창을 띄우므로,
  * 묻는 동안 다시 부르면 새로 묻지 않고 같은 요청을 기다린다.
+ *
+ * 송출 화면에서는 묻지 않고 마지막으로 확인한 상태를 돌려준다. 그 창이 관객 화면에 뜨면 안 된다.
+ * 부팅(`App`)과 배경 받기(`mediaCache`)가 모두 부르므로 이 규칙은 부르는 쪽이 아니라 여기서 지킨다.
  */
 export function requestPersistentStorage(): Promise<StoragePersistence> {
+  if (isProjecting()) return Promise.resolve(known);
   pending ??= ask().then((result) => {
     pending = null;
     if (result !== known) {
