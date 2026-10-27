@@ -11,14 +11,22 @@ export {
   deletePresentationRemote,
 } from "./presentationSync";
 export { OfflineError, ServerRejectedError } from "../api/request";
-export { flushPendingSync, hasPendingDocumentPush } from "./syncScheduler";
+export {
+  flushBeforeProjection,
+  flushPendingSync,
+  hasPendingDocumentPush,
+} from "./syncScheduler";
 export {
   startBootSync,
   runDeferredBootSync,
   useBootPullPending,
 } from "./bootSync";
 export { flushBeforeSignOut, stopAccountSync } from "./accountEnd";
-export { startStorageSync, resumeHeldStorageChanges } from "./storageSync";
+export {
+  listenForStorageChanges,
+  startStorageSync,
+  resumeHeldStorageChanges,
+} from "./storageSync";
 export { refreshBackgroundCatalog } from "./backgroundSync";
 export { flushDeckSync } from "./deckSync";
 export { flushFolderSync, hasPendingFolderPush } from "./folderSync";

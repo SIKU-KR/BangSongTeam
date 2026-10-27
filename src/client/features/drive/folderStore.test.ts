@@ -549,6 +549,37 @@ describe("folderStore", () => {
         "다른 탭에서 바꾼 이름",
       );
     });
+
+    it("읽는 동안 다시 읽기를 멈추면 폴더를 바꾸거나 빼지 않고 읽은 id를 돌려준다", async () => {
+      const pushed: string[] = [];
+      __setFolderPusherForTests(async (f) => {
+        pushed.push(f.id);
+        return f;
+      });
+      setFolderSyncEnabled(true);
+      const renamed = createFolder(null, "이름을 바꿀 폴더");
+      const removed = createFolder(null, "다른 탭에서 지운 폴더");
+      await flushFolderWrites();
+      await flushFolderSync();
+      renameFolder(removed.id, "올리기를 기다리는 이름");
+      await flushFolderWrites();
+      await writeFromOtherTab({ ...renamed, name: "다른 탭에서 바꾼 이름" });
+      await deleteFromOtherTab(removed.id);
+      let paused = false;
+
+      const reloading = reloadFoldersFromStorage(
+        [renamed.id, removed.id],
+        () => paused,
+      );
+      paused = true;
+      const held = await reloading;
+      await flushFolderSync();
+
+      expect(held).toEqual([renamed.id, removed.id]);
+      expect(getFolder(renamed.id)).toEqual(renamed);
+      expect(getFolder(removed.id)?.name).toBe("올리기를 기다리는 이름");
+      expect(pushed).toEqual([renamed.id, removed.id, removed.id]);
+    });
   });
 
   describe("다른 탭에 알리기", () => {

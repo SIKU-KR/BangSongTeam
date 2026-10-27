@@ -42,6 +42,7 @@ import {
   listPendingDeckDeletes,
   rememberDeckDelete,
 } from "../../lib/sync/pendingDeckDeletes";
+import { mergeLibraryDecks } from "../../lib/sync/mergeLibraryDecks";
 import { SEED_USER_ID } from "../../test/presentationFixture";
 
 vi.mock("../../lib/storage", async (importOriginal) => {
@@ -631,7 +632,10 @@ describe("songLibraryStore", () => {
     });
 
     it("다른 탭이 고친 곡과 만든 곡을 보관함에 싣는다", async () => {
-      const mine = saveSongToLibrary({ title: "이 탭의 곡", lyricsRaw: "가사" });
+      const mine = saveSongToLibrary({
+        title: "이 탭의 곡",
+        lyricsRaw: "가사",
+      });
       await settleWrites();
       const edited = {
         ...mine,
@@ -694,19 +698,28 @@ describe("songLibraryStore", () => {
     });
 
     it("읽는 동안 이 탭에서 고친 곡은 읽은 저장본으로 바꾸지 않는다", async () => {
-      const mine = saveSongToLibrary({ title: "이 탭의 곡", lyricsRaw: "가사" });
+      const mine = saveSongToLibrary({
+        title: "이 탭의 곡",
+        lyricsRaw: "가사",
+      });
       await settleWrites();
       await writeFromOtherTab({ ...mine, title: "다른 탭에서 고친 제목" });
 
       const reloading = reloadSongsFromStorage([mine.id]);
-      updateLibrarySongInfo(mine.id, { title: "읽는 동안 고친 제목", artist: "" });
+      updateLibrarySongInfo(mine.id, {
+        title: "읽는 동안 고친 제목",
+        artist: "",
+      });
       await reloading;
 
       expect(getLibraryDeck(mine.id)?.title).toBe("읽는 동안 고친 제목");
     });
 
     it("읽지 못한 저장본과 다른 계정의 곡은 그대로 둔다", async () => {
-      const mine = saveSongToLibrary({ title: "이 탭의 곡", lyricsRaw: "가사" });
+      const mine = saveSongToLibrary({
+        title: "이 탭의 곡",
+        lyricsRaw: "가사",
+      });
       await settleWrites();
       const before = getLibraryDeck(mine.id);
       await writeFromOtherTab({ id: mine.id, title: null });
@@ -723,7 +736,10 @@ describe("songLibraryStore", () => {
     });
 
     it("다시 읽기는 저장소에 쓰지도 서버에 올리지도 않는다", async () => {
-      const mine = saveSongToLibrary({ title: "이 탭의 곡", lyricsRaw: "가사" });
+      const mine = saveSongToLibrary({
+        title: "이 탭의 곡",
+        lyricsRaw: "가사",
+      });
       await flushDeckSync();
       await settleWrites();
       push.mockClear();
@@ -736,6 +752,145 @@ describe("songLibraryStore", () => {
 
       expect(saveSong).not.toHaveBeenCalled();
       expect(push).not.toHaveBeenCalled();
+    });
+
+    it("읽는 동안 다시 읽기를 멈추면 곡을 바꾸거나 빼지 않고, 지운 곡으로 기억하지도 않고 읽은 id를 돌려준다", async () => {
+      const mine = saveSongToLibrary({
+        title: "이 탭의 곡",
+        lyricsRaw: "가사",
+      });
+      const removed = saveSongToLibrary({
+        title: "다른 탭에서 지운 곡",
+        lyricsRaw: "가사",
+      });
+      await flushDeckSync();
+      push.mockClear();
+      updateLibrarySongInfo(removed.id, {
+        title: "올리기를 기다리는 제목",
+        artist: "",
+      });
+      await settleWrites();
+      await writeFromOtherTab({ ...mine, title: "다른 탭에서 고친 제목" });
+      await deleteFromOtherTab(removed.id);
+      let paused = false;
+
+      const reloading = reloadSongsFromStorage(
+        [mine.id, removed.id],
+        () => paused,
+      );
+      paused = true;
+      const held = await reloading;
+      await flushDeckSync();
+
+      expect(held).toEqual([mine.id, removed.id]);
+      expect(getLibraryDeck(mine.id)?.title).toBe("이 탭의 곡");
+      expect(getLibraryDeck(removed.id)?.title).toBe("올리기를 기다리는 제목");
+      expect(wasDeckDeleted(removed.id)).toBe(false);
+      expect(push).toHaveBeenCalledExactlyOnceWith(
+        expect.objectContaining({ id: removed.id }),
+      );
+      expect(await reloadSongsFromStorage([mine.id], () => false)).toEqual([]);
+    });
+
+    it("이 탭이 지우는 중인 곡은 다른 탭이 늦게 쓴 저장본을 읽어도 보관함에 다시 넣지 않는다", async () => {
+      const queued = saveSongToLibrary({ title: "지울 곡", lyricsRaw: "가사" });
+      const sending = saveSongToLibrary({
+        title: "지우기를 보내는 중인 곡",
+        lyricsRaw: "가사",
+      });
+      await flushDeckSync();
+      let finishDelete: () => void = () => undefined;
+      remove.mockImplementationOnce(
+        () =>
+          new Promise<void>((resolve) => {
+            finishDelete = resolve;
+          }),
+      );
+      deleteUserSong(sending.id);
+      const deleting = flushDeckSync();
+      await vi.waitFor(() => expect(remove).toHaveBeenCalledTimes(1));
+      deleteUserSong(queued.id);
+      await settleWrites();
+      await writeFromOtherTab(queued);
+      await writeFromOtherTab(sending);
+
+      await reloadSongsFromStorage([queued.id, sending.id]);
+      finishDelete();
+      await deleting;
+      await flushDeckSync();
+
+      expect(getLibraryDeck(queued.id)).toBeUndefined();
+      expect(getLibraryDeck(sending.id)).toBeUndefined();
+      expect(remove.mock.calls.map(([id]) => id)).toEqual([
+        sending.id,
+        queued.id,
+      ]);
+      expect(wasDeckDeleted(queued.id)).toBe(true);
+      expect(wasDeckDeleted(sending.id)).toBe(true);
+    });
+
+    it("다른 탭이 지우는 중인 곡(삭제 기록이 남은 곡)은 늦게 쓴 저장본을 읽어도 싣지 않는다", async () => {
+      const mine = saveSongToLibrary({
+        title: "다른 탭이 지운 곡",
+        lyricsRaw: "가사",
+      });
+      await settleWrites();
+      rememberDeckDelete(SEED_USER_ID, mine.id);
+      await deleteFromOtherTab(mine.id);
+      await reloadSongsFromStorage([mine.id]);
+      await writeFromOtherTab(mine);
+
+      await reloadSongsFromStorage([mine.id]);
+
+      expect(getLibraryDeck(mine.id)).toBeUndefined();
+      expect(wasDeckDeleted(mine.id)).toBe(true);
+    });
+
+    it("다른 탭이 지우는 중인 곡은 저장본이 남아 있어도 지운 곡으로 보고 보관함에서 빼며 올리려던 PUT을 버린다", async () => {
+      const mine = saveSongToLibrary({
+        title: "다른 탭이 지운 곡",
+        lyricsRaw: "가사",
+      });
+      await flushDeckSync();
+      push.mockClear();
+      updateLibrarySongInfo(mine.id, {
+        title: "올리기를 기다리는 제목",
+        artist: "",
+      });
+      await settleWrites();
+      rememberDeckDelete(SEED_USER_ID, mine.id);
+
+      await reloadSongsFromStorage([mine.id]);
+      await flushDeckSync();
+
+      expect(getLibraryDeck(mine.id)).toBeUndefined();
+      expect(wasDeckDeleted(mine.id)).toBe(true);
+      expect(push).not.toHaveBeenCalled();
+      expect(remove).not.toHaveBeenCalled();
+    });
+
+    it("다른 탭에서 지운 곡의 저장본이 다시 생기면 지운 곡으로 기억하지 않고 보관함에 싣는다", async () => {
+      const fork = libraryDeck("c000000000000000000f2", {
+        origin: "fork",
+        forkedFrom: "c000000000000000000f0",
+        forkedFromAuthorName: "원작자",
+      });
+      upsertLibraryDeck(fork, { push: false });
+      await settleWrites();
+      await deleteFromOtherTab(fork.id);
+      await reloadSongsFromStorage([fork.id]);
+      expect(wasDeckDeleted(fork.id)).toBe(true);
+      await writeFromOtherTab(fork);
+
+      await reloadSongsFromStorage([fork.id]);
+
+      expect(getLibraryDeck(fork.id)).toEqual(fork);
+      expect(wasDeckDeleted(fork.id)).toBe(false);
+      expect(
+        mergeLibraryDecks(getUserSongs(), [fork], {
+          deletedIds: getDeletedSongIds(),
+        }).removedIds,
+      ).toEqual([]);
     });
   });
 

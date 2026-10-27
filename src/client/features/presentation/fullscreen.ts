@@ -137,6 +137,9 @@ export function savePresentReturnPath(
  *
  * 새로 시작하는 송출은 첫 슬라이드부터 띄우도록 같은 탭에 남은 이어 보기 상태를 지운다.
  * 이어 보기는 송출 화면을 새로고침했을 때만 쓴다.
+ *
+ * 송출하는 동안 프레젠테이션 큐는 보내지 않으므로, 호출자는 이 함수 바로 앞에서 큐에 남은 변경을
+ * 보낸다(`flushBeforeProjection`).
  */
 export function launchPresentation(
   navigate: PresentNavigate,

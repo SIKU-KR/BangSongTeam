@@ -4,7 +4,9 @@ import { ERROR_COPY } from "#copy/common";
 import {
   scheduleDocumentPush,
   cancelDocumentPush,
+  flushBeforeProjection,
   flushPendingSync,
+  hasPendingDocumentPush,
   isDocumentQueued,
   retryPendingSyncNow,
   setSyncEnabled,
@@ -367,6 +369,62 @@ describe("서버 push 스케줄러", () => {
       expect(push.mock.calls.map(([sent]) => sent.title)).toEqual([
         "첫 판",
         "송출 중에 고친 판",
+      ]);
+    });
+
+    it("송출 화면으로 가기 직전에 부르면 기다리는 세트를 디바운스·동시 개수 제한 없이 모두 보낸다", async () => {
+      const ids = ["a", "b", "c", "d", "e"];
+      for (const id of ids)
+        scheduleDocumentPush(doc(id, "송출 직전에 고친 제목"));
+
+      flushBeforeProjection();
+      window.history.pushState({}, "", PROJECTION_PATH);
+      await flushPendingSync();
+
+      expect(push.mock.calls.map(([sent]) => sent.id).sort()).toEqual(ids);
+      expect(hasPendingDocumentPush()).toBe(false);
+      expect(getSyncSnapshot().status).toBe("synced");
+    });
+
+    it("이미 송출 중이면 송출 직전 보내기도 보내지 않는다", async () => {
+      window.history.pushState({}, "", PROJECTION_PATH);
+      scheduleDocumentPush(doc("a"));
+
+      flushBeforeProjection();
+      await flushPendingSync();
+      await vi.advanceTimersByTimeAsync(SYNC_MAX_WAIT_MS);
+
+      expect(push).not.toHaveBeenCalled();
+      expect(isDocumentQueued("a")).toBe(true);
+    });
+
+    it("송출 직전에 보내는 중이던 세트의 새 판은 그 요청이 끝나고 송출을 마친 뒤에 보낸다", async () => {
+      let release: () => void = () => undefined;
+      push.mockImplementationOnce(
+        () =>
+          new Promise<boolean>((resolve) => {
+            release = () => resolve(true);
+          }),
+      );
+      scheduleDocumentPush(doc("a", "첫 판"));
+      const first = flushPendingSync();
+      await vi.waitFor(() => expect(push).toHaveBeenCalledTimes(1));
+      scheduleDocumentPush(doc("a", "송출 직전에 고친 판"));
+
+      flushBeforeProjection();
+      window.history.pushState({}, "", PROJECTION_PATH);
+      release();
+      await first;
+      await vi.advanceTimersByTimeAsync(BASE_BACKOFF_MS * 3);
+
+      expect(push).toHaveBeenCalledTimes(1);
+
+      window.history.pushState({}, "", "/presentations");
+      await vi.advanceTimersByTimeAsync(BASE_BACKOFF_MS);
+
+      expect(push.mock.calls.map(([sent]) => sent.title)).toEqual([
+        "첫 판",
+        "송출 직전에 고친 판",
       ]);
     });
   });

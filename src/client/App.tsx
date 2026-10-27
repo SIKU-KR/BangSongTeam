@@ -36,6 +36,7 @@ import {
   flushDeckSync,
   flushFolderSync,
   stopAccountSync,
+  listenForStorageChanges,
   startStorageSync,
   resumeHeldStorageChanges,
   startSyncRecovery,
@@ -79,6 +80,7 @@ function useHydration(): boolean {
     if (bootstrappedUserId === userId) return;
 
     const controller = new AbortController();
+    listenForStorageChanges();
     void (async () => {
       await Promise.all([
         hydrateFromStorage(),

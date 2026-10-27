@@ -47,6 +47,7 @@ let pending = new Map<string, PendingOp>();
 let failed = new Map<string, PendingOp>();
 const waitingOnServer = new Set<string>();
 const deletedIds = new Set<string>();
+const deletedElsewhere = new Set<string>();
 let timer: ReturnType<typeof setTimeout> | null = null;
 let inFlight: Promise<void> = Promise.resolve();
 const runningBatches = new Set<Promise<void>>();
@@ -101,11 +102,32 @@ export function wasDeckDeleted(id: string): boolean {
 }
 
 /**
- * DELETE를 보내지 않고 지운 곡으로만 기억한다. 서버가 이미 지운 곡(410)이나 다른 탭에서
- * 지운 곡처럼 이 페이지가 서버에서 지울 필요가 없는 곡에 쓴다.
+ * DELETE를 보내지 않고 지운 곡으로만 기억한다. 다른 탭에서 지운 곡처럼 이 페이지가 서버에서
+ * 지울 필요가 없는 곡에 쓴다. 이 페이지가 지웠거나 서버가 지웠다고 답한 곡이면 그 기억을 그대로
+ * 둔다(`unmarkDeckDeleted` 참고).
  */
 export function markDeckDeleted(id: string): void {
+  if (!deletedIds.has(id)) deletedElsewhere.add(id);
   deletedIds.add(id);
+}
+
+/**
+ * 다른 탭에서 지운 곡으로만 기억한 곡(`markDeckDeleted`)의 저장본이 다시 생겼을 때 그 기억을
+ * 지운다. 지운 탭이 DELETE를 보내기 전에 같은 공유 곡을 다시 가져오면 같은 id로 돌아온다. 기억을
+ * 남기면 이 페이지의 다음 보관함 병합이 다시 가져온 곡을 지운 곡으로 보고 저장소에서 지우고, 그
+ * 알림을 받은 다른 탭도 곡을 뺀다.
+ *
+ * 이 페이지가 지웠거나(DELETE를 기다리거나 보내는 중이거나 이미 보냄) 서버가 지웠다고 답한
+ * 곡(410)이면 기억을 그대로 두고 false를 돌려준다. 그 곡의 저장본은 늦게 끝난 다른 탭의 쓰기라
+ * 보관함에 다시 넣으면 서버에서 지워진 곡이 이 페이지에만 남는다. 지운 곡으로 기억하지 않는(또는
+ * 이번에 기억을 지운) 곡이면 true다.
+ */
+export function unmarkDeckDeleted(id: string): boolean {
+  if (!deletedIds.has(id)) return true;
+  if (!deletedElsewhere.has(id)) return false;
+  deletedElsewhere.delete(id);
+  deletedIds.delete(id);
+  return true;
 }
 
 function resetDeckState(id: string): void {
@@ -116,6 +138,7 @@ function resetDeckState(id: string): void {
 
 function forgetDeletedDeck(id: string): void {
   deletedIds.add(id);
+  deletedElsewhere.delete(id);
   if (pending.get(id)?.kind === "push") pending.delete(id);
   if (failed.get(id)?.kind === "push") failed.delete(id);
   resetDeckState(id);
@@ -276,6 +299,7 @@ export function scheduleDeckPush(deck: Deck): void {
 export function scheduleDeckDelete(id: string, userId: string): void {
   rememberDeckDelete(userId, id);
   deletedIds.add(id);
+  deletedElsewhere.delete(id);
   resetDeckState(id);
   schedule(id, { kind: "delete", id, userId });
 }
@@ -315,6 +339,7 @@ export function cancelDeckPush(id: string): void {
 export function cancelDeckDelete(id: string, userId: string): void {
   forgetDeckDelete(userId, id);
   deletedIds.delete(id);
+  deletedElsewhere.delete(id);
   const queued = pending.get(id);
   const held = failed.get(id);
   if (queued?.kind !== "delete" && held?.kind !== "delete") return;
@@ -421,6 +446,7 @@ export function __resetDeckSyncForTests(): void {
   listener = null;
   goneListener = null;
   deletedIds.clear();
+  deletedElsewhere.clear();
   clearPending();
   inFlight = Promise.resolve();
   runningBatches.clear();

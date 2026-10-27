@@ -91,7 +91,7 @@ function scheduleNextTimer(): void {
 
   if (earliest === Infinity) return;
   const delay = Math.max(0, earliest - now);
-  timer = setTimeout(dispatch, delay);
+  timer = setTimeout(() => dispatch(), delay);
 }
 
 function startPush(document: Presentation): void {
@@ -169,11 +169,11 @@ function startPush(document: Presentation): void {
   });
 }
 
-function dispatch(): void {
+function dispatch(concurrency = PUSH_CONCURRENCY): void {
   if (!enabled) return;
   clearTimer();
   if (isProjecting()) {
-    if (pending.size > 0) timer = setTimeout(dispatch, BASE_BACKOFF_MS);
+    if (pending.size > 0) timer = setTimeout(() => dispatch(), BASE_BACKOFF_MS);
     return;
   }
 
@@ -188,7 +188,7 @@ function dispatch(): void {
 
   readyItems.sort((a, b) => a.readyAt - b.readyAt);
 
-  while (inFlightDocs.size < PUSH_CONCURRENCY && readyItems.length > 0) {
+  while (inFlightDocs.size < concurrency && readyItems.length > 0) {
     const item = readyItems.shift()!;
     pending.delete(item.document.id);
     inFlightDocs.add(item.document.id);
@@ -300,6 +300,24 @@ export function hasPendingDocumentPush(): boolean {
  */
 export function isDocumentQueued(id: string): boolean {
   return pending.has(id) || inFlightDocs.has(id) || failed.has(id);
+}
+
+/**
+ * 송출 화면으로 가기 직전에 부른다. 기다리는 push를 디바운스·백오프·동시 개수 제한 없이 지금 모두
+ * 보낸다.
+ *
+ * 송출하는 동안 큐는 보내지 않는다. 남긴 세트는 예배 내내 서버에 없다가 송출을 마친 뒤에야 송출
+ * 전 판으로 올라가, 그사이 다른 기기나 탭이 고친 내용을 서버에서 되돌린다. 송출 화면에서 탭을
+ * 닫으면 그 편집은 다음 부팅까지 서버에 가지 않는다. 같은 세트를 이미 보내는 중이면 새 판은 그
+ * 요청이 끝난 뒤, 송출을 마치고 보낸다(세트마다 PATCH는 하나씩). 송출 중에 부르면 아무것도 하지
+ * 않는다.
+ */
+export function flushBeforeProjection(): void {
+  if (!enabled || isProjecting()) return;
+  for (const item of pending.values()) {
+    item.readyAt = 0;
+  }
+  dispatch(Infinity);
 }
 
 /**

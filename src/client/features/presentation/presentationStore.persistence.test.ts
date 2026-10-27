@@ -823,6 +823,39 @@ describe("presentationStore 영속성", () => {
       expect(hasPendingDocumentPush()).toBe(false);
     });
 
+    it("읽는 동안 다시 읽기를 멈추면 세트를 바꾸거나 빼지 않고 읽은 id를 돌려준다", async () => {
+      const pusher = vi.fn(async (doc: Presentation) => doc.id);
+      __setPusherForTests(pusher);
+      setSyncEnabled(true);
+      renamePresentation(SECOND.id, "올리기를 기다리는 이름");
+      await flushPendingWrites();
+      await writeFromOtherTab(withExtraSong(FIRST));
+      await deleteFromOtherTab(SECOND.id);
+      let paused = false;
+
+      const reloading = reloadPresentationsFromStorage(
+        [FIRST.id, SECOND.id],
+        () => paused,
+      );
+      paused = true;
+      const held = await reloading;
+      await flushPendingSync();
+
+      expect(held).toEqual([FIRST.id, SECOND.id]);
+      expect(getPresentationById(FIRST.id)?.items).toHaveLength(
+        FIRST.items.length,
+      );
+      expect(getPresentationById(SECOND.id)?.title).toBe(
+        "올리기를 기다리는 이름",
+      );
+      expect(pusher).toHaveBeenCalledExactlyOnceWith(
+        expect.objectContaining({ id: SECOND.id }),
+      );
+      expect(
+        await reloadPresentationsFromStorage([FIRST.id], () => false),
+      ).toEqual([]);
+    });
+
     it("새 버전의 탭이 남긴 baseUpdatedAt은 떼고 싣는다", async () => {
       const newer = withExtraSong(FIRST);
       await writeFromOtherTab({ ...newer, baseUpdatedAt: newer.updatedAt });

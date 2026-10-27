@@ -380,21 +380,26 @@ export async function removeFoldersLocally(
  * 없으면 다른 탭에서 영구 삭제한 것이라 메모리에서 빼고 대기 중인 push를 버린다. 남은 push가 지운
  * 폴더를 서버에 되살린다. 읽지 못한 저장본은 지운 것이 아니라 그대로 둔다. 저장도 push도 하지
  * 않는다. 폴더를 읽지 못한 탭(하이드레이션 실패)은 다시 읽지 않는다.
+ *
+ * 읽은 뒤 `isPaused()`가 참이면(그사이 송출을 시작함) 아무것도 바꾸지 않고 읽은 id를 돌려준다.
+ * 부른 쪽이 모아 두었다가 송출을 마친 뒤 다시 읽는다. 그 밖에는 빈 목록이다.
  */
 export async function reloadFoldersFromStorage(
   ids: readonly string[],
-): Promise<void> {
-  if (hydrationFailed) return;
+  isPaused: () => boolean = () => false,
+): Promise<string[]> {
+  if (hydrationFailed) return [];
   const unique = [...new Set(ids)].filter((id) => !unpersisted.has(id));
-  if (unique.length === 0) return;
+  if (unique.length === 0) return [];
   let loaded: { id: string; record: LoadedRecord<Folder> }[];
   try {
     loaded = await Promise.all(
       unique.map(async (id) => ({ id, record: await loadFolder(id) })),
     );
   } catch {
-    return;
+    return [];
   }
+  if (isPaused()) return unique;
 
   const userId = getCurrentUserId();
   const byId = new Map(folders.map((folder) => [folder.id, folder]));
@@ -413,6 +418,7 @@ export async function reloadFoldersFromStorage(
     changed = true;
   }
   if (changed) setFolders([...byId.values()]);
+  return [];
 }
 
 /** 대기 중인 저장이 끝날 때까지 기다린다 (테스트·언로드용) */

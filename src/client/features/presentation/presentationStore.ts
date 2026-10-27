@@ -1118,21 +1118,27 @@ function replaceFromStorage(doc: Presentation): void {
  * 저장도 push도 하지 않는다. 저장본은 다른 탭이 이미 썼고, 올리기도 그 탭이 한다. 하이드레이션에
  * 실패한 탭은 다시 읽지 않는다. 메모리에만 있는 편집을 저장본으로 덮게 된다. 읽기에 실패하면
  * 메모리를 그대로 둔다. 잃는 것이 없어 저장 실패 경고는 올리지 않는다.
+ *
+ * 읽은 뒤 `isPaused()`가 참이면(그사이 송출을 시작함) 아무것도 바꾸지 않고 읽은 id를 돌려준다.
+ * 송출 화면은 띄운 프레젠테이션의 변경을 따라 그리므로, 부른 쪽이 모아 두었다가 송출을 마친 뒤
+ * 다시 읽는다. 그 밖에는 빈 목록이다.
  */
 export async function reloadPresentationsFromStorage(
   ids: readonly string[],
-): Promise<void> {
-  if (!persistenceEnabled) return;
+  isPaused: () => boolean = () => false,
+): Promise<string[]> {
+  if (!persistenceEnabled) return [];
   const unique = [...new Set(ids)].filter((id) => !skipsUnpersisted(id));
-  if (unique.length === 0) return;
+  if (unique.length === 0) return [];
   let loaded: { id: string; record: LoadedRecord<Presentation> }[];
   try {
     loaded = await Promise.all(
       unique.map(async (id) => ({ id, record: await loadPresentation(id) })),
     );
   } catch {
-    return;
+    return [];
   }
+  if (isPaused()) return unique;
 
   const userId = getCurrentUserId();
   const missing: string[] = [];
@@ -1156,6 +1162,7 @@ export async function reloadPresentationsFromStorage(
   if (forgetPresentations(missing).length > 0) changed = true;
   for (const id of missing) cancelDocumentPush(id);
   if (changed) notifyListeners();
+  return [];
 }
 
 function skipsUnpersisted(id: string): boolean {
