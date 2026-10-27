@@ -47,10 +47,6 @@ interface QueryForms {
 
 let lastQuery: { raw: string; forms: QueryForms } | null = null;
 
-/**
- * 검색어를 비교에 쓰는 꼴로 푼다. 한 번 검색하는 동안 모든 대상이 같은 검색어를 쓰므로 마지막
- * 검색어의 결과만 기억해 대상마다 다시 풀지 않는다.
- */
 function queryFormsOf(query: string): QueryForms {
   if (lastQuery?.raw === query) return lastQuery.forms;
   const clean = query.trim().toLowerCase();
@@ -76,6 +72,9 @@ function queryFormsOf(query: string): QueryForms {
 /**
  * 풀어 둔 대상이 검색어에 맞는지. 초성·자모 분해 및 영타 오타 변환을 지원한다.
  * 빈 검색어는 모두 통과하고, 빈 대상은 어떤 검색어도 통과하지 못한다.
+ *
+ * 한 번 검색하는 동안 모든 대상이 같은 검색어를 쓰므로, 검색어를 푼 결과는 마지막 검색어 하나만
+ * 기억해 두고 대상마다 다시 풀지 않는다.
  */
 export function hangulIncludesPrepared(
   target: HangulTarget,

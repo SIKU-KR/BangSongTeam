@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useDeferredValue, useMemo, useState } from "react";
 import { usePathname } from "next/navigation";
 import { SidebarInset, SidebarProvider } from "#components/ui/sidebar";
 import { TooltipProvider } from "#components/ui/tooltip";
@@ -16,6 +16,7 @@ import {
   getFolder,
   isDrivePath,
   useDrive,
+  useDriveSearchQuery,
   useFolderIndex,
 } from "../features/drive";
 import { AppShellContext, type AppShellContextValue } from "./appShellContext";
@@ -57,9 +58,10 @@ function metaFor(pathname: string): ShellPageMeta {
  * 서버 벡터 검색을 부르므로, 드라이브에서 친 검색어가 넘어가 요청이 나가지 않게 하고
  * 제출한 검색어만 갤러리에 넘긴다.
  *
- * 드라이브 검색어는 친 위치에 묶인다. 셸은 화면을 오가도 남아 있어서, 검색 결과에서 연 폴더나
- * 휴지통에까지 검색어가 따라가면 화면이 바뀐 것 같지 않다. 드라이브 안에서 위치가 바뀌면
- * 비우고, 배경 갤러리에 다녀온 뒤 같은 위치로 돌아오면 그대로 둔다.
+ * 드라이브·휴지통 화면에는 검색어를 늦춰 넘긴다(`useDeferredValue`). 화면은 `children`으로
+ * 들어오므로 입력창을 고치는 커밋에서는 다시 그려지지 않아, 곡이 많아도 글자마다 찾고 수백 행을
+ * 다시 그리는 일이 입력을 붙잡지 않는다. 검색어를 지울 때는 늦추지 않는다. 늦추면 다른 위치로
+ * 옮겨 가거나 검색을 끝낸 뒤에 옛 검색 결과가 한 번 더 비친다.
  */
 export function AppShellLayout({
   children,
@@ -84,15 +86,10 @@ function AppShellFrame({
   const drive = useDrive();
   const onDrive = isDrivePath(pathname);
 
-  const [searchQuery, setSearchQuery] = useState<string>("");
-  const [searchPath, setSearchPath] = useState<string>(pathname);
+  const searchQuery = useDriveSearchQuery();
+  const deferredSearch = useDeferredValue(searchQuery);
   const [backgroundDraft, setBackgroundDraft] = useState<string>("");
   const [backgroundQuery, setBackgroundQuery] = useState<string>("");
-
-  if (onDrive && searchPath !== pathname) {
-    setSearchPath(pathname);
-    setSearchQuery("");
-  }
 
   const meta = metaFor(pathname);
   const onTrash = drive.isTrashView;
@@ -117,10 +114,11 @@ function AppShellFrame({
       }
     : {
         searchQuery,
-        onSearchQueryChange: setSearchQuery,
+        onSearchQueryChange: drive.setSearchQuery,
       };
 
-  const routeQuery = onBackgrounds ? backgroundQuery : searchQuery;
+  const driveQuery = searchQuery.trim() === "" ? "" : deferredSearch;
+  const routeQuery = onBackgrounds ? backgroundQuery : driveQuery;
   const context = useMemo<AppShellContextValue>(
     () => ({ searchQuery: routeQuery }),
     [routeQuery],

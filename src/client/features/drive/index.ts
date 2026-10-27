@@ -11,7 +11,11 @@ export {
   TRASH_PATH,
 } from "./drivePaths";
 export { DriveProvider } from "./DriveProvider";
-export { useDrive, useDriveDroppable } from "./driveContext";
+export {
+  useDrive,
+  useDriveDroppable,
+  useDriveSearchQuery,
+} from "./driveContext";
 export { DriveBrowser } from "./DriveBrowser";
 export { FolderPickerDialog } from "./DriveDialogs";
 export { DriveBreadcrumbs } from "./DriveBreadcrumbs";

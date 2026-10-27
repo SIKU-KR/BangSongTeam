@@ -1658,4 +1658,235 @@ describe("AppShellLayout (검색어)", () => {
     expect(searchInput()).toHaveValue("예배");
     expect(screen.getByTestId("drive-summary")).toHaveTextContent("검색 결과");
   });
+
+  it.each([
+    [
+      "더블클릭해",
+      async (row: HTMLElement): Promise<void> => {
+        act(() => {
+          fireEvent.doubleClick(row);
+        });
+      },
+    ],
+    [
+      "⋮ 메뉴로 열어",
+      async (row: HTMLElement): Promise<void> => {
+        fireEvent.click(within(row).getByTestId("item-more-btn"));
+        fireEvent.click(await screen.findByTestId("action-open"));
+      },
+    ],
+  ])(
+    "검색 결과에서 지금 열린 폴더를 %s도 검색을 끝내고 그 폴더의 내용을 보여 준다",
+    async (_, openRow) => {
+      __loadFoldersForTests([folder(WORSHIP, "주일 대예배")]);
+      const inside = { ...SEED_PRESENTATIONS[0], folderId: WORSHIP };
+      __loadDocumentsForTests([inside, ...SEED_PRESENTATIONS.slice(1)]);
+      renderShell(`/presentations/folders/${WORSHIP}`);
+      fireEvent.change(searchInput(), { target: { value: "주일" } });
+      expect(screen.getByTestId("drive-summary")).toHaveTextContent(
+        "검색 결과",
+      );
+
+      await openRow(card("폴더 주일 대예배"));
+
+      expect(window.location.pathname).toBe(
+        `/presentations/folders/${WORSHIP}`,
+      );
+      expect(searchInput()).toHaveValue("");
+      expect(screen.getByTestId("drive-summary")).not.toHaveTextContent(
+        "검색 결과",
+      );
+      const options = screen.getAllByRole("option");
+      expect(options).toHaveLength(1);
+      expect(options[0]).toHaveAccessibleName(
+        `${DRIVE_COPY.kind.file} ${inside.title}`,
+      );
+    },
+  );
+
+  it.each([
+    ["내 드라이브", (): HTMLElement => screen.getByTestId("sidebar-nav-home")],
+    [
+      "앱 이름",
+      (): HTMLElement =>
+        screen.getByRole("button", { name: new RegExp(APP_NAME) }),
+    ],
+  ])(
+    "루트에서 검색하는 중에 사이드바의 %s 버튼을 누르면 검색을 끝내고 루트의 내용을 보여 준다",
+    (_, sidebarButton) => {
+      renderShell();
+      fireEvent.change(searchInput(), { target: { value: "주일" } });
+      expect(screen.getByTestId("drive-summary")).toHaveTextContent(
+        "검색 결과",
+      );
+
+      fireEvent.click(sidebarButton());
+
+      expect(window.location.pathname).toBe(DRIVE_ROOT_PATH);
+      expect(searchInput()).toHaveValue("");
+      expect(screen.getByTestId("drive-summary")).not.toHaveTextContent(
+        "검색 결과",
+      );
+      expect(screen.getByTestId("drive-trash-folder")).toBeInTheDocument();
+    },
+  );
+
+  interface ShellCommit {
+    input: string;
+    summary: string;
+    driveRendered: boolean;
+  }
+
+  function renderRecordingCommits(): ShellCommit[] {
+    const commits: ShellCommit[] = [];
+    let driveRendered = false;
+    render(
+      withQueryClient(
+        <ThemeProvider>
+          <React.Profiler
+            id="shell"
+            onRender={() => {
+              commits.push({
+                input:
+                  screen.queryByTestId<HTMLInputElement>("shell-search-input")
+                    ?.value ?? "",
+                summary:
+                  screen.queryByTestId("drive-summary")?.textContent ?? "",
+                driveRendered,
+              });
+              driveRendered = false;
+            }}
+          >
+            <MemoryRouter initialEntries={[DRIVE_ROOT_PATH]}>
+              <Routes>
+                <Route layout={AppShellLayout}>
+                  <Route
+                    path={DRIVE_ROOT_PATH}
+                    element={
+                      <React.Profiler
+                        id="drive"
+                        onRender={() => {
+                          driveRendered = true;
+                        }}
+                      >
+                        <PresentationsRoute />
+                      </React.Profiler>
+                    }
+                  />
+                </Route>
+              </Routes>
+            </MemoryRouter>
+          </React.Profiler>
+        </ThemeProvider>,
+      ),
+    );
+    commits.length = 0;
+    return commits;
+  }
+
+  it("검색어를 치면 입력창을 먼저 고치고, 그 커밋에서는 드라이브 목록을 다시 그리지 않는다", () => {
+    const commits = renderRecordingCommits();
+
+    fireEvent.change(searchInput(), { target: { value: "주일" } });
+
+    const typed = commits.find((commit) => commit.input === "주일");
+    expect(typed).toMatchObject({ driveRendered: false });
+    expect(screen.getByTestId("drive-summary")).toHaveTextContent("검색 결과");
+  });
+
+  it("검색어를 지우면 늦은 검색 결과를 한 번 더 그리지 않고 곧바로 폴더 내용을 보여 준다", () => {
+    const commits = renderRecordingCommits();
+    fireEvent.change(searchInput(), { target: { value: "주일" } });
+    commits.length = 0;
+
+    fireEvent.change(searchInput(), { target: { value: "  " } });
+
+    expect(commits.length).toBeGreaterThan(0);
+    expect(commits.some((commit) => commit.summary.includes("검색 결과"))).toBe(
+      false,
+    );
+  });
+});
+
+describe("AppShellLayout (빈 곳과 휴지통 폴더의 메뉴)", () => {
+  beforeEach(() => {
+    signInAsTestUser();
+    resetPresentationStore();
+    resetFolderStore();
+    window.localStorage.clear();
+    __loadDocumentsForTests(SEED_PRESENTATIONS);
+    vi.restoreAllMocks();
+  });
+
+  afterEach(async () => {
+    vi.useRealTimers();
+    await new Promise((resolve) => setTimeout(resolve, 60));
+  });
+
+  function longPress(target: HTMLElement): void {
+    vi.useFakeTimers();
+    fireEvent.touchStart(target, { touches: [{ clientX: 50, clientY: 50 }] });
+    act(() => {
+      vi.advanceTimersByTime(500);
+    });
+  }
+
+  const openers = [
+    [
+      "우클릭으로",
+      (target: HTMLElement): void => {
+        fireEvent.contextMenu(target);
+      },
+    ],
+    ["길게 눌러", longPress],
+  ] as const;
+
+  it.each(openers)(
+    "루트의 빈 곳에서 %s 연 메뉴는 선택을 풀고 새로 만들기 항목을 보여 준다",
+    (_, openMenu) => {
+      renderShell();
+      fireEvent.click(card(SEED_PRESENTATIONS[0].title));
+      expect(screen.getByTestId("selection-bar")).toHaveTextContent(
+        "1개 선택됨",
+      );
+
+      openMenu(screen.getByTestId("drive-scroll-area"));
+
+      const menu = screen.getByTestId("drive-menu");
+      expect(within(menu).getByTestId("new-menu-folder")).toBeInTheDocument();
+      expect(within(menu).queryByTestId("action-open")).toBeNull();
+      expect(screen.queryByTestId("selection-bar")).not.toBeInTheDocument();
+    },
+  );
+
+  it.each(openers)(
+    "휴지통의 빈 곳에서는 %s도 메뉴를 열지 않는다",
+    (_, openMenu) => {
+      __loadDocumentsForTests([
+        { ...SEED_PRESENTATIONS[0], trashedAt: "2026-09-20T12:00:00.000Z" },
+        ...SEED_PRESENTATIONS.slice(1),
+      ]);
+      renderShell(TRASH_PATH);
+      expect(card(SEED_PRESENTATIONS[0].title)).toBeInTheDocument();
+
+      openMenu(screen.getByTestId("drive-scroll-area"));
+
+      expect(screen.queryByTestId("drive-menu")).not.toBeInTheDocument();
+    },
+  );
+
+  it("고정된 휴지통 폴더를 길게 누르면 열기·비우기 메뉴를 보여 준다", () => {
+    __loadDocumentsForTests([
+      { ...SEED_PRESENTATIONS[0], trashedAt: "2026-09-20T12:00:00.000Z" },
+      ...SEED_PRESENTATIONS.slice(1),
+    ]);
+    renderShell();
+
+    longPress(screen.getByTestId("drive-trash-folder"));
+
+    const menu = screen.getByTestId("drive-menu");
+    expect(within(menu).getByTestId("action-open")).toBeInTheDocument();
+    expect(within(menu).getByTestId("action-empty-trash")).toBeEnabled();
+    expect(within(menu).queryByTestId("new-menu-folder")).toBeNull();
+  });
 });
