@@ -9,16 +9,19 @@
  */
 
 import {
+  applyTarget,
   assertEmulatorUp,
+  describeTarget,
   importSource,
   parseFlags,
-  applyTarget,
 } from "./lib/targets.mjs";
 
 async function main() {
   const flags = parseFlags(process.argv.slice(2));
-  applyTarget(flags.target ?? "local");
+  const target = flags.target ?? "local";
+  applyTarget(target);
   await assertEmulatorUp();
+  console.log(`대상: ${describeTarget(target)}`);
 
   const [{ getFirestore }, ops] = await Promise.all([
     importSource("src/db/client.ts"),
