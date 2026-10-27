@@ -3,6 +3,7 @@ import {
   callApi,
   describeApiError,
   isRetryableApiError,
+  isTransientServerError,
   OfflineError,
   parseRetryAfter,
   requestIdOfError,
@@ -367,6 +368,31 @@ describe("isRetryableApiError", () => {
 
   it("일반 Error는 재시도 대상이 아니다", () => {
     expect(isRetryableApiError(new Error("unknown"))).toBe(false);
+  });
+});
+
+describe("isTransientServerError", () => {
+  it("서버나 앞단이 잠시 받지 못한다고 답한 408·429·502·503·504만 일시 거절로 본다", () => {
+    for (const status of [408, 429, 502, 503, 504]) {
+      expect(isTransientServerError(new ServerRejectedError(status))).toBe(
+        true,
+      );
+    }
+  });
+
+  it("다시 보내도 같은 답일 500 같은 서버 오류와 4xx는 일시 거절로 보지 않는다", () => {
+    for (const status of [400, 404, 409, 413, 500, 501, 505]) {
+      expect(isTransientServerError(new ServerRejectedError(status))).toBe(
+        false,
+      );
+    }
+  });
+
+  it("서버에 닿지 못한 실패와 세션 만료는 서버의 거절이 아니다", () => {
+    expect(isTransientServerError(new OfflineError())).toBe(false);
+    expect(isTransientServerError(new TimeoutError())).toBe(false);
+    expect(isTransientServerError(new SessionExpiredError())).toBe(false);
+    expect(isTransientServerError(new Error("unknown"))).toBe(false);
   });
 });
 

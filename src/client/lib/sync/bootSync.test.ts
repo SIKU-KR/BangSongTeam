@@ -766,6 +766,35 @@ describe("runBootSync — 동기화 상태", () => {
     }
   });
 
+  it("목록 받기가 서버 오류(500)로 재시도 한도를 넘기면 천천히 다시 받지 않고 다시 시도에만 다시 받는다", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+    try {
+      presentationSync.pullFolders.mockClear();
+      presentationSync.pullFolders.mockRejectedValue(
+        new ServerRejectedError(500, API_ERRORS.requestFailed),
+      );
+
+      await runBootSync();
+      await vi.advanceTimersByTimeAsync(SLOW_RETRY_MS * 4);
+
+      expect(presentationSync.pullFolders).toHaveBeenCalledTimes(
+        MAX_RETRY_ATTEMPTS + 1,
+      );
+      expect(getSyncDomainStatus("folder")).toBe("error");
+
+      await expect(retryBootSyncIfNeeded("reconnect")).resolves.toBe(false);
+      presentationSync.pullFolders.mockResolvedValue(EMPTY_FOLDER_LIST);
+      await expect(retryBootSyncIfNeeded("manual")).resolves.toBe(true);
+
+      expect(presentationSync.pullFolders).toHaveBeenCalledTimes(
+        MAX_RETRY_ATTEMPTS + 2,
+      );
+      expect(getSyncSnapshot().status).toBe("synced");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("서버가 몇 분 동안 503을 주다 회복하면 받지 못한 단계를 다시 시도 없이 다시 받아 동기화됨으로 돌아온다", async () => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
     try {

@@ -1,6 +1,7 @@
 import type { Presentation } from "#shared";
 import {
   isRetryableApiError,
+  isTransientServerError,
   requestIdOfError,
   OfflineError,
   ServerRejectedError,
@@ -207,7 +208,7 @@ function startPush(document: Presentation): void {
           err instanceof ServerRejectedError || sessionExpired,
         );
         setSyncStatus("presentation", sessionExpired ? "error" : "offline");
-      } else if (isRetryableApiError(err)) {
+      } else if (isTransientServerError(err)) {
         requeueAfter(document, SLOW_RETRY_MS, true);
         recordSyncFailure(failureOf(document, err));
         setSyncStatus("presentation", "offline");

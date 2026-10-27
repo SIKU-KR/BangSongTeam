@@ -51,10 +51,12 @@ import {
 } from "./driveActions";
 import {
   __resetFolderSyncForTests,
+  __setFolderBackoffRandomForTests,
   __setFolderPusherForTests,
   pushFolderNow,
   setFolderSyncEnabled,
 } from "../../lib/sync/folderSync";
+import { MAX_RETRY_ATTEMPTS } from "../../lib/sync/backoff";
 import {
   __resetSyncSchedulerForTests,
   __setPusherForTests,
@@ -406,6 +408,34 @@ describe("driveActions", () => {
         expect(getFolders().map((f) => f.id)).toEqual(
           expect.arrayContaining([ROOT, CHILD]),
         );
+      });
+
+      it("재시도 한도를 넘긴 서버 오류(500)로 올리지 못한 폴더 변경은 영구 삭제를 막지 않는다", async () => {
+        vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+        try {
+          __setFolderBackoffRandomForTests(() => 1);
+          folderPusher.mockImplementation(async (saved) => {
+            if (saved.id === CHILD) {
+              throw new ServerRejectedError(500, API_ERRORS.requestFailed);
+            }
+            return saved;
+          });
+          moveFolder(CHILD, null);
+          trashFolder(ROOT);
+          await vi.advanceTimersByTimeAsync(2000);
+          for (let i = 0; i < MAX_RETRY_ATTEMPTS; i++) {
+            await vi.advanceTimersByTimeAsync(60_000);
+          }
+
+          await deleteItemsForever([{ kind: "folder", id: ROOT }]);
+
+          expect(sync.deleteFolderRemote).toHaveBeenCalledWith(ROOT, {
+            folderIds: [ROOT],
+            presentationIds: [],
+          });
+        } finally {
+          vi.useRealTimers();
+        }
       });
 
       it("서버에 닿지 못해 올리지 못한 변경이 남으면 오프라인이라 지울 수 없다고 알린다", async () => {

@@ -39,7 +39,12 @@ import {
   __setDeckTransportForTests,
   __resetDeckSyncForTests,
 } from "./deckSync";
-import { MAX_BACKOFF_MS, MAX_RETRY_ATTEMPTS, SLOW_RETRY_MS } from "./backoff";
+import {
+  BASE_BACKOFF_MS,
+  MAX_BACKOFF_MS,
+  MAX_RETRY_ATTEMPTS,
+  SLOW_RETRY_MS,
+} from "./backoff";
 
 const USER = "000000000000000000001";
 const PARENT = "a00000000000000000001";
@@ -820,6 +825,95 @@ describe("폴더 push 큐", () => {
     expect(getSyncSnapshot().status).toBe("synced");
 
     vi.useRealTimers();
+  });
+
+  it("재시도 한도를 넘긴 서버 오류(500)는 천천히 다시 보내지 않고 영구 실패로 남겨, 그 안의 폴더를 막지 않는다", async () => {
+    push.mockImplementation(async (f) => {
+      if (f.id === PARENT) throw new ServerRejectedError(500, "서버 오류");
+      return f;
+    });
+    __setFolderBackoffRandomForTests(() => 1);
+    vi.useFakeTimers();
+
+    scheduleFolderPush(folder(PARENT, null));
+    scheduleFolderPush(folder(CHILD, PARENT));
+    await vi.advanceTimersByTimeAsync(2000);
+    for (let i = 0; i < MAX_RETRY_ATTEMPTS; i++) {
+      await vi.advanceTimersByTimeAsync(60_000);
+    }
+
+    expect(push.mock.calls.map(([f]) => f.id)).toEqual([
+      ...Array<string>(MAX_RETRY_ATTEMPTS + 1).fill(PARENT),
+      CHILD,
+    ]);
+    expect(hasPendingFolderPush()).toBe(false);
+    expect(getSyncSnapshot()).toMatchObject({
+      status: "error",
+      lastFailure: { id: PARENT, kind: "folder", status: 500 },
+    });
+    await expect(ensureFolderPushed(PARENT)).resolves.toBe(true);
+
+    await vi.advanceTimersByTimeAsync(SLOW_RETRY_MS * 2);
+    expect(push).toHaveBeenCalledTimes(MAX_RETRY_ATTEMPTS + 2);
+
+    vi.useRealTimers();
+  });
+
+  describe("송출 화면", () => {
+    const startPath = window.location.pathname;
+    const PROJECTION_PATH = "/present/a00000000000000000001/fullscreen";
+
+    afterEach(() => {
+      vi.useRealTimers();
+      window.history.pushState({}, "", startPath);
+    });
+
+    it("재시도 한도를 넘겨 천천히 다시 보내던 폴더도 송출하는 동안은 보내지 않고, 송출을 마치면 보낸다", async () => {
+      push.mockRejectedValue(new ServerRejectedError(503, "지속 과부하"));
+      __setFolderBackoffRandomForTests(() => 1);
+      vi.useFakeTimers();
+      scheduleFolderPush(folder(PARENT, null));
+      await vi.advanceTimersByTimeAsync(2000);
+      for (let i = 0; i < MAX_RETRY_ATTEMPTS; i++) {
+        await vi.advanceTimersByTimeAsync(60_000);
+      }
+      expect(push).toHaveBeenCalledTimes(MAX_RETRY_ATTEMPTS + 1);
+
+      window.history.pushState({}, "", PROJECTION_PATH);
+      await vi.advanceTimersByTimeAsync(SLOW_RETRY_MS * 6);
+      await flushFolderSync();
+      await retryFolderSyncNow("manual");
+
+      expect(push).toHaveBeenCalledTimes(MAX_RETRY_ATTEMPTS + 1);
+      expect(hasPendingFolderPush()).toBe(true);
+
+      push.mockImplementation(async (f) => f);
+      window.history.pushState({}, "", "/presentations");
+      await vi.advanceTimersByTimeAsync(BASE_BACKOFF_MS);
+
+      expect(push).toHaveBeenCalledTimes(MAX_RETRY_ATTEMPTS + 2);
+      expect(getSyncSnapshot()).toMatchObject({
+        status: "synced",
+        lastFailure: null,
+      });
+    });
+
+    it("송출 중에 고친 폴더는 디바운스·flush로도 보내지 않고, 송출을 마치면 보낸다", async () => {
+      vi.useFakeTimers();
+      window.history.pushState({}, "", PROJECTION_PATH);
+
+      scheduleFolderPush(folder(PARENT, null));
+      await vi.advanceTimersByTimeAsync(BASE_BACKOFF_MS * 3);
+      await flushFolderSync();
+
+      expect(push).not.toHaveBeenCalled();
+
+      window.history.pushState({}, "", "/presentations");
+      await vi.advanceTimersByTimeAsync(BASE_BACKOFF_MS);
+
+      expect(push).toHaveBeenCalledTimes(1);
+      expect(hasPendingFolderPush()).toBe(false);
+    });
   });
 
   it("오프라인(OfflineError)은 10회를 초과해도 재시도를 포기하지 않고 큐에 유지된다", async () => {

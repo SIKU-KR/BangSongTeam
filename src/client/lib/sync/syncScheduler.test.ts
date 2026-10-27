@@ -1213,6 +1213,41 @@ describe("서버 push 스케줄러", () => {
     vi.useRealTimers();
   });
 
+  it("재시도 한도를 넘긴 서버 오류(500)는 천천히 다시 보내지 않고 영구 실패로 남긴다", async () => {
+    push.mockRejectedValue(new ServerRejectedError(500, "서버 오류"));
+    __setBackoffRandomForTests(() => 1);
+    vi.useFakeTimers();
+
+    scheduleDocumentPush(doc("a"));
+    await vi.advanceTimersByTimeAsync(SYNC_DEBOUNCE_MS);
+    for (let i = 0; i < MAX_RETRY_ATTEMPTS; i++) {
+      await vi.advanceTimersByTimeAsync(60_000);
+    }
+
+    expect(push).toHaveBeenCalledTimes(MAX_RETRY_ATTEMPTS + 1);
+    expect(hasPendingDocumentPush()).toBe(false);
+    expect(isDocumentQueued("a")).toBe(true);
+    expect(getSyncSnapshot()).toMatchObject({
+      status: "error",
+      lastFailure: { id: "a", kind: "presentation", status: 500 },
+    });
+
+    await vi.advanceTimersByTimeAsync(SLOW_RETRY_MS * 2);
+    expect(push).toHaveBeenCalledTimes(MAX_RETRY_ATTEMPTS + 1);
+
+    push.mockResolvedValue(true);
+    retryPendingSyncNow("manual");
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(push).toHaveBeenCalledTimes(MAX_RETRY_ATTEMPTS + 2);
+    expect(getSyncSnapshot()).toMatchObject({
+      status: "synced",
+      lastFailure: null,
+    });
+
+    vi.useRealTimers();
+  });
+
   it("서버가 몇 분 동안 503을 주다 회복하면 다시 시도를 누르지 않아도 미뤄 둔 세트를 올린다", async () => {
     vi.useFakeTimers();
     __setBackoffRandomForTests(() => 0);

@@ -113,6 +113,25 @@ export function isRetryableApiError(err: unknown): boolean {
   return false;
 }
 
+const TRANSIENT_SERVER_STATUSES: ReadonlySet<number> = new Set([
+  408, 429, 502, 503, 504,
+]);
+
+/**
+ * 서버나 그 앞단(프록시·Cloud Run)이 지금은 받지 못한다고 답한 거절인지(408·429·502·503·504).
+ * 서버는 저장소 일시 장애를 503으로, 코드 결함을 500으로 답한다.
+ *
+ * 동기화 큐와 부팅 받기는 재시도 한도를 넘긴 뒤에는 이 거절만 천천히 다시 보낸다. 500처럼 다시
+ * 보내도 같은 답일 거절까지 한도 없이 다시 보내면, 그 항목이 세션 내내 큐에 남아 휴지통 비우기를
+ * 막고 그 폴더 아래의 폴더·세트도 올리지 못한다.
+ */
+export function isTransientServerError(err: unknown): boolean {
+  return (
+    err instanceof ServerRejectedError &&
+    TRANSIENT_SERVER_STATUSES.has(err.status)
+  );
+}
+
 function isTimeoutError(err: unknown): boolean {
   if (err && typeof err === "object" && "name" in err) {
     const error = err as { name?: unknown; cause?: unknown };

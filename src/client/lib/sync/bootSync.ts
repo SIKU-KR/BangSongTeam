@@ -45,6 +45,7 @@ import {
 } from "./presentationSync";
 import {
   isRetryableApiError,
+  isTransientServerError,
   requestIdOfError,
   OfflineError,
   ServerRejectedError,
@@ -484,7 +485,7 @@ function retryPullLater(step: () => Promise<void>, err: unknown): SyncStatus {
   const timedOut = err instanceof TimeoutError;
   const waitsOnServer = timedOut || !(err instanceof OfflineError);
   if (waitsOnServer && retryBackoff.getServerAttempt() >= MAX_RETRY_ATTEMPTS) {
-    if (timedOut) return abandonPull(step);
+    if (!isTransientServerError(err)) return abandonPull(step);
     retryPullAfter(step, SLOW_RETRY_MS, true);
     return "error";
   }
@@ -529,10 +530,11 @@ function runRetry(): Promise<void> | null {
  *
  * 받다 시간을 넘기면 서버가 거절한 것처럼 재시도 한도에 센다. 느린 회선에서 큰 목록은 매번 처음부터
  * 다시 받으므로, 끝나지 않는 받기를 한도 없이 되풀이하면 기록 전체를 1분마다 다시 읽는다. 한도에
- * 이르면 포기하고 `manual`만 다시 받는다. 서버의 일시 장애(408·429·5xx)는 한도를 넘겨도 포기하지
- * 않고 `SLOW_RETRY_MS`마다 다시 받는다. 장애가 끝나면 '다시 시도'를 누르지 않아도 부팅 병합을
- * 마쳐, 이 기기에만 있는 변경을 올리고 다른 기기에서 고친 판을 받는다. `manual`은 거절돼 포기한
- * 단계도 다시 받는다.
+ * 이르면 포기하고 `manual`만 다시 받는다. 서버가 지금은 받지 못한다고 답한 거절(408·429·502·503·504,
+ * `isTransientServerError`)은 한도를 넘겨도 포기하지 않고 `SLOW_RETRY_MS`마다 다시 받는다. 장애가
+ * 끝나면 '다시 시도'를 누르지 않아도 부팅 병합을 마쳐, 이 기기에만 있는 변경을 올리고 다른 기기에서
+ * 고친 판을 받는다. 500처럼 다시 받아도 같은 답일 거절은 한도에서 포기한다. `manual`은 거절돼
+ * 포기한 단계도 다시 받는다.
  */
 export async function retryBootSyncIfNeeded(
   mode: SyncRetryMode,

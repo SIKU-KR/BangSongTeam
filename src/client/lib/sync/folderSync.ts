@@ -1,6 +1,7 @@
 import { sortFoldersParentFirst, type Folder } from "#shared";
 import {
   isRetryableApiError,
+  isTransientServerError,
   requestIdOfError,
   OfflineError,
   ServerRejectedError,
@@ -15,10 +16,12 @@ import {
 } from "./syncStatus";
 import {
   BackoffTracker,
+  BASE_BACKOFF_MS,
   MAX_RETRY_ATTEMPTS,
   SLOW_RETRY_MS,
   type SyncRetryMode,
 } from "./backoff";
+import { isProjecting } from "../../features/presentation/fullscreen";
 
 const FOLDER_SYNC_DEBOUNCE_MS = 2000;
 
@@ -215,7 +218,7 @@ async function pushAll(
         if (!pending.has(folder.id)) pending.set(folder.id, folder);
         const delay = backoff.getDelay(folder.id, err);
         if (delay < minRetryDelay) minRetryDelay = delay;
-      } else if (isRetryableApiError(err)) {
+      } else if (isTransientServerError(err)) {
         slowRetry = true;
         serverRejected = true;
         retrying.add(folder.id);
@@ -274,6 +277,10 @@ function run(): void {
     timer = null;
   }
   if (!enabled || pending.size === 0) return;
+  if (isProjecting()) {
+    timer = setTimeout(run, BASE_BACKOFF_MS);
+    return;
+  }
 
   const folders = [...pending.values()];
   pending = new Map();
@@ -411,6 +418,11 @@ export async function ensureFolderPushed(
  * 폴더 변경은 다음 부팅까지 서버에 가지 않고, 영구 삭제는 휴지통에 넣거나 폴더 밖으로 꺼낸
  * 변경이 서버에 닿은 뒤에 해야 한다. 세트 push는 이것을 부르지 않고 자기 폴더만
  * 기다린다(`ensureFolderPushed`).
+ *
+ * 송출 중에는 묶음을 새로 보내지 않고 이미 나간 것이 끝나기만 기다린다. 송출 화면은 서버 요청이
+ * 0건이어야 한다. 디바운스·백오프와 재시도 한도를 넘긴 느린 재시도(`SLOW_RETRY_MS`)도 송출하는
+ * 동안은 몇 초마다 다시 보기만 하고, 송출을 마치면 남은 폴더를 보낸다. 그동안 바뀐 내용은 저장소에
+ * 남아 있어 탭을 닫아도 다음 부팅이 올린다.
  */
 export function flushFolderSync(): Promise<void> {
   run();

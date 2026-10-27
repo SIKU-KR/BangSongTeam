@@ -1,6 +1,7 @@
 import type { Deck } from "#shared";
 import {
   isRetryableApiError,
+  isTransientServerError,
   requestIdOfError,
   OfflineError,
   ServerRejectedError,
@@ -19,6 +20,7 @@ import {
 } from "./syncStatus";
 import {
   BackoffTracker,
+  BASE_BACKOFF_MS,
   MAX_RETRY_ATTEMPTS,
   SLOW_RETRY_MS,
   type SyncRetryMode,
@@ -28,6 +30,7 @@ import {
   listPendingDeckDeletes,
   rememberDeckDelete,
 } from "./pendingDeckDeletes";
+import { isProjecting } from "../../features/presentation/fullscreen";
 
 const DECK_SYNC_DEBOUNCE_MS = 2000;
 
@@ -231,7 +234,7 @@ async function runOps(ops: PendingOp[]): Promise<void> {
         if (!pending.has(key)) pending.set(key, op);
         const delay = backoff.getDelay(key, err);
         if (delay < minRetryDelay) minRetryDelay = delay;
-      } else if (isRetryableApiError(err)) {
+      } else if (isTransientServerError(err)) {
         slowRetry = true;
         waitingOnServer.add(key);
         if (!pending.has(key)) pending.set(key, op);
@@ -282,6 +285,10 @@ function run(): void {
     timer = null;
   }
   if (!enabled || pending.size === 0) return;
+  if (isProjecting()) {
+    timer = setTimeout(run, BASE_BACKOFF_MS);
+    return;
+  }
 
   const ops = [...pending.values()];
   pending = new Map();
@@ -413,6 +420,15 @@ export function hasPendingDeckSync(): boolean {
   return pending.size > 0 || runningBatches.size > 0;
 }
 
+/**
+ * 대기 중인 곡 변경을 디바운스·백오프를 기다리지 않고 지금 보내고, 큐가 끝날 때까지 기다린다.
+ * 창을 닫을 때(`pagehide`)와 로그아웃하기 전에 부른다.
+ *
+ * 송출 중에는 묶음을 새로 보내지 않고 이미 나간 것이 끝나기만 기다린다. 송출 화면은 서버 요청이
+ * 0건이어야 한다. 디바운스·백오프와 재시도 한도를 넘긴 느린 재시도(`SLOW_RETRY_MS`)도 송출하는
+ * 동안은 몇 초마다 다시 보기만 하고, 송출을 마치면 남은 곡 변경을 보낸다. 지운 곡은 삭제
+ * 기록(`pendingDeckDeletes`)에, 고친 곡은 저장소에 남아 있어 탭을 닫아도 다음 부팅이 보낸다.
+ */
 export function flushDeckSync(): Promise<void> {
   run();
   return inFlight;
