@@ -115,6 +115,10 @@ function sortedIds(result: DeleteFolderTreeResult): DeleteFolderTreeResult {
     : result;
 }
 
+function deletedPresentationIds(result: DeleteFolderTreeResult): string[] {
+  return result.status === "deleted" ? result.presentationIds : [];
+}
+
 describe("드라이브 폴더 쿼리", () => {
   let db: Db;
 
@@ -630,6 +634,39 @@ describe("드라이브 폴더 쿼리", () => {
       expect(
         (await getDriveTombstones(db, USER_A)).presentationIds,
       ).toHaveLength(tree.presentationIds.length - remaining.length);
+    });
+
+    it("다른 요청이 차례 사이에 마저 지우면 이 요청이 지운 것만 담아 지운 것으로 답한다", async () => {
+      const tree = await seedLargeFolder();
+      const finishedElsewhere: DeleteFolderTreeResult[] = [];
+      const instrument = instrumentTransactions(db, {
+        afterCall: {
+          call: 1,
+          run: async () => {
+            finishedElsewhere.push(
+              await deleteFolderTree(db, USER_A, tree.rootId),
+            );
+          },
+        },
+      });
+
+      const result = await deleteFolderTree(db, USER_A, tree.rootId);
+      instrument.restore();
+
+      const [other] = finishedElsewhere;
+      expect(result).toMatchObject({ status: "deleted", folderIds: [] });
+      expect(other).toMatchObject({
+        status: "deleted",
+        folderIds: [tree.rootId],
+      });
+      const firstPass = deletedPresentationIds(result);
+      expect(firstPass.length).toBeGreaterThan(0);
+      expect(firstPass.length).toBeLessThan(tree.presentationIds.length);
+      expect([...firstPass, ...deletedPresentationIds(other)].sort()).toEqual(
+        tree.presentationIds,
+      );
+      expect(await getFoldersByUserId(db, USER_A)).toEqual([]);
+      expect(await getPresentationDocumentsByUserId(db, USER_A)).toEqual([]);
     });
   });
 

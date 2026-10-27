@@ -166,13 +166,9 @@ export function backgroundDoc(
   };
 }
 
-/**
- * 배치 하나에 담는 쓰기 수. Firestore의 쓰기 한도(500)를 에뮬레이터는 검사하지 않아, 시드도
- * 운영에서 통할 크기로 나눠 쓴다.
- */
 const MAX_BATCH_WRITES = 500;
 
-/** 문서들을 넣는다. 많으면 `MAX_BATCH_WRITES`씩 나눈 배치로 차례로 쓴다 */
+/** 문서들을 넣는다. 많으면 Firestore의 예전 쓰기 한도(500)씩 나눈 배치로 차례로 쓴다 */
 export async function seedDocs(
   db: Db,
   docs: {
