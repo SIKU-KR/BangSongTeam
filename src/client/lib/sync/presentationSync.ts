@@ -260,12 +260,20 @@ export async function pushDeck(deck: Deck): Promise<Deck> {
   return DeckSchema.parse(body.deck);
 }
 
-/** 이미 없으면(404) 성공으로 본다 */
-export async function deleteDeckRemote(id: string): Promise<void> {
+/**
+ * 보관함 곡을 서버에서 지운다. 서버가 지운 곡으로 기록했으면(200) true, 이 계정의 곡이 아니라고
+ * 하면(404) false다.
+ *
+ * 서버는 한 번도 올라가지 않은 곡도 지운 곡으로 기록하고 200으로 답한다. 404는 다른 계정의
+ * 쿠키로 보낸 요청처럼 이 계정으로는 지울 수 없을 때 온다. 실패로 남기지는 않지만, 호출자는
+ * 곡 주인의 다음 부팅에 다시 보낼 수 있게 삭제 기록을 남긴다.
+ */
+export async function deleteDeckRemote(id: string): Promise<boolean> {
   try {
     await callSyncApi(() => api.api.decks[":id"].$delete({ param: { id } }));
+    return true;
   } catch (err) {
-    if (err instanceof ServerRejectedError && err.status === 404) return;
+    if (err instanceof ServerRejectedError && err.status === 404) return false;
     throw err;
   }
 }

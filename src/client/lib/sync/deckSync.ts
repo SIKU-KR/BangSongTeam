@@ -22,15 +22,21 @@ import {
   MAX_RETRY_ATTEMPTS,
   type SyncRetryMode,
 } from "./backoff";
+import {
+  forgetDeckDelete,
+  listPendingDeckDeletes,
+  rememberDeckDelete,
+} from "./pendingDeckDeletes";
 
 const DECK_SYNC_DEBOUNCE_MS = 2000;
 
 type DeckPusher = (deck: Deck) => Promise<Deck>;
-type DeckDeleter = (id: string) => Promise<void>;
+type DeckDeleter = (id: string) => Promise<boolean | void>;
 type ServerDeckListener = (deck: Deck) => void;
 type DeckGoneListener = (id: string) => void;
 
-type PendingOp = { kind: "push"; deck: Deck } | { kind: "delete"; id: string };
+type PendingOp =
+  { kind: "push"; deck: Deck } | { kind: "delete"; id: string; userId: string };
 
 let pusher: DeckPusher = pushDeck;
 let deleter: DeckDeleter = deleteDeckRemote;
@@ -138,7 +144,8 @@ async function runOps(ops: PendingOp[]): Promise<void> {
         if (deletedIds.has(key)) continue;
         listener?.(saved);
       } else {
-        await deleter(op.id);
+        const removed = await deleter(op.id);
+        if (removed !== false) forgetDeckDelete(op.userId, op.id);
       }
       backoff.reset(key);
       waitingOnServer.delete(key);
@@ -172,6 +179,7 @@ async function runOps(ops: PendingOp[]): Promise<void> {
         waitingOnServer.delete(key);
         backoff.reset(key);
         failed.set(key, op);
+        if (op.kind === "delete") forgetDeckDelete(op.userId, op.id);
         const failure: SyncFailure = {
           id: key,
           title: op.kind === "push" ? op.deck.title : undefined,
@@ -250,11 +258,28 @@ export function scheduleDeckPush(deck: Deck): void {
  * 동기화가 꺼져 있어도 지운 곡으로 기억한다(`deletedDeckIds`). 그 곡을 올리던 요청은 결과가
  * 와도 성공이든 실패든 버린다. push와 DELETE는 같은 키로 대기·백오프·실패 기록을 나눠 쓰므로,
  * push의 실패 처리가 대기 중인 DELETE를 지우거나 push를 다시 넣어 지운 곡을 되살린다.
+ *
+ * 무엇보다 먼저 `userId`의 삭제 기록(`pendingDeckDeletes`)에 남겨, 새로고침한 뒤에도 다시
+ * 보낸다. 서버가 지웠다고 답하거나 다시 보내도 지울 수 없을 때(영구 실패)만 기록을 지운다.
+ * 영구 실패에도 남기면 서버에 남은 곡이 이 기기에서만 끝내 가려진다. 404(다른 계정의 쿠키로
+ * 보낸 요청)·세션 만료·오프라인·일시 장애는 기록을 남겨 그 계정의 다음 부팅에 다시 보낸다.
  */
-export function scheduleDeckDelete(id: string): void {
+export function scheduleDeckDelete(id: string, userId: string): void {
+  rememberDeckDelete(userId, id);
   deletedIds.add(id);
   resetDeckState(id);
-  schedule(id, { kind: "delete", id });
+  schedule(id, { kind: "delete", id, userId });
+}
+
+/**
+ * `userId`가 앞선 페이지에서 지우고 서버에서 아직 지우지 못한 곡의 DELETE를 다시 큐에 넣는다.
+ * 부팅 동기화가 큐를 켜자마자 부른다. 보관함 목록을 받지 못한 부팅에서도 큐의 백오프로 다시
+ * 보낸다.
+ */
+export function resumePendingDeckDeletes(userId: string): void {
+  for (const id of listPendingDeckDeletes(userId)) {
+    scheduleDeckDelete(id, userId);
+  }
 }
 
 /**
@@ -274,11 +299,12 @@ export function cancelDeckPush(id: string): void {
 }
 
 /**
- * 아직 보내지 않았거나 영구 실패로 맡긴 그 곡의 DELETE를 버리고 지운 곡 목록에서 뺀다.
- * 지운 곡을 다시 넣을 때 부른다. 공유 곡을 다시 가져오면 서버는 남아 있는 첫 사본을 돌려주므로,
- * DELETE가 뒤늦게 나가면 다시 가져온 곡이 서버에서 지워진다.
+ * 아직 보내지 않았거나 영구 실패로 맡긴 그 곡의 DELETE를 버리고 지운 곡 목록과 `userId`의
+ * 삭제 기록에서 뺀다. 지운 곡을 다시 넣을 때 부른다. 공유 곡을 다시 가져오면 서버는 남아 있는
+ * 첫 사본을 돌려주므로, DELETE가 뒤늦게 나가면 다시 가져온 곡이 서버에서 지워진다.
  */
-export function cancelDeckDelete(id: string): void {
+export function cancelDeckDelete(id: string, userId: string): void {
+  forgetDeckDelete(userId, id);
   deletedIds.delete(id);
   const queued = pending.get(id);
   const held = failed.get(id);

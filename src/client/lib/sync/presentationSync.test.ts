@@ -46,7 +46,7 @@ vi.mock("../api/client", async (importOriginal) => {
         presentations: {
           ":id": { $patch: api.patch, $delete: api.remove, $get: api.get },
         },
-        decks: { $get: api.listDecks },
+        decks: { $get: api.listDecks, ":id": actual.api.api.decks[":id"] },
         folders: actual.api.api.folders,
         "client-reports": { $path: () => "/api/client-reports" },
       },
@@ -56,6 +56,7 @@ vi.mock("../api/client", async (importOriginal) => {
 
 import {
   __resetServerDecksForTests,
+  deleteDeckRemote,
   deleteFolderRemote,
   deletePresentationRemote,
   endSharedPresentationRefresh,
@@ -412,6 +413,51 @@ describe("프레젠테이션 원격 삭제", () => {
     await expect(deletePresentationRemote(DOC_ID)).resolves.toBeUndefined();
 
     expect(getSyncSnapshot().status).toBe("idle");
+  });
+});
+
+describe("보관함 곡 원격 삭제", () => {
+  const SONG = deckId(7);
+  let fake: FakeApi | null = null;
+
+  afterEach(() => {
+    fake?.restore();
+    fake = null;
+  });
+
+  it("서버가 지운 곡으로 기록하면(200) true를 돌려준다", async () => {
+    fake = installFakeApi({
+      "DELETE /api/decks/*": () => ({ body: { ok: true } }),
+    });
+
+    await expect(deleteDeckRemote(SONG)).resolves.toBe(true);
+    expect(fake.calls).toMatchObject([
+      { method: "DELETE", path: `/api/decks/${SONG}` },
+    ]);
+  });
+
+  it("이 계정의 곡이 아니라고 하면(404) 실패로 던지지 않고 false를 돌려준다", async () => {
+    fake = installFakeApi({
+      "DELETE /api/decks/*": () => ({
+        status: 404,
+        body: { error: API_ERRORS.deck.notAccessible },
+      }),
+    });
+
+    await expect(deleteDeckRemote(SONG)).resolves.toBe(false);
+  });
+
+  it("그 밖의 거절은 그대로 던진다", async () => {
+    fake = installFakeApi({
+      "DELETE /api/decks/*": () => ({
+        status: 503,
+        body: { error: API_ERRORS.serverBusy },
+      }),
+    });
+
+    await expect(deleteDeckRemote(SONG)).rejects.toMatchObject({
+      status: 503,
+    });
   });
 });
 
