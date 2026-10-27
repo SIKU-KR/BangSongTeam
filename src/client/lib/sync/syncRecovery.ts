@@ -134,6 +134,10 @@ async function runResume(mode: SyncRetryMode): Promise<void> {
   retryBackgroundCatalogIfNeeded(mode);
   for (const listener of resumeListeners) listener(mode);
   const repulled = await retryBootSyncIfNeeded(mode).catch(() => false);
+  if (isPaused()) {
+    deferUntilUnpaused(mode);
+    return;
+  }
   void retryFolderSyncNow(mode).catch(() => undefined);
   retryPendingSyncNow(mode);
   resumeOtherTabsSongDeletes();
@@ -245,7 +249,9 @@ function handleVisibilityChange(): void {
  * `isPaused`가 true인 동안(송출 화면)에는 상태 확인도 큐 재시도도 다시 받기도 보내지 않고, 들어온
  * 신호만 기억했다가 송출을 마친 뒤(`resumeDeferredSyncRecovery`) 한 번 돌린다. 송출
  * 화면은 같은 SPA 안에서 이동해 들어가므로 매번 다시 묻는다. 다시 받기 타이머도 송출 중에 돌아오면
- * 다시 걸지 않고, 송출을 마치면 다시 센다.
+ * 다시 걸지 않고, 송출을 마치면 다시 센다. 부팅 단계를 다시 받는 동안 송출을 시작했으면 그 회복의
+ * 큐 재시도·다시 받기와 그사이 들어온 신호도 송출을 마친 뒤로 미룬다. 신호를 받는 곳(로그아웃
+ * 마치기 등)은 송출 중인지 보지 않고 요청을 보낸다.
  */
 export function startSyncRecovery(options: SyncRecoveryOptions): () => void {
   if (started || typeof window === "undefined") return () => undefined;

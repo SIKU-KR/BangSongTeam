@@ -1165,6 +1165,8 @@ describe("공유받은 프레젠테이션 새로고침 상태", () => {
 });
 
 describe("공유받은 프레젠테이션 새로고침 결과", () => {
+  const startPath = window.location.pathname;
+  const PROJECTION_PATH = `/present/${DOC_ID}/fullscreen`;
   const listener = {
     replaced: vi.fn<(document: PresentationDocument) => void>(),
     lost: vi.fn<(id: string) => void>(),
@@ -1181,7 +1183,24 @@ describe("공유받은 프레젠테이션 새로고침 결과", () => {
 
   afterEach(() => {
     setSharedPresentationListener(null);
+    window.history.pushState({}, "", startPath);
   });
+
+  function holdGet(): (status: number) => void {
+    let answer: (status: number) => void = () => undefined;
+    api.get.mockReturnValueOnce(
+      new Promise((resolve) => {
+        answer = (status) =>
+          resolve({
+            status,
+            ok: status < 400,
+            json: async () =>
+              status < 400 ? { presentation: makeSet() } : { error: "없음" },
+          });
+      }),
+    );
+    return answer;
+  }
 
   it("서버가 더는 열 수 없다고 하면(404) 접근을 잃었다고 알리고 실패로 남기지 않는다", async () => {
     api.get.mockResolvedValueOnce({
@@ -1238,5 +1257,52 @@ describe("공유받은 프레젠테이션 새로고침 결과", () => {
     );
     expect(listener.lost).not.toHaveBeenCalled();
     expect(getSyncSnapshot().status).toBe("synced");
+  });
+
+  it("받은 최신본을 반영하고, 접근을 잃었으면 알린다", async () => {
+    api.get.mockResolvedValueOnce({
+      status: 200,
+      ok: true,
+      json: async () => ({ presentation: makeSet() }),
+    });
+    await refreshSharedPresentation(DOC_ID);
+    api.get.mockResolvedValueOnce({
+      status: 404,
+      ok: false,
+      json: async () => ({ error: "없음" }),
+    });
+    await refreshSharedPresentation(DOC_ID);
+
+    expect(listener.replaced).toHaveBeenCalledExactlyOnceWith(makeSet());
+    expect(listener.lost).toHaveBeenCalledExactlyOnceWith(DOC_ID);
+  });
+
+  it.each([
+    [200, "최신본"],
+    [404, "접근을 잃은 것"],
+  ])(
+    "받는 사이 송출을 시작했으면 %s 응답(%s)을 반영하지 않는다",
+    async (status) => {
+      const answer = holdGet();
+      const refreshing = refreshSharedPresentation(DOC_ID);
+      window.history.pushState({}, "", PROJECTION_PATH);
+
+      answer(status);
+      await refreshing;
+
+      expect(listener.replaced).not.toHaveBeenCalled();
+      expect(listener.lost).not.toHaveBeenCalled();
+    },
+  );
+
+  it("화면을 떠난 뒤 도착한 응답은 반영하지 않는다", async () => {
+    const answer = holdGet();
+    const refreshing = refreshSharedPresentation(DOC_ID);
+    endSharedPresentationRefresh();
+
+    answer(404);
+    await refreshing;
+
+    expect(listener.lost).not.toHaveBeenCalled();
   });
 });

@@ -246,8 +246,8 @@ export function useBootPullPending(domain: BootPullDomain): boolean {
  * 부팅 도중에 송출을 시작해도 같다. 받기마다 그 직전과 받은 직후에 송출 중이면 그 단계를
  * 받은 결과와 함께 내려놓고, 송출을 마친 뒤 처음부터 다시 받는다. 송출 화면은 지금 띄운
  * 프레젠테이션의 변경을 따라 그리므로, 그대로 병합하면 송출 중인 화면이 바뀌고 다음 요청이
- * 나간다. 병합을 마친 단계는 송출 중이어도 폴더·곡을 끝까지 올리고, 프레젠테이션은 큐가 송출을
- * 마친 뒤에 올린다.
+ * 나간다. 병합을 마친 단계가 올리던 폴더·곡도 송출을 시작하면 남은 것은 보내지 않고 도메인 큐에
+ * 넘기고, 큐가 송출을 마친 뒤에 올린다. 프레젠테이션도 큐가 송출을 마친 뒤에 올린다.
  *
  * 프레젠테이션은 프레젠테이션 큐로 올리고(`scheduleDocumentPush`) 큐가 모두 보낼 때까지
  * 기다린다(`flushDocumentPushes`). 부팅이 따로 보내면 같은 세트의 PATCH가 큐의 것과 겹쳐 먼저 보낸
@@ -763,7 +763,7 @@ async function pushLatestEach<T extends { id: string }>(
     if (generation !== bootGeneration) break;
     const item = findLatest(target.current, id);
     if (!item) continue;
-    if (target.waitsFor?.(item)) {
+    if (isProjecting() || target.waitsFor?.(item)) {
       target.requeue(item);
       offline = true;
       continue;

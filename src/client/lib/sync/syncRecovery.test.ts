@@ -75,6 +75,7 @@ import {
   resetBackgroundCatalogForTests,
 } from "../../features/backgrounds/backgroundCatalog";
 import { makeBackground } from "../../test/backgroundFixture";
+import { isProjecting } from "../../features/presentation/fullscreen";
 
 const recoveryDeps = vi.hoisted(() => ({
   retryBootSyncIfNeeded: vi.fn(async () => false),
@@ -372,6 +373,96 @@ describe("동기화 회복", () => {
     expect(recoveryDeps.retryBootSyncIfNeeded).not.toHaveBeenCalled();
     expect(recoveryDeps.refreshOwnDataIfStale).not.toHaveBeenCalled();
     expect(recoveryDeps.resumeMediaCaching).not.toHaveBeenCalled();
+  });
+
+  describe("부팅 재시도를 기다리는 동안 송출을 시작하면", () => {
+    const startPath = window.location.pathname;
+    const PROJECTION_PATH = "/present/a00000000000000000001/fullscreen";
+    const SONG_A = "00000000c00000000000a";
+    const SONG_B = "00000000c00000000000b";
+
+    afterEach(() => {
+      window.history.pushState({}, "", startPath);
+    });
+
+    function holdBootRetry(): () => void {
+      let release: () => void = () => undefined;
+      recoveryDeps.retryBootSyncIfNeeded.mockImplementationOnce(
+        () =>
+          new Promise<boolean>((resolve) => {
+            release = () => resolve(false);
+          }),
+      );
+      return () => release();
+    }
+
+    it("서버가 기다리게 한 곡이 있어도 곡 큐를 돌리지 않고, 송출을 마친 뒤 돌린다", async () => {
+      setVisibility("visible");
+      const sent: { id: string; projecting: boolean }[] = [];
+      __setDeckTransportForTests({
+        push: async (deck: Deck) => {
+          sent.push({ id: deck.id, projecting: isProjecting() });
+          if (deck.id === SONG_A) {
+            throw new ServerRejectedError(503, undefined, 30_000);
+          }
+          return deck;
+        },
+      });
+      setDeckSyncEnabled(true);
+      stop = startSyncRecovery({ isPaused: isProjecting });
+      scheduleDeckPush({ id: SONG_A } as Deck);
+      await vi.advanceTimersByTimeAsync(2000);
+      expect(sent).toEqual([{ id: SONG_A, projecting: false }]);
+
+      const release = holdBootRetry();
+      scheduleDeckPush({ id: SONG_B } as Deck);
+      window.dispatchEvent(new Event("focus"));
+      await vi.advanceTimersByTimeAsync(0);
+      window.history.pushState({}, "", PROJECTION_PATH);
+      release();
+      await __waitForSyncRecoveryForTests();
+      await vi.advanceTimersByTimeAsync(MAX_BACKOFF_MS);
+
+      expect(sent.filter((entry) => entry.projecting)).toEqual([]);
+      expect(recoveryDeps.refreshOwnDataIfStale).not.toHaveBeenCalled();
+
+      window.history.pushState({}, "", "/presentations");
+      resumeDeferredSyncRecovery();
+      await __waitForSyncRecoveryForTests();
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(sent).toContainEqual({ id: SONG_B, projecting: false });
+      expect(recoveryDeps.refreshOwnDataIfStale).toHaveBeenCalledWith("wake");
+    });
+
+    it("그사이 들어온 더 센 회복 신호도 송출 중에는 돌리지 않고 송출을 마친 뒤 돌린다", async () => {
+      const listener = vi.fn();
+      subscribeSyncRecovery(listener);
+      stop = startSyncRecovery({ isPaused: isProjecting });
+      const release = holdBootRetry();
+
+      window.dispatchEvent(new Event("focus"));
+      await vi.advanceTimersByTimeAsync(0);
+      window.dispatchEvent(new Event("online"));
+      window.history.pushState({}, "", PROJECTION_PATH);
+      release();
+      await __waitForSyncRecoveryForTests();
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(listener.mock.calls).toEqual([["wake"]]);
+      expect(recoveryDeps.resumeMediaCaching).toHaveBeenCalledTimes(1);
+      expect(recoveryDeps.retryBootSyncIfNeeded).toHaveBeenCalledTimes(1);
+      expect(recoveryDeps.refreshOwnDataIfStale).not.toHaveBeenCalled();
+
+      window.history.pushState({}, "", "/presentations");
+      resumeDeferredSyncRecovery();
+      await __waitForSyncRecoveryForTests();
+
+      expect(listener.mock.calls).toEqual([["wake"], ["reconnect"]]);
+      expect(
+        recoveryDeps.refreshOwnDataIfStale,
+      ).toHaveBeenCalledExactlyOnceWith("reconnect");
+    });
   });
 
   it("송출로 들어가기 전에 잡힌 상태 확인은 송출 중에 타이머 없이 미뤘다가 송출을 마치면 보낸다", async () => {

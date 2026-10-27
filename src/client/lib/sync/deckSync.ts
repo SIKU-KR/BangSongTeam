@@ -208,12 +208,18 @@ async function runOps(ops: PendingOp[]): Promise<void> {
   let offline = false;
   let sessionExpired = false;
   let slowRetry = false;
+  let deferred = false;
   let minRetryDelay = Infinity;
 
   for (const op of ops) {
     if (!enabled) return;
     const key = op.kind === "push" ? op.deck.id : op.id;
     if (op.kind === "delete" && !takeWaitingDelete(op)) continue;
+    if (isProjecting()) {
+      if (!pending.has(key)) pending.set(key, op);
+      deferred = true;
+      continue;
+    }
     try {
       if (op.kind === "push") {
         const saved = await pusher(op.deck);
@@ -272,7 +278,7 @@ async function runOps(ops: PendingOp[]): Promise<void> {
     setSyncStatus("deck", "error");
   } else if (offline || waitingOnServer.size > 0) {
     setSyncStatus("deck", "offline");
-  } else {
+  } else if (!deferred) {
     backoff.reset();
     setSyncStatus("deck", "synced");
   }
@@ -283,6 +289,7 @@ async function runOps(ops: PendingOp[]): Promise<void> {
   ) {
     timer = setTimeout(run, minRetryDelay);
   }
+  if (deferred && !timer) timer = setTimeout(run, BASE_BACKOFF_MS);
 }
 
 function startBatch(ops: PendingOp[]): void {
@@ -313,6 +320,10 @@ function run(): void {
 }
 
 function runNotWaitingOnServer(): void {
+  if (isProjecting()) {
+    if (!timer) timer = setTimeout(run, BASE_BACKOFF_MS);
+    return;
+  }
   const ops: PendingOp[] = [];
   for (const [key, op] of pending) {
     if (waitingOnServer.has(key)) continue;
@@ -492,7 +503,8 @@ export function hasPendingDeckSync(): boolean {
  * 창을 닫을 때(`pagehide`)와 로그아웃하기 전에 부른다.
  *
  * 송출 중에는 묶음을 새로 보내지 않고 이미 나간 것이 끝나기만 기다린다. 송출 화면은 서버 요청이
- * 0건이어야 한다. 디바운스·백오프와 재시도 한도를 넘긴 느린 재시도(`SLOW_RETRY_MS`)도 송출하는
+ * 0건이어야 한다. 송출 전에 보내기 시작한 묶음도 송출을 시작하면 남은 곡 변경을 보내지 않고 큐에
+ * 되돌린다. 디바운스·백오프와 재시도 한도를 넘긴 느린 재시도(`SLOW_RETRY_MS`)도 송출하는
  * 동안은 몇 초마다 다시 보기만 하고, 송출을 마치면 남은 곡 변경을 보낸다. 지운 곡은 삭제
  * 기록(`pendingDeckDeletes`)에, 고친 곡은 저장소에 남아 있어 탭을 닫아도 다음 부팅이 보낸다.
  */
@@ -522,6 +534,8 @@ export function holdFailedDeckPush(deck: Deck): void {
  * 사본이 아니라 지금 보관함의 곡을 넣고(`setFailedDeckResolver`), 그사이 없어진 곡은 버린다. 다시
  * 넣는 DELETE는 영구 실패 때 지운 삭제 기록(`pendingDeckDeletes`)에도 다시 남긴다. 사용자가 다시
  * 지우겠다고 한 것이라, 이번에 오프라인으로 밀린 채 탭을 닫아도 다음 부팅이 다시 보낸다.
+ *
+ * 송출 중에는 어느 모드든 보내지 않고 송출을 마친 뒤 큐가 보낸다(`flushDeckSync`와 같다).
  */
 export function retryDeckSyncNow(mode: SyncRetryMode): Promise<void> {
   if (mode === "manual") {

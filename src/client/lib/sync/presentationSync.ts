@@ -396,9 +396,15 @@ let sharedRefreshGeneration = 0;
  * 동기화 큐를 거치지 않는 요청이라 결과를 `shared` 도메인 상태로 직접 남긴다.
  * 이 상태는 공유받은 프레젠테이션을 보는 동안만 의미가 있으므로, 화면을 떠나면
  * `endSharedPresentationRefresh`로 지운다. 그 뒤에 도착한 응답은 상태를 남기지 않는다.
+ *
+ * 화면을 떠났거나 받는 사이 송출을 시작했으면 받은 최신본도 접근 상실도 반영하지 않는다. 송출 화면은
+ * 띄운 프레젠테이션의 변경을 따라 그려, 반영하면 송출 중에 소유자의 새 판으로 바뀌거나 사라진다.
+ * 편집기가 다음에 열리거나 연결을 되찾을 때 다시 받는다.
  */
 export async function refreshSharedPresentation(id: string): Promise<void> {
   const generation = sharedRefreshGeneration;
+  const isCurrent = (): boolean =>
+    generation === sharedRefreshGeneration && !isProjecting();
   const report = (status: SyncStatus, requestId?: string): void => {
     if (generation === sharedRefreshGeneration) {
       setSyncStatus("shared", status, requestId);
@@ -408,13 +414,14 @@ export async function refreshSharedPresentation(id: string): Promise<void> {
     const body = await callSyncApi<{ presentation: unknown }>(() =>
       api.api.presentations[":id"].$get({ param: { id } }),
     );
+    if (!isCurrent()) return;
     sharedListener?.replaced(
       PresentationDocumentSchema.parse(body.presentation),
     );
     report("synced");
   } catch (err) {
     if (err instanceof ServerRejectedError && err.status === 404) {
-      sharedListener?.lost(id);
+      if (isCurrent()) sharedListener?.lost(id);
       report("synced");
       return;
     }

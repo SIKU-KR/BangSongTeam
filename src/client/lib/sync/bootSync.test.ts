@@ -94,6 +94,7 @@ import {
   resetFolderStore,
 } from "../../features/drive/folderStore";
 import { listPresentations } from "../../features/presentation";
+import { isProjecting } from "../../features/presentation/fullscreen";
 import {
   __loadDocumentsForTests,
   flushPendingWrites,
@@ -2423,6 +2424,65 @@ describe("runBootSync — 부팅 중에 시작한 송출", () => {
     );
 
     expect(presentationSync.pullFolders).toHaveBeenCalledTimes(2);
+  });
+
+  it("부팅이 이 기기에만 있는 폴더를 올리는 중에 송출을 시작하면 남은 폴더는 송출을 마친 뒤에 올린다", async () => {
+    const SECOND = "e00000000000000000005";
+    const pushing = deferred<Folder>();
+    const sent: { id: string; projecting: boolean }[] = [];
+    __setFolderPusherForTests((f: Folder) => {
+      sent.push({ id: f.id, projecting: isProjecting() });
+      return sent.length === 1 ? pushing.promise : Promise.resolve(f);
+    });
+    __loadFoldersForTests([folder(PARENT), folder(SECOND)]);
+
+    const booting = runBootSync();
+    await vi.waitFor(() => expect(sent).toHaveLength(1));
+    window.history.pushState({}, "", "/present/abc/fullscreen");
+    pushing.resolve(folder(PARENT));
+    await booting;
+    await vi.advanceTimersByTimeAsync(MAX_BACKOFF_MS);
+
+    expect(sent).toEqual([{ id: PARENT, projecting: false }]);
+
+    window.history.pushState({}, "", "/presentations");
+    await vi.advanceTimersByTimeAsync(BASE_BACKOFF_MS);
+    await vi.waitFor(() =>
+      expect(sent).toContainEqual({ id: SECOND, projecting: false }),
+    );
+    expect(sent.filter((entry) => entry.projecting)).toEqual([]);
+  });
+
+  it("부팅이 이 기기에만 있는 곡을 올리는 중에 송출을 시작하면 남은 곡은 송출을 마친 뒤에 올린다", async () => {
+    const first = saveSongToLibrary({ title: "곡 1", lyricsRaw: "가사" });
+    const second = saveSongToLibrary({ title: "곡 2", lyricsRaw: "가사" });
+    const pushing = deferred<Deck>();
+    const sent: { id: string; projecting: boolean }[] = [];
+    __setDeckTransportForTests({
+      push: (deck: Deck) => {
+        sent.push({ id: deck.id, projecting: isProjecting() });
+        return sent.length === 1 ? pushing.promise : Promise.resolve(deck);
+      },
+    });
+
+    const booting = runBootSync();
+    await vi.waitFor(() => expect(sent).toHaveLength(1));
+    const [{ id: firstSent }] = sent;
+    window.history.pushState({}, "", "/present/abc/fullscreen");
+    pushing.resolve(firstSent === first.id ? first : second);
+    await booting;
+    await vi.advanceTimersByTimeAsync(MAX_BACKOFF_MS);
+
+    expect(sent).toEqual([{ id: firstSent, projecting: false }]);
+
+    window.history.pushState({}, "", "/presentations");
+    await vi.advanceTimersByTimeAsync(BASE_BACKOFF_MS);
+    await vi.waitFor(() => expect(sent).toHaveLength(2));
+    expect(sent.map((entry) => entry.id).sort()).toEqual(
+      [first.id, second.id].sort(),
+    );
+    expect(sent.filter((entry) => entry.projecting)).toEqual([]);
+    expect(hasPendingDeckSync()).toBe(false);
   });
 
   it("프레젠테이션 목록을 받는 중에 송출을 시작하면 병합과 곡 목록 받기를 송출을 마칠 때까지 미룬다", async () => {

@@ -31,6 +31,7 @@ import {
   TimeoutError,
 } from "../api/request";
 import { installFakeApi } from "../../test/fakeApi";
+import { isProjecting } from "../../features/presentation/fullscreen";
 import { getSyncSnapshot, resetSyncStatus } from "./syncStatus";
 import {
   scheduleDocumentPush,
@@ -443,6 +444,67 @@ describe("보관함 push 큐", () => {
         status: "synced",
         lastFailure: null,
       });
+    });
+
+    it("서버가 기다리게 한 곡이 있을 때 포커스로 큐를 돌려도 송출하는 동안은 다른 곡을 보내지 않고, 송출을 마치면 보낸다", async () => {
+      vi.useFakeTimers();
+      push.mockImplementation(async (d: Deck) => {
+        if (d.id === A) throw new ServerRejectedError(503, undefined, 30_000);
+        return d;
+      });
+      scheduleDeckPush(deck());
+      await vi.advanceTimersByTimeAsync(2000);
+      expect(push).toHaveBeenCalledTimes(1);
+
+      scheduleDeckPush({ ...deck("곡 2"), id: B });
+      window.history.pushState({}, "", PROJECTION_PATH);
+      await retryDeckSyncNow("wake");
+      await vi.advanceTimersByTimeAsync(MAX_BACKOFF_MS);
+
+      expect(push).toHaveBeenCalledTimes(1);
+
+      window.history.pushState({}, "", "/presentations");
+      await vi.advanceTimersByTimeAsync(BASE_BACKOFF_MS);
+
+      expect(push.mock.calls.map(([sent]) => sent.id)).toContain(B);
+    });
+
+    it("송출 전에 보내기 시작한 묶음도 송출하는 동안은 남은 곡 변경을 보내지 않고, 송출을 마치면 보낸다", async () => {
+      const C = "c0000000000000000000c";
+      vi.useFakeTimers();
+      let release: () => void = () => undefined;
+      const sent: { id: string; projecting: boolean }[] = [];
+      push.mockImplementation((d: Deck) => {
+        sent.push({ id: d.id, projecting: isProjecting() });
+        if (d.id !== A) return Promise.resolve(d);
+        return new Promise<Deck>((resolve) => {
+          release = () => resolve(d);
+        });
+      });
+      scheduleDeckPush(deck());
+      scheduleDeckPush({ ...deck("곡 2"), id: B });
+      scheduleDeckDelete(C, USER);
+      await vi.advanceTimersByTimeAsync(2000);
+      expect(sent).toEqual([{ id: A, projecting: false }]);
+
+      window.history.pushState({}, "", PROJECTION_PATH);
+      release();
+      await vi.advanceTimersByTimeAsync(MAX_BACKOFF_MS);
+
+      expect(sent).toHaveLength(1);
+      expect(remove).not.toHaveBeenCalled();
+      expect(hasPendingDeckSync()).toBe(true);
+
+      window.history.pushState({}, "", "/presentations");
+      await vi.advanceTimersByTimeAsync(BASE_BACKOFF_MS);
+
+      expect(sent).toEqual([
+        { id: A, projecting: false },
+        { id: B, projecting: false },
+      ]);
+      expect(remove).toHaveBeenCalledExactlyOnceWith(C);
+      expect(hasPendingDeckSync()).toBe(false);
+      expect(getSyncSnapshot().status).toBe("synced");
     });
 
     it("송출 중에 고치거나 지운 곡은 디바운스·flush로도 보내지 않고, 송출을 마치면 보낸다", async () => {

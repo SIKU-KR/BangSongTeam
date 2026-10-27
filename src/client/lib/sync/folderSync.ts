@@ -185,6 +185,11 @@ async function pushAll(
 
   for (const folder of sortFoldersParentFirst(folders)) {
     if (!enabled) return;
+    if (isProjecting()) {
+      if (!pending.has(folder.id)) pending.set(folder.id, folder);
+      deferred = true;
+      continue;
+    }
     if (folder.parentId !== null && isQueuedAfter(folder.parentId, batch)) {
       if (!pending.has(folder.id)) pending.set(folder.id, folder);
       deferred = true;
@@ -420,7 +425,8 @@ export async function ensureFolderPushed(
  * 기다린다(`ensureFolderPushed`).
  *
  * 송출 중에는 묶음을 새로 보내지 않고 이미 나간 것이 끝나기만 기다린다. 송출 화면은 서버 요청이
- * 0건이어야 한다. 디바운스·백오프와 재시도 한도를 넘긴 느린 재시도(`SLOW_RETRY_MS`)도 송출하는
+ * 0건이어야 한다. 송출 전에 보내기 시작한 묶음도 송출을 시작하면 남은 폴더를 보내지 않고 큐에
+ * 되돌린다. 디바운스·백오프와 재시도 한도를 넘긴 느린 재시도(`SLOW_RETRY_MS`)도 송출하는
  * 동안은 몇 초마다 다시 보기만 하고, 송출을 마치면 남은 폴더를 보낸다. 그동안 바뀐 내용은 저장소에
  * 남아 있어 탭을 닫아도 다음 부팅이 올린다.
  */

@@ -31,6 +31,7 @@ import {
   TimeoutError,
 } from "../api/request";
 import { installFakeApi } from "../../test/fakeApi";
+import { isProjecting } from "../../features/presentation/fullscreen";
 import { getSyncSnapshot, resetSyncStatus } from "./syncStatus";
 import {
   scheduleDeckPush,
@@ -896,6 +897,40 @@ describe("폴더 push 큐", () => {
         status: "synced",
         lastFailure: null,
       });
+    });
+
+    it("송출 전에 보내기 시작한 묶음도 송출하는 동안은 남은 폴더를 보내지 않고, 송출을 마치면 보낸다", async () => {
+      vi.useFakeTimers();
+      let release: () => void = () => undefined;
+      const sent: { id: string; projecting: boolean }[] = [];
+      push.mockImplementation((f: Folder) => {
+        sent.push({ id: f.id, projecting: isProjecting() });
+        if (f.id !== PARENT) return Promise.resolve(f);
+        return new Promise<Folder>((resolve) => {
+          release = () => resolve(f);
+        });
+      });
+      scheduleFolderPush(folder(PARENT, null));
+      scheduleFolderPush(folder(OTHER_ROOT, null));
+      await vi.advanceTimersByTimeAsync(2000);
+      expect(sent).toEqual([{ id: PARENT, projecting: false }]);
+
+      window.history.pushState({}, "", PROJECTION_PATH);
+      release();
+      await vi.advanceTimersByTimeAsync(MAX_BACKOFF_MS);
+
+      expect(sent).toHaveLength(1);
+      expect(hasPendingFolderPush()).toBe(true);
+
+      window.history.pushState({}, "", "/presentations");
+      await vi.advanceTimersByTimeAsync(BASE_BACKOFF_MS);
+
+      expect(sent).toEqual([
+        { id: PARENT, projecting: false },
+        { id: OTHER_ROOT, projecting: false },
+      ]);
+      expect(hasPendingFolderPush()).toBe(false);
+      expect(getSyncSnapshot().status).toBe("synced");
     });
 
     it("송출 중에 고친 폴더는 디바운스·flush로도 보내지 않고, 송출을 마치면 보낸다", async () => {
