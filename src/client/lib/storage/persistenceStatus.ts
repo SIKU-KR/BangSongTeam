@@ -1,17 +1,29 @@
 import { useSyncExternalStore } from "react";
-import { PersistenceUnavailableError } from "./db";
+import { discardBrokenConnection, PersistenceUnavailableError } from "./db";
 import type { CorruptedRecord } from "./presentationRepository";
 import { ERROR_COPY } from "#copy/common";
 import { isQuotaExceededError } from "../browser/quotaError";
 
-type PersistenceErrorKind = "unavailable" | "quota" | "unknown";
+type PersistenceErrorKind =
+  "unavailable" | "blocked" | "outdated" | "quota" | "unknown";
 
 interface PersistenceError {
   kind: PersistenceErrorKind;
   message: string;
 }
 
-let current: PersistenceError | null = null;
+/**
+ * 저장 실패를 남긴 곳. 세 스토어(프레젠테이션·곡 보관함·폴더)는 한 자리(`stores`)를 함께 쓰고,
+ * 세션 캐시(`session`)는 따로 둔다. 세션 캐시를 다시 저장했다고 스토어가 저장하지 못한 경고를
+ * 지우면 작업을 잃을 수 있고, 스토어가 저장했다고 세션 캐시를 읽지 못한 경고를 지우면 로그인
+ * 화면에서 까닭을 알 수 없다.
+ */
+export type PersistenceSource = "stores" | "session";
+
+const failures: Record<PersistenceSource, PersistenceError | null> = {
+  stores: null,
+  session: null,
+};
 
 const NO_CORRUPTED: readonly CorruptedRecord[] = Object.freeze([]);
 let corrupted: readonly CorruptedRecord[] = NO_CORRUPTED;
@@ -23,7 +35,7 @@ function emit(): void {
 }
 
 function classify(err: unknown): PersistenceErrorKind {
-  if (err instanceof PersistenceUnavailableError) return "unavailable";
+  if (err instanceof PersistenceUnavailableError) return err.reason;
   if (isQuotaExceededError(err)) return "quota";
   return "unknown";
 }
@@ -33,22 +45,32 @@ function classify(err: unknown): PersistenceErrorKind {
  *
  * 조용히 삼키지 않는 것이 핵심이다.
  * 사용자가 저장된 줄 알고 예배 당일에 잃는 것이 최악의 시나리오다.
+ *
+ * 연결이 끊겨 난 오류면 그 연결을 버려(`discardBrokenConnection`) 다음 저장이 다시 연다.
  */
-export function reportPersistenceError(err: unknown): void {
+export function reportPersistenceError(
+  err: unknown,
+  source: PersistenceSource = "stores",
+): void {
+  discardBrokenConnection(err);
   const kind = classify(err);
-  if (current?.kind === kind) return;
-  current = { kind, message: ERROR_COPY.persistence[kind] };
+  if (failures[source]?.kind === kind) return;
+  failures[source] = { kind, message: ERROR_COPY.persistence[kind] };
   emit();
 }
 
-export function clearPersistenceError(): void {
-  if (!current) return;
-  current = null;
+/** `source`가 남긴 저장 실패만 지우고 다른 곳의 실패는 남긴다 */
+export function clearPersistenceError(
+  source: PersistenceSource = "stores",
+): void {
+  if (!failures[source]) return;
+  failures[source] = null;
   emit();
 }
 
+/** 스토어의 저장 실패를 세션 캐시의 실패보다 먼저 보인다. 스토어의 실패는 작업을 잃을 수 있다 */
 export function getPersistenceError(): PersistenceError | null {
-  return current;
+  return failures.stores ?? failures.session;
 }
 
 function subscribe(listener: () => void): () => void {
