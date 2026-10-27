@@ -613,6 +613,36 @@ describe("동기화 회복", () => {
     },
   );
 
+  it.each(["focus", "online"] as const)(
+    "가려진 탭은 %s 이벤트에 대기 중인 쓰기는 보내되 내 데이터는 다시 받지 않는다",
+    async (event) => {
+      setVisibility("hidden");
+      const push = vi.fn(async () => undefined);
+      __setPusherForTests(push);
+      start();
+      scheduleDocumentPush(presentation());
+
+      window.dispatchEvent(new Event(event));
+      await __waitForSyncRecoveryForTests();
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(push).toHaveBeenCalledTimes(1);
+      expect(recoveryDeps.refreshOwnDataIfStale).not.toHaveBeenCalled();
+    },
+  );
+
+  it("가려진 탭에서도 다시 시도를 누르면 내 데이터를 다시 받는다", async () => {
+    setVisibility("hidden");
+    start();
+
+    retrySyncNow();
+    await __waitForSyncRecoveryForTests();
+
+    expect(recoveryDeps.refreshOwnDataIfStale).toHaveBeenCalledExactlyOnceWith(
+      "manual",
+    );
+  });
+
   it("닫힌 탭이 보내지 못하고 남긴 곡 삭제는 열려 있는 탭이 연결을 되찾을 때 보낸다", async () => {
     const LEFT_BEHIND = "00000000c000000000002";
     localStorage.clear();

@@ -142,7 +142,10 @@ async function runResume(mode: SyncRetryMode): Promise<void> {
   retryPendingSyncNow(mode);
   resumeOtherTabsSongDeletes();
   void retryDeckSyncNow(mode).catch(() => undefined);
-  if (!repulled) void refreshOwnDataIfStale(mode);
+  if (repulled) return;
+  if (mode === "manual" || document.visibilityState === "visible") {
+    void refreshOwnDataIfStale(mode);
+  }
 }
 
 function resume(mode: SyncRetryMode): Promise<void> {
@@ -234,8 +237,10 @@ function handleVisibilityChange(): void {
  *
  * 큐를 돌린 뒤에는 내 데이터를 다시 받는다(`refreshOwnDataIfStale`). 부팅 때만 받으면 며칠 열어 둔
  * 탭이 다른 기기에서 고친 판을 모른 채 띄우고 송출한다. 받지 못했던 부팅 단계를 방금 다시 받았으면
- * 받지 않는다. 신호가 오지 않는 탭(한 화면을 띄워 둔 예배실 PC)도 보이고 서버에 닿는 동안에는
- * `FRESHNESS_TICK_MS`마다 다시 받는다. 받는 간격은 다시 받기가 정한다.
+ * 받지 않는다. 가려진 탭은 '다시 시도'가 아니면 받지 않는다. 연결이 돌아오면 가려진 탭까지 모든 탭이
+ * 한꺼번에 목록 전체를 받는데, 보이는 탭이 받아 쓴 저장본이 저장본 알림으로 가려진 탭에도 오고, 그
+ * 탭은 다시 보일 때 받는다. 신호가 오지 않는 탭(한 화면을 띄워 둔 예배실 PC)도 보이고 서버에 닿는
+ * 동안에는 `FRESHNESS_TICK_MS`마다 다시 받는다. 받는 간격은 다시 받기가 정한다.
  *
  * 포커스·탭 복귀·상태 확인 성공은 자주 오므로 큐의 백오프 횟수와 서버가 준 대기를 비우지
  * 않는다(`SyncRetryMode`의 `wake`). 다만 닿지 못하다 다시 닿았으면 배경 다운로드에는

@@ -837,7 +837,10 @@ function canRefresh(mode: SyncRetryMode): boolean {
  * 연결 회복(`reconnect`)은 `RECONNECT_REFRESH_MS`가 지나야 받고, '다시 시도'(`manual`)는 곧바로
  * 받는다. 받기 시작한 때부터 세어, 받지 못해도 그 간격 안에는 장애 중인 서버에 다시 묻지 않는다. 다른
  * 탭이 받았다고 알리면 그때부터 센다(`noteRemotePull`). 기기 시계가 뒤로 돌아가 받은 때가 앞날이 되면
- * 오래된 것으로 본다. 시계를 맞춘 만큼 다시 받지 않으면 그동안 지난 판을 띄운다.
+ * 오래된 것으로 본다. 시계를 맞춘 만큼 다시 받지 않으면 그동안 지난 판을 띄운다. 같은 브라우저의 다른
+ * 탭이 받는 중이면(Web Lock `chiton:refresh`) 함께 받지 않고 그 탭의 받았다는 알림을 기다린다. 받았다는
+ * 알림만으로는 다른 탭이 받기를 마친 뒤에야 알게 되어, 연결이 돌아온 순간처럼 여러 탭이 한꺼번에 신호를
+ * 받으면 모두 목록 전체를 받는다.
  *
  * 부팅 동기화가 첫 받기를 마치기 전(송출 화면에서 부팅해 미뤄 둔 부팅도), 받지 못한 부팅 단계가 다시
  * 받기를 기다리는 동안, 동기화를 끈 뒤(`stopSync`), 송출 중에는 받지 않는다. 그동안은 부팅 병합과 그
@@ -851,11 +854,24 @@ export function refreshOwnDataIfStale(mode: SyncRetryMode): Promise<void> {
   const userId = getCurrentUserId();
   if (!userId || !canRefresh(mode)) return Promise.resolve();
   lastPulledAt = Date.now();
-  const running = refreshOwnData(userId, bootGeneration).finally(() => {
+  const generation = bootGeneration;
+  const running = withRefreshLock(() =>
+    refreshOwnData(userId, generation),
+  ).finally(() => {
     if (refreshInFlight === running) refreshInFlight = null;
   });
   refreshInFlight = running;
   return running;
+}
+
+const REFRESH_LOCK = "chiton:refresh";
+
+async function withRefreshLock(task: () => Promise<void>): Promise<void> {
+  const locks = typeof navigator === "undefined" ? undefined : navigator.locks;
+  if (!locks) return task();
+  await locks.request(REFRESH_LOCK, { ifAvailable: true }, async (lock) => {
+    if (lock) await task();
+  });
 }
 
 /**

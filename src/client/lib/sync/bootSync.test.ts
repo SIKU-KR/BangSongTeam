@@ -1,4 +1,12 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import {
+  describe,
+  it,
+  expect,
+  beforeEach,
+  afterEach,
+  onTestFinished,
+  vi,
+} from "vitest";
 import {
   API_ERRORS,
   DEFAULT_DECK_STYLE,
@@ -3135,6 +3143,43 @@ describe("refreshOwnDataIfStale — 열려 있는 탭이 내 데이터를 다시
       await vi.waitFor(() => expect(fetcher).toHaveBeenCalledTimes(1));
     },
   );
+
+  it("같은 브라우저의 다른 탭이 받는 중이면 함께 받지 않고, 그 탭이 마친 뒤에는 받는다", async () => {
+    const held = new Set<string>();
+    const locks = {
+      request: async (
+        name: string,
+        _options: { ifAvailable: boolean },
+        callback: (lock: { name: string } | null) => Promise<void>,
+      ): Promise<void> => {
+        if (held.has(name)) return callback(null);
+        held.add(name);
+        try {
+          return await callback({ name });
+        } finally {
+          held.delete(name);
+        }
+      },
+    };
+    Object.defineProperty(navigator, "locks", {
+      configurable: true,
+      value: locks,
+    });
+    onTestFinished(() => {
+      Reflect.deleteProperty(navigator, "locks");
+    });
+    await runBootSync();
+    clearPulls();
+
+    held.add("chiton:refresh");
+    await refreshOwnDataIfStale("manual");
+    expect(pulls()).toBe(0);
+
+    held.delete("chiton:refresh");
+    await refreshOwnDataIfStale("manual");
+    expect(pulls()).toBe(1);
+    expect(held.size).toBe(0);
+  });
 
   it("다른 탭이 방금 받았다고 알리면 그때부터 1분 동안 다시 받지 않는다", async () => {
     await runBootSync();
