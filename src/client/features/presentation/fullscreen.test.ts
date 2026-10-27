@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import {
   enterFullscreen,
   exitFullscreen,
+  isProjecting,
   isProjectionPath,
   launchPresentation,
   loadPresentReturnPath,
@@ -201,6 +202,25 @@ describe("fullscreen utilities", () => {
       "/present/abc/fullscreen/extra",
     ])("다른 주소는 송출이 아니다 (%s)", (pathname) => {
       expect(isProjectionPath(pathname)).toBe(false);
+    });
+  });
+
+  describe("isProjecting", () => {
+    const startPath = window.location.pathname;
+
+    afterEach(() => {
+      window.history.pushState({}, "", startPath);
+    });
+
+    it("지금 주소가 송출 화면일 때만 송출 중으로 본다", () => {
+      window.history.pushState({}, "", "/present/x/fullscreen");
+      expect(isProjecting()).toBe(true);
+
+      window.history.pushState({}, "", "/present/x");
+      expect(isProjecting()).toBe(false);
+
+      window.history.pushState({}, "", "/editor/x");
+      expect(isProjecting()).toBe(false);
     });
   });
 

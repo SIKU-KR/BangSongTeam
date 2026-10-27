@@ -16,16 +16,20 @@ import {
   savePresentation,
   saveSharedPresentation,
   loadAllPresentations,
+  loadPresentation,
   deletePresentation,
   deleteSharedPresentation,
   reportPersistenceError,
   clearPersistenceError,
   reportCorruptedRecords,
+  type LoadedRecord,
 } from "../../lib/storage";
+import { announceStorageChange } from "../../lib/storage/storageChannel";
 import { getCurrentUserId } from "../../lib/auth/sessionStore";
 import {
   scheduleDocumentPush,
   cancelDocumentPush,
+  isDocumentQueued,
 } from "../../lib/sync/syncScheduler";
 import { getBackgrounds } from "../backgrounds/backgroundCatalog";
 import { COMMON_COPY } from "#copy/common";
@@ -158,24 +162,45 @@ const PERSIST_DEBOUNCE_MS = 300;
 
 let persistenceEnabled = false;
 let pendingIds = new Set<string>();
+const writingIds = new Map<string, number>();
+const skippedReloads = new Set<string>();
 let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 let inFlight: Promise<void> = Promise.resolve();
 
+function markWriting(ids: readonly string[]): void {
+  for (const id of ids) writingIds.set(id, (writingIds.get(id) ?? 0) + 1);
+}
+
+function doneWriting(id: string): void {
+  const remaining = (writingIds.get(id) ?? 1) - 1;
+  if (remaining > 0) writingIds.set(id, remaining);
+  else writingIds.delete(id);
+}
+
+function hasUnpersistedWrite(id: string): boolean {
+  return pendingIds.has(id) || writingIds.has(id);
+}
+
 async function writeDocuments(ids: string[]): Promise<void> {
   let failed = false;
+  const written: string[] = [];
   for (const id of ids) {
     const doc = state.byId[id];
-    if (!doc) continue;
     try {
+      if (!doc) continue;
       await (doc.access ? saveSharedPresentation(doc) : savePresentation(doc));
+      written.push(id);
     } catch (err) {
       failed = true;
       reportPersistenceError(err);
+    } finally {
+      doneWriting(id);
     }
   }
   if (!failed && ids.length > 0) {
     clearPersistenceError();
   }
+  announceStorageChange("presentations", written);
 }
 
 function runPendingWrites(): void {
@@ -187,6 +212,7 @@ function runPendingWrites(): void {
 
   const ids = [...pendingIds];
   pendingIds = new Set();
+  markWriting(ids);
   inFlight = inFlight.then(() => writeDocuments(ids));
 }
 
@@ -219,17 +245,14 @@ export async function flushPendingWrites(): Promise<void> {
  */
 export async function hydrateFromStorage(): Promise<void> {
   persistenceEnabled = false;
+  skippedReloads.clear();
   const userId = getCurrentUserId();
 
   try {
     const { valid, corrupted } = await loadAllPresentations();
     reportCorruptedRecords(corrupted);
 
-    const mine = userId
-      ? valid.filter(
-          (doc) => doc.userId === userId || doc.access?.memberId === userId,
-        )
-      : [];
+    const mine = valid.filter((doc) => isVisibleTo(doc, userId));
     const sorted = [...mine].sort((a, b) =>
       a.createdAt.localeCompare(b.createdAt),
     );
@@ -257,10 +280,18 @@ export async function hydrateFromStorage(): Promise<void> {
   }
 }
 
-/** 메모리 상태 제거는 호출자 책임이다. */
+function isVisibleTo(doc: Presentation, userId: string | null): boolean {
+  return (
+    userId !== null &&
+    (doc.userId === userId || doc.access?.memberId === userId)
+  );
+}
+
+/** 메모리 상태 제거는 호출자 책임이다. 지운 뒤 다른 탭에 알린다. */
 export async function removePersistedPresentation(id: string): Promise<void> {
   try {
     await deletePresentation(id);
+    announceStorageChange("presentations", [id]);
   } catch (err) {
     reportPersistenceError(err);
   }
@@ -276,6 +307,7 @@ export async function removePersistedSharedPresentation(
 ): Promise<void> {
   try {
     await deleteSharedPresentation(id);
+    announceStorageChange("presentations", [id]);
   } catch (err) {
     reportPersistenceError(err);
   }
@@ -290,6 +322,8 @@ function removePersisted(doc: Presentation): Promise<void> {
 function resetPersistenceForTests(): void {
   persistenceEnabled = false;
   pendingIds = new Set();
+  writingIds.clear();
+  skippedReloads.clear();
   if (debounceTimer) {
     clearTimeout(debounceTimer);
     debounceTimer = null;
@@ -1022,18 +1056,29 @@ function putSharedDocument(doc: Presentation): void {
 export async function removePresentationsLocally(
   ids: readonly string[],
 ): Promise<void> {
+  const removed = forgetPresentations(ids);
+  if (removed.length === 0) return;
+  notifyListeners();
+
+  for (const doc of removed) {
+    await removePersisted(doc);
+  }
+}
+
+function forgetPresentations(ids: readonly string[]): Presentation[] {
   const removed = new Map<string, Presentation>();
   for (const id of ids) {
     const doc = state.byId[id];
     if (doc) removed.set(id, doc);
   }
-  if (removed.size === 0) return;
+  if (removed.size === 0) return [];
 
   const byId = { ...state.byId };
   for (const id of removed.keys()) {
     delete byId[id];
     clearHistory(id);
     pendingIds.delete(id);
+    skippedReloads.delete(id);
     cancelDocumentPush(id);
   }
   const order = state.order.filter((id) => !removed.has(id));
@@ -1042,11 +1087,81 @@ export async function removePresentationsLocally(
     order,
     activeId: removed.has(state.activeId) ? (order[0] ?? "") : state.activeId,
   });
-  notifyListeners();
+  return [...removed.values()];
+}
 
-  for (const doc of removed.values()) {
-    await removePersisted(doc);
+function replaceFromStorage(doc: Presentation): void {
+  const exists = Boolean(state.byId[doc.id]);
+  commit({
+    ...state,
+    byId: { ...state.byId, [doc.id]: doc },
+    order: exists ? state.order : [...state.order, doc.id],
+  });
+  clearHistory(doc.id);
+  skippedReloads.delete(doc.id);
+}
+
+/**
+ * 다른 탭이 IndexedDB에 쓰거나 지운 세트를 저장본에서 다시 읽어 메모리를 맞춘다
+ * (`storageSync`가 다른 탭의 알림을 받아 부른다). 맞추지 않으면 이 탭의 낡은 사본이 다음 편집
+ * 때 다른 탭이 더한 곡과 고친 내용을 저장소와 서버에서 지운다.
+ *
+ * - 저장본이 있으면 하이드레이션과 같은 기준(세션 사용자의 세트와 공유받은 사본)으로 싣고, 그
+ *   세트의 되돌리기 기록을 지운다. 기록은 바꾸기 전의 판이라, 되돌리면 다른 탭의 수정을 덮는다.
+ * - 이 탭이 아직 저장하지 않았거나 저장하는 중인 세트는 바꾸지도 빼지도 않고 건너뛴 것으로
+ *   기억한다. 곧 이 탭의 쓰기가 저장본을 다시 쓰고, 바꾸면 이 탭의 편집이 메모리에서 사라진다.
+ *   읽는 동안 이 탭에서 고친 세트도 같다. 서버에 아직 올리지 못한 세트도 바꾸지 않고 기억한다.
+ * - 저장본이 없으면 다른 탭에서 지운 것이라, 올리기를 기다리던 세트라도 메모리에서 빼고 대기 중인
+ *   push를 버린다. 이 탭의 push가 남으면 지운 세트를 서버에 되살린다.
+ * - 읽지 못한 저장본(깨졌거나 새 버전의 탭이 쓴 모양)은 지운 것이 아니라 메모리를 그대로 둔다.
+ *
+ * 저장도 push도 하지 않는다. 저장본은 다른 탭이 이미 썼고, 올리기도 그 탭이 한다. 하이드레이션에
+ * 실패한 탭은 다시 읽지 않는다. 메모리에만 있는 편집을 저장본으로 덮게 된다. 읽기에 실패하면
+ * 메모리를 그대로 둔다. 잃는 것이 없어 저장 실패 경고는 올리지 않는다.
+ */
+export async function reloadPresentationsFromStorage(
+  ids: readonly string[],
+): Promise<void> {
+  if (!persistenceEnabled) return;
+  const unique = [...new Set(ids)].filter((id) => !skipsUnpersisted(id));
+  if (unique.length === 0) return;
+  let loaded: { id: string; record: LoadedRecord<Presentation> }[];
+  try {
+    loaded = await Promise.all(
+      unique.map(async (id) => ({ id, record: await loadPresentation(id) })),
+    );
+  } catch {
+    return;
   }
+
+  const userId = getCurrentUserId();
+  const missing: string[] = [];
+  let changed = false;
+  for (const { id, record } of loaded) {
+    if (skipsUnpersisted(id)) continue;
+    if (record.status === "missing") {
+      missing.push(id);
+      continue;
+    }
+    if (record.status === "unreadable" || !isVisibleTo(record.value, userId)) {
+      continue;
+    }
+    if (isDocumentQueued(id)) {
+      skippedReloads.add(id);
+      continue;
+    }
+    replaceFromStorage(record.value);
+    changed = true;
+  }
+  if (forgetPresentations(missing).length > 0) changed = true;
+  for (const id of missing) cancelDocumentPush(id);
+  if (changed) notifyListeners();
+}
+
+function skipsUnpersisted(id: string): boolean {
+  if (!hasUnpersistedWrite(id)) return false;
+  skippedReloads.add(id);
+  return true;
 }
 
 function subscribe(listener: () => void): () => void {

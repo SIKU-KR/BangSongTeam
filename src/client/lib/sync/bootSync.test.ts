@@ -355,6 +355,7 @@ describe("runBootSync — 동기화 상태", () => {
     __resetDeckSyncForTests();
     __resetSyncSchedulerForTests();
     __resetFolderSyncForTests();
+    __setBackoffRandomForTests(() => 1);
     __setDeckTransportForTests({ push: vi.fn(async (deck: Deck) => deck) });
     __setFolderPusherForTests(vi.fn(async (f: Folder) => f));
     presentationSync.pullDecks.mockResolvedValue({ decks: [], deletedIds: [] });
@@ -739,21 +740,36 @@ describe("runBootSync — 동기화 상태", () => {
     });
   });
 
-  it("부팅이 큐에 넘긴 세트를 큐가 먼저 올렸으면 오프라인으로 남지 않는다", async () => {
+  it("부팅이 올리지 못한 세트를 큐가 다시 올리면 오프라인으로 남지 않는다", async () => {
     const OTHER = "e00000000000000000004";
     __loadDocumentsForTests([presentation(DOC), presentation(OTHER)]);
-    let calls = 0;
-    presentationSync.pushPresentation.mockImplementation(async () => {
-      calls += 1;
-      if (calls === 1) throw new OfflineError();
-      if (calls === 2) await flushPendingSync();
-      return true;
+    let failed = false;
+    presentationSync.pushPresentation.mockImplementation(async (doc) => {
+      if ((doc as Presentation).id === DOC && !failed) {
+        failed = true;
+        throw new OfflineError();
+      }
     });
 
     await runBootSync();
+    expect(getSyncSnapshot().status).toBe("offline");
 
-    expect(calls).toBe(3);
+    await flushPendingSync();
+
+    expect(presentationSync.pushPresentation).toHaveBeenCalledTimes(3);
     expect(getSyncSnapshot().status).toBe("synced");
+  });
+
+  it("부팅 push가 세션 만료(401)로 끝나면 부팅이 동기화됨으로 덮지 않는다", async () => {
+    __loadDocumentsForTests([presentation(DOC)]);
+    presentationSync.pushPresentation.mockRejectedValue(
+      new SessionExpiredError(),
+    );
+
+    await runBootSync();
+
+    expect(getSyncSnapshot().status).toBe("error");
+    expect(hasPendingDocumentPush()).toBe(true);
   });
 
   it("큐가 세트를 올리는 중이면 부팅이 먼저 동기화됨을 띄우지 않는다", async () => {
@@ -770,11 +786,15 @@ describe("runBootSync — 동기화 상태", () => {
       return [];
     });
 
-    await runBootSync();
+    const booting = runBootSync();
+    await vi.waitFor(() =>
+      expect(presentationSync.pushPresentation).toHaveBeenCalledTimes(1),
+    );
+    await settleMicrotasks();
     expect(getSyncSnapshot().status).toBe("syncing");
 
     release?.();
-    await flushPendingSync();
+    await booting;
     expect(getSyncSnapshot().status).toBe("synced");
   });
 
@@ -919,7 +939,7 @@ describe("runBootSync — 부팅이 올리는 동안 바뀐 항목", () => {
     expect(getFolders().find((f) => f.id === CHILD)?.name).toBe("새 이름");
   });
 
-  it("앞 세트를 올리는 동안 고친 세트는 고친 내용으로 올린다", async () => {
+  it("앞 세트를 올리는 동안 고친 세트는 마지막에 고친 내용으로 올리고 큐를 비운다", async () => {
     const OTHER = "e00000000000000000004";
     __loadDocumentsForTests([presentation(DOC), presentation(OTHER)]);
     const pushed: Presentation[] = [];
@@ -937,8 +957,47 @@ describe("runBootSync — 부팅이 올리는 동안 바뀐 항목", () => {
 
     const editedId = pushed[0].id === DOC ? OTHER : DOC;
     const editedPushes = pushed.filter((doc) => doc.id === editedId);
-    expect(editedPushes.length).toBeGreaterThan(0);
-    expect(editedPushes.every((doc) => doc.title === "고친 세트")).toBe(true);
+    expect(editedPushes.at(-1)?.title).toBe("고친 세트");
+    expect(hasPendingDocumentPush()).toBe(false);
+  });
+
+  it("부팅이 올리는 세트를 그사이 고쳐도 그 세트의 PATCH는 겹치지 않고, flush는 부팅 push가 끝난 뒤에 돌아온다", async () => {
+    __loadDocumentsForTests([presentation(DOC)]);
+    const bootPush = deferred<void>();
+    const titles: string[] = [];
+    let active = 0;
+    let maxActive = 0;
+    presentationSync.pushPresentation.mockImplementation(async (doc) => {
+      active += 1;
+      maxActive = Math.max(maxActive, active);
+      titles.push((doc as Presentation).title);
+      try {
+        if (titles.length === 1) await bootPush.promise;
+      } finally {
+        active -= 1;
+      }
+    });
+
+    const booting = runBootSync();
+    await vi.waitFor(() =>
+      expect(presentationSync.pushPresentation).toHaveBeenCalledTimes(1),
+    );
+    renamePresentation(DOC, "부팅 중에 고친 세트");
+    let flushed = false;
+    const flushing = flushPendingSync().then(() => {
+      flushed = true;
+    });
+    await settleMicrotasks();
+
+    expect(flushed).toBe(false);
+    expect(maxActive).toBe(1);
+
+    bootPush.resolve();
+    await Promise.all([booting, flushing]);
+
+    expect(maxActive).toBe(1);
+    expect(titles).toEqual(["세트", "부팅 중에 고친 세트"]);
+    expect(getSyncSnapshot().status).toBe("synced");
   });
 });
 

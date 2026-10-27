@@ -9,9 +9,12 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { renderApp } from "./test/nextApp";
 import {
   createNewPresentation,
+  getPresentationById,
   resetPresentationStore,
 } from "./features/presentation/presentationStore";
 import { closeOfflineDB, OFFLINE_DB_NAME } from "./lib/storage/db";
+import { __resetStorageChannelForTests } from "./lib/storage/storageChannel";
+import { __resetStorageSyncForTests } from "./lib/sync/storageSync";
 import { authClient } from "./lib/auth/authClient";
 import {
   revalidateSession,
@@ -174,6 +177,8 @@ describe("App Route Integration", () => {
 
   beforeEach(async () => {
     tabs = installFakeBroadcastChannel();
+    __resetStorageSyncForTests();
+    __resetStorageChannelForTests();
     closeOfflineDB();
     await new Promise<void>((resolve) => {
       const req = indexedDB.deleteDatabase(OFFLINE_DB_NAME);
@@ -543,6 +548,78 @@ describe("App Route Integration", () => {
 
       expect(await screen.findByTestId("editor-route")).toBeInTheDocument();
       expect(window.location.pathname).toBe(`/editor/${NEW_DOC.id}`);
+    });
+  });
+
+  describe("다른 탭이 저장한 변경", () => {
+    const [SEED] = SEED_PRESENTATIONS;
+    let api: FakeApi | null = null;
+
+    function announceFromOtherTab(ids: string[]): void {
+      tabs.otherTab("chiton:storage").post({
+        v: 1,
+        userId: SEED_USER_ID,
+        kind: "presentations",
+        ids,
+      });
+    }
+
+    beforeEach(() => {
+      resetSyncModules();
+    });
+
+    afterEach(() => {
+      api?.restore();
+      api = null;
+      resetSyncModules();
+    });
+
+    it("다른 탭이 이름을 바꾼 프레젠테이션을 드라이브에 바로 보여 준다", async () => {
+      api = installFakeApi(bootRoutes());
+      renderAt("/presentations");
+      await waitFor(() => expect(getSyncSnapshot().status).toBe("synced"));
+
+      await seedPresentationsIntoStorage([
+        {
+          ...SEED,
+          title: "다른 탭에서 바꾼 제목",
+          updatedAt: "2026-10-26T00:00:00.000Z",
+        },
+      ]);
+      announceFromOtherTab([SEED.id]);
+
+      expect(
+        await screen.findByText("다른 탭에서 바꾼 제목"),
+      ).toBeInTheDocument();
+    });
+
+    it("송출 주소로 부팅한 탭은 송출 동안 받은 변경을 송출을 마친 뒤에 싣는다", async () => {
+      await saveCachedSession(sessionUser());
+      api = installFakeApi(bootRoutes());
+      renderAt(`/present/${SEED.id}/fullscreen`);
+      await screen.findByTestId("fullscreen-present-route");
+
+      await seedPresentationsIntoStorage([
+        {
+          ...SEED,
+          title: "송출 중에 다른 탭이 바꾼 제목",
+          updatedAt: "2026-10-26T00:00:00.000Z",
+        },
+      ]);
+      announceFromOtherTab([SEED.id]);
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      });
+
+      expect(getPresentationById(SEED.id)?.title).toBe(SEED.title);
+
+      fireEvent.click(screen.getByTestId("exit-present-btn"));
+
+      await waitFor(() =>
+        expect(getPresentationById(SEED.id)?.title).toBe(
+          "송출 중에 다른 탭이 바꾼 제목",
+        ),
+      );
     });
   });
 

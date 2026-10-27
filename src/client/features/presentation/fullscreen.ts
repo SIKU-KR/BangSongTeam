@@ -94,6 +94,17 @@ export function isProjectionPath(pathname: string): boolean {
   return PROJECTION_PATH.test(pathname);
 }
 
+/**
+ * 이 탭이 지금 송출 화면에 있는지. 송출 중에는 서버 요청이 0건이어야 하고 띄운 프레젠테이션이
+ * 바뀌면 안 되므로, 동기화 큐·부팅 동기화·다른 탭의 저장 알림이 이 판정으로 할 일을 송출을 마친
+ * 뒤로 미룬다.
+ */
+export function isProjecting(): boolean {
+  return (
+    typeof window !== "undefined" && isProjectionPath(window.location.pathname)
+  );
+}
+
 /** 송출 종료 후 돌아갈 곳을 모를 때(주소 직접 진입·새로고침)의 복귀 경로 */
 export const DEFAULT_PRESENT_RETURN_PATH = DRIVE_ROOT_PATH;
 

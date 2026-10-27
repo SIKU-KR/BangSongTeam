@@ -28,6 +28,7 @@ import {
 } from "../api/request";
 import { requestSessionCheck } from "../auth/sessionStore";
 import { reportApiFailure } from "../observability/clientReports";
+import { isProjecting } from "../../features/presentation/fullscreen";
 import { setSyncStatus, type SyncStatus } from "./syncStatus";
 
 function isSessionMismatch(err: unknown): boolean {
@@ -156,17 +157,47 @@ async function sendChanges(changes: PresentationChanges): Promise<void> {
 }
 
 /**
+ * 내 프레젠테이션을 올릴 때 스토어에 묻는 창구. 부팅 동기화가 등록하고 `stopSync`가 뗀다.
+ *
+ * - `current`: 그 세트의 지금 판. 큐에 든 사본은 넣은 때의 판이라, 그사이 이 탭이 고쳤거나 다른
+ *   탭이 쓴 저장본을 다시 읽었으면 낡았다. 낡은 판을 올리면 그 뒤의 수정을 서버에서 되돌린다.
+ *   지운 세트면 없다고 답한다.
+ * - `requeue`: 송출 중이라 지금 보내지 못한 그 세트를 큐에 다시 넣는다.
+ */
+export interface OwnPresentationListener {
+  current(id: string): Presentation | undefined;
+  requeue(id: string): void;
+}
+
+let ownListener: OwnPresentationListener | null = null;
+
+export function setOwnPresentationListener(
+  next: OwnPresentationListener | null,
+): void {
+  ownListener = next;
+}
+
+/**
  * 세트를 서버에 올린다. 헤더와 곡 순서는 언제나, 덱은 서버에 마지막으로 올린 뒤
  * 바뀐 것만 보낸다. 서버가 모르는 곡이 있다고 하면(409) 모든 덱을 담아 한 번 더
  * 보낸다.
+ *
+ * 받은 사본이 아니라 스토어의 지금 판을 올린다(`OwnPresentationListener.current`). 그사이 지운
+ * 세트나 공유받은 사본이 된 자리는 요청 없이 끝낸다. 창구가 없으면(부팅 동기화 전) 받은 사본을
+ * 올린다.
+ *
+ * 송출 중에 409를 받으면 모든 덱을 다시 보내지 않고 큐에 다시 넣는다. 송출 화면은 요청이
+ * 0건이어야 하고, 큐는 송출을 마친 뒤 모든 덱을 담아 올린다(기억한 덱 지문을 버렸다).
  *
  * 글 한도에 맞춘 문서를 올리고 그 문서의 덱 지문을 기억한다. 줄이기 전의 덱으로 기억하면
  * 줄인 곡을 올릴 때마다 바뀐 곡으로 보고 다시 보낸다. 서버가 받을 수 없는 문서면 요청 없이
  * `UnsyncableDocumentError`를 던진다.
  */
-export async function pushPresentation(
-  presentation: Presentation,
-): Promise<void> {
+export async function pushPresentation(snapshot: Presentation): Promise<void> {
+  const presentation = ownListener
+    ? ownListener.current(snapshot.id)
+    : snapshot;
+  if (!presentation || presentation.access) return;
   const document = toSyncableDocument(presentation);
 
   const known = serverDecks.get(document.id);
@@ -180,6 +211,10 @@ export async function pushPresentation(
   } catch (err) {
     if (!(err instanceof ServerRejectedError && err.status === 409)) throw err;
     serverDecks.delete(document.id);
+    if (ownListener && isProjecting()) {
+      ownListener.requeue(document.id);
+      return;
+    }
     await sendChanges(toPresentationChanges(document));
   }
 

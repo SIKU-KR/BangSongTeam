@@ -9,6 +9,7 @@ import {
 import {
   savePresentation,
   loadAllPresentations,
+  loadPresentation,
   deletePresentation,
   saveSharedPresentation,
   deleteSharedPresentation,
@@ -102,6 +103,47 @@ describe("presentationRepository", () => {
 
     expect(valid).toEqual([]);
     expect(corrupted).toEqual([]);
+  });
+
+  describe("한 건 읽기 (loadPresentation)", () => {
+    it("저장본이 없으면 없다고 답한다", async () => {
+      expect(await loadPresentation(createId())).toEqual({
+        status: "missing",
+      });
+    });
+
+    it("스키마를 통과하지 못한 저장본은 없다고 하지 않고 읽지 못했다고 답한다", async () => {
+      await seedRawRecord({ id: "broken-1", title: 42 });
+
+      expect(await loadPresentation("broken-1")).toEqual({
+        status: "unreadable",
+      });
+    });
+
+    it("저장한 문서를 그대로 읽는다", async () => {
+      const presentation = makePresentation({ title: "주일 1부" });
+      await savePresentation(presentation);
+
+      expect(await loadPresentation(presentation.id)).toEqual({
+        status: "ok",
+        value: presentation,
+      });
+    });
+
+    it("새 버전의 탭이 남긴 baseUpdatedAt은 떼고 읽는다", async () => {
+      const presentation = makePresentation();
+      await seedRawRecord({
+        ...presentation,
+        baseUpdatedAt: presentation.updatedAt,
+      });
+
+      const loaded = await loadPresentation(presentation.id);
+
+      expect(loaded).toEqual({ status: "ok", value: presentation });
+      expect(loaded.status === "ok" && "baseUpdatedAt" in loaded.value).toBe(
+        false,
+      );
+    });
   });
 
   describe("한 브라우저의 소유자 저장본과 공유받은 사본", () => {

@@ -18,6 +18,7 @@ export {
   useBootPullPending,
 } from "./bootSync";
 export { flushBeforeSignOut, stopAccountSync } from "./accountEnd";
+export { startStorageSync, resumeHeldStorageChanges } from "./storageSync";
 export { refreshBackgroundCatalog } from "./backgroundSync";
 export { flushDeckSync } from "./deckSync";
 export { flushFolderSync, hasPendingFolderPush } from "./folderSync";

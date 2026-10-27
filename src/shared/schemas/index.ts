@@ -11,3 +11,4 @@ export * from "./presentationShare";
 export * from "./projection";
 export * from "./clientReport";
 export * from "./session";
+export * from "./storage";

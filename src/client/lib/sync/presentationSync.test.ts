@@ -4,6 +4,7 @@ import {
   DEFAULT_DECK_STYLE,
   PresentationDocumentSchema,
   toPresentationChanges,
+  type Presentation,
   type PresentationChanges,
   type PresentationDocument,
 } from "#shared";
@@ -71,6 +72,7 @@ import {
   pushPresentation,
   refreshSharedPresentation,
   rememberServerDocuments,
+  setOwnPresentationListener,
   syncFailureReasonOf,
   UnsyncableDocumentError,
 } from "./presentationSync";
@@ -278,6 +280,89 @@ describe("세트 변경분 push", () => {
     expect(api.patch.mock.calls[0][0].json).toEqual(
       toPresentationChanges(makeSet()),
     );
+  });
+});
+
+describe("스토어의 지금 판 올리기", () => {
+  const startPath = window.location.pathname;
+  const listener = {
+    current: vi.fn<(id: string) => Presentation | undefined>(),
+    requeue: vi.fn<(id: string) => void>(),
+  };
+
+  beforeEach(() => {
+    __resetServerDecksForTests();
+    api.patch.mockReset();
+    api.patch.mockResolvedValue(respond(200));
+    listener.current.mockReset();
+    listener.requeue.mockReset();
+    setOwnPresentationListener(listener);
+  });
+
+  afterEach(() => {
+    setOwnPresentationListener(null);
+    window.history.pushState({}, "", startPath);
+  });
+
+  it("큐에 든 사본이 아니라 올리는 순간 스토어에 있는 판을 올린다", async () => {
+    const queued = makeSet();
+    listener.current.mockReturnValue(
+      withLyrics({ ...queued, title: "큐에 넣은 뒤 고친 제목" }, 1, "새 가사"),
+    );
+
+    await pushPresentation(queued);
+
+    expect(listener.current).toHaveBeenCalledWith(DOC_ID);
+    expect(api.patch).toHaveBeenCalledTimes(1);
+    expect(api.patch.mock.calls[0][0].json.title).toBe("큐에 넣은 뒤 고친 제목");
+    expect(
+      api.patch.mock.calls[0][0].json.decks.find(
+        (deck) => deck.id === deckId(1),
+      )?.lyricsRaw,
+    ).toBe("새 가사");
+  });
+
+  it("그사이 지운 세트와 공유받은 사본이 된 자리는 요청 없이 끝낸다", async () => {
+    listener.current.mockReturnValueOnce(undefined);
+    await expect(pushPresentation(makeSet())).resolves.toBeUndefined();
+
+    listener.current.mockReturnValueOnce({
+      ...makeSet(),
+      access: { ownerName: "인도자" },
+    });
+    await expect(pushPresentation(makeSet())).resolves.toBeUndefined();
+
+    expect(api.patch).not.toHaveBeenCalled();
+  });
+
+  it("송출 중에 서버가 모르는 곡이 있다고 하면(409) 모든 덱을 다시 보내지 않고 큐에 다시 넣는다", async () => {
+    rememberServerDocuments([makeSet()]);
+    const edited = withLyrics(makeSet(), 0, "고친 가사");
+    listener.current.mockReturnValue(edited);
+    api.patch.mockResolvedValueOnce(respond(409));
+    window.history.pushState({}, "", `/present/${DOC_ID}/fullscreen`);
+
+    await pushPresentation(edited);
+
+    expect(api.patch).toHaveBeenCalledTimes(1);
+    expect(listener.requeue).toHaveBeenCalledExactlyOnceWith(DOC_ID);
+
+    window.history.pushState({}, "", "/presentations");
+    await pushPresentation(edited);
+
+    expect(sentDeckIds(1)).toEqual([deckId(0), deckId(1), deckId(2)]);
+  });
+
+  it("송출 중이 아니면 409 뒤에 모든 덱을 담아 곧바로 다시 보낸다", async () => {
+    rememberServerDocuments([makeSet()]);
+    const edited = withLyrics(makeSet(), 0, "고친 가사");
+    listener.current.mockReturnValue(edited);
+    api.patch.mockResolvedValueOnce(respond(409));
+
+    await pushPresentation(edited);
+
+    expect(listener.requeue).not.toHaveBeenCalled();
+    expect(sentDeckIds(1)).toEqual([deckId(0), deckId(1), deckId(2)]);
   });
 });
 

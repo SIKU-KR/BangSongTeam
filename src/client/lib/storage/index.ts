@@ -1,19 +1,23 @@
 export {
   savePresentation,
   loadAllPresentations,
+  loadPresentation,
   deletePresentation,
   saveSharedPresentation,
   deleteSharedPresentation,
+  type LoadedRecord,
 } from "./presentationRepository";
 export {
   saveFolder,
   saveFolders,
   loadAllFolders,
+  loadFolder,
   deleteFolders,
 } from "./folderRepository";
 export {
   saveSong,
   loadAllSongs,
+  loadSong,
   deleteSong,
   clearAllSongs,
   migrateLegacySongs,

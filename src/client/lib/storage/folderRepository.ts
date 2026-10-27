@@ -2,7 +2,9 @@ import { FolderSchema, type Folder } from "#shared";
 import { getOfflineDB } from "./db";
 import {
   toCorruptedRecord,
+  toLoadedRecord,
   type CorruptedRecord,
+  type LoadedRecord,
   type LoadResult,
 } from "./presentationRepository";
 
@@ -38,6 +40,12 @@ export async function loadAllFolders(): Promise<LoadResult<Folder>> {
   }
 
   return { valid, corrupted };
+}
+
+/** 폴더 저장본 한 건을 읽는다. 다른 탭이 쓰거나 지운 폴더를 다시 읽을 때 쓴다 */
+export async function loadFolder(id: string): Promise<LoadedRecord<Folder>> {
+  const db = await getOfflineDB();
+  return toLoadedRecord(await db.get("folders", id), FolderSchema);
 }
 
 export async function deleteFolders(ids: readonly string[]): Promise<void> {

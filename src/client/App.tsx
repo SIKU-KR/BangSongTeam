@@ -36,6 +36,8 @@ import {
   flushDeckSync,
   flushFolderSync,
   stopAccountSync,
+  startStorageSync,
+  resumeHeldStorageChanges,
   startSyncRecovery,
   resumeDeferredSyncRecovery,
   subscribeSyncRecovery,
@@ -85,6 +87,7 @@ function useHydration(): boolean {
         hydrateBackgroundCatalog(),
       ]);
       if (controller.signal.aborted || getCurrentUserId() !== userId) return;
+      startStorageSync();
       startBootSync(window.location.pathname);
       setBootstrappedUserId(userId);
     })();
@@ -253,6 +256,7 @@ function ProjectionLatchGate({
   useEffect(() => {
     if (isOnProjection) return;
     resumeDeferredSessionWork();
+    resumeHeldStorageChanges();
     runDeferredBootSync();
     resumeDeferredSyncRecovery();
     flushClientReports();

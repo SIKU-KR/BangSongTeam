@@ -1,8 +1,14 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import type { Folder } from "#shared";
 import { signInAsTestUser } from "../../test/sessionFixture";
-import { closeOfflineDB, OFFLINE_DB_NAME } from "../../lib/storage/db";
+import {
+  closeOfflineDB,
+  getOfflineDB,
+  OFFLINE_DB_NAME,
+} from "../../lib/storage/db";
 import { deleteFolders, loadAllFolders, saveFolders } from "../../lib/storage";
+import { __resetStorageChannelForTests } from "../../lib/storage/storageChannel";
+import { installFakeBroadcastChannel } from "../../test/fakeBroadcastChannel";
 import {
   __resetFolderSyncForTests,
   __setFolderPusherForTests,
@@ -19,6 +25,7 @@ import {
   getFolders,
   hydrateFoldersFromStorage,
   moveFolder,
+  reloadFoldersFromStorage,
   removeFoldersLocally,
   renameFolder,
   resetFolderStore,
@@ -411,6 +418,168 @@ describe("folderStore", () => {
       resetFolderStore();
       await hydrateFoldersFromStorage();
       expect(getFolders().map((f) => f.id)).toEqual([kept]);
+    });
+
+    it("병합 결과 중 바뀐 폴더와 지운 폴더만 저장소에 쓴다", async () => {
+      const same = folder("a00000000000000000001");
+      const changed = folder("a00000000000000000002");
+      const removed = folder("a00000000000000000003");
+      __loadFoldersForTests([same, changed, removed]);
+      vi.mocked(saveFolders).mockClear();
+      vi.mocked(deleteFolders).mockClear();
+
+      const newer = folder(changed.id, {
+        name: "서버에서 바꾼 이름",
+        updatedAt: "2026-09-25T00:00:00.000Z",
+      });
+      const added = folder("a00000000000000000004");
+      await applyServerFolders([{ ...same }, newer, added], [removed.id]);
+
+      expect(saveFolders).toHaveBeenCalledExactlyOnceWith([newer, added]);
+      expect(deleteFolders).toHaveBeenCalledExactlyOnceWith([removed.id]);
+    });
+
+    it("병합 결과가 지금 폴더와 같으면 저장소에 쓰지 않는다", async () => {
+      const same = folder("a00000000000000000001");
+      __loadFoldersForTests([same]);
+      vi.mocked(saveFolders).mockClear();
+      vi.mocked(deleteFolders).mockClear();
+
+      await applyServerFolders([{ ...same }]);
+
+      expect(saveFolders).not.toHaveBeenCalled();
+      expect(deleteFolders).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("다른 탭이 쓴 저장본 다시 읽기", () => {
+    async function writeFromOtherTab(record: unknown): Promise<void> {
+      const db = await getOfflineDB();
+      await db.put("folders", record as Folder);
+    }
+
+    async function deleteFromOtherTab(id: string): Promise<void> {
+      const db = await getOfflineDB();
+      await db.delete("folders", id);
+    }
+
+    it("다른 탭이 고친 폴더와 만든 폴더를 따르고, 지운 폴더는 빼고 대기 중인 push를 버린다", async () => {
+      const pushed: Folder[] = [];
+      __setFolderPusherForTests(async (f) => {
+        pushed.push(f);
+        return f;
+      });
+      setFolderSyncEnabled(true);
+      const renamed = createFolder(null, "이름을 바꿀 폴더");
+      const removed = createFolder(null, "지울 폴더");
+      await flushFolderWrites();
+      const otherName = {
+        ...renamed,
+        name: "다른 탭에서 바꾼 이름",
+        updatedAt: new Date(Date.now() + 1000).toISOString(),
+      };
+      const created = folder("a0000000000000000000e", {
+        name: "다른 탭에서 만든 폴더",
+      });
+      await writeFromOtherTab(otherName);
+      await writeFromOtherTab(created);
+      await deleteFromOtherTab(removed.id);
+
+      await reloadFoldersFromStorage([renamed.id, created.id, removed.id]);
+      await flushFolderSync();
+
+      expect(getFolder(renamed.id)).toEqual(otherName);
+      expect(getFolder(created.id)).toEqual(created);
+      expect(getFolder(removed.id)).toBeUndefined();
+      expect(pushed.map((f) => f.id)).not.toContain(removed.id);
+    });
+
+    it("이 탭이 아직 저장하지 않은 폴더는 다른 탭의 저장본으로 바꾸지 않는다", async () => {
+      const mine = createFolder(null, "이 탭의 폴더");
+      await flushFolderWrites();
+      await writeFromOtherTab({ ...mine, name: "다른 탭에서 바꾼 이름" });
+
+      renameFolder(mine.id, "이 탭에서 바꾼 이름");
+      await reloadFoldersFromStorage([mine.id]);
+
+      expect(getFolder(mine.id)?.name).toBe("이 탭에서 바꾼 이름");
+    });
+
+    it("읽는 동안 이 탭에서 고친 폴더는 읽은 저장본으로 바꾸지 않는다", async () => {
+      const mine = createFolder(null, "이 탭의 폴더");
+      await flushFolderWrites();
+      await writeFromOtherTab({ ...mine, name: "다른 탭에서 바꾼 이름" });
+
+      const reloading = reloadFoldersFromStorage([mine.id]);
+      renameFolder(mine.id, "읽는 동안 바꾼 이름");
+      await reloading;
+
+      expect(getFolder(mine.id)?.name).toBe("읽는 동안 바꾼 이름");
+    });
+
+    it("읽지 못한 저장본과 다른 계정의 폴더는 그대로 둔다", async () => {
+      const mine = createFolder(null, "이 탭의 폴더");
+      await flushFolderWrites();
+      await writeFromOtherTab({ id: mine.id, name: "" });
+      const foreign = folder("a0000000000000000000f", {
+        userId: "999999999999999999999",
+      });
+      await writeFromOtherTab(foreign);
+
+      await reloadFoldersFromStorage([mine.id, foreign.id]);
+
+      expect(getFolder(mine.id)).toEqual(mine);
+      expect(getFolder(foreign.id)).toBeUndefined();
+    });
+
+    it("다시 읽기는 저장소에 쓰지 않는다", async () => {
+      const mine = createFolder(null, "이 탭의 폴더");
+      await flushFolderWrites();
+      await writeFromOtherTab({ ...mine, name: "다른 탭에서 바꾼 이름" });
+      vi.mocked(saveFolders).mockClear();
+      vi.mocked(deleteFolders).mockClear();
+
+      await reloadFoldersFromStorage([mine.id]);
+      await flushFolderWrites();
+
+      expect(saveFolders).not.toHaveBeenCalled();
+      expect(deleteFolders).not.toHaveBeenCalled();
+      const { valid } = await loadAllFolders();
+      expect(valid.find((f) => f.id === mine.id)?.name).toBe(
+        "다른 탭에서 바꾼 이름",
+      );
+    });
+  });
+
+  describe("다른 탭에 알리기", () => {
+    let tabs: ReturnType<typeof installFakeBroadcastChannel>;
+
+    beforeEach(() => {
+      tabs = installFakeBroadcastChannel();
+      __resetStorageChannelForTests();
+    });
+
+    afterEach(() => {
+      __resetStorageChannelForTests();
+      vi.unstubAllGlobals();
+    });
+
+    it("폴더를 저장소에 쓰거나 지운 뒤에 그 id를 알린다", async () => {
+      const other = tabs.otherTab("chiton:storage");
+
+      const created = createFolder(null, "새 폴더");
+      await flushFolderWrites();
+      await removeFoldersLocally([created.id]);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      const change = {
+        v: 1,
+        userId: SEED_USER_ID,
+        kind: "folders",
+        ids: [created.id],
+      };
+      expect(other.received).toEqual([change, change]);
+      other.close();
     });
   });
 });

@@ -17,9 +17,11 @@ import {
 import { flushFolderSync } from "./folderSync";
 import {
   BackoffTracker,
+  BASE_BACKOFF_MS,
   MAX_RETRY_ATTEMPTS,
   type SyncRetryMode,
 } from "./backoff";
+import { isProjecting } from "../../features/presentation/fullscreen";
 
 /** 입력이 멈춘 뒤 이만큼 조용하면 올린다 */
 export const SYNC_DEBOUNCE_MS = 3000;
@@ -42,6 +44,7 @@ let enabled = false;
 let pending = new Map<string, PendingItem>();
 let failed = new Map<string, Presentation>();
 const inFlightDocs = new Set<string>();
+const cancelledInFlight = new Set<string>();
 const inFlightTasks = new Set<Promise<void>>();
 let timer: ReturnType<typeof setTimeout> | null = null;
 const backoff = new BackoffTracker();
@@ -105,6 +108,7 @@ function startPush(document: Presentation): void {
         setSyncStatus("presentation", "synced");
       }
     } catch (err) {
+      if (cancelledInFlight.has(document.id)) return;
       const sessionExpired = err instanceof SessionExpiredError;
       if (
         err instanceof OfflineError ||
@@ -146,6 +150,7 @@ function startPush(document: Presentation): void {
         recordSyncFailure(failure);
       }
     } finally {
+      cancelledInFlight.delete(document.id);
       inFlightDocs.delete(document.id);
       if (
         inFlightDocs.size === 0 &&
@@ -167,6 +172,10 @@ function startPush(document: Presentation): void {
 function dispatch(): void {
   if (!enabled) return;
   clearTimer();
+  if (isProjecting()) {
+    if (pending.size > 0) timer = setTimeout(dispatch, BASE_BACKOFF_MS);
+    return;
+  }
 
   const now = Date.now();
   const readyItems: PendingItem[] = [];
@@ -196,7 +205,8 @@ function dispatch(): void {
  * `wake`(포커스·탭 복귀·상태 확인 성공)는 서버가 거절해(5xx·429·401) 기다리는 항목을 앞당기지
  * 않고 백오프 횟수도 그대로 둔다. 그래야 `Retry-After`를 지키고 서버 재시도 한도에 이른다.
  * `reconnect`·`manual`은 백오프를 비우고 모두 보낸다. 회복 뒤 다시 실패하면 짧은 간격부터
- * 다시 센다. `manual`은 영구 실패로 남긴 항목도 실패 기록을 지우고 다시 넣는다.
+ * 다시 센다. `manual`은 영구 실패로 남긴 항목도 실패 기록을 지우고 다시 넣는다. 송출 중에는
+ * 앞당긴 항목도 송출을 마칠 때까지 보내지 않는다(`flushPendingSync` 참고).
  */
 export function retryPendingSyncNow(mode: SyncRetryMode): void {
   if (!enabled) return;
@@ -225,14 +235,6 @@ function requeueFailedDocuments(): void {
 }
 
 /**
- * 부팅 동기화가 올리다 영구 실패로 남긴 프레젠테이션을 맡긴다. 사용자가 '다시 시도'를
- * 누르면(`retryPendingSyncNow("manual")`) 큐가 다시 올린다.
- */
-export function holdFailedDocumentPush(document: Presentation): void {
-  failed.set(document.id, document);
-}
-
-/**
  * 문서 1건을 서버 push 큐에 넣는다.
  *
  * 활성 문서만 넣지 않는다 — 기존 IndexedDB 스케줄러의 제약을 물려받으면
@@ -258,6 +260,7 @@ export function scheduleDocumentPush(document: Presentation): void {
       : debounceReady;
 
   failed.delete(document.id);
+  cancelledInFlight.delete(document.id);
   pending.set(document.id, {
     document,
     firstScheduledAt,
@@ -271,10 +274,15 @@ export function scheduleDocumentPush(document: Presentation): void {
  * 대기 중인 push 1건을 취소한다 (영구 삭제한 문서).
  * 이미 나간 요청은 되돌릴 수 없으므로 호출자는 `flushPendingSync()`로 기다린다.
  * 지운 문서의 실패 기록도 함께 지운다. 없는 문서 때문에 헤더가 계속 빨갛게 남으면 안 된다.
+ *
+ * 보내는 중인 push는 끝났을 때 실패로 남기거나 다시 넣지 않는다(그 뒤 다시 넣으면 다시 센다).
+ * 남기면 '다시 시도'가 지운 세트를 다시 넣고, 오프라인으로 끝난 push는 연결이 돌아올 때 지운
+ * 세트를 올린다.
  */
 export function cancelDocumentPush(id: string): void {
   pending.delete(id);
   failed.delete(id);
+  if (inFlightDocs.has(id)) cancelledInFlight.add(id);
   backoff.reset(id);
   clearSyncFailure("presentation", id);
   scheduleNextTimer();
@@ -285,6 +293,23 @@ export function hasPendingDocumentPush(): boolean {
   return pending.size > 0 || inFlightDocs.size > 0;
 }
 
+/**
+ * 큐가 그 세트를 아직 끝내지 못했는지. 기다리는 중, 보내는 중, 영구 실패로 맡아 '다시 시도'를
+ * 기다리는 것을 모두 센다. 다른 탭이 쓴 저장본을 다시 읽을지 정할 때 쓴다. 이 탭이 아직 서버에
+ * 올리지 못한 판을 들고 있으면 다시 읽지 않는다.
+ */
+export function isDocumentQueued(id: string): boolean {
+  return pending.has(id) || inFlightDocs.has(id) || failed.has(id);
+}
+
+/**
+ * 대기 중인 push를 디바운스·백오프를 기다리지 않고 보내고, 보낸 것이 모두 끝날 때까지 기다린다.
+ * 같은 세트는 한 번에 하나만 보내므로, 보내는 중인 세트의 새 판은 앞 요청이 끝난 뒤 보낸다.
+ *
+ * 송출 중에는 새로 보내지 않고 이미 나간 요청이 끝나기만 기다린다. 송출 화면은 서버 요청이
+ * 0건이어야 한다. 큐는 송출하는 동안 몇 초마다 다시 보고, 송출을 마치면 남은 세트를 보낸다.
+ * 그동안 바뀐 내용은 저장소에 남아 있어 탭을 닫아도 다음 부팅이 올린다.
+ */
 export async function flushPendingSync(): Promise<void> {
   if (!enabled) return;
   for (const item of pending.values()) {
@@ -320,6 +345,7 @@ export function __resetSyncSchedulerForTests(): void {
   pusher = pushPresentation;
   clearPending();
   inFlightDocs.clear();
+  cancelledInFlight.clear();
   inFlightTasks.clear();
   backoff.reset();
 }
