@@ -5,6 +5,12 @@ import {
   fitPresentationToLimits,
   type Presentation,
 } from "#shared";
+import {
+  buildPresentationCopy,
+  hasUnsyncedEdits,
+  isSyncedWithServer,
+} from "../../features/presentation/presentationDocument";
+import { contentFingerprint } from "../sync/presentationLineage";
 import { getOfflineDB, type WorshipOfflineDB } from "./db";
 
 /**
@@ -22,7 +28,8 @@ export interface LoadResult<T> {
 
 /**
  * 프레젠테이션 저장본 전체를 읽은 결과. `repairedIds`는 글 한도에 맞춰 줄여 읽은 저장본의 id,
- * `restoredIds`는 보관본에서 되살려 그 자리에 다시 쓴 저장본의 id다
+ * `restoredIds`는 보관본에서 되살려 다시 쓴 저장본의 id다. 그 자리에 되살린 판과, 보관본의 올리지
+ * 않은 편집을 남긴 새 사본의 id가 함께 들어 있다.
  */
 export interface PresentationLoadResult extends LoadResult<Presentation> {
   repairedIds: string[];
@@ -77,6 +84,12 @@ interface HealedRow {
   row: unknown;
   keptRemain: boolean;
   restored: boolean;
+  copies: Presentation[];
+}
+
+interface HealPlan {
+  row: Presentation;
+  copies: Presentation[];
 }
 
 const KEPT_COPY_MARK = "#kept#";
@@ -201,6 +214,48 @@ export async function savePresentationIfStoredAt(
   return written;
 }
 
+function keepsEdits(doc: Presentation): boolean {
+  return !doc.access && hasUnsyncedEdits(doc);
+}
+
+function planHeal(
+  current: Presentation,
+  kept: readonly Presentation[],
+): HealPlan {
+  let row = current;
+  if (!hasUnsyncedEdits(current)) {
+    for (const doc of kept) {
+      if (!keepsEdits(doc) && isNewer(doc, row)) row = doc;
+    }
+  }
+  const seen = new Set([contentFingerprint(current), contentFingerprint(row)]);
+  let edits: Presentation[] = [];
+  for (const doc of kept) {
+    if (!keepsEdits(doc)) continue;
+    const fingerprint = contentFingerprint(doc);
+    if (seen.has(fingerprint)) continue;
+    seen.add(fingerprint);
+    edits.push(doc);
+  }
+  if (edits.length > 0 && isSyncedWithServer(row)) {
+    const newest = edits.reduce((a, b) => (isNewer(b, a) ? b : a));
+    row = newest;
+    edits = edits.filter((doc) => doc !== newest);
+  }
+  const now = new Date().toISOString();
+  return {
+    row,
+    copies: edits.map((doc) =>
+      buildPresentationCopy(doc, {
+        userId: doc.userId,
+        folderId: doc.folderId ?? null,
+        trashedAt: doc.trashedAt ?? null,
+        now,
+      }),
+    ),
+  };
+}
+
 async function healKeptCopies(db: OfflineDB, id: string): Promise<HealedRow> {
   const tx = db.transaction("presentations", "readwrite");
   const heal = (async (): Promise<HealedRow> => {
@@ -209,14 +264,19 @@ async function healKeptCopies(db: OfflineDB, id: string): Promise<HealedRow> {
     const copies: unknown[] = await tx.store.getAll(keptRange(id));
     if (stored === undefined) {
       await tx.store.delete(keptRange(id));
-      return { row: undefined, keptRemain: false, restored: false };
+      return { row: undefined, keptRemain: false, restored: false, copies: [] };
     }
     const current = readPresentation(stored);
     if (!current) {
-      return { row: stored, keptRemain: keys.length > 0, restored: false };
+      return {
+        row: stored,
+        keptRemain: keys.length > 0,
+        restored: false,
+        copies: [],
+      };
     }
 
-    let newest = current.presentation;
+    const kept: Presentation[] = [];
     let keptRemain = false;
     for (const [index, key] of keys.entries()) {
       const copy = copies[index];
@@ -227,13 +287,15 @@ async function healKeptCopies(db: OfflineDB, id: string): Promise<HealedRow> {
       }
       await tx.store.delete(key);
       if (read.presentation.access && !current.presentation.access) continue;
-      if (isNewer(read.presentation, newest)) newest = read.presentation;
+      kept.push(read.presentation);
     }
-    if (newest === current.presentation) {
-      return { row: stored, keptRemain, restored: false };
+    const plan = planHeal(current.presentation, kept);
+    for (const copy of plan.copies) await tx.store.put(copy);
+    if (plan.row === current.presentation) {
+      return { row: stored, keptRemain, restored: false, copies: plan.copies };
     }
-    await tx.store.put(newest);
-    return { row: newest, keptRemain, restored: true };
+    await tx.store.put(plan.row);
+    return { row: plan.row, keptRemain, restored: true, copies: plan.copies };
   })();
   const [healed] = await Promise.all([heal, tx.done]);
   return healed;
@@ -261,13 +323,24 @@ function replaceRow(rows: unknown[], id: string, row: unknown): void {
  *   (`savePresentation`).
  * - 보관한 사본(`<id>#kept#<updatedAt>`)은 원래 id마다 한 readwrite 트랜잭션에서 지금 저장본과
  *   함께 다시 읽어 고친다. 지금 저장본이 없으면 그 프레젠테이션이 지워진 것이라 보관본도 지운다.
- *   지금 저장본을 읽지 못하면 모두 그대로 둔다. 그 밖에는 읽을 수 있게 된 보관본 가운데 가장
- *   새 판이 지금 판보다 새로우면 그 판을 되살리고, 읽은 보관본은 지운다. 부팅 병합이 로컬과
- *   서버 사본을 고르는 것과 같은 나중 쓰기 우선이다. 다만 공유받은 사본은 소유자 자신의 저장본
- *   자리에 되살리지 않는다(`saveSharedPresentation`). 아직 읽지 못한 보관본은 남기고 원래 id로
- *   한 번만 알린다. 고치지 못하면(트랜잭션 실패) 보관본을 그대로 두고 알린다.
- * - 되살려 다시 쓴 저장본의 id는 `restoredIds`로 돌려준다. 다른 탭은 되살리기 전 판을 메모리에
- *   들고 있으므로 부른 쪽이 알린다.
+ *   지금 저장본을 읽지 못하면 모두 그대로 둔다. 그 밖에는 읽을 수 있게 된 보관본을 지우되, 올리지
+ *   않은 편집(`hasUnsyncedEdits`)은 잃지 않는다. 부팅 병합처럼 시각이 아니라 기준 판으로 가른다.
+ *   - 올리지 않은 편집이 없는 판끼리는 나중 쓰기 우선이라, 가장 새 보관본이 지금 판보다 새로우면 그
+ *     판을 되살린다. 지금 판이 올리지 않은 편집이면 더 새로운 보관본으로도 덮지 않는다.
+ *   - 지금 판이 서버와 맞춘 판이면 올리지 않은 편집인 보관본(여럿이면 가장 새 판)을 수정 시각과
+ *     상관없이 되살린다. 맞춘 판은 서버에 있고, 되살린 편집은 큐와 부팅 병합이 기준 판을 실어
+ *     올려 서버와 엇갈리면(412) 사본으로 남는다. 시계가 늦은 기기의 편집은 서버 판보다 이른 시각을
+ *     달고 있어, 시각으로 고르면 사본 없이 사라진다.
+ *   - 그 밖의 올리지 않은 편집인 보관본(지금 판도 올리지 않은 편집이거나 기준 판을 모르는 이전
+ *     저장본일 때, 여럿 가운데 되살리지 않은 것)은 지금 판·되살린 판·다른 보관본과 내용이 다르면 같은
+ *     폴더·휴지통 자리의 새 프레젠테이션 "제목 (사본)"으로 같은 트랜잭션에서 저장한다. 새
+ *     프레젠테이션이라 다음 부팅 병합이 올린다.
+ *
+ *   공유받은 사본은 소유자 자신의 저장본 자리에 되살리지 않는다(`saveSharedPresentation`). 아직
+ *   읽지 못한 보관본은 남기고 원래 id로 한 번만 알린다. 고치지 못하면(트랜잭션 실패) 보관본을
+ *   그대로 두고 알린다.
+ * - 되살려 다시 쓴 저장본과 새 사본의 id는 `restoredIds`로 돌려준다. 다른 탭은 되살리기 전 판을
+ *   메모리에 들고 있고 새 사본을 모르므로 부른 쪽이 알린다.
  *
  * 보관본 고치기 말고는 쓰지 않는다.
  */
@@ -289,8 +362,10 @@ export async function loadAllPresentations(): Promise<PresentationLoadResult> {
     try {
       const healed = await healKeptCopies(db, id);
       replaceRow(rows, id, healed.row);
+      rows.push(...healed.copies);
       if (healed.keptRemain) keptUnread.add(id);
       if (healed.restored) restoredIds.push(id);
+      restoredIds.push(...healed.copies.map((copy) => copy.id));
     } catch {
       keptUnread.add(id);
     }
