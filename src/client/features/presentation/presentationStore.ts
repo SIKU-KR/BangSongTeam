@@ -291,7 +291,7 @@ async function writeDocuments(ids: string[]): Promise<void> {
   announceStorageChange("presentations", written);
   for (const id of superseded) {
     skippedReloads.add(id);
-    if (!isProjecting()) void reloadSkippedRecord(id);
+    if (!isProjecting() && !isDocumentQueued(id)) void reloadSkippedRecord(id);
   }
 }
 
@@ -1277,6 +1277,11 @@ async function reloadSkippedRecord(id: string): Promise<void> {
  * 탭의 판으로 덮지 않고 다시 읽는다(송출 중에는 그대로 둔다). 그 판은 다른 탭이 올린다. 그 밖에는
  * 저장본이 이 탭이 마지막으로 쓴 판일 때만 쓰고(`savePresentationIfStoredAt`), 아니면 쓰지 않고 다시
  * 읽는다. 알림이 아직 오지 않은 다른 탭의 저장본도 동기화 결과로 덮지 않는다.
+ *
+ * 그때 큐가 그 세트를 아직 끝내지 못했으면(다시 얹어 보내는 중 등) 곧바로 읽지 않고 건너뛴 것으로
+ * 기억해, 그 올리기의 결과가 다시 읽는다. 보내는 동안 메모리를 다른 탭의 판으로 바꾸면 결과가 그 판을
+ * 이 탭이 보낸 판 위에서 고친 판으로 보고 기준 판을 옮겨, 그 판이 다음 올리기에서 이 탭이 올린 판을
+ * 사본 없이 덮는다.
  */
 export function markPresentationSynced(
   id: string,

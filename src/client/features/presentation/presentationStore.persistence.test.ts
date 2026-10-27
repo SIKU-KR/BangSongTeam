@@ -1501,6 +1501,78 @@ describe("presentationStore 영속성", () => {
             expect(stored.title).toBe("이 탭의 두 번째 이름");
             expect(await storedById(FIRST.id)).toEqual(otherTab);
           });
+
+          it("다시 얹어 보내는 동안 알림 없이 다른 탭이 쓴 저장본은 보낸 결과를 받은 뒤에 다시 읽어, 이 탭이 올린 판 위에 얹지 않는다", async () => {
+            await hydrateWith({ ...FIRST, updatedAt: T1, baseUpdatedAt: T1 });
+            setSyncEnabled(true);
+            renamePresentation(FIRST.id, "이 탭의 첫 이름");
+            await flushPendingWrites();
+            const firstVersion = getPresentationById(FIRST.id)!;
+            stored = {
+              ...structuredClone(FIRST),
+              title: "이 탭의 첫 이름",
+              updatedAt: T2,
+            };
+            renamePresentation(FIRST.id, "이 탭의 두 번째 이름");
+            await flushPendingWrites();
+            let release: () => void = () => undefined;
+            const held = new Promise<void>((resolve) => {
+              release = resolve;
+            });
+            fake.restore();
+            fake = installFakeApi({
+              "PATCH /api/presentations/*": async ({ body }) => {
+                const changes = body as PresentationChanges;
+                if (changes.baseUpdatedAt !== stored.updatedAt) {
+                  return {
+                    status: 412,
+                    body: {
+                      error: API_ERRORS.presentation.conflict,
+                      presentation: stored,
+                    },
+                  };
+                }
+                await held;
+                stored = {
+                  ...stored,
+                  title: changes.title,
+                  updatedAt: laterThan(stored.updatedAt, changes.updatedAt),
+                };
+                return { body: { ok: true, updatedAt: stored.updatedAt } };
+              },
+            });
+            const otherTab: Presentation = {
+              ...firstVersion,
+              serviceDate: "2026-12-25",
+              updatedAt: T3,
+            };
+
+            const pushing = flushPendingSync();
+            await vi.waitFor(() => expect(fake.calls).toHaveLength(2));
+            await writeFromOtherTab(otherTab);
+            await flushPendingWrites();
+            expect(await storedById(FIRST.id)).toEqual(otherTab);
+            expect(getPresentationById(FIRST.id)?.title).toBe(
+              "이 탭의 두 번째 이름",
+            );
+            release();
+            await pushing;
+            await vi.waitFor(() =>
+              expect(getPresentationById(FIRST.id)).toEqual(otherTab),
+            );
+            await flushPendingWrites();
+
+            expect(
+              fake.calls
+                .map(({ body }) => body as PresentationChanges)
+                .map((changes) => [changes.title, changes.baseUpdatedAt]),
+            ).toEqual([
+              ["이 탭의 두 번째 이름", T1],
+              ["이 탭의 두 번째 이름", T2],
+            ]);
+            expect(stored.title).toBe("이 탭의 두 번째 이름");
+            expect(await storedById(FIRST.id)).toEqual(otherTab);
+          });
         });
       });
 
