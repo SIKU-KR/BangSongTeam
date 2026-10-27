@@ -374,6 +374,41 @@ describe("동기화 회복", () => {
     expect(healthCalls(server)).toBe(1);
   });
 
+  it("송출로 들어가기 전에 쌓인 회복 신호는 송출 중에 돌리지 않고 송출을 마치면 돌린다", async () => {
+    let releaseBoot: () => void = () => undefined;
+    recoveryDeps.retryBootSyncIfNeeded.mockImplementationOnce(
+      () =>
+        new Promise<boolean>((resolve) => {
+          releaseBoot = () => resolve(false);
+        }),
+    );
+    const listener = vi.fn();
+    subscribeSyncRecovery(listener);
+    start();
+
+    window.dispatchEvent(new Event("focus"));
+    window.dispatchEvent(new Event("online"));
+    paused = true;
+    releaseBoot();
+    await __waitForSyncRecoveryForTests();
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(listener.mock.calls).toEqual([["wake"]]);
+    expect(recoveryDeps.resumeMediaCaching).toHaveBeenCalledTimes(1);
+    expect(recoveryDeps.retryBootSyncIfNeeded).toHaveBeenCalledTimes(1);
+
+    paused = false;
+    resumeDeferredSyncRecovery();
+    await __waitForSyncRecoveryForTests();
+
+    expect(listener.mock.calls).toEqual([["wake"], ["reconnect"]]);
+    expect(recoveryDeps.retryBootSyncIfNeeded).toHaveBeenCalledTimes(2);
+    expect(recoveryDeps.resumeMediaCaching).toHaveBeenLastCalledWith(
+      "reconnect",
+      { afterOutage: false },
+    );
+  });
+
   it("offline 이벤트는 닿지 못함으로 남기고, 브라우저가 오프라인인 동안에는 확인하지 않다가 online이 오면 곧바로 확인한다", async () => {
     start();
     setNavigatorOnline(false);
@@ -790,6 +825,39 @@ describe("동기화 회복", () => {
         expect(getBackgroundCatalogStatus()).toBe("synced"),
       );
       expect(catalogCalls).toBe(3);
+    });
+
+    it("송출로 들어가기 전에 쌓인 회복 신호로는 송출 중에 목록을 받지 않고, 송출을 마치면 받는다", async () => {
+      setVisibility("visible");
+      catalogReplies = [unavailable];
+      await refreshBackgroundCatalog();
+      expect(getBackgroundCatalogStatus()).toBe("error");
+      let releaseBoot: () => void = () => undefined;
+      recoveryDeps.retryBootSyncIfNeeded.mockImplementationOnce(
+        () =>
+          new Promise<boolean>((resolve) => {
+            releaseBoot = () => resolve(false);
+          }),
+      );
+      start();
+
+      window.dispatchEvent(new Event("focus"));
+      window.dispatchEvent(new Event("online"));
+      paused = true;
+      releaseBoot();
+      await settle();
+
+      expect(catalogCalls).toBe(1);
+      expect(getBackgroundCatalogStatus()).toBe("error");
+
+      paused = false;
+      resumeDeferredSyncRecovery();
+      await settle();
+
+      await vi.waitFor(() =>
+        expect(getBackgroundCatalogStatus()).toBe("synced"),
+      );
+      expect(catalogCalls).toBe(2);
     });
 
     it("받은 목록은 회복 신호가 와도 다시 받지 않는다", async () => {

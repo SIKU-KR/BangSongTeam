@@ -154,8 +154,12 @@ function resume(mode: SyncRetryMode): Promise<void> {
   resumeInFlight = (async (): Promise<void> => {
     let next: SyncRetryMode | null = mode;
     while (next) {
-      runningMode = next;
       queuedMode = null;
+      if (isPaused()) {
+        deferUntilUnpaused(next);
+        return;
+      }
+      runningMode = next;
       await runResume(next);
       next = queuedMode;
     }
