@@ -10,10 +10,30 @@ export const OPERATOR_BRAND = "시쿠랩스";
 export const OPERATOR_NAME = "박범식";
 export const OPERATOR_EMAIL = "peter012677@naver.com";
 
+/**
+ * 이용약관·개인정보 처리방침의 시행일(`YYYY-MM-DD`, 한국 시각 0시부터). 두 글은 바꾸면 시행 7일
+ * 전부터 서비스 화면에 알린다고 정해 두어(처리방침 11항, 약관 제9조), 글을 고치면 이 날짜를
+ * 고친 글이 배포되고 7일 뒤 이후로 옮긴다. 시행일 전까지 `LegalChangeNotice`가 바뀐다는 안내를
+ * 띄운다.
+ */
+export const LEGAL_EFFECTIVE_DATE = "2026-11-03";
+
+const legalDate = (date: string): string => {
+  const [year, month, day] = date.split("-").map(Number);
+  return `${year}년 ${month}월 ${day}일`;
+};
+
 export const LEGAL_COPY = {
   terms: "이용약관",
   privacy: "개인정보 처리방침",
-  effectiveDate: (date: string) => `시행일: ${date}`,
+  effectiveDate: (date: string) => `시행일: ${legalDate(date)}`,
+  change: {
+    title: (date: string) =>
+      `${legalDate(date)}부터 이용약관과 개인정보 처리방침이 바뀌어요`,
+    description:
+      "이메일로 가입할 때 받는 정보와 개인정보를 처리하는 해외 업체(Cloudflare)를 더했어요.",
+    dismiss: "약관 변경 안내 닫기",
+  },
 } as const;
 
 export const AUTH_COPY = {

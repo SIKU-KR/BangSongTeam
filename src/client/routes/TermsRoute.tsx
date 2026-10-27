@@ -8,6 +8,7 @@ import {
 } from "#components/layout/LegalDocument";
 import {
   LEGAL_COPY,
+  LEGAL_EFFECTIVE_DATE,
   OPERATOR_BRAND,
   OPERATOR_EMAIL,
   OPERATOR_NAME,
@@ -22,7 +23,10 @@ import { APP_NAME } from "#shared";
  */
 export function TermsRoute(): React.JSX.Element {
   return (
-    <LegalDocument title={LEGAL_COPY.terms} effectiveDate="2026년 9월 27일">
+    <LegalDocument
+      title={LEGAL_COPY.terms}
+      effectiveDate={LEGAL_EFFECTIVE_DATE}
+    >
       <LegalSection title="제1조 (목적)">
         <p>
           이 약관은 {OPERATOR_BRAND}(운영자 {OPERATOR_NAME}, 이하
@@ -34,16 +38,16 @@ export function TermsRoute(): React.JSX.Element {
 
       <LegalSection title="제2조 (서비스 내용)">
         <p>
-          서비스는 예배용 찬양 가사 슬라이드를 만들고, 세트로 묶어 송출하고,
-          다른 이용자와 곡을 나누는 기능을 무료로 제공합니다.
+          서비스는 예배용 찬양 가사 슬라이드를 만들고, 프레젠테이션으로 묶어
+          송출하고, 다른 이용자와 곡을 나누는 기능을 무료로 제공합니다.
         </p>
       </LegalSection>
 
       <LegalSection title="제3조 (계정)">
         <LegalList>
           <li>
-            카카오·네이버·Google 계정으로 로그인하고 이 약관과 개인정보
-            처리방침에 동의하면 가입됩니다.
+            카카오·네이버·Google 계정으로 로그인하거나 이메일로 계정을 만든 뒤,
+            이 약관과 개인정보 처리방침에 동의하면 가입됩니다.
           </li>
           <li>만 14세 이상만 가입할 수 있습니다.</li>
           <li>
@@ -107,7 +111,7 @@ export function TermsRoute(): React.JSX.Element {
         <p>
           서비스는 개인이 무료로 운영합니다. 운영자는 기능을 바꾸거나 서비스를
           중단할 수 있고, 중단할 때는 30일 전에 서비스 화면에 알립니다. 중요한
-          곡과 세트는 이용자가 따로 보관해 두기를 권합니다.
+          곡과 프레젠테이션은 이용자가 따로 보관해 두기를 권합니다.
         </p>
       </LegalSection>
 

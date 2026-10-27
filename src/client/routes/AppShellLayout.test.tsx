@@ -50,7 +50,7 @@ import { DRIVE_COPY } from "#copy/drive";
 import { FOLDER_COPY } from "#copy/folders";
 import { PRESENTATION_COPY } from "#copy/presentation";
 import { SHELL_COPY } from "#copy/shell";
-import { AUTH_COPY } from "#copy/auth";
+import { AUTH_COPY, LEGAL_COPY, LEGAL_EFFECTIVE_DATE } from "#copy/auth";
 import { SEED_PRESENTATIONS, SEED_USER_ID } from "../test/presentationFixture";
 import { authClient } from "../lib/auth/authClient";
 import { getSessionState } from "../lib/auth/sessionStore";
@@ -1888,5 +1888,36 @@ describe("AppShellLayout (빈 곳과 휴지통 폴더의 메뉴)", () => {
     expect(within(menu).getByTestId("action-open")).toBeInTheDocument();
     expect(within(menu).getByTestId("action-empty-trash")).toBeEnabled();
     expect(within(menu).queryByTestId("new-menu-folder")).toBeNull();
+  });
+});
+
+describe("AppShellLayout (안내 배너)", () => {
+  beforeEach(() => {
+    signInAsTestUser();
+    resetPresentationStore();
+    resetFolderStore();
+    window.localStorage.clear();
+    __loadDocumentsForTests(SEED_PRESENTATIONS);
+    vi.restoreAllMocks();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("약관이 바뀌기 전에는 드라이브 위에 바뀐다는 안내를 띄우고, 시행일부터는 띄우지 않는다", () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-11-02T12:00:00+09:00"));
+    const { unmount } = renderShell();
+
+    expect(screen.getByTestId("legal-change-notice")).toHaveTextContent(
+      LEGAL_COPY.change.title(LEGAL_EFFECTIVE_DATE),
+    );
+    unmount();
+
+    vi.setSystemTime(new Date("2026-11-03T00:00:00+09:00"));
+    renderShell();
+
+    expect(screen.queryByTestId("legal-change-notice")).toBeNull();
   });
 });

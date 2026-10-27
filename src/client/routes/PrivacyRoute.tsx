@@ -8,6 +8,7 @@ import {
 } from "#components/layout/LegalDocument";
 import {
   LEGAL_COPY,
+  LEGAL_EFFECTIVE_DATE,
   OPERATOR_BRAND,
   OPERATOR_EMAIL,
   OPERATOR_NAME,
@@ -17,12 +18,17 @@ import { APP_NAME } from "#shared";
 /**
  * 개인정보 처리방침 (개인정보 보호법 제30조).
  *
- * 수집 항목은 `src/db/collections.ts`의 사용자 문서와 `src/server/lib/auth.ts`의 소셜 프로필
- * 매핑을 따른다. 저장하는 값이 바뀌면 이 글도 함께 고친다.
+ * 수집 항목은 `src/db/collections.ts`의 사용자 문서와 `src/server/lib/auth.ts`의 이메일 가입·소셜
+ * 프로필 매핑을, 국외 이전은 서비스 호스팅(Google Cloud)과 도메인 프록시(`infra/cloudflare-proxy`)를
+ * 따른다. 저장하는 값이나 요청이 지나는 곳이 바뀌면 이 글도 함께 고치고 시행일을 옮긴다
+ * (`LEGAL_EFFECTIVE_DATE`).
  */
 export function PrivacyRoute(): React.JSX.Element {
   return (
-    <LegalDocument title={LEGAL_COPY.privacy} effectiveDate="2026년 9월 27일">
+    <LegalDocument
+      title={LEGAL_COPY.privacy}
+      effectiveDate={LEGAL_EFFECTIVE_DATE}
+    >
       <p>
         {OPERATOR_BRAND}(운영자 {OPERATOR_NAME})가 운영하는 {APP_NAME}(이하
         &lsquo;서비스&rsquo;)는 「개인정보 보호법」에 따라 이용자의 개인정보를
@@ -33,6 +39,10 @@ export function PrivacyRoute(): React.JSX.Element {
       <LegalSection title="1. 처리하는 개인정보 항목과 수집 방법">
         <LegalList>
           <li>
+            이메일로 가입할 때 이용자가 직접 입력하는 정보: 이름, 이메일 주소,
+            비밀번호(복원할 수 없도록 일방향 암호화해 저장)
+          </li>
+          <li>
             카카오·네이버·Google 로그인 시 해당 서비스에서 받는 정보: 이름 또는
             닉네임, 이메일 주소(제공되는 경우), 프로필 이미지, 소셜 계정 식별자
           </li>
@@ -41,8 +51,8 @@ export function PrivacyRoute(): React.JSX.Element {
             정보(User-Agent), 접속 일시
           </li>
           <li>
-            이용자가 서비스에서 직접 만든 정보: 곡(가사·슬라이드), 세트, 폴더,
-            신고 내용
+            이용자가 서비스에서 직접 만든 정보: 곡(가사·슬라이드), 프레젠테이션,
+            폴더, 신고 내용
           </li>
           <li>이용 동의 기록: 약관·개인정보 수집·이용에 동의한 시각</li>
         </LegalList>
@@ -51,17 +61,18 @@ export function PrivacyRoute(): React.JSX.Element {
       <LegalSection title="2. 처리 목적">
         <LegalList>
           <li>회원 식별과 로그인 유지</li>
-          <li>만든 곡과 세트를 계정에 저장하고 여러 기기에서 동기화</li>
-          <li>공유 라이브러리와 세트 링크 공유 기능 제공</li>
+          <li>만든 곡과 프레젠테이션을 계정에 저장하고 여러 기기에서 동기화</li>
+          <li>공유 라이브러리와 프레젠테이션 링크 공유 기능 제공</li>
           <li>신고 처리와 부정 이용 방지</li>
         </LegalList>
       </LegalSection>
 
       <LegalSection title="3. 다른 이용자에게 공개되는 정보">
         <p>
-          곡을 공유 라이브러리에 공개하거나 세트 링크를 공유하면 이용자의 이름
-          또는 닉네임이 작성자로 함께 표시됩니다. Google 로그인은 Google 계정에
-          등록된 이름이 쓰입니다.
+          곡을 공유 라이브러리에 공개하거나 프레젠테이션 링크를 공유하면
+          이용자의 이름 또는 닉네임이 작성자로 함께 표시됩니다. Google 로그인은
+          Google 계정에 등록된 이름이, 이메일 가입은 가입할 때 입력한 이름이
+          쓰입니다.
         </p>
       </LegalSection>
 
@@ -86,8 +97,8 @@ export function PrivacyRoute(): React.JSX.Element {
       <LegalSection title="5. 제3자 제공과 국외 이전">
         <p>
           서비스는 개인정보를 제3자에게 제공하지 않습니다. 다만 서비스 운영을
-          위해 다음과 같이 개인정보를 국외에 보관합니다(「개인정보 보호법」
-          제28조의8 제1항 제3호).
+          위해 다음과 같이 개인정보를 국외에 보관하거나 국외 사업자에게 처리를
+          맡깁니다(「개인정보 보호법」 제28조의8 제1항 제3호).
         </p>
         <LegalList>
           <li>
@@ -102,18 +113,35 @@ export function PrivacyRoute(): React.JSX.Element {
             데이터베이스, Cloud Storage 저장소)
           </li>
           <li>보유 기간: 4항과 같음</li>
+        </LegalList>
+        <LegalList>
           <li>
-            국외 이전을 원하지 않으면 회원 탈퇴를 요청할 수 있습니다. 이 경우
-            서비스를 이용할 수 없습니다.
+            이전받는 자: Cloudflare, Inc. (privacyquestions@cloudflare.com)
+          </li>
+          <li>이전 국가: 미국 등 Cloudflare 데이터센터가 있는 국가</li>
+          <li>이전 일시와 방법: 서비스를 이용할 때 네트워크를 통해 전송</li>
+          <li>
+            이전 항목: 접속 IP 주소, 브라우저 정보(User-Agent), 로그인 쿠키,
+            요청 내용(로그인·가입할 때 입력한 정보를 포함)
+          </li>
+          <li>이전 목적: 서비스 도메인 연결(요청 전달)과 배경 미디어 캐시</li>
+          <li>
+            보유 기간: 요청을 전달하는 동안. 배경 미디어 사본과 접속 기록은
+            Cloudflare가 정한 보관 기간 동안
           </li>
         </LegalList>
+        <p>
+          국외 이전을 원하지 않으면 회원 탈퇴를 요청할 수 있습니다. 이 경우
+          서비스를 이용할 수 없습니다.
+        </p>
       </LegalSection>
 
       <LegalSection title="6. 쿠키와 기기 저장소">
         <p>
           로그인 유지에 필요한 쿠키만 사용하며 광고·분석용 쿠키는 쓰지 않습니다.
-          오프라인에서도 쓸 수 있도록 곡과 세트를 브라우저 저장소(IndexedDB)에
-          보관합니다. 브라우저 설정에서 쿠키를 막으면 로그인할 수 없습니다.
+          오프라인에서도 쓸 수 있도록 곡과 프레젠테이션을 브라우저
+          저장소(IndexedDB)에, 배경 영상과 이미지를 브라우저 캐시에 보관합니다.
+          브라우저 설정에서 쿠키를 막으면 로그인할 수 없습니다.
         </p>
       </LegalSection>
 
@@ -135,6 +163,7 @@ export function PrivacyRoute(): React.JSX.Element {
       <LegalSection title="9. 안전성 확보 조치">
         <LegalList>
           <li>모든 통신을 HTTPS로 암호화합니다.</li>
+          <li>비밀번호는 복원할 수 없도록 일방향 암호화해 저장합니다.</li>
           <li>로그인 쿠키는 스크립트가 읽을 수 없게(httpOnly) 발급합니다.</li>
           <li>개인정보에 접근할 수 있는 사람을 운영자로 한정합니다.</li>
         </LegalList>

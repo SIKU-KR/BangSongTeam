@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { API_ERRORS } from "#shared";
-import { AUTH_COPY } from "./auth";
+import { AUTH_COPY, LEGAL_COPY } from "./auth";
 import { BACKGROUND_COPY } from "./backgrounds";
 import { COMMON_COPY, ERROR_COPY } from "./common";
 import { DRIVE_COPY } from "./drive";
@@ -14,6 +14,7 @@ import { SHELL_COPY } from "./shell";
 const COPY_MODULES = {
   API_ERRORS,
   AUTH_COPY,
+  LEGAL_COPY,
   BACKGROUND_COPY,
   COMMON_COPY,
   ERROR_COPY,
