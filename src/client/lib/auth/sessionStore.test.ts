@@ -1086,7 +1086,7 @@ describe("세션 스토어", () => {
       expect(window.sessionStorage.getItem(SESSION_END_KEY)).toBe("otherTab");
     });
 
-    it("로그아웃·이메일 로그인·세션 확인 결과를 알리고, 부팅은 알리지 않는다", async () => {
+    it("로그아웃·이메일 로그인·세션 확인 결과를 알리고, 캐시와 같은 계정이나 로그인하지 않은 채로 들어간 부팅은 알리지 않는다", async () => {
       const other = tabs.otherTab(SESSION_CHANNEL);
       await signInAsCachedUser();
       await nextTask();
@@ -1117,6 +1117,60 @@ describe("세션 스토어", () => {
         { userId: USER_ID },
         { userId: OTHER_USER_ID },
       ]);
+    });
+
+    it("부팅이 서버에 물어 캐시와 다른 계정을 찾으면 그 계정을 다른 탭에 알린다", async () => {
+      const other = tabs.otherTab(SESSION_CHANNEL);
+      await saveExpiredSession();
+      __setSessionFetcherForTests(async () =>
+        makeUser({ userId: OTHER_USER_ID }),
+      );
+
+      await hydrateSession();
+      await nextTask();
+
+      expect(getCurrentUserId()).toBe(OTHER_USER_ID);
+      expect(other.received).toEqual([{ userId: OTHER_USER_ID }]);
+    });
+
+    it("로그인하고 돌아온 부팅(캐시 없음)은 들어간 계정을 다른 탭에 알린다", async () => {
+      const other = tabs.otherTab(SESSION_CHANNEL);
+      __setSessionFetcherForTests(async () => makeUser());
+
+      await hydrateSession();
+      await nextTask();
+
+      expect(other.received).toEqual([{ userId: USER_ID }]);
+    });
+
+    it("부팅이 캐시의 세션이 끝난 것을 서버에서 찾으면 다른 탭에 로그아웃을 알린다", async () => {
+      const other = tabs.otherTab(SESSION_CHANNEL);
+      await saveExpiredSession();
+      __setSessionFetcherForTests(async () => null);
+
+      await hydrateSession();
+      await nextTask();
+
+      expect(getSessionState().status).toBe("unauthenticated");
+      expect(other.received).toEqual([{ userId: null }]);
+    });
+
+    it("부팅이 서버에 물어 캐시와 같은 계정을 확인하거나 서버에 닿지 못하면 알리지 않는다", async () => {
+      const other = tabs.otherTab(SESSION_CHANNEL);
+      await saveExpiredSession();
+      __setSessionFetcherForTests(async () => makeUser());
+      await hydrateSession();
+
+      __resetSessionForTests();
+      __setPageReloadForTests(reload);
+      stopListening = listenToOtherTabs();
+      await saveExpiredSession();
+      __setSessionFetcherForTests(offlineFetcher);
+      await hydrateSession();
+      await nextTask();
+
+      expect(getCurrentUserId()).toBe(USER_ID);
+      expect(other.received).toEqual([]);
     });
 
     it("세션 확인이 세션 없음을 찾으면 다른 탭에 로그아웃을 알린다", async () => {

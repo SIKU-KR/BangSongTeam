@@ -524,11 +524,17 @@ function isServerChange(
  * (`reloadPresentationsFromStorage`)는, 병합이 서버 판으로 바꾸거나 지워도 그 저장본에 쓰거나 지우지
  * 않고 다시 읽는다(송출 중에는 그대로 둔다). 그 저장본은 다른 탭이 아직 올리지 못한 편집일 수 있어,
  * 덮거나 지우면 그 탭이 올리기 전에 닫힐 때 그 편집이 사라진다. 올리는 일은 그 탭이 한다.
+ *
+ * 세션 사용자의 것도 세션 사용자에게 공유된 것도 아닌 세트는 넣지 않는다(하이드레이션과 같은 기준).
+ * 계정이 바뀐 것을 놓친 탭이 다른 계정의 쿠키로 받은 목록이 그 계정의 비공개 세트를 이 계정의
+ * 드라이브에 넣고 저장하면 안 된다. 그런 목록은 부팅 동기화가 먼저 통째로 버린다.
  */
 export function applyServerDocuments(
-  documents: Presentation[],
+  incoming: Presentation[],
   removedIds: readonly string[] = [],
 ): void {
+  const userId = getCurrentUserId();
+  const documents = incoming.filter((doc) => isVisibleTo(doc, userId));
   const previous = state.byId;
   const previousActive = state.activeId;
   const byId = Object.fromEntries(documents.map((doc) => [doc.id, doc]));

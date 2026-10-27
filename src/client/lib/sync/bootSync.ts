@@ -104,7 +104,11 @@ import {
   isProjecting,
   isProjectionPath,
 } from "../../features/presentation/fullscreen";
-import { getCurrentUserId, revalidateSession } from "../auth/sessionStore";
+import {
+  getCurrentUserId,
+  requestSessionCheck,
+  revalidateSession,
+} from "../auth/sessionStore";
 import { announcePull } from "../storage/storageChannel";
 
 /**
@@ -289,6 +293,13 @@ export function useBootPullPending(domain: BootPullDomain): boolean {
  * (`refreshOwnDataIfStale`)가 받은 지 얼마나 됐는지 세고, 같은 브라우저의 다른 탭에도 받았다고
  * 알린다.
  *
+ * 받은 폴더·프레젠테이션·보관함 목록에 다른 계정의 항목(이 계정의 것도 이 계정에 공유된 것도 아닌
+ * 항목)이 있으면 쿠키가 다른 계정의 것이다. 그 단계를 받은 결과와 함께 버리고 '다시 시도'로만 다시
+ * 받으며, 세션을 확인한다(`requestSessionCheck`). 다른 탭의 로그인 변화를 듣지 못한 탭(알림 채널이
+ * 없는 브라우저, 놓친 알림)의 받기는 401·403 없이 그 계정의 목록을 받는다. 병합하면 그 계정의 비공개
+ * 세트가 이 계정의 드라이브에 들어가 저장되고, 서버 목록에 없는 이 계정의 항목을 그 쿠키로 다시
+ * 올린다. 세션 확인이 다른 계정을 찾으면 새로고침한다.
+ *
  * 결과는 폴더·프레젠테이션·곡 도메인별로 따로 남기고, 올리지 못한 항목은 항목별
  * 실패로 남긴다. 도메인 단계만 바꾸면 같은 도메인 큐의 다음 성공이 그 실패를 덮는다.
  * 도메인 큐가 아직 끝내지 못한 일(보내는 중이거나 다시 시도할 것)이 있으면 그 결과는
@@ -381,6 +392,7 @@ function removeGoneFolders(ids: readonly string[]): Promise<void> {
 async function syncDriveAndDecks(): Promise<void> {
   const generation = bootGeneration;
   if (parkWhileProjecting(syncDriveAndDecks)) return;
+  const userId = getCurrentUserId();
   const knownBeforePull = idsOf(listPresentations());
   const knownFolders = idsOf(getFolders());
   let serverDocuments;
@@ -390,6 +402,10 @@ async function syncDriveAndDecks(): Promise<void> {
     const folderList = await pullFolders();
     if (generation !== bootGeneration) return;
     if (parkWhileProjecting(syncDriveAndDecks)) return;
+    if (holdsOtherAccount(userId, [folderList.folders])) {
+      dropOtherAccountsPull(syncDriveAndDecks, unsynced);
+      return;
+    }
     tombstones = folderList.tombstones;
     const folderStatus = await syncFolders(
       folderList.folders,
@@ -404,6 +420,10 @@ async function syncDriveAndDecks(): Promise<void> {
     serverDocuments = await pullPresentations();
     if (generation !== bootGeneration) return;
     if (parkWhileProjecting(syncDriveAndDecks)) return;
+    if (holdsOtherAccount(userId, [serverDocuments])) {
+      dropOtherAccountsPull(syncDriveAndDecks, unsynced);
+      return;
+    }
     rememberServerDocuments(serverDocuments);
     retryBackoff.reset();
   } catch (err) {
@@ -478,6 +498,40 @@ function abandonPull(step: () => Promise<void>): SyncStatus {
   retryBackoff.reset();
   abandonedStep = step;
   return "error";
+}
+
+interface AccountRecord {
+  userId?: unknown;
+  access?: { memberId?: unknown };
+}
+
+function belongsToOtherAccount(record: AccountRecord, userId: string): boolean {
+  return (
+    typeof record.userId === "string" &&
+    record.userId !== userId &&
+    record.access?.memberId !== userId
+  );
+}
+
+function holdsOtherAccount(
+  userId: string | null,
+  lists: readonly (readonly AccountRecord[])[],
+): boolean {
+  return (
+    userId !== null &&
+    lists.some((list) =>
+      list.some((record) => belongsToOtherAccount(record, userId)),
+    )
+  );
+}
+
+function dropOtherAccountsPull(
+  step: () => Promise<void>,
+  domains: readonly SyncDomain[],
+): void {
+  const status = abandonPull(step);
+  for (const domain of domains) setSyncStatus(domain, status);
+  requestSessionCheck();
 }
 
 function retryPullAfter(
@@ -629,12 +683,17 @@ async function pushLibraryDeckAtBoot(deck: Deck): Promise<void> {
 async function syncLibraryDecks(): Promise<void> {
   const generation = bootGeneration;
   if (parkWhileProjecting(syncLibraryDecks)) return;
+  const userId = getCurrentUserId();
   const knownBeforePull = idsOf(getUserSongs());
   let pull;
   try {
     pull = await pullDecks();
     if (generation !== bootGeneration) return;
     if (parkWhileProjecting(syncLibraryDecks)) return;
+    if (holdsOtherAccount(userId, [pull.decks])) {
+      dropOtherAccountsPull(syncLibraryDecks, ["deck"]);
+      return;
+    }
     retryBackoff.reset();
   } catch (err) {
     if (generation !== bootGeneration) return;
@@ -784,7 +843,8 @@ function canRefresh(mode: SyncRetryMode): boolean {
  * 받기를 기다리는 동안, 동기화를 끈 뒤(`stopSync`), 송출 중에는 받지 않는다. 그동안은 부팅 병합과 그
  * 재시도가 서버와 맞추고, 송출 중에는 요청이 0건이어야 한다. 부팅이 거절돼 받기를 포기했으면 '다시
  * 시도'만 그 단계를 다시 받으므로, 그때부터는 이 다시 받기가 맞춘다. 받는 사이 송출을 시작했거나
- * 계정·부팅이 바뀌었으면 받은 것을 버린다. 송출 중인 프레젠테이션이 바뀌면 안 된다.
+ * 계정·부팅이 바뀌었으면 받은 것을 버린다. 송출 중인 프레젠테이션이 바뀌면 안 된다. 받은 목록에 다른
+ * 계정의 항목이 있으면 받은 것을 모두 버리고 세션을 확인한다(`runBootSync`와 같은 까닭).
  */
 export function refreshOwnDataIfStale(mode: SyncRetryMode): Promise<void> {
   if (refreshInFlight) return refreshInFlight;
@@ -831,6 +891,16 @@ async function refreshOwnData(
     isProjecting() ||
     getCurrentUserId() !== userId
   ) {
+    return;
+  }
+  if (
+    holdsOtherAccount(userId, [
+      folderList.folders,
+      serverDocuments,
+      library.decks,
+    ])
+  ) {
+    requestSessionCheck();
     return;
   }
 

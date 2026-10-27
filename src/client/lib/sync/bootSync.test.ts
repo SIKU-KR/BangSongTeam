@@ -2570,6 +2570,81 @@ describe("stopSync — 계정이 끝난 탭", () => {
   });
 });
 
+describe("runBootSync — 계정이 바뀐 것을 놓친 탭이 받은 다른 계정의 목록", () => {
+  const THEIR_DOC = "e00000000000000000005";
+  const THEIR_FOLDER = "f00000000000000000006";
+  let fetcher: ReturnType<typeof vi.fn<SessionFetcher>>;
+
+  beforeEach(async () => {
+    await resetBootSyncDependencies();
+    fetcher = vi.fn<SessionFetcher>(async () => sessionUser(OTHER_USER_ID));
+    __setSessionFetcherForTests(fetcher);
+  });
+
+  afterEach(cleanUpBootSync);
+
+  it("다른 계정의 프레젠테이션 목록은 병합하지도 이 계정의 세트를 올리지도 않고 세션을 확인한다", async () => {
+    __loadDocumentsForTests([presentation(DOC)]);
+    presentationSync.pullPresentations.mockResolvedValue([
+      { ...presentation(THEIR_DOC), userId: OTHER_USER_ID },
+    ]);
+
+    await runBootSync();
+
+    expect(listPresentations()).toEqual([presentation(DOC)]);
+    expect(presentationSync.pushPresentation).not.toHaveBeenCalled();
+    expect(presentationSync.pullDecks).not.toHaveBeenCalled();
+    await vi.waitFor(() => expect(fetcher).toHaveBeenCalledTimes(1));
+  });
+
+  it("다른 계정의 폴더 목록은 병합하지도 이 계정의 폴더를 올리지도 않고 세션을 확인한다", async () => {
+    const pushFolder = vi.fn(async (f: Folder) => f);
+    __setFolderPusherForTests(pushFolder);
+    __loadFoldersForTests([folder(PARENT)]);
+    presentationSync.pullFolders.mockResolvedValue({
+      ...EMPTY_FOLDER_LIST,
+      folders: [folder(THEIR_FOLDER, { userId: OTHER_USER_ID })],
+    });
+
+    await runBootSync();
+
+    expect(getFolders()).toEqual([folder(PARENT)]);
+    expect(pushFolder).not.toHaveBeenCalled();
+    expect(presentationSync.pullPresentations).not.toHaveBeenCalled();
+    await vi.waitFor(() => expect(fetcher).toHaveBeenCalledTimes(1));
+  });
+
+  it("다른 계정의 보관함은 병합하지도 이 계정의 곡을 올리지도 않고 세션을 확인한다", async () => {
+    const pushDeck = vi.fn(async (deck: Deck) => deck);
+    __setDeckTransportForTests({ push: pushDeck });
+    const mine = saveSongToLibrary({ title: "내 곡", lyricsRaw: "가사" });
+    presentationSync.pullDecks.mockResolvedValue({
+      decks: [serverDeck({ userId: OTHER_USER_ID })],
+      deletedIds: [],
+    });
+
+    await runBootSync();
+
+    expect(getUserSongs().map((deck) => deck.id)).toEqual([mine.id]);
+    expect(pushDeck).not.toHaveBeenCalled();
+    await vi.waitFor(() => expect(fetcher).toHaveBeenCalledTimes(1));
+  });
+
+  it("이 계정에 공유된 다른 계정의 세트는 이 계정의 목록으로 본다", async () => {
+    const shared: Presentation = {
+      ...presentation(THEIR_DOC),
+      userId: OTHER_USER_ID,
+      access: { ownerName: "인도자", memberId: TEST_USER_ID },
+    };
+    presentationSync.pullPresentations.mockResolvedValue([shared]);
+
+    await runBootSync();
+
+    expect(listPresentations()).toEqual([shared]);
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+});
+
 describe("refreshOwnDataIfStale — 열려 있는 탭이 내 데이터를 다시 받기", () => {
   const T1 = "2026-10-01T00:00:00.000Z";
   const T2 = "2026-10-01T00:10:00.000Z";
@@ -2955,6 +3030,51 @@ describe("refreshOwnDataIfStale — 열려 있는 탭이 내 데이터를 다시
     await refreshOwnDataIfStale("manual");
     expect(pulls()).toBe(1);
   });
+
+  it.each([
+    [
+      "폴더",
+      () =>
+        presentationSync.pullFolders.mockResolvedValue({
+          ...EMPTY_FOLDER_LIST,
+          folders: [folder(PARENT, { userId: OTHER_USER_ID })],
+        }),
+    ],
+    [
+      "프레젠테이션",
+      () =>
+        presentationSync.pullPresentations.mockResolvedValue([
+          v2(),
+          { ...presentation(CHILD), userId: OTHER_USER_ID },
+        ]),
+    ],
+    [
+      "보관함",
+      () =>
+        presentationSync.pullDecks.mockResolvedValue({
+          decks: [serverDeck({ userId: OTHER_USER_ID })],
+          deletedIds: [],
+        }),
+    ],
+  ])(
+    "받은 %s 목록에 다른 계정의 항목이 있으면(쿠키가 다른 계정) 받은 것을 모두 버리고 세션을 확인한다",
+    async (_list, pullOtherAccount) => {
+      await runBootSync();
+      const fetcher = vi.fn<SessionFetcher>(async () =>
+        sessionUser(OTHER_USER_ID),
+      );
+      __setSessionFetcherForTests(fetcher);
+      presentationSync.pullPresentations.mockResolvedValue([v2()]);
+      pullOtherAccount();
+
+      await refreshOwnDataIfStale("manual");
+
+      expect(listPresentations()).toEqual([{ ...v1(), baseUpdatedAt: T1 }]);
+      expect(getFolders()).toEqual([]);
+      expect(getUserSongs()).toEqual([]);
+      await vi.waitFor(() => expect(fetcher).toHaveBeenCalledTimes(1));
+    },
+  );
 
   it("다른 탭이 방금 받았다고 알리면 그때부터 1분 동안 다시 받지 않는다", async () => {
     await runBootSync();

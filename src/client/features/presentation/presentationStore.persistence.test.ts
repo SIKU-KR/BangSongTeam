@@ -638,6 +638,26 @@ describe("presentationStore 영속성", () => {
       );
     });
 
+    it("세션 사용자의 것도 세션 사용자에게 공유된 것도 아닌 세트는 넣지도 저장하지도 않는다", async () => {
+      const [mine, others, sharedWithOther] = SEED_PRESENTATIONS;
+      await seedPresentationsIntoStorage([mine]);
+      await hydrateFromStorage();
+      forgetWrites();
+
+      applyServerDocuments([
+        getPresentationById(mine.id)!,
+        serverCopy(others, { userId: OTHER_USER }),
+        serverCopy(sharedWithOther, {
+          userId: OTHER_USER,
+          access: { ownerName: "인도자", memberId: "888888888888888888888" },
+        }),
+      ]);
+      await flushPendingWrites();
+
+      expect(listPresentations().map((doc) => doc.id)).toEqual([mine.id]);
+      expect(writtenIds()).toEqual([]);
+    });
+
     it("공유받은 세트는 updatedAt과 folderId가 같아도 다시 쓴다", async () => {
       const shared: Presentation = {
         ...SEED_PRESENTATIONS[4],
