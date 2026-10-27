@@ -1,4 +1,13 @@
-export { SOCIAL_PROVIDERS, type SocialProvider } from "./authClient";
+export {
+  SOCIAL_PROVIDERS,
+  visibleSocialProviders,
+  type SocialProvider,
+} from "./authClient";
+export {
+  AUTH_ERROR_PARAM,
+  callbackErrorMessage,
+  withoutAuthError,
+} from "./authError";
 export {
   EmailAuthError,
   finishPendingSignOut,
@@ -11,6 +20,7 @@ export {
   signInWithProvider,
   signUpWithEmail,
   signOut,
+  SocialSignInError,
   useSession,
   type AccountHooks,
   type EmailAuthFailure,

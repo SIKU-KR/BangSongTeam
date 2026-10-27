@@ -463,12 +463,28 @@ export function finishPendingSignOut(): Promise<boolean> {
 }
 
 /**
+ * 소셜 로그인을 시작하지 못했다. `message`는 화면에 그대로 보여 줄 안내 문구다. 화면은 이 오류의
+ * 문구만 그대로 보이고, 서버에 닿지 못한 오류 같은 나머지는 일반 안내로 바꾼다.
+ */
+export class SocialSignInError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "SocialSignInError";
+  }
+}
+
+/**
  * 소셜 로그인 후 원래 보던 주소로 돌아온다. 로그아웃 상태로 공유 링크를
  * 연 사람이 로그인하고 나서 링크로 다시 들어오게 하기 위해서다.
  * 첫 화면(`/`)에서 로그인하면 드라이브로 보낸다.
  *
+ * 도중에 실패해도 같은 주소로 돌아온다(`errorCallbackURL`). 알려 주지 않으면 Better Auth가 자기
+ * 오류 주소로 보내, 운영에서는 이유를 알 수 없는 랜딩 화면으로, 개발에서는 영문 오류 페이지로
+ * 떨어진다. 돌아온 로그인 화면이 `?error=코드`를 읽어 안내한다(`callbackErrorMessage`).
+ *
  * better-auth 클라이언트는 실패를 던지지 않고 `error`로 돌려준다. 그대로 두면
- * 이동도 오류도 없이 버튼이 로딩 상태로 멈추므로 던져서 화면이 안내하게 한다.
+ * 이동도 오류도 없이 버튼이 로딩 상태로 멈추므로 던져서 화면이 안내하게 한다. 서버에 등록되지
+ * 않은 프로바이더(404)는 다시 시도해도 같으므로 다른 방법으로 로그인하라고 따로 안내한다.
  *
  * 서버가 확인하지 않은 로그아웃이 남아 있으면 먼저 마치고, 마치지 못하면 로그인을 시작하지 않는다.
  * 그대로 시작하면 돌아온 부팅이 남은 표시를 보고 방금 로그인한 세션을 로그아웃시키고, 늦게 온
@@ -478,14 +494,23 @@ export async function signInWithProvider(
   provider: SocialProvider,
 ): Promise<void> {
   if (!(await finishPendingSignOut())) {
-    throw new Error(AUTH_COPY.signInFailed);
+    throw new SocialSignInError(AUTH_COPY.signInFailed);
   }
   const { pathname, search } = window.location;
+  const returnPath =
+    pathname === "/" ? "/presentations" : `${pathname}${search}`;
   const { error } = await authClient.signIn.social({
     provider,
-    callbackURL: pathname === "/" ? "/presentations" : `${pathname}${search}`,
+    callbackURL: returnPath,
+    errorCallbackURL: returnPath,
   });
-  if (error) throw new Error(AUTH_COPY.signInFailed);
+  if (error) {
+    throw new SocialSignInError(
+      error.status === 404
+        ? AUTH_COPY.providerUnavailable
+        : AUTH_COPY.signInFailed,
+    );
+  }
 }
 
 export type EmailAuthFailure =

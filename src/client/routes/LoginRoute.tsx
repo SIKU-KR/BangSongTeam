@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { CircleAlertIcon } from "lucide-react";
 import { Alert, AlertDescription } from "#components/ui/alert";
 import { Button } from "#components/ui/button";
@@ -14,11 +15,18 @@ import {
   CardTitle,
 } from "#components/ui/card";
 import {
-  SOCIAL_PROVIDERS,
+  AUTH_ERROR_PARAM,
+  callbackErrorMessage,
   signInWithProvider,
+  SocialSignInError,
+  visibleSocialProviders,
+  withoutAuthError,
   type SocialProvider,
 } from "../lib/auth";
+import { useConfiguredSocialProviders } from "../lib/api/authConfigQueries";
+import { detectInAppBrowser } from "../lib/browser/inAppBrowser";
 import { EmailLoginForm } from "../features/auth/EmailLoginForm";
+import { InAppBrowserNotice } from "../features/auth/InAppBrowserNotice";
 import { SocialLoginButton } from "../features/auth/SocialLoginButton";
 import { StorageWarningBanner } from "../components/common/StorageWarningBanner";
 import { AUTH_COPY, LEGAL_COPY } from "#copy/auth";
@@ -37,26 +45,68 @@ interface LoginRouteProps {
 }
 
 /**
- * 로그인 화면 라우트. 위쪽에 저장 경고 배너를 둔다. 저장소가 다른 탭에 막혀 세션 캐시를 읽지
- * 못한 부팅은 이 화면에서 끝날 수 있어, 다른 탭을 닫으라는 안내가 여기서도 보여야 한다.
+ * 로그인 화면 라우트.
+ *
+ * - 위쪽에 저장 경고 배너를 둔다. 저장소가 다른 탭에 막혀 세션 캐시를 읽지 못한 부팅은 이 화면에서
+ *   끝날 수 있어, 다른 탭을 닫으라는 안내가 여기서도 보여야 한다.
+ * - 소셜 로그인은 서버가 켜 둔 것만 버튼으로 보인다. 서버 목록을 받기 전이거나 받지 못하면
+ *   Google만 보여, 이메일 로그인과 함께 늘 쓸 수 있게 한다(`visibleSocialProviders`).
+ * - 소셜 로그인이 도중에 실패해 이 주소로 돌아오면 주소의 `?error=코드`를 읽어 안내하고 주소에서
+ *   지운다(`signInWithProvider`가 돌아올 주소를 알려 준다). 안내는 지운 뒤에도 남는다.
+ * - 앱 안 브라우저(카카오톡 등)에서는 Google이 로그인을 막으므로 버튼 대신 다른 브라우저로 열라고
+ *   안내한다. 이메일 로그인과 카카오·네이버 로그인은 앱 안에서도 된다.
+ * - Google 화면에서 뒤로 가기로 돌아오면 브라우저가 이 화면을 로그인으로 이동하던 상태 그대로
+ *   되살린다(`pageshow`의 `persisted`). 막아 둔 버튼을 풀지 않으면 이메일 로그인까지 막힌 채 남는다.
  */
 export function LoginRoute({
   description = AUTH_COPY.defaultDescription,
   onCancel,
 }: LoginRouteProps = {}): React.JSX.Element {
+  const searchParams = useSearchParams();
   const [pending, setPending] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(() =>
+    callbackErrorMessage(searchParams.get(AUTH_ERROR_PARAM)),
+  );
+  const [inAppBrowser] = useState(() =>
+    detectInAppBrowser(window.navigator.userAgent),
+  );
+  const configured = useConfiguredSocialProviders().data;
+
+  useEffect(() => {
+    const { pathname, search, hash } = window.location;
+    const rest = withoutAuthError(search);
+    if (rest !== search) {
+      window.history.replaceState(null, "", `${pathname}${rest}${hash}`);
+    }
+  }, []);
+
+  useEffect(() => {
+    const restore = (event: PageTransitionEvent): void => {
+      if (event.persisted) setPending(null);
+    };
+    window.addEventListener("pageshow", restore);
+    return () => window.removeEventListener("pageshow", restore);
+  }, []);
 
   const handleSignIn = async (provider: SocialProvider): Promise<void> => {
     setPending(provider);
     setError(null);
     try {
       await signInWithProvider(provider);
-    } catch {
-      setError(AUTH_COPY.signInFailed);
+    } catch (err) {
+      setError(
+        err instanceof SocialSignInError ? err.message : AUTH_COPY.signInFailed,
+      );
       setPending(null);
     }
   };
+
+  const providers = visibleSocialProviders(configured);
+  const offersGoogle = providers.some((provider) => provider.id === "google");
+  const googleBlockedBy = offersGoogle ? inAppBrowser : null;
+  const buttons = googleBlockedBy
+    ? providers.filter((provider) => provider.id !== "google")
+    : providers;
 
   return (
     <div className="flex min-h-screen flex-col bg-muted/40">
@@ -71,26 +121,41 @@ export function LoginRoute({
           </CardHeader>
 
           <CardContent className="flex flex-col gap-5">
-            <div className="flex flex-col gap-2">
-              {SOCIAL_PROVIDERS.map((provider) => (
-                <SocialLoginButton
-                  key={provider.id}
-                  provider={provider.id}
-                  label={provider.label}
-                  pending={pending === provider.id}
-                  disabled={pending !== null}
-                  onClick={() => void handleSignIn(provider.id)}
-                />
-              ))}
-            </div>
+            {error && (
+              <Alert variant="destructive">
+                <CircleAlertIcon />
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
+            )}
 
-            <div className="flex items-center gap-3">
-              <Separator className="flex-1" />
-              <span className="text-xs text-muted-foreground">
-                {AUTH_COPY.email.divider}
-              </span>
-              <Separator className="flex-1" />
-            </div>
+            {buttons.length > 0 && (
+              <div className="flex flex-col gap-2">
+                {buttons.map((provider) => (
+                  <SocialLoginButton
+                    key={provider.id}
+                    provider={provider.id}
+                    label={provider.label}
+                    pending={pending === provider.id}
+                    disabled={pending !== null}
+                    onClick={() => void handleSignIn(provider.id)}
+                  />
+                ))}
+              </div>
+            )}
+
+            {googleBlockedBy && (
+              <InAppBrowserNotice browser={googleBlockedBy} />
+            )}
+
+            {(buttons.length > 0 || googleBlockedBy) && (
+              <div className="flex items-center gap-3">
+                <Separator className="flex-1" />
+                <span className="text-xs text-muted-foreground">
+                  {AUTH_COPY.email.divider}
+                </span>
+                <Separator className="flex-1" />
+              </div>
+            )}
 
             <EmailLoginForm disabled={pending !== null} />
 
@@ -113,13 +178,6 @@ export function LoginRoute({
                   </Button>
                 ))}
               </div>
-            )}
-
-            {error && (
-              <Alert variant="destructive">
-                <CircleAlertIcon />
-                <AlertDescription>{error}</AlertDescription>
-              </Alert>
             )}
           </CardContent>
 

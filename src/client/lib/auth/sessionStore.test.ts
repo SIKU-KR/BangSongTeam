@@ -22,6 +22,7 @@ import {
   signInWithProvider,
   signOut,
   signUpWithEmail,
+  SocialSignInError,
   __setPageReloadForTests,
   __setSessionFetcherForTests,
   __resetSessionForTests,
@@ -1533,17 +1534,67 @@ describe("세션 스토어", () => {
   });
 
   describe("signInWithProvider", () => {
-    it("서버가 로그인 시작을 거절하면 던져 화면이 안내하게 한다", async () => {
+    function rejectSignIn(status: number): void {
       signInSocial.mockResolvedValueOnce({
         data: null,
-        error: {
-          status: 404,
-          statusText: "Not Found",
-          message: "Provider not found",
-        },
+        error: { status, statusText: "" },
       } as never);
+    }
 
-      await expect(signInWithProvider("kakao")).rejects.toThrow();
+    it("서버가 로그인 시작을 거절하면 던져 화면이 안내하게 한다", async () => {
+      rejectSignIn(500);
+
+      const error = await signInWithProvider("kakao").catch(
+        (err: unknown) => err,
+      );
+
+      expect(error).toBeInstanceOf(SocialSignInError);
+      expect(error).toHaveProperty("message", AUTH_COPY.signInFailed);
+    });
+
+    it("서버에 등록되지 않은 프로바이더(404)는 다른 방법으로 로그인하라고 안내한다", async () => {
+      rejectSignIn(404);
+
+      const error = await signInWithProvider("kakao").catch(
+        (err: unknown) => err,
+      );
+
+      expect(error).toBeInstanceOf(SocialSignInError);
+      expect(error).toHaveProperty("message", AUTH_COPY.providerUnavailable);
+    });
+
+    it("서버에 닿지 못하는 오류는 그대로 던진다", async () => {
+      signInSocial.mockRejectedValueOnce(new TypeError("Failed to fetch"));
+
+      await expect(signInWithProvider("google")).rejects.toBeInstanceOf(
+        TypeError,
+      );
+    });
+
+    it("로그인을 시작한 주소로 돌아오도록 성공과 실패 주소를 모두 알려 준다", async () => {
+      window.history.replaceState({}, "", "/s/tok-abc?copy=1");
+      signInSocial.mockResolvedValueOnce({ data: {}, error: null } as never);
+
+      await signInWithProvider("google");
+
+      expect(signInSocial).toHaveBeenCalledWith({
+        provider: "google",
+        callbackURL: "/s/tok-abc?copy=1",
+        errorCallbackURL: "/s/tok-abc?copy=1",
+      });
+    });
+
+    it("첫 화면에서 시작한 로그인은 성공도 실패도 보관함 주소로 보낸다", async () => {
+      window.history.replaceState({}, "", "/");
+      signInSocial.mockResolvedValueOnce({ data: {}, error: null } as never);
+
+      await signInWithProvider("google");
+
+      expect(signInSocial).toHaveBeenCalledWith({
+        provider: "google",
+        callbackURL: "/presentations",
+        errorCallbackURL: "/presentations",
+      });
     });
   });
 

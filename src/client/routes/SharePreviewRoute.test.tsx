@@ -33,6 +33,7 @@ import {
 } from "../test/backgroundFixture";
 import { SharePreviewRoute } from "./SharePreviewRoute";
 import { API_ERRORS } from "#shared";
+import { AUTH_COPY } from "#copy/auth";
 import { COMMON_COPY, ERROR_COPY } from "#copy/common";
 import { SHARE_LINK_COPY } from "#copy/shareLink";
 import { SEED_PRESENTATIONS } from "../test/presentationFixture";
@@ -110,6 +111,21 @@ describe("SharePreviewRoute (로그인하지 않은 /s/:token)", () => {
     await waitFor(() =>
       expect(screen.getByTestId("editor-route")).toBeInTheDocument(),
     );
+  });
+
+  it("사본 만들기 로그인이 도중에 실패해 돌아오면 로그인 화면에 이유를 안내하고 사본 요청은 지킨다", async () => {
+    api = installFakeApi({
+      "GET /api/share/*": () => ({ body: { document: shared } }),
+    });
+    renderAt("/s/tok-first?copy=1&error=account_not_linked");
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      AUTH_COPY.oauthErrors.accountNotLinked,
+    );
+    expect(screen.getByTestId("login-description")).toBeInTheDocument();
+    expect(window.location.pathname).toBe("/s/tok-first");
+    expect(window.location.search).toBe("?copy=1");
+    expect(screen.queryByTestId("editor-route")).not.toBeInTheDocument();
   });
 
   it("만료된 링크는 안내를 보여 준다", async () => {

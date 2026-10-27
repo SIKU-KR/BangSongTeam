@@ -24,6 +24,19 @@ export const AUTH_COPY = {
   },
   defaultDescription: "로그인하면 교회와 집 어디서든 이어서 작업할 수 있어요.",
   signInFailed: "로그인을 시작하지 못했어요. 잠시 후 다시 시도해 주세요.",
+  providerUnavailable:
+    "지금은 이 방법으로 로그인할 수 없어요. 다른 방법으로 로그인해 주세요.",
+  oauthErrors: {
+    accountNotLinked:
+      "같은 이메일로 가입한 계정이 있어요. 가입할 때 쓴 방법으로 로그인해 주세요.",
+    stateExpired: "로그인 시간이 지났어요. 다시 시도해 주세요.",
+  },
+  inAppBrowser: {
+    notice:
+      "카카오톡 같은 앱 안에서는 Google 로그인을 쓸 수 없어요. Chrome이나 Safari에서 열어 주세요.",
+    openExternal: "다른 브라우저로 열기",
+    copyLink: "링크 복사",
+  },
   signOutFailed:
     "로그아웃하지 못했어요. 인터넷에 연결한 뒤 다시 시도해 주세요.",
   cancel: "로그인 없이 돌아가기",
@@ -48,7 +61,8 @@ export const AUTH_COPY = {
       `비밀번호는 ${min}자 이상 ${max}자 이하로 입력해 주세요.`,
     failures: {
       invalidCredentials: "이메일 또는 비밀번호를 확인해 주세요.",
-      alreadyExists: "이미 가입한 이메일이에요. 로그인해 주세요.",
+      alreadyExists:
+        "이미 가입한 이메일이에요. 가입할 때 쓴 방법으로 로그인해 주세요.",
       invalidInput: "입력한 내용을 확인한 뒤 다시 시도해 주세요.",
       rateLimited: "시도가 너무 많아요. 잠시 후 다시 시도해 주세요.",
       network: "서버에 연결하지 못했어요. 네트워크를 확인해 주세요.",
