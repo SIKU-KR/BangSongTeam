@@ -5,6 +5,7 @@ import {
   editTimestamp,
   isFolderTrashed,
   MAX_CLOCK_SKEW_MS,
+  MAX_FOLDERS_PER_USER,
   PresentationDocumentSchema,
   resolveFolderId,
   type Folder,
@@ -350,6 +351,155 @@ describe("드라이브 폴더 쿼리", () => {
         status: "saved",
         folder: { parentId: null },
       });
+    });
+  });
+
+  describe("사용자당 폴더 수 상한", () => {
+    async function seedFolders(
+      userId: string,
+      count: number,
+      overrides: Partial<FolderDoc> = {},
+    ): Promise<FolderDoc[]> {
+      const folders = Array.from({ length: count }, () =>
+        folderDoc({ id: nextId(), userId, ...overrides }),
+      );
+      await seedDocs(db, { folders });
+      return folders;
+    }
+
+    async function countFolders(userId: string): Promise<number> {
+      const snapshot = await foldersCol(db)
+        .where("userId", "==", userId)
+        .count()
+        .get();
+      return snapshot.data().count;
+    }
+
+    it("상한만큼 폴더가 있으면 새 루트 폴더를 만들지 않는다", async () => {
+      await seedFolders(USER_A, MAX_FOLDERS_PER_USER);
+      const fresh = makeFolder(USER_A);
+      const instrument = instrumentTransactions(db);
+
+      const result = await upsertFolder(db, USER_A, fresh);
+      instrument.restore();
+
+      expect(result).toEqual({ status: "limitReached" });
+      expect(instrument.max()).toBe(0);
+      expect((await foldersCol(db).doc(fresh.id).get()).exists).toBe(false);
+      expect(await countFolders(USER_A)).toBe(MAX_FOLDERS_PER_USER);
+    });
+
+    it("상한만큼 폴더가 있으면 새 하위 폴더도 만들지 않는다", async () => {
+      const [parent] = await seedFolders(USER_A, MAX_FOLDERS_PER_USER);
+      const fresh = makeFolder(USER_A, { parentId: parent.id });
+      const instrument = instrumentTransactions(db);
+
+      const result = await upsertFolder(db, USER_A, fresh);
+      instrument.restore();
+
+      expect(result).toEqual({ status: "limitReached" });
+      expect(instrument.max()).toBe(0);
+      expect((await foldersCol(db).doc(fresh.id).get()).exists).toBe(false);
+      expect(await countFolders(USER_A)).toBe(MAX_FOLDERS_PER_USER);
+    });
+
+    it("상한을 넘긴 사용자도 이미 있는 폴더의 이름·이동·휴지통은 저장하고 새 폴더만 막는다", async () => {
+      const overCap = MAX_FOLDERS_PER_USER + 5;
+      const [folder, parent] = await seedFolders(USER_A, overCap);
+      const renamed = {
+        ...toSharedFolder(folder),
+        name: "새 이름",
+        updatedAt: "2026-09-25T00:00:00.000Z",
+      };
+      const moved = {
+        ...renamed,
+        parentId: parent.id,
+        trashedAt: TRASHED_AT,
+        updatedAt: "2026-09-25T00:00:01.000Z",
+      };
+
+      expect(await upsertFolder(db, USER_A, renamed)).toEqual({
+        status: "saved",
+        folder: renamed,
+      });
+      expect(await upsertFolder(db, USER_A, moved)).toEqual({
+        status: "saved",
+        folder: moved,
+      });
+      expect(await upsertFolder(db, USER_A, makeFolder(USER_A))).toEqual({
+        status: "limitReached",
+      });
+      expect(await countFolders(USER_A)).toBe(overCap);
+    });
+
+    it("상한보다 하나 모자라면 하나 더 만들 수 있고 그다음부터 막는다", async () => {
+      await seedFolders(USER_A, MAX_FOLDERS_PER_USER - 1);
+      const last = makeFolder(USER_A);
+
+      expect(await upsertFolder(db, USER_A, last)).toEqual({
+        status: "saved",
+        folder: last,
+      });
+      expect(await upsertFolder(db, USER_A, makeFolder(USER_A))).toEqual({
+        status: "limitReached",
+      });
+      expect(await countFolders(USER_A)).toBe(MAX_FOLDERS_PER_USER);
+    });
+
+    it("휴지통에 있는 폴더도 영구 삭제하기 전에는 세고, 지우면 다시 만들 수 있다", async () => {
+      await seedFolders(USER_A, MAX_FOLDERS_PER_USER - 1);
+      const [trashed] = await seedFolders(USER_A, 1, {
+        trashedAt: new Date(TRASHED_AT),
+      });
+      const fresh = makeFolder(USER_A);
+      expect(await upsertFolder(db, USER_A, fresh)).toEqual({
+        status: "limitReached",
+      });
+
+      expect((await deleteFolderTree(db, USER_A, trashed.id)).status).toBe(
+        "deleted",
+      );
+
+      expect(await upsertFolder(db, USER_A, fresh)).toEqual({
+        status: "saved",
+        folder: fresh,
+      });
+    });
+
+    it("다른 사용자의 폴더는 세지 않는다", async () => {
+      await seedFolders(USER_A, MAX_FOLDERS_PER_USER);
+      const root = makeFolder(USER_B);
+      const nested = makeFolder(USER_B, { parentId: root.id });
+
+      expect(await upsertFolder(db, USER_B, root)).toEqual({
+        status: "saved",
+        folder: root,
+      });
+      expect(await upsertFolder(db, USER_B, nested)).toEqual({
+        status: "saved",
+        folder: nested,
+      });
+    });
+
+    it("상한에 이르러도 영구 삭제한 id는 deleted, 프레젠테이션 id는 forbidden이다", async () => {
+      await seedFolders(USER_A, MAX_FOLDERS_PER_USER);
+      const removed = makeFolder(USER_A);
+      await driveTombstonesCol(db)
+        .doc(removed.id)
+        .set({ itemId: removed.id, userId: USER_A, kind: "folder" });
+      const presentation = presentationDoc({ id: nextId(), userId: USER_A });
+      await seedDocs(db, { presentations: [presentation] });
+
+      expect(await upsertFolder(db, USER_A, removed)).toEqual({
+        status: "deleted",
+      });
+      expect(
+        await upsertFolder(
+          db,
+          USER_A,
+          makeFolder(USER_A, { id: presentation.id }),
+        ),
+      ).toEqual({ status: "forbidden" });
     });
   });
 

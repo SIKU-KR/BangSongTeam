@@ -1,9 +1,11 @@
+import type { Transaction } from "@google-cloud/firestore";
 import {
   buildFolderIndex,
   clampToClock,
   collectDescendantFolderIds,
   isFolderTrashed,
   isOutdatedWrite,
+  MAX_FOLDERS_PER_USER,
   sortFoldersParentFirst,
   wouldCreateCycle,
   type DriveTombstones,
@@ -33,6 +35,17 @@ function byCreatedAtAsc(a: FolderDoc, b: FolderDoc): number {
   );
 }
 
+async function countOwnFolders(
+  tx: Transaction,
+  db: Db,
+  userId: string,
+): Promise<number> {
+  const snapshot = await tx.get(
+    foldersCol(db).where("userId", "==", userId).count(),
+  );
+  return snapshot.data().count;
+}
+
 /** 본인 폴더 전체 (생성 순) */
 export async function getFoldersByUserId(
   db: Db,
@@ -52,7 +65,8 @@ export async function getFoldersByUserId(
 export type UpsertFolderResult =
   | { status: "saved"; folder: SharedFolder }
   | { status: "forbidden" }
-  | { status: "deleted" };
+  | { status: "deleted" }
+  | { status: "limitReached" };
 
 /**
  * 폴더 1건 업서트.
@@ -66,6 +80,10 @@ export type UpsertFolderResult =
  *   프레젠테이션이 한 id 공간을 쓰고, 프레젠테이션 id는 링크로 공유받은 사람에게도 보인다. 그 id로
  *   폴더를 만들어 지우면 주인보다 먼저 기록을 차지해, 주인이 영구 삭제한 프레젠테이션을 주인의
  *   다른 기기가 다시 올린다.
+ * - 새 폴더인데 내 폴더가 이미 `MAX_FOLDERS_PER_USER`개면 쓰지 않고 `limitReached` (→ 403). 휴지통에
+ *   있는 폴더도 영구 삭제하기 전에는 센다. 이미 있는 폴더는 상한을 넘었어도 고칠 수 있어서, 상한이
+ *   생기기 전에 많이 만든 사용자도 편집은 막히지 않는다. 폴더 수는 새 폴더일 때만 위 확인을 통과한
+ *   뒤 같은 트랜잭션에서 센다.
  * - 수정 시각(`updatedAt`)과 새 폴더의 만든 시각은 서버 시계 + 5분까지로 줄인다(`clampToClock`).
  * - 저장된 폴더가 들어온 것보다 늦게 고친 것이면 쓰지 않고 저장된 폴더를 돌려준다
  *   (`isOutdatedWrite`). 오프라인 대기열이 늦게 올린 옛 수정이 다른 기기의 새 이름·이동·휴지통을 덮지
@@ -101,6 +119,11 @@ export async function upsertFolder(
       (await tx.get(presentationsCol(db).doc(folder.id))).exists
     ) {
       return { status: "forbidden" };
+    }
+    if (!existing) {
+      const ownCount =
+        ownFolders?.size ?? (await countOwnFolders(tx, db, userId));
+      if (ownCount >= MAX_FOLDERS_PER_USER) return { status: "limitReached" };
     }
 
     const nowMs = now.getTime();

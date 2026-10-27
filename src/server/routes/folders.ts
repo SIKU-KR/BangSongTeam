@@ -25,7 +25,8 @@ import {
  * 휴지통 비우기·영구 삭제 전용이다 (하위 폴더·프레젠테이션까지 지운다).
  * PUT은 서버에 저장된 확정본을 돌려준다. 저장된 폴더가 더 나중에 고친 것이면 쓰지 않고 그 폴더로
  * 200이다. 영구 삭제한 폴더에 늦게 온 PUT은 다시 만들지 않고 410이며, 얼마나 자주 일어나는지 보려고
- * INFO 로그로 남긴다.
+ * INFO 로그로 남긴다. 폴더가 이미 `MAX_FOLDERS_PER_USER`개인 사용자의 새 폴더 PUT은 403이다(이미 있는
+ * 폴더의 PUT은 그대로 받는다).
  * DELETE는 서버에서 그 폴더나 조상이 휴지통에 있을 때만 지운다. 본문의 `expected`(그 기기가 본
  * 하위 트리)를 받으면 서버 트리가 그 안에 들 때만 지운다. 어느 쪽이든 어긋나면 아무것도 지우지
  * 않고 409로 답한다. 본문이 없는 이전 클라이언트는 휴지통 확인만 받는다. 큰 트리를 나눠 지우는
@@ -81,6 +82,8 @@ export function createFoldersRoute(deps: AppDeps = {}) {
             folderId: folder.id,
           });
           return c.json({ error: API_ERRORS.folder.deleted }, 410);
+        case "limitReached":
+          return c.json({ error: API_ERRORS.folder.limitReached }, 403);
         case "saved":
           return c.json({ folder: result.folder }, 200);
       }
