@@ -831,6 +831,45 @@ describe("보관함 push 큐", () => {
       }
     });
 
+    it("영구 실패한 DELETE를 '다시 시도'로 다시 보내면 기록을 다시 남겨, 오프라인으로 밀려도 남긴다", async () => {
+      remove.mockRejectedValueOnce(new ServerRejectedError(400, "거절"));
+      scheduleDeckDelete(A, USER);
+      await flushDeckSync();
+      expect(listPendingDeckDeletes(USER)).toEqual([]);
+
+      remove.mockRejectedValueOnce(new OfflineError());
+      await retryDeckSyncNow("manual");
+
+      expect(remove).toHaveBeenCalledTimes(2);
+      expect(listPendingDeckDeletes(USER)).toEqual([A]);
+      expect(getSyncSnapshot().status).toBe("offline");
+    });
+
+    it.each([
+      {
+        reason: "서버가 지우면(200)",
+        answer: (): Promise<boolean> => Promise.resolve(true),
+      },
+      {
+        reason: "다시 거절하면(400)",
+        answer: (): Promise<boolean> =>
+          Promise.reject(new ServerRejectedError(400, "거절")),
+      },
+    ])(
+      "영구 실패한 DELETE를 '다시 시도'로 다시 보내 $reason 기록을 지운다",
+      async ({ answer }) => {
+        remove.mockRejectedValueOnce(new ServerRejectedError(400, "거절"));
+        scheduleDeckDelete(A, USER);
+        await flushDeckSync();
+
+        remove.mockImplementationOnce(answer);
+        await retryDeckSyncNow("manual");
+
+        expect(remove).toHaveBeenCalledTimes(2);
+        expect(listPendingDeckDeletes(USER)).toEqual([]);
+      },
+    );
+
     it("cancelDeckDelete는 기록도 지운다", () => {
       scheduleDeckDelete(A, USER);
 

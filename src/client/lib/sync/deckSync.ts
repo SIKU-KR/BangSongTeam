@@ -371,13 +371,17 @@ export function holdFailedDeckPush(deck: Deck): void {
  * 곡 변경끼리는 순서가 없으므로 오프라인으로 밀린 곡까지 함께 기다릴 까닭이 없다.
  * `reconnect`·`manual`은 백오프를 비우고 모두 보낸다(`syncScheduler`와 같다). 비우지
  * 않으면 '다시 시도' 뒤 한 번 더 실패한 곡이 지난 횟수 때문에 곧바로 영구 실패가 된다.
- * `manual`은 영구 실패로 남긴 곡 변경도 실패 기록을 지우고 다시 넣는다.
+ * `manual`은 영구 실패로 남긴 곡 변경도 실패 기록을 지우고 다시 넣는다. 다시 넣는 DELETE는
+ * 영구 실패 때 지운 삭제 기록(`pendingDeckDeletes`)에도 다시 남긴다. 사용자가 다시 지우겠다고
+ * 한 것이라, 이번에 오프라인으로 밀린 채 탭을 닫아도 다음 부팅이 다시 보낸다.
  */
 export function retryDeckSyncNow(mode: SyncRetryMode): Promise<void> {
   if (mode === "manual") {
     for (const [key, op] of failed) {
       clearSyncFailure("deck", key);
-      if (!pending.has(key)) pending.set(key, op);
+      if (pending.has(key)) continue;
+      pending.set(key, op);
+      if (op.kind === "delete") rememberDeckDelete(op.userId, op.id);
     }
     failed = new Map();
   }
