@@ -61,6 +61,13 @@ function setOnline(online: boolean): void {
   });
 }
 
+function markLoaded(video: HTMLVideoElement, url: string): void {
+  Object.defineProperty(video, "currentSrc", {
+    configurable: true,
+    value: url,
+  });
+}
+
 function markErrored(video: HTMLVideoElement): void {
   Object.defineProperty(video, "error", {
     configurable: true,
@@ -208,6 +215,32 @@ describe("VideoLayer", () => {
 
     expect(slotB()).toHaveAttribute("src", LOOP2);
     expect(slotB()).toHaveStyle({ opacity: "1" });
+  });
+
+  it("배경이 없는 곡으로 넘어가면 비운 영상을 멈추고 내려 받던 데이터를 놓아, 보이지 않는 곳에서 재생하지 않는다", () => {
+    const { rerender } = render(<VideoLayer src={LOOP1} />);
+    advance(FADE_MS);
+    markLoaded(slotA(), LOOP1);
+    pause.mockClear();
+    load.mockClear();
+    play.mockClear();
+
+    rerender(<VideoLayer src={undefined} />);
+
+    expect(pause.mock.contexts).toContain(slotA());
+    expect(load.mock.contexts).toContain(slotA());
+
+    fire(slotA(), "pause");
+    fire(window, "keydown");
+    expect(play.mock.contexts).not.toContain(slotA());
+  });
+
+  it("처음부터 배경이 없으면 빈 슬롯을 건드리지 않는다", () => {
+    render(<VideoLayer src={undefined} />);
+
+    expect(pause).not.toHaveBeenCalled();
+    expect(load).not.toHaveBeenCalled();
+    expect(play).not.toHaveBeenCalled();
   });
 
   it("교차 전환 중에는 새 슬롯이 위에서 나타나고 앞 슬롯은 끝날 때까지 불투명하게 남는다", () => {
