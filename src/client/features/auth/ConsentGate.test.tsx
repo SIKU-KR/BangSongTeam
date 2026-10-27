@@ -124,4 +124,43 @@ describe("ConsentGate (가입 동의 모달)", () => {
       ),
     ).toBeInTheDocument();
   });
+
+  it("로그아웃하지 못한 뒤 다시 누르면 앞선 실패 안내를 지우고 다시 로그아웃한다", async () => {
+    vi.mocked(signOut)
+      .mockRejectedValueOnce(new Error(AUTH_COPY.signOutFailed))
+      .mockReturnValueOnce(new Promise<void>(() => undefined));
+    renderGate();
+
+    const decline = await screen.findByTestId("consent-decline");
+    fireEvent.click(decline);
+    expect(
+      await screen.findByText(AUTH_COPY.signOutFailed),
+    ).toBeInTheDocument();
+
+    fireEvent.click(decline);
+
+    expect(signOut).toHaveBeenCalledTimes(2);
+    expect(screen.queryByText(AUTH_COPY.signOutFailed)).not.toBeInTheDocument();
+  });
+
+  it("로그아웃하지 못한 뒤 동의하면 로그아웃 실패 안내를 지운다", async () => {
+    vi.mocked(signOut).mockRejectedValueOnce(
+      new Error(AUTH_COPY.signOutFailed),
+    );
+    renderGate();
+
+    fireEvent.click(await screen.findByTestId("consent-decline"));
+    expect(
+      await screen.findByText(AUTH_COPY.signOutFailed),
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId("consent-all"));
+    fireEvent.click(screen.getByTestId("consent-agree"));
+
+    expect(screen.getByTestId("consent-dialog")).toBeInTheDocument();
+    expect(screen.queryByText(AUTH_COPY.signOutFailed)).not.toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.queryByTestId("consent-dialog")).not.toBeInTheDocument(),
+    );
+  });
 });

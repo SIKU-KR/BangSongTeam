@@ -91,6 +91,16 @@ function ConsentDialog({ userId }: { userId: string }): React.JSX.Element {
     setChecked({ ageOver14: value, terms: value, privacy: value });
   };
 
+  const declineConsent = (): void => {
+    setSignOutFailed(false);
+    void signOut().catch(() => setSignOutFailed(true));
+  };
+
+  const submitConsent = (): void => {
+    setSignOutFailed(false);
+    agree.mutate({ ageOver14: true, terms: true, privacy: true });
+  };
+
   return (
     <AlertDialog open>
       <AlertDialogContent data-testid="consent-dialog">
@@ -157,16 +167,14 @@ function ConsentDialog({ userId }: { userId: string }): React.JSX.Element {
             variant="outline"
             data-testid="consent-decline"
             disabled={agree.isPending}
-            onClick={() => void signOut().catch(() => setSignOutFailed(true))}
+            onClick={declineConsent}
           >
             {AUTH_COPY.consent.decline}
           </AlertDialogAction>
           <AlertDialogAction
             data-testid="consent-agree"
             disabled={!allChecked || agree.isPending}
-            onClick={() =>
-              agree.mutate({ ageOver14: true, terms: true, privacy: true })
-            }
+            onClick={submitConsent}
           >
             {agree.isPending
               ? AUTH_COPY.consent.saving
