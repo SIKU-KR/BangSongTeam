@@ -39,6 +39,7 @@ import {
   getFolder,
   getFolders,
   moveFolder,
+  removeFoldersLocally,
   renameFolder,
   resetFolderStore,
   trashFolder,
@@ -55,6 +56,7 @@ import {
   __setFolderBackoffRandomForTests,
   __setFolderPusherForTests,
   pushFolderNow,
+  setFolderGoneListener,
   setFolderSyncEnabled,
 } from "../../lib/sync/folderSync";
 import { MAX_RETRY_ATTEMPTS } from "../../lib/sync/backoff";
@@ -519,6 +521,25 @@ describe("driveActions", () => {
         expect(error).toBeInstanceOf(DriveActionError);
         expect((error as Error).message).toBe(DRIVE_COPY.deleteForeverOffline);
         expect(sync.deleteFolderRemote).not.toHaveBeenCalled();
+      });
+
+      it("비우는 폴더를 다른 곳에서 이미 영구 삭제했으면(410) 고를 때 본 하위 폴더와 세트도 이 기기에서 지운다", async () => {
+        folderPusher.mockImplementation(async (saved) => {
+          if (saved.id === ROOT) {
+            throw new ServerRejectedError(410, API_ERRORS.folder.deleted);
+          }
+          return saved;
+        });
+        setFolderGoneListener(removeFoldersLocally);
+        trashFolder(ROOT);
+
+        await deleteItemsForever([{ kind: "folder", id: ROOT }]);
+
+        expect(getFolders().map((f) => f.id)).toEqual([OTHER]);
+        expect(listPresentations().map((p) => p.id)).toEqual([
+          SEED1.id,
+          SEED2.id,
+        ]);
       });
 
       it("폴더 밖으로 옮긴 세트를 서버가 받지 못하면(503) 폴더를 지우지 않는다", async () => {

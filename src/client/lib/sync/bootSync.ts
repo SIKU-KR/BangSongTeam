@@ -262,6 +262,12 @@ export function useBootPullPending(domain: BootPullDomain): boolean {
  * 돌리고 그 큐가 끝날 때까지 기다리므로(`ensureFolderPushed`), 부팅도 그 큐를 기다린다. 그 큐는 다시
  * 시도를 기다리던 다른 폴더도 함께 보낸다.
  *
+ * 올린 폴더를 다른 곳에서 영구 삭제했으면(410) 이 기기에서 지우고 곧바로 내 데이터를 다시
+ * 받는다(`refreshOwnDataIfStale`). 서버는 그 폴더의 하위 트리도 함께 지웠다. 폴더만 지우면 그 안의
+ * 폴더·세트가 없는 부모를 가리켜 드라이브 루트에 휴지통 밖 항목으로 나타난다. 다시 받기는 영구 삭제
+ * 기록을 따라 서버와 맞춘 하위 항목만 지운다. 고친 세트는 남아 그 push가 410을 받고 편집을 사본으로
+ * 남기고, 다른 곳에서 옮겨 둔 항목은 서버 위치를 받는다.
+ *
  * 폴더·곡은 항목마다 올리기 직전과 큐에 넘기거나 실패로 남길 때 지금 저장소에 있는 것을 다시
  * 찾아 쓰고, 그사이 지워졌으면 건너뛴다. 부팅 병합 때의 사본을 올리면 앞 항목을 올리는 동안
  * 사용자가 지운 곡이 되살아나고, 바로 올리기는 큐에 대기 중인 같은 항목을 버리므로 그사이
@@ -312,7 +318,7 @@ export async function runBootSync(): Promise<void> {
   setFailedDeckResolver(getLibraryDeck);
   setFolderSyncEnabled(true);
   setServerFolderListener(applyServerFolder);
-  setFolderGoneListener(removeFoldersLocally);
+  setFolderGoneListener(removeGoneFolders);
   setFailedFolderResolver(getFolder);
   void refreshBackgroundCatalog();
 
@@ -364,6 +370,12 @@ let refreshInFlight: Promise<void> | null = null;
 
 function idsOf(items: readonly { id: string }[]): Set<string> {
   return new Set(items.map((item) => item.id));
+}
+
+function removeGoneFolders(ids: readonly string[]): Promise<void> {
+  const removing = removeFoldersLocally(ids);
+  void refreshOwnDataIfStale("manual");
+  return removing;
 }
 
 async function syncDriveAndDecks(): Promise<void> {

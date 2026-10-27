@@ -1683,6 +1683,62 @@ describe("runBootSync — 기준 판으로 맞추기", () => {
     expect(getSyncDomainStatus("folder")).toBe("synced");
   });
 
+  it("큐가 올린 폴더를 다른 곳에서 영구 삭제했으면(410) 곧바로 다시 받아, 서버가 함께 지운 하위 폴더와 서버와 맞춘 세트를 지우고 고친 세트와 서버가 옮겨 둔 폴더는 남긴다", async () => {
+    const EDITED = "d00000000000000000004";
+    const MOVED = "c00000000000000000005";
+    const tree = [
+      folder(PARENT),
+      folder(CHILD, { parentId: PARENT }),
+      folder(MOVED, { parentId: PARENT }),
+    ];
+    __loadFoldersForTests(tree);
+    __loadDocumentsForTests([
+      {
+        ...presentation(DOC),
+        folderId: CHILD,
+        baseUpdatedAt: T1,
+        updatedAt: T1,
+      },
+      {
+        ...presentation(EDITED),
+        folderId: CHILD,
+        title: "이 기기에서 고친 제목",
+        baseUpdatedAt: T1,
+        updatedAt: EDITED_AT,
+      },
+    ]);
+    presentationSync.pullFolders.mockResolvedValue({
+      ...EMPTY_FOLDER_LIST,
+      folders: tree,
+    });
+    presentationSync.pullPresentations.mockResolvedValue([
+      { ...presentation(DOC), folderId: CHILD, updatedAt: T1 },
+      { ...presentation(EDITED), folderId: CHILD, updatedAt: T1 },
+    ]);
+    await runBootSync();
+    presentationSync.pullFolders.mockResolvedValue({
+      folders: [folder(MOVED, { updatedAt: T2 })],
+      tombstones: {
+        folderIds: [PARENT, CHILD],
+        presentationIds: [DOC, EDITED],
+      },
+    });
+    presentationSync.pullPresentations.mockResolvedValue([]);
+    pushFolder.mockRejectedValue(
+      new ServerRejectedError(410, API_ERRORS.folder.deleted),
+    );
+
+    renameFolder(PARENT, "다른 곳에서 지운 폴더");
+    await flushFolderSync();
+
+    await vi.waitFor(() =>
+      expect(getFolders()).toEqual([folder(MOVED, { updatedAt: T2 })]),
+    );
+    expect(getPresentationById(DOC)).toBeUndefined();
+    expect(getPresentationById(EDITED)?.title).toBe("이 기기에서 고친 제목");
+    expect(getSyncSnapshot().lastFailure).toBeNull();
+  });
+
   it("동기화를 끄면 폴더가 영구 삭제됐다는 응답을 더 받지 않는다", async () => {
     await runBootSync();
     __loadFoldersForTests([folder(PARENT)]);
