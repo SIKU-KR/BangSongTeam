@@ -14,7 +14,8 @@ interface EditorRibbonProps {
   slideControls: SlideControlsProps;
   /** `coalesceField`가 같은 연속 변경(슬라이더 끌기)은 되돌리기 한 단계로 묶는다 */
   onUpdateStyle: (update: Partial<DeckStyle>, coalesceField?: string) => void;
-  onUpdateBackground: (choice: BackgroundChoice) => void;
+  /** `songId`는 배경 선택 창을 연 때의 곡이다 */
+  onUpdateBackground: (songId: string, choice: BackgroundChoice) => void;
 }
 
 /**
@@ -68,6 +69,7 @@ export function EditorRibbon({
       <RibbonDivider />
       <BackgroundControls
         style={style}
+        songId={song?.id}
         backgroundId={song?.backgroundId}
         disabled={disabled}
         onUpdateStyle={onUpdateStyle}

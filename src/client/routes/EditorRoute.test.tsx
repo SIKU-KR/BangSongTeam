@@ -42,6 +42,7 @@ import {
   canUndo,
   getActivePresentation,
   getPresentationById,
+  listPresentations,
   replaceWithServerDocument,
   updatePresentationTitle,
   updateSlideLines,
@@ -1445,6 +1446,64 @@ describe("EditorRoute (PowerPoint식 프레젠테이션 편집기)", () => {
 
       expect(screen.queryByTestId("song-info-dialog")).not.toBeInTheDocument();
       expect(screen.queryByText("바뀐 제목")).not.toBeInTheDocument();
+    });
+
+    describe("창이 떠 있는 동안 다른 탭이나 기기에서 곡 순서를 바꾸면", () => {
+      function deckById(id: string) {
+        return getActivePresentation().items.find(
+          (item) => item.deck?.id === id,
+        )?.deck;
+      }
+
+      function reverseSongsElsewhere(): void {
+        const active = getActivePresentation();
+        const items = [...active.items]
+          .reverse()
+          .map((item, order) => ({ ...item, order }));
+        act(() => {
+          applyServerDocuments(
+            listPresentations().map((doc) =>
+              doc.id === active.id ? { ...active, items } : doc,
+            ),
+          );
+        });
+      }
+
+      it("곡 정보 수정 창은 연 곡의 제목을 고친다", () => {
+        renderEditor();
+        const opened = firstSong();
+        const untouched = getActivePresentation().items.at(-1)!.deck!;
+        fireEvent.click(screen.getByTestId("song-section-menu-btn-0"));
+        fireEvent.click(
+          screen.getByRole("menuitem", { name: EDITOR_COPY.song.editInfo }),
+        );
+
+        reverseSongsElsewhere();
+        fireEvent.change(screen.getByTestId("song-info-title-input"), {
+          target: { value: "연 곡의 새 제목" },
+        });
+        fireEvent.click(screen.getByTestId("song-info-save-btn"));
+
+        expect(deckById(opened.id)?.title).toBe("연 곡의 새 제목");
+        expect(firstSong()).toEqual(untouched);
+      });
+
+      it("배경 선택 창은 연 곡의 배경을 바꾼다", () => {
+        renderEditor();
+        const opened = firstSong();
+        const untouched = getActivePresentation().items.at(-1)!.deck!;
+        fireEvent.click(screen.getByTestId("open-bg-picker-btn"));
+
+        reverseSongsElsewhere();
+        fireEvent.click(
+          within(screen.getByTestId("bg-solid-palette")).getByRole("button", {
+            name: "진한 파랑",
+          }),
+        );
+
+        expect(deckById(opened.id)?.style.backgroundColor).toBe("#002060");
+        expect(firstSong()).toEqual(untouched);
+      });
     });
 
     it("우클릭으로 구역 메뉴가 열리고 Esc로 닫힌다", async () => {

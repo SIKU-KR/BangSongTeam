@@ -87,6 +87,12 @@ import { EDITOR_COPY } from "#copy/editor";
 import { COMMON_COPY } from "#copy/common";
 import { SHELL_COPY } from "#copy/shell";
 
+function songIndexOfDeck(deckId: string): number {
+  return getActivePresentation().items.findIndex(
+    (item) => item.deck?.id === deckId,
+  );
+}
+
 /** 로그인하지 않고 공유 링크로 볼 때 편집기를 보기 화면으로 쓰기 위한 설정 */
 export interface EditorGuestOptions {
   presentationId: string;
@@ -135,7 +141,7 @@ function EditorScreen({
   const [songPickerMode, setSongPickerMode] = useState<SongPickerMode | null>(
     null,
   );
-  const [editingSongIndex, setEditingSongIndex] = useState<number | null>(null);
+  const [editingDeckId, setEditingDeckId] = useState<string | null>(null);
   const [isShareOpen, setIsShareOpen] = useState(false);
   const makeCopy = useMakeCopyFlow({
     presentationId: presentation.id,
@@ -204,7 +210,9 @@ function EditorScreen({
   const currentSlideNumber = slideNumberOfPosition(position, songs);
 
   const editingSong =
-    editingSongIndex === null ? undefined : songs[editingSongIndex]?.deck;
+    editingDeckId === null
+      ? undefined
+      : songs.find((item) => item.deck?.id === editingDeckId)?.deck;
 
   const background = useCacheFirstVideo(
     useBackgroundLayers(currentSong?.backgroundId),
@@ -438,9 +446,10 @@ function EditorScreen({
         <EditorRibbon
           song={currentSong}
           onUpdateStyle={handleUpdateStyle}
-          onUpdateBackground={(choice) =>
-            updateSongBackground(safeSongIndex, choice)
-          }
+          onUpdateBackground={(deckId, choice) => {
+            const songIndex = songIndexOfDeck(deckId);
+            if (songIndex >= 0) updateSongBackground(songIndex, choice);
+          }}
           slideControls={{
             hasSlide: !!currentSlide,
             canDelete: selection.canDelete,
@@ -486,7 +495,9 @@ function EditorScreen({
           onDropSlides={selection.dropSelection}
           onReorderSong={handleReorderSong}
           onDuplicateSong={handleDuplicateSong}
-          onEditSongInfo={setEditingSongIndex}
+          onEditSongInfo={(songIndex) =>
+            setEditingDeckId(songs[songIndex]?.deck?.id ?? null)
+          }
           onDeleteSong={handleDeleteSong}
           onOpenSongPicker={() => setSongPickerMode("browse")}
           readOnly={readOnly}
@@ -542,7 +553,7 @@ function EditorScreen({
         />
       </div>
 
-      {editingSongIndex !== null && editingSong && (
+      {editingSong && (
         <SongInfoDialog
           heading={EDITOR_COPY.song.editInfo}
           initialValues={{
@@ -551,10 +562,11 @@ function EditorScreen({
           }}
           notice={EDITOR_COPY.song.setOnlyNotice}
           onSubmit={(values) => {
-            updateSongInfo(editingSongIndex, values);
-            setEditingSongIndex(null);
+            const songIndex = songIndexOfDeck(editingSong.id);
+            if (songIndex >= 0) updateSongInfo(songIndex, values);
+            setEditingDeckId(null);
           }}
-          onCancel={() => setEditingSongIndex(null)}
+          onCancel={() => setEditingDeckId(null)}
         />
       )}
 
