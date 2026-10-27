@@ -69,7 +69,10 @@ vi.mock("../lib/auth/authClient", async (importOriginal) => ({
   },
 }));
 
-const dnd = vi.hoisted(() => ({ props: null as DndContextProps | null }));
+const dnd = vi.hoisted(() => ({
+  props: null as DndContextProps | null,
+  started: [] as string[],
+}));
 
 vi.mock("@dnd-kit/core", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@dnd-kit/core")>();
@@ -78,7 +81,13 @@ vi.mock("@dnd-kit/core", async (importOriginal) => {
     ...actual,
     DndContext: (props: DndContextProps) => {
       dnd.props = props;
-      return createElement(actual.DndContext, props);
+      return createElement(actual.DndContext, {
+        ...props,
+        onDragStart: (event: DragStartEvent) => {
+          dnd.started.push(String(event.active.id));
+          props.onDragStart?.(event);
+        },
+      });
     },
   };
 });
@@ -1343,5 +1352,123 @@ describe("AppShellLayout (끌어 옮기기와 선택 범위)", () => {
       expect(getPresentationById(id)?.trashedAt).toBeTruthy();
     }
     expect(input).toHaveValue("예배");
+  });
+});
+
+describe("AppShellLayout (터치)", () => {
+  beforeEach(() => {
+    signInAsTestUser();
+    resetPresentationStore();
+    resetFolderStore();
+    window.localStorage.clear();
+    __loadDocumentsForTests(SEED_PRESENTATIONS);
+    vi.restoreAllMocks();
+    dnd.started.length = 0;
+  });
+
+  afterEach(async () => {
+    vi.useRealTimers();
+    await new Promise((resolve) => setTimeout(resolve, 60));
+  });
+
+  function longPress(target: HTMLElement): void {
+    fireEvent.touchStart(target, { touches: [{ clientX: 50, clientY: 50 }] });
+    act(() => {
+      vi.advanceTimersByTime(500);
+    });
+  }
+
+  function touchRoll(target: HTMLElement): void {
+    const touch = { isPrimary: true, pointerType: "touch", clientY: 100 };
+    fireEvent.pointerDown(target, { ...touch, button: 0, clientX: 100 });
+    fireEvent.pointerMove(document, { ...touch, clientX: 108 });
+    fireEvent.pointerUp(document, { ...touch, clientX: 108 });
+  }
+
+  it("행을 길게 누르면 그 행의 메뉴가 열리고 행이 선택된다", () => {
+    renderShell();
+    vi.useFakeTimers();
+    const row = card(SEED_PRESENTATIONS[0].title);
+
+    longPress(row);
+
+    const menu = screen.getByTestId("drive-menu");
+    expect(within(menu).getByTestId("action-open")).toBeInTheDocument();
+    expect(within(menu).getByTestId("action-trash")).toBeInTheDocument();
+    expect(row).toHaveAttribute("aria-selected", "true");
+  });
+
+  it("앞서 우클릭으로 만든 메뉴가 아니라 길게 누른 행의 메뉴를 보여 준다", async () => {
+    renderShell();
+    const [first, second, third] = SEED_PRESENTATIONS;
+    const [firstRow, secondRow, thirdRow] = [first, second, third].map((doc) =>
+      card(doc.title),
+    );
+    fireEvent.click(firstRow);
+    fireEvent.click(secondRow, { ctrlKey: true });
+    fireEvent.contextMenu(firstRow);
+    expect(screen.queryByTestId("action-open")).not.toBeInTheDocument();
+    fireEvent.keyDown(await screen.findByTestId("drive-menu"), {
+      key: "Escape",
+    });
+    await waitFor(() => expect(screen.queryByTestId("drive-menu")).toBeNull());
+
+    vi.useFakeTimers();
+    longPress(thirdRow);
+
+    expect(
+      within(screen.getByTestId("drive-menu")).getByTestId("action-open"),
+    ).toBeInTheDocument();
+    expect(thirdRow).toHaveAttribute("aria-selected", "true");
+    expect(firstRow).toHaveAttribute("aria-selected", "false");
+  });
+
+  it("검색 결과의 빈 곳을 길게 눌러도 메뉴를 열지 않는다", () => {
+    renderShell();
+    fireEvent.change(screen.getByTestId("shell-search-input"), {
+      target: { value: SEED_PRESENTATIONS[0].title },
+    });
+    vi.useFakeTimers();
+
+    longPress(screen.getByTestId("drive-scroll-area"));
+
+    expect(screen.queryByTestId("drive-menu")).not.toBeInTheDocument();
+  });
+
+  it("⋮ 메뉴 항목을 터치로 누를 때 손가락이 굴러도 끌기로 가로채이지 않고 항목이 실행된다", async () => {
+    renderShell();
+    const before = listPresentations().length;
+    fireEvent.click(
+      within(card(SEED_PRESENTATIONS[0].title)).getByTestId("item-more-btn"),
+    );
+    const duplicate = await screen.findByTestId("action-duplicate");
+
+    touchRoll(duplicate);
+    fireEvent.click(duplicate);
+
+    expect(dnd.started).toEqual([]);
+    expect(listPresentations()).toHaveLength(before + 1);
+  });
+
+  it("행의 편집 버튼도 터치로 누를 때 손가락이 굴러도 눌린다", () => {
+    renderShell();
+    const edit = within(card(SEED_PRESENTATIONS[0].title)).getByTestId(
+      "row-edit-btn",
+    );
+
+    touchRoll(edit);
+    fireEvent.click(edit);
+
+    expect(dnd.started).toEqual([]);
+    expect(screen.getByTestId("editor-stub")).toBeInTheDocument();
+  });
+
+  it("행 본문에서 손가락이 굴러 시작한 끌기는 그대로 시작한다", () => {
+    renderShell();
+    const target = SEED_PRESENTATIONS[0];
+
+    touchRoll(card(target.title));
+
+    expect(dnd.started).toEqual([itemKey("file", target.id)]);
   });
 });

@@ -88,8 +88,14 @@ const HOVER_REVEAL =
 const ROW_CLASS =
   "group h-12 cursor-default border-b text-sm text-muted-foreground outline-none select-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset";
 
-/** 행 안의 조작이 행 선택·더블클릭 열기로 번지지 않게 막는다 */
+/**
+ * 행 안의 조작이 행 선택·더블클릭 열기·끌기로 번지지 않게 막는다.
+ *
+ * `onPointerDown`이 없으면 버튼과 ⋮ 메뉴(React 트리에서는 행의 자식이다)의 터치가 행의 끌기
+ * 센서에 닿아, 손가락이 5px만 굴러도 끌기가 시작되고 이어지는 클릭이 삼켜진다.
+ */
 const STOP_ROW_EVENTS = {
+  onPointerDown: (event: React.PointerEvent) => event.stopPropagation(),
   onMouseDown: (event: React.MouseEvent) => event.stopPropagation(),
   onClick: (event: React.MouseEvent) => event.stopPropagation(),
   onDoubleClick: (event: React.MouseEvent) => event.stopPropagation(),

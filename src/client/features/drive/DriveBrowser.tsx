@@ -60,9 +60,13 @@ interface DriveBrowserProps {
  * 폴더와 파일을 한 목록에 섞어 보여 준다. 섹션을 나누지 않는다.
  * - 누르기: 선택 (선택된 묶음을 누르면 끌 수 있게 유지하고, 떼면 그 항목만 남긴다)
  * - Ctrl/⌘+클릭: 추가·해제 · Shift+클릭: 범위 · Ctrl/⌘+Shift+클릭: 범위 추가 · 더블클릭: 열기
- * - 빈 곳에서 끌기: 드래그 선택 · 우클릭·⋮: 메뉴 · 머리글: 정렬
+ * - 빈 곳에서 끌기: 드래그 선택 · 우클릭·길게 누르기·⋮: 메뉴 · 머리글: 정렬
  * - 끌어서 폴더·경로·고정된 휴지통 폴더에 놓기
  * - 키보드는 `useDriveKeyboard`
+ *
+ * 우클릭·길게 누르기 메뉴의 항목은 메뉴가 열리는 순간 누른 곳으로 만든다. iOS는 길게 눌러도
+ * `contextmenu`를 보내지 않아 Base UI가 터치 타이머로 메뉴를 여는데, 그때는 `onContextMenu`가
+ * 불리지 않아 미리 만든 항목이 비어 있거나 앞서 우클릭한 행의 것이다.
  *
  * 검색·유형 필터·이동으로 목록에서 빠진 항목은 선택에서도 뺀다. 가려진 항목이 선택에 남으면
  * 끌기(선택 전체)와 도구 모음·키보드(보이는 선택)가 서로 다른 항목에 듣는다.
@@ -184,6 +188,24 @@ export function DriveBrowser({
     onSelect: (next) => drive.setSelection(next, next[0] ?? null),
   });
 
+  const contextActionsAt = (
+    target: EventTarget | null,
+  ): MenuAction[] | null => {
+    const element = target instanceof Element ? target : null;
+    const rowKey = element
+      ?.closest("[data-item-key]")
+      ?.getAttribute("data-item-key");
+    const item = items.find((candidate) => candidate.key === rowKey);
+    if (item) return actionsFor(targetsFor(item));
+    if (element?.closest("[data-trash-folder]")) {
+      drive.clearSelection();
+      return trashFolderActions;
+    }
+    if (isTrash || query) return null;
+    drive.clearSelection();
+    return newActions;
+  };
+
   return (
     <div
       data-testid={isTrash ? "trash-view" : "drive-view"}
@@ -201,7 +223,14 @@ export function DriveBrowser({
         onEmptyTrash={() => drive.requestEmptyTrash()}
       />
 
-      <ContextMenu>
+      <ContextMenu
+        onOpenChange={(opened, details) => {
+          if (!opened) return;
+          const actions = contextActionsAt(details.event.target);
+          if (actions) setContextActions(actions);
+          else details.cancel();
+        }}
+      >
         <ContextMenuTrigger
           ref={containerRef}
           data-testid="drive-scroll-area"
@@ -214,24 +243,6 @@ export function DriveBrowser({
             )
               return;
             drive.clearSelection();
-          }}
-          onContextMenu={(event) => {
-            const target = event.target as HTMLElement;
-            const rowKey = target
-              .closest<HTMLElement>("[data-item-key]")
-              ?.getAttribute("data-item-key");
-            const item = items.find((candidate) => candidate.key === rowKey);
-            if (item) {
-              setContextActions(actionsFor(targetsFor(item)));
-            } else if (target.closest("[data-trash-folder]")) {
-              drive.clearSelection();
-              setContextActions(trashFolderActions);
-            } else if (isTrash || query) {
-              event.preventBaseUIHandler();
-            } else {
-              drive.clearSelection();
-              setContextActions(newActions);
-            }
           }}
         >
           {(items.length > 0 || showTrashFolder) && (
