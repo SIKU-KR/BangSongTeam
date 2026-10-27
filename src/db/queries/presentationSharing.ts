@@ -135,14 +135,15 @@ function toSharedDocument(
   };
 }
 
+function tokenQuery(db: Db, token: string) {
+  return presentationsCol(db).where("linkToken", "==", token).limit(1);
+}
+
 async function findActiveByToken(
   db: Db,
   token: string,
 ): Promise<PresentationDoc | null> {
-  const snapshot = await presentationsCol(db)
-    .where("linkToken", "==", token)
-    .limit(1)
-    .get();
+  const snapshot = await tokenQuery(db, token).get();
   const presentation = snapshot.docs[0]?.data();
   return presentation && (await isLinkActive(presentation, readFolderDoc(db)))
     ? presentation
@@ -283,20 +284,37 @@ export interface JoinResult {
   document: PresentationDocument;
 }
 
-/** 링크가 살아 있으면 멤버로 기록하고 문서를 돌려준다. 소유자는 기록하지 않는다. */
+/**
+ * 링크가 살아 있으면 멤버로 기록하고 문서를 돌려준다. 소유자는 기록하지 않는다.
+ *
+ * 토큰 확인과 멤버 기록은 한 트랜잭션이다. 따로 하면 링크 재설정(`resetLinkToken`)이 토큰을 바꾸고
+ * 멤버를 지운 뒤에 예전 토큰을 확인한 참여가 멤버를 다시 써, 재설정으로 끊은 사람이 계속 본다.
+ * 재설정은 참여가 읽은 프레젠테이션 문서를 고치고 참여가 쓰는 멤버 문서를 지우므로 Firestore가 둘의
+ * 차례를 정한다. 참여가 먼저면 재설정이 그 멤버를 지우고, 재설정이 먼저면 참여는 예전 토큰을 찾지
+ * 못해 아무것도 쓰지 않는다.
+ */
 export async function joinByToken(
   db: Db,
   token: string,
   userId: string,
 ): Promise<JoinResult | null> {
-  const target = await findActiveByToken(db, token);
+  const target = await db.runTransaction(async (tx) => {
+    const snapshot = await tx.get(tokenQuery(db, token));
+    const presentation = snapshot.docs[0]?.data();
+    if (!presentation) return null;
+    const active = await isLinkActive(presentation, async (id) =>
+      (await tx.get(foldersCol(db).doc(id))).data(),
+    );
+    if (!active) return null;
+    if (presentation.userId !== userId) {
+      tx.set(
+        presentationMembersCol(db).doc(memberDocId(presentation.id, userId)),
+        { presentationId: presentation.id, userId },
+      );
+    }
+    return presentation;
+  });
   if (!target) return null;
-
-  if (target.userId !== userId) {
-    await presentationMembersCol(db)
-      .doc(memberDocId(target.id, userId))
-      .set({ presentationId: target.id, userId });
-  }
 
   const role = await resolvePresentationAccess(db, target.id, userId);
   const document = await getPresentationDocument(db, target.id, userId);

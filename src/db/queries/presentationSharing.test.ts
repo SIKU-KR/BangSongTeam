@@ -1,5 +1,10 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { DocumentReference } from "@google-cloud/firestore";
+import {
+  DocumentReference,
+  Query,
+  QuerySnapshot,
+  Transaction,
+} from "@google-cloud/firestore";
 import type { Db } from "../client";
 import {
   COLLECTIONS,
@@ -46,6 +51,7 @@ const DECK_ID = "c00000000000000000001";
 const FOLDER_ID = "f00000000000000000001";
 const PARENT_FOLDER_ID = "f00000000000000000002";
 const OTHER_FOLDER_ID = "f00000000000000000003";
+const RESET_WAIT_MS = 300;
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -136,6 +142,51 @@ describe("세트 링크 공유", () => {
       .doc(memberDocId(DOC_ID, userId))
       .get();
     return snapshot.exists;
+  }
+
+  function isTokenLookup(snapshot: unknown): boolean {
+    return (
+      snapshot instanceof QuerySnapshot &&
+      snapshot.docs[0]?.ref.parent.id === COLLECTIONS.presentations
+    );
+  }
+
+  function resetAfterFirstTokenLookup(): () => Promise<unknown> {
+    let reset: Promise<unknown> | null = null;
+    const startReset = async (snapshot: unknown): Promise<void> => {
+      if (reset || !isTokenLookup(snapshot)) return;
+      reset = resetLinkToken(db, DOC_ID, OWNER);
+      await Promise.race([
+        reset,
+        new Promise((resolve) => setTimeout(resolve, RESET_WAIT_MS)),
+      ]);
+    };
+
+    const queryGet = Query.prototype.get;
+    vi.spyOn(Query.prototype, "get").mockImplementation(async function (
+      this: Query,
+    ) {
+      const snapshot = await queryGet.call(this);
+      await startReset(snapshot);
+      return snapshot;
+    });
+    const transactionGet = Transaction.prototype.get as (
+      this: Transaction,
+      target: unknown,
+    ) => Promise<unknown>;
+    vi.spyOn(Transaction.prototype, "get").mockImplementation(async function (
+      this: Transaction,
+      target: unknown,
+    ) {
+      const snapshot = await transactionGet.call(this, target);
+      await startReset(snapshot);
+      return snapshot;
+    } as typeof Transaction.prototype.get);
+
+    return async () => {
+      if (!reset) throw new Error("token lookup never ran");
+      return reset;
+    };
   }
 
   describe("in 조건 한도(30)를 넘는 공유 목록", () => {
@@ -274,6 +325,22 @@ describe("세트 링크 공유", () => {
       expect(
         (await joinByToken(db, reset?.token as string, STRANGER))?.role,
       ).toBe("viewer");
+    });
+
+    it("예전 링크로 들어오는 참여가 링크 재설정과 겹쳐도 멤버가 남지 않는다", async () => {
+      const oldToken = await shareAndJoin();
+      const resetDone = resetAfterFirstTokenLookup();
+
+      await joinByToken(db, oldToken, MEMBER);
+      await resetDone();
+      vi.restoreAllMocks();
+
+      expect((await getShareSettings(db, DOC_ID, OWNER))?.token).not.toBe(
+        oldToken,
+      );
+      expect(await memberExists(MEMBER)).toBe(false);
+      expect(await resolvePresentationAccess(db, DOC_ID, MEMBER)).toBeNull();
+      expect(await getSharedPresentationDocuments(db, MEMBER)).toEqual([]);
     });
   });
 
