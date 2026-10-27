@@ -2,6 +2,7 @@ import { describe, it, expect, afterEach, beforeEach, vi } from "vitest";
 import {
   __resetProxySecretWarningForTests,
   clientIp,
+  lastForwardedIp,
   PROXY_CLIENT_IP_HEADER,
   PROXY_SECRET_HEADER,
   rateLimitKey,
@@ -84,6 +85,35 @@ describe("withTrustedClientIp", () => {
 
     expect(request.method).toBe("POST");
     await expect(request.json()).resolves.toEqual({ email: "a@example.com" });
+  });
+});
+
+describe("lastForwardedIp", () => {
+  const forwarded = (value: string) =>
+    new Headers({ "x-forwarded-for": value });
+
+  it("앞단이 마지막에 붙인 값을 읽어, 클라이언트가 앞에 적은 값은 쓰지 않는다", () => {
+    expect(lastForwardedIp(forwarded("10.0.9.9, 203.0.113.9 "))).toBe(
+      "203.0.113.9",
+    );
+    expect(lastForwardedIp(forwarded("192.0.2.10"))).toBe("192.0.2.10");
+  });
+
+  it("프록시를 거친 요청은 프록시가 넘긴 IP를 읽는다", () => {
+    const request = withTrustedClientIp(
+      proxied({
+        [PROXY_SECRET_HEADER]: SECRET,
+        [PROXY_CLIENT_IP_HEADER]: "192.0.2.10",
+      }),
+      SECRET,
+    );
+
+    expect(lastForwardedIp(request.headers)).toBe("192.0.2.10");
+  });
+
+  it("헤더가 없거나 마지막 값이 비면 unknown이다", () => {
+    expect(lastForwardedIp(new Headers())).toBe("unknown");
+    expect(lastForwardedIp(forwarded("10.0.9.9, "))).toBe("unknown");
   });
 });
 

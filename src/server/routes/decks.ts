@@ -168,6 +168,8 @@ export function createDecksRoute(deps: AppDeps = {}) {
               },
               409,
             );
+          case "source_taken_down":
+            return c.json({ error: API_ERRORS.deck.sourceTakenDown }, 409);
           case "deleted":
             return c.json({ error: API_ERRORS.deck.deleted }, 410);
           case "banned":

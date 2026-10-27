@@ -19,6 +19,19 @@ export function clientIp(headers: Headers): string {
   return headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
 }
 
+/**
+ * `x-forwarded-for`의 마지막 값. Cloud Run 앞단은 클라이언트가 보낸 값 뒤에 실제로 접속한 주소를
+ * 붙이므로, 첫 값(`clientIp`)과 달리 요청을 보내는 쪽이 고르지 못한다.
+ *
+ * 공개 도메인으로 온 요청은 `withTrustedClientIp`가 사용자 IP 하나로 바꿔 두어 첫 값과 같다. 앞단에
+ * 로드 밸런서를 두면 프록시를 거치지 않은 요청이 그 주소 하나로 묶이고, 프록시 비밀값이 어긋나면
+ * 모든 요청이 Cloudflare 출구 IP로 묶인다. 그래서 남의 IP를 적어 그 사람을 하루 내내 막을 수 있으면
+ * 안 되는 한도(`limitEmailSignUps`)에만 쓴다.
+ */
+export function lastForwardedIp(headers: Headers): string {
+  return headers.get("x-forwarded-for")?.split(",").at(-1)?.trim() || "unknown";
+}
+
 function hextetsOf(part: string): string[] {
   if (!part) return [];
   const groups = part.split(":");

@@ -22,6 +22,7 @@ import {
 } from "../test/fixtures";
 import {
   banUser,
+  findBlockingSource,
   listDescendants,
   listPendingReports,
   rejectReport,
@@ -268,7 +269,7 @@ describe("신고·게시 중단 운영 작업", () => {
 
       expect(
         (await setDeckVisibility(db, C, fork.deck.id, "public")).status,
-      ).toBe("taken_down");
+      ).toBe("source_taken_down");
       expect((await searchPublicDecks(db, "시선")).map((d) => d.id)).toEqual([
         FORK,
       ]);
@@ -288,11 +289,11 @@ describe("신고·게시 중단 운영 작업", () => {
       await takedownDeck(db, DECK);
 
       expect((await setDeckVisibility(db, B, FORK, "public")).status).toBe(
-        "taken_down",
+        "source_taken_down",
       );
       expect(
         (await setDeckVisibility(db, C, grandchild.deck.id, "public")).status,
-      ).toBe("taken_down");
+      ).toBe("source_taken_down");
       expect(await searchPublicDecks(db, "시선")).toEqual([]);
 
       await restoreDeck(db, DECK);
@@ -318,7 +319,49 @@ describe("신고·게시 중단 운영 작업", () => {
 
       expect(
         (await setDeckVisibility(db, B, GREAT_GRANDCHILD, "public")).status,
-      ).toBe("taken_down");
+      ).toBe("source_taken_down");
+    });
+
+    it("가져간 곡의 게시 중단만 풀면 원본이 아직 게시 중단돼 있어 공개하지 못하고, 무엇이 막는지 알려 준다", async () => {
+      const fork = await forkPublicDeck(db, C, DECK);
+      if (fork.status !== "ok") throw new Error(fork.status);
+      await takedownDeck(db, DECK);
+      await takedownForks(db, DECK);
+
+      expect(await restoreDeck(db, fork.deck.id)).toBe(true);
+
+      expect(await findBlockingSource(db, fork.deck.id)).toBe(DECK);
+      expect(
+        (await listDescendants(db, DECK)).find(
+          (deck) => deck.id === fork.deck.id,
+        ),
+      ).toMatchObject({ takenDown: false, blockedBy: DECK });
+      expect(
+        (await setDeckVisibility(db, C, fork.deck.id, "public")).status,
+      ).toBe("source_taken_down");
+    });
+
+    it("가져간 곡마다 공개를 막는 가장 가까운 게시 중단된 원본을 알려 준다", async () => {
+      await seedForkTree();
+      await takedownDeck(db, DECK);
+      await takedownForks(db, DECK);
+      await restoreDeck(db, DECK);
+      await restoreDeck(db, PRIVATE_FORK);
+
+      const found = await listDescendants(db, DECK);
+
+      expect(
+        Object.fromEntries(
+          found.map((deck) => [deck.id, [deck.takenDown, deck.blockedBy]]),
+        ),
+      ).toEqual({
+        [FORK]: [true, null],
+        [PRIVATE_FORK]: [false, null],
+        [GRANDCHILD]: [true, FORK],
+      });
+      expect(await findBlockingSource(db, GRANDCHILD)).toBe(FORK);
+      expect(await findBlockingSource(db, PRIVATE_FORK)).toBeNull();
+      expect(await findBlockingSource(db, NOBODY)).toBeNull();
     });
 
     it("게시 중단한 곡을 주인이 지워도 가져간 비공개 곡은 공개하지 못하고, 공개 중인 곡은 그대로 둔다", async () => {
@@ -426,6 +469,7 @@ describe("신고·게시 중단 운영 작업", () => {
           forkedFrom: DECK,
           listed: true,
           takenDown: false,
+          blockedBy: null,
         },
         {
           id: PRIVATE_FORK,
@@ -434,6 +478,7 @@ describe("신고·게시 중단 운영 작업", () => {
           forkedFrom: DECK,
           listed: false,
           takenDown: false,
+          blockedBy: null,
         },
         {
           id: GRANDCHILD,
@@ -442,6 +487,7 @@ describe("신고·게시 중단 운영 작업", () => {
           forkedFrom: FORK,
           listed: false,
           takenDown: false,
+          blockedBy: null,
         },
       ]);
     });

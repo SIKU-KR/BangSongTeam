@@ -4,10 +4,10 @@
  *
  * 사용법:
  *   node scripts/moderation.mjs list                                  # 처리 대기 신고
- *   node scripts/moderation.mjs descendants <곡 id>                   # 이 곡에서 가져간 보관함 곡 (가져간 곡을 다시 가져간 곡까지, 비공개 포함)
+ *   node scripts/moderation.mjs descendants <곡 id>                   # 이 곡에서 가져간 보관함 곡 (가져간 곡을 다시 가져간 곡까지, 비공개 포함). blockedBy는 공개를 막는 게시 중단된 원곡
  *   node scripts/moderation.mjs takedown <곡 id> --note=<사유>        # 게시 중단 + 그 곡의 신고 처리 완료
  *   node scripts/moderation.mjs takedown <곡 id> --with-forks --note=<사유>  # 가져간 곡도 함께 게시 중단
- *   node scripts/moderation.mjs restore <곡 id> --note=<사유>         # 게시 중단 해제 (비공개 유지)
+ *   node scripts/moderation.mjs restore <곡 id> --note=<사유>         # 게시 중단 해제 (비공개 유지). 원곡이나 가져간 곡이 아직 게시 중단돼 있으면 알린다
  *   node scripts/moderation.mjs ban <사용자 id> --note=<사유>         # 계정 제한: 공개·가져오기·신고를 막고 공개 곡을 게시 중단, 로그인 세션 종료
  *   node scripts/moderation.mjs unban <사용자 id> --note=<사유>       # 계정 제한 해제 (게시 중단한 곡은 restore로 하나씩 푼다)
  *   node scripts/moderation.mjs resolve <신고 id> --note=<메모>
@@ -74,12 +74,28 @@ async function main() {
       );
       return;
     }
-    case "restore":
+    case "restore": {
       if (!(await ops.restoreDeck(db, requireId(), now, eventNote))) {
         throw new Error(`보관함 곡이 아닙니다: ${id}`);
       }
+      const [blockedBy, descendants] = await Promise.all([
+        ops.findBlockingSource(db, id),
+        ops.listDescendants(db, id),
+      ]);
+      const stillTakenDown = descendants.filter((deck) => deck.takenDown);
       console.log("게시 중단을 풀었습니다. 곡은 비공개로 남습니다.");
+      if (blockedBy) {
+        console.warn(
+          `원곡 ${blockedBy}이(가) 아직 게시 중단돼 있어 소유자는 이 곡을 공개할 수 없습니다.`,
+        );
+      }
+      if (stillTakenDown.length > 0) {
+        console.log(
+          `가져간 곡 ${stillTakenDown.length}개는 아직 게시 중단돼 있습니다. descendants ${id}로 확인하고 restore로 하나씩 풀어 주세요.`,
+        );
+      }
       return;
+    }
     case "ban": {
       const result = await ops.banUser(db, requireId(), now, eventNote);
       if (result.status === "not_found") {

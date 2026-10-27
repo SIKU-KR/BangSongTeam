@@ -88,6 +88,7 @@ export type SetVisibilityResult =
   | { status: "not_found" }
   | { status: "not_library" }
   | { status: "taken_down" }
+  | { status: "source_taken_down" }
   | { status: "empty" }
   | { status: "deleted" }
   | { status: "banned" }
@@ -96,10 +97,11 @@ export type SetVisibilityResult =
 /**
  * 보관함 곡의 공개 여부를 변경한다. 게시 중단된 곡과 빈 곡은 공개할 수 없다.
  *
- * 가져온 곡은 거슬러 올라간 원본 가운데 하나라도 게시 중단됐으면 공개할 수 없다(`taken_down`,
+ * 가져온 곡은 거슬러 올라간 원본 가운데 하나라도 게시 중단됐으면 공개할 수 없다(`source_taken_down`,
  * `findTakenDownSource`). 가져간 사본은 지우지 않고 남기므로, 막지 않으면 게시 중단한 가사가
- * 사본이나 사본을 다시 가져간 곡으로 곧바로 다시 올라온다. 원본의 게시 중단을 풀면 다시 공개할 수
- * 있다.
+ * 사본이나 사본을 다시 가져간 곡으로 곧바로 다시 올라온다. 원본의 게시 중단을 풀면 공개할 수 있다.
+ * 이때 곡 자신에는 게시 중단 시각이 없어 클라이언트가 공개 버튼을 그대로 보여 주므로, 곡 자신이 게시
+ * 중단된 경우(`taken_down`)와 나눠 원곡 때문이라고 알린다.
  *
  * 운영자가 제한한 계정은 공개할 수 없고(`banned`), 그날 공개 한도(`DAILY_USER_LIMITS.publish`)를
  * 다 썼으면 `rate_limited`다. 한도는 비공개 곡을 공개할 때만 센다. 이미 공개한 곡을 다시 공개하거나
@@ -134,7 +136,7 @@ export async function setDeckVisibility(
       if (limits.banned) return { status: "banned" };
       if (row.takedownAt) return { status: "taken_down" };
       if (await findTakenDownSource(tx, db, row)) {
-        return { status: "taken_down" };
+        return { status: "source_taken_down" };
       }
       if (parseSlides(row.slides).length === 0) return { status: "empty" };
       if (row.visibility !== "public") {

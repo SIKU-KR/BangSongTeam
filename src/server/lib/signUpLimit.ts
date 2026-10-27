@@ -3,7 +3,7 @@ import { APIError } from "better-auth/api";
 import { takeSignUpQuota } from "#db";
 import { API_ERRORS, DAILY_SIGN_UP_LIMIT_CODE } from "#shared";
 import type { Bindings } from "../types";
-import { clientIp, rateLimitKey } from "./clientIp";
+import { lastForwardedIp, rateLimitKey } from "./clientIp";
 
 /**
  * 이메일 가입 하루 한도를 세는 IP 키. IP를 빈도 제한 단위(`rateLimitKey`, IPv6는 /64)로 묶고
@@ -26,10 +26,11 @@ export function signUpQuotaKey(ip: string, secret: string): string {
  * 있고, 계정마다의 하루 한도(`DAILY_USER_LIMITS`)가 그만큼 곱절이 된다. 그래서 가입 수를 Firestore에
  * 날마다 센다. 소셜 로그인 가입은 그쪽 계정을 따로 만들어야 해서 세지 않는다.
  *
- * IP는 `clientIp`로 읽는다. 공개 도메인으로 온 가입은 프록시가 알려 준 IP라 믿을 수 있지만, run.app에
- * 바로 보낸 요청은 `x-forwarded-for` 첫 값을 보내는 쪽이 정한다. 프록시를 거치지 않은 요청을 막기
- * 전에는 값을 바꿔 가며 run.app에 보내는 스크립트를 이 한도로 막지 못한다. 프록시 비밀값이 어긋나면
- * 모든 가입이 Cloudflare 출구 IP 몇 개로 묶여 한도에 일찍 닿는다(`proxy_secret_mismatch` 경고).
+ * IP는 `x-forwarded-for`의 마지막 값(`lastForwardedIp`)으로 읽는다. 첫 값은 run.app에 바로 보낸 요청이
+ * 마음대로 적으므로, 첫 값으로 세면 교회 공인 IP 같은 남의 IP를 적어 보내 그날 그 IP의 가입을 막거나
+ * 값을 바꿔 가며 한도를 피할 수 있다. 공개 도메인으로 온 가입은 프록시가 알려 준 IP 하나로 바뀌어 있어
+ * 첫 값과 같다. 프록시 비밀값이 어긋나면 모든 가입이 Cloudflare 출구 IP 몇 개로 묶여 한도에 일찍
+ * 닿는다(`proxy_secret_mismatch` 경고).
  *
  * `x-forwarded-for`가 없으면 세지 않는다. Cloud Run 앞단과 Next.js 서버가 늘 채우므로 운영과 로컬
  * 개발에서는 언제나 센다. 로컬 개발 서버(`pnpm dev`·`pnpm start`)에서는 Next.js가 소켓 주소를 채워
@@ -40,7 +41,7 @@ export async function limitEmailSignUps(
   headers: Headers | undefined,
   now: Date = new Date(),
 ): Promise<void> {
-  const ip = headers ? clientIp(headers) : "unknown";
+  const ip = headers ? lastForwardedIp(headers) : "unknown";
   if (ip === "unknown") return;
   const key = signUpQuotaKey(ip, env.BETTER_AUTH_SECRET ?? "");
   if (await takeSignUpQuota(env.DB, key, now)) return;

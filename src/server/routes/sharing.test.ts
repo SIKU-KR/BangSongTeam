@@ -153,7 +153,25 @@ describe("공유 라이브러리 API", () => {
 
     it("refuses to republish a taken-down deck", async () => {
       await takeDown(PUB);
-      expect((await publish(PUB)).status).toBe(409);
+      const res = await publish(PUB);
+      expect(res.status).toBe(409);
+      expect(await res.json()).toEqual({ error: API_ERRORS.deck.takenDown });
+    });
+
+    it("원곡이 게시 중단된 가져온 곡은 409로 공개하지 않고 원곡 때문이라고 알린다", async () => {
+      await publish(PUB);
+      currentUser = B;
+      const forked = await request("POST", `/api/decks/${PUB}/fork`);
+      expect(forked.status).toBe(200);
+      const { deck: fork } = (await forked.json()) as { deck: Deck };
+      await takeDown(PUB);
+
+      const res = await publish(fork.id);
+
+      expect(res.status).toBe(409);
+      expect(await res.json()).toEqual({
+        error: API_ERRORS.deck.sourceTakenDown,
+      });
     });
 
     it("게시 중단한 곡은 옛 탭이 공개·중단 없음으로 보낸 저장에도 다시 공개되지 않는다", async () => {

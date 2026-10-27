@@ -6,12 +6,17 @@ import {
   decksCol,
   reportsCol,
   usersCol,
+  type DeckDoc,
   type ModerationEventDoc,
   type ReportDoc,
 } from "../collections";
 import { withDeckIndex } from "../deckIndex";
 import { isBannedUser } from "../queries/limits";
-import { recordModerationEvent } from "../queries/takedowns";
+import {
+  findTakenDownAncestor,
+  recordModerationEvent,
+  type DeckReader,
+} from "../queries/takedowns";
 
 /**
  * 신고·게시 중단 운영 작업. 관리자 화면 없이 `scripts/moderation.mjs`로 실행한다.
@@ -127,7 +132,11 @@ export async function takedownDeck(
   return takeDown(db, deckId, now, directCause(note));
 }
 
-/** 게시 중단 해제. 비공개로 둔 채 소유자가 다시 공개할 수 있게만 한다 */
+/**
+ * 게시 중단 해제. 비공개로 둔 채 이 곡 자신의 게시 중단만 푼다. 거슬러 올라간 원본이 아직 게시
+ * 중단돼 있으면 소유자는 여전히 공개하지 못하고(`findBlockingSource`), 이 곡에서 가져간 곡의 게시
+ * 중단도 그대로 남는다(`listDescendants`).
+ */
 export async function restoreDeck(
   db: Db,
   deckId: string,
@@ -152,15 +161,52 @@ export interface DescendantDeck {
   /** 이 곡이 가져온 곡 */
   forkedFrom: string;
   listed: boolean;
+  /** 이 곡 자신이 게시 중단됐다 */
   takenDown: boolean;
+  /**
+   * 이 곡의 공개를 막는 원본: 거슬러 올라가며 처음 만나는 게시 중단된 곡 id(`findBlockingSource`).
+   * 없으면 `null`이다. 이 값이 있으면 `takenDown`이 `false`여도 공개하지 못한다.
+   */
+  blockedBy: string | null;
 }
 
 const DESCENDANT_QUERY_CONCURRENCY = 30;
 
+function cachedDeckReader(db: Db, known: Iterable<DeckDoc> = []): DeckReader {
+  const reads = new Map<string, Promise<DeckDoc | undefined>>();
+  for (const deck of known) reads.set(deck.id, Promise.resolve(deck));
+  return (deckId) => {
+    const cached = reads.get(deckId);
+    if (cached) return cached;
+    const read = decksCol(db)
+      .doc(deckId)
+      .get()
+      .then((snapshot) => snapshot.data());
+    reads.set(deckId, read);
+    return read;
+  };
+}
+
+/**
+ * 이 곡의 공개를 막는 원본: 거슬러 올라가며 처음 만나는 게시 중단된 곡 id. 없거나 곡이 없으면
+ * `null`이다. 곡을 공개하는 트랜잭션(`setDeckVisibility`)과 같은 길(`findTakenDownAncestor`)로 찾으므로,
+ * 이 값이 있으면 곡 자신의 게시 중단을 풀어도 공개하지 못한다.
+ */
+export async function findBlockingSource(
+  db: Db,
+  deckId: string,
+): Promise<string | null> {
+  const read = cachedDeckReader(db);
+  const deck = await read(deckId);
+  if (!deck) return null;
+  return (await findTakenDownAncestor(read, deck))?.id ?? null;
+}
+
 /**
  * 이 곡에서 가져간 보관함 곡 전부. 가져간 곡을 다시 가져간 곡까지 너비 우선으로 찾고, 공개
  * 여부와 상관없이 담는다(함께 게시 중단할지 판단용). 비공개 사본도 나중에 공개할 수 있고, 곡을
- * 프레젠테이션에 담을 때마다 비공개 사본이 생기기 때문이다.
+ * 프레젠테이션에 담을 때마다 비공개 사본이 생기기 때문이다. 곡마다 공개를 막는 원본(`blockedBy`)도
+ * 함께 알려, 원본의 게시 중단을 풀거나 곡 하나만 풀었을 때 실제로 공개할 수 있는 곡을 가린다.
  *
  * 원본이 지워져 `forkedFrom`이 비워진 곡과 가사를 복사해 새로 만든 곡은 이어지지 않아 찾지 못한다.
  */
@@ -168,7 +214,7 @@ export async function listDescendants(
   db: Db,
   deckId: string,
 ): Promise<DescendantDeck[]> {
-  const found: DescendantDeck[] = [];
+  const found: { parent: string; deck: DeckDoc }[] = [];
   const seen = new Set([deckId]);
   let parents = [deckId];
   while (parents.length > 0) {
@@ -184,23 +230,30 @@ export async function listDescendants(
           return snapshot.docs.map((doc) => ({ parent, deck: doc.data() }));
         }),
       );
-      for (const { parent, deck } of children.flat()) {
-        if (seen.has(deck.id)) continue;
-        seen.add(deck.id);
-        next.push(deck.id);
-        found.push({
-          id: deck.id,
-          userId: deck.userId,
-          title: deck.title,
-          forkedFrom: parent,
-          listed: deck.listed,
-          takenDown: Boolean(deck.takedownAt),
-        });
+      for (const child of children.flat()) {
+        if (seen.has(child.deck.id)) continue;
+        seen.add(child.deck.id);
+        next.push(child.deck.id);
+        found.push(child);
       }
     }
     parents = next;
   }
-  return found;
+  const read = cachedDeckReader(
+    db,
+    found.map(({ deck }) => deck),
+  );
+  return Promise.all(
+    found.map(async ({ parent, deck }) => ({
+      id: deck.id,
+      userId: deck.userId,
+      title: deck.title,
+      forkedFrom: parent,
+      listed: deck.listed,
+      takenDown: Boolean(deck.takedownAt),
+      blockedBy: (await findTakenDownAncestor(read, deck))?.id ?? null,
+    })),
+  );
 }
 
 /**
