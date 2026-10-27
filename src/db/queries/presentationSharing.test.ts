@@ -30,6 +30,7 @@ import {
 } from "#shared";
 import { upsertPresentationDocument } from "./presentations";
 import {
+  MAX_SHARED_FOLDER_DEPTH,
   getPresentationDocument,
   getShareSettings,
   getSharedDocumentByToken,
@@ -56,6 +57,26 @@ const RESET_WAIT_MS = 300;
 afterEach(() => {
   vi.restoreAllMocks();
 });
+
+async function withFolderReads<T>(
+  run: () => Promise<T>,
+): Promise<{ result: T; folderReads: number }> {
+  const directGet = vi.spyOn(DocumentReference.prototype, "get");
+  const transactionGet = vi.spyOn(Transaction.prototype, "get");
+  const result = await run();
+  const targets: unknown[] = [
+    ...directGet.mock.contexts,
+    ...transactionGet.mock.calls.map(([target]) => target),
+  ];
+  directGet.mockRestore();
+  transactionGet.mockRestore();
+  const folderReads = targets.filter(
+    (target) =>
+      target instanceof DocumentReference &&
+      target.parent.id === COLLECTIONS.folders,
+  ).length;
+  return { result, folderReads };
+}
 
 function makeDoc(
   overrides: Partial<PresentationDocument> = {},
@@ -134,6 +155,17 @@ describe("세트 링크 공유", () => {
           name: "9월",
         }),
       ],
+    });
+  }
+
+  async function placeFolderAtDepth(depth: number): Promise<void> {
+    const chain = Array.from({ length: depth }, (_, level) =>
+      level === 0 ? FOLDER_ID : `e${String(level).padStart(20, "0")}`,
+    );
+    await seedDocs(db, {
+      folders: chain.map((id, level) =>
+        folderDoc({ id, userId: OWNER, parentId: chain[level + 1] ?? null }),
+      ),
     });
   }
 
@@ -396,6 +428,58 @@ describe("세트 링크 공유", () => {
         SECOND_DOC_ID,
       ]);
       expect(folderReads).toEqual([FOLDER_ID, PARENT_FOLDER_ID]);
+    });
+  });
+
+  describe("링크 확인의 폴더 읽기 한도", () => {
+    it("담긴 폴더가 한도보다 깊으면 링크를 멈추고, 확인마다 폴더를 한도까지만 읽는다", async () => {
+      const token = await shareAndJoin();
+      await placeFolderAtDepth(MAX_SHARED_FOLDER_DEPTH + 1);
+
+      const checks = [
+        await withFolderReads(() => getSharedDocumentByToken(db, token)),
+        await withFolderReads(() =>
+          resolvePresentationAccess(db, DOC_ID, MEMBER),
+        ),
+        await withFolderReads(() => getSharedPresentationDocuments(db, MEMBER)),
+        await withFolderReads(() => joinByToken(db, token, STRANGER)),
+      ];
+
+      expect(checks.map(({ result }) => result)).toEqual([
+        null,
+        null,
+        [],
+        null,
+      ]);
+      for (const { folderReads } of checks) {
+        expect(folderReads).toBeLessThanOrEqual(MAX_SHARED_FOLDER_DEPTH);
+      }
+      expect(await memberExists(STRANGER)).toBe(false);
+      expect(await resolvePresentationAccess(db, DOC_ID, OWNER)).toBe("owner");
+    });
+
+    it("한도 깊이까지 담긴 프레젠테이션은 링크가 열린다", async () => {
+      const token = await shareAndJoin();
+      await placeFolderAtDepth(MAX_SHARED_FOLDER_DEPTH);
+
+      expect((await getSharedDocumentByToken(db, token))?.id).toBe(DOC_ID);
+      expect(await resolvePresentationAccess(db, DOC_ID, MEMBER)).toBe(
+        "viewer",
+      );
+      expect((await joinByToken(db, token, STRANGER))?.role).toBe("viewer");
+    });
+
+    it("링크로 들어오면 담긴 폴더를 멤버로 기록할 때와 문서를 줄 때 한 번씩만 따라 읽는다", async () => {
+      const depth = 3;
+      await placeFolderAtDepth(depth);
+      const settings = await setLinkAccess(db, DOC_ID, OWNER, "view");
+
+      const joined = await withFolderReads(() =>
+        joinByToken(db, settings?.token as string, MEMBER),
+      );
+
+      expect(joined.result?.role).toBe("viewer");
+      expect(joined.folderReads).toBe(2 * depth);
     });
   });
 

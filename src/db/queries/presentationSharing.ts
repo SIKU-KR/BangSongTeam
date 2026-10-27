@@ -24,6 +24,15 @@ import {
 
 export type PresentationRole = "owner" | "viewer";
 
+/**
+ * 공유 링크가 살아 있는지 볼 때 프레젠테이션 하나에서 따라 올라가며 읽는 폴더 수 상한. 이 확인은
+ * 로그인 없는 링크 보기와 공유받은 사람의 목록·참여 요청에서 일어나, 소유자가 폴더를 깊게 쌓으면
+ * 남의 요청이 읽는 문서 수와 기다리는 시간이 함께 늘어난다. 더 깊이 담긴 프레젠테이션은 휴지통
+ * 여부를 끝까지 보지 않고 링크가 멈춘 것으로 본다. 영구 삭제의 휴지통 확인(`deletePresentation`)은
+ * 소유자 자신의 요청이라 묶지 않는다.
+ */
+export const MAX_SHARED_FOLDER_DEPTH = 64;
+
 type FolderReader = (id: string) => Promise<FolderDoc | undefined>;
 
 function readFolderDoc(db: Db): FolderReader {
@@ -41,21 +50,40 @@ function memoizeFolderReads(read: FolderReader): FolderReader {
   };
 }
 
+class FolderChainTooDeepError extends Error {}
+
+function limitFolderReads(read: FolderReader): FolderReader {
+  let reads = 0;
+  return async (id) => {
+    reads += 1;
+    if (reads > MAX_SHARED_FOLDER_DEPTH) throw new FolderChainTooDeepError();
+    return read(id);
+  };
+}
+
 /**
  * 링크 공유가 살아 있는 프레젠테이션인지. 프레젠테이션이나 담긴 폴더(조상 포함)가 휴지통에
  * 있으면 링크가 멈춘다. 폴더를 휴지통에 넣으면 폴더 문서만 바뀌므로 폴더를 따라 읽는다
  * (`isPresentationInTrash`). 폴더는 링크가 켜져 있고 자신은 휴지통 밖인 프레젠테이션일 때만 읽고,
  * 이 확인에만 쓰고 돌려주지 않는다. 멤버 기록은 남아 폴더를 복원하면 링크가 다시 열린다.
+ * 폴더를 `MAX_SHARED_FOLDER_DEPTH`개보다 많이 읽어야 하면 더 읽지 않고 링크가 멈춘 것으로 본다.
  */
 async function isLinkActive(
   presentation: PresentationDoc,
   readFolder: FolderReader,
 ): Promise<boolean> {
-  return (
-    presentation.linkAccess !== "off" &&
-    presentation.trashedAt === null &&
-    !(await isPresentationInTrash(readFolder, presentation))
-  );
+  if (presentation.linkAccess === "off" || presentation.trashedAt !== null) {
+    return false;
+  }
+  try {
+    return !(await isPresentationInTrash(
+      limitFolderReads(readFolder),
+      presentation,
+    ));
+  } catch (error) {
+    if (error instanceof FolderChainTooDeepError) return false;
+    throw error;
+  }
 }
 
 /**
@@ -323,8 +351,11 @@ export async function joinByToken(
   });
   if (!target) return null;
 
-  const role = await resolvePresentationAccess(db, target.id, userId);
   const document = await getPresentationDocument(db, target.id, userId);
-  if (!role || !document) return null;
-  return { presentationId: target.id, role, document };
+  if (!document) return null;
+  return {
+    presentationId: target.id,
+    role: document.access ? "viewer" : "owner",
+    document,
+  };
 }
