@@ -10,12 +10,12 @@ export {
   deleteFolderRemote,
   deletePresentationRemote,
 } from "./presentationSync";
-export { OfflineError } from "../api/request";
-export { flushPendingSync } from "./syncScheduler";
+export { OfflineError, ServerRejectedError } from "../api/request";
+export { flushPendingSync, hasPendingDocumentPush } from "./syncScheduler";
 export { runBootSync, shouldRunBootSync } from "./bootSync";
 export { refreshBackgroundCatalog } from "./backgroundSync";
 export { flushDeckSync } from "./deckSync";
-export { flushFolderSync } from "./folderSync";
+export { flushFolderSync, hasPendingFolderPush } from "./folderSync";
 export {
   startSyncRecovery,
   retrySyncNow,

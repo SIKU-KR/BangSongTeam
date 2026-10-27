@@ -10,6 +10,7 @@ import {
   type Deck,
   type DeckListResponse,
   type Folder,
+  type FolderDeleteRequest,
   type FolderDeleteResponse,
   type FolderListResponse,
   type Presentation,
@@ -317,15 +318,21 @@ export async function pushFolder(folder: Folder): Promise<Folder> {
 }
 
 /**
- * 폴더를 하위 폴더·프레젠테이션과 함께 서버에서 영구 삭제한다.
- * 이미 없으면(404 — 한 번도 안 올라간 폴더) 지운 것이 없는 성공으로 본다.
+ * 폴더를 하위 폴더·프레젠테이션과 함께 서버에서 영구 삭제한다. `expected`는 이 기기가 본
+ * 하위 트리(폴더 자신 포함)다.
+ *
+ * 서버는 그 폴더나 조상이 서버의 휴지통에 없거나, 서버 트리에 `expected` 밖의 항목(다른
+ * 기기에서 옮겨 넣은 것 등)이 있으면 아무것도 지우지 않고 409로 거절한다. 409를 포함한 거절은
+ * 서버 문장을 담아 그대로 던진다. 이미 없으면(404 — 한 번도 안 올라간 폴더) 지운 것이 없는
+ * 성공으로 본다.
  */
 export async function deleteFolderRemote(
   id: string,
+  expected: NonNullable<FolderDeleteRequest["expected"]>,
 ): Promise<FolderDeleteResponse> {
   try {
     const body = await callSyncApi<unknown>(() =>
-      api.api.folders[":id"].$delete({ param: { id } }),
+      api.api.folders[":id"].$delete({ param: { id }, json: { expected } }),
     );
     return FolderDeleteResponseSchema.parse(body);
   } catch (err) {

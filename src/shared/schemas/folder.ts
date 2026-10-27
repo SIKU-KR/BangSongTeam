@@ -71,10 +71,15 @@ export const FolderDeleteRequestSchema = z.object({
 });
 export type FolderDeleteRequest = z.infer<typeof FolderDeleteRequestSchema>;
 
-/** 폴더 영구 삭제 응답 — 함께 지워진 하위 폴더·프레젠테이션 id */
+/**
+ * 폴더 영구 삭제 응답 — 함께 지워진 하위 폴더·프레젠테이션 id.
+ *
+ * id 형식은 보지 않는다. 가져온 데이터의 id는 형식을 검사한 적이 없어, 엄격히 읽으면 서버가
+ * 이미 끝낸 삭제를 실패로 알리고 로컬에서 지우지 않는다.
+ */
 export const FolderDeleteResponseSchema = z.object({
   ok: z.literal(true),
-  deletedFolderIds: z.array(IdSchema),
-  deletedPresentationIds: z.array(IdSchema),
+  deletedFolderIds: z.array(z.string()),
+  deletedPresentationIds: z.array(z.string()),
 });
 export type FolderDeleteResponse = z.infer<typeof FolderDeleteResponseSchema>;

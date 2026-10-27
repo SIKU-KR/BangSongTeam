@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import {
   API_ERRORS,
   DEFAULT_DECK_STYLE,
@@ -38,20 +38,25 @@ const api = vi.hoisted(() => ({
   >(),
 }));
 
-vi.mock("../api/client", () => ({
-  api: {
+vi.mock("../api/client", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../api/client")>();
+  return {
     api: {
-      presentations: {
-        ":id": { $patch: api.patch, $delete: api.remove, $get: api.get },
+      api: {
+        presentations: {
+          ":id": { $patch: api.patch, $delete: api.remove, $get: api.get },
+        },
+        decks: { $get: api.listDecks },
+        folders: actual.api.api.folders,
+        "client-reports": { $path: () => "/api/client-reports" },
       },
-      decks: { $get: api.listDecks },
-      "client-reports": { $path: () => "/api/client-reports" },
     },
-  },
-}));
+  };
+});
 
 import {
   __resetServerDecksForTests,
+  deleteFolderRemote,
   deletePresentationRemote,
   endSharedPresentationRefresh,
   pullDecks,
@@ -64,6 +69,7 @@ import {
 import { getSyncSnapshot, resetSyncStatus, setSyncStatus } from "./syncStatus";
 import { OfflineError, ServerRejectedError } from "../api/request";
 import { rememberRequestMeta } from "../api/traceContext";
+import { installFakeApi, type FakeApi } from "../../test/fakeApi";
 import {
   __resetClientReportsForTests,
   flushClientReports,
@@ -406,6 +412,101 @@ describe("프레젠테이션 원격 삭제", () => {
     await expect(deletePresentationRemote(DOC_ID)).resolves.toBeUndefined();
 
     expect(getSyncSnapshot().status).toBe("idle");
+  });
+});
+
+describe("폴더 원격 영구 삭제", () => {
+  const FOLDER = "a00000000000000000001";
+  const CHILD = "b00000000000000000002";
+  const IMPORTED = "550e8400-e29b-41d4-a716-446655440000";
+  const expected = {
+    folderIds: [FOLDER, CHILD],
+    presentationIds: [DOC_ID, IMPORTED],
+  };
+  let fake: FakeApi | null = null;
+
+  afterEach(() => {
+    fake?.restore();
+    fake = null;
+  });
+
+  it("이 기기가 본 하위 폴더·프레젠테이션 id를 본문에 담아 보낸다", async () => {
+    fake = installFakeApi({
+      "DELETE /api/folders/*": () => ({
+        body: {
+          ok: true,
+          deletedFolderIds: [FOLDER, CHILD],
+          deletedPresentationIds: [DOC_ID],
+        },
+      }),
+    });
+
+    await expect(deleteFolderRemote(FOLDER, expected)).resolves.toEqual({
+      ok: true,
+      deletedFolderIds: [FOLDER, CHILD],
+      deletedPresentationIds: [DOC_ID],
+    });
+
+    expect(fake.calls).toEqual([
+      {
+        method: "DELETE",
+        path: `/api/folders/${FOLDER}`,
+        search: "",
+        body: { expected },
+      },
+    ]);
+  });
+
+  it("이미 없는 폴더(404)는 지운 것이 없는 성공으로 본다", async () => {
+    fake = installFakeApi({
+      "DELETE /api/folders/*": () => ({
+        status: 404,
+        body: { error: API_ERRORS.folder.notAccessible },
+      }),
+    });
+
+    await expect(deleteFolderRemote(FOLDER, expected)).resolves.toEqual({
+      ok: true,
+      deletedFolderIds: [],
+      deletedPresentationIds: [],
+    });
+  });
+
+  it("서버가 지웠다고 돌려준 id가 id 형식이 아니어도 삭제를 끝낸 것으로 본다", async () => {
+    fake = installFakeApi({
+      "DELETE /api/folders/*": () => ({
+        body: {
+          ok: true,
+          deletedFolderIds: [FOLDER],
+          deletedPresentationIds: [IMPORTED],
+        },
+      }),
+    });
+
+    await expect(deleteFolderRemote(FOLDER, expected)).resolves.toEqual({
+      ok: true,
+      deletedFolderIds: [FOLDER],
+      deletedPresentationIds: [IMPORTED],
+    });
+  });
+
+  it("서버가 그사이 바뀌었다고 거절하면(409) 그 문장을 담아 던진다", async () => {
+    fake = installFakeApi({
+      "DELETE /api/folders/*": () => ({
+        status: 409,
+        body: { error: API_ERRORS.trashChanged },
+      }),
+    });
+
+    const error = await deleteFolderRemote(FOLDER, expected).catch(
+      (err: unknown) => err,
+    );
+
+    expect(error).toBeInstanceOf(ServerRejectedError);
+    expect(error).toMatchObject({
+      status: 409,
+      message: API_ERRORS.trashChanged,
+    });
   });
 });
 
