@@ -77,8 +77,8 @@ gcloud run deploy "$SERVICE" --image "$IMAGE" --region "$REGION" \
 
 - `--timeout=3600`: 오프라인 송출용 배경 영상(수백 MB)을 느린 회선으로 받아도 끊기지 않게 한다.
 - 컨테이너는 `MEDIA_BUCKET`·`BETTER_AUTH_URL`·`BETTER_AUTH_SECRET`·`PROXY_SECRET` 중 하나라도
-  비어 있으면 뜨지 않는다(`scripts/cloudRunBoot.mjs`). 나중에 변수를 바꿀 때 `--set-env-vars`는
-  나머지 변수를 모두 지우므로 `--update-env-vars`를 쓴다.
+  비어 있으면 뜨지 않는다(`scripts/cloudRunBoot.mjs`). 나중에 바꿀 때 `--set-env-vars`·`--set-secrets`는
+  나머지 변수·비밀값을 모두 지우므로 `--update-env-vars`·`--update-secrets`를 쓴다.
 - 사용하지 않는 소셜 로그인은 id·secret을 빼면 로그인 화면에서 사라진다.
 - 서울 리전은 Cloud Run 도메인 매핑을 지원하지 않아, 도메인은 Cloudflare Worker 프록시
   (`infra/cloudflare-proxy`)가 run.app으로 넘긴다. Worker와 Cloud Run에 같은 `PROXY_SECRET`을
