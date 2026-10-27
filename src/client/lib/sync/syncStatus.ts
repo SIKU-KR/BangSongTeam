@@ -217,7 +217,8 @@ export function useSyncStatus(): SyncSnapshot {
 
 /**
  * 모든 도메인을 처음 상태로 되돌린다. 부팅 동기화가 큐를 켜기 전에 부른다.
- * 새로고침 없이 계정을 바꿨을 때 앞 사용자의 실패 기록과 동기화 시각이 남으면 안 된다.
+ * 다시 부팅하면 앞선 부팅이 남긴 실패 기록과 동기화 시각이 새 부팅의 결과를 가리면 안 된다.
+ * 계정이 끝나면 페이지를 새로고침하므로 다른 계정의 기록은 남지 않는다.
  */
 export function resetSyncStatus(): void {
   domains = createDomains();

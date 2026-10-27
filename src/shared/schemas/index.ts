@@ -10,3 +10,4 @@ export * from "./api";
 export * from "./presentationShare";
 export * from "./projection";
 export * from "./clientReport";
+export * from "./session";

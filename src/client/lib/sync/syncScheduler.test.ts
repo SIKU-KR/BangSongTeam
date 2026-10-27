@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { API_ERRORS, type Presentation } from "#shared";
+import { API_ERRORS, type Folder, type Presentation } from "#shared";
 import { ERROR_COPY } from "#copy/common";
 import {
   scheduleDocumentPush,
@@ -279,6 +279,40 @@ describe("서버 push 스케줄러", () => {
     await flushPendingSync();
 
     expect(order).toEqual(["folder:f00000000000000000001", "doc:a"]);
+    __resetFolderSyncForTests();
+  });
+
+  it("폴더 큐를 먼저 비우는 동안 끄면 프레젠테이션을 보내지 않는다", async () => {
+    __resetFolderSyncForTests();
+    const newFolder: Folder = {
+      id: "f00000000000000000001",
+      userId: USER,
+      parentId: null,
+      name: "새 폴더",
+      trashedAt: null,
+      createdAt: "2026-09-22T00:00:00.000Z",
+      updatedAt: "2026-09-22T00:00:00.000Z",
+    };
+    let finishFolder: (saved: Folder) => void = () => undefined;
+    const pushFolder = vi.fn(
+      () =>
+        new Promise<Folder>((resolve) => {
+          finishFolder = resolve;
+        }),
+    );
+    __setFolderPusherForTests(pushFolder);
+    setFolderSyncEnabled(true);
+
+    scheduleFolderPush(newFolder);
+    scheduleDocumentPush({ ...doc("a"), folderId: newFolder.id });
+    const flushing = flushPendingSync();
+    await vi.waitFor(() => expect(pushFolder).toHaveBeenCalledTimes(1));
+
+    setSyncEnabled(false);
+    finishFolder(newFolder);
+    await flushing;
+
+    expect(push).not.toHaveBeenCalled();
     __resetFolderSyncForTests();
   });
 

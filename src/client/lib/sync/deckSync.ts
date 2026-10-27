@@ -56,6 +56,10 @@ const backoff = new BackoffTracker();
  * 로그인·하이드레이션이 끝난 뒤에만 켠다 (송출 화면에서는 켜지 않는다).
  * 끄면 대기 중인 일은 버리지만 지운 곡 목록(`deletedDeckIds`)은 남긴다. id는 다시 쓰이지
  * 않으므로 남겨도 다른 곡을 가리지 않는다.
+ *
+ * 꺼져 있는 동안에는 보내는 중인 묶음의 남은 곡도, 끈 뒤에 끝난 요청이 다시 넣은 곡도 보내지
+ * 않는다. 계정이 끝난 탭(`stopSync`)은 새로고침할 때까지 큐를 꺼 두고, 송출 중이면 송출을 마칠
+ * 때까지 새로고침을 미룬다. 그사이 요청이 나가면 다른 계정의 쿠키로 간다.
  */
 export function setDeckSyncEnabled(next: boolean): void {
   enabled = next;
@@ -137,6 +141,7 @@ async function runOps(ops: PendingOp[]): Promise<void> {
   let minRetryDelay = Infinity;
 
   for (const op of ops) {
+    if (!enabled) return;
     const key = op.kind === "push" ? op.deck.id : op.id;
     try {
       if (op.kind === "push") {
@@ -222,7 +227,7 @@ function run(): void {
     clearTimeout(timer);
     timer = null;
   }
-  if (pending.size === 0) return;
+  if (!enabled || pending.size === 0) return;
 
   const ops = [...pending.values()];
   pending = new Map();

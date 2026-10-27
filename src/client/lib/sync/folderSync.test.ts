@@ -30,6 +30,7 @@ import {
   __setDeckTransportForTests,
   __resetDeckSyncForTests,
 } from "./deckSync";
+import { MAX_BACKOFF_MS } from "./backoff";
 
 const USER = "000000000000000000001";
 const PARENT = "a00000000000000000001";
@@ -409,6 +410,76 @@ describe("폴더 push 큐", () => {
       await flushDeckSync();
 
       expect(getSyncSnapshot().status).toBe("offline");
+    });
+  });
+
+  describe("큐를 끈 뒤", () => {
+    function holdPushOnce(): {
+      resolve: (saved: Folder) => void;
+      reject: (err: unknown) => void;
+    } {
+      const settle: {
+        resolve: (saved: Folder) => void;
+        reject: (err: unknown) => void;
+      } = { resolve: () => undefined, reject: () => undefined };
+      push.mockImplementationOnce(
+        () =>
+          new Promise<Folder>((resolve, reject) => {
+            settle.resolve = resolve;
+            settle.reject = reject;
+          }),
+      );
+      return settle;
+    }
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it("묶음의 첫 폴더를 보내는 동안 끄면 그 뒤의 폴더는 보내지 않는다", async () => {
+      const first = holdPushOnce();
+      scheduleFolderPush(folder(PARENT, null));
+      scheduleFolderPush(folder(CHILD, PARENT));
+      scheduleFolderPush(folder(GRANDCHILD, CHILD));
+      const flushing = flushFolderSync();
+      await vi.waitFor(() => expect(push).toHaveBeenCalledTimes(1));
+
+      setFolderSyncEnabled(false);
+      first.resolve(folder(PARENT, null));
+      await flushing;
+
+      expect(push).toHaveBeenCalledTimes(1);
+    });
+
+    it("끈 뒤에 오프라인으로 끝난 폴더는 백오프 타이머가 지나도 다시 보내지 않는다", async () => {
+      vi.useFakeTimers();
+      const first = holdPushOnce();
+      scheduleFolderPush(folder(PARENT, null));
+      const flushing = flushFolderSync();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(push).toHaveBeenCalledTimes(1);
+
+      setFolderSyncEnabled(false);
+      first.reject(new OfflineError());
+      await flushing;
+      await vi.advanceTimersByTimeAsync(MAX_BACKOFF_MS);
+
+      expect(push).toHaveBeenCalledTimes(1);
+    });
+
+    it("끈 뒤에는 flush하거나 다시 시도해도 보내지 않는다", async () => {
+      const first = holdPushOnce();
+      scheduleFolderPush(folder(PARENT, null));
+      const flushing = flushFolderSync();
+      await vi.waitFor(() => expect(push).toHaveBeenCalledTimes(1));
+
+      setFolderSyncEnabled(false);
+      first.reject(new OfflineError());
+      await flushing;
+      await flushFolderSync();
+      await retryFolderSyncNow("manual");
+
+      expect(push).toHaveBeenCalledTimes(1);
     });
   });
 });
