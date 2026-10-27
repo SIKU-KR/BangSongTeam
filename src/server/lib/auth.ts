@@ -6,7 +6,9 @@ import {
   FALLBACK_USER_NAME,
   PASSWORD_MAX_LENGTH,
   PASSWORD_MIN_LENGTH,
+  SocialProviderSchema,
   toDisplayName,
+  type SocialProvider,
 } from "#shared";
 import type { Bindings } from "../types";
 import { devSignIn } from "./devSignIn";
@@ -84,6 +86,27 @@ export function hasCredentials(
   return Boolean(clientId?.trim()) && Boolean(clientSecret?.trim());
 }
 
+/**
+ * id·secret이 모두 채워져 Better Auth에 등록하는 소셜 로그인. 로그인 화면의 순서를 따른다.
+ *
+ * 운영에서는 이 값이 소셜 로그인을 켜고 끄는 스위치다. 로그인 화면이 버튼을 고르는
+ * `GET /api/auth-config`도 이 목록을 그대로 알려 줘, 보이는 버튼과 시작할 수 있는 로그인이
+ * 어긋나지 않는다.
+ */
+export function configuredSocialProviders(env: Bindings): SocialProvider[] {
+  const credentials: Record<
+    SocialProvider,
+    readonly [string | undefined, string | undefined]
+  > = {
+    kakao: [env.KAKAO_CLIENT_ID, env.KAKAO_CLIENT_SECRET],
+    naver: [env.NAVER_CLIENT_ID, env.NAVER_CLIENT_SECRET],
+    google: [env.GOOGLE_CLIENT_ID, env.GOOGLE_CLIENT_SECRET],
+  };
+  return SocialProviderSchema.options.filter((provider) =>
+    hasCredentials(...credentials[provider]),
+  );
+}
+
 function syntheticEmail(provider: string, id: string | number): string {
   return `${provider}_${id}@${SYNTHETIC_EMAIL_DOMAIN}`;
 }
@@ -140,9 +163,10 @@ export const ACCOUNT_LINKING = {
 } as const;
 
 function buildAuth(env: Bindings) {
+  const enabled = new Set(configuredSocialProviders(env));
   const socialProviders: Record<string, unknown> = {};
 
-  if (hasCredentials(env.KAKAO_CLIENT_ID, env.KAKAO_CLIENT_SECRET)) {
+  if (enabled.has("kakao")) {
     socialProviders.kakao = {
       clientId: env.KAKAO_CLIENT_ID as string,
       clientSecret: env.KAKAO_CLIENT_SECRET as string,
@@ -150,7 +174,7 @@ function buildAuth(env: Bindings) {
     };
   }
 
-  if (hasCredentials(env.NAVER_CLIENT_ID, env.NAVER_CLIENT_SECRET)) {
+  if (enabled.has("naver")) {
     socialProviders.naver = {
       clientId: env.NAVER_CLIENT_ID as string,
       clientSecret: env.NAVER_CLIENT_SECRET as string,
@@ -158,7 +182,7 @@ function buildAuth(env: Bindings) {
     };
   }
 
-  if (hasCredentials(env.GOOGLE_CLIENT_ID, env.GOOGLE_CLIENT_SECRET)) {
+  if (enabled.has("google")) {
     socialProviders.google = {
       clientId: env.GOOGLE_CLIENT_ID as string,
       clientSecret: env.GOOGLE_CLIENT_SECRET as string,

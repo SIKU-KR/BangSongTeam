@@ -98,6 +98,16 @@ export const SocialProviderSchema = z.enum(["kakao", "naver", "google"]);
 export type SocialProvider = z.infer<typeof SocialProviderSchema>;
 
 /**
+ * `GET /api/auth-config`: 이 서버에서 로그인을 시작할 수 있는 소셜 로그인. 서버에 id·secret이
+ * 없는 프로바이더는 Better Auth에 등록되지 않아 로그인 시작이 404로 끝나므로, 로그인 화면은
+ * 여기 없는 버튼을 감춘다.
+ */
+export const AuthConfigResponseSchema = z.object({
+  providers: z.array(SocialProviderSchema),
+});
+export type AuthConfigResponse = z.infer<typeof AuthConfigResponseSchema>;
+
+/**
  * better-auth `/get-session`이 세션이 있을 때 돌려주는 본문 중 앱이 쓰는 부분.
  * 캡티브 포털의 HTML처럼 이 모양이 아닌 200 응답은 "로그아웃됨"이 아니라
  * "서버에 닿지 못함"으로 다뤄야 해서 모양을 검사한다.

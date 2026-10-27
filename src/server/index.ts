@@ -10,6 +10,7 @@ import { retryAfterOnUnavailable } from "./middleware/retryAfter";
 import { sameOriginWrites } from "./middleware/sameOrigin";
 import { createHealthRoute } from "./routes/health";
 import { createAuthRoute } from "./routes/auth";
+import { createAuthConfigRoute } from "./routes/authConfig";
 import { createClientReportsRoute } from "./routes/clientReports";
 import { createConsentRoute } from "./routes/consent";
 import { createPresentationsRoute } from "./routes/presentations";
@@ -62,6 +63,7 @@ export function createApp(deps: AppDeps = {}) {
     .use("/api/auth/*", limitBody(AUTH_BODY_MAX_BYTES))
     .route("/api/health", createHealthRoute())
     .route("/api/auth", createAuthRoute())
+    .route("/api/auth-config", createAuthConfigRoute())
     .route("/api/client-reports", createClientReportsRoute())
     .route("/api/consent", createConsentRoute(deps))
     .route("/api/presentations", createPresentationsRoute(deps))
