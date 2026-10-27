@@ -63,11 +63,16 @@ export interface TombstoneEntry {
   itemId: string;
 }
 
+interface PresentationDependents {
+  members: DocumentReference[];
+  copies: DocumentReference[];
+}
+
 async function readDependentsByPresentation(
   tx: Transaction,
   db: Db,
   presentationIds: readonly string[],
-): Promise<Map<string, DocumentReference[]>> {
+): Promise<Map<string, PresentationDependents>> {
   const [members, copies] = await Promise.all([
     tx.get(
       presentationMembersCol(db).where("presentationId", "in", presentationIds),
@@ -75,17 +80,20 @@ async function readDependentsByPresentation(
     tx.get(decksCol(db).where("presentationId", "in", presentationIds)),
   ]);
   const dependents = new Map(
-    presentationIds.map((id): [string, DocumentReference[]] => [id, []]),
+    presentationIds.map((id): [string, PresentationDependents] => [
+      id,
+      { members: [], copies: [] },
+    ]),
   );
   for (const doc of members.docs) {
     dependents
       .get(doc.data().presentationId)
-      ?.push(doc.ref as DocumentReference);
+      ?.members.push(doc.ref as DocumentReference);
   }
   for (const doc of copies.docs) {
     dependents
       .get(doc.data().presentationId ?? "")
-      ?.push(doc.ref as DocumentReference);
+      ?.copies.push(doc.ref as DocumentReference);
   }
   return dependents;
 }
@@ -136,8 +144,9 @@ export async function prepareTombstones(
  * 차례가 커밋된 뒤 다음 차례 전에 멈춰도 남은 것은 모두 휴지통에 넣은 폴더 아래에 그대로 있어,
  * 다시 지우면 이어서 끝난다. 그래서 다음 순서로 담는다.
  * - 프레젠테이션마다 공유 멤버, 사본 곡, 프레젠테이션과 그 영구 삭제 기록을 한 묶음으로 담는다.
- *   첫 묶음이 혼자서도 넘치면 멤버부터 담을 수 있는 만큼만 지우고 프레젠테이션은 다음 차례에
- *   지운다. 곡보다 멤버가 먼저 사라져야 중간에 멈췄을 때 잃는 것이 적다.
+ *   첫 묶음이 혼자서도 넘치면 공유 멤버만 담을 수 있는 만큼 지우고, 곡은 프레젠테이션과 같은
+ *   차례에 지운다. 차례 사이에 멈추거나 다른 기기가 복원해도 곡은 모두 남고, 멤버는 링크를 다시
+ *   열면 돌아온다. 멤버가 없는데도 곡만으로 한 차례를 넘는 옛 프레젠테이션만 곡을 나눠 지운다.
  * - 폴더는 남은 프레젠테이션을 이 차례에 모두 담았을 때만, 주어진 순서(깊은 폴더부터, 지우려는
  *   폴더가 마지막)대로 영구 삭제 기록과 함께 담는다. 폴더가 먼저 사라지면 그 안의 프레젠테이션이나
  *   하위 폴더가 루트로 올라와 휴지통 밖에 다시 보인다.
@@ -160,13 +169,19 @@ export async function prepareDeletionPass(
     if (budget < DELETE_AND_TOMBSTONE) break;
     const dependents = await readDependentsByPresentation(tx, db, ids);
     for (const id of ids) {
-      const refs = dependents.get(id) ?? [];
-      const unitWrites = refs.length + DELETE_AND_TOMBSTONE;
+      const { members, copies } = dependents.get(id) ?? {
+        members: [],
+        copies: [],
+      };
+      const unitWrites = members.length + copies.length + DELETE_AND_TOMBSTONE;
       if (unitWrites > budget) {
-        if (deletes.length === 0) deletes.push(...refs.slice(0, budget));
+        if (deletes.length === 0) {
+          const prefix = members.length > 0 ? members : copies;
+          deletes.push(...prefix.slice(0, budget));
+        }
         break planning;
       }
-      deletes.push(...refs, presentationsCol(db).doc(id));
+      deletes.push(...members, ...copies, presentationsCol(db).doc(id));
       passPresentationIds.push(id);
       budget -= unitWrites;
     }

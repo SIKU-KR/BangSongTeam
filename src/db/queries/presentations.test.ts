@@ -294,6 +294,70 @@ describe("프레젠테이션 쿼리", () => {
         );
       });
     });
+
+    describe("한 차례에 다 담지 못하는 프레젠테이션", () => {
+      const trashedAt = new Date(TRASHED_AT);
+      const countCopies = async (presentationId: string) =>
+        (await decksCol(db).where("presentationId", "==", presentationId).get())
+          .size;
+
+      afterEach(async () => {
+        await clearDb(db);
+      });
+
+      it("공유 멤버를 나눠 지우는 차례 사이에 복원되면 곡은 하나도 지우지 않은 채 멈춘다", async () => {
+        const seeded = presentationsWithCopies(userAId, 1, 10, { trashedAt });
+        const [presentation] = seeded.presentations;
+        await seedDocs(db, {
+          ...seeded,
+          members: Array.from({ length: 445 }, (_, index) => ({
+            presentationId: presentation.id,
+            userId: `m${String(index).padStart(20, "0")}`,
+          })),
+        });
+        const instrument = instrumentTransactions(db, {
+          afterCall: {
+            call: 1,
+            run: async () => {
+              await presentationsCol(db)
+                .doc(presentation.id)
+                .update({ trashedAt: null });
+            },
+          },
+        });
+
+        const result = await deletePresentation(db, presentation.id, userAId);
+        instrument.restore();
+
+        expect(result).toEqual({ status: "conflict", partial: true });
+        expect(await countCopies(presentation.id)).toBe(10);
+        expect((await driveTombstonesCol(db).get()).size).toBe(0);
+      });
+
+      it("공유 멤버 없이 곡만으로 한 차례를 넘는 옛 프레젠테이션은 곡을 나눠 모두 지운다", async () => {
+        const seeded = presentationsWithCopies(userAId, 1, 500, { trashedAt });
+        const [presentation] = seeded.presentations;
+        await seedDocs(db, seeded);
+        const instrument = instrumentTransactions(db);
+
+        expect(await deletePresentation(db, presentation.id, userAId)).toEqual({
+          status: "deleted",
+        });
+        instrument.restore();
+
+        expect(instrument.writesPerAttempt.length).toBeGreaterThan(1);
+        expect(instrument.max()).toBeLessThanOrEqual(
+          MAX_WRITES_PER_TRANSACTION,
+        );
+        expect(await countCopies(presentation.id)).toBe(0);
+        expect(
+          (await presentationsCol(db).doc(presentation.id).get()).exists,
+        ).toBe(false);
+        expect(
+          (await driveTombstonesCol(db).get()).docs.map((doc) => doc.id),
+        ).toEqual([presentation.id]);
+      });
+    });
   });
 
   describe("isPresentationInTrash", () => {

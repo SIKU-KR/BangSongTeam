@@ -636,6 +636,39 @@ describe("드라이브 폴더 쿼리", () => {
       ).toHaveLength(tree.presentationIds.length - remaining.length);
     });
 
+    it("여러 차례로 지우는 중에 기기가 보지 못한 프레젠테이션이 들어오면 일부만 지운 채 멈춘다", async () => {
+      const tree = await seedLargeFolder();
+      const outsider = makeDoc(USER_A);
+      await upsertPresentationDocument(db, USER_A, outsider);
+      const instrument = instrumentTransactions(db, {
+        afterCall: {
+          call: 1,
+          run: async () => {
+            await upsertPresentationDocument(db, USER_A, {
+              ...outsider,
+              folderId: tree.rootId,
+            });
+          },
+        },
+      });
+
+      const result = await deleteFolderTree(db, USER_A, tree.rootId, {
+        folderIds: [tree.rootId],
+        presentationIds: tree.presentationIds,
+      });
+      instrument.restore();
+
+      expect(result).toEqual({ status: "conflict", partial: true });
+      const survivor = (
+        await getPresentationDocumentsByUserId(db, USER_A)
+      ).find((doc) => doc.id === outsider.id);
+      expect(survivor?.folderId).toBe(tree.rootId);
+      expect(survivor?.items).toHaveLength(1);
+      expect(
+        (await getDriveTombstones(db, USER_A)).presentationIds,
+      ).not.toContain(outsider.id);
+    });
+
     it("다른 요청이 차례 사이에 마저 지우면 이 요청이 지운 것만 담아 지운 것으로 답한다", async () => {
       const tree = await seedLargeFolder();
       const finishedElsewhere: DeleteFolderTreeResult[] = [];
