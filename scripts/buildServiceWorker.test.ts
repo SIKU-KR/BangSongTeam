@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import * as vm from "node:vm";
 import {
+  assertShellsCarryBuildId,
   collectShells,
   shellWorkerSource,
   OFFLINE_RSC_PREFIX,
@@ -25,6 +26,7 @@ const SHELLS = collectShells(
 );
 
 const PROJECTION_RSC = `0:{"c":["","present","${P}","fullscreen"],"q":"","t":{"s":{"n":"presentationId","t":"d","k":"${P}","s":[]}},"b":"${BUILD_ID}"}\n`;
+const PRESENTATIONS_RSC = `0:{"c":["","presentations"],"b":"${BUILD_ID}"}\n`;
 
 function shellHtml(buildId: string, param: string | null = P): string {
   const route =
@@ -37,7 +39,7 @@ const TERMS_HTML = shellHtml(BUILD_ID, null);
 
 const PRECACHED: Record<string, string> = {
   [`${OFFLINE_RSC_PREFIX}/present/${P}/fullscreen.rsc`]: PROJECTION_RSC,
-  [`${OFFLINE_RSC_PREFIX}/presentations.rsc`]: '0:{"c":["","presentations"]}\n',
+  [`${OFFLINE_RSC_PREFIX}/presentations.rsc`]: PRESENTATIONS_RSC,
   [`/editor/${P}`]: EDITOR_HTML,
   "/terms": TERMS_HTML,
 };
@@ -52,7 +54,13 @@ interface FakeRequest {
 type FetchListener = (event: {
   request: FakeRequest;
   respondWith: (response: Response | Promise<Response>) => void;
+  waitUntil: (work: Promise<unknown>) => void;
 }) => void;
+
+interface ShellWorker {
+  (request: FakeRequest): Promise<Response> | undefined;
+  idle: () => Promise<void>;
+}
 
 type Network = (
   input: FakeRequest | string,
@@ -71,7 +79,7 @@ function fakePrecache(bodies: Record<string, string>): Map<string, string> {
 function startShellWorker(
   network: Network,
   precached: Record<string, string> | Map<string, string> = PRECACHED,
-): (request: FakeRequest) => Promise<Response> | undefined {
+): ShellWorker {
   const listeners: FetchListener[] = [];
   const entries =
     precached instanceof Map ? precached : fakePrecache(precached);
@@ -119,7 +127,8 @@ function startShellWorker(
   });
   vm.runInContext(shellWorkerSource(SHELLS, P, BUILD_ID), context);
 
-  return (request) => {
+  const background: Promise<unknown>[] = [];
+  const handle = (request: FakeRequest): Promise<Response> | undefined => {
     let response: Promise<Response> | undefined;
     for (const listener of listeners) {
       listener({
@@ -127,10 +136,19 @@ function startShellWorker(
         respondWith: (value) => {
           response = Promise.resolve(value);
         },
+        waitUntil: (work) => {
+          background.push(work);
+        },
       });
     }
     return response;
   };
+  const idle = async (): Promise<void> => {
+    while (background.length > 0) {
+      await Promise.all(background.splice(0));
+    }
+  };
+  return Object.assign(handle, { idle });
 }
 
 function rscRequest(
@@ -174,7 +192,7 @@ describe("서비스 워커의 화면 안 이동(RSC 요청)", () => {
 
     const response = await handle(rscRequest("/presentations?_rsc=2"));
 
-    expect(await response!.text()).toBe('0:{"c":["","presentations"]}\n');
+    expect(await response!.text()).toBe(PRESENTATIONS_RSC);
   });
 
   it("연결돼 있으면 서버가 준 RSC 응답을 그대로 쓴다", async () => {
@@ -289,14 +307,86 @@ describe("서비스 워커의 주소창 이동(셸 HTML)과 배포 중 섞인 �
     expect(() => shellWorkerSource(SHELLS, P, "")).toThrow();
   });
 
-  it("미리 받아 둔 셸이 이 서비스 워커의 빌드면 서버에 묻지 않고 그대로 답한다", async () => {
+  it("미리 받아 둔 셸이 모두 이 서비스 워커의 빌드면 서버에 묻지 않고 그대로 답한다", async () => {
     const network = vi.fn(offline);
     const handle = startShellWorker(network);
 
     const response = await handle(navigate("/terms"));
+    await handle.idle();
 
     expect(await response!.text()).toBe(TERMS_HTML);
     expect(network).not.toHaveBeenCalled();
+  });
+
+  it("주소창 이동을 받으면 다른 화면의 셸과 셸 RSC도 확인해, 다른 빌드로 담긴 것을 서버에서 다시 받아 고친다", async () => {
+    const freshProjection = shellHtml(BUILD_ID);
+    const projectionRscPath = `${OFFLINE_RSC_PREFIX}/present/${P}/fullscreen.rsc`;
+    const fromServer: Record<string, string> = {
+      [`${ORIGIN}/present/${P}/fullscreen`]: freshProjection,
+      [`${ORIGIN}${projectionRscPath}`]: PROJECTION_RSC,
+    };
+    const network = vi.fn(async (input: FakeRequest | string) => {
+      const body = fromServer[String(input)];
+      return body ? html(body) : html("<html>not found</html>", 404);
+    });
+    const precache = fakePrecache({
+      "/terms": TERMS_HTML,
+      [`/present/${P}/fullscreen`]: shellHtml("build-0"),
+      [projectionRscPath]: PROJECTION_RSC.replace(BUILD_ID, "build-0"),
+      [`${OFFLINE_RSC_PREFIX}/presentations.rsc`]: PRESENTATIONS_RSC,
+    });
+    const handle = startShellWorker(network, precache);
+
+    expect(await (await handle(navigate("/terms")))!.text()).toBe(TERMS_HTML);
+    await handle.idle();
+
+    expect(network.mock.calls.map(([input]) => String(input)).sort()).toEqual(
+      Object.keys(fromServer).sort(),
+    );
+    expect(network).toHaveBeenCalledWith(`${ORIGIN}${projectionRscPath}`, {
+      cache: "reload",
+    });
+    expect(precache.get(precacheKey(`/present/${P}/fullscreen`))).toBe(
+      freshProjection,
+    );
+    expect(precache.get(precacheKey(projectionRscPath))).toBe(PROJECTION_RSC);
+  });
+
+  it("다른 빌드로 담긴 셸을 고치지 못했으면(오프라인) 다음 주소창 이동에서 다시 확인한다", async () => {
+    let online = false;
+    const network = vi.fn(async () => (online ? html(EDITOR_HTML) : offline()));
+    const stale = shellHtml("build-0");
+    const precache = fakePrecache({
+      "/terms": TERMS_HTML,
+      [`/editor/${P}`]: stale,
+    });
+    const handle = startShellWorker(network, precache);
+
+    await handle(navigate("/terms"));
+    await handle.idle();
+    expect(precache.get(precacheKey(`/editor/${P}`))).toBe(stale);
+
+    online = true;
+    await handle(navigate("/terms"));
+    await handle.idle();
+
+    expect(precache.get(precacheKey(`/editor/${P}`))).toBe(EDITOR_HTML);
+  });
+
+  it("셸을 모두 확인해 고쳤으면 다음 주소창 이동에서는 다시 확인하지 않는다", async () => {
+    const network = vi.fn(async () => html(EDITOR_HTML));
+    const precache = fakePrecache({
+      "/terms": TERMS_HTML,
+      [`/editor/${P}`]: shellHtml("build-0"),
+    });
+    const handle = startShellWorker(network, precache);
+
+    await handle(navigate("/terms"));
+    await handle.idle();
+    await handle(navigate("/terms"));
+    await handle.idle();
+
+    expect(network).toHaveBeenCalledTimes(1);
   });
 
   it("배포 중 이전 빌드의 셸이 담겼으면 서버에서 셸을 다시 받아 그것으로 답하고 프리캐시를 고친다", async () => {
@@ -357,6 +447,30 @@ describe("서비스 워커의 주소창 이동(셸 HTML)과 배포 중 섞인 �
     },
   );
 
+  it("셸을 다시 받는 응답이 제한 시간 뒤에 와도 같은 빌드면 프리캐시를 고친다", async () => {
+    vi.useFakeTimers();
+    const stale = shellHtml("build-0", null);
+    let answer: (response: Response) => void = () => undefined;
+    const network = vi.fn(
+      () =>
+        new Promise<Response>((resolve) => {
+          answer = resolve;
+        }),
+    );
+    const precache = fakePrecache({ "/terms": stale });
+    const handle = startShellWorker(network, precache);
+
+    const response = handle(navigate("/terms"));
+    await vi.advanceTimersByTimeAsync(SHELL_REFRESH_TIMEOUT_MS);
+    expect(await (await response!).text()).toBe(stale);
+
+    answer(html(TERMS_HTML));
+    await handle.idle();
+
+    expect(network).toHaveBeenCalledTimes(1);
+    expect(precache.get(precacheKey("/terms"))).toBe(TERMS_HTML);
+  });
+
   it("셸을 다시 받는 응답이 늦으면 제한 시간 뒤 미리 받아 둔 셸로 답한다", async () => {
     vi.useFakeTimers();
     const stale = shellHtml("build-0", null);
@@ -376,4 +490,41 @@ describe("서비스 워커의 주소창 이동(셸 HTML)과 배포 중 섞인 �
     await vi.advanceTimersByTimeAsync(1);
     expect(await (await response!).text()).toBe(stale);
   });
+});
+
+describe("assertShellsCarryBuildId", () => {
+  const shells = collectShells(
+    {
+      "/terms": { dataRoute: "/terms.rsc" },
+      [`/editor/${P}`]: { dataRoute: `/editor/${P}.rsc` },
+    },
+    P,
+  );
+  const built: Record<string, string> = {
+    "terms.html": TERMS_HTML,
+    "/terms.rsc": `0:{"b":"${BUILD_ID}"}\n`,
+    [`editor/${P}.html`]: EDITOR_HTML,
+    [`/editor/${P}.rsc`]: `0:{"b":"${BUILD_ID}"}\n`,
+  };
+
+  it("셸 HTML과 셸 RSC가 모두 빌드 id를 실으면 통과한다", () => {
+    expect(() =>
+      assertShellsCarryBuildId(shells, BUILD_ID, (file: string) => built[file]),
+    ).not.toThrow();
+  });
+
+  it.each([`editor/${P}.html`, "/terms.rsc"])(
+    "%s에 빌드 id가 없으면 그 파일을 알리며 빌드를 멈춘다",
+    (file) => {
+      const files = { ...built, [file]: "<html></html>" };
+
+      expect(() =>
+        assertShellsCarryBuildId(
+          shells,
+          BUILD_ID,
+          (name: string) => files[name],
+        ),
+      ).toThrow(file);
+    },
+  );
 });
