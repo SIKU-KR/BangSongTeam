@@ -1,7 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Query } from "@google-cloud/firestore";
 import { handleOAuthUserInfo } from "better-auth/oauth2";
-import { FALLBACK_USER_NAME, OFFICIAL_LIBRARY_NAME } from "#shared";
+import {
+  FALLBACK_USER_NAME,
+  OFFICIAL_LIBRARY_NAME,
+  SIGN_UP_IN_PROGRESS,
+} from "#shared";
 import { COLLECTIONS, runBulk, type Db } from "#db";
 import { env } from "../test/env";
 import { clearDb } from "../../db/test/fixtures";
@@ -14,6 +18,11 @@ import {
 } from "../lib/auth";
 
 const ORIGIN = env.BETTER_AUTH_URL ?? "";
+const LONE_SURROGATE = String.fromCharCode(0xd800);
+
+async function countDocs(collection: string): Promise<number> {
+  return (await env.DB.collection(collection).count().get()).data().count;
+}
 
 async function post(
   path: string,
@@ -163,6 +172,25 @@ describe("이메일·비밀번호 인증", () => {
     expect(sessionCookie(duplicate)).toBe("");
     expect(short.status).toBe(400);
   });
+
+  it.each([
+    ["짝 없는 서로게이트가 든 문자열", `a/b${LONE_SURROGATE}`, "10.0.0.7"],
+    [
+      "짝 없는 서로게이트가 든 주소",
+      `a${LONE_SURROGATE}b@example.com`,
+      "10.0.0.8",
+    ],
+    ["3,000자 문자열", "x".repeat(3000), "10.0.0.9"],
+  ])(
+    "이메일이 아닌 %s로 가입하면 아무것도 쓰지 않고 400으로 답한다",
+    async (_, email, ip) => {
+      const res = await signUp(email, ip);
+
+      expect(res.status).toBe(400);
+      expect(await countDocs(COLLECTIONS.users)).toBe(0);
+      expect(await countDocs(COLLECTIONS.userEmails)).toBe(0);
+    },
+  );
 });
 
 describe("가입이 겹치거나 중간에 실패할 때", () => {
@@ -237,11 +265,34 @@ describe("가입이 겹치거나 중간에 실패할 때", () => {
     ).map((res) => res.status);
 
     expect(statuses.filter((status) => status === 200)).toHaveLength(1);
-    expect(statuses.filter((status) => status === 422)).toHaveLength(2);
+    expect(
+      statuses.filter((status) => status === 409 || status === 422),
+    ).toHaveLength(2);
     expect(await usersWithEmail("race@example.com")).toBe(1);
   });
 
-  it("비밀번호 저장이 실패한 가입은 잠시 뒤 같은 이메일로 다시 가입하고 로그인할 수 있다", async () => {
+  it("가입 전에 반쯤 끝난 가입을 찾다 실패해도 가입은 그대로 하고, 로그에 이메일을 남기지 않는다", async () => {
+    vi.spyOn(Query.prototype, "get").mockImplementationOnce(() =>
+      Promise.reject(Object.assign(new Error("14 UNAVAILABLE"), { code: 14 })),
+    );
+    const lines: string[] = [];
+    const capture = (line: unknown): void => {
+      lines.push(String(line));
+    };
+    vi.spyOn(console, "log").mockImplementation(capture);
+    vi.spyOn(console, "error").mockImplementation(capture);
+
+    const res = await signUp("unlucky@example.com", "10.0.5.8");
+
+    expect(res.status).toBe(200);
+    expect(await usersWithEmail("unlucky@example.com")).toBe(1);
+    expect(
+      lines.filter((line) => line.includes("abandoned_sign_up_release_failed")),
+    ).toHaveLength(1);
+    expect(lines.filter((line) => line.includes("unlucky@"))).toEqual([]);
+  });
+
+  it("비밀번호 저장이 실패한 가입을 바로 다시 하면 잠시 뒤 다시 하라고 답하고, 잠시 뒤에는 가입하고 로그인할 수 있다", async () => {
     vi.spyOn(console, "error").mockImplementation(() => {});
     const startedAt = Date.now();
     vi.useFakeTimers({ toFake: ["Date"] });
@@ -268,9 +319,10 @@ describe("가입이 겹치거나 중간에 실패할 때", () => {
     expect(failed.status).toBeGreaterThanOrEqual(500);
     expect(await usersWithEmail("retry@example.com")).toBe(1);
 
-    expect(
-      (await post("/api/auth/sign-up/email", body, "10.0.5.5")).status,
-    ).toBe(422);
+    const immediate = await post("/api/auth/sign-up/email", body, "10.0.5.5");
+    expect(immediate.status).toBe(409);
+    expect(await immediate.json()).toMatchObject({ code: SIGN_UP_IN_PROGRESS });
+    expect(await usersWithEmail("retry@example.com")).toBe(1);
 
     vi.setSystemTime(startedAt + 2 * MINUTE_MS);
     const retried = await post("/api/auth/sign-up/email", body, "10.0.5.6");

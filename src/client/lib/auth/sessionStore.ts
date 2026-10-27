@@ -233,7 +233,8 @@ export async function signInWithEmail(
 /**
  * 이메일·비밀번호로 가입한다. 메일 인증이 없어 가입과 동시에 로그인된다.
  * 같은 이메일로 이미 가입했으면 `alreadyExists`로 던진다. 서버가 사용자를 만들지 못한
- * 422(`FAILED_TO_CREATE_USER`: 저장 실패, 같은 이메일로 동시에 보낸 가입)는 `unknown`이다.
+ * 422(`FAILED_TO_CREATE_USER`: 저장 실패, 같은 이메일로 동시에 보낸 가입)와 같은 이메일의 가입이
+ * 아직 끝나지 않았다는 409(`SIGN_UP_IN_PROGRESS`)는 `unknown`이라 잠시 뒤 다시 가입하게 한다.
  * 이미 가입했다고 안내하면 사용자는 그 이메일로 로그인하려 하지만 들어가지 못한다.
  */
 export async function signUpWithEmail(

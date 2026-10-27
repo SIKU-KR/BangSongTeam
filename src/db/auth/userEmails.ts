@@ -1,4 +1,5 @@
 import type { DocumentData, DocumentReference } from "@google-cloud/firestore";
+import { OFFICIAL_LIBRARY_USER_ID } from "#shared";
 import type { Db } from "../client";
 import {
   COLLECTIONS,
@@ -66,23 +67,41 @@ export async function reservationsHeldBy(
     .map((snapshot) => snapshot.ref);
 }
 
-function looksAbandoned(user: UserDoc | undefined, now: Date): boolean {
-  if (!user || user.emailVerified || user.termsAgreedAt) return false;
-  const createdAt =
-    user.createdAt instanceof Date ? user.createdAt.getTime() : now.getTime();
-  return now.getTime() - createdAt >= ABANDONED_SIGN_UP_MIN_AGE_MS;
+/**
+ * 가입 요청 전에 본 같은 이메일의 가입. `released`는 반쯤 끝난 가입을 치웠다는 뜻이고,
+ * `inProgress`는 비밀번호를 아직 저장하지 않은 가입이 진행 중일 수 있어 그대로 두었다는 뜻이다.
+ */
+export type EarlierSignUp = "none" | "inProgress" | "released";
+
+function unfinishedSignUpAge(
+  user: UserDoc | undefined,
+  now: Date,
+): "fresh" | "stale" | null {
+  if (!user || user.emailVerified || user.termsAgreedAt) return null;
+  if (!(user.createdAt instanceof Date)) return null;
+  return now.getTime() - user.createdAt.getTime() < ABANDONED_SIGN_UP_MIN_AGE_MS
+    ? "fresh"
+    : "stale";
 }
 
 /**
- * 반쯤 끝난 이메일 가입을 치워 그 이메일로 다시 가입할 수 있게 한다. 치웠으면 `true`.
+ * 반쯤 끝난 이메일 가입을 치워 그 이메일로 다시 가입할 수 있게 한다.
  *
  * Better Auth 가입은 사용자 문서와 비밀번호 계정을 따로 쓴다. 그 사이에 저장이 실패하면
  * 비밀번호 없는 사용자만 남아, 같은 이메일로는 가입도(이미 있음) 로그인도(비밀번호 없음)
- * 못 한다. 그래서 가입 요청마다 그 이메일의 사용자가 아래를 모두 만족하면 지운다.
+ * 못 한다. 그래서 가입 요청마다 그 이메일의 사용자가 아래를 모두 만족하면 지우고 `released`를
+ * 돌려준다.
  * - 이메일의 사용자가 하나뿐이다.
  * - 연결된 계정(비밀번호·소셜)이 없어 누구도 로그인할 수 없다.
  * - 이메일이 인증되지 않았고 약관에 동의하지 않았다. 앱을 써 본 적 없는 사용자다.
- * - 만든 지 `ABANDONED_SIGN_UP_MIN_AGE_MS`가 지났다. 만든 시각을 모르면 방금 만든 것으로 본다.
+ * - 만든 지 `ABANDONED_SIGN_UP_MIN_AGE_MS`가 지났다. 만든 시각을 모르면 건드리지 않는다.
+ *
+ * 만든 지 그보다 덜 된 사용자는 비밀번호를 저장하는 중일 수 있어 지우지 않고 `inProgress`를
+ * 돌려준다. 막 실패한 가입을 바로 다시 할 때도 여기에 걸린다(`SIGN_UP_IN_PROGRESS`).
+ *
+ * 공식 라이브러리 계정(`OFFICIAL_LIBRARY_USER_ID`)은 연결된 계정 없이 시드로 만들고 이메일도
+ * 저장소에 드러나 있다. 지금은 시드가 인증·약관 동의를 채워 두지만, 지워지면 공식 곡이 모두
+ * 공유 라이브러리에서 사라지므로 따로 빼 둔다.
  *
  * 마지막 확인과 지우기는 한 트랜잭션에서 하고, 이메일 예약은 아직 그 사용자를 가리킬 때만
  * 지운다. 같은 이메일로 둘이 동시에 가입하면, 먼저 치운 쪽이 새 사용자와 예약을 만든 뒤에 늦은
@@ -93,29 +112,38 @@ export async function releaseAbandonedSignUp(
   db: Db,
   email: string,
   now: Date = new Date(),
-): Promise<boolean> {
+): Promise<EarlierSignUp> {
   const users = await usersCol(db)
     .where("email", "==", email.toLowerCase())
     .limit(2)
     .get();
   const [candidate] = users.docs;
-  if (users.size !== 1 || !candidate) return false;
-  if (!looksAbandoned(candidate.data(), now)) return false;
+  if (users.size !== 1 || !candidate) return "none";
+  if (candidate.id === OFFICIAL_LIBRARY_USER_ID) return "none";
+  const age = unfinishedSignUpAge(candidate.data(), now);
+  if (!age) return "none";
 
-  const reservationRef = userEmailsCol(db).doc(userEmailDocId(email));
   const accounts = db
     .collection(COLLECTIONS.accounts)
     .where("userId", "==", candidate.id)
     .limit(1);
-  return await db.runTransaction(async (tx) => {
+  if (age === "fresh") {
+    return (await accounts.get()).empty ? "inProgress" : "none";
+  }
+
+  const reservationRef = userEmailsCol(db).doc(userEmailDocId(email));
+  const released = await db.runTransaction(async (tx) => {
     const user = await tx.get(candidate.ref);
     const reservation = await tx.get(reservationRef);
     const linked = await tx.get(accounts);
-    if (!looksAbandoned(user.data(), now) || !linked.empty) return false;
+    if (unfinishedSignUpAge(user.data(), now) !== "stale" || !linked.empty) {
+      return false;
+    }
     tx.delete(candidate.ref);
     if (reservation.data()?.userId === candidate.id) {
       tx.delete(reservationRef);
     }
     return true;
   });
+  return released ? "released" : "none";
 }

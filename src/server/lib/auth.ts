@@ -1,18 +1,28 @@
 import { betterAuth } from "better-auth/minimal";
-import { createAuthMiddleware } from "better-auth/api";
-import { firestoreAdapter, releaseAbandonedSignUp } from "#db";
+import { APIError, createAuthMiddleware } from "better-auth/api";
 import {
+  firestoreAdapter,
+  releaseAbandonedSignUp,
+  type Db,
+  type EarlierSignUp,
+} from "#db";
+import {
+  API_ERRORS,
   APP_NAME,
   createId,
+  EmailSignUpRequestSchema,
   FALLBACK_USER_NAME,
   PASSWORD_MAX_LENGTH,
   PASSWORD_MIN_LENGTH,
+  SIGN_UP_IN_PROGRESS,
   SocialProviderSchema,
   type SocialProvider,
 } from "#shared";
 import type { Bindings } from "../types";
+import { CLOUD_TRACE_LOG_FIELD, cloudTraceName } from "./cloudTrace";
 import { devSignIn } from "./devSignIn";
 import { hashPassword, verifyPassword } from "./password";
+import { describeError, writeLog } from "./requestLog";
 import { toAccountName } from "./userNames";
 
 /**
@@ -220,6 +230,25 @@ export const ACCOUNT_LINKING = {
   requireLocalEmailVerified: true,
 } as const;
 
+async function settleEarlierSignUp(
+  db: Db,
+  email: string,
+  headers: Headers | undefined,
+): Promise<EarlierSignUp> {
+  try {
+    return await releaseAbandonedSignUp(db, email);
+  } catch (error) {
+    writeLog("WARNING", {
+      event: "abandoned_sign_up_release_failed",
+      [CLOUD_TRACE_LOG_FIELD]: await cloudTraceName(
+        headers?.get("x-cloud-trace-context") ?? undefined,
+      ),
+      error: describeError(error),
+    });
+    return "none";
+  }
+}
+
 function buildAuth(env: Bindings) {
   const enabled = new Set(configuredSocialProviders(env));
   const socialProviders: Record<string, unknown> = {};
@@ -275,9 +304,21 @@ function buildAuth(env: Bindings) {
     disabledPaths: ["/update-user"],
     hooks: {
       before: createAuthMiddleware(async (ctx) => {
-        const email: unknown = ctx.body?.email;
-        if (ctx.path === "/sign-up/email" && typeof email === "string") {
-          await releaseAbandonedSignUp(env.DB, email);
+        if (ctx.path !== "/sign-up/email") return;
+        const email = EmailSignUpRequestSchema.shape.email.safeParse(
+          ctx.body?.email,
+        );
+        if (!email.success) return;
+        const earlier = await settleEarlierSignUp(
+          env.DB,
+          email.data,
+          ctx.headers,
+        );
+        if (earlier === "inProgress") {
+          throw APIError.from("CONFLICT", {
+            code: SIGN_UP_IN_PROGRESS,
+            message: API_ERRORS.auth.signUpInProgress,
+          });
         }
       }),
     },
@@ -322,7 +363,14 @@ type AuthInstance = ReturnType<typeof buildAuth>;
  *   본문의 타입도 검사하지 않는다. 거절하지 않고 다듬어서 긴 소셜 프로필 이름으로도 로그인이
  *   막히지 않는다. 앱이 부르지 않는 `/update-user`는 막는다(404).
  * - 이메일 가입 요청은 먼저 그 이메일의 반쯤 끝난 가입(비밀번호 계정 저장이 실패해 남은 사용자)을
- *   치운다(`releaseAbandonedSignUp`). 그대로 두면 그 이메일로는 가입도 로그인도 못 한다.
+ *   치운다(`releaseAbandonedSignUp`). 그대로 두면 그 이메일로는 가입도 로그인도 못 한다. 아직
+ *   끝나지 않았을 수 있는 가입이 있으면 "이미 가입함" 대신 409(`SIGN_UP_IN_PROGRESS`)로 답해
+ *   잠시 뒤 다시 가입하게 한다.
+ * - 이 정리는 Better Auth가 본문을 검사하기 전에 돈다. 가입 폼과 같은 이메일 규칙
+ *   (`EmailSignUpRequestSchema`)을 통과한 주소로만 Firestore를 읽는다. 짝 없는 서로게이트나
+ *   아주 긴 값은 쿼리가 거절해, 400이어야 할 요청이 500이 된다. 정리하다 실패해도 로그만 남기고
+ *   가입을 이어 간다. 정리를 건너뛰어도 같은 이메일의 두 번째 사용자는 생기지 않는다(Better Auth의
+ *   이메일 조회와 어댑터의 이메일 예약).
  */
 export function getAuth(env: Bindings): AuthInstance {
   return buildAuth(env);

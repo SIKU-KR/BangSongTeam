@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { SIGN_UP_IN_PROGRESS } from "#shared";
 import { closeOfflineDB, OFFLINE_DB_NAME } from "../storage/db";
 import { authClient } from "./authClient";
 import { saveCachedSession, loadCachedSession } from "./sessionCache";
@@ -367,10 +368,10 @@ describe("세션 스토어", () => {
       password: "password-1234",
     };
 
-    function rejectSignUp(code: string): void {
+    function rejectSignUp(code: string, status = 422): void {
       signUpEmail.mockResolvedValueOnce({
         data: null,
-        error: { status: 422, statusText: "", code },
+        error: { status, statusText: "", code },
       } as never);
     }
 
@@ -384,6 +385,14 @@ describe("세션 스토어", () => {
 
     it("서버가 사용자를 만들지 못한 422는 이미 가입했다고 하지 않고 다시 시도하게 한다", async () => {
       rejectSignUp("FAILED_TO_CREATE_USER");
+
+      await expect(signUpWithEmail(input)).rejects.toMatchObject({
+        reason: "unknown",
+      });
+    });
+
+    it("같은 이메일의 가입이 아직 끝나지 않았다는 409도 이미 가입했다고 하지 않고 다시 시도하게 한다", async () => {
+      rejectSignUp(SIGN_UP_IN_PROGRESS, 409);
 
       await expect(signUpWithEmail(input)).rejects.toMatchObject({
         reason: "unknown",

@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { betterAuth } from "better-auth/minimal";
+import { OFFICIAL_LIBRARY_USER_ID } from "#shared";
 import type { Db } from "../client";
 import { COLLECTIONS } from "../collections";
 import { clearDb, createTestDb, seedDocs, userDoc } from "../test/fixtures";
@@ -32,6 +33,18 @@ async function signUpWithoutCredential(
     { method: "email-password" },
   );
   return user.id;
+}
+
+async function linkCredential(userId: string): Promise<void> {
+  await db
+    .collection(COLLECTIONS.accounts)
+    .doc(`account-${userId}`)
+    .set({
+      id: `account-${userId}`,
+      userId,
+      providerId: "credential",
+      accountId: userId,
+    });
 }
 
 async function usersWithEmail(email: string): Promise<number> {
@@ -95,7 +108,7 @@ describe("releaseAbandonedSignUp", () => {
     await signUpWithoutCredential("left@example.com", LONG_AGO);
 
     expect(await releaseAbandonedSignUp(db, "Left@Example.com", NOW)).toBe(
-      true,
+      "released",
     );
     expect(await usersWithEmail("left@example.com")).toBe(0);
     expect(
@@ -106,16 +119,29 @@ describe("releaseAbandonedSignUp", () => {
     expect(await usersWithEmail("left@example.com")).toBe(1);
   });
 
-  it("방금 만든 사용자는 가입이 아직 진행 중일 수 있어 그대로 둔다", async () => {
+  it("방금 만든 사용자는 가입이 아직 진행 중일 수 있어 지우지 않고 진행 중이라고 알린다", async () => {
     await signUpWithoutCredential(
       "fresh@example.com",
       new Date(NOW.getTime() - ABANDONED_SIGN_UP_MIN_AGE_MS / 2),
     );
 
     expect(await releaseAbandonedSignUp(db, "fresh@example.com", NOW)).toBe(
-      false,
+      "inProgress",
     );
     expect(await usersWithEmail("fresh@example.com")).toBe(1);
+  });
+
+  it("방금 가입을 마쳐 계정이 있는 사용자는 진행 중으로 보지 않는다", async () => {
+    const id = await signUpWithoutCredential(
+      "done@example.com",
+      new Date(NOW.getTime() - ABANDONED_SIGN_UP_MIN_AGE_MS / 2),
+    );
+    await linkCredential(id);
+
+    expect(await releaseAbandonedSignUp(db, "done@example.com", NOW)).toBe(
+      "none",
+    );
+    expect(await usersWithEmail("done@example.com")).toBe(1);
   });
 
   it("만든 시각이 없는 사용자 문서는 예외 없이 그대로 둔다", async () => {
@@ -130,22 +156,17 @@ describe("releaseAbandonedSignUp", () => {
       .set(withoutCreatedAt);
 
     expect(await releaseAbandonedSignUp(db, "undated@example.com", NOW)).toBe(
-      false,
+      "none",
     );
     expect(await usersWithEmail("undated@example.com")).toBe(1);
   });
 
   it("연결된 계정이 있으면 지우지 않는다", async () => {
     const id = await signUpWithoutCredential("linked@example.com", LONG_AGO);
-    await db.collection(COLLECTIONS.accounts).doc("account-1").set({
-      id: "account-1",
-      userId: id,
-      providerId: "credential",
-      accountId: id,
-    });
+    await linkCredential(id);
 
     expect(await releaseAbandonedSignUp(db, "linked@example.com", NOW)).toBe(
-      false,
+      "none",
     );
     expect(await usersWithEmail("linked@example.com")).toBe(1);
   });
@@ -169,13 +190,30 @@ describe("releaseAbandonedSignUp", () => {
     });
 
     expect(await releaseAbandonedSignUp(db, "bot@example.com", NOW)).toBe(
-      false,
+      "none",
     );
     expect(await releaseAbandonedSignUp(db, "agreed@example.com", NOW)).toBe(
-      false,
+      "none",
     );
     expect(await usersWithEmail("bot@example.com")).toBe(1);
     expect(await usersWithEmail("agreed@example.com")).toBe(1);
+  });
+
+  it("공식 라이브러리 계정은 인증·약관 동의 표시가 없어도 지우지 않는다", async () => {
+    await seedDocs(db, {
+      users: [
+        userDoc({
+          id: OFFICIAL_LIBRARY_USER_ID,
+          email: "library@example.com",
+          createdAt: LONG_AGO,
+        }),
+      ],
+    });
+
+    expect(await releaseAbandonedSignUp(db, "library@example.com", NOW)).toBe(
+      "none",
+    );
+    expect(await usersWithEmail("library@example.com")).toBe(1);
   });
 
   it("같은 이메일의 사용자가 둘이면 어느 쪽도 지우지 않는다", async () => {
@@ -195,7 +233,7 @@ describe("releaseAbandonedSignUp", () => {
     });
 
     expect(await releaseAbandonedSignUp(db, "twin@example.com", NOW)).toBe(
-      false,
+      "none",
     );
     expect(await usersWithEmail("twin@example.com")).toBe(2);
   });
@@ -213,12 +251,12 @@ describe("releaseAbandonedSignUp", () => {
     const late = releaseAbandonedSignUp(slow.db, "race@example.com", NOW);
     await slow.paused;
     expect(await releaseAbandonedSignUp(db, "race@example.com", NOW)).toBe(
-      true,
+      "released",
     );
     const newUserId = await signUpWithoutCredential("race@example.com", NOW);
     resume();
 
-    expect(await late).toBe(false);
+    expect(await late).toBe("none");
     expect(await usersWithEmail("race@example.com")).toBe(1);
     expect(await reservationHolders()).toEqual([newUserId]);
   });
@@ -231,7 +269,7 @@ describe("releaseAbandonedSignUp", () => {
       releaseAbandonedSignUp(db, "twice@example.com", NOW),
     ]);
 
-    expect(released.sort()).toEqual([false, true]);
+    expect(released.sort()).toEqual(["none", "released"]);
     expect(await usersWithEmail("twice@example.com")).toBe(0);
     expect(await reservationHolders()).toEqual([]);
   });
