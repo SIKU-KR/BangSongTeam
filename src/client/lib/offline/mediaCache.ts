@@ -52,25 +52,35 @@ function isOffline(): boolean {
   return typeof navigator !== "undefined" && navigator.onLine === false;
 }
 
+/**
+ * 받은 바이트 진행을 묶어 알리는 간격. 받는 조각(약 64 KB)마다 알리면 구독하는 편집기·송출
+ * 화면 전체가 받는 내내 초당 수십 번 다시 그려져, 저사양 노트북에서 입력과 송출이 버벅인다.
+ */
+export const MEDIA_PROGRESS_NOTIFY_MS = 250;
+
 const progress = new Map<string, MediaProgress>();
 const progressListeners = new Set<() => void>();
 let progressVersion = 0;
+let progressTimer: ReturnType<typeof setTimeout> | null = null;
 
 function notify(): void {
+  if (progressTimer !== null) clearTimeout(progressTimer);
+  progressTimer = null;
   progressVersion += 1;
   for (const listener of progressListeners) listener();
 }
 
 function reportProgress(url: string, next: MediaProgress): void {
   progress.set(url, next);
-  notify();
+  progressTimer ??= setTimeout(notify, MEDIA_PROGRESS_NOTIFY_MS);
 }
 
 /**
  * `useSyncExternalStore`용 구독. 스냅숏은 `getMediaProgressVersion`이다.
  *
- * 받은 바이트뿐 아니라 담기 성공, 재시도 예약·취소 때도 알린다. 그래야 포스터로 기다리던
- * 미리보기와 편집기 헤더가 백그라운드 재시도의 결과를 곧바로 따라간다.
+ * 받은 바이트는 `MEDIA_PROGRESS_NOTIFY_MS`마다 묶어 알리고(`getMediaProgress`는 늘 최신이다),
+ * 담기 성공, 재시도 예약·취소는 곧바로 알린다. 그래야 포스터로 기다리던 미리보기와 편집기
+ * 헤더가 백그라운드 재시도의 결과를 곧바로 따라간다.
  */
 export function subscribeMediaProgress(listener: () => void): () => void {
   progressListeners.add(listener);
@@ -784,6 +794,8 @@ export function __resetMediaCachingForTests(): void {
   quotaHits.clear();
   progress.clear();
   progressVersion = 0;
+  if (progressTimer !== null) clearTimeout(progressTimer);
+  progressTimer = null;
   draining = null;
   persistenceRequested = false;
 }

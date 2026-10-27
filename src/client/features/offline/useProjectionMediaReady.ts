@@ -162,11 +162,14 @@ function collectMediaFiles(
   return [...files.values()];
 }
 
-function useMediaProgressVersion(): number {
+const subscribeNothing = (): (() => void) => () => undefined;
+const noProgressVersion = (): number => 0;
+
+function useMediaProgressVersion(active: boolean): number {
   return useSyncExternalStore(
-    subscribeMediaProgress,
-    getMediaProgressVersion,
-    getMediaProgressVersion,
+    active ? subscribeMediaProgress : subscribeNothing,
+    active ? getMediaProgressVersion : noProgressVersion,
+    active ? getMediaProgressVersion : noProgressVersion,
   );
 }
 
@@ -308,7 +311,7 @@ export function useProjectionMediaReady(
     };
   }, [key]);
 
-  useMediaProgressVersion();
+  useMediaProgressVersion(files.length > 0);
   const current: RunState =
     run.key === key
       ? run

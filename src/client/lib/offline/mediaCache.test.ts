@@ -16,6 +16,7 @@ import {
   shouldWaitForMediaCache,
   isCacheStorageAvailable,
   MAX_MEDIA_RETRIES,
+  MEDIA_PROGRESS_NOTIFY_MS,
   MEDIA_STALL_TIMEOUT_MS,
   __resetMediaCachingForTests,
   __setMediaRetryRandomForTests,
@@ -208,6 +209,53 @@ describe("cacheMediaFirst 진행률과 캐시 분리", () => {
     const videos = await caches.open(MEDIA_CACHE_NAME);
     expect(await videos.match(POSTER)).toBeUndefined();
     expect(await isCached(POSTER)).toBe(true);
+  });
+
+  it("받은 바이트는 조각마다 알리지 않고 묶어서 알리되, 담기면 곧바로 알린다", async () => {
+    vi.useFakeTimers();
+    const chunk = new Uint8Array(64 * 1024);
+    let sent = 0;
+    let finish: () => void = () => undefined;
+    const finished = new Promise<void>((resolve) => {
+      finish = resolve;
+    });
+    mockFetch(
+      async () =>
+        new Response(
+          new ReadableStream<Uint8Array>({
+            async pull(controller) {
+              if (sent === 16) {
+                await finished;
+                controller.close();
+                return;
+              }
+              await new Promise((resolve) => setTimeout(resolve, 0));
+              sent += 1;
+              controller.enqueue(chunk);
+            },
+          }),
+          { status: 200 },
+        ),
+    );
+    const listener = vi.fn();
+    const unsubscribe = subscribeMediaProgress(listener);
+
+    const result = cacheMediaFirst(VIDEO);
+    for (let i = 0; i < 20; i += 1) await vi.advanceTimersByTimeAsync(1);
+
+    expect(sent).toBe(16);
+    expect(getMediaProgress(VIDEO)?.received).toBe(16 * chunk.byteLength);
+    expect(listener).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(MEDIA_PROGRESS_NOTIFY_MS);
+    expect(listener).toHaveBeenCalledTimes(1);
+
+    finish();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(await result).toBe(true);
+    expect(listener.mock.calls.length).toBeGreaterThan(1);
+    expect(vi.getTimerCount()).toBe(0);
+    unsubscribe();
   });
 });
 

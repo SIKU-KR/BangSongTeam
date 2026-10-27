@@ -94,6 +94,95 @@ describe("useProjectionMediaReady", () => {
     expect(result.current.totalCount).toBe(0);
   });
 
+  it("다른 곳에서 영상을 받는 동안 받은 조각마다 다시 그리지 않는다", async () => {
+    vi.useFakeTimers();
+    const chunk = new Uint8Array(64 * 1024);
+    let sent = 0;
+    globalThis.fetch = vi.fn(
+      async () =>
+        new Response(
+          new ReadableStream<Uint8Array>({
+            async pull(controller) {
+              await new Promise((resolve) => setTimeout(resolve, 0));
+              sent += 1;
+              controller.enqueue(chunk);
+              if (sent === 16) controller.close();
+            },
+          }),
+          {
+            status: 200,
+            headers: { "content-length": String(16 * chunk.byteLength) },
+          },
+        ),
+    ) as unknown as typeof fetch;
+    let renders = 0;
+    renderHook(() => {
+      renders += 1;
+      return useProjectionMediaReady(null);
+    });
+
+    await act(async () => {
+      const cached = cacheMediaFirst(FIRST.mediaUrl);
+      await vi.runAllTimersAsync();
+      expect(await cached).toBe(true);
+    });
+
+    expect(sent).toBe(16);
+    expect(renders).toBeLessThanOrEqual(3);
+  });
+
+  it("편집기 헤더도 영상을 받는 동안 받은 조각마다 다시 그리지 않는다", async () => {
+    vi.useFakeTimers();
+    const chunk = new Uint8Array(64 * 1024);
+    let sent = 0;
+    let finish: () => void = () => undefined;
+    const finished = new Promise<void>((resolve) => {
+      finish = resolve;
+    });
+    globalThis.fetch = vi.fn(
+      async () =>
+        new Response(
+          new ReadableStream<Uint8Array>({
+            async pull(controller) {
+              if (sent === 16) {
+                await finished;
+                controller.close();
+                return;
+              }
+              await new Promise((resolve) => setTimeout(resolve, 0));
+              sent += 1;
+              controller.enqueue(chunk);
+            },
+          }),
+          { status: 200 },
+        ),
+    ) as unknown as typeof fetch;
+    let renders = 0;
+    renderHook(() => {
+      renders += 1;
+      return useProjectionMediaReady(PRESENTATION, { passive: true });
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    const settled = renders;
+
+    let cached: Promise<boolean> = Promise.resolve(false);
+    await act(async () => {
+      cached = cacheMediaFirst(FIRST.mediaUrl);
+      for (let i = 0; i < 20; i += 1) await vi.advanceTimersByTimeAsync(1);
+    });
+
+    expect(sent).toBe(16);
+    expect(renders - settled).toBeLessThanOrEqual(1);
+
+    await act(async () => {
+      finish();
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(await cached).toBe(true);
+  });
+
   it("빠진 영상만 받고 개수와 용량을 알린 뒤 준비된다", async () => {
     await store(FIRST.mediaUrl);
     const fetchMock = mockFetch();
