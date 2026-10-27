@@ -10,9 +10,15 @@ import {
   type Deck,
   type PresentationDocument,
 } from "#shared";
-import { decksCol, presentationMembersCol, type Db } from "#db";
+import {
+  decksCol,
+  driveTombstonesCol,
+  presentationMembersCol,
+  type Db,
+} from "#db";
 import {
   clearDb,
+  deckDoc,
   instrumentTransactions,
   seedDocs,
   userDoc,
@@ -400,6 +406,156 @@ describe("동기화 라우트 교차 사용자 격리", () => {
       expect(decks.decks).toHaveLength(0);
     }
   });
+
+  describe("지운 보관함 곡", () => {
+    const libraryDeck = (userId: string = USER_A): Deck =>
+      makeDeck(userId, {
+        id: LIB_DECK_ID,
+        scope: "library",
+        presentationId: null,
+      });
+
+    const putDeck = (deck: Deck) =>
+      app.request(`/api/decks/${deck.id}`, json(deck), env);
+
+    const deleteDeck = (id: string) =>
+      app.request(
+        `/api/decks/${id}`,
+        { method: "DELETE", headers: { "sec-fetch-site": "same-origin" } },
+        env,
+      );
+
+    const listDecks = async (): Promise<{
+      decks: Deck[];
+      deletedIds: string[];
+    }> => {
+      const res = await app.request("/api/decks", {}, env);
+      expect(res.status).toBe(200);
+      return (await res.json()) as { decks: Deck[]; deletedIds: string[] };
+    };
+
+    const recreateByOldRevision = () =>
+      seedDocs(env.DB, {
+        decks: [deckDoc({ id: LIB_DECK_ID, userId: USER_A, title: "되살림" })],
+      });
+
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    it("지운 보관함 곡은 같은 사용자가 다시 올려도 410이고 목록에 돌아오지 않는다", async () => {
+      await seedDocs(env.DB, {
+        users: [userDoc({ id: USER_A, name: "A", termsAgreedAt: new Date() })],
+      });
+      expect((await putDeck(libraryDeck())).status).toBe(200);
+
+      const removed = await deleteDeck(LIB_DECK_ID);
+      expect(removed.status).toBe(200);
+      expect(await removed.json()).toEqual({ ok: true });
+      expect(await listDecks()).toEqual({
+        decks: [],
+        deletedIds: [LIB_DECK_ID],
+      });
+
+      const again = await putDeck(libraryDeck());
+      expect(again.status).toBe(410);
+      expect(await again.json()).toEqual({ error: API_ERRORS.deck.deleted });
+
+      for (const visibility of [
+        { visibility: "public", acceptedCopyrightNotice: true },
+        { visibility: "private" },
+      ]) {
+        const res = await app.request(
+          `/api/decks/${LIB_DECK_ID}/visibility`,
+          patchJson(visibility),
+          env,
+        );
+        expect(res.status).toBe(410);
+        expect(await res.json()).toEqual({ error: API_ERRORS.deck.deleted });
+      }
+
+      expect(await listDecks()).toEqual({
+        decks: [],
+        deletedIds: [LIB_DECK_ID],
+      });
+      expect((await decksCol(env.DB).doc(LIB_DECK_ID).get()).exists).toBe(
+        false,
+      );
+    });
+
+    it("남의 곡을 지우려 하면 404이고, 그 곡도 남의 지운 목록도 그대로다", async () => {
+      expect((await putDeck(libraryDeck())).status).toBe(200);
+
+      currentUser = USER_B;
+      const res = await deleteDeck(LIB_DECK_ID);
+      expect(res.status).toBe(404);
+      expect(await res.json()).toEqual({
+        error: API_ERRORS.deck.notAccessible,
+      });
+      expect(await listDecks()).toEqual({ decks: [], deletedIds: [] });
+
+      currentUser = USER_A;
+      const mine = await listDecks();
+      expect(mine.decks.map((deck) => deck.id)).toEqual([LIB_DECK_ID]);
+      expect(mine.deletedIds).toEqual([]);
+    });
+
+    it("형식이 틀린 id를 지우면 404이고 기록을 남기지 않는다", async () => {
+      for (const id of ["not-an-id", "__abcdefghijklmnopq__"]) {
+        expect((await deleteDeck(id)).status).toBe(404);
+      }
+      expect((await driveTombstonesCol(env.DB).get()).empty).toBe(true);
+    });
+
+    it("올린 적 없는 곡을 지워도 200이고, 그 뒤에 도착한 저장은 410이다", async () => {
+      const removed = await deleteDeck(LIB_DECK_ID);
+      expect(removed.status).toBe(200);
+      expect(await removed.json()).toEqual({ ok: true });
+
+      const late = await putDeck(libraryDeck());
+      expect(late.status).toBe(410);
+      expect(await late.json()).toEqual({ error: API_ERRORS.deck.deleted });
+      expect(await listDecks()).toEqual({
+        decks: [],
+        deletedIds: [LIB_DECK_ID],
+      });
+    });
+
+    it("옛 리비전이 기록 옆에 다시 만든 곡은 목록에서 빼고 지운다", async () => {
+      expect((await deleteDeck(LIB_DECK_ID)).status).toBe(200);
+      await recreateByOldRevision();
+
+      expect(await listDecks()).toEqual({
+        decks: [],
+        deletedIds: [LIB_DECK_ID],
+      });
+      expect((await decksCol(env.DB).doc(LIB_DECK_ID).get()).exists).toBe(
+        false,
+      );
+    });
+
+    it("다시 만든 곡을 지우지 못해도 목록은 그 곡을 빼고 답한다", async () => {
+      expect((await deleteDeck(LIB_DECK_ID)).status).toBe(200);
+      await recreateByOldRevision();
+      const errorLog = vi.spyOn(console, "error").mockImplementation(() => {});
+      vi.spyOn(env.DB, "runTransaction").mockRejectedValue(
+        new Error("14 UNAVAILABLE: connection reset"),
+      );
+
+      expect(await listDecks()).toEqual({
+        decks: [],
+        deletedIds: [LIB_DECK_ID],
+      });
+
+      expect(errorLog).toHaveBeenCalledTimes(1);
+      expect(JSON.parse(String(errorLog.mock.calls[0]?.[0]))).toMatchObject({
+        severity: "ERROR",
+        deckId: LIB_DECK_ID,
+      });
+      expect((await decksCol(env.DB).doc(LIB_DECK_ID).get()).exists).toBe(true);
+    });
+  });
+
   describe("2-기기 왕복", () => {
     beforeEach(async () => {
       await resetBackgrounds(5);
