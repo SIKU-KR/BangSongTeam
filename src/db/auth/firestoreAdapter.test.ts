@@ -5,6 +5,7 @@ import { runBulk, type Db } from "../client";
 import { COLLECTIONS } from "../collections";
 import { clearDb, createTestDb, seedDocs, userDoc } from "../test/fixtures";
 import { firestoreAdapter, matchesWhere } from "./firestoreAdapter";
+import { EmailTakenError } from "./userEmails";
 
 type Clause = Parameters<typeof matchesWhere>[1][number];
 
@@ -344,6 +345,85 @@ describe("Firestore 인증 어댑터 (에뮬레이터)", () => {
 
       expect(deleted).toBe(1_200);
       expect(await countDocs(COLLECTIONS.verifications)).toBe(3);
+    });
+  });
+
+  describe("이메일 하나에 사용자 하나", () => {
+    const SIGN_UP = { method: "email-password" } as const;
+
+    async function usersWithEmail(email: string): Promise<number> {
+      return (
+        await db.collection(COLLECTIONS.users).where("email", "==", email).get()
+      ).size;
+    }
+
+    async function createUser(email: string): Promise<{ id: string }> {
+      const ctx = await authContext();
+      return await ctx.internalAdapter.createUser(
+        { email, name: "찬양팀" },
+        SIGN_UP,
+      );
+    }
+
+    it("같은 이메일로 두 번째 사용자를 만들지 않는다", async () => {
+      await createUser("dup@example.com");
+
+      await expect(createUser("DUP@example.com")).rejects.toThrow(
+        EmailTakenError,
+      );
+      expect(await usersWithEmail("dup@example.com")).toBe(1);
+    });
+
+    it("같은 이메일로 동시에 만들어도 사용자는 하나만 생긴다", async () => {
+      const results = await Promise.allSettled(
+        [1, 2, 3].map(() => createUser("race@example.com")),
+      );
+
+      const rejected = results.flatMap((result) =>
+        result.status === "rejected" ? [result.reason as unknown] : [],
+      );
+      expect(rejected).toEqual([
+        expect.any(EmailTakenError),
+        expect.any(EmailTakenError),
+      ]);
+      expect(await usersWithEmail("race@example.com")).toBe(1);
+    });
+
+    it("사용자를 지우면 같은 이메일로 다시 만들 수 있다", async () => {
+      const first = await createUser("again@example.com");
+      await (await authContext()).internalAdapter.deleteUser(first.id);
+
+      await createUser("again@example.com");
+
+      expect(await usersWithEmail("again@example.com")).toBe(1);
+      expect(await countDocs(COLLECTIONS.userEmails)).toBe(1);
+    });
+
+    it("사용자 문서만 지워져 남은 예약은 새 사용자를 막지 않는다", async () => {
+      const first = await createUser("stale@example.com");
+      await db.collection(COLLECTIONS.users).doc(first.id).delete();
+
+      await createUser("stale@example.com");
+
+      expect(await usersWithEmail("stale@example.com")).toBe(1);
+    });
+
+    it("같은 이메일의 다른 사용자를 지워도 남은 사용자의 예약은 지우지 않는다", async () => {
+      const holder = await createUser("shared@example.com");
+      await seedDocs(db, {
+        users: [
+          userDoc({ id: "legacy00000000000001", email: "shared@example.com" }),
+        ],
+      });
+
+      await (
+        await authContext()
+      ).internalAdapter.deleteUser("legacy00000000000001");
+
+      await expect(createUser("shared@example.com")).rejects.toThrow(
+        EmailTakenError,
+      );
+      expect(holder.id).not.toBe("legacy00000000000001");
     });
   });
 });

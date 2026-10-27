@@ -1,5 +1,6 @@
 import { betterAuth } from "better-auth/minimal";
-import { firestoreAdapter } from "#db";
+import { createAuthMiddleware } from "better-auth/api";
+import { firestoreAdapter, releaseAbandonedSignUp } from "#db";
 import {
   APP_NAME,
   createId,
@@ -272,6 +273,14 @@ function buildAuth(env: Bindings) {
     account: { accountLinking: ACCOUNT_LINKING },
     socialProviders,
     disabledPaths: ["/update-user"],
+    hooks: {
+      before: createAuthMiddleware(async (ctx) => {
+        const email: unknown = ctx.body?.email;
+        if (ctx.path === "/sign-up/email" && typeof email === "string") {
+          await releaseAbandonedSignUp(env.DB, email);
+        }
+      }),
+    },
     databaseHooks: {
       user: {
         create: {
@@ -312,6 +321,8 @@ type AuthInstance = ReturnType<typeof buildAuth>;
  *   프레젠테이션에 복사되는데, Better Auth는 가입 이름의 길이도, `update-user` 본문의 타입도
  *   검사하지 않는다. 거절하지 않고 다듬어서 긴 소셜 프로필 이름으로도 로그인이 막히지 않는다.
  *   앱이 부르지 않는 `/update-user`는 막는다(404).
+ * - 이메일 가입 요청은 먼저 그 이메일의 반쯤 끝난 가입(비밀번호 계정 저장이 실패해 남은 사용자)을
+ *   치운다(`releaseAbandonedSignUp`). 그대로 두면 그 이메일로는 가입도 로그인도 못 한다.
  */
 export function getAuth(env: Bindings): AuthInstance {
   return buildAuth(env);

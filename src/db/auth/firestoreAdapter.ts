@@ -7,7 +7,8 @@ import type {
 } from "@google-cloud/firestore";
 import { createAdapterFactory } from "better-auth/adapters";
 import { runBulk, type Db } from "../client";
-import { fromFirestoreData } from "../collections";
+import { COLLECTIONS, fromFirestoreData } from "../collections";
+import { createUserWithEmail, reservationsHeldBy } from "./userEmails";
 
 type CleanedWhere = {
   field: string;
@@ -177,6 +178,8 @@ function toRow(snapshot: QueryDocumentSnapshot<DocumentData>): Row {
  * SQL 어댑터와 같게 맞춘 동작:
  * - `create`는 같은 id의 문서가 있으면 덮지 않고 실패한다. 먼저 쓴 쪽이 이기는 예약
  *   (`reserveVerificationValue`)이 이 실패에 기댄다.
+ * - 사용자는 이메일마다 하나다. 사용자 문서는 이메일 예약과 함께 만들고(`createUserWithEmail`)
+ *   지울 때 그 사용자의 예약도 지운다. 같은 이메일의 두 번째 사용자는 만들지 않고 실패한다.
  * - `delete`는 조건에 맞는 문서를 모두 지운다. 같은 식별자로 두 번 만든 값도 함께 사라진다.
  * - 여러 문서 지우기는 BulkWriter로 나눠 보낸다. 쌓인 문서가 많아도 커밋 하나가 요청 크기
  *   한도(10 MiB)를 넘지 않는다.
@@ -184,8 +187,19 @@ function toRow(snapshot: QueryDocumentSnapshot<DocumentData>): Row {
 export function firestoreAdapter(
   db: Db,
 ): ReturnType<typeof createAdapterFactory> {
-  async function deleteRefs(refs: readonly DocumentReference[]): Promise<void> {
-    if (refs.length === 0) return;
+  async function deleteRows(
+    model: string,
+    rows: readonly { row: Row; ref: DocumentReference }[],
+  ): Promise<void> {
+    if (rows.length === 0) return;
+    const reservations =
+      model === COLLECTIONS.users
+        ? await reservationsHeldBy(
+            db,
+            rows.map(({ row }) => row),
+          )
+        : [];
+    const refs = [...rows.map(({ ref }) => ref), ...reservations];
     await runBulk(db, (writer) => refs.map((ref) => writer.delete(ref)));
   }
 
@@ -224,10 +238,12 @@ export function firestoreAdapter(
     adapter: () => ({
       async create({ model, data }) {
         const row = data as Row;
-        await db
-          .collection(model)
-          .doc(String(row.id))
-          .create(row as DocumentData);
+        const ref = db.collection(model).doc(String(row.id));
+        if (model === COLLECTIONS.users && typeof row.email === "string") {
+          await createUserWithEmail(db, ref, row.email, row as DocumentData);
+        } else {
+          await ref.create(row as DocumentData);
+        }
         return data;
       },
       async findOne({ model, where }) {
@@ -263,12 +279,11 @@ export function firestoreAdapter(
         return rows.length;
       },
       async delete({ model, where }) {
-        const rows = await findRows(model, where as CleanedWhere[]);
-        await deleteRefs(rows.map(({ ref }) => ref));
+        await deleteRows(model, await findRows(model, where as CleanedWhere[]));
       },
       async deleteMany({ model, where }) {
         const rows = await findRows(model, where as CleanedWhere[]);
-        await deleteRefs(rows.map(({ ref }) => ref));
+        await deleteRows(model, rows);
         return rows.length;
       },
       async consumeOne({ model, where }) {

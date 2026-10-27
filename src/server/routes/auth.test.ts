@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Query } from "@google-cloud/firestore";
 import { handleOAuthUserInfo } from "better-auth/oauth2";
 import { FALLBACK_USER_NAME } from "#shared";
-import { COLLECTIONS, runBulk } from "#db";
+import { COLLECTIONS, runBulk, type Db } from "#db";
 import { env } from "../test/env";
 import { clearDb } from "../../db/test/fixtures";
 import app from "../index";
@@ -162,6 +162,127 @@ describe("이메일·비밀번호 인증", () => {
     expect(duplicate.status).toBeGreaterThanOrEqual(400);
     expect(sessionCookie(duplicate)).toBe("");
     expect(short.status).toBe(400);
+  });
+});
+
+describe("가입이 겹치거나 중간에 실패할 때", () => {
+  const MINUTE_MS = 60_000;
+
+  beforeEach(async () => {
+    await clearDb(env.DB);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  async function usersWithEmail(email: string): Promise<number> {
+    return (
+      await env.DB.collection(COLLECTIONS.users)
+        .where("email", "==", email)
+        .get()
+    ).size;
+  }
+
+  function bindMethods<T extends object>(
+    target: T,
+    override: (prop: string | symbol) => unknown,
+  ): T {
+    return new Proxy(target, {
+      get(inner, prop) {
+        const replaced = override(prop);
+        if (replaced !== undefined) return replaced;
+        const value = Reflect.get(inner, prop, inner) as unknown;
+        return typeof value === "function"
+          ? (value as (...args: unknown[]) => unknown).bind(inner)
+          : value;
+      },
+    });
+  }
+
+  function failFirstCredentialSave(db: Db): Db {
+    let failed = false;
+    const failOnce = () => {
+      failed = true;
+      return Promise.reject(
+        Object.assign(new Error("14 UNAVAILABLE"), { code: 14 }),
+      );
+    };
+    return bindMethods(db, (prop) =>
+      prop === "collection"
+        ? (name: string) => {
+            const collection = db.collection(name);
+            if (name !== COLLECTIONS.accounts) return collection;
+            return bindMethods(collection, (method) =>
+              method === "doc"
+                ? (id: string) =>
+                    bindMethods(collection.doc(id), (op) =>
+                      op === "create" && !failed ? failOnce : undefined,
+                    )
+                : undefined,
+            );
+          }
+        : undefined,
+    );
+  }
+
+  it("같은 이메일로 동시에 가입해도 사용자는 하나만 생긴다", async () => {
+    const statuses = (
+      await Promise.all(
+        ["10.0.5.1", "10.0.5.2", "10.0.5.3"].map((ip) =>
+          signUp("race@example.com", ip),
+        ),
+      )
+    ).map((res) => res.status);
+
+    expect(statuses.filter((status) => status === 200)).toHaveLength(1);
+    expect(statuses.filter((status) => status === 422)).toHaveLength(2);
+    expect(await usersWithEmail("race@example.com")).toBe(1);
+  });
+
+  it("비밀번호 저장이 실패한 가입은 잠시 뒤 같은 이메일로 다시 가입하고 로그인할 수 있다", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const startedAt = Date.now();
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(startedAt);
+    const body = {
+      email: "retry@example.com",
+      password: "password-1234",
+      name: "찬양팀",
+    };
+
+    const failed = await app.request(
+      "/api/auth/sign-up/email",
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          origin: ORIGIN,
+          "x-forwarded-for": "10.0.5.4",
+        },
+        body: JSON.stringify(body),
+      },
+      { ...env, DB: failFirstCredentialSave(env.DB) },
+    );
+    expect(failed.status).toBeGreaterThanOrEqual(500);
+    expect(await usersWithEmail("retry@example.com")).toBe(1);
+
+    expect(
+      (await post("/api/auth/sign-up/email", body, "10.0.5.5")).status,
+    ).toBe(422);
+
+    vi.setSystemTime(startedAt + 2 * MINUTE_MS);
+    const retried = await post("/api/auth/sign-up/email", body, "10.0.5.6");
+    expect(retried.status).toBe(200);
+    expect(await usersWithEmail("retry@example.com")).toBe(1);
+
+    const signedIn = await post(
+      "/api/auth/sign-in/email",
+      { email: body.email, password: body.password },
+      "10.0.5.7",
+    );
+    expect(signedIn.status).toBe(200);
   });
 });
 

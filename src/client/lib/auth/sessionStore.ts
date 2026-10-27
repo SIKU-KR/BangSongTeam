@@ -208,6 +208,18 @@ function failureFromStatus(status: number | undefined): EmailAuthFailure {
   }
 }
 
+function signUpFailure(error: {
+  status?: number;
+  code?: string;
+}): EmailAuthFailure {
+  if (error.status === 422) {
+    return error.code === "USER_ALREADY_EXISTS_USE_ANOTHER_EMAIL"
+      ? "alreadyExists"
+      : "unknown";
+  }
+  return failureFromStatus(error.status);
+}
+
 /** 이메일·비밀번호로 로그인한다. 성공하면 서버 세션으로 세션 스토어를 갱신한다. */
 export async function signInWithEmail(
   email: string,
@@ -220,13 +232,15 @@ export async function signInWithEmail(
 
 /**
  * 이메일·비밀번호로 가입한다. 메일 인증이 없어 가입과 동시에 로그인된다.
- * 같은 이메일로 이미 가입했으면 `alreadyExists`로 던진다.
+ * 같은 이메일로 이미 가입했으면 `alreadyExists`로 던진다. 서버가 사용자를 만들지 못한
+ * 422(`FAILED_TO_CREATE_USER`: 저장 실패, 같은 이메일로 동시에 보낸 가입)는 `unknown`이다.
+ * 이미 가입했다고 안내하면 사용자는 그 이메일로 로그인하려 하지만 들어가지 못한다.
  */
 export async function signUpWithEmail(
   input: EmailSignUpRequest,
 ): Promise<void> {
   const { error } = await authClient.signUp.email(input);
-  if (error) throw new EmailAuthError(failureFromStatus(error.status));
+  if (error) throw new EmailAuthError(signUpFailure(error));
   await revalidateSession();
 }
 
