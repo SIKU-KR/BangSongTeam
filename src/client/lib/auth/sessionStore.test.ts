@@ -920,6 +920,7 @@ describe("세션 스토어", () => {
 
       requestSessionCheck();
       window.history.replaceState({}, "", "/presentations");
+      requestSessionCheck();
       resumeDeferredSessionWork();
       await vi.waitFor(() => expect(reload).toHaveBeenCalledTimes(1));
 
