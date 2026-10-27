@@ -13,7 +13,8 @@ const AUTH_ERROR_DESCRIPTION_PARAM = "error_description";
  * 소셜 로그인 오류 코드에 맞는 안내 문구. 안내할 것이 없으면 null이다.
  *
  * Google 화면에서 직접 취소한 `access_denied`는 사용자가 한 일이라 알리지 않는다. 코드는 화면에
- * 그대로 보이지 않고 아는 것만 문구로 바꾼다. 나머지는 모두 로그인을 마치지 못했다는 안내다.
+ * 그대로 보이지 않고 아는 것만 문구로 바꾼다. 나머지는 그 화면을 지나 돌아오는 길에 실패한 것이라
+ * '시작하지 못했어요'(`signInFailed`)가 아니라 '로그인하지 못했어요'로 안내한다.
  */
 export function callbackErrorMessage(code: string | null): string | null {
   switch (code) {
@@ -26,7 +27,7 @@ export function callbackErrorMessage(code: string | null): string | null {
     case "state_mismatch":
       return AUTH_COPY.oauthErrors.stateExpired;
     default:
-      return AUTH_COPY.signInFailed;
+      return AUTH_COPY.email.failures.unknown;
   }
 }
 

@@ -378,7 +378,7 @@ describe("LoginRoute", () => {
     it.each([
       ["account_not_linked", AUTH_COPY.oauthErrors.accountNotLinked],
       ["state_mismatch", AUTH_COPY.oauthErrors.stateExpired],
-      ["unable_to_get_user_info", AUTH_COPY.signInFailed],
+      ["unable_to_get_user_info", AUTH_COPY.email.failures.unknown],
     ])("오류 코드 %s를 알아듣는 문구로 안내한다", async (code, message) => {
       window.history.replaceState(null, "", `/presentations?error=${code}`);
       renderLogin();

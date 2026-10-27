@@ -375,6 +375,20 @@ describe("App Route Integration", () => {
     expect(window.location.search).toBe("");
   });
 
+  it("이미 로그인한 사람이 /?error=로 돌아오면 오류 코드를 가져가지 않고 내 프레젠테이션으로 간다", async () => {
+    renderAt("/?error=account_not_linked");
+
+    expect(
+      (await screen.findAllByTestId("presentation-row")).length,
+    ).toBeGreaterThan(0);
+    expect(screen.queryByTestId("landing-route")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(AUTH_COPY.oauthErrors.accountNotLinked),
+    ).not.toBeInTheDocument();
+    expect(window.location.pathname).toBe("/presentations");
+    expect(window.location.search).toBe("");
+  });
+
   it("미로그인이면 링크로 연 세트가 아닌 송출 경로는 막는다", async () => {
     signOutForTests();
 

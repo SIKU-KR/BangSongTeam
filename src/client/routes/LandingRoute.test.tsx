@@ -1,7 +1,8 @@
 import React from "react";
 import { render, screen, fireEvent } from "@testing-library/react";
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, afterEach } from "vitest";
 import { MemoryRouter, Routes, Route } from "../test/router";
+import { signInAsTestUser, signOutForTests } from "../test/sessionFixture";
 import { LandingRoute } from "./LandingRoute";
 import { APP_NAME, APP_TAGLINE } from "#shared";
 
@@ -20,6 +21,8 @@ function renderLanding(path = "/") {
 }
 
 describe("LandingRoute", () => {
+  afterEach(() => signOutForTests());
+
   it("랜딩 플레이스홀더를 렌더한다", () => {
     renderLanding();
 
@@ -44,6 +47,17 @@ describe("LandingRoute", () => {
       expect(screen.queryByTestId("landing-route")).toBeNull();
       expect(window.location.pathname).toBe("/presentations");
       expect(window.location.search).toBe("?error=account_not_linked");
+    });
+
+    it("이미 로그인한 사람에게는 안내할 로그인 화면이 없으니 오류 코드 없이 드라이브로 보낸다", () => {
+      signInAsTestUser();
+
+      renderLanding("/?error=account_not_linked");
+
+      expect(screen.getByTestId("presentations-stub")).toBeInTheDocument();
+      expect(screen.queryByTestId("landing-route")).toBeNull();
+      expect(window.location.pathname).toBe("/presentations");
+      expect(window.location.search).toBe("");
     });
 
     it("제공자가 붙인 오류 설명은 넘기지 않는다", () => {

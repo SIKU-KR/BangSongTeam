@@ -23,10 +23,16 @@ describe("callbackErrorMessage", () => {
     );
   });
 
-  it.each(["unable_to_get_user_info", "email_not_found", "internal_error"])(
-    "그 밖의 오류 %j는 로그인을 마치지 못했다고 알린다",
+  it.each([
+    "unable_to_get_user_info",
+    "invalid_code",
+    "email_not_found",
+    "internal_server_error",
+  ])(
+    "그 밖의 오류 %j는 Google 화면을 지난 뒤의 실패라 로그인하지 못했다고 알린다",
     (code) => {
-      expect(callbackErrorMessage(code)).toBe(AUTH_COPY.signInFailed);
+      expect(callbackErrorMessage(code)).toBe(AUTH_COPY.email.failures.unknown);
+      expect(callbackErrorMessage(code)).not.toBe(AUTH_COPY.signInFailed);
     },
   );
 });
