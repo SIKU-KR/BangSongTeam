@@ -10,8 +10,13 @@ import {
   type Deck,
   type PresentationDocument,
 } from "#shared";
-import { decksCol, type Db } from "#db";
-import { clearDb, seedDocs, userDoc } from "../../db/test/fixtures";
+import { decksCol, presentationMembersCol, type Db } from "#db";
+import {
+  clearDb,
+  instrumentTransactions,
+  seedDocs,
+  userDoc,
+} from "../../db/test/fixtures";
 import { createApp } from "../index";
 import type { SessionReader } from "../middleware/auth";
 import { resetBackgrounds, serviceBackgroundId } from "../test/backgrounds";
@@ -216,6 +221,60 @@ describe("동기화 라우트 교차 사용자 격리", () => {
     const removed = await remove();
     expect(removed.status).toBe(200);
     expect(await listIds()).toEqual([]);
+  });
+
+  it("나눠 지우는 중에 휴지통에서 꺼내면 일부만 지운 채 409로 알린다", async () => {
+    const trashed = {
+      ...makeDoc(USER_A),
+      trashedAt: "2026-09-25T00:00:00.000Z",
+    };
+    await app.request(`/api/presentations/${DOC_ID}`, json(trashed), env);
+    await seedDocs(env.DB, {
+      members: Array.from({ length: 600 }, (_, index) => ({
+        presentationId: DOC_ID,
+        userId: `m${String(index).padStart(20, "0")}`,
+      })),
+    });
+    const instrument = instrumentTransactions(env.DB, {
+      afterCall: {
+        call: 1,
+        run: async () => {
+          const restore = await app.request(
+            `/api/presentations/${DOC_ID}`,
+            json({ ...makeDoc(USER_A), trashedAt: null }),
+            env,
+          );
+          expect(restore.status).toBe(200);
+        },
+      },
+    });
+
+    let res: Response;
+    try {
+      res = await app.request(
+        `/api/presentations/${DOC_ID}`,
+        { method: "DELETE", headers: { "sec-fetch-site": "same-origin" } },
+        env,
+      );
+    } finally {
+      instrument.restore();
+    }
+
+    expect(res.status).toBe(409);
+    expect(await res.json()).toEqual({ error: API_ERRORS.trashChangedPartly });
+    const list = await app.request("/api/presentations", {}, env);
+    const body = (await list.json()) as {
+      presentations: PresentationDocument[];
+    };
+    expect(body.presentations.map((presentation) => presentation.id)).toEqual([
+      DOC_ID,
+    ]);
+    expect(body.presentations[0].items).toHaveLength(1);
+    const members = await presentationMembersCol(env.DB)
+      .where("presentationId", "==", DOC_ID)
+      .get();
+    expect(members.size).toBeGreaterThan(0);
+    expect(members.size).toBeLessThan(600);
   });
 
   it("미로그인은 모든 동기화 경로에서 401이다", async () => {

@@ -124,7 +124,8 @@ function writeLimitMessage(breach: WriteLimitBreach): string {
  * 목록·단건 조회에는 링크로 공유받은 세트(`access`가 붙음, 보기 전용)도 온다.
  * 저장은 소유자만 할 수 있다.
  * DELETE(영구 삭제)는 서버에서 휴지통에 있는(자신이나 담긴 폴더·조상이 휴지통에 있는)
- * 프레젠테이션만 지우고, 아니면 아무것도 지우지 않고 409로 답한다.
+ * 프레젠테이션만 지우고, 아니면 아무것도 지우지 않고 409로 답한다. 멤버·사본이 많아 나눠 지우는
+ * 중에 휴지통에서 나오면 그때까지 지운 것은 지운 채 409(`trashChangedPartly`)로 답한다.
  * 저장할 수 없을 만큼 큰 본문(곡마다의 가사·슬라이드, 곡 수, 곡 글 전체, Firestore 저장 한도)은
  * 400·500 대신 413과 무엇을 줄일지 말하는 문장으로 답한다.
  */
@@ -180,8 +181,16 @@ export function createPresentationsRoute(deps: AppDeps = {}) {
       );
       if (result.status === "notFound")
         return c.json({ error: API_ERRORS.presentation.notAccessible }, 404);
-      if (result.status === "conflict")
-        return c.json({ error: API_ERRORS.trashChanged }, 409);
+      if (result.status === "conflict") {
+        return c.json(
+          {
+            error: result.partial
+              ? API_ERRORS.trashChangedPartly
+              : API_ERRORS.trashChanged,
+          },
+          409,
+        );
+      }
       return c.json({ ok: true as const }, 200);
     })
     .get("/:id/share", presentationId, async (c) => {

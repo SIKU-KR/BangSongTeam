@@ -8,7 +8,14 @@ import {
   type FolderDeleteRequest,
   type PresentationDocument,
 } from "#shared";
-import { clearDb, seedDocs, userDoc } from "../../db/test/fixtures";
+import {
+  clearDb,
+  instrumentTransactions,
+  presentationDoc,
+  presentationsWithCopies,
+  seedDocs,
+  userDoc,
+} from "../../db/test/fixtures";
 import { createApp } from "../index";
 import type { SessionReader } from "../middleware/auth";
 
@@ -194,6 +201,19 @@ describe("드라이브 폴더 API", () => {
     expect(still.name).toBe("2026 주일");
   });
 
+  it("남의 프레젠테이션 id로는 폴더를 만들지 못한다 (403)", async () => {
+    const theirs = presentationDoc({ id: nextId(), userId: USER_B });
+    await seedDocs(env.DB, { presentations: [theirs] });
+
+    const res = await putFolder(makeFolder({ id: theirs.id }));
+
+    expect(res.status).toBe(403);
+    expect(await res.json()).toEqual({
+      error: API_ERRORS.folder.notAccessible,
+    });
+    expect(await listFolders()).toEqual([]);
+  });
+
   it("본문의 userId가 세션 사용자와 다르면 403으로 거절하고 만들지 않는다", async () => {
     const res = await putFolder(makeFolder({ userId: USER_B }));
 
@@ -299,6 +319,42 @@ describe("드라이브 폴더 API", () => {
     expect(await del.json()).toEqual({ error: API_ERRORS.trashChanged });
     expect((await listFolders()).map((f) => f.id)).toEqual([root.id, child.id]);
     expect((await listDocs()).map((d) => d.id)).toEqual([doc.id]);
+  });
+
+  it("나눠 지우는 중에 다른 기기가 복원하면 일부만 지운 채 409로 알린다", async () => {
+    const root = makeFolder({ trashedAt: TRASHED_AT });
+    await putFolder(root);
+    const seeded = presentationsWithCopies(USER_A, 60, 8, {
+      folderId: root.id,
+    });
+    await seedDocs(env.DB, seeded);
+    const restored = {
+      ...root,
+      trashedAt: null,
+      updatedAt: "2026-09-26T00:00:00.000Z",
+    };
+    const instrument = instrumentTransactions(env.DB, {
+      afterCall: {
+        call: 1,
+        run: async () => {
+          expect((await putFolder(restored)).status).toBe(200);
+        },
+      },
+    });
+
+    let del: Response;
+    try {
+      del = await deleteFolder(root.id);
+    } finally {
+      instrument.restore();
+    }
+
+    expect(del.status).toBe(409);
+    expect(await del.json()).toEqual({ error: API_ERRORS.trashChangedPartly });
+    expect(await listFolders()).toEqual([restored]);
+    const remaining = await listDocs();
+    expect(remaining.length).toBeGreaterThan(0);
+    expect(remaining.length).toBeLessThan(seeded.presentations.length);
   });
 
   it("기기가 보낸 id가 NanoID가 아니어도 400 없이 지운다", async () => {

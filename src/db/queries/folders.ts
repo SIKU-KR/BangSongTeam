@@ -2,6 +2,7 @@ import {
   buildFolderIndex,
   collectDescendantFolderIds,
   isFolderTrashed,
+  sortFoldersParentFirst,
   wouldCreateCycle,
   type DriveTombstones,
   type Folder as SharedFolder,
@@ -18,8 +19,9 @@ import {
 import { toFolderDoc, toSharedFolder } from "./mappers";
 import {
   prepareClearTombstone,
-  readPresentationDependents,
-  writeTombstones,
+  prepareDeletionPass,
+  runDeletionPasses,
+  type DeletionResult,
 } from "./cascade";
 
 function byCreatedAtAsc(a: FolderDoc, b: FolderDoc): number {
@@ -47,6 +49,10 @@ export async function getFoldersByUserId(
  * - 남의 폴더면 아무것도 쓰지 않고 `null` (→ 403).
  * - 본문의 `userId`가 세션 사용자가 아니어도 `null` (→ 403). 아직 A라고 믿는 탭이나 A가 남긴
  *   대기열이 보낸 폴더를 지금 쿠키의 주인인 B의 드라이브에 만들면 안 된다.
+ * - 새 폴더의 id가 이미 프레젠테이션 id여도 `null` (→ 403). 영구 삭제 기록은 폴더와
+ *   프레젠테이션이 한 id 공간을 쓰고, 프레젠테이션 id는 링크로 공유받은 사람에게도 보인다. 그 id로
+ *   폴더를 만들어 지우면 주인보다 먼저 기록을 차지해, 주인이 영구 삭제한 프레젠테이션을 주인의
+ *   다른 기기가 다시 올린다.
  * - 부모가 없거나, 남의 것이거나, 옮기면 사이클이 생기면 **루트로 보정**한다.
  *   오프라인 기기 두 대가 서로 반대로 옮기거나 다른 기기에서 부모를 영구
  *   삭제하면 생기는 일이다. 거절하면 그 폴더는 영영 동기화되지 않으므로,
@@ -71,6 +77,12 @@ export async function upsertFolder(
     ]);
     const existing = existingSnapshot.data();
     if (existing && existing.userId !== userId) return null;
+    if (
+      !existing &&
+      (await tx.get(presentationsCol(db).doc(folder.id))).exists
+    ) {
+      return null;
+    }
 
     let parentId = folder.parentId;
     if (parentId !== null && ownFolders) {
@@ -105,19 +117,7 @@ export async function upsertFolder(
   });
 }
 
-/**
- * 영구 삭제 결과.
- *
- * - `notFound`: 없거나 남의 항목 (→ 404).
- * - `conflict`: 서버에서 그 항목이 휴지통에 없거나(다른 기기에서 복원했거나 밖으로 옮김), 지우라고
- *   한 기기가 보지 못한 항목이 서버 트리에 있다 (→ 409). `partial`은 그 전에 이미 일부를 지웠는지다.
- */
-export type DeleteForeverRefusal =
-  { status: "notFound" } | { status: "conflict"; partial: boolean };
-
-export type DeleteFolderTreeResult =
-  | { status: "deleted"; folderIds: string[]; presentationIds: string[] }
-  | DeleteForeverRefusal;
+export type DeleteFolderTreeResult = DeletionResult;
 
 type ExpectedFolderTree = NonNullable<FolderDeleteRequest["expected"]>;
 
@@ -143,7 +143,9 @@ function holdsUnseenItems(
  * id가 더 있는 것은 괜찮다. 확인은 모두 쓰기 전에 해서, 거절할 때는 아무것도 쓰지 않는다.
  *
  * 프레젠테이션은 담긴 사본 곡·공유 멤버와 함께 지우고, 지운 폴더·프레젠테이션마다 영구
- * 삭제 기록을 남긴다. 모두 한 트랜잭션이라 중간에 실패해도 반쪽 트리가 남지 않는다.
+ * 삭제 기록을 남긴다. 큰 트리는 트랜잭션 여러 개로 나눠 지운다(`runDeletionPasses`). 차례마다 위
+ * 확인을 다시 하고, 깊은 폴더부터 지우고 이 폴더를 마지막에 지운다. 중간에 멈춰도 남은 것은 모두
+ * 이 폴더 아래 휴지통에 있어 다시 지우면 이어서 끝난다.
  */
 export async function deleteFolderTree(
   db: Db,
@@ -151,41 +153,33 @@ export async function deleteFolderTree(
   folderId: string,
   expected?: ExpectedFolderTree,
 ): Promise<DeleteFolderTreeResult> {
-  return db.runTransaction(async (tx): Promise<DeleteFolderTreeResult> => {
+  return runDeletionPasses(db, async (tx) => {
     const ownFolders = await tx.get(
       foldersCol(db).where("userId", "==", userId),
     );
-    const index = buildFolderIndex(
-      ownFolders.docs.map((doc) => toSharedFolder(doc.data())),
-    );
-    if (!index.byId.has(folderId)) return { status: "notFound" };
-    if (!isFolderTrashed(index, folderId)) {
-      return { status: "conflict", partial: false };
-    }
+    const folders = ownFolders.docs.map((doc) => toSharedFolder(doc.data()));
+    const index = buildFolderIndex(folders);
+    if (!index.byId.has(folderId)) return "notFound";
+    if (!isFolderTrashed(index, folderId)) return "conflict";
 
-    const folderIds = [...collectDescendantFolderIds(index, folderId)];
-    const inTree = new Set(folderIds);
+    const subtree = collectDescendantFolderIds(index, folderId);
     const ownPresentations = await tx.get(
       presentationsCol(db).where("userId", "==", userId),
     );
     const presentationIds = ownPresentations.docs
-      .filter((doc) => inTree.has(doc.data().folderId ?? ""))
+      .filter((doc) => subtree.has(doc.data().folderId ?? ""))
       .map((doc) => doc.id);
-    if (expected && holdsUnseenItems(expected, folderIds, presentationIds)) {
-      return { status: "conflict", partial: false };
+    if (expected && holdsUnseenItems(expected, [...subtree], presentationIds)) {
+      return "conflict";
     }
-    const dependents = await readPresentationDependents(
-      tx,
-      db,
-      presentationIds,
-    );
 
-    for (const ref of dependents) tx.delete(ref);
-    for (const id of presentationIds) tx.delete(presentationsCol(db).doc(id));
-    for (const id of folderIds) tx.delete(foldersCol(db).doc(id));
-    writeTombstones(tx, db, userId, "folder", folderIds);
-    writeTombstones(tx, db, userId, "presentation", presentationIds);
-    return { status: "deleted", folderIds, presentationIds };
+    const childFirst = sortFoldersParentFirst(
+      folders.filter((folder) => subtree.has(folder.id)),
+      folders,
+    )
+      .reverse()
+      .map((folder) => folder.id);
+    return prepareDeletionPass(tx, db, userId, presentationIds, childFirst);
   });
 }
 

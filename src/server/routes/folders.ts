@@ -24,7 +24,8 @@ import {
  * 휴지통 비우기·영구 삭제 전용이다 (하위 폴더·프레젠테이션까지 지운다).
  * DELETE는 서버에서 그 폴더나 조상이 휴지통에 있을 때만 지운다. 본문의 `expected`(그 기기가 본
  * 하위 트리)를 받으면 서버 트리가 그 안에 들 때만 지운다. 어느 쪽이든 어긋나면 아무것도 지우지
- * 않고 409로 답한다. 본문이 없는 이전 클라이언트는 휴지통 확인만 받는다.
+ * 않고 409로 답한다. 본문이 없는 이전 클라이언트는 휴지통 확인만 받는다. 큰 트리를 나눠 지우는
+ * 중에 어긋나면 그때까지 지운 것은 지운 채 409(`trashChangedPartly`)로 답한다.
  * `userId`는 세션에서 가져오고, 본문의 userId가 세션 사용자와 다르면 403으로 거절한다 (다른
  * 계정으로 바뀐 탭·남은 대기열이 보낸 문서를 지금 쿠키의 계정에 만들지 않는다. Firestore에
  * 사용자별 접근 규칙이 없다).
@@ -92,7 +93,14 @@ export function createFoldersRoute(deps: AppDeps = {}) {
           return c.json({ error: API_ERRORS.folder.notAccessible }, 404);
         }
         if (result.status === "conflict") {
-          return c.json({ error: API_ERRORS.trashChanged }, 409);
+          return c.json(
+            {
+              error: result.partial
+                ? API_ERRORS.trashChangedPartly
+                : API_ERRORS.trashChanged,
+            },
+            409,
+          );
         }
         return c.json(
           {

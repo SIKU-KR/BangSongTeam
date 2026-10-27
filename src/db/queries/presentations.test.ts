@@ -1,16 +1,19 @@
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, afterEach, beforeEach, vi } from "vitest";
 import type { Db } from "../client";
 import {
   decksCol,
   driveTombstonesCol,
+  presentationMembersCol,
   presentationsCol,
   type FolderDoc,
   type PresentationDoc,
 } from "../collections";
 import {
+  clearDb,
   createTestDb,
   deckDoc,
   folderDoc,
+  instrumentTransactions,
   presentationDoc,
   presentationsWithCopies,
   seedDocs,
@@ -24,6 +27,7 @@ import {
   resolveFolderId,
   type PresentationDocument,
 } from "#shared";
+import { MAX_WRITES_PER_TRANSACTION } from "./cascade";
 import { isPresentationInTrash } from "./folders";
 import { toSharedFolder } from "./mappers";
 import {
@@ -216,6 +220,79 @@ describe("프레젠테이션 쿼리", () => {
       expect((await presentationsCol(db).doc(DOC_ID).get()).exists).toBe(true);
       expect((await decksCol(db).doc(clonedDeckId).get()).exists).toBe(true);
       expect((await driveTombstonesCol(db).get()).size).toBe(0);
+    });
+
+    describe("공유 멤버가 600명인 프레젠테이션", () => {
+      const countMembers = async () =>
+        (
+          await presentationMembersCol(db)
+            .where("presentationId", "==", DOC_ID)
+            .get()
+        ).size;
+
+      beforeEach(async () => {
+        await upsertPresentationDocument(
+          db,
+          userAId,
+          makeDoc(userAId, { trashedAt: TRASHED_AT }),
+        );
+        await seedDocs(db, {
+          members: Array.from({ length: 600 }, (_, index) => ({
+            presentationId: DOC_ID,
+            userId: `m${String(index).padStart(20, "0")}`,
+          })),
+        });
+      });
+
+      afterEach(async () => {
+        await clearDb(db);
+      });
+
+      it("트랜잭션마다 450건 이하로 나눠 모두 지운다", async () => {
+        const instrument = instrumentTransactions(db);
+
+        expect(await deletePresentation(db, DOC_ID, userAId)).toEqual({
+          status: "deleted",
+        });
+        instrument.restore();
+
+        expect(instrument.writesPerAttempt.length).toBeGreaterThan(1);
+        expect(instrument.max()).toBeLessThanOrEqual(
+          MAX_WRITES_PER_TRANSACTION,
+        );
+        expect(await countMembers()).toBe(0);
+        expect((await decksCol(db).doc(clonedDeckId).get()).exists).toBe(false);
+        expect((await presentationsCol(db).doc(DOC_ID).get()).exists).toBe(
+          false,
+        );
+        expect(
+          (await driveTombstonesCol(db).get()).docs.map((doc) => doc.id),
+        ).toEqual([DOC_ID]);
+      });
+
+      it("멤버부터 지우므로 차례 사이에 멈춰도 곡은 남고, 다시 지우면 끝난다", async () => {
+        const instrument = instrumentTransactions(db, { failOnCall: 2 });
+
+        await expect(deletePresentation(db, DOC_ID, userAId)).rejects.toThrow();
+        instrument.restore();
+
+        expect(await countMembers()).toBeGreaterThan(0);
+        expect(await countMembers()).toBeLessThan(600);
+        expect((await decksCol(db).doc(clonedDeckId).get()).exists).toBe(true);
+        expect((await presentationsCol(db).doc(DOC_ID).get()).exists).toBe(
+          true,
+        );
+        expect((await driveTombstonesCol(db).get()).size).toBe(0);
+
+        expect(await deletePresentation(db, DOC_ID, userAId)).toEqual({
+          status: "deleted",
+        });
+        expect(await countMembers()).toBe(0);
+        expect((await decksCol(db).doc(clonedDeckId).get()).exists).toBe(false);
+        expect((await presentationsCol(db).doc(DOC_ID).get()).exists).toBe(
+          false,
+        );
+      });
     });
   });
 
