@@ -16,7 +16,11 @@ import {
   type DeckDoc,
   type PresentationDoc,
 } from "../collections";
-import { fromPresentationChanges, toPresentationDocument } from "./mappers";
+import {
+  fromPresentationChanges,
+  MAX_FIRESTORE_TIME,
+  toPresentationDocument,
+} from "./mappers";
 import { existingBackgroundIds } from "./decks";
 import { isPresentationInTrash } from "./folders";
 import {
@@ -39,6 +43,20 @@ export function byServiceDateDesc(
 
 function byPosition(a: DeckDoc, b: DeckDoc): number {
   return (a.position ?? 0) - (b.position ?? 0);
+}
+
+function nextRevision(
+  previous: Date | undefined,
+  sentIso: string,
+  nowMs: number,
+): string {
+  const revision = laterThan(
+    previous?.toISOString(),
+    clampToClock(sentIso, nowMs),
+  );
+  return Date.parse(revision) > MAX_FIRESTORE_TIME
+    ? new Date(MAX_FIRESTORE_TIME).toISOString()
+    : revision;
 }
 
 export type DeletePresentationResult =
@@ -180,7 +198,9 @@ function editableDeckFields(row: DeckDoc): Partial<DeckDoc> {
  *
  * 저장된 `updatedAt`은 판이고 받은 저장마다 커진다. 보낸 시각을 서버 시계 + 5분까지로 줄여 쓰되, 저장된
  * 판보다 늦지 않으면 저장된 판 + 1ms로 쓴다(`laterThan`). 되돌리기처럼 옛 시각을 담은 저장도 모든
- * 기기에서 새 판이 되고, 빠른 시계가 판을 미래에 박아 두지 못한다.
+ * 기기에서 새 판이 되고, 빠른 시계가 판을 미래에 박아 두지 못한다. Firestore가 담는 마지막 시각
+ * (`MAX_FIRESTORE_TIME`)에 박힌 판만은 그대로 둔다. 1ms를 더한 값은 담지 못해 1970년으로 바뀌고,
+ * 판이 거꾸로 간다.
  *
  * 영구 삭제는 되돌리지 않는다. 서버에 없고 내 영구 삭제 기록이 있는 id는 기준과 상관없이 쓰지 않고
  * `deleted`다(`readOwnTombstone`).
@@ -279,9 +299,10 @@ export async function savePresentationChanges(
     } = fromPresentationChanges({
       ...changes,
       userId,
-      updatedAt: laterThan(
-        existing?.updatedAt.toISOString(),
-        clampToClock(changes.updatedAt, now.getTime()),
+      updatedAt: nextRevision(
+        existing?.updatedAt,
+        changes.updatedAt,
+        now.getTime(),
       ),
       ...(folderId === undefined ? {} : { folderId }),
     });

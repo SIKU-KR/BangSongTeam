@@ -45,7 +45,10 @@ export async function getFoldersByUserId(
     .map(toSharedFolder);
 }
 
-/** `upsertFolder` 결과. `saved`만 쓰고, `folder`는 서버에 저장된 확정본이다 */
+/**
+ * `upsertFolder` 결과. `saved`는 서버에 저장된 확정본(`folder`)을 담는다. 늦게 온 옛 수정이면 쓰지
+ * 않고 저장본만 돌려준다. 나머지 결과는 아무것도 쓰지 않는다.
+ */
 export type UpsertFolderResult =
   | { status: "saved"; folder: SharedFolder }
   | { status: "forbidden" }

@@ -485,6 +485,54 @@ describe("기준 판으로 거르는 저장과 늘 커지는 판", () => {
     expect((await readSet())?.updatedAt).toBe(limit.toISOString());
   });
 
+  it("판이 Firestore가 담는 마지막 시각에 박혀 있어도 다음 판이 1970년으로 돌아가지 않는다", async () => {
+    const last = "9999-12-31T23:59:59.999Z";
+    await save(changesOf(version(3, T1), null));
+    await presentationsCol(db)
+      .doc(DOC_ID)
+      .update({ updatedAt: new Date(last) });
+
+    expect(
+      await save(toPresentationChanges(version(3, T2, { title: "고친 제목" }))),
+    ).toEqual({ status: "saved", updatedAt: new Date(last) });
+    expect(
+      await save(
+        changesOf(version(3, T3, { title: "기준을 실은 저장" }), last),
+      ),
+    ).toEqual({ status: "saved", updatedAt: new Date(last) });
+
+    expect(await readSet()).toMatchObject({
+      title: "기준을 실은 저장",
+      updatedAt: last,
+    });
+  });
+
+  it("충돌로 돌려주는 판은 곡을 문서 id 순서가 아니라 저장된 순서대로 담는다", async () => {
+    await save(changesOf(version(3, T1), null));
+    const doc = version(3, T2);
+    const reversed = {
+      ...doc,
+      items: [...doc.items]
+        .reverse()
+        .map((item, order) => ({ ...item, order })),
+    };
+    expect(await save(changesOf(reversed, T1, () => false))).toMatchObject({
+      status: "saved",
+    });
+
+    const stale = await save(
+      changesOf(version(3, T3, { title: "낡은 기기의 제목" }), T1, () => false),
+    );
+
+    const stored = await readSet();
+    expect(stored?.items.map((item) => item.deck.id)).toEqual([
+      deckId(2),
+      deckId(1),
+      deckId(0),
+    ]);
+    expect(stale).toEqual({ status: "conflict", current: stored });
+  });
+
   it("서버에 있는 세트를 기준 null로 보내면 충돌이다", async () => {
     await save(changesOf(version(3, T1), null));
 

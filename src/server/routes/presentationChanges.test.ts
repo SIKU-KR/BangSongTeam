@@ -130,6 +130,10 @@ async function patch(body: unknown): Promise<Response> {
   );
 }
 
+async function put(body: unknown): Promise<Response> {
+  return app.request(`/api/presentations/${DOC_ID}`, request("PUT", body), env);
+}
+
 function eventLines(
   log: MockInstance,
   event: string,
@@ -387,6 +391,40 @@ describe("기준 판(baseUpdatedAt)과 영구 삭제한 세트의 저장", () =>
       }),
     ]);
     expect(JSON.stringify(lines)).not.toContain("번 곡");
+  });
+
+  it("문서 전체 PUT도 기준 판을 견줘, 맞으면 200과 판을 돌려주고 낡으면 412로 세트를 그대로 둔다", async () => {
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+
+    const first = await put({
+      ...editOneLine(makeSet(USER_A)),
+      baseUpdatedAt: STORED_AT,
+    });
+    expect(first.status).toBe(200);
+    expect(await first.json()).toEqual({
+      ok: true,
+      updatedAt: "2026-09-22T00:00:00.000Z",
+    });
+    const stored = await readSet();
+    expect(stored.items[4].deck.lyricsRaw).toMatch(/추가$/);
+
+    const stale = await put({
+      ...makeSet(USER_A),
+      title: "낡은 기기의 제목",
+      updatedAt: "2026-09-23T00:00:00.000Z",
+      baseUpdatedAt: STORED_AT,
+    });
+    expect(stale.status).toBe(412);
+    expect(await stale.json()).toEqual({
+      error: API_ERRORS.presentation.conflict,
+      presentation: stored,
+    });
+    expect(await readSet()).toEqual(stored);
+    expect(eventLines(log, "presentation_save_conflict")).toHaveLength(1);
+
+    const malformed = await put({ ...makeSet(USER_A), baseUpdatedAt: "어제" });
+    expect(malformed.status).toBe(400);
+    expect(await readSet()).toEqual(stored);
   });
 
   it("기준 없이 보낸 이전 클라이언트의 옛 시각 PATCH도 200이고 판은 앞으로 간다", async () => {
