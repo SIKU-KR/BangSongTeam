@@ -372,6 +372,42 @@ describe("스토어의 지금 판 올리기", () => {
     expect(sentDeckIds(1)).toEqual([deckId(0), deckId(1), deckId(2)]);
   });
 
+  it("보내는 동안 계정이 끝나 창구를 떼고 송출을 시작했으면, 409를 받아도 다시 보내지 않고 보낼 때의 창구로 큐에 다시 넣는다", async () => {
+    rememberServerDocuments([makeSet()]);
+    const edited = withLyrics(makeSet(), 0, "고친 가사");
+    listener.current.mockReturnValue(edited);
+    let answer: () => void = () => undefined;
+    api.patch.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          answer = () => resolve(respond(409));
+        }),
+    );
+
+    const pushing = pushPresentation(edited);
+    await vi.waitFor(() => expect(api.patch).toHaveBeenCalledTimes(1));
+    window.history.pushState({}, "", `/present/${DOC_ID}/fullscreen`);
+    setOwnPresentationListener(null);
+    answer();
+    await pushing;
+
+    expect(api.patch).toHaveBeenCalledTimes(1);
+    expect(listener.requeue).toHaveBeenCalledExactlyOnceWith(DOC_ID);
+  });
+
+  it("창구 없이 보낸 push는 송출 중에 409를 받으면 다시 보내지 않고 그 거절을 던진다", async () => {
+    setOwnPresentationListener(null);
+    rememberServerDocuments([makeSet()]);
+    api.patch.mockResolvedValueOnce(respond(409));
+    window.history.pushState({}, "", `/present/${DOC_ID}/fullscreen`);
+
+    await expect(
+      pushPresentation(withLyrics(makeSet(), 0, "고친 가사")),
+    ).rejects.toMatchObject({ status: 409 });
+
+    expect(api.patch).toHaveBeenCalledTimes(1);
+  });
+
   it("송출 중이 아니면 409 뒤에 모든 덱을 담아 곧바로 다시 보낸다", async () => {
     rememberServerDocuments([makeSet()]);
     const edited = withLyrics(makeSet(), 0, "고친 가사");

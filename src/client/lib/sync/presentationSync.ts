@@ -237,6 +237,7 @@ type SendOutcome =
 
 async function sendPresentation(
   presentation: Presentation,
+  listener: OwnPresentationListener | null,
 ): Promise<SendOutcome> {
   const document = toSyncableDocument(presentation);
   noteOwnVersion(presentation);
@@ -255,8 +256,9 @@ async function sendPresentation(
         throw err;
       }
       serverDecks.delete(document.id);
-      if (ownListener && isProjecting()) {
-        ownListener.requeue(document.id);
+      if (isProjecting()) {
+        if (!listener) throw err;
+        listener.requeue(document.id);
         return { kind: "requeued" };
       }
       body = await sendChanges(toPresentationChanges(document));
@@ -304,7 +306,9 @@ async function sendPresentation(
  * 잊고 `gone`으로 알린다.
  *
  * 송출 중에 409를 받으면 모든 덱을 다시 보내지 않고 큐에 다시 넣는다. 송출 화면은 요청이
- * 0건이어야 하고, 큐는 송출을 마친 뒤 모든 덱을 담아 올린다(기억한 덱 지문을 버렸다).
+ * 0건이어야 하고, 큐는 송출을 마친 뒤 모든 덱을 담아 올린다(기억한 덱 지문을 버렸다). 다시 넣는
+ * 창구는 보내기 시작할 때 등록돼 있던 것이라, 보내는 동안 계정이 끝나 창구를 뗐어도(`stopSync`) 송출
+ * 중에 다른 쿠키로 요청을 더 보내지 않는다. 창구 없이 보낸 push면 다시 보내지 않고 그 409를 던진다.
  *
  * 글 한도에 맞춘 문서를 올리고 그 문서의 덱 지문을 기억한다. 줄이기 전의 덱으로 기억하면
  * 줄인 곡을 올릴 때마다 바뀐 곡으로 보고 다시 보낸다. 보낸 판은 이 탭의 계보에 적는다
@@ -323,7 +327,7 @@ export async function pushPresentation(snapshot: Presentation): Promise<void> {
       listener.requeue(presentation.id);
       return;
     }
-    const outcome = await sendPresentation(presentation);
+    const outcome = await sendPresentation(presentation, listener);
     if (outcome.kind === "requeued") return;
     if (outcome.kind === "saved") {
       listener?.saved(presentation, outcome.stored);
