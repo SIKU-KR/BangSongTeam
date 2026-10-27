@@ -1,5 +1,5 @@
 import React from "react";
-import { render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import { describe, it, expect, beforeEach } from "vitest";
 import { ERROR_COPY } from "#copy/common";
 import { SHELL_COPY } from "#copy/shell";
@@ -9,13 +9,12 @@ import {
   clearPersistenceError,
   reportCorruptedRecords,
 } from "../../lib/storage";
-import { clearCorruptedRecords } from "../../lib/storage/persistenceStatus";
+import { __resetPersistenceStatusForTests } from "../../lib/storage/persistenceStatus";
 import { PersistenceUnavailableError } from "../../lib/storage/db";
 
 describe("StorageWarningBanner", () => {
   beforeEach(() => {
-    clearPersistenceError();
-    clearCorruptedRecords();
+    __resetPersistenceStatusForTests();
   });
 
   it("저장 오류가 없으면 아무것도 렌더링하지 않는다", () => {
@@ -27,7 +26,7 @@ describe("StorageWarningBanner", () => {
   });
 
   it("IndexedDB를 쓸 수 없으면 해당 안내를 띄운다", () => {
-    reportPersistenceError(new PersistenceUnavailableError());
+    reportPersistenceError(new PersistenceUnavailableError(), "presentation");
     render(<StorageWarningBanner />);
 
     expect(screen.getByTestId("storage-warning-banner")).toHaveTextContent(
@@ -36,7 +35,10 @@ describe("StorageWarningBanner", () => {
   });
 
   it("용량 초과는 별도 문구로 구분한다", () => {
-    reportPersistenceError(new DOMException("quota", "QuotaExceededError"));
+    reportPersistenceError(
+      new DOMException("quota", "QuotaExceededError"),
+      "deck",
+    );
     render(<StorageWarningBanner />);
 
     expect(screen.getByTestId("storage-warning-banner")).toHaveTextContent(
@@ -45,7 +47,7 @@ describe("StorageWarningBanner", () => {
   });
 
   it("닫기 버튼을 제공하지 않는다 (해소될 때까지 계속 보여야 한다)", () => {
-    reportPersistenceError(new Error("boom"));
+    reportPersistenceError(new Error("boom"), "folder");
     render(<StorageWarningBanner />);
 
     expect(screen.getByTestId("storage-warning-banner")).toBeInTheDocument();
@@ -62,10 +64,29 @@ describe("StorageWarningBanner", () => {
 
   it("격리 안내는 저장이 다시 성공해도 사라지지 않는다", () => {
     reportCorruptedRecords([{ id: "p1" }]);
-    clearPersistenceError();
+    reportPersistenceError(new Error("boom"), "presentation");
+    clearPersistenceError("presentation");
     render(<StorageWarningBanner />);
 
+    expect(
+      screen.queryByTestId("storage-warning-banner"),
+    ).not.toBeInTheDocument();
     expect(screen.getByTestId("corrupted-warning-banner")).toBeInTheDocument();
+  });
+
+  it("한 저장소가 다시 저장해도 다른 저장소가 저장하지 못한 경고는 남는다", () => {
+    reportPersistenceError(
+      new DOMException("quota", "QuotaExceededError"),
+      "presentation",
+    );
+    reportPersistenceError(new Error("boom"), "deck");
+    render(<StorageWarningBanner />);
+
+    act(() => clearPersistenceError("deck"));
+
+    expect(screen.getByTestId("storage-warning-banner")).toHaveTextContent(
+      ERROR_COPY.persistence.quota,
+    );
   });
 
   it("격리된 저장본이 없으면 격리 안내를 렌더링하지 않는다", () => {

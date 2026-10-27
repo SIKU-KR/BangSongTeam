@@ -34,3 +34,4 @@ export {
   reportCorruptedRecords,
   useCorruptedRecords,
 } from "./persistenceStatus";
+export { createWriteRetry, type WriteOp } from "./writeRetry";

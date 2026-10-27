@@ -15,7 +15,8 @@ import {
   savePresentation,
   savePresentationIfUnchanged,
   saveSharedPresentation,
-  clearPersistenceError,
+  deletePresentation,
+  deleteSharedPresentation,
 } from "../../lib/storage";
 import {
   closeOfflineDB,
@@ -23,7 +24,10 @@ import {
   OFFLINE_DB_NAME,
   type WorshipOfflineDB,
 } from "../../lib/storage/db";
-import { getPersistenceError } from "../../lib/storage/persistenceStatus";
+import {
+  __resetPersistenceStatusForTests,
+  getPersistenceError,
+} from "../../lib/storage/persistenceStatus";
 import { __resetStorageChannelForTests } from "../../lib/storage/storageChannel";
 import { installFakeBroadcastChannel } from "../../test/fakeBroadcastChannel";
 import {
@@ -49,6 +53,11 @@ import {
   adoptServerPresentation,
   mayDifferFromStorage,
 } from "./presentationStore";
+import {
+  hydrateSongLibrary,
+  resetSongLibraryStore,
+} from "../editor/songLibraryStore";
+import { MAX_BACKOFF_MS } from "../../lib/sync/backoff";
 import {
   __resetLineageForTests,
   contentFingerprint,
@@ -105,6 +114,8 @@ vi.mock("../../lib/storage", async (importOriginal) => {
       withHook(actual.savePresentationIfUnchanged),
     ),
     saveSharedPresentation: vi.fn(withHook(actual.saveSharedPresentation)),
+    deletePresentation: vi.fn(actual.deletePresentation),
+    deleteSharedPresentation: vi.fn(actual.deleteSharedPresentation),
   };
 });
 
@@ -131,7 +142,7 @@ describe("presentationStore 영속성", () => {
 
   beforeEach(async () => {
     localStorage.clear();
-    clearPersistenceError();
+    __resetPersistenceStatusForTests();
     await resetDatabase();
     signInAsTestUser();
     resetPresentationStore();
@@ -141,11 +152,14 @@ describe("presentationStore 영속성", () => {
     vi.mocked(savePresentation).mockClear();
     vi.mocked(savePresentationIfUnchanged).mockClear();
     vi.mocked(saveSharedPresentation).mockClear();
+    vi.mocked(deletePresentation).mockClear();
+    vi.mocked(deleteSharedPresentation).mockClear();
     vi.mocked(loadAllPresentations).mockClear();
   });
 
   afterEach(() => {
     vi.unstubAllGlobals();
+    resetPresentationStore();
     __resetSyncSchedulerForTests();
     closeOfflineDB();
   });
@@ -1344,6 +1358,193 @@ describe("presentationStore 영속성", () => {
           });
         });
       });
+    });
+  });
+
+  describe("저장 실패와 다시 저장", () => {
+    const quotaError = (): DOMException =>
+      new DOMException("가득 참", "QuotaExceededError");
+
+    async function storedById(id: string): Promise<Presentation | undefined> {
+      const { valid } = await loadAllPresentations();
+      return valid.find((doc) => doc.id === id);
+    }
+
+    async function retryFailedWrites(): Promise<void> {
+      await vi.advanceTimersByTimeAsync(MAX_BACKOFF_MS);
+      await flushPendingWrites();
+    }
+
+    function savedIds(): string[] {
+      return vi.mocked(savePresentation).mock.calls.map(([doc]) => doc.id);
+    }
+
+    beforeEach(() => {
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    });
+
+    afterEach(async () => {
+      await resetSongLibraryStore();
+      vi.useRealTimers();
+    });
+
+    it("저장에 실패한 세트는 다른 세트 저장이 성공해도 경고를 지우지 않고, 다시 저장되면 지운다", async () => {
+      await hydrateFromStorage();
+      const failing = createNewPresentation();
+      const other = createNewPresentation();
+      await flushPendingWrites();
+      vi.mocked(savePresentation).mockRejectedValueOnce(quotaError());
+      renamePresentation(failing.id, "저장하지 못한 제목");
+      await flushPendingWrites();
+      expect(getPersistenceError("presentation")?.kind).toBe("quota");
+
+      renamePresentation(other.id, "저장한 제목");
+      await flushPendingWrites();
+
+      expect(getPersistenceError("presentation")?.kind).toBe("quota");
+      expect((await storedById(failing.id))?.title).not.toBe(
+        "저장하지 못한 제목",
+      );
+
+      await retryFailedWrites();
+
+      expect((await storedById(failing.id))?.title).toBe("저장하지 못한 제목");
+      expect(getPersistenceError()).toBeNull();
+    });
+
+    it("저장에 실패한 세트를 다른 세트를 고칠 때마다 다시 쓰지 않고 백오프 뒤에 한 번 다시 쓴다", async () => {
+      await hydrateFromStorage();
+      const failing = createNewPresentation();
+      const other = createNewPresentation();
+      await flushPendingWrites();
+      vi.mocked(savePresentation).mockRejectedValueOnce(quotaError());
+      renamePresentation(failing.id, "저장하지 못한 제목");
+      await flushPendingWrites();
+      vi.mocked(savePresentation).mockClear();
+
+      renamePresentation(other.id, "첫 수정");
+      await flushPendingWrites();
+      renamePresentation(other.id, "두 번째 수정");
+      await flushPendingWrites();
+
+      expect(savedIds()).toEqual([other.id, other.id]);
+
+      await retryFailedWrites();
+
+      expect(savedIds()).toEqual([other.id, other.id, failing.id]);
+    });
+
+    it("지우지 못한 세트는 지우기로 다시 시도한다", async () => {
+      await hydrateFromStorage();
+      const doc = createNewPresentation();
+      await flushPendingWrites();
+      vi.mocked(deletePresentation).mockRejectedValueOnce(new Error("disk"));
+
+      await removePresentationsLocally([doc.id]);
+
+      expect(getPersistenceError("presentation")?.kind).toBe("unknown");
+      expect(await storedById(doc.id)).toBeDefined();
+
+      vi.mocked(savePresentation).mockClear();
+      await retryFailedWrites();
+
+      expect(deletePresentation).toHaveBeenCalledTimes(2);
+      expect(savePresentation).not.toHaveBeenCalled();
+      expect(await storedById(doc.id)).toBeUndefined();
+      expect(getPersistenceError()).toBeNull();
+    });
+
+    it("공유받은 사본을 지우지 못하면 공유받은 사본 지우기로 다시 시도한다", async () => {
+      await hydrateFromStorage();
+      const shared: Presentation = {
+        ...SEED_PRESENTATIONS[4],
+        userId: OTHER_USER,
+        access: { ownerName: "인도자", memberId: SEED_USER_ID },
+      };
+      replaceWithServerDocument(shared);
+      await flushPendingWrites();
+      vi.mocked(deleteSharedPresentation).mockRejectedValueOnce(
+        new Error("disk"),
+      );
+
+      await removePresentationsLocally([shared.id]);
+      await retryFailedWrites();
+
+      expect(deleteSharedPresentation).toHaveBeenCalledTimes(2);
+      expect(deletePresentation).not.toHaveBeenCalled();
+      expect(await storedById(shared.id)).toBeUndefined();
+      expect(getPersistenceError()).toBeNull();
+    });
+
+    it("고쳐 실은 세트를 저장하지 못하면 다시 쓸 때도 저장본이 읽은 판 그대로일 때만 쓴다", async () => {
+      const [SEED] = SEED_PRESENTATIONS;
+      await putRawRecord({ ...SEED, title: "가".repeat(150) });
+      vi.mocked(savePresentationIfUnchanged).mockRejectedValueOnce(
+        quotaError(),
+      );
+      await hydrateFromStorage();
+      await flushPendingWrites();
+      expect(getPersistenceError("presentation")?.kind).toBe("quota");
+
+      await retryFailedWrites();
+
+      expect(savePresentationIfUnchanged).toHaveBeenCalledTimes(2);
+      expect(savePresentation).not.toHaveBeenCalled();
+      expect((await loadAllPresentations()).valid).toEqual([
+        { ...SEED, title: "가".repeat(100) },
+      ]);
+      expect(getPersistenceError()).toBeNull();
+    });
+
+    it("저장하지 못한 세트는 다른 탭의 저장본으로 바꾸지 않고, 다시 쓸 때 이 탭의 판을 저장한다", async () => {
+      await hydrateFromStorage();
+      const doc = createNewPresentation();
+      await flushPendingWrites();
+      vi.mocked(savePresentation).mockRejectedValueOnce(quotaError());
+      renamePresentation(doc.id, "이 탭에서 고친 제목");
+      await flushPendingWrites();
+      await putRawRecord({
+        ...getPresentationById(doc.id)!,
+        title: "다른 탭에서 고친 제목",
+      });
+
+      await reloadPresentationsFromStorage([doc.id]);
+
+      expect(getPresentationById(doc.id)?.title).toBe("이 탭에서 고친 제목");
+      expect(mayDifferFromStorage(doc.id)).toBe(true);
+
+      await retryFailedWrites();
+
+      expect((await storedById(doc.id))?.title).toBe("이 탭에서 고친 제목");
+    });
+
+    it("세트 저장소를 읽지 못한 경고는 곡 보관함을 불러와도 남는다", async () => {
+      vi.mocked(loadAllPresentations).mockRejectedValueOnce(
+        new Error("읽기 실패"),
+      );
+      await hydrateFromStorage();
+
+      await hydrateSongLibrary();
+
+      expect(getPersistenceError()?.kind).toBe("unknown");
+      expect(getPersistenceError("presentation")?.kind).toBe("unknown");
+    });
+
+    it("다시 불러오면 앞서 저장하지 못한 세트의 경고와 다시 시도를 버린다", async () => {
+      await hydrateFromStorage();
+      const doc = createNewPresentation();
+      await flushPendingWrites();
+      vi.mocked(savePresentation).mockRejectedValueOnce(quotaError());
+      renamePresentation(doc.id, "저장하지 못한 제목");
+      await flushPendingWrites();
+
+      signInAsTestUser(OTHER_USER);
+      await hydrateFromStorage();
+      vi.mocked(savePresentation).mockClear();
+      await retryFailedWrites();
+
+      expect(getPersistenceError()).toBeNull();
+      expect(savePresentation).not.toHaveBeenCalled();
     });
   });
 

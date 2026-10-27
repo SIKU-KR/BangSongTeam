@@ -12,7 +12,7 @@ import {
   PersistenceUnavailableError,
 } from "./db";
 import {
-  clearPersistenceError,
+  __resetPersistenceStatusForTests,
   reportPersistenceError,
 } from "./persistenceStatus";
 
@@ -201,7 +201,7 @@ describe("worship-offline-db", () => {
       vi.restoreAllMocks();
       for (const db of otherTabs.splice(0)) db.close();
       window.history.replaceState({}, "", "/");
-      clearPersistenceError();
+      __resetPersistenceStatusForTests();
     });
 
     it("새 버전을 여는 다른 탭을 막지 않고, 그 뒤에는 이전 버전이라 저장할 수 없다고 알린다", async () => {
@@ -279,9 +279,12 @@ describe("worship-offline-db", () => {
     it("연결이 끊겨 난 오류(InvalidStateError·UnknownError)를 알리면 다음 호출에서 다시 연다", async () => {
       const first = await getOfflineDB();
 
-      reportPersistenceError(new DOMException("", "InvalidStateError"));
+      reportPersistenceError(
+        new DOMException("", "InvalidStateError"),
+        "presentation",
+      );
       const second = await getOfflineDB();
-      reportPersistenceError(new DOMException("", "UnknownError"));
+      reportPersistenceError(new DOMException("", "UnknownError"), "deck");
       const third = await getOfflineDB();
 
       expect(second).not.toBe(first);
@@ -292,7 +295,10 @@ describe("worship-offline-db", () => {
     it("연결과 상관없는 오류를 알리면 연결을 그대로 쓴다", async () => {
       const first = await getOfflineDB();
 
-      reportPersistenceError(new DOMException("가득 참", "QuotaExceededError"));
+      reportPersistenceError(
+        new DOMException("가득 참", "QuotaExceededError"),
+        "presentation",
+      );
 
       expect(await getOfflineDB()).toBe(first);
     });

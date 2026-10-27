@@ -1,12 +1,22 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import type { Folder } from "#shared";
-import { signInAsTestUser } from "../../test/sessionFixture";
+import { signInAsTestUser, signOutForTests } from "../../test/sessionFixture";
 import {
   closeOfflineDB,
   getOfflineDB,
   OFFLINE_DB_NAME,
 } from "../../lib/storage/db";
-import { deleteFolders, loadAllFolders, saveFolders } from "../../lib/storage";
+import {
+  deleteFolders,
+  loadAllFolders,
+  saveFolder,
+  saveFolders,
+} from "../../lib/storage";
+import {
+  __resetPersistenceStatusForTests,
+  getPersistenceError,
+} from "../../lib/storage/persistenceStatus";
+import { MAX_BACKOFF_MS } from "../../lib/sync/backoff";
 import { __resetStorageChannelForTests } from "../../lib/storage/storageChannel";
 import { installFakeBroadcastChannel } from "../../test/fakeBroadcastChannel";
 import {
@@ -41,6 +51,7 @@ vi.mock("../../lib/storage", async (importOriginal) => {
   return {
     ...actual,
     loadAllFolders: vi.fn(actual.loadAllFolders),
+    saveFolder: vi.fn(actual.saveFolder),
     saveFolders: vi.fn(actual.saveFolders),
     deleteFolders: vi.fn(actual.deleteFolders),
   };
@@ -71,6 +82,7 @@ function folder(id: string, overrides: Partial<Folder> = {}): Folder {
 
 describe("folderStore", () => {
   beforeEach(async () => {
+    __resetPersistenceStatusForTests();
     await resetDatabase();
     signInAsTestUser();
     resetFolderStore();
@@ -79,6 +91,7 @@ describe("folderStore", () => {
 
   afterEach(async () => {
     await flushFolderWrites();
+    resetFolderStore();
     __resetFolderSyncForTests();
     closeOfflineDB();
   });
@@ -449,6 +462,102 @@ describe("folderStore", () => {
 
       expect(saveFolders).not.toHaveBeenCalled();
       expect(deleteFolders).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("저장 실패와 다시 저장", () => {
+    const quotaError = (): DOMException =>
+      new DOMException("가득 참", "QuotaExceededError");
+
+    async function storedName(id: string): Promise<string | undefined> {
+      const { valid } = await loadAllFolders();
+      return valid.find((stored) => stored.id === id)?.name;
+    }
+
+    async function retryFailedWrites(): Promise<void> {
+      await vi.advanceTimersByTimeAsync(MAX_BACKOFF_MS);
+      await flushFolderWrites();
+    }
+
+    beforeEach(() => {
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+      vi.mocked(saveFolder).mockClear();
+      vi.mocked(deleteFolders).mockClear();
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it("실패한 폴더 쓰기는 다른 폴더가 저장돼도 경고를 남기고, 다시 쓸 때 그때의 폴더를 저장해 경고를 지운다", async () => {
+      const failing = createFolder(null, "처음 이름");
+      await flushFolderWrites();
+      vi.mocked(saveFolder)
+        .mockRejectedValueOnce(quotaError())
+        .mockRejectedValueOnce(quotaError());
+      renameFolder(failing.id, "고친 이름");
+      renameFolder(failing.id, "마지막 이름");
+      await flushFolderWrites();
+      expect(getPersistenceError("folder")?.kind).toBe("quota");
+
+      createFolder(null, "저장한 폴더");
+      await flushFolderWrites();
+
+      expect(getPersistenceError("folder")?.kind).toBe("quota");
+      expect(await storedName(failing.id)).toBe("처음 이름");
+
+      await retryFailedWrites();
+
+      expect(await storedName(failing.id)).toBe("마지막 이름");
+      expect(getPersistenceError()).toBeNull();
+    });
+
+    it("지우지 못한 폴더는 지우기로 다시 시도한다", async () => {
+      const gone = createFolder(null, "지울 폴더");
+      await flushFolderWrites();
+      vi.mocked(deleteFolders).mockRejectedValueOnce(new Error("disk"));
+
+      await removeFoldersLocally([gone.id]);
+
+      expect(getPersistenceError("folder")?.kind).toBe("unknown");
+      expect(await storedName(gone.id)).toBe("지울 폴더");
+
+      vi.mocked(saveFolder).mockClear();
+      await retryFailedWrites();
+
+      expect(deleteFolders).toHaveBeenLastCalledWith([gone.id]);
+      expect(saveFolder).not.toHaveBeenCalled();
+      expect(await storedName(gone.id)).toBeUndefined();
+      expect(getPersistenceError()).toBeNull();
+    });
+
+    it("사용자가 지우지 않았는데 메모리에서 사라진 폴더의 실패한 저장은 저장하지도 지우지도 않고 경고만 푼다", async () => {
+      const kept = createFolder(null, "처음 이름");
+      await flushFolderWrites();
+      vi.mocked(saveFolder).mockRejectedValueOnce(quotaError());
+      renameFolder(kept.id, "저장하지 못한 이름");
+      await flushFolderWrites();
+      signOutForTests();
+      await applyServerFolders([]);
+      vi.mocked(saveFolder).mockClear();
+      vi.mocked(deleteFolders).mockClear();
+
+      await retryFailedWrites();
+
+      expect(saveFolder).not.toHaveBeenCalled();
+      expect(deleteFolders).not.toHaveBeenCalled();
+      expect(await storedName(kept.id)).toBe("처음 이름");
+      expect(getPersistenceError()).toBeNull();
+    });
+
+    it("폴더를 다시 불러오면 불러오지 못한 경고를 지운다", async () => {
+      vi.mocked(loadAllFolders).mockRejectedValueOnce(new Error("읽기 실패"));
+      await hydrateFoldersFromStorage();
+      expect(getPersistenceError("folder")?.kind).toBe("unknown");
+
+      await hydrateFoldersFromStorage();
+
+      expect(getPersistenceError()).toBeNull();
     });
   });
 

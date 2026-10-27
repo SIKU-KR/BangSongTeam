@@ -19,8 +19,11 @@ import {
   loadFolder,
   deleteFolders,
   reportPersistenceError,
+  clearPersistenceError,
   reportCorruptedRecords,
+  createWriteRetry,
   type LoadedRecord,
+  type WriteOp,
 } from "../../lib/storage";
 import { announceStorageChange } from "../../lib/storage/storageChannel";
 import { getCurrentUserId } from "../../lib/auth/sessionStore";
@@ -54,6 +57,16 @@ let writes: Promise<void> = Promise.resolve();
 const unpersisted = new Map<string, number>();
 let hydrationFailed = false;
 
+const writeRetry = createWriteRetry("folder", (failed) => {
+  for (const [id, op] of failed) {
+    queueWrite([id], index.byId.has(id) ? "save" : op, async () => {
+      const latest = index.byId.get(id);
+      if (latest) await saveFolder(latest);
+      else if (op === "delete") await deleteFolders([id]);
+    });
+  }
+});
+
 function setFolders(next: Folder[]): void {
   folders = next;
   index = buildFolderIndex(next);
@@ -68,16 +81,25 @@ function releaseUnpersisted(ids: readonly string[]): void {
   }
 }
 
-function queueWrite(ids: readonly string[], write: () => Promise<void>): void {
+function queueWrite(
+  ids: readonly string[],
+  op: WriteOp,
+  write: () => Promise<void>,
+): void {
   for (const id of ids) unpersisted.set(id, (unpersisted.get(id) ?? 0) + 1);
   writes = writes
     .then(async () => {
       await write();
       announceStorageChange("folders", ids);
     })
-    .catch((err: unknown) => {
-      reportPersistenceError(err);
-    })
+    .then(
+      () => {
+        for (const id of ids) writeRetry.succeeded(id);
+      },
+      (err: unknown) => {
+        for (const id of ids) writeRetry.failed(id, op, err);
+      },
+    )
     .finally(() => releaseUnpersisted(ids));
 }
 
@@ -87,7 +109,7 @@ function commit(changed: Folder[]): void {
   setFolders([...byId.values()]);
 
   for (const folder of changed) {
-    queueWrite([folder.id], () => saveFolder(folder));
+    queueWrite([folder.id], "save", () => saveFolder(folder));
     scheduleFolderPush(folder);
   }
 }
@@ -258,19 +280,26 @@ export function restoreFolder(id: string): void {
   ]);
 }
 
-/** 저장본으로 폴더를 복원한다. 세션 사용자의 폴더만 싣는다 */
+/**
+ * 저장본으로 폴더를 복원한다. 세션 사용자의 폴더만 싣는다.
+ *
+ * 읽기 전에 앞서 실패한 쓰기의 다시 시도와 그 경고를 버린다. 읽지 못한 경고는 다시 불러올 때까지
+ * 남긴다. 폴더를 저장했다고 지우면 읽지 못한 저장본이 있다는 것을 알 수 없다.
+ */
 export async function hydrateFoldersFromStorage(): Promise<void> {
+  writeRetry.reset();
   const userId = getCurrentUserId();
   try {
     const { valid, corrupted } = await loadAllFolders();
     reportCorruptedRecords(corrupted);
     hydrationFailed = false;
+    clearPersistenceError("folder:hydrate");
     setFolders(
       userId ? valid.filter((folder) => folder.userId === userId) : [],
     );
   } catch (err) {
     hydrationFailed = true;
-    reportPersistenceError(err);
+    reportPersistenceError(err, "folder:hydrate");
     setFolders([]);
   }
 }
@@ -308,14 +337,15 @@ export async function applyServerFolders(
   const changed = mine.filter(
     (folder) => !isSameFolder(previous.get(folder.id), folder),
   );
-  if (changed.length > 0 || removedIds.length > 0) {
+  if (changed.length > 0) {
     queueWrite(
-      [...changed.map((folder) => folder.id), ...removedIds],
-      async () => {
-        await saveFolders(changed);
-        await deleteFolders(removedIds);
-      },
+      changed.map((folder) => folder.id),
+      "save",
+      () => saveFolders(changed),
     );
+  }
+  if (removedIds.length > 0) {
+    queueWrite(removedIds, "delete", () => deleteFolders(removedIds));
   }
   await writes;
 }
@@ -355,7 +385,7 @@ export function applyServerFolder(serverFolder: Folder): void {
       folder.id === serverFolder.id ? serverFolder : folder,
     ),
   );
-  queueWrite([serverFolder.id], () => saveFolder(serverFolder));
+  queueWrite([serverFolder.id], "save", () => saveFolder(serverFolder));
 }
 
 /** 영구 삭제가 끝난 폴더를 메모리와 저장소에서 지운다 */
@@ -366,7 +396,7 @@ export async function removeFoldersLocally(
   const removed = new Set(ids);
   for (const id of removed) cancelFolderPush(id);
   setFolders(folders.filter((folder) => !removed.has(folder.id)));
-  queueWrite(ids, () => deleteFolders(ids));
+  queueWrite(ids, "delete", () => deleteFolders(ids));
   await writes;
 }
 
@@ -431,6 +461,7 @@ export function resetFolderStore(): void {
   writes = Promise.resolve();
   unpersisted.clear();
   hydrationFailed = false;
+  writeRetry.reset();
   setFolders([]);
 }
 

@@ -12,18 +12,23 @@ interface PersistenceError {
   message: string;
 }
 
-/**
- * 저장 실패를 남긴 곳. 세 스토어(프레젠테이션·곡 보관함·폴더)는 한 자리(`stores`)를 함께 쓰고,
- * 세션 캐시(`session`)는 따로 둔다. 세션 캐시를 다시 저장했다고 스토어가 저장하지 못한 경고를
- * 지우면 작업을 잃을 수 있고, 스토어가 저장했다고 세션 캐시를 읽지 못한 경고를 지우면 로그인
- * 화면에서 까닭을 알 수 없다.
- */
-export type PersistenceSource = "stores" | "session";
+/** 저장 실패를 따로 세는 저장소: 프레젠테이션·곡 보관함·폴더 스토어와 세션 캐시 */
+export type PersistenceStore = "presentation" | "deck" | "folder" | "session";
 
-const failures: Record<PersistenceSource, PersistenceError | null> = {
-  stores: null,
-  session: null,
-};
+/**
+ * 저장 실패를 남긴 곳. 저장소의 쓰기(`presentation` 등)와 불러오기(`presentation:hydrate` 등)를
+ * 따로 둔다.
+ *
+ * 한 저장소가 저장했다고 다른 저장소가 저장하지 못한 경고를 지우면, 아직 저장하지 못한 작업을
+ * 저장된 줄 알게 된다. 쓰기 실패는 그 저장소에 저장하지 못한 항목이 하나도 남지 않을 때 지우고
+ * (`createWriteRetry`), 불러오기 실패는 저장소를 다시 불러올 때까지 남긴다. 불러오지 못한
+ * 저장소는 그때까지 저장하지 않거나(프레젠테이션), 읽지 못한 저장본을 병합 결과로 덮지 않으려고
+ * 부팅 병합을 저장하지 않는다(곡 보관함·폴더).
+ */
+export type PersistenceSource =
+  PersistenceStore | `${PersistenceStore}:hydrate`;
+
+const failures = new Map<PersistenceSource, PersistenceError>();
 
 const NO_CORRUPTED: readonly CorruptedRecord[] = Object.freeze([]);
 let corrupted: readonly CorruptedRecord[] = NO_CORRUPTED;
@@ -40,37 +45,63 @@ function classify(err: unknown): PersistenceErrorKind {
   return "unknown";
 }
 
+function latestSource(): PersistenceSource | undefined {
+  return [...failures.keys()].at(-1);
+}
+
 /**
- * 저장 실패를 전역 상태로 올린다.
+ * `source`의 저장 실패를 전역 상태로 올린다.
  *
  * 조용히 삼키지 않는 것이 핵심이다.
  * 사용자가 저장된 줄 알고 예배 당일에 잃는 것이 최악의 시나리오다.
  *
- * 연결이 끊겨 난 오류면 그 연결을 버려(`discardBrokenConnection`) 다음 저장이 다시 연다.
+ * 연결이 끊겨 난 오류면 그 연결을 버려(`discardBrokenConnection`) 다음 저장이 다시 연다. 같은
+ * 종류의 실패를 다시 알려도 같은 객체를 두어, 구독하는 화면이 다시 그리지 않는다.
  */
 export function reportPersistenceError(
   err: unknown,
-  source: PersistenceSource = "stores",
+  source: PersistenceSource,
 ): void {
   discardBrokenConnection(err);
   const kind = classify(err);
-  if (failures[source]?.kind === kind) return;
-  failures[source] = { kind, message: ERROR_COPY.persistence[kind] };
+  const current = failures.get(source);
+  if (current?.kind === kind && latestSource() === source) return;
+  failures.delete(source);
+  failures.set(
+    source,
+    current?.kind === kind
+      ? current
+      : { kind, message: ERROR_COPY.persistence[kind] },
+  );
   emit();
 }
 
 /** `source`가 남긴 저장 실패만 지우고 다른 곳의 실패는 남긴다 */
-export function clearPersistenceError(
-  source: PersistenceSource = "stores",
-): void {
-  if (!failures[source]) return;
-  failures[source] = null;
+export function clearPersistenceError(source: PersistenceSource): void {
+  if (!failures.delete(source)) return;
   emit();
 }
 
-/** 스토어의 저장 실패를 세션 캐시의 실패보다 먼저 보인다. 스토어의 실패는 작업을 잃을 수 있다 */
-export function getPersistenceError(): PersistenceError | null {
-  return failures.stores ?? failures.session;
+function belongsTo(
+  source: PersistenceSource,
+  store: PersistenceStore | undefined,
+): boolean {
+  return (
+    store === undefined || source === store || source === `${store}:hydrate`
+  );
+}
+
+/**
+ * 아직 풀리지 않은 저장 실패 가운데 가장 나중에 알린 것. `store`를 주면 그 저장소의 쓰기와
+ * 불러오기 실패만 본다.
+ */
+export function getPersistenceError(
+  store?: PersistenceStore,
+): PersistenceError | null {
+  const latest = [...failures]
+    .reverse()
+    .find(([source]) => belongsTo(source, store));
+  return latest?.[1] ?? null;
 }
 
 function subscribe(listener: () => void): () => void {
@@ -80,13 +111,12 @@ function subscribe(listener: () => void): () => void {
   };
 }
 
-/** 저장 실패 여부를 반응형으로 구독한다 (경고 배너용) */
-export function usePersistenceError(): PersistenceError | null {
-  return useSyncExternalStore(
-    subscribe,
-    getPersistenceError,
-    getPersistenceError,
-  );
+/** 저장 실패를 반응형으로 구독한다 (경고 배너용). `store`는 `getPersistenceError`와 같다 */
+export function usePersistenceError(
+  store?: PersistenceStore,
+): PersistenceError | null {
+  const getSnapshot = (): PersistenceError | null => getPersistenceError(store);
+  return useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
 }
 
 /**
@@ -131,4 +161,11 @@ export function useCorruptedRecords(): readonly CorruptedRecord[] {
     getCorruptedRecords,
     getCorruptedRecords,
   );
+}
+
+/** 테스트 격리용: 모든 저장소의 저장 실패와 격리 알림을 지운다 */
+export function __resetPersistenceStatusForTests(): void {
+  failures.clear();
+  corrupted = NO_CORRUPTED;
+  emit();
 }
