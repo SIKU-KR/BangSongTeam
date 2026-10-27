@@ -1,4 +1,9 @@
-export { useFolderIndex, getFolder, isFolderAvailable } from "./folderStore";
+export {
+  useFolderIndex,
+  getFolder,
+  isFolderAvailable,
+  nearestAvailableFolder,
+} from "./folderStore";
 export {
   drivePath,
   isDrivePath,

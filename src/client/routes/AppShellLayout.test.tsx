@@ -127,6 +127,7 @@ function renderShell(initialPath = "/presentations") {
 
 const WORSHIP = "a00000000000000000001";
 const YOUTH = "b00000000000000000002";
+const OUTREACH = "d00000000000000000004";
 
 const H264 = capabilities.BROWSER_CAPABILITIES.find(({ id }) => id === "h264")!;
 
@@ -781,13 +782,58 @@ describe("AppShellLayout (드라이브형 홈)", () => {
     }
   });
 
-  it("없거나 휴지통에 있는 폴더 주소는 루트로 보낸다", () => {
+  it("없는 폴더 주소는 루트로 보낸다", () => {
     renderShell("/presentations/folders/c00000000000000000009");
     expect(screen.getByTestId(`crumb-root`)).toHaveAttribute(
       "aria-current",
       "page",
     );
     expect(screen.getAllByTestId("presentation-row")).toHaveLength(5);
+  });
+
+  it("휴지통에 있는 폴더 주소는 열 수 있는 가장 가까운 상위 폴더로 보낸다", () => {
+    __loadFoldersForTests([
+      folder(WORSHIP, "2026"),
+      folder(YOUTH, "주일", WORSHIP),
+      {
+        ...folder(OUTREACH, "청년부", YOUTH),
+        trashedAt: "2026-10-01T00:00:00Z",
+      },
+    ]);
+    renderShell(`/presentations/folders/${OUTREACH}`);
+
+    expect(window.location.pathname).toBe(`/presentations/folders/${YOUTH}`);
+    expect(screen.getByTestId(`crumb-${YOUTH}`)).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+  });
+
+  it("현재 폴더를 ▾ 메뉴로 휴지통에 보내면 이동이 늦어도 루트가 아니라 상위 폴더로 간다", async () => {
+    __loadFoldersForTests([
+      folder(WORSHIP, "2026"),
+      folder(YOUTH, "주일", WORSHIP),
+    ]);
+    renderShell(`/presentations/folders/${YOUTH}`);
+    const push = testRouter.push;
+    vi.spyOn(testRouter, "push").mockImplementation((href) => {
+      setTimeout(() => push(href), 0);
+    });
+    const replace = vi.spyOn(testRouter, "replace");
+
+    fireEvent.click(screen.getByTestId("breadcrumb-menu-btn"));
+    fireEvent.click(
+      await screen.findByRole("menuitem", { name: DRIVE_COPY.moveToTrash }),
+    );
+
+    expect(replace).not.toHaveBeenCalledWith(DRIVE_ROOT_PATH);
+    await waitFor(() =>
+      expect(screen.getByTestId(`crumb-${WORSHIP}`)).toHaveAttribute(
+        "aria-current",
+        "page",
+      ),
+    );
+    expect(window.location.pathname).toBe(`/presentations/folders/${WORSHIP}`);
   });
 
   describe("부팅 동기화가 아직 받지 않은 폴더 주소", () => {

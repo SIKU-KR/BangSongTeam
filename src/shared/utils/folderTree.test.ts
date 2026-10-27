@@ -1,3 +1,4 @@
+import vm from "node:vm";
 import { describe, it, expect } from "vitest";
 import {
   buildFolderIndex,
@@ -148,6 +149,39 @@ describe("resolveUniqueName", () => {
     const result = resolveUniqueName(long, [long]);
     expect(result.length).toBeLessThanOrEqual(100);
     expect(result.endsWith(" (2)")).toBe(true);
+  });
+
+  describe("안전한 정수를 넘는 번호", () => {
+    function resolveWithin(base: string, taken: string[]): string {
+      return vm.runInNewContext(
+        "resolveUniqueName(base, taken)",
+        { resolveUniqueName, base, taken },
+        { timeout: 1000 },
+      ) as string;
+    }
+
+    it("2^53을 넘는 번호도 다음 번호를 붙여 끝난다", () => {
+      expect(
+        resolveWithin("x (99999999999999999999)", [
+          "x (99999999999999999999)",
+          "x (100000000000000000000)",
+        ]),
+      ).toBe("x (100000000000000000001)");
+    });
+
+    it("2^53 바로 위의 번호에서도 건너뛰지 않고 이어 센다", () => {
+      expect(
+        resolveWithin("y (9007199254740994)", [
+          "y (9007199254740994)",
+          "y (9007199254740995)",
+          "y (9007199254740996)",
+        ]),
+      ).toBe("y (9007199254740997)");
+    });
+
+    it("앞에 0이 붙은 번호는 숫자로 읽어 다음 번호를 붙인다", () => {
+      expect(resolveWithin("z (007)", ["z (007)"])).toBe("z (8)");
+    });
   });
 });
 

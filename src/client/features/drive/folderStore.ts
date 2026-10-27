@@ -4,6 +4,7 @@ import {
   createId,
   editTimestamp,
   folderNameKey,
+  getFolderPath,
   isFarFuture,
   isFolderTrashed,
   MAX_FOLDER_NAME_LENGTH,
@@ -136,6 +137,23 @@ export function isFolderAvailable(id: string | null | undefined): boolean {
   return index.byId.has(id) && !isFolderTrashed(index, id);
 }
 
+/**
+ * 폴더 대신 보여 줄 가장 가까운 폴더. 쓸 수 있는 폴더는 그대로 돌려주고, 휴지통에 있는 폴더(조상이
+ * 휴지통에 있는 경우 포함)는 열 수 있는 가장 가까운 조상을 돌려준다. 모르는 폴더거나 열 수 있는 조상이
+ * 없으면 루트(`null`)다.
+ *
+ * 열려 있는 폴더를 휴지통에 넣으면 상위 폴더로 가는 이동이 끝나기 전에 옛 주소로 한 번 더 그려져, 그
+ * 폴더를 열 수 없다고 보고 다른 곳으로 보낸다. 그곳이 루트면 곧이어 도착하는 상위 폴더 이동을 덮어쓴다.
+ */
+export function nearestAvailableFolder(
+  id: string | null | undefined,
+): string | null {
+  const path = getFolderPath(index, id);
+  const firstTrashed = path.findIndex((folder) => folder.trashedAt);
+  const available = firstTrashed === -1 ? path : path.slice(0, firstTrashed);
+  return available.at(-1)?.id ?? null;
+}
+
 function siblingNames(parentId: string | null, excludeId?: string): string[] {
   return (index.childrenOf.get(parentId) ?? [])
     .filter((folder) => folder.id !== excludeId && !folder.trashedAt)
@@ -219,10 +237,14 @@ export function renameFolder(id: string, name: string): FolderMutationResult {
 /**
  * 폴더 이동. 자기 자신이나 하위 폴더로는 옮길 수 없다.
  * 옮겨 간 곳에 같은 이름이 있으면 번호를 붙인다.
+ *
+ * `preferredName`을 주면 지금 이름 대신 그 이름을 쓴다(겹치면 똑같이 번호를 붙인다). 이동을 되돌릴 때
+ * 옮기며 붙은 번호를 걷어 내려는 것이다.
  */
 export function moveFolder(
   id: string,
   parentId: string | null,
+  preferredName?: string,
 ): FolderMutationResult {
   const folder = index.byId.get(id);
   if (!folder) return { ok: false, error: FOLDER_COPY.folderNotFound };
@@ -239,7 +261,10 @@ export function moveFolder(
   const next: Folder = {
     ...folder,
     parentId,
-    name: resolveUniqueName(folder.name, siblingNames(parentId, id)),
+    name: resolveUniqueName(
+      preferredName ?? folder.name,
+      siblingNames(parentId, id),
+    ),
     updatedAt: editTimestamp(folder.updatedAt),
   };
   commit([next]);
