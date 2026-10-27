@@ -20,6 +20,7 @@ import {
   loadAllPresentations,
   loadAllSongs,
   savePresentation,
+  saveSharedPresentation,
   saveSong,
 } from "../storage";
 import { closeOfflineDB, OFFLINE_DB_NAME } from "../storage/db";
@@ -92,6 +93,7 @@ vi.mock("../storage", async (importOriginal) => {
       if (hook) await hook(doc);
       return actual.savePresentation(doc);
     }),
+    saveSharedPresentation: vi.fn(actual.saveSharedPresentation),
     saveSong: vi.fn(async (deck: Deck) => {
       const hook = storageHooks.beforeSaveSong;
       storageHooks.beforeSaveSong = null;
@@ -145,6 +147,13 @@ function writtenIds(save: typeof savePresentation | typeof saveSong): string[] {
     .sort();
 }
 
+function writtenPresentationIds(): string[] {
+  return [
+    ...writtenIds(savePresentation),
+    ...vi.mocked(saveSharedPresentation).mock.calls.map(([doc]) => doc.id),
+  ].sort();
+}
+
 async function storedTitle(id: string): Promise<string | undefined> {
   const { valid } = await loadAllPresentations();
   return valid.find((doc) => doc.id === id)?.title;
@@ -185,6 +194,7 @@ describe("runBootSync — 병합 결과 저장", () => {
     storageHooks.beforeSavePresentation = null;
     storageHooks.beforeSaveSong = null;
     vi.mocked(savePresentation).mockClear();
+    vi.mocked(saveSharedPresentation).mockClear();
     vi.mocked(saveSong).mockClear();
     vi.mocked(loadAllPresentations).mockClear();
   });
@@ -298,6 +308,7 @@ describe("runBootSync — 병합 결과 저장", () => {
     await seedPresentationsIntoStorage([synced, localWon, moved, newer]);
     await hydrateFromStorage();
     vi.mocked(savePresentation).mockClear();
+    vi.mocked(saveSharedPresentation).mockClear();
     presentationSync.pullPresentations.mockResolvedValue([
       copyOf(synced),
       copyOf(OTHER),
@@ -313,7 +324,7 @@ describe("runBootSync — 병합 결과 저장", () => {
     await runBootSync();
     await flushPendingWrites();
 
-    expect(writtenIds(savePresentation)).toEqual(
+    expect(writtenPresentationIds()).toEqual(
       [moved.id, newer.id, "1s0000000000000000001"].sort(),
     );
     expect(await storedTitle(localWon.id)).toBe("로컬에서 고침");

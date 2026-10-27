@@ -58,3 +58,39 @@ export async function deletePresentation(id: string): Promise<void> {
   const db = await getOfflineDB();
   await db.delete("presentations", id);
 }
+
+/**
+ * 링크로 공유받은 프레젠테이션(`access`가 있는 사본)을 저장한다. 같은 id 자리에 소유자 자신의
+ * 저장본이 있으면 쓰지 않는다.
+ *
+ * 저장소는 id 하나로만 저장본을 가르므로, 한 브라우저를 소유자와 공유받은 사람이 함께 쓰면 두
+ * 사람의 사본이 한 자리를 나눠 쓴다. 공유받은 사본이 덮으면 소유자가 아직 올리지 못한 편집이
+ * 사라지고, 소유자는 자기 프레젠테이션을 보기 전용으로 읽게 된다. 읽기와 쓰기를 한 readwrite
+ * 트랜잭션에서 해, 그사이 소유자의 탭이 쓴 저장본도 덮지 않는다. 저장소 버전을 올리지 않아
+ * 같은 저장소를 여는 이전 버전의 탭도 그대로 열린다.
+ */
+export async function saveSharedPresentation(
+  presentation: Presentation,
+): Promise<void> {
+  const db = await getOfflineDB();
+  const tx = db.transaction("presentations", "readwrite");
+  const write = (async (): Promise<void> => {
+    const stored = await tx.store.get(presentation.id);
+    if (!stored || stored.access) await tx.store.put(presentation);
+  })();
+  await Promise.all([write, tx.done]);
+}
+
+/**
+ * 공유받은 프레젠테이션의 저장본을 지운다. 그 자리에 소유자 자신의 저장본이 있으면 지우지
+ * 않는다(`saveSharedPresentation`과 같은 이유).
+ */
+export async function deleteSharedPresentation(id: string): Promise<void> {
+  const db = await getOfflineDB();
+  const tx = db.transaction("presentations", "readwrite");
+  const remove = (async (): Promise<void> => {
+    const stored = await tx.store.get(id);
+    if (stored?.access) await tx.store.delete(id);
+  })();
+  await Promise.all([remove, tx.done]);
+}

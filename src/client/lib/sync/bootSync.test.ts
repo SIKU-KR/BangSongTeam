@@ -43,7 +43,12 @@ import {
   flushFolderSync,
   retryFolderSyncNow,
 } from "./folderSync";
-import { loadAllSongs } from "../storage";
+import {
+  loadAllPresentations,
+  loadAllSongs,
+  savePresentation,
+} from "../storage";
+import { closeOfflineDB, OFFLINE_DB_NAME } from "../storage/db";
 import {
   __loadFoldersForTests,
   getFolders,
@@ -53,6 +58,8 @@ import {
 import { listPresentations } from "../../features/presentation";
 import {
   __loadDocumentsForTests,
+  flushPendingWrites,
+  hydrateFromStorage,
   removePresentationsLocally,
   renamePresentation,
   resetPresentationStore,
@@ -1082,5 +1089,106 @@ describe("runBootSync — 지운 항목과 밀린 push", () => {
     expect(getUserSongs().map((deck) => deck.title)).toEqual([
       "다른 기기 제목",
     ]);
+  });
+});
+
+describe("runBootSync — 한 브라우저의 소유자 저장본과 공유받은 사본", () => {
+  const MEMBER = "0000000x0000000member";
+  const SHARED = "p00000000000000000001";
+
+  function leaderCopy(): Presentation {
+    return {
+      ...presentation(SHARED),
+      title: "로컬 수정",
+      updatedAt: "2026-09-30T00:00:00.000Z",
+    };
+  }
+
+  function memberCopy(): Presentation {
+    return {
+      ...presentation(SHARED),
+      title: "서버",
+      access: { ownerName: "인도자", memberId: MEMBER },
+    };
+  }
+
+  async function storedPresentations(): Promise<Presentation[]> {
+    return (await loadAllPresentations()).valid;
+  }
+
+  beforeEach(async () => {
+    closeOfflineDB();
+    await new Promise<void>((resolve) => {
+      const req = indexedDB.deleteDatabase(OFFLINE_DB_NAME);
+      req.onsuccess = () => resolve();
+      req.onerror = () => resolve();
+      req.onblocked = () => resolve();
+    });
+    await resetSongLibraryStore();
+    resetFolderStore();
+    resetPresentationStore();
+    resetSyncStatus();
+    __resetBootSyncForTests();
+    __resetDeckSyncForTests();
+    __resetSyncSchedulerForTests();
+    __resetFolderSyncForTests();
+    __setDeckTransportForTests({ push: vi.fn(async (deck: Deck) => deck) });
+    __setFolderPusherForTests(vi.fn(async (f: Folder) => f));
+    presentationSync.pullDecks.mockReset();
+    presentationSync.pullDecks.mockResolvedValue({ decks: [], deletedIds: [] });
+    presentationSync.pullPresentations.mockReset();
+    presentationSync.pullPresentations.mockResolvedValue([]);
+    presentationSync.pushPresentation.mockReset();
+    presentationSync.pushPresentation.mockResolvedValue(undefined);
+    presentationSync.pullFolders.mockReset();
+    presentationSync.pullFolders.mockResolvedValue(EMPTY_FOLDER_LIST);
+  });
+
+  afterEach(() => {
+    __resetBootSyncForTests();
+    __resetFolderSyncForTests();
+    __resetDeckSyncForTests();
+    __resetSyncSchedulerForTests();
+    signInAsTestUser();
+    closeOfflineDB();
+  });
+
+  it("공유받은 사람의 부팅 병합이 소유자의 더 새로운 저장본을 덮지 않는다", async () => {
+    await savePresentation(leaderCopy());
+    signInAsTestUser(MEMBER);
+    await hydrateFromStorage();
+    presentationSync.pullPresentations.mockResolvedValue([memberCopy()]);
+
+    await runBootSync();
+    await flushPendingWrites();
+
+    expect(listPresentations().map((doc) => doc.id)).toEqual([SHARED]);
+    expect(await storedPresentations()).toEqual([leaderCopy()]);
+  });
+
+  it("공유가 끝난 사본은 저장본에서도 지운다", async () => {
+    await savePresentation(memberCopy());
+    signInAsTestUser(MEMBER);
+    await hydrateFromStorage();
+    expect(listPresentations().map((doc) => doc.id)).toEqual([SHARED]);
+
+    await runBootSync();
+    await flushPendingWrites();
+
+    expect(listPresentations()).toEqual([]);
+    expect(await storedPresentations()).toEqual([]);
+  });
+
+  it("공유가 끝난 사본의 자리에 그사이 소유자의 저장본이 들어왔으면 지우지 않는다", async () => {
+    await savePresentation(memberCopy());
+    signInAsTestUser(MEMBER);
+    await hydrateFromStorage();
+    await savePresentation(leaderCopy());
+
+    await runBootSync();
+    await flushPendingWrites();
+
+    expect(listPresentations()).toEqual([]);
+    expect(await storedPresentations()).toEqual([leaderCopy()]);
   });
 });

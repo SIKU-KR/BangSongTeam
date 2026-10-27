@@ -2,6 +2,8 @@ export {
   savePresentation,
   loadAllPresentations,
   deletePresentation,
+  saveSharedPresentation,
+  deleteSharedPresentation,
 } from "./presentationRepository";
 export {
   saveFolder,

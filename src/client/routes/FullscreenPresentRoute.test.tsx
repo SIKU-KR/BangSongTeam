@@ -877,6 +877,29 @@ describe("FullscreenPresentRoute", () => {
     ).not.toBeInTheDocument();
   });
 
+  describe("찾지 못한 송출은 송출을 시작한 화면으로 돌아간다", () => {
+    const MISSING_ID = "999999999999999999999";
+
+    it("편집기에서 시작한 송출은 편집기로 돌아간다", () => {
+      savePresentReturnPath(MISSING_ID, `/editor/${MISSING_ID}`);
+
+      renderPresent(`/present/${MISSING_ID}/fullscreen`);
+
+      expect(screen.getByTestId("editor-stub")).toBeInTheDocument();
+      expect(
+        screen.queryByTestId("fullscreen-present-route"),
+      ).not.toBeInTheDocument();
+    });
+
+    it("남은 복귀 경로가 송출 화면이면 드라이브로 돌아간다", () => {
+      savePresentReturnPath(MISSING_ID, `/present/${MISSING_ID}/fullscreen`);
+
+      renderPresent(`/present/${MISSING_ID}/fullscreen`);
+
+      expect(screen.getByTestId("presentations-stub")).toBeInTheDocument();
+    });
+  });
+
   it("송출할 프레젠테이션이 없으면 전체화면을 풀고, 송출용 history 항목을 쌓지 않는다", async () => {
     const exitFullscreenMock = vi.fn().mockResolvedValue(undefined);
     Object.defineProperty(document, "fullscreenElement", {

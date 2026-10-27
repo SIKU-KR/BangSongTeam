@@ -231,6 +231,38 @@ describe("App Route Integration", () => {
     }
   });
 
+  it("미로그인으로 링크에서 띄운 송출을 새로고침하면 링크 화면으로 돌아가 다시 받는다", async () => {
+    signOutForTests();
+    window.sessionStorage.setItem(
+      `chiton:present-return:${DOC_ID}`,
+      "/s/tok-first",
+    );
+    const api = installFakeApi({
+      "GET /api/share/*": () => ({
+        body: {
+          document: {
+            ...SEED_PRESENTATIONS[0],
+            userId: "0000000000000000owner",
+            access: { ownerName: "인도자" },
+          },
+        },
+      }),
+    });
+
+    try {
+      renderAt(`/present/${DOC_ID}/fullscreen`);
+
+      expect(await screen.findByTestId("read-only-banner")).toBeInTheDocument();
+      expect(window.location.pathname).toBe("/s/tok-first");
+      expect(
+        screen.queryByRole("button", { name: /카카오 로그인/ }),
+      ).not.toBeInTheDocument();
+    } finally {
+      api.restore();
+      window.sessionStorage.clear();
+    }
+  });
+
   it("다른 계정으로 로그인하면 남의 세트가 보이지 않는다", async () => {
     signInAsTestUser("999999999999999999999");
 
