@@ -34,18 +34,23 @@ function applyIfWaiting(registration: ServiceWorkerRegistration): void {
 
 function startUpdateChecks(registration: ServiceWorkerRegistration): void {
   stopUpdateChecks?.();
+  let lastCheckAt = Date.now();
   const check = (): void => {
-    if (isProjectionPath()) return;
+    if (
+      isProjectionPath() ||
+      document.visibilityState !== "visible" ||
+      Date.now() - lastCheckAt < UPDATE_CHECK_INTERVAL_MS
+    ) {
+      return;
+    }
+    lastCheckAt = Date.now();
     registration.update().catch(() => undefined);
   };
-  const checkWhenVisible = (): void => {
-    if (document.visibilityState === "visible") check();
-  };
   const timer = window.setInterval(check, UPDATE_CHECK_INTERVAL_MS);
-  document.addEventListener("visibilitychange", checkWhenVisible);
+  document.addEventListener("visibilitychange", check);
   stopUpdateChecks = () => {
     window.clearInterval(timer);
-    document.removeEventListener("visibilitychange", checkWhenVisible);
+    document.removeEventListener("visibilitychange", check);
   };
 }
 
@@ -68,13 +73,14 @@ function handleChunkError(event: ErrorEvent | PromiseRejectionEvent): void {
  *
  * 다른 탭이 새 버전을 적용하면 새 SW가 옛 프리캐시를 지우고, 새 배포 서버에도 옛 해시
  * 청크가 없다. 새로고침하지 않고 남은 탭은 지연 로드 화면으로 이동할 때 오류 화면에
- * 걸린다. 송출 화면에서는 전체 화면이 풀리므로 새로고침하지 않는다. 1분 안에 다시
- * 실패하면 새로고침하지 않아 무한 새로고침이 생기지 않고, sessionStorage를 쓸 수 없으면
- * 새로고침하지 않는다.
+ * 걸린다. 송출 화면에서는 전체 화면이 풀리므로 새로고침하지 않는다. 오프라인이면 청크를
+ * 받지 못한 까닭이 배포가 아니라 연결이고 새로고침은 브라우저 오류 화면으로 끝날 수 있어
+ * 새로고침하지 않는다. 1분 안에 다시 실패하면 새로고침하지 않아 무한 새로고침이 생기지 않고,
+ * sessionStorage를 쓸 수 없으면 새로고침하지 않는다.
  */
 export function reloadOnStaleChunk(): void {
   try {
-    if (isProjectionPath()) return;
+    if (isProjectionPath() || !navigator.onLine) return;
     const last = Number(sessionStorage.getItem(STALE_CHUNK_RELOAD_KEY));
     const now = Date.now();
     if (now - last < STALE_CHUNK_RELOAD_INTERVAL_MS) return;
@@ -131,8 +137,13 @@ export async function reloadIfUncontrolled(): Promise<void> {
  * 직후 한 번뿐이다. 그 뒤에 발견한 버전은 쓰고 있는 화면을 갑자기 새로고침하게 되므로
  * 다음 새로고침으로 미룬다. 옛 SW에 끝나지 않은 요청이 남아 있으면 브라우저가 활성화를
  * 미뤄 제어가 수십 초 뒤에 넘어오기도 한다. 그때는 이미 화면을 쓰고 있을 수 있으므로
- * 요청 후 5초 안에 넘어온 경우에만 새로고침하고, 늦게 넘어오면 다음 새로고침에 맡긴다. 열어 둔 탭이 배포를 미리 발견해 두도록 주기적으로, 그리고
- * 탭이 다시 보일 때 갱신을 확인한다.
+ * 요청 후 5초 안에 넘어온 경우에만 새로고침하고, 늦게 넘어오면 다음 새로고침에 맡긴다.
+ *
+ * 열어 둔 탭이 배포를 미리 발견해 두도록 30분마다, 그리고 탭이 다시 보일 때 갱신을 확인하되,
+ * 탭이 보이고 지난 확인에서 30분이 지났을 때만 확인한다. 확인 한 번이 도메인 프록시(Cloudflare
+ * Worker) 요청 여러 건이고 그 플랜은 하루 요청 수에 한도가 있어, 숨은 탭이 하루 내내 확인하거나
+ * 탭을 오갈 때마다 확인하면 한도를 앞당긴다. 페이지를 열 때는 브라우저가 이동하며 스스로 확인하므로
+ * 등록한 때부터 센다.
  *
  * 송출 경로(`/present/...`)는 새로고침해도 적용하지 않고, 예배 중 새 버전을 내려받지
  * 않도록 갱신 확인도 건너뛴다.

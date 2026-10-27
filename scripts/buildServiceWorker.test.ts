@@ -5,29 +5,41 @@ import {
   shellWorkerSource,
   OFFLINE_RSC_PREFIX,
   RSC_NETWORK_TIMEOUT_MS,
+  SHELL_REFRESH_TIMEOUT_MS,
 } from "./buildServiceWorker.mjs";
 import { OFFLINE_SHELL_PARAM } from "../src/shared/constants/projection";
 
 const P = OFFLINE_SHELL_PARAM;
 const ORIGIN = "https://x.test";
 const PRECACHE = `workbox-precache-v2-${ORIGIN}/`;
+const BUILD_ID = "build-1";
 
 const SHELLS = collectShells(
   {
     "/presentations": { dataRoute: "/presentations.rsc" },
+    "/terms": { dataRoute: "/terms.rsc" },
     [`/editor/${P}`]: { dataRoute: `/editor/${P}.rsc` },
     [`/present/${P}/fullscreen`]: { dataRoute: `/present/${P}/fullscreen.rsc` },
   },
   P,
 );
 
-const PROJECTION_RSC = `0:{"c":["","present","${P}","fullscreen"],"q":"","t":{"s":{"n":"presentationId","t":"d","k":"${P}","s":[]}},"b":"build-1"}\n`;
-const EDITOR_HTML = `<!DOCTYPE html><script>self.__next_f.push([1,"[\\"presentationId\\",\\"${P}\\",\\"d\\"]"])</script>`;
+const PROJECTION_RSC = `0:{"c":["","present","${P}","fullscreen"],"q":"","t":{"s":{"n":"presentationId","t":"d","k":"${P}","s":[]}},"b":"${BUILD_ID}"}\n`;
+
+function shellHtml(buildId: string, param: string | null = P): string {
+  const route =
+    param === null ? "" : `[\\"presentationId\\",\\"${param}\\",\\"d\\"]`;
+  return `<!DOCTYPE html><script>self.__next_f.push([1,"${route}{\\"b\\":\\"${buildId}\\"}"])</script>`;
+}
+
+const EDITOR_HTML = shellHtml(BUILD_ID);
+const TERMS_HTML = shellHtml(BUILD_ID, null);
 
 const PRECACHED: Record<string, string> = {
   [`${OFFLINE_RSC_PREFIX}/present/${P}/fullscreen.rsc`]: PROJECTION_RSC,
   [`${OFFLINE_RSC_PREFIX}/presentations.rsc`]: '0:{"c":["","presentations"]}\n',
   [`/editor/${P}`]: EDITOR_HTML,
+  "/terms": TERMS_HTML,
 };
 
 interface FakeRequest {
@@ -42,11 +54,31 @@ type FetchListener = (event: {
   respondWith: (response: Response | Promise<Response>) => void;
 }) => void;
 
+type Network = (
+  input: FakeRequest | string,
+  init?: RequestInit,
+) => Promise<Response>;
+
+const precacheKey = (path: string): string =>
+  `${ORIGIN}${path}?__WB_REVISION__=r1`;
+
+function fakePrecache(bodies: Record<string, string>): Map<string, string> {
+  return new Map(
+    Object.entries(bodies).map(([path, body]) => [precacheKey(path), body]),
+  );
+}
+
 function startShellWorker(
-  network: (request: FakeRequest) => Promise<Response>,
-  precached: Record<string, string> = PRECACHED,
+  network: Network,
+  precached: Record<string, string> | Map<string, string> = PRECACHED,
 ): (request: FakeRequest) => Promise<Response> | undefined {
   const listeners: FetchListener[] = [];
+  const entries =
+    precached instanceof Map ? precached : fakePrecache(precached);
+  const keysFor = (url: string): string[] =>
+    [...entries.keys()].filter(
+      (key) => new URL(key).pathname === new URL(url).pathname,
+    );
   const context = vm.createContext({
     self: {
       registration: { scope: `${ORIGIN}/` },
@@ -57,13 +89,25 @@ function startShellWorker(
     },
     caches: {
       match: async (url: string, options: { cacheName: string }) => {
-        const body = precached[new URL(url).pathname];
-        if (options.cacheName !== PRECACHE || body === undefined) {
+        const [key] = keysFor(url);
+        if (options.cacheName !== PRECACHE || key === undefined) {
           return undefined;
         }
-        return new Response(body, {
+        return new Response(entries.get(key), {
           headers: { "content-type": "text/html; charset=utf-8" },
         });
+      },
+      open: async (name: string) => {
+        if (name !== PRECACHE) throw new Error(`unexpected cache ${name}`);
+        return {
+          keys: async (url: string, options: { ignoreSearch?: boolean }) =>
+            options.ignoreSearch
+              ? keysFor(url).map((key) => ({ url: key }))
+              : [],
+          put: async (request: { url: string }, response: Response) => {
+            entries.set(request.url, await response.text());
+          },
+        };
       },
     },
     fetch: network,
@@ -73,7 +117,7 @@ function startShellWorker(
     setTimeout: (callback: () => void, ms: number) => setTimeout(callback, ms),
     clearTimeout: (timer: ReturnType<typeof setTimeout>) => clearTimeout(timer),
   });
-  vm.runInContext(shellWorkerSource(SHELLS, P), context);
+  vm.runInContext(shellWorkerSource(SHELLS, P, BUILD_ID), context);
 
   return (request) => {
     let response: Promise<Response> | undefined;
@@ -217,5 +261,119 @@ describe("서비스 워커의 화면 안 이동(RSC 요청)", () => {
 
     expect(await response!.text()).toContain('\\"abc\\"');
     expect(network).not.toHaveBeenCalled();
+  });
+});
+
+describe("서비스 워커의 주소창 이동(셸 HTML)과 배포 중 섞인 셸", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  function navigate(path: string): FakeRequest {
+    return {
+      mode: "navigate",
+      method: "GET",
+      url: `${ORIGIN}${path}`,
+      headers: new Headers(),
+    };
+  }
+
+  function html(body: string, status = 200): Response {
+    return new Response(body, {
+      status,
+      headers: { "content-type": "text/html; charset=utf-8" },
+    });
+  }
+
+  it("빌드 id 없이는 셸 핸들러를 만들지 않는다", () => {
+    expect(() => shellWorkerSource(SHELLS, P, "")).toThrow();
+  });
+
+  it("미리 받아 둔 셸이 이 서비스 워커의 빌드면 서버에 묻지 않고 그대로 답한다", async () => {
+    const network = vi.fn(offline);
+    const handle = startShellWorker(network);
+
+    const response = await handle(navigate("/terms"));
+
+    expect(await response!.text()).toBe(TERMS_HTML);
+    expect(network).not.toHaveBeenCalled();
+  });
+
+  it("배포 중 이전 빌드의 셸이 담겼으면 서버에서 셸을 다시 받아 그것으로 답하고 프리캐시를 고친다", async () => {
+    const fresh = TERMS_HTML;
+    const network = vi.fn(async () => html(fresh));
+    const precache = fakePrecache({ "/terms": shellHtml("build-0", null) });
+    const handle = startShellWorker(network, precache);
+
+    const response = await handle(navigate("/terms?from=menu"));
+
+    expect(await response!.text()).toBe(fresh);
+    expect(network).toHaveBeenCalledWith(`${ORIGIN}/terms`, {
+      cache: "reload",
+    });
+    expect(precache.get(precacheKey("/terms"))).toBe(fresh);
+  });
+
+  it("동적 경로는 자리표시 셸을 다시 받아 프리캐시를 고치고, 주소의 id를 넣어 답한다", async () => {
+    const network = vi.fn(async () => html(EDITOR_HTML));
+    const precache = fakePrecache({ [`/editor/${P}`]: shellHtml("build-0") });
+    const handle = startShellWorker(network, precache);
+
+    const response = await handle(navigate("/editor/abc"));
+
+    expect(await response!.text()).toBe(shellHtml(BUILD_ID, "abc"));
+    expect(network).toHaveBeenCalledWith(`${ORIGIN}/editor/${P}`, {
+      cache: "reload",
+    });
+    expect(precache.get(precacheKey(`/editor/${P}`))).toBe(EDITOR_HTML);
+  });
+
+  it("서버가 또 다른 빌드의 셸을 주면 그것으로 답하되 프리캐시는 고치지 않는다", async () => {
+    const stale = shellHtml("build-0", null);
+    const newer = shellHtml("build-2", null);
+    const precache = fakePrecache({ "/terms": stale });
+    const handle = startShellWorker(async () => html(newer), precache);
+
+    const response = await handle(navigate("/terms"));
+
+    expect(await response!.text()).toBe(newer);
+    expect(precache.get(precacheKey("/terms"))).toBe(stale);
+  });
+
+  it.each([
+    ["서버에 닿지 못하면", offline],
+    ["서버가 오류로 답하면", async () => html("<html>error</html>", 503)],
+  ])(
+    "%s 미리 받아 둔 셸로 답해 오프라인에서도 앱이 뜨게 한다",
+    async (_label, network) => {
+      const stale = shellHtml("build-0");
+      const precache = fakePrecache({ [`/editor/${P}`]: stale });
+      const handle = startShellWorker(network, precache);
+
+      const response = await handle(navigate("/editor/abc"));
+
+      expect(await response!.text()).toBe(shellHtml("build-0", "abc"));
+      expect(precache.get(precacheKey(`/editor/${P}`))).toBe(stale);
+    },
+  );
+
+  it("셸을 다시 받는 응답이 늦으면 제한 시간 뒤 미리 받아 둔 셸로 답한다", async () => {
+    vi.useFakeTimers();
+    const stale = shellHtml("build-0", null);
+    const handle = startShellWorker(
+      () => new Promise<Response>(() => {}),
+      fakePrecache({ "/terms": stale }),
+    );
+
+    const response = handle(navigate("/terms"));
+    let settled = false;
+    void response!.then(() => {
+      settled = true;
+    });
+    await vi.advanceTimersByTimeAsync(SHELL_REFRESH_TIMEOUT_MS - 1);
+    expect(settled).toBe(false);
+
+    await vi.advanceTimersByTimeAsync(1);
+    expect(await (await response!).text()).toBe(stale);
   });
 });

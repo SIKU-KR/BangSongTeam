@@ -73,6 +73,12 @@ export const OFFLINE_RSC_PREFIX = "/offline-rsc";
 export const RSC_NETWORK_TIMEOUT_MS = 3000;
 
 /**
+ * 다른 빌드의 셸이 프리캐시에 담겼을 때 서버에서 셸을 다시 받는 응답을 기다리는 최대 시간.
+ * 넘기면 담겨 있던 셸로 답한다. 화면 이동이 응답 없는 서버를 끝없이 기다리지 않게 한다.
+ */
+export const SHELL_REFRESH_TIMEOUT_MS = 3000;
+
+/**
  * 미리 렌더한 HTML 셸 목록. 동적 경로는 `OFFLINE_SHELL_PARAM`으로 한 장씩 렌더돼 있다.
  * 한 경로에 동적 자리가 둘 이상이면 어느 값을 어디에 넣을지 알 수 없어 빌드를 멈춘다.
  * `rsc`는 같은 셸의 RSC 파일(prerender manifest의 `dataRoute`)이다.
@@ -129,6 +135,13 @@ export function matchShell(pathname, shells, placeholder) {
  * generateSW가 만드는 Workbox 라우트보다 먼저 등록되도록 `importScripts`로 붙는다.
  *
  * - 주소창 이동(`navigate`)은 언제나 셸 HTML로 답한다.
+ * - 셸 HTML이 이 서비스 워커와 같은 빌드(`buildId`, Next.js가 HTML의 RSC 데이터에 싣는 빌드
+ *   id)인지 확인한다. 배포 중에는 요청이 옛 리비전과 새 리비전에 섞여 가서, 설치가 새 셸 자리에
+ *   옛 리비전의 셸을 담을 수 있다. Workbox는 이미 담긴 자리를 다시 받지 않으므로 그대로 두면
+ *   다음 배포까지 지워진 옛 청크를 부르는 셸로 답해 앱이 로딩 화면에서 멈춘다. 다른 빌드면
+ *   서버에서 셸을 다시 받아 답하고, 같은 빌드를 받았을 때만 프리캐시 자리를 고친다. 서버에
+ *   닿지 못하거나 `SHELL_REFRESH_TIMEOUT_MS` 안에 답이 없으면 담겨 있던 셸로 답해 오프라인에서도
+ *   앱이 뜨게 한다.
  * - 앱 안 이동(`router.push`)의 RSC 요청은 서버에 먼저 묻고, 닿지 못하거나 RSC가 아닌
  *   응답(프록시·서버 오류 페이지)이 오거나 `RSC_NETWORK_TIMEOUT_MS` 안에 답이 없으면 셸
  *   RSC로 답한다. Next.js는 RSC 요청이 실패하면 브라우저 이동(전체 새로고침)으로 넘어가는데,
@@ -137,7 +150,8 @@ export function matchShell(pathname, shells, placeholder) {
  * - 미리 받기(prefetch) 요청은 응답 형식이 달라 답하지 않는다. 실패해도 Next.js가 이동할 때
  *   위의 RSC 요청을 다시 보낸다.
  */
-export function shellWorkerSource(shells, placeholder) {
+export function shellWorkerSource(shells, placeholder, buildId) {
+  if (!buildId) throw new Error("셸을 확인할 빌드 id가 없습니다");
   const shellRscPaths = Object.fromEntries(
     shells.map(({ route, rsc }) => [route, OFFLINE_RSC_PREFIX + rsc]),
   );
@@ -145,9 +159,11 @@ export function shellWorkerSource(shells, placeholder) {
 const SHELLS = ${JSON.stringify(shells.map(({ route, segments }) => ({ route, segments })))};
 const SHELL_RSC_PATHS = ${JSON.stringify(shellRscPaths)};
 const PLACEHOLDER = ${JSON.stringify(placeholder)};
+const BUILD_ID = ${JSON.stringify(buildId)};
 const PRECACHE = "workbox-precache-v2-" + self.registration.scope;
 const RSC_CONTENT_TYPE = "text/x-component";
 const RSC_NETWORK_TIMEOUT_MS = ${RSC_NETWORK_TIMEOUT_MS};
+const SHELL_REFRESH_TIMEOUT_MS = ${SHELL_REFRESH_TIMEOUT_MS};
 const matchShell = ${matchShell.toString()};
 
 function precached(pathname) {
@@ -161,14 +177,51 @@ function fillPlaceholder(text, shell) {
   return shell.value === null ? text : text.split(PLACEHOLDER).join(shell.value);
 }
 
+function htmlResponse(html, sourceHeaders) {
+  const headers = new Headers(sourceHeaders);
+  headers.delete("content-length");
+  return new Response(html, { status: 200, headers });
+}
+
+async function refetchShell(route) {
+  let timer;
+  const network = fetch(new URL(route, self.location.origin).href, { cache: "reload" })
+    .then(async (response) =>
+      response.ok ? { html: await response.text(), headers: response.headers } : null,
+    )
+    .catch(() => null);
+  const timedOut = new Promise((resolve) => {
+    timer = setTimeout(() => resolve(null), SHELL_REFRESH_TIMEOUT_MS);
+  });
+  const fresh = await Promise.race([network, timedOut]);
+  clearTimeout(timer);
+  return fresh;
+}
+
+async function storeShell(route, fresh) {
+  const cache = await caches.open(PRECACHE);
+  const [key] = await cache.keys(new URL(route, self.location.origin).href, {
+    ignoreSearch: true,
+  });
+  if (key) await cache.put(key, htmlResponse(fresh.html, fresh.headers));
+}
+
 async function serveShell(request, shell) {
   const cached = await precached(shell.route);
   if (!cached) return fetch(request);
-  if (shell.value === null) return cached;
-  const html = fillPlaceholder(await cached.text(), shell);
-  const headers = new Headers(cached.headers);
-  headers.delete("content-length");
-  return new Response(html, { status: 200, headers });
+  let html = await cached.text();
+  let headers = cached.headers;
+  if (!html.includes(BUILD_ID)) {
+    const fresh = await refetchShell(shell.route);
+    if (fresh) {
+      if (fresh.html.includes(BUILD_ID)) {
+        await storeShell(shell.route, fresh).catch(() => undefined);
+      }
+      html = fresh.html;
+      headers = fresh.headers;
+    }
+  }
+  return htmlResponse(fillPlaceholder(html, shell), headers);
 }
 
 async function shellRsc(shell) {
@@ -240,7 +293,8 @@ async function main() {
     readFileSync(path.join(NEXT_DIR, "prerender-manifest.json"), "utf-8"),
   );
   const shells = collectShells(manifest.routes, OFFLINE_SHELL_PARAM);
-  const shellScript = shellWorkerSource(shells, OFFLINE_SHELL_PARAM);
+  const buildId = readFileSync(path.join(NEXT_DIR, "BUILD_ID"), "utf-8").trim();
+  const shellScript = shellWorkerSource(shells, OFFLINE_SHELL_PARAM, buildId);
   writeFileSync(path.join(PUBLIC_DIR, SHELL_SCRIPT), shellScript);
   copyShellRscFiles(shells);
 

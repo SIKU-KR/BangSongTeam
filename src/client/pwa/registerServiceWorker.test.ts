@@ -59,10 +59,6 @@ function stubServiceWorker({
   return getRegistration;
 }
 
-async function flushPromises(): Promise<void> {
-  await new Promise((resolve) => setTimeout(resolve, 0));
-}
-
 afterEach(() => {
   vi.useRealTimers();
   vi.restoreAllMocks();
@@ -209,25 +205,70 @@ describe("갱신 확인", () => {
     document.dispatchEvent(new Event("visibilitychange"));
   }
 
-  it("30분마다 새 버전을 확인한다", () => {
+  function becomeHidden(): void {
+    vi.spyOn(document, "visibilityState", "get").mockReturnValue("hidden");
+    document.dispatchEvent(new Event("visibilitychange"));
+  }
+
+  it("보이는 탭은 30분마다 새 버전을 확인한다", () => {
     vi.useFakeTimers();
     stubLocation();
     const update = vi.fn(async () => {});
     registerWith(update);
 
     vi.advanceTimersByTime(30 * 60_000);
+    expect(update).toHaveBeenCalledTimes(1);
+
+    vi.advanceTimersByTime(30 * 60_000);
+    expect(update).toHaveBeenCalledTimes(2);
+  });
+
+  it("탭이 다시 보이면 지난 확인에서 30분이 지났을 때 새 버전을 확인한다", () => {
+    vi.useFakeTimers();
+    stubLocation();
+    const update = vi.fn(async () => {});
+    registerWith(update);
+    becomeHidden();
+
+    vi.advanceTimersByTime(30 * 60_000);
+    becomeVisible();
 
     expect(update).toHaveBeenCalledTimes(1);
   });
 
-  it("탭이 다시 보이면 새 버전을 확인한다", () => {
+  it("페이지를 연 뒤 30분 안에는 탭을 오가도 다시 확인하지 않는다", () => {
+    vi.useFakeTimers();
     stubLocation();
     const update = vi.fn(async () => {});
     registerWith(update);
 
-    becomeVisible();
+    for (let i = 0; i < 10; i += 1) {
+      becomeHidden();
+      vi.advanceTimersByTime(30_000);
+      becomeVisible();
+    }
 
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it("확인은 30분에 한 번만 하고 숨은 탭에서는 주기 확인도 건너뛴다", () => {
+    vi.useFakeTimers();
+    stubLocation();
+    const update = vi.fn(async () => {});
+    registerWith(update);
+    vi.advanceTimersByTime(30 * 60_000);
     expect(update).toHaveBeenCalledTimes(1);
+
+    for (let i = 0; i < 10; i += 1) {
+      becomeVisible();
+      vi.advanceTimersByTime(30_000);
+    }
+    becomeHidden();
+    vi.advanceTimersByTime(2 * 60 * 60_000);
+    expect(update).toHaveBeenCalledTimes(1);
+
+    becomeVisible();
+    expect(update).toHaveBeenCalledTimes(2);
   });
 
   it("송출 화면에서는 새 버전을 확인하지 않는다", () => {
@@ -243,14 +284,14 @@ describe("갱신 확인", () => {
   });
 
   it("확인이 실패해도 오류를 던지지 않는다", async () => {
+    vi.useFakeTimers();
     stubLocation();
     const update = vi.fn(async () => {
       throw new TypeError("offline");
     });
     registerWith(update);
 
-    becomeVisible();
-    await flushPromises();
+    await vi.advanceTimersByTimeAsync(30 * 60_000);
 
     expect(update).toHaveBeenCalledTimes(1);
   });
@@ -286,6 +327,16 @@ describe("reloadOnStaleChunk", () => {
     reloadOnStaleChunk();
 
     expect(reload).not.toHaveBeenCalled();
+  });
+
+  it("오프라인이면 새로고침이 브라우저 오류 화면으로 끝나므로 새로고침하지 않는다", () => {
+    const reload = stubLocation("/editor/p1");
+    vi.spyOn(navigator, "onLine", "get").mockReturnValue(false);
+
+    reloadOnStaleChunk();
+
+    expect(reload).not.toHaveBeenCalled();
+    expect(sessionStorage.getItem(STALE_CHUNK_KEY)).toBeNull();
   });
 
   it("sessionStorage를 쓸 수 없으면 새로고침하지 않는다", () => {
