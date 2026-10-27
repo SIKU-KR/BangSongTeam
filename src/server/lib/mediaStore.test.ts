@@ -209,4 +209,34 @@ describe("Cloud Storage 미디어 저장소", () => {
     expect(downloadsOf("loops/unread.mp4")).toEqual([]);
     expect(await readAtLeast(body.getReader(), Infinity)).toBe(OBJECT_SIZE);
   });
+
+  it("읽는 도중에 취소하면 기다리던 읽기를 끝내고 그 내려받기를 닫는다", async () => {
+    const store = createGcsMediaStore("test");
+    const object = await store.stat("loops/pending.mp4");
+    const reader = store.read("loops/pending.mp4", object!).getReader();
+
+    await readAtLeast(reader, 64 * 1024);
+    const pending = reader.read();
+    await reader.cancel(new Error("client gone"));
+
+    expect(await pending).toEqual({ done: true, value: undefined });
+    await vi.waitFor(() => {
+      expect(downloadsOf("loops/pending.mp4")).toEqual([
+        { key: "loops/pending.mp4", state: "closed early" },
+      ]);
+    });
+  });
+
+  it("읽기 전에 취소하면 내려받기를 열지 않는다", async () => {
+    const store = createGcsMediaStore("test");
+    const object = await store.stat("loops/never-read.mp4");
+    const body = store.read("loops/never-read.mp4", object!);
+
+    await expect(
+      body.cancel(new Error("client gone")),
+    ).resolves.toBeUndefined();
+    await sleep(200);
+
+    expect(downloadsOf("loops/never-read.mp4")).toEqual([]);
+  });
 });
