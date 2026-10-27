@@ -1,4 +1,8 @@
-import { loadNoonnuFontCatalog, type NoonnuFont } from "#shared";
+import {
+  loadNoonnuFontCatalog,
+  STYLESHEET_FONT_FAMILIES,
+  type NoonnuFont,
+} from "#shared";
 
 /**
  * npm으로 번들한 글꼴. 카탈로그의 CDN 주소 대신 자체 오리진에서 받는다.
@@ -73,9 +77,13 @@ export async function getNoonnuFont(
 /**
  * 덱에 저장된 글꼴 이름을 CSS `font-family` 값으로 바꾼다.
  * 스테이지와 넘침 측정기가 같은 글꼴로 그리고 재려면 둘 다 이 값을 써야 한다.
+ * 스타일시트로 싣는 카탈로그 글꼴은 저장된 한글 이름과 스타일시트가 선언한 패밀리가 달라
+ * 선언된 패밀리를 앞에 둔다(`STYLESHEET_FONT_FAMILIES`).
  */
 export function toCssFontFamily(nameOrFamily: string): string {
-  const family = BUNDLED_FONT_FAMILIES[nameOrFamily];
+  const family =
+    BUNDLED_FONT_FAMILIES[nameOrFamily] ??
+    STYLESHEET_FONT_FAMILIES[nameOrFamily];
   return family ? `"${family}", "${nameOrFamily}"` : `"${nameOrFamily}"`;
 }
 
@@ -96,10 +104,31 @@ function loadBundledFont(
   return loading;
 }
 
+function loadStylesheetFont(font: NoonnuFont): Promise<void> {
+  return new Promise((resolve) => {
+    const link = document.createElement("link");
+    link.rel = "stylesheet";
+    link.href = font.url;
+    link.dataset.noonnuFontId = font.id;
+    link.addEventListener("load", () => resolve(), { once: true });
+    link.addEventListener(
+      "error",
+      () => {
+        link.remove();
+        loadingFonts.delete(font.id);
+        resolve();
+      },
+      { once: true },
+    );
+    document.head.appendChild(link);
+  });
+}
+
 /**
  * 웹폰트 동적 로드. 번들 글꼴은 CSS 청크를, 눈누 글꼴은 @font-face 스타일 또는
- * stylesheet link를 붙인다. 번들 글꼴은 `@font-face`가 문서에 들어간 뒤 끝나므로,
- * 곧바로 `document.fonts.load`를 부르려면 기다려야 한다.
+ * stylesheet link를 붙인다. 번들 글꼴과 스타일시트로 싣는 글꼴은 `@font-face`가 문서에
+ * 들어간 뒤(스타일시트는 받지 못해도) 끝나므로, 곧바로 `document.fonts.load`를 부르려면
+ * 기다려야 한다. 받지 못한 스타일시트는 걷어 내 다음 호출에서 다시 받는다.
  */
 export async function loadWebFont(nameOrFamily: string): Promise<void> {
   if (typeof document === "undefined") return;
@@ -116,17 +145,14 @@ export async function loadWebFont(nameOrFamily: string): Promise<void> {
   const existing = loadingFonts.get(font.id);
   if (existing) return existing;
 
+  if (font.format === "css") {
+    const loading = loadStylesheetFont(font);
+    loadingFonts.set(font.id, loading);
+    return loading;
+  }
+
   const loaded = Promise.resolve();
   loadingFonts.set(font.id, loaded);
-
-  if (font.format === "css") {
-    const link = document.createElement("link");
-    link.rel = "stylesheet";
-    link.href = font.url;
-    link.dataset.noonnuFontId = font.id;
-    document.head.appendChild(link);
-    return loaded;
-  }
 
   const style = document.createElement("style");
   style.dataset.noonnuFontId = font.id;

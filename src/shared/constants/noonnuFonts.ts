@@ -23,6 +23,32 @@ export async function loadNoonnuFontCatalog(): Promise<readonly NoonnuFont[]> {
 }
 
 /**
+ * 스타일시트(`format: "css"`)로 싣는 카탈로그 글꼴의 이름 → 그 스타일시트가 선언한 패밀리.
+ *
+ * 덱은 한글 이름(`나눔스퀘어`)을 저장하지만 스타일시트는 영문 패밀리(`NanumSquare`)만
+ * 선언한다. 한글 이름으로 그리면 그 글꼴이 설치되지 않은 송출 PC에서 대체 글꼴로 나온다.
+ * 글꼴을 그리는 쪽은 동기로 이름을 바꿔야 해서 지연 청크인 카탈로그 대신 메인 번들에 둔다.
+ * 카탈로그의 카드 패밀리명과 같아야 한다(`fontLoader.test.ts`가 확인한다).
+ */
+export const STYLESHEET_FONT_FAMILIES: Readonly<Record<string, string>> = {
+  나눔스퀘어: "NanumSquare",
+  나눔고딕: "Nanum Gothic",
+  검은고딕: "Black Han Sans",
+  갈무리9: "Galmuri9",
+  갈무리11: "Galmuri11",
+  갈무리7: "Galmuri7",
+  "스포카 한 산스": "Spoqa Han Sans",
+  한나체: "Hanna",
+  이롭게바탕체: "Iropke Batang",
+  나눔손글씨붓: "Nanum Brush Script",
+  나눔손글씨펜: "Nanum Pen Script",
+  제주고딕: "Jeju Gothic",
+  제주명조: "Jeju Myeongjo",
+  제주한라산: "Jeju Hallasan",
+  나눔고딕코딩: "Nanum Gothic Coding",
+};
+
+/**
  * 스타일 스키마가 허용하는 글꼴 이름 목록 (각 글꼴의 이름과 카드 패밀리명).
  * 저장된 덱을 검증할 때 쓰므로 카탈로그와 달리 메인 번들에 남는다.
  */
