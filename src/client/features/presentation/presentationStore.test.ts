@@ -11,6 +11,7 @@ import {
 import {
   getActivePresentation,
   addDeckToPresentation,
+  applyServerDocuments,
   resetPresentationStore,
   __loadDocumentsForTests,
   createNewPresentation,
@@ -775,6 +776,84 @@ describe("문서별 Undo/Redo 격리", () => {
       const second = addDeckToPresentation(first.deck!);
       expect(second.deck?.forkedFrom).toBe("9000000000000000000aa");
     });
+  });
+});
+
+describe("수정 시각", () => {
+  const T0 = "2026-09-25T00:00:00.000Z";
+
+  beforeEach(() => {
+    signInAsTestUser();
+    resetPresentationStore();
+    __loadDocumentsForTests(SEED_PRESENTATIONS);
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date(T0));
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("되돌리기·다시 하기는 지금 판보다 늦은 시각으로 찍는다", () => {
+    const fontSize = () =>
+      getActivePresentation().items[0].deck?.style.fontSizeVw;
+    const original = fontSize();
+    updateSongStyle(0, { fontSizeVw: 8 });
+    expect(getActivePresentation().updatedAt).toBe(T0);
+
+    vi.setSystemTime(new Date("2026-09-25T00:00:10.000Z"));
+    undo();
+    expect(fontSize()).toBe(original);
+    expect(getActivePresentation().updatedAt).toBe("2026-09-25T00:00:10.000Z");
+
+    vi.setSystemTime(new Date("2026-09-25T00:00:20.000Z"));
+    redo();
+    expect(fontSize()).toBe(8);
+    expect(getActivePresentation().updatedAt).toBe("2026-09-25T00:00:20.000Z");
+  });
+
+  it("시계가 뒤로 가도 되돌리기와 편집은 지금 판보다 1ms 뒤로 찍는다", () => {
+    updateSongStyle(0, { fontSizeVw: 8 });
+
+    vi.setSystemTime(new Date("2026-09-24T23:59:00.000Z"));
+    undo();
+    expect(getActivePresentation().updatedAt).toBe("2026-09-25T00:00:00.001Z");
+
+    updatePresentationTitle("시계가 뒤로 간 뒤의 편집");
+    expect(getActivePresentation().updatedAt).toBe("2026-09-25T00:00:00.002Z");
+  });
+
+  it("같은 밀리초에 두 번 고쳐도 수정 시각이 늘어난다", () => {
+    updateSongStyle(0, { fontSizeVw: 8 });
+    updateSongStyle(0, { fontSizeVw: 9 });
+
+    expect(getActivePresentation().updatedAt).toBe("2026-09-25T00:00:00.001Z");
+  });
+
+  it("병합이 서버본으로 바꾼 세트는 되돌리기 기록을 지운다", () => {
+    updatePresentationTitle("로컬 편집");
+    const newer: Presentation = {
+      ...getActivePresentation(),
+      title: "다른 기기의 편집",
+      updatedAt: "2026-09-25T00:01:00.000Z",
+    };
+
+    applyServerDocuments(
+      listPresentations().map((doc) => (doc.id === newer.id ? newer : doc)),
+    );
+
+    expect(getActivePresentation().title).toBe("다른 기기의 편집");
+    expect(canUndo()).toBe(false);
+  });
+
+  it("병합이 그대로 두거나 같은 판의 서버 객체로 바꾼 세트는 되돌리기 기록을 지킨다", () => {
+    updatePresentationTitle("로컬 편집");
+
+    applyServerDocuments(listPresentations());
+    expect(canUndo()).toBe(true);
+
+    applyServerDocuments(listPresentations().map((doc) => ({ ...doc })));
+    expect(canUndo()).toBe(true);
   });
 });
 
