@@ -83,6 +83,32 @@ describe("auth 인스턴스", () => {
       expect(user.name.length).toBeGreaterThan(0);
       expect(user.email).toBe(`kakao_42@${SYNTHETIC_EMAIL_DOMAIN}`);
     });
+
+    it("인증했고 아직 그 계정 것인 이메일만 인증된 이메일로 본다", () => {
+      const verified = (account: KakaoProfileLike["kakao_account"]) =>
+        buildKakaoUser({ id: 7, kakao_account: account }).emailVerified;
+
+      expect(
+        verified({
+          email: "v@example.com",
+          is_email_verified: true,
+          is_email_valid: true,
+        }),
+      ).toBe(true);
+      expect(
+        verified({
+          email: "v@example.com",
+          is_email_verified: true,
+          is_email_valid: false,
+        }),
+      ).toBe(false);
+      expect(
+        verified({ email: "v@example.com", is_email_verified: true }),
+      ).toBe(false);
+      expect(
+        verified({ email: "v@example.com", is_email_valid: true }),
+      ).toBe(false);
+    });
   });
 
   describe("네이버 프로필 매핑", () => {
@@ -105,6 +131,15 @@ describe("auth 인스턴스", () => {
     it("이메일이 없으면 합성 이메일로 폴백한다", () => {
       const user = buildNaverUser({ response: { id: "naver-xyz" } });
       expect(user.email).toBe(`naver_naver-xyz@${SYNTHETIC_EMAIL_DOMAIN}`);
+      expect(user.emailVerified).toBe(false);
+    });
+
+    it("네이버가 준 이메일은 인증 여부를 알 수 없어 인증된 이메일로 보지 않는다", () => {
+      const user = buildNaverUser({
+        response: { id: "naver-abc", email: "v@example.com" },
+      });
+
+      expect(user.email).toBe("v@example.com");
       expect(user.emailVerified).toBe(false);
     });
   });

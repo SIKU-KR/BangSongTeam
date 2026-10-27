@@ -4,7 +4,12 @@ import { FALLBACK_USER_NAME } from "#shared";
 import { env } from "../test/env";
 import { clearDb } from "../../db/test/fixtures";
 import app from "../index";
-import { ACCOUNT_LINKING, getAuth } from "../lib/auth";
+import {
+  ACCOUNT_LINKING,
+  buildKakaoUser,
+  buildNaverUser,
+  getAuth,
+} from "../lib/auth";
 
 const ORIGIN = env.BETTER_AUTH_URL ?? "";
 
@@ -47,19 +52,43 @@ function sessionCookie(res: Response): string {
   return cookie?.split(";")[0] ?? "";
 }
 
-async function googleSignIn(email: string): Promise<string | undefined> {
+async function socialSignIn(
+  providerId: string,
+  accountId: string,
+  userInfo: { email: string; name: string; emailVerified: boolean },
+): Promise<string | undefined> {
   const context = await getAuth(env).$context;
   const result = await handleOAuthUserInfo({ context } as never, {
-    userInfo: {
-      id: "google-sub-1",
-      email,
-      name: "구글 사용자",
-      emailVerified: true,
-    },
-    account: { providerId: "google", accountId: "google-sub-1" },
+    userInfo: { id: accountId, ...userInfo },
+    account: { providerId, accountId },
     callbackURL: "/",
   });
   return result.error ?? undefined;
+}
+
+async function googleSignIn(email: string): Promise<string | undefined> {
+  return await socialSignIn("google", "google-sub-1", {
+    email,
+    name: "구글 사용자",
+    emailVerified: true,
+  });
+}
+
+async function createVerifiedUser(email: string): Promise<string> {
+  const context = await getAuth(env).$context;
+  const user = await context.internalAdapter.createUser(
+    { email, name: "기존 사용자", emailVerified: true },
+    { method: "oauth", oauth: { providerId: "google" } },
+  );
+  return user.id;
+}
+
+async function linkedProviders(email: string): Promise<string[]> {
+  const context = await getAuth(env).$context;
+  const user = await context.internalAdapter.findUserByEmail(email, {
+    includeAccounts: true,
+  });
+  return user?.accounts.map((account) => account.providerId) ?? [];
 }
 
 describe("이메일·비밀번호 인증", () => {
@@ -276,5 +305,49 @@ describe("소셜 로그인 계정 연결", () => {
     });
 
     expect(await googleSignIn("verified@example.com")).toBeUndefined();
+  });
+
+  it("다른 카카오계정으로 넘어간 이메일로는 같은 이메일의 기존 계정에 묶지 않는다", async () => {
+    await createVerifiedUser("moved@example.com");
+    const profile = {
+      id: 777,
+      kakao_account: {
+        email: "moved@example.com",
+        is_email_verified: true,
+        is_email_valid: false,
+      },
+    };
+
+    expect(await socialSignIn("kakao", "777", buildKakaoUser(profile))).toBe(
+      "account not linked",
+    );
+    expect(await linkedProviders("moved@example.com")).toEqual([]);
+  });
+
+  it("카카오가 인증했고 지금도 유효하다고 한 이메일은 기존 계정에 묶는다", async () => {
+    await createVerifiedUser("valid@example.com");
+    const profile = {
+      id: 778,
+      kakao_account: {
+        email: "valid@example.com",
+        is_email_verified: true,
+        is_email_valid: true,
+      },
+    };
+
+    expect(
+      await socialSignIn("kakao", "778", buildKakaoUser(profile)),
+    ).toBeUndefined();
+    expect(await linkedProviders("valid@example.com")).toEqual(["kakao"]);
+  });
+
+  it("네이버 이메일로는 같은 이메일의 기존 계정에 묶지 않는다", async () => {
+    await createVerifiedUser("naver@example.com");
+    const profile = { response: { id: "n-1", email: "naver@example.com" } };
+
+    expect(await socialSignIn("naver", "n-1", buildNaverUser(profile))).toBe(
+      "account not linked",
+    );
+    expect(await linkedProviders("naver@example.com")).toEqual([]);
   });
 });

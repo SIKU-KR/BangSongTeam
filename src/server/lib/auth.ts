@@ -45,6 +45,8 @@ export interface KakaoProfileLike {
   kakao_account?: {
     email?: string | null;
     is_email_verified?: boolean;
+    /** 다른 카카오계정이 이 이메일을 가져가면 `false`가 된다 */
+    is_email_valid?: boolean;
     profile?: {
       nickname?: string;
       profile_image_url?: string;
@@ -111,6 +113,14 @@ function syntheticEmail(provider: string, id: string | number): string {
   return `${provider}_${id}@${SYNTHETIC_EMAIL_DOMAIN}`;
 }
 
+/**
+ * 카카오 프로필을 로컬 사용자로 옮긴다. 인증했고(`is_email_verified`) 지금도 이 계정의 것인
+ * (`is_email_valid`) 이메일만 인증된 이메일로 본다. Better Auth 기본 매핑과 같은 규칙이다.
+ *
+ * 인증된 이메일은 같은 이메일의 기존 계정에 소셜 계정을 묶는 근거다(`ACCOUNT_LINKING`). 예전에
+ * 인증했다가 다른 카카오계정으로 넘어간 주소를 믿으면, 그 주소의 옛 주인이 지금 주인의 계정에
+ * 들어간다.
+ */
 export function buildKakaoUser(profile: KakaoProfileLike): MappedSocialUser {
   const account = profile.kakao_account;
   const kakaoProfile = account?.profile;
@@ -125,10 +135,17 @@ export function buildKakaoUser(profile: KakaoProfileLike): MappedSocialUser {
     name: nickname || FALLBACK_USER_NAME.kakao,
     email: email || syntheticEmail("kakao", profile.id),
     image,
-    emailVerified: Boolean(email) && account?.is_email_verified === true,
+    emailVerified:
+      Boolean(email) &&
+      account?.is_email_verified === true &&
+      account.is_email_valid === true,
   };
 }
 
+/**
+ * 네이버 프로필을 로컬 사용자로 옮긴다. 네이버 프로필 API는 이메일 인증 여부를 알려 주지 않아
+ * Better Auth 기본 매핑처럼 언제나 인증되지 않은 이메일로 본다.
+ */
 export function buildNaverUser(profile: NaverProfileLike): MappedSocialUser {
   const response = profile.response;
   const displayName = response?.nickname ?? response?.name ?? "";
@@ -139,7 +156,7 @@ export function buildNaverUser(profile: NaverProfileLike): MappedSocialUser {
     name: displayName || FALLBACK_USER_NAME.naver,
     email: email || syntheticEmail("naver", id),
     image: response?.profile_image,
-    emailVerified: Boolean(email),
+    emailVerified: false,
   };
 }
 
@@ -156,6 +173,10 @@ export function buildNaverUser(profile: NaverProfileLike): MappedSocialUser {
  * 거치지 않아 기존 소셜 사용자에게 영향이 없고, 인증된 이메일끼리의 소셜 간 연결도 유지된다.
  * 대가로 선점된 주소의 실제 주인은 소셜 로그인으로 들어오지 못한다. 비밀번호 재설정이
  * 없는 지금은 이쪽이 안전하다.
+ *
+ * 네이버 이메일은 인증 여부를 알 수 없어 인증되지 않은 것으로 본다(`buildNaverUser`). 그래서
+ * 네이버 로그인은 같은 이메일의 기존 계정에 묶이지 않고, 네이버로 처음 만든 계정에도 다른
+ * 소셜 로그인이 묶이지 않는다.
  */
 export const ACCOUNT_LINKING = {
   enabled: true,
