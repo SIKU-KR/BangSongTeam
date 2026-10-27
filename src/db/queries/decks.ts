@@ -111,6 +111,10 @@ export function libraryDeckDefaults(
   };
 }
 
+function inheritsSourceTakedown(fork: DeckDoc): boolean {
+  return fork.presentationId === null && !fork.listed && !fork.takedownAt;
+}
+
 export type UpsertDeckResult =
   | { status: "saved"; deck: SharedDeck }
   | { status: "forbidden" }
@@ -172,6 +176,11 @@ export async function upsertDeck(
  * 외래키가 하던 정리를 같은 트랜잭션에서 한다. 이 곡을 가리키던 곡(가져간 곡·담은 사본)의
  * `forkedFrom`과 신고의 `deckId`는 비우고, 이 곡이 가져온 원본의 가져간 횟수는 줄인다.
  *
+ * 게시 중단한 곡을 지우면, 이 곡에서 가져가 아직 공개하지 않은 보관함 곡은 게시 중단 시각을 이어받는다.
+ * 그 곡들은 원본이 게시 중단돼 공개하지 못하는데(`setDeckVisibility`), `forkedFrom`만 비우면 원본을
+ * 지우는 것만으로 다시 공개할 수 있게 풀린다. 이미 공개 중인 곡은 운영자가 따로 정하므로 건드리지
+ * 않는다.
+ *
  * 멱등이다. 서버에 없는 id도 기록하고 `true`다. 그래서 클라이언트가 시간 초과로 포기한 저장이
  * 삭제보다 늦게 커밋되거나, 다른 탭이 아직 올리지 않은 곡을 올려도 되살아나지 않는다. 기록은
  * 없을 때만 써서 늘어나는 쓰기는 한 건뿐이고, 남의 기록은 덮지 않는다. 남의 곡·프레젠테이션
@@ -217,7 +226,19 @@ export async function deleteDeckScoped(
       tx.update(source.ref, { forkCount: FieldValue.increment(-1) });
     }
     for (const dependent of dependents.docs) {
-      tx.update(dependent.ref, { forkedFrom: null });
+      const fork = dependent.data();
+      if (deck.takedownAt && inheritsSourceTakedown(fork)) {
+        tx.set(
+          dependent.ref,
+          withDeckIndex({
+            ...fork,
+            forkedFrom: null,
+            takedownAt: deck.takedownAt,
+          }),
+        );
+      } else {
+        tx.update(dependent.ref, { forkedFrom: null });
+      }
     }
     for (const report of reports.docs) {
       tx.update(report.ref, { deckId: null });

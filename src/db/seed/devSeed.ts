@@ -144,6 +144,7 @@ async function resetSeedUsers(db: Db): Promise<void> {
     COLLECTIONS.driveTombstones,
     COLLECTIONS.sessions,
     COLLECTIONS.accounts,
+    COLLECTIONS.userQuotas,
   ];
   const snapshots = await Promise.all(
     chunkIds(SEED_USER_IDS).flatMap((ids) => [
@@ -206,6 +207,7 @@ async function insertUsers(db: Db, now: Date): Promise<void> {
         ...user,
         emailVerified: true,
         image: null,
+        bannedAt: null,
         createdAt: now,
         updatedAt: now,
       }),

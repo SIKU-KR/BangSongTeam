@@ -6,7 +6,15 @@ import {
   OFFICIAL_LIBRARY_NAME,
   SIGN_UP_IN_PROGRESS,
 } from "#shared";
-import { COLLECTIONS, runBulk, type Db } from "#db";
+import {
+  COLLECTIONS,
+  DAILY_SIGN_UPS_PER_IP,
+  quotaDay,
+  runBulk,
+  signUpQuotaDocId,
+  signUpQuotasCol,
+  type Db,
+} from "#db";
 import { env } from "../test/env";
 import { clearDb } from "../../db/test/fixtures";
 import app from "../index";
@@ -16,6 +24,7 @@ import {
   buildNaverUser,
   getAuth,
 } from "../lib/auth";
+import { signUpQuotaKey } from "../lib/signUpLimit";
 
 const ORIGIN = env.BETTER_AUTH_URL ?? "";
 const LONE_SURROGATE = String.fromCharCode(0xd800);
@@ -773,5 +782,117 @@ describe("소셜 로그인 계정 연결", () => {
       "account not linked",
     );
     expect(await linkedProviders("naver@example.com")).toEqual([]);
+  });
+});
+
+describe("계정 제한 필드", () => {
+  beforeEach(async () => {
+    await clearDb(env.DB);
+  });
+
+  async function storedUser(email: string): Promise<Record<string, unknown>> {
+    const snapshot = await env.DB.collection(COLLECTIONS.users)
+      .where("email", "==", email)
+      .get();
+    return snapshot.docs[0]?.data() ?? {};
+  }
+
+  it("가입한 사용자에게 제한 없음(null)을 저장하고, 가입 본문으로 정하거나 응답에 싣지 않는다", async () => {
+    const res = await post(
+      "/api/auth/sign-up/email",
+      {
+        email: "ban-field@example.com",
+        password: "password-1234",
+        name: "찬양팀",
+        bannedAt: "2026-01-01T00:00:00.000Z",
+      },
+      "10.0.6.1",
+    );
+
+    expect(res.status).toBe(200);
+    expect(await storedUser("ban-field@example.com")).toHaveProperty(
+      "bannedAt",
+      null,
+    );
+    expect(JSON.stringify(await res.json())).not.toContain("bannedAt");
+  });
+
+  it("제한된 사용자는 /update-user로 제한을 풀지 못한다", async () => {
+    const created = await signUp("banned@example.com", "10.0.6.2");
+    const id = String((await storedUser("banned@example.com")).id);
+    await env.DB.collection(COLLECTIONS.users)
+      .doc(id)
+      .update({ bannedAt: new Date() });
+
+    await app.request(
+      "/api/auth/update-user",
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          origin: ORIGIN,
+          "x-forwarded-for": "10.0.6.2",
+          cookie: sessionCookie(created),
+        },
+        body: JSON.stringify({ name: "x", bannedAt: null }),
+      },
+      env,
+    );
+
+    expect((await storedUser("banned@example.com")).bannedAt).not.toBeNull();
+  });
+});
+
+describe("이메일 가입 하루 한도", () => {
+  beforeEach(async () => {
+    await clearDb(env.DB);
+  });
+
+  const quotaRef = (ip: string) =>
+    signUpQuotasCol(env.DB).doc(
+      signUpQuotaDocId(
+        signUpQuotaKey(ip, env.BETTER_AUTH_SECRET),
+        quotaDay(new Date()),
+      ),
+    );
+
+  async function usersWithEmail(email: string): Promise<number> {
+    return (
+      await env.DB.collection(COLLECTIONS.users)
+        .where("email", "==", email)
+        .get()
+    ).size;
+  }
+
+  it("한 IP에서 하루 한도만큼 가입하면 그날은 그 IP의 가입을 받지 않는다", async () => {
+    await quotaRef("10.0.7.1").set({
+      day: quotaDay(new Date()),
+      signUps: DAILY_SIGN_UPS_PER_IP,
+      expiresAt: new Date(),
+    });
+
+    const blocked = await signUp("cap@example.com", "10.0.7.1");
+
+    expect(blocked.status).toBe(429);
+    expect(sessionCookie(blocked)).toBe("");
+    expect(await usersWithEmail("cap@example.com")).toBe(0);
+    expect((await signUp("cap@example.com", "10.0.7.2")).status).toBe(200);
+  });
+
+  it("사용자를 만든 가입만 센다", async () => {
+    expect((await signUp("count@example.com", "10.0.7.3")).status).toBe(200);
+    expect(
+      (await signUp("count@example.com", "10.0.7.3")).status,
+    ).toBeGreaterThanOrEqual(400);
+
+    expect((await quotaRef("10.0.7.3").get()).data()?.signUps).toBe(1);
+  });
+
+  it("IP 대신 비밀값으로 만든 해시를 문서 id로 쓴다", async () => {
+    await signUp("hash-key@example.com", "10.0.7.4");
+
+    const ids = (await signUpQuotasCol(env.DB).get()).docs.map((doc) => doc.id);
+    expect(ids).toHaveLength(1);
+    expect(ids[0]).not.toContain("10.0.7.4");
   });
 });

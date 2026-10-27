@@ -55,6 +55,8 @@ function storageFailure(c: Context<AppEnv>, error: unknown) {
  * 410이다. 옛 리비전이 기록 옆에 다시 만든 문서는 주인이 목록을 받을 때 지운다. 지우기는
  * 멱등이라 서버에 없던 id도 기록하고 200이며, 남의 곡·프레젠테이션 사본, 서버에 곡이 없는데 남이
  * 기록한 id만 404다.
+ *
+ * 운영자가 제한한 계정의 공개·새로 가져오기는 403, 그날 한도를 넘은 공개·가져오기는 429다.
  */
 export function createDecksRoute(deps: AppDeps = {}) {
   const savedId = idParam(API_ERRORS.idMismatch, 400);
@@ -168,6 +170,10 @@ export function createDecksRoute(deps: AppDeps = {}) {
             );
           case "deleted":
             return c.json({ error: API_ERRORS.deck.deleted }, 410);
+          case "banned":
+            return c.json({ error: API_ERRORS.accountRestricted }, 403);
+          case "rate_limited":
+            return c.json({ error: API_ERRORS.deck.dailyPublishLimit }, 429);
         }
       },
     )
@@ -178,13 +184,19 @@ export function createDecksRoute(deps: AppDeps = {}) {
         c.get("userId") as string,
         c.req.param("id"),
       );
-      if (result.status === "not_found") {
-        return c.json({ error: API_ERRORS.deck.notPublished }, 404);
+      switch (result.status) {
+        case "not_found":
+          return c.json({ error: API_ERRORS.deck.notPublished }, 404);
+        case "banned":
+          return c.json({ error: API_ERRORS.accountRestricted }, 403);
+        case "rate_limited":
+          return c.json({ error: API_ERRORS.deck.dailyForkLimit }, 429);
+        case "ok":
+          return c.json(
+            { deck: result.deck, alreadyOwned: result.alreadyOwned },
+            200,
+          );
       }
-      return c.json(
-        { deck: result.deck, alreadyOwned: result.alreadyOwned },
-        200,
-      );
     })
     .delete("/:id", deckId, async (c) => {
       const db = c.env.DB;

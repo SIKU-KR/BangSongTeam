@@ -176,6 +176,24 @@ describe("Firestore 설정", () => {
     ]);
   });
 
+  it.each(["userQuotas", "signUpQuotas"])(
+    "지난 날의 하루 한도 문서(%s)는 TTL 정책이 지우고 만료 시각은 색인하지 않는다",
+    (collectionGroup) => {
+      const expiresAt = indexes.fieldOverrides.find(
+        (field) =>
+          field.collectionGroup === collectionGroup &&
+          field.fieldPath === "expiresAt",
+      );
+
+      expect(expiresAt).toEqual({
+        collectionGroup,
+        fieldPath: "expiresAt",
+        ttl: true,
+        indexes: [],
+      });
+    },
+  );
+
   it("공유 라이브러리 정렬·검색 쿼리에 맞는 복합 색인이 있다", () => {
     const fieldsOf = (paths: string[]) =>
       indexes.indexes.find(

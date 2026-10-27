@@ -10,6 +10,8 @@ import type { Db } from "../client";
 import {
   COLLECTIONS,
   decksCol,
+  userQuotaDocId,
+  userQuotasCol,
   type DeckDoc,
   type UserDoc,
 } from "../collections";
@@ -19,9 +21,11 @@ import {
   instrumentTransactions,
   presentationDoc,
   seedDocs,
+  seedUserQuota,
   userDoc,
 } from "../test/fixtures";
 import { deleteDeckScoped } from "./decks";
+import { DAILY_USER_LIMITS, quotaDay } from "./limits";
 import { searchPublicDecks } from "./search";
 import {
   forkPublicDeck,
@@ -33,6 +37,8 @@ import {
 const A = "00000000000000000000a";
 const B = "00000000000000000000b";
 const DECK = "c00000000000000000001";
+const DAY = new Date("2026-10-27T05:00:00.000Z");
+const NEXT_DAY = new Date("2026-10-28T05:00:00.000Z");
 
 const SLIDES = JSON.stringify([
   { id: "s2", order: 1, lines: ["둘째 슬라이드"] },
@@ -68,6 +74,24 @@ describe("공유 쿼리 헬퍼", () => {
     const r = (await decksCol(db).doc(id).get()).data();
     if (!r) throw new Error(`no deck ${id}`);
     return r;
+  }
+
+  async function counted(
+    userId: string,
+    action: keyof typeof DAILY_USER_LIMITS,
+  ): Promise<number> {
+    const quota = (
+      await userQuotasCol(db)
+        .doc(userQuotaDocId(userId, quotaDay(DAY)))
+        .get()
+    ).data();
+    return quota?.[action] ?? 0;
+  }
+
+  async function ban(userId: string, name: string): Promise<void> {
+    await seedDocs(db, {
+      users: [userDoc({ id: userId, name, bannedAt: new Date() })],
+    });
   }
 
   describe("toPublicDeckSummary", () => {
@@ -284,6 +308,76 @@ describe("공유 쿼리 헬퍼", () => {
       });
       expect(await getPublicDeckDetail(db, DECK)).toBeNull();
     });
+
+    it("운영자가 제한한 계정은 공개하지 못하지만 비공개로는 돌릴 수 있다", async () => {
+      await seedDocs(db, {
+        decks: [row({ id: "pub", visibility: "public" })],
+      });
+      await ban(A, "김찬양");
+
+      expect((await setDeckVisibility(db, A, DECK, "public")).status).toBe(
+        "banned",
+      );
+      expect(await readRow(DECK)).toMatchObject({
+        visibility: "private",
+        listed: false,
+      });
+      expect((await setDeckVisibility(db, A, "pub", "private")).status).toBe(
+        "ok",
+      );
+    });
+
+    it("제한 필드가 생기기 전의 사용자 문서는 제한되지 않은 것으로 읽는다", async () => {
+      const { bannedAt, ...legacy } = userDoc({ id: A, name: "김찬양" });
+      void bannedAt;
+      await db.collection(COLLECTIONS.users).doc(A).set(legacy);
+
+      expect((await setDeckVisibility(db, A, DECK, "public")).status).toBe(
+        "ok",
+      );
+    });
+
+    it("하루 공개 한도만큼만 비공개 곡을 공개하고, 다음 날 다시 공개할 수 있다", async () => {
+      const ids = Array.from(
+        { length: DAILY_USER_LIMITS.publish + 1 },
+        (_, n) => `c0000000000000000${String(n).padStart(4, "0")}`,
+      );
+      await seedDocs(db, { decks: ids.map((id) => row({ id })) });
+
+      const statuses: string[] = [];
+      for (const id of ids) {
+        statuses.push(
+          (await setDeckVisibility(db, A, id, "public", DAY)).status,
+        );
+      }
+
+      expect(statuses.slice(0, -1).every((status) => status === "ok")).toBe(
+        true,
+      );
+      expect(statuses.at(-1)).toBe("rate_limited");
+      const [first] = ids;
+      const last = ids.at(-1) as string;
+      expect((await readRow(last)).listed).toBe(false);
+      expect(
+        (await setDeckVisibility(db, A, first, "public", DAY)).status,
+      ).toBe("ok");
+      expect(
+        (await setDeckVisibility(db, A, first, "private", DAY)).status,
+      ).toBe("ok");
+      expect(await counted(A, "publish")).toBe(DAILY_USER_LIMITS.publish);
+      expect(
+        (await setDeckVisibility(db, A, last, "public", NEXT_DAY)).status,
+      ).toBe("ok");
+    });
+
+    it("공개하지 못한 곡은 공개 한도를 쓰지 않는다", async () => {
+      await seedDocs(db, { decks: [row({ id: "empty", slides: "[]" })] });
+
+      expect(
+        (await setDeckVisibility(db, A, "empty", "public", DAY)).status,
+      ).toBe("empty");
+      expect(await counted(A, "publish")).toBe(0);
+    });
   });
 
   describe("getPublicDeckDetail", () => {
@@ -373,6 +467,45 @@ describe("공유 쿼리 헬퍼", () => {
         forkedFrom: null,
         forkedFromAuthorName: "김찬양",
       });
+    });
+
+    it("운영자가 제한한 계정은 새로 가져오지 못하지만 이미 가져온 곡은 돌려받는다", async () => {
+      const first = await forkPublicDeck(db, B, DECK);
+      if (first.status !== "ok") throw new Error(first.status);
+      await seedDocs(db, {
+        decks: [row({ id: "other", visibility: "public" })],
+      });
+      await ban(B, "이예배");
+
+      expect(await forkPublicDeck(db, B, DECK)).toMatchObject({
+        status: "ok",
+        alreadyOwned: true,
+        deck: { id: first.deck.id },
+      });
+      expect((await forkPublicDeck(db, B, "other")).status).toBe("banned");
+      expect((await readRow("other")).forkCount).toBe(0);
+      expect(
+        (await decksCol(db).where("userId", "==", B).get()).docs,
+      ).toHaveLength(1);
+    });
+
+    it("새로 가져올 때만 하루 한도를 쓰고, 다 쓰면 다음 날까지 새로 가져오지 못한다", async () => {
+      await seedDocs(db, {
+        decks: [row({ id: "other", visibility: "public" })],
+      });
+      await forkPublicDeck(db, B, DECK, DAY);
+      await forkPublicDeck(db, B, DECK, DAY);
+      expect(await counted(B, "fork")).toBe(1);
+
+      await seedUserQuota(db, B, DAY, { fork: DAILY_USER_LIMITS.fork });
+      expect((await forkPublicDeck(db, B, "other", DAY)).status).toBe(
+        "rate_limited",
+      );
+      expect((await readRow("other")).forkCount).toBe(0);
+      expect((await forkPublicDeck(db, B, DECK, DAY)).status).toBe("ok");
+      expect((await forkPublicDeck(db, B, "other", NEXT_DAY)).status).toBe(
+        "ok",
+      );
     });
 
     it("counts current forks: deleting a fork lowers the count", async () => {

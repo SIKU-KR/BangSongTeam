@@ -6,5 +6,6 @@ export * from "./backgrounds";
 export * from "./search";
 export * from "./sharing";
 export * from "./reports";
+export * from "./limits";
 export * from "./presentationSharing";
 export * from "./consent";

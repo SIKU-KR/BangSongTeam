@@ -9,6 +9,8 @@ export const API_ERRORS = {
   loginRequired: "로그인이 필요해요",
   consentRequired:
     "이용 동의를 마쳐야 쓸 수 있어요. 동의한 뒤 다시 시도해 주세요",
+  accountRestricted:
+    "운영자가 이 계정의 공유 라이브러리 이용을 제한했어요. 궁금한 점은 운영자에게 이메일로 문의해 주세요",
   userNotFound: "사용자를 찾을 수 없어요",
   idMismatch: "요청이 올바르지 않아요. 새로고침한 뒤 다시 시도해 주세요",
   tooManyRequests: "요청이 너무 많아요. 잠시 후 다시 시도해 주세요",
@@ -34,6 +36,10 @@ export const API_ERRORS = {
     notPublished: "공개된 곡을 찾을 수 없어요",
     tooLarge: "가사가 너무 길어요. 가사를 나눠 여러 곡으로 만들어 주세요",
     deleted: "이미 지운 곡이에요. 새로고침하면 보관함에서 사라져요",
+    dailyPublishLimit:
+      "오늘은 곡을 더 공개할 수 없어요. 내일 다시 공개해 주세요",
+    dailyForkLimit:
+      "오늘은 공유 라이브러리에서 곡을 더 가져올 수 없어요. 내일 다시 가져와 주세요",
   },
   folder: {
     notAccessible: "이 폴더를 열 수 없어요",
@@ -52,6 +58,7 @@ export const API_ERRORS = {
   report: {
     targetNotFound: "신고할 곡을 찾을 수 없어요",
     alreadyPending: "이미 보낸 신고를 확인하고 있어요",
+    dailyLimit: "오늘은 신고를 더 보낼 수 없어요. 내일 다시 보내 주세요",
   },
   media: {
     keyRequired: "배경 파일을 지정해 주세요",
