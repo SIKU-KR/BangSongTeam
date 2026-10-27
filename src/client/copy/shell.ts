@@ -20,6 +20,7 @@ export const SHELL_COPY = {
     capabilities: {
       fullscreen: "전체화면 송출",
       h264: "배경 영상(H.264) 재생",
+      wakeLock: "화면 꺼짐 방지",
       offline: "오프라인 송출",
     },
   },

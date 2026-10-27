@@ -48,8 +48,10 @@ import {
   flushPendingSync,
   setSyncEnabled,
 } from "../lib/sync/syncScheduler";
+import * as capabilities from "../lib/browser/capabilities";
 import { EDITOR_COPY } from "#copy/editor";
 import { COMMON_COPY } from "#copy/common";
+import { PRESENTATION_COPY } from "#copy/presentation";
 import {
   SEED_PRESENTATIONS,
   SEED_PRESENTATION_IDS,
@@ -132,6 +134,7 @@ describe("EditorRoute (PowerPoint식 프레젠테이션 편집기)", () => {
     __loadDocumentsForTests(SEED_PRESENTATIONS);
     mockNavigate.mockClear();
     vi.restoreAllMocks();
+    vi.spyOn(capabilities, "canPresentReliably").mockReturnValue(true);
   });
 
   it("헤더·리본·썸네일 창·캔버스·상태 표시줄을 그리고 오른쪽 패널은 없다", () => {
@@ -202,6 +205,27 @@ describe("EditorRoute (PowerPoint식 프레젠테이션 편집기)", () => {
         expect.objectContaining({ id: DOC_ID, title: "송출 직전에 고친 제목" }),
       );
     });
+  });
+
+  it("전체화면·배경 영상·화면 꺼짐 방지가 모자란 브라우저에서는 드라이브처럼 발표 전에 확인을 받는다", () => {
+    vi.spyOn(capabilities, "canPresentReliably").mockReturnValue(false);
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(false);
+    renderEditor();
+
+    const presentBtn = screen.getByTestId("header-present-btn");
+    fireEvent.click(presentBtn);
+    expect(confirmSpy).toHaveBeenCalledWith(
+      PRESENTATION_COPY.presentUnreliable,
+    );
+    expect(mockNavigate).not.toHaveBeenCalled();
+
+    expect(fireEvent.keyDown(window, { key: "F5" })).toBe(false);
+    expect(confirmSpy).toHaveBeenCalledTimes(2);
+    expect(mockNavigate).not.toHaveBeenCalled();
+
+    confirmSpy.mockReturnValue(true);
+    fireEvent.click(presentBtn);
+    expect(mockNavigate).toHaveBeenCalledWith(`/present/${DOC_ID}/fullscreen`);
   });
 
   it("should switch active slide when clicking a slide thumbnail", () => {

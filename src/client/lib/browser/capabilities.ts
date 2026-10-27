@@ -2,7 +2,7 @@ import { resolveFullscreenStrategy } from "./fullscreen";
 import { SHELL_COPY } from "#copy/shell";
 import { navigatorApi } from "./optionalApis";
 
-type BrowserCapabilityId = "fullscreen" | "h264" | "offline";
+type BrowserCapabilityId = "fullscreen" | "h264" | "wakeLock" | "offline";
 
 interface BrowserCapability {
   id: BrowserCapabilityId;
@@ -17,18 +17,30 @@ const H264_MP4 = 'video/mp4; codecs="avc1.42E01E"';
  * 송출과 오프라인 예배에 필요한 기능 목록.
  * 브라우저 이름이 아니라 기능이 있는지로 판별한다. Edge·Whale·Safari·Firefox도
  * 이 기능이 모두 있으면 Chrome과 똑같이 대한다.
+ *
+ * 전체화면은 API가 있어도 막혀 있으면(`fullscreenEnabled === false`) 없는 것으로 본다.
+ * 전체화면 요청을 구현하지 않은 앱 안 브라우저(Android WebView)가 이렇게 알린다. 화면 꺼짐
+ * 방지(Screen Wake Lock)가 없으면 블랙아웃·이미지 배경 중에 화면이 잠들어 프로젝터에 신호
+ * 없음이 뜬다.
  */
 export const BROWSER_CAPABILITIES: readonly BrowserCapability[] = [
   {
     id: "fullscreen",
     label: SHELL_COPY.browserSupport.capabilities.fullscreen,
-    isSupported: () => resolveFullscreenStrategy().kind !== "unsupported",
+    isSupported: () =>
+      resolveFullscreenStrategy().kind !== "unsupported" &&
+      document.fullscreenEnabled !== false,
   },
   {
     id: "h264",
     label: SHELL_COPY.browserSupport.capabilities.h264,
     isSupported: () =>
       document.createElement("video").canPlayType(H264_MP4) !== "",
+  },
+  {
+    id: "wakeLock",
+    label: SHELL_COPY.browserSupport.capabilities.wakeLock,
+    isSupported: () => "wakeLock" in navigator,
   },
   {
     id: "offline",
@@ -72,6 +84,7 @@ export function canStoreMediaOffline(): boolean {
 const PRESENTATION_CAPABILITIES: readonly BrowserCapabilityId[] = [
   "fullscreen",
   "h264",
+  "wakeLock",
 ];
 
 /** 이 브라우저에 없는 기능. 브라우저 밖(테스트 전 단계 등)에서는 빈 배열이다 */
@@ -88,7 +101,7 @@ export function getMissingCapabilities(): BrowserCapability[] {
   });
 }
 
-/** 전체화면 송출과 배경 영상 재생이 모두 되면 true. 아니면 송출 전에 한 번 더 확인한다 */
+/** 전체화면 송출·배경 영상 재생·화면 꺼짐 방지가 모두 되면 true. 아니면 송출 전에 한 번 더 확인한다 */
 export function canPresentReliably(): boolean {
   return !getMissingCapabilities().some((capability) =>
     PRESENTATION_CAPABILITIES.includes(capability.id),

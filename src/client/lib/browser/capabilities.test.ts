@@ -17,6 +17,13 @@ function stubFullscreen(isAvailable: boolean): void {
   });
 }
 
+function stubFullscreenEnabled(isEnabled: boolean): void {
+  Object.defineProperty(document, "fullscreenEnabled", {
+    value: isEnabled,
+    configurable: true,
+  });
+}
+
 function stubServiceWorker(isAvailable: boolean): void {
   if (isAvailable) {
     Object.defineProperty(navigator, "serviceWorker", {
@@ -28,17 +35,31 @@ function stubServiceWorker(isAvailable: boolean): void {
   }
 }
 
+function stubWakeLock(isAvailable: boolean): void {
+  if (isAvailable) {
+    Object.defineProperty(navigator, "wakeLock", {
+      value: { request: vi.fn() },
+      configurable: true,
+    });
+  } else {
+    Reflect.deleteProperty(navigator, "wakeLock");
+  }
+}
+
 describe("browser capabilities", () => {
   afterEach(() => {
     vi.restoreAllMocks();
     stubFullscreen(false);
+    Reflect.deleteProperty(document, "fullscreenEnabled");
     stubServiceWorker(false);
+    stubWakeLock(false);
   });
 
-  it("전체화면·H.264·오프라인이 모두 되면 빠진 기능이 없다", () => {
+  it("전체화면·H.264·화면 꺼짐 방지·오프라인이 모두 되면 빠진 기능이 없다", () => {
     stubFullscreen(true);
     stubCanPlayType("probably");
     stubServiceWorker(true);
+    stubWakeLock(true);
 
     expect(getMissingCapabilities()).toEqual([]);
     expect(canPresentReliably()).toBe(true);
@@ -48,8 +69,33 @@ describe("browser capabilities", () => {
     stubFullscreen(true);
     stubCanPlayType("");
     stubServiceWorker(true);
+    stubWakeLock(true);
 
     expect(getMissingCapabilities().map(({ id }) => id)).toEqual(["h264"]);
+    expect(canPresentReliably()).toBe(false);
+  });
+
+  it("전체화면 API가 있어도 막혀 있으면(fullscreenEnabled가 false) 전체화면을 쓸 수 없는 것으로 본다", () => {
+    stubFullscreen(true);
+    stubFullscreenEnabled(false);
+    stubCanPlayType("probably");
+    stubServiceWorker(true);
+    stubWakeLock(true);
+
+    expect(getMissingCapabilities().map(({ id }) => id)).toEqual([
+      "fullscreen",
+    ]);
+    expect(canPresentReliably()).toBe(false);
+  });
+
+  it("화면 꺼짐 방지(Screen Wake Lock)가 없으면 송출 전에 확인이 필요하다", () => {
+    stubFullscreen(true);
+    stubFullscreenEnabled(true);
+    stubCanPlayType("probably");
+    stubServiceWorker(true);
+    stubWakeLock(false);
+
+    expect(getMissingCapabilities().map(({ id }) => id)).toEqual(["wakeLock"]);
     expect(canPresentReliably()).toBe(false);
   });
 
@@ -57,6 +103,7 @@ describe("browser capabilities", () => {
     stubFullscreen(true);
     stubCanPlayType("maybe");
     stubServiceWorker(false);
+    stubWakeLock(true);
 
     expect(getMissingCapabilities().map(({ id }) => id)).toEqual(["offline"]);
     expect(canPresentReliably()).toBe(true);

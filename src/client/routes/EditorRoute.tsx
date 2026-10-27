@@ -24,7 +24,7 @@ import {
   canRedo,
   createNewPresentation,
   editorPath,
-  launchPresentation,
+  startPresentation,
   canEditPresentation,
   clampPosition,
   nextPosition,
@@ -77,7 +77,6 @@ import { prefersReducedData } from "../lib/browser/optionalApis";
 import { PresentationShareDialog } from "../features/sharing/PresentationShareDialog";
 import {
   endSharedPresentationRefresh,
-  flushBeforeProjection,
   refreshSharedPresentation,
   subscribeSyncRecovery,
   useBootPullPending,
@@ -218,8 +217,7 @@ function EditorScreen({
   const handlePresent = () => {
     if (presentationId) {
       if (found) void warmPresentationFonts(found).catch(() => undefined);
-      flushBeforeProjection();
-      launchPresentation(
+      startPresentation(
         navigate,
         presentationId,
         guest?.returnPath ?? editorPath(presentationId),
