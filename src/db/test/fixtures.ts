@@ -3,6 +3,7 @@ import type { Transaction, WriteBatch } from "@google-cloud/firestore";
 import { createFirestore, type Db } from "../client";
 import {
   backgroundsCol,
+  COLLECTIONS,
   decksCol,
   foldersCol,
   presentationMembersCol,
@@ -58,6 +59,22 @@ export function userDoc(row: Pick<UserDoc, "id"> & Partial<UserDoc>): UserDoc {
     updatedAt: EPOCH,
     ...row,
   };
+}
+
+/**
+ * 사용자에게 연결된 로그인(Better Auth `accounts`) 하나. 소셜 계정이면 비밀번호는 `null`이고,
+ * 문서 id와 프로바이더 계정 id는 `<사용자 id>-<프로바이더>`다.
+ */
+export async function seedAccount(
+  db: Db,
+  userId: string,
+  providerId: string,
+): Promise<void> {
+  const id = `${userId}-${providerId}`;
+  await db
+    .collection(COLLECTIONS.accounts)
+    .doc(id)
+    .set({ id, accountId: id, providerId, userId, password: null });
 }
 
 /** `now`가 든 날(한국 시간)에 하루 한도를 `counts`만큼 이미 쓴 사용자 (`queries/limits.ts`) */
