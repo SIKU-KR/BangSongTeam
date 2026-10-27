@@ -1,23 +1,117 @@
-import { screen, act, fireEvent } from "@testing-library/react";
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { screen, act, fireEvent, waitFor } from "@testing-library/react";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { renderApp } from "./test/nextApp";
-import { resetPresentationStore } from "./features/presentation/presentationStore";
+import {
+  createNewPresentation,
+  resetPresentationStore,
+} from "./features/presentation/presentationStore";
 import { closeOfflineDB, OFFLINE_DB_NAME } from "./lib/storage/db";
-import { __setSessionForTests } from "./lib/auth/sessionStore";
-import { installFakeApi } from "./test/fakeApi";
+import {
+  __setSessionFetcherForTests,
+  __setSessionForTests,
+  type SessionFetcher,
+} from "./lib/auth/sessionStore";
+import { saveCachedSession, type SessionUser } from "./lib/auth/sessionCache";
+import { __resetBootSyncForTests } from "./lib/sync/bootSync";
+import { __resetDeckSyncForTests } from "./lib/sync/deckSync";
+import { __resetFolderSyncForTests } from "./lib/sync/folderSync";
+import {
+  __resetSyncSchedulerForTests,
+  flushPendingSync,
+} from "./lib/sync/syncScheduler";
+import { getSyncSnapshot, resetSyncStatus } from "./lib/sync/syncStatus";
+import { installFakeApi, type FakeApi, type FakeRoute } from "./test/fakeApi";
 import {
   signInAsTestUser,
   signOutForTests,
   seedPresentationsIntoStorage,
 } from "./test/sessionFixture";
-import { APP_NAME } from "#shared";
+import {
+  APP_NAME,
+  MEDIA_URL_PREFIX,
+  type FolderListResponse,
+  type Presentation,
+} from "#shared";
 import { SHELL_COPY } from "#copy/shell";
 import {
   SEED_PRESENTATION_IDS,
   SEED_PRESENTATIONS,
+  SEED_USER_ID,
 } from "./test/presentationFixture";
 
 const DOC_ID = SEED_PRESENTATION_IDS[0];
+const HOUR = 60 * 60 * 1000;
+
+const EMPTY_FOLDER_LIST: FolderListResponse = {
+  folders: [],
+  tombstones: { folderIds: [], presentationIds: [] },
+};
+
+const NEW_DOC: Presentation = {
+  id: "n00000000000000000001",
+  userId: SEED_USER_ID,
+  title: "다른 기기에서 만든 세트",
+  serviceDate: "2026-10-25",
+  items: [],
+  folderId: null,
+  trashedAt: null,
+  createdAt: "2026-10-25T00:00:00.000Z",
+  updatedAt: "2026-10-25T00:00:00.000Z",
+};
+
+function sessionUser(overrides: Partial<SessionUser> = {}): SessionUser {
+  return {
+    userId: SEED_USER_ID,
+    name: "테스트 봉사자",
+    image: null,
+    expiresAt: Date.now() + HOUR,
+    ...overrides,
+  };
+}
+
+function bootRoutes(
+  overrides: Record<string, FakeRoute> = {},
+): Record<string, FakeRoute> {
+  return {
+    "GET /api/folders": () => ({ body: EMPTY_FOLDER_LIST }),
+    "GET /api/presentations": () => ({
+      body: { presentations: SEED_PRESENTATIONS },
+    }),
+    "GET /api/decks": () => ({ body: { decks: [], deletedIds: [] } }),
+    "GET /api/backgrounds": () => ({ body: { backgrounds: [] } }),
+    "PATCH /api/presentations/*": () => ({ body: { ok: true } }),
+    "PUT /api/folders/*": ({ body }) => ({ body: { folder: body } }),
+    ...overrides,
+  };
+}
+
+function apiRequests(api: FakeApi): string[] {
+  return api.calls
+    .filter(
+      ({ path }) =>
+        path.startsWith("/api/") && !path.startsWith(MEDIA_URL_PREFIX),
+    )
+    .map(({ method, path }) => `${method} ${path}`);
+}
+
+function deferred<T>(): {
+  promise: Promise<T>;
+  resolve: (value: T) => void;
+} {
+  let resolve: (value: T) => void = () => undefined;
+  const promise = new Promise<T>((settle) => {
+    resolve = settle;
+  });
+  return { promise, resolve };
+}
+
+function resetSyncModules(): void {
+  __resetBootSyncForTests();
+  __resetFolderSyncForTests();
+  __resetDeckSyncForTests();
+  __resetSyncSchedulerForTests();
+  resetSyncStatus();
+}
 
 function renderAt(path: string) {
   return renderApp(path);
@@ -286,5 +380,100 @@ describe("App Route Integration", () => {
     expect(
       (await screen.findAllByTestId("presentation-row")).length,
     ).toBeGreaterThan(0);
+  });
+
+  describe("송출 주소로 부팅한 탭과 주소로 연 항목", () => {
+    let fetcher: ReturnType<typeof vi.fn<SessionFetcher>>;
+    let api: FakeApi | null = null;
+
+    beforeEach(() => {
+      resetSyncModules();
+      fetcher = vi.fn<SessionFetcher>(async () => sessionUser());
+      __setSessionFetcherForTests(fetcher);
+    });
+
+    afterEach(() => {
+      api?.restore();
+      api = null;
+      resetSyncModules();
+    });
+
+    it("송출 주소로 부팅해도 송출을 마치면 서버와 맞추고 이후 변경을 올린다", async () => {
+      await saveCachedSession(sessionUser());
+      api = installFakeApi(bootRoutes());
+
+      renderAt(`/present/${DOC_ID}/fullscreen`);
+      await screen.findByTestId("fullscreen-present-route");
+
+      expect(apiRequests(api)).toEqual([]);
+      expect(fetcher).not.toHaveBeenCalled();
+
+      fireEvent.click(screen.getByTestId("exit-present-btn"));
+      await waitFor(() => expect(getSyncSnapshot().status).toBe("synced"));
+
+      expect(fetcher).toHaveBeenCalledTimes(1);
+      expect(apiRequests(api)).toContain("GET /api/folders");
+
+      let created: Presentation | undefined;
+      act(() => {
+        created = createNewPresentation();
+      });
+      await act(async () => {
+        await flushPendingSync();
+      });
+
+      expect(apiRequests(api)).toContain(
+        `PATCH /api/presentations/${created?.id}`,
+      );
+    });
+
+    it("만료된 세션으로 송출 주소를 열면 송출 중에는 묻지 않고, 송출을 마치면 세션을 확인해 로그인 화면으로 보낸다", async () => {
+      await saveCachedSession(sessionUser({ expiresAt: Date.now() - HOUR }));
+      fetcher.mockResolvedValue(null);
+      const expired: FakeRoute = () => ({
+        status: 401,
+        body: { error: "세션 만료" },
+      });
+      api = installFakeApi({
+        "GET /api/folders": expired,
+        "GET /api/presentations": expired,
+        "GET /api/decks": expired,
+        "GET /api/backgrounds": expired,
+      });
+
+      renderAt(`/present/${DOC_ID}/fullscreen`);
+      await screen.findByTestId("fullscreen-present-route");
+
+      expect(fetcher).not.toHaveBeenCalled();
+      expect(apiRequests(api)).toEqual([]);
+
+      fireEvent.click(screen.getByTestId("exit-present-btn"));
+
+      expect(
+        await screen.findByRole("button", { name: /카카오 로그인/ }),
+      ).toBeInTheDocument();
+      expect(fetcher).toHaveBeenCalledTimes(1);
+    });
+
+    it("다른 기기에서 만든 세트 주소로 들어오면 받을 때까지 기다렸다가 연다", async () => {
+      const presentations = deferred<{ body: unknown }>();
+      api = installFakeApi(
+        bootRoutes({ "GET /api/presentations": () => presentations.promise }),
+      );
+
+      renderAt(`/editor/${NEW_DOC.id}`);
+
+      expect(await screen.findByTestId("editor-pending")).toBeInTheDocument();
+      expect(window.location.pathname).toBe(`/editor/${NEW_DOC.id}`);
+
+      await act(async () => {
+        presentations.resolve({
+          body: { presentations: [...SEED_PRESENTATIONS, NEW_DOC] },
+        });
+      });
+
+      expect(await screen.findByTestId("editor-route")).toBeInTheDocument();
+      expect(window.location.pathname).toBe(`/editor/${NEW_DOC.id}`);
+    });
   });
 });

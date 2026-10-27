@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 import { useNavigate } from "#hooks/useNavigate";
+import { LoadingScreen } from "../components/common/LoadingScreen";
 import { Navigate } from "../components/common/Navigate";
 import { CopyIcon, EyeIcon } from "lucide-react";
 import { Alert, AlertAction, AlertDescription } from "#components/ui/alert";
@@ -77,10 +78,12 @@ import {
   endSharedPresentationRefresh,
   refreshSharedPresentation,
   subscribeSyncRecovery,
+  useBootPullPending,
 } from "../lib/sync";
 import { useBackgroundLayers } from "../features/backgrounds";
 import { EDITOR_COPY } from "#copy/editor";
 import { COMMON_COPY } from "#copy/common";
+import { SHELL_COPY } from "#copy/shell";
 
 /** 로그인하지 않고 공유 링크로 볼 때 편집기를 보기 화면으로 쓰기 위한 설정 */
 export interface EditorGuestOptions {
@@ -121,6 +124,7 @@ function EditorScreen({
   const isGuest = guest !== undefined;
   const searchParams = useSearchParams();
   const { found, presentation } = useOpenedPresentation(presentationId);
+  const isPullPending = useBootPullPending("presentation");
   const [songPickerMode, setSongPickerMode] = useState<SongPickerMode | null>(
     null,
   );
@@ -346,7 +350,16 @@ function EditorScreen({
 
   const overflowMessages = getOverflowMessages(currentOverflow, safeSlideIndex);
 
-  if (!found) return <Navigate to={drivePath(null)} />;
+  if (!found) {
+    if (isPullPending && !isGuest) {
+      return (
+        <LoadingScreen testId="editor-pending">
+          {SHELL_COPY.routeLoading}
+        </LoadingScreen>
+      );
+    }
+    return <Navigate to={drivePath(null)} />;
+  }
 
   return (
     <div

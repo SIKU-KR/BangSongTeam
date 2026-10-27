@@ -4,6 +4,7 @@ import React, { Suspense, useCallback, useEffect, useState } from "react";
 import dynamic from "next/dynamic";
 import { usePathname } from "next/navigation";
 import { ThemeProvider } from "#components/theme-provider";
+import { LoadingScreen } from "./components/common/LoadingScreen";
 import { RouteErrorBoundary } from "./components/common/RouteErrorBoundary";
 import {
   hydrateFromStorage,
@@ -20,8 +21,8 @@ import { createAppQueryClient } from "./lib/api/queryClient";
 import { flushClientReports } from "./lib/observability/clientReports";
 import { registerServiceWorker } from "./pwa/registerServiceWorker";
 import {
-  runBootSync,
-  shouldRunBootSync,
+  startBootSync,
+  runDeferredBootSync,
   flushPendingSync,
   flushDeckSync,
   flushFolderSync,
@@ -66,9 +67,8 @@ function useHydration(): boolean {
         hydrateBackgroundCatalog(),
       ]);
       if (controller.signal.aborted) return;
+      startBootSync(window.location.pathname);
       setBootstrappedUserId(userId);
-
-      if (shouldRunBootSync(window.location.pathname)) void runBootSync();
     })();
     return () => controller.abort();
   }, [session.status, userId, bootstrappedUserId]);
@@ -215,6 +215,7 @@ function ProjectionLatchGate({
 
   useEffect(() => {
     if (isOnProjection) return;
+    runDeferredBootSync();
     resumeDeferredSyncRecovery();
     flushClientReports();
   }, [isOnProjection]);
@@ -243,32 +244,6 @@ function AppFrame({
       </RouteErrorBoundary>
       {overlay}
     </QueryClientProvider>
-  );
-}
-
-function LoadingScreen({
-  testId,
-  children,
-}: {
-  testId: string;
-  children: React.ReactNode;
-}): React.JSX.Element {
-  const pathname = usePathname();
-  if (isProjectionPath(pathname)) {
-    return (
-      <div data-testid={testId} className="min-h-screen bg-black">
-        <span className="sr-only">{children}</span>
-      </div>
-    );
-  }
-
-  return (
-    <div
-      data-testid={testId}
-      className="flex min-h-screen items-center justify-center bg-background text-sm text-muted-foreground"
-    >
-      {children}
-    </div>
   );
 }
 

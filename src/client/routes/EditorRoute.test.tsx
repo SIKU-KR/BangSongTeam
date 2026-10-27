@@ -9,18 +9,23 @@ import {
   within,
   waitFor,
 } from "@testing-library/react";
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import type { Presentation } from "#shared";
 import { MemoryRouter, Routes, Route } from "../test/router";
 import { EditorRoute } from "./EditorRoute";
 import { loadPresentReturnPath } from "../features/presentation/fullscreen";
 import {
+  applyServerDocuments,
   getActivePresentation,
+  getPresentationById,
   replaceWithServerDocument,
+  updatePresentationTitle,
 } from "../features/presentation";
 import {
   __loadDocumentsForTests,
   resetPresentationStore,
 } from "../features/presentation/presentationStore";
+import { __setBootPullPendingForTests } from "../lib/sync/bootSync";
 import { EDITOR_COPY } from "#copy/editor";
 import { COMMON_COPY } from "#copy/common";
 import {
@@ -601,6 +606,69 @@ describe("EditorRoute (PowerPoint식 프레젠테이션 편집기)", () => {
 
     expect(screen.getByTestId("presentations-stub")).toBeInTheDocument();
     expect(screen.queryByTestId("editor-route")).not.toBeInTheDocument();
+  });
+
+  describe("부팅 동기화가 아직 받지 않은 세트 주소", () => {
+    const NEW_ID = "n00000000000000000001";
+    const NEW_DOC: Presentation = {
+      id: NEW_ID,
+      userId: SEED_PRESENTATIONS[0].userId,
+      title: "다른 기기에서 만든 세트",
+      serviceDate: "2026-10-25",
+      items: [],
+      folderId: null,
+      trashedAt: null,
+      createdAt: "2026-10-25T00:00:00.000Z",
+      updatedAt: "2026-10-25T00:00:00.000Z",
+    };
+
+    afterEach(() => {
+      __setBootPullPendingForTests([]);
+    });
+
+    it("세트를 받는 중이면 없는 id라도 드라이브로 보내지 않고, 받으면 그 세트를 열어 편집한다", () => {
+      __setBootPullPendingForTests(["presentation"]);
+      renderEditor(`/editor/${NEW_ID}`);
+
+      expect(screen.getByTestId("editor-pending")).toBeInTheDocument();
+      expect(
+        screen.queryByTestId("presentations-stub"),
+      ).not.toBeInTheDocument();
+
+      act(() => {
+        applyServerDocuments([
+          ...SEED_PRESENTATIONS.map((doc) => structuredClone(doc)),
+          NEW_DOC,
+        ]);
+        __setBootPullPendingForTests([]);
+      });
+
+      expect(screen.getByTestId("editor-route")).toBeInTheDocument();
+
+      act(() => {
+        updatePresentationTitle("새 제목");
+      });
+
+      expect(getPresentationById(NEW_ID)?.title).toBe("새 제목");
+      expect(getPresentationById(DOC_ID)?.title).toBe(
+        SEED_PRESENTATIONS[0].title,
+      );
+    });
+
+    it("받기가 끝났는데도 없으면 드라이브로 보낸다", () => {
+      __setBootPullPendingForTests(["presentation"]);
+      renderEditor(`/editor/${NEW_ID}`);
+
+      expect(
+        screen.queryByTestId("presentations-stub"),
+      ).not.toBeInTheDocument();
+
+      act(() => {
+        __setBootPullPendingForTests([]);
+      });
+
+      expect(screen.getByTestId("presentations-stub")).toBeInTheDocument();
+    });
   });
 
   it("다른 시드 문서를 id로 직접 열 수 있다", () => {

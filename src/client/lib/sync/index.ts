@@ -12,7 +12,11 @@ export {
 } from "./presentationSync";
 export { OfflineError, ServerRejectedError } from "../api/request";
 export { flushPendingSync, hasPendingDocumentPush } from "./syncScheduler";
-export { runBootSync, shouldRunBootSync } from "./bootSync";
+export {
+  startBootSync,
+  runDeferredBootSync,
+  useBootPullPending,
+} from "./bootSync";
 export { refreshBackgroundCatalog } from "./backgroundSync";
 export { flushDeckSync } from "./deckSync";
 export { flushFolderSync, hasPendingFolderPush } from "./folderSync";
