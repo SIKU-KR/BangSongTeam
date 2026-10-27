@@ -20,6 +20,7 @@ import { closeOfflineDB, OFFLINE_DB_NAME } from "./lib/storage/db";
 import { __resetStorageChannelForTests } from "./lib/storage/storageChannel";
 import { __resetStorageSyncForTests } from "./lib/sync/storageSync";
 import { authClient } from "./lib/auth/authClient";
+import * as capabilities from "./lib/browser/capabilities";
 import {
   revalidateSession,
   __setPageReloadForTests,
@@ -581,6 +582,7 @@ describe("App Route Integration", () => {
       api?.restore();
       api = null;
       resetSyncModules();
+      vi.restoreAllMocks();
     });
 
     it("저장본을 싣는 동안 다른 탭이 저장한 변경도 싣는다", async () => {
@@ -659,6 +661,10 @@ describe("App Route Integration", () => {
     });
 
     it("송출 직전에 고친 세트는 송출 화면으로 가기 전에 올려, 송출 중에 다른 탭이 고친 판을 송출을 마친 뒤에 덮지 않는다", async () => {
+      vi.spyOn(
+        capabilities,
+        "getMissingPresentationCapabilities",
+      ).mockReturnValue([]);
       api = installFakeApi(bootRoutes());
       renderAt(`/editor/${SEED.id}`);
       await screen.findByTestId("editor-stage-canvas");
@@ -1053,6 +1059,7 @@ describe("App Route Integration", () => {
       });
       api?.restore();
       api = null;
+      vi.restoreAllMocks();
       resetSyncModules();
       if (clipboard) Object.defineProperty(navigator, "clipboard", clipboard);
       else Reflect.deleteProperty(navigator, "clipboard");
@@ -1181,6 +1188,10 @@ describe("App Route Integration", () => {
     });
 
     it("송출 화면에는 알림을 띄우지 않고, 송출 전에 떠 있던 알림은 송출을 마쳐도 다시 뜨지 않는다", async () => {
+      vi.spyOn(
+        capabilities,
+        "getMissingPresentationCapabilities",
+      ).mockReturnValue([]);
       api = installFakeApi(bootRoutes());
       renderAt(`/editor/${DOC_ID}`);
       await screen.findByTestId("editor-stage-canvas");
