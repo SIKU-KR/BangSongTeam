@@ -1,5 +1,17 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import {
+  describe,
+  it,
+  expect,
+  beforeEach,
+  afterEach,
+  onTestFinished,
+  vi,
+} from "vitest";
 import { DEFAULT_DECK_STYLE, DeckSchema, type Deck } from "#shared";
+import {
+  __resetServerClockForTests,
+  noteServerClock,
+} from "../api/serverClock";
 import {
   hasSameDeckContent,
   hasSameServerFields,
@@ -110,6 +122,19 @@ describe("mergeLibraryDecks", () => {
       const { decks, needsPush } = mergeLibraryDecks(
         [deck(A, { title: "로컬", updatedAt: "2026-09-25T00:10:00.000Z" })],
         [deck(A, { title: "서버" })],
+      );
+
+      expect(decks.map((d) => d.title)).toEqual(["로컬"]);
+      expect(needsPush).toEqual([A]);
+    });
+
+    it("기기 시계가 서버보다 한 시간 늦으면 서버 시계로 가려, 서버 판 바로 뒤로 찍은 로컬 곡이 이기고 올린다", () => {
+      noteServerClock(new Headers({ date: "Fri, 25 Sep 2026 01:00:00 GMT" }));
+      onTestFinished(__resetServerClockForTests);
+
+      const { decks, needsPush } = mergeLibraryDecks(
+        [deck(A, { title: "로컬", updatedAt: "2026-09-25T00:59:00.001Z" })],
+        [deck(A, { title: "서버", updatedAt: "2026-09-25T00:59:00.000Z" })],
       );
 
       expect(decks.map((d) => d.title)).toEqual(["로컬"]);

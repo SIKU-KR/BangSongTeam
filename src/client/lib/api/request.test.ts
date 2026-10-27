@@ -1,4 +1,4 @@
-import { beforeEach, describe, it, expect, vi } from "vitest";
+import { afterEach, beforeEach, describe, it, expect, vi } from "vitest";
 import {
   callApi,
   describeApiError,
@@ -19,6 +19,7 @@ import {
   markServerUnreachable,
 } from "./connectivity";
 import { rememberRequestMeta } from "./traceContext";
+import { __resetServerClockForTests, serverAlignedNow } from "./serverClock";
 
 describe("request", () => {
   describe("callApi", () => {
@@ -277,6 +278,37 @@ describe("request", () => {
       await callApi(abort).catch(() => undefined);
       expect(isServerReachable()).toBe(false);
     });
+  });
+
+  describe("callApi 서버 시계", () => {
+    const DEVICE_NOW = Date.parse("2026-10-28T09:50:00.000Z");
+
+    beforeEach(() => {
+      vi.useFakeTimers({ toFake: ["Date"] });
+      vi.setSystemTime(DEVICE_NOW);
+      __resetServerClockForTests();
+    });
+
+    afterEach(() => {
+      __resetServerClockForTests();
+      vi.useRealTimers();
+    });
+
+    it.each([200, 401, 503])(
+      "%i 응답의 Date 헤더로 서버 시계를 잰다",
+      async (status) => {
+        const response = {
+          status,
+          ok: status < 400,
+          headers: new Headers({ date: "Wed, 28 Oct 2026 10:00:00 GMT" }),
+          json: async () => ({}),
+        };
+
+        await callApi(async () => response).catch(() => undefined);
+
+        expect(serverAlignedNow()).toBe(DEVICE_NOW + 10 * 60_000 + 1000);
+      },
+    );
   });
 
   describe("describeApiError", () => {

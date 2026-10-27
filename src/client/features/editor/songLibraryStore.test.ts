@@ -1,6 +1,17 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { signInAsTestUser, signOutForTests } from "../../test/sessionFixture";
-import { createId, DEFAULT_DECK_STYLE, DeckSchema, type Deck } from "#shared";
+import {
+  clampToClock,
+  createId,
+  DEFAULT_DECK_STYLE,
+  DeckSchema,
+  isOutdatedWrite,
+  type Deck,
+} from "#shared";
+import {
+  __resetServerClockForTests,
+  noteServerClock,
+} from "../../lib/api/serverClock";
 import {
   closeOfflineDB,
   getOfflineDB,
@@ -219,6 +230,73 @@ describe("songLibraryStore", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  describe("시계가 서버보다 10분 늦은 기기", () => {
+    const SERVER_NOW = Date.parse("2026-09-25T00:10:00.000Z");
+    const FORKED_AT = "2026-09-25T00:10:00.000Z";
+
+    beforeEach(() => {
+      vi.useFakeTimers({ toFake: ["Date"] });
+      vi.setSystemTime(new Date("2026-09-25T00:00:00.000Z"));
+      noteServerClock(
+        new Headers({ date: new Date(SERVER_NOW).toUTCString() }),
+      );
+    });
+
+    afterEach(() => {
+      __resetServerClockForTests();
+      vi.useRealTimers();
+    });
+
+    function fork(): Deck {
+      return upsertLibraryDeck(
+        libraryDeck("c000000000000000000f4", {
+          origin: "fork",
+          forkedFrom: "c000000000000000000f0",
+          forkedFromAuthorName: "원작자",
+          createdAt: FORKED_AT,
+          updatedAt: FORKED_AT,
+        }),
+        { push: false },
+      );
+    }
+
+    it("가져오자마자 제목을 고쳐도 가져온 시각보다 뒤로 찍어, 서버가 옛 수정으로 버리지 않는다", () => {
+      const forked = fork();
+
+      const renamed = updateLibrarySongInfo(forked.id, {
+        title: "새 제목",
+        artist: "",
+      });
+      const again = updateLibrarySongInfo(forked.id, {
+        title: "또 고친 제목",
+        artist: "",
+      });
+
+      for (const stamp of [renamed?.updatedAt, again?.updatedAt]) {
+        expect(Date.parse(stamp ?? "")).toBeGreaterThan(Date.parse(FORKED_AT));
+        expect(
+          isOutdatedWrite(
+            FORKED_AT,
+            clampToClock(stamp ?? "", SERVER_NOW),
+            SERVER_NOW,
+          ),
+        ).toBe(false);
+      }
+      expect(Date.parse(again?.updatedAt ?? "")).toBeGreaterThan(
+        Date.parse(renamed?.updatedAt ?? ""),
+      );
+    });
+
+    it("가져온 시각 바로 뒤로 찍은 곡을 한참 앞선 값으로 보지 않아, 늦게 온 앞 판 응답이 덮지 않는다", () => {
+      const forked = fork();
+      updateLibrarySongInfo(forked.id, { title: "새 제목", artist: "" });
+
+      applyServerDeckFields(forked);
+
+      expect(getLibraryDeck(forked.id)?.title).toBe("새 제목");
+    });
   });
 
   it("저장한 곡은 하이드레이션 후에도 남아 있어야 한다 (IndexedDB 영속)", async () => {

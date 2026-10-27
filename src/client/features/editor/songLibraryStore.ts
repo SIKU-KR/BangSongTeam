@@ -23,6 +23,7 @@ import {
 } from "../../lib/storage";
 import { announceStorageChange } from "../../lib/storage/storageChannel";
 import { getCurrentUserId } from "../../lib/auth/sessionStore";
+import { serverAlignedNow } from "../../lib/api/serverClock";
 import {
   cancelDeckDelete,
   cancelDeckDeleteReaddedElsewhere,
@@ -216,7 +217,7 @@ function adoptsServerDeck(local: Deck, server: Deck): boolean {
   return (
     server.updatedAt > local.updatedAt ||
     hasSameDeckContent(local, server) ||
-    isFarFuture(local.updatedAt)
+    isFarFuture(local.updatedAt, serverAlignedNow())
   );
 }
 
@@ -228,9 +229,10 @@ function adoptsServerDeck(local: Deck, server: Deck): boolean {
  *   기기의 곡을 돌려준다.
  * - 내용이 같고 시각만 다르다(`hasSameDeckContent`). 서버가 기기 시각을 줄이고 만든 시각을 처음 값으로
  *   지킨 것이라, 따르지 않으면 다음 부팅 병합에서 로컬 시각이 이겨 같은 곡을 다시 올린다.
- * - 로컬 시각이 기기 시계보다 한참 앞선다(`isFarFuture`). 빠른 시계가 남긴 값이라 로컬이 더
- *   새롭다고 볼 수 없다(`mergeLibraryDecks`도 서버 사본을 고른다). 서버 덱으로 바로 맞추고, 이 값을
- *   읽는 이전 버전의 탭이 병합에서 다시 올리지 않게 저장본도 고친다.
+ * - 로컬 시각이 서버에 맞춘 지금(`serverAlignedNow`)보다 한참 앞선다(`isFarFuture`). 빠른 시계가 남긴
+ *   값이라 로컬이 더 새롭다고 볼 수 없다(`mergeLibraryDecks`도 서버 사본을 고른다). 시계가 늦은 기기의
+ *   기기 시계로 가르면 서버 판 바로 뒤로 찍은 수정까지 걸린다. 서버 덱으로 바로 맞추고, 이 값을 읽는
+ *   이전 버전의 탭이 병합에서 다시 올리지 않게 저장본도 고친다.
  *
  * 그 밖에는 서버가 정하는 공유 필드만 입히고 내용은 로컬을 지킨다. 그사이 로컬에서 더 고친 내용이 곧
  * 올라간다.
@@ -365,7 +367,8 @@ export function resumeOtherTabsSongDeletes(): void {
  *
  * 수정 시각은 지금이되 이 기기가 본 판보다 뒤로 찍는다(`editTimestamp`). 가져오기는 서버 시각으로
  * 찍히므로, 시계가 뒤처진 기기가 가져오자마자 고친 이름을 지금으로 찍으면 서버가 옛 수정으로 보고
- * 버린다.
+ * 버린다. 지금은 서버에 맞춘 시각이다(`serverAlignedNow`). 기기 시계로는 시계가 늦은 기기가 가져온
+ * 시각 바로 뒤로 찍은 수정을 한참 앞선 값(`isFarFuture`)으로 봐, 늦게 온 앞 판 응답이 그 수정을 덮는다.
  */
 export function updateLibrarySongInfo(
   id: string,
@@ -382,7 +385,7 @@ export function updateLibrarySongInfo(
     ...deck,
     title: info.title,
     artist: info.artist,
-    updatedAt: editTimestamp(deck.updatedAt),
+    updatedAt: editTimestamp(deck.updatedAt, serverAlignedNow()),
   });
 }
 
