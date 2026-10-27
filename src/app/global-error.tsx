@@ -1,6 +1,7 @@
 "use client";
 
 import { RouteErrorScreen } from "../client/components/common/RouteErrorScreen";
+import { SHELL_COPY } from "../client/copy/shell";
 import { APP_NAME } from "../shared/copy/app";
 import "../client/index.css";
 
@@ -16,7 +17,7 @@ export default function GlobalError(): React.JSX.Element {
         <title>{APP_NAME}</title>
       </head>
       <body>
-        <RouteErrorScreen />
+        <RouteErrorScreen description={SHELL_COPY.rootError.description} />
       </body>
     </html>
   );

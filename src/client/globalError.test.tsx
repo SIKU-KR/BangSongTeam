@@ -14,4 +14,12 @@ describe("global-error", () => {
     expect(html).toContain(SHELL_COPY.routeError.reload);
     expect(html).not.toMatch(/couldn.t load/i);
   });
+
+  it("연결 탓이 아닌 앱 오류이므로 인터넷 연결을 확인하라고 하지 않는다", () => {
+    const html = renderToStaticMarkup(<GlobalError />);
+
+    expect(html).toContain(SHELL_COPY.rootError.description);
+    expect(html).not.toContain(SHELL_COPY.routeError.description);
+    expect(html).not.toMatch(/인터넷|연결/);
+  });
 });

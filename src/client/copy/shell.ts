@@ -42,6 +42,9 @@ export const SHELL_COPY = {
     description: "인터넷 연결을 확인하고 새로고침해 주세요.",
     reload: "새로고침",
   },
+  rootError: {
+    description: "새로고침해 주세요.",
+  },
   storage: {
     saveFailed: "저장하지 못했어요",
     corrupted: (count: number) => `저장본 ${count}개를 열지 못했어요`,
