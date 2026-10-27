@@ -19,6 +19,12 @@ export interface WriteRetry<Op extends string = WriteOp> {
   failed(id: string, op: Op, err: unknown): void;
   /** 그 항목의 쓰기가 실패한 채 남아 있는지 */
   has(id: string): boolean;
+  /**
+   * 예약한 다시 시도를 백오프를 기다리지 않고 지금 한다. 창을 닫거나 계정이 끝날 때처럼 다시 시도할
+   * 때까지 페이지가 남지 않을 수 있는 마지막 저장에 쓴다. 다시 시도가 이미 도는 중이면(타이머가 울려
+   * 쓰는 중) 같은 쓰기를 겹쳐 하지 않는다. 또 실패하면 다음 대기로 다시 예약한다.
+   */
+  retryNow(): void;
   /** 실패한 항목·예약한 다시 시도·경고를 모두 버린다 (다시 불러오기·테스트 격리) */
   reset(): void;
 }
@@ -34,21 +40,26 @@ export interface WriteRetry<Op extends string = WriteOp> {
  * 않고 실패만 푼다. 메모리는 사용자가 지우지 않아도 빌 수 있어(불러오기 실패, 부팅 중 로그아웃,
  * 계정 바꾸기), 메모리만 보고 지우면 아직 올리지 못한 저장본을 잃는다.
  *
- * 실패한 항목은 이 추적기만 들고 다시 시도는 이 타이머만 한다. 편집할 때마다 실패한 항목을 함께
- * 다시 쓰면, 저장 공간이 찬 동안 편집마다 실패할 쓰기를 되풀이한다. 대기는 `BackoffTracker`로
- * 늘리고(최대 1분), 모두 저장되면 처음 대기로 돌아간다.
+ * 실패한 항목은 이 추적기만 들고 다시 시도는 이 타이머와 마지막 저장(`retryNow`)만 한다. 편집할
+ * 때마다 실패한 항목을 함께 다시 쓰면, 저장 공간이 찬 동안 편집마다 실패할 쓰기를 되풀이한다. 대기는
+ * `backoff`로 늘리고(최대 1분), 모두 저장되면 처음 대기로 돌아간다.
  */
 export function createWriteRetry<Op extends string = WriteOp>(
   source: PersistenceStore,
   retry: (failed: ReadonlyMap<string, Op>) => void,
+  backoff: BackoffTracker = new BackoffTracker(),
 ): WriteRetry<Op> {
   const failedOps = new Map<string, Op>();
-  const backoff = new BackoffTracker();
   let timer: ReturnType<typeof setTimeout> | null = null;
 
   const cancelTimer = (): void => {
     if (timer) clearTimeout(timer);
     timer = null;
+  };
+
+  const retryFailed = (): void => {
+    timer = null;
+    retry(new Map(failedOps));
   };
 
   return {
@@ -67,13 +78,15 @@ export function createWriteRetry<Op extends string = WriteOp>(
       failedOps.set(id, op);
       reportPersistenceError(err, source);
       if (timer) return;
-      timer = setTimeout(() => {
-        timer = null;
-        retry(new Map(failedOps));
-      }, backoff.getDelay(err));
+      timer = setTimeout(retryFailed, backoff.getDelay(err));
     },
     has(id) {
       return failedOps.has(id);
+    },
+    retryNow() {
+      if (!timer) return;
+      clearTimeout(timer);
+      retryFailed();
     },
     reset() {
       failedOps.clear();

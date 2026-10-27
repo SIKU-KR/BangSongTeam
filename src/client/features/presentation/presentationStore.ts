@@ -43,6 +43,7 @@ import {
   noteOwnVersion,
   resetLineage,
 } from "../../lib/sync/presentationLineage";
+import { BackoffTracker } from "../../lib/sync/backoff";
 import { getBackgrounds } from "../backgrounds/backgroundCatalog";
 import { isProjecting } from "./fullscreen";
 import { COMMON_COPY } from "#copy/common";
@@ -185,6 +186,7 @@ let inFlight: Promise<void> = Promise.resolve();
 
 type PresentationWriteOp = WriteOp | "deleteShared";
 
+const writeRetryBackoff = new BackoffTracker();
 const writeRetry = createWriteRetry<PresentationWriteOp>(
   "presentation",
   (failed) => {
@@ -195,7 +197,12 @@ const writeRetry = createWriteRetry<PresentationWriteOp>(
     for (const [id, op] of failed) retryFailedWrite(id, op);
     runPendingWrites();
   },
+  writeRetryBackoff,
 );
+
+export function __setWriteRetryRandomForTests(next: () => number): void {
+  writeRetryBackoff.__setRandomForTests(next);
+}
 
 function retryFailedWrite(id: string, op: PresentationWriteOp): void {
   if (state.byId[id]) {
@@ -312,8 +319,14 @@ function schedulePersist(id: string): void {
 /**
  * IndexedDB는 비동기라 언로드 시점의 완료를 보장할 수 없어, 디바운스를 300ms로
  * 짧게 유지하고 창이 숨겨질 때 타이머를 앞당기는 방식을 쓴다.
+ *
+ * 창을 닫거나 숨길 때, 로그아웃하기 전, 계정이 끝나 새로고침하기 전의 마지막 저장이라, 앞서 쓰지
+ * 못해 다시 시도를 기다리는 저장·지우기도 백오프를 기다리지 않고 지금 다시 한다. 그 다시 시도는
+ * 최대 1분 뒤라, 그사이 탭이 닫히면 서버에 올리지 못한 편집을 잃는다. 편집마다 도는 디바운스 저장은
+ * 실패한 쓰기를 함께 하지 않는다.
  */
 export async function flushPendingWrites(): Promise<void> {
+  writeRetry.retryNow();
   runPendingWrites();
   await inFlight;
 }

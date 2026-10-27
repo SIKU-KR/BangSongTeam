@@ -43,6 +43,23 @@ describe("createWriteRetry", () => {
     expect(retry).toHaveBeenCalledExactlyOnceWith(new Map([["A", "save"]]));
   });
 
+  it("예약한 다시 시도를 백오프를 기다리지 않고 지금 하고, 이미 도는 다시 시도는 겹쳐 하지 않는다", () => {
+    const tracker = createWriteRetry("presentation", retry);
+    tracker.retryNow();
+    expect(retry).not.toHaveBeenCalled();
+
+    tracker.failed("A", "save", quotaError());
+    tracker.retryNow();
+
+    expect(retry).toHaveBeenCalledExactlyOnceWith(new Map([["A", "save"]]));
+    expect(tracker.has("A")).toBe(true);
+
+    tracker.retryNow();
+    vi.advanceTimersByTime(60_000);
+
+    expect(retry).toHaveBeenCalledOnce();
+  });
+
   it("실패한 적 없는 항목이 저장돼도 경고를 남긴다", () => {
     const tracker = createWriteRetry("presentation", retry);
     tracker.failed("A", "save", quotaError());

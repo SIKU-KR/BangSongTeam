@@ -73,6 +73,7 @@ import {
   updateSongStyle,
   reorderSongs,
   redo,
+  __setWriteRetryRandomForTests,
 } from "./presentationStore";
 import {
   hydrateSongLibrary,
@@ -1688,9 +1689,11 @@ describe("presentationStore 영속성", () => {
 
     beforeEach(() => {
       vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+      __setWriteRetryRandomForTests(() => 0.5);
     });
 
     afterEach(async () => {
+      __setWriteRetryRandomForTests(Math.random);
       await resetSongLibraryStore();
       vi.useRealTimers();
     });
@@ -1706,7 +1709,10 @@ describe("presentationStore 영속성", () => {
       expect(getPersistenceError("presentation")?.kind).toBe("quota");
 
       renamePresentation(other.id, "저장한 제목");
-      await flushPendingWrites();
+      await vi.advanceTimersToNextTimerAsync();
+      await vi.waitFor(async () =>
+        expect((await storedById(other.id))?.title).toBe("저장한 제목"),
+      );
 
       expect(getPersistenceError("presentation")?.kind).toBe("quota");
       expect((await storedById(failing.id))?.title).not.toBe(
@@ -1730,15 +1736,47 @@ describe("presentationStore 영속성", () => {
       vi.mocked(savePresentation).mockClear();
 
       renamePresentation(other.id, "첫 수정");
-      await flushPendingWrites();
+      await vi.advanceTimersToNextTimerAsync();
       renamePresentation(other.id, "두 번째 수정");
-      await flushPendingWrites();
-
-      expect(savedIds()).toEqual([other.id, other.id]);
+      await vi.advanceTimersToNextTimerAsync();
+      await vi.waitFor(() => expect(savedIds()).toEqual([other.id, other.id]));
 
       await retryFailedWrites();
 
       expect(savedIds()).toEqual([other.id, other.id, failing.id]);
+    });
+
+    it("창을 닫거나 계정이 끝나 저장 줄을 비우면, 저장하지 못한 세트도 다시 시도를 기다리지 않고 다시 쓴다", async () => {
+      await hydrateFromStorage();
+      const doc = createNewPresentation();
+      await flushPendingWrites();
+      vi.mocked(savePresentation).mockRejectedValueOnce(
+        new DOMException("연결이 끊겼어요", "InvalidStateError"),
+      );
+      renamePresentation(doc.id, "저장하지 못한 제목");
+      await flushPendingWrites();
+      expect((await storedById(doc.id))?.title).not.toBe("저장하지 못한 제목");
+
+      await flushPendingWrites();
+
+      expect((await storedById(doc.id))?.title).toBe("저장하지 못한 제목");
+      expect(getPersistenceError()).toBeNull();
+    });
+
+    it("저장 줄을 비우면 지우지 못한 세트도 다시 시도를 기다리지 않고 다시 지운다", async () => {
+      await hydrateFromStorage();
+      const doc = createNewPresentation();
+      await flushPendingWrites();
+      vi.mocked(deletePresentation).mockRejectedValueOnce(
+        new DOMException("연결이 끊겼어요", "InvalidStateError"),
+      );
+      await removePresentationsLocally([doc.id]);
+      expect(await storedById(doc.id)).toBeDefined();
+
+      await flushPendingWrites();
+
+      expect(await storedById(doc.id)).toBeUndefined();
+      expect(getPersistenceError()).toBeNull();
     });
 
     it("지우지 못한 세트는 지우기로 다시 시도한다", async () => {
