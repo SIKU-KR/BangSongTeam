@@ -836,6 +836,21 @@ describe("EditorRoute (PowerPoint식 프레젠테이션 편집기)", () => {
       ).not.toBeInTheDocument();
     });
 
+    it("제목 입력 중의 Esc는 고치던 제목을 버리고 저장된 제목을 남긴다", () => {
+      renderEditor();
+      const savedTitle = getActivePresentation().title;
+      const input = openTitleInput();
+      fireEvent.change(input, { target: { value: "새 제목" } });
+
+      fireEvent.keyDown(input, { key: "Escape" });
+
+      expect(input).not.toBeInTheDocument();
+      expect(getActivePresentation().title).toBe(savedTitle);
+      expect(screen.getByTestId("header-title-btn")).toHaveTextContent(
+        savedTitle,
+      );
+    });
+
     it("한글 조합 중의 Esc는 제목 편집을 끝내지 않는다", () => {
       renderEditor();
       const input = openTitleInput();
