@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { handleOAuthUserInfo } from "better-auth/oauth2";
 import { FALLBACK_USER_NAME } from "#shared";
 import { env } from "../test/env";
@@ -160,6 +160,68 @@ describe("이메일·비밀번호 인증", () => {
     expect(duplicate.status).toBeGreaterThanOrEqual(400);
     expect(sessionCookie(duplicate)).toBe("");
     expect(short.status).toBe(400);
+  });
+});
+
+describe("로그인 유지 기간", () => {
+  const DAY_MS = 24 * 60 * 60 * 1000;
+
+  beforeEach(async () => {
+    await clearDb(env.DB);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  async function sessionEmail(cookie: string): Promise<string | null> {
+    const res = await app.request(
+      "/api/auth/get-session",
+      { headers: { cookie } },
+      env,
+    );
+    const body = (await res.json()) as { user?: { email: string } } | null;
+    return body?.user?.email ?? null;
+  }
+
+  function freezeClock(): number {
+    const startedAt = Date.now();
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(startedAt);
+    return startedAt;
+  }
+
+  it("한 주에 한 번만 열어도 로그인이 이어진다", async () => {
+    const startedAt = freezeClock();
+    const cookie = sessionCookie(
+      await signUp("weekly@example.com", "10.0.3.1"),
+    );
+
+    vi.setSystemTime(startedAt + 8 * DAY_MS);
+
+    expect(await sessionEmail(cookie)).toBe("weekly@example.com");
+  });
+
+  it("쓸 때마다 유지 기간이 다시 30일로 늘어난다", async () => {
+    const startedAt = freezeClock();
+    const cookie = sessionCookie(
+      await signUp("sliding@example.com", "10.0.3.2"),
+    );
+
+    vi.setSystemTime(startedAt + 20 * DAY_MS);
+    expect(await sessionEmail(cookie)).toBe("sliding@example.com");
+
+    vi.setSystemTime(startedAt + 45 * DAY_MS);
+    expect(await sessionEmail(cookie)).toBe("sliding@example.com");
+  });
+
+  it("30일 넘게 쓰지 않으면 다시 로그인해야 한다", async () => {
+    const startedAt = freezeClock();
+    const cookie = sessionCookie(await signUp("idle@example.com", "10.0.3.3"));
+
+    vi.setSystemTime(startedAt + 31 * DAY_MS);
+
+    expect(await sessionEmail(cookie)).toBeNull();
   });
 });
 

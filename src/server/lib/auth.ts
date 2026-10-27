@@ -24,6 +24,18 @@ import { hashPassword, verifyPassword } from "./password";
 export const SYNTHETIC_EMAIL_DOMAIN = "users.noreply.worship-slide.local";
 
 /**
+ * 로그인 유지 기간(초). 마지막으로 쓴 날부터 30일 동안은 다시 로그인하지 않아도 된다.
+ *
+ * Better Auth 기본값(7일)이면 주일에만 앱을 여는 사람은 지난주보다 조금만 늦게 열어도 예배
+ * 직전에 로그아웃된다. 이메일 가입자는 비밀번호 재설정이 없어 다시 들어오기도 어렵다. 대신
+ * 로그아웃하지 않은 공용 PC에는 로그인이 그만큼 오래 남는다.
+ */
+const SESSION_EXPIRES_IN_SECONDS = 30 * 24 * 60 * 60;
+
+/** 유지 기간을 다시 늘리는 간격(초). 하루에 처음 쓸 때만 세션 문서를 고쳐 쓴다 */
+const SESSION_UPDATE_AGE_SECONDS = 24 * 60 * 60;
+
+/**
  * 세션 쿠키 캐시 유효 시간(초).
  *
  * 이 시간 동안은 서명된 `session_data` 쿠키로 세션을 확인하고 Firestore의 `sessions`·`users`를
@@ -231,6 +243,8 @@ function buildAuth(env: Bindings) {
     secret: env.BETTER_AUTH_SECRET,
     database: firestoreAdapter(env.DB),
     session: {
+      expiresIn: SESSION_EXPIRES_IN_SECONDS,
+      updateAge: SESSION_UPDATE_AGE_SECONDS,
       cookieCache: { enabled: true, maxAge: SESSION_COOKIE_CACHE_SECONDS },
     },
     rateLimit: { enabled: true, customRules: RATE_LIMIT_RULES },
