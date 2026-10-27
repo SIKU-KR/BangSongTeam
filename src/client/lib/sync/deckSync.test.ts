@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { DEFAULT_DECK_STYLE, DeckSchema, type Deck } from "#shared";
+import { API_ERRORS, DEFAULT_DECK_STYLE, DeckSchema, type Deck } from "#shared";
 import {
   scheduleDeckPush,
   scheduleDeckDelete,
@@ -230,6 +230,47 @@ describe("보관함 push 큐", () => {
       kind: "deck",
       status: 400,
     });
+  });
+
+  it("서버가 거절하며 준 문장을 실패 이유로 남긴다", async () => {
+    __setDeckTransportForTests({});
+    const fake = installFakeApi({
+      "PUT /api/decks/*": () => ({
+        status: 413,
+        body: { error: API_ERRORS.deck.tooLarge },
+      }),
+    });
+
+    scheduleDeckPush(deck("긴 곡"));
+    await flushDeckSync();
+    fake.restore();
+
+    expect(getSyncSnapshot().status).toBe("error");
+    expect(getSyncSnapshot().lastFailure).toMatchObject({
+      id: A,
+      title: "긴 곡",
+      kind: "deck",
+      status: 413,
+      reason: API_ERRORS.deck.tooLarge,
+    });
+  });
+
+  it("서버 응답을 읽지 못한 실패는 개발자용 오류 문구라 실패 이유로 남기지 않는다", async () => {
+    __setDeckTransportForTests({});
+    const fake = installFakeApi({
+      "PUT /api/decks/*": () => ({ status: 200, body: { deck: { id: A } } }),
+    });
+
+    scheduleDeckPush(deck());
+    await flushDeckSync();
+    fake.restore();
+
+    expect(getSyncSnapshot().status).toBe("error");
+    expect(getSyncSnapshot().lastFailure).toMatchObject({
+      id: A,
+      kind: "deck",
+    });
+    expect(getSyncSnapshot().lastFailure?.reason).toBeUndefined();
   });
 
   it("동시에 여러 덱이 실패해도 각 덱의 백오프 attempt는 독립적으로 계산된다", async () => {
