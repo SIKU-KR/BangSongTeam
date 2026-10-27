@@ -7,6 +7,7 @@ import {
 } from "../../test/serviceWorkerFixture";
 import {
   cacheMediaFirst,
+  clearUnusedMediaCache,
   ensureMediaSpace,
   findCachedMediaUrls,
   getMediaCacheFailure,
@@ -33,6 +34,7 @@ import {
   __resetClientReportsForTests,
   flushClientReports,
 } from "../observability/clientReports";
+import { __resetStoragePersistenceForTests } from "./storagePersistence";
 
 const VIDEO = "/api/media/loops/warm_light_flow.mp4";
 const POSTER = "/api/media/posters/warm_light_flow.webp";
@@ -100,6 +102,7 @@ const originalFetch = globalThis.fetch;
 beforeEach(() => {
   resetFakeCacheStorage();
   __resetMediaCachingForTests();
+  __resetStoragePersistenceForTests();
   installServiceWorker();
 });
 
@@ -1513,5 +1516,43 @@ describe("받기 실패 보고", () => {
 
     expect(getMediaCacheFailure(OTHER)).toBe("quota");
     expect(await flushedReports()).toEqual([]);
+  });
+});
+
+describe("clearUnusedMediaCache", () => {
+  it("열린 화면이 붙잡은 영상만 남기고 담긴 영상을 지운 뒤 지운 수를 돌려준다", async () => {
+    mockFetch();
+    await cacheAll([VIDEO, OTHER, LARGE]);
+    retainMediaUrls([VIDEO]);
+
+    expect(await clearUnusedMediaCache()).toBe(2);
+
+    expect(await isCached(VIDEO)).toBe(true);
+    expect(await isCached(OTHER)).toBe(false);
+    expect(await isCached(LARGE)).toBe(false);
+  });
+
+  it("지운 영상은 다시 열면 다시 받는다", async () => {
+    mockFetch();
+    await cacheAll([OTHER]);
+    await clearUnusedMediaCache();
+    const fetchMock = mockFetch();
+
+    expect(await cacheMediaFirst(OTHER)).toBe(true);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("포스터는 지우지 않는다", async () => {
+    mockFetch();
+    await cacheAll([POSTER]);
+
+    expect(await clearUnusedMediaCache()).toBe(0);
+    expect(await isCached(POSTER)).toBe(true);
+  });
+
+  it("Cache Storage를 열지 못하면 던지지 않고 0을 돌려준다", async () => {
+    vi.spyOn(caches, "open").mockRejectedValue(new Error("broken"));
+
+    expect(await clearUnusedMediaCache()).toBe(0);
   });
 });

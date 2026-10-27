@@ -36,7 +36,9 @@ export class TimeoutError extends OfflineError {
 
 /**
  * 서버가 요청을 거절했다 (4xx·5xx). 상태 코드로 사유를 가를 수 있게 남긴다.
- * 메시지는 서버가 준 한국어 오류 문장이 있으면 그것을 쓴다.
+ * 메시지는 서버가 준 한국어 오류 문장이 있으면 그것을 쓰고, 없으면(프록시·Cloud Run이 답한
+ * 오류 페이지) 다시 시도하라는 일반 안내를 쓴다. 상태 코드는 사용자가 할 일을 알려 주지 않아
+ * 문장에 넣지 않고 `status`와 실패 보고에만 남긴다.
  *
  * `body`는 거절 응답의 JSON 본문이다. 412가 실어 보내는 저장된 판처럼, 거절된 요청을 다시
  * 묻지 않고 처리하는 데 쓴다. 본문을 읽지 못했으면 없다.
@@ -54,7 +56,7 @@ export class ServerRejectedError extends Error {
     meta?: RequestMeta,
     body?: unknown,
   ) {
-    super(message ?? ERROR_COPY.serverRejected(status));
+    super(message ?? ERROR_COPY.requestFailed);
     this.name = "ServerRejectedError";
     this.status = status;
     this.retryAfterMs = retryAfterMs;
@@ -239,7 +241,12 @@ export async function callApi<T>(
   }
 }
 
+/**
+ * 요청 실패를 화면에 보일 한 문장으로 바꾼다. 데드라인을 넘긴 요청(`TimeoutError`)은
+ * `OfflineError`이기도 하지만 연결은 된 채 서버가 늦은 것이라, 오프라인이라고 하지 않는다.
+ */
 export function describeApiError(err: unknown): string {
+  if (err instanceof TimeoutError) return ERROR_COPY.timeout;
   if (err instanceof OfflineError) return ERROR_COPY.offline;
   if (err instanceof SessionExpiredError) return ERROR_COPY.sessionExpired;
   if (err instanceof ServerRejectedError) return err.message;

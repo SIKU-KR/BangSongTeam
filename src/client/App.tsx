@@ -3,7 +3,7 @@
 import React, { Suspense, useCallback, useEffect, useState } from "react";
 import dynamic from "next/dynamic";
 import { usePathname } from "next/navigation";
-import { toast } from "sonner";
+import { toast, type ToasterProps } from "sonner";
 import { ThemeProvider } from "#components/theme-provider";
 import { Toaster } from "#components/ui/sonner";
 import { LoadingScreen } from "./components/common/LoadingScreen";
@@ -29,6 +29,7 @@ import { ConsentGate } from "./features/auth/ConsentGate";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { createAppQueryClient } from "./lib/api/queryClient";
 import { flushClientReports } from "./lib/observability/clientReports";
+import { requestPersistentStorage } from "./lib/offline/storagePersistence";
 import { registerServiceWorker } from "./pwa/registerServiceWorker";
 import {
   startBootSync,
@@ -48,12 +49,20 @@ import {
 } from "./lib/sync";
 import { THEME_STORAGE_KEY } from "#lib/theme";
 import { SHELL_COPY } from "#copy/shell";
-import { ERROR_COPY } from "#copy/common";
+import { COMMON_COPY, ERROR_COPY } from "#copy/common";
 
 /** 로그인 화면은 손님에게만 보이므로 그 주소를 처음 열 때 청크를 받는다 */
 const LoginRoute = dynamic(() =>
   import("./routes/LoginRoute").then((m) => m.LoginRoute),
 );
+
+// sonner@2.0.8은 알림 닫기 버튼을 'Close toast'로 알린다(dist/index.mjs의
+// closeButtonAriaLabel 기본값). components/ui/sonner.tsx는 받은 props를 자기 toastOptions
+// 뒤에 펼쳐 통째로 덮으므로 그 classNames도 함께 넘긴다.
+const TOAST_OPTIONS: ToasterProps["toastOptions"] = {
+  classNames: { toast: "cn-toast" },
+  closeButtonAriaLabel: COMMON_COPY.close,
+};
 
 function useHydration(): boolean {
   const [isSessionResolved, setIsSessionResolved] = useState(false);
@@ -95,6 +104,9 @@ function useHydration(): boolean {
       startStorageSync();
       startBootSync(window.location.pathname);
       setBootstrappedUserId(userId);
+      if (!isProjectionPath(window.location.pathname)) {
+        void requestPersistentStorage();
+      }
     })();
     return () => controller.abort();
   }, [session.status, userId, bootstrappedUserId]);
@@ -169,6 +181,11 @@ function isGuestPath(pathname: string): boolean {
  * 서버가 확인하지 않은 로그아웃은 연결이 돌아올 때마다 마저 끝낸다(`finishPendingSignOut`). 열린
  * 채로 남은 교회 PC의 탭에서도 남은 쿠키를 지워야 한다.
  *
+ * 로그인한 사용자의 저장소를 불러오면 브라우저에 영구 저장을 요청한다(`requestPersistentStorage`).
+ * 허락받지 못하면 기기 저장 공간이 모자랄 때 오프라인 저장본이 예고 없이 지워질 수 있어 드라이브가
+ * 안내한다. 송출 주소로 부팅했으면 묻지 않는다. Firefox는 허락을 묻는 창을 띄우는데, 송출 중에
+ * 띄우면 안 된다.
+ *
  * 송출 화면이 아닌 주소로 옮길 때마다 내 데이터가 오래됐으면 다시 받는다(`refreshOwnDataIfStale`).
  * 오래 열어 둔 탭에서 편집기를 열면 다른 기기에서 고친 판으로 고치고 송출해야 한다. 송출을 마치고
  * 돌아올 때도 같다.
@@ -204,7 +221,13 @@ function AppToaster(): React.JSX.Element | null {
     if (isOnProjection) toast.dismiss();
   }, [isOnProjection]);
 
-  return isOnProjection ? null : <Toaster position="bottom-left" />;
+  return isOnProjection ? null : (
+    <Toaster
+      position="bottom-left"
+      containerAriaLabel={SHELL_COPY.notifications}
+      toastOptions={TOAST_OPTIONS}
+    />
+  );
 }
 
 function AppGate({

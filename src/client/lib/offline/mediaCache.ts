@@ -767,6 +767,34 @@ export async function ensureMediaSpace(
   }
 }
 
+/**
+ * 지금 열린 편집기·송출 화면이 붙잡지 않은(`retainMediaUrls`) 배경 영상을 캐시에서 모두 지우고
+ * 지운 수를 돌려준다. 포스터는 작아서 남긴다.
+ *
+ * 기기 저장 공간이 가득 차 작업을 저장하지 못할 때 사용자가 고르는 정리다(`StorageWarningBanner`).
+ * 영상은 한 편에 수백 MB라 오리진 용량을 가장 많이 쓰고 서버에서 다시 받을 수 있지만, 프레젠테이션·
+ * 곡 저장본은 몇 KB라 휴지통을 비워도 거의 비지 않는다. 지운 영상은 그 프레젠테이션을 다시 열 때
+ * 다시 받는다. Cache Storage를 열지 못하면 던지지 않고 0이다.
+ */
+export async function clearUnusedMediaCache(): Promise<number> {
+  if (!isCacheStorageAvailable()) return 0;
+  const keep = new Set([...retained.keys()].map(pathOf));
+  try {
+    const cache = await caches.open(MEDIA_CACHE_NAME);
+    let deleted = 0;
+    for (const request of await cache.keys()) {
+      const path = pathOf(request.url);
+      if (keep.has(path)) continue;
+      if (await cache.delete(request)) deleted += 1;
+      knownCached.delete(path);
+    }
+    if (deleted > 0) notify();
+    return deleted;
+  } catch {
+    return 0;
+  }
+}
+
 export async function __waitForMediaCachingForTests(): Promise<void> {
   while (draining || inFlight.size > 0) {
     await Promise.all([draining, ...inFlight.values()]);

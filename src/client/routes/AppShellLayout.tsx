@@ -6,6 +6,7 @@ import { SidebarInset, SidebarProvider } from "#components/ui/sidebar";
 import { TooltipProvider } from "#components/ui/tooltip";
 import { BrowserSupportBanner } from "../components/common/BrowserSupportBanner";
 import { LegalChangeNotice } from "../components/common/LegalChangeNotice";
+import { StoragePersistenceNotice } from "../components/common/StoragePersistenceNotice";
 import { StorageWarningBanner } from "../components/common/StorageWarningBanner";
 import { AppSidebar } from "../components/layout/AppSidebar";
 import { AppHeader } from "../components/layout/AppHeader";
@@ -143,6 +144,7 @@ function AppShellFrame({
       >
         <BrowserSupportBanner />
         <StorageWarningBanner />
+        <StoragePersistenceNotice />
         <LegalChangeNotice />
 
         <AppHeader

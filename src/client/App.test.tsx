@@ -47,6 +47,7 @@ import {
 } from "./lib/sync/syncRecovery";
 import { getSyncSnapshot, resetSyncStatus } from "./lib/sync/syncStatus";
 import { __resetConnectivityForTests } from "./lib/api/connectivity";
+import { __resetStoragePersistenceForTests } from "./lib/offline/storagePersistence";
 import { installFakeApi, type FakeApi, type FakeRoute } from "./test/fakeApi";
 import { installFakeBroadcastChannel } from "./test/fakeBroadcastChannel";
 import {
@@ -338,6 +339,41 @@ describe("App Route Integration", () => {
       await screen.findByRole("button", { name: /Google 계정으로 로그인/ }),
     ).toBeInTheDocument();
     expect(screen.queryByTestId("presentation-row")).not.toBeInTheDocument();
+  });
+
+  it("사이트 데이터를 막은 브라우저에서도 손님 화면(개인정보 처리방침)이 열린다", async () => {
+    signOutForTests();
+    const windowStorage = Object.getOwnPropertyDescriptor(
+      window,
+      "localStorage",
+    );
+    const globalStorage = Object.getOwnPropertyDescriptor(
+      globalThis,
+      "localStorage",
+    );
+    const denied: PropertyDescriptor = {
+      configurable: true,
+      get: () => {
+        throw new DOMException("denied", "SecurityError");
+      },
+    };
+    Object.defineProperty(window, "localStorage", denied);
+    Object.defineProperty(globalThis, "localStorage", denied);
+
+    try {
+      renderAt("/privacy");
+
+      expect(
+        await screen.findByRole("heading", { name: LEGAL_COPY.privacy }),
+      ).toBeInTheDocument();
+    } finally {
+      if (windowStorage) {
+        Object.defineProperty(window, "localStorage", windowStorage);
+      }
+      if (globalStorage) {
+        Object.defineProperty(globalThis, "localStorage", globalStorage);
+      }
+    }
   });
 
   it("미로그인이어도 랜딩 페이지는 열리고, 진입 버튼은 로그인 화면으로 이어진다", async () => {
@@ -769,6 +805,90 @@ describe("App Route Integration", () => {
         await flushPendingSync();
       });
       expect(patches()).toHaveLength(1);
+    });
+  });
+
+  describe("영구 저장소 요청", () => {
+    const originalStorage = Object.getOwnPropertyDescriptor(
+      navigator,
+      "storage",
+    );
+
+    function stubStorage(persisted: boolean): ReturnType<typeof vi.fn> {
+      const persist = vi.fn(async () => false);
+      Object.defineProperty(navigator, "storage", {
+        value: {
+          persisted: async () => persisted,
+          persist,
+          estimate: async () => ({ quota: 1024 ** 3, usage: 0 }),
+        },
+        configurable: true,
+      });
+      return persist;
+    }
+
+    async function settle(): Promise<void> {
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      });
+    }
+
+    beforeEach(() => {
+      localStorage.clear();
+      __resetStoragePersistenceForTests();
+    });
+
+    afterEach(() => {
+      if (originalStorage) {
+        Object.defineProperty(navigator, "storage", originalStorage);
+      } else {
+        Reflect.deleteProperty(navigator, "storage");
+      }
+      __resetStoragePersistenceForTests();
+    });
+
+    it("로그인한 사용자를 불러오면 영구 저장을 요청하고, 브라우저가 지울 수 있으면 드라이브에 안내한다", async () => {
+      const persist = stubStorage(false);
+
+      renderAt("/presentations");
+      await screen.findAllByTestId("presentation-row");
+
+      expect(
+        await screen.findByTestId("storage-persistence-notice"),
+      ).toHaveTextContent(SHELL_COPY.storagePersistence.title);
+      expect(persist).toHaveBeenCalledTimes(1);
+    });
+
+    it("이미 영구 저장이면 다시 묻지 않고 안내하지 않는다", async () => {
+      const persist = stubStorage(true);
+
+      renderAt("/presentations");
+      await screen.findAllByTestId("presentation-row");
+      await settle();
+
+      expect(persist).not.toHaveBeenCalled();
+      expect(screen.queryByTestId("storage-persistence-notice")).toBeNull();
+    });
+
+    it("송출 주소로 부팅하면 송출 중에는 허락을 묻지 않는다", async () => {
+      const persist = stubStorage(false);
+
+      renderAt(`/present/${DOC_ID}/fullscreen`);
+      await screen.findByTestId("fullscreen-present-route");
+      await settle();
+
+      expect(persist).not.toHaveBeenCalled();
+    });
+
+    it("로그인하지 않은 손님에게는 묻지 않는다", async () => {
+      signOutForTests();
+      const persist = stubStorage(false);
+
+      renderAt("/");
+      await screen.findByTestId("landing-route");
+      await settle();
+
+      expect(persist).not.toHaveBeenCalled();
     });
   });
 
@@ -1219,6 +1339,30 @@ describe("App Route Integration", () => {
       });
 
       expect(await screen.findByText("손님 화면의 알림")).toBeInTheDocument();
+    });
+
+    it("알림 창과 알림 닫기 버튼을 화면 낭독기에 영어가 아닌 한국어로 알린다", async () => {
+      signOutForTests();
+      renderAt("/");
+      await screen.findByTestId("landing-route");
+
+      act(() => {
+        toast("닫을 수 있는 알림", { closeButton: true });
+      });
+      await screen.findByText("닫을 수 있는 알림");
+
+      expect(
+        screen.queryByRole("region", { name: /Notifications/ }),
+      ).toBeNull();
+      expect(
+        screen.getByRole("region", {
+          name: new RegExp(`^${SHELL_COPY.notifications}`),
+        }),
+      ).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Close toast" })).toBeNull();
+      expect(
+        screen.getByRole("button", { name: COMMON_COPY.close }),
+      ).toBeInTheDocument();
     });
 
     it("드라이브의 실행 취소 알림은 드라이브를 떠나면 닫혀, 다른 화면에서도 드라이브로 돌아와서도 다시 뜨지 않는다", async () => {

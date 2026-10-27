@@ -101,6 +101,26 @@ export function getMissingCapabilities(): BrowserCapability[] {
 }
 
 /**
+ * 화면의 옅은 색 상태(고른 행, 끌어다 놓는 폴더, 삭제 버튼 바탕)를 제대로 그릴 수 있는지.
+ *
+ * 이 상태들은 CSS `color-mix()`로 색을 섞어 그리는데, 이것이 없는 브라우저(Windows 7·8.1에 남은
+ * Chrome·Edge 109)에서는 Tailwind가 섞지 않은 진한 색을 그대로 칠해 글자가 바탕에 묻힌다. 앱이
+ * 기준으로 삼는 브라우저(Chrome 111 이상)보다 오래되어 고쳐 그리지 않고 업데이트나 다른 브라우저를
+ * 안내한다(`BrowserSupportBanner`). Tailwind가 대체 색을 고르는 `@supports`와 같은 조건으로 확인하고,
+ * 확인할 수 없으면 섞을 수 있다고 본다.
+ */
+export function canMixColors(): boolean {
+  try {
+    if (typeof CSS === "undefined" || typeof CSS.supports !== "function") {
+      return true;
+    }
+    return CSS.supports("color", "color-mix(in lab, red, red)");
+  } catch {
+    return true;
+  }
+}
+
+/**
  * 송출을 시작하기 전에 확인을 받을, 이 브라우저에 없는 기능.
  *
  * 송출 화면에서 되살릴 수 없는 전체화면과 배경 영상(H.264)만 본다. 확인 창은 전체화면 요청보다

@@ -1,19 +1,9 @@
 import React from "react";
-import { RefreshCwIcon } from "lucide-react";
-import { Button } from "#components/ui/button";
-import {
-  Empty,
-  EmptyContent,
-  EmptyDescription,
-  EmptyHeader,
-  EmptyMedia,
-  EmptyTitle,
-} from "#components/ui/empty";
 import {
   isChunkLoadError,
   reloadOnStaleChunk,
 } from "../../pwa/registerServiceWorker";
-import { SHELL_COPY } from "#copy/shell";
+import { RouteErrorScreen } from "./RouteErrorScreen";
 
 interface RouteErrorBoundaryState {
   failed: boolean;
@@ -44,25 +34,6 @@ export class RouteErrorBoundary extends React.Component<
 
   render(): React.ReactNode {
     if (!this.state.failed) return this.props.children;
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-background p-4">
-        <Empty data-testid="route-error">
-          <EmptyHeader>
-            <EmptyMedia variant="icon">
-              <RefreshCwIcon />
-            </EmptyMedia>
-            <EmptyTitle>{SHELL_COPY.routeError.title}</EmptyTitle>
-            <EmptyDescription>
-              {SHELL_COPY.routeError.description}
-            </EmptyDescription>
-          </EmptyHeader>
-          <EmptyContent>
-            <Button onClick={() => window.location.reload()}>
-              {SHELL_COPY.routeError.reload}
-            </Button>
-          </EmptyContent>
-        </Empty>
-      </div>
-    );
+    return <RouteErrorScreen />;
   }
 }
