@@ -52,9 +52,10 @@ const SESSION_UPDATE_AGE_SECONDS = 24 * 60 * 60;
  *
  * 이 시간 동안은 서명된 `session_data` 쿠키로 세션을 확인하고 Firestore의 `sessions`·`users`를
  * 읽지 않는다. 그 대가로 다른 기기에서의 세션 폐기·계정 삭제는 최대 이 시간만큼 늦게
- * 반영된다. 같은 브라우저의 로그아웃은 쿠키를 함께 지우므로 바로 반영된다.
+ * 반영된다. 같은 브라우저의 로그아웃은 쿠키를 함께 지우므로 바로 반영된다. 계정 삭제
+ * (`scripts/deleteUser.mjs`)는 로그인 수단을 지운 뒤 이 시간만큼 기다렸다가 데이터를 지운다.
  */
-const SESSION_COOKIE_CACHE_SECONDS = 5 * 60;
+export const SESSION_COOKIE_CACHE_SECONDS = 5 * 60;
 
 /**
  * OAuth state 같은 한 번 쓰는 값(`verifications`) 설정. 만료된 값은 콜백마다 찾아 지우지 않고
