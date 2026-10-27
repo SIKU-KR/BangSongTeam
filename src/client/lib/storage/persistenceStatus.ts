@@ -144,12 +144,6 @@ export function reportCorruptedRecords(
   emit();
 }
 
-export function clearCorruptedRecords(): void {
-  if (corrupted.length === 0) return;
-  corrupted = NO_CORRUPTED;
-  emit();
-}
-
 function getCorruptedRecords(): readonly CorruptedRecord[] {
   return corrupted;
 }

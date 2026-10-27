@@ -1494,6 +1494,40 @@ describe("presentationStore 영속성", () => {
       expect(getPersistenceError()).toBeNull();
     });
 
+    it("지우지 못한 프레젠테이션은 그 전에 줄을 선 저장이 끝나도 경고를 남기고 다시 지운다", async () => {
+      await hydrateFromStorage();
+      const slow = createNewPresentation();
+      const gone = createNewPresentation();
+      await flushPendingWrites();
+      let release: () => void = () => undefined;
+      const started = new Promise<void>((resolve) => {
+        storageHooks.beforeSave = () => {
+          resolve();
+          return new Promise<void>((done) => {
+            release = done;
+          });
+        };
+      });
+      renamePresentation(slow.id, "늦게 저장하는 제목");
+      renamePresentation(gone.id, "지울 프레젠테이션 제목");
+      const writing = flushPendingWrites();
+      await started;
+      vi.mocked(deletePresentation).mockRejectedValueOnce(new Error("disk"));
+
+      await removePresentationsLocally([gone.id]);
+      release();
+      await writing;
+
+      expect(getPersistenceError("presentation")?.kind).toBe("unknown");
+      expect(await storedById(gone.id)).toBeDefined();
+
+      await retryFailedWrites();
+
+      expect(deletePresentation).toHaveBeenCalledTimes(2);
+      expect(await storedById(gone.id)).toBeUndefined();
+      expect(getPersistenceError()).toBeNull();
+    });
+
     it("공유받은 사본을 지우지 못하면 공유받은 사본 지우기로 다시 시도한다", async () => {
       await hydrateFromStorage();
       const shared: Presentation = {
@@ -1570,16 +1604,20 @@ describe("presentationStore 영속성", () => {
       expect(getPersistenceError("presentation")?.kind).toBe("unknown");
     });
 
-    it("다시 불러오면 앞서 저장하지 못한 세트의 경고와 다시 시도를 버린다", async () => {
+    it("다시 불러오면 앞서 저장하지 못한 프레젠테이션의 경고와 다시 시도를 버린다", async () => {
       await hydrateFromStorage();
       const doc = createNewPresentation();
       await flushPendingWrites();
       vi.mocked(savePresentation).mockRejectedValueOnce(quotaError());
       renamePresentation(doc.id, "저장하지 못한 제목");
       await flushPendingWrites();
+      expect(getPersistenceError("presentation")?.kind).toBe("quota");
 
       signInAsTestUser(OTHER_USER);
       await hydrateFromStorage();
+
+      expect(getPersistenceError()).toBeNull();
+
       vi.mocked(savePresentation).mockClear();
       await retryFailedWrites();
 

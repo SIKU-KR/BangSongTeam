@@ -998,6 +998,23 @@ describe("songLibraryStore", () => {
 
       expect(getPersistenceError()).toBeNull();
     });
+
+    it("보관함을 다시 불러오면 앞서 저장하지 못한 곡의 경고와 다시 시도를 버린다", async () => {
+      vi.mocked(saveSong).mockRejectedValueOnce(quotaError());
+      updateLibrarySongInfo(SONG, { title: "저장하지 못한 수정", artist: "" });
+      await loadAllSongs();
+      expect(getPersistenceError("deck")?.kind).toBe("quota");
+
+      await hydrateSongLibrary();
+
+      expect(getPersistenceError()).toBeNull();
+
+      vi.mocked(saveSong).mockClear();
+      await retryFailedWrites();
+
+      expect(saveSong).not.toHaveBeenCalled();
+      expect(getPersistenceError()).toBeNull();
+    });
   });
 
   describe("다른 탭에 알리기", () => {

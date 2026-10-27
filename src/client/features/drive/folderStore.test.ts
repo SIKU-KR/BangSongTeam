@@ -531,6 +531,31 @@ describe("folderStore", () => {
       expect(getPersistenceError()).toBeNull();
     });
 
+    it("부팅 병합이 지운 폴더를 저장본에서 지우지 못하면 바뀐 폴더는 저장하고 지운 폴더만 지우기로 다시 시도한다", async () => {
+      const kept = createFolder(null, "남는 폴더");
+      const gone = createFolder(null, "다른 기기에서 지운 폴더");
+      await flushFolderWrites();
+      vi.mocked(deleteFolders).mockRejectedValueOnce(new Error("disk"));
+
+      await applyServerFolders(
+        [{ ...kept, name: "서버에서 바꾼 이름" }],
+        [gone.id],
+      );
+
+      expect(getPersistenceError("folder")?.kind).toBe("unknown");
+      expect(await storedName(kept.id)).toBe("서버에서 바꾼 이름");
+      expect(await storedName(gone.id)).toBe("다른 기기에서 지운 폴더");
+
+      vi.mocked(saveFolder).mockClear();
+      await retryFailedWrites();
+
+      expect(deleteFolders).toHaveBeenCalledTimes(2);
+      expect(deleteFolders).toHaveBeenLastCalledWith([gone.id]);
+      expect(saveFolder).not.toHaveBeenCalled();
+      expect(await storedName(gone.id)).toBeUndefined();
+      expect(getPersistenceError()).toBeNull();
+    });
+
     it("사용자가 지우지 않았는데 메모리에서 사라진 폴더의 실패한 저장은 저장하지도 지우지도 않고 경고만 푼다", async () => {
       const kept = createFolder(null, "처음 이름");
       await flushFolderWrites();
@@ -557,6 +582,26 @@ describe("folderStore", () => {
 
       await hydrateFoldersFromStorage();
 
+      expect(getPersistenceError()).toBeNull();
+    });
+
+    it("폴더를 다시 불러오면 앞서 저장하지 못한 폴더의 경고와 다시 시도를 버린다", async () => {
+      const kept = createFolder(null, "처음 이름");
+      await flushFolderWrites();
+      vi.mocked(saveFolder).mockRejectedValueOnce(quotaError());
+      renameFolder(kept.id, "저장하지 못한 이름");
+      await flushFolderWrites();
+      expect(getPersistenceError("folder")?.kind).toBe("quota");
+
+      await hydrateFoldersFromStorage();
+
+      expect(getPersistenceError()).toBeNull();
+
+      vi.mocked(saveFolder).mockClear();
+      await retryFailedWrites();
+
+      expect(saveFolder).not.toHaveBeenCalled();
+      expect(await storedName(kept.id)).toBe("처음 이름");
       expect(getPersistenceError()).toBeNull();
     });
   });
