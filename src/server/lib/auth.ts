@@ -32,6 +32,19 @@ export const SYNTHETIC_EMAIL_DOMAIN = "users.noreply.worship-slide.local";
  */
 const SESSION_COOKIE_CACHE_SECONDS = 5 * 60;
 
+/**
+ * Better Auth 빈도 제한에서 기본값을 바꾸는 경로. 기본은 `/sign-in*`·`/sign-up*` 모두 IP마다
+ * 10초에 3번이다.
+ *
+ * 소셜 로그인 시작(`/sign-in/social`)은 비밀번호를 받지 않아 맞혀 볼 것이 없다. 교회 와이파이처럼
+ * 공인 IP 하나를 나눠 쓰는 팀이 함께 로그인해도 막히지 않게 10초에 20번까지 받는다. 이메일
+ * 로그인·가입은 계정마다 잠그는 장치가 없어 이 IP당 제한이 비밀번호 대입과 가입 남용을 막는
+ * 유일한 장치라 기본값을 그대로 둔다.
+ */
+const RATE_LIMIT_RULES = {
+  "/sign-in/social": { window: 10, max: 20 },
+};
+
 /** 소셜 프로필에서 만들어 내는 로컬 사용자 속성 */
 interface MappedSocialUser {
   name: string;
@@ -220,7 +233,7 @@ function buildAuth(env: Bindings) {
     session: {
       cookieCache: { enabled: true, maxAge: SESSION_COOKIE_CACHE_SECONDS },
     },
-    rateLimit: { enabled: true },
+    rateLimit: { enabled: true, customRules: RATE_LIMIT_RULES },
     telemetry: { enabled: false },
     emailAndPassword: {
       enabled: true,

@@ -163,6 +163,70 @@ describe("이메일·비밀번호 인증", () => {
   });
 });
 
+describe("로그인 빈도 제한", () => {
+  const googleEnv = {
+    ...env,
+    GOOGLE_CLIENT_ID: "test-client",
+    GOOGLE_CLIENT_SECRET: "test-secret",
+  };
+
+  beforeEach(async () => {
+    await clearDb(env.DB);
+  });
+
+  it("같은 교회 와이파이에서 여럿이 함께 소셜 로그인을 시작해도 막지 않는다", async () => {
+    const statuses: number[] = [];
+    for (let i = 0; i < 6; i++) {
+      const res = await app.request(
+        "/api/auth/sign-in/social",
+        {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            origin: ORIGIN,
+            "x-forwarded-for": "10.0.2.1",
+          },
+          body: JSON.stringify({
+            provider: "google",
+            callbackURL: "/presentations",
+          }),
+        },
+        googleEnv,
+      );
+      statuses.push(res.status);
+    }
+
+    expect(statuses).toEqual([200, 200, 200, 200, 200, 200]);
+  });
+
+  it("비밀번호 로그인은 IP마다 10초에 3번까지만 받는다", async () => {
+    await signUp("limit@example.com", "10.0.2.2");
+
+    const statuses: number[] = [];
+    for (let i = 0; i < 4; i++) {
+      const res = await post(
+        "/api/auth/sign-in/email",
+        { email: "limit@example.com", password: "wrong-password" },
+        "10.0.2.3",
+      );
+      statuses.push(res.status);
+    }
+
+    expect(statuses).toEqual([401, 401, 401, 429]);
+  });
+
+  it("이메일 가입도 IP마다 10초에 3번까지만 받는다", async () => {
+    const statuses: number[] = [];
+    for (let i = 0; i < 4; i++) {
+      statuses.push(
+        (await signUp(`flood-${i}@example.com`, "10.0.2.4")).status,
+      );
+    }
+
+    expect(statuses).toEqual([200, 200, 200, 429]);
+  });
+});
+
 describe("표시 이름", () => {
   beforeEach(async () => {
     await clearDb(env.DB);
