@@ -94,6 +94,8 @@ import {
 
 const USER = "00000000x000000000001";
 const DOC_ID = "100000000000000000001";
+const FOLDER_ID = "f00000000000000000001";
+const MOVED_FOLDER_ID = "f00000000000000000002";
 
 function deckId(n: number): string {
   return `c${String(n).padStart(20, "0")}`;
@@ -381,6 +383,33 @@ describe("스토어의 지금 판 올리기", () => {
     expect(listener.requeue).not.toHaveBeenCalled();
     expect(sentDeckIds(1)).toEqual([deckId(0), deckId(1), deckId(2)]);
   });
+
+  it("큐가 담긴 폴더를 올린 뒤 다른 폴더로 옮긴 판은 보내지 않고 큐에 다시 넣어, 큐가 옮긴 폴더를 먼저 올리게 한다", async () => {
+    const queued = { ...makeSet(), folderId: FOLDER_ID };
+    listener.current.mockReturnValue({ ...queued, folderId: MOVED_FOLDER_ID });
+
+    await pushPresentation(queued);
+
+    expect(api.patch).not.toHaveBeenCalled();
+    expect(listener.requeue).toHaveBeenCalledExactlyOnceWith(DOC_ID);
+  });
+
+  it("폴더 밖으로만 옮겨도 큐에 다시 넣고, 폴더가 그대로면 곧바로 보낸다", async () => {
+    const queued = { ...makeSet(), folderId: FOLDER_ID };
+    listener.current
+      .mockReturnValueOnce({ ...queued, folderId: null })
+      .mockReturnValueOnce({ ...queued, title: "폴더는 그대로인 판" });
+
+    await pushPresentation(queued);
+    await pushPresentation(queued);
+
+    expect(listener.requeue).toHaveBeenCalledExactlyOnceWith(DOC_ID);
+    expect(api.patch).toHaveBeenCalledTimes(1);
+    expect(api.patch.mock.calls[0][0].json).toMatchObject({
+      title: "폴더는 그대로인 판",
+      folderId: FOLDER_ID,
+    });
+  });
 });
 
 describe("기준 판과 서버의 거절 (412·410)", () => {
@@ -557,6 +586,29 @@ describe("기준 판과 서버의 거절 (412·410)", () => {
     await expect(pushPresentation(current)).resolves.toBeUndefined();
 
     expect(listener.rebase).toHaveBeenCalledTimes(1);
+    expect(api.patch).toHaveBeenCalledTimes(2);
+  });
+
+  it("다시 얹는 사이 다른 폴더로 옮긴 판은 다시 보내지 않고 큐에 다시 넣는다", async () => {
+    const lost = dirty({ title: "응답을 잃은 판", folderId: FOLDER_ID });
+    current = lost;
+    await loseResponseOf(lost);
+    current = { ...lost, title: "그 뒤에 고친 판", updatedAt: EDITED_AT };
+    const queued = current;
+    api.patch.mockResolvedValueOnce(conflictWith({ ...lost, updatedAt: S }));
+    listener.rebase.mockImplementation((_id, base) => {
+      current = {
+        ...queued,
+        folderId: MOVED_FOLDER_ID,
+        baseUpdatedAt: base,
+        updatedAt: laterThan(base, queued.updatedAt),
+      };
+    });
+
+    await pushPresentation(queued);
+
+    expect(listener.rebase).toHaveBeenCalledExactlyOnceWith(DOC_ID, S);
+    expect(listener.requeue).toHaveBeenCalledExactlyOnceWith(DOC_ID);
     expect(api.patch).toHaveBeenCalledTimes(2);
   });
 

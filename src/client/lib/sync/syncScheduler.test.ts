@@ -1,6 +1,27 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { API_ERRORS, type Folder, type Presentation } from "#shared";
+import {
+  describe,
+  it,
+  expect,
+  beforeEach,
+  afterEach,
+  onTestFinished,
+  vi,
+} from "vitest";
+import {
+  API_ERRORS,
+  type Folder,
+  type Presentation,
+  type PresentationChanges,
+} from "#shared";
 import { ERROR_COPY } from "#copy/common";
+import { signInAsTestUser } from "../../test/sessionFixture";
+import {
+  __loadDocumentsForTests,
+  getPresentationById,
+  movePresentation,
+  resetPresentationStore,
+} from "../../features/presentation/presentationStore";
+import { ownPresentationListener } from "./ownPresentationListener";
 import {
   scheduleDocumentPush,
   cancelDocumentPush,
@@ -19,7 +40,10 @@ import {
 } from "./syncScheduler";
 import { BASE_BACKOFF_MS, MAX_RETRY_ATTEMPTS, SLOW_RETRY_MS } from "./backoff";
 import { getSyncSnapshot, resetSyncStatus } from "./syncStatus";
-import { __resetServerDecksForTests } from "./presentationSync";
+import {
+  __resetServerDecksForTests,
+  setOwnPresentationListener,
+} from "./presentationSync";
 import {
   OfflineError,
   ServerRejectedError,
@@ -506,6 +530,60 @@ describe("서버 push 스케줄러", () => {
 
     expect(order).toEqual(["folder:f00000000000000000001", "doc:a"]);
     __resetFolderSyncForTests();
+  });
+
+  it("담긴 폴더가 오르기를 기다리는 사이 다른 새 폴더로 옮긴 세트는 그 폴더가 오른 뒤에 옮긴 자리로 올린다", async () => {
+    __resetFolderSyncForTests();
+    signInAsTestUser(USER);
+    const docId = "100000000000000000001";
+    const first = newFolder("f00000000000000000001");
+    const second = newFolder("f00000000000000000002");
+    const order: string[] = [];
+    let releaseFirst: () => void = () => undefined;
+    __setFolderPusherForTests(async (folder) => {
+      order.push(`folder:${folder.id}`);
+      if (folder.id === first.id) {
+        await new Promise<void>((resolve) => {
+          releaseFirst = resolve;
+        });
+      }
+      return folder;
+    });
+    const api = installFakeApi({
+      "PATCH /api/presentations/*": ({ body }) => {
+        const changes = body as PresentationChanges;
+        order.push(`doc:${changes.folderId}`);
+        return { body: { ok: true, updatedAt: changes.updatedAt } };
+      },
+    });
+    onTestFinished(() => {
+      setOwnPresentationListener(null);
+      api.restore();
+      resetPresentationStore();
+      __resetFolderSyncForTests();
+    });
+    __setPusherForTests(null);
+    setOwnPresentationListener(ownPresentationListener);
+    setFolderSyncEnabled(true);
+    __loadDocumentsForTests([
+      { ...doc(docId), folderId: first.id, baseUpdatedAt: null },
+    ]);
+
+    scheduleFolderPush(first);
+    scheduleDocumentPush(getPresentationById(docId)!);
+    const flushing = flushPendingSync();
+    await vi.waitFor(() => expect(order).toEqual([`folder:${first.id}`]));
+    scheduleFolderPush(second);
+    movePresentation(docId, second.id);
+    releaseFirst();
+    await flushing;
+    await flushPendingSync();
+
+    expect(order).toEqual([
+      `folder:${first.id}`,
+      `folder:${second.id}`,
+      `doc:${second.id}`,
+    ]);
   });
 
   it("폴더 큐를 먼저 비우는 동안 끄면 프레젠테이션을 보내지 않는다", async () => {
