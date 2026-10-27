@@ -22,6 +22,18 @@ function settle(): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, 0));
 }
 
+const EARLY_ACCESS_STYLESHEET =
+  /^(?:https:)?\/\/fonts\.googleapis\.com\/earlyaccess\/(\w+)\.css$/;
+
+const GRADUATED_EARLY_ACCESS_FONTS = new Set([
+  "notosanskr",
+  "nanummyeongjo",
+  "nanumgothic",
+  "nanumgothiccoding",
+  "nanumbrushscript",
+  "nanumpenscript",
+]);
+
 describe("눈누(noonnu.cc) 웹폰트 카탈로그 및 동적 로더", () => {
   beforeEach(() => {
     // DOM head 정리
@@ -138,6 +150,17 @@ describe("눈누(noonnu.cc) 웹폰트 카탈로그 및 동적 로더", () => {
           .map((font) => [font.name, font.cardFamily]),
       ),
     );
+  });
+
+  it("Google 얼리 액세스 스타일시트는 정식 Google Fonts로 옮겨 간 글꼴만 가리킨다(나머지는 글꼴 파일이 지워졌다)", async () => {
+    const filesRemoved = (await loadNoonnuFontCatalog())
+      .filter((font) => {
+        const slug = EARLY_ACCESS_STYLESHEET.exec(font.url)?.[1];
+        return slug !== undefined && !GRADUATED_EARLY_ACCESS_FONTS.has(slug);
+      })
+      .map((font) => font.name);
+
+    expect(filesRemoved).toEqual([]);
   });
 
   it("CSS로 싣는 글꼴은 스타일시트를 받은 뒤에야 불러오기를 마친다", async () => {

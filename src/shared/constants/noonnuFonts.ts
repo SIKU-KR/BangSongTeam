@@ -1,6 +1,10 @@
 /**
  * 눈누(https://noonnu.cc/index) 상업용 무료 한글 웹폰트 메타데이터.
- * 모든 폰트는 유효한 웹폰트 URL(woff2, woff, css 등)을 갖추고 있습니다.
+ *
+ * `url`은 `format`이 `css`면 글꼴을 선언하는 스타일시트, 아니면 글꼴 파일 주소다. 모두 외부
+ * CDN이라 올린 곳에서 파일을 내리면 대체 글꼴로 그려진다. `pnpm fonts:previews`가 받지 못한
+ * 글꼴을 알려 준다. Google 얼리 액세스에서 정식 글꼴로 옮겨 가지 않은 한나체·제주 글꼴은
+ * 스타일시트만 남고 파일이 지워져, 같은 패밀리를 선언하는 npm 사본(`@noonnu/*`)에서 받는다.
  */
 export interface NoonnuFont {
   readonly id: string;
