@@ -124,4 +124,46 @@ describe("mergeFolders", () => {
       A,
     ]);
   });
+
+  it.each(["boot", "refresh"] as const)(
+    "받기 전부터 알던 폴더가 그사이 로컬에서 사라졌으면 서버 목록에 있어도 다시 넣지 않는다 (%s)",
+    (mode) => {
+      const result = mergeFolders(
+        [folder(B)],
+        [folder(A), folder(B), folder(C)],
+        {
+          mode,
+          knownBeforePull: new Set([A, B]),
+        },
+      );
+
+      expect(result.folders.map((f) => f.id)).toEqual([B, C]);
+      expect(result.needsPush).toEqual([]);
+    },
+  );
+
+  describe("다시 받기 (refresh)", () => {
+    it("더 새 로컬 폴더와 로컬에만 있는 폴더는 그대로 두고 올리지 않으며, 더 새 서버 폴더는 받는다", () => {
+      const localNewer = folder(A, {
+        name: "로컬",
+        updatedAt: "2026-09-22T00:00:00.000Z",
+      });
+      const localOnly = folder(C, { name: "로컬에만" });
+      const serverNewer = folder(B, {
+        name: "서버",
+        updatedAt: "2026-09-22T00:00:00.000Z",
+      });
+
+      const result = mergeFolders(
+        [localNewer, folder(B, { name: "옛 로컬" }), localOnly],
+        [folder(A, { name: "옛 서버" }), serverNewer],
+        { mode: "refresh", knownBeforePull: new Set([A, B, C]) },
+      );
+
+      expect(result.folders.find((f) => f.id === A)).toBe(localNewer);
+      expect(result.folders.find((f) => f.id === B)).toBe(serverNewer);
+      expect(result.folders.find((f) => f.id === C)).toBe(localOnly);
+      expect(result.needsPush).toEqual([]);
+    });
+  });
 });

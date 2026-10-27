@@ -1398,6 +1398,17 @@ function skipsUnpersisted(id: string): boolean {
   return true;
 }
 
+/**
+ * 이 탭의 그 세트가 저장본과 다를 수 있는지: 아직 저장하지 않았거나 저장하는 중이거나, 다른 탭이 쓴
+ * 저장본을 다시 읽지 않고 건너뛰었다(`reloadPresentationsFromStorage`).
+ *
+ * 다시 받기(`refreshOwnDataIfStale`)는 이런 세트를 서버 판으로 바꾸지 않는다. 바꾼 판은 저장 줄이
+ * 저장본에 쓰므로, 다른 탭이 저장만 하고 아직 올리지 못한 판을 서버 판으로 덮을 수 있다.
+ */
+export function mayDifferFromStorage(id: string): boolean {
+  return hasUnpersistedWrite(id) || skippedReloads.has(id);
+}
+
 function subscribe(listener: () => void): () => void {
   listeners.add(listener);
   return () => {

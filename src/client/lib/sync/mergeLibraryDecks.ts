@@ -1,4 +1,5 @@
 import { isFarFuture, type Deck } from "#shared";
+import type { MergeMode } from "./mergeDocuments";
 
 interface LibraryMergeResult {
   decks: Deck[];
@@ -8,6 +9,8 @@ interface LibraryMergeResult {
 
 interface LibraryMergeOptions {
   deletedIds?: Iterable<string>;
+  mode?: MergeMode;
+  knownBeforePull?: ReadonlySet<string>;
 }
 
 /**
@@ -83,6 +86,12 @@ export function hasSameDeckContent(a: Deck, b: Deck): boolean {
  * 지운 곡(`deletedIds`: 서버의 삭제 기록과 이 페이지에서 지운 곡)은 양쪽에서 뺀다. 지우기가
  * 로컬에만 있는 사본이나 더 새로운 로컬 사본보다 우선한다. 오래된 기기·탭이 다시 올린 서버
  * 사본은 받지 않고, 로컬 사본은 올리지 않고 로컬에서 지우도록 `removedIds`로 돌려준다.
+ *
+ * 받기 전부터 알던 곡(`knownBeforePull`)이 그사이 보관함에서 사라졌으면 서버 목록에 있어도 넣지
+ * 않는다. 받는 동안 지웠거나 다른 탭이 지운 곡이라, 목록이 그 삭제보다 먼저 받은 것일 수 있다.
+ *
+ * 다시 받기(`refresh`)는 받기만 한다. 이기는 로컬 곡과 로컬에만 있는 곡도 그대로 두고 올릴
+ * 목록(`needsPush`)은 비운다. 그 곡은 큐와 다음 부팅이 올린다.
  */
 export function mergeLibraryDecks(
   local: Deck[],
@@ -90,12 +99,17 @@ export function mergeLibraryDecks(
   options: LibraryMergeOptions = {},
 ): LibraryMergeResult {
   const deleted = new Set(options.deletedIds ?? []);
+  const known = options.knownBeforePull ?? new Set<string>();
+  const localIds = new Set(local.map((deck) => deck.id));
+  const refresh = options.mode === "refresh";
   const byId = new Map<string, Deck>();
   const needsPush: string[] = [];
   const removedIds: string[] = [];
 
   for (const deck of server) {
-    if (!deleted.has(deck.id)) byId.set(deck.id, deck);
+    if (deleted.has(deck.id)) continue;
+    if (known.has(deck.id) && !localIds.has(deck.id)) continue;
+    byId.set(deck.id, deck);
   }
 
   for (const localDeck of local) {
@@ -108,7 +122,7 @@ export function mergeLibraryDecks(
 
     if (!serverDeck) {
       byId.set(localDeck.id, localDeck);
-      needsPush.push(localDeck.id);
+      if (!refresh) needsPush.push(localDeck.id);
       continue;
     }
 
@@ -117,7 +131,7 @@ export function mergeLibraryDecks(
       !isFarFuture(localDeck.updatedAt)
     ) {
       byId.set(localDeck.id, withServerFields(localDeck, serverDeck));
-      needsPush.push(localDeck.id);
+      if (!refresh) needsPush.push(localDeck.id);
     }
   }
 

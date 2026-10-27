@@ -9,6 +9,7 @@ import { isProjecting } from "../../features/presentation/fullscreen";
 import { reloadPresentationsFromStorage } from "../../features/presentation/presentationStore";
 import { reloadFoldersFromStorage } from "../../features/drive/folderStore";
 import { reloadSongsFromStorage } from "../../features/editor/songLibraryStore";
+import { noteRemotePull } from "./bootSync";
 
 const KINDS = StorageChangeKindSchema.options;
 
@@ -75,6 +76,10 @@ function reload(
 
 function onStorageChange(change: StorageChange): void {
   if (change.userId !== getCurrentUserId()) return;
+  if (change.kind === "pulled") {
+    noteRemotePull();
+    return;
+  }
   if (!started || isProjecting()) {
     hold(change.userId, change.kind, change.ids);
     return;

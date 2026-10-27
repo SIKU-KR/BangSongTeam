@@ -34,6 +34,17 @@ export function announceStorageChange(
 }
 
 /**
+ * 이 탭이 서버에서 내 데이터를 다시 받았다고 같은 브라우저의 다른 탭에 알린다(`pulled`). 받은 탭은 다시
+ * 받기를 그만큼 미룬다. 이 탭이 받아 바꾼 저장본은 저장본 알림으로 이미 그 탭에 가므로, 탭마다 같은
+ * 목록을 다시 받으면 요청만 는다. 로그인하지 않았으면 보내지 않는다.
+ */
+export function announcePull(): void {
+  const userId = getCurrentUserId();
+  if (!userId) return;
+  storageChannel().post({ v: 1, userId, kind: "pulled", ids: [] });
+}
+
+/**
  * 다른 탭이 알린 저장본 변화를 받는다. 형식이 맞지 않거나 모르는 판의 메시지는 버리고, 사용자
  * id는 받는 쪽이 자기 사용자와 견준다. 구독을 푸는 함수를 돌려준다.
  */

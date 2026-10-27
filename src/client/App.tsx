@@ -33,6 +33,7 @@ import { registerServiceWorker } from "./pwa/registerServiceWorker";
 import {
   startBootSync,
   runDeferredBootSync,
+  refreshOwnDataIfStale,
   flushBeforeSignOut,
   flushPendingSync,
   flushDeckSync,
@@ -168,6 +169,10 @@ function isGuestPath(pathname: string): boolean {
  * 서버가 확인하지 않은 로그아웃은 연결이 돌아올 때마다 마저 끝낸다(`finishPendingSignOut`). 열린
  * 채로 남은 교회 PC의 탭에서도 남은 쿠키를 지워야 한다.
  *
+ * 송출 화면이 아닌 주소로 옮길 때마다 내 데이터가 오래됐으면 다시 받는다(`refreshOwnDataIfStale`).
+ * 오래 열어 둔 탭에서 편집기를 열면 다른 기기에서 고친 판으로 고치고 송출해야 한다. 송출을 마치고
+ * 돌아올 때도 같다.
+ *
  * 알림 창(sonner `Toaster`)은 로그인하지 않은 화면을 포함한 모든 주소가 함께 쓰는 하나만 여기 둔다.
  * sonner는 알림 창이 마운트될 때 아직 닫히지 않은 알림을 다시 띄워서, 화면마다 창을 두면 창이 없는
  * 화면(편집기 등)에서 띄운 알림은 보이지 않다가 다른 화면에서 뒤늦게 뜬다. 송출 화면에는 두지 않는다.
@@ -282,6 +287,10 @@ function ProjectionLatchGate({
     resumeDeferredSyncRecovery();
     flushClientReports();
   }, [isOnProjection]);
+
+  useEffect(() => {
+    if (!isProjectionPath(pathname)) void refreshOwnDataIfStale("wake");
+  }, [pathname]);
 
   return hasLeft ? null : <>{children}</>;
 }

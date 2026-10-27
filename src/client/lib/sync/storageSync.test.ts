@@ -46,6 +46,13 @@ vi.mock("../../features/editor/songLibraryStore", async (importOriginal) => ({
   reloadSongsFromStorage: reloads.decks,
 }));
 
+const remotePull = vi.hoisted(() => ({ note: vi.fn() }));
+
+vi.mock("./bootSync", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./bootSync")>()),
+  noteRemotePull: remotePull.note,
+}));
+
 const CHANNEL = "chiton:storage";
 const PROJECTION_PATH = "/present/p00000000000000000001/fullscreen";
 const SET_A = "p00000000000000000001";
@@ -94,6 +101,7 @@ describe("storageSync", () => {
       reload.mockReset();
       reload.mockResolvedValue([]);
     }
+    remotePull.note.mockClear();
   });
 
   afterEach(() => {
@@ -115,6 +123,21 @@ describe("storageSync", () => {
     expect(reloadedIds("presentations")).toEqual([[SET_A]]);
     expect(reloadedIds("folders")).toEqual([[FOLDER]]);
     expect(reloadedIds("decks")).toEqual([[SONG]]);
+    other.close();
+  });
+
+  it("다른 탭이 내 데이터를 다시 받았다고 알리면 다시 받기 간격을 그때부터 세고, 저장본은 다시 읽지 않는다", async () => {
+    startStorageSync();
+    const other = tabs.otherTab(CHANNEL);
+
+    other.post({ v: 1, userId: SEED_USER_ID, kind: "pulled", ids: [] });
+    other.post({ v: 1, userId: OTHER_USER, kind: "pulled", ids: [] });
+    await nextTask();
+
+    expect(remotePull.note).toHaveBeenCalledTimes(1);
+    expect(reloads.presentations).not.toHaveBeenCalled();
+    expect(reloads.folders).not.toHaveBeenCalled();
+    expect(reloads.decks).not.toHaveBeenCalled();
     other.close();
   });
 

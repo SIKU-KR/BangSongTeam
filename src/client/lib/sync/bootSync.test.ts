@@ -19,6 +19,7 @@ import {
   deleteUserSong,
   getUserSongs,
   hydrateSongLibrary,
+  reloadSongsFromStorage,
   resetSongLibraryStore,
   saveSongToLibrary,
   updateLibrarySongInfo,
@@ -26,7 +27,11 @@ import {
 import {
   __resetBootSyncForTests,
   BOOT_PULL_WAIT_MS,
+  FRESHNESS_MS,
   isBootPullPending,
+  noteRemotePull,
+  RECONNECT_REFRESH_MS,
+  refreshOwnDataIfStale,
   retryBootSyncIfNeeded,
   runDeferredBootSync,
   shouldRunBootSync,
@@ -66,6 +71,7 @@ import {
   setFolderSyncEnabled,
 } from "./folderSync";
 import {
+  deleteSong,
   loadAllPresentations,
   loadAllSongs,
   saveFolders,
@@ -73,9 +79,12 @@ import {
   saveSong,
 } from "../storage";
 import { closeOfflineDB, OFFLINE_DB_NAME } from "../storage/db";
+import { __resetStorageChannelForTests } from "../storage/storageChannel";
+import { installFakeBroadcastChannel } from "../../test/fakeBroadcastChannel";
 import {
   __loadFoldersForTests,
   getFolders,
+  removeFoldersLocally,
   renameFolder,
   resetFolderStore,
 } from "../../features/drive/folderStore";
@@ -2099,5 +2108,355 @@ describe("stopSync — 계정이 끝난 탭", () => {
     await settleMicrotasks();
 
     expect(presentationSync.pullFolders).not.toHaveBeenCalled();
+  });
+});
+
+describe("refreshOwnDataIfStale — 열려 있는 탭이 내 데이터를 다시 받기", () => {
+  const T1 = "2026-10-01T00:00:00.000Z";
+  const T2 = "2026-10-01T00:10:00.000Z";
+  const LATER = "2026-09-25T00:00:00.000Z";
+  let pushFolder: ReturnType<typeof vi.fn<(f: Folder) => Promise<Folder>>>;
+  let pushDeck: ReturnType<typeof vi.fn<(deck: Deck) => Promise<Deck>>>;
+  let removeDeck: ReturnType<typeof vi.fn<(id: string) => Promise<boolean>>>;
+
+  function v1(): Presentation {
+    return { ...presentation(DOC), title: "v1", updatedAt: T1 };
+  }
+
+  function v2(): Presentation {
+    return {
+      ...presentation(DOC),
+      title: "다른 기기에서 고친 v2",
+      updatedAt: T2,
+    };
+  }
+
+  function elapse(ms: number): void {
+    vi.setSystemTime(Date.now() + ms);
+  }
+
+  function clearPulls(): void {
+    presentationSync.pullFolders.mockClear();
+    presentationSync.pullPresentations.mockClear();
+    presentationSync.pullDecks.mockClear();
+  }
+
+  function pulls(): number {
+    return presentationSync.pullPresentations.mock.calls.length;
+  }
+
+  beforeEach(async () => {
+    await resetBootSyncDependencies();
+    vi.useFakeTimers({ toFake: ["Date"] });
+    pushFolder = vi.fn(async (f: Folder) => f);
+    __setFolderPusherForTests(pushFolder);
+    pushDeck = vi.fn(async (deck: Deck) => deck);
+    removeDeck = vi.fn(async () => true);
+    __setDeckTransportForTests({ push: pushDeck, remove: removeDeck });
+    presentationSync.pullPresentations.mockResolvedValue([v1()]);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    cleanUpBootSync();
+  });
+
+  it("받은 지 1분이 지나 창으로 돌아오면 다른 기기에서 고친 판을 받고, 아무것도 올리지 않는다", async () => {
+    await runBootSync();
+    expect(getPresentationById(DOC)?.title).toBe("v1");
+    presentationSync.pullPresentations.mockResolvedValue([v2()]);
+
+    elapse(FRESHNESS_MS + 1_000);
+    await refreshOwnDataIfStale("wake");
+    await Promise.all([flushFolderSync(), flushPendingSync(), flushDeckSync()]);
+
+    expect(listPresentations()).toEqual([{ ...v2(), baseUpdatedAt: T2 }]);
+    expect(presentationSync.pushPresentation).not.toHaveBeenCalled();
+    expect(pushFolder).not.toHaveBeenCalled();
+    expect(pushDeck).not.toHaveBeenCalled();
+  });
+
+  it("창으로 돌아오기·주소 이동은 받은 지 1분이 지나야 다시 받는다", async () => {
+    await runBootSync();
+    clearPulls();
+
+    await refreshOwnDataIfStale("wake");
+    expect(pulls()).toBe(0);
+
+    elapse(FRESHNESS_MS);
+    await refreshOwnDataIfStale("wake");
+    elapse(FRESHNESS_MS - 1);
+    await refreshOwnDataIfStale("wake");
+
+    expect(presentationSync.pullFolders).toHaveBeenCalledTimes(1);
+    expect(presentationSync.pullPresentations).toHaveBeenCalledTimes(1);
+    expect(presentationSync.pullDecks).toHaveBeenCalledTimes(1);
+
+    elapse(1);
+    await refreshOwnDataIfStale("wake");
+    expect(pulls()).toBe(2);
+  });
+
+  it("연결이 돌아오면 받은 지 15초가 지나야 다시 받는다", async () => {
+    await runBootSync();
+    clearPulls();
+
+    elapse(RECONNECT_REFRESH_MS);
+    await refreshOwnDataIfStale("reconnect");
+    elapse(RECONNECT_REFRESH_MS - 1);
+    await refreshOwnDataIfStale("reconnect");
+    expect(pulls()).toBe(1);
+
+    elapse(1);
+    await refreshOwnDataIfStale("reconnect");
+    expect(pulls()).toBe(2);
+  });
+
+  it("다시 시도는 기다리지 않고 곧바로 받는다", async () => {
+    await runBootSync();
+    clearPulls();
+
+    await refreshOwnDataIfStale("manual");
+    await refreshOwnDataIfStale("manual");
+
+    expect(pulls()).toBe(2);
+  });
+
+  it("받는 중에 다시 불러도 한 번만 받는다", async () => {
+    await runBootSync();
+    clearPulls();
+    const pulling = deferred<Presentation[]>();
+    presentationSync.pullPresentations.mockReturnValueOnce(pulling.promise);
+
+    const first = refreshOwnDataIfStale("manual");
+    const second = refreshOwnDataIfStale("manual");
+    pulling.resolve([v2()]);
+    await Promise.all([first, second]);
+
+    expect(pulls()).toBe(1);
+    expect(getPresentationById(DOC)?.title).toBe(v2().title);
+  });
+
+  it("송출 중에는 받지 않고, 받는 사이 송출을 시작했으면 받은 판을 반영하지 않는다", async () => {
+    await runBootSync();
+    clearPulls();
+
+    window.history.pushState({}, "", "/present/abc/fullscreen");
+    await refreshOwnDataIfStale("manual");
+    expect(presentationSync.pullFolders).not.toHaveBeenCalled();
+    expect(pulls()).toBe(0);
+
+    window.history.pushState({}, "", "/presentations");
+    const pulling = deferred<Presentation[]>();
+    presentationSync.pullPresentations.mockReturnValueOnce(pulling.promise);
+    const refreshing = refreshOwnDataIfStale("manual");
+    window.history.pushState({}, "", "/present/abc/fullscreen");
+    pulling.resolve([v2()]);
+    await refreshing;
+
+    expect(getPresentationById(DOC)?.title).toBe("v1");
+  });
+
+  it("받는 사이 비우기로 지운 폴더, 지운 곡, 지우는 중인 곡, 다른 탭이 지운 곡은 다시 넣지 않는다", async () => {
+    const [deletedDuringPull, deleting, deletedInOtherTab] = [
+      "c00000000000000000a01",
+      "c00000000000000000a02",
+      "c00000000000000000a03",
+    ].map((id) => serverDeck({ id, title: id }));
+    presentationSync.pullFolders.mockResolvedValue({
+      ...EMPTY_FOLDER_LIST,
+      folders: [folder(PARENT)],
+    });
+    presentationSync.pullDecks.mockResolvedValue({
+      decks: [deletedDuringPull, deleting, deletedInOtherTab],
+      deletedIds: [],
+    });
+    const removing = deferred<boolean>();
+    removeDeck.mockImplementation(async (id) =>
+      id === deleting.id ? removing.promise : true,
+    );
+    await runBootSync();
+    expect(getFolders().map((f) => f.id)).toEqual([PARENT]);
+    expect(getUserSongs()).toHaveLength(3);
+
+    deleteUserSong(deleting.id);
+    void flushDeckSync();
+    await vi.waitFor(() =>
+      expect(removeDeck).toHaveBeenCalledWith(deleting.id),
+    );
+    const folders = deferred<FolderListResponse>();
+    presentationSync.pullFolders.mockReturnValueOnce(folders.promise);
+
+    const refreshing = refreshOwnDataIfStale("manual");
+    await removeFoldersLocally([PARENT]);
+    deleteUserSong(deletedDuringPull.id);
+    await deleteSong(deletedInOtherTab.id);
+    await reloadSongsFromStorage([deletedInOtherTab.id]);
+    folders.resolve({ ...EMPTY_FOLDER_LIST, folders: [folder(PARENT)] });
+    await refreshing;
+
+    expect(getFolders()).toEqual([]);
+    expect(getUserSongs()).toEqual([]);
+    removing.resolve(true);
+  });
+
+  it("올리기를 기다리는 세트는 서버와 맞춘 판이어도 서버 판으로 바꾸지 않는다", async () => {
+    await runBootSync();
+    scheduleDocumentPush(getPresentationById(DOC)!);
+    presentationSync.pullPresentations.mockResolvedValue([v2()]);
+
+    await refreshOwnDataIfStale("manual");
+
+    expect(getPresentationById(DOC)?.title).toBe("v1");
+    expect(hasPendingDocumentPush()).toBe(true);
+  });
+
+  it("고친 세트는 서버 판이 더 새로워도 그대로 두고 대기 중인 push도 버리지 않는다", async () => {
+    await runBootSync();
+    renamePresentation(DOC, "이 탭에서 고친 제목");
+    presentationSync.pullPresentations.mockResolvedValue([v2()]);
+
+    await refreshOwnDataIfStale("manual");
+
+    expect(getPresentationById(DOC)?.title).toBe("이 탭에서 고친 제목");
+    expect(hasPendingDocumentPush()).toBe(true);
+  });
+
+  it("서버가 더 새로운 폴더·곡은 받고 그 낡은 push를 버리며, 이 탭에서 더 늦게 고친 폴더·곡의 push는 남긴다", async () => {
+    const editedDeck = serverDeck({ id: "c00000000000000000b01" });
+    const staleDeck = serverDeck({ id: "c00000000000000000b02" });
+    presentationSync.pullFolders.mockResolvedValue({
+      ...EMPTY_FOLDER_LIST,
+      folders: [folder(PARENT), folder(CHILD)],
+    });
+    presentationSync.pullDecks.mockResolvedValue({
+      decks: [editedDeck, staleDeck],
+      deletedIds: [],
+    });
+    await runBootSync();
+
+    renameFolder(PARENT, "이 탭에서 바꾼 이름");
+    scheduleFolderPush(folder(CHILD, { name: "낡은 이름" }));
+    updateLibrarySongInfo(editedDeck.id, {
+      title: "이 탭에서 고친 제목",
+      artist: "",
+    });
+    scheduleDeckPush({ ...staleDeck, title: "낡은 제목" });
+    presentationSync.pullFolders.mockResolvedValue({
+      ...EMPTY_FOLDER_LIST,
+      folders: [
+        folder(PARENT),
+        folder(CHILD, { name: "다른 기기 이름", updatedAt: LATER }),
+      ],
+    });
+    presentationSync.pullDecks.mockResolvedValue({
+      decks: [
+        editedDeck,
+        { ...staleDeck, title: "다른 기기 제목", updatedAt: LATER },
+      ],
+      deletedIds: [],
+    });
+
+    await refreshOwnDataIfStale("manual");
+    await Promise.all([flushFolderSync(), flushDeckSync()]);
+
+    expect(getFolders().find((f) => f.id === CHILD)?.name).toBe(
+      "다른 기기 이름",
+    );
+    expect(pushFolder.mock.calls.map(([f]) => [f.id, f.name])).toEqual([
+      [PARENT, "이 탭에서 바꾼 이름"],
+    ]);
+    expect(getUserSongs().find((deck) => deck.id === staleDeck.id)?.title).toBe(
+      "다른 기기 제목",
+    );
+    expect(pushDeck.mock.calls.map(([deck]) => [deck.id, deck.title])).toEqual([
+      [editedDeck.id, "이 탭에서 고친 제목"],
+    ]);
+  });
+
+  it("받지 못해도 동기화 상태를 바꾸거나 다시 받기를 예약하지 않는다", async () => {
+    await runBootSync();
+    expect(getSyncSnapshot().status).toBe("synced");
+    presentationSync.pullPresentations.mockRejectedValueOnce(
+      new OfflineError(),
+    );
+
+    await refreshOwnDataIfStale("manual");
+
+    expect(getSyncSnapshot().status).toBe("synced");
+    expect(await retryBootSyncIfNeeded("manual")).toBe(false);
+  });
+
+  it("부팅이 받기 전이나 받지 못한 부팅 단계가 다시 받기를 기다리는 동안에는 받지 않는다", async () => {
+    await refreshOwnDataIfStale("manual");
+    expect(presentationSync.pullFolders).not.toHaveBeenCalled();
+
+    window.history.pushState({}, "", "/present/abc/fullscreen");
+    startBootSync(window.location.pathname);
+    window.history.pushState({}, "", "/presentations");
+    await refreshOwnDataIfStale("manual");
+    expect(presentationSync.pullFolders).not.toHaveBeenCalled();
+
+    presentationSync.pullFolders.mockRejectedValueOnce(new OfflineError());
+    await runBootSync();
+    expect(presentationSync.pullFolders).toHaveBeenCalledTimes(1);
+
+    await refreshOwnDataIfStale("manual");
+    expect(presentationSync.pullFolders).toHaveBeenCalledTimes(1);
+  });
+
+  it("동기화를 끈 뒤에는 받지 않고, 끄기 전에 시작한 받기의 결과도 반영하지 않는다", async () => {
+    await runBootSync();
+    clearPulls();
+    const pulling = deferred<Presentation[]>();
+    presentationSync.pullPresentations.mockReturnValueOnce(pulling.promise);
+
+    const refreshing = refreshOwnDataIfStale("manual");
+    stopSync();
+    pulling.resolve([v2()]);
+    await refreshing;
+
+    expect(getPresentationById(DOC)?.title).toBe("v1");
+
+    await refreshOwnDataIfStale("manual");
+    expect(pulls()).toBe(1);
+  });
+
+  it("다른 탭이 방금 받았다고 알리면 그때부터 1분 동안 다시 받지 않는다", async () => {
+    await runBootSync();
+    clearPulls();
+
+    elapse(FRESHNESS_MS);
+    noteRemotePull();
+    await refreshOwnDataIfStale("wake");
+    expect(pulls()).toBe(0);
+
+    elapse(FRESHNESS_MS);
+    await refreshOwnDataIfStale("wake");
+    expect(pulls()).toBe(1);
+  });
+
+  it("받고 나면 같은 브라우저의 다른 탭에 받았다고 알린다", async () => {
+    const tabs = installFakeBroadcastChannel();
+    __resetStorageChannelForTests();
+    const other = tabs.otherTab("chiton:storage");
+
+    try {
+      await runBootSync();
+      other.received.length = 0;
+      await refreshOwnDataIfStale("manual");
+      await settleMicrotasks();
+
+      expect(other.received).toContainEqual({
+        v: 1,
+        userId: TEST_USER_ID,
+        kind: "pulled",
+        ids: [],
+      });
+    } finally {
+      other.close();
+      __resetStorageChannelForTests();
+      vi.unstubAllGlobals();
+    }
   });
 });
