@@ -217,7 +217,7 @@ describe("VideoLayer", () => {
     expect(slotB()).toHaveStyle({ opacity: "1" });
   });
 
-  it("배경이 없는 곡으로 넘어가면 비운 영상을 멈추고 내려 받던 데이터를 놓아, 보이지 않는 곳에서 재생하지 않는다", () => {
+  it("배경이 없는 곡으로 넘어가면 비운 영상을 곧바로 멈추고, 마지막 프레임이 흐려지는 전환이 끝난 뒤에 받던 데이터를 놓는다", () => {
     const { rerender } = render(<VideoLayer src={LOOP1} />);
     advance(FADE_MS);
     markLoaded(slotA(), LOOP1);
@@ -228,6 +228,12 @@ describe("VideoLayer", () => {
     rerender(<VideoLayer src={undefined} />);
 
     expect(pause.mock.contexts).toContain(slotA());
+    expect(slotA().style.transition).toBe(`opacity ${FADE_MS}ms ease-in-out`);
+
+    advance(FADE_MS - 1);
+    expect(load.mock.contexts).not.toContain(slotA());
+
+    advance(1);
     expect(load.mock.contexts).toContain(slotA());
 
     fire(slotA(), "pause");

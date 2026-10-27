@@ -63,9 +63,11 @@ function initialSlots(
  * 같은 곡 안의 슬라이드 이동은 `src`가 그대로라 영상이 끊기지 않는다.
  *
  * `src`가 사라지면(배경 없음·이미지 배경 곡으로 넘어감) 재생 중이던 슬롯을 비운다.
- * 비우지 않으면 앞 곡의 영상이 다음 곡 뒤에서 계속 보인다. 비운 슬롯은 멈추고 다시
- * 불러(`load`) 받던 데이터를 놓는다. `src` 속성만 지우면 브라우저는 보이지 않는 영상을
- * 계속 디코딩하며 반복 재생하고, 캐시에 없는 영상이면 계속 받는다.
+ * 비우지 않으면 앞 곡의 영상이 다음 곡 뒤에서 계속 보인다. `src` 속성만 지우면 브라우저는
+ * 보이지 않는 영상을 계속 디코딩하며 반복 재생하고, 캐시에 없는 영상이면 계속 받는다.
+ * 그래서 비운 슬롯은 곧바로 멈추고, 마지막 프레임이 흐려지는 전환이 끝난 뒤에 다시
+ * 불러(`load`) 받던 데이터를 놓는다. 바로 다시 부르면 영상이 그 자리에서 투명해져 전환 없이
+ * 끊기고, 이미지 배경 곡이면 이미지를 그리기 전의 배경색이 잠깐 비친다.
  *
  * 새 슬롯은 앞 슬롯 위에 올라와 서서히 나타나고, 앞 슬롯은 전환이 끝날 때까지
  * 불투명하게 남는다. 두 슬롯을 함께 흐리게 하면 전환 중간에 화면이 어두워진다.
@@ -159,11 +161,10 @@ export function VideoLayer({
     const video = videoOf(activeSlot);
     if (!video) return;
     if (!activeSrc) {
-      if (video.currentSrc) {
-        video.pause();
-        video.load();
-      }
-      return;
+      if (!video.currentSrc) return;
+      video.pause();
+      const releaseTimer = setTimeout(() => video.load(), FADE_MS);
+      return () => clearTimeout(releaseTimer);
     }
 
     let failures = 0;
