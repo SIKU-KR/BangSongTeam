@@ -1240,5 +1240,31 @@ describe("EditorRoute (PowerPoint식 프레젠테이션 편집기)", () => {
         screen.queryByTestId("copy-picker-dialog"),
       ).not.toBeInTheDocument();
     });
+
+    it("슬라이드를 바꾸는 단축키는 세트를 바꾸지 않고 선택도 옮기지 않는다", () => {
+      const press = (init: Parameters<typeof fireEvent.keyDown>[1]) =>
+        act(() => {
+          fireEvent.keyDown(window, init);
+        });
+      renderEditor(`/editor/${SHARED_ID}`);
+      const shared = getPresentationById(SHARED_ID);
+
+      press({ key: "d", code: "KeyD", ctrlKey: true });
+
+      expect(statusBar()).toHaveTextContent("슬라이드 1/23");
+
+      fireEvent.click(screen.getByTestId("slide-thumb-1"));
+      press({ key: "c", code: "KeyC", ctrlKey: true });
+      press({ key: "v", code: "KeyV", ctrlKey: true });
+      press({ key: "Delete" });
+      press({ key: "x", code: "KeyX", ctrlKey: true });
+      press({ key: "ArrowDown", ctrlKey: true });
+      press({ key: "ArrowUp", ctrlKey: true, shiftKey: true });
+      press({ key: ">", code: "Period", ctrlKey: true, shiftKey: true });
+      press({ key: "<", code: "Comma", ctrlKey: true, shiftKey: true });
+
+      expect(statusBar()).toHaveTextContent("슬라이드 2/23");
+      expect(getPresentationById(SHARED_ID)).toBe(shared);
+    });
   });
 });

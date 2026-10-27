@@ -9,6 +9,7 @@ import { COMMON_COPY } from "#copy/common";
 import {
   seedPresentationsIntoStorage,
   signInAsTestUser,
+  signOutForTests,
 } from "../../test/sessionFixture";
 import {
   loadAllPresentations,
@@ -52,6 +53,15 @@ import {
   markPresentationSynced,
   adoptServerPresentation,
   mayDifferFromStorage,
+  removeSlides,
+  splitSlideAtCursor,
+  mergeSlideWithNext,
+  duplicateSlides,
+  insertSlides,
+  moveSlides,
+  updateSongStyle,
+  reorderSongs,
+  redo,
 } from "./presentationStore";
 import {
   hydrateSongLibrary,
@@ -190,6 +200,36 @@ describe("presentationStore 영속성", () => {
     expect(getPresentationById(preview.id)?.access).toEqual({
       ownerName: "인도자",
     });
+    const { valid } = await loadAllPresentations();
+    expect(valid.some((p) => p.id === preview.id)).toBe(false);
+  });
+
+  it("로그아웃한 탭에서 링크로 보는 세트에 막힌 편집을 해도 저장소에 남기지 않고 세트도 바꾸지 않는다", async () => {
+    await hydrateFromStorage();
+    signOutForTests();
+    const preview: Presentation = {
+      ...SEED_PRESENTATIONS[0],
+      id: "p0000000000000preview",
+      access: { ownerName: "인도자" },
+    };
+    showSharedPreview(preview);
+    openPresentation(preview.id);
+    const shown = getActivePresentation();
+
+    expect(removeSlides(0, [0])).toBe(false);
+    expect(splitSlideAtCursor(0, 0, 3)).toBe(false);
+    expect(mergeSlideWithNext(0, 0)).toBe(false);
+    expect(undo()).toBe(false);
+    expect(redo()).toBe(false);
+    duplicateSlides(0, [0]);
+    insertSlides(0, 0, [["붙여 넣은 가사"]]);
+    moveSlides(0, [0], 2);
+    updateSongStyle(0, { fontSizeVw: 9 });
+    updatePresentationTitle("바꾼 제목");
+    reorderSongs(0, 1);
+    await flushPendingWrites();
+
+    expect(getActivePresentation()).toBe(shown);
     const { valid } = await loadAllPresentations();
     expect(valid.some((p) => p.id === preview.id)).toBe(false);
   });

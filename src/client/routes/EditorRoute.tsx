@@ -313,6 +313,31 @@ function EditorScreen({
     navigate(editorPath(created.id));
   };
 
+  const editShortcuts = readOnly
+    ? {}
+    : {
+        duplicateSlide: selection.duplicateSelection,
+        deleteSlide: selection.deleteSelection,
+        cutSlides: selection.cut,
+        pasteSlides: selection.paste,
+        moveSlidesUp: () => selection.moveSelection("up"),
+        moveSlidesDown: () => selection.moveSelection("down"),
+        moveSlidesToStart: () => selection.moveSelection("start"),
+        moveSlidesToEnd: () => selection.moveSelection("end"),
+        fontSizeUp: () =>
+          currentSong
+            ? handleUpdateStyle({
+                fontSizeVw: stepFontSize(currentStyle.fontSizeVw, 1),
+              })
+            : false,
+        fontSizeDown: () =>
+          currentSong
+            ? handleUpdateStyle({
+                fontSizeVw: stepFontSize(currentStyle.fontSizeVw, -1),
+              })
+            : false,
+      };
+
   useEditorShortcuts({
     undo: () => (canUndo() ? undo() : false),
     redo: () => (canRedo() ? redo() : false),
@@ -322,32 +347,13 @@ function EditorScreen({
     lastSlide: () => selectEdge("last"),
     editText: () => (currentSlide && !readOnly ? textEditing.start() : false),
     newSlide: () => (currentSong && !readOnly ? handleAddSlide() : false),
-    duplicateSlide: selection.duplicateSelection,
-    deleteSlide: selection.deleteSelection,
     selectAll: selection.selectAll,
     copySlides: selection.copy,
-    cutSlides: selection.cut,
-    pasteSlides: selection.paste,
     extendPrev: () => selection.extend(-1),
     extendNext: () => selection.extend(1),
-    moveSlidesUp: () => selection.moveSelection("up"),
-    moveSlidesDown: () => selection.moveSelection("down"),
-    moveSlidesToStart: () => selection.moveSelection("start"),
-    moveSlidesToEnd: () => selection.moveSelection("end"),
     clearInsertion: selection.clearInsertion,
-    fontSizeUp: () =>
-      currentSong
-        ? handleUpdateStyle({
-            fontSizeVw: stepFontSize(currentStyle.fontSizeVw, 1),
-          })
-        : false,
-    fontSizeDown: () =>
-      currentSong
-        ? handleUpdateStyle({
-            fontSizeVw: stepFontSize(currentStyle.fontSizeVw, -1),
-          })
-        : false,
     present: () => (songs.length > 0 ? handlePresent() : false),
+    ...editShortcuts,
   });
 
   const overflowMessages = getOverflowMessages(currentOverflow, safeSlideIndex);

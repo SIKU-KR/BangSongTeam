@@ -109,18 +109,23 @@ function readActive(): Presentation {
  * 링크로 공유받은 프레젠테이션(`access`)은 보기 전용이다. 편집 함수는 모두
  * `writeActive`·`pushHistory`·`updateDocumentById`를 거치므로 여기서 막으면
  * 화면에서 버튼을 빠뜨려도 문서가 바뀌지 않는다.
+ *
+ * 막힌 편집은 저장하지도 알리지도 않고, 바꾼 것이 있는지 돌려주는 편집 함수는 `false`를 돌려준다.
+ * 로그인 없이 링크로 보는 세트(`showSharedPreview`)를 저장하면 소유자 id가 달린 보기 전용 세트가
+ * 남아, 소유자가 이 브라우저에서 아직 올리지 못한 자기 세트를 잃고 보기 전용으로 연다.
  */
 export function canEditPresentation(doc: Presentation): boolean {
   return doc.access === undefined;
 }
 
-function writeActive(next: Presentation): void {
+function writeActive(next: Presentation): boolean {
   const current = readActive();
-  if (!canEditPresentation(current)) return;
+  if (!canEditPresentation(current)) return false;
   commit({
     ...state,
     byId: { ...state.byId, [state.activeId]: withEditStamp(current, next) },
   });
+  return true;
 }
 
 function pushHistory(coalesceKey?: string): void {
@@ -146,6 +151,7 @@ export function canRedo(): boolean {
  */
 export function undo(): boolean {
   const current = readActive();
+  if (!canEditPresentation(current)) return false;
   const previous = takeUndo(state.activeId, current);
   if (!previous) return false;
   writeActive(withCurrentPlacement(previous, current));
@@ -156,6 +162,7 @@ export function undo(): boolean {
 /** 다시 하기. `undo`처럼 수정 시각을 지금 판보다 뒤로 찍는다. */
 export function redo(): boolean {
   const current = readActive();
+  if (!canEditPresentation(current)) return false;
   const next = takeRedo(state.activeId, current);
   if (!next) return false;
   writeActive(withCurrentPlacement(next, current));
@@ -558,8 +565,7 @@ function reindexOrder<T extends { order: number }>(list: readonly T[]): T[] {
 }
 
 function writeActiveItems(items: PresentationItem[]): void {
-  writeActive({ ...readActive(), items });
-  emitChange();
+  if (writeActive({ ...readActive(), items })) emitChange();
 }
 
 function readSongSlides(songIndex: number): Slide[] | undefined {
@@ -701,8 +707,7 @@ export function updatePresentationTitle(title: string): void {
   const next = clampText(title.trim(), MAX_PRESENTATION_TITLE_LENGTH);
   if (!next || next === readActive().title) return;
   pushHistory();
-  writeActive({ ...readActive(), title: next });
-  emitChange();
+  if (writeActive({ ...readActive(), title: next })) emitChange();
 }
 
 interface HistoryOptions {
@@ -834,7 +839,7 @@ export function removeSlides(
   slideIndexes: readonly number[],
 ): boolean {
   const slides = readSongSlides(songIndex);
-  if (!slides) return false;
+  if (!slides || !canEditPresentation(readActive())) return false;
   const targets = new Set(
     slideIndexes.filter((index) => index >= 0 && index < slides.length),
   );
@@ -934,7 +939,7 @@ export function splitSlideAtCursor(
 ): boolean {
   const slides = readSongSlides(songIndex);
   const target = slides?.[slideIndex];
-  if (!slides || !target) return false;
+  if (!slides || !target || !canEditPresentation(readActive())) return false;
 
   const parts = splitLinesAtCursor(target.lines, offset);
   if (!parts) return false;
@@ -963,7 +968,9 @@ export function mergeSlideWithNext(
   const slides = readSongSlides(songIndex);
   const target = slides?.[slideIndex];
   const following = slides?.[slideIndex + 1];
-  if (!slides || !target || !following) return false;
+  if (!slides || !target || !following || !canEditPresentation(readActive())) {
+    return false;
+  }
 
   const lines = mergeSlideLines(target.lines, following.lines);
   if (!lines) return false;
