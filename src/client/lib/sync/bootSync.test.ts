@@ -385,6 +385,71 @@ describe("runBootSync — drive folders", () => {
     ]);
   });
 
+  it("부팅 때 새 부모 폴더를 올리지 못하면 자식 폴더와 담긴 세트는 큐로 넘겨 부모가 오른 뒤에 올린다", async () => {
+    const order: string[] = [];
+    pushFolder.mockImplementation(async (f: Folder) => {
+      order.push(`folder:${f.id}`);
+      return f;
+    });
+    pushFolder.mockImplementationOnce(async (f: Folder) => {
+      order.push(`folder:${f.id}`);
+      throw new ServerRejectedError(503, API_ERRORS.serverBusy);
+    });
+    presentationSync.pushPresentation.mockImplementation(async (doc) => {
+      order.push(`doc:${(doc as Presentation).id}`);
+      return true;
+    });
+    __loadFoldersForTests([
+      folder(CHILD, { parentId: PARENT }),
+      folder(PARENT),
+    ]);
+    __loadDocumentsForTests([{ ...presentation(DOC), folderId: CHILD }]);
+
+    await runBootSync();
+
+    expect(order).toEqual([`folder:${PARENT}`]);
+
+    await flushFolderSync();
+    await flushPendingSync();
+
+    expect(order).toEqual([
+      `folder:${PARENT}`,
+      `folder:${PARENT}`,
+      `folder:${CHILD}`,
+      `doc:${DOC}`,
+    ]);
+    expect(
+      pushFolder.mock.calls.find(([f]) => f.id === CHILD)?.[0].parentId,
+    ).toBe(PARENT);
+  });
+
+  it("폴더의 큐 재시도가 나가는 중이면 부팅이 그 안의 세트를 올리지 않고, 폴더가 오르면 큐가 올린다", async () => {
+    const retry = deferred<Folder>();
+    pushFolder
+      .mockRejectedValueOnce(
+        new ServerRejectedError(503, API_ERRORS.serverBusy),
+      )
+      .mockReturnValueOnce(retry.promise);
+    __loadFoldersForTests([folder(PARENT)]);
+    __loadDocumentsForTests([{ ...presentation(DOC), folderId: PARENT }]);
+    presentationSync.pullPresentations.mockImplementationOnce(async () => {
+      void flushFolderSync();
+      await vi.waitFor(() => expect(pushFolder).toHaveBeenCalledTimes(2));
+      return [];
+    });
+
+    await runBootSync();
+
+    expect(presentationSync.pushPresentation).not.toHaveBeenCalled();
+
+    retry.resolve(folder(PARENT));
+    await vi.waitFor(() =>
+      expect(presentationSync.pushPresentation).toHaveBeenCalledExactlyOnceWith(
+        expect.objectContaining({ id: DOC, folderId: PARENT }),
+      ),
+    );
+  });
+
   it("다른 기기에서 영구 삭제한 폴더·세트는 되살리지 않고 로컬에서도 지운다", async () => {
     __loadFoldersForTests([folder(PARENT)]);
     __loadDocumentsForTests([presentation(DOC)]);
@@ -471,6 +536,41 @@ describe("runBootSync — 동기화 상태", () => {
     expect(presentationSync.pushPresentation.mock.calls[1][0]).toMatchObject({
       id: DOC,
     });
+    expect(getSyncSnapshot()).toMatchObject({
+      status: "synced",
+      lastFailure: null,
+    });
+  });
+
+  it("다시 시도는 부팅이 영구 실패로 남긴 폴더·곡의 실패한 사본이 아니라 지금 판을 올린다", async () => {
+    const pushFolder = vi
+      .fn(async (f: Folder) => f)
+      .mockRejectedValueOnce(new ServerRejectedError(400, "거절"));
+    const pushDeck = vi
+      .fn(async (deck: Deck) => deck)
+      .mockRejectedValueOnce(new ServerRejectedError(400, "거절"));
+    __setFolderPusherForTests(pushFolder);
+    __setDeckTransportForTests({ push: pushDeck });
+    __loadFoldersForTests([folder(PARENT, { name: "처음 이름" })]);
+    const song = saveSongToLibrary({ title: "처음 곡", lyricsRaw: "가사" });
+
+    await runBootSync();
+    expect(getSyncSnapshot().status).toBe("error");
+
+    __loadFoldersForTests([folder(PARENT, { name: "다른 탭에서 바꾼 이름" })]);
+    await saveSong({ ...song, title: "다른 탭에서 바꾼 곡" });
+    await reloadSongsFromStorage([song.id]);
+    await retryFolderSyncNow("manual");
+    await retryDeckSyncNow("manual");
+
+    expect(pushFolder.mock.calls.map(([f]) => f.name)).toEqual([
+      "처음 이름",
+      "다른 탭에서 바꾼 이름",
+    ]);
+    expect(pushDeck.mock.calls.map(([deck]) => deck.title)).toEqual([
+      "처음 곡",
+      "다른 탭에서 바꾼 곡",
+    ]);
     expect(getSyncSnapshot()).toMatchObject({
       status: "synced",
       lastFailure: null,

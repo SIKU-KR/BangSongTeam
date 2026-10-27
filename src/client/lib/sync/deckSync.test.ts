@@ -18,6 +18,7 @@ import {
   isDeckDeletedError,
   hasPendingDeckSync,
   resumePendingDeckDeletes,
+  setFailedDeckResolver,
   __setDeckTransportForTests,
   __setDeckBackoffRandomForTests,
   __resetDeckSyncForTests,
@@ -757,6 +758,112 @@ describe("보관함 push 큐", () => {
       expect(isDeckDeletedError(new ServerRejectedError(410))).toBe(true);
       expect(isDeckDeletedError(new ServerRejectedError(404))).toBe(false);
       expect(isDeckDeletedError(new OfflineError())).toBe(false);
+    });
+  });
+
+  describe("영구 실패한 곡 변경", () => {
+    it("영구 실패한 곡을 올리는 동안 지운 곡은 다음 차례에 서버에서도 지운다", async () => {
+      push.mockImplementationOnce(async () => {
+        scheduleDeckDelete(A, USER);
+        throw new ServerRejectedError(400, "거절");
+      });
+
+      scheduleDeckPush(deck());
+      await flushDeckSync();
+      await flushDeckSync();
+
+      expect(remove).toHaveBeenCalledExactlyOnceWith(A);
+      expect(getSyncSnapshot()).toMatchObject({
+        status: "synced",
+        lastFailure: null,
+      });
+    });
+
+    it("영구 실패한 요청을 보내는 동안 고친 곡은 버리지 않고 다음 차례에 올린다", async () => {
+      push.mockImplementationOnce(async () => {
+        scheduleDeckPush(deck("고친 곡"));
+        throw new ServerRejectedError(400, "거절");
+      });
+
+      scheduleDeckPush(deck("처음 곡"));
+      await flushDeckSync();
+
+      expect(hasPendingDeckSync()).toBe(true);
+      expect(getSyncSnapshot().status).toBe("error");
+
+      await flushDeckSync();
+
+      expect(push.mock.calls.map(([sent]) => sent.title)).toEqual([
+        "처음 곡",
+        "고친 곡",
+      ]);
+      expect(getSyncSnapshot()).toMatchObject({
+        status: "synced",
+        lastFailure: null,
+      });
+
+      await retryDeckSyncNow("manual");
+      expect(push).toHaveBeenCalledTimes(2);
+    });
+
+    it("영구 실패한 삭제를 보내는 동안 다시 넣은 곡은 버리지 않고 올린다", async () => {
+      remove.mockImplementationOnce(async () => {
+        cancelDeckDelete(A, USER);
+        scheduleDeckPush(deck("다시 넣은 곡"));
+        throw new ServerRejectedError(400, "거절");
+      });
+
+      scheduleDeckDelete(A, USER);
+      await flushDeckSync();
+      await flushDeckSync();
+
+      expect(push.mock.calls.map(([sent]) => sent.title)).toEqual([
+        "다시 넣은 곡",
+      ]);
+      expect(getSyncSnapshot()).toMatchObject({
+        status: "synced",
+        lastFailure: null,
+      });
+
+      await retryDeckSyncNow("manual");
+      expect(remove).toHaveBeenCalledTimes(1);
+    });
+
+    it("다시 시도는 실패로 남긴 사본이 아니라 지금 보관함의 곡을 올리고, 없어진 곡은 버린다", async () => {
+      push.mockRejectedValueOnce(new ServerRejectedError(400, "거절"));
+      push.mockRejectedValueOnce(new ServerRejectedError(400, "거절"));
+      scheduleDeckPush(deck("실패한 사본"));
+      scheduleDeckPush({ ...deck("없어진 곡"), id: B });
+      await flushDeckSync();
+      expect(getSyncSnapshot().status).toBe("error");
+
+      setFailedDeckResolver((id) =>
+        id === A ? deck("지금 보관함의 곡") : undefined,
+      );
+      await retryDeckSyncNow("manual");
+
+      expect(push.mock.calls.slice(2).map(([sent]) => sent.title)).toEqual([
+        "지금 보관함의 곡",
+      ]);
+      expect(getSyncSnapshot()).toMatchObject({
+        status: "synced",
+        lastFailure: null,
+      });
+    });
+
+    it("영구 실패한 삭제는 다시 시도에 지금 곡을 찾지 않고 삭제로 다시 보낸다", async () => {
+      const resolve = vi.fn<(id: string) => Deck | undefined>(() => undefined);
+      setFailedDeckResolver(resolve);
+      remove.mockRejectedValueOnce(new ServerRejectedError(400, "거절"));
+      scheduleDeckDelete(A, USER);
+      await flushDeckSync();
+
+      await retryDeckSyncNow("manual");
+
+      expect(remove).toHaveBeenCalledTimes(2);
+      expect(remove).toHaveBeenLastCalledWith(A);
+      expect(push).not.toHaveBeenCalled();
+      expect(resolve).not.toHaveBeenCalled();
     });
   });
 

@@ -34,6 +34,7 @@ type DeckPusher = (deck: Deck) => Promise<Deck>;
 type DeckDeleter = (id: string) => Promise<boolean | void>;
 type ServerDeckListener = (deck: Deck) => void;
 type DeckGoneListener = (id: string) => void;
+type FailedDeckResolver = (id: string) => Deck | undefined;
 
 type PendingOp =
   { kind: "push"; deck: Deck } | { kind: "delete"; id: string; userId: string };
@@ -42,6 +43,7 @@ let pusher: DeckPusher = pushDeck;
 let deleter: DeckDeleter = deleteDeckRemote;
 let listener: ServerDeckListener | null = null;
 let goneListener: DeckGoneListener | null = null;
+let resolveFailed: FailedDeckResolver | null = null;
 let enabled = false;
 let pending = new Map<string, PendingOp>();
 let failed = new Map<string, PendingOp>();
@@ -77,6 +79,18 @@ export function setServerDeckListener(next: ServerDeckListener | null): void {
  */
 export function setDeckGoneListener(next: DeckGoneListener | null): void {
   goneListener = next;
+}
+
+/**
+ * '다시 시도'(`retryDeckSyncNow("manual")`)가 영구 실패로 남긴 곡 push 대신 다시 넣을 지금
+ * 보관함의 곡을 찾을 곳을 등록한다. 부팅 동기화가 보관함을 등록하고 `stopSync`가 뗀다. 없다고
+ * 답한 곡은 다시 넣지 않는다. 영구 실패한 삭제는 찾지 않고 삭제로 다시 보낸다.
+ *
+ * 실패로 남긴 사본은 실패한 때의 판이다. 그사이 부팅의 재시도 병합이 보관함을 서버의 새 사본으로
+ * 바꿨으면, 그 사본을 다시 보내 서버의 새 곡을 옛 내용으로 덮는다.
+ */
+export function setFailedDeckResolver(next: FailedDeckResolver | null): void {
+  resolveFailed = next;
 }
 
 /**
@@ -203,10 +217,9 @@ async function runOps(ops: PendingOp[]): Promise<void> {
         const delay = backoff.getDelay(key, err);
         if (delay < minRetryDelay) minRetryDelay = delay;
       } else {
-        pending.delete(key);
         waitingOnServer.delete(key);
         backoff.reset(key);
-        failed.set(key, op);
+        if (!pending.has(key)) failed.set(key, op);
         if (op.kind === "delete" && !expired) {
           forgetDeckDelete(op.userId, op.id);
         }
@@ -405,26 +418,39 @@ export function holdFailedDeckPush(deck: Deck): void {
  * 곡 변경끼리는 순서가 없으므로 오프라인으로 밀린 곡까지 함께 기다릴 까닭이 없다.
  * `reconnect`·`manual`은 백오프를 비우고 모두 보낸다(`syncScheduler`와 같다). 비우지
  * 않으면 '다시 시도' 뒤 한 번 더 실패한 곡이 지난 횟수 때문에 곧바로 영구 실패가 된다.
- * `manual`은 영구 실패로 남긴 곡 변경도 실패 기록을 지우고 다시 넣는다. 다시 넣는 DELETE는
- * 영구 실패 때 지운 삭제 기록(`pendingDeckDeletes`)에도 다시 남긴다. 사용자가 다시 지우겠다고
- * 한 것이라, 이번에 오프라인으로 밀린 채 탭을 닫아도 다음 부팅이 다시 보낸다.
+ * `manual`은 영구 실패로 남긴 곡 변경도 실패 기록을 지우고 다시 넣는다. 곡 push는 실패한 사본이
+ * 아니라 지금 보관함의 곡을 넣고(`setFailedDeckResolver`), 그사이 없어진 곡은 버린다. 다시 넣는
+ * DELETE는 영구 실패 때 지운 삭제 기록(`pendingDeckDeletes`)에도 다시 남긴다. 사용자가 다시
+ * 지우겠다고 한 것이라, 이번에 오프라인으로 밀린 채 탭을 닫아도 다음 부팅이 다시 보낸다.
  */
 export function retryDeckSyncNow(mode: SyncRetryMode): Promise<void> {
-  if (mode === "manual") {
-    for (const [key, op] of failed) {
-      clearSyncFailure("deck", key);
-      if (pending.has(key)) continue;
-      pending.set(key, op);
-      if (op.kind === "delete") rememberDeckDelete(op.userId, op.id);
-    }
-    failed = new Map();
-  }
+  if (mode === "manual") requeueFailedOps();
   if (mode !== "wake") backoff.reset();
   if (mode === "wake" && waitingOnServer.size > 0) {
     runNotWaitingOnServer();
     return inFlight;
   }
   return flushDeckSync();
+}
+
+function currentOpOf(op: PendingOp): PendingOp | null {
+  if (op.kind === "delete" || !resolveFailed) return op;
+  const deck = resolveFailed(op.deck.id);
+  return deck ? { kind: "push", deck } : null;
+}
+
+function requeueFailedOps(): void {
+  for (const [key, op] of failed) {
+    clearSyncFailure("deck", key);
+    if (pending.has(key)) continue;
+    const current = currentOpOf(op);
+    if (!current) continue;
+    pending.set(key, current);
+    if (current.kind === "delete") {
+      rememberDeckDelete(current.userId, current.id);
+    }
+  }
+  failed = new Map();
 }
 
 export function __setDeckTransportForTests(next: {
@@ -445,6 +471,7 @@ export function __resetDeckSyncForTests(): void {
   deleter = deleteDeckRemote;
   listener = null;
   goneListener = null;
+  resolveFailed = null;
   deletedIds.clear();
   deletedElsewhere.clear();
   clearPending();

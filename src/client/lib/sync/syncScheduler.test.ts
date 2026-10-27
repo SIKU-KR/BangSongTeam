@@ -30,12 +30,27 @@ import { installFakeApi, type FakeApi } from "../../test/fakeApi";
 import {
   scheduleFolderPush,
   flushFolderSync,
+  pushFolderNow,
   setFolderSyncEnabled,
   __resetFolderSyncForTests,
+  __setFolderBackoffRandomForTests,
   __setFolderPusherForTests,
 } from "./folderSync";
 
 const USER = "00000000x000000000001";
+const FOLDER = "f00000000000000000001";
+
+function newFolder(id = FOLDER): Folder {
+  return {
+    id,
+    userId: USER,
+    parentId: null,
+    name: "새 폴더",
+    trashedAt: null,
+    createdAt: "2026-09-22T00:00:00.000Z",
+    updatedAt: "2026-09-22T00:00:00.000Z",
+  };
+}
 
 function doc(id: string, title = "세트"): Presentation {
   return {
@@ -527,6 +542,213 @@ describe("서버 push 스케줄러", () => {
     __resetFolderSyncForTests();
   });
 
+  describe("세트가 담긴 폴더를 기다리기", () => {
+    let pushFolder: ReturnType<typeof vi.fn<(f: Folder) => Promise<Folder>>>;
+
+    function inFolder(id: string, folderId: string | null = FOLDER) {
+      return { ...doc(id), folderId };
+    }
+
+    beforeEach(() => {
+      __resetFolderSyncForTests();
+      pushFolder = vi.fn(async (f: Folder) => f);
+      __setFolderPusherForTests(pushFolder);
+      __setFolderBackoffRandomForTests(() => 1);
+      setFolderSyncEnabled(true);
+      setSyncEnabled(true);
+    });
+
+    afterEach(() => {
+      __resetFolderSyncForTests();
+      vi.useRealTimers();
+    });
+
+    it("폴더가 백오프로 기다리는 동안 붙잡힌 세트는 폴더 재시도를 앞당기지 않고, 폴더가 오르면 곧바로 올린다", async () => {
+      vi.useFakeTimers();
+      pushFolder.mockRejectedValueOnce(
+        new ServerRejectedError(503, API_ERRORS.serverBusy, 30_000),
+      );
+      scheduleFolderPush(newFolder());
+      for (const id of ["a", "b", "c", "d"]) scheduleDocumentPush(inFolder(id));
+
+      await vi.advanceTimersByTimeAsync(25_000);
+
+      expect(pushFolder).toHaveBeenCalledTimes(1);
+      expect(push).not.toHaveBeenCalled();
+      expect(hasPendingDocumentPush()).toBe(true);
+      expect(getSyncSnapshot().status).toBe("offline");
+
+      await vi.advanceTimersByTimeAsync(8_000);
+
+      expect(pushFolder).toHaveBeenCalledTimes(2);
+      expect(push.mock.calls.map(([sent]) => sent.id).sort()).toEqual([
+        "a",
+        "b",
+        "c",
+        "d",
+      ]);
+      expect(Math.min(...push.mock.invocationCallOrder)).toBeGreaterThan(
+        pushFolder.mock.invocationCallOrder[1],
+      );
+      expect(hasPendingDocumentPush()).toBe(false);
+      expect(getSyncSnapshot().status).toBe("synced");
+    });
+
+    it("담긴 폴더가 영구 실패하면 붙잡힌 세트를 놓아 준다", async () => {
+      vi.useFakeTimers();
+      pushFolder
+        .mockRejectedValueOnce(new ServerRejectedError(503, "과부하", 30_000))
+        .mockRejectedValueOnce(new ServerRejectedError(400, "거절"));
+      scheduleFolderPush(newFolder());
+      scheduleDocumentPush(inFolder("a"));
+
+      await vi.advanceTimersByTimeAsync(SYNC_DEBOUNCE_MS);
+      expect(push).not.toHaveBeenCalled();
+
+      await vi.advanceTimersByTimeAsync(30_000);
+
+      expect(pushFolder).toHaveBeenCalledTimes(2);
+      expect(push).toHaveBeenCalledExactlyOnceWith(
+        expect.objectContaining({ id: "a", folderId: FOLDER }),
+      );
+      expect(hasPendingDocumentPush()).toBe(false);
+    });
+
+    it("루트 세트는 다른 폴더가 백오프로 기다려도 그 폴더를 보내지 않고 올린다", async () => {
+      vi.useFakeTimers();
+      pushFolder.mockRejectedValueOnce(
+        new ServerRejectedError(503, "과부하", 30_000),
+      );
+      scheduleFolderPush(newFolder());
+      await vi.advanceTimersByTimeAsync(2000);
+      expect(pushFolder).toHaveBeenCalledTimes(1);
+
+      scheduleDocumentPush(inFolder("a", null));
+      await vi.advanceTimersByTimeAsync(SYNC_DEBOUNCE_MS);
+
+      expect(push).toHaveBeenCalledTimes(1);
+      expect(pushFolder).toHaveBeenCalledTimes(1);
+    });
+
+    it("세트는 자기 폴더가 아닌 폴더의 push가 끝나기를 기다리지 않는다", async () => {
+      pushFolder.mockImplementation(() => new Promise<Folder>(() => {}));
+      scheduleFolderPush(newFolder());
+      void flushFolderSync();
+      await vi.waitFor(() => expect(pushFolder).toHaveBeenCalledTimes(1));
+
+      scheduleDocumentPush(inFolder("a", null));
+      scheduleDocumentPush(inFolder("b", "f00000000000000000002"));
+      void flushPendingSync();
+
+      await vi.waitFor(() => expect(push).toHaveBeenCalledTimes(2));
+    });
+
+    it("flushPendingSync는 기다리는 세트가 없어도 대기 중인 폴더를 보낸다", async () => {
+      scheduleFolderPush(newFolder());
+
+      await flushPendingSync();
+
+      expect(pushFolder).toHaveBeenCalledTimes(1);
+    });
+
+    it("부팅이 바로 올리는 폴더에 든 세트는 그 폴더가 오른 뒤에 올린다", async () => {
+      const order: string[] = [];
+      let release: () => void = () => undefined;
+      pushFolder.mockImplementationOnce(
+        (f) =>
+          new Promise<Folder>((resolve) => {
+            release = () => {
+              order.push(`folder:${f.id}`);
+              resolve(f);
+            };
+          }),
+      );
+      push.mockImplementation(async (document) => {
+        order.push(`doc:${document.id}`);
+        return true;
+      });
+
+      const booting = pushFolderNow(newFolder());
+      await vi.waitFor(() => expect(pushFolder).toHaveBeenCalledTimes(1));
+      scheduleDocumentPush(inFolder("a"));
+      const flushing = flushPendingSync();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      expect(push).not.toHaveBeenCalled();
+
+      release();
+      await Promise.all([booting, flushing]);
+
+      expect(order).toEqual([`folder:${FOLDER}`, "doc:a"]);
+    });
+
+    it("폴더가 오르기를 기다리는 동안 고친 세트도 폴더가 오르면 마지막 판을 올린다", async () => {
+      vi.useFakeTimers();
+      pushFolder.mockRejectedValueOnce(
+        new ServerRejectedError(503, "과부하", 30_000),
+      );
+      scheduleFolderPush(newFolder());
+      scheduleDocumentPush({ ...inFolder("a"), title: "첫 판" });
+      await vi.advanceTimersByTimeAsync(SYNC_DEBOUNCE_MS);
+
+      scheduleDocumentPush({ ...inFolder("a"), title: "고친 판" });
+      await vi.advanceTimersByTimeAsync(SYNC_DEBOUNCE_MS * 2);
+      expect(push).not.toHaveBeenCalled();
+
+      await vi.advanceTimersByTimeAsync(30_000);
+
+      expect(push.mock.calls.map(([sent]) => sent.title)).toEqual(["고친 판"]);
+    });
+
+    it("붙잡힌 세트를 루트로 옮기면 폴더를 기다리지 않고 디바운스 뒤에 올린다", async () => {
+      vi.useFakeTimers();
+      pushFolder.mockRejectedValueOnce(
+        new ServerRejectedError(503, "과부하", 30_000),
+      );
+      scheduleFolderPush(newFolder());
+      scheduleDocumentPush(inFolder("a"));
+      await vi.advanceTimersByTimeAsync(SYNC_DEBOUNCE_MS);
+
+      scheduleDocumentPush(inFolder("a", null));
+      await vi.advanceTimersByTimeAsync(SYNC_DEBOUNCE_MS);
+
+      expect(push).toHaveBeenCalledExactlyOnceWith(
+        expect.objectContaining({ id: "a", folderId: null }),
+      );
+      expect(pushFolder).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe("영구 실패한 세트", () => {
+    it("영구 실패한 요청을 보내는 동안 고친 판은 버리지 않고 올린다", async () => {
+      push.mockImplementationOnce(async () => {
+        scheduleDocumentPush(doc("a", "고친 판"));
+        throw new ServerRejectedError(400, "거절");
+      });
+
+      scheduleDocumentPush(doc("a", "처음 판"));
+      await flushPendingSync();
+
+      expect(hasPendingDocumentPush()).toBe(true);
+      expect(getSyncSnapshot().status).toBe("error");
+
+      await flushPendingSync();
+
+      expect(push.mock.calls.map(([sent]) => sent.title)).toEqual([
+        "처음 판",
+        "고친 판",
+      ]);
+      expect(getSyncSnapshot()).toMatchObject({
+        status: "synced",
+        lastFailure: null,
+      });
+
+      retryPendingSyncNow("manual");
+      await flushPendingSync();
+      expect(push).toHaveBeenCalledTimes(2);
+    });
+  });
+
   describe("타이머", () => {
     beforeEach(() => {
       vi.useFakeTimers();
@@ -973,6 +1195,31 @@ describe("서버가 받을 수 있게 다듬어 올리기", () => {
       lastFailure: null,
     });
     expect(patchCalls()).toHaveLength(1);
+  });
+
+  it("페이지가 숨겨진 뒤 비우는 PATCH는 폴더 push를 기다리지 않고 keepalive로 보낸다", async () => {
+    const visibility = vi
+      .spyOn(document, "visibilityState", "get")
+      .mockReturnValue("hidden");
+    __resetFolderSyncForTests();
+    __setFolderPusherForTests(() => new Promise<Folder>(() => {}));
+    setFolderSyncEnabled(true);
+    try {
+      scheduleFolderPush(newFolder());
+      scheduleDocumentPush(doc(DOC_ID));
+
+      void flushFolderSync();
+      void flushPendingSync();
+      await vi.waitFor(() => expect(patchCalls()).toHaveLength(1));
+
+      const patchInit = vi
+        .mocked(globalThis.fetch)
+        .mock.calls.find(([, init]) => init?.method === "PATCH")?.[1];
+      expect(patchInit?.keepalive).toBe(true);
+    } finally {
+      visibility.mockRestore();
+      __resetFolderSyncForTests();
+    }
   });
 
   it("101자 제목은 100자로 줄여 올리고 동기화됨으로 끝난다", async () => {

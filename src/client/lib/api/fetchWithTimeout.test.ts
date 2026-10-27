@@ -5,6 +5,7 @@ import {
   getDeadlineForRequest,
   DEFAULT_API_TIMEOUT_MS,
   DELETE_API_TIMEOUT_MS,
+  KEEPALIVE_BODY_BUDGET,
   PULL_API_TIMEOUT_MS,
   HEALTH_API_TIMEOUT_MS,
 } from "./fetchWithTimeout";
@@ -153,6 +154,147 @@ describe("fetchWithTimeout", () => {
       expect(interceptedSignal?.aborted).toBe(true);
 
       vi.useRealTimers();
+    });
+  });
+
+  describe("숨겨진 페이지의 쓰기 요청", () => {
+    const URL_OF_SET = "/api/presentations/V1StGXR8_Z5jdHi6B-myT";
+
+    function hidePage(state: DocumentVisibilityState = "hidden"): void {
+      vi.spyOn(document, "visibilityState", "get").mockReturnValue(state);
+    }
+
+    function bodyOfBytes(bytes: number): string {
+      return "a".repeat(bytes);
+    }
+
+    function keepaliveOf(fetch: typeof globalThis.fetch, call: number) {
+      return vi.mocked(fetch).mock.calls[call]?.[1]?.keepalive;
+    }
+
+    function holdResponses(): {
+      settle: Array<{ resolve: () => void; reject: (err: unknown) => void }>;
+    } {
+      const held: {
+        settle: Array<{ resolve: () => void; reject: (err: unknown) => void }>;
+      } = { settle: [] };
+      globalThis.fetch = vi.fn(
+        () =>
+          new Promise<Response>((resolve, reject) => {
+            held.settle.push({
+              resolve: () => resolve(new Response("{}")),
+              reject,
+            });
+          }),
+      );
+      return held;
+    }
+
+    it.each(["PATCH", "PUT", "DELETE"])(
+      "%s는 keepalive로 보내 탭을 닫아도 끝까지 간다",
+      async (method) => {
+        hidePage();
+        globalThis.fetch = vi.fn(async () => new Response("{}"));
+
+        await fetchWithTimeout(URL_OF_SET, {
+          method,
+          body: method === "DELETE" ? undefined : JSON.stringify({ a: 1 }),
+        });
+
+        expect(keepaliveOf(globalThis.fetch, 0)).toBe(true);
+      },
+    );
+
+    it("GET, 보이는 페이지, 문자열이 아닌 본문은 keepalive로 보내지 않는다", async () => {
+      globalThis.fetch = vi.fn(async () => new Response("{}"));
+
+      hidePage();
+      await fetchWithTimeout("/api/presentations");
+      await fetchWithTimeout(URL_OF_SET, {
+        method: "PUT",
+        body: new FormData(),
+      });
+      hidePage("visible");
+      await fetchWithTimeout(URL_OF_SET, { method: "PATCH", body: "{}" });
+
+      expect(keepaliveOf(globalThis.fetch, 0)).toBeUndefined();
+      expect(keepaliveOf(globalThis.fetch, 1)).toBeUndefined();
+      expect(keepaliveOf(globalThis.fetch, 2)).toBeUndefined();
+    });
+
+    it("본문 크기는 UTF-8 바이트로 세어 한도를 넘으면 keepalive 없이 보낸다", async () => {
+      hidePage();
+      globalThis.fetch = vi.fn(async () => new Response("{}"));
+
+      await fetchWithTimeout(URL_OF_SET, {
+        method: "PATCH",
+        body: "가".repeat(KEEPALIVE_BODY_BUDGET / 3),
+      });
+      await fetchWithTimeout(URL_OF_SET, {
+        method: "PATCH",
+        body: "가".repeat(KEEPALIVE_BODY_BUDGET / 3 + 1),
+      });
+
+      expect(keepaliveOf(globalThis.fetch, 0)).toBe(true);
+      expect(keepaliveOf(globalThis.fetch, 1)).toBeUndefined();
+    });
+
+    it("응답을 기다리는 keepalive 본문까지 합쳐 한도를 넘는 요청은 keepalive 없이 보낸다", async () => {
+      hidePage();
+      const held = holdResponses();
+      const half = KEEPALIVE_BODY_BUDGET / 2;
+
+      const first = fetchWithTimeout(URL_OF_SET, {
+        method: "PATCH",
+        body: bodyOfBytes(half),
+      });
+      const second = fetchWithTimeout(URL_OF_SET, {
+        method: "PATCH",
+        body: bodyOfBytes(half),
+      });
+      const third = fetchWithTimeout(URL_OF_SET, {
+        method: "PATCH",
+        body: bodyOfBytes(1),
+      });
+
+      expect(keepaliveOf(globalThis.fetch, 0)).toBe(true);
+      expect(keepaliveOf(globalThis.fetch, 1)).toBe(true);
+      expect(keepaliveOf(globalThis.fetch, 2)).toBeUndefined();
+
+      for (const { resolve } of held.settle) resolve();
+      await Promise.all([first, second, third]);
+    });
+
+    it("응답을 받거나 실패하면 그 본문만큼 한도를 돌려준다", async () => {
+      hidePage();
+      const held = holdResponses();
+      const most = KEEPALIVE_BODY_BUDGET - 10;
+
+      const answered = fetchWithTimeout(URL_OF_SET, {
+        method: "PATCH",
+        body: bodyOfBytes(most),
+      });
+      held.settle[0].resolve();
+      await answered;
+
+      const failing = fetchWithTimeout(URL_OF_SET, {
+        method: "PATCH",
+        body: bodyOfBytes(most),
+      });
+      held.settle[1].reject(new TypeError("Failed to fetch"));
+      await expect(failing).rejects.toThrow(TypeError);
+
+      const last = fetchWithTimeout(URL_OF_SET, {
+        method: "PATCH",
+        body: bodyOfBytes(most),
+      });
+
+      expect(keepaliveOf(globalThis.fetch, 0)).toBe(true);
+      expect(keepaliveOf(globalThis.fetch, 1)).toBe(true);
+      expect(keepaliveOf(globalThis.fetch, 2)).toBe(true);
+
+      held.settle[2].resolve();
+      await last;
     });
   });
 

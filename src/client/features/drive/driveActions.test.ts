@@ -52,6 +52,7 @@ import {
 import {
   __resetFolderSyncForTests,
   __setFolderPusherForTests,
+  pushFolderNow,
   setFolderSyncEnabled,
 } from "../../lib/sync/folderSync";
 import {
@@ -354,6 +355,35 @@ describe("driveActions", () => {
         });
         expect(getFolders().map((f) => f.id)).toEqual([CHILD, OTHER]);
         expect(getPresentationById(SEED0.id)).toBeDefined();
+      });
+
+      it("부팅이 올리는 중인 폴더 push를 기다린 뒤에 지운다", async () => {
+        let release: () => void = () => undefined;
+        folderPusher.mockImplementationOnce(
+          (saved) =>
+            new Promise<Folder>((resolve) => {
+              release = () => resolve(saved);
+            }),
+        );
+        trashFolder(ROOT);
+        const booting = pushFolderNow({
+          ...folder(ROOT),
+          trashedAt: "2026-09-21T00:00:00.000Z",
+        });
+        await vi.waitFor(() => expect(folderPusher).toHaveBeenCalledTimes(1));
+
+        const deleting = deleteItemsForever([{ kind: "folder", id: ROOT }]);
+        await new Promise((resolve) => setTimeout(resolve, 0));
+
+        expect(sync.deleteFolderRemote).not.toHaveBeenCalled();
+
+        release();
+        await Promise.all([booting, deleting]);
+
+        expect(sync.deleteFolderRemote).toHaveBeenCalledTimes(1);
+        expect(
+          sync.deleteFolderRemote.mock.invocationCallOrder[0],
+        ).toBeGreaterThan(folderPusher.mock.invocationCallOrder[0]);
       });
 
       it("폴더 변경을 서버가 받지 못하면(503) 아무것도 지우지 않고 다시 시도하라고 알린다", async () => {
