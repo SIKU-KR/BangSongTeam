@@ -41,6 +41,7 @@ import {
   disableShareLink,
   findBlockingSource,
   findPresentationIdByLinkToken,
+  findUnknownUserIds,
   listDescendants,
   listPendingReports,
   listUserDecks,
@@ -67,6 +68,7 @@ const FORK = "c00000000000000000002";
 const PRIVATE_DECK = "c00000000000000000003";
 const PRESENTATION_COPY = "c00000000000000000004";
 const BOT_DECK = "c00000000000000000005";
+const PUBLIC_TAKEN_DOWN = "c00000000000000000006";
 const PRESENTATION = "p00000000000000000001";
 const SLIDES = JSON.stringify([{ id: "s", order: 0, lines: ["시선"] }]);
 
@@ -224,7 +226,10 @@ describe("신고·게시 중단 운영 작업", () => {
       resolutionNote: "권리자 요청",
     });
 
-    await restoreDeck(db, DECK);
+    expect(await restoreDeck(db, DECK)).toEqual({
+      visibility: "private",
+      listed: false,
+    });
     expect(await deckState(DECK)).toEqual({
       visibility: "private",
       takedownAt: null,
@@ -261,6 +266,42 @@ describe("신고·게시 중단 운영 작업", () => {
       ["takedown", "direct", null],
       ["restore", "direct", "권리자 철회"],
     ]);
+  });
+
+  describe("restore", () => {
+    it("writes nothing and refuses when the deck is not taken down", async () => {
+      const before = await decksCol(db).doc(DECK).get();
+
+      await expect(restoreDeck(db, DECK)).rejects.toThrow(
+        OPS_ERRORS.deck.nothingToRestore,
+      );
+
+      const after = await decksCol(db).doc(DECK).get();
+      expect(after.updateTime).toEqual(before.updateTime);
+      expect(after.data()).toMatchObject({
+        visibility: "public",
+        listed: true,
+      });
+      expect(await events()).toEqual([]);
+    });
+
+    it("says the deck is back in the library when its stored visibility stayed public", async () => {
+      await seedDocs(db, {
+        decks: [
+          deckDoc({
+            id: PUBLIC_TAKEN_DOWN,
+            userId: A,
+            visibility: "public",
+            takedownAt: new Date(1),
+          }),
+        ],
+      });
+
+      expect(await restoreDeck(db, PUBLIC_TAKEN_DOWN)).toEqual({
+        visibility: "public",
+        listed: true,
+      });
+    });
   });
 
   it("resolves or rejects single reports", async () => {
@@ -375,7 +416,10 @@ describe("신고·게시 중단 운영 작업", () => {
       await takedownDeck(db, DECK);
       await takedownForks(db, DECK);
 
-      expect(await restoreDeck(db, fork.deck.id)).toBe(true);
+      expect(await restoreDeck(db, fork.deck.id)).toEqual({
+        visibility: "private",
+        listed: false,
+      });
 
       expect(await findBlockingSource(db, fork.deck.id)).toBe(DECK);
       expect(
@@ -788,8 +832,8 @@ describe("신고·게시 중단 운영 작업", () => {
       expect(await searchIds()).not.toContain(BOT_DECK);
 
       const now = new Date(5000);
-      expect(await restoreDeck(db, BOT_DECK, { republish: true, now })).toBe(
-        true,
+      expect(await restoreDeck(db, BOT_DECK, { republish: true, now })).toEqual(
+        { visibility: "public", listed: true },
       );
 
       const stored = (await decksCol(db).doc(BOT_DECK).get()).data();
@@ -856,7 +900,10 @@ describe("신고·게시 중단 운영 작업", () => {
       ).rejects.toThrow(OPS_ERRORS.deck.notTakenDown);
 
       await takedownDeck(db, BOT_DECK);
-      expect(await restoreDeck(db, BOT_DECK, { republish: true })).toBe(true);
+      expect(await restoreDeck(db, BOT_DECK, { republish: true })).toEqual({
+        visibility: "public",
+        listed: true,
+      });
       expect(await searchIds()).toContain(BOT_DECK);
     });
 
@@ -873,7 +920,10 @@ describe("신고·게시 중단 운영 작업", () => {
       });
 
       await restoreDeck(db, DECK);
-      expect(await restoreDeck(db, FORK, { republish: true })).toBe(true);
+      expect(await restoreDeck(db, FORK, { republish: true })).toEqual({
+        visibility: "public",
+        listed: true,
+      });
       expect(await searchIds()).toContain(FORK);
     });
 
@@ -892,7 +942,7 @@ describe("신고·게시 중단 운영 작업", () => {
 
       expect(
         await restoreDeck(db, PRESENTATION_COPY, { republish: true }),
-      ).toBe(false);
+      ).toBeNull();
       expect((await deckState(PRESENTATION_COPY)).visibility).toBe("private");
     });
   });
@@ -1112,7 +1162,11 @@ describe("신고·게시 중단 운영 작업", () => {
     it("takes down every library deck of an account and nothing else", async () => {
       const now = new Date(5000);
 
-      expect(await takedownUserDecks(db, A, now)).toBe(2);
+      expect(await takedownUserDecks(db, A, now)).toEqual({
+        status: "taken_down",
+        deckIds: [DECK, PRIVATE_DECK],
+        libraryDeckIds: [DECK, PRIVATE_DECK],
+      });
 
       for (const id of [DECK, PRIVATE_DECK]) {
         const deck = (await decksCol(db).doc(id).get()).data();
@@ -1123,7 +1177,52 @@ describe("신고·게시 중단 운영 작업", () => {
         expect(deck?.takedownAt).toBeNull();
       }
       expect((await decksCol(db).doc(FORK).get()).data()?.listed).toBe(true);
-      expect(await takedownUserDecks(db, "nobody")).toBe(0);
+      expect(await takedownUserDecks(db, "nobody")).toEqual({
+        status: "taken_down",
+        deckIds: [],
+        libraryDeckIds: [],
+      });
+    });
+
+    it("refuses to take down every deck of the official library account", async () => {
+      const botDecks = Array.from({ length: 30 }, (_, i) => `bot-deck-${i}`);
+      await seedDocs(db, {
+        users: [
+          userDoc({
+            id: OFFICIAL_LIBRARY_USER_ID,
+            name: OFFICIAL_LIBRARY_NAME,
+          }),
+        ],
+        decks: botDecks.map((id) =>
+          deckDoc({
+            id,
+            userId: OFFICIAL_LIBRARY_USER_ID,
+            visibility: "public",
+            slides: JSON.stringify([{ id: "s", order: 0, lines: ["시선"] }]),
+          }),
+        ),
+      });
+
+      expect(await takedownUserDecks(db, OFFICIAL_LIBRARY_USER_ID)).toEqual({
+        status: "official",
+      });
+
+      const listed = await decksCol(db)
+        .where("userId", "==", OFFICIAL_LIBRARY_USER_ID)
+        .where("listed", "==", true)
+        .get();
+      expect(listed.size).toBe(botDecks.length);
+      expect(await takedownDecks(db, [botDecks[0] as string])).toEqual({
+        takenDown: [botDecks[0]],
+        notLibrary: [],
+      });
+    });
+
+    it("names the user ids that have no account, including ones that cannot be document ids", async () => {
+      expect(
+        await findUnknownUserIds(db, [A, "nobody", `${B}\r`, "", "a/b", A, B]),
+      ).toEqual(["nobody", `${B}\r`, "", "a/b"]);
+      expect(await findUnknownUserIds(db, [])).toEqual([]);
     });
 
     it("다시 실행하면 그사이 생긴 곡만 중단하고 운영 기록을 겹쳐 남기지 않는다", async () => {
@@ -1133,9 +1232,13 @@ describe("신고·게시 중단 운영 작업", () => {
         decks: [deckDoc({ id: later, userId: A, visibility: "public" })],
       });
 
-      expect(await takedownUserDecks(db, A, new Date(6000), "계정 정리")).toBe(
-        1,
-      );
+      expect(
+        await takedownUserDecks(db, A, new Date(6000), "계정 정리"),
+      ).toEqual({
+        status: "taken_down",
+        deckIds: [later],
+        libraryDeckIds: [DECK, PRIVATE_DECK, later],
+      });
 
       expect(
         (await events()).map(({ deckId, cause, note }) => [
@@ -1193,7 +1296,7 @@ describe("신고·게시 중단 운영 작업", () => {
     it("treats an id that cannot be a document id as one that does not exist", async () => {
       for (const id of ["", "a/b", "a//b", ".", "..", "__id__"]) {
         expect(await takedownDeck(db, id)).toBe(false);
-        expect(await restoreDeck(db, id)).toBe(false);
+        expect(await restoreDeck(db, id)).toBeNull();
         expect(await disableShareLink(db, id)).toBe(false);
         await expect(resolveReport(db, id, "처리")).rejects.toThrow(
           OPS_ERRORS.report.notFound,

@@ -26,9 +26,11 @@ import * as ops from "./moderation";
 
 const A = "00000000000000000000a";
 const B = "00000000000000000000b";
+const BOT = "bot-seed-official-lib";
 const DECK = "c00000000000000000001";
 const OTHER = "c00000000000000000002";
 const B_DECK = "c00000000000000000003";
+const PUBLIC_TAKEN_DOWN = "c00000000000000000004";
 const PRESENTATION = "p00000000000000000001";
 const OTHER_PRESENTATION = "p00000000000000000002";
 const DASHED = `--${"x8Jk".padEnd(19, "0")}`;
@@ -134,6 +136,25 @@ describe("moderation 명령줄", () => {
       expect(() => parseModerationArgs(["takedown", "a", "--forse"])).toThrow(
         "--forse",
       );
+    });
+
+    it("붙여 넣은 id 앞뒤의 공백·줄바꿈·폭 없는 문자를 지우고 빈 인자는 버린다", () => {
+      expect(
+        parseModerationArgs([
+          "takedown-user",
+          ` ${A}\r`,
+          `\u200b${B}\ufeff`,
+          `${DASHED}\r`,
+          "\r",
+          "\u3000",
+          "--note=계정 정리\r",
+        ]),
+      ).toEqual({
+        command: "takedown-user",
+        ids: [A, B, DASHED],
+        flags: { note: "계정 정리" },
+      });
+      expect(() => parseModerationArgs(["restore", " \r"])).toThrow("id");
     });
 
     it("모르는 명령이나 id 개수가 맞지 않는 입력은 연결하기 전에 멈춘다", () => {
@@ -322,6 +343,75 @@ describe("moderation 명령줄", () => {
       expect(warnings).toEqual([]);
     });
 
+    it("멈춘 실행을 이어 갈 때 먼저 중단된 곡에 걸린 신고도 닫는다", async () => {
+      await ops.takedownDeck(db, DECK);
+      await addReport("r1", B, DECK);
+
+      await run("takedown-user", A, "--note=계정 정리");
+
+      expect(await report("r1")).toEqual({
+        status: "resolved",
+        resolutionNote: "계정 정리",
+      });
+      expect(
+        (await decksCol(db).doc(OTHER).get()).data()?.takedownAt,
+      ).not.toBeNull();
+      expect(logs[0]).toContain("곡 1개");
+    });
+
+    it("공식 라이브러리 계정은 한꺼번에 중단하지 않고 나머지 계정을 처리한 뒤 실패로 알린다", async () => {
+      const botDecks = Array.from({ length: 30 }, (_, i) => `bot-deck-${i}`);
+      await seedDocs(db, {
+        users: [userDoc({ id: BOT, name: "공식 찬양 라이브러리" })],
+        decks: botDecks.map((id) =>
+          deckDoc({ id, userId: BOT, visibility: "public", slides: SLIDES }),
+        ),
+      });
+      await addReport("r1", B, "bot-deck-0");
+
+      const error = await run("takedown-user", BOT, A, "--note=x").catch(
+        (e: Error) => e,
+      );
+
+      expect(error).toBeInstanceOf(Error);
+      expect((error as Error).message).toContain(BOT);
+      expect((error as Error).message).toContain("takedown");
+      const listed = await decksCol(db)
+        .where("userId", "==", BOT)
+        .where("listed", "==", true)
+        .get();
+      expect(listed.size).toBe(botDecks.length);
+      expect((await report("r1")).status).toBe("pending");
+      expect((await decksCol(db).doc(DECK).get()).data()?.listed).toBe(false);
+    });
+
+    it("없는 계정 id는 나머지를 처리한 뒤 실패로 알린다", async () => {
+      const typo = "nobody-xxxxxxxxxxxxxx";
+
+      await expect(run("takedown-user", typo, A)).rejects.toThrow(typo);
+
+      expect((await decksCol(db).doc(DECK).get()).data()?.listed).toBe(false);
+      expect(logs.join("\n")).not.toContain(typo);
+    });
+
+    it("줄 끝에 \\r이나 공백이 붙은 계정 id도 그 계정으로 처리한다", async () => {
+      await run("takedown-user", `${A}\r`, `${B} `);
+
+      expect((await decksCol(db).doc(DECK).get()).data()?.listed).toBe(false);
+      expect((await decksCol(db).doc(B_DECK).get()).data()?.listed).toBe(false);
+    });
+
+    it("없는 계정 id는 세션을 지운 것처럼 알리지 않고 나머지를 처리한다", async () => {
+      const sessions = db.collection(COLLECTIONS.sessions);
+      await sessions.doc("sa").set({ id: "sa", userId: A });
+      const typo = "nobody-xxxxxxxxxxxxxx";
+
+      await expect(run("revoke-sessions", typo, `${A} `)).rejects.toThrow(typo);
+
+      expect((await sessions.get()).size).toBe(0);
+      expect(logs.join("\n")).not.toContain(typo);
+    });
+
     it("계정마다 세션을 지운다", async () => {
       const sessions = db.collection(COLLECTIONS.sessions);
       await sessions.doc("sa").set({ id: "sa", userId: A });
@@ -333,11 +423,12 @@ describe("moderation 명령줄", () => {
       expect(logs[0]).toContain("1개");
     });
 
-    it("세션을 지워도 로그인한 기기는 몇 분 더 쓸 수 있다고 알린다", async () => {
+    it("세션을 지워도 로그인한 기기는 몇 분 더 쓸 수 있고 다시 로그인할 수 있다고 알린다", async () => {
       await run("revoke-sessions", A);
 
       expect(logs[0]).toContain("5분");
       expect(logs[0]).toContain("takedown-user");
+      expect(logs[0]).toContain("다시 로그인");
     });
   });
 
@@ -378,6 +469,49 @@ describe("moderation 명령줄", () => {
       const deck = (await decksCol(db).doc(DECK).get()).data();
       expect(deck).toMatchObject({ visibility: "private", listed: false });
       expect(deck?.takedownAt).toBeNull();
+      expect(logs.at(-1)).toContain("비공개");
+    });
+
+    it("게시 중단되지 않은 곡은 푼 것처럼 알리지 않는다", async () => {
+      await expect(run("restore", DECK)).rejects.toThrow(
+        OPS_ERRORS.deck.nothingToRestore,
+      );
+
+      expect((await decksCol(db).doc(DECK).get()).data()).toMatchObject({
+        visibility: "public",
+        listed: true,
+      });
+      expect(logs).toEqual([]);
+    });
+
+    it("풀고 나서 곡이 공유 라이브러리에 다시 보이면 그렇게 알린다", async () => {
+      await seedDocs(db, {
+        decks: [
+          deckDoc({
+            id: PUBLIC_TAKEN_DOWN,
+            userId: A,
+            visibility: "public",
+            takedownAt: new Date(1),
+            slides: SLIDES,
+          }),
+        ],
+      });
+
+      await run("restore", PUBLIC_TAKEN_DOWN);
+
+      expect(
+        (await decksCol(db).doc(PUBLIC_TAKEN_DOWN).get()).data(),
+      ).toMatchObject({ visibility: "public", listed: true });
+      expect(logs.at(-1)).toContain("공유 라이브러리");
+      expect(logs.at(-1)).not.toContain("비공개");
+    });
+
+    it("--republish로 풀면 공유 라이브러리에 다시 보인다고 알린다", async () => {
+      await run("takedown", DECK);
+
+      await run("restore", DECK, "--republish");
+
+      expect(logs.at(-1)).toContain("공유 라이브러리");
     });
 
     it("--republish면 다시 공개한다", async () => {

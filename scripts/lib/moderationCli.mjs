@@ -19,11 +19,24 @@ const SHARE_URL = /\/s\/([\w-]+)/;
 
 const ID_SHAPE = /^[\w-]{21}$/;
 
+const EDGE_NOISE = /^[\s\p{Cf}]+|[\s\p{Cf}]+$/gu;
+
+const trimArg = (arg) => arg.replace(EDGE_NOISE, "");
+
 const isOption = (arg) => arg.startsWith("--") && !ID_SHAPE.test(arg);
 
 const noteOf = (flags) => (typeof flags.note === "string" ? flags.note : "");
 
 const eventNoteOf = (flags) => noteOf(flags).trim() || null;
+
+async function splitKnownUsers(db, ops, ids) {
+  const unknown = await ops.findUnknownUserIds(db, ids);
+  const known = [...new Set(ids)].filter((id) => !unknown.includes(id));
+  return { known, unknown };
+}
+
+const unknownUsersMessage = (unknown) =>
+  `사용자를 찾을 수 없어 건너뛰었어요: ${unknown.join(", ")}. id를 확인해 주세요.`;
 
 async function resolvePresentationId(db, ops, target) {
   const shared = SHARE_URL.exec(target);
@@ -113,36 +126,49 @@ const COMMANDS = {
     flags: ["note"],
     async run({ ids, flags }, { db, ops, out }) {
       const now = new Date();
-      for (const userId of ids) {
-        const deckIds = (await ops.listUserDecks(db, userId)).map(
-          (deck) => deck.id,
-        );
-        const count = await ops.takedownUserDecks(
+      const { known, unknown } = await splitKnownUsers(db, ops, ids);
+      const official = [];
+      for (const userId of known) {
+        const result = await ops.takedownUserDecks(
           db,
           userId,
           now,
           eventNoteOf(flags),
         );
+        if (result.status === "official") {
+          official.push(userId);
+          continue;
+        }
         const closed = await ops.resolveReportsForDecks(
           db,
-          deckIds,
+          result.libraryDeckIds,
           noteOf(flags),
         );
         out.log(
-          `${userId}: 곡 ${count}개의 게시를 중단하고 신고 ${closed}건을 처리 완료로 닫았어요.`,
+          `${userId}: 곡 ${result.deckIds.length}개의 게시를 중단하고 신고 ${closed}건을 처리 완료로 닫았어요.`,
         );
       }
+      const problems = [];
+      if (official.length > 0) {
+        problems.push(
+          `공식 라이브러리 계정의 곡은 한꺼번에 게시 중단할 수 없어 건너뛰었어요: ${official.join(", ")}. 곡마다 takedown <곡 id>로 중단해 주세요.`,
+        );
+      }
+      if (unknown.length > 0) problems.push(unknownUsersMessage(unknown));
+      if (problems.length > 0) throw new Error(problems.join("\n"));
     },
   },
   "revoke-sessions": {
     ids: "many",
     async run({ ids }, { db, ops, out }) {
-      for (const userId of ids) {
+      const { known, unknown } = await splitKnownUsers(db, ops, ids);
+      for (const userId of known) {
         const count = await ops.revokeSessions(db, userId);
         out.log(
-          `${userId}: 세션 ${count}개를 지웠어요. 로그인한 기기는 최대 5분 더 쓸 수 있어요. 계정을 정리하는 중이면 5분 뒤 takedown-user를 한 번 더 실행해 주세요.`,
+          `${userId}: 세션 ${count}개를 지웠어요. 계정은 막지 않아 바로 다시 로그인할 수 있고, 로그인해 있던 기기도 최대 5분 더 쓸 수 있어요. 계정을 정리하는 중이면 5분 뒤 takedown-user를 한 번 더 실행해 주세요.`,
         );
       }
+      if (unknown.length > 0) throw new Error(unknownUsersMessage(unknown));
     },
   },
   ban: {
@@ -190,12 +216,11 @@ const COMMANDS = {
     ids: "one",
     flags: ["republish", "note"],
     async run({ ids: [deckId], flags }, { db, ops, out }) {
-      const republish = flags.republish === true;
       const restored = await ops.restoreDeck(db, deckId, {
-        republish,
+        republish: flags.republish === true,
         note: eventNoteOf(flags),
       });
-      if (!restored) {
+      if (restored === null) {
         throw new Error(`보관함 곡이 아니에요: ${deckId}`);
       }
       const [blockedBy, descendants] = await Promise.all([
@@ -204,8 +229,8 @@ const COMMANDS = {
       ]);
       const stillTakenDown = descendants.filter((deck) => deck.takenDown);
       out.log(
-        republish
-          ? "게시 중단을 풀고 다시 공개했어요."
+        restored.listed
+          ? "게시 중단을 풀었어요. 곡이 공유 라이브러리에 다시 보여요."
           : "게시 중단을 풀었어요. 곡은 비공개로 남아요.",
       );
       if (blockedBy) {
@@ -326,12 +351,17 @@ function checkFlags(command, allowed, flags) {
  * 대상에 쓰는 일이 없도록 모르는 옵션도 오류로 본다.
  *
  * id는 NanoID(21자, `A-Za-z0-9_-`)라 `--`로 시작할 수 있다. 긴 목록이 id 하나 때문에 통째로
- * 거절되지 않도록 그 모양(`ID_PATTERN`)인 인자는 옵션이 아니라 id로 읽는다. 옵션 이름은 모두
+ * 거절되지 않도록 그 모양(`ID_SHAPE`)인 인자는 옵션이 아니라 id로 읽는다. 옵션 이름은 모두
  * 21자보다 짧거나 `=`가 들어가 id와 겹치지 않는다.
+ *
+ * 붙여 넣은 목록이나 CRLF 파일(`xargs`)에서 따라온 앞뒤 공백·`\r`·폭 없는 문자는 인자마다 지우고,
+ * 지우고 나서 빈 인자는 버린다. 그대로 두면 id가 실제 문서와 맞지 않아 아무것도 하지 않은 명령이
+ * 성공한 것처럼 끝난다.
  */
 export function parseModerationArgs(argv) {
-  const [command, ...ids] = argv.filter((arg) => !isOption(arg));
-  const flags = parseFlags(argv.filter(isOption));
+  const args = argv.map(trimArg).filter((arg) => arg !== "");
+  const [command, ...ids] = args.filter((arg) => !isOption(arg));
+  const flags = parseFlags(args.filter(isOption));
   if (command === undefined || !Object.hasOwn(COMMANDS, command)) {
     throw new Error(
       `알 수 없는 명령이에요${command === undefined ? "" : `: ${command}`}. 명령: ${Object.keys(COMMANDS).join(" | ")}`,

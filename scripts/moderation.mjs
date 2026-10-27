@@ -9,9 +9,9 @@
  *   node scripts/moderation.mjs user-decks <사용자 id>                # 계정의 보관함 곡
  *   node scripts/moderation.mjs takedown <곡 id>... --note=<사유>     # 게시 중단 + 그 곡의 신고 처리 완료
  *   node scripts/moderation.mjs takedown <곡 id>... --with-forks --note=<사유>  # 가져간 곡도 함께 게시 중단
- *   node scripts/moderation.mjs takedown-user <사용자 id>... --note=<사유>   # 계정의 보관함 곡 모두 중단 (먼저 user-decks로 확인)
- *   node scripts/moderation.mjs revoke-sessions <사용자 id>...        # 계정의 세션 삭제 (로그인한 기기는 최대 5분 더 씀)
- *   node scripts/moderation.mjs restore <곡 id> [--republish] --note=<사유>  # 게시 중단 해제 (기본은 비공개 유지). 원곡이나 가져간 곡이 아직 게시 중단돼 있으면 알린다
+ *   node scripts/moderation.mjs takedown-user <사용자 id>... --note=<사유>   # 계정의 보관함 곡 모두 중단 (먼저 user-decks로 확인. 공식 라이브러리 계정은 곡마다 takedown)
+ *   node scripts/moderation.mjs revoke-sessions <사용자 id>...        # 계정의 세션 삭제 (로그인한 기기는 최대 5분 더 쓰고, 다시 로그인할 수 있음)
+ *   node scripts/moderation.mjs restore <곡 id> [--republish] --note=<사유>  # 게시 중단 해제 (기본은 공개 범위를 바꾸지 않음). 원곡이나 가져간 곡이 아직 게시 중단돼 있으면 알린다
  *   node scripts/moderation.mjs ban <사용자 id> --note=<사유>         # 계정 제한: 공개·가져오기·신고를 막고 공개 곡을 게시 중단, 로그인 세션 종료
  *   node scripts/moderation.mjs unban <사용자 id> --note=<사유>       # 계정 제한 해제 (게시 중단한 곡은 restore로 하나씩 푼다)
  *   node scripts/moderation.mjs resolve <신고 id> --note=<메모> [--force]

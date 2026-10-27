@@ -10,6 +10,7 @@ export const OPS_ERRORS = {
       "게시를 중단한 적 없는 곡이라 --republish를 쓸 수 없어요. 주인이 로그인할 수 없는 곡이면 takedown으로 먼저 중단해 주세요",
     sourceTakenDown:
       "가져온 원본이 게시 중단된 곡이라 다시 공개할 수 없어요. 원본의 게시 중단을 먼저 풀어 주세요",
+    nothingToRestore: "게시 중단된 곡이 아니에요. 곡 id를 확인해 주세요",
   },
   report: {
     notFound: "신고를 찾을 수 없어요",

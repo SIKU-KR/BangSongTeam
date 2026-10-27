@@ -41,18 +41,17 @@ import {
  * 스크립트는 오류를 찍고 곧바로 끝나므로 트랜잭션 콜백은 던지지 않고 거절을 반환값으로 알린다.
  * Firestore SDK는 콜백이 던져도 롤백 요청을 기다리지 않고 보내서, 요청이 나가기 전에 프로세스가
  * 끝나면 그 문서의 잠금이 한참 남는다. 같은 까닭으로 여러 곡을 나눠 처리하다 하나가 실패하면
- * 새 작업은 시작하지 않고, 진행 중인 작업이 모두 끝난 뒤에 오류를 던진다. 여러 신고를 닫을 때는
- * 범위 조회를 트랜잭션 밖에서 하고 문서 단위로만 다시 읽어, 동시에 도는 작업끼리 서로 잠가
- * 재시도가 늘지 않게 한다.
+ * 새 작업은 시작하지 않고, 진행 중인 작업이 모두 끝난 뒤에 오류를 던진다. 곡·신고 여러 개는
+ * 한 번에 `CONCURRENCY`개씩만 보내 계정 하나의 곡이 수천 개여도 연결을 다 쓰지 않게 한다. 여러
+ * 신고를 닫을 때는 범위 조회를 트랜잭션 밖에서 하고 문서 단위로만 다시 읽어, 동시에 도는
+ * 작업끼리 서로 잠가 재시도가 늘지 않게 한다.
  *
  * 운영자가 붙여 넣은 값이 문서 id가 될 수 없으면(빈 값, `/`가 든 주소, `.`·`..`, `__…__`) SDK가
  * 던지거나 서버가 거절해 목록 전체가 멈추므로, 그런 값은 문서를 읽기 전에 "없는 id"로 다룬다.
  */
 
-/** Firestore 한 번의 쓰기(트랜잭션·배치)가 담을 수 있는 문서 수 */
 const MAX_BATCH_WRITES = 500;
 
-/** 곡·신고 여러 개를 처리할 때 동시에 보내는 요청 수. 계정 하나의 곡이 수천 개여도 연결을 다 쓰지 않게 한다 */
 const CONCURRENCY = 20;
 
 function isDocumentId(id: string): boolean {
@@ -167,7 +166,7 @@ type DeckChange = Partial<
 type Refusal = { refusal: string };
 
 type LibraryUpdate =
-  | { status: "updated" }
+  | { status: "updated"; deck: DeckDoc }
   | { status: "notLibrary" }
   | { status: "refused"; reason: string };
 
@@ -186,7 +185,8 @@ async function updateLibraryDeck(
     if (!deck || deck.presentationId !== null) return { status: "notLibrary" };
     const next = await change(deck, tx);
     if ("refusal" in next) return { status: "refused", reason: next.refusal };
-    tx.set(ref, withDeckIndex({ ...deck, ...next }));
+    const updated = withDeckIndex({ ...deck, ...next });
+    tx.set(ref, updated);
     recordModerationEvent(tx, db, {
       action,
       ...cause,
@@ -195,7 +195,7 @@ async function updateLibraryDeck(
       title: deck.title,
       at: now,
     });
-    return { status: "updated" };
+    return { status: "updated", deck: updated };
   });
 }
 
@@ -241,10 +241,14 @@ export interface RestoreOptions {
   note?: string | null;
 }
 
+export type RestoredDeck = Pick<DeckDoc, "visibility" | "listed">;
+
 /**
- * 게시 중단 해제. 기본은 비공개로 둔 채 이 곡 자신의 게시 중단만 푼다. 거슬러 올라간 원본이 아직
- * 게시 중단돼 있으면 소유자는 여전히 공개하지 못하고(`findBlockingSource`), 이 곡에서 가져간 곡의
- * 게시 중단도 그대로 남는다(`listDescendants`).
+ * 게시 중단 해제. 기본은 공개 범위를 바꾸지 않고 이 곡 자신의 게시 중단만 푼다. 거슬러 올라간 원본이
+ * 아직 게시 중단돼 있으면 소유자는 여전히 공개하지 못하고(`findBlockingSource`), 이 곡에서 가져간 곡의
+ * 게시 중단도 그대로 남는다(`listDescendants`). 해제한 뒤 저장된 공개 상태를 돌려줘, 운영자가 짐작이
+ * 아니라 실제 값으로 곡이 공유 라이브러리에 보이는지 확인한다. 보관함 곡이 아니면 `null`이다. 지금
+ * 게시 중단된 곡이 아니면 아무것도 쓰지 않고 거절해, 틀린 id로도 해제한 것처럼 보이지 않게 한다.
  *
  * 공식 라이브러리 곡처럼 로그인할 수 없는 계정이 주인이면 다시 공개할 사람이 없어 곡이
  * 영영 돌아오지 못하므로, `republish`로 운영자가 대신 공개한다. 잘못 넣은 id로 남의 비공개
@@ -255,15 +259,19 @@ export async function restoreDeck(
   db: Db,
   deckId: string,
   { republish = false, now = new Date(), note = null }: RestoreOptions = {},
-): Promise<boolean> {
+): Promise<RestoredDeck | null> {
   const result = await updateLibraryDeck(
     db,
     deckId,
     async (deck, tx) => {
-      if (!republish) return { takedownAt: null };
       if (deck.takedownAt === null) {
-        return { refusal: OPS_ERRORS.deck.notTakenDown };
+        return {
+          refusal: republish
+            ? OPS_ERRORS.deck.notTakenDown
+            : OPS_ERRORS.deck.nothingToRestore,
+        };
       }
+      if (!republish) return { takedownAt: null };
       if (parseSlides(deck.slides).length === 0) {
         return { refusal: API_ERRORS.deck.noSlides };
       }
@@ -277,7 +285,8 @@ export async function restoreDeck(
     directCause(note),
   );
   if (result.status === "refused") throw new Error(result.reason);
-  return result.status === "updated";
+  if (result.status === "notLibrary") return null;
+  return { visibility: result.deck.visibility, listed: result.deck.listed };
 }
 
 /** 이 곡에서 가져간 보관함 곡 하나 (`listDescendants`) */
@@ -463,19 +472,31 @@ export async function listUserDecks(
     }));
 }
 
+export type UserDecksTakedown =
+  | { status: "taken_down"; deckIds: string[]; libraryDeckIds: string[] }
+  | { status: "official" };
+
 /**
- * 한 계정의 보관함 곡을 모두 게시 중단한다. 비공개 곡도 포함해, 계정이 나중에 그 곡을 다시
- * 공개하지 못하게 한다. 곡마다 `takedownDeck`을 거치므로 색인과 프레젠테이션 사본 제외
- * 규칙이 그대로 적용된다. 이미 게시 중단된 곡은 건너뛰어 다시 실행해도 운영 기록이 겹치지
- * 않는다. 중단 전 공개 범위는 남기지 않으므로 나중에 `restoreDeck`의 `republish`로 되살리면
- * 원래 비공개였던 곡도 공개된다. 새로 게시 중단한 곡 수를 돌려준다.
+ * 한 계정의 보관함 곡을 모두 게시 중단하고, 새로 게시 중단한 곡 id를 돌려준다. 비공개 곡도 포함해,
+ * 계정이 나중에 그 곡을 다시 공개하지 못하게 한다. 곡마다 `takedownDeck`을 거치므로 색인과
+ * 프레젠테이션 사본 제외 규칙이 그대로 적용된다. 이미 게시 중단된 곡은 건너뛰어 다시 실행해도
+ * 운영 기록이 겹치지 않는다. 중단 전 공개 범위는 남기지 않으므로 나중에 `restoreDeck`의
+ * `republish`로 되살리면 원래 비공개였던 곡도 공개된다.
+ *
+ * 건너뛴 곡까지 포함한 계정의 보관함 곡 id 전부도 함께 돌려줘(`libraryDeckIds`), 중간에 멈춘 실행을
+ * 이어 갈 때 먼저 중단된 곡에 걸린 신고까지 닫을 수 있다. 곡 문서를 다시 읽지 않는다.
+ *
+ * 공식 라이브러리 계정(`OFFICIAL_LIBRARY_USER_ID`)은 아무것도 하지 않고 `official`이다. 공유
+ * 라이브러리 곡 대부분이 그 계정 곡이라 한 번에 라이브러리가 비고, 되돌리려면 곡마다 `restoreDeck`을
+ * 불러야 한다. 공식 곡은 `takedownDecks`로 곡을 골라 중단한다.
  */
 export async function takedownUserDecks(
   db: Db,
   userId: string,
   now: Date = new Date(),
   note: string | null = null,
-): Promise<number> {
+): Promise<UserDecksTakedown> {
+  if (userId === OFFICIAL_LIBRARY_USER_ID) return { status: "official" };
   const snapshot = await libraryDecksOf(db, userId).select("takedownAt").get();
   const { takenDown } = await takedownDecks(
     db,
@@ -483,7 +504,34 @@ export async function takedownUserDecks(
     now,
     note,
   );
-  return takenDown.length;
+  return {
+    status: "taken_down",
+    deckIds: takenDown,
+    libraryDeckIds: snapshot.docs.map((doc) => doc.id),
+  };
+}
+
+/**
+ * 사용자 문서가 없는 id (중복은 한 번만). 계정 단위 명령이 오타 난 id로 아무것도 하지 않고 성공한
+ * 것처럼 끝나지 않게 먼저 거른다. 문서 id가 될 수 없는 값도 없는 사용자다.
+ */
+export async function findUnknownUserIds(
+  db: Db,
+  userIds: readonly string[],
+): Promise<string[]> {
+  const ids = [...new Set(userIds)];
+  const found = new Set<string>();
+  await mapWithConcurrency(
+    chunkIds(ids.filter(isDocumentId)),
+    CONCURRENCY,
+    async (chunk) => {
+      const users = await db.getAll(...chunk.map((id) => usersCol(db).doc(id)));
+      for (const user of users) {
+        if (user.exists) found.add(user.id);
+      }
+    },
+  );
+  return ids.filter((id) => !found.has(id));
 }
 
 /**
