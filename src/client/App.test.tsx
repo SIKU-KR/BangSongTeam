@@ -31,6 +31,7 @@ import { __resetFolderSyncForTests } from "./lib/sync/folderSync";
 import {
   __resetSyncSchedulerForTests,
   flushPendingSync,
+  scheduleDocumentPush,
 } from "./lib/sync/syncScheduler";
 import {
   retrySyncNow,
@@ -68,6 +69,22 @@ vi.mock("./lib/auth/authClient", async (importOriginal) => ({
     signOut: vi.fn(async () => ({ data: { success: true }, error: null })),
   },
 }));
+
+const backgroundHydration = vi.hoisted(() => ({
+  held: null as Promise<void> | null,
+}));
+
+vi.mock("./features/backgrounds/backgroundCatalog", async (importOriginal) => {
+  const actual =
+    await importOriginal<
+      typeof import("./features/backgrounds/backgroundCatalog")
+    >();
+  return {
+    ...actual,
+    hydrateBackgroundCatalog: (): Promise<void> =>
+      backgroundHydration.held ?? actual.hydrateBackgroundCatalog(),
+  };
+});
 
 const DOC_ID = SEED_PRESENTATION_IDS[0];
 const OTHER_USER_ID = "999999999999999999999";
@@ -537,10 +554,33 @@ describe("App Route Integration", () => {
     });
 
     afterEach(() => {
+      backgroundHydration.held = null;
       api?.restore();
       api = null;
       resetSyncModules();
       window.sessionStorage.clear();
+    });
+
+    it("저장본 싣기가 끝난 직후 화면을 다시 그리기 전에 로그인이 풀려도 부팅 동기화를 시작하지 않고 이후 변경도 보내지 않는다", async () => {
+      const backgrounds = deferred<void>();
+      backgroundHydration.held = backgrounds.promise;
+      api = installFakeApi(bootRoutes());
+      renderAt("/presentations");
+      await waitFor(async () =>
+        expect((await loadCachedSession())?.userId).toBe(SEED_USER_ID),
+      );
+
+      await act(async () => {
+        backgrounds.resolve();
+        queueMicrotask(() => __setSessionForTests(null));
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      });
+      await act(async () => {
+        scheduleDocumentPush(SEED_PRESENTATIONS[0]);
+        await flushPendingSync();
+      });
+
+      expect(apiRequests(api)).toEqual([]);
     });
 
     it("계정 카드로 로그아웃하면 세션 캐시를 비우고 로딩 화면으로 덮은 채 한 번 새로고침한다", async () => {

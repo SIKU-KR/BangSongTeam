@@ -123,11 +123,6 @@ function isProjecting(): boolean {
   return isProjectionPath(window.location.pathname);
 }
 
-function reloadPage(): void {
-  if (isProjecting()) return;
-  pageReload();
-}
-
 function stopAccountSync(): Promise<void> {
   return hooks?.stopAccountSync().catch(() => undefined) ?? Promise.resolve();
 }
@@ -148,7 +143,7 @@ function finishLeaving(reason: SessionEndReason): Promise<void> {
     setState({ status: "loading", user: null });
     await stopping;
     rememberSessionEnd(reason);
-    reloadPage();
+    pageReload();
   })();
   return leaving;
 }
@@ -161,6 +156,9 @@ function finishLeaving(reason: SessionEndReason): Promise<void> {
  * 새로고침이 앞 계정의 메모리 큐·타이머·실패 기록·스토어를 모두 비우고, 다음 부팅이 누가
  * 로그인했는지 정한다. 송출 중이면 큐만 끄고 세션 상태와 epoch는 그대로 둔다. 송출 화면을 다시
  * 그리거나 송출 화면의 부팅을 버리면 관객 화면이 끊긴다.
+ *
+ * 송출 화면 밖에서 시작한 새로고침은 끝까지 한다. 로딩 화면이 이미 송출 화면을 내렸으므로,
+ * 그사이 뒤로 가기로 주소가 송출 화면으로 바뀌었다고 미루면 탭이 로딩 화면에 멈춘다.
  */
 export function resumeDeferredSessionWork(): void {
   if (accountEndReason === null || isProjecting()) return;

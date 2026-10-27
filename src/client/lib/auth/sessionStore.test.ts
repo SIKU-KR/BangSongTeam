@@ -33,6 +33,36 @@ vi.mock("./authClient", () => ({
   },
 }));
 
+type CacheWrite = "save" | "clear";
+
+const cacheWriteGates = vi.hoisted(
+  () => new Map<CacheWrite, { reach: () => void; release: Promise<void> }>(),
+);
+
+vi.mock("./sessionCache", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./sessionCache")>();
+  const passGate = async (write: CacheWrite): Promise<void> => {
+    const gate = cacheWriteGates.get(write);
+    if (!gate) return;
+    cacheWriteGates.delete(write);
+    gate.reach();
+    await gate.release;
+  };
+  return {
+    ...actual,
+    saveCachedSession: async (
+      ...args: Parameters<typeof actual.saveCachedSession>
+    ): Promise<void> => {
+      await passGate("save");
+      await actual.saveCachedSession(...args);
+    },
+    clearCachedSession: async (): Promise<void> => {
+      await passGate("clear");
+      await actual.clearCachedSession();
+    },
+  };
+});
+
 const getSession = vi.mocked(authClient.getSession);
 const signInSocial = vi.mocked(authClient.signIn.social);
 const signInEmail = vi.mocked(authClient.signIn.email);
@@ -103,6 +133,39 @@ function holdFetcher(): {
   };
 }
 
+function deferred<T>(): {
+  promise: Promise<T>;
+  resolve: (value: T) => void;
+} {
+  let resolve: (value: T) => void = () => undefined;
+  const promise = new Promise<T>((settle) => {
+    resolve = settle;
+  });
+  return { promise, resolve };
+}
+
+function holdNextCacheWrite(write: CacheWrite): {
+  reached: Promise<void>;
+  release: () => void;
+} {
+  const reached = deferred<void>();
+  const released = deferred<void>();
+  cacheWriteGates.set(write, {
+    reach: () => reached.resolve(),
+    release: released.promise,
+  });
+  return { reached: reached.promise, release: () => released.resolve() };
+}
+
+function holdFlushBeforeSignOut(): () => void {
+  const flushed = deferred<void>();
+  setAccountHooks({
+    flushBeforeSignOut: () => flushed.promise,
+    stopAccountSync: vi.fn(async () => undefined),
+  });
+  return () => flushed.resolve();
+}
+
 async function signInAsCachedUser(): Promise<void> {
   await saveCachedSession(makeUser());
   __setSessionFetcherForTests(async () => makeUser());
@@ -128,6 +191,7 @@ describe("세션 스토어", () => {
   });
 
   afterEach(() => {
+    cacheWriteGates.clear();
     __resetSessionForTests();
     closeOfflineDB();
     getSession.mockReset();
@@ -357,6 +421,39 @@ describe("세션 스토어", () => {
       expect(getCurrentUserId()).toBe(USER_ID);
       expect((await loadCachedSession())?.userId).toBe(USER_ID);
     });
+
+    it.each([
+      {
+        step: "받은 세션을 캐시에 쓰는",
+        write: "save",
+        seed: async () => undefined,
+        answer: makeUser({ userId: OTHER_USER_ID }),
+      },
+      {
+        step: "만료된 캐시를 지우는",
+        write: "clear",
+        seed: saveExpiredSession,
+        answer: null,
+      },
+    ] as const)(
+      "부팅이 $step 사이 이메일로 로그인하면 늦게 끝난 부팅이 그 세션을 덮지 않는다",
+      async ({ write, seed, answer }) => {
+        await seed();
+        const held = holdNextCacheWrite(write);
+        __setSessionFetcherForTests(async () => answer);
+        const hydrating = hydrateSession();
+        await held.reached;
+
+        signInEmail.mockResolvedValueOnce({ data: {}, error: null } as never);
+        __setSessionFetcherForTests(async () => makeUser());
+        await signInWithEmail("team@example.com", "password-1234");
+        held.release();
+        await hydrating;
+
+        expect(getSessionState().status).toBe("authenticated");
+        expect(getCurrentUserId()).toBe(USER_ID);
+      },
+    );
   });
 
   describe("서버 응답 해석", () => {
@@ -596,6 +693,69 @@ describe("세션 스토어", () => {
       expect(reload).toHaveBeenCalledTimes(1);
     });
 
+    it.each([
+      { answer: "세션 없음", user: null },
+      { answer: "다른 사용자", user: makeUser({ userId: OTHER_USER_ID }) },
+    ])(
+      "로그아웃이 변경을 보내는 동안 끝난 재검증($answer)은 로그아웃을 끊지 않는다",
+      async ({ user }) => {
+        await signInAsCachedUser();
+        const finishFlush = holdFlushBeforeSignOut();
+        const check = holdFetcher();
+        const checking = revalidateSession();
+        await vi.waitFor(() => expect(check.fetcher).toHaveBeenCalled());
+
+        const signingOut = signOut();
+        check.answer(user);
+        await checking;
+
+        expect(reload).not.toHaveBeenCalled();
+
+        finishFlush();
+        await signingOut;
+
+        expect(authSignOut).toHaveBeenCalledTimes(1);
+        expect(reload).toHaveBeenCalledTimes(1);
+        expect(window.sessionStorage.getItem(SESSION_END_KEY)).toBe(
+          "signedOut",
+        );
+      },
+    );
+
+    it.each([
+      { step: "세션 없음을 받아 캐시를 지우는", write: "clear", user: null },
+      {
+        step: "다른 사용자를 받아 캐시에 쓰는",
+        write: "save",
+        user: makeUser({ userId: OTHER_USER_ID }),
+      },
+    ] as const)(
+      "재검증이 $step 사이 로그아웃을 시작해도 재검증이 로그아웃을 끊지 않는다",
+      async ({ write, user }) => {
+        await signInAsCachedUser();
+        const finishFlush = holdFlushBeforeSignOut();
+        const held = holdNextCacheWrite(write);
+        __setSessionFetcherForTests(async () => user);
+        const checking = revalidateSession();
+        await held.reached;
+
+        const signingOut = signOut();
+        held.release();
+        await checking;
+
+        expect(reload).not.toHaveBeenCalled();
+
+        finishFlush();
+        await signingOut;
+
+        expect(authSignOut).toHaveBeenCalledTimes(1);
+        expect(reload).toHaveBeenCalledTimes(1);
+        expect(window.sessionStorage.getItem(SESSION_END_KEY)).toBe(
+          "signedOut",
+        );
+      },
+    );
+
     it("서버에 로그아웃을 알리지 못해도 이 탭은 로그아웃하고 새로고침한다", async () => {
       await signInAsCachedUser();
       authSignOut.mockRejectedValueOnce(new TypeError("Failed to fetch"));
@@ -604,6 +764,27 @@ describe("세션 스토어", () => {
 
       expect(await loadCachedSession()).toBeNull();
       expect(reload).toHaveBeenCalledTimes(1);
+    });
+
+    it("동기화를 끄는 사이 주소가 송출 화면으로 바뀌어도 새로고침한다", async () => {
+      await signInAsCachedUser();
+      const stopped = deferred<void>();
+      setAccountHooks({
+        flushBeforeSignOut: vi.fn(async () => undefined),
+        stopAccountSync: () => stopped.promise,
+      });
+      __setSessionFetcherForTests(async () => null);
+
+      const checking = revalidateSession();
+      await vi.waitFor(() =>
+        expect(getSessionState()).toEqual({ status: "loading", user: null }),
+      );
+      window.history.replaceState({}, "", "/present/abc/fullscreen");
+      stopped.resolve();
+      await checking;
+
+      expect(reload).toHaveBeenCalledTimes(1);
+      expect(window.sessionStorage.getItem(SESSION_END_KEY)).toBe("expired");
     });
 
     it("송출 중에 계정이 끝나면 동기화만 끄고, 새로고침은 송출을 마친 뒤에 한 번 한다", async () => {
@@ -645,6 +826,29 @@ describe("세션 스토어", () => {
       await new Promise((resolve) => setTimeout(resolve, 0));
       expect(reload).toHaveBeenCalledTimes(1);
     });
+
+    it("송출 중에 계정이 끝난 뒤의 재검증은 캐시에 쓰지 않고 동기화를 다시 끄지 않는다", async () => {
+      __setSessionFetcherForTests(async () => makeUser());
+      await hydrateSession();
+      const stopAccountSync = vi.fn(async () => undefined);
+      setAccountHooks({
+        flushBeforeSignOut: vi.fn(async () => undefined),
+        stopAccountSync,
+      });
+      window.history.replaceState({}, "", "/present/abc/fullscreen");
+
+      __setSessionFetcherForTests(async () => null);
+      await revalidateSession();
+      __setSessionFetcherForTests(async () =>
+        makeUser({ userId: OTHER_USER_ID }),
+      );
+      await revalidateSession();
+
+      expect(await loadCachedSession()).toBeNull();
+      expect(stopAccountSync).toHaveBeenCalledTimes(1);
+      expect(getCurrentUserId()).toBe(USER_ID);
+      expect(reload).not.toHaveBeenCalled();
+    });
   });
 
   describe("signInWithEmail", () => {
@@ -659,6 +863,26 @@ describe("세션 스토어", () => {
       expect(getCurrentUserId()).toBe(USER_ID);
       expect((await loadCachedSession())?.userId).toBe(USER_ID);
       expect(reload).not.toHaveBeenCalled();
+    });
+
+    it("로그인을 겹쳐 하면 나중에 시작한 로그인의 세션으로 들어간다", async () => {
+      __setSessionFetcherForTests(async () => null);
+      await hydrateSession();
+      signInEmail.mockResolvedValue({ data: {}, error: null } as never);
+
+      const held = holdNextCacheWrite("save");
+      __setSessionFetcherForTests(async () =>
+        makeUser({ userId: OTHER_USER_ID }),
+      );
+      const first = signInWithEmail("other@example.com", "password-1234");
+      await held.reached;
+      __setSessionFetcherForTests(async () => makeUser());
+      await signInWithEmail("team@example.com", "password-1234");
+      held.release();
+      await first;
+
+      expect(getSessionState().status).toBe("authenticated");
+      expect(getCurrentUserId()).toBe(USER_ID);
     });
   });
 
