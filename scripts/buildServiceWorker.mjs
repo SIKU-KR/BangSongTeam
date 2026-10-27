@@ -6,7 +6,7 @@
  *   유니코드 서브셋 수백 개가 모두 빌드 산출물에 있기 때문이다. 번들 글꼴과 눈누 카탈로그의
  *   CDN 글꼴 모두 아래 runtimeCaching으로 실제 쓰인 것만 담고, 세트를 열면 백그라운드 캐시가
  *   가사에 쓰인 글꼴을 불러 캐시를 데운다.
- * - 화면 이동은 언제나 프리캐시한 셸로 답한다(`public/sw-shell.js`). 서버는 어느 화면이든
+ * - 화면 이동은 언제나 프리캐시한 셸로 답한다(`public/sw-shell-<빌드 id>.js`). 서버는 어느 화면이든
  *   로딩 화면만 그리므로 셸이 서버 응답과 같고, 네트워크가 끊긴 상태에서 `/present/...`를
  *   새로고침해도 앱이 뜬다. 동적 경로 셸은 `OFFLINE_SHELL_PARAM` 자리를 실제 값으로 바꾼다.
  * - 앱 안 이동(`router.push`)이 서버에 묻는 RSC 응답도 화면별로 미리 렌더한 `.rsc`를
@@ -28,6 +28,7 @@ import { createHash } from "node:crypto";
 import {
   copyFileSync,
   mkdirSync,
+  readdirSync,
   readFileSync,
   rmSync,
   writeFileSync,
@@ -53,7 +54,7 @@ const ROOT_DIR = path.resolve(
 );
 const NEXT_DIR = path.join(ROOT_DIR, ".next");
 const PUBLIC_DIR = path.join(ROOT_DIR, "public");
-const SHELL_SCRIPT = "sw-shell.js";
+const SHELL_SCRIPT_FILE = /^sw-shell(-[A-Za-z0-9_-]+)?\.js$/;
 
 /** 셸로 답하지 않는 Next.js 내부 페이지 */
 const INTERNAL_ROUTES = new Set(["/_not-found", "/_global-error"]);
@@ -131,7 +132,7 @@ export function matchShell(pathname, shells, placeholder) {
 }
 
 /**
- * 화면 이동 요청을 프리캐시한 셸로 답하는 fetch 핸들러(`public/sw-shell.js`)의 소스.
+ * 화면 이동 요청을 프리캐시한 셸로 답하는 fetch 핸들러(`public/sw-shell-<빌드 id>.js`)의 소스.
  * generateSW가 만드는 Workbox 라우트보다 먼저 등록되도록 `importScripts`로 붙는다.
  *
  * - 주소창 이동(`navigate`)은 언제나 셸 HTML로 답한다.
@@ -320,6 +321,24 @@ self.addEventListener("fetch", (event) => {
 }
 
 /**
+ * 셸 핸들러(`shellWorkerSource`) 파일 이름. 빌드 id를 넣어 빌드마다 다른 주소로 둔다.
+ *
+ * 핸들러는 자기 빌드 id로 프리캐시한 셸을 가려내므로, 그 빌드의 `sw.js`(프리캐시 목록)와 짝이
+ * 맞아야 한다. 이름이 늘 같으면 배포 중 갱신 확인 한 번이 두 리비전에 나뉘어 한 빌드의 `sw.js`와
+ * 다른 빌드의 핸들러를 받을 수 있고, 브라우저는 가져온 스크립트만 바뀌어도 새 버전으로 설치한다.
+ * 그러면 핸들러가 옛 프리캐시 자리에 새 빌드의 셸을 담아 오프라인에서 청크를 찾지 못하거나, 담긴
+ * 셸을 모두 다른 빌드로 보아 화면을 옮길 때마다 서버에 다시 묻는다. 이름에 빌드 id가 있으면 다른
+ * 리비전에는 그 파일이 없어 404로 답하고, 브라우저는 그 설치나 비교를 버리고 다음 확인에서 다시
+ * 받는다. 빌드 id가 주소에 그대로 쓸 수 없는 값이면 빌드를 멈춘다.
+ */
+export function shellScriptName(buildId) {
+  if (!/^[A-Za-z0-9_-]+$/.test(buildId)) {
+    throw new Error(`셸 핸들러 이름에 쓸 수 없는 빌드 id입니다: ${buildId}`);
+  }
+  return `sw-shell-${buildId}.js`;
+}
+
+/**
  * 미리 렌더한 셸 HTML과 셸 RSC가 모두 이 빌드의 id를 싣는지 확인하고, 하나라도 없으면 그 파일을
  * 알리며 빌드를 멈춘다. `readShellFile`은 `.next/server/app` 안의 파일 이름으로 내용을 읽는다.
  *
@@ -335,6 +354,13 @@ export function assertShellsCarryBuildId(shells, buildId, readShellFile) {
       }
     }
   }
+}
+
+function writeShellScript(name, source) {
+  for (const file of readdirSync(PUBLIC_DIR)) {
+    if (SHELL_SCRIPT_FILE.test(file)) rmSync(path.join(PUBLIC_DIR, file));
+  }
+  writeFileSync(path.join(PUBLIC_DIR, name), source);
 }
 
 function copyShellRscFiles(shells) {
@@ -360,8 +386,9 @@ async function main() {
   assertShellsCarryBuildId(shells, buildId, (file) =>
     readFileSync(path.join(NEXT_DIR, "server/app", file), "utf-8"),
   );
-  const shellScript = shellWorkerSource(shells, OFFLINE_SHELL_PARAM, buildId);
-  writeFileSync(path.join(PUBLIC_DIR, SHELL_SCRIPT), shellScript);
+  const shellScript = shellScriptName(buildId);
+  const shellSource = shellWorkerSource(shells, OFFLINE_SHELL_PARAM, buildId);
+  writeShellScript(shellScript, shellSource);
   copyShellRscFiles(shells);
 
   const { count, size, warnings } = await generateSW({
@@ -386,7 +413,7 @@ async function main() {
         ),
       },
     ],
-    importScripts: [`/${SHELL_SCRIPT}`],
+    importScripts: [`/${shellScript}`],
     maximumFileSizeToCacheInBytes: 6 * 1024 * 1024,
     cleanupOutdatedCaches: true,
     clientsClaim: true,

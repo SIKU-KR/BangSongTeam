@@ -3,6 +3,7 @@ import * as vm from "node:vm";
 import {
   assertShellsCarryBuildId,
   collectShells,
+  shellScriptName,
   shellWorkerSource,
   OFFLINE_RSC_PREFIX,
   RSC_NETWORK_TIMEOUT_MS,
@@ -490,6 +491,20 @@ describe("서비스 워커의 주소창 이동(셸 HTML)과 배포 중 섞인 �
     await vi.advanceTimersByTimeAsync(1);
     expect(await (await response!).text()).toBe(stale);
   });
+});
+
+describe("shellScriptName", () => {
+  it("핸들러 파일 이름에 빌드 id를 넣어 빌드마다 다른 주소로 불러오게 한다", () => {
+    expect(shellScriptName(BUILD_ID)).toBe(`sw-shell-${BUILD_ID}.js`);
+    expect(shellScriptName("build-2")).not.toBe(shellScriptName(BUILD_ID));
+  });
+
+  it.each(["", "a/b", "a b", "../x"])(
+    "주소에 그대로 넣을 수 없는 빌드 id(%j)면 빌드를 멈춘다",
+    (buildId) => {
+      expect(() => shellScriptName(buildId)).toThrow();
+    },
+  );
 });
 
 describe("assertShellsCarryBuildId", () => {

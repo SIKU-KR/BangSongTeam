@@ -210,6 +210,72 @@ describe("갱신 확인", () => {
     document.dispatchEvent(new Event("visibilitychange"));
   }
 
+  function captureIntervalTick(): () => void {
+    let tick: () => void = () => undefined;
+    const capture = (handler: () => void): number => {
+      tick = handler;
+      return 0;
+    };
+    vi.spyOn(window, "setInterval").mockImplementation(
+      capture as unknown as typeof window.setInterval,
+    );
+    return () => tick();
+  }
+
+  it("주기 타이머가 조금씩 늦게 불려 앞 확인과의 간격이 30분에 조금 모자라도 확인한다", () => {
+    stubLocation();
+    let now = 1_000_000;
+    vi.spyOn(Date, "now").mockImplementation(() => now);
+    vi.spyOn(performance, "now").mockImplementation(() => now);
+    const tick = captureIntervalTick();
+    const update = vi.fn(async () => {});
+    const registeredAt = now;
+    registerWith(update);
+
+    now = registeredAt + 30 * 60_000 + 5;
+    tick();
+    now = registeredAt + 60 * 60_000 + 2;
+    tick();
+
+    expect(update).toHaveBeenCalledTimes(2);
+  });
+
+  it("기기 시계가 뒤로 고쳐져도 30분마다 확인한다", () => {
+    stubLocation();
+    let wall = 1_800_000_000_000;
+    let elapsed = 0;
+    vi.spyOn(Date, "now").mockImplementation(() => wall);
+    vi.spyOn(performance, "now").mockImplementation(() => elapsed);
+    const tick = captureIntervalTick();
+    const update = vi.fn(async () => {});
+    registerWith(update);
+
+    wall -= 2 * 60 * 60_000;
+    elapsed += 30 * 60_000;
+    wall += 30 * 60_000;
+    tick();
+
+    expect(update).toHaveBeenCalledTimes(1);
+  });
+
+  it("기기가 잠든 동안 performance.now()가 멈춰도 깨어나 탭이 보이면 확인한다", () => {
+    stubLocation();
+    let wall = 1_800_000_000_000;
+    let elapsed = 0;
+    vi.spyOn(Date, "now").mockImplementation(() => wall);
+    vi.spyOn(performance, "now").mockImplementation(() => elapsed);
+    captureIntervalTick();
+    const update = vi.fn(async () => {});
+    registerWith(update);
+    becomeHidden();
+
+    wall += 2 * 60 * 60_000;
+    elapsed += 60_000;
+    becomeVisible();
+
+    expect(update).toHaveBeenCalledTimes(1);
+  });
+
   it("보이는 탭은 30분마다 새 버전을 확인한다", () => {
     vi.useFakeTimers();
     stubLocation();

@@ -61,8 +61,18 @@ describe("PWA 설정", () => {
   });
 
   it("화면 이동은 프리캐시한 셸로 답하고 /api는 제외한다", () => {
-    expect(config).toContain("importScripts: [`/${SHELL_SCRIPT}`]");
+    expect(config).toContain("importScripts: [`/${shellScript}`]");
     expect(config).toContain('url.pathname.startsWith("/api/")');
+  });
+
+  it("셸 핸들러는 빌드 id가 든 이름으로 써서 sw.js가 같은 빌드의 핸들러만 불러오게 한다", () => {
+    expect(config).toContain("const shellScript = shellScriptName(buildId);");
+    expect(config).toContain("writeShellScript(shellScript, shellSource);");
+    const gitignore = fs.readFileSync(
+      path.join(rootDir, ".gitignore"),
+      "utf-8",
+    );
+    expect(gitignore).toContain("public/sw-shell*.js");
   });
 
   it("앱 안 이동에 쓰도록 화면마다 미리 렌더한 RSC를 공개 경로에 복사해 함께 프리캐시한다", () => {

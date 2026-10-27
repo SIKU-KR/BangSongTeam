@@ -20,6 +20,7 @@ const UNCONTROLLED_RELOAD_KEY = "sw-uncontrolled-reload";
 const STALE_CHUNK_RELOAD_KEY = "sw-stale-chunk-reload";
 const STALE_CHUNK_RELOAD_INTERVAL_MS = 60_000;
 const UPDATE_CHECK_INTERVAL_MS = 30 * 60_000;
+const UPDATE_CHECK_SLACK_MS = 60_000;
 const APPLY_RELOAD_DEADLINE_MS = 5_000;
 
 function isProjectionPath(): boolean {
@@ -34,16 +35,21 @@ function applyIfWaiting(registration: ServiceWorkerRegistration): void {
 
 function startUpdateChecks(registration: ServiceWorkerRegistration): void {
   stopUpdateChecks?.();
-  let lastCheckAt = Date.now();
+  let lastCheck = { monotonic: performance.now(), wall: Date.now() };
+  const sinceLastCheck = (): number =>
+    Math.max(
+      performance.now() - lastCheck.monotonic,
+      Date.now() - lastCheck.wall,
+    );
   const check = (): void => {
     if (
       isProjectionPath() ||
       document.visibilityState !== "visible" ||
-      Date.now() - lastCheckAt < UPDATE_CHECK_INTERVAL_MS
+      sinceLastCheck() < UPDATE_CHECK_INTERVAL_MS - UPDATE_CHECK_SLACK_MS
     ) {
       return;
     }
-    lastCheckAt = Date.now();
+    lastCheck = { monotonic: performance.now(), wall: Date.now() };
     registration.update().catch(() => undefined);
   };
   const timer = window.setInterval(check, UPDATE_CHECK_INTERVAL_MS);
@@ -143,7 +149,11 @@ export async function reloadIfUncontrolled(): Promise<void> {
  * 탭이 보이고 지난 확인에서 30분이 지났을 때만 확인한다. 확인 한 번이 도메인 프록시(Cloudflare
  * Worker) 요청 여러 건이고 그 플랜은 하루 요청 수에 한도가 있어, 숨은 탭이 하루 내내 확인하거나
  * 탭을 오갈 때마다 확인하면 한도를 앞당긴다. 페이지를 열 때는 브라우저가 이동하며 스스로 확인하므로
- * 등록한 때부터 센다.
+ * 등록한 때부터 센다. 주기 타이머는 조금씩 늦게 불려 앞 확인과의 간격이 30분에 몇 ms 모자랄 수
+ * 있으므로 1분 여유를 두고 센다. 여유가 없으면 그 차례를 통째로 건너뛰어 한 시간에 한 번만
+ * 확인한다. 지난 시간은 벽시계와 `performance.now()` 가운데 더 많이 지난 쪽으로 센다. 벽시계만
+ * 보면 교회 PC처럼 켤 때 틀렸던 시계가 뒤로 맞춰질 때 그만큼 확인이 멈추고, `performance.now()`만
+ * 보면 기기가 잠든 동안 그 값이 멈추는 브라우저에서 깨어난 뒤 한참 확인하지 않는다.
  *
  * 송출 경로(`/present/...`)는 새로고침해도 적용하지 않고, 예배 중 새 버전을 내려받지
  * 않도록 갱신 확인도 건너뛴다.
