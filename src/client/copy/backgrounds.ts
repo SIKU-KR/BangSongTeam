@@ -10,6 +10,7 @@ export const BACKGROUND_COPY = {
   previewFailed: "미리보기를 불러오지 못했어요",
   noBackgrounds: "아직 배경이 없어요.",
   offline: "오프라인이라 저장해 둔 배경만 보여요",
+  catalogFailed: "배경 목록을 불러오지 못했어요. 잠시 뒤 다시 시도해 주세요.",
   searchPlaceholders: [
     "예: 물결",
     "예: 십자가",

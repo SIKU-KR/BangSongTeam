@@ -31,6 +31,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
 import {
   ROOT_DIR,
   assertEmulatorUp,
@@ -73,21 +74,43 @@ function run(command, args) {
   });
 }
 
-function loadManifest(manifestPath, dir) {
+/**
+ * 매니페스트를 읽고 올리기 전에 항목을 확인한다. 앱은 배경 목록을 행마다 검증하므로 형식을
+ * 어긴 배경(숫자 검색어, 문자열이 아닌 제목·설명)은 갤러리와 송출에서 빠진다. 손으로 고친
+ * 매니페스트의 실수를 여기서 막는다.
+ */
+export function loadManifest(manifestPath, dir) {
   const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf-8"));
   const ids = new Set();
   for (const item of manifest.items) {
     if (!ID_PATTERN.test(item.id)) throw new Error(`잘못된 id: ${item.file}`);
     if (ids.has(item.id)) throw new Error(`중복 id: ${item.id}`);
     ids.add(item.id);
-    if (!item.title?.trim()) throw new Error(`제목 없음: ${item.file}`);
+    if (typeof item.title !== "string" || !item.title.trim())
+      throw new Error(`제목 없음: ${item.file}`);
     if (!Array.isArray(item.keywords))
       throw new Error(`keywords 없음: ${item.file}`);
+    if (item.keywords.some((keyword) => typeof keyword !== "string"))
+      throw new Error(`keywords에 문자열이 아닌 값: ${item.file}`);
+    if (item.description != null && typeof item.description !== "string")
+      throw new Error(`description이 문자열이 아님: ${item.file}`);
     if (!fs.existsSync(path.join(dir, item.file))) {
       throw new Error(`영상 파일 없음: ${path.join(dir, item.file)}`);
     }
   }
   return manifest;
+}
+
+/**
+ * ffprobe 결과의 영상 길이(초, 반올림). 길이를 읽지 못하면 등록을 멈춘다. NaN은 Firestore에
+ * 그대로 남고 JSON으로는 null이 되어 앱이 그 배경을 버린다.
+ */
+export function durationOf(probed, file) {
+  const durationSec = Math.round(Number(probed.format?.duration));
+  if (!Number.isFinite(durationSec) || durationSec < 0) {
+    throw new Error(`영상 길이를 읽지 못함: ${file}`);
+  }
+  return durationSec;
 }
 
 function probeVideo(file) {
@@ -105,7 +128,7 @@ function probeVideo(file) {
   const probed = JSON.parse(output);
   const codec = probed.streams?.[0]?.codec_name;
   if (codec !== "h264") throw new Error(`H.264가 아닙니다 (${codec}): ${file}`);
-  return Math.round(Number(probed.format.duration));
+  return durationOf(probed, file);
 }
 
 function makePoster(file, durationSec, outFile) {
@@ -248,10 +271,15 @@ async function main() {
   console.log(`기존 배경 ${toDelete.length}개를 지웠습니다.`);
 }
 
-try {
-  await main();
-  process.exit(process.exitCode ?? 0);
-} catch (error) {
-  console.error(error.stderr?.trim() || error.message);
-  process.exit(1);
+if (
+  process.argv[1] &&
+  fs.realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)
+) {
+  try {
+    await main();
+    process.exit(process.exitCode ?? 0);
+  } catch (error) {
+    console.error(error.stderr?.trim() || error.message);
+    process.exit(1);
+  }
 }

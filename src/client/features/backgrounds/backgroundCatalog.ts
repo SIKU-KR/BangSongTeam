@@ -99,6 +99,10 @@ export function getBackgrounds(): BackgroundMedia[] {
   return snapshot.backgrounds;
 }
 
+export function getBackgroundCatalogStatus(): BackgroundCatalogStatus {
+  return snapshot.status;
+}
+
 export function resolveBackgroundLayers(
   background: BackgroundMedia | undefined,
 ): BackgroundLayers {

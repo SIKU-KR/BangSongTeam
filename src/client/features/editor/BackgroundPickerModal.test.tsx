@@ -253,4 +253,26 @@ describe("BackgroundPickerModal", () => {
     expect(screen.getByText(BACKGROUND_COPY.noBackgrounds)).toBeInTheDocument();
     expect(screen.getByTestId("bg-solid-palette")).toBeInTheDocument();
   });
+
+  it("서버가 목록을 주지 못했으면 가진 목록은 그대로 두고 다시 받기를 보여 준다", () => {
+    setBackgroundCatalogForTests(TEST_SERVICE_BACKGROUNDS, "error");
+    renderPicker();
+
+    expect(screen.getByText(BACKGROUND_COPY.catalogFailed)).toBeInTheDocument();
+    expect(
+      screen.getByTestId(`bg-item-${TEST_SERVICE_BACKGROUNDS[0].id}`),
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: COMMON_COPY.retry }));
+
+    expect(refreshBackgroundCatalog).toHaveBeenCalledTimes(2);
+  });
+
+  it("목록이 비었는데 서버가 주지 못했으면 배경이 없다고 하지 않는다", () => {
+    setBackgroundCatalogForTests([], "error");
+    renderPicker();
+
+    expect(screen.getByText(BACKGROUND_COPY.catalogFailed)).toBeInTheDocument();
+    expect(screen.queryByText(BACKGROUND_COPY.noBackgrounds)).toBeNull();
+  });
 });

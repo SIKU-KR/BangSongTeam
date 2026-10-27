@@ -9,6 +9,7 @@ import { makeBackground } from "../../test/backgroundFixture";
 import { resetBackgroundCatalogForTests } from "../backgrounds/backgroundCatalog";
 import { refreshBackgroundCatalog } from "../../lib/sync/backgroundSync";
 import { BACKGROUND_COPY } from "#copy/backgrounds";
+import { COMMON_COPY } from "#copy/common";
 
 const LAKE = makeBackground(1, { title: "고요한 호수 물결" });
 const FIRE = makeBackground(2, {
@@ -146,5 +147,31 @@ describe("BackgroundLibraryView", () => {
     expect(
       await screen.findByText(/오프라인이라 저장해 둔 배경만 보여요/),
     ).toBeInTheDocument();
+  });
+
+  it("서버가 목록을 주지 못하면 배경이 없다고 하지 않고 다시 받기를 보여 주며, 누르면 다시 받는다", async () => {
+    let attempts = 0;
+    api = installFakeApi({
+      "GET /api/backgrounds": () => {
+        attempts += 1;
+        return attempts === 1
+          ? { status: 503, body: { error: "잠시 쓸 수 없어요" } }
+          : listResponse([LAKE]);
+      },
+    });
+    await renderView();
+
+    expect(
+      await screen.findByText(BACKGROUND_COPY.catalogFailed),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(BACKGROUND_COPY.noBackgrounds)).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: COMMON_COPY.retry }));
+
+    expect(
+      await screen.findByRole("img", { name: "고요한 호수 물결" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(BACKGROUND_COPY.catalogFailed)).toBeNull();
+    expect(attempts).toBe(2);
   });
 });

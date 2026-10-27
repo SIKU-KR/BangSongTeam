@@ -16,7 +16,11 @@ import {
 import { Empty, EmptyDescription, EmptyHeader } from "#components/ui/empty";
 import { SearchInput } from "#components/common/SearchInput";
 import { DEFAULT_BACKGROUND_COLOR, type BackgroundMedia } from "#shared";
-import { BackgroundKindFilter, BackgroundPreview } from "../backgrounds";
+import {
+  BackgroundCatalogError,
+  BackgroundKindFilter,
+  BackgroundPreview,
+} from "../backgrounds";
 import {
   describeBackgroundGalleryEmpty,
   useBackgroundGallery,
@@ -117,6 +121,8 @@ function PickerDialog({
     visibleBackgrounds,
     hasAnyBackground,
     emptyReason,
+    loadFailed,
+    retryLoad,
   } = useBackgroundGallery(query);
 
   const pick = (choice: BackgroundChoice): void => {
@@ -167,6 +173,7 @@ function PickerDialog({
                 <BackgroundKindFilter value={kind} onChange={setKind} />
               )}
             </div>
+            {loadFailed && <BackgroundCatalogError onRetry={retryLoad} />}
             {hasAnyBackground && (
               <SearchInput
                 value={draft}

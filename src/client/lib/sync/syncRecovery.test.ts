@@ -45,6 +45,16 @@ import {
 } from "./syncStatus";
 import { BASE_BACKOFF_MS, MAX_BACKOFF_MS, type SyncRetryMode } from "./backoff";
 import { ServerRejectedError, TimeoutError } from "../api/request";
+import {
+  __waitForBackgroundCatalogForTests,
+  refreshBackgroundCatalog,
+} from "./backgroundSync";
+import {
+  getBackgroundCatalogStatus,
+  getBackgrounds,
+  resetBackgroundCatalogForTests,
+} from "../../features/backgrounds/backgroundCatalog";
+import { makeBackground } from "../../test/backgroundFixture";
 
 const recoveryDeps = vi.hoisted(() => ({
   retryBootSyncIfNeeded: vi.fn(async () => false),
@@ -670,5 +680,128 @@ describe("동기화 회복", () => {
 
     expect(listener).toHaveBeenCalledTimes(1);
     second();
+  });
+
+  describe("받지 못한 배경 목록", () => {
+    let catalogReplies: Array<() => Response>;
+    let catalogCalls: number;
+
+    function catalogOk(): Response {
+      return new Response(
+        JSON.stringify({ backgrounds: [makeBackground(1)] }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+    }
+
+    function unreachable(): Response {
+      throw new TypeError("Failed to fetch");
+    }
+
+    function unavailable(): Response {
+      return new Response(JSON.stringify({ error: "잠시 쓸 수 없어요" }), {
+        status: 503,
+        headers: { "content-type": "application/json" },
+      });
+    }
+
+    async function settle(): Promise<void> {
+      await vi.advanceTimersByTimeAsync(0);
+      await __waitForSyncRecoveryForTests();
+      await vi.advanceTimersByTimeAsync(0);
+      await __waitForBackgroundCatalogForTests();
+    }
+
+    beforeEach(() => {
+      resetBackgroundCatalogForTests();
+      catalogReplies = [];
+      catalogCalls = 0;
+      const serverFetch = globalThis.fetch;
+      globalThis.fetch = vi.fn(
+        async (input: RequestInfo | URL, init?: RequestInit) => {
+          const url = new URL(String(input), "http://localhost");
+          if (url.pathname !== "/api/backgrounds") {
+            return serverFetch(input, init);
+          }
+          catalogCalls += 1;
+          return (catalogReplies.shift() ?? catalogOk)();
+        },
+      ) as typeof fetch;
+    });
+
+    afterEach(async () => {
+      await __waitForBackgroundCatalogForTests();
+      resetBackgroundCatalogForTests();
+    });
+
+    it("부팅 때 닿지 못해 받지 못한 목록을 연결이 돌아오면 다시 받는다", async () => {
+      catalogReplies = [unreachable];
+      await refreshBackgroundCatalog();
+      expect(getBackgroundCatalogStatus()).toBe("offline");
+
+      start();
+      markServerUnreachable();
+      window.dispatchEvent(new Event("online"));
+      await settle();
+
+      await vi.waitFor(() =>
+        expect(getBackgroundCatalogStatus()).toBe("synced"),
+      );
+      expect(catalogCalls).toBe(2);
+      expect(getBackgrounds()).toHaveLength(1);
+    });
+
+    it("닿지 못했던 목록은 포커스로 회복할 때도 다시 받는다", async () => {
+      setVisibility("visible");
+      catalogReplies = [unreachable];
+      await refreshBackgroundCatalog();
+
+      start();
+      window.dispatchEvent(new Event("focus"));
+      await settle();
+
+      await vi.waitFor(() =>
+        expect(getBackgroundCatalogStatus()).toBe("synced"),
+      );
+      expect(catalogCalls).toBe(2);
+    });
+
+    it("서버가 거절한 목록은 포커스마다 다시 받지 않고, 1분이 지난 포커스나 online에는 다시 받는다", async () => {
+      setVisibility("visible");
+      catalogReplies = [unavailable, unavailable];
+      await refreshBackgroundCatalog();
+      expect(getBackgroundCatalogStatus()).toBe("error");
+      start();
+
+      for (let i = 0; i < 5; i += 1) {
+        window.dispatchEvent(new Event("focus"));
+        await settle();
+      }
+      expect(catalogCalls).toBe(1);
+
+      await vi.advanceTimersByTimeAsync(MAX_BACKOFF_MS);
+      window.dispatchEvent(new Event("focus"));
+      await settle();
+      await vi.waitFor(() => expect(catalogCalls).toBe(2));
+      expect(getBackgroundCatalogStatus()).toBe("error");
+
+      window.dispatchEvent(new Event("online"));
+      await settle();
+      await vi.waitFor(() =>
+        expect(getBackgroundCatalogStatus()).toBe("synced"),
+      );
+      expect(catalogCalls).toBe(3);
+    });
+
+    it("받은 목록은 회복 신호가 와도 다시 받지 않는다", async () => {
+      await refreshBackgroundCatalog();
+      expect(getBackgroundCatalogStatus()).toBe("synced");
+      start();
+
+      window.dispatchEvent(new Event("online"));
+      retrySyncNow();
+      await settle();
+
+      expect(catalogCalls).toBe(1);
+    });
   });
 });

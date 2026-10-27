@@ -7,6 +7,7 @@ import { probeServerHealth } from "../api/healthApi";
 import { OfflineError } from "../api/request";
 import { resumeMediaCaching } from "../offline/mediaCache";
 import { BackoffTracker, MAX_BACKOFF_MS, type SyncRetryMode } from "./backoff";
+import { retryBackgroundCatalogIfNeeded } from "./backgroundSync";
 import { refreshOwnDataIfStale, retryBootSyncIfNeeded } from "./bootSync";
 import { retryDeckSyncNow } from "./deckSync";
 import { retryFolderSyncNow } from "./folderSync";
@@ -129,6 +130,7 @@ async function runResume(mode: SyncRetryMode): Promise<void> {
   const afterOutage = outageEnded;
   outageEnded = false;
   resumeMediaCaching(mode, { afterOutage });
+  retryBackgroundCatalogIfNeeded(mode);
   for (const listener of resumeListeners) listener(mode);
   const repulled = await retryBootSyncIfNeeded(mode).catch(() => false);
   void retryFolderSyncNow(mode).catch(() => undefined);
@@ -213,9 +215,10 @@ function handleVisibilityChange(): void {
  * `online` 이벤트만 기다리면 캡티브 포털·멈춘 Wi‑Fi처럼 브라우저가 연결됐다고 믿는 동안
  * 큐가 백오프 끝(최대 1분)까지 멈춰 있고, 부팅 때 받지 못한 단계는 다시 받지 않는다.
  * 그래서 실제 요청이 닿지 못하면(`connectivity`) 가벼운 상태 확인(`GET /api/health`)을
- * 백오프 간격으로 보내고, 닿으면 부팅 재시도 → 폴더·프레젠테이션·곡 큐 → 배경 다운로드를
- * 곧바로 다시 돌린다. `online`, 탭 복귀(`visibilitychange` → visible), 포커스도 같은
- * 경로를 탄다. 닿는 중이면 확인 없이 대기 중인 쓰기를 곧바로 보낸다 (TanStack Query의
+ * 백오프 간격으로 보내고, 닿으면 부팅 재시도 → 폴더·프레젠테이션·곡 큐 → 배경 다운로드와
+ * 받지 못한 배경 목록(`retryBackgroundCatalogIfNeeded`)을 곧바로 다시 돌린다. `online`,
+ * 탭 복귀(`visibilitychange` → visible), 포커스도 같은 경로를 탄다. 닿는 중이면 확인 없이
+ * 대기 중인 쓰기를 곧바로 보낸다 (TanStack Query의
  * `refetchOnReconnect`·`refetchOnWindowFocus`와 같은 원칙).
  *
  * 큐를 돌린 뒤에는 내 데이터를 다시 받는다(`refreshOwnDataIfStale`). 부팅 때만 받으면 며칠 열어 둔

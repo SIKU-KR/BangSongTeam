@@ -9,7 +9,11 @@ import {
   EmptyTitle,
 } from "#components/ui/empty";
 import type { BackgroundMedia } from "#shared";
-import { BackgroundKindFilter, BackgroundPreview } from "../backgrounds";
+import {
+  BackgroundCatalogError,
+  BackgroundKindFilter,
+  BackgroundPreview,
+} from "../backgrounds";
 import {
   describeBackgroundGalleryEmpty,
   useBackgroundGallery,
@@ -51,6 +55,8 @@ export function BackgroundLibraryView({
     visibleBackgrounds,
     hasAnyBackground,
     emptyReason,
+    loadFailed,
+    retryLoad,
   } = useBackgroundGallery(searchQuery);
   const isOnline = useIsOnline();
 
@@ -58,11 +64,13 @@ export function BackgroundLibraryView({
 
   return (
     <div className="space-y-6">
-      {isOffline && (
+      {isOffline ? (
         <Alert role="status">
           <WifiOffIcon />
           <AlertDescription>{BACKGROUND_COPY.offline}</AlertDescription>
         </Alert>
+      ) : (
+        loadFailed && <BackgroundCatalogError onRetry={retryLoad} />
       )}
 
       <section className="space-y-4">
