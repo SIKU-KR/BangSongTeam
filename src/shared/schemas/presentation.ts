@@ -9,13 +9,16 @@ export const MAX_PRESENTATION_TITLE_LENGTH = 100;
 export const MAX_PRESENTATION_SONGS = 200;
 
 /**
- * 프레젠테이션 하나에 담긴 곡 글(가사와 슬라이드 JSON)의 저장 상한(UTF-8 바이트).
+ * 프레젠테이션 하나에 담긴 곡 글의 저장 상한(바이트). 곡마다 제목·아티스트·원작자 이름·가사·
+ * 슬라이드를 JSON으로 쓴 크기(서버의 `songTextBytes`)를 더해 센다.
  *
- * API 요청 본문 상한(2 MiB)과 같다. 본문은 곡 글보다 크므로, 한 번에 통째로 보낼 수 있는
- * 프레젠테이션은 언제나 이 상한 안이다. 바뀐 곡만 보내는 저장을 여러 번 해 이보다 키우는 것만
- * 막아, 링크로 공유한 프레젠테이션을 로그인 없이 한 번 볼 때 서버가 읽고 보내는 양을 묶는다.
+ * 바뀐 곡만 보내는 저장을 거듭하면 요청 본문 상한(2 MiB)과 상관없이 프레젠테이션을 키울 수
+ * 있어, 링크로 공유한 프레젠테이션을 로그인 없이 볼 때 서버가 읽고 보내는 양을 이 상한으로
+ * 묶는다. 요청 본문 상한보다 곡 200개의 나머지 필드(id·시각·스타일, 곡마다 1.2 KB 남짓)만큼
+ * 작게 두어, 서버가 받은 프레젠테이션은 언제나 한 번에 통째로 다시 보낼 수 있다(409 뒤 모든
+ * 곡 다시 보내기, 사본 만들기, 이전 버전의 PUT).
  */
-export const MAX_PRESENTATION_TEXT_BYTES = 2 * 1024 * 1024;
+export const MAX_PRESENTATION_TEXT_BYTES = 1.75 * 1024 * 1024;
 
 export const PresentationItemSchema = z.object({
   id: IdSchema,

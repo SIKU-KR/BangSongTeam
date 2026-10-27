@@ -6,17 +6,20 @@ import {
   DeckSchema,
   MAX_PRESENTATION_SONGS,
   MAX_PRESENTATION_TEXT_BYTES,
+  MAX_PRESENTATION_TITLE_LENGTH,
   MAX_SLIDE_ID_LENGTH,
   MAX_WRITE_LYRICS_LENGTH,
   MAX_WRITE_SLIDES,
+  NOONNU_SUPPORTED_FONT_NAMES,
   PresentationDocumentSchema,
   toPresentationChanges,
   type Deck,
   type PresentationChanges,
   type PresentationDocument,
+  type ShareSettings,
   type Slide,
 } from "#shared";
-import { decksCol, presentationsCol, type DeckDoc } from "#db";
+import { decksCol, presentationsCol, songTextBytes, type DeckDoc } from "#db";
 import {
   clearDb,
   deckDoc,
@@ -26,14 +29,19 @@ import {
 } from "../../db/test/fixtures";
 import { createApp } from "../index";
 import type { SessionReader } from "../middleware/auth";
-import { PRESENTATION_BODY_MAX_BYTES } from "../middleware/bodyLimit";
+import {
+  DECK_BODY_MAX_BYTES,
+  PRESENTATION_BODY_MAX_BYTES,
+} from "../middleware/bodyLimit";
 
 const USER = "aaaaaaaa0000000000031";
 const DOC_ID = "1000000000000000000dd";
 const LIB_DECK_ID = "c000000000000000000dd";
+const OTHER_ID = "e000000000000000000dd";
 
 const fakeSession: SessionReader = async () => ({ userId: USER });
 const app = createApp({ readSession: fakeSession });
+const anonymousApp = createApp({ readSession: async () => null });
 
 const deckId = (n: number) => `d0${String(n).padStart(19, "0")}`;
 const itemId = (n: number) => `i0${String(n).padStart(19, "0")}`;
@@ -72,7 +80,56 @@ function heavySong(n: number): Deck {
   });
 }
 
-function presentation(decks: Deck[]): PresentationDocument {
+function controlCharacterSong(n: number): Deck {
+  return song(n, { lyricsRaw: "\u0001".repeat(MAX_WRITE_LYRICS_LENGTH) });
+}
+
+const widestFontName = NOONNU_SUPPORTED_FONT_NAMES.reduce((widest, name) =>
+  Buffer.byteLength(name) > Buffer.byteLength(widest) ? name : widest,
+);
+
+function widestFixedFieldsSong(n: number): Deck {
+  const third = 100 / 3;
+  return song(n, {
+    lyricsRaw: "",
+    slides: [],
+    backgroundId: OTHER_ID,
+    forkedFrom: OTHER_ID,
+    forkCount: Number.MAX_SAFE_INTEGER,
+    origin: "fork",
+    forkedFromAuthorName: null,
+    publishedAt: "2026-09-21T00:00:00.000Z",
+    takedownAt: "2026-09-21T00:00:00.000Z",
+    style: {
+      overlayOpacity: third,
+      overlayColor: "#FFFFFF",
+      backgroundColor: "#FFFFFF",
+      textBackdrop: {
+        enabled: false,
+        opacity: third,
+        paddingPercent: third,
+        radiusPercent: third,
+      },
+      fontFamily: widestFontName,
+      fontSizeVw: 10 / 3,
+      fontColor: "#FFFFFF",
+      textAlign: "center",
+      lineHeight: 4 / 3,
+      textShadowLevel: "medium",
+      position: {
+        anchor: "bottom-center",
+        xPercent: third,
+        yPercent: third,
+        widthPercent: third,
+      },
+    },
+  });
+}
+
+function presentation(
+  decks: Deck[],
+  overrides: Partial<PresentationDocument> = {},
+): PresentationDocument {
   return PresentationDocumentSchema.parse({
     id: DOC_ID,
     userId: USER,
@@ -87,6 +144,7 @@ function presentation(decks: Deck[]): PresentationDocument {
     })),
     createdAt: "2026-09-20T00:00:00.000Z",
     updatedAt: "2026-09-21T00:00:00.000Z",
+    ...overrides,
   });
 }
 
@@ -98,10 +156,11 @@ function onlyDecks(
 }
 
 function textBytes(deck: Deck): number {
-  return (
-    Buffer.byteLength(deck.lyricsRaw) +
-    Buffer.byteLength(JSON.stringify(deck.slides))
-  );
+  return songTextBytes({
+    ...deck,
+    forkedFromAuthorName: deck.forkedFromAuthorName ?? null,
+    slides: JSON.stringify(deck.slides),
+  });
 }
 
 function storedCopy(deck: Deck, position: number): DeckDoc {
@@ -139,10 +198,28 @@ async function storedDeckIds(): Promise<string[]> {
   return snapshot.docs.map((doc) => doc.id).sort();
 }
 
+async function growUntilRefused(
+  next: (n: number) => Deck,
+): Promise<{ songs: Deck[]; refusal: Response }> {
+  const songs: Deck[] = [];
+  for (let n = 0; n < 64; n += 1) {
+    const added = next(n);
+    const res = await savePresentation(
+      "PATCH",
+      onlyDecks(presentation([...songs, added]), [added.id]),
+    );
+    if (res.status !== 200) return { songs, refusal: res };
+    songs.push(added);
+  }
+  throw new Error("곡 글 저장 상한에 닿지 않았어요");
+}
+
 describe("저장 본문의 쓰기 한도", () => {
   beforeEach(async () => {
     await clearDb(env.DB);
-    await seedDocs(env.DB, { users: [userDoc({ id: USER, name: "인도자" })] });
+    await seedDocs(env.DB, {
+      users: [userDoc({ id: USER, name: "인도자", termsAgreedAt: new Date() })],
+    });
   });
 
   it("가사가 한도를 넘는 곡이 든 프레젠테이션은 PUT·PATCH 모두 그 곡을 짚어 413으로 답하고 아무것도 쓰지 않는다", async () => {
@@ -283,8 +360,52 @@ describe("저장 본문의 쓰기 한도", () => {
     expect(fits.status).toBe(200);
   });
 
-  it("곡 글 저장 상한은 요청 본문 상한보다 작지 않아, 한 번에 보낼 수 있는 프레젠테이션은 그 상한에 걸리지 않는다", () => {
-    expect(MAX_PRESENTATION_TEXT_BYTES).toBeGreaterThanOrEqual(
+  it("곡 글 저장 상한에 곡마다의 고정 필드를 더해도 요청 본문 상한 안이라, 서버가 받은 프레젠테이션은 언제나 한 번에 다시 보낼 수 있다", () => {
+    const doc = presentation(
+      Array.from({ length: MAX_PRESENTATION_SONGS }, (_, n) =>
+        widestFixedFieldsSong(n),
+      ),
+      {
+        title: "\u0001".repeat(MAX_PRESENTATION_TITLE_LENGTH),
+        folderId: OTHER_ID,
+        trashedAt: "2026-09-22T00:00:00.000Z",
+      },
+    );
+    const text = doc.items.reduce((sum, item) => sum + textBytes(item.deck), 0);
+
+    for (const body of [doc, toPresentationChanges(doc)]) {
+      const fixedBytes = Buffer.byteLength(JSON.stringify(body)) - text;
+      expect(MAX_PRESENTATION_TEXT_BYTES + fixedBytes).toBeLessThanOrEqual(
+        PRESENTATION_BODY_MAX_BYTES,
+      );
+    }
+  });
+
+  it("제어 문자 가사로 곡 글 저장 상한까지 키운 프레젠테이션도 통째로 다시 보낼 수 있고, 로그인 없이 보는 응답은 요청 본문 상한 안이다", async () => {
+    const { songs, refusal } = await growUntilRefused(controlCharacterSong);
+
+    expect(refusal.status).toBe(413);
+    expect(await refusal.json()).toEqual({
+      error: API_ERRORS.presentation.tooLarge,
+    });
+    expect(songs.length).toBeGreaterThan(1);
+
+    const doc = presentation(songs);
+    expect(
+      (await savePresentation("PATCH", toPresentationChanges(doc))).status,
+    ).toBe(200);
+    expect((await savePresentation("PUT", doc)).status).toBe(200);
+
+    const share = await app.request(
+      `/api/presentations/${DOC_ID}/share`,
+      send("PUT", { access: "view" }),
+      env,
+    );
+    const { token } = (await share.json()) as ShareSettings;
+    const view = await anonymousApp.request(`/api/share/${token}`, {}, env);
+
+    expect(view.status).toBe(200);
+    expect(Buffer.byteLength(await view.text())).toBeLessThan(
       PRESENTATION_BODY_MAX_BYTES,
     );
   });
@@ -383,5 +504,25 @@ describe("저장 본문의 쓰기 한도", () => {
     expect((await presentationsCol(env.DB).doc(DOC_ID).get()).exists).toBe(
       false,
     );
+  });
+
+  it("한도 안의 보관함 곡이라도 Firestore 문서 한도를 넘을 만큼 크면 곡 저장 본문 상한에서 413이고 아무것도 쓰지 않는다", async () => {
+    const deck = song(0, {
+      id: LIB_DECK_ID,
+      scope: "library",
+      presentationId: null,
+      title: "제어 문자 곡",
+      lyricsRaw: "가".repeat(MAX_WRITE_LYRICS_LENGTH),
+      slides: slidesOf(MAX_WRITE_SLIDES, "\u0001".repeat(80)),
+    });
+    expect(Buffer.byteLength(JSON.stringify(deck))).toBeGreaterThan(
+      DECK_BODY_MAX_BYTES,
+    );
+
+    const res = await saveLibraryDeck(deck);
+
+    expect(res.status).toBe(413);
+    expect(await res.json()).toEqual({ error: API_ERRORS.payloadTooLarge });
+    expect((await decksCol(env.DB).doc(LIB_DECK_ID).get()).exists).toBe(false);
   });
 });

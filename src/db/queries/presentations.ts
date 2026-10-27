@@ -62,9 +62,9 @@ export async function deletePresentation(
  *   지금 쿠키의 주인인 B의 계정에 만들면 안 된다
  * - `stale`: 항목이 가리키는 덱이 본문에도 서버에도 없다. 클라이언트가 서버 상태를
  *   잘못 알고 있으므로 모든 덱을 담아 다시 보내야 한다.
- * - `tooLarge`: 저장하면 담긴 곡 글이 `MAX_PRESENTATION_TEXT_BYTES`를 넘고 지금보다 커진다.
- *   이미 상한을 넘은 프레젠테이션이라도 곡 글을 키우지 않는 저장(제목·순서 바꾸기, 곡 빼기)은
- *   받는다.
+ * - `tooLarge`: 저장하면 담긴 곡 글(곡마다 `songTextBytes`)의 합이
+ *   `MAX_PRESENTATION_TEXT_BYTES`를 넘고 지금보다 커진다. 이미 상한을 넘은 프레젠테이션이라도
+ *   곡 글을 키우지 않는 저장(프레젠테이션 제목·곡 순서 바꾸기, 곡 빼기)은 받는다.
  */
 export type SavePresentationResult =
   "saved" | "forbidden" | "stale" | "tooLarge";
@@ -73,8 +73,31 @@ function utf8Bytes(value: unknown): number {
   return typeof value === "string" ? Buffer.byteLength(value, "utf8") : 0;
 }
 
-function songTextBytes(deck: Pick<DeckDoc, "lyricsRaw" | "slides">): number {
-  return utf8Bytes(deck.lyricsRaw) + utf8Bytes(deck.slides);
+function jsonStringBytes(value: unknown): number {
+  return typeof value === "string" ? utf8Bytes(JSON.stringify(value)) : 0;
+}
+
+/**
+ * 곡 하나의 글(제목·아티스트·원작자 이름·가사·슬라이드)이 JSON 본문에서 차지하는 바이트.
+ *
+ * 저장된 글의 UTF-8 크기가 아니라 JSON으로 쓴 크기를 센다. 링크 보기 응답과 전체 저장 본문은
+ * 글을 JSON으로 담는데, 제어 문자는 저장하면 1바이트지만 JSON에서는 6바이트(`\u0001`)라 저장
+ * 크기로 세면 응답이 상한의 몇 배가 된다. 슬라이드는 이미 JSON 문자열로 저장하므로 그 길이를
+ * 센다.
+ */
+export function songTextBytes(
+  deck: Pick<
+    DeckDoc,
+    "title" | "artist" | "forkedFromAuthorName" | "lyricsRaw" | "slides"
+  >,
+): number {
+  return (
+    jsonStringBytes(deck.title) +
+    jsonStringBytes(deck.artist) +
+    jsonStringBytes(deck.forkedFromAuthorName) +
+    jsonStringBytes(deck.lyricsRaw) +
+    utf8Bytes(deck.slides)
+  );
 }
 
 /**
