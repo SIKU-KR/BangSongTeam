@@ -172,6 +172,7 @@ function EditorScreen({
     const requested = Number(searchParams.get("song") || 0);
     setActiveSongIndex(Number.isFinite(requested) ? Math.max(0, requested) : 0);
     setActiveSlideIndex(0);
+    setSongPickerMode(null);
   }, [presentationId]);
 
   const safeSongIndex = Math.min(

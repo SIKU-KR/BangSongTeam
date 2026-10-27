@@ -147,6 +147,27 @@ describe("songLibraryStore", () => {
     expect(getUserSongs().length).toBe(0);
   });
 
+  it("보관함 곡의 제목·아티스트에 남은 서로게이트 반쪽은 U+FFFD로 바꿔 저장한다", () => {
+    const saved = saveSongToLibrary({
+      title: "옛 제목",
+      lyricsRaw: "가사 한 줄",
+    });
+
+    const updated = updateLibrarySongInfo(saved.id, {
+      title: "새 제목\uD83D",
+      artist: "\uDE00아티스트 🙏",
+    });
+
+    expect(updated).toMatchObject({
+      title: "새 제목\uFFFD",
+      artist: "\uFFFD아티스트 🙏",
+    });
+    expect(getLibraryDeck(saved.id)).toMatchObject({
+      title: "새 제목\uFFFD",
+      artist: "\uFFFD아티스트 🙏",
+    });
+  });
+
   it("보관함 곡의 제목·아티스트를 고치면 하이드레이션 후에도 남는다", async () => {
     const saved = saveSongToLibrary({
       title: "옛 제목",

@@ -7,6 +7,23 @@ import {
 } from "../schemas/deck";
 import { MAX_PRESENTATION_TITLE_LENGTH } from "../schemas/presentation";
 
+const SURROGATE = /[\uD800-\uDBFF][\uDC00-\uDFFF]|[\uD800-\uDFFF]/g;
+
+/**
+ * 짝을 잃은 서로게이트(이모지 같은 서로게이트 쌍의 반쪽)를 U+FFFD로 바꾼다.
+ * `String.prototype.toWellFormed`와 결과가 같다. 그 메서드는 Firefox 119 미만에 없고,
+ * TS lib(ES2023)에도 타입이 없다.
+ *
+ * Firestore는 짝을 잃은 서로게이트가 든 문자열을 저장하지 못해, 그런 글이 든 프레젠테이션·곡은
+ * 저장할 때마다 실패해 서버에 올라가지 않는다. 붙여 넣은 글이나 이전 버전이 자른 가사에 반쪽이
+ * 남을 수 있어, 편집기에서 입력한 글은 저장하기 전에 이것을 거친다.
+ */
+export function toWellFormedText(text: string): string {
+  return text.replace(SURROGATE, (match) =>
+    match.length === 2 ? match : "\uFFFD",
+  );
+}
+
 /**
  * 글을 `max` UTF-16 코드 단위 안으로 자른다. 한도 안이면 그대로 돌려준다.
  *

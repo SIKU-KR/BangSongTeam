@@ -135,6 +135,20 @@ function placeCaret(textarea: HTMLTextAreaElement, offset: number): void {
   });
 }
 
+function insertAtCaret(textarea: HTMLTextAreaElement, text: string): void {
+  const { value, selectionStart, selectionEnd } = textarea;
+  const caret = selectionStart + text.length;
+  act(() => {
+    fireEvent.change(textarea, {
+      target: {
+        value: `${value.slice(0, selectionStart)}${text}${value.slice(selectionEnd)}`,
+        selectionStart: caret,
+        selectionEnd: caret,
+      },
+    });
+  });
+}
+
 function flushReactBeforeWindowListeners(): () => void {
   const flush = (): void => flushSync(() => undefined);
   document.addEventListener("keydown", flush);
@@ -389,6 +403,65 @@ describe("EditorRoute (PowerPoint식 프레젠테이션 편집기)", () => {
 
     expect(firstSong().slides[0].lines).toEqual(["가".repeat(80)]);
     expect(screen.getByTestId("slide-line-limit-hint")).toBeInTheDocument();
+  });
+
+  it("붙여 넣은 가사에 남은 서로게이트 반쪽은 U+FFFD로 바꿔 저장한다", () => {
+    renderEditor();
+    const textarea = startLyricsEdit();
+
+    typeLyrics(textarea, "주의 은혜\uD83D\n\uDE4F 감사해 🙏");
+
+    expect(firstSong().slides[0].lines).toEqual([
+      "주의 은혜\uFFFD",
+      "\uFFFD 감사해 🙏",
+    ]);
+    expect(lyricsEditor()).toHaveValue("주의 은혜\uFFFD\n\uFFFD 감사해 🙏");
+  });
+
+  it("반쪽씩 두 번에 나눠 들어오는 이모지(Windows 이모지 패널)도 깨지지 않고 저장한다", () => {
+    renderEditor();
+    const textarea = startLyricsEdit();
+    typeLyrics(textarea, "주의 은혜");
+    placeCaret(textarea, 2);
+
+    insertAtCaret(textarea, "\uD83D");
+    insertAtCaret(textarea, "\uDE4F");
+
+    expect(firstSong().slides[0].lines).toEqual(["주의🙏 은혜"]);
+    expect(lyricsEditor()).toHaveValue("주의🙏 은혜");
+  });
+
+  it.each([
+    [
+      "Esc로",
+      (textarea: HTMLElement) => fireEvent.keyDown(textarea, { key: "Escape" }),
+    ],
+    ["다른 곳을 눌러", (textarea: HTMLElement) => fireEvent.blur(textarea)],
+  ])(
+    "%s 편집을 마치면 커서 앞에 남겨 둔 서로게이트 반쪽도 U+FFFD로 바꾼다",
+    (_name, finish) => {
+      renderEditor();
+      const textarea = startLyricsEdit();
+      typeLyrics(textarea, "주의 은혜\uD83D");
+
+      act(() => {
+        finish(textarea);
+      });
+
+      expect(firstSong().slides[0].lines).toEqual(["주의 은혜\uFFFD"]);
+    },
+  );
+
+  it("커서가 이모지 가운데에 놓여도 이모지를 반으로 나누지 않는다", () => {
+    renderEditor();
+    const textarea = startLyricsEdit();
+    typeLyrics(textarea, "주의 은혜\n😀 감사해");
+
+    placeCaret(textarea, "주의 은혜\n".length + 1);
+    fireEvent.click(screen.getByTestId("split-slide-btn"));
+
+    expect(firstSong().slides[0].lines).toEqual(["주의 은혜"]);
+    expect(firstSong().slides[1].lines).toEqual(["😀 감사해"]);
   });
 
   it("연속으로 입력한 가사는 실행 취소 한 번에 되돌아간다", () => {
@@ -969,6 +1042,27 @@ describe("EditorRoute (PowerPoint식 프레젠테이션 편집기)", () => {
         expect(getUserSongs().map((deck) => deck.id)).toEqual([FORK_ID]),
       );
       expect(songCounts()).toEqual(before);
+    });
+
+    it("다른 프레젠테이션으로 바뀌면 곡 추가 창을 닫는다", async () => {
+      api = installFakeApi({
+        "GET /api/catalog/search": () => ({ body: { decks: [sharedSummary] } }),
+      });
+      renderEditor();
+      fireEvent.click(screen.getByTestId("add-song-btn"));
+      expect(
+        await screen.findByTestId(`song-item-${SHARED_ID}`),
+      ).toBeInTheDocument();
+
+      act(() => {
+        testRouter.push(`/editor/${SEED_PRESENTATION_IDS[3]}`);
+      });
+
+      await waitFor(() =>
+        expect(
+          screen.queryByTestId("song-picker-modal"),
+        ).not.toBeInTheDocument(),
+      );
     });
   });
 

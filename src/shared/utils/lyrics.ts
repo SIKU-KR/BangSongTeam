@@ -15,6 +15,14 @@ export function sanitizeLyricLine(line: string): string {
   );
 }
 
+function toCodePointBoundary(text: string, index: number): number {
+  const before = text.charCodeAt(index - 1);
+  const after = text.charCodeAt(index);
+  const splitsPair =
+    before >= 0xd800 && before <= 0xdbff && after >= 0xdc00 && after <= 0xdfff;
+  return splitsPair ? index - 1 : index;
+}
+
 function wrapLyricLine(line: string): string[] {
   if (line.length <= MAX_SLIDE_LINE_LENGTH) return [line];
 
@@ -31,7 +39,8 @@ function wrapLyricLine(line: string): string[] {
       space = i;
     }
   }
-  const cut = space < 0 ? MAX_SLIDE_LINE_LENGTH : space;
+  const cut =
+    space < 0 ? toCodePointBoundary(text, MAX_SLIDE_LINE_LENGTH) : space;
 
   return [
     sanitizeLyricLine(text.slice(0, cut)),
@@ -44,6 +53,9 @@ function wrapLyricLine(line: string): string[] {
  * 넘는 줄은 조각 길이가 고르도록 공백에서 끊어 여러 줄로 만든다(공백이 없으면
  * 글자 수로 자른다). 그 결과가 `MAX_SLIDE_LINES`를 넘으면 2줄씩 나누되, 한 줄에서
  * 나온 조각은 되도록 같은 슬라이드에 둔다.
+ *
+ * 글자 수로 자를 때 이모지 같은 서로게이트 쌍은 반으로 나누지 않고 다음 줄로 넘긴다. 반쪽이
+ * 남으면 글자가 깨지고, Firestore가 그 문서를 저장하지 못한다.
  */
 export function fitLinesToSlides(lines: readonly string[]): string[][] {
   const units = lines.map(wrapLyricLine);
@@ -132,14 +144,15 @@ function isBlankLine(line: string): boolean {
  *
  * `offset`은 `lines.join("\n")` 기준 문자 위치다. 커서가 줄 중간이면 그 줄을
  * 쪼개고, 나눈 자리에 생긴 앞뒤 공백과 빈 줄은 버린다. 어느 한쪽에 가사가
- * 남지 않으면 나눌 수 없으므로 `null`을 돌려준다.
+ * 남지 않으면 나눌 수 없으므로 `null`을 돌려준다. 위치가 이모지 같은 서로게이트 쌍의
+ * 가운데면(되돌리기로 가사가 바뀐 뒤 남은 커서 위치 등) 그 글자 앞에서 나눈다.
  */
 export function splitLinesAtCursor(
   lines: readonly string[],
   offset: number,
 ): [string[], string[]] | null {
   const text = lines.join("\n");
-  const cut = Math.max(0, offset);
+  const cut = toCodePointBoundary(text, Math.max(0, offset));
   const before = text
     .slice(0, cut)
     .split("\n")

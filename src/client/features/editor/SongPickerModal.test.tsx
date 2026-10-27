@@ -9,7 +9,7 @@ import {
   waitFor,
   within,
 } from "@testing-library/react";
-import { onlineManager } from "@tanstack/react-query";
+import { onlineManager, type QueryClient } from "@tanstack/react-query";
 import {
   API_ERRORS,
   type Deck,
@@ -653,10 +653,12 @@ describe("SongPickerModal", () => {
 
       function installDeferredFork(): {
         release: () => Promise<void>;
+        fail: () => Promise<void>;
         forkCalls: () => number;
       } {
         api.restore();
         let resolveFork: () => void = () => undefined;
+        let failFork: () => void = () => undefined;
         api = installFakeApi({
           "GET /api/catalog/search": () => ({
             body: { decks: [sharedSummary] },
@@ -677,6 +679,11 @@ describe("SongPickerModal", () => {
                 resolve({
                   body: { deck: forkedDeck(), alreadyOwned: false },
                 });
+              failFork = () =>
+                resolve({
+                  status: 404,
+                  body: { error: API_ERRORS.deck.notPublished },
+                });
             }),
         });
         return {
@@ -684,8 +691,31 @@ describe("SongPickerModal", () => {
             act(async () => {
               resolveFork();
             }),
+          fail: () =>
+            act(async () => {
+              failFork();
+            }),
           forkCalls: () =>
             api.calls.filter((call) => call.path.endsWith("/fork")).length,
+        };
+      }
+
+      function reopenablePicker(): {
+        picker: (isOpen: boolean) => React.ReactElement;
+        client: QueryClient;
+      } {
+        const client = createTestQueryClient();
+        return {
+          client,
+          picker: (isOpen) =>
+            withQueryClient(
+              <SongPickerModal
+                isOpen={isOpen}
+                onClose={onCloseMock}
+                onSelectSong={onSelectSongMock}
+              />,
+              client,
+            ),
         };
       }
 
@@ -751,6 +781,75 @@ describe("SongPickerModal", () => {
         await fork.release();
 
         await expectForkKeptOnlyInLibrary();
+      });
+
+      it("가져오는 중에 닫았다 다시 연 창은 앞선 가져오기를 기다리지 않는다", async () => {
+        const fork = installDeferredFork();
+        const { picker } = reopenablePicker();
+        const view = render(picker(true));
+        await startFork(fork.forkCalls);
+
+        view.rerender(picker(false));
+        view.rerender(picker(true));
+        fireEvent.click(await screen.findByTestId(`song-item-${SHARED_ID}`));
+
+        const addButton = screen.getByTestId("song-picker-add-btn");
+        expect(addButton).toBeEnabled();
+        expect(addButton).not.toHaveTextContent(EDITOR_COPY.preview.importing);
+        await fork.release();
+        await expectForkKeptOnlyInLibrary();
+      });
+
+      it("가져오는 중에 닫았다 다시 연 창에는 앞선 가져오기의 실패를 보여 주지 않는다", async () => {
+        const fork = installDeferredFork();
+        const { picker, client } = reopenablePicker();
+        const view = render(picker(true));
+        await startFork(fork.forkCalls);
+
+        view.rerender(picker(false));
+        view.rerender(picker(true));
+        fireEvent.click(await screen.findByTestId(`song-item-${SHARED_ID}`));
+        await fork.fail();
+        await waitFor(() => expect(client.isMutating()).toBe(0));
+        await act(async () => {
+          await new Promise((resolve) => setTimeout(resolve, 0));
+        });
+
+        expect(
+          screen.queryByText(API_ERRORS.deck.notPublished),
+        ).not.toBeInTheDocument();
+        expect(screen.getByTestId("song-picker-add-btn")).toBeEnabled();
+        expect(onSelectSongMock).not.toHaveBeenCalled();
+      });
+
+      it("닫히는 애니메이션 중인 창에서 누른 추가는 곡을 가져오지도 세트에 넣지도 않는다", async () => {
+        const fork = installDeferredFork();
+        const { picker } = reopenablePicker();
+        const view = render(picker(true));
+        fireEvent.click(await screen.findByTestId(`song-item-${SHARED_ID}`));
+        const addButton = screen.getByTestId("song-picker-add-btn");
+        const exitAnimation = {
+          finished: new Promise<never>(() => undefined),
+        } as unknown as Animation;
+        Object.defineProperty(Element.prototype, "getAnimations", {
+          configurable: true,
+          value: () => [exitAnimation],
+        });
+
+        try {
+          view.rerender(picker(false));
+          expect(addButton).toBeInTheDocument();
+          fireEvent.click(addButton);
+          await act(async () => {
+            await new Promise((resolve) => setTimeout(resolve, 0));
+          });
+          view.unmount();
+        } finally {
+          Reflect.deleteProperty(Element.prototype, "getAnimations");
+        }
+
+        expect(fork.forkCalls()).toBe(0);
+        expect(onSelectSongMock).not.toHaveBeenCalled();
       });
 
       it("가져오는 중에 화면을 떠나도 가져온 곡을 세트에 넣지 않는다", async () => {
