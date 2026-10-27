@@ -1179,6 +1179,24 @@ describe("runBootSync — 한 브라우저의 소유자 저장본과 공유받�
     expect(await storedPresentations()).toEqual([]);
   });
 
+  it("소유자의 부팅 병합은 공유받은 사본만 있던 자리를 소유자의 서버본으로 바꾼다", async () => {
+    const owners: Presentation = {
+      ...presentation(SHARED),
+      title: "서버",
+      folderId: null,
+    };
+    await savePresentation(memberCopy());
+    signInAsTestUser(TEST_USER_ID);
+    await hydrateFromStorage();
+    presentationSync.pullPresentations.mockResolvedValue([owners]);
+
+    await runBootSync();
+    await flushPendingWrites();
+
+    expect(listPresentations()).toEqual([owners]);
+    expect(await storedPresentations()).toEqual([owners]);
+  });
+
   it("공유가 끝난 사본의 자리에 그사이 소유자의 저장본이 들어왔으면 지우지 않는다", async () => {
     await savePresentation(memberCopy());
     signInAsTestUser(MEMBER);

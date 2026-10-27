@@ -576,5 +576,27 @@ describe("presentationStore 영속성", () => {
       const { valid } = await loadAllPresentations();
       expect(valid.map((p) => p.id)).not.toContain(shared.id);
     });
+
+    it("소유자의 부팅 병합은 공유받은 사본만 있던 자리를 updatedAt과 folderId가 같아도 소유자 사본으로 바꿔 다음에도 편집할 수 있다", async () => {
+      const owners: Presentation = {
+        ...structuredClone(SEED_PRESENTATIONS[0]),
+        userId: LEADER,
+        folderId: null,
+      };
+      await seedPresentationsIntoStorage([
+        { ...owners, access: { ownerName: "인도자", memberId: MEMBER } },
+      ]);
+      await signInAs(LEADER);
+      expect(canEditPresentation(getPresentationById(owners.id)!)).toBe(false);
+
+      applyServerDocuments([structuredClone(owners)]);
+      await flushPendingWrites();
+      await signInAs(LEADER);
+
+      const reloaded = getPresentationById(owners.id);
+      expect(reloaded && canEditPresentation(reloaded)).toBe(true);
+      const { valid } = await loadAllPresentations();
+      expect(valid.find((p) => p.id === owners.id)).toEqual(owners);
+    });
   });
 });
