@@ -84,7 +84,6 @@ export function canStoreMediaOffline(): boolean {
 const PRESENTATION_CAPABILITIES: readonly BrowserCapabilityId[] = [
   "fullscreen",
   "h264",
-  "wakeLock",
 ];
 
 /** 이 브라우저에 없는 기능. 브라우저 밖(테스트 전 단계 등)에서는 빈 배열이다 */
@@ -101,9 +100,16 @@ export function getMissingCapabilities(): BrowserCapability[] {
   });
 }
 
-/** 전체화면 송출·배경 영상 재생·화면 꺼짐 방지가 모두 되면 true. 아니면 송출 전에 한 번 더 확인한다 */
-export function canPresentReliably(): boolean {
-  return !getMissingCapabilities().some((capability) =>
+/**
+ * 송출을 시작하기 전에 확인을 받을, 이 브라우저에 없는 기능.
+ *
+ * 송출 화면에서 되살릴 수 없는 전체화면과 배경 영상(H.264)만 본다. 확인 창은 전체화면 요청보다
+ * 먼저 뜨고, 열려 있는 동안에도 클릭의 사용자 활성화 시간(Chrome 5초)이 흘러 늦게 누르면
+ * 전체화면이 거부된다. 그래서 전체화면은 되고 화면 꺼짐 방지만 없는 브라우저(앱 안 브라우저,
+ * 예전 Firefox·Safari)에는 묻지 않고 배너로만 알린다.
+ */
+export function getMissingPresentationCapabilities(): BrowserCapability[] {
+  return getMissingCapabilities().filter((capability) =>
     PRESENTATION_CAPABILITIES.includes(capability.id),
   );
 }

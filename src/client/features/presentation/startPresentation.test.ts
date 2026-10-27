@@ -17,6 +17,10 @@ import {
 } from "./presentationStore";
 import { startPresentation } from "./startPresentation";
 
+const FULLSCREEN = capabilities.BROWSER_CAPABILITIES.find(
+  ({ id }) => id === "fullscreen",
+)!;
+
 describe("startPresentation", () => {
   const startPath = window.location.pathname;
   const SET = SEED_PRESENTATIONS[2];
@@ -35,7 +39,10 @@ describe("startPresentation", () => {
     documentPusher.mockResolvedValue(undefined);
     __setPusherForTests(documentPusher);
     setSyncEnabled(true);
-    vi.spyOn(capabilities, "canPresentReliably").mockReturnValue(true);
+    vi.spyOn(
+      capabilities,
+      "getMissingPresentationCapabilities",
+    ).mockReturnValue([]);
   });
 
   afterEach(() => {
@@ -62,7 +69,9 @@ describe("startPresentation", () => {
   });
 
   it("송출을 그만두면 큐에 남은 세트 변경을 앞당겨 보내지 않는다", async () => {
-    vi.mocked(capabilities.canPresentReliably).mockReturnValue(false);
+    vi.mocked(capabilities.getMissingPresentationCapabilities).mockReturnValue([
+      FULLSCREEN,
+    ]);
     vi.spyOn(window, "confirm").mockReturnValue(false);
     renamePresentation(SET.id, "송출을 그만둔 뒤의 이름");
 

@@ -59,6 +59,10 @@ import {
 
 const DOC_ID = SEED_PRESENTATION_IDS[0];
 
+const FULLSCREEN = capabilities.BROWSER_CAPABILITIES.find(
+  ({ id }) => id === "fullscreen",
+)!;
+
 function renderEditor(path = `/editor/${DOC_ID}`) {
   return render(
     withQueryClient(
@@ -134,7 +138,10 @@ describe("EditorRoute (PowerPoint식 프레젠테이션 편집기)", () => {
     __loadDocumentsForTests(SEED_PRESENTATIONS);
     mockNavigate.mockClear();
     vi.restoreAllMocks();
-    vi.spyOn(capabilities, "canPresentReliably").mockReturnValue(true);
+    vi.spyOn(
+      capabilities,
+      "getMissingPresentationCapabilities",
+    ).mockReturnValue([]);
   });
 
   it("헤더·리본·썸네일 창·캔버스·상태 표시줄을 그리고 오른쪽 패널은 없다", () => {
@@ -207,15 +214,18 @@ describe("EditorRoute (PowerPoint식 프레젠테이션 편집기)", () => {
     });
   });
 
-  it("전체화면·배경 영상·화면 꺼짐 방지가 모자란 브라우저에서는 드라이브처럼 발표 전에 확인을 받는다", () => {
-    vi.spyOn(capabilities, "canPresentReliably").mockReturnValue(false);
+  it("전체화면이 안 되는 브라우저에서는 드라이브처럼 빠진 기능을 들어 발표 전에 확인을 받는다", () => {
+    vi.spyOn(
+      capabilities,
+      "getMissingPresentationCapabilities",
+    ).mockReturnValue([FULLSCREEN]);
     const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(false);
     renderEditor();
 
     const presentBtn = screen.getByTestId("header-present-btn");
     fireEvent.click(presentBtn);
     expect(confirmSpy).toHaveBeenCalledWith(
-      PRESENTATION_COPY.presentUnreliable,
+      PRESENTATION_COPY.presentUnreliable(FULLSCREEN.label),
     );
     expect(mockNavigate).not.toHaveBeenCalled();
 

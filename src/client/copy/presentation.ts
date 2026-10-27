@@ -7,6 +7,6 @@ export const PRESENTATION_COPY = {
     "다른 기기나 창에서 영구 삭제한 프레젠테이션이라 여기서도 지웠어요",
   deletedSavedAsCopy: (title: string) =>
     `다른 기기나 창에서 영구 삭제한 프레젠테이션이에요. 이 기기에서 고친 내용은 '${title}'에 따로 저장했어요`,
-  presentUnreliable:
-    "이 브라우저에선 전체화면, 배경 영상, 화면 꺼짐 방지 중 일부가 안 될 수 있어요. 그래도 발표할까요?",
+  presentUnreliable: (missing: string) =>
+    `이 브라우저에선 ${missing} 기능을 지원하지 않아요. 그래도 발표할까요?`,
 } as const;
