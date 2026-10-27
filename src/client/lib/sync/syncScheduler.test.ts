@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import type { Presentation } from "#shared";
+import { API_ERRORS, type Presentation } from "#shared";
+import { ERROR_COPY } from "#copy/common";
 import {
   scheduleDocumentPush,
   cancelDocumentPush,
@@ -12,13 +13,14 @@ import {
   __setBackoffRandomForTests,
 } from "./syncScheduler";
 import { getSyncSnapshot, resetSyncStatus } from "./syncStatus";
+import { __resetServerDecksForTests } from "./presentationSync";
 import {
   OfflineError,
   ServerRejectedError,
   SessionExpiredError,
   TimeoutError,
 } from "../api/request";
-import { installFakeApi } from "../../test/fakeApi";
+import { installFakeApi, type FakeApi } from "../../test/fakeApi";
 import {
   scheduleFolderPush,
   flushFolderSync,
@@ -603,5 +605,90 @@ describe("서버 push 스케줄러", () => {
     expect(getSyncSnapshot().status).toBe("synced");
 
     vi.useRealTimers();
+  });
+});
+
+describe("서버가 받을 수 있게 다듬어 올리기", () => {
+  const DOC_ID = "100000000000000000001";
+  let api: FakeApi;
+  let respondToPatch: () => { status?: number; body: unknown };
+
+  function patchCalls(): FakeApi["calls"] {
+    return api.calls.filter((call) => call.method === "PATCH");
+  }
+
+  beforeEach(() => {
+    __resetSyncSchedulerForTests();
+    __resetServerDecksForTests();
+    resetSyncStatus();
+    respondToPatch = () => ({ body: { ok: true } });
+    api = installFakeApi({
+      "PATCH /api/presentations/*": () => respondToPatch(),
+    });
+    __setPusherForTests(null);
+    setSyncEnabled(true);
+  });
+
+  afterEach(() => {
+    api.restore();
+    __resetSyncSchedulerForTests();
+  });
+
+  it("덱이 빠진 항목이 있는 문서는 보내지 않고 실패와 이유를 남기며, 고친 문서를 올리면 지운다", async () => {
+    const broken: Presentation = {
+      ...doc(DOC_ID, "주일 1부"),
+      items: [
+        {
+          id: "300000000000000000001",
+          presentationId: DOC_ID,
+          deckId: "c00000000000000000001",
+          order: 0,
+        },
+      ],
+    };
+
+    scheduleDocumentPush(broken);
+    await flushPendingSync();
+
+    expect(getSyncSnapshot().status).toBe("error");
+    expect(getSyncSnapshot().lastFailure).toMatchObject({
+      id: DOC_ID,
+      title: "주일 1부",
+      reason: ERROR_COPY.documentInvalid,
+    });
+    expect(patchCalls()).toHaveLength(0);
+
+    scheduleDocumentPush({ ...broken, items: [] });
+    await flushPendingSync();
+
+    expect(getSyncSnapshot()).toMatchObject({
+      status: "synced",
+      lastFailure: null,
+    });
+    expect(patchCalls()).toHaveLength(1);
+  });
+
+  it("101자 제목은 100자로 줄여 올리고 동기화됨으로 끝난다", async () => {
+    scheduleDocumentPush(doc(DOC_ID, "가".repeat(101)));
+    await flushPendingSync();
+
+    expect(patchCalls()).toHaveLength(1);
+    expect(patchCalls()[0].body).toMatchObject({ title: "가".repeat(100) });
+    expect(getSyncSnapshot().status).toBe("synced");
+  });
+
+  it("서버가 너무 크다고 거절하면(413) 서버가 준 문장을 이유로 남긴다", async () => {
+    const sentence = API_ERRORS.presentation.songTooLarge("긴 곡");
+    respondToPatch = () => ({ status: 413, body: { error: sentence } });
+
+    scheduleDocumentPush(doc(DOC_ID));
+    await flushPendingSync();
+
+    expect(getSyncSnapshot().status).toBe("error");
+    expect(getSyncSnapshot().lastFailure).toMatchObject({
+      id: DOC_ID,
+      status: 413,
+      reason: sentence,
+    });
   });
 });

@@ -3,7 +3,13 @@ import { Button } from "#components/ui/button";
 import { Input } from "#components/ui/input";
 import { Field, FieldDescription, FieldLabel } from "#components/ui/field";
 import { Textarea } from "#components/ui/textarea";
-import { splitLyricsIntoSlides } from "#shared";
+import {
+  MAX_DECK_ARTIST_LENGTH,
+  MAX_DECK_TITLE_LENGTH,
+  MAX_LYRICS_LENGTH,
+  clampText,
+  splitLyricsIntoSlides,
+} from "#shared";
 import { ExternalSearchLinks } from "../ExternalSearchLinks";
 import { EDITOR_COPY } from "#copy/editor";
 import { COMMON_COPY } from "#copy/common";
@@ -21,14 +27,19 @@ interface CreateSongFormProps {
 }
 
 /**
- * 새 찬양 가사 직접 입력 폼.
+ * 새 곡 가사 직접 입력 폼.
+ *
+ * 제목·아티스트·가사 칸은 곡 한도까지만 받는다. 검색어로 채운 제목도 한도로 줄여서 시작한다.
+ * 브라우저는 한도를 넘게 붙여 넣은 가사를 말없이 잘라 내므로, 가사가 한도에 이르면 안내를 띄운다.
  */
 export function CreateSongForm({
   initialTitle = "",
   onCancel,
   onSubmit,
 }: CreateSongFormProps): React.JSX.Element {
-  const [title, setTitle] = useState(initialTitle);
+  const [title, setTitle] = useState(() =>
+    clampText(initialTitle, MAX_DECK_TITLE_LENGTH),
+  );
   const [artist, setArtist] = useState("");
   const [lyrics, setLyrics] = useState("");
 
@@ -58,6 +69,7 @@ export function CreateSongForm({
             type="text"
             data-testid="song-picker-create-title-input"
             value={title}
+            maxLength={MAX_DECK_TITLE_LENGTH}
             onChange={(e) => setTitle(e.target.value)}
             placeholder={EDITOR_COPY.create.titlePlaceholder}
           />
@@ -72,6 +84,7 @@ export function CreateSongForm({
             type="text"
             data-testid="song-picker-create-artist-input"
             value={artist}
+            maxLength={MAX_DECK_ARTIST_LENGTH}
             onChange={(e) => setArtist(e.target.value)}
             placeholder={EDITOR_COPY.create.artistPlaceholder}
           />
@@ -93,6 +106,7 @@ export function CreateSongForm({
           id={`${fieldId}-lyrics`}
           data-testid="song-picker-create-lyrics-input"
           value={lyrics}
+          maxLength={MAX_LYRICS_LENGTH}
           onChange={(e) => setLyrics(e.target.value)}
           placeholder={EDITOR_COPY.create.lyricsPlaceholder}
           className="flex-1 resize-none font-mono"
@@ -100,6 +114,11 @@ export function CreateSongForm({
         {previewSlides.length > 0 && (
           <FieldDescription>
             {EDITOR_COPY.create.splitCount(previewSlides.length)}
+          </FieldDescription>
+        )}
+        {lyrics.length >= MAX_LYRICS_LENGTH && (
+          <FieldDescription>
+            {EDITOR_COPY.create.lyricsLimit(MAX_LYRICS_LENGTH)}
           </FieldDescription>
         )}
       </Field>

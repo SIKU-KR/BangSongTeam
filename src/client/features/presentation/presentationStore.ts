@@ -1,7 +1,10 @@
 import { useSyncExternalStore } from "react";
 import type { Deck, Presentation, PresentationItem, Slide } from "#shared";
 import {
+  MAX_DECK_TITLE_LENGTH,
   MAX_PRESENTATION_TITLE_LENGTH,
+  appendWithinLimit,
+  clampText,
   createId,
   cycleItem,
   createSlideId,
@@ -499,11 +502,20 @@ export function openPresentation(id: string): boolean {
   return true;
 }
 
+/**
+ * 편집기 헤더에서 고친 제목. 앞뒤 공백을 떼고 제목 한도로 줄이며, 비거나 그대로면 되돌리기
+ * 기록도 남기지 않는다.
+ *
+ * 한도를 넘은 제목은 스키마를 통과하지 못해 그 프레젠테이션이 서버에 올라가지 않고, 다음에
+ * 불러올 때 읽지 못한 저장본으로 남는다. 입력 칸의 `maxLength`는 코드로 넣은 값을 막지 못한다.
+ */
 export function updatePresentationTitle(title: string): void {
+  const next = clampText(title.trim(), MAX_PRESENTATION_TITLE_LENGTH);
+  if (!next || next === readActive().title) return;
   pushHistory();
   writeActive({
     ...readActive(),
-    title,
+    title: next,
     updatedAt: new Date().toISOString(),
   });
   emitChange();
@@ -808,6 +820,10 @@ export function removeSongFromPresentation(songIndex: number): void {
   );
 }
 
+/**
+ * 곡을 바로 뒤에 복제한다. 사본 제목은 "제목 (사본)"이고, 사본 표시를 붙여도 곡 제목 한도를
+ * 넘지 않게 원래 제목을 줄인다. 한도를 넘으면 그 프레젠테이션 전체가 서버에 올라가지 못한다.
+ */
 export function duplicateSongInPresentation(songIndex: number): Deck | null {
   const item = readActive().items[songIndex];
   if (!item || !item.deck) return null;
@@ -819,7 +835,11 @@ export function duplicateSongInPresentation(songIndex: number): Deck | null {
   const clonedDeck: Deck = {
     ...cloneDeck(originalDeck),
     id: createId(),
-    title: `${originalDeck.title}${COMMON_COPY.copySuffix}`,
+    title: appendWithinLimit(
+      originalDeck.title,
+      COMMON_COPY.copySuffix,
+      MAX_DECK_TITLE_LENGTH,
+    ),
     createdAt: now,
     updatedAt: now,
   };

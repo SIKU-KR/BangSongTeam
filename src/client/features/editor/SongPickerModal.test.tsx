@@ -12,6 +12,9 @@ import {
   API_ERRORS,
   type Deck,
   DEFAULT_DECK_STYLE,
+  MAX_DECK_ARTIST_LENGTH,
+  MAX_DECK_TITLE_LENGTH,
+  MAX_LYRICS_LENGTH,
   MAX_SEARCH_QUERY_LENGTH,
   OFFICIAL_LIBRARY_NAME,
   clampSearchQuery,
@@ -698,6 +701,69 @@ describe("SongPickerModal", () => {
         artist: "사명자",
       });
       expect(added.slides).toHaveLength(2);
+    });
+
+    it("153자 메들리 제목으로 찾다가 새 곡으로 등록해도 곡 제목 한도로 줄여 저장한다", async () => {
+      const medley =
+        "오 거룩하신 주님 (O Sacred Head, Now Wounded) _ 주 달려 죽은 십자가 (When I Survey The Wondrous Cross) _ 예수 나를 위하여 (Near The Cross) _ 내 구주 예수를 더욱 사랑 (More Love To Thee)";
+      expect(medley.length).toBeGreaterThan(MAX_DECK_TITLE_LENGTH);
+      renderPicker();
+
+      fireEvent.change(screen.getByTestId("song-picker-search-input"), {
+        target: { value: medley },
+      });
+      const searched = (): string[] =>
+        api.calls
+          .filter((call) => call.path === "/api/catalog/search")
+          .map((call) => new URLSearchParams(call.search).get("q") ?? "");
+      await waitFor(() =>
+        expect(searched()).toContain(clampSearchQuery(medley)),
+      );
+      expect(searched().every((q) => q.length <= MAX_SEARCH_QUERY_LENGTH)).toBe(
+        true,
+      );
+
+      fireEvent.click(screen.getByTestId("song-picker-switch-create-btn"));
+      fireEvent.change(screen.getByTestId("song-picker-create-lyrics-input"), {
+        target: { value: "오 거룩하신 주님\n\n주 달려 죽은 십자가" },
+      });
+      fireEvent.click(screen.getByTestId("song-picker-create-submit-btn"));
+
+      await waitFor(() => expect(onSelectSongMock).toHaveBeenCalledTimes(1));
+      const saved: Deck = onSelectSongMock.mock.calls[0][0];
+      expect(saved.title.length).toBeLessThanOrEqual(MAX_DECK_TITLE_LENGTH);
+      expect(medley.startsWith(saved.title)).toBe(true);
+    });
+
+    it("화면 밖에서 넣은 101자 제목도 곡 제목 한도로 줄여 저장한다", async () => {
+      renderPicker();
+      fillCreateForm("가".repeat(101));
+      fireEvent.click(screen.getByTestId("song-picker-create-submit-btn"));
+
+      await waitFor(() => expect(onSelectSongMock).toHaveBeenCalledTimes(1));
+      expect(onSelectSongMock.mock.calls[0][0].title).toBe("가".repeat(100));
+    });
+
+    it("제목·아티스트·가사 칸은 한도까지만 받고, 가사가 한도에 이르면 안내를 보여 준다", () => {
+      renderPicker();
+      fireEvent.click(screen.getByTestId("song-picker-switch-create-btn"));
+      const lyrics = screen.getByTestId("song-picker-create-lyrics-input");
+
+      expect(
+        screen.getByTestId("song-picker-create-title-input"),
+      ).toHaveProperty("maxLength", MAX_DECK_TITLE_LENGTH);
+      expect(
+        screen.getByTestId("song-picker-create-artist-input"),
+      ).toHaveProperty("maxLength", MAX_DECK_ARTIST_LENGTH);
+      expect(lyrics).toHaveProperty("maxLength", MAX_LYRICS_LENGTH);
+      const hint = EDITOR_COPY.create.lyricsLimit(MAX_LYRICS_LENGTH);
+      expect(screen.queryByText(hint)).not.toBeInTheDocument();
+
+      fireEvent.change(lyrics, {
+        target: { value: "가".repeat(MAX_LYRICS_LENGTH) },
+      });
+
+      expect(screen.getByText(hint)).toBeInTheDocument();
     });
 
     it("같은 제목의 공유 곡이 있어도 묻지 않고 바로 저장한다", async () => {

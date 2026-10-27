@@ -6,7 +6,7 @@ import {
   ServerRejectedError,
   SessionExpiredError,
 } from "../api/request";
-import { pushPresentation } from "./presentationSync";
+import { pushPresentation, syncFailureReasonOf } from "./presentationSync";
 import {
   clearSyncFailure,
   getSyncDomainStatus,
@@ -28,7 +28,7 @@ export const SYNC_MAX_WAIT_MS = 10_000;
 /** 서로 다른 문서를 동시에 올리는 최대 개수 */
 const PUSH_CONCURRENCY = 3;
 
-type Pusher = (document: Presentation) => Promise<boolean>;
+type Pusher = (document: Presentation) => Promise<unknown>;
 
 interface PendingItem {
   document: Presentation;
@@ -135,6 +135,7 @@ function startPush(document: Presentation): void {
           message: err instanceof Error ? err.message : String(err),
           failedAt: Date.now(),
           requestId: requestIdOfError(err),
+          reason: syncFailureReasonOf(err),
         };
         console.error("Presentation push failed permanently", failure);
         recordSyncFailure(failure);

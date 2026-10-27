@@ -6,7 +6,11 @@ import {
   ServerRejectedError,
   SessionExpiredError,
 } from "../api/request";
-import { pushDeck, deleteDeckRemote } from "./presentationSync";
+import {
+  pushDeck,
+  deleteDeckRemote,
+  syncFailureReasonOf,
+} from "./presentationSync";
 import {
   clearSyncFailure,
   recordSyncFailure,
@@ -176,6 +180,7 @@ async function runOps(ops: PendingOp[]): Promise<void> {
           message: err instanceof Error ? err.message : String(err),
           failedAt: Date.now(),
           requestId: requestIdOfError(err),
+          reason: syncFailureReasonOf(err),
         };
         console.error("Deck push failed permanently", failure);
         recordSyncFailure(failure);

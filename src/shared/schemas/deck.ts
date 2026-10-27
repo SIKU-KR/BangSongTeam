@@ -21,6 +21,15 @@ export const MAX_WRITE_LYRICS_LENGTH = 50_000;
 /** 저장 요청이 곡 하나에 담을 수 있는 슬라이드 수. 가장 긴 곡(43장)의 10배가 넘는다 */
 export const MAX_WRITE_SLIDES = 500;
 
+/**
+ * 새 곡 입력 창의 가사 입력 상한. 입력 칸에만 두고 `DeckSchema`에는 넣지 않는다.
+ *
+ * `DeckSchema`는 저장본과 서버 응답도 읽으므로, 거기에 두면 이미 저장된 긴 곡을 읽지 못한다.
+ * 가사(`lyricsRaw`)는 만든 뒤 고칠 수 없어 상한을 넘은 곡은 고칠 길도 없다. 이 길이면 공개해
+ * 검색 색인이 붙어도 곡 문서가 Firestore의 1 MiB·색인 40,000개 한도에 한참 못 미친다.
+ */
+export const MAX_LYRICS_LENGTH = 10_000;
+
 export const DeckVisibilitySchema = z.enum(["private", "public"]);
 export type DeckVisibility = z.infer<typeof DeckVisibilitySchema>;
 

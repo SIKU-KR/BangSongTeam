@@ -31,6 +31,7 @@ import {
   setSharedPresentationListener,
   pullDecks,
   pullFolders,
+  syncFailureReasonOf,
 } from "./presentationSync";
 import {
   isRetryableApiError,
@@ -451,6 +452,7 @@ async function pushLatestEach<T extends { id: string }>(
           message: err instanceof Error ? err.message : String(err),
           failedAt: Date.now(),
           requestId: requestIdOfError(err),
+          reason: syncFailureReasonOf(err),
         });
       }
     }

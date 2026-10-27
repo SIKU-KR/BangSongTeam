@@ -5,6 +5,7 @@ import {
   MAX_DECK_TITLE_LENGTH,
   MAX_FORKED_FROM_AUTHOR_NAME_LENGTH,
 } from "../schemas/deck";
+import { MAX_PRESENTATION_TITLE_LENGTH } from "../schemas/presentation";
 
 /**
  * 글을 `max` UTF-16 코드 단위 안으로 자른다. 한도 안이면 그대로 돌려준다.
@@ -18,6 +19,20 @@ export function clampText(text: string, max: number): string {
   const sliced = text.slice(0, max);
   const last = sliced.charCodeAt(sliced.length - 1);
   return last >= 0xd800 && last <= 0xdbff ? sliced.slice(0, -1) : sliced;
+}
+
+/**
+ * `text` 뒤에 `suffix`를 붙이되 합친 길이가 `max`를 넘지 않게 앞 글을 줄인다.
+ *
+ * 한도에 가까운 제목에 ' (사본)'을 그대로 붙이면 스키마 한도를 넘어, 그 곡이 든 프레젠테이션은
+ * 서버가 받지 못한다.
+ */
+export function appendWithinLimit(
+  text: string,
+  suffix: string,
+  max: number,
+): string {
+  return `${clampText(text, max - suffix.length)}${suffix}`;
 }
 
 const BIDI_EXPLICIT_FORMATTING = /[\u202A-\u202E\u2066-\u2069]/g;
@@ -101,4 +116,79 @@ export function toNonNegativeInt(value: unknown): number {
   return Number.isSafeInteger(value) && (value as number) > 0
     ? (value as number)
     : 0;
+}
+
+type UnknownRecord = Record<string, unknown>;
+
+function isRecord(value: unknown): value is UnknownRecord {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function withField(
+  record: UnknownRecord,
+  key: string,
+  value: unknown,
+): UnknownRecord {
+  return record[key] === value ? record : { ...record, [key]: value };
+}
+
+function clampField(
+  record: UnknownRecord,
+  key: string,
+  max: number,
+): UnknownRecord {
+  const value = record[key];
+  return typeof value === "string"
+    ? withField(record, key, clampText(value, max))
+    : record;
+}
+
+function fitDeckRecord(deck: unknown): unknown {
+  if (!isRecord(deck)) return deck;
+  const fitted = clampField(
+    clampField(deck, "title", MAX_DECK_TITLE_LENGTH),
+    "artist",
+    MAX_DECK_ARTIST_LENGTH,
+  );
+  const author = fitted.forkedFromAuthorName;
+  if (author === undefined || author === null) return fitted;
+  return typeof author === "string"
+    ? clampField(
+        fitted,
+        "forkedFromAuthorName",
+        MAX_FORKED_FROM_AUTHOR_NAME_LENGTH,
+      )
+    : withField(fitted, "forkedFromAuthorName", FALLBACK_USER_NAME.default);
+}
+
+function fitItems(items: unknown): unknown {
+  if (!Array.isArray(items)) return items;
+  const fitted = items.map((item: unknown) =>
+    isRecord(item) ? withField(item, "deck", fitDeckRecord(item.deck)) : item,
+  );
+  return fitted.every((item, index) => item === items[index]) ? items : fitted;
+}
+
+function fitAccess(access: unknown): unknown {
+  if (!isRecord(access) || !("ownerName" in access)) return access;
+  return typeof access.ownerName === "string"
+    ? access
+    : withField(access, "ownerName", FALLBACK_USER_NAME.default);
+}
+
+/**
+ * 메모리·저장본의 프레젠테이션을 글 한도에 맞춘다. 한도를 넘은 문자열(프레젠테이션 제목, 곡의
+ * 제목·아티스트·원작자 이름)만 줄이고, 문자열이 아닌 원작자 이름·소유자 이름은 기본 이름으로
+ * 바꾼다. 던지지 않는다.
+ *
+ * 이전 버전의 화면은 100자 넘는 제목이나 ' (사본)'이 붙은 긴 곡 제목을 그대로 저장해, 그
+ * 프레젠테이션은 스키마를 통과하지 못해 서버에 올라가지 않는다. 없는 키는 더하지 않고 다른 값은
+ * 손대지 않아, 올바른 문서는 깊은 비교로 그대로라 저장 본문과 덱 지문이 바뀌지 않는다. 덱이 빠진
+ * 항목 같은 다른 잘못은 고치지 않고 스키마가 거절하게 둔다.
+ */
+export function fitPresentationToLimits(row: unknown): unknown {
+  if (!isRecord(row)) return row;
+  const titled = clampField(row, "title", MAX_PRESENTATION_TITLE_LENGTH);
+  const withItems = withField(titled, "items", fitItems(titled.items));
+  return withField(withItems, "access", fitAccess(withItems.access));
 }

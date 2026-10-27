@@ -1,9 +1,11 @@
+import { ERROR_COPY } from "#copy/common";
 import {
   DeckSchema,
   FolderDeleteResponseSchema,
   FolderSchema,
   IdSchema,
   PresentationDocumentSchema,
+  fitPresentationToLimits,
   toPresentationChanges,
   type Deck,
   type DeckListResponse,
@@ -37,16 +39,47 @@ async function callSyncApi<T>(
 }
 
 /**
- * 프레젠테이션을 서버가 받을 수 있는 문서로 좁힌다.
+ * 이 기기에 있는 프레젠테이션이 서버가 받을 수 있는 모양이 아니다. 글 한도에 맞춰도 스키마를
+ * 통과하지 못한 문서(덱이 빠진 항목 등)라 다시 보내도 같은 결과다.
  *
- * 덱이 비어 있는 항목이 하나라도 있으면 서버의 `PresentationDocumentSchema`가
- * 거절한다. 여기서 걸러 내지 않으면 400을 받고 그 문서는 영영 안 올라간다.
+ * 동기화 큐는 다시 시도하지 않는 영구 실패로 남긴다(`isRetryableApiError`가 거짓). 그래서
+ * 헤더가 '동기화 실패'와 이유를 보여 주고, '다시 시도'나 다음 편집 때만 다시 보낸다. `cause`는
+ * 로그에 남길 스키마 오류다.
  */
-function toSyncableDocument(
-  presentation: Presentation,
-): PresentationDocument | null {
-  const result = PresentationDocumentSchema.safeParse(presentation);
-  return result.success ? result.data : null;
+export class UnsyncableDocumentError extends Error {
+  constructor(cause?: unknown) {
+    super(ERROR_COPY.documentInvalid);
+    this.name = "UnsyncableDocumentError";
+    this.cause = cause;
+  }
+}
+
+/**
+ * 동기화 실패를 화면에 보일 이유(`SyncFailure.reason`). 서버가 거절하며 준 문장과 보낼 수
+ * 없는 문서만 이유가 된다. 그 밖의 오류 문구는 응답 스키마 오류처럼 개발자용 글일 수 있어
+ * 보여 주지 않는다.
+ */
+export function syncFailureReasonOf(err: unknown): string | undefined {
+  return err instanceof ServerRejectedError ||
+    err instanceof UnsyncableDocumentError
+    ? err.message
+    : undefined;
+}
+
+/**
+ * 프레젠테이션을 서버가 받을 수 있는 문서로 좁힌다. 글 한도를 넘은 제목·원작자 이름은
+ * 줄이고(`fitPresentationToLimits`), 그래도 스키마를 통과하지 못하면
+ * `UnsyncableDocumentError`를 던진다.
+ *
+ * 덱이 비어 있는 항목이 하나라도 있으면 서버의 `PresentationDocumentSchema`가 거절한다.
+ * 조용히 건너뛰면 큐가 성공으로 세어, 올라가지 않은 문서가 '동기화됨'으로 보인다.
+ */
+function toSyncableDocument(presentation: Presentation): PresentationDocument {
+  const result = PresentationDocumentSchema.safeParse(
+    fitPresentationToLimits(presentation),
+  );
+  if (!result.success) throw new UnsyncableDocumentError(result.error);
+  return result.data;
 }
 
 /**
@@ -115,12 +148,15 @@ async function sendChanges(changes: PresentationChanges): Promise<void> {
  * 세트를 서버에 올린다. 헤더와 곡 순서는 언제나, 덱은 서버에 마지막으로 올린 뒤
  * 바뀐 것만 보낸다. 서버가 모르는 곡이 있다고 하면(409) 모든 덱을 담아 한 번 더
  * 보낸다.
+ *
+ * 글 한도에 맞춘 문서를 올리고 그 문서의 덱 지문을 기억한다. 줄이기 전의 덱으로 기억하면
+ * 줄인 곡을 올릴 때마다 바뀐 곡으로 보고 다시 보낸다. 서버가 받을 수 없는 문서면 요청 없이
+ * `UnsyncableDocumentError`를 던진다.
  */
 export async function pushPresentation(
   presentation: Presentation,
-): Promise<boolean> {
+): Promise<void> {
   const document = toSyncableDocument(presentation);
-  if (!document) return false;
 
   const known = serverDecks.get(document.id);
   try {
@@ -137,7 +173,6 @@ export async function pushPresentation(
   }
 
   rememberServerDecks(document);
-  return true;
 }
 
 /** 공유받은 세트의 최신본을 받았거나(`replaced`) 접근을 잃었을 때(`lost`) 알린다. */

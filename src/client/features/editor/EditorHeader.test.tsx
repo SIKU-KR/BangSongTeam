@@ -7,6 +7,7 @@ import {
   screen,
   waitFor,
 } from "@testing-library/react";
+import { API_ERRORS, MAX_PRESENTATION_TITLE_LENGTH } from "#shared";
 import { MemoryRouter } from "../../test/router";
 import { TooltipProvider } from "#components/ui/tooltip";
 import { EditorHeader } from "./EditorHeader";
@@ -181,6 +182,16 @@ describe("EditorHeader", () => {
     ).toBeLessThan(
       popover.textContent!.indexOf(EDITOR_COPY.header.presentShortcuts),
     );
+  });
+
+  it("제목 입력 칸은 프레젠테이션 제목 한도까지만 받는다", () => {
+    renderHeader();
+
+    fireEvent.click(screen.getByTestId("header-title-btn"));
+
+    expect(
+      screen.getByRole("textbox", { name: EDITOR_COPY.header.titleLabel }),
+    ).toHaveProperty("maxLength", MAX_PRESENTATION_TITLE_LENGTH);
   });
 
   it("곡·슬라이드 번호는 헤더가 아니라 캔버스 상태 표시줄에 둔다", () => {
@@ -377,7 +388,7 @@ describe("EditorHeader", () => {
       expect(screen.getByTestId("save-status-retry")).toBeInTheDocument();
     });
 
-    it("동기화 실패의 상관 ID를 툴팁에 문의 코드로 보여 준다", async () => {
+    it("동기화 실패를 누르면 상관 ID를 고를 수 있는 문의 코드로 보여 준다", async () => {
       recordSyncFailure({
         id: "doc",
         kind: "presentation",
@@ -388,11 +399,113 @@ describe("EditorHeader", () => {
       });
       renderHeader();
 
-      act(() => screen.getByTestId("save-status").focus());
+      fireEvent.click(screen.getByTestId("save-status"));
 
-      expect(
-        await screen.findByTestId("save-status-failure-code"),
-      ).toHaveTextContent(EDITOR_COPY.syncStatus.failureCode("4bf92f35"));
+      const code = await screen.findByTestId("save-status-failure-code");
+      expect(code).toHaveTextContent(
+        EDITOR_COPY.syncStatus.failureCode("4bf92f35"),
+      );
+      expect(code).toHaveClass("select-text");
+    });
+
+    it("문의 코드 복사 버튼으로 문의 코드를 복사한다", async () => {
+      const writeText = vi.fn().mockResolvedValue(undefined);
+      Object.defineProperty(navigator, "clipboard", {
+        value: { writeText },
+        configurable: true,
+      });
+      recordSyncFailure({
+        id: "doc",
+        kind: "presentation",
+        status: 500,
+        message: "거절",
+        failedAt: 1,
+        requestId: "4bf92f3577b34da6a3ce929d0e0e4736",
+      });
+      renderHeader();
+
+      try {
+        fireEvent.click(screen.getByTestId("save-status"));
+        fireEvent.click(
+          await screen.findByRole("button", {
+            name: EDITOR_COPY.syncStatus.copyFailureCode,
+          }),
+        );
+
+        expect(writeText).toHaveBeenCalledWith("4bf92f35");
+        expect(
+          await screen.findByRole("button", {
+            name: EDITOR_COPY.syncStatus.failureCodeCopied,
+          }),
+        ).toBeInTheDocument();
+      } finally {
+        Object.defineProperty(navigator, "clipboard", {
+          value: undefined,
+          configurable: true,
+        });
+      }
+    });
+
+    it("동기화 실패는 좁은 화면에서도 보이고, 다른 상태는 좁은 화면에서 숨긴다", () => {
+      setSyncStatus("presentation", "synced");
+      const { unmount } = renderHeader();
+      expect(screen.getByTestId("save-status-bar")).toHaveClass(
+        "hidden",
+        "md:inline-flex",
+      );
+      unmount();
+
+      recordSyncFailure({
+        id: "doc",
+        kind: "presentation",
+        message: "거절",
+        failedAt: 1,
+      });
+      renderHeader();
+      expect(screen.getByTestId("save-status-bar")).not.toHaveClass("hidden");
+    });
+
+    it("실패한 항목의 제목과 이유를 보여 주고 오류 원문은 보여 주지 않는다", async () => {
+      const reason = API_ERRORS.presentation.songTooLarge("긴 곡");
+      recordSyncFailure({
+        id: "doc",
+        title: "주일 1부",
+        kind: "presentation",
+        message: "ZodError: title too long",
+        reason,
+        failedAt: 1,
+      });
+      renderHeader();
+
+      fireEvent.click(screen.getByTestId("save-status"));
+
+      const failure = await screen.findByTestId("save-status-failure");
+      expect(failure).toHaveTextContent("‘주일 1부’를 올리지 못했어요");
+      expect(failure).toHaveTextContent(reason);
+      expect(screen.getByTestId("save-status-detail")).not.toHaveTextContent(
+        "ZodError",
+      );
+    });
+
+    it("이유가 없는 실패는 실패한 항목의 제목만 보여 준다", async () => {
+      recordSyncFailure({
+        id: "doc",
+        title: "주일 1부",
+        kind: "presentation",
+        message: "Unexpected token <",
+        failedAt: 1,
+      });
+      renderHeader();
+
+      fireEvent.click(screen.getByTestId("save-status"));
+
+      const failure = await screen.findByTestId("save-status-failure");
+      expect(failure.textContent).toBe(
+        EDITOR_COPY.syncStatus.failedItem("주일 1부"),
+      );
+      expect(screen.getByTestId("save-status-detail")).not.toHaveTextContent(
+        "Unexpected token",
+      );
     });
 
     it("항목 없이 받기가 실패해도 그 요청의 문의 코드를 보여 준다", async () => {
@@ -403,7 +516,7 @@ describe("EditorHeader", () => {
       );
       renderHeader();
 
-      act(() => screen.getByTestId("save-status").focus());
+      fireEvent.click(screen.getByTestId("save-status"));
 
       expect(
         await screen.findByTestId("save-status-failure-code"),
@@ -419,7 +532,7 @@ describe("EditorHeader", () => {
       });
       renderHeader();
 
-      act(() => screen.getByTestId("save-status").focus());
+      fireEvent.click(screen.getByTestId("save-status"));
 
       expect(await screen.findByTestId("save-status-detail")).toBeVisible();
       expect(

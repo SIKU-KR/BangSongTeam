@@ -1,7 +1,8 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useNavigate } from "#hooks/useNavigate";
 import {
   ArrowLeftIcon,
+  CheckIcon,
   ChevronDownIcon,
   CloudAlertIcon,
   CopyIcon,
@@ -32,6 +33,8 @@ import {
   Popover,
   PopoverContent,
   PopoverDescription,
+  PopoverHeader,
+  PopoverTitle,
   PopoverTrigger,
 } from "#components/ui/popover";
 import { Separator } from "#components/ui/separator";
@@ -41,10 +44,19 @@ import {
   TooltipTrigger,
 } from "#components/ui/tooltip";
 import { IconButton } from "#components/common/IconButton";
+import { copyToClipboard } from "../../lib/browser/clipboard";
 import { usePersistenceError } from "../../lib/storage";
-import { retrySyncNow, useSyncStatus, type SyncStatus } from "../../lib/sync";
+import {
+  retrySyncNow,
+  useSyncStatus,
+  type SyncFailure,
+  type SyncStatus,
+} from "../../lib/sync";
 import { ThemeMenuButton } from "../../components/common/ThemeMenuButton";
-import type { PresentationAccess } from "#shared";
+import {
+  MAX_PRESENTATION_TITLE_LENGTH,
+  type PresentationAccess,
+} from "#shared";
 import type { ProjectionMediaFailure } from "../offline/useProjectionMediaReady";
 import { EDITOR_COPY, SHORTCUT_GUIDE } from "#copy/editor";
 import { COMMON_COPY } from "#copy/common";
@@ -130,58 +142,157 @@ function formatSyncedAt(syncedAt: number): string {
 
 const FAILURE_CODE_LENGTH = 8;
 
+const COPIED_FEEDBACK_MS = 2000;
+
 const RETRYABLE_SYNC_STATUSES: ReadonlySet<SyncStatus> = new Set([
   "offline",
   "error",
 ]);
 
+function CopyFailureCodeButton({ code }: { code: string }): React.JSX.Element {
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    if (!copied) return;
+    const timer = setTimeout(() => setCopied(false), COPIED_FEEDBACK_MS);
+    return () => clearTimeout(timer);
+  }, [copied]);
+
+  return (
+    <IconButton
+      label={
+        copied
+          ? EDITOR_COPY.syncStatus.failureCodeCopied
+          : EDITOR_COPY.syncStatus.copyFailureCode
+      }
+      size="icon-xs"
+      data-testid="save-status-copy-code"
+      onClick={() => {
+        copyToClipboard(code).then(
+          () => setCopied(true),
+          () => setCopied(false),
+        );
+      }}
+    >
+      {copied ? <CheckIcon /> : <CopyIcon />}
+    </IconButton>
+  );
+}
+
+function SyncFailureDetail({
+  failure,
+  failureCode,
+  lastSyncedLine,
+  trigger,
+  children,
+}: {
+  failure: SyncFailure | null;
+  failureCode: string | null;
+  lastSyncedLine: string;
+  trigger: React.ReactElement;
+  children: React.ReactNode;
+}): React.JSX.Element {
+  return (
+    <Popover>
+      <PopoverTrigger openOnHover render={trigger}>
+        {children}
+      </PopoverTrigger>
+      <PopoverContent
+        data-testid="save-status-detail"
+        align="start"
+        className="gap-1.5 text-xs"
+      >
+        {failure && (failure.title || failure.reason) && (
+          <PopoverHeader data-testid="save-status-failure">
+            {failure.title && (
+              <PopoverTitle>
+                {EDITOR_COPY.syncStatus.failedItem(failure.title)}
+              </PopoverTitle>
+            )}
+            {failure.reason && (
+              <PopoverDescription>{failure.reason}</PopoverDescription>
+            )}
+          </PopoverHeader>
+        )}
+        <p className="text-muted-foreground">{lastSyncedLine}</p>
+        {failureCode && (
+          <div className="flex items-center gap-1">
+            <span
+              data-testid="save-status-failure-code"
+              className="select-text"
+            >
+              {EDITOR_COPY.syncStatus.failureCode(failureCode)}
+            </span>
+            <CopyFailureCodeButton code={failureCode} />
+          </div>
+        )}
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 function SaveStatusIndicator(): React.JSX.Element {
   const persistenceError = usePersistenceError();
-  const { status, lastSyncedAt, failureRequestId } = useSyncStatus();
+  const { status, lastSyncedAt, lastFailure, failureRequestId } =
+    useSyncStatus();
 
   const { dotClass, label } = persistenceError
     ? SAVE_FAILED_INDICATOR
     : SYNC_STATUS_INDICATOR[status];
   const canRetry = !persistenceError && RETRYABLE_SYNC_STATUSES.has(status);
-  const failureCode =
-    !persistenceError && status === "error" && failureRequestId
-      ? failureRequestId.slice(0, FAILURE_CODE_LENGTH)
-      : null;
+  const syncFailed = !persistenceError && status === "error";
+  const lastSyncedLine =
+    lastSyncedAt === null
+      ? EDITOR_COPY.syncStatus.notSyncedYet
+      : EDITOR_COPY.syncStatus.lastSynced(formatSyncedAt(lastSyncedAt));
+
+  const trigger = (
+    <Button
+      variant="ghost"
+      size="xs"
+      data-testid="save-status"
+      className="min-w-0 shrink"
+    />
+  );
+  const statusLabel = (
+    <>
+      <span className={cn("size-1.5 shrink-0 rounded-full", dotClass)}></span>
+      <span className="truncate text-muted-foreground">{label}</span>
+    </>
+  );
 
   return (
-    <span className="hidden min-w-0 items-center gap-1 md:inline-flex">
-      <Tooltip>
-        <TooltipTrigger
-          render={
-            <Button
-              variant="ghost"
-              size="xs"
-              data-testid="save-status"
-              className="min-w-0 shrink"
-            />
+    <span
+      data-testid="save-status-bar"
+      className={cn(
+        "min-w-0 items-center gap-1",
+        syncFailed ? "inline-flex" : "hidden md:inline-flex",
+      )}
+    >
+      {syncFailed ? (
+        <SyncFailureDetail
+          failure={lastFailure}
+          failureCode={
+            failureRequestId
+              ? failureRequestId.slice(0, FAILURE_CODE_LENGTH)
+              : null
           }
+          lastSyncedLine={lastSyncedLine}
+          trigger={trigger}
         >
-          <span
-            className={cn("size-1.5 shrink-0 rounded-full", dotClass)}
-          ></span>
-          <span className="truncate text-muted-foreground">{label}</span>
-        </TooltipTrigger>
-        <TooltipContent
-          data-testid="save-status-detail"
-          className="flex-col items-start"
-        >
-          <span>
-            {lastSyncedAt === null
-              ? EDITOR_COPY.syncStatus.notSyncedYet
-              : EDITOR_COPY.syncStatus.lastSynced(formatSyncedAt(lastSyncedAt))}
-          </span>
-          {failureCode && (
-            <span data-testid="save-status-failure-code">
-              {EDITOR_COPY.syncStatus.failureCode(failureCode)}
-            </span>
-          )}
-        </TooltipContent>
-      </Tooltip>
+          {statusLabel}
+        </SyncFailureDetail>
+      ) : (
+        <Tooltip>
+          <TooltipTrigger render={trigger}>{statusLabel}</TooltipTrigger>
+          <TooltipContent
+            data-testid="save-status-detail"
+            className="flex-col items-start"
+          >
+            <span>{lastSyncedLine}</span>
+          </TooltipContent>
+        </Tooltip>
+      )}
       {canRetry && (
         <IconButton
           label={COMMON_COPY.retry}
@@ -234,6 +345,7 @@ function PresentationTitleField({
       <Input
         type="text"
         value={tempTitle}
+        maxLength={MAX_PRESENTATION_TITLE_LENGTH}
         autoFocus
         aria-label={EDITOR_COPY.header.titleLabel}
         onChange={(e) => setTempTitle(e.target.value)}
@@ -387,8 +499,12 @@ function ShortcutGuidePopover(): React.JSX.Element {
 /**
  * 편집기 상단 네비게이션 헤더.
  *
- * 동기화 실패면 저장 상태 툴팁에 실패한 요청의 상관 ID 앞 8자리를 문의 코드로 보여 준다.
- * 앞부분만으로도 Worker 로그에서 앞부분 일치로 찾을 수 있고, 사용자가 읽어 주기 쉽다.
+ * 동기화 실패면 저장 상태를 눌러(마우스는 올려도) 연 창에 실패한 항목의 제목과 이유, 실패한
+ * 요청의 상관 ID 앞 8자리를 문의 코드로 보여 준다. 앞부분만으로도 Worker 로그에서 앞부분 일치로
+ * 찾을 수 있고, 사용자가 읽어 주기 쉽다. 툴팁은 마우스로만 열리고 고를 수도 없어, 실패 내용은
+ * 터치로도 열리는 팝오버에 두고 문의 코드는 고르거나 복사할 수 있게 한다. 저장 상태는 좁은
+ * 화면에서 숨기지만, 동기화 실패는 좁은 화면에서도 보인다. 오류 원문(`SyncFailure.message`)은
+ * 개발자용 글일 수 있어 그리지 않는다.
  */
 export function EditorHeader({
   title,

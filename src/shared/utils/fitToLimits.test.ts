@@ -1,12 +1,66 @@
 import { describe, it, expect } from "vitest";
+import { DEFAULT_DECK_STYLE } from "../constants";
 import { FALLBACK_USER_NAME, UNTITLED_SONG } from "../copy/app";
+import { PresentationDocumentSchema } from "../schemas/api";
 import { MAX_DECK_TITLE_LENGTH } from "../schemas/deck";
 import {
+  appendWithinLimit,
   clampText,
   fitDeckText,
+  fitPresentationToLimits,
   toDisplayName,
   toNonNegativeInt,
 } from "./fitToLimits";
+
+const OWNER = "00000000x000000000001";
+const DOC_ID = "100000000000000000001";
+const DECK_ID = "c00000000000000000001";
+
+function validDocument() {
+  return PresentationDocumentSchema.parse({
+    id: DOC_ID,
+    userId: OWNER,
+    title: "주일 1부 예배",
+    serviceDate: "2026-09-27",
+    items: [
+      {
+        id: "300000000000000000001",
+        presentationId: DOC_ID,
+        deckId: DECK_ID,
+        order: 0,
+        deck: {
+          id: DECK_ID,
+          userId: OWNER,
+          scope: "presentation",
+          presentationId: DOC_ID,
+          title: "은혜로다",
+          artist: "손경민",
+          lyricsRaw: "은혜로다 주의 은혜",
+          slides: [{ id: "s1", order: 0, lines: ["은혜로다 주의 은혜"] }],
+          backgroundId: null,
+          style: DEFAULT_DECK_STYLE,
+          createdAt: "2026-09-20T00:00:00.000Z",
+          updatedAt: "2026-09-21T00:00:00.000Z",
+        },
+      },
+    ],
+    createdAt: "2026-09-20T00:00:00.000Z",
+    updatedAt: "2026-09-21T00:00:00.000Z",
+  });
+}
+
+function withDeck(
+  doc: ReturnType<typeof validDocument>,
+  deck: Record<string, unknown>,
+): Record<string, unknown> {
+  return {
+    ...doc,
+    items: doc.items.map((item) => ({
+      ...item,
+      deck: { ...item.deck, ...deck },
+    })),
+  };
+}
 
 describe("clampText", () => {
   it("한도 안의 글은 그대로 둔다", () => {
@@ -138,5 +192,92 @@ describe("toNonNegativeInt", () => {
     }
     expect(toNonNegativeInt(4)).toBe(4);
     expect(toNonNegativeInt(0)).toBe(0);
+  });
+});
+
+describe("appendWithinLimit", () => {
+  it("꼬리말을 붙여도 한도를 넘지 않게 앞 글을 줄인다", () => {
+    const appended = appendWithinLimit("가".repeat(96), " (사본)", 100);
+
+    expect(appended).toHaveLength(100);
+    expect(appended.endsWith(" (사본)")).toBe(true);
+  });
+
+  it("한도 안이면 꼬리말만 붙인다", () => {
+    expect(appendWithinLimit("주일 1부", " (사본)", 100)).toBe(
+      "주일 1부 (사본)",
+    );
+  });
+});
+
+describe("fitPresentationToLimits", () => {
+  it("한도 안의 문서는 키를 더하지 않고 그대로 돌려준다", () => {
+    const doc = validDocument();
+
+    expect(fitPresentationToLimits(doc)).toStrictEqual(doc);
+  });
+
+  it("프레젠테이션 제목과 곡의 제목·아티스트·원작자 이름을 한도로 줄인다", () => {
+    const fitted = fitPresentationToLimits(
+      withDeck(
+        { ...validDocument(), title: "가".repeat(150) },
+        {
+          title: "나".repeat(153),
+          artist: "다".repeat(150),
+          forkedFromAuthorName: "x".repeat(150),
+        },
+      ),
+    );
+
+    const parsed = PresentationDocumentSchema.parse(fitted);
+    expect(parsed.title).toBe("가".repeat(100));
+    expect(parsed.items[0].deck).toMatchObject({
+      title: "나".repeat(100),
+      artist: "다".repeat(100),
+      forkedFromAuthorName: "x".repeat(100),
+    });
+  });
+
+  it("문자열이 아닌 원작자 이름과 소유자 이름은 기본 이름으로 바꾸고 null은 그대로 둔다", () => {
+    const fitted = fitPresentationToLimits({
+      ...withDeck(validDocument(), { forkedFromAuthorName: 12345 }),
+      access: { ownerName: 0, memberId: OWNER },
+    }) as {
+      access: { ownerName: string };
+      items: { deck: { forkedFromAuthorName: unknown } }[];
+    };
+
+    expect(fitted.items[0].deck.forkedFromAuthorName).toBe(
+      FALLBACK_USER_NAME.default,
+    );
+    expect(fitted.access.ownerName).toBe(FALLBACK_USER_NAME.default);
+
+    const withNullAuthor = withDeck(validDocument(), {
+      forkedFromAuthorName: null,
+    });
+    expect(fitPresentationToLimits(withNullAuthor)).toStrictEqual(
+      withNullAuthor,
+    );
+  });
+
+  it("글 한도 밖의 잘못된 값은 고치지 않고 스키마가 거절하게 둔다", () => {
+    const doc = validDocument();
+    const broken = {
+      ...doc,
+      serviceDate: "nope",
+      items: [{ ...doc.items[0], deck: undefined }],
+    };
+
+    expect(fitPresentationToLimits(broken)).toStrictEqual(broken);
+    expect(
+      PresentationDocumentSchema.safeParse(fitPresentationToLimits(broken))
+        .success,
+    ).toBe(false);
+  });
+
+  it("객체가 아닌 값은 그대로 돌려준다", () => {
+    for (const value of [null, undefined, 42, "문서", [1, 2]]) {
+      expect(fitPresentationToLimits(value)).toBe(value);
+    }
   });
 });

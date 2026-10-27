@@ -59,6 +59,8 @@ import {
 } from "../../features/presentation/presentationStore";
 import { SEED_USER_ID as TEST_USER_ID } from "../../test/presentationFixture";
 import { OfflineError, ServerRejectedError } from "../api/request";
+import { UnsyncableDocumentError } from "./presentationSync";
+import { ERROR_COPY } from "#copy/common";
 import { MAX_BACKOFF_MS } from "./backoff";
 import {
   getSyncSnapshot,
@@ -73,7 +75,7 @@ const EMPTY_FOLDER_LIST: FolderListResponse = {
 
 const presentationSync = vi.hoisted(() => ({
   pullPresentations: vi.fn(async (): Promise<Presentation[]> => []),
-  pushPresentation: vi.fn<(doc: unknown) => Promise<boolean>>(async () => true),
+  pushPresentation: vi.fn<(doc: unknown) => Promise<unknown>>(async () => {}),
   pullDecks: vi.fn(
     async (): Promise<{ decks: Deck[]; deletedIds: string[] }> => ({
       decks: [],
@@ -320,6 +322,34 @@ describe("runBootSync — 동기화 상태", () => {
     await runBootSync();
 
     expect(getSyncSnapshot().status).toBe("error");
+  });
+
+  it("부팅 때 보낼 수 없는 프레젠테이션은 이유와 함께 동기화 실패로 남기고, 다시 시도하면 다시 올린다", async () => {
+    __loadDocumentsForTests([presentation(DOC)]);
+    presentationSync.pushPresentation.mockRejectedValueOnce(
+      new UnsyncableDocumentError(),
+    );
+
+    await runBootSync();
+
+    expect(getSyncSnapshot().status).toBe("error");
+    expect(getSyncSnapshot().lastFailure).toMatchObject({
+      id: DOC,
+      kind: "presentation",
+      reason: ERROR_COPY.documentInvalid,
+    });
+
+    retryPendingSyncNow("manual");
+    await flushPendingSync();
+
+    expect(presentationSync.pushPresentation).toHaveBeenCalledTimes(2);
+    expect(presentationSync.pushPresentation.mock.calls[1][0]).toMatchObject({
+      id: DOC,
+    });
+    expect(getSyncSnapshot()).toMatchObject({
+      status: "synced",
+      lastFailure: null,
+    });
   });
 
   it("곡을 받지 못하고 오프라인이면 offline으로 남는다", async () => {
