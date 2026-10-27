@@ -7,7 +7,11 @@ import {
   getRetryDelay,
   BackoffTracker,
 } from "./backoff";
-import { OfflineError, ServerRejectedError } from "../api/request";
+import {
+  OfflineError,
+  ServerRejectedError,
+  SessionExpiredError,
+} from "../api/request";
 
 describe("calculateBackoffWithJitter", () => {
   it("random이 1일 때 지수적으로 2배씩 증가한다", () => {
@@ -106,6 +110,19 @@ describe("BackoffTracker", () => {
 
     tracker.reset("doc-a");
     expect(tracker.getServerAttempt("doc-a")).toBe(0);
+  });
+
+  it("세션 만료(401)도 서버 재시도 횟수로 센다", () => {
+    const tracker = new BackoffTracker();
+    tracker.__setRandomForTests(() => 1);
+
+    expect(tracker.getDelay("doc-a", new SessionExpiredError())).toBe(
+      BASE_BACKOFF_MS,
+    );
+    tracker.getDelay("doc-a", new SessionExpiredError());
+
+    expect(tracker.getAttempt("doc-a")).toBe(2);
+    expect(tracker.getServerAttempt("doc-a")).toBe(2);
   });
 
   it("MAX_RETRY_ATTEMPTS 상수는 10이다", () => {

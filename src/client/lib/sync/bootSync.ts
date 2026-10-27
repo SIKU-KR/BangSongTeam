@@ -122,9 +122,9 @@ export function startBootSync(pathname: string): void {
  * 것이면 지금 한 번 돌린다. 송출 중이거나 미뤄 둔 부팅이 없으면 아무것도 하지 않는다.
  *
  * 세션도 보통 부팅처럼 함께 확인한다. 송출 화면의 부팅은 만료된 캐시 세션도 서버에 묻지 않고
- * 통과시킨다. 확인하지 않으면 받기·올리기가 모두 401로 실패하는데, 401은 세션 상태를 바꾸지
- * 않아 로그인 화면이 뜨지 않는다. 확인을 기다렸다가 부팅하지 않는 것은 그동안 큐가 꺼져 있어
- * 지운 곡을 잃기 때문이다.
+ * 통과시킨다. 확인하지 않으면 받기·올리기가 401로 실패한 뒤에야 세션을 확인하고, 그동안 받기
+ * 단계는 거절돼 포기한다. 확인을 기다렸다가 부팅하지 않는 것은 그동안 큐가 꺼져 있어 지운 곡을
+ * 잃기 때문이다.
  */
 export function runDeferredBootSync(): void {
   if (deferredBootUserId === null || isProjecting()) return;
@@ -215,6 +215,8 @@ export function useBootPullPending(domain: BootPullDomain): boolean {
  * 백오프 간격과 연결 회복(`retryBootSyncIfNeeded`)으로 다시 받고, 올리지 못한 항목은
  * 도메인 큐에 넘겨 큐의 백오프로 다시 올린다. 다시 하지 않으면 그 도메인이 세션 내내
  * '오프라인'으로 남아, 연결이 돌아와 저장이 다 끝나도 헤더가 초록색으로 돌아오지 않는다.
+ * 세션이 거절돼(401) 올리지 못한 항목도 버리지 않고 큐에 넘긴다. 큐는 재시도 한도 안에서 다시
+ * 보내고, 그사이 세션 확인이 로그인 만료를 확인하면 새로고침한 로그인 화면으로 간다.
  * 송출 화면에 있는 동안에는 다시 받지 않고 송출을 마친 뒤로 미룬다. 송출 중에는
  * API·데이터 요청이 0건이어야 하고, 받은 결과를 병합하면 띄운 문서가 바뀔 수 있다.
  * 부팅 도중에 송출을 시작해도 같다. 받기마다 그 직전과 받은 직후에 송출 중이면 그 단계를
@@ -605,10 +607,10 @@ async function pushLatestEach<T extends { id: string }>(
       await target.push(item);
     } catch (err) {
       if (generation !== bootGeneration) break;
-      if (err instanceof SessionExpiredError) {
-        sessionExpired = true;
-      } else if (isRetryableApiError(err)) {
-        offline = true;
+      const expired = err instanceof SessionExpiredError;
+      if (expired || isRetryableApiError(err)) {
+        if (expired) sessionExpired = true;
+        else offline = true;
         const latest = findLatest(target.current, id);
         if (latest) target.requeue(latest);
       } else {

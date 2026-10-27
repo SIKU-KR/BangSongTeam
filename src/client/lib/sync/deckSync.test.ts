@@ -15,6 +15,7 @@ import {
   wasDeckDeleted,
   markDeckDeleted,
   isDeckDeletedError,
+  hasPendingDeckSync,
   resumePendingDeckDeletes,
   __setDeckTransportForTests,
   __setDeckBackoffRandomForTests,
@@ -39,7 +40,7 @@ import {
   listPendingDeckDeletes,
   rememberDeckDelete,
 } from "./pendingDeckDeletes";
-import { MAX_BACKOFF_MS } from "./backoff";
+import { MAX_BACKOFF_MS, MAX_RETRY_ATTEMPTS } from "./backoff";
 
 const USER = "00000000x000000000001";
 const OTHER_USER = "00000000x000000000002";
@@ -893,6 +894,96 @@ describe("보관함 push 큐", () => {
       expect(listPendingDeckDeletes(OTHER_USER)).toEqual([
         "c0000000000000000000c",
       ]);
+    });
+  });
+
+  describe("세션 만료(401)", () => {
+    beforeEach(() => {
+      __setDeckBackoffRandomForTests(() => 1);
+      vi.useFakeTimers();
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it("401을 받은 DELETE는 버리지 않고 큐에 남겨 백오프 타이머로 다시 보낸다", async () => {
+      remove
+        .mockRejectedValueOnce(new SessionExpiredError())
+        .mockResolvedValue(true);
+
+      scheduleDeckDelete(A, USER);
+      await vi.advanceTimersByTimeAsync(2000);
+      expect(remove).toHaveBeenCalledTimes(1);
+      expect(getSyncSnapshot().status).toBe("error");
+      expect(hasPendingDeckSync()).toBe(true);
+
+      await vi.advanceTimersByTimeAsync(2000);
+
+      expect(remove).toHaveBeenCalledTimes(2);
+      expect(listPendingDeckDeletes(USER)).toEqual([]);
+      expect(getSyncSnapshot()).toMatchObject({
+        status: "synced",
+        lastFailure: null,
+      });
+    });
+
+    it("포커스(wake)는 401로 기다리는 DELETE를 앞당기지 않는다", async () => {
+      remove
+        .mockRejectedValueOnce(new SessionExpiredError())
+        .mockResolvedValue(true);
+
+      scheduleDeckDelete(A, USER);
+      await vi.advanceTimersByTimeAsync(2000);
+      await retryDeckSyncNow("wake");
+      await vi.advanceTimersByTimeAsync(1999);
+
+      expect(remove).toHaveBeenCalledTimes(1);
+
+      await vi.advanceTimersByTimeAsync(1);
+      expect(remove).toHaveBeenCalledTimes(2);
+    });
+
+    it("401이 재시도 한도까지 이어지면 실패로 남기되 삭제 기록은 지키고, '다시 시도'가 다시 보낸다", async () => {
+      remove.mockRejectedValue(new SessionExpiredError());
+
+      scheduleDeckDelete(A, USER);
+      await vi.advanceTimersByTimeAsync(2000);
+      for (let i = 0; i < MAX_RETRY_ATTEMPTS; i++) {
+        await vi.advanceTimersByTimeAsync(60_000);
+      }
+
+      expect(remove).toHaveBeenCalledTimes(MAX_RETRY_ATTEMPTS + 1);
+      expect(getSyncSnapshot()).toMatchObject({
+        status: "error",
+        lastFailure: { id: A, kind: "deck" },
+      });
+      expect(listPendingDeckDeletes(USER)).toEqual([A]);
+
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(remove).toHaveBeenCalledTimes(MAX_RETRY_ATTEMPTS + 1);
+
+      remove.mockResolvedValue(true);
+      await retryDeckSyncNow("manual");
+
+      expect(remove).toHaveBeenCalledTimes(MAX_RETRY_ATTEMPTS + 2);
+      expect(listPendingDeckDeletes(USER)).toEqual([]);
+      expect(getSyncSnapshot()).toMatchObject({
+        status: "synced",
+        lastFailure: null,
+      });
+    });
+
+    it("401을 받은 곡 push도 큐에 남겨 다시 올린다", async () => {
+      push.mockRejectedValueOnce(new SessionExpiredError());
+
+      scheduleDeckPush(deck("고친 곡"));
+      await vi.advanceTimersByTimeAsync(2000);
+      await vi.advanceTimersByTimeAsync(2000);
+
+      expect(push).toHaveBeenCalledTimes(2);
+      expect(push.mock.calls[1][0].title).toBe("고친 곡");
+      expect(getSyncSnapshot().status).toBe("synced");
     });
   });
 

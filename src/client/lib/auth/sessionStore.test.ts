@@ -12,6 +12,8 @@ import {
   revalidateSession,
   getSessionState,
   getCurrentUserId,
+  listenToOtherTabs,
+  requestSessionCheck,
   resumeDeferredSessionWork,
   setAccountHooks,
   signInWithEmail,
@@ -23,6 +25,7 @@ import {
   __resetSessionForTests,
   type SessionFetcher,
 } from "./sessionStore";
+import { installFakeBroadcastChannel } from "../../test/fakeBroadcastChannel";
 
 vi.mock("./authClient", () => ({
   authClient: {
@@ -73,6 +76,7 @@ const HOUR = 60 * 60 * 1000;
 const USER_ID = "8f14e45fc1a2b3c4d5e6f";
 const OTHER_USER_ID = "bbbbbbbbc1a2b3c4d5e6f";
 const SESSION_END_KEY = "chiton:session-end";
+const SESSION_CHANNEL = "chiton:session";
 
 function makeUser(overrides = {}) {
   return {
@@ -848,6 +852,282 @@ describe("세션 스토어", () => {
       expect(stopAccountSync).toHaveBeenCalledTimes(1);
       expect(getCurrentUserId()).toBe(USER_ID);
       expect(reload).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("401·403 뒤의 세션 확인 (requestSessionCheck)", () => {
+    it("로그인한 탭에서만 확인하고, 겹쳐 불러도 서버에 한 번만 묻는다", async () => {
+      const loading = holdFetcher();
+      requestSessionCheck();
+      expect(loading.fetcher).not.toHaveBeenCalled();
+
+      __setSessionFetcherForTests(async () => null);
+      await hydrateSession();
+      const signedOut = holdFetcher();
+      requestSessionCheck();
+      expect(signedOut.fetcher).not.toHaveBeenCalled();
+
+      await signInAsCachedUser();
+      const check = holdFetcher();
+      requestSessionCheck();
+      requestSessionCheck();
+      check.answer(makeUser());
+      await revalidateSession();
+
+      expect(check.fetcher).toHaveBeenCalledTimes(1);
+      expect(reload).not.toHaveBeenCalled();
+    });
+
+    it("확인한 서버가 세션 없음을 답하면 만료로 계정을 끝낸다", async () => {
+      await signInAsCachedUser();
+      __setSessionFetcherForTests(async () => null);
+
+      requestSessionCheck();
+
+      await vi.waitFor(() => expect(reload).toHaveBeenCalledTimes(1));
+      expect(window.sessionStorage.getItem(SESSION_END_KEY)).toBe("expired");
+      expect(await loadCachedSession()).toBeNull();
+    });
+
+    it("로그아웃이 변경을 보내는 동안에는 확인하지 않는다", async () => {
+      await signInAsCachedUser();
+      const finishFlush = holdFlushBeforeSignOut();
+      const fetcher = vi.fn<SessionFetcher>(async () => null);
+      __setSessionFetcherForTests(fetcher);
+
+      const signingOut = signOut();
+      requestSessionCheck();
+      finishFlush();
+      await signingOut;
+
+      expect(fetcher).not.toHaveBeenCalled();
+      expect(window.sessionStorage.getItem(SESSION_END_KEY)).toBe("signedOut");
+    });
+
+    it("계정이 끝난 뒤에는 확인하지 않는다", async () => {
+      await signInAsCachedUser();
+      window.history.replaceState({}, "", "/present/x/fullscreen");
+      __setSessionFetcherForTests(async () => null);
+      await revalidateSession();
+      const fetcher = vi.fn<SessionFetcher>(async () => makeUser());
+      __setSessionFetcherForTests(fetcher);
+
+      requestSessionCheck();
+      window.history.replaceState({}, "", "/presentations");
+      resumeDeferredSessionWork();
+      await vi.waitFor(() => expect(reload).toHaveBeenCalledTimes(1));
+
+      expect(fetcher).not.toHaveBeenCalled();
+    });
+
+    it("송출 중에는 묻지 않고, 송출을 마치면 한 번 확인한다", async () => {
+      await signInAsCachedUser();
+      const fetcher = vi.fn<SessionFetcher>(async () => makeUser());
+      __setSessionFetcherForTests(fetcher);
+      window.history.replaceState({}, "", "/present/x/fullscreen");
+
+      requestSessionCheck();
+      requestSessionCheck();
+      resumeDeferredSessionWork();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      expect(fetcher).not.toHaveBeenCalled();
+
+      window.history.replaceState({}, "", "/presentations");
+      resumeDeferredSessionWork();
+      await vi.waitFor(() => expect(fetcher).toHaveBeenCalledTimes(1));
+      resumeDeferredSessionWork();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      expect(fetcher).toHaveBeenCalledTimes(1);
+      expect(reload).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("다른 탭의 로그인 변화 (listenToOtherTabs)", () => {
+    let tabs: ReturnType<typeof installFakeBroadcastChannel>;
+    let stopListening: () => void;
+
+    function nextTask(): Promise<void> {
+      return new Promise((resolve) => setTimeout(resolve, 0));
+    }
+
+    beforeEach(() => {
+      tabs = installFakeBroadcastChannel();
+      stopListening = listenToOtherTabs();
+    });
+
+    afterEach(() => {
+      stopListening();
+      vi.unstubAllGlobals();
+    });
+
+    it("다른 탭이 로그아웃했다고 알리면 캐시를 비우고 새로고침한다", async () => {
+      await signInAsCachedUser();
+      const other = tabs.otherTab(SESSION_CHANNEL);
+
+      other.post({ userId: null });
+
+      await vi.waitFor(() => expect(reload).toHaveBeenCalledTimes(1));
+      expect(await loadCachedSession()).toBeNull();
+      expect(window.sessionStorage.getItem(SESSION_END_KEY)).toBe("otherTab");
+      expect(getSessionState()).toEqual({ status: "loading", user: null });
+    });
+
+    it("다른 탭이 다른 계정으로 로그인했다고 알리면 캐시를 그대로 두고 새로고침한다", async () => {
+      await signInAsCachedUser();
+      const other = tabs.otherTab(SESSION_CHANNEL);
+
+      other.post({ userId: OTHER_USER_ID });
+
+      await vi.waitFor(() => expect(reload).toHaveBeenCalledTimes(1));
+      expect((await loadCachedSession())?.userId).toBe(USER_ID);
+    });
+
+    it("같은 계정이라는 알림과 모양이 다른 메시지는 무시한다", async () => {
+      await signInAsCachedUser();
+      const other = tabs.otherTab(SESSION_CHANNEL);
+
+      other.post({ userId: USER_ID });
+      other.post({ userId: 42 });
+      other.post("로그아웃");
+      await nextTask();
+
+      expect(reload).not.toHaveBeenCalled();
+      expect(getCurrentUserId()).toBe(USER_ID);
+    });
+
+    it("로그인하지 않은 탭은 어떤 알림에도 그대로 있다", async () => {
+      __setSessionFetcherForTests(async () => null);
+      await hydrateSession();
+      const other = tabs.otherTab(SESSION_CHANNEL);
+
+      other.post({ userId: OTHER_USER_ID });
+      other.post({ userId: null });
+      await nextTask();
+
+      expect(reload).not.toHaveBeenCalled();
+      expect(getSessionState().status).toBe("unauthenticated");
+    });
+
+    it("부팅 중인 탭은 알림을 받으면 새로고침한다", async () => {
+      const boot = holdFetcher();
+      const hydrating = hydrateSession();
+      await vi.waitFor(() => expect(boot.fetcher).toHaveBeenCalled());
+      const other = tabs.otherTab(SESSION_CHANNEL);
+
+      other.post({ userId: OTHER_USER_ID });
+      await vi.waitFor(() => expect(reload).toHaveBeenCalledTimes(1));
+      boot.answer(makeUser());
+      await hydrating;
+
+      expect(getSessionState()).toEqual({ status: "loading", user: null });
+    });
+
+    it("송출 중이면 동기화만 끄고, 새로고침은 송출을 마친 뒤에 한다", async () => {
+      await signInAsCachedUser();
+      const stopAccountSync = vi.fn(async () => undefined);
+      setAccountHooks({
+        flushBeforeSignOut: vi.fn(async () => undefined),
+        stopAccountSync,
+      });
+      window.history.replaceState({}, "", "/present/abc/fullscreen");
+      const other = tabs.otherTab(SESSION_CHANNEL);
+
+      other.post({ userId: OTHER_USER_ID });
+      await vi.waitFor(() => expect(stopAccountSync).toHaveBeenCalledTimes(1));
+      other.post({ userId: null });
+      await nextTask();
+
+      expect(reload).not.toHaveBeenCalled();
+      expect(getCurrentUserId()).toBe(USER_ID);
+      expect(stopAccountSync).toHaveBeenCalledTimes(1);
+
+      window.history.replaceState({}, "", "/presentations");
+      resumeDeferredSessionWork();
+
+      await vi.waitFor(() => expect(reload).toHaveBeenCalledTimes(1));
+      expect(window.sessionStorage.getItem(SESSION_END_KEY)).toBe("otherTab");
+    });
+
+    it("로그아웃·이메일 로그인·세션 확인 결과를 알리고, 부팅은 알리지 않는다", async () => {
+      const other = tabs.otherTab(SESSION_CHANNEL);
+      await signInAsCachedUser();
+      await nextTask();
+      expect(other.received).toEqual([]);
+
+      await signOut();
+      await nextTask();
+      expect(other.received).toEqual([{ userId: null }]);
+
+      __resetSessionForTests();
+      __setPageReloadForTests(reload);
+      stopListening = listenToOtherTabs();
+      __setSessionFetcherForTests(async () => null);
+      await hydrateSession();
+      signInEmail.mockResolvedValueOnce({ data: {}, error: null } as never);
+      __setSessionFetcherForTests(async () => makeUser());
+      await signInWithEmail("team@example.com", "password-1234");
+      await nextTask();
+      expect(other.received).toEqual([{ userId: null }, { userId: USER_ID }]);
+
+      __setSessionFetcherForTests(async () =>
+        makeUser({ userId: OTHER_USER_ID }),
+      );
+      await revalidateSession();
+      await nextTask();
+      expect(other.received).toEqual([
+        { userId: null },
+        { userId: USER_ID },
+        { userId: OTHER_USER_ID },
+      ]);
+    });
+
+    it("세션 확인이 세션 없음을 찾으면 다른 탭에 로그아웃을 알린다", async () => {
+      const other = tabs.otherTab(SESSION_CHANNEL);
+      await signInAsCachedUser();
+
+      __setSessionFetcherForTests(async () => null);
+      await revalidateSession();
+      await nextTask();
+
+      expect(other.received).toEqual([{ userId: null }]);
+    });
+
+    it("로그아웃이 변경을 보내는 동안 다른 탭이 바뀌면 서버에 알리지 않고 한 번 새로고침한다", async () => {
+      await signInAsCachedUser();
+      const finishFlush = holdFlushBeforeSignOut();
+      const other = tabs.otherTab(SESSION_CHANNEL);
+
+      const signingOut = signOut();
+      other.post({ userId: OTHER_USER_ID });
+      await nextTask();
+      expect(reload).not.toHaveBeenCalled();
+
+      finishFlush();
+      await signingOut;
+
+      expect(authSignOut).not.toHaveBeenCalled();
+      expect(reload).toHaveBeenCalledTimes(1);
+      expect(window.sessionStorage.getItem(SESSION_END_KEY)).toBe("otherTab");
+    });
+
+    it("로그아웃 요청 중에 다른 탭이 로그인하면 그 탭이 남긴 세션 캐시를 지우지 않는다", async () => {
+      await signInAsCachedUser();
+      const sent = deferred<SignOutResult>();
+      authSignOut.mockReturnValueOnce(sent.promise);
+      const other = tabs.otherTab(SESSION_CHANNEL);
+
+      const signingOut = signOut();
+      await vi.waitFor(() => expect(authSignOut).toHaveBeenCalledTimes(1));
+      await saveCachedSession(makeUser({ userId: OTHER_USER_ID }));
+      other.post({ userId: OTHER_USER_ID });
+      await nextTask();
+      sent.resolve({ data: { success: true }, error: null } as SignOutResult);
+      await signingOut;
+
+      expect((await loadCachedSession())?.userId).toBe(OTHER_USER_ID);
+      expect(reload).toHaveBeenCalledTimes(1);
     });
   });
 

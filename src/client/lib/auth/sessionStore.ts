@@ -2,7 +2,9 @@ import { useSyncExternalStore } from "react";
 import {
   AuthSessionResponseSchema,
   FALLBACK_USER_NAME,
+  SessionBroadcastSchema,
   type EmailSignUpRequest,
+  type SessionBroadcast,
   type SessionEndReason,
 } from "#shared";
 import {
@@ -15,6 +17,7 @@ import {
 } from "./sessionCache";
 import { authClient, type SocialProvider } from "./authClient";
 import { isProjectionPath } from "../../features/presentation/fullscreen";
+import { createBroadcast, type Broadcast } from "../browser/broadcast";
 import { AUTH_COPY } from "#copy/auth";
 
 type SessionStatus = "loading" | "authenticated" | "unauthenticated";
@@ -46,6 +49,7 @@ export interface AccountHooks {
 
 const CACHED_SESSION_CHECK_TIMEOUT_MS = 5000;
 const FIRST_SESSION_CHECK_TIMEOUT_MS = 15000;
+const SESSION_CHANNEL = "chiton:session";
 
 const fetchFromServer: SessionFetcher = async (timeoutMs) => {
   const result = await authClient.getSession({
@@ -79,10 +83,13 @@ let hooks: AccountHooks | null = null;
 let pageReload: () => void = reloadWindow;
 let epoch = 0;
 let transitioning = false;
+let changedElsewhere = false;
+let checkDeferred = false;
 let accountEndReason: SessionEndReason | null = null;
 let leaving: Promise<void> | null = null;
 let hydration: Promise<SessionState> | null = null;
 let revalidation: Promise<void> | null = null;
+let otherTabs: Broadcast<SessionBroadcast> | null = null;
 
 function setState(next: SessionState): void {
   state = next;
@@ -149,20 +156,108 @@ function finishLeaving(reason: SessionEndReason): Promise<void> {
 }
 
 /**
- * 송출 화면을 떠났을 때 부른다. 송출 중에 계정이 끝났으면 미뤄 둔 새로고침을 지금 한다. 송출
- * 중이거나 미뤄 둔 일이 없으면 아무것도 하지 않는다.
+ * 송출 화면을 떠났을 때 부른다. 송출 중에 계정이 끝났으면 미뤄 둔 새로고침을 지금 하고, 송출
+ * 중에 미뤄 둔 세션 확인(`requestSessionCheck`)이 있으면 지금 한 번 한다. 송출 중이거나 미뤄 둔
+ * 일이 없으면 아무것도 하지 않는다.
  *
- * 계정이 끝나면(로그아웃·세션 만료·다른 계정) 세 큐를 끄고 저장본 쓰기를 마친 뒤 새로고침한다.
- * 새로고침이 앞 계정의 메모리 큐·타이머·실패 기록·스토어를 모두 비우고, 다음 부팅이 누가
- * 로그인했는지 정한다. 송출 중이면 큐만 끄고 세션 상태와 epoch는 그대로 둔다. 송출 화면을 다시
- * 그리거나 송출 화면의 부팅을 버리면 관객 화면이 끊긴다.
+ * 계정이 끝나면(로그아웃·세션 만료·다른 계정·다른 탭의 로그인 변화) 세 큐를 끄고 저장본 쓰기를
+ * 마친 뒤 새로고침한다. 새로고침이 앞 계정의 메모리 큐·타이머·실패 기록·스토어를 모두 비우고,
+ * 다음 부팅이 누가 로그인했는지 정한다. 송출 중이면 큐만 끄고 세션 상태와 epoch는 그대로 둔다.
+ * 송출 화면을 다시 그리거나 송출 화면의 부팅을 버리면 관객 화면이 끊긴다.
  *
  * 송출 화면 밖에서 시작한 새로고침은 끝까지 한다. 로딩 화면이 이미 송출 화면을 내렸으므로,
  * 그사이 뒤로 가기로 주소가 송출 화면으로 바뀌었다고 미루면 탭이 로딩 화면에 멈춘다.
  */
 export function resumeDeferredSessionWork(): void {
-  if (accountEndReason === null || isProjecting()) return;
-  void finishLeaving(accountEndReason);
+  if (isProjecting()) return;
+  if (accountEndReason !== null) {
+    checkDeferred = false;
+    void finishLeaving(accountEndReason);
+    return;
+  }
+  if (!checkDeferred) return;
+  checkDeferred = false;
+  requestSessionCheck();
+}
+
+/**
+ * 동기화 요청이 401(세션 거절)이나 403(다른 계정의 문서)을 받았을 때 부른다. 서버에 세션을 다시
+ * 물어(`revalidateSession`) 세션이 없으면 만료로, 다른 사용자면 계정 전환으로 계정을 끝낸다.
+ *
+ * 401 하나로 곧바로 로그아웃하지 않는다. 엔드포인트 하나나 프록시 하나가 401을 내도 세션은 살아
+ * 있을 수 있어서, 부팅처럼 get-session으로 확인한 결과만 따른다. 확인하지 못하면(오프라인·5xx)
+ * 그대로 두고 큐가 재시도 한도 안에서 다시 보낸다. 403은 다른 탭에서 계정이 바뀐 낡은 탭이 받는다.
+ *
+ * 로그인한 탭에서만, 한 번에 하나만 묻는다. 로그아웃·로그인 중이거나 계정이 이미 끝났으면
+ * 아무것도 하지 않는다. 송출 중이면 묻지 않고 송출을 마칠 때까지 미룬다(`resumeDeferredSessionWork`).
+ * 송출 중에는 요청이 0건이어야 한다.
+ */
+export function requestSessionCheck(): void {
+  if (
+    state.status !== "authenticated" ||
+    transitioning ||
+    accountEndReason !== null
+  ) {
+    return;
+  }
+  if (isProjecting()) {
+    checkDeferred = true;
+    return;
+  }
+  void revalidateSession();
+}
+
+/**
+ * 같은 브라우저의 다른 탭이 알리는 로그인 변화를 듣는다(`chiton:session`). 돌려준 함수로 끈다.
+ * `App`이 세션을 복원하기 전에 켠다.
+ *
+ * 탭들은 쿠키와 IndexedDB의 세션 캐시를 함께 쓴다. 다른 탭에서 로그아웃하거나 다른 계정으로
+ * 로그인하면 이 탭의 큐가 다음 계정의 쿠키로 앞 계정의 문서를 올린다. 그래서 알림을 받으면:
+ *
+ * - 로그아웃·로그인 중이면 표시만 남긴다(`signOut`이 보고 서버에 알리지 않거나 캐시를 지우지 않는다).
+ * - 같은 사용자로 로그인한 탭과 로그인하지 않은 탭은 그대로 둔다. 로그인하지 않은 탭에는 계정
+ *   상태가 없고, 공유 링크를 보던 손님을 새 계정으로 들이면 안 된다.
+ * - 그 밖에는(다른 사용자, 아직 부팅 중인 탭) 로그아웃 알림이면 세션 캐시를 먼저 지우고 계정을
+ *   끝낸다(`otherTab`). 부팅 중인 탭은 바뀌기 전의 캐시를 이미 읽었을 수 있다. 캐시를 지우는 것은
+ *   이 탭의 늦은 세션 확인이 보낸 탭이 지운 뒤에 앞 계정을 다시 썼을 수 있어서다.
+ *
+ * 알린 사용자를 그대로 쓰지는 않는다. 새로고침한 부팅이 서버에 물어 정한다. 이 탭이 일으킨
+ * 변화(로그아웃·이메일 로그인·세션 확인 결과)만 알리고, 부팅과 받은 알림은 다시 알리지 않는다.
+ * `BroadcastChannel`이 없으면 다음 동기화 요청의 401·403 확인으로 따라간다.
+ */
+export function listenToOtherTabs(): () => void {
+  otherTabs?.close();
+  const channel = createBroadcast(SESSION_CHANNEL, SessionBroadcastSchema);
+  otherTabs = channel;
+  channel.subscribe(followOtherTab);
+  return () => {
+    channel.close();
+    if (otherTabs === channel) otherTabs = null;
+  };
+}
+
+function announce(userId: string | null): void {
+  otherTabs?.post({ userId });
+}
+
+function otherTabChanged(): boolean {
+  return changedElsewhere;
+}
+
+function followOtherTab({ userId }: SessionBroadcast): void {
+  if (transitioning) {
+    changedElsewhere = true;
+    return;
+  }
+  if (state.status === "unauthenticated") return;
+  if (state.status === "authenticated" && state.user?.userId === userId) {
+    return;
+  }
+  void (async (): Promise<void> => {
+    if (userId === null) await forget();
+    if (accountEndReason !== null) return;
+    await leaveAccount("otherTab");
+  })();
 }
 
 /**
@@ -252,9 +347,9 @@ async function restoreSession(): Promise<SessionState> {
 /**
  * 서버에 세션을 다시 확인한다. 한 번에 하나만 보낸다.
  *
- * - 세션이 없으면 캐시를 지우고 계정을 끝낸다(`expired`).
- * - 다른 사용자면 그 사용자를 캐시에 남기고 계정을 끝낸다(`switched`). 제자리에서 바꾸면 앞
- *   계정의 큐·스토어가 남아 다음 쿠키로 올라간다.
+ * - 세션이 없으면 캐시를 지우고, 다른 탭에 로그아웃을 알리고, 계정을 끝낸다(`expired`).
+ * - 다른 사용자면 그 사용자를 캐시에 남기고, 다른 탭에 알리고, 계정을 끝낸다(`switched`).
+ *   제자리에서 바꾸면 앞 계정의 큐·스토어가 남아 다음 쿠키로 올라간다.
  * - 같은 사용자면 만료 시각을 갱신한다. 확인하지 못하면(오프라인·5xx) 아무것도 하지 않는다.
  *
  * 결과는 그사이 로그아웃·로그인이 시작됐거나(epoch), 계정이 이미 끝났거나, 로그인 상태가 아니면
@@ -291,6 +386,7 @@ async function checkSession(): Promise<void> {
   if (!user) {
     await forget();
     if (!isStillSignedIn(started)) return;
+    announce(null);
     await leaveAccount("expired");
     return;
   }
@@ -298,6 +394,7 @@ async function checkSession(): Promise<void> {
   await persist(user);
   if (!isStillSignedIn(started)) return;
   if (user.userId !== state.user?.userId) {
+    announce(user.userId);
     await leaveAccount("switched");
     return;
   }
@@ -377,6 +474,7 @@ async function signInThen(request: () => Promise<void>): Promise<void> {
     await adoptSignedInSession();
   } finally {
     transitioning = false;
+    changedElsewhere = false;
   }
 }
 
@@ -400,10 +498,11 @@ async function adoptSignedInSession(): Promise<void> {
   await persist(user);
   if (started !== epoch) return;
   setState({ status: "authenticated", user });
+  announce(user.userId);
 }
 
 /**
- * 이메일·비밀번호로 로그인한다. 성공하면 서버 세션으로 세션 스토어를 갱신한다.
+ * 이메일·비밀번호로 로그인한다. 성공하면 서버 세션으로 세션 스토어를 갱신하고 다른 탭에 알린다.
  *
  * 새로고침 없이 그 자리에서 들어간다. 계정이 끝나면 늘 새로고침하므로 로그인 화면을 보이는
  * 페이지에는 다른 계정의 큐·스토어가 남아 있지 않다. 그사이 시작된 세션 확인의 늦은 결과가
@@ -438,12 +537,16 @@ export async function signUpWithEmail(
 
 /**
  * 로그아웃한다. 대기 중인 저장과 변경을 먼저 보내고(`flushBeforeSignOut`), 서버에 로그아웃을
- * 알리고, 캐시를 지운 뒤 계정을 끝낸다(`signedOut`). 로그아웃 중이거나 계정이 이미 끝났으면
- * 아무것도 하지 않는다.
+ * 알리고, 캐시를 지우고, 다른 탭에 알린 뒤 계정을 끝낸다(`signedOut`). 로그아웃 중이거나 계정이
+ * 이미 끝났으면 아무것도 하지 않는다.
  *
  * 보내기는 쿠키가 아직 유효할 때 한다. 로그아웃 뒤의 요청은 401로 버려진다. 시작하자마자 epoch를
  * 올려, 그 전에 시작한 세션 확인이 늦게 끝나며 지운 캐시에 이 계정을 다시 쓰지 않게 한다. 서버에
  * 알리지 못해도 이 탭은 로그아웃한다. 공용 PC에서 다음 사람에게 계정이 남으면 안 된다.
+ *
+ * 그사이 다른 탭의 로그인 변화를 받았으면(`listenToOtherTabs`) 따른다. 보내는 동안 받았으면 서버에
+ * 알리지 않고 그 탭을 따라 계정을 끝낸다(`otherTab`). 지금 쿠키는 다른 탭이 로그인한 계정일 수
+ * 있다. 서버에 알리는 동안 받았으면 캐시를 지우지 않는다. 다른 탭이 남긴 세션 캐시다.
  */
 export async function signOut(): Promise<void> {
   if (transitioning || accountEndReason !== null) return;
@@ -451,11 +554,17 @@ export async function signOut(): Promise<void> {
   epoch += 1;
   try {
     await hooks?.flushBeforeSignOut().catch(() => undefined);
+    if (otherTabChanged()) {
+      await leaveAccount("otherTab");
+      return;
+    }
     await authClient.signOut().catch(() => undefined);
-    await forget();
+    if (!otherTabChanged()) await forget();
+    announce(null);
     await leaveAccount("signedOut");
   } finally {
     transitioning = false;
+    changedElsewhere = false;
   }
 }
 
@@ -498,6 +607,10 @@ export function __resetSessionForTests(): void {
   pageReload = reloadWindow;
   epoch += 1;
   transitioning = false;
+  changedElsewhere = false;
+  checkDeferred = false;
+  otherTabs?.close();
+  otherTabs = null;
   accountEndReason = null;
   leaving = null;
   hydration = null;

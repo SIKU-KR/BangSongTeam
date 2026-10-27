@@ -5,6 +5,7 @@ import {
   scheduleDocumentPush,
   cancelDocumentPush,
   flushPendingSync,
+  retryPendingSyncNow,
   setSyncEnabled,
   SYNC_DEBOUNCE_MS,
   SYNC_MAX_WAIT_MS,
@@ -12,6 +13,7 @@ import {
   __setPusherForTests,
   __setBackoffRandomForTests,
 } from "./syncScheduler";
+import { MAX_RETRY_ATTEMPTS } from "./backoff";
 import { getSyncSnapshot, resetSyncStatus } from "./syncStatus";
 import { __resetServerDecksForTests } from "./presentationSync";
 import {
@@ -531,18 +533,80 @@ describe("서버 push 스케줄러", () => {
     vi.useRealTimers();
   });
 
-  it("401 세션 만료는 재시도하지 않는다", async () => {
-    push.mockRejectedValue(new SessionExpiredError());
+  describe("401이면 항목을 버리지 않고 백오프 뒤 다시 보내고, 한도를 넘으면 실패로 남긴다", () => {
+    beforeEach(() => {
+      __setBackoffRandomForTests(() => 1);
+      vi.useFakeTimers();
+    });
 
-    scheduleDocumentPush(doc("a"));
-    await flushPendingSync();
+    afterEach(() => {
+      vi.useRealTimers();
+    });
 
-    expect(getSyncSnapshot().status).toBe("error");
+    it("401 뒤 세션이 살아 있으면 백오프 뒤 다시 보내 동기화됨으로 끝난다", async () => {
+      push
+        .mockRejectedValueOnce(new SessionExpiredError())
+        .mockResolvedValue(true);
 
-    vi.useFakeTimers();
-    await vi.advanceTimersByTimeAsync(60_000);
-    expect(push).toHaveBeenCalledTimes(1);
-    vi.useRealTimers();
+      scheduleDocumentPush(doc("a"));
+      await vi.advanceTimersByTimeAsync(SYNC_DEBOUNCE_MS);
+      expect(push).toHaveBeenCalledTimes(1);
+      expect(getSyncSnapshot().status).toBe("error");
+
+      await vi.advanceTimersByTimeAsync(2000);
+
+      expect(push).toHaveBeenCalledTimes(2);
+      expect(push.mock.calls[1][0].id).toBe("a");
+      expect(getSyncSnapshot()).toMatchObject({
+        status: "synced",
+        lastFailure: null,
+      });
+    });
+
+    it("401이 이어지면 재시도 한도 뒤 실패로 남기고, '다시 시도'가 다시 보낸다", async () => {
+      push.mockRejectedValue(new SessionExpiredError());
+
+      scheduleDocumentPush(doc("a", "만료된 세트"));
+      await vi.advanceTimersByTimeAsync(SYNC_DEBOUNCE_MS);
+      for (let i = 0; i < MAX_RETRY_ATTEMPTS; i++) {
+        await vi.advanceTimersByTimeAsync(60_000);
+      }
+
+      expect(push).toHaveBeenCalledTimes(MAX_RETRY_ATTEMPTS + 1);
+      expect(getSyncSnapshot()).toMatchObject({
+        status: "error",
+        lastFailure: { id: "a", title: "만료된 세트", kind: "presentation" },
+      });
+
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(push).toHaveBeenCalledTimes(MAX_RETRY_ATTEMPTS + 1);
+
+      push.mockResolvedValue(true);
+      retryPendingSyncNow("manual");
+      await flushPendingSync();
+
+      expect(push).toHaveBeenCalledTimes(MAX_RETRY_ATTEMPTS + 2);
+      expect(getSyncSnapshot()).toMatchObject({
+        status: "synced",
+        lastFailure: null,
+      });
+    });
+
+    it("포커스(wake)는 401로 기다리는 항목을 앞당기지 않는다", async () => {
+      push
+        .mockRejectedValueOnce(new SessionExpiredError())
+        .mockResolvedValue(true);
+
+      scheduleDocumentPush(doc("a"));
+      await vi.advanceTimersByTimeAsync(SYNC_DEBOUNCE_MS);
+      retryPendingSyncNow("wake");
+      await vi.advanceTimersByTimeAsync(1999);
+
+      expect(push).toHaveBeenCalledTimes(1);
+
+      await vi.advanceTimersByTimeAsync(1);
+      expect(push).toHaveBeenCalledTimes(2);
+    });
   });
 
   it("동시에 여러 문서가 실패해도 각 문서의 백오프 attempt는 독립적으로 계산된다", async () => {

@@ -163,19 +163,19 @@ async function runOps(ops: PendingOp[]): Promise<void> {
         goneListener?.(key);
         continue;
       }
-      if (err instanceof SessionExpiredError) {
-        sessionExpired = true;
-        pending.delete(key);
-        waitingOnServer.delete(key);
-        backoff.reset(key);
-      } else if (
+      const expired = err instanceof SessionExpiredError;
+      if (
         err instanceof OfflineError ||
-        (isRetryableApiError(err) &&
+        ((isRetryableApiError(err) || expired) &&
           backoff.getServerAttempt(key) < MAX_RETRY_ATTEMPTS)
       ) {
-        offline = true;
-        if (err instanceof ServerRejectedError) waitingOnServer.add(key);
-        else waitingOnServer.delete(key);
+        if (expired) sessionExpired = true;
+        else offline = true;
+        if (err instanceof ServerRejectedError || expired) {
+          waitingOnServer.add(key);
+        } else {
+          waitingOnServer.delete(key);
+        }
         if (!pending.has(key)) pending.set(key, op);
         const delay = backoff.getDelay(key, err);
         if (delay < minRetryDelay) minRetryDelay = delay;
@@ -184,7 +184,9 @@ async function runOps(ops: PendingOp[]): Promise<void> {
         waitingOnServer.delete(key);
         backoff.reset(key);
         failed.set(key, op);
-        if (op.kind === "delete") forgetDeckDelete(op.userId, op.id);
+        if (op.kind === "delete" && !expired) {
+          forgetDeckDelete(op.userId, op.id);
+        }
         const failure: SyncFailure = {
           id: key,
           title: op.kind === "push" ? op.deck.title : undefined,
@@ -209,7 +211,7 @@ async function runOps(ops: PendingOp[]): Promise<void> {
     backoff.reset();
     setSyncStatus("deck", "synced");
   }
-  if (offline && !timer && minRetryDelay !== Infinity) {
+  if ((offline || sessionExpired) && !timer && minRetryDelay !== Infinity) {
     timer = setTimeout(run, minRetryDelay);
   }
 }
@@ -268,6 +270,8 @@ export function scheduleDeckPush(deck: Deck): void {
  * 보낸다. 서버가 지웠다고 답하거나 다시 보내도 지울 수 없을 때(영구 실패)만 기록을 지운다.
  * 영구 실패에도 남기면 서버에 남은 곡이 이 기기에서만 끝내 가려진다. 404(다른 계정의 쿠키로
  * 보낸 요청)·세션 만료·오프라인·일시 장애는 기록을 남겨 그 계정의 다음 부팅에 다시 보낸다.
+ * 세션 만료(401)는 재시도 한도를 넘겨 실패로 남아도 기록을 남긴다. 서버가 삭제를 거절한 것이
+ * 아니라 이 탭의 로그인이 끝난 것이라, 그 계정으로 다시 로그인한 부팅이 지우면 된다.
  */
 export function scheduleDeckDelete(id: string, userId: string): void {
   rememberDeckDelete(userId, id);
@@ -371,7 +375,7 @@ export function holdFailedDeckPush(deck: Deck): void {
 /**
  * 연결 회복 신호(`syncRecovery`)에 맞춰 대기 중인 곡 변경을 곧바로 보낸다.
  *
- * `wake`는 서버가 거절해(5xx·429) 기다리는 곡만 백오프 타이머에 맡기고 나머지는 곧바로
+ * `wake`는 서버가 거절해(5xx·429·401) 기다리는 곡만 백오프 타이머에 맡기고 나머지는 곧바로
  * 보낸다. 포커스마다 앞당기면 `Retry-After`를 어기고 서버 재시도 한도에 이르지 못한다.
  * 곡 변경끼리는 순서가 없으므로 오프라인으로 밀린 곡까지 함께 기다릴 까닭이 없다.
  * `reconnect`·`manual`은 백오프를 비우고 모두 보낸다(`syncScheduler`와 같다). 비우지

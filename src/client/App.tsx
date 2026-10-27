@@ -17,6 +17,7 @@ import { hydrateBackgroundCatalog } from "./features/backgrounds/backgroundCatal
 import {
   getCurrentUserId,
   hydrateSession,
+  listenToOtherTabs,
   resumeDeferredSessionWork,
   setAccountHooks,
   useSession,
@@ -57,12 +58,14 @@ function useHydration(): boolean {
   useEffect(() => {
     const controller = new AbortController();
     setAccountHooks({ flushBeforeSignOut, stopAccountSync });
+    const stopListening = listenToOtherTabs();
     void (async () => {
       await hydrateSession();
       if (!controller.signal.aborted) setIsSessionResolved(true);
     })();
     return () => {
       controller.abort();
+      stopListening();
       setAccountHooks(null);
     };
   }, []);
@@ -140,16 +143,18 @@ function isGuestPath(pathname: string): boolean {
  * 이 컴포넌트는 세션·로컬 저장소를 불러오는 동안의 로딩 화면과 로그인 여부에 따른
  * 화면 선택을 맡는다.
  *
- * 계정이 끝나면(로그아웃·세션 만료·다른 계정) 세션이 다시 `loading`이 되고, 동기화를 끄고
- * 새로고침할 때까지 로딩 화면이 앞 계정의 화면을 덮는다. 송출 중에 끝나면 세션 스토어가 동기화만
- * 끄고 송출 화면을 그대로 두었다가, 송출을 마치고 다른 주소로 나갈 때 새로고침한다. 트리를
- * 바꾸면 송출 화면이 다시 마운트되어 관객 화면이 첫 슬라이드로 돌아가거나 로그인 화면이 뜬다.
- * 같은 이유로 송출 중에 로그아웃 상태가 되더라도 송출을 마칠 때까지 로그인한 트리를 지킨다.
- * 송출 주소의 로딩 화면은 새로고침 중에도 프로젝터가 흰 화면으로 번쩍이지 않게 검게만 그린다.
+ * 계정이 끝나면(로그아웃·세션 만료·다른 계정·다른 탭의 로그인 변화) 세션이 다시 `loading`이
+ * 되고, 동기화를 끄고 새로고침할 때까지 로딩 화면이 앞 계정의 화면을 덮는다. 송출 중에 끝나면
+ * 세션 스토어가 동기화만 끄고 송출 화면을 그대로 두었다가, 송출을 마치고 다른 주소로 나갈 때
+ * 새로고침한다. 트리를 바꾸면 송출 화면이 다시 마운트되어 관객 화면이 첫 슬라이드로 돌아가거나
+ * 로그인 화면이 뜬다. 같은 이유로 송출 중에 로그아웃 상태가 되더라도 송출을 마칠 때까지 로그인한
+ * 트리를 지킨다. 송출 주소의 로딩 화면은 새로고침 중에도 프로젝터가 흰 화면으로 번쩍이지 않게
+ * 검게만 그린다.
  *
  * 트리를 바꿀 때(로그인 화면에서 그 자리에서 로그인할 때 등)는 Query 캐시도 새로 만들어 앞
  * 트리의 서버 데이터가 남지 않게 한다. 계정이 끝날 때 할 동기화 쪽 일은 세션 스토어가
- * `lib/sync`를 가져오지 못해 여기서 등록한다(`setAccountHooks`).
+ * `lib/sync`를 가져오지 못해 여기서 등록한다(`setAccountHooks`). 다른 탭의 로그인 변화는 세션을
+ * 복원하기 전부터 듣는다(`listenToOtherTabs`). 부팅 중인 탭도 바뀌기 전의 캐시를 읽었을 수 있다.
  */
 export function App({
   children,

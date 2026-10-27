@@ -39,6 +39,7 @@ import {
 } from "./lib/sync/syncRecovery";
 import { getSyncSnapshot, resetSyncStatus } from "./lib/sync/syncStatus";
 import { installFakeApi, type FakeApi, type FakeRoute } from "./test/fakeApi";
+import { installFakeBroadcastChannel } from "./test/fakeBroadcastChannel";
 import {
   signInAsTestUser,
   signOutForTests,
@@ -167,7 +168,10 @@ function renderAt(path: string) {
 }
 
 describe("App Route Integration", () => {
+  let tabs: ReturnType<typeof installFakeBroadcastChannel>;
+
   beforeEach(async () => {
+    tabs = installFakeBroadcastChannel();
     closeOfflineDB();
     await new Promise<void>((resolve) => {
       const req = indexedDB.deleteDatabase(OFFLINE_DB_NAME);
@@ -184,6 +188,7 @@ describe("App Route Integration", () => {
   afterEach(() => {
     signOutForTests();
     closeOfflineDB();
+    vi.unstubAllGlobals();
   });
 
   it("should render the landing placeholder at '/'", async () => {
@@ -640,6 +645,59 @@ describe("App Route Integration", () => {
       });
 
       expect(apiRequests(api).slice(sentBefore)).not.toContain(patchOfCreated);
+    });
+
+    it("동기화가 401을 받고 서버가 세션 없음을 답하면 새로고침하고, 다시 열면 로그인 화면이 만료를 알린다", async () => {
+      let expired = false;
+      api = installFakeApi(
+        bootRoutes({
+          "PATCH /api/presentations/*": () =>
+            expired
+              ? { status: 401, body: { error: "세션 만료" } }
+              : { body: { ok: true } },
+        }),
+      );
+      const view = renderAt("/presentations");
+      await screen.findAllByTestId("presentation-row");
+      await waitFor(() => expect(getSyncSnapshot().status).toBe("synced"));
+
+      expired = true;
+      fetcher.mockResolvedValue(null);
+      act(() => {
+        createNewPresentation();
+      });
+      await act(async () => {
+        await flushPendingSync();
+      });
+
+      await waitFor(() => expect(reload).toHaveBeenCalledTimes(1));
+      expect(screen.getByTestId("app-hydrating")).toBeInTheDocument();
+      expect(window.sessionStorage.getItem(SESSION_END_KEY)).toBe("expired");
+      expect(await loadCachedSession()).toBeNull();
+
+      view.unmount();
+      renderAt(window.location.pathname);
+
+      expect(await screen.findByTestId("login-description")).toHaveTextContent(
+        ERROR_COPY.sessionExpired,
+      );
+    });
+
+    it("다른 탭이 로그아웃했다고 알리면 로딩 화면으로 덮고 캐시를 비운 뒤 새로고침한다", async () => {
+      api = installFakeApi(bootRoutes());
+      renderAt("/presentations");
+      await screen.findAllByTestId("presentation-row");
+      await waitFor(() => expect(getSyncSnapshot().status).toBe("synced"));
+      const other = tabs.otherTab("chiton:session");
+
+      other.post({ userId: null });
+
+      await waitFor(() => expect(reload).toHaveBeenCalledTimes(1));
+      expect(screen.getByTestId("app-hydrating")).toBeInTheDocument();
+      expect(screen.queryByTestId("presentation-row")).not.toBeInTheDocument();
+      expect(await loadCachedSession()).toBeNull();
+      expect(window.sessionStorage.getItem(SESSION_END_KEY)).toBe("otherTab");
+      other.close();
     });
 
     it("송출 중에 다른 계정으로 바뀌어도 송출 화면을 그대로 두고, 송출을 마치면 부팅 없이 새로고침한다", async () => {

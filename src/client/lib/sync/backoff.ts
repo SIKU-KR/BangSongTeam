@@ -1,10 +1,17 @@
-import { ServerRejectedError } from "../api/request";
+import { ServerRejectedError, SessionExpiredError } from "../api/request";
 
 /** 백오프 시작 지연 시간 (2초) */
 export const BASE_BACKOFF_MS = 2000;
 /** 백오프 최대 상한 (60초) */
 export const MAX_BACKOFF_MS = 60_000;
-/** 서버 재시도 한도 (5xx·429 등 서버 오류 10회 초과 시 영구 실패 처리; 오프라인은 제외) */
+/**
+ * 서버 재시도 한도. 5xx·429와 401(세션 거절)이 10회를 넘으면 영구 실패로 남긴다. 오프라인은 세지
+ * 않는다.
+ *
+ * 401도 센다. 401을 받은 항목은 버리지 않고 세션을 확인하며 다시 보내는데, 세션이 살아 있다는데
+ * 401이 이어지면(엔드포인트·프록시 문제) 한도 없이 다시 보내고 그때마다 세션을 묻게 된다. 영구
+ * 실패로 남긴 항목은 '다시 시도'가 다시 넣는다.
+ */
 export const MAX_RETRY_ATTEMPTS = 10;
 
 /**
@@ -85,7 +92,10 @@ export class BackoffTracker {
     const attempt = this.attempts.get(key) ?? 0;
     const delay = getRetryDelay(err, attempt, this.randomGenerator());
     this.attempts.set(key, attempt + 1);
-    if (err instanceof ServerRejectedError) {
+    if (
+      err instanceof ServerRejectedError ||
+      err instanceof SessionExpiredError
+    ) {
       const serverAttempt = this.serverAttempts.get(key) ?? 0;
       this.serverAttempts.set(key, serverAttempt + 1);
     }

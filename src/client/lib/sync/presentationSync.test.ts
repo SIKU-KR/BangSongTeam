@@ -38,6 +38,13 @@ const api = vi.hoisted(() => ({
   >(),
 }));
 
+const requestSessionCheck = vi.hoisted(() => vi.fn<() => void>());
+
+vi.mock("../auth/sessionStore", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../auth/sessionStore")>()),
+  requestSessionCheck,
+}));
+
 vi.mock("../api/client", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../api/client")>();
   return {
@@ -271,6 +278,46 @@ describe("세트 변경분 push", () => {
     expect(api.patch.mock.calls[0][0].json).toEqual(
       toPresentationChanges(makeSet()),
     );
+  });
+});
+
+describe("세션 확인 요청", () => {
+  beforeEach(() => {
+    __resetServerDecksForTests();
+    api.patch.mockReset();
+    requestSessionCheck.mockClear();
+  });
+
+  it.each([401, 403])(
+    "올리기가 %i로 거절되면 세션을 한 번 확인한다",
+    async (status) => {
+      api.patch.mockResolvedValueOnce(respond(status));
+
+      await expect(pushPresentation(makeSet())).rejects.toThrow();
+
+      expect(requestSessionCheck).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it.each([404, 503])(
+    "올리기가 %i로 거절되면 세션을 확인하지 않는다",
+    async (status) => {
+      api.patch.mockResolvedValueOnce(respond(status));
+
+      await expect(pushPresentation(makeSet())).rejects.toThrow();
+
+      expect(requestSessionCheck).not.toHaveBeenCalled();
+    },
+  );
+
+  it("서버에 닿지 못하면 세션을 확인하지 않는다", async () => {
+    api.patch.mockRejectedValueOnce(new TypeError("Failed to fetch"));
+
+    await expect(pushPresentation(makeSet())).rejects.toBeInstanceOf(
+      OfflineError,
+    );
+
+    expect(requestSessionCheck).not.toHaveBeenCalled();
   });
 });
 

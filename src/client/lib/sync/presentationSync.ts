@@ -24,9 +24,18 @@ import {
   OfflineError,
   requestIdOfError,
   ServerRejectedError,
+  SessionExpiredError,
 } from "../api/request";
+import { requestSessionCheck } from "../auth/sessionStore";
 import { reportApiFailure } from "../observability/clientReports";
 import { setSyncStatus, type SyncStatus } from "./syncStatus";
+
+function isSessionMismatch(err: unknown): boolean {
+  return (
+    err instanceof SessionExpiredError ||
+    (err instanceof ServerRejectedError && err.status === 403)
+  );
+}
 
 async function callSyncApi<T>(
   request: Parameters<typeof callApi>[0],
@@ -35,6 +44,7 @@ async function callSyncApi<T>(
     return await callApi<T>(request);
   } catch (err) {
     reportApiFailure(err);
+    if (isSessionMismatch(err)) requestSessionCheck();
     throw err;
   }
 }

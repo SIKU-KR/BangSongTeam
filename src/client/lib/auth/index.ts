@@ -3,6 +3,7 @@ export {
   EmailAuthError,
   getCurrentUserId,
   hydrateSession,
+  listenToOtherTabs,
   resumeDeferredSessionWork,
   setAccountHooks,
   signInWithEmail,
