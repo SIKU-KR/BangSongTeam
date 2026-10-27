@@ -18,6 +18,7 @@ import {
 } from "../presentation/presentationStore";
 import {
   __resetSyncSchedulerForTests,
+  flushPendingSync,
   setSyncEnabled,
 } from "../../lib/sync/syncScheduler";
 import { PresentationShareDialog } from "./PresentationShareDialog";
@@ -74,6 +75,20 @@ describe("PresentationShareDialog (세트 링크 공유)", () => {
       SHARING_COPY.link.accessOptions.off,
     );
     expect(screen.queryByTestId("share-link-input")).not.toBeInTheDocument();
+  });
+
+  it("설정을 불러오는 동안에는 자리표시자를 보이고 불러오면 거둔다", async () => {
+    renderDialog();
+
+    expect(screen.getByTestId("share-settings-skeleton")).toBeInTheDocument();
+    expect(screen.queryByTestId("share-access-select")).not.toBeInTheDocument();
+
+    expect(
+      await screen.findByTestId("share-access-select"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("share-settings-skeleton"),
+    ).not.toBeInTheDocument();
   });
 
   it("보기 가능으로 바꾸면 /s/ 링크가 나타난다", async () => {
@@ -186,6 +201,33 @@ describe("PresentationShareDialog (세트 링크 공유)", () => {
       expect(select).toBeDisabled();
       expect(select).toHaveAttribute("data-disabled");
     });
+
+    it("올리던 변경이 끝나기 전에 대화 상자가 사라지면 공유 설정을 읽으러 가지 않는다", async () => {
+      api.restore();
+      let finishUpload: () => void = () => undefined;
+      const upload = new Promise<void>((resolve) => {
+        finishUpload = resolve;
+      });
+      api = installFakeApi({
+        "PATCH /api/presentations/*": async () => {
+          await upload;
+          return { body: { ok: true } };
+        },
+        "GET /api/presentations/*/share": () => ({ body: settings }),
+      });
+      const created = createNewPresentation(null);
+      const dialog = renderDialog(created.id);
+      await waitFor(() => expect(api.calls).toHaveLength(1));
+
+      dialog.unmount();
+      finishUpload();
+      await flushPendingSync();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      expect(api.calls.map(({ method, path }) => `${method} ${path}`)).toEqual([
+        `PATCH /api/presentations/${created.id}`,
+      ]);
+    });
   });
 
   describe("오프라인", () => {
@@ -216,6 +258,9 @@ describe("PresentationShareDialog (세트 링크 공유)", () => {
       expect(
         screen.queryByTestId("share-access-select"),
       ).not.toBeInTheDocument();
+      expect(
+        screen.queryByTestId("share-settings-skeleton"),
+      ).not.toBeInTheDocument();
       expect(api.calls).toEqual([]);
 
       goOnline();
@@ -238,6 +283,19 @@ describe("PresentationShareDialog (세트 링크 공유)", () => {
         await screen.findByText(SHARING_COPY.library.onlineOnly),
       ).toBeInTheDocument();
       expect(screen.getByTestId("share-access-select")).toBeDisabled();
+    });
+
+    it("불러온 뒤 오프라인이 되면 링크 재설정도 하지 못하게 한다", async () => {
+      settings = { access: "view", token: "tok-first" };
+      renderDialog();
+      expect(await screen.findByTestId("share-reset-btn")).toBeEnabled();
+
+      goOffline();
+
+      expect(
+        await screen.findByText(SHARING_COPY.library.onlineOnly),
+      ).toBeInTheDocument();
+      expect(screen.getByTestId("share-reset-btn")).toBeDisabled();
     });
   });
 });

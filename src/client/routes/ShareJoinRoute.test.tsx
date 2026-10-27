@@ -350,6 +350,31 @@ describe("ShareJoinRoute (/s/:token)", () => {
       expect(screen.queryByTestId("editor-probe")).not.toBeInTheDocument();
     });
 
+    it.each([
+      [401, API_ERRORS.loginRequired],
+      [403, API_ERRORS.accountRestricted],
+    ])(
+      "서버가 거절하면(%i) 저장된 사본이 있어도 열지 않고 다시 시도도 두지 않는다",
+      async (status, error) => {
+        await joinOnline();
+        api = installFakeApi(
+          withConsent({
+            "POST /api/share/*/join": () => ({ status, body: { error } }),
+          }),
+        );
+
+        renderAt("/s/tok-first");
+
+        expect(
+          await screen.findByTestId("share-link-error"),
+        ).toBeInTheDocument();
+        expect(screen.queryByTestId("editor-probe")).not.toBeInTheDocument();
+        expect(
+          screen.queryByRole("button", { name: COMMON_COPY.retry }),
+        ).not.toBeInTheDocument();
+      },
+    );
+
     it("저장된 사본이 이 기기에서 사라졌으면 열지 않는다", async () => {
       await joinOnline();
       resetPresentationStore();

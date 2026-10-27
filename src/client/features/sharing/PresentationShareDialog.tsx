@@ -82,8 +82,8 @@ function describeShareError(error: unknown): string {
  * 만든 세트는 서버가 아직 몰라 설정을 읽을 수 없다(404). 그래도 서버에 없으면 열 수 없다고
  * 하지 않고 동기화가 끝난 뒤 다시 열라고 알린다.
  *
- * 오프라인이면 요청을 멈춰 두는 대신 온라인에서만 된다고 알리고 링크 설정을 바꾸지 못하게 한다.
- * 멈춰 둔 요청은 대화 상자를 닫은 뒤 연결이 돌아올 때 링크를 켜거나 끌 수 있다.
+ * 오프라인이면 요청을 멈춰 두는 대신 온라인에서만 된다고 알리고, 링크를 켜고 끄거나 재설정하지
+ * 못하게 한다. 멈춰 둔 요청은 대화 상자를 닫은 뒤 연결이 돌아올 때 링크를 바꿀 수 있다.
  */
 export function PresentationShareDialog({
   presentationId,
@@ -128,7 +128,12 @@ export function PresentationShareDialog({
         </DialogHeader>
 
         {settings.isPending ? (
-          isOnline && <Skeleton className="h-20 w-full" />
+          isOnline && (
+            <Skeleton
+              data-testid="share-settings-skeleton"
+              className="h-20 w-full"
+            />
+          )
         ) : (
           <>
             <Field>
@@ -198,7 +203,7 @@ export function PresentationShareDialog({
             <Button
               data-testid="share-reset-btn"
               variant="outline"
-              disabled={reset.isPending}
+              disabled={reset.isPending || !isOnline}
               onClick={() => setIsResetOpen(true)}
             >
               {SHARING_COPY.link.reset}

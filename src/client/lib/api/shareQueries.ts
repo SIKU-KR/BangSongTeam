@@ -29,6 +29,9 @@ export function useSharePreview(token: string) {
  * 세트의 링크 공유 설정. 서버가 아직 모르는 세트의 설정은 읽을 수 없어(404), 호출한 화면이 넘긴
  * `beforeFetch`(올리던 변경 보내기)를 읽기 전에 기다린다. 다시 시도할 때마다 다시 돈다. 이 모듈이
  * `lib/sync`를 직접 가져오면 api와 sync가 서로를 가져오는 순환이 생겨 화면이 넘기게 했다.
+ *
+ * 기다리는 동안 화면이 사라지면 읽으러 가지 않는다. 송출 화면은 서버 요청이 0건이어야 해서, 느린
+ * push가 송출로 넘어간 뒤에야 끝나도 읽기 요청을 보내지 않는다.
  */
 export function useShareSettings(
   id: string,
@@ -36,8 +39,9 @@ export function useShareSettings(
 ): UseQueryResult<ShareSettings> {
   return useQuery({
     queryKey: shareKeys.settings(id),
-    queryFn: async () => {
+    queryFn: async ({ signal }) => {
       await options.beforeFetch?.();
+      signal.throwIfAborted();
       return fetchShareSettings(id);
     },
     enabled: options.enabled,
