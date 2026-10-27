@@ -65,6 +65,7 @@ import { SHELL_COPY } from "#copy/shell";
 import { LEGAL_COPY } from "#copy/auth";
 import { COMMON_COPY, ERROR_COPY } from "#copy/common";
 import { PRESENTATION_COPY } from "#copy/presentation";
+import { SHARE_LINK_COPY } from "#copy/shareLink";
 import { SHARING_COPY } from "#copy/sharing";
 import {
   SEED_PRESENTATION_IDS,
@@ -390,6 +391,31 @@ describe("App Route Integration", () => {
       expect(
         screen.queryByRole("button", { name: /카카오 로그인/ }),
       ).not.toBeInTheDocument();
+    } finally {
+      api.restore();
+    }
+  });
+
+  it("미로그인으로 연 공유 링크가 만료됐으면 로그인하기가 랜딩이 아니라 로그인 화면으로 이어진다", async () => {
+    signOutForTests();
+    const api = installFakeApi({
+      "GET /api/share/*": () => ({
+        status: 404,
+        body: { error: API_ERRORS.share.linkUnavailable },
+      }),
+    });
+
+    try {
+      renderAt("/s/expired");
+
+      fireEvent.click(
+        await screen.findByRole("button", { name: SHARE_LINK_COPY.signIn }),
+      );
+
+      expect(
+        await screen.findByTestId("login-description"),
+      ).toBeInTheDocument();
+      expect(screen.queryByTestId("landing-route")).not.toBeInTheDocument();
     } finally {
       api.restore();
     }
