@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { betterAuth } from "better-auth/minimal";
+import type { Db } from "../client";
 import { COLLECTIONS } from "../collections";
 import { clearDb, createTestDb, seedDocs, userDoc } from "../test/fixtures";
 import { firestoreAdapter } from "./firestoreAdapter";
@@ -37,6 +38,52 @@ async function usersWithEmail(email: string): Promise<number> {
   return (
     await db.collection(COLLECTIONS.users).where("email", "==", email).get()
   ).size;
+}
+
+async function reservationHolders(): Promise<unknown[]> {
+  return (await db.collection(COLLECTIONS.userEmails).get()).docs.map((doc) =>
+    doc.get("userId"),
+  );
+}
+
+function pauseBeforeWriting(
+  target: Db,
+  resume: Promise<void>,
+): { db: Db; paused: Promise<void> } {
+  let markPaused: () => void = () => {};
+  const paused = new Promise<void>((resolve) => {
+    markPaused = resolve;
+  });
+  const hold = async (): Promise<void> => {
+    markPaused();
+    await resume;
+  };
+  const gated = new Proxy(target, {
+    get(inner, prop) {
+      if (prop === "runTransaction") {
+        return async (...args: Parameters<Db["runTransaction"]>) => {
+          await hold();
+          return await inner.runTransaction(...args);
+        };
+      }
+      if (prop === "batch") {
+        return () => {
+          const batch = inner.batch();
+          const commit = batch.commit.bind(batch);
+          batch.commit = async () => {
+            await hold();
+            return await commit();
+          };
+          return batch;
+        };
+      }
+      const value = Reflect.get(inner, prop, inner) as unknown;
+      return typeof value === "function"
+        ? (value as (...args: unknown[]) => unknown).bind(inner)
+        : value;
+    },
+  });
+  return { db: gated, paused };
 }
 
 describe("releaseAbandonedSignUp", () => {
@@ -151,5 +198,41 @@ describe("releaseAbandonedSignUp", () => {
       false,
     );
     expect(await usersWithEmail("twin@example.com")).toBe(2);
+  });
+
+  it("치우는 사이에 같은 이메일의 다른 가입이 먼저 끝나면 그 새 사용자의 예약은 지우지 않는다", async () => {
+    await signUpWithoutCredential("race@example.com", LONG_AGO);
+    let resume: () => void = () => {};
+    const slow = pauseBeforeWriting(
+      db,
+      new Promise<void>((resolve) => {
+        resume = resolve;
+      }),
+    );
+
+    const late = releaseAbandonedSignUp(slow.db, "race@example.com", NOW);
+    await slow.paused;
+    expect(await releaseAbandonedSignUp(db, "race@example.com", NOW)).toBe(
+      true,
+    );
+    const newUserId = await signUpWithoutCredential("race@example.com", NOW);
+    resume();
+
+    expect(await late).toBe(false);
+    expect(await usersWithEmail("race@example.com")).toBe(1);
+    expect(await reservationHolders()).toEqual([newUserId]);
+  });
+
+  it("같은 가입을 동시에 치워도 한 번만 치운다", async () => {
+    await signUpWithoutCredential("twice@example.com", LONG_AGO);
+
+    const released = await Promise.all([
+      releaseAbandonedSignUp(db, "twice@example.com", NOW),
+      releaseAbandonedSignUp(db, "twice@example.com", NOW),
+    ]);
+
+    expect(released.sort()).toEqual([false, true]);
+    expect(await usersWithEmail("twice@example.com")).toBe(0);
+    expect(await reservationHolders()).toEqual([]);
   });
 });

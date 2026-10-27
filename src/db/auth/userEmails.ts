@@ -5,6 +5,7 @@ import {
   userEmailDocId,
   userEmailsCol,
   usersCol,
+  type UserDoc,
 } from "../collections";
 
 /**
@@ -65,6 +66,13 @@ export async function reservationsHeldBy(
     .map((snapshot) => snapshot.ref);
 }
 
+function looksAbandoned(user: UserDoc | undefined, now: Date): boolean {
+  if (!user || user.emailVerified || user.termsAgreedAt) return false;
+  const createdAt =
+    user.createdAt instanceof Date ? user.createdAt.getTime() : now.getTime();
+  return now.getTime() - createdAt >= ABANDONED_SIGN_UP_MIN_AGE_MS;
+}
+
 /**
  * 반쯤 끝난 이메일 가입을 치워 그 이메일로 다시 가입할 수 있게 한다. 치웠으면 `true`.
  *
@@ -75,6 +83,11 @@ export async function reservationsHeldBy(
  * - 연결된 계정(비밀번호·소셜)이 없어 누구도 로그인할 수 없다.
  * - 이메일이 인증되지 않았고 약관에 동의하지 않았다. 앱을 써 본 적 없는 사용자다.
  * - 만든 지 `ABANDONED_SIGN_UP_MIN_AGE_MS`가 지났다. 만든 시각을 모르면 방금 만든 것으로 본다.
+ *
+ * 마지막 확인과 지우기는 한 트랜잭션에서 하고, 이메일 예약은 아직 그 사용자를 가리킬 때만
+ * 지운다. 같은 이메일로 둘이 동시에 가입하면, 먼저 치운 쪽이 새 사용자와 예약을 만든 뒤에 늦은
+ * 쪽이 지우기를 마칠 수 있다. 미리 읽어 둔 대로 지우면 그 새 예약까지 지워, 그 이메일로 사용자가
+ * 다시 둘 생길 수 있다.
  */
 export async function releaseAbandonedSignUp(
   db: Db,
@@ -85,28 +98,24 @@ export async function releaseAbandonedSignUp(
     .where("email", "==", email.toLowerCase())
     .limit(2)
     .get();
-  const [snapshot] = users.docs;
-  if (users.size !== 1 || !snapshot) return false;
+  const [candidate] = users.docs;
+  if (users.size !== 1 || !candidate) return false;
+  if (!looksAbandoned(candidate.data(), now)) return false;
 
-  const user = snapshot.data();
-  if (user.emailVerified || user.termsAgreedAt) return false;
-  const createdAt =
-    user.createdAt instanceof Date ? user.createdAt.getTime() : now.getTime();
-  if (now.getTime() - createdAt < ABANDONED_SIGN_UP_MIN_AGE_MS) return false;
-
-  const accounts = await db
+  const reservationRef = userEmailsCol(db).doc(userEmailDocId(email));
+  const accounts = db
     .collection(COLLECTIONS.accounts)
-    .where("userId", "==", snapshot.id)
-    .limit(1)
-    .get();
-  if (!accounts.empty) return false;
-
-  const reservations = await reservationsHeldBy(db, [
-    { id: snapshot.id, email: user.email },
-  ]);
-  const batch = db.batch();
-  batch.delete(snapshot.ref);
-  for (const ref of reservations) batch.delete(ref);
-  await batch.commit();
-  return true;
+    .where("userId", "==", candidate.id)
+    .limit(1);
+  return await db.runTransaction(async (tx) => {
+    const user = await tx.get(candidate.ref);
+    const reservation = await tx.get(reservationRef);
+    const linked = await tx.get(accounts);
+    if (!looksAbandoned(user.data(), now) || !linked.empty) return false;
+    tx.delete(candidate.ref);
+    if (reservation.data()?.userId === candidate.id) {
+      tx.delete(reservationRef);
+    }
+    return true;
+  });
 }
