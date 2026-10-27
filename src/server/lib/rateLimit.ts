@@ -5,11 +5,18 @@ interface LimitWindow {
   count: number;
 }
 
-interface FixedWindowLimiterOptions {
+export interface FixedWindowLimiterOptions {
   limit: number;
   windowMs: number;
   now?: () => number;
 }
+
+/**
+ * 요청 한 건을 센 결과. 막혔으면 지금 창이 끝나 다시 받을 때까지 남은 시간을 함께 준다.
+ * 그보다 일찍 다시 보내면 같은 창이라 또 막힌다.
+ */
+export type LimitDecision =
+  { allowed: true } | { allowed: false; retryAfterMs: number };
 
 /**
  * 고정 창(fixed window) 요청 빈도 제한. 키마다 `windowMs` 안에 `limit`건까지 허용한다.
@@ -25,7 +32,7 @@ export function createFixedWindowLimiter({
   limit,
   windowMs,
   now = Date.now,
-}: FixedWindowLimiterOptions): (key: string) => boolean {
+}: FixedWindowLimiterOptions): (key: string) => LimitDecision {
   const windows = new Map<string, LimitWindow>();
   let lastPrunedAt = -Infinity;
 
@@ -48,9 +55,13 @@ export function createFixedWindowLimiter({
         prune(at);
       }
       windows.set(key, { startedAt: at, count: 1 });
-      return true;
+      return { allowed: true };
     }
     current.count += 1;
-    return current.count <= limit;
+    if (current.count <= limit) return { allowed: true };
+    return {
+      allowed: false,
+      retryAfterMs: current.startedAt + windowMs - at,
+    };
   };
 }

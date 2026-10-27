@@ -1,9 +1,11 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { Query } from "@google-cloud/firestore";
 import { env } from "../test/env";
 import { BackgroundListResponseSchema } from "#shared";
 import { clearDb } from "../../db/test/fixtures";
 import { createApp } from "../index";
 import { resetBackgrounds } from "../test/backgrounds";
+import { createBackgroundsRoute } from "./backgrounds";
 
 const app = createApp();
 
@@ -45,6 +47,53 @@ describe("배경 갤러리 API", () => {
     );
     expect(remove.status).toBe(404);
     expect((await list()).backgrounds.map((bg) => bg.id)).toEqual(serviceIds);
+  });
+});
+
+describe("배경 목록 캐시", () => {
+  async function listedIds(
+    route: ReturnType<typeof createBackgroundsRoute>,
+  ): Promise<string[]> {
+    const res = await route.request("/", {}, env);
+    expect(res.status).toBe(200);
+    const body = BackgroundListResponseSchema.parse(await res.json());
+    return body.backgrounds.map((bg) => bg.id);
+  }
+
+  beforeEach(async () => {
+    await clearDb(env.DB);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("30초 동안은 배경 문서를 다시 읽지 않고 그 뒤에 새 목록을 읽는다", async () => {
+    let now = 0;
+    const route = createBackgroundsRoute({ now: () => now });
+    const before = await resetBackgrounds(1);
+    expect(await listedIds(route)).toEqual(before);
+
+    const after = await resetBackgrounds(2);
+    const reads = vi.spyOn(Query.prototype, "get");
+    now = 29_999;
+    expect(await listedIds(route)).toEqual(before);
+    expect(reads).not.toHaveBeenCalled();
+
+    now = 30_000;
+    expect(await listedIds(route)).toEqual(after);
+  });
+
+  it("목록을 읽지 못하면 두지 않고 다음 요청이 다시 읽는다", async () => {
+    const ids = await resetBackgrounds(1);
+    const route = createBackgroundsRoute({ now: () => 0 });
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.spyOn(Query.prototype, "get").mockRejectedValueOnce(
+      new Error("unavailable"),
+    );
+
+    expect((await route.request("/", {}, env)).status).toBe(500);
+    expect(await listedIds(route)).toEqual(ids);
   });
 });
 

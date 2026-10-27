@@ -497,6 +497,26 @@ describe("SongPickerModal", () => {
       expect(screen.getAllByText("내가 만든 찬양").length).toBeGreaterThan(0);
     });
 
+    it("검색이 몰려 서버가 429로 막으면 연결 실패 대신 잠시 후 다시 검색하라고 알린다", async () => {
+      api.restore();
+      api = installFakeApi({
+        "GET /api/catalog/search": () => ({
+          status: 429,
+          body: { error: API_ERRORS.tooManyRequests },
+        }),
+      });
+      seedMySong();
+      renderPicker();
+
+      expect(
+        await screen.findByTestId("song-picker-offline-notice"),
+      ).toHaveTextContent(EDITOR_COPY.picker.rateLimited);
+      expect(
+        screen.queryByText(EDITOR_COPY.picker.serverUnavailable),
+      ).not.toBeInTheDocument();
+      expect(screen.getAllByText("내가 만든 찬양").length).toBeGreaterThan(0);
+    });
+
     it("브라우저가 오프라인이면 서버를 부르지 않는다", () => {
       const onLine = vi
         .spyOn(navigator, "onLine", "get")

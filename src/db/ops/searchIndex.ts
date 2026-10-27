@@ -13,13 +13,13 @@ interface ReindexedPage {
   updated: number;
 }
 
-function sameIndex(stored: DeckIndex, current: DeckIndex): boolean {
+function sameIndex(stored: Partial<DeckIndex>, current: DeckIndex): boolean {
+  const { searchGrams } = stored;
   return (
     stored.listed === current.listed &&
-    stored.searchGrams.length === current.searchGrams.length &&
-    current.searchGrams.every(
-      (gram, index) => stored.searchGrams[index] === gram,
-    )
+    Array.isArray(searchGrams) &&
+    searchGrams.length === current.searchGrams.length &&
+    current.searchGrams.every((gram, index) => searchGrams[index] === gram)
   );
 }
 

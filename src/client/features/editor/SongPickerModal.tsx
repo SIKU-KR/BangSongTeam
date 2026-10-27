@@ -20,7 +20,7 @@ import { SearchInput } from "#components/common/SearchInput";
 import type { Deck } from "#shared";
 import { saveSongToLibrary, useUserSongs } from "./songLibraryStore";
 import { useCatalogSearch, useForkDeck } from "../../lib/api/catalogQueries";
-import { describeApiError } from "../../lib/api/request";
+import { describeApiError, ServerRejectedError } from "../../lib/api/request";
 import { useIsOnline } from "../../hooks/useIsOnline";
 import { ReportDialog } from "../sharing/ReportDialog";
 import {
@@ -59,6 +59,18 @@ const FILTERS: { id: PickerFilter; label: string }[] = [
   { id: "mine", label: EDITOR_COPY.picker.filters.mine },
   { id: "shared", label: EDITOR_COPY.picker.filters.shared },
 ];
+
+function sharedSearchNotice(
+  isOnline: boolean,
+  search: { isError: boolean; error: unknown; data: unknown },
+): string | null {
+  if (!isOnline) return EDITOR_COPY.picker.offline;
+  if (!search.isError || search.data) return null;
+  return search.error instanceof ServerRejectedError &&
+    search.error.status === 429
+    ? EDITOR_COPY.picker.rateLimited
+    : EDITOR_COPY.picker.serverUnavailable;
+}
 
 /**
  * 곡 선택 모달.
@@ -150,7 +162,7 @@ export function SongPickerModal({
     addDeck(saved);
   };
 
-  const serverUnavailable = !isOnline || (search.isError && !search.data);
+  const sharedNotice = sharedSearchNotice(isOnline, search);
   const sharedCount = search.data?.decks.length ?? 0;
   const isAdding = fork.isPending;
 
@@ -237,14 +249,12 @@ export function SongPickerModal({
                 </Button>
               </div>
 
-              {serverUnavailable && (
+              {sharedNotice && (
                 <p
                   data-testid="song-picker-offline-notice"
                   className="text-xs text-warning"
                 >
-                  {isOnline
-                    ? EDITOR_COPY.picker.serverUnavailable
-                    : EDITOR_COPY.picker.offline}
+                  {sharedNotice}
                 </p>
               )}
             </div>

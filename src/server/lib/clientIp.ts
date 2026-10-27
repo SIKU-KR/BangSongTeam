@@ -32,25 +32,35 @@ function hextetsOf(part: string): string[] {
   ];
 }
 
-function expandIPv6(ip: string): string[] {
-  const [head = "", tail] = ip.toLowerCase().split("::");
+function expandIPv6(address: string): string[] | null {
+  const [head = "", tail] = address.toLowerCase().split("::");
   const left = hextetsOf(head);
   const right = tail === undefined ? [] : hextetsOf(tail);
-  const zeros = Array<string>(8 - left.length - right.length).fill("0");
-  return [...left, ...zeros, ...right].map((group) => group.padStart(4, "0"));
+  const missing = 8 - left.length - right.length;
+  if (missing < 0 || (tail === undefined && missing > 0)) return null;
+  return [...left, ...Array<string>(missing).fill("0"), ...right].map((group) =>
+    group.padStart(4, "0"),
+  );
 }
 
 /**
  * 빈도 제한을 셀 IP 단위. IPv6는 앞 64비트(/64) 대역으로 묶고, IPv4를 담은 IPv6
- * (`::ffff:192.0.2.1`)는 IPv4로 센다.
+ * (`::ffff:192.0.2.1`)는 IPv4로 센다. 어느 쪽도 아니면 받은 값을 그대로 쓴다.
  *
  * IPv6 사용자는 대개 /64 대역을 통째로 받아 그 안에서 주소를 마음대로 바꿀 수 있어, 주소마다
  * 따로 세면 주소를 바꿔 가며 한도를 피한다. Better Auth도 같은 까닭에 /64로 묶어 센다
  * (`ipv6Subnet` 기본값).
+ *
+ * 영역 표시(`fe80::1%eth0`의 `%eth0`)는 떼고 센다. 한 컴퓨터 안에서만 뜻이 있는 값이라 앞단이
+ * 붙이지 않는데, run.app에 직접 보낸 `x-forwarded-for`에는 누구나 아무 값이나 넣을 수 있다.
+ * `node:net`의 `isIPv6`는 쌍점이 든 영역(`1:2:3:4:5:6:7:8%a:b`)도 주소로 받아 준다. 빈도 제한은
+ * 로그인 없는 요청마다 라우트보다 먼저 돌므로, 어떤 값에도 예외를 던지지 않고 8묶음으로 펼치지
+ * 못하는 값은 받은 그대로 키로 쓴다. 던지면 그 요청이 500으로 끝난다.
  */
 export function rateLimitKey(ip: string): string {
-  if (!isIPv6(ip)) return ip;
-  const groups = expandIPv6(ip);
+  const address = ip.split("%")[0] ?? "";
+  const groups = isIPv6(address) ? expandIPv6(address) : null;
+  if (!groups) return ip;
   const mapsIPv4 =
     groups.slice(0, 5).every((group) => group === "0000") &&
     groups[5] === "ffff";

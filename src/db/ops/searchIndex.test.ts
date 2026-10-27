@@ -25,6 +25,12 @@ function indexedBeforeInitials(deck: DeckDoc): DeckDoc {
   };
 }
 
+function withoutSearchGrams(deck: DeckDoc): DeckDoc {
+  const stored: Partial<DeckDoc> = { ...deck };
+  delete stored.searchGrams;
+  return stored as DeckDoc;
+}
+
 async function storedDeck(db: Db, id: string): Promise<DeckDoc | undefined> {
   return (await decksCol(db).doc(id).get()).data();
 }
@@ -86,5 +92,17 @@ describe("reindexDecks", () => {
       listed: false,
       searchGrams: [],
     });
+  });
+
+  it("검색 색인 필드가 아예 없는 곡도 멈추지 않고 색인을 채운다", async () => {
+    const missing = libraryDeck({ id: "missing", title: "주님의 사랑" });
+    const after = libraryDeck({ id: "next", title: "은혜" });
+    await seedDocs(db, {
+      decks: [withoutSearchGrams(missing), withoutSearchGrams(after)],
+    });
+
+    expect(await reindexDecks(db)).toEqual({ scanned: 2, updated: 2 });
+    expect(await storedDeck(db, "missing")).toEqual(missing);
+    expect(await storedDeck(db, "next")).toEqual(after);
   });
 });

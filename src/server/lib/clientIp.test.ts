@@ -107,6 +107,18 @@ describe("rateLimitKey", () => {
     expect(rateLimitKey("::FFFF:c000:201")).toBe("192.0.2.1");
     expect(rateLimitKey("64:ff9b::192.0.2.1")).toBe(rateLimitKey("64:ff9b::1"));
   });
+
+  it("IPv6 영역 표시(%)는 떼고 세어 쌍점이 든 영역에도 예외 없이 같은 /64로 묶는다", () => {
+    expect(rateLimitKey("1:2:3:4:5:6:7:8%a:b")).toBe(
+      rateLimitKey("1:2:3:4::1"),
+    );
+    expect(rateLimitKey("1:2:3:4::1%eth0")).toBe(rateLimitKey("1:2:3:4::1"));
+    expect(rateLimitKey("fe80::1%a:b:c:d:e:f:g:h")).toBe(
+      rateLimitKey("fe80::1"),
+    );
+    expect(rateLimitKey("::1%:1:2:3:4:5:6:7:8:9")).toBe(rateLimitKey("::1"));
+    expect(rateLimitKey("::ffff:192.0.2.1%x:y")).toBe("192.0.2.1");
+  });
 });
 
 describe("프록시 비밀값 불일치 경고", () => {

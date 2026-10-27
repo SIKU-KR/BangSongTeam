@@ -44,7 +44,11 @@ describe("GET /api/catalog/search", () => {
     expect(await limited.json()).toEqual({
       error: API_ERRORS.tooManyRequests,
     });
+    const retryAfter = Number(limited.headers.get("retry-after"));
+    expect(retryAfter).toBeGreaterThanOrEqual(1);
+    expect(retryAfter).toBeLessThanOrEqual(60);
     expect(otherIp.status).toBe(200);
+    expect(otherIp.headers.has("retry-after")).toBe(false);
   });
 
   it("IPv6는 /64 대역 하나를 한 IP로 세어 주소를 바꿔도 한도를 넘지 못한다", async () => {
@@ -59,6 +63,12 @@ describe("GET /api/catalog/search", () => {
 
     expect(sameSubnet.status).toBe(429);
     expect(otherSubnet.status).toBe(200);
+  });
+
+  it("x-forwarded-for에 쌍점이 든 영역 표시를 붙인 IPv6를 보내도 500 없이 검색한다", async () => {
+    const res = await search(createApp(), "z", "1:2:3:4:5:6:7:8%a:b");
+
+    expect(res.status).toBe(200);
   });
 
   it("후보 수를 세지 못해도 검색 결과를 주고 경고 로그를 남긴다", async () => {
