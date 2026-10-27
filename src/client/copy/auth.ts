@@ -1,4 +1,4 @@
-import { APP_NAME } from "#shared";
+import { API_ERRORS, APP_NAME } from "#shared";
 
 /**
  * 운영 브랜드. 법인도 개인사업자도 아니라 계약 주체가 될 수 없으므로,
@@ -65,6 +65,7 @@ export const AUTH_COPY = {
         "이미 가입한 이메일이에요. 가입할 때 쓴 방법으로 로그인해 주세요.",
       invalidInput: "입력한 내용을 확인한 뒤 다시 시도해 주세요.",
       rateLimited: "시도가 너무 많아요. 잠시 후 다시 시도해 주세요.",
+      dailySignUpLimit: API_ERRORS.auth.dailySignUpLimit,
       network: "서버에 연결하지 못했어요. 네트워크를 확인해 주세요.",
       unknown: "로그인하지 못했어요. 잠시 후 다시 시도해 주세요.",
     },

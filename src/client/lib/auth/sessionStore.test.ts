@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { SIGN_UP_IN_PROGRESS } from "#shared";
+import { DAILY_SIGN_UP_LIMIT_CODE, SIGN_UP_IN_PROGRESS } from "#shared";
 import { closeOfflineDB, OFFLINE_DB_NAME } from "../storage/db";
 import { authClient } from "./authClient";
 import {
@@ -1436,15 +1436,16 @@ describe("세션 스토어", () => {
     {
       flow: "로그인",
       request: signInEmail,
-      run: () => signInWithEmail("team@example.com", "password-1234"),
+      run: (email = "team@example.com") =>
+        signInWithEmail(email, "password-1234"),
     },
     {
       flow: "가입",
       request: signUpEmail,
-      run: () =>
+      run: (email = "team@example.com") =>
         signUpWithEmail({
           name: "찬양팀",
-          email: "team@example.com",
+          email,
           password: "password-1234",
         }),
     },
@@ -1496,6 +1497,85 @@ describe("세션 스토어", () => {
       await expect(run()).rejects.toMatchObject({ reason: "unknown" });
       expect(getSessionState().status).toBe("unauthenticated");
     });
+
+    describe("서버가 받아 준 뒤 세션을 확인하지 못해 다시 보낼 때", () => {
+      function checkFailsOnceThenAnswers(user: SessionUser | null): void {
+        __setSessionFetcherForTests(
+          vi
+            .fn<SessionFetcher>()
+            .mockRejectedValueOnce(new Error("timeout"))
+            .mockResolvedValue(user),
+        );
+      }
+
+      it("같은 이메일이면 자격 증명을 다시 보내지 않고 세션만 다시 확인해 들어간다", async () => {
+        request.mockResolvedValue({ data: {}, error: null } as never);
+        checkFailsOnceThenAnswers(makeUser());
+
+        await expect(run()).rejects.toMatchObject({ reason: "network" });
+        await run();
+
+        expect(request).toHaveBeenCalledTimes(1);
+        expect(getSessionState().status).toBe("authenticated");
+        expect(getCurrentUserId()).toBe(USER_ID);
+      });
+
+      it("대소문자와 앞뒤 공백만 다른 이메일은 같은 이메일로 본다", async () => {
+        request.mockResolvedValue({ data: {}, error: null } as never);
+        checkFailsOnceThenAnswers(makeUser());
+
+        await expect(run(" Team@Example.com")).rejects.toMatchObject({
+          reason: "network",
+        });
+        await run("team@example.com");
+
+        expect(request).toHaveBeenCalledTimes(1);
+        expect(getSessionState().status).toBe("authenticated");
+      });
+
+      it("다른 이메일이면 자격 증명을 다시 보낸다", async () => {
+        request.mockResolvedValue({ data: {}, error: null } as never);
+        checkFailsOnceThenAnswers(makeUser({ userId: OTHER_USER_ID }));
+
+        await expect(run()).rejects.toMatchObject({ reason: "network" });
+        await run("other@example.com");
+
+        expect(request).toHaveBeenCalledTimes(2);
+        expect(request).toHaveBeenLastCalledWith(
+          expect.objectContaining({ email: "other@example.com" }),
+        );
+        expect(getCurrentUserId()).toBe(OTHER_USER_ID);
+      });
+
+      it("세션 확인에서 서버가 세션이 없다고 답했으면 다음에는 자격 증명을 다시 보낸다", async () => {
+        request.mockResolvedValue({ data: {}, error: null } as never);
+        __setSessionFetcherForTests(
+          vi
+            .fn<SessionFetcher>()
+            .mockResolvedValueOnce(null)
+            .mockResolvedValue(makeUser()),
+        );
+
+        await expect(run()).rejects.toMatchObject({ reason: "unknown" });
+        await run();
+
+        expect(request).toHaveBeenCalledTimes(2);
+        expect(getSessionState().status).toBe("authenticated");
+      });
+
+      it("서버가 받아 주지 않은 요청 뒤에는 자격 증명을 다시 보낸다", async () => {
+        request
+          .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+          .mockResolvedValue({ data: {}, error: null } as never);
+        __setSessionFetcherForTests(async () => makeUser());
+
+        await expect(run()).rejects.toMatchObject({ reason: "network" });
+        await run();
+
+        expect(request).toHaveBeenCalledTimes(2);
+        expect(getSessionState().status).toBe("authenticated");
+      });
+    });
   });
 
   describe("signInWithEmail", () => {
@@ -1530,6 +1610,17 @@ describe("세션 스토어", () => {
 
       expect(getSessionState().status).toBe("authenticated");
       expect(getCurrentUserId()).toBe(USER_ID);
+    });
+
+    it("빈도 제한(429)은 잠시 후 다시 시도하라고 안내한다", async () => {
+      signInEmail.mockResolvedValueOnce({
+        data: null,
+        error: { status: 429, statusText: "" },
+      } as never);
+
+      await expect(
+        signInWithEmail("team@example.com", "password-1234"),
+      ).rejects.toMatchObject({ reason: "rateLimited" });
     });
   });
 
@@ -1581,6 +1672,7 @@ describe("세션 스토어", () => {
         provider: "google",
         callbackURL: "/s/tok-abc?copy=1",
         errorCallbackURL: "/s/tok-abc?copy=1",
+        fetchOptions: { signal: expect.any(AbortSignal) },
       });
     });
 
@@ -1594,7 +1686,31 @@ describe("세션 스토어", () => {
         provider: "google",
         callbackURL: "/presentations",
         errorCallbackURL: "/presentations",
+        fetchOptions: { signal: expect.any(AbortSignal) },
       });
+    });
+
+    it("로그인 시작 요청에 20초 시간 제한을 걸고, 응답 없이 시간이 지나면 던진다", async () => {
+      const deadline = new AbortController();
+      const timeout = vi
+        .spyOn(AbortSignal, "timeout")
+        .mockReturnValue(deadline.signal);
+      signInSocial.mockImplementationOnce(
+        ((options: { fetchOptions: { signal: AbortSignal } }) =>
+          new Promise((_, reject) => {
+            options.fetchOptions.signal.addEventListener("abort", () =>
+              reject(options.fetchOptions.signal.reason),
+            );
+          })) as never,
+      );
+
+      const signingIn = signInWithProvider("google");
+      await vi.waitFor(() => expect(signInSocial).toHaveBeenCalledTimes(1));
+      expect(timeout).toHaveBeenCalledWith(20_000);
+
+      deadline.abort(new DOMException("timeout", "TimeoutError"));
+
+      await expect(signingIn).rejects.toMatchObject({ name: "TimeoutError" });
     });
   });
 
@@ -1605,7 +1721,7 @@ describe("세션 스토어", () => {
       password: "password-1234",
     };
 
-    function rejectSignUp(code: string, status = 422): void {
+    function rejectSignUp(status: number, code?: string): void {
       signUpEmail.mockResolvedValueOnce({
         data: null,
         error: { status, statusText: "", code },
@@ -1613,7 +1729,7 @@ describe("세션 스토어", () => {
     }
 
     it("이미 가입한 이메일이라는 답이면 로그인하라고 안내한다", async () => {
-      rejectSignUp("USER_ALREADY_EXISTS_USE_ANOTHER_EMAIL");
+      rejectSignUp(422, "USER_ALREADY_EXISTS_USE_ANOTHER_EMAIL");
 
       await expect(signUpWithEmail(input)).rejects.toMatchObject({
         reason: "alreadyExists",
@@ -1621,7 +1737,7 @@ describe("세션 스토어", () => {
     });
 
     it("서버가 사용자를 만들지 못한 422는 이미 가입했다고 하지 않고 다시 시도하게 한다", async () => {
-      rejectSignUp("FAILED_TO_CREATE_USER");
+      rejectSignUp(422, "FAILED_TO_CREATE_USER");
 
       await expect(signUpWithEmail(input)).rejects.toMatchObject({
         reason: "unknown",
@@ -1629,10 +1745,26 @@ describe("세션 스토어", () => {
     });
 
     it("같은 이메일의 가입이 아직 끝나지 않았다는 409도 이미 가입했다고 하지 않고 다시 시도하게 한다", async () => {
-      rejectSignUp(SIGN_UP_IN_PROGRESS, 409);
+      rejectSignUp(409, SIGN_UP_IN_PROGRESS);
 
       await expect(signUpWithEmail(input)).rejects.toMatchObject({
         reason: "unknown",
+      });
+    });
+
+    it("IP 하나의 하루 가입 한도에 닿은 429는 잠시 후가 아니라 내일 다시 가입하라고 따로 안내한다", async () => {
+      rejectSignUp(429, DAILY_SIGN_UP_LIMIT_CODE);
+
+      await expect(signUpWithEmail(input)).rejects.toMatchObject({
+        reason: "dailySignUpLimit",
+      });
+    });
+
+    it("코드 없는 429(짧은 빈도 제한)는 잠시 후 다시 시도하라고 안내한다", async () => {
+      rejectSignUp(429);
+
+      await expect(signUpWithEmail(input)).rejects.toMatchObject({
+        reason: "rateLimited",
       });
     });
   });

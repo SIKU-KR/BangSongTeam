@@ -350,6 +350,42 @@ describe("LoginRoute", () => {
       );
       expect(screen.queryByText(/Failed to fetch/)).toBeNull();
     });
+
+    it("로그인 시작 요청이 시간 제한에 걸리면 안내하고 Google 버튼과 이메일 로그인, 돌아가기를 다시 쓸 수 있게 한다", async () => {
+      let timeOut: () => void = () => undefined;
+      signInWithProvider.mockReturnValue(
+        new Promise<never>((_, reject) => {
+          timeOut = () =>
+            reject(new DOMException("signal timed out", "TimeoutError"));
+        }),
+      );
+      renderLogin({ onCancel: vi.fn() });
+
+      fireEvent.click(
+        await screen.findByRole("button", { name: AUTH_COPY.providers.google }),
+      );
+      const google = screen.getByRole("button", {
+        name: AUTH_COPY.providers.google,
+      });
+      const emailSubmit = screen.getByRole("button", {
+        name: AUTH_COPY.email.submitSignIn,
+      });
+      const cancel = screen.getByTestId("login-cancel-btn");
+      await waitFor(() => {
+        expect(emailSubmit).toBeDisabled();
+      });
+      expect(google).toBeDisabled();
+      expect(cancel).toBeDisabled();
+
+      timeOut();
+
+      expect(await screen.findByRole("alert")).toHaveTextContent(
+        AUTH_COPY.signInFailed,
+      );
+      expect(google).toBeEnabled();
+      expect(emailSubmit).toBeEnabled();
+      expect(cancel).toBeEnabled();
+    });
   });
 
   it("소셜 로그인과 함께 이메일 로그인 폼을 보여 준다", async () => {
