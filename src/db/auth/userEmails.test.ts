@@ -71,6 +71,23 @@ describe("releaseAbandonedSignUp", () => {
     expect(await usersWithEmail("fresh@example.com")).toBe(1);
   });
 
+  it("만든 시각이 없는 사용자 문서는 예외 없이 그대로 둔다", async () => {
+    const { createdAt, ...withoutCreatedAt } = userDoc({
+      id: "undated00000000000001",
+      email: "undated@example.com",
+    });
+    void createdAt;
+    await db
+      .collection(COLLECTIONS.users)
+      .doc(withoutCreatedAt.id)
+      .set(withoutCreatedAt);
+
+    expect(await releaseAbandonedSignUp(db, "undated@example.com", NOW)).toBe(
+      false,
+    );
+    expect(await usersWithEmail("undated@example.com")).toBe(1);
+  });
+
   it("연결된 계정이 있으면 지우지 않는다", async () => {
     const id = await signUpWithoutCredential("linked@example.com", LONG_AGO);
     await db.collection(COLLECTIONS.accounts).doc("account-1").set({

@@ -6,7 +6,7 @@ import type {
   Transaction,
 } from "@google-cloud/firestore";
 import { createAdapterFactory } from "better-auth/adapters";
-import { runBulk, type Db } from "../client";
+import type { Db } from "../client";
 import { COLLECTIONS, fromFirestoreData } from "../collections";
 import { createUserWithEmail, reservationsHeldBy } from "./userEmails";
 
@@ -22,6 +22,9 @@ type Row = Record<string, unknown>;
 
 /** Firestore `in`이 받는 값 수. 이보다 많으면 서버에서 거른다 */
 const MAX_IN_VALUES = 30;
+
+/** 커밋 하나에 담는 지우기 수. 쌓인 문서가 많아도 요청 크기 한도(10 MiB)를 넘지 않는다 */
+const MAX_DELETES_PER_COMMIT = 400;
 
 const RANGE_OPERATORS: Readonly<Record<string, "<" | "<=" | ">" | ">=">> = {
   lt: "<",
@@ -181,8 +184,8 @@ function toRow(snapshot: QueryDocumentSnapshot<DocumentData>): Row {
  * - 사용자는 이메일마다 하나다. 사용자 문서는 이메일 예약과 함께 만들고(`createUserWithEmail`)
  *   지울 때 그 사용자의 예약도 지운다. 같은 이메일의 두 번째 사용자는 만들지 않고 실패한다.
  * - `delete`는 조건에 맞는 문서를 모두 지운다. 같은 식별자로 두 번 만든 값도 함께 사라진다.
- * - 여러 문서 지우기는 BulkWriter로 나눠 보낸다. 쌓인 문서가 많아도 커밋 하나가 요청 크기
- *   한도(10 MiB)를 넘지 않는다.
+ * - 여러 문서 지우기는 `MAX_DELETES_PER_COMMIT`개씩 나눠 커밋한다. 쌓인 문서가 많아도 커밋
+ *   하나가 요청 크기 한도를 넘지 않는다.
  */
 export function firestoreAdapter(
   db: Db,
@@ -196,11 +199,17 @@ export function firestoreAdapter(
       model === COLLECTIONS.users
         ? await reservationsHeldBy(
             db,
-            rows.map(({ row }) => row),
+            rows.map(({ row, ref }) => ({ id: ref.id, email: row.email })),
           )
         : [];
     const refs = [...rows.map(({ ref }) => ref), ...reservations];
-    await runBulk(db, (writer) => refs.map((ref) => writer.delete(ref)));
+    for (let i = 0; i < refs.length; i += MAX_DELETES_PER_COMMIT) {
+      const batch = db.batch();
+      for (const ref of refs.slice(i, i + MAX_DELETES_PER_COMMIT)) {
+        batch.delete(ref);
+      }
+      await batch.commit();
+    }
   }
 
   async function findRows(

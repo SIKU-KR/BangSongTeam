@@ -74,7 +74,7 @@ export async function reservationsHeldBy(
  * - 이메일의 사용자가 하나뿐이다.
  * - 연결된 계정(비밀번호·소셜)이 없어 누구도 로그인할 수 없다.
  * - 이메일이 인증되지 않았고 약관에 동의하지 않았다. 앱을 써 본 적 없는 사용자다.
- * - 만든 지 `ABANDONED_SIGN_UP_MIN_AGE_MS`가 지났다.
+ * - 만든 지 `ABANDONED_SIGN_UP_MIN_AGE_MS`가 지났다. 만든 시각을 모르면 방금 만든 것으로 본다.
  */
 export async function releaseAbandonedSignUp(
   db: Db,
@@ -90,9 +90,9 @@ export async function releaseAbandonedSignUp(
 
   const user = snapshot.data();
   if (user.emailVerified || user.termsAgreedAt) return false;
-  if (now.getTime() - user.createdAt.getTime() < ABANDONED_SIGN_UP_MIN_AGE_MS) {
-    return false;
-  }
+  const createdAt =
+    user.createdAt instanceof Date ? user.createdAt.getTime() : now.getTime();
+  if (now.getTime() - createdAt < ABANDONED_SIGN_UP_MIN_AGE_MS) return false;
 
   const accounts = await db
     .collection(COLLECTIONS.accounts)
