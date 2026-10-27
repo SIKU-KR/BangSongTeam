@@ -144,17 +144,21 @@ D1 테이블을 운영 Firestore에 쓴다. 필요한 토큰과 실행 명령은
 
 CI는 새 리비전을 트래픽 없이 `candidate` 태그로 올리고, 태그 주소의 `/api/health`와
 `/api/backgrounds`가 응답해야 트래픽을 옮긴다. 확인에 실패하면 트래픽은 이전 리비전에 남고, 실패한
-리비전은 태그 주소(`gcloud run services describe`의 `candidate` URL)로 살펴볼 수 있다.
+리비전은 태그 주소(`gcloud run services describe`의 `candidate` URL)로 살펴볼 수 있다. 이 주소는 다음
+배포가 태그를 옮기거나 `--remove-tags=candidate`로 태그를 뗄 때까지 누구나 열 수 있다.
 
-트래픽을 받은 뒤에 문제가 드러나면 이전 리비전으로 되돌린다.
+트래픽을 받은 뒤에 문제가 드러나면 이전 리비전으로 되돌린다. 태그는 마지막으로 올린 리비전에 남아
+있으므로, 함께 떼야 문제 리비전이 태그 주소로 열리지 않는다.
 
 ```bash
 gcloud run revisions list --service "$SERVICE" --region "$REGION"
-gcloud run services update-traffic "$SERVICE" --region "$REGION" --to-revisions=<이전 리비전>=100
+gcloud run services update-traffic "$SERVICE" --region "$REGION" \
+  --to-revisions=<이전 리비전>=100 --remove-tags=candidate
 ```
 
-다음 CI 배포는 확인을 통과하면 트래픽을 다시 최신 리비전으로 옮긴다. 문제를 고치기 전에 다른 PR을
-머지하면 문제가 남은 코드로 돌아가므로, 문제 커밋을 되돌리는 PR이나 고친 PR을 먼저 머지한다.
+다음 CI 배포는 새 리비전에 태그를 다시 붙이고, 확인을 통과하면 트래픽을 다시 최신 리비전으로
+옮긴다. 문제를 고치기 전에 다른 PR을 머지하면 문제가 남은 코드로 돌아가므로, 문제 커밋을 되돌리는
+PR이나 고친 PR을 먼저 머지한다.
 
 ## 9. 회원 탈퇴
 

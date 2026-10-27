@@ -66,7 +66,7 @@ describe("CI/CD 워크플로", () => {
 
     it("candidate 주소의 상태 확인과 공개 읽기가 성공한 뒤에야 트래픽을 최신 리비전으로 옮긴다", () => {
       const deploy = deployJob();
-      const steps = [
+      const positions = [
         /gcloud run deploy .*--no-traffic/,
         /select\(\.tag == "candidate"\)/,
         /curl -fsS .*"\$\{CANDIDATE_URL\}\/api\/health"/,
@@ -74,8 +74,19 @@ describe("CI/CD 워크플로", () => {
         /gcloud run services update-traffic .*--to-latest/,
       ].map((pattern) => deploy.search(pattern));
 
-      expect(steps).not.toContain(-1);
-      expect(steps).toEqual([...steps].sort((a, b) => a - b));
+      expect(positions).not.toContain(-1);
+      expect(positions).toEqual([...positions].sort((a, b) => a - b));
+
+      const steps = deploy.split(/\n(?= {6}- )/);
+      const candidate = steps.findIndex((step) =>
+        step.includes("gcloud run deploy "),
+      );
+      expect(candidate).toBeGreaterThan(0);
+      expect(
+        steps
+          .slice(candidate)
+          .filter((step) => /^\s*(?:- )?(?:if|continue-on-error):/m.test(step)),
+      ).toEqual([]);
     });
   });
 });
