@@ -682,6 +682,93 @@ describe("서버 push 스케줄러", () => {
       expect(order).toEqual([`folder:${FOLDER}`, "doc:a"]);
     });
 
+    it("부팅이 바로 올리던 폴더가 일시 장애로 실패하면, 그 폴더를 기다리던 세트는 폴더가 다시 오른 뒤에 올린다", async () => {
+      const order: string[] = [];
+      let failBoot: (err: unknown) => void = () => undefined;
+      pushFolder.mockImplementation(async (f) => {
+        order.push(`folder:${f.id}`);
+        return f;
+      });
+      pushFolder.mockImplementationOnce(
+        (f) =>
+          new Promise<Folder>((_, reject) => {
+            failBoot = (err) => {
+              order.push(`folder-try:${f.id}`);
+              reject(err);
+            };
+          }),
+      );
+      push.mockImplementation(async (document) => {
+        order.push(`doc:${document.id}`);
+        return true;
+      });
+
+      const booting = pushFolderNow(newFolder()).catch(() => {
+        scheduleFolderPush(newFolder());
+      });
+      await vi.waitFor(() => expect(pushFolder).toHaveBeenCalledTimes(1));
+      scheduleDocumentPush(inFolder("a"));
+      const flushing = flushPendingSync();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      failBoot(new ServerRejectedError(503, API_ERRORS.serverBusy));
+      await Promise.all([booting, flushing]);
+
+      expect(order).toEqual([`folder-try:${FOLDER}`]);
+      expect(hasPendingDocumentPush()).toBe(true);
+
+      await flushPendingSync();
+
+      expect(order).toEqual([
+        `folder-try:${FOLDER}`,
+        `folder:${FOLDER}`,
+        "doc:a",
+      ]);
+      expect(hasPendingDocumentPush()).toBe(false);
+    });
+
+    it("폴더 재시도를 기다리며 붙잡힌 세트는 부팅이 같은 폴더를 바로 올리다 실패해도 놓이지 않는다", async () => {
+      vi.useFakeTimers();
+      pushFolder.mockRejectedValueOnce(
+        new ServerRejectedError(503, API_ERRORS.serverBusy, 30_000),
+      );
+      scheduleFolderPush(newFolder());
+      scheduleDocumentPush(inFolder("a"));
+      await vi.advanceTimersByTimeAsync(SYNC_DEBOUNCE_MS);
+      expect(pushFolder).toHaveBeenCalledTimes(1);
+      expect(hasPendingDocumentPush()).toBe(true);
+
+      let failBoot: (err: unknown) => void = () => undefined;
+      pushFolder.mockImplementationOnce(
+        () =>
+          new Promise<Folder>((_, reject) => {
+            failBoot = reject;
+          }),
+      );
+      const booting = pushFolderNow(newFolder()).catch(() => {
+        scheduleFolderPush(newFolder());
+      });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(pushFolder).toHaveBeenCalledTimes(2);
+
+      failBoot(new ServerRejectedError(503, API_ERRORS.serverBusy, 30_000));
+      await booting;
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(push).not.toHaveBeenCalled();
+      expect(hasPendingDocumentPush()).toBe(true);
+
+      await vi.advanceTimersByTimeAsync(2000);
+
+      expect(pushFolder).toHaveBeenCalledTimes(3);
+      expect(push).toHaveBeenCalledExactlyOnceWith(
+        expect.objectContaining({ id: "a", folderId: FOLDER }),
+      );
+      expect(push.mock.invocationCallOrder[0]).toBeGreaterThan(
+        pushFolder.mock.invocationCallOrder[2],
+      );
+    });
+
     it("폴더가 오르기를 기다리는 동안 고친 세트도 폴더가 오르면 마지막 판을 올린다", async () => {
       vi.useFakeTimers();
       pushFolder.mockRejectedValueOnce(

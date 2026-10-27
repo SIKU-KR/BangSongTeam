@@ -456,6 +456,48 @@ describe("runBootSync — drive folders", () => {
     );
   });
 
+  it("부팅이 올리던 폴더가 일시 장애로 실패하면, 그사이 그 폴더에 넣은 세트는 폴더가 다시 오른 뒤에 올린다", async () => {
+    const order: string[] = [];
+    let failBoot: (err: unknown) => void = () => undefined;
+    pushFolder.mockImplementation(async (f: Folder) => {
+      order.push(`folder:${f.id}`);
+      return f;
+    });
+    pushFolder.mockImplementationOnce(
+      (f: Folder) =>
+        new Promise<Folder>((_, reject) => {
+          failBoot = (err) => {
+            order.push(`folder-try:${f.id}`);
+            reject(err);
+          };
+        }),
+    );
+    presentationSync.pushPresentation.mockImplementation(async (doc) => {
+      order.push(`doc:${(doc as Presentation).id}`);
+      return true;
+    });
+    __loadFoldersForTests([folder(PARENT)]);
+
+    const booting = runBootSync();
+    await vi.waitFor(() => expect(pushFolder).toHaveBeenCalledTimes(1));
+    scheduleDocumentPush({ ...presentation(DOC), folderId: PARENT });
+    const flushing = flushPendingSync();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    failBoot(new ServerRejectedError(503, API_ERRORS.serverBusy));
+    await Promise.all([booting, flushing]);
+
+    expect(order).toEqual([`folder-try:${PARENT}`]);
+
+    await flushPendingSync();
+
+    expect(order).toEqual([
+      `folder-try:${PARENT}`,
+      `folder:${PARENT}`,
+      `doc:${DOC}`,
+    ]);
+  });
+
   it("다른 기기에서 영구 삭제한 폴더·세트는 되살리지 않고 로컬에서도 지운다", async () => {
     __loadFoldersForTests([folder(PARENT)]);
     __loadDocumentsForTests([presentation(DOC)]);

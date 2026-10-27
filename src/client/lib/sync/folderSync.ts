@@ -311,8 +311,10 @@ export function cancelFolderPush(id: string): void {
  * 폴더로 옮긴 세트는 폴더가 오른 뒤에 오른다. 등록을 지운 뒤에 돌아오므로, 부팅이 다음 폴더를
  * 올릴지 정할 때 방금 오른 부모를 아직 오르지 않은 폴더로 보지 않는다.
  *
- * 실패는 부른 쪽에 그대로 던진다. 일시 장애(오프라인·5xx·429·401)면 그 폴더가 다시 시도를
- * 기다린다고 남긴다. 부팅이 그 폴더를 큐에 넘긴 뒤, 그 안의 세트가 폴더 재시도를 앞당기지
+ * 실패는 부른 쪽에 그대로 던진다. 일시 장애(오프라인·5xx·429·401)면 던지기 전에 그 폴더를 큐에
+ * 다시 넣어 백오프로 다시 올린다. 부른 쪽(부팅)이 큐에 넘길 때까지 두면, 그사이 이 폴더가 끝난
+ * 것으로 보여 붙잡혀 있던 세트와 뒤에 줄 선 하위 폴더가 먼저 올라가고 서버는 그것을 루트로 옮겨
+ * 받는다. 다시 넣은 폴더는 다시 시도를 기다리는 폴더라, 그 안의 세트가 폴더 재시도를 앞당기지
  * 않는다(`ensureFolderPushed`). 다른 곳에서 영구 삭제한 폴더면(410) 지웠다고
  * 알리고(`setFolderGoneListener`) `null`이다.
  */
@@ -330,7 +332,7 @@ export async function pushFolderNow(folder: Folder): Promise<Folder | null> {
         return null;
       }
       if (isRetryableApiError(err) || err instanceof SessionExpiredError) {
-        retrying.add(folder.id);
+        keepForRetry(folder, err);
       }
       throw err;
     }
@@ -339,6 +341,14 @@ export async function pushFolderNow(folder: Folder): Promise<Folder | null> {
     clearSyncFailure("folder", folder.id);
     return saved;
   });
+}
+
+function keepForRetry(folder: Folder, err: unknown): void {
+  if (!enabled) return;
+  retrying.add(folder.id);
+  if (!pending.has(folder.id)) pending.set(folder.id, folder);
+  const delay = backoff.getDelay(folder.id, err);
+  if (!timer) timer = setTimeout(run, delay);
 }
 
 /**
