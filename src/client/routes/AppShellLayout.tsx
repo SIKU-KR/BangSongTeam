@@ -3,7 +3,6 @@
 import React, { useMemo, useState } from "react";
 import { usePathname } from "next/navigation";
 import { SidebarInset, SidebarProvider } from "#components/ui/sidebar";
-import { Toaster } from "#components/ui/sonner";
 import { TooltipProvider } from "#components/ui/tooltip";
 import { BrowserSupportBanner } from "../components/common/BrowserSupportBanner";
 import { StorageWarningBanner } from "../components/common/StorageWarningBanner";
@@ -160,8 +159,6 @@ function AppShellFrame({
           )}
         </AppShellContext.Provider>
       </SidebarInset>
-
-      <Toaster position="bottom-left" />
     </SidebarProvider>
   );
 }

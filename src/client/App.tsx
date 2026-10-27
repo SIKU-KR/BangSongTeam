@@ -3,7 +3,9 @@
 import React, { Suspense, useCallback, useEffect, useState } from "react";
 import dynamic from "next/dynamic";
 import { usePathname } from "next/navigation";
+import { toast } from "sonner";
 import { ThemeProvider } from "#components/theme-provider";
+import { Toaster } from "#components/ui/sonner";
 import { LoadingScreen } from "./components/common/LoadingScreen";
 import { RouteErrorBoundary } from "./components/common/RouteErrorBoundary";
 import {
@@ -165,6 +167,12 @@ function isGuestPath(pathname: string): boolean {
  * 복원하기 전부터 듣는다(`listenToOtherTabs`). 부팅 중인 탭도 바뀌기 전의 캐시를 읽었을 수 있다.
  * 서버가 확인하지 않은 로그아웃은 연결이 돌아올 때마다 마저 끝낸다(`finishPendingSignOut`). 열린
  * 채로 남은 교회 PC의 탭에서도 남은 쿠키를 지워야 한다.
+ *
+ * 알림 창(sonner `Toaster`)은 로그인하지 않은 화면을 포함한 모든 주소가 함께 쓰는 하나만 여기 둔다.
+ * sonner는 알림 창이 마운트될 때 아직 닫히지 않은 알림을 다시 띄워서, 화면마다 창을 두면 창이 없는
+ * 화면(편집기 등)에서 띄운 알림은 보이지 않다가 다른 화면에서 뒤늦게 뜬다. 송출 화면에는 두지 않는다.
+ * 관객이 보는 화면에 알림이 뜨면 안 된다. 송출을 시작할 때 떠 있던 알림은 닫아, 송출을 마친 뒤 다시
+ * 뜨지 않게 한다.
  */
 export function App({
   children,
@@ -179,8 +187,19 @@ export function App({
   return (
     <ThemeProvider defaultTheme="system" storageKey={THEME_STORAGE_KEY}>
       <AppGate>{children}</AppGate>
+      <AppToaster />
     </ThemeProvider>
   );
+}
+
+function AppToaster(): React.JSX.Element | null {
+  const isOnProjection = isProjectionPath(usePathname());
+
+  useEffect(() => {
+    if (isOnProjection) toast.dismiss();
+  }, [isOnProjection]);
+
+  return isOnProjection ? null : <Toaster position="bottom-left" />;
 }
 
 function AppGate({

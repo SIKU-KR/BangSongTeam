@@ -6,7 +6,9 @@ import {
   within,
 } from "@testing-library/react";
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { toast } from "sonner";
 import { renderApp } from "./test/nextApp";
+import { testRouter } from "./test/next/navigation";
 import {
   createNewPresentation,
   flushPendingWrites,
@@ -59,6 +61,7 @@ import {
 } from "#shared";
 import { SHELL_COPY } from "#copy/shell";
 import { ERROR_COPY } from "#copy/common";
+import { SHARING_COPY } from "#copy/sharing";
 import {
   SEED_PRESENTATION_IDS,
   SEED_PRESENTATIONS,
@@ -912,6 +915,134 @@ describe("App Route Integration", () => {
       expect(apiRequests(api)).not.toContain("GET /api/folders");
       expect(apiRequests(api)).not.toContain("GET /api/presentations");
       expect(apiRequests(api)).not.toContain("GET /api/decks");
+    });
+  });
+
+  describe("알림 창", () => {
+    let api: FakeApi | null = null;
+    const clipboard = Object.getOwnPropertyDescriptor(navigator, "clipboard");
+    const execCommand = Object.getOwnPropertyDescriptor(
+      document,
+      "execCommand",
+    );
+
+    function navigateTo(path: string): void {
+      act(() => {
+        testRouter.push(path);
+      });
+    }
+
+    async function nextTask(): Promise<void> {
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      });
+    }
+
+    beforeEach(() => {
+      resetSyncModules();
+    });
+
+    afterEach(() => {
+      act(() => {
+        toast.dismiss();
+      });
+      api?.restore();
+      api = null;
+      resetSyncModules();
+      if (clipboard) Object.defineProperty(navigator, "clipboard", clipboard);
+      else Reflect.deleteProperty(navigator, "clipboard");
+      if (execCommand)
+        Object.defineProperty(document, "execCommand", execCommand);
+      else Reflect.deleteProperty(document, "execCommand");
+    });
+
+    it("편집기에서 공유 링크를 복사하지 못하면 편집기 화면에 알린다", async () => {
+      Object.defineProperty(navigator, "clipboard", {
+        value: {
+          writeText: vi.fn(async () => Promise.reject(new Error("거부"))),
+        },
+        configurable: true,
+      });
+      Object.defineProperty(document, "execCommand", {
+        value: vi.fn(() => false),
+        configurable: true,
+      });
+      api = installFakeApi(
+        bootRoutes({
+          "GET /api/presentations/*/share": () => ({
+            body: { access: "view", token: "share-token" },
+          }),
+        }),
+      );
+      renderAt(`/editor/${DOC_ID}`);
+      await screen.findByTestId("editor-stage-canvas");
+
+      fireEvent.click(screen.getByTestId("header-share-btn"));
+      fireEvent.click(await screen.findByTestId("share-copy-btn"));
+
+      expect(
+        await screen.findByText(SHARING_COPY.link.copyFailed),
+      ).toBeInTheDocument();
+    });
+
+    it("로그인하지 않은 화면에서도 알림을 띄운다", async () => {
+      signOutForTests();
+      renderAt("/");
+      await screen.findByTestId("landing-route");
+
+      act(() => {
+        toast("손님 화면의 알림");
+      });
+
+      expect(await screen.findByText("손님 화면의 알림")).toBeInTheDocument();
+    });
+
+    it("드라이브의 실행 취소 알림은 드라이브를 떠나면 닫혀, 다른 화면에서도 드라이브로 돌아와서도 다시 뜨지 않는다", async () => {
+      api = installFakeApi(bootRoutes());
+      renderAt("/presentations");
+      await screen.findAllByTestId("presentation-row");
+
+      fireEvent.click(screen.getAllByRole("option")[0]);
+      act(() => {
+        fireEvent.keyDown(document.activeElement ?? window, {
+          key: "Delete",
+        });
+      });
+      expect(await screen.findByTestId("drive-toast")).toBeInTheDocument();
+
+      navigateTo(`/editor/${DOC_ID}`);
+      await screen.findByTestId("editor-stage-canvas");
+      await waitFor(() =>
+        expect(screen.queryByTestId("drive-toast")).not.toBeInTheDocument(),
+      );
+
+      navigateTo("/presentations");
+      await screen.findAllByTestId("presentation-row");
+      await nextTask();
+
+      expect(screen.queryByTestId("drive-toast")).not.toBeInTheDocument();
+    });
+
+    it("송출 화면에는 알림을 띄우지 않고, 송출 전에 떠 있던 알림은 송출을 마쳐도 다시 뜨지 않는다", async () => {
+      api = installFakeApi(bootRoutes());
+      renderAt(`/editor/${DOC_ID}`);
+      await screen.findByTestId("editor-stage-canvas");
+
+      act(() => {
+        toast("송출 전의 알림");
+      });
+      expect(await screen.findByText("송출 전의 알림")).toBeInTheDocument();
+
+      fireEvent.click(screen.getByTestId("header-present-btn"));
+      await screen.findByTestId("fullscreen-present-route");
+      await nextTask();
+      expect(screen.queryByText("송출 전의 알림")).not.toBeInTheDocument();
+
+      fireEvent.click(screen.getByTestId("exit-present-btn"));
+      await screen.findByTestId("editor-stage-canvas");
+      await nextTask();
+
+      expect(screen.queryByText("송출 전의 알림")).not.toBeInTheDocument();
     });
   });
 });
