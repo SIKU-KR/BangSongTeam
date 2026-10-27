@@ -53,8 +53,9 @@ const NONE_CHECKED: Record<ConsentItem, boolean> = {
  *
  * 소셜 로그인은 첫 로그인에 계정이 만들어지므로 가입 절차를 이 모달이 대신한다.
  * 동의 상태를 확인하지 못하면(오프라인 등) 막지 않는다. 예배 중 네트워크가 끊겨도
- * 이미 쓰던 사용자가 갇히면 안 된다. 송출 화면은 요청 0건 규칙 때문에, 약관
- * 페이지는 모달의 '보기'로 여는 곳이라 건너뛴다.
+ * 이미 쓰던 사용자가 갇히면 안 된다. 일시 장애로 확인하지 못했으면 막지 않은 채 다시
+ * 확인해, 동의 전이라는 걸 알게 되면 그때 띄운다(`useConsentStatus`). 송출 화면은 요청
+ * 0건 규칙 때문에, 약관 페이지는 모달의 '보기'로 여는 곳이라 건너뛴다.
  */
 export function ConsentGate(): React.JSX.Element | null {
   const pathname = usePathname();
