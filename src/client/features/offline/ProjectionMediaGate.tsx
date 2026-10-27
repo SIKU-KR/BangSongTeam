@@ -27,7 +27,8 @@ function megabytes(bytes: number): string {
  * `저장된 배경으로 시작`은 확인·받는 중에도 늘 연다. 약한 와이파이에서 받기가 느리거나
  * 멈추면, 막아 두는 동안 예배 중에 송출을 시작할 방법이 없다. 시작한 뒤에는 백그라운드
  * 큐가 남은 배경을 받고, 아직 저장하지 못한 배경은 인터넷으로 재생해 연결이 끊기면 멈출
- * 수 있다. `다시 시도`는 받지 못했을 때만 연다.
+ * 수 있다. `다시 시도`는 받지 못했을 때만 연다. 서비스 워커가 없어 저장할 수 없는
+ * 브라우저(`unsupported`)에는 열지 않는다. 다시 시도해도 같기 때문이다.
  */
 export function ProjectionMediaGate({
   readiness,
@@ -72,7 +73,7 @@ export function ProjectionMediaGate({
           </Progress>
         </div>
         <CardFooter className="flex-wrap gap-2">
-          {failure && (
+          {failure && failure !== "unsupported" && (
             <Button
               data-testid="projection-media-retry"
               onClick={readiness.retry}

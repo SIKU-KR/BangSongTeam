@@ -73,6 +73,7 @@ import {
   useProjectionMediaReady,
 } from "../features/offline";
 import { warmPresentationFonts } from "../lib/offline";
+import { prefersReducedData } from "../lib/browser/optionalApis";
 import { PresentationShareDialog } from "../features/sharing/PresentationShareDialog";
 import {
   endSharedPresentationRefresh,
@@ -100,6 +101,11 @@ export interface EditorGuestOptions {
  *
  * `guest`가 있으면 로그인하지 않은 사람의 공유 세트 보기다. 드라이브·새 세트가
  * 없고, 서버 최신본 받기(로그인 필요)도 하지 않는다.
+ *
+ * 손님과 데이터 절약 모드에서는 배경 영상을 이 기기에 받아 두지 않는다. 링크를 연 휴대폰마다
+ * 프레젠테이션의 영상(수백 MB~수 GB)을 모바일 데이터로 다 받게 되기 때문이다. 포스터만 담고,
+ * 미리보기 영상은 스트리밍하며, 헤더에 저장 진행도 띄우지 않는다. 송출을 시작하면 준비 카드가
+ * 받는다.
  *
  * 툴팁 Provider를 앱 루트가 아니라 여기에 두는 것은 Base UI 툴팁 전체가 로그인·송출
  * 화면이 받는 메인 청크에 들어가지 않게 하기 위해서다.
@@ -150,7 +156,8 @@ function EditorScreen({
     };
   }, [presentationId, readOnly, isGuest]);
 
-  useBackgroundAutoCache(found ?? null);
+  const cachesBackgrounds = !isGuest && !prefersReducedData();
+  useBackgroundAutoCache(found ?? null, { posterOnly: !cachesBackgrounds });
 
   const initialSongIndex = Math.min(
     Math.max(0, Number(searchParams.get("song") || 0)),
@@ -200,11 +207,13 @@ function EditorScreen({
 
   const background = useCacheFirstVideo(
     useBackgroundLayers(currentSong?.backgroundId),
+    { cacheFirst: cachesBackgrounds },
   );
 
-  const mediaReadiness = useProjectionMediaReady(found ?? null, {
-    passive: true,
-  });
+  const mediaReadiness = useProjectionMediaReady(
+    cachesBackgrounds ? (found ?? null) : null,
+    { passive: true },
+  );
 
   const handlePresent = () => {
     if (presentationId) {

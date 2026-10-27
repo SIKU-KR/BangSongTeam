@@ -12,6 +12,7 @@ import {
 } from "#shared";
 import {
   cacheMediaFirst,
+  canStoreMediaOffline,
   ensureMediaSpace,
   findCachedMediaUrls,
   getMediaCacheFailure,
@@ -35,8 +36,11 @@ export type ProjectionMediaStatus =
  * - `offline`: 인터넷이 끊겨 빠진 영상을 받을 수 없다
  * - `quota`: 기기 저장 공간이 모자라다
  * - `network`: 연결은 됐지만 받다가 실패했다 (다시 시도하면 될 수 있다)
+ * - `unsupported`: 서비스 워커가 없는 브라우저라 받아 둔 배경을 재생에 쓸 수 없다. 받지 않고
+ *   인터넷으로 재생하며, 다시 시도해도 같다
  */
-export type ProjectionMediaFailure = "offline" | "quota" | "network";
+export type ProjectionMediaFailure =
+  "offline" | "quota" | "network" | "unsupported";
 
 export interface ProjectionMediaReadiness {
   status: ProjectionMediaStatus;
@@ -201,6 +205,11 @@ function useMediaProgressVersion(active: boolean): number {
  *
  * 받다가 저장 공간 부족으로 실패하면 연결이 끊겼더라도 `quota`로 알린다. 다시 연결해도
  * 공간을 비우기 전에는 낫지 않기 때문이다.
+ *
+ * 서비스 워커가 없는 브라우저(`canStoreMediaOffline`)에서는 받지 않고 `unsupported`로 알린다.
+ * 받아 둔 사본을 재생에 쓰지 못해, 저장했다고 알리면 운영자가 믿고 시작했다가 예배 중 연결이
+ * 끊길 때 배경을 잃는다. 이미 담긴 사본이 있어도 같다. `passive`면 받을 일이 없으니 아무것도
+ * 알리지 않는다.
  */
 export function useProjectionMediaReady(
   presentation: Presentation | null,
@@ -208,10 +217,14 @@ export function useProjectionMediaReady(
 ): ProjectionMediaReadiness {
   const passive = options.passive ?? false;
   const findBackground = useBackgroundLookup();
+  const storable = canStoreMediaOffline();
 
   const files = useMemo(
-    () => collectMediaFiles(presentation, findBackground),
-    [presentation, findBackground],
+    () =>
+      passive && !storable
+        ? []
+        : collectMediaFiles(presentation, findBackground),
+    [presentation, findBackground, passive, storable],
   );
   const filesRef = useLatest(files);
   const [attempt, setAttempt] = useState(0);
@@ -258,6 +271,10 @@ export function useProjectionMediaReady(
 
     const readyUrls = new Set<string>();
     const prepare = async (): Promise<void> => {
+      if (files.length > 0 && !canStoreMediaOffline()) {
+        update({ status: "failed", failure: "unsupported", readyUrls });
+        return;
+      }
       for (const url of await findCachedMediaUrls(urls)) readyUrls.add(url);
       const missing = files.filter((file) => !readyUrls.has(file.url));
       if (missing.length === 0) {

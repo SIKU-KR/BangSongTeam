@@ -26,8 +26,15 @@ import type { BackgroundLayers } from "../backgrounds/backgroundCatalog";
  * 그리게 하고, `shouldWaitForMediaCache`가 false가 되어 곧바로 영상을 재생한다. 그래서
  * 미리보기는 헤더가 저장된 것으로 세는 순간에만 영상으로 바뀐다. 송출 화면은 배경이 늦게
  * 뜨면 안 되므로 쓰지 않는다.
+ *
+ * `cacheFirst`가 false면 기다리지 않고 곧바로 스트리밍한다. 링크로 연 손님처럼 영상을 받아
+ * 둘 까닭이 없는 화면이 곡을 열 때마다 수백 MB 파일을 통째로 받은 뒤에야 보여 주지 않게 한다.
  */
-export function useCacheFirstVideo(layers: BackgroundLayers): BackgroundLayers {
+export function useCacheFirstVideo(
+  layers: BackgroundLayers,
+  options: { cacheFirst?: boolean } = {},
+): BackgroundLayers {
+  const cacheFirst = options.cacheFirst ?? true;
   const { videoUrl, posterUrl } = layers;
   const [readyUrl, setReadyUrl] = useState<string | null>(null);
   useSyncExternalStore(
@@ -36,7 +43,10 @@ export function useCacheFirstVideo(layers: BackgroundLayers): BackgroundLayers {
     getMediaProgressVersion,
   );
   const waiting =
-    !!videoUrl && videoUrl !== readyUrl && shouldWaitForMediaCache(videoUrl);
+    cacheFirst &&
+    !!videoUrl &&
+    videoUrl !== readyUrl &&
+    shouldWaitForMediaCache(videoUrl);
 
   useEffect(() => {
     if (!videoUrl || !waiting) return;

@@ -2,7 +2,12 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { MEDIA_CACHE_NAME, mediaCacheNameFor } from "#shared";
 import { resetFakeCacheStorage } from "../../test/fakeCacheStorage";
 import {
+  installServiceWorker,
+  removeServiceWorker,
+} from "../../test/serviceWorkerFixture";
+import {
   cacheMediaFirst,
+  canStoreMediaOffline,
   ensureMediaSpace,
   findCachedMediaUrls,
   getMediaCacheFailure,
@@ -93,16 +98,57 @@ const originalFetch = globalThis.fetch;
 beforeEach(() => {
   resetFakeCacheStorage();
   __resetMediaCachingForTests();
+  installServiceWorker();
 });
 
 afterEach(() => {
   globalThis.fetch = originalFetch;
   vi.restoreAllMocks();
   vi.useRealTimers();
-  // @ts-expect-error 테스트에서 주입한 서비스 워커를 되돌린다
-  delete navigator.serviceWorker;
+  removeServiceWorker();
   // @ts-expect-error 테스트에서 주입한 저장소 관리자를 되돌린다
   delete navigator.storage;
+});
+
+describe("서비스 워커를 지원하지 않는 브라우저", () => {
+  it("받아 둔 사본을 재생에 쓸 수 없으므로 큐와 곧바로 받기 모두 받지 않는다", async () => {
+    removeServiceWorker();
+    retainMediaUrls([VIDEO]);
+    const fetchMock = mockFetch();
+
+    scheduleMediaCaching([VIDEO, POSTER]);
+    resumeMediaCaching("manual");
+    await __waitForMediaCachingForTests();
+
+    expect(canStoreMediaOffline()).toBe(false);
+    expect(await cacheMediaFirst(OTHER)).toBe(false);
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(getMediaQueueState(VIDEO)).toBeNull();
+    expect(getMediaCacheFailure(OTHER)).toBeUndefined();
+  });
+
+  it("지원은 하지만 아직 제어받지 않은 페이지는 직접 담는다", async () => {
+    mockFetch();
+
+    expect(canStoreMediaOffline()).toBe(true);
+    expect(await cacheMediaFirst(VIDEO)).toBe(true);
+    expect(await isCached(VIDEO)).toBe(true);
+  });
+
+  it("서비스 워커에 접근하면 브라우저가 거절하는 문서도 던지지 않고 지원하지 않는 것으로 본다", async () => {
+    Object.defineProperty(navigator, "serviceWorker", {
+      get() {
+        throw new DOMException("sandboxed", "SecurityError");
+      },
+      configurable: true,
+    });
+    const fetchMock = mockFetch();
+
+    expect(canStoreMediaOffline()).toBe(false);
+    scheduleMediaCaching([VIDEO]);
+    await __waitForMediaCachingForTests();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
 });
 
 describe("cacheMediaFirst", () => {

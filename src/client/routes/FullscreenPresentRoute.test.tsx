@@ -36,8 +36,13 @@ import {
   withBackgrounds,
 } from "../test/backgroundFixture";
 import { resetFakeCacheStorage } from "../test/fakeCacheStorage";
+import {
+  installServiceWorker,
+  removeServiceWorker,
+} from "../test/serviceWorkerFixture";
 import { __resetMediaCachingForTests } from "../lib/offline/mediaCache";
 import { MEDIA_CACHE_NAME } from "#shared";
+import { BACKGROUND_COPY } from "#copy/backgrounds";
 import {
   SEED_PRESENTATIONS,
   SEED_PRESENTATION_IDS,
@@ -124,6 +129,7 @@ describe("FullscreenPresentRoute", () => {
     });
     resetFakeCacheStorage();
     __resetMediaCachingForTests();
+    installServiceWorker();
     resetPresentationStore();
     __loadDocumentsForTests(SEED_PRESENTATIONS);
     vi.spyOn(globalThis, "fetch");
@@ -135,6 +141,7 @@ describe("FullscreenPresentRoute", () => {
     vi.useRealTimers();
     vi.restoreAllMocks();
     resetBackgroundCatalogForTests();
+    removeServiceWorker();
   });
 
   it("should render the first song's first slide lyrics without external network requests", () => {
@@ -865,6 +872,27 @@ describe("FullscreenPresentRoute", () => {
       expect(
         await screen.findByText("시작됐네 우리 주님의 능력이"),
       ).toBeInTheDocument();
+    });
+
+    it("서비스 워커가 없는 브라우저는 배경을 받지 않고 인터넷으로 재생한다고 알린 뒤 시작할 수 있다", async () => {
+      removeServiceWorker();
+      mockMediaFetch();
+      renderPresent();
+
+      expect(await screen.findByRole("alert")).toHaveTextContent(
+        BACKGROUND_COPY.prepare.failed.unsupported,
+      );
+      expect(screen.queryByTestId("projection-media-retry")).toBeNull();
+      fireEvent.click(screen.getByTestId("projection-media-start-saved"));
+
+      expect(
+        screen.getByText("시작됐네 우리 주님의 능력이"),
+      ).toBeInTheDocument();
+      expect(screen.getByTestId("video-slot-a")).toHaveAttribute(
+        "src",
+        first.mediaUrl,
+      );
+      expect(globalThis.fetch).not.toHaveBeenCalled();
     });
   });
 

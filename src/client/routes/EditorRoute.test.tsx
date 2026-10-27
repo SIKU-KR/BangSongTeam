@@ -12,6 +12,22 @@ import {
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import type { Presentation } from "#shared";
 import { MemoryRouter, Routes, Route } from "../test/router";
+import { installFakeApi } from "../test/fakeApi";
+import { resetFakeCacheStorage } from "../test/fakeCacheStorage";
+import {
+  installServiceWorker,
+  removeServiceWorker,
+} from "../test/serviceWorkerFixture";
+import {
+  TEST_SERVICE_BACKGROUNDS,
+  withBackgrounds,
+} from "../test/backgroundFixture";
+import {
+  resetBackgroundCatalogForTests,
+  setBackgroundCatalogForTests,
+} from "../features/backgrounds/backgroundCatalog";
+import { AUTO_CACHE_DELAY_MS } from "../features/offline/useBackgroundAutoCache";
+import { __resetMediaCachingForTests } from "../lib/offline/mediaCache";
 import { EditorRoute } from "./EditorRoute";
 import { loadPresentReturnPath } from "../features/presentation/fullscreen";
 import {
@@ -1040,6 +1056,77 @@ describe("EditorRoute (PowerPoint식 프레젠테이션 편집기)", () => {
       ).toHaveTextContent(
         getActivePresentation().items[1].deck!.style.fontFamily,
       );
+    });
+  });
+
+  describe("배경 자동 저장", () => {
+    const backgrounds = TEST_SERVICE_BACKGROUNDS.slice(0, 3);
+
+    beforeEach(() => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      resetFakeCacheStorage();
+      __resetMediaCachingForTests();
+      installServiceWorker();
+      setBackgroundCatalogForTests(TEST_SERVICE_BACKGROUNDS);
+      resetPresentationStore();
+      __loadDocumentsForTests([
+        withBackgrounds(
+          SEED_PRESENTATIONS[0],
+          backgrounds.map((bg) => bg.id),
+        ),
+        ...SEED_PRESENTATIONS.slice(1),
+      ]);
+      vi.spyOn(window.HTMLMediaElement.prototype, "play").mockResolvedValue();
+      vi.spyOn(window.HTMLMediaElement.prototype, "pause").mockReturnValue();
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+      removeServiceWorker();
+      Reflect.deleteProperty(navigator, "connection");
+      resetBackgroundCatalogForTests();
+      __resetMediaCachingForTests();
+    });
+
+    async function mediaPathsAfterAutoCache(): Promise<string[]> {
+      const api = installFakeApi({});
+      try {
+        renderEditor();
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(AUTO_CACHE_DELAY_MS);
+        });
+        return api.calls
+          .map((call) => call.path)
+          .filter((path) => path.startsWith("/api/media/"));
+      } finally {
+        api.restore();
+      }
+    }
+
+    it("소유자가 연 프레젠테이션은 배경 영상까지 이 기기에 받아 둔다", async () => {
+      const paths = await mediaPathsAfterAutoCache();
+
+      expect(paths.some((path) => path.startsWith("/api/media/loops/"))).toBe(
+        true,
+      );
+    });
+
+    it("데이터 절약 모드면 영상은 받아 두지 않고 포스터만 담으며 저장 진행을 띄우지 않는다", async () => {
+      Object.defineProperty(navigator, "connection", {
+        value: { saveData: true },
+        configurable: true,
+      });
+
+      const paths = await mediaPathsAfterAutoCache();
+
+      expect(paths.some((path) => path.startsWith("/api/media/loops/"))).toBe(
+        false,
+      );
+      expect(paths.some((path) => path.startsWith("/api/media/posters/"))).toBe(
+        true,
+      );
+      expect(screen.queryByTestId("header-media-progress")).toBeNull();
+      expect(screen.queryByTestId("header-media-failure")).toBeNull();
     });
   });
 

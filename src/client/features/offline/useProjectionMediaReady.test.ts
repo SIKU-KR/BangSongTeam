@@ -11,6 +11,10 @@ import {
 } from "../../test/backgroundFixture";
 import { resetFakeCacheStorage } from "../../test/fakeCacheStorage";
 import {
+  installServiceWorker,
+  removeServiceWorker,
+} from "../../test/serviceWorkerFixture";
+import {
   __resetMediaCachingForTests,
   __setMediaRetryRandomForTests,
   cacheMediaFirst,
@@ -75,6 +79,7 @@ describe("useProjectionMediaReady", () => {
     resetFakeCacheStorage();
     __resetMediaCachingForTests();
     setBackgroundCatalogForTests(TEST_SERVICE_BACKGROUNDS);
+    installServiceWorker();
   });
 
   afterEach(() => {
@@ -82,6 +87,7 @@ describe("useProjectionMediaReady", () => {
     vi.restoreAllMocks();
     vi.useRealTimers();
     resetBackgroundCatalogForTests();
+    removeServiceWorker();
     // @ts-expect-error 테스트에서 주입한 저장소 관리자를 되돌린다
     delete navigator.storage;
   });
@@ -92,6 +98,52 @@ describe("useProjectionMediaReady", () => {
     );
     expect(result.current.status).toBe("ready");
     expect(result.current.totalCount).toBe(0);
+  });
+
+  describe("서비스 워커를 지원하지 않는 브라우저", () => {
+    beforeEach(() => {
+      removeServiceWorker();
+    });
+
+    it("받아 둔 배경을 재생에 쓸 수 없으니 받지 않고 unsupported로 알린다", async () => {
+      await store(FIRST.mediaUrl);
+      await store(SECOND.mediaUrl);
+      const fetchMock = mockFetch();
+
+      const { result } = renderHook(() =>
+        useProjectionMediaReady(PRESENTATION),
+      );
+
+      await waitFor(() => expect(result.current.status).toBe("failed"));
+      expect(result.current.failure).toBe("unsupported");
+      expect(result.current.readyCount).toBe(0);
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it("배경이 없는 프레젠테이션은 그대로 곧바로 준비된다", async () => {
+      const { result } = renderHook(() =>
+        useProjectionMediaReady(SEED_PRESENTATIONS[0]),
+      );
+
+      await act(async () => undefined);
+      expect(result.current.status).toBe("ready");
+    });
+
+    it("passive면 저장 진행을 알리지 않는다", async () => {
+      const fetchMock = mockFetch();
+
+      const { result } = renderHook(() =>
+        useProjectionMediaReady(PRESENTATION, { passive: true }),
+      );
+
+      await act(async () => undefined);
+      expect(result.current).toMatchObject({
+        status: "ready",
+        failure: null,
+        totalCount: 0,
+      });
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
   });
 
   it("다른 곳에서 영상을 받는 동안 받은 조각마다 다시 그리지 않는다", async () => {

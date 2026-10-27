@@ -1,6 +1,12 @@
 import React from "react";
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "../test/router";
 import type { PresentationDocument } from "#shared";
 import { signOutForTests } from "../test/sessionFixture";
@@ -10,6 +16,21 @@ import {
   getPresentationById,
   resetPresentationStore,
 } from "../features/presentation/presentationStore";
+import {
+  resetBackgroundCatalogForTests,
+  setBackgroundCatalogForTests,
+} from "../features/backgrounds/backgroundCatalog";
+import { AUTO_CACHE_DELAY_MS } from "../features/offline/useBackgroundAutoCache";
+import { __resetMediaCachingForTests } from "../lib/offline/mediaCache";
+import { resetFakeCacheStorage } from "../test/fakeCacheStorage";
+import {
+  installServiceWorker,
+  removeServiceWorker,
+} from "../test/serviceWorkerFixture";
+import {
+  TEST_SERVICE_BACKGROUNDS,
+  withBackgrounds,
+} from "../test/backgroundFixture";
 import { SharePreviewRoute } from "./SharePreviewRoute";
 import { API_ERRORS } from "#shared";
 import { SEED_PRESENTATIONS } from "../test/presentationFixture";
@@ -97,5 +118,69 @@ describe("SharePreviewRoute (로그인하지 않은 /s/:token)", () => {
     expect(await screen.findByTestId("share-link-error")).toHaveTextContent(
       API_ERRORS.share.linkUnavailable,
     );
+  });
+
+  describe("손님이 본 프레젠테이션의 배경", () => {
+    const backgrounds = TEST_SERVICE_BACKGROUNDS.slice(0, 3);
+    const withVideos = {
+      ...shared,
+      ...withBackgrounds(
+        SEED_PRESENTATIONS[0],
+        backgrounds.map((bg) => bg.id),
+      ),
+      userId: OWNER,
+      folderId: null,
+      access: { ownerName: "인도자" },
+    } as PresentationDocument;
+
+    beforeEach(() => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      resetFakeCacheStorage();
+      __resetMediaCachingForTests();
+      installServiceWorker({ controlled: true });
+      setBackgroundCatalogForTests(TEST_SERVICE_BACKGROUNDS);
+      vi.spyOn(window.HTMLMediaElement.prototype, "play").mockResolvedValue();
+      vi.spyOn(window.HTMLMediaElement.prototype, "pause").mockReturnValue();
+      vi.spyOn(window.HTMLMediaElement.prototype, "load").mockReturnValue();
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+      vi.restoreAllMocks();
+      removeServiceWorker();
+      resetBackgroundCatalogForTests();
+      __resetMediaCachingForTests();
+    });
+
+    it("영상은 통째로 받지 않고 스트리밍하며, 포스터만 담고 헤더에 저장 진행을 띄우지 않는다", async () => {
+      api = installFakeApi({
+        "GET /api/share/*": () => ({ body: { document: withVideos } }),
+        "GET /api/backgrounds": () => ({
+          body: { backgrounds: TEST_SERVICE_BACKGROUNDS },
+        }),
+      });
+      renderAt("/s/tok-first");
+      await screen.findByTestId("read-only-banner");
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(AUTO_CACHE_DELAY_MS);
+      });
+
+      const mediaPaths = api.calls
+        .map((call) => call.path)
+        .filter((path) => path.startsWith("/api/media/"));
+      expect(
+        mediaPaths.some((path) => path.startsWith("/api/media/loops/")),
+      ).toBe(false);
+      expect(
+        mediaPaths.some((path) => path.startsWith("/api/media/posters/")),
+      ).toBe(true);
+      expect(screen.getByTestId("video-slot-a")).toHaveAttribute(
+        "src",
+        backgrounds[0].mediaUrl,
+      );
+      expect(screen.queryByTestId("header-media-progress")).toBeNull();
+      expect(screen.queryByTestId("header-media-failure")).toBeNull();
+    });
   });
 });

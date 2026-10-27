@@ -445,8 +445,30 @@ function startDrain(): void {
     });
 }
 
+/**
+ * 이 브라우저가 배경을 받아 두었다가 인터넷 없이 재생할 수 있는지.
+ *
+ * `<video>`·`<img>` 요청에 Cache Storage의 사본으로 답하는 것은 서비스 워커뿐이다. 서비스
+ * 워커가 없는 브라우저(App-Bound Domain이 아닌 iOS 앱 안 WebView 등)에서는 받아 둔 사본을
+ * 재생에 쓰지 못하고 재생이 같은 파일을 한 번 더 받으므로, 큐도 곧바로 받기도 받지 않는다.
+ * 지원은 하지만 아직 페이지를 제어하지 않을 때(첫 방문, 강력 새로고침)는 받는다. 다음
+ * 로드부터 서비스 워커가 그 사본으로 답한다.
+ *
+ * 렌더 중에도 부르므로 던지지 않는다. 샌드박스 문서처럼 브라우저가 `navigator.serviceWorker`
+ * 접근을 `SecurityError`로 거절하면 지원하지 않는 것으로 본다.
+ */
+export function canStoreMediaOffline(): boolean {
+  try {
+    return (
+      navigatorApi("serviceWorker") !== undefined && isCacheStorageAvailable()
+    );
+  } catch {
+    return false;
+  }
+}
+
 function canCacheInBackground(): boolean {
-  return !isOffline() && isCacheStorageAvailable();
+  return !isOffline() && canStoreMediaOffline();
 }
 
 /**
@@ -589,7 +611,8 @@ export function getMediaQueueState(url: string): MediaQueueState | null {
  * 서비스 워커가 페이지를 제어하면 `fetch()`가 SW의 `CacheFirst` 미디어 라우트를
  * 지나며 SW가 캐시에 담으므로, 여기서는 본문을 다 읽고 SW의 쓰기가 끝나기를 기다리기만
  * 한다. 페이지가 `cache.put`을 한 번 더 하면 수백 MB 영상마다 디스크 쓰기가 두 번이다.
- * SW가 없을 때(개발 서버, SW를 지원하지 않는 브라우저)만 직접 `put`한다.
+ * SW가 아직 제어하지 않을 때(개발 서버, 첫 방문, 강력 새로고침)만 직접 `put`한다. SW를
+ * 지원하지 않는 브라우저에서는 받지 않고 false다(`canStoreMediaOffline`).
  *
  * `MEDIA_STALL_TIMEOUT_MS` 동안 진전이 없으면(새 바이트가 오지 않거나 Cache Storage가
  * 응답하지 않으면) 끊고 실패로 넘긴다.

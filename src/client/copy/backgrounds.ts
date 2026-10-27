@@ -40,6 +40,8 @@ export const BACKGROUND_COPY = {
         "기기 저장 공간이 부족해 배경 영상을 저장하지 못했어요. 공간을 비운 뒤 다시 시도해 주세요.",
       network:
         "배경 영상을 받지 못했어요. 인터넷 연결을 확인하고 다시 시도해 주세요.",
+      unsupported:
+        "이 브라우저에선 배경을 기기에 저장할 수 없어 인터넷으로 재생해요. 오프라인 송출은 최신 Chrome, Edge, Safari, Firefox에서 해 주세요.",
     },
     retry: COMMON_COPY.retry,
     startWithSaved: "저장된 배경으로 시작",
