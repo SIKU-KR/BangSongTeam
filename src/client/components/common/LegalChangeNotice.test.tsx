@@ -6,10 +6,21 @@ import { LEGAL_COPY, LEGAL_EFFECTIVE_DATE } from "#copy/auth";
 
 const EFFECTIVE = new Date(`${LEGAL_EFFECTIVE_DATE}T00:00:00+09:00`);
 const BEFORE = new Date(EFFECTIVE.getTime() - 60_000);
+const KST_OFFSET_MS = 9 * 60 * 60_000;
 
 function notice(): HTMLElement | null {
   return screen.queryByTestId("legal-change-notice");
 }
+
+describe("시행일 상수", () => {
+  it("한국 시각 0시로 읽을 수 있는 실제 YYYY-MM-DD 날짜다", () => {
+    expect(LEGAL_EFFECTIVE_DATE).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(Number.isFinite(EFFECTIVE.getTime())).toBe(true);
+    expect(
+      new Date(EFFECTIVE.getTime() + KST_OFFSET_MS).toISOString().slice(0, 10),
+    ).toBe(LEGAL_EFFECTIVE_DATE);
+  });
+});
 
 describe("LegalChangeNotice", () => {
   beforeEach(() => {

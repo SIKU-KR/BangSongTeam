@@ -16,7 +16,7 @@ export const OPERATOR_EMAIL = "peter012677@naver.com";
  * 고친 글이 배포되고 7일 뒤 이후로 옮긴다. 시행일 전까지 `LegalChangeNotice`가 바뀐다는 안내를
  * 띄운다.
  */
-export const LEGAL_EFFECTIVE_DATE = "2026-11-03";
+export const LEGAL_EFFECTIVE_DATE = "2026-11-11";
 
 const legalDate = (date: string): string => {
   const [year, month, day] = date.split("-").map(Number);
