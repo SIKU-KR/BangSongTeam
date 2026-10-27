@@ -61,7 +61,7 @@ export const SHARING_COPY = {
     },
     accessHints: {
       off: "링크로는 들어올 수 없어요.",
-      view: "로그인한 사람은 보고 발표할 수 있어요. 사본을 만들면 고칠 수도 있어요.",
+      view: "로그인하지 않아도 누구나 보고 발표할 수 있어요. 로그인하면 사본을 만들어 고칠 수 있어요.",
     },
     link: "링크",
     shareLink: "공유 링크",
@@ -74,5 +74,7 @@ export const SHARING_COPY = {
       "지금 링크로 들어온 사람은 더 이상 볼 수 없어요. 새 링크를 다시 보내 주세요.",
     resetConfirm: "재설정",
     regenerated: "새 링크를 만들었어요",
+    notSynced:
+      "아직 서버와 동기화하지 않았어요. 동기화가 끝나면 다시 열어 주세요",
   },
 } as const;
