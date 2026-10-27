@@ -188,18 +188,33 @@ describe("withEditStamp", () => {
     expect(edited.updatedAt).toBe("2026-10-01T13:00:00.000Z");
   });
 
-  it("기준 판이 없거나 서버가 확정한 적 없는 판은 기기 시계 + 5분 뒤로 넘기지 않는다", () => {
+  it("고치기 전 판이 기준 판보다 일러도 기준 판보다 늦게 찍는다", () => {
+    const stampedEarlier: Presentation = {
+      ...clean,
+      updatedAt: "2026-10-01T10:00:00.000Z",
+    };
+
+    expect(
+      withEditStamp(
+        stampedEarlier,
+        { ...stampedEarlier, title: "고친 제목" },
+        HOUR_BEHIND,
+      ).updatedAt,
+    ).toBe("2026-10-01T12:00:00.001Z");
+  });
+
+  it("기준 판이 없거나 서버가 확정한 적 없는 판도 기기 시계로 줄이지 않고 고치기 전 판보다 늦게 찍는다", () => {
     const legacy: Presentation = { ...SOURCE, updatedAt: BASE };
     const created: Presentation = { ...legacy, baseUpdatedAt: null };
 
     expect(
       withEditStamp(legacy, { ...legacy, title: "고친 제목" }, HOUR_BEHIND)
         .updatedAt,
-    ).toBe("2026-10-01T11:05:00.001Z");
+    ).toBe("2026-10-01T12:00:00.001Z");
     expect(
       withEditStamp(created, { ...created, title: "고친 제목" }, HOUR_BEHIND)
         .updatedAt,
-    ).toBe("2026-10-01T11:05:00.001Z");
+    ).toBe("2026-10-01T12:00:00.001Z");
   });
 });
 
