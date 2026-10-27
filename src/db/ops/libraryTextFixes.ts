@@ -102,8 +102,8 @@ function textChanges(deck: DeckDoc, fix: LibraryTextFix): TextChanges | null {
 
 /**
  * 공식 라이브러리 곡을 제목·아티스트로 찾는다. 운영에는 100자로 줄이기 전에 넣은 곡과 줄여 넣은
- * 곡이 섞여 있어 두 모양을 모두 찾는다. 제목 하나의 같음 조건만 쓰고(자동 단일 필드 색인)
- * 주인·아티스트·사본 여부는 받아 온 뒤 거른다.
+ * 곡이 섞여 있어 두 모양을 모두 찾는다. 주인·제목의 같음 조건만 써서 복합 색인이 필요 없고,
+ * 아티스트·사본 여부는 받아 온 뒤 거른다. 사용자가 가져간 곡은 제목이 같아도 읽지 않는다.
  */
 async function findOfficialDecks(
   db: Db,
@@ -114,14 +114,13 @@ async function findOfficialDecks(
   const titles = new Set([title, clampText(title, MAX_DECK_TITLE_LENGTH)]);
   const found = new Map<string, DeckDoc>();
   for (const candidate of titles) {
-    const snapshot = await decksCol(db).where("title", "==", candidate).get();
+    const snapshot = await decksCol(db)
+      .where("userId", "==", OFFICIAL_LIBRARY_USER_ID)
+      .where("title", "==", candidate)
+      .get();
     for (const doc of snapshot.docs) {
       const deck = doc.data();
-      if (
-        deck.userId === OFFICIAL_LIBRARY_USER_ID &&
-        deck.presentationId === null &&
-        artists.has(deck.artist)
-      ) {
+      if (deck.presentationId === null && artists.has(deck.artist)) {
         found.set(deck.id, deck);
       }
     }
