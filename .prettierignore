@@ -7,3 +7,4 @@ public/sw.js*
 public/sw-shell*.js
 public/workbox-*.js*
 .data/
+src/server/lib/fixtures/

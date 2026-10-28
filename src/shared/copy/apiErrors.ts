@@ -72,6 +72,11 @@ export const API_ERRORS = {
     alreadyPending: "이미 보낸 신고를 확인하고 있어요",
     dailyLimit: "오늘은 신고를 더 보낼 수 없어요. 내일 다시 보내 주세요",
   },
+  lyrics: {
+    unavailable:
+      "가사를 불러오지 못했어요. 잠시 후 다시 시도하거나 직접 붙여 넣어 주세요",
+    empty: "불러올 수 있는 가사가 없어요. 직접 붙여 넣어 주세요",
+  },
   media: {
     keyRequired: "배경 파일을 지정해 주세요",
     notFound: "배경 파일을 찾을 수 없어요",
