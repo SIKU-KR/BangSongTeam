@@ -85,6 +85,7 @@ import {
   useBootPullPending,
 } from "../lib/sync";
 import { useBackgroundLayers } from "../features/backgrounds";
+import { DRIVE_COPY } from "#copy/drive";
 import { EDITOR_COPY } from "#copy/editor";
 import { COMMON_COPY } from "#copy/common";
 import { SHELL_COPY } from "#copy/shell";
@@ -423,7 +424,12 @@ function EditorScreen({
         </LoadingScreen>
       );
     }
-    return <Navigate to={drivePath(null)} />;
+    return (
+      <Navigate
+        to={drivePath(null)}
+        notice={DRIVE_COPY.toast.presentationNotFound}
+      />
+    );
   }
 
   return (

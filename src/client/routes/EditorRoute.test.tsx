@@ -61,6 +61,8 @@ import {
   setSyncEnabled,
 } from "../lib/sync/syncScheduler";
 import * as capabilities from "../lib/browser/capabilities";
+import { toast } from "sonner";
+import { DRIVE_COPY } from "#copy/drive";
 import { EDITOR_COPY } from "#copy/editor";
 import { COMMON_COPY } from "#copy/common";
 import { PRESENTATION_COPY } from "#copy/presentation";
@@ -1106,11 +1108,17 @@ describe("EditorRoute (PowerPoint식 프레젠테이션 편집기)", () => {
     expect(firstSong().slides).toHaveLength(5);
   });
 
-  it("존재하지 않는 presentationId 는 /presentations 로 리다이렉트된다", () => {
+  it("존재하지 않는 presentationId 는 /presentations 로 리다이렉트되고, 찾지 못했다고 알린다", () => {
+    const info = vi.spyOn(toast, "info");
     renderEditor("/editor/999999999999999999999");
 
     expect(screen.getByTestId("presentations-stub")).toBeInTheDocument();
     expect(screen.queryByTestId("editor-route")).not.toBeInTheDocument();
+    expect(info).toHaveBeenCalledTimes(1);
+    expect(info).toHaveBeenCalledWith(
+      DRIVE_COPY.toast.presentationNotFound,
+      expect.anything(),
+    );
   });
 
   describe("부팅 동기화가 아직 받지 않은 세트 주소", () => {
@@ -1132,6 +1140,7 @@ describe("EditorRoute (PowerPoint식 프레젠테이션 편집기)", () => {
     });
 
     it("세트를 받는 중이면 없는 id라도 드라이브로 보내지 않고, 받으면 그 세트를 열어 편집한다", () => {
+      const info = vi.spyOn(toast, "info");
       __setBootPullPendingForTests(["presentation"]);
       renderEditor(`/editor/${NEW_ID}`);
 
@@ -1149,6 +1158,7 @@ describe("EditorRoute (PowerPoint식 프레젠테이션 편집기)", () => {
       });
 
       expect(screen.getByTestId("editor-route")).toBeInTheDocument();
+      expect(info).not.toHaveBeenCalled();
 
       act(() => {
         updatePresentationTitle("새 제목");
@@ -1160,19 +1170,26 @@ describe("EditorRoute (PowerPoint식 프레젠테이션 편집기)", () => {
       );
     });
 
-    it("받기가 끝났는데도 없으면 드라이브로 보낸다", () => {
+    it("받기가 끝났는데도 없으면 드라이브로 보내고, 그때서야 찾지 못했다고 알린다", () => {
+      const info = vi.spyOn(toast, "info");
       __setBootPullPendingForTests(["presentation"]);
       renderEditor(`/editor/${NEW_ID}`);
 
       expect(
         screen.queryByTestId("presentations-stub"),
       ).not.toBeInTheDocument();
+      expect(info).not.toHaveBeenCalled();
 
       act(() => {
         __setBootPullPendingForTests([]);
       });
 
       expect(screen.getByTestId("presentations-stub")).toBeInTheDocument();
+      expect(info).toHaveBeenCalledTimes(1);
+      expect(info).toHaveBeenCalledWith(
+        DRIVE_COPY.toast.presentationNotFound,
+        expect.anything(),
+      );
     });
   });
 

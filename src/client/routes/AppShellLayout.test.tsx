@@ -23,7 +23,15 @@ import {
   within,
   waitFor,
 } from "@testing-library/react";
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeEach,
+  afterEach,
+  type MockInstance,
+} from "vitest";
 import type {
   DndContextProps,
   DragEndEvent,
@@ -40,6 +48,7 @@ import { TrashRoute } from "./TrashRoute";
 import { LyricsRoute } from "./LyricsRoute";
 import { BackgroundsRoute } from "./BackgroundsRoute";
 import * as capabilities from "../lib/browser/capabilities";
+import { toast } from "sonner";
 import { withQueryClient } from "../test/queryClientFixture";
 import { stubMatchMedia } from "../test/matchMedia";
 import { BELOW_SM_QUERY } from "#hooks/useMediaQuery";
@@ -869,6 +878,12 @@ describe("AppShellLayout (드라이브형 홈)", () => {
   });
 
   describe("부팅 동기화가 아직 받지 않은 폴더 주소", () => {
+    let notice: MockInstance<typeof toast.info>;
+
+    beforeEach(() => {
+      notice = vi.spyOn(toast, "info").mockReturnValue("notice");
+    });
+
     afterEach(() => {
       __setBootPullPendingForTests([]);
     });
@@ -894,6 +909,40 @@ describe("AppShellLayout (드라이브형 홈)", () => {
       expect(window.location.pathname).toBe(
         `/presentations/folders/${WORSHIP}`,
       );
+      expect(notice).not.toHaveBeenCalled();
+    });
+
+    it("받기가 끝났는데도 없는 폴더 주소는 루트로 보내고, 그때서야 찾지 못했다고 알린다", async () => {
+      __setBootPullPendingForTests(["folder"]);
+      renderShell(`/presentations/folders/${WORSHIP}`);
+
+      expect(screen.getByTestId("drive-pending")).toBeInTheDocument();
+      expect(notice).not.toHaveBeenCalled();
+
+      act(() => {
+        __setBootPullPendingForTests([]);
+      });
+
+      expect(screen.getByTestId("crumb-root")).toHaveAttribute(
+        "aria-current",
+        "page",
+      );
+      expect(window.location.pathname).toBe("/presentations");
+      expect(notice).toHaveBeenCalledTimes(1);
+      expect(notice).toHaveBeenCalledWith(
+        DRIVE_COPY.toast.folderNotFound,
+        expect.anything(),
+      );
+    });
+
+    it("받는 중이 아니어도 모르는 폴더 주소는 루트로 보내고 찾지 못했다고 알린다", () => {
+      renderShell(`/presentations/folders/${WORSHIP}`);
+
+      expect(window.location.pathname).toBe("/presentations");
+      expect(notice).toHaveBeenCalledWith(
+        DRIVE_COPY.toast.folderNotFound,
+        expect.anything(),
+      );
     });
 
     it("휴지통에 있는 폴더는 받는 중이어도 바로 루트로 보낸다", () => {
@@ -912,6 +961,7 @@ describe("AppShellLayout (드라이브형 홈)", () => {
         "page",
       );
       expect(window.location.pathname).toBe("/presentations");
+      expect(notice).not.toHaveBeenCalled();
     });
   });
 
