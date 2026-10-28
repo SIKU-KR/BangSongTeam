@@ -2,6 +2,8 @@ import { describe, it, expect } from "vitest";
 import {
   EMAIL_MAX_LENGTH,
   EmailSignUpRequestSchema,
+  OmittedPresentationSchema,
+  PresentationListQuerySchema,
   SearchCatalogQuerySchema,
   SearchCatalogResponseSchema,
   PresentationChangesRequestSchema,
@@ -171,6 +173,31 @@ describe("API Schemas", () => {
           baseUpdatedAt: "어제",
         }).success,
       ).toBe(false);
+    });
+
+    it("곡 사본을 뺀 머리는 어느 문서 스키마로 읽어도 곡이 없는 프레젠테이션이 되지 않는다", () => {
+      const omitted = { ...document, items: null, copiesOmitted: true };
+
+      expect(OmittedPresentationSchema.parse(omitted)).toEqual(omitted);
+      expect(PresentationDocumentSchema.safeParse(omitted).success).toBe(false);
+      expect(PresentationSchema.safeParse(omitted).success).toBe(false);
+      expect(
+        OmittedPresentationSchema.safeParse({ ...document, items: [] }).success,
+      ).toBe(false);
+    });
+
+    it("목록 쿼리의 since는 ISO 시각만 받는다", () => {
+      expect(PresentationListQuerySchema.parse({})).toEqual({});
+      expect(
+        PresentationListQuerySchema.parse({
+          since: "2026-09-22T00:00:00.000Z",
+        }),
+      ).toEqual({ since: "2026-09-22T00:00:00.000Z" });
+      for (const since of ["어제", "", "1727000000000"]) {
+        expect(PresentationListQuerySchema.safeParse({ since }).success).toBe(
+          false,
+        );
+      }
     });
   });
 });

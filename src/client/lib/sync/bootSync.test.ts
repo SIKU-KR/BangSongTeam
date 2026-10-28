@@ -217,6 +217,10 @@ function serverDeck(overrides: Partial<Deck> = {}): Deck {
   });
 }
 
+beforeEach(() => {
+  localStorage.clear();
+});
+
 describe("shouldRunBootSync", () => {
   it("skips projection windows to keep Zero-Fetch", () => {
     expect(shouldRunBootSync("/present/abc/fullscreen")).toBe(false);

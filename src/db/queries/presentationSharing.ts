@@ -4,6 +4,7 @@ import {
   toDisplayName,
   type LinkAccess,
   type PresentationDocument,
+  type PresentationListEntry,
   type ShareSettings,
 } from "#shared";
 import type { Db } from "../client";
@@ -19,6 +20,7 @@ import {
 import { isPresentationInTrash } from "./folders";
 import {
   byServiceDateDesc,
+  hydrateChangedPresentations,
   hydratePresentationDocuments,
 } from "./presentations";
 
@@ -146,6 +148,17 @@ export async function getPresentationDocument(
     : toSharedDocument(document, ownerName, userId);
 }
 
+function sharedPlacement(
+  ownerName: string,
+  memberId?: string,
+): Pick<PresentationDocument, "folderId" | "trashedAt" | "access"> {
+  return {
+    folderId: null,
+    trashedAt: null,
+    access: memberId ? { ownerName, memberId } : { ownerName },
+  };
+}
+
 /**
  * 공유받은 사람에게 주는 모양. 폴더·휴지통은 소유자의 드라이브 배치라 비운다. 사본이 담아 온
  * 보관함 곡(`forkedFrom`)도 소유자의 보관함이라 비운다. 서버는 저장한 사람 자신의 곡을 가리킬
@@ -159,14 +172,22 @@ function toSharedDocument(
 ): PresentationDocument {
   return {
     ...document,
-    folderId: null,
-    trashedAt: null,
+    ...sharedPlacement(ownerName, memberId),
     items: document.items.map((item) => ({
       ...item,
       deck: { ...item.deck, forkedFrom: null },
     })),
-    access: memberId ? { ownerName, memberId } : { ownerName },
   };
+}
+
+function toSharedEntry(
+  entry: PresentationListEntry,
+  ownerName: string,
+  memberId: string,
+): PresentationListEntry {
+  return entry.items === null
+    ? { ...entry, ...sharedPlacement(ownerName, memberId) }
+    : toSharedDocument(entry, ownerName, memberId);
 }
 
 function tokenQuery(db: Db, token: string) {
@@ -201,22 +222,19 @@ export async function getSharedDocumentByToken(
   return document ? toSharedDocument(document, ownerName) : null;
 }
 
-/**
- * 링크로 들어와 아직 접근할 수 있는 프레젠테이션 목록.
- * 폴더·휴지통은 소유자의 드라이브 배치라 공유받은 사람에게는 비워서 준다.
- *
- * 휴지통에 넣은 폴더 안의 프레젠테이션은 뺀다. 소유자의 폴더는 이 확인에만 읽고, 한 요청 안에서
- * 같은 폴더는 한 번만 읽는다. 같은 폴더에 담긴 프레젠테이션을 여러 개 받았으면 프레젠테이션마다
- * 같은 조상을 다시 읽게 되기 때문이다.
- */
-export async function getSharedPresentationDocuments(
+interface SharedHeaders {
+  headers: PresentationDoc[];
+  ownerNames: Map<string, string>;
+}
+
+async function readSharedHeaders(
   db: Db,
   userId: string,
-): Promise<PresentationDocument[]> {
+): Promise<SharedHeaders> {
   const memberships = await presentationMembersCol(db)
     .where("userId", "==", userId)
     .get();
-  if (memberships.empty) return [];
+  if (memberships.empty) return { headers: [], ownerNames: new Map() };
 
   const presentations = (await db.getAll(
     ...memberships.docs.map((doc) =>
@@ -235,17 +253,45 @@ export async function getSharedPresentationDocuments(
   );
   const visible = others.filter((_, index) => active[index]);
   const names = await ownerNames(db, visible);
-  const headers = visible
-    .filter((p) => names.has(p.userId))
-    .sort(byServiceDateDesc);
+  return {
+    headers: visible.filter((p) => names.has(p.userId)).sort(byServiceDateDesc),
+    ownerNames: names,
+  };
+}
 
+/**
+ * 링크로 들어와 아직 접근할 수 있는 프레젠테이션 목록.
+ * 폴더·휴지통은 소유자의 드라이브 배치라 공유받은 사람에게는 비워서 준다.
+ *
+ * 휴지통에 넣은 폴더 안의 프레젠테이션은 뺀다. 소유자의 폴더는 이 확인에만 읽고, 한 요청 안에서
+ * 같은 폴더는 한 번만 읽는다. 같은 폴더에 담긴 프레젠테이션을 여러 개 받았으면 프레젠테이션마다
+ * 같은 조상을 다시 읽게 되기 때문이다.
+ */
+export async function getSharedPresentationDocuments(
+  db: Db,
+  userId: string,
+): Promise<PresentationDocument[]> {
+  const { headers, ownerNames: names } = await readSharedHeaders(db, userId);
   const documents = await hydratePresentationDocuments(db, headers);
-  return documents.map((document, index) =>
-    toSharedDocument(
-      document,
-      names.get(headers[index]?.userId ?? "") ?? "",
-      userId,
-    ),
+  return documents.map((document) =>
+    toSharedDocument(document, names.get(document.userId) ?? "", userId),
+  );
+}
+
+/**
+ * 링크로 들어와 아직 접근할 수 있는 프레젠테이션 목록(`GET /api/presentations`).
+ * `getSharedPresentationDocuments`와 같은 프레젠테이션을 같은 모양으로 주되, 곡 사본은 판이 `since`보다
+ * 늦은 것만 붙이고 나머지는 머리만 준다(`hydrateChangedPresentations`).
+ */
+export async function getSharedPresentationList(
+  db: Db,
+  userId: string,
+  since?: Date,
+): Promise<PresentationListEntry[]> {
+  const { headers, ownerNames: names } = await readSharedHeaders(db, userId);
+  const entries = await hydrateChangedPresentations(db, headers, since);
+  return entries.map((entry) =>
+    toSharedEntry(entry, names.get(entry.userId) ?? "", userId),
   );
 }
 

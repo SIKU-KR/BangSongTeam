@@ -1,4 +1,5 @@
 import { Hono, type Context } from "hono";
+import { zValidator } from "@hono/zod-validator";
 import {
   API_ERRORS,
   isReservedDocumentId,
@@ -7,14 +8,15 @@ import {
   type PresentationChangesRequest,
   PresentationChangesRequestSchema,
   PresentationDocumentRequestSchema,
+  PresentationListQuerySchema,
   UpdateShareSettingsRequestSchema,
 } from "#shared";
 import {
   deletePresentation,
   getPresentationDocument,
-  getPresentationDocumentsByUserId,
+  getPresentationListByUserId,
   getShareSettings,
-  getSharedPresentationDocuments,
+  getSharedPresentationList,
   resetLinkToken,
   savePresentationChanges,
   setLinkAccess,
@@ -146,6 +148,9 @@ function writeLimitMessage(breach: WriteLimitBreach): string {
  * 계정으로 바뀐 탭·남은 대기열이 보낸 문서를 지금 쿠키의 계정에 만들지 않는다. Firestore에
  * 사용자별 접근 규칙이 없다).
  * 목록·단건 조회에는 링크로 공유받은 세트(`access`가 붙음, 보기 전용)도 온다.
+ * 목록에 `since`(ISO 시각)를 주면 판이 그보다 늦은 프레젠테이션만 곡 사본을 담고 나머지는 머리만
+ * 보낸다(`OmittedPresentationSchema`). 머리는 모두 보내므로 영구 삭제·이동·휴지통은 그대로 알린다.
+ * ISO 시각이 아니면 400이다. 이 값을 모르는 이전 클라이언트는 보내지 않아 늘 모두 받는다.
  * 저장은 소유자만 할 수 있다.
  * DELETE(영구 삭제)는 서버에서 휴지통에 있는(자신이나 담긴 폴더·조상이 휴지통에 있는)
  * 프레젠테이션만 지우고, 아니면 아무것도 지우지 않고 409로 답한다. 멤버·사본이 많아 나눠 지우는
@@ -168,14 +173,26 @@ export function createPresentationsRoute(deps: AppDeps = {}) {
     overLimit,
   );
 
+  const listQuery = zValidator(
+    "query",
+    PresentationListQuerySchema,
+    (result, c) => {
+      if (!result.success) {
+        return c.json({ error: API_ERRORS.idMismatch }, 400);
+      }
+    },
+  );
+
   return new Hono<AppEnv>()
     .use("*", resolveRequireAuth(deps))
-    .get("/", async (c) => {
+    .get("/", listQuery, async (c) => {
       const db = c.env.DB;
       const userId = c.get("userId") as string;
+      const { since } = c.req.valid("query");
+      const changedAfter = since === undefined ? undefined : new Date(since);
       const [own, shared] = await Promise.all([
-        getPresentationDocumentsByUserId(db, userId),
-        getSharedPresentationDocuments(db, userId),
+        getPresentationListByUserId(db, userId, changedAfter),
+        getSharedPresentationList(db, userId, changedAfter),
       ]);
       return c.json({ presentations: [...own, ...shared] }, 200);
     })

@@ -51,6 +51,43 @@ export const PresentationDocumentSchema = PresentationSchema.extend({
 });
 export type PresentationDocument = z.infer<typeof PresentationDocumentSchema>;
 
+/**
+ * 프레젠테이션 목록 조회(`GET /api/presentations`)의 쿼리. `since`(ISO 시각)를 보내면 판(`updatedAt`)이
+ * 그보다 늦은 프레젠테이션만 곡 사본을 담고, 나머지는 머리만 보낸다(`OmittedPresentationSchema`). 이
+ * 값을 모르는 이전 클라이언트는 보내지 않으므로 언제나 모두 받는다.
+ */
+export const PresentationListQuerySchema = z.object({
+  since: z.iso.datetime().optional(),
+});
+
+/**
+ * 프레젠테이션 목록에서 곡 사본을 빼고 보낸 머리(`copiesOmitted`). 판이 `since`보다 늦지 않은
+ * 프레젠테이션이다.
+ *
+ * 목록은 프레젠테이션마다 머리를 빠짐없이 보내, 받는 쪽은 영구 삭제·폴더 이동·휴지통 상태를 그대로
+ * 맞춘다. 곡은 받는 쪽이 같은 판을 이미 가졌으면 그 판을 쓰고, 아니면 그 프레젠테이션을 따로 받는다
+ * (`GET /api/presentations/:id`).
+ *
+ * `items`는 빈 배열이 아니라 `null`이다. 빈 배열이면 곡이 하나도 없는 프레젠테이션과 같아 보여, 이 표시를
+ * 놓친 코드가 곡을 모두 뺀 판으로 받는다. `null`은 문서 스키마(`PresentationSchema`·
+ * `PresentationDocumentSchema`)를 통과하지 못한다.
+ */
+export const OmittedPresentationSchema = PresentationSchema.omit({
+  items: true,
+  baseUpdatedAt: true,
+}).extend({
+  items: z.null(),
+  copiesOmitted: z.literal(true),
+});
+export type OmittedPresentation = z.infer<typeof OmittedPresentationSchema>;
+
+/** 프레젠테이션 목록의 한 줄: 곡 사본까지 담은 문서나 사본을 뺀 머리 */
+export const PresentationListEntrySchema = z.union([
+  PresentationDocumentSchema,
+  OmittedPresentationSchema,
+]);
+export type PresentationListEntry = z.infer<typeof PresentationListEntrySchema>;
+
 const BaseUpdatedAtSchema = z.iso.datetime().nullable().optional();
 
 /**
