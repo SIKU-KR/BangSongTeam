@@ -14,7 +14,13 @@ import { isProjectionPath } from "./features/presentation/fullscreen";
 import { hydrateSongLibrary } from "./features/editor/songLibraryStore";
 import { hydrateFoldersFromStorage } from "./features/drive/folderStore";
 import { hydrateBackgroundCatalog } from "./features/backgrounds/backgroundCatalog";
-import { hydrateSession, useSession } from "./lib/auth";
+import {
+  getCurrentUserId,
+  hydrateSession,
+  resumeDeferredSessionWork,
+  setAccountHooks,
+  useSession,
+} from "./lib/auth";
 import { ConsentGate } from "./features/auth/ConsentGate";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { createAppQueryClient } from "./lib/api/queryClient";
@@ -23,14 +29,17 @@ import { registerServiceWorker } from "./pwa/registerServiceWorker";
 import {
   startBootSync,
   runDeferredBootSync,
+  flushBeforeSignOut,
   flushPendingSync,
   flushDeckSync,
   flushFolderSync,
+  stopAccountSync,
   startSyncRecovery,
   resumeDeferredSyncRecovery,
 } from "./lib/sync";
 import { THEME_STORAGE_KEY } from "#lib/theme";
 import { SHELL_COPY } from "#copy/shell";
+import { ERROR_COPY } from "#copy/common";
 
 /** 로그인 화면은 손님에게만 보이므로 그 주소를 처음 열 때 청크를 받는다 */
 const LoginRoute = dynamic(() =>
@@ -47,11 +56,15 @@ function useHydration(): boolean {
 
   useEffect(() => {
     const controller = new AbortController();
+    setAccountHooks({ flushBeforeSignOut, stopAccountSync });
     void (async () => {
       await hydrateSession();
       if (!controller.signal.aborted) setIsSessionResolved(true);
     })();
-    return () => controller.abort();
+    return () => {
+      controller.abort();
+      setAccountHooks(null);
+    };
   }, []);
 
   useEffect(() => {
@@ -66,7 +79,7 @@ function useHydration(): boolean {
         hydrateFoldersFromStorage(),
         hydrateBackgroundCatalog(),
       ]);
-      if (controller.signal.aborted) return;
+      if (controller.signal.aborted || getCurrentUserId() !== userId) return;
       startBootSync(window.location.pathname);
       setBootstrappedUserId(userId);
     })();
@@ -78,6 +91,7 @@ function useHydration(): boolean {
 
   return (
     isSessionResolved &&
+    session.status !== "loading" &&
     (session.status !== "authenticated" || bootstrappedUserId === userId)
   );
 }
@@ -126,11 +140,16 @@ function isGuestPath(pathname: string): boolean {
  * 이 컴포넌트는 세션·로컬 저장소를 불러오는 동안의 로딩 화면과 로그인 여부에 따른
  * 화면 선택을 맡는다.
  *
- * 송출 중에 세션이 끊겨도 로그인한 트리를 그대로 둔다. 트리를 바꾸면 송출 화면이 다시
- * 마운트되어 관객 화면이 첫 슬라이드로 돌아가거나 로그인 화면이 뜬다. 송출을 마치고 다른
- * 주소로 나가면 그때 손님 트리로 바꾼다. 트리를 바꿀 때는 Query 캐시도 새로 만들어 앞
- * 사용자의 서버 데이터가 남지 않게 한다. 송출 주소의 로딩 화면은 새로고침 중에도
- * 프로젝터가 흰 화면으로 번쩍이지 않게 검게만 그린다.
+ * 계정이 끝나면(로그아웃·세션 만료·다른 계정) 세션이 다시 `loading`이 되고, 동기화를 끄고
+ * 새로고침할 때까지 로딩 화면이 앞 계정의 화면을 덮는다. 송출 중에 끝나면 세션 스토어가 동기화만
+ * 끄고 송출 화면을 그대로 두었다가, 송출을 마치고 다른 주소로 나갈 때 새로고침한다. 트리를
+ * 바꾸면 송출 화면이 다시 마운트되어 관객 화면이 첫 슬라이드로 돌아가거나 로그인 화면이 뜬다.
+ * 같은 이유로 송출 중에 로그아웃 상태가 되더라도 송출을 마칠 때까지 로그인한 트리를 지킨다.
+ * 송출 주소의 로딩 화면은 새로고침 중에도 프로젝터가 흰 화면으로 번쩍이지 않게 검게만 그린다.
+ *
+ * 트리를 바꿀 때(로그인 화면에서 그 자리에서 로그인할 때 등)는 Query 캐시도 새로 만들어 앞
+ * 트리의 서버 데이터가 남지 않게 한다. 계정이 끝날 때 할 동기화 쪽 일은 세션 스토어가
+ * `lib/sync`를 가져오지 못해 여기서 등록한다(`setAccountHooks`).
  */
 export function App({
   children,
@@ -193,7 +212,15 @@ function AppGate({
 
   return (
     <AppFrame key="guest">
-      {isGuestPath(pathname) ? children : <LoginRoute />}
+      {isGuestPath(pathname) ? (
+        children
+      ) : (
+        <LoginRoute
+          description={
+            session.reason === "expired" ? ERROR_COPY.sessionExpired : undefined
+          }
+        />
+      )}
     </AppFrame>
   );
 }
@@ -215,6 +242,7 @@ function ProjectionLatchGate({
 
   useEffect(() => {
     if (isOnProjection) return;
+    resumeDeferredSessionWork();
     runDeferredBootSync();
     resumeDeferredSyncRecovery();
     flushClientReports();

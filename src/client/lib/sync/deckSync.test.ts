@@ -39,6 +39,7 @@ import {
   listPendingDeckDeletes,
   rememberDeckDelete,
 } from "./pendingDeckDeletes";
+import { MAX_BACKOFF_MS } from "./backoff";
 
 const USER = "00000000x000000000001";
 const OTHER_USER = "00000000x000000000002";
@@ -892,6 +893,83 @@ describe("보관함 push 큐", () => {
       expect(listPendingDeckDeletes(OTHER_USER)).toEqual([
         "c0000000000000000000c",
       ]);
+    });
+  });
+
+  describe("큐를 끈 뒤", () => {
+    const C = "c0000000000000000000c";
+
+    function deckOf(id: string): Deck {
+      return { ...deck(), id };
+    }
+
+    function holdPushOnce(): {
+      resolve: (saved: Deck) => void;
+      reject: (err: unknown) => void;
+    } {
+      const settle: {
+        resolve: (saved: Deck) => void;
+        reject: (err: unknown) => void;
+      } = { resolve: () => undefined, reject: () => undefined };
+      push.mockImplementationOnce(
+        () =>
+          new Promise<Deck>((resolve, reject) => {
+            settle.resolve = resolve;
+            settle.reject = reject;
+          }),
+      );
+      return settle;
+    }
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it("묶음의 첫 곡을 보내는 동안 끄면 그 뒤의 곡과 삭제는 보내지 않는다", async () => {
+      const first = holdPushOnce();
+      scheduleDeckPush(deckOf(A));
+      scheduleDeckPush(deckOf(B));
+      scheduleDeckDelete(C, USER);
+      const flushing = flushDeckSync();
+      await vi.waitFor(() => expect(push).toHaveBeenCalledTimes(1));
+
+      setDeckSyncEnabled(false);
+      first.resolve(deckOf(A));
+      await flushing;
+
+      expect(push).toHaveBeenCalledTimes(1);
+      expect(remove).not.toHaveBeenCalled();
+    });
+
+    it("끈 뒤에 오프라인으로 끝난 곡은 백오프 타이머가 지나도 다시 보내지 않는다", async () => {
+      vi.useFakeTimers();
+      const first = holdPushOnce();
+      scheduleDeckPush(deck());
+      const flushing = flushDeckSync();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(push).toHaveBeenCalledTimes(1);
+
+      setDeckSyncEnabled(false);
+      first.reject(new OfflineError());
+      await flushing;
+      await vi.advanceTimersByTimeAsync(MAX_BACKOFF_MS);
+
+      expect(push).toHaveBeenCalledTimes(1);
+    });
+
+    it("끈 뒤에는 flush하거나 다시 시도해도 보내지 않는다", async () => {
+      const first = holdPushOnce();
+      scheduleDeckPush(deck());
+      const flushing = flushDeckSync();
+      await vi.waitFor(() => expect(push).toHaveBeenCalledTimes(1));
+
+      setDeckSyncEnabled(false);
+      first.reject(new OfflineError());
+      await flushing;
+      await flushDeckSync();
+      await retryDeckSyncNow("manual");
+
+      expect(push).toHaveBeenCalledTimes(1);
     });
   });
 });

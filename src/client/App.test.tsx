@@ -1,4 +1,10 @@
-import { screen, act, fireEvent, waitFor } from "@testing-library/react";
+import {
+  screen,
+  act,
+  fireEvent,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { renderApp } from "./test/nextApp";
 import {
@@ -6,19 +12,31 @@ import {
   resetPresentationStore,
 } from "./features/presentation/presentationStore";
 import { closeOfflineDB, OFFLINE_DB_NAME } from "./lib/storage/db";
+import { authClient } from "./lib/auth/authClient";
 import {
+  revalidateSession,
+  __setPageReloadForTests,
   __setSessionFetcherForTests,
   __setSessionForTests,
   type SessionFetcher,
 } from "./lib/auth/sessionStore";
-import { saveCachedSession, type SessionUser } from "./lib/auth/sessionCache";
+import {
+  loadCachedSession,
+  saveCachedSession,
+  type SessionUser,
+} from "./lib/auth/sessionCache";
 import { __resetBootSyncForTests } from "./lib/sync/bootSync";
 import { __resetDeckSyncForTests } from "./lib/sync/deckSync";
 import { __resetFolderSyncForTests } from "./lib/sync/folderSync";
 import {
   __resetSyncSchedulerForTests,
   flushPendingSync,
+  scheduleDocumentPush,
 } from "./lib/sync/syncScheduler";
+import {
+  retrySyncNow,
+  __waitForSyncRecoveryForTests,
+} from "./lib/sync/syncRecovery";
 import { getSyncSnapshot, resetSyncStatus } from "./lib/sync/syncStatus";
 import { installFakeApi, type FakeApi, type FakeRoute } from "./test/fakeApi";
 import {
@@ -33,13 +51,44 @@ import {
   type Presentation,
 } from "#shared";
 import { SHELL_COPY } from "#copy/shell";
+import { ERROR_COPY } from "#copy/common";
 import {
   SEED_PRESENTATION_IDS,
   SEED_PRESENTATIONS,
   SEED_USER_ID,
 } from "./test/presentationFixture";
 
+// better-auth 클라이언트는 만들 때 fetch를 잡아 두어 installFakeApi가 바꾼 fetch를 쓰지 않는다.
+// better-auth@1.7.12 dist/client/config.mjs (`customFetchImpl: fetch`)
+vi.mock("./lib/auth/authClient", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./lib/auth/authClient")>()),
+  authClient: {
+    getSession: vi.fn(),
+    signIn: { social: vi.fn(), email: vi.fn() },
+    signUp: { email: vi.fn() },
+    signOut: vi.fn(async () => ({ data: { success: true }, error: null })),
+  },
+}));
+
+const backgroundHydration = vi.hoisted(() => ({
+  held: null as Promise<void> | null,
+}));
+
+vi.mock("./features/backgrounds/backgroundCatalog", async (importOriginal) => {
+  const actual =
+    await importOriginal<
+      typeof import("./features/backgrounds/backgroundCatalog")
+    >();
+  return {
+    ...actual,
+    hydrateBackgroundCatalog: (): Promise<void> =>
+      backgroundHydration.held ?? actual.hydrateBackgroundCatalog(),
+  };
+});
+
 const DOC_ID = SEED_PRESENTATION_IDS[0];
+const OTHER_USER_ID = "999999999999999999999";
+const SESSION_END_KEY = "chiton:session-end";
 const HOUR = 60 * 60 * 1000;
 
 const EMPTY_FOLDER_LIST: FolderListResponse = {
@@ -427,7 +476,9 @@ describe("App Route Integration", () => {
       );
     });
 
-    it("만료된 세션으로 송출 주소를 열면 송출 중에는 묻지 않고, 송출을 마치면 세션을 확인해 로그인 화면으로 보낸다", async () => {
+    it("만료된 세션으로 송출 주소를 열면 송출 중에는 묻지 않고, 송출을 마치면 세션을 확인해 새로고침한 뒤 로그인 화면에서 만료를 알린다", async () => {
+      const reload = vi.fn<() => void>();
+      __setPageReloadForTests(reload);
       await saveCachedSession(sessionUser({ expiresAt: Date.now() - HOUR }));
       fetcher.mockResolvedValue(null);
       const expired: FakeRoute = () => ({
@@ -441,7 +492,7 @@ describe("App Route Integration", () => {
         "GET /api/backgrounds": expired,
       });
 
-      renderAt(`/present/${DOC_ID}/fullscreen`);
+      const view = renderAt(`/present/${DOC_ID}/fullscreen`);
       await screen.findByTestId("fullscreen-present-route");
 
       expect(fetcher).not.toHaveBeenCalled();
@@ -449,10 +500,21 @@ describe("App Route Integration", () => {
 
       fireEvent.click(screen.getByTestId("exit-present-btn"));
 
-      expect(
-        await screen.findByRole("button", { name: /카카오 로그인/ }),
-      ).toBeInTheDocument();
+      await waitFor(() => expect(reload).toHaveBeenCalledTimes(1));
       expect(fetcher).toHaveBeenCalledTimes(1);
+      expect(screen.getByTestId("app-hydrating")).toBeInTheDocument();
+      expect(window.sessionStorage.getItem(SESSION_END_KEY)).toBe("expired");
+
+      view.unmount();
+      renderAt(window.location.pathname);
+
+      expect(await screen.findByTestId("login-description")).toHaveTextContent(
+        ERROR_COPY.sessionExpired,
+      );
+      expect(
+        screen.getByRole("button", { name: /카카오 로그인/ }),
+      ).toBeInTheDocument();
+      expect(fetcher).toHaveBeenCalledTimes(2);
     });
 
     it("다른 기기에서 만든 세트 주소로 들어오면 받을 때까지 기다렸다가 연다", async () => {
@@ -474,6 +536,135 @@ describe("App Route Integration", () => {
 
       expect(await screen.findByTestId("editor-route")).toBeInTheDocument();
       expect(window.location.pathname).toBe(`/editor/${NEW_DOC.id}`);
+    });
+  });
+
+  describe("계정이 끝난 탭", () => {
+    let fetcher: ReturnType<typeof vi.fn<SessionFetcher>>;
+    let reload: ReturnType<typeof vi.fn<() => void>>;
+    let api: FakeApi | null = null;
+
+    beforeEach(() => {
+      resetSyncModules();
+      fetcher = vi.fn<SessionFetcher>(async () => sessionUser());
+      __setSessionFetcherForTests(fetcher);
+      reload = vi.fn<() => void>();
+      __setPageReloadForTests(reload);
+      vi.mocked(authClient.signOut).mockClear();
+    });
+
+    afterEach(() => {
+      backgroundHydration.held = null;
+      api?.restore();
+      api = null;
+      resetSyncModules();
+      window.sessionStorage.clear();
+    });
+
+    it("저장본 싣기가 끝난 직후 화면을 다시 그리기 전에 로그인이 풀려도 부팅 동기화를 시작하지 않고 이후 변경도 보내지 않는다", async () => {
+      const backgrounds = deferred<void>();
+      backgroundHydration.held = backgrounds.promise;
+      api = installFakeApi(bootRoutes());
+      renderAt("/presentations");
+      await waitFor(async () =>
+        expect((await loadCachedSession())?.userId).toBe(SEED_USER_ID),
+      );
+
+      await act(async () => {
+        backgrounds.resolve();
+        queueMicrotask(() => __setSessionForTests(null));
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      });
+      await act(async () => {
+        scheduleDocumentPush(SEED_PRESENTATIONS[0]);
+        await flushPendingSync();
+      });
+
+      expect(apiRequests(api)).toEqual([]);
+    });
+
+    it("계정 카드로 로그아웃하면 세션 캐시를 비우고 로딩 화면으로 덮은 채 한 번 새로고침한다", async () => {
+      api = installFakeApi(bootRoutes());
+      renderAt("/presentations");
+      await screen.findAllByTestId("presentation-row");
+      await waitFor(() => expect(getSyncSnapshot().status).toBe("synced"));
+      expect((await loadCachedSession())?.userId).toBe(SEED_USER_ID);
+
+      fireEvent.click(
+        within(screen.getByTestId("account-card")).getByRole("button"),
+      );
+
+      await waitFor(() => expect(reload).toHaveBeenCalledTimes(1));
+      expect(authClient.signOut).toHaveBeenCalledTimes(1);
+      expect(screen.getByTestId("app-hydrating")).toBeInTheDocument();
+      expect(screen.queryByTestId("presentation-row")).not.toBeInTheDocument();
+      expect(await loadCachedSession()).toBeNull();
+      expect(window.sessionStorage.getItem(SESSION_END_KEY)).toBe("signedOut");
+    });
+
+    it("오프라인으로 밀린 프레젠테이션은 다른 계정으로 바뀐 뒤 다시 시도해도 보내지 않는다", async () => {
+      api = installFakeApi(
+        bootRoutes({
+          "PATCH /api/presentations/*": () => {
+            throw new TypeError("Failed to fetch");
+          },
+        }),
+      );
+      renderAt("/presentations");
+      await screen.findAllByTestId("presentation-row");
+      await waitFor(() => expect(getSyncSnapshot().status).toBe("synced"));
+
+      let created: Presentation | undefined;
+      act(() => {
+        created = createNewPresentation();
+      });
+      await act(async () => {
+        await flushPendingSync();
+      });
+      const patchOfCreated = `PATCH /api/presentations/${created?.id}`;
+      expect(apiRequests(api)).toContain(patchOfCreated);
+
+      fetcher.mockResolvedValue(sessionUser({ userId: OTHER_USER_ID }));
+      await act(async () => {
+        await revalidateSession();
+      });
+
+      expect(reload).toHaveBeenCalledTimes(1);
+      expect(screen.getByTestId("app-hydrating")).toBeInTheDocument();
+
+      const sentBefore = apiRequests(api).length;
+      await act(async () => {
+        retrySyncNow();
+        await __waitForSyncRecoveryForTests();
+        await flushPendingSync();
+      });
+
+      expect(apiRequests(api).slice(sentBefore)).not.toContain(patchOfCreated);
+    });
+
+    it("송출 중에 다른 계정으로 바뀌어도 송출 화면을 그대로 두고, 송출을 마치면 부팅 없이 새로고침한다", async () => {
+      await saveCachedSession(sessionUser());
+      api = installFakeApi(bootRoutes());
+      renderAt(`/present/${DOC_ID}/fullscreen`);
+      const route = await screen.findByTestId("fullscreen-present-route");
+
+      fetcher.mockResolvedValue(sessionUser({ userId: OTHER_USER_ID }));
+      await act(async () => {
+        await revalidateSession();
+      });
+
+      expect(screen.getByTestId("fullscreen-present-route")).toBe(route);
+      expect(reload).not.toHaveBeenCalled();
+
+      fireEvent.click(screen.getByTestId("exit-present-btn"));
+
+      await waitFor(() => expect(reload).toHaveBeenCalledTimes(1));
+      expect(screen.getByTestId("app-hydrating")).toBeInTheDocument();
+      expect(window.sessionStorage.getItem(SESSION_END_KEY)).toBe("switched");
+      expect(fetcher).toHaveBeenCalledTimes(1);
+      expect(apiRequests(api)).not.toContain("GET /api/folders");
+      expect(apiRequests(api)).not.toContain("GET /api/presentations");
+      expect(apiRequests(api)).not.toContain("GET /api/decks");
     });
   });
 });

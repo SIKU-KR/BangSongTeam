@@ -60,7 +60,13 @@ function clearPending(): void {
   backoff.reset();
 }
 
-/** 로그인·하이드레이션이 끝난 뒤에만 켠다 */
+/**
+ * 로그인·하이드레이션이 끝난 뒤에만 켠다.
+ *
+ * 꺼져 있는 동안에는 폴더 큐를 먼저 비우던 push도 보내지 않는다. 계정이 끝난 탭(`stopSync`)은
+ * 새로고침할 때까지 큐를 꺼 두고, 송출 중이면 송출을 마칠 때까지 새로고침을 미룬다. 그사이
+ * 요청이 나가면 다른 계정의 쿠키로 간다.
+ */
 export function setSyncEnabled(next: boolean): void {
   enabled = next;
   if (!next) clearPending();
@@ -90,6 +96,7 @@ function startPush(document: Presentation): void {
   const task = (async (): Promise<void> => {
     try {
       await flushFolderSync();
+      if (!enabled) return;
       await pusher(document);
       backoff.reset(document.id);
       failed.delete(document.id);

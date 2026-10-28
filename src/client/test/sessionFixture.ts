@@ -1,4 +1,5 @@
 import {
+  __setPageReloadForTests,
   __setSessionFetcherForTests,
   __resetSessionForTests,
   __setSessionForTests,
@@ -18,6 +19,7 @@ export function signInAsTestUser(userId: string = SEED_USER_ID): void {
     expiresAt: Date.now() + HOUR,
   };
   __resetSessionForTests();
+  __setPageReloadForTests(() => undefined);
   __setSessionForTests(user);
   __setSessionFetcherForTests(async () => user);
 }
@@ -25,6 +27,7 @@ export function signInAsTestUser(userId: string = SEED_USER_ID): void {
 /** 미로그인 상태로 둔다 */
 export function signOutForTests(): void {
   __resetSessionForTests();
+  __setPageReloadForTests(() => undefined);
   __setSessionFetcherForTests(async () => null);
 }
 

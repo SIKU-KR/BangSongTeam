@@ -103,7 +103,7 @@ let deferredBootUserId: string | null = null;
  *
  * 부팅 동기화만 세 큐(폴더·프레젠테이션·곡)를 켠다. 미뤄 둔 부팅을 아무도 돌리지 않으면 송출을
  * 마친 같은 탭에서 고친 프레젠테이션·곡·폴더가 새로고침할 때까지 서버에 가지 않고, 헤더는 그동안
- * 초록색 '자동 저장됨'으로 남는다. 다른 계정이 부팅하면 미뤄 둔 앞 계정의 부팅은 버린다.
+ * 초록색 '자동 저장됨'으로 남는다.
  *
  * 화면이 주소의 항목을 그리기 전에 불러야 한다. 부팅이 시작될 때 세우는 첫 받기 표시
  * (`useBootPullPending`)를 보고, 아직 받지 않은 프레젠테이션·폴더 주소를 드라이브로 보내지 않는다.
@@ -125,9 +125,6 @@ export function startBootSync(pathname: string): void {
  * 통과시킨다. 확인하지 않으면 받기·올리기가 모두 401로 실패하는데, 401은 세션 상태를 바꾸지
  * 않아 로그인 화면이 뜨지 않는다. 확인을 기다렸다가 부팅하지 않는 것은 그동안 큐가 꺼져 있어
  * 지운 곡을 잃기 때문이다.
- *
- * 로그아웃된 채 떠났으면 미뤄 둔 부팅을 그대로 둔다. 같은 계정으로 다시 로그인하면 하이드레이션을
- * 다시 하지 않으므로, 다시 그린 화면이 이 함수를 불러 그때 돌린다.
  */
 export function runDeferredBootSync(): void {
   if (deferredBootUserId === null || isProjecting()) return;
@@ -196,7 +193,7 @@ export function isBootPullPending(domain: BootPullDomain): boolean {
  *
  * 부팅이 시작될 때 두 도메인 모두 세우고, 폴더는 받은 폴더를 메모리에 넣자마자, 프레젠테이션은
  * 병합하자마자 내린다. 받기가 실패하거나 송출로 멈추거나 `BOOT_PULL_WAIT_MS`가 지나도 내린다.
- * 내리는 일은 모두 그 부팅의 세대일 때만 한다. 계정 전환 등으로 밀려난 부팅이 늦게 끝나며 새
+ * 내리는 일은 모두 그 부팅의 세대일 때만 한다. 다시 부팅해 밀려난 부팅이 늦게 끝나며 새
  * 부팅의 기다림을 끝내면 안 된다.
  */
 export function useBootPullPending(domain: BootPullDomain): boolean {
@@ -245,7 +242,7 @@ export function useBootPullPending(domain: BootPullDomain): boolean {
  * 큐가 남긴다. 부팅의 '동기화됨'은 아직 올라가지 않은 변경을 가리고, 큐가 이미 다시
  * 올린 항목을 두고 남긴 '오프라인'은 지울 주체가 없어 세션 내내 남는다.
  * 상태 초기화는 큐를 켜기 전에 한다. 켠 뒤에 지우면 먼저 실패한 큐의 기록이 사라진다.
- * 다시 부르면(새로고침 없이 계정 전환) 앞선 부팅의 남은 단계는 상태를 남기지 않는다.
+ * 다시 부르거나 동기화를 끄면(`stopSync`) 앞선 부팅의 남은 단계는 상태를 남기지 않는다.
  */
 export async function runBootSync(): Promise<void> {
   bootGeneration += 1;
@@ -272,6 +269,32 @@ export async function runBootSync(): Promise<void> {
     clearBootPull("folder", generation);
     clearBootPull("presentation", generation);
   }
+}
+
+/**
+ * 이 탭의 계정이 끝날 때(로그아웃·세션 만료·다른 계정) 부팅 동기화가 켠 것을 모두 끈다. 세 큐를
+ * 끄고, 앞선 부팅의 남은 단계와 다시 받기, 송출을 마친 뒤로 미뤄 둔 부팅, 첫 받기 표시를 버리고,
+ * 서버 응답을 받던 리스너를 뗀다.
+ *
+ * 동기화를 끄는 길은 이것 하나다. 계정이 끝나면 페이지를 새로고침하므로 같은 페이지에서 큐를 다시
+ * 켜는 일은 없다. 새로고침을 기다리는 동안(송출 중이면 송출을 마칠 때까지) 앞 계정의 항목이나 앞선
+ * 부팅의 다음 단계가 다른 계정의 쿠키로 나가면 안 된다. `runBootSync`에 등록을 더하면 여기서도
+ * 풀어야 한다.
+ */
+export function stopSync(): void {
+  bootGeneration += 1;
+  cancelBootRetry();
+  deferredBootUserId = null;
+  pendingBootPulls.clear();
+  clearBootPullTimer();
+  notifyBootPull();
+  setSharedPresentationListener(null);
+  setServerDeckListener(null);
+  setDeckGoneListener(null);
+  setServerFolderListener(null);
+  setFolderSyncEnabled(false);
+  setSyncEnabled(false);
+  setDeckSyncEnabled(false);
 }
 
 let bootGeneration = 0;

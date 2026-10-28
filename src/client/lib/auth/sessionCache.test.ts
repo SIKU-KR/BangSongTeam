@@ -1,9 +1,11 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { closeOfflineDB, OFFLINE_DB_NAME } from "../storage/db";
 import {
   saveCachedSession,
   loadCachedSession,
   clearCachedSession,
+  rememberSessionEnd,
+  takeSessionEnd,
 } from "./sessionCache";
 
 const HOUR = 60 * 60 * 1000;
@@ -80,5 +82,35 @@ describe("오프라인 세션 캐시", () => {
 
   it("캐시가 비어 있을 때 지워도 던지지 않는다", async () => {
     await expect(clearCachedSession()).resolves.toBeUndefined();
+  });
+});
+
+describe("계정이 끝난 이유", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    window.sessionStorage.clear();
+  });
+
+  it("남긴 이유를 한 번만 돌려주고 지운다", () => {
+    rememberSessionEnd("switched");
+
+    expect(takeSessionEnd()).toBe("switched");
+    expect(takeSessionEnd()).toBeNull();
+  });
+
+  it("모르는 값은 보통 부팅으로 보고 지운다", () => {
+    window.sessionStorage.setItem("chiton:session-end", "kicked");
+
+    expect(takeSessionEnd()).toBeNull();
+    expect(window.sessionStorage.getItem("chiton:session-end")).toBeNull();
+  });
+
+  it("sessionStorage를 쓸 수 없어도 던지지 않는다", () => {
+    vi.spyOn(window, "sessionStorage", "get").mockImplementation(() => {
+      throw new DOMException("blocked", "SecurityError");
+    });
+
+    expect(() => rememberSessionEnd("expired")).not.toThrow();
+    expect(takeSessionEnd()).toBeNull();
   });
 });

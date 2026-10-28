@@ -31,6 +31,7 @@ import {
   shouldRunBootSync,
   startBootSync,
   runBootSync,
+  stopSync,
 } from "./bootSync";
 import {
   __resetDeckSyncForTests,
@@ -58,6 +59,7 @@ import {
   __setFolderPusherForTests,
   flushFolderSync,
   retryFolderSyncNow,
+  scheduleFolderPush,
 } from "./folderSync";
 import {
   loadAllPresentations,
@@ -1796,5 +1798,61 @@ describe("runBootSync — 부팅 중에 시작한 송출", () => {
     );
 
     expect(presentationSync.pullDecks).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("stopSync — 계정이 끝난 탭", () => {
+  beforeEach(resetBootSyncDependencies);
+
+  afterEach(cleanUpBootSync);
+
+  it("stopSync 뒤에는 앞선 부팅이 다음 단계로 가지 않는다", async () => {
+    const folders = deferred<FolderListResponse>();
+    presentationSync.pullFolders.mockReturnValueOnce(folders.promise);
+    const pushFolder = vi.fn(async (f: Folder) => f);
+    __setFolderPusherForTests(pushFolder);
+    const pushDeck = vi.fn(async (deck: Deck) => deck);
+    __setDeckTransportForTests({ push: pushDeck });
+
+    const booting = runBootSync();
+    stopSync();
+    folders.resolve({ ...EMPTY_FOLDER_LIST, folders: [folder(PARENT)] });
+    await booting;
+
+    expect(getFolders()).toEqual([]);
+    expect(presentationSync.pullPresentations).not.toHaveBeenCalled();
+    expect(isBootPullPending("folder")).toBe(false);
+    expect(isBootPullPending("presentation")).toBe(false);
+
+    scheduleFolderPush(folder(CHILD));
+    scheduleDocumentPush(presentation(DOC));
+    scheduleDeckPush(serverDeck());
+    await Promise.all([flushFolderSync(), flushPendingSync(), flushDeckSync()]);
+
+    expect(pushFolder).not.toHaveBeenCalled();
+    expect(presentationSync.pushPresentation).not.toHaveBeenCalled();
+    expect(pushDeck).not.toHaveBeenCalled();
+  });
+
+  it("받지 못해 기다리던 부팅 단계는 연결이 돌아와도 다시 받지 않는다", async () => {
+    presentationSync.pullFolders.mockRejectedValueOnce(new OfflineError());
+    await runBootSync();
+
+    stopSync();
+
+    expect(await retryBootSyncIfNeeded("manual")).toBe(false);
+    expect(presentationSync.pullFolders).toHaveBeenCalledTimes(1);
+  });
+
+  it("송출 화면에서 미뤄 둔 부팅은 송출을 마쳐도 돌지 않는다", async () => {
+    window.history.pushState({}, "", "/present/abc/fullscreen");
+    startBootSync(window.location.pathname);
+
+    stopSync();
+    window.history.pushState({}, "", "/presentations");
+    runDeferredBootSync();
+    await settleMicrotasks();
+
+    expect(presentationSync.pullFolders).not.toHaveBeenCalled();
   });
 });
