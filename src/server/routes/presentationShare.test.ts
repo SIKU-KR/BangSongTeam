@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { env } from "../test/env";
 import {
+  API_ERRORS,
   DEFAULT_DECK_STYLE,
   PresentationDocumentSchema,
   type JoinShareResponse,
@@ -272,5 +273,31 @@ describe("세트 링크 공유 라우트", () => {
       env,
     );
     expect(res.status).toBe(401);
+  });
+
+  it("로그인 없이 링크로 보는 요청은 IP마다 1분에 60번까지만 받는다", async () => {
+    const { body: settings } = await as<ShareSettings>(
+      OWNER,
+      `/api/presentations/${DOC_ID}/share`,
+      send("PUT", { access: "view" }),
+    );
+    const viewerApp = createApp({ readSession: fakeSession });
+    const view = (ip: string, token = settings.token) =>
+      viewerApp.request(
+        `/api/share/${token}`,
+        { headers: { "x-forwarded-for": ip } },
+        env,
+      );
+    currentUser = null;
+
+    for (let n = 0; n < 59; n += 1) {
+      expect((await view("203.0.113.7")).status).toBe(200);
+    }
+    expect((await view("203.0.113.7", "nope")).status).toBe(404);
+    const limited = await view("203.0.113.7");
+
+    expect(limited.status).toBe(429);
+    expect(await limited.json()).toEqual({ error: API_ERRORS.tooManyRequests });
+    expect((await view("198.51.100.4")).status).toBe(200);
   });
 });

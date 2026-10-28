@@ -1,6 +1,7 @@
 import type { DocumentSnapshot } from "@google-cloud/firestore";
 import {
   createId,
+  toDisplayName,
   type LinkAccess,
   type PresentationDocument,
   type ShareSettings,
@@ -57,7 +58,7 @@ async function ownerNames(
   return new Map(
     users.flatMap((snapshot) => {
       const user = snapshot.data();
-      return user ? [[snapshot.id, user.name] as const] : [];
+      return user ? [[snapshot.id, toDisplayName(user.name)] as const] : [];
     }),
   );
 }

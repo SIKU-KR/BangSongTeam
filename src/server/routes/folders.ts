@@ -19,7 +19,9 @@ import { SMALL_BODY_MAX_BYTES } from "../middleware/bodyLimit";
  *
  * 폴더는 1건 단위로 주고받는다. 휴지통은 `trashedAt`을 담은 PUT이고, DELETE는
  * 휴지통 비우기·영구 삭제 전용이다 (하위 폴더·프레젠테이션까지 지운다).
- * `userId`는 언제나 세션에서 가져온다 (Firestore에 사용자별 접근 규칙이 없다).
+ * `userId`는 세션에서 가져오고, 본문의 userId가 세션 사용자와 다르면 403으로 거절한다 (다른
+ * 계정으로 바뀐 탭·남은 대기열이 보낸 문서를 지금 쿠키의 계정에 만들지 않는다. Firestore에
+ * 사용자별 접근 규칙이 없다).
  */
 export function createFoldersRoute(deps: AppDeps = {}) {
   const savedId = idParam(API_ERRORS.idMismatch, 400);

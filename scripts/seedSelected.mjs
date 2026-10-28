@@ -15,6 +15,9 @@
  *
  * 봇 계정에 같은 제목·아티스트 곡이 이미 있으면 건너뛰므로 여러 번 돌려도 겹치지 않는다.
  * 슬라이드 나누기와 기본 스타일은 앱과 같은 `#shared` 규칙을 쓴다.
+ * 제목·아티스트는 개발용 시드(`devSeed.ts`)처럼 곡 스키마 한도(100자)로 줄여 넣는다. 원본에는
+ * 100자를 넘는 메들리 제목이 있다. 이미 들어간 곡과도 줄인 값끼리 비교해, 예전에 줄이지 않고
+ * 넣은 곡을 줄인 사본으로 다시 넣지 않는다.
  */
 
 import fs from "node:fs/promises";
@@ -170,22 +173,32 @@ async function main() {
     `- 대상: ${target === "remote" ? "운영 Firestore" : "로컬 에뮬레이터"}`,
   );
 
+  const fitTitle = (title) =>
+    shared.clampText(title, shared.MAX_DECK_TITLE_LENGTH) || "제목 없음";
+  const fitArtist = (artist) =>
+    shared.clampText(artist, shared.MAX_DECK_ARTIST_LENGTH);
+  const songKey = (title, artist) =>
+    `${fitTitle(title)}\u0000${fitArtist(artist ?? "")}`;
+
   const existing = await decks
     .where("userId", "==", SEED_BOT_USER_ID)
     .where("presentationId", "==", null)
     .get();
   const seen = new Set(
-    existing.docs.map((doc) => `${doc.data().title}\u0000${doc.data().artist}`),
+    existing.docs.map((doc) => songKey(doc.data().title, doc.data().artist)),
   );
 
   const now = new Date();
   const rows = [];
-  for (const { label, title, artist, lyricsRaw } of songs) {
+  for (const song of songs) {
+    const { label, lyricsRaw } = song;
+    const title = fitTitle(song.title);
+    const artist = fitArtist(song.artist);
     if (!lyricsRaw || lyricsRaw.length < 5) {
       console.warn(`[건너뜀] 가사 내용 부족: ${label}`);
       continue;
     }
-    const key = `${title}\u0000${artist}`;
+    const key = songKey(title, artist);
     if (seen.has(key)) continue;
     seen.add(key);
     rows.push(

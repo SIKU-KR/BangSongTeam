@@ -1,8 +1,13 @@
 import {
+  clampText,
   DEFAULT_DECK_STYLE,
   DeckStyleSchema,
+  fitDeckText,
   fitSlidesToLimits,
+  MAX_PRESENTATION_TITLE_LENGTH,
   StoredSlideSchema,
+  toNonNegativeInt,
+  UNTITLED_SONG,
   type Deck as SharedDeck,
   type DeckStyle,
   type Slide,
@@ -41,14 +46,41 @@ export function parseSlides(raw: string | null | undefined): Slide[] {
   );
 }
 
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/**
+ * 저장된 스타일 JSON → 스타일. 스키마를 통과하지 못한 필드만 기본값으로 바꾸고 나머지는
+ * 살린다.
+ *
+ * 다른 판(배포 중의 새 판, 되돌린 판)이 저장한 스타일에는 이 판이 모르는 글꼴 같은 값이 있을 수
+ * 있다. 필드 하나 때문에 스타일 전체를 기본값으로 돌리면, 그 응답을 받아 다시 저장하는
+ * 클라이언트가 사용자의 글자 크기·색·위치를 모두 지운다. JSON이 깨졌거나 객체가 아니면 기본
+ * 스타일이다.
+ */
 export function parseStyle(raw: string | null | undefined): DeckStyle {
   if (!raw) return { ...DEFAULT_DECK_STYLE };
+  let parsed: unknown;
   try {
-    const result = DeckStyleSchema.safeParse(JSON.parse(raw));
-    return result.success ? result.data : { ...DEFAULT_DECK_STYLE };
+    parsed = JSON.parse(raw);
   } catch {
     return { ...DEFAULT_DECK_STYLE };
   }
+
+  const result = DeckStyleSchema.safeParse(parsed);
+  if (result.success) return result.data;
+  if (!isPlainObject(parsed)) return { ...DEFAULT_DECK_STYLE };
+
+  const kept = Object.fromEntries(
+    Object.entries(DeckStyleSchema.shape).flatMap(([key, field]) =>
+      key in parsed && field.safeParse(parsed[key]).success
+        ? [[key, parsed[key]]]
+        : [],
+    ),
+  );
+  const repaired = DeckStyleSchema.safeParse(kept);
+  return repaired.success ? repaired.data : { ...DEFAULT_DECK_STYLE };
 }
 
 function toIso(value: Date | null | undefined): string {
@@ -83,24 +115,30 @@ function toDate(iso: string): Date {
  *
  * `scope`는 `presentation_id`가 있는지로, `origin`은 원작 표시 스냅샷
  * (`forked_from_author_name`)이 있는지로 정한다. 둘 다 저장하지 않는 파생값이다.
+ *
+ * 제목·아티스트·원작자 이름과 가져간 횟수는 `DeckSchema` 한도에 맞춰 읽는다(`fitDeckText`,
+ * `toNonNegativeInt`). 시드·옮긴 데이터에 한도를 넘는 값이 있어도 이 DTO를 엄격하게 검사하는
+ * 클라이언트가 곡이나 그 곡을 담은 프레젠테이션 전체를 버리지 않게 하기 위해서다. 한도 안의
+ * 값은 그대로다.
  */
 export function toSharedDeck(row: DeckDoc): SharedDeck {
+  const text = fitDeckText(row);
   return {
     id: row.id,
     userId: row.userId,
     scope: row.presentationId ? "presentation" : "library",
     presentationId: row.presentationId ?? null,
-    title: row.title,
-    artist: row.artist,
+    title: text.title,
+    artist: text.artist,
     lyricsRaw: row.lyricsRaw,
     slides: parseSlides(row.slides),
     backgroundId: row.backgroundId ?? null,
     style: parseStyle(row.style),
     visibility: row.visibility,
     forkedFrom: row.forkedFrom ?? null,
-    forkCount: row.forkCount,
-    origin: row.forkedFromAuthorName ? "fork" : "user",
-    forkedFromAuthorName: row.forkedFromAuthorName ?? null,
+    forkCount: toNonNegativeInt(row.forkCount),
+    origin: text.forkedFromAuthorName ? "fork" : "user",
+    forkedFromAuthorName: text.forkedFromAuthorName,
     publishedAt: toIsoOrNull(row.publishedAt),
     takedownAt: toIsoOrNull(row.takedownAt),
     createdAt: toIso(row.createdAt),
@@ -137,15 +175,25 @@ export function toDeckContent(
   };
 }
 
-/** 머리 문서 + 사본 곡 문서(`position` 순) → 하이드레이션된 문서 */
+/**
+ * 머리 문서 + 사본 곡 문서(`position` 순) → 하이드레이션된 문서.
+ *
+ * 제목은 문서 스키마 한도로 줄이고, 비었거나 문자열이 아니면 '(제목 없음)'으로 읽는다. 목록
+ * 조회는 모든 문서를 한 응답에 담으므로, 한 문서의 잘못된 제목이 응답 전체를 깨뜨리지 않게
+ * 한다.
+ */
 export function toPresentationDocument(
   presentation: PresentationDoc,
   copies: DeckDoc[],
 ): PresentationDocument {
+  const title: unknown = presentation.title;
   return {
     id: presentation.id,
     userId: presentation.userId,
-    title: presentation.title,
+    title:
+      typeof title === "string" && title.length > 0
+        ? clampText(title, MAX_PRESENTATION_TITLE_LENGTH)
+        : UNTITLED_SONG,
     serviceDate: presentation.serviceDate,
     folderId: presentation.folderId ?? null,
     trashedAt: toIsoOrNull(presentation.trashedAt),

@@ -10,6 +10,7 @@ import {
 } from "../test/fixtures";
 import {
   DEFAULT_DECK_STYLE,
+  FALLBACK_USER_NAME,
   PresentationDocumentSchema,
   type PresentationDocument,
 } from "#shared";
@@ -222,6 +223,20 @@ describe("세트 링크 공유", () => {
         folderId: null,
         access: { ownerName: "인도자" },
       });
+    });
+
+    it("소유자 이름이 문자열이 아니면 기본 이름을 붙인다", async () => {
+      await seedDocs(db, {
+        users: [{ ...userDoc({ id: OWNER }), name: 0 as unknown as string }],
+      });
+      await shareAndJoin();
+
+      const [shared] = await getSharedPresentationDocuments(db, MEMBER);
+      const single = await getPresentationDocument(db, DOC_ID, MEMBER);
+
+      expect(shared.access?.ownerName).toBe(FALLBACK_USER_NAME.default);
+      expect(single?.access?.ownerName).toBe(FALLBACK_USER_NAME.default);
+      expect(PresentationDocumentSchema.safeParse(shared).success).toBe(true);
     });
 
     it("공유받은 사람은 원본을 고치지 못한다", async () => {

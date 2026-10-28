@@ -21,6 +21,7 @@ export const API_ERRORS = {
     noSlides: "슬라이드가 한 장 이상 있어야 공개할 수 있어요",
     takenDown: "운영자가 게시를 중단한 곡이라 다시 공개할 수 없어요",
     notPublished: "공개된 곡을 찾을 수 없어요",
+    tooLarge: "가사가 너무 길어요. 가사를 나눠 여러 곡으로 만들어 주세요",
   },
   folder: {
     notAccessible: "이 폴더를 열 수 없어요",
@@ -31,6 +32,10 @@ export const API_ERRORS = {
     saveFailed: "프레젠테이션을 저장하지 못했어요",
     fullSyncRequired:
       "서버에 없는 곡이 있어 프레젠테이션 전체를 다시 보내야 해요",
+    songTooLarge: (title: string) =>
+      `‘${title}’ 곡이 너무 커요. 프레젠테이션에서 이 곡을 빼 주세요`,
+    tooLarge:
+      "프레젠테이션이 너무 커요. 곡을 몇 개 빼거나 프레젠테이션을 나눠 주세요",
   },
   report: {
     targetNotFound: "신고할 곡을 찾을 수 없어요",

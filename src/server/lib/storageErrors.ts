@@ -2,6 +2,41 @@
 const TRANSIENT_GRPC_CODES = new Set([4, 8, 10, 14]);
 const TRANSIENT_HTTP_STATUSES = new Set([429, 502, 503, 504]);
 
+const INVALID_ARGUMENT = 3;
+const STORAGE_LIMIT_MESSAGE =
+  /bytes|index entries|too big|more than \d+ entities|maximum \d+ writes/i;
+
+/**
+ * Firestore가 저장 한도(필드·문서 1 MiB, 문서당 색인 항목 4만 개, 요청·트랜잭션 크기, 한 번에
+ * 쓰는 문서 수)를 넘었다며 거절한 오류인지. `cause`에 감싸인 오류도 본다.
+ *
+ * 같은 내용을 다시 보내도 같은 결과라 재시도할 일이 아니다. 라우트는 이 오류를 일시 장애(503)나
+ * 서버 오류(500)가 아니라 413과 무엇을 줄일지 담은 문장으로 답한다. Firestore가 문구를 바꾸면
+ * 지금처럼 500으로 돌아갈 뿐 더 위험해지지 않는다.
+ * https://firebase.google.com/docs/firestore/quotas#limits
+ */
+export function isStorageLimitError(error: unknown): boolean {
+  const seen = new Set<unknown>();
+  let current = error;
+  while (current && typeof current === "object" && !seen.has(current)) {
+    seen.add(current);
+    const err = current as {
+      code?: unknown;
+      message?: unknown;
+      cause?: unknown;
+    };
+    if (
+      err.code === INVALID_ARGUMENT &&
+      typeof err.message === "string" &&
+      STORAGE_LIMIT_MESSAGE.test(err.message)
+    ) {
+      return true;
+    }
+    current = err.cause;
+  }
+  return false;
+}
+
 /**
  * Firestore·GCS의 일시 장애(경합, 타임아웃, 네트워크 실패, 과부하)와 코드 결함(500)을
  * 구분한다.

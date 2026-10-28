@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { handleOAuthUserInfo } from "better-auth/oauth2";
+import { FALLBACK_USER_NAME } from "#shared";
 import { env } from "../test/env";
 import { clearDb } from "../../db/test/fixtures";
 import app from "../index";
@@ -130,6 +131,113 @@ describe("이메일·비밀번호 인증", () => {
     expect(duplicate.status).toBeGreaterThanOrEqual(400);
     expect(sessionCookie(duplicate)).toBe("");
     expect(short.status).toBe(400);
+  });
+});
+
+describe("표시 이름", () => {
+  beforeEach(async () => {
+    await clearDb(env.DB);
+  });
+
+  async function storedName(email: string): Promise<unknown> {
+    const context = await getAuth(env).$context;
+    return (await context.internalAdapter.findUserByEmail(email))?.user.name;
+  }
+
+  async function signUpNamed(
+    email: string,
+    name: string,
+    ip: string,
+  ): Promise<Response> {
+    return await post(
+      "/api/auth/sign-up/email",
+      { email, password: "password-1234", name },
+      ip,
+    );
+  }
+
+  it("가입할 때 긴 이름은 거절하지 않고 50자로 줄여 저장한다", async () => {
+    const res = await signUpNamed(
+      "long@example.com",
+      "a".repeat(150),
+      "10.0.1.1",
+    );
+
+    expect(res.status).toBe(200);
+    expect(await storedName("long@example.com")).toBe("a".repeat(50));
+  });
+
+  it("공백뿐인 이름은 기본 이름으로 저장한다", async () => {
+    const res = await signUpNamed("blank@example.com", "   ", "10.0.1.2");
+
+    expect(res.status).toBe(200);
+    expect(await storedName("blank@example.com")).toBe(
+      FALLBACK_USER_NAME.default,
+    );
+  });
+
+  it("채움 문자와 폭 없는 문자뿐인 이름도 기본 이름으로 저장한다", async () => {
+    const res = await signUpNamed(
+      "filler@example.com",
+      "\u200B\u3164\u115F",
+      "10.0.1.5",
+    );
+
+    expect(res.status).toBe(200);
+    expect(await storedName("filler@example.com")).toBe(
+      FALLBACK_USER_NAME.default,
+    );
+  });
+
+  it("글 방향을 바꾸는 제어 문자는 빼고 저장한다", async () => {
+    const res = await signUpNamed(
+      "bidi@example.com",
+      "\u202E관리자",
+      "10.0.1.6",
+    );
+
+    expect(res.status).toBe(200);
+    expect(await storedName("bidi@example.com")).toBe("관리자");
+  });
+
+  it("쓰지 않는 /update-user는 404이고 이름을 바꾸지 않는다", async () => {
+    const created = await signUpNamed("keep@example.com", "찬양팀", "10.0.1.3");
+    const res = await app.request(
+      "/api/auth/update-user",
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          origin: ORIGIN,
+          "x-forwarded-for": "10.0.1.3",
+          cookie: sessionCookie(created),
+        },
+        body: JSON.stringify({ name: 0 }),
+      },
+      env,
+    );
+
+    expect(res.status).toBe(404);
+    expect(await storedName("keep@example.com")).toBe("찬양팀");
+  });
+
+  it("다른 경로로 이름을 바꿀 때도 다듬고, 이름이 없는 수정은 이름을 그대로 둔다", async () => {
+    await signUpNamed("update@example.com", "찬양팀", "10.0.1.4");
+    const context = await getAuth(env).$context;
+    const found =
+      await context.internalAdapter.findUserByEmail("update@example.com");
+    const id = found?.user.id ?? "";
+
+    await context.internalAdapter.updateUser(id, {
+      name: { x: 1 } as unknown as string,
+    });
+    expect(await storedName("update@example.com")).toBe(
+      FALLBACK_USER_NAME.default,
+    );
+
+    await context.internalAdapter.updateUser(id, { name: "  새 이름  " });
+    await context.internalAdapter.updateUser(id, { emailVerified: true });
+    expect(await storedName("update@example.com")).toBe("새 이름");
   });
 });
 

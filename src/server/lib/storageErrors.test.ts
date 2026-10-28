@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { isTransientStorageError } from "./storageErrors";
+import { isStorageLimitError, isTransientStorageError } from "./storageErrors";
 
 describe("isTransientStorageError", () => {
   it("Firestore의 경합·과부하·연결 오류 코드를 일시 장애로 판별한다", () => {
@@ -58,5 +58,54 @@ describe("isTransientStorageError", () => {
     expect(isTransientStorageError(new SyntaxError("Unexpected token"))).toBe(
       false,
     );
+  });
+});
+
+describe("isStorageLimitError", () => {
+  const invalidArgument = (message: string) =>
+    Object.assign(new Error(`3 INVALID_ARGUMENT: ${message}`), { code: 3 });
+
+  it("문서·필드 크기, 색인 항목 수, 트랜잭션 크기·쓰기 수 한도 초과를 판별한다", () => {
+    for (const message of [
+      "The value of property 'lyricsRaw' is longer than 1048487 bytes.",
+      "Document 'decks/abc' cannot be written because its size (1,234,567 bytes) exceeds the maximum allowed size of 1,048,576 bytes.",
+      "too many index entries for entity",
+      "Transaction too big. Decrease transaction size.",
+      "cannot write more than 500 entities in a single call",
+      "maximum 500 writes allowed per request",
+    ]) {
+      expect(isStorageLimitError(invalidArgument(message))).toBe(true);
+    }
+  });
+
+  it("원인(cause)에 한도 초과가 감싸여 있어도 판별한다", () => {
+    const wrapped = new Error("transaction failed", {
+      cause: invalidArgument("maximum entity size is 1048576 bytes"),
+    });
+    expect(isStorageLimitError(wrapped)).toBe(true);
+  });
+
+  it("한도와 상관없는 잘못된 요청, 다른 코드, 일반 오류는 아니다", () => {
+    expect(
+      isStorageLimitError(invalidArgument("Document path must not be empty")),
+    ).toBe(false);
+    expect(
+      isStorageLimitError(
+        Object.assign(new Error("10 ABORTED: too big contention"), {
+          code: 10,
+        }),
+      ),
+    ).toBe(false);
+    expect(isStorageLimitError(new Error("value longer than 10 bytes"))).toBe(
+      false,
+    );
+    expect(isStorageLimitError(null)).toBe(false);
+    expect(isStorageLimitError("3 INVALID_ARGUMENT: bytes")).toBe(false);
+  });
+
+  it("원인이 자기 자신을 가리켜도 끝난다", () => {
+    const loop: Error & { cause?: unknown } = new Error("loop");
+    loop.cause = loop;
+    expect(isStorageLimitError(loop)).toBe(false);
   });
 });

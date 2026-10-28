@@ -1,7 +1,11 @@
 import { z } from "zod";
 import { IdSchema } from "./id";
-import { DeckSchema } from "./deck";
-import { PresentationSchema, PresentationItemSchema } from "./presentation";
+import { DeckSchema, DeckWriteSchema } from "./deck";
+import {
+  MAX_PRESENTATION_SONGS,
+  PresentationSchema,
+  PresentationItemSchema,
+} from "./presentation";
 import { PublicDeckSummarySchema } from "./library";
 
 /** 공유 라이브러리 검색어 길이 상한. 이전 서버의 `max(50)`처럼 UTF-16 코드 단위로 센다 */
@@ -47,6 +51,20 @@ export const PresentationDocumentSchema = PresentationSchema.extend({
 });
 export type PresentationDocument = z.infer<typeof PresentationDocumentSchema>;
 
+/**
+ * 프레젠테이션 문서 전체 저장 본문(`PUT /api/presentations/:id`). `PresentationDocumentSchema`에
+ * 곡 수 상한과 곡마다의 쓰기 한도(`DeckWriteSchema`)를 더한다.
+ *
+ * 서버가 쓰기 요청을 검사할 때만 쓴다. 문서 스키마는 IndexedDB 저장본과 조회 응답도 읽으므로
+ * 한도를 두지 않는다.
+ */
+export const PresentationDocumentRequestSchema =
+  PresentationDocumentSchema.extend({
+    items: z
+      .array(PresentationItemSchema.extend({ deck: DeckWriteSchema }))
+      .max(MAX_PRESENTATION_SONGS),
+  });
+
 export const PresentationChangeItemSchema = z.object({
   id: IdSchema,
   deckId: IdSchema,
@@ -63,12 +81,15 @@ export type PresentationChangeItem = z.infer<
  * 보낸다. 서버는 `items`에 없는 곡을 지우므로 문서 단위 전체 교체와 결과가 같다.
  * 항목이 가리키는 덱이 본문에도 서버에도 없으면 서버가 409로 거절하고,
  * 클라이언트는 모든 덱을 담아 다시 보낸다.
+ *
+ * 서버가 쓰기 요청을 검사하는 스키마라 곡 수 상한과 곡마다의 쓰기 한도(`DeckWriteSchema`)를
+ * 둔다. 클라이언트는 이 모양의 타입만 쓰고 이 스키마로 저장본을 읽지 않는다.
  */
 export const PresentationChangesSchema = PresentationSchema.omit({
   items: true,
 }).extend({
-  items: z.array(PresentationChangeItemSchema),
-  decks: z.array(DeckSchema),
+  items: z.array(PresentationChangeItemSchema).max(MAX_PRESENTATION_SONGS),
+  decks: z.array(DeckWriteSchema).max(MAX_PRESENTATION_SONGS),
 });
 export type PresentationChanges = z.infer<typeof PresentationChangesSchema>;
 
@@ -111,7 +132,11 @@ export const PASSWORD_MIN_LENGTH = 8;
 export const PASSWORD_MAX_LENGTH = 128;
 export const USER_NAME_MAX_LENGTH = 50;
 
-/** 이메일 가입 폼 입력. 서버 검증은 Better Auth가 따로 한다 */
+/**
+ * 이메일 가입 폼 입력. 서버의 Better Auth는 이메일·비밀번호만 검사하고 이름 길이는 보지
+ * 않아, 서버에서는 인증 훅(`server/lib/auth.ts`)이 이름을 다듬어(50자, 보이는 글자가 없으면
+ * 기본 이름) 저장한다
+ */
 export const EmailSignUpRequestSchema = z.object({
   name: z.string().trim().min(1).max(USER_NAME_MAX_LENGTH),
   email: z.email(),

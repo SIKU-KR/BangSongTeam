@@ -67,4 +67,29 @@ describe("jsonBody", () => {
     expect(res.status).toBe(413);
     expect(await res.json()).toEqual({ error: API_ERRORS.payloadTooLarge });
   });
+
+  it("틀린 본문은 onInvalid가 준 응답으로 답하고, onInvalid가 넘기면 400이다", async () => {
+    const seen: unknown[] = [];
+    const app = new Hono<AppEnv>().post(
+      "/",
+      jsonBody(z.object({ name: z.string().max(3) }), 1024, (body, c) => {
+        seen.push(body);
+        return (body as { name?: unknown }).name === "너무 긴 이름"
+          ? c.json({ error: "too long" }, 413)
+          : undefined;
+      }),
+      (c) => c.text("ok"),
+    );
+
+    const tooLong = await post(app, JSON.stringify({ name: "너무 긴 이름" }));
+    const wrongType = await post(app, JSON.stringify({ name: 1 }));
+    const valid = await post(app, JSON.stringify({ name: "곡" }));
+
+    expect(tooLong.status).toBe(413);
+    expect(await tooLong.json()).toEqual({ error: "too long" });
+    expect(wrongType.status).toBe(400);
+    expect(await wrongType.json()).toEqual({ error: API_ERRORS.idMismatch });
+    expect(valid.status).toBe(200);
+    expect(seen).toEqual([{ name: "너무 긴 이름" }, { name: 1 }]);
+  });
 });

@@ -1,5 +1,6 @@
 import {
   isReservedDocumentId,
+  MAX_PRESENTATION_TEXT_BYTES,
   toPresentationChanges,
   type PresentationChanges,
   type PresentationDocument,
@@ -56,11 +57,48 @@ export async function deletePresentation(
 /**
  * `savePresentationChanges` 결과.
  *
- * - `forbidden`: 남의 세트, 공유받은 세트(`access`), 또는 다른 곳에 속한 덱 id
+ * - `forbidden`: 남의 세트, 공유받은 세트(`access`), 다른 곳에 속한 덱 id, 또는 본문의
+ *   `userId`가 세션 사용자가 아닌 세트. 아직 A라고 믿는 탭이나 A가 남긴 대기열이 보낸 문서를
+ *   지금 쿠키의 주인인 B의 계정에 만들면 안 된다
  * - `stale`: 항목이 가리키는 덱이 본문에도 서버에도 없다. 클라이언트가 서버 상태를
  *   잘못 알고 있으므로 모든 덱을 담아 다시 보내야 한다.
+ * - `tooLarge`: 저장하면 담긴 곡 글(곡마다 `songTextBytes`)의 합이
+ *   `MAX_PRESENTATION_TEXT_BYTES`를 넘고 지금보다 커진다. 이미 상한을 넘은 프레젠테이션이라도
+ *   곡 글을 키우지 않는 저장(프레젠테이션 제목·곡 순서 바꾸기, 곡 빼기)은 받는다.
  */
-export type SavePresentationResult = "saved" | "forbidden" | "stale";
+export type SavePresentationResult =
+  "saved" | "forbidden" | "stale" | "tooLarge";
+
+function utf8Bytes(value: unknown): number {
+  return typeof value === "string" ? Buffer.byteLength(value, "utf8") : 0;
+}
+
+function jsonStringBytes(value: unknown): number {
+  return typeof value === "string" ? utf8Bytes(JSON.stringify(value)) : 0;
+}
+
+/**
+ * 곡 하나의 글(제목·아티스트·원작자 이름·가사·슬라이드)이 JSON 본문에서 차지하는 바이트.
+ *
+ * 저장된 글의 UTF-8 크기가 아니라 JSON으로 쓴 크기를 센다. 링크 보기 응답과 전체 저장 본문은
+ * 글을 JSON으로 담는데, 제어 문자는 저장하면 1바이트지만 JSON에서는 6바이트(`\u0001`)라 저장
+ * 크기로 세면 응답이 상한의 몇 배가 된다. 슬라이드는 이미 JSON 문자열로 저장하므로 그 길이를
+ * 센다.
+ */
+export function songTextBytes(
+  deck: Pick<
+    DeckDoc,
+    "title" | "artist" | "forkedFromAuthorName" | "lyricsRaw" | "slides"
+  >,
+): number {
+  return (
+    jsonStringBytes(deck.title) +
+    jsonStringBytes(deck.artist) +
+    jsonStringBytes(deck.forkedFromAuthorName) +
+    jsonStringBytes(deck.lyricsRaw) +
+    utf8Bytes(deck.slides)
+  );
+}
 
 /**
  * 이미 있는 사본에서 편집기가 바꿀 수 있는 곡 내용 필드만 고른다.
@@ -97,6 +135,11 @@ function editableDeckFields(row: DeckDoc): Partial<DeckDoc> {
  *
  * 링크로 공유받은 세트(`access`)는 서버에 없어도 새로 만들지 않는다. 소유자가
  * 지운 세트를 받은 사람이 자기 문서로 되살리지 않게 하기 위해서다.
+ *
+ * 담긴 곡 글을 `MAX_PRESENTATION_TEXT_BYTES` 너머로 키우는 저장은 `tooLarge`로 거절한다. 바뀐
+ * 곡만 보내는 저장을 거듭하면 요청 본문 상한과 상관없이 프레젠테이션을 키울 수 있는데, 링크로
+ * 공유하면 로그인 없이 보는 요청마다 서버가 그 전부를 읽어 보낸다. 상한은 사본을 이미 읽는 이
+ * 트랜잭션에서 세므로 읽기가 늘지 않는다.
  */
 export async function savePresentationChanges(
   db: Db,
@@ -104,6 +147,7 @@ export async function savePresentationChanges(
   changes: PresentationChanges,
 ): Promise<SavePresentationResult> {
   if (changes.access) return "forbidden";
+  if (changes.userId !== userId) return "forbidden";
 
   const sentDeckIds = changes.decks.map((deck) => deck.id);
   const forkedFromIds = [
@@ -195,6 +239,18 @@ export async function savePresentationChanges(
     );
     if (missingDeck) return "stale";
 
+    const savedBytes = slots.reduce((sum, slot) => {
+      const row = sent.get(slot.deckId) ?? previous.get(slot.deckId);
+      return sum + (row ? songTextBytes(row) : 0);
+    }, 0);
+    const storedBytes = existingCopies.reduce(
+      (sum, copy) => sum + songTextBytes(copy),
+      0,
+    );
+    if (savedBytes > MAX_PRESENTATION_TEXT_BYTES && savedBytes > storedBytes) {
+      return "tooLarge";
+    }
+
     const nextDeckIds = new Set(slots.map((slot) => slot.deckId));
     const removed = new Set(
       existingCopies
@@ -264,7 +320,8 @@ export async function savePresentationChanges(
 
 /**
  * 프레젠테이션 문서 업서트 (문서 단위 전체 교체). 모든 덱을 담은 변경분 저장과 같다.
- * 소유자가 다르거나 공유받은 세트면 아무것도 쓰지 않고 false를 돌린다.
+ * 소유자가 다르거나, 공유받은 세트거나, 문서의 `userId`가 세션 사용자가 아니면 아무것도
+ * 쓰지 않고 false를 돌린다.
  */
 export async function upsertPresentationDocument(
   db: Db,

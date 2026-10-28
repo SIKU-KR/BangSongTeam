@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { env } from "../test/env";
 import {
+  API_ERRORS,
   DEFAULT_DECK_STYLE,
   DeckSchema,
   FolderSchema,
@@ -267,25 +268,43 @@ describe("동기화 라우트 교차 사용자 격리", () => {
     expect(row).toMatchObject({ visibility: "private", forkCount: 0 });
   });
 
-  it("본문의 userId를 믿지 않는다", async () => {
-    await app.request(
+  it("본문의 userId가 세션 사용자와 다르면 403으로 거절하고 어느 계정에도 만들지 않는다", async () => {
+    const put = await app.request(
       `/api/presentations/${DOC_ID}`,
       json(makeDoc(USER_B)),
       env,
     );
+    const patch = await app.request(
+      `/api/presentations/${DOC_ID}`,
+      patchJson({ ...toPresentationChanges(makeDoc(USER_A)), userId: USER_B }),
+      env,
+    );
+    const deck = await app.request(
+      `/api/decks/${LIB_DECK_ID}`,
+      json(
+        makeDeck(USER_B, {
+          id: LIB_DECK_ID,
+          scope: "library",
+          presentationId: null,
+        }),
+      ),
+      env,
+    );
 
-    currentUser = USER_B;
-    const bBody = (await (
-      await app.request("/api/presentations", {}, env)
-    ).json()) as { presentations: PresentationDocument[] };
-    expect(bBody.presentations).toHaveLength(0);
-
-    currentUser = USER_A;
-    const aBody = (await (
-      await app.request("/api/presentations", {}, env)
-    ).json()) as { presentations: PresentationDocument[] };
-    expect(aBody.presentations).toHaveLength(1);
-    expect(aBody.presentations[0].userId).toBe(USER_A);
+    expect([put.status, patch.status, deck.status]).toEqual([403, 403, 403]);
+    for (const user of [USER_A, USER_B]) {
+      currentUser = user;
+      const presentations = (await (
+        await app.request("/api/presentations", {}, env)
+      ).json()) as { presentations: PresentationDocument[] };
+      const decks = (await (
+        await app.request("/api/decks", {}, env)
+      ).json()) as {
+        decks: Deck[];
+      };
+      expect(presentations.presentations).toHaveLength(0);
+      expect(decks.decks).toHaveLength(0);
+    }
   });
   describe("2-기기 왕복", () => {
     beforeEach(async () => {
@@ -647,6 +666,75 @@ describe("동기화 라우트 교차 사용자 격리", () => {
       const secondBody = await second.json();
 
       expect(firstBody).toEqual(secondBody);
+    });
+
+    it("저장할 수 없을 만큼 큰 곡이 든 프레젠테이션 저장은 그 곡을 짚어 413으로 답하고 아무것도 쓰지 않는다", async () => {
+      const base = toPresentationChanges(makeDoc(USER_A));
+      const longDeck = makeDeck(USER_A, {
+        id: "c000000000000000000ab",
+        title: "긴 곡",
+        lyricsRaw: "가".repeat(400_000),
+      });
+      const changes = {
+        ...base,
+        items: [
+          ...base.items,
+          { id: "3000000000000000000ab", deckId: longDeck.id, order: 1 },
+        ],
+        decks: [...base.decks, longDeck],
+      };
+
+      const res = await app.request(
+        `/api/presentations/${DOC_ID}`,
+        patchJson(changes),
+        env,
+      );
+
+      expect(res.status).toBe(413);
+      expect(await res.json()).toEqual({
+        error: API_ERRORS.presentation.songTooLarge("긴 곡"),
+      });
+      const get = await app.request(`/api/presentations/${DOC_ID}`, {}, env);
+      expect(get.status).toBe(404);
+    });
+
+    it("Firestore 문서 한도를 넘는 보관함 곡 저장은 413으로 답한다", async () => {
+      const tooLargeEnv = {
+        ...env,
+        DB: new Proxy(env.DB, {
+          get(target, prop) {
+            if (prop === "runTransaction") {
+              return async () => {
+                throw Object.assign(
+                  new Error(
+                    `3 INVALID_ARGUMENT: Document 'decks/${LIB_DECK_ID}' cannot be written because its size (1,234,567 bytes) exceeds the maximum allowed size of 1,048,576 bytes.`,
+                  ),
+                  { code: 3 },
+                );
+              };
+            }
+            return Reflect.get(target, prop);
+          },
+        }) as Db,
+      };
+
+      const res = await app.request(
+        `/api/decks/${LIB_DECK_ID}`,
+        json(
+          makeDeck(USER_A, {
+            id: LIB_DECK_ID,
+            scope: "library",
+            presentationId: null,
+          }),
+        ),
+        tooLargeEnv,
+      );
+
+      expect(res.status).toBe(413);
+      expect(await res.json()).toEqual({ error: API_ERRORS.deck.tooLarge });
+      expect((await decksCol(env.DB).doc(LIB_DECK_ID).get()).exists).toBe(
+        false,
+      );
     });
 
     it("Firestore 일시 장애(트랜잭션 경합 등)가 이어지면 503의 Retry-After가 2초에 머물지 않고 늘어난다", async () => {

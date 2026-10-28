@@ -114,10 +114,9 @@ describe("드라이브 폴더 쿼리", () => {
       expect(folders).toEqual([mine]);
     });
 
-    it("본문의 userId를 믿지 않고 세션 소유자로 강제한다", async () => {
-      const forged = makeFolder(USER_B);
-      const saved = await upsertFolder(db, USER_A, forged);
-      expect(saved?.userId).toBe(USER_A);
+    it("본문의 userId가 세션 사용자와 다르면 쓰지 않는다", async () => {
+      expect(await upsertFolder(db, USER_A, makeFolder(USER_B))).toBeNull();
+      expect(await getFoldersByUserId(db, USER_A)).toEqual([]);
       expect(await getFoldersByUserId(db, USER_B)).toEqual([]);
     });
 

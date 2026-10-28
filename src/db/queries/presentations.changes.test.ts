@@ -209,6 +209,23 @@ describe("세트 변경분 저장", () => {
     expect((await readSet()).items[0].deck.lyricsRaw).toBe("가사 0");
   });
 
+  it("본문의 userId가 세션 사용자와 다르면 내 세트도 쓰지 않는다", async () => {
+    const edited = withLyrics(makeSet(USER_A, 10), 0, "다른 계정의 대기열");
+
+    expect(
+      await savePresentationChanges(db, USER_A, {
+        ...toPresentationChanges(edited),
+        userId: USER_B,
+      }),
+    ).toBe("forbidden");
+
+    const restored = await readSet();
+    expect(restored.items).toHaveLength(10);
+    expect(restored.items[0].deck.lyricsRaw).toBe("가사 0");
+    expect(restored.updatedAt).toBe("2026-09-21T00:00:00.000Z");
+    expect(await getPresentationDocumentsByUserId(db, USER_B)).toHaveLength(0);
+  });
+
   it("다른 세트의 덱 id를 보내면 그 덱을 건드리지 않고 거절한다", async () => {
     const other = {
       ...withLyrics(makeSet(USER_A, 1), 0, "가로채기"),

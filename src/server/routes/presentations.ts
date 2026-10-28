@@ -3,9 +3,10 @@ import {
   API_ERRORS,
   isReservedDocumentId,
   toPresentationChanges,
+  type Deck,
   type PresentationChanges,
   PresentationChangesSchema,
-  PresentationDocumentSchema,
+  PresentationDocumentRequestSchema,
   UpdateShareSettingsRequestSchema,
 } from "#shared";
 import {
@@ -21,15 +22,40 @@ import {
 } from "#db";
 import type { AppEnv } from "../types";
 import { resolveRequireAuth, type AppDeps } from "../deps";
-import { isTransientStorageError } from "../lib/storageErrors";
+import {
+  isStorageLimitError,
+  isTransientStorageError,
+} from "../lib/storageErrors";
 import { logServerError } from "../lib/requestLog";
 import { idParam } from "../lib/params";
 import { jsonBody } from "../lib/jsonBody";
+import { rejectOverLimit, type WriteLimitBreach } from "../lib/writeLimits";
 import {
   PRESENTATION_BODY_MAX_BYTES,
   SMALL_BODY_MAX_BYTES,
 } from "../middleware/bodyLimit";
 import { hasAgreedToTerms } from "../middleware/consent";
+
+function songTextLength(deck: Deck): number {
+  return (
+    deck.lyricsRaw.length +
+    deck.slides.reduce(
+      (sum, slide) =>
+        sum + slide.lines.reduce((lines, line) => lines + line.length, 0),
+      0,
+    )
+  );
+}
+
+function largestSongTitle(decks: readonly Deck[]): string | null {
+  let largest: Deck | null = null;
+  for (const deck of decks) {
+    if (!largest || songTextLength(deck) > songTextLength(largest)) {
+      largest = deck;
+    }
+  }
+  return largest?.title ?? null;
+}
 
 async function save(c: Context<AppEnv>, changes: PresentationChanges) {
   if (
@@ -52,6 +78,17 @@ async function save(c: Context<AppEnv>, changes: PresentationChanges) {
       songCount: changes.items.length,
       sentDeckCount: changes.decks.length,
     });
+    if (isStorageLimitError(error)) {
+      const title = largestSongTitle(changes.decks);
+      return c.json(
+        {
+          error: title
+            ? API_ERRORS.presentation.songTooLarge(title)
+            : API_ERRORS.presentation.saveFailed,
+        },
+        413,
+      );
+    }
     if (isTransientStorageError(error)) {
       return c.json({ error: API_ERRORS.presentation.saveFailed }, 503);
     }
@@ -63,7 +100,16 @@ async function save(c: Context<AppEnv>, changes: PresentationChanges) {
   if (result === "stale") {
     return c.json({ error: API_ERRORS.presentation.fullSyncRequired }, 409);
   }
+  if (result === "tooLarge") {
+    return c.json({ error: API_ERRORS.presentation.tooLarge }, 413);
+  }
   return c.json({ ok: true as const }, 200);
+}
+
+function writeLimitMessage(breach: WriteLimitBreach): string {
+  return breach.kind === "song"
+    ? API_ERRORS.presentation.songTooLarge(breach.title)
+    : API_ERRORS.presentation.tooLarge;
 }
 
 /**
@@ -72,20 +118,27 @@ async function save(c: Context<AppEnv>, changes: PresentationChanges) {
  * 조회는 로컬 IndexedDB가 문서 1건을 통째로 put하는 것과 같은 단위로 주고받는다.
  * 저장은 문서 전체(`PUT`, 이전 버전 클라이언트와 부팅 동기화)나 바뀐 덱만 담은
  * 변경분(`PATCH`)으로 받으며, 결과는 둘 다 문서 단위 전체 교체와 같다.
- * `userId`는 언제나 세션에서 가져오고 본문 값은 신뢰하지 않는다 (Firestore에 사용자별 접근 규칙이 없다).
+ * `userId`는 세션에서 가져오고, 본문의 userId가 세션 사용자와 다르면 403으로 거절한다 (다른
+ * 계정으로 바뀐 탭·남은 대기열이 보낸 문서를 지금 쿠키의 계정에 만들지 않는다. Firestore에
+ * 사용자별 접근 규칙이 없다).
  * 목록·단건 조회에는 링크로 공유받은 세트(`access`가 붙음, 보기 전용)도 온다.
  * 저장은 소유자만 할 수 있다.
+ * 저장할 수 없을 만큼 큰 본문(곡마다의 가사·슬라이드, 곡 수, 곡 글 전체, Firestore 저장 한도)은
+ * 400·500 대신 413과 무엇을 줄일지 말하는 문장으로 답한다.
  */
 export function createPresentationsRoute(deps: AppDeps = {}) {
   const savedId = idParam(API_ERRORS.idMismatch, 400);
   const presentationId = idParam(API_ERRORS.presentation.notAccessible, 404);
+  const overLimit = rejectOverLimit(writeLimitMessage);
   const documentBody = jsonBody(
-    PresentationDocumentSchema,
+    PresentationDocumentRequestSchema,
     PRESENTATION_BODY_MAX_BYTES,
+    overLimit,
   );
   const changesBody = jsonBody(
     PresentationChangesSchema,
     PRESENTATION_BODY_MAX_BYTES,
+    overLimit,
   );
 
   return new Hono<AppEnv>()
