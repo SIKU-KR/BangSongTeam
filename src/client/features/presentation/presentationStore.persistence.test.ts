@@ -7,6 +7,7 @@ import {
 import {
   loadAllPresentations,
   savePresentation,
+  saveSharedPresentation,
   clearPersistenceError,
 } from "../../lib/storage";
 import { closeOfflineDB, OFFLINE_DB_NAME } from "../../lib/storage/db";
@@ -26,6 +27,9 @@ import {
   getPresentationById,
   applyServerDocuments,
   renamePresentation,
+  canEditPresentation,
+  replaceWithServerDocument,
+  removePresentationsLocally,
 } from "./presentationStore";
 import {
   __resetSyncSchedulerForTests,
@@ -45,15 +49,19 @@ const storageHooks = vi.hoisted(() => ({
 
 vi.mock("../../lib/storage", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../lib/storage")>();
-  return {
-    ...actual,
-    loadAllPresentations: vi.fn(actual.loadAllPresentations),
-    savePresentation: vi.fn(async (doc: Presentation) => {
+  const withHook =
+    (save: (doc: Presentation) => Promise<void>) =>
+    async (doc: Presentation): Promise<void> => {
       const hook = storageHooks.beforeSave;
       storageHooks.beforeSave = null;
       if (hook) await hook(doc);
-      return actual.savePresentation(doc);
-    }),
+      return save(doc);
+    };
+  return {
+    ...actual,
+    loadAllPresentations: vi.fn(actual.loadAllPresentations),
+    savePresentation: vi.fn(withHook(actual.savePresentation)),
+    saveSharedPresentation: vi.fn(withHook(actual.saveSharedPresentation)),
   };
 });
 
@@ -78,6 +86,7 @@ describe("presentationStore 영속성", () => {
     resetPresentationStore();
     storageHooks.beforeSave = null;
     vi.mocked(savePresentation).mockClear();
+    vi.mocked(saveSharedPresentation).mockClear();
     vi.mocked(loadAllPresentations).mockClear();
   });
 
@@ -299,10 +308,17 @@ describe("presentationStore 영속성", () => {
     }
 
     function writtenIds(): string[] {
-      return vi
-        .mocked(savePresentation)
-        .mock.calls.map(([doc]) => doc.id)
+      return [
+        ...vi.mocked(savePresentation).mock.calls,
+        ...vi.mocked(saveSharedPresentation).mock.calls,
+      ]
+        .map(([doc]) => doc.id)
         .sort();
+    }
+
+    function forgetWrites(): void {
+      vi.mocked(savePresentation).mockClear();
+      vi.mocked(saveSharedPresentation).mockClear();
     }
 
     it("서버에서 바뀐 세트만 저장소에 다시 쓴다", async () => {
@@ -311,7 +327,7 @@ describe("presentationStore 영속성", () => {
       const moved = { ...seededMoved, folderId: "a00000000000000000001" };
       await seedPresentationsIntoStorage([unchanged, localWon, newer, moved]);
       await hydrateFromStorage();
-      vi.mocked(savePresentation).mockClear();
+      forgetWrites();
 
       const created = serverCopy(newer, {
         id: "1x0000000000000000001",
@@ -347,7 +363,7 @@ describe("presentationStore 영속성", () => {
       };
       await seedPresentationsIntoStorage([shared]);
       await hydrateFromStorage();
-      vi.mocked(savePresentation).mockClear();
+      forgetWrites();
 
       applyServerDocuments([
         serverCopy(shared, {
@@ -481,7 +497,7 @@ describe("presentationStore 영속성", () => {
           ],
         },
       ]);
-      vi.mocked(savePresentation).mockClear();
+      forgetWrites();
       storageHooks.beforeSave = () =>
         Promise.reject(new DOMException("가득 참", "QuotaExceededError"));
 
@@ -490,6 +506,97 @@ describe("presentationStore 영속성", () => {
 
       expect(writtenIds()).toEqual([seed.id]);
       expect(getPersistenceError()?.kind).toBe("quota");
+    });
+  });
+
+  describe("한 브라우저를 함께 쓰는 소유자와 공유받은 사람", () => {
+    const LEADER = SEED_USER_ID;
+    const MEMBER = OTHER_USER;
+
+    async function leaderEditsOffline(): Promise<Presentation> {
+      signInAsTestUser(LEADER);
+      resetPresentationStore();
+      await hydrateFromStorage();
+      const created = createNewPresentation();
+      updatePresentationTitle("로컬 수정");
+      await flushPendingWrites();
+      return getPresentationById(created.id)!;
+    }
+
+    async function signInAs(userId: string): Promise<void> {
+      signInAsTestUser(userId);
+      resetPresentationStore();
+      await hydrateFromStorage();
+    }
+
+    it("공유받은 사람이 받은 사본이 소유자의 저장본을 덮지 않는다", async () => {
+      const leaders = await leaderEditsOffline();
+
+      await signInAs(MEMBER);
+      replaceWithServerDocument({
+        ...leaders,
+        title: "서버",
+        access: { ownerName: "인도자", memberId: MEMBER },
+      });
+      await flushPendingWrites();
+
+      await signInAs(LEADER);
+      const reloaded = getPresentationById(leaders.id);
+      expect(reloaded?.title).toBe("로컬 수정");
+      expect(reloaded && canEditPresentation(reloaded)).toBe(true);
+    });
+
+    it("공유받은 사람이 사본을 지워도 소유자의 저장본은 남는다", async () => {
+      const leaders = await leaderEditsOffline();
+
+      await signInAs(MEMBER);
+      replaceWithServerDocument({
+        ...leaders,
+        title: "서버",
+        access: { ownerName: "인도자", memberId: MEMBER },
+      });
+      await flushPendingWrites();
+      await removePresentationsLocally([leaders.id]);
+
+      const { valid } = await loadAllPresentations();
+      expect(valid.find((p) => p.id === leaders.id)).toEqual(leaders);
+    });
+
+    it("공유받은 사본만 있던 자리는 사본을 지우면 비운다", async () => {
+      const shared: Presentation = {
+        ...SEED_PRESENTATIONS[0],
+        userId: LEADER,
+        access: { ownerName: "인도자", memberId: MEMBER },
+      };
+      await seedPresentationsIntoStorage([shared]);
+      await signInAs(MEMBER);
+
+      await removePresentationsLocally([shared.id]);
+
+      const { valid } = await loadAllPresentations();
+      expect(valid.map((p) => p.id)).not.toContain(shared.id);
+    });
+
+    it("소유자의 부팅 병합은 공유받은 사본만 있던 자리를 updatedAt과 folderId가 같아도 소유자 사본으로 바꿔 다음에도 편집할 수 있다", async () => {
+      const owners: Presentation = {
+        ...structuredClone(SEED_PRESENTATIONS[0]),
+        userId: LEADER,
+        folderId: null,
+      };
+      await seedPresentationsIntoStorage([
+        { ...owners, access: { ownerName: "인도자", memberId: MEMBER } },
+      ]);
+      await signInAs(LEADER);
+      expect(canEditPresentation(getPresentationById(owners.id)!)).toBe(false);
+
+      applyServerDocuments([structuredClone(owners)]);
+      await flushPendingWrites();
+      await signInAs(LEADER);
+
+      const reloaded = getPresentationById(owners.id);
+      expect(reloaded && canEditPresentation(reloaded)).toBe(true);
+      const { valid } = await loadAllPresentations();
+      expect(valid.find((p) => p.id === owners.id)).toEqual(owners);
     });
   });
 });

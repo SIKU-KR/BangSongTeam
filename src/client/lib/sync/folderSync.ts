@@ -6,7 +6,7 @@ import {
   ServerRejectedError,
   SessionExpiredError,
 } from "../api/request";
-import { pushFolder } from "./presentationSync";
+import { pushFolder, syncFailureReasonOf } from "./presentationSync";
 import {
   clearSyncFailure,
   recordSyncFailure,
@@ -102,6 +102,7 @@ async function pushAll(folders: Folder[]): Promise<void> {
           message: err instanceof Error ? err.message : String(err),
           failedAt: Date.now(),
           requestId: requestIdOfError(err),
+          reason: syncFailureReasonOf(err),
         };
         console.error("Folder push failed permanently", failure);
         recordSyncFailure(failure);

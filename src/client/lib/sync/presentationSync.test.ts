@@ -1,10 +1,13 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import {
+  API_ERRORS,
   DEFAULT_DECK_STYLE,
   PresentationDocumentSchema,
+  toPresentationChanges,
   type PresentationChanges,
   type PresentationDocument,
 } from "#shared";
+import { ERROR_COPY } from "#copy/common";
 
 const api = vi.hoisted(() => ({
   patch: vi.fn<
@@ -55,8 +58,11 @@ import {
   pushPresentation,
   refreshSharedPresentation,
   rememberServerDocuments,
+  syncFailureReasonOf,
+  UnsyncableDocumentError,
 } from "./presentationSync";
 import { getSyncSnapshot, resetSyncStatus, setSyncStatus } from "./syncStatus";
+import { OfflineError, ServerRejectedError } from "../api/request";
 import { rememberRequestMeta } from "../api/traceContext";
 import {
   __resetClientReportsForTests,
@@ -203,15 +209,78 @@ describe("세트 변경분 push", () => {
     expect(sentDeckIds(1)).toHaveLength(3);
   });
 
-  it("덱이 빠진 항목이 있는 세트는 보내지 않는다", async () => {
+  it("덱이 빠진 항목이 있는 세트는 보내지 않고 보낼 수 없는 문서라고 알린다", async () => {
     const doc = makeSet();
     const broken = {
       ...doc,
       items: [{ ...doc.items[0], deck: undefined }],
     };
 
-    expect(await pushPresentation(broken)).toBe(false);
+    const err = await pushPresentation(broken).catch((error: unknown) => error);
+
+    expect(err).toBeInstanceOf(UnsyncableDocumentError);
+    expect(syncFailureReasonOf(err)).toBe(ERROR_COPY.documentInvalid);
     expect(api.patch).not.toHaveBeenCalled();
+  });
+
+  it("100자를 넘는 제목은 100자로 줄여 보낸다", async () => {
+    await pushPresentation({ ...makeSet(), title: "가".repeat(150) });
+
+    expect(api.patch).toHaveBeenCalledTimes(1);
+    expect(api.patch.mock.calls[0][0].json.title).toBe("가".repeat(100));
+  });
+
+  it("곡 제목과 원작자 이름이 한도를 넘으면 줄여 보내고, 줄인 곡을 다음에 다시 보내지 않는다", async () => {
+    const doc = makeSet();
+    const longSong: PresentationDocument = {
+      ...doc,
+      items: doc.items.map((item, index) =>
+        index === 0
+          ? {
+              ...item,
+              deck: {
+                ...item.deck,
+                title: "나".repeat(153),
+                forkedFromAuthorName: "x".repeat(150),
+              },
+            }
+          : item,
+      ),
+    };
+
+    await pushPresentation(longSong);
+    await pushPresentation(longSong);
+
+    expect(api.patch.mock.calls[0][0].json.decks[0]).toMatchObject({
+      title: "나".repeat(100),
+      forkedFromAuthorName: "x".repeat(100),
+    });
+    expect(sentDeckIds(1)).toEqual([]);
+  });
+
+  it("한도 안의 세트는 줄이지 않고 그대로 보낸다", async () => {
+    await pushPresentation(makeSet());
+
+    expect(api.patch.mock.calls[0][0].json).toEqual(
+      toPresentationChanges(makeSet()),
+    );
+  });
+});
+
+describe("동기화 실패 이유", () => {
+  it("서버가 거절한 문장과 보낼 수 없는 문서만 이유로 보여 준다", () => {
+    expect(
+      syncFailureReasonOf(
+        new ServerRejectedError(413, API_ERRORS.presentation.tooLarge),
+      ),
+    ).toBe(API_ERRORS.presentation.tooLarge);
+    expect(syncFailureReasonOf(new UnsyncableDocumentError())).toBe(
+      ERROR_COPY.documentInvalid,
+    );
+    expect(syncFailureReasonOf(new OfflineError())).toBeUndefined();
+    expect(
+      syncFailureReasonOf(new Error("Unexpected token <")),
+    ).toBeUndefined();
   });
 });
 

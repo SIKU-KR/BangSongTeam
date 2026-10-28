@@ -31,6 +31,8 @@ export const ERROR_COPY = {
   sessionExpiredShort: "로그인이 만료됐어요",
   serverRejected: (status: number) =>
     `서버가 요청을 처리하지 못했어요 (${status})`,
+  documentInvalid:
+    "서버가 받을 수 없는 내용이 있어요. 새로고침해도 그대로면 문의해 주세요",
   indexedDbUnavailable: "이 브라우저에는 작업을 저장할 수 없어요",
   persistence: {
     unavailable:

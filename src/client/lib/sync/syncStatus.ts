@@ -22,10 +22,16 @@ export interface SyncFailure {
   title?: string;
   kind: SyncDomain;
   status?: number;
+  /** 로그에 남기는 오류 원문. 개발자용 글(응답 스키마 오류 등)이 섞일 수 있어 화면에 그리지 않는다 */
   message: string;
   failedAt: number;
   /** 마지막으로 실패한 요청의 상관 ID. 에디터가 '문의 코드'로 보여 주고 Worker 로그에서 찾는다 */
   requestId?: string;
+  /**
+   * 화면에 보여 줄 실패 이유. 서버가 준 문장(곡이 너무 큼 등)과 이 기기가 보낼 수 없는 문서처럼
+   * 사용자가 무엇을 고칠지 알 수 있는 실패에만 둔다(`syncFailureReasonOf`).
+   */
+  reason?: string;
 }
 
 export interface SyncSnapshot {

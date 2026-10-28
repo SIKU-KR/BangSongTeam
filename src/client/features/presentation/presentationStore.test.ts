@@ -4,6 +4,7 @@ import { renderHook, act } from "@testing-library/react";
 import {
   DeckSchema,
   DEFAULT_DECK_STYLE,
+  PresentationDocumentSchema,
   PresentationSchema,
   type Presentation,
 } from "#shared";
@@ -194,6 +195,25 @@ describe("presentationStore (In-memory reactive presentation)", () => {
     expect(result.current.title).toBe("2026 청년부 금요 찬양");
   });
 
+  it("편집기 제목은 한도로 줄여 저장해 서버가 받을 수 있는 문서로 남는다", () => {
+    updatePresentationTitle("가".repeat(101));
+
+    expect(getActivePresentation().title).toBe("가".repeat(100));
+    expect(
+      PresentationDocumentSchema.safeParse(getActivePresentation()).success,
+    ).toBe(true);
+  });
+
+  it("공백뿐인 제목이나 같은 제목은 바꾸지 않고 되돌리기 기록도 남기지 않는다", () => {
+    const before = getActivePresentation();
+
+    updatePresentationTitle("   ");
+    updatePresentationTitle(`  ${before.title}  `);
+
+    expect(getActivePresentation()).toBe(before);
+    expect(canUndo()).toBe(false);
+  });
+
   it("should update song style and background", () => {
     const { result } = renderHook(() => useSeedPresentation());
     act(() => {
@@ -323,6 +343,18 @@ describe("presentationStore (In-memory reactive presentation)", () => {
     expect(result.current.items[1].deck?.slides).toHaveLength(
       result.current.items[0].deck?.slides.length ?? 0,
     );
+  });
+
+  it("긴 제목의 곡을 복제해도 사본 제목이 곡 제목 한도를 넘지 않는다", () => {
+    updateSongInfo(0, { title: "가".repeat(96), artist: "" });
+
+    const copy = duplicateSongInPresentation(0);
+
+    expect(copy?.title.length).toBeLessThanOrEqual(100);
+    expect(copy?.title.endsWith(" (사본)")).toBe(true);
+    expect(
+      PresentationDocumentSchema.safeParse(getActivePresentation()).success,
+    ).toBe(true);
   });
 
   it("커서 위치에서 슬라이드를 나누고 되돌릴 수 있다", () => {

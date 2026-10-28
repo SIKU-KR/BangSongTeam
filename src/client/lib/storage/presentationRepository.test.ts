@@ -10,6 +10,8 @@ import {
   savePresentation,
   loadAllPresentations,
   deletePresentation,
+  saveSharedPresentation,
+  deleteSharedPresentation,
 } from "./presentationRepository";
 
 function makePresentation(overrides: Partial<Presentation> = {}): Presentation {
@@ -100,5 +102,52 @@ describe("presentationRepository", () => {
 
     expect(valid).toEqual([]);
     expect(corrupted).toEqual([]);
+  });
+
+  describe("한 브라우저의 소유자 저장본과 공유받은 사본", () => {
+    const MEMBER = "0000000x0000000member";
+
+    function sharedCopyOf(presentation: Presentation): Presentation {
+      return {
+        ...presentation,
+        title: "서버에서 받은 제목",
+        access: { ownerName: "인도자", memberId: MEMBER },
+      };
+    }
+
+    it("소유자의 저장본이 있는 자리에는 공유받은 사본을 쓰지 않는다", async () => {
+      const owned = makePresentation({ title: "소유자가 고친 제목" });
+      await savePresentation(owned);
+
+      await saveSharedPresentation(sharedCopyOf(owned));
+
+      const { valid } = await loadAllPresentations();
+      expect(valid).toEqual([owned]);
+    });
+
+    it("빈 자리와 공유받은 사본이 있던 자리에는 공유받은 사본을 쓴다", async () => {
+      const shared = sharedCopyOf(makePresentation());
+
+      await saveSharedPresentation(shared);
+      expect((await loadAllPresentations()).valid).toEqual([shared]);
+
+      await saveSharedPresentation({ ...shared, title: "새로 받은 제목" });
+      expect((await loadAllPresentations()).valid).toEqual([
+        { ...shared, title: "새로 받은 제목" },
+      ]);
+    });
+
+    it("공유받은 사본만 지우고 소유자의 저장본은 남긴다", async () => {
+      const owned = makePresentation({ title: "소유자의 프레젠테이션" });
+      const shared = sharedCopyOf(makePresentation());
+      await savePresentation(owned);
+      await savePresentation(shared);
+
+      await deleteSharedPresentation(owned.id);
+      await deleteSharedPresentation(shared.id);
+
+      const { valid } = await loadAllPresentations();
+      expect(valid).toEqual([owned]);
+    });
   });
 });

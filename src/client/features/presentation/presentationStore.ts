@@ -1,7 +1,10 @@
 import { useSyncExternalStore } from "react";
 import type { Deck, Presentation, PresentationItem, Slide } from "#shared";
 import {
+  MAX_DECK_TITLE_LENGTH,
   MAX_PRESENTATION_TITLE_LENGTH,
+  appendWithinLimit,
+  clampText,
   createId,
   cycleItem,
   createSlideId,
@@ -10,8 +13,10 @@ import {
 } from "#shared";
 import {
   savePresentation,
+  saveSharedPresentation,
   loadAllPresentations,
   deletePresentation,
+  deleteSharedPresentation,
   reportPersistenceError,
   clearPersistenceError,
   reportCorruptedRecords,
@@ -145,7 +150,7 @@ async function writeDocuments(ids: string[]): Promise<void> {
     const doc = state.byId[id];
     if (!doc) continue;
     try {
-      await savePresentation(doc);
+      await (doc.access ? saveSharedPresentation(doc) : savePresentation(doc));
     } catch (err) {
       failed = true;
       reportPersistenceError(err);
@@ -244,6 +249,27 @@ export async function removePersistedPresentation(id: string): Promise<void> {
   }
 }
 
+/**
+ * 공유받은 사본의 저장본을 지운다. 같은 자리에 소유자 자신의 저장본이 있으면 남긴다
+ * (`deleteSharedPresentation`). 한 브라우저를 함께 쓰는 소유자의 저장본을 공유받은 사람의 공유
+ * 해제·부팅 병합이 지우면 안 된다. 메모리 상태 제거는 호출자 책임이다.
+ */
+export async function removePersistedSharedPresentation(
+  id: string,
+): Promise<void> {
+  try {
+    await deleteSharedPresentation(id);
+  } catch (err) {
+    reportPersistenceError(err);
+  }
+}
+
+function removePersisted(doc: Presentation): Promise<void> {
+  return doc.access
+    ? removePersistedSharedPresentation(doc.id)
+    : removePersistedPresentation(doc.id);
+}
+
 function resetPersistenceForTests(): void {
   persistenceEnabled = false;
   pendingIds = new Set();
@@ -263,6 +289,7 @@ function isServerChange(
     !stored ||
     stored.updatedAt !== merged.updatedAt ||
     (stored.folderId ?? null) !== (merged.folderId ?? null) ||
+    stored.access !== undefined ||
     merged.access !== undefined
   );
 }
@@ -274,16 +301,19 @@ function isServerChange(
  * 활성 문서는 가능하면 유지한다. 동기화가 돌았다고 사용자가 보던 프레젠테이션이
  * 바뀌면 편집 중에 화면이 튄다.
  *
- * 저장은 새 세트, `updatedAt`이나 `folderId`가 바뀐 세트, 공유받은 세트만 한다. 두 병합 모두
- * `updatedAt`이 같으면 서버 객체를 고르므로, 객체가 같은지만 보면 동기화된 세트를 부팅마다 모두
- * 다시 쓰고 그 뒤의 편집 저장이 그만큼 늦어진다. `folderId`(서버가 남의 폴더를 루트로 옮김)와
- * 공유받은 세트는 `updatedAt` 없이 바뀐다. 저장 줄은 쓰는 순간의 세트를 쓰므로 병합 뒤에 고친
+ * 저장은 새 세트, `updatedAt`이나 `folderId`가 바뀐 세트, 공유받은 세트, 공유받은 사본이던 세트만
+ * 한다. 두 병합 모두 `updatedAt`이 같으면 서버 객체를 고르므로, 객체가 같은지만 보면 동기화된
+ * 세트를 부팅마다 모두 다시 쓰고 그 뒤의 편집 저장이 그만큼 늦어진다. `folderId`(서버가 남의
+ * 폴더를 루트로 옮김)와 공유받은 세트는 `updatedAt` 없이 바뀐다. 이 브라우저에 공유받은 사람의
+ * 사본만 있던 소유자의 세트도 그렇다. 소유자 사본으로 다시 쓰지 않으면 다음 오프라인 부팅에서
+ * 소유자가 자기 세트를 다시 보기 전용으로 연다. 저장 줄은 쓰는 순간의 세트를 쓰므로 병합 뒤에 고친
  * 내용을 병합 때의 사본으로 덮지 않는다. 읽지 못한 저장본은 덮지 않도록 하이드레이션이 실패했으면
  * 쓰지 않는다.
  *
  * 지운 세트는 되돌리기 기록·대기 중인 저장·서버 push를 버리고, 이미 줄을 선 저장 뒤에 저장본을
  * 지운다. push가 남으면 연결이 돌아올 때 서버에서 되살아나고, 줄을 선 저장이 뒤에 오면 저장본이
- * 되살아난다.
+ * 되살아난다. 공유받은 세트는 같은 자리에 소유자 자신의 저장본이 없을 때만 쓰고 지운다. 한
+ * 브라우저를 함께 쓰는 소유자의 저장본을 공유받은 사람의 병합이 덮거나 지우면 안 된다.
  */
 export function applyServerDocuments(
   documents: Presentation[],
@@ -311,9 +341,8 @@ export function applyServerDocuments(
   }
   runPendingWrites();
   for (const id of removed) {
-    if (previous[id]) {
-      inFlight = inFlight.then(() => removePersistedPresentation(id));
-    }
+    const doc = previous[id];
+    if (doc) inFlight = inFlight.then(() => removePersisted(doc));
   }
 }
 
@@ -499,11 +528,20 @@ export function openPresentation(id: string): boolean {
   return true;
 }
 
+/**
+ * 편집기 헤더에서 고친 제목. 앞뒤 공백을 떼고 제목 한도로 줄이며, 비거나 그대로면 되돌리기
+ * 기록도 남기지 않는다.
+ *
+ * 한도를 넘은 제목은 스키마를 통과하지 못해 그 프레젠테이션이 서버에 올라가지 않고, 다음에
+ * 불러올 때 읽지 못한 저장본으로 남는다. 입력 칸의 `maxLength`는 코드로 넣은 값을 막지 못한다.
+ */
 export function updatePresentationTitle(title: string): void {
+  const next = clampText(title.trim(), MAX_PRESENTATION_TITLE_LENGTH);
+  if (!next || next === readActive().title) return;
   pushHistory();
   writeActive({
     ...readActive(),
-    title,
+    title: next,
     updatedAt: new Date().toISOString(),
   });
   emitChange();
@@ -808,6 +846,10 @@ export function removeSongFromPresentation(songIndex: number): void {
   );
 }
 
+/**
+ * 곡을 바로 뒤에 복제한다. 사본 제목은 "제목 (사본)"이고, 사본 표시를 붙여도 곡 제목 한도를
+ * 넘지 않게 원래 제목을 줄인다. 한도를 넘으면 그 프레젠테이션 전체가 서버에 올라가지 못한다.
+ */
 export function duplicateSongInPresentation(songIndex: number): Deck | null {
   const item = readActive().items[songIndex];
   if (!item || !item.deck) return null;
@@ -819,7 +861,11 @@ export function duplicateSongInPresentation(songIndex: number): Deck | null {
   const clonedDeck: Deck = {
     ...cloneDeck(originalDeck),
     id: createId(),
-    title: `${originalDeck.title}${COMMON_COPY.copySuffix}`,
+    title: appendWithinLimit(
+      originalDeck.title,
+      COMMON_COPY.copySuffix,
+      MAX_DECK_TITLE_LENGTH,
+    ),
     createdAt: now,
     updatedAt: now,
   };
@@ -936,6 +982,9 @@ export function duplicatePresentation(
 /**
  * 공유받은 프레젠테이션을 서버본으로 넣거나 바꾼다 (링크로 들어옴·최신본 받기).
  * 보기 전용이라 다시 push하지 않는다.
+ *
+ * 저장본은 같은 자리에 소유자 자신의 저장본이 없을 때만 쓴다(`saveSharedPresentation`). 한
+ * 브라우저를 소유자와 함께 쓰면 공유받은 사본이 소유자가 아직 올리지 못한 편집을 덮는다.
  */
 export function replaceWithServerDocument(doc: Presentation): void {
   putSharedDocument(doc);
@@ -967,16 +1016,21 @@ function putSharedDocument(doc: Presentation): void {
  * 영구 삭제가 끝난 문서를 메모리와 저장소에서 지운다.
  *
  * 서버 삭제가 성공한 뒤에만 부른다. 대기 중인 로컬 저장·서버 push도 취소한다 —
- * 늦게 도착한 push가 서버에서 문서를 되살리면 안 된다.
+ * 늦게 도착한 push가 서버에서 문서를 되살리면 안 된다. 공유가 끝난 사본은 그 자리에 소유자
+ * 자신의 저장본이 없을 때만 저장소에서 지운다(`removePersistedSharedPresentation`).
  */
 export async function removePresentationsLocally(
   ids: readonly string[],
 ): Promise<void> {
-  const removed = new Set(ids.filter((id) => state.byId[id]));
+  const removed = new Map<string, Presentation>();
+  for (const id of ids) {
+    const doc = state.byId[id];
+    if (doc) removed.set(id, doc);
+  }
   if (removed.size === 0) return;
 
   const byId = { ...state.byId };
-  for (const id of removed) {
+  for (const id of removed.keys()) {
     delete byId[id];
     clearHistory(id);
     pendingIds.delete(id);
@@ -990,8 +1044,8 @@ export async function removePresentationsLocally(
   });
   notifyListeners();
 
-  for (const id of removed) {
-    await removePersistedPresentation(id);
+  for (const doc of removed.values()) {
+    await removePersisted(doc);
   }
 }
 

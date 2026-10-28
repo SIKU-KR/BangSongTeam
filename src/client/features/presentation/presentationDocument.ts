@@ -1,5 +1,9 @@
 import type { Deck, Presentation, PresentationItem } from "#shared";
-import { MAX_PRESENTATION_TITLE_LENGTH, createId } from "#shared";
+import {
+  MAX_PRESENTATION_TITLE_LENGTH,
+  appendWithinLimit,
+  createId,
+} from "#shared";
 import { COMMON_COPY } from "#copy/common";
 
 /** 덱 깊은 복사. 덱은 JSON으로 표현되는 값만 담는다. */
@@ -130,7 +134,11 @@ export function buildPresentationCopy(
     ...source,
     id: newId,
     userId,
-    title: `${source.title.slice(0, MAX_PRESENTATION_TITLE_LENGTH - COMMON_COPY.copySuffix.length)}${COMMON_COPY.copySuffix}`,
+    title: appendWithinLimit(
+      source.title,
+      COMMON_COPY.copySuffix,
+      MAX_PRESENTATION_TITLE_LENGTH,
+    ),
     items,
     folderId,
     trashedAt: null,

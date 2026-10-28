@@ -1,4 +1,4 @@
-import { PRESENTATION_SHORTCUTS } from "#shared";
+import { PRESENTATION_SHORTCUTS, withObjectParticle } from "#shared";
 import { COMMON_COPY } from "./common";
 import { PRESENTATION_COPY } from "./presentation";
 
@@ -96,6 +96,10 @@ export const EDITOR_COPY = {
     lastSynced: (time: string) => `${time}에 마지막으로 동기화했어요`,
     notSyncedYet: "아직 동기화하지 않았어요",
     failureCode: (code: string) => `문의 코드 ${code}`,
+    failedItem: (title: string) =>
+      `${withObjectParticle(`‘${title}’`)} 올리지 못했어요`,
+    copyFailureCode: "문의 코드 복사",
+    failureCodeCopied: "문의 코드를 복사했어요",
   },
   readOnly: {
     guest:
@@ -182,6 +186,8 @@ export const EDITOR_COPY = {
     lyricsPlaceholder:
       "당신은 시간을 뚫고\n이 땅 가운데 오셨네\n\n우리 없는 하늘을 원치 않아\n우리 삶에 오셨네",
     splitCount: (count: number) => `슬라이드 ${count}장으로 나눠요`,
+    lyricsLimit: (max: number) =>
+      `가사는 ${max.toLocaleString("ko-KR")}자까지 넣을 수 있어요. 더 긴 가사는 여러 곡으로 나눠 주세요.`,
     submit: "보관함에 저장하고 추가",
   },
   preview: {

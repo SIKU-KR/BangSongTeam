@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import {
+  API_ERRORS,
   DEFAULT_DECK_STYLE,
   DeckSchema,
   type Deck,
@@ -239,6 +240,50 @@ describe("폴더 push 큐", () => {
     await vi.advanceTimersByTimeAsync(60_000);
     expect(push).toHaveBeenCalledTimes(1);
     vi.useRealTimers();
+  });
+
+  it("서버가 거절하며 준 문장을 실패 이유로 남긴다", async () => {
+    __setFolderPusherForTests(null);
+    const fake = installFakeApi({
+      "PUT /api/folders/*": () => ({
+        status: 403,
+        body: { error: API_ERRORS.folder.notAccessible },
+      }),
+    });
+
+    scheduleFolderPush(folder(PARENT, null, "남의 폴더"));
+    await flushFolderSync();
+    fake.restore();
+
+    expect(getSyncSnapshot().status).toBe("error");
+    expect(getSyncSnapshot().lastFailure).toMatchObject({
+      id: PARENT,
+      title: "남의 폴더",
+      kind: "folder",
+      status: 403,
+      reason: API_ERRORS.folder.notAccessible,
+    });
+  });
+
+  it("서버 응답을 읽지 못한 실패는 개발자용 오류 문구라 실패 이유로 남기지 않는다", async () => {
+    __setFolderPusherForTests(null);
+    const fake = installFakeApi({
+      "PUT /api/folders/*": () => ({
+        status: 200,
+        body: { folder: { id: PARENT } },
+      }),
+    });
+
+    scheduleFolderPush(folder(PARENT, null));
+    await flushFolderSync();
+    fake.restore();
+
+    expect(getSyncSnapshot().status).toBe("error");
+    expect(getSyncSnapshot().lastFailure).toMatchObject({
+      id: PARENT,
+      kind: "folder",
+    });
+    expect(getSyncSnapshot().lastFailure?.reason).toBeUndefined();
   });
 
   it("동시에 여러 폴더가 실패해도 각 폴더의 백오프 attempt는 독립적으로 계산된다", async () => {

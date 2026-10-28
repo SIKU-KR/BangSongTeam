@@ -17,6 +17,7 @@ import { useProjectionMediaReady } from "../features/offline/useProjectionMediaR
 import { useBackgroundLayers } from "../features/backgrounds/backgroundCatalog";
 import {
   exitFullscreen,
+  isProjectionPath,
   loadPresentReturnPath,
   DEFAULT_PRESENT_RETURN_PATH,
 } from "../features/presentation/fullscreen";
@@ -68,7 +69,10 @@ const preventDefault = (event: React.SyntheticEvent): void => {
  * 위치는 처음부터 곡 id에 고정해, 첫 슬라이드를 띄워 둔 채 곡 순서가 바뀌어도 화면이 그대로다.
  * 새로고침되면 같은 탭에 저장한 위치·블랙아웃·가사 숨김으로 다시 뜬다.
  *
- * 송출할 프레젠테이션을 찾지 못하면 송출 화면을 마운트하지 않고 드라이브로 보낸다.
+ * 송출할 프레젠테이션을 찾지 못하면 송출 화면을 마운트하지 않고 송출을 시작한 화면(이 탭에 남긴
+ * 복귀 경로)으로 보낸다. 복귀 경로가 없거나 송출 화면 자신이면 드라이브로 보낸다. 로그인하지
+ * 않고 링크로 띄운 송출은 미리보기가 메모리에만 있어 새로고침하면 찾지 못하는데, 드라이브로
+ * 보내면 프로젝터에 로그인 화면이 뜬다. 링크 화면으로 돌아가면 미리보기를 다시 받는다.
  * 이때 전체화면을 풀어, 다음 화면이 전체화면에 갇히지 않게 한다. 송출 화면의 전체화면·
  * history·화면 잠금 방지는 송출할 내용이 있을 때만 건다.
  *
@@ -82,7 +86,9 @@ export function FullscreenPresentRoute(): React.JSX.Element {
   const shown =
     found ?? (lastShown?.id === presentationId ? lastShown : undefined);
 
-  if (!presentationId || !shown) return <ProjectionRedirect />;
+  if (!presentationId || !shown) {
+    return <ProjectionRedirect presentationId={presentationId} />;
+  }
 
   return (
     <ProjectionSession
@@ -93,11 +99,23 @@ export function FullscreenPresentRoute(): React.JSX.Element {
   );
 }
 
-function ProjectionRedirect(): React.JSX.Element {
+function launchScreenOf(presentationId: string | undefined): string {
+  if (!presentationId) return DEFAULT_PRESENT_RETURN_PATH;
+  const returnPath = loadPresentReturnPath(presentationId);
+  return isProjectionPath(returnPath)
+    ? DEFAULT_PRESENT_RETURN_PATH
+    : returnPath;
+}
+
+function ProjectionRedirect({
+  presentationId,
+}: {
+  presentationId: string | undefined;
+}): React.JSX.Element {
   useEffect(() => {
     exitFullscreen().catch(() => {});
   }, []);
-  return <Navigate to={DEFAULT_PRESENT_RETURN_PATH} />;
+  return <Navigate to={launchScreenOf(presentationId)} />;
 }
 
 function exitFullscreenWithin(ms: number): Promise<void> {
