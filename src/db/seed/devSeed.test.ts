@@ -11,6 +11,8 @@ import {
   decksCol,
   foldersCol,
   presentationMembersCol,
+  signUpQuotaDocId,
+  signUpQuotasCol,
   usersCol,
 } from "../collections";
 import { createTestDb, folderDoc, seedDocs, userDoc } from "../test/fixtures";
@@ -177,6 +179,16 @@ describe("seedDevData", () => {
     expect(
       (await foldersCol(db).where("userId", "==", OTHER_USER).get()).size,
     ).toBe(1);
+  });
+
+  it("로컬 이메일 가입 하루 한도를 비운다", async () => {
+    await signUpQuotasCol(db)
+      .doc(signUpQuotaDocId("loopback", "2026-09-30"))
+      .set({ day: "2026-09-30", signUps: 20, expiresAt: NOW });
+
+    await seedDevData(db, INPUT, NOW);
+
+    expect((await signUpQuotasCol(db).get()).size).toBe(0);
   });
 
   it("곡이 없으면 아무것도 지우지 않고 멈춘다", async () => {

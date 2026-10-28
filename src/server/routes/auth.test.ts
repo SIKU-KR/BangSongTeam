@@ -2,11 +2,22 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Query } from "@google-cloud/firestore";
 import { handleOAuthUserInfo } from "better-auth/oauth2";
 import {
+  API_ERRORS,
+  DAILY_SIGN_UP_LIMIT_CODE,
   FALLBACK_USER_NAME,
   OFFICIAL_LIBRARY_NAME,
   SIGN_UP_IN_PROGRESS,
 } from "#shared";
-import { COLLECTIONS, runBulk, type Db } from "#db";
+import {
+  COLLECTIONS,
+  DAILY_SIGN_UPS_PER_IP,
+  quotaDay,
+  runBulk,
+  signUpQuotaDocId,
+  signUpQuotasCol,
+  usersCol,
+  type Db,
+} from "#db";
 import { env } from "../test/env";
 import { clearDb } from "../../db/test/fixtures";
 import app from "../index";
@@ -16,6 +27,7 @@ import {
   buildNaverUser,
   getAuth,
 } from "../lib/auth";
+import { signUpQuotaKey } from "../lib/signUpLimit";
 
 const ORIGIN = env.BETTER_AUTH_URL ?? "";
 const LONE_SURROGATE = String.fromCharCode(0xd800);
@@ -773,5 +785,248 @@ describe("소셜 로그인 계정 연결", () => {
       "account not linked",
     );
     expect(await linkedProviders("naver@example.com")).toEqual([]);
+  });
+});
+
+describe("계정 제한 필드", () => {
+  beforeEach(async () => {
+    await clearDb(env.DB);
+  });
+
+  async function storedUser(email: string): Promise<Record<string, unknown>> {
+    const snapshot = await env.DB.collection(COLLECTIONS.users)
+      .where("email", "==", email)
+      .get();
+    return snapshot.docs[0]?.data() ?? {};
+  }
+
+  it("가입한 사용자에게 제한 없음(null)을 저장하고, 가입 본문으로 정하거나 응답에 싣지 않는다", async () => {
+    const res = await post(
+      "/api/auth/sign-up/email",
+      {
+        email: "ban-field@example.com",
+        password: "password-1234",
+        name: "찬양팀",
+        bannedAt: "2026-01-01T00:00:00.000Z",
+      },
+      "10.0.6.1",
+    );
+
+    expect(res.status).toBe(200);
+    expect(await storedUser("ban-field@example.com")).toHaveProperty(
+      "bannedAt",
+      null,
+    );
+    expect(JSON.stringify(await res.json())).not.toContain("bannedAt");
+  });
+
+  it("앱이 쓰지 않는 /update-user는 404라 제한된 사용자가 제한을 풀지 못한다", async () => {
+    const created = await signUp("banned@example.com", "10.0.6.2");
+    const id = String((await storedUser("banned@example.com")).id);
+    await env.DB.collection(COLLECTIONS.users)
+      .doc(id)
+      .update({ bannedAt: new Date() });
+
+    const res = await app.request(
+      "/api/auth/update-user",
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          origin: ORIGIN,
+          "x-forwarded-for": "10.0.6.2",
+          cookie: sessionCookie(created),
+        },
+        body: JSON.stringify({ name: "x", bannedAt: null }),
+      },
+      env,
+    );
+
+    expect(res.status).toBe(404);
+    expect((await storedUser("banned@example.com")).bannedAt).not.toBeNull();
+  });
+
+  it("Better Auth의 사용자 수정을 직접 불러도 요청 본문으로는 제한 시각을 바꾸지 못한다", async () => {
+    const created = await signUp("banned-api@example.com", "10.0.6.11");
+    const id = String((await storedUser("banned-api@example.com")).id);
+    const bannedAt = new Date("2026-10-01T00:00:00.000Z");
+    await usersCol(env.DB).doc(id).update({ bannedAt });
+    const body: Record<string, unknown> = { name: "새 이름", bannedAt: null };
+
+    await getAuth(env).api.updateUser({
+      body: body as { name: string },
+      headers: new Headers({ cookie: sessionCookie(created) }),
+    });
+
+    expect((await usersCol(env.DB).doc(id).get()).data()).toMatchObject({
+      name: "새 이름",
+      bannedAt,
+    });
+  });
+});
+
+describe("이메일 가입 하루 한도", () => {
+  const GOOGLE_TOKEN_ENDPOINT = "https://oauth2.googleapis.com/token";
+  const googleEnv = {
+    ...env,
+    GOOGLE_CLIENT_ID: "google-id",
+    GOOGLE_CLIENT_SECRET: "google-secret",
+  };
+
+  beforeEach(async () => {
+    await clearDb(env.DB);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  const quotaRef = (ip: string) =>
+    signUpQuotasCol(env.DB).doc(
+      signUpQuotaDocId(
+        signUpQuotaKey(ip, env.BETTER_AUTH_SECRET),
+        quotaDay(new Date()),
+      ),
+    );
+
+  async function fillQuota(ip: string): Promise<void> {
+    await quotaRef(ip).set({
+      day: quotaDay(new Date()),
+      signUps: DAILY_SIGN_UPS_PER_IP,
+      expiresAt: new Date(),
+    });
+  }
+
+  async function usersWithEmail(email: string): Promise<number> {
+    return (
+      await env.DB.collection(COLLECTIONS.users)
+        .where("email", "==", email)
+        .get()
+    ).size;
+  }
+
+  function unsignedIdToken(claims: Record<string, unknown>): string {
+    const part = (value: unknown): string =>
+      Buffer.from(JSON.stringify(value)).toString("base64url");
+    return `${part({ alg: "RS256", typ: "JWT" })}.${part(claims)}.signature`;
+  }
+
+  async function googleSignUp(email: string, ip: string): Promise<Response> {
+    const started = await app.request(
+      "/api/auth/sign-in/social",
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          origin: ORIGIN,
+          "x-forwarded-for": ip,
+        },
+        body: JSON.stringify({
+          provider: "google",
+          callbackURL: "/presentations",
+        }),
+      },
+      googleEnv,
+    );
+    const { url } = (await started.json()) as { url: string };
+    const state = new URL(url).searchParams.get("state") ?? "";
+    const stateCookie =
+      started.headers
+        .getSetCookie()
+        .find((value) => value.startsWith("better-auth.state="))
+        ?.split(";")[0] ?? "";
+    const realFetch = globalThis.fetch;
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const target = input instanceof Request ? input.url : String(input);
+      if (target !== GOOGLE_TOKEN_ENDPOINT) return realFetch(input, init);
+      return Response.json({
+        access_token: "google-access-token",
+        token_type: "Bearer",
+        expires_in: 3600,
+        id_token: unsignedIdToken({
+          sub: "google-sub-cap",
+          email,
+          email_verified: true,
+          name: "구글 사용자",
+        }),
+      });
+    });
+    return await app.request(
+      `/api/auth/callback/google?state=${encodeURIComponent(state)}&code=code`,
+      { headers: { cookie: stateCookie, "x-forwarded-for": ip } },
+      googleEnv,
+    );
+  }
+
+  it("소셜 로그인으로 가입하면 그 IP가 그날 한도에 닿아 있어도 가입되고 세지 않는다", async () => {
+    await fillQuota("10.0.7.5");
+
+    const res = await googleSignUp("social-cap@example.com", "10.0.7.5");
+
+    expect(res.status).toBe(302);
+    expect(res.headers.get("location")).not.toContain("error");
+    expect(await usersWithEmail("social-cap@example.com")).toBe(1);
+    expect((await quotaRef("10.0.7.5").get()).data()?.signUps).toBe(
+      DAILY_SIGN_UPS_PER_IP,
+    );
+  });
+
+  it("x-forwarded-for의 마지막 IP로 세어, 앞에 남의 IP를 적어 보내도 그 IP의 한도를 쓰지 않는다", async () => {
+    const res = await signUp("forged@example.com", "10.0.9.9, 10.0.7.1");
+
+    expect(res.status).toBe(200);
+    expect((await quotaRef("10.0.7.1").get()).data()?.signUps).toBe(1);
+    expect((await quotaRef("10.0.9.9").get()).exists).toBe(false);
+  });
+
+  it("x-forwarded-for가 없는 가입은 세지 않는다", async () => {
+    const res = await app.request(
+      "/api/auth/sign-up/email",
+      {
+        method: "POST",
+        headers: { "content-type": "application/json", origin: ORIGIN },
+        body: JSON.stringify({
+          email: "no-ip@example.com",
+          password: "password-1234",
+          name: "찬양팀",
+        }),
+      },
+      env,
+    );
+
+    expect(res.status).toBe(200);
+    expect((await signUpQuotasCol(env.DB).get()).empty).toBe(true);
+  });
+
+  it("한 IP에서 하루 한도만큼 가입하면 그날은 그 IP의 가입을 받지 않는다", async () => {
+    await fillQuota("10.0.7.1");
+
+    const blocked = await signUp("cap@example.com", "10.0.7.1");
+
+    expect(blocked.status).toBe(429);
+    expect(await blocked.json()).toMatchObject({
+      code: DAILY_SIGN_UP_LIMIT_CODE,
+      message: API_ERRORS.auth.dailySignUpLimit,
+    });
+    expect(sessionCookie(blocked)).toBe("");
+    expect(await usersWithEmail("cap@example.com")).toBe(0);
+    expect((await signUp("cap@example.com", "10.0.7.2")).status).toBe(200);
+  });
+
+  it("사용자를 만든 가입만 센다", async () => {
+    expect((await signUp("count@example.com", "10.0.7.3")).status).toBe(200);
+    expect(
+      (await signUp("count@example.com", "10.0.7.3")).status,
+    ).toBeGreaterThanOrEqual(400);
+
+    expect((await quotaRef("10.0.7.3").get()).data()?.signUps).toBe(1);
+  });
+
+  it("IP 대신 비밀값으로 만든 해시를 문서 id로 쓴다", async () => {
+    await signUp("hash-key@example.com", "10.0.7.4");
+
+    const ids = (await signUpQuotasCol(env.DB).get()).docs.map((doc) => doc.id);
+    expect(ids).toHaveLength(1);
+    expect(ids[0]).not.toContain("10.0.7.4");
   });
 });

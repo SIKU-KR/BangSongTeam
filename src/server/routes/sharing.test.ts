@@ -11,9 +11,15 @@ import {
   type Deck,
   type SearchCatalogResponse,
 } from "#shared";
-import { decksCol, type Db } from "#db";
+import { DAILY_USER_LIMITS, decksCol, usersCol, type Db } from "#db";
 import { takedownDeck } from "../../db/ops/moderation";
-import { clearDb, deckDoc, seedDocs, userDoc } from "../../db/test/fixtures";
+import {
+  clearDb,
+  deckDoc,
+  seedDocs,
+  seedUserQuota,
+  userDoc,
+} from "../../db/test/fixtures";
 import { createApp } from "../index";
 import type { SessionReader } from "../middleware/auth";
 import { resetBackgrounds } from "../test/backgrounds";
@@ -24,6 +30,7 @@ const PUB = "c00000003000000000001";
 const PRIV = "c00000003000000000002";
 const SET_ID = "100000003000000000001";
 const CLONE = "c00000003000000000003";
+const B_DECK = "c00000003000000000004";
 
 let currentUser: string | null = A;
 const fakeSession: SessionReader = async () =>
@@ -146,6 +153,49 @@ describe("공유 라이브러리 API", () => {
 
     it("refuses to republish a taken-down deck", async () => {
       await takeDown(PUB);
+      const res = await publish(PUB);
+      expect(res.status).toBe(409);
+      expect(await res.json()).toEqual({ error: API_ERRORS.deck.takenDown });
+    });
+
+    it("원곡이 게시 중단된 가져온 곡은 409로 공개하지 않고 원곡 때문이라고 알린다", async () => {
+      await publish(PUB);
+      currentUser = B;
+      const forked = await request("POST", `/api/decks/${PUB}/fork`);
+      expect(forked.status).toBe(200);
+      const { deck: fork } = (await forked.json()) as { deck: Deck };
+      await takeDown(PUB);
+
+      const res = await publish(fork.id);
+
+      expect(res.status).toBe(409);
+      expect(await res.json()).toEqual({
+        error: API_ERRORS.deck.sourceTakenDown,
+      });
+    });
+
+    it("게시 중단한 곡은 옛 탭이 공개·중단 없음으로 보낸 저장에도 다시 공개되지 않는다", async () => {
+      await publish(PUB);
+      await takeDown(PUB);
+
+      const res = await request(
+        "PUT",
+        `/api/decks/${PUB}`,
+        deck(PUB, {
+          title: "제목만 바꿈",
+          visibility: "public",
+          takedownAt: null,
+        }),
+      );
+
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as { deck: Deck };
+      expect(body.deck).toMatchObject({
+        title: "제목만 바꿈",
+        visibility: "private",
+      });
+      expect(body.deck.takedownAt).not.toBeNull();
+      expect((await search("제목만")).decks).toHaveLength(0);
       expect((await publish(PUB)).status).toBe(409);
     });
 
@@ -511,6 +561,106 @@ describe("공유 라이브러리 API", () => {
           })
         ).status,
       ).toBe(400);
+    });
+
+    it("신고를 받으면 신고 id와 사유만 담은 WARNING 로그를 남기고, 받지 않은 신고는 남기지 않는다", async () => {
+      await publish(PUB);
+      currentUser = B;
+      const log = vi.spyOn(console, "log").mockImplementation(() => {});
+      const reportLines = () =>
+        log.mock.calls
+          .map(([line]) => String(line))
+          .filter((line) => line.includes('"report_created"'))
+          .map((line) => JSON.parse(line) as Record<string, unknown>);
+      const body = {
+        targetType: "deck",
+        targetId: PUB,
+        reason: "copyright",
+        details: "1절 가사 전문을 그대로 올렸어요",
+      };
+
+      const created = await request("POST", "/api/reports", body);
+      expect(created.status).toBe(201);
+      const { id } = (await created.json()) as { id: string };
+      expect((await request("POST", "/api/reports", body)).status).toBe(409);
+
+      const lines = reportLines();
+      expect(lines).toEqual([
+        expect.objectContaining({
+          severity: "WARNING",
+          event: "report_created",
+          reportId: id,
+          reason: "copyright",
+        }),
+      ]);
+      expect(lines[0]).not.toHaveProperty("details");
+      expect(JSON.stringify(lines)).not.toContain("1절");
+    });
+  });
+
+  describe("계정 제한과 하루 한도", () => {
+    const report = () =>
+      request("POST", "/api/reports", {
+        targetType: "deck",
+        targetId: PUB,
+        reason: "copyright",
+      });
+
+    beforeEach(async () => {
+      await publish(PUB);
+      currentUser = B;
+      expect(
+        (
+          await request(
+            "PUT",
+            `/api/decks/${B_DECK}`,
+            deck(B_DECK, { userId: B, title: "B의 곡" }),
+          )
+        ).status,
+      ).toBe(200);
+    });
+
+    it("운영자가 제한한 계정은 공개·새로 가져오기·신고가 403이다", async () => {
+      await usersCol(env.DB).doc(B).update({ bannedAt: new Date() });
+
+      for (const res of [
+        await publish(B_DECK),
+        await request("POST", `/api/decks/${PUB}/fork`),
+        await report(),
+      ]) {
+        expect(res.status).toBe(403);
+        expect(await res.json()).toEqual({
+          error: API_ERRORS.accountRestricted,
+        });
+      }
+      expect(
+        (
+          await request("PATCH", `/api/decks/${B_DECK}/visibility`, {
+            visibility: "private",
+          })
+        ).status,
+      ).toBe(200);
+    });
+
+    it("하루 한도를 다 쓰면 429와 함께 내일 다시 하라고 알려 준다", async () => {
+      await seedUserQuota(env.DB, B, new Date(), {
+        publish: DAILY_USER_LIMITS.publish,
+        fork: DAILY_USER_LIMITS.fork,
+        report: DAILY_USER_LIMITS.report,
+      });
+
+      const cases = [
+        [await publish(B_DECK), API_ERRORS.deck.dailyPublishLimit],
+        [
+          await request("POST", `/api/decks/${PUB}/fork`),
+          API_ERRORS.deck.dailyForkLimit,
+        ],
+        [await report(), API_ERRORS.report.dailyLimit],
+      ] as const;
+      for (const [res, error] of cases) {
+        expect(res.status).toBe(429);
+        expect(await res.json()).toEqual({ error });
+      }
     });
   });
 });

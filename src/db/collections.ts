@@ -37,12 +37,15 @@ export const COLLECTIONS = {
   driveTombstones: "driveTombstones",
   backgrounds: "backgrounds",
   reports: "reports",
+  moderationEvents: "moderationEvents",
+  userQuotas: "userQuotas",
+  signUpQuotas: "signUpQuotas",
 } as const;
 
 /**
- * 사용자. Better Auth `user` 모델에 약관 동의 시각을 더한다. 세션·계정·인증 요청 문서는
- * Better Auth 어댑터(`auth/firestoreAdapter.ts`)가 같은 방식으로 쓴다. 어댑터는 이메일 예약
- * (`UserEmailDoc`)과 함께 만들고 함께 지운다.
+ * 사용자. Better Auth `user` 모델에 약관 동의 시각과 계정 제한 시각을 더한다. 세션·계정·인증
+ * 요청 문서는 Better Auth 어댑터(`auth/firestoreAdapter.ts`)가 같은 방식으로 쓴다. 어댑터는
+ * 이메일 예약(`UserEmailDoc`)과 함께 만들고 함께 지운다.
  */
 export interface UserDoc {
   id: string;
@@ -51,6 +54,11 @@ export interface UserDoc {
   emailVerified: boolean;
   image: string | null;
   termsAgreedAt: Date | null;
+  /**
+   * 운영자가 계정을 제한한 시각(`ops/moderation.ts`의 `banUser`). 이 필드가 생기기 전에 만든
+   * 사용자 문서에는 없으므로 `isBannedUser`로 읽는다.
+   */
+  bannedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -174,17 +182,75 @@ export interface BackgroundDoc {
 /**
  * 공개 곡 신고·교정 제안. 처리는 `ops/moderation.ts`로 한다. 신고한 사람이나 곡이 지워져도
  * 처리 기록은 남기려고 두 id는 `null`로 바뀐다.
+ *
+ * `targetUserId`·`targetTitle`은 접수할 때의 곡 주인과 제목이다. 곡이 지워져 `deckId`가 비어도
+ * 누구의 무슨 곡을 신고했는지 남긴다. 이 필드가 생기기 전에 받은 신고에는 없다.
  */
 export interface ReportDoc {
   id: string;
   reporterId: string | null;
   deckId: string | null;
+  targetUserId: string | null;
+  targetTitle: string | null;
   reason: ReportReason;
   details: string | null;
   status: "pending" | "resolved" | "rejected";
   resolvedAt: Date | null;
   resolutionNote: string | null;
   createdAt: Date;
+}
+
+/**
+ * 운영 기록: 게시 중단·해제와 계정 제한·해제. 그 일과 같은 트랜잭션에서 쓴다
+ * (`queries/takedowns.ts`의 `recordModerationEvent`). 곡이 지워져도 남아, 누구의 곡을 무슨 제목으로
+ * 게시 중단했는지 보고 같은 사람이 다시 올린 곡을 알아본다. 문서 id는 `createId()`다.
+ */
+export interface ModerationEventDoc {
+  id: string;
+  action: "takedown" | "restore" | "ban" | "unban";
+  /**
+   * 왜 한 일인지. `direct`는 운영자가 이 곡이나 계정을 골라 한 일, `fork`는 가져온 원본
+   * (`sourceDeckId`)이 게시 중단돼 함께 막은 곡, `ban`은 주인의 계정을 제한하며 함께 막은 곡이다.
+   * `fork`로 막힌 곡의 주인은 원본을 가져갔을 뿐 그 가사를 올린 사람이 아니므로, 같은 사람이 다시
+   * 올린 곡을 찾을 때는 빼고 본다.
+   */
+  cause: "direct" | "fork" | "ban";
+  /** `fork`일 때 게시 중단된 원본 곡 id. 아니면 `null` */
+  sourceDeckId: string | null;
+  /** 운영자가 남긴 사유(`scripts/moderation.mjs`의 `--note`). 없으면 `null` */
+  note: string | null;
+  /** 곡 주인이나 제한한 계정 */
+  userId: string;
+  /** 곡에 한 일이면 곡 id와 그때의 제목, 계정에 한 일이면 `null` */
+  deckId: string | null;
+  title: string | null;
+  at: Date;
+}
+
+/**
+ * 사용자 한 명이 그날(한국 시간) 쓴 공유 라이브러리 쓰기 수(`queries/limits.ts`). 문서 id는
+ * `userQuotaDocId`다. 지난 날의 문서는 TTL 정책(`firestore.indexes.json`)이 지운다.
+ */
+export interface UserQuotaDoc {
+  userId: string;
+  /** 한국 시간 날짜(YYYY-MM-DD) */
+  day: string;
+  publish: number;
+  fork: number;
+  report: number;
+  expiresAt: Date;
+}
+
+/**
+ * IP 하나에서 그날(한국 시간) 받은 이메일 가입 수(`queries/limits.ts`). 문서 id는
+ * `signUpQuotaDocId`이고, IP는 서버가 비밀값으로 해시한 키로만 남는다. 지난 날의 문서는 TTL
+ * 정책(`firestore.indexes.json`)이 지운다.
+ */
+export interface SignUpQuotaDoc {
+  /** 한국 시간 날짜(YYYY-MM-DD) */
+  day: string;
+  signUps: number;
+  expiresAt: Date;
 }
 
 /** 저장된 Timestamp를 `Date`로 바꿔 읽는다. 중첩 값은 쓰지 않으므로 맨 위 필드만 본다 */
@@ -222,6 +288,12 @@ export const driveTombstonesCol = (db: Db) =>
 export const backgroundsCol = (db: Db) =>
   typed<BackgroundDoc>(db, COLLECTIONS.backgrounds);
 export const reportsCol = (db: Db) => typed<ReportDoc>(db, COLLECTIONS.reports);
+export const moderationEventsCol = (db: Db) =>
+  typed<ModerationEventDoc>(db, COLLECTIONS.moderationEvents);
+export const userQuotasCol = (db: Db) =>
+  typed<UserQuotaDoc>(db, COLLECTIONS.userQuotas);
+export const signUpQuotasCol = (db: Db) =>
+  typed<SignUpQuotaDoc>(db, COLLECTIONS.signUpQuotas);
 
 /**
  * 이메일 예약 문서 id: 소문자로 맞춘 이메일의 SHA-256(16진수). 이메일에 든 `/` 같은 문자가
@@ -242,6 +314,16 @@ export function memberDocId(presentationId: string, userId: string): string {
  */
 export function deckTombstoneDocId(deckId: string): string {
   return `deck:${deckId}`;
+}
+
+/** 사용자 하루 한도 문서 id. 사용자 id(NanoID)에 `:`가 없으므로 날짜와 이어도 겹치지 않는다 */
+export function userQuotaDocId(userId: string, day: string): string {
+  return `${userId}:${day}`;
+}
+
+/** 이메일 가입 하루 한도 문서 id. 키는 16진수 해시라 `:`가 없다 */
+export function signUpQuotaDocId(key: string, day: string): string {
+  return `${key}:${day}`;
 }
 
 /**

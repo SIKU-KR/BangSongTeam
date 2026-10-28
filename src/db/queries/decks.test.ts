@@ -20,6 +20,7 @@ import {
 } from "./decks";
 import { getDriveTombstones } from "./folders";
 import { setDeckVisibility } from "./sharing";
+import { takedownDeck } from "../ops/moderation";
 import { DEFAULT_DECK_STYLE, DeckSchema, type Deck } from "#shared";
 import { toSharedDeck } from "./mappers";
 
@@ -275,6 +276,37 @@ describe("덱 쓰기 헬퍼 (보관함 동기화)", () => {
           publishedAt: publishedAt.toISOString(),
         },
       });
+    });
+
+    it("게시 중단한 곡은 옛 탭이 공개·중단 없음으로 보낸 저장에도 게시 중단을 지킨다", async () => {
+      await upsertDeck(db, ownerId, makeDeck(ownerId));
+      await takedownDeck(db, DECK_ID, new Date("2026-09-23T00:00:00.000Z"));
+
+      const saved = await upsertDeck(
+        db,
+        ownerId,
+        makeDeck(ownerId, {
+          title: "제목만 바꿈",
+          visibility: "public",
+          takedownAt: null,
+        }),
+      );
+
+      expect(saved).toMatchObject({
+        status: "saved",
+        deck: {
+          title: "제목만 바꿈",
+          visibility: "private",
+          takedownAt: "2026-09-23T00:00:00.000Z",
+        },
+      });
+      expect((await decksCol(db).doc(DECK_ID).get()).data()).toMatchObject({
+        listed: false,
+        searchGrams: [],
+      });
+      expect(
+        (await setDeckVisibility(db, ownerId, DECK_ID, "public")).status,
+      ).toBe("taken_down");
     });
 
     it("보관함 경로로 세트 복제본을 만들거나 고칠 수 없다", async () => {

@@ -7,6 +7,8 @@ import {
   foldersCol,
   presentationMembersCol,
   presentationsCol,
+  userQuotaDocId,
+  userQuotasCol,
   usersCol,
   memberDocId,
   type BackgroundDoc,
@@ -16,6 +18,7 @@ import {
   type UserDoc,
 } from "../collections";
 import { withDeckIndex } from "../deckIndex";
+import { quotaDay, type UserQuotaAction } from "../queries/limits";
 
 const EPOCH = new Date(0);
 
@@ -50,10 +53,32 @@ export function userDoc(row: Pick<UserDoc, "id"> & Partial<UserDoc>): UserDoc {
     emailVerified: false,
     image: null,
     termsAgreedAt: null,
+    bannedAt: null,
     createdAt: EPOCH,
     updatedAt: EPOCH,
     ...row,
   };
+}
+
+/** `now`가 든 날(한국 시간)에 하루 한도를 `counts`만큼 이미 쓴 사용자 (`queries/limits.ts`) */
+export async function seedUserQuota(
+  db: Db,
+  userId: string,
+  now: Date,
+  counts: Partial<Record<UserQuotaAction, number>>,
+): Promise<void> {
+  const day = quotaDay(now);
+  await userQuotasCol(db)
+    .doc(userQuotaDocId(userId, day))
+    .set({
+      userId,
+      day,
+      publish: 0,
+      fork: 0,
+      report: 0,
+      ...counts,
+      expiresAt: now,
+    });
 }
 
 /**

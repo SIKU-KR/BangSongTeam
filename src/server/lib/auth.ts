@@ -23,6 +23,7 @@ import { CLOUD_TRACE_LOG_FIELD, cloudTraceName } from "./cloudTrace";
 import { devSignIn } from "./devSignIn";
 import { hashPassword, verifyPassword } from "./password";
 import { describeError, writeLog } from "./requestLog";
+import { limitEmailSignUps } from "./signUpLimit";
 import { toAccountName } from "./userNames";
 
 /**
@@ -72,12 +73,22 @@ const VERIFICATION_OPTIONS = { disableCleanup: true };
  *
  * 소셜 로그인 시작(`/sign-in/social`)은 비밀번호를 받지 않아 맞혀 볼 것이 없다. 교회 와이파이처럼
  * 공인 IP 하나를 나눠 쓰는 팀이 함께 로그인해도 막히지 않게 10초에 20번까지 받는다. 이메일
- * 로그인·가입은 계정마다 잠그는 장치가 없어 이 IP당 제한이 비밀번호 대입과 가입 남용을 막는
- * 유일한 장치라 기본값을 그대로 둔다.
+ * 로그인은 계정마다 잠그는 장치가 없어 이 IP당 제한이 비밀번호 대입을 막는 유일한 장치라 기본값을
+ * 그대로 둔다. 이메일 가입은 이 제한 위에 IP당 하루 한도(`limitEmailSignUps`)를 더 둔다.
  */
 const RATE_LIMIT_RULES = {
   "/sign-in/social": { window: 10, max: 20 },
 };
+
+const USER_ADDITIONAL_FIELDS = {
+  bannedAt: {
+    type: "date",
+    required: false,
+    defaultValue: null,
+    input: false,
+    returned: false,
+  },
+} as const;
 
 /** 소셜 프로필에서 만들어 내는 로컬 사용자 속성 */
 interface MappedSocialUser {
@@ -299,6 +310,7 @@ function buildAuth(env: Bindings) {
       maxPasswordLength: PASSWORD_MAX_LENGTH,
       password: { hash: hashPassword, verify: verifyPassword },
     },
+    user: { additionalFields: USER_ADDITIONAL_FIELDS },
     account: { accountLinking: ACCOUNT_LINKING },
     socialProviders,
     disabledPaths: ["/update-user"],
@@ -325,9 +337,15 @@ function buildAuth(env: Bindings) {
     databaseHooks: {
       user: {
         create: {
-          before: async (user) => ({
-            data: { name: toAccountName(user.name) },
-          }),
+          before: async (user, context) => {
+            if (context?.path === "/sign-up/email") {
+              await limitEmailSignUps(
+                env,
+                context.request?.headers ?? context.headers,
+              );
+            }
+            return { data: { name: toAccountName(user.name) } };
+          },
         },
         update: {
           before: async (data) =>
@@ -371,6 +389,10 @@ type AuthInstance = ReturnType<typeof buildAuth>;
  *   아주 긴 값은 쿼리가 거절해, 400이어야 할 요청이 500이 된다. 정리하다 실패해도 로그만 남기고
  *   가입을 이어 간다. 정리를 건너뛰어도 같은 이메일의 두 번째 사용자는 생기지 않는다(Better Auth의
  *   이메일 조회와 어댑터의 이메일 예약).
+ * - 이메일 가입은 사용자를 만들기 직전에 IP당 하루 한도를 센다(`limitEmailSignUps`). 메모리에만
+ *   있는 위의 빈도 제한과 달리 Firestore에 남아 인스턴스가 여럿이어도 지켜진다.
+ * - 계정 제한 시각(`UserDoc.bannedAt`)은 새 사용자에게 `null`로 저장하고, 가입·수정 요청 본문으로는
+ *   정하지 못하며(`input: false`), 세션 응답에도 싣지 않는다. 제한은 운영자 작업(`banUser`)만 건다.
  */
 export function getAuth(env: Bindings): AuthInstance {
   return buildAuth(env);

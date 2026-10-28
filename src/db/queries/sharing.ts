@@ -15,8 +15,10 @@ import type { Db } from "../client";
 import { decksCol, usersCol, type DeckDoc } from "../collections";
 import { withDeckIndex } from "../deckIndex";
 import { readTombstone } from "./cascade";
+import { readLibraryLimits } from "./limits";
 import { parseSlides, parseStyle, toSharedDeck } from "./mappers";
 import { libraryDeckDefaults } from "./decks";
+import { findTakenDownSource } from "./takedowns";
 
 /** 공유 라이브러리에 보이는 곡과 작성자 이름(`toDisplayName`으로 다듬은 값) */
 export type PublicDeck = DeckDoc & { authorName: string };
@@ -86,11 +88,24 @@ export type SetVisibilityResult =
   | { status: "not_found" }
   | { status: "not_library" }
   | { status: "taken_down" }
+  | { status: "source_taken_down" }
   | { status: "empty" }
-  | { status: "deleted" };
+  | { status: "deleted" }
+  | { status: "banned" }
+  | { status: "rate_limited" };
 
 /**
  * 보관함 곡의 공개 여부를 변경한다. 게시 중단된 곡과 빈 곡은 공개할 수 없다.
+ *
+ * 가져온 곡은 거슬러 올라간 원본 가운데 하나라도 게시 중단됐으면 공개할 수 없다(`source_taken_down`,
+ * `findTakenDownSource`). 가져간 사본은 지우지 않고 남기므로, 막지 않으면 게시 중단한 가사가
+ * 사본이나 사본을 다시 가져간 곡으로 곧바로 다시 올라온다. 원본의 게시 중단을 풀면 공개할 수 있다.
+ * 이때 곡 자신에는 게시 중단 시각이 없어 클라이언트가 공개 버튼을 그대로 보여 주므로, 곡 자신이 게시
+ * 중단된 경우(`taken_down`)와 나눠 원곡 때문이라고 알린다.
+ *
+ * 운영자가 제한한 계정은 공개할 수 없고(`banned`), 그날 공개 한도(`DAILY_USER_LIMITS.publish`)를
+ * 다 썼으면 `rate_limited`다. 한도는 비공개 곡을 공개할 때만 센다. 이미 공개한 곡을 다시 공개하거나
+ * 비공개로 돌리는 것은 세지도 막지도 않는다.
  *
  * 내가 지운 곡(삭제 기록이 있는 id)은 문서가 다시 생겨 있어도 바꾸지 않고 `deleted`다. 옛
  * 리비전이 되살린 문서를 공개해 주면, 그 곡은 주인의 보관함 목록(`GET /api/decks`)에서는 가려진
@@ -101,27 +116,39 @@ export async function setDeckVisibility(
   userId: string,
   deckId: string,
   visibility: DeckVisibility,
+  now: Date = new Date(),
 ): Promise<SetVisibilityResult> {
   return db.runTransaction(async (tx) => {
     const ref = decksCol(db).doc(deckId);
-    const [row, record] = await Promise.all([
+    const [row, record, limits] = await Promise.all([
       tx.get(ref).then((snapshot) => snapshot.data()),
       readTombstone(tx, db, "deck", deckId),
+      visibility === "public"
+        ? readLibraryLimits(tx, db, userId, "publish", now)
+        : null,
     ]);
 
     if (record?.userId === userId) return { status: "deleted" };
     if (!row || row.userId !== userId) return { status: "not_found" };
     if (row.presentationId) return { status: "not_library" };
 
-    if (visibility === "public") {
+    if (limits) {
+      if (limits.banned) return { status: "banned" };
       if (row.takedownAt) return { status: "taken_down" };
+      if (await findTakenDownSource(tx, db, row)) {
+        return { status: "source_taken_down" };
+      }
       if (parseSlides(row.slides).length === 0) return { status: "empty" };
+      if (row.visibility !== "public") {
+        if (limits.quota.exceeded) return { status: "rate_limited" };
+        limits.quota.take();
+      }
     }
 
     const updated = withDeckIndex({
       ...row,
       visibility,
-      ...(visibility === "public" ? { publishedAt: new Date() } : {}),
+      ...(visibility === "public" ? { publishedAt: now } : {}),
     });
     tx.set(ref, updated);
     return { status: "ok", deck: toSharedDeck(updated) };
@@ -152,7 +179,9 @@ export async function getPublicDeckDetail(
 
 export type ForkResult =
   | { status: "ok"; deck: SharedDeck; alreadyOwned: boolean }
-  | { status: "not_found" };
+  | { status: "not_found" }
+  | { status: "banned" }
+  | { status: "rate_limited" };
 
 /**
  * 공개 덱을 내 보관함으로 가져온다 (fork).
@@ -166,14 +195,19 @@ export type ForkResult =
  *   값이 있어도 복제본은 처음부터 스키마를 통과한다
  *
  * 새로 가져오면 원본의 가져간 횟수를 같은 트랜잭션에서 올린다.
+ *
+ * 새로 가져오는 것만 막고 센다. 운영자가 제한한 계정은 `banned`, 그날 가져오기 한도
+ * (`DAILY_USER_LIMITS.fork`)를 다 썼으면 `rate_limited`다. 이미 가져온 곡과 내 곡은 아무것도 쓰지
+ * 않으므로 그대로 돌려준다.
  */
 export async function forkPublicDeck(
   db: Db,
   userId: string,
   sourceId: string,
+  now: Date = new Date(),
 ): Promise<ForkResult> {
   return db.runTransaction(async (tx) => {
-    const [source, previousForks] = await Promise.all([
+    const [source, previousForks, limits] = await Promise.all([
       readPublicDeck(db, tx, sourceId),
       tx.get(
         decksCol(db)
@@ -182,6 +216,7 @@ export async function forkPublicDeck(
           .where("presentationId", "==", null)
           .limit(1),
       ),
+      readLibraryLimits(tx, db, userId, "fork", now),
     ]);
     if (!source) return { status: "not_found" };
 
@@ -197,8 +232,9 @@ export async function forkPublicDeck(
         alreadyOwned: true,
       };
     }
+    if (limits.banned) return { status: "banned" };
+    if (limits.quota.exceeded) return { status: "rate_limited" };
 
-    const now = new Date();
     const fork = withDeckIndex({
       ...libraryDeckDefaults(createId(), userId),
       ...fitDeckText({
@@ -218,6 +254,7 @@ export async function forkPublicDeck(
     tx.update(decksCol(db).doc(source.id), {
       forkCount: FieldValue.increment(1),
     });
+    limits.quota.take();
     return { status: "ok", deck: toSharedDeck(fork), alreadyOwned: false };
   });
 }

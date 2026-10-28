@@ -11,6 +11,7 @@ import {
 import { withDeckIndex } from "../deckIndex";
 import { prepareTombstones, readTombstone } from "./cascade";
 import { toDeckContent, toSharedDeck } from "./mappers";
+import { findTakenDownSource, recordModerationEvent } from "./takedowns";
 
 /** 최근 수정순 (같으면 id순) */
 export function byUpdatedAtDesc(a: DeckDoc, b: DeckDoc): number {
@@ -111,6 +112,25 @@ export function libraryDeckDefaults(
   };
 }
 
+function inheritsSourceTakedown(fork: DeckDoc): boolean {
+  return fork.presentationId === null && !fork.listed && !fork.takedownAt;
+}
+
+async function takedownToPassOn(
+  tx: Transaction,
+  db: Db,
+  deck: DeckDoc,
+  dependents: readonly DeckDoc[],
+): Promise<{ sourceDeckId: string; takedownAt: Date } | null> {
+  if (!dependents.some(inheritsSourceTakedown)) return null;
+  const source = deck.takedownAt
+    ? deck
+    : await findTakenDownSource(tx, db, deck);
+  return source?.takedownAt
+    ? { sourceDeckId: source.id, takedownAt: source.takedownAt }
+    : null;
+}
+
 export type UpsertDeckResult =
   | { status: "saved"; deck: SharedDeck }
   | { status: "forbidden" }
@@ -172,6 +192,13 @@ export async function upsertDeck(
  * 외래키가 하던 정리를 같은 트랜잭션에서 한다. 이 곡을 가리키던 곡(가져간 곡·담은 사본)의
  * `forkedFrom`과 신고의 `deckId`는 비우고, 이 곡이 가져온 원본의 가져간 횟수는 줄인다.
  *
+ * 이 곡이나 거슬러 올라간 원본이 게시 중단돼 있으면, 이 곡에서 가져가 아직 공개하지 않은 보관함 곡은
+ * 그 게시 중단 시각을 이어받고 운영 기록(`cause: "fork"`)을 남긴다. 그 곡들은 원본이 게시 중단돼
+ * 공개하지 못하는데(`findTakenDownSource`), `forkedFrom`만 비우면 이 곡을 지우는 것만으로 다시 공개할
+ * 수 있게 풀린다. 이미 공개 중인 곡은 운영자가 따로 정하므로 건드리지 않는다. 이어받는 곡도 바뀌는
+ * 필드만 고친다. 가져간 곡은 가사·슬라이드를 통째로 담고 있어, 문서째 다시 쓰면 가져간 곡이 많을 때
+ * 커밋이 Firestore 한도(10 MiB)를 넘어 이 곡을 지우지 못한다.
+ *
  * 멱등이다. 서버에 없는 id도 기록하고 `true`다. 그래서 클라이언트가 시간 초과로 포기한 저장이
  * 삭제보다 늦게 커밋되거나, 다른 탭이 아직 올리지 않은 곡을 올려도 되살아나지 않는다. 기록은
  * 없을 때만 써서 늘어나는 쓰기는 한 건뿐이고, 남의 기록은 덮지 않는다. 남의 곡·프레젠테이션
@@ -186,6 +213,7 @@ export async function deleteDeckScoped(
   db: Db,
   deckId: string,
   userId: string,
+  now: Date = new Date(),
 ): Promise<boolean> {
   return db.runTransaction(async (tx) => {
     const ref = decksCol(db).doc(deckId);
@@ -211,13 +239,44 @@ export async function deleteDeckScoped(
       tx.get(reportsCol(db).where("deckId", "==", deckId)),
       record ? Promise.resolve(null) : prepareRecord(),
     ]);
+    const inherited = await takedownToPassOn(
+      tx,
+      db,
+      deck,
+      dependents.docs.map((dependent) => dependent.data()),
+    );
 
     tx.delete(ref);
     if (source?.exists) {
       tx.update(source.ref, { forkCount: FieldValue.increment(-1) });
     }
     for (const dependent of dependents.docs) {
-      tx.update(dependent.ref, { forkedFrom: null });
+      const fork = dependent.data();
+      if (!inherited || !inheritsSourceTakedown(fork)) {
+        tx.update(dependent.ref, { forkedFrom: null });
+        continue;
+      }
+      const next = withDeckIndex({
+        ...fork,
+        forkedFrom: null,
+        takedownAt: inherited.takedownAt,
+      });
+      tx.update(dependent.ref, {
+        forkedFrom: next.forkedFrom,
+        takedownAt: next.takedownAt,
+        listed: next.listed,
+        searchGrams: next.searchGrams,
+      });
+      recordModerationEvent(tx, db, {
+        action: "takedown",
+        cause: "fork",
+        sourceDeckId: inherited.sourceDeckId,
+        note: null,
+        userId: fork.userId,
+        deckId: fork.id,
+        title: fork.title,
+        at: now,
+      });
     }
     for (const report of reports.docs) {
       tx.update(report.ref, { deckId: null });

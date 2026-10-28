@@ -239,6 +239,7 @@ async function main() {
         emailVerified: true,
         image: null,
         termsAgreedAt: now,
+        bannedAt: null,
         createdAt: now,
         updatedAt: now,
       },
