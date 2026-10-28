@@ -16,6 +16,7 @@ import {
 import {
   createTestDb,
   deckDoc,
+  instrumentTransactions,
   presentationDoc,
   seedDocs,
   userDoc,
@@ -253,6 +254,35 @@ describe("공유 쿼리 헬퍼", () => {
       expect((await setDeckVisibility(db, A, "down", "private")).status).toBe(
         "ok",
       );
+    });
+
+    it("내가 지운 곡은 문서가 다시 생겨 있어도 공개 여부를 바꾸지 않는다", async () => {
+      expect(await deleteDeckScoped(db, DECK, A)).toBe(true);
+      const instrument = instrumentTransactions(db);
+      try {
+        expect(await setDeckVisibility(db, A, DECK, "public")).toEqual({
+          status: "deleted",
+        });
+        expect((await decksCol(db).doc(DECK).get()).exists).toBe(false);
+
+        await seedDocs(db, { decks: [row()] });
+        expect(await setDeckVisibility(db, A, DECK, "public")).toEqual({
+          status: "deleted",
+        });
+        expect(await setDeckVisibility(db, A, DECK, "private")).toEqual({
+          status: "deleted",
+        });
+      } finally {
+        instrument.restore();
+      }
+
+      expect(instrument.max()).toBe(0);
+      expect(await readRow(DECK)).toMatchObject({
+        visibility: "private",
+        publishedAt: null,
+        listed: false,
+      });
+      expect(await getPublicDeckDetail(db, DECK)).toBeNull();
     });
   });
 

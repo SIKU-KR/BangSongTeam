@@ -2,6 +2,7 @@ import type { DocumentReference, Transaction } from "@google-cloud/firestore";
 import type { Db } from "../client";
 import {
   chunkIds,
+  deckTombstoneDocId,
   decksCol,
   driveTombstonesCol,
   foldersCol,
@@ -99,13 +100,41 @@ async function readDependentsByPresentation(
 }
 
 /**
+ * 영구 삭제 기록의 문서 id. 폴더·프레젠테이션은 항목 id이고 보관함 곡은 `deckTombstoneDocId`다.
+ * 곡 기록까지 항목 id를 쓰면, 곡 id로 보낸 삭제가 남의 프레젠테이션 기록 자리를 먼저 차지하고
+ * 드라이브 저장이 곡 기록을 지운다.
+ */
+export function tombstoneDocId(
+  kind: DriveTombstoneDoc["kind"],
+  itemId: string,
+): string {
+  return kind === "deck" ? deckTombstoneDocId(itemId) : itemId;
+}
+
+/**
+ * 영구 삭제 기록 하나를 트랜잭션에서 읽는다. 누구의 기록인지는 부르는 쪽이 `userId`로 가른다.
+ * 트랜잭션은 쓴 뒤에 읽지 못하므로 다른 읽기와 함께 먼저 부른다.
+ */
+export async function readTombstone(
+  tx: Transaction,
+  db: Db,
+  kind: DriveTombstoneDoc["kind"],
+  itemId: string,
+): Promise<DriveTombstoneDoc | undefined> {
+  const ref = driveTombstonesCol(db).doc(tombstoneDocId(kind, itemId));
+  return (await tx.get(ref)).data();
+}
+
+/**
  * 영구 삭제 기록(다른 기기의 부팅 병합용)을 쓸 준비를 한다. 트랜잭션의 다른 읽기와 함께 먼저
  * 부르고, 돌려받은 `write`를 쓰기 단계에서 부른다.
  *
- * 기록 문서 id는 항목 id라 모든 사용자가 한 id 공간을 쓴다. 그래서 기록이 없거나 내 기록일 때만
- * 쓴다. 남의 기록을 덮으면 그 사람의 다른 기기가 영구 삭제한 항목을 다시 올린다. 남이 같은 id로
- * 먼저 기록을 차지하는 길은 `upsertFolder`가 막는다(새 폴더 id가 프레젠테이션 id면 거절). 같은 id가
- * 두 번 오면 처음 것만 쓴다.
+ * 기록 문서 id(`tombstoneDocId`)는 모든 사용자가 한 id 공간을 쓴다. 그래서 기록이 없거나 내
+ * 기록일 때만 쓴다. 남의 기록을 덮으면 그 사람의 다른 기기가 영구 삭제한 항목을 다시 올린다.
+ * 폴더·프레젠테이션 기록을 남이 같은 id로 먼저 차지하는 길은 `upsertFolder`가 막는다(새 폴더 id가
+ * 프레젠테이션 id면 거절). 보관함 곡 기록(`deckTombstoneDocId`)은 서버에 없는 id를 먼저 지운
+ * 사람의 것이 되고, 그 뒤로 다른 사람이 그 id로 곡을 새로 만드는 저장은 `upsertDeck`이
+ * `forbidden`으로 거절한다. 같은 문서 id가 두 번 오면 처음 것만 쓴다.
  */
 export async function prepareTombstones(
   tx: Transaction,
@@ -113,25 +142,28 @@ export async function prepareTombstones(
   userId: string,
   entries: readonly TombstoneEntry[],
 ): Promise<PreparedWrites> {
-  const byId = new Map<string, TombstoneEntry>();
+  const byDocId = new Map<string, TombstoneEntry>();
   for (const entry of entries) {
-    if (!byId.has(entry.itemId)) byId.set(entry.itemId, entry);
+    const docId = tombstoneDocId(entry.kind, entry.itemId);
+    if (!byDocId.has(docId)) byDocId.set(docId, entry);
   }
-  if (byId.size === 0) return { writes: 0, write: () => {} };
+  if (byDocId.size === 0) return { writes: 0, write: () => {} };
 
   const snapshots = await tx.getAll(
-    ...[...byId.keys()].map((id) => driveTombstonesCol(db).doc(id)),
+    ...[...byDocId.keys()].map((id) => driveTombstonesCol(db).doc(id)),
   );
   const writable = snapshots.flatMap((snapshot) => {
-    const entry = byId.get(snapshot.id);
+    const entry = byDocId.get(snapshot.id);
     const owner = snapshot.data()?.userId;
-    return entry && (owner === undefined || owner === userId) ? [entry] : [];
+    return entry && (owner === undefined || owner === userId)
+      ? [{ ref: snapshot.ref, entry }]
+      : [];
   });
   return {
     writes: writable.length,
     write: () => {
-      for (const { kind, itemId } of writable) {
-        tx.set(driveTombstonesCol(db).doc(itemId), { itemId, userId, kind });
+      for (const { ref, entry } of writable) {
+        tx.set(ref, { itemId: entry.itemId, userId, kind: entry.kind });
       }
     },
   };

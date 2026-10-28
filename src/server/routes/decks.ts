@@ -5,6 +5,7 @@ import {
   VisibilityUpdateRequestSchema,
 } from "#shared";
 import {
+  getDeletedDeckIds,
   getMyLibraryDecks,
   upsertDeck,
   deleteDeckScoped,
@@ -12,6 +13,7 @@ import {
   setDeckVisibility,
   forkPublicDeck,
   type SetVisibilityResult,
+  type UpsertDeckResult,
 } from "#db";
 import type { AppEnv } from "../types";
 import { resolveRequireAuth, type AppDeps } from "../deps";
@@ -47,6 +49,12 @@ function storageFailure(c: Context<AppEnv>, error: unknown) {
  *
  * 쓰기 한도(`DeckWriteSchema`)나 Firestore 저장 한도를 넘는 곡은 400·500 대신 413과 가사를
  * 나누라는 문장으로 답한다.
+ *
+ * 지운 곡은 삭제 기록으로 남는다(`deleteDeckScoped`). 목록은 기록된 id를 빼고 `deletedIds`로
+ * 알려, 다른 기기의 부팅 병합이 그 곡을 다시 올리지 않게 한다. 그 id로 오는 저장·공개 설정은
+ * 410이다. 옛 리비전이 기록 옆에 다시 만든 문서는 주인이 목록을 받을 때 지운다. 지우기는
+ * 멱등이라 서버에 없던 id도 기록하고 200이며, 남의 곡·프레젠테이션 사본, 서버에 곡이 없는데 남이
+ * 기록한 id만 404다.
  */
 export function createDecksRoute(deps: AppDeps = {}) {
   const savedId = idParam(API_ERRORS.idMismatch, 400);
@@ -62,8 +70,29 @@ export function createDecksRoute(deps: AppDeps = {}) {
     .use("*", resolveRequireAuth(deps))
     .get("/", async (c) => {
       const db = c.env.DB;
-      const rows = await getMyLibraryDecks(db, c.get("userId") as string);
-      return c.json({ decks: rows.map(toSharedDeck) }, 200);
+      const userId = c.get("userId") as string;
+      const [rows, deletedIds] = await Promise.all([
+        getMyLibraryDecks(db, userId),
+        getDeletedDeckIds(db, userId),
+      ]);
+      const deleted = new Set(deletedIds);
+      for (const row of rows) {
+        if (!deleted.has(row.id)) continue;
+        try {
+          await deleteDeckScoped(db, row.id, userId);
+        } catch (error) {
+          logServerError(c, "re-created deck cleanup failed", error, {
+            deckId: row.id,
+          });
+        }
+      }
+      return c.json(
+        {
+          decks: rows.filter((row) => !deleted.has(row.id)).map(toSharedDeck),
+          deletedIds,
+        },
+        200,
+      );
     })
     .put("/:id", savedId, deckBody, async (c) => {
       const userId = c.get("userId") as string;
@@ -78,18 +107,22 @@ export function createDecksRoute(deps: AppDeps = {}) {
 
       const db = c.env.DB;
 
-      let saved;
+      let result: UpsertDeckResult;
       try {
-        saved = await upsertDeck(db, userId, deck);
-        if (!saved) {
-          return c.json({ error: API_ERRORS.deck.notAccessible }, 403);
-        }
+        result = await upsertDeck(db, userId, deck);
       } catch (error) {
         logServerError(c, "deck upsert failed", error, { deckId: deck.id });
         return storageFailure(c, error);
       }
 
-      return c.json({ ok: true as const, deck: saved }, 200);
+      switch (result.status) {
+        case "forbidden":
+          return c.json({ error: API_ERRORS.deck.notAccessible }, 403);
+        case "deleted":
+          return c.json({ error: API_ERRORS.deck.deleted }, 410);
+        case "saved":
+          return c.json({ ok: true as const, deck: result.deck }, 200);
+      }
     })
     .patch(
       "/:id/visibility",
@@ -133,6 +166,8 @@ export function createDecksRoute(deps: AppDeps = {}) {
               },
               409,
             );
+          case "deleted":
+            return c.json({ error: API_ERRORS.deck.deleted }, 410);
         }
       },
     )

@@ -14,6 +14,7 @@ import {
 import type { Db } from "../client";
 import { decksCol, usersCol, type DeckDoc } from "../collections";
 import { withDeckIndex } from "../deckIndex";
+import { readTombstone } from "./cascade";
 import { parseSlides, parseStyle, toSharedDeck } from "./mappers";
 import { libraryDeckDefaults } from "./decks";
 
@@ -85,10 +86,15 @@ export type SetVisibilityResult =
   | { status: "not_found" }
   | { status: "not_library" }
   | { status: "taken_down" }
-  | { status: "empty" };
+  | { status: "empty" }
+  | { status: "deleted" };
 
 /**
  * 보관함 곡의 공개 여부를 변경한다. 게시 중단된 곡과 빈 곡은 공개할 수 없다.
+ *
+ * 내가 지운 곡(삭제 기록이 있는 id)은 문서가 다시 생겨 있어도 바꾸지 않고 `deleted`다. 옛
+ * 리비전이 되살린 문서를 공개해 주면, 그 곡은 주인의 보관함 목록(`GET /api/decks`)에서는 가려진
+ * 채 공유 라이브러리에 남는다.
  */
 export async function setDeckVisibility(
   db: Db,
@@ -98,8 +104,12 @@ export async function setDeckVisibility(
 ): Promise<SetVisibilityResult> {
   return db.runTransaction(async (tx) => {
     const ref = decksCol(db).doc(deckId);
-    const row = (await tx.get(ref)).data();
+    const [row, record] = await Promise.all([
+      tx.get(ref).then((snapshot) => snapshot.data()),
+      readTombstone(tx, db, "deck", deckId),
+    ]);
 
+    if (record?.userId === userId) return { status: "deleted" };
     if (!row || row.userId !== userId) return { status: "not_found" };
     if (row.presentationId) return { status: "not_library" };
 

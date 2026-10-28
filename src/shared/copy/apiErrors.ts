@@ -33,6 +33,7 @@ export const API_ERRORS = {
     takenDown: "운영자가 게시를 중단한 곡이라 다시 공개할 수 없어요",
     notPublished: "공개된 곡을 찾을 수 없어요",
     tooLarge: "가사가 너무 길어요. 가사를 나눠 여러 곡으로 만들어 주세요",
+    deleted: "이미 지운 곡이에요. 새로고침하면 보관함에서 사라져요",
   },
   folder: {
     notAccessible: "이 폴더를 열 수 없어요",

@@ -139,11 +139,17 @@ export interface FolderDoc {
   updatedAt: Date;
 }
 
-/** 오프라인 우선 동기화에서 영구 삭제를 다른 기기로 전하는 기록. 문서 id는 항목 id다 */
+/**
+ * 오프라인 우선 동기화에서 영구 삭제를 다른 기기로 전하는 기록.
+ *
+ * 폴더·프레젠테이션 기록의 문서 id는 항목 id다. 보관함 곡 기록은 `deckTombstoneDocId`로
+ * 접두사를 붙여 드라이브 기록과 id를 나누지 않는다. 그래서 드라이브 쪽 쓰기·읽기는 곡 기록을
+ * 덮거나 지우지 않고, 곡을 지우는 요청이 남의 프레젠테이션 기록 자리를 먼저 차지하지도 못한다.
+ */
 export interface DriveTombstoneDoc {
   itemId: string;
   userId: string;
-  kind: "folder" | "presentation";
+  kind: "folder" | "presentation" | "deck";
 }
 
 /**
@@ -228,6 +234,14 @@ export function userEmailDocId(email: string): string {
 /** 멤버 문서 id. id 알파벳(NanoID)에 `:`가 없으므로 두 id를 이어도 겹치지 않는다 */
 export function memberDocId(presentationId: string, userId: string): string {
   return `${presentationId}:${userId}`;
+}
+
+/**
+ * 보관함 곡 삭제 기록의 문서 id. id 알파벳(NanoID)에 `:`가 없으므로 항목 id를 그대로 쓰는
+ * 폴더·프레젠테이션 기록과 겹치지 않는다.
+ */
+export function deckTombstoneDocId(deckId: string): string {
+  return `deck:${deckId}`;
 }
 
 /**
