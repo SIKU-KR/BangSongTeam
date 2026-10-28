@@ -125,7 +125,10 @@ export function PresentationShareDialog({
         if (!open) onClose();
       }}
     >
-      <DialogContent data-testid="share-dialog" className="sm:max-w-md">
+      <DialogContent
+        data-testid="share-dialog"
+        className="max-h-9/10 overflow-y-auto sm:max-w-md"
+      >
         <DialogHeader>
           <DialogTitle>{COMMON_COPY.share}</DialogTitle>
           <DialogDescription className="truncate">{title}</DialogDescription>
@@ -222,7 +225,7 @@ export function PresentationShareDialog({
       </DialogContent>
 
       <AlertDialog open={isResetOpen} onOpenChange={setIsResetOpen}>
-        <AlertDialogContent size="sm">
+        <AlertDialogContent size="sm" className="max-h-9/10 overflow-y-auto">
           <AlertDialogHeader>
             <AlertDialogTitle>{SHARING_COPY.link.resetTitle}</AlertDialogTitle>
             <AlertDialogDescription>

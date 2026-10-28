@@ -149,7 +149,10 @@ function AccountMenuItem(): React.JSX.Element {
       </SidebarMenuItem>
 
       <AlertDialog open={confirmingSignOut} onOpenChange={setConfirmingSignOut}>
-        <AlertDialogContent data-testid="sign-out-confirm-dialog">
+        <AlertDialogContent
+          data-testid="sign-out-confirm-dialog"
+          className="max-h-9/10 overflow-y-auto"
+        >
           <AlertDialogHeader>
             <AlertDialogTitle>
               {SHELL_COPY.signOutConfirm.title}

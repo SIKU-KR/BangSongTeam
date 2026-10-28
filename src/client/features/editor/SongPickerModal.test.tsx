@@ -1149,4 +1149,42 @@ describe("SongPickerModal", () => {
       expect(screen.queryByText(/소절/)).not.toBeInTheDocument();
     });
   });
+
+  describe("폰 폭(md 미만) 배치", () => {
+    it("목록 아래의 미리보기와 추가 버튼까지 본문을 통째로 밀어서 닿고, 목록과 가사는 높이를 제한한다", () => {
+      seedMySong();
+      renderPicker();
+
+      const body = screen.getByTestId("song-picker-body");
+
+      expect(body).toHaveClass("max-md:overflow-y-auto");
+      expect(body.firstElementChild).toHaveClass("max-md:max-h-72");
+      expect(body).toContainElement(screen.getByTestId("song-picker-add-btn"));
+      expect(screen.getByTestId("song-picker-lyrics")).toHaveClass(
+        "max-md:max-h-64",
+      );
+    });
+
+    it("동작 줄은 좁으면 줄을 바꿔서 추가 버튼이 대화 상자 오른쪽 밖으로 밀려 나가지 않는다", () => {
+      seedMySong();
+      renderPicker();
+
+      const actions = screen.getByTestId("song-picker-actions");
+
+      expect(actions).toHaveClass("max-md:flex-wrap");
+      expect(actions).toContainElement(
+        screen.getByTestId("song-picker-add-btn"),
+      );
+    });
+
+    it("md 이상에서는 목록과 미리보기가 나란히 놓이고 각자 스크롤한다", () => {
+      seedMySong();
+      renderPicker();
+
+      const body = screen.getByTestId("song-picker-body");
+
+      expect(body).toHaveClass("overflow-hidden", "md:flex-row");
+      expect(body.firstElementChild).toHaveClass("md:w-5/12");
+    });
+  });
 });

@@ -59,7 +59,11 @@ export function SongInfoDialog({
         if (!open) onCancel();
       }}
     >
-      <DialogContent data-testid="song-info-dialog" initialFocus={titleRef}>
+      <DialogContent
+        data-testid="song-info-dialog"
+        initialFocus={titleRef}
+        className="max-h-9/10 overflow-y-auto"
+      >
         <form
           className="grid gap-4"
           onSubmit={(event) => {

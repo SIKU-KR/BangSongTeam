@@ -73,10 +73,13 @@ function ActionBar({
           {error}
         </p>
       )}
-      <div className="flex items-center justify-between gap-2">
+      <div
+        data-testid="song-picker-actions"
+        className="flex items-center justify-between gap-2 max-md:flex-wrap"
+      >
         <div className="flex items-center gap-2">{children}</div>
 
-        <div className="flex items-center gap-2.5">
+        <div className="flex items-center gap-2.5 max-md:ml-auto">
           <Button variant="ghost" onClick={onClose}>
             {COMMON_COPY.close}
           </Button>
@@ -158,7 +161,10 @@ export function MyDeckPreview({
           </>
         }
       />
-      <div className="flex-1 overflow-y-auto p-5 font-mono text-xs">
+      <div
+        data-testid="song-picker-lyrics"
+        className="flex-1 overflow-y-auto p-5 font-mono text-xs max-md:max-h-64"
+      >
         <LyricsViewer lyrics={deck.lyricsRaw} />
       </div>
       <LibraryShareControls key={deck.id} deck={deck} />
@@ -233,7 +239,10 @@ export function SharedDeckPreview({
           </>
         }
       />
-      <div className="flex-1 overflow-y-auto p-5 font-mono text-xs">
+      <div
+        data-testid="song-picker-lyrics"
+        className="flex-1 overflow-y-auto p-5 font-mono text-xs max-md:max-h-64"
+      >
         {detail.data ? (
           <LyricsViewer lyrics={detail.data.lyricsRaw} />
         ) : detail.isError ? (

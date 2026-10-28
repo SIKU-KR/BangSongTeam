@@ -2,28 +2,13 @@ import { describe, it, expect } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
 import { compile } from "tailwindcss";
+import { clientSourceFiles } from "./test/clientSources";
 
 const CLIENT_DIR = __dirname;
-const SKIPPED_DIRS = [
-  path.join(CLIENT_DIR, "components", "ui"),
-  path.join(CLIENT_DIR, "test"),
-];
-
-function sourceFiles(dir: string): string[] {
-  return fs.readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
-    const file = path.join(dir, entry.name);
-    if (entry.isDirectory()) {
-      return SKIPPED_DIRS.includes(file) ? [] : sourceFiles(file);
-    }
-    return /\.tsx?$/.test(entry.name) && !/\.test\.tsx?$/.test(entry.name)
-      ? [file]
-      : [];
-  });
-}
 
 describe("화면 높이 단위", () => {
   it("화면을 채우는 높이는 툴바 밑까지 잡히는 h-screen·100vh 대신 동적 뷰포트 단위(dvh)를 쓴다", () => {
-    const offenders = sourceFiles(CLIENT_DIR)
+    const offenders = clientSourceFiles()
       .filter((file) =>
         /\bh-screen\b|\b100vh\b/.test(fs.readFileSync(file, "utf-8")),
       )
