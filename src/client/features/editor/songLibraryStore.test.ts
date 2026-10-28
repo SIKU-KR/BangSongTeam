@@ -1,15 +1,19 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { signInAsTestUser } from "../../test/sessionFixture";
+import { signInAsTestUser, signOutForTests } from "../../test/sessionFixture";
 import { createId, DEFAULT_DECK_STYLE, DeckSchema, type Deck } from "#shared";
 import {
   closeOfflineDB,
   getOfflineDB,
   OFFLINE_DB_NAME,
 } from "../../lib/storage/db";
-import { loadAllSongs, saveSong } from "../../lib/storage";
+import { deleteSong, loadAllSongs, saveSong } from "../../lib/storage";
 import { __resetStorageChannelForTests } from "../../lib/storage/storageChannel";
 import { installFakeBroadcastChannel } from "../../test/fakeBroadcastChannel";
-import { getPersistenceError } from "../../lib/storage/persistenceStatus";
+import {
+  __resetPersistenceStatusForTests,
+  getPersistenceError,
+} from "../../lib/storage/persistenceStatus";
+import { MAX_BACKOFF_MS } from "../../lib/sync/backoff";
 import {
   LEGACY_SONGS_KEY,
   LEGACY_SONGS_BACKUP_KEY,
@@ -51,6 +55,7 @@ vi.mock("../../lib/storage", async (importOriginal) => {
     ...actual,
     loadAllSongs: vi.fn(actual.loadAllSongs),
     saveSong: vi.fn(actual.saveSong),
+    deleteSong: vi.fn(actual.deleteSong),
   };
 });
 
@@ -87,12 +92,14 @@ async function resetDatabase(): Promise<void> {
 describe("songLibraryStore", () => {
   beforeEach(async () => {
     localStorage.clear();
+    __resetPersistenceStatusForTests();
     await resetDatabase();
     signInAsTestUser();
     await resetSongLibraryStore();
   });
 
-  afterEach(() => {
+  afterEach(async () => {
+    await resetSongLibraryStore();
     closeOfflineDB();
     __resetDeckSyncForTests();
   });
@@ -891,6 +898,122 @@ describe("songLibraryStore", () => {
           deletedIds: getDeletedSongIds(),
         }).removedIds,
       ).toEqual([]);
+    });
+  });
+
+  describe("저장 실패와 다시 저장", () => {
+    const SONG = "c000000000000000000d1";
+    const OTHER_SONG = "c000000000000000000d2";
+    const quotaError = (): DOMException =>
+      new DOMException("가득 참", "QuotaExceededError");
+
+    async function storedTitle(id: string): Promise<string | undefined> {
+      const { valid } = await loadAllSongs();
+      return valid.find((deck) => deck.id === id)?.title;
+    }
+
+    async function retryFailedWrites(): Promise<void> {
+      await vi.advanceTimersByTimeAsync(MAX_BACKOFF_MS);
+      await loadAllSongs();
+    }
+
+    beforeEach(async () => {
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+      await hydrateSongLibrary();
+      upsertLibraryDeck(libraryDeck(SONG), { push: false });
+      upsertLibraryDeck(libraryDeck(OTHER_SONG), { push: false });
+      await loadAllSongs();
+      vi.mocked(saveSong).mockClear();
+      vi.mocked(deleteSong).mockClear();
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it("저장에 실패한 곡은 다른 곡이 저장돼도 경고를 남기고, 백오프 뒤 마지막 사본으로 다시 저장한다", async () => {
+      vi.mocked(saveSong)
+        .mockRejectedValueOnce(quotaError())
+        .mockRejectedValueOnce(quotaError());
+      updateLibrarySongInfo(SONG, { title: "첫 수정", artist: "" });
+      updateLibrarySongInfo(SONG, { title: "마지막 수정", artist: "" });
+      await loadAllSongs();
+      expect(getPersistenceError("deck")?.kind).toBe("quota");
+
+      updateLibrarySongInfo(OTHER_SONG, { title: "저장한 곡", artist: "" });
+      await loadAllSongs();
+
+      expect(getPersistenceError("deck")?.kind).toBe("quota");
+      expect(await storedTitle(SONG)).toBe("서버에서 받은 곡");
+
+      vi.mocked(saveSong).mockClear();
+      await retryFailedWrites();
+
+      expect(
+        vi.mocked(saveSong).mock.calls.map(([deck]) => deck.title),
+      ).toEqual(["마지막 수정"]);
+      expect(await storedTitle(SONG)).toBe("마지막 수정");
+      expect(getPersistenceError()).toBeNull();
+    });
+
+    it("지우지 못한 곡은 지우기로 다시 시도한다", async () => {
+      vi.mocked(deleteSong).mockRejectedValueOnce(new Error("disk"));
+
+      deleteUserSong(SONG);
+      await loadAllSongs();
+
+      expect(getPersistenceError("deck")?.kind).toBe("unknown");
+      expect(await storedSongIds()).toContain(SONG);
+
+      await retryFailedWrites();
+
+      expect(deleteSong).toHaveBeenCalledTimes(2);
+      expect(saveSong).not.toHaveBeenCalled();
+      expect(await storedSongIds()).not.toContain(SONG);
+      expect(getPersistenceError()).toBeNull();
+    });
+
+    it("사용자가 지우지 않았는데 보관함에서 사라진 곡의 실패한 저장은 저장하지도 지우지도 않고 경고만 푼다", async () => {
+      vi.mocked(saveSong).mockRejectedValueOnce(quotaError());
+      updateLibrarySongInfo(SONG, { title: "저장하지 못한 수정", artist: "" });
+      await loadAllSongs();
+      signOutForTests();
+      await applyServerLibraryDecks([]);
+      vi.mocked(saveSong).mockClear();
+
+      await retryFailedWrites();
+
+      expect(saveSong).not.toHaveBeenCalled();
+      expect(deleteSong).not.toHaveBeenCalled();
+      expect(await storedTitle(SONG)).toBe("서버에서 받은 곡");
+      expect(getPersistenceError()).toBeNull();
+    });
+
+    it("보관함을 다시 불러오면 불러오지 못한 경고를 지운다", async () => {
+      vi.mocked(loadAllSongs).mockRejectedValueOnce(new Error("읽기 실패"));
+      await hydrateSongLibrary();
+      expect(getPersistenceError("deck")?.kind).toBe("unknown");
+
+      await hydrateSongLibrary();
+
+      expect(getPersistenceError()).toBeNull();
+    });
+
+    it("보관함을 다시 불러오면 앞서 저장하지 못한 곡의 경고와 다시 시도를 버린다", async () => {
+      vi.mocked(saveSong).mockRejectedValueOnce(quotaError());
+      updateLibrarySongInfo(SONG, { title: "저장하지 못한 수정", artist: "" });
+      await loadAllSongs();
+      expect(getPersistenceError("deck")?.kind).toBe("quota");
+
+      await hydrateSongLibrary();
+
+      expect(getPersistenceError()).toBeNull();
+
+      vi.mocked(saveSong).mockClear();
+      await retryFailedWrites();
+
+      expect(saveSong).not.toHaveBeenCalled();
+      expect(getPersistenceError()).toBeNull();
     });
   });
 

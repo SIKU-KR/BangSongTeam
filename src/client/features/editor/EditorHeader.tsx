@@ -232,15 +232,15 @@ function SyncFailureDetail({
 }
 
 function SaveStatusIndicator(): React.JSX.Element {
-  const persistenceError = usePersistenceError();
+  const persistenceError = usePersistenceError("presentation");
   const { status, lastSyncedAt, lastFailure, failureRequestId } =
     useSyncStatus();
 
   const { dotClass, label } = persistenceError
     ? SAVE_FAILED_INDICATOR
     : SYNC_STATUS_INDICATOR[status];
-  const canRetry = !persistenceError && RETRYABLE_SYNC_STATUSES.has(status);
-  const syncFailed = !persistenceError && status === "error";
+  const canRetry = RETRYABLE_SYNC_STATUSES.has(status);
+  const syncFailed = status === "error";
   const lastSyncedLine =
     lastSyncedAt === null
       ? EDITOR_COPY.syncStatus.notSyncedYet
@@ -505,6 +505,10 @@ function ShortcutGuidePopover(): React.JSX.Element {
  * 터치로도 열리는 팝오버에 두고 문의 코드는 고르거나 복사할 수 있게 한다. 저장 상태는 좁은
  * 화면에서 숨기지만, 동기화 실패는 좁은 화면에서도 보인다. 오류 원문(`SyncFailure.message`)은
  * 개발자용 글일 수 있어 그리지 않는다.
+ *
+ * '저장 실패'는 프레젠테이션을 이 기기에 저장하지 못할 때만 보인다. 곡 보관함·폴더의 저장 실패는
+ * 경고 배너가 알리고, 헤더는 동기화 상태를 그대로 보인다. 기기에 저장하지 못하는 동안에도 다시
+ * 시도와 문의 코드는 동기화 상태를 따른다. 그때는 서버 사본이 유일하게 안전한 사본이다.
  */
 export function EditorHeader({
   title,

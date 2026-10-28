@@ -23,7 +23,9 @@ import {
   reportPersistenceError,
   clearPersistenceError,
   reportCorruptedRecords,
+  createWriteRetry,
   type LoadedRecord,
+  type WriteOp,
 } from "../../lib/storage";
 import { announceStorageChange } from "../../lib/storage/storageChannel";
 import { getCurrentUserId } from "../../lib/auth/sessionStore";
@@ -107,18 +109,23 @@ function readActive(): Presentation {
  * 링크로 공유받은 프레젠테이션(`access`)은 보기 전용이다. 편집 함수는 모두
  * `writeActive`·`pushHistory`·`updateDocumentById`를 거치므로 여기서 막으면
  * 화면에서 버튼을 빠뜨려도 문서가 바뀌지 않는다.
+ *
+ * 막힌 편집은 저장하지도 알리지도 않고, 바꾼 것이 있는지 돌려주는 편집 함수는 `false`를 돌려준다.
+ * 로그인 없이 링크로 보는 프레젠테이션(`showSharedPreview`)을 저장하면 소유자 id가 달린 보기 전용
+ * 저장본이 남아, 소유자가 이 브라우저에서 로그인하면 자기 프레젠테이션을 보기 전용으로 연다.
  */
 export function canEditPresentation(doc: Presentation): boolean {
   return doc.access === undefined;
 }
 
-function writeActive(next: Presentation): void {
+function writeActive(next: Presentation): boolean {
   const current = readActive();
-  if (!canEditPresentation(current)) return;
+  if (!canEditPresentation(current)) return false;
   commit({
     ...state,
     byId: { ...state.byId, [state.activeId]: withEditStamp(current, next) },
   });
+  return true;
 }
 
 function pushHistory(coalesceKey?: string): void {
@@ -144,6 +151,7 @@ export function canRedo(): boolean {
  */
 export function undo(): boolean {
   const current = readActive();
+  if (!canEditPresentation(current)) return false;
   const previous = takeUndo(state.activeId, current);
   if (!previous) return false;
   writeActive(withCurrentPlacement(previous, current));
@@ -154,6 +162,7 @@ export function undo(): boolean {
 /** 다시 하기. `undo`처럼 수정 시각을 지금 판보다 뒤로 찍는다. */
 export function redo(): boolean {
   const current = readActive();
+  if (!canEditPresentation(current)) return false;
   const next = takeRedo(state.activeId, current);
   if (!next) return false;
   writeActive(withCurrentPlacement(next, current));
@@ -171,6 +180,36 @@ const repairedVersions = new Map<string, Presentation>();
 let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 let inFlight: Promise<void> = Promise.resolve();
 
+type PresentationWriteOp = WriteOp | "deleteShared";
+
+const writeRetry = createWriteRetry<PresentationWriteOp>(
+  "presentation",
+  (failed) => {
+    if (!persistenceEnabled) {
+      writeRetry.reset();
+      return;
+    }
+    for (const [id, op] of failed) retryFailedWrite(id, op);
+    runPendingWrites();
+  },
+);
+
+function retryFailedWrite(id: string, op: PresentationWriteOp): void {
+  if (state.byId[id]) {
+    pendingIds.add(id);
+    return;
+  }
+  if (op === "save") {
+    writeRetry.succeeded(id);
+    return;
+  }
+  inFlight = inFlight.then(() =>
+    op === "deleteShared"
+      ? removePersistedSharedPresentation(id)
+      : removePersistedPresentation(id),
+  );
+}
+
 function markWriting(ids: readonly string[]): void {
   for (const id of ids) writingIds.set(id, (writingIds.get(id) ?? 0) + 1);
 }
@@ -182,7 +221,7 @@ function doneWriting(id: string): void {
 }
 
 function hasUnpersistedWrite(id: string): boolean {
-  return pendingIds.has(id) || writingIds.has(id);
+  return pendingIds.has(id) || writingIds.has(id) || writeRetry.has(id);
 }
 
 async function writeDocument(
@@ -195,7 +234,6 @@ async function writeDocument(
 }
 
 async function writeDocuments(ids: string[]): Promise<void> {
-  let failed = false;
   const written: string[] = [];
   const superseded: string[] = [];
   for (const id of ids) {
@@ -203,25 +241,27 @@ async function writeDocuments(ids: string[]): Promise<void> {
     const repaired = doc !== undefined && repairedVersions.get(id) === doc;
     repairedVersions.delete(id);
     try {
-      if (!doc) continue;
+      if (!doc) {
+        writeRetry.succeeded(id, "save");
+        continue;
+      }
       if (!(await writeDocument(doc, repaired))) {
         superseded.push(id);
+        writeRetry.succeeded(id);
         continue;
       }
       written.push(id);
+      writeRetry.succeeded(id);
       if (!doc.access) {
         noteOwnVersion(doc);
         skippedReloads.delete(id);
       }
     } catch (err) {
-      failed = true;
-      reportPersistenceError(err);
+      if (repaired) repairedVersions.set(id, doc);
+      writeRetry.failed(id, "save", err);
     } finally {
       doneWriting(id);
     }
-  }
-  if (!failed && ids.length > 0) {
-    clearPersistenceError();
   }
   announceStorageChange("presentations", written);
   for (const id of superseded) {
@@ -267,11 +307,11 @@ export async function flushPendingWrites(): Promise<void> {
  * 병합도 하기 전에 새 계정의 세트를 올리게 된다.
  *
  * 싣다가 고친 세트(글 한도에 맞춰 줄인 판, 중복 덱 id를 고친 판)는 `updatedAt`을 그대로 두고 저장
- * 줄로 다시 써서, 실패하면 경고를 올린다. 시각을 올리면 줄인 판이 다른 기기의 온전한 판을 이긴다.
- * 고친 그 객체가 메모리에 그대로 있는 동안에는 저장본이 읽은 판 그대로일 때만 쓰고
- * (`savePresentationIfUnchanged`), 그사이 다른 탭(이전 버전의 탭 포함)이 고쳐 썼으면 덮지 않고
- * 그 저장본을 다시 싣는다. 그 전에 고친 세트는 고친 판을 그대로 저장한다. 다른 계정의 저장본은
- * 싣지 않으므로 다시 쓰지도 않는다.
+ * 줄로 다시 써서, 실패하면 경고를 올리고 백오프 뒤에 다시 쓴다. 시각을 올리면 줄인 판이 다른 기기의
+ * 온전한 판을 이긴다. 고친 그 객체가 메모리에 그대로 있는 동안에는 다시 쓸 때도 저장본이 읽은 판
+ * 그대로일 때만 쓰고(`savePresentationIfUnchanged`), 그사이 다른 탭(이전 버전의 탭 포함)이 고쳐
+ * 썼으면 덮지 않고 그 저장본을 다시 싣는다. 그 전에 고친 세트는 고친 판을 그대로 저장한다. 다른
+ * 계정의 저장본은 싣지 않으므로 다시 쓰지도 않는다.
  *
  * 읽으면서 보관본에서 되살린 프레젠테이션(`loadAllPresentations`의 `restoredIds`)은 싣고 나서 다른
  * 탭에 알린다. 되살리기는 저장 줄 밖의 쓰기라, 알리지 않으면 다른 탭이 되살리기 전 판을 메모리에 든
@@ -279,9 +319,14 @@ export async function flushPendingWrites(): Promise<void> {
  * 이 탭이 실은 프레젠테이션만 알린다.
  *
  * 읽지 못하면 메모리를 비우고 저장을 끈다. 앞 계정의 세트가 남으면 다음 병합이 그 세트를 새
- * 계정에 올리고, 저장을 켜 두면 읽지 못한 저장본을 병합 결과로 덮는다.
+ * 계정에 올리고, 저장을 켜 두면 읽지 못한 저장본을 병합 결과로 덮는다. 그 경고는 다시 불러올 때까지
+ * 남긴다. 다른 저장소가 저장했다고 지우면 세트를 저장하지 않는 동안에도 저장된 줄 알게 된다.
+ *
+ * 싣기 전에 앞서 실패한 쓰기의 다시 시도와 그 경고를 버린다. 메모리를 저장본으로 새로 채우므로
+ * 다시 쓸 사본이 남지 않는다.
  */
 export async function hydrateFromStorage(): Promise<void> {
+  writeRetry.reset();
   persistenceEnabled = false;
   skippedReloads.clear();
   repairedVersions.clear();
@@ -311,7 +356,7 @@ export async function hydrateFromStorage(): Promise<void> {
     );
 
     persistenceEnabled = true;
-    clearPersistenceError();
+    clearPersistenceError("presentation:hydrate");
 
     for (const id of new Set([...repairedIds, ...fittedIds])) {
       const doc = state.byId[id];
@@ -325,7 +370,7 @@ export async function hydrateFromStorage(): Promise<void> {
     replaceAll([]);
     clearHistory();
     notifyListeners();
-    reportPersistenceError(err);
+    reportPersistenceError(err, "presentation:hydrate");
   }
 }
 
@@ -348,29 +393,35 @@ function isVisibleTo(doc: Presentation, userId: string | null): boolean {
   );
 }
 
-/** 메모리 상태 제거는 호출자 책임이다. 지운 뒤 다른 탭에 알린다. */
+/**
+ * 메모리 상태 제거는 호출자 책임이다. 지운 뒤 다른 탭에 알린다. 지우지 못하면 경고를 올리고 백오프
+ * 뒤에 다시 지운다. 그사이 그 세트가 메모리에 다시 생기면 지우지 않고 그 세트를 저장한다.
+ */
 export async function removePersistedPresentation(id: string): Promise<void> {
   try {
     await deletePresentation(id);
+    writeRetry.succeeded(id);
     announceStorageChange("presentations", [id]);
   } catch (err) {
-    reportPersistenceError(err);
+    writeRetry.failed(id, "delete", err);
   }
 }
 
 /**
  * 공유받은 사본의 저장본을 지운다. 같은 자리에 소유자 자신의 저장본이 있으면 남긴다
  * (`deleteSharedPresentation`). 한 브라우저를 함께 쓰는 소유자의 저장본을 공유받은 사람의 공유
- * 해제·부팅 병합이 지우면 안 된다. 메모리 상태 제거는 호출자 책임이다.
+ * 해제·부팅 병합이 지우면 안 된다. 지우지 못해 다시 지울 때도 이 규칙을 따른다. 메모리 상태 제거는
+ * 호출자 책임이다.
  */
 export async function removePersistedSharedPresentation(
   id: string,
 ): Promise<void> {
   try {
     await deleteSharedPresentation(id);
+    writeRetry.succeeded(id);
     announceStorageChange("presentations", [id]);
   } catch (err) {
-    reportPersistenceError(err);
+    writeRetry.failed(id, "deleteShared", err);
   }
 }
 
@@ -381,6 +432,7 @@ function removePersisted(doc: Presentation): Promise<void> {
 }
 
 function resetPersistenceForTests(): void {
+  writeRetry.reset();
   persistenceEnabled = false;
   pendingIds = new Set();
   writingIds.clear();
@@ -513,8 +565,7 @@ function reindexOrder<T extends { order: number }>(list: readonly T[]): T[] {
 }
 
 function writeActiveItems(items: PresentationItem[]): void {
-  writeActive({ ...readActive(), items });
-  emitChange();
+  if (writeActive({ ...readActive(), items })) emitChange();
 }
 
 function readSongSlides(songIndex: number): Slide[] | undefined {
@@ -656,8 +707,7 @@ export function updatePresentationTitle(title: string): void {
   const next = clampText(title.trim(), MAX_PRESENTATION_TITLE_LENGTH);
   if (!next || next === readActive().title) return;
   pushHistory();
-  writeActive({ ...readActive(), title: next });
-  emitChange();
+  if (writeActive({ ...readActive(), title: next })) emitChange();
 }
 
 interface HistoryOptions {
@@ -789,7 +839,7 @@ export function removeSlides(
   slideIndexes: readonly number[],
 ): boolean {
   const slides = readSongSlides(songIndex);
-  if (!slides) return false;
+  if (!slides || !canEditPresentation(readActive())) return false;
   const targets = new Set(
     slideIndexes.filter((index) => index >= 0 && index < slides.length),
   );
@@ -889,7 +939,7 @@ export function splitSlideAtCursor(
 ): boolean {
   const slides = readSongSlides(songIndex);
   const target = slides?.[slideIndex];
-  if (!slides || !target) return false;
+  if (!slides || !target || !canEditPresentation(readActive())) return false;
 
   const parts = splitLinesAtCursor(target.lines, offset);
   if (!parts) return false;
@@ -918,7 +968,9 @@ export function mergeSlideWithNext(
   const slides = readSongSlides(songIndex);
   const target = slides?.[slideIndex];
   const following = slides?.[slideIndex + 1];
-  if (!slides || !target || !following) return false;
+  if (!slides || !target || !following || !canEditPresentation(readActive())) {
+    return false;
+  }
 
   const lines = mergeSlideLines(target.lines, following.lines);
   if (!lines) return false;

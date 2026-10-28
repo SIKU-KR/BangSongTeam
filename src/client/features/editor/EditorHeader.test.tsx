@@ -21,7 +21,7 @@ import {
   setSyncStatus,
 } from "../../lib/sync/syncStatus";
 import {
-  clearPersistenceError,
+  __resetPersistenceStatusForTests,
   reportPersistenceError,
 } from "../../lib/storage/persistenceStatus";
 
@@ -288,7 +288,7 @@ describe("EditorHeader", () => {
   describe("동기화 상태", () => {
     beforeEach(() => {
       resetSyncStatus();
-      clearPersistenceError();
+      __resetPersistenceStatusForTests();
       syncRecovery.retrySyncNow.mockClear();
     });
 
@@ -296,7 +296,7 @@ describe("EditorHeader", () => {
       cleanup();
       vi.useRealTimers();
       resetSyncStatus();
-      clearPersistenceError();
+      __resetPersistenceStatusForTests();
     });
 
     it("아직 동기화하지 않았으면 툴팁에 그 사실을 보여 준다", async () => {
@@ -540,15 +540,53 @@ describe("EditorHeader", () => {
       ).not.toBeInTheDocument();
     });
 
-    it("기기 저장이 실패했으면 동기화 다시 시도를 보여 주지 않는다", () => {
+    it("곡 보관함만 저장하지 못하면 동기화 상태와 다시 시도를 그대로 보여 준다", () => {
+      setSyncStatus("presentation", "error");
+      reportPersistenceError(new Error("disk"), "deck:hydrate");
+      renderHeader();
+
+      expect(screen.getByTestId("save-status")).toHaveTextContent(
+        EDITOR_COPY.syncStatus.syncFailed,
+      );
+      expect(screen.getByTestId("save-status-retry")).toBeInTheDocument();
+    });
+
+    it("세트를 저장하지 못해도 동기화가 멈췄으면 다시 시도를 보여 준다", () => {
       setSyncStatus("presentation", "offline");
-      reportPersistenceError(new Error("disk"));
+      reportPersistenceError(new Error("disk"), "presentation");
       renderHeader();
 
       expect(screen.getByTestId("save-status")).toHaveTextContent(
         EDITOR_COPY.syncStatus.saveFailed,
       );
-      expect(screen.queryByTestId("save-status-retry")).not.toBeInTheDocument();
+      fireEvent.click(screen.getByTestId("save-status-retry"));
+      expect(syncRecovery.retrySyncNow).toHaveBeenCalledOnce();
+    });
+
+    it("세트를 저장하지 못한 채 동기화도 실패하면 실패한 항목과 문의 코드를 보여 준다", async () => {
+      recordSyncFailure({
+        id: "doc",
+        title: "주일 1부",
+        kind: "presentation",
+        message: "거절",
+        failedAt: 1,
+        requestId: "0af7651916cd43dd8448eb211c80319c",
+      });
+      reportPersistenceError(new Error("disk"), "presentation:hydrate");
+      renderHeader();
+
+      expect(screen.getByTestId("save-status")).toHaveTextContent(
+        EDITOR_COPY.syncStatus.saveFailed,
+      );
+      fireEvent.click(screen.getByTestId("save-status"));
+
+      expect(
+        await screen.findByTestId("save-status-failure"),
+      ).toHaveTextContent(EDITOR_COPY.syncStatus.failedItem("주일 1부"));
+      expect(screen.getByTestId("save-status-failure-code")).toHaveTextContent(
+        EDITOR_COPY.syncStatus.failureCode("0af76519"),
+      );
+      expect(screen.getByTestId("save-status-retry")).toBeInTheDocument();
     });
   });
 });

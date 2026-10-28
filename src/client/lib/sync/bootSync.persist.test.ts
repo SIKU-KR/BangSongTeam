@@ -16,7 +16,6 @@ import {
   SEED_USER_ID,
 } from "../../test/presentationFixture";
 import {
-  clearPersistenceError,
   loadAllPresentations,
   loadAllSongs,
   savePresentation,
@@ -24,7 +23,10 @@ import {
   saveSong,
 } from "../storage";
 import { closeOfflineDB, OFFLINE_DB_NAME } from "../storage/db";
-import { getPersistenceError } from "../storage/persistenceStatus";
+import {
+  __resetPersistenceStatusForTests,
+  getPersistenceError,
+} from "../storage/persistenceStatus";
 import {
   flushPendingWrites,
   getPresentationById,
@@ -175,7 +177,7 @@ describe("runBootSync — 병합 결과 저장", () => {
     resetFolderStore();
     await resetSongLibraryStore();
     resetSyncStatus();
-    clearPersistenceError();
+    __resetPersistenceStatusForTests();
     __resetBootSyncForTests();
     __resetDeckSyncForTests();
     __resetSyncSchedulerForTests();
