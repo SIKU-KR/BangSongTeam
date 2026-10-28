@@ -59,3 +59,6 @@ node scripts/seedSelected.mjs --dir=data/cleaned/hymns --target=local
 # 핵심 워십 1,202곡 전체 주입
 node scripts/seedSelected.mjs --dir=data/cleaned/worship --target=local
 ```
+
+### 이미 넣은 곡 고치기
+`cleaned/*.json`에서 운영에 이미 넣은 곡의 제목이나 가사를 고치면 옛 값과 고친 값을 `data/officialLibraryFixes.json`에도 적습니다. 시드는 이 목록으로 옛 제목의 곡을 고친 곡과 같은 곡으로 보고 다시 넣지 않으며, 운영에 들어간 곡은 `node scripts/fixLibraryText.mjs`로 제자리에서 고칩니다.

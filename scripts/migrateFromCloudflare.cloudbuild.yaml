@@ -6,14 +6,21 @@
 # 만든다 (Access Key ID = 토큰 id, Secret = 토큰 값의 SHA-256).
 # https://developers.cloudflare.com/r2/api/tokens/#get-s3-api-credentials-from-an-api-token
 #
-# 기본은 미리보기(_APPLY=false)로 복사할 객체와 옮길 문서 수만 보여 준다.
+# 기본은 미리보기로 복사할 객체와 옮길 문서 수만 보여 준다. 실제로 쓰는 단계는 따로 켠다:
+#   _APPLY_MEDIA=true         R2 객체를 버킷에 복사한다. 이미 있는 객체는 건너뛰므로 실패한
+#                             복사를 이어서 하려고 이것만 다시 켜도 된다.
+#   _APPLY_FIRESTORE=true     D1 행을 운영 Firestore에 쓴다. 대상에 사용자가 이미 있으면 새 서비스의
+#                             쓰기를 D1의 옛 값으로 덮어쓰게 되므로 쓰지 않고 멈춘다.
+#   _OVERWRITE_EXISTING=true  롤백한 뒤 다시 옮기거나 멈춘 이전을 이어 갈 때만 켠다.
 #   git archive --format=tar.gz -o /tmp/src.tgz HEAD
 #   gcloud builds submit /tmp/src.tgz --config=scripts/migrateFromCloudflare.cloudbuild.yaml
 #   gcloud builds submit /tmp/src.tgz --config=scripts/migrateFromCloudflare.cloudbuild.yaml \
-#     --substitutions=_APPLY=true
+#     --substitutions=_APPLY_MEDIA=true,_APPLY_FIRESTORE=true
 
 substitutions:
-  _APPLY: "false"
+  _APPLY_MEDIA: "false"
+  _APPLY_FIRESTORE: "false"
+  _OVERWRITE_EXISTING: "false"
   _CF_ACCOUNT_ID: a74e29b2c6cac2b0bbef65ea746e27c6
   _D1_DATABASE_ID: 5a48a9a7-6b5a-4914-89ac-1b7da45e8d4b
   _R2_BUCKET: bangsongteam-media
@@ -46,7 +53,7 @@ steps:
       export RCLONE_CONFIG_R2_ACCESS_KEY_ID="$token_id"
       export RCLONE_CONFIG_R2_SECRET_ACCESS_KEY=$(printf '%s' "$CLOUDFLARE_API_TOKEN" | sha256sum | cut -d' ' -f1)
       rclone size "r2:${_R2_BUCKET}"
-      if [ "${_APPLY}" = true ]; then
+      if [ "${_APPLY_MEDIA}" = true ]; then
         rclone copy "r2:${_R2_BUCKET}" "gcs:${_MEDIA_BUCKET}" --transfers=8 --stats=30s --stats-one-line
         rclone check "r2:${_R2_BUCKET}" "gcs:${_MEDIA_BUCKET}" --one-way
       else
@@ -65,8 +72,10 @@ steps:
       set -eu
       corepack enable
       pnpm install --frozen-lockfile --reporter=silent
-      if [ "${_APPLY}" = true ]; then mode=--confirm; else mode=--dry-run; fi
-      node scripts/migrateFromCloudflare.mjs --d1=${_D1_DATABASE_ID} --target=remote "$mode"
+      flags=--dry-run
+      if [ "${_APPLY_FIRESTORE}" = true ]; then flags=--confirm; fi
+      if [ "${_OVERWRITE_EXISTING}" = true ]; then flags="$flags --overwrite-existing"; fi
+      node scripts/migrateFromCloudflare.mjs --d1=${_D1_DATABASE_ID} --target=remote $flags
 
 timeout: 3600s
 options:

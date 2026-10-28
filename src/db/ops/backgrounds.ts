@@ -85,11 +85,17 @@ export async function countDecksByBackground(
   return new Map(counts.filter(([, count]) => count > 0));
 }
 
-/** 배경을 지운다. 쓰던 곡은 같은 트랜잭션에서 '배경 없음'이 된다 */
-export async function deleteBackground(db: Db, id: string): Promise<void> {
-  await db.runTransaction(async (tx) => {
+/**
+ * 배경을 지운다. 쓰던 곡은 같은 트랜잭션에서 '배경 없음'이 되고, 그렇게 바꾼 곡 id를 돌려준다.
+ *
+ * 같은 id로 다시 등록해도 곡은 배경을 되찾지 않는다. 실수로 지웠을 때 어느 곡을 되돌려야 하는지
+ * 알 수 있게 부르는 쪽이 돌려받은 id를 남긴다(`scripts/importBackgrounds.mjs`).
+ */
+export async function deleteBackground(db: Db, id: string): Promise<string[]> {
+  return db.runTransaction(async (tx) => {
     const users = await tx.get(decksCol(db).where("backgroundId", "==", id));
     for (const deck of users.docs) tx.update(deck.ref, { backgroundId: null });
     tx.delete(backgroundsCol(db).doc(id));
+    return users.docs.map((deck) => deck.id);
   });
 }

@@ -1,8 +1,11 @@
+import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
+import path from "node:path";
 import type { Transaction, WriteBatch } from "@google-cloud/firestore";
 import { createFirestore, type Db } from "../client";
 import {
   backgroundsCol,
+  COLLECTIONS,
   decksCol,
   foldersCol,
   presentationMembersCol,
@@ -35,6 +38,48 @@ export function createTestDb(): Db {
   return db;
 }
 
+/** 따로 띄운 운영 스크립트의 종료 코드와 출력 */
+export interface ScriptRun {
+  code: number | null;
+  stdout: string;
+  stderr: string;
+}
+
+const ROOT_DIR = path.resolve(import.meta.dirname, "..", "..", "..");
+
+/**
+ * `scripts/<name>`을 새 Node 프로세스로 돌린다. `createTestDb`로 만든 `db`의 프로젝트 id를 넘겨,
+ * 스크립트가 기본 대상(local)으로 이 테스트와 같은 에뮬레이터·프로젝트에 붙는다.
+ */
+export function spawnScript(
+  db: Db,
+  name: string,
+  args: string[],
+): Promise<ScriptRun> {
+  const projectId = projectIds.get(db);
+  if (!projectId) throw new Error("spawnScript needs a db from createTestDb");
+  return new Promise((resolve, reject) => {
+    const child = spawn(
+      process.execPath,
+      [path.join(ROOT_DIR, "scripts", name), ...args],
+      {
+        cwd: ROOT_DIR,
+        env: { ...process.env, GOOGLE_CLOUD_PROJECT: projectId },
+      },
+    );
+    let stdout = "";
+    let stderr = "";
+    child.stdout.on("data", (chunk: Buffer) => {
+      stdout += chunk.toString();
+    });
+    child.stderr.on("data", (chunk: Buffer) => {
+      stderr += chunk.toString();
+    });
+    child.on("error", reject);
+    child.on("close", (code) => resolve({ code, stdout, stderr }));
+  });
+}
+
 /** 테스트 Firestore의 모든 문서를 지운다 (에뮬레이터 전용 API) */
 export async function clearDb(db: Db): Promise<void> {
   const host = process.env.FIRESTORE_EMULATOR_HOST;
@@ -58,6 +103,22 @@ export function userDoc(row: Pick<UserDoc, "id"> & Partial<UserDoc>): UserDoc {
     updatedAt: EPOCH,
     ...row,
   };
+}
+
+/**
+ * 사용자에게 연결된 로그인(Better Auth `accounts`) 하나. 소셜 계정이면 비밀번호는 `null`이고,
+ * 문서 id와 프로바이더 계정 id는 `<사용자 id>-<프로바이더>`다.
+ */
+export async function seedAccount(
+  db: Db,
+  userId: string,
+  providerId: string,
+): Promise<void> {
+  const id = `${userId}-${providerId}`;
+  await db
+    .collection(COLLECTIONS.accounts)
+    .doc(id)
+    .set({ id, accountId: id, providerId, userId, password: null });
 }
 
 /** `now`가 든 날(한국 시간)에 하루 한도를 `counts`만큼 이미 쓴 사용자 (`queries/limits.ts`) */

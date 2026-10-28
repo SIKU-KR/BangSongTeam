@@ -8,15 +8,12 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { decodeHtmlEntities, sanitizeFilename } from "./lib/songText.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT_DIR = path.resolve(__dirname, "..");
 const HYMNS_DIR = path.join(ROOT_DIR, "data", "extracted", "hymns");
 const HYMNS_JSON = path.join(ROOT_DIR, "data", "extracted", "hymns.json");
-
-function sanitizeFilename(name) {
-  return name.replace(/[\\/:*?"<>|]/g, "_").trim();
-}
 
 async function fetchHymn(num) {
   const url = `http://www.holybible.or.kr/NHYMN/cgi/hymnftxt.php?VR=NHYMN&DN=${num}`;
@@ -37,7 +34,7 @@ async function fetchHymn(num) {
   }
 
   const hymnNo = parseInt(titleMatch[1], 10);
-  const title = titleMatch[2].trim();
+  const title = decodeHtmlEntities(titleMatch[2]).trim();
   const oldHymn = titleMatch[3] ? titleMatch[3].trim() : "";
 
   // 가사 절/후렴 행 추출
@@ -51,14 +48,12 @@ async function fetchHymn(num) {
   const rawSectionsText = [];
 
   for (const r of rows) {
-    let label = r[1]
-      .replace(/<[^>]+>/g, "")
-      .replace(/&nbsp;?/g, " ")
-      .trim();
-    const text = r[2]
-      .replace(/<[^>]+>/g, "")
-      .replace(/&nbsp;?/g, " ")
-      .trim();
+    let label = decodeHtmlEntities(
+      r[1].replace(/<[^>]+>/g, "").replace(/&nbsp;?/g, " "),
+    ).trim();
+    const text = decodeHtmlEntities(
+      r[2].replace(/<[^>]+>/g, "").replace(/&nbsp;?/g, " "),
+    ).trim();
 
     if (label.endsWith(".")) {
       label = `[${label.slice(0, -1)}절]`;

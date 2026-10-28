@@ -14,6 +14,8 @@
  *   --dry-run       Firestore에 쓰지 않고 넣을 곡 수만 셉니다.
  *
  * 봇 계정에 같은 제목·아티스트 곡이 이미 있으면 건너뛰므로 여러 번 돌려도 겹치지 않는다.
+ * 제목은 고칠 목록(`data/officialLibraryFixes.json`)의 고친 제목으로 견주고 넣으므로, 원본에서 고친
+ * 곡을 `fixLibraryText.mjs`보다 먼저 시드해도 운영에 남은 옛 제목의 곡과 겹치지 않는다.
  * 슬라이드 나누기와 기본 스타일은 앱과 같은 `#shared` 규칙을 쓴다.
  * 제목·아티스트는 개발용 시드(`devSeed.ts`)처럼 곡 스키마 한도(100자)로 줄여 넣는다. 원본에는
  * 100자를 넘는 메들리 제목이 있다. 이미 들어간 곡과도 줄인 값끼리 비교해, 예전에 줄이지 않고
@@ -26,12 +28,14 @@ import { nanoid } from "nanoid";
 import {
   ROOT_DIR,
   assertEmulatorUp,
+  describeTarget,
   importSource,
   parseFlags,
   applyTarget,
 } from "./lib/targets.mjs";
 
 const SELECTED_DIR = path.join(ROOT_DIR, "data", "cleaned", "selected");
+const FIXES_JSON = path.join(ROOT_DIR, "data", "officialLibraryFixes.json");
 
 /**
  * 텍스트 파일 파싱 (헤더 메타데이터 또는 파일명에서 곡 정보 추출)
@@ -153,43 +157,55 @@ async function main() {
 
   applyTarget(target);
   await assertEmulatorUp();
-  const [shared, client, collections, deckIndex] = await Promise.all([
-    importSource("src/shared/index.ts"),
-    importSource("src/db/client.ts"),
-    importSource("src/db/collections.ts"),
-    importSource("src/db/deckIndex.ts"),
-  ]);
+  const [shared, client, collections, deckIndex, libraryFixes] =
+    await Promise.all([
+      importSource("src/shared/index.ts"),
+      importSource("src/db/client.ts"),
+      importSource("src/db/collections.ts"),
+      importSource("src/db/deckIndex.ts"),
+      importSource("src/db/ops/libraryTextFixes.ts"),
+    ]);
   const db = client.getFirestore();
   const decks = collections.decksCol(db);
   const botId = shared.OFFICIAL_LIBRARY_USER_ID;
+  const correctTitle = libraryFixes.libraryTitleCorrector(
+    libraryFixes.parseLibraryTextFixes(
+      JSON.parse(await fs.readFile(FIXES_JSON, "utf-8")),
+    ),
+  );
 
   console.log(`=== 시드 시작 ===`);
   console.log(`- 원본: ${source}`);
   console.log(`- 처리할 곡: ${songs.length}개`);
-  console.log(
-    `- 대상: ${target === "remote" ? "운영 Firestore" : "로컬 에뮬레이터"}`,
-  );
+  console.log(`- 대상: ${describeTarget(target)}`);
 
-  const fitTitle = (title) =>
-    shared.clampText(title, shared.MAX_DECK_TITLE_LENGTH) || "제목 없음";
   const fitArtist = (artist) =>
-    shared.clampText(artist, shared.MAX_DECK_ARTIST_LENGTH);
+    shared.clampText(artist ?? "", shared.MAX_DECK_ARTIST_LENGTH);
+  const fitTitle = (title, artist) =>
+    shared.clampText(
+      correctTitle(title, artist ?? ""),
+      shared.MAX_DECK_TITLE_LENGTH,
+    ) || "제목 없음";
   const songKey = (title, artist) =>
-    `${fitTitle(title)}\u0000${fitArtist(artist ?? "")}`;
+    `${fitTitle(title, artist)}\u0000${fitArtist(artist)}`;
 
   const existing = await decks
     .where("userId", "==", botId)
     .where("presentationId", "==", null)
     .get();
+  const official = existing.docs.map((doc) => doc.data());
   const seen = new Set(
-    existing.docs.map((doc) => songKey(doc.data().title, doc.data().artist)),
+    official.map(({ title, artist }) => songKey(title, artist)),
   );
+  const stale = official.filter(
+    ({ title, artist }) => correctTitle(title, artist) !== title,
+  ).length;
 
   const now = new Date();
   const rows = [];
   for (const song of songs) {
     const { label, lyricsRaw } = song;
-    const title = fitTitle(song.title);
+    const title = fitTitle(song.title, song.artist);
     const artist = fitArtist(song.artist);
     if (!lyricsRaw || lyricsRaw.length < 5) {
       console.warn(`[건너뜀] 가사 내용 부족: ${label}`);
@@ -224,6 +240,11 @@ async function main() {
   }
 
   console.log(`\n새로 넣을 곡: ${rows.length}개 (이미 있는 곡 제외)`);
+  if (stale > 0) {
+    console.log(
+      `공식 곡 ${stale}개가 아직 고치기 전 제목입니다. 고친 제목으로 들어온 곡은 이 곡들과 같은 곡으로 보고 넣지 않으니, scripts/fixLibraryText.mjs로 제목을 고쳐 주세요.`,
+    );
+  }
   if (dryRun) {
     console.log(`--dry-run 모드이므로 Firestore에 쓰지 않습니다.`);
     return;

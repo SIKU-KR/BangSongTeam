@@ -13,12 +13,17 @@
  *   "lyrics": "가사 본문 (개행 문자 \\n)"
  * }
  *
+ * 워십 곡 제목·아티스트는 수집한 원본(`data/extracted/worship.json`)에서 읽는다. 파일 이름은
+ * `:`·`/`·`?` 같은 글자를 `_`로 바꾼 것이라(`John 1_12`) 원래 제목을 되살릴 수 없다. 원본이 없거나
+ * 그 곡이 원본에 없으면 파일 이름에서 읽는다. HTML 엔티티는 어느 쪽이든 글자로 푼다.
+ *
  * 실행: node scripts/buildFixedJson.mjs
  */
 
 import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { decodeHtmlEntities, worshipFileName } from "./lib/songText.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT_DIR = path.resolve(__dirname, "..");
@@ -30,12 +35,40 @@ const WORSHIP_DIR = path.join(CLEANED_DIR, "worship");
 const OUTPUT_HYMNS_JSON = path.join(CLEANED_DIR, "hymns.json");
 const OUTPUT_WORSHIP_JSON = path.join(CLEANED_DIR, "worship.json");
 const OUTPUT_SONGS_JSON = path.join(CLEANED_DIR, "songs.json");
+const EXTRACTED_WORSHIP_JSON = path.join(
+  ROOT_DIR,
+  "data",
+  "extracted",
+  "worship.json",
+);
 
 /**
  * 텍스트 파일 가사 정규화 (CRLF -> LF, 앞뒤 공백 제거)
  */
 function normalizeLyrics(text) {
-  return text.replace(/\r\n/g, "\n").replace(/\r/g, "\n").trim();
+  return decodeHtmlEntities(
+    text.replace(/\r\n/g, "\n").replace(/\r/g, "\n"),
+  ).trim();
+}
+
+/** 수집한 원본의 곡을 가사 파일 이름으로 찾는 표. 원본이 없으면 비어 있다 */
+async function loadExtractedWorship() {
+  let songs;
+  try {
+    songs = JSON.parse(await fs.readFile(EXTRACTED_WORSHIP_JSON, "utf-8"));
+  } catch (error) {
+    if (error.code === "ENOENT") return new Map();
+    throw error;
+  }
+  return new Map(
+    songs.map((song) => [
+      worshipFileName(song),
+      {
+        title: decodeHtmlEntities(song.title).trim(),
+        artist: decodeHtmlEntities(song.artist).trim(),
+      },
+    ]),
+  );
 }
 
 async function buildHymnsJson() {
@@ -73,6 +106,7 @@ async function buildHymnsJson() {
 async function buildWorshipJson() {
   const files = await fs.readdir(WORSHIP_DIR);
   const txtFiles = files.filter((f) => f.endsWith(".txt"));
+  const extracted = await loadExtractedWorship();
 
   const worshipList = [];
 
@@ -80,8 +114,9 @@ async function buildWorshipJson() {
     const match = file.match(/^\[(.*?)\]\s*(.+)\.txt$/);
     if (!match) continue;
 
-    const artist = match[1].trim();
-    const title = match[2].trim();
+    const original = extracted.get(file);
+    const artist = original?.artist ?? decodeHtmlEntities(match[1]).trim();
+    const title = original?.title ?? decodeHtmlEntities(match[2]).trim();
 
     const content = await fs.readFile(path.join(WORSHIP_DIR, file), "utf-8");
     const lyrics = normalizeLyrics(content);

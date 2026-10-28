@@ -89,7 +89,7 @@ describe("배경 운영 작업", () => {
       new Map([[SERVICE, 1]]),
     );
 
-    await deleteBackground(db, SERVICE);
+    expect(await deleteBackground(db, SERVICE)).toEqual([DECK]);
 
     expect(
       (await decksCol(db).doc(DECK).get()).data()?.backgroundId,
