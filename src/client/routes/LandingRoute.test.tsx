@@ -31,6 +31,12 @@ describe("LandingRoute", () => {
     expect(screen.getByText(APP_TAGLINE)).toBeInTheDocument();
   });
 
+  it("화면 높이를 동적 뷰포트 단위로 채워, 모바일 브라우저 툴바 밑으로 가운데가 밀리지 않는다", () => {
+    renderLanding();
+
+    expect(screen.getByTestId("landing-route")).toHaveClass("h-dvh");
+  });
+
   it("진입 버튼은 /presentations 로 이동한다", () => {
     renderLanding();
 

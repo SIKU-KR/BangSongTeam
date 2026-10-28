@@ -40,7 +40,7 @@ export function LandingRoute(): React.JSX.Element | null {
   return (
     <div
       data-testid="landing-route"
-      className="flex h-screen w-full flex-col items-center justify-center gap-4 bg-background"
+      className="flex h-dvh w-full flex-col items-center justify-center gap-4 bg-background"
     >
       <h1 className="text-3xl font-extrabold tracking-tight sm:text-4xl">
         {APP_NAME}

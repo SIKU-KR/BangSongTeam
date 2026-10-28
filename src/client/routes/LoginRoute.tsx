@@ -109,7 +109,7 @@ export function LoginRoute({
     : providers;
 
   return (
-    <div className="flex min-h-screen flex-col bg-muted/40">
+    <div className="flex min-h-dvh flex-col bg-muted/40">
       <StorageWarningBanner />
       <div className="flex flex-1 items-center justify-center px-4">
         <Card className="w-full max-w-sm">

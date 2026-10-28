@@ -283,6 +283,15 @@ describe("App Route Integration", () => {
     expect(screen.getByTestId("app-hydrating")).toHaveClass("bg-background");
   });
 
+  it.each(["/presentations", `/present/${DOC_ID}/fullscreen`])(
+    "%s의 부팅 화면은 동적 뷰포트 단위로 화면을 채워 모바일 툴바에 가리지 않는다",
+    (path) => {
+      renderAt(path);
+
+      expect(screen.getByTestId("app-hydrating")).toHaveClass("min-h-dvh");
+    },
+  );
+
   it("송출 중 세션이 끊겨도 송출 화면을 그대로 두고, 송출을 마치면 로그인 화면으로 간다", async () => {
     renderAt(`/present/${DOC_ID}/fullscreen`);
     const route = await screen.findByTestId("fullscreen-present-route");

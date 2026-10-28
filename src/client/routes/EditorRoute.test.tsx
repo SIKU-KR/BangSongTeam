@@ -1200,6 +1200,16 @@ describe("EditorRoute (PowerPoint식 프레젠테이션 편집기)", () => {
     expect(screen.getByText("수요 성령기도회")).toBeInTheDocument();
   });
 
+  it("화면 높이를 동적 뷰포트 단위로 채워, 모바일 브라우저 툴바 밑으로 아래쪽이 숨지 않는다", () => {
+    renderEditor();
+
+    expect(screen.getByTestId("editor-route")).toHaveClass(
+      "h-dvh",
+      "w-screen",
+      "overflow-hidden",
+    );
+  });
+
   it("?song= 파라미터로 진입하면 해당 곡이 선택된다", () => {
     renderEditor(`/editor/${DOC_ID}?song=2`);
 

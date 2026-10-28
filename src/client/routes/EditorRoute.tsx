@@ -438,7 +438,7 @@ function EditorScreen({
   return (
     <div
       data-testid="editor-route"
-      className="flex h-screen w-screen flex-col overflow-hidden bg-muted/40 select-none"
+      className="flex h-dvh w-screen flex-col overflow-hidden bg-muted/40 select-none"
     >
       <StorageWarningBanner />
 
