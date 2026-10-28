@@ -1,3 +1,5 @@
+import { MAX_FOLDERS_PER_USER } from "../schemas/folder";
+
 /**
  * API 서버가 `{ error }`로 돌려주는 문장. 클라이언트는 이 문장을 그대로 토스트에
  * 띄운다(`describeApiError`).
@@ -50,6 +52,7 @@ export const API_ERRORS = {
     notAccessible: "이 폴더를 열 수 없어요",
     saveFailed: "폴더를 저장하지 못했어요",
     deleted: "이미 영구 삭제한 폴더예요. 새로고침해 주세요",
+    limitReached: `폴더는 ${MAX_FOLDERS_PER_USER.toLocaleString("ko-KR")}개까지 만들 수 있어요. 필요 없는 폴더를 영구 삭제한 뒤 다시 시도해 주세요`,
   },
   presentation: {
     notAccessible: "이 프레젠테이션을 열 수 없어요",

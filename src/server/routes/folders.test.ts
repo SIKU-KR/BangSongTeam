@@ -11,6 +11,7 @@ import { env } from "../test/env";
 import {
   API_ERRORS,
   DEFAULT_DECK_STYLE,
+  MAX_FOLDERS_PER_USER,
   PresentationDocumentSchema,
   type Folder,
   type FolderDeleteRequest,
@@ -18,6 +19,7 @@ import {
 } from "#shared";
 import {
   clearDb,
+  folderDoc,
   instrumentTransactions,
   presentationDoc,
   presentationsWithCopies,
@@ -288,6 +290,47 @@ describe("드라이브 폴더 API", () => {
       expect.objectContaining({
         severity: "INFO",
         folderId: folder.id,
+        route: "/api/folders/:id",
+      }),
+    ]);
+  });
+
+  it("폴더가 상한만큼 있으면 새 폴더 저장은 403이고, 있는 폴더는 계속 고칠 수 있다", async () => {
+    const seeded = Array.from({ length: MAX_FOLDERS_PER_USER }, () =>
+      folderDoc({ id: nextId(), userId: USER_A }),
+    );
+    await seedDocs(env.DB, { folders: seeded });
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    const rootFolder = makeFolder();
+    const nestedFolder = makeFolder({ parentId: seeded[0].id });
+
+    const refused = [
+      await putFolder(rootFolder),
+      await putFolder(nestedFolder),
+    ];
+
+    for (const res of refused) {
+      expect(res.status).toBe(403);
+      expect(await res.json()).toEqual({
+        error: API_ERRORS.folder.limitReached,
+      });
+    }
+    expect(await listFolders()).toHaveLength(MAX_FOLDERS_PER_USER);
+    const renamed = makeFolder({
+      id: seeded[0].id,
+      name: "새 이름",
+      updatedAt: "2026-09-25T00:00:00.000Z",
+    });
+    expect((await putFolder(renamed)).status).toBe(200);
+    expect(eventLines(log, "folder_save_limit_reached")).toEqual([
+      expect.objectContaining({
+        severity: "INFO",
+        folderId: rootFolder.id,
+        route: "/api/folders/:id",
+      }),
+      expect.objectContaining({
+        severity: "INFO",
+        folderId: nestedFolder.id,
         route: "/api/folders/:id",
       }),
     ]);

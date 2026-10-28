@@ -5,6 +5,15 @@ import { IdSchema } from "./id";
 export const MAX_FOLDER_NAME_LENGTH = 100;
 
 /**
+ * 한 사용자가 가질 수 있는 폴더 수(휴지통에 있는 폴더 포함, 영구 삭제하면 줄어든다).
+ *
+ * 하위 폴더를 저장하거나 휴지통을 비울 때마다 서버가 그 사용자의 폴더를 모두 읽고, 폴더 목록 응답도
+ * 폴더 수만큼 커진다. 한 계정이 폴더를 끝없이 만들어 이 읽기 비용을 키우지 못하게 새 폴더를 만들 때만
+ * 막는다(`upsertFolder`). 이미 있는 폴더는 상한을 넘었어도 계속 고칠 수 있다.
+ */
+export const MAX_FOLDERS_PER_USER = 1000;
+
+/**
  * 드라이브 폴더 (홈 `/presentations`).
  *
  * 실제 파일시스템처럼 `parentId`로 중첩된다. `null`이면 '내 드라이브' 루트다.
