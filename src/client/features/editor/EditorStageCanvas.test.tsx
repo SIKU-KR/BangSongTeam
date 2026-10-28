@@ -1,8 +1,9 @@
 import React from "react";
-import { describe, it, expect, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { describe, it, expect, vi, afterEach } from "vitest";
+import { act, render, screen } from "@testing-library/react";
 import { compile } from "tailwindcss";
 import { DEFAULT_DECK_STYLE, type Slide } from "#shared";
+import { installFakeResizeObserver } from "../../test/fakeResizeObserver";
 import { EditorStageCanvas } from "./EditorStageCanvas";
 
 const SLIDE: Slide = { id: "s-1", order: 0, lines: ["가사 한 줄"] };
@@ -100,5 +101,94 @@ describe("EditorStageCanvas 이전·다음 버튼", () => {
       expect(button).toBeDisabled();
       expect(css).toMatch(/\.disabled\\:opacity-0:disabled \{\s*opacity: 0%/);
     }
+  });
+});
+
+describe("EditorStageCanvas 슬라이드 크기", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  function layoutAreaHeight(height: number): void {
+    vi.spyOn(Element.prototype, "clientHeight", "get").mockReturnValue(height);
+  }
+
+  const stage = () =>
+    document.querySelector<HTMLElement>("[data-editor-canvas]")!;
+
+  it("영역이 슬라이드보다 낮으면(가로로 돌린 폰) 슬라이드 폭을 영역 높이에 맞춰 줄인다", () => {
+    installFakeResizeObserver();
+    layoutAreaHeight(180);
+
+    renderCanvas({ slideNumber: 1, total: 3 });
+
+    expect(stage().style.width).toBe("min(100%, 320px)");
+  });
+
+  it("영역 높이가 넉넉해도 폭은 영역 폭을 넘지 않게 둔다", () => {
+    installFakeResizeObserver();
+    layoutAreaHeight(1080);
+
+    renderCanvas({ slideNumber: 1, total: 3 });
+
+    expect(stage().style.width).toBe("min(100%, 1920px)");
+  });
+
+  it("슬라이드 비율과 폭 상한은 CSS가 그대로 지킨다", () => {
+    installFakeResizeObserver();
+    layoutAreaHeight(180);
+
+    renderCanvas({ slideNumber: 1, total: 3 });
+
+    expect(stage()).toHaveClass("aspect-video", "w-full", "max-w-4xl");
+  });
+
+  it("기기를 돌려 영역 높이가 바뀌면 슬라이드 폭도 따라 바뀐다", () => {
+    const resize = installFakeResizeObserver();
+    layoutAreaHeight(180);
+    renderCanvas({ slideNumber: 1, total: 3 });
+
+    layoutAreaHeight(540);
+    act(() => resize.notify());
+
+    expect(stage().style.width).toBe("min(100%, 960px)");
+  });
+
+  it("확대 배율은 그대로 슬라이드에 걸린다", () => {
+    installFakeResizeObserver();
+    layoutAreaHeight(180);
+
+    renderCanvas({ slideNumber: 1, total: 3 });
+
+    expect(stage().style.transform).toBe("scale(1)");
+  });
+
+  it("영역 높이를 아직 재지 못했으면 폭을 CSS에 맡긴다", () => {
+    installFakeResizeObserver();
+
+    renderCanvas({ slideNumber: 1, total: 3 });
+
+    expect(stage().style.width).toBe("");
+  });
+
+  it("슬라이드가 없다가 생겨도 그 영역을 잰다", () => {
+    installFakeResizeObserver();
+    layoutAreaHeight(180);
+    const props = {
+      style: DEFAULT_DECK_STYLE,
+      slideNumber: 1,
+      totalSlideCount: 1,
+      songNumber: 1,
+      totalSongs: 1,
+      onPrevSlide: vi.fn(),
+      onNextSlide: vi.fn(),
+    };
+    const { rerender } = render(<EditorStageCanvas {...props} slide={null} />);
+    expect(document.querySelector("[data-editor-canvas]")).toBeNull();
+
+    rerender(<EditorStageCanvas {...props} slide={SLIDE} />);
+
+    expect(stage().style.width).toBe("min(100%, 320px)");
   });
 });

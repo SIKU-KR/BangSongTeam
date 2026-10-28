@@ -19,6 +19,7 @@ import {
   EmptyTitle,
 } from "#components/ui/empty";
 import { IconButton } from "#components/common/IconButton";
+import { useStageWidthLimit } from "#hooks/useStageWidthLimit";
 import type { Slide, DeckStyle, TextBoxPosition } from "#shared";
 import { SlideStage } from "../../components/stage/SlideStage";
 import type { SnapGuides } from "./textBoxDrag";
@@ -57,6 +58,9 @@ interface EditorStageCanvasProps {
  * 슬라이드 편집 캔버스 작업 공간 컴포넌트.
  * 텍스트 박스 조작(react-moveable)은 고칠 수 있을 때만 따로 불러와, 보기 전용인
  * 공유 링크 미리보기는 그 청크를 받지 않는다.
+ *
+ * 슬라이드는 작업 공간의 폭과 높이 중 더 모자란 쪽에 맞춰 통째로 보인다. 폭만 보고 맞추면 높이가
+ * 모자란 가로 폰에서 슬라이드의 위아래가 잘린다(`useStageWidthLimit`).
  */
 export function EditorStageCanvas({
   slide,
@@ -83,6 +87,8 @@ export function EditorStageCanvas({
     guides: SnapGuides;
   } | null>(null);
   const [zoomLevel, setZoomLevel] = useState<number>(ZOOM_PERCENT.fit);
+  const [stageArea, setStageArea] = useState<HTMLDivElement | null>(null);
+  const stageWidthCap = useStageWidthLimit(stageArea);
 
   const isEditingText = textEditor !== undefined;
   const effectiveStyle = draft ? { ...style, position: draft.position } : style;
@@ -139,7 +145,10 @@ export function EditorStageCanvas({
       data-testid="editor-stage-canvas"
       className="relative flex flex-1 flex-col items-center justify-between overflow-hidden px-6 pt-6 pb-2 select-none max-md:px-3 max-md:pt-3"
     >
-      <div className="flex w-full flex-1 items-center justify-center overflow-hidden py-2">
+      <div
+        ref={setStageArea}
+        className="flex w-full flex-1 items-center justify-center overflow-hidden py-2"
+      >
         <div
           data-editor-canvas
           tabIndex={-1}
@@ -149,6 +158,10 @@ export function EditorStageCanvas({
           }}
           className="group relative aspect-video w-full max-w-4xl overflow-hidden rounded-xl bg-black shadow-xl ring-1 ring-border transition-transform duration-150 outline-none"
           style={{
+            width:
+              stageWidthCap === null
+                ? undefined
+                : `min(100%, ${stageWidthCap}px)`,
             transform: `scale(${zoomScale})`,
             transformOrigin: "center center",
           }}
