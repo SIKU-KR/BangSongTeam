@@ -13,12 +13,21 @@ pnpm dev             # http://localhost:5173. Sign in with a dev account on the 
 pnpm build && pnpm start   # production build with the service worker, against the emulator (offline testing)
 
 pnpm typecheck && pnpm lint && pnpm test   # must pass before pushing (the CI gate). Tests start their own emulator on :8085
+pnpm test src/db/queries/decks.test.ts     # one file; add `-t "<name>"` for one test, `--project server|client|node` for one project
 ```
 
+- Vitest has three projects (`vitest.config.ts`): `server` (`src/server`, `src/db`, against the emulator), `client` (`src/client`, jsdom, with `next/navigation`/`next/link` stubbed by `src/client/test/next/*`) and `node` (`src/shared`, `config`, `scripts`, `infra`).
 - Run `pnpm fonts:previews` after editing `noonnuFontCatalog.ts`.
 - For UI changes, check the real rendering in Chrome against `pnpm dev`.
 - Deploys (image, Firestore rules and indexes) run only in CI on push to `main`.
 - Any script run with `--target=remote` reads or writes production Firestore or GCS, and some delete or move user data. Ask before every such run, previews included.
+- `next dev` re-creates `AGENTS.md` with its agent-rules block. Next is 16.x; read `node_modules/next/dist/docs/` before relying on remembered Next APIs.
+
+## Architecture
+
+- **Local-first client.** The browser keeps presentations, songs, folders and backgrounds in IndexedDB (`src/client/lib/storage`); the UI reads and writes there. `src/client/lib/sync` pushes local changes and pulls server changes (boot delta pull, schedulers, listeners for own and shared presentations, cross-tab `storageSync`) and must flush before projection and sign-out. Projection works offline: the service worker precaches the app shell and `src/client/features/offline` caches background videos and fonts.
+- **API.** `src/app/api/[[...route]]/route.ts` hands every `/api/*` request to the Hono app in `src/server/index.ts`. Tests build it with `createApp(deps)` to swap the session reader and hit the real routes. Error bodies are `{ error }` with a Korean sentence the client shows as is.
+- **Shared contract.** Zod schemas, constants and copy in `src/shared` (`#shared`) are imported by both the server and the client.
 
 ## Conventions
 
@@ -43,14 +52,14 @@ pnpm typecheck && pnpm lint && pnpm test   # must pass before pushing (the CI ga
 ### Code
 
 - Exported functions and endpoints get explicit return types. `const` by default, async/await.
-- Naming: components `PascalCase.tsx`, hooks and utils `camelCase.ts`, DB schema `src/db/schema/<table>.ts`, Zod schemas grouped by domain in `src/shared/schemas/<domain>.ts`.
+- Naming: components `PascalCase.tsx`, hooks and utils `camelCase.ts`, Zod schemas grouped by domain in `src/shared/schemas/<domain>.ts`.
 - Declare each model and API contract once as a Zod schema and derive types with `z.infer`.
 - Server data goes through TanStack Query (invalidate after mutations); UI state lives in React state/context and the feature stores.
 - When simplifying a screen, cut helpers that duplicate a direct-manipulation path instead of relocating them. Confirm before removing a whole product area.
 
 ### Database (Firestore)
 
-- Collections, document types and typed accessors live in `src/db/collections.ts`; queries in `src/db/queries/`, operator tasks in `src/db/ops/`. Store empty values as `null`, never omit the field: `where(field, "==", null)` doesn't match a missing field.
+- Collections, document types and typed accessors live in `src/db/collections.ts`; queries in `src/db/queries/`, operator tasks in `src/db/ops/` (run through `scripts/*.mjs`). Store empty values as `null`, never omit the field: `where(field, "==", null)` doesn't match a missing field.
 - Firestore has no foreign keys, CHECK constraints or triggers. A write that used to rely on them does the work itself in the same transaction: deleting a presentation deletes its copies and members (`queries/cascade.ts`), deleting a song clears `forkedFrom`/report `deckId` pointing at it, forking bumps `forkCount`, unknown `backgroundId`s are saved as `null`. Read everything first, then write (a transaction can't read after writing).
 - Every song write passes the final document through `withDeckIndex` (`src/db/deckIndex.ts`). It sets `listed`, the single definition of public scope that every public-library query filters on, and `searchGrams`, the bigram index the library search narrows candidates with.
 - Queries that order or range over more than one field need a composite index in `firestore.indexes.json` (the emulator doesn't check). Prefer equality filters plus sorting in memory for per-user lists so they need no index.
@@ -68,9 +77,9 @@ pnpm typecheck && pnpm lint && pnpm test   # must pass before pushing (the CI ga
 
 - `src/app` files only map URLs to client routes in `src/client/routes`. The server renders just the loading screen: `App` waits for the session and IndexedDB before drawing a page, so don't fetch data in pages or layouts.
 - Every dynamic route exports `generateStaticParams` returning `OFFLINE_SHELL_PARAM`. `scripts/buildServiceWorker.mjs` precaches that HTML and serves it for any id, offline included. One dynamic segment per route.
-- Keep `cacheComponents` off. It keeps routes you leave mounted but hidden and restores their state on the way back, so a projection or editor reopened from history would resume stale state (slide position, return path, open dialogs).
+- Keep `cacheComponents` off (`next.config.ts` explains why).
 - The Next router has no history state. Pass navigation data in the query (`?copy=1`) or sessionStorage (the projection return path).
 - Root-layout modules (`App.tsx`, stores) import feature files directly, never a feature barrel (`features/editor`, `features/drive`), so the editor and drive code (react-moveable, @dnd-kit) stays out of every page's first load.
 - Import `betterAuth` from `better-auth/minimal`. The default entry bundles Kysely and its dialects; auth data goes through the Firestore adapter (`src/db/auth/firestoreAdapter.ts`).
-- Changing a stored field: the previous release keeps running on the same Firestore while a deploy rolls out, and old documents keep their old shape. Keep changes additive, read missing fields with a fallback, and backfill with a script before relying on a new field. Raising a length limit or adding a font or style key is such a change too, and the wait is days, not one deploy: cached clients clamp over-long text when they load or push it and can't read unknown fonts, so ship the schema that accepts the value first and let the UI write it only after cached clients have updated.
+- Changing a stored field: the previous release keeps running on the same Firestore while a deploy rolls out, and old documents keep their old shape. IndexedDB on cached clients holds old shapes too. Keep changes additive, read missing fields with a fallback, and backfill with a script before relying on a new field. Raising a length limit or adding a font or style key is such a change too, and the wait is days, not one deploy: cached clients clamp over-long text when they load or push it and can't read unknown fonts, so ship the schema that accepts the value first and let the UI write it only after cached clients have updated.
 - Media responses over 32 MiB go out without `content-length` (chunked). Cloud Run caps sized HTTP/1 responses at 32 MiB, and background videos are hundreds of MB.
