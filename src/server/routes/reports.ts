@@ -1,17 +1,22 @@
 import { Hono } from "hono";
-import { zValidator } from "@hono/zod-validator";
 import { API_ERRORS, CreateReportRequestSchema } from "#shared";
 import { createReport } from "#db";
 import type { AppEnv } from "../types";
 import { resolveRequireAuth, type AppDeps } from "../deps";
+import { requireConsent } from "../middleware/consent";
+import { jsonBody } from "../lib/jsonBody";
+import { SMALL_BODY_MAX_BYTES } from "../middleware/bodyLimit";
 
 /**
  * 신고 접수. 처리는 `scripts/moderation.mjs`로 한다 — 관리자 화면은 두지 않는다.
  */
 export function createReportsRoute(deps: AppDeps = {}) {
+  const reportBody = jsonBody(CreateReportRequestSchema, SMALL_BODY_MAX_BYTES);
+
   return new Hono<AppEnv>()
     .use("*", resolveRequireAuth(deps))
-    .post("/", zValidator("json", CreateReportRequestSchema), async (c) => {
+    .use("*", requireConsent)
+    .post("/", reportBody, async (c) => {
       const db = c.env.DB;
       const result = await createReport(
         db,

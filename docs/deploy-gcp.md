@@ -50,12 +50,16 @@ gcloud projects add-iam-policy-binding "$PROJECT_ID" --member="serviceAccount:$R
 
 ```bash
 printf '%s' "$(openssl rand -base64 32)" | gcloud secrets create better-auth-secret --data-file=-
+printf '%s' "$(openssl rand -base64 32)" | gcloud secrets create proxy-secret --data-file=-
 printf '%s' '<카카오 secret>' | gcloud secrets create kakao-client-secret --data-file=-
 printf '%s' '<네이버 secret>' | gcloud secrets create naver-client-secret --data-file=-
 printf '%s' '<구글 secret>' | gcloud secrets create google-client-secret --data-file=-
 ```
 
 `BETTER_AUTH_SECRET`을 Cloudflare 때와 같은 값으로 두면 이전 뒤에도 기존 로그인 쿠키가 유효하다.
+`proxy-secret`은 Cloudflare Worker의 `PROXY_SECRET`에도 같은 값으로 넣는다
+(`infra/cloudflare-proxy/wrangler.jsonc`). 두 값이 다르면 서버가 `proxy_secret_mismatch`
+경고를 남기고, 모든 사용자가 로그인 빈도 제한 하나를 나눠 쓴다.
 
 ## 5. 첫 배포 (서비스 설정)
 
@@ -72,6 +76,9 @@ gcloud run deploy "$SERVICE" --image "$IMAGE" --region "$REGION" \
 ```
 
 - `--timeout=3600`: 오프라인 송출용 배경 영상(수백 MB)을 느린 회선으로 받아도 끊기지 않게 한다.
+- 컨테이너는 `MEDIA_BUCKET`·`BETTER_AUTH_URL`·`BETTER_AUTH_SECRET`·`PROXY_SECRET` 중 하나라도
+  비어 있으면 뜨지 않는다(`scripts/cloudRunBoot.mjs`). 나중에 바꿀 때 `--set-env-vars`·`--set-secrets`는
+  나머지 변수·비밀값을 모두 지우므로 `--update-env-vars`·`--update-secrets`를 쓴다.
 - 사용하지 않는 소셜 로그인은 id·secret을 빼면 로그인 화면에서 사라진다.
 - 서울 리전은 Cloud Run 도메인 매핑을 지원하지 않아, 도메인은 Cloudflare Worker 프록시
   (`infra/cloudflare-proxy`)가 run.app으로 넘긴다. Worker와 Cloud Run에 같은 `PROXY_SECRET`을

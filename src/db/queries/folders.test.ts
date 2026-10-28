@@ -6,8 +6,17 @@ import {
   type PresentationDocument,
 } from "#shared";
 import type { Db } from "../client";
-import { decksCol, presentationsCol } from "../collections";
-import { createTestDb, seedDocs, userDoc } from "../test/fixtures";
+import {
+  decksCol,
+  presentationMembersCol,
+  presentationsCol,
+} from "../collections";
+import {
+  createTestDb,
+  presentationsWithCopies,
+  seedDocs,
+  userDoc,
+} from "../test/fixtures";
 import {
   deleteFolderTree,
   getDriveTombstones,
@@ -369,6 +378,35 @@ describe("드라이브 폴더 쿼리", () => {
       const result = await deleteFolderTree(db, USER_A, root.id);
       expect(result?.folderIds).toHaveLength(46);
       expect((await getDriveTombstones(db, USER_A)).folderIds).toHaveLength(46);
+    });
+
+    it("in 조건 한도(30)를 넘는 프레젠테이션을 담은 폴더도 사본 곡·공유 멤버까지 모두 지운다", async () => {
+      const folder = makeFolder(USER_A);
+      await upsertFolder(db, USER_A, folder);
+      const seeded = presentationsWithCopies(USER_A, 31, 2, {
+        folderId: folder.id,
+      });
+      await seedDocs(db, {
+        ...seeded,
+        members: seeded.presentations.map((presentation) => ({
+          presentationId: presentation.id,
+          userId: USER_B,
+        })),
+      });
+
+      const result = await deleteFolderTree(db, USER_A, folder.id);
+
+      expect(result?.presentationIds).toHaveLength(31);
+      expect(
+        (await decksCol(db).where("userId", "==", USER_A).get()).size,
+      ).toBe(0);
+      expect(
+        (await presentationMembersCol(db).where("userId", "==", USER_B).get())
+          .size,
+      ).toBe(0);
+      expect(
+        (await getDriveTombstones(db, USER_A)).presentationIds.sort(),
+      ).toEqual(seeded.presentations.map((presentation) => presentation.id));
     });
   });
 });

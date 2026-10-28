@@ -1,7 +1,7 @@
 import type { NextConfig } from "next";
 
 /**
- * - `output: "standalone"`: Cloud Run 컨테이너가 `node server.js` 하나로 뜨도록 필요한
+ * - `output: "standalone"`: Cloud Run 컨테이너가 standalone 출력만으로 뜨도록 필요한
  *   의존성만 `.next/standalone`에 모은다 (`Dockerfile`).
  * - Google Cloud 클라이언트는 실행 중에 proto 파일을 디스크에서 읽어 번들하면 깨진다.
  *   `@node-rs/argon2`는 플랫폼별 `.node` 바이너리를 불러오므로 같은 이유로 번들하지 않는다.

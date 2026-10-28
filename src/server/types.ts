@@ -24,6 +24,8 @@ export interface Variables {
   userId?: string;
   /** 요청 상관 ID. `requestLog` 미들웨어가 정하고 응답의 `x-request-id`로도 내보낸다 */
   requestId?: string;
+  /** 이 요청의 Cloud Logging trace 이름. 모르면 없다(`cloudTraceName`) */
+  logTrace?: string;
 }
 
 export interface AppEnv {

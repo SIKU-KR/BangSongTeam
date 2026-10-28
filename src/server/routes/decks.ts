@@ -1,5 +1,4 @@
 import { Hono } from "hono";
-import { zValidator } from "@hono/zod-validator";
 import { API_ERRORS, DeckSchema, VisibilityUpdateRequestSchema } from "#shared";
 import {
   getMyLibraryDecks,
@@ -13,6 +12,13 @@ import type { AppEnv } from "../types";
 import { resolveRequireAuth, type AppDeps } from "../deps";
 import { isTransientStorageError } from "../lib/storageErrors";
 import { logServerError } from "../lib/requestLog";
+import { idParam } from "../lib/params";
+import { jsonBody } from "../lib/jsonBody";
+import {
+  DECK_BODY_MAX_BYTES,
+  SMALL_BODY_MAX_BYTES,
+} from "../middleware/bodyLimit";
+import { hasAgreedToTerms, requireConsent } from "../middleware/consent";
 
 /**
  * 곡 보관함(scope: 'library') 동기화 API.
@@ -21,6 +27,11 @@ import { logServerError } from "../lib/requestLog";
  * 여기서는 다루지 않는다 (`/api/presentations`).
  */
 export function createDecksRoute(deps: AppDeps = {}) {
+  const savedId = idParam(API_ERRORS.idMismatch, 400);
+  const deckId = idParam(API_ERRORS.deck.notAccessible, 404);
+  const publicDeckId = idParam(API_ERRORS.deck.notPublished, 404);
+  const deckBody = jsonBody(DeckSchema, DECK_BODY_MAX_BYTES);
+
   return new Hono<AppEnv>()
     .use("*", resolveRequireAuth(deps))
     .get("/", async (c) => {
@@ -28,7 +39,7 @@ export function createDecksRoute(deps: AppDeps = {}) {
       const rows = await getMyLibraryDecks(db, c.get("userId") as string);
       return c.json({ decks: rows.map(toSharedDeck) }, 200);
     })
-    .put("/:id", zValidator("json", DeckSchema), async (c) => {
+    .put("/:id", savedId, deckBody, async (c) => {
       const userId = c.get("userId") as string;
       const deck = c.req.valid("json");
 
@@ -50,7 +61,6 @@ export function createDecksRoute(deps: AppDeps = {}) {
       } catch (error) {
         logServerError(c, "deck upsert failed", error, { deckId: deck.id });
         if (isTransientStorageError(error)) {
-          c.header("Retry-After", "2");
           return c.json({ error: API_ERRORS.deck.saveFailed }, 503);
         }
         return c.json({ error: API_ERRORS.deck.saveFailed }, 500);
@@ -60,10 +70,14 @@ export function createDecksRoute(deps: AppDeps = {}) {
     })
     .patch(
       "/:id/visibility",
-      zValidator("json", VisibilityUpdateRequestSchema),
+      deckId,
+      jsonBody(VisibilityUpdateRequestSchema, SMALL_BODY_MAX_BYTES),
       async (c) => {
         const db = c.env.DB;
         const { visibility } = c.req.valid("json");
+        if (visibility === "public" && !(await hasAgreedToTerms(c))) {
+          return c.json({ error: API_ERRORS.consentRequired }, 403);
+        }
         const result = await setDeckVisibility(
           db,
           c.get("userId") as string,
@@ -90,7 +104,7 @@ export function createDecksRoute(deps: AppDeps = {}) {
         }
       },
     )
-    .post("/:id/fork", async (c) => {
+    .post("/:id/fork", publicDeckId, requireConsent, async (c) => {
       const db = c.env.DB;
       const result = await forkPublicDeck(
         db,
@@ -105,7 +119,7 @@ export function createDecksRoute(deps: AppDeps = {}) {
         200,
       );
     })
-    .delete("/:id", async (c) => {
+    .delete("/:id", deckId, async (c) => {
       const db = c.env.DB;
       const removed = await deleteDeckScoped(
         db,

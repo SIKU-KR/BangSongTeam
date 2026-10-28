@@ -1,7 +1,13 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import type { Db } from "../client";
 import { decksCol, presentationsCol } from "../collections";
-import { createTestDb, folderDoc, seedDocs, userDoc } from "../test/fixtures";
+import {
+  createTestDb,
+  folderDoc,
+  presentationsWithCopies,
+  seedDocs,
+  userDoc,
+} from "../test/fixtures";
 import {
   DEFAULT_DECK_STYLE,
   PresentationDocumentSchema,
@@ -90,6 +96,34 @@ describe("세트 링크 공유", () => {
     await joinByToken(db, token, MEMBER);
     return token;
   }
+
+  describe("in 조건 한도(30)를 넘는 공유 목록", () => {
+    it("30개를 넘게 공유받아도 모두 사본 곡과 함께 돌려준다", async () => {
+      const seeded = presentationsWithCopies(OWNER, 31, 1, {
+        linkAccess: "view",
+      });
+      await seedDocs(db, {
+        ...seeded,
+        members: seeded.presentations.map((presentation) => ({
+          presentationId: presentation.id,
+          userId: MEMBER,
+        })),
+      });
+
+      const documents = await getSharedPresentationDocuments(db, MEMBER);
+
+      expect(documents.map((document) => document.id).sort()).toEqual(
+        seeded.presentations.map((presentation) => presentation.id),
+      );
+      for (const document of documents) {
+        expect(document.access).toEqual({
+          ownerName: "인도자",
+          memberId: MEMBER,
+        });
+        expect(document.items).toHaveLength(1);
+      }
+    });
+  });
 
   describe("설정", () => {
     it("처음에는 링크가 꺼져 있고 토큰이 없다", async () => {

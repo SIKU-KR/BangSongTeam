@@ -1,9 +1,74 @@
-import { describe, it, expect, beforeAll } from "vitest";
+import { describe, it, expect, beforeAll, afterEach, vi } from "vitest";
 import { env } from "./test/env";
-import { API_ERRORS, BackgroundListResponseSchema } from "#shared";
-import app from "./index";
+import {
+  API_ERRORS,
+  BackgroundListResponseSchema,
+  DEFAULT_DECK_STYLE,
+  DeckSchema,
+  type Deck,
+} from "#shared";
+import app, { createApp } from "./index";
 import type { Db } from "#db";
+import { seedDocs, userDoc } from "../db/test/fixtures";
 import type { MediaStore } from "./lib/mediaStore";
+import {
+  DECK_BODY_MAX_BYTES,
+  PRESENTATION_BODY_MAX_BYTES,
+  SMALL_BODY_MAX_BYTES,
+} from "./middleware/bodyLimit";
+
+const SIGNED_IN_USER = "aaaaaaaa00000000000i1";
+const LIBRARY_DECK_ID = "c000000000000000000i1";
+const FOLDER_ID = "f000000000000000000i1";
+const PRESENTATION_ID = "1000000000000000000i1";
+
+const signedInApp = createApp({
+  readSession: async () => ({ userId: SIGNED_IN_USER }),
+});
+
+function libraryDeck(overrides: Partial<Deck> = {}): Deck {
+  return DeckSchema.parse({
+    id: LIBRARY_DECK_ID,
+    userId: SIGNED_IN_USER,
+    scope: "library",
+    title: "은혜로다",
+    lyricsRaw: "시작됐네",
+    slides: [{ id: "s1", order: 0, lines: ["시작됐네"] }],
+    backgroundId: null,
+    style: DEFAULT_DECK_STYLE,
+    createdAt: "2026-09-20T00:00:00.000Z",
+    updatedAt: "2026-09-21T00:00:00.000Z",
+    ...overrides,
+  });
+}
+
+function countingJsonArrayBody(totalBytes: number): {
+  body: ReadableStream<Uint8Array>;
+  pulledBytes: () => number;
+} {
+  const encoder = new TextEncoder();
+  const element = encoder.encode("{},".repeat(5_000));
+  let pulled = 0;
+  const body = new ReadableStream<Uint8Array>({
+    pull(controller) {
+      const last = pulled >= totalBytes;
+      const chunk =
+        pulled === 0
+          ? encoder.encode("[")
+          : last
+            ? encoder.encode("{}]")
+            : element;
+      pulled += chunk.byteLength;
+      controller.enqueue(chunk);
+      if (last) controller.close();
+    },
+  });
+  return { body, pulledBytes: () => pulled };
+}
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 describe("API 앱 통합 테스트 (Firestore 에뮬레이터)", () => {
   beforeAll(() => {
@@ -57,14 +122,32 @@ describe("API 앱 통합 테스트 (Firestore 에뮬레이터)", () => {
     );
 
     expect(res.status).toBe(500);
-    expect(await res.json()).toEqual({ error: "Internal Server Error" });
+    expect(await res.json()).toEqual({ error: API_ERRORS.requestFailed });
   });
 
-  it("GET /api/unknown-path returns 404", async () => {
+  it("저장소 일시 장애는 503과 다시 시도하라는 한국어 문장을 준다", async () => {
+    const unavailableStore: MediaStore = {
+      stat: async () => {
+        throw Object.assign(new Error("unavailable"), { code: 14 });
+      },
+      read: () => new ReadableStream(),
+    };
+
+    const res = await app.request(
+      "/api/media/loops/warm_light_flow.mp4",
+      {},
+      { ...env, MEDIA: unavailableStore },
+    );
+
+    expect(res.status).toBe(503);
+    expect(res.headers.get("retry-after")).not.toBeNull();
+    expect(await res.json()).toEqual({ error: API_ERRORS.serverBusy });
+  });
+
+  it("없는 API 경로는 404와 새로고침하라는 한국어 문장을 준다", async () => {
     const res = await app.request("/api/unknown-path", {}, env);
     expect(res.status).toBe(404);
-    const json = await res.json();
-    expect(json).toHaveProperty("error");
+    expect(await res.json()).toEqual({ error: API_ERRORS.notFound });
   });
 
   it("GET /api/backgrounds는 비로그인에게 기본 제공 배경을 준다", async () => {
@@ -188,11 +271,187 @@ describe("API 앱 통합 테스트 (Firestore 에뮬레이터)", () => {
       );
       const unknownApi = await app.request("/api/nonexistent", {}, env);
 
-      expect(await unknownApi.json()).toEqual({ error: "Not Found" });
+      expect(await unknownApi.json()).toEqual({ error: API_ERRORS.notFound });
       expect(await unknownAuth.text()).not.toBe(
-        JSON.stringify({ error: "Not Found" }),
+        JSON.stringify({ error: API_ERRORS.notFound }),
       );
     });
+  });
+
+  describe("요청 본문 크기 제한", () => {
+    beforeAll(async () => {
+      await seedDocs(env.DB, {
+        users: [userDoc({ id: SIGNED_IN_USER, termsAgreedAt: new Date() })],
+      });
+    });
+
+    it.each([
+      ["PUT", `/api/decks/${LIBRARY_DECK_ID}`, DECK_BODY_MAX_BYTES],
+      [
+        "PATCH",
+        `/api/decks/${LIBRARY_DECK_ID}/visibility`,
+        SMALL_BODY_MAX_BYTES,
+      ],
+      ["PUT", `/api/folders/${FOLDER_ID}`, SMALL_BODY_MAX_BYTES],
+      [
+        "PUT",
+        `/api/presentations/${PRESENTATION_ID}`,
+        PRESENTATION_BODY_MAX_BYTES,
+      ],
+      [
+        "PATCH",
+        `/api/presentations/${PRESENTATION_ID}`,
+        PRESENTATION_BODY_MAX_BYTES,
+      ],
+      [
+        "PUT",
+        `/api/presentations/${PRESENTATION_ID}/share`,
+        SMALL_BODY_MAX_BYTES,
+      ],
+      ["POST", "/api/reports", SMALL_BODY_MAX_BYTES],
+      ["POST", "/api/consent", SMALL_BODY_MAX_BYTES],
+    ])(
+      "%s %s는 상한(%i바이트)을 넘는 본문을 해석하지 않고 413으로 끊는다",
+      async (method, path, maxBytes) => {
+        const res = await signedInApp.request(
+          path,
+          {
+            method,
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify("x".repeat(maxBytes)),
+          },
+          env,
+        );
+
+        expect(res.status).toBe(413);
+        expect(await res.json()).toEqual({
+          error: API_ERRORS.payloadTooLarge,
+        });
+      },
+    );
+
+    it("로그인하지 않은 쓰기 요청은 본문을 읽지 않고 401이다", async () => {
+      const { body, pulledBytes } = countingJsonArrayBody(3 * 1024 * 1024);
+
+      const res = await app.request(
+        `/api/presentations/${PRESENTATION_ID}`,
+        {
+          method: "PUT",
+          headers: { "content-type": "application/json" },
+          body,
+          duplex: "half",
+        } as RequestInit,
+        env,
+      );
+
+      expect(res.status).toBe(401);
+      expect(pulledBytes()).toBeLessThan(64 * 1024);
+    });
+
+    it("큰 본문이 한꺼번에 몰리면 인스턴스 예산을 넘는 요청은 해석하지 않고 503으로 돌려보낸다", async () => {
+      const count = Math.floor((PRESENTATION_BODY_MAX_BYTES - 3) / 3);
+      const body = `[${"{},".repeat(count)}{}]`;
+
+      const responses = await Promise.all(
+        Array.from({ length: 40 }, () =>
+          signedInApp.request(
+            `/api/presentations/${PRESENTATION_ID}`,
+            {
+              method: "PUT",
+              headers: { "content-type": "application/json" },
+              body,
+            },
+            env,
+          ),
+        ),
+      );
+      const statuses = responses.map((res) => res.status);
+      const busy = responses.filter((res) => res.status === 503);
+
+      expect(statuses.every((s) => s === 400 || s === 503)).toBe(true);
+      expect(busy.length).toBeGreaterThanOrEqual(20);
+      expect(busy[0].headers.get("retry-after")).not.toBeNull();
+      expect(await busy[0].json()).toEqual({ error: API_ERRORS.serverBusy });
+    });
+
+    it("틀린 곡 저장 본문은 첫 문제에서 검사를 멈추고 짧은 400으로 답한다", async () => {
+      const res = await signedInApp.request(
+        `/api/decks/${LIBRARY_DECK_ID}`,
+        {
+          method: "PUT",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            ...libraryDeck(),
+            slides: Array.from({ length: 20_000 }, () => ({})),
+          }),
+        },
+        env,
+      );
+
+      expect(res.status).toBe(400);
+      expect(await res.json()).toEqual({ error: API_ERRORS.idMismatch });
+    });
+
+    it("로그인 전 인증 요청도 큰 본문은 끝까지 읽지 않고 413으로 끊는다", async () => {
+      const { body, pulledBytes } = countingJsonArrayBody(3 * 1024 * 1024);
+
+      const res = await app.request(
+        "/api/auth/sign-out",
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body,
+          duplex: "half",
+        } as RequestInit,
+        env,
+      );
+
+      expect(res.status).toBe(413);
+      expect(await res.json()).toEqual({ error: API_ERRORS.payloadTooLarge });
+      expect(pulledBytes()).toBeLessThan(256 * 1024);
+    });
+
+    it("상한을 넘는 곡 저장은 Firestore에 닿기 전에 413이다", async () => {
+      const res = await signedInApp.request(
+        `/api/decks/${LIBRARY_DECK_ID}`,
+        {
+          method: "PUT",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(
+            libraryDeck({ lyricsRaw: "가".repeat(400_000) }),
+          ),
+        },
+        env,
+      );
+
+      expect(res.status).toBe(413);
+      expect(await res.json()).toEqual({ error: API_ERRORS.payloadTooLarge });
+    });
+  });
+
+  describe("깨진 JSON 본문", () => {
+    it.each([
+      ["PUT", `/api/decks/${LIBRARY_DECK_ID}`, "{"],
+      ["PUT", `/api/folders/${FOLDER_ID}`, '{"id":"f0000'],
+      ["PATCH", `/api/presentations/${PRESENTATION_ID}`, "{x"],
+    ])(
+      "%s %s는 서버 오류가 아니라 400이고 오류 로그를 남기지 않는다",
+      async (method, path, body) => {
+        const errorLog = vi
+          .spyOn(console, "error")
+          .mockImplementation(() => {});
+
+        const res = await signedInApp.request(
+          path,
+          { method, headers: { "content-type": "application/json" }, body },
+          env,
+        );
+
+        expect(res.status).toBe(400);
+        expect(await res.json()).toEqual({ error: API_ERRORS.idMismatch });
+        expect(errorLog).not.toHaveBeenCalled();
+      },
+    );
   });
   describe("동기화 라우트 마운트 (/api/presentations, /api/decks)", () => {
     it("세션 없이 접근하면 401이다 (404가 아니다)", async () => {
@@ -218,7 +477,7 @@ describe("API 앱 통합 테스트 (Firestore 에뮬레이터)", () => {
 
       const del = await app.request(
         `/api/decks/${id}`,
-        { method: "DELETE" },
+        { method: "DELETE", headers: { "sec-fetch-site": "same-origin" } },
         env,
       );
       expect(del.status).toBe(401);

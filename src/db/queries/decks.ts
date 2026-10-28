@@ -1,5 +1,5 @@
 import { FieldValue, type Transaction } from "@google-cloud/firestore";
-import type { Deck as SharedDeck } from "#shared";
+import { isReservedDocumentId, type Deck as SharedDeck } from "#shared";
 import type { Db } from "../client";
 import {
   backgroundsCol,
@@ -42,7 +42,11 @@ export async function existingBackgroundIds(
   db: Db,
   ids: readonly (string | null)[],
 ): Promise<Set<string>> {
-  const unique = [...new Set(ids.filter((id): id is string => Boolean(id)))];
+  const unique = [
+    ...new Set(
+      ids.flatMap((id) => (id && !isReservedDocumentId(id) ? [id] : [])),
+    ),
+  ];
   if (unique.length === 0) return new Set();
   const snapshots = await tx.getAll(
     ...unique.map((id) => backgroundsCol(db).doc(id)),

@@ -1,7 +1,7 @@
 import { Hono, type Context } from "hono";
-import { zValidator } from "@hono/zod-validator";
 import {
   API_ERRORS,
+  isReservedDocumentId,
   toPresentationChanges,
   type PresentationChanges,
   PresentationChangesSchema,
@@ -23,9 +23,19 @@ import type { AppEnv } from "../types";
 import { resolveRequireAuth, type AppDeps } from "../deps";
 import { isTransientStorageError } from "../lib/storageErrors";
 import { logServerError } from "../lib/requestLog";
+import { idParam } from "../lib/params";
+import { jsonBody } from "../lib/jsonBody";
+import {
+  PRESENTATION_BODY_MAX_BYTES,
+  SMALL_BODY_MAX_BYTES,
+} from "../middleware/bodyLimit";
+import { hasAgreedToTerms } from "../middleware/consent";
 
 async function save(c: Context<AppEnv>, changes: PresentationChanges) {
-  if (changes.id !== c.req.param("id")) {
+  if (
+    changes.id !== c.req.param("id") ||
+    changes.decks.some((deck) => isReservedDocumentId(deck.id))
+  ) {
     return c.json({ error: API_ERRORS.idMismatch }, 400);
   }
 
@@ -43,7 +53,6 @@ async function save(c: Context<AppEnv>, changes: PresentationChanges) {
       sentDeckCount: changes.decks.length,
     });
     if (isTransientStorageError(error)) {
-      c.header("Retry-After", "2");
       return c.json({ error: API_ERRORS.presentation.saveFailed }, 503);
     }
     return c.json({ error: API_ERRORS.presentation.saveFailed }, 500);
@@ -68,6 +77,17 @@ async function save(c: Context<AppEnv>, changes: PresentationChanges) {
  * 저장은 소유자만 할 수 있다.
  */
 export function createPresentationsRoute(deps: AppDeps = {}) {
+  const savedId = idParam(API_ERRORS.idMismatch, 400);
+  const presentationId = idParam(API_ERRORS.presentation.notAccessible, 404);
+  const documentBody = jsonBody(
+    PresentationDocumentSchema,
+    PRESENTATION_BODY_MAX_BYTES,
+  );
+  const changesBody = jsonBody(
+    PresentationChangesSchema,
+    PRESENTATION_BODY_MAX_BYTES,
+  );
+
   return new Hono<AppEnv>()
     .use("*", resolveRequireAuth(deps))
     .get("/", async (c) => {
@@ -79,7 +99,7 @@ export function createPresentationsRoute(deps: AppDeps = {}) {
       ]);
       return c.json({ presentations: [...own, ...shared] }, 200);
     })
-    .get("/:id", async (c) => {
+    .get("/:id", presentationId, async (c) => {
       const db = c.env.DB;
       const document = await getPresentationDocument(
         db,
@@ -90,14 +110,14 @@ export function createPresentationsRoute(deps: AppDeps = {}) {
         return c.json({ error: API_ERRORS.presentation.notAccessible }, 404);
       return c.json({ presentation: document }, 200);
     })
-    .put("/:id", zValidator("json", PresentationDocumentSchema), async (c) => {
+    .put("/:id", savedId, documentBody, async (c) => {
       const document = c.req.valid("json");
       return save(c, toPresentationChanges(document));
     })
-    .patch("/:id", zValidator("json", PresentationChangesSchema), async (c) =>
+    .patch("/:id", savedId, changesBody, async (c) =>
       save(c, c.req.valid("json")),
     )
-    .delete("/:id", async (c) => {
+    .delete("/:id", presentationId, async (c) => {
       const removed = await deletePresentation(
         c.env.DB,
         c.req.param("id"),
@@ -107,7 +127,7 @@ export function createPresentationsRoute(deps: AppDeps = {}) {
         return c.json({ error: API_ERRORS.presentation.notAccessible }, 404);
       return c.json({ ok: true as const }, 200);
     })
-    .get("/:id/share", async (c) => {
+    .get("/:id/share", presentationId, async (c) => {
       const settings = await getShareSettings(
         c.env.DB,
         c.req.param("id"),
@@ -119,20 +139,25 @@ export function createPresentationsRoute(deps: AppDeps = {}) {
     })
     .put(
       "/:id/share",
-      zValidator("json", UpdateShareSettingsRequestSchema),
+      presentationId,
+      jsonBody(UpdateShareSettingsRequestSchema, SMALL_BODY_MAX_BYTES),
       async (c) => {
+        const { access } = c.req.valid("json");
+        if (access !== "off" && !(await hasAgreedToTerms(c))) {
+          return c.json({ error: API_ERRORS.consentRequired }, 403);
+        }
         const settings = await setLinkAccess(
           c.env.DB,
           c.req.param("id"),
           c.get("userId") as string,
-          c.req.valid("json").access,
+          access,
         );
         if (!settings)
           return c.json({ error: API_ERRORS.presentation.notAccessible }, 404);
         return c.json(settings, 200);
       },
     )
-    .post("/:id/share/reset", async (c) => {
+    .post("/:id/share/reset", presentationId, async (c) => {
       const settings = await resetLinkToken(
         c.env.DB,
         c.req.param("id"),

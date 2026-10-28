@@ -63,9 +63,19 @@ function toDateOrNull(iso: string | null | undefined): Date | null {
   return iso ? toDate(iso) : null;
 }
 
+/**
+ * Firestore Timestamp가 담는 범위(0001-01-01 ~ 9999-12-31, UTC). 본문의 ISO 문자열은
+ * `0000`년도 통과하는데, 그대로 쓰면 Timestamp 변환이 던져 저장이 500이 된다.
+ * https://github.com/protocolbuffers/protobuf/blob/main/src/google/protobuf/timestamp.proto
+ */
+const MIN_FIRESTORE_TIME = Date.parse("0001-01-01T00:00:00.000Z");
+const MAX_FIRESTORE_TIME = Date.parse("9999-12-31T23:59:59.999Z");
+
 function toDate(iso: string): Date {
-  const date = new Date(iso);
-  return Number.isNaN(date.getTime()) ? new Date(0) : date;
+  const time = new Date(iso).getTime();
+  return time >= MIN_FIRESTORE_TIME && time <= MAX_FIRESTORE_TIME
+    ? new Date(time)
+    : new Date(0);
 }
 
 /**

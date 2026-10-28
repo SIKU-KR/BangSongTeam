@@ -29,14 +29,18 @@ describe("배경 갤러리 API", () => {
   it("앱에서 배경을 올리거나 지우는 경로는 없다 (등록과 정리는 스크립트로만)", async () => {
     const upload = await app.request(
       "/api/backgrounds/uploads",
-      { method: "POST", body: new FormData() },
+      {
+        method: "POST",
+        headers: { "sec-fetch-site": "same-origin" },
+        body: new FormData(),
+      },
       env,
     );
     expect(upload.status).toBe(404);
 
     const remove = await app.request(
       `/api/backgrounds/uploads/${serviceIds[0]}`,
-      { method: "DELETE" },
+      { method: "DELETE", headers: { "sec-fetch-site": "same-origin" } },
       env,
     );
     expect(remove.status).toBe(404);

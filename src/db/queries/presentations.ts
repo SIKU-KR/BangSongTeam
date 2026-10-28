@@ -1,4 +1,5 @@
 import {
+  isReservedDocumentId,
   toPresentationChanges,
   type PresentationChanges,
   type PresentationDocument,
@@ -108,7 +109,9 @@ export async function savePresentationChanges(
   const forkedFromIds = [
     ...new Set(
       changes.decks.flatMap((deck) =>
-        deck.forkedFrom ? [deck.forkedFrom] : [],
+        deck.forkedFrom && !isReservedDocumentId(deck.forkedFrom)
+          ? [deck.forkedFrom]
+          : [],
       ),
     ),
   ];
@@ -126,7 +129,7 @@ export async function savePresentationChanges(
     ] = await Promise.all([
       tx.get(ref),
       tx.get(decksCol(db).where("presentationId", "==", changes.id)),
-      changes.folderId
+      changes.folderId && !isReservedDocumentId(changes.folderId)
         ? tx.get(foldersCol(db).doc(changes.folderId))
         : Promise.resolve(null),
       sentDeckIds.length > 0

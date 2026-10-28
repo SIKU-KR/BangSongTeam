@@ -57,7 +57,10 @@ function request(method: string, path: string, body?: unknown) {
     path,
     {
       method,
-      headers: body ? { "content-type": "application/json" } : undefined,
+      headers: {
+        "sec-fetch-site": "same-origin",
+        ...(body ? { "content-type": "application/json" } : {}),
+      },
       body: body ? JSON.stringify(body) : undefined,
     },
     env,
@@ -90,7 +93,7 @@ describe("공유 라이브러리 API", () => {
       users: [
         { id: A, name: "김찬양", createdAt: new Date(), updatedAt: new Date() },
         { id: B, name: "이예배", createdAt: new Date(), updatedAt: new Date() },
-      ].map((row) => userDoc(row)),
+      ].map((row) => userDoc({ ...row, termsAgreedAt: new Date() })),
     });
 
     currentUser = A;

@@ -1,3 +1,5 @@
+import { API_ERRORS } from "#shared";
+
 /** 두 기능 이상에서 같은 뜻으로 쓰는 문구. 기능별 copy는 이 값을 다시 적지 않고 참조한다. */
 export const COMMON_COPY = {
   cancel: "취소",
@@ -24,7 +26,7 @@ export const COMMON_COPY = {
 export const ERROR_COPY = {
   offline: "오프라인이라 서버에 연결할 수 없어요",
   sessionExpired: "로그인이 만료됐어요. 다시 로그인해 주세요",
-  requestFailed: "요청을 처리하지 못했어요. 잠시 후 다시 시도해 주세요",
+  requestFailed: API_ERRORS.requestFailed,
   serverUnreachable: "서버에 연결할 수 없어요",
   sessionExpiredShort: "로그인이 만료됐어요",
   serverRejected: (status: number) =>

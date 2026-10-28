@@ -64,10 +64,13 @@ function makeDoc(
 
 function send(method: string, body?: unknown): RequestInit {
   return body === undefined
-    ? { method }
+    ? { method, headers: { "sec-fetch-site": "same-origin" } }
     : {
         method,
-        headers: { "content-type": "application/json" },
+        headers: {
+          "sec-fetch-site": "same-origin",
+          "content-type": "application/json",
+        },
         body: JSON.stringify(body),
       };
 }
@@ -109,7 +112,7 @@ describe("세트 링크 공유 라우트", () => {
           createdAt: new Date(),
           updatedAt: new Date(),
         },
-      ].map((row) => userDoc(row)),
+      ].map((row) => userDoc({ ...row, termsAgreedAt: new Date() })),
     });
     await as(OWNER, `/api/presentations/${DOC_ID}`, send("PUT", makeDoc()));
   });

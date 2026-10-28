@@ -27,7 +27,10 @@ async function call(method: string, path: string, body?: unknown) {
     path,
     {
       method,
-      headers: body ? { "content-type": "application/json" } : undefined,
+      headers: {
+        "sec-fetch-site": "same-origin",
+        ...(body ? { "content-type": "application/json" } : {}),
+      },
       body: body ? JSON.stringify(body) : undefined,
     },
     env,
@@ -86,7 +89,7 @@ describe("2계정 공유 라이브러리 E2E", () => {
           createdAt: new Date(),
           updatedAt: new Date(),
         },
-      ].map((row) => userDoc(row)),
+      ].map((row) => userDoc({ ...row, termsAgreedAt: new Date() })),
     });
     currentUser = A;
   });

@@ -112,8 +112,22 @@ describe("POST /api/client-reports", () => {
 
     expect(res.status).toBe(413);
     expect(await res.json()).toEqual({
-      error: API_ERRORS.clientReport.tooLarge,
+      error: API_ERRORS.payloadTooLarge,
     });
+  });
+
+  it("JSON이 아닌 본문은 서버 오류가 아니라 400이고 오류 로그를 남기지 않는다", async () => {
+    const errorLog = vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    const app = createApp();
+
+    for (const body of ["{", "{not json"]) {
+      const res = await post(app, body);
+
+      expect(res.status).toBe(400);
+      expect(await res.json()).toEqual({ error: API_ERRORS.idMismatch });
+    }
+    expect(errorLog).not.toHaveBeenCalled();
   });
 
   it("같은 IP가 창 안에서 한도를 넘으면 429다", async () => {
@@ -134,5 +148,36 @@ describe("POST /api/client-reports", () => {
       error: API_ERRORS.tooManyRequests,
     });
     expect(otherIp.status).toBe(204);
+  });
+
+  it("빈도 제한에 걸린 보고는 본문을 읽지 않고 429다", async () => {
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    const app = createApp();
+    const headers = { "x-forwarded-for": "203.0.113.9" };
+    for (let index = 0; index < 30; index += 1) {
+      expect((await post(app, validBatch, headers)).status).toBe(204);
+    }
+    let pulled = 0;
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        pulled += 16 * 1024;
+        controller.enqueue(new Uint8Array(16 * 1024).fill(0x20));
+        if (pulled >= 3 * 1024 * 1024) controller.close();
+      },
+    });
+
+    const res = await app.request(
+      "/api/client-reports",
+      {
+        method: "POST",
+        headers: { "content-type": "application/json", ...headers },
+        body,
+        duplex: "half",
+      } as RequestInit,
+      env,
+    );
+
+    expect(res.status).toBe(429);
+    expect(pulled).toBeLessThan(CLIENT_REPORT_MAX_BYTES * 8);
   });
 });

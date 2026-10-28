@@ -102,6 +102,36 @@ export function presentationDoc(
   };
 }
 
+/**
+ * 사본 곡이 `copies`곡씩 담긴 프레젠테이션 `count`개. Firestore `in` 조건 한도(30)를 넘는
+ * 조회·삭제를 시험할 때 쓴다. 사본 id는 자리의 역순으로 정렬되게 붙여, 읽는 쪽이 자리순으로
+ * 다시 세우는지도 함께 드러난다.
+ */
+export function presentationsWithCopies(
+  userId: string,
+  count: number,
+  copies: number,
+  overrides: Partial<PresentationDoc> = {},
+): { presentations: PresentationDoc[]; decks: DeckDoc[] } {
+  const pad = (value: number, width: number) =>
+    String(value).padStart(width, "0");
+  const presentations = Array.from({ length: count }, (_, index) =>
+    presentationDoc({ id: `p${pad(index, 20)}`, userId, ...overrides }),
+  );
+  const decks = presentations.flatMap((presentation, index) =>
+    Array.from({ length: copies }, (_, position) =>
+      deckDoc({
+        id: `d${pad(index, 10)}${pad(copies - position, 10)}`,
+        userId,
+        presentationId: presentation.id,
+        itemId: `i${pad(index, 10)}${pad(position, 10)}`,
+        position,
+      }),
+    ),
+  );
+  return { presentations, decks };
+}
+
 /** 폴더 문서 */
 export function folderDoc(
   row: Pick<FolderDoc, "id" | "userId"> & Partial<FolderDoc>,
