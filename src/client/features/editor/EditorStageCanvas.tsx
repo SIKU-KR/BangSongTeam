@@ -3,6 +3,7 @@ import {
   ChevronLeftIcon,
   ChevronRightIcon,
   FileMusicIcon,
+  ListIcon,
   MinusIcon,
   PlusIcon,
 } from "lucide-react";
@@ -48,6 +49,8 @@ interface EditorStageCanvasProps {
   onRequestTextEdit?: () => void;
   /** 상태 표시줄 왼쪽에 덧붙일 항목 (줄 수, 넘침 경고) */
   statusItems?: React.ReactNode;
+  /** 폰 폭에서만 넘긴다. 접어 둔 슬라이드 목록을 여는 버튼을 상태 표시줄에 둔다 */
+  onOpenSlideList?: () => void;
 }
 
 /**
@@ -72,6 +75,7 @@ export function EditorStageCanvas({
   textEditor,
   onRequestTextEdit,
   statusItems,
+  onOpenSlideList,
 }: EditorStageCanvasProps): React.JSX.Element {
   const [textBoxEl, setTextBoxEl] = useState<HTMLDivElement | null>(null);
   const [draft, setDraft] = useState<{
@@ -112,12 +116,15 @@ export function EditorStageCanvas({
               {EDITOR_COPY.canvas.emptyDescription}
             </EmptyDescription>
           </EmptyHeader>
-          {onOpenLyricModal && (
+          {(onOpenLyricModal || onOpenSlideList) && (
             <EmptyContent>
-              <Button onClick={onOpenLyricModal}>
-                <PlusIcon />
-                {EDITOR_COPY.canvas.pasteNewSong}
-              </Button>
+              {onOpenLyricModal && (
+                <Button onClick={onOpenLyricModal}>
+                  <PlusIcon />
+                  {EDITOR_COPY.canvas.pasteNewSong}
+                </Button>
+              )}
+              {onOpenSlideList && <SlideListButton onClick={onOpenSlideList} />}
             </EmptyContent>
           )}
         </Empty>
@@ -130,7 +137,7 @@ export function EditorStageCanvas({
   return (
     <div
       data-testid="editor-stage-canvas"
-      className="relative flex flex-1 flex-col items-center justify-between overflow-hidden px-6 pt-6 pb-2 select-none"
+      className="relative flex flex-1 flex-col items-center justify-between overflow-hidden px-6 pt-6 pb-2 select-none max-md:px-3 max-md:pt-3"
     >
       <div className="flex w-full flex-1 items-center justify-center overflow-hidden py-2">
         <div
@@ -214,12 +221,13 @@ export function EditorStageCanvas({
         data-testid="editor-status-bar"
         className="mt-2 flex w-full max-w-4xl shrink-0 items-center justify-between gap-3 text-xs text-muted-foreground"
       >
-        <div className="flex min-w-0 items-center gap-2">
-          <span className="inline-flex items-center rounded-md bg-muted px-2 py-0.5 font-mono font-semibold text-foreground">
+        <div className="flex min-w-0 items-center gap-2 max-md:flex-wrap max-md:gap-y-1">
+          {onOpenSlideList && <SlideListButton onClick={onOpenSlideList} />}
+          <span className="inline-flex items-center rounded-md bg-muted px-2 py-0.5 font-mono font-semibold text-foreground max-md:shrink-0 max-md:whitespace-nowrap">
             {EDITOR_COPY.canvas.slidePosition(slideNumber, totalSlideCount)}
           </span>
           <span aria-hidden="true">·</span>
-          <span className="font-mono">
+          <span className="font-mono max-md:shrink-0 max-md:whitespace-nowrap">
             {EDITOR_COPY.canvas.songPosition(songNumber, totalSongs)}
           </span>
           {statusItems}
@@ -264,6 +272,24 @@ export function EditorStageCanvas({
         </ButtonGroup>
       </div>
     </div>
+  );
+}
+
+function SlideListButton({
+  onClick,
+}: {
+  onClick: () => void;
+}): React.JSX.Element {
+  return (
+    <Button
+      variant="outline"
+      size="sm"
+      data-testid="open-slide-list-btn"
+      onClick={onClick}
+    >
+      <ListIcon />
+      {EDITOR_COPY.thumbnails.list}
+    </Button>
   );
 }
 

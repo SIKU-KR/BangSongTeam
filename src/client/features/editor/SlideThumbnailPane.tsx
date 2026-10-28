@@ -63,6 +63,7 @@ import {
   paneTargetAttrs,
   readPaneTarget,
 } from "./slidePaneTargets";
+import { SlideListCloseButton } from "./SlideListSheet";
 import { useCollapsedSongs } from "./useCollapsedSongs";
 import { useSlidePaneDrag } from "./useSlidePaneDrag";
 import {
@@ -103,6 +104,13 @@ export interface SlideThumbnailPaneProps {
   onOpenSongPicker: () => void;
   /** 보기 권한으로 공유받은 세트. 선택·펼치기만 되고 메뉴·끌기·추가는 없다 */
   readOnly?: boolean;
+  /**
+   * `sheet`는 폰 폭의 `SlideListSheet` 안에 놓는 모습이다. 시트 폭을 채우고 머리줄에 닫기 버튼을
+   * 두며, 위아래로 쓸어 스크롤하는 손가락이 끌기로 읽히지 않게 마우스로만 끌 수 있다.
+   */
+  variant?: "docked" | "sheet";
+  /** 슬라이드를 눌러 골랐을 때 알린다 (끌기를 시작하며 고른 것은 알리지 않는다). 시트가 이것으로 닫는다 */
+  onSlideChosen?: () => void;
 }
 
 type MenuTarget =
@@ -163,6 +171,7 @@ function slideOverflowWarning(
  * 클릭·Ctrl/⌘·Shift 선택, 썸네일 사이 삽입 커서, 우클릭 메뉴, 여러 장 끌기를
  * 지원한다. 선택·끌기·붙여넣기는 곡마다 서식이 달라 한 곡 안에서만 한다.
  * 창 자체가 포커스를 받아 편집기 단축키가 창 전용 키(`data-slide-pane`)를 켠다.
+ * 폰 폭에서는 접어 두고 시트 안에서 연다(`variant="sheet"`).
  */
 export function SlideThumbnailPane({
   items,
@@ -188,6 +197,8 @@ export function SlideThumbnailPane({
   onDeleteSong,
   onOpenSongPicker,
   readOnly = false,
+  variant = "docked",
+  onSlideChosen,
 }: SlideThumbnailPaneProps): React.JSX.Element {
   useBackgroundCatalog();
   const [menuTarget, setMenuTarget] = useState<MenuTarget | null>(null);
@@ -241,6 +252,7 @@ export function SlideThumbnailPane({
     onDropSlides,
     onReorderSong,
     onDragBegin: focusPane,
+    mouseOnly: variant === "sheet",
   });
 
   const pasteAction: MenuAction = {
@@ -409,6 +421,7 @@ export function SlideThumbnailPane({
       shift: event.shiftKey,
       mod: event.metaKey || event.ctrlKey,
     });
+    onSlideChosen?.();
   };
 
   const draggedCount =
@@ -420,7 +433,10 @@ export function SlideThumbnailPane({
   return (
     <aside
       data-testid="slide-thumbnail-pane"
-      className="flex w-64 shrink-0 flex-col border-r bg-background select-none"
+      className={cn(
+        "flex shrink-0 flex-col bg-background select-none",
+        variant === "sheet" ? "min-h-0 w-full flex-1" : "w-64 border-r",
+      )}
     >
       <div className="flex h-11 shrink-0 items-center justify-between border-b px-3">
         <span className="text-xs font-bold">
@@ -429,25 +445,28 @@ export function SlideThumbnailPane({
             {totalSlides}
           </span>
         </span>
-        {!readOnly && (
-          <Tooltip>
-            <TooltipTrigger
-              render={
-                <Button
-                  variant="ghost"
-                  size="xs"
-                  data-testid="add-slide-btn"
-                  disabled={items.length === 0}
-                  onClick={onAddSlide}
-                />
-              }
-            >
-              <PlusIcon />
-              {EDITOR_COPY.slide.add}
-            </TooltipTrigger>
-            <TooltipContent>{EDITOR_COPY.slide.addTooltip}</TooltipContent>
-          </Tooltip>
-        )}
+        <div className="flex items-center gap-1">
+          {!readOnly && (
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <Button
+                    variant="ghost"
+                    size="xs"
+                    data-testid="add-slide-btn"
+                    disabled={items.length === 0}
+                    onClick={onAddSlide}
+                  />
+                }
+              >
+                <PlusIcon />
+                {EDITOR_COPY.slide.add}
+              </TooltipTrigger>
+              <TooltipContent>{EDITOR_COPY.slide.addTooltip}</TooltipContent>
+            </Tooltip>
+          )}
+          {variant === "sheet" && <SlideListCloseButton />}
+        </div>
       </div>
 
       <DndContext {...dndContextProps}>

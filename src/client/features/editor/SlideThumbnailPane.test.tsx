@@ -108,6 +108,18 @@ describe("SlideThumbnailPane (PPT식 썸네일 창)", () => {
     });
   });
 
+  it("슬라이드를 눌러 골랐을 때만 알린다 (곡 머리글과 틈은 고른 것이 아니다)", () => {
+    const onSlideChosen = vi.fn();
+    renderPane({ onSlideChosen });
+
+    fireEvent.click(screen.getByTestId("song-section-title-1"));
+    fireEvent.click(screen.getByTestId("slide-pane-list"));
+    expect(onSlideChosen).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByTestId("slide-thumb-4"));
+    expect(onSlideChosen).toHaveBeenCalledTimes(1);
+  });
+
   it("곡 머리글을 누르면 그 곡 전체를 선택한다", () => {
     const { props } = renderPane();
 

@@ -128,6 +128,8 @@ export const EDITOR_COPY = {
     fit: "맞춤",
   },
   thumbnails: {
+    list: `${SLIDE.label} 목록`,
+    listHint: "슬라이드를 누르면 그 슬라이드로 옮기고 목록을 닫아요.",
     cut: "잘라내기",
     paste: "붙여넣기",
     collapseAll: "모두 축소",
