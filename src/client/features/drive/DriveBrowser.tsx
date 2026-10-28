@@ -1,4 +1,10 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type ComponentProps,
+} from "react";
 import { FolderIcon, SearchIcon, Trash2Icon } from "lucide-react";
 import { Button } from "#components/ui/button";
 import {
@@ -44,6 +50,10 @@ import { useMarqueeSelection } from "./useMarqueeSelection";
 import { DRIVE_COPY } from "#copy/drive";
 import { COMMON_COPY } from "#copy/common";
 
+type ContextMenuActionsRef = NonNullable<
+  ComponentProps<typeof ContextMenu>["actionsRef"]
+>;
+
 interface DriveBrowserProps {
   mode: "drive" | "trash";
   folderId?: string | null;
@@ -67,8 +77,12 @@ interface DriveBrowserProps {
  * 우클릭·길게 누르기 메뉴의 항목은 메뉴가 열리는 순간 누른 곳으로 만든다. iOS는 길게 눌러도
  * `contextmenu`를 보내지 않아 Base UI가 터치 타이머로 메뉴를 여는데, 그때는 `onContextMenu`가
  * 불리지 않아 미리 만든 항목이 비어 있거나 앞서 우클릭한 행의 것이다. 행의 ⋮ 메뉴 같은 팝업은
- * DOM에서는 목록 밖이어도 React 트리에서는 행의 자식이라 그 안의 터치가 목록의 길게 누르기
- * 타이머에 닿으므로, 목록 안에서 시작하지 않은 누름은 메뉴를 열지 않는다.
+ * DOM에서는 목록 밖이어도 React 트리에서는 행의 자식이라 그 안의 이벤트가 목록의 메뉴 트리거에
+ * 닿을 수 있으므로, 목록 안에서 시작하지 않은 누름은 메뉴를 열지 않는다.
+ *
+ * 터치로는 움직이지 않고 0.5초 누르면 메뉴가 열리고, 0.25초 누른 뒤 움직이면 끌기가 시작된다
+ * (`LongPressDragSensor`). 메뉴가 열린 뒤에 움직여 끌기가 시작되면 메뉴를 닫고, 끌기 중에는 우클릭이나
+ * 길게 누르기로도 메뉴를 열지 않는다.
  *
  * 검색·유형 필터·이동으로 목록에서 빠진 항목은 선택에서도 뺀다. 가려진 항목이 선택에 남으면
  * 끌기(선택 전체)와 도구 모음·키보드(보이는 선택)가 서로 다른 항목에 듣는다.
@@ -84,6 +98,8 @@ export function DriveBrowser({
   const newActions = useNewItemActions();
   const [contextActions, setContextActions] = useState<MenuAction[]>([]);
   const containerRef = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<ContextMenuActionsRef["current"]>(null);
+  const isDragging = drive.activeDrag !== null;
 
   const isTrash = mode === "trash";
   const {
@@ -104,6 +120,10 @@ export function DriveBrowser({
   const { selection, setSelection } = drive;
   const selectedItems = items.filter((item) => selection.has(item.key));
   const tabStopKey = visibleKey(keys, drive.focusKey) ?? keys[0] ?? null;
+
+  useEffect(() => {
+    if (isDragging) menuRef.current?.close();
+  }, [isDragging]);
 
   useEffect(() => {
     const listed = new Set(keys);
@@ -227,9 +247,12 @@ export function DriveBrowser({
       />
 
       <ContextMenu
+        actionsRef={menuRef}
         onOpenChange={(opened, details) => {
           if (!opened) return;
-          const actions = contextActionsAt(details.event.target);
+          const actions = isDragging
+            ? null
+            : contextActionsAt(details.event.target);
           if (actions) setContextActions(actions);
           else details.cancel();
         }}

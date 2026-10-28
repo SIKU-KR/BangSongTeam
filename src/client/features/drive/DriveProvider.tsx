@@ -6,10 +6,7 @@ import { Badge } from "#components/ui/badge";
 import {
   DndContext,
   DragOverlay,
-  PointerSensor,
   pointerWithin,
-  useSensor,
-  useSensors,
   type DragEndEvent,
   type DragStartEvent,
   type Modifier,
@@ -43,14 +40,10 @@ import {
 } from "./driveModel";
 import { TRASH_PATH, isDrivePath } from "./drivePaths";
 import { DriveDialogHost, type DriveDialogState } from "./DriveDialogHost";
+import { useDriveSensors } from "./useDriveSensors";
 import { useUndoToast } from "./useUndoToast";
 import { DRIVE_COPY } from "#copy/drive";
 import { COMMON_COPY } from "#copy/common";
-
-// useSensor는 옵션 객체가 바뀌면 센서를 새로 만들고, 그러면 끌기·놓기 내부 컨텍스트가 바뀌어 모든 행이
-// 다시 그려진다. 검색어를 칠 때마다 이 공급자가 다시 그려지므로 옵션을 렌더 밖에 둔다.
-// @dnd-kit/core@6.3.1 dist/core.esm.js (`useSensor`, `useCombineActivators`)
-const POINTER_SENSOR_OPTIONS = { activationConstraint: { distance: 5 } };
 
 const followCursor: Modifier = ({
   activatorEvent,
@@ -203,7 +196,7 @@ export function DriveProvider({
     [navigate],
   );
 
-  const sensors = useSensors(useSensor(PointerSensor, POINTER_SENSOR_OPTIONS));
+  const sensors = useDriveSensors();
 
   const handleDragStart = ({ active }: DragStartEvent): void => {
     const key = String(active.id);

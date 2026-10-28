@@ -89,7 +89,7 @@ const ROW_CLASS =
   "group h-12 cursor-default border-b text-sm text-muted-foreground outline-none select-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset";
 
 const STOP_ROW_EVENTS = {
-  onPointerDown: (event: React.PointerEvent) => event.stopPropagation(),
+  onTouchStart: (event: React.TouchEvent) => event.stopPropagation(),
   onMouseDown: (event: React.MouseEvent) => event.stopPropagation(),
   onClick: (event: React.MouseEvent) => event.stopPropagation(),
   onDoubleClick: (event: React.MouseEvent) => event.stopPropagation(),
@@ -270,9 +270,12 @@ export function DriveListHeader({
  * 넘긴다. `showLocation`이면 이름 옆에 항목의 위치를 보인다.
  * 발표·편집 버튼은 마우스를 올리거나 선택·포커스했을 때만 보인다.
  *
- * 행 안의 버튼과 ⋮ 메뉴는 누름이 행 선택·더블클릭 열기·끌기로 번지지 않게 막는다. 포인터 누름까지
- * 막아야 한다. ⋮ 메뉴는 React 트리에서 행의 자식이라, 버튼이나 메뉴 항목을 터치할 때 손가락이
- * 5px만 굴러도 행 끌기가 시작되고 이어지는 클릭이 삼켜진다.
+ * 행 안의 버튼과 ⋮ 메뉴는 누름이 행 선택·더블클릭 열기·끌기로 번지지 않게 막는다. 마우스 누름뿐
+ * 아니라 터치 누름까지 막아야 한다. ⋮ 메뉴는 React 트리에서 행의 자식이라, 막지 않으면 버튼이나 메뉴
+ * 항목을 꾹 눌렀다가 움직일 때 행 끌기가 시작되고 이어지는 클릭이 삼켜진다.
+ *
+ * 행 자신의 `onMouseDown`은 끌기 센서의 `onMouseDown`과 같은 이벤트라 둘을 함께 부른다. 따로 달면
+ * 뒤에 오는 쪽이 앞쪽을 덮어 마우스로 끌 수 없다.
  */
 export function DriveListRow({
   item,
@@ -303,7 +306,10 @@ export function DriveListRow({
       tabIndex={handlers.tabStop ? 0 : -1}
       data-testid={isFolder ? "folder-row" : "presentation-row"}
       data-item-key={item.key}
-      onMouseDown={handlers.onMouseDown}
+      onMouseDown={(event) => {
+        dnd.listeners?.onMouseDown?.(event);
+        handlers.onMouseDown(event);
+      }}
       onClick={handlers.onClick}
       onDoubleClick={handlers.onDoubleClick}
       onFocus={handlers.onFocus}
