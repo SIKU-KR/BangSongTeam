@@ -8,6 +8,7 @@ import {
 } from "./db";
 import {
   savePresentation,
+  savePresentationIfUnchanged,
   loadAllPresentations,
   loadPresentation,
   deletePresentation,
@@ -189,6 +190,423 @@ describe("presentationRepository", () => {
 
       const { valid } = await loadAllPresentations();
       expect(valid).toEqual([owned]);
+    });
+  });
+
+  describe("한도를 넘는 저장본과 읽지 못한 저장본", () => {
+    const T1 = "2026-09-25T00:00:00.000Z";
+    const T2 = "2026-09-26T00:00:00.000Z";
+    const T3 = "2026-09-27T00:00:00.000Z";
+    const LONG_TITLE = "가".repeat(150);
+    const FITTED_TITLE = "가".repeat(100);
+
+    async function rowAt(key: string): Promise<unknown> {
+      const db = await getOfflineDB();
+      return db.get("presentations", key);
+    }
+
+    async function storedKeys(): Promise<string[]> {
+      const db = await getOfflineDB();
+      const keys = await db.getAllKeys("presentations");
+      return keys.map(String).sort();
+    }
+
+    function keptKey(id: string, updatedAt: string): string {
+      return `${id}#kept#${updatedAt}`;
+    }
+
+    function unreadableRow(
+      id: string,
+      updatedAt: string,
+      title = "새 버전이 쓴 판",
+    ): Record<string, unknown> {
+      return {
+        ...makePresentation({ id, updatedAt, title }),
+        serviceDate: "nope",
+      };
+    }
+
+    function overLimitRow(
+      id: string,
+      updatedAt: string,
+    ): Record<string, unknown> {
+      return { ...makePresentation({ id, updatedAt }), title: LONG_TITLE };
+    }
+
+    it("글 한도만 넘은 저장본은 줄여 싣고 고친 id로 알리며, 저장본은 그대로 둔다", async () => {
+      const id = createId();
+      const row = overLimitRow(id, T2);
+      await seedRawRecord(row);
+
+      const { valid, corrupted, repairedIds } = await loadAllPresentations();
+
+      expect(valid).toHaveLength(1);
+      expect(valid[0]).toMatchObject({
+        id,
+        title: FITTED_TITLE,
+        updatedAt: T2,
+      });
+      expect(repairedIds).toEqual([id]);
+      expect(corrupted).toEqual([]);
+      expect(await rowAt(id)).toEqual(row);
+    });
+
+    it("읽지 못한 저장본은 한 번만 알리고 그 자리에 그대로 둔다", async () => {
+      const id = createId();
+      const row = unreadableRow(id, T2);
+      await seedRawRecord(row);
+
+      const { valid, corrupted, repairedIds } = await loadAllPresentations();
+
+      expect(valid).toEqual([]);
+      expect(repairedIds).toEqual([]);
+      expect(corrupted).toEqual([{ id }]);
+      expect(await storedKeys()).toEqual([id]);
+      expect(await rowAt(id)).toEqual(row);
+    });
+
+    describe("싣다가 읽지 못한 저장본을 덮을 때", () => {
+      it("덮기 전에 그 판을 보관하고, 다시 저장할 때는 더 보관하지 않는다", async () => {
+        const id = createId();
+        const raw = unreadableRow(id, T2);
+        await seedRawRecord(raw);
+        await loadAllPresentations();
+        const server = makePresentation({ id, updatedAt: T1 });
+
+        await savePresentation(server);
+        await savePresentation({ ...server, title: "다시 저장한 제목" });
+
+        expect(await rowAt(id)).toEqual({
+          ...server,
+          title: "다시 저장한 제목",
+        });
+        expect(await rowAt(keptKey(id, T2))).toEqual({
+          ...raw,
+          id: keptKey(id, T2),
+        });
+        expect(await storedKeys()).toEqual([id, keptKey(id, T2)].sort());
+      });
+
+      it("보관한 판은 덮지 않고, 다음에 읽지 못한 다른 판도 따로 보관한다", async () => {
+        const id = createId();
+        await seedRawRecord(unreadableRow(id, T2));
+        await loadAllPresentations();
+        await savePresentation(makePresentation({ id, updatedAt: T1 }));
+        const keptAtT2 = await rowAt(keptKey(id, T2));
+
+        const newer = unreadableRow(id, T3);
+        await seedRawRecord(newer);
+        await loadAllPresentations();
+        await savePresentation(makePresentation({ id, updatedAt: T1 }));
+
+        expect(await rowAt(keptKey(id, T2))).toEqual(keptAtT2);
+        expect(await rowAt(keptKey(id, T3))).toEqual({
+          ...newer,
+          id: keptKey(id, T3),
+        });
+        expect(await storedKeys()).toEqual(
+          [id, keptKey(id, T2), keptKey(id, T3)].sort(),
+        );
+      });
+
+      it("같은 updatedAt의 보관본이 이미 있으면 그 보관본을 덮지 않는다", async () => {
+        const id = createId();
+        await seedRawRecord(unreadableRow(id, T2, "먼저 보관한 판"));
+        await loadAllPresentations();
+        await savePresentation(makePresentation({ id, updatedAt: T1 }));
+        const kept = await rowAt(keptKey(id, T2));
+
+        await seedRawRecord(unreadableRow(id, T2, "같은 시각의 다른 판"));
+        await loadAllPresentations();
+        await savePresentation(makePresentation({ id, updatedAt: T1 }));
+
+        expect(await rowAt(keptKey(id, T2))).toEqual(kept);
+      });
+
+      it("저장할 판이 읽지 못한 저장본과 같은 updatedAt이면 보관하지 않는다", async () => {
+        const id = createId();
+        await seedRawRecord(unreadableRow(id, T2));
+        await loadAllPresentations();
+        const same = makePresentation({ id, updatedAt: T2 });
+
+        await savePresentation(same);
+
+        expect(await storedKeys()).toEqual([id]);
+        expect(await rowAt(id)).toEqual(same);
+      });
+
+      it("두 저장이 함께 덮어도 보관본은 하나만 남긴다", async () => {
+        const id = createId();
+        const raw = unreadableRow(id, T2);
+        await seedRawRecord(raw);
+        await loadAllPresentations();
+
+        await Promise.all([
+          savePresentation(makePresentation({ id, updatedAt: T1 })),
+          savePresentation(makePresentation({ id, updatedAt: T3 })),
+        ]);
+
+        expect(await storedKeys()).toEqual([id, keptKey(id, T2)].sort());
+        expect(await rowAt(keptKey(id, T2))).toEqual({
+          ...raw,
+          id: keptKey(id, T2),
+        });
+      });
+
+      it("한 건 읽기에서 읽지 못한 저장본도 덮기 전에 보관한다", async () => {
+        const id = createId();
+        const raw = unreadableRow(id, T2);
+        await seedRawRecord(raw);
+
+        expect(await loadPresentation(id)).toEqual({ status: "unreadable" });
+        await savePresentation(makePresentation({ id, updatedAt: T1 }));
+
+        expect(await rowAt(keptKey(id, T2))).toEqual({
+          ...raw,
+          id: keptKey(id, T2),
+        });
+      });
+
+      it("읽지 못한 공유받은 사본을 덮을 때도 보관한다", async () => {
+        const id = createId();
+        const access = {
+          ownerName: "인도자",
+          memberId: "0000000x0000000member",
+        };
+        const raw = { ...unreadableRow(id, T2), access };
+        await seedRawRecord(raw);
+        await loadAllPresentations();
+        const shared = makePresentation({ id, updatedAt: T1, access });
+
+        await saveSharedPresentation(shared);
+
+        expect(await rowAt(id)).toEqual(shared);
+        expect(await rowAt(keptKey(id, T2))).toEqual({
+          ...raw,
+          id: keptKey(id, T2),
+        });
+      });
+    });
+
+    it("한 건 읽기는 글 한도만 넘은 저장본을 줄여 읽는다", async () => {
+      const id = createId();
+      await seedRawRecord(overLimitRow(id, T2));
+
+      const loaded = await loadPresentation(id);
+
+      expect(loaded.status === "ok" && loaded.value.title).toBe(FITTED_TITLE);
+    });
+
+    describe("보관본 고치기", () => {
+      it("읽을 수 있게 된 보관본이 지금 판보다 새로우면 그 판을 되살리고 보관본을 지운다", async () => {
+        const id = createId();
+        await savePresentation(makePresentation({ id, updatedAt: T1 }));
+        await seedRawRecord({ ...overLimitRow(id, T2), id: keptKey(id, T2) });
+
+        const { valid, corrupted, restoredIds } = await loadAllPresentations();
+
+        expect(valid).toHaveLength(1);
+        expect(valid[0]).toMatchObject({
+          id,
+          updatedAt: T2,
+          title: FITTED_TITLE,
+        });
+        expect(corrupted).toEqual([]);
+        expect(restoredIds).toEqual([id]);
+        expect(await storedKeys()).toEqual([id]);
+        expect(await rowAt(id)).toEqual(valid[0]);
+      });
+
+      it("지금 판이 더 새로우면 지금 판을 두고 보관본을 지운다", async () => {
+        const id = createId();
+        const current = makePresentation({ id, updatedAt: T3 });
+        await savePresentation(current);
+        await seedRawRecord({ ...overLimitRow(id, T2), id: keptKey(id, T2) });
+
+        const { valid, corrupted, restoredIds } = await loadAllPresentations();
+
+        expect(valid).toEqual([current]);
+        expect(corrupted).toEqual([]);
+        expect(restoredIds).toEqual([]);
+        expect(await storedKeys()).toEqual([id]);
+      });
+
+      it("지금 저장본을 읽지 못하면 읽을 수 있는 보관본도 그대로 두고, 그 자리를 덮은 다음에 되살린다", async () => {
+        const id = createId();
+        const unreadable = unreadableRow(id, T3);
+        const keptAtT2 = { ...overLimitRow(id, T2), id: keptKey(id, T2) };
+        await seedRawRecord(unreadable);
+        await seedRawRecord(keptAtT2);
+
+        const first = await loadAllPresentations();
+
+        expect(first.valid).toEqual([]);
+        expect(first.corrupted).toEqual([{ id }]);
+        expect(first.restoredIds).toEqual([]);
+        expect(await rowAt(id)).toEqual(unreadable);
+        expect(await rowAt(keptKey(id, T2))).toEqual(keptAtT2);
+
+        await savePresentation(makePresentation({ id, updatedAt: T1 }));
+        const second = await loadAllPresentations();
+
+        expect(second.valid).toHaveLength(1);
+        expect(second.valid[0]).toMatchObject({
+          id,
+          updatedAt: T2,
+          title: FITTED_TITLE,
+        });
+        expect(second.corrupted).toEqual([{ id }]);
+        expect(second.restoredIds).toEqual([id]);
+        expect(await rowAt(id)).toEqual(second.valid[0]);
+        expect(await rowAt(keptKey(id, T3))).toEqual({
+          ...unreadable,
+          id: keptKey(id, T3),
+        });
+        expect(await storedKeys()).toEqual([id, keptKey(id, T3)].sort());
+      });
+
+      it("아직 읽지 못하는 보관본은 남기고 원래 id로 한 번만 알린다", async () => {
+        const id = createId();
+        const current = makePresentation({ id, updatedAt: T1 });
+        await savePresentation(current);
+        await seedRawRecord({ ...unreadableRow(id, T2), id: keptKey(id, T2) });
+        await seedRawRecord({ ...unreadableRow(id, T3), id: keptKey(id, T3) });
+
+        const { valid, corrupted } = await loadAllPresentations();
+
+        expect(valid).toEqual([current]);
+        expect(corrupted).toEqual([{ id }]);
+        expect(await storedKeys()).toEqual(
+          [id, keptKey(id, T2), keptKey(id, T3)].sort(),
+        );
+      });
+
+      it("공유받은 사본의 보관본은 소유자 저장본 자리에 되살리지 않는다", async () => {
+        const id = createId();
+        const owned = makePresentation({ id, updatedAt: T1 });
+        await savePresentation(owned);
+        await seedRawRecord({
+          ...makePresentation({
+            id,
+            updatedAt: T2,
+            access: { ownerName: "인도자", memberId: "0000000x0000000member" },
+          }),
+          id: keptKey(id, T2),
+        });
+
+        const { valid, corrupted, restoredIds } = await loadAllPresentations();
+
+        expect(valid).toEqual([owned]);
+        expect(corrupted).toEqual([]);
+        expect(restoredIds).toEqual([]);
+        expect(await storedKeys()).toEqual([id]);
+      });
+
+      it("원래 저장본이 없는 보관본은 지운다", async () => {
+        const id = createId();
+        await seedRawRecord({ ...unreadableRow(id, T2), id: keptKey(id, T2) });
+        await seedRawRecord({ ...overLimitRow(id, T3), id: keptKey(id, T3) });
+
+        const { valid, corrupted } = await loadAllPresentations();
+
+        expect(valid).toEqual([]);
+        expect(corrupted).toEqual([]);
+        expect(await storedKeys()).toEqual([]);
+      });
+
+      it("두 탭이 함께 고쳐도 둘 다 되살린 판을 싣고 저장본에는 한 번만 둔다", async () => {
+        const id = createId();
+        await savePresentation(makePresentation({ id, updatedAt: T1 }));
+        const kept = makePresentation({
+          id,
+          updatedAt: T2,
+          title: "되살릴 판",
+        });
+        await seedRawRecord({ ...kept, id: keptKey(id, T2) });
+
+        const [first, second] = await Promise.all([
+          loadAllPresentations(),
+          loadAllPresentations(),
+        ]);
+
+        expect(first.valid).toEqual([kept]);
+        expect(second.valid).toEqual([kept]);
+        expect([...first.restoredIds, ...second.restoredIds]).toEqual([id]);
+        expect(await storedKeys()).toEqual([id]);
+        expect(await rowAt(id)).toEqual(kept);
+      });
+    });
+
+    it("프레젠테이션을 지우면 그 보관본도 모두 지운다", async () => {
+      const id = createId();
+      const other = makePresentation();
+      await savePresentation(makePresentation({ id, updatedAt: T3 }));
+      await seedRawRecord({ ...unreadableRow(id, T1), id: keptKey(id, T1) });
+      await seedRawRecord({ ...unreadableRow(id, T2), id: keptKey(id, T2) });
+      await savePresentation(other);
+      await seedRawRecord({
+        ...unreadableRow(other.id, T2),
+        id: keptKey(other.id, T2),
+      });
+
+      await deletePresentation(id);
+
+      expect(await storedKeys()).toEqual(
+        [other.id, keptKey(other.id, T2)].sort(),
+      );
+    });
+
+    describe("바뀌지 않았을 때만 쓰기 (savePresentationIfUnchanged)", () => {
+      it("저장본의 updatedAt이 같으면 쓴다", async () => {
+        const id = createId();
+        await seedRawRecord(overLimitRow(id, T2));
+        const fitted = makePresentation({
+          id,
+          updatedAt: T2,
+          title: FITTED_TITLE,
+        });
+
+        expect(await savePresentationIfUnchanged(fitted)).toBe(true);
+
+        expect(await rowAt(id)).toEqual(fitted);
+      });
+
+      it("그사이 다른 쓰기가 저장본을 바꿨으면 쓰지 않는다", async () => {
+        const id = createId();
+        await seedRawRecord(overLimitRow(id, T2));
+        const rewritten = makePresentation({ id, updatedAt: T3 });
+        await savePresentation(rewritten);
+
+        expect(
+          await savePresentationIfUnchanged(
+            makePresentation({ id, updatedAt: T2, title: FITTED_TITLE }),
+          ),
+        ).toBe(false);
+
+        expect(await rowAt(id)).toEqual(rewritten);
+      });
+
+      it("저장본이 없으면 쓰지 않는다", async () => {
+        const doc = makePresentation();
+
+        expect(await savePresentationIfUnchanged(doc)).toBe(false);
+
+        expect(await storedKeys()).toEqual([]);
+      });
+
+      it("소유자의 저장본이 같은 판이어도 공유받은 사본으로 덮지 않는다", async () => {
+        const owned = makePresentation({ updatedAt: T2 });
+        await savePresentation(owned);
+
+        expect(
+          await savePresentationIfUnchanged({
+            ...owned,
+            access: { ownerName: "인도자", memberId: "0000000x0000000member" },
+          }),
+        ).toBe(false);
+
+        expect(await rowAt(owned.id)).toEqual(owned);
+      });
     });
   });
 });

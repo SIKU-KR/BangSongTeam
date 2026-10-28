@@ -78,7 +78,12 @@ import {
   savePresentation,
   saveSong,
 } from "../storage";
-import { closeOfflineDB, OFFLINE_DB_NAME } from "../storage/db";
+import {
+  closeOfflineDB,
+  getOfflineDB,
+  OFFLINE_DB_NAME,
+  type WorshipOfflineDB,
+} from "../storage/db";
 import { __resetStorageChannelForTests } from "../storage/storageChannel";
 import { installFakeBroadcastChannel } from "../../test/fakeBroadcastChannel";
 import {
@@ -2010,6 +2015,109 @@ async function settleMicrotasks(): Promise<void> {
 async function bootSettled(): Promise<void> {
   await vi.waitFor(() => expect(getSyncSnapshot().status).toBe("synced"));
 }
+
+describe("runBootSync — 한도를 넘는 저장본과 읽지 못한 저장본", () => {
+  const T1 = "2026-09-25T00:00:00.000Z";
+  const T2 = "2026-09-26T00:00:00.000Z";
+  const FITTED_TITLE = "가".repeat(100);
+  const KEPT_AT_T2 = `${DOC}#kept#${T2}`;
+
+  async function putRawRecord(record: unknown): Promise<void> {
+    const db = await getOfflineDB();
+    await db.put(
+      "presentations",
+      record as WorshipOfflineDB["presentations"]["value"],
+    );
+  }
+
+  async function rowAt(key: string): Promise<unknown> {
+    const db = await getOfflineDB();
+    return db.get("presentations", key);
+  }
+
+  async function storedKeys(): Promise<string[]> {
+    const db = await getOfflineDB();
+    const keys = await db.getAllKeys("presentations");
+    return keys.map(String).sort();
+  }
+
+  function serverCopy(): Presentation {
+    return { ...presentation(DOC), title: "서버 판", updatedAt: T1 };
+  }
+
+  function unreadableRecord(): Record<string, unknown> {
+    return {
+      ...presentation(DOC),
+      title: "새 버전이 쓴 판",
+      serviceDate: "nope",
+      updatedAt: T2,
+    };
+  }
+
+  async function bootWithServerCopy(): Promise<void> {
+    await hydrateFromStorage();
+    presentationSync.pullPresentations.mockResolvedValue([serverCopy()]);
+    await runBootSync();
+    await flushPendingWrites();
+  }
+
+  beforeEach(async () => {
+    await resetOfflineDatabase();
+    await resetBootSyncDependencies();
+  });
+
+  afterEach(() => {
+    cleanUpBootSync();
+    closeOfflineDB();
+  });
+
+  it("글 한도만 넘은 로컬 판은 줄여 올리고, 저장본에는 그 판을 보관본 없이 남긴다", async () => {
+    await putRawRecord({
+      ...presentation(DOC),
+      title: "가".repeat(150),
+      updatedAt: T2,
+    });
+
+    await bootWithServerCopy();
+
+    expect(presentationSync.pushPresentation).toHaveBeenCalledTimes(1);
+    expect(presentationSync.pushPresentation.mock.calls[0][0]).toMatchObject({
+      id: DOC,
+      title: FITTED_TITLE,
+      updatedAt: T2,
+    });
+    expect(await storedKeys()).toEqual([DOC]);
+    expect(await rowAt(DOC)).toMatchObject({
+      title: FITTED_TITLE,
+      updatedAt: T2,
+    });
+  });
+
+  it("읽지 못한 로컬 판은 서버 사본으로 덮기 전에 보관한다", async () => {
+    const raw = unreadableRecord();
+    await putRawRecord(raw);
+
+    await bootWithServerCopy();
+
+    const adopted = { ...serverCopy(), baseUpdatedAt: T1 };
+    expect(listPresentations()).toEqual([adopted]);
+    expect(await rowAt(DOC)).toEqual(adopted);
+    expect(await rowAt(KEPT_AT_T2)).toEqual({ ...raw, id: KEPT_AT_T2 });
+  });
+
+  it("다시 싣고 부팅해도 보관본을 더 만들지 않고 그 세트를 한 번만 알린다", async () => {
+    const raw = unreadableRecord();
+    await putRawRecord(raw);
+    await bootWithServerCopy();
+
+    resetPresentationStore();
+    await bootWithServerCopy();
+
+    expect(await storedKeys()).toEqual([DOC, KEPT_AT_T2].sort());
+    expect(await rowAt(KEPT_AT_T2)).toEqual({ ...raw, id: KEPT_AT_T2 });
+    expect((await loadAllPresentations()).corrupted).toEqual([{ id: DOC }]);
+  });
+});
 
 describe("startBootSync — 송출 화면에서 부팅한 탭", () => {
   let fetcher: ReturnType<typeof vi.fn<SessionFetcher>>;

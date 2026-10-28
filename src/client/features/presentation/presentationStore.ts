@@ -14,6 +14,7 @@ import {
 } from "#shared";
 import {
   savePresentation,
+  savePresentationIfUnchanged,
   saveSharedPresentation,
   loadAllPresentations,
   loadPresentation,
@@ -166,6 +167,7 @@ let persistenceEnabled = false;
 let pendingIds = new Set<string>();
 const writingIds = new Map<string, number>();
 const skippedReloads = new Set<string>();
+const repairedVersions = new Map<string, Presentation>();
 let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 let inFlight: Promise<void> = Promise.resolve();
 
@@ -183,14 +185,29 @@ function hasUnpersistedWrite(id: string): boolean {
   return pendingIds.has(id) || writingIds.has(id);
 }
 
+async function writeDocument(
+  doc: Presentation,
+  repaired: boolean,
+): Promise<boolean> {
+  if (repaired) return savePresentationIfUnchanged(doc);
+  await (doc.access ? saveSharedPresentation(doc) : savePresentation(doc));
+  return true;
+}
+
 async function writeDocuments(ids: string[]): Promise<void> {
   let failed = false;
   const written: string[] = [];
+  const superseded: string[] = [];
   for (const id of ids) {
     const doc = state.byId[id];
+    const repaired = doc !== undefined && repairedVersions.get(id) === doc;
+    repairedVersions.delete(id);
     try {
       if (!doc) continue;
-      await (doc.access ? saveSharedPresentation(doc) : savePresentation(doc));
+      if (!(await writeDocument(doc, repaired))) {
+        superseded.push(id);
+        continue;
+      }
       written.push(id);
       if (!doc.access) {
         noteOwnVersion(doc);
@@ -207,6 +224,10 @@ async function writeDocuments(ids: string[]): Promise<void> {
     clearPersistenceError();
   }
   announceStorageChange("presentations", written);
+  for (const id of superseded) {
+    skippedReloads.add(id);
+    if (!isProjecting()) void reloadSkippedRecord(id);
+  }
 }
 
 function runPendingWrites(): void {
@@ -243,8 +264,19 @@ export async function flushPendingWrites(): Promise<void> {
  * 저장본으로 세션 사용자의 프레젠테이션을 싣는다.
  *
  * 싣기는 편집이 아니라서 열린 세트를 서버에 올리지 않는다. 계정을 바꾼 뒤 큐가 켜져 있으면
- * 병합도 하기 전에 새 계정의 세트를 올리게 된다. 하이드레이션이 고친 세트는 저장 줄로 다시 써서
- * 실패하면 경고를 올린다.
+ * 병합도 하기 전에 새 계정의 세트를 올리게 된다.
+ *
+ * 싣다가 고친 세트(글 한도에 맞춰 줄인 판, 중복 덱 id를 고친 판)는 `updatedAt`을 그대로 두고 저장
+ * 줄로 다시 써서, 실패하면 경고를 올린다. 시각을 올리면 줄인 판이 다른 기기의 온전한 판을 이긴다.
+ * 고친 그 객체가 메모리에 그대로 있는 동안에는 저장본이 읽은 판 그대로일 때만 쓰고
+ * (`savePresentationIfUnchanged`), 그사이 다른 탭(이전 버전의 탭 포함)이 고쳐 썼으면 덮지 않고
+ * 그 저장본을 다시 싣는다. 그 전에 고친 세트는 고친 판을 그대로 저장한다. 다른 계정의 저장본은
+ * 싣지 않으므로 다시 쓰지도 않는다.
+ *
+ * 읽으면서 보관본에서 되살린 프레젠테이션(`loadAllPresentations`의 `restoredIds`)은 싣고 나서 다른
+ * 탭에 알린다. 되살리기는 저장 줄 밖의 쓰기라, 알리지 않으면 다른 탭이 되살리기 전 판을 메모리에 든
+ * 채 다음 편집으로 덮고, 보관본은 이미 지워져 되살린 판을 잃는다. 알림에는 세션 사용자 id가 붙으므로
+ * 이 탭이 실은 프레젠테이션만 알린다.
  *
  * 읽지 못하면 메모리를 비우고 저장을 끈다. 앞 계정의 세트가 남으면 다음 병합이 그 세트를 새
  * 계정에 올리고, 저장을 켜 두면 읽지 못한 저장본을 병합 결과로 덮는다.
@@ -252,10 +284,16 @@ export async function flushPendingWrites(): Promise<void> {
 export async function hydrateFromStorage(): Promise<void> {
   persistenceEnabled = false;
   skippedReloads.clear();
+  repairedVersions.clear();
   const userId = getCurrentUserId();
 
   try {
-    const { valid, corrupted } = await loadAllPresentations();
+    const {
+      valid,
+      corrupted,
+      repairedIds: fittedIds,
+      restoredIds,
+    } = await loadAllPresentations();
     reportCorruptedRecords(corrupted);
 
     const mine = valid.filter((doc) => isVisibleTo(doc, userId));
@@ -267,11 +305,20 @@ export async function hydrateFromStorage(): Promise<void> {
     replaceAll(documents);
     clearHistory();
     notifyListeners();
+    announceStorageChange(
+      "presentations",
+      restoredIds.filter((id) => state.byId[id] !== undefined),
+    );
 
     persistenceEnabled = true;
     clearPersistenceError();
 
-    for (const id of repairedIds) pendingIds.add(id);
+    for (const id of new Set([...repairedIds, ...fittedIds])) {
+      const doc = state.byId[id];
+      if (!doc) continue;
+      repairedVersions.set(id, doc);
+      pendingIds.add(id);
+    }
     runPendingWrites();
   } catch (err) {
     persistenceEnabled = false;
@@ -338,6 +385,7 @@ function resetPersistenceForTests(): void {
   pendingIds = new Set();
   writingIds.clear();
   skippedReloads.clear();
+  repairedVersions.clear();
   if (debounceTimer) {
     clearTimeout(debounceTimer);
     debounceTimer = null;

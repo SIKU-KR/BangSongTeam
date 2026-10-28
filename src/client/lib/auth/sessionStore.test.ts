@@ -28,7 +28,12 @@ import {
   type SessionFetcher,
 } from "./sessionStore";
 import { installFakeBroadcastChannel } from "../../test/fakeBroadcastChannel";
+import {
+  clearPersistenceError,
+  getPersistenceError,
+} from "../storage/persistenceStatus";
 import { AUTH_COPY } from "#copy/auth";
+import { ERROR_COPY } from "#copy/common";
 
 vi.mock("./authClient", () => ({
   authClient: {
@@ -202,6 +207,8 @@ describe("세션 스토어", () => {
     cacheWriteGates.clear();
     __resetSessionForTests();
     closeOfflineDB();
+    vi.unstubAllGlobals();
+    clearPersistenceError("session");
     getSession.mockReset();
     authSignOut.mockReset();
     signInEmail.mockReset();
@@ -266,6 +273,27 @@ describe("세션 스토어", () => {
       await hydrateSession();
 
       expect(getSessionState().status).toBe("unauthenticated");
+    });
+
+    it("세션 캐시를 읽지 못하면 로그인 화면에서 알 수 있게 session 저장 실패를 남기고, 캐시를 저장하면 지운다", async () => {
+      closeOfflineDB();
+      vi.stubGlobal("indexedDB", undefined);
+      __setSessionFetcherForTests(async () => null);
+
+      await hydrateSession();
+
+      expect(getSessionState().status).toBe("unauthenticated");
+      expect(getPersistenceError()).toEqual({
+        kind: "unavailable",
+        message: ERROR_COPY.persistence.unavailable,
+      });
+
+      vi.unstubAllGlobals();
+      __setSessionFetcherForTests(async () => makeUser());
+      await hydrateSession();
+
+      expect(getSessionState().status).toBe("authenticated");
+      expect(getPersistenceError()).toBeNull();
     });
 
     it("만료된 캐시는 서버가 세션 없음을 답하면 캐시를 비우고 만료 사유와 함께 로그아웃한다", async () => {

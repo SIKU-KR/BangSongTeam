@@ -21,6 +21,10 @@ import {
 } from "./sessionCache";
 import { authClient, type SocialProvider } from "./authClient";
 import { isProjectionPath } from "../../features/presentation/fullscreen";
+import {
+  clearPersistenceError,
+  reportPersistenceError,
+} from "../storage/persistenceStatus";
 import { createBroadcast, type Broadcast } from "../browser/broadcast";
 import { AUTH_COPY } from "#copy/auth";
 
@@ -291,6 +295,8 @@ function followOtherTab({ userId }: SessionBroadcast): void {
  *   만료로 끝난 부팅이면 `reason: "expired"`를 붙여 로그인 화면이 만료를 알리게 한다. 로그아웃으로
  *   끝난 부팅은 붙이지 않는다.
  * - 그사이 로그인·로그아웃·계정 끝내기가 시작되면(epoch) 결과를 캐시에도 상태에도 쓰지 않는다.
+ * - 캐시를 읽지 못하면(다른 탭에 막힌 저장소 등) 캐시가 없는 것처럼 이어 가되, 세션 캐시의 저장
+ *   실패로 알린다. 로그인 화면으로 끝나도 경고 배너가 까닭을 보이고, 캐시를 다시 저장하면 지운다.
  */
 export function hydrateSession(): Promise<SessionState> {
   if (hydration) return hydration;
@@ -315,7 +321,8 @@ async function restoreSession(): Promise<SessionState> {
   let cached: SessionUser | null = null;
   try {
     cached = await loadCachedSession();
-  } catch {
+  } catch (err) {
+    reportPersistenceError(err, "session");
     cached = null;
   }
   if (started !== epoch) return state;
@@ -655,6 +662,7 @@ export async function signOut(): Promise<void> {
 async function persist(user: SessionUser): Promise<void> {
   try {
     await saveCachedSession(user);
+    clearPersistenceError("session");
   } catch (error) {
     void error;
   }

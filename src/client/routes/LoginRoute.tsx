@@ -20,6 +20,7 @@ import {
 } from "../lib/auth";
 import { EmailLoginForm } from "../features/auth/EmailLoginForm";
 import { SocialLoginButton } from "../features/auth/SocialLoginButton";
+import { StorageWarningBanner } from "../components/common/StorageWarningBanner";
 import { AUTH_COPY, LEGAL_COPY } from "#copy/auth";
 import { APP_NAME, DEV_USERS } from "#shared";
 
@@ -35,7 +36,10 @@ interface LoginRouteProps {
   onCancel?: () => void;
 }
 
-/** 로그인 화면 라우트 */
+/**
+ * 로그인 화면 라우트. 위쪽에 저장 경고 배너를 둔다. 저장소가 다른 탭에 막혀 세션 캐시를 읽지
+ * 못한 부팅은 이 화면에서 끝날 수 있어, 다른 탭을 닫으라는 안내가 여기서도 보여야 한다.
+ */
 export function LoginRoute({
   description = AUTH_COPY.defaultDescription,
   onCancel,
@@ -55,99 +59,104 @@ export function LoginRoute({
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-muted/40 px-4">
-      <Card className="w-full max-w-sm">
-        <CardHeader className="text-center">
-          <CardTitle className="text-2xl">{APP_NAME}</CardTitle>
-          <CardDescription data-testid="login-description">
-            {description}
-          </CardDescription>
-        </CardHeader>
+    <div className="flex min-h-screen flex-col bg-muted/40">
+      <StorageWarningBanner />
+      <div className="flex flex-1 items-center justify-center px-4">
+        <Card className="w-full max-w-sm">
+          <CardHeader className="text-center">
+            <CardTitle className="text-2xl">{APP_NAME}</CardTitle>
+            <CardDescription data-testid="login-description">
+              {description}
+            </CardDescription>
+          </CardHeader>
 
-        <CardContent className="flex flex-col gap-5">
-          <div className="flex flex-col gap-2">
-            {SOCIAL_PROVIDERS.map((provider) => (
-              <SocialLoginButton
-                key={provider.id}
-                provider={provider.id}
-                label={provider.label}
-                pending={pending === provider.id}
+          <CardContent className="flex flex-col gap-5">
+            <div className="flex flex-col gap-2">
+              {SOCIAL_PROVIDERS.map((provider) => (
+                <SocialLoginButton
+                  key={provider.id}
+                  provider={provider.id}
+                  label={provider.label}
+                  pending={pending === provider.id}
+                  disabled={pending !== null}
+                  onClick={() => void handleSignIn(provider.id)}
+                />
+              ))}
+            </div>
+
+            <div className="flex items-center gap-3">
+              <Separator className="flex-1" />
+              <span className="text-xs text-muted-foreground">
+                {AUTH_COPY.email.divider}
+              </span>
+              <Separator className="flex-1" />
+            </div>
+
+            <EmailLoginForm disabled={pending !== null} />
+
+            {process.env.NODE_ENV !== "production" && (
+              <div data-testid="dev-sign-in" className="flex flex-col gap-2">
+                <p className="text-center text-xs text-muted-foreground">
+                  {AUTH_COPY.dev.title}
+                </p>
+                {DEV_USERS.map((dev) => (
+                  <Button
+                    key={dev.id}
+                    variant="outline"
+                    nativeButton={false}
+                    render={
+                      <a href={`/api/auth/dev/sign-in?userId=${dev.id}`} />
+                    }
+                  >
+                    {AUTH_COPY.dev.signInAs(dev.name)}
+                    {!dev.termsAgreed && ` · ${AUTH_COPY.dev.consentPending}`}
+                  </Button>
+                ))}
+              </div>
+            )}
+
+            {error && (
+              <Alert variant="destructive">
+                <CircleAlertIcon />
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
+            )}
+          </CardContent>
+
+          <CardFooter className="flex-col gap-2 text-xs text-muted-foreground">
+            {onCancel && (
+              <Button
+                variant="ghost"
+                data-testid="login-cancel-btn"
                 disabled={pending !== null}
-                onClick={() => void handleSignIn(provider.id)}
-              />
-            ))}
-          </div>
-
-          <div className="flex items-center gap-3">
-            <Separator className="flex-1" />
-            <span className="text-xs text-muted-foreground">
-              {AUTH_COPY.email.divider}
-            </span>
-            <Separator className="flex-1" />
-          </div>
-
-          <EmailLoginForm disabled={pending !== null} />
-
-          {process.env.NODE_ENV !== "production" && (
-            <div data-testid="dev-sign-in" className="flex flex-col gap-2">
-              <p className="text-center text-xs text-muted-foreground">
-                {AUTH_COPY.dev.title}
-              </p>
-              {DEV_USERS.map((dev) => (
+                onClick={onCancel}
+              >
+                {AUTH_COPY.cancel}
+              </Button>
+            )}
+            {AUTH_COPY.optimizedFor}
+            <div className="flex gap-1">
+              {LEGAL_LINKS.map((link) => (
                 <Button
-                  key={dev.id}
-                  variant="outline"
+                  key={link.href}
+                  variant="link"
+                  size="xs"
                   nativeButton={false}
-                  render={<a href={`/api/auth/dev/sign-in?userId=${dev.id}`} />}
+                  render={
+                    <a
+                      href={link.href}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    />
+                  }
                 >
-                  {AUTH_COPY.dev.signInAs(dev.name)}
-                  {!dev.termsAgreed && ` · ${AUTH_COPY.dev.consentPending}`}
+                  {link.label}
                 </Button>
               ))}
             </div>
-          )}
-
-          {error && (
-            <Alert variant="destructive">
-              <CircleAlertIcon />
-              <AlertDescription>{error}</AlertDescription>
-            </Alert>
-          )}
-        </CardContent>
-
-        <CardFooter className="flex-col gap-2 text-xs text-muted-foreground">
-          {onCancel && (
-            <Button
-              variant="ghost"
-              data-testid="login-cancel-btn"
-              disabled={pending !== null}
-              onClick={onCancel}
-            >
-              {AUTH_COPY.cancel}
-            </Button>
-          )}
-          {AUTH_COPY.optimizedFor}
-          <div className="flex gap-1">
-            {LEGAL_LINKS.map((link) => (
-              <Button
-                key={link.href}
-                variant="link"
-                size="xs"
-                nativeButton={false}
-                render={
-                  <a
-                    href={link.href}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  />
-                }
-              >
-                {link.label}
-              </Button>
-            ))}
-          </div>
-        </CardFooter>
-      </Card>
+          </CardFooter>
+        </Card>
+      </div>
     </div>
   );
 }

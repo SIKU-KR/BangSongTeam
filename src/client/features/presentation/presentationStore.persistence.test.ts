@@ -13,6 +13,7 @@ import {
 import {
   loadAllPresentations,
   savePresentation,
+  savePresentationIfUnchanged,
   saveSharedPresentation,
   clearPersistenceError,
 } from "../../lib/storage";
@@ -82,8 +83,8 @@ const storageHooks = vi.hoisted(() => ({
 vi.mock("../../lib/storage", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../lib/storage")>();
   const withHook =
-    (save: (doc: Presentation) => Promise<void>) =>
-    async (doc: Presentation): Promise<void> => {
+    <T>(save: (doc: Presentation) => Promise<T>) =>
+    async (doc: Presentation): Promise<T> => {
       const hook = storageHooks.beforeSave;
       storageHooks.beforeSave = null;
       if (hook) await hook(doc);
@@ -100,9 +101,20 @@ vi.mock("../../lib/storage", async (importOriginal) => {
       return record;
     }),
     savePresentation: vi.fn(withHook(actual.savePresentation)),
+    savePresentationIfUnchanged: vi.fn(
+      withHook(actual.savePresentationIfUnchanged),
+    ),
     saveSharedPresentation: vi.fn(withHook(actual.saveSharedPresentation)),
   };
 });
+
+async function putRawRecord(record: unknown): Promise<void> {
+  const db = await getOfflineDB();
+  await db.put(
+    "presentations",
+    record as WorshipOfflineDB["presentations"]["value"],
+  );
+}
 
 async function resetDatabase(): Promise<void> {
   closeOfflineDB();
@@ -127,6 +139,7 @@ describe("presentationStore 영속성", () => {
     storageHooks.beforeSave = null;
     storageHooks.afterLoad = null;
     vi.mocked(savePresentation).mockClear();
+    vi.mocked(savePresentationIfUnchanged).mockClear();
     vi.mocked(saveSharedPresentation).mockClear();
     vi.mocked(loadAllPresentations).mockClear();
   });
@@ -338,6 +351,114 @@ describe("presentationStore 영속성", () => {
       expect(getActivePresentation().id).toBe(SEED_PRESENTATIONS[1].id);
       expect(hasPendingDocumentPush()).toBe(false);
     });
+
+    describe("글 한도만 넘은 저장본", () => {
+      const [SEED] = SEED_PRESENTATIONS;
+      const LONG_TITLE = "가".repeat(150);
+      const FITTED_TITLE = "가".repeat(100);
+
+      it("줄여 싣고, 원래 updatedAt 그대로 줄인 판을 저장본에 다시 쓴다", async () => {
+        await putRawRecord({ ...SEED, title: LONG_TITLE });
+
+        await hydrateFromStorage();
+        await flushPendingWrites();
+
+        expect(getPresentationById(SEED.id)?.title).toBe(FITTED_TITLE);
+        expect(savePresentationIfUnchanged).toHaveBeenCalledTimes(1);
+        const { valid, corrupted, repairedIds } = await loadAllPresentations();
+        expect(valid).toEqual([{ ...SEED, title: FITTED_TITLE }]);
+        expect(repairedIds).toEqual([]);
+        expect(corrupted).toEqual([]);
+      });
+
+      it("다시 쓰기 전에 다른 탭이 저장본을 고쳐 썼으면 줄인 판으로 덮지 않고 그 저장본을 다시 싣는다", async () => {
+        const rewritten: Presentation = {
+          ...SEED,
+          title: "다른 탭에서 고친 제목",
+          updatedAt: "2026-10-01T00:00:00.000Z",
+        };
+        await putRawRecord({ ...SEED, title: LONG_TITLE });
+        storageHooks.beforeSave = () => putRawRecord(rewritten);
+
+        await hydrateFromStorage();
+        await flushPendingWrites();
+
+        expect((await loadAllPresentations()).valid).toEqual([rewritten]);
+        await vi.waitFor(() =>
+          expect(getPresentationById(SEED.id)).toEqual(rewritten),
+        );
+      });
+
+      it("다시 쓰기 전에 고친 세트는 고친 판으로 저장한다", async () => {
+        await hydrateFromStorage();
+        let release: () => void = () => undefined;
+        const started = new Promise<void>((resolve) => {
+          storageHooks.beforeSave = () => {
+            resolve();
+            return new Promise<void>((done) => {
+              release = done;
+            });
+          };
+        });
+        createNewPresentation();
+        const busy = flushPendingWrites();
+        await started;
+        await putRawRecord({ ...SEED, title: LONG_TITLE });
+
+        await hydrateFromStorage();
+        renamePresentation(SEED.id, "다시 쓰기 전에 고친 제목");
+        release();
+        await busy;
+        await flushPendingWrites();
+
+        expect(savePresentationIfUnchanged).not.toHaveBeenCalled();
+        const { valid } = await loadAllPresentations();
+        expect(valid.find((doc) => doc.id === SEED.id)?.title).toBe(
+          "다시 쓰기 전에 고친 제목",
+        );
+      });
+
+      it("다른 계정의 저장본은 줄여 읽어도 다시 쓰지 않는다", async () => {
+        await putRawRecord({
+          ...SEED,
+          userId: OTHER_USER,
+          title: LONG_TITLE,
+        });
+
+        await hydrateFromStorage();
+        await flushPendingWrites();
+
+        expect(savePresentationIfUnchanged).not.toHaveBeenCalled();
+        expect((await loadAllPresentations()).repairedIds).toEqual([SEED.id]);
+      });
+    });
+
+    it("중복 덱 id를 고친 세트는 바뀌지 않았을 때만 쓰기로, 원래 updatedAt 그대로 다시 쓴다", async () => {
+      const [seed] = SEED_PRESENTATIONS;
+      const [first, second, ...rest] = seed.items;
+      await putRawRecord({
+        ...seed,
+        items: [
+          first,
+          {
+            ...second,
+            deckId: first.deckId,
+            deck: { ...second.deck!, id: first.deckId },
+          },
+          ...rest,
+        ],
+      });
+
+      await hydrateFromStorage();
+      await flushPendingWrites();
+
+      expect(savePresentationIfUnchanged).toHaveBeenCalledTimes(1);
+      expect(savePresentation).not.toHaveBeenCalled();
+      const [stored] = (await loadAllPresentations()).valid;
+      const deckIds = stored.items.map((item) => item.deck?.id);
+      expect(new Set(deckIds).size).toBe(deckIds.length);
+      expect(stored.updatedAt).toBe(seed.updatedAt);
+    });
   });
 
   describe("부팅 병합 저장", () => {
@@ -351,6 +472,7 @@ describe("presentationStore 영속성", () => {
     function writtenIds(): string[] {
       return [
         ...vi.mocked(savePresentation).mock.calls,
+        ...vi.mocked(savePresentationIfUnchanged).mock.calls,
         ...vi.mocked(saveSharedPresentation).mock.calls,
       ]
         .map(([doc]) => doc.id)
@@ -359,6 +481,7 @@ describe("presentationStore 영속성", () => {
 
     function forgetWrites(): void {
       vi.mocked(savePresentation).mockClear();
+      vi.mocked(savePresentationIfUnchanged).mockClear();
       vi.mocked(saveSharedPresentation).mockClear();
     }
 
@@ -1260,6 +1383,38 @@ describe("presentationStore 영속성", () => {
         ids: [created.id],
       };
       expect(other.received).toEqual([change, change]);
+      other.close();
+    });
+
+    it("싣다가 보관본에서 되살린 세션 사용자의 프레젠테이션은 그 id를 알린다", async () => {
+      const other = tabs.otherTab(CHANNEL);
+      const RESTORED_AT = "2026-10-01T00:00:00.000Z";
+      const [mine, seeded] = SEED_PRESENTATIONS;
+      const theirs: Presentation = { ...seeded, userId: OTHER_USER };
+      await seedPresentationsIntoStorage([mine, theirs]);
+      for (const doc of [mine, theirs]) {
+        await putRawRecord({
+          ...doc,
+          id: `${doc.id}#kept#${RESTORED_AT}`,
+          title: "보관본에서 되살린 제목",
+          updatedAt: RESTORED_AT,
+        });
+      }
+
+      await hydrateFromStorage();
+      await nextTask();
+
+      expect(getPresentationById(mine.id)?.title).toBe(
+        "보관본에서 되살린 제목",
+      );
+      expect(other.received).toEqual([
+        {
+          v: 1,
+          userId: SEED_USER_ID,
+          kind: "presentations",
+          ids: [mine.id],
+        },
+      ]);
       other.close();
     });
 

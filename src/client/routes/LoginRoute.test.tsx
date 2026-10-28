@@ -1,8 +1,11 @@
 import React from "react";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { LoginRoute } from "./LoginRoute";
 import { AUTH_COPY } from "#copy/auth";
+import { ERROR_COPY } from "#copy/common";
+import { clearPersistenceError, reportPersistenceError } from "../lib/storage";
+import { PersistenceUnavailableError } from "../lib/storage/db";
 
 const signInWithProvider = vi.fn();
 
@@ -23,6 +26,10 @@ describe("LoginRoute", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     signInWithProvider.mockResolvedValue(undefined);
+  });
+
+  afterEach(() => {
+    clearPersistenceError("session");
   });
 
   it("로그인이 왜 필요한지 설명한다", async () => {
@@ -99,5 +106,18 @@ describe("LoginRoute", () => {
     expect(
       screen.getByRole("button", { name: AUTH_COPY.email.submitSignIn }),
     ).toBeEnabled();
+  });
+
+  it("저장소가 이전 버전 탭에 막혀 있으면 로그인 화면에 다른 탭을 닫으라는 안내를 보여 준다", async () => {
+    reportPersistenceError(
+      new PersistenceUnavailableError(undefined, "blocked"),
+      "session",
+    );
+
+    render(<LoginRoute />);
+
+    expect(
+      await screen.findByTestId("storage-warning-banner"),
+    ).toHaveTextContent(ERROR_COPY.persistence.blocked);
   });
 });
