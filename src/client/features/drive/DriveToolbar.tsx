@@ -77,6 +77,9 @@ function TypeFilterChip({
 /**
  * 선택 막대. 항목을 고르면 칩 줄 자리에 대신 뜬다 (구글 드라이브와 같다).
  * 열기를 뺀 작업은 아이콘으로, 전체 메뉴는 ⋮로 연다.
+ *
+ * 터치 화면은 아이콘 하나가 44px라 좁은 화면에서는 다 들어가지 않는다. 작업 줄만 가로로
+ * 스크롤하고 선택 해제와 ⋮는 막대 끝에 붙여, 안 보이는 작업도 ⋮ 메뉴에서 늘 열 수 있다.
  */
 function SelectionBar({
   count,
@@ -90,7 +93,7 @@ function SelectionBar({
   return (
     <div
       data-testid="selection-bar"
-      className="flex h-10 w-full items-center gap-0.5 overflow-x-auto rounded-full bg-muted pr-2 pl-1"
+      className="flex h-10 w-full items-center gap-0.5 rounded-full bg-muted px-1 pointer-coarse:h-11"
     >
       <IconButton
         label={DRIVE_COPY.clearSelection}
@@ -102,20 +105,25 @@ function SelectionBar({
       <span className="px-2 text-sm font-medium whitespace-nowrap">
         {DRIVE_COPY.selected(count)}
       </span>
-      {actions
-        .filter((action) => action.key !== "open")
-        .map((action) => (
-          <IconButton
-            key={action.key}
-            label={action.label}
-            data-testid={action.testId ? `bar-${action.testId}` : undefined}
-            disabled={action.disabled}
-            className={cn(action.danger && "text-destructive")}
-            onClick={action.onSelect}
-          >
-            {action.icon && <action.icon />}
-          </IconButton>
-        ))}
+      <div
+        data-testid="selection-actions"
+        className="flex min-w-0 scrollbar-none items-center gap-0.5 overflow-x-auto"
+      >
+        {actions
+          .filter((action) => action.key !== "open")
+          .map((action) => (
+            <IconButton
+              key={action.key}
+              label={action.label}
+              data-testid={action.testId ? `bar-${action.testId}` : undefined}
+              disabled={action.disabled}
+              className={cn(action.danger && "text-destructive")}
+              onClick={action.onSelect}
+            >
+              {action.icon && <action.icon />}
+            </IconButton>
+          ))}
+      </div>
       <DropdownMenu>
         <DropdownMenuTrigger
           data-testid="selection-more"
