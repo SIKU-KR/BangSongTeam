@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import { useParams, usePathname } from "next/navigation";
 import { useNavigate } from "#hooks/useNavigate";
 import { FolderIcon, PresentationIcon } from "lucide-react";
@@ -68,6 +68,9 @@ const followCursor: Modifier = ({
  * 끌어서 옮기거나 버린 뒤에는 선택을 푼다. 목록에서 사라진 항목이 선택에 남으면 다음 끌기에
  * 함께 딸려 간다.
  *
+ * 주소가 바뀌면 그릴 때 선택·기준점·포커스를 비운다. 효과로 비우면 효과가 그린 뒤에 돌아서,
+ * 마운트나 이동 직후에 고른 항목을 뒤늦게 지운다.
+ *
  * 헤더의 드라이브 검색어는 친 위치에 묶인다. 셸은 화면을 오가도 남아 있어서, 검색 결과에서 연
  * 폴더나 휴지통에까지 검색어가 따라가면 화면이 바뀐 것 같지 않다. 드라이브 안에서 위치가 바뀌면
  * 비우고, 배경 갤러리에 다녀온 뒤 같은 위치로 돌아오면 그대로 둔다. 주소가 그대로인 열기(검색
@@ -94,6 +97,7 @@ export function DriveProvider({
   const [typeFilter, setTypeFilter] = useState<DriveTypeFilter>("all");
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [searchPath, setSearchPath] = useState<string>(pathname);
+  const [selectionPath, setSelectionPath] = useState<string>(pathname);
   const { showToast } = useUndoToast({ isSuspended: dialog !== null });
 
   if (isDrivePath(pathname) && searchPath !== pathname) {
@@ -101,11 +105,12 @@ export function DriveProvider({
     setSearchQuery("");
   }
 
-  useEffect(() => {
+  if (selectionPath !== pathname) {
+    setSelectionPath(pathname);
     setSelectionState(new Set());
     setAnchorKey(null);
     setFocusKey(null);
-  }, [pathname]);
+  }
 
   const setSelection = useCallback(
     (keys: readonly string[], anchor?: string | null): void => {
