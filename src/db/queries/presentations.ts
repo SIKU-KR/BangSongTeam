@@ -7,6 +7,7 @@ import {
   toPresentationChanges,
   type PresentationChangesRequest,
   type PresentationDocument,
+  type PresentationListEntry,
 } from "#shared";
 import type { Db } from "../client";
 import {
@@ -17,7 +18,11 @@ import {
   type DeckDoc,
   type PresentationDoc,
 } from "../collections";
-import { fromPresentationChanges, toPresentationDocument } from "./mappers";
+import {
+  fromPresentationChanges,
+  toOmittedPresentation,
+  toPresentationDocument,
+} from "./mappers";
 import { existingBackgroundIds } from "./decks";
 import { isPresentationInTrash } from "./folders";
 import {
@@ -419,19 +424,75 @@ export async function upsertPresentationDocument(
   return result.status === "saved";
 }
 
+async function readOwnHeaders(
+  db: Db,
+  userId: string,
+): Promise<PresentationDoc[]> {
+  const snapshot = await presentationsCol(db)
+    .where("userId", "==", userId)
+    .get();
+  return snapshot.docs.map((doc) => doc.data()).sort(byServiceDateDesc);
+}
+
 /** 본인 소유 프레젠테이션 전체를 하이드레이션된 문서 목록으로 조회 */
 export async function getPresentationDocumentsByUserId(
   db: Db,
   userId: string,
 ): Promise<PresentationDocument[]> {
-  const snapshot = await presentationsCol(db)
-    .where("userId", "==", userId)
-    .get();
-  const headers = snapshot.docs
-    .map((doc) => doc.data())
-    .sort(byServiceDateDesc);
+  return hydratePresentationDocuments(db, await readOwnHeaders(db, userId));
+}
 
-  return hydratePresentationDocuments(db, headers);
+/**
+ * 본인 소유 프레젠테이션 목록(`GET /api/presentations`). 머리는 모두 담고, 곡 사본은 판이 `since`보다
+ * 늦은 프레젠테이션만 붙인다(`hydrateChangedPresentations`). `since`가 없으면 모두 붙인다.
+ */
+export async function getPresentationListByUserId(
+  db: Db,
+  userId: string,
+  since?: Date,
+): Promise<PresentationListEntry[]> {
+  return hydrateChangedPresentations(
+    db,
+    await readOwnHeaders(db, userId),
+    since,
+  );
+}
+
+function changedSince(
+  header: PresentationDoc,
+  since: Date | undefined,
+): boolean {
+  const revision: unknown = header.updatedAt;
+  return (
+    since === undefined ||
+    !(revision instanceof Date) ||
+    revision.getTime() > since.getTime()
+  );
+}
+
+/**
+ * 헤더마다 목록 한 줄을 만든다. 판(`updatedAt`)이 `since`보다 늦은 헤더만 사본 곡을 읽어 문서로
+ * 붙이고(`hydratePresentationDocuments`), 나머지는 사본을 읽지 않고 머리로 둔다(`toOmittedPresentation`).
+ * 판을 읽지 못하는 헤더는 바뀐 것으로 본다. 순서는 헤더 순서 그대로이고 권한 검사는 호출자 책임이다.
+ *
+ * 받는 쪽은 그 판을 이미 가진 프레젠테이션의 사본만 다시 받지 않는다. 판은 받은 저장마다 커지므로
+ * 같은 판이면 같은 곡이다. `since`는 그 판을 가졌을 프레젠테이션을 고르는 기준일 뿐이다.
+ */
+export async function hydrateChangedPresentations(
+  db: Db,
+  headers: PresentationDoc[],
+  since: Date | undefined,
+): Promise<PresentationListEntry[]> {
+  const hydrated = await hydratePresentationDocuments(
+    db,
+    headers.filter((header) => changedSince(header, since)),
+  );
+  const documents = new Map(
+    hydrated.map((document) => [document.id, document]),
+  );
+  return headers.map(
+    (header) => documents.get(header.id) ?? toOmittedPresentation(header),
+  );
 }
 
 /** 헤더에 사본 곡을 붙여 문서로 만든다. 권한 검사는 호출자 책임이다. */

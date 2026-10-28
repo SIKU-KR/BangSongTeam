@@ -94,12 +94,28 @@ function isReplaceableOnRefresh(
   return isSyncedWithServer(doc) && !isQueued(doc.id);
 }
 
+/**
+ * 다시 받기 병합(`refresh`)이 이 내 세트를 그 판(`serverUpdatedAt`)의 서버 판으로 바꾸는지. 서버 판의
+ * 내용은 보지 않는다. 그래서 바꾸지 않을 세트는 서버 판을 받지 않아도 병합 결과가 같고, 다시 받기는 그
+ * 세트의 곡을 따로 받지 않는다(`pullServerPresentations`의 `keepsLocal`).
+ */
+export function adoptsOnRefresh(
+  local: Presentation,
+  serverUpdatedAt: string,
+  isQueued: (id: string) => boolean,
+): boolean {
+  return (
+    isReplaceableOnRefresh(local, isQueued) &&
+    timeOf(serverUpdatedAt) > timeOf(local.updatedAt)
+  );
+}
+
 function chooseOwnOnRefresh(
   local: Presentation,
   server: Presentation,
   isQueued: (id: string) => boolean,
 ): Choice {
-  return isReplaceableOnRefresh(local, isQueued) && isNewer(server, local)
+  return adoptsOnRefresh(local, server.updatedAt, isQueued)
     ? { document: asSynced(server), push: false }
     : keepLocal(local);
 }

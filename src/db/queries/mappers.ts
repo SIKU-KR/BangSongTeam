@@ -12,6 +12,7 @@ import {
   type Deck as SharedDeck,
   type DeckStyle,
   type Slide,
+  type OmittedPresentation,
   type PresentationChanges,
   type PresentationDocument,
   type Folder as SharedFolder,
@@ -206,6 +207,20 @@ export function toPresentationDocument(
     })),
     createdAt: toIso(presentation.createdAt),
     updatedAt: toIso(presentation.updatedAt),
+  };
+}
+
+/**
+ * 머리 문서 → 곡 사본을 뺀 목록 한 줄(`OmittedPresentationSchema`). 머리 필드는
+ * `toPresentationDocument`와 똑같이 읽어, 같은 판이면 사본을 담아 보낸 문서와 머리가 같다.
+ */
+export function toOmittedPresentation(
+  presentation: PresentationDoc,
+): OmittedPresentation {
+  return {
+    ...toPresentationDocument(presentation, []),
+    items: null,
+    copiesOmitted: true,
   };
 }
 

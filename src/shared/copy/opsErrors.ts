@@ -16,6 +16,10 @@ export const OPS_ERRORS = {
     invalidFile:
       "고칠 곡 목록의 형식이 맞지 않아요. 곡마다 title·artist와 함께 nextTitle이나 lyrics(from·to)를 적어 주세요",
   },
+  retention: {
+    daysTooShort: (minDays: number) =>
+      `보관 기간은 ${minDays}일 이상의 정수로 적어 주세요`,
+  },
   report: {
     notFound: "신고를 찾을 수 없어요",
     alreadyResolved:

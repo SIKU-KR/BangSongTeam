@@ -18,9 +18,10 @@ import {
   type DriveTombstones,
   type Folder,
   type FolderListResponse,
-  type PresentationDocument,
+  type OmittedPresentation,
+  type Presentation,
 } from "#shared";
-import { planBootMerge } from "./mergeDocuments";
+import { adoptsOnRefresh, planBootMerge } from "./mergeDocuments";
 import { mergeFolders } from "./mergeFolders";
 import {
   getLibraryDeck,
@@ -35,7 +36,11 @@ import { mergeLibraryDecks } from "./mergeLibraryDecks";
 import { sharedPresentationListener } from "./sharedPresentationListener";
 import { ownPresentationListener } from "./ownPresentationListener";
 import {
-  pullPresentations,
+  notePresentationsPulled,
+  pullServerPresentations,
+  type PresentationPull,
+} from "./presentationPull";
+import {
   rememberServerDocuments,
   setOwnPresentationListener,
   setSharedPresentationListener,
@@ -280,6 +285,11 @@ export function useBootPullPending(domain: BootPullDomain): boolean {
  * 남긴 사본 대신 지금 저장소의 폴더·곡을 올린다(`setFailedFolderResolver`,
  * `setFailedDeckResolver`).
  *
+ * 프레젠테이션은 이 기기가 지난번에 반영한 받기 뒤에 바뀐 것만 곡까지 받고, 나머지는 머리만 받아 이
+ * 기기의 같은 판으로 채운다(`pullServerPresentations`). 판이 다르거나 올리지 않은 편집이 있는 세트는 그
+ * 세트만 따로 받아 병합하므로 병합 규칙은 목록 전체를 받을 때와 같다. 받은 시각은 병합해 반영한 뒤에만
+ * 남긴다(`notePresentationsPulled`).
+ *
  * 병합 결과는 각 스토어의 저장 줄로 저장한다 (`applyServerDocuments` 등). 병합하자마자 기다림
  * 없이 지운 항목과 서버 사본이 이긴 항목의 대기 중인 push를 버린다. 대기 중인 사본은 방금
  * 서버와 견준 메모리보다 새로울 수 없으므로, 남겨 두면 연결이 돌아올 때 지운 항목을 서버에서
@@ -395,7 +405,7 @@ async function syncDriveAndDecks(): Promise<void> {
   const userId = getCurrentUserId();
   const knownBeforePull = idsOf(listPresentations());
   const knownFolders = idsOf(getFolders());
-  let serverDocuments;
+  let pull: PresentationPull | null;
   let tombstones: DriveTombstones;
   let unsynced: readonly SyncDomain[] = ["folder", "presentation", "deck"];
   try {
@@ -417,14 +427,18 @@ async function syncDriveAndDecks(): Promise<void> {
     if (parkWhileProjecting(syncDriveAndDecks)) return;
     settleSyncStatus("folder", folderStatus);
     unsynced = ["presentation", "deck"];
-    serverDocuments = await pullPresentations();
-    if (generation !== bootGeneration) return;
-    if (parkWhileProjecting(syncDriveAndDecks)) return;
-    if (holdsOtherAccount(userId, [serverDocuments])) {
-      dropOtherAccountsPull(syncDriveAndDecks, unsynced);
-      return;
-    }
-    rememberServerDocuments(serverDocuments);
+    pull = await pullServerPresentations(userId, {
+      local: listPresentations,
+      proceed: (lists) => {
+        if (generation !== bootGeneration) return false;
+        if (parkWhileProjecting(syncDriveAndDecks)) return false;
+        if (!holdsOtherAccount(userId, lists)) return true;
+        dropOtherAccountsPull(syncDriveAndDecks, ["presentation", "deck"]);
+        return false;
+      },
+    });
+    if (!pull) return;
+    rememberServerDocuments(pull.documents);
     retryBackoff.reset();
   } catch (err) {
     if (generation !== bootGeneration) return;
@@ -437,12 +451,13 @@ async function syncDriveAndDecks(): Promise<void> {
 
   const { documents, needsPush, removedIds } = planBootMerge(
     listPresentations(),
-    serverDocuments,
+    pull.documents,
     tombstones.presentationIds,
     knownBeforePull,
   );
   cancelPushesOfServerWins(documents, needsPush, cancelDocumentPush);
   applyServerDocuments(documents, removedIds);
+  notePresentationsPulled(userId, pull);
   clearBootPull("presentation", generation);
 
   setSyncStatus("presentation", "syncing");
@@ -801,8 +816,8 @@ async function pushLatestEach<T extends { id: string }>(
 
 /**
  * 열려 있는 탭이 내 데이터를 다시 받는 최소 간격. 창으로 돌아올 때, 주소를 옮길 때, 5분마다 하는
- * 확인(`wake`)은 받은 지 이만큼 지나야 다시 받는다. 다시 받기는 내 폴더, 곡을 모두 담은 프레젠테이션
- * 전부, 보관함을 통째로 받는 무거운 요청이다.
+ * 확인(`wake`)은 받은 지 이만큼 지나야 다시 받는다. 다시 받기는 내 폴더와 보관함 전부, 프레젠테이션 머리
+ * 전부와 지난 받기 뒤에 바뀐 프레젠테이션의 곡을 받는 요청이다.
  */
 export const FRESHNESS_MS = 60_000;
 
@@ -826,12 +841,13 @@ function canRefresh(mode: SyncRetryMode): boolean {
  * 교회 PC의 탭이 지난 판을 띄우고 송출하며, 그 위에서 고친 내용이 다른 기기의 편집을 덮는다.
  *
  * 받기만 한다(`refresh` 병합). 프레젠테이션은 서버와 맞춘 판이고 이 탭이 올리기를 기다리지 않으며
- * 저장본과 같은 세트만 서버 판이 더 새로울 때 받는다. 고친 세트와 이전 저장본은 그대로 둔다. 폴더·곡은
- * 부팅처럼 더 늦게 고친 쪽을 고르되 올리지 않고, 서버 사본을 받은 항목의 대기 중인 push만 버린다. 그
- * push는 서버가 옛 수정으로 보고 버릴 사본이다. 영구 삭제 기록과 지운 곡을 따르고, 받기 전부터 알던
- * 항목이 받는 사이 사라졌으면(비우기, 다른 탭의 삭제) 다시 넣지 않는다. 동기화 상태는 바꾸지 않고,
- * 받지 못하면 조용히 넘어가 다음 신호에 다시 받는다. 받은 결과를 반영하면 같은 브라우저의 다른 탭에
- * 받았다고 알린다.
+ * 저장본과 같은 세트만 서버 판이 더 새로울 때 받는다. 고친 세트와 이전 저장본은 그대로 둔다.
+ * 프레젠테이션에 담긴 곡은 부팅처럼 지난 받기 뒤에 바뀐 세트의 것만 받고, 그대로 둘 세트의 곡은 따로
+ * 받지 않는다. 폴더·곡은 부팅처럼 더 늦게 고친 쪽을 고르되 올리지 않고, 서버 사본을 받은 항목의 대기
+ * 중인 push만 버린다. 그 push는 서버가 옛 수정으로 보고 버릴 사본이다. 영구 삭제 기록과 지운 곡을 따르고,
+ * 받기 전부터 알던 항목이 받는 사이 사라졌으면(비우기, 다른 탭의 삭제) 다시 넣지 않는다. 동기화 상태는
+ * 바꾸지 않고, 받지 못하면 조용히 넘어가 다음 신호에 다시 받는다. 받은 결과를 반영하면 같은 브라우저의
+ * 다른 탭에 받았다고 알린다.
  *
  * 한 번에 하나만 받는다. 창으로 돌아오기·주소 이동·5분마다 확인(`wake`)은 받은 지 `FRESHNESS_MS`,
  * 연결 회복(`reconnect`)은 `RECONNECT_REFRESH_MS`가 지나야 받고, '다시 시도'(`manual`)는 곧바로
@@ -890,42 +906,44 @@ async function refreshOwnData(
   const knownFolders = idsOf(getFolders());
   const knownPresentations = idsOf(listPresentations());
   const knownSongs = idsOf(getUserSongs());
+  const isCurrent = (): boolean =>
+    generation === bootGeneration &&
+    !isProjecting() &&
+    getCurrentUserId() === userId;
   let folderList: FolderListResponse;
-  let serverDocuments: PresentationDocument[];
+  let pull: PresentationPull | null;
   let library: Awaited<ReturnType<typeof pullDecks>>;
   try {
-    [folderList, serverDocuments, library] = await Promise.all([
+    [folderList, pull, library] = await Promise.all([
       pullFolders(),
-      pullPresentations(),
+      pullServerPresentations(userId, {
+        local: listPresentations,
+        keepsLocal: keepsLocalOnRefresh,
+        proceed: (lists) => {
+          if (!isCurrent()) return false;
+          if (!holdsOtherAccount(userId, lists)) return true;
+          requestSessionCheck();
+          return false;
+        },
+      }),
       pullDecks(),
     ]);
   } catch {
     return;
   }
-  if (
-    generation !== bootGeneration ||
-    isProjecting() ||
-    getCurrentUserId() !== userId
-  ) {
-    return;
-  }
-  if (
-    holdsOtherAccount(userId, [
-      folderList.folders,
-      serverDocuments,
-      library.decks,
-    ])
-  ) {
+  if (!pull || !isCurrent()) return;
+  if (holdsOtherAccount(userId, [folderList.folders, library.decks])) {
     requestSessionCheck();
     return;
   }
 
   const folders = refreshFolders(folderList, knownFolders);
   refreshPresentations(
-    serverDocuments,
+    pull.documents,
     folderList.tombstones.presentationIds,
     knownPresentations,
   );
+  notePresentationsPulled(userId, pull);
   const songs = refreshLibraryDecks(library, knownSongs);
   await Promise.all([folders, songs]);
   if (generation === bootGeneration) announcePull();
@@ -967,8 +985,23 @@ function refreshFolders(
   );
 }
 
+function isQueuedOnRefresh(id: string): boolean {
+  return isDocumentQueued(id) || mayDifferFromStorage(id);
+}
+
+function keepsLocalOnRefresh(
+  local: Presentation,
+  header: OmittedPresentation,
+): boolean {
+  return (
+    !local.access &&
+    !header.access &&
+    !adoptsOnRefresh(local, header.updatedAt, isQueuedOnRefresh)
+  );
+}
+
 function refreshPresentations(
-  serverDocuments: PresentationDocument[],
+  serverDocuments: Presentation[],
   deletedIds: readonly string[],
   knownBeforePull: ReadonlySet<string>,
 ): void {
@@ -977,10 +1010,7 @@ function refreshPresentations(
     serverDocuments,
     deletedIds,
     knownBeforePull,
-    {
-      mode: "refresh",
-      isQueued: (id) => isDocumentQueued(id) || mayDifferFromStorage(id),
-    },
+    { mode: "refresh", isQueued: isQueuedOnRefresh },
   );
   rememberServerDocuments(serverDocuments);
   applyServerDocuments(documents, removedIds);

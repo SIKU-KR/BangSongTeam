@@ -17,6 +17,7 @@ import {
   type Presentation,
   type PresentationChanges,
   type PresentationDocument,
+  type PresentationListEntry,
 } from "#shared";
 import { api } from "../api/client";
 import {
@@ -444,11 +445,41 @@ export function endSharedPresentationRefresh(): void {
   setSyncStatus("shared", "idle");
 }
 
-export async function pullPresentations(): Promise<PresentationDocument[]> {
-  const body = await callSyncApi<{ presentations: PresentationDocument[] }>(
-    () => api.api.presentations.$get(),
+/**
+ * 내 프레젠테이션과 링크로 공유받은 프레젠테이션 목록을 받는다. `since`를 주면 판이 그보다 늦은 것만 곡
+ * 사본까지 오고 나머지는 머리만 온다(`OmittedPresentation`). `since`를 모르는 이전 서버는 모두 담아 준다.
+ *
+ * 문서는 검사하지 않고 넘긴다. 머리를 가려 내고 채우는 일은 `pullServerPresentations`가 한다.
+ */
+export async function pullPresentations(
+  since?: string,
+): Promise<PresentationListEntry[]> {
+  const body = await callSyncApi<{ presentations: PresentationListEntry[] }>(
+    () =>
+      api.api.presentations.$get({
+        query: since === undefined ? {} : { since },
+      }),
   );
   return body.presentations;
+}
+
+/**
+ * 프레젠테이션 1건을 곡 사본까지 받는다. 목록이 곡을 빼고 보낸 프레젠테이션을 채울 때 쓴다. 이제 볼 수
+ * 없거나(404, 영구 삭제·공유 해제) 문서 모양이 아니면 null이다.
+ */
+export async function pullPresentation(
+  id: string,
+): Promise<PresentationDocument | null> {
+  try {
+    const body = await callSyncApi<{ presentation: unknown }>(() =>
+      api.api.presentations[":id"].$get({ param: { id } }),
+    );
+    const parsed = PresentationDocumentSchema.safeParse(body.presentation);
+    return parsed.success ? parsed.data : null;
+  } catch (err) {
+    if (err instanceof ServerRejectedError && err.status === 404) return null;
+    throw err;
+  }
 }
 
 /**
