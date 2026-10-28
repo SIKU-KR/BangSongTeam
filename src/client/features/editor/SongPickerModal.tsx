@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeftIcon, PlusIcon } from "lucide-react";
 import { Badge } from "#components/ui/badge";
 import { Button } from "#components/ui/button";
@@ -74,6 +74,10 @@ function sharedSearchNotice(
 
 /**
  * 곡 선택 모달.
+ *
+ * 공유 곡 가져오기의 결과는 그 요청을 보낸 열림에만 쓴다. 가져오는 중에 창을 닫으면 가져온 곡은
+ * 보관함에만 남고 프레젠테이션에는 넣지 않으며, 다시 연 창은 앞선 요청을 기다리거나 그 실패를
+ * 보여 주지 않는다. 닫히는 동안 누른 추가는 무시한다.
  */
 export function SongPickerModal({
   isOpen,
@@ -100,6 +104,8 @@ export function SongPickerModal({
     enabled: isOpen && isOnline,
   });
   const fork = useForkDeck();
+  const resetFork = fork.reset;
+  const openSession = useRef<object | null>(null);
 
   useEffect(() => {
     if (isOpen) {
@@ -109,6 +115,15 @@ export function SongPickerModal({
       setActionError(null);
     }
   }, [isOpen, initialMode]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    openSession.current = {};
+    return () => {
+      openSession.current = null;
+      resetFork();
+    };
+  }, [isOpen, resetFork]);
 
   const entries = useMemo<PickerEntry[]>(
     () =>
@@ -136,19 +151,22 @@ export function SongPickerModal({
   };
 
   const handleAddSelected = async (): Promise<void> => {
-    if (!selected) return;
+    const session = openSession.current;
+    if (!selected || !session) return;
     setActionError(null);
     try {
       if (selected.kind === "mine") {
         addDeck(selected.deck);
+      } else if (selected.ownedCopy) {
+        addDeck(selected.ownedCopy);
       } else {
-        addDeck(
-          selected.ownedCopy ??
-            (await fork.mutateAsync(selected.summary.id)).deck,
-        );
+        const { deck } = await fork.mutateAsync(selected.summary.id);
+        if (openSession.current === session) addDeck(deck);
       }
     } catch (err) {
-      setActionError(describeApiError(err));
+      if (openSession.current === session) {
+        setActionError(describeApiError(err));
+      }
     }
   };
 

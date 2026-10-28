@@ -88,8 +88,8 @@ const HOVER_REVEAL =
 const ROW_CLASS =
   "group h-12 cursor-default border-b text-sm text-muted-foreground outline-none select-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset";
 
-/** 행 안의 조작이 행 선택·더블클릭 열기로 번지지 않게 막는다 */
 const STOP_ROW_EVENTS = {
+  onPointerDown: (event: React.PointerEvent) => event.stopPropagation(),
   onMouseDown: (event: React.MouseEvent) => event.stopPropagation(),
   onClick: (event: React.MouseEvent) => event.stopPropagation(),
   onDoubleClick: (event: React.MouseEvent) => event.stopPropagation(),
@@ -269,6 +269,10 @@ export function DriveListHeader({
  * `date`는 날짜 칸에 보일 ISO 시각이다. 드라이브는 수정 시각, 휴지통은 버린 시각을
  * 넘긴다. `showLocation`이면 이름 옆에 항목의 위치를 보인다.
  * 발표·편집 버튼은 마우스를 올리거나 선택·포커스했을 때만 보인다.
+ *
+ * 행 안의 버튼과 ⋮ 메뉴는 누름이 행 선택·더블클릭 열기·끌기로 번지지 않게 막는다. 포인터 누름까지
+ * 막아야 한다. ⋮ 메뉴는 React 트리에서 행의 자식이라, 버튼이나 메뉴 항목을 터치할 때 손가락이
+ * 5px만 굴러도 행 끌기가 시작되고 이어지는 클릭이 삼켜진다.
  */
 export function DriveListRow({
   item,

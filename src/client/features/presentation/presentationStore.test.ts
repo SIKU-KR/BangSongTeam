@@ -230,6 +230,34 @@ describe("presentationStore (In-memory reactive presentation)", () => {
     expect(canUndo()).toBe(false);
   });
 
+  it("붙여 넣은 제목·곡 정보에 남은 서로게이트 반쪽은 U+FFFD로 바꿔 저장한다", () => {
+    updatePresentationTitle("주일 \uD83D예배");
+    updateSongInfo(1, { title: "은혜\uDE4F", artist: "\uD83D손경민" });
+
+    const active = getActivePresentation();
+    expect(active.title).toBe("주일 \uFFFD예배");
+    expect(active.items[1].deck).toMatchObject({
+      title: "은혜\uFFFD",
+      artist: "\uFFFD손경민",
+    });
+  });
+
+  it("슬라이드를 나누거나 합칠 때 남은 서로게이트 반쪽은 U+FFFD로 바꾼다", () => {
+    updateSlideLines(0, 0, ["가\uD83D", "나 😀"]);
+
+    expect(splitSlideAtCursor(0, 0, "가\uD83D".length)).toBe(true);
+    const split = getActivePresentation().items[0].deck!.slides;
+    expect(split[0].lines).toEqual(["가\uFFFD"]);
+    expect(split[1].lines).toEqual(["나 😀"]);
+
+    updateSlideLines(0, 0, ["\uDE00가"]);
+    expect(mergeSlideWithNext(0, 0)).toBe(true);
+    expect(getActivePresentation().items[0].deck!.slides[0].lines).toEqual([
+      "\uFFFD가",
+      "나 😀",
+    ]);
+  });
+
   it("should update song style and background", () => {
     const { result } = renderHook(() => useSeedPresentation());
     act(() => {

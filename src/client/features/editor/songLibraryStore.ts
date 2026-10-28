@@ -4,6 +4,7 @@ import {
   DeckSchema,
   editTimestamp,
   isFarFuture,
+  toWellFormedText,
   type Deck,
 } from "#shared";
 import {
@@ -351,8 +352,12 @@ export function resumeSongDeletes(): void {
  */
 export function updateLibrarySongInfo(
   id: string,
-  info: { title: string; artist: string },
+  input: { title: string; artist: string },
 ): Deck | undefined {
+  const info = {
+    title: toWellFormedText(input.title),
+    artist: toWellFormedText(input.artist),
+  };
   const deck = getLibraryDeck(id);
   if (!deck) return undefined;
   if (deck.title === info.title && deck.artist === info.artist) return deck;

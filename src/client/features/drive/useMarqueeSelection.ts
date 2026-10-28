@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useLatest } from "../../hooks/useLatest";
+import { isTypingTarget } from "../../lib/browser/keyboardTarget";
 import {
   marqueeKeys,
   mergeKeys,
@@ -32,6 +33,9 @@ interface MarqueeOptions {
  * 행·버튼 위에서 시작하면 무시하므로 항목 끌어 옮기기(dnd-kit)와 겹치지 않는다.
  * Ctrl/⌘/Shift를 누른 채 시작하면 기존 선택에 더한다. 4px 안에서 떼면 평범한
  * 클릭으로 두고, 실제로 끌었으면 바로 이어지는 클릭(선택 해제)을 `consumeClick`이 삼킨다.
+ *
+ * 시작할 때 글자 입력란(검색창)의 포커스를 놓는다. 누름을 막으면 브라우저가 포커스를 옮기지
+ * 않아, 입력란이 포커스를 쥔 채 남고 Delete·Backspace가 고른 항목 대신 검색어를 지운다.
  */
 export function useMarqueeSelection({
   containerRef,
@@ -124,6 +128,10 @@ export function useMarqueeSelection({
       };
       suppressClickRef.current = false;
       setTracking(true);
+      const focused = document.activeElement;
+      if (focused instanceof HTMLElement && isTypingTarget(focused)) {
+        focused.blur();
+      }
       event.preventDefault();
     },
     [enabled, selection, containerRef],

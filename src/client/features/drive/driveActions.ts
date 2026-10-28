@@ -107,8 +107,14 @@ export function renameItem(
   return { ok: true };
 }
 
+interface MovedItem {
+  ref: DriveItemRef;
+  from: string | null;
+  renamed?: { from: string; to: string };
+}
+
 interface MoveOutcome {
-  moved: Array<{ ref: DriveItemRef; from: string | null }>;
+  moved: MovedItem[];
   errors: string[];
 }
 
@@ -125,25 +131,47 @@ export function moveItems(
   for (const ref of refs) {
     const from = parentOf(ref);
     if (from === targetFolderId) continue;
-    if (ref.kind === "folder") {
-      const result = moveFolder(ref.id, targetFolderId);
-      if (!result.ok) {
-        outcome.errors.push(result.error);
-        continue;
-      }
-    } else {
+    if (ref.kind === "file") {
       movePresentation(ref.id, targetFolderId);
+      outcome.moved.push({ ref, from });
+      continue;
     }
-    outcome.moved.push({ ref, from });
+    const nameBefore = itemName(ref);
+    const result = moveFolder(ref.id, targetFolderId);
+    if (!result.ok) {
+      outcome.errors.push(result.error);
+      continue;
+    }
+    const nameAfter = result.folder.name;
+    outcome.moved.push({
+      ref,
+      from,
+      renamed:
+        nameAfter === nameBefore
+          ? undefined
+          : { from: nameBefore, to: nameAfter },
+    });
   }
   return outcome;
 }
 
+/**
+ * 옮긴 항목을 원래 폴더로 되돌린다. 원래 폴더가 없어졌거나 휴지통에 있으면 루트로 보낸다.
+ *
+ * 폴더를 옮기다 같은 이름 때문에 번호가 붙었다면, 되돌릴 때 번호를 걷어 내 원래 이름으로 돌려놓는다.
+ * 옮긴 뒤에 사용자가 이름을 바꿨으면 그 이름을 지키고, 원래 자리에 같은 이름이 새로 생겼으면 다시
+ * 번호를 붙인다.
+ */
 export function undoMove(outcome: MoveOutcome): void {
-  for (const { ref, from } of outcome.moved) {
+  for (const { ref, from, renamed } of outcome.moved) {
     const target = from !== null && isFolderAvailable(from) ? from : null;
-    if (ref.kind === "folder") moveFolder(ref.id, target);
-    else movePresentation(ref.id, target);
+    if (ref.kind === "file") {
+      movePresentation(ref.id, target);
+      continue;
+    }
+    const original =
+      renamed && itemName(ref) === renamed.to ? renamed.from : undefined;
+    moveFolder(ref.id, target, original);
   }
 }
 

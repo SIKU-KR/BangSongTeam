@@ -40,6 +40,11 @@ export interface DriveContextValue {
   setSortOrder: (order: SortOrder) => void;
   typeFilter: DriveTypeFilter;
   setTypeFilter: (filter: DriveTypeFilter) => void;
+  /**
+   * 헤더 검색어를 바꾼다. 검색어는 글자마다 바뀌므로 이 값에 넣지 않고 `useDriveSearchQuery`로
+   * 읽는다. 여기에 넣으면 끌기·놓기 훅으로 이 값을 읽는 모든 행이 글자마다 다시 그려진다.
+   */
+  setSearchQuery: (query: string) => void;
 
   requestNewFolder: (parentId: string | null) => void;
   requestRename: (ref: DriveItemRef) => void;
@@ -63,6 +68,16 @@ export function useDrive(): DriveContextValue {
     throw new Error("useDrive must be used within a DriveProvider");
   }
   return value;
+}
+
+export const DriveSearchQueryContext = createContext("");
+
+/**
+ * 헤더에 친 드라이브 검색어 (친 그대로). 입력창을 그리는 셸만 읽는다. 목록은 셸이 늦춰 넘기는
+ * 검색어로 그려야 글자를 칠 때 입력창이 밀리지 않는다.
+ */
+export function useDriveSearchQuery(): string {
+  return useContext(DriveSearchQueryContext);
 }
 
 /** 끌어 온 항목을 이 대상에 놓으면 실제로 무언가 바뀌는지 */

@@ -39,6 +39,9 @@ interface DriveItemActions {
 /**
  * 드라이브 항목 메뉴의 규칙. 휴지통에서는 복원·영구 삭제만, 드라이브에서는
  * 하나를 고르면 열기·송출·이름 바꾸기가 더해지고 사본은 프레젠테이션만 만든다.
+ *
+ * 폴더를 열면 검색을 끝낸다. 검색 결과에서 지금 열린 폴더를 열면 주소가 그대로라 위치가 바뀔 때
+ * 비우는 검색어가 남고, 연 것이 아무 일도 하지 않은 것처럼 보인다.
  */
 export function useDriveItemActions({
   isTrash,
@@ -59,6 +62,7 @@ export function useDriveItemActions({
         drive.showToast(DRIVE_COPY.openTrashedItem);
         return;
       }
+      if (item.kind === "folder") drive.setSearchQuery("");
       openItem(toItemRef(item), navigate);
     },
     [isTrash, drive, navigate],

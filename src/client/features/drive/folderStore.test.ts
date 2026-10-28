@@ -35,6 +35,7 @@ import {
   getFolders,
   hydrateFoldersFromStorage,
   moveFolder,
+  nearestAvailableFolder,
   reloadFoldersFromStorage,
   removeFoldersLocally,
   renameFolder,
@@ -177,6 +178,21 @@ describe("folderStore", () => {
       });
     });
 
+    it("옮길 때 쓸 이름을 주면 그 이름으로 옮기되, 겹치면 번호를 붙인다", () => {
+      const target = createFolder(null, "보관");
+      createFolder(target.id, "주일");
+      const moving = createFolder(null, "주일 (2)");
+
+      moveFolder(moving.id, target.id, "주일");
+      expect(getFolder(moving.id)?.name).toBe("주일 (2)");
+
+      moveFolder(moving.id, null, "주일");
+      expect(getFolder(moving.id)).toMatchObject({
+        parentId: null,
+        name: "주일",
+      });
+    });
+
     it("자기 자신이나 하위 폴더로는 옮기지 못한다", () => {
       const a = createFolder(null, "a");
       const b = createFolder(a.id, "b");
@@ -194,6 +210,40 @@ describe("folderStore", () => {
       const trash = createFolder(null, "t");
       trashFolder(trash.id);
       expect(moveFolder(a.id, trash.id).ok).toBe(false);
+    });
+  });
+
+  describe("nearestAvailableFolder", () => {
+    it("쓸 수 있는 폴더는 그대로, 휴지통에 들어간 폴더는 가장 가까운 쓸 수 있는 상위 폴더를 돌려준다", () => {
+      const a = createFolder(null, "a");
+      const b = createFolder(a.id, "b");
+      const c = createFolder(b.id, "c");
+      expect(nearestAvailableFolder(c.id)).toBe(c.id);
+
+      trashFolder(c.id);
+      expect(nearestAvailableFolder(c.id)).toBe(b.id);
+
+      trashFolder(b.id);
+      expect(nearestAvailableFolder(c.id)).toBe(a.id);
+
+      trashFolder(a.id);
+      expect(nearestAvailableFolder(c.id)).toBeNull();
+    });
+
+    it("상위 폴더가 휴지통에 있으면 자신이 따로 버려지지 않았어도 그 위로 올라간다", () => {
+      const a = createFolder(null, "a");
+      const b = createFolder(a.id, "b");
+      const c = createFolder(b.id, "c");
+
+      trashFolder(b.id);
+
+      expect(nearestAvailableFolder(c.id)).toBe(a.id);
+    });
+
+    it("모르는 폴더나 루트는 루트로 본다", () => {
+      expect(nearestAvailableFolder("c00000000000000000009")).toBeNull();
+      expect(nearestAvailableFolder(null)).toBeNull();
+      expect(nearestAvailableFolder(undefined)).toBeNull();
     });
   });
 

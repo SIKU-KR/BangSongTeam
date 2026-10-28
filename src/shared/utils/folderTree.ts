@@ -162,6 +162,9 @@ const NUMBERED_NAME = /^(.*) \((\d+)\)$/;
 /**
  * 같은 위치에 겹치는 이름이 있으면 파일 탐색기처럼 번호를 붙인다.
  * "새 폴더" → "새 폴더 (2)", "새 폴더 (2)" → "새 폴더 (3)".
+ *
+ * 번호는 `BigInt`로 센다. 사용자가 이름에 쓴 숫자는 길이 제한까지 얼마든지 길 수 있고, `Number`는
+ * 2^53을 넘으면 1을 더해도 같은 값에 머물러 이미 쓰는 이름을 끝없이 다시 고른다.
  */
 export function resolveUniqueName(
   base: string,
@@ -175,13 +178,14 @@ export function resolveUniqueName(
 
   const match = NUMBERED_NAME.exec(trimmed);
   const stem = match?.[1] ?? trimmed;
-  let counter = match ? Number(match[2]) + 1 : 2;
+  const digits = match?.[2];
+  let counter = digits === undefined ? 2n : BigInt(digits) + 1n;
 
   for (;;) {
     const suffix = ` (${counter})`;
     const candidate = `${stem.slice(0, MAX_FOLDER_NAME_LENGTH - suffix.length)}${suffix}`;
     if (!taken.has(folderNameKey(candidate))) return candidate;
-    counter += 1;
+    counter += 1n;
   }
 }
 

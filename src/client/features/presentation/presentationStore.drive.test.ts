@@ -70,6 +70,16 @@ describe("presentationStore 드라이브 조작", () => {
     expect(getPresentationById(target.id)?.title).toBe(target.title);
   });
 
+  it("이름을 한도로 줄일 때 이모지를 반으로 자르지 않고, 서로게이트 반쪽은 U+FFFD로 바꾼다", () => {
+    const target = SEED_PRESENTATIONS[1];
+
+    renamePresentation(target.id, `${"가".repeat(99)}😀`);
+    expect(getPresentationById(target.id)?.title).toBe("가".repeat(99));
+
+    renamePresentation(target.id, "새 \uD83D이름\uDE00");
+    expect(getPresentationById(target.id)?.title).toBe("새 \uFFFD이름\uFFFD");
+  });
+
   it("바뀐 문서를 서버 push 큐에 넣는다 (활성 문서가 아니어도)", async () => {
     const pushed: Presentation[] = [];
     __setPusherForTests(async (doc) => {

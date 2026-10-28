@@ -35,8 +35,11 @@ import {
 } from "../presentation/presentationStore";
 import {
   __loadFoldersForTests,
+  createFolder,
+  getFolder,
   getFolders,
   moveFolder,
+  renameFolder,
   resetFolderStore,
   trashFolder,
 } from "./folderStore";
@@ -155,6 +158,73 @@ describe("driveActions", () => {
       const outcome = moveItems([{ kind: "folder", id: ROOT }], CHILD);
       expect(outcome.moved).toHaveLength(0);
       expect(outcome.errors).toEqual([FOLDER_COPY.cannotMoveIntoSelf]);
+    });
+
+    describe("옮기며 번호가 붙은 폴더", () => {
+      const LEFT = "d00000000000000000004";
+      const RIGHT = "e00000000000000000005";
+      const MOVING = "f00000000000000000006";
+      const TAKEN = "g00000000000000000007";
+      const EMPTY = "h00000000000000000008";
+
+      beforeEach(() => {
+        __loadFoldersForTests([
+          folder(LEFT),
+          folder(RIGHT),
+          folder(EMPTY),
+          { ...folder(MOVING, LEFT), name: "찬양" },
+          { ...folder(TAKEN, RIGHT), name: "찬양" },
+        ]);
+      });
+
+      it("되돌리면 번호가 붙기 전 이름으로 돌아온다", () => {
+        const outcome = moveItems([{ kind: "folder", id: MOVING }], RIGHT);
+        expect(getFolder(MOVING)?.name).toBe("찬양 (2)");
+
+        undoMove(outcome);
+
+        expect(getFolder(MOVING)).toMatchObject({
+          parentId: LEFT,
+          name: "찬양",
+        });
+      });
+
+      it("옮긴 뒤에 직접 바꾼 이름은 되돌려도 지킨다", () => {
+        const outcome = moveItems([{ kind: "folder", id: MOVING }], RIGHT);
+        renameFolder(MOVING, "찬양팀");
+
+        undoMove(outcome);
+
+        expect(getFolder(MOVING)).toMatchObject({
+          parentId: LEFT,
+          name: "찬양팀",
+        });
+      });
+
+      it("원래 자리에 같은 이름이 생겼으면 되돌릴 때 다시 번호를 붙인다", () => {
+        const outcome = moveItems([{ kind: "folder", id: MOVING }], RIGHT);
+        createFolder(LEFT, "찬양");
+
+        undoMove(outcome);
+
+        expect(getFolder(MOVING)).toMatchObject({
+          parentId: LEFT,
+          name: "찬양 (2)",
+        });
+      });
+
+      it("번호가 붙지 않은 이동은 되돌려도 이름을 건드리지 않는다", () => {
+        const outcome = moveItems([{ kind: "folder", id: MOVING }], EMPTY);
+        expect(getFolder(MOVING)?.name).toBe("찬양");
+        renameFolder(MOVING, "합창");
+
+        undoMove(outcome);
+
+        expect(getFolder(MOVING)).toMatchObject({
+          parentId: LEFT,
+          name: "합창",
+        });
+      });
     });
   });
 

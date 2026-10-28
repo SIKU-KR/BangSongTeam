@@ -22,4 +22,26 @@ describe("deckMatchesQuery", () => {
     expect(deckMatchesQuery({ ...deck, artist: "" }, "은혜")).toBe(true);
     expect(deckMatchesQuery({ ...deck, artist: "" }, "손경민")).toBe(false);
   });
+
+  it("같은 곡 객체를 거듭 찾아도 결과가 같다", () => {
+    const same = { ...deck };
+
+    expect(deckMatchesQuery(same, "ㅅㄱㅁ")).toBe(true);
+    expect(deckMatchesQuery(same, "ㅅㄱㅁ")).toBe(true);
+    expect(deckMatchesQuery(same, "시선")).toBe(false);
+    expect(deckMatchesQuery(same, "시선")).toBe(false);
+  });
+
+  it("같은 곡 객체의 글을 제자리에서 고쳐도 고친 글로 찾는다", () => {
+    const edited = { ...deck };
+    expect(deckMatchesQuery(edited, "손경민")).toBe(true);
+
+    edited.artist = "김명선";
+    edited.lyricsRaw = "내게로부터 눈을 들어";
+
+    expect(deckMatchesQuery(edited, "손경민")).toBe(false);
+    expect(deckMatchesQuery(edited, "김명선")).toBe(true);
+    expect(deckMatchesQuery(edited, "눈을 들어")).toBe(true);
+    expect(deckMatchesQuery(edited, "한량없는")).toBe(false);
+  });
 });

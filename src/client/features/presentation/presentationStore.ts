@@ -11,6 +11,7 @@ import {
   laterThan,
   mergeSlideLines,
   splitLinesAtCursor,
+  toWellFormedText,
 } from "#shared";
 import {
   savePresentation,
@@ -704,7 +705,10 @@ export function openPresentation(id: string): boolean {
  * 불러올 때 읽지 못한 저장본으로 남는다. 입력 칸의 `maxLength`는 코드로 넣은 값을 막지 못한다.
  */
 export function updatePresentationTitle(title: string): void {
-  const next = clampText(title.trim(), MAX_PRESENTATION_TITLE_LENGTH);
+  const next = clampText(
+    toWellFormedText(title).trim(),
+    MAX_PRESENTATION_TITLE_LENGTH,
+  );
   if (!next || next === readActive().title) return;
   pushHistory();
   if (writeActive({ ...readActive(), title: next })) emitChange();
@@ -751,12 +755,12 @@ export function updateSongInfo(
 ): void {
   const item = readActive().items[songIndex];
   if (!item || !item.deck) return;
-  if (item.deck.title === info.title && item.deck.artist === info.artist) {
-    return;
-  }
+  const title = toWellFormedText(info.title);
+  const artist = toWellFormedText(info.artist);
+  if (item.deck.title === title && item.deck.artist === artist) return;
 
   pushHistory();
-  writeSongDeck(songIndex, { title: info.title, artist: info.artist });
+  writeSongDeck(songIndex, { title, artist });
 }
 
 /** 곡 배경으로 고를 수 있는 것: 배경 갤러리의 영상·이미지, 또는 단색 */
@@ -785,6 +789,9 @@ export function updateSongBackground(
 /**
  * 슬라이드 가사를 바꾼다. 값이 그대로면 되돌리기 기록도 남기지 않는다.
  * `coalesceKey`가 같은 연속 입력은 되돌리기 한 단계로 묶인다.
+ *
+ * 다른 글 수정과 달리 짝을 잃은 서로게이트를 여기서 바꾸지 않는다. 가사 편집창이 반쪽씩 들어오는
+ * 이모지의 첫 반쪽을 잠시 남겨 두어야 해서, 다듬기는 편집창이 맡는다(`StageLyricsEditor`).
  */
 export function updateSlideLines(
   songIndex: number,
@@ -931,6 +938,9 @@ function replaceSongSlides(songIndex: number, slides: Slide[]): void {
  * 가사 편집창의 커서 위치에서 슬라이드를 둘로 나눈다. 앞부분은 기존 슬라이드
  * id를 유지하고 뒷부분은 새 슬라이드로 바로 뒤에 들어간다. 커서가 맨 앞·맨
  * 끝이라 한쪽이 비면 아무것도 하지 않고 `false`를 돌려준다.
+ *
+ * 나눈 가사에 남은 서로게이트 반쪽은 U+FFFD로 바꾼다. 가사 편집창은 반쪽씩 들어오는 이모지를
+ * 위해 커서 앞의 반쪽을 남겨 두는데(`StageLyricsEditor`), 편집창의 나누기는 그 상태로도 불린다.
  */
 export function splitSlideAtCursor(
   songIndex: number,
@@ -946,12 +956,17 @@ export function splitSlideAtCursor(
 
   pushHistory();
 
+  const [before, after] = parts;
   const next = [...slides];
   next.splice(
     slideIndex,
     1,
-    { ...target, lines: parts[0] },
-    { id: createSlideId(), order: slideIndex + 1, lines: parts[1] },
+    { ...target, lines: before.map(toWellFormedText) },
+    {
+      id: createSlideId(),
+      order: slideIndex + 1,
+      lines: after.map(toWellFormedText),
+    },
   );
   replaceSongSlides(songIndex, next);
   return true;
@@ -959,7 +974,8 @@ export function splitSlideAtCursor(
 
 /**
  * 슬라이드를 다음 슬라이드와 합친다. 합친 줄 수가 슬라이드 최대 줄 수를 넘거나
- * 다음 슬라이드가 없으면 아무것도 하지 않고 `false`를 돌려준다.
+ * 다음 슬라이드가 없으면 아무것도 하지 않고 `false`를 돌려준다. 나누기처럼 남은 서로게이트
+ * 반쪽은 U+FFFD로 바꾼다.
  */
 export function mergeSlideWithNext(
   songIndex: number,
@@ -978,7 +994,7 @@ export function mergeSlideWithNext(
   pushHistory();
 
   const next = [...slides];
-  next.splice(slideIndex, 2, { ...target, lines });
+  next.splice(slideIndex, 2, { ...target, lines: lines.map(toWellFormedText) });
   replaceSongSlides(songIndex, next);
   return true;
 }
@@ -1076,7 +1092,10 @@ export function movePresentation(id: string, folderId: string | null): void {
  * 단계가 아니라, 기록을 남기면 편집기에서 되돌릴 때 기록의 옛 이름으로 돌아간다.
  */
 export function renamePresentation(id: string, title: string): void {
-  const trimmed = title.trim().slice(0, MAX_PRESENTATION_TITLE_LENGTH);
+  const trimmed = clampText(
+    toWellFormedText(title).trim(),
+    MAX_PRESENTATION_TITLE_LENGTH,
+  );
   if (!trimmed) return;
   const current = state.byId[id];
   const renamed = updateDocumentById(id, (doc) =>

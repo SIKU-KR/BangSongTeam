@@ -51,11 +51,16 @@ export function usePublicDeck(id: string | null) {
 /**
  * 공개 덱 가져오기. 성공하면 받은 포크를 내 보관함에 넣는다.
  * 서버에 이미 있는 덱이므로 다시 올리지 않는다 (`push: false`).
+ *
+ * `networkMode: 'always'`인 것은 오프라인에서 멈춘 요청이 온라인이 되는 순간, 사용자가 창을
+ * 닫고 다른 프레젠테이션으로 옮겨 간 뒤에도 나가기 때문이다. 요청을 곧바로 보내 닿지 못하면
+ * `OfflineError`로 바로 끝낸다.
  */
 export function useForkDeck() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: forkPublicDeck,
+    networkMode: "always",
     onSuccess: ({ deck }) => {
       upsertLibraryDeck(deck, { push: false });
       void queryClient.invalidateQueries({ queryKey: catalogKeys.all });

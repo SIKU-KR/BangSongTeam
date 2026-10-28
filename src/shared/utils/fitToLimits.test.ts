@@ -10,6 +10,7 @@ import {
   fitPresentationToLimits,
   toDisplayName,
   toNonNegativeInt,
+  toWellFormedText,
 } from "./fitToLimits";
 
 const OWNER = "00000000x000000000001";
@@ -61,6 +62,26 @@ function withDeck(
     })),
   };
 }
+
+describe("toWellFormedText", () => {
+  it("짝을 잃은 서로게이트 반쪽만 U+FFFD로 바꾼다", () => {
+    expect(toWellFormedText("가\uD83D나")).toBe("가\uFFFD나");
+    expect(toWellFormedText("\uDE4F가")).toBe("\uFFFD가");
+    expect(toWellFormedText("😀\uD83D")).toBe("😀\uFFFD");
+    expect(toWellFormedText("\uDE00\uD83D")).toBe("\uFFFD\uFFFD");
+    expect(toWellFormedText("\uD83D😀\uDE00")).toBe("\uFFFD😀\uFFFD");
+  });
+
+  it("짝이 맞는 이모지와 보통 글은 그대로 둔다", () => {
+    expect(toWellFormedText("")).toBe("");
+    expect(toWellFormedText("은혜로다 🙏 주의 은혜")).toBe(
+      "은혜로다 🙏 주의 은혜",
+    );
+    expect(toWellFormedText("\u{1F468}\u200D\u{1F469}\u200D\u{1F467}")).toBe(
+      "\u{1F468}\u200D\u{1F469}\u200D\u{1F467}",
+    );
+  });
+});
 
 describe("clampText", () => {
   it("한도 안의 글은 그대로 둔다", () => {

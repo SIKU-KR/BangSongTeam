@@ -17,6 +17,7 @@ import {
   reorderSongs,
   removeSongFromPresentation,
   addDeckToPresentation,
+  getActivePresentation,
   duplicateSongInPresentation,
   undo,
   redo,
@@ -171,6 +172,7 @@ function EditorScreen({
     const requested = Number(searchParams.get("song") || 0);
     setActiveSongIndex(Number.isFinite(requested) ? Math.max(0, requested) : 0);
     setActiveSlideIndex(0);
+    setSongPickerMode(null);
   }, [presentationId]);
 
   const safeSongIndex = Math.min(
@@ -584,6 +586,7 @@ function EditorScreen({
         initialMode={songPickerMode ?? "browse"}
         onClose={() => setSongPickerMode(null)}
         onSelectSong={(newDeck) => {
+          if (getActivePresentation().id !== presentation.id) return;
           addDeckToPresentation(newDeck);
           selection.select({
             songIndex: presentation.items.length,

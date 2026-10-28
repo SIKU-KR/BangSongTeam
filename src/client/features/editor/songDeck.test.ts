@@ -38,4 +38,22 @@ describe("createSongDeck", () => {
     );
     expect(deck.artist).toBe("");
   });
+
+  it("제목·아티스트·가사에 남은 서로게이트 반쪽은 U+FFFD로 바꾼다", () => {
+    const deck = createSongDeck({
+      userId: USER_ID,
+      title: "은혜로다\uD83D",
+      artist: "\uDE00손경민",
+      lyricsRaw: "은혜로다 \uD83D주의 은혜\n한량없는 🙏 주의 은혜",
+    });
+
+    expect(deck.title).toBe("은혜로다\uFFFD");
+    expect(deck.artist).toBe("\uFFFD손경민");
+    expect(deck.lyricsRaw).toBe(
+      "은혜로다 \uFFFD주의 은혜\n한량없는 🙏 주의 은혜",
+    );
+    expect(deck.slides.map((slide) => slide.lines)).toEqual([
+      ["은혜로다 \uFFFD주의 은혜", "한량없는 🙏 주의 은혜"],
+    ]);
+  });
 });

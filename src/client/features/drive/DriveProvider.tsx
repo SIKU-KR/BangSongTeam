@@ -19,6 +19,7 @@ import { createNewPresentation, editorPath } from "../presentation";
 import { isFolderAvailable } from "./folderStore";
 import {
   DriveContext,
+  DriveSearchQueryContext,
   canDropOn,
   type DriveContextValue,
   type DropTarget,
@@ -40,11 +41,16 @@ import {
   type DriveTypeFilter,
   type SortOrder,
 } from "./driveModel";
-import { TRASH_PATH } from "./drivePaths";
+import { TRASH_PATH, isDrivePath } from "./drivePaths";
 import { DriveDialogHost, type DriveDialogState } from "./DriveDialogHost";
 import { useUndoToast } from "./useUndoToast";
 import { DRIVE_COPY } from "#copy/drive";
 import { COMMON_COPY } from "#copy/common";
+
+// useSensor는 옵션 객체가 바뀌면 센서를 새로 만들고, 그러면 끌기·놓기 내부 컨텍스트가 바뀌어 모든 행이
+// 다시 그려진다. 검색어를 칠 때마다 이 공급자가 다시 그려지므로 옵션을 렌더 밖에 둔다.
+// @dnd-kit/core@6.3.1 dist/core.esm.js (`useSensor`, `useCombineActivators`)
+const POINTER_SENSOR_OPTIONS = { activationConstraint: { distance: 5 } };
 
 const followCursor: Modifier = ({
   activatorEvent,
@@ -65,6 +71,14 @@ const followCursor: Modifier = ({
  *
  * 사이드바, 헤더 브레드크럼, 본문 목록이 같은 선택·드래그 상태를
  * 봐야 하므로 셸 한 곳에 둔다. 대화 상자와 알림(실행 취소)도 여기서 띄운다.
+ *
+ * 끌어서 옮기거나 버린 뒤에는 선택을 푼다. 목록에서 사라진 항목이 선택에 남으면 다음 끌기에
+ * 함께 딸려 간다.
+ *
+ * 헤더의 드라이브 검색어는 친 위치에 묶인다. 셸은 화면을 오가도 남아 있어서, 검색 결과에서 연
+ * 폴더나 휴지통에까지 검색어가 따라가면 화면이 바뀐 것 같지 않다. 드라이브 안에서 위치가 바뀌면
+ * 비우고, 배경 갤러리에 다녀온 뒤 같은 위치로 돌아오면 그대로 둔다. 주소가 그대로인 열기(검색
+ * 결과에서 지금 폴더 열기, 루트에서 내 드라이브 누르기)는 여는 쪽이 검색어를 비운다.
  */
 export function DriveProvider({
   children,
@@ -85,7 +99,14 @@ export function DriveProvider({
   const [dialog, setDialog] = useState<DriveDialogState | null>(null);
   const [sortOrder, setSortOrder] = useState<SortOrder>(DEFAULT_SORT_ORDER);
   const [typeFilter, setTypeFilter] = useState<DriveTypeFilter>("all");
+  const [searchQuery, setSearchQuery] = useState<string>("");
+  const [searchPath, setSearchPath] = useState<string>(pathname);
   const { showToast } = useUndoToast({ isSuspended: dialog !== null });
+
+  if (isDrivePath(pathname) && searchPath !== pathname) {
+    setSearchPath(pathname);
+    setSearchQuery("");
+  }
 
   useEffect(() => {
     setSelectionState(new Set());
@@ -182,9 +203,7 @@ export function DriveProvider({
     [navigate],
   );
 
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
-  );
+  const sensors = useSensors(useSensor(PointerSensor, POINTER_SENSOR_OPTIONS));
 
   const handleDragStart = ({ active }: DragStartEvent): void => {
     const key = String(active.id);
@@ -201,8 +220,12 @@ export function DriveProvider({
     setActiveDrag(null);
     const target = over?.data.current as DropTarget | undefined;
     if (!refs || !target || !canDropOn(refs, target)) return;
-    if (target.kind === "trash") trash(refs);
-    else move(refs, target.folderId);
+    if (target.kind === "trash") {
+      trash(refs);
+      return;
+    }
+    clearSelection();
+    move(refs, target.folderId);
   };
 
   const value = useMemo<DriveContextValue>(
@@ -221,6 +244,7 @@ export function DriveProvider({
       setSortOrder,
       typeFilter,
       setTypeFilter,
+      setSearchQuery,
       requestNewFolder: (parentId) =>
         setDialog({ kind: "new-folder", parentId }),
       requestRename: (ref) => setDialog({ kind: "rename", ref }),
@@ -261,18 +285,20 @@ export function DriveProvider({
 
   return (
     <DriveContext.Provider value={value}>
-      <DndContext
-        sensors={sensors}
-        collisionDetection={pointerWithin}
-        onDragStart={handleDragStart}
-        onDragEnd={handleDragEnd}
-        onDragCancel={() => setActiveDrag(null)}
-      >
-        {children}
-        <DragOverlay dropAnimation={null} modifiers={[followCursor]}>
-          {activeDrag && <DragChip refs={activeDrag} />}
-        </DragOverlay>
-      </DndContext>
+      <DriveSearchQueryContext.Provider value={searchQuery}>
+        <DndContext
+          sensors={sensors}
+          collisionDetection={pointerWithin}
+          onDragStart={handleDragStart}
+          onDragEnd={handleDragEnd}
+          onDragCancel={() => setActiveDrag(null)}
+        >
+          {children}
+          <DragOverlay dropAnimation={null} modifiers={[followCursor]}>
+            {activeDrag && <DragChip refs={activeDrag} />}
+          </DragOverlay>
+        </DndContext>
+      </DriveSearchQueryContext.Provider>
 
       <DriveDialogHost dialog={dialog} onClose={() => setDialog(null)} />
     </DriveContext.Provider>

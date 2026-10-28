@@ -27,6 +27,7 @@ import {
   NewMenuButton,
   drivePath,
   isDrivePath,
+  useDrive,
   useDriveDroppable,
 } from "../../features/drive";
 import { SHELL_COPY } from "#copy/shell";
@@ -127,25 +128,34 @@ function AccountMenuItem(): React.JSX.Element {
   );
 }
 
-/** 좌측 내비게이션 사이드바 */
+/**
+ * 좌측 내비게이션 사이드바.
+ *
+ * 드라이브에서 앱 이름이나 내 드라이브를 누르면 검색을 끝내고 루트를 연다. 루트에서 검색하던
+ * 중이면 주소가 그대로라 검색어가 남기 때문이다. 배경 갤러리에서 누를 때는 비우지 않아, 같은
+ * 위치로 돌아오면 두고 온 검색어를 이어 쓴다.
+ */
 export function AppSidebar(): React.JSX.Element {
   const navigate = useNavigate();
   const pathname = usePathname();
+  const drive = useDrive();
 
   const isDrive = isDrivePath(pathname);
   const isBackgrounds =
     pathname === BACKGROUNDS_ITEM.path ||
     pathname.startsWith(`${BACKGROUNDS_ITEM.path}/`);
 
+  const openMyDrive = (): void => {
+    if (isDrive) drive.setSearchQuery("");
+    navigate(drivePath(null));
+  };
+
   return (
     <Sidebar>
       <SidebarHeader>
         <SidebarMenu>
           <SidebarMenuItem>
-            <SidebarMenuButton
-              size="lg"
-              onClick={() => navigate(drivePath(null))}
-            >
+            <SidebarMenuButton size="lg" onClick={openMyDrive}>
               <img
                 src="/icons/icon-192.png"
                 alt=""
@@ -174,7 +184,7 @@ export function AppSidebar(): React.JSX.Element {
                 <NavItem
                   item={DRIVE_ITEM}
                   active={isDrive}
-                  onClick={() => navigate(drivePath(null))}
+                  onClick={openMyDrive}
                   drop={{ kind: "folder", folderId: null }}
                 />
                 <NavItem

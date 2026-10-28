@@ -18,6 +18,11 @@ import {
 const LONG_VERSE =
   "걱정 근심 많은 자를 성령감화 하시며 복과 은혜 사랑 받아 평안하게 하소서 첨과 끝이 되신 주님 항상 인도 하셔서 마귀 유혹 받는 것을 속히 끊게 하소서";
 
+const LONE_SURROGATE =
+  /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/;
+
+const EMOJI_AT_WRAP = `${"가".repeat(MAX_SLIDE_LINE_LENGTH - 1)}😀${"나".repeat(20)}`;
+
 describe("Lyric Processing Utilities", () => {
   describe("sanitizeLyricLine", () => {
     it("trims regular whitespace", () => {
@@ -148,6 +153,20 @@ describe("Lyric Processing Utilities", () => {
       expect(slides[0].lines).toHaveLength(4);
     });
 
+    it("공백 없는 긴 줄을 감쌀 때 경계에 걸친 이모지를 반으로 나누지 않는다", () => {
+      const line = `${"가".repeat(MAX_SLIDE_LINE_LENGTH - 1)}🙏${"나".repeat(20)}`;
+
+      const lines = splitLyricsIntoSlides(line).flatMap((slide) => slide.lines);
+
+      expect(lines).toEqual([
+        "가".repeat(MAX_SLIDE_LINE_LENGTH - 1),
+        `🙏${"나".repeat(20)}`,
+      ]);
+      for (const text of lines) {
+        expect(text).not.toMatch(LONE_SURROGATE);
+      }
+    });
+
     it("generates unique IDs for each slide", () => {
       const rawText = `L1\nL2\n\nL3\nL4\n\nL5\nL6`;
       const slides = splitLyricsIntoSlides(rawText);
@@ -173,6 +192,29 @@ describe("Lyric Processing Utilities", () => {
     it("공백 없는 긴 줄은 글자 수로 자른다", () => {
       const [lines] = fitLinesToSlides(["가".repeat(170)]);
       expect(lines.map((line) => line.length)).toEqual([80, 80, 10]);
+    });
+
+    it("글자 수로 자를 때 경계에 걸친 이모지는 다음 줄로 넘긴다", () => {
+      const [lines] = fitLinesToSlides([EMOJI_AT_WRAP]);
+
+      expect(lines).toEqual([
+        "가".repeat(MAX_SLIDE_LINE_LENGTH - 1),
+        `😀${"나".repeat(20)}`,
+      ]);
+      for (const line of lines) {
+        expect(line).not.toMatch(LONE_SURROGATE);
+        expect(line.length).toBeLessThanOrEqual(MAX_SLIDE_LINE_LENGTH);
+      }
+    });
+
+    it("이모지만 이어진 긴 줄도 이모지 단위로 자른다", () => {
+      const [lines] = fitLinesToSlides([`가${"😀".repeat(60)}`]);
+
+      expect(lines.join("")).toBe(`가${"😀".repeat(60)}`);
+      for (const line of lines) {
+        expect(line).not.toMatch(LONE_SURROGATE);
+        expect(line.length).toBeLessThanOrEqual(MAX_SLIDE_LINE_LENGTH);
+      }
     });
 
     it("감싼 뒤 4줄을 넘으면 2줄씩 나눈다", () => {
@@ -247,6 +289,14 @@ describe("Lyric Processing Utilities", () => {
       expect(splitLinesAtCursor(withBlank, offset)).toEqual([
         ["첫째 줄"],
         ["둘째 줄"],
+      ]);
+    });
+
+    it("커서가 이모지 가운데에 있으면 이모지 앞에서 나눈다", () => {
+      expect(splitLinesAtCursor(["가😀나"], 2)).toEqual([["가"], ["😀나"]]);
+      expect(splitLinesAtCursor(["첫째 줄", "😀둘째"], 6)).toEqual([
+        ["첫째 줄"],
+        ["😀둘째"],
       ]);
     });
 
