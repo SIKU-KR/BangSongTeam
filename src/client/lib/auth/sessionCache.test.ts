@@ -4,6 +4,9 @@ import {
   saveCachedSession,
   loadCachedSession,
   clearCachedSession,
+  clearPendingSignOut,
+  hasPendingSignOut,
+  markSignOutPending,
   rememberSessionEnd,
   takeSessionEnd,
 } from "./sessionCache";
@@ -82,6 +85,54 @@ describe("오프라인 세션 캐시", () => {
 
   it("캐시가 비어 있을 때 지워도 던지지 않는다", async () => {
     await expect(clearCachedSession()).resolves.toBeUndefined();
+  });
+});
+
+describe("서버가 확인하지 않은 로그아웃 표시", () => {
+  const PENDING_KEY = "chiton:sign-out-pending";
+
+  function storageBlocked(): never {
+    throw new DOMException("blocked", "SecurityError");
+  }
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    window.localStorage.clear();
+  });
+
+  it("남기고 읽고 지운다", () => {
+    expect(hasPendingSignOut()).toBe(false);
+
+    expect(markSignOutPending()).toBe(true);
+    expect(hasPendingSignOut()).toBe(true);
+    expect(Number(window.localStorage.getItem(PENDING_KEY))).toBeGreaterThan(0);
+
+    clearPendingSignOut();
+    expect(hasPendingSignOut()).toBe(false);
+  });
+
+  it("다른 탭이 남긴 표시도 읽는다", () => {
+    window.localStorage.setItem(PENDING_KEY, "1761523200000");
+
+    expect(hasPendingSignOut()).toBe(true);
+  });
+
+  it("저장소에 쓸 수 없으면 남기지 못했다고 돌려주고 던지지 않는다", () => {
+    vi.spyOn(window.localStorage, "setItem").mockImplementation(storageBlocked);
+
+    expect(markSignOutPending()).toBe(false);
+    expect(hasPendingSignOut()).toBe(false);
+  });
+
+  it("저장소를 읽거나 지울 수 없어도 던지지 않는다", () => {
+    window.localStorage.setItem(PENDING_KEY, "1");
+    vi.spyOn(window.localStorage, "getItem").mockImplementation(storageBlocked);
+    vi.spyOn(window.localStorage, "removeItem").mockImplementation(
+      storageBlocked,
+    );
+
+    expect(hasPendingSignOut()).toBe(false);
+    expect(() => clearPendingSignOut()).not.toThrow();
   });
 });
 

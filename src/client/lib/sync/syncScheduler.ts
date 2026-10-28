@@ -105,18 +105,16 @@ function startPush(document: Presentation): void {
         setSyncStatus("presentation", "synced");
       }
     } catch (err) {
-      if (err instanceof SessionExpiredError) {
-        pending.delete(document.id);
-        backoff.reset(document.id);
-        setSyncStatus("presentation", "error");
-      } else if (
+      const sessionExpired = err instanceof SessionExpiredError;
+      if (
         err instanceof OfflineError ||
-        (isRetryableApiError(err) &&
+        ((isRetryableApiError(err) || sessionExpired) &&
           backoff.getServerAttempt(document.id) < MAX_RETRY_ATTEMPTS)
       ) {
         const delay = backoff.getDelay(document.id, err);
         const now = Date.now();
-        const waitingOnServer = err instanceof ServerRejectedError;
+        const waitingOnServer =
+          err instanceof ServerRejectedError || sessionExpired;
         const existing = pending.get(document.id);
         if (existing) {
           existing.readyAt = Math.max(existing.readyAt, now + delay);
@@ -129,7 +127,7 @@ function startPush(document: Presentation): void {
             waitingOnServer,
           });
         }
-        setSyncStatus("presentation", "offline");
+        setSyncStatus("presentation", sessionExpired ? "error" : "offline");
       } else {
         pending.delete(document.id);
         backoff.reset(document.id);
@@ -195,7 +193,7 @@ function dispatch(): void {
  * 연결 회복 신호(`syncRecovery`)에 맞춰 대기 중인 push를 디바운스·백오프를 기다리지 않고
  * 곧바로 보낸다. 여기서 `online`을 따로 들으면 회복 경로가 둘이 된다.
  *
- * `wake`(포커스·탭 복귀·상태 확인 성공)는 서버가 거절해(5xx·429) 기다리는 항목을 앞당기지
+ * `wake`(포커스·탭 복귀·상태 확인 성공)는 서버가 거절해(5xx·429·401) 기다리는 항목을 앞당기지
  * 않고 백오프 횟수도 그대로 둔다. 그래야 `Retry-After`를 지키고 서버 재시도 한도에 이른다.
  * `reconnect`·`manual`은 백오프를 비우고 모두 보낸다. 회복 뒤 다시 실패하면 짧은 간격부터
  * 다시 센다. `manual`은 영구 실패로 남긴 항목도 실패 기록을 지우고 다시 넣는다.

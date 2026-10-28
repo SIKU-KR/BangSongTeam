@@ -42,7 +42,22 @@ import { COMMON_COPY } from "#copy/common";
 import { DRIVE_COPY } from "#copy/drive";
 import { FOLDER_COPY } from "#copy/folders";
 import { SHELL_COPY } from "#copy/shell";
+import { AUTH_COPY } from "#copy/auth";
 import { SEED_PRESENTATIONS, SEED_USER_ID } from "../test/presentationFixture";
+import { authClient } from "../lib/auth/authClient";
+import { getSessionState } from "../lib/auth/sessionStore";
+
+// better-auth 클라이언트는 만들 때 fetch를 잡아 두어 로그아웃 요청을 가짜 응답으로 바꿀 수 없다.
+// better-auth@1.7.12 dist/client/config.mjs (`customFetchImpl: fetch`)
+vi.mock("../lib/auth/authClient", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../lib/auth/authClient")>()),
+  authClient: {
+    getSession: vi.fn(),
+    signIn: { social: vi.fn(), email: vi.fn() },
+    signUp: { email: vi.fn() },
+    signOut: vi.fn(async () => ({ data: { success: true }, error: null })),
+  },
+}));
 
 function renderShell(initialPath = "/presentations") {
   return render(
@@ -237,6 +252,33 @@ describe("AppShellLayout (드라이브형 홈)", () => {
 
     fireEvent.click(screen.getByTestId("sidebar-nav-home"));
     expect(screen.getAllByTestId("presentation-row")).toHaveLength(5);
+  });
+
+  it("로그아웃하지 못하면 알림으로 알리고 계정 카드를 그대로 둔다", async () => {
+    renderShell();
+    vi.spyOn(window.localStorage, "setItem").mockImplementation(() => {
+      throw new DOMException("blocked", "SecurityError");
+    });
+    vi.mocked(authClient.signOut).mockRejectedValueOnce(
+      new TypeError("Failed to fetch"),
+    );
+
+    fireEvent.click(
+      within(screen.getByTestId("account-card")).getByRole("button"),
+    );
+
+    expect(
+      await screen.findByText(AUTH_COPY.signOutFailed),
+    ).toBeInTheDocument();
+    expect(getSessionState().status).toBe("authenticated");
+    await waitFor(() =>
+      expect(
+        within(screen.getByTestId("account-card")).getByRole("button"),
+      ).toBeEnabled(),
+    );
+    expect(screen.getByTestId("account-card")).toHaveTextContent(
+      SHELL_COPY.signOut,
+    );
   });
 
   it("새로 만들기 → 새 프레젠테이션은 문서를 만들고 편집기로 간다", () => {

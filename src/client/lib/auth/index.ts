@@ -1,8 +1,10 @@
 export { SOCIAL_PROVIDERS, type SocialProvider } from "./authClient";
 export {
   EmailAuthError,
+  finishPendingSignOut,
   getCurrentUserId,
   hydrateSession,
+  listenToOtherTabs,
   resumeDeferredSessionWork,
   setAccountHooks,
   signInWithEmail,

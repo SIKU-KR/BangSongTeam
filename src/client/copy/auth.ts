@@ -24,6 +24,8 @@ export const AUTH_COPY = {
   },
   defaultDescription: "로그인하면 교회와 집 어디서든 이어서 작업할 수 있어요.",
   signInFailed: "로그인을 시작하지 못했어요. 잠시 후 다시 시도해 주세요.",
+  signOutFailed:
+    "로그아웃하지 못했어요. 인터넷에 연결한 뒤 다시 시도해 주세요.",
   cancel: "로그인 없이 돌아가기",
   optimizedFor: "데스크톱 Chrome에서 가장 잘 동작해요",
   sessionCheckFailed: "서버에 연결하지 못했어요",

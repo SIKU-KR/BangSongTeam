@@ -50,6 +50,7 @@ import {
   __resetSyncSchedulerForTests,
   __setBackoffRandomForTests,
   flushPendingSync,
+  hasPendingDocumentPush,
   retryPendingSyncNow,
   scheduleDocumentPush,
 } from "./syncScheduler";
@@ -85,7 +86,11 @@ import {
   resetPresentationStore,
 } from "../../features/presentation/presentationStore";
 import { SEED_USER_ID as TEST_USER_ID } from "../../test/presentationFixture";
-import { OfflineError, ServerRejectedError } from "../api/request";
+import {
+  OfflineError,
+  ServerRejectedError,
+  SessionExpiredError,
+} from "../api/request";
 import { UnsyncableDocumentError } from "./presentationSync";
 import { ERROR_COPY } from "#copy/common";
 import { BASE_BACKOFF_MS, MAX_BACKOFF_MS } from "./backoff";
@@ -619,6 +624,43 @@ describe("runBootSync — 동기화 상태", () => {
 
     expect(push).toHaveBeenCalledTimes(2);
     expect(push.mock.calls[1][0].id).toBe(local.id);
+    expect(getSyncSnapshot().status).toBe("synced");
+  });
+
+  it("부팅 때 세션 만료(401)로 올리지 못한 곡은 버리지 않고 큐에 넘긴다", async () => {
+    const push = vi
+      .fn(async (deck: Deck) => deck)
+      .mockRejectedValueOnce(new SessionExpiredError());
+    __setDeckTransportForTests({ push });
+    const local = saveSongToLibrary({ title: "로컬 곡", lyricsRaw: "가사" });
+
+    await runBootSync();
+    expect(getSyncSnapshot().status).toBe("error");
+    expect(hasPendingDeckSync()).toBe(true);
+
+    await flushDeckSync();
+
+    expect(push).toHaveBeenCalledTimes(2);
+    expect(push.mock.calls[1][0].id).toBe(local.id);
+    expect(getSyncSnapshot().status).toBe("synced");
+  });
+
+  it("부팅 때 세션 만료(401)로 올리지 못한 세트는 버리지 않고 큐에 넘긴다", async () => {
+    __loadDocumentsForTests([presentation(DOC)]);
+    presentationSync.pushPresentation.mockRejectedValueOnce(
+      new SessionExpiredError(),
+    );
+
+    await runBootSync();
+    expect(getSyncSnapshot().status).toBe("error");
+    expect(hasPendingDocumentPush()).toBe(true);
+
+    await flushPendingSync();
+
+    expect(presentationSync.pushPresentation).toHaveBeenCalledTimes(2);
+    expect(presentationSync.pushPresentation.mock.calls[1][0]).toMatchObject({
+      id: DOC,
+    });
     expect(getSyncSnapshot().status).toBe("synced");
   });
 

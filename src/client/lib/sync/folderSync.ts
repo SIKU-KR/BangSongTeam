@@ -83,17 +83,17 @@ async function pushAll(folders: Folder[]): Promise<void> {
       failed.delete(folder.id);
       clearSyncFailure("folder", folder.id);
     } catch (err) {
-      if (err instanceof SessionExpiredError) {
-        sessionExpired = true;
-        pending.delete(folder.id);
-        backoff.reset(folder.id);
-      } else if (
+      const expired = err instanceof SessionExpiredError;
+      if (
         err instanceof OfflineError ||
-        (isRetryableApiError(err) &&
+        ((isRetryableApiError(err) || expired) &&
           backoff.getServerAttempt(folder.id) < MAX_RETRY_ATTEMPTS)
       ) {
-        offline = true;
-        if (err instanceof ServerRejectedError) serverRejected = true;
+        if (expired) sessionExpired = true;
+        else offline = true;
+        if (err instanceof ServerRejectedError || expired) {
+          serverRejected = true;
+        }
         if (!pending.has(folder.id)) pending.set(folder.id, folder);
         const delay = backoff.getDelay(folder.id, err);
         if (delay < minRetryDelay) minRetryDelay = delay;
@@ -117,7 +117,8 @@ async function pushAll(folders: Folder[]): Promise<void> {
     }
   }
 
-  waitingOnServer = offline && serverRejected;
+  const retrying = offline || sessionExpired;
+  waitingOnServer = retrying && serverRejected;
   if (sessionExpired) {
     setSyncStatus("folder", "error");
   } else if (offline) {
@@ -126,7 +127,7 @@ async function pushAll(folders: Folder[]): Promise<void> {
     backoff.reset();
     setSyncStatus("folder", "synced");
   }
-  if (offline && !timer && minRetryDelay !== Infinity) {
+  if (retrying && !timer && minRetryDelay !== Infinity) {
     timer = setTimeout(run, minRetryDelay);
   }
 }
@@ -206,7 +207,7 @@ export function flushFolderSync(): Promise<void> {
 /**
  * 연결 회복 신호(`syncRecovery`)에 맞춰 대기 중인 폴더를 곧바로 올린다.
  *
- * `wake`는 서버가 거절해(5xx·429) 기다리는 중이면 백오프 타이머에 맡긴다. 포커스마다
+ * `wake`는 서버가 거절해(5xx·429·401) 기다리는 중이면 백오프 타이머에 맡긴다. 포커스마다
  * 앞당기면 `Retry-After`를 어기고 서버 재시도 한도에 이르지 못한다. 기다리는 폴더만 빼고
  * 보내지 않는 것은 부모보다 자식이 먼저 도착하면 서버가 자식을 루트로 옮기기 때문이다.
  * `reconnect`·`manual`은 백오프를 비우고 모두 보낸다(`syncScheduler`와 같다). 비우지

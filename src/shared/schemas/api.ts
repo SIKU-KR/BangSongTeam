@@ -123,6 +123,15 @@ export const AuthSessionResponseSchema = z.object({
   }),
 });
 
+/**
+ * better-auth `/sign-out`이 세션 쿠키를 지우며 돌려주는 본문. 서버는 세션이 없어도 이렇게 답한다.
+ * 캡티브 포털·프록시가 보낸 200은 쿠키를 지우지 않으므로, 이 모양일 때만 로그아웃을 마친 것으로
+ * 본다.
+ */
+export const AuthSignOutResponseSchema = z.object({
+  success: z.literal(true),
+});
+
 /** 동의를 마치지 않은 사용자는 `agreedAt`이 null이고, 앱이 동의 모달로 막는다 */
 export const ConsentStatusResponseSchema = z.object({
   agreedAt: z.iso.datetime().nullable(),

@@ -82,12 +82,23 @@ function ConsentCheck({
 
 function ConsentDialog({ userId }: { userId: string }): React.JSX.Element {
   const [checked, setChecked] = useState(NONE_CHECKED);
+  const [signOutFailed, setSignOutFailed] = useState(false);
   const agree = useAgreeConsent(userId);
   const idPrefix = useId();
   const allChecked = ITEMS.every((item) => checked[item.id]);
 
   const setAll = (value: boolean): void => {
     setChecked({ ageOver14: value, terms: value, privacy: value });
+  };
+
+  const declineConsent = (): void => {
+    setSignOutFailed(false);
+    void signOut().catch(() => setSignOutFailed(true));
+  };
+
+  const submitConsent = (): void => {
+    setSignOutFailed(false);
+    agree.mutate({ ageOver14: true, terms: true, privacy: true });
   };
 
   return (
@@ -149,22 +160,21 @@ function ConsentDialog({ userId }: { userId: string }): React.JSX.Element {
         {agree.error && (
           <FieldError>{describeApiError(agree.error)}</FieldError>
         )}
+        {signOutFailed && <FieldError>{AUTH_COPY.signOutFailed}</FieldError>}
 
         <AlertDialogFooter>
           <AlertDialogAction
             variant="outline"
             data-testid="consent-decline"
             disabled={agree.isPending}
-            onClick={() => void signOut()}
+            onClick={declineConsent}
           >
             {AUTH_COPY.consent.decline}
           </AlertDialogAction>
           <AlertDialogAction
             data-testid="consent-agree"
             disabled={!allChecked || agree.isPending}
-            onClick={() =>
-              agree.mutate({ ageOver14: true, terms: true, privacy: true })
-            }
+            onClick={submitConsent}
           >
             {agree.isPending
               ? AUTH_COPY.consent.saving

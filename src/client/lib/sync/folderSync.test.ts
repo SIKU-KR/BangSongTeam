@@ -9,6 +9,7 @@ import {
 import {
   scheduleFolderPush,
   flushFolderSync,
+  hasPendingFolderPush,
   retryFolderSyncNow,
   setFolderSyncEnabled,
   setServerFolderListener,
@@ -19,6 +20,7 @@ import {
 import {
   OfflineError,
   ServerRejectedError,
+  SessionExpiredError,
   TimeoutError,
 } from "../api/request";
 import { installFakeApi } from "../../test/fakeApi";
@@ -30,7 +32,7 @@ import {
   __setDeckTransportForTests,
   __resetDeckSyncForTests,
 } from "./deckSync";
-import { MAX_BACKOFF_MS } from "./backoff";
+import { MAX_BACKOFF_MS, MAX_RETRY_ATTEMPTS } from "./backoff";
 
 const USER = "000000000000000000001";
 const PARENT = "a00000000000000000001";
@@ -373,6 +375,82 @@ describe("폴더 push 큐", () => {
     expect(getSyncSnapshot().status).toBe("synced");
 
     vi.useRealTimers();
+  });
+
+  describe("세션 만료(401)", () => {
+    beforeEach(() => {
+      __setFolderBackoffRandomForTests(() => 1);
+      vi.useFakeTimers();
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it("401을 받은 폴더는 버리지 않고 큐에 남겨 백오프 타이머로 다시 올린다", async () => {
+      push
+        .mockRejectedValueOnce(new SessionExpiredError())
+        .mockImplementation(async (f) => f);
+
+      scheduleFolderPush(folder(PARENT, null, "새 폴더"));
+      await vi.advanceTimersByTimeAsync(2000);
+      expect(push).toHaveBeenCalledTimes(1);
+      expect(getSyncSnapshot().status).toBe("error");
+      expect(hasPendingFolderPush()).toBe(true);
+
+      await vi.advanceTimersByTimeAsync(2000);
+
+      expect(push).toHaveBeenCalledTimes(2);
+      expect(push.mock.calls[1][0].name).toBe("새 폴더");
+      expect(getSyncSnapshot()).toMatchObject({
+        status: "synced",
+        lastFailure: null,
+      });
+    });
+
+    it("포커스(wake)는 401로 기다리는 폴더를 앞당기지 않고 타이머를 기다린다", async () => {
+      push
+        .mockRejectedValueOnce(new SessionExpiredError())
+        .mockImplementation(async (f) => f);
+
+      scheduleFolderPush(folder(PARENT, null));
+      await vi.advanceTimersByTimeAsync(2000);
+      await retryFolderSyncNow("wake");
+      await vi.advanceTimersByTimeAsync(1999);
+
+      expect(push).toHaveBeenCalledTimes(1);
+
+      await vi.advanceTimersByTimeAsync(1);
+      expect(push).toHaveBeenCalledTimes(2);
+    });
+
+    it("401이 재시도 한도까지 이어지면 실패로 남기고 더 올리지 않는다", async () => {
+      push.mockRejectedValue(new SessionExpiredError());
+
+      scheduleFolderPush(folder(PARENT, null, "만료된 폴더"));
+      await vi.advanceTimersByTimeAsync(2000);
+      for (let i = 0; i < MAX_RETRY_ATTEMPTS; i++) {
+        await vi.advanceTimersByTimeAsync(60_000);
+      }
+
+      expect(push).toHaveBeenCalledTimes(MAX_RETRY_ATTEMPTS + 1);
+      expect(getSyncSnapshot()).toMatchObject({
+        status: "error",
+        lastFailure: { id: PARENT, title: "만료된 폴더", kind: "folder" },
+      });
+
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(push).toHaveBeenCalledTimes(MAX_RETRY_ATTEMPTS + 1);
+
+      push.mockImplementation(async (f) => f);
+      await retryFolderSyncNow("manual");
+
+      expect(push).toHaveBeenCalledTimes(MAX_RETRY_ATTEMPTS + 2);
+      expect(getSyncSnapshot()).toMatchObject({
+        status: "synced",
+        lastFailure: null,
+      });
+    });
   });
 
   describe("다른 큐와 함께", () => {

@@ -38,7 +38,9 @@ import {
   __waitForSyncRecoveryForTests,
 } from "./lib/sync/syncRecovery";
 import { getSyncSnapshot, resetSyncStatus } from "./lib/sync/syncStatus";
+import { __resetConnectivityForTests } from "./lib/api/connectivity";
 import { installFakeApi, type FakeApi, type FakeRoute } from "./test/fakeApi";
+import { installFakeBroadcastChannel } from "./test/fakeBroadcastChannel";
 import {
   signInAsTestUser,
   signOutForTests,
@@ -89,6 +91,7 @@ vi.mock("./features/backgrounds/backgroundCatalog", async (importOriginal) => {
 const DOC_ID = SEED_PRESENTATION_IDS[0];
 const OTHER_USER_ID = "999999999999999999999";
 const SESSION_END_KEY = "chiton:session-end";
+const SIGN_OUT_PENDING_KEY = "chiton:sign-out-pending";
 const HOUR = 60 * 60 * 1000;
 
 const EMPTY_FOLDER_LIST: FolderListResponse = {
@@ -167,7 +170,10 @@ function renderAt(path: string) {
 }
 
 describe("App Route Integration", () => {
+  let tabs: ReturnType<typeof installFakeBroadcastChannel>;
+
   beforeEach(async () => {
+    tabs = installFakeBroadcastChannel();
     closeOfflineDB();
     await new Promise<void>((resolve) => {
       const req = indexedDB.deleteDatabase(OFFLINE_DB_NAME);
@@ -184,6 +190,7 @@ describe("App Route Integration", () => {
   afterEach(() => {
     signOutForTests();
     closeOfflineDB();
+    vi.unstubAllGlobals();
   });
 
   it("should render the landing placeholder at '/'", async () => {
@@ -640,6 +647,90 @@ describe("App Route Integration", () => {
       });
 
       expect(apiRequests(api).slice(sentBefore)).not.toContain(patchOfCreated);
+    });
+
+    it("동기화가 401을 받고 서버가 세션 없음을 답하면 새로고침하고, 다시 열면 로그인 화면이 만료를 알린다", async () => {
+      let expired = false;
+      api = installFakeApi(
+        bootRoutes({
+          "PATCH /api/presentations/*": () =>
+            expired
+              ? { status: 401, body: { error: "세션 만료" } }
+              : { body: { ok: true } },
+        }),
+      );
+      const view = renderAt("/presentations");
+      await screen.findAllByTestId("presentation-row");
+      await waitFor(() => expect(getSyncSnapshot().status).toBe("synced"));
+
+      expired = true;
+      fetcher.mockResolvedValue(null);
+      act(() => {
+        createNewPresentation();
+      });
+      await act(async () => {
+        await flushPendingSync();
+      });
+
+      await waitFor(() => expect(reload).toHaveBeenCalledTimes(1));
+      expect(screen.getByTestId("app-hydrating")).toBeInTheDocument();
+      expect(window.sessionStorage.getItem(SESSION_END_KEY)).toBe("expired");
+      expect(await loadCachedSession()).toBeNull();
+
+      view.unmount();
+      renderAt(window.location.pathname);
+
+      expect(await screen.findByTestId("login-description")).toHaveTextContent(
+        ERROR_COPY.sessionExpired,
+      );
+    });
+
+    it("다른 탭이 로그아웃했다고 알리면 로딩 화면으로 덮고 캐시를 비운 뒤 새로고침한다", async () => {
+      api = installFakeApi(bootRoutes());
+      renderAt("/presentations");
+      await screen.findAllByTestId("presentation-row");
+      await waitFor(() => expect(getSyncSnapshot().status).toBe("synced"));
+      const other = tabs.otherTab("chiton:session");
+
+      other.post({ userId: null });
+
+      await waitFor(() => expect(reload).toHaveBeenCalledTimes(1));
+      expect(screen.getByTestId("app-hydrating")).toBeInTheDocument();
+      expect(screen.queryByTestId("presentation-row")).not.toBeInTheDocument();
+      expect(await loadCachedSession()).toBeNull();
+      expect(window.sessionStorage.getItem(SESSION_END_KEY)).toBe("otherTab");
+      other.close();
+    });
+
+    it("로그아웃을 마치지 못한 채 연 앱은 연결이 돌아오면 로그아웃을 마치고 표시를 지운다", async () => {
+      signOutForTests();
+      __resetConnectivityForTests();
+      api = installFakeApi(bootRoutes());
+      window.localStorage.setItem(SIGN_OUT_PENDING_KEY, String(Date.now()));
+      vi.mocked(authClient.signOut).mockRejectedValueOnce(
+        new TypeError("Failed to fetch"),
+      );
+
+      renderAt("/presentations");
+
+      expect(
+        await screen.findByRole("button", { name: /카카오 로그인/ }),
+      ).toBeInTheDocument();
+      await waitFor(() => expect(authClient.signOut).toHaveBeenCalledTimes(1));
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      });
+      expect(window.localStorage.getItem(SIGN_OUT_PENDING_KEY)).not.toBeNull();
+
+      vi.mocked(authClient.signOut).mockClear();
+      act(() => {
+        window.dispatchEvent(new Event("online"));
+      });
+
+      await waitFor(() =>
+        expect(window.localStorage.getItem(SIGN_OUT_PENDING_KEY)).toBeNull(),
+      );
+      expect(authClient.signOut).toHaveBeenCalledTimes(1);
     });
 
     it("송출 중에 다른 계정으로 바뀌어도 송출 화면을 그대로 두고, 송출을 마치면 부팅 없이 새로고침한다", async () => {
