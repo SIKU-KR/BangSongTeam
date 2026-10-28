@@ -13,10 +13,10 @@ import {
 } from "@testing-library/react";
 import { flushSync } from "react-dom";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { DEFAULT_DECK_STYLE, type Deck, type Presentation } from "#shared";
+import type { Presentation } from "#shared";
 import { MemoryRouter, Routes, Route } from "../test/router";
 import { testRouter } from "../test/next/navigation";
-import { installFakeApi, type FakeApi } from "../test/fakeApi";
+import { installFakeApi } from "../test/fakeApi";
 import { resetFakeCacheStorage } from "../test/fakeCacheStorage";
 import {
   installServiceWorker,
@@ -33,8 +33,8 @@ import {
 import { AUTO_CACHE_DELAY_MS } from "../features/offline/useBackgroundAutoCache";
 import { __resetMediaCachingForTests } from "../lib/offline/mediaCache";
 import {
-  getUserSongs,
   resetSongLibraryStore,
+  saveSongToLibrary,
 } from "../features/editor/songLibraryStore";
 import { EditorRoute } from "./EditorRoute";
 import { loadPresentReturnPath } from "../features/presentation/fullscreen";
@@ -484,7 +484,7 @@ describe("EditorRoute (PowerPoint식 프레젠테이션 편집기)", () => {
     expect(firstSong().slides[0].lines).toEqual(original);
   });
 
-  it("편집기에는 암전·가사 숨김 미리보기, 테마 프리셋, 3×3 기준점, 초기화, 공유가 없다", () => {
+  it("편집기에는 암전·가사 숨김 미리보기, 테마 프리셋, 3×3 기준점, 초기화가 없다", () => {
     renderEditor();
 
     for (const testId of [
@@ -493,8 +493,6 @@ describe("EditorRoute (PowerPoint식 프레젠테이션 편집기)", () => {
       "canvas-present-cta",
       "style-preset-0",
       "grid-anchor-bottom-center",
-      "song-share-publish-btn",
-      "song-share-status",
     ]) {
       expect(screen.queryByTestId(testId)).not.toBeInTheDocument();
     }
@@ -941,122 +939,25 @@ describe("EditorRoute (PowerPoint식 프레젠테이션 편집기)", () => {
     });
   });
 
-  describe("곡 추가 창에서 공유 곡을 가져오는 중", () => {
-    const SHARED_ID = "c00000005000000000001";
-    const FORK_ID = "c000000050000000000f0";
-    const NOW = "2026-09-23T00:00:00.000Z";
-    const SHARED_LYRICS = "당신은 시간을 뚫고\n이 땅 가운데 오셨네";
-    let api: FakeApi | undefined;
-
-    const sharedSummary = {
-      id: SHARED_ID,
-      title: "시간을 뚫고",
-      artist: "WELOVE",
-      authorName: "김찬양",
-      forkedFromAuthorName: null,
-      forkCount: 42,
-      backgroundId: null,
-      firstSlidePreview: ["당신은 시간을 뚫고", "이 땅 가운데 오셨네"],
-      slideCount: 1,
-      updatedAt: NOW,
-    };
-
-    function forkedDeck(): Deck {
-      return {
-        id: FORK_ID,
-        userId: SEED_PRESENTATIONS[0].userId,
-        scope: "library",
-        presentationId: null,
-        title: "시간을 뚫고",
-        artist: "WELOVE",
-        lyricsRaw: SHARED_LYRICS,
-        slides: [
-          {
-            id: "s1",
-            order: 0,
-            lines: ["당신은 시간을 뚫고", "이 땅 가운데 오셨네"],
-          },
-        ],
-        backgroundId: null,
-        style: DEFAULT_DECK_STYLE,
-        visibility: "private",
-        forkedFrom: SHARED_ID,
-        forkedFromAuthorName: "김찬양",
-        forkCount: 0,
-        origin: "fork",
-        publishedAt: null,
-        takedownAt: null,
-        createdAt: NOW,
-        updatedAt: NOW,
-      };
-    }
-
+  describe("곡 추가 창", () => {
     beforeEach(async () => {
       await resetSongLibraryStore();
     });
 
     afterEach(async () => {
-      api?.restore();
       await resetSongLibraryStore();
     });
 
-    it("다른 프레젠테이션으로 바뀌면 가져온 곡을 그 프레젠테이션에 넣지 않고 보관함에만 남긴다", async () => {
-      let resolveFork: () => void = () => undefined;
-      const server = installFakeApi({
-        "GET /api/catalog/search": () => ({ body: { decks: [sharedSummary] } }),
-        "GET /api/catalog/decks/*": () => ({
-          body: {
-            deck: {
-              ...sharedSummary,
-              lyricsRaw: SHARED_LYRICS,
-              slides: forkedDeck().slides,
-              style: DEFAULT_DECK_STYLE,
-            },
-          },
-        }),
-        "POST /api/decks/*/fork": () =>
-          new Promise((resolve) => {
-            resolveFork = () =>
-              resolve({ body: { deck: forkedDeck(), alreadyOwned: false } });
-          }),
-      });
-      api = server;
-      renderEditor();
-      fireEvent.click(screen.getByTestId("add-song-btn"));
-      fireEvent.click(await screen.findByTestId(`song-item-${SHARED_ID}`));
-      fireEvent.click(screen.getByTestId("song-picker-add-btn"));
-      await waitFor(() =>
-        expect(
-          server.calls.filter((call) => call.path.endsWith("/fork")),
-        ).toHaveLength(1),
-      );
-      const otherId = SEED_PRESENTATION_IDS[3];
-      const songCounts = () =>
-        [DOC_ID, otherId].map((id) => getPresentationById(id)?.items.length);
-      const before = songCounts();
-
-      act(() => {
-        testRouter.push(`/editor/${otherId}`);
-      });
-      expect(getActivePresentation().id).toBe(otherId);
-      await act(async () => {
-        resolveFork();
-      });
-
-      await waitFor(() =>
-        expect(getUserSongs().map((deck) => deck.id)).toEqual([FORK_ID]),
-      );
-      expect(songCounts()).toEqual(before);
-    });
-
     it("다른 프레젠테이션으로 바뀌면 곡 추가 창을 닫는다", async () => {
-      api = installFakeApi({
-        "GET /api/catalog/search": () => ({ body: { decks: [sharedSummary] } }),
+      const mine = saveSongToLibrary({
+        title: "내가 만든 찬양",
+        artist: "본인",
+        lyricsRaw: "첫째 줄\n둘째 줄",
       });
       renderEditor();
       fireEvent.click(screen.getByTestId("add-song-btn"));
       expect(
-        await screen.findByTestId(`song-item-${SHARED_ID}`),
+        await screen.findByTestId(`song-item-${mine.id}`),
       ).toBeInTheDocument();
 
       act(() => {

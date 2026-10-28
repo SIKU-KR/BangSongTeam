@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { ArrowLeftIcon, PlusIcon } from "lucide-react";
 import { Badge } from "#components/ui/badge";
 import { Button } from "#components/ui/button";
@@ -15,28 +15,14 @@ import {
   EmptyDescription,
   EmptyHeader,
 } from "#components/ui/empty";
-import { ToggleGroup, ToggleGroupItem } from "#components/ui/toggle-group";
 import { SearchInput } from "#components/common/SearchInput";
-import type { Deck } from "#shared";
+import { deckMatchesQuery, type Deck } from "#shared";
 import { saveSongToLibrary, useUserSongs } from "./songLibraryStore";
-import { useCatalogSearch, useForkDeck } from "../../lib/api/catalogQueries";
-import { describeApiError, ServerRejectedError } from "../../lib/api/request";
-import { useIsOnline } from "../../hooks/useIsOnline";
-import { ReportDialog } from "../sharing/ReportDialog";
 import {
   CreateSongForm,
   type CreateSongValues,
 } from "./songPicker/CreateSongForm";
-import {
-  MyDeckPreview,
-  SharedDeckPreview,
-} from "./songPicker/SongPickerPreview";
-import {
-  buildPickerEntries,
-  getPickerEmptyMessage,
-  type PickerEntry,
-  type PickerFilter,
-} from "./songPicker/pickerEntries";
+import { MyDeckPreview } from "./songPicker/SongPickerPreview";
 import { SongPickerEntryRow } from "./songPicker/SongPickerEntryRow";
 import {
   LibrarySongDialog,
@@ -54,30 +40,9 @@ interface SongPickerModalProps {
 
 export type SongPickerMode = "browse" | "create";
 
-const FILTERS: { id: PickerFilter; label: string }[] = [
-  { id: "all", label: EDITOR_COPY.picker.filters.all },
-  { id: "mine", label: EDITOR_COPY.picker.filters.mine },
-  { id: "shared", label: EDITOR_COPY.picker.filters.shared },
-];
-
-function sharedSearchNotice(
-  isOnline: boolean,
-  search: { isError: boolean; error: unknown; data: unknown },
-): string | null {
-  if (!isOnline) return EDITOR_COPY.picker.offline;
-  if (!search.isError || search.data) return null;
-  return search.error instanceof ServerRejectedError &&
-    search.error.status === 429
-    ? EDITOR_COPY.picker.rateLimited
-    : EDITOR_COPY.picker.serverUnavailable;
-}
-
 /**
- * 곡 선택 모달.
- *
- * 공유 곡 가져오기의 결과는 그 요청을 보낸 열림에만 쓴다. 가져오는 중에 창을 닫으면 가져온 곡은
- * 보관함에만 남고 프레젠테이션에는 넣지 않으며, 다시 연 창은 앞선 요청을 기다리거나 그 실패를
- * 보여 주지 않는다. 닫히는 동안 누른 추가는 무시한다.
+ * 곡 선택 모달. 내 보관함 곡만 검색어로 로컬에서 걸러 보여 주고, 새 가사를 입력하면
+ * 보관함에 저장한 뒤 바로 프레젠테이션에 넣는다.
  */
 export function SongPickerModal({
   isOpen,
@@ -86,88 +51,35 @@ export function SongPickerModal({
   initialMode = "browse",
 }: SongPickerModalProps): React.JSX.Element | null {
   const mySongs = useUserSongs();
-  const isOnline = useIsOnline();
 
   const [searchQuery, setSearchQuery] = useState("");
-  const [filter, setFilter] = useState<PickerFilter>("all");
   const [mode, setMode] = useState<SongPickerMode>("browse");
-  const [selectedKey, setSelectedKey] = useState<string | null>(null);
-  const [actionError, setActionError] = useState<string | null>(null);
-  const [reportTarget, setReportTarget] = useState<{
-    id: string;
-    title: string;
-  } | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [libraryDialog, setLibraryDialog] =
     useState<LibrarySongDialogRequest | null>(null);
-
-  const search = useCatalogSearch(searchQuery, {
-    enabled: isOpen && isOnline,
-  });
-  const fork = useForkDeck();
-  const resetFork = fork.reset;
-  const openSession = useRef<object | null>(null);
 
   useEffect(() => {
     if (isOpen) {
       setSearchQuery("");
       setMode(initialMode);
-      setSelectedKey(null);
-      setActionError(null);
+      setSelectedId(null);
     }
   }, [isOpen, initialMode]);
 
-  useEffect(() => {
-    if (!isOpen) return;
-    openSession.current = {};
-    return () => {
-      openSession.current = null;
-      resetFork();
-    };
-  }, [isOpen, resetFork]);
+  const entries = useMemo<Deck[]>(() => {
+    const q = searchQuery.trim();
+    return q ? mySongs.filter((deck) => deckMatchesQuery(deck, q)) : mySongs;
+  }, [mySongs, searchQuery]);
 
-  const entries = useMemo<PickerEntry[]>(
-    () =>
-      buildPickerEntries({
-        mySongs,
-        sharedDecks: search.data?.decks ?? [],
-        query: searchQuery,
-        filter,
-      }),
-    [mySongs, search.data, searchQuery, filter],
-  );
+  const selected = entries.find((deck) => deck.id === selectedId) ?? entries[0];
 
-  const selected =
-    entries.find((entry) => entry.key === selectedKey) ?? entries[0];
-
-  const emptyMessage = getPickerEmptyMessage({
-    isFetching: search.isFetching,
-    query: searchQuery,
-    filter,
-  });
+  const emptyMessage = searchQuery.trim()
+    ? EDITOR_COPY.picker.noMatch
+    : EDITOR_COPY.picker.noSongs;
 
   const addDeck = (deck: Deck): void => {
     onSelectSong(deck);
     onClose();
-  };
-
-  const handleAddSelected = async (): Promise<void> => {
-    const session = openSession.current;
-    if (!selected || !session) return;
-    setActionError(null);
-    try {
-      if (selected.kind === "mine") {
-        addDeck(selected.deck);
-      } else if (selected.ownedCopy) {
-        addDeck(selected.ownedCopy);
-      } else {
-        const { deck } = await fork.mutateAsync(selected.summary.id);
-        if (openSession.current === session) addDeck(deck);
-      }
-    } catch (err) {
-      if (openSession.current === session) {
-        setActionError(describeApiError(err));
-      }
-    }
   };
 
   const handleCreateSubmit = (values: CreateSongValues): void => {
@@ -179,10 +91,6 @@ export function SongPickerModal({
     setMode("browse");
     addDeck(saved);
   };
-
-  const sharedNotice = sharedSearchNotice(isOnline, search);
-  const sharedCount = search.data?.decks.length ?? 0;
-  const isAdding = fork.isPending;
 
   return (
     <Dialog
@@ -201,7 +109,7 @@ export function SongPickerModal({
               {EDITOR_COPY.song.addSong}
             </DialogTitle>
             <Badge variant="secondary" className="font-mono">
-              {EDITOR_COPY.picker.counts(mySongs.length, sharedCount)}
+              {mySongs.length}
             </Badge>
           </div>
           <DialogDescription className="text-xs">
@@ -223,31 +131,7 @@ export function SongPickerModal({
                 testId="song-picker-search-input"
               />
 
-              <div className="flex items-center justify-between gap-1.5">
-                <ToggleGroup
-                  aria-label={EDITOR_COPY.picker.kind}
-                  variant="outline"
-                  size="sm"
-                  spacing={0}
-                  value={[filter]}
-                  onValueChange={(next) => {
-                    const picked = FILTERS.find(
-                      (option) => option.id === next[0],
-                    );
-                    if (picked) setFilter(picked.id);
-                  }}
-                >
-                  {FILTERS.map((option) => (
-                    <ToggleGroupItem
-                      key={option.id}
-                      value={option.id}
-                      data-testid={`song-picker-filter-${option.id}`}
-                    >
-                      {option.label}
-                    </ToggleGroupItem>
-                  ))}
-                </ToggleGroup>
-
+              <div className="flex items-center justify-end gap-1.5">
                 <Button
                   size="xs"
                   variant={mode === "browse" ? "outline" : "secondary"}
@@ -269,15 +153,6 @@ export function SongPickerModal({
                   )}
                 </Button>
               </div>
-
-              {sharedNotice && (
-                <p
-                  data-testid="song-picker-offline-notice"
-                  className="text-xs text-warning"
-                >
-                  {sharedNotice}
-                </p>
-              )}
             </div>
 
             <div className="flex-1 divide-y overflow-y-auto">
@@ -298,16 +173,13 @@ export function SongPickerModal({
                   </EmptyContent>
                 </Empty>
               ) : (
-                entries.map((entry) => (
+                entries.map((deck) => (
                   <SongPickerEntryRow
-                    key={entry.key}
-                    entry={entry}
-                    isSelected={
-                      selected?.key === entry.key && mode === "browse"
-                    }
+                    key={deck.id}
+                    deck={deck}
+                    isSelected={selected?.id === deck.id && mode === "browse"}
                     onSelect={() => {
-                      setSelectedKey(entry.key);
-                      setActionError(null);
+                      setSelectedId(deck.id);
                       setMode("browse");
                     }}
                   />
@@ -327,31 +199,16 @@ export function SongPickerModal({
               <div className="flex flex-1 items-center justify-center text-xs text-muted-foreground">
                 {EDITOR_COPY.picker.selectSong}
               </div>
-            ) : selected.kind === "mine" ? (
+            ) : (
               <MyDeckPreview
-                deck={selected.deck}
-                onAdd={() => void handleAddSelected()}
+                deck={selected}
+                onAdd={() => addDeck(selected)}
                 onClose={onClose}
                 onEditInfo={() =>
-                  setLibraryDialog({ kind: "edit", deck: selected.deck })
+                  setLibraryDialog({ kind: "edit", deck: selected })
                 }
                 onDelete={() =>
-                  setLibraryDialog({ kind: "delete", deck: selected.deck })
-                }
-              />
-            ) : (
-              <SharedDeckPreview
-                summary={selected.summary}
-                ownedCopy={selected.ownedCopy}
-                isAdding={isAdding}
-                error={actionError}
-                onAdd={() => void handleAddSelected()}
-                onClose={onClose}
-                onReport={() =>
-                  setReportTarget({
-                    id: selected.summary.id,
-                    title: selected.summary.title,
-                  })
+                  setLibraryDialog({ kind: "delete", deck: selected })
                 }
               />
             )}
@@ -362,14 +219,6 @@ export function SongPickerModal({
           <LibrarySongDialog
             request={libraryDialog}
             onDone={() => setLibraryDialog(null)}
-          />
-        )}
-
-        {reportTarget && (
-          <ReportDialog
-            onClose={() => setReportTarget(null)}
-            targetId={reportTarget.id}
-            targetTitle={reportTarget.title}
           />
         )}
       </DialogContent>

@@ -283,7 +283,7 @@ describe("PresentationShareDialog (세트 링크 공유)", () => {
       renderDialog();
 
       expect(
-        await screen.findByText(SHARING_COPY.library.onlineOnly),
+        await screen.findByText(SHARING_COPY.link.onlineOnly),
       ).toBeInTheDocument();
       expect(
         screen.queryByTestId("share-access-select"),
@@ -299,7 +299,7 @@ describe("PresentationShareDialog (세트 링크 공유)", () => {
         await screen.findByTestId("share-access-select"),
       ).toBeInTheDocument();
       expect(
-        screen.queryByText(SHARING_COPY.library.onlineOnly),
+        screen.queryByText(SHARING_COPY.link.onlineOnly),
       ).not.toBeInTheDocument();
     });
 
@@ -310,7 +310,7 @@ describe("PresentationShareDialog (세트 링크 공유)", () => {
       goOffline();
 
       expect(
-        await screen.findByText(SHARING_COPY.library.onlineOnly),
+        await screen.findByText(SHARING_COPY.link.onlineOnly),
       ).toBeInTheDocument();
       expect(screen.getByTestId("share-access-select")).toBeDisabled();
     });
@@ -323,7 +323,7 @@ describe("PresentationShareDialog (세트 링크 공유)", () => {
       goOffline();
 
       expect(
-        await screen.findByText(SHARING_COPY.library.onlineOnly),
+        await screen.findByText(SHARING_COPY.link.onlineOnly),
       ).toBeInTheDocument();
       expect(screen.getByTestId("share-reset-btn")).toBeDisabled();
     });
@@ -337,7 +337,7 @@ describe("PresentationShareDialog (세트 링크 공유)", () => {
       renderDialog(ID, createAppQueryClient());
 
       expect(
-        await screen.findByText(SHARING_COPY.library.onlineOnly),
+        await screen.findByText(SHARING_COPY.link.onlineOnly),
       ).toBeInTheDocument();
       expect(
         screen.queryByTestId("share-access-select"),
@@ -358,7 +358,7 @@ describe("PresentationShareDialog (세트 링크 공유)", () => {
         await screen.findByTestId("share-access-select"),
       ).toHaveTextContent(SHARING_COPY.link.accessOptions.view);
       expect(
-        screen.queryByText(SHARING_COPY.library.onlineOnly),
+        screen.queryByText(SHARING_COPY.link.onlineOnly),
       ).not.toBeInTheDocument();
     });
 
@@ -378,7 +378,7 @@ describe("PresentationShareDialog (세트 링크 공유)", () => {
       goOffline();
 
       expect(
-        await screen.findByText(SHARING_COPY.library.onlineOnly),
+        await screen.findByText(SHARING_COPY.link.onlineOnly),
       ).toBeInTheDocument();
       expect(screen.queryByText(API_ERRORS.serverBusy)).not.toBeInTheDocument();
     });
@@ -397,7 +397,7 @@ describe("PresentationShareDialog (세트 링크 공유)", () => {
       expect(confirm).toBeDisabled();
       expect(
         within(screen.getByRole("alertdialog")).getByText(
-          SHARING_COPY.library.onlineOnly,
+          SHARING_COPY.link.onlineOnly,
         ),
       ).toBeInTheDocument();
       fireEvent.click(confirm);

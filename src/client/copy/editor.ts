@@ -23,7 +23,6 @@ const SONG = {
   editInfo: "제목·아티스트 수정",
   newLyrics: "새 가사 입력",
   myLibrary: "내 보관함",
-  official: "공식",
 } as const;
 
 const SPLIT_RULE =
@@ -150,35 +149,19 @@ export const EDITOR_COPY = {
     source: "가사 출처: gasazip.com",
   },
   picker: {
-    filters: { all: COMMON_COPY.all, mine: "내 곡", shared: "공유 곡" },
-    searching: "공유 라이브러리를 검색하는 중…",
     noMatch: "맞는 곡이 없어요.",
-    noShared: "아직 공유된 곡이 없어요.",
-    noMine: "보관함에 곡이 없어요.",
     noSongs: `${EMPTY_SONGS}.`,
-    counts: (mine: number, shared: number) =>
-      `내 곡 ${mine} · ${COMMON_COPY.share} ${shared}`,
-    description:
-      "보관함과 공유 라이브러리에서 곡을 찾아 추가하거나, 새 가사를 입력해 보세요.",
+    description: "보관함에서 곡을 찾아 추가하거나, 새 가사를 입력해 보세요.",
     searchLabel: "곡 검색",
     searchPlaceholder: "곡 제목, 아티스트, 가사로 검색",
-    kind: "곡 종류",
     showList: "목록 보기",
-    serverUnavailable: "공유 라이브러리에 연결하지 못해 내 곡만 보여요",
-    rateLimited:
-      "검색이 몰려 지금은 내 곡만 보여요. 잠시 후 다시 검색해 주세요",
-    offline: "오프라인이라 내 곡만 보여요",
     createNew: (query: string) => `${query ? `‘${query}’ ` : ""}새 곡으로 등록`,
     selectSong: "곡을 선택해 주세요.",
     editLibraryTitle: "보관함 곡 정보 수정",
-    editPublicNotice:
-      "공개한 곡이라 공유 라이브러리에도 바로 반영돼요. 프레젠테이션에 이미 넣은 곡은 바뀌지 않아요.",
     editNotice: "프레젠테이션에 이미 넣은 곡은 바뀌지 않아요.",
     deleteTitle: "보관함에서 삭제",
     deleteMessage: (title: string) =>
       `‘${title}’ 곡을 보관함에서 삭제할까요? 프레젠테이션에 이미 넣은 곡은 그대로 남아요.`,
-    deletePublicNote: " 공개한 곡이라 공유 라이브러리에서도 내려가요.",
-    inLibrary: "보관함에 있음",
     slideCount: (count: number) => `${count}장`,
   },
   create: {
@@ -197,24 +180,12 @@ export const EDITOR_COPY = {
   preview: {
     lyricsCopied: "가사를 복사했어요",
     copyLyrics: "가사 복사",
-    report: "신고",
     splitMarker: "[슬라이드 나눔]",
     mineMeta: (artist: string, slides: number) =>
       `${artist} · 슬라이드 ${slides}장`,
     forkedFrom: (author: string) => ` · 원작: ${author}`,
-    sharedMeta: (
-      artist: string,
-      slides: number,
-      author: string,
-      forks: number,
-    ) =>
-      `${artist} · 슬라이드 ${slides}장 · 공유: ${author} · ${COMMON_COPY.forkCount(forks)}`,
     addMine: ADD_TO_PRESENTATION,
     editInfo: "정보 수정",
-    sharedBadge: "공유 곡",
-    loadingLyrics: "가사를 불러오는 중…",
-    importing: "가져오는 중…",
-    importAndAdd: "보관함에 가져와서 추가",
   },
   ribbon: {
     background: "배경",
