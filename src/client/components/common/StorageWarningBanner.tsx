@@ -16,8 +16,10 @@ function ClearMediaButton(): React.JSX.Element {
     setClearing(true);
     const deleted = await clearUnusedMediaCache();
     setClearing(false);
-    if (deleted > 0) toast.success(SHELL_COPY.storage.mediaCleared(deleted));
-    else toast.info(SHELL_COPY.storage.noMediaToClear);
+    if (deleted === null) toast.info(SHELL_COPY.storage.closeOtherWindows);
+    else if (deleted > 0) {
+      toast.success(SHELL_COPY.storage.mediaCleared(deleted));
+    } else toast.info(SHELL_COPY.storage.noMediaToClear);
   };
 
   return (
@@ -47,6 +49,8 @@ function ClearMediaButton(): React.JSX.Element {
  * 저장 공간이 가득 차 저장하지 못했으면 저장한 배경 영상을 지우는 버튼을 둔다. 오리진 용량은
  * 거의 배경 영상 캐시가 쓰므로, 이 앱 안에서 공간을 되찾는 방법은 그것뿐이다. 실패한 저장은
  * 저장소가 백오프로 다시 시도하므로, 공간이 생기면 다음 시도에서 저장하고 경고도 사라진다.
+ * 다른 창이 열려 있으면 그 창이 쓰는 영상이 지워질 수 있어 지우지 않고, 다른 창을 닫고 다시
+ * 누르라고 알린다.
  */
 export function StorageWarningBanner(): React.JSX.Element | null {
   const error = usePersistenceError();

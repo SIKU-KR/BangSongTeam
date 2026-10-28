@@ -60,6 +60,8 @@ export const SHELL_COPY = {
     mediaCleared: (count: number) =>
       `배경 영상 ${count}개를 지웠어요. 잠시 뒤 다시 저장해요.`,
     noMediaToClear: "지울 배경 영상이 없어요. 기기 저장 공간을 비워 주세요.",
+    closeOtherWindows:
+      "다른 창에서 쓰는 영상이 지워질 수 있어서 지우지 않았어요. 다른 창을 모두 닫고 다시 눌러 주세요.",
   },
   storagePersistence: {
     title: "오프라인 저장본이 지워질 수 있어요",

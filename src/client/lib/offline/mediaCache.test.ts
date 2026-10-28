@@ -31,6 +31,7 @@ import {
   __setMediaRetryRandomForTests,
   __waitForMediaCachingForTests,
 } from "./mediaCache";
+import { WINDOW_COUNT_TIMEOUT_MS } from "./openWindows";
 import {
   canStoreMediaOffline,
   isCacheStorageAvailable,
@@ -1534,11 +1535,69 @@ describe("clearUnusedMediaCache", () => {
 
   beforeEach(() => {
     installFakeLockManager();
+    installServiceWorker({ windowCountReply: { windows: 1 } });
   });
 
   afterEach(() => {
     removeFakeLockManager();
     vi.unstubAllGlobals();
+    vi.useRealTimers();
+  });
+
+  it("다른 창이 열려 있으면 아무것도 지우지 않고 null을 돌려준다", async () => {
+    installServiceWorker({ windowCountReply: { windows: 2 } });
+    mockFetch();
+    await cacheAll([VIDEO, OTHER]);
+
+    expect(await clearUnusedMediaCache()).toBeNull();
+
+    expect(await isCached(VIDEO)).toBe(true);
+    expect(await isCached(OTHER)).toBe(true);
+  });
+
+  it("이 창뿐이면 붙잡지 않은 영상을 지우고 지운 수를 돌려준다", async () => {
+    mockFetch();
+    await cacheAll([VIDEO, OTHER]);
+
+    expect(await clearUnusedMediaCache()).toBe(2);
+
+    expect(await isCached(VIDEO)).toBe(false);
+    expect(await isCached(OTHER)).toBe(false);
+  });
+
+  it("다른 창이 열려 있는지 알 수 없으면(옛 서비스 워커가 답하지 않음) 열려 있다고 보고 지우지 않는다", async () => {
+    mockFetch();
+    await cacheAll([VIDEO]);
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    installServiceWorker({ controlled: true });
+
+    const clearing = clearUnusedMediaCache();
+    await vi.advanceTimersByTimeAsync(WINDOW_COUNT_TIMEOUT_MS);
+
+    expect(await clearing).toBeNull();
+    expect(await isCached(VIDEO)).toBe(true);
+  });
+
+  it("서비스 워커를 쓸 수 없어 다른 창을 알 수 없으면 지우지 않는다", async () => {
+    mockFetch();
+    await cacheAll([VIDEO]);
+    removeServiceWorker();
+
+    expect(await clearUnusedMediaCache()).toBeNull();
+
+    expect(await isCached(VIDEO)).toBe(true);
+  });
+
+  it("다른 창이 있다고 답한 뒤 닫혀 이 창뿐이 되면 다음에는 지운다", async () => {
+    installServiceWorker({ windowCountReply: { windows: 2 } });
+    mockFetch();
+    await cacheAll([VIDEO]);
+    expect(await clearUnusedMediaCache()).toBeNull();
+
+    installServiceWorker({ windowCountReply: { windows: 1 } });
+
+    expect(await clearUnusedMediaCache()).toBe(1);
+    expect(await isCached(VIDEO)).toBe(false);
   });
 
   it("다른 창에서 송출·편집하며 붙잡은 영상은 지우지 않는다", async () => {

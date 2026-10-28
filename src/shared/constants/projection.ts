@@ -54,6 +54,16 @@ export const POSTER_URL_PREFIX = `${MEDIA_URL_PREFIX}posters/`;
  */
 export const MEDIA_SIZE_HEADER = "x-media-size";
 
+/**
+ * 페이지가 서비스 워커에 '이 출처의 창이 몇 개 열려 있는지' 묻는 메시지의 종류(`data.type`). 답은
+ * 함께 보낸 MessageChannel 포트로 돌아오고, 모양은 `WindowCountReplySchema`다.
+ *
+ * 창마다 쥐는 미디어 Web Lock은 이 기능을 담은 배포판의 창만 쥔다. 옛 배포판이 열어 둔 송출·편집
+ * 창은 영상을 쓰면서도 잠금을 쥐지 않아, 저장한 영상을 지울 때(`clearUnusedMediaCache`) 창 수로
+ * 따로 확인한다. 서비스 워커(`scripts/buildServiceWorker.mjs`)와 페이지가 같은 값을 봐야 한다.
+ */
+export const WINDOW_COUNT_MESSAGE = "chiton:count-windows";
+
 /** 미디어 URL이 담기는 런타임 캐시. Workbox `urlPattern`과 같은 기준으로 나눈다 */
 export function mediaCacheNameFor(url: string): string {
   return url.startsWith(POSTER_URL_PREFIX)

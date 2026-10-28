@@ -46,6 +46,7 @@ import {
   OFFLINE_SHELL_PARAM,
   POSTER_CACHE_NAME,
   POSTER_URL_PREFIX,
+  WINDOW_COUNT_MESSAGE,
 } from "../src/shared/constants/projection.ts";
 
 const ROOT_DIR = path.resolve(
@@ -155,6 +156,10 @@ export function matchShell(pathname, shells, placeholder) {
  *   셸 RSC는 같은 빌드에서 나와 빌드 id가 페이지와 같다.
  * - 미리 받기(prefetch) 요청은 응답 형식이 달라 답하지 않는다. 실패해도 Next.js가 이동할 때
  *   위의 RSC 요청을 다시 보낸다.
+ * - 페이지가 '열려 있는 창이 몇 개인지' 물으면(`WINDOW_COUNT_MESSAGE`) 함께 받은 포트로 창 수를
+ *   답한다. 저장한 배경 영상을 지울 때 다른 창이 그 영상을 쓰는지 알려는 것이다. 옛 배포판이 연 창은
+ *   영상을 쓰면서도 미디어 Web Lock을 쥐지 않아 잠금으로는 알 수 없지만, 창 수는 배포판과 상관없이
+ *   센다. 이 서비스 워커가 아직 제어하지 않는 창도 센다(`includeUncontrolled`).
  */
 export function shellWorkerSource(shells, placeholder, buildId) {
   if (!buildId) throw new Error("셸을 확인할 빌드 id가 없습니다");
@@ -170,6 +175,7 @@ const PRECACHE = "workbox-precache-v2-" + self.registration.scope;
 const RSC_CONTENT_TYPE = "text/x-component";
 const RSC_NETWORK_TIMEOUT_MS = ${RSC_NETWORK_TIMEOUT_MS};
 const SHELL_REFRESH_TIMEOUT_MS = ${SHELL_REFRESH_TIMEOUT_MS};
+const WINDOW_COUNT_MESSAGE = ${JSON.stringify(WINDOW_COUNT_MESSAGE)};
 const matchShell = ${matchShell.toString()};
 
 const refreshing = new Map();
@@ -316,6 +322,17 @@ self.addEventListener("fetch", (event) => {
   }
   event.respondWith(serveShell(request, shell));
   event.waitUntil(checkShells());
+});
+
+self.addEventListener("message", (event) => {
+  const port = event.ports && event.ports[0];
+  if (!port || !event.data || event.data.type !== WINDOW_COUNT_MESSAGE) return;
+  event.waitUntil(
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then(
+      (windows) => port.postMessage({ windows: windows.length }),
+      () => port.postMessage({ windows: null }),
+    ),
+  );
 });
 `;
 }

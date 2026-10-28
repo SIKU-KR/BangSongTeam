@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { BackgroundMediaSchema } from "./media";
+import { BackgroundMediaSchema, WindowCountReplySchema } from "./media";
 
 const VALID_BACKGROUND = {
   id: "a0eebc9996bb9bd380a11",
@@ -46,4 +46,20 @@ describe("BackgroundMediaSchema", () => {
       BackgroundMediaSchema.parse({ ...VALID_BACKGROUND, kind: "gif" }),
     ).toThrow();
   });
+});
+
+describe("WindowCountReplySchema", () => {
+  it.each([{ windows: 1 }, { windows: 0 }, { windows: 12 }, { windows: null }])(
+    "창 수 %o를 받는다",
+    (reply) => {
+      expect(WindowCountReplySchema.parse(reply)).toEqual(reply);
+    },
+  );
+
+  it.each([{}, { windows: -1 }, { windows: 1.5 }, { windows: "2" }, null, "2"])(
+    "맞지 않는 답 %o는 받지 않는다",
+    (reply) => {
+      expect(WindowCountReplySchema.safeParse(reply).success).toBe(false);
+    },
+  );
 });
