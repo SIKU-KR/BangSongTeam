@@ -12,6 +12,7 @@ import {
   type Modifier,
 } from "@dnd-kit/core";
 import { getEventCoordinates } from "@dnd-kit/utilities";
+import { useDragSensors } from "../../lib/dnd/useDragSensors";
 import { createNewPresentation, editorPath } from "../presentation";
 import { isFolderAvailable } from "./folderStore";
 import {
@@ -40,7 +41,6 @@ import {
 } from "./driveModel";
 import { TRASH_PATH, isDrivePath } from "./drivePaths";
 import { DriveDialogHost, type DriveDialogState } from "./DriveDialogHost";
-import { useDriveSensors } from "./useDriveSensors";
 import { useUndoToast } from "./useUndoToast";
 import { DRIVE_COPY } from "#copy/drive";
 import { COMMON_COPY } from "#copy/common";
@@ -196,7 +196,7 @@ export function DriveProvider({
     [navigate],
   );
 
-  const sensors = useDriveSensors();
+  const sensors = useDragSensors();
 
   const handleDragStart = ({ active }: DragStartEvent): void => {
     const key = String(active.id);

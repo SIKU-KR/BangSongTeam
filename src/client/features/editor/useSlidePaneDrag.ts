@@ -1,13 +1,10 @@
 import { useState } from "react";
-import {
-  MouseSensor,
-  PointerSensor,
-  useSensor,
-  useSensors,
-  type DndContextProps,
-  type DragEndEvent,
-  type DragStartEvent,
+import type {
+  DndContextProps,
+  DragEndEvent,
+  DragStartEvent,
 } from "@dnd-kit/core";
+import { useDragSensors } from "../../lib/dnd/useDragSensors";
 import {
   collideBySameDragType,
   dropTargetOf,
@@ -17,7 +14,6 @@ import {
 } from "./slidePaneDnd";
 
 const NO_SENSORS: [] = [];
-const DRAG_SENSOR_OPTIONS = { activationConstraint: { distance: 5 } };
 
 interface SlidePaneDrag {
   dndContextProps: Pick<
@@ -36,12 +32,13 @@ interface SlidePaneDrag {
 /**
  * 썸네일 창의 슬라이드·곡 끌기 상태.
  *
- * 선택되지 않은 슬라이드를 끌기 시작하면 그 장만 먼저 고른다. 클릭과 끌기를 가르려고
- * 5px 넘게 움직여야 끌기가 시작되고, 보기 전용이면 센서를 빼 끌기를 막는다.
+ * 선택되지 않은 슬라이드를 끌기 시작하면 그 장만 먼저 고른다. 보기 전용이면 센서를 빼 끌기를 막는다.
  *
- * `mouseOnly`면 마우스(펜 포함)로만 끈다. 포인터 센서는 터치로 5px만 움직여도 끌기를 시작해,
- * 목록을 위아래로 쓸어 스크롤하면 손가락 밑의 슬라이드가 골라지고 끌려 다닌다. 터치는 쓸어서
- * 스크롤만 하고, 순서를 바꾸려면 메뉴를 쓴다.
+ * 클릭과 끌기를 가르려고 마우스(펜 포함)는 5px 넘게 움직여야 끌기가 시작되고, 터치는 꾹 누른 채
+ * 움직여야 시작된다(`useDragSensors`). 포인터 센서는 터치로 5px만 움직여도 끌기를 시작해, 목록을
+ * 위아래로 쓸어 스크롤하면 손가락 밑의 슬라이드가 골라지고 끌려 다닌다.
+ *
+ * `mouseOnly`면 마우스로만 끈다. 폰 폭 시트에서는 쓸어서 스크롤만 하고, 순서를 바꾸려면 메뉴를 쓴다.
  */
 export function useSlidePaneDrag({
   isReadOnly,
@@ -62,9 +59,7 @@ export function useSlidePaneDrag({
 }): SlidePaneDrag {
   const [dragging, setDragging] = useState<PaneDragData | null>(null);
   const [dropTarget, setDropTarget] = useState<PaneDropTarget | null>(null);
-  const sensors = useSensors(
-    useSensor(mouseOnly ? MouseSensor : PointerSensor, DRAG_SENSOR_OPTIONS),
-  );
+  const sensors = useDragSensors({ touch: !mouseOnly });
 
   const handleDragStart = ({ active }: DragStartEvent) => {
     const data = active.data.current as PaneDragData | undefined;

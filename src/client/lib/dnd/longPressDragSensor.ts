@@ -34,9 +34,9 @@ function movedBeyond(
  * `delay` 동안 `tolerance`px 넘게 움직이면 스크롤로 보고 물러나, 재빨리 쓸어 목록을 스크롤하는 손가락이
  * 끌기로 읽히지 않는다. 다 누른 뒤 `distance`px 넘게 움직이면 끌기를 시작하고, 그때부터 스크롤을 막는다.
  *
- * dnd-kit의 `TouchSensor`는 `delay`가 차는 순간 움직이지 않아도 끌기를 시작한다. 행을 길게 눌러 메뉴를
+ * dnd-kit의 `TouchSensor`는 `delay`가 차는 순간 움직이지 않아도 끌기를 시작한다. 항목을 길게 눌러 메뉴를
  * 여는 Base UI 컨텍스트 메뉴는 움직이지 않고 500ms 누르고 있을 때 열리므로 둘이 겹쳐, 메뉴가 열릴 때까지
- * 끌기 칩이 떠 있다가 메뉴까지 열린다. 움직임으로 끌기를 가르면 움직이지 않는 누름은 메뉴 몫이 된다.
+ * 끌기가 시작된 채 있다가 메뉴까지 열린다. 움직임으로 끌기를 가르면 움직이지 않는 누름은 메뉴 몫이 된다.
  * `distance`는 Base UI가 길게 누르기를 취소하는 움직임(10px)과 같게 두어, 끌기가 시작될 때는 메뉴의
  * 타이머도 멈춘다. 메뉴가 이미 열린 뒤에 움직여도 끌기는 시작되며, 그때 메뉴를 닫는 것은 쓰는 쪽이다.
  * @base-ui/react@1.8.0 context-menu/trigger/ContextMenuTrigger.mjs (`LONG_PRESS_DELAY`, `moveThreshold`)

@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState, type ComponentProps } from "react";
 import {
   DndContext,
   DragOverlay,
@@ -118,6 +118,10 @@ export interface SlideThumbnailPaneProps {
 type MenuTarget =
   { kind: "slides" } | { kind: "gap" } | { kind: "song"; songIndex: number };
 
+type ContextMenuActionsRef = NonNullable<
+  ComponentProps<typeof ContextMenu>["actionsRef"]
+>;
+
 const NO_MODIFIERS: ClickModifiers = { shift: false, mod: false };
 
 function actionsFor(
@@ -174,6 +178,10 @@ function slideOverflowWarning(
  * 지원한다. 선택·끌기·붙여넣기는 곡마다 서식이 달라 한 곡 안에서만 한다.
  * 창 자체가 포커스를 받아 편집기 단축키가 창 전용 키(`data-slide-pane`)를 켠다.
  * 폰 폭에서는 접어 두고 시트 안에서 연다(`variant="sheet"`).
+ *
+ * 터치로는 쓸면 스크롤이고, 꾹 누른 채 움직여야 끌기가 시작된다(`LongPressDragSensor`). 움직이지 않는
+ * 누름은 끌기에 끼어들지 않아 탭은 슬라이드를 고르고 길게 누르기는 컨텍스트 메뉴 몫이다. 메뉴가 열린 뒤에
+ * 움직여 끌기가 시작되면 메뉴를 닫는다.
  */
 export function SlideThumbnailPane({
   items,
@@ -207,6 +215,7 @@ export function SlideThumbnailPane({
   const [menuTarget, setMenuTarget] = useState<MenuTarget | null>(null);
   const paneRef = useRef<HTMLDivElement>(null);
   const activeThumbRef = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<ContextMenuActionsRef["current"]>(null);
 
   const measureText = useTextWidthMeasurer();
   const songRows: {
@@ -255,6 +264,10 @@ export function SlideThumbnailPane({
     onDragBegin: focusPane,
     mouseOnly: variant === "sheet",
   });
+
+  useEffect(() => {
+    if (dragging) menuRef.current?.close();
+  }, [dragging]);
 
   const pasteAction: MenuAction = {
     key: "paste",
@@ -471,7 +484,7 @@ export function SlideThumbnailPane({
       </div>
 
       <DndContext {...dndContextProps}>
-        <ContextMenu>
+        <ContextMenu actionsRef={menuRef}>
           <ContextMenuTrigger
             ref={paneRef}
             tabIndex={0}
