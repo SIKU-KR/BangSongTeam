@@ -52,6 +52,31 @@ function fontPreviewPath(id: string): string {
   return `/font-previews/${id}.webp`;
 }
 
+function focusListEdge(origin: HTMLElement, edge: "first" | "last"): void {
+  const options = origin
+    .closest('[role="listbox"]')
+    ?.querySelectorAll<HTMLElement>('[role="option"]');
+  const ordered = Array.from(options ?? []);
+  (edge === "first" ? ordered.at(0) : ordered.at(-1))?.focus();
+}
+
+function handleSearchKeyDown(
+  event: React.KeyboardEvent<HTMLInputElement>,
+): void {
+  const plain =
+    !event.nativeEvent.isComposing &&
+    !(event.ctrlKey || event.metaKey || event.altKey || event.shiftKey);
+  if (plain && event.key === "Escape") return;
+  event.stopPropagation();
+  if (plain && (event.key === "ArrowDown" || event.key === "ArrowUp")) {
+    event.preventDefault();
+    focusListEdge(
+      event.currentTarget,
+      event.key === "ArrowDown" ? "first" : "last",
+    );
+  }
+}
+
 function FontOption({
   font,
 }: {
@@ -80,6 +105,14 @@ function FontOption({
  * 글꼴 목록은 폰트 파일 대신 `scripts/buildFontPreviews.mjs`가 미리 그려 둔 이름 이미지
  * (`/font-previews/<id>.webp`)를 mask로 보여 준다. 한글 폰트는 파일 하나가 수 MB라 목록을
  * 그 글꼴로 그리면 드롭다운 하나로 수십~수백 MB를 받는다. 폰트 파일은 고른 글꼴만 받는다.
+ *
+ * 검색창이 받은 키는 목록의 글자 찾기와 편집기 단축키(F5, Ctrl+M 등)로 새지 않게 막는다. 다만
+ * Esc는 막지 않고 흘려 보내 목록이 닫게 하고, ↓·↑는 첫·마지막 글꼴로 포커스를 직접 옮긴다. 열면
+ * 포커스가 검색창에 오므로 다 막으면 Esc가 닫지 못하고 ↓로 목록에 들어가지 못한다. ↓·↑를 목록의
+ * 방향키 이동에 맡기지 않는 것은, 열 때 고른 글꼴이 이미 강조돼 있어 첫 ↓가 첫 글꼴을 건너뛰고 검색
+ * 결과가 하나면 아무 일도 일어나지 않기 때문이다. 목록 안에서는 목록이 방향키·Enter를 받는다. 한글
+ * 조합 중이거나 수정키를 누른 키는 언제나 막는다. 열 때마다 지난 검색어를 비워, 고른 뒤 다시 열어도
+ * 앞서 찾던 결과만 보이지 않게 한다.
  */
 export function FontFamilySelect({
   value,
@@ -120,7 +153,9 @@ export function FontFamilySelect({
       value={value}
       disabled={disabled}
       onOpenChange={(open) => {
-        if (open) loadCatalog();
+        if (!open) return;
+        setFontSearch("");
+        loadCatalog();
       }}
       onValueChange={(next) => {
         if (next) {
@@ -145,7 +180,7 @@ export function FontFamilySelect({
             placeholder={EDITOR_COPY.ribbon.fontSearch}
             value={fontSearch}
             onChange={(e) => setFontSearch(e.target.value)}
-            onKeyDown={(e) => e.stopPropagation()}
+            onKeyDown={handleSearchKeyDown}
             className="h-7 text-xs"
           />
         </div>

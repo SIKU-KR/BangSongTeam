@@ -155,4 +155,117 @@ describe("FontControls (글꼴 컨트롤)", () => {
 
     expect(onUpdateStyle).toHaveBeenCalledWith({ fontFamily: "페이퍼로지" });
   });
+
+  describe("글꼴 검색창 키보드", () => {
+    async function openFontList(onUpdateStyle = vi.fn()): Promise<HTMLElement> {
+      render(
+        <FontControls
+          style={DEFAULT_DECK_STYLE}
+          disabled={false}
+          onUpdateStyle={onUpdateStyle}
+        />,
+      );
+      fireEvent.click(
+        screen.getByRole("combobox", { name: EDITOR_COPY.ribbon.font }),
+      );
+      return screen.findByPlaceholderText(EDITOR_COPY.ribbon.fontSearch);
+    }
+
+    function searchField(): HTMLElement | null {
+      return screen.queryByPlaceholderText(EDITOR_COPY.ribbon.fontSearch);
+    }
+
+    it("Esc를 누르면 글꼴 목록이 닫힌다", async () => {
+      const searchInput = await openFontList();
+
+      fireEvent.keyDown(searchInput, { key: "Escape" });
+
+      await waitFor(() => expect(searchField()).not.toBeInTheDocument());
+    });
+
+    it("↓·↑로 목록에 들어가 글꼴 사이를 옮기고 Enter로 고른다", async () => {
+      const onUpdateStyle = vi.fn();
+      const searchInput = await openFontList(onUpdateStyle);
+      const options = await screen.findAllByRole("option");
+
+      fireEvent.keyDown(searchInput, { key: "ArrowDown" });
+      await waitFor(() => expect(options[0]).toHaveFocus());
+
+      fireEvent.keyDown(options[0], { key: "ArrowDown" });
+      await waitFor(() => expect(options[1]).toHaveFocus());
+
+      fireEvent.keyDown(options[1], { key: "ArrowDown" });
+      await waitFor(() => expect(options[2]).toHaveFocus());
+
+      fireEvent.keyDown(options[2], { key: "ArrowUp" });
+      await waitFor(() => expect(options[1]).toHaveFocus());
+
+      fireEvent.keyDown(options[1], { key: "Enter" });
+
+      expect(onUpdateStyle).toHaveBeenCalledWith({
+        fontFamily: options[1].textContent,
+      });
+      await waitFor(() => expect(searchField()).not.toBeInTheDocument());
+    });
+
+    it("검색 결과 목록에서도 ↓로 들어가 Enter로 고른다", async () => {
+      const onUpdateStyle = vi.fn();
+      const searchInput = await openFontList(onUpdateStyle);
+
+      fireEvent.change(searchInput, { target: { value: "페이퍼로지" } });
+      const paperOption = await screen.findByRole("option", {
+        name: "페이퍼로지",
+      });
+      fireEvent.keyDown(searchInput, { key: "ArrowDown" });
+      await waitFor(() => expect(paperOption).toHaveFocus());
+      fireEvent.keyDown(paperOption, { key: "Enter" });
+
+      expect(onUpdateStyle).toHaveBeenCalledWith({ fontFamily: "페이퍼로지" });
+    });
+
+    it("다시 열면 지난 검색어를 지우고 전체 목록을 보여 준다", async () => {
+      const searchInput = await openFontList();
+      fireEvent.change(searchInput, { target: { value: "페이퍼로지" } });
+      fireEvent.click(
+        await screen.findByRole("option", { name: "페이퍼로지" }),
+      );
+      await waitFor(() => expect(searchField()).not.toBeInTheDocument());
+
+      fireEvent.click(
+        screen.getByRole("combobox", { name: EDITOR_COPY.ribbon.font }),
+      );
+
+      expect(
+        await screen.findByPlaceholderText(EDITOR_COPY.ribbon.fontSearch),
+      ).toHaveValue("");
+      expect(
+        await screen.findByRole("option", { name: "Gmarket Sans" }),
+      ).toBeInTheDocument();
+    });
+
+    it("글자를 치는 동안의 키는 편집기 단축키로 새지 않지만, 목록을 움직이는 키는 목록이 받는다", async () => {
+      const searchInput = await openFontList();
+      const leaked = vi.fn();
+      window.addEventListener("keydown", leaked);
+
+      for (const init of [
+        { key: "a" },
+        { key: "Delete" },
+        { key: "Home" },
+        { key: "End" },
+        { key: "Enter" },
+        { key: "F5" },
+        { key: "m", ctrlKey: true },
+        { key: "ArrowDown", shiftKey: true },
+        { key: "ㅎ", isComposing: true },
+        { key: "Escape", isComposing: true },
+      ]) {
+        fireEvent.keyDown(searchInput, init);
+      }
+      window.removeEventListener("keydown", leaked);
+
+      expect(leaked).not.toHaveBeenCalled();
+      expect(searchField()).toBeInTheDocument();
+    });
+  });
 });

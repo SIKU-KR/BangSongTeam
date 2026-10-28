@@ -78,7 +78,10 @@ export function ReportDialog({
         if (!open) close();
       }}
     >
-      <DialogContent data-testid="report-dialog" className="sm:max-w-md">
+      <DialogContent
+        data-testid="report-dialog"
+        className="max-h-9/10 overflow-y-auto sm:max-w-md"
+      >
         <DialogHeader>
           <DialogTitle>{SHARING_COPY.report.title}</DialogTitle>
           <DialogDescription className="truncate">

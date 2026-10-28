@@ -511,6 +511,20 @@ export function hasPendingDeckSync(): boolean {
 }
 
 /**
+ * 서버에 아직 올리거나 지우지 못한 곡 변경이 있는지. `hasPendingDeckSync`가 세는 것에 더해, 영구
+ * 실패로 맡아 '다시 시도'를 기다리는 변경과 기다리는 삭제도 센다. 새로고침해 큐가 비어도 남는
+ * 삭제 기록은 `listPendingDeckDeletes`로 따로 본다.
+ */
+export function hasUnsentDecks(): boolean {
+  return (
+    pending.size > 0 ||
+    runningBatches.size > 0 ||
+    failed.size > 0 ||
+    waitingDeletes.size > 0
+  );
+}
+
+/**
  * 대기 중인 곡 변경을 디바운스·백오프를 기다리지 않고 지금 보내고, 큐가 끝날 때까지 기다린다.
  * 창을 닫을 때(`pagehide`)와 로그아웃하기 전에 부른다.
  *

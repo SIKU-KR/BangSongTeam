@@ -612,15 +612,11 @@ describe("folderStore", () => {
         .mockRejectedValueOnce(quotaError());
       renameFolder(failing.id, "고친 이름");
       renameFolder(failing.id, "마지막 이름");
-      await flushFolderWrites();
-      expect(getPersistenceError("folder")?.kind).toBe("quota");
-
       const saved = createFolder(null, "저장한 폴더");
-      await vi.waitFor(async () =>
-        expect(await storedName(saved.id)).toBe("저장한 폴더"),
-      );
+      await flushFolderWrites();
 
       expect(getPersistenceError("folder")?.kind).toBe("quota");
+      expect(await storedName(saved.id)).toBe("저장한 폴더");
       expect(await storedName(failing.id)).toBe("처음 이름");
 
       await retryFailedWrites();

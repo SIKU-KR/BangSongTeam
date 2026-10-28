@@ -41,6 +41,21 @@ describe("개인정보 처리방침", () => {
   });
 });
 
+describe("법적 고지 문체", () => {
+  it.each([
+    ["이용약관", TermsRoute],
+    ["개인정보 처리방침", PrivacyRoute],
+  ] as const)("%s 화면은 해요체 문장 없이 격식체로 쓴다", (_name, Route) => {
+    render(<Route />);
+
+    const haeyoSentences = (document.body.textContent ?? "")
+      .split(/(?<=[.?!])/)
+      .map((sentence) => sentence.trim())
+      .filter((sentence) => /[요죠][.?!]$/.test(sentence));
+    expect(haeyoSentences).toEqual([]);
+  });
+});
+
 describe("시행일 표기", () => {
   it("YYYY-MM-DD 시행일을 한국어 날짜로 적는다", () => {
     expect(LEGAL_COPY.effectiveDate("2026-11-03")).toBe(

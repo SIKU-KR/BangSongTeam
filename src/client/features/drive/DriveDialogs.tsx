@@ -65,7 +65,11 @@ export function NameDialog({
 
   return (
     <Dialog open onOpenChange={closeOnDismiss(onCancel)}>
-      <DialogContent data-testid="drive-name-dialog" initialFocus={inputRef}>
+      <DialogContent
+        data-testid="drive-name-dialog"
+        initialFocus={inputRef}
+        className="max-h-9/10 overflow-y-auto"
+      >
         <form
           className="grid gap-4"
           onSubmit={(event) => {
@@ -135,7 +139,10 @@ export function ConfirmDialog({
 }: ConfirmDialogProps): React.JSX.Element {
   return (
     <AlertDialog open onOpenChange={closeOnDismiss(onCancel)}>
-      <AlertDialogContent data-testid="drive-confirm-dialog">
+      <AlertDialogContent
+        data-testid="drive-confirm-dialog"
+        className="max-h-9/10 overflow-y-auto"
+      >
         <AlertDialogHeader>
           <AlertDialogTitle>{title}</AlertDialogTitle>
           <AlertDialogDescription render={<div />}>
@@ -195,7 +202,10 @@ export function FolderPickerDialog({
 
   return (
     <Dialog open onOpenChange={closeOnDismiss(onCancel)}>
-      <DialogContent data-testid={testId} className="sm:max-w-lg">
+      <DialogContent
+        data-testid={testId}
+        className="max-h-9/10 overflow-y-auto sm:max-w-lg"
+      >
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
         </DialogHeader>

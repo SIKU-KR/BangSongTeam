@@ -30,6 +30,25 @@ describe("Global Styles & Local Pretendard Webfont Configuration", () => {
     expect(cssContent).not.toMatch(/@fontsource\//);
   });
 
+  it("검색 입력란의 브라우저 기본 지우기 버튼을 숨겨 직접 만든 지우기 버튼만 남긴다", () => {
+    const cssContent = fs.readFileSync(cssPath, "utf-8");
+    expect(cssContent).toMatch(
+      /input\[type="search"\]::-webkit-search-cancel-button\s*\{[^}]*display:\s*none/,
+    );
+  });
+
+  it("본문 글은 띄어쓰기에서만 줄을 바꾸고, 한 줄보다 긴 토큰은 어디서든 끊어 넘치지 않게 한다", () => {
+    const cssContent = fs.readFileSync(cssPath, "utf-8");
+    const bodyRule = cssContent.match(/\n\s*body\s*\{([^}]*)\}/)?.[1] ?? "";
+    expect(bodyRule).toMatch(/word-break:\s*keep-all/);
+    expect(bodyRule).toMatch(/overflow-wrap:\s*anywhere/);
+  });
+
+  it("폰 폭을 나누는 xs(360px) 경계를 토큰으로 둔다", () => {
+    const cssContent = fs.readFileSync(cssPath, "utf-8");
+    expect(cssContent).toMatch(/--breakpoint-xs:\s*22\.5rem/);
+  });
+
   it("should import index.css in the root layout", () => {
     const layoutContent = fs.readFileSync(rootLayoutPath, "utf-8");
     expect(layoutContent).toMatch(/import\s+['"]\.\.\/client\/index\.css['"]/);

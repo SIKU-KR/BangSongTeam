@@ -25,6 +25,11 @@
     BlinkMacSystemFont, system-ui, sans-serif;
 }
 
+/* 폰 폭을 한 번 더 나누는 경계(360px). 기본 breakpoint는 sm(640px)부터라 그 아래를 가르지 못한다 */
+@theme {
+  --breakpoint-xs: 22.5rem;
+}
+
 @theme inline {
   --color-google: var(--google);
   --color-google-foreground: var(--google-foreground);
@@ -162,8 +167,12 @@
     -moz-osx-font-smoothing: grayscale;
     text-rendering: optimizeLegibility;
   }
+  /* 한글은 기본값에서 음절마다 줄이 바뀌어 단어가 둘로 끊긴다. keep-all로 띄어쓰기에서만 줄을 바꾸고,
+     한 줄보다 긴 토큰(주소 등)만 anywhere로 어디서든 끊어 가로로 넘치지 않게 한다 */
   body {
     @apply overflow-hidden bg-background text-foreground select-none;
+    word-break: keep-all;
+    overflow-wrap: anywhere;
   }
   button:not(:disabled),
   [role="button"]:not(:disabled) {
@@ -186,6 +195,13 @@
       min-block-size: 2.75rem;
       min-inline-size: 2.75rem;
     }
+  }
+
+  /* Chrome·Safari는 type="search" 입력란에 글자가 있으면 기본 지우기 버튼
+     (::-webkit-search-cancel-button)을 그린다. 헤더 검색란에는 직접 만든 '검색어 지우기'
+     버튼이 있어 지우기 아이콘이 둘로 보이므로 기본 버튼을 숨긴다 */
+  input[type="search"]::-webkit-search-cancel-button {
+    display: none;
   }
 
   /* 모션 줄이기 설정을 존중한다. base 레이어의 !important는 유틸리티와 인라인 style보다 우선한다 */

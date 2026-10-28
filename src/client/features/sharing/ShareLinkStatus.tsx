@@ -29,7 +29,7 @@ export function ShareLinkError({
   onRetry?: () => void;
 }): React.JSX.Element {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background p-4">
+    <div className="flex min-h-dvh items-center justify-center bg-background p-4">
       <Empty data-testid="share-link-error">
         <EmptyHeader>
           <EmptyMedia variant="icon">
@@ -51,7 +51,7 @@ export function ShareLinkError({
 
 export function ShareLinkLoading(): React.JSX.Element {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background p-4">
+    <div className="flex min-h-dvh items-center justify-center bg-background p-4">
       <p
         data-testid="share-link-loading"
         className="flex items-center gap-2 text-sm text-muted-foreground"

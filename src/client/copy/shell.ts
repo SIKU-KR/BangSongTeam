@@ -12,10 +12,16 @@ export const SHELL_COPY = {
   skipToContent: "본문으로 건너뛰기",
   signOut: "로그아웃",
   signingOut: "로그아웃 중…",
+  signOutConfirm: {
+    title: "로그아웃할까요?",
+    description:
+      "아직 보내지 못한 변경은 이 기기에 남아 있다가, 이 기기에서 같은 계정으로 다시 로그인하면 보내요. 다시 로그인하려면 인터넷이 필요해요.",
+  },
   landingEnter: "내 프레젠테이션으로 이동",
   searchPlaceholder: {
     trash: "휴지통에서 검색",
     drive: "폴더, 프레젠테이션, 곡 제목, 가사로 검색",
+    driveCompact: "제목, 가사로 검색",
   },
   unsupportedBrowser:
     "이 브라우저에서는 열 수 없어요. iPhone·iPad는 iOS 16.4 이상으로 업데이트하거나, 최신 Chrome·Edge·Safari·Firefox에서 열어 주세요.",
@@ -54,6 +60,8 @@ export const SHELL_COPY = {
     mediaCleared: (count: number) =>
       `배경 영상 ${count}개를 지웠어요. 잠시 뒤 다시 저장해요.`,
     noMediaToClear: "지울 배경 영상이 없어요. 기기 저장 공간을 비워 주세요.",
+    closeOtherWindows:
+      "다른 창에서 쓰는 영상이 지워질 수 있어서 지우지 않았어요. 다른 창을 모두 닫고 다시 눌러 주세요.",
   },
   storagePersistence: {
     title: "오프라인 저장본이 지워질 수 있어요",

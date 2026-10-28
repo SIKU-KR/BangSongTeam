@@ -9,6 +9,7 @@ import {
 import { SidebarTrigger } from "#components/ui/sidebar";
 import { isTypingTarget } from "../../lib/browser/keyboardTarget";
 import { ThemeMenuButton } from "../common/ThemeMenuButton";
+import { BELOW_SM_QUERY, useMediaQuery } from "#hooks/useMediaQuery";
 import { useRotatingPlaceholder } from "#hooks/useRotatingPlaceholder";
 import { COMMON_COPY } from "#copy/common";
 
@@ -17,6 +18,8 @@ interface AppHeaderProps {
   title: string;
   /** 여러 개면 검색창이 비어 있는 동안 돌려 가며 보여 준다 */
   searchPlaceholder: string | readonly string[];
+  /** sm 미만에서 `searchPlaceholder` 대신 보인다. 폰 폭의 검색창은 좁아 긴 안내의 끝이 잘린다 */
+  compactSearchPlaceholder?: string;
   searchQuery: string;
   onSearchQueryChange: (value: string) => void;
   /** 있으면 Enter나 '검색' 버튼으로 제출할 때만 검색한다 (배경 벡터 검색) */
@@ -35,6 +38,7 @@ interface AppHeaderProps {
 export function AppHeader({
   title,
   searchPlaceholder,
+  compactSearchPlaceholder,
   searchQuery,
   onSearchQueryChange,
   onSearchSubmit,
@@ -42,8 +46,11 @@ export function AppHeader({
   actions,
 }: AppHeaderProps): React.JSX.Element {
   const inputRef = useRef<HTMLInputElement>(null);
+  const isCompact = useMediaQuery(BELOW_SM_QUERY);
   const placeholder = useRotatingPlaceholder(
-    searchPlaceholder,
+    isCompact && compactSearchPlaceholder
+      ? compactSearchPlaceholder
+      : searchPlaceholder,
     searchQuery !== "",
   );
 

@@ -49,7 +49,7 @@ export function PublishDialog({
     >
       <DialogContent
         data-testid="publish-dialog"
-        className="sm:max-w-md"
+        className="max-h-9/10 overflow-y-auto sm:max-w-md"
         showCloseButton={!isPending}
       >
         <DialogHeader>

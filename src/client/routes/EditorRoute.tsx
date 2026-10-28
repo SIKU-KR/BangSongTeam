@@ -41,12 +41,15 @@ import {
 } from "../features/presentation/projectionState";
 import { useOpenedPresentation } from "../features/presentation/useOpenedPresentation";
 import { DEFAULT_DECK_STYLE, MAX_SLIDE_LINES } from "#shared";
+import { BELOW_MD_QUERY, useMediaQuery } from "#hooks/useMediaQuery";
 import type { DeckStyle } from "#shared";
 import { EditorHeader } from "../features/editor/EditorHeader";
 import { FolderPickerDialog, drivePath } from "../features/drive";
 import { StorageWarningBanner } from "../components/common/StorageWarningBanner";
 import { EditorStageCanvas } from "../features/editor/EditorStageCanvas";
 import { SlideThumbnailPane } from "../features/editor/SlideThumbnailPane";
+import { SlideListSheet } from "../features/editor/SlideListSheet";
+import { useCollapsedSongs } from "../features/editor/useCollapsedSongs";
 import { EditorRibbon } from "../features/editor/ribbon/EditorRibbon";
 import { stepFontSize } from "../features/editor/ribbon/ribbonOptions";
 import { StageLyricsEditor } from "../features/editor/StageLyricsEditor";
@@ -83,6 +86,7 @@ import {
   useBootPullPending,
 } from "../lib/sync";
 import { useBackgroundLayers } from "../features/backgrounds";
+import { DRIVE_COPY } from "#copy/drive";
 import { EDITOR_COPY } from "#copy/editor";
 import { COMMON_COPY } from "#copy/common";
 import { SHELL_COPY } from "#copy/shell";
@@ -143,6 +147,8 @@ function EditorScreen({
   );
   const [editingDeckId, setEditingDeckId] = useState<string | null>(null);
   const [isShareOpen, setIsShareOpen] = useState(false);
+  const isPhone = useMediaQuery(BELOW_MD_QUERY);
+  const [isSlideListOpen, setIsSlideListOpen] = useState(false);
   const makeCopy = useMakeCopyFlow({
     presentationId: presentation.id,
     onGuestRequest: guest?.onRequestCopy,
@@ -161,6 +167,10 @@ function EditorScreen({
       endSharedPresentationRefresh();
     };
   }, [presentationId, readOnly, isGuest]);
+
+  useEffect(() => {
+    if (!isPhone) setIsSlideListOpen(false);
+  }, [isPhone]);
 
   const cachesBackgrounds = !isGuest && !prefersReducedData();
   useBackgroundAutoCache(found ?? null, { posterOnly: !cachesBackgrounds });
@@ -374,6 +384,40 @@ function EditorScreen({
   });
 
   const overflowMessages = getOverflowMessages(currentOverflow, safeSlideIndex);
+  const collapsedSongs = useCollapsedSongs(songs[safeSongIndex]?.id);
+
+  const slidePane = (
+    <SlideThumbnailPane
+      items={songs}
+      activeSongIndex={safeSongIndex}
+      activeSlideIndex={safeSlideIndex}
+      selectedIds={selection.selectedIds}
+      insertion={selection.insertion}
+      canDelete={selection.canDelete}
+      canPaste={selection.canPaste}
+      onClickSlide={selection.clickSlide}
+      onSelectSong={selection.selectSong}
+      onSetInsertion={selection.setInsertion}
+      onAddSlide={handleAddSlide}
+      onDuplicateSlides={selection.duplicateSelection}
+      onDeleteSlides={selection.deleteSelection}
+      onCopySlides={selection.copy}
+      onCutSlides={selection.cut}
+      onPasteSlides={selection.paste}
+      onDropSlides={selection.dropSelection}
+      onReorderSong={handleReorderSong}
+      onDuplicateSong={handleDuplicateSong}
+      onEditSongInfo={(songIndex) =>
+        setEditingDeckId(songs[songIndex]?.deck?.id ?? null)
+      }
+      onDeleteSong={handleDeleteSong}
+      onOpenSongPicker={() => setSongPickerMode("browse")}
+      collapsedSongs={collapsedSongs}
+      readOnly={readOnly}
+      variant={isPhone ? "sheet" : "docked"}
+      onSlideChosen={isPhone ? () => setIsSlideListOpen(false) : undefined}
+    />
+  );
 
   if (!found) {
     if (isPullPending && !isGuest) {
@@ -383,13 +427,18 @@ function EditorScreen({
         </LoadingScreen>
       );
     }
-    return <Navigate to={drivePath(null)} />;
+    return (
+      <Navigate
+        to={drivePath(null)}
+        notice={DRIVE_COPY.toast.presentationNotFound}
+      />
+    );
   }
 
   return (
     <div
       data-testid="editor-route"
-      className="flex h-screen w-screen flex-col overflow-hidden bg-muted/40 select-none"
+      className="flex h-dvh w-screen flex-col overflow-hidden bg-muted/40 select-none"
     >
       <StorageWarningBanner />
 
@@ -423,7 +472,10 @@ function EditorScreen({
 
       {readOnly ? (
         <div className="border-b bg-background px-4 py-2">
-          <Alert data-testid="read-only-banner">
+          <Alert
+            data-testid="read-only-banner"
+            className="has-data-[slot=alert-action]:pr-28"
+          >
             <EyeIcon />
             <AlertDescription>
               {isGuest
@@ -475,33 +527,16 @@ function EditorScreen({
       )}
 
       <div className="flex flex-1 overflow-hidden">
-        <SlideThumbnailPane
-          items={songs}
-          activeSongIndex={safeSongIndex}
-          activeSlideIndex={safeSlideIndex}
-          selectedIds={selection.selectedIds}
-          insertion={selection.insertion}
-          canDelete={selection.canDelete}
-          canPaste={selection.canPaste}
-          onClickSlide={selection.clickSlide}
-          onSelectSong={selection.selectSong}
-          onSetInsertion={selection.setInsertion}
-          onAddSlide={handleAddSlide}
-          onDuplicateSlides={selection.duplicateSelection}
-          onDeleteSlides={selection.deleteSelection}
-          onCopySlides={selection.copy}
-          onCutSlides={selection.cut}
-          onPasteSlides={selection.paste}
-          onDropSlides={selection.dropSelection}
-          onReorderSong={handleReorderSong}
-          onDuplicateSong={handleDuplicateSong}
-          onEditSongInfo={(songIndex) =>
-            setEditingDeckId(songs[songIndex]?.deck?.id ?? null)
-          }
-          onDeleteSong={handleDeleteSong}
-          onOpenSongPicker={() => setSongPickerMode("browse")}
-          readOnly={readOnly}
-        />
+        {isPhone ? (
+          <SlideListSheet
+            open={isSlideListOpen}
+            onOpenChange={setIsSlideListOpen}
+          >
+            {slidePane}
+          </SlideListSheet>
+        ) : (
+          slidePane
+        )}
 
         <EditorStageCanvas
           slide={currentSlide}
@@ -550,6 +585,7 @@ function EditorScreen({
               <OverflowWarningStatus messages={overflowMessages} />
             </>
           }
+          onOpenSlideList={isPhone ? () => setIsSlideListOpen(true) : undefined}
         />
       </div>
 

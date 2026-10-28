@@ -398,6 +398,15 @@ export function hasPendingDocumentPush(): boolean {
 }
 
 /**
+ * 서버에 아직 올리지 못한 프레젠테이션이 있는지. `hasPendingDocumentPush`가 세는 기다리는 중·보내는
+ * 중에 더해, 영구 실패로 맡아 '다시 시도'를 기다리는 것도 센다. 로그아웃해도 이 기기에 남아 그 계정의
+ * 다음 로그인에서 올라가는 변경을 알리는 데 쓴다.
+ */
+export function hasUnsentDocuments(): boolean {
+  return pending.size > 0 || inFlightDocs.size > 0 || failed.size > 0;
+}
+
+/**
  * 큐가 그 세트를 아직 끝내지 못했는지. 기다리는 중, 보내는 중, 영구 실패로 맡아 '다시 시도'를
  * 기다리는 것을 모두 센다. 다른 탭이 쓴 저장본을 다시 읽을지 정할 때 쓴다. 이 탭이 아직 서버에
  * 올리지 못한 판을 들고 있으면 다시 읽지 않는다.

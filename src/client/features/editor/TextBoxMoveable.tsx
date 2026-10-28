@@ -35,7 +35,17 @@ interface GestureState {
 
 const NO_GUIDES: SnapGuides = { vertical: false, horizontal: false };
 
-/** 편집 캔버스 전용 텍스트 박스 조작 컴포넌트. */
+/**
+ * 편집 캔버스 전용 텍스트 박스 조작 컴포넌트.
+ *
+ * react-moveable은 대상 자신의 크기·스타일 변화만 따라가고 조상의 변화는 따라가지 않는다. 스테이지
+ * scale(창 폭, 태블릿·폰 회전)과 확대 배율은 조상의 인라인 `style`로 바뀌므로, 돌린 뒤에도 컨트롤 박스가
+ * 옛 자리에 남아 핸들이 화면 밖으로 나가고 조작 영역이 이전·다음 버튼을 덮어 버튼이 눌리지 않았다.
+ * 조상의 `style`이 바뀔 때 다시 맞춘다. 창 resize 이벤트에 걸면 React가 scale을 반영하기 전에 재서
+ * 같은 문제가 남는다.
+ * react-moveable@0.56.0 dist/moveable.esm.js (`MoveableManager.updateRect`는 창 크기가 바뀔 때 직접
+ * 부르라고 안내한다)
+ */
 export function TextBoxMoveable({
   target,
   refreshKey,
@@ -67,6 +77,17 @@ export function TextBoxMoveable({
       events.forEach((type) => target.removeEventListener(type, sync));
       cancelAnimationFrame(frame);
     };
+  }, [target]);
+
+  useEffect(() => {
+    if (!target || typeof MutationObserver === "undefined") return;
+    const observer = new MutationObserver(() => {
+      moveableRef.current?.updateRect("", true, true);
+    });
+    for (let el = target.parentElement; el; el = el.parentElement) {
+      observer.observe(el, { attributes: true, attributeFilter: ["style"] });
+    }
+    return () => observer.disconnect();
   }, [target]);
 
   if (!target) return null;

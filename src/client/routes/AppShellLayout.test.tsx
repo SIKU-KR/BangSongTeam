@@ -14,6 +14,13 @@ import {
   resetFolderStore,
 } from "../features/drive/folderStore";
 import { __setBootPullPendingForTests } from "../lib/sync/bootSync";
+import {
+  __resetSyncSchedulerForTests,
+  __setPusherForTests,
+  scheduleDocumentPush,
+  setSyncEnabled,
+} from "../lib/sync/syncScheduler";
+import { __resetConnectivityForTests } from "../lib/api/connectivity";
 import { signInAsTestUser } from "../test/sessionFixture";
 import {
   render,
@@ -23,7 +30,15 @@ import {
   within,
   waitFor,
 } from "@testing-library/react";
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeEach,
+  afterEach,
+  type MockInstance,
+} from "vitest";
 import type {
   DndContextProps,
   DragEndEvent,
@@ -40,7 +55,10 @@ import { TrashRoute } from "./TrashRoute";
 import { LyricsRoute } from "./LyricsRoute";
 import { BackgroundsRoute } from "./BackgroundsRoute";
 import * as capabilities from "../lib/browser/capabilities";
+import { toast } from "sonner";
 import { withQueryClient } from "../test/queryClientFixture";
+import { stubMatchMedia } from "../test/matchMedia";
+import { BELOW_SM_QUERY } from "#hooks/useMediaQuery";
 import { installFakeApi } from "../test/fakeApi";
 import { makeBackground } from "../test/backgroundFixture";
 import { resetBackgroundCatalogForTests } from "../features/backgrounds/backgroundCatalog";
@@ -186,6 +204,7 @@ function stackRows(): void {
 describe("AppShellLayout (드라이브형 홈)", () => {
   beforeEach(() => {
     signInAsTestUser();
+    __resetConnectivityForTests();
     resetPresentationStore();
     resetFolderStore();
     window.localStorage.clear();
@@ -352,6 +371,85 @@ describe("AppShellLayout (드라이브형 홈)", () => {
     expect(screen.getByTestId("account-card")).toHaveTextContent(
       SHELL_COPY.signOut,
     );
+  });
+
+  describe("로그아웃 확인", () => {
+    const accountButton = (): HTMLElement =>
+      within(screen.getByTestId("account-card")).getByRole("button");
+
+    beforeEach(() => {
+      vi.mocked(authClient.signOut).mockClear();
+    });
+
+    afterEach(() => {
+      __resetSyncSchedulerForTests();
+    });
+
+    it("온라인이고 보낼 것이 없으면 확인 없이 로그아웃한다", async () => {
+      renderShell();
+
+      fireEvent.click(accountButton());
+
+      await waitFor(() => expect(authClient.signOut).toHaveBeenCalledTimes(1));
+      expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+      await waitFor(() => expect(getSessionState().status).toBe("loading"));
+    });
+
+    it("오프라인이면 먼저 확인하고, 취소하면 로그아웃하지 않는다", async () => {
+      vi.spyOn(navigator, "onLine", "get").mockReturnValue(false);
+      renderShell();
+
+      fireEvent.click(accountButton());
+
+      const dialog = await screen.findByRole("alertdialog");
+      expect(dialog).toHaveTextContent(SHELL_COPY.signOutConfirm.title);
+      expect(dialog).toHaveTextContent(SHELL_COPY.signOutConfirm.description);
+      expect(authClient.signOut).not.toHaveBeenCalled();
+
+      fireEvent.click(
+        within(dialog).getByRole("button", { name: COMMON_COPY.cancel }),
+      );
+
+      await waitFor(() =>
+        expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument(),
+      );
+      expect(authClient.signOut).not.toHaveBeenCalled();
+      expect(getSessionState().status).toBe("authenticated");
+    });
+
+    it("오프라인에서 확인하면 로그아웃한다", async () => {
+      vi.spyOn(navigator, "onLine", "get").mockReturnValue(false);
+      renderShell();
+      fireEvent.click(accountButton());
+      const dialog = await screen.findByRole("alertdialog");
+
+      fireEvent.click(
+        within(dialog).getByRole("button", { name: SHELL_COPY.signOut }),
+      );
+
+      await waitFor(() => expect(authClient.signOut).toHaveBeenCalledTimes(1));
+      await waitFor(() =>
+        expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument(),
+      );
+      await waitFor(() => expect(getSessionState().status).toBe("loading"));
+    });
+
+    it("온라인이어도 보내지 못한 변경이 있으면 확인하고, Esc로 닫으면 로그아웃하지 않는다", async () => {
+      __setPusherForTests(() => new Promise(() => undefined));
+      setSyncEnabled(true);
+      scheduleDocumentPush(SEED_PRESENTATIONS[0]);
+      renderShell();
+
+      fireEvent.click(accountButton());
+
+      await screen.findByRole("alertdialog");
+      fireEvent.keyDown(document, { key: "Escape" });
+      await waitFor(() =>
+        expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument(),
+      );
+      expect(authClient.signOut).not.toHaveBeenCalled();
+      expect(getSessionState().status).toBe("authenticated");
+    });
   });
 
   it("새로 만들기 → 새 프레젠테이션은 문서를 만들고 편집기로 간다", () => {
@@ -738,6 +836,36 @@ describe("AppShellLayout (드라이브형 홈)", () => {
     expect(screen.getByTestId("drive-summary")).toHaveTextContent("검색 결과");
   });
 
+  it("폰 폭에서는 드라이브 검색창 안내를 줄여 잘리지 않게 하고, 넓어지면 전체 안내로 돌아온다", () => {
+    const media = stubMatchMedia(BELOW_SM_QUERY);
+    renderShell();
+    const input = screen.getByTestId("shell-search-input");
+
+    expect(input).toHaveAttribute(
+      "placeholder",
+      SHELL_COPY.searchPlaceholder.driveCompact,
+    );
+
+    act(() => media.match());
+
+    expect(input).toHaveAttribute(
+      "placeholder",
+      SHELL_COPY.searchPlaceholder.drive,
+    );
+  });
+
+  it("휴지통 검색창 안내는 폰 폭에서도 그대로다", () => {
+    stubMatchMedia(BELOW_SM_QUERY);
+    renderShell();
+
+    openTrashFolder();
+
+    expect(screen.getByTestId("shell-search-input")).toHaveAttribute(
+      "placeholder",
+      SHELL_COPY.searchPlaceholder.trash,
+    );
+  });
+
   it("배경 갤러리 검색어는 드라이브 검색어와 따로 두고, 제출해야 거른다", async () => {
     resetBackgroundCatalogForTests();
     const sunset = makeBackground(1, { title: "따뜻한 노을" });
@@ -837,6 +965,12 @@ describe("AppShellLayout (드라이브형 홈)", () => {
   });
 
   describe("부팅 동기화가 아직 받지 않은 폴더 주소", () => {
+    let notice: MockInstance<typeof toast.info>;
+
+    beforeEach(() => {
+      notice = vi.spyOn(toast, "info").mockReturnValue("notice");
+    });
+
     afterEach(() => {
       __setBootPullPendingForTests([]);
     });
@@ -862,6 +996,40 @@ describe("AppShellLayout (드라이브형 홈)", () => {
       expect(window.location.pathname).toBe(
         `/presentations/folders/${WORSHIP}`,
       );
+      expect(notice).not.toHaveBeenCalled();
+    });
+
+    it("받기가 끝났는데도 없는 폴더 주소는 루트로 보내고, 그때서야 찾지 못했다고 알린다", async () => {
+      __setBootPullPendingForTests(["folder"]);
+      renderShell(`/presentations/folders/${WORSHIP}`);
+
+      expect(screen.getByTestId("drive-pending")).toBeInTheDocument();
+      expect(notice).not.toHaveBeenCalled();
+
+      act(() => {
+        __setBootPullPendingForTests([]);
+      });
+
+      expect(screen.getByTestId("crumb-root")).toHaveAttribute(
+        "aria-current",
+        "page",
+      );
+      expect(window.location.pathname).toBe("/presentations");
+      expect(notice).toHaveBeenCalledTimes(1);
+      expect(notice).toHaveBeenCalledWith(
+        DRIVE_COPY.toast.folderNotFound,
+        expect.anything(),
+      );
+    });
+
+    it("받는 중이 아니어도 모르는 폴더 주소는 루트로 보내고 찾지 못했다고 알린다", () => {
+      renderShell(`/presentations/folders/${WORSHIP}`);
+
+      expect(window.location.pathname).toBe("/presentations");
+      expect(notice).toHaveBeenCalledWith(
+        DRIVE_COPY.toast.folderNotFound,
+        expect.anything(),
+      );
     });
 
     it("휴지통에 있는 폴더는 받는 중이어도 바로 루트로 보낸다", () => {
@@ -880,6 +1048,7 @@ describe("AppShellLayout (드라이브형 홈)", () => {
         "page",
       );
       expect(window.location.pathname).toBe("/presentations");
+      expect(notice).not.toHaveBeenCalled();
     });
   });
 
@@ -1433,6 +1602,59 @@ describe("AppShellLayout (끌어 옮기기와 선택 범위)", () => {
   });
 });
 
+describe("AppShellLayout (마우스 끌기)", () => {
+  beforeEach(() => {
+    signInAsTestUser();
+    resetPresentationStore();
+    resetFolderStore();
+    window.localStorage.clear();
+    __loadDocumentsForTests(SEED_PRESENTATIONS);
+    vi.restoreAllMocks();
+    dnd.started.length = 0;
+  });
+
+  afterEach(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 60));
+  });
+
+  it("5px 넘게 움직이면 그 행의 끌기를 시작하고, 누른 행은 그대로 고른다", () => {
+    renderShell();
+    const target = SEED_PRESENTATIONS[0];
+    const row = card(target.title);
+
+    fireEvent.mouseDown(row, { button: 0, clientX: 40, clientY: 40 });
+    fireEvent.mouseMove(document, { clientX: 40, clientY: 46 });
+    fireEvent.mouseUp(document);
+
+    expect(dnd.started).toEqual([itemKey("file", target.id)]);
+    expect(row).toHaveAttribute("aria-selected", "true");
+  });
+
+  it("5px 이하만 움직이면 끌기를 시작하지 않는다", () => {
+    renderShell();
+    const row = card(SEED_PRESENTATIONS[0].title);
+
+    fireEvent.mouseDown(row, { button: 0, clientX: 40, clientY: 40 });
+    fireEvent.mouseMove(document, { clientX: 40, clientY: 44 });
+    fireEvent.mouseUp(document);
+
+    expect(dnd.started).toEqual([]);
+  });
+
+  it("끌고 있는 동안에는 우클릭해도 메뉴를 열지 않는다", () => {
+    renderShell();
+    const row = card(SEED_PRESENTATIONS[0].title);
+
+    fireEvent.mouseDown(row, { button: 0, clientX: 40, clientY: 40 });
+    fireEvent.mouseMove(document, { clientX: 40, clientY: 46 });
+    fireEvent.contextMenu(row);
+    fireEvent.mouseUp(document);
+
+    expect(dnd.started).toHaveLength(1);
+    expect(screen.queryByTestId("drive-menu")).not.toBeInTheDocument();
+  });
+});
+
 describe("AppShellLayout (터치)", () => {
   beforeEach(() => {
     signInAsTestUser();
@@ -1456,11 +1678,21 @@ describe("AppShellLayout (터치)", () => {
     });
   }
 
-  function touchRoll(target: HTMLElement): void {
-    const touch = { isPrimary: true, pointerType: "touch", clientY: 100 };
-    fireEvent.pointerDown(target, { ...touch, button: 0, clientX: 100 });
-    fireEvent.pointerMove(document, { ...touch, clientX: 108 });
-    fireEvent.pointerUp(document, { ...touch, clientX: 108 });
+  const fingerAt = (clientY: number) => ({
+    touches: [{ clientX: 100, clientY }],
+  });
+
+  function pressFor(ms: number, target: HTMLElement): void {
+    fireEvent.touchStart(target, fingerAt(100));
+    act(() => {
+      vi.advanceTimersByTime(ms);
+    });
+  }
+
+  function holdAndRoll(target: HTMLElement): void {
+    pressFor(300, target);
+    fireEvent.touchMove(target, fingerAt(112));
+    fireEvent.touchEnd(target);
   }
 
   it("행을 길게 누르면 그 행의 메뉴가 열리고 행이 선택된다", () => {
@@ -1474,6 +1706,28 @@ describe("AppShellLayout (터치)", () => {
     expect(within(menu).getByTestId("action-open")).toBeInTheDocument();
     expect(within(menu).getByTestId("action-trash")).toBeInTheDocument();
     expect(row).toHaveAttribute("aria-selected", "true");
+  });
+
+  it("길게 누르기 메뉴는 10px 넘게 움직이면 취소된다 (끌기를 시작하는 움직임을 이에 맞춘다)", () => {
+    renderShell();
+    vi.useFakeTimers();
+    const row = card(SEED_PRESENTATIONS[0].title);
+
+    fireEvent.touchStart(row, fingerAt(100));
+    fireEvent.touchMove(row, fingerAt(110));
+    act(() => {
+      vi.advanceTimersByTime(600);
+    });
+    expect(screen.getByTestId("drive-menu")).toBeInTheDocument();
+    fireEvent.touchEnd(row);
+    fireEvent.keyDown(screen.getByTestId("drive-menu"), { key: "Escape" });
+
+    fireEvent.touchStart(row, fingerAt(100));
+    fireEvent.touchMove(row, fingerAt(111));
+    act(() => {
+      vi.advanceTimersByTime(600);
+    });
+    expect(screen.queryByTestId("drive-menu")).not.toBeInTheDocument();
   });
 
   it("앞서 우클릭으로 만든 메뉴가 아니라 길게 누른 행의 메뉴를 보여 준다", async () => {
@@ -1513,15 +1767,16 @@ describe("AppShellLayout (터치)", () => {
     expect(screen.queryByTestId("drive-menu")).not.toBeInTheDocument();
   });
 
-  it("⋮ 메뉴 항목을 터치로 누를 때 손가락이 굴러도 끌기로 가로채이지 않고 항목이 실행된다", async () => {
+  it("⋮ 메뉴 항목을 꾹 눌렀다 손가락이 굴러도 끌기로 가로채이지 않고 항목이 실행된다", async () => {
     renderShell();
     const before = listPresentations().length;
     fireEvent.click(
       within(card(SEED_PRESENTATIONS[0].title)).getByTestId("item-more-btn"),
     );
     const duplicate = await screen.findByTestId("action-duplicate");
+    vi.useFakeTimers();
 
-    touchRoll(duplicate);
+    holdAndRoll(duplicate);
     fireEvent.click(duplicate);
 
     expect(dnd.started).toEqual([]);
@@ -1543,26 +1798,95 @@ describe("AppShellLayout (터치)", () => {
     expect(screen.getByTestId("selection-bar")).toHaveTextContent("1개 선택됨");
   });
 
-  it("행의 편집 버튼도 터치로 누를 때 손가락이 굴러도 눌린다", () => {
+  it("행의 편집 버튼도 꾹 눌렀다 손가락이 굴러도 눌린다", () => {
     renderShell();
     const edit = within(card(SEED_PRESENTATIONS[0].title)).getByTestId(
       "row-edit-btn",
     );
+    vi.useFakeTimers();
 
-    touchRoll(edit);
+    holdAndRoll(edit);
     fireEvent.click(edit);
 
     expect(dnd.started).toEqual([]);
     expect(screen.getByTestId("editor-stub")).toBeInTheDocument();
   });
 
-  it("행 본문에서 손가락이 굴러 시작한 끌기는 그대로 시작한다", () => {
+  it("행을 쓸어 스크롤해도 끌기가 시작되지 않고 메뉴도 열리지 않는다", () => {
     renderShell();
-    const target = SEED_PRESENTATIONS[0];
+    vi.useFakeTimers();
+    const row = card(SEED_PRESENTATIONS[0].title);
 
-    touchRoll(card(target.title));
+    fireEvent.touchStart(row, fingerAt(100));
+    fireEvent.touchMove(row, fingerAt(112));
+    act(() => {
+      vi.advanceTimersByTime(800);
+    });
+    fireEvent.touchEnd(row);
+
+    expect(dnd.started).toEqual([]);
+    expect(screen.queryByTestId("drive-menu")).not.toBeInTheDocument();
+    expect(row).toHaveAttribute("aria-selected", "false");
+  });
+
+  it("행을 꾹 누른 채 움직이면 그 행의 끌기를 시작하고, 길게 누르기 메뉴는 열리지 않는다", () => {
+    renderShell();
+    vi.useFakeTimers();
+    const target = SEED_PRESENTATIONS[0];
+    const row = card(target.title);
+
+    pressFor(300, row);
+    fireEvent.touchMove(row, fingerAt(112));
+    act(() => {
+      vi.advanceTimersByTime(800);
+    });
+    fireEvent.touchEnd(row);
 
     expect(dnd.started).toEqual([itemKey("file", target.id)]);
+    expect(screen.queryByTestId("drive-menu")).not.toBeInTheDocument();
+  });
+
+  it("움직이지 않고 꾹 누르면 끌기 없이 메뉴만 열고, 뗀 뒤에도 메뉴가 남는다", () => {
+    renderShell();
+    vi.useFakeTimers();
+    const row = card(SEED_PRESENTATIONS[0].title);
+
+    pressFor(600, row);
+    fireEvent.touchEnd(row);
+
+    expect(screen.getByTestId("drive-menu")).toBeInTheDocument();
+    expect(dnd.started).toEqual([]);
+  });
+
+  it("메뉴가 열린 뒤 손가락을 움직이면 메뉴를 닫고 그 행의 끌기를 시작한다", () => {
+    renderShell();
+    vi.useFakeTimers();
+    const target = SEED_PRESENTATIONS[0];
+    const row = card(target.title);
+
+    pressFor(600, row);
+    expect(screen.getByTestId("drive-menu")).toBeInTheDocument();
+    fireEvent.touchMove(row, fingerAt(160));
+    act(() => {
+      vi.advanceTimersByTime(500);
+    });
+    fireEvent.touchEnd(row);
+
+    expect(dnd.started).toEqual([itemKey("file", target.id)]);
+    expect(screen.queryByTestId("drive-menu")).not.toBeInTheDocument();
+  });
+
+  it("느리게 눌렀다 떼도 끌기를 시작하지 않고, 이어지는 클릭으로 행을 고른다", () => {
+    renderShell();
+    vi.useFakeTimers();
+    const row = card(SEED_PRESENTATIONS[0].title);
+
+    pressFor(400, row);
+    fireEvent.touchEnd(row);
+    fireEvent.click(row);
+
+    expect(dnd.started).toEqual([]);
+    expect(row).toHaveAttribute("aria-selected", "true");
   });
 });
 

@@ -31,6 +31,7 @@ const MAIN_CONTENT_ID = "main-content";
 interface ShellPageMeta {
   title: string;
   placeholder: string | readonly string[];
+  compactPlaceholder?: string;
 }
 
 const TRASH_META: ShellPageMeta = {
@@ -40,6 +41,7 @@ const TRASH_META: ShellPageMeta = {
 const DRIVE_META: ShellPageMeta = {
   title: COMMON_COPY.myDrive,
   placeholder: SHELL_COPY.searchPlaceholder.drive,
+  compactPlaceholder: SHELL_COPY.searchPlaceholder.driveCompact,
 };
 const BACKGROUNDS_META: ShellPageMeta = {
   title: SHELL_COPY.backgroundGallery,
@@ -150,6 +152,7 @@ function AppShellFrame({
         <AppHeader
           title={pageTitle}
           searchPlaceholder={meta.placeholder}
+          compactSearchPlaceholder={meta.compactPlaceholder}
           {...search}
           titleSlot={onDrive ? <DriveBreadcrumbs /> : undefined}
           actions={

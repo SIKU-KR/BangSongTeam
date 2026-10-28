@@ -62,3 +62,14 @@ export const MediaCacheChangeSchema = z.object({
   deleted: z.array(MediaUrlSchema),
 });
 export type MediaCacheChange = z.infer<typeof MediaCacheChangeSchema>;
+
+/**
+ * 서비스 워커가 '이 출처의 창이 몇 개 열려 있는지' 물음(`WINDOW_COUNT_MESSAGE`)에 돌려보내는 메시지.
+ * `windows`가 null이면 서비스 워커가 창 목록을 읽지 못한 것이다. 이 물음을 담기 전 배포판의
+ * 서비스 워커는 답하지 않고 다른 배포판이 보낸 값일 수 있어, 이 스키마로 걸러 맞지 않으면 모른다고
+ * 본다.
+ */
+export const WindowCountReplySchema = z.object({
+  windows: z.number().int().nonnegative().nullable(),
+});
+export type WindowCountReply = z.infer<typeof WindowCountReplySchema>;

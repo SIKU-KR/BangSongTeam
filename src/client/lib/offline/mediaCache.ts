@@ -27,6 +27,7 @@ import {
   reportApiFailure,
 } from "../observability/clientReports";
 import { BackoffTracker, type SyncRetryMode } from "../sync/backoff";
+import { countOpenWindows } from "./openWindows";
 import { requestPersistentStorage } from "./storagePersistence";
 import { navigatorApi } from "../browser/optionalApis";
 import { createBroadcast, type Broadcast } from "../browser/broadcast";
@@ -869,10 +870,17 @@ async function deleteMediaOutside(
  * 않으면 그 탭의 송출 준비가 빈 캐시를 두고 준비됐다고 알리고, 다시 열어도 받지 않는다. 받은 탭은
  * 지운 영상 가운데 자기가 붙잡은 것(잠금을 확인한 뒤에 붙잡았다)을 다시 받는다.
  *
+ * 그 잠금은 이 기능을 담은 배포판의 창만 쥔다. 옛 배포판이 열어 둔 송출·편집 창은 영상을 쓰면서도
+ * 잠금을 쥐지 않아 위의 방법으로는 보이지 않는다. 그래서 이 창 말고 다른 창이 하나라도 열려 있으면
+ * 아무것도 지우지 않고 `null`을 돌려준다. 창 수는 서비스 워커에 물어 알고(`countOpenWindows`), 알 수
+ * 없어도 다른 창이 있을 수 있다고 본다. 이 창뿐이면 위처럼 지운다.
+ *
  * Cache Storage가 실패하면 던지지 않고 그때까지 지운 수를 돌려준다.
  */
-export async function clearUnusedMediaCache(): Promise<number> {
+export async function clearUnusedMediaCache(): Promise<number | null> {
   if (!isCacheStorageAvailable()) return 0;
+  const windows = await countOpenWindows();
+  if (windows === null || windows > 1) return null;
   const inUse = await mediaPathsInUse();
   if (!inUse) return 0;
   const deleted: string[] = [];

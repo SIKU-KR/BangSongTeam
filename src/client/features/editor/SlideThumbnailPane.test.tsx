@@ -1,12 +1,14 @@
 import React from "react";
 import { describe, it, expect, vi } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { compile } from "tailwindcss";
 import type { PresentationItem } from "#shared";
 import { DEFAULT_DECK_STYLE } from "#shared";
 import {
   SlideThumbnailPane,
   type SlideThumbnailPaneProps,
 } from "./SlideThumbnailPane";
+import { useCollapsedSongs } from "./useCollapsedSongs";
 import { EDITOR_COPY } from "#copy/editor";
 import { COMMON_COPY } from "#copy/common";
 
@@ -34,8 +36,24 @@ function makeItems(slideCounts: number[]): PresentationItem[] {
   );
 }
 
-function renderPane(overrides: Partial<SlideThumbnailPaneProps> = {}) {
-  const props: SlideThumbnailPaneProps = {
+type PaneProps = Omit<SlideThumbnailPaneProps, "collapsedSongs">;
+
+function TestPane(props: PaneProps): React.JSX.Element {
+  const collapsedSongs = useCollapsedSongs(
+    props.items[props.activeSongIndex]?.id,
+  );
+  return <SlideThumbnailPane {...props} collapsedSongs={collapsedSongs} />;
+}
+
+async function opacityCss(element: HTMLElement): Promise<string> {
+  const compiler = await compile("@tailwind utilities;");
+  return compiler.build(
+    element.className.split(/\s+/).filter((name) => name.includes("opacity")),
+  );
+}
+
+function renderPane(overrides: Partial<PaneProps> = {}) {
+  const props: PaneProps = {
     items: makeItems([3, 1, 2]),
     activeSongIndex: 0,
     activeSlideIndex: 0,
@@ -60,7 +78,7 @@ function renderPane(overrides: Partial<SlideThumbnailPaneProps> = {}) {
     onOpenSongPicker: vi.fn(),
     ...overrides,
   };
-  const utils = render(<SlideThumbnailPane {...props} />);
+  const utils = render(<TestPane {...props} />);
   return { ...utils, props };
 }
 
@@ -108,6 +126,18 @@ describe("SlideThumbnailPane (PPT식 썸네일 창)", () => {
     });
   });
 
+  it("슬라이드를 눌러 골랐을 때만 알린다 (곡 머리글과 틈은 고른 것이 아니다)", () => {
+    const onSlideChosen = vi.fn();
+    renderPane({ onSlideChosen });
+
+    fireEvent.click(screen.getByTestId("song-section-title-1"));
+    fireEvent.click(screen.getByTestId("slide-pane-list"));
+    expect(onSlideChosen).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByTestId("slide-thumb-4"));
+    expect(onSlideChosen).toHaveBeenCalledTimes(1);
+  });
+
   it("곡 머리글을 누르면 그 곡 전체를 선택한다", () => {
     const { props } = renderPane();
 
@@ -126,7 +156,7 @@ describe("SlideThumbnailPane (PPT식 썸네일 창)", () => {
     );
 
     rerender(
-      <SlideThumbnailPane
+      <TestPane
         {...props}
         activeSongIndex={1}
         activeSlideIndex={0}
@@ -178,7 +208,7 @@ describe("SlideThumbnailPane (PPT식 썸네일 창)", () => {
     );
 
     rerender(
-      <SlideThumbnailPane
+      <TestPane
         {...props}
         selectedIds={[]}
         insertion={{ songIndex: 2, index: 1 }}
@@ -299,6 +329,18 @@ describe("SlideThumbnailPane (PPT식 썸네일 창)", () => {
     ).toHaveAttribute("aria-disabled", "true");
   });
 
+  it("구역 ⋯ 버튼은 hover가 되는 기기에서는 마우스를 올릴 때, hover가 없는 터치 기기에서는 늘 보인다", async () => {
+    renderPane();
+
+    const css = await opacityCss(screen.getByTestId("song-section-menu-btn-0"));
+
+    expect(css).toMatch(/\.opacity-0 \{\s*opacity: 0%/);
+    expect(css).toMatch(
+      /@media \(hover: hover\) \{[^}]*group-hover[^}]*\{\s*opacity: 100%/,
+    );
+    expect(css).toMatch(/@media \(hover: ?none\) \{[^}]*\{\s*opacity: 100%/);
+  });
+
   it("구역 메뉴 항목은 곡 동작을 호출하고 메뉴를 닫는다", () => {
     const { props } = renderPane();
 
@@ -344,13 +386,7 @@ describe("SlideThumbnailPane (PPT식 썸네일 창)", () => {
     fireEvent.click(screen.getByTestId("song-section-toggle-2"));
     expect(screen.queryByTestId("slide-thumb-4")).not.toBeInTheDocument();
 
-    rerender(
-      <SlideThumbnailPane
-        {...props}
-        activeSongIndex={2}
-        activeSlideIndex={0}
-      />,
-    );
+    rerender(<TestPane {...props} activeSongIndex={2} activeSlideIndex={0} />);
     expect(screen.getByTestId("slide-thumb-4")).toBeInTheDocument();
   });
 

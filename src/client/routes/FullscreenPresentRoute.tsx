@@ -261,7 +261,7 @@ function ProjectionSession({
       data-testid="fullscreen-present-route"
       onContextMenu={preventDefault}
       className={cn(
-        "relative h-screen w-screen overflow-hidden bg-black select-none",
+        "relative h-dvh w-screen overflow-hidden bg-black select-none",
         !isPreparing && !isPointerActive && "cursor-none",
       )}
     >

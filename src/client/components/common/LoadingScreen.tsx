@@ -6,7 +6,7 @@ import { cn } from "cn";
 import { isProjectionPath } from "../../features/presentation/fullscreen";
 
 const VARIANT_CLASS = {
-  screen: "min-h-screen bg-background",
+  screen: "min-h-dvh bg-background",
   content: "min-h-0 flex-1",
 } as const;
 
@@ -29,7 +29,7 @@ export function LoadingScreen({
   const pathname = usePathname();
   if (isProjectionPath(pathname)) {
     return (
-      <div data-testid={testId} role="status" className="min-h-screen bg-black">
+      <div data-testid={testId} role="status" className="min-h-dvh bg-black">
         <span className="sr-only">{children}</span>
       </div>
     );

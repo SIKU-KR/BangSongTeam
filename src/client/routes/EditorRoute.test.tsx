@@ -1,5 +1,7 @@
 import React from "react";
 import { signInAsTestUser } from "../test/sessionFixture";
+import { stubMatchMedia } from "../test/matchMedia";
+import { BELOW_MD_QUERY } from "#hooks/useMediaQuery";
 import { withQueryClient } from "../test/queryClientFixture";
 import {
   render,
@@ -59,6 +61,8 @@ import {
   setSyncEnabled,
 } from "../lib/sync/syncScheduler";
 import * as capabilities from "../lib/browser/capabilities";
+import { toast } from "sonner";
+import { DRIVE_COPY } from "#copy/drive";
 import { EDITOR_COPY } from "#copy/editor";
 import { COMMON_COPY } from "#copy/common";
 import { PRESENTATION_COPY } from "#copy/presentation";
@@ -1104,11 +1108,17 @@ describe("EditorRoute (PowerPoint식 프레젠테이션 편집기)", () => {
     expect(firstSong().slides).toHaveLength(5);
   });
 
-  it("존재하지 않는 presentationId 는 /presentations 로 리다이렉트된다", () => {
+  it("존재하지 않는 presentationId 는 /presentations 로 리다이렉트되고, 찾지 못했다고 알린다", () => {
+    const info = vi.spyOn(toast, "info");
     renderEditor("/editor/999999999999999999999");
 
     expect(screen.getByTestId("presentations-stub")).toBeInTheDocument();
     expect(screen.queryByTestId("editor-route")).not.toBeInTheDocument();
+    expect(info).toHaveBeenCalledTimes(1);
+    expect(info).toHaveBeenCalledWith(
+      DRIVE_COPY.toast.presentationNotFound,
+      expect.anything(),
+    );
   });
 
   describe("부팅 동기화가 아직 받지 않은 세트 주소", () => {
@@ -1130,6 +1140,7 @@ describe("EditorRoute (PowerPoint식 프레젠테이션 편집기)", () => {
     });
 
     it("세트를 받는 중이면 없는 id라도 드라이브로 보내지 않고, 받으면 그 세트를 열어 편집한다", () => {
+      const info = vi.spyOn(toast, "info");
       __setBootPullPendingForTests(["presentation"]);
       renderEditor(`/editor/${NEW_ID}`);
 
@@ -1147,6 +1158,7 @@ describe("EditorRoute (PowerPoint식 프레젠테이션 편집기)", () => {
       });
 
       expect(screen.getByTestId("editor-route")).toBeInTheDocument();
+      expect(info).not.toHaveBeenCalled();
 
       act(() => {
         updatePresentationTitle("새 제목");
@@ -1158,19 +1170,26 @@ describe("EditorRoute (PowerPoint식 프레젠테이션 편집기)", () => {
       );
     });
 
-    it("받기가 끝났는데도 없으면 드라이브로 보낸다", () => {
+    it("받기가 끝났는데도 없으면 드라이브로 보내고, 그때서야 찾지 못했다고 알린다", () => {
+      const info = vi.spyOn(toast, "info");
       __setBootPullPendingForTests(["presentation"]);
       renderEditor(`/editor/${NEW_ID}`);
 
       expect(
         screen.queryByTestId("presentations-stub"),
       ).not.toBeInTheDocument();
+      expect(info).not.toHaveBeenCalled();
 
       act(() => {
         __setBootPullPendingForTests([]);
       });
 
       expect(screen.getByTestId("presentations-stub")).toBeInTheDocument();
+      expect(info).toHaveBeenCalledTimes(1);
+      expect(info).toHaveBeenCalledWith(
+        DRIVE_COPY.toast.presentationNotFound,
+        expect.anything(),
+      );
     });
   });
 
@@ -1179,6 +1198,16 @@ describe("EditorRoute (PowerPoint식 프레젠테이션 편집기)", () => {
 
     expect(screen.getByTestId("editor-route")).toBeInTheDocument();
     expect(screen.getByText("수요 성령기도회")).toBeInTheDocument();
+  });
+
+  it("화면 높이를 동적 뷰포트 단위로 채워, 모바일 브라우저 툴바 밑으로 아래쪽이 숨지 않는다", () => {
+    renderEditor();
+
+    expect(screen.getByTestId("editor-route")).toHaveClass(
+      "h-dvh",
+      "w-screen",
+      "overflow-hidden",
+    );
   });
 
   it("?song= 파라미터로 진입하면 해당 곡이 선택된다", () => {
@@ -1820,6 +1849,14 @@ describe("EditorRoute (PowerPoint식 프레젠테이션 편집기)", () => {
       expect(window.location.search).toBe("");
     });
 
+    it("보기 전용 안내는 사본 만들기 버튼 자리를 비워 두어 글이 버튼 밑으로 들어가지 않는다", () => {
+      renderEditor(`/editor/${SHARED_ID}`);
+
+      expect(screen.getByTestId("read-only-banner")).toHaveClass(
+        "has-data-[slot=alert-action]:pr-28",
+      );
+    });
+
     it("그냥 열면 사본 만들기 창을 띄우지 않는다", () => {
       renderEditor(`/editor/${SHARED_ID}`);
 
@@ -1854,5 +1891,248 @@ describe("EditorRoute (PowerPoint식 프레젠테이션 편집기)", () => {
       expect(statusBar()).toHaveTextContent("슬라이드 2/23");
       expect(getPresentationById(SHARED_ID)).toBe(shared);
     });
+  });
+
+  describe("폰 폭(md 미만)", () => {
+    const SHARED_ID = "s0000000000000000000b";
+    const listDialog = (): HTMLElement =>
+      screen.getByRole("dialog", { name: EDITOR_COPY.thumbnails.list });
+    const queryListDialog = (): HTMLElement | null =>
+      screen.queryByRole("dialog", { name: EDITOR_COPY.thumbnails.list });
+
+    beforeEach(() => {
+      stubMatchMedia(BELOW_MD_QUERY);
+    });
+
+    it("슬라이드 썸네일 창을 접어 두고, 무대는 폭을 모두 쓴다", () => {
+      renderEditor();
+
+      expect(
+        screen.queryByTestId("slide-thumbnail-pane"),
+      ).not.toBeInTheDocument();
+      expect(queryListDialog()).not.toBeInTheDocument();
+      expect(stageCanvas()).toHaveClass("flex-1", "max-md:px-3");
+      expect(screen.getByTestId("open-slide-list-btn")).toHaveTextContent(
+        EDITOR_COPY.thumbnails.list,
+      );
+    });
+
+    it("버튼으로 시트를 열고, 슬라이드를 고르면 그 슬라이드로 옮기고 시트를 닫는다", async () => {
+      renderEditor();
+
+      fireEvent.click(screen.getByTestId("open-slide-list-btn"));
+      const sheet = await screen.findByRole("dialog", {
+        name: EDITOR_COPY.thumbnails.list,
+      });
+      expect(
+        within(sheet).getByTestId("slide-thumbnail-pane"),
+      ).toBeInTheDocument();
+      expect(within(sheet).getByTestId("slide-thumb-0")).toHaveAttribute(
+        "aria-current",
+        "true",
+      );
+
+      fireEvent.click(within(sheet).getByTestId("slide-thumb-5"));
+
+      expect(statusBar()).toHaveTextContent("슬라이드 6/23");
+      expect(statusBar()).toHaveTextContent("곡 2/5");
+      await waitFor(() => expect(queryListDialog()).not.toBeInTheDocument());
+      expect(
+        screen.queryByTestId("slide-thumbnail-pane"),
+      ).not.toBeInTheDocument();
+    });
+
+    it("곡 머리글을 눌러 접거나 고르는 동안은 시트를 열어 둔다", async () => {
+      renderEditor();
+      fireEvent.click(screen.getByTestId("open-slide-list-btn"));
+      const sheet = await screen.findByRole("dialog", {
+        name: EDITOR_COPY.thumbnails.list,
+      });
+
+      fireEvent.click(within(sheet).getByTestId("song-section-title-2"));
+
+      expect(statusBar()).toHaveTextContent("슬라이드 10/23");
+      expect(listDialog()).toBeInTheDocument();
+    });
+
+    it("시트를 닫았다 다시 열어도 접어 둔 곡 구역이 그대로다", async () => {
+      renderEditor();
+      fireEvent.click(screen.getByTestId("open-slide-list-btn"));
+      const first = await screen.findByRole("dialog", {
+        name: EDITOR_COPY.thumbnails.list,
+      });
+      fireEvent.click(within(first).getByTestId("song-section-toggle-1"));
+      expect(within(first).queryByTestId("slide-thumb-5")).toBeNull();
+      fireEvent.click(
+        within(first).getByRole("button", { name: COMMON_COPY.close }),
+      );
+      await waitFor(() => expect(queryListDialog()).not.toBeInTheDocument());
+
+      fireEvent.click(screen.getByTestId("open-slide-list-btn"));
+      const reopened = await screen.findByRole("dialog", {
+        name: EDITOR_COPY.thumbnails.list,
+      });
+
+      expect(
+        within(reopened).getByTestId("song-section-toggle-1"),
+      ).toHaveAttribute("aria-expanded", "false");
+      expect(within(reopened).queryByTestId("slide-thumb-5")).toBeNull();
+      expect(within(reopened).getByTestId("slide-thumb-0")).toBeInTheDocument();
+    });
+
+    it("시트를 닫아 둔 채 접어 둔 곡으로 옮겨 가면 그 구역을 펼친다", async () => {
+      renderEditor();
+      fireEvent.click(screen.getByTestId("open-slide-list-btn"));
+      const first = await screen.findByRole("dialog", {
+        name: EDITOR_COPY.thumbnails.list,
+      });
+      fireEvent.click(within(first).getByTestId("song-section-toggle-1"));
+      fireEvent.click(
+        within(first).getByRole("button", { name: COMMON_COPY.close }),
+      );
+      await waitFor(() => expect(queryListDialog()).not.toBeInTheDocument());
+
+      for (let step = 0; step < 5; step += 1) {
+        fireEvent.click(screen.getByTestId("canvas-next-btn"));
+      }
+      expect(statusBar()).toHaveTextContent("곡 2/5");
+      fireEvent.click(screen.getByTestId("open-slide-list-btn"));
+      const reopened = await screen.findByRole("dialog", {
+        name: EDITOR_COPY.thumbnails.list,
+      });
+
+      expect(
+        within(reopened).getByTestId("song-section-toggle-1"),
+      ).toHaveAttribute("aria-expanded", "true");
+      expect(within(reopened).getByTestId("slide-thumb-5")).toHaveAttribute(
+        "aria-current",
+        "true",
+      );
+    });
+
+    it("닫기 버튼과 Esc로 닫는다", async () => {
+      renderEditor();
+
+      fireEvent.click(screen.getByTestId("open-slide-list-btn"));
+      await screen.findByRole("dialog", {
+        name: EDITOR_COPY.thumbnails.list,
+      });
+      fireEvent.click(
+        within(listDialog()).getByRole("button", { name: COMMON_COPY.close }),
+      );
+      await waitFor(() => expect(queryListDialog()).not.toBeInTheDocument());
+
+      fireEvent.click(screen.getByTestId("open-slide-list-btn"));
+      await screen.findByRole("dialog", {
+        name: EDITOR_COPY.thumbnails.list,
+      });
+      fireEvent.keyDown(document, { key: "Escape" });
+      await waitFor(() => expect(queryListDialog()).not.toBeInTheDocument());
+    });
+
+    it("시트 안에서도 새 슬라이드와 곡 추가를 쓸 수 있다", async () => {
+      renderEditor();
+      fireEvent.click(screen.getByTestId("open-slide-list-btn"));
+      const sheet = await screen.findByRole("dialog", {
+        name: EDITOR_COPY.thumbnails.list,
+      });
+
+      expect(within(sheet).getByTestId("add-slide-btn")).toBeInTheDocument();
+      expect(within(sheet).getByTestId("add-song-btn")).toBeInTheDocument();
+    });
+
+    it("목록을 연 채 화면이 넓어지면 시트 대신 창을 붙이고, 다시 좁아져도 시트가 저절로 열리지 않는다", async () => {
+      const media = stubMatchMedia(BELOW_MD_QUERY);
+      renderEditor();
+      fireEvent.click(screen.getByTestId("open-slide-list-btn"));
+      await screen.findByRole("dialog", {
+        name: EDITOR_COPY.thumbnails.list,
+      });
+
+      act(() => media.match());
+
+      expect(screen.getByTestId("slide-thumbnail-pane")).toBeInTheDocument();
+      expect(screen.queryByTestId("open-slide-list-btn")).toBeNull();
+      expect(queryListDialog()).not.toBeInTheDocument();
+
+      act(() => media.match(BELOW_MD_QUERY));
+
+      expect(queryListDialog()).not.toBeInTheDocument();
+      expect(screen.getByTestId("open-slide-list-btn")).toBeInTheDocument();
+    });
+
+    it("곡이 없는 편집기도 슬라이드 목록 버튼으로 곡 추가를 연다", async () => {
+      replaceWithServerDocument({
+        ...SEED_PRESENTATIONS[0],
+        id: SHARED_ID,
+        items: [],
+      });
+      renderEditor(`/editor/${SHARED_ID}`);
+
+      fireEvent.click(screen.getByTestId("open-slide-list-btn"));
+      const sheet = await screen.findByRole("dialog", {
+        name: EDITOR_COPY.thumbnails.list,
+      });
+
+      expect(within(sheet).getByTestId("add-song-btn")).toBeInTheDocument();
+    });
+
+    it("보기 전용 화면에서도 같은 버튼으로 슬라이드 목록을 열고 고른다", async () => {
+      replaceWithServerDocument({
+        ...SEED_PRESENTATIONS[0],
+        id: SHARED_ID,
+        userId: "0000000000000000owner",
+        access: { ownerName: "인도자", memberId: "0000000000000000user1" },
+      });
+      renderEditor(`/editor/${SHARED_ID}`);
+      expect(screen.getByTestId("read-only-banner")).toBeInTheDocument();
+      expect(screen.queryByTestId("editor-ribbon")).not.toBeInTheDocument();
+
+      fireEvent.click(screen.getByTestId("open-slide-list-btn"));
+      const sheet = await screen.findByRole("dialog", {
+        name: EDITOR_COPY.thumbnails.list,
+      });
+      expect(
+        within(sheet).queryByTestId("add-slide-btn"),
+      ).not.toBeInTheDocument();
+      fireEvent.click(within(sheet).getByTestId("slide-thumb-3"));
+
+      expect(statusBar()).toHaveTextContent("슬라이드 4/23");
+      await waitFor(() => expect(queryListDialog()).not.toBeInTheDocument());
+    });
+
+    it("리본은 줄을 바꾸지 않고 가로로 스크롤해 글자 색과 그림자까지 닿는다", () => {
+      renderEditor();
+
+      const ribbon = screen.getByTestId("editor-ribbon");
+      expect(ribbon).toHaveClass(
+        "max-md:flex-nowrap",
+        "max-md:overflow-x-auto",
+        "max-md:*:shrink-0",
+      );
+      expect(ribbon).toContainElement(screen.getByTestId("font-color-btn"));
+      expect(ribbon).toContainElement(screen.getByTestId("text-shadow-btn"));
+    });
+  });
+
+  it("md 이상에서는 썸네일 창을 그대로 붙이고 슬라이드 목록 버튼을 두지 않는다", () => {
+    renderEditor();
+
+    expect(screen.getByTestId("slide-thumbnail-pane")).toBeInTheDocument();
+    expect(screen.queryByTestId("open-slide-list-btn")).not.toBeInTheDocument();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("슬라이드·곡 위치는 폭과 상관없이 한 줄을 지킨다", () => {
+    renderEditor();
+
+    expect(within(statusBar()).getByText("슬라이드 1/23")).toHaveClass(
+      "shrink-0",
+      "whitespace-nowrap",
+    );
+    expect(within(statusBar()).getByText("곡 1/5")).toHaveClass(
+      "shrink-0",
+      "whitespace-nowrap",
+    );
   });
 });

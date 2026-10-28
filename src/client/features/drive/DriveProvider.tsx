@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import { useParams, usePathname } from "next/navigation";
 import { useNavigate } from "#hooks/useNavigate";
 import { FolderIcon, PresentationIcon } from "lucide-react";
@@ -6,15 +6,13 @@ import { Badge } from "#components/ui/badge";
 import {
   DndContext,
   DragOverlay,
-  PointerSensor,
   pointerWithin,
-  useSensor,
-  useSensors,
   type DragEndEvent,
   type DragStartEvent,
   type Modifier,
 } from "@dnd-kit/core";
 import { getEventCoordinates } from "@dnd-kit/utilities";
+import { useDragSensors } from "../../lib/dnd/useDragSensors";
 import { createNewPresentation, editorPath } from "../presentation";
 import { isFolderAvailable } from "./folderStore";
 import {
@@ -47,11 +45,6 @@ import { useUndoToast } from "./useUndoToast";
 import { DRIVE_COPY } from "#copy/drive";
 import { COMMON_COPY } from "#copy/common";
 
-// useSensor는 옵션 객체가 바뀌면 센서를 새로 만들고, 그러면 끌기·놓기 내부 컨텍스트가 바뀌어 모든 행이
-// 다시 그려진다. 검색어를 칠 때마다 이 공급자가 다시 그려지므로 옵션을 렌더 밖에 둔다.
-// @dnd-kit/core@6.3.1 dist/core.esm.js (`useSensor`, `useCombineActivators`)
-const POINTER_SENSOR_OPTIONS = { activationConstraint: { distance: 5 } };
-
 const followCursor: Modifier = ({
   activatorEvent,
   activeNodeRect,
@@ -74,6 +67,9 @@ const followCursor: Modifier = ({
  *
  * 끌어서 옮기거나 버린 뒤에는 선택을 푼다. 목록에서 사라진 항목이 선택에 남으면 다음 끌기에
  * 함께 딸려 간다.
+ *
+ * 주소가 바뀌면 그릴 때 선택·기준점·포커스를 비운다. 효과로 비우면 효과가 그린 뒤에 돌아서,
+ * 마운트나 이동 직후에 고른 항목을 뒤늦게 지운다.
  *
  * 헤더의 드라이브 검색어는 친 위치에 묶인다. 셸은 화면을 오가도 남아 있어서, 검색 결과에서 연
  * 폴더나 휴지통에까지 검색어가 따라가면 화면이 바뀐 것 같지 않다. 드라이브 안에서 위치가 바뀌면
@@ -101,6 +97,7 @@ export function DriveProvider({
   const [typeFilter, setTypeFilter] = useState<DriveTypeFilter>("all");
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [searchPath, setSearchPath] = useState<string>(pathname);
+  const [selectionPath, setSelectionPath] = useState<string>(pathname);
   const { showToast } = useUndoToast({ isSuspended: dialog !== null });
 
   if (isDrivePath(pathname) && searchPath !== pathname) {
@@ -108,11 +105,12 @@ export function DriveProvider({
     setSearchQuery("");
   }
 
-  useEffect(() => {
+  if (selectionPath !== pathname) {
+    setSelectionPath(pathname);
     setSelectionState(new Set());
     setAnchorKey(null);
     setFocusKey(null);
-  }, [pathname]);
+  }
 
   const setSelection = useCallback(
     (keys: readonly string[], anchor?: string | null): void => {
@@ -203,7 +201,7 @@ export function DriveProvider({
     [navigate],
   );
 
-  const sensors = useSensors(useSensor(PointerSensor, POINTER_SENSOR_OPTIONS));
+  const sensors = useDragSensors();
 
   const handleDragStart = ({ active }: DragStartEvent): void => {
     const key = String(active.id);

@@ -283,6 +283,15 @@ describe("App Route Integration", () => {
     expect(screen.getByTestId("app-hydrating")).toHaveClass("bg-background");
   });
 
+  it.each(["/presentations", `/present/${DOC_ID}/fullscreen`])(
+    "%s의 부팅 화면은 동적 뷰포트 단위로 화면을 채워 모바일 툴바에 가리지 않는다",
+    (path) => {
+      renderAt(path);
+
+      expect(screen.getByTestId("app-hydrating")).toHaveClass("min-h-dvh");
+    },
+  );
+
   it("송출 중 세션이 끊겨도 송출 화면을 그대로 두고, 송출을 마치면 로그인 화면으로 간다", async () => {
     renderAt(`/present/${DOC_ID}/fullscreen`);
     const route = await screen.findByTestId("fullscreen-present-route");
@@ -1426,6 +1435,21 @@ describe("App Route Integration", () => {
       expect(
         screen.getByRole("button", { name: COMMON_COPY.close }),
       ).toBeInTheDocument();
+    });
+
+    it("알림 닫기 버튼은 누르는 영역을 24px 이상으로 키운다", async () => {
+      signOutForTests();
+      renderAt("/");
+      await screen.findByTestId("landing-route");
+
+      act(() => {
+        toast("닫을 수 있는 알림", { closeButton: true });
+      });
+      await screen.findByText("닫을 수 있는 알림", {}, TOAST_WAIT);
+
+      expect(
+        screen.getByRole("button", { name: COMMON_COPY.close }),
+      ).toHaveClass("size-6!");
     });
 
     it("드라이브의 실행 취소 알림은 드라이브를 떠나면 닫혀, 다른 화면에서도 드라이브로 돌아와서도 다시 뜨지 않는다", async () => {

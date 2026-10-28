@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState, type ComponentProps } from "react";
 import {
   DndContext,
   DragOverlay,
@@ -63,7 +63,8 @@ import {
   paneTargetAttrs,
   readPaneTarget,
 } from "./slidePaneTargets";
-import { useCollapsedSongs } from "./useCollapsedSongs";
+import { SlideListCloseButton } from "./SlideListSheet";
+import type { CollapsedSongs } from "./useCollapsedSongs";
 import { useSlidePaneDrag } from "./useSlidePaneDrag";
 import {
   analyzeDeckOverflowCached,
@@ -101,12 +102,25 @@ export interface SlideThumbnailPaneProps {
   onEditSongInfo: (songIndex: number) => void;
   onDeleteSong: (songIndex: number) => void;
   onOpenSongPicker: () => void;
+  /** 접은 곡 구역. 창을 담는 쪽이 쥐어, 시트처럼 창이 사라졌다 다시 그려져도 접어 둔 구역이 남는다 */
+  collapsedSongs: CollapsedSongs;
   /** 보기 권한으로 공유받은 세트. 선택·펼치기만 되고 메뉴·끌기·추가는 없다 */
   readOnly?: boolean;
+  /**
+   * `sheet`는 폰 폭의 `SlideListSheet` 안에 놓는 모습이다. 시트 폭을 채우고 머리줄에 닫기 버튼을
+   * 두며, 위아래로 쓸어 스크롤하는 손가락이 끌기로 읽히지 않게 마우스로만 끌 수 있다.
+   */
+  variant?: "docked" | "sheet";
+  /** 슬라이드를 눌러 골랐을 때 알린다 (끌기를 시작하며 고른 것은 알리지 않는다). 시트가 이것으로 닫는다 */
+  onSlideChosen?: () => void;
 }
 
 type MenuTarget =
   { kind: "slides" } | { kind: "gap" } | { kind: "song"; songIndex: number };
+
+type ContextMenuActionsRef = NonNullable<
+  ComponentProps<typeof ContextMenu>["actionsRef"]
+>;
 
 const NO_MODIFIERS: ClickModifiers = { shift: false, mod: false };
 
@@ -160,9 +174,23 @@ function slideOverflowWarning(
 /**
  * PowerPoint식 슬라이드 썸네일 창. 곡은 구역, 번호는 세트 전체에 이어진다.
  *
- * 클릭·Ctrl/⌘·Shift 선택, 썸네일 사이 삽입 커서, 우클릭 메뉴, 여러 장 끌기를
+ * 클릭·Ctrl/⌘·Shift 선택, 썸네일 사이 삽입 커서, 우클릭·길게 누르기 메뉴, 여러 장 끌기를
  * 지원한다. 선택·끌기·붙여넣기는 곡마다 서식이 달라 한 곡 안에서만 한다.
  * 창 자체가 포커스를 받아 편집기 단축키가 창 전용 키(`data-slide-pane`)를 켠다.
+ * 폰 폭에서는 접어 두고 시트 안에서 연다(`variant="sheet"`).
+ *
+ * 터치로는 쓸면 스크롤이고, 꾹 누른 채 움직여야 끌기가 시작된다(`LongPressDragSensor`). 움직이지 않는
+ * 누름은 끌기에 끼어들지 않아 탭은 슬라이드를 고르고 길게 누르기는 컨텍스트 메뉴 몫이다. 메뉴가 열린 뒤에
+ * 움직여 끌기가 시작되면 메뉴를 닫고, 끌기 중에는 우클릭이나 길게 누르기로도 메뉴를 열지 않는다.
+ *
+ * 메뉴의 대상은 메뉴가 열리는 순간 누른 곳으로 정한다. iOS는 길게 눌러도 `contextmenu`를 보내지 않아
+ * Base UI가 터치 타이머로 메뉴를 여는데, 그때는 `onContextMenu`가 불리지 않아 대상이 없거나 앞서 우클릭한
+ * 곳의 것이 된다. 곡 ⋯ 메뉴 같은 팝업은 DOM에서는 창 밖이어도 React 트리에서는 곡 머리글의 자식이라 그 안의
+ * 누름이 창의 메뉴 트리거에 닿을 수 있으므로, 창 안에서 시작하지 않은 누름은 메뉴를 열지 않는다.
+ *
+ * 안드로이드는 `contextmenu`와 터치 타이머가 둘 다 메뉴를 열어 `onOpenChange(true)`가 한 번 더 온다. 그때 창에
+ * 포커스를 다시 주면 포커스가 메뉴를 떠나 방향키가 듣지 않으므로, 이미 열린 메뉴를 다시 열라는 요청은 무시한다.
+ * @base-ui/react@1.8.0 context-menu/trigger/ContextMenuTrigger.mjs (`handleContextMenu`, `handleTouchStart`의 타이머)
  */
 export function SlideThumbnailPane({
   items,
@@ -187,15 +215,17 @@ export function SlideThumbnailPane({
   onEditSongInfo,
   onDeleteSong,
   onOpenSongPicker,
+  collapsedSongs,
   readOnly = false,
+  variant = "docked",
+  onSlideChosen,
 }: SlideThumbnailPaneProps): React.JSX.Element {
   useBackgroundCatalog();
   const [menuTarget, setMenuTarget] = useState<MenuTarget | null>(null);
   const paneRef = useRef<HTMLDivElement>(null);
   const activeThumbRef = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<ContextMenuActionsRef["current"]>(null);
 
-  const activeItemId = items[activeSongIndex]?.id;
-  const collapsedSongs = useCollapsedSongs(activeItemId);
   const measureText = useTextWidthMeasurer();
   const songRows: {
     item: PresentationItem;
@@ -241,7 +271,12 @@ export function SlideThumbnailPane({
     onDropSlides,
     onReorderSong,
     onDragBegin: focusPane,
+    mouseOnly: variant === "sheet",
   });
+
+  useEffect(() => {
+    if (dragging) menuRef.current?.close();
+  }, [dragging]);
 
   const pasteAction: MenuAction = {
     key: "paste",
@@ -361,43 +396,41 @@ export function SlideThumbnailPane({
     song: songActions,
   });
 
-  const handleContextMenu = (
-    event: React.MouseEvent & { preventBaseUIHandler: () => void },
-  ) => {
-    if (readOnly) {
-      event.preventBaseUIHandler();
-      return;
+  const menuTargetAt = (target: EventTarget | null): MenuTarget | null => {
+    const pane = paneRef.current;
+    const element = target instanceof Element ? target : null;
+    if (readOnly || dragging || !element || !pane?.contains(element)) {
+      return null;
     }
-    const target = readPaneTarget(event.target as Element);
+    if (pane.hasAttribute("data-popup-open")) return null;
     focusPane();
-    switch (target?.kind) {
+    const paneTarget = readPaneTarget(element);
+    switch (paneTarget?.kind) {
       case "slide": {
-        const { songIndex, slideIndex } = target;
-        const slideId = getSlideAt(target, items)?.id ?? "";
+        const { songIndex, slideIndex } = paneTarget;
+        const slideId = getSlideAt(paneTarget, items)?.id ?? "";
         if (!isSelected(songIndex, slideId)) {
           onClickSlide(songIndex, slideIndex, NO_MODIFIERS);
         }
-        setMenuTarget({ kind: "slides" });
-        break;
+        return { kind: "slides" };
       }
       case "gap":
-        onSetInsertion({ songIndex: target.songIndex, index: target.index });
-        setMenuTarget({ kind: "gap" });
-        break;
+        onSetInsertion({
+          songIndex: paneTarget.songIndex,
+          index: paneTarget.index,
+        });
+        return { kind: "gap" };
       case "header":
-        setMenuTarget({ kind: "song", songIndex: target.songIndex });
-        break;
-      default:
-        if (items.length > 0) {
-          const lastSong = items.length - 1;
-          onSetInsertion({
-            songIndex: lastSong,
-            index: songSlidesAt(items, lastSong).length,
-          });
-          setMenuTarget({ kind: "gap" });
-        } else {
-          event.preventBaseUIHandler();
-        }
+        return { kind: "song", songIndex: paneTarget.songIndex };
+      default: {
+        if (items.length === 0) return null;
+        const lastSong = items.length - 1;
+        onSetInsertion({
+          songIndex: lastSong,
+          index: songSlidesAt(items, lastSong).length,
+        });
+        return { kind: "gap" };
+      }
     }
   };
 
@@ -409,6 +442,7 @@ export function SlideThumbnailPane({
       shift: event.shiftKey,
       mod: event.metaKey || event.ctrlKey,
     });
+    onSlideChosen?.();
   };
 
   const draggedCount =
@@ -420,7 +454,10 @@ export function SlideThumbnailPane({
   return (
     <aside
       data-testid="slide-thumbnail-pane"
-      className="flex w-64 shrink-0 flex-col border-r bg-background select-none"
+      className={cn(
+        "flex shrink-0 flex-col bg-background select-none",
+        variant === "sheet" ? "min-h-0 w-full flex-1" : "w-64 border-r",
+      )}
     >
       <div className="flex h-11 shrink-0 items-center justify-between border-b px-3">
         <span className="text-xs font-bold">
@@ -429,29 +466,40 @@ export function SlideThumbnailPane({
             {totalSlides}
           </span>
         </span>
-        {!readOnly && (
-          <Tooltip>
-            <TooltipTrigger
-              render={
-                <Button
-                  variant="ghost"
-                  size="xs"
-                  data-testid="add-slide-btn"
-                  disabled={items.length === 0}
-                  onClick={onAddSlide}
-                />
-              }
-            >
-              <PlusIcon />
-              {EDITOR_COPY.slide.add}
-            </TooltipTrigger>
-            <TooltipContent>{EDITOR_COPY.slide.addTooltip}</TooltipContent>
-          </Tooltip>
-        )}
+        <div className="flex items-center gap-1">
+          {!readOnly && (
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <Button
+                    variant="ghost"
+                    size="xs"
+                    data-testid="add-slide-btn"
+                    disabled={items.length === 0}
+                    onClick={onAddSlide}
+                  />
+                }
+              >
+                <PlusIcon />
+                {EDITOR_COPY.slide.add}
+              </TooltipTrigger>
+              <TooltipContent>{EDITOR_COPY.slide.addTooltip}</TooltipContent>
+            </Tooltip>
+          )}
+          {variant === "sheet" && <SlideListCloseButton />}
+        </div>
       </div>
 
       <DndContext {...dndContextProps}>
-        <ContextMenu>
+        <ContextMenu
+          actionsRef={menuRef}
+          onOpenChange={(opened, details) => {
+            if (!opened) return;
+            const next = menuTargetAt(details.event.target);
+            if (next) setMenuTarget(next);
+            else details.cancel();
+          }}
+        >
           <ContextMenuTrigger
             ref={paneRef}
             tabIndex={0}
@@ -461,7 +509,6 @@ export function SlideThumbnailPane({
             {...paneRootAttrs}
             data-testid="slide-pane-list"
             onClick={handleClick}
-            onContextMenu={handleContextMenu}
             className="flex-1 overflow-y-auto px-3 py-2 outline-none"
           >
             {items.length === 0 && (
@@ -759,7 +806,7 @@ function SongHeader({
             <Button
               variant="ghost"
               size="icon-xs"
-              className="opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100 data-popup-open:opacity-100"
+              className="opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100 data-popup-open:opacity-100 [@media(hover:none)]:opacity-100"
             />
           }
         >

@@ -23,7 +23,12 @@ export {
   refreshOwnDataIfStale,
   useBootPullPending,
 } from "./bootSync";
-export { flushBeforeSignOut, stopAccountSync } from "./accountEnd";
+export {
+  flushBeforeSignOut,
+  hasUnsentChanges,
+  shouldConfirmSignOut,
+  stopAccountSync,
+} from "./accountEnd";
 export {
   listenForStorageChanges,
   startStorageSync,

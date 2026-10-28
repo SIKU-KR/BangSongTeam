@@ -55,6 +55,7 @@ export const BACKGROUND_COPY = {
       `배경 저장 중 ${ready}/${total}`,
     editorRetrying: (ready: number, total: number) =>
       `배경 다시 시도 대기 ${ready}/${total}`,
+    editorProgress: (ready: number, total: number) => `${ready}/${total}`,
     editorQuota: "기기 저장 공간 부족",
     editorFailed: "배경 저장 실패",
   },

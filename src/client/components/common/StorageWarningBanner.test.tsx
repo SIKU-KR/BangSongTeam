@@ -13,6 +13,10 @@ import { ERROR_COPY } from "#copy/common";
 import { SHELL_COPY } from "#copy/shell";
 import { resetFakeCacheStorage } from "../../test/fakeCacheStorage";
 import {
+  installServiceWorker,
+  removeServiceWorker,
+} from "../../test/serviceWorkerFixture";
+import {
   installFakeLockManager,
   removeFakeLockManager,
 } from "../../test/fakeLockManager";
@@ -127,6 +131,7 @@ describe("StorageWarningBanner", () => {
     beforeEach(() => {
       resetFakeCacheStorage();
       installFakeLockManager();
+      installServiceWorker({ windowCountReply: { windows: 1 } });
       vi.mocked(toast.success).mockClear();
       vi.mocked(toast.info).mockClear();
       reportPersistenceError(
@@ -137,6 +142,7 @@ describe("StorageWarningBanner", () => {
 
     afterEach(() => {
       removeFakeLockManager();
+      removeServiceWorker();
     });
 
     it("휴지통을 비우라고 하지 않고, 저장한 배경 영상을 지울 수 있게 한다", async () => {
@@ -157,6 +163,27 @@ describe("StorageWarningBanner", () => {
         );
       });
       expect(await cachedVideos()).toEqual([]);
+    });
+
+    it("다른 창이 열려 있으면 영상을 지우지 않고 다른 창을 모두 닫으라고 알린다", async () => {
+      installServiceWorker({ windowCountReply: { windows: 2 } });
+      await seedCachedVideo("/api/media/loops/a.mp4");
+      render(<StorageWarningBanner />);
+
+      fireEvent.click(
+        screen.getByRole("button", { name: SHELL_COPY.storage.clearMedia }),
+      );
+
+      await waitFor(() => {
+        expect(toast.info).toHaveBeenCalledWith(
+          SHELL_COPY.storage.closeOtherWindows,
+        );
+      });
+      expect(toast.success).not.toHaveBeenCalled();
+      expect(toast.info).not.toHaveBeenCalledWith(
+        SHELL_COPY.storage.noMediaToClear,
+      );
+      expect(await cachedVideos()).toHaveLength(1);
     });
 
     it("지울 배경 영상이 없으면 기기 저장 공간을 비우라고 알린다", async () => {

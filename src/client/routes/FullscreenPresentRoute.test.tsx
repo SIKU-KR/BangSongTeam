@@ -669,6 +669,16 @@ describe("FullscreenPresentRoute", () => {
     });
   });
 
+  it("보이는 화면을 정확히 채운다. 툴바가 오가는 모바일 브라우저에서는 동적 뷰포트 단위로 맞춘다", () => {
+    renderPresent();
+
+    expect(screen.getByTestId("fullscreen-present-route")).toHaveClass(
+      "h-dvh",
+      "w-screen",
+      "overflow-hidden",
+    );
+  });
+
   describe("커서와 종료 버튼", () => {
     function movePointer(x: number, y: number): void {
       window.dispatchEvent(

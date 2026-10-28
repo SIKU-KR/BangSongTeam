@@ -209,8 +209,11 @@ export function SongPickerModal({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="flex min-h-0 flex-1 flex-col overflow-hidden md:flex-row">
-          <div className="flex w-full shrink-0 flex-col border-b md:w-5/12 md:border-r md:border-b-0 lg:w-4/12">
+        <div
+          data-testid="song-picker-body"
+          className="flex min-h-0 flex-1 flex-col overflow-hidden max-md:overflow-y-auto md:flex-row"
+        >
+          <div className="flex w-full shrink-0 flex-col border-b max-md:max-h-72 md:w-5/12 md:border-r md:border-b-0 lg:w-4/12">
             <div className="shrink-0 space-y-2.5 border-b p-3.5">
               <SearchInput
                 value={searchQuery}

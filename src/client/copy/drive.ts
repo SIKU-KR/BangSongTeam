@@ -71,6 +71,9 @@ export const DRIVE_COPY = {
       `${withObjectParticle(label)} 영구 삭제했어요`,
     deletedForeverMany: (count: number) => `${count}개 항목을 영구 삭제했어요`,
     deleteForeverFailed: "영구 삭제하지 못했어요",
+    presentationNotFound:
+      "프레젠테이션을 찾지 못했어요. 내 드라이브에서 다시 열어 주세요.",
+    folderNotFound: "폴더를 찾지 못했어요. 내 드라이브에서 다시 찾아 주세요.",
   },
   moveDialog: {
     title: (name: string) => `‘${name}’ 옮기기`,

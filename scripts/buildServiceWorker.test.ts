@@ -9,7 +9,10 @@ import {
   RSC_NETWORK_TIMEOUT_MS,
   SHELL_REFRESH_TIMEOUT_MS,
 } from "./buildServiceWorker.mjs";
-import { OFFLINE_SHELL_PARAM } from "../src/shared/constants/projection";
+import {
+  OFFLINE_SHELL_PARAM,
+  WINDOW_COUNT_MESSAGE,
+} from "../src/shared/constants/projection";
 
 const P = OFFLINE_SHELL_PARAM;
 const ORIGIN = "https://x.test";
@@ -542,4 +545,88 @@ describe("assertShellsCarryBuildId", () => {
       ).toThrow(file);
     },
   );
+});
+
+describe("서비스 워커의 창 수 질문", () => {
+  interface FakeMessageEvent {
+    data: unknown;
+    ports: Array<{ postMessage: (reply: unknown) => void }>;
+    waitUntil: (work: Promise<unknown>) => void;
+  }
+
+  function startWindowCountWorker(
+    matchAll: (options: unknown) => Promise<unknown[]>,
+  ): (message: unknown, withPort?: boolean) => Promise<unknown[]> {
+    const listeners: Array<(event: FakeMessageEvent) => void> = [];
+    const context = vm.createContext({
+      self: {
+        registration: { scope: `${ORIGIN}/` },
+        location: { origin: ORIGIN },
+        addEventListener: (
+          type: string,
+          listener: (event: FakeMessageEvent) => void,
+        ) => {
+          if (type === "message") listeners.push(listener);
+        },
+        clients: { matchAll },
+      },
+      caches: {},
+      fetch: offline,
+      Headers,
+      Response,
+      URL,
+      setTimeout,
+      clearTimeout,
+    });
+    vm.runInContext(shellWorkerSource(SHELLS, P, BUILD_ID), context);
+
+    return async (message, withPort = true) => {
+      const replies: unknown[] = [];
+      const background: Promise<unknown>[] = [];
+      for (const listener of listeners) {
+        listener({
+          data: message,
+          ports: withPort
+            ? [{ postMessage: (reply) => replies.push(reply) }]
+            : [],
+          waitUntil: (work) => background.push(work),
+        });
+      }
+      await Promise.all(background);
+      return replies;
+    };
+  }
+
+  it("열려 있는 창 수로 답한다. 아직 이 서비스 워커가 제어하지 않는 창도 센다", async () => {
+    const matchAll = vi.fn(async () => [{}, {}]);
+    const ask = startWindowCountWorker(matchAll);
+
+    expect(await ask({ type: WINDOW_COUNT_MESSAGE })).toEqual([{ windows: 2 }]);
+    expect(matchAll).toHaveBeenCalledWith({
+      type: "window",
+      includeUncontrolled: true,
+    });
+  });
+
+  it("창 목록을 읽지 못하면 모른다고 답한다", async () => {
+    const ask = startWindowCountWorker(async () => {
+      throw new Error("읽지 못함");
+    });
+
+    expect(await ask({ type: WINDOW_COUNT_MESSAGE })).toEqual([
+      { windows: null },
+    ]);
+  });
+
+  it.each([
+    ["다른 종류의 메시지", { type: "SKIP_WAITING" }, true],
+    ["종류가 없는 메시지", null, true],
+    ["답할 포트가 없는 질문", { type: WINDOW_COUNT_MESSAGE }, false],
+  ])("%s는 창을 세지 않고 답하지 않는다", async (_, message, withPort) => {
+    const matchAll = vi.fn(async () => []);
+    const ask = startWindowCountWorker(matchAll);
+
+    expect(await ask(message, withPort)).toEqual([]);
+    expect(matchAll).not.toHaveBeenCalled();
+  });
 });

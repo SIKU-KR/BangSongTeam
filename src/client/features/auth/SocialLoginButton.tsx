@@ -1,11 +1,12 @@
 import React from "react";
 import { Button as ButtonPrimitive } from "@base-ui/react/button";
 import { cva } from "class-variance-authority";
+import type { StaticImageData } from "next/image";
 import "@fontsource/google-sans/latin-500.css";
 import type { SocialProvider } from "../../lib/auth";
-import googleGUrl from "./brand/google-g.svg";
-import kakaoSymbolUrl from "./brand/kakao-symbol.svg";
-import naverLogoUrl from "./brand/naver-logo.svg";
+import googleG from "./brand/google-g.svg";
+import kakaoSymbol from "./brand/kakao-symbol.svg";
+import naverLogo from "./brand/naver-logo.svg";
 
 const socialLoginButtonVariants = cva(
   "inline-flex h-12 w-full items-center justify-center rounded-brand border whitespace-nowrap outline-none select-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50 aria-busy:opacity-100",
@@ -23,12 +24,14 @@ const socialLoginButtonVariants = cva(
   },
 );
 
-const BRAND_MARKS: Record<SocialProvider, { src: string; className: string }> =
-  {
-    kakao: { src: kakaoSymbolUrl, className: "h-3.25 shrink-0" },
-    naver: { src: naverLogoUrl, className: "size-4 shrink-0" },
-    google: { src: googleGUrl, className: "size-5 shrink-0" },
-  };
+const BRAND_MARKS: Record<
+  SocialProvider,
+  { image: StaticImageData; className: string }
+> = {
+  kakao: { image: kakaoSymbol, className: "h-3.25 shrink-0" },
+  naver: { image: naverLogo, className: "size-4 shrink-0" },
+  google: { image: googleG, className: "size-5 shrink-0" },
+};
 
 interface SocialLoginButtonProps extends Omit<
   ButtonPrimitive.Props,
@@ -61,7 +64,7 @@ export function SocialLoginButton({
       className={socialLoginButtonVariants({ provider })}
       {...props}
     >
-      <img alt="" src={mark.src} className={mark.className} />
+      <img alt="" src={mark.image.src} className={mark.className} />
       <span className="truncate">{label}</span>
     </ButtonPrimitive>
   );

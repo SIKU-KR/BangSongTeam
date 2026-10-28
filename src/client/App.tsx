@@ -65,8 +65,11 @@ const LoginRoute = dynamic(() =>
 // sonner@2.0.8은 알림 닫기 버튼을 'Close toast'로 알린다(dist/index.mjs의
 // closeButtonAriaLabel 기본값). components/ui/sonner.tsx는 받은 props를 자기 toastOptions
 // 뒤에 펼쳐 통째로 덮으므로 그 classNames도 함께 넘긴다.
+// 같은 파일의 `[data-sonner-toast] [data-close-button]` 규칙이 닫기 버튼을 20px로 고정해
+// WCAG 2.2 AA의 최소 누름 영역(24px)에 못 미친다. 그 규칙은 CSS 레이어 밖이라 레이어 안의
+// 유틸리티로는 이길 수 없어 `!`를 붙인다. 터치 화면은 index.css의 44px 최소 크기가 그대로 이긴다.
 const TOAST_OPTIONS: ToasterProps["toastOptions"] = {
-  classNames: { toast: "cn-toast" },
+  classNames: { toast: "cn-toast", closeButton: "size-6!" },
   closeButtonAriaLabel: COMMON_COPY.close,
 };
 
