@@ -13,6 +13,7 @@ import { seedDocs, userDoc } from "../db/test/fixtures";
 import type { MediaStore } from "./lib/mediaStore";
 import {
   DECK_BODY_MAX_BYTES,
+  FOLDER_DELETE_BODY_MAX_BYTES,
   PRESENTATION_BODY_MAX_BYTES,
   SMALL_BODY_MAX_BYTES,
 } from "./middleware/bodyLimit";
@@ -293,6 +294,7 @@ describe("API 앱 통합 테스트 (Firestore 에뮬레이터)", () => {
         SMALL_BODY_MAX_BYTES,
       ],
       ["PUT", `/api/folders/${FOLDER_ID}`, SMALL_BODY_MAX_BYTES],
+      ["DELETE", `/api/folders/${FOLDER_ID}`, FOLDER_DELETE_BODY_MAX_BYTES],
       [
         "PUT",
         `/api/presentations/${PRESENTATION_ID}`,

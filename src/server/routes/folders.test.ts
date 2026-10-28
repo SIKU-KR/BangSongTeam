@@ -1,17 +1,27 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { env } from "../test/env";
 import {
+  API_ERRORS,
   DEFAULT_DECK_STYLE,
   PresentationDocumentSchema,
   type Folder,
+  type FolderDeleteRequest,
   type PresentationDocument,
 } from "#shared";
-import { clearDb, seedDocs, userDoc } from "../../db/test/fixtures";
+import {
+  clearDb,
+  instrumentTransactions,
+  presentationDoc,
+  presentationsWithCopies,
+  seedDocs,
+  userDoc,
+} from "../../db/test/fixtures";
 import { createApp } from "../index";
 import type { SessionReader } from "../middleware/auth";
 
 const USER_A = "aaaaaaaa00000000000f1";
 const USER_B = "bbbbbbbb00000000000f2";
+const TRASHED_AT = "2026-09-25T00:00:00.000Z";
 
 let currentUser: string | null = USER_A;
 const fakeSession: SessionReader = async () =>
@@ -85,6 +95,27 @@ function put(body: unknown) {
 
 async function putFolder(folder: Folder): Promise<Response> {
   return app.request(`/api/folders/${folder.id}`, put(folder), env);
+}
+
+async function putDoc(doc: PresentationDocument): Promise<Response> {
+  return app.request(`/api/presentations/${doc.id}`, put(doc), env);
+}
+
+async function deleteFolder(
+  id: string,
+  body?: FolderDeleteRequest,
+): Promise<Response> {
+  return app.request(
+    `/api/folders/${id}`,
+    body === undefined
+      ? { method: "DELETE", headers: { "sec-fetch-site": "same-origin" } }
+      : {
+          method: "DELETE",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(body),
+        },
+    env,
+  );
 }
 
 interface FolderListBody {
@@ -170,6 +201,19 @@ describe("드라이브 폴더 API", () => {
     expect(still.name).toBe("2026 주일");
   });
 
+  it("남의 프레젠테이션 id로는 폴더를 만들지 못한다 (403)", async () => {
+    const theirs = presentationDoc({ id: nextId(), userId: USER_B });
+    await seedDocs(env.DB, { presentations: [theirs] });
+
+    const res = await putFolder(makeFolder({ id: theirs.id }));
+
+    expect(res.status).toBe(403);
+    expect(await res.json()).toEqual({
+      error: API_ERRORS.folder.notAccessible,
+    });
+    expect(await listFolders()).toEqual([]);
+  });
+
   it("본문의 userId가 세션 사용자와 다르면 403으로 거절하고 만들지 않는다", async () => {
     const res = await putFolder(makeFolder({ userId: USER_B }));
 
@@ -192,7 +236,7 @@ describe("드라이브 폴더 API", () => {
   });
 
   it("프레젠테이션을 폴더에 담고, 폴더 영구 삭제 시 하위까지 함께 지운다", async () => {
-    const root = makeFolder({ name: "root" });
+    const root = makeFolder({ name: "root", trashedAt: TRASHED_AT });
     const child = makeFolder({ name: "child", parentId: root.id });
     const keep = makeFolder({ name: "keep" });
     for (const folder of [root, child, keep]) await putFolder(folder);
@@ -200,19 +244,15 @@ describe("드라이브 폴더 API", () => {
     const inChild = makeDoc(child.id);
     const inKeep = makeDoc(keep.id);
     for (const doc of [inChild, inKeep]) {
-      const res = await app.request(
-        `/api/presentations/${doc.id}`,
-        put(doc),
-        env,
-      );
-      expect(res.status).toBe(200);
+      expect((await putDoc(doc)).status).toBe(200);
     }
 
-    const del = await app.request(
-      `/api/folders/${root.id}`,
-      { method: "DELETE", headers: { "sec-fetch-site": "same-origin" } },
-      env,
-    );
+    const del = await deleteFolder(root.id, {
+      expected: {
+        folderIds: [root.id, child.id],
+        presentationIds: [inChild.id],
+      },
+    });
     expect(del.status).toBe(200);
     const body = (await del.json()) as {
       deletedFolderIds: string[];
@@ -230,6 +270,104 @@ describe("드라이브 폴더 API", () => {
     const docs = await listDocs();
     expect(docs.map((d) => d.id)).toEqual([inKeep.id]);
     expect(docs[0].folderId).toBe(keep.id);
+  });
+
+  it("본문 없이 보내는 이전 클라이언트도 휴지통에 넣은 폴더는 지운다", async () => {
+    const folder = makeFolder({ trashedAt: TRASHED_AT });
+    await putFolder(folder);
+
+    const del = await deleteFolder(folder.id);
+
+    expect(del.status).toBe(200);
+    expect(await del.json()).toEqual({
+      ok: true,
+      deletedFolderIds: [folder.id],
+      deletedPresentationIds: [],
+    });
+    expect(await listFolders()).toEqual([]);
+  });
+
+  it("휴지통에 없는 폴더는 409로 거절하고 아무것도 지우지 않는다", async () => {
+    const folder = makeFolder();
+    await putFolder(folder);
+    const doc = makeDoc(folder.id);
+    await putDoc(doc);
+
+    const del = await deleteFolder(folder.id);
+
+    expect(del.status).toBe(409);
+    expect(await del.json()).toEqual({ error: API_ERRORS.trashChanged });
+    expect(await listFolderBody()).toEqual({
+      folders: [folder],
+      tombstones: { folderIds: [], presentationIds: [] },
+    });
+    expect((await listDocs()).map((d) => d.id)).toEqual([doc.id]);
+  });
+
+  it("기기가 보지 못한 하위 항목이 서버 트리에 있으면 409로 거절한다", async () => {
+    const root = makeFolder({ trashedAt: TRASHED_AT });
+    const child = makeFolder({ parentId: root.id });
+    for (const folder of [root, child]) await putFolder(folder);
+    const doc = makeDoc(child.id);
+    await putDoc(doc);
+
+    const del = await deleteFolder(root.id, {
+      expected: { folderIds: [root.id], presentationIds: [] },
+    });
+
+    expect(del.status).toBe(409);
+    expect(await del.json()).toEqual({ error: API_ERRORS.trashChanged });
+    expect((await listFolders()).map((f) => f.id)).toEqual([root.id, child.id]);
+    expect((await listDocs()).map((d) => d.id)).toEqual([doc.id]);
+  });
+
+  it("나눠 지우는 중에 다른 기기가 복원하면 일부만 지운 채 409로 알린다", async () => {
+    const root = makeFolder({ trashedAt: TRASHED_AT });
+    await putFolder(root);
+    const seeded = presentationsWithCopies(USER_A, 60, 8, {
+      folderId: root.id,
+    });
+    await seedDocs(env.DB, seeded);
+    const restored = {
+      ...root,
+      trashedAt: null,
+      updatedAt: "2026-09-26T00:00:00.000Z",
+    };
+    const instrument = instrumentTransactions(env.DB, {
+      afterCall: {
+        call: 1,
+        run: async () => {
+          expect((await putFolder(restored)).status).toBe(200);
+        },
+      },
+    });
+
+    let del: Response;
+    try {
+      del = await deleteFolder(root.id);
+    } finally {
+      instrument.restore();
+    }
+
+    expect(del.status).toBe(409);
+    expect(await del.json()).toEqual({ error: API_ERRORS.trashChangedPartly });
+    expect(await listFolders()).toEqual([restored]);
+    const remaining = await listDocs();
+    expect(remaining.length).toBeGreaterThan(0);
+    expect(remaining.length).toBeLessThan(seeded.presentations.length);
+  });
+
+  it("기기가 보낸 id가 NanoID가 아니어도 400 없이 지운다", async () => {
+    const folder = makeFolder({ trashedAt: TRASHED_AT });
+    await putFolder(folder);
+    const uuid = "550e8400-e29b-41d4-a716-446655440000";
+
+    const del = await deleteFolder(folder.id, {
+      expected: { folderIds: [folder.id, uuid], presentationIds: [uuid] },
+    });
+
+    expect(del.status).toBe(200);
+    expect(await listFolders()).toEqual([]);
   });
 
   it("남의 폴더를 가리키는 프레젠테이션은 루트로 보정된다", async () => {

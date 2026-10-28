@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import type { Transaction, WriteBatch } from "@google-cloud/firestore";
 import { createFirestore, type Db } from "../client";
 import {
   backgroundsCol,
@@ -165,7 +166,9 @@ export function backgroundDoc(
   };
 }
 
-/** 문서들을 한 번에 넣는다 */
+const MAX_BATCH_WRITES = 500;
+
+/** 문서들을 넣는다. 많으면 Firestore의 예전 쓰기 한도(500)씩 나눈 배치로 차례로 쓴다 */
 export async function seedDocs(
   db: Db,
   docs: {
@@ -177,25 +180,152 @@ export async function seedDocs(
     members?: { presentationId: string; userId: string }[];
   },
 ): Promise<void> {
-  const batch = db.batch();
-  for (const row of docs.users ?? []) batch.set(usersCol(db).doc(row.id), row);
-  for (const row of docs.decks ?? []) batch.set(decksCol(db).doc(row.id), row);
+  const writes: ((batch: WriteBatch) => void)[] = [];
+  for (const row of docs.users ?? []) {
+    writes.push((batch) => batch.set(usersCol(db).doc(row.id), row));
+  }
+  for (const row of docs.decks ?? []) {
+    writes.push((batch) => batch.set(decksCol(db).doc(row.id), row));
+  }
   for (const row of docs.presentations ?? []) {
-    batch.set(presentationsCol(db).doc(row.id), row);
+    writes.push((batch) => batch.set(presentationsCol(db).doc(row.id), row));
   }
   for (const row of docs.folders ?? []) {
-    batch.set(foldersCol(db).doc(row.id), row);
+    writes.push((batch) => batch.set(foldersCol(db).doc(row.id), row));
   }
   for (const row of docs.backgrounds ?? []) {
-    batch.set(backgroundsCol(db).doc(row.id), row);
+    writes.push((batch) => batch.set(backgroundsCol(db).doc(row.id), row));
   }
   for (const row of docs.members ?? []) {
-    batch.set(
-      presentationMembersCol(db).doc(
-        memberDocId(row.presentationId, row.userId),
-      ),
-      row,
+    const ref = presentationMembersCol(db).doc(
+      memberDocId(row.presentationId, row.userId),
     );
+    writes.push((batch) => batch.set(ref, row));
   }
-  await batch.commit();
+  for (let start = 0; start < writes.length; start += MAX_BATCH_WRITES) {
+    const batch = db.batch();
+    for (const write of writes.slice(start, start + MAX_BATCH_WRITES)) {
+      write(batch);
+    }
+    await batch.commit();
+  }
+}
+
+/** `instrumentTransactions` 옵션. 호출 순번은 1부터 센다 */
+export interface TransactionInstrumentOptions {
+  /** 이 순번의 `runTransaction`은 아무것도 쓰지 않고 실패한다 (차례 사이에 멈춘 서버) */
+  failOnCall?: number;
+  /**
+   * 이 순번의 `runTransaction`이 커밋된 뒤 돌려주기 전에 부른다 (차례 사이에 끼어든 다른 기기).
+   * 안에서 연 트랜잭션은 세지 않는다.
+   */
+  afterCall?: { call: number; run: () => Promise<void> };
+  /**
+   * 첫 호출의 콜백을 쓰기를 버리는 트랜잭션으로 한 번 먼저 돌린다. Firestore가 경합으로 콜백을
+   * 다시 돌리는 일을 흉내 낸다.
+   */
+  replayFirstAttempt?: boolean;
+}
+
+export interface TransactionInstrument {
+  /** 콜백을 돌린 시도마다 부른 쓰기(set·update·delete·create) 수 */
+  readonly writesPerAttempt: readonly number[];
+  /** 가장 많이 쓴 시도의 쓰기 수 */
+  max(): number;
+  /** 원래 `runTransaction`으로 되돌린다 */
+  restore(): void;
+}
+
+const WRITE_METHODS = new Set<PropertyKey>([
+  "set",
+  "update",
+  "delete",
+  "create",
+]);
+
+function watchWrites(
+  tx: Transaction,
+  onWrite: () => void,
+  dropWrites: boolean,
+): Transaction {
+  const watched: Transaction = new Proxy(tx, {
+    get(target, property) {
+      const value: unknown = Reflect.get(target, property);
+      if (typeof value !== "function") return value;
+      const method = value as (...args: unknown[]) => unknown;
+      if (!WRITE_METHODS.has(property)) return method.bind(target);
+      return (...args: unknown[]) => {
+        onWrite();
+        if (!dropWrites) method.apply(target, args);
+        return watched;
+      };
+    },
+  });
+  return watched;
+}
+
+/**
+ * `db.runTransaction`을 감싸 트랜잭션마다 쓰기 수를 세고, 차례 사이의 실패·끼어듦·콜백 재실행을
+ * 일으킨다. 쓰기 한도를 에뮬레이터가 검사하지 않아 테스트가 직접 센다. 끝나면 `restore()`를 부른다.
+ */
+export function instrumentTransactions(
+  db: Db,
+  options: TransactionInstrumentOptions = {},
+): TransactionInstrument {
+  const ownProperty = Object.prototype.hasOwnProperty.call(
+    db,
+    "runTransaction",
+  );
+  const unwrapped = db.runTransaction;
+  const original = unwrapped.bind(db);
+  const writesPerAttempt: number[] = [];
+  let calls = 0;
+  let passThrough = false;
+
+  const instrumented: Db["runTransaction"] = async (
+    updateFunction,
+    transactionOptions,
+  ) => {
+    if (passThrough) return original(updateFunction, transactionOptions);
+    calls += 1;
+    const call = calls;
+    if (call === options.failOnCall) {
+      throw new Error(`instrumented failure of runTransaction #${call}`);
+    }
+    const attempt = (tx: Transaction, dropWrites: boolean) => {
+      const slot = writesPerAttempt.push(0) - 1;
+      return updateFunction(
+        watchWrites(
+          tx,
+          () => {
+            writesPerAttempt[slot] += 1;
+          },
+          dropWrites,
+        ),
+      );
+    };
+    const result = await original(async (tx) => {
+      if (call === 1 && options.replayFirstAttempt) await attempt(tx, true);
+      return attempt(tx, false);
+    }, transactionOptions);
+    if (call === options.afterCall?.call) {
+      passThrough = true;
+      try {
+        await options.afterCall.run();
+      } finally {
+        passThrough = false;
+      }
+    }
+    return result;
+  };
+  db.runTransaction = instrumented;
+
+  return {
+    writesPerAttempt,
+    max: () => Math.max(0, ...writesPerAttempt),
+    restore: () => {
+      if (ownProperty) db.runTransaction = unwrapped;
+      else Reflect.deleteProperty(db, "runTransaction");
+    },
+  };
 }

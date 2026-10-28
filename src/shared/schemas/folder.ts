@@ -52,6 +52,25 @@ export const FolderUpsertResponseSchema = z.object({
 });
 export type FolderUpsertResponse = z.infer<typeof FolderUpsertResponseSchema>;
 
+/**
+ * 폴더 영구 삭제 요청 본문.
+ *
+ * 새 클라이언트는 `expected`에 지우려는 하위 트리(그 기기가 본 폴더·프레젠테이션 id)를 담는다.
+ * 서버 트리에 그 밖의 항목이 있으면 그 기기가 보지 못한 항목(다른 기기에서 옮겨 넣은 프레젠테이션 등)이라
+ * 아무것도 지우지 않고 409로 답한다. 목록은 포함 여부를 볼 때만 쓰고, 가져온 데이터의 id는 형식을
+ * 검사한 적이 없어 아무 문자열이나 받는다. 형식이 다른 id 하나 때문에 400이 나면 그 폴더는 영영
+ * 지울 수 없다. 이전 클라이언트는 본문을 보내지 않으므로 휴지통 확인만 받는다.
+ */
+export const FolderDeleteRequestSchema = z.object({
+  expected: z
+    .object({
+      folderIds: z.array(z.string()),
+      presentationIds: z.array(z.string()),
+    })
+    .optional(),
+});
+export type FolderDeleteRequest = z.infer<typeof FolderDeleteRequestSchema>;
+
 /** 폴더 영구 삭제 응답 — 함께 지워진 하위 폴더·프레젠테이션 id */
 export const FolderDeleteResponseSchema = z.object({
   ok: z.literal(true),

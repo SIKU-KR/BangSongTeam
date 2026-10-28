@@ -7,7 +7,9 @@ import type { AppEnv } from "../types";
 import { limitBody } from "../middleware/bodyLimit";
 
 type JsonBodyInput<T extends z.ZodType> = {
-  in: { json: z.input<T> };
+  in: undefined extends z.input<T>
+    ? { json?: z.input<T> }
+    : { json: z.input<T> };
   out: { json: z.output<T> };
 };
 

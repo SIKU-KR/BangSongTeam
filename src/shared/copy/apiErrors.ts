@@ -16,6 +16,10 @@ export const API_ERRORS = {
   serverBusy: "서버가 잠시 바빠요. 잠시 후 다시 시도해 주세요",
   notFound: "요청한 기능을 찾을 수 없어요. 새로고침한 뒤 다시 시도해 주세요",
   payloadTooLarge: "보낸 내용이 너무 커요. 줄여서 다시 보내 주세요",
+  trashChanged:
+    "그사이 바뀐 항목이 있어 영구 삭제하지 않았어요. 새로고침한 뒤 휴지통을 다시 확인해 주세요",
+  trashChangedPartly:
+    "그사이 바뀐 항목이 있어 일부만 영구 삭제했어요. 새로고침한 뒤 휴지통을 다시 확인해 주세요",
   auth: {
     signUpInProgress:
       "이 이메일로 가입하는 중이에요. 잠시 후 다시 시도해 주세요",

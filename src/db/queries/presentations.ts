@@ -16,10 +16,12 @@ import {
 } from "../collections";
 import { fromPresentationChanges, toPresentationDocument } from "./mappers";
 import { existingBackgroundIds } from "./decks";
+import { isPresentationInTrash } from "./folders";
 import {
   prepareClearTombstone,
-  readPresentationDependents,
-  writeTombstones,
+  prepareDeletionPass,
+  runDeletionPasses,
+  type DeleteForeverRefusal,
 } from "./cascade";
 
 /** 예배 날짜 최신순, 같으면 만든 순서 최신순 */
@@ -33,25 +35,37 @@ export function byServiceDateDesc(
   return b.createdAt.getTime() - a.createdAt.getTime();
 }
 
-/** 프레젠테이션 삭제. 담긴 사본 곡과 공유 멤버도 함께 지운다 */
+export type DeletePresentationResult =
+  { status: "deleted" } | DeleteForeverRefusal;
+
+/**
+ * 프레젠테이션 영구 삭제 (휴지통 비우기). 담긴 사본 곡과 공유 멤버도 함께 지우고 영구 삭제
+ * 기록을 남긴다.
+ *
+ * 서버에서 자신이나 담긴 폴더(조상 포함)가 휴지통에 있을 때만 지운다. 요청은 다른 기기에서
+ * 복원하거나 밖으로 옮긴 것을 모르는 오래된 탭에서 올 수 있다. 확인은 쓰기 전에 하고, 폴더는
+ * 프레젠테이션 자신이 휴지통에 없고 폴더에 담겨 있을 때만 부모까지 따라 읽는다.
+ *
+ * 멤버·사본이 많으면 트랜잭션 여러 개로 나눠 지우고(`runDeletionPasses`), 차례마다 확인을 다시 한다.
+ */
 export async function deletePresentation(
   db: Db,
   presentationId: string,
   userId: string,
-): Promise<boolean> {
-  return db.runTransaction(async (tx) => {
-    const ref = presentationsCol(db).doc(presentationId);
-    const [presentation, dependents] = await Promise.all([
-      tx.get(ref),
-      readPresentationDependents(tx, db, [presentationId]),
-    ]);
-    if (presentation.data()?.userId !== userId) return false;
-
-    for (const dependent of dependents) tx.delete(dependent);
-    tx.delete(ref);
-    writeTombstones(tx, db, userId, "presentation", [presentationId]);
-    return true;
+): Promise<DeletePresentationResult> {
+  const result = await runDeletionPasses(db, async (tx) => {
+    const presentation = (
+      await tx.get(presentationsCol(db).doc(presentationId))
+    ).data();
+    if (presentation?.userId !== userId) return "notFound";
+    const inTrash = await isPresentationInTrash(
+      async (id) => (await tx.get(foldersCol(db).doc(id))).data(),
+      presentation,
+    );
+    if (!inTrash) return "conflict";
+    return prepareDeletionPass(tx, db, userId, [presentationId], []);
   });
+  return result.status === "deleted" ? { status: "deleted" } : result;
 }
 
 /**

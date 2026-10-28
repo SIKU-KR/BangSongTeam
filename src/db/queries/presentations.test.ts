@@ -1,18 +1,35 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, afterEach, beforeEach, vi } from "vitest";
 import type { Db } from "../client";
-import { decksCol, presentationsCol } from "../collections";
 import {
+  decksCol,
+  driveTombstonesCol,
+  presentationMembersCol,
+  presentationsCol,
+  type FolderDoc,
+  type PresentationDoc,
+} from "../collections";
+import {
+  clearDb,
   createTestDb,
   deckDoc,
+  folderDoc,
+  instrumentTransactions,
+  presentationDoc,
   presentationsWithCopies,
   seedDocs,
   userDoc,
 } from "../test/fixtures";
 import {
+  buildFolderIndex,
   DEFAULT_DECK_STYLE,
+  isFolderTrashed,
   PresentationDocumentSchema,
+  resolveFolderId,
   type PresentationDocument,
 } from "#shared";
+import { MAX_WRITES_PER_TRANSACTION } from "./cascade";
+import { isPresentationInTrash } from "./folders";
+import { toSharedFolder } from "./mappers";
 import {
   deletePresentation,
   upsertPresentationDocument,
@@ -20,6 +37,7 @@ import {
 } from "./presentations";
 
 const DOC_ID = "100000000000000000001";
+const TRASHED_AT = "2026-09-25T00:00:00.000Z";
 
 function makeDoc(
   userId: string,
@@ -103,6 +121,8 @@ describe("프레젠테이션 쿼리", () => {
   });
 
   describe("deletePresentation", () => {
+    const clonedDeckId = "c00000000000000000001";
+
     it("should delete presentation and cascade-delete its copy decks (no orphans)", async () => {
       await seedDocs(db, {
         decks: [
@@ -115,16 +135,361 @@ describe("프레젠테이션 쿼리", () => {
           }),
         ],
       });
-      await upsertPresentationDocument(db, userAId, makeDoc(userAId));
-      const clonedDeckId = "c00000000000000000001";
+      await upsertPresentationDocument(
+        db,
+        userAId,
+        makeDoc(userAId, { trashedAt: TRASHED_AT }),
+      );
 
       expect((await decksCol(db).doc(clonedDeckId).get()).exists).toBe(true);
 
-      await deletePresentation(db, DOC_ID, userAId);
+      expect(await deletePresentation(db, DOC_ID, userAId)).toEqual({
+        status: "deleted",
+      });
 
       expect((await presentationsCol(db).doc(DOC_ID).get()).exists).toBe(false);
       expect((await decksCol(db).doc(clonedDeckId).get()).exists).toBe(false);
       expect((await decksCol(db).doc("deck-song-1").get()).exists).toBe(true);
+    });
+
+    it("휴지통에 없는 프레젠테이션은 영구 삭제하지 않는다", async () => {
+      await upsertPresentationDocument(db, userAId, makeDoc(userAId));
+
+      expect(await deletePresentation(db, DOC_ID, userAId)).toEqual({
+        status: "conflict",
+        partial: false,
+      });
+
+      expect((await presentationsCol(db).doc(DOC_ID).get()).exists).toBe(true);
+      expect((await decksCol(db).doc(clonedDeckId).get()).exists).toBe(true);
+      expect((await driveTombstonesCol(db).get()).size).toBe(0);
+    });
+
+    it("휴지통 폴더(조상 포함) 안의 프레젠테이션은 지운다", async () => {
+      const trashed = folderDoc({
+        id: "f00000000000000000001",
+        userId: userAId,
+        trashedAt: new Date(TRASHED_AT),
+      });
+      const child = folderDoc({
+        id: "f00000000000000000002",
+        userId: userAId,
+        parentId: trashed.id,
+      });
+      await seedDocs(db, { folders: [trashed, child] });
+      const inChild = makeDoc(userAId, { folderId: child.id });
+      await upsertPresentationDocument(db, userAId, inChild);
+      await seedDocs(db, {
+        presentations: [
+          presentationDoc({
+            id: "100000000000000000002",
+            userId: userAId,
+            folderId: trashed.id,
+          }),
+        ],
+      });
+
+      expect(await deletePresentation(db, DOC_ID, userAId)).toEqual({
+        status: "deleted",
+      });
+      expect(
+        await deletePresentation(db, "100000000000000000002", userAId),
+      ).toEqual({ status: "deleted" });
+
+      expect((await presentationsCol(db).get()).size).toBe(0);
+      expect((await decksCol(db).doc(clonedDeckId).get()).exists).toBe(false);
+      expect(
+        (await driveTombstonesCol(db).get()).docs.map((doc) => doc.id).sort(),
+      ).toEqual([DOC_ID, "100000000000000000002"]);
+    });
+
+    it("남의 프레젠테이션·없는 프레젠테이션은 notFound이고 아무것도 지우지 않는다", async () => {
+      await upsertPresentationDocument(
+        db,
+        userAId,
+        makeDoc(userAId, { trashedAt: TRASHED_AT }),
+      );
+
+      expect(await deletePresentation(db, DOC_ID, userBId)).toEqual({
+        status: "notFound",
+      });
+      expect(
+        await deletePresentation(db, "100000000000000000009", userAId),
+      ).toEqual({ status: "notFound" });
+
+      expect((await presentationsCol(db).doc(DOC_ID).get()).exists).toBe(true);
+      expect((await decksCol(db).doc(clonedDeckId).get()).exists).toBe(true);
+      expect((await driveTombstonesCol(db).get()).size).toBe(0);
+    });
+
+    describe("공유 멤버가 600명인 프레젠테이션", () => {
+      const countMembers = async () =>
+        (
+          await presentationMembersCol(db)
+            .where("presentationId", "==", DOC_ID)
+            .get()
+        ).size;
+
+      beforeEach(async () => {
+        await upsertPresentationDocument(
+          db,
+          userAId,
+          makeDoc(userAId, { trashedAt: TRASHED_AT }),
+        );
+        await seedDocs(db, {
+          members: Array.from({ length: 600 }, (_, index) => ({
+            presentationId: DOC_ID,
+            userId: `m${String(index).padStart(20, "0")}`,
+          })),
+        });
+      });
+
+      afterEach(async () => {
+        await clearDb(db);
+      });
+
+      it("트랜잭션마다 450건 이하로 나눠 모두 지운다", async () => {
+        const instrument = instrumentTransactions(db);
+
+        expect(await deletePresentation(db, DOC_ID, userAId)).toEqual({
+          status: "deleted",
+        });
+        instrument.restore();
+
+        expect(instrument.writesPerAttempt.length).toBeGreaterThan(1);
+        expect(instrument.max()).toBeLessThanOrEqual(
+          MAX_WRITES_PER_TRANSACTION,
+        );
+        expect(await countMembers()).toBe(0);
+        expect((await decksCol(db).doc(clonedDeckId).get()).exists).toBe(false);
+        expect((await presentationsCol(db).doc(DOC_ID).get()).exists).toBe(
+          false,
+        );
+        expect(
+          (await driveTombstonesCol(db).get()).docs.map((doc) => doc.id),
+        ).toEqual([DOC_ID]);
+      });
+
+      it("멤버부터 지우므로 차례 사이에 멈춰도 곡은 남고, 다시 지우면 끝난다", async () => {
+        const instrument = instrumentTransactions(db, { failOnCall: 2 });
+
+        await expect(deletePresentation(db, DOC_ID, userAId)).rejects.toThrow();
+        instrument.restore();
+
+        expect(await countMembers()).toBeGreaterThan(0);
+        expect(await countMembers()).toBeLessThan(600);
+        expect((await decksCol(db).doc(clonedDeckId).get()).exists).toBe(true);
+        expect((await presentationsCol(db).doc(DOC_ID).get()).exists).toBe(
+          true,
+        );
+        expect((await driveTombstonesCol(db).get()).size).toBe(0);
+
+        expect(await deletePresentation(db, DOC_ID, userAId)).toEqual({
+          status: "deleted",
+        });
+        expect(await countMembers()).toBe(0);
+        expect((await decksCol(db).doc(clonedDeckId).get()).exists).toBe(false);
+        expect((await presentationsCol(db).doc(DOC_ID).get()).exists).toBe(
+          false,
+        );
+      });
+    });
+
+    describe("한 차례에 다 담지 못하는 프레젠테이션", () => {
+      const trashedAt = new Date(TRASHED_AT);
+      const countCopies = async (presentationId: string) =>
+        (await decksCol(db).where("presentationId", "==", presentationId).get())
+          .size;
+
+      afterEach(async () => {
+        await clearDb(db);
+      });
+
+      it("공유 멤버를 나눠 지우는 차례 사이에 복원되면 곡은 하나도 지우지 않은 채 멈춘다", async () => {
+        const seeded = presentationsWithCopies(userAId, 1, 10, { trashedAt });
+        const [presentation] = seeded.presentations;
+        await seedDocs(db, {
+          ...seeded,
+          members: Array.from({ length: 445 }, (_, index) => ({
+            presentationId: presentation.id,
+            userId: `m${String(index).padStart(20, "0")}`,
+          })),
+        });
+        const instrument = instrumentTransactions(db, {
+          afterCall: {
+            call: 1,
+            run: async () => {
+              await presentationsCol(db)
+                .doc(presentation.id)
+                .update({ trashedAt: null });
+            },
+          },
+        });
+
+        const result = await deletePresentation(db, presentation.id, userAId);
+        instrument.restore();
+
+        expect(result).toEqual({ status: "conflict", partial: true });
+        expect(await countCopies(presentation.id)).toBe(10);
+        expect((await driveTombstonesCol(db).get()).size).toBe(0);
+      });
+
+      it("공유 멤버 없이 곡만으로 한 차례를 넘는 옛 프레젠테이션은 곡을 나눠 모두 지운다", async () => {
+        const seeded = presentationsWithCopies(userAId, 1, 500, { trashedAt });
+        const [presentation] = seeded.presentations;
+        await seedDocs(db, seeded);
+        const instrument = instrumentTransactions(db);
+
+        expect(await deletePresentation(db, presentation.id, userAId)).toEqual({
+          status: "deleted",
+        });
+        instrument.restore();
+
+        expect(instrument.writesPerAttempt.length).toBeGreaterThan(1);
+        expect(instrument.max()).toBeLessThanOrEqual(
+          MAX_WRITES_PER_TRANSACTION,
+        );
+        expect(await countCopies(presentation.id)).toBe(0);
+        expect(
+          (await presentationsCol(db).doc(presentation.id).get()).exists,
+        ).toBe(false);
+        expect(
+          (await driveTombstonesCol(db).get()).docs.map((doc) => doc.id),
+        ).toEqual([presentation.id]);
+      });
+    });
+  });
+
+  describe("isPresentationInTrash", () => {
+    const P = "f0000000000000000000p";
+    const Q = "f0000000000000000000q";
+    const R = "f0000000000000000000r";
+    const trashedAt = new Date(TRASHED_AT);
+
+    function readerOf(folders: FolderDoc[]) {
+      const byId = new Map(folders.map((folder) => [folder.id, folder]));
+      return vi.fn(async (id: string) => byId.get(id));
+    }
+
+    function presentationIn(
+      folderId: string | null,
+      overrides: Partial<PresentationDoc> = {},
+    ): PresentationDoc {
+      return presentationDoc({
+        id: DOC_ID,
+        userId: userAId,
+        folderId,
+        ...overrides,
+      });
+    }
+
+    function clientRule(
+      folders: FolderDoc[],
+      presentation: PresentationDoc,
+    ): boolean {
+      const index = buildFolderIndex(
+        folders
+          .filter((folder) => folder.userId === presentation.userId)
+          .map(toSharedFolder),
+      );
+      return (
+        Boolean(presentation.trashedAt) ||
+        isFolderTrashed(index, resolveFolderId(index, presentation.folderId))
+      );
+    }
+
+    it("프레젠테이션 자신이 휴지통에 있으면 폴더를 읽지 않고 참이다", async () => {
+      const read = readerOf([]);
+
+      expect(
+        await isPresentationInTrash(read, presentationIn(P, { trashedAt })),
+      ).toBe(true);
+      expect(read).not.toHaveBeenCalled();
+    });
+
+    it("루트의 프레젠테이션은 폴더를 읽지 않고, 휴지통 필드가 없는 옛 문서는 휴지통 밖이다", async () => {
+      const read = readerOf([]);
+      const legacy = presentationIn(null) as Partial<PresentationDoc>;
+      delete legacy.trashedAt;
+      delete legacy.folderId;
+
+      expect(await isPresentationInTrash(read, presentationIn(null))).toBe(
+        false,
+      );
+      expect(await isPresentationInTrash(read, legacy as PresentationDoc)).toBe(
+        false,
+      );
+      expect(read).not.toHaveBeenCalled();
+    });
+
+    it.each<[string, FolderDoc[], string, boolean]>([
+      [
+        "담긴 폴더가 휴지통에 있다",
+        [folderDoc({ id: P, userId: userAId, trashedAt })],
+        P,
+        true,
+      ],
+      [
+        "조상 폴더가 휴지통에 있다",
+        [
+          folderDoc({ id: P, userId: userAId, parentId: Q }),
+          folderDoc({ id: Q, userId: userAId, trashedAt }),
+        ],
+        P,
+        true,
+      ],
+      ["담긴 폴더가 없으면 루트다", [], P, false],
+      [
+        "부모가 없으면 그 폴더에서 루트로 끊는다",
+        [folderDoc({ id: P, userId: userAId, parentId: R })],
+        P,
+        false,
+      ],
+      [
+        "남의 폴더는 없는 폴더처럼 루트로 끊는다",
+        [
+          folderDoc({ id: P, userId: userAId, parentId: Q }),
+          folderDoc({ id: Q, userId: userBId, trashedAt }),
+        ],
+        P,
+        false,
+      ],
+      [
+        "사이클 너머의 휴지통 폴더는 세지 않는다",
+        [
+          folderDoc({ id: P, userId: userAId, parentId: Q }),
+          folderDoc({ id: Q, userId: userAId, parentId: P, trashedAt }),
+        ],
+        P,
+        false,
+      ],
+      [
+        "사이클로 들어가는 길의 휴지통 폴더는 센다",
+        [
+          folderDoc({ id: R, userId: userAId, parentId: P }),
+          folderDoc({ id: P, userId: userAId, parentId: Q, trashedAt }),
+          folderDoc({ id: Q, userId: userAId, parentId: P }),
+        ],
+        R,
+        true,
+      ],
+      [
+        "사이클로 들어가는 길에서도 끊은 곳 너머는 세지 않는다",
+        [
+          folderDoc({ id: R, userId: userAId, parentId: P }),
+          folderDoc({ id: P, userId: userAId, parentId: Q }),
+          folderDoc({ id: Q, userId: userAId, parentId: P, trashedAt }),
+        ],
+        R,
+        false,
+      ],
+    ])("%s", async (_, folders, folderId, expected) => {
+      const presentation = presentationIn(folderId);
+
+      expect(clientRule(folders, presentation)).toBe(expected);
+      expect(await isPresentationInTrash(readerOf(folders), presentation)).toBe(
+        expected,
+      );
     });
   });
 
