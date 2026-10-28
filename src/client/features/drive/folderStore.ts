@@ -2,7 +2,9 @@ import { useSyncExternalStore } from "react";
 import {
   buildFolderIndex,
   createId,
+  editTimestamp,
   folderNameKey,
+  isFarFuture,
   isFolderTrashed,
   MAX_FOLDER_NAME_LENGTH,
   resolveUniqueName,
@@ -33,6 +35,10 @@ import { FOLDER_COPY } from "#copy/folders";
  *
  * 이름 규칙은 파일 탐색기와 같다. 같은 위치의 폴더끼리는 이름이 겹치지 않는다
  * (대소문자·앞뒤 공백 무시). 휴지통에 있는 폴더는 자리를 차지하지 않는다.
+ *
+ * 이름 바꾸기·이동·휴지통·복원은 수정 시각을 이 기기가 본 판보다 뒤로 찍는다
+ * (`editTimestamp`). 서버는 저장된 폴더보다 이른 시각의 쓰기를 늦게 온 옛 수정으로 보고
+ * 버리므로, 시계가 뒤처진 기기가 지금으로 찍으면 방금 고친 내용이 서버에 남지 않는다.
  */
 
 export type FolderMutationResult =
@@ -160,7 +166,11 @@ export function renameFolder(id: string, name: string): FolderMutationResult {
   const trimmed = name.trim();
   if (trimmed === folder.name) return { ok: true, folder };
 
-  const next = { ...folder, name: trimmed, updatedAt: now() };
+  const next = {
+    ...folder,
+    name: trimmed,
+    updatedAt: editTimestamp(folder.updatedAt),
+  };
   commit([next]);
   return { ok: true, folder: next };
 }
@@ -189,7 +199,7 @@ export function moveFolder(
     ...folder,
     parentId,
     name: resolveUniqueName(folder.name, siblingNames(parentId, id)),
-    updatedAt: now(),
+    updatedAt: editTimestamp(folder.updatedAt),
   };
   commit([next]);
   return { ok: true, folder: next };
@@ -199,8 +209,13 @@ export function moveFolder(
 export function trashFolder(id: string): void {
   const folder = index.byId.get(id);
   if (!folder || folder.trashedAt) return;
-  const timestamp = now();
-  commit([{ ...folder, trashedAt: timestamp, updatedAt: timestamp }]);
+  commit([
+    {
+      ...folder,
+      trashedAt: now(),
+      updatedAt: editTimestamp(folder.updatedAt),
+    },
+  ]);
 }
 
 /**
@@ -219,7 +234,7 @@ export function restoreFolder(id: string): void {
       parentId,
       name: resolveUniqueName(folder.name, siblingNames(parentId, id)),
       trashedAt: null,
-      updatedAt: now(),
+      updatedAt: editTimestamp(folder.updatedAt),
     },
   ]);
 }
@@ -265,20 +280,36 @@ export async function applyServerFolders(
   await writes;
 }
 
+function adoptsServerFolder(local: Folder, server: Folder): boolean {
+  if (
+    local.parentId === server.parentId &&
+    local.name === server.name &&
+    local.trashedAt === server.trashedAt
+  ) {
+    return (
+      local.updatedAt !== server.updatedAt ||
+      local.createdAt !== server.createdAt
+    );
+  }
+  return local.updatedAt <= server.updatedAt || isFarFuture(local.updatedAt);
+}
+
 /**
  * 서버가 확정한 폴더 1건(push 응답)을 반영한다.
- * 그사이 로컬에서 더 고쳤거나 지웠으면 무시한다 — 그 변경도 곧 올라간다.
+ *
+ * - 서버본이 로컬과 같거나 늦은 시각이면 따른다. 서버가 부모를 보정했거나, 이 수정보다 늦게 고친
+ *   다른 기기의 폴더를 돌려준 것이다(서버는 늦게 온 옛 수정을 쓰지 않는다).
+ * - 이름·부모·휴지통이 같고 시각만 다르면 서버 시각을 따른다. 서버가 기기 시각을 줄인 값이라,
+ *   따르지 않으면 다음 부팅 병합에서 로컬 시각이 이겨 같은 폴더를 다시 올린다.
+ * - 로컬 시각이 기기 시계보다 한참 앞서면(`isFarFuture`) 서버본을 따른다. 빠른 시계가 남긴 값이라
+ *   로컬이 더 새롭다고 볼 수 없다(`mergeFolders`도 서버본을 고른다). 서버본으로 바로 맞추고,
+ *   이 값을 읽는 이전 버전의 탭이 병합에서 다시 올리지 않게 저장본도 고친다.
+ * - 그 밖에 로컬이 더 늦고 내용이 다르면 무시한다. 그사이 로컬에서 더 고쳤거나 지웠고, 그 변경도
+ *   곧 올라간다.
  */
 export function applyServerFolder(serverFolder: Folder): void {
   const local = index.byId.get(serverFolder.id);
-  if (!local || local.updatedAt > serverFolder.updatedAt) return;
-  if (
-    local.parentId === serverFolder.parentId &&
-    local.name === serverFolder.name &&
-    local.trashedAt === serverFolder.trashedAt
-  ) {
-    return;
-  }
+  if (!local || !adoptsServerFolder(local, serverFolder)) return;
   setFolders(
     folders.map((folder) =>
       folder.id === serverFolder.id ? serverFolder : folder,

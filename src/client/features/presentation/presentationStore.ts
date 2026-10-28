@@ -8,6 +8,7 @@ import {
   createId,
   cycleItem,
   createSlideId,
+  editTimestamp,
   mergeSlideLines,
   splitLinesAtCursor,
 } from "#shared";
@@ -95,11 +96,21 @@ export function canEditPresentation(doc: Presentation): boolean {
   return doc.access === undefined;
 }
 
+function withEditStamp(
+  current: Presentation,
+  next: Presentation,
+): Presentation {
+  return next === current
+    ? next
+    : { ...next, updatedAt: editTimestamp(current.updatedAt) };
+}
+
 function writeActive(next: Presentation): void {
-  if (!canEditPresentation(readActive())) return;
+  const current = readActive();
+  if (!canEditPresentation(current)) return;
   commit({
     ...state,
-    byId: { ...state.byId, [state.activeId]: next },
+    byId: { ...state.byId, [state.activeId]: withEditStamp(current, next) },
   });
 }
 
@@ -119,6 +130,11 @@ export function canRedo(): boolean {
   return canRedoDocument(state.activeId);
 }
 
+/**
+ * 되돌리기. 되돌린 판도 새 편집이라 수정 시각은 기록의 옛 시각이 아니라 지금 판보다 뒤로 찍는다
+ * (`editTimestamp`). 옛 시각으로 올리면 그사이의 판을 이미 받은 다른 기기가 다음 부팅 병합에서
+ * 자기 판이 더 새롭다고 보고, 되돌린 내용을 모든 기기에서 다시 되돌린다.
+ */
 export function undo(): boolean {
   const current = readActive();
   const previous = takeUndo(state.activeId, current);
@@ -128,6 +144,7 @@ export function undo(): boolean {
   return true;
 }
 
+/** 다시 하기. `undo`처럼 수정 시각을 지금 판보다 뒤로 찍는다. */
 export function redo(): boolean {
   const current = readActive();
   const next = takeRedo(state.activeId, current);
@@ -310,6 +327,10 @@ function isServerChange(
  * 내용을 병합 때의 사본으로 덮지 않는다. 읽지 못한 저장본은 덮지 않도록 하이드레이션이 실패했으면
  * 쓰지 않는다.
  *
+ * 이렇게 서버에서 바뀐 세트는 되돌리기 기록도 지운다. 기록은 병합 전의 판들이라, 남기면 되돌리기가
+ * 다른 기기의 수정을 병합 전 판으로 덮는다. `updatedAt`이 같은 서버 객체로만 바뀐 세트는 같은 판이라
+ * 기록을 남긴다.
+ *
  * 지운 세트는 되돌리기 기록·대기 중인 저장·서버 push를 버리고, 이미 줄을 선 저장 뒤에 저장본을
  * 지운다. push가 남으면 연결이 돌아올 때 서버에서 되살아나고, 줄을 선 저장이 뒤에 오면 저장본이
  * 되살아난다. 공유받은 세트는 같은 자리에 소유자 자신의 저장본이 없을 때만 쓰고 지운다. 한
@@ -327,7 +348,11 @@ export function applyServerDocuments(
     order: documents.map((doc) => doc.id),
     activeId: byId[previousActive] ? previousActive : (documents[0]?.id ?? ""),
   });
+  const changed = documents.filter((doc) =>
+    isServerChange(previous[doc.id], doc),
+  );
   const removed = removedIds.filter((id) => !byId[id]);
+  for (const doc of changed) clearHistory(doc.id);
   for (const id of removed) {
     clearHistory(id);
     pendingIds.delete(id);
@@ -336,9 +361,7 @@ export function applyServerDocuments(
   notifyListeners();
 
   if (!persistenceEnabled) return;
-  for (const doc of documents) {
-    if (isServerChange(previous[doc.id], doc)) pendingIds.add(doc.id);
-  }
+  for (const doc of changed) pendingIds.add(doc.id);
   runPendingWrites();
   for (const id of removed) {
     const doc = previous[id];
@@ -385,15 +408,8 @@ function reindexOrder<T extends { order: number }>(list: readonly T[]): T[] {
   return list.map((entry, idx) => ({ ...entry, order: idx }));
 }
 
-function writeActiveItems(
-  items: PresentationItem[],
-  now: string = new Date().toISOString(),
-): void {
-  writeActive({
-    ...readActive(),
-    items,
-    updatedAt: now,
-  });
+function writeActiveItems(items: PresentationItem[]): void {
+  writeActive({ ...readActive(), items });
   emitChange();
 }
 
@@ -406,12 +422,11 @@ function writeSongDeck(songIndex: number, changes: Partial<Deck>): void {
   const item = items[songIndex];
   if (!item || !item.deck) return;
 
-  const now = new Date().toISOString();
   items[songIndex] = {
     ...item,
-    deck: { ...item.deck, ...changes, updatedAt: now },
+    deck: { ...item.deck, ...changes, updatedAt: new Date().toISOString() },
   };
-  writeActiveItems(items, now);
+  writeActiveItems(items);
 }
 
 /**
@@ -424,10 +439,7 @@ function writeSongDeck(songIndex: number, changes: Partial<Deck>): void {
 export function addDeckToPresentation(deck: Deck): PresentationItem {
   pushHistory();
   const active = readActive();
-  const rotatedBackground = cycleItem(
-    getBackgrounds(),
-    active.items.length,
-  );
+  const rotatedBackground = cycleItem(getBackgrounds(), active.items.length);
   const assignedBackgroundId =
     deck.backgroundId ||
     (!deck.style.backgroundColor && rotatedBackground
@@ -453,7 +465,7 @@ export function addDeckToPresentation(deck: Deck): PresentationItem {
     deck: resolvedDeck,
   };
 
-  writeActiveItems([...readActive().items, newItem], now);
+  writeActiveItems([...readActive().items, newItem]);
   return newItem;
 }
 
@@ -539,11 +551,7 @@ export function updatePresentationTitle(title: string): void {
   const next = clampText(title.trim(), MAX_PRESENTATION_TITLE_LENGTH);
   if (!next || next === readActive().title) return;
   pushHistory();
-  writeActive({
-    ...readActive(),
-    title: next,
-    updatedAt: new Date().toISOString(),
-  });
+  writeActive({ ...readActive(), title: next });
   emitChange();
 }
 
@@ -880,7 +888,7 @@ export function duplicateSongInPresentation(songIndex: number): Deck | null {
 
   const items = [...readActive().items];
   items.splice(songIndex + 1, 0, newItem);
-  writeActiveItems(reindexOrder(items), now);
+  writeActiveItems(reindexOrder(items));
   return clonedDeck;
 }
 
@@ -890,7 +898,7 @@ function updateDocumentById(
 ): Presentation | undefined {
   const current = state.byId[id];
   if (!current || !canEditPresentation(current)) return undefined;
-  const next = update(current);
+  const next = withEditStamp(current, update(current));
   commit({ ...state, byId: { ...state.byId, [id]: next } });
   notifyDocument(next);
   return next;
@@ -899,33 +907,32 @@ function updateDocumentById(
 /** `folderId`가 `null`이면 루트로 옮긴다. */
 export function movePresentation(id: string, folderId: string | null): void {
   updateDocumentById(id, (doc) =>
-    (doc.folderId ?? null) === folderId
-      ? doc
-      : { ...doc, folderId, updatedAt: new Date().toISOString() },
+    (doc.folderId ?? null) === folderId ? doc : { ...doc, folderId },
   );
 }
 
 /**
  * 빈 이름은 무시하고 최대 길이로 자른다. 편집기 헤더의 제목 수정은 편집 기록을
  * 남기는 `updatePresentationTitle`을 쓴다.
+ *
+ * 이름이 바뀌면 그 세트의 되돌리기 기록을 지운다. 드라이브에서 바꾼 이름은 편집기의 되돌리기
+ * 단계가 아니라, 기록을 남기면 편집기에서 되돌릴 때 기록의 옛 이름으로 돌아간다.
  */
 export function renamePresentation(id: string, title: string): void {
   const trimmed = title.trim().slice(0, MAX_PRESENTATION_TITLE_LENGTH);
   if (!trimmed) return;
-  updateDocumentById(id, (doc) =>
-    doc.title === trimmed
-      ? doc
-      : { ...doc, title: trimmed, updatedAt: new Date().toISOString() },
+  const current = state.byId[id];
+  const renamed = updateDocumentById(id, (doc) =>
+    doc.title === trimmed ? doc : { ...doc, title: trimmed },
   );
+  if (renamed && renamed !== current) clearHistory(id);
 }
 
 /** 휴지통으로 보낸다. 폴더 배치는 그대로 두어 복원 시 제자리로 돌아간다 */
 export function trashPresentation(id: string): void {
-  updateDocumentById(id, (doc) => {
-    if (doc.trashedAt) return doc;
-    const now = new Date().toISOString();
-    return { ...doc, trashedAt: now, updatedAt: now };
-  });
+  updateDocumentById(id, (doc) =>
+    doc.trashedAt ? doc : { ...doc, trashedAt: new Date().toISOString() },
+  );
 }
 
 /**
@@ -934,14 +941,7 @@ export function trashPresentation(id: string): void {
  */
 export function restorePresentation(id: string, folderId: string | null): void {
   updateDocumentById(id, (doc) =>
-    doc.trashedAt
-      ? {
-          ...doc,
-          folderId,
-          trashedAt: null,
-          updatedAt: new Date().toISOString(),
-        }
-      : doc,
+    doc.trashedAt ? { ...doc, folderId, trashedAt: null } : doc,
   );
 }
 

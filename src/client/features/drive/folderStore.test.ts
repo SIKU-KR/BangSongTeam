@@ -204,6 +204,55 @@ describe("folderStore", () => {
     });
   });
 
+  describe("수정 시각", () => {
+    const NOW = "2026-09-25T00:00:00.000Z";
+    const SEEN = "2026-09-25T00:02:00.000Z";
+    const AFTER_SEEN = "2026-09-25T00:02:00.001Z";
+
+    beforeEach(() => {
+      vi.useFakeTimers({ toFake: ["Date"] });
+      vi.setSystemTime(new Date(NOW));
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it("시계가 본 판보다 늦어도 이름 바꾸기·이동·휴지통·복원은 본 판보다 1ms 뒤로 찍는다", () => {
+      __loadFoldersForTests([
+        folder("renamed", { updatedAt: SEEN }),
+        folder("moved", { updatedAt: SEEN }),
+        folder("target"),
+        folder("trashed", { updatedAt: SEEN }),
+        folder("restored", { trashedAt: SEEN, updatedAt: SEEN }),
+      ]);
+
+      renameFolder("renamed", "새 이름");
+      moveFolder("moved", "target");
+      trashFolder("trashed");
+      restoreFolder("restored");
+
+      expect(getFolder("renamed")?.updatedAt).toBe(AFTER_SEEN);
+      expect(getFolder("moved")?.updatedAt).toBe(AFTER_SEEN);
+      expect(getFolder("trashed")).toMatchObject({
+        trashedAt: NOW,
+        updatedAt: AFTER_SEEN,
+      });
+      expect(getFolder("restored")).toMatchObject({
+        trashedAt: null,
+        updatedAt: AFTER_SEEN,
+      });
+    });
+
+    it("본 판이 지금보다 앞서지 않으면 지금으로 찍는다", () => {
+      __loadFoldersForTests([folder("x")]);
+
+      renameFolder("x", "새 이름");
+
+      expect(getFolder("x")?.updatedAt).toBe(NOW);
+    });
+  });
+
   describe("영속성·동기화", () => {
     it("저장소에 쓰고, 다시 부팅하면 세션 사용자의 폴더만 싣는다", async () => {
       const mine = createFolder(null, "내 폴더");
@@ -251,6 +300,44 @@ describe("folderStore", () => {
         folder("x", { name: "옛 이름", updatedAt: "2026-09-21T00:00:00.000Z" }),
       );
       expect(getFolder("x")?.name).toBe("새 이름");
+    });
+
+    it("필드가 같고 시각만 다른 서버 확정본(서버가 줄인 시각)은 그 시각을 따르고 저장한다", async () => {
+      const id = "a0000000000000000000d";
+      __loadFoldersForTests([
+        folder(id, {
+          name: "주일",
+          createdAt: "2026-09-25T00:20:00.000Z",
+          updatedAt: "2026-09-25T00:20:00.000Z",
+        }),
+      ]);
+      const clamped = folder(id, {
+        name: "주일",
+        createdAt: "2026-09-25T00:05:00.000Z",
+        updatedAt: "2026-09-25T00:05:00.000Z",
+      });
+
+      applyServerFolder(clamped);
+      await flushFolderWrites();
+
+      expect(getFolder(id)).toEqual(clamped);
+      resetFolderStore();
+      await hydrateFoldersFromStorage();
+      expect(getFolder(id)).toEqual(clamped);
+    });
+
+    it("기기 시계보다 한참 앞선 로컬 폴더는 필드가 달라도 서버 확정본을 따른다", () => {
+      __loadFoldersForTests([
+        folder("x", { name: "미래", updatedAt: "9999-12-31T00:00:00.000Z" }),
+      ]);
+      const server = folder("x", {
+        name: "서버",
+        updatedAt: new Date(Date.now() + 5 * 60_000).toISOString(),
+      });
+
+      applyServerFolder(server);
+
+      expect(getFolder("x")).toEqual(server);
     });
 
     it("병합 결과로 교체하고 영구 삭제된 폴더는 저장본에서도 지운다", async () => {

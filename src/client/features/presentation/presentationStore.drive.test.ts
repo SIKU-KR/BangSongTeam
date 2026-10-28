@@ -3,6 +3,7 @@ import { PresentationDocumentSchema, type Presentation } from "#shared";
 import { signInAsTestUser } from "../../test/sessionFixture";
 import {
   __loadDocumentsForTests,
+  canUndo,
   createNewPresentation,
   duplicatePresentation,
   getActivePresentation,
@@ -18,6 +19,7 @@ import {
   undo,
   redo,
   updatePresentationTitle,
+  updateSongInfo,
 } from "./presentationStore";
 import {
   __resetSyncSchedulerForTests,
@@ -151,6 +153,56 @@ describe("presentationStore 드라이브 조작", () => {
     redo();
     expect(getActivePresentation().title).toBe("편집 1");
     expect(getActivePresentation().folderId).toBe(OTHER);
+  });
+
+  it("드라이브에서 바꾼 이름은 편집기 되돌리기로 돌아가지 않는다", () => {
+    const target = SEED_PRESENTATIONS[0];
+    openPresentation(target.id);
+    updateSongInfo(0, { title: "고친 곡 제목", artist: "" });
+
+    renamePresentation(target.id, "새 이름");
+    expect(canUndo()).toBe(false);
+    undo();
+
+    expect(getPresentationById(target.id)?.title).toBe("새 이름");
+  });
+
+  it("이름이 그대로면 되돌리기 기록을 지우지 않는다", () => {
+    const target = SEED_PRESENTATIONS[0];
+    openPresentation(target.id);
+    updateSongInfo(0, { title: "고친 곡 제목", artist: "" });
+
+    renamePresentation(target.id, `  ${target.title}  `);
+
+    expect(canUndo()).toBe(true);
+  });
+
+  it("시계가 본 판보다 늦어도 이동·이름 바꾸기·휴지통·복원은 본 판보다 1ms 뒤로 찍는다", () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      const behind = (doc: Presentation) =>
+        vi.setSystemTime(Date.parse(doc.updatedAt) - 60_000);
+      const after = (doc: Presentation) =>
+        new Date(Date.parse(doc.updatedAt) + 1).toISOString();
+      const [moved, renamed, trashed] = SEED_PRESENTATIONS.slice(1, 4);
+
+      behind(moved);
+      movePresentation(moved.id, FOLDER);
+      behind(renamed);
+      renamePresentation(renamed.id, "새 이름");
+      behind(trashed);
+      trashPresentation(trashed.id);
+      const inTrash = getPresentationById(trashed.id)!;
+      behind(inTrash);
+      restorePresentation(trashed.id, null);
+
+      expect(getPresentationById(moved.id)?.updatedAt).toBe(after(moved));
+      expect(getPresentationById(renamed.id)?.updatedAt).toBe(after(renamed));
+      expect(inTrash.updatedAt).toBe(after(trashed));
+      expect(getPresentationById(trashed.id)?.updatedAt).toBe(after(inTrash));
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("영구 삭제된 문서를 지우고 활성 문서를 옮기며 대기 중인 push를 취소한다", async () => {

@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import type { Folder } from "#shared";
 import { mergeFolders } from "./mergeFolders";
 
@@ -49,6 +49,48 @@ describe("mergeFolders", () => {
     expect(result.folders.find((f) => f.id === A)?.name).toBe("로컬");
     expect(result.folders.find((f) => f.id === B)?.name).toBe("서버");
     expect(result.needsPush).toEqual([A]);
+  });
+
+  describe("기기 시계보다 앞선 로컬 시각", () => {
+    const NOW = "2026-09-25T00:00:00.000Z";
+
+    beforeEach(() => {
+      vi.useFakeTimers({ toFake: ["Date"] });
+      vi.setSystemTime(new Date(NOW));
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it("기기 시계 + 10분보다 늦은 로컬 폴더는 서버본에 지고 올리지 않는다", () => {
+      const result = mergeFolders(
+        [folder(A, { name: "미래", updatedAt: "2026-09-25T00:10:00.001Z" })],
+        [folder(A, { name: "서버" })],
+      );
+
+      expect(result.folders.map((f) => f.name)).toEqual(["서버"]);
+      expect(result.needsPush).toEqual([]);
+    });
+
+    it("기기 시계 + 10분까지의 더 새 로컬 폴더는 그대로 이기고 올린다", () => {
+      const result = mergeFolders(
+        [folder(A, { name: "로컬", updatedAt: "2026-09-25T00:10:00.000Z" })],
+        [folder(A, { name: "서버" })],
+      );
+
+      expect(result.folders.map((f) => f.name)).toEqual(["로컬"]);
+      expect(result.needsPush).toEqual([A]);
+    });
+
+    it("서버에 없는 로컬 폴더는 시각이 앞서도 살리고 올린다", () => {
+      const future = folder(A, { updatedAt: "9999-12-31T00:00:00.000Z" });
+
+      const result = mergeFolders([future], []);
+
+      expect(result.folders).toEqual([future]);
+      expect(result.needsPush).toEqual([A]);
+    });
   });
 
   it("같은 시각이면 서버 것을 쓴다 (서버 보정본이 이긴다)", () => {

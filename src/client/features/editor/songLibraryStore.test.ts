@@ -156,6 +156,32 @@ describe("songLibraryStore", () => {
     expect(getLibraryDeck(saved.id)?.title).toBe("새 제목");
   });
 
+  it("가져온 곡의 시각보다 시계가 늦어도 제목을 고치면 그 시각보다 1ms 뒤로 찍는다", () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      vi.setSystemTime(new Date("2026-09-25T00:00:00.000Z"));
+      const forked = upsertLibraryDeck(
+        libraryDeck("c000000000000000000f3", {
+          origin: "fork",
+          forkedFrom: "c000000000000000000f0",
+          forkedFromAuthorName: "원작자",
+          createdAt: "2026-09-25T00:02:00.000Z",
+          updatedAt: "2026-09-25T00:02:00.000Z",
+        }),
+        { push: false },
+      );
+
+      const renamed = updateLibrarySongInfo(forked.id, {
+        title: "새 제목",
+        artist: "",
+      });
+
+      expect(renamed?.updatedAt).toBe("2026-09-25T00:02:00.001Z");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("저장한 곡은 하이드레이션 후에도 남아 있어야 한다 (IndexedDB 영속)", async () => {
     saveSongToLibrary({
       title: "다시 불러올 곡",
@@ -270,6 +296,57 @@ describe("songLibraryStore", () => {
         visibility: "public",
         forkCount: 5,
       });
+    });
+
+    it("push 응답이 로컬보다 새 곡이면 통째로 따른다", async () => {
+      const saved = saveSongToLibrary({
+        title: "로컬 제목",
+        lyricsRaw: "가사",
+      });
+      const newer = {
+        ...saved,
+        title: "다른 기기에서 고친 제목",
+        forkCount: 2,
+        updatedAt: new Date(Date.parse(saved.updatedAt) + 60_000).toISOString(),
+      };
+
+      applyServerDeckFields(newer);
+
+      expect(getLibraryDeck(saved.id)).toEqual(newer);
+      await hydrateSongLibrary();
+      expect(getLibraryDeck(saved.id)).toEqual(newer);
+    });
+
+    it("내용이 같고 시각만 다른 push 응답(서버가 줄인 시각)은 서버 시각을 따른다", () => {
+      const saved = saveSongToLibrary({ title: "제목", lyricsRaw: "가사" });
+      const clamped = {
+        ...saved,
+        visibility: "public" as const,
+        createdAt: "2026-09-25T00:05:00.000Z",
+        updatedAt: "2026-09-25T00:05:00.000Z",
+      };
+
+      applyServerDeckFields(clamped);
+
+      expect(getLibraryDeck(saved.id)).toEqual(clamped);
+    });
+
+    it("기기 시계보다 한참 앞선 로컬 곡은 push 응답을 통째로 따른다", () => {
+      const future = upsertLibraryDeck(
+        libraryDeck("c000000000000000000e2", {
+          title: "미래 시각의 제목",
+          updatedAt: "9999-12-31T00:00:00.000Z",
+        }),
+        { push: false },
+      );
+      const server = libraryDeck(future.id, {
+        title: "서버 제목",
+        updatedAt: new Date(Date.now() + 5 * 60_000).toISOString(),
+      });
+
+      applyServerDeckFields(server);
+
+      expect(getLibraryDeck(future.id)).toEqual(server);
     });
 
     it("부팅 병합 결과로 보관함을 교체하고 로컬에 남긴다", async () => {

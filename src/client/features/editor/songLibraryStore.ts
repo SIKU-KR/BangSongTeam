@@ -1,5 +1,11 @@
 import { useSyncExternalStore } from "react";
-import { API_ERRORS, DeckSchema, type Deck } from "#shared";
+import {
+  API_ERRORS,
+  DeckSchema,
+  editTimestamp,
+  isFarFuture,
+  type Deck,
+} from "#shared";
 import {
   saveSong,
   deleteSong,
@@ -23,6 +29,7 @@ import {
   listPendingDeckDeletes,
 } from "../../lib/sync/pendingDeckDeletes";
 import {
+  hasSameDeckContent,
   hasSameServerFields,
   withServerFields,
 } from "../../lib/sync/mergeLibraryDecks";
@@ -177,8 +184,28 @@ export async function applyServerLibraryDecks(
   }
 }
 
+function adoptsServerDeck(local: Deck, server: Deck): boolean {
+  return (
+    server.updatedAt > local.updatedAt ||
+    hasSameDeckContent(local, server) ||
+    isFarFuture(local.updatedAt)
+  );
+}
+
 /**
- * 서버가 확정한 덱 메타데이터 반영.
+ * 서버가 확정한 덱 반영 (push·공개 설정 응답).
+ *
+ * 서버 덱을 통째로 따르는 때:
+ * - 서버 덱이 로컬보다 늦게 고친 것이다. 서버는 늦게 온 옛 수정을 쓰지 않고, 더 늦게 고친 다른
+ *   기기의 곡을 돌려준다.
+ * - 내용이 같고 시각만 다르다(`hasSameDeckContent`). 서버가 기기 시각을 줄이고 만든 시각을 처음 값으로
+ *   지킨 것이라, 따르지 않으면 다음 부팅 병합에서 로컬 시각이 이겨 같은 곡을 다시 올린다.
+ * - 로컬 시각이 기기 시계보다 한참 앞선다(`isFarFuture`). 빠른 시계가 남긴 값이라 로컬이 더
+ *   새롭다고 볼 수 없다(`mergeLibraryDecks`도 서버 사본을 고른다). 서버 덱으로 바로 맞추고, 이 값을
+ *   읽는 이전 버전의 탭이 병합에서 다시 올리지 않게 저장본도 고친다.
+ *
+ * 그 밖에는 서버가 정하는 공유 필드만 입히고 내용은 로컬을 지킨다. 그사이 로컬에서 더 고친 내용이 곧
+ * 올라간다.
  *
  * 보관함에 없는 곡이면 무시한다. 올리는 동안 사용자가 지운 곡의 응답이 곡을 다시 넣으면
  * 서버에서는 지워진 곡이 이 기기에만 남고 다음 부팅에 다시 올라간다.
@@ -186,7 +213,9 @@ export async function applyServerLibraryDecks(
 export function applyServerDeckFields(serverDeck: Deck): void {
   const local = getLibraryDeck(serverDeck.id);
   if (!local) return;
-  const next = withServerFields(local, serverDeck);
+  const next = adoptsServerDeck(local, serverDeck)
+    ? serverDeck
+    : withServerFields(local, serverDeck);
   if (next.userId !== getCurrentUserId()) return;
   putInCache(next);
   emitChange();
@@ -226,6 +255,10 @@ export function resumeSongDeletes(): void {
 /**
  * 보관함 곡의 제목·아티스트 수정. 공개 곡이면 서버 동기화 뒤 공유 라이브러리에도
  * 그대로 보인다. 이미 프레젠테이션에 넣은 곡은 복제본이라 바뀌지 않는다.
+ *
+ * 수정 시각은 지금이되 이 기기가 본 판보다 뒤로 찍는다(`editTimestamp`). 가져오기는 서버 시각으로
+ * 찍히므로, 시계가 뒤처진 기기가 가져오자마자 고친 이름을 지금으로 찍으면 서버가 옛 수정으로 보고
+ * 버린다.
  */
 export function updateLibrarySongInfo(
   id: string,
@@ -238,7 +271,7 @@ export function updateLibrarySongInfo(
     ...deck,
     title: info.title,
     artist: info.artist,
-    updatedAt: new Date().toISOString(),
+    updatedAt: editTimestamp(deck.updatedAt),
   });
 }
 
