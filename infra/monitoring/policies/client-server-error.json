@@ -1,0 +1,29 @@
+{
+  "displayName": "[방송팀] 브라우저가 겪은 서버 오류",
+  "combiner": "OR",
+  "conditions": [
+    {
+      "displayName": "server_error 보고 10분 합계",
+      "conditionThreshold": {
+        "filter": "metric.type=\"logging.googleapis.com/user/bst_client_server_error\" AND resource.type=\"cloud_run_revision\" AND resource.labels.service_name=\"__SERVICE__\"",
+        "aggregations": [
+          {
+            "alignmentPeriod": "600s",
+            "perSeriesAligner": "ALIGN_SUM",
+            "crossSeriesReducer": "REDUCE_SUM"
+          }
+        ],
+        "comparison": "COMPARISON_GT",
+        "thresholdValue": 9,
+        "duration": "60s",
+        "trigger": { "count": 1 },
+        "evaluationMissingData": "EVALUATION_MISSING_DATA_INACTIVE"
+      }
+    }
+  ],
+  "alertStrategy": { "autoClose": "1800s" },
+  "documentation": {
+    "mimeType": "text/markdown",
+    "content": "브라우저가 서버 5xx를 겪었다는 보고가 10분 안에 10건 이상 들어왔다.\n\n- 서버 5xx 알림과 함께 왔다면 같은 문제다. 이 알림만 왔다면 앱 로그에 남지 않는 앞단 오류(과부하, 시작 중, 프록시)다.\n- 알림은 앱 버전을 가리지 않고 센다. 어느 배포부터인지는 지표 탐색기에서 `app_version` 라벨로 나눠 본다. 보고는 `jsonPayload.event=\"client_report\"`이고, `requestId`로 서버 로그의 `request` 줄과 이어진다."
+  }
+}

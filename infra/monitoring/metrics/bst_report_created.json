@@ -1,0 +1,4 @@
+{
+  "description": "새로 접수된 곡 신고 수. 저작권 게시 중단 요청도 여기에 들어온다.",
+  "filter": "resource.type=\"cloud_run_revision\" AND jsonPayload.event=\"report_created\""
+}

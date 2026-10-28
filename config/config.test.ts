@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, afterEach, vi } from "vitest";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import loadCustomRoutes from "next/dist/lib/load-custom-routes";
@@ -85,6 +85,23 @@ describe("Next.js·Cloud Run 프로젝트 설정", () => {
     expect(configSchema.safeParse(nextConfig).error?.issues ?? []).toEqual([]);
   });
 
+  describe("클라이언트 실패 보고에 싣는 앱 버전", () => {
+    afterEach(() => {
+      vi.unstubAllEnvs();
+    });
+
+    it.each([
+      [undefined, "dev"],
+      ["", "dev"],
+      ["3a0fbb1c0ffee", "3a0fbb1"],
+    ])("GITHUB_SHA가 %j이면 %s다", async (sha, version) => {
+      vi.stubEnv("GITHUB_SHA", sha);
+      vi.resetModules();
+      const { default: config } = await import("../next.config");
+      expect(config.env?.NEXT_PUBLIC_APP_VERSION).toBe(version);
+    });
+  });
+
   it("Dockerfile이 standalone 서버와 정적 파일을 담아 8080에서 띄운다", () => {
     const dockerfile = read("Dockerfile");
     expect(dockerfile).toContain("pnpm install --frozen-lockfile");
@@ -103,6 +120,15 @@ describe("Next.js·Cloud Run 프로젝트 설정", () => {
     );
     expect(dockerfile).toContain('CMD ["boot.mjs"]');
     expect(dockerfile).not.toContain('CMD ["server.js"]');
+  });
+
+  it("google-github-actions/auth가 작업 공간에 쓰는 자격 증명 파일을 이미지 빌드와 커밋에서 뺀다", () => {
+    const lines = (file: string) =>
+      read(file)
+        .split("\n")
+        .map((line) => line.trim());
+    expect(lines(".dockerignore")).toContain("gha-creds-*.json");
+    expect(lines(".gitignore")).toContain("gha-creds-*.json");
   });
 });
 

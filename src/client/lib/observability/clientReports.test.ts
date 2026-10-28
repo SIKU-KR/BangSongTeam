@@ -211,3 +211,20 @@ describe("flushClientReports", () => {
     expect(batch.reports).toHaveLength(1);
   });
 });
+
+describe("APP_VERSION", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("빌드가 앱 버전을 빈 값으로 넣어도 서버가 받는 dev로 보낸다", async () => {
+    vi.stubEnv("NEXT_PUBLIC_APP_VERSION", "");
+    vi.resetModules();
+    const { APP_VERSION: version } = await import("./clientReports");
+
+    expect(version).toBe("dev");
+    expect(
+      ClientReportBatchSchema.shape.appVersion.safeParse(version).success,
+    ).toBe(true);
+  });
+});

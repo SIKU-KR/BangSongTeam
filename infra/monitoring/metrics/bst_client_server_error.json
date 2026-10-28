@@ -1,0 +1,19 @@
+{
+  "description": "브라우저가 서버 5xx를 겪었다고 보낸 실패 보고 수. 앱 버전별로 나뉜다.",
+  "filter": "resource.type=\"cloud_run_revision\" AND jsonPayload.event=\"client_report\" AND jsonPayload.kind=\"server_error\"",
+  "metricDescriptor": {
+    "metricKind": "DELTA",
+    "valueType": "INT64",
+    "unit": "1",
+    "labels": [
+      {
+        "key": "app_version",
+        "valueType": "STRING",
+        "description": "보고를 보낸 클라이언트의 앱 버전(커밋 SHA 앞 7자리)"
+      }
+    ]
+  },
+  "labelExtractors": {
+    "app_version": "EXTRACT(jsonPayload.appVersion)"
+  }
+}

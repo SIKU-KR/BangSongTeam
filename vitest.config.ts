@@ -6,7 +6,7 @@ const rootDir = import.meta.dirname;
 
 /**
  * 테스트 프로젝트 세 개: server(Node + Firestore 에뮬레이터: API·DB), client(jsdom),
- * node(shared·config·scripts). 에뮬레이터는 `config/firestoreEmulator.ts`가 준비한다.
+ * node(shared·config·scripts·infra). 에뮬레이터는 `config/firestoreEmulator.ts`가 준비한다.
  * API 서버가 요청마다 남기는 구조화 로그(`requestLog`)가 테스트 출력을 덮지 않게 성공 요청
  * 줄만 숨긴다. 5xx 줄은 `console.error`라 그대로 보인다.
  */
@@ -61,6 +61,7 @@ export default defineConfig({
             "src/shared/**/*.test.ts",
             "config/**/*.test.ts",
             "scripts/**/*.test.ts",
+            "infra/**/*.test.ts",
           ],
           environment: "node",
         },

@@ -1,0 +1,4 @@
+{
+  "description": "API가 5xx로 답한 요청 수. 앱이 요청마다 남기는 request 로그 줄을 센다.",
+  "filter": "resource.type=\"cloud_run_revision\" AND jsonPayload.event=\"request\" AND jsonPayload.status>=500"
+}

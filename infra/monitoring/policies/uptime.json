@@ -1,0 +1,29 @@
+{
+  "displayName": "[방송팀] 도메인 가동 확인 실패",
+  "combiner": "OR",
+  "conditions": [
+    {
+      "displayName": "/api/health가 여러 지역에서 실패",
+      "conditionThreshold": {
+        "filter": "metric.type=\"monitoring.googleapis.com/uptime_check/check_passed\" AND metric.labels.check_id=\"__CHECK_ID__\" AND resource.type=\"uptime_url\"",
+        "aggregations": [
+          {
+            "alignmentPeriod": "300s",
+            "perSeriesAligner": "ALIGN_NEXT_OLDER",
+            "crossSeriesReducer": "REDUCE_COUNT_FALSE",
+            "groupByFields": ["resource.*"]
+          }
+        ],
+        "comparison": "COMPARISON_GT",
+        "thresholdValue": 1,
+        "duration": "60s",
+        "trigger": { "count": 1 }
+      }
+    }
+  ],
+  "alertStrategy": { "autoClose": "1800s" },
+  "documentation": {
+    "mimeType": "text/markdown",
+    "content": "공개 주소의 `/api/health`가 여러 지역에서 실패했다. 컨테이너와 Cloudflare Worker 프록시 중 어느 쪽이든 끊기면 울린다.\n\n- Cloudflare 오류 1027이면 Workers 요청 한도를 넘은 것이다(docs/deploy-gcp.md 9절).\n- 403이면 `REQUIRE_PROXY`를 켠 서비스와 Worker의 `PROXY_SECRET`이 어긋나 모든 API가 막힌 것이다. 플래그를 끄고 Worker에 값을 다시 넣는다(9절).\n- 그 밖이면 Worker의 `ORIGIN_HOST`와 Cloud Run 상태를 차례로 본다."
+  }
+}

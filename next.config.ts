@@ -7,7 +7,8 @@ import type { NextConfig } from "next";
  *   `@node-rs/argon2`는 플랫폼별 `.node` 바이너리를 불러오므로 같은 이유로 번들하지 않는다.
  *   번들 밖 패키지로 두고 standalone 추적이 `node_modules`째 복사하게 한다.
  * - `NEXT_PUBLIC_APP_VERSION`: 클라이언트 실패 보고에 실을 앱 버전. CI 빌드는 커밋 SHA
- *   앞 7자리, 그 밖에서는 `dev`다.
+ *   앞 7자리, 그 밖에서는 `dev`다. 빌드 인자 없이 만든 이미지는 `GITHUB_SHA`가 빈
+ *   문자열인데, 서버가 빈 앱 버전을 거절하므로 이때도 `dev`로 둔다.
  * - Cache Components를 켜지 않는다. 켜면 떠난 화면을 언마운트하지 않고 숨겨 두었다가
  *   돌아올 때 상태를 그대로 되살린다. 뒤로 가기로 다시 연 송출·편집 화면이 지난 위치·복귀
  *   경로·열린 대화 상자를 이어 가면 안 된다. 서버에서 가져오는 데이터가 없어 얻는 것도 없다.
@@ -40,7 +41,7 @@ const config: NextConfig = {
   ],
   typescript: { tsconfigPath: "tsconfig.app.json" },
   env: {
-    NEXT_PUBLIC_APP_VERSION: process.env.GITHUB_SHA?.slice(0, 7) ?? "dev",
+    NEXT_PUBLIC_APP_VERSION: process.env.GITHUB_SHA?.slice(0, 7) || "dev",
   },
   experimental: { isrFlushToDisk: false },
   images: { unoptimized: true },

@@ -34,13 +34,15 @@ jobs:
     outputs:
       app: ${{ steps.filter.outputs.app }}
     steps:
-      - uses: dorny/paths-filter@v4
+      - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
         id: filter
         with:
           filters: |
             app:
               - 'src/**'
               - 'config/**'
+              - 'docs/deploy-gcp.md'
+              - 'infra/**'
               - 'public/**'
               - 'scripts/**'
               - 'package.json'
@@ -52,6 +54,7 @@ jobs:
               - 'eslint.config.mjs'
               - 'Dockerfile'
               - '.dockerignore'
+              - '.gitignore'
               - 'firebase.json'
               - 'firestore.indexes.json'
               - 'firestore.rules'
@@ -66,30 +69,30 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       # The version comes from "packageManager" in package.json; pinning it
       # here as well makes the action fail whenever the two disagree.
       - name: Install pnpm
-        uses: pnpm/action-setup@v6
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
         with:
           run_install: false
 
       - name: Setup Node.js
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22
           cache: "pnpm"
 
       # The Firestore emulator that server tests run against is a Java program.
       - name: Setup Java
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4.9.1
         with:
           distribution: temurin
           java-version: 21
 
       - name: Cache Firestore emulator
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: ~/.cache/firebase/emulators
           key: firebase-emulators-${{ hashFiles('pnpm-lock.yaml') }}
@@ -139,17 +142,17 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       # Keyless auth through Workload Identity Federation; no JSON key is stored.
       - name: Authenticate to Google Cloud
-        uses: google-github-actions/auth@v2
+        uses: google-github-actions/auth@c200f3691d83b41bf9bbd8638997a462592937ed # v2.1.13
         with:
           workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
           service_account: ${{ vars.GCP_DEPLOY_SERVICE_ACCOUNT }}
 
       - name: Setup gcloud
-        uses: google-github-actions/setup-gcloud@v2
+        uses: google-github-actions/setup-gcloud@e427ad8a34f8676edf47cf7d7925499adf3eb74f # v2.2.1
 
       - name: Build and push image
         run: |
@@ -158,12 +161,12 @@ jobs:
           docker push "${IMAGE}"
 
       - name: Install pnpm
-        uses: pnpm/action-setup@v6
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
         with:
           run_install: false
 
       - name: Setup Node.js
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22
           cache: "pnpm"
@@ -177,7 +180,34 @@ jobs:
       - name: Deploy Firestore rules and indexes
         run: pnpm exec firebase deploy --only firestore --project "${PROJECT_ID}" --non-interactive
 
-      # Service settings (env vars, secrets, service account, timeout) are set once
-      # when the service is created (docs/deploy-gcp.md); a deploy only swaps the image.
-      - name: Deploy Cloud Run service
-        run: gcloud run deploy "${SERVICE}" --image "${IMAGE}" --region "${REGION}" --quiet
+      # 서비스 설정(환경 변수·비밀값·서비스 계정·제한 시간·시작 프로브)은 서비스를 만들 때 한 번
+      # 정한다(docs/deploy-gcp.md). 배포는 이미지만 바꾼다. 새 리비전은 candidate 태그 주소로만
+      # 열리고, 트래픽은 지금 리비전에 이름으로 묶여 그대로 남는다.
+      - name: Deploy candidate revision
+        run: gcloud run deploy "${SERVICE}" --image "${IMAGE}" --region "${REGION}" --no-traffic --tag=candidate --quiet
+
+      # 테스트와 빌드는 이미지를 띄우지 않아, 번들에서 빠진 파일이나 환경 변수 문제는 여기서 처음
+      # 드러난다. /api/health는 API 번들과 서버 환경을 불러오고, /api/backgrounds는 로그인 없이
+      # Firestore를 읽는다. 하나라도 실패하면 트래픽을 옮기지 않는다.
+      # 서비스에 REQUIRE_PROXY가 켜져 있으면 /api/health를 뺀 직접 요청은 프록시 비밀값이 있어야
+      # 하므로, 후보 리비전이 쓰는 proxy-secret 버전을 읽어 헤더로 보낸다(docs/deploy-gcp.md 9절).
+      - name: Smoke test candidate revision
+        shell: bash
+        run: |
+          SERVICE_JSON=$(gcloud run services describe "${SERVICE}" --region "${REGION}" --format=json)
+          CANDIDATE_URL=$(jq -er '.status.traffic[] | select(.tag == "candidate") | .url' <<< "${SERVICE_JSON}")
+          REQUIRE_PROXY=$(jq -r '(.spec.template.spec.containers[0].env // []) | map(select(.name == "REQUIRE_PROXY") | .value // "") | first // "" | ascii_downcase' <<< "${SERVICE_JSON}")
+          PROXY_HEADER=()
+          if [ "${REQUIRE_PROXY}" = 1 ] || [ "${REQUIRE_PROXY}" = true ]; then
+            PROXY_SECRET_VERSION=$(jq -er '.spec.template.spec.containers[0].env[] | select(.name == "PROXY_SECRET") | .valueFrom.secretKeyRef.key' <<< "${SERVICE_JSON}")
+            PROXY_SECRET=$(gcloud secrets versions access "${PROXY_SECRET_VERSION}" --secret=proxy-secret)
+            echo "::add-mask::${PROXY_SECRET}"
+            PROXY_HEADER=(-H "x-bst-proxy-secret: ${PROXY_SECRET}")
+          fi
+          curl -fsS --retry 5 --retry-all-errors --retry-delay 5 --max-time 30 "${CANDIDATE_URL}/api/health"
+          curl -fsS --retry 5 --retry-all-errors --retry-delay 5 --max-time 30 "${PROXY_HEADER[@]}" -o /dev/null "${CANDIDATE_URL}/api/backgrounds"
+
+      # 트래픽을 모두 최신 리비전으로 옮기고 이후 배포도 최신 리비전을 따르게 한다. 손으로 이전
+      # 리비전에 트래픽을 고정해 되돌린 뒤에도 다음 배포가 여기서 고정을 푼다.
+      - name: Route traffic to new revision
+        run: gcloud run services update-traffic "${SERVICE}" --region "${REGION}" --to-latest --quiet

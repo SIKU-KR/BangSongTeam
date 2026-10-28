@@ -1,0 +1,47 @@
+{
+  "displayName": "[방송팀] 서버 5xx 오류",
+  "combiner": "OR",
+  "conditions": [
+    {
+      "displayName": "API 5xx 로그 5분 합계",
+      "conditionThreshold": {
+        "filter": "metric.type=\"logging.googleapis.com/user/bst_api_5xx\" AND resource.type=\"cloud_run_revision\" AND resource.labels.service_name=\"__SERVICE__\"",
+        "aggregations": [
+          {
+            "alignmentPeriod": "300s",
+            "perSeriesAligner": "ALIGN_SUM",
+            "crossSeriesReducer": "REDUCE_SUM"
+          }
+        ],
+        "comparison": "COMPARISON_GT",
+        "thresholdValue": 4,
+        "duration": "60s",
+        "trigger": { "count": 1 },
+        "evaluationMissingData": "EVALUATION_MISSING_DATA_INACTIVE"
+      }
+    },
+    {
+      "displayName": "Cloud Run 5xx 응답 5분 합계",
+      "conditionThreshold": {
+        "filter": "metric.type=\"run.googleapis.com/request_count\" AND resource.type=\"cloud_run_revision\" AND resource.labels.service_name=\"__SERVICE__\" AND metric.labels.response_code_class=\"5xx\"",
+        "aggregations": [
+          {
+            "alignmentPeriod": "300s",
+            "perSeriesAligner": "ALIGN_SUM",
+            "crossSeriesReducer": "REDUCE_SUM"
+          }
+        ],
+        "comparison": "COMPARISON_GT",
+        "thresholdValue": 4,
+        "duration": "60s",
+        "trigger": { "count": 1 },
+        "evaluationMissingData": "EVALUATION_MISSING_DATA_INACTIVE"
+      }
+    }
+  ],
+  "alertStrategy": { "autoClose": "1800s" },
+  "documentation": {
+    "mimeType": "text/markdown",
+    "content": "API가 5분 안에 5xx 응답을 5건 이상 돌려줬다.\n\n- 앱 로그: `jsonPayload.event=\"request\" AND jsonPayload.status>=500`. `error`에 원인이 있고, 같은 `requestId`로 브라우저의 `client_report`와 이어 본다.\n- Cloud Run 5xx 조건만 울렸다면 앱이 로그를 남기기 전에 컨테이너가 죽었거나 과부하다. 컨테이너 오류·메모리 알림을 함께 본다.\n- 배포 직후라면 docs/deploy-gcp.md 8절로 이전 리비전에 되돌린다."
+  }
+}

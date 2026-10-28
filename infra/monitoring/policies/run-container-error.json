@@ -1,0 +1,29 @@
+{
+  "displayName": "[방송팀] Cloud Run 컨테이너 오류",
+  "combiner": "OR",
+  "conditions": [
+    {
+      "displayName": "컨테이너 오류 로그 5분 합계",
+      "conditionThreshold": {
+        "filter": "metric.type=\"logging.googleapis.com/user/bst_run_container_error\" AND resource.type=\"cloud_run_revision\" AND resource.labels.service_name=\"__SERVICE__\"",
+        "aggregations": [
+          {
+            "alignmentPeriod": "300s",
+            "perSeriesAligner": "ALIGN_SUM",
+            "crossSeriesReducer": "REDUCE_SUM"
+          }
+        ],
+        "comparison": "COMPARISON_GT",
+        "thresholdValue": 0,
+        "duration": "60s",
+        "trigger": { "count": 1 },
+        "evaluationMissingData": "EVALUATION_MISSING_DATA_INACTIVE"
+      }
+    }
+  ],
+  "alertStrategy": { "autoClose": "1800s" },
+  "documentation": {
+    "mimeType": "text/markdown",
+    "content": "Cloud Run이 컨테이너의 메모리 한도 초과 종료, 비정상 종료 또는 시작 실패를 기록했다.\n\n- 원인은 `log_id(\"run.googleapis.com/varlog/system\")` 로그에 있다.\n- 새 리비전이 시작하지 못한 것이라면 트래픽은 이전 리비전에 남아 있다(docs/deploy-gcp.md 8절)."
+  }
+}

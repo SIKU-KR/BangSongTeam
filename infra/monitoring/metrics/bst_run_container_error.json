@@ -1,0 +1,4 @@
+{
+  "description": "Cloud Run이 컨테이너 문제로 남긴 오류 로그 수. 메모리 한도 초과로 종료, 비정상 종료, 시작 실패가 들어온다.",
+  "filter": "resource.type=\"cloud_run_revision\" AND log_id(\"run.googleapis.com/varlog/system\") AND (severity>=ERROR OR textPayload:\"Memory limit of\")"
+}

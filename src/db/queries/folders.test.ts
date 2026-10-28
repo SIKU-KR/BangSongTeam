@@ -955,6 +955,30 @@ describe("드라이브 폴더 쿼리", () => {
       expect(await getPresentationDocumentsByUserId(db, USER_A)).toEqual([]);
     });
 
+    it("영구 삭제한 폴더도 내 영구 삭제 기록을 지우면 복구 스크립트가 다시 저장할 수 있다", async () => {
+      const folder = makeFolder(USER_A, { trashedAt: TRASHED_AT });
+      await upsertFolder(db, USER_A, folder);
+      await deleteFolderTree(db, USER_A, folder.id);
+      expect(await upsertFolder(db, USER_A, folder)).toEqual({
+        status: "deleted",
+      });
+
+      const record = driveTombstonesCol(db).doc(folder.id);
+      expect((await record.get()).data()).toEqual({
+        itemId: folder.id,
+        userId: USER_A,
+        kind: "folder",
+      });
+      await record.delete();
+
+      expect(await upsertFolder(db, USER_A, folder)).toEqual({
+        status: "saved",
+        folder,
+      });
+      expect(await getFoldersByUserId(db, USER_A)).toEqual([folder]);
+      expect(await getDriveTombstones(db, USER_A)).toEqual(NO_TOMBSTONES);
+    });
+
     it("폴더가 있으면 같은 id의 내 영구 삭제 기록을 지우고 저장한다", async () => {
       const folder = makeFolder(USER_A);
       await upsertFolder(db, USER_A, folder);
