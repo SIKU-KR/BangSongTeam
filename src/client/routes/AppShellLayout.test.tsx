@@ -41,6 +41,8 @@ import { LyricsRoute } from "./LyricsRoute";
 import { BackgroundsRoute } from "./BackgroundsRoute";
 import * as capabilities from "../lib/browser/capabilities";
 import { withQueryClient } from "../test/queryClientFixture";
+import { stubMatchMedia } from "../test/matchMedia";
+import { BELOW_SM_QUERY } from "#hooks/useMediaQuery";
 import { installFakeApi } from "../test/fakeApi";
 import { makeBackground } from "../test/backgroundFixture";
 import { resetBackgroundCatalogForTests } from "../features/backgrounds/backgroundCatalog";
@@ -736,6 +738,36 @@ describe("AppShellLayout (드라이브형 홈)", () => {
       screen.getByRole("columnheader", { name: DRIVE_COPY.location }),
     ).toBeInTheDocument();
     expect(screen.getByTestId("drive-summary")).toHaveTextContent("검색 결과");
+  });
+
+  it("폰 폭에서는 드라이브 검색창 안내를 줄여 잘리지 않게 하고, 넓어지면 전체 안내로 돌아온다", () => {
+    const media = stubMatchMedia(BELOW_SM_QUERY);
+    renderShell();
+    const input = screen.getByTestId("shell-search-input");
+
+    expect(input).toHaveAttribute(
+      "placeholder",
+      SHELL_COPY.searchPlaceholder.driveCompact,
+    );
+
+    act(() => media.match());
+
+    expect(input).toHaveAttribute(
+      "placeholder",
+      SHELL_COPY.searchPlaceholder.drive,
+    );
+  });
+
+  it("휴지통 검색창 안내는 폰 폭에서도 그대로다", () => {
+    stubMatchMedia(BELOW_SM_QUERY);
+    renderShell();
+
+    openTrashFolder();
+
+    expect(screen.getByTestId("shell-search-input")).toHaveAttribute(
+      "placeholder",
+      SHELL_COPY.searchPlaceholder.trash,
+    );
   });
 
   it("배경 갤러리 검색어는 드라이브 검색어와 따로 두고, 제출해야 거른다", async () => {

@@ -16,6 +16,7 @@ export const SHELL_COPY = {
   searchPlaceholder: {
     trash: "휴지통에서 검색",
     drive: "폴더, 프레젠테이션, 곡 제목, 가사로 검색",
+    driveCompact: "제목, 가사로 검색",
   },
   unsupportedBrowser:
     "이 브라우저에서는 열 수 없어요. iPhone·iPad는 iOS 16.4 이상으로 업데이트하거나, 최신 Chrome·Edge·Safari·Firefox에서 열어 주세요.",
