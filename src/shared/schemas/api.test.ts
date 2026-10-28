@@ -1,5 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
+  EMAIL_MAX_LENGTH,
+  EmailSignUpRequestSchema,
   SearchCatalogQuerySchema,
   SearchCatalogResponseSchema,
   PresentationDocumentSchema,
@@ -43,6 +45,7 @@ describe("API Schemas", () => {
           firstSlidePreview: ["시작됐네 우리 주님의 능력이"],
           slideCount: 6,
           updatedAt: "2026-09-23T00:00:00.000Z",
+          official: false,
         },
       ],
     };
@@ -136,5 +139,27 @@ describe("clampSearchQuery", () => {
 
     expect(clamped).toBe("가".repeat(49));
     expect(() => encodeURIComponent(clamped)).not.toThrow();
+  });
+});
+
+describe("EmailSignUpRequestSchema", () => {
+  const acceptsEmail = (email: string): boolean =>
+    EmailSignUpRequestSchema.safeParse({
+      name: "찬양팀",
+      email,
+      password: "password-1234",
+    }).success;
+  const emailOfLength = (length: number): string =>
+    `${"a".repeat(length - "@example.com".length)}@example.com`;
+
+  it("메일 주소가 가질 수 있는 가장 긴 길이까지만 받는다", () => {
+    expect(acceptsEmail(emailOfLength(EMAIL_MAX_LENGTH))).toBe(true);
+    expect(acceptsEmail(emailOfLength(EMAIL_MAX_LENGTH + 1))).toBe(false);
+  });
+
+  it("짝 없는 서로게이트가 든 주소는 받지 않는다", () => {
+    expect(acceptsEmail(`a${String.fromCharCode(0xd800)}b@example.com`)).toBe(
+      false,
+    );
   });
 });

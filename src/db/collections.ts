@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import {
   Timestamp,
   type CollectionReference,
@@ -25,6 +26,7 @@ import type { Db } from "./client";
  */
 export const COLLECTIONS = {
   users: "users",
+  userEmails: "userEmails",
   sessions: "sessions",
   accounts: "accounts",
   verifications: "verifications",
@@ -39,7 +41,8 @@ export const COLLECTIONS = {
 
 /**
  * 사용자. Better Auth `user` 모델에 약관 동의 시각을 더한다. 세션·계정·인증 요청 문서는
- * Better Auth 어댑터(`auth/firestoreAdapter.ts`)가 같은 방식으로 쓴다.
+ * Better Auth 어댑터(`auth/firestoreAdapter.ts`)가 같은 방식으로 쓴다. 어댑터는 이메일 예약
+ * (`UserEmailDoc`)과 함께 만들고 함께 지운다.
  */
 export interface UserDoc {
   id: string;
@@ -50,6 +53,18 @@ export interface UserDoc {
   termsAgreedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
+}
+
+/**
+ * 이메일 하나에 사용자 하나만 두는 예약. 문서 id는 `userEmailDocId(email)`이다.
+ *
+ * Firestore에는 고유 제약이 없어, 인증 어댑터가 이 예약과 사용자 문서를 한 트랜잭션에서 만든다
+ * (`auth/userEmails.ts`). 가리키는 사용자가 없는 예약은 남은 것이라 새 사용자가 가져간다.
+ * 이메일을 바꾸는 기능은 켜져 있지 않다. 켜면 예약도 함께 옮겨야 한다. 예약이 생기기 전에
+ * 만든 사용자는 예약이 없고, 같은 이메일의 가입은 Better Auth의 이메일 조회가 먼저 막는다.
+ */
+export interface UserEmailDoc {
+  userId: string;
 }
 
 /**
@@ -188,6 +203,8 @@ function typed<T extends object>(db: Db, name: string): CollectionReference<T> {
 }
 
 export const usersCol = (db: Db) => typed<UserDoc>(db, COLLECTIONS.users);
+export const userEmailsCol = (db: Db) =>
+  typed<UserEmailDoc>(db, COLLECTIONS.userEmails);
 export const decksCol = (db: Db) => typed<DeckDoc>(db, COLLECTIONS.decks);
 export const presentationsCol = (db: Db) =>
   typed<PresentationDoc>(db, COLLECTIONS.presentations);
@@ -199,6 +216,14 @@ export const driveTombstonesCol = (db: Db) =>
 export const backgroundsCol = (db: Db) =>
   typed<BackgroundDoc>(db, COLLECTIONS.backgrounds);
 export const reportsCol = (db: Db) => typed<ReportDoc>(db, COLLECTIONS.reports);
+
+/**
+ * 이메일 예약 문서 id: 소문자로 맞춘 이메일의 SHA-256(16진수). 이메일에 든 `/` 같은 문자가
+ * 문서 경로를 깨지 않고, 콘솔·로그에 남는 문서 경로에 주소가 드러나지 않는다.
+ */
+export function userEmailDocId(email: string): string {
+  return createHash("sha256").update(email.toLowerCase()).digest("hex");
+}
 
 /** 멤버 문서 id. id 알파벳(NanoID)에 `:`가 없으므로 두 id를 이어도 겹치지 않는다 */
 export function memberDocId(presentationId: string, userId: string): string {

@@ -1,12 +1,28 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { Query } from "@google-cloud/firestore";
 import { handleOAuthUserInfo } from "better-auth/oauth2";
-import { FALLBACK_USER_NAME } from "#shared";
+import {
+  FALLBACK_USER_NAME,
+  OFFICIAL_LIBRARY_NAME,
+  SIGN_UP_IN_PROGRESS,
+} from "#shared";
+import { COLLECTIONS, runBulk, type Db } from "#db";
 import { env } from "../test/env";
 import { clearDb } from "../../db/test/fixtures";
 import app from "../index";
-import { ACCOUNT_LINKING, getAuth } from "../lib/auth";
+import {
+  ACCOUNT_LINKING,
+  buildKakaoUser,
+  buildNaverUser,
+  getAuth,
+} from "../lib/auth";
 
 const ORIGIN = env.BETTER_AUTH_URL ?? "";
+const LONE_SURROGATE = String.fromCharCode(0xd800);
+
+async function countDocs(collection: string): Promise<number> {
+  return (await env.DB.collection(collection).count().get()).data().count;
+}
 
 async function post(
   path: string,
@@ -47,19 +63,43 @@ function sessionCookie(res: Response): string {
   return cookie?.split(";")[0] ?? "";
 }
 
-async function googleSignIn(email: string): Promise<string | undefined> {
+async function socialSignIn(
+  providerId: string,
+  accountId: string,
+  userInfo: { email: string; name: string; emailVerified: boolean },
+): Promise<string | undefined> {
   const context = await getAuth(env).$context;
   const result = await handleOAuthUserInfo({ context } as never, {
-    userInfo: {
-      id: "google-sub-1",
-      email,
-      name: "구글 사용자",
-      emailVerified: true,
-    },
-    account: { providerId: "google", accountId: "google-sub-1" },
+    userInfo: { id: accountId, ...userInfo },
+    account: { providerId, accountId },
     callbackURL: "/",
   });
   return result.error ?? undefined;
+}
+
+async function googleSignIn(email: string): Promise<string | undefined> {
+  return await socialSignIn("google", "google-sub-1", {
+    email,
+    name: "구글 사용자",
+    emailVerified: true,
+  });
+}
+
+async function createVerifiedUser(email: string): Promise<string> {
+  const context = await getAuth(env).$context;
+  const user = await context.internalAdapter.createUser(
+    { email, name: "기존 사용자", emailVerified: true },
+    { method: "oauth", oauth: { providerId: "google" } },
+  );
+  return user.id;
+}
+
+async function linkedProviders(email: string): Promise<string[]> {
+  const context = await getAuth(env).$context;
+  const user = await context.internalAdapter.findUserByEmail(email, {
+    includeAccounts: true,
+  });
+  return user?.accounts.map((account) => account.providerId) ?? [];
 }
 
 describe("이메일·비밀번호 인증", () => {
@@ -131,6 +171,359 @@ describe("이메일·비밀번호 인증", () => {
     expect(duplicate.status).toBeGreaterThanOrEqual(400);
     expect(sessionCookie(duplicate)).toBe("");
     expect(short.status).toBe(400);
+  });
+
+  it.each([
+    ["짝 없는 서로게이트가 든 문자열", `a/b${LONE_SURROGATE}`, "10.0.0.7"],
+    [
+      "짝 없는 서로게이트가 든 주소",
+      `a${LONE_SURROGATE}b@example.com`,
+      "10.0.0.8",
+    ],
+    ["3,000자 문자열", "x".repeat(3000), "10.0.0.9"],
+  ])(
+    "이메일이 아닌 %s로 가입하면 아무것도 쓰지 않고 400으로 답한다",
+    async (_, email, ip) => {
+      const res = await signUp(email, ip);
+
+      expect(res.status).toBe(400);
+      expect(await countDocs(COLLECTIONS.users)).toBe(0);
+      expect(await countDocs(COLLECTIONS.userEmails)).toBe(0);
+    },
+  );
+});
+
+describe("가입이 겹치거나 중간에 실패할 때", () => {
+  const MINUTE_MS = 60_000;
+
+  beforeEach(async () => {
+    await clearDb(env.DB);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  async function usersWithEmail(email: string): Promise<number> {
+    return (
+      await env.DB.collection(COLLECTIONS.users)
+        .where("email", "==", email)
+        .get()
+    ).size;
+  }
+
+  function bindMethods<T extends object>(
+    target: T,
+    override: (prop: string | symbol) => unknown,
+  ): T {
+    return new Proxy(target, {
+      get(inner, prop) {
+        const replaced = override(prop);
+        if (replaced !== undefined) return replaced;
+        const value = Reflect.get(inner, prop, inner) as unknown;
+        return typeof value === "function"
+          ? (value as (...args: unknown[]) => unknown).bind(inner)
+          : value;
+      },
+    });
+  }
+
+  function failFirstCredentialSave(db: Db): Db {
+    let failed = false;
+    const failOnce = () => {
+      failed = true;
+      return Promise.reject(
+        Object.assign(new Error("14 UNAVAILABLE"), { code: 14 }),
+      );
+    };
+    return bindMethods(db, (prop) =>
+      prop === "collection"
+        ? (name: string) => {
+            const collection = db.collection(name);
+            if (name !== COLLECTIONS.accounts) return collection;
+            return bindMethods(collection, (method) =>
+              method === "doc"
+                ? (id: string) =>
+                    bindMethods(collection.doc(id), (op) =>
+                      op === "create" && !failed ? failOnce : undefined,
+                    )
+                : undefined,
+            );
+          }
+        : undefined,
+    );
+  }
+
+  it("같은 이메일로 동시에 가입해도 사용자는 하나만 생긴다", async () => {
+    const statuses = (
+      await Promise.all(
+        ["10.0.5.1", "10.0.5.2", "10.0.5.3"].map((ip) =>
+          signUp("race@example.com", ip),
+        ),
+      )
+    ).map((res) => res.status);
+
+    expect(statuses.filter((status) => status === 200)).toHaveLength(1);
+    expect(
+      statuses.filter((status) => status === 409 || status === 422),
+    ).toHaveLength(2);
+    expect(await usersWithEmail("race@example.com")).toBe(1);
+  });
+
+  it("가입 전에 반쯤 끝난 가입을 찾다 실패해도 가입은 그대로 하고, 로그에 이메일을 남기지 않는다", async () => {
+    vi.spyOn(Query.prototype, "get").mockImplementationOnce(() =>
+      Promise.reject(Object.assign(new Error("14 UNAVAILABLE"), { code: 14 })),
+    );
+    const lines: string[] = [];
+    const capture = (line: unknown): void => {
+      lines.push(String(line));
+    };
+    vi.spyOn(console, "log").mockImplementation(capture);
+    vi.spyOn(console, "error").mockImplementation(capture);
+
+    const res = await signUp("unlucky@example.com", "10.0.5.8");
+
+    expect(res.status).toBe(200);
+    expect(await usersWithEmail("unlucky@example.com")).toBe(1);
+    expect(
+      lines.filter((line) => line.includes("abandoned_sign_up_release_failed")),
+    ).toHaveLength(1);
+    expect(lines.filter((line) => line.includes("unlucky@"))).toEqual([]);
+  });
+
+  it("비밀번호 저장이 실패한 가입을 바로 다시 하면 잠시 뒤 다시 하라고 답하고, 잠시 뒤에는 가입하고 로그인할 수 있다", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const startedAt = Date.now();
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(startedAt);
+    const body = {
+      email: "retry@example.com",
+      password: "password-1234",
+      name: "찬양팀",
+    };
+
+    const failed = await app.request(
+      "/api/auth/sign-up/email",
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          origin: ORIGIN,
+          "x-forwarded-for": "10.0.5.4",
+        },
+        body: JSON.stringify(body),
+      },
+      { ...env, DB: failFirstCredentialSave(env.DB) },
+    );
+    expect(failed.status).toBeGreaterThanOrEqual(500);
+    expect(await usersWithEmail("retry@example.com")).toBe(1);
+
+    const immediate = await post("/api/auth/sign-up/email", body, "10.0.5.5");
+    expect(immediate.status).toBe(409);
+    expect(await immediate.json()).toMatchObject({ code: SIGN_UP_IN_PROGRESS });
+    expect(await usersWithEmail("retry@example.com")).toBe(1);
+
+    vi.setSystemTime(startedAt + 2 * MINUTE_MS);
+    const retried = await post("/api/auth/sign-up/email", body, "10.0.5.6");
+    expect(retried.status).toBe(200);
+    expect(await usersWithEmail("retry@example.com")).toBe(1);
+
+    const signedIn = await post(
+      "/api/auth/sign-in/email",
+      { email: body.email, password: body.password },
+      "10.0.5.7",
+    );
+    expect(signedIn.status).toBe(200);
+  });
+});
+
+describe("OAuth 콜백", () => {
+  const MINUTE_MS = 60_000;
+
+  beforeEach(async () => {
+    await clearDb(env.DB);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  async function seedStates(
+    count: number,
+    expiresAt: Date,
+    prefix: string,
+  ): Promise<void> {
+    await runBulk(env.DB, (writer) =>
+      Array.from({ length: count }, (_, i) =>
+        writer.set(
+          env.DB.collection(COLLECTIONS.verifications).doc(`${prefix}-${i}`),
+          {
+            id: `${prefix}-${i}`,
+            identifier: `${prefix}-state-${i}`,
+            value: "{}",
+            expiresAt,
+            createdAt: new Date(expiresAt.getTime() - 10 * MINUTE_MS),
+            updatedAt: new Date(expiresAt.getTime() - 10 * MINUTE_MS),
+          },
+        ),
+      ),
+    );
+  }
+
+  it("만료된 state를 지우려고 쌓인 state를 모두 읽지 않는다", async () => {
+    await seedStates(150, new Date(Date.now() - MINUTE_MS), "old");
+    await seedStates(150, new Date(Date.now() + MINUTE_MS), "live");
+    const sizes: number[] = [];
+    const get = Query.prototype.get;
+    vi.spyOn(Query.prototype, "get").mockImplementation(async function (
+      this: Query,
+    ) {
+      const snapshot = await get.call(this);
+      sizes.push(snapshot.size);
+      return snapshot;
+    });
+    vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const res = await app.request(
+      "/api/auth/callback/google?state=missing&code=x",
+      { headers: { "x-forwarded-for": "10.0.4.1" } },
+      { ...env, GOOGLE_CLIENT_ID: "google-id", GOOGLE_CLIENT_SECRET: "secret" },
+    );
+
+    expect(res.status).toBe(302);
+    expect(res.headers.get("location")).toContain("error=state_mismatch");
+    expect(Math.max(0, ...sizes)).toBeLessThanOrEqual(1);
+    expect(
+      (await env.DB.collection(COLLECTIONS.verifications).count().get()).data()
+        .count,
+    ).toBe(300);
+  });
+});
+
+describe("로그인 유지 기간", () => {
+  const DAY_MS = 24 * 60 * 60 * 1000;
+
+  beforeEach(async () => {
+    await clearDb(env.DB);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  async function sessionEmail(cookie: string): Promise<string | null> {
+    const res = await app.request(
+      "/api/auth/get-session",
+      { headers: { cookie } },
+      env,
+    );
+    const body = (await res.json()) as { user?: { email: string } } | null;
+    return body?.user?.email ?? null;
+  }
+
+  function freezeClock(): number {
+    const startedAt = Date.now();
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(startedAt);
+    return startedAt;
+  }
+
+  it("한 주에 한 번만 열어도 로그인이 이어진다", async () => {
+    const startedAt = freezeClock();
+    const cookie = sessionCookie(
+      await signUp("weekly@example.com", "10.0.3.1"),
+    );
+
+    vi.setSystemTime(startedAt + 8 * DAY_MS);
+
+    expect(await sessionEmail(cookie)).toBe("weekly@example.com");
+  });
+
+  it("쓸 때마다 유지 기간이 다시 30일로 늘어난다", async () => {
+    const startedAt = freezeClock();
+    const cookie = sessionCookie(
+      await signUp("sliding@example.com", "10.0.3.2"),
+    );
+
+    vi.setSystemTime(startedAt + 20 * DAY_MS);
+    expect(await sessionEmail(cookie)).toBe("sliding@example.com");
+
+    vi.setSystemTime(startedAt + 45 * DAY_MS);
+    expect(await sessionEmail(cookie)).toBe("sliding@example.com");
+  });
+
+  it("30일 넘게 쓰지 않으면 다시 로그인해야 한다", async () => {
+    const startedAt = freezeClock();
+    const cookie = sessionCookie(await signUp("idle@example.com", "10.0.3.3"));
+
+    vi.setSystemTime(startedAt + 31 * DAY_MS);
+
+    expect(await sessionEmail(cookie)).toBeNull();
+  });
+});
+
+describe("로그인 빈도 제한", () => {
+  const googleEnv = {
+    ...env,
+    GOOGLE_CLIENT_ID: "test-client",
+    GOOGLE_CLIENT_SECRET: "test-secret",
+  };
+
+  beforeEach(async () => {
+    await clearDb(env.DB);
+  });
+
+  it("같은 교회 와이파이에서 여럿이 함께 소셜 로그인을 시작해도 막지 않는다", async () => {
+    const statuses: number[] = [];
+    for (let i = 0; i < 6; i++) {
+      const res = await app.request(
+        "/api/auth/sign-in/social",
+        {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            origin: ORIGIN,
+            "x-forwarded-for": "10.0.2.1",
+          },
+          body: JSON.stringify({
+            provider: "google",
+            callbackURL: "/presentations",
+          }),
+        },
+        googleEnv,
+      );
+      statuses.push(res.status);
+    }
+
+    expect(statuses).toEqual([200, 200, 200, 200, 200, 200]);
+  });
+
+  it("비밀번호 로그인은 IP마다 10초에 3번까지만 받는다", async () => {
+    await signUp("limit@example.com", "10.0.2.2");
+
+    const statuses: number[] = [];
+    for (let i = 0; i < 4; i++) {
+      const res = await post(
+        "/api/auth/sign-in/email",
+        { email: "limit@example.com", password: "wrong-password" },
+        "10.0.2.3",
+      );
+      statuses.push(res.status);
+    }
+
+    expect(statuses).toEqual([401, 401, 401, 429]);
+  });
+
+  it("이메일 가입도 IP마다 10초에 3번까지만 받는다", async () => {
+    const statuses: number[] = [];
+    for (let i = 0; i < 4; i++) {
+      statuses.push(
+        (await signUp(`flood-${i}@example.com`, "10.0.2.4")).status,
+      );
+    }
+
+    expect(statuses).toEqual([200, 200, 200, 429]);
   });
 });
 
@@ -239,6 +632,66 @@ describe("표시 이름", () => {
     await context.internalAdapter.updateUser(id, { emailVerified: true });
     expect(await storedName("update@example.com")).toBe("새 이름");
   });
+
+  it.each([
+    [OFFICIAL_LIBRARY_NAME, "10.0.6.1"],
+    [" 공식찬양라이브러리 ", "10.0.6.2"],
+    ["공식\u200b찬양 라이브러리", "10.0.6.3"],
+    ["공식 \u3164찬양 라이브러리", "10.0.6.5"],
+    ["공식 \u115f찬양 라이브러리", "10.0.6.6"],
+    ["공식 \u1160찬양 라이브러리", "10.0.6.7"],
+    ["공식 \uffa0찬양 라이브러리", "10.0.6.8"],
+  ])(
+    "공식 라이브러리처럼 보이는 이름 %j로 가입하면 그 이름 대신 기본 이름을 저장한다",
+    async (name, ip) => {
+      const email = `impostor-${ip}@example.com`;
+      const res = await signUpNamed(email, name, ip);
+
+      expect(res.status).toBe(200);
+      expect(await storedName(email)).toBe(FALLBACK_USER_NAME.default);
+    },
+  );
+
+  it("가입 이름의 방향 제어 문자는 빼고 저장해 거꾸로 적은 이름이 공식 라이브러리 이름으로 보이지 않는다", async () => {
+    const res = await signUpNamed(
+      "reversed@example.com",
+      "\u202e리러브이라 양찬 식공\u202c",
+      "10.0.6.9",
+    );
+
+    expect(res.status).toBe(200);
+    expect(await storedName("reversed@example.com")).toBe(
+      "리러브이라 양찬 식공",
+    );
+  });
+
+  it("소셜 프로필 이름이 공식 라이브러리 이름이어도 로그인은 되고 그 이름은 저장하지 않는다", async () => {
+    expect(
+      await socialSignIn("google", "google-sub-official", {
+        email: "official-name@example.com",
+        name: OFFICIAL_LIBRARY_NAME,
+        emailVerified: true,
+      }),
+    ).toBeUndefined();
+    expect(await storedName("official-name@example.com")).toBe(
+      FALLBACK_USER_NAME.default,
+    );
+  });
+
+  it("다른 경로로 이름을 바꿀 때도 공식 라이브러리 이름은 저장하지 않는다", async () => {
+    await signUpNamed("rename@example.com", "찬양팀", "10.0.6.4");
+    const context = await getAuth(env).$context;
+    const found =
+      await context.internalAdapter.findUserByEmail("rename@example.com");
+
+    await context.internalAdapter.updateUser(found?.user.id ?? "", {
+      name: OFFICIAL_LIBRARY_NAME,
+    });
+
+    expect(await storedName("rename@example.com")).toBe(
+      FALLBACK_USER_NAME.default,
+    );
+  });
 });
 
 describe("소셜 로그인 계정 연결", () => {
@@ -276,5 +729,49 @@ describe("소셜 로그인 계정 연결", () => {
     });
 
     expect(await googleSignIn("verified@example.com")).toBeUndefined();
+  });
+
+  it("다른 카카오계정으로 넘어간 이메일로는 같은 이메일의 기존 계정에 묶지 않는다", async () => {
+    await createVerifiedUser("moved@example.com");
+    const profile = {
+      id: 777,
+      kakao_account: {
+        email: "moved@example.com",
+        is_email_verified: true,
+        is_email_valid: false,
+      },
+    };
+
+    expect(await socialSignIn("kakao", "777", buildKakaoUser(profile))).toBe(
+      "account not linked",
+    );
+    expect(await linkedProviders("moved@example.com")).toEqual([]);
+  });
+
+  it("카카오가 인증했고 지금도 유효하다고 한 이메일은 기존 계정에 묶는다", async () => {
+    await createVerifiedUser("valid@example.com");
+    const profile = {
+      id: 778,
+      kakao_account: {
+        email: "valid@example.com",
+        is_email_verified: true,
+        is_email_valid: true,
+      },
+    };
+
+    expect(
+      await socialSignIn("kakao", "778", buildKakaoUser(profile)),
+    ).toBeUndefined();
+    expect(await linkedProviders("valid@example.com")).toEqual(["kakao"]);
+  });
+
+  it("네이버 이메일로는 같은 이메일의 기존 계정에 묶지 않는다", async () => {
+    await createVerifiedUser("naver@example.com");
+    const profile = { response: { id: "n-1", email: "naver@example.com" } };
+
+    expect(await socialSignIn("naver", "n-1", buildNaverUser(profile))).toBe(
+      "account not linked",
+    );
+    expect(await linkedProviders("naver@example.com")).toEqual([]);
   });
 });

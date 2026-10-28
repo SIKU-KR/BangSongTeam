@@ -55,6 +55,9 @@ export function SongPickerEntryRow({
           {entry.kind === "mine" && (
             <Badge variant="secondary">{EDITOR_COPY.song.myLibrary}</Badge>
           )}
+          {entry.kind === "shared" && entry.summary.official && (
+            <Badge variant="secondary">{EDITOR_COPY.song.official}</Badge>
+          )}
           {entry.kind === "shared" && (
             <Badge variant="outline">
               {entry.ownedCopy

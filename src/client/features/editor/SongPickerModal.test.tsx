@@ -1,12 +1,19 @@
 import React from "react";
 import { signInAsTestUser } from "../../test/sessionFixture";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import {
+  render,
+  screen,
+  fireEvent,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import {
   API_ERRORS,
   type Deck,
   DEFAULT_DECK_STYLE,
   MAX_SEARCH_QUERY_LENGTH,
+  OFFICIAL_LIBRARY_NAME,
   clampSearchQuery,
 } from "#shared";
 import { closeOfflineDB, OFFLINE_DB_NAME } from "../../lib/storage/db";
@@ -240,6 +247,48 @@ describe("SongPickerModal", () => {
       .filter((call) => call.path === "/api/catalog/search")
       .map((call) => new URLSearchParams(call.search).get("q"));
     expect(searched).toEqual(["", clampSearchQuery(lyrics)]);
+  });
+
+  it("공식 라이브러리 곡에만 공식 표시를 달아 같은 이름을 쓴 사람의 곡과 구별한다", async () => {
+    const official = {
+      ...sharedSummary,
+      authorName: OFFICIAL_LIBRARY_NAME,
+      official: true,
+    };
+    const lookalike = {
+      ...sharedSummary,
+      id: LYRIC_MATCH_ID,
+      authorName: OFFICIAL_LIBRARY_NAME,
+      official: false,
+    };
+    api.restore();
+    installServer({ sharedDecks: [official, lookalike] });
+    renderPicker();
+
+    const officialRow = await screen.findByTestId(`song-item-${SHARED_ID}`);
+    const lookalikeRow = screen.getByTestId(`song-item-${LYRIC_MATCH_ID}`);
+    expect(
+      within(officialRow).getByText(EDITOR_COPY.song.official),
+    ).toBeInTheDocument();
+    expect(
+      within(lookalikeRow).queryByText(EDITOR_COPY.song.official),
+    ).not.toBeInTheDocument();
+
+    fireEvent.click(officialRow);
+    const heading = screen.getByRole("heading", { name: official.title });
+    expect(
+      within(heading.parentElement as HTMLElement).getByText(
+        EDITOR_COPY.song.official,
+      ),
+    ).toBeInTheDocument();
+
+    fireEvent.click(lookalikeRow);
+    expect(
+      within(
+        screen.getByRole("heading", { name: lookalike.title })
+          .parentElement as HTMLElement,
+      ).queryByText(EDITOR_COPY.song.official),
+    ).not.toBeInTheDocument();
   });
 
   it("곡 항목은 키보드 Enter로도 고를 수 있다", async () => {

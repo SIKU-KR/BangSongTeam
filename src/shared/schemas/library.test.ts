@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   CreateReportRequestSchema,
   PublicDeckDetailSchema,
+  PublicDeckSummarySchema,
   VisibilityUpdateRequestSchema,
 } from "./library";
 
@@ -31,6 +32,28 @@ describe("VisibilityUpdateRequestSchema", () => {
     expect(
       VisibilityUpdateRequestSchema.parse({ visibility: "private" }),
     ).toEqual({ visibility: "private" });
+  });
+});
+
+describe("PublicDeckSummarySchema", () => {
+  const summary = {
+    id: ID,
+    title: "은혜로다",
+    artist: "예수전도단",
+    authorName: "김찬양",
+    forkedFromAuthorName: null,
+    forkCount: 3,
+    backgroundId: null,
+    firstSlidePreview: ["첫 줄"],
+    slideCount: 1,
+    updatedAt: "2026-09-23T00:00:00.000Z",
+  };
+
+  it("공식 표시가 없는 이전 서버의 응답도 받고 공식 곡이 아닌 것으로 읽는다", () => {
+    expect(PublicDeckSummarySchema.parse(summary).official).toBe(false);
+    expect(
+      PublicDeckSummarySchema.parse({ ...summary, official: true }).official,
+    ).toBe(true);
   });
 });
 

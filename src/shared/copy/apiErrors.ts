@@ -1,6 +1,9 @@
 /**
  * API 서버가 `{ error }`로 돌려주는 문장. 클라이언트는 이 문장을 그대로 토스트에
  * 띄운다(`describeApiError`).
+ *
+ * `auth`는 Better Auth 오류 본문(`{ code, message }`)의 `message`다. 로그인 화면은 이 문장 대신
+ * `code`와 상태로 고른 문구를 보여 준다.
  */
 export const API_ERRORS = {
   loginRequired: "로그인이 필요해요",
@@ -13,6 +16,10 @@ export const API_ERRORS = {
   serverBusy: "서버가 잠시 바빠요. 잠시 후 다시 시도해 주세요",
   notFound: "요청한 기능을 찾을 수 없어요. 새로고침한 뒤 다시 시도해 주세요",
   payloadTooLarge: "보낸 내용이 너무 커요. 줄여서 다시 보내 주세요",
+  auth: {
+    signUpInProgress:
+      "이 이메일로 가입하는 중이에요. 잠시 후 다시 시도해 주세요",
+  },
   deck: {
     libraryOnly: "보관함 곡만 저장할 수 있어요",
     notAccessible: "이 곡을 열 수 없어요",

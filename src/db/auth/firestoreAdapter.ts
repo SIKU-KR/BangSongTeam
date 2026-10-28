@@ -7,7 +7,8 @@ import type {
 } from "@google-cloud/firestore";
 import { createAdapterFactory } from "better-auth/adapters";
 import type { Db } from "../client";
-import { fromFirestoreData } from "../collections";
+import { COLLECTIONS, fromFirestoreData } from "../collections";
+import { createUserWithEmail, reservationsHeldBy } from "./userEmails";
 
 type CleanedWhere = {
   field: string;
@@ -22,6 +23,16 @@ type Row = Record<string, unknown>;
 /** Firestore `in`이 받는 값 수. 이보다 많으면 서버에서 거른다 */
 const MAX_IN_VALUES = 30;
 
+/** 커밋 하나에 담는 지우기 수. 쌓인 문서가 많아도 요청 크기 한도(10 MiB)를 넘지 않는다 */
+const MAX_DELETES_PER_COMMIT = 400;
+
+const RANGE_OPERATORS: Readonly<Record<string, "<" | "<=" | ">" | ">=">> = {
+  lt: "<",
+  lte: "<=",
+  gt: ">",
+  gte: ">=",
+};
+
 function lower(value: unknown): unknown {
   return typeof value === "string" ? value.toLowerCase() : value;
 }
@@ -33,6 +44,16 @@ function compare(a: unknown, b: unknown): number {
   if (a instanceof Date && b instanceof Date) return a.getTime() - b.getTime();
   if (typeof a === "number" && typeof b === "number") return a - b;
   return String(a) < String(b) ? -1 : String(a) > String(b) ? 1 : 0;
+}
+
+function inRange(
+  actual: unknown,
+  expected: unknown,
+  accepts: (order: number) => boolean,
+): boolean {
+  return (
+    actual != null && expected != null && accepts(compare(actual, expected))
+  );
 }
 
 function matchesClause(row: Row, clause: CleanedWhere): boolean {
@@ -58,19 +79,23 @@ function matchesClause(row: Row, clause: CleanedWhere): boolean {
     case "ne":
       return compare(actual, expected) !== 0;
     case "gt":
-      return expected != null && compare(actual, expected) > 0;
+      return inRange(actual, expected, (order) => order > 0);
     case "gte":
-      return expected != null && compare(actual, expected) >= 0;
+      return inRange(actual, expected, (order) => order >= 0);
     case "lt":
-      return expected != null && compare(actual, expected) < 0;
+      return inRange(actual, expected, (order) => order < 0);
     case "lte":
-      return expected != null && compare(actual, expected) <= 0;
+      return inRange(actual, expected, (order) => order <= 0);
     default:
       return expected === null ? raw == null : compare(actual, expected) === 0;
   }
 }
 
-/** `connector`를 왼쪽부터 차례로 적용한다 (Better Auth 메모리 어댑터와 같은 해석) */
+/**
+ * `connector`를 왼쪽부터 차례로 적용한다 (Better Auth 메모리 어댑터와 같은 해석). 범위 비교는
+ * SQL처럼 비어 있는 값과는 맞지 않는다. Firestore 범위 쿼리도 필드가 없거나 `null`인 문서를
+ * 돌려주지 않아, 쿼리로 넘겨도 결과가 같다.
+ */
 export function matchesWhere(
   row: Row,
   where: readonly CleanedWhere[],
@@ -86,14 +111,32 @@ export function matchesWhere(
   return result;
 }
 
+function pushDownRange(
+  query: Query,
+  where: readonly CleanedWhere[],
+): Query | null {
+  const [only] = where;
+  const operator = only ? RANGE_OPERATORS[only.operator] : undefined;
+  if (where.length !== 1 || !only || !operator) return null;
+  if (only.mode === "insensitive") return null;
+  if (!(only.value instanceof Date) && typeof only.value !== "number") {
+    return null;
+  }
+  return query.where(only.field, operator, only.value);
+}
+
 /**
  * 조건 중 Firestore에 그대로 넘겨도 결과가 같은 것만 쿼리로 만든다. 모두 AND일 때 대소문자를
  * 가리는 `eq`·`in`만 넘긴다. `null`과 같음은 넘기지 않는다. 값이 `undefined`라 빠진 필드는
- * Firestore의 `== null`에 걸리지 않는다. 이 조건들은 단일 필드 색인만으로 돌아가 복합 색인이 필요 없다.
- * 나머지 조건과 정렬은 받아 온 문서에서 `matchesWhere`로 다시 확인한다.
+ * Firestore의 `== null`에 걸리지 않는다. 범위 조건(`lt`·`lte`·`gt`·`gte`)은 그 조건 하나뿐이고
+ * 값이 시각·숫자일 때만 넘긴다(만료된 OAuth state 정리처럼 컬렉션 전체를 읽지 않게). 다른 필드
+ * 조건과 함께 넘긴 범위는 복합 색인이 있어야 한다. 이 규칙대로면 단일 필드 색인만으로 돌아가
+ * 복합 색인이 필요 없다. 나머지 조건과 정렬은 받아 온 문서에서 `matchesWhere`로 다시 확인한다.
  */
 function pushDown(query: Query, where: readonly CleanedWhere[]): Query {
   if (where.some((clause) => clause.connector === "OR")) return query;
+  const range = pushDownRange(query, where);
+  if (range) return range;
   let next = query;
   for (const clause of where) {
     if (clause.mode === "insensitive") continue;
@@ -134,10 +177,41 @@ function toRow(snapshot: QueryDocumentSnapshot<DocumentData>): Row {
  * 인증 조회는 대부분 id·토큰·이메일 같은 같음 조건이라 쿼리로 넘기고, 나머지 조건·정렬·
  * 페이지는 서버에서 처리한다. 한 번 쓰는 값(OAuth state 등)은 `consumeOne`이 트랜잭션으로
  * 읽고 지워 두 요청이 같은 값을 쓰지 못하게 한다.
+ *
+ * SQL 어댑터와 같게 맞춘 동작:
+ * - `create`는 같은 id의 문서가 있으면 덮지 않고 실패한다. 먼저 쓴 쪽이 이기는 예약
+ *   (`reserveVerificationValue`)이 이 실패에 기댄다.
+ * - 사용자는 이메일마다 하나다. 사용자 문서는 이메일 예약과 함께 만들고(`createUserWithEmail`)
+ *   지울 때 그 사용자의 예약도 지운다. 같은 이메일의 두 번째 사용자는 만들지 않고 실패한다.
+ * - `delete`는 조건에 맞는 문서를 모두 지운다. 같은 식별자로 두 번 만든 값도 함께 사라진다.
+ * - 여러 문서 지우기는 `MAX_DELETES_PER_COMMIT`개씩 나눠 커밋한다. 쌓인 문서가 많아도 커밋
+ *   하나가 요청 크기 한도를 넘지 않는다.
  */
 export function firestoreAdapter(
   db: Db,
 ): ReturnType<typeof createAdapterFactory> {
+  async function deleteRows(
+    model: string,
+    rows: readonly { row: Row; ref: DocumentReference }[],
+  ): Promise<void> {
+    if (rows.length === 0) return;
+    const reservations =
+      model === COLLECTIONS.users
+        ? await reservationsHeldBy(
+            db,
+            rows.map(({ row, ref }) => ({ id: ref.id, email: row.email })),
+          )
+        : [];
+    const refs = [...rows.map(({ ref }) => ref), ...reservations];
+    for (let i = 0; i < refs.length; i += MAX_DELETES_PER_COMMIT) {
+      const batch = db.batch();
+      for (const ref of refs.slice(i, i + MAX_DELETES_PER_COMMIT)) {
+        batch.delete(ref);
+      }
+      await batch.commit();
+    }
+  }
+
   async function findRows(
     model: string,
     where: readonly CleanedWhere[],
@@ -173,10 +247,12 @@ export function firestoreAdapter(
     adapter: () => ({
       async create({ model, data }) {
         const row = data as Row;
-        await db
-          .collection(model)
-          .doc(String(row.id))
-          .set(row as DocumentData);
+        const ref = db.collection(model).doc(String(row.id));
+        if (model === COLLECTIONS.users && typeof row.email === "string") {
+          await createUserWithEmail(db, ref, row.email, row as DocumentData);
+        } else {
+          await ref.create(row as DocumentData);
+        }
         return data;
       },
       async findOne({ model, where }) {
@@ -212,14 +288,11 @@ export function firestoreAdapter(
         return rows.length;
       },
       async delete({ model, where }) {
-        const [first] = await findRows(model, where as CleanedWhere[]);
-        if (first) await first.ref.delete();
+        await deleteRows(model, await findRows(model, where as CleanedWhere[]));
       },
       async deleteMany({ model, where }) {
         const rows = await findRows(model, where as CleanedWhere[]);
-        const batch = db.batch();
-        for (const { ref } of rows) batch.delete(ref);
-        if (rows.length > 0) await batch.commit();
+        await deleteRows(model, rows);
         return rows.length;
       },
       async consumeOne({ model, where }) {

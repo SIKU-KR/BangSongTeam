@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { SIGN_UP_IN_PROGRESS } from "#shared";
 import { closeOfflineDB, OFFLINE_DB_NAME } from "../storage/db";
 import { authClient } from "./authClient";
 import { saveCachedSession, loadCachedSession } from "./sessionCache";
@@ -8,17 +9,23 @@ import {
   getSessionState,
   getCurrentUserId,
   signInWithProvider,
+  signUpWithEmail,
   __setSessionFetcherForTests,
   __resetSessionForTests,
   type SessionFetcher,
 } from "./sessionStore";
 
 vi.mock("./authClient", () => ({
-  authClient: { getSession: vi.fn(), signIn: { social: vi.fn() } },
+  authClient: {
+    getSession: vi.fn(),
+    signIn: { social: vi.fn() },
+    signUp: { email: vi.fn() },
+  },
 }));
 
 const getSession = vi.mocked(authClient.getSession);
 const signInSocial = vi.mocked(authClient.signIn.social);
+const signUpEmail = vi.mocked(authClient.signUp.email);
 
 const HOUR = 60 * 60 * 1000;
 const USER_ID = "8f14e45fc1a2b3c4d5e6f";
@@ -351,6 +358,45 @@ describe("세션 스토어", () => {
       } as never);
 
       await expect(signInWithProvider("kakao")).rejects.toThrow();
+    });
+  });
+
+  describe("signUpWithEmail", () => {
+    const input = {
+      name: "찬양팀",
+      email: "team@example.com",
+      password: "password-1234",
+    };
+
+    function rejectSignUp(code: string, status = 422): void {
+      signUpEmail.mockResolvedValueOnce({
+        data: null,
+        error: { status, statusText: "", code },
+      } as never);
+    }
+
+    it("이미 가입한 이메일이라는 답이면 로그인하라고 안내한다", async () => {
+      rejectSignUp("USER_ALREADY_EXISTS_USE_ANOTHER_EMAIL");
+
+      await expect(signUpWithEmail(input)).rejects.toMatchObject({
+        reason: "alreadyExists",
+      });
+    });
+
+    it("서버가 사용자를 만들지 못한 422는 이미 가입했다고 하지 않고 다시 시도하게 한다", async () => {
+      rejectSignUp("FAILED_TO_CREATE_USER");
+
+      await expect(signUpWithEmail(input)).rejects.toMatchObject({
+        reason: "unknown",
+      });
+    });
+
+    it("같은 이메일의 가입이 아직 끝나지 않았다는 409도 이미 가입했다고 하지 않고 다시 시도하게 한다", async () => {
+      rejectSignUp(SIGN_UP_IN_PROGRESS, 409);
+
+      await expect(signUpWithEmail(input)).rejects.toMatchObject({
+        reason: "unknown",
+      });
     });
   });
 });

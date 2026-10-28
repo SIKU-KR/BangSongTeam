@@ -49,6 +49,12 @@ export const PublicDeckSummarySchema = z.object({
   firstSlidePreview: z.array(z.string()),
   slideCount: z.number().int().nonnegative(),
   updatedAt: z.iso.datetime(),
+  /**
+   * 공식 라이브러리 계정이 올린 곡. 서버가 작성자 id로만 정한다(`OFFICIAL_LIBRARY_USER_ID`).
+   * 작성자 이름은 누구나 비슷하게 지을 수 있어 이름만으로는 공식 곡을 가릴 수 없다. 이 값이 없는
+   * 이전 서버의 응답은 공식 곡이 아닌 것으로 읽는다.
+   */
+  official: z.boolean().default(false),
 });
 export type PublicDeckSummary = z.infer<typeof PublicDeckSummarySchema>;
 

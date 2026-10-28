@@ -98,6 +98,16 @@ export const SocialProviderSchema = z.enum(["kakao", "naver", "google"]);
 export type SocialProvider = z.infer<typeof SocialProviderSchema>;
 
 /**
+ * `GET /api/auth-config`: 이 서버에서 로그인을 시작할 수 있는 소셜 로그인. 서버에 id·secret이
+ * 없는 프로바이더는 Better Auth에 등록되지 않아 로그인 시작이 404로 끝나므로, 로그인 화면은
+ * 여기 없는 버튼을 감춘다.
+ */
+export const AuthConfigResponseSchema = z.object({
+  providers: z.array(SocialProviderSchema),
+});
+export type AuthConfigResponse = z.infer<typeof AuthConfigResponseSchema>;
+
+/**
  * better-auth `/get-session`이 세션이 있을 때 돌려주는 본문 중 앱이 쓰는 부분.
  * 캡티브 포털의 HTML처럼 이 모양이 아닌 200 응답은 "로그아웃됨"이 아니라
  * "서버에 닿지 못함"으로 다뤄야 해서 모양을 검사한다.
@@ -133,13 +143,31 @@ export const PASSWORD_MAX_LENGTH = 128;
 export const USER_NAME_MAX_LENGTH = 50;
 
 /**
+ * 이메일 주소 길이 상한. 메일로 주고받을 수 있는 가장 긴 주소(RFC 5321)다. Firestore가
+ * 쿼리에서 받는 값의 크기 한도(1,500바이트)보다 짧아, 서버가 이 길이 안의 주소로 사용자를
+ * 찾을 때 쿼리가 거절되지 않는다.
+ */
+export const EMAIL_MAX_LENGTH = 254;
+
+/**
  * 이메일 가입 폼 입력. 서버의 Better Auth는 이메일·비밀번호만 검사하고 이름 길이는 보지
  * 않아, 서버에서는 인증 훅(`server/lib/auth.ts`)이 이름을 다듬어(50자, 보이는 글자가 없으면
- * 기본 이름) 저장한다
+ * 기본 이름) 저장한다. 그 훅은 Better Auth가 본문을 검사하기 전에 돌아서, 이 스키마의 `email`을
+ * 통과한 주소로만 Firestore를 읽는다.
  */
 export const EmailSignUpRequestSchema = z.object({
   name: z.string().trim().min(1).max(USER_NAME_MAX_LENGTH),
-  email: z.email(),
+  email: z.email().max(EMAIL_MAX_LENGTH),
   password: z.string().min(PASSWORD_MIN_LENGTH).max(PASSWORD_MAX_LENGTH),
 });
 export type EmailSignUpRequest = z.infer<typeof EmailSignUpRequestSchema>;
+
+/**
+ * 같은 이메일의 가입이 아직 끝나지 않았을 수 있어 받지 않은 이메일 가입(409)의 오류 코드.
+ *
+ * 비밀번호를 저장하기 전에 실패한 가입은 비밀번호 없는 사용자를 남기고, 서버는 진행 중인 가입을
+ * 지우지 않으려고 그 사용자를 잠시 뒤에야 치운다. 그 사이의 가입을 "이미 가입함"으로 답하면
+ * 사용자는 들어갈 수 없는 계정으로 로그인하려 한다. 그래서 이 코드로 답하고 화면은 잠시 뒤
+ * 다시 가입하게 안내한다.
+ */
+export const SIGN_UP_IN_PROGRESS = "SIGN_UP_IN_PROGRESS";
