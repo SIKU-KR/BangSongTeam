@@ -615,6 +615,32 @@ describe("동기화 회복", () => {
     expect(lastMinute.length).toBeLessThanOrEqual(2);
   });
 
+  it("포커스는 상태 확인 간격을 처음으로 되돌리지 않아, 상태 확인만 닿고 push가 시간을 넘기는 동안 다시 보내는 횟수를 늘리지 않는다", async () => {
+    __setProbeRandomForTests(() => 1);
+    __setBackoffRandomForTests(() => 1);
+    setVisibility("visible");
+    const pushedAt: number[] = [];
+    __setPusherForTests(async () => {
+      pushedAt.push(Date.now());
+      await new Promise((resolve) => setTimeout(resolve, 10_000));
+      markServerUnreachable();
+      throw new TimeoutError();
+    });
+    start();
+    scheduleDocumentPush(presentation());
+    await vi.advanceTimersByTimeAsync(5 * 60_000);
+    for (let step = 0; step < 120 && isServerReachable(); step += 1) {
+      await vi.advanceTimersByTimeAsync(1000);
+    }
+    expect(isServerReachable()).toBe(false);
+    pushedAt.length = 0;
+
+    window.dispatchEvent(new Event("focus"));
+    await vi.advanceTimersByTimeAsync(60_000);
+
+    expect(pushedAt.length).toBeLessThanOrEqual(2);
+  });
+
   it("구독을 풀거나 회복을 끄면 알리지 않는다", async () => {
     const listener = vi.fn();
     const unsubscribe = subscribeSyncRecovery(listener);

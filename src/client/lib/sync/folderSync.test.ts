@@ -8,11 +8,16 @@ import {
 } from "#shared";
 import {
   scheduleFolderPush,
+  cancelFolderPush,
+  ensureFolderPushed,
   flushFolderSync,
   hasPendingFolderPush,
+  isFolderPushPending,
   pushFolderNow,
   retryFolderSyncNow,
+  setFailedFolderResolver,
   setFolderGoneListener,
+  setFolderPushSettledListener,
   setFolderSyncEnabled,
   setServerFolderListener,
   __setFolderPusherForTests,
@@ -34,12 +39,18 @@ import {
   __setDeckTransportForTests,
   __resetDeckSyncForTests,
 } from "./deckSync";
-import { MAX_BACKOFF_MS, MAX_RETRY_ATTEMPTS } from "./backoff";
+import {
+  BASE_BACKOFF_MS,
+  MAX_BACKOFF_MS,
+  MAX_RETRY_ATTEMPTS,
+  SLOW_RETRY_MS,
+} from "./backoff";
 
 const USER = "000000000000000000001";
 const PARENT = "a00000000000000000001";
 const CHILD = "b00000000000000000002";
 const GRANDCHILD = "c00000000000000000003";
+const OTHER_ROOT = "d00000000000000000004";
 
 function folder(id: string, parentId: string | null, name = "폴더"): Folder {
   return {
@@ -341,8 +352,8 @@ describe("폴더 push 큐", () => {
     __setFolderBackoffRandomForTests(() => 1);
     vi.useFakeTimers();
 
-    scheduleFolderPush(folder(PARENT, null, "부모"));
-    scheduleFolderPush(folder(CHILD, PARENT, "자식"));
+    scheduleFolderPush(folder(PARENT, null, "첫 폴더"));
+    scheduleFolderPush(folder(OTHER_ROOT, null, "둘째 폴더"));
     await vi.advanceTimersByTimeAsync(2000);
     expect(push).toHaveBeenCalledTimes(2);
 
@@ -352,6 +363,375 @@ describe("폴더 push 큐", () => {
     expect(getSyncSnapshot().status).toBe("synced");
 
     vi.useRealTimers();
+  });
+
+  describe("부모가 아직 서버에 없는 폴더", () => {
+    const listener = vi.fn<(saved: Folder) => void>();
+
+    beforeEach(() => {
+      listener.mockReset();
+      setServerFolderListener(listener);
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it("부모 push가 일시 실패하면 같은 차례의 자식·손자는 올리지 않고 함께 다시 시도한다", async () => {
+      push.mockImplementationOnce(async () => {
+        throw new ServerRejectedError(503, API_ERRORS.serverBusy);
+      });
+
+      scheduleFolderPush(folder(GRANDCHILD, CHILD));
+      scheduleFolderPush(folder(CHILD, PARENT));
+      scheduleFolderPush(folder(PARENT, null));
+      await flushFolderSync();
+
+      expect(push.mock.calls.map(([f]) => f.id)).toEqual([PARENT]);
+      expect(listener).not.toHaveBeenCalled();
+      expect(getSyncSnapshot().status).toBe("offline");
+      expect(hasPendingFolderPush()).toBe(true);
+
+      await flushFolderSync();
+
+      expect(push.mock.calls.map(([f]) => f.id)).toEqual([
+        PARENT,
+        PARENT,
+        CHILD,
+        GRANDCHILD,
+      ]);
+      expect(push.mock.calls[2][0].parentId).toBe(PARENT);
+      expect(getSyncSnapshot().status).toBe("synced");
+    });
+
+    it("부모 PUT이 나가는 동안 만든 자식은 부모가 실패하면 다음 차례에도 기다린다", async () => {
+      __setFolderBackoffRandomForTests(() => 1);
+      vi.useFakeTimers();
+      let failParent: (err: unknown) => void = () => undefined;
+      push.mockImplementationOnce(
+        () =>
+          new Promise<Folder>((_, reject) => {
+            failParent = reject;
+          }),
+      );
+
+      scheduleFolderPush(folder(PARENT, null));
+      await vi.advanceTimersByTimeAsync(2000);
+      expect(push).toHaveBeenCalledTimes(1);
+
+      scheduleFolderPush(folder(CHILD, PARENT));
+      await vi.advanceTimersByTimeAsync(2000);
+      failParent(new ServerRejectedError(503, API_ERRORS.serverBusy));
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(push.mock.calls.map(([f]) => f.id)).toEqual([PARENT]);
+      expect(getSyncSnapshot().status).toBe("offline");
+
+      await vi.advanceTimersByTimeAsync(2000);
+
+      expect(push.mock.calls.map(([f]) => f.id)).toEqual([
+        PARENT,
+        PARENT,
+        CHILD,
+      ]);
+      expect(push.mock.calls[2][0].parentId).toBe(PARENT);
+      expect(listener).toHaveBeenLastCalledWith(
+        expect.objectContaining({ id: CHILD, parentId: PARENT }),
+      );
+      expect(getSyncSnapshot().status).toBe("synced");
+    });
+
+    it("부팅이 바로 올리던 부모가 일시 장애로 실패하면, 그 뒤에 줄 선 자식은 부모가 다시 오른 뒤에 올린다", async () => {
+      let failParent: (err: unknown) => void = () => undefined;
+      push.mockImplementationOnce(
+        () =>
+          new Promise<Folder>((_, reject) => {
+            failParent = reject;
+          }),
+      );
+      const booting = pushFolderNow(folder(PARENT, null)).catch(() => {
+        scheduleFolderPush(folder(PARENT, null));
+      });
+      await vi.waitFor(() => expect(push).toHaveBeenCalledTimes(1));
+
+      scheduleFolderPush(folder(CHILD, PARENT));
+      const queued = flushFolderSync();
+      failParent(new ServerRejectedError(503, API_ERRORS.serverBusy));
+      await Promise.all([booting, queued]);
+
+      expect(push.mock.calls.map(([f]) => f.id)).toEqual([PARENT]);
+      expect(listener).not.toHaveBeenCalled();
+
+      await flushFolderSync();
+
+      expect(push.mock.calls.map(([f]) => f.id)).toEqual([
+        PARENT,
+        PARENT,
+        CHILD,
+      ]);
+      expect(listener).toHaveBeenLastCalledWith(
+        expect.objectContaining({ id: CHILD, parentId: PARENT }),
+      );
+    });
+
+    it("부모가 영구 실패하면 자식은 기다리지 않고 올린다", async () => {
+      push.mockImplementation(async (f) => {
+        if (f.id === PARENT) throw new ServerRejectedError(400, "거절");
+        return { ...f, parentId: null };
+      });
+
+      scheduleFolderPush(folder(PARENT, null));
+      scheduleFolderPush(folder(CHILD, PARENT));
+      await flushFolderSync();
+
+      expect(push.mock.calls.map(([f]) => f.id)).toEqual([PARENT, CHILD]);
+      expect(hasPendingFolderPush()).toBe(false);
+    });
+  });
+
+  describe("올리는 중인 폴더 (isFolderPushPending)", () => {
+    function holdPushOnce(): () => void {
+      let release: () => void = () => undefined;
+      push.mockImplementationOnce(
+        (f) =>
+          new Promise<Folder>((resolve) => {
+            release = () => resolve(f);
+          }),
+      );
+      return () => release();
+    }
+
+    it("기다리는 중, 묶음으로 보내는 중, 바로 올리는 중에 참이고 끝나면 거짓이다", async () => {
+      expect(isFolderPushPending(PARENT)).toBe(false);
+      expect(isFolderPushPending(null)).toBe(false);
+
+      scheduleFolderPush(folder(PARENT, null));
+      expect(isFolderPushPending(PARENT)).toBe(true);
+
+      const releaseBatch = holdPushOnce();
+      const flushing = flushFolderSync();
+      await vi.waitFor(() => expect(push).toHaveBeenCalledTimes(1));
+      expect(isFolderPushPending(PARENT)).toBe(true);
+      releaseBatch();
+      await flushing;
+      expect(isFolderPushPending(PARENT)).toBe(false);
+
+      const releaseNow = holdPushOnce();
+      const pushing = pushFolderNow(folder(CHILD, PARENT));
+      await vi.waitFor(() => expect(push).toHaveBeenCalledTimes(2));
+      expect(isFolderPushPending(CHILD)).toBe(true);
+      expect(hasPendingFolderPush()).toBe(true);
+      releaseNow();
+      await pushing;
+      expect(isFolderPushPending(CHILD)).toBe(false);
+      expect(hasPendingFolderPush()).toBe(false);
+    });
+
+    it("flushFolderSync는 이미 나간 바로 올리기(pushFolderNow)가 끝날 때까지 기다린다", async () => {
+      const releaseNow = holdPushOnce();
+      const pushing = pushFolderNow(folder(PARENT, null));
+      await vi.waitFor(() => expect(push).toHaveBeenCalledTimes(1));
+
+      let flushed = false;
+      const flushing = flushFolderSync().then(() => {
+        flushed = true;
+      });
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(flushed).toBe(false);
+
+      releaseNow();
+      await Promise.all([pushing, flushing]);
+      expect(flushed).toBe(true);
+    });
+
+    it("바로 올리기가 일시 장애로 실패하면 그 오류를 부른 쪽에 던지고, 큐가 그 폴더를 다시 올린다", async () => {
+      push.mockRejectedValueOnce(new ServerRejectedError(503, "과부하"));
+
+      await expect(pushFolderNow(folder(PARENT, null))).rejects.toBeInstanceOf(
+        ServerRejectedError,
+      );
+      expect(isFolderPushPending(PARENT)).toBe(true);
+
+      scheduleFolderPush(folder(CHILD, null));
+      await flushFolderSync();
+      expect(push.mock.calls.map(([f]) => f.id)).toEqual([
+        PARENT,
+        PARENT,
+        CHILD,
+      ]);
+      expect(hasPendingFolderPush()).toBe(false);
+    });
+
+    it("바로 올리기가 영구 실패(400)하면 큐에 다시 넣지 않는다", async () => {
+      push.mockRejectedValueOnce(new ServerRejectedError(400, "거절"));
+
+      await expect(pushFolderNow(folder(PARENT, null))).rejects.toBeInstanceOf(
+        ServerRejectedError,
+      );
+
+      expect(isFolderPushPending(PARENT)).toBe(false);
+      await flushFolderSync();
+      expect(push).toHaveBeenCalledTimes(1);
+    });
+
+    it("바로 올리기가 일시 장애로 끝나 알릴 때는 그 폴더를 아직 끝나지 않은 폴더로 센다", async () => {
+      push.mockRejectedValueOnce(new ServerRejectedError(503, "과부하"));
+      const pendingWhenSettled: boolean[] = [];
+      setFolderPushSettledListener(() => {
+        pendingWhenSettled.push(isFolderPushPending(PARENT));
+      });
+
+      await pushFolderNow(folder(PARENT, null)).catch(() => undefined);
+
+      expect(pendingWhenSettled).toEqual([true]);
+    });
+  });
+
+  describe("세트가 기다리는 폴더 (ensureFolderPushed)", () => {
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it("기다리는 폴더가 없으면 요청 없이 곧바로 참이다", async () => {
+      await expect(ensureFolderPushed(null)).resolves.toBe(true);
+      await expect(ensureFolderPushed(PARENT)).resolves.toBe(true);
+
+      expect(push).not.toHaveBeenCalled();
+    });
+
+    it("기다리는 폴더는 지금 올리고, 올라가면 참이다", async () => {
+      scheduleFolderPush(folder(PARENT, null));
+
+      await expect(ensureFolderPushed(PARENT)).resolves.toBe(true);
+
+      expect(push).toHaveBeenCalledTimes(1);
+      expect(isFolderPushPending(PARENT)).toBe(false);
+    });
+
+    it("폴더나 기다리는 조상이 서버 거절로 다시 시도를 기다리면 요청 없이 거짓이다", async () => {
+      __setFolderBackoffRandomForTests(() => 1);
+      vi.useFakeTimers();
+      push.mockRejectedValueOnce(
+        new ServerRejectedError(503, API_ERRORS.serverBusy, 30_000),
+      );
+      scheduleFolderPush(folder(PARENT, null));
+      await vi.advanceTimersByTimeAsync(2000);
+      expect(push).toHaveBeenCalledTimes(1);
+      scheduleFolderPush(folder(CHILD, PARENT));
+
+      await expect(ensureFolderPushed(PARENT)).resolves.toBe(false);
+      await expect(ensureFolderPushed(CHILD)).resolves.toBe(false);
+
+      expect(push).toHaveBeenCalledTimes(1);
+    });
+
+    it("부모가 오르기를 기다리느라 미뤄진 폴더는 거짓이다", async () => {
+      push.mockImplementationOnce(async () => {
+        throw new ServerRejectedError(503, API_ERRORS.serverBusy);
+      });
+      scheduleFolderPush(folder(PARENT, null));
+      scheduleFolderPush(folder(CHILD, PARENT));
+
+      await expect(ensureFolderPushed(CHILD)).resolves.toBe(false);
+
+      expect(push.mock.calls.map(([f]) => f.id)).toEqual([PARENT]);
+    });
+  });
+
+  describe("폴더 큐가 일을 마칠 때마다 알리기 (setFolderPushSettledListener)", () => {
+    const settled = vi.fn<() => void>();
+
+    beforeEach(() => {
+      settled.mockReset();
+      setFolderPushSettledListener(settled);
+    });
+
+    it("묶음과 바로 올리기가 끝나면 등록에서 뺀 뒤에 알린다", async () => {
+      let pendingWhenSettled: boolean | null = null;
+      settled.mockImplementation(() => {
+        pendingWhenSettled = isFolderPushPending(PARENT);
+      });
+
+      scheduleFolderPush(folder(PARENT, null));
+      await flushFolderSync();
+      expect(settled).toHaveBeenCalledTimes(1);
+      expect(pendingWhenSettled).toBe(false);
+
+      await pushFolderNow(folder(PARENT, null));
+      expect(settled).toHaveBeenCalledTimes(2);
+      expect(pendingWhenSettled).toBe(false);
+    });
+
+    it("기다리던 폴더를 취소하거나 큐를 끄면 알린다", () => {
+      scheduleFolderPush(folder(PARENT, null));
+      cancelFolderPush(PARENT);
+      expect(settled).toHaveBeenCalledTimes(1);
+
+      setFolderSyncEnabled(false);
+      expect(settled).toHaveBeenCalledTimes(2);
+    });
+
+    it("테스트 초기화는 알릴 곳을 지운다", async () => {
+      __resetFolderSyncForTests();
+      __setFolderPusherForTests(push);
+      setFolderSyncEnabled(true);
+
+      scheduleFolderPush(folder(PARENT, null));
+      await flushFolderSync();
+
+      expect(settled).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("영구 실패한 폴더", () => {
+    it("영구 실패한 요청을 보내는 동안 고친 폴더는 버리지 않고 다음에 올린다", async () => {
+      push.mockImplementationOnce(async () => {
+        scheduleFolderPush(folder(PARENT, null, "고친 이름"));
+        throw new ServerRejectedError(400, "거절");
+      });
+
+      scheduleFolderPush(folder(PARENT, null, "처음 이름"));
+      await flushFolderSync();
+
+      expect(hasPendingFolderPush()).toBe(true);
+      expect(getSyncSnapshot().status).toBe("error");
+
+      await flushFolderSync();
+
+      expect(push.mock.calls.map(([f]) => f.name)).toEqual([
+        "처음 이름",
+        "고친 이름",
+      ]);
+      expect(getSyncSnapshot()).toMatchObject({
+        status: "synced",
+        lastFailure: null,
+      });
+
+      await retryFolderSyncNow("manual");
+      expect(push).toHaveBeenCalledTimes(2);
+    });
+
+    it("다시 시도는 실패로 남긴 사본이 아니라 지금 폴더를 올리고, 없어진 폴더는 버린다", async () => {
+      push.mockRejectedValueOnce(new ServerRejectedError(400, "거절"));
+      push.mockRejectedValueOnce(new ServerRejectedError(400, "거절"));
+      scheduleFolderPush(folder(PARENT, null, "실패한 사본"));
+      scheduleFolderPush(folder(OTHER_ROOT, null, "지운 폴더"));
+      await flushFolderSync();
+      expect(getSyncSnapshot().status).toBe("error");
+
+      setFailedFolderResolver((id) =>
+        id === PARENT ? folder(PARENT, null, "지금 폴더") : undefined,
+      );
+      await retryFolderSyncNow("manual");
+
+      expect(push.mock.calls.slice(2).map(([f]) => f.name)).toEqual([
+        "지금 폴더",
+      ]);
+      expect(getSyncSnapshot()).toMatchObject({
+        status: "synced",
+        lastFailure: null,
+      });
+    });
   });
 
   it.each(["reconnect", "manual"] as const)(
@@ -375,7 +755,7 @@ describe("폴더 push 큐", () => {
     },
   );
 
-  it("재시도 한도(MAX_RETRY_ATTEMPTS)를 초과하면 재시도를 중단하고 error 상태가 된다", async () => {
+  it("재시도 한도를 넘긴 일시 장애(503)는 동기화 실패로 보이되 버리지 않고 SLOW_RETRY_MS 뒤에 다시 보낸다", async () => {
     push.mockRejectedValue(new ServerRejectedError(503, "지속 과부하"));
     __setFolderBackoffRandomForTests(() => 1);
     vi.useFakeTimers();
@@ -394,11 +774,146 @@ describe("폴더 push 큐", () => {
       kind: "folder",
       status: 503,
     });
+    expect(hasPendingFolderPush()).toBe(true);
+    await expect(ensureFolderPushed(PARENT)).resolves.toBe(false);
 
-    await vi.advanceTimersByTimeAsync(60_000);
+    await vi.advanceTimersByTimeAsync(30_000);
+    await retryFolderSyncNow("wake");
     expect(push).toHaveBeenCalledTimes(11);
 
+    push.mockImplementation(async (f) => f);
+    await vi.advanceTimersByTimeAsync(SLOW_RETRY_MS);
+
+    expect(push).toHaveBeenCalledTimes(12);
+    expect(getSyncSnapshot()).toMatchObject({
+      status: "synced",
+      lastFailure: null,
+    });
+
     vi.useRealTimers();
+  });
+
+  it("재시도 한도를 넘겨 천천히 다시 보내던 폴더는 다시 시도하면 곧바로 보내고 실패 표시를 지운다", async () => {
+    push.mockRejectedValue(new ServerRejectedError(503, "지속 과부하"));
+    __setFolderBackoffRandomForTests(() => 0);
+    vi.useFakeTimers();
+    scheduleFolderPush(folder(PARENT, null));
+    for (let i = 0; i <= MAX_RETRY_ATTEMPTS; i++) {
+      await vi.advanceTimersByTimeAsync(2000);
+    }
+    expect(push).toHaveBeenCalledTimes(MAX_RETRY_ATTEMPTS + 1);
+    expect(getSyncSnapshot().status).toBe("error");
+
+    let release: () => void = () => undefined;
+    push.mockImplementation(
+      (f) =>
+        new Promise<Folder>((resolve) => {
+          release = () => resolve(f);
+        }),
+    );
+    const retrying = retryFolderSyncNow("manual");
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(push).toHaveBeenCalledTimes(MAX_RETRY_ATTEMPTS + 2);
+    expect(getSyncSnapshot()).toMatchObject({
+      status: "syncing",
+      lastFailure: null,
+    });
+
+    release();
+    await retrying;
+    expect(getSyncSnapshot().status).toBe("synced");
+
+    vi.useRealTimers();
+  });
+
+  it("재시도 한도를 넘긴 서버 오류(500)는 천천히 다시 보내지 않고 영구 실패로 남겨, 그 안의 폴더를 막지 않는다", async () => {
+    push.mockImplementation(async (f) => {
+      if (f.id === PARENT) throw new ServerRejectedError(500, "서버 오류");
+      return f;
+    });
+    __setFolderBackoffRandomForTests(() => 1);
+    vi.useFakeTimers();
+
+    scheduleFolderPush(folder(PARENT, null));
+    scheduleFolderPush(folder(CHILD, PARENT));
+    await vi.advanceTimersByTimeAsync(2000);
+    for (let i = 0; i < MAX_RETRY_ATTEMPTS; i++) {
+      await vi.advanceTimersByTimeAsync(60_000);
+    }
+
+    expect(push.mock.calls.map(([f]) => f.id)).toEqual([
+      ...Array<string>(MAX_RETRY_ATTEMPTS + 1).fill(PARENT),
+      CHILD,
+    ]);
+    expect(hasPendingFolderPush()).toBe(false);
+    expect(getSyncSnapshot()).toMatchObject({
+      status: "error",
+      lastFailure: { id: PARENT, kind: "folder", status: 500 },
+    });
+    await expect(ensureFolderPushed(PARENT)).resolves.toBe(true);
+
+    await vi.advanceTimersByTimeAsync(SLOW_RETRY_MS * 2);
+    expect(push).toHaveBeenCalledTimes(MAX_RETRY_ATTEMPTS + 2);
+
+    vi.useRealTimers();
+  });
+
+  describe("송출 화면", () => {
+    const startPath = window.location.pathname;
+    const PROJECTION_PATH = "/present/a00000000000000000001/fullscreen";
+
+    afterEach(() => {
+      vi.useRealTimers();
+      window.history.pushState({}, "", startPath);
+    });
+
+    it("재시도 한도를 넘겨 천천히 다시 보내던 폴더도 송출하는 동안은 보내지 않고, 송출을 마치면 보낸다", async () => {
+      push.mockRejectedValue(new ServerRejectedError(503, "지속 과부하"));
+      __setFolderBackoffRandomForTests(() => 1);
+      vi.useFakeTimers();
+      scheduleFolderPush(folder(PARENT, null));
+      await vi.advanceTimersByTimeAsync(2000);
+      for (let i = 0; i < MAX_RETRY_ATTEMPTS; i++) {
+        await vi.advanceTimersByTimeAsync(60_000);
+      }
+      expect(push).toHaveBeenCalledTimes(MAX_RETRY_ATTEMPTS + 1);
+
+      window.history.pushState({}, "", PROJECTION_PATH);
+      await vi.advanceTimersByTimeAsync(SLOW_RETRY_MS * 6);
+      await flushFolderSync();
+      await retryFolderSyncNow("manual");
+
+      expect(push).toHaveBeenCalledTimes(MAX_RETRY_ATTEMPTS + 1);
+      expect(hasPendingFolderPush()).toBe(true);
+
+      push.mockImplementation(async (f) => f);
+      window.history.pushState({}, "", "/presentations");
+      await vi.advanceTimersByTimeAsync(BASE_BACKOFF_MS);
+
+      expect(push).toHaveBeenCalledTimes(MAX_RETRY_ATTEMPTS + 2);
+      expect(getSyncSnapshot()).toMatchObject({
+        status: "synced",
+        lastFailure: null,
+      });
+    });
+
+    it("송출 중에 고친 폴더는 디바운스·flush로도 보내지 않고, 송출을 마치면 보낸다", async () => {
+      vi.useFakeTimers();
+      window.history.pushState({}, "", PROJECTION_PATH);
+
+      scheduleFolderPush(folder(PARENT, null));
+      await vi.advanceTimersByTimeAsync(BASE_BACKOFF_MS * 3);
+      await flushFolderSync();
+
+      expect(push).not.toHaveBeenCalled();
+
+      window.history.pushState({}, "", "/presentations");
+      await vi.advanceTimersByTimeAsync(BASE_BACKOFF_MS);
+
+      expect(push).toHaveBeenCalledTimes(1);
+      expect(hasPendingFolderPush()).toBe(false);
+    });
   });
 
   it("오프라인(OfflineError)은 10회를 초과해도 재시도를 포기하지 않고 큐에 유지된다", async () => {
@@ -589,6 +1104,18 @@ describe("폴더 push 큐", () => {
       await vi.advanceTimersByTimeAsync(MAX_BACKOFF_MS);
 
       expect(push).toHaveBeenCalledTimes(1);
+    });
+
+    it("끈 뒤에 일시 장애로 끝난 바로 올리기는 큐에 다시 넣지 않는다", async () => {
+      const first = holdPushOnce();
+      const booting = pushFolderNow(folder(PARENT, null));
+      await vi.waitFor(() => expect(push).toHaveBeenCalledTimes(1));
+
+      setFolderSyncEnabled(false);
+      first.reject(new ServerRejectedError(503, "과부하"));
+      await expect(booting).rejects.toBeInstanceOf(ServerRejectedError);
+
+      expect(hasPendingFolderPush()).toBe(false);
     });
 
     it("끈 뒤에는 flush하거나 다시 시도해도 보내지 않는다", async () => {

@@ -11,6 +11,7 @@ import {
   OfflineError,
   ServerRejectedError,
   SessionExpiredError,
+  TimeoutError,
 } from "../api/request";
 
 describe("calculateBackoffWithJitter", () => {
@@ -38,10 +39,19 @@ describe("calculateBackoffWithJitter", () => {
 });
 
 describe("getRetryDelay", () => {
-  it("Retry-After 헤더가 있는 ServerRejectedError는 헤더 값을 우선한다", () => {
+  it("Retry-After를 바닥으로 삼고, 시도할수록 늘어나는 백오프가 더 길면 그만큼 기다린다", () => {
     const errorWithHeader = new ServerRejectedError(503, "과부하", 5000);
     expect(getRetryDelay(errorWithHeader, 0, 1)).toBe(5000);
-    expect(getRetryDelay(errorWithHeader, 5, 0.5)).toBe(5000);
+    expect(getRetryDelay(errorWithHeader, 5, 0.5)).toBe(30_000);
+  });
+
+  it("서버가 늘 같은 짧은 Retry-After를 줘도 시도할수록 간격이 늘고, 그 값보다 짧게 기다리지 않는다", () => {
+    const busy = new ServerRejectedError(503, "", 2000);
+
+    expect(getRetryDelay(busy, 6, 1)).toBe(MAX_BACKOFF_MS);
+    for (let attempt = 0; attempt < MAX_RETRY_ATTEMPTS; attempt += 1) {
+      expect(getRetryDelay(busy, attempt, 0)).toBe(2000);
+    }
   });
 
   it("Retry-After 값이 BASE_BACKOFF_MS보다 작으면 BASE_BACKOFF_MS로 보정한다", () => {
@@ -50,7 +60,11 @@ describe("getRetryDelay", () => {
   });
 
   it("Retry-After 값이 MAX_BACKOFF_MS보다 크면 MAX_BACKOFF_MS로 보정한다", () => {
-    const errorWithLargeHeader = new ServerRejectedError(503, "과부하", 120_000);
+    const errorWithLargeHeader = new ServerRejectedError(
+      503,
+      "과부하",
+      120_000,
+    );
     expect(getRetryDelay(errorWithLargeHeader, 0, 1)).toBe(MAX_BACKOFF_MS);
   });
 
@@ -123,6 +137,20 @@ describe("BackoffTracker", () => {
 
     expect(tracker.getAttempt("doc-a")).toBe(2);
     expect(tracker.getServerAttempt("doc-a")).toBe(2);
+  });
+
+  it("서버가 거절하지 않은 실패도 서버 재시도 횟수에 넣을 수 있다", () => {
+    const tracker = new BackoffTracker();
+    tracker.__setRandomForTests(() => 1);
+
+    tracker.getDelay(new TimeoutError());
+    tracker.countServerAttempt();
+
+    expect(tracker.getAttempt()).toBe(1);
+    expect(tracker.getServerAttempt()).toBe(1);
+
+    tracker.reset();
+    expect(tracker.getServerAttempt()).toBe(0);
   });
 
   it("MAX_RETRY_ATTEMPTS 상수는 10이다", () => {

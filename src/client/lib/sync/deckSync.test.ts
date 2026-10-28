@@ -18,6 +18,7 @@ import {
   isDeckDeletedError,
   hasPendingDeckSync,
   resumePendingDeckDeletes,
+  setFailedDeckResolver,
   __setDeckTransportForTests,
   __setDeckBackoffRandomForTests,
   __resetDeckSyncForTests,
@@ -41,7 +42,12 @@ import {
   listPendingDeckDeletes,
   rememberDeckDelete,
 } from "./pendingDeckDeletes";
-import { MAX_BACKOFF_MS, MAX_RETRY_ATTEMPTS } from "./backoff";
+import {
+  BASE_BACKOFF_MS,
+  MAX_BACKOFF_MS,
+  MAX_RETRY_ATTEMPTS,
+  SLOW_RETRY_MS,
+} from "./backoff";
 
 const USER = "00000000x000000000001";
 const OTHER_USER = "00000000x000000000002";
@@ -304,7 +310,7 @@ describe("보관함 push 큐", () => {
     vi.useRealTimers();
   });
 
-  it("재시도 한도(MAX_RETRY_ATTEMPTS)를 초과하면 재시도를 중단하고 error 상태가 된다", async () => {
+  it("재시도 한도를 넘긴 일시 장애(503)는 동기화 실패로 보이되 버리지 않고 SLOW_RETRY_MS 뒤에 다시 보낸다", async () => {
     push.mockRejectedValue(new ServerRejectedError(503, "지속 과부하"));
     __setDeckBackoffRandomForTests(() => 1);
     vi.useFakeTimers();
@@ -323,11 +329,140 @@ describe("보관함 push 큐", () => {
       kind: "deck",
       status: 503,
     });
+    expect(hasPendingDeckSync()).toBe(true);
 
-    await vi.advanceTimersByTimeAsync(60_000);
+    await vi.advanceTimersByTimeAsync(30_000);
+    await retryDeckSyncNow("wake");
     expect(push).toHaveBeenCalledTimes(11);
 
+    push.mockImplementation(async (d: Deck) => d);
+    await vi.advanceTimersByTimeAsync(SLOW_RETRY_MS);
+
+    expect(push).toHaveBeenCalledTimes(12);
+    expect(getSyncSnapshot()).toMatchObject({
+      status: "synced",
+      lastFailure: null,
+    });
+
     vi.useRealTimers();
+  });
+
+  it("재시도 한도를 넘겨 천천히 다시 보내던 곡은 다시 시도하면 곧바로 보내고 실패 표시를 지운다", async () => {
+    push.mockRejectedValue(new ServerRejectedError(503, "지속 과부하"));
+    __setDeckBackoffRandomForTests(() => 0);
+    vi.useFakeTimers();
+    scheduleDeckPush(deck());
+    for (let i = 0; i <= MAX_RETRY_ATTEMPTS; i++) {
+      await vi.advanceTimersByTimeAsync(2000);
+    }
+    expect(push).toHaveBeenCalledTimes(MAX_RETRY_ATTEMPTS + 1);
+    expect(getSyncSnapshot().status).toBe("error");
+
+    let release: () => void = () => undefined;
+    push.mockImplementation(
+      (d: Deck) =>
+        new Promise<Deck>((resolve) => {
+          release = () => resolve(d);
+        }),
+    );
+    const retrying = retryDeckSyncNow("manual");
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(push).toHaveBeenCalledTimes(MAX_RETRY_ATTEMPTS + 2);
+    expect(getSyncSnapshot()).toMatchObject({
+      status: "syncing",
+      lastFailure: null,
+    });
+
+    release();
+    await retrying;
+    expect(getSyncSnapshot().status).toBe("synced");
+
+    vi.useRealTimers();
+  });
+
+  it("재시도 한도를 넘긴 서버 오류(500)는 천천히 다시 보내지 않고 영구 실패로 남긴다", async () => {
+    push.mockRejectedValue(new ServerRejectedError(500, "서버 오류"));
+    __setDeckBackoffRandomForTests(() => 1);
+    vi.useFakeTimers();
+
+    scheduleDeckPush(deck());
+    await vi.advanceTimersByTimeAsync(2000);
+    for (let i = 0; i < MAX_RETRY_ATTEMPTS; i++) {
+      await vi.advanceTimersByTimeAsync(60_000);
+    }
+
+    expect(push).toHaveBeenCalledTimes(MAX_RETRY_ATTEMPTS + 1);
+    expect(hasPendingDeckSync()).toBe(false);
+    expect(getSyncSnapshot()).toMatchObject({
+      status: "error",
+      lastFailure: { id: A, kind: "deck", status: 500 },
+    });
+
+    await vi.advanceTimersByTimeAsync(SLOW_RETRY_MS * 2);
+    expect(push).toHaveBeenCalledTimes(MAX_RETRY_ATTEMPTS + 1);
+
+    vi.useRealTimers();
+  });
+
+  describe("송출 화면", () => {
+    const startPath = window.location.pathname;
+    const PROJECTION_PATH = "/present/a00000000000000000001/fullscreen";
+
+    afterEach(() => {
+      vi.useRealTimers();
+      window.history.pushState({}, "", startPath);
+    });
+
+    it("재시도 한도를 넘겨 천천히 다시 보내던 곡도 송출하는 동안은 보내지 않고, 송출을 마치면 보낸다", async () => {
+      push.mockRejectedValue(new ServerRejectedError(503, "지속 과부하"));
+      __setDeckBackoffRandomForTests(() => 1);
+      vi.useFakeTimers();
+      scheduleDeckPush(deck());
+      await vi.advanceTimersByTimeAsync(2000);
+      for (let i = 0; i < MAX_RETRY_ATTEMPTS; i++) {
+        await vi.advanceTimersByTimeAsync(60_000);
+      }
+      expect(push).toHaveBeenCalledTimes(MAX_RETRY_ATTEMPTS + 1);
+
+      window.history.pushState({}, "", PROJECTION_PATH);
+      await vi.advanceTimersByTimeAsync(SLOW_RETRY_MS * 6);
+      await flushDeckSync();
+      await retryDeckSyncNow("manual");
+
+      expect(push).toHaveBeenCalledTimes(MAX_RETRY_ATTEMPTS + 1);
+      expect(hasPendingDeckSync()).toBe(true);
+
+      push.mockImplementation(async (d: Deck) => d);
+      window.history.pushState({}, "", "/presentations");
+      await vi.advanceTimersByTimeAsync(BASE_BACKOFF_MS);
+
+      expect(push).toHaveBeenCalledTimes(MAX_RETRY_ATTEMPTS + 2);
+      expect(getSyncSnapshot()).toMatchObject({
+        status: "synced",
+        lastFailure: null,
+      });
+    });
+
+    it("송출 중에 고치거나 지운 곡은 디바운스·flush로도 보내지 않고, 송출을 마치면 보낸다", async () => {
+      vi.useFakeTimers();
+      window.history.pushState({}, "", PROJECTION_PATH);
+
+      scheduleDeckPush(deck());
+      scheduleDeckDelete(B, USER);
+      await vi.advanceTimersByTimeAsync(BASE_BACKOFF_MS * 3);
+      await flushDeckSync();
+
+      expect(push).not.toHaveBeenCalled();
+      expect(remove).not.toHaveBeenCalled();
+
+      window.history.pushState({}, "", "/presentations");
+      await vi.advanceTimersByTimeAsync(BASE_BACKOFF_MS);
+
+      expect(push).toHaveBeenCalledTimes(1);
+      expect(remove).toHaveBeenCalledExactlyOnceWith(B);
+      expect(hasPendingDeckSync()).toBe(false);
+    });
   });
 
   it("오프라인(OfflineError)은 10회를 초과해도 재시도를 포기하지 않고 큐에 유지된다", async () => {
@@ -760,6 +895,112 @@ describe("보관함 push 큐", () => {
     });
   });
 
+  describe("영구 실패한 곡 변경", () => {
+    it("영구 실패한 곡을 올리는 동안 지운 곡은 다음 차례에 서버에서도 지운다", async () => {
+      push.mockImplementationOnce(async () => {
+        scheduleDeckDelete(A, USER);
+        throw new ServerRejectedError(400, "거절");
+      });
+
+      scheduleDeckPush(deck());
+      await flushDeckSync();
+      await flushDeckSync();
+
+      expect(remove).toHaveBeenCalledExactlyOnceWith(A);
+      expect(getSyncSnapshot()).toMatchObject({
+        status: "synced",
+        lastFailure: null,
+      });
+    });
+
+    it("영구 실패한 요청을 보내는 동안 고친 곡은 버리지 않고 다음 차례에 올린다", async () => {
+      push.mockImplementationOnce(async () => {
+        scheduleDeckPush(deck("고친 곡"));
+        throw new ServerRejectedError(400, "거절");
+      });
+
+      scheduleDeckPush(deck("처음 곡"));
+      await flushDeckSync();
+
+      expect(hasPendingDeckSync()).toBe(true);
+      expect(getSyncSnapshot().status).toBe("error");
+
+      await flushDeckSync();
+
+      expect(push.mock.calls.map(([sent]) => sent.title)).toEqual([
+        "처음 곡",
+        "고친 곡",
+      ]);
+      expect(getSyncSnapshot()).toMatchObject({
+        status: "synced",
+        lastFailure: null,
+      });
+
+      await retryDeckSyncNow("manual");
+      expect(push).toHaveBeenCalledTimes(2);
+    });
+
+    it("영구 실패한 삭제를 보내는 동안 다시 넣은 곡은 버리지 않고 올린다", async () => {
+      remove.mockImplementationOnce(async () => {
+        cancelDeckDelete(A, USER);
+        scheduleDeckPush(deck("다시 넣은 곡"));
+        throw new ServerRejectedError(400, "거절");
+      });
+
+      scheduleDeckDelete(A, USER);
+      await flushDeckSync();
+      await flushDeckSync();
+
+      expect(push.mock.calls.map(([sent]) => sent.title)).toEqual([
+        "다시 넣은 곡",
+      ]);
+      expect(getSyncSnapshot()).toMatchObject({
+        status: "synced",
+        lastFailure: null,
+      });
+
+      await retryDeckSyncNow("manual");
+      expect(remove).toHaveBeenCalledTimes(1);
+    });
+
+    it("다시 시도는 실패로 남긴 사본이 아니라 지금 보관함의 곡을 올리고, 없어진 곡은 버린다", async () => {
+      push.mockRejectedValueOnce(new ServerRejectedError(400, "거절"));
+      push.mockRejectedValueOnce(new ServerRejectedError(400, "거절"));
+      scheduleDeckPush(deck("실패한 사본"));
+      scheduleDeckPush({ ...deck("없어진 곡"), id: B });
+      await flushDeckSync();
+      expect(getSyncSnapshot().status).toBe("error");
+
+      setFailedDeckResolver((id) =>
+        id === A ? deck("지금 보관함의 곡") : undefined,
+      );
+      await retryDeckSyncNow("manual");
+
+      expect(push.mock.calls.slice(2).map(([sent]) => sent.title)).toEqual([
+        "지금 보관함의 곡",
+      ]);
+      expect(getSyncSnapshot()).toMatchObject({
+        status: "synced",
+        lastFailure: null,
+      });
+    });
+
+    it("영구 실패한 삭제는 다시 시도에 지금 곡을 찾지 않고 삭제로 다시 보낸다", async () => {
+      const resolve = vi.fn<(id: string) => Deck | undefined>(() => undefined);
+      setFailedDeckResolver(resolve);
+      remove.mockRejectedValueOnce(new ServerRejectedError(400, "거절"));
+      scheduleDeckDelete(A, USER);
+      await flushDeckSync();
+
+      await retryDeckSyncNow("manual");
+
+      expect(remove).toHaveBeenCalledTimes(2);
+      expect(remove).toHaveBeenLastCalledWith(A);
+      expect(push).not.toHaveBeenCalled();
+      expect(resolve).not.toHaveBeenCalled();
+    });
+  });
+
   describe("새로고침 뒤에도 보낼 곡 삭제 기록", () => {
     it("동기화가 꺼져 있어도 지운 곡을 기록하고, 서버가 지우면(200) 기록을 지운다", async () => {
       setDeckSyncEnabled(false);
@@ -832,7 +1073,7 @@ describe("보관함 push 큐", () => {
       expect(wasDeckDeleted(A)).toBe(true);
     });
 
-    it("재시도 한도까지 일시 장애(503)가 이어지면 기록을 지우고 이번 실패는 남긴다", async () => {
+    it("재시도 한도까지 일시 장애(503)가 이어져도 기록을 남기고 실패를 보이며, 천천히 다시 보내 지우면 기록을 지운다", async () => {
       remove.mockRejectedValue(new ServerRejectedError(503, "지속 과부하"));
       __setDeckBackoffRandomForTests(() => 1);
       vi.useFakeTimers();
@@ -847,10 +1088,20 @@ describe("보관함 push 큐", () => {
         }
 
         expect(remove).toHaveBeenCalledTimes(11);
-        expect(listPendingDeckDeletes(USER)).toEqual([]);
+        expect(listPendingDeckDeletes(USER)).toEqual([A]);
         expect(getSyncSnapshot()).toMatchObject({
           status: "error",
           lastFailure: { id: A, kind: "deck", status: 503 },
+        });
+
+        remove.mockResolvedValue(true);
+        await vi.advanceTimersByTimeAsync(SLOW_RETRY_MS);
+
+        expect(remove).toHaveBeenCalledTimes(12);
+        expect(listPendingDeckDeletes(USER)).toEqual([]);
+        expect(getSyncSnapshot()).toMatchObject({
+          status: "synced",
+          lastFailure: null,
         });
       } finally {
         vi.useRealTimers();

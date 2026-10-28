@@ -6,6 +6,7 @@ import {
 } from "../../features/presentation";
 import { mayDifferFromStorage } from "../../features/presentation/presentationStore";
 import {
+  getFolder,
   getFolders,
   applyServerFolders,
   applyServerFolder,
@@ -22,6 +23,7 @@ import {
 import { planBootMerge } from "./mergeDocuments";
 import { mergeFolders } from "./mergeFolders";
 import {
+  getLibraryDeck,
   getUserSongs,
   getDeletedSongIds,
   applyServerLibraryDecks,
@@ -43,24 +45,29 @@ import {
 } from "./presentationSync";
 import {
   isRetryableApiError,
+  isTransientServerError,
   requestIdOfError,
   OfflineError,
   ServerRejectedError,
   SessionExpiredError,
+  TimeoutError,
 } from "../api/request";
 import {
   BackoffTracker,
   BASE_BACKOFF_MS,
   MAX_RETRY_ATTEMPTS,
+  SLOW_RETRY_MS,
   type SyncRetryMode,
 } from "./backoff";
 import {
   setFolderSyncEnabled,
   setServerFolderListener,
   setFolderGoneListener,
+  setFailedFolderResolver,
   pushFolderNow,
   hasPendingFolderPush,
   holdFailedFolderPush,
+  isFolderPushPending,
   scheduleFolderPush,
   cancelFolderPush,
 } from "./folderSync";
@@ -74,7 +81,7 @@ import {
 } from "./syncStatus";
 import {
   cancelDocumentPush,
-  flushPendingSync,
+  flushDocumentPushes,
   hasPendingDocumentPush,
   isDocumentQueued,
   scheduleDocumentPush,
@@ -84,6 +91,7 @@ import {
   setDeckSyncEnabled,
   setServerDeckListener,
   setDeckGoneListener,
+  setFailedDeckResolver,
   pushDeckNow,
   hasPendingDeckSync,
   holdFailedDeckPush,
@@ -238,18 +246,29 @@ export function useBootPullPending(domain: BootPullDomain): boolean {
  * 마친 뒤에 올린다.
  *
  * 프레젠테이션은 프레젠테이션 큐로 올리고(`scheduleDocumentPush`) 큐가 모두 보낼 때까지
- * 기다린다(`flushPendingSync`). 부팅이 따로 보내면 같은 세트의 PATCH가 큐의 것과 겹쳐 먼저 보낸
+ * 기다린다(`flushDocumentPushes`). 부팅이 따로 보내면 같은 세트의 PATCH가 큐의 것과 겹쳐 먼저 보낸
  * 판이 나중에 닿을 수 있고, 영구 삭제가 기다리는 큐 비우기가 부팅 push를 기다리지 않는다. 큐는
  * 보낼 때 스토어의 지금 판을 올린다(`ownPresentationListener`). 부팅은 올리기 전에 '동기화 중'으로
  * 두고, 큐가 끝난 뒤에도 그대로일 때만 '동기화됨'으로 바꾼다. 받지 못해 다시 받은 단계는 앞서 남긴
  * '오프라인'을 풀어야 하고, 큐가 그동안 남긴 오프라인·세션 만료·실패를 덮으면 올라가지 않은 변경이
  * 저장된 것처럼 보인다.
  *
+ * 폴더는 부모부터 올리고, 부모가 아직 폴더 큐에 남아 있으면(일시 장애로 넘겼거나 다시 시도 중)
+ * 자식은 올리지 않고 큐에 넘긴다. 서버는 모르는 부모를 가리키는 폴더를 루트로 옮겨 받고, 이
+ * 기기도 응답을 받자마자 그 위치를 따른다. 담긴 폴더가 큐에 남은 세트는 프레젠테이션 큐가 폴더가 오를
+ * 때까지 붙잡아 둔다. 부팅이 폴더 큐를 직접 비우지 않는 것은, 비우면 서버가 준 대기를 어기고 다시
+ * 시도를 기다리는 폴더를 곧바로 다시 보내며, 그 재시도를 기다리면 보관함 받기가 그만큼 늦기
+ * 때문이다. 다만 담긴 폴더가 다시 시도 없이 큐에서 기다리는 세트(방금 고친 폴더)는 폴더 큐를 지금
+ * 돌리고 그 큐가 끝날 때까지 기다리므로(`ensureFolderPushed`), 부팅도 그 큐를 기다린다. 그 큐는 다시
+ * 시도를 기다리던 다른 폴더도 함께 보낸다.
+ *
  * 폴더·곡은 항목마다 올리기 직전과 큐에 넘기거나 실패로 남길 때 지금 저장소에 있는 것을 다시
  * 찾아 쓰고, 그사이 지워졌으면 건너뛴다. 부팅 병합 때의 사본을 올리면 앞 항목을 올리는 동안
  * 사용자가 지운 곡이 되살아나고, 바로 올리기는 큐에 대기 중인 같은 항목을 버리므로 그사이
  * 고친 내용(폴더 이름 등)이 다음 부팅까지 서버에 가지 않는다. 올리는 동안 지운 항목의 실패를
- * 남기면 '다시 시도'가 다시 올릴 항목이 없어 그 실패가 세션 내내 남는다.
+ * 남기면 '다시 시도'가 다시 올릴 항목이 없어 그 실패가 세션 내내 남는다. '다시 시도'도 실패로
+ * 남긴 사본 대신 지금 저장소의 폴더·곡을 올린다(`setFailedFolderResolver`,
+ * `setFailedDeckResolver`).
  *
  * 병합 결과는 각 스토어의 저장 줄로 저장한다 (`applyServerDocuments` 등). 병합하자마자 기다림
  * 없이 지운 항목과 서버 사본이 이긴 항목의 대기 중인 push를 버린다. 대기 중인 사본은 방금
@@ -290,9 +309,11 @@ export async function runBootSync(): Promise<void> {
   resumeSongDeletes();
   setServerDeckListener(applyServerDeckFields);
   setDeckGoneListener(dropDeletedLibraryDeck);
+  setFailedDeckResolver(getLibraryDeck);
   setFolderSyncEnabled(true);
   setServerFolderListener(applyServerFolder);
   setFolderGoneListener(removeFoldersLocally);
+  setFailedFolderResolver(getFolder);
   void refreshBackgroundCatalog();
 
   try {
@@ -326,8 +347,10 @@ export function stopSync(): void {
   setOwnPresentationListener(null);
   setServerDeckListener(null);
   setDeckGoneListener(null);
+  setFailedDeckResolver(null);
   setServerFolderListener(null);
   setFolderGoneListener(null);
+  setFailedFolderResolver(null);
   setFolderSyncEnabled(false);
   setSyncEnabled(false);
   setDeckSyncEnabled(false);
@@ -395,7 +418,7 @@ async function syncDriveAndDecks(): Promise<void> {
     const latest = getPresentationById(id);
     if (latest) scheduleDocumentPush(latest);
   }
-  await flushPendingSync();
+  await flushDocumentPushes();
   if (generation !== bootGeneration) return;
   if (getSyncDomainStatus("presentation") === "syncing") {
     settleSyncStatus("presentation", "synced");
@@ -439,21 +462,36 @@ function cancelBootRetry(): void {
   retryBackoff.reset();
 }
 
-function retryPullLater(step: () => Promise<void>, err: unknown): SyncStatus {
-  if (
-    !isRetryableApiError(err) ||
-    (!(err instanceof OfflineError) &&
-      retryBackoff.getServerAttempt() >= MAX_RETRY_ATTEMPTS)
-  ) {
-    retryBackoff.reset();
-    abandonedStep = step;
-    return "error";
-  }
+function abandonPull(step: () => Promise<void>): SyncStatus {
+  retryBackoff.reset();
+  abandonedStep = step;
+  return "error";
+}
+
+function retryPullAfter(
+  step: () => Promise<void>,
+  delay: number,
+  waitsOnServer: boolean,
+): void {
   abandonedStep = null;
   retryStep = step;
-  retryWaitsOnServer = !(err instanceof OfflineError);
+  retryWaitsOnServer = waitsOnServer;
   if (retryTimer) clearTimeout(retryTimer);
-  retryTimer = setTimeout(runRetry, retryBackoff.getDelay(err));
+  retryTimer = setTimeout(runRetry, delay);
+}
+
+function retryPullLater(step: () => Promise<void>, err: unknown): SyncStatus {
+  if (!isRetryableApiError(err)) return abandonPull(step);
+  const timedOut = err instanceof TimeoutError;
+  const waitsOnServer = timedOut || !(err instanceof OfflineError);
+  if (waitsOnServer && retryBackoff.getServerAttempt() >= MAX_RETRY_ATTEMPTS) {
+    if (!isTransientServerError(err)) return abandonPull(step);
+    retryPullAfter(step, SLOW_RETRY_MS, true);
+    return "error";
+  }
+  const delay = retryBackoff.getDelay(err);
+  if (timedOut) retryBackoff.countServerAttempt();
+  retryPullAfter(step, delay, waitsOnServer);
   return "offline";
 }
 
@@ -487,9 +525,16 @@ function runRetry(): Promise<void> | null {
  * 들어 있지 않아, 회복을 알아도 백오프 타이머가 끝날 때까지(최대 1분) 헤더가
  * '오프라인'으로 남는다. 먼저 받아 병합해야 큐가 병합 결과를 올린다.
  *
- * `wake`는 서버가 거절해(5xx·429) 기다리는 단계를 앞당기지 않고 백오프 횟수도 그대로
- * 둔다. 포커스마다 목록 전체를 다시 받으면 장애 중인 서버를 더 누른다. `manual`은 서버
- * 재시도 한도에 이르렀거나 거절돼 포기한 단계도 다시 받는다.
+ * `wake`는 서버가 거절해(5xx·429) 기다리거나 받다 시간을 넘겨 기다리는 단계를 앞당기지 않고
+ * 백오프 횟수도 그대로 둔다. 포커스마다 목록 전체를 다시 받으면 장애 중인 서버를 더 누른다.
+ *
+ * 받다 시간을 넘기면 서버가 거절한 것처럼 재시도 한도에 센다. 느린 회선에서 큰 목록은 매번 처음부터
+ * 다시 받으므로, 끝나지 않는 받기를 한도 없이 되풀이하면 기록 전체를 1분마다 다시 읽는다. 한도에
+ * 이르면 포기하고 `manual`만 다시 받는다. 서버가 지금은 받지 못한다고 답한 거절(408·429·502·503·504,
+ * `isTransientServerError`)은 한도를 넘겨도 포기하지 않고 `SLOW_RETRY_MS`마다 다시 받는다. 장애가
+ * 끝나면 '다시 시도'를 누르지 않아도 부팅 병합을 마쳐, 이 기기에만 있는 변경을 올리고 다른 기기에서
+ * 고친 판을 받는다. 500처럼 다시 받아도 같은 답일 거절은 한도에서 포기한다. `manual`은 거절돼
+ * 포기한 단계도 다시 받는다.
  */
 export async function retryBootSyncIfNeeded(
   mode: SyncRetryMode,
@@ -549,6 +594,8 @@ async function syncFolders(
       requeue: scheduleFolderPush,
       hold: holdFailedFolderPush,
       titleOf: (folder) => folder.name,
+      waitsFor: (folder) =>
+        folder.parentId !== null && isFolderPushPending(folder.parentId),
     },
     sortFoldersParentFirst(
       folders.filter((candidate) => toPush.has(candidate.id)),
@@ -624,6 +671,7 @@ interface BootPushTarget<T extends { id: string }> {
   requeue: (item: T) => void;
   hold: (item: T) => void;
   titleOf: (item: T) => string;
+  waitsFor?: (item: T) => boolean;
 }
 
 function findLatest<T extends { id: string }>(
@@ -644,6 +692,11 @@ async function pushLatestEach<T extends { id: string }>(
     if (generation !== bootGeneration) break;
     const item = findLatest(target.current, id);
     if (!item) continue;
+    if (target.waitsFor?.(item)) {
+      target.requeue(item);
+      offline = true;
+      continue;
+    }
     try {
       await target.push(item);
     } catch (err) {
