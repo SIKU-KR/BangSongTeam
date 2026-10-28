@@ -130,17 +130,16 @@ describe("presentationRepository", () => {
       });
     });
 
-    it("새 버전의 탭이 남긴 baseUpdatedAt은 떼고 읽는다", async () => {
-      const presentation = makePresentation();
-      await seedRawRecord({
-        ...presentation,
-        baseUpdatedAt: presentation.updatedAt,
+    it("기준 판(baseUpdatedAt)을 함께 읽고, 스키마에 없는 필드는 떼고 읽는다", async () => {
+      const presentation = makePresentation({
+        baseUpdatedAt: "2026-09-27T00:00:00.000Z",
       });
+      await seedRawRecord({ ...presentation, notYetKnown: "새 버전의 필드" });
 
       const loaded = await loadPresentation(presentation.id);
 
       expect(loaded).toEqual({ status: "ok", value: presentation });
-      expect(loaded.status === "ok" && "baseUpdatedAt" in loaded.value).toBe(
+      expect(loaded.status === "ok" && "notYetKnown" in loaded.value).toBe(
         false,
       );
     });

@@ -8,7 +8,7 @@ import {
   createId,
   cycleItem,
   createSlideId,
-  editTimestamp,
+  laterThan,
   mergeSlideLines,
   splitLinesAtCursor,
 } from "#shared";
@@ -31,7 +31,15 @@ import {
   cancelDocumentPush,
   isDocumentQueued,
 } from "../../lib/sync/syncScheduler";
+import {
+  confirmVersion,
+  contentFingerprint,
+  forgetLineage,
+  noteOwnVersion,
+  resetLineage,
+} from "../../lib/sync/presentationLineage";
 import { getBackgrounds } from "../backgrounds/backgroundCatalog";
+import { isProjecting } from "./fullscreen";
 import { COMMON_COPY } from "#copy/common";
 import {
   breakHistoryCoalescing,
@@ -46,8 +54,11 @@ import {
   buildPresentationCopy,
   cloneDeck,
   forkDeckIntoPresentation,
+  hasUnsyncedEdits,
+  isSyncedWithServer,
   repairDuplicateDeckIds,
   withCurrentPlacement,
+  withEditStamp,
 } from "./presentationDocument";
 
 interface PresentationStoreState {
@@ -100,15 +111,6 @@ export function canEditPresentation(doc: Presentation): boolean {
   return doc.access === undefined;
 }
 
-function withEditStamp(
-  current: Presentation,
-  next: Presentation,
-): Presentation {
-  return next === current
-    ? next
-    : { ...next, updatedAt: editTimestamp(current.updatedAt) };
-}
-
 function writeActive(next: Presentation): void {
   const current = readActive();
   if (!canEditPresentation(current)) return;
@@ -136,7 +138,7 @@ export function canRedo(): boolean {
 
 /**
  * 되돌리기. 되돌린 판도 새 편집이라 수정 시각은 기록의 옛 시각이 아니라 지금 판보다 뒤로 찍는다
- * (`editTimestamp`). 옛 시각으로 올리면 그사이의 판을 이미 받은 다른 기기가 다음 부팅 병합에서
+ * (`withEditStamp`). 옛 시각으로 올리면 그사이의 판을 이미 받은 다른 기기가 다음 부팅 병합에서
  * 자기 판이 더 새롭다고 보고, 되돌린 내용을 모든 기기에서 다시 되돌린다.
  */
 export function undo(): boolean {
@@ -190,6 +192,10 @@ async function writeDocuments(ids: string[]): Promise<void> {
       if (!doc) continue;
       await (doc.access ? saveSharedPresentation(doc) : savePresentation(doc));
       written.push(id);
+      if (!doc.access) {
+        noteOwnVersion(doc);
+        skippedReloads.delete(id);
+      }
     } catch (err) {
       failed = true;
       reportPersistenceError(err);
@@ -258,11 +264,7 @@ export async function hydrateFromStorage(): Promise<void> {
     );
     const { documents, repairedIds } = repairDuplicateDeckIds(sorted);
 
-    commit({
-      byId: Object.fromEntries(documents.map((doc) => [doc.id, doc])),
-      order: documents.map((doc) => doc.id),
-      activeId: documents[0]?.id ?? "",
-    });
+    replaceAll(documents);
     clearHistory();
     notifyListeners();
 
@@ -273,10 +275,22 @@ export async function hydrateFromStorage(): Promise<void> {
     runPendingWrites();
   } catch (err) {
     persistenceEnabled = false;
-    commit(createEmptyState());
+    replaceAll([]);
     clearHistory();
     notifyListeners();
     reportPersistenceError(err);
+  }
+}
+
+function replaceAll(documents: readonly Presentation[]): void {
+  for (const id of state.order) forgetLineage(id);
+  commit({
+    byId: Object.fromEntries(documents.map((doc) => [doc.id, doc])),
+    order: documents.map((doc) => doc.id),
+    activeId: documents[0]?.id ?? "",
+  });
+  for (const doc of documents) {
+    if (!doc.access) resetLineage(doc);
   }
 }
 
@@ -341,7 +355,8 @@ function isServerChange(
     stored.updatedAt !== merged.updatedAt ||
     (stored.folderId ?? null) !== (merged.folderId ?? null) ||
     stored.access !== undefined ||
-    merged.access !== undefined
+    merged.access !== undefined ||
+    contentFingerprint(stored) !== contentFingerprint(merged)
   );
 }
 
@@ -352,18 +367,20 @@ function isServerChange(
  * 활성 문서는 가능하면 유지한다. 동기화가 돌았다고 사용자가 보던 프레젠테이션이
  * 바뀌면 편집 중에 화면이 튄다.
  *
- * 저장은 새 세트, `updatedAt`이나 `folderId`가 바뀐 세트, 공유받은 세트, 공유받은 사본이던 세트만
- * 한다. 두 병합 모두 `updatedAt`이 같으면 서버 객체를 고르므로, 객체가 같은지만 보면 동기화된
- * 세트를 부팅마다 모두 다시 쓰고 그 뒤의 편집 저장이 그만큼 늦어진다. `folderId`(서버가 남의
- * 폴더를 루트로 옮김)와 공유받은 세트는 `updatedAt` 없이 바뀐다. 이 브라우저에 공유받은 사람의
- * 사본만 있던 소유자의 세트도 그렇다. 소유자 사본으로 다시 쓰지 않으면 다음 오프라인 부팅에서
- * 소유자가 자기 세트를 다시 보기 전용으로 연다. 저장 줄은 쓰는 순간의 세트를 쓰므로 병합 뒤에 고친
- * 내용을 병합 때의 사본으로 덮지 않는다. 읽지 못한 저장본은 덮지 않도록 하이드레이션이 실패했으면
- * 쓰지 않는다.
+ * 저장은 새 세트, `updatedAt`이나 `folderId`나 내용이 바뀐 세트, 공유받은 세트, 공유받은 사본이던
+ * 세트만 한다. 병합은 같은 판이면 서버 객체를 고르기도 하므로, 객체가 같은지만 보면 동기화된 세트를
+ * 부팅마다 모두 다시 쓰고 그 뒤의 편집 저장이 그만큼 늦어진다. `folderId`(서버가 남의 폴더를 루트로
+ * 옮김)와 공유받은 세트는 `updatedAt` 없이 바뀐다. 이 브라우저에 공유받은 사람의 사본만 있던 소유자의
+ * 세트도 그렇다. 소유자 사본으로 다시 쓰지 않으면 다음 오프라인 부팅에서 소유자가 자기 세트를 다시 보기
+ * 전용으로 연다. 시각이 같아도 서버가 내용을 고친 세트(없는 폴더·배경을 비움 등)도 쓴다. 기준 판만
+ * 바뀐 세트(서버와 맞춘 판이 된 이전 저장본 등)는 쓰지 않는다. 다음 부팅 병합이 같은 기준 판을 다시
+ * 붙이고 다음 편집이나 동기화 결과가 함께 쓴다. 이전 저장본을 모두 다시 쓰면 그 사이 다른 탭이 쓴
+ * 저장본을 덮는다. 저장 줄은 쓰는 순간의 세트를 쓰므로 병합 뒤에 고친 내용을 병합 때의 사본으로
+ * 덮지 않는다. 읽지 못한 저장본은 덮지 않도록 하이드레이션이 실패했으면 쓰지 않는다.
  *
  * 이렇게 서버에서 바뀐 세트는 되돌리기 기록도 지운다. 기록은 병합 전의 판들이라, 남기면 되돌리기가
- * 다른 기기의 수정을 병합 전 판으로 덮는다. `updatedAt`이 같은 서버 객체로만 바뀐 세트는 같은 판이라
- * 기록을 남긴다.
+ * 다른 기기의 수정을 병합 전 판으로 덮는다. 같은 내용의 서버 객체나 기준 판으로만 바뀐 세트는 같은
+ * 판이라 기록을 남긴다. 서버 판으로 내용이 바뀐 세트는 그 판에서 계보를 새로 시작한다.
  *
  * 지운 세트는 되돌리기 기록·대기 중인 저장·서버 push를 버리고, 이미 줄을 선 저장 뒤에 저장본을
  * 지운다. push가 남으면 연결이 돌아올 때 서버에서 되살아나고, 줄을 선 저장이 뒤에 오면 저장본이
@@ -386,9 +403,19 @@ export function applyServerDocuments(
     isServerChange(previous[doc.id], doc),
   );
   const removed = removedIds.filter((id) => !byId[id]);
-  for (const doc of changed) clearHistory(doc.id);
+  for (const doc of changed) {
+    const stored = previous[doc.id];
+    clearHistory(doc.id);
+    if (
+      !doc.access &&
+      (!stored || contentFingerprint(stored) !== contentFingerprint(doc))
+    ) {
+      resetLineage(doc);
+    }
+  }
   for (const id of removed) {
     clearHistory(id);
+    forgetLineage(id);
     pendingIds.delete(id);
     cancelDocumentPush(id);
   }
@@ -407,14 +434,9 @@ export function applyServerDocuments(
  * 저장은 하지 않는다 (저장까지 원하면 저장소에 심고 hydrateFromStorage()를 부른다).
  */
 export function __loadDocumentsForTests(documents: Presentation[]): void {
-  const copies = documents.map(
-    (doc) => JSON.parse(JSON.stringify(doc)) as Presentation,
+  replaceAll(
+    documents.map((doc) => JSON.parse(JSON.stringify(doc)) as Presentation),
   );
-  commit({
-    byId: Object.fromEntries(copies.map((doc) => [doc.id, doc])),
-    order: copies.map((doc) => doc.id),
-    activeId: copies[0]?.id ?? "",
-  });
   clearHistory();
   notifyListeners();
 }
@@ -506,7 +528,7 @@ export function addDeckToPresentation(deck: Deck): PresentationItem {
 export function resetPresentationStore(): void {
   resetPersistenceForTests();
   clearHistory();
-  commit(createEmptyState());
+  replaceAll([]);
   emitChange();
 }
 
@@ -536,6 +558,7 @@ export function createNewPresentation(
     trashedAt: null,
     createdAt: now,
     updatedAt: now,
+    baseUpdatedAt: null,
   };
   commit({
     byId: { ...state.byId, [created.id]: created },
@@ -1013,6 +1036,186 @@ export function duplicatePresentation(
   return copy;
 }
 
+function defersSyncOutcome(id: string): boolean {
+  if (!skippedReloads.has(id) || hasUnpersistedWrite(id)) return false;
+  if (!isProjecting()) void reloadSkippedRecord(id);
+  return true;
+}
+
+function writeSyncOutcome(next: Presentation): void {
+  commit({ ...state, byId: { ...state.byId, [next.id]: next } });
+  schedulePersist(next.id);
+  notifyListeners();
+}
+
+async function reloadSkippedRecord(id: string): Promise<void> {
+  const before = state.byId[id];
+  let record: LoadedRecord<Presentation>;
+  try {
+    record = await loadPresentation(id);
+  } catch {
+    return;
+  }
+  if (
+    state.byId[id] !== before ||
+    !skippedReloads.has(id) ||
+    hasUnpersistedWrite(id) ||
+    isProjecting()
+  ) {
+    return;
+  }
+  if (record.status === "missing") {
+    if (forgetPresentations([id]).length > 0) notifyListeners();
+    return;
+  }
+  if (
+    record.status === "unreadable" ||
+    !isVisibleTo(record.value, getCurrentUserId())
+  ) {
+    return;
+  }
+  replaceFromStorage(record.value);
+  notifyListeners();
+}
+
+/**
+ * 서버가 받은 판(`sent`)을 확정한다. `stored`는 서버가 남긴 판(응답의 `updatedAt`)이다.
+ *
+ * 보낸 객체가 아직 지금 판이면 그 판이 서버와 맞춘 판이 된다(수정 시각과 기준 판 모두 `stored`).
+ * 그사이 고쳤거나 바뀐 판이면 기준 판만 `stored`로 옮기고 올리지 않은 편집으로 남겨, 수정 시각이
+ * 기준 판보다 늦도록 필요하면 `stored` + 1ms로 민다. 같은 밀리초에 고쳤거나 시계가 뒤로 가도 보내지
+ * 않은 내용이 맞춘 판으로 보이지 않게, 시각이 아니라 객체가 같은지로 가른다(편집은 늘 새 객체를
+ * 만든다). 기준 판은 뒤로 옮기지 않는다. 그사이 더 새 서버 판을 받았으면 아무것도 바꾸지 않는다.
+ *
+ * 이 탭이 올리기를 기다리느라 다른 탭이 쓴 저장본을 다시 읽지 않고 건너뛰었으면, 그 저장본을 이
+ * 탭의 판으로 덮지 않고 다시 읽는다(송출 중에는 그대로 둔다). 그 판은 다른 탭이 올린다.
+ */
+export function markPresentationSynced(
+  id: string,
+  sent: Presentation,
+  stored: string,
+): void {
+  const current = state.byId[id];
+  if (!current || current.access) return;
+  const base = current.baseUpdatedAt;
+  if (typeof base === "string" && Date.parse(base) >= Date.parse(stored)) {
+    return;
+  }
+  confirmVersion(sent);
+  if (defersSyncOutcome(id)) return;
+  writeSyncOutcome(
+    current === sent
+      ? { ...current, updatedAt: stored, baseUpdatedAt: stored }
+      : {
+          ...current,
+          updatedAt: laterThan(stored, current.updatedAt),
+          baseUpdatedAt: stored,
+        },
+  );
+}
+
+/**
+ * 412가 돌려준 서버 판이 이 탭이 만든 판일 때, 지금 판을 그 판 위에 다시 얹는다. 기준 판을 `base`로
+ * 옮기고 수정 시각을 그보다 늦게 둬, 다시 보낼 올리지 않은 편집으로 남긴다.
+ */
+export function rebasePresentation(id: string, base: string): void {
+  const current = state.byId[id];
+  if (!current || current.access) return;
+  commit({
+    ...state,
+    byId: {
+      ...state.byId,
+      [id]: {
+        ...current,
+        updatedAt: laterThan(base, current.updatedAt),
+        baseUpdatedAt: base,
+      },
+    },
+  });
+  schedulePersist(id);
+  notifyListeners();
+}
+
+/**
+ * 서버 판을 그 세트의 지금 판으로 받는다. 기준 판은 그 서버 판이다.
+ *
+ * 이 탭에 없는 세트나 지금 사용자의 것이 아닌 판은 넣지 않는다. 늦게 온 응답이 지운 세트를
+ * 되살리거나, 로그아웃한 앞 계정의 세트를 다음 계정의 드라이브에 넣으면 안 된다. 대기 중인 push는
+ * 버린다. 받기 전의 판들인 되돌리기 기록도 버리고, 계보는 그 판에서 새로 시작한다. 저장 줄로 저장해
+ * 다른 탭에 알린다.
+ *
+ * 다른 탭의 저장본을 건너뛰었으면 받지 않고 그 저장본을 다시 읽는다(`markPresentationSynced`). 그때
+ * 되돌리기 기록과 계보는 다시 읽기가 바꿀 때까지 그대로 둔다. 읽는 동안 고쳤거나 저장본을 읽지 못해
+ * 이 탭의 판이 남았는데 계보만 서버 판에서 시작하면, 다음 412가 그 서버 판을 이 탭이 만든 판으로 보고
+ * 그 위에 다시 보내 다른 기기의 수정을 덮는다.
+ */
+export function adoptServerPresentation(server: Presentation): void {
+  const current = state.byId[server.id];
+  if (
+    !current ||
+    current.access ||
+    server.access ||
+    server.userId !== getCurrentUserId()
+  ) {
+    return;
+  }
+  const adopted: Presentation = { ...server, baseUpdatedAt: server.updatedAt };
+  cancelDocumentPush(server.id);
+  if (defersSyncOutcome(server.id)) return;
+  clearHistory(server.id);
+  resetLineage(adopted);
+  writeSyncOutcome(adopted);
+}
+
+/**
+ * 이 기기에서 고쳤는데 서버에 올리지 못한 편집이 확실하면(`hasUnsyncedEdits`) 그 판을 새
+ * 프레젠테이션 "제목 (사본)"으로 남기고 돌려준다. 같은 폴더·휴지통 자리에 두고 저장하고 올린다.
+ * 그런 편집이 없거나 알 수 없으면(기준 판이 없는 이전 저장본) 남기지 않고 `null`이다.
+ *
+ * 다른 기기와 엇갈렸거나 다른 기기에서 영구 삭제한 세트를 서버 판으로 바꾸거나 지우기 전에 부른다.
+ * 그 세트의 id는 공유 링크·멤버·다른 기기가 가리키므로 서버 판이 지니고, 이 기기의 편집은 조용히
+ * 잃지 않고 사본으로 남긴다.
+ */
+export function keepUnsyncedCopy(id: string): Presentation | null {
+  const current = state.byId[id];
+  if (!current || current.access || !hasUnsyncedEdits(current)) return null;
+  const copy = buildPresentationCopy(current, {
+    userId: current.userId,
+    folderId: current.folderId ?? null,
+    trashedAt: current.trashedAt ?? null,
+    now: new Date().toISOString(),
+  });
+  commit({
+    ...state,
+    byId: { ...state.byId, [copy.id]: copy },
+    order: [...state.order, copy.id],
+  });
+  notifyDocument(copy);
+  return copy;
+}
+
+/**
+ * 다른 기기와 엇갈린 세트(412, 양쪽 다 고침)를 둘 다 지키며 푼다. 이 기기의 올리지 못한 편집은
+ * "제목 (사본)"으로 남기고(`keepUnsyncedCopy`), 그 세트는 서버 판을 받는다
+ * (`adoptServerPresentation`). 사본을 만들었으면 돌려준다.
+ */
+export function resolvePresentationConflict(
+  server: Presentation,
+): Presentation | null {
+  const current = state.byId[server.id];
+  if (
+    !current ||
+    current.access ||
+    server.access ||
+    server.userId !== getCurrentUserId()
+  ) {
+    return null;
+  }
+  const copy = keepUnsyncedCopy(server.id);
+  adoptServerPresentation(server);
+  return copy;
+}
+
 /**
  * 공유받은 프레젠테이션을 서버본으로 넣거나 바꾼다 (링크로 들어옴·최신본 받기).
  * 보기 전용이라 다시 push하지 않는다.
@@ -1077,6 +1280,7 @@ function forgetPresentations(ids: readonly string[]): Presentation[] {
   for (const id of removed.keys()) {
     delete byId[id];
     clearHistory(id);
+    forgetLineage(id);
     pendingIds.delete(id);
     skippedReloads.delete(id);
     cancelDocumentPush(id);
@@ -1098,7 +1302,21 @@ function replaceFromStorage(doc: Presentation): void {
     order: exists ? state.order : [...state.order, doc.id],
   });
   clearHistory(doc.id);
+  if (doc.access) forgetLineage(doc.id);
+  else resetLineage(doc);
   skippedReloads.delete(doc.id);
+}
+
+function isOlderSyncedRecord(
+  record: Presentation,
+  memory: Presentation | undefined,
+): boolean {
+  return (
+    memory !== undefined &&
+    isSyncedWithServer(memory) &&
+    isSyncedWithServer(record) &&
+    Date.parse(record.updatedAt) < Date.parse(memory.updatedAt)
+  );
 }
 
 /**
@@ -1107,15 +1325,20 @@ function replaceFromStorage(doc: Presentation): void {
  * 때 다른 탭이 더한 곡과 고친 내용을 저장소와 서버에서 지운다.
  *
  * - 저장본이 있으면 하이드레이션과 같은 기준(세션 사용자의 세트와 공유받은 사본)으로 싣고, 그
- *   세트의 되돌리기 기록을 지운다. 기록은 바꾸기 전의 판이라, 되돌리면 다른 탭의 수정을 덮는다.
+ *   세트의 되돌리기 기록을 지우고 계보를 그 판에서 새로 시작한다. 기록은 바꾸기 전의 판이라,
+ *   되돌리면 다른 탭의 수정을 덮는다.
+ * - 서버와 맞춘 저장본이 이 탭의 맞춘 판보다 오래된 서버 판이면 바꾸지 않고 이 탭의 판을 다시
+ *   저장한다. 다른 탭이 늦게 쓴 옛 판으로 이미 확정한 판을 되돌리면, 다음 편집이 낡은 기준 판으로
+ *   올라가 사본이 생긴다. 다른 탭의 올리지 않은 편집은 이 탭의 맞춘 판을 바꾼다.
  * - 이 탭이 아직 저장하지 않았거나 저장하는 중인 세트는 바꾸지도 빼지도 않고 건너뛴 것으로
  *   기억한다. 곧 이 탭의 쓰기가 저장본을 다시 쓰고, 바꾸면 이 탭의 편집이 메모리에서 사라진다.
- *   읽는 동안 이 탭에서 고친 세트도 같다. 서버에 아직 올리지 못한 세트도 바꾸지 않고 기억한다.
+ *   읽는 동안 이 탭에서 고친 세트도 같다. 서버에 아직 올리지 못한 세트도 바꾸지 않고 기억했다가,
+ *   그 올리기의 결과를 저장본에 덮어쓰지 않고 그때 다시 읽는다(`markPresentationSynced`).
  * - 저장본이 없으면 다른 탭에서 지운 것이라, 올리기를 기다리던 세트라도 메모리에서 빼고 대기 중인
  *   push를 버린다. 이 탭의 push가 남으면 지운 세트를 서버에 되살린다.
  * - 읽지 못한 저장본(깨졌거나 새 버전의 탭이 쓴 모양)은 지운 것이 아니라 메모리를 그대로 둔다.
  *
- * 저장도 push도 하지 않는다. 저장본은 다른 탭이 이미 썼고, 올리기도 그 탭이 한다. 하이드레이션에
+ * 그 밖에는 저장도 push도 하지 않는다. 저장본은 다른 탭이 이미 썼고, 올리기도 그 탭이 한다. 하이드레이션에
  * 실패한 탭은 다시 읽지 않는다. 메모리에만 있는 편집을 저장본으로 덮게 된다. 읽기에 실패하면
  * 메모리를 그대로 둔다. 잃는 것이 없어 저장 실패 경고는 올리지 않는다.
  *
@@ -1154,6 +1377,10 @@ export async function reloadPresentationsFromStorage(
     }
     if (isDocumentQueued(id)) {
       skippedReloads.add(id);
+      continue;
+    }
+    if (isOlderSyncedRecord(record.value, state.byId[id])) {
+      schedulePersist(id);
       continue;
     }
     replaceFromStorage(record.value);

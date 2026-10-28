@@ -7,6 +7,7 @@ import {
   flushBeforeProjection,
   flushPendingSync,
   hasPendingDocumentPush,
+  isDocumentPushCancelled,
   isDocumentQueued,
   retryPendingSyncNow,
   setSyncEnabled,
@@ -279,6 +280,37 @@ describe("서버 push 스케줄러", () => {
       status: "synced",
       lastFailure: null,
     });
+  });
+
+  it("보내는 중에 취소한 세트는 그 push가 끝나거나 다시 넣을 때까지 취소한 것으로 본다", async () => {
+    const releases: Array<() => void> = [];
+    push.mockImplementation(
+      () =>
+        new Promise<boolean>((resolve) => {
+          releases.push(() => resolve(true));
+        }),
+    );
+
+    scheduleDocumentPush(doc("a"));
+    const first = flushPendingSync();
+    await vi.waitFor(() => expect(push).toHaveBeenCalledTimes(1));
+    expect(isDocumentPushCancelled("a")).toBe(false);
+    cancelDocumentPush("a");
+    expect(isDocumentPushCancelled("a")).toBe(true);
+    releases[0]();
+    await first;
+    expect(isDocumentPushCancelled("a")).toBe(false);
+
+    scheduleDocumentPush(doc("a"));
+    const second = flushPendingSync();
+    await vi.waitFor(() => expect(push).toHaveBeenCalledTimes(2));
+    cancelDocumentPush("a");
+    scheduleDocumentPush(doc("a"));
+    expect(isDocumentPushCancelled("a")).toBe(false);
+    releases[1]();
+    await second;
+    cancelDocumentPush("b");
+    expect(isDocumentPushCancelled("b")).toBe(false);
   });
 
   it("대기 중이거나 보내는 중이거나 실패로 남은 세트를 큐에 있다고 본다", async () => {

@@ -80,8 +80,8 @@ export async function loadAllPresentations(): Promise<
 /**
  * 프레젠테이션 저장본 한 건을 읽는다. 다른 탭이 쓰거나 지운 저장본을 다시 읽을 때 쓴다.
  *
- * 스키마에 없는 필드는 떼고 읽는다. 새 버전의 탭이 남긴 필드(기준 판 `baseUpdatedAt` 등)를 이
- * 버전이 들고 있다가 다시 쓰거나 올리면, 그 값이 앞으로 나아가지 않은 채 남는다.
+ * 스키마에 없는 필드는 떼고 읽는다. 새 버전의 탭이 남긴 필드를 이 버전이 들고 있다가 다시 쓰거나
+ * 올리면, 그 값이 앞으로 나아가지 않은 채 남는다.
  */
 export async function loadPresentation(
   id: string,

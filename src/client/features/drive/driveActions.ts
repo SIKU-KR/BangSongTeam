@@ -22,6 +22,7 @@ import {
 import { canPresentReliably } from "../../lib/browser/capabilities";
 import { isServerReachable } from "../../lib/api/connectivity";
 import {
+  beginPermanentDelete,
   deleteFolderRemote,
   deletePresentationRemote,
   flushBeforeProjection,
@@ -229,10 +230,25 @@ export class DriveActionError extends Error {
  *
  * 거절된 항목은 건너뛰고 나머지를 지운 뒤 서버가 준 문장으로 알린다. 그사이 지운 것이 있으면
  * 일부만 지웠다고 알린다. 거절이 아닌 오류에서는 멈춘다.
+ *
+ * 지울 프레젠테이션(고른 파일과, 고른 폴더 아래의 세트)은 큐를 보내기 전에 정하고, 끝날 때까지
+ * 영구 삭제 중으로 둔다(`beginPermanentDelete`). 먼저 보내는 그 세트의 변경이 다른 기기와 엇갈리거나
+ * 이미 영구 삭제됐다는 답을 받아도, 비우는 휴지통에 '(사본)'을 남기거나 알리지 않는다. 그 세트들의
+ * 대기 중인 push는 버리지 않는다. 버리면 휴지통에 넣은 직후 비울 때 서버가 그 세트를 휴지통 밖으로
+ * 보고 거절하고(409), 폴더로 옮긴 세트가 서버에서 폴더 밖에 남는다.
  */
 export async function deleteItemsForever(
   refs: readonly DriveItemRef[],
 ): Promise<void> {
+  const end = beginPermanentDelete(presentationsDeletedBy(refs));
+  try {
+    await deleteNow(refs);
+  } finally {
+    end();
+  }
+}
+
+async function deleteNow(refs: readonly DriveItemRef[]): Promise<void> {
   let refusal: ServerRejectedError | null = null;
   let deletedAny = false;
   try {
@@ -268,6 +284,33 @@ export async function deleteItemsForever(
   }
 }
 
+function presentationIdsIn(
+  index: ReturnType<typeof getFolderIndex>,
+  folderIds: ReadonlySet<string>,
+): string[] {
+  return listPresentations()
+    .filter((presentation) => {
+      const folderId = resolveFolderId(index, presentation.folderId);
+      return folderId !== null && folderIds.has(folderId);
+    })
+    .map((presentation) => presentation.id);
+}
+
+function presentationsDeletedBy(refs: readonly DriveItemRef[]): string[] {
+  const index = getFolderIndex();
+  const folderIds = new Set(
+    refs.flatMap((ref) =>
+      ref.kind === "folder"
+        ? [...collectDescendantFolderIds(index, ref.id)]
+        : [],
+    ),
+  );
+  return [
+    ...refs.flatMap((ref) => (ref.kind === "file" ? [ref.id] : [])),
+    ...presentationIdsIn(index, folderIds),
+  ];
+}
+
 async function deleteForever(ref: DriveItemRef): Promise<void> {
   if (ref.kind === "file") {
     await deletePresentationRemote(ref.id);
@@ -278,12 +321,7 @@ async function deleteForever(ref: DriveItemRef): Promise<void> {
   const index = getFolderIndex();
   const subtree = collectDescendantFolderIds(index, ref.id);
   const folderIds = [...subtree];
-  const presentationIds = listPresentations()
-    .filter((presentation) => {
-      const folderId = resolveFolderId(index, presentation.folderId);
-      return folderId !== null && subtree.has(folderId);
-    })
-    .map((presentation) => presentation.id);
+  const presentationIds = presentationIdsIn(index, subtree);
 
   const result = await deleteFolderRemote(ref.id, {
     folderIds,

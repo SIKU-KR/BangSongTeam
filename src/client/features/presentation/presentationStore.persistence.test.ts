@@ -1,5 +1,11 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import type { Presentation } from "#shared";
+import {
+  API_ERRORS,
+  laterThan,
+  type Presentation,
+  type PresentationChanges,
+} from "#shared";
+import { COMMON_COPY } from "#copy/common";
 import {
   seedPresentationsIntoStorage,
   signInAsTestUser,
@@ -38,7 +44,21 @@ import {
   replaceWithServerDocument,
   removePresentationsLocally,
   reloadPresentationsFromStorage,
+  markPresentationSynced,
+  adoptServerPresentation,
 } from "./presentationStore";
+import {
+  __resetLineageForTests,
+  contentFingerprint,
+  isKnownAncestor,
+} from "../../lib/sync/presentationLineage";
+import { relateVersions } from "../../lib/sync/mergeDocuments";
+import {
+  __resetServerDecksForTests,
+  setOwnPresentationListener,
+} from "../../lib/sync/presentationSync";
+import { ownPresentationListener } from "../../lib/sync/ownPresentationListener";
+import { installFakeApi, type FakeApi } from "../../test/fakeApi";
 import {
   __resetSyncSchedulerForTests,
   __setPusherForTests,
@@ -55,6 +75,7 @@ import {
 
 const storageHooks = vi.hoisted(() => ({
   beforeSave: null as null | ((doc: unknown) => Promise<void>),
+  afterLoad: null as null | (() => void),
 }));
 
 vi.mock("../../lib/storage", async (importOriginal) => {
@@ -70,6 +91,13 @@ vi.mock("../../lib/storage", async (importOriginal) => {
   return {
     ...actual,
     loadAllPresentations: vi.fn(actual.loadAllPresentations),
+    loadPresentation: vi.fn(async (id: string) => {
+      const record = await actual.loadPresentation(id);
+      const hook = storageHooks.afterLoad;
+      storageHooks.afterLoad = null;
+      hook?.();
+      return record;
+    }),
     savePresentation: vi.fn(withHook(actual.savePresentation)),
     saveSharedPresentation: vi.fn(withHook(actual.saveSharedPresentation)),
   };
@@ -94,7 +122,9 @@ describe("presentationStore 영속성", () => {
     await resetDatabase();
     signInAsTestUser();
     resetPresentationStore();
+    __resetLineageForTests();
     storageHooks.beforeSave = null;
+    storageHooks.afterLoad = null;
     vi.mocked(savePresentation).mockClear();
     vi.mocked(saveSharedPresentation).mockClear();
     vi.mocked(loadAllPresentations).mockClear();
@@ -387,6 +417,45 @@ describe("presentationStore 영속성", () => {
       expect(valid.find((p) => p.id === shared.id)?.access?.ownerName).toBe(
         "이름을 바꾼 인도자",
       );
+    });
+
+    it("시각이 같아도 서버가 내용을 고친 세트는 다시 쓰고, 기준 판만 붙은 세트는 다시 쓰지 않는다", async () => {
+      const [legacy, synced] = SEED_PRESENTATIONS;
+      const clean = { ...synced, baseUpdatedAt: synced.updatedAt };
+      await seedPresentationsIntoStorage([legacy, clean]);
+      await hydrateFromStorage();
+      forgetWrites();
+
+      applyServerDocuments([
+        serverCopy(legacy, { baseUpdatedAt: legacy.updatedAt }),
+        serverCopy(clean, { title: "서버가 고친 제목" }),
+      ]);
+      await flushPendingWrites();
+
+      expect(writtenIds()).toEqual([synced.id]);
+      expect(getPresentationById(legacy.id)?.baseUpdatedAt).toBe(
+        legacy.updatedAt,
+      );
+      const { valid } = await loadAllPresentations();
+      expect(valid.find((p) => p.id === synced.id)?.title).toBe(
+        "서버가 고친 제목",
+      );
+    });
+
+    it("병합이 서버 판으로 바꾼 세트는 그 판에서 계보를 새로 시작한다", async () => {
+      const [doc] = SEED_PRESENTATIONS;
+      await seedPresentationsIntoStorage([doc]);
+      await hydrateFromStorage();
+      const server = serverCopy(doc, {
+        title: "다른 기기의 판",
+        updatedAt: "2026-09-30T00:00:00.000Z",
+        baseUpdatedAt: "2026-09-30T00:00:00.000Z",
+      });
+
+      applyServerDocuments([server]);
+
+      expect(isKnownAncestor(doc.id, contentFingerprint(doc))).toBe(false);
+      expect(isKnownAncestor(doc.id, contentFingerprint(server))).toBe(true);
     });
 
     it("지운 세트의 대기 중인 push와 저장을 버리고 저장본에서도 지운다", async () => {
@@ -856,15 +925,282 @@ describe("presentationStore 영속성", () => {
       ).toEqual([]);
     });
 
-    it("새 버전의 탭이 남긴 baseUpdatedAt은 떼고 싣는다", async () => {
-      const newer = withExtraSong(FIRST);
-      await writeFromOtherTab({ ...newer, baseUpdatedAt: newer.updatedAt });
+    it("다른 탭이 남긴 기준 판을 함께 싣는다", async () => {
+      const newer = {
+        ...withExtraSong(FIRST),
+        baseUpdatedAt: "2026-10-01T00:00:00.000Z",
+      };
+      await writeFromOtherTab(newer);
 
       await reloadPresentationsFromStorage([FIRST.id]);
 
-      const held = getPresentationById(FIRST.id);
-      expect(held).toEqual(newer);
-      expect(held && "baseUpdatedAt" in held).toBe(false);
+      expect(getPresentationById(FIRST.id)).toEqual(newer);
+    });
+
+    describe("기준 판으로 고르기", () => {
+      const T1 = "2026-09-25T00:00:00.000Z";
+      const T2 = "2026-09-26T00:00:00.000Z";
+      const T3 = "2026-09-27T00:00:00.000Z";
+
+      async function hydrateWith(doc: Presentation): Promise<void> {
+        await seedPresentationsIntoStorage([doc, SECOND]);
+        await hydrateFromStorage();
+        vi.mocked(savePresentation).mockClear();
+      }
+
+      it("더 오래된 기준 판의 맞춘 저장본은 이 탭의 더 새로운 맞춘 판을 바꾸지 않고, 이 탭의 판을 다시 저장한다", async () => {
+        const current = {
+          ...FIRST,
+          title: "서버가 나중에 확정한 판",
+          updatedAt: T3,
+          baseUpdatedAt: T3,
+        };
+        await hydrateWith(current);
+        await writeFromOtherTab({
+          ...FIRST,
+          updatedAt: T1,
+          baseUpdatedAt: T1,
+        });
+
+        await reloadPresentationsFromStorage([FIRST.id]);
+        await flushPendingWrites();
+
+        expect(getPresentationById(FIRST.id)).toEqual(current);
+        expect(await storedById(FIRST.id)).toEqual(current);
+      });
+
+      it("다른 탭의 올리지 않은 편집은 이 탭의 맞춘 판을 바꾼다", async () => {
+        await hydrateWith({ ...FIRST, updatedAt: T2, baseUpdatedAt: T2 });
+        const edited = {
+          ...withExtraSong(FIRST),
+          updatedAt: T3,
+          baseUpdatedAt: T1,
+        };
+        await writeFromOtherTab(edited);
+
+        await reloadPresentationsFromStorage([FIRST.id]);
+
+        expect(getPresentationById(FIRST.id)).toEqual(edited);
+      });
+
+      it("올리기를 기다리느라 다른 탭의 저장본을 건너뛰었으면, 올린 뒤 맞춘 판을 쓰지 않고 그 저장본을 다시 읽는다", async () => {
+        await hydrateWith({ ...FIRST, updatedAt: T1, baseUpdatedAt: T1 });
+        let release: () => void = () => undefined;
+        const gate = new Promise<void>((resolve) => {
+          release = resolve;
+        });
+        __setPusherForTests(async (doc: Presentation) => {
+          await gate;
+          markPresentationSynced(doc.id, doc, T2);
+        });
+        setSyncEnabled(true);
+        renamePresentation(FIRST.id, "이 탭에서 바꾼 이름");
+        await flushPendingWrites();
+        const otherTab = {
+          ...getPresentationById(FIRST.id)!,
+          title: "다른 탭에서 바꾼 이름",
+          updatedAt: T3,
+        };
+        await writeFromOtherTab(otherTab);
+        await reloadPresentationsFromStorage([FIRST.id]);
+        expect(getPresentationById(FIRST.id)?.title).toBe(
+          "이 탭에서 바꾼 이름",
+        );
+
+        const pushing = flushPendingSync();
+        release();
+        await pushing;
+        await vi.waitFor(() =>
+          expect(getPresentationById(FIRST.id)?.title).toBe(
+            "다른 탭에서 바꾼 이름",
+          ),
+        );
+        await flushPendingWrites();
+
+        expect(await storedById(FIRST.id)).toEqual(otherTab);
+      });
+
+      it("이 탭이 저장한 판과 다시 읽은 판으로 계보를 맞춘다", async () => {
+        await hydrateWith({ ...FIRST, updatedAt: T1, baseUpdatedAt: T1 });
+        expect(isKnownAncestor(FIRST.id, contentFingerprint(FIRST))).toBe(true);
+
+        renamePresentation(FIRST.id, "저장한 이름");
+        await flushPendingWrites();
+        const saved = getPresentationById(FIRST.id)!;
+        expect(isKnownAncestor(FIRST.id, contentFingerprint(saved))).toBe(true);
+
+        const otherTab = { ...withExtraSong(FIRST), baseUpdatedAt: T1 };
+        await writeFromOtherTab(otherTab);
+        await reloadPresentationsFromStorage([FIRST.id]);
+
+        expect(isKnownAncestor(FIRST.id, contentFingerprint(saved))).toBe(
+          false,
+        );
+        expect(isKnownAncestor(FIRST.id, contentFingerprint(otherTab))).toBe(
+          true,
+        );
+      });
+
+      describe("다른 탭의 저장본을 건너뛰어 미룬 서버 판 받기", () => {
+        const OTHER_DEVICE_TITLE = "다른 기기에서 바꾼 이름";
+
+        function otherDeviceCopy(): Presentation {
+          return {
+            ...structuredClone(FIRST),
+            title: OTHER_DEVICE_TITLE,
+            updatedAt: T2,
+          };
+        }
+
+        async function skipOtherTabWhileQueued(
+          edit: () => void,
+        ): Promise<void> {
+          await hydrateWith({ ...FIRST, updatedAt: T1, baseUpdatedAt: T1 });
+          setSyncEnabled(true);
+          edit();
+          await flushPendingWrites();
+          await writeFromOtherTab({
+            ...getPresentationById(FIRST.id)!,
+            title: "다른 탭에서 바꾼 이름",
+          });
+          await reloadPresentationsFromStorage([FIRST.id]);
+        }
+
+        beforeEach(() => {
+          __setPusherForTests(vi.fn(async () => undefined));
+        });
+
+        it("다시 읽는 동안 고쳐 다시 읽기를 마치지 못하면, 그 서버 판을 이 탭이 만든 판으로 알지 않는다", async () => {
+          await skipOtherTabWhileQueued(() =>
+            renamePresentation(FIRST.id, "이 탭에서 바꾼 이름"),
+          );
+          const server = otherDeviceCopy();
+          storageHooks.afterLoad = () =>
+            renamePresentation(FIRST.id, "다시 읽는 동안 고친 이름");
+
+          adoptServerPresentation(server);
+          await vi.waitFor(() =>
+            expect(getPresentationById(FIRST.id)?.title).toBe(
+              "다시 읽는 동안 고친 이름",
+            ),
+          );
+          await flushPendingWrites();
+
+          const current = getPresentationById(FIRST.id)!;
+          expect(isKnownAncestor(FIRST.id, contentFingerprint(server))).toBe(
+            false,
+          );
+          expect(
+            relateVersions(current, server, (fingerprint) =>
+              isKnownAncestor(FIRST.id, fingerprint),
+            ),
+          ).toBe("diverged");
+        });
+
+        it("저장본을 읽지 못해 다시 읽기를 마치지 못하면 이 탭의 판과 되돌리기 기록을 그대로 둔다", async () => {
+          await skipOtherTabWhileQueued(() => {
+            openPresentation(FIRST.id);
+            updatePresentationTitle("이 탭에서 바꾼 이름");
+          });
+          await writeFromOtherTab({ ...FIRST, title: 42 });
+          const before = getPresentationById(FIRST.id);
+          const server = otherDeviceCopy();
+          let loaded = false;
+          storageHooks.afterLoad = () => {
+            loaded = true;
+          };
+
+          adoptServerPresentation(server);
+          await vi.waitFor(() => expect(loaded).toBe(true));
+
+          expect(getPresentationById(FIRST.id)).toBe(before);
+          expect(canUndo()).toBe(true);
+          expect(isKnownAncestor(FIRST.id, contentFingerprint(server))).toBe(
+            false,
+          );
+        });
+
+        describe("올리기 결과로", () => {
+          let fake: FakeApi;
+          let stored: Presentation;
+
+          beforeEach(() => {
+            __setPusherForTests(null);
+            __resetServerDecksForTests();
+            stored = otherDeviceCopy();
+            fake = installFakeApi({
+              "PATCH /api/presentations/*": ({ body }) => {
+                const changes = body as PresentationChanges;
+                if (changes.id !== FIRST.id) {
+                  return { body: { ok: true, updatedAt: changes.updatedAt } };
+                }
+                if (changes.baseUpdatedAt !== stored.updatedAt) {
+                  return {
+                    status: 412,
+                    body: {
+                      error: API_ERRORS.presentation.conflict,
+                      presentation: stored,
+                    },
+                  };
+                }
+                stored = {
+                  ...stored,
+                  title: changes.title,
+                  updatedAt: laterThan(stored.updatedAt, changes.updatedAt),
+                };
+                return { body: { ok: true, updatedAt: stored.updatedAt } };
+              },
+            });
+            setOwnPresentationListener(ownPresentationListener);
+          });
+
+          afterEach(() => {
+            setOwnPresentationListener(null);
+            fake.restore();
+          });
+
+          it("엇갈린 세트를 다시 읽는 동안 고치면, 다시 보낼 때 다른 기기의 판을 덮지 않고 사본을 하나 더 남긴다", async () => {
+            await skipOtherTabWhileQueued(() =>
+              renamePresentation(FIRST.id, "이 탭에서 바꾼 이름"),
+            );
+            storageHooks.afterLoad = () =>
+              renamePresentation(FIRST.id, "다시 읽는 동안 고친 이름");
+
+            await flushPendingSync();
+            await vi.waitFor(() =>
+              expect(getPresentationById(FIRST.id)?.title).toBe(
+                "다시 읽는 동안 고친 이름",
+              ),
+            );
+            await flushPendingWrites();
+            await flushPendingSync();
+
+            expect(
+              fake.calls
+                .map(({ body }) => body as PresentationChanges)
+                .filter((changes) => changes.id === FIRST.id)
+                .map((changes) => [changes.title, changes.baseUpdatedAt]),
+            ).toEqual([
+              ["이 탭에서 바꾼 이름", T1],
+              ["다시 읽는 동안 고친 이름", T1],
+            ]);
+            expect(stored.title).toBe(OTHER_DEVICE_TITLE);
+            expect(
+              listPresentations()
+                .map((doc) => doc.title)
+                .filter((title) => title.endsWith(COMMON_COPY.copySuffix)),
+            ).toEqual([
+              `이 탭에서 바꾼 이름${COMMON_COPY.copySuffix}`,
+              `다시 읽는 동안 고친 이름${COMMON_COPY.copySuffix}`,
+            ]);
+            expect(getPresentationById(FIRST.id)).toMatchObject({
+              title: OTHER_DEVICE_TITLE,
+              updatedAt: T2,
+              baseUpdatedAt: T2,
+            });
+          });
+        });
+      });
     });
   });
 

@@ -17,6 +17,9 @@ interface UndoToastOptions {
  * 알림은 하나만 띄우고 새 알림이 앞 알림을 바꾼다. 실행 취소가 걸린 알림이 떠 있는
  * 동안에는 Cmd/Ctrl+Z로도 되돌린다. `showToast`는 렌더마다 바뀌지 않아야
  * 드라이브 조작 콜백과 컨텍스트 값이 다시 만들어지지 않는다.
+ *
+ * 드라이브를 떠나면 알림을 닫는다. 알림 창은 앱 전체에 하나라 화면을 옮겨도 남는데, 남겨 두면
+ * 편집기·송출 화면에서 누른 실행 취소가 보이지 않는 드라이브 항목을 되돌린다.
  */
 export function useUndoToast({ isSuspended }: UndoToastOptions): {
   showToast: (message: string, action?: ToastAction) => void;
@@ -41,6 +44,13 @@ export function useUndoToast({ isSuspended }: UndoToastOptions): {
         onDismiss: () => setUndoAction(null),
         onAutoClose: () => setUndoAction(null),
       });
+    },
+    [],
+  );
+
+  useEffect(
+    () => () => {
+      toast.dismiss(TOAST_ID);
     },
     [],
   );

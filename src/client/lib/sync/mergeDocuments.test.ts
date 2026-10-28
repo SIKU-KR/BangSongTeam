@@ -1,6 +1,11 @@
 import { describe, it, expect } from "vitest";
 import type { Presentation } from "#shared";
-import { mergeDocuments, planBootMerge } from "./mergeDocuments";
+import {
+  mergeDocuments,
+  planBootMerge,
+  relateVersions,
+} from "./mergeDocuments";
+import { contentFingerprint } from "./presentationLineage";
 
 const USER = "00000000x000000000001";
 
@@ -102,7 +107,10 @@ describe("문서 단위 LWW 병합", () => {
 
     const { documents } = mergeDocuments([localDoc], [serverDoc]);
 
-    expect(documents[0]).toEqual(localDoc);
+    expect(documents[0]).toEqual({
+      ...localDoc,
+      baseUpdatedAt: serverDoc.updatedAt,
+    });
   });
 
   describe("공유받은 세트", () => {
@@ -196,5 +204,265 @@ describe("부팅 병합 계획", () => {
 
     expect(plan.documents.map((d) => d.id).sort()).toEqual(["local", "server"]);
     expect(plan.needsPush).toEqual(["local"]);
+  });
+});
+
+describe("두 판의 관계 (relateVersions)", () => {
+  const T1 = "2026-10-01T00:00:00.000Z";
+  const T2 = "2026-10-01T00:00:00.001Z";
+  const T3 = "2026-10-01T00:10:00.000Z";
+  const never = () => false;
+
+  it("기준 판이 없는 이전 저장본이나, 서버 판보다 늦거나 같은 기준 판이면 견주지 않는다 (skip)", () => {
+    const server = doc("a", T2, { title: "서버" });
+
+    expect(relateVersions(doc("a", T3, { title: "로컬" }), server, never)).toBe(
+      "skip",
+    );
+    expect(
+      relateVersions(
+        doc("a", T3, { title: "로컬", baseUpdatedAt: T2 }),
+        server,
+        never,
+      ),
+    ).toBe("skip");
+    expect(
+      relateVersions(
+        doc("a", T3, { title: "로컬", baseUpdatedAt: T3 }),
+        server,
+        never,
+      ),
+    ).toBe("skip");
+  });
+
+  it("내용이 같으면 시각이 달라도 같은 판이다 (same)", () => {
+    expect(
+      relateVersions(doc("a", T3, { baseUpdatedAt: T1 }), doc("a", T2), never),
+    ).toBe("same");
+    expect(
+      relateVersions(
+        doc("a", T3, { baseUpdatedAt: null }),
+        doc("a", T2),
+        never,
+      ),
+    ).toBe("same");
+  });
+
+  it("서버 판이 이 탭의 계보에 있으면 이 탭이 앞서 있다 (ahead)", () => {
+    const server = doc("a", T2, { title: "이 탭이 올린 판" });
+    const known = new Set([contentFingerprint(server)]);
+
+    expect(
+      relateVersions(
+        doc("a", T3, { title: "그 위에서 고친 판", baseUpdatedAt: T1 }),
+        server,
+        (fingerprint) => known.has(fingerprint),
+      ),
+    ).toBe("ahead");
+  });
+
+  it("고친 것이 없는 판이 서버보다 뒤처졌으면 서버 판을 받는다 (behind)", () => {
+    expect(
+      relateVersions(
+        doc("a", T1, { baseUpdatedAt: T1 }),
+        doc("a", T2, { title: "다른 기기의 판" }),
+        never,
+      ),
+    ).toBe("behind");
+  });
+
+  it("양쪽 다 고쳤으면 엇갈린 판이다 (diverged)", () => {
+    const server = doc("a", T2, { title: "다른 기기의 판" });
+
+    expect(
+      relateVersions(
+        doc("a", T3, { title: "이 기기의 판", baseUpdatedAt: T1 }),
+        server,
+        never,
+      ),
+    ).toBe("diverged");
+    expect(
+      relateVersions(
+        doc("a", T3, { title: "이 기기의 판", baseUpdatedAt: null }),
+        server,
+        never,
+      ),
+    ).toBe("diverged");
+  });
+});
+
+describe("부팅 병합 계획 — 기준 판", () => {
+  const T1 = "2026-10-01T00:00:00.000Z";
+  const T2 = "2026-10-01T00:05:00.000Z";
+  const T3 = "2026-10-01T00:10:00.000Z";
+  const FOLDER = "f00000000000000000001";
+
+  function plan(
+    local: Presentation[],
+    server: Presentation[],
+    deletedIds: string[] = [],
+    knownBeforePull: Iterable<string> = local.map((d) => d.id),
+  ) {
+    return planBootMerge(local, server, deletedIds, new Set(knownBeforePull));
+  }
+
+  it("고친 것이 없는 판은 서버 판이 더 새로우면 서버 판을 기준 판과 함께 받는다", () => {
+    const local = doc("a", T1, { baseUpdatedAt: T1 });
+    const server = doc("a", T2, { title: "다른 기기의 판" });
+
+    const { documents, needsPush } = plan([local], [server]);
+
+    expect(documents).toEqual([{ ...server, baseUpdatedAt: T2 }]);
+    expect(needsPush).toEqual([]);
+  });
+
+  it("받는 사이 확정된 판은 더 오래된 서버 목록으로 되돌리지 않는다", () => {
+    const local = doc("a", T3, {
+      title: "받는 동안 올린 판",
+      baseUpdatedAt: T3,
+    });
+
+    const { documents, needsPush } = plan([local], [doc("a", T1)]);
+
+    expect(documents[0]).toBe(local);
+    expect(needsPush).toEqual([]);
+  });
+
+  it("서버 판과 시각이 같아도 서버가 고친 내용이면 서버 판을 받는다", () => {
+    const local = doc("a", T1, { folderId: FOLDER, baseUpdatedAt: T1 });
+    const server = doc("a", T1, { folderId: null });
+
+    const { documents, needsPush } = plan([local], [server]);
+
+    expect(documents).toEqual([{ ...server, baseUpdatedAt: T1 }]);
+    expect(needsPush).toEqual([]);
+  });
+
+  it("서버 판과 시각·내용이 같으면 로컬 판을 그대로 둔다", () => {
+    const local = doc("a", T1, { baseUpdatedAt: T1 });
+
+    const { documents, needsPush } = plan([local], [doc("a", T1)]);
+
+    expect(documents[0]).toBe(local);
+    expect(needsPush).toEqual([]);
+  });
+
+  it("고친 판이 서버 판과 내용이 같으면 서버 판을 맞춘 판으로 받는다", () => {
+    const local = doc("a", T2, { title: "같은 내용", baseUpdatedAt: T1 });
+    const server = doc("a", T3, { title: "같은 내용" });
+
+    const { documents, needsPush } = plan([local], [server]);
+
+    expect(documents).toEqual([{ ...server, baseUpdatedAt: T3 }]);
+    expect(needsPush).toEqual([]);
+  });
+
+  it("시계가 느려 서버 판보다 이른 시각이어도 고친 판은 남기고 기준 판 그대로 올린다", () => {
+    const local = doc("a", T2, { title: "이 기기의 편집", baseUpdatedAt: T1 });
+    const server = doc("a", T3, { title: "다른 기기의 편집" });
+
+    const { documents, needsPush } = plan([local], [server]);
+
+    expect(documents[0]).toBe(local);
+    expect(needsPush).toEqual(["a"]);
+  });
+
+  it("고친 판이 서버 판과 같아도 서버 목록이 기준 판보다 오래되면 남기고 올린다", () => {
+    const local = doc("a", T3, { title: "같은 내용", baseUpdatedAt: T2 });
+
+    const { documents, needsPush } = plan(
+      [local],
+      [doc("a", T1, { title: "같은 내용" })],
+    );
+
+    expect(documents[0]).toBe(local);
+    expect(needsPush).toEqual(["a"]);
+  });
+
+  it("기준 판이 없는 이전 저장본은 서버 판과 내용이 같으면 맞춘 판으로 받는다", () => {
+    const server = doc("a", T2);
+
+    const { documents, needsPush } = plan([doc("a", T1)], [server]);
+
+    expect(documents).toEqual([{ ...server, baseUpdatedAt: T2 }]);
+    expect(needsPush).toEqual([]);
+  });
+
+  it("기준 판이 없는 이전 저장본이 더 새로우면 서버 판을 기준 판으로 삼아 올린다", () => {
+    const local = doc("a", T3, { title: "로컬 편집" });
+
+    const { documents, needsPush } = plan([local], [doc("a", T2)]);
+
+    expect(documents).toEqual([{ ...local, baseUpdatedAt: T2 }]);
+    expect(needsPush).toEqual(["a"]);
+  });
+
+  it("서버에 없는 내 세트는 서버가 확정한 판이어도 다시 만들도록 기준 판을 비우고 올린다", () => {
+    const clean = doc("a", T1, { baseUpdatedAt: T1 });
+    const legacy = doc("b", T1);
+    const created = doc("c", T1, { baseUpdatedAt: null });
+
+    const { documents, needsPush } = plan([clean, legacy, created], []);
+
+    expect(documents).toEqual([
+      { ...clean, baseUpdatedAt: null },
+      { ...legacy, baseUpdatedAt: null },
+      created,
+    ]);
+    expect(documents[2]).toBe(created);
+    expect(needsPush).toEqual(["a", "b", "c"]);
+  });
+
+  it("영구 삭제 기록이 있는 세트는 올리지 않은 편집이 없으면 지운다", () => {
+    const { documents, needsPush, removedIds } = plan(
+      [doc("a", T1, { baseUpdatedAt: T1 }), doc("b", T1)],
+      [],
+      ["a", "b"],
+    );
+
+    expect(documents).toEqual([]);
+    expect(needsPush).toEqual([]);
+    expect(removedIds).toEqual(["a", "b"]);
+  });
+
+  it("영구 삭제 기록이 있어도 올리지 않은 편집이 있으면 남기고 올려 서버가 정하게 한다", () => {
+    const edited = doc("a", T2, { baseUpdatedAt: T1 });
+    const created = doc("b", T1, { baseUpdatedAt: null });
+
+    const { documents, needsPush, removedIds } = plan(
+      [edited, created],
+      [],
+      ["a", "b"],
+    );
+
+    expect(documents).toEqual([edited, created]);
+    expect(documents[0]).toBe(edited);
+    expect(needsPush).toEqual(["a", "b"]);
+    expect(removedIds).toEqual([]);
+  });
+
+  it("영구 삭제 기록이 있어도 기준 판보다 이른 시각으로 고친 세트는 남기고 올린다", () => {
+    const edited = doc("a", T1, {
+      title: "시계가 늦은 기기의 편집",
+      baseUpdatedAt: T2,
+    });
+
+    const { documents, needsPush, removedIds } = plan([edited], [], ["a"]);
+
+    expect(documents).toEqual([edited]);
+    expect(needsPush).toEqual(["a"]);
+    expect(removedIds).toEqual([]);
+  });
+
+  it("받기 전부터 알던 내 세트가 그사이 사라졌으면 서버 목록에 있어도 다시 넣지 않는다", () => {
+    const { documents, needsPush } = plan(
+      [],
+      [doc("a", T1), doc("b", T1)],
+      [],
+      ["a"],
+    );
+
+    expect(documents.map((d) => d.id)).toEqual(["b"]);
+    expect(needsPush).toEqual([]);
   });
 });

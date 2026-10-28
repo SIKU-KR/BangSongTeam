@@ -8,6 +8,7 @@ import {
   getFolders,
   applyServerFolders,
   applyServerFolder,
+  removeFoldersLocally,
 } from "../../features/drive/folderStore";
 import {
   sortFoldersParentFirst,
@@ -53,6 +54,7 @@ import {
 import {
   setFolderSyncEnabled,
   setServerFolderListener,
+  setFolderGoneListener,
   pushFolderNow,
   hasPendingFolderPush,
   holdFailedFolderPush,
@@ -278,6 +280,7 @@ export async function runBootSync(): Promise<void> {
   setDeckGoneListener(dropDeletedLibraryDeck);
   setFolderSyncEnabled(true);
   setServerFolderListener(applyServerFolder);
+  setFolderGoneListener(removeFoldersLocally);
   void refreshBackgroundCatalog();
 
   try {
@@ -310,6 +313,7 @@ export function stopSync(): void {
   setServerDeckListener(null);
   setDeckGoneListener(null);
   setServerFolderListener(null);
+  setFolderGoneListener(null);
   setFolderSyncEnabled(false);
   setSyncEnabled(false);
   setDeckSyncEnabled(false);

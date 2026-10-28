@@ -25,8 +25,10 @@ import {
 } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { MemoryRouter, Routes, Route } from "../test/router";
+import { testRouter } from "../test/next/navigation";
 import type { Folder } from "#shared";
 import { ThemeProvider } from "#components/theme-provider";
+import { Toaster } from "#components/ui/sonner";
 import { AppShellLayout } from "./AppShellLayout";
 import { PresentationsRoute } from "./PresentationsRoute";
 import { TrashRoute } from "./TrashRoute";
@@ -85,6 +87,7 @@ function renderShell(initialPath = "/presentations") {
             />
           </Routes>
         </MemoryRouter>
+        <Toaster position="bottom-left" />
       </ThemeProvider>,
     ),
   );
@@ -417,6 +420,27 @@ describe("AppShellLayout (드라이브형 홈)", () => {
       }),
     );
     expect(getPresentationById(target.id)?.folderId ?? null).toBeNull();
+  });
+
+  it("드라이브를 떠나면 실행 취소 알림을 닫아 다른 화면에서 되돌리지 않는다", async () => {
+    renderShell();
+    const target = SEED_PRESENTATIONS[1];
+
+    fireEvent.click(card(target.title));
+    act(() => {
+      fireEvent.keyDown(document.activeElement ?? window, { key: "Delete" });
+    });
+    expect(await screen.findByTestId("drive-toast")).toBeInTheDocument();
+
+    act(() => {
+      testRouter.push(`/editor/${target.id}`);
+    });
+
+    expect(screen.getByTestId("editor-stub")).toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.queryByTestId("drive-toast")).not.toBeInTheDocument(),
+    );
+    expect(getPresentationById(target.id)?.trashedAt).not.toBeNull();
   });
 
   it("폴더를 자기 하위로는 옮길 수 없다 (이동 대화 상자에서 비활성)", () => {

@@ -37,17 +37,22 @@ export class TimeoutError extends OfflineError {
 /**
  * 서버가 요청을 거절했다 (4xx·5xx). 상태 코드로 사유를 가를 수 있게 남긴다.
  * 메시지는 서버가 준 한국어 오류 문장이 있으면 그것을 쓴다.
+ *
+ * `body`는 거절 응답의 JSON 본문이다. 412가 실어 보내는 저장된 판처럼, 거절된 요청을 다시
+ * 묻지 않고 처리하는 데 쓴다. 본문을 읽지 못했으면 없다.
  */
 export class ServerRejectedError extends Error {
   readonly status: number;
   readonly retryAfterMs?: number;
   readonly requestId?: string;
   readonly route?: string;
+  readonly body?: unknown;
   constructor(
     status: number,
     message?: string,
     retryAfterMs?: number,
     meta?: RequestMeta,
+    body?: unknown,
   ) {
     super(message ?? ERROR_COPY.serverRejected(status));
     this.name = "ServerRejectedError";
@@ -55,6 +60,7 @@ export class ServerRejectedError extends Error {
     this.retryAfterMs = retryAfterMs;
     this.requestId = meta?.requestId;
     this.route = meta?.route;
+    this.body = body;
   }
 }
 
@@ -179,8 +185,9 @@ export async function callApi<T>(
   if (response.status === 401) throw new SessionExpiredError();
   if (!response.ok) {
     let message: string | undefined;
+    let body: unknown;
     try {
-      const body: unknown = await response.json();
+      body = await response.json();
       if (typeof body === "object" && body !== null && "error" in body) {
         if (typeof body.error === "string") message = body.error;
       }
@@ -194,7 +201,13 @@ export async function callApi<T>(
     }
     const retryAfter = response.headers?.get("retry-after");
     const retryAfterMs = parseRetryAfter(retryAfter) ?? undefined;
-    throw new ServerRejectedError(response.status, message, retryAfterMs, meta);
+    throw new ServerRejectedError(
+      response.status,
+      message,
+      retryAfterMs,
+      meta,
+      body,
+    );
   }
 
   try {

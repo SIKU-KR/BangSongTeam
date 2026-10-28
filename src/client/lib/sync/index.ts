@@ -16,6 +16,7 @@ export {
   flushPendingSync,
   hasPendingDocumentPush,
 } from "./syncScheduler";
+export { beginPermanentDelete } from "./ownPresentationListener";
 export {
   startBootSync,
   runDeferredBootSync,

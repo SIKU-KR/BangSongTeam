@@ -1,3 +1,4 @@
+import { z } from "zod";
 import { ERROR_COPY } from "#copy/common";
 import {
   DeckSchema,
@@ -29,7 +30,15 @@ import {
 import { requestSessionCheck } from "../auth/sessionStore";
 import { reportApiFailure } from "../observability/clientReports";
 import { isProjecting } from "../../features/presentation/fullscreen";
+import { isSyncedWithServer } from "../../features/presentation/presentationDocument";
 import { setSyncStatus, type SyncStatus } from "./syncStatus";
+import { cyrb53 } from "./contentHash";
+import { relateVersions } from "./mergeDocuments";
+import {
+  confirmVersion,
+  isKnownAncestor,
+  noteOwnVersion,
+} from "./presentationLineage";
 
 function isSessionMismatch(err: unknown): boolean {
   return (
@@ -103,24 +112,8 @@ function toSyncableDocument(presentation: Presentation): PresentationDocument {
  */
 const serverDecks = new Map<string, Map<string, string>>();
 
-/**
- * 스키마로 파싱한 덱의 JSON을 53비트 해시로 줄인다 (cyrb53). 덱 본문을 통째로
- * 들고 있으면 세트 수만큼 메모리를 한 벌 더 쓴다.
- */
 function deckFingerprint(deck: Deck): string {
-  const text = JSON.stringify(deck);
-  let h1 = 0xdeadbeef;
-  let h2 = 0x41c6ce57;
-  for (let i = 0; i < text.length; i++) {
-    const code = text.charCodeAt(i);
-    h1 = Math.imul(h1 ^ code, 2654435761);
-    h2 = Math.imul(h2 ^ code, 1597334677);
-  }
-  h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507);
-  h1 ^= Math.imul(h2 ^ (h2 >>> 13), 3266489909);
-  h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507);
-  h2 ^= Math.imul(h1 ^ (h1 >>> 13), 3266489909);
-  return (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(36);
+  return cyrb53(JSON.stringify(deck));
 }
 
 function rememberServerDecks(document: PresentationDocument): void {
@@ -147,8 +140,8 @@ export function __resetServerDecksForTests(): void {
   serverDecks.clear();
 }
 
-async function sendChanges(changes: PresentationChanges): Promise<void> {
-  await callSyncApi(() =>
+async function sendChanges(changes: PresentationChanges): Promise<unknown> {
+  return callSyncApi<unknown>(() =>
     api.api.presentations[":id"].$patch({
       param: { id: changes.id },
       json: changes,
@@ -156,17 +149,49 @@ async function sendChanges(changes: PresentationChanges): Promise<void> {
   );
 }
 
+function storedRevisionOf(body: unknown, sent: PresentationDocument): string {
+  const updatedAt =
+    typeof body === "object" && body !== null && "updatedAt" in body
+      ? body.updatedAt
+      : undefined;
+  const parsed = z.iso.datetime().safeParse(updatedAt);
+  return parsed.success ? parsed.data : sent.updatedAt;
+}
+
+function conflictingPresentationOf(
+  err: ServerRejectedError,
+): PresentationDocument | null {
+  const body = err.body;
+  const presentation =
+    typeof body === "object" && body !== null && "presentation" in body
+      ? body.presentation
+      : undefined;
+  const parsed = PresentationDocumentSchema.safeParse(presentation);
+  return parsed.success ? parsed.data : null;
+}
+
 /**
- * 내 프레젠테이션을 올릴 때 스토어에 묻는 창구. 부팅 동기화가 등록하고 `stopSync`가 뗀다.
+ * 내 프레젠테이션을 올릴 때 스토어에 묻고 결과를 알리는 창구. 부팅 동기화가 등록하고 `stopSync`가
+ * 뗀다.
  *
  * - `current`: 그 세트의 지금 판. 큐에 든 사본은 넣은 때의 판이라, 그사이 이 탭이 고쳤거나 다른
  *   탭이 쓴 저장본을 다시 읽었으면 낡았다. 낡은 판을 올리면 그 뒤의 수정을 서버에서 되돌린다.
  *   지운 세트면 없다고 답한다.
  * - `requeue`: 송출 중이라 지금 보내지 못한 그 세트를 큐에 다시 넣는다.
+ * - `saved`: 서버가 보낸 판(`sent`, 스토어의 그 객체)을 `stored` 판으로 받았다.
+ * - `rebase`: 412의 서버 판이 이 탭이 만든 판이라, 지금 판을 그 판(`base`) 위에 얹어 다시 보낸다.
+ * - `adopt`: 이 탭은 고친 것이 없고 서버 판이 앞섰다. 서버 판을 받는다.
+ * - `conflict`: 양쪽 다 고쳤다. 이 탭의 편집을 사본으로 남기고 서버 판을 받는다.
+ * - `gone`: 다른 곳에서 영구 삭제한 세트다(410).
  */
 export interface OwnPresentationListener {
   current(id: string): Presentation | undefined;
   requeue(id: string): void;
+  saved(sent: Presentation, stored: string): void;
+  rebase(id: string, base: string): void;
+  adopt(server: Presentation): void;
+  conflict(server: Presentation): void;
+  gone(id: string): void;
 }
 
 let ownListener: OwnPresentationListener | null = null;
@@ -177,48 +202,139 @@ export function setOwnPresentationListener(
   ownListener = next;
 }
 
+const MAX_REBASES = 2;
+
+type SendOutcome =
+  | { kind: "saved"; stored: string }
+  | { kind: "requeued" }
+  | { kind: "gone"; error: ServerRejectedError }
+  | {
+      kind: "conflict";
+      server: PresentationDocument;
+      error: ServerRejectedError;
+    };
+
+async function sendPresentation(
+  presentation: Presentation,
+): Promise<SendOutcome> {
+  const document = toSyncableDocument(presentation);
+  noteOwnVersion(presentation);
+  const known = serverDecks.get(document.id);
+  try {
+    let body: unknown;
+    try {
+      body = await sendChanges(
+        toPresentationChanges(
+          document,
+          (deck) => known?.get(deck.id) !== deckFingerprint(deck),
+        ),
+      );
+    } catch (err) {
+      if (!(err instanceof ServerRejectedError && err.status === 409)) {
+        throw err;
+      }
+      serverDecks.delete(document.id);
+      if (ownListener && isProjecting()) {
+        ownListener.requeue(document.id);
+        return { kind: "requeued" };
+      }
+      body = await sendChanges(toPresentationChanges(document));
+    }
+    rememberServerDecks(document);
+    return { kind: "saved", stored: storedRevisionOf(body, document) };
+  } catch (err) {
+    if (!(err instanceof ServerRejectedError)) throw err;
+    if (err.status === 410) {
+      serverDecks.delete(document.id);
+      return { kind: "gone", error: err };
+    }
+    if (err.status !== 412) throw err;
+    const server = conflictingPresentationOf(err);
+    if (!server) throw err;
+    return { kind: "conflict", server, error: err };
+  }
+}
+
 /**
  * 세트를 서버에 올린다. 헤더와 곡 순서는 언제나, 덱은 서버에 마지막으로 올린 뒤
  * 바뀐 것만 보낸다. 서버가 모르는 곡이 있다고 하면(409) 모든 덱을 담아 한 번 더
  * 보낸다.
  *
  * 받은 사본이 아니라 스토어의 지금 판을 올린다(`OwnPresentationListener.current`). 그사이 지운
- * 세트나 공유받은 사본이 된 자리는 요청 없이 끝낸다. 창구가 없으면(부팅 동기화 전) 받은 사본을
- * 올린다.
+ * 세트나 공유받은 사본이 된 자리, 서버와 맞춘 판(`isSyncedWithServer`)은 요청 없이 끝낸다. 창구가
+ * 없으면(부팅 동기화 전) 받은 사본을 올리고, 서버의 거절(412·410)은 그대로 던진다.
+ *
+ * 저장 본문에 기준 판(`baseUpdatedAt`)을 싣는다. 서버가 받으면(200) 보낸 판과 서버가 남긴 판을
+ * `saved`로 알린다. 판을 돌려주지 않는 이전 서버면 보낸 시각이 그 서버가 남긴 판이다. 그사이 다른
+ * 곳에서 바꿔 서버가 쓰지 않았으면(412, 모든 덱을 다시 보낸 뒤도 같다) 서버가 돌려준 저장된 판을
+ * 지금 판과 견준다(`relateVersions`).
+ * - 이 탭이 이미 더 새 판을 받았으면 아무것도 하지 않는다.
+ * - 내용이 같으면 그 판을 맞춘 판으로 확정한다.
+ * - 서버 판이 이 탭이 만든 판이면(응답을 잃은 저장 등) 그 판 위에 얹어 다시 보낸다. 잇달아 두 번까지만
+ *   다시 보내고, 그다음은 412를 영구 실패로 던진다. 송출 중이면 보내지 않고 큐에 다시 넣는다.
+ * - 이 탭이 고친 것이 없으면 서버 판을 받고(`adopt`), 양쪽 다 고쳤으면 `conflict`로 둘 다 지킨다.
+ * 412의 서버 판을 읽지 못하면 412를 영구 실패로 던진다. 영구 삭제한 세트라고 하면(410) 기억한 덱을
+ * 잊고 `gone`으로 알린다.
  *
  * 송출 중에 409를 받으면 모든 덱을 다시 보내지 않고 큐에 다시 넣는다. 송출 화면은 요청이
  * 0건이어야 하고, 큐는 송출을 마친 뒤 모든 덱을 담아 올린다(기억한 덱 지문을 버렸다).
  *
  * 글 한도에 맞춘 문서를 올리고 그 문서의 덱 지문을 기억한다. 줄이기 전의 덱으로 기억하면
- * 줄인 곡을 올릴 때마다 바뀐 곡으로 보고 다시 보낸다. 서버가 받을 수 없는 문서면 요청 없이
- * `UnsyncableDocumentError`를 던진다.
+ * 줄인 곡을 올릴 때마다 바뀐 곡으로 보고 다시 보낸다. 보낸 판은 이 탭의 계보에 적는다
+ * (`noteOwnVersion`). 서버가 받을 수 없는 문서면 요청 없이 `UnsyncableDocumentError`를 던진다.
  */
 export async function pushPresentation(snapshot: Presentation): Promise<void> {
-  const presentation = ownListener
-    ? ownListener.current(snapshot.id)
-    : snapshot;
-  if (!presentation || presentation.access) return;
-  const document = toSyncableDocument(presentation);
-
-  const known = serverDecks.get(document.id);
-  try {
-    await sendChanges(
-      toPresentationChanges(
-        document,
-        (deck) => known?.get(deck.id) !== deckFingerprint(deck),
-      ),
-    );
-  } catch (err) {
-    if (!(err instanceof ServerRejectedError && err.status === 409)) throw err;
-    serverDecks.delete(document.id);
-    if (ownListener && isProjecting()) {
-      ownListener.requeue(document.id);
+  const listener = ownListener;
+  let presentation = listener ? listener.current(snapshot.id) : snapshot;
+  let rebases = 0;
+  while (
+    presentation &&
+    !presentation.access &&
+    !isSyncedWithServer(presentation)
+  ) {
+    const outcome = await sendPresentation(presentation);
+    if (outcome.kind === "requeued") return;
+    if (outcome.kind === "saved") {
+      listener?.saved(presentation, outcome.stored);
       return;
     }
-    await sendChanges(toPresentationChanges(document));
-  }
+    if (!listener) throw outcome.error;
+    if (outcome.kind === "gone") {
+      listener.gone(presentation.id);
+      return;
+    }
 
-  rememberServerDecks(document);
+    const { server } = outcome;
+    const current = listener.current(presentation.id);
+    if (!current || current.access) return;
+    const relation = relateVersions(current, server, (fingerprint) =>
+      isKnownAncestor(current.id, fingerprint),
+    );
+    if (relation === "skip") return;
+    rememberServerDecks(server);
+    if (relation === "same") {
+      listener.saved(current, server.updatedAt);
+      return;
+    }
+    if (relation === "behind") {
+      listener.adopt(server);
+      return;
+    }
+    if (relation === "diverged") {
+      listener.conflict(server);
+      return;
+    }
+    if (isProjecting()) {
+      listener.requeue(current.id);
+      return;
+    }
+    if (rebases >= MAX_REBASES) throw outcome.error;
+    rebases += 1;
+    confirmVersion(server);
+    listener.rebase(current.id, server.updatedAt);
+    presentation = listener.current(current.id);
+    if (presentation?.baseUpdatedAt !== server.updatedAt) return;
+  }
 }
 
 /** 공유받은 세트의 최신본을 받았거나(`replaced`) 접근을 잃었을 때(`lost`) 알린다. */

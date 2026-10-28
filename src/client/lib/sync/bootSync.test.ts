@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import {
+  API_ERRORS,
   DEFAULT_DECK_STYLE,
   DeckSchema,
   type Deck,
@@ -53,6 +54,7 @@ import {
   hasPendingDocumentPush,
   retryPendingSyncNow,
   scheduleDocumentPush,
+  setSyncEnabled,
 } from "./syncScheduler";
 import {
   __resetFolderSyncForTests,
@@ -61,6 +63,7 @@ import {
   flushFolderSync,
   retryFolderSyncNow,
   scheduleFolderPush,
+  setFolderSyncEnabled,
 } from "./folderSync";
 import {
   loadAllPresentations,
@@ -80,11 +83,13 @@ import { listPresentations } from "../../features/presentation";
 import {
   __loadDocumentsForTests,
   flushPendingWrites,
+  getPresentationById,
   hydrateFromStorage,
   removePresentationsLocally,
   renamePresentation,
   resetPresentationStore,
 } from "../../features/presentation/presentationStore";
+import { ownPresentationListener } from "./ownPresentationListener";
 import { SEED_USER_ID as TEST_USER_ID } from "../../test/presentationFixture";
 import {
   OfflineError,
@@ -95,6 +100,7 @@ import { UnsyncableDocumentError } from "./presentationSync";
 import { ERROR_COPY } from "#copy/common";
 import { BASE_BACKOFF_MS, MAX_BACKOFF_MS } from "./backoff";
 import {
+  getSyncDomainStatus,
   getSyncSnapshot,
   recordSyncFailure,
   resetSyncStatus,
@@ -1241,6 +1247,143 @@ describe("runBootSync — 지운 항목과 밀린 push", () => {
   });
 });
 
+describe("runBootSync — 기준 판으로 맞추기", () => {
+  const T1 = "2026-10-01T00:00:00.000Z";
+  const EDITED_AT = "2026-10-01T00:05:00.000Z";
+  const T2 = "2026-10-01T00:10:00.000Z";
+  const T3 = "2026-10-01T00:20:00.000Z";
+  let pushFolder: ReturnType<typeof vi.fn<(f: Folder) => Promise<Folder>>>;
+
+  beforeEach(async () => {
+    signInAsTestUser();
+    await resetSongLibraryStore();
+    resetFolderStore();
+    resetPresentationStore();
+    resetSyncStatus();
+    __resetBootSyncForTests();
+    __resetDeckSyncForTests();
+    __resetSyncSchedulerForTests();
+    __resetFolderSyncForTests();
+    __setDeckTransportForTests({ push: vi.fn(async (deck: Deck) => deck) });
+    pushFolder = vi.fn(async (f: Folder) => f);
+    __setFolderPusherForTests(pushFolder);
+    presentationSync.pullDecks.mockReset();
+    presentationSync.pullDecks.mockResolvedValue({ decks: [], deletedIds: [] });
+    presentationSync.pullPresentations.mockReset();
+    presentationSync.pullPresentations.mockResolvedValue([]);
+    presentationSync.pushPresentation.mockReset();
+    presentationSync.pushPresentation.mockResolvedValue(undefined);
+    presentationSync.pullFolders.mockReset();
+    presentationSync.pullFolders.mockResolvedValue(EMPTY_FOLDER_LIST);
+  });
+
+  afterEach(() => {
+    __resetBootSyncForTests();
+    __resetFolderSyncForTests();
+    __resetDeckSyncForTests();
+    __resetSyncSchedulerForTests();
+  });
+
+  it("시계가 느린 기기에서 고친 판은 더 늦은 시각의 서버 판으로 덮지 않고 그 기준 판으로 올린다", async () => {
+    __loadDocumentsForTests([
+      {
+        ...presentation(DOC),
+        title: "이 기기에서 고친 제목",
+        baseUpdatedAt: T1,
+        updatedAt: EDITED_AT,
+      },
+    ]);
+    presentationSync.pullPresentations.mockResolvedValue([
+      { ...presentation(DOC), title: "다른 기기에서 고친 제목", updatedAt: T2 },
+    ]);
+
+    await runBootSync();
+
+    expect(getPresentationById(DOC)?.title).toBe("이 기기에서 고친 제목");
+    expect(presentationSync.pushPresentation).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({ id: DOC, baseUpdatedAt: T1 }),
+    );
+  });
+
+  it("받는 동안 확정된 판은 그보다 먼저 받은 서버 목록으로 되돌리지 않고 다시 올리지 않는다", async () => {
+    __loadDocumentsForTests([
+      { ...presentation(DOC), baseUpdatedAt: T1, updatedAt: T1 },
+    ]);
+    let releasePull: (documents: Presentation[]) => void = () => undefined;
+    presentationSync.pullPresentations.mockImplementationOnce(
+      () =>
+        new Promise<Presentation[]>((resolve) => {
+          releasePull = resolve;
+        }),
+    );
+    presentationSync.pushPresentation.mockImplementation(async (doc) => {
+      ownPresentationListener.saved(doc as Presentation, T3);
+    });
+
+    const booting = runBootSync();
+    await vi.waitFor(() =>
+      expect(presentationSync.pullPresentations).toHaveBeenCalled(),
+    );
+    renamePresentation(DOC, "받는 동안 고친 제목");
+    await flushPendingSync();
+    releasePull([{ ...presentation(DOC), updatedAt: T1 }]);
+    await booting;
+
+    expect(getPresentationById(DOC)).toMatchObject({
+      title: "받는 동안 고친 제목",
+      baseUpdatedAt: T3,
+      updatedAt: T3,
+    });
+    expect(presentationSync.pushPresentation).toHaveBeenCalledTimes(1);
+  });
+
+  it("병합이 지운 세트의 대기 중인 push를 버린다", async () => {
+    __loadDocumentsForTests([presentation(DOC)]);
+    setSyncEnabled(true);
+    scheduleDocumentPush(getPresentationById(DOC)!);
+    presentationSync.pullFolders.mockResolvedValue({
+      folders: [],
+      tombstones: { folderIds: [], presentationIds: [DOC] },
+    });
+
+    await runBootSync();
+    await flushPendingSync();
+
+    expect(getPresentationById(DOC)).toBeUndefined();
+    expect(hasPendingDocumentPush()).toBe(false);
+    expect(presentationSync.pushPresentation).not.toHaveBeenCalled();
+  });
+
+  it("부팅이 올린 폴더를 서버가 이미 영구 삭제했다고 하면(410) 실패 없이 이 기기에서도 지운다", async () => {
+    __loadFoldersForTests([folder(PARENT)]);
+    pushFolder.mockRejectedValue(
+      new ServerRejectedError(410, API_ERRORS.folder.deleted),
+    );
+
+    await runBootSync();
+    await flushFolderSync();
+
+    expect(getFolders()).toEqual([]);
+    expect(getSyncSnapshot().lastFailure).toBeNull();
+    expect(getSyncDomainStatus("folder")).toBe("synced");
+  });
+
+  it("동기화를 끄면 폴더가 영구 삭제됐다는 응답을 더 받지 않는다", async () => {
+    await runBootSync();
+    __loadFoldersForTests([folder(PARENT)]);
+    stopSync();
+    setFolderSyncEnabled(true);
+    pushFolder.mockRejectedValue(
+      new ServerRejectedError(410, API_ERRORS.folder.deleted),
+    );
+
+    scheduleFolderPush(folder(PARENT));
+    await flushFolderSync();
+
+    expect(getFolders().map((f) => f.id)).toEqual([PARENT]);
+  });
+});
+
 describe("runBootSync — 새로고침 뒤에도 남는 곡 삭제", () => {
   let push: ReturnType<typeof vi.fn<(deck: Deck) => Promise<Deck>>>;
   let remove: ReturnType<typeof vi.fn<(id: string) => Promise<boolean | void>>>;
@@ -1492,8 +1635,9 @@ describe("runBootSync — 한 브라우저의 소유자 저장본과 공유받�
     await runBootSync();
     await flushPendingWrites();
 
-    expect(listPresentations()).toEqual([owners]);
-    expect(await storedPresentations()).toEqual([owners]);
+    const adopted = { ...owners, baseUpdatedAt: owners.updatedAt };
+    expect(listPresentations()).toEqual([adopted]);
+    expect(await storedPresentations()).toEqual([adopted]);
   });
 
   it("공유가 끝난 사본의 자리에 그사이 소유자의 저장본이 들어왔으면 지우지 않는다", async () => {
