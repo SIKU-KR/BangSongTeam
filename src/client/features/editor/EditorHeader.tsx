@@ -6,6 +6,7 @@ import {
   ChevronDownIcon,
   CloudAlertIcon,
   CopyIcon,
+  DownloadIcon,
   FileTextIcon,
   HardDriveIcon,
   InfoIcon,
@@ -251,13 +252,18 @@ function SaveStatusIndicator(): React.JSX.Element {
       variant="ghost"
       size="xs"
       data-testid="save-status"
-      className="min-w-0 shrink"
+      className="md:min-w-0 md:shrink"
     />
   );
   const statusLabel = (
     <>
-      <span className={cn("size-1.5 shrink-0 rounded-full", dotClass)}></span>
-      <span className="truncate text-muted-foreground">{label}</span>
+      <span
+        className={cn("size-1.5 shrink-0 rounded-full max-md:hidden", dotClass)}
+      ></span>
+      <CloudAlertIcon className="size-4 text-destructive md:hidden" />
+      <span className="truncate text-muted-foreground max-md:sr-only">
+        {label}
+      </span>
     </>
   );
 
@@ -265,7 +271,7 @@ function SaveStatusIndicator(): React.JSX.Element {
     <span
       data-testid="save-status-bar"
       className={cn(
-        "min-w-0 items-center gap-1",
+        "min-w-0 items-center gap-1 max-md:shrink-0",
         syncFailed ? "inline-flex" : "hidden md:inline-flex",
       )}
     >
@@ -377,7 +383,7 @@ function PresentationTitleField({
             variant="ghost"
             size="sm"
             data-testid="header-title-btn"
-            className="max-w-xs min-w-0 shrink text-sm font-bold sm:max-w-md"
+            className="max-w-xs min-w-0 shrink overflow-hidden text-sm font-bold max-md:px-1.5 sm:max-w-md"
             onClick={() => {
               setTempTitle(title);
               setIsEditingTitle(true);
@@ -386,7 +392,7 @@ function PresentationTitleField({
         }
       >
         <span className="truncate">{title}</span>
-        <PencilIcon className="text-muted-foreground" />
+        <PencilIcon className="text-muted-foreground max-md:hidden" />
       </TooltipTrigger>
       <TooltipContent>{EDITOR_COPY.header.editTitle}</TooltipContent>
     </Tooltip>
@@ -443,9 +449,11 @@ function MediaFailurePopover({
         render={<Button variant="destructive" size="sm" />}
       >
         {quota ? <HardDriveIcon /> : <CloudAlertIcon />}
-        {quota
-          ? BACKGROUND_COPY.prepare.editorQuota
-          : BACKGROUND_COPY.prepare.editorFailed}
+        <span className="max-md:sr-only">
+          {quota
+            ? BACKGROUND_COPY.prepare.editorQuota
+            : BACKGROUND_COPY.prepare.editorFailed}
+        </span>
       </PopoverTrigger>
       <PopoverContent data-testid="header-media-failure-popover" align="end">
         <PopoverDescription>
@@ -513,6 +521,11 @@ function ShortcutGuidePopover(): React.JSX.Element {
  * 화면에서 숨기지만, 동기화 실패는 좁은 화면에서도 보인다. 오류 원문(`SyncFailure.message`)은
  * 개발자용 글일 수 있어 그리지 않는다.
  *
+ * 터치 화면은 버튼이 44px 이상이라 폰 너비(md 미만)에서는 글자까지 두면 오른쪽 묶음이 왼쪽 묶음
+ * (뒤로·파일·제목)을 0폭으로 밀어 겹치고, 줄어든 저장 상태 버튼은 눌러 열 수 없다. 그래서 저장
+ * 상태·공유·발표·배경 저장 표시는 아이콘만 두고, 글자는 화면 낭독기용(`sr-only`)으로 남긴다.
+ * 단축키 안내와 테마 전환은 sm 미만에서 숨긴다. 줄어드는 쪽은 제목뿐이다.
+ *
  * '저장 실패'는 프레젠테이션을 이 기기에 저장하지 못할 때만 보인다. 곡 보관함·폴더의 저장 실패는
  * 경고 배너가 알리고, 헤더는 동기화 상태를 그대로 보인다. 기기에 저장하지 못하는 동안에도 다시
  * 시도와 문의 코드는 동기화 상태를 따른다. 그때는 서버 사본이 유일하게 안전한 사본이다.
@@ -540,9 +553,9 @@ export function EditorHeader({
   return (
     <header
       data-testid="editor-header"
-      className="flex h-14 items-center justify-between border-b bg-background px-4 select-none"
+      className="flex h-14 items-center gap-2 border-b bg-background px-2 select-none sm:px-4 md:gap-0"
     >
-      <div className="flex min-w-0 items-center gap-3">
+      <div className="flex min-w-0 flex-1 items-center gap-1 sm:gap-3">
         {backPath !== null && (
           <Tooltip>
             <TooltipTrigger
@@ -604,9 +617,9 @@ export function EditorHeader({
           </DropdownMenuContent>
         </DropdownMenu>
 
-        <Separator orientation="vertical" className="h-4" />
+        <Separator orientation="vertical" className="h-4 max-sm:hidden" />
 
-        <div className="flex min-w-0 items-center gap-2">
+        <div className="flex min-w-0 items-center gap-1 sm:gap-2">
           <PresentationTitleField
             title={title}
             readOnly={readOnly}
@@ -651,10 +664,15 @@ export function EditorHeader({
         )}
       </div>
 
-      <div className="flex shrink-0 items-center gap-2">
-        <ShortcutGuidePopover />
+      <div className="flex shrink-0 items-center gap-1 sm:gap-2">
+        <div
+          data-testid="header-secondary-controls"
+          className="hidden items-center gap-2 sm:flex"
+        >
+          <ShortcutGuidePopover />
 
-        <ThemeMenuButton />
+          <ThemeMenuButton />
+        </div>
 
         {onShare && (
           <Button
@@ -663,7 +681,7 @@ export function EditorHeader({
             onClick={onShare}
           >
             <Share2Icon />
-            {COMMON_COPY.share}
+            <span className="max-md:sr-only">{COMMON_COPY.share}</span>
           </Button>
         )}
 
@@ -679,12 +697,25 @@ export function EditorHeader({
               data-testid="header-media-progress"
               data-state={mediaProgress.retrying ? "retrying" : "downloading"}
             >
-              {(mediaProgress.retrying
-                ? BACKGROUND_COPY.prepare.editorRetrying
-                : BACKGROUND_COPY.prepare.editorStatus)(
-                mediaProgress.readyCount,
-                mediaProgress.totalCount,
+              {mediaProgress.retrying ? (
+                <RefreshCwIcon className="md:hidden" />
+              ) : (
+                <DownloadIcon className="md:hidden" />
               )}
+              <span className="max-md:sr-only">
+                {(mediaProgress.retrying
+                  ? BACKGROUND_COPY.prepare.editorRetrying
+                  : BACKGROUND_COPY.prepare.editorStatus)(
+                  mediaProgress.readyCount,
+                  mediaProgress.totalCount,
+                )}
+              </span>
+              <span aria-hidden="true" className="md:hidden">
+                {BACKGROUND_COPY.prepare.editorProgress(
+                  mediaProgress.readyCount,
+                  mediaProgress.totalCount,
+                )}
+              </span>
             </Badge>
           )
         )}
@@ -695,7 +726,7 @@ export function EditorHeader({
           onClick={onPresent}
         >
           <PlayIcon className="fill-current" />
-          {EDITOR_COPY.slide.present}
+          <span className="max-md:sr-only">{EDITOR_COPY.slide.present}</span>
         </Button>
       </div>
     </header>

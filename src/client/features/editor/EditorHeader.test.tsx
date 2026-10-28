@@ -6,6 +6,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import { API_ERRORS, MAX_PRESENTATION_TITLE_LENGTH } from "#shared";
 import { MemoryRouter } from "../../test/router";
@@ -216,6 +217,70 @@ describe("EditorHeader", () => {
     expect(
       screen.queryByTestId("header-media-failure"),
     ).not.toBeInTheDocument();
+  });
+
+  it("배경 저장 중 표시는 좁은 화면에서 아이콘과 저장된 수만 보이고 전체 안내는 읽어 준다", () => {
+    renderHeader({
+      mediaProgress: {
+        readyCount: 1,
+        totalCount: 2,
+        failure: null,
+        retrying: false,
+        retry: vi.fn(),
+      },
+    });
+
+    const badge = screen.getByTestId("header-media-progress");
+    expect(
+      within(badge).getByText(BACKGROUND_COPY.prepare.editorStatus(1, 2)),
+    ).toHaveClass("max-md:sr-only");
+    expect(
+      within(badge).getByText(BACKGROUND_COPY.prepare.editorProgress(1, 2)),
+    ).toHaveClass("md:hidden");
+  });
+
+  it("다시 받기를 멈춘 실패의 글자는 좁은 화면에서 감추되 버튼 이름으로 남긴다", () => {
+    renderHeader({
+      mediaProgress: {
+        readyCount: 1,
+        totalCount: 2,
+        failure: "network",
+        retrying: false,
+        retry: vi.fn(),
+      },
+    });
+
+    const trigger = screen.getByTestId("header-media-failure");
+    expect(trigger).toHaveAccessibleName(BACKGROUND_COPY.prepare.editorFailed);
+    expect(
+      within(trigger).getByText(BACKGROUND_COPY.prepare.editorFailed),
+    ).toHaveClass("max-md:sr-only");
+  });
+
+  it("단축키 안내와 테마 전환은 좁은 화면에서 숨기고 sm부터 보인다", () => {
+    renderHeader();
+
+    const secondary = screen.getByTestId("header-secondary-controls");
+    expect(secondary).toHaveClass("hidden", "sm:flex");
+    expect(secondary).toContainElement(
+      screen.getByTestId("header-shortcuts-btn"),
+    );
+    expect(secondary).toContainElement(screen.getByTestId("theme-menu-button"));
+  });
+
+  it("공유와 슬라이드쇼 발표는 좁은 화면에서 글자를 감추되 버튼 이름으로 남긴다", () => {
+    renderHeader({ onShare: vi.fn() });
+
+    const share = screen.getByTestId("header-share-btn");
+    expect(share).toHaveAccessibleName(COMMON_COPY.share);
+    expect(within(share).getByText(COMMON_COPY.share)).toHaveClass(
+      "max-md:sr-only",
+    );
+    const present = screen.getByTestId("header-present-btn");
+    expect(present).toHaveAccessibleName(EDITOR_COPY.slide.present);
+    expect(within(present).getByText(EDITOR_COPY.slide.present)).toHaveClass(
+      "max-md:sr-only",
+    );
   });
 
   it("받다 실패해 곧 다시 받을 예정이면 저장 중과 구분해 보여 준다", () => {
@@ -463,6 +528,27 @@ describe("EditorHeader", () => {
       });
       renderHeader();
       expect(screen.getByTestId("save-status-bar")).not.toHaveClass("hidden");
+    });
+
+    it("동기화 실패의 저장 상태는 좁은 화면에서 줄어들지 않고 아이콘만 보이며 이름은 남는다", () => {
+      recordSyncFailure({
+        id: "doc",
+        kind: "presentation",
+        message: "거절",
+        failedAt: 1,
+      });
+      renderHeader();
+
+      const trigger = screen.getByTestId("save-status");
+      expect(trigger).toHaveAccessibleName(EDITOR_COPY.syncStatus.syncFailed);
+      expect(
+        within(trigger).getByText(EDITOR_COPY.syncStatus.syncFailed),
+      ).toHaveClass("max-md:sr-only");
+      expect(trigger).not.toHaveClass("min-w-0");
+      expect(trigger).not.toHaveClass("shrink");
+      expect(screen.getByTestId("save-status-bar")).toHaveClass(
+        "max-md:shrink-0",
+      );
     });
 
     it("실패한 항목의 제목과 이유를 보여 주고 오류 원문은 보여 주지 않는다", async () => {
