@@ -57,6 +57,9 @@ interface LoginRouteProps {
  *   안내한다. 이메일 로그인과 카카오·네이버 로그인은 앱 안에서도 된다.
  * - Google 화면에서 뒤로 가기로 돌아오면 브라우저가 이 화면을 로그인으로 이동하던 상태 그대로
  *   되살린다(`pageshow`의 `persisted`). 막아 둔 버튼을 풀지 않으면 이메일 로그인까지 막힌 채 남는다.
+ * - 카드가 화면보다 길면(키보드가 올라온 폰, 가로로 돌린 폰) 이 화면이 스스로 스크롤한다. body가
+ *   overflow-hidden이라 화면 높이만큼의 스크롤 영역(`h-dvh overflow-y-auto`)을 두지 않으면 잘린 아래쪽의
+ *   입력란과 제출 버튼에 닿을 수 없다.
  */
 export function LoginRoute({
   description = AUTH_COPY.defaultDescription,
@@ -109,9 +112,12 @@ export function LoginRoute({
     : providers;
 
   return (
-    <div className="flex min-h-dvh flex-col bg-muted/40">
+    <div
+      data-testid="login-route"
+      className="flex h-dvh flex-col overflow-y-auto bg-muted/40"
+    >
       <StorageWarningBanner />
-      <div className="flex flex-1 items-center justify-center px-4">
+      <div className="flex flex-1 items-center justify-center p-4">
         <Card className="w-full max-w-sm">
           <CardHeader className="text-center">
             <CardTitle className="text-2xl">{APP_NAME}</CardTitle>

@@ -104,7 +104,10 @@ function ConsentDialog({ userId }: { userId: string }): React.JSX.Element {
 
   return (
     <AlertDialog open>
-      <AlertDialogContent data-testid="consent-dialog">
+      <AlertDialogContent
+        data-testid="consent-dialog"
+        className="max-h-9/10 overflow-y-auto"
+      >
         <AlertDialogHeader>
           <AlertDialogTitle>{AUTH_COPY.consent.title}</AlertDialogTitle>
           <AlertDialogDescription>

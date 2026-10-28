@@ -70,6 +70,16 @@ describe("ConsentGate (가입 동의 모달)", () => {
     expect(agree).toBeEnabled();
   });
 
+  it("화면보다 낮은 곳(가로로 돌린 폰, 키보드가 올라온 화면)에서는 창 안을 밀어서 모든 항목과 버튼에 닿는다", async () => {
+    renderGate();
+
+    const dialog = await screen.findByTestId("consent-dialog");
+
+    expect(dialog).toHaveClass("max-h-9/10", "overflow-y-auto");
+    expect(dialog).toContainElement(screen.getByTestId("consent-agree"));
+    expect(dialog).toContainElement(screen.getByTestId("consent-decline"));
+  });
+
   it("전체 동의 후 동의하면 기록하고 모달을 닫는다", async () => {
     renderGate();
 

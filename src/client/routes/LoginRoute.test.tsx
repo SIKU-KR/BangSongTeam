@@ -127,6 +127,32 @@ describe("LoginRoute", () => {
     expect(await screen.findByText(/어디서든/)).toBeInTheDocument();
   });
 
+  describe("화면보다 카드가 긴 작은 화면", () => {
+    it("화면 높이만큼의 스크롤 영역이라, 키보드가 올라와 낮아져도 아래 입력란과 버튼까지 밀어서 닿는다", () => {
+      renderLogin();
+
+      const root = screen.getByTestId("login-route");
+
+      expect(root).toHaveClass("h-dvh", "overflow-y-auto");
+      expect(root).toContainElement(screen.getByTestId("email-login-form"));
+    });
+
+    it("카드는 넘치지 않을 때 가운데에 놓이고, 넘칠 때는 위아래에 여백을 두고 이어진다", () => {
+      renderLogin();
+
+      const centering = screen
+        .getByTestId("email-login-form")
+        .closest("[data-slot=card]")?.parentElement;
+
+      expect(centering).toHaveClass(
+        "flex-1",
+        "items-center",
+        "justify-center",
+        "p-4",
+      );
+    });
+  });
+
   describe("소셜 로그인 버튼", () => {
     it("서버가 켜 둔 로그인만 버튼으로 보여 준다", async () => {
       serveProviders(["kakao", "google"]);
