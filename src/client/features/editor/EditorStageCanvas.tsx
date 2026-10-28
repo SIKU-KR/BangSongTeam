@@ -223,11 +223,11 @@ export function EditorStageCanvas({
       >
         <div className="flex min-w-0 items-center gap-2 max-md:flex-wrap max-md:gap-y-1">
           {onOpenSlideList && <SlideListButton onClick={onOpenSlideList} />}
-          <span className="inline-flex items-center rounded-md bg-muted px-2 py-0.5 font-mono font-semibold text-foreground max-md:shrink-0 max-md:whitespace-nowrap">
+          <span className="inline-flex shrink-0 items-center rounded-md bg-muted px-2 py-0.5 font-mono font-semibold whitespace-nowrap text-foreground">
             {EDITOR_COPY.canvas.slidePosition(slideNumber, totalSlideCount)}
           </span>
           <span aria-hidden="true">·</span>
-          <span className="font-mono max-md:shrink-0 max-md:whitespace-nowrap">
+          <span className="shrink-0 font-mono whitespace-nowrap">
             {EDITOR_COPY.canvas.songPosition(songNumber, totalSongs)}
           </span>
           {statusItems}

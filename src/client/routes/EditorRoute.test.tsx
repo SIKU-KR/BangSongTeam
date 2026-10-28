@@ -2048,19 +2048,6 @@ describe("EditorRoute (PowerPoint식 프레젠테이션 편집기)", () => {
       expect(ribbon).toContainElement(screen.getByTestId("font-color-btn"));
       expect(ribbon).toContainElement(screen.getByTestId("text-shadow-btn"));
     });
-
-    it("슬라이드·곡 위치는 한 줄을 지킨다", () => {
-      renderEditor();
-
-      expect(within(statusBar()).getByText("슬라이드 1/23")).toHaveClass(
-        "max-md:shrink-0",
-        "max-md:whitespace-nowrap",
-      );
-      expect(within(statusBar()).getByText("곡 1/5")).toHaveClass(
-        "max-md:shrink-0",
-        "max-md:whitespace-nowrap",
-      );
-    });
   });
 
   it("md 이상에서는 썸네일 창을 그대로 붙이고 슬라이드 목록 버튼을 두지 않는다", () => {
@@ -2069,5 +2056,18 @@ describe("EditorRoute (PowerPoint식 프레젠테이션 편집기)", () => {
     expect(screen.getByTestId("slide-thumbnail-pane")).toBeInTheDocument();
     expect(screen.queryByTestId("open-slide-list-btn")).not.toBeInTheDocument();
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("슬라이드·곡 위치는 폭과 상관없이 한 줄을 지킨다", () => {
+    renderEditor();
+
+    expect(within(statusBar()).getByText("슬라이드 1/23")).toHaveClass(
+      "shrink-0",
+      "whitespace-nowrap",
+    );
+    expect(within(statusBar()).getByText("곡 1/5")).toHaveClass(
+      "shrink-0",
+      "whitespace-nowrap",
+    );
   });
 });
