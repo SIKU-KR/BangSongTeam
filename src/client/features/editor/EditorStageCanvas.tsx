@@ -198,7 +198,10 @@ export function EditorStageCanvas({
             disabled={slideNumber <= 1}
             onClick={onPrevSlide}
             variant="secondary"
-            className={cn(CANVAS_NAV_POSITION, "left-3")}
+            className={cn(
+              CANVAS_NAV_POSITION,
+              "left-3 [@media(hover:none)]:left-1",
+            )}
           >
             <ChevronLeftIcon />
           </IconButton>
@@ -210,7 +213,10 @@ export function EditorStageCanvas({
             disabled={slideNumber >= totalSlideCount}
             onClick={onNextSlide}
             variant="secondary"
-            className={cn(CANVAS_NAV_POSITION, "right-3")}
+            className={cn(
+              CANVAS_NAV_POSITION,
+              "right-3 [@media(hover:none)]:right-1",
+            )}
           >
             <ChevronRightIcon />
           </IconButton>
@@ -293,6 +299,10 @@ function SlideListButton({
   );
 }
 
-/** 슬라이드 위 이전·다음 버튼의 자리. 마우스를 올렸을 때만 보인다 */
+/**
+ * 슬라이드 위 이전·다음 버튼의 자리. 마우스 기기에서는 마우스를 올렸을 때만 보인다. 올릴 마우스가 없는
+ * 터치 기기(`@media(hover:none)`)에서는 늘 보이되, 가사를 덜 가리도록 불투명도를 줄이고 가장자리에 바짝
+ * 붙이며, 손가락으로 누를 44px은 지킨다. 눌러도 갈 곳이 없는 버튼은 어느 기기에서나 가린다.
+ */
 const CANVAS_NAV_POSITION =
-  "absolute top-1/2 z-40 -translate-y-1/2 rounded-full opacity-0 group-hover:opacity-100 disabled:opacity-0";
+  "absolute top-1/2 z-40 -translate-y-1/2 rounded-full opacity-0 group-hover:opacity-100 disabled:opacity-0 [@media(hover:none)]:size-11 [@media(hover:none)]:opacity-70";
