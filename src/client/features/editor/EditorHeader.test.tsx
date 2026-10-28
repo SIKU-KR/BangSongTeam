@@ -283,6 +283,37 @@ describe("EditorHeader", () => {
     );
   });
 
+  it("공유 버튼은 360px 미만에서 숨기고, 그 폭에서는 파일 메뉴의 공유 항목이 대신한다", () => {
+    const onShare = vi.fn();
+    renderHeader({ onShare });
+
+    expect(screen.getByTestId("header-share-btn")).toHaveClass("max-xs:hidden");
+
+    fireEvent.click(screen.getByTestId("header-file-menu-btn"));
+    const item = screen.getByTestId("header-file-menu-share-btn");
+    expect(item).toHaveClass("xs:hidden");
+    expect(item).toHaveTextContent(COMMON_COPY.share);
+
+    fireEvent.click(item);
+
+    expect(onShare).toHaveBeenCalledTimes(1);
+    expect(
+      screen.queryByTestId("header-file-menu-dropdown"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("공유할 수 없는 화면은 파일 메뉴에도 공유 항목이 없다", () => {
+    renderHeader({ onShare: undefined });
+
+    fireEvent.click(screen.getByTestId("header-file-menu-btn"));
+
+    expect(screen.getByTestId("header-file-menu-dropdown")).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("header-file-menu-share-btn"),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByTestId("header-share-btn")).not.toBeInTheDocument();
+  });
+
   it("받다 실패해 곧 다시 받을 예정이면 저장 중과 구분해 보여 준다", () => {
     renderHeader({
       mediaProgress: {

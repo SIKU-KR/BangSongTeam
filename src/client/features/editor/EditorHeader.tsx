@@ -524,7 +524,9 @@ function ShortcutGuidePopover(): React.JSX.Element {
  * 터치 화면은 버튼이 44px 이상이라 폰 너비(md 미만)에서는 글자까지 두면 오른쪽 묶음이 왼쪽 묶음
  * (뒤로·파일·제목)을 0폭으로 밀어 겹치고, 줄어든 저장 상태 버튼은 눌러 열 수 없다. 그래서 저장
  * 상태·공유·발표·배경 저장 표시는 아이콘만 두고, 글자는 화면 낭독기용(`sr-only`)으로 남긴다.
- * 단축키 안내와 테마 전환은 sm 미만에서 숨긴다. 줄어드는 쪽은 제목뿐이다.
+ * 단축키 안내와 테마 전환은 sm 미만에서 숨긴다. 줄어드는 쪽은 제목뿐이다. 360px(`xs`) 미만에서는
+ * 동기화에 실패하면 저장 상태와 다시 시도까지 44px 버튼 둘이 더해져 제목이 14px로 줄고 다시 시도가
+ * 공유 버튼과 겹친다. 그 폭에서는 공유 버튼을 숨기고 파일 메뉴의 공유 항목으로 대신한다.
  *
  * '저장 실패'는 프레젠테이션을 이 기기에 저장하지 못할 때만 보인다. 곡 보관함·폴더의 저장 실패는
  * 경고 배너가 알리고, 헤더는 동기화 상태를 그대로 보인다. 기기에 저장하지 못하는 동안에도 다시
@@ -614,6 +616,16 @@ export function EditorHeader({
                 {COMMON_COPY.makeCopy}
               </DropdownMenuItem>
             )}
+            {onShare && (
+              <DropdownMenuItem
+                data-testid="header-file-menu-share-btn"
+                className="xs:hidden"
+                onClick={onShare}
+              >
+                <Share2Icon />
+                {COMMON_COPY.share}
+              </DropdownMenuItem>
+            )}
           </DropdownMenuContent>
         </DropdownMenu>
 
@@ -678,6 +690,7 @@ export function EditorHeader({
           <Button
             data-testid="header-share-btn"
             variant="outline"
+            className="max-xs:hidden"
             onClick={onShare}
           >
             <Share2Icon />

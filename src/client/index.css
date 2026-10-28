@@ -25,6 +25,11 @@
     BlinkMacSystemFont, system-ui, sans-serif;
 }
 
+/* 폰 폭을 한 번 더 나누는 경계(360px). 기본 breakpoint는 sm(640px)부터라 그 아래를 가르지 못한다 */
+@theme {
+  --breakpoint-xs: 22.5rem;
+}
+
 @theme inline {
   --color-google: var(--google);
   --color-google-foreground: var(--google-foreground);
