@@ -1,5 +1,17 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import {
+  describe,
+  it,
+  expect,
+  beforeEach,
+  afterEach,
+  onTestFinished,
+  vi,
+} from "vitest";
 import type { Folder } from "#shared";
+import {
+  __resetServerClockForTests,
+  noteServerClock,
+} from "../api/serverClock";
 import { mergeFolders } from "./mergeFolders";
 
 const USER = "000000000000000000001";
@@ -77,6 +89,19 @@ describe("mergeFolders", () => {
       const result = mergeFolders(
         [folder(A, { name: "로컬", updatedAt: "2026-09-25T00:10:00.000Z" })],
         [folder(A, { name: "서버" })],
+      );
+
+      expect(result.folders.map((f) => f.name)).toEqual(["로컬"]);
+      expect(result.needsPush).toEqual([A]);
+    });
+
+    it("기기 시계가 서버보다 한 시간 늦으면 서버 시계로 가려, 서버 판 바로 뒤로 찍은 로컬 폴더가 이기고 올린다", () => {
+      noteServerClock(new Headers({ date: "Fri, 25 Sep 2026 01:00:00 GMT" }));
+      onTestFinished(__resetServerClockForTests);
+
+      const result = mergeFolders(
+        [folder(A, { name: "로컬", updatedAt: "2026-09-25T00:59:00.001Z" })],
+        [folder(A, { name: "서버", updatedAt: "2026-09-25T00:59:00.000Z" })],
       );
 
       expect(result.folders.map((f) => f.name)).toEqual(["로컬"]);

@@ -55,4 +55,9 @@ describe("공식 라이브러리 이름", () => {
     );
     expect(toAccountName(" \u202e ")).toBe(FALLBACK_USER_NAME.default);
   });
+
+  it("짝을 잃은 서로게이트는 U+FFFD로 바꿔 저장할 수 있는 이름으로 두고, 온전한 이모지는 그대로 둔다", () => {
+    expect(toAccountName("찬양팀\uD83D")).toBe("찬양팀\uFFFD");
+    expect(toAccountName("\uDE00찬양팀 😀")).toBe("\uFFFD찬양팀 😀");
+  });
 });

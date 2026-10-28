@@ -23,11 +23,14 @@ import {
 } from "../../lib/storage";
 import { announceStorageChange } from "../../lib/storage/storageChannel";
 import { getCurrentUserId } from "../../lib/auth/sessionStore";
+import { serverAlignedNow } from "../../lib/api/serverClock";
 import {
   cancelDeckDelete,
+  cancelDeckDeleteReaddedElsewhere,
   cancelDeckPush,
   deletedDeckIds,
   markDeckDeleted,
+  resumeOtherTabsDeckDeletes,
   resumePendingDeckDeletes,
   scheduleDeckPush,
   scheduleDeckDelete,
@@ -47,6 +50,7 @@ import { createSongDeck } from "./songDeck";
 let userSongsCache: Deck[] = [];
 let hydrationFailed = false;
 const unpersisted = new Map<string, number>();
+const writing = new Set<Promise<void>>();
 const listeners = new Set<() => void>();
 
 const writeRetry = createWriteRetry("deck", (failed) => {
@@ -213,7 +217,7 @@ function adoptsServerDeck(local: Deck, server: Deck): boolean {
   return (
     server.updatedAt > local.updatedAt ||
     hasSameDeckContent(local, server) ||
-    isFarFuture(local.updatedAt)
+    isFarFuture(local.updatedAt, serverAlignedNow())
   );
 }
 
@@ -225,9 +229,10 @@ function adoptsServerDeck(local: Deck, server: Deck): boolean {
  *   기기의 곡을 돌려준다.
  * - 내용이 같고 시각만 다르다(`hasSameDeckContent`). 서버가 기기 시각을 줄이고 만든 시각을 처음 값으로
  *   지킨 것이라, 따르지 않으면 다음 부팅 병합에서 로컬 시각이 이겨 같은 곡을 다시 올린다.
- * - 로컬 시각이 기기 시계보다 한참 앞선다(`isFarFuture`). 빠른 시계가 남긴 값이라 로컬이 더
- *   새롭다고 볼 수 없다(`mergeLibraryDecks`도 서버 사본을 고른다). 서버 덱으로 바로 맞추고, 이 값을
- *   읽는 이전 버전의 탭이 병합에서 다시 올리지 않게 저장본도 고친다.
+ * - 로컬 시각이 서버에 맞춘 지금(`serverAlignedNow`)보다 한참 앞선다(`isFarFuture`). 빠른 시계가 남긴
+ *   값이라 로컬이 더 새롭다고 볼 수 없다(`mergeLibraryDecks`도 서버 사본을 고른다). 시계가 늦은 기기의
+ *   기기 시계로 가르면 서버 판 바로 뒤로 찍은 수정까지 걸린다. 서버 덱으로 바로 맞추고, 이 값을 읽는
+ *   이전 버전의 탭이 병합에서 다시 올리지 않게 저장본도 고친다.
  *
  * 그 밖에는 서버가 정하는 공유 필드만 입히고 내용은 로컬을 지킨다. 그사이 로컬에서 더 고친 내용이 곧
  * 올라간다.
@@ -268,9 +273,11 @@ export function dropDeletedLibraryDeck(id: string): void {
  * 곡(`pendingDeckDeletes`)도 저장본이 남아 있으면 같게 본다. 하이드레이션도 그 곡을 싣지 않는다.
  *
  * 이 탭이 지웠거나 서버가 지웠다고 답한 곡은 저장본이 다시 생겨도 보관함에 넣지 않는다. 그 저장본은
- * 다른 탭의 늦은 쓰기(push 응답 등)라, 넣으면 서버에서 지운 곡이 이 탭에만 남는다. 다른 탭에서 지운
- * 곡으로만 기억한 곡은 저장본이 다시 생기면 기억을 지우고 싣는다(`unmarkDeckDeleted`). 지운 탭이 같은
- * 공유 곡을 다시 가져온 것이라, 기억을 남기면 이 탭의 다음 보관함 병합이 그 곡을 지운다.
+ * 다른 탭의 늦은 쓰기(push 응답 등)라, 넣으면 서버에서 지운 곡이 이 탭에만 남는다. 다만 이 탭이 지운
+ * 곡을 다른 탭이 다시 가져와 삭제 기록에서 뺐고 이 탭의 DELETE가 아직 나가지 않았으면, 그 DELETE를
+ * 거두고 싣는다(`cancelDeckDeleteReaddedElsewhere`). 거두지 않으면 다시 가져온 곡을 서버에서 지운다.
+ * 다른 탭에서 지운 곡으로만 기억한 곡은 저장본이 다시 생기면 기억을 지우고 싣는다(`unmarkDeckDeleted`).
+ * 지운 탭이 같은 공유 곡을 다시 가져온 것이라, 기억을 남기면 이 탭의 다음 보관함 병합이 그 곡을 지운다.
  *
  * 이 탭이 아직 저장하지 않았거나 저장하는 중인 곡은 건너뛴다(읽는 동안 고친 곡도 같다). 곧 이 탭의
  * 쓰기가 저장본을 다시 쓰고, 지운 곡을 이 탭에서 다시 가져오는 중이면 다시 넣은 곡을 지운 알림이
@@ -314,7 +321,9 @@ export async function reloadSongsFromStorage(
       }
       continue;
     }
-    if (!unmarkDeckDeleted(id)) continue;
+    if (!unmarkDeckDeleted(id) && !cancelDeckDeleteReaddedElsewhere(id)) {
+      continue;
+    }
     putInCache(record.value);
     changed = true;
   }
@@ -343,12 +352,23 @@ export function resumeSongDeletes(): void {
 }
 
 /**
+ * 같은 브라우저의 다른 탭이 지우고 서버에 보내지 못한 지금 계정의 곡을 이 탭이 서버에서 지운다
+ * (`resumeOtherTabsDeckDeletes`). 연결 회복 신호마다 부른다. 지운 탭이 보내지 못하고 닫혔으면 열려 있는
+ * 탭은 그 곡을 감추기만 해, 다음 부팅까지 서버와 공유 라이브러리에 남는다.
+ */
+export function resumeOtherTabsSongDeletes(): void {
+  const userId = getCurrentUserId();
+  if (userId) resumeOtherTabsDeckDeletes(userId);
+}
+
+/**
  * 보관함 곡의 제목·아티스트 수정. 공개 곡이면 서버 동기화 뒤 공유 라이브러리에도
  * 그대로 보인다. 이미 프레젠테이션에 넣은 곡은 복제본이라 바뀌지 않는다.
  *
  * 수정 시각은 지금이되 이 기기가 본 판보다 뒤로 찍는다(`editTimestamp`). 가져오기는 서버 시각으로
  * 찍히므로, 시계가 뒤처진 기기가 가져오자마자 고친 이름을 지금으로 찍으면 서버가 옛 수정으로 보고
- * 버린다.
+ * 버린다. 지금은 서버에 맞춘 시각이다(`serverAlignedNow`). 기기 시계로는 시계가 늦은 기기가 가져온
+ * 시각 바로 뒤로 찍은 수정을 한참 앞선 값(`isFarFuture`)으로 봐, 늦게 온 앞 판 응답이 그 수정을 덮는다.
  */
 export function updateLibrarySongInfo(
   id: string,
@@ -365,7 +385,7 @@ export function updateLibrarySongInfo(
     ...deck,
     title: info.title,
     artist: info.artist,
-    updatedAt: editTimestamp(deck.updatedAt),
+    updatedAt: editTimestamp(deck.updatedAt, serverAlignedNow()),
   });
 }
 
@@ -385,7 +405,30 @@ export function deleteUserSong(id: string): void {
   void persist(id, "delete", () => deleteSong(id));
 }
 
-async function persist(
+/**
+ * 저장소에 쓰는 중인 곡 쓰기가 모두 끝날 때까지 기다린다. 창을 닫거나 숨길 때, 로그아웃하기 전,
+ * 계정이 끝나 새로고침하기 전의 마지막 저장이라, 앞서 쓰지 못해 다시 시도를 기다리는 저장·지우기도
+ * 백오프를 기다리지 않고 지금 다시 한다. 새로고침은 끝나지 않은 쓰기를 버리고, 다시 시도는 최대 1분
+ * 뒤라 그사이 페이지가 사라지면 서버에 올리지 못한 곡을 잃는다. 바뀔 때마다 하는 쓰기는 실패한 쓰기를
+ * 함께 하지 않는다.
+ */
+export async function flushSongWrites(): Promise<void> {
+  writeRetry.retryNow();
+  while (writing.size > 0) await Promise.all(writing);
+}
+
+function persist(
+  id: string,
+  op: WriteOp,
+  operation: () => Promise<void>,
+): Promise<void> {
+  const write = writeSong(id, op, operation);
+  writing.add(write);
+  void write.finally(() => writing.delete(write));
+  return write;
+}
+
+async function writeSong(
   id: string,
   op: WriteOp,
   operation: () => Promise<void>,
@@ -417,6 +460,7 @@ export async function resetSongLibraryStore(): Promise<void> {
   userSongsCache = [];
   hydrationFailed = false;
   unpersisted.clear();
+  writing.clear();
   writeRetry.reset();
   emitChange();
   try {

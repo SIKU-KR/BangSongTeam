@@ -193,7 +193,8 @@ function conflictingPresentationOf(
  * - `current`: 그 세트의 지금 판. 큐에 든 사본은 넣은 때의 판이라, 그사이 이 탭이 고쳤거나 다른
  *   탭이 쓴 저장본을 다시 읽었으면 낡았다. 낡은 판을 올리면 그 뒤의 수정을 서버에서 되돌린다.
  *   지운 세트면 없다고 답한다.
- * - `requeue`: 송출 중이라 지금 보내지 못한 그 세트를 큐에 다시 넣는다.
+ * - `requeue`: 송출 중이거나 큐가 담긴 폴더를 올린 뒤 다른 폴더로 옮겨 지금 보내지 못한 그 세트를
+ *   큐에 다시 넣는다.
  * - `saved`: 서버가 보낸 판(`sent`, 스토어의 그 객체)을 `stored` 판으로 받았다.
  * - `rebase`: 412의 서버 판이 이 탭이 만든 판이라, 지금 판을 그 판(`base`) 위에 얹어 다시 보낸다.
  * - `adopt`: 이 탭은 고친 것이 없고 서버 판이 앞섰다. 서버 판을 받는다.
@@ -220,6 +221,10 @@ export function setOwnPresentationListener(
 
 const MAX_REBASES = 2;
 
+function folderOf(presentation: Presentation): string | null {
+  return presentation.folderId ?? null;
+}
+
 type SendOutcome =
   | { kind: "saved"; stored: string }
   | { kind: "requeued" }
@@ -232,6 +237,7 @@ type SendOutcome =
 
 async function sendPresentation(
   presentation: Presentation,
+  listener: OwnPresentationListener | null,
 ): Promise<SendOutcome> {
   const document = toSyncableDocument(presentation);
   noteOwnVersion(presentation);
@@ -250,8 +256,9 @@ async function sendPresentation(
         throw err;
       }
       serverDecks.delete(document.id);
-      if (ownListener && isProjecting()) {
-        ownListener.requeue(document.id);
+      if (isProjecting()) {
+        if (!listener) throw err;
+        listener.requeue(document.id);
         return { kind: "requeued" };
       }
       body = await sendChanges(toPresentationChanges(document));
@@ -281,6 +288,11 @@ async function sendPresentation(
  * 세트나 공유받은 사본이 된 자리, 서버와 맞춘 판(`isSyncedWithServer`)은 요청 없이 끝낸다. 창구가
  * 없으면(부팅 동기화 전) 받은 사본을 올리고, 서버의 거절(412·410)은 그대로 던진다.
  *
+ * 큐는 받은 사본의 폴더를 먼저 올린 뒤 부른다(`ensureFolderPushed`). 보낼 판(다시 얹은 판 포함)이
+ * 그사이 다른 폴더로 옮겨졌으면 보내지 않고 큐에 다시 넣어, 큐가 그 폴더를 먼저 올리게 한다. 아직
+ * 서버에 없는 폴더를 가리키면 서버가 루트로 옮겨 받고, 이 탭은 그 판을 맞춘 판으로 확정해 옮긴 뒤의
+ * push가 아무것도 보내지 않아 다음 부팅에서 루트 자리가 이긴다.
+ *
  * 저장 본문에 기준 판(`baseUpdatedAt`)을 싣는다. 서버가 받으면(200) 보낸 판과 서버가 남긴 판을
  * `saved`로 알린다. 판을 돌려주지 않는 이전 서버면 보낸 시각이 그 서버가 남긴 판이다. 그사이 다른
  * 곳에서 바꿔 서버가 쓰지 않았으면(412, 모든 덱을 다시 보낸 뒤도 같다) 서버가 돌려준 저장된 판을
@@ -294,7 +306,9 @@ async function sendPresentation(
  * 잊고 `gone`으로 알린다.
  *
  * 송출 중에 409를 받으면 모든 덱을 다시 보내지 않고 큐에 다시 넣는다. 송출 화면은 요청이
- * 0건이어야 하고, 큐는 송출을 마친 뒤 모든 덱을 담아 올린다(기억한 덱 지문을 버렸다).
+ * 0건이어야 하고, 큐는 송출을 마친 뒤 모든 덱을 담아 올린다(기억한 덱 지문을 버렸다). 다시 넣는
+ * 창구는 보내기 시작할 때 등록돼 있던 것이라, 보내는 동안 계정이 끝나 창구를 뗐어도(`stopSync`) 송출
+ * 중에 다른 쿠키로 요청을 더 보내지 않는다. 창구 없이 보낸 push면 다시 보내지 않고 그 409를 던진다.
  *
  * 글 한도에 맞춘 문서를 올리고 그 문서의 덱 지문을 기억한다. 줄이기 전의 덱으로 기억하면
  * 줄인 곡을 올릴 때마다 바뀐 곡으로 보고 다시 보낸다. 보낸 판은 이 탭의 계보에 적는다
@@ -309,7 +323,11 @@ export async function pushPresentation(snapshot: Presentation): Promise<void> {
     !presentation.access &&
     !isSyncedWithServer(presentation)
   ) {
-    const outcome = await sendPresentation(presentation);
+    if (listener && folderOf(presentation) !== folderOf(snapshot)) {
+      listener.requeue(presentation.id);
+      return;
+    }
+    const outcome = await sendPresentation(presentation, listener);
     if (outcome.kind === "requeued") return;
     if (outcome.kind === "saved") {
       listener?.saved(presentation, outcome.stored);
@@ -378,9 +396,16 @@ let sharedRefreshGeneration = 0;
  * 동기화 큐를 거치지 않는 요청이라 결과를 `shared` 도메인 상태로 직접 남긴다.
  * 이 상태는 공유받은 프레젠테이션을 보는 동안만 의미가 있으므로, 화면을 떠나면
  * `endSharedPresentationRefresh`로 지운다. 그 뒤에 도착한 응답은 상태를 남기지 않는다.
+ *
+ * 화면을 떠났거나 받는 사이 송출을 시작했으면 받은 최신본도 접근 상실도 반영하지 않는다. 송출 화면은
+ * 띄운 프레젠테이션의 변경을 따라 그려, 반영하면 송출 중에 소유자의 새 판으로 바뀌거나 사라진다.
+ * 편집기를 다시 열거나 내 데이터를 다시 받을 때(`refreshOwnDataIfStale`, 공유받은 세트도 받는다)
+ * 맞춘다.
  */
 export async function refreshSharedPresentation(id: string): Promise<void> {
   const generation = sharedRefreshGeneration;
+  const isCurrent = (): boolean =>
+    generation === sharedRefreshGeneration && !isProjecting();
   const report = (status: SyncStatus, requestId?: string): void => {
     if (generation === sharedRefreshGeneration) {
       setSyncStatus("shared", status, requestId);
@@ -390,13 +415,14 @@ export async function refreshSharedPresentation(id: string): Promise<void> {
     const body = await callSyncApi<{ presentation: unknown }>(() =>
       api.api.presentations[":id"].$get({ param: { id } }),
     );
+    if (!isCurrent()) return;
     sharedListener?.replaced(
       PresentationDocumentSchema.parse(body.presentation),
     );
     report("synced");
   } catch (err) {
     if (err instanceof ServerRejectedError && err.status === 404) {
-      sharedListener?.lost(id);
+      if (isCurrent()) sharedListener?.lost(id);
       report("synced");
       return;
     }

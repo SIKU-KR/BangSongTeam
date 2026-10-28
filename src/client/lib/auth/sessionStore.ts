@@ -236,8 +236,11 @@ export function requestSessionCheck(): void {
  *   이 탭의 늦은 세션 확인이 보낸 탭이 지운 뒤에 앞 계정을 다시 썼을 수 있어서다.
  *
  * 알린 사용자를 그대로 쓰지는 않는다. 새로고침한 부팅이 서버에 물어 정한다. 이 탭이 일으킨
- * 변화(로그아웃·이메일 로그인·세션 확인 결과)만 알리고, 부팅과 받은 알림은 다시 알리지 않는다.
- * `BroadcastChannel`이 없으면 다음 동기화 요청의 401·403 확인으로 따라간다.
+ * 변화(로그아웃·이메일 로그인·세션 확인 결과)와, 서버에 물은 부팅이 캐시와 다른 사용자나 끝난 세션을
+ * 찾은 것을 알린다(`hydrateSession`). 받은 알림과 캐시와 같은 사용자로 들어간 부팅은 알리지 않는다.
+ * 알림을 받고 새로고침한 탭의 부팅은 보낸 탭이 남긴 캐시와 서버의 답이 같아 다시 알리지 않는다.
+ * `BroadcastChannel`이 없으면 다음 동기화 요청의 401·403 확인이나 다른 계정의 목록을 받은 부팅
+ * 동기화의 세션 확인으로 따라간다.
  */
 export function listenToOtherTabs(): () => void {
   otherTabs?.close();
@@ -297,6 +300,9 @@ function followOtherTab({ userId }: SessionBroadcast): void {
  * - 서버가 세션 없음을 분명히 답하면 캐시를 지우고 로그아웃한다. 캐시된 세션이 있었거나 세션
  *   만료로 끝난 부팅이면 `reason: "expired"`를 붙여 로그인 화면이 만료를 알리게 한다. 로그아웃으로
  *   끝난 부팅은 붙이지 않는다.
+ * - 서버에 물어 캐시와 다른 사용자로 들어가거나(소셜 로그인으로 돌아온 부팅 포함) 캐시의 세션이
+ *   끝난 것을 찾으면 다른 탭에 알린다(`listenToOtherTabs`). 이 탭이 일으킨 변화가 아니어도 알리지
+ *   않으면, 앞 계정을 띄운 채 숨어 있던 탭이 다음 요청까지 바뀐 쿠키로 다른 계정의 목록을 받는다.
  * - 그사이 로그인·로그아웃·계정 끝내기가 시작되면(epoch) 결과를 캐시에도 상태에도 쓰지 않는다.
  * - 캐시를 읽지 못하면(다른 탭에 막힌 저장소 등) 캐시가 없는 것처럼 이어 가되, 세션 캐시의 저장
  *   실패로 알린다. 로그인 화면으로 끝나도 경고 배너가 까닭을 보이고, 캐시를 다시 저장하면 지운다.
@@ -360,6 +366,7 @@ async function restoreSession(): Promise<SessionState> {
     await persist(user);
     if (started !== epoch) return state;
     setState({ status: "authenticated", user });
+    if (user.userId !== cached?.userId) announce(user.userId);
     return state;
   }
 
@@ -370,6 +377,7 @@ async function restoreSession(): Promise<SessionState> {
       endReason === "expired" || (cached !== null && endReason !== "signedOut"),
     ),
   );
+  if (cached) announce(null);
   return state;
 }
 

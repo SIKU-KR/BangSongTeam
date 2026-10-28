@@ -1,6 +1,17 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { signInAsTestUser, signOutForTests } from "../../test/sessionFixture";
-import { createId, DEFAULT_DECK_STYLE, DeckSchema, type Deck } from "#shared";
+import {
+  clampToClock,
+  createId,
+  DEFAULT_DECK_STYLE,
+  DeckSchema,
+  isOutdatedWrite,
+  type Deck,
+} from "#shared";
+import {
+  __resetServerClockForTests,
+  noteServerClock,
+} from "../../lib/api/serverClock";
 import {
   closeOfflineDB,
   getOfflineDB,
@@ -28,6 +39,7 @@ import {
   applyServerDeckFields,
   applyServerLibraryDecks,
   dropDeletedLibraryDeck,
+  flushSongWrites,
   getDeletedSongIds,
   getLibraryDeck,
   reloadSongsFromStorage,
@@ -43,6 +55,7 @@ import {
   __resetDeckSyncForTests,
 } from "../../lib/sync/deckSync";
 import {
+  forgetDeckDelete,
   listPendingDeckDeletes,
   rememberDeckDelete,
 } from "../../lib/sync/pendingDeckDeletes";
@@ -217,6 +230,73 @@ describe("songLibraryStore", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  describe("시계가 서버보다 10분 늦은 기기", () => {
+    const SERVER_NOW = Date.parse("2026-09-25T00:10:00.000Z");
+    const FORKED_AT = "2026-09-25T00:10:00.000Z";
+
+    beforeEach(() => {
+      vi.useFakeTimers({ toFake: ["Date"] });
+      vi.setSystemTime(new Date("2026-09-25T00:00:00.000Z"));
+      noteServerClock(
+        new Headers({ date: new Date(SERVER_NOW).toUTCString() }),
+      );
+    });
+
+    afterEach(() => {
+      __resetServerClockForTests();
+      vi.useRealTimers();
+    });
+
+    function fork(): Deck {
+      return upsertLibraryDeck(
+        libraryDeck("c000000000000000000f4", {
+          origin: "fork",
+          forkedFrom: "c000000000000000000f0",
+          forkedFromAuthorName: "원작자",
+          createdAt: FORKED_AT,
+          updatedAt: FORKED_AT,
+        }),
+        { push: false },
+      );
+    }
+
+    it("가져오자마자 제목을 고쳐도 가져온 시각보다 뒤로 찍어, 서버가 옛 수정으로 버리지 않는다", () => {
+      const forked = fork();
+
+      const renamed = updateLibrarySongInfo(forked.id, {
+        title: "새 제목",
+        artist: "",
+      });
+      const again = updateLibrarySongInfo(forked.id, {
+        title: "또 고친 제목",
+        artist: "",
+      });
+
+      for (const stamp of [renamed?.updatedAt, again?.updatedAt]) {
+        expect(Date.parse(stamp ?? "")).toBeGreaterThan(Date.parse(FORKED_AT));
+        expect(
+          isOutdatedWrite(
+            FORKED_AT,
+            clampToClock(stamp ?? "", SERVER_NOW),
+            SERVER_NOW,
+          ),
+        ).toBe(false);
+      }
+      expect(Date.parse(again?.updatedAt ?? "")).toBeGreaterThan(
+        Date.parse(renamed?.updatedAt ?? ""),
+      );
+    });
+
+    it("가져온 시각 바로 뒤로 찍은 곡을 한참 앞선 값으로 보지 않아, 늦게 온 앞 판 응답이 덮지 않는다", () => {
+      const forked = fork();
+      updateLibrarySongInfo(forked.id, { title: "새 제목", artist: "" });
+
+      applyServerDeckFields(forked);
+
+      expect(getLibraryDeck(forked.id)?.title).toBe("새 제목");
+    });
   });
 
   it("저장한 곡은 하이드레이션 후에도 남아 있어야 한다 (IndexedDB 영속)", async () => {
@@ -897,6 +977,108 @@ describe("songLibraryStore", () => {
       expect(remove).not.toHaveBeenCalled();
     });
 
+    describe("이 탭이 지운 곡을 다른 탭이 다시 가져옴", () => {
+      const fork = libraryDeck("c000000000000000000f3", {
+        origin: "fork",
+        forkedFrom: "c000000000000000000f0",
+        forkedFromAuthorName: "원작자",
+      });
+
+      async function readdFromOtherTab(): Promise<void> {
+        forgetDeckDelete(SEED_USER_ID, fork.id);
+        await writeFromOtherTab(fork);
+      }
+
+      beforeEach(async () => {
+        upsertLibraryDeck(fork, { push: false });
+        await settleWrites();
+      });
+
+      it("아직 보내지 않은 지우기는 거두고 다시 가져온 곡을 싣는다", async () => {
+        deleteUserSong(fork.id);
+        await settleWrites();
+        await readdFromOtherTab();
+
+        await reloadSongsFromStorage([fork.id]);
+        await flushDeckSync();
+
+        expect(remove).not.toHaveBeenCalled();
+        expect(getLibraryDeck(fork.id)).toEqual(fork);
+        expect(getDeletedSongIds().has(fork.id)).toBe(false);
+      });
+
+      it("보내는 묶음에서 앞 곡을 기다리던 지우기도 보내지 않는다", async () => {
+        const slow = saveSongToLibrary({
+          title: "먼저 올릴 곡",
+          lyricsRaw: "가사",
+        });
+        let finishPush: () => void = () => undefined;
+        push.mockImplementationOnce(
+          (deck) =>
+            new Promise<Deck>((resolve) => {
+              finishPush = () => resolve(deck);
+            }),
+        );
+        deleteUserSong(fork.id);
+        const sending = flushDeckSync();
+        await vi.waitFor(() => expect(push).toHaveBeenCalledTimes(1));
+        await settleWrites();
+        await readdFromOtherTab();
+
+        await reloadSongsFromStorage([fork.id]);
+        finishPush();
+        await sending;
+        await flushDeckSync();
+
+        expect(push.mock.calls[0][0].id).toBe(slow.id);
+        expect(remove).not.toHaveBeenCalled();
+        expect(getLibraryDeck(fork.id)).toEqual(fork);
+      });
+
+      it("이미 보낸 지우기는 거둘 수 없어 다시 가져온 곡을 싣지 않는다", async () => {
+        let finishDelete: () => void = () => undefined;
+        remove.mockImplementationOnce(
+          () =>
+            new Promise<void>((resolve) => {
+              finishDelete = resolve;
+            }),
+        );
+        deleteUserSong(fork.id);
+        const deleting = flushDeckSync();
+        await vi.waitFor(() => expect(remove).toHaveBeenCalledTimes(1));
+        await settleWrites();
+        await readdFromOtherTab();
+
+        await reloadSongsFromStorage([fork.id]);
+        finishDelete();
+        await deleting;
+
+        expect(getLibraryDeck(fork.id)).toBeUndefined();
+        expect(wasDeckDeleted(fork.id)).toBe(true);
+      });
+
+      it("삭제 기록에 남기지 못한 지우기는 기록이 없어도 다시 가져온 것으로 보지 않는다", async () => {
+        const setItem = vi
+          .spyOn(localStorage, "setItem")
+          .mockImplementation(() => {
+            throw new Error("QuotaExceededError");
+          });
+        try {
+          deleteUserSong(fork.id);
+        } finally {
+          setItem.mockRestore();
+        }
+        await settleWrites();
+        await writeFromOtherTab(fork);
+
+        await reloadSongsFromStorage([fork.id]);
+        await flushDeckSync();
+
+        expect(remove).toHaveBeenCalledExactlyOnceWith(fork.id);
+        expect(getLibraryDeck(fork.id)).toBeUndefined();
+      });
+    });
+
     it("다른 탭에서 지운 곡의 저장본이 다시 생기면 지운 곡으로 기억하지 않고 보관함에 싣는다", async () => {
       const fork = libraryDeck("c000000000000000000f2", {
         origin: "fork",
@@ -975,6 +1157,54 @@ describe("songLibraryStore", () => {
       ).toEqual(["마지막 수정"]);
       expect(await storedTitle(SONG)).toBe("마지막 수정");
       expect(getPersistenceError()).toBeNull();
+    });
+
+    it("창을 닫거나 계정이 끝나 저장 줄을 비우면, 저장하지 못한 곡도 다시 시도를 기다리지 않고 다시 쓴다", async () => {
+      vi.mocked(saveSong).mockRejectedValueOnce(quotaError());
+      updateLibrarySongInfo(SONG, { title: "저장하지 못한 수정", artist: "" });
+      await loadAllSongs();
+      expect(getPersistenceError("deck")?.kind).toBe("quota");
+
+      await flushSongWrites();
+
+      expect(await storedTitle(SONG)).toBe("저장하지 못한 수정");
+      expect(getPersistenceError()).toBeNull();
+    });
+
+    it("저장 줄을 비우면 지우지 못한 곡도 다시 시도를 기다리지 않고 다시 지운다", async () => {
+      vi.mocked(deleteSong).mockRejectedValueOnce(new Error("disk"));
+      deleteUserSong(SONG);
+      await loadAllSongs();
+      expect(await storedSongIds()).toContain(SONG);
+
+      await flushSongWrites();
+
+      expect(await storedSongIds()).not.toContain(SONG);
+      expect(getPersistenceError()).toBeNull();
+    });
+
+    it("저장 줄을 비우면 저장소에 쓰는 중인 곡을 다 쓴 뒤에 끝난다", async () => {
+      const save = vi.mocked(saveSong).getMockImplementation()!;
+      let release: () => void = () => undefined;
+      const held = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      vi.mocked(saveSong).mockImplementationOnce(async (deck) => {
+        await held;
+        await save(deck);
+      });
+      updateLibrarySongInfo(SONG, { title: "쓰는 중인 수정", artist: "" });
+
+      let flushed = false;
+      const flushing = flushSongWrites().then(() => {
+        flushed = true;
+      });
+      await loadAllSongs();
+      expect(flushed).toBe(false);
+      release();
+      await flushing;
+
+      expect(await storedTitle(SONG)).toBe("쓰는 중인 수정");
     });
 
     it("지우지 못한 곡은 지우기로 다시 시도한다", async () => {

@@ -28,6 +28,7 @@ import {
 } from "../../lib/storage";
 import { announceStorageChange } from "../../lib/storage/storageChannel";
 import { getCurrentUserId } from "../../lib/auth/sessionStore";
+import { serverAlignedNow } from "../../lib/api/serverClock";
 import {
   scheduleFolderPush,
   cancelFolderPush,
@@ -45,7 +46,9 @@ import { FOLDER_COPY } from "#copy/folders";
  *
  * 이름 바꾸기·이동·휴지통·복원은 수정 시각을 이 기기가 본 판보다 뒤로 찍는다
  * (`editTimestamp`). 서버는 저장된 폴더보다 이른 시각의 쓰기를 늦게 온 옛 수정으로 보고
- * 버리므로, 시계가 뒤처진 기기가 지금으로 찍으면 방금 고친 내용이 서버에 남지 않는다.
+ * 버리므로, 시계가 뒤처진 기기가 지금으로 찍으면 방금 고친 내용이 서버에 남지 않는다. 지금은 서버에
+ * 맞춘 시각이다(`serverAlignedNow`). 기기 시계로는 시계가 늦은 기기가 서버 판 바로 뒤로 찍은 수정을
+ * 한참 앞선 값(`isFarFuture`)으로 봐, 늦게 온 앞 판 응답이 그 수정을 덮는다.
  */
 
 export type FolderMutationResult =
@@ -228,7 +231,7 @@ export function renameFolder(id: string, name: string): FolderMutationResult {
   const next = {
     ...folder,
     name: trimmed,
-    updatedAt: editTimestamp(folder.updatedAt),
+    updatedAt: editTimestamp(folder.updatedAt, serverAlignedNow()),
   };
   commit([next]);
   return { ok: true, folder: next };
@@ -265,7 +268,7 @@ export function moveFolder(
       preferredName ?? folder.name,
       siblingNames(parentId, id),
     ),
-    updatedAt: editTimestamp(folder.updatedAt),
+    updatedAt: editTimestamp(folder.updatedAt, serverAlignedNow()),
   };
   commit([next]);
   return { ok: true, folder: next };
@@ -279,7 +282,7 @@ export function trashFolder(id: string): void {
     {
       ...folder,
       trashedAt: now(),
-      updatedAt: editTimestamp(folder.updatedAt),
+      updatedAt: editTimestamp(folder.updatedAt, serverAlignedNow()),
     },
   ]);
 }
@@ -300,7 +303,7 @@ export function restoreFolder(id: string): void {
       parentId,
       name: resolveUniqueName(folder.name, siblingNames(parentId, id)),
       trashedAt: null,
-      updatedAt: editTimestamp(folder.updatedAt),
+      updatedAt: editTimestamp(folder.updatedAt, serverAlignedNow()),
     },
   ]);
 }
@@ -386,7 +389,10 @@ function adoptsServerFolder(local: Folder, server: Folder): boolean {
       local.createdAt !== server.createdAt
     );
   }
-  return local.updatedAt <= server.updatedAt || isFarFuture(local.updatedAt);
+  return (
+    local.updatedAt <= server.updatedAt ||
+    isFarFuture(local.updatedAt, serverAlignedNow())
+  );
 }
 
 /**
@@ -396,8 +402,9 @@ function adoptsServerFolder(local: Folder, server: Folder): boolean {
  *   다른 기기의 폴더를 돌려준 것이다(서버는 늦게 온 옛 수정을 쓰지 않는다).
  * - 이름·부모·휴지통이 같고 시각만 다르면 서버 시각을 따른다. 서버가 기기 시각을 줄인 값이라,
  *   따르지 않으면 다음 부팅 병합에서 로컬 시각이 이겨 같은 폴더를 다시 올린다.
- * - 로컬 시각이 기기 시계보다 한참 앞서면(`isFarFuture`) 서버본을 따른다. 빠른 시계가 남긴 값이라
- *   로컬이 더 새롭다고 볼 수 없다(`mergeFolders`도 서버본을 고른다). 서버본으로 바로 맞추고,
+ * - 로컬 시각이 서버에 맞춘 지금(`serverAlignedNow`)보다 한참 앞서면(`isFarFuture`) 서버본을 따른다.
+ *   빠른 시계가 남긴 값이라 로컬이 더 새롭다고 볼 수 없다(`mergeFolders`도 서버본을 고른다). 시계가 늦은
+ *   기기의 기기 시계로 가르면 서버 판 바로 뒤로 찍은 수정까지 걸린다. 서버본으로 바로 맞추고,
  *   이 값을 읽는 이전 버전의 탭이 병합에서 다시 올리지 않게 저장본도 고친다.
  * - 그 밖에 로컬이 더 늦고 내용이 다르면 무시한다. 그사이 로컬에서 더 고쳤거나 지웠고, 그 변경도
  *   곧 올라간다.
@@ -476,8 +483,14 @@ export async function reloadFoldersFromStorage(
   return [];
 }
 
-/** 대기 중인 저장이 끝날 때까지 기다린다 (테스트·언로드용) */
+/**
+ * 대기 중인 저장이 끝날 때까지 기다린다. 창을 닫거나 숨길 때, 로그아웃하기 전, 계정이 끝나
+ * 새로고침하기 전의 마지막 저장이라, 앞서 쓰지 못해 다시 시도를 기다리는 저장·지우기도 백오프를
+ * 기다리지 않고 지금 다시 한다. 그 다시 시도는 최대 1분 뒤라, 그사이 페이지가 사라지면 서버에 올리지
+ * 못한 폴더 변경을 잃는다. 바뀔 때마다 하는 쓰기는 실패한 쓰기를 함께 하지 않는다.
+ */
 export function flushFolderWrites(): Promise<void> {
+  writeRetry.retryNow();
   return writes;
 }
 

@@ -18,24 +18,29 @@ import { BACKGROUND_COPY } from "#copy/backgrounds";
 
 interface BackgroundControlsProps {
   style: DeckStyle;
+  songId: string | undefined;
   backgroundId: string | null | undefined;
   disabled: boolean;
   onUpdateStyle: (update: Partial<DeckStyle>, coalesceField?: string) => void;
-  onUpdateBackground: (choice: BackgroundChoice) => void;
+  onUpdateBackground: (songId: string, choice: BackgroundChoice) => void;
 }
 
 /**
  * 리본 '배경' 그룹: 곡 배경(단색·영상·이미지) 선택, 화면 전체를 덮는 검정 오버레이(어둡게),
  * 글자 뒤에만 까는 글자 배경. 어둡게와 글자 배경은 따로 켜서 함께 쓸 수 있다.
+ *
+ * 고른 배경은 선택 창을 연 때의 곡(`songId`)에 입힌다. 창이 떠 있는 동안 다른 탭이나 기기의 변경을
+ * 받아 곡 순서가 바뀌어도 다른 곡의 배경을 바꾸지 않는다.
  */
 export function BackgroundControls({
   style,
+  songId,
   backgroundId,
   disabled,
   onUpdateStyle,
   onUpdateBackground,
 }: BackgroundControlsProps): React.JSX.Element {
-  const [isPickerOpen, setIsPickerOpen] = useState(false);
+  const [pickerSongId, setPickerSongId] = useState<string | null>(null);
   const background = useBackground(backgroundId);
   const textBackdropLabelId = useId();
   const { textBackdrop } = style;
@@ -64,7 +69,7 @@ export function BackgroundControls({
           aria-label={EDITOR_COPY.ribbon.changeBackground}
           disabled={disabled}
           onMouseDown={(e) => e.preventDefault()}
-          onClick={() => setIsPickerOpen(true)}
+          onClick={() => setPickerSongId(songId ?? null)}
         >
           <span
             className="h-6 w-10 shrink-0 overflow-hidden rounded-sm border"
@@ -167,11 +172,13 @@ export function BackgroundControls({
       </RibbonDropdown>
 
       <BackgroundPickerModal
-        isOpen={isPickerOpen}
-        onClose={() => setIsPickerOpen(false)}
+        isOpen={pickerSongId !== null}
+        onClose={() => setPickerSongId(null)}
         selectedBackgroundId={background?.id ?? null}
         selectedColor={style.backgroundColor}
-        onSelect={onUpdateBackground}
+        onSelect={(choice) => {
+          if (pickerSongId !== null) onUpdateBackground(pickerSongId, choice);
+        }}
       />
     </RibbonGroup>
   );

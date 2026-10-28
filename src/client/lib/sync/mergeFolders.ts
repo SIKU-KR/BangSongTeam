@@ -1,4 +1,5 @@
 import { buildFolderIndex, isFarFuture, type Folder } from "#shared";
+import { serverAlignedNow } from "../api/serverClock";
 import type { MergeMode } from "./mergeDocuments";
 
 interface FolderMergeResult {
@@ -19,9 +20,10 @@ interface FolderMergeOptions {
  * 저장하지 않으므로 서버 트리는 늘 유효하고, 되돌리지 않으면 push가 매번 루트로
  * 보정되며 기기마다 트리가 어긋난다.
  *
- * 로컬 시각이 기기 시계보다 한참 앞서면(`isFarFuture`) 로컬 폴더가 더 늦어도 서버본을 고른다.
- * 빠른 시계가 남긴 값이라, 이기게 두면 부팅마다 다시 올라가고 서버가 줄인 시각이 그동안 다른 기기의
- * 수정을 옛 수정으로 막는다.
+ * 로컬 시각이 서버에 맞춘 지금(`serverAlignedNow`)보다 한참 앞서면(`isFarFuture`) 로컬 폴더가 더
+ * 늦어도 서버본을 고른다. 빠른 시계가 남긴 값이라, 이기게 두면 부팅마다 다시 올라가고 서버가 줄인 시각이
+ * 그동안 다른 기기의 수정을 옛 수정으로 막는다. 시계가 늦은 기기의 기기 시계로 가르면 서버 판 바로 뒤로
+ * 찍은 수정까지 진다.
  *
  * 받기 전부터 알던 폴더(`knownBeforePull`)가 그사이 로컬에서 사라졌으면 서버 목록에 있어도 넣지
  * 않는다. 받는 동안이나 받기 직전에 비우기·다른 탭이 지운 폴더라, 목록이 그 삭제보다 먼저 받은 것일 수
@@ -44,13 +46,14 @@ export function mergeFolders(
   );
   const byId = new Map<string, Folder>(serverById);
   const localWins = new Set<string>();
+  const nowMs = serverAlignedNow();
 
   for (const localFolder of local) {
     const serverFolder = serverById.get(localFolder.id);
     if (
       !serverFolder ||
       (localFolder.updatedAt > serverFolder.updatedAt &&
-        !isFarFuture(localFolder.updatedAt))
+        !isFarFuture(localFolder.updatedAt, nowMs))
     ) {
       byId.set(localFolder.id, localFolder);
       localWins.add(localFolder.id);

@@ -12,6 +12,7 @@ import { refreshOwnDataIfStale, retryBootSyncIfNeeded } from "./bootSync";
 import { retryDeckSyncNow } from "./deckSync";
 import { retryFolderSyncNow } from "./folderSync";
 import { retryPendingSyncNow } from "./syncScheduler";
+import { resumeOtherTabsSongDeletes } from "../../features/editor/songLibraryStore";
 
 interface SyncRecoveryOptions {
   /** true인 동안에는 요청을 보내지 않는다 (송출 화면) */
@@ -133,10 +134,18 @@ async function runResume(mode: SyncRetryMode): Promise<void> {
   retryBackgroundCatalogIfNeeded(mode);
   for (const listener of resumeListeners) listener(mode);
   const repulled = await retryBootSyncIfNeeded(mode).catch(() => false);
+  if (isPaused()) {
+    deferUntilUnpaused(mode);
+    return;
+  }
   void retryFolderSyncNow(mode).catch(() => undefined);
   retryPendingSyncNow(mode);
+  resumeOtherTabsSongDeletes();
   void retryDeckSyncNow(mode).catch(() => undefined);
-  if (!repulled) void refreshOwnDataIfStale(mode);
+  if (repulled) return;
+  if (mode === "manual" || document.visibilityState === "visible") {
+    void refreshOwnDataIfStale(mode);
+  }
 }
 
 function resume(mode: SyncRetryMode): Promise<void> {
@@ -223,12 +232,15 @@ function handleVisibilityChange(): void {
  * 받지 못한 배경 목록(`retryBackgroundCatalogIfNeeded`)을 곧바로 다시 돌린다. `online`,
  * 탭 복귀(`visibilitychange` → visible), 포커스도 같은 경로를 탄다. 닿는 중이면 확인 없이
  * 대기 중인 쓰기를 곧바로 보낸다 (TanStack Query의
- * `refetchOnReconnect`·`refetchOnWindowFocus`와 같은 원칙).
+ * `refetchOnReconnect`·`refetchOnWindowFocus`와 같은 원칙). 곡 큐에는 같은 브라우저의 다른
+ * 탭이 보내지 못하고 남긴 곡 삭제도 넣는다(`resumeOtherTabsSongDeletes`).
  *
  * 큐를 돌린 뒤에는 내 데이터를 다시 받는다(`refreshOwnDataIfStale`). 부팅 때만 받으면 며칠 열어 둔
  * 탭이 다른 기기에서 고친 판을 모른 채 띄우고 송출한다. 받지 못했던 부팅 단계를 방금 다시 받았으면
- * 받지 않는다. 신호가 오지 않는 탭(한 화면을 띄워 둔 예배실 PC)도 보이고 서버에 닿는 동안에는
- * `FRESHNESS_TICK_MS`마다 다시 받는다. 받는 간격은 다시 받기가 정한다.
+ * 받지 않는다. 가려진 탭은 '다시 시도'가 아니면 받지 않는다. 연결이 돌아오면 가려진 탭까지 모든 탭이
+ * 한꺼번에 목록 전체를 받는데, 보이는 탭이 받아 쓴 저장본이 저장본 알림으로 가려진 탭에도 오고, 그
+ * 탭은 다시 보일 때 받는다. 신호가 오지 않는 탭(한 화면을 띄워 둔 예배실 PC)도 보이고 서버에 닿는
+ * 동안에는 `FRESHNESS_TICK_MS`마다 다시 받는다. 받는 간격은 다시 받기가 정한다.
  *
  * 포커스·탭 복귀·상태 확인 성공은 자주 오므로 큐의 백오프 횟수와 서버가 준 대기를 비우지
  * 않는다(`SyncRetryMode`의 `wake`). 다만 닿지 못하다 다시 닿았으면 배경 다운로드에는
@@ -242,7 +254,9 @@ function handleVisibilityChange(): void {
  * `isPaused`가 true인 동안(송출 화면)에는 상태 확인도 큐 재시도도 다시 받기도 보내지 않고, 들어온
  * 신호만 기억했다가 송출을 마친 뒤(`resumeDeferredSyncRecovery`) 한 번 돌린다. 송출
  * 화면은 같은 SPA 안에서 이동해 들어가므로 매번 다시 묻는다. 다시 받기 타이머도 송출 중에 돌아오면
- * 다시 걸지 않고, 송출을 마치면 다시 센다.
+ * 다시 걸지 않고, 송출을 마치면 다시 센다. 부팅 단계를 다시 받는 동안 송출을 시작했으면 그 회복의
+ * 큐 재시도·다시 받기와 그사이 들어온 신호도 송출을 마친 뒤로 미룬다. 신호를 받는 곳(로그아웃
+ * 마치기 등)은 송출 중인지 보지 않고 요청을 보낸다.
  */
 export function startSyncRecovery(options: SyncRecoveryOptions): () => void {
   if (started || typeof window === "undefined") return () => undefined;

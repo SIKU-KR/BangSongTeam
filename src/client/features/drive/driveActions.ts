@@ -227,6 +227,11 @@ export class DriveActionError extends Error {
  * 둔 프레젠테이션은 다른 기기에서 꺼낸 것이라 서버에서 지우지 않고 이 기기에서만 내려놓는다.
  * 다음 부팅 병합이 서버 위치로 되돌린다.
  *
+ * 서버가 폴더를 지우면 사용자가 고를 때 본 하위 폴더·세트도 이 기기에서 내려놓는다. 먼저 올리는
+ * 동안 그 폴더를 다른 곳에서 이미 영구 삭제했다는 답(410)을 받으면 이 기기에서 폴더만 사라진다.
+ * 그러면 올린 뒤의 하위 트리는 비어, 그 안에 있던 폴더·세트가 없는 부모를 가리켜 휴지통 밖 드라이브
+ * 루트에 나타난다.
+ *
  * 거절된 항목은 건너뛰고 나머지를 지운 뒤 서버가 준 문장으로 알린다. 그사이 지운 것이 있으면
  * 일부만 지웠다고 알린다. 거절이 아닌 오류에서는 멈춘다.
  *
@@ -239,15 +244,22 @@ export class DriveActionError extends Error {
 export async function deleteItemsForever(
   refs: readonly DriveItemRef[],
 ): Promise<void> {
-  const end = beginPermanentDelete(presentationsDeletedBy(refs));
+  const seen = seenSubtrees(refs);
+  const end = beginPermanentDelete([
+    ...refs.flatMap((ref) => (ref.kind === "file" ? [ref.id] : [])),
+    ...[...seen.values()].flatMap((subtree) => subtree.presentationIds),
+  ]);
   try {
-    await deleteNow(refs);
+    await deleteNow(refs, seen);
   } finally {
     end();
   }
 }
 
-async function deleteNow(refs: readonly DriveItemRef[]): Promise<void> {
+async function deleteNow(
+  refs: readonly DriveItemRef[],
+  seen: ReadonlyMap<string, FolderSubtree>,
+): Promise<void> {
   let refusal: ServerRejectedError | null = null;
   let deletedAny = false;
   try {
@@ -263,7 +275,7 @@ async function deleteNow(refs: readonly DriveItemRef[]): Promise<void> {
 
     for (const ref of refs) {
       try {
-        await deleteForever(ref);
+        await deleteForever(ref, seen.get(ref.id));
         deletedAny = true;
       } catch (err) {
         if (!isTrashRefusal(err)) throw err;
@@ -295,43 +307,65 @@ function presentationIdsIn(
     .map((presentation) => presentation.id);
 }
 
-function presentationsDeletedBy(refs: readonly DriveItemRef[]): string[] {
+interface FolderSubtree {
+  folderIds: string[];
+  presentationIds: string[];
+}
+
+function subtreeOf(
+  index: ReturnType<typeof getFolderIndex>,
+  id: string,
+): FolderSubtree {
+  const subtree = collectDescendantFolderIds(index, id);
+  return {
+    folderIds: [...subtree],
+    presentationIds: presentationIdsIn(index, subtree),
+  };
+}
+
+function seenSubtrees(
+  refs: readonly DriveItemRef[],
+): Map<string, FolderSubtree> {
   const index = getFolderIndex();
-  const folderIds = new Set(
+  return new Map(
     refs.flatMap((ref) =>
       ref.kind === "folder"
-        ? [...collectDescendantFolderIds(index, ref.id)]
+        ? [[ref.id, subtreeOf(index, ref.id)] as const]
         : [],
     ),
   );
-  return [
-    ...refs.flatMap((ref) => (ref.kind === "file" ? [ref.id] : [])),
-    ...presentationIdsIn(index, folderIds),
-  ];
 }
 
-async function deleteForever(ref: DriveItemRef): Promise<void> {
+async function deleteForever(
+  ref: DriveItemRef,
+  seen: FolderSubtree | undefined,
+): Promise<void> {
   if (ref.kind === "file") {
     await deletePresentationRemote(ref.id);
     await removePresentationsLocally([ref.id]);
     return;
   }
 
-  const index = getFolderIndex();
-  const subtree = collectDescendantFolderIds(index, ref.id);
-  const folderIds = [...subtree];
-  const presentationIds = presentationIdsIn(index, subtree);
-
+  const { folderIds, presentationIds } = subtreeOf(getFolderIndex(), ref.id);
   const result = await deleteFolderRemote(ref.id, {
     folderIds,
     presentationIds,
   });
 
   await removePresentationsLocally([
-    ...presentationIds,
-    ...result.deletedPresentationIds,
+    ...new Set([
+      ...(seen?.presentationIds ?? []),
+      ...presentationIds,
+      ...result.deletedPresentationIds,
+    ]),
   ]);
-  await removeFoldersLocally([...folderIds, ...result.deletedFolderIds]);
+  await removeFoldersLocally([
+    ...new Set([
+      ...(seen?.folderIds ?? []),
+      ...folderIds,
+      ...result.deletedFolderIds,
+    ]),
+  ]);
 }
 
 function isTrashRefusal(err: unknown): err is ServerRejectedError {

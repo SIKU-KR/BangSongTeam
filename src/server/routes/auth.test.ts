@@ -605,6 +605,30 @@ describe("표시 이름", () => {
     expect(await storedName("bidi@example.com")).toBe("관리자");
   });
 
+  it("이름에 짝을 잃은 서로게이트가 있어도 가입되고 그 자리는 U+FFFD로 저장한다", async () => {
+    const res = await signUpNamed(
+      "lone-name@example.com",
+      `찬양팀${LONE_SURROGATE}`,
+      "10.0.1.7",
+    );
+
+    expect(res.status).toBe(200);
+    expect(await storedName("lone-name@example.com")).toBe("찬양팀\uFFFD");
+  });
+
+  it("소셜 프로필 이름에 짝을 잃은 서로게이트가 있어도 로그인되고 그 자리는 U+FFFD로 저장한다", async () => {
+    expect(
+      await socialSignIn("google", "google-sub-lone-name", {
+        email: "lone-social@example.com",
+        name: `구글 사용자${LONE_SURROGATE}`,
+        emailVerified: true,
+      }),
+    ).toBeUndefined();
+    expect(await storedName("lone-social@example.com")).toBe(
+      "구글 사용자\uFFFD",
+    );
+  });
+
   it("쓰지 않는 /update-user는 404이고 이름을 바꾸지 않는다", async () => {
     const created = await signUpNamed("keep@example.com", "찬양팀", "10.0.1.3");
     const res = await app.request(

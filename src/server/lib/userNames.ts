@@ -2,6 +2,7 @@ import {
   FALLBACK_USER_NAME,
   OFFICIAL_LIBRARY_NAME,
   toDisplayName,
+  toWellFormedText,
 } from "#shared";
 
 const IGNORED_IN_NAME_KEY = /\p{Default_Ignorable_Code_Point}|[^\p{L}\p{N}]/gu;
@@ -39,10 +40,15 @@ export function isReservedUserName(name: string): boolean {
  *
  * 방향 제어 문자(RLO 등)는 보이지 않으면서 글자를 저장한 순서와 다르게 늘어놓는다. 그대로 두면
  * 거꾸로 적은 이름이 화면에서는 공식 라이브러리 이름으로 보여 저장한 순서로 하는 검사를 피한다.
+ *
+ * 짝을 잃은 서로게이트는 U+FFFD로 바꾼다(`toWellFormedText`). Firestore가 그런 이름의 사용자 문서를
+ * 저장하지 못해, 가입과 그 이름의 소셜 프로필 로그인이 실패한다.
  */
 export function toAccountName(raw: unknown): string {
   const name = toDisplayName(
-    typeof raw === "string" ? raw.replace(BIDI_CONTROLS, "") : raw,
+    typeof raw === "string"
+      ? toWellFormedText(raw.replace(BIDI_CONTROLS, ""))
+      : raw,
   );
   return isReservedUserName(name) ? FALLBACK_USER_NAME.default : name;
 }

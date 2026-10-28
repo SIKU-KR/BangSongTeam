@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { createId, type Presentation } from "#shared";
+import { COMMON_COPY } from "#copy/common";
 import {
   getOfflineDB,
   closeOfflineDB,
@@ -512,6 +513,129 @@ describe("presentationRepository", () => {
         expect(valid).toEqual([]);
         expect(corrupted).toEqual([]);
         expect(await storedKeys()).toEqual([]);
+      });
+
+      describe("올리지 않은 편집이 있는 보관본", () => {
+        const S1 = "2026-09-25T00:00:00.000Z";
+        const S1_EDIT = "2026-09-25T00:00:00.001Z";
+        const S2 = "2026-09-26T00:00:00.000Z";
+        const S2_EDIT = "2026-09-26T00:05:00.000Z";
+        const FOLDER = "a00000000000000000001";
+
+        function syncedAt(
+          id: string,
+          at: string,
+          title = "서버와 맞춘 판",
+        ): Presentation {
+          return makePresentation({
+            id,
+            title,
+            updatedAt: at,
+            baseUpdatedAt: at,
+          });
+        }
+
+        function editedOn(
+          id: string,
+          base: string,
+          at: string,
+          title: string,
+        ): Presentation {
+          return makePresentation({
+            id,
+            title,
+            folderId: FOLDER,
+            trashedAt: null,
+            updatedAt: at,
+            baseUpdatedAt: base,
+          });
+        }
+
+        async function keep(doc: Presentation): Promise<void> {
+          await seedRawRecord({ ...doc, id: keptKey(doc.id, doc.updatedAt) });
+        }
+
+        it("서버와 맞춘 지금 판보다 수정 시각이 이르더라도 그 판 대신 되살린다", async () => {
+          const id = createId();
+          await savePresentation(syncedAt(id, S2));
+          const edited = editedOn(id, S1, S1_EDIT, "시계가 늦은 기기의 편집");
+          await keep(edited);
+
+          const { valid, corrupted, restoredIds } =
+            await loadAllPresentations();
+
+          expect(valid).toEqual([edited]);
+          expect(corrupted).toEqual([]);
+          expect(restoredIds).toEqual([id]);
+          expect(await storedKeys()).toEqual([id]);
+          expect(await rowAt(id)).toEqual(edited);
+        });
+
+        it("지금 판도 올리지 않은 편집이면 지금 판을 두고, 보관본의 편집은 같은 폴더의 새 사본으로 남긴다", async () => {
+          const id = createId();
+          const current = editedOn(id, S2, S2_EDIT, "이 기기의 편집");
+          await savePresentation(current);
+          await keep(editedOn(id, S1, S1_EDIT, "보관본의 편집"));
+
+          const { valid, corrupted, restoredIds } =
+            await loadAllPresentations();
+
+          const copy = valid.find((doc) => doc.id !== id);
+          expect(valid.find((doc) => doc.id === id)).toEqual(current);
+          expect(copy).toMatchObject({
+            title: `보관본의 편집${COMMON_COPY.copySuffix}`,
+            folderId: FOLDER,
+            trashedAt: null,
+            baseUpdatedAt: null,
+          });
+          expect(corrupted).toEqual([]);
+          expect(restoredIds).toEqual([copy?.id]);
+          expect(await storedKeys()).toEqual([id, copy?.id].sort());
+          expect(await rowAt(copy!.id)).toEqual(copy);
+        });
+
+        it("지금 판이 올리지 않은 편집이면 더 새로운 맞춘 보관본으로 덮지 않는다", async () => {
+          const id = createId();
+          const current = editedOn(id, S1, S1_EDIT, "이 기기의 편집");
+          await savePresentation(current);
+          await keep(syncedAt(id, S2, "더 새로운 서버 판"));
+
+          const { valid, restoredIds } = await loadAllPresentations();
+
+          expect(valid).toEqual([current]);
+          expect(restoredIds).toEqual([]);
+          expect(await storedKeys()).toEqual([id]);
+        });
+
+        it("내용이 지금 판과 같은 보관본은 사본 없이 지운다", async () => {
+          const id = createId();
+          const current = editedOn(id, S2, S2_EDIT, "같은 편집");
+          await savePresentation(current);
+          await keep({ ...current, updatedAt: S1_EDIT, baseUpdatedAt: S1 });
+
+          const { valid, restoredIds } = await loadAllPresentations();
+
+          expect(valid).toEqual([current]);
+          expect(restoredIds).toEqual([]);
+          expect(await storedKeys()).toEqual([id]);
+        });
+
+        it("서버와 맞춘 지금 판에 편집한 보관본이 여럿이면 가장 새 편집을 되살리고 나머지는 사본으로 남긴다", async () => {
+          const id = createId();
+          await savePresentation(syncedAt(id, S2));
+          const older = editedOn(id, S1, S1_EDIT, "먼저 고친 편집");
+          const newer = editedOn(id, S1, S2_EDIT, "나중에 고친 편집");
+          await keep(older);
+          await keep(newer);
+
+          const { valid, restoredIds } = await loadAllPresentations();
+
+          const copy = valid.find((doc) => doc.id !== id);
+          expect(valid.find((doc) => doc.id === id)).toEqual(newer);
+          expect(copy?.title).toBe(`먼저 고친 편집${COMMON_COPY.copySuffix}`);
+          expect(restoredIds).toEqual([id, copy?.id]);
+          expect(await storedKeys()).toEqual([id, copy?.id].sort());
+        });
       });
 
       it("두 탭이 함께 고쳐도 둘 다 되살린 판을 싣고 저장본에는 한 번만 둔다", async () => {

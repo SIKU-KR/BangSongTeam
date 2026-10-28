@@ -16,12 +16,13 @@ function readIds(userId: string): string[] {
   }
 }
 
-function writeIds(userId: string, ids: readonly string[]): void {
+function writeIds(userId: string, ids: readonly string[]): boolean {
   try {
     if (ids.length === 0) localStorage.removeItem(storageKey(userId));
     else localStorage.setItem(storageKey(userId), JSON.stringify(ids));
+    return true;
   } catch {
-    return;
+    return false;
   }
 }
 
@@ -33,12 +34,15 @@ function writeIds(userId: string, ids: readonly string[]): void {
  * `localStorage`에 둔다. 동기로 써지므로 지운 직후 탭을 닫아도 남고, IndexedDB 버전을 올리지
  * 않아도 된다(버전을 올리면 옛 버전을 연 탭이 있는 동안 새 탭이 열리지 않는다). 저장소를 쓸 수
  * 없으면 기록 없이 메모리 큐만으로 지운다.
+ *
+ * 기록에 남았으면(이미 있었으면 포함) true다. 남기지 못한 곡은 기록에 없어도 다른 탭이 지운 것이
+ * 아니다.
  */
-export function rememberDeckDelete(userId: string, id: string): void {
-  if (!IdSchema.safeParse(id).success) return;
+export function rememberDeckDelete(userId: string, id: string): boolean {
+  if (!IdSchema.safeParse(id).success) return false;
   const ids = readIds(userId);
-  if (ids.includes(id)) return;
-  writeIds(userId, [...ids, id]);
+  if (ids.includes(id)) return true;
+  return writeIds(userId, [...ids, id]);
 }
 
 /** 서버가 지웠거나 다시는 지울 수 없는 곡, 다시 넣은 곡의 기록을 지운다 */

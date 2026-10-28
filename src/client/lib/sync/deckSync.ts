@@ -40,8 +40,8 @@ type ServerDeckListener = (deck: Deck) => void;
 type DeckGoneListener = (id: string) => void;
 type FailedDeckResolver = (id: string) => Deck | undefined;
 
-type PendingOp =
-  { kind: "push"; deck: Deck } | { kind: "delete"; id: string; userId: string };
+type DeleteOp = { kind: "delete"; id: string; userId: string };
+type PendingOp = { kind: "push"; deck: Deck } | DeleteOp;
 
 let pusher: DeckPusher = pushDeck;
 let deleter: DeckDeleter = deleteDeckRemote;
@@ -51,10 +51,13 @@ let resolveFailed: FailedDeckResolver | null = null;
 let enabled = false;
 let pending = new Map<string, PendingOp>();
 let failed = new Map<string, PendingOp>();
-const waitingOnServer = new Set<string>();
+const waitingDeletes = new Map<string, DeleteOp>();
+const recordedDeletes = new Set<string>();
+const waitingOnServer = new Map<string, number>();
 const deletedIds = new Set<string>();
 const deletedElsewhere = new Set<string>();
 let timer: ReturnType<typeof setTimeout> | null = null;
+let timerDueAt = Infinity;
 let inFlight: Promise<void> = Promise.resolve();
 const runningBatches = new Set<Promise<void>>();
 const backoff = new BackoffTracker();
@@ -162,14 +165,37 @@ function forgetDeletedDeck(id: string): void {
   resetDeckState(id);
 }
 
+function forgetRecordedDelete(op: DeleteOp): void {
+  forgetDeckDelete(op.userId, op.id);
+  recordedDeletes.delete(op.id);
+}
+
+function takeWaitingDelete(op: DeleteOp): boolean {
+  if (waitingDeletes.get(op.id) !== op) return false;
+  waitingDeletes.delete(op.id);
+  return true;
+}
+
+function clearTimer(): void {
+  if (timer) clearTimeout(timer);
+  timer = null;
+  timerDueAt = Infinity;
+}
+
+function runBy(dueAt: number): void {
+  if (timer && timerDueAt <= dueAt) return;
+  if (timer) clearTimeout(timer);
+  timerDueAt = dueAt;
+  timer = setTimeout(run, Math.max(0, dueAt - Date.now()));
+}
+
 function clearPending(): void {
   pending = new Map();
   failed = new Map();
+  waitingDeletes.clear();
+  recordedDeletes.clear();
   waitingOnServer.clear();
-  if (timer) {
-    clearTimeout(timer);
-    timer = null;
-  }
+  clearTimer();
   backoff.reset();
 }
 
@@ -193,11 +219,18 @@ async function runOps(ops: PendingOp[]): Promise<void> {
   let offline = false;
   let sessionExpired = false;
   let slowRetry = false;
+  let deferred = false;
   let minRetryDelay = Infinity;
 
   for (const op of ops) {
     if (!enabled) return;
     const key = op.kind === "push" ? op.deck.id : op.id;
+    if (op.kind === "delete" && !takeWaitingDelete(op)) continue;
+    if (isProjecting()) {
+      if (!pending.has(key)) pending.set(key, op);
+      deferred = true;
+      continue;
+    }
     try {
       if (op.kind === "push") {
         const saved = await pusher(op.deck);
@@ -205,7 +238,7 @@ async function runOps(ops: PendingOp[]): Promise<void> {
         listener?.(saved);
       } else {
         const removed = await deleter(op.id);
-        if (removed !== false) forgetDeckDelete(op.userId, op.id);
+        if (removed !== false) forgetRecordedDelete(op);
       }
       backoff.reset(key);
       waitingOnServer.delete(key);
@@ -226,17 +259,17 @@ async function runOps(ops: PendingOp[]): Promise<void> {
       ) {
         if (expired) sessionExpired = true;
         else offline = true;
+        const delay = backoff.getDelay(key, err);
         if (err instanceof ServerRejectedError || expired) {
-          waitingOnServer.add(key);
+          waitingOnServer.set(key, Date.now() + delay);
         } else {
           waitingOnServer.delete(key);
         }
         if (!pending.has(key)) pending.set(key, op);
-        const delay = backoff.getDelay(key, err);
         if (delay < minRetryDelay) minRetryDelay = delay;
       } else if (isTransientServerError(err)) {
         slowRetry = true;
-        waitingOnServer.add(key);
+        waitingOnServer.set(key, Date.now() + SLOW_RETRY_MS);
         if (!pending.has(key)) pending.set(key, op);
         if (SLOW_RETRY_MS < minRetryDelay) minRetryDelay = SLOW_RETRY_MS;
         recordSyncFailure(failureOf(op, key, err));
@@ -244,9 +277,7 @@ async function runOps(ops: PendingOp[]): Promise<void> {
         waitingOnServer.delete(key);
         backoff.reset(key);
         if (!pending.has(key)) failed.set(key, op);
-        if (op.kind === "delete" && !expired) {
-          forgetDeckDelete(op.userId, op.id);
-        }
+        if (op.kind === "delete" && !expired) forgetRecordedDelete(op);
         const failure = failureOf(op, key, err);
         console.error("Deck push failed permanently", failure);
         recordSyncFailure(failure);
@@ -258,20 +289,20 @@ async function runOps(ops: PendingOp[]): Promise<void> {
     setSyncStatus("deck", "error");
   } else if (offline || waitingOnServer.size > 0) {
     setSyncStatus("deck", "offline");
-  } else {
+  } else if (!deferred) {
     backoff.reset();
     setSyncStatus("deck", "synced");
   }
-  if (
-    (offline || sessionExpired || slowRetry) &&
-    !timer &&
-    minRetryDelay !== Infinity
-  ) {
-    timer = setTimeout(run, minRetryDelay);
+  if ((offline || sessionExpired || slowRetry) && minRetryDelay !== Infinity) {
+    runBy(Date.now() + minRetryDelay);
   }
+  if (deferred) runBy(Date.now() + BASE_BACKOFF_MS);
 }
 
 function startBatch(ops: PendingOp[]): void {
+  for (const op of ops) {
+    if (op.kind === "delete") waitingDeletes.set(op.id, op);
+  }
   const batch = inFlight.then(() => runOps(ops));
   runningBatches.add(batch);
   inFlight = batch.finally(() => {
@@ -279,41 +310,50 @@ function startBatch(ops: PendingOp[]): void {
   });
 }
 
-function run(): void {
-  if (timer) {
-    clearTimeout(timer);
-    timer = null;
-  }
+function send(all: boolean): void {
+  clearTimer();
   if (!enabled || pending.size === 0) return;
   if (isProjecting()) {
-    timer = setTimeout(run, BASE_BACKOFF_MS);
+    runBy(Date.now() + BASE_BACKOFF_MS);
     return;
   }
 
-  const ops = [...pending.values()];
-  pending = new Map();
-  startBatch(ops);
-}
-
-function runNotWaitingOnServer(): void {
+  const now = Date.now();
   const ops: PendingOp[] = [];
+  let nextWaitEnds = Infinity;
   for (const [key, op] of pending) {
-    if (waitingOnServer.has(key)) continue;
+    const waitEnds = waitingOnServer.get(key) ?? 0;
+    if (!all && waitEnds > now) {
+      nextWaitEnds = Math.min(nextWaitEnds, waitEnds);
+      continue;
+    }
     pending.delete(key);
     ops.push(op);
   }
   if (ops.length > 0) startBatch(ops);
+  if (nextWaitEnds !== Infinity) runBy(nextWaitEnds);
+}
+
+function run(): void {
+  send(false);
 }
 
 function schedule(key: string, op: PendingOp): void {
   if (!enabled) return;
   failed.delete(key);
   pending.set(key, op);
-  if (timer) clearTimeout(timer);
-  timer = setTimeout(run, DECK_SYNC_DEBOUNCE_MS);
+  clearTimer();
+  runBy(Date.now() + DECK_SYNC_DEBOUNCE_MS);
 }
 
-/** 같은 곡을 연달아 고치면 마지막 것만 올린다 */
+/**
+ * 같은 곡을 연달아 고치면 마지막 것만 올린다.
+ *
+ * 서버가 기다리라고 한 곡(5xx·429·401의 백오프와 `Retry-After`, 재시도 한도를 넘긴 느린 재시도)은 고쳐도
+ * 그 대기가 끝난 뒤에 보내고, 다른 곡을 고쳐 디바운스 뒤에 보낼 때도 함께 보내지 않는다. 함께 보내면
+ * 장애 중에 곡을 고칠 때마다 기다리던 곡을 모두 다시 보내 재시도 한도를 곧 다 쓰고, 느린 재시도가
+ * 무른다.
+ */
 export function scheduleDeckPush(deck: Deck): void {
   schedule(deck.id, { kind: "push", deck });
 }
@@ -333,7 +373,8 @@ export function scheduleDeckPush(deck: Deck): void {
  * 아니라 이 탭의 로그인이 끝난 것이라, 그 계정으로 다시 로그인한 부팅이 지우면 된다.
  */
 export function scheduleDeckDelete(id: string, userId: string): void {
-  rememberDeckDelete(userId, id);
+  if (rememberDeckDelete(userId, id)) recordedDeletes.add(id);
+  else recordedDeletes.delete(id);
   deletedIds.add(id);
   deletedElsewhere.delete(id);
   resetDeckState(id);
@@ -349,6 +390,52 @@ export function resumePendingDeckDeletes(userId: string): void {
   for (const id of listPendingDeckDeletes(userId)) {
     scheduleDeckDelete(id, userId);
   }
+}
+
+/**
+ * 같은 브라우저의 다른 탭이 남긴 `userId`의 삭제 기록 가운데 이 페이지가 지운 적 없는 곡의 DELETE를
+ * 이 페이지 큐에 넣는다. 연결 회복 신호(`syncRecovery`)마다 부른다. 큐가 꺼져 있으면 하지 않는다.
+ *
+ * DELETE는 지운 탭의 메모리 큐에만 있다. 그 탭이 오프라인에서 보내지 못한 채 닫히면, 열려 있는 탭은
+ * 그 곡을 지운 곡으로 감추기만 하고 다음 부팅까지 아무도 보내지 않아 곡이 서버와 공유 라이브러리에
+ * 남는다. DELETE는 몇 번 받아도 결과가 같아, 아직 열려 있는 탭의 DELETE와 겹쳐도 된다. 이 페이지가
+ * 지운 곡은 이 페이지 큐가 맡고 있거나, 서버가 이 계정의 곡이 아니라고 답해(404) 다음 부팅에 다시
+ * 보낼 곡이라 넣지 않는다.
+ */
+export function resumeOtherTabsDeckDeletes(userId: string): void {
+  if (!enabled) return;
+  for (const id of listPendingDeckDeletes(userId)) {
+    if (deletedIds.has(id) && !deletedElsewhere.has(id)) continue;
+    scheduleDeckDelete(id, userId);
+  }
+}
+
+function unsentDeleteOf(id: string): DeleteOp | undefined {
+  for (const op of [pending.get(id), failed.get(id), waitingDeletes.get(id)]) {
+    if (op?.kind === "delete") return op;
+  }
+  return undefined;
+}
+
+/**
+ * 다른 탭이 이 페이지가 지운 곡을 다시 넣었으면 아직 보내지 않은 그 곡의 DELETE를 거두고 true를
+ * 돌려준다. 다른 탭이 쓴 그 곡의 저장본을 다시 읽을 때(`reloadSongsFromStorage`) 부른다.
+ *
+ * 공유 곡을 다시 가져오면 서버는 남아 있는 첫 사본을 같은 id로 돌려주고, 다시 넣은 탭은 삭제 기록에서
+ * 그 곡을 뺀다(`cancelDeckDelete`). 그 탭은 자기 큐만 거두므로 이 페이지의 DELETE가 나가면 다시
+ * 가져온 곡이 서버에서 지워진다. 기다리거나, 다시 시도나 '다시 시도'를 기다리거나, 보내는 묶음에서
+ * 차례를 기다리는 DELETE만 거둔다. 이미 보낸 DELETE는 서버가 지우므로 그대로 둔다.
+ *
+ * 이 페이지가 삭제 기록에 남긴 곡이 지금 기록에 없을 때만 다시 넣은 것으로 본다. 기록에 남아 있으면
+ * 다른 탭의 늦은 쓰기다. 저장소를 쓸 수 없어 남기지 못했거나 영구 실패로 이 페이지가 기록을 지웠으면,
+ * 기록이 없다는 것만으로는 다시 넣었는지 알 수 없어 거두지 않는다.
+ */
+export function cancelDeckDeleteReaddedElsewhere(id: string): boolean {
+  const op = unsentDeleteOf(id);
+  if (!op || !recordedDeletes.has(id)) return false;
+  if (listPendingDeckDeletes(op.userId).includes(id)) return false;
+  cancelDeckDelete(id, op.userId);
+  return true;
 }
 
 /**
@@ -369,16 +456,19 @@ export function cancelDeckPush(id: string): void {
 
 /**
  * 아직 보내지 않았거나 영구 실패로 맡긴 그 곡의 DELETE를 버리고 지운 곡 목록과 `userId`의
- * 삭제 기록에서 뺀다. 지운 곡을 다시 넣을 때 부른다. 공유 곡을 다시 가져오면 서버는 남아 있는
- * 첫 사본을 돌려주므로, DELETE가 뒤늦게 나가면 다시 가져온 곡이 서버에서 지워진다.
+ * 삭제 기록에서 뺀다. 보내는 묶음에서 앞 곡을 기다리는 DELETE도 차례가 와도 보내지 않는다. 지운
+ * 곡을 다시 넣을 때 부른다. 공유 곡을 다시 가져오면 서버는 남아 있는 첫 사본을 돌려주므로,
+ * DELETE가 뒤늦게 나가면 다시 가져온 곡이 서버에서 지워진다.
  */
 export function cancelDeckDelete(id: string, userId: string): void {
   forgetDeckDelete(userId, id);
+  recordedDeletes.delete(id);
   deletedIds.delete(id);
   deletedElsewhere.delete(id);
+  const waiting = waitingDeletes.delete(id);
   const queued = pending.get(id);
   const held = failed.get(id);
-  if (queued?.kind !== "delete" && held?.kind !== "delete") return;
+  if (queued?.kind !== "delete" && held?.kind !== "delete" && !waiting) return;
   if (queued?.kind === "delete") pending.delete(id);
   if (held?.kind === "delete") failed.delete(id);
   resetDeckState(id);
@@ -425,12 +515,13 @@ export function hasPendingDeckSync(): boolean {
  * 창을 닫을 때(`pagehide`)와 로그아웃하기 전에 부른다.
  *
  * 송출 중에는 묶음을 새로 보내지 않고 이미 나간 것이 끝나기만 기다린다. 송출 화면은 서버 요청이
- * 0건이어야 한다. 디바운스·백오프와 재시도 한도를 넘긴 느린 재시도(`SLOW_RETRY_MS`)도 송출하는
+ * 0건이어야 한다. 송출 전에 보내기 시작한 묶음도 송출을 시작하면 남은 곡 변경을 보내지 않고 큐에
+ * 되돌린다. 디바운스·백오프와 재시도 한도를 넘긴 느린 재시도(`SLOW_RETRY_MS`)도 송출하는
  * 동안은 몇 초마다 다시 보기만 하고, 송출을 마치면 남은 곡 변경을 보낸다. 지운 곡은 삭제
  * 기록(`pendingDeckDeletes`)에, 고친 곡은 저장소에 남아 있어 탭을 닫아도 다음 부팅이 보낸다.
  */
 export function flushDeckSync(): Promise<void> {
-  run();
+  send(true);
   return inFlight;
 }
 
@@ -455,6 +546,8 @@ export function holdFailedDeckPush(deck: Deck): void {
  * 사본이 아니라 지금 보관함의 곡을 넣고(`setFailedDeckResolver`), 그사이 없어진 곡은 버린다. 다시
  * 넣는 DELETE는 영구 실패 때 지운 삭제 기록(`pendingDeckDeletes`)에도 다시 남긴다. 사용자가 다시
  * 지우겠다고 한 것이라, 이번에 오프라인으로 밀린 채 탭을 닫아도 다음 부팅이 다시 보낸다.
+ *
+ * 송출 중에는 어느 모드든 보내지 않고 송출을 마친 뒤 큐가 보낸다(`flushDeckSync`와 같다).
  */
 export function retryDeckSyncNow(mode: SyncRetryMode): Promise<void> {
   if (mode === "manual") {
@@ -462,11 +555,8 @@ export function retryDeckSyncNow(mode: SyncRetryMode): Promise<void> {
     requeueFailedOps();
   }
   if (mode !== "wake") backoff.reset();
-  if (mode === "wake" && waitingOnServer.size > 0) {
-    runNotWaitingOnServer();
-    return inFlight;
-  }
-  return flushDeckSync();
+  send(mode !== "wake");
+  return inFlight;
 }
 
 function currentOpOf(op: PendingOp): PendingOp | null {
@@ -482,8 +572,11 @@ function requeueFailedOps(): void {
     const current = currentOpOf(op);
     if (!current) continue;
     pending.set(key, current);
-    if (current.kind === "delete") {
-      rememberDeckDelete(current.userId, current.id);
+    if (
+      current.kind === "delete" &&
+      rememberDeckDelete(current.userId, current.id)
+    ) {
+      recordedDeletes.add(current.id);
     }
   }
   failed = new Map();

@@ -92,4 +92,62 @@ describe("jsonBody", () => {
     expect(valid.status).toBe(200);
     expect(seen).toEqual([{ name: "너무 긴 이름" }, { name: 1 }]);
   });
+
+  it("짝을 잃은 서로게이트는 검사 전에 U+FFFD로 바꿔 넘기고, 온전한 이모지는 그대로 둔다", async () => {
+    const schema = z.object({
+      title: z.string().max(2),
+      songs: z.array(z.object({ lines: z.array(z.string()) })),
+    });
+    const app = new Hono<AppEnv>().post("/", jsonBody(schema, 1024), (c) =>
+      c.json(c.req.valid("json")),
+    );
+
+    const res = await post(
+      app,
+      JSON.stringify({
+        title: "곡\uD83D",
+        songs: [{ lines: ["\uDE00끝", "😀\uD83D😀"] }],
+      }),
+    );
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({
+      title: "곡\uFFFD",
+      songs: [{ lines: ["\uFFFD끝", "😀\uFFFD😀"] }],
+    });
+  });
+
+  it("틀린 본문도 반쪽을 바꾼 뒤에 onInvalid에 넘긴다", async () => {
+    const seen: unknown[] = [];
+    const app = new Hono<AppEnv>().post(
+      "/",
+      jsonBody(z.object({ name: z.string().max(1) }), 1024, (body) => {
+        seen.push(body);
+        return undefined;
+      }),
+      (c) => c.text("ok"),
+    );
+
+    const res = await post(app, JSON.stringify({ name: "곡\uD83D" }));
+
+    expect(res.status).toBe(400);
+    expect(seen).toEqual([{ name: "곡\uFFFD" }]);
+  });
+
+  it("아주 깊이 겹친 본문도 스택을 넘기지 않고 검사해 400으로 답한다", async () => {
+    const depth = 200_000;
+    const app = new Hono<AppEnv>().post(
+      "/",
+      jsonBody(z.object({ name: z.string() }), 1024 * 1024),
+      (c) => c.text("ok"),
+    );
+
+    const res = await post(
+      app,
+      `${"[".repeat(depth)}{"name":"\\ud83d"}${"]".repeat(depth)}`,
+    );
+
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({ error: API_ERRORS.idMismatch });
+  });
 });

@@ -1,4 +1,5 @@
 import { isFarFuture, type Deck } from "#shared";
+import { serverAlignedNow } from "../api/serverClock";
 import type { MergeMode } from "./mergeDocuments";
 
 interface LibraryMergeResult {
@@ -79,9 +80,10 @@ export function hasSameDeckContent(a: Deck, b: Deck): boolean {
  * (`mergeDocuments`와 같은 이유로 필드 단위로 섞지 않는다). 공유 필드는
  * `updatedAt`과 무관하게 항상 서버 값이다.
  *
- * 로컬 시각이 기기 시계보다 한참 앞서면(`isFarFuture`) 로컬 사본이 더 늦어도 서버 사본을 고른다.
- * 빠른 시계가 남긴 값이라, 이기게 두면 부팅마다 다시 올라가고 서버가 줄인 시각이 그동안 다른 기기의
- * 수정을 옛 수정으로 막는다.
+ * 로컬 시각이 서버에 맞춘 지금(`serverAlignedNow`)보다 한참 앞서면(`isFarFuture`) 로컬 사본이 더
+ * 늦어도 서버 사본을 고른다. 빠른 시계가 남긴 값이라, 이기게 두면 부팅마다 다시 올라가고 서버가 줄인
+ * 시각이 그동안 다른 기기의 수정을 옛 수정으로 막는다. 시계가 늦은 기기의 기기 시계로 가르면 서버 판 바로
+ * 뒤로 찍은 수정까지 진다.
  *
  * 지운 곡(`deletedIds`: 서버의 삭제 기록과 이 페이지에서 지운 곡)은 양쪽에서 뺀다. 지우기가
  * 로컬에만 있는 사본이나 더 새로운 로컬 사본보다 우선한다. 오래된 기기·탭이 다시 올린 서버
@@ -105,6 +107,7 @@ export function mergeLibraryDecks(
   const byId = new Map<string, Deck>();
   const needsPush: string[] = [];
   const removedIds: string[] = [];
+  const nowMs = serverAlignedNow();
 
   for (const deck of server) {
     if (deleted.has(deck.id)) continue;
@@ -128,7 +131,7 @@ export function mergeLibraryDecks(
 
     if (
       localDeck.updatedAt > serverDeck.updatedAt &&
-      !isFarFuture(localDeck.updatedAt)
+      !isFarFuture(localDeck.updatedAt, nowMs)
     ) {
       byId.set(localDeck.id, withServerFields(localDeck, serverDeck));
       if (!refresh) needsPush.push(localDeck.id);

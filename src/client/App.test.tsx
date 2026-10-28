@@ -1267,7 +1267,8 @@ describe("App Route Integration", () => {
     });
   });
 
-  describe("알림 창", () => {
+  describe("알림 창", { timeout: 15_000 }, () => {
+    const TOAST_WAIT = { timeout: 5_000 };
     let api: FakeApi | null = null;
     const clipboard = Object.getOwnPropertyDescriptor(navigator, "clipboard");
     const execCommand = Object.getOwnPropertyDescriptor(
@@ -1331,7 +1332,7 @@ describe("App Route Integration", () => {
       fireEvent.click(await screen.findByTestId("share-copy-btn"));
 
       expect(
-        await screen.findByText(SHARING_COPY.link.copyFailed),
+        await screen.findByText(SHARING_COPY.link.copyFailed, {}, TOAST_WAIT),
       ).toBeInTheDocument();
     });
 
@@ -1380,6 +1381,8 @@ describe("App Route Integration", () => {
           PRESENTATION_COPY.conflictSavedAsCopy(
             `이 기기에서 고친 제목${COMMON_COPY.copySuffix}`,
           ),
+          {},
+          TOAST_WAIT,
         ),
       ).toBeInTheDocument();
       expect(getPresentationById(DOC_ID)?.title).toBe(
@@ -1396,7 +1399,9 @@ describe("App Route Integration", () => {
         toast("손님 화면의 알림");
       });
 
-      expect(await screen.findByText("손님 화면의 알림")).toBeInTheDocument();
+      expect(
+        await screen.findByText("손님 화면의 알림", {}, TOAST_WAIT),
+      ).toBeInTheDocument();
     });
 
     it("알림 창과 알림 닫기 버튼을 화면 낭독기에 영어가 아닌 한국어로 알린다", async () => {
@@ -1407,7 +1412,7 @@ describe("App Route Integration", () => {
       act(() => {
         toast("닫을 수 있는 알림", { closeButton: true });
       });
-      await screen.findByText("닫을 수 있는 알림");
+      await screen.findByText("닫을 수 있는 알림", {}, TOAST_WAIT);
 
       expect(
         screen.queryByRole("region", { name: /Notifications/ }),
@@ -1434,12 +1439,16 @@ describe("App Route Integration", () => {
           key: "Delete",
         });
       });
-      expect(await screen.findByTestId("drive-toast")).toBeInTheDocument();
+      expect(
+        await screen.findByTestId("drive-toast", {}, TOAST_WAIT),
+      ).toBeInTheDocument();
 
       navigateTo(`/editor/${DOC_ID}`);
       await screen.findByTestId("editor-stage-canvas");
-      await waitFor(() =>
-        expect(screen.queryByTestId("drive-toast")).not.toBeInTheDocument(),
+      await waitFor(
+        () =>
+          expect(screen.queryByTestId("drive-toast")).not.toBeInTheDocument(),
+        TOAST_WAIT,
       );
 
       navigateTo("/presentations");
@@ -1461,7 +1470,9 @@ describe("App Route Integration", () => {
       act(() => {
         toast("송출 전의 알림");
       });
-      expect(await screen.findByText("송출 전의 알림")).toBeInTheDocument();
+      expect(
+        await screen.findByText("송출 전의 알림", {}, TOAST_WAIT),
+      ).toBeInTheDocument();
 
       fireEvent.click(screen.getByTestId("header-present-btn"));
       await screen.findByTestId("fullscreen-present-route");

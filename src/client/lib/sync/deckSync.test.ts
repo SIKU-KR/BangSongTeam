@@ -17,6 +17,7 @@ import {
   unmarkDeckDeleted,
   isDeckDeletedError,
   hasPendingDeckSync,
+  resumeOtherTabsDeckDeletes,
   resumePendingDeckDeletes,
   setFailedDeckResolver,
   __setDeckTransportForTests,
@@ -30,6 +31,7 @@ import {
   TimeoutError,
 } from "../api/request";
 import { installFakeApi } from "../../test/fakeApi";
+import { isProjecting } from "../../features/presentation/fullscreen";
 import { getSyncSnapshot, resetSyncStatus } from "./syncStatus";
 import {
   scheduleDocumentPush,
@@ -310,6 +312,105 @@ describe("보관함 push 큐", () => {
     vi.useRealTimers();
   });
 
+  describe("서버가 기다리라고 한 곡", () => {
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    function recordSends(rejectA: () => Error | null): string[] {
+      const start = Date.now();
+      const sent: string[] = [];
+      push.mockImplementation(async (d: Deck) => {
+        sent.push(`${d.id === A ? "A" : "B"}@${Date.now() - start}`);
+        const err = d.id === A ? rejectA() : null;
+        if (err) throw err;
+        return d;
+      });
+      return sent;
+    }
+
+    it("다른 곡을 고쳐도 Retry-After를 지키고 고친 곡만 보낸 뒤, 기다린 곡은 대기가 끝나면 보낸다", async () => {
+      vi.useFakeTimers();
+      let rejected = false;
+      const sent = recordSends(() => {
+        if (rejected) return null;
+        rejected = true;
+        return new ServerRejectedError(503, undefined, 30_000);
+      });
+      scheduleDeckPush(deck());
+      await vi.advanceTimersByTimeAsync(2000);
+
+      scheduleDeckPush({ ...deck("곡 2"), id: B });
+      await vi.advanceTimersByTimeAsync(2000);
+
+      expect(sent).toEqual(["A@2000", "B@4000"]);
+      expect(getSyncSnapshot().status).toBe("offline");
+
+      await vi.advanceTimersByTimeAsync(28_000 - 1);
+      expect(sent).toHaveLength(2);
+      await vi.advanceTimersByTimeAsync(1);
+
+      expect(sent).toEqual(["A@2000", "B@4000", "A@32000"]);
+      expect(getSyncSnapshot().status).toBe("synced");
+    });
+
+    it("재시도 한도를 넘겨 천천히 다시 보내는 곡도 다른 곡을 고쳐 보내는 사이에는 다시 보내지 않는다", async () => {
+      vi.useFakeTimers();
+      __setDeckBackoffRandomForTests(() => 1);
+      const sent = recordSends(
+        () => new ServerRejectedError(503, "지속 과부하"),
+      );
+      scheduleDeckPush(deck());
+      await vi.advanceTimersByTimeAsync(2000);
+      for (let i = 0; i < MAX_RETRY_ATTEMPTS; i++) {
+        await vi.advanceTimersByTimeAsync(60_000);
+      }
+      const slowRetries = sent.length;
+      expect(slowRetries).toBe(MAX_RETRY_ATTEMPTS + 1);
+
+      scheduleDeckPush({ ...deck("곡 2"), id: B });
+      await vi.advanceTimersByTimeAsync(2000);
+      scheduleDeckPush({ ...deck("곡 2 다시"), id: B });
+      await vi.advanceTimersByTimeAsync(2000);
+
+      expect(sent.slice(slowRetries).map((entry) => entry[0])).toEqual([
+        "B",
+        "B",
+      ]);
+
+      await vi.advanceTimersByTimeAsync(SLOW_RETRY_MS);
+      expect(sent.slice(slowRetries).map((entry) => entry[0])).toEqual([
+        "B",
+        "B",
+        "A",
+      ]);
+    });
+
+    it("기다리는 곡이 있어도 오프라인으로 밀린 다른 곡은 그 대기를 기다리지 않고 백오프대로 다시 보낸다", async () => {
+      vi.useFakeTimers();
+      __setDeckBackoffRandomForTests(() => 1);
+      const start = Date.now();
+      const sent: string[] = [];
+      let offlineOnce = true;
+      push.mockImplementation(async (d: Deck) => {
+        sent.push(`${d.id === A ? "A" : "B"}@${Date.now() - start}`);
+        if (d.id === A) throw new ServerRejectedError(503, undefined, 60_000);
+        if (offlineOnce) {
+          offlineOnce = false;
+          throw new OfflineError();
+        }
+        return d;
+      });
+      scheduleDeckPush(deck());
+      await vi.advanceTimersByTimeAsync(2000);
+      scheduleDeckPush({ ...deck("곡 2"), id: B });
+      await vi.advanceTimersByTimeAsync(2000);
+      await vi.advanceTimersByTimeAsync(BASE_BACKOFF_MS);
+
+      expect(sent).toEqual(["A@2000", "B@4000", "B@6000"]);
+    });
+  });
+
   it("재시도 한도를 넘긴 일시 장애(503)는 동기화 실패로 보이되 버리지 않고 SLOW_RETRY_MS 뒤에 다시 보낸다", async () => {
     push.mockRejectedValue(new ServerRejectedError(503, "지속 과부하"));
     __setDeckBackoffRandomForTests(() => 1);
@@ -442,6 +543,67 @@ describe("보관함 push 큐", () => {
         status: "synced",
         lastFailure: null,
       });
+    });
+
+    it("서버가 기다리게 한 곡이 있을 때 포커스로 큐를 돌려도 송출하는 동안은 다른 곡을 보내지 않고, 송출을 마치면 보낸다", async () => {
+      vi.useFakeTimers();
+      push.mockImplementation(async (d: Deck) => {
+        if (d.id === A) throw new ServerRejectedError(503, undefined, 30_000);
+        return d;
+      });
+      scheduleDeckPush(deck());
+      await vi.advanceTimersByTimeAsync(2000);
+      expect(push).toHaveBeenCalledTimes(1);
+
+      scheduleDeckPush({ ...deck("곡 2"), id: B });
+      window.history.pushState({}, "", PROJECTION_PATH);
+      await retryDeckSyncNow("wake");
+      await vi.advanceTimersByTimeAsync(MAX_BACKOFF_MS);
+
+      expect(push).toHaveBeenCalledTimes(1);
+
+      window.history.pushState({}, "", "/presentations");
+      await vi.advanceTimersByTimeAsync(BASE_BACKOFF_MS);
+
+      expect(push.mock.calls.map(([sent]) => sent.id)).toContain(B);
+    });
+
+    it("송출 전에 보내기 시작한 묶음도 송출하는 동안은 남은 곡 변경을 보내지 않고, 송출을 마치면 보낸다", async () => {
+      const C = "c0000000000000000000c";
+      vi.useFakeTimers();
+      let release: () => void = () => undefined;
+      const sent: { id: string; projecting: boolean }[] = [];
+      push.mockImplementation((d: Deck) => {
+        sent.push({ id: d.id, projecting: isProjecting() });
+        if (d.id !== A) return Promise.resolve(d);
+        return new Promise<Deck>((resolve) => {
+          release = () => resolve(d);
+        });
+      });
+      scheduleDeckPush(deck());
+      scheduleDeckPush({ ...deck("곡 2"), id: B });
+      scheduleDeckDelete(C, USER);
+      await vi.advanceTimersByTimeAsync(2000);
+      expect(sent).toEqual([{ id: A, projecting: false }]);
+
+      window.history.pushState({}, "", PROJECTION_PATH);
+      release();
+      await vi.advanceTimersByTimeAsync(MAX_BACKOFF_MS);
+
+      expect(sent).toHaveLength(1);
+      expect(remove).not.toHaveBeenCalled();
+      expect(hasPendingDeckSync()).toBe(true);
+
+      window.history.pushState({}, "", "/presentations");
+      await vi.advanceTimersByTimeAsync(BASE_BACKOFF_MS);
+
+      expect(sent).toEqual([
+        { id: A, projecting: false },
+        { id: B, projecting: false },
+      ]);
+      expect(remove).toHaveBeenCalledExactlyOnceWith(C);
+      expect(hasPendingDeckSync()).toBe(false);
+      expect(getSyncSnapshot().status).toBe("synced");
     });
 
     it("송출 중에 고치거나 지운 곡은 디바운스·flush로도 보내지 않고, 송출을 마치면 보낸다", async () => {
@@ -1169,6 +1331,34 @@ describe("보관함 push 큐", () => {
       expect(listPendingDeckDeletes(OTHER_USER)).toEqual([
         "c0000000000000000000c",
       ]);
+    });
+
+    it("resumeOtherTabsDeckDeletes는 다른 탭이 남긴 기록만 한 번 보내고, 이 페이지가 지운 곡은 다시 넣지 않는다", async () => {
+      remove.mockImplementation(async (id) => id !== B);
+      scheduleDeckDelete(B, USER);
+      await flushDeckSync();
+      rememberDeckDelete(USER, A);
+      markDeckDeleted(A);
+
+      resumeOtherTabsDeckDeletes(USER);
+      await flushDeckSync();
+      resumeOtherTabsDeckDeletes(USER);
+      await flushDeckSync();
+
+      expect(remove.mock.calls.map(([id]) => id)).toEqual([B, A]);
+      expect(listPendingDeckDeletes(USER)).toEqual([B]);
+    });
+
+    it("resumeOtherTabsDeckDeletes는 큐가 꺼져 있으면 아무것도 하지 않는다", async () => {
+      rememberDeckDelete(USER, A);
+      setDeckSyncEnabled(false);
+
+      resumeOtherTabsDeckDeletes(USER);
+      setDeckSyncEnabled(true);
+      await flushDeckSync();
+
+      expect(remove).not.toHaveBeenCalled();
+      expect(wasDeckDeleted(A)).toBe(false);
     });
   });
 

@@ -1,6 +1,10 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import type { Folder } from "#shared";
+import { clampToClock, isOutdatedWrite, type Folder } from "#shared";
 import { signInAsTestUser, signOutForTests } from "../../test/sessionFixture";
+import {
+  __resetServerClockForTests,
+  noteServerClock,
+} from "../../lib/api/serverClock";
 import {
   closeOfflineDB,
   getOfflineDB,
@@ -321,6 +325,67 @@ describe("folderStore", () => {
 
       expect(getFolder("x")?.updatedAt).toBe(NOW);
     });
+
+    describe("시계가 서버보다 10분 늦은 기기", () => {
+      const SERVER_NOW = Date.parse("2026-09-25T00:10:00.000Z");
+      const OTHER_DEVICE_EDIT = "2026-09-25T00:09:00.000Z";
+
+      beforeEach(() => {
+        noteServerClock(
+          new Headers({ date: new Date(SERVER_NOW).toUTCString() }),
+        );
+      });
+
+      afterEach(() => {
+        __resetServerClockForTests();
+      });
+
+      it("다른 기기가 방금 고친 폴더를 고쳐도 그 판보다 뒤로 찍어, 서버가 옛 수정으로 버리지 않는다", () => {
+        __loadFoldersForTests([
+          folder("renamed", { updatedAt: OTHER_DEVICE_EDIT }),
+          folder("moved", { updatedAt: OTHER_DEVICE_EDIT }),
+          folder("target"),
+          folder("trashed", { updatedAt: OTHER_DEVICE_EDIT }),
+          folder("restored", {
+            trashedAt: OTHER_DEVICE_EDIT,
+            updatedAt: OTHER_DEVICE_EDIT,
+          }),
+        ]);
+
+        renameFolder("renamed", "새 이름");
+        moveFolder("moved", "target");
+        trashFolder("trashed");
+        restoreFolder("restored");
+        renameFolder("renamed", "또 고친 이름");
+
+        for (const id of ["renamed", "moved", "trashed", "restored"]) {
+          const stamp = getFolder(id)?.updatedAt ?? "";
+          expect(Date.parse(stamp)).toBeGreaterThan(
+            Date.parse(OTHER_DEVICE_EDIT),
+          );
+          expect(
+            isOutdatedWrite(
+              OTHER_DEVICE_EDIT,
+              clampToClock(stamp, SERVER_NOW),
+              SERVER_NOW,
+            ),
+          ).toBe(false);
+        }
+      });
+
+      it("서버 판 바로 뒤로 찍은 로컬 폴더를 한참 앞선 값으로 보지 않아, 늦게 온 앞 판 응답이 덮지 않는다", () => {
+        __loadFoldersForTests([
+          folder("x", { name: "옛 이름", updatedAt: OTHER_DEVICE_EDIT }),
+        ]);
+        renameFolder("x", "새 이름");
+
+        applyServerFolder(
+          folder("x", { name: "옛 이름", updatedAt: OTHER_DEVICE_EDIT }),
+        );
+
+        expect(getFolder("x")?.name).toBe("새 이름");
+      });
+    });
   });
 
   describe("영속성·동기화", () => {
@@ -550,8 +615,10 @@ describe("folderStore", () => {
       await flushFolderWrites();
       expect(getPersistenceError("folder")?.kind).toBe("quota");
 
-      createFolder(null, "저장한 폴더");
-      await flushFolderWrites();
+      const saved = createFolder(null, "저장한 폴더");
+      await vi.waitFor(async () =>
+        expect(await storedName(saved.id)).toBe("저장한 폴더"),
+      );
 
       expect(getPersistenceError("folder")?.kind).toBe("quota");
       expect(await storedName(failing.id)).toBe("처음 이름");
@@ -559,6 +626,33 @@ describe("folderStore", () => {
       await retryFailedWrites();
 
       expect(await storedName(failing.id)).toBe("마지막 이름");
+      expect(getPersistenceError()).toBeNull();
+    });
+
+    it("창을 닫거나 계정이 끝나 저장 줄을 비우면, 저장하지 못한 폴더도 다시 시도를 기다리지 않고 다시 쓴다", async () => {
+      const kept = createFolder(null, "처음 이름");
+      await flushFolderWrites();
+      vi.mocked(saveFolder).mockRejectedValueOnce(quotaError());
+      renameFolder(kept.id, "저장하지 못한 이름");
+      await flushFolderWrites();
+      expect(await storedName(kept.id)).toBe("처음 이름");
+
+      await flushFolderWrites();
+
+      expect(await storedName(kept.id)).toBe("저장하지 못한 이름");
+      expect(getPersistenceError()).toBeNull();
+    });
+
+    it("저장 줄을 비우면 지우지 못한 폴더도 다시 시도를 기다리지 않고 다시 지운다", async () => {
+      const gone = createFolder(null, "지울 폴더");
+      await flushFolderWrites();
+      vi.mocked(deleteFolders).mockRejectedValueOnce(new Error("disk"));
+      await removeFoldersLocally([gone.id]);
+      expect(await storedName(gone.id)).toBe("지울 폴더");
+
+      await flushFolderWrites();
+
+      expect(await storedName(gone.id)).toBeUndefined();
       expect(getPersistenceError()).toBeNull();
     });
 

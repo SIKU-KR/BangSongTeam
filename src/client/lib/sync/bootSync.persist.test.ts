@@ -294,9 +294,8 @@ describe("runBootSync — 병합 결과 저장", () => {
     });
 
     await runBootSync();
-    await flushPendingWrites();
 
-    expect(getPersistenceError()?.kind).toBe("quota");
+    await vi.waitFor(() => expect(getPersistenceError()?.kind).toBe("quota"));
   });
 
   it("서버와 같은 세트는 다시 쓰지 않고 서버에서 바뀐 세트만 쓴다", async () => {

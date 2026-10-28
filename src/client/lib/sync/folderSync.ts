@@ -40,8 +40,9 @@ let enabled = false;
 let pending = new Map<string, Folder>();
 let failed = new Map<string, Folder>();
 const retrying = new Set<string>();
-let waitingOnServer = false;
+const serverWaits = new Map<string, number>();
 let timer: ReturnType<typeof setTimeout> | null = null;
+let timerDueAt = Infinity;
 let inFlight: Promise<void> = Promise.resolve();
 const runningBatches = new Map<Promise<void>, ReadonlySet<string>>();
 const backoff = new BackoffTracker();
@@ -118,20 +119,31 @@ function forgetGoneFolder(id: string): void {
   pending.delete(id);
   failed.delete(id);
   retrying.delete(id);
+  serverWaits.delete(id);
   backoff.reset(id);
   clearSyncFailure("folder", id);
   void goneListener?.([id]);
+}
+
+function clearTimer(): void {
+  if (timer) clearTimeout(timer);
+  timer = null;
+  timerDueAt = Infinity;
+}
+
+function runBy(dueAt: number): void {
+  if (timer && timerDueAt <= dueAt) return;
+  if (timer) clearTimeout(timer);
+  timerDueAt = dueAt;
+  timer = setTimeout(run, Math.max(0, dueAt - Date.now()));
 }
 
 function clearPending(): void {
   pending = new Map();
   failed = new Map();
   retrying.clear();
-  waitingOnServer = false;
-  if (timer) {
-    clearTimeout(timer);
-    timer = null;
-  }
+  serverWaits.clear();
+  clearTimer();
   backoff.reset();
   notifySettled();
 }
@@ -178,13 +190,17 @@ async function pushAll(
   let offline = false;
   let sessionExpired = false;
   let slowRetry = false;
-  let serverRejected = false;
   let deferred = false;
   let deferredBehindRetry = false;
   let minRetryDelay = Infinity;
 
   for (const folder of sortFoldersParentFirst(folders)) {
     if (!enabled) return;
+    if (isProjecting()) {
+      if (!pending.has(folder.id)) pending.set(folder.id, folder);
+      deferred = true;
+      continue;
+    }
     if (folder.parentId !== null && isQueuedAfter(folder.parentId, batch)) {
       if (!pending.has(folder.id)) pending.set(folder.id, folder);
       deferred = true;
@@ -196,6 +212,7 @@ async function pushAll(
       listener?.(saved);
       backoff.reset(folder.id);
       retrying.delete(folder.id);
+      serverWaits.delete(folder.id);
       failed.delete(folder.id);
       clearSyncFailure("folder", folder.id);
     } catch (err) {
@@ -211,22 +228,25 @@ async function pushAll(
       ) {
         if (expired) sessionExpired = true;
         else offline = true;
-        if (err instanceof ServerRejectedError || expired) {
-          serverRejected = true;
-        }
         retrying.add(folder.id);
         if (!pending.has(folder.id)) pending.set(folder.id, folder);
         const delay = backoff.getDelay(folder.id, err);
+        if (err instanceof ServerRejectedError || expired) {
+          serverWaits.set(folder.id, Date.now() + delay);
+        } else {
+          serverWaits.delete(folder.id);
+        }
         if (delay < minRetryDelay) minRetryDelay = delay;
       } else if (isTransientServerError(err)) {
         slowRetry = true;
-        serverRejected = true;
         retrying.add(folder.id);
+        serverWaits.set(folder.id, Date.now() + SLOW_RETRY_MS);
         if (!pending.has(folder.id)) pending.set(folder.id, folder);
         if (SLOW_RETRY_MS < minRetryDelay) minRetryDelay = SLOW_RETRY_MS;
         recordSyncFailure(failureOf(folder, err));
       } else {
         retrying.delete(folder.id);
+        serverWaits.delete(folder.id);
         backoff.reset(folder.id);
         if (!pending.has(folder.id)) failed.set(folder.id, folder);
         const failure = failureOf(folder, err);
@@ -237,22 +257,18 @@ async function pushAll(
   }
 
   const failedRetryably = offline || sessionExpired || slowRetry;
-  if (failedRetryably) waitingOnServer = serverRejected;
-  else if (!deferred) waitingOnServer = false;
   if (sessionExpired) {
     setSyncStatus("folder", "error");
-  } else if (offline || slowRetry || deferredBehindRetry) {
+  } else if (offline || slowRetry || deferredBehindRetry || retrying.size > 0) {
     setSyncStatus("folder", "offline");
   } else if (!deferred) {
     backoff.reset();
     setSyncStatus("folder", "synced");
   }
-  if (failedRetryably && !timer && minRetryDelay !== Infinity) {
-    timer = setTimeout(run, minRetryDelay);
+  if (failedRetryably && minRetryDelay !== Infinity) {
+    runBy(Date.now() + minRetryDelay);
   }
-  if (deferred && !timer) {
-    timer = setTimeout(run, FOLDER_SYNC_DEBOUNCE_MS);
-  }
+  if (deferred) runBy(Date.now() + FOLDER_SYNC_DEBOUNCE_MS);
 }
 
 function enqueue<T>(
@@ -271,32 +287,58 @@ function enqueue<T>(
   });
 }
 
-function run(): void {
-  if (timer) {
-    clearTimeout(timer);
-    timer = null;
-  }
+function send(all: boolean): void {
+  clearTimer();
   if (!enabled || pending.size === 0) return;
   if (isProjecting()) {
-    timer = setTimeout(run, BASE_BACKOFF_MS);
+    runBy(Date.now() + BASE_BACKOFF_MS);
     return;
   }
 
-  const folders = [...pending.values()];
-  pending = new Map();
-  const ids: ReadonlySet<string> = new Set(folders.map((folder) => folder.id));
-  enqueue(ids, () => pushAll(folders, ids)).catch((err: unknown) => {
-    console.error("Folder push batch failed", err);
-  });
+  const now = Date.now();
+  const folders: Folder[] = [];
+  const ids = new Set<string>();
+  let nextWaitEnds = Infinity;
+  for (const folder of sortFoldersParentFirst([...pending.values()])) {
+    const waitEnds = serverWaits.get(folder.id) ?? 0;
+    const parentHeld =
+      folder.parentId !== null &&
+      pending.has(folder.parentId) &&
+      !ids.has(folder.parentId);
+    if (!all && (waitEnds > now || parentHeld)) {
+      if (waitEnds > now) nextWaitEnds = Math.min(nextWaitEnds, waitEnds);
+      continue;
+    }
+    ids.add(folder.id);
+    folders.push(folder);
+  }
+  for (const id of ids) pending.delete(id);
+  if (folders.length > 0) {
+    enqueue(ids, () => pushAll(folders, ids)).catch((err: unknown) => {
+      console.error("Folder push batch failed", err);
+    });
+  }
+  if (nextWaitEnds !== Infinity) runBy(nextWaitEnds);
 }
 
-/** 같은 폴더를 연달아 고치면 마지막 것만 올린다 */
+function run(): void {
+  send(false);
+}
+
+/**
+ * 같은 폴더를 연달아 고치면 마지막 것만 올린다.
+ *
+ * 서버가 기다리라고 한 폴더(5xx·429·401의 백오프와 `Retry-After`, 재시도 한도를 넘긴 느린 재시도)는
+ * 고쳐도 그 대기가 끝난 뒤에 보내고, 다른 폴더를 고쳐 디바운스 뒤에 보낼 때도 함께 보내지 않는다. 그
+ * 안의 폴더도 그 폴더와 함께 보낸다. 함께 보내면 장애 중에 폴더를 고칠 때마다 기다리던 폴더를 모두
+ * 다시 보내 재시도 한도를 곧 다 쓰고, 느린 재시도가 무른다.
+ */
 export function scheduleFolderPush(folder: Folder): void {
   if (!enabled) return;
   failed.delete(folder.id);
   pending.set(folder.id, folder);
-  if (timer) clearTimeout(timer);
-  timer = setTimeout(run, FOLDER_SYNC_DEBOUNCE_MS);
+  clearTimer();
+  runBy(Date.now() + FOLDER_SYNC_DEBOUNCE_MS);
 }
 
 /** 영구 삭제한 폴더의 대기 중인 push를 취소하고, 남은 실패 기록도 지운다 */
@@ -304,6 +346,7 @@ export function cancelFolderPush(id: string): void {
   const wasPending = pending.delete(id);
   failed.delete(id);
   retrying.delete(id);
+  serverWaits.delete(id);
   backoff.reset(id);
   clearSyncFailure("folder", id);
   if (wasPending) notifySettled();
@@ -328,6 +371,7 @@ export function cancelFolderPush(id: string): void {
 export async function pushFolderNow(folder: Folder): Promise<Folder | null> {
   pending.delete(folder.id);
   retrying.delete(folder.id);
+  serverWaits.delete(folder.id);
   backoff.reset(folder.id);
   return enqueue(new Set([folder.id]), async () => {
     let saved: Folder;
@@ -355,7 +399,13 @@ function keepForRetry(folder: Folder, err: unknown): void {
   retrying.add(folder.id);
   if (!pending.has(folder.id)) pending.set(folder.id, folder);
   const delay = backoff.getDelay(folder.id, err);
-  if (!timer) timer = setTimeout(run, delay);
+  if (
+    err instanceof ServerRejectedError ||
+    err instanceof SessionExpiredError
+  ) {
+    serverWaits.set(folder.id, Date.now() + delay);
+  }
+  runBy(Date.now() + delay);
 }
 
 /**
@@ -420,12 +470,13 @@ export async function ensureFolderPushed(
  * 기다린다(`ensureFolderPushed`).
  *
  * 송출 중에는 묶음을 새로 보내지 않고 이미 나간 것이 끝나기만 기다린다. 송출 화면은 서버 요청이
- * 0건이어야 한다. 디바운스·백오프와 재시도 한도를 넘긴 느린 재시도(`SLOW_RETRY_MS`)도 송출하는
+ * 0건이어야 한다. 송출 전에 보내기 시작한 묶음도 송출을 시작하면 남은 폴더를 보내지 않고 큐에
+ * 되돌린다. 디바운스·백오프와 재시도 한도를 넘긴 느린 재시도(`SLOW_RETRY_MS`)도 송출하는
  * 동안은 몇 초마다 다시 보기만 하고, 송출을 마치면 남은 폴더를 보낸다. 그동안 바뀐 내용은 저장소에
  * 남아 있어 탭을 닫아도 다음 부팅이 올린다.
  */
 export function flushFolderSync(): Promise<void> {
-  run();
+  send(true);
   return inFlight;
 }
 
@@ -448,7 +499,7 @@ export function retryFolderSyncNow(mode: SyncRetryMode): Promise<void> {
     requeueFailedFolders();
   }
   if (mode !== "wake") backoff.reset();
-  if (mode === "wake" && waitingOnServer) return inFlight;
+  if (mode === "wake" && serverWaits.size > 0) return inFlight;
   return flushFolderSync();
 }
 

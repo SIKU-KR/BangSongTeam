@@ -94,6 +94,8 @@ import {
 
 const USER = "00000000x000000000001";
 const DOC_ID = "100000000000000000001";
+const FOLDER_ID = "f00000000000000000001";
+const MOVED_FOLDER_ID = "f00000000000000000002";
 
 function deckId(n: number): string {
   return `c${String(n).padStart(20, "0")}`;
@@ -370,6 +372,42 @@ describe("스토어의 지금 판 올리기", () => {
     expect(sentDeckIds(1)).toEqual([deckId(0), deckId(1), deckId(2)]);
   });
 
+  it("보내는 동안 계정이 끝나 창구를 떼고 송출을 시작했으면, 409를 받아도 다시 보내지 않고 보낼 때의 창구로 큐에 다시 넣는다", async () => {
+    rememberServerDocuments([makeSet()]);
+    const edited = withLyrics(makeSet(), 0, "고친 가사");
+    listener.current.mockReturnValue(edited);
+    let answer: () => void = () => undefined;
+    api.patch.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          answer = () => resolve(respond(409));
+        }),
+    );
+
+    const pushing = pushPresentation(edited);
+    await vi.waitFor(() => expect(api.patch).toHaveBeenCalledTimes(1));
+    window.history.pushState({}, "", `/present/${DOC_ID}/fullscreen`);
+    setOwnPresentationListener(null);
+    answer();
+    await pushing;
+
+    expect(api.patch).toHaveBeenCalledTimes(1);
+    expect(listener.requeue).toHaveBeenCalledExactlyOnceWith(DOC_ID);
+  });
+
+  it("창구 없이 보낸 push는 송출 중에 409를 받으면 다시 보내지 않고 그 거절을 던진다", async () => {
+    setOwnPresentationListener(null);
+    rememberServerDocuments([makeSet()]);
+    api.patch.mockResolvedValueOnce(respond(409));
+    window.history.pushState({}, "", `/present/${DOC_ID}/fullscreen`);
+
+    await expect(
+      pushPresentation(withLyrics(makeSet(), 0, "고친 가사")),
+    ).rejects.toMatchObject({ status: 409 });
+
+    expect(api.patch).toHaveBeenCalledTimes(1);
+  });
+
   it("송출 중이 아니면 409 뒤에 모든 덱을 담아 곧바로 다시 보낸다", async () => {
     rememberServerDocuments([makeSet()]);
     const edited = withLyrics(makeSet(), 0, "고친 가사");
@@ -380,6 +418,33 @@ describe("스토어의 지금 판 올리기", () => {
 
     expect(listener.requeue).not.toHaveBeenCalled();
     expect(sentDeckIds(1)).toEqual([deckId(0), deckId(1), deckId(2)]);
+  });
+
+  it("큐가 담긴 폴더를 올린 뒤 다른 폴더로 옮긴 판은 보내지 않고 큐에 다시 넣어, 큐가 옮긴 폴더를 먼저 올리게 한다", async () => {
+    const queued = { ...makeSet(), folderId: FOLDER_ID };
+    listener.current.mockReturnValue({ ...queued, folderId: MOVED_FOLDER_ID });
+
+    await pushPresentation(queued);
+
+    expect(api.patch).not.toHaveBeenCalled();
+    expect(listener.requeue).toHaveBeenCalledExactlyOnceWith(DOC_ID);
+  });
+
+  it("폴더 밖으로만 옮겨도 큐에 다시 넣고, 폴더가 그대로면 곧바로 보낸다", async () => {
+    const queued = { ...makeSet(), folderId: FOLDER_ID };
+    listener.current
+      .mockReturnValueOnce({ ...queued, folderId: null })
+      .mockReturnValueOnce({ ...queued, title: "폴더는 그대로인 판" });
+
+    await pushPresentation(queued);
+    await pushPresentation(queued);
+
+    expect(listener.requeue).toHaveBeenCalledExactlyOnceWith(DOC_ID);
+    expect(api.patch).toHaveBeenCalledTimes(1);
+    expect(api.patch.mock.calls[0][0].json).toMatchObject({
+      title: "폴더는 그대로인 판",
+      folderId: FOLDER_ID,
+    });
   });
 });
 
@@ -557,6 +622,29 @@ describe("기준 판과 서버의 거절 (412·410)", () => {
     await expect(pushPresentation(current)).resolves.toBeUndefined();
 
     expect(listener.rebase).toHaveBeenCalledTimes(1);
+    expect(api.patch).toHaveBeenCalledTimes(2);
+  });
+
+  it("다시 얹는 사이 다른 폴더로 옮긴 판은 다시 보내지 않고 큐에 다시 넣는다", async () => {
+    const lost = dirty({ title: "응답을 잃은 판", folderId: FOLDER_ID });
+    current = lost;
+    await loseResponseOf(lost);
+    current = { ...lost, title: "그 뒤에 고친 판", updatedAt: EDITED_AT };
+    const queued = current;
+    api.patch.mockResolvedValueOnce(conflictWith({ ...lost, updatedAt: S }));
+    listener.rebase.mockImplementation((_id, base) => {
+      current = {
+        ...queued,
+        folderId: MOVED_FOLDER_ID,
+        baseUpdatedAt: base,
+        updatedAt: laterThan(base, queued.updatedAt),
+      };
+    });
+
+    await pushPresentation(queued);
+
+    expect(listener.rebase).toHaveBeenCalledExactlyOnceWith(DOC_ID, S);
+    expect(listener.requeue).toHaveBeenCalledExactlyOnceWith(DOC_ID);
     expect(api.patch).toHaveBeenCalledTimes(2);
   });
 
@@ -1077,6 +1165,8 @@ describe("공유받은 프레젠테이션 새로고침 상태", () => {
 });
 
 describe("공유받은 프레젠테이션 새로고침 결과", () => {
+  const startPath = window.location.pathname;
+  const PROJECTION_PATH = `/present/${DOC_ID}/fullscreen`;
   const listener = {
     replaced: vi.fn<(document: PresentationDocument) => void>(),
     lost: vi.fn<(id: string) => void>(),
@@ -1093,7 +1183,24 @@ describe("공유받은 프레젠테이션 새로고침 결과", () => {
 
   afterEach(() => {
     setSharedPresentationListener(null);
+    window.history.pushState({}, "", startPath);
   });
+
+  function holdGet(): (status: number) => void {
+    let answer: (status: number) => void = () => undefined;
+    api.get.mockReturnValueOnce(
+      new Promise((resolve) => {
+        answer = (status) =>
+          resolve({
+            status,
+            ok: status < 400,
+            json: async () =>
+              status < 400 ? { presentation: makeSet() } : { error: "없음" },
+          });
+      }),
+    );
+    return answer;
+  }
 
   it("서버가 더는 열 수 없다고 하면(404) 접근을 잃었다고 알리고 실패로 남기지 않는다", async () => {
     api.get.mockResolvedValueOnce({
@@ -1150,5 +1257,52 @@ describe("공유받은 프레젠테이션 새로고침 결과", () => {
     );
     expect(listener.lost).not.toHaveBeenCalled();
     expect(getSyncSnapshot().status).toBe("synced");
+  });
+
+  it("받은 최신본을 반영하고, 접근을 잃었으면 알린다", async () => {
+    api.get.mockResolvedValueOnce({
+      status: 200,
+      ok: true,
+      json: async () => ({ presentation: makeSet() }),
+    });
+    await refreshSharedPresentation(DOC_ID);
+    api.get.mockResolvedValueOnce({
+      status: 404,
+      ok: false,
+      json: async () => ({ error: "없음" }),
+    });
+    await refreshSharedPresentation(DOC_ID);
+
+    expect(listener.replaced).toHaveBeenCalledExactlyOnceWith(makeSet());
+    expect(listener.lost).toHaveBeenCalledExactlyOnceWith(DOC_ID);
+  });
+
+  it.each([
+    [200, "최신본"],
+    [404, "접근을 잃은 것"],
+  ])(
+    "받는 사이 송출을 시작했으면 %s 응답(%s)을 반영하지 않는다",
+    async (status) => {
+      const answer = holdGet();
+      const refreshing = refreshSharedPresentation(DOC_ID);
+      window.history.pushState({}, "", PROJECTION_PATH);
+
+      answer(status);
+      await refreshing;
+
+      expect(listener.replaced).not.toHaveBeenCalled();
+      expect(listener.lost).not.toHaveBeenCalled();
+    },
+  );
+
+  it("화면을 떠난 뒤 도착한 응답은 반영하지 않는다", async () => {
+    const answer = holdGet();
+    const refreshing = refreshSharedPresentation(DOC_ID);
+    endSharedPresentationRefresh();
+
+    answer(404);
+    await refreshing;
+
+    expect(listener.lost).not.toHaveBeenCalled();
   });
 });
