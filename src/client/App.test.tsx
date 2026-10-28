@@ -1428,6 +1428,21 @@ describe("App Route Integration", () => {
       ).toBeInTheDocument();
     });
 
+    it("알림 닫기 버튼은 누르는 영역을 24px 이상으로 키운다", async () => {
+      signOutForTests();
+      renderAt("/");
+      await screen.findByTestId("landing-route");
+
+      act(() => {
+        toast("닫을 수 있는 알림", { closeButton: true });
+      });
+      await screen.findByText("닫을 수 있는 알림", {}, TOAST_WAIT);
+
+      expect(
+        screen.getByRole("button", { name: COMMON_COPY.close }),
+      ).toHaveClass("size-6!");
+    });
+
     it("드라이브의 실행 취소 알림은 드라이브를 떠나면 닫혀, 다른 화면에서도 드라이브로 돌아와서도 다시 뜨지 않는다", async () => {
       api = installFakeApi(bootRoutes());
       renderAt("/presentations");
