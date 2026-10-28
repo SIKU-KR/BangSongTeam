@@ -24,6 +24,7 @@ import { isServerReachable } from "../../lib/api/connectivity";
 import {
   deleteFolderRemote,
   deletePresentationRemote,
+  flushBeforeProjection,
   flushFolderSync,
   flushPendingSync,
   hasPendingDocumentPush,
@@ -66,6 +67,9 @@ export function openItem(ref: DriveItemRef, navigate: Navigate): void {
  * 브라우저면 먼저 묻는다.
  * 송출을 끝내면 `returnTo`(지금 보고 있는 드라이브 경로)로 돌아온다.
  *
+ * 송출 화면으로 가기 전에 프레젠테이션 큐에 남은 변경을 보낸다(`flushBeforeProjection`). 송출하는
+ * 동안 큐는 보내지 않는다.
+ *
  * 클릭 핸들러 안에서 동기로 불러야 브라우저가 전체화면을 허용한다 — 이 함수와
  * 호출 경로 사이에 await를 끼우지 않는다.
  */
@@ -78,6 +82,7 @@ export function startPresentation(
     const proceed = window.confirm(DRIVE_COPY.presentUnreliable);
     if (!proceed) return false;
   }
+  flushBeforeProjection();
   launchPresentation(navigate, id, returnTo);
   return true;
 }

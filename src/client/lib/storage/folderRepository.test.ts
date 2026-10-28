@@ -5,6 +5,7 @@ import {
   saveFolder,
   saveFolders,
   loadAllFolders,
+  loadFolder,
   deleteFolders,
 } from "./folderRepository";
 
@@ -76,5 +77,28 @@ describe("folderRepository", () => {
 
     await deleteFolders([a.id, b.id]);
     expect((await loadAllFolders()).valid).toEqual([c]);
+  });
+
+  describe("한 건 읽기 (loadFolder)", () => {
+    it("저장본이 없으면 없다고 답한다", async () => {
+      expect(await loadFolder(createId())).toEqual({ status: "missing" });
+    });
+
+    it("스키마를 어긴 저장본은 없다고 하지 않고 읽지 못했다고 답한다", async () => {
+      const db = await getOfflineDB();
+      await db.put("folders", { id: "broken", name: "" } as unknown as Folder);
+
+      expect(await loadFolder("broken")).toEqual({ status: "unreadable" });
+    });
+
+    it("저장한 폴더를 그대로 읽는다", async () => {
+      const folder = makeFolder({ name: "청년부" });
+      await saveFolder(folder);
+
+      expect(await loadFolder(folder.id)).toEqual({
+        status: "ok",
+        value: folder,
+      });
+    });
   });
 });

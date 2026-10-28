@@ -36,6 +36,9 @@ import {
   flushDeckSync,
   flushFolderSync,
   stopAccountSync,
+  listenForStorageChanges,
+  startStorageSync,
+  resumeHeldStorageChanges,
   startSyncRecovery,
   resumeDeferredSyncRecovery,
   subscribeSyncRecovery,
@@ -77,6 +80,7 @@ function useHydration(): boolean {
     if (bootstrappedUserId === userId) return;
 
     const controller = new AbortController();
+    listenForStorageChanges();
     void (async () => {
       await Promise.all([
         hydrateFromStorage(),
@@ -85,6 +89,7 @@ function useHydration(): boolean {
         hydrateBackgroundCatalog(),
       ]);
       if (controller.signal.aborted || getCurrentUserId() !== userId) return;
+      startStorageSync();
       startBootSync(window.location.pathname);
       setBootstrappedUserId(userId);
     })();
@@ -253,6 +258,7 @@ function ProjectionLatchGate({
   useEffect(() => {
     if (isOnProjection) return;
     resumeDeferredSessionWork();
+    resumeHeldStorageChanges();
     runDeferredBootSync();
     resumeDeferredSyncRecovery();
     flushClientReports();

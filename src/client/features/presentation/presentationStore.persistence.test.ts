@@ -10,8 +10,15 @@ import {
   saveSharedPresentation,
   clearPersistenceError,
 } from "../../lib/storage";
-import { closeOfflineDB, OFFLINE_DB_NAME } from "../../lib/storage/db";
+import {
+  closeOfflineDB,
+  getOfflineDB,
+  OFFLINE_DB_NAME,
+  type WorshipOfflineDB,
+} from "../../lib/storage/db";
 import { getPersistenceError } from "../../lib/storage/persistenceStatus";
+import { __resetStorageChannelForTests } from "../../lib/storage/storageChannel";
+import { installFakeBroadcastChannel } from "../../test/fakeBroadcastChannel";
 import {
   hydrateFromStorage,
   flushPendingWrites,
@@ -30,15 +37,18 @@ import {
   canEditPresentation,
   replaceWithServerDocument,
   removePresentationsLocally,
+  reloadPresentationsFromStorage,
 } from "./presentationStore";
 import {
   __resetSyncSchedulerForTests,
   __setPusherForTests,
   flushPendingSync,
   hasPendingDocumentPush,
+  isDocumentQueued,
   setSyncEnabled,
 } from "../../lib/sync/syncScheduler";
 import {
+  mockDecks,
   SEED_PRESENTATIONS,
   SEED_USER_ID,
 } from "../../test/presentationFixture";
@@ -597,6 +607,318 @@ describe("presentationStore 영속성", () => {
       expect(reloaded && canEditPresentation(reloaded)).toBe(true);
       const { valid } = await loadAllPresentations();
       expect(valid.find((p) => p.id === owners.id)).toEqual(owners);
+    });
+  });
+
+  describe("다른 탭이 쓴 저장본 다시 읽기", () => {
+    const [FIRST, SECOND, THIRD] = SEED_PRESENTATIONS;
+
+    function withExtraSong(doc: Presentation): Presentation {
+      const deck = {
+        ...structuredClone(mockDecks[3]),
+        id: "2x0000000000000000001",
+        presentationId: doc.id,
+      };
+      return {
+        ...structuredClone(doc),
+        items: [
+          ...structuredClone(doc.items),
+          {
+            id: "3x0000000000000000001",
+            presentationId: doc.id,
+            deckId: deck.id,
+            order: doc.items.length,
+            deck,
+          },
+        ],
+        updatedAt: "2026-10-01T00:00:00.000Z",
+      };
+    }
+
+    async function writeFromOtherTab(record: unknown): Promise<void> {
+      const db = await getOfflineDB();
+      await db.put(
+        "presentations",
+        record as WorshipOfflineDB["presentations"]["value"],
+      );
+    }
+
+    async function deleteFromOtherTab(id: string): Promise<void> {
+      const db = await getOfflineDB();
+      await db.delete("presentations", id);
+    }
+
+    async function storedById(id: string): Promise<Presentation | undefined> {
+      const { valid } = await loadAllPresentations();
+      return valid.find((doc) => doc.id === id);
+    }
+
+    beforeEach(async () => {
+      await seedPresentationsIntoStorage([FIRST, SECOND]);
+      await hydrateFromStorage();
+      vi.mocked(savePresentation).mockClear();
+      vi.mocked(saveSharedPresentation).mockClear();
+    });
+
+    it("다른 탭이 곡을 더한 저장본을 다시 읽으면, 이 탭에서 이름을 바꿔도 그 곡을 지킨다", async () => {
+      const newer = withExtraSong(FIRST);
+      await writeFromOtherTab(newer);
+
+      await reloadPresentationsFromStorage([FIRST.id]);
+      renamePresentation(FIRST.id, "이 탭에서 바꾼 이름");
+      await flushPendingWrites();
+
+      const stored = await storedById(FIRST.id);
+      expect(stored?.title).toBe("이 탭에서 바꾼 이름");
+      expect(stored?.items.map((item) => item.id)).toEqual(
+        newer.items.map((item) => item.id),
+      );
+    });
+
+    it("다른 탭에서 만든 세트를 목록 끝에 넣는다", async () => {
+      const before = listPresentations().map((doc) => doc.id);
+      await writeFromOtherTab(THIRD);
+
+      await reloadPresentationsFromStorage([THIRD.id]);
+
+      expect(getPresentationById(THIRD.id)).toEqual(THIRD);
+      expect(listPresentations().map((doc) => doc.id)).toEqual([
+        ...before,
+        THIRD.id,
+      ]);
+    });
+
+    it("다시 읽어 바꾼 세트는 되돌리기 기록을 지운다", async () => {
+      openPresentation(FIRST.id);
+      updatePresentationTitle("되돌릴 수 있던 제목");
+      await flushPendingWrites();
+      expect(canUndo()).toBe(true);
+      await writeFromOtherTab(withExtraSong(getPresentationById(FIRST.id)!));
+
+      await reloadPresentationsFromStorage([FIRST.id]);
+
+      expect(canUndo()).toBe(false);
+      expect(getActivePresentation().items).toHaveLength(
+        FIRST.items.length + 1,
+      );
+    });
+
+    it("이 탭이 아직 저장하지 않은 편집이 있는 세트는 바꾸지 않는다", async () => {
+      await writeFromOtherTab(withExtraSong(FIRST));
+      renamePresentation(FIRST.id, "아직 저장하지 않은 이름");
+
+      await reloadPresentationsFromStorage([FIRST.id]);
+
+      expect(getPresentationById(FIRST.id)?.title).toBe(
+        "아직 저장하지 않은 이름",
+      );
+      expect(getPresentationById(FIRST.id)?.items).toHaveLength(
+        FIRST.items.length,
+      );
+    });
+
+    it("이 탭이 저장하는 중인 세트는 바꾸지 않는다", async () => {
+      let release: () => void = () => undefined;
+      const started = new Promise<void>((resolve) => {
+        storageHooks.beforeSave = () => {
+          resolve();
+          return new Promise<void>((done) => {
+            release = done;
+          });
+        };
+      });
+      renamePresentation(FIRST.id, "저장하는 중인 이름");
+      const writing = flushPendingWrites();
+      await started;
+      await writeFromOtherTab(withExtraSong(FIRST));
+
+      await reloadPresentationsFromStorage([FIRST.id]);
+      release();
+      await writing;
+
+      expect(getPresentationById(FIRST.id)?.title).toBe("저장하는 중인 이름");
+      expect(getPresentationById(FIRST.id)?.items).toHaveLength(
+        FIRST.items.length,
+      );
+    });
+
+    it("이 탭이 아직 서버에 올리지 못한 세트는 바꾸지 않는다", async () => {
+      __setPusherForTests(vi.fn(async () => undefined));
+      setSyncEnabled(true);
+      renamePresentation(FIRST.id, "올리기를 기다리는 이름");
+      await flushPendingWrites();
+      expect(isDocumentQueued(FIRST.id)).toBe(true);
+      await writeFromOtherTab(withExtraSong(FIRST));
+
+      await reloadPresentationsFromStorage([FIRST.id]);
+
+      expect(getPresentationById(FIRST.id)?.title).toBe(
+        "올리기를 기다리는 이름",
+      );
+    });
+
+    it("읽는 동안 이 탭에서 고친 세트는 읽은 저장본으로 바꾸지 않는다", async () => {
+      await writeFromOtherTab(withExtraSong(FIRST));
+
+      const reloading = reloadPresentationsFromStorage([FIRST.id]);
+      renamePresentation(FIRST.id, "읽는 동안 고친 이름");
+      await reloading;
+
+      expect(getPresentationById(FIRST.id)?.title).toBe("읽는 동안 고친 이름");
+      expect(getPresentationById(FIRST.id)?.items).toHaveLength(
+        FIRST.items.length,
+      );
+    });
+
+    it("다른 탭에서 지운 세트는 메모리에서 빼고 대기 중인 push를 버린다", async () => {
+      const pusher = vi.fn(async (doc: Presentation) => doc.id);
+      __setPusherForTests(pusher);
+      setSyncEnabled(true);
+      openPresentation(FIRST.id);
+      renamePresentation(FIRST.id, "지우기 전에 고친 이름");
+      await flushPendingWrites();
+      await deleteFromOtherTab(FIRST.id);
+
+      await reloadPresentationsFromStorage([FIRST.id]);
+      await flushPendingSync();
+
+      expect(getPresentationById(FIRST.id)).toBeUndefined();
+      expect(listPresentations().map((doc) => doc.id)).toEqual([SECOND.id]);
+      expect(getActivePresentation().id).toBe(SECOND.id);
+      expect(pusher).not.toHaveBeenCalled();
+      expect(isDocumentQueued(FIRST.id)).toBe(false);
+    });
+
+    it("읽지 못한 저장본(새 버전이 쓴 모양)은 지운 것으로 보지 않고 메모리를 그대로 둔다", async () => {
+      const before = getPresentationById(FIRST.id);
+      await writeFromOtherTab({ ...FIRST, title: 42 });
+
+      await reloadPresentationsFromStorage([FIRST.id]);
+
+      expect(getPresentationById(FIRST.id)).toBe(before);
+    });
+
+    it("다른 계정의 저장본은 싣지 않는다", async () => {
+      await writeFromOtherTab({ ...THIRD, userId: OTHER_USER });
+
+      await reloadPresentationsFromStorage([THIRD.id]);
+
+      expect(getPresentationById(THIRD.id)).toBeUndefined();
+    });
+
+    it("다시 읽기는 저장소에 쓰지도 서버에 올리지도 않는다", async () => {
+      const pusher = vi.fn(async (doc: Presentation) => doc.id);
+      __setPusherForTests(pusher);
+      setSyncEnabled(true);
+      await writeFromOtherTab(withExtraSong(FIRST));
+      await deleteFromOtherTab(SECOND.id);
+
+      await reloadPresentationsFromStorage([FIRST.id, SECOND.id]);
+      await flushPendingWrites();
+      await flushPendingSync();
+
+      expect(savePresentation).not.toHaveBeenCalled();
+      expect(saveSharedPresentation).not.toHaveBeenCalled();
+      expect(pusher).not.toHaveBeenCalled();
+      expect(hasPendingDocumentPush()).toBe(false);
+    });
+
+    it("읽는 동안 다시 읽기를 멈추면 세트를 바꾸거나 빼지 않고 읽은 id를 돌려준다", async () => {
+      const pusher = vi.fn(async (doc: Presentation) => doc.id);
+      __setPusherForTests(pusher);
+      setSyncEnabled(true);
+      renamePresentation(SECOND.id, "올리기를 기다리는 이름");
+      await flushPendingWrites();
+      await writeFromOtherTab(withExtraSong(FIRST));
+      await deleteFromOtherTab(SECOND.id);
+      let paused = false;
+
+      const reloading = reloadPresentationsFromStorage(
+        [FIRST.id, SECOND.id],
+        () => paused,
+      );
+      paused = true;
+      const held = await reloading;
+      await flushPendingSync();
+
+      expect(held).toEqual([FIRST.id, SECOND.id]);
+      expect(getPresentationById(FIRST.id)?.items).toHaveLength(
+        FIRST.items.length,
+      );
+      expect(getPresentationById(SECOND.id)?.title).toBe(
+        "올리기를 기다리는 이름",
+      );
+      expect(pusher).toHaveBeenCalledExactlyOnceWith(
+        expect.objectContaining({ id: SECOND.id }),
+      );
+      expect(
+        await reloadPresentationsFromStorage([FIRST.id], () => false),
+      ).toEqual([]);
+    });
+
+    it("새 버전의 탭이 남긴 baseUpdatedAt은 떼고 싣는다", async () => {
+      const newer = withExtraSong(FIRST);
+      await writeFromOtherTab({ ...newer, baseUpdatedAt: newer.updatedAt });
+
+      await reloadPresentationsFromStorage([FIRST.id]);
+
+      const held = getPresentationById(FIRST.id);
+      expect(held).toEqual(newer);
+      expect(held && "baseUpdatedAt" in held).toBe(false);
+    });
+  });
+
+  describe("다른 탭에 알리기", () => {
+    const CHANNEL = "chiton:storage";
+    let tabs: ReturnType<typeof installFakeBroadcastChannel>;
+
+    function nextTask(): Promise<void> {
+      return new Promise((resolve) => setTimeout(resolve, 0));
+    }
+
+    beforeEach(() => {
+      tabs = installFakeBroadcastChannel();
+      __resetStorageChannelForTests();
+    });
+
+    afterEach(() => {
+      __resetStorageChannelForTests();
+    });
+
+    it("세트를 저장소에 쓰거나 지운 뒤에 그 id를 알린다", async () => {
+      const other = tabs.otherTab(CHANNEL);
+      await hydrateFromStorage();
+
+      const created = createNewPresentation();
+      await nextTask();
+      expect(other.received).toEqual([]);
+
+      await flushPendingWrites();
+      await removePresentationsLocally([created.id]);
+      await nextTask();
+
+      const change = {
+        v: 1,
+        userId: SEED_USER_ID,
+        kind: "presentations",
+        ids: [created.id],
+      };
+      expect(other.received).toEqual([change, change]);
+      other.close();
+    });
+
+    it("저장소에 쓰지 못한 세트는 알리지 않는다", async () => {
+      const other = tabs.otherTab(CHANNEL);
+      await hydrateFromStorage();
+      storageHooks.beforeSave = () =>
+        Promise.reject(new DOMException("가득 참", "QuotaExceededError"));
+
+      createNewPresentation();
+      await flushPendingWrites();
+      await nextTask();
+
+      expect(other.received).toEqual([]);
+      other.close();
     });
   });
 });

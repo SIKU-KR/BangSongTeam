@@ -76,6 +76,7 @@ import { warmPresentationFonts } from "../lib/offline";
 import { PresentationShareDialog } from "../features/sharing/PresentationShareDialog";
 import {
   endSharedPresentationRefresh,
+  flushBeforeProjection,
   refreshSharedPresentation,
   subscribeSyncRecovery,
   useBootPullPending,
@@ -208,6 +209,7 @@ function EditorScreen({
   const handlePresent = () => {
     if (presentationId) {
       if (found) void warmPresentationFonts(found).catch(() => undefined);
+      flushBeforeProjection();
       launchPresentation(
         navigate,
         presentationId,

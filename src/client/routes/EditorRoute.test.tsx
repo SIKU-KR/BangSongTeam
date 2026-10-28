@@ -26,6 +26,12 @@ import {
   resetPresentationStore,
 } from "../features/presentation/presentationStore";
 import { __setBootPullPendingForTests } from "../lib/sync/bootSync";
+import {
+  __resetSyncSchedulerForTests,
+  __setPusherForTests,
+  flushPendingSync,
+  setSyncEnabled,
+} from "../lib/sync/syncScheduler";
 import { EDITOR_COPY } from "#copy/editor";
 import { COMMON_COPY } from "#copy/common";
 import {
@@ -142,6 +148,44 @@ describe("EditorRoute (PowerPoint식 프레젠테이션 편집기)", () => {
 
     expect(mockNavigate).toHaveBeenCalledWith(`/present/${DOC_ID}/fullscreen`);
     expect(loadPresentReturnPath(DOC_ID)).toBe(`/editor/${DOC_ID}`);
+  });
+
+  describe("송출 직전에 고친 내용", () => {
+    const startPath = window.location.pathname;
+    const push = vi.fn<(document: Presentation) => Promise<void>>();
+
+    beforeEach(() => {
+      __resetSyncSchedulerForTests();
+      push.mockReset();
+      push.mockResolvedValue(undefined);
+      __setPusherForTests(push);
+      setSyncEnabled(true);
+    });
+
+    afterEach(() => {
+      __resetSyncSchedulerForTests();
+      window.history.pushState({}, "", startPath);
+    });
+
+    it("송출 화면으로 가기 전에 서버에 올린다", async () => {
+      mockNavigate.mockImplementationOnce((to: string) => {
+        window.history.pushState({}, "", to);
+      });
+      renderEditor();
+      act(() => {
+        updatePresentationTitle("송출 직전에 고친 제목");
+      });
+
+      fireEvent.click(screen.getByTestId("header-present-btn"));
+      await act(async () => {
+        await flushPendingSync();
+      });
+
+      expect(window.location.pathname).toBe(`/present/${DOC_ID}/fullscreen`);
+      expect(push).toHaveBeenCalledExactlyOnceWith(
+        expect.objectContaining({ id: DOC_ID, title: "송출 직전에 고친 제목" }),
+      );
+    });
   });
 
   it("should switch active slide when clicking a slide thumbnail", () => {

@@ -9,6 +9,7 @@ import {
 import {
   saveSong,
   loadAllSongs,
+  loadSong,
   deleteSong,
   clearAllSongs,
   migrateLegacySongs,
@@ -103,6 +104,25 @@ describe("songRepository", () => {
     await clearAllSongs();
 
     expect((await loadAllSongs()).valid).toHaveLength(0);
+  });
+
+  describe("한 건 읽기 (loadSong)", () => {
+    it("저장본이 없으면 없다고 답한다", async () => {
+      expect(await loadSong(createId())).toEqual({ status: "missing" });
+    });
+
+    it("스키마를 통과하지 못한 곡은 없다고 하지 않고 읽지 못했다고 답한다", async () => {
+      await seedRawDeck({ id: "broken-deck", title: null });
+
+      expect(await loadSong("broken-deck")).toEqual({ status: "unreadable" });
+    });
+
+    it("저장한 곡을 그대로 읽는다", async () => {
+      const deck = makeDeck({ title: "시간을 뚫고" });
+      await saveSong(deck);
+
+      expect(await loadSong(deck.id)).toEqual({ status: "ok", value: deck });
+    });
   });
 
   describe("localStorage 마이그레이션", () => {

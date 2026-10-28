@@ -2,7 +2,9 @@ import { DeckSchema, type Deck } from "#shared";
 import { getOfflineDB } from "./db";
 import {
   toCorruptedRecord,
+  toLoadedRecord,
   type CorruptedRecord,
+  type LoadedRecord,
   type LoadResult,
 } from "./presentationRepository";
 
@@ -33,6 +35,12 @@ export async function loadAllSongs(): Promise<LoadResult<Deck>> {
   }
 
   return { valid, corrupted };
+}
+
+/** 보관함 곡 저장본 한 건을 읽는다. 다른 탭이 쓰거나 지운 곡을 다시 읽을 때 쓴다 */
+export async function loadSong(id: string): Promise<LoadedRecord<Deck>> {
+  const db = await getOfflineDB();
+  return toLoadedRecord(await db.get("decks", id), DeckSchema);
 }
 
 export async function deleteSong(id: string): Promise<void> {

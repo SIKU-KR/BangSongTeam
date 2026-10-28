@@ -9,9 +9,14 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { renderApp } from "./test/nextApp";
 import {
   createNewPresentation,
+  flushPendingWrites,
+  getPresentationById,
+  renamePresentation,
   resetPresentationStore,
 } from "./features/presentation/presentationStore";
 import { closeOfflineDB, OFFLINE_DB_NAME } from "./lib/storage/db";
+import { __resetStorageChannelForTests } from "./lib/storage/storageChannel";
+import { __resetStorageSyncForTests } from "./lib/sync/storageSync";
 import { authClient } from "./lib/auth/authClient";
 import {
   revalidateSession,
@@ -174,6 +179,8 @@ describe("App Route Integration", () => {
 
   beforeEach(async () => {
     tabs = installFakeBroadcastChannel();
+    __resetStorageSyncForTests();
+    __resetStorageChannelForTests();
     closeOfflineDB();
     await new Promise<void>((resolve) => {
       const req = indexedDB.deleteDatabase(OFFLINE_DB_NAME);
@@ -543,6 +550,155 @@ describe("App Route Integration", () => {
 
       expect(await screen.findByTestId("editor-route")).toBeInTheDocument();
       expect(window.location.pathname).toBe(`/editor/${NEW_DOC.id}`);
+    });
+  });
+
+  describe("다른 탭이 저장한 변경", () => {
+    const [SEED] = SEED_PRESENTATIONS;
+    let api: FakeApi | null = null;
+
+    function announceFromOtherTab(ids: string[]): void {
+      tabs.otherTab("chiton:storage").post({
+        v: 1,
+        userId: SEED_USER_ID,
+        kind: "presentations",
+        ids,
+      });
+    }
+
+    beforeEach(() => {
+      resetSyncModules();
+    });
+
+    afterEach(() => {
+      backgroundHydration.held = null;
+      api?.restore();
+      api = null;
+      resetSyncModules();
+    });
+
+    it("저장본을 싣는 동안 다른 탭이 저장한 변경도 싣는다", async () => {
+      const backgrounds = deferred<void>();
+      backgroundHydration.held = backgrounds.promise;
+      api = installFakeApi(bootRoutes());
+      renderAt("/presentations");
+      await waitFor(() => expect(getPresentationById(SEED.id)).toBeDefined());
+
+      await seedPresentationsIntoStorage([
+        {
+          ...SEED,
+          title: "싣는 동안 다른 탭이 바꾼 제목",
+          updatedAt: "2026-10-26T00:00:00.000Z",
+        },
+      ]);
+      announceFromOtherTab([SEED.id]);
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      });
+      await act(async () => {
+        backgrounds.resolve();
+      });
+
+      expect(
+        await screen.findByText("싣는 동안 다른 탭이 바꾼 제목"),
+      ).toBeInTheDocument();
+    });
+
+    it("다른 탭이 이름을 바꾼 프레젠테이션을 드라이브에 바로 보여 준다", async () => {
+      api = installFakeApi(bootRoutes());
+      renderAt("/presentations");
+      await waitFor(() => expect(getSyncSnapshot().status).toBe("synced"));
+
+      await seedPresentationsIntoStorage([
+        {
+          ...SEED,
+          title: "다른 탭에서 바꾼 제목",
+          updatedAt: "2026-10-26T00:00:00.000Z",
+        },
+      ]);
+      announceFromOtherTab([SEED.id]);
+
+      expect(
+        await screen.findByText("다른 탭에서 바꾼 제목"),
+      ).toBeInTheDocument();
+    });
+
+    it("송출 주소로 부팅한 탭은 송출 동안 받은 변경을 송출을 마친 뒤에 싣는다", async () => {
+      await saveCachedSession(sessionUser());
+      api = installFakeApi(bootRoutes());
+      renderAt(`/present/${SEED.id}/fullscreen`);
+      await screen.findByTestId("fullscreen-present-route");
+
+      await seedPresentationsIntoStorage([
+        {
+          ...SEED,
+          title: "송출 중에 다른 탭이 바꾼 제목",
+          updatedAt: "2026-10-26T00:00:00.000Z",
+        },
+      ]);
+      announceFromOtherTab([SEED.id]);
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      });
+
+      expect(getPresentationById(SEED.id)?.title).toBe(SEED.title);
+
+      fireEvent.click(screen.getByTestId("exit-present-btn"));
+
+      await waitFor(() =>
+        expect(getPresentationById(SEED.id)?.title).toBe(
+          "송출 중에 다른 탭이 바꾼 제목",
+        ),
+      );
+    });
+
+    it("송출 직전에 고친 세트는 송출 화면으로 가기 전에 올려, 송출 중에 다른 탭이 고친 판을 송출을 마친 뒤에 덮지 않는다", async () => {
+      api = installFakeApi(bootRoutes());
+      renderAt(`/editor/${SEED.id}`);
+      await screen.findByTestId("editor-stage-canvas");
+      await waitFor(() => expect(getSyncSnapshot().status).toBe("synced"));
+      const patches = () =>
+        (api?.calls ?? []).filter(
+          ({ method, path }) =>
+            method === "PATCH" && path === `/api/presentations/${SEED.id}`,
+        );
+
+      act(() => {
+        renamePresentation(SEED.id, "송출 직전에 고친 제목");
+      });
+      fireEvent.click(screen.getByTestId("header-present-btn"));
+      await screen.findByTestId("fullscreen-present-route");
+
+      await waitFor(() => expect(patches()).toHaveLength(1));
+      expect(patches()[0].body).toMatchObject({
+        title: "송출 직전에 고친 제목",
+      });
+
+      await act(async () => {
+        await flushPendingWrites();
+      });
+      await seedPresentationsIntoStorage([
+        {
+          ...SEED,
+          title: "송출 중에 다른 탭이 고친 제목",
+          updatedAt: "2026-10-26T00:00:00.000Z",
+        },
+      ]);
+      announceFromOtherTab([SEED.id]);
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      });
+      fireEvent.click(screen.getByTestId("exit-present-btn"));
+
+      await waitFor(() =>
+        expect(getPresentationById(SEED.id)?.title).toBe(
+          "송출 중에 다른 탭이 고친 제목",
+        ),
+      );
+      await act(async () => {
+        await flushPendingSync();
+      });
+      expect(patches()).toHaveLength(1);
     });
   });
 

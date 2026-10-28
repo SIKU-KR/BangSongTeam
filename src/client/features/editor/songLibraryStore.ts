@@ -10,19 +10,25 @@ import {
   saveSong,
   deleteSong,
   loadAllSongs,
+  loadSong,
   clearAllSongs,
   migrateLegacySongs,
   reportPersistenceError,
   clearPersistenceError,
   reportCorruptedRecords,
+  type LoadedRecord,
 } from "../../lib/storage";
+import { announceStorageChange } from "../../lib/storage/storageChannel";
 import { getCurrentUserId } from "../../lib/auth/sessionStore";
 import {
   cancelDeckDelete,
+  cancelDeckPush,
   deletedDeckIds,
+  markDeckDeleted,
   resumePendingDeckDeletes,
   scheduleDeckPush,
   scheduleDeckDelete,
+  unmarkDeckDeleted,
 } from "../../lib/sync/deckSync";
 import {
   forgetDeckDelete,
@@ -37,6 +43,7 @@ import { createSongDeck } from "./songDeck";
 
 let userSongsCache: Deck[] = [];
 let hydrationFailed = false;
+const unpersisted = new Map<string, number>();
 const listeners = new Set<() => void>();
 
 function emitChange(): void {
@@ -76,7 +83,7 @@ export async function hydrateSongLibrary(): Promise<void> {
     emitChange();
     clearPersistenceError();
     for (const { id } of own) {
-      if (pendingDeletes.has(id)) await persist(() => deleteSong(id));
+      if (pendingDeletes.has(id)) await persist(id, () => deleteSong(id));
     }
   } catch (err) {
     hydrationFailed = true;
@@ -137,7 +144,7 @@ export function upsertLibraryDeck(
   cancelDeckDelete(parsed.id, parsed.userId);
   putInCache(parsed);
   emitChange();
-  void persist(() => saveSong(parsed));
+  void persist(parsed.id, () => saveSong(parsed));
   if (options.push ?? true) scheduleDeckPush(parsed);
   return parsed;
 }
@@ -173,14 +180,14 @@ export async function applyServerLibraryDecks(
   if (hydrationFailed) return;
 
   for (const id of removedIds) {
-    await persist(() => deleteSong(id));
+    await persist(id, () => deleteSong(id));
   }
   const changed = userSongsCache.filter((deck) =>
     isServerChange(previous.get(deck.id), deck),
   );
   for (const { id } of changed) {
     const latest = getLibraryDeck(id);
-    if (latest) await persist(() => saveSong(latest));
+    if (latest) await persist(id, () => saveSong(latest));
   }
 }
 
@@ -219,7 +226,7 @@ export function applyServerDeckFields(serverDeck: Deck): void {
   if (next.userId !== getCurrentUserId()) return;
   putInCache(next);
   emitChange();
-  void persist(() => saveSong(next));
+  void persist(next.id, () => saveSong(next));
 }
 
 /**
@@ -229,7 +236,72 @@ export function applyServerDeckFields(serverDeck: Deck): void {
 export function dropDeletedLibraryDeck(id: string): void {
   userSongsCache = userSongsCache.filter((deck) => deck.id !== id);
   emitChange();
-  void persist(() => deleteSong(id));
+  void persist(id, () => deleteSong(id));
+}
+
+/**
+ * 다른 탭이 IndexedDB에 쓰거나 지운 보관함 곡을 저장본에서 다시 읽어 맞춘다(`storageSync`가
+ * 부른다).
+ *
+ * 세션 사용자의 곡이면 보관함의 곡을 저장본으로 바꾸거나 더한다. 저장본이 없으면 다른 탭에서 지운
+ * 곡이다. 보관함에서 빼고, 이 탭이 올리려던 PUT을 버리고, 지운 곡으로 기억한다(`markDeckDeleted`).
+ * 남겨 두면 이 탭이 지운 곡을 서버에 다시 올리고, 부팅 병합이 서버 목록의 곡을 다시 넣는다. 이 탭이
+ * 그 곡을 지우려고 기다리던 DELETE는 남긴다. 이 브라우저의 다른 탭이 지우고 서버가 아직 답하지 않은
+ * 곡(`pendingDeckDeletes`)도 저장본이 남아 있으면 같게 본다. 하이드레이션도 그 곡을 싣지 않는다.
+ *
+ * 이 탭이 지웠거나 서버가 지웠다고 답한 곡은 저장본이 다시 생겨도 보관함에 넣지 않는다. 그 저장본은
+ * 다른 탭의 늦은 쓰기(push 응답 등)라, 넣으면 서버에서 지운 곡이 이 탭에만 남는다. 다른 탭에서 지운
+ * 곡으로만 기억한 곡은 저장본이 다시 생기면 기억을 지우고 싣는다(`unmarkDeckDeleted`). 지운 탭이 같은
+ * 공유 곡을 다시 가져온 것이라, 기억을 남기면 이 탭의 다음 보관함 병합이 그 곡을 지운다.
+ *
+ * 이 탭이 아직 저장하지 않았거나 저장하는 중인 곡은 건너뛴다(읽는 동안 고친 곡도 같다). 곧 이 탭의
+ * 쓰기가 저장본을 다시 쓰고, 지운 곡을 이 탭에서 다시 가져오는 중이면 다시 넣은 곡을 지운 알림이
+ * 빼면 안 된다. 읽지 못한 저장본은 지운 것이 아니라 그대로 둔다. 저장도 push도 하지 않는다. 보관함을
+ * 읽지 못한 탭은 다시 읽지 않는다.
+ *
+ * 읽은 뒤 `isPaused()`가 참이면(그사이 송출을 시작함) 아무것도 바꾸지 않고 읽은 id를 돌려준다.
+ * 부른 쪽이 모아 두었다가 송출을 마친 뒤 다시 읽는다. 그 밖에는 빈 목록이다.
+ */
+export async function reloadSongsFromStorage(
+  ids: readonly string[],
+  isPaused: () => boolean = () => false,
+): Promise<string[]> {
+  if (hydrationFailed) return [];
+  const userId = getCurrentUserId();
+  if (!userId) return [];
+  const unique = [...new Set(ids)].filter((id) => !unpersisted.has(id));
+  if (unique.length === 0) return [];
+  let loaded: { id: string; record: LoadedRecord<Deck> }[];
+  try {
+    loaded = await Promise.all(
+      unique.map(async (id) => ({ id, record: await loadSong(id) })),
+    );
+  } catch {
+    return [];
+  }
+  if (getCurrentUserId() !== userId) return [];
+  if (isPaused()) return unique;
+
+  const deleting = new Set(listPendingDeckDeletes(userId));
+  let changed = false;
+  for (const { id, record } of loaded) {
+    if (unpersisted.has(id) || record.status === "unreadable") continue;
+    if (record.status === "ok" && record.value.userId !== userId) continue;
+    if (record.status === "missing" || deleting.has(id)) {
+      cancelDeckPush(id);
+      markDeckDeleted(id);
+      if (getLibraryDeck(id)) {
+        userSongsCache = userSongsCache.filter((deck) => deck.id !== id);
+        changed = true;
+      }
+      continue;
+    }
+    if (!unmarkDeckDeleted(id)) continue;
+    putInCache(record.value);
+    changed = true;
+  }
+  if (changed) emitChange();
+  return [];
 }
 
 /**
@@ -288,15 +360,24 @@ export function deleteUserSong(id: string): void {
   if (userId) scheduleDeckDelete(id, userId);
   userSongsCache = userSongsCache.filter((d) => d.id !== id);
   emitChange();
-  void persist(() => deleteSong(id));
+  void persist(id, () => deleteSong(id));
 }
 
-async function persist(operation: () => Promise<void>): Promise<void> {
+async function persist(
+  id: string,
+  operation: () => Promise<void>,
+): Promise<void> {
+  unpersisted.set(id, (unpersisted.get(id) ?? 0) + 1);
   try {
     await operation();
     clearPersistenceError();
+    announceStorageChange("decks", [id]);
   } catch (err) {
     reportPersistenceError(err);
+  } finally {
+    const remaining = (unpersisted.get(id) ?? 1) - 1;
+    if (remaining > 0) unpersisted.set(id, remaining);
+    else unpersisted.delete(id);
   }
 }
 
@@ -312,6 +393,7 @@ export async function resetSongLibraryStore(): Promise<void> {
   }
   userSongsCache = [];
   hydrationFailed = false;
+  unpersisted.clear();
   emitChange();
   try {
     await clearAllSongs();

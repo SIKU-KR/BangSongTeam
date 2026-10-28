@@ -16,10 +16,13 @@ import {
   saveFolder,
   saveFolders,
   loadAllFolders,
+  loadFolder,
   deleteFolders,
   reportPersistenceError,
   reportCorruptedRecords,
+  type LoadedRecord,
 } from "../../lib/storage";
+import { announceStorageChange } from "../../lib/storage/storageChannel";
 import { getCurrentUserId } from "../../lib/auth/sessionStore";
 import {
   scheduleFolderPush,
@@ -48,6 +51,7 @@ let folders: Folder[] = [];
 let index: FolderIndex<Folder> = buildFolderIndex(folders);
 const listeners = new Set<() => void>();
 let writes: Promise<void> = Promise.resolve();
+const unpersisted = new Map<string, number>();
 let hydrationFailed = false;
 
 function setFolders(next: Folder[]): void {
@@ -56,10 +60,25 @@ function setFolders(next: Folder[]): void {
   for (const listener of listeners) listener();
 }
 
-function queueWrite(write: () => Promise<void>): void {
-  writes = writes.then(write).catch((err: unknown) => {
-    reportPersistenceError(err);
-  });
+function releaseUnpersisted(ids: readonly string[]): void {
+  for (const id of ids) {
+    const remaining = (unpersisted.get(id) ?? 1) - 1;
+    if (remaining > 0) unpersisted.set(id, remaining);
+    else unpersisted.delete(id);
+  }
+}
+
+function queueWrite(ids: readonly string[], write: () => Promise<void>): void {
+  for (const id of ids) unpersisted.set(id, (unpersisted.get(id) ?? 0) + 1);
+  writes = writes
+    .then(async () => {
+      await write();
+      announceStorageChange("folders", ids);
+    })
+    .catch((err: unknown) => {
+      reportPersistenceError(err);
+    })
+    .finally(() => releaseUnpersisted(ids));
 }
 
 function commit(changed: Folder[]): void {
@@ -68,7 +87,7 @@ function commit(changed: Folder[]): void {
   setFolders([...byId.values()]);
 
   for (const folder of changed) {
-    queueWrite(() => saveFolder(folder));
+    queueWrite([folder.id], () => saveFolder(folder));
     scheduleFolderPush(folder);
   }
 }
@@ -256,10 +275,22 @@ export async function hydrateFoldersFromStorage(): Promise<void> {
   }
 }
 
+function isSameFolder(a: Folder | undefined, b: Folder): boolean {
+  if (!a) return false;
+  const keys = new Set([...Object.keys(a), ...Object.keys(b)]);
+  return [...keys].every(
+    (key) =>
+      (a[key as keyof Folder] ?? null) === (b[key as keyof Folder] ?? null),
+  );
+}
+
 /**
  * 서버와 병합한 폴더 목록으로 교체하고 저장한다 (부팅 동기화).
  * `removedIds`는 다른 기기에서 영구 삭제된 폴더다 — 대기 중인 push를 버리고 로컬
  * 저장본에서도 지운다. push가 남으면 연결이 돌아올 때 서버에서 되살아난다.
+ *
+ * 지금 폴더와 내용이 다른 폴더만 쓴다. 병합은 시각이 같으면 서버 객체를 고르므로 객체만 견주면
+ * 부팅마다 모든 폴더를 다시 쓰고, 쓴 폴더마다 다른 탭이 저장본을 다시 읽는다.
  *
  * 저장본을 읽지 못했으면 메모리만 바꾸고 저장소에는 쓰지 않는다. 읽지 못한 저장본을 병합
  * 결과로 덮으면 그 안에 있던, 아직 올리지 못한 폴더를 잃는다.
@@ -269,14 +300,23 @@ export async function applyServerFolders(
   removedIds: readonly string[] = [],
 ): Promise<void> {
   for (const id of removedIds) cancelFolderPush(id);
+  const previous = new Map(folders.map((folder) => [folder.id, folder]));
   const userId = getCurrentUserId();
   const mine = userId ? next.filter((folder) => folder.userId === userId) : [];
   setFolders(mine);
   if (hydrationFailed) return;
-  queueWrite(async () => {
-    await saveFolders(mine);
-    await deleteFolders(removedIds);
-  });
+  const changed = mine.filter(
+    (folder) => !isSameFolder(previous.get(folder.id), folder),
+  );
+  if (changed.length > 0 || removedIds.length > 0) {
+    queueWrite(
+      [...changed.map((folder) => folder.id), ...removedIds],
+      async () => {
+        await saveFolders(changed);
+        await deleteFolders(removedIds);
+      },
+    );
+  }
   await writes;
 }
 
@@ -315,7 +355,7 @@ export function applyServerFolder(serverFolder: Folder): void {
       folder.id === serverFolder.id ? serverFolder : folder,
     ),
   );
-  queueWrite(() => saveFolder(serverFolder));
+  queueWrite([serverFolder.id], () => saveFolder(serverFolder));
 }
 
 /** 영구 삭제가 끝난 폴더를 메모리와 저장소에서 지운다 */
@@ -326,8 +366,59 @@ export async function removeFoldersLocally(
   const removed = new Set(ids);
   for (const id of removed) cancelFolderPush(id);
   setFolders(folders.filter((folder) => !removed.has(folder.id)));
-  queueWrite(() => deleteFolders(ids));
+  queueWrite(ids, () => deleteFolders(ids));
   await writes;
+}
+
+/**
+ * 다른 탭이 IndexedDB에 쓰거나 지운 폴더를 저장본에서 다시 읽어 메모리를 맞춘다
+ * (`storageSync`가 부른다). 맞추지 않으면 이 탭의 낡은 폴더가 다음 이름 바꾸기·이동 때 다른 탭의
+ * 휴지통·이동을 되돌린다.
+ *
+ * 세션 사용자의 폴더를 저장본으로 바꾸거나 더한다. 이 탭이 아직 저장하지 않았거나 저장하는 중인
+ * 폴더는 건너뛴다(읽는 동안 고친 폴더도 같다). 곧 이 탭의 쓰기가 저장본을 다시 쓴다. 저장본이
+ * 없으면 다른 탭에서 영구 삭제한 것이라 메모리에서 빼고 대기 중인 push를 버린다. 남은 push가 지운
+ * 폴더를 서버에 되살린다. 읽지 못한 저장본은 지운 것이 아니라 그대로 둔다. 저장도 push도 하지
+ * 않는다. 폴더를 읽지 못한 탭(하이드레이션 실패)은 다시 읽지 않는다.
+ *
+ * 읽은 뒤 `isPaused()`가 참이면(그사이 송출을 시작함) 아무것도 바꾸지 않고 읽은 id를 돌려준다.
+ * 부른 쪽이 모아 두었다가 송출을 마친 뒤 다시 읽는다. 그 밖에는 빈 목록이다.
+ */
+export async function reloadFoldersFromStorage(
+  ids: readonly string[],
+  isPaused: () => boolean = () => false,
+): Promise<string[]> {
+  if (hydrationFailed) return [];
+  const unique = [...new Set(ids)].filter((id) => !unpersisted.has(id));
+  if (unique.length === 0) return [];
+  let loaded: { id: string; record: LoadedRecord<Folder> }[];
+  try {
+    loaded = await Promise.all(
+      unique.map(async (id) => ({ id, record: await loadFolder(id) })),
+    );
+  } catch {
+    return [];
+  }
+  if (isPaused()) return unique;
+
+  const userId = getCurrentUserId();
+  const byId = new Map(folders.map((folder) => [folder.id, folder]));
+  let changed = false;
+  for (const { id, record } of loaded) {
+    if (unpersisted.has(id)) continue;
+    if (record.status === "missing") {
+      cancelFolderPush(id);
+      if (byId.delete(id)) changed = true;
+      continue;
+    }
+    if (record.status === "unreadable" || record.value.userId !== userId) {
+      continue;
+    }
+    byId.set(id, record.value);
+    changed = true;
+  }
+  if (changed) setFolders([...byId.values()]);
+  return [];
 }
 
 /** 대기 중인 저장이 끝날 때까지 기다린다 (테스트·언로드용) */
@@ -338,6 +429,7 @@ export function flushFolderWrites(): Promise<void> {
 /** 테스트 격리 전용 */
 export function resetFolderStore(): void {
   writes = Promise.resolve();
+  unpersisted.clear();
   hydrationFailed = false;
   setFolders([]);
 }

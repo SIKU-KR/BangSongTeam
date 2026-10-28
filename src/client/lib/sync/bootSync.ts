@@ -2,6 +2,7 @@ import { useSyncExternalStore } from "react";
 import {
   listPresentations,
   applyServerDocuments,
+  getPresentationById,
 } from "../../features/presentation";
 import {
   getFolders,
@@ -26,10 +27,11 @@ import {
 } from "../../features/editor/songLibraryStore";
 import { mergeLibraryDecks } from "./mergeLibraryDecks";
 import { sharedPresentationListener } from "./sharedPresentationListener";
+import { ownPresentationListener } from "./ownPresentationListener";
 import {
   pullPresentations,
-  pushPresentation,
   rememberServerDocuments,
+  setOwnPresentationListener,
   setSharedPresentationListener,
   pullDecks,
   pullFolders,
@@ -67,8 +69,8 @@ import {
 } from "./syncStatus";
 import {
   cancelDocumentPush,
+  flushPendingSync,
   hasPendingDocumentPush,
-  holdFailedDocumentPush,
   scheduleDocumentPush,
   setSyncEnabled,
 } from "./syncScheduler";
@@ -84,7 +86,10 @@ import {
   isDeckDeletedError,
 } from "./deckSync";
 import { refreshBackgroundCatalog } from "./backgroundSync";
-import { isProjectionPath } from "../../features/presentation/fullscreen";
+import {
+  isProjecting,
+  isProjectionPath,
+} from "../../features/presentation/fullscreen";
 import { getCurrentUserId, revalidateSession } from "../auth/sessionStore";
 
 /**
@@ -222,10 +227,19 @@ export function useBootPullPending(domain: BootPullDomain): boolean {
  * 부팅 도중에 송출을 시작해도 같다. 받기마다 그 직전과 받은 직후에 송출 중이면 그 단계를
  * 받은 결과와 함께 내려놓고, 송출을 마친 뒤 처음부터 다시 받는다. 송출 화면은 지금 띄운
  * 프레젠테이션의 변경을 따라 그리므로, 그대로 병합하면 송출 중인 화면이 바뀌고 다음 요청이
- * 나간다. 병합을 마친 단계는 송출 중이어도 올릴 항목을 끝까지 올린다.
+ * 나간다. 병합을 마친 단계는 송출 중이어도 폴더·곡을 끝까지 올리고, 프레젠테이션은 큐가 송출을
+ * 마친 뒤에 올린다.
  *
- * 항목마다 올리기 직전과 큐에 넘기거나 실패로 남길 때 지금 저장소에 있는 것을 다시 찾아
- * 쓰고, 그사이 지워졌으면 건너뛴다. 부팅 병합 때의 사본을 올리면 앞 항목을 올리는 동안
+ * 프레젠테이션은 프레젠테이션 큐로 올리고(`scheduleDocumentPush`) 큐가 모두 보낼 때까지
+ * 기다린다(`flushPendingSync`). 부팅이 따로 보내면 같은 세트의 PATCH가 큐의 것과 겹쳐 먼저 보낸
+ * 판이 나중에 닿을 수 있고, 영구 삭제가 기다리는 큐 비우기가 부팅 push를 기다리지 않는다. 큐는
+ * 보낼 때 스토어의 지금 판을 올린다(`ownPresentationListener`). 부팅은 올리기 전에 '동기화 중'으로
+ * 두고, 큐가 끝난 뒤에도 그대로일 때만 '동기화됨'으로 바꾼다. 받지 못해 다시 받은 단계는 앞서 남긴
+ * '오프라인'을 풀어야 하고, 큐가 그동안 남긴 오프라인·세션 만료·실패를 덮으면 올라가지 않은 변경이
+ * 저장된 것처럼 보인다.
+ *
+ * 폴더·곡은 항목마다 올리기 직전과 큐에 넘기거나 실패로 남길 때 지금 저장소에 있는 것을 다시
+ * 찾아 쓰고, 그사이 지워졌으면 건너뛴다. 부팅 병합 때의 사본을 올리면 앞 항목을 올리는 동안
  * 사용자가 지운 곡이 되살아나고, 바로 올리기는 큐에 대기 중인 같은 항목을 버리므로 그사이
  * 고친 내용(폴더 이름 등)이 다음 부팅까지 서버에 가지 않는다. 올리는 동안 지운 항목의 실패를
  * 남기면 '다시 시도'가 다시 올릴 항목이 없어 그 실패가 세션 내내 남는다.
@@ -256,6 +270,7 @@ export async function runBootSync(): Promise<void> {
   setSyncStatus("presentation", "syncing");
   setSyncStatus("deck", "syncing");
   setSharedPresentationListener(sharedPresentationListener);
+  setOwnPresentationListener(ownPresentationListener);
   setSyncEnabled(true);
   setDeckSyncEnabled(true);
   resumeSongDeletes();
@@ -291,6 +306,7 @@ export function stopSync(): void {
   clearBootPullTimer();
   notifyBootPull();
   setSharedPresentationListener(null);
+  setOwnPresentationListener(null);
   setServerDeckListener(null);
   setDeckGoneListener(null);
   setServerFolderListener(null);
@@ -346,20 +362,16 @@ async function syncDriveAndDecks(): Promise<void> {
   applyServerDocuments(documents, removedIds);
   clearBootPull("presentation", generation);
 
-  const presentationStatus = await pushLatestEach(
-    {
-      domain: "presentation",
-      current: listPresentations,
-      push: pushPresentation,
-      requeue: scheduleDocumentPush,
-      hold: holdFailedDocumentPush,
-      titleOf: (document) => document.title,
-    },
-    needsPush,
-    generation,
-  );
+  setSyncStatus("presentation", "syncing");
+  for (const id of needsPush) {
+    const latest = getPresentationById(id);
+    if (latest) scheduleDocumentPush(latest);
+  }
+  await flushPendingSync();
   if (generation !== bootGeneration) return;
-  settleSyncStatus("presentation", presentationStatus);
+  if (getSyncDomainStatus("presentation") === "syncing") {
+    settleSyncStatus("presentation", "synced");
+  }
 
   await syncLibraryDecks();
 }
@@ -415,12 +427,6 @@ function retryPullLater(step: () => Promise<void>, err: unknown): SyncStatus {
   if (retryTimer) clearTimeout(retryTimer);
   retryTimer = setTimeout(runRetry, retryBackoff.getDelay(err));
   return "offline";
-}
-
-function isProjecting(): boolean {
-  return (
-    typeof window !== "undefined" && isProjectionPath(window.location.pathname)
-  );
 }
 
 function parkWhileProjecting(step: () => Promise<void>): boolean {

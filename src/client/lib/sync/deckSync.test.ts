@@ -14,6 +14,7 @@ import {
   deletedDeckIds,
   wasDeckDeleted,
   markDeckDeleted,
+  unmarkDeckDeleted,
   isDeckDeletedError,
   hasPendingDeckSync,
   resumePendingDeckDeletes,
@@ -727,6 +728,29 @@ describe("보관함 push 큐", () => {
 
       expect(wasDeckDeleted(A)).toBe(true);
       expect(remove).not.toHaveBeenCalled();
+    });
+
+    it("unmarkDeckDeleted는 다른 곳에서 지운 곡으로만 기억한 곡의 기억만 지운다", async () => {
+      expect(unmarkDeckDeleted(A)).toBe(true);
+
+      markDeckDeleted(A);
+      expect(unmarkDeckDeleted(A)).toBe(true);
+      expect(wasDeckDeleted(A)).toBe(false);
+
+      markDeckDeleted(B);
+      scheduleDeckDelete(B, USER);
+      markDeckDeleted(B);
+      expect(unmarkDeckDeleted(B)).toBe(false);
+      await flushDeckSync();
+      expect(unmarkDeckDeleted(B)).toBe(false);
+      expect(wasDeckDeleted(B)).toBe(true);
+
+      push.mockRejectedValueOnce(new ServerRejectedError(410));
+      scheduleDeckPush(deck());
+      await flushDeckSync();
+      markDeckDeleted(A);
+      expect(unmarkDeckDeleted(A)).toBe(false);
+      expect(wasDeckDeleted(A)).toBe(true);
     });
 
     it("410만 지운 곡 오류로 본다", () => {
