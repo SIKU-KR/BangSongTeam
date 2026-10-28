@@ -1820,6 +1820,14 @@ describe("EditorRoute (PowerPoint식 프레젠테이션 편집기)", () => {
       expect(window.location.search).toBe("");
     });
 
+    it("보기 전용 안내는 사본 만들기 버튼 자리를 비워 두어 글이 버튼 밑으로 들어가지 않는다", () => {
+      renderEditor(`/editor/${SHARED_ID}`);
+
+      expect(screen.getByTestId("read-only-banner")).toHaveClass(
+        "has-data-[slot=alert-action]:pr-28",
+      );
+    });
+
     it("그냥 열면 사본 만들기 창을 띄우지 않는다", () => {
       renderEditor(`/editor/${SHARED_ID}`);
 

@@ -423,7 +423,10 @@ function EditorScreen({
 
       {readOnly ? (
         <div className="border-b bg-background px-4 py-2">
-          <Alert data-testid="read-only-banner">
+          <Alert
+            data-testid="read-only-banner"
+            className="has-data-[slot=alert-action]:pr-28"
+          >
             <EyeIcon />
             <AlertDescription>
               {isGuest
