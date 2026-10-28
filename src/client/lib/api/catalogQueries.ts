@@ -4,7 +4,7 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
-import type { CreateReportRequest } from "#shared";
+import { clampSearchQuery, type CreateReportRequest } from "#shared";
 import {
   fetchPublicDeck,
   forkPublicDeck,
@@ -22,9 +22,15 @@ const catalogKeys = {
   deck: (id: string) => ["catalog", "deck", id] as const,
 };
 
-/** 타이핑 중에는 이전 결과를 유지해 목록이 깜박이지 않게 한다 */
+/**
+ * 타이핑 중에는 이전 결과를 유지해 목록이 깜박이지 않게 한다. 검색어는 서버 상한으로 잘라
+ * 보낸다(`clampSearchQuery`)
+ */
 export function useCatalogSearch(query: string, options: { enabled: boolean }) {
-  const q = useDebouncedValue(query.trim(), CATALOG_SEARCH_DEBOUNCE_MS);
+  const q = useDebouncedValue(
+    clampSearchQuery(query),
+    CATALOG_SEARCH_DEBOUNCE_MS,
+  );
   return useQuery({
     queryKey: catalogKeys.search(q),
     queryFn: () => searchCatalog(q),

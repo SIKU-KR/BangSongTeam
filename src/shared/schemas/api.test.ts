@@ -3,6 +3,7 @@ import {
   SearchCatalogQuerySchema,
   SearchCatalogResponseSchema,
   PresentationDocumentSchema,
+  clampSearchQuery,
 } from "./api";
 import { DeckStyleSchema } from "./style";
 import { PresentationSchema } from "./presentation";
@@ -20,9 +21,12 @@ describe("API Schemas", () => {
   it("allows an empty query for browsing by popularity", () => {
     expect(SearchCatalogQuerySchema.parse({}).q).toBe("");
     expect(SearchCatalogQuerySchema.parse({ q: "" }).limit).toBe(20);
-    expect(() =>
-      SearchCatalogQuerySchema.parse({ q: "가".repeat(51) }),
-    ).toThrow();
+  });
+
+  it("긴 검색어는 거절하지 않고 앞 50자로 자른다", () => {
+    expect(SearchCatalogQuerySchema.parse({ q: "가".repeat(61) }).q).toBe(
+      "가".repeat(50),
+    );
   });
 
   it("validates SearchCatalogResponseSchema", () => {
@@ -118,5 +122,19 @@ describe("API Schemas", () => {
       );
       expect(PresentationSchema.safeParse(withoutDeck).success).toBe(true);
     });
+  });
+});
+
+describe("clampSearchQuery", () => {
+  it("앞뒤 공백을 떼고 50자까지만 남긴다", () => {
+    expect(clampSearchQuery("  은혜  ")).toBe("은혜");
+    expect(clampSearchQuery(`${"가".repeat(49)} 나다`)).toBe("가".repeat(49));
+  });
+
+  it("50자 경계에 걸친 이모지는 반쪽으로 자르지 않고 뺀다", () => {
+    const clamped = clampSearchQuery(`${"가".repeat(49)}🙏🙏`);
+
+    expect(clamped).toBe("가".repeat(49));
+    expect(() => encodeURIComponent(clamped)).not.toThrow();
   });
 });

@@ -4,6 +4,7 @@ import {
   clientIp,
   PROXY_CLIENT_IP_HEADER,
   PROXY_SECRET_HEADER,
+  rateLimitKey,
   withTrustedClientIp,
 } from "./clientIp";
 
@@ -83,6 +84,40 @@ describe("withTrustedClientIp", () => {
 
     expect(request.method).toBe("POST");
     await expect(request.json()).resolves.toEqual({ email: "a@example.com" });
+  });
+});
+
+describe("rateLimitKey", () => {
+  it("IPv4와 IP가 아닌 값은 그대로 쓴다", () => {
+    expect(rateLimitKey("198.51.100.7")).toBe("198.51.100.7");
+    expect(rateLimitKey("unknown")).toBe("unknown");
+  });
+
+  it("IPv6는 같은 /64 대역이면 같은 키로 묶는다", () => {
+    const key = rateLimitKey("2001:db8:abcd:12::1");
+
+    expect(rateLimitKey("2001:DB8:ABCD:0012:ffff:ffff:ffff:fffe")).toBe(key);
+    expect(rateLimitKey("2001:db8:abcd:12:a::")).toBe(key);
+    expect(rateLimitKey("2001:db8:abcd:13::1")).not.toBe(key);
+    expect(rateLimitKey("2001:db8::abcd:12:0:0:1")).not.toBe(key);
+  });
+
+  it("IPv4를 담은 IPv6는 IPv4로 센다", () => {
+    expect(rateLimitKey("::ffff:192.0.2.1")).toBe("192.0.2.1");
+    expect(rateLimitKey("::FFFF:c000:201")).toBe("192.0.2.1");
+    expect(rateLimitKey("64:ff9b::192.0.2.1")).toBe(rateLimitKey("64:ff9b::1"));
+  });
+
+  it("IPv6 영역 표시(%)는 떼고 세어 쌍점이 든 영역에도 예외 없이 같은 /64로 묶는다", () => {
+    expect(rateLimitKey("1:2:3:4:5:6:7:8%a:b")).toBe(
+      rateLimitKey("1:2:3:4::1"),
+    );
+    expect(rateLimitKey("1:2:3:4::1%eth0")).toBe(rateLimitKey("1:2:3:4::1"));
+    expect(rateLimitKey("fe80::1%a:b:c:d:e:f:g:h")).toBe(
+      rateLimitKey("fe80::1"),
+    );
+    expect(rateLimitKey("::1%:1:2:3:4:5:6:7:8:9")).toBe(rateLimitKey("::1"));
+    expect(rateLimitKey("::ffff:192.0.2.1%x:y")).toBe("192.0.2.1");
   });
 });
 

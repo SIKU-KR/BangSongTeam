@@ -156,6 +156,8 @@ export const EDITOR_COPY = {
     kind: "곡 종류",
     showList: "목록 보기",
     serverUnavailable: "공유 라이브러리에 연결하지 못해 내 곡만 보여요",
+    rateLimited:
+      "검색이 몰려 지금은 내 곡만 보여요. 잠시 후 다시 검색해 주세요",
     offline: "오프라인이라 내 곡만 보여요",
     createNew: (query: string) => `${query ? `‘${query}’ ` : ""}새 곡으로 등록`,
     selectSong: "곡을 선택해 주세요.",

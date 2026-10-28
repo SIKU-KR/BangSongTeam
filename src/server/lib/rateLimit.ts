@@ -5,18 +5,25 @@ interface LimitWindow {
   count: number;
 }
 
-interface FixedWindowLimiterOptions {
+export interface FixedWindowLimiterOptions {
   limit: number;
   windowMs: number;
   now?: () => number;
 }
 
 /**
+ * 요청 한 건을 센 결과. 막혔으면 지금 창이 끝나 다시 받을 때까지 남은 시간을 함께 준다.
+ * 그보다 일찍 다시 보내면 같은 창이라 또 막힌다.
+ */
+export type LimitDecision =
+  { allowed: true } | { allowed: false; retryAfterMs: number };
+
+/**
  * 고정 창(fixed window) 요청 빈도 제한. 키마다 `windowMs` 안에 `limit`건까지 허용한다.
  *
  * 인스턴스 메모리에만 두므로 최선 노력이다. 인스턴스가 여럿이거나 다시 뜨면 한도가 그만큼
- * 느슨해진다. 지키려는 것은 로그 양뿐이라(보고는 저장하지 않는다) 이 정도로 충분하고,
- * Memorystore 같은 새 리소스가 필요한 방법을 피한다.
+ * 느슨해진다. 지키려는 것은 실패 보고의 로그 양과 공개 검색의 읽기 비용처럼 정확한 한도가
+ * 필요 없는 것이라 이 정도로 충분하고, Memorystore 같은 새 리소스가 필요한 방법을 피한다.
  * 키가 쌓여 메모리가 늘지 않게, 1000개를 넘으면 지난 창을 비운다. 비우기는 맵 전체를 훑으므로
  * 창마다 한 번만 한다. 한 창 안에 새 키가 몰려도 새 키마다 훑지 않는 대신, 그 창 동안은
  * 맵이 1000개를 넘을 수 있다.
@@ -25,7 +32,7 @@ export function createFixedWindowLimiter({
   limit,
   windowMs,
   now = Date.now,
-}: FixedWindowLimiterOptions): (key: string) => boolean {
+}: FixedWindowLimiterOptions): (key: string) => LimitDecision {
   const windows = new Map<string, LimitWindow>();
   let lastPrunedAt = -Infinity;
 
@@ -48,9 +55,13 @@ export function createFixedWindowLimiter({
         prune(at);
       }
       windows.set(key, { startedAt: at, count: 1 });
-      return true;
+      return { allowed: true };
     }
     current.count += 1;
-    return current.count <= limit;
+    if (current.count <= limit) return { allowed: true };
+    return {
+      allowed: false,
+      retryAfterMs: current.startedAt + windowMs - at,
+    };
   };
 }

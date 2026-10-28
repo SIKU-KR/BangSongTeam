@@ -1,15 +1,9 @@
 import { Hono } from "hono";
-import { createMiddleware } from "hono/factory";
-import {
-  API_ERRORS,
-  CLIENT_REPORT_MAX_BYTES,
-  ClientReportBatchSchema,
-} from "#shared";
+import { CLIENT_REPORT_MAX_BYTES, ClientReportBatchSchema } from "#shared";
 import type { AppEnv } from "../types";
-import { createFixedWindowLimiter } from "../lib/rateLimit";
-import { clientIp } from "../lib/clientIp";
 import { writeLog } from "../lib/requestLog";
 import { jsonBody } from "../lib/jsonBody";
+import { limitPerClientIp } from "../middleware/rateLimit";
 
 const REPORTS_PER_WINDOW = 30;
 const REPORT_WINDOW_MS = 60_000;
@@ -26,15 +20,9 @@ const REPORT_WINDOW_MS = 60_000;
  * 이 순서로 먼저 확인한다. 응답은 아무도 읽지 않으므로 204로 끝낸다.
  */
 export function createClientReportsRoute() {
-  const allow = createFixedWindowLimiter({
+  const rateLimit = limitPerClientIp({
     limit: REPORTS_PER_WINDOW,
     windowMs: REPORT_WINDOW_MS,
-  });
-  const rateLimit = createMiddleware<AppEnv>(async (c, next) => {
-    if (!allow(clientIp(c.req.raw.headers))) {
-      return c.json({ error: API_ERRORS.tooManyRequests }, 429);
-    }
-    await next();
   });
 
   return new Hono<AppEnv>().post(

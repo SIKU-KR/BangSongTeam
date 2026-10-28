@@ -3,6 +3,7 @@ import { env } from "../test/env";
 import {
   DEFAULT_DECK_STYLE,
   DeckSchema,
+  MAX_SEARCH_QUERY_LENGTH,
   PresentationDocumentSchema,
   SearchCatalogResponseSchema,
   type Deck,
@@ -163,6 +164,14 @@ describe("공유 라이브러리 API", () => {
       expect(card).not.toHaveProperty("lyricsRaw");
       expect(card).not.toHaveProperty("slides");
       expect(card).not.toHaveProperty("userId");
+    });
+
+    it("50자를 넘는 검색어는 거절하지 않고 앞 50자로 찾는다", async () => {
+      const lyrics =
+        "시작됐네 우리 주님의 능력이 나의 삶을 다스리시네 둘째 슬라이드 시작됐네 우리 주님의 능력이 나의 삶을";
+      expect(lyrics.length).toBeGreaterThan(MAX_SEARCH_QUERY_LENGTH);
+
+      expect((await search(lyrics)).decks.map((d) => d.id)).toEqual([PUB]);
     });
 
     it("never exposes private decks, presentation clones or taken-down decks", async () => {
