@@ -4,6 +4,7 @@ import {
   combineSignals,
   getDeadlineForRequest,
   DEFAULT_API_TIMEOUT_MS,
+  DELETE_API_TIMEOUT_MS,
   PULL_API_TIMEOUT_MS,
   HEALTH_API_TIMEOUT_MS,
 } from "./fetchWithTimeout";
@@ -33,8 +34,18 @@ describe("fetchWithTimeout", () => {
       ["/api/consent", "GET", DEFAULT_API_TIMEOUT_MS],
       ["/api/reports", "POST", DEFAULT_API_TIMEOUT_MS],
       ["/api/health", "GET", HEALTH_API_TIMEOUT_MS],
+      ["/api/folders/x", "DELETE", DELETE_API_TIMEOUT_MS],
+      ["/api/presentations/x", "DELETE", DELETE_API_TIMEOUT_MS],
+      ["http://localhost/api/folders/x", "delete", DELETE_API_TIMEOUT_MS],
+      ["/api/decks/x", "DELETE", DEFAULT_API_TIMEOUT_MS],
+      ["/api/folders/x", "PUT", DEFAULT_API_TIMEOUT_MS],
+      ["/api/folders/x", "GET", DEFAULT_API_TIMEOUT_MS],
     ])("%s (%s) 데드라인은 %dms이다", (url, method, expected) => {
       expect(getDeadlineForRequest(url, method)).toBe(expected);
+    });
+
+    it("영구 삭제는 60초까지 기다린다", () => {
+      expect(DELETE_API_TIMEOUT_MS).toBe(60_000);
     });
   });
 

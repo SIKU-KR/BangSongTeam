@@ -15,6 +15,7 @@ import {
   wasDeckDeleted,
   markDeckDeleted,
   isDeckDeletedError,
+  resumePendingDeckDeletes,
   __setDeckTransportForTests,
   __setDeckBackoffRandomForTests,
   __resetDeckSyncForTests,
@@ -22,6 +23,7 @@ import {
 import {
   OfflineError,
   ServerRejectedError,
+  SessionExpiredError,
   TimeoutError,
 } from "../api/request";
 import { installFakeApi } from "../../test/fakeApi";
@@ -33,9 +35,15 @@ import {
   __setPusherForTests,
   __resetSyncSchedulerForTests,
 } from "./syncScheduler";
+import {
+  listPendingDeckDeletes,
+  rememberDeckDelete,
+} from "./pendingDeckDeletes";
 
 const USER = "00000000x000000000001";
+const OTHER_USER = "00000000x000000000002";
 const A = "c0000000000000000000a";
+const B = "c0000000000000000000b";
 
 function deck(title = "은혜로다"): Deck {
   return DeckSchema.parse({
@@ -54,9 +62,10 @@ function deck(title = "은혜로다"): Deck {
 
 describe("보관함 push 큐", () => {
   let push: ReturnType<typeof vi.fn<(deck: Deck) => Promise<Deck>>>;
-  let remove: ReturnType<typeof vi.fn<(id: string) => Promise<void>>>;
+  let remove: ReturnType<typeof vi.fn<(id: string) => Promise<boolean | void>>>;
 
   beforeEach(() => {
+    localStorage.clear();
     __resetDeckSyncForTests();
     resetSyncStatus();
     push = vi.fn(async (d: Deck) => ({ ...d, forkCount: 3 }));
@@ -95,7 +104,7 @@ describe("보관함 push 큐", () => {
 
   it("a delete replaces a pending push", async () => {
     scheduleDeckPush(deck());
-    scheduleDeckDelete(A);
+    scheduleDeckDelete(A, USER);
     await flushDeckSync();
     expect(push).not.toHaveBeenCalled();
     expect(remove).toHaveBeenCalledWith(A);
@@ -373,7 +382,7 @@ describe("보관함 push 큐", () => {
     await flushDeckSync();
     expect(getSyncSnapshot().status).toBe("error");
 
-    scheduleDeckDelete(A);
+    scheduleDeckDelete(A, USER);
     await flushDeckSync();
 
     expect(remove).toHaveBeenCalledWith(A);
@@ -568,7 +577,7 @@ describe("보관함 push 큐", () => {
         const first = flushDeckSync();
         await vi.waitFor(() => expect(push).toHaveBeenCalledTimes(1));
 
-        scheduleDeckDelete(A);
+        scheduleDeckDelete(A, USER);
         const second = batched ? flushDeckSync() : first;
         pending.reject(makeError());
         await second;
@@ -594,7 +603,7 @@ describe("보관함 push 큐", () => {
       const flushing = flushDeckSync();
       await vi.waitFor(() => expect(push).toHaveBeenCalledTimes(1));
 
-      scheduleDeckDelete(A);
+      scheduleDeckDelete(A, USER);
       pending.resolve({ ...deck(), forkCount: 3 });
       await flushing;
       await flushDeckSync();
@@ -610,7 +619,7 @@ describe("보관함 push 큐", () => {
       const pushing = pushDeckNow(deck());
       await vi.waitFor(() => expect(push).toHaveBeenCalledTimes(1));
 
-      scheduleDeckDelete(A);
+      scheduleDeckDelete(A, USER);
       pending.resolve(deck());
       await pushing;
       await flushDeckSync();
@@ -633,7 +642,7 @@ describe("보관함 push 큐", () => {
         remove
           .mockRejectedValueOnce(new ServerRejectedError(503, "과부하", 30_000))
           .mockResolvedValue(undefined);
-        scheduleDeckDelete(A);
+        scheduleDeckDelete(A, USER);
         await vi.advanceTimersByTimeAsync(2000);
         expect(remove).toHaveBeenCalledTimes(1);
 
@@ -652,7 +661,7 @@ describe("보관함 push 큐", () => {
 
     it("cancelDeckPush는 영구 실패로 맡긴 DELETE와 그 실패 기록을 남긴다", async () => {
       remove.mockRejectedValueOnce(new ServerRejectedError(400, "거절"));
-      scheduleDeckDelete(A);
+      scheduleDeckDelete(A, USER);
       await flushDeckSync();
       expect(getSyncSnapshot().lastFailure).toMatchObject({ id: A });
 
@@ -678,10 +687,10 @@ describe("보관함 push 큐", () => {
     });
 
     it("cancelDeckDelete는 대기 중인 DELETE를 버리고 지운 곡 목록에서 뺀다", async () => {
-      scheduleDeckDelete(A);
+      scheduleDeckDelete(A, USER);
       expect(deletedDeckIds().has(A)).toBe(true);
 
-      cancelDeckDelete(A);
+      cancelDeckDelete(A, USER);
       await flushDeckSync();
 
       expect(deletedDeckIds().has(A)).toBe(false);
@@ -690,11 +699,11 @@ describe("보관함 push 큐", () => {
 
     it("cancelDeckDelete는 영구 실패로 맡긴 DELETE와 그 실패 기록을 지운다", async () => {
       remove.mockRejectedValueOnce(new ServerRejectedError(400, "거절"));
-      scheduleDeckDelete(A);
+      scheduleDeckDelete(A, USER);
       await flushDeckSync();
       expect(getSyncSnapshot().lastFailure).toMatchObject({ id: A });
 
-      cancelDeckDelete(A);
+      cancelDeckDelete(A, USER);
       expect(getSyncSnapshot().lastFailure).toBeNull();
 
       await retryDeckSyncNow("manual");
@@ -703,7 +712,7 @@ describe("보관함 push 큐", () => {
 
     it("동기화가 꺼져 있어도 지운 곡을 기억하고, 껐다 켜도 잊지 않는다", () => {
       setDeckSyncEnabled(false);
-      scheduleDeckDelete(A);
+      scheduleDeckDelete(A, USER);
       expect(wasDeckDeleted(A)).toBe(true);
 
       setDeckSyncEnabled(true);
@@ -722,6 +731,167 @@ describe("보관함 push 큐", () => {
       expect(isDeckDeletedError(new ServerRejectedError(410))).toBe(true);
       expect(isDeckDeletedError(new ServerRejectedError(404))).toBe(false);
       expect(isDeckDeletedError(new OfflineError())).toBe(false);
+    });
+  });
+
+  describe("새로고침 뒤에도 보낼 곡 삭제 기록", () => {
+    it("동기화가 꺼져 있어도 지운 곡을 기록하고, 서버가 지우면(200) 기록을 지운다", async () => {
+      setDeckSyncEnabled(false);
+      scheduleDeckDelete(A, USER);
+      expect(listPendingDeckDeletes(USER)).toEqual([A]);
+
+      setDeckSyncEnabled(true);
+      remove.mockResolvedValueOnce(true);
+      scheduleDeckDelete(A, USER);
+      await flushDeckSync();
+
+      expect(remove).toHaveBeenCalledWith(A);
+      expect(listPendingDeckDeletes(USER)).toEqual([]);
+    });
+
+    it("지운 계정의 기록만 지운다", async () => {
+      rememberDeckDelete(OTHER_USER, A);
+
+      scheduleDeckDelete(A, USER);
+      await flushDeckSync();
+
+      expect(listPendingDeckDeletes(USER)).toEqual([]);
+      expect(listPendingDeckDeletes(OTHER_USER)).toEqual([A]);
+    });
+
+    it("이 계정의 곡이 아니라고 하면(404) 실패로 남기지 않되 기록은 남긴다", async () => {
+      remove.mockResolvedValueOnce(false);
+
+      scheduleDeckDelete(A, USER);
+      await flushDeckSync();
+
+      expect(listPendingDeckDeletes(USER)).toEqual([A]);
+      expect(getSyncSnapshot()).toMatchObject({
+        status: "synced",
+        lastFailure: null,
+      });
+    });
+
+    it.each([
+      { reason: "세션 만료(401)", makeError: () => new SessionExpiredError() },
+      { reason: "오프라인", makeError: () => new OfflineError() },
+      {
+        reason: "일시 장애(503)",
+        makeError: () => new ServerRejectedError(503, "과부하"),
+      },
+    ])(
+      "$reason로 보내지 못한 DELETE는 기록을 남긴다",
+      async ({ makeError }) => {
+        remove.mockRejectedValueOnce(makeError());
+
+        scheduleDeckDelete(A, USER);
+        await flushDeckSync();
+
+        expect(remove).toHaveBeenCalledTimes(1);
+        expect(listPendingDeckDeletes(USER)).toEqual([A]);
+      },
+    );
+
+    it("서버가 거절해(400) 끝내 지우지 못한 곡은 기록을 지우고 이번 실패는 남긴다", async () => {
+      remove.mockRejectedValueOnce(new ServerRejectedError(400, "거절"));
+
+      scheduleDeckDelete(A, USER);
+      await flushDeckSync();
+
+      expect(listPendingDeckDeletes(USER)).toEqual([]);
+      expect(getSyncSnapshot()).toMatchObject({
+        status: "error",
+        lastFailure: { id: A, kind: "deck", status: 400 },
+      });
+      expect(wasDeckDeleted(A)).toBe(true);
+    });
+
+    it("재시도 한도까지 일시 장애(503)가 이어지면 기록을 지우고 이번 실패는 남긴다", async () => {
+      remove.mockRejectedValue(new ServerRejectedError(503, "지속 과부하"));
+      __setDeckBackoffRandomForTests(() => 1);
+      vi.useFakeTimers();
+      try {
+        scheduleDeckDelete(A, USER);
+        await vi.advanceTimersByTimeAsync(2000);
+        expect(remove).toHaveBeenCalledTimes(1);
+        expect(listPendingDeckDeletes(USER)).toEqual([A]);
+
+        for (let i = 0; i < 10; i++) {
+          await vi.advanceTimersByTimeAsync(60_000);
+        }
+
+        expect(remove).toHaveBeenCalledTimes(11);
+        expect(listPendingDeckDeletes(USER)).toEqual([]);
+        expect(getSyncSnapshot()).toMatchObject({
+          status: "error",
+          lastFailure: { id: A, kind: "deck", status: 503 },
+        });
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("영구 실패한 DELETE를 '다시 시도'로 다시 보내면 기록을 다시 남겨, 오프라인으로 밀려도 남긴다", async () => {
+      remove.mockRejectedValueOnce(new ServerRejectedError(400, "거절"));
+      scheduleDeckDelete(A, USER);
+      await flushDeckSync();
+      expect(listPendingDeckDeletes(USER)).toEqual([]);
+
+      remove.mockRejectedValueOnce(new OfflineError());
+      await retryDeckSyncNow("manual");
+
+      expect(remove).toHaveBeenCalledTimes(2);
+      expect(listPendingDeckDeletes(USER)).toEqual([A]);
+      expect(getSyncSnapshot().status).toBe("offline");
+    });
+
+    it.each([
+      {
+        reason: "서버가 지우면(200)",
+        answer: (): Promise<boolean> => Promise.resolve(true),
+      },
+      {
+        reason: "다시 거절하면(400)",
+        answer: (): Promise<boolean> =>
+          Promise.reject(new ServerRejectedError(400, "거절")),
+      },
+    ])(
+      "영구 실패한 DELETE를 '다시 시도'로 다시 보내 $reason 기록을 지운다",
+      async ({ answer }) => {
+        remove.mockRejectedValueOnce(new ServerRejectedError(400, "거절"));
+        scheduleDeckDelete(A, USER);
+        await flushDeckSync();
+
+        remove.mockImplementationOnce(answer);
+        await retryDeckSyncNow("manual");
+
+        expect(remove).toHaveBeenCalledTimes(2);
+        expect(listPendingDeckDeletes(USER)).toEqual([]);
+      },
+    );
+
+    it("cancelDeckDelete는 기록도 지운다", () => {
+      scheduleDeckDelete(A, USER);
+
+      cancelDeckDelete(A, USER);
+
+      expect(listPendingDeckDeletes(USER)).toEqual([]);
+    });
+
+    it("resumePendingDeckDeletes는 그 계정의 기록을 모두 지운 곡으로 다시 보낸다", async () => {
+      rememberDeckDelete(USER, A);
+      rememberDeckDelete(USER, B);
+      rememberDeckDelete(OTHER_USER, "c0000000000000000000c");
+
+      resumePendingDeckDeletes(USER);
+      await flushDeckSync();
+
+      expect(remove.mock.calls.map(([id]) => id).sort()).toEqual([A, B]);
+      expect(wasDeckDeleted(A)).toBe(true);
+      expect(listPendingDeckDeletes(USER)).toEqual([]);
+      expect(listPendingDeckDeletes(OTHER_USER)).toEqual([
+        "c0000000000000000000c",
+      ]);
     });
   });
 });

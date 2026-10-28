@@ -11,6 +11,7 @@ import { signInAsTestUser } from "../../test/sessionFixture";
 import {
   deleteUserSong,
   getUserSongs,
+  hydrateSongLibrary,
   resetSongLibraryStore,
   saveSongToLibrary,
   updateLibrarySongInfo,
@@ -26,9 +27,14 @@ import {
   __setDeckBackoffRandomForTests,
   __setDeckTransportForTests,
   flushDeckSync,
+  hasPendingDeckSync,
   retryDeckSyncNow,
   scheduleDeckPush,
 } from "./deckSync";
+import {
+  listPendingDeckDeletes,
+  rememberDeckDelete,
+} from "./pendingDeckDeletes";
 import {
   __resetSyncSchedulerForTests,
   __setBackoffRandomForTests,
@@ -47,6 +53,7 @@ import {
   loadAllPresentations,
   loadAllSongs,
   savePresentation,
+  saveSong,
 } from "../storage";
 import { closeOfflineDB, OFFLINE_DB_NAME } from "../storage/db";
 import {
@@ -1089,6 +1096,156 @@ describe("runBootSync — 지운 항목과 밀린 push", () => {
     expect(getUserSongs().map((deck) => deck.title)).toEqual([
       "다른 기기 제목",
     ]);
+  });
+});
+
+describe("runBootSync — 새로고침 뒤에도 남는 곡 삭제", () => {
+  let push: ReturnType<typeof vi.fn<(deck: Deck) => Promise<Deck>>>;
+  let remove: ReturnType<typeof vi.fn<(id: string) => Promise<boolean | void>>>;
+
+  beforeEach(async () => {
+    localStorage.clear();
+    signInAsTestUser();
+    await resetSongLibraryStore();
+    resetFolderStore();
+    resetPresentationStore();
+    resetSyncStatus();
+    __resetBootSyncForTests();
+    __resetDeckSyncForTests();
+    __resetSyncSchedulerForTests();
+    __resetFolderSyncForTests();
+    push = vi.fn(async (deck: Deck) => deck);
+    remove = vi.fn(async () => true);
+    __setDeckTransportForTests({ push, remove });
+    __setFolderPusherForTests(vi.fn(async (f: Folder) => f));
+    presentationSync.pullDecks.mockReset();
+    presentationSync.pullDecks.mockResolvedValue({ decks: [], deletedIds: [] });
+    presentationSync.pullPresentations.mockReset();
+    presentationSync.pullPresentations.mockResolvedValue([]);
+    presentationSync.pushPresentation.mockReset();
+    presentationSync.pushPresentation.mockResolvedValue(undefined);
+    presentationSync.pullFolders.mockReset();
+    presentationSync.pullFolders.mockResolvedValue(EMPTY_FOLDER_LIST);
+  });
+
+  afterEach(() => {
+    __resetBootSyncForTests();
+    __resetFolderSyncForTests();
+    __resetDeckSyncForTests();
+    __resetSyncSchedulerForTests();
+    localStorage.clear();
+  });
+
+  async function reload(): Promise<void> {
+    __resetBootSyncForTests();
+    __resetDeckSyncForTests();
+    __setDeckTransportForTests({ push, remove });
+    await hydrateSongLibrary();
+  }
+
+  async function storedSongIds(): Promise<string[]> {
+    const { valid } = await loadAllSongs();
+    return valid.map((deck) => deck.id);
+  }
+
+  async function uploadedSong(): Promise<Deck> {
+    const song = saveSongToLibrary({ title: "지울 곡", lyricsRaw: "가사" });
+    await runBootSync();
+    expect(push).toHaveBeenCalledWith(song);
+    return song;
+  }
+
+  it("오프라인에서 지운 곡은 새로고침한 뒤 서버 목록에 있어도 보관함에 넣지 않고, 서버에서 지운다", async () => {
+    const song = await uploadedSong();
+    remove.mockRejectedValueOnce(new OfflineError());
+    deleteUserSong(song.id);
+    await flushDeckSync();
+    expect(remove).toHaveBeenCalledTimes(1);
+
+    await reload();
+    presentationSync.pullDecks.mockResolvedValue({
+      decks: [song],
+      deletedIds: [],
+    });
+    await runBootSync();
+
+    expect(getUserSongs()).toEqual([]);
+    await flushDeckSync();
+    expect(remove).toHaveBeenCalledTimes(2);
+    expect(remove).toHaveBeenLastCalledWith(song.id);
+    expect(listPendingDeckDeletes(TEST_USER_ID)).toEqual([]);
+    expect(await storedSongIds()).not.toContain(song.id);
+  });
+
+  it("지우고 2초 안에 탭을 닫아도 새로고침한 뒤 감추고 서버에서 지운다", async () => {
+    const song = await uploadedSong();
+    deleteUserSong(song.id);
+    await loadAllSongs();
+    await saveSong(song);
+    expect(remove).not.toHaveBeenCalled();
+
+    await reload();
+    expect(getUserSongs()).toEqual([]);
+    expect(await storedSongIds()).not.toContain(song.id);
+    presentationSync.pullDecks.mockResolvedValue({
+      decks: [song],
+      deletedIds: [],
+    });
+    await runBootSync();
+
+    expect(getUserSongs()).toEqual([]);
+    await flushDeckSync();
+    expect(remove).toHaveBeenCalledWith(song.id);
+    expect(listPendingDeckDeletes(TEST_USER_ID)).toEqual([]);
+  });
+
+  it("이 계정의 곡이 아니라는 답(404)을 받은 삭제는 기록을 남겨 다음 부팅에 다시 보낸다", async () => {
+    const song = await uploadedSong();
+    remove.mockResolvedValueOnce(false);
+    deleteUserSong(song.id);
+    await flushDeckSync();
+    expect(listPendingDeckDeletes(TEST_USER_ID)).toEqual([song.id]);
+
+    await reload();
+    await runBootSync();
+    await flushDeckSync();
+
+    expect(remove).toHaveBeenCalledTimes(2);
+    expect(remove).toHaveBeenLastCalledWith(song.id);
+    expect(listPendingDeckDeletes(TEST_USER_ID)).toEqual([]);
+  });
+
+  it("부팅 때 목록을 받지 못해도 앞선 페이지에서 지운 곡의 삭제를 곧바로 큐에 넣는다", async () => {
+    const gone = "c000000000000000000e9";
+    rememberDeckDelete(TEST_USER_ID, gone);
+    presentationSync.pullFolders.mockRejectedValue(new OfflineError());
+
+    const booting = runBootSync();
+    expect(hasPendingDeckSync()).toBe(true);
+    await booting;
+    await flushDeckSync();
+
+    expect(remove).toHaveBeenCalledWith(gone);
+    expect(listPendingDeckDeletes(TEST_USER_ID)).toEqual([]);
+  });
+
+  it("서버가 끝내 지우지 못한 곡은 기록을 지워, 새로고침하면 서버의 곡이 보관함에 돌아온다", async () => {
+    const song = await uploadedSong();
+    remove.mockRejectedValueOnce(new ServerRejectedError(400, "거절"));
+    deleteUserSong(song.id);
+    await flushDeckSync();
+    expect(getSyncSnapshot().lastFailure).toMatchObject({ id: song.id });
+    expect(listPendingDeckDeletes(TEST_USER_ID)).toEqual([]);
+
+    await reload();
+    presentationSync.pullDecks.mockResolvedValue({
+      decks: [song],
+      deletedIds: [],
+    });
+    await runBootSync();
+
+    expect(getUserSongs().map((deck) => deck.id)).toEqual([song.id]);
+    expect(remove).toHaveBeenCalledTimes(1);
   });
 });
 

@@ -20,6 +20,7 @@ import {
   dropDeletedLibraryDeck,
   getDeletedSongIds,
   getLibraryDeck,
+  resumeSongDeletes,
   updateLibrarySongInfo,
 } from "./songLibraryStore";
 import {
@@ -29,6 +30,10 @@ import {
   __setDeckTransportForTests,
   __resetDeckSyncForTests,
 } from "../../lib/sync/deckSync";
+import {
+  listPendingDeckDeletes,
+  rememberDeckDelete,
+} from "../../lib/sync/pendingDeckDeletes";
 import { SEED_USER_ID } from "../../test/presentationFixture";
 
 vi.mock("../../lib/storage", async (importOriginal) => {
@@ -359,6 +364,68 @@ describe("songLibraryStore", () => {
       deleteUserSong(gone.id);
 
       expect(getDeletedSongIds().has(gone.id)).toBe(true);
+    });
+
+    it("resumeSongDeletes는 지금 계정이 앞선 페이지에서 지운 곡만 다시 보낸다", async () => {
+      const mine = "c000000000000000000d4";
+      const theirs = "c000000000000000000d5";
+      rememberDeckDelete(SEED_USER_ID, mine);
+      rememberDeckDelete("999999999999999999999", theirs);
+
+      resumeSongDeletes();
+      await flushDeckSync();
+
+      expect(remove.mock.calls).toEqual([[mine]]);
+    });
+  });
+
+  describe("새로고침 뒤에도 남는 곡 삭제 기록", () => {
+    it("지우면 동기화가 꺼져 있어도 지금 계정의 삭제 기록에 남긴다", () => {
+      const saved = saveSongToLibrary({ title: "지울 곡", lyricsRaw: "가사" });
+
+      deleteUserSong(saved.id);
+
+      expect(listPendingDeckDeletes(SEED_USER_ID)).toEqual([saved.id]);
+    });
+
+    it("서버에서 지우기를 기다리는 곡은 저장본에 남아 있어도 불러올 때 감추고 저장본에서 지운다", async () => {
+      const pending = libraryDeck("c000000000000000000d1");
+      const kept = libraryDeck("c000000000000000000d2");
+      await saveSong(pending);
+      await saveSong(kept);
+      rememberDeckDelete(SEED_USER_ID, pending.id);
+
+      await hydrateSongLibrary();
+
+      expect(getUserSongs().map((d) => d.id)).toEqual([kept.id]);
+      expect(await storedSongIds()).toEqual([kept.id]);
+    });
+
+    it("앞선 페이지에서 지우고 서버에서 아직 지우지 못한 곡도 지운 곡으로 본다", () => {
+      rememberDeckDelete(SEED_USER_ID, "c000000000000000000d3");
+
+      expect(getDeletedSongIds().has("c000000000000000000d3")).toBe(true);
+    });
+
+    it("서버에서 지우기를 기다리는 곡을 다시 넣으면 삭제 기록에서 뺀다", () => {
+      const fork = libraryDeck("c000000000000000000f2", {
+        origin: "fork",
+        forkedFrom: "c000000000000000000f0",
+      });
+      rememberDeckDelete(SEED_USER_ID, fork.id);
+
+      upsertLibraryDeck(fork, { push: false });
+
+      expect(listPendingDeckDeletes(SEED_USER_ID)).toEqual([]);
+      expect(getDeletedSongIds().has(fork.id)).toBe(false);
+    });
+
+    it("초기화하면 지금 계정의 삭제 기록도 지운다", async () => {
+      rememberDeckDelete(SEED_USER_ID, "c000000000000000000d6");
+
+      await resetSongLibraryStore();
+
+      expect(listPendingDeckDeletes(SEED_USER_ID)).toEqual([]);
     });
   });
 

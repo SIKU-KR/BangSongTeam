@@ -1,4 +1,5 @@
 import {
+  API_ERRORS,
   collectDescendantFolderIds,
   MAX_PRESENTATION_TITLE_LENGTH,
   onlyItem,
@@ -19,11 +20,16 @@ import {
   type PresentNavigate,
 } from "../presentation";
 import { canPresentReliably } from "../../lib/browser/capabilities";
+import { isServerReachable } from "../../lib/api/connectivity";
 import {
   deleteFolderRemote,
   deletePresentationRemote,
+  flushFolderSync,
   flushPendingSync,
+  hasPendingDocumentPush,
+  hasPendingFolderPush,
   OfflineError,
+  ServerRejectedError,
 } from "../../lib/sync";
 import {
   getFolder,
@@ -206,48 +212,96 @@ export class DriveActionError extends Error {
  * 로컬에서 먼저 지우면, 서버에 남은 사본을 다음 부팅 병합이 '아직 안 올라간
  * 문서'로 보고 되살린다. 그래서 오프라인이면 지우지 않고 알린다.
  *
- * 먼저 대기 중인 push를 모두 보낸다. 방금 폴더로 옮긴 세트가 서버에서는 아직
- * 다른 곳에 있으면, 서버의 폴더 삭제가 그 세트를 놓친다.
+ * 먼저 폴더·프레젠테이션 큐를 모두 보내고, 그래도 올리지 못한 변경이 남으면 아무것도 지우지
+ * 않는다. 서버는 자기 휴지통에 있는 항목만 지운다. 휴지통에 넣거나 폴더 밖으로 꺼낸 변경이
+ * 서버에 닿기 전에 지우면 서버가 거절해(409) 사용자가 지우려던 항목을 지우지 못한다. 폴더로
+ * 옮겨 넣은 프레젠테이션은 서버에서 아직 폴더 밖에 있어 서버에 남고, 다음 부팅 병합이 되살린다.
+ *
+ * 폴더는 이 기기가 본 하위 폴더·프레젠테이션 id를 함께 보낸다. 서버 트리에 그 밖의 항목(다른
+ * 기기에서 옮겨 넣은 것)이 있으면 서버는 아무것도 지우지 않고 거절한다(409). 서버가 폴더 밖에
+ * 둔 프레젠테이션은 다른 기기에서 꺼낸 것이라 서버에서 지우지 않고 이 기기에서만 내려놓는다.
+ * 다음 부팅 병합이 서버 위치로 되돌린다.
+ *
+ * 거절된 항목은 건너뛰고 나머지를 지운 뒤 서버가 준 문장으로 알린다. 그사이 지운 것이 있으면
+ * 일부만 지웠다고 알린다. 거절이 아닌 오류에서는 멈춘다.
  */
 export async function deleteItemsForever(
   refs: readonly DriveItemRef[],
 ): Promise<void> {
+  let refusal: ServerRejectedError | null = null;
+  let deletedAny = false;
   try {
+    await flushFolderSync();
     await flushPendingSync();
+    if (hasPendingFolderPush() || hasPendingDocumentPush()) {
+      throw new DriveActionError(
+        isServerReachable()
+          ? DRIVE_COPY.deleteForeverRetry
+          : DRIVE_COPY.deleteForeverOffline,
+      );
+    }
 
     for (const ref of refs) {
-      if (ref.kind === "file") {
-        await deletePresentationRemote(ref.id);
-        await removePresentationsLocally([ref.id]);
-        continue;
+      try {
+        await deleteForever(ref);
+        deletedAny = true;
+      } catch (err) {
+        if (!isTrashRefusal(err)) throw err;
+        refusal = err;
+        deletedAny ||= err.message === API_ERRORS.trashChangedPartly;
       }
-
-      const index = getFolderIndex();
-      const subtree = collectDescendantFolderIds(index, ref.id);
-      const localFiles = listPresentations()
-        .filter((presentation) => {
-          const folderId = resolveFolderId(index, presentation.folderId);
-          return folderId !== null && subtree.has(folderId);
-        })
-        .map((presentation) => presentation.id);
-
-      const result = await deleteFolderRemote(ref.id);
-
-      const deletedOnServer = new Set(result.deletedPresentationIds);
-      for (const id of localFiles) {
-        if (!deletedOnServer.has(id)) await deletePresentationRemote(id);
-      }
-
-      await removePresentationsLocally([
-        ...localFiles,
-        ...result.deletedPresentationIds,
-      ]);
-      await removeFoldersLocally([...subtree, ...result.deletedFolderIds]);
     }
   } catch (err) {
-    if (err instanceof OfflineError) {
-      throw new DriveActionError(DRIVE_COPY.deleteForeverOffline, err);
-    }
-    throw new DriveActionError(DRIVE_COPY.deleteForeverRetry, err);
+    throw toDeleteForeverError(err);
   }
+
+  if (refusal) {
+    throw new DriveActionError(
+      deletedAny ? API_ERRORS.trashChangedPartly : refusal.message,
+      refusal,
+    );
+  }
+}
+
+async function deleteForever(ref: DriveItemRef): Promise<void> {
+  if (ref.kind === "file") {
+    await deletePresentationRemote(ref.id);
+    await removePresentationsLocally([ref.id]);
+    return;
+  }
+
+  const index = getFolderIndex();
+  const subtree = collectDescendantFolderIds(index, ref.id);
+  const folderIds = [...subtree];
+  const presentationIds = listPresentations()
+    .filter((presentation) => {
+      const folderId = resolveFolderId(index, presentation.folderId);
+      return folderId !== null && subtree.has(folderId);
+    })
+    .map((presentation) => presentation.id);
+
+  const result = await deleteFolderRemote(ref.id, {
+    folderIds,
+    presentationIds,
+  });
+
+  await removePresentationsLocally([
+    ...presentationIds,
+    ...result.deletedPresentationIds,
+  ]);
+  await removeFoldersLocally([...folderIds, ...result.deletedFolderIds]);
+}
+
+function isTrashRefusal(err: unknown): err is ServerRejectedError {
+  return err instanceof ServerRejectedError && err.status === 409;
+}
+
+function toDeleteForeverError(err: unknown): DriveActionError {
+  if (err instanceof DriveActionError) return err;
+  return new DriveActionError(
+    err instanceof OfflineError
+      ? DRIVE_COPY.deleteForeverOffline
+      : DRIVE_COPY.deleteForeverRetry,
+    err,
+  );
 }

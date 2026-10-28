@@ -23,6 +23,12 @@ export const DEFAULT_API_TIMEOUT_MS = 10_000;
 export const PULL_API_TIMEOUT_MS = 30_000;
 /** 연결 회복 확인 요청은 짧게 끊는다. 멈춘 연결에서 10초를 기다리면 회복이 그만큼 늦다 */
 export const HEALTH_API_TIMEOUT_MS = 5_000;
+/**
+ * 폴더·프레젠테이션 영구 삭제의 데드라인. 큰 폴더는 서버가 트랜잭션을 여러 번 나눠 지워 10초를
+ * 넘길 수 있다. 그 전에 끊으면 서버는 삭제를 끝내는데 화면은 오프라인이라 지우지 못했다고 알린다.
+ * Cloudflare가 원 서버 응답을 기다리는 100초보다는 짧다.
+ */
+export const DELETE_API_TIMEOUT_MS = 60_000;
 
 const HEALTH_PATH = "/api/health";
 
@@ -33,13 +39,20 @@ const BULK_PULL_PATHS = new Set([
   "/api/backgrounds",
 ]);
 
+const PERMANENT_DELETE_PATH = /^\/api\/(?:folders|presentations)\/[^/]+$/;
+
 /**
  * 요청 URL과 메서드에 맞는 데드라인(ms)을 반환한다.
- * 부팅 및 목록 동기화 시 대용량 JSON을 가져오는 전체 목록 pull 요청에는 더 넉넉한 시간을 둔다.
+ * 부팅 및 목록 동기화 시 대용량 JSON을 가져오는 전체 목록 pull 요청과 영구 삭제에는 더 넉넉한
+ * 시간을 둔다.
  */
 export function getDeadlineForRequest(url: string, method = "GET"): number {
-  if (method.toUpperCase() === "GET") {
-    const pathname = new URL(url, "http://localhost").pathname;
+  const upperMethod = method.toUpperCase();
+  const pathname = new URL(url, "http://localhost").pathname;
+  if (upperMethod === "DELETE" && PERMANENT_DELETE_PATH.test(pathname)) {
+    return DELETE_API_TIMEOUT_MS;
+  }
+  if (upperMethod === "GET") {
     if (pathname === HEALTH_PATH) return HEALTH_API_TIMEOUT_MS;
     if (BULK_PULL_PATHS.has(pathname)) {
       return PULL_API_TIMEOUT_MS;

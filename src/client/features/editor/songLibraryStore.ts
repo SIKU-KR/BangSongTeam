@@ -14,9 +14,14 @@ import { getCurrentUserId } from "../../lib/auth/sessionStore";
 import {
   cancelDeckDelete,
   deletedDeckIds,
+  resumePendingDeckDeletes,
   scheduleDeckPush,
   scheduleDeckDelete,
 } from "../../lib/sync/deckSync";
+import {
+  forgetDeckDelete,
+  listPendingDeckDeletes,
+} from "../../lib/sync/pendingDeckDeletes";
 import {
   hasSameServerFields,
   withServerFields,
@@ -45,6 +50,9 @@ export function getUserSongs(): Deck[] {
  *
  * 읽지 못하면 보관함을 비우고 부팅 병합이 저장소에 쓰지 않게 한다. 앞 계정의 곡이 남으면
  * 병합이 새 계정에 올리고, 병합 결과를 쓰면 읽지 못한 저장본(아직 올리지 못한 곡)을 덮는다.
+ *
+ * 지우고 서버에서 아직 지우지 못한 곡(`pendingDeckDeletes`)은 저장본에 남아 있어도 보관함에
+ * 넣지 않고 저장본에서 지운다. 저장본 삭제는 비동기라 지운 직후 탭을 닫으면 끝나지 않는다.
  */
 export async function hydrateSongLibrary(): Promise<void> {
   const userId = getCurrentUserId();
@@ -53,11 +61,16 @@ export async function hydrateSongLibrary(): Promise<void> {
     const { valid, corrupted } = await loadAllSongs();
     reportCorruptedRecords(corrupted);
     hydrationFailed = false;
-    userSongsCache = userId
-      ? valid.filter((deck) => deck.userId === userId)
-      : [];
+    const own = userId ? valid.filter((deck) => deck.userId === userId) : [];
+    const pendingDeletes = new Set(
+      userId ? listPendingDeckDeletes(userId) : [],
+    );
+    userSongsCache = own.filter((deck) => !pendingDeletes.has(deck.id));
     emitChange();
     clearPersistenceError();
+    for (const { id } of own) {
+      if (pendingDeletes.has(id)) await persist(() => deleteSong(id));
+    }
   } catch (err) {
     hydrationFailed = true;
     userSongsCache = [];
@@ -114,7 +127,7 @@ export function upsertLibraryDeck(
   options: { push?: boolean } = {},
 ): Deck {
   const parsed = DeckSchema.parse(deck);
-  cancelDeckDelete(parsed.id);
+  cancelDeckDelete(parsed.id, parsed.userId);
   putInCache(parsed);
   emitChange();
   void persist(() => saveSong(parsed));
@@ -192,10 +205,22 @@ export function dropDeletedLibraryDeck(id: string): void {
 
 /**
  * 이 계정에서 지운 곡 id. 보관함 병합이 서버 목록에서 받지도, 로컬에서 올리지도 않는다
- * (`deletedDeckIds`).
+ * (`deletedDeckIds`). 앞선 페이지에서 지우고 서버에서 아직 지우지 못한 곡도 넣는다. 서버
+ * 목록에는 그 곡이 아직 있다.
  */
 export function getDeletedSongIds(): ReadonlySet<string> {
-  return deletedDeckIds();
+  const userId = getCurrentUserId();
+  if (!userId) return deletedDeckIds();
+  return new Set([...deletedDeckIds(), ...listPendingDeckDeletes(userId)]);
+}
+
+/**
+ * 앞선 페이지에서 지우고 서버에서 아직 지우지 못한 지금 계정의 곡을 다시 서버에서 지운다
+ * (`resumePendingDeckDeletes`). 부팅 동기화가 곡 큐를 켜자마자 부른다.
+ */
+export function resumeSongDeletes(): void {
+  const userId = getCurrentUserId();
+  if (userId) resumePendingDeckDeletes(userId);
 }
 
 /**
@@ -220,12 +245,17 @@ export function updateLibrarySongInfo(
 /**
  * 사용자가 등록한 곡 삭제. 프레젠테이션에 넣은 곡은 복제본이라 남는다. 공개 곡이면
  * 서버에서 지워지면서 공유 라이브러리에서도 사라진다.
+ *
+ * 서버 삭제를 메모리·저장본에서 지우기보다 먼저 예약한다. 예약이 남기는 삭제 기록
+ * (`pendingDeckDeletes`)이 있어야 오프라인이거나 곧바로 탭을 닫아도 다음 부팅이 서버의 곡을
+ * 되살리지 않고 다시 지운다.
  */
 export function deleteUserSong(id: string): void {
+  const userId = getCurrentUserId();
+  if (userId) scheduleDeckDelete(id, userId);
   userSongsCache = userSongsCache.filter((d) => d.id !== id);
   emitChange();
   void persist(() => deleteSong(id));
-  scheduleDeckDelete(id);
 }
 
 async function persist(operation: () => Promise<void>): Promise<void> {
@@ -241,6 +271,12 @@ async function persist(operation: () => Promise<void>): Promise<void> {
  * 테스트 격리용 초기화.
  */
 export async function resetSongLibraryStore(): Promise<void> {
+  const userId = getCurrentUserId();
+  if (userId) {
+    for (const id of listPendingDeckDeletes(userId)) {
+      forgetDeckDelete(userId, id);
+    }
+  }
   userSongsCache = [];
   hydrationFailed = false;
   emitChange();

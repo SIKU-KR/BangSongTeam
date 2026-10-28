@@ -21,6 +21,7 @@ import {
   applyServerLibraryDecks,
   applyServerDeckFields,
   dropDeletedLibraryDeck,
+  resumeSongDeletes,
 } from "../../features/editor/songLibraryStore";
 import { mergeLibraryDecks } from "./mergeLibraryDecks";
 import { sharedPresentationListener } from "./sharedPresentationListener";
@@ -116,7 +117,9 @@ export function shouldRunBootSync(pathname: string): boolean {
  * 없이 지운 항목과 서버 사본이 이긴 항목의 대기 중인 push를 버린다. 대기 중인 사본은 방금
  * 서버와 견준 메모리보다 새로울 수 없으므로, 남겨 두면 연결이 돌아올 때 지운 항목을 서버에서
  * 되살리거나 서버의 새 사본을 옛 사본으로 덮는다. 지운 곡은 서버의 삭제 기록과 이 페이지에서
- * 지운 곡을 모두 병합에서 뺀다.
+ * 지운 곡, 앞선 페이지에서 지우고 서버에서 아직 지우지 못한 곡을 모두 병합에서 뺀다. 앞선
+ * 페이지의 삭제는 곡 큐를 켜자마자 기다림 없이 다시 넣어, 목록을 받지 못한 부팅에서도 큐의
+ * 백오프로 다시 보낸다.
  *
  * 결과는 폴더·프레젠테이션·곡 도메인별로 따로 남기고, 올리지 못한 항목은 항목별
  * 실패로 남긴다. 도메인 단계만 바꾸면 같은 도메인 큐의 다음 성공이 그 실패를 덮는다.
@@ -136,6 +139,7 @@ export async function runBootSync(): Promise<void> {
   setSharedPresentationListener(sharedPresentationListener);
   setSyncEnabled(true);
   setDeckSyncEnabled(true);
+  resumeSongDeletes();
   setServerDeckListener(applyServerDeckFields);
   setDeckGoneListener(dropDeletedLibraryDeck);
   setFolderSyncEnabled(true);
