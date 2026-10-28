@@ -55,9 +55,46 @@ function isNotFound(error: unknown): boolean {
   return err?.code === 404 || err?.code === "ENOENT" || err?.code === "EISDIR";
 }
 
-/** Cloud Storage 버킷. Cloud Run 서비스 계정의 자격으로 읽는다 */
+function openOnFirstRead(
+  open: () => ReadableStream<Uint8Array>,
+): ReadableStream<Uint8Array> {
+  let source: ReadableStreamDefaultReader<Uint8Array> | undefined;
+  return new ReadableStream<Uint8Array>(
+    {
+      async pull(controller) {
+        source ??= open().getReader();
+        const { value, done } = await source.read();
+        if (done) controller.close();
+        else controller.enqueue(value);
+      },
+      cancel(reason) {
+        return source?.cancel(reason);
+      },
+    },
+    { highWaterMark: 0 },
+  );
+}
+
+/**
+ * Cloud Storage 버킷. Cloud Run 서비스 계정의 자격으로 읽는다.
+ *
+ * - 요청마다 `forever: false`로 라이브러리의 공용 keep-alive 에이전트를 쓰지 않는다.
+ *   `createReadStream`은 내려받기가 오류로 끝나면 그 요청의 에이전트를 `destroy()`하는데
+ *   (@google-cloud/storage `file.js` createReadStream의 `onComplete`), 기본값이면 그
+ *   에이전트를 프로세스 전체가 나눠 쓴다. 그러면 영상 요청 하나가 끊길 때 같은 인스턴스의 다른
+ *   내려받기도 모두 끊긴다. 라이브러리도 Cloud Functions에서는 같은 방법으로 끈다. Node 기본
+ *   에이전트도 연결을 다시 쓰고, 끊긴 요청의 소켓만 닫는다.
+ * - `read`는 본문을 처음 읽을 때 내려받기를 연다. HEAD 응답이나 `stat` 중에 떠난 요청처럼
+ *   아무도 읽지 않고 버리는 본문이 내려받기를 열어 두면 취소되지 않고 소켓과 버퍼를 붙잡는다.
+ */
 export function createGcsMediaStore(bucketName: string): MediaStore {
-  const bucket = new Storage().bucket(bucketName);
+  const bucket = new Storage({
+    interceptors_: [
+      {
+        request: (reqOpts: { uri: string }) => ({ ...reqOpts, forever: false }),
+      },
+    ],
+  }).bucket(bucketName);
   return {
     async stat(key) {
       try {
@@ -78,12 +115,15 @@ export function createGcsMediaStore(bucketName: string): MediaStore {
         key,
         object.version ? { generation: Number(object.version) } : {},
       );
-      return Readable.toWeb(
-        file.createReadStream({
-          validation: false,
-          ...(range ? { start: range.start, end: range.end } : {}),
-        }),
-      ) as ReadableStream<Uint8Array>;
+      return openOnFirstRead(
+        () =>
+          Readable.toWeb(
+            file.createReadStream({
+              validation: false,
+              ...(range ? { start: range.start, end: range.end } : {}),
+            }),
+          ) as ReadableStream<Uint8Array>,
+      );
     },
   };
 }

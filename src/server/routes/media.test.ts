@@ -22,6 +22,20 @@ beforeAll(() => {
 const requestRange = async (range: string, key = KEY): Promise<Response> =>
   app.request(`/api/media/${key}`, { headers: { range } }, env);
 
+function countingStore(): { store: MediaStore; reads: () => number } {
+  let reads = 0;
+  return {
+    store: {
+      stat: env.MEDIA.stat,
+      read: (key, object, range) => {
+        reads += 1;
+        return env.MEDIA.read(key, object, range);
+      },
+    },
+    reads: () => reads,
+  };
+}
+
 describe("GET /api/media/*", () => {
   it("전체 응답(200)에 불변 캐시 헤더를 붙인다", async () => {
     const res = await app.request(`/api/media/${KEY}`, {}, env);
@@ -184,5 +198,40 @@ describe("GET /api/media/*", () => {
 
     expect(res.status).toBe(416);
     expect(res.headers.get("content-range")).toBe("bytes */0");
+  });
+});
+
+describe("HEAD /api/media/*", () => {
+  it("GET과 같은 헤더로 답하고 저장소 본문을 열지 않는다", async () => {
+    const { store, reads } = countingStore();
+
+    const res = await app.request(
+      `/api/media/${KEY}`,
+      { method: "HEAD" },
+      { ...env, MEDIA: store },
+    );
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get("etag")).toBe((await env.MEDIA.stat(KEY))?.etag);
+    expect(res.headers.get("accept-ranges")).toBe("bytes");
+    expect(res.headers.get("content-type")).toBe("video/mp4");
+    expect(res.headers.get("content-length")).toBe(String(BODY.length));
+    expect(res.headers.get("cache-control")).toBe(IMMUTABLE);
+    expect(reads()).toBe(0);
+  });
+
+  it("Range가 붙어도 206 헤더만 답하고 저장소 본문을 열지 않는다", async () => {
+    const { store, reads } = countingStore();
+
+    const res = await app.request(
+      `/api/media/${KEY}`,
+      { method: "HEAD", headers: { range: "bytes=0-3" } },
+      { ...env, MEDIA: store },
+    );
+
+    expect(res.status).toBe(206);
+    expect(res.headers.get("content-range")).toBe(`bytes 0-3/${BODY.length}`);
+    expect(res.headers.get("content-length")).toBe("4");
+    expect(reads()).toBe(0);
   });
 });

@@ -1,10 +1,28 @@
 import { describe, it, expect } from "vitest";
 import * as fs from "node:fs";
 import * as path from "node:path";
+import loadCustomRoutes from "next/dist/lib/load-custom-routes";
+import { configSchema } from "next/dist/server/config-schema";
+import { buildCustomRoute } from "next/dist/server/lib/router-utils/filesystem";
+import nextConfig from "../next.config";
 
 const rootDir = path.resolve(__dirname, "..");
 const read = (file: string) =>
   fs.readFileSync(path.join(rootDir, file), "utf-8");
+
+async function responseHeadersFor(
+  pathname: string,
+): Promise<Record<string, string>> {
+  const { headers: rules } = await loadCustomRoutes(nextConfig);
+  const headers: Record<string, string> = {};
+  for (const rule of rules) {
+    if (!buildCustomRoute("header", rule).match(pathname)) continue;
+    for (const { key, value } of rule.headers) {
+      headers[key.toLowerCase()] = value;
+    }
+  }
+  return headers;
+}
 
 describe("Next.js·Cloud Run 프로젝트 설정", () => {
   it("package.json이 필수 의존성·스크립트와 레이어 import 별칭을 갖는다", () => {
@@ -55,6 +73,18 @@ describe("Next.js·Cloud Run 프로젝트 설정", () => {
     );
   });
 
+  it("주소마다 렌더한 화면 캐시를 파일로 쓰지 않는다 (Cloud Run 파일 시스템은 메모리다)", () => {
+    expect(nextConfig.experimental?.isrFlushToDisk).toBe(false);
+  });
+
+  it("쓰지 않는 이미지 최적화 경로(/_next/image)를 닫는다", () => {
+    expect(nextConfig.images?.unoptimized).toBe(true);
+  });
+
+  it("Next.js가 아는 옵션만 쓴다 (모르는 옵션은 빌드가 경고만 하고 무시한다)", () => {
+    expect(configSchema.safeParse(nextConfig).error?.issues ?? []).toEqual([]);
+  });
+
   it("Dockerfile이 standalone 서버와 정적 파일을 담아 8080에서 띄운다", () => {
     const dockerfile = read("Dockerfile");
     expect(dockerfile).toContain("pnpm install --frozen-lockfile");
@@ -65,6 +95,48 @@ describe("Next.js·Cloud Run 프로젝트 설정", () => {
     expect(dockerfile).toMatch(/PORT=8080/);
     expect(dockerfile).toContain('CMD ["server.js"]');
     expect(read(".dockerignore")).toMatch(/^\.data$/m);
+  });
+});
+
+describe("응답 보안 헤더", () => {
+  const CSP = "frame-ancestors 'none'; base-uri 'self'; object-src 'none'";
+
+  it("X-Powered-By를 보내지 않는다", () => {
+    expect(nextConfig.poweredByHeader).toBe(false);
+  });
+
+  it.each([
+    "/",
+    "/presentations",
+    "/editor/abc_DEF-123",
+    "/present/abc/fullscreen",
+    "/api/presentations",
+    "/api/media/loops/a.mp4",
+    "/sw.js",
+    "/_next/static/chunks/main.js",
+  ])("%s 응답에 보안 헤더를 붙인다", async (pathname) => {
+    expect(await responseHeadersFor(pathname)).toMatchObject({
+      "x-content-type-options": "nosniff",
+      "referrer-policy": "strict-origin-when-cross-origin",
+      "x-frame-options": "DENY",
+      "content-security-policy": CSP,
+      "strict-transport-security": "max-age=31536000",
+    });
+  });
+
+  it("공유 링크 화면은 Referer로 링크 토큰을 내보내지 않는다", async () => {
+    expect(await responseHeadersFor("/s/abc_DEF-123")).toMatchObject({
+      "referrer-policy": "no-referrer",
+      "x-content-type-options": "nosniff",
+      "x-frame-options": "DENY",
+      "content-security-policy": CSP,
+    });
+  });
+
+  it("보안 헤더가 /sw.js의 재검증 헤더를 덮지 않는다", async () => {
+    expect((await responseHeadersFor("/sw.js"))["cache-control"]).toBe(
+      "no-cache, no-store, must-revalidate",
+    );
   });
 });
 
