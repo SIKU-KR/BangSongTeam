@@ -25,12 +25,11 @@ export const COMMON_COPY = {
 
 export const ERROR_COPY = {
   offline: "오프라인이라 서버에 연결할 수 없어요",
+  timeout: "서버 응답이 늦어요. 잠시 후 다시 시도해 주세요",
   sessionExpired: "로그인이 만료됐어요. 다시 로그인해 주세요",
   requestFailed: API_ERRORS.requestFailed,
   serverUnreachable: "서버에 연결할 수 없어요",
   sessionExpiredShort: "로그인이 만료됐어요",
-  serverRejected: (status: number) =>
-    `서버가 요청을 처리하지 못했어요 (${status})`,
   documentInvalid:
     "서버가 받을 수 없는 내용이 있어요. 새로고침해도 그대로면 문의해 주세요",
   indexedDbUnavailable: "이 브라우저에는 작업을 저장할 수 없어요",
@@ -41,7 +40,8 @@ export const ERROR_COPY = {
       "다른 탭에 열린 이전 버전 때문에 저장할 수 없어요. 다른 탭을 모두 닫고 새로고침해 주세요.",
     outdated:
       "다른 탭에서 새 버전을 열었어요. 새로고침하면 다시 저장할 수 있어요.",
-    quota: "저장 공간이 가득 찼어요. 휴지통을 비우면 다시 저장할 수 있어요.",
+    quota:
+      "기기 저장 공간이 가득 찼어요. 저장한 배경 영상을 지우거나 기기 저장 공간을 비우면 다시 저장할 수 있어요.",
     unknown: "이 브라우저에 저장하지 못했어요. 작업이 사라질 수 있어요.",
   },
 } as const;

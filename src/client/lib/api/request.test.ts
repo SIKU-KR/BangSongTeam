@@ -280,9 +280,20 @@ describe("request", () => {
   });
 
   describe("describeApiError", () => {
-    it("OfflineError와 TimeoutError 모두 오프라인 안내 문구를 반환한다", () => {
+    it("OfflineError는 오프라인 안내 문구를 반환한다", () => {
       expect(describeApiError(new OfflineError())).toBe(ERROR_COPY.offline);
-      expect(describeApiError(new TimeoutError())).toBe(ERROR_COPY.offline);
+    });
+
+    it("TimeoutError는 오프라인이라고 하지 않고 서버 응답이 늦다고 안내한다", () => {
+      expect(describeApiError(new TimeoutError())).toBe(ERROR_COPY.timeout);
+      expect(ERROR_COPY.timeout).not.toBe(ERROR_COPY.offline);
+    });
+
+    it("서버가 문장 없이 거절하면 상태 코드 대신 다시 시도하라는 안내를 반환한다", () => {
+      const message = describeApiError(new ServerRejectedError(503));
+
+      expect(message).toBe(ERROR_COPY.requestFailed);
+      expect(message).not.toMatch(/\(\d{3}\)/);
     });
 
     it("SessionExpiredError는 세션 만료 문구를 반환한다", () => {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { API_ERRORS } from "#shared";
-import { AUTH_COPY } from "./auth";
+import { AUTH_COPY, LEGAL_COPY } from "./auth";
 import { BACKGROUND_COPY } from "./backgrounds";
 import { COMMON_COPY, ERROR_COPY } from "./common";
 import { DRIVE_COPY } from "./drive";
@@ -14,6 +14,7 @@ import { SHELL_COPY } from "./shell";
 const COPY_MODULES = {
   API_ERRORS,
   AUTH_COPY,
+  LEGAL_COPY,
   BACKGROUND_COPY,
   COMMON_COPY,
   ERROR_COPY,
@@ -27,7 +28,7 @@ const COPY_MODULES = {
   SHELL_COPY,
 };
 
-const FORMAL_ENDING = /(습니다|십시오|하세요|하시겠습니까)[.?!]?$/;
+const FORMAL_ENDING = /(니다|니까|십시오|하세요)[.?!]?$/;
 
 const collectSentences = (value: unknown): string[] => {
   if (typeof value === "string") {
@@ -47,6 +48,24 @@ const collectSentences = (value: unknown): string[] => {
 };
 
 describe("UI 문구 문체", () => {
+  it.each([
+    "저장합니다.",
+    "모바일 사이드바입니다.",
+    "삭제됩니다.",
+    "삭제하시겠습니까?",
+  ])("합니다체 '%s'를 잡는다", (sentence) => {
+    expect(FORMAL_ENDING.test(sentence)).toBe(true);
+  });
+
+  it.each([
+    "저장했어요.",
+    "모바일 사이드바예요.",
+    "삭제할까요?",
+    "다시 시도해 주세요",
+  ])("해요체 '%s'는 잡지 않는다", (sentence) => {
+    expect(FORMAL_ENDING.test(sentence)).toBe(false);
+  });
+
   it.each(Object.entries(COPY_MODULES))("%s는 해요체로 쓴다", (_, copy) => {
     const formal = collectSentences(copy).filter((sentence) =>
       FORMAL_ENDING.test(sentence),

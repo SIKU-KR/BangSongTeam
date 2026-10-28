@@ -50,3 +50,15 @@ export type BackgroundListResponse = z.infer<
 export const BackgroundListEnvelopeSchema = BackgroundListResponseSchema.extend(
   { backgrounds: z.array(z.unknown()) },
 );
+
+/**
+ * 탭이 배경 영상 캐시에서 지운 파일의 경로를 같은 브라우저의 다른 탭에 알리는 메시지(BroadcastChannel
+ * `chiton:media-cache`). 받는 탭은 그 경로를 '담긴 것을 확인함' 기록에서 지우고 다시 확인할 뿐 다른
+ * 내용은 믿지 않는다. 다른 배포판의 탭이 보낸 값일 수 있어 이 스키마로 걸러 맞지 않으면 버리므로,
+ * 모양을 바꾸면 `v`를 올린다.
+ */
+export const MediaCacheChangeSchema = z.object({
+  v: z.literal(1),
+  deleted: z.array(MediaUrlSchema),
+});
+export type MediaCacheChange = z.infer<typeof MediaCacheChangeSchema>;

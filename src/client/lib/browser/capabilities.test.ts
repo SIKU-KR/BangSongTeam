@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import {
+  canMixColors,
   canStoreMediaOffline,
   getMissingCapabilities,
   getMissingPresentationCapabilities,
@@ -150,5 +151,44 @@ describe("browser capabilities", () => {
     stubServiceWorker(true);
 
     expect(canStoreMediaOffline()).toBe(true);
+  });
+});
+
+describe("canMixColors", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  it("CSS color-mix()를 Tailwind와 같은 조건으로 확인한다", () => {
+    const supports = vi.spyOn(CSS, "supports").mockReturnValue(false);
+
+    expect(canMixColors()).toBe(false);
+    expect(supports).toHaveBeenCalledWith(
+      "color",
+      "color-mix(in lab, red, red)",
+    );
+  });
+
+  it("color-mix()를 지원하면 색을 섞을 수 있다", () => {
+    vi.spyOn(CSS, "supports").mockReturnValue(true);
+
+    expect(canMixColors()).toBe(true);
+  });
+
+  it.each([
+    ["CSS 객체가 없으면", undefined],
+    [
+      "확인이 던지면",
+      {
+        supports: () => {
+          throw new Error("boom");
+        },
+      },
+    ],
+  ])("%s 확인할 수 없으니 안내하지 않도록 섞을 수 있다고 본다", (_, css) => {
+    vi.stubGlobal("CSS", css);
+
+    expect(canMixColors()).toBe(true);
   });
 });

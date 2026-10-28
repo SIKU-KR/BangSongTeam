@@ -1,4 +1,4 @@
-type OptionalNavigatorApi = "clipboard" | "serviceWorker" | "storage";
+type OptionalNavigatorApi = "clipboard" | "locks" | "serviceWorker" | "storage";
 
 /**
  * 브라우저에 따라 없을 수 있는 navigator API.

@@ -6,7 +6,7 @@
  *   유니코드 서브셋 수백 개가 모두 빌드 산출물에 있기 때문이다. 번들 글꼴과 눈누 카탈로그의
  *   CDN 글꼴 모두 아래 runtimeCaching으로 실제 쓰인 것만 담고, 세트를 열면 백그라운드 캐시가
  *   가사에 쓰인 글꼴을 불러 캐시를 데운다.
- * - 화면 이동은 언제나 프리캐시한 셸로 답한다(`public/sw-shell.js`). 서버는 어느 화면이든
+ * - 화면 이동은 언제나 프리캐시한 셸로 답한다(`public/sw-shell-<빌드 id>.js`). 서버는 어느 화면이든
  *   로딩 화면만 그리므로 셸이 서버 응답과 같고, 네트워크가 끊긴 상태에서 `/present/...`를
  *   새로고침해도 앱이 뜬다. 동적 경로 셸은 `OFFLINE_SHELL_PARAM` 자리를 실제 값으로 바꾼다.
  * - 앱 안 이동(`router.push`)이 서버에 묻는 RSC 응답도 화면별로 미리 렌더한 `.rsc`를
@@ -28,6 +28,7 @@ import { createHash } from "node:crypto";
 import {
   copyFileSync,
   mkdirSync,
+  readdirSync,
   readFileSync,
   rmSync,
   writeFileSync,
@@ -53,7 +54,7 @@ const ROOT_DIR = path.resolve(
 );
 const NEXT_DIR = path.join(ROOT_DIR, ".next");
 const PUBLIC_DIR = path.join(ROOT_DIR, "public");
-const SHELL_SCRIPT = "sw-shell.js";
+const SHELL_SCRIPT_FILE = /^sw-shell(-[A-Za-z0-9_-]+)?\.js$/;
 
 /** 셸로 답하지 않는 Next.js 내부 페이지 */
 const INTERNAL_ROUTES = new Set(["/_not-found", "/_global-error"]);
@@ -71,6 +72,12 @@ export const OFFLINE_RSC_PREFIX = "/offline-rsc";
  * 것이 없다.
  */
 export const RSC_NETWORK_TIMEOUT_MS = 3000;
+
+/**
+ * 다른 빌드의 셸이 프리캐시에 담겼을 때 서버에서 셸을 다시 받는 응답을 기다리는 최대 시간.
+ * 넘기면 담겨 있던 셸로 답한다. 화면 이동이 응답 없는 서버를 끝없이 기다리지 않게 한다.
+ */
+export const SHELL_REFRESH_TIMEOUT_MS = 3000;
 
 /**
  * 미리 렌더한 HTML 셸 목록. 동적 경로는 `OFFLINE_SHELL_PARAM`으로 한 장씩 렌더돼 있다.
@@ -125,10 +132,22 @@ export function matchShell(pathname, shells, placeholder) {
 }
 
 /**
- * 화면 이동 요청을 프리캐시한 셸로 답하는 fetch 핸들러(`public/sw-shell.js`)의 소스.
+ * 화면 이동 요청을 프리캐시한 셸로 답하는 fetch 핸들러(`public/sw-shell-<빌드 id>.js`)의 소스.
  * generateSW가 만드는 Workbox 라우트보다 먼저 등록되도록 `importScripts`로 붙는다.
  *
  * - 주소창 이동(`navigate`)은 언제나 셸 HTML로 답한다.
+ * - 셸 HTML이 이 서비스 워커와 같은 빌드(`buildId`, Next.js가 HTML의 RSC 데이터에 싣는 빌드
+ *   id)인지 확인한다. 배포 중에는 요청이 옛 리비전과 새 리비전에 섞여 가서, 설치가 새 셸 자리에
+ *   옛 리비전의 셸을 담을 수 있다. Workbox는 이미 담긴 자리를 다시 받지 않으므로 그대로 두면
+ *   다음 배포까지 지워진 옛 청크를 부르는 셸로 답해 앱이 로딩 화면에서 멈춘다. 다른 빌드면
+ *   서버에서 셸을 다시 받아 답하고, 같은 빌드를 받았을 때만 프리캐시 자리를 고친다. 서버에
+ *   닿지 못하거나 `SHELL_REFRESH_TIMEOUT_MS` 안에 답이 없으면 담겨 있던 셸로 답해 오프라인에서도
+ *   앱이 뜨게 한다. 늦게 온 답도 같은 빌드면 담는다.
+ * - 주소창 이동에 답하면서 다른 화면의 셸 HTML과 셸 RSC도 모두 같은 빌드인지 확인해, 다른 빌드로
+ *   담긴 것을 같은 방법으로 고친다. 송출 화면은 보통 앱 안 이동(RSC)으로 열려 그 셸 HTML을
+ *   주소창으로 열 일이 드물고, 셸 RSC는 서버에 닿지 못할 때만 쓰여 그때는 고칠 수 없다. 다른
+ *   빌드의 셸 RSC로 답하면 Next.js가 브라우저 이동으로 넘어가 송출의 전체화면이 풀린다. 서비스
+ *   워커가 뜰 때마다 한 번 확인하고, 고치지 못한 것이 남으면 다음 주소창 이동에서 다시 확인한다.
  * - 앱 안 이동(`router.push`)의 RSC 요청은 서버에 먼저 묻고, 닿지 못하거나 RSC가 아닌
  *   응답(프록시·서버 오류 페이지)이 오거나 `RSC_NETWORK_TIMEOUT_MS` 안에 답이 없으면 셸
  *   RSC로 답한다. Next.js는 RSC 요청이 실패하면 브라우저 이동(전체 새로고침)으로 넘어가는데,
@@ -137,7 +156,8 @@ export function matchShell(pathname, shells, placeholder) {
  * - 미리 받기(prefetch) 요청은 응답 형식이 달라 답하지 않는다. 실패해도 Next.js가 이동할 때
  *   위의 RSC 요청을 다시 보낸다.
  */
-export function shellWorkerSource(shells, placeholder) {
+export function shellWorkerSource(shells, placeholder, buildId) {
+  if (!buildId) throw new Error("셸을 확인할 빌드 id가 없습니다");
   const shellRscPaths = Object.fromEntries(
     shells.map(({ route, rsc }) => [route, OFFLINE_RSC_PREFIX + rsc]),
   );
@@ -145,13 +165,22 @@ export function shellWorkerSource(shells, placeholder) {
 const SHELLS = ${JSON.stringify(shells.map(({ route, segments }) => ({ route, segments })))};
 const SHELL_RSC_PATHS = ${JSON.stringify(shellRscPaths)};
 const PLACEHOLDER = ${JSON.stringify(placeholder)};
+const BUILD_ID = ${JSON.stringify(buildId)};
 const PRECACHE = "workbox-precache-v2-" + self.registration.scope;
 const RSC_CONTENT_TYPE = "text/x-component";
 const RSC_NETWORK_TIMEOUT_MS = ${RSC_NETWORK_TIMEOUT_MS};
+const SHELL_REFRESH_TIMEOUT_MS = ${SHELL_REFRESH_TIMEOUT_MS};
 const matchShell = ${matchShell.toString()};
 
+const refreshing = new Map();
+let shellsChecked = null;
+
+function absolute(pathname) {
+  return new URL(pathname, self.location.origin).href;
+}
+
 function precached(pathname) {
-  return caches.match(new URL(pathname, self.location.origin).href, {
+  return caches.match(absolute(pathname), {
     cacheName: PRECACHE,
     ignoreSearch: true,
   });
@@ -161,14 +190,79 @@ function fillPlaceholder(text, shell) {
   return shell.value === null ? text : text.split(PLACEHOLDER).join(shell.value);
 }
 
+function shellResponse(body, sourceHeaders) {
+  const headers = new Headers(sourceHeaders);
+  headers.delete("content-length");
+  return new Response(body, { status: 200, headers });
+}
+
+async function storeShell(pathname, fresh) {
+  const cache = await caches.open(PRECACHE);
+  const [key] = await cache.keys(absolute(pathname), { ignoreSearch: true });
+  if (key) await cache.put(key, shellResponse(fresh.body, fresh.headers));
+}
+
+function refreshShell(pathname) {
+  let task = refreshing.get(pathname);
+  if (!task) {
+    task = fetch(absolute(pathname), { cache: "reload" })
+      .then(async (response) => {
+        if (!response.ok) return null;
+        const fresh = { body: await response.text(), headers: response.headers };
+        if (fresh.body.includes(BUILD_ID)) {
+          await storeShell(pathname, fresh).catch(() => undefined);
+        }
+        return fresh;
+      })
+      .catch(() => null)
+      .finally(() => refreshing.delete(pathname));
+    refreshing.set(pathname, task);
+  }
+  return task;
+}
+
+function withinRefreshTimeout(task) {
+  let timer;
+  const timedOut = new Promise((resolve) => {
+    timer = setTimeout(() => resolve(null), SHELL_REFRESH_TIMEOUT_MS);
+  });
+  return Promise.race([task, timedOut]).finally(() => clearTimeout(timer));
+}
+
+async function isCurrent(pathname) {
+  const cached = await precached(pathname);
+  if (!cached) return true;
+  if ((await cached.text()).includes(BUILD_ID)) return true;
+  const fresh = await refreshShell(pathname);
+  return fresh !== null && fresh.body.includes(BUILD_ID);
+}
+
+function checkShells() {
+  const paths = [...SHELLS.map((shell) => shell.route), ...Object.values(SHELL_RSC_PATHS)];
+  shellsChecked ??= Promise.all(paths.map(isCurrent)).then(
+    (results) => {
+      if (results.includes(false)) shellsChecked = null;
+    },
+    () => {
+      shellsChecked = null;
+    },
+  );
+  return shellsChecked;
+}
+
 async function serveShell(request, shell) {
   const cached = await precached(shell.route);
   if (!cached) return fetch(request);
-  if (shell.value === null) return cached;
-  const html = fillPlaceholder(await cached.text(), shell);
-  const headers = new Headers(cached.headers);
-  headers.delete("content-length");
-  return new Response(html, { status: 200, headers });
+  let body = await cached.text();
+  let headers = cached.headers;
+  if (!body.includes(BUILD_ID)) {
+    const fresh = await withinRefreshTimeout(refreshShell(shell.route));
+    if (fresh) {
+      body = fresh.body;
+      headers = fresh.headers;
+    }
+  }
+  return shellResponse(fillPlaceholder(body, shell), headers);
 }
 
 async function shellRsc(shell) {
@@ -216,9 +310,57 @@ self.addEventListener("fetch", (event) => {
   if (url.origin !== self.location.origin || url.pathname.startsWith("/api/")) return;
   const shell = matchShell(url.pathname, SHELLS, PLACEHOLDER);
   if (!shell) return;
-  event.respondWith(isNavigation ? serveShell(request, shell) : serveRsc(request, shell));
+  if (!isNavigation) {
+    event.respondWith(serveRsc(request, shell));
+    return;
+  }
+  event.respondWith(serveShell(request, shell));
+  event.waitUntil(checkShells());
 });
 `;
+}
+
+/**
+ * 셸 핸들러(`shellWorkerSource`) 파일 이름. 빌드 id를 넣어 빌드마다 다른 주소로 둔다.
+ *
+ * 핸들러는 자기 빌드 id로 프리캐시한 셸을 가려내므로, 그 빌드의 `sw.js`(프리캐시 목록)와 짝이
+ * 맞아야 한다. 이름이 늘 같으면 배포 중 갱신 확인 한 번이 두 리비전에 나뉘어 한 빌드의 `sw.js`와
+ * 다른 빌드의 핸들러를 받을 수 있고, 브라우저는 가져온 스크립트만 바뀌어도 새 버전으로 설치한다.
+ * 그러면 핸들러가 옛 프리캐시 자리에 새 빌드의 셸을 담아 오프라인에서 청크를 찾지 못하거나, 담긴
+ * 셸을 모두 다른 빌드로 보아 화면을 옮길 때마다 서버에 다시 묻는다. 이름에 빌드 id가 있으면 다른
+ * 리비전에는 그 파일이 없어 404로 답하고, 브라우저는 그 설치나 비교를 버리고 다음 확인에서 다시
+ * 받는다. 빌드 id가 주소에 그대로 쓸 수 없는 값이면 빌드를 멈춘다.
+ */
+export function shellScriptName(buildId) {
+  if (!/^[A-Za-z0-9_-]+$/.test(buildId)) {
+    throw new Error(`셸 핸들러 이름에 쓸 수 없는 빌드 id입니다: ${buildId}`);
+  }
+  return `sw-shell-${buildId}.js`;
+}
+
+/**
+ * 미리 렌더한 셸 HTML과 셸 RSC가 모두 이 빌드의 id를 싣는지 확인하고, 하나라도 없으면 그 파일을
+ * 알리며 빌드를 멈춘다. `readShellFile`은 `.next/server/app` 안의 파일 이름으로 내용을 읽는다.
+ *
+ * 서비스 워커는 이 id로 배포 중 섞여 담긴 셸을 가려낸다(`shellWorkerSource`). Next.js가 셸에 id를
+ * 싣지 않게 바뀌면 모든 셸을 다른 빌드로 보아 주소창 이동마다 서버에 다시 묻고 답을 담지 않는다.
+ * 그러면 오프라인 우선 이동과 도메인 프록시 요청 절약이 소리 없이 깨지고 시험도 잡지 못한다.
+ */
+export function assertShellsCarryBuildId(shells, buildId, readShellFile) {
+  for (const shell of shells) {
+    for (const file of [shell.file, shell.rsc]) {
+      if (!readShellFile(file)?.includes(buildId)) {
+        throw new Error(`셸에 빌드 id(${buildId})가 없습니다: ${file}`);
+      }
+    }
+  }
+}
+
+function writeShellScript(name, source) {
+  for (const file of readdirSync(PUBLIC_DIR)) {
+    if (SHELL_SCRIPT_FILE.test(file)) rmSync(path.join(PUBLIC_DIR, file));
+  }
+  writeFileSync(path.join(PUBLIC_DIR, name), source);
 }
 
 function copyShellRscFiles(shells) {
@@ -240,8 +382,13 @@ async function main() {
     readFileSync(path.join(NEXT_DIR, "prerender-manifest.json"), "utf-8"),
   );
   const shells = collectShells(manifest.routes, OFFLINE_SHELL_PARAM);
-  const shellScript = shellWorkerSource(shells, OFFLINE_SHELL_PARAM);
-  writeFileSync(path.join(PUBLIC_DIR, SHELL_SCRIPT), shellScript);
+  const buildId = readFileSync(path.join(NEXT_DIR, "BUILD_ID"), "utf-8").trim();
+  assertShellsCarryBuildId(shells, buildId, (file) =>
+    readFileSync(path.join(NEXT_DIR, "server/app", file), "utf-8"),
+  );
+  const shellScript = shellScriptName(buildId);
+  const shellSource = shellWorkerSource(shells, OFFLINE_SHELL_PARAM, buildId);
+  writeShellScript(shellScript, shellSource);
   copyShellRscFiles(shells);
 
   const { count, size, warnings } = await generateSW({
@@ -266,7 +413,7 @@ async function main() {
         ),
       },
     ],
-    importScripts: [`/${SHELL_SCRIPT}`],
+    importScripts: [`/${shellScript}`],
     maximumFileSizeToCacheInBytes: 6 * 1024 * 1024,
     cleanupOutdatedCaches: true,
     clientsClaim: true,

@@ -45,6 +45,15 @@ describe("persistenceStatus", () => {
     expect(getPersistenceError()?.kind).toBe("unavailable");
   });
 
+  it("저장 공간이 가득 차면 거의 비지 않는 휴지통 대신 배경 영상과 기기 저장 공간을 비우라고 안내한다", () => {
+    reportPersistenceError(quotaError(), "presentation");
+
+    const error = getPersistenceError();
+    expect(error?.kind).toBe("quota");
+    expect(error?.message).not.toMatch(/휴지통/);
+    expect(error?.message).toMatch(/배경 영상/);
+  });
+
   describe("저장소마다 따로 두는 실패", () => {
     it("곡 보관함이 다시 저장해도 프레젠테이션이 저장하지 못한 경고는 남긴다", () => {
       reportPersistenceError(quotaError(), "presentation");

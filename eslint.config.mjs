@@ -227,7 +227,7 @@ export default tseslint.config(
       ".open-next/**",
       "next-env.d.ts",
       "public/sw.js",
-      "public/sw-shell.js",
+      "public/sw-shell*.js",
       "public/workbox-*.js",
       ".claude/**",
       "**/coverage/**",

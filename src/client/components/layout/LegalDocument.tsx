@@ -11,6 +11,7 @@ export function LegalDocument({
   children,
 }: {
   title: string;
+  /** 시행일 (`YYYY-MM-DD`) */
   effectiveDate: string;
   children: React.ReactNode;
 }): React.JSX.Element {

@@ -197,7 +197,7 @@ function Sidebar({
         >
           <SheetHeader className="sr-only">
             <SheetTitle>사이드바</SheetTitle>
-            <SheetDescription>모바일 사이드바입니다.</SheetDescription>
+            <SheetDescription>모바일 사이드바예요.</SheetDescription>
           </SheetHeader>
           <div className="flex h-full w-full flex-col">{children}</div>
         </SheetContent>
