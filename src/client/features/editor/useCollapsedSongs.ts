@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 
-interface CollapsedSongs {
+/** 접힌 곡 구역과 그것을 바꾸는 동작 */
+export interface CollapsedSongs {
   collapsedIds: ReadonlySet<string>;
   toggle: (itemId: string) => void;
   collapseAll: (itemIds: readonly string[]) => void;
@@ -10,6 +11,9 @@ interface CollapsedSongs {
 
 /**
  * 썸네일 창에서 접힌 곡 구역. 현재 곡이 바뀌면 그 곡이 접혀 있을 때 저절로 펼친다.
+ *
+ * 창이 사라졌다 다시 그려져도 접어 둔 구역이 남도록, 창을 그리는 쪽이 아니라 창을 담는 부모가
+ * 쓴다. 폰 폭의 시트는 닫히면 창이 통째로 사라진다.
  *
  * 다른 곡 머리글을 누르면 그 곡을 고르면서 동시에 접기를 토글하므로, 펼쳐져 있던 곡은
  * 접히자마자 현재 곡이 되어 자동 펼치기에 다시 펼쳐진다. `keepCollapsedOnActivate`로

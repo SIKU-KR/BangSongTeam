@@ -57,6 +57,14 @@ function withEditedLine(
   });
 }
 
+const NO_COLLAPSED_SONGS: SlideThumbnailPaneProps["collapsedSongs"] = {
+  collapsedIds: new Set(),
+  toggle: vi.fn(),
+  collapseAll: vi.fn(),
+  expandAll: vi.fn(),
+  keepCollapsedOnActivate: vi.fn(),
+};
+
 function paneProps(items: PresentationItem[]): SlideThumbnailPaneProps {
   return {
     items,
@@ -81,6 +89,7 @@ function paneProps(items: PresentationItem[]): SlideThumbnailPaneProps {
     onEditSongInfo: vi.fn(),
     onDeleteSong: vi.fn(),
     onOpenSongPicker: vi.fn(),
+    collapsedSongs: NO_COLLAPSED_SONGS,
   };
 }
 

@@ -49,6 +49,7 @@ import { StorageWarningBanner } from "../components/common/StorageWarningBanner"
 import { EditorStageCanvas } from "../features/editor/EditorStageCanvas";
 import { SlideThumbnailPane } from "../features/editor/SlideThumbnailPane";
 import { SlideListSheet } from "../features/editor/SlideListSheet";
+import { useCollapsedSongs } from "../features/editor/useCollapsedSongs";
 import { EditorRibbon } from "../features/editor/ribbon/EditorRibbon";
 import { stepFontSize } from "../features/editor/ribbon/ribbonOptions";
 import { StageLyricsEditor } from "../features/editor/StageLyricsEditor";
@@ -383,6 +384,7 @@ function EditorScreen({
   });
 
   const overflowMessages = getOverflowMessages(currentOverflow, safeSlideIndex);
+  const collapsedSongs = useCollapsedSongs(songs[safeSongIndex]?.id);
 
   const slidePane = (
     <SlideThumbnailPane
@@ -410,6 +412,7 @@ function EditorScreen({
       }
       onDeleteSong={handleDeleteSong}
       onOpenSongPicker={() => setSongPickerMode("browse")}
+      collapsedSongs={collapsedSongs}
       readOnly={readOnly}
       variant={isPhone ? "sheet" : "docked"}
       onSlideChosen={isPhone ? () => setIsSlideListOpen(false) : undefined}

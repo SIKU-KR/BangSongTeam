@@ -7,6 +7,7 @@ import {
   SlideThumbnailPane,
   type SlideThumbnailPaneProps,
 } from "./SlideThumbnailPane";
+import { useCollapsedSongs } from "./useCollapsedSongs";
 import { EDITOR_COPY } from "#copy/editor";
 import { COMMON_COPY } from "#copy/common";
 
@@ -34,8 +35,17 @@ function makeItems(slideCounts: number[]): PresentationItem[] {
   );
 }
 
-function renderPane(overrides: Partial<SlideThumbnailPaneProps> = {}) {
-  const props: SlideThumbnailPaneProps = {
+type PaneProps = Omit<SlideThumbnailPaneProps, "collapsedSongs">;
+
+function TestPane(props: PaneProps): React.JSX.Element {
+  const collapsedSongs = useCollapsedSongs(
+    props.items[props.activeSongIndex]?.id,
+  );
+  return <SlideThumbnailPane {...props} collapsedSongs={collapsedSongs} />;
+}
+
+function renderPane(overrides: Partial<PaneProps> = {}) {
+  const props: PaneProps = {
     items: makeItems([3, 1, 2]),
     activeSongIndex: 0,
     activeSlideIndex: 0,
@@ -60,7 +70,7 @@ function renderPane(overrides: Partial<SlideThumbnailPaneProps> = {}) {
     onOpenSongPicker: vi.fn(),
     ...overrides,
   };
-  const utils = render(<SlideThumbnailPane {...props} />);
+  const utils = render(<TestPane {...props} />);
   return { ...utils, props };
 }
 
@@ -138,7 +148,7 @@ describe("SlideThumbnailPane (PPT식 썸네일 창)", () => {
     );
 
     rerender(
-      <SlideThumbnailPane
+      <TestPane
         {...props}
         activeSongIndex={1}
         activeSlideIndex={0}
@@ -190,7 +200,7 @@ describe("SlideThumbnailPane (PPT식 썸네일 창)", () => {
     );
 
     rerender(
-      <SlideThumbnailPane
+      <TestPane
         {...props}
         selectedIds={[]}
         insertion={{ songIndex: 2, index: 1 }}
@@ -356,13 +366,7 @@ describe("SlideThumbnailPane (PPT식 썸네일 창)", () => {
     fireEvent.click(screen.getByTestId("song-section-toggle-2"));
     expect(screen.queryByTestId("slide-thumb-4")).not.toBeInTheDocument();
 
-    rerender(
-      <SlideThumbnailPane
-        {...props}
-        activeSongIndex={2}
-        activeSlideIndex={0}
-      />,
-    );
+    rerender(<TestPane {...props} activeSongIndex={2} activeSlideIndex={0} />);
     expect(screen.getByTestId("slide-thumb-4")).toBeInTheDocument();
   });
 

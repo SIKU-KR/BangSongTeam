@@ -64,7 +64,7 @@ import {
   readPaneTarget,
 } from "./slidePaneTargets";
 import { SlideListCloseButton } from "./SlideListSheet";
-import { useCollapsedSongs } from "./useCollapsedSongs";
+import type { CollapsedSongs } from "./useCollapsedSongs";
 import { useSlidePaneDrag } from "./useSlidePaneDrag";
 import {
   analyzeDeckOverflowCached,
@@ -102,6 +102,8 @@ export interface SlideThumbnailPaneProps {
   onEditSongInfo: (songIndex: number) => void;
   onDeleteSong: (songIndex: number) => void;
   onOpenSongPicker: () => void;
+  /** 접은 곡 구역. 창을 담는 쪽이 쥐어, 시트처럼 창이 사라졌다 다시 그려져도 접어 둔 구역이 남는다 */
+  collapsedSongs: CollapsedSongs;
   /** 보기 권한으로 공유받은 세트. 선택·펼치기만 되고 메뉴·끌기·추가는 없다 */
   readOnly?: boolean;
   /**
@@ -196,6 +198,7 @@ export function SlideThumbnailPane({
   onEditSongInfo,
   onDeleteSong,
   onOpenSongPicker,
+  collapsedSongs,
   readOnly = false,
   variant = "docked",
   onSlideChosen,
@@ -205,8 +208,6 @@ export function SlideThumbnailPane({
   const paneRef = useRef<HTMLDivElement>(null);
   const activeThumbRef = useRef<HTMLDivElement>(null);
 
-  const activeItemId = items[activeSongIndex]?.id;
-  const collapsedSongs = useCollapsedSongs(activeItemId);
   const measureText = useTextWidthMeasurer();
   const songRows: {
     item: PresentationItem;

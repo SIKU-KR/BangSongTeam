@@ -1945,6 +1945,61 @@ describe("EditorRoute (PowerPoint식 프레젠테이션 편집기)", () => {
       expect(listDialog()).toBeInTheDocument();
     });
 
+    it("시트를 닫았다 다시 열어도 접어 둔 곡 구역이 그대로다", async () => {
+      renderEditor();
+      fireEvent.click(screen.getByTestId("open-slide-list-btn"));
+      const first = await screen.findByRole("dialog", {
+        name: EDITOR_COPY.thumbnails.list,
+      });
+      fireEvent.click(within(first).getByTestId("song-section-toggle-1"));
+      expect(within(first).queryByTestId("slide-thumb-5")).toBeNull();
+      fireEvent.click(
+        within(first).getByRole("button", { name: COMMON_COPY.close }),
+      );
+      await waitFor(() => expect(queryListDialog()).not.toBeInTheDocument());
+
+      fireEvent.click(screen.getByTestId("open-slide-list-btn"));
+      const reopened = await screen.findByRole("dialog", {
+        name: EDITOR_COPY.thumbnails.list,
+      });
+
+      expect(
+        within(reopened).getByTestId("song-section-toggle-1"),
+      ).toHaveAttribute("aria-expanded", "false");
+      expect(within(reopened).queryByTestId("slide-thumb-5")).toBeNull();
+      expect(within(reopened).getByTestId("slide-thumb-0")).toBeInTheDocument();
+    });
+
+    it("시트를 닫아 둔 채 접어 둔 곡으로 옮겨 가면 그 구역을 펼친다", async () => {
+      renderEditor();
+      fireEvent.click(screen.getByTestId("open-slide-list-btn"));
+      const first = await screen.findByRole("dialog", {
+        name: EDITOR_COPY.thumbnails.list,
+      });
+      fireEvent.click(within(first).getByTestId("song-section-toggle-1"));
+      fireEvent.click(
+        within(first).getByRole("button", { name: COMMON_COPY.close }),
+      );
+      await waitFor(() => expect(queryListDialog()).not.toBeInTheDocument());
+
+      for (let step = 0; step < 5; step += 1) {
+        fireEvent.click(screen.getByTestId("canvas-next-btn"));
+      }
+      expect(statusBar()).toHaveTextContent("곡 2/5");
+      fireEvent.click(screen.getByTestId("open-slide-list-btn"));
+      const reopened = await screen.findByRole("dialog", {
+        name: EDITOR_COPY.thumbnails.list,
+      });
+
+      expect(
+        within(reopened).getByTestId("song-section-toggle-1"),
+      ).toHaveAttribute("aria-expanded", "true");
+      expect(within(reopened).getByTestId("slide-thumb-5")).toHaveAttribute(
+        "aria-current",
+        "true",
+      );
+    });
+
     it("닫기 버튼과 Esc로 닫는다", async () => {
       renderEditor();
 
