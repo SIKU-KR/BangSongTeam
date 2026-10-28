@@ -1,3 +1,4 @@
+import { useSyncExternalStore } from "react";
 import {
   listPresentations,
   applyServerDocuments,
@@ -84,6 +85,7 @@ import {
 } from "./deckSync";
 import { refreshBackgroundCatalog } from "./backgroundSync";
 import { isProjectionPath } from "../../features/presentation/fullscreen";
+import { getCurrentUserId, revalidateSession } from "../auth/sessionStore";
 
 /**
  * 송출 중 새로고침하면 부팅 경로를 처음부터 다시 탄다. 여기서 서버와 맞추면
@@ -91,6 +93,118 @@ import { isProjectionPath } from "../../features/presentation/fullscreen";
  */
 export function shouldRunBootSync(pathname: string): boolean {
   return !isProjectionPath(pathname);
+}
+
+let deferredBootUserId: string | null = null;
+
+/**
+ * 로컬 하이드레이션을 마친 뒤 부팅 동기화를 시작한다. 송출 화면에서 부팅했으면 돌리지 않고
+ * 지금 사용자로 미뤄 두었다가, 송출을 마치면 `runDeferredBootSync`가 한 번 돌린다.
+ *
+ * 부팅 동기화만 세 큐(폴더·프레젠테이션·곡)를 켠다. 미뤄 둔 부팅을 아무도 돌리지 않으면 송출을
+ * 마친 같은 탭에서 고친 프레젠테이션·곡·폴더가 새로고침할 때까지 서버에 가지 않고, 헤더는 그동안
+ * 초록색 '자동 저장됨'으로 남는다. 다른 계정이 부팅하면 미뤄 둔 앞 계정의 부팅은 버린다.
+ *
+ * 화면이 주소의 항목을 그리기 전에 불러야 한다. 부팅이 시작될 때 세우는 첫 받기 표시
+ * (`useBootPullPending`)를 보고, 아직 받지 않은 프레젠테이션·폴더 주소를 드라이브로 보내지 않는다.
+ */
+export function startBootSync(pathname: string): void {
+  deferredBootUserId = null;
+  if (!shouldRunBootSync(pathname)) {
+    deferredBootUserId = getCurrentUserId();
+    return;
+  }
+  void runBootSync();
+}
+
+/**
+ * 송출 화면을 떠났을 때 부른다. 송출 화면에서 부팅해 미뤄 둔 부팅 동기화가 같은 사용자의
+ * 것이면 지금 한 번 돌린다. 송출 중이거나 미뤄 둔 부팅이 없으면 아무것도 하지 않는다.
+ *
+ * 세션도 보통 부팅처럼 함께 확인한다. 송출 화면의 부팅은 만료된 캐시 세션도 서버에 묻지 않고
+ * 통과시킨다. 확인하지 않으면 받기·올리기가 모두 401로 실패하는데, 401은 세션 상태를 바꾸지
+ * 않아 로그인 화면이 뜨지 않는다. 확인을 기다렸다가 부팅하지 않는 것은 그동안 큐가 꺼져 있어
+ * 지운 곡을 잃기 때문이다.
+ *
+ * 로그아웃된 채 떠났으면 미뤄 둔 부팅을 그대로 둔다. 같은 계정으로 다시 로그인하면 하이드레이션을
+ * 다시 하지 않으므로, 다시 그린 화면이 이 함수를 불러 그때 돌린다.
+ */
+export function runDeferredBootSync(): void {
+  if (deferredBootUserId === null || isProjecting()) return;
+  if (getCurrentUserId() !== deferredBootUserId) return;
+  deferredBootUserId = null;
+  void revalidateSession();
+  void runBootSync();
+}
+
+/** 부팅 동기화가 첫 받기를 마칠 때까지 주소로 연 항목을 기다리는 도메인 */
+export type BootPullDomain = "folder" | "presentation";
+
+/**
+ * 첫 받기를 기다리는 최대 시간. 프레젠테이션 받기는 폴더 받기(최대 30초)와 부팅이 올리는 폴더
+ * (하나에 최대 10초) 뒤에 오므로, 기한이 없으면 느린 회선에서 1분 넘게 기다릴 수 있다.
+ */
+export const BOOT_PULL_WAIT_MS = 10_000;
+
+const pendingBootPulls = new Set<BootPullDomain>();
+const bootPullListeners = new Set<() => void>();
+let bootPullTimer: ReturnType<typeof setTimeout> | null = null;
+
+function notifyBootPull(): void {
+  for (const listener of bootPullListeners) listener();
+}
+
+function subscribeBootPull(listener: () => void): () => void {
+  bootPullListeners.add(listener);
+  return () => {
+    bootPullListeners.delete(listener);
+  };
+}
+
+function clearBootPullTimer(): void {
+  if (bootPullTimer) clearTimeout(bootPullTimer);
+  bootPullTimer = null;
+}
+
+function markBootPullPending(generation: number): void {
+  pendingBootPulls.add("folder");
+  pendingBootPulls.add("presentation");
+  clearBootPullTimer();
+  bootPullTimer = setTimeout(() => {
+    clearBootPull("folder", generation);
+    clearBootPull("presentation", generation);
+  }, BOOT_PULL_WAIT_MS);
+  notifyBootPull();
+}
+
+function clearBootPull(domain: BootPullDomain, generation: number): void {
+  if (generation !== bootGeneration) return;
+  if (!pendingBootPulls.delete(domain)) return;
+  if (pendingBootPulls.size === 0) clearBootPullTimer();
+  notifyBootPull();
+}
+
+/** 지금 부팅 동기화가 그 도메인의 첫 받기를 기다리고 있는지 */
+export function isBootPullPending(domain: BootPullDomain): boolean {
+  return pendingBootPulls.has(domain);
+}
+
+/**
+ * 부팅 동기화가 그 도메인의 첫 받기를 기다리는 동안 true다. 다른 기기에서 만들었거나 저장소를
+ * 비운 기기에서 연 `/editor/:id`·폴더 주소는 첫 받기가 끝나야 항목이 생기므로, 그동안 드라이브로
+ * 보내지 말고 기다리라는 뜻이다.
+ *
+ * 부팅이 시작될 때 두 도메인 모두 세우고, 폴더는 받은 폴더를 메모리에 넣자마자, 프레젠테이션은
+ * 병합하자마자 내린다. 받기가 실패하거나 송출로 멈추거나 `BOOT_PULL_WAIT_MS`가 지나도 내린다.
+ * 내리는 일은 모두 그 부팅의 세대일 때만 한다. 계정 전환 등으로 밀려난 부팅이 늦게 끝나며 새
+ * 부팅의 기다림을 끝내면 안 된다.
+ */
+export function useBootPullPending(domain: BootPullDomain): boolean {
+  return useSyncExternalStore(
+    subscribeBootPull,
+    () => pendingBootPulls.has(domain),
+    () => false,
+  );
 }
 
 /**
@@ -106,6 +220,10 @@ export function shouldRunBootSync(pathname: string): boolean {
  * '오프라인'으로 남아, 연결이 돌아와 저장이 다 끝나도 헤더가 초록색으로 돌아오지 않는다.
  * 송출 화면에 있는 동안에는 다시 받지 않고 송출을 마친 뒤로 미룬다. 송출 중에는
  * API·데이터 요청이 0건이어야 하고, 받은 결과를 병합하면 띄운 문서가 바뀔 수 있다.
+ * 부팅 도중에 송출을 시작해도 같다. 받기마다 그 직전과 받은 직후에 송출 중이면 그 단계를
+ * 받은 결과와 함께 내려놓고, 송출을 마친 뒤 처음부터 다시 받는다. 송출 화면은 지금 띄운
+ * 프레젠테이션의 변경을 따라 그리므로, 그대로 병합하면 송출 중인 화면이 바뀌고 다음 요청이
+ * 나간다. 병합을 마친 단계는 송출 중이어도 올릴 항목을 끝까지 올린다.
  *
  * 항목마다 올리기 직전과 큐에 넘기거나 실패로 남길 때 지금 저장소에 있는 것을 다시 찾아
  * 쓰고, 그사이 지워졌으면 건너뛴다. 부팅 병합 때의 사본을 올리면 앞 항목을 올리는 동안
@@ -131,6 +249,8 @@ export function shouldRunBootSync(pathname: string): boolean {
  */
 export async function runBootSync(): Promise<void> {
   bootGeneration += 1;
+  const generation = bootGeneration;
+  markBootPullPending(generation);
   cancelBootRetry();
   resetSyncStatus();
   setSyncStatus("folder", "syncing");
@@ -146,13 +266,19 @@ export async function runBootSync(): Promise<void> {
   setServerFolderListener(applyServerFolder);
   void refreshBackgroundCatalog();
 
-  await syncDriveAndDecks();
+  try {
+    await syncDriveAndDecks();
+  } finally {
+    clearBootPull("folder", generation);
+    clearBootPull("presentation", generation);
+  }
 }
 
 let bootGeneration = 0;
 
 async function syncDriveAndDecks(): Promise<void> {
   const generation = bootGeneration;
+  if (parkWhileProjecting(syncDriveAndDecks)) return;
   const knownBeforePull = new Set(listPresentations().map((doc) => doc.id));
   let serverDocuments;
   let tombstones: DriveTombstones;
@@ -160,6 +286,7 @@ async function syncDriveAndDecks(): Promise<void> {
   try {
     const folderList = await pullFolders();
     if (generation !== bootGeneration) return;
+    if (parkWhileProjecting(syncDriveAndDecks)) return;
     tombstones = folderList.tombstones;
     const folderStatus = await syncFolders(
       folderList.folders,
@@ -167,10 +294,12 @@ async function syncDriveAndDecks(): Promise<void> {
       generation,
     );
     if (generation !== bootGeneration) return;
+    if (parkWhileProjecting(syncDriveAndDecks)) return;
     settleSyncStatus("folder", folderStatus);
     unsynced = ["presentation", "deck"];
     serverDocuments = await pullPresentations();
     if (generation !== bootGeneration) return;
+    if (parkWhileProjecting(syncDriveAndDecks)) return;
     rememberServerDocuments(serverDocuments);
     retryBackoff.reset();
   } catch (err) {
@@ -190,6 +319,7 @@ async function syncDriveAndDecks(): Promise<void> {
   );
   cancelPushesOfServerWins(documents, needsPush, cancelDocumentPush);
   applyServerDocuments(documents, removedIds);
+  clearBootPull("presentation", generation);
 
   const presentationStatus = await pushLatestEach(
     {
@@ -268,6 +398,16 @@ function isProjecting(): boolean {
   );
 }
 
+function parkWhileProjecting(step: () => Promise<void>): boolean {
+  if (!isProjecting()) return false;
+  retryStep = step;
+  retryWaitsOnServer = false;
+  abandonedStep = null;
+  if (retryTimer) clearTimeout(retryTimer);
+  retryTimer = setTimeout(runRetry, BASE_BACKOFF_MS);
+  return true;
+}
+
 function runRetry(): Promise<void> | null {
   if (retryTimer) clearTimeout(retryTimer);
   retryTimer = null;
@@ -332,10 +472,12 @@ async function syncFolders(
     serverFolders,
   );
   cancelPushesOfServerWins(folders, needsPush, cancelFolderPush);
-  await applyServerFolders(
+  const applied = applyServerFolders(
     folders,
     local.filter((folder) => deletedIds.has(folder.id)).map((f) => f.id),
   );
+  clearBootPull("folder", generation);
+  await applied;
 
   const toPush = new Set(needsPush);
   return pushLatestEach(
@@ -366,10 +508,12 @@ async function pushLibraryDeckAtBoot(deck: Deck): Promise<void> {
 
 async function syncLibraryDecks(): Promise<void> {
   const generation = bootGeneration;
+  if (parkWhileProjecting(syncLibraryDecks)) return;
   let pull;
   try {
     pull = await pullDecks();
     if (generation !== bootGeneration) return;
+    if (parkWhileProjecting(syncLibraryDecks)) return;
     retryBackoff.reset();
   } catch (err) {
     if (generation !== bootGeneration) return;
@@ -467,4 +611,18 @@ async function pushLatestEach<T extends { id: string }>(
 
 export function __resetBootSyncForTests(): void {
   cancelBootRetry();
+  deferredBootUserId = null;
+  pendingBootPulls.clear();
+  clearBootPullTimer();
+  notifyBootPull();
+}
+
+/** 테스트 전용: 첫 받기를 기다리는 도메인을 정한다 (기한 타이머 없이) */
+export function __setBootPullPendingForTests(
+  domains: readonly BootPullDomain[],
+): void {
+  pendingBootPulls.clear();
+  for (const domain of domains) pendingBootPulls.add(domain);
+  clearBootPullTimer();
+  notifyBootPull();
 }

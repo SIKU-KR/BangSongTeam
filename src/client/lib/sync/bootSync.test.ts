@@ -9,6 +9,12 @@ import {
 } from "#shared";
 import { signInAsTestUser } from "../../test/sessionFixture";
 import {
+  __setSessionFetcherForTests,
+  __setSessionForTests,
+  type SessionFetcher,
+} from "../auth/sessionStore";
+import type { SessionUser } from "../auth/sessionCache";
+import {
   deleteUserSong,
   getUserSongs,
   hydrateSongLibrary,
@@ -18,8 +24,12 @@ import {
 } from "../../features/editor/songLibraryStore";
 import {
   __resetBootSyncForTests,
+  BOOT_PULL_WAIT_MS,
+  isBootPullPending,
   retryBootSyncIfNeeded,
+  runDeferredBootSync,
   shouldRunBootSync,
+  startBootSync,
   runBootSync,
 } from "./bootSync";
 import {
@@ -52,6 +62,7 @@ import {
 import {
   loadAllPresentations,
   loadAllSongs,
+  saveFolders,
   savePresentation,
   saveSong,
 } from "../storage";
@@ -75,7 +86,7 @@ import { SEED_USER_ID as TEST_USER_ID } from "../../test/presentationFixture";
 import { OfflineError, ServerRejectedError } from "../api/request";
 import { UnsyncableDocumentError } from "./presentationSync";
 import { ERROR_COPY } from "#copy/common";
-import { MAX_BACKOFF_MS } from "./backoff";
+import { BASE_BACKOFF_MS, MAX_BACKOFF_MS } from "./backoff";
 import {
   getSyncSnapshot,
   recordSyncFailure,
@@ -106,6 +117,34 @@ vi.mock("./presentationSync", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./presentationSync")>();
   return { ...actual, ...presentationSync };
 });
+
+const storageHooks = vi.hoisted(() => ({
+  holdSaveFolders: null as Promise<void> | null,
+}));
+
+vi.mock("../storage", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../storage")>();
+  return {
+    ...actual,
+    saveFolders: vi.fn(
+      async (folders: Parameters<typeof actual.saveFolders>[0]) => {
+        if (storageHooks.holdSaveFolders) await storageHooks.holdSaveFolders;
+        return actual.saveFolders(folders);
+      },
+    ),
+  };
+});
+
+function deferred<T>(): {
+  promise: Promise<T>;
+  resolve: (value: T) => void;
+} {
+  let resolve: (value: T) => void = () => undefined;
+  const promise = new Promise<T>((settle) => {
+    resolve = settle;
+  });
+  return { promise, resolve };
+}
 
 function serverDeck(overrides: Partial<Deck> = {}): Deck {
   return DeckSchema.parse({
@@ -1365,5 +1404,397 @@ describe("runBootSync — 한 브라우저의 소유자 저장본과 공유받�
 
     expect(listPresentations()).toEqual([]);
     expect(await storedPresentations()).toEqual([leaderCopy()]);
+  });
+});
+
+const HOUR = 60 * 60 * 1000;
+const OTHER_USER_ID = "999999999999999999999";
+
+function sessionUser(userId: string = TEST_USER_ID): SessionUser {
+  return {
+    userId,
+    name: "테스트 봉사자",
+    image: null,
+    expiresAt: Date.now() + HOUR,
+  };
+}
+
+async function resetBootSyncDependencies(): Promise<void> {
+  signInAsTestUser();
+  await resetSongLibraryStore();
+  resetFolderStore();
+  resetPresentationStore();
+  resetSyncStatus();
+  __resetBootSyncForTests();
+  __resetDeckSyncForTests();
+  __resetSyncSchedulerForTests();
+  __resetFolderSyncForTests();
+  __setDeckTransportForTests({ push: vi.fn(async (deck: Deck) => deck) });
+  __setFolderPusherForTests(vi.fn(async (f: Folder) => f));
+  storageHooks.holdSaveFolders = null;
+  vi.mocked(saveFolders).mockClear();
+  presentationSync.pullDecks.mockReset();
+  presentationSync.pullDecks.mockResolvedValue({ decks: [], deletedIds: [] });
+  presentationSync.pullPresentations.mockReset();
+  presentationSync.pullPresentations.mockResolvedValue([]);
+  presentationSync.pushPresentation.mockReset();
+  presentationSync.pushPresentation.mockResolvedValue(true);
+  presentationSync.pullFolders.mockReset();
+  presentationSync.pullFolders.mockResolvedValue(EMPTY_FOLDER_LIST);
+}
+
+function cleanUpBootSync(): void {
+  storageHooks.holdSaveFolders = null;
+  window.history.pushState({}, "", "/");
+  __resetBootSyncForTests();
+  __resetFolderSyncForTests();
+  __resetDeckSyncForTests();
+  __resetSyncSchedulerForTests();
+}
+
+async function settleMicrotasks(): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, 0));
+}
+
+async function bootSettled(): Promise<void> {
+  await vi.waitFor(() => expect(getSyncSnapshot().status).toBe("synced"));
+}
+
+describe("startBootSync — 송출 화면에서 부팅한 탭", () => {
+  let fetcher: ReturnType<typeof vi.fn<SessionFetcher>>;
+
+  beforeEach(async () => {
+    await resetBootSyncDependencies();
+    fetcher = vi.fn<SessionFetcher>(async () => sessionUser());
+    __setSessionFetcherForTests(fetcher);
+  });
+
+  afterEach(cleanUpBootSync);
+
+  it("송출 화면에서 부팅하면 서버에 묻지 않고, 송출을 마치면 세션을 확인하고 부팅 동기화를 한 번 돈다", async () => {
+    window.history.pushState({}, "", "/present/abc/fullscreen");
+    startBootSync(window.location.pathname);
+    runDeferredBootSync();
+    await settleMicrotasks();
+
+    expect(presentationSync.pullFolders).not.toHaveBeenCalled();
+    expect(fetcher).not.toHaveBeenCalled();
+
+    window.history.pushState({}, "", "/presentations");
+    runDeferredBootSync();
+    await bootSettled();
+
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(presentationSync.pullFolders).toHaveBeenCalledTimes(1);
+
+    scheduleDocumentPush(presentation(DOC));
+    await flushPendingSync();
+    expect(presentationSync.pushPresentation).toHaveBeenCalledWith(
+      expect.objectContaining({ id: DOC }),
+    );
+
+    runDeferredBootSync();
+    await settleMicrotasks();
+
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(presentationSync.pullFolders).toHaveBeenCalledTimes(1);
+  });
+
+  it("송출을 마칠 때 로그아웃돼 있으면 미뤄 두었다가 같은 계정이 다시 로그인한 뒤에 돈다", async () => {
+    window.history.pushState({}, "", "/present/abc/fullscreen");
+    startBootSync(window.location.pathname);
+    __setSessionForTests(null);
+    window.history.pushState({}, "", "/presentations");
+    runDeferredBootSync();
+    await settleMicrotasks();
+
+    expect(presentationSync.pullFolders).not.toHaveBeenCalled();
+    expect(fetcher).not.toHaveBeenCalled();
+
+    __setSessionForTests(sessionUser());
+    runDeferredBootSync();
+    await bootSettled();
+
+    expect(presentationSync.pullFolders).toHaveBeenCalledTimes(1);
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+
+  it("미뤄 둔 부팅은 다른 계정이 부팅하면 버린다", async () => {
+    window.history.pushState({}, "", "/present/abc/fullscreen");
+    startBootSync(window.location.pathname);
+    window.history.pushState({}, "", "/presentations");
+    __setSessionForTests(sessionUser(OTHER_USER_ID));
+    startBootSync(window.location.pathname);
+    await bootSettled();
+
+    expect(presentationSync.pullFolders).toHaveBeenCalledTimes(1);
+
+    __setSessionForTests(sessionUser());
+    runDeferredBootSync();
+    await settleMicrotasks();
+
+    expect(presentationSync.pullFolders).toHaveBeenCalledTimes(1);
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+});
+
+describe("부팅 첫 받기 대기 (isBootPullPending)", () => {
+  beforeEach(resetBootSyncDependencies);
+
+  afterEach(() => {
+    vi.useRealTimers();
+    cleanUpBootSync();
+  });
+
+  it("받기 전에는 폴더·프레젠테이션 모두 기다리고, 폴더는 메모리에 넣자마자, 프레젠테이션은 병합하면 끝난다", async () => {
+    const folders = deferred<FolderListResponse>();
+    const presentations = deferred<Presentation[]>();
+    const saving = deferred<void>();
+    presentationSync.pullFolders.mockReturnValueOnce(folders.promise);
+    presentationSync.pullPresentations.mockReturnValueOnce(
+      presentations.promise,
+    );
+    storageHooks.holdSaveFolders = saving.promise;
+
+    const booting = runBootSync();
+
+    expect(isBootPullPending("folder")).toBe(true);
+    expect(isBootPullPending("presentation")).toBe(true);
+
+    folders.resolve({ ...EMPTY_FOLDER_LIST, folders: [folder(PARENT)] });
+    await vi.waitFor(() => expect(saveFolders).toHaveBeenCalled());
+
+    expect(isBootPullPending("folder")).toBe(false);
+    expect(getFolders().map((f) => f.id)).toEqual([PARENT]);
+    expect(isBootPullPending("presentation")).toBe(true);
+    expect(presentationSync.pullPresentations).not.toHaveBeenCalled();
+
+    saving.resolve();
+    await vi.waitFor(() =>
+      expect(presentationSync.pullPresentations).toHaveBeenCalled(),
+    );
+    expect(isBootPullPending("presentation")).toBe(true);
+
+    const decks = deferred<{ decks: Deck[]; deletedIds: string[] }>();
+    presentationSync.pullDecks.mockReturnValueOnce(decks.promise);
+    presentations.resolve([presentation(DOC)]);
+    await vi.waitFor(() =>
+      expect(presentationSync.pullDecks).toHaveBeenCalled(),
+    );
+
+    expect(isBootPullPending("presentation")).toBe(false);
+    expect(listPresentations().map((doc) => doc.id)).toEqual([DOC]);
+
+    decks.resolve({ decks: [], deletedIds: [] });
+    await booting;
+  });
+
+  it("받기가 오프라인으로 실패해도 기다림을 끝낸다", async () => {
+    presentationSync.pullFolders.mockRejectedValueOnce(new OfflineError());
+
+    await runBootSync();
+
+    expect(isBootPullPending("folder")).toBe(false);
+    expect(isBootPullPending("presentation")).toBe(false);
+  });
+
+  it("앞선 부팅이 늦게 끝나도 새 부팅의 기다림을 끝내지 않는다", async () => {
+    const first = deferred<FolderListResponse>();
+    const second = deferred<FolderListResponse>();
+    presentationSync.pullFolders
+      .mockReturnValueOnce(first.promise)
+      .mockReturnValueOnce(second.promise);
+
+    const firstBoot = runBootSync();
+    const secondBoot = runBootSync();
+    first.resolve(EMPTY_FOLDER_LIST);
+    await firstBoot;
+
+    expect(isBootPullPending("folder")).toBe(true);
+    expect(isBootPullPending("presentation")).toBe(true);
+
+    second.resolve(EMPTY_FOLDER_LIST);
+    await secondBoot;
+
+    expect(isBootPullPending("folder")).toBe(false);
+    expect(isBootPullPending("presentation")).toBe(false);
+  });
+
+  it("받기가 끝나지 않아도 BOOT_PULL_WAIT_MS가 지나면 기다림을 끝낸다", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    presentationSync.pullFolders.mockReturnValueOnce(new Promise(() => {}));
+
+    void runBootSync();
+    await vi.advanceTimersByTimeAsync(BOOT_PULL_WAIT_MS - 1);
+
+    expect(isBootPullPending("folder")).toBe(true);
+    expect(isBootPullPending("presentation")).toBe(true);
+
+    await vi.advanceTimersByTimeAsync(1);
+
+    expect(isBootPullPending("folder")).toBe(false);
+    expect(isBootPullPending("presentation")).toBe(false);
+  });
+});
+
+describe("runBootSync — 부팅 중에 시작한 송출", () => {
+  beforeEach(async () => {
+    await resetBootSyncDependencies();
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    cleanUpBootSync();
+  });
+
+  it("부팅 동기화 중 송출을 시작하면 병합과 다음 요청을 송출을 마칠 때까지 미룬다", async () => {
+    const folders = deferred<FolderListResponse>();
+    presentationSync.pullFolders.mockReturnValueOnce(folders.promise);
+
+    const booting = runBootSync();
+    window.history.pushState({}, "", "/present/abc/fullscreen");
+    folders.resolve({ ...EMPTY_FOLDER_LIST, folders: [folder(PARENT)] });
+    await booting;
+
+    expect(presentationSync.pullPresentations).not.toHaveBeenCalled();
+    expect(getFolders()).toEqual([]);
+
+    await vi.advanceTimersByTimeAsync(MAX_BACKOFF_MS);
+
+    expect(presentationSync.pullFolders).toHaveBeenCalledTimes(1);
+    expect(presentationSync.pullPresentations).not.toHaveBeenCalled();
+    expect(getFolders()).toEqual([]);
+
+    window.history.pushState({}, "", "/presentations");
+    await vi.advanceTimersByTimeAsync(BASE_BACKOFF_MS);
+    await vi.waitFor(() =>
+      expect(presentationSync.pullPresentations).toHaveBeenCalledTimes(1),
+    );
+
+    expect(presentationSync.pullFolders).toHaveBeenCalledTimes(2);
+    expect(
+      presentationSync.pullFolders.mock.invocationCallOrder[1],
+    ).toBeLessThan(
+      presentationSync.pullPresentations.mock.invocationCallOrder[0],
+    );
+  });
+
+  it("부팅이 폴더를 올리는 중에 송출을 시작하면 프레젠테이션 목록을 송출을 마친 뒤에 받는다", async () => {
+    const pushing = deferred<Folder>();
+    const pushFolder = vi.fn<(f: Folder) => Promise<Folder>>(
+      () => pushing.promise,
+    );
+    __setFolderPusherForTests(pushFolder);
+    __loadFoldersForTests([folder(PARENT)]);
+
+    const booting = runBootSync();
+    await vi.waitFor(() => expect(pushFolder).toHaveBeenCalledTimes(1));
+    window.history.pushState({}, "", "/present/abc/fullscreen");
+    pushing.resolve(folder(PARENT));
+    await booting;
+
+    expect(presentationSync.pullPresentations).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(MAX_BACKOFF_MS);
+
+    expect(presentationSync.pullFolders).toHaveBeenCalledTimes(1);
+    expect(presentationSync.pullPresentations).not.toHaveBeenCalled();
+
+    window.history.pushState({}, "", "/presentations");
+    await vi.advanceTimersByTimeAsync(BASE_BACKOFF_MS);
+    await vi.waitFor(() =>
+      expect(presentationSync.pullPresentations).toHaveBeenCalledTimes(1),
+    );
+
+    expect(presentationSync.pullFolders).toHaveBeenCalledTimes(2);
+  });
+
+  it("프레젠테이션 목록을 받는 중에 송출을 시작하면 병합과 곡 목록 받기를 송출을 마칠 때까지 미룬다", async () => {
+    const presentations = deferred<Presentation[]>();
+    presentationSync.pullPresentations.mockReturnValueOnce(
+      presentations.promise,
+    );
+
+    const booting = runBootSync();
+    await vi.waitFor(() =>
+      expect(presentationSync.pullPresentations).toHaveBeenCalledTimes(1),
+    );
+    window.history.pushState({}, "", "/present/abc/fullscreen");
+    presentations.resolve([presentation(DOC)]);
+    await booting;
+
+    expect(listPresentations()).toEqual([]);
+    expect(presentationSync.pullDecks).not.toHaveBeenCalled();
+    expect(isBootPullPending("presentation")).toBe(false);
+
+    await vi.advanceTimersByTimeAsync(MAX_BACKOFF_MS);
+
+    expect(listPresentations()).toEqual([]);
+    expect(presentationSync.pullDecks).not.toHaveBeenCalled();
+    expect(presentationSync.pullPresentations).toHaveBeenCalledTimes(1);
+
+    presentationSync.pullPresentations.mockResolvedValue([presentation(DOC)]);
+    window.history.pushState({}, "", "/presentations");
+    await vi.advanceTimersByTimeAsync(BASE_BACKOFF_MS);
+    await vi.waitFor(() =>
+      expect(listPresentations().map((doc) => doc.id)).toEqual([DOC]),
+    );
+
+    expect(presentationSync.pullFolders).toHaveBeenCalledTimes(2);
+  });
+
+  it("부팅이 프레젠테이션을 올리는 중에 송출을 시작하면 곡 목록을 송출을 마친 뒤에 받는다", async () => {
+    const pushing = deferred<boolean>();
+    presentationSync.pushPresentation.mockReturnValueOnce(pushing.promise);
+    __loadDocumentsForTests([presentation(DOC)]);
+
+    const booting = runBootSync();
+    await vi.waitFor(() =>
+      expect(presentationSync.pushPresentation).toHaveBeenCalledTimes(1),
+    );
+    window.history.pushState({}, "", "/present/abc/fullscreen");
+    pushing.resolve(true);
+    await booting;
+    await vi.advanceTimersByTimeAsync(MAX_BACKOFF_MS);
+
+    expect(presentationSync.pullDecks).not.toHaveBeenCalled();
+
+    window.history.pushState({}, "", "/presentations");
+    await vi.advanceTimersByTimeAsync(BASE_BACKOFF_MS);
+    await vi.waitFor(() =>
+      expect(presentationSync.pullDecks).toHaveBeenCalledTimes(1),
+    );
+  });
+
+  it("곡 목록을 받는 중에 송출을 시작하면 곡 병합을 송출을 마칠 때까지 미룬다", async () => {
+    const decks = deferred<{ decks: Deck[]; deletedIds: string[] }>();
+    presentationSync.pullDecks.mockReturnValueOnce(decks.promise);
+
+    const booting = runBootSync();
+    await vi.waitFor(() =>
+      expect(presentationSync.pullDecks).toHaveBeenCalledTimes(1),
+    );
+    window.history.pushState({}, "", "/present/abc/fullscreen");
+    decks.resolve({ decks: [serverDeck()], deletedIds: [] });
+    await booting;
+    await vi.advanceTimersByTimeAsync(MAX_BACKOFF_MS);
+
+    expect(getUserSongs()).toEqual([]);
+    expect(presentationSync.pullDecks).toHaveBeenCalledTimes(1);
+
+    presentationSync.pullDecks.mockResolvedValue({
+      decks: [serverDeck()],
+      deletedIds: [],
+    });
+    window.history.pushState({}, "", "/presentations");
+    await vi.advanceTimersByTimeAsync(BASE_BACKOFF_MS);
+    await vi.waitFor(() =>
+      expect(getUserSongs().map((deck) => deck.title)).toEqual([
+        "다른 PC에서 만든 곡",
+      ]),
+    );
+
+    expect(presentationSync.pullDecks).toHaveBeenCalledTimes(2);
   });
 });

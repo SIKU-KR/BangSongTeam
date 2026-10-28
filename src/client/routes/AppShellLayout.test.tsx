@@ -9,9 +9,11 @@ import {
 } from "../features/presentation/presentationStore";
 import {
   __loadFoldersForTests,
+  applyServerFolders,
   getFolders,
   resetFolderStore,
 } from "../features/drive/folderStore";
+import { __setBootPullPendingForTests } from "../lib/sync/bootSync";
 import { signInAsTestUser } from "../test/sessionFixture";
 import {
   render,
@@ -21,7 +23,7 @@ import {
   within,
   waitFor,
 } from "@testing-library/react";
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { MemoryRouter, Routes, Route } from "../test/router";
 import type { Folder } from "#shared";
 import { ThemeProvider } from "#components/theme-provider";
@@ -651,6 +653,53 @@ describe("AppShellLayout (드라이브형 홈)", () => {
       "page",
     );
     expect(screen.getAllByTestId("presentation-row")).toHaveLength(5);
+  });
+
+  describe("부팅 동기화가 아직 받지 않은 폴더 주소", () => {
+    afterEach(() => {
+      __setBootPullPendingForTests([]);
+    });
+
+    it("폴더를 받는 중이면 모르는 폴더 주소를 루트로 보내지 않고, 받으면 그 폴더를 연다", async () => {
+      __setBootPullPendingForTests(["folder"]);
+      renderShell(`/presentations/folders/${WORSHIP}`);
+
+      expect(screen.getByTestId("drive-pending")).toBeInTheDocument();
+      expect(window.location.pathname).toBe(
+        `/presentations/folders/${WORSHIP}`,
+      );
+
+      await act(async () => {
+        await applyServerFolders([folder(WORSHIP, "2026 주일 대예배")]);
+      });
+
+      expect(screen.queryByTestId("drive-pending")).not.toBeInTheDocument();
+      expect(screen.getByTestId(`crumb-${WORSHIP}`)).toHaveAttribute(
+        "aria-current",
+        "page",
+      );
+      expect(window.location.pathname).toBe(
+        `/presentations/folders/${WORSHIP}`,
+      );
+    });
+
+    it("휴지통에 있는 폴더는 받는 중이어도 바로 루트로 보낸다", () => {
+      __loadFoldersForTests([
+        {
+          ...folder(WORSHIP, "2026 주일 대예배"),
+          trashedAt: "2026-10-01T00:00:00.000Z",
+        },
+      ]);
+      __setBootPullPendingForTests(["folder"]);
+      renderShell(`/presentations/folders/${WORSHIP}`);
+
+      expect(screen.queryByTestId("drive-pending")).not.toBeInTheDocument();
+      expect(screen.getByTestId("crumb-root")).toHaveAttribute(
+        "aria-current",
+        "page",
+      );
+      expect(window.location.pathname).toBe("/presentations");
+    });
   });
 
   it("휴지통은 내 드라이브 루트 맨 위에 고정된 폴더로 보인다", () => {
