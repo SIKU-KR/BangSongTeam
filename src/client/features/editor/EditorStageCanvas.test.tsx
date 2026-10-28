@@ -155,6 +155,36 @@ describe("EditorStageCanvas 슬라이드 크기", () => {
     expect(stage().style.width).toBe("min(100%, 960px)");
   });
 
+  it("슬라이드가 좁아지면(가로 폰) 이전·다음 버튼을 글상자 조작 핸들 높이에서 벗어난 아래쪽 모서리로 옮긴다", () => {
+    installFakeResizeObserver();
+    layoutAreaHeight(189);
+
+    renderCanvas({ slideNumber: 2, total: 3 });
+
+    for (const testId of ["canvas-prev-btn", "canvas-next-btn"]) {
+      const button = screen.getByTestId(testId);
+      expect(button).toHaveClass("bottom-1");
+      expect(button).not.toHaveClass("top-1/2");
+      expect(button).not.toHaveClass("-translate-y-1/2");
+    }
+  });
+
+  it.each([192, 540, null])(
+    "슬라이드가 넉넉히 넓으면(영역 높이 %s) 버튼은 가장자리 가운데 높이에 둔다",
+    (areaHeight) => {
+      installFakeResizeObserver();
+      if (areaHeight !== null) layoutAreaHeight(areaHeight);
+
+      renderCanvas({ slideNumber: 2, total: 3 });
+
+      for (const testId of ["canvas-prev-btn", "canvas-next-btn"]) {
+        const button = screen.getByTestId(testId);
+        expect(button).toHaveClass("top-1/2", "-translate-y-1/2");
+        expect(button).not.toHaveClass("bottom-1");
+      }
+    },
+  );
+
   it("확대 배율은 그대로 슬라이드에 걸린다", () => {
     installFakeResizeObserver();
     layoutAreaHeight(180);

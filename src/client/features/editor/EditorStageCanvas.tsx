@@ -139,6 +139,10 @@ export function EditorStageCanvas({
   }
 
   const zoomScale = zoomLevel / 100;
+  const navVertical =
+    stageWidthCap !== null && stageWidthCap < COMPACT_STAGE_WIDTH
+      ? NAV_AT_BOTTOM
+      : NAV_CENTERED;
 
   return (
     <div
@@ -213,6 +217,7 @@ export function EditorStageCanvas({
             variant="secondary"
             className={cn(
               CANVAS_NAV_POSITION,
+              navVertical,
               "left-3 [@media(hover:none)]:left-1",
             )}
           >
@@ -228,6 +233,7 @@ export function EditorStageCanvas({
             variant="secondary"
             className={cn(
               CANVAS_NAV_POSITION,
+              navVertical,
               "right-3 [@media(hover:none)]:right-1",
             )}
           >
@@ -315,7 +321,20 @@ function SlideListButton({
 /**
  * 슬라이드 위 이전·다음 버튼의 자리. 마우스 기기에서는 마우스를 올렸을 때만 보인다. 올릴 마우스가 없는
  * 터치 기기(`@media(hover:none)`)에서는 늘 보이되, 가사를 덜 가리도록 불투명도를 줄이고 가장자리에 바짝
- * 붙이며, 손가락으로 누를 44px은 지킨다. 눌러도 갈 곳이 없는 버튼은 어느 기기에서나 가린다.
+ * 붙이며, 손가락으로 누를 44px은 지킨다. 눌러도 갈 곳이 없는 버튼은 어느 기기에서나 가린다. 높이는
+ * `NAV_CENTERED`나 `NAV_AT_BOTTOM`이 정한다.
  */
 const CANVAS_NAV_POSITION =
-  "absolute top-1/2 z-40 -translate-y-1/2 rounded-full opacity-0 group-hover:opacity-100 disabled:opacity-0 [@media(hover:none)]:size-11 [@media(hover:none)]:opacity-70";
+  "absolute z-40 rounded-full opacity-0 group-hover:opacity-100 disabled:opacity-0 [@media(hover:none)]:size-11 [@media(hover:none)]:opacity-70";
+
+const NAV_CENTERED = "top-1/2 -translate-y-1/2";
+
+const NAV_AT_BOTTOM = "bottom-1";
+
+/**
+ * 슬라이드 폭(px)이 이보다 좁으면 이전·다음 버튼을 가운데 높이에서 아래쪽 모서리로 옮긴다. 글상자 양 끝의
+ * 조작 핸들은 기본 자리에서 슬라이드 가장자리로부터 폭의 10%, 가운데 높이에 있다. 가로로 돌린 폰처럼
+ * 슬라이드가 330px쯤보다 좁아지면 버튼 한가운데(터치에서는 가장자리로부터 26px)가 핸들에 덮여, 눌러도
+ * 버튼이 아니라 핸들이 잡힌다. 폰 세로의 폭 366px에서는 덮이지 않는다.
+ */
+const COMPACT_STAGE_WIDTH = 340;
