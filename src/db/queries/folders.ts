@@ -1,7 +1,9 @@
 import {
   buildFolderIndex,
+  clampToClock,
   collectDescendantFolderIds,
   isFolderTrashed,
+  isOutdatedWrite,
   sortFoldersParentFirst,
   wouldCreateCycle,
   type DriveTombstones,
@@ -18,8 +20,8 @@ import {
 } from "../collections";
 import { toFolderDoc, toSharedFolder } from "./mappers";
 import {
-  prepareClearTombstone,
   prepareDeletionPass,
+  readOwnTombstone,
   runDeletionPasses,
   type DeletionResult,
 } from "./cascade";
@@ -44,44 +46,70 @@ export async function getFoldersByUserId(
 }
 
 /**
+ * `upsertFolder` 결과. `saved`는 서버에 저장된 확정본(`folder`)을 담는다. 늦게 온 옛 수정이면 쓰지
+ * 않고 저장본만 돌려준다. 나머지 결과는 아무것도 쓰지 않는다.
+ */
+export type UpsertFolderResult =
+  | { status: "saved"; folder: SharedFolder }
+  | { status: "forbidden" }
+  | { status: "deleted" };
+
+/**
  * 폴더 1건 업서트.
  *
- * - 남의 폴더면 아무것도 쓰지 않고 `null` (→ 403).
- * - 본문의 `userId`가 세션 사용자가 아니어도 `null` (→ 403). 아직 A라고 믿는 탭이나 A가 남긴
+ * - 남의 폴더면 아무것도 쓰지 않고 `forbidden` (→ 403).
+ * - 본문의 `userId`가 세션 사용자가 아니어도 `forbidden` (→ 403). 아직 A라고 믿는 탭이나 A가 남긴
  *   대기열이 보낸 폴더를 지금 쿠키의 주인인 B의 드라이브에 만들면 안 된다.
- * - 새 폴더의 id가 이미 프레젠테이션 id여도 `null` (→ 403). 영구 삭제 기록은 폴더와
+ * - 내가 영구 삭제한 폴더(서버에 없고 내 영구 삭제 기록이 있다)는 다시 만들지 않고 `deleted` (→ 410).
+ *   그 폴더를 아직 가진 기기·캐시된 옛 앱이 늦게 올린 저장이다.
+ * - 새 폴더의 id가 이미 프레젠테이션 id여도 `forbidden` (→ 403). 영구 삭제 기록은 폴더와
  *   프레젠테이션이 한 id 공간을 쓰고, 프레젠테이션 id는 링크로 공유받은 사람에게도 보인다. 그 id로
  *   폴더를 만들어 지우면 주인보다 먼저 기록을 차지해, 주인이 영구 삭제한 프레젠테이션을 주인의
  *   다른 기기가 다시 올린다.
+ * - 수정 시각(`updatedAt`)과 새 폴더의 만든 시각은 서버 시계 + 5분까지로 줄인다(`clampToClock`).
+ * - 저장된 폴더가 들어온 것보다 늦게 고친 것이면 쓰지 않고 저장된 폴더를 돌려준다
+ *   (`isOutdatedWrite`). 오프라인 대기열이 늦게 올린 옛 수정이 다른 기기의 새 이름·이동·휴지통을 덮지
+ *   않게 한다. 시각이 같으면 쓴다.
  * - 부모가 없거나, 남의 것이거나, 옮기면 사이클이 생기면 **루트로 보정**한다.
  *   오프라인 기기 두 대가 서로 반대로 옮기거나 다른 기기에서 부모를 영구
  *   삭제하면 생기는 일이다. 거절하면 그 폴더는 영영 동기화되지 않으므로,
  *   받아들이되 트리가 깨지지 않는 쪽으로 고친다.
  *
- * 보정된 확정본을 돌려준다. 클라이언트는 이것을 반영한다.
+ * 보정·줄인 값을 담은 저장본을 돌려준다. 클라이언트는 이것을 반영해 서버와 같은 값으로 맞춘다.
  */
 export async function upsertFolder(
   db: Db,
   userId: string,
   folder: SharedFolder,
-): Promise<SharedFolder | null> {
-  if (folder.userId !== userId) return null;
+  now: Date = new Date(),
+): Promise<UpsertFolderResult> {
+  if (folder.userId !== userId) return { status: "forbidden" };
   return db.runTransaction(async (tx) => {
     const ref = foldersCol(db).doc(folder.id);
-    const [existingSnapshot, ownFolders, clearTombstone] = await Promise.all([
+    const [existingSnapshot, ownFolders, tombstone] = await Promise.all([
       tx.get(ref),
       folder.parentId === null
         ? Promise.resolve(null)
         : tx.get(foldersCol(db).where("userId", "==", userId)),
-      prepareClearTombstone(tx, db, userId, folder.id),
+      readOwnTombstone(tx, db, userId, "folder", folder.id),
     ]);
     const existing = existingSnapshot.data();
-    if (existing && existing.userId !== userId) return null;
+    if (existing && existing.userId !== userId) return { status: "forbidden" };
+    if (!existing && tombstone.exists) return { status: "deleted" };
     if (
       !existing &&
       (await tx.get(presentationsCol(db).doc(folder.id))).exists
     ) {
-      return null;
+      return { status: "forbidden" };
+    }
+
+    const nowMs = now.getTime();
+    const updatedAt = clampToClock(folder.updatedAt, nowMs);
+    if (
+      existing &&
+      isOutdatedWrite(existing.updatedAt.toISOString(), updatedAt, nowMs)
+    ) {
+      return { status: "saved", folder: toSharedFolder(existing) };
     }
 
     let parentId = folder.parentId;
@@ -97,23 +125,26 @@ export async function upsertFolder(
       }
     }
 
-    const saved: SharedFolder = { ...folder, userId, parentId };
-    const next = toFolderDoc(saved);
+    const next = toFolderDoc({
+      ...folder,
+      userId,
+      parentId,
+      createdAt: clampToClock(folder.createdAt, nowMs),
+      updatedAt,
+    });
+    const stored: FolderDoc = existing
+      ? {
+          ...existing,
+          parentId: next.parentId,
+          name: next.name,
+          trashedAt: next.trashedAt,
+          updatedAt: next.updatedAt,
+        }
+      : next;
 
-    clearTombstone();
-    tx.set(
-      ref,
-      existing
-        ? {
-            ...existing,
-            parentId: next.parentId,
-            name: next.name,
-            trashedAt: next.trashedAt,
-            updatedAt: next.updatedAt,
-          }
-        : next,
-    );
-    return saved;
+    tombstone.clear();
+    tx.set(ref, stored);
+    return { status: "saved", folder: toSharedFolder(stored) };
   });
 }
 

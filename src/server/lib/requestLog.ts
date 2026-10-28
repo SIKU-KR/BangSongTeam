@@ -60,6 +60,27 @@ export function logServerError(
   });
 }
 
+/**
+ * 오류는 아니지만 얼마나 자주 일어나는지 지켜볼 일(서버가 거절한 저장 등)을 남긴다. 상관 ID와 라우트
+ * 패턴을 함께 실어 요청 로그 줄과 이어 볼 수 있게 한다.
+ *
+ * 요청 본문은 읽지 않는다. 가사가 로그에 남으면 안 되므로, 호출자는 id 같은 요약만 `context`로 넘긴다.
+ */
+export function logRequestEvent(
+  c: Context<AppEnv>,
+  severity: LogSeverity,
+  event: string,
+  context: Record<string, unknown> = {},
+): void {
+  writeLog(severity, {
+    event,
+    requestId: c.get("requestId"),
+    [CLOUD_TRACE_LOG_FIELD]: c.get("logTrace"),
+    route: routePath(c),
+    ...context,
+  });
+}
+
 export type LogSeverity = "INFO" | "WARNING" | "ERROR";
 
 /**

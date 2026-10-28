@@ -1,6 +1,15 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import {
+  describe,
+  it,
+  expect,
+  afterEach,
+  beforeEach,
+  vi,
+  type MockInstance,
+} from "vitest";
 import { env } from "../test/env";
 import {
+  API_ERRORS,
   DEFAULT_DECK_STYLE,
   PresentationDocumentSchema,
   toPresentationChanges,
@@ -112,6 +121,30 @@ async function readSet(): Promise<PresentationDocument> {
   return ((await res.json()) as { presentation: PresentationDocument })
     .presentation;
 }
+
+async function patch(body: unknown): Promise<Response> {
+  return app.request(
+    `/api/presentations/${DOC_ID}`,
+    request("PATCH", body),
+    env,
+  );
+}
+
+async function put(body: unknown): Promise<Response> {
+  return app.request(`/api/presentations/${DOC_ID}`, request("PUT", body), env);
+}
+
+function eventLines(
+  log: MockInstance,
+  event: string,
+): Record<string, unknown>[] {
+  return log.mock.calls
+    .map(([line]) => String(line))
+    .filter((line) => line.includes(`"${event}"`))
+    .map((line) => JSON.parse(line) as Record<string, unknown>);
+}
+
+const STORED_AT = "2026-09-21T00:00:00.000Z";
 
 describe("PATCH /api/presentations/:id (변경분 저장)", () => {
   beforeEach(async () => {
@@ -275,5 +308,199 @@ describe("PATCH /api/presentations/:id (변경분 저장)", () => {
     );
 
     expect(res.status).toBe(401);
+  });
+});
+
+describe("기준 판(baseUpdatedAt)과 영구 삭제한 세트의 저장", () => {
+  beforeEach(async () => {
+    await clearDb(env.DB);
+    await seedDocs(env.DB, {
+      users: [userDoc({ id: USER_A, name: "A" })],
+    });
+    currentUser = USER_A;
+    expect(
+      (
+        await app.request(
+          `/api/presentations/${DOC_ID}`,
+          request("PUT", makeSet(USER_A)),
+          env,
+        )
+      ).status,
+    ).toBe(200);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("기준이 저장된 판과 같으면 200과 서버가 남긴 판을 돌려준다", async () => {
+    const res = await patch({
+      ...toPresentationChanges(
+        editOneLine(makeSet(USER_A)),
+        (deck) => deck.id === deckId(4),
+      ),
+      baseUpdatedAt: STORED_AT,
+    });
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({
+      ok: true,
+      updatedAt: "2026-09-22T00:00:00.000Z",
+    });
+    expect((await readSet()).items[4].deck.lyricsRaw).toMatch(/추가$/);
+  });
+
+  it("기준이 낡으면 412와 저장된 판을 돌려주고, 세트는 그대로 둔 채 가사 없이 기록한다", async () => {
+    const first = await patch({
+      ...toPresentationChanges(
+        editOneLine(makeSet(USER_A)),
+        (deck) => deck.id === deckId(4),
+      ),
+      baseUpdatedAt: STORED_AT,
+    });
+    expect(first.status).toBe(200);
+    const stored = await readSet();
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+
+    const res = await patch({
+      ...toPresentationChanges(
+        {
+          ...makeSet(USER_A),
+          title: "낡은 기기의 제목",
+          updatedAt: "2026-09-23T00:00:00.000Z",
+        },
+        () => false,
+      ),
+      baseUpdatedAt: STORED_AT,
+    });
+
+    expect(res.status).toBe(412);
+    const body = (await res.json()) as { error: string; presentation: unknown };
+    expect(body.error).toBe(API_ERRORS.presentation.conflict);
+    expect(
+      PresentationDocumentSchema.safeParse(body.presentation).success,
+    ).toBe(true);
+    expect(body.presentation).toEqual(stored);
+    expect(await readSet()).toEqual(stored);
+    const lines = eventLines(log, "presentation_save_conflict");
+    expect(lines).toEqual([
+      expect.objectContaining({
+        severity: "INFO",
+        presentationId: DOC_ID,
+        route: "/api/presentations/:id",
+      }),
+    ]);
+    expect(JSON.stringify(lines)).not.toContain("번 곡");
+  });
+
+  it("문서 전체 PUT도 기준 판을 견줘, 맞으면 200과 판을 돌려주고 낡으면 412로 세트를 그대로 둔다", async () => {
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+
+    const first = await put({
+      ...editOneLine(makeSet(USER_A)),
+      baseUpdatedAt: STORED_AT,
+    });
+    expect(first.status).toBe(200);
+    expect(await first.json()).toEqual({
+      ok: true,
+      updatedAt: "2026-09-22T00:00:00.000Z",
+    });
+    const stored = await readSet();
+    expect(stored.items[4].deck.lyricsRaw).toMatch(/추가$/);
+
+    const stale = await put({
+      ...makeSet(USER_A),
+      title: "낡은 기기의 제목",
+      updatedAt: "2026-09-23T00:00:00.000Z",
+      baseUpdatedAt: STORED_AT,
+    });
+    expect(stale.status).toBe(412);
+    expect(await stale.json()).toEqual({
+      error: API_ERRORS.presentation.conflict,
+      presentation: stored,
+    });
+    expect(await readSet()).toEqual(stored);
+    expect(eventLines(log, "presentation_save_conflict")).toHaveLength(1);
+
+    const malformed = await put({ ...makeSet(USER_A), baseUpdatedAt: "어제" });
+    expect(malformed.status).toBe(400);
+    expect(await readSet()).toEqual(stored);
+  });
+
+  it("기준 없이 보낸 이전 클라이언트의 옛 시각 PATCH도 200이고 판은 앞으로 간다", async () => {
+    const res = await patch(
+      toPresentationChanges(
+        {
+          ...makeSet(USER_A),
+          title: "되돌린 제목",
+          updatedAt: "2026-09-20T00:00:00.000Z",
+        },
+        () => false,
+      ),
+    );
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({
+      ok: true,
+      updatedAt: "2026-09-21T00:00:00.001Z",
+    });
+    expect(await readSet()).toMatchObject({
+      title: "되돌린 제목",
+      updatedAt: "2026-09-21T00:00:00.001Z",
+    });
+  });
+
+  it("영구 삭제한 프레젠테이션에 늦게 온 PATCH·PUT은 410이고 되살리지 않는다", async () => {
+    const trashedAt = "2026-09-22T00:00:00.000Z";
+    const trash = await app.request(
+      `/api/presentations/${DOC_ID}`,
+      request("PUT", { ...makeSet(USER_A), trashedAt, updatedAt: trashedAt }),
+      env,
+    );
+    expect(trash.status).toBe(200);
+    const removed = await app.request(
+      `/api/presentations/${DOC_ID}`,
+      { method: "DELETE", headers: { "sec-fetch-site": "same-origin" } },
+      env,
+    );
+    expect(removed.status).toBe(200);
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+
+    const late = [
+      await patch(
+        toPresentationChanges(
+          editOneLine(makeSet(USER_A)),
+          (deck) => deck.id === deckId(4),
+        ),
+      ),
+      await patch({
+        ...toPresentationChanges(editOneLine(makeSet(USER_A))),
+        baseUpdatedAt: trashedAt,
+      }),
+      await app.request(
+        `/api/presentations/${DOC_ID}`,
+        request("PUT", editOneLine(makeSet(USER_A))),
+        env,
+      ),
+    ];
+
+    for (const res of late) {
+      expect(res.status).toBe(410);
+      expect(await res.json()).toEqual({
+        error: API_ERRORS.presentation.deleted,
+      });
+    }
+    expect(
+      (await app.request(`/api/presentations/${DOC_ID}`, {}, env)).status,
+    ).toBe(404);
+    const folders = (await (
+      await app.request("/api/folders", {}, env)
+    ).json()) as { tombstones: { presentationIds: string[] } };
+    expect(folders.tombstones.presentationIds).toEqual([DOC_ID]);
+    expect(eventLines(log, "presentation_save_deleted")).toEqual(
+      late.map(() =>
+        expect.objectContaining({ severity: "INFO", presentationId: DOC_ID }),
+      ),
+    );
   });
 });

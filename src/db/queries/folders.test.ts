@@ -2,7 +2,9 @@ import { describe, it, expect, afterEach, beforeEach } from "vitest";
 import {
   buildFolderIndex,
   DEFAULT_DECK_STYLE,
+  editTimestamp,
   isFolderTrashed,
+  MAX_CLOCK_SKEW_MS,
   PresentationDocumentSchema,
   resolveFolderId,
   type Folder,
@@ -11,6 +13,7 @@ import {
 import type { Db } from "../client";
 import {
   decksCol,
+  driveTombstonesCol,
   foldersCol,
   presentationMembersCol,
   presentationsCol,
@@ -28,6 +31,7 @@ import {
   userDoc,
 } from "../test/fixtures";
 import { MAX_WRITES_PER_TRANSACTION } from "./cascade";
+import { toSharedFolder } from "./mappers";
 import {
   deleteFolderTree,
   getDriveTombstones,
@@ -143,7 +147,9 @@ describe("드라이브 폴더 쿼리", () => {
     });
 
     it("본문의 userId가 세션 사용자와 다르면 쓰지 않는다", async () => {
-      expect(await upsertFolder(db, USER_A, makeFolder(USER_B))).toBeNull();
+      expect(await upsertFolder(db, USER_A, makeFolder(USER_B))).toEqual({
+        status: "forbidden",
+      });
       expect(await getFoldersByUserId(db, USER_A)).toEqual([]);
       expect(await getFoldersByUserId(db, USER_B)).toEqual([]);
     });
@@ -154,7 +160,7 @@ describe("드라이브 폴더 쿼리", () => {
 
       expect(
         await upsertFolder(db, USER_A, { ...theirs, name: "탈취" }),
-      ).toBeNull();
+      ).toEqual({ status: "forbidden" });
       const [still] = await getFoldersByUserId(db, USER_B);
       expect(still.name).toBe("B의 폴더");
     });
@@ -165,7 +171,7 @@ describe("드라이브 폴더 쿼리", () => {
 
       expect(
         await upsertFolder(db, USER_A, makeFolder(USER_A, { id: theirs.id })),
-      ).toBeNull();
+      ).toEqual({ status: "forbidden" });
 
       expect(await getFoldersByUserId(db, USER_A)).toEqual([]);
       expect((await foldersCol(db).doc(theirs.id).get()).exists).toBe(false);
@@ -181,7 +187,103 @@ describe("드라이브 폴더 쿼리", () => {
       );
       const renamed = { ...folder, name: "새 이름" };
 
-      expect(await upsertFolder(db, USER_A, renamed)).toEqual(renamed);
+      expect(await upsertFolder(db, USER_A, renamed)).toEqual({
+        status: "saved",
+        folder: renamed,
+      });
+    });
+
+    it("늦게 도착한 옛 변경은 더 새 폴더를 덮지 않고 저장된 폴더를 돌려준다", async () => {
+      const folder = makeFolder(USER_A, { name: "처음" });
+      await upsertFolder(db, USER_A, folder);
+      const newer = {
+        ...folder,
+        name: "주일 1부",
+        updatedAt: "2026-09-25T00:00:02.000Z",
+      };
+      await upsertFolder(db, USER_A, newer);
+
+      const late = await upsertFolder(db, USER_A, {
+        ...folder,
+        name: "주일 예배",
+        updatedAt: "2026-09-25T00:00:01.000Z",
+      });
+
+      expect(late).toEqual({ status: "saved", folder: newer });
+      expect(await getFoldersByUserId(db, USER_A)).toEqual([newer]);
+    });
+
+    it("시계가 30분 뒤처진 기기가 1분 전에 저장된 폴더를 고쳐도 쓴다", async () => {
+      const now = new Date("2026-09-25T00:00:00.000Z");
+      const elsewhere = makeFolder(USER_A, {
+        name: "다른 기기",
+        updatedAt: new Date(now.getTime() - 60_000).toISOString(),
+      });
+      await upsertFolder(db, USER_A, elsewhere, now);
+      const renamed = {
+        ...elsewhere,
+        name: "새 이름",
+        updatedAt: editTimestamp(
+          elsewhere.updatedAt,
+          now.getTime() - 30 * 60_000,
+        ),
+      };
+
+      expect(await upsertFolder(db, USER_A, renamed, now)).toEqual({
+        status: "saved",
+        folder: renamed,
+      });
+      expect(await getFoldersByUserId(db, USER_A)).toEqual([renamed]);
+    });
+
+    it("수정 시각이 같으면 다시 쓴다", async () => {
+      const folder = makeFolder(USER_A, { name: "처음" });
+      await upsertFolder(db, USER_A, folder);
+      const sameTime = { ...folder, name: "같은 시각" };
+
+      expect(await upsertFolder(db, USER_A, sameTime)).toEqual({
+        status: "saved",
+        folder: sameTime,
+      });
+      expect(await getFoldersByUserId(db, USER_A)).toEqual([sameTime]);
+    });
+
+    it("서버 시계 + 5분보다 늦은 시각은 줄여서 저장하고 줄인 값을 돌려준다", async () => {
+      const now = new Date("2026-09-25T00:00:00.000Z");
+      const limit = new Date(now.getTime() + MAX_CLOCK_SKEW_MS).toISOString();
+      const future = makeFolder(USER_A, {
+        createdAt: "9999-12-31T00:00:00.000Z",
+        updatedAt: "9999-12-31T00:00:00.000Z",
+      });
+
+      const result = await upsertFolder(db, USER_A, future, now);
+
+      const clamped = { ...future, createdAt: limit, updatedAt: limit };
+      expect(result).toEqual({ status: "saved", folder: clamped });
+      expect(await getFoldersByUserId(db, USER_A)).toEqual([clamped]);
+    });
+
+    it("시각을 줄이기 전에 미래 시각으로 저장된 폴더도 이름을 바꿀 수 있다", async () => {
+      const pinned = folderDoc({
+        id: nextId(),
+        userId: USER_A,
+        name: "미래에 박힌 폴더",
+        createdAt: new Date("2026-09-20T00:00:00.000Z"),
+        updatedAt: new Date("9999-12-31T00:00:00.000Z"),
+      });
+      await seedDocs(db, { folders: [pinned] });
+      const now = new Date("2026-09-25T00:00:00.000Z");
+      const renamed = {
+        ...toSharedFolder(pinned),
+        name: "새 이름",
+        updatedAt: now.toISOString(),
+      };
+
+      expect(await upsertFolder(db, USER_A, renamed, now)).toEqual({
+        status: "saved",
+        folder: renamed,
+      });
+      expect(await getFoldersByUserId(db, USER_A)).toEqual([renamed]);
     });
 
     it("이름 변경·이동·휴지통을 반영한다", async () => {
@@ -197,7 +299,10 @@ describe("드라이브 폴더 쿼리", () => {
         trashedAt: "2026-09-25T00:00:00.789Z",
         updatedAt: "2026-09-25T00:00:00.789Z",
       };
-      expect(await upsertFolder(db, USER_A, moved)).toEqual(moved);
+      expect(await upsertFolder(db, USER_A, moved)).toEqual({
+        status: "saved",
+        folder: moved,
+      });
 
       const folders = await getFoldersByUserId(db, USER_A);
       expect(folders.find((f) => f.id === child.id)).toEqual(moved);
@@ -218,8 +323,14 @@ describe("드라이브 폴더 쿼리", () => {
         makeFolder(USER_A, { parentId: theirs.id }),
       );
 
-      expect(orphan?.parentId).toBeNull();
-      expect(intruder?.parentId).toBeNull();
+      expect(orphan).toMatchObject({
+        status: "saved",
+        folder: { parentId: null },
+      });
+      expect(intruder).toMatchObject({
+        status: "saved",
+        folder: { parentId: null },
+      });
     });
 
     it("하위 폴더 안으로 옮겨 사이클이 생기면 루트로 보정한다", async () => {
@@ -229,10 +340,16 @@ describe("드라이브 폴더 쿼리", () => {
       await upsertFolder(db, USER_A, b);
 
       const saved = await upsertFolder(db, USER_A, { ...a, parentId: b.id });
-      expect(saved?.parentId).toBeNull();
+      expect(saved).toMatchObject({
+        status: "saved",
+        folder: { parentId: null },
+      });
 
       const self = await upsertFolder(db, USER_A, { ...b, parentId: b.id });
-      expect(self?.parentId).toBeNull();
+      expect(self).toMatchObject({
+        status: "saved",
+        folder: { parentId: null },
+      });
     });
   });
 
@@ -810,7 +927,7 @@ describe("드라이브 폴더 쿼리", () => {
       ]);
     });
 
-    it("같은 id를 다시 저장하면 기록을 지우고 되살린다", async () => {
+    it("영구 삭제한 id는 다시 저장해도 되살리지 않고 기록을 남긴다", async () => {
       const folder = makeFolder(USER_A, { trashedAt: TRASHED_AT });
       await upsertFolder(db, USER_A, folder);
       const doc = makeDoc(USER_A, { trashedAt: TRASHED_AT });
@@ -818,11 +935,72 @@ describe("드라이브 폴더 쿼리", () => {
       await deleteFolderTree(db, USER_A, folder.id);
       await deletePresentation(db, doc.id, USER_A);
 
-      await upsertFolder(db, USER_A, folder);
-      await upsertPresentationDocument(db, USER_A, doc);
+      expect(await upsertFolder(db, USER_A, folder)).toEqual({
+        status: "deleted",
+      });
+      expect(
+        await upsertFolder(db, USER_A, {
+          ...folder,
+          trashedAt: null,
+          updatedAt: "2026-09-26T00:00:00.000Z",
+        }),
+      ).toEqual({ status: "deleted" });
+      expect(await upsertPresentationDocument(db, USER_A, doc)).toBe(false);
 
-      expect(await getDriveTombstones(db, USER_A)).toEqual(NO_TOMBSTONES);
-      expect(await getFoldersByUserId(db, USER_A)).toHaveLength(1);
+      expect(await getDriveTombstones(db, USER_A)).toEqual({
+        folderIds: [folder.id],
+        presentationIds: [doc.id],
+      });
+      expect(await getFoldersByUserId(db, USER_A)).toEqual([]);
+      expect(await getPresentationDocumentsByUserId(db, USER_A)).toEqual([]);
+    });
+
+    it("폴더가 있으면 같은 id의 내 영구 삭제 기록을 지우고 저장한다", async () => {
+      const folder = makeFolder(USER_A);
+      await upsertFolder(db, USER_A, folder);
+      await driveTombstonesCol(db)
+        .doc(folder.id)
+        .set({ itemId: folder.id, userId: USER_A, kind: "folder" });
+      const renamed = { ...folder, name: "새 이름" };
+
+      expect(await upsertFolder(db, USER_A, renamed)).toEqual({
+        status: "saved",
+        folder: renamed,
+      });
+      expect((await getDriveTombstones(db, USER_A)).folderIds).toEqual([]);
+    });
+
+    it("폴더가 있어도 같은 id의 남의 영구 삭제 기록은 지우지 않는다", async () => {
+      const folder = makeFolder(USER_A);
+      await upsertFolder(db, USER_A, folder);
+      await driveTombstonesCol(db)
+        .doc(folder.id)
+        .set({ itemId: folder.id, userId: USER_B, kind: "folder" });
+      const renamed = { ...folder, name: "새 이름" };
+
+      expect(await upsertFolder(db, USER_A, renamed)).toEqual({
+        status: "saved",
+        folder: renamed,
+      });
+      expect((await getDriveTombstones(db, USER_B)).folderIds).toEqual([
+        folder.id,
+      ]);
+    });
+
+    it("내가 영구 삭제한 프레젠테이션의 id로는 폴더도 다시 만들지 않는다", async () => {
+      const doc = makeDoc(USER_A, { trashedAt: TRASHED_AT });
+      await upsertPresentationDocument(db, USER_A, doc);
+      await deletePresentation(db, doc.id, USER_A);
+
+      expect(
+        await upsertFolder(db, USER_A, makeFolder(USER_A, { id: doc.id })),
+      ).toEqual({ status: "deleted" });
+
+      expect(await getFoldersByUserId(db, USER_A)).toEqual([]);
+      expect(await getDriveTombstones(db, USER_A)).toEqual({
+        folderIds: [],
+        presentationIds: [doc.id],
+      });
     });
 
     it("남이 같은 id로 만들고 지워도 내 영구 삭제 기록은 남는다", async () => {
@@ -836,7 +1014,10 @@ describe("드라이브 폴더 쿼리", () => {
         id: theirs.id,
         trashedAt: TRASHED_AT,
       });
-      expect(await upsertFolder(db, USER_A, folder)).toEqual(folder);
+      expect(await upsertFolder(db, USER_A, folder)).toEqual({
+        status: "saved",
+        folder,
+      });
       await upsertPresentationDocument(
         db,
         USER_A,

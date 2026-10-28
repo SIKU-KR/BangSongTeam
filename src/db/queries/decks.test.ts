@@ -11,17 +11,24 @@ import {
   seedDocs,
   userDoc,
 } from "../test/fixtures";
-import { prepareClearTombstone } from "./cascade";
+import { readOwnTombstone } from "./cascade";
 import {
   getDeletedDeckIds,
   getMyLibraryDecks,
   upsertDeck,
   deleteDeckScoped,
+  type UpsertDeckResult,
 } from "./decks";
 import { getDriveTombstones } from "./folders";
 import { setDeckVisibility } from "./sharing";
 import { takedownDeck } from "../ops/moderation";
-import { DEFAULT_DECK_STYLE, DeckSchema, type Deck } from "#shared";
+import {
+  DEFAULT_DECK_STYLE,
+  DeckSchema,
+  editTimestamp,
+  MAX_CLOCK_SKEW_MS,
+  type Deck,
+} from "#shared";
 import { toSharedDeck } from "./mappers";
 
 describe("Scoped Deck Queries", () => {
@@ -131,6 +138,172 @@ describe("덱 쓰기 헬퍼 (보관함 동기화)", () => {
     const rows = await decksCol(db).where("userId", "==", ownerId).get();
     expect(rows.size).toBe(1);
     expect((await readDeck(DECK_ID)).title).toBe("은혜로다 (수정)");
+  });
+
+  it("늦게 도착한 옛 수정은 쓰지 않고 저장된 새 곡을 돌려준다", async () => {
+    await upsertDeck(db, ownerId, makeDeck(ownerId));
+    const newer = await upsertDeck(
+      db,
+      ownerId,
+      makeDeck(ownerId, {
+        title: "은혜로다 (새 제목)",
+        updatedAt: "2026-09-23T00:00:00.000Z",
+      }),
+    );
+    const instrument = instrumentTransactions(db);
+
+    let late: UpsertDeckResult;
+    try {
+      late = await upsertDeck(
+        db,
+        ownerId,
+        makeDeck(ownerId, {
+          title: "은혜로다 (옛 제목)",
+          updatedAt: "2026-09-22T00:00:00.000Z",
+        }),
+      );
+    } finally {
+      instrument.restore();
+    }
+
+    expect(newer).toMatchObject({ status: "saved" });
+    expect(late).toEqual(newer);
+    expect(instrument.writesPerAttempt).toEqual([0]);
+    expect((await readDeck(DECK_ID)).title).toBe("은혜로다 (새 제목)");
+  });
+
+  it("시계가 30분 뒤처진 기기가 1분 전에 저장된 곡을 고쳐도 쓴다", async () => {
+    const now = new Date("2026-09-25T00:00:00.000Z");
+    const elsewhere = makeDeck(ownerId, {
+      title: "다른 기기",
+      updatedAt: new Date(now.getTime() - 60_000).toISOString(),
+    });
+    await upsertDeck(db, ownerId, elsewhere, now);
+    const renamed = makeDeck(ownerId, {
+      title: "새 제목",
+      updatedAt: editTimestamp(
+        elsewhere.updatedAt,
+        now.getTime() - 30 * 60_000,
+      ),
+    });
+
+    expect(await upsertDeck(db, ownerId, renamed, now)).toMatchObject({
+      status: "saved",
+      deck: { title: "새 제목", updatedAt: renamed.updatedAt },
+    });
+    expect(await readDeck(DECK_ID)).toMatchObject({
+      title: "새 제목",
+      updatedAt: renamed.updatedAt,
+    });
+  });
+
+  it("서버 시계 + 5분보다 늦은 시각은 줄이고, 만든 시각은 처음 저장한 값을 지킨다", async () => {
+    const now = new Date("2026-09-25T00:00:00.000Z");
+    const limit = new Date(now.getTime() + MAX_CLOCK_SKEW_MS).toISOString();
+
+    const first = await upsertDeck(
+      db,
+      ownerId,
+      makeDeck(ownerId, {
+        createdAt: "9999-12-31T00:00:00.000Z",
+        updatedAt: "9999-12-31T00:00:00.000Z",
+      }),
+      now,
+    );
+    expect(first).toMatchObject({
+      status: "saved",
+      deck: { createdAt: limit, updatedAt: limit },
+    });
+
+    const later = new Date(now.getTime() + 60 * 60_000);
+    const second = await upsertDeck(
+      db,
+      ownerId,
+      makeDeck(ownerId, {
+        title: "고친 제목",
+        createdAt: "2026-01-01T00:00:00.000Z",
+        updatedAt: later.toISOString(),
+      }),
+      later,
+    );
+    expect(second).toMatchObject({
+      status: "saved",
+      deck: {
+        title: "고친 제목",
+        createdAt: limit,
+        updatedAt: later.toISOString(),
+      },
+    });
+    expect(await readDeck(DECK_ID)).toMatchObject({
+      createdAt: limit,
+      updatedAt: later.toISOString(),
+    });
+  });
+
+  it("시각을 줄이기 전에 미래 시각으로 저장된 곡도 고칠 수 있다", async () => {
+    await seedDocs(db, {
+      decks: [
+        deckDoc({
+          id: DECK_ID,
+          userId: ownerId,
+          title: "미래에 박힌 곡",
+          updatedAt: new Date("9999-12-31T00:00:00.000Z"),
+        }),
+      ],
+    });
+    const now = new Date("2026-09-25T00:00:00.000Z");
+
+    const saved = await upsertDeck(
+      db,
+      ownerId,
+      makeDeck(ownerId, { title: "고친 곡", updatedAt: now.toISOString() }),
+      now,
+    );
+
+    expect(saved).toMatchObject({
+      status: "saved",
+      deck: { title: "고친 곡", updatedAt: now.toISOString() },
+    });
+    expect((await readDeck(DECK_ID)).title).toBe("고친 곡");
+  });
+
+  it("공개 중인 곡을 슬라이드 없이 저장하면 empty로 거절하고 공개·슬라이드를 지킨다", async () => {
+    await upsertDeck(db, ownerId, makeDeck(ownerId));
+    expect(
+      (await setDeckVisibility(db, ownerId, DECK_ID, "public")).status,
+    ).toBe("ok");
+
+    expect(
+      await upsertDeck(
+        db,
+        ownerId,
+        makeDeck(ownerId, {
+          slides: [],
+          updatedAt: "2026-09-22T00:00:00.000Z",
+        }),
+      ),
+    ).toEqual({ status: "empty" });
+
+    expect((await decksCol(db).doc(DECK_ID).get()).data()).toMatchObject({
+      visibility: "public",
+      listed: true,
+    });
+    expect((await readDeck(DECK_ID)).slides).toHaveLength(1);
+  });
+
+  it("비공개 곡은 슬라이드 없이도 저장한다", async () => {
+    await upsertDeck(db, ownerId, makeDeck(ownerId));
+
+    expect(
+      await upsertDeck(
+        db,
+        ownerId,
+        makeDeck(ownerId, {
+          slides: [],
+          updatedAt: "2026-09-22T00:00:00.000Z",
+        }),
+      ),
+    ).toMatchObject({ status: "saved", deck: { slides: [] } });
   });
 
   it("본문의 userId가 세션 사용자와 다르면 쓰지 않는다", async () => {
@@ -474,9 +647,17 @@ describe("덱 쓰기 헬퍼 (보관함 동기화)", () => {
       expect(await getDeletedDeckIds(db, ownerId)).toEqual([]);
 
       await db.runTransaction(async (tx) => {
-        (await prepareClearTombstone(tx, db, strangerId, DECK_ID))();
+        const tombstone = await readOwnTombstone(
+          tx,
+          db,
+          strangerId,
+          "presentation",
+          DECK_ID,
+        );
+        tombstone.clear();
       });
       expect(await getDeletedDeckIds(db, strangerId)).toEqual([DECK_ID]);
+      expect(await readRecord(DECK_ID)).toEqual(presentationRecord);
     });
 
     it("옛 리비전이 기록 옆에 다시 만든 곡은 저장을 거절하고, 지우면 문서만 지우고 기록은 남긴다", async () => {

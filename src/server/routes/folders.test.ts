@@ -1,4 +1,12 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import {
+  describe,
+  it,
+  expect,
+  afterEach,
+  beforeEach,
+  vi,
+  type MockInstance,
+} from "vitest";
 import { env } from "../test/env";
 import {
   API_ERRORS,
@@ -138,6 +146,16 @@ async function listDocs(): Promise<PresentationDocument[]> {
     .presentations;
 }
 
+function eventLines(
+  log: MockInstance,
+  event: string,
+): Record<string, unknown>[] {
+  return log.mock.calls
+    .map(([line]) => String(line))
+    .filter((line) => line.includes(`"${event}"`))
+    .map((line) => JSON.parse(line) as Record<string, unknown>);
+}
+
 describe("드라이브 폴더 API", () => {
   beforeEach(async () => {
     await clearDb(env.DB);
@@ -148,6 +166,10 @@ describe("드라이브 폴더 API", () => {
       ].map((row) => userDoc(row)),
     });
     currentUser = USER_A;
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
   it("로그인하지 않으면 401", async () => {
@@ -221,6 +243,54 @@ describe("드라이브 폴더 API", () => {
     expect(await listFolders()).toEqual([]);
     currentUser = USER_B;
     expect(await listFolders()).toEqual([]);
+  });
+
+  it("늦게 도착한 옛 폴더 저장은 200과 저장된 새 폴더로 답한다", async () => {
+    const folder = makeFolder({ name: "처음" });
+    await putFolder(folder);
+    const newer = {
+      ...folder,
+      name: "주일 1부",
+      updatedAt: "2026-09-25T00:00:05.000Z",
+    };
+    expect((await putFolder(newer)).status).toBe(200);
+
+    const late = await putFolder({
+      ...folder,
+      name: "주일 예배",
+      updatedAt: "2026-09-25T00:00:00.000Z",
+    });
+
+    expect(late.status).toBe(200);
+    expect(await late.json()).toEqual({ folder: newer });
+    expect(await listFolders()).toEqual([newer]);
+  });
+
+  it("영구 삭제한 폴더에 늦게 온 저장은 410이고 다시 만들지 않는다", async () => {
+    const folder = makeFolder({ trashedAt: TRASHED_AT });
+    await putFolder(folder);
+    expect((await deleteFolder(folder.id)).status).toBe(200);
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+
+    const late = await putFolder({
+      ...folder,
+      trashedAt: null,
+      updatedAt: "2026-09-26T00:00:00.000Z",
+    });
+
+    expect(late.status).toBe(410);
+    expect(await late.json()).toEqual({ error: API_ERRORS.folder.deleted });
+    expect(await listFolderBody()).toEqual({
+      folders: [],
+      tombstones: { folderIds: [folder.id], presentationIds: [] },
+    });
+    expect(eventLines(log, "folder_save_deleted")).toEqual([
+      expect.objectContaining({
+        severity: "INFO",
+        folderId: folder.id,
+        route: "/api/folders/:id",
+      }),
+    ]);
   });
 
   it("사이클을 만드는 이동은 루트로 보정해 돌려준다", async () => {

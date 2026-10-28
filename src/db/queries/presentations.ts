@@ -1,8 +1,11 @@
 import {
+  clampToClock,
   isReservedDocumentId,
+  laterThan,
+  MAX_FIRESTORE_TIME,
   MAX_PRESENTATION_TEXT_BYTES,
   toPresentationChanges,
-  type PresentationChanges,
+  type PresentationChangesRequest,
   type PresentationDocument,
 } from "#shared";
 import type { Db } from "../client";
@@ -18,8 +21,8 @@ import { fromPresentationChanges, toPresentationDocument } from "./mappers";
 import { existingBackgroundIds } from "./decks";
 import { isPresentationInTrash } from "./folders";
 import {
-  prepareClearTombstone,
   prepareDeletionPass,
+  readOwnTombstone,
   runDeletionPasses,
   type DeleteForeverRefusal,
 } from "./cascade";
@@ -33,6 +36,24 @@ export function byServiceDateDesc(
     return a.serviceDate < b.serviceDate ? 1 : -1;
   }
   return b.createdAt.getTime() - a.createdAt.getTime();
+}
+
+function byPosition(a: DeckDoc, b: DeckDoc): number {
+  return (a.position ?? 0) - (b.position ?? 0);
+}
+
+function nextRevision(
+  previous: Date | undefined,
+  sentIso: string,
+  nowMs: number,
+): string {
+  const revision = laterThan(
+    previous?.toISOString(),
+    clampToClock(sentIso, nowMs),
+  );
+  return Date.parse(revision) > MAX_FIRESTORE_TIME
+    ? new Date(MAX_FIRESTORE_TIME).toISOString()
+    : revision;
 }
 
 export type DeletePresentationResult =
@@ -71,17 +92,27 @@ export async function deletePresentation(
 /**
  * `savePresentationChanges` 결과.
  *
+ * - `saved`: 썼다. `updatedAt`은 서버가 남긴 판이라 보낸 시각과 다를 수 있다.
  * - `forbidden`: 남의 세트, 공유받은 세트(`access`), 다른 곳에 속한 덱 id, 또는 본문의
  *   `userId`가 세션 사용자가 아닌 세트. 아직 A라고 믿는 탭이나 A가 남긴 대기열이 보낸 문서를
  *   지금 쿠키의 주인인 B의 계정에 만들면 안 된다
+ * - `deleted`: 내가 영구 삭제한 프레젠테이션이다(서버에 없고 내 영구 삭제 기록이 있다).
+ * - `conflict`: 기준 판(`baseUpdatedAt`)이 저장된 판과 다르다. 저장된 판(`current`)을 돌려준다.
  * - `stale`: 항목이 가리키는 덱이 본문에도 서버에도 없다. 클라이언트가 서버 상태를
  *   잘못 알고 있으므로 모든 덱을 담아 다시 보내야 한다.
  * - `tooLarge`: 저장하면 담긴 곡 글(곡마다 `songTextBytes`)의 합이
  *   `MAX_PRESENTATION_TEXT_BYTES`를 넘고 지금보다 커진다. 이미 상한을 넘은 프레젠테이션이라도
  *   곡 글을 키우지 않는 저장(프레젠테이션 제목·곡 순서 바꾸기, 곡 빼기)은 받는다.
+ *
+ * `saved` 말고는 아무것도 쓰지 않는다.
  */
 export type SavePresentationResult =
-  "saved" | "forbidden" | "stale" | "tooLarge";
+  | { status: "saved"; updatedAt: Date }
+  | { status: "forbidden" }
+  | { status: "deleted" }
+  | { status: "conflict"; current: PresentationDocument }
+  | { status: "stale" }
+  | { status: "tooLarge" };
 
 function utf8Bytes(value: unknown): number {
   return typeof value === "string" ? Buffer.byteLength(value, "utf8") : 0;
@@ -154,14 +185,31 @@ function editableDeckFields(row: DeckDoc): Partial<DeckDoc> {
  * 곡만 보내는 저장을 거듭하면 요청 본문 상한과 상관없이 프레젠테이션을 키울 수 있는데, 링크로
  * 공유하면 로그인 없이 보는 요청마다 서버가 그 전부를 읽어 보낸다. 상한은 사본을 이미 읽는 이
  * 트랜잭션에서 세므로 읽기가 늘지 않는다.
+ *
+ * 문서 전체를 갈아 끼우는 저장이라 기준 판(`baseUpdatedAt`)이 오면 저장된 판과 견준다. 그사이 다른
+ * 곳에서 바꿨으면(기준이 다르거나, 서버에 있는데 기준이 `null`) 쓰지 않고 `conflict`와 저장된 판을
+ * 돌려준다. 그대로 쓰면 다른 기기가 넣은 곡을 지우고 바꾼 순서·제목을 되돌린다. 저장된 판은 이미 읽은
+ * 머리·사본으로 만들어 읽기가 늘지 않는다. 견주기는 주인 확인 뒤, `stale` 앞에 한다. 남의 세트를
+ * 돌려주지 않고, 낡은 기기가 모든 곡 다시 보내기로 지운 곡을 되살리지 않게 하기 위해서다. 기준이 없는
+ * 이전 클라이언트의 저장은 견주지 않고 받는다. 서버에 없는 id는 기준과 상관없이 만든다.
+ *
+ * 저장된 `updatedAt`은 판이고 받은 저장마다 커진다. 보낸 시각을 서버 시계 + 5분까지로 줄여 쓰되, 저장된
+ * 판보다 늦지 않으면 저장된 판 + 1ms로 쓴다(`laterThan`). 되돌리기처럼 옛 시각을 담은 저장도 모든
+ * 기기에서 새 판이 되고, 빠른 시계가 판을 미래에 박아 두지 못한다. Firestore가 담는 마지막 시각
+ * (`MAX_FIRESTORE_TIME`)에 박힌 판만은 그대로 둔다. 1ms를 더한 값은 담지 못해 1970년으로 바뀌고,
+ * 판이 거꾸로 간다.
+ *
+ * 영구 삭제는 되돌리지 않는다. 서버에 없고 내 영구 삭제 기록이 있는 id는 기준과 상관없이 쓰지 않고
+ * `deleted`다(`readOwnTombstone`).
  */
 export async function savePresentationChanges(
   db: Db,
   userId: string,
-  changes: PresentationChanges,
+  changes: PresentationChangesRequest,
+  now: Date = new Date(),
 ): Promise<SavePresentationResult> {
-  if (changes.access) return "forbidden";
-  if (changes.userId !== userId) return "forbidden";
+  if (changes.access) return { status: "forbidden" };
+  if (changes.userId !== userId) return { status: "forbidden" };
 
   const sentDeckIds = changes.decks.map((deck) => deck.id);
   const forkedFromIds = [
@@ -183,7 +231,7 @@ export async function savePresentationChanges(
       sentDecks,
       forkedFromDecks,
       knownBackgrounds,
-      clearTombstone,
+      tombstone,
     ] = await Promise.all([
       tx.get(ref),
       tx.get(decksCol(db).where("presentationId", "==", changes.id)),
@@ -201,11 +249,28 @@ export async function savePresentationChanges(
         db,
         changes.decks.map((deck) => deck.backgroundId),
       ),
-      prepareClearTombstone(tx, db, userId, changes.id),
+      readOwnTombstone(tx, db, userId, "presentation", changes.id),
     ]);
 
     const existing = existingSnapshot.data();
-    if (existing && existing.userId !== userId) return "forbidden";
+    if (existing && existing.userId !== userId) return { status: "forbidden" };
+    if (!existing && tombstone.exists) return { status: "deleted" };
+
+    const existingCopies = copiesSnapshot.docs.map((doc) => doc.data());
+    const base = changes.baseUpdatedAt;
+    if (
+      existing &&
+      base !== undefined &&
+      (base === null || Date.parse(base) !== existing.updatedAt.getTime())
+    ) {
+      return {
+        status: "conflict",
+        current: toPresentationDocument(
+          existing,
+          [...existingCopies].sort(byPosition),
+        ),
+      };
+    }
 
     const sentDecksElsewhere = sentDecks.some((snapshot) => {
       const deck = snapshot.data();
@@ -214,7 +279,7 @@ export async function savePresentationChanges(
         (deck.presentationId !== changes.id || deck.userId !== userId)
       );
     });
-    if (sentDecksElsewhere) return "forbidden";
+    if (sentDecksElsewhere) return { status: "forbidden" };
 
     const ownedFolder = folderSnapshot?.data()?.userId === userId;
     const folderId =
@@ -231,10 +296,14 @@ export async function savePresentationChanges(
     } = fromPresentationChanges({
       ...changes,
       userId,
+      updatedAt: nextRevision(
+        existing?.updatedAt,
+        changes.updatedAt,
+        now.getTime(),
+      ),
       ...(folderId === undefined ? {} : { folderId }),
     });
 
-    const existingCopies = copiesSnapshot.docs.map((doc) => doc.data());
     const previous = new Map(existingCopies.map((copy) => [copy.id, copy]));
     const sent = new Map(
       sentDeckRows.map((row) => [
@@ -251,7 +320,7 @@ export async function savePresentationChanges(
     const missingDeck = slots.some(
       (slot) => !sent.has(slot.deckId) && !previous.has(slot.deckId),
     );
-    if (missingDeck) return "stale";
+    if (missingDeck) return { status: "stale" };
 
     const savedBytes = slots.reduce((sum, slot) => {
       const row = sent.get(slot.deckId) ?? previous.get(slot.deckId);
@@ -262,7 +331,7 @@ export async function savePresentationChanges(
       0,
     );
     if (savedBytes > MAX_PRESENTATION_TEXT_BYTES && savedBytes > storedBytes) {
-      return "tooLarge";
+      return { status: "tooLarge" };
     }
 
     const nextDeckIds = new Set(slots.map((slot) => slot.deckId));
@@ -277,7 +346,7 @@ export async function savePresentationChanges(
         .map((snapshot) => snapshot.id),
     );
 
-    clearTombstone();
+    tombstone.clear();
 
     if (existing) {
       tx.update(ref, {
@@ -328,24 +397,26 @@ export async function savePresentationChanges(
       }
     }
 
-    return "saved";
+    return { status: "saved", updatedAt: presentation.updatedAt };
   });
 }
 
 /**
  * 프레젠테이션 문서 업서트 (문서 단위 전체 교체). 모든 덱을 담은 변경분 저장과 같다.
- * 소유자가 다르거나, 공유받은 세트거나, 문서의 `userId`가 세션 사용자가 아니면 아무것도
- * 쓰지 않고 false를 돌린다.
+ * 소유자가 다르거나, 공유받은 세트거나, 문서의 `userId`가 세션 사용자가 아니거나, 영구 삭제한
+ * 프레젠테이션이면 아무것도 쓰지 않고 false를 돌린다.
  */
 export async function upsertPresentationDocument(
   db: Db,
   userId: string,
   doc: PresentationDocument,
 ): Promise<boolean> {
-  return (
-    (await savePresentationChanges(db, userId, toPresentationChanges(doc))) ===
-    "saved"
+  const result = await savePresentationChanges(
+    db,
+    userId,
+    toPresentationChanges(doc),
   );
+  return result.status === "saved";
 }
 
 /** 본인 소유 프레젠테이션 전체를 하이드레이션된 문서 목록으로 조회 */
@@ -387,9 +458,7 @@ export async function hydratePresentationDocuments(
   return headers.map((header) =>
     toPresentationDocument(
       header,
-      (byPresentation.get(header.id) ?? []).sort(
-        (a, b) => (a.position ?? 0) - (b.position ?? 0),
-      ),
+      (byPresentation.get(header.id) ?? []).sort(byPosition),
     ),
   );
 }

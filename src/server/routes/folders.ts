@@ -5,11 +5,12 @@ import {
   getDriveTombstones,
   upsertFolder,
   deleteFolderTree,
+  type UpsertFolderResult,
 } from "#db";
 import type { AppEnv } from "../types";
 import { resolveRequireAuth, type AppDeps } from "../deps";
 import { isTransientStorageError } from "../lib/storageErrors";
-import { logServerError } from "../lib/requestLog";
+import { logRequestEvent, logServerError } from "../lib/requestLog";
 import { idParam } from "../lib/params";
 import { jsonBody } from "../lib/jsonBody";
 import {
@@ -22,6 +23,9 @@ import {
  *
  * 폴더는 1건 단위로 주고받는다. 휴지통은 `trashedAt`을 담은 PUT이고, DELETE는
  * 휴지통 비우기·영구 삭제 전용이다 (하위 폴더·프레젠테이션까지 지운다).
+ * PUT은 서버에 저장된 확정본을 돌려준다. 저장된 폴더가 더 나중에 고친 것이면 쓰지 않고 그 폴더로
+ * 200이다. 영구 삭제한 폴더에 늦게 온 PUT은 다시 만들지 않고 410이며, 얼마나 자주 일어나는지 보려고
+ * INFO 로그로 남긴다.
  * DELETE는 서버에서 그 폴더나 조상이 휴지통에 있을 때만 지운다. 본문의 `expected`(그 기기가 본
  * 하위 트리)를 받으면 서버 트리가 그 안에 들 때만 지운다. 어느 쪽이든 어긋나면 아무것도 지우지
  * 않고 409로 답한다. 본문이 없는 이전 클라이언트는 휴지통 확인만 받는다. 큰 트리를 나눠 지우는
@@ -56,12 +60,9 @@ export function createFoldersRoute(deps: AppDeps = {}) {
 
       const db = c.env.DB;
 
-      let saved;
+      let result: UpsertFolderResult;
       try {
-        saved = await upsertFolder(db, userId, folder);
-        if (!saved) {
-          return c.json({ error: API_ERRORS.folder.notAccessible }, 403);
-        }
+        result = await upsertFolder(db, userId, folder);
       } catch (error) {
         logServerError(c, "folder upsert failed", error, {
           folderId: folder.id,
@@ -72,7 +73,17 @@ export function createFoldersRoute(deps: AppDeps = {}) {
         return c.json({ error: API_ERRORS.folder.saveFailed }, 500);
       }
 
-      return c.json({ folder: saved }, 200);
+      switch (result.status) {
+        case "forbidden":
+          return c.json({ error: API_ERRORS.folder.notAccessible }, 403);
+        case "deleted":
+          logRequestEvent(c, "INFO", "folder_save_deleted", {
+            folderId: folder.id,
+          });
+          return c.json({ error: API_ERRORS.folder.deleted }, 410);
+        case "saved":
+          return c.json({ folder: result.folder }, 200);
+      }
     })
     .delete(
       "/:id",
