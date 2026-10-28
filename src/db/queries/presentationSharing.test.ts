@@ -1,9 +1,23 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import {
+  DocumentReference,
+  Query,
+  QuerySnapshot,
+  Transaction,
+} from "@google-cloud/firestore";
 import type { Db } from "../client";
-import { decksCol, presentationsCol } from "../collections";
+import {
+  COLLECTIONS,
+  decksCol,
+  foldersCol,
+  memberDocId,
+  presentationMembersCol,
+  presentationsCol,
+} from "../collections";
 import {
   createTestDb,
   folderDoc,
+  presentationDoc,
   presentationsWithCopies,
   seedDocs,
   userDoc,
@@ -16,8 +30,10 @@ import {
 } from "#shared";
 import { upsertPresentationDocument } from "./presentations";
 import {
+  MAX_SHARED_FOLDER_DEPTH,
   getPresentationDocument,
   getShareSettings,
+  getSharedDocumentByToken,
   getSharedPresentationDocuments,
   joinByToken,
   resetLinkToken,
@@ -29,8 +45,38 @@ const OWNER = "000000000000000000001";
 const MEMBER = "000000000000000000002";
 const STRANGER = "000000000000000000003";
 const DOC_ID = "100000000000000000001";
+const SECOND_DOC_ID = "100000000000000000002";
+const LINK_OFF_DOC_ID = "100000000000000000003";
+const TRASHED_DOC_ID = "100000000000000000004";
 const DECK_ID = "c00000000000000000001";
 const FOLDER_ID = "f00000000000000000001";
+const PARENT_FOLDER_ID = "f00000000000000000002";
+const OTHER_FOLDER_ID = "f00000000000000000003";
+const RESET_WAIT_MS = 300;
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
+
+async function withFolderReads<T>(
+  run: () => Promise<T>,
+): Promise<{ result: T; folderReads: number }> {
+  const directGet = vi.spyOn(DocumentReference.prototype, "get");
+  const transactionGet = vi.spyOn(Transaction.prototype, "get");
+  const result = await run();
+  const targets: unknown[] = [
+    ...directGet.mock.contexts,
+    ...transactionGet.mock.calls.map(([target]) => target),
+  ];
+  directGet.mockRestore();
+  transactionGet.mockRestore();
+  const folderReads = targets.filter(
+    (target) =>
+      target instanceof DocumentReference &&
+      target.parent.id === COLLECTIONS.folders,
+  ).length;
+  return { result, folderReads };
+}
 
 function makeDoc(
   overrides: Partial<PresentationDocument> = {},
@@ -96,6 +142,83 @@ describe("세트 링크 공유", () => {
     const token = settings?.token as string;
     await joinByToken(db, token, MEMBER);
     return token;
+  }
+
+  async function nestUnderParentFolder(): Promise<void> {
+    await seedDocs(db, {
+      folders: [
+        folderDoc({ id: PARENT_FOLDER_ID, userId: OWNER, name: "2026" }),
+        folderDoc({
+          id: FOLDER_ID,
+          userId: OWNER,
+          parentId: PARENT_FOLDER_ID,
+          name: "9월",
+        }),
+      ],
+    });
+  }
+
+  async function placeFolderAtDepth(depth: number): Promise<void> {
+    const chain = Array.from({ length: depth }, (_, level) =>
+      level === 0 ? FOLDER_ID : `e${String(level).padStart(20, "0")}`,
+    );
+    await seedDocs(db, {
+      folders: chain.map((id, level) =>
+        folderDoc({ id, userId: OWNER, parentId: chain[level + 1] ?? null }),
+      ),
+    });
+  }
+
+  async function memberExists(userId: string): Promise<boolean> {
+    const snapshot = await presentationMembersCol(db)
+      .doc(memberDocId(DOC_ID, userId))
+      .get();
+    return snapshot.exists;
+  }
+
+  function isTokenLookup(snapshot: unknown): boolean {
+    return (
+      snapshot instanceof QuerySnapshot &&
+      snapshot.docs[0]?.ref.parent.id === COLLECTIONS.presentations
+    );
+  }
+
+  function resetAfterFirstTokenLookup(): () => Promise<unknown> {
+    let reset: Promise<unknown> | null = null;
+    const startReset = async (snapshot: unknown): Promise<void> => {
+      if (reset || !isTokenLookup(snapshot)) return;
+      reset = resetLinkToken(db, DOC_ID, OWNER);
+      await Promise.race([
+        reset,
+        new Promise((resolve) => setTimeout(resolve, RESET_WAIT_MS)),
+      ]);
+    };
+
+    const queryGet = Query.prototype.get;
+    vi.spyOn(Query.prototype, "get").mockImplementation(async function (
+      this: Query,
+    ) {
+      const snapshot = await queryGet.call(this);
+      await startReset(snapshot);
+      return snapshot;
+    });
+    const transactionGet = Transaction.prototype.get as (
+      this: Transaction,
+      target: unknown,
+    ) => Promise<unknown>;
+    vi.spyOn(Transaction.prototype, "get").mockImplementation(async function (
+      this: Transaction,
+      target: unknown,
+    ) {
+      const snapshot = await transactionGet.call(this, target);
+      await startReset(snapshot);
+      return snapshot;
+    } as typeof Transaction.prototype.get);
+
+    return async () => {
+      if (!reset) throw new Error("token lookup never ran");
+      return reset;
+    };
   }
 
   describe("in 조건 한도(30)를 넘는 공유 목록", () => {
@@ -194,6 +317,36 @@ describe("세트 링크 공유", () => {
       expect(await getSharedPresentationDocuments(db, MEMBER)).toEqual([]);
     });
 
+    it("휴지통에 넣은 폴더(조상 포함) 안의 프레젠테이션은 링크가 멈추고, 복원하면 다시 열린다", async () => {
+      await nestUnderParentFolder();
+      const token = await shareAndJoin();
+
+      await foldersCol(db)
+        .doc(PARENT_FOLDER_ID)
+        .update({ trashedAt: new Date() });
+
+      expect(await resolvePresentationAccess(db, DOC_ID, MEMBER)).toBeNull();
+      expect(await getPresentationDocument(db, DOC_ID, MEMBER)).toBeNull();
+      expect(await getSharedPresentationDocuments(db, MEMBER)).toEqual([]);
+      expect(await getSharedDocumentByToken(db, token)).toBeNull();
+      expect(await joinByToken(db, token, STRANGER)).toBeNull();
+      expect(await memberExists(STRANGER)).toBe(false);
+      expect(await resolvePresentationAccess(db, DOC_ID, OWNER)).toBe("owner");
+
+      await foldersCol(db).doc(PARENT_FOLDER_ID).update({ trashedAt: null });
+
+      expect(await resolvePresentationAccess(db, DOC_ID, MEMBER)).toBe(
+        "viewer",
+      );
+      expect(
+        (await getSharedPresentationDocuments(db, MEMBER)).map(
+          (document) => document.id,
+        ),
+      ).toEqual([DOC_ID]);
+      expect((await getSharedDocumentByToken(db, token))?.id).toBe(DOC_ID);
+      expect(await resolvePresentationAccess(db, DOC_ID, STRANGER)).toBeNull();
+    });
+
     it("링크를 재설정하면 예전 링크와 기존 멤버가 모두 끊긴다", async () => {
       const oldToken = await shareAndJoin();
       const reset = await resetLinkToken(db, DOC_ID, OWNER);
@@ -204,6 +357,129 @@ describe("세트 링크 공유", () => {
       expect(
         (await joinByToken(db, reset?.token as string, STRANGER))?.role,
       ).toBe("viewer");
+    });
+
+    it.each([
+      ["이미 들어와 있던", MEMBER],
+      ["처음 들어오는", STRANGER],
+    ])(
+      "%s 사람의 예전 링크 참여가 링크 재설정과 겹쳐도 멤버로 남지 않는다",
+      async (_, userId) => {
+        const oldToken = await shareAndJoin();
+        const resetDone = resetAfterFirstTokenLookup();
+
+        await joinByToken(db, oldToken, userId);
+        await resetDone();
+        vi.restoreAllMocks();
+
+        expect((await getShareSettings(db, DOC_ID, OWNER))?.token).not.toBe(
+          oldToken,
+        );
+        expect(await memberExists(userId)).toBe(false);
+        expect(await resolvePresentationAccess(db, DOC_ID, userId)).toBeNull();
+        expect(await getSharedPresentationDocuments(db, userId)).toEqual([]);
+      },
+    );
+  });
+
+  describe("공유 목록의 폴더 읽기", () => {
+    it("링크가 살아 있을 수 있는 프레젠테이션의 폴더만 읽고, 같은 조상 폴더는 한 번씩만 읽는다", async () => {
+      await nestUnderParentFolder();
+      await seedDocs(db, {
+        folders: [folderDoc({ id: OTHER_FOLDER_ID, userId: OWNER })],
+        presentations: [
+          presentationDoc({
+            id: SECOND_DOC_ID,
+            userId: OWNER,
+            folderId: FOLDER_ID,
+            linkAccess: "view",
+            linkToken: "t00000000000000000002",
+          }),
+          presentationDoc({
+            id: LINK_OFF_DOC_ID,
+            userId: OWNER,
+            folderId: OTHER_FOLDER_ID,
+            linkToken: "t00000000000000000003",
+          }),
+          presentationDoc({
+            id: TRASHED_DOC_ID,
+            userId: OWNER,
+            folderId: OTHER_FOLDER_ID,
+            linkAccess: "view",
+            linkToken: "t00000000000000000004",
+            trashedAt: new Date(),
+          }),
+        ],
+        members: [SECOND_DOC_ID, LINK_OFF_DOC_ID, TRASHED_DOC_ID].map(
+          (presentationId) => ({ presentationId, userId: MEMBER }),
+        ),
+      });
+      await shareAndJoin();
+      const get = vi.spyOn(DocumentReference.prototype, "get");
+
+      const documents = await getSharedPresentationDocuments(db, MEMBER);
+
+      const folderReads = (get.mock.contexts as DocumentReference[])
+        .filter((ref) => ref.parent.id === COLLECTIONS.folders)
+        .map((ref) => ref.id)
+        .sort();
+      expect(documents.map((document) => document.id).sort()).toEqual([
+        DOC_ID,
+        SECOND_DOC_ID,
+      ]);
+      expect(folderReads).toEqual([FOLDER_ID, PARENT_FOLDER_ID]);
+    });
+  });
+
+  describe("링크 확인의 폴더 읽기 한도", () => {
+    it("담긴 폴더가 한도보다 깊으면 링크를 멈추고, 확인마다 폴더를 한도까지만 읽는다", async () => {
+      const token = await shareAndJoin();
+      await placeFolderAtDepth(MAX_SHARED_FOLDER_DEPTH + 1);
+
+      const checks = [
+        await withFolderReads(() => getSharedDocumentByToken(db, token)),
+        await withFolderReads(() =>
+          resolvePresentationAccess(db, DOC_ID, MEMBER),
+        ),
+        await withFolderReads(() => getSharedPresentationDocuments(db, MEMBER)),
+        await withFolderReads(() => joinByToken(db, token, STRANGER)),
+      ];
+
+      expect(checks.map(({ result }) => result)).toEqual([
+        null,
+        null,
+        [],
+        null,
+      ]);
+      for (const { folderReads } of checks) {
+        expect(folderReads).toBeLessThanOrEqual(MAX_SHARED_FOLDER_DEPTH);
+      }
+      expect(await memberExists(STRANGER)).toBe(false);
+      expect(await resolvePresentationAccess(db, DOC_ID, OWNER)).toBe("owner");
+    });
+
+    it("한도 깊이까지 담긴 프레젠테이션은 링크가 열린다", async () => {
+      const token = await shareAndJoin();
+      await placeFolderAtDepth(MAX_SHARED_FOLDER_DEPTH);
+
+      expect((await getSharedDocumentByToken(db, token))?.id).toBe(DOC_ID);
+      expect(await resolvePresentationAccess(db, DOC_ID, MEMBER)).toBe(
+        "viewer",
+      );
+      expect((await joinByToken(db, token, STRANGER))?.role).toBe("viewer");
+    });
+
+    it("링크로 들어오면 담긴 폴더를 멤버로 기록할 때와 문서를 줄 때 한 번씩만 따라 읽는다", async () => {
+      const depth = 3;
+      await placeFolderAtDepth(depth);
+      const settings = await setLinkAccess(db, DOC_ID, OWNER, "view");
+
+      const joined = await withFolderReads(() =>
+        joinByToken(db, settings?.token as string, MEMBER),
+      );
+
+      expect(joined.result?.role).toBe("viewer");
+      expect(joined.folderReads).toBe(2 * depth);
     });
   });
 

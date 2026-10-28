@@ -8,12 +8,15 @@ import {
 } from "#shared";
 import type { Db } from "../client";
 import {
+  foldersCol,
   memberDocId,
   presentationMembersCol,
   presentationsCol,
   usersCol,
+  type FolderDoc,
   type PresentationDoc,
 } from "../collections";
+import { isPresentationInTrash } from "./folders";
 import {
   byServiceDateDesc,
   hydratePresentationDocuments,
@@ -21,16 +24,73 @@ import {
 
 export type PresentationRole = "owner" | "viewer";
 
-/** 링크 공유가 살아 있는 세트인지. 휴지통에 들어간 세트는 링크가 멈춘다 */
-function isLinkActive(presentation: PresentationDoc): boolean {
-  return presentation.linkAccess !== "off" && presentation.trashedAt === null;
+/**
+ * 공유 링크가 살아 있는지 볼 때 프레젠테이션 하나에서 따라 올라가며 읽는 폴더 수 상한. 이 확인은
+ * 로그인 없는 링크 보기와 공유받은 사람의 목록·참여 요청에서 일어나, 소유자가 폴더를 깊게 쌓으면
+ * 남의 요청이 읽는 문서 수와 기다리는 시간이 함께 늘어난다. 더 깊이 담긴 프레젠테이션은 휴지통
+ * 여부를 끝까지 보지 않고 링크가 멈춘 것으로 본다. 영구 삭제의 휴지통 확인(`deletePresentation`)은
+ * 소유자 자신의 요청이라 묶지 않는다.
+ */
+export const MAX_SHARED_FOLDER_DEPTH = 64;
+
+type FolderReader = (id: string) => Promise<FolderDoc | undefined>;
+
+function readFolderDoc(db: Db): FolderReader {
+  return async (id) => (await foldersCol(db).doc(id).get()).data();
+}
+
+function memoizeFolderReads(read: FolderReader): FolderReader {
+  const reads = new Map<string, Promise<FolderDoc | undefined>>();
+  return (id) => {
+    const known = reads.get(id);
+    if (known) return known;
+    const pending = read(id);
+    reads.set(id, pending);
+    return pending;
+  };
+}
+
+class FolderChainTooDeepError extends Error {}
+
+function limitFolderReads(read: FolderReader): FolderReader {
+  let reads = 0;
+  return async (id) => {
+    reads += 1;
+    if (reads > MAX_SHARED_FOLDER_DEPTH) throw new FolderChainTooDeepError();
+    return read(id);
+  };
 }
 
 /**
- * 세트 접근 권한을 한 곳에서 판정한다.
+ * 링크 공유가 살아 있는 프레젠테이션인지. 프레젠테이션이나 담긴 폴더(조상 포함)가 휴지통에
+ * 있으면 링크가 멈춘다. 폴더를 휴지통에 넣으면 폴더 문서만 바뀌므로 폴더를 따라 읽는다
+ * (`isPresentationInTrash`). 폴더는 링크가 켜져 있고 자신은 휴지통 밖인 프레젠테이션일 때만 읽고,
+ * 이 확인에만 쓰고 돌려주지 않는다. 멤버 기록은 남아 폴더를 복원하면 링크가 다시 열린다.
+ * 폴더를 `MAX_SHARED_FOLDER_DEPTH`개보다 많이 읽어야 하면 더 읽지 않고 링크가 멈춘 것으로 본다.
+ */
+async function isLinkActive(
+  presentation: PresentationDoc,
+  readFolder: FolderReader,
+): Promise<boolean> {
+  if (presentation.linkAccess === "off" || presentation.trashedAt !== null) {
+    return false;
+  }
+  try {
+    return !(await isPresentationInTrash(
+      limitFolderReads(readFolder),
+      presentation,
+    ));
+  } catch (error) {
+    if (error instanceof FolderChainTooDeepError) return false;
+    throw error;
+  }
+}
+
+/**
+ * 프레젠테이션 접근 권한을 한 곳에서 판정한다.
  *
- * 소유자가 아니면 멤버 문서가 있고 링크가 살아 있을 때만 보기 권한을 준다.
- * 소유자가 링크를 끄거나 세트를 휴지통에 넣으면 다음 요청부터 막힌다.
+ * 소유자가 아니면 멤버 문서가 있고 링크가 살아 있을 때만 보기 권한을 준다. 소유자가 링크를
+ * 끄거나 프레젠테이션이나 담긴 폴더(조상 포함)를 휴지통에 넣으면 다음 요청부터 막힌다.
  */
 export async function resolvePresentationAccess(
   db: Db,
@@ -44,8 +104,10 @@ export async function resolvePresentationAccess(
   const presentation = presentationSnapshot.data();
   if (!presentation) return null;
   if (presentation.userId === userId) return "owner";
-  if (!memberSnapshot.exists || !isLinkActive(presentation)) return null;
-  return "viewer";
+  if (!memberSnapshot.exists) return null;
+  return (await isLinkActive(presentation, readFolderDoc(db)))
+    ? "viewer"
+    : null;
 }
 
 async function ownerNames(
@@ -85,7 +147,9 @@ export async function getPresentationDocument(
 }
 
 /**
- * 공유받은 사람에게 주는 모양. 폴더·휴지통은 소유자의 드라이브 배치라 비운다.
+ * 공유받은 사람에게 주는 모양. 폴더·휴지통은 소유자의 드라이브 배치라 비운다. 사본이 담아 온
+ * 보관함 곡(`forkedFrom`)도 소유자의 보관함이라 비운다. 서버는 저장한 사람 자신의 곡을 가리킬
+ * 때만 남기므로, 그대로 주면 소유자의 비공개 곡 id가 링크를 아는 누구에게나 드러난다.
  * `memberId`가 없으면 로그인하지 않고 링크로 보는 사람이다.
  */
 function toSharedDocument(
@@ -97,20 +161,27 @@ function toSharedDocument(
     ...document,
     folderId: null,
     trashedAt: null,
+    items: document.items.map((item) => ({
+      ...item,
+      deck: { ...item.deck, forkedFrom: null },
+    })),
     access: memberId ? { ownerName, memberId } : { ownerName },
   };
+}
+
+function tokenQuery(db: Db, token: string) {
+  return presentationsCol(db).where("linkToken", "==", token).limit(1);
 }
 
 async function findActiveByToken(
   db: Db,
   token: string,
 ): Promise<PresentationDoc | null> {
-  const snapshot = await presentationsCol(db)
-    .where("linkToken", "==", token)
-    .limit(1)
-    .get();
+  const snapshot = await tokenQuery(db, token).get();
   const presentation = snapshot.docs[0]?.data();
-  return presentation && isLinkActive(presentation) ? presentation : null;
+  return presentation && (await isLinkActive(presentation, readFolderDoc(db)))
+    ? presentation
+    : null;
 }
 
 /**
@@ -131,8 +202,12 @@ export async function getSharedDocumentByToken(
 }
 
 /**
- * 링크로 들어와 아직 접근할 수 있는 세트 목록.
+ * 링크로 들어와 아직 접근할 수 있는 프레젠테이션 목록.
  * 폴더·휴지통은 소유자의 드라이브 배치라 공유받은 사람에게는 비워서 준다.
+ *
+ * 휴지통에 넣은 폴더 안의 프레젠테이션은 뺀다. 소유자의 폴더는 이 확인에만 읽고, 한 요청 안에서
+ * 같은 폴더는 한 번만 읽는다. 같은 폴더에 담긴 프레젠테이션을 여러 개 받았으면 프레젠테이션마다
+ * 같은 조상을 다시 읽게 되기 때문이다.
  */
 export async function getSharedPresentationDocuments(
   db: Db,
@@ -148,12 +223,17 @@ export async function getSharedPresentationDocuments(
       presentationsCol(db).doc(doc.data().presentationId),
     ),
   )) as DocumentSnapshot<PresentationDoc>[];
-  const visible = presentations
+  const others = presentations
     .flatMap((snapshot) => {
       const presentation = snapshot.data();
       return presentation ? [presentation] : [];
     })
-    .filter((p) => p.userId !== userId && isLinkActive(p));
+    .filter((p) => p.userId !== userId);
+  const readFolder = memoizeFolderReads(readFolderDoc(db));
+  const active = await Promise.all(
+    others.map((presentation) => isLinkActive(presentation, readFolder)),
+  );
+  const visible = others.filter((_, index) => active[index]);
   const names = await ownerNames(db, visible);
   const headers = visible
     .filter((p) => names.has(p.userId))
@@ -238,23 +318,44 @@ export interface JoinResult {
   document: PresentationDocument;
 }
 
-/** 링크가 살아 있으면 멤버로 기록하고 문서를 돌려준다. 소유자는 기록하지 않는다. */
+/**
+ * 링크가 살아 있으면 멤버로 기록하고 문서를 돌려준다. 소유자는 기록하지 않는다.
+ *
+ * 토큰 확인과 멤버 기록은 한 트랜잭션이다. 따로 하면 링크 재설정(`resetLinkToken`)이 토큰을 바꾸고
+ * 멤버를 지운 뒤에 예전 토큰을 확인한 참여가 멤버를 다시 써, 재설정으로 끊은 사람이 계속 본다.
+ * 재설정은 참여가 읽은 프레젠테이션 문서를 고치므로 Firestore가 둘의 차례를 정하고, 뒤에 오는 쪽이
+ * 앞쪽의 결과를 본다. 참여가 먼저면 재설정이 그 멤버 문서까지 읽어 지운다. 처음 들어오는 사람처럼
+ * 재설정이 멤버 목록을 읽어 둔 뒤에 생긴 멤버 문서여도 같다. 재설정이 먼저면 참여는 예전 토큰을 찾지
+ * 못해 아무것도 쓰지 않는다.
+ */
 export async function joinByToken(
   db: Db,
   token: string,
   userId: string,
 ): Promise<JoinResult | null> {
-  const target = await findActiveByToken(db, token);
+  const target = await db.runTransaction(async (tx) => {
+    const snapshot = await tx.get(tokenQuery(db, token));
+    const presentation = snapshot.docs[0]?.data();
+    if (!presentation) return null;
+    const active = await isLinkActive(presentation, async (id) =>
+      (await tx.get(foldersCol(db).doc(id))).data(),
+    );
+    if (!active) return null;
+    if (presentation.userId !== userId) {
+      tx.set(
+        presentationMembersCol(db).doc(memberDocId(presentation.id, userId)),
+        { presentationId: presentation.id, userId },
+      );
+    }
+    return presentation;
+  });
   if (!target) return null;
 
-  if (target.userId !== userId) {
-    await presentationMembersCol(db)
-      .doc(memberDocId(target.id, userId))
-      .set({ presentationId: target.id, userId });
-  }
-
-  const role = await resolvePresentationAccess(db, target.id, userId);
   const document = await getPresentationDocument(db, target.id, userId);
-  if (!role || !document) return null;
-  return { presentationId: target.id, role, document };
+  if (!document) return null;
+  return {
+    presentationId: target.id,
+    role: document.access ? "viewer" : "owner",
+    document,
+  };
 }
