@@ -62,9 +62,10 @@ import {
   type Presentation,
 } from "#shared";
 import { SHELL_COPY } from "#copy/shell";
-import { LEGAL_COPY } from "#copy/auth";
+import { AUTH_COPY, LEGAL_COPY } from "#copy/auth";
 import { COMMON_COPY, ERROR_COPY } from "#copy/common";
 import { PRESENTATION_COPY } from "#copy/presentation";
+import { SHARE_LINK_COPY } from "#copy/shareLink";
 import { SHARING_COPY } from "#copy/sharing";
 import {
   SEED_PRESENTATION_IDS,
@@ -148,6 +149,8 @@ function bootRoutes(
     ...overrides,
   };
 }
+
+const AUTH_CONFIG_REQUEST = "GET /api/auth-config";
 
 function apiRequests(api: FakeApi): string[] {
   return api.calls
@@ -278,13 +281,13 @@ describe("App Route Integration", () => {
 
     expect(screen.getByTestId("fullscreen-present-route")).toBe(route);
     expect(
-      screen.queryByRole("button", { name: /카카오 로그인/ }),
+      screen.queryByRole("button", { name: /Google 계정으로 로그인/ }),
     ).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByTestId("exit-present-btn"));
 
     expect(
-      await screen.findByRole("button", { name: /카카오 로그인/ }),
+      await screen.findByRole("button", { name: /Google 계정으로 로그인/ }),
     ).toBeInTheDocument();
     expect(
       screen.queryByTestId("fullscreen-present-route"),
@@ -332,7 +335,7 @@ describe("App Route Integration", () => {
     renderAt("/presentations");
 
     expect(
-      await screen.findByRole("button", { name: /카카오 로그인/ }),
+      await screen.findByRole("button", { name: /Google 계정으로 로그인/ }),
     ).toBeInTheDocument();
     expect(screen.queryByTestId("presentation-row")).not.toBeInTheDocument();
   });
@@ -344,7 +347,7 @@ describe("App Route Integration", () => {
 
     expect(await screen.findByTestId("landing-route")).toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: /카카오 로그인/ }),
+      screen.queryByRole("button", { name: /Google 계정으로 로그인/ }),
     ).not.toBeInTheDocument();
 
     act(() => {
@@ -352,8 +355,38 @@ describe("App Route Integration", () => {
     });
 
     expect(
-      await screen.findByRole("button", { name: /카카오 로그인/ }),
+      await screen.findByRole("button", { name: /Google 계정으로 로그인/ }),
     ).toBeInTheDocument();
+  });
+
+  it("소셜 로그인이 도중에 실패해 서버가 /?error=로 돌려보내면 로그인 화면에서 이유를 안내한다", async () => {
+    signOutForTests();
+
+    renderAt("/?error=account_not_linked");
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      AUTH_COPY.oauthErrors.accountNotLinked,
+    );
+    expect(
+      screen.getByRole("button", { name: /Google 계정으로 로그인/ }),
+    ).toBeEnabled();
+    expect(screen.queryByTestId("landing-route")).not.toBeInTheDocument();
+    expect(window.location.pathname).toBe("/presentations");
+    expect(window.location.search).toBe("");
+  });
+
+  it("이미 로그인한 사람이 /?error=로 돌아오면 오류 코드를 가져가지 않고 내 프레젠테이션으로 간다", async () => {
+    renderAt("/?error=account_not_linked");
+
+    expect(
+      (await screen.findAllByTestId("presentation-row")).length,
+    ).toBeGreaterThan(0);
+    expect(screen.queryByTestId("landing-route")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(AUTH_COPY.oauthErrors.accountNotLinked),
+    ).not.toBeInTheDocument();
+    expect(window.location.pathname).toBe("/presentations");
+    expect(window.location.search).toBe("");
   });
 
   it("미로그인이면 링크로 연 세트가 아닌 송출 경로는 막는다", async () => {
@@ -362,7 +395,7 @@ describe("App Route Integration", () => {
     renderAt(`/present/${DOC_ID}/fullscreen`);
 
     expect(
-      await screen.findByRole("button", { name: /카카오 로그인/ }),
+      await screen.findByRole("button", { name: /Google 계정으로 로그인/ }),
     ).toBeInTheDocument();
     expect(
       screen.queryByTestId("fullscreen-present-route"),
@@ -388,8 +421,33 @@ describe("App Route Integration", () => {
 
       expect(await screen.findByTestId("read-only-banner")).toBeInTheDocument();
       expect(
-        screen.queryByRole("button", { name: /카카오 로그인/ }),
+        screen.queryByRole("button", { name: /Google 계정으로 로그인/ }),
       ).not.toBeInTheDocument();
+    } finally {
+      api.restore();
+    }
+  });
+
+  it("미로그인으로 연 공유 링크가 만료됐으면 로그인하기가 랜딩이 아니라 로그인 화면으로 이어진다", async () => {
+    signOutForTests();
+    const api = installFakeApi({
+      "GET /api/share/*": () => ({
+        status: 404,
+        body: { error: API_ERRORS.share.linkUnavailable },
+      }),
+    });
+
+    try {
+      renderAt("/s/expired");
+
+      fireEvent.click(
+        await screen.findByRole("button", { name: SHARE_LINK_COPY.signIn }),
+      );
+
+      expect(
+        await screen.findByTestId("login-description"),
+      ).toBeInTheDocument();
+      expect(screen.queryByTestId("landing-route")).not.toBeInTheDocument();
     } finally {
       api.restore();
     }
@@ -419,7 +477,7 @@ describe("App Route Integration", () => {
       expect(await screen.findByTestId("read-only-banner")).toBeInTheDocument();
       expect(window.location.pathname).toBe("/s/tok-first");
       expect(
-        screen.queryByRole("button", { name: /카카오 로그인/ }),
+        screen.queryByRole("button", { name: /Google 계정으로 로그인/ }),
       ).not.toBeInTheDocument();
     } finally {
       api.restore();
@@ -440,7 +498,7 @@ describe("App Route Integration", () => {
     signOutForTests();
     renderAt("/presentations");
 
-    await screen.findByRole("button", { name: /카카오 로그인/ });
+    await screen.findByRole("button", { name: /Google 계정으로 로그인/ });
 
     await act(async () => {
       signInAsTestUser();
@@ -533,7 +591,7 @@ describe("App Route Integration", () => {
         ERROR_COPY.sessionExpired,
       );
       expect(
-        screen.getByRole("button", { name: /카카오 로그인/ }),
+        screen.getByRole("button", { name: /Google 계정으로 로그인/ }),
       ).toBeInTheDocument();
       expect(fetcher).toHaveBeenCalledTimes(2);
     });
@@ -857,7 +915,9 @@ describe("App Route Integration", () => {
         await flushPendingSync();
       });
 
-      expect(apiRequests(api)).toEqual([]);
+      expect(
+        apiRequests(api).filter((request) => request !== AUTH_CONFIG_REQUEST),
+      ).toEqual([]);
     });
 
     it("계정 카드로 로그아웃하면 세션 캐시를 비우고 로딩 화면으로 덮은 채 한 번 새로고침한다", async () => {
@@ -984,7 +1044,7 @@ describe("App Route Integration", () => {
       renderAt("/presentations");
 
       expect(
-        await screen.findByRole("button", { name: /카카오 로그인/ }),
+        await screen.findByRole("button", { name: /Google 계정으로 로그인/ }),
       ).toBeInTheDocument();
       await waitFor(() => expect(authClient.signOut).toHaveBeenCalledTimes(1));
       await act(async () => {

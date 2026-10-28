@@ -9,17 +9,24 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "#components/ui/empty";
+import { COMMON_COPY } from "#copy/common";
 import { SHARE_LINK_COPY } from "#copy/shareLink";
 
-/** 공유 링크를 열 수 없을 때(만료·해제·오프라인) 보여 주는 안내 */
+/**
+ * 공유 링크를 열 수 없을 때(만료·해제·오프라인) 보여 주는 안내. 잠시 뒤 되살아날 실패(오프라인·서버
+ * 일시 장애)만 `onRetry`를 받아 '다시 시도'를 앞에 둔다. 링크가 해제된 실패는 다시 해도 같아서
+ * 다시 시도를 두지 않는다.
+ */
 export function ShareLinkError({
   message,
   actionLabel,
   onAction,
+  onRetry,
 }: {
   message: string;
   actionLabel: string;
   onAction: () => void;
+  onRetry?: () => void;
 }): React.JSX.Element {
   return (
     <div className="flex min-h-screen items-center justify-center bg-background p-4">
@@ -32,7 +39,10 @@ export function ShareLinkError({
           <EmptyDescription>{message}</EmptyDescription>
         </EmptyHeader>
         <EmptyContent>
-          <Button onClick={onAction}>{actionLabel}</Button>
+          {onRetry && <Button onClick={onRetry}>{COMMON_COPY.retry}</Button>}
+          <Button variant={onRetry ? "outline" : "default"} onClick={onAction}>
+            {actionLabel}
+          </Button>
         </EmptyContent>
       </Empty>
     </div>

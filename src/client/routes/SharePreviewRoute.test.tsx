@@ -33,6 +33,9 @@ import {
 } from "../test/backgroundFixture";
 import { SharePreviewRoute } from "./SharePreviewRoute";
 import { API_ERRORS } from "#shared";
+import { AUTH_COPY } from "#copy/auth";
+import { COMMON_COPY, ERROR_COPY } from "#copy/common";
+import { SHARE_LINK_COPY } from "#copy/shareLink";
 import { SEED_PRESENTATIONS } from "../test/presentationFixture";
 
 const OWNER = "0000000000000000owner";
@@ -44,6 +47,10 @@ function renderAt(path: string) {
         <Routes>
           <Route path="/s/:token" element={<SharePreviewRoute />} />
           <Route path="/" element={<p data-testid="root-probe" />} />
+          <Route
+            path="/presentations"
+            element={<p data-testid="drive-probe" />}
+          />
         </Routes>
       </MemoryRouter>,
     ),
@@ -106,6 +113,21 @@ describe("SharePreviewRoute (로그인하지 않은 /s/:token)", () => {
     );
   });
 
+  it("사본 만들기 로그인이 도중에 실패해 돌아오면 로그인 화면에 이유를 안내하고 사본 요청은 지킨다", async () => {
+    api = installFakeApi({
+      "GET /api/share/*": () => ({ body: { document: shared } }),
+    });
+    renderAt("/s/tok-first?copy=1&error=account_not_linked");
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      AUTH_COPY.oauthErrors.accountNotLinked,
+    );
+    expect(screen.getByTestId("login-description")).toBeInTheDocument();
+    expect(window.location.pathname).toBe("/s/tok-first");
+    expect(window.location.search).toBe("?copy=1");
+    expect(screen.queryByTestId("editor-route")).not.toBeInTheDocument();
+  });
+
   it("만료된 링크는 안내를 보여 준다", async () => {
     api = installFakeApi({
       "GET /api/share/*": () => ({
@@ -118,6 +140,63 @@ describe("SharePreviewRoute (로그인하지 않은 /s/:token)", () => {
     expect(await screen.findByTestId("share-link-error")).toHaveTextContent(
       API_ERRORS.share.linkUnavailable,
     );
+    expect(
+      screen.queryByRole("button", { name: COMMON_COPY.retry }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("열 수 없는 링크의 로그인하기는 로그인할 수 없는 랜딩이 아니라 로그인 화면이 열리는 주소로 보낸다", async () => {
+    api = installFakeApi({
+      "GET /api/share/*": () => ({
+        status: 404,
+        body: { error: API_ERRORS.share.linkUnavailable },
+      }),
+    });
+    renderAt("/s/expired");
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: SHARE_LINK_COPY.signIn }),
+    );
+
+    expect(await screen.findByTestId("drive-probe")).toBeInTheDocument();
+    expect(screen.queryByTestId("root-probe")).not.toBeInTheDocument();
+  });
+
+  describe("서버가 잠시 응답하지 못할 때", () => {
+    it("한국어 안내와 다시 시도를 보여 주고, 다시 시도하면 링크를 다시 불러온다", async () => {
+      let busy = true;
+      api = installFakeApi({
+        "GET /api/share/*": () =>
+          busy
+            ? { status: 503, body: { error: API_ERRORS.serverBusy } }
+            : { body: { document: shared } },
+      });
+      renderAt("/s/tok-first");
+
+      expect(await screen.findByTestId("share-link-error")).toHaveTextContent(
+        API_ERRORS.serverBusy,
+      );
+      busy = false;
+      fireEvent.click(screen.getByRole("button", { name: COMMON_COPY.retry }));
+
+      expect(await screen.findByTestId("read-only-banner")).toBeInTheDocument();
+      expect(screen.queryByTestId("share-link-error")).not.toBeInTheDocument();
+      expect(
+        api.calls.filter((call) => call.path.startsWith("/api/share/")),
+      ).toHaveLength(2);
+    });
+
+    it("오프라인으로 열지 못해도 다시 시도를 보여 준다", async () => {
+      api = installFakeApi({}, { offline: true });
+      renderAt("/s/tok-first");
+
+      expect(await screen.findByTestId("share-link-error")).toHaveTextContent(
+        ERROR_COPY.offline,
+      );
+      expect(
+        screen.getByRole("button", { name: COMMON_COPY.retry }),
+      ).toBeInTheDocument();
+    });
   });
 
   describe("손님이 본 프레젠테이션의 배경", () => {

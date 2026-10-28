@@ -74,6 +74,7 @@ import {
   refreshSharedPresentation,
   rememberServerDocuments,
   setOwnPresentationListener,
+  setSharedPresentationListener,
   syncFailureReasonOf,
   UnsyncableDocumentError,
 } from "./presentationSync";
@@ -1071,6 +1072,83 @@ describe("공유받은 프레젠테이션 새로고침 상태", () => {
     fail(new TypeError("Failed to fetch"));
     await refreshing;
 
+    expect(getSyncSnapshot().status).toBe("synced");
+  });
+});
+
+describe("공유받은 프레젠테이션 새로고침 결과", () => {
+  const listener = {
+    replaced: vi.fn<(document: PresentationDocument) => void>(),
+    lost: vi.fn<(id: string) => void>(),
+  };
+
+  beforeEach(() => {
+    resetSyncStatus();
+    endSharedPresentationRefresh();
+    api.get.mockReset();
+    listener.replaced.mockReset();
+    listener.lost.mockReset();
+    setSharedPresentationListener(listener);
+  });
+
+  afterEach(() => {
+    setSharedPresentationListener(null);
+  });
+
+  it("서버가 더는 열 수 없다고 하면(404) 접근을 잃었다고 알리고 실패로 남기지 않는다", async () => {
+    api.get.mockResolvedValueOnce({
+      status: 404,
+      ok: false,
+      json: async () => ({ error: API_ERRORS.presentation.notAccessible }),
+    });
+
+    await expect(refreshSharedPresentation(DOC_ID)).resolves.toBeUndefined();
+
+    expect(listener.lost).toHaveBeenCalledExactlyOnceWith(DOC_ID);
+    expect(listener.replaced).not.toHaveBeenCalled();
+    expect(getSyncSnapshot().status).toBe("synced");
+  });
+
+  it.each([401, 403, 503])(
+    "서버가 %i로 답하면 접근을 잃은 것으로 보지 않아 받아 둔 사본을 지우지 않는다",
+    async (status) => {
+      api.get.mockResolvedValueOnce({
+        status,
+        ok: false,
+        json: async () => ({}),
+      });
+
+      await expect(refreshSharedPresentation(DOC_ID)).rejects.toThrow();
+
+      expect(listener.lost).not.toHaveBeenCalled();
+      expect(listener.replaced).not.toHaveBeenCalled();
+    },
+  );
+
+  it("서버에 닿지 못해도 받아 둔 사본을 지우지 않는다", async () => {
+    api.get.mockRejectedValueOnce(new TypeError("Failed to fetch"));
+
+    await expect(refreshSharedPresentation(DOC_ID)).resolves.toBeUndefined();
+
+    expect(listener.lost).not.toHaveBeenCalled();
+    expect(listener.replaced).not.toHaveBeenCalled();
+    expect(getSyncSnapshot().status).toBe("offline");
+  });
+
+  it("최신본을 받으면 그 판으로 바꾸라고 알린다", async () => {
+    const latest = { ...makeSet(), title: "소유자가 바꾼 제목" };
+    api.get.mockResolvedValueOnce({
+      status: 200,
+      ok: true,
+      json: async () => ({ presentation: latest }),
+    });
+
+    await refreshSharedPresentation(DOC_ID);
+
+    expect(listener.replaced).toHaveBeenCalledExactlyOnceWith(
+      PresentationDocumentSchema.parse(latest),
+    );
+    expect(listener.lost).not.toHaveBeenCalled();
     expect(getSyncSnapshot().status).toBe("synced");
   });
 });

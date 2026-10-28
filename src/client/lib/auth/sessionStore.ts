@@ -2,6 +2,7 @@ import { useSyncExternalStore } from "react";
 import {
   AuthSessionResponseSchema,
   AuthSignOutResponseSchema,
+  DAILY_SIGN_UP_LIMIT_CODE,
   FALLBACK_USER_NAME,
   SessionBroadcastSchema,
   type EmailSignUpRequest,
@@ -59,6 +60,7 @@ const CACHED_SESSION_CHECK_TIMEOUT_MS = 5000;
 const FIRST_SESSION_CHECK_TIMEOUT_MS = 15000;
 const SIGN_OUT_TIMEOUT_MS = 5000;
 const EMAIL_AUTH_TIMEOUT_MS = 20_000;
+const SOCIAL_SIGN_IN_TIMEOUT_MS = 20_000;
 const SESSION_CHANNEL = "chiton:session";
 
 const fetchFromServer: SessionFetcher = async (timeoutMs) => {
@@ -101,6 +103,7 @@ let hydration: Promise<SessionState> | null = null;
 let revalidation: Promise<void> | null = null;
 let finishing: Promise<boolean> | null = null;
 let otherTabs: Broadcast<SessionBroadcast> | null = null;
+let acceptedSignIn: string | null = null;
 
 function setState(next: SessionState): void {
   state = next;
@@ -463,12 +466,31 @@ export function finishPendingSignOut(): Promise<boolean> {
 }
 
 /**
+ * 소셜 로그인을 시작하지 못했다. `message`는 화면에 그대로 보여 줄 안내 문구다. 화면은 이 오류의
+ * 문구만 그대로 보이고, 서버에 닿지 못한 오류 같은 나머지는 일반 안내로 바꾼다.
+ */
+export class SocialSignInError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "SocialSignInError";
+  }
+}
+
+/**
  * 소셜 로그인 후 원래 보던 주소로 돌아온다. 로그아웃 상태로 공유 링크를
  * 연 사람이 로그인하고 나서 링크로 다시 들어오게 하기 위해서다.
  * 첫 화면(`/`)에서 로그인하면 드라이브로 보낸다.
  *
+ * 도중에 실패해도 같은 주소로 돌아온다(`errorCallbackURL`). 알려 주지 않으면 Better Auth가 자기
+ * 오류 주소로 보내, 운영에서는 이유를 알 수 없는 랜딩 화면으로, 개발에서는 영문 오류 페이지로
+ * 떨어진다. 돌아온 로그인 화면이 `?error=코드`를 읽어 안내한다(`callbackErrorMessage`).
+ *
  * better-auth 클라이언트는 실패를 던지지 않고 `error`로 돌려준다. 그대로 두면
- * 이동도 오류도 없이 버튼이 로딩 상태로 멈추므로 던져서 화면이 안내하게 한다.
+ * 이동도 오류도 없이 버튼이 로딩 상태로 멈추므로 던져서 화면이 안내하게 한다. 서버에 등록되지
+ * 않은 프로바이더(404)는 다시 시도해도 같으므로 다른 방법으로 로그인하라고 따로 안내한다.
+ * 같은 까닭으로 시작 요청은 20초까지만 기다리고 끊어 던진다. 느린 교회 Wi‑Fi에서 응답 없이 멈춘
+ * 요청을 기다리기만 하면, 로그인 화면은 이메일 로그인과 돌아가기 버튼까지 막은 채 새로고침할
+ * 때까지 풀지 않는다.
  *
  * 서버가 확인하지 않은 로그아웃이 남아 있으면 먼저 마치고, 마치지 못하면 로그인을 시작하지 않는다.
  * 그대로 시작하면 돌아온 부팅이 남은 표시를 보고 방금 로그인한 세션을 로그아웃시키고, 늦게 온
@@ -478,14 +500,24 @@ export async function signInWithProvider(
   provider: SocialProvider,
 ): Promise<void> {
   if (!(await finishPendingSignOut())) {
-    throw new Error(AUTH_COPY.signInFailed);
+    throw new SocialSignInError(AUTH_COPY.signInFailed);
   }
   const { pathname, search } = window.location;
+  const returnPath =
+    pathname === "/" ? "/presentations" : `${pathname}${search}`;
   const { error } = await authClient.signIn.social({
     provider,
-    callbackURL: pathname === "/" ? "/presentations" : `${pathname}${search}`,
+    callbackURL: returnPath,
+    errorCallbackURL: returnPath,
+    fetchOptions: { signal: AbortSignal.timeout(SOCIAL_SIGN_IN_TIMEOUT_MS) },
   });
-  if (error) throw new Error(AUTH_COPY.signInFailed);
+  if (error) {
+    throw new SocialSignInError(
+      error.status === 404
+        ? AUTH_COPY.providerUnavailable
+        : AUTH_COPY.signInFailed,
+    );
+  }
 }
 
 export type EmailAuthFailure =
@@ -493,6 +525,7 @@ export type EmailAuthFailure =
   | "alreadyExists"
   | "invalidInput"
   | "rateLimited"
+  | "dailySignUpLimit"
   | "network"
   | "unknown";
 
@@ -530,25 +563,34 @@ function signUpFailure(error: EmailAuthRejection): EmailAuthFailure {
       ? "alreadyExists"
       : "unknown";
   }
+  if (error.status === 429 && error.code === DAILY_SIGN_UP_LIMIT_CODE) {
+    return "dailySignUpLimit";
+  }
   return failureFromStatus(error.status);
 }
 
 async function signInThen(
+  email: string,
   send: (signal: AbortSignal) => Promise<{ error: EmailAuthRejection | null }>,
   failureOf: (error: EmailAuthRejection) => EmailAuthFailure,
 ): Promise<void> {
+  const account = email.trim().toLowerCase();
   transitioning = true;
   epoch += 1;
   try {
     if (finishing) await finishing;
-    let result: { error: EmailAuthRejection | null };
-    try {
-      result = await send(AbortSignal.timeout(EMAIL_AUTH_TIMEOUT_MS));
-    } catch {
-      throw new EmailAuthError("network");
+    if (acceptedSignIn !== account) {
+      acceptedSignIn = null;
+      let result: { error: EmailAuthRejection | null };
+      try {
+        result = await send(AbortSignal.timeout(EMAIL_AUTH_TIMEOUT_MS));
+      } catch {
+        throw new EmailAuthError("network");
+      }
+      if (result.error) throw new EmailAuthError(failureOf(result.error));
+      clearPendingSignOut();
+      acceptedSignIn = account;
     }
-    if (result.error) throw new EmailAuthError(failureOf(result.error));
-    clearPendingSignOut();
     await adoptSignedInSession();
   } finally {
     transitioning = false;
@@ -566,6 +608,7 @@ async function adoptSignedInSession(): Promise<void> {
     throw new EmailAuthError("network");
   }
   if (started !== epoch) return;
+  acceptedSignIn = null;
   if (!user) throw new EmailAuthError("unknown");
 
   await persist(user);
@@ -586,6 +629,11 @@ async function adoptSignedInSession(): Promise<void> {
  * 확인하지 못하면 `network`, 들어온 뒤 서버가 세션이 없다고 하면 `unknown`으로 던져 화면이
  * 알리게 한다. 확인하지 못한 로그인을 조용히 넘기면 사용자는 비밀번호가 틀린 줄 알고 다시 보낸다.
  *
+ * 서버가 받아 준 뒤 세션 확인만 실패했으면(`network`), 같은 이메일(대소문자 무시)로 다시 부를 때
+ * 자격 증명은 보내지 않고 세션만 다시 확인한다. 쿠키에는 이미 받아 준 세션이 있어, 다시 보내면
+ * 로그인은 서버 세션을 하나 더 만들고 가입은 방금 만든 계정을 이미 가입한 이메일(422)로 거절한다.
+ * 그사이 다른 이메일로 보냈거나 서버가 세션이 없다고 답했으면 다시 보낸다.
+ *
  * 서버가 확인하지 않은 로그아웃(`finishPendingSignOut`)이 보내는 중이면 끝난 뒤에 보낸다. 늦게 온
  * 로그아웃 응답이 새 쿠키를 지우면 안 된다. 로그인에 성공하면 쿠키가 새 세션으로 바뀌었으므로
  * 남은 로그아웃 표시를 지운다.
@@ -595,6 +643,7 @@ export async function signInWithEmail(
   password: string,
 ): Promise<void> {
   await signInThen(
+    email,
     (signal) =>
       authClient.signIn.email({ email, password, fetchOptions: { signal } }),
     (error) => failureFromStatus(error.status),
@@ -603,16 +652,19 @@ export async function signInWithEmail(
 
 /**
  * 이메일·비밀번호로 가입한다. 메일 인증이 없어 가입과 동시에 로그인된다(`signInWithEmail`처럼
- * 그 자리에서 들어가고, 시간 제한·실패 안내·남은 로그아웃 표시도 같다).
+ * 그 자리에서 들어가고, 시간 제한·실패 안내·남은 로그아웃 표시와 세션 확인만 다시 하는 것도 같다).
  * 같은 이메일로 이미 가입했으면 `alreadyExists`로 던진다. 서버가 사용자를 만들지 못한
  * 422(`FAILED_TO_CREATE_USER`: 저장 실패, 같은 이메일로 동시에 보낸 가입)와 같은 이메일의 가입이
  * 아직 끝나지 않았다는 409(`SIGN_UP_IN_PROGRESS`)는 `unknown`이라 잠시 뒤 다시 가입하게 한다.
  * 이미 가입했다고 안내하면 사용자는 그 이메일로 로그인하려 하지만 들어가지 못한다.
+ * IP 하나의 하루 가입 한도에 닿은 429(`DAILY_SIGN_UP_LIMIT_CODE`)는 `dailySignUpLimit`이다. 이 한도는
+ * 한국 시간 0시에야 풀려, 잠시 후 다시 시도하라는 빈도 제한 안내(`rateLimited`)를 따르면 계속 실패한다.
  */
 export async function signUpWithEmail(
   input: EmailSignUpRequest,
 ): Promise<void> {
   await signInThen(
+    input.email,
     (signal) => authClient.signUp.email({ ...input, fetchOptions: { signal } }),
     signUpFailure,
   );
@@ -708,6 +760,7 @@ export function __resetSessionForTests(): void {
   hydration = null;
   revalidation = null;
   finishing = null;
+  acceptedSignIn = null;
   takeSessionEnd();
   clearPendingSignOut();
   setState({ status: "loading", user: null });
