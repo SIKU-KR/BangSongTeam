@@ -37,6 +37,13 @@ describe("Global Styles & Local Pretendard Webfont Configuration", () => {
     );
   });
 
+  it("본문 글은 띄어쓰기에서만 줄을 바꾸고, 한 줄보다 긴 토큰은 어디서든 끊어 넘치지 않게 한다", () => {
+    const cssContent = fs.readFileSync(cssPath, "utf-8");
+    const bodyRule = cssContent.match(/\n\s*body\s*\{([^}]*)\}/)?.[1] ?? "";
+    expect(bodyRule).toMatch(/word-break:\s*keep-all/);
+    expect(bodyRule).toMatch(/overflow-wrap:\s*anywhere/);
+  });
+
   it("should import index.css in the root layout", () => {
     const layoutContent = fs.readFileSync(rootLayoutPath, "utf-8");
     expect(layoutContent).toMatch(/import\s+['"]\.\.\/client\/index\.css['"]/);

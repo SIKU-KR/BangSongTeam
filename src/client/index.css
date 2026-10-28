@@ -162,8 +162,12 @@
     -moz-osx-font-smoothing: grayscale;
     text-rendering: optimizeLegibility;
   }
+  /* 한글은 기본값에서 음절마다 줄이 바뀌어 단어가 둘로 끊긴다. keep-all로 띄어쓰기에서만 줄을 바꾸고,
+     한 줄보다 긴 토큰(주소 등)만 anywhere로 어디서든 끊어 가로로 넘치지 않게 한다 */
   body {
     @apply overflow-hidden bg-background text-foreground select-none;
+    word-break: keep-all;
+    overflow-wrap: anywhere;
   }
   button:not(:disabled),
   [role="button"]:not(:disabled) {
