@@ -161,7 +161,7 @@ export function MyDeckPreview({
       <div className="flex-1 overflow-y-auto p-5 font-mono text-xs">
         <LyricsViewer lyrics={deck.lyricsRaw} />
       </div>
-      <LibraryShareControls deck={deck} />
+      <LibraryShareControls key={deck.id} deck={deck} />
       <ActionBar
         addLabel={EDITOR_COPY.preview.addMine}
         onAdd={onAdd}

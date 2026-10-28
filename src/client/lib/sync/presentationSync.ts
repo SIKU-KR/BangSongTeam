@@ -2,9 +2,11 @@ import {
   DeckSchema,
   FolderDeleteResponseSchema,
   FolderSchema,
+  IdSchema,
   PresentationDocumentSchema,
   toPresentationChanges,
   type Deck,
+  type DeckListResponse,
   type Folder,
   type FolderDeleteResponse,
   type FolderListResponse,
@@ -232,9 +234,24 @@ export async function deleteDeckRemote(id: string): Promise<void> {
   }
 }
 
-export async function pullDecks(): Promise<Deck[]> {
-  const body = await callSyncApi<{ decks: Deck[] }>(() => api.api.decks.$get());
-  return body.decks;
+/**
+ * 내 보관함 곡과 이 계정에서 지운 곡 id를 받는다.
+ *
+ * 곡은 검증하지 않고 넘긴다. 한 곡이 깨졌다고 보관함 전체를 받지 못하면 안 된다. 지운 곡 id는
+ * 하나씩 걸러 형식이 맞는 것만 남긴다. 곡 삭제 기록을 남기기 전의 서버는 목록을 보내지 않는다.
+ */
+export async function pullDecks(): Promise<{
+  decks: Deck[];
+  deletedIds: string[];
+}> {
+  const body = await callSyncApi<DeckListResponse>(() => api.api.decks.$get());
+  const deletedIds: unknown = body.deletedIds;
+  return {
+    decks: body.decks,
+    deletedIds: Array.isArray(deletedIds)
+      ? deletedIds.filter((id): id is string => IdSchema.safeParse(id).success)
+      : [],
+  };
 }
 
 /** 이미 없으면(404 — 한 번도 안 올라간 문서) 성공으로 본다 */

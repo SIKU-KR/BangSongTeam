@@ -185,6 +185,16 @@ export async function flushPendingWrites(): Promise<void> {
   await inFlight;
 }
 
+/**
+ * 저장본으로 세션 사용자의 프레젠테이션을 싣는다.
+ *
+ * 싣기는 편집이 아니라서 열린 세트를 서버에 올리지 않는다. 계정을 바꾼 뒤 큐가 켜져 있으면
+ * 병합도 하기 전에 새 계정의 세트를 올리게 된다. 하이드레이션이 고친 세트는 저장 줄로 다시 써서
+ * 실패하면 경고를 올린다.
+ *
+ * 읽지 못하면 메모리를 비우고 저장을 끈다. 앞 계정의 세트가 남으면 다음 병합이 그 세트를 새
+ * 계정에 올리고, 저장을 켜 두면 읽지 못한 저장본을 병합 결과로 덮는다.
+ */
 export async function hydrateFromStorage(): Promise<void> {
   persistenceEnabled = false;
   const userId = getCurrentUserId();
@@ -209,17 +219,18 @@ export async function hydrateFromStorage(): Promise<void> {
       activeId: documents[0]?.id ?? "",
     });
     clearHistory();
-    emitChange();
+    notifyListeners();
 
     persistenceEnabled = true;
     clearPersistenceError();
 
-    for (const id of repairedIds) {
-      const repaired = state.byId[id];
-      if (repaired) await savePresentation(repaired).catch(() => {});
-    }
+    for (const id of repairedIds) pendingIds.add(id);
+    runPendingWrites();
   } catch (err) {
     persistenceEnabled = false;
+    commit(createEmptyState());
+    clearHistory();
+    notifyListeners();
     reportPersistenceError(err);
   }
 }
@@ -243,20 +254,67 @@ function resetPersistenceForTests(): void {
   inFlight = Promise.resolve();
 }
 
+function isServerChange(
+  stored: Presentation | undefined,
+  merged: Presentation,
+): boolean {
+  if (stored === merged) return false;
+  return (
+    !stored ||
+    stored.updatedAt !== merged.updatedAt ||
+    (stored.folderId ?? null) !== (merged.folderId ?? null) ||
+    merged.access !== undefined
+  );
+}
+
 /**
+ * 부팅 병합 결과로 바꾸고, 서버에서 온 변경만 저장 줄로 저장한다. `removedIds`는 다른
+ * 기기에서 영구 삭제했거나 공유가 끝난 세트다.
+ *
  * 활성 문서는 가능하면 유지한다. 동기화가 돌았다고 사용자가 보던 프레젠테이션이
  * 바뀌면 편집 중에 화면이 튄다.
+ *
+ * 저장은 새 세트, `updatedAt`이나 `folderId`가 바뀐 세트, 공유받은 세트만 한다. 두 병합 모두
+ * `updatedAt`이 같으면 서버 객체를 고르므로, 객체가 같은지만 보면 동기화된 세트를 부팅마다 모두
+ * 다시 쓰고 그 뒤의 편집 저장이 그만큼 늦어진다. `folderId`(서버가 남의 폴더를 루트로 옮김)와
+ * 공유받은 세트는 `updatedAt` 없이 바뀐다. 저장 줄은 쓰는 순간의 세트를 쓰므로 병합 뒤에 고친
+ * 내용을 병합 때의 사본으로 덮지 않는다. 읽지 못한 저장본은 덮지 않도록 하이드레이션이 실패했으면
+ * 쓰지 않는다.
+ *
+ * 지운 세트는 되돌리기 기록·대기 중인 저장·서버 push를 버리고, 이미 줄을 선 저장 뒤에 저장본을
+ * 지운다. push가 남으면 연결이 돌아올 때 서버에서 되살아나고, 줄을 선 저장이 뒤에 오면 저장본이
+ * 되살아난다.
  */
-export function applyServerDocuments(documents: Presentation[]): void {
+export function applyServerDocuments(
+  documents: Presentation[],
+  removedIds: readonly string[] = [],
+): void {
+  const previous = state.byId;
   const previousActive = state.activeId;
+  const byId = Object.fromEntries(documents.map((doc) => [doc.id, doc]));
   commit({
-    byId: Object.fromEntries(documents.map((doc) => [doc.id, doc])),
+    byId,
     order: documents.map((doc) => doc.id),
-    activeId: documents.some((doc) => doc.id === previousActive)
-      ? previousActive
-      : (documents[0]?.id ?? ""),
+    activeId: byId[previousActive] ? previousActive : (documents[0]?.id ?? ""),
   });
+  const removed = removedIds.filter((id) => !byId[id]);
+  for (const id of removed) {
+    clearHistory(id);
+    pendingIds.delete(id);
+    cancelDocumentPush(id);
+  }
   notifyListeners();
+
+  if (!persistenceEnabled) return;
+  for (const doc of documents) {
+    if (isServerChange(previous[doc.id], doc)) pendingIds.add(doc.id);
+  }
+  runPendingWrites();
+  for (const id of removed) {
+    if (previous[id]) {
+      inFlight = inFlight.then(() => removePersistedPresentation(id));
+    }
+  }
 }
 
 /**
