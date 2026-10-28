@@ -333,6 +333,22 @@ describe("useBackgroundAutoCache", () => {
     ]);
   });
 
+  it("포스터만 받게 하면 영상 원본은 큐에 넣지도 붙잡지도 않는다", () => {
+    const [video, poster] = urlsOf(BG_A);
+    renderHook(() =>
+      useBackgroundAutoCache(withBackground(BG_A), { posterOnly: true }),
+    );
+
+    act(() => {
+      vi.advanceTimersByTime(AUTO_CACHE_DELAY_MS);
+      notifySyncRecovery("manual");
+    });
+
+    expect(scheduleMediaCaching.mock.calls).toEqual([[[poster]], [[poster]]]);
+    expect(retainMediaUrls).toHaveBeenCalledWith([poster]);
+    expect(retainMediaUrls.mock.calls.flat(2)).not.toContain(video);
+  });
+
   it("세트가 없으면 아무것도 하지 않는다", () => {
     renderHook(() => useBackgroundAutoCache(null));
 

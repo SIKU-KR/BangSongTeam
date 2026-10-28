@@ -193,6 +193,48 @@ describe("GET /api/media/*", () => {
     expect(head.headers.get("content-length")).toBe("1024");
   });
 
+  it("길이 없이 흘려보내는 큰 본문에도 객체 전체 크기를 x-media-size로 붙인다", async () => {
+    const huge: MediaObject = {
+      size: 300 * 1024 * 1024,
+      etag: '"big"',
+      contentType: "video/mp4",
+      version: "1",
+    };
+    const store: MediaStore = {
+      stat: async () => huge,
+      read: () =>
+        new ReadableStream({
+          start(controller) {
+            controller.enqueue(encode("x"));
+            controller.close();
+          },
+        }),
+    };
+
+    const whole = await app.request(
+      `/api/media/${KEY}`,
+      {},
+      { ...env, MEDIA: store },
+    );
+    expect(whole.headers.get("content-length")).toBeNull();
+    expect(whole.headers.get("x-media-size")).toBe("314572800");
+
+    const part = await app.request(
+      `/api/media/${KEY}`,
+      { headers: { range: "bytes=0-1023" } },
+      { ...env, MEDIA: store },
+    );
+    expect(part.status).toBe(206);
+    expect(part.headers.get("x-media-size")).toBe("314572800");
+  });
+
+  it("작은 본문도 길이와 같은 x-media-size를 붙인다", async () => {
+    const res = await app.request(`/api/media/${KEY}`, {}, env);
+
+    expect(res.headers.get("content-length")).toBe(String(BODY.length));
+    expect(res.headers.get("x-media-size")).toBe(String(BODY.length));
+  });
+
   it("빈 객체에 Range를 보내면 416과 크기 0을 돌려준다", async () => {
     const res = await requestRange("bytes=0-", EMPTY_KEY);
 

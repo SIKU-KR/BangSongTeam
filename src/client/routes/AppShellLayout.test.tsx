@@ -43,6 +43,7 @@ import { APP_NAME } from "#shared";
 import { COMMON_COPY } from "#copy/common";
 import { DRIVE_COPY } from "#copy/drive";
 import { FOLDER_COPY } from "#copy/folders";
+import { PRESENTATION_COPY } from "#copy/presentation";
 import { SHELL_COPY } from "#copy/shell";
 import { AUTH_COPY } from "#copy/auth";
 import { SEED_PRESENTATIONS, SEED_USER_ID } from "../test/presentationFixture";
@@ -95,6 +96,8 @@ function renderShell(initialPath = "/presentations") {
 
 const WORSHIP = "a00000000000000000001";
 const YOUTH = "b00000000000000000002";
+
+const H264 = capabilities.BROWSER_CAPABILITIES.find(({ id }) => id === "h264")!;
 
 function folder(
   id: string,
@@ -196,21 +199,30 @@ describe("AppShellLayout (드라이브형 홈)", () => {
   });
 
   it("목록의 발표 버튼은 송출 기능을 모두 갖춘 브라우저에서 곧바로 전체화면 송출로 간다", () => {
-    vi.spyOn(capabilities, "canPresentReliably").mockReturnValue(true);
+    vi.spyOn(
+      capabilities,
+      "getMissingPresentationCapabilities",
+    ).mockReturnValue([]);
     renderShell();
 
     fireEvent.click(screen.getAllByTestId("row-present-btn")[0]);
     expect(screen.getByTestId("fullscreen-stub")).toBeInTheDocument();
   });
 
-  it("전체화면이나 H.264 재생을 지원하지 않으면 발표 전에 확인을 받는다", () => {
-    vi.spyOn(capabilities, "canPresentReliably").mockReturnValue(false);
+  it("전체화면이나 H.264 재생을 지원하지 않으면 빠진 기능을 들어 발표 전에 확인을 받는다", () => {
+    vi.spyOn(
+      capabilities,
+      "getMissingPresentationCapabilities",
+    ).mockReturnValue([H264]);
     const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(false);
     renderShell();
 
     const startBtn = screen.getAllByTestId("row-present-btn")[0];
     fireEvent.click(startBtn);
     expect(confirmSpy).toHaveBeenCalledTimes(1);
+    expect(confirmSpy).toHaveBeenCalledWith(
+      PRESENTATION_COPY.presentUnreliable(H264.label),
+    );
     expect(screen.queryByTestId("fullscreen-stub")).not.toBeInTheDocument();
 
     confirmSpy.mockReturnValue(true);

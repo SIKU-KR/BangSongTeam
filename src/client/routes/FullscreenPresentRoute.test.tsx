@@ -36,8 +36,13 @@ import {
   withBackgrounds,
 } from "../test/backgroundFixture";
 import { resetFakeCacheStorage } from "../test/fakeCacheStorage";
+import {
+  installServiceWorker,
+  removeServiceWorker,
+} from "../test/serviceWorkerFixture";
 import { __resetMediaCachingForTests } from "../lib/offline/mediaCache";
 import { MEDIA_CACHE_NAME } from "#shared";
+import { BACKGROUND_COPY } from "#copy/backgrounds";
 import {
   SEED_PRESENTATIONS,
   SEED_PRESENTATION_IDS,
@@ -124,6 +129,7 @@ describe("FullscreenPresentRoute", () => {
     });
     resetFakeCacheStorage();
     __resetMediaCachingForTests();
+    installServiceWorker();
     resetPresentationStore();
     __loadDocumentsForTests(SEED_PRESENTATIONS);
     vi.spyOn(globalThis, "fetch");
@@ -135,6 +141,7 @@ describe("FullscreenPresentRoute", () => {
     vi.useRealTimers();
     vi.restoreAllMocks();
     resetBackgroundCatalogForTests();
+    removeServiceWorker();
   });
 
   it("should render the first song's first slide lyrics without external network requests", () => {
@@ -823,6 +830,52 @@ describe("FullscreenPresentRoute", () => {
       ).toBeInTheDocument();
     });
 
+    it("준비 카드의 버튼은 송출 단축키에 막히지 않아 Enter·Space로 누를 수 있다", async () => {
+      vi.mocked(globalThis.fetch).mockImplementation(
+        () => new Promise<Response>(() => {}),
+      );
+      renderPresent();
+      await waitFor(() => expect(globalThis.fetch).toHaveBeenCalled());
+
+      const startSaved = screen.getByTestId("projection-media-start-saved");
+      startSaved.focus();
+
+      expect(
+        fireEvent.keyDown(startSaved, { key: "Enter", code: "Enter" }),
+      ).toBe(true);
+      expect(fireEvent.keyDown(startSaved, { key: " ", code: "Space" })).toBe(
+        true,
+      );
+      expect(screen.getByTestId("projection-media-gate")).toBeInTheDocument();
+      expect(fireEvent.keyDown(window, { key: " ", code: "Space" })).toBe(
+        false,
+      );
+    });
+
+    it("준비 카드에서 다시 시도하거나 시작하면 풀린 전체화면을 다시 요청한다", async () => {
+      const requestFullscreenMock = vi.fn().mockResolvedValue(undefined);
+      Object.defineProperty(document.documentElement, "requestFullscreen", {
+        value: requestFullscreenMock,
+        configurable: true,
+        writable: true,
+      });
+      mockMediaFetch(500);
+      renderPresent();
+      expect(await screen.findByRole("alert")).toHaveTextContent(
+        "배경 영상을 받지 못했어요",
+      );
+      requestFullscreenMock.mockClear();
+
+      fireEvent.click(screen.getByTestId("projection-media-retry"));
+      expect(requestFullscreenMock).toHaveBeenCalledTimes(1);
+
+      fireEvent.click(screen.getByTestId("projection-media-start-saved"));
+      expect(requestFullscreenMock).toHaveBeenCalledTimes(2);
+      expect(
+        screen.getByText("시작됐네 우리 주님의 능력이"),
+      ).toBeInTheDocument();
+    });
+
     it("이미 저장된 세트는 곧바로 시작한다", async () => {
       await storeMedia(first.mediaUrl, second.mediaUrl);
       renderPresent();
@@ -865,6 +918,27 @@ describe("FullscreenPresentRoute", () => {
       expect(
         await screen.findByText("시작됐네 우리 주님의 능력이"),
       ).toBeInTheDocument();
+    });
+
+    it("서비스 워커가 없는 브라우저는 배경을 받지 않고 인터넷으로 재생한다고 알린 뒤 시작할 수 있다", async () => {
+      removeServiceWorker();
+      mockMediaFetch();
+      renderPresent();
+
+      expect(await screen.findByRole("alert")).toHaveTextContent(
+        BACKGROUND_COPY.prepare.failed.unsupported,
+      );
+      expect(screen.queryByTestId("projection-media-retry")).toBeNull();
+      fireEvent.click(screen.getByTestId("projection-media-start-saved"));
+
+      expect(
+        screen.getByText("시작됐네 우리 주님의 능력이"),
+      ).toBeInTheDocument();
+      expect(screen.getByTestId("video-slot-a")).toHaveAttribute(
+        "src",
+        first.mediaUrl,
+      );
+      expect(globalThis.fetch).not.toHaveBeenCalled();
     });
   });
 

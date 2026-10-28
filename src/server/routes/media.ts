@@ -1,6 +1,6 @@
 import { Hono, type Context } from "hono";
 import { basePath } from "hono/route";
-import { API_ERRORS } from "#shared";
+import { API_ERRORS, MEDIA_SIZE_HEADER } from "#shared";
 import { parseRangeHeader, resolveByteRange } from "../lib/byteRange";
 import type { ByteRange, MediaObject } from "../lib/mediaStore";
 import type { AppEnv } from "../types";
@@ -10,6 +10,7 @@ const IMMUTABLE_MEDIA_CACHE_CONTROL = "public, max-age=31536000, immutable";
 /**
  * Cloud Run은 `content-length`를 단 HTTP/1 응답을 32 MiB까지만 보낸다. 그보다 긴 본문은
  * 길이를 빼고 chunked로 흘려보낸다. https://cloud.google.com/run/quotas
+ * 길이를 뺀 응답도 클라이언트가 용량을 셀 수 있게 전체 크기는 `MEDIA_SIZE_HEADER`로 늘 싣는다.
  */
 const MAX_SIZED_RESPONSE_BYTES = 32 * 1024 * 1024 - 1;
 
@@ -19,6 +20,7 @@ function objectHeaders(object: MediaObject, length: number): Headers {
     etag: object.etag,
     "accept-ranges": "bytes",
     "cache-control": IMMUTABLE_MEDIA_CACHE_CONTROL,
+    [MEDIA_SIZE_HEADER]: String(object.size),
   });
   if (length <= MAX_SIZED_RESPONSE_BYTES) {
     headers.set("content-length", String(length));

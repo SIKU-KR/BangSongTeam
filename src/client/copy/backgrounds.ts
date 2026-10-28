@@ -10,6 +10,7 @@ export const BACKGROUND_COPY = {
   previewFailed: "미리보기를 불러오지 못했어요",
   noBackgrounds: "아직 배경이 없어요.",
   offline: "오프라인이라 저장해 둔 배경만 보여요",
+  catalogFailed: "배경 목록을 불러오지 못했어요. 잠시 뒤 다시 시도해 주세요.",
   searchPlaceholders: [
     "예: 물결",
     "예: 십자가",
@@ -24,10 +25,13 @@ export const BACKGROUND_COPY = {
     solid: "단색",
     media: "영상·이미지",
     cachedHint: "고른 배경은 이 기기에 저장해 두어 오프라인에서도 재생돼요",
+    dataSaverHint: "고른 배경은 송출을 시작할 때 이 기기에 저장해요",
+    streamedHint: "이 브라우저에선 고른 배경을 인터넷으로 재생해요",
     searchLabel: "배경 검색",
   },
   prepare: {
     title: "배경 영상을 준비하고 있어요",
+    unsupportedTitle: "배경을 인터넷으로 재생해요",
     description:
       "이 기기에 모두 저장하면 송출을 시작해요. 저장해 두면 인터넷이 끊겨도 배경이 멈추지 않아요.",
     count: (ready: number, total: number) => `${ready}/${total}개`,
@@ -40,8 +44,11 @@ export const BACKGROUND_COPY = {
         "기기 저장 공간이 부족해 배경 영상을 저장하지 못했어요. 공간을 비운 뒤 다시 시도해 주세요.",
       network:
         "배경 영상을 받지 못했어요. 인터넷 연결을 확인하고 다시 시도해 주세요.",
+      unsupported:
+        "이 브라우저에선 배경을 기기에 저장할 수 없어요. 오프라인 송출은 최신 Chrome, Edge, Safari, Firefox에서 해 주세요.",
     },
     retry: COMMON_COPY.retry,
+    start: "송출 시작",
     startWithSaved: "저장된 배경으로 시작",
     savedHint: "저장하지 못한 곡은 배경 대신 정지 화면이 보여요.",
     editorStatus: (ready: number, total: number) =>

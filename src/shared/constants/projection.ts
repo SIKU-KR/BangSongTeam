@@ -44,6 +44,16 @@ export const MEDIA_URL_PREFIX = "/api/media/";
 /** 포스터 저장소 키 접두사를 포함한 프록시 경로 */
 export const POSTER_URL_PREFIX = `${MEDIA_URL_PREFIX}posters/`;
 
+/**
+ * 미디어 본문 응답(200·206과 그 HEAD)이 늘 싣는 객체 전체 크기(바이트) 헤더.
+ *
+ * 32 MiB를 넘는 영상은 Cloud Run 응답 한도 때문에 `content-length` 없이 나간다. 이 헤더가
+ * 없으면 캐시에 담긴 큰 영상의 용량을 셀 수 없어, 저장 공간을 비울 때 0바이트로 세고 SW가
+ * 담지 못한 까닭도 가리지 못한다(`mediaCache`). 서비스 워커·Cloudflare 캐시는 응답 헤더를
+ * 그대로 담으므로 캐시본에도 남는다.
+ */
+export const MEDIA_SIZE_HEADER = "x-media-size";
+
 /** 미디어 URL이 담기는 런타임 캐시. Workbox `urlPattern`과 같은 기준으로 나눈다 */
 export function mediaCacheNameFor(url: string): string {
   return url.startsWith(POSTER_URL_PREFIX)

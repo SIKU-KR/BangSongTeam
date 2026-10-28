@@ -10,8 +10,9 @@ import {
   Trash2Icon,
   Undo2Icon,
 } from "lucide-react";
+import { startPresentation } from "../presentation";
 import { useDrive } from "./driveContext";
-import { openItem, startPresentation } from "./driveActions";
+import { openItem } from "./driveActions";
 import { TRASH_PATH } from "./drivePaths";
 import { toItemRef, type DriveItem } from "./driveModel";
 import type { MenuAction } from "#components/common/ActionMenu";
@@ -48,7 +49,7 @@ export function useDriveItemActions({
   const drive = useDrive();
 
   const present = useCallback(
-    (id: string) => startPresentation(id, navigate, pathname),
+    (id: string) => startPresentation(navigate, id, pathname),
     [navigate, pathname],
   );
 

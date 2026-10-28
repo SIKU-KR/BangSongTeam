@@ -44,13 +44,13 @@ export {
 } from "./presentationStore";
 export {
   exitFullscreen,
-  launchPresentation,
   editorPath,
   resolvePresentReturnPath,
   loadPresentReturnPath,
   DEFAULT_PRESENT_RETURN_PATH,
   type PresentNavigate,
 } from "./fullscreen";
+export { startPresentation } from "./startPresentation";
 export {
   nextPosition,
   prevPosition,

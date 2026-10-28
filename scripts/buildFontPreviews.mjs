@@ -135,7 +135,7 @@ async function renderInPage(font, options) {
           document.head.appendChild(link);
         }),
       );
-      family = font.name;
+      family = font.cardFamily;
       await withTimeout(
         document.fonts.load(
           `${weight} ${options.fontSize}px "${family}"`,

@@ -13,6 +13,10 @@ import {
 } from "../lib/offline/mediaCache";
 import { resetFakeCacheStorage } from "../test/fakeCacheStorage";
 import {
+  installServiceWorker,
+  removeServiceWorker,
+} from "../test/serviceWorkerFixture";
+import {
   TEST_SERVICE_BACKGROUNDS,
   withBackgrounds,
 } from "../test/backgroundFixture";
@@ -59,6 +63,7 @@ beforeEach(() => {
   );
   resetFakeCacheStorage();
   __resetMediaCachingForTests();
+  installServiceWorker();
 
   fetchSpy = vi.fn(async (input: RequestInfo | URL) => {
     const url = urlOf(input);
@@ -75,6 +80,7 @@ beforeEach(() => {
 afterEach(() => {
   vi.useRealTimers();
   resetBackgroundCatalogForTests();
+  removeServiceWorker();
   globalThis.fetch = originalFetch;
   vi.restoreAllMocks();
 });

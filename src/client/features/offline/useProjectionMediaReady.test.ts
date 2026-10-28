@@ -11,6 +11,10 @@ import {
 } from "../../test/backgroundFixture";
 import { resetFakeCacheStorage } from "../../test/fakeCacheStorage";
 import {
+  installServiceWorker,
+  removeServiceWorker,
+} from "../../test/serviceWorkerFixture";
+import {
   __resetMediaCachingForTests,
   __setMediaRetryRandomForTests,
   cacheMediaFirst,
@@ -35,6 +39,11 @@ const PRESENTATION = withBackgrounds(SEED_PRESENTATIONS[0], [
 async function store(url: string): Promise<void> {
   const cache = await caches.open(MEDIA_CACHE_NAME);
   await cache.put(url, new Response("media"));
+}
+
+async function isStored(url: string): Promise<boolean> {
+  const cache = await caches.open(MEDIA_CACHE_NAME);
+  return (await cache.match(url)) !== undefined;
 }
 
 function mockFetch(status = 200) {
@@ -70,6 +79,7 @@ describe("useProjectionMediaReady", () => {
     resetFakeCacheStorage();
     __resetMediaCachingForTests();
     setBackgroundCatalogForTests(TEST_SERVICE_BACKGROUNDS);
+    installServiceWorker();
   });
 
   afterEach(() => {
@@ -77,6 +87,7 @@ describe("useProjectionMediaReady", () => {
     vi.restoreAllMocks();
     vi.useRealTimers();
     resetBackgroundCatalogForTests();
+    removeServiceWorker();
     // @ts-expect-error 테스트에서 주입한 저장소 관리자를 되돌린다
     delete navigator.storage;
   });
@@ -87,6 +98,141 @@ describe("useProjectionMediaReady", () => {
     );
     expect(result.current.status).toBe("ready");
     expect(result.current.totalCount).toBe(0);
+  });
+
+  describe("서비스 워커를 지원하지 않는 브라우저", () => {
+    beforeEach(() => {
+      removeServiceWorker();
+    });
+
+    it("받아 둔 배경을 재생에 쓸 수 없으니 받지 않고 unsupported로 알린다", async () => {
+      await store(FIRST.mediaUrl);
+      await store(SECOND.mediaUrl);
+      const fetchMock = mockFetch();
+
+      const { result } = renderHook(() =>
+        useProjectionMediaReady(PRESENTATION),
+      );
+
+      await waitFor(() => expect(result.current.status).toBe("failed"));
+      expect(result.current.failure).toBe("unsupported");
+      expect(result.current.readyCount).toBe(0);
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it("배경이 없는 프레젠테이션은 그대로 곧바로 준비된다", async () => {
+      const { result } = renderHook(() =>
+        useProjectionMediaReady(SEED_PRESENTATIONS[0]),
+      );
+
+      await act(async () => undefined);
+      expect(result.current.status).toBe("ready");
+    });
+
+    it("passive면 저장 진행을 알리지 않는다", async () => {
+      const fetchMock = mockFetch();
+
+      const { result } = renderHook(() =>
+        useProjectionMediaReady(PRESENTATION, { passive: true }),
+      );
+
+      await act(async () => undefined);
+      expect(result.current).toMatchObject({
+        status: "ready",
+        failure: null,
+        totalCount: 0,
+      });
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+  });
+
+  it("다른 곳에서 영상을 받는 동안 받은 조각마다 다시 그리지 않는다", async () => {
+    vi.useFakeTimers();
+    const chunk = new Uint8Array(64 * 1024);
+    let sent = 0;
+    globalThis.fetch = vi.fn(
+      async () =>
+        new Response(
+          new ReadableStream<Uint8Array>({
+            async pull(controller) {
+              await new Promise((resolve) => setTimeout(resolve, 0));
+              sent += 1;
+              controller.enqueue(chunk);
+              if (sent === 16) controller.close();
+            },
+          }),
+          {
+            status: 200,
+            headers: { "content-length": String(16 * chunk.byteLength) },
+          },
+        ),
+    ) as unknown as typeof fetch;
+    let renders = 0;
+    renderHook(() => {
+      renders += 1;
+      return useProjectionMediaReady(null);
+    });
+
+    await act(async () => {
+      const cached = cacheMediaFirst(FIRST.mediaUrl);
+      await vi.runAllTimersAsync();
+      expect(await cached).toBe(true);
+    });
+
+    expect(sent).toBe(16);
+    expect(renders).toBeLessThanOrEqual(3);
+  });
+
+  it("편집기 헤더도 영상을 받는 동안 받은 조각마다 다시 그리지 않는다", async () => {
+    vi.useFakeTimers();
+    const chunk = new Uint8Array(64 * 1024);
+    let sent = 0;
+    let finish: () => void = () => undefined;
+    const finished = new Promise<void>((resolve) => {
+      finish = resolve;
+    });
+    globalThis.fetch = vi.fn(
+      async () =>
+        new Response(
+          new ReadableStream<Uint8Array>({
+            async pull(controller) {
+              if (sent === 16) {
+                await finished;
+                controller.close();
+                return;
+              }
+              await new Promise((resolve) => setTimeout(resolve, 0));
+              sent += 1;
+              controller.enqueue(chunk);
+            },
+          }),
+          { status: 200 },
+        ),
+    ) as unknown as typeof fetch;
+    let renders = 0;
+    renderHook(() => {
+      renders += 1;
+      return useProjectionMediaReady(PRESENTATION, { passive: true });
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    const settled = renders;
+
+    let cached: Promise<boolean> = Promise.resolve(false);
+    await act(async () => {
+      cached = cacheMediaFirst(FIRST.mediaUrl);
+      for (let i = 0; i < 20; i += 1) await vi.advanceTimersByTimeAsync(1);
+    });
+
+    expect(sent).toBe(16);
+    expect(renders - settled).toBeLessThanOrEqual(1);
+
+    await act(async () => {
+      finish();
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(await cached).toBe(true);
   });
 
   it("빠진 영상만 받고 개수와 용량을 알린 뒤 준비된다", async () => {
@@ -119,6 +265,20 @@ describe("useProjectionMediaReady", () => {
     await waitFor(() => expect(result.current.failure).toBe("quota"));
     expect(result.current.status).toBe("failed");
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("다른 프레젠테이션의 영상이 크기 헤더 없이 담겨 있어도 카탈로그 크기로 세어 필요한 만큼만 지우고 받는다", async () => {
+    const [, , THIRD, FOURTH] = TEST_SERVICE_BACKGROUNDS;
+    await store(THIRD.mediaUrl);
+    await store(FOURTH.mediaUrl);
+    mockEstimate(10_000_000, 8_500_000);
+    mockFetch();
+
+    const { result } = renderHook(() => useProjectionMediaReady(PRESENTATION));
+
+    await waitFor(() => expect(result.current.status).toBe("ready"));
+    expect(await isStored(THIRD.mediaUrl)).toBe(false);
+    expect(await isStored(FOURTH.mediaUrl)).toBe(true);
   });
 
   it("오프라인이면 받지 않고 offline으로 실패한다", async () => {
@@ -251,6 +411,30 @@ describe("useProjectionMediaReady", () => {
       timeout: PASSIVE_RECHECK_MS * 2,
     });
     expect(result.current.failure).toBeNull();
+  });
+
+  it("passive에서 다시 시도할 때도 크기 헤더 없이 담긴 다른 프레젠테이션의 영상을 카탈로그 크기로 세어 필요한 만큼만 지운다", async () => {
+    const [, , THIRD, FOURTH] = TEST_SERVICE_BACKGROUNDS;
+    mockFetch();
+    const put = await rejectPutWithQuota();
+    expect(await cacheMediaFirst(FIRST.mediaUrl)).toBe(false);
+    put.mockRestore();
+    await store(THIRD.mediaUrl);
+    await store(FOURTH.mediaUrl);
+    mockEstimate(10_000_000, 8_500_000);
+
+    const { result } = renderHook(() =>
+      useProjectionMediaReady(PRESENTATION, { passive: true }),
+    );
+    await waitFor(() => expect(result.current.failure).toBe("quota"));
+
+    act(() => result.current.retry());
+
+    await waitFor(() => expect(result.current.status).toBe("ready"), {
+      timeout: PASSIVE_RECHECK_MS * 2,
+    });
+    expect(await isStored(THIRD.mediaUrl)).toBe(false);
+    expect(await isStored(FOURTH.mediaUrl)).toBe(true);
   });
 
   it("passive에서 다시 시도해도 세트 밖 영상을 다 지워 자리가 없으면 다시 받지 않고 저장 공간 부족을 남긴다", async () => {

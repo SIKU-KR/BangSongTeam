@@ -145,6 +145,18 @@ describe("useCacheFirstVideo", () => {
     expect(releaseMediaUrls).toHaveBeenCalledWith([VIDEO]);
   });
 
+  it("캐시를 먼저 채우지 않게 하면 곧바로 영상을 스트리밍하고 받지도 붙잡지도 않는다", () => {
+    shouldWaitForMediaCache.mockReturnValue(true);
+
+    const { result } = renderHook(() =>
+      useCacheFirstVideo(LAYERS, { cacheFirst: false }),
+    );
+
+    expect(result.current).toBe(LAYERS);
+    expect(cacheMediaFirst).not.toHaveBeenCalled();
+    expect(retainMediaUrls).not.toHaveBeenCalled();
+  });
+
   it("기다릴 필요가 없으면 곧바로 영상을 쓰고 캐시를 앞당기지 않는다", () => {
     shouldWaitForMediaCache.mockReturnValue(false);
 

@@ -85,8 +85,6 @@ export const DRIVE_COPY = {
   },
   emptyTrashMessage:
     "휴지통의 모든 항목을 영구 삭제할까요? 삭제하면 되돌릴 수 없어요.",
-  presentUnreliable:
-    "이 브라우저에선 전체화면이나 배경 영상이 안 될 수 있어요. 그래도 발표할까요?",
   deleteForeverOffline:
     "오프라인에선 영구 삭제할 수 없어요. 인터넷에 연결한 뒤 다시 시도해 주세요.",
   deleteForeverRetry: "영구 삭제하지 못했어요. 잠시 후 다시 시도해 주세요.",

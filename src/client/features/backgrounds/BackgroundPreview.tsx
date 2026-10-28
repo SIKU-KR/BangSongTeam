@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { FilmIcon, HardDriveIcon, ImageIcon } from "lucide-react";
 import type { BackgroundMedia } from "#shared";
 import { BACKGROUND_COPY } from "#copy/backgrounds";
@@ -24,6 +24,10 @@ function prefersReducedMotion(): boolean {
  *
  * 원본이 이미 기기 캐시에 있으면 '기기에 저장됨'을 표시해, 받지 않고 바로 송출하거나
  * 오프라인에서 쓸 배경을 고를 수 있게 한다.
+ *
+ * 포스터를 불러오지 못했으면 다시 연결될 때(`online`) 다시 불러온다. 카드는 배경 id로 그려져
+ * 목록을 새로 받아도 다시 마운트되지 않으므로, 그러지 않으면 잠깐 끊겼던 갤러리가 화면을
+ * 떠났다 돌아올 때까지 깨진 채로 남는다.
  */
 export function BackgroundPreview({
   background,
@@ -36,6 +40,13 @@ export function BackgroundPreview({
   const isSaved = useIsMediaCached(background.mediaUrl);
   const playing =
     isVideo && !failed && (hovered || active) && !prefersReducedMotion();
+
+  useEffect(() => {
+    if (!failed) return;
+    const retry = (): void => setFailedUrl(null);
+    window.addEventListener("online", retry);
+    return () => window.removeEventListener("online", retry);
+  }, [failed]);
 
   return (
     <div

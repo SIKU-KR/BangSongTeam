@@ -12,6 +12,22 @@ import {
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import type { Presentation } from "#shared";
 import { MemoryRouter, Routes, Route } from "../test/router";
+import { installFakeApi } from "../test/fakeApi";
+import { resetFakeCacheStorage } from "../test/fakeCacheStorage";
+import {
+  installServiceWorker,
+  removeServiceWorker,
+} from "../test/serviceWorkerFixture";
+import {
+  TEST_SERVICE_BACKGROUNDS,
+  withBackgrounds,
+} from "../test/backgroundFixture";
+import {
+  resetBackgroundCatalogForTests,
+  setBackgroundCatalogForTests,
+} from "../features/backgrounds/backgroundCatalog";
+import { AUTO_CACHE_DELAY_MS } from "../features/offline/useBackgroundAutoCache";
+import { __resetMediaCachingForTests } from "../lib/offline/mediaCache";
 import { EditorRoute } from "./EditorRoute";
 import { loadPresentReturnPath } from "../features/presentation/fullscreen";
 import {
@@ -32,14 +48,20 @@ import {
   flushPendingSync,
   setSyncEnabled,
 } from "../lib/sync/syncScheduler";
+import * as capabilities from "../lib/browser/capabilities";
 import { EDITOR_COPY } from "#copy/editor";
 import { COMMON_COPY } from "#copy/common";
+import { PRESENTATION_COPY } from "#copy/presentation";
 import {
   SEED_PRESENTATIONS,
   SEED_PRESENTATION_IDS,
 } from "../test/presentationFixture";
 
 const DOC_ID = SEED_PRESENTATION_IDS[0];
+
+const FULLSCREEN = capabilities.BROWSER_CAPABILITIES.find(
+  ({ id }) => id === "fullscreen",
+)!;
 
 function renderEditor(path = `/editor/${DOC_ID}`) {
   return render(
@@ -116,6 +138,10 @@ describe("EditorRoute (PowerPoint식 프레젠테이션 편집기)", () => {
     __loadDocumentsForTests(SEED_PRESENTATIONS);
     mockNavigate.mockClear();
     vi.restoreAllMocks();
+    vi.spyOn(
+      capabilities,
+      "getMissingPresentationCapabilities",
+    ).mockReturnValue([]);
   });
 
   it("헤더·리본·썸네일 창·캔버스·상태 표시줄을 그리고 오른쪽 패널은 없다", () => {
@@ -186,6 +212,30 @@ describe("EditorRoute (PowerPoint식 프레젠테이션 편집기)", () => {
         expect.objectContaining({ id: DOC_ID, title: "송출 직전에 고친 제목" }),
       );
     });
+  });
+
+  it("전체화면이 안 되는 브라우저에서는 드라이브처럼 빠진 기능을 들어 발표 전에 확인을 받는다", () => {
+    vi.spyOn(
+      capabilities,
+      "getMissingPresentationCapabilities",
+    ).mockReturnValue([FULLSCREEN]);
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(false);
+    renderEditor();
+
+    const presentBtn = screen.getByTestId("header-present-btn");
+    fireEvent.click(presentBtn);
+    expect(confirmSpy).toHaveBeenCalledWith(
+      PRESENTATION_COPY.presentUnreliable(FULLSCREEN.label),
+    );
+    expect(mockNavigate).not.toHaveBeenCalled();
+
+    expect(fireEvent.keyDown(window, { key: "F5" })).toBe(false);
+    expect(confirmSpy).toHaveBeenCalledTimes(2);
+    expect(mockNavigate).not.toHaveBeenCalled();
+
+    confirmSpy.mockReturnValue(true);
+    fireEvent.click(presentBtn);
+    expect(mockNavigate).toHaveBeenCalledWith(`/present/${DOC_ID}/fullscreen`);
   });
 
   it("should switch active slide when clicking a slide thumbnail", () => {
@@ -1040,6 +1090,77 @@ describe("EditorRoute (PowerPoint식 프레젠테이션 편집기)", () => {
       ).toHaveTextContent(
         getActivePresentation().items[1].deck!.style.fontFamily,
       );
+    });
+  });
+
+  describe("배경 자동 저장", () => {
+    const backgrounds = TEST_SERVICE_BACKGROUNDS.slice(0, 3);
+
+    beforeEach(() => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      resetFakeCacheStorage();
+      __resetMediaCachingForTests();
+      installServiceWorker();
+      setBackgroundCatalogForTests(TEST_SERVICE_BACKGROUNDS);
+      resetPresentationStore();
+      __loadDocumentsForTests([
+        withBackgrounds(
+          SEED_PRESENTATIONS[0],
+          backgrounds.map((bg) => bg.id),
+        ),
+        ...SEED_PRESENTATIONS.slice(1),
+      ]);
+      vi.spyOn(window.HTMLMediaElement.prototype, "play").mockResolvedValue();
+      vi.spyOn(window.HTMLMediaElement.prototype, "pause").mockReturnValue();
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+      removeServiceWorker();
+      Reflect.deleteProperty(navigator, "connection");
+      resetBackgroundCatalogForTests();
+      __resetMediaCachingForTests();
+    });
+
+    async function mediaPathsAfterAutoCache(): Promise<string[]> {
+      const api = installFakeApi({});
+      try {
+        renderEditor();
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(AUTO_CACHE_DELAY_MS);
+        });
+        return api.calls
+          .map((call) => call.path)
+          .filter((path) => path.startsWith("/api/media/"));
+      } finally {
+        api.restore();
+      }
+    }
+
+    it("소유자가 연 프레젠테이션은 배경 영상까지 이 기기에 받아 둔다", async () => {
+      const paths = await mediaPathsAfterAutoCache();
+
+      expect(paths.some((path) => path.startsWith("/api/media/loops/"))).toBe(
+        true,
+      );
+    });
+
+    it("데이터 절약 모드면 영상은 받아 두지 않고 포스터만 담으며 저장 진행을 띄우지 않는다", async () => {
+      Object.defineProperty(navigator, "connection", {
+        value: { saveData: true },
+        configurable: true,
+      });
+
+      const paths = await mediaPathsAfterAutoCache();
+
+      expect(paths.some((path) => path.startsWith("/api/media/loops/"))).toBe(
+        false,
+      );
+      expect(paths.some((path) => path.startsWith("/api/media/posters/"))).toBe(
+        true,
+      );
+      expect(screen.queryByTestId("header-media-progress")).toBeNull();
+      expect(screen.queryByTestId("header-media-failure")).toBeNull();
     });
   });
 

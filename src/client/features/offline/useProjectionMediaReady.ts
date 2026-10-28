@@ -21,8 +21,12 @@ import {
   scheduleMediaCaching,
   subscribeMediaProgress,
 } from "../../lib/offline";
-import { useBackgroundLookup } from "../backgrounds/backgroundCatalog";
+import {
+  getBackgrounds,
+  useBackgroundLookup,
+} from "../backgrounds/backgroundCatalog";
 import { useLatest } from "../../hooks/useLatest";
+import { canStoreMediaOffline } from "../../lib/browser/capabilities";
 import { navigatorApi } from "../../lib/browser/optionalApis";
 
 export type ProjectionMediaStatus =
@@ -32,8 +36,11 @@ export type ProjectionMediaStatus =
  * - `offline`: 인터넷이 끊겨 빠진 영상을 받을 수 없다
  * - `quota`: 기기 저장 공간이 모자라다
  * - `network`: 연결은 됐지만 받다가 실패했다 (다시 시도하면 될 수 있다)
+ * - `unsupported`: 서비스 워커가 없는 브라우저라 받아 둔 배경을 재생에 쓸 수 없다. 받지 않고
+ *   인터넷으로 재생하며, 다시 시도해도 같다
  */
-export type ProjectionMediaFailure = "offline" | "quota" | "network";
+export type ProjectionMediaFailure =
+  "offline" | "quota" | "network" | "unsupported";
 
 export interface ProjectionMediaReadiness {
   status: ProjectionMediaStatus;
@@ -115,13 +122,23 @@ async function waitForServiceWorker(): Promise<void> {
   ]);
 }
 
+function catalogMediaSize(): (path: string) => number | undefined {
+  const sizes = new Map(
+    getBackgrounds().map((background) => [
+      background.mediaUrl,
+      background.sizeBytes,
+    ]),
+  );
+  return (path) => sizes.get(path);
+}
+
 async function requeueMissing(files: readonly MediaFile[]): Promise<void> {
   const urls = files.map((file) => file.url);
   const cached = new Set(await findCachedMediaUrls(urls));
   const missing = files.filter((file) => !cached.has(file.url));
   if (missing.length === 0) return;
   const neededBytes = missing.reduce((sum, file) => sum + file.sizeBytes, 0);
-  if (!(await ensureMediaSpace(neededBytes, urls))) return;
+  if (!(await ensureMediaSpace(neededBytes, urls, catalogMediaSize()))) return;
   scheduleMediaCaching(
     missing.map((file) => file.url),
     { priority: true },
@@ -149,11 +166,14 @@ function collectMediaFiles(
   return [...files.values()];
 }
 
-function useMediaProgressVersion(): number {
+const subscribeNothing = (): (() => void) => () => undefined;
+const noProgressVersion = (): number => 0;
+
+function useMediaProgressVersion(active: boolean): number {
   return useSyncExternalStore(
-    subscribeMediaProgress,
-    getMediaProgressVersion,
-    getMediaProgressVersion,
+    active ? subscribeMediaProgress : subscribeNothing,
+    active ? getMediaProgressVersion : noProgressVersion,
+    active ? getMediaProgressVersion : noProgressVersion,
   );
 }
 
@@ -163,7 +183,8 @@ function useMediaProgressVersion(): number {
  * 배경 영상은 하나에 수백 MB일 수 있어, 받는 도중에 송출을 시작하면 예배 중에
  * 네트워크가 끊겼을 때 배경이 멈춘다. 그래서 송출 화면은 `ready`가 되거나 운영자가
  * 저장된 배경으로 시작할 때까지 슬라이드를 띄우지 않는다. 받기 전에 모자란 저장 공간을 세트 밖의 영상을 지워 확보한다
- * (`ensureMediaSpace`). 포스터는 작아서 기다리지 않는다 — 기존 백그라운드 큐가 받는다.
+ * (`ensureMediaSpace`). 길이 헤더 없이 담긴 영상은 카탈로그의 `sizeBytes`로 센다. 포스터는
+ * 작아서 기다리지 않는다 — 기존 백그라운드 큐가 받는다.
  *
  * 총 용량은 카탈로그의 `sizeBytes`(영상+포스터)로 먼저 잡고, 받기 시작하면 응답
  * 길이로 바꾼다.
@@ -184,6 +205,11 @@ function useMediaProgressVersion(): number {
  *
  * 받다가 저장 공간 부족으로 실패하면 연결이 끊겼더라도 `quota`로 알린다. 다시 연결해도
  * 공간을 비우기 전에는 낫지 않기 때문이다.
+ *
+ * 서비스 워커가 없는 브라우저(`canStoreMediaOffline`)에서는 받지 않고 `unsupported`로 알린다.
+ * 받아 둔 사본을 재생에 쓰지 못해, 저장했다고 알리면 운영자가 믿고 시작했다가 예배 중 연결이
+ * 끊길 때 배경을 잃는다. 이미 담긴 사본이 있어도 같다. `passive`면 받을 일이 없으니 아무것도
+ * 알리지 않는다.
  */
 export function useProjectionMediaReady(
   presentation: Presentation | null,
@@ -191,10 +217,14 @@ export function useProjectionMediaReady(
 ): ProjectionMediaReadiness {
   const passive = options.passive ?? false;
   const findBackground = useBackgroundLookup();
+  const storable = canStoreMediaOffline();
 
   const files = useMemo(
-    () => collectMediaFiles(presentation, findBackground),
-    [presentation, findBackground],
+    () =>
+      passive && !storable
+        ? []
+        : collectMediaFiles(presentation, findBackground),
+    [presentation, findBackground, passive, storable],
   );
   const filesRef = useLatest(files);
   const [attempt, setAttempt] = useState(0);
@@ -241,6 +271,10 @@ export function useProjectionMediaReady(
 
     const readyUrls = new Set<string>();
     const prepare = async (): Promise<void> => {
+      if (files.length > 0 && !canStoreMediaOffline()) {
+        update({ status: "failed", failure: "unsupported", readyUrls });
+        return;
+      }
       for (const url of await findCachedMediaUrls(urls)) readyUrls.add(url);
       const missing = files.filter((file) => !readyUrls.has(file.url));
       if (missing.length === 0) {
@@ -256,7 +290,7 @@ export function useProjectionMediaReady(
         (sum, file) => sum + file.sizeBytes,
         0,
       );
-      if (!(await ensureMediaSpace(neededBytes, urls))) {
+      if (!(await ensureMediaSpace(neededBytes, urls, catalogMediaSize()))) {
         update({ status: "failed", failure: "quota", readyUrls });
         return;
       }
@@ -294,7 +328,7 @@ export function useProjectionMediaReady(
     };
   }, [key]);
 
-  useMediaProgressVersion();
+  useMediaProgressVersion(files.length > 0);
   const current: RunState =
     run.key === key
       ? run

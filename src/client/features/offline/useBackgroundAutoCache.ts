@@ -55,20 +55,26 @@ function useRetainedMediaUrls(
  * 포커스·탭 복귀(`wake`)에는 이미 실패한 URL을 넣지 않고, `online`에도 저장 공간 부족으로
  * 실패한 URL은 넣지 않는다. 다시 넣으면 영상을 끝까지 받은 뒤에야 같은 실패를 알게 되어,
  * 포커스마다 큰 파일을 처음부터 다시 받는다. '다시 시도'(`manual`)만 모두 넣는다.
+ *
+ * `posterOnly`면 영상·이미지 원본은 빼고 포스터만 담는다. 링크로 연 손님이나 데이터 절약
+ * 모드처럼 이 기기에서 송출할지 모르는 사람의 휴대폰이 수백 MB 영상을 조용히 다 받지 않게
+ * 한다. 실제로 송출을 시작하면 준비 카드와 송출 큐(`useProjectionMediaCache`)가 받는다.
  */
 export function useBackgroundAutoCache(
   presentation: Presentation | null,
+  options: { posterOnly?: boolean } = {},
 ): void {
+  const posterOnly = options.posterOnly ?? false;
   const findBackground = useBackgroundLookup();
-  const urls = useMemo(
-    () =>
-      presentation
-        ? collectUniqueMediaUrls(
-            collectPresentationMediaAssets(presentation, findBackground),
-          )
-        : [],
-    [presentation, findBackground],
-  );
+  const urls = useMemo(() => {
+    if (!presentation) return [];
+    const assets = collectPresentationMediaAssets(presentation, findBackground);
+    return collectUniqueMediaUrls(
+      posterOnly
+        ? assets.map((asset) => ({ ...asset, mediaUrl: undefined }))
+        : assets,
+    );
+  }, [presentation, findBackground, posterOnly]);
   const urlKey = urls.join("|");
   const presentationId = presentation?.id ?? null;
 

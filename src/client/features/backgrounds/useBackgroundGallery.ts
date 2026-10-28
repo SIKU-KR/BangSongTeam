@@ -8,7 +8,10 @@ import {
   filterBackgrounds,
   type BackgroundKindFilterValue,
 } from "./backgroundSearch";
-import { refreshBackgroundCatalog } from "../../lib/sync/backgroundSync";
+import {
+  refreshBackgroundCatalog,
+  retryBackgroundCatalogIfNeeded,
+} from "../../lib/sync/backgroundSync";
 import { BACKGROUND_COPY } from "#copy/backgrounds";
 
 /**
@@ -38,11 +41,22 @@ interface BackgroundGallery {
   visibleBackgrounds: BackgroundMedia[];
   hasAnyBackground: boolean;
   emptyReason: BackgroundGalleryEmptyReason | null;
+  loadFailed: boolean;
+  retryLoad: () => void;
 }
+
+const retryLoad = (): void => {
+  retryBackgroundCatalogIfNeeded("manual");
+};
 
 /**
  * 배경 갤러리와 배경 선택 창이 함께 쓰는 목록 상태. 열릴 때 서버 목록을 한 번 새로
  * 받아 로컬 카탈로그를 맞추고, 종류 필터와 검색어로 거른 배경을 돌려준다.
+ *
+ * 서버가 목록을 주지 못했으면(`loadFailed`) 가진 목록이 비어 있어도 `noBackgrounds`로 보지
+ * 않는다. 배경이 없는 것이 아니라 받지 못한 것이라, 화면은 그 사실과 다시 받기(`retryLoad`)를
+ * 보여 준다. 다시 받기는 '다시 시도'(`manual`)라서 여러 번 받지 못해 스스로 다시 받기를 멈춘
+ * 목록도 백오프를 비우고 다시 받는다. 그래야 그 뒤에 또 실패해도 서버가 돌아오면 스스로 받는다.
  */
 export function useBackgroundGallery(query: string): BackgroundGallery {
   const catalog = useBackgroundCatalog();
@@ -56,9 +70,10 @@ export function useBackgroundGallery(query: string): BackgroundGallery {
   const all = catalog.backgrounds;
   const visibleBackgrounds = filterBackgrounds(all, { kind, query });
   const hasAnyBackground = all.length > 0;
+  const loadFailed = catalog.status === "error";
 
   const emptyReason: BackgroundGalleryEmptyReason | null =
-    visibleBackgrounds.length > 0
+    visibleBackgrounds.length > 0 || (!hasAnyBackground && loadFailed)
       ? null
       : !hasAnyBackground
         ? "noBackgrounds"
@@ -74,5 +89,7 @@ export function useBackgroundGallery(query: string): BackgroundGallery {
     visibleBackgrounds,
     hasAnyBackground,
     emptyReason,
+    loadFailed,
+    retryLoad,
   };
 }
