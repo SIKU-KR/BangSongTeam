@@ -188,6 +188,13 @@
     }
   }
 
+  /* Chrome·Safari는 type="search" 입력란에 글자가 있으면 기본 지우기 버튼
+     (::-webkit-search-cancel-button)을 그린다. 헤더 검색란에는 직접 만든 '검색어 지우기'
+     버튼이 있어 지우기 아이콘이 둘로 보이므로 기본 버튼을 숨긴다 */
+  input[type="search"]::-webkit-search-cancel-button {
+    display: none;
+  }
+
   /* 모션 줄이기 설정을 존중한다. base 레이어의 !important는 유틸리티와 인라인 style보다 우선한다 */
   @media (prefers-reduced-motion: reduce) {
     *,

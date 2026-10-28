@@ -30,6 +30,13 @@ describe("Global Styles & Local Pretendard Webfont Configuration", () => {
     expect(cssContent).not.toMatch(/@fontsource\//);
   });
 
+  it("검색 입력란의 브라우저 기본 지우기 버튼을 숨겨 직접 만든 지우기 버튼만 남긴다", () => {
+    const cssContent = fs.readFileSync(cssPath, "utf-8");
+    expect(cssContent).toMatch(
+      /input\[type="search"\]::-webkit-search-cancel-button\s*\{[^}]*display:\s*none/,
+    );
+  });
+
   it("should import index.css in the root layout", () => {
     const layoutContent = fs.readFileSync(rootLayoutPath, "utf-8");
     expect(layoutContent).toMatch(/import\s+['"]\.\.\/client\/index\.css['"]/);
