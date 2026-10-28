@@ -6,7 +6,12 @@ import {
   type Folder,
   type Presentation,
 } from "#shared";
-import { flushBeforeSignOut, stopAccountSync } from "./accountEnd";
+import {
+  flushBeforeSignOut,
+  hasUnsentChanges,
+  shouldConfirmSignOut,
+  stopAccountSync,
+} from "./accountEnd";
 import {
   __resetSyncSchedulerForTests,
   __setPusherForTests,
@@ -18,6 +23,7 @@ import {
   __resetDeckSyncForTests,
   __setDeckTransportForTests,
   flushDeckSync,
+  holdFailedDeckPush,
   scheduleDeckDelete,
   scheduleDeckPush,
   setDeckSyncEnabled,
@@ -26,9 +32,11 @@ import {
   __resetFolderSyncForTests,
   __setFolderPusherForTests,
   flushFolderSync,
+  holdFailedFolderPush,
   scheduleFolderPush,
   setFolderSyncEnabled,
 } from "./folderSync";
+import { ServerRejectedError } from "../api/request";
 import { __resetBootSyncForTests } from "./bootSync";
 import { resetSyncStatus } from "./syncStatus";
 import {
@@ -376,6 +384,118 @@ describe("계정이 끝날 때의 동기화", () => {
 
       const { valid } = await loadAllSongs();
       expect(valid.map((deck) => deck.id)).toContain(song.id);
+    });
+  });
+
+  describe("hasUnsentChanges", () => {
+    it("보낼 것이 없으면 거짓이다", () => {
+      expect(hasUnsentChanges()).toBe(false);
+    });
+
+    it("기다리는 중인 프레젠테이션이 있으면 참이고, 다 보내면 거짓이다", async () => {
+      scheduleDocumentPush(presentation());
+      expect(hasUnsentChanges()).toBe(true);
+
+      await flushPendingSync();
+
+      expect(hasUnsentChanges()).toBe(false);
+    });
+
+    it("서버로 보내는 중인 프레젠테이션도 센다", async () => {
+      let release: () => void = () => undefined;
+      pushPresentation.mockImplementation(
+        () =>
+          new Promise((resolve) => {
+            release = () => resolve(true);
+          }),
+      );
+      scheduleDocumentPush(presentation());
+      const flushing = flushPendingSync();
+      await vi.waitFor(() => expect(pushPresentation).toHaveBeenCalledTimes(1));
+
+      expect(hasUnsentChanges()).toBe(true);
+
+      release();
+      await flushing;
+      expect(hasUnsentChanges()).toBe(false);
+    });
+
+    it("서버가 거절해 다시 시도를 기다리는 프레젠테이션도 센다", async () => {
+      vi.spyOn(console, "error").mockImplementation(() => undefined);
+      pushPresentation.mockRejectedValue(new ServerRejectedError(422));
+      scheduleDocumentPush(presentation());
+
+      await flushPendingSync();
+
+      expect(hasUnsentChanges()).toBe(true);
+    });
+
+    it("폴더는 기다리는 중과 다시 시도를 기다리는 중 모두 센다", async () => {
+      scheduleFolderPush(folder());
+      expect(hasUnsentChanges()).toBe(true);
+      await flushFolderSync();
+      expect(hasUnsentChanges()).toBe(false);
+
+      holdFailedFolderPush(folder());
+
+      expect(hasUnsentChanges()).toBe(true);
+    });
+
+    it("곡은 기다리는 중과 다시 시도를 기다리는 중 모두 센다", async () => {
+      scheduleDeckPush(libraryDeck());
+      expect(hasUnsentChanges()).toBe(true);
+      await flushDeckSync();
+      expect(hasUnsentChanges()).toBe(false);
+
+      holdFailedDeckPush(libraryDeck());
+
+      expect(hasUnsentChanges()).toBe(true);
+    });
+
+    it("서버에서 아직 지우지 못한 곡은 새로고침해 큐가 비어도 센다", async () => {
+      markServerUnreachable();
+      scheduleDeckDelete(SONG, SEED_USER_ID);
+      await flushBeforeSignOut();
+      resetQueues();
+      expect(removeDeck).not.toHaveBeenCalled();
+
+      expect(hasUnsentChanges()).toBe(true);
+    });
+
+    it("서버가 지웠다고 답한 곡은 세지 않는다", async () => {
+      scheduleDeckDelete(SONG, SEED_USER_ID);
+      await flushDeckSync();
+
+      expect(removeDeck).toHaveBeenCalledWith(SONG);
+      expect(hasUnsentChanges()).toBe(false);
+    });
+  });
+
+  describe("shouldConfirmSignOut", () => {
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    it("온라인이고 보낼 것이 없으면 확인 없이 로그아웃한다", () => {
+      expect(shouldConfirmSignOut()).toBe(false);
+    });
+
+    it("브라우저가 오프라인이라고 알리면 확인한다", () => {
+      vi.spyOn(navigator, "onLine", "get").mockReturnValue(false);
+
+      expect(shouldConfirmSignOut()).toBe(true);
+    });
+
+    it("마지막 요청이 서버에 닿지 못했으면 브라우저가 온라인이라 해도 확인한다", () => {
+      markServerUnreachable();
+
+      expect(shouldConfirmSignOut()).toBe(true);
+    });
+
+    it("온라인이어도 보내지 못한 변경이 있으면 확인한다", () => {
+      scheduleDocumentPush(presentation());
+
+      expect(shouldConfirmSignOut()).toBe(true);
     });
   });
 });

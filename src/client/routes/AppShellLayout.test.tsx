@@ -14,6 +14,13 @@ import {
   resetFolderStore,
 } from "../features/drive/folderStore";
 import { __setBootPullPendingForTests } from "../lib/sync/bootSync";
+import {
+  __resetSyncSchedulerForTests,
+  __setPusherForTests,
+  scheduleDocumentPush,
+  setSyncEnabled,
+} from "../lib/sync/syncScheduler";
+import { __resetConnectivityForTests } from "../lib/api/connectivity";
 import { signInAsTestUser } from "../test/sessionFixture";
 import {
   render,
@@ -197,6 +204,7 @@ function stackRows(): void {
 describe("AppShellLayout (드라이브형 홈)", () => {
   beforeEach(() => {
     signInAsTestUser();
+    __resetConnectivityForTests();
     resetPresentationStore();
     resetFolderStore();
     window.localStorage.clear();
@@ -363,6 +371,85 @@ describe("AppShellLayout (드라이브형 홈)", () => {
     expect(screen.getByTestId("account-card")).toHaveTextContent(
       SHELL_COPY.signOut,
     );
+  });
+
+  describe("로그아웃 확인", () => {
+    const accountButton = (): HTMLElement =>
+      within(screen.getByTestId("account-card")).getByRole("button");
+
+    beforeEach(() => {
+      vi.mocked(authClient.signOut).mockClear();
+    });
+
+    afterEach(() => {
+      __resetSyncSchedulerForTests();
+    });
+
+    it("온라인이고 보낼 것이 없으면 확인 없이 로그아웃한다", async () => {
+      renderShell();
+
+      fireEvent.click(accountButton());
+
+      await waitFor(() => expect(authClient.signOut).toHaveBeenCalledTimes(1));
+      expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+      await waitFor(() => expect(getSessionState().status).toBe("loading"));
+    });
+
+    it("오프라인이면 먼저 확인하고, 취소하면 로그아웃하지 않는다", async () => {
+      vi.spyOn(navigator, "onLine", "get").mockReturnValue(false);
+      renderShell();
+
+      fireEvent.click(accountButton());
+
+      const dialog = await screen.findByRole("alertdialog");
+      expect(dialog).toHaveTextContent(SHELL_COPY.signOutConfirm.title);
+      expect(dialog).toHaveTextContent(SHELL_COPY.signOutConfirm.description);
+      expect(authClient.signOut).not.toHaveBeenCalled();
+
+      fireEvent.click(
+        within(dialog).getByRole("button", { name: COMMON_COPY.cancel }),
+      );
+
+      await waitFor(() =>
+        expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument(),
+      );
+      expect(authClient.signOut).not.toHaveBeenCalled();
+      expect(getSessionState().status).toBe("authenticated");
+    });
+
+    it("오프라인에서 확인하면 로그아웃한다", async () => {
+      vi.spyOn(navigator, "onLine", "get").mockReturnValue(false);
+      renderShell();
+      fireEvent.click(accountButton());
+      const dialog = await screen.findByRole("alertdialog");
+
+      fireEvent.click(
+        within(dialog).getByRole("button", { name: SHELL_COPY.signOut }),
+      );
+
+      await waitFor(() => expect(authClient.signOut).toHaveBeenCalledTimes(1));
+      await waitFor(() =>
+        expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument(),
+      );
+      await waitFor(() => expect(getSessionState().status).toBe("loading"));
+    });
+
+    it("온라인이어도 보내지 못한 변경이 있으면 확인하고, Esc로 닫으면 로그아웃하지 않는다", async () => {
+      __setPusherForTests(() => new Promise(() => undefined));
+      setSyncEnabled(true);
+      scheduleDocumentPush(SEED_PRESENTATIONS[0]);
+      renderShell();
+
+      fireEvent.click(accountButton());
+
+      await screen.findByRole("alertdialog");
+      fireEvent.keyDown(document, { key: "Escape" });
+      await waitFor(() =>
+        expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument(),
+      );
+      expect(authClient.signOut).not.toHaveBeenCalled();
+      expect(getSessionState().status).toBe("authenticated");
+    });
   });
 
   it("새로 만들기 → 새 프레젠테이션은 문서를 만들고 편집기로 간다", () => {

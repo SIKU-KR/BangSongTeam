@@ -425,6 +425,14 @@ export function hasPendingFolderPush(): boolean {
 }
 
 /**
+ * 서버에 아직 올리지 못한 폴더가 있는지. `hasPendingFolderPush`가 세는 기다리는 중·보내는 중에 더해,
+ * 영구 실패로 맡아 '다시 시도'를 기다리는 것도 센다.
+ */
+export function hasUnsentFolders(): boolean {
+  return pending.size > 0 || runningBatches.size > 0 || failed.size > 0;
+}
+
+/**
  * 그 폴더의 push가 아직 끝나지 않았는지. 기다리는 중이거나 보내는 중(큐의 묶음, 부팅의 바로
  * 올리기)이면 참이다. 아직 서버에 없을 수 있는 폴더라, 그 안에 넣은 폴더·세트는 이 폴더가
  * 오른 뒤에 올린다. 서버는 모르는 폴더를 가리키는 폴더·세트를 루트로 옮겨 받고, 이 기기도 그

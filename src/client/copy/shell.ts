@@ -12,6 +12,11 @@ export const SHELL_COPY = {
   skipToContent: "본문으로 건너뛰기",
   signOut: "로그아웃",
   signingOut: "로그아웃 중…",
+  signOutConfirm: {
+    title: "로그아웃할까요?",
+    description:
+      "아직 보내지 못한 변경은 이 기기에 남아 있다가, 이 기기에서 같은 계정으로 다시 로그인하면 보내요. 다시 로그인하려면 인터넷이 필요해요.",
+  },
   landingEnter: "내 프레젠테이션으로 이동",
   searchPlaceholder: {
     trash: "휴지통에서 검색",

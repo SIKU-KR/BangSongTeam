@@ -9,6 +9,16 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "cn";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "#components/ui/alert-dialog";
 import { Avatar, AvatarFallback, AvatarImage } from "#components/ui/avatar";
 import {
   Sidebar,
@@ -22,6 +32,7 @@ import {
   SidebarMenuItem,
 } from "#components/ui/sidebar";
 import { useSession, signOut } from "../../lib/auth";
+import { shouldConfirmSignOut } from "../../lib/sync";
 import {
   DRIVE_ROOT_PATH,
   NewMenuButton,
@@ -88,9 +99,14 @@ function NavItem({
   );
 }
 
+/**
+ * 계정 카드. 누르면 로그아웃한다. 오프라인이거나 서버에 보내지 못한 변경이 있으면 먼저 확인을 받는다.
+ * 그 변경은 이 기기에 남아 같은 계정으로 다시 로그인할 때 올라가고, 다시 로그인하려면 인터넷이 필요하다.
+ */
 function AccountMenuItem(): React.JSX.Element {
   const session = useSession();
   const [signingOut, setSigningOut] = useState(false);
+  const [confirmingSignOut, setConfirmingSignOut] = useState(false);
 
   const name = session.user?.name ?? FALLBACK_USER_NAME.default;
 
@@ -105,26 +121,58 @@ function AccountMenuItem(): React.JSX.Element {
     }
   };
 
+  const handleClick = (): void => {
+    if (shouldConfirmSignOut()) setConfirmingSignOut(true);
+    else void handleSignOut();
+  };
+
   return (
-    <SidebarMenuItem data-testid="account-card">
-      <SidebarMenuButton
-        size="lg"
-        disabled={signingOut}
-        onClick={() => void handleSignOut()}
-      >
-        <Avatar>
-          {session.user?.image && <AvatarImage src={session.user.image} />}
-          <AvatarFallback>{name.slice(0, 2)}</AvatarFallback>
-        </Avatar>
-        <div className="grid flex-1 text-left leading-tight">
-          <span className="truncate font-semibold">{name}</span>
-          <span className="truncate text-xs text-muted-foreground">
-            {signingOut ? SHELL_COPY.signingOut : SHELL_COPY.signOut}
-          </span>
-        </div>
-        <LogOutIcon />
-      </SidebarMenuButton>
-    </SidebarMenuItem>
+    <>
+      <SidebarMenuItem data-testid="account-card">
+        <SidebarMenuButton
+          size="lg"
+          disabled={signingOut}
+          onClick={handleClick}
+        >
+          <Avatar>
+            {session.user?.image && <AvatarImage src={session.user.image} />}
+            <AvatarFallback>{name.slice(0, 2)}</AvatarFallback>
+          </Avatar>
+          <div className="grid flex-1 text-left leading-tight">
+            <span className="truncate font-semibold">{name}</span>
+            <span className="truncate text-xs text-muted-foreground">
+              {signingOut ? SHELL_COPY.signingOut : SHELL_COPY.signOut}
+            </span>
+          </div>
+          <LogOutIcon />
+        </SidebarMenuButton>
+      </SidebarMenuItem>
+
+      <AlertDialog open={confirmingSignOut} onOpenChange={setConfirmingSignOut}>
+        <AlertDialogContent data-testid="sign-out-confirm-dialog">
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {SHELL_COPY.signOutConfirm.title}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {SHELL_COPY.signOutConfirm.description}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{COMMON_COPY.cancel}</AlertDialogCancel>
+            <AlertDialogAction
+              data-testid="sign-out-confirm-btn"
+              onClick={() => {
+                setConfirmingSignOut(false);
+                void handleSignOut();
+              }}
+            >
+              {SHELL_COPY.signOut}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   );
 }
 

@@ -2,10 +2,12 @@ import { flushPendingWrites } from "../../features/presentation";
 import { flushFolderWrites } from "../../features/drive/folderStore";
 import { flushSongWrites } from "../../features/editor/songLibraryStore";
 import { isServerReachable } from "../api/connectivity";
+import { getCurrentUserId } from "../auth/sessionStore";
 import { stopSync } from "./bootSync";
-import { flushDeckSync } from "./deckSync";
-import { flushFolderSync } from "./folderSync";
-import { flushPendingSync } from "./syncScheduler";
+import { flushDeckSync, hasUnsentDecks } from "./deckSync";
+import { flushFolderSync, hasUnsentFolders } from "./folderSync";
+import { listPendingDeckDeletes } from "./pendingDeckDeletes";
+import { flushPendingSync, hasUnsentDocuments } from "./syncScheduler";
 
 const SIGN_OUT_FLUSH_TIMEOUT_MS = 3000;
 
@@ -43,6 +45,36 @@ export async function flushBeforeSignOut(): Promise<void> {
     );
   await Promise.race([flushed, deadline]);
   clearTimeout(timer);
+}
+
+/**
+ * 서버에 아직 닿지 못한 변경이 이 기기에 있는지. 큐가 기다리거나 보내는 중이거나 실패로 붙잡은
+ * 프레젠테이션·폴더·곡과, 서버에서 아직 지우지 못한 곡(새로고침해도 남는 삭제 기록)을 센다. 이런
+ * 변경은 로그아웃해도 이 기기에 남아, 같은 계정으로 다시 로그인한 부팅이 올린다.
+ */
+export function hasUnsentChanges(): boolean {
+  const userId = getCurrentUserId();
+  return (
+    hasUnsentDocuments() ||
+    hasUnsentFolders() ||
+    hasUnsentDecks() ||
+    (userId !== null && listPendingDeckDeletes(userId).length > 0)
+  );
+}
+
+/**
+ * 로그아웃하기 전에 사용자에게 먼저 물을지. 오프라인이거나 보내지 못한 변경이 있을 때다.
+ *
+ * 오프라인이면 로그아웃 요청이 닿지 않아 서버 세션이 남고, 다시 로그인하려면 인터넷이 필요해 그동안
+ * 이 기기에서 작업을 이어 갈 수 없다. 보내지 못한 변경은 이 기기에 남아 다음 로그인에서 올라가지만,
+ * 그 전에는 다른 기기에 보이지 않는다. 오프라인은 브라우저가 알리거나(`navigator.onLine`) 마지막
+ * 요청이 서버에 닿지 못한 경우(`isServerReachable`)다. 둘 다 아니고 보낼 것이 없을 때만 묻지 않는다.
+ */
+export function shouldConfirmSignOut(): boolean {
+  const offline =
+    (typeof navigator !== "undefined" && !navigator.onLine) ||
+    !isServerReachable();
+  return offline || hasUnsentChanges();
 }
 
 /**
