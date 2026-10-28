@@ -20,6 +20,7 @@ export { beginPermanentDelete } from "./ownPresentationListener";
 export {
   startBootSync,
   runDeferredBootSync,
+  refreshOwnDataIfStale,
   useBootPullPending,
 } from "./bootSync";
 export { flushBeforeSignOut, stopAccountSync } from "./accountEnd";

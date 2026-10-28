@@ -4,6 +4,7 @@ import { signInAsTestUser, signOutForTests } from "../../test/sessionFixture";
 import { SEED_USER_ID } from "../../test/presentationFixture";
 import {
   __resetStorageChannelForTests,
+  announcePull,
   announceStorageChange,
   subscribeStorageChanges,
 } from "./storageChannel";
@@ -71,7 +72,7 @@ describe("storageChannel", () => {
     const other = tabs.otherTab(CHANNEL);
 
     other.post({ v: 2, userId: SEED_USER_ID, kind: "decks", ids: [FIRST] });
-    other.post({ v: 1, userId: SEED_USER_ID, kind: "pulled", ids: [] });
+    other.post({ v: 1, userId: SEED_USER_ID, kind: "backgrounds", ids: [] });
     other.post({ v: 1, userId: SEED_USER_ID, kind: "decks", ids: ["짧은 id"] });
     other.post({ v: 1, userId: "", kind: "decks", ids: [FIRST] });
     other.post({ v: 1, kind: "decks", ids: [FIRST] });
@@ -92,6 +93,38 @@ describe("storageChannel", () => {
     await nextTask();
 
     expect(received).not.toHaveBeenCalled();
+    other.close();
+  });
+
+  it("서버에서 내 데이터를 다시 받았다고 지금 사용자 id와 함께 알리고, 다른 탭은 그 알림을 받는다", async () => {
+    const received = vi.fn();
+    subscribeStorageChanges(received);
+    const other = tabs.otherTab(CHANNEL);
+
+    announcePull();
+    other.post({ v: 1, userId: SEED_USER_ID, kind: "pulled", ids: [] });
+    await nextTask();
+
+    expect(other.received).toEqual([
+      { v: 1, userId: SEED_USER_ID, kind: "pulled", ids: [] },
+    ]);
+    expect(received).toHaveBeenCalledExactlyOnceWith({
+      v: 1,
+      userId: SEED_USER_ID,
+      kind: "pulled",
+      ids: [],
+    });
+    other.close();
+  });
+
+  it("로그인하지 않았으면 다시 받았다고 알리지 않는다", async () => {
+    const other = tabs.otherTab(CHANNEL);
+
+    signOutForTests();
+    announcePull();
+    await nextTask();
+
+    expect(other.received).toEqual([]);
     other.close();
   });
 

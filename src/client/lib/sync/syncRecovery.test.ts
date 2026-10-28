@@ -10,6 +10,7 @@ import {
   __resetSyncRecoveryForTests,
   __setProbeRandomForTests,
   __waitForSyncRecoveryForTests,
+  FRESHNESS_TICK_MS,
   resumeDeferredSyncRecovery,
   retrySyncNow,
   startSyncRecovery,
@@ -36,18 +37,27 @@ import {
   setDeckSyncEnabled,
 } from "./deckSync";
 import { __resetServerDecksForTests } from "./presentationSync";
-import { getSyncSnapshot, resetSyncStatus } from "./syncStatus";
-import { BASE_BACKOFF_MS, MAX_BACKOFF_MS } from "./backoff";
+import {
+  getSyncDomainStatus,
+  getSyncSnapshot,
+  resetSyncStatus,
+  type SyncStatus,
+} from "./syncStatus";
+import { BASE_BACKOFF_MS, MAX_BACKOFF_MS, type SyncRetryMode } from "./backoff";
 import { ServerRejectedError, TimeoutError } from "../api/request";
 
 const recoveryDeps = vi.hoisted(() => ({
   retryBootSyncIfNeeded: vi.fn(async () => false),
+  refreshOwnDataIfStale: vi.fn<(mode: SyncRetryMode) => Promise<void>>(
+    async () => undefined,
+  ),
   resumeMediaCaching: vi.fn(),
 }));
 
 vi.mock("./bootSync", async (importOriginal) => ({
   ...(await importOriginal<typeof import("./bootSync")>()),
   retryBootSyncIfNeeded: recoveryDeps.retryBootSyncIfNeeded,
+  refreshOwnDataIfStale: recoveryDeps.refreshOwnDataIfStale,
 }));
 
 vi.mock("../offline/mediaCache", async (importOriginal) => ({
@@ -121,6 +131,8 @@ describe("동기화 회복", () => {
     __resetServerDecksForTests();
     resetSyncStatus();
     recoveryDeps.retryBootSyncIfNeeded.mockClear();
+    recoveryDeps.refreshOwnDataIfStale.mockReset();
+    recoveryDeps.refreshOwnDataIfStale.mockResolvedValue(undefined);
     recoveryDeps.resumeMediaCaching.mockClear();
     server = installFakeServer();
     paused = false;
@@ -321,11 +333,14 @@ describe("동기화 회복", () => {
     await vi.advanceTimersByTimeAsync(0);
     markServerUnreachable();
     await vi.advanceTimersByTimeAsync(MAX_BACKOFF_MS * 2);
+    markServerReachable();
+    await vi.advanceTimersByTimeAsync(FRESHNESS_TICK_MS * 2);
 
     expect(
       server.calls.filter((call) => call.path === "/api/health"),
     ).toHaveLength(0);
     expect(recoveryDeps.retryBootSyncIfNeeded).not.toHaveBeenCalled();
+    expect(recoveryDeps.refreshOwnDataIfStale).not.toHaveBeenCalled();
     expect(recoveryDeps.resumeMediaCaching).not.toHaveBeenCalled();
   });
 
@@ -335,7 +350,7 @@ describe("동기화 회복", () => {
     start();
     paused = true;
 
-    await vi.advanceTimersByTimeAsync(MAX_BACKOFF_MS * 2);
+    await vi.advanceTimersByTimeAsync(FRESHNESS_TICK_MS);
     window.dispatchEvent(new Event("focus"));
     expect(healthCalls(server)).toBe(0);
     expect(vi.getTimerCount()).toBe(0);
@@ -411,6 +426,104 @@ describe("동기화 회복", () => {
     expect(pushFolder).toHaveBeenCalledTimes(1);
     expect(pushDeck).toHaveBeenCalledTimes(1);
     expect(pushDoc).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    ["focus", "wake"],
+    ["online", "reconnect"],
+  ] as const)(
+    "%s 이벤트에는 대기 중인 쓰기를 보낸 뒤 내 데이터를 다시 받는다",
+    async (event, mode) => {
+      let presentationStatusAtRefresh: SyncStatus | null = null;
+      recoveryDeps.refreshOwnDataIfStale.mockImplementation(async () => {
+        presentationStatusAtRefresh = getSyncDomainStatus("presentation");
+      });
+      __setPusherForTests(vi.fn(async () => undefined));
+      start();
+      scheduleDocumentPush(presentation());
+
+      window.dispatchEvent(new Event(event));
+      await __waitForSyncRecoveryForTests();
+
+      expect(
+        recoveryDeps.refreshOwnDataIfStale,
+      ).toHaveBeenCalledExactlyOnceWith(mode);
+      expect(presentationStatusAtRefresh).toBe("syncing");
+      expect(
+        recoveryDeps.retryBootSyncIfNeeded.mock.invocationCallOrder[0],
+      ).toBeLessThan(
+        recoveryDeps.refreshOwnDataIfStale.mock.invocationCallOrder[0],
+      );
+    },
+  );
+
+  it("받지 못한 부팅 단계를 지금 다시 받았으면 내 데이터를 따로 다시 받지 않는다", async () => {
+    recoveryDeps.retryBootSyncIfNeeded.mockResolvedValueOnce(true);
+    start();
+
+    retrySyncNow();
+    await __waitForSyncRecoveryForTests();
+
+    expect(recoveryDeps.retryBootSyncIfNeeded).toHaveBeenCalledTimes(1);
+    expect(recoveryDeps.refreshOwnDataIfStale).not.toHaveBeenCalled();
+  });
+
+  it("탭이 보이고 서버에 닿으면 5분마다 내 데이터를 다시 받는다", async () => {
+    setVisibility("visible");
+    start();
+
+    await vi.advanceTimersByTimeAsync(FRESHNESS_TICK_MS - 1);
+    expect(recoveryDeps.refreshOwnDataIfStale).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(1);
+    expect(recoveryDeps.refreshOwnDataIfStale).toHaveBeenCalledExactlyOnceWith(
+      "wake",
+    );
+
+    await vi.advanceTimersByTimeAsync(FRESHNESS_TICK_MS);
+    expect(recoveryDeps.refreshOwnDataIfStale).toHaveBeenCalledTimes(2);
+  });
+
+  it("탭이 가려졌거나 서버에 닿지 못하면 5분 확인에 받지 않는다", async () => {
+    setVisibility("hidden");
+    start();
+
+    await vi.advanceTimersByTimeAsync(FRESHNESS_TICK_MS);
+    expect(recoveryDeps.refreshOwnDataIfStale).not.toHaveBeenCalled();
+
+    setVisibility("visible");
+    server.blocked = true;
+    markServerUnreachable();
+    await vi.advanceTimersByTimeAsync(FRESHNESS_TICK_MS);
+    expect(recoveryDeps.refreshOwnDataIfStale).not.toHaveBeenCalled();
+  });
+
+  it("송출 중에는 5분 확인에도 받지 않고 타이머도 남기지 않으며, 송출을 마치면 다시 센다", async () => {
+    setVisibility("visible");
+    start();
+    paused = true;
+
+    await vi.advanceTimersByTimeAsync(FRESHNESS_TICK_MS * 3);
+    expect(recoveryDeps.refreshOwnDataIfStale).not.toHaveBeenCalled();
+    expect(vi.getTimerCount()).toBe(0);
+
+    paused = false;
+    resumeDeferredSyncRecovery();
+    await vi.advanceTimersByTimeAsync(FRESHNESS_TICK_MS);
+    expect(recoveryDeps.refreshOwnDataIfStale).toHaveBeenCalledExactlyOnceWith(
+      "wake",
+    );
+  });
+
+  it("회복을 끄면 5분 확인도 멈춘다", async () => {
+    setVisibility("visible");
+    start();
+
+    stop();
+    await vi.advanceTimersByTimeAsync(FRESHNESS_TICK_MS * 2);
+
+    expect(recoveryDeps.refreshOwnDataIfStale).not.toHaveBeenCalled();
+    expect(vi.getTimerCount()).toBe(0);
   });
 
   it("동기화 실패로 남은 프레젠테이션·폴더·곡을 다시 시도하면 다시 올리고 실패를 지운다", async () => {

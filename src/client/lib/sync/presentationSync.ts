@@ -103,36 +103,52 @@ function toSyncableDocument(presentation: Presentation): PresentationDocument {
   return result.data;
 }
 
+interface KnownServerDecks {
+  revision: number;
+  fingerprints: Map<string, string>;
+}
+
 /**
- * 문서 id → (덱 id → 서버에 있다고 아는 덱의 지문). 메모리에만 둔다.
+ * 문서 id → 서버에 있다고 아는 판(`revision`)과 그 판의 덱 지문(덱 id → 지문). 메모리에만 둔다.
  *
  * 바뀐 덱만 올리는 기준이다. 모르는 문서(새로고침 직후 부팅 동기화 전 등)는
  * 모든 덱을 보낸다. 서버가 실제로 덱을 잃었으면(다른 기기에서 곡을 뺀 경우 등) 409를
  * 받고 모든 덱을 담아 다시 보내므로, 이 표가 틀려도 곡이 빠지지는 않는다.
  */
-const serverDecks = new Map<string, Map<string, string>>();
+const serverDecks = new Map<string, KnownServerDecks>();
 
 function deckFingerprint(deck: Deck): string {
   return cyrb53(JSON.stringify(deck));
 }
 
-function rememberServerDecks(document: PresentationDocument): void {
-  serverDecks.set(
-    document.id,
-    new Map(
+function rememberServerDecks(
+  document: PresentationDocument,
+  revision: string,
+): void {
+  serverDecks.set(document.id, {
+    revision: Date.parse(revision),
+    fingerprints: new Map(
       document.items.map((item) => [item.deck.id, deckFingerprint(item.deck)]),
     ),
-  );
+  });
 }
 
 /**
- * 서버에서 받은 문서들을 변경분 계산의 기준으로 삼는다 (부팅 동기화).
+ * 서버에서 받은 문서들을 변경분 계산의 기준으로 삼는다 (부팅 동기화, 열려 있는 탭의 다시 받기).
  * 보기 전용 공유 세트는 올리지 않으므로 기억하지 않는다.
+ *
+ * 이미 아는 판보다 오래된 문서는 기준으로 삼지 않는다. 목록을 받는 사이 이 탭이 올려 서버가 더 새 판을
+ * 확정했는데 그보다 먼저 받은 목록으로 기준을 되돌리면, 그 판에서 옛 내용으로 되돌린 곡(되돌리기 등)이
+ * 바뀌지 않은 곡으로 보여 올라가지 않는다. 서버는 기준 판이 맞으니 저장을 받고, 서버에는 되돌리기 전 곡이
+ * 남는다.
  */
 export function rememberServerDocuments(documents: readonly unknown[]): void {
   for (const candidate of documents) {
     const parsed = PresentationDocumentSchema.safeParse(candidate);
-    if (parsed.success && !parsed.data.access) rememberServerDecks(parsed.data);
+    if (!parsed.success || parsed.data.access) continue;
+    const known = serverDecks.get(parsed.data.id);
+    if (known && known.revision > Date.parse(parsed.data.updatedAt)) continue;
+    rememberServerDecks(parsed.data, parsed.data.updatedAt);
   }
 }
 
@@ -226,7 +242,7 @@ async function sendPresentation(
       body = await sendChanges(
         toPresentationChanges(
           document,
-          (deck) => known?.get(deck.id) !== deckFingerprint(deck),
+          (deck) => known?.fingerprints.get(deck.id) !== deckFingerprint(deck),
         ),
       );
     } catch (err) {
@@ -240,8 +256,9 @@ async function sendPresentation(
       }
       body = await sendChanges(toPresentationChanges(document));
     }
-    rememberServerDecks(document);
-    return { kind: "saved", stored: storedRevisionOf(body, document) };
+    const stored = storedRevisionOf(body, document);
+    rememberServerDecks(document, stored);
+    return { kind: "saved", stored };
   } catch (err) {
     if (!(err instanceof ServerRejectedError)) throw err;
     if (err.status === 410) {
@@ -311,7 +328,7 @@ export async function pushPresentation(snapshot: Presentation): Promise<void> {
       isKnownAncestor(current.id, fingerprint),
     );
     if (relation === "skip") return;
-    rememberServerDecks(server);
+    rememberServerDecks(server, server.updatedAt);
     if (relation === "same") {
       listener.saved(current, server.updatedAt);
       return;

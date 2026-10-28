@@ -46,6 +46,7 @@ import {
   reloadPresentationsFromStorage,
   markPresentationSynced,
   adoptServerPresentation,
+  mayDifferFromStorage,
 } from "./presentationStore";
 import {
   __resetLineageForTests,
@@ -837,6 +838,25 @@ describe("presentationStore 영속성", () => {
       expect(getPresentationById(FIRST.id)?.items).toHaveLength(
         FIRST.items.length,
       );
+    });
+
+    it("저장하지 않았거나 저장하는 중인 세트와 다른 탭의 저장본을 건너뛴 세트만 저장본과 다를 수 있다고 본다", async () => {
+      expect(mayDifferFromStorage(FIRST.id)).toBe(false);
+
+      renamePresentation(FIRST.id, "아직 저장하지 않은 이름");
+      expect(mayDifferFromStorage(FIRST.id)).toBe(true);
+      await flushPendingWrites();
+      expect(mayDifferFromStorage(FIRST.id)).toBe(false);
+
+      __setPusherForTests(vi.fn(async () => undefined));
+      setSyncEnabled(true);
+      renamePresentation(SECOND.id, "올리기를 기다리는 이름");
+      await flushPendingWrites();
+      expect(mayDifferFromStorage(SECOND.id)).toBe(false);
+      await writeFromOtherTab(withExtraSong(SECOND));
+      await reloadPresentationsFromStorage([SECOND.id]);
+
+      expect(mayDifferFromStorage(SECOND.id)).toBe(true);
     });
 
     it("다른 탭에서 지운 세트는 메모리에서 빼고 대기 중인 push를 버린다", async () => {

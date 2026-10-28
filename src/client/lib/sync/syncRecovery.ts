@@ -7,7 +7,7 @@ import { probeServerHealth } from "../api/healthApi";
 import { OfflineError } from "../api/request";
 import { resumeMediaCaching } from "../offline/mediaCache";
 import { BackoffTracker, MAX_BACKOFF_MS, type SyncRetryMode } from "./backoff";
-import { retryBootSyncIfNeeded } from "./bootSync";
+import { refreshOwnDataIfStale, retryBootSyncIfNeeded } from "./bootSync";
 import { retryDeckSyncNow } from "./deckSync";
 import { retryFolderSyncNow } from "./folderSync";
 import { retryPendingSyncNow } from "./syncScheduler";
@@ -16,6 +16,12 @@ interface SyncRecoveryOptions {
   /** true인 동안에는 요청을 보내지 않는다 (송출 화면) */
   isPaused: () => boolean;
 }
+
+/**
+ * 보이는 탭이 신호 없이도 내 데이터를 다시 받는 간격. 포커스를 잃지 않고 한 화면을 띄워 둔 예배실
+ * PC는 창으로 돌아오는 신호가 오지 않는다.
+ */
+export const FRESHNESS_TICK_MS = 5 * 60_000;
 
 const NEVER_PAUSED = (): boolean => false;
 const STABLE_REACHABLE_MS = MAX_BACKOFF_MS;
@@ -29,6 +35,8 @@ let isPaused: () => boolean = NEVER_PAUSED;
 let started = false;
 let stop: (() => void) | null = null;
 let probeTimer: ReturnType<typeof setTimeout> | null = null;
+let freshnessTimer: ReturnType<typeof setTimeout> | null = null;
+let freshnessDeferred = false;
 let probeInFlight: Promise<void> | null = null;
 let resumeInFlight: Promise<void> | null = null;
 let runningMode: SyncRetryMode = "wake";
@@ -54,6 +62,29 @@ function isBrowserOffline(): boolean {
 function clearProbeTimer(): void {
   if (probeTimer) clearTimeout(probeTimer);
   probeTimer = null;
+}
+
+function clearFreshnessTimer(): void {
+  if (freshnessTimer) clearTimeout(freshnessTimer);
+  freshnessTimer = null;
+}
+
+function scheduleFreshnessTick(): void {
+  if (!started || freshnessTimer) return;
+  freshnessTimer = setTimeout(runFreshnessTick, FRESHNESS_TICK_MS);
+}
+
+function runFreshnessTick(): void {
+  freshnessTimer = null;
+  if (!started) return;
+  if (isPaused()) {
+    freshnessDeferred = true;
+    return;
+  }
+  if (document.visibilityState === "visible" && isServerReachable()) {
+    void refreshOwnDataIfStale("wake");
+  }
+  scheduleFreshnessTick();
 }
 
 function deferUntilUnpaused(mode: SyncRetryMode): void {
@@ -99,10 +130,11 @@ async function runResume(mode: SyncRetryMode): Promise<void> {
   outageEnded = false;
   resumeMediaCaching(mode, { afterOutage });
   for (const listener of resumeListeners) listener(mode);
-  await retryBootSyncIfNeeded(mode).catch(() => false);
+  const repulled = await retryBootSyncIfNeeded(mode).catch(() => false);
   void retryFolderSyncNow(mode).catch(() => undefined);
   retryPendingSyncNow(mode);
   void retryDeckSyncNow(mode).catch(() => undefined);
+  if (!repulled) void refreshOwnDataIfStale(mode);
 }
 
 function resume(mode: SyncRetryMode): Promise<void> {
@@ -184,6 +216,11 @@ function handleVisibilityChange(): void {
  * 경로를 탄다. 닿는 중이면 확인 없이 대기 중인 쓰기를 곧바로 보낸다 (TanStack Query의
  * `refetchOnReconnect`·`refetchOnWindowFocus`와 같은 원칙).
  *
+ * 큐를 돌린 뒤에는 내 데이터를 다시 받는다(`refreshOwnDataIfStale`). 부팅 때만 받으면 며칠 열어 둔
+ * 탭이 다른 기기에서 고친 판을 모른 채 띄우고 송출한다. 받지 못했던 부팅 단계를 방금 다시 받았으면
+ * 받지 않는다. 신호가 오지 않는 탭(한 화면을 띄워 둔 예배실 PC)도 보이고 서버에 닿는 동안에는
+ * `FRESHNESS_TICK_MS`마다 다시 받는다. 받는 간격은 다시 받기가 정한다.
+ *
  * 포커스·탭 복귀·상태 확인 성공은 자주 오므로 큐의 백오프 횟수와 서버가 준 대기를 비우지
  * 않는다(`SyncRetryMode`의 `wake`). 다만 닿지 못하다 다시 닿았으면 배경 다운로드에는
  * 그 사실(`afterOutage`)을 함께 넘겨, 끊긴 동안 재시도를 다 쓴 영상을 다시 받게 한다. 상태 확인의 백오프도 회복 때 비우지 않고, 닿는 상태가
@@ -191,9 +228,10 @@ function handleVisibilityChange(): void {
  * 요청만 시간을 넘기는 느린 연결에서, 회복할 때마다 처음 간격으로 돌아가 같은 요청을 쉬지
  * 않고 다시 보내지 않게 하려는 것이다.
  *
- * `isPaused`가 true인 동안(송출 화면)에는 상태 확인도 큐 재시도도 보내지 않고, 들어온
+ * `isPaused`가 true인 동안(송출 화면)에는 상태 확인도 큐 재시도도 다시 받기도 보내지 않고, 들어온
  * 신호만 기억했다가 송출을 마친 뒤(`resumeDeferredSyncRecovery`) 한 번 돌린다. 송출
- * 화면은 같은 SPA 안에서 이동해 들어가므로 매번 다시 묻는다.
+ * 화면은 같은 SPA 안에서 이동해 들어가므로 매번 다시 묻는다. 다시 받기 타이머도 송출 중에 돌아오면
+ * 다시 걸지 않고, 송출을 마치면 다시 센다.
  */
 export function startSyncRecovery(options: SyncRecoveryOptions): () => void {
   if (started || typeof window === "undefined") return () => undefined;
@@ -205,6 +243,7 @@ export function startSyncRecovery(options: SyncRecoveryOptions): () => void {
   window.addEventListener("focus", handleFocus);
   document.addEventListener("visibilitychange", handleVisibilityChange);
   scheduleProbe();
+  scheduleFreshnessTick();
 
   const cleanup = (): void => {
     if (stop !== cleanup) return;
@@ -215,6 +254,7 @@ export function startSyncRecovery(options: SyncRecoveryOptions): () => void {
     window.removeEventListener("focus", handleFocus);
     document.removeEventListener("visibilitychange", handleVisibilityChange);
     clearProbeTimer();
+    clearFreshnessTimer();
     resetRecoveryState();
   };
   stop = cleanup;
@@ -228,6 +268,7 @@ function resetRecoveryState(): void {
   modeOnReachable = null;
   outageEnded = false;
   reachableSince = 0;
+  freshnessDeferred = false;
   isPaused = NEVER_PAUSED;
   started = false;
 }
@@ -242,11 +283,17 @@ export function retrySyncNow(): void {
 }
 
 /**
- * 송출 화면을 떠났을 때 부른다. 송출 중에 미뤄 둔 회복 신호가 있으면 지금 한 번 돌린다.
- * 송출 중에 타이머로 다시 묻지 않으려고, 라우트 변화를 아는 쪽(`App`)이 알려 준다.
+ * 송출 화면을 떠났을 때 부른다. 송출 중에 미뤄 둔 회복 신호가 있으면 지금 한 번 돌리고, 송출 중에
+ * 멈춘 다시 받기 타이머를 다시 건다. 송출 중에 타이머로 다시 묻지 않으려고, 라우트 변화를 아는
+ * 쪽(`App`)이 알려 준다.
  */
 export function resumeDeferredSyncRecovery(): void {
-  if (!started || !deferredMode || isPaused()) return;
+  if (!started || isPaused()) return;
+  if (freshnessDeferred) {
+    freshnessDeferred = false;
+    scheduleFreshnessTick();
+  }
+  if (!deferredMode) return;
   const mode = deferredMode;
   deferredMode = null;
   wake(mode);
@@ -279,6 +326,7 @@ export async function __waitForSyncRecoveryForTests(): Promise<void> {
 export function __resetSyncRecoveryForTests(): void {
   stop?.();
   clearProbeTimer();
+  clearFreshnessTimer();
   resetRecoveryState();
   probeBackoff.__setRandomForTests(Math.random);
   probeInFlight = null;

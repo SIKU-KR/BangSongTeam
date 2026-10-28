@@ -32,7 +32,7 @@ import {
   saveCachedSession,
   type SessionUser,
 } from "./lib/auth/sessionCache";
-import { __resetBootSyncForTests } from "./lib/sync/bootSync";
+import { __resetBootSyncForTests, FRESHNESS_MS } from "./lib/sync/bootSync";
 import { __resetDeckSyncForTests } from "./lib/sync/deckSync";
 import { __resetFolderSyncForTests } from "./lib/sync/folderSync";
 import {
@@ -61,6 +61,7 @@ import {
   type Presentation,
 } from "#shared";
 import { SHELL_COPY } from "#copy/shell";
+import { LEGAL_COPY } from "#copy/auth";
 import { COMMON_COPY, ERROR_COPY } from "#copy/common";
 import { PRESENTATION_COPY } from "#copy/presentation";
 import { SHARING_COPY } from "#copy/sharing";
@@ -704,6 +705,108 @@ describe("App Route Integration", () => {
         await flushPendingSync();
       });
       expect(patches()).toHaveLength(1);
+    });
+  });
+
+  describe("주소를 옮길 때 오래된 내 데이터 다시 받기", () => {
+    const OWN_DATA_PULLS = [
+      "GET /api/folders",
+      "GET /api/presentations",
+      "GET /api/decks",
+    ];
+    let api: FakeApi | null = null;
+
+    function navigateTo(path: string): void {
+      act(() => {
+        testRouter.push(path);
+      });
+    }
+
+    function ownDataPulls(): string[] {
+      return apiRequests(api as FakeApi).filter((request) =>
+        OWN_DATA_PULLS.includes(request),
+      );
+    }
+
+    function presentationPulls(): number {
+      return ownDataPulls().filter(
+        (request) => request === "GET /api/presentations",
+      ).length;
+    }
+
+    async function settle(): Promise<void> {
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      });
+    }
+
+    function pretendDataIsStale(): void {
+      vi.useFakeTimers({
+        toFake: ["Date"],
+        now: Date.now() + FRESHNESS_MS + 1_000,
+      });
+    }
+
+    beforeEach(() => {
+      resetSyncModules();
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+      api?.restore();
+      api = null;
+      resetSyncModules();
+    });
+
+    it("받은 지 1분이 지난 뒤 편집기로 옮기면 내 데이터를 한 번 다시 받는다", async () => {
+      api = installFakeApi(bootRoutes());
+      renderAt("/presentations");
+      await screen.findAllByTestId("presentation-row");
+      await waitFor(() => expect(getSyncSnapshot().status).toBe("synced"));
+      navigateTo(`/editor/${DOC_ID}`);
+      await screen.findByTestId("editor-stage-canvas");
+      navigateTo("/presentations");
+      await screen.findAllByTestId("presentation-row");
+      await settle();
+      expect(presentationPulls()).toBe(1);
+
+      pretendDataIsStale();
+      navigateTo(`/editor/${DOC_ID}`);
+      await screen.findByTestId("editor-stage-canvas");
+      await waitFor(() => expect(presentationPulls()).toBe(2));
+      navigateTo("/presentations");
+      await screen.findAllByTestId("presentation-row");
+      await settle();
+
+      expect(ownDataPulls()).toEqual([...OWN_DATA_PULLS, ...OWN_DATA_PULLS]);
+    });
+
+    it("송출 주소로 옮길 때는 받은 지 1분이 지났어도 다시 받지 않는다", async () => {
+      api = installFakeApi(bootRoutes());
+      renderAt(`/editor/${DOC_ID}`);
+      await screen.findByTestId("editor-stage-canvas");
+      await waitFor(() => expect(getSyncSnapshot().status).toBe("synced"));
+
+      pretendDataIsStale();
+      navigateTo(`/present/${DOC_ID}/fullscreen`);
+      await screen.findByTestId("fullscreen-present-route");
+      await settle();
+
+      expect(presentationPulls()).toBe(1);
+    });
+
+    it("로그인하지 않은 손님은 주소를 옮겨도 아무것도 받지 않는다", async () => {
+      signOutForTests();
+      api = installFakeApi(bootRoutes());
+      renderAt("/");
+      await screen.findByTestId("landing-route");
+
+      pretendDataIsStale();
+      navigateTo("/terms");
+      await screen.findByRole("heading", { name: LEGAL_COPY.terms });
+      await settle();
+
+      expect(ownDataPulls()).toEqual([]);
     });
   });
 

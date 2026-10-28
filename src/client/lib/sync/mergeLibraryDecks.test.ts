@@ -153,6 +153,62 @@ describe("mergeLibraryDecks", () => {
   it("지운 곡이 없으면 지울 곡도 없다", () => {
     expect(mergeLibraryDecks([deck(A)], [deck(B)]).removedIds).toEqual([]);
   });
+
+  it.each(["boot", "refresh"] as const)(
+    "받기 전부터 알던 곡이 그사이 로컬에서 사라졌으면 서버 목록에 있어도 다시 넣지 않는다 (%s)",
+    (mode) => {
+      const result = mergeLibraryDecks([], [deck(A), deck(B)], {
+        mode,
+        knownBeforePull: new Set([A]),
+      });
+
+      expect(result.decks.map((d) => d.id)).toEqual([B]);
+      expect(result.needsPush).toEqual([]);
+      expect(result.removedIds).toEqual([]);
+    },
+  );
+
+  describe("다시 받기 (refresh)", () => {
+    it("로컬 곡은 더 새로워도, 로컬에만 있어도 올리지 않고 서버가 정하는 필드만 입히며, 더 새 서버 곡은 받는다", () => {
+      const localOnly = deck(B, { title: "로컬에만" });
+      const serverNewer = deck("c0000000000000000000c", {
+        title: "서버",
+        updatedAt: "2026-09-22T00:00:00.000Z",
+      });
+
+      const { decks, needsPush, removedIds } = mergeLibraryDecks(
+        [
+          deck(A, {
+            title: "로컬에서 고침",
+            updatedAt: "2026-09-23T00:00:00.000Z",
+          }),
+          localOnly,
+          deck("c0000000000000000000c", { title: "옛 로컬" }),
+        ],
+        [deck(A, { title: "서버 제목", forkCount: 3 }), serverNewer],
+        { mode: "refresh", knownBeforePull: new Set([A, B]) },
+      );
+
+      expect(decks.find((d) => d.id === A)).toMatchObject({
+        title: "로컬에서 고침",
+        forkCount: 3,
+      });
+      expect(decks.find((d) => d.id === B)).toBe(localOnly);
+      expect(decks.find((d) => d.id === serverNewer.id)).toBe(serverNewer);
+      expect(needsPush).toEqual([]);
+      expect(removedIds).toEqual([]);
+    });
+
+    it("지운 곡은 서버 목록에 있어도 받지 않고 로컬에서도 지운다", () => {
+      const result = mergeLibraryDecks([deck(A)], [deck(A), deck(B)], {
+        deletedIds: [A, B],
+        mode: "refresh",
+        knownBeforePull: new Set([A]),
+      });
+
+      expect(result).toEqual({ decks: [], needsPush: [], removedIds: [A] });
+    });
+  });
 });
 
 describe("hasSameDeckContent", () => {

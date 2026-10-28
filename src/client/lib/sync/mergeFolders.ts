@@ -1,8 +1,14 @@
 import { buildFolderIndex, isFarFuture, type Folder } from "#shared";
+import type { MergeMode } from "./mergeDocuments";
 
 interface FolderMergeResult {
   folders: Folder[];
   needsPush: string[];
+}
+
+interface FolderMergeOptions {
+  mode?: MergeMode;
+  knownBeforePull?: ReadonlySet<string>;
 }
 
 /**
@@ -16,12 +22,26 @@ interface FolderMergeResult {
  * 로컬 시각이 기기 시계보다 한참 앞서면(`isFarFuture`) 로컬 폴더가 더 늦어도 서버본을 고른다.
  * 빠른 시계가 남긴 값이라, 이기게 두면 부팅마다 다시 올라가고 서버가 줄인 시각이 그동안 다른 기기의
  * 수정을 옛 수정으로 막는다.
+ *
+ * 받기 전부터 알던 폴더(`knownBeforePull`)가 그사이 로컬에서 사라졌으면 서버 목록에 있어도 넣지
+ * 않는다. 받는 동안이나 받기 직전에 비우기·다른 탭이 지운 폴더라, 목록이 그 삭제보다 먼저 받은 것일 수
+ * 있다. 넣으면 다음 부팅이 서버에 다시 만든다.
+ *
+ * 다시 받기(`refresh`)는 받기만 한다. 이기는 로컬 폴더와 로컬에만 있는 폴더도 그대로 두고 올릴
+ * 목록(`needsPush`)은 비운다. 그 폴더는 큐와 다음 부팅이 올린다.
  */
 export function mergeFolders(
   local: Folder[],
   server: Folder[],
+  options: FolderMergeOptions = {},
 ): FolderMergeResult {
-  const serverById = new Map(server.map((folder) => [folder.id, folder]));
+  const localIds = new Set(local.map((folder) => folder.id));
+  const known = options.knownBeforePull ?? new Set<string>();
+  const serverById = new Map(
+    server
+      .filter((folder) => localIds.has(folder.id) || !known.has(folder.id))
+      .map((folder) => [folder.id, folder]),
+  );
   const byId = new Map<string, Folder>(serverById);
   const localWins = new Set<string>();
 
@@ -52,5 +72,8 @@ export function mergeFolders(
   const folders = [...byId.values()].sort((a, b) =>
     a.createdAt.localeCompare(b.createdAt),
   );
-  return { folders, needsPush: [...localWins] };
+  return {
+    folders,
+    needsPush: options.mode === "refresh" ? [] : [...localWins],
+  };
 }

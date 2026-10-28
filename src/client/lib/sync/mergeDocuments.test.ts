@@ -466,3 +466,146 @@ describe("부팅 병합 계획 — 기준 판", () => {
     expect(needsPush).toEqual([]);
   });
 });
+
+describe("다시 받기 병합 계획 (refresh)", () => {
+  const T1 = "2026-10-01T00:00:00.000Z";
+  const T2 = "2026-10-01T00:05:00.000Z";
+  const T3 = "2026-10-01T00:10:00.000Z";
+  const FOLDER = "f00000000000000000001";
+  const access = { ownerName: "인도자", memberId: USER };
+
+  function refresh(
+    local: Presentation[],
+    server: Presentation[],
+    options: {
+      deletedIds?: string[];
+      knownBeforePull?: Iterable<string>;
+      queued?: string[];
+    } = {},
+  ) {
+    const queued = new Set(options.queued ?? []);
+    return planBootMerge(
+      local,
+      server,
+      options.deletedIds ?? [],
+      new Set(options.knownBeforePull ?? local.map((d) => d.id)),
+      { mode: "refresh", isQueued: (id) => queued.has(id) },
+    );
+  }
+
+  it("고친 것이 없는 세트는 서버 판이 더 새로울 때만 받는다", () => {
+    const behind = doc("a", T1, { baseUpdatedAt: T1 });
+    const normalized = doc("b", T1, { folderId: FOLDER, baseUpdatedAt: T1 });
+    const ahead = doc("c", T3, { baseUpdatedAt: T3 });
+    const newer = doc("a", T2, { title: "다른 기기의 판" });
+
+    const { documents, needsPush, removedIds } = refresh(
+      [behind, normalized, ahead],
+      [newer, doc("b", T1, { folderId: null }), doc("c", T2)],
+    );
+
+    expect(documents).toEqual([
+      { ...newer, baseUpdatedAt: T2 },
+      normalized,
+      ahead,
+    ]);
+    expect(documents[1]).toBe(normalized);
+    expect(documents[2]).toBe(ahead);
+    expect(needsPush).toEqual([]);
+    expect(removedIds).toEqual([]);
+  });
+
+  it("고친 세트·기준 판이 없는 이전 저장본·올리기를 기다리는 세트는 서버 판이 더 새로워도 그대로 둔다", () => {
+    const edited = doc("a", T2, { title: "이 기기의 편집", baseUpdatedAt: T1 });
+    const created = doc("b", T1, { baseUpdatedAt: null });
+    const legacy = doc("c", T1, { title: "이전 저장본" });
+    const queued = doc("d", T1, { baseUpdatedAt: T1 });
+    const sameContent = doc("e", T2, { baseUpdatedAt: T1 });
+
+    const { documents, needsPush } = refresh(
+      [edited, created, legacy, queued, sameContent],
+      [
+        doc("a", T3, { title: "다른 기기의 판" }),
+        doc("b", T3, { title: "다른 기기의 판" }),
+        doc("c", T3, { title: "다른 기기의 판" }),
+        doc("d", T3, { title: "다른 기기의 판" }),
+        doc("e", T3),
+      ],
+      { queued: ["d"] },
+    );
+
+    expect(documents).toHaveLength(5);
+    expect(documents[0]).toBe(edited);
+    expect(documents[1]).toBe(created);
+    expect(documents[2]).toBe(legacy);
+    expect(documents[3]).toBe(queued);
+    expect(documents[4]).toBe(sameContent);
+    expect(needsPush).toEqual([]);
+  });
+
+  it("서버에 없는 내 세트는 기준 판을 비우지 않고 그대로 두며 올리지 않는다", () => {
+    const clean = doc("a", T1, { baseUpdatedAt: T1 });
+    const legacy = doc("b", T1);
+    const created = doc("c", T1, { baseUpdatedAt: null });
+
+    const { documents, needsPush, removedIds } = refresh(
+      [clean, legacy, created],
+      [],
+    );
+
+    expect(documents).toHaveLength(3);
+    expect(documents[0]).toBe(clean);
+    expect(documents[1]).toBe(legacy);
+    expect(documents[2]).toBe(created);
+    expect(needsPush).toEqual([]);
+    expect(removedIds).toEqual([]);
+  });
+
+  it("서버에만 있는 세트는 받되, 받기 전부터 알던 세트가 그사이 사라졌으면 다시 넣지 않는다", () => {
+    const { documents, needsPush } = refresh(
+      [],
+      [doc("gone", T1), doc("new", T2)],
+      { knownBeforePull: ["gone"] },
+    );
+
+    expect(documents).toEqual([{ ...doc("new", T2), baseUpdatedAt: T2 }]);
+    expect(needsPush).toEqual([]);
+  });
+
+  it("영구 삭제 기록이 있는 세트는 고친 것이 없고 올리기를 기다리지 않을 때만 지우고, 남긴 세트도 올리지 않는다", () => {
+    const clean = doc("a", T1, { baseUpdatedAt: T1 });
+    const edited = doc("b", T2, { baseUpdatedAt: T1 });
+    const queued = doc("c", T1, { baseUpdatedAt: T1 });
+    const legacy = doc("d", T1);
+
+    const { documents, needsPush, removedIds } = refresh(
+      [clean, edited, queued, legacy],
+      [],
+      { deletedIds: ["a", "b", "c", "d"], queued: ["c"] },
+    );
+
+    expect(documents).toHaveLength(3);
+    expect(documents[0]).toBe(edited);
+    expect(documents[1]).toBe(queued);
+    expect(documents[2]).toBe(legacy);
+    expect(needsPush).toEqual([]);
+    expect(removedIds).toEqual(["a"]);
+  });
+
+  it("공유받은 세트는 부팅 때처럼 서버본을 쓰고, 받기 전부터 알던 세트가 목록에서 빠지면 지운다", () => {
+    const shared = doc("a", T1, { access, title: "옛 원본" });
+    const ended = doc("b", T1, { access });
+    const joined = doc("c", T1, { access });
+    const original = doc("a", T2, { access, title: "원본" });
+
+    const { documents, needsPush, removedIds } = refresh(
+      [shared, ended, joined],
+      [original],
+      { knownBeforePull: ["a", "b"] },
+    );
+
+    expect(documents).toEqual([original, joined]);
+    expect(needsPush).toEqual([]);
+    expect(removedIds).toEqual(["b"]);
+  });
+});

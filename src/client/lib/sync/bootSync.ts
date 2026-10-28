@@ -4,6 +4,7 @@ import {
   applyServerDocuments,
   getPresentationById,
 } from "../../features/presentation";
+import { mayDifferFromStorage } from "../../features/presentation/presentationStore";
 import {
   getFolders,
   applyServerFolders,
@@ -15,6 +16,8 @@ import {
   type Deck,
   type DriveTombstones,
   type Folder,
+  type FolderListResponse,
+  type PresentationDocument,
 } from "#shared";
 import { planBootMerge } from "./mergeDocuments";
 import { mergeFolders } from "./mergeFolders";
@@ -73,6 +76,7 @@ import {
   cancelDocumentPush,
   flushPendingSync,
   hasPendingDocumentPush,
+  isDocumentQueued,
   scheduleDocumentPush,
   setSyncEnabled,
 } from "./syncScheduler";
@@ -93,6 +97,7 @@ import {
   isProjectionPath,
 } from "../../features/presentation/fullscreen";
 import { getCurrentUserId, revalidateSession } from "../auth/sessionStore";
+import { announcePull } from "../storage/storageChannel";
 
 /**
  * 송출 중 새로고침하면 부팅 경로를 처음부터 다시 탄다. 여기서 서버와 맞추면
@@ -252,7 +257,12 @@ export function useBootPullPending(domain: BootPullDomain): boolean {
  * 되살리거나 서버의 새 사본을 옛 사본으로 덮는다. 지운 곡은 서버의 삭제 기록과 이 페이지에서
  * 지운 곡, 앞선 페이지에서 지우고 서버에서 아직 지우지 못한 곡을 모두 병합에서 뺀다. 앞선
  * 페이지의 삭제는 곡 큐를 켜자마자 기다림 없이 다시 넣어, 목록을 받지 못한 부팅에서도 큐의
- * 백오프로 다시 보낸다.
+ * 백오프로 다시 보낸다. 받기 전부터 알던 폴더·프레젠테이션·곡이 받는 사이 사라졌으면(비우기, 다른
+ * 탭의 삭제) 서버 목록에 있어도 다시 넣지 않는다. 목록이 그 삭제보다 먼저 받은 것일 수 있다.
+ *
+ * 곡 목록까지 병합하면 첫 받기를 마친 것이다. 그때부터 열려 있는 탭의 다시 받기
+ * (`refreshOwnDataIfStale`)가 받은 지 얼마나 됐는지 세고, 같은 브라우저의 다른 탭에도 받았다고
+ * 알린다.
  *
  * 결과는 폴더·프레젠테이션·곡 도메인별로 따로 남기고, 올리지 못한 항목은 항목별
  * 실패로 남긴다. 도메인 단계만 바꾸면 같은 도메인 큐의 다음 성공이 그 실패를 덮는다.
@@ -265,6 +275,8 @@ export function useBootPullPending(domain: BootPullDomain): boolean {
 export async function runBootSync(): Promise<void> {
   bootGeneration += 1;
   const generation = bootGeneration;
+  syncStopped = false;
+  bootPulled = false;
   markBootPullPending(generation);
   cancelBootRetry();
   resetSyncStatus();
@@ -294,7 +306,8 @@ export async function runBootSync(): Promise<void> {
 /**
  * 이 탭의 계정이 끝날 때(로그아웃·세션 만료·다른 계정) 부팅 동기화가 켠 것을 모두 끈다. 세 큐를
  * 끄고, 앞선 부팅의 남은 단계와 다시 받기, 송출을 마친 뒤로 미뤄 둔 부팅, 첫 받기 표시를 버리고,
- * 서버 응답을 받던 리스너를 뗀다.
+ * 서버 응답을 받던 리스너를 뗀다. 열려 있는 탭의 다시 받기(`refreshOwnDataIfStale`)도 멈추고,
+ * 받는 중이던 결과는 버린다.
  *
  * 동기화를 끄는 길은 이것 하나다. 계정이 끝나면 페이지를 새로고침하므로 같은 페이지에서 큐를 다시
  * 켜는 일은 없다. 새로고침을 기다리는 동안(송출 중이면 송출을 마칠 때까지) 앞 계정의 항목이나 앞선
@@ -303,6 +316,7 @@ export async function runBootSync(): Promise<void> {
  */
 export function stopSync(): void {
   bootGeneration += 1;
+  syncStopped = true;
   cancelBootRetry();
   deferredBootUserId = null;
   pendingBootPulls.clear();
@@ -320,11 +334,20 @@ export function stopSync(): void {
 }
 
 let bootGeneration = 0;
+let syncStopped = false;
+let bootPulled = false;
+let lastPulledAt = 0;
+let refreshInFlight: Promise<void> | null = null;
+
+function idsOf(items: readonly { id: string }[]): Set<string> {
+  return new Set(items.map((item) => item.id));
+}
 
 async function syncDriveAndDecks(): Promise<void> {
   const generation = bootGeneration;
   if (parkWhileProjecting(syncDriveAndDecks)) return;
-  const knownBeforePull = new Set(listPresentations().map((doc) => doc.id));
+  const knownBeforePull = idsOf(listPresentations());
+  const knownFolders = idsOf(getFolders());
   let serverDocuments;
   let tombstones: DriveTombstones;
   let unsynced: readonly SyncDomain[] = ["folder", "presentation", "deck"];
@@ -336,6 +359,7 @@ async function syncDriveAndDecks(): Promise<void> {
     const folderStatus = await syncFolders(
       folderList.folders,
       tombstones,
+      knownFolders,
       generation,
     );
     if (generation !== bootGeneration) return;
@@ -498,6 +522,7 @@ function cancelPushesOfServerWins(
 async function syncFolders(
   serverFolders: Folder[],
   tombstones: DriveTombstones,
+  knownBeforePull: ReadonlySet<string>,
   generation: number,
 ): Promise<SyncStatus> {
   const deletedIds = new Set(tombstones.folderIds);
@@ -505,6 +530,7 @@ async function syncFolders(
   const { folders, needsPush } = mergeFolders(
     local.filter((folder) => !deletedIds.has(folder.id)),
     serverFolders,
+    { knownBeforePull },
   );
   cancelPushesOfServerWins(folders, needsPush, cancelFolderPush);
   const applied = applyServerFolders(
@@ -544,6 +570,7 @@ async function pushLibraryDeckAtBoot(deck: Deck): Promise<void> {
 async function syncLibraryDecks(): Promise<void> {
   const generation = bootGeneration;
   if (parkWhileProjecting(syncLibraryDecks)) return;
+  const knownBeforePull = idsOf(getUserSongs());
   let pull;
   try {
     pull = await pullDecks();
@@ -564,11 +591,15 @@ async function syncLibraryDecks(): Promise<void> {
   const { decks, needsPush, removedIds } = mergeLibraryDecks(
     getUserSongs(),
     pull.decks,
-    { deletedIds },
+    { deletedIds, knownBeforePull },
   );
   for (const id of deletedIds) cancelDeckPush(id);
   cancelPushesOfServerWins(decks, needsPush, cancelDeckPush);
   await applyServerLibraryDecks(decks, removedIds);
+  if (generation !== bootGeneration) return;
+  bootPulled = true;
+  lastPulledAt = Date.now();
+  announcePull();
 
   const deckStatus = await pushLatestEach(
     {
@@ -644,12 +675,192 @@ async function pushLatestEach<T extends { id: string }>(
   return offline ? "offline" : "synced";
 }
 
+/**
+ * 열려 있는 탭이 내 데이터를 다시 받는 최소 간격. 창으로 돌아올 때, 주소를 옮길 때, 5분마다 하는
+ * 확인(`wake`)은 받은 지 이만큼 지나야 다시 받는다. 다시 받기는 내 폴더, 곡을 모두 담은 프레젠테이션
+ * 전부, 보관함을 통째로 받는 무거운 요청이다.
+ */
+export const FRESHNESS_MS = 60_000;
+
+/**
+ * 연결이 돌아왔을 때(`reconnect`) 다시 받는 최소 간격. `online`은 핫스폿이 끊겼다 붙을 때마다 와서,
+ * 막지 않으면 흔들리는 Wi‑Fi에서 같은 목록을 쉬지 않고 받는다.
+ */
+export const RECONNECT_REFRESH_MS = 15_000;
+
+function canRefresh(mode: SyncRetryMode): boolean {
+  if (syncStopped || retryStep || isProjecting()) return false;
+  if (!bootPulled && !abandonedStep) return false;
+  if (mode === "manual") return true;
+  const interval = mode === "reconnect" ? RECONNECT_REFRESH_MS : FRESHNESS_MS;
+  const elapsed = Date.now() - lastPulledAt;
+  return elapsed < 0 || elapsed >= interval;
+}
+
+/**
+ * 열려 있는 탭이 내 폴더·프레젠테이션·보관함 곡을 서버에서 다시 받는다. 부팅 때만 받으면 며칠 열어 둔
+ * 교회 PC의 탭이 지난 판을 띄우고 송출하며, 그 위에서 고친 내용이 다른 기기의 편집을 덮는다.
+ *
+ * 받기만 한다(`refresh` 병합). 프레젠테이션은 서버와 맞춘 판이고 이 탭이 올리기를 기다리지 않으며
+ * 저장본과 같은 세트만 서버 판이 더 새로울 때 받는다. 고친 세트와 이전 저장본은 그대로 둔다. 폴더·곡은
+ * 부팅처럼 더 늦게 고친 쪽을 고르되 올리지 않고, 서버 사본을 받은 항목의 대기 중인 push만 버린다. 그
+ * push는 서버가 옛 수정으로 보고 버릴 사본이다. 영구 삭제 기록과 지운 곡을 따르고, 받기 전부터 알던
+ * 항목이 받는 사이 사라졌으면(비우기, 다른 탭의 삭제) 다시 넣지 않는다. 동기화 상태는 바꾸지 않고,
+ * 받지 못하면 조용히 넘어가 다음 신호에 다시 받는다. 받은 결과를 반영하면 같은 브라우저의 다른 탭에
+ * 받았다고 알린다.
+ *
+ * 한 번에 하나만 받는다. 창으로 돌아오기·주소 이동·5분마다 확인(`wake`)은 받은 지 `FRESHNESS_MS`,
+ * 연결 회복(`reconnect`)은 `RECONNECT_REFRESH_MS`가 지나야 받고, '다시 시도'(`manual`)는 곧바로
+ * 받는다. 받기 시작한 때부터 세어, 받지 못해도 그 간격 안에는 장애 중인 서버에 다시 묻지 않는다. 다른
+ * 탭이 받았다고 알리면 그때부터 센다(`noteRemotePull`). 기기 시계가 뒤로 돌아가 받은 때가 앞날이 되면
+ * 오래된 것으로 본다. 시계를 맞춘 만큼 다시 받지 않으면 그동안 지난 판을 띄운다.
+ *
+ * 부팅 동기화가 첫 받기를 마치기 전(송출 화면에서 부팅해 미뤄 둔 부팅도), 받지 못한 부팅 단계가 다시
+ * 받기를 기다리는 동안, 동기화를 끈 뒤(`stopSync`), 송출 중에는 받지 않는다. 그동안은 부팅 병합과 그
+ * 재시도가 서버와 맞추고, 송출 중에는 요청이 0건이어야 한다. 부팅이 거절돼 받기를 포기했으면 '다시
+ * 시도'만 그 단계를 다시 받으므로, 그때부터는 이 다시 받기가 맞춘다. 받는 사이 송출을 시작했거나
+ * 계정·부팅이 바뀌었으면 받은 것을 버린다. 송출 중인 프레젠테이션이 바뀌면 안 된다.
+ */
+export function refreshOwnDataIfStale(mode: SyncRetryMode): Promise<void> {
+  if (refreshInFlight) return refreshInFlight;
+  const userId = getCurrentUserId();
+  if (!userId || !canRefresh(mode)) return Promise.resolve();
+  lastPulledAt = Date.now();
+  const running = refreshOwnData(userId, bootGeneration).finally(() => {
+    if (refreshInFlight === running) refreshInFlight = null;
+  });
+  refreshInFlight = running;
+  return running;
+}
+
+/**
+ * 같은 브라우저의 다른 탭이 서버에서 내 데이터를 방금 받았다(`storageSync`가 `pulled` 알림을 받아
+ * 부른다). 이 탭은 다시 받는 간격을 그때부터 센다. 그 탭이 받아 바꾼 저장본은 저장본 알림으로 이 탭에도
+ * 오므로, 탭마다 같은 목록을 다시 받으면 요청만 는다.
+ */
+export function noteRemotePull(): void {
+  lastPulledAt = Date.now();
+}
+
+async function refreshOwnData(
+  userId: string,
+  generation: number,
+): Promise<void> {
+  const knownFolders = idsOf(getFolders());
+  const knownPresentations = idsOf(listPresentations());
+  const knownSongs = idsOf(getUserSongs());
+  let folderList: FolderListResponse;
+  let serverDocuments: PresentationDocument[];
+  let library: Awaited<ReturnType<typeof pullDecks>>;
+  try {
+    [folderList, serverDocuments, library] = await Promise.all([
+      pullFolders(),
+      pullPresentations(),
+      pullDecks(),
+    ]);
+  } catch {
+    return;
+  }
+  if (
+    generation !== bootGeneration ||
+    isProjecting() ||
+    getCurrentUserId() !== userId
+  ) {
+    return;
+  }
+
+  const folders = refreshFolders(folderList, knownFolders);
+  refreshPresentations(
+    serverDocuments,
+    folderList.tombstones.presentationIds,
+    knownPresentations,
+  );
+  const songs = refreshLibraryDecks(library, knownSongs);
+  await Promise.all([folders, songs]);
+  if (generation === bootGeneration) announcePull();
+}
+
+function cancelPushesOfServerCopies<T extends { id: string }>(
+  local: readonly T[],
+  server: readonly T[],
+  merged: readonly T[],
+  cancel: (id: string) => void,
+): void {
+  const localIds = idsOf(local);
+  const serverCopies = new Set<T>(server);
+  for (const item of merged) {
+    if (localIds.has(item.id) && serverCopies.has(item)) cancel(item.id);
+  }
+}
+
+function refreshFolders(
+  folderList: FolderListResponse,
+  knownBeforePull: ReadonlySet<string>,
+): Promise<void> {
+  const deletedIds = new Set(folderList.tombstones.folderIds);
+  const local = getFolders();
+  const kept = local.filter((folder) => !deletedIds.has(folder.id));
+  const { folders } = mergeFolders(kept, folderList.folders, {
+    mode: "refresh",
+    knownBeforePull,
+  });
+  cancelPushesOfServerCopies(
+    kept,
+    folderList.folders,
+    folders,
+    cancelFolderPush,
+  );
+  return applyServerFolders(
+    folders,
+    local.filter((folder) => deletedIds.has(folder.id)).map((f) => f.id),
+  );
+}
+
+function refreshPresentations(
+  serverDocuments: PresentationDocument[],
+  deletedIds: readonly string[],
+  knownBeforePull: ReadonlySet<string>,
+): void {
+  const { documents, removedIds } = planBootMerge(
+    listPresentations(),
+    serverDocuments,
+    deletedIds,
+    knownBeforePull,
+    {
+      mode: "refresh",
+      isQueued: (id) => isDocumentQueued(id) || mayDifferFromStorage(id),
+    },
+  );
+  rememberServerDocuments(serverDocuments);
+  applyServerDocuments(documents, removedIds);
+}
+
+function refreshLibraryDecks(
+  library: Awaited<ReturnType<typeof pullDecks>>,
+  knownBeforePull: ReadonlySet<string>,
+): Promise<void> {
+  const deletedIds = new Set([...library.deletedIds, ...getDeletedSongIds()]);
+  const local = getUserSongs();
+  const { decks, removedIds } = mergeLibraryDecks(local, library.decks, {
+    deletedIds,
+    mode: "refresh",
+    knownBeforePull,
+  });
+  for (const id of deletedIds) cancelDeckPush(id);
+  cancelPushesOfServerCopies(local, library.decks, decks, cancelDeckPush);
+  return applyServerLibraryDecks(decks, removedIds);
+}
+
 export function __resetBootSyncForTests(): void {
   cancelBootRetry();
   deferredBootUserId = null;
   pendingBootPulls.clear();
   clearBootPullTimer();
   notifyBootPull();
+  syncStopped = false;
+  bootPulled = false;
+  lastPulledAt = 0;
+  refreshInFlight = null;
 }
 
 /** 테스트 전용: 첫 받기를 기다리는 도메인을 정한다 (기한 타이머 없이) */

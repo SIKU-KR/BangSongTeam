@@ -5,6 +5,21 @@ import {
 } from "../../features/presentation/presentationDocument";
 import { contentFingerprint } from "./presentationLineage";
 
+/**
+ * 병합을 부른 쪽. `boot`는 부팅 동기화라 이 기기의 변경을 올릴 목록(`needsPush`)도 돌려준다.
+ * `refresh`는 열려 있는 탭이 내 데이터를 다시 받는 것(`refreshOwnDataIfStale`)이라 서버 판을 받기만
+ * 하고, 올릴 목록은 늘 비어 있다.
+ */
+export type MergeMode = "boot" | "refresh";
+
+interface MergeOptions {
+  mode?: MergeMode;
+  /**
+   * 이 탭이 그 세트를 아직 올리지 못했거나(큐에 있음) 저장본과 다를 수 있는지. `refresh`만 본다.
+   */
+  isQueued?: (id: string) => boolean;
+}
+
 interface MergeResult {
   documents: Presentation[];
   needsPush: string[];
@@ -68,6 +83,27 @@ interface Choice {
   push: boolean;
 }
 
+function keepLocal(local: Presentation): Choice {
+  return { document: local, push: false };
+}
+
+function isReplaceableOnRefresh(
+  doc: Presentation,
+  isQueued: (id: string) => boolean,
+): boolean {
+  return isSyncedWithServer(doc) && !isQueued(doc.id);
+}
+
+function chooseOwnOnRefresh(
+  local: Presentation,
+  server: Presentation,
+  isQueued: (id: string) => boolean,
+): Choice {
+  return isReplaceableOnRefresh(local, isQueued) && isNewer(server, local)
+    ? { document: asSynced(server), push: false }
+    : keepLocal(local);
+}
+
 function chooseOwn(local: Presentation, server: Presentation): Choice {
   const base = local.baseUpdatedAt;
   if (base === undefined) {
@@ -97,14 +133,21 @@ function chooseOwn(local: Presentation, server: Presentation): Choice {
   return { document: local, push: true };
 }
 
-function choose(local: Presentation, server: Presentation): Choice {
+function choose(
+  local: Presentation,
+  server: Presentation,
+  options: MergeOptions,
+): Choice {
+  const refresh = options.mode === "refresh";
   if (server.access) return { document: server, push: false };
   if (local.access) {
     return isNewer(local, server)
-      ? { document: local, push: true }
+      ? { document: local, push: !refresh }
       : { document: asSynced(server), push: false };
   }
-  return chooseOwn(local, server);
+  return refresh
+    ? chooseOwnOnRefresh(local, server, options.isQueued ?? (() => false))
+    : chooseOwn(local, server);
 }
 
 /**
@@ -123,12 +166,19 @@ function choose(local: Presentation, server: Presentation): Choice {
  *   건너뛰므로, 비우지 않으면 서버가 잃은 세트가 서버에 돌아오지 않는다.
  * 받는 서버 판에는 그 판을 기준 판으로 단다.
  *
+ * 다시 받기(`refresh`)는 받기만 한다. 서버와 맞춘 판이고 이 탭이 올리기를 기다리지 않는(`isQueued`)
+ * 세트만 서버 판이 더 새로울 때 받는다. 시각이 같은 서버 판은 내용이 달라도 받지 않는다. 서버가 고친
+ * 내용(없는 폴더·배경을 비움 등)은 부팅 병합이 맞추고, 포커스마다 도는 다시 받기가 받으면 아무도 바꾸지
+ * 않은 세트의 되돌리기 기록을 지운다. 고친 세트, 이전 저장본, 서버에 없는 세트는 그대로 두고 올리지도
+ * 않는다. 올리는 일은 큐와 다음 부팅이 한다.
+ *
  * 공유받은 세트(`access`)는 보기 전용이라 언제나 서버본을 쓰고 올리지 않는다. 서버 목록에 없으면
  * 공유가 끝난 것이므로 지운다.
  */
 export function mergeDocuments(
   local: Presentation[],
   server: Presentation[],
+  options: MergeOptions = {},
 ): MergeResult {
   const serverById = new Map(server.map((doc) => [doc.id, doc]));
   const localIds = new Set(local.map((doc) => doc.id));
@@ -139,13 +189,17 @@ export function mergeDocuments(
   for (const localDoc of local) {
     const serverDoc = serverById.get(localDoc.id);
     if (serverDoc) {
-      const choice = choose(localDoc, serverDoc);
+      const choice = choose(localDoc, serverDoc, options);
       documents.push(choice.document);
       if (choice.push) needsPush.push(localDoc.id);
       continue;
     }
     if (localDoc.access) {
       removed.push(localDoc.id);
+      continue;
+    }
+    if (options.mode === "refresh") {
+      documents.push(localDoc);
       continue;
     }
     documents.push(
@@ -183,13 +237,20 @@ interface BootMergePlan {
  * - 서버 목록에서 빠진 공유받은 프레젠테이션은 서버를 받기 전부터 알던 것
  *   (`knownBeforePull`)만 지운다. 받는 사이에 새로 들어온 공유받은 프레젠테이션은
  *   그보다 앞선 서버 목록에 없을 뿐이라 그대로 둔다.
+ *
+ * 다시 받기(`refresh`)는 `mergeDocuments`의 규칙대로 받기만 하고 `needsPush`는 늘 비어 있다. 영구 삭제
+ * 기록이 있는 세트도 서버와 맞춘 판이고 올리기를 기다리지 않을 때만 지운다. 남긴 세트는 큐의 push가
+ * 410을 받거나 다음 부팅이 올려 서버가 정한다.
  */
 export function planBootMerge(
   local: Presentation[],
   server: Presentation[],
   deletedIds: readonly string[],
   knownBeforePull: ReadonlySet<string>,
+  options: MergeOptions = {},
 ): BootMergePlan {
+  const refresh = options.mode === "refresh";
+  const isQueued = options.isQueued ?? (() => false);
   const deleted = new Set(deletedIds);
   const serverIds = new Set(server.map((doc) => doc.id));
   const localIds = new Set(local.map((doc) => doc.id));
@@ -197,7 +258,9 @@ export function planBootMerge(
     (doc) => !doc.access && deleted.has(doc.id) && !serverIds.has(doc.id),
   );
   const tombstonedIds = new Set(tombstoned.map((doc) => doc.id));
-  const keptEdits = tombstoned.filter(hasUnsyncedEdits);
+  const keptEdits = tombstoned.filter((doc) =>
+    refresh ? !isReplaceableOnRefresh(doc, isQueued) : hasUnsyncedEdits(doc),
+  );
   const keptIds = new Set(keptEdits.map((doc) => doc.id));
 
   const merged = mergeDocuments(
@@ -208,6 +271,7 @@ export function planBootMerge(
         localIds.has(doc.id) ||
         !knownBeforePull.has(doc.id),
     ),
+    options,
   );
   const joinedDuringPull = local.filter(
     (doc) => merged.removed.includes(doc.id) && !knownBeforePull.has(doc.id),
@@ -218,7 +282,9 @@ export function planBootMerge(
     documents: [...merged.documents, ...joinedDuringPull, ...keptEdits].sort(
       (a, b) => a.createdAt.localeCompare(b.createdAt),
     ),
-    needsPush: [...merged.needsPush, ...keptEdits.map((doc) => doc.id)],
+    needsPush: refresh
+      ? []
+      : [...merged.needsPush, ...keptEdits.map((doc) => doc.id)],
     removedIds: [
       ...deletedIds.filter((id) => tombstonedIds.has(id) && !keptIds.has(id)),
       ...removedShared,
