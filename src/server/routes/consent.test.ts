@@ -5,7 +5,6 @@ import {
   DEFAULT_DECK_STYLE,
   DeckSchema,
   PresentationDocumentSchema,
-  SearchCatalogResponseSchema,
   type Deck,
   type ShareSettings,
 } from "#shared";
@@ -142,15 +141,6 @@ async function call(
   );
 }
 
-const PUBLISH = { visibility: "public", acceptedCopyrightNotice: true };
-
-async function listedIds(): Promise<string[]> {
-  const res = await call(null, "GET", "/api/catalog/search?q=동의");
-  return SearchCatalogResponseSchema.parse(await res.json()).decks.map(
-    (deck) => deck.id,
-  );
-}
-
 describe("가입 동의 전에 막는 일", () => {
   beforeEach(async () => {
     await clearDb(env.DB);
@@ -176,44 +166,9 @@ describe("가입 동의 전에 막는 일", () => {
           .status,
       ).toBe(200);
     }
-    expect(
-      (await call(USER_B, "PATCH", `/api/decks/${B_DECK}/visibility`, PUBLISH))
-        .status,
-    ).toBe(200);
   });
 
-  it("동의 전에는 곡을 공개하지 못하고, 동의하면 공개한다", async () => {
-    const refused = await call(
-      USER_A,
-      "PATCH",
-      `/api/decks/${A_DECK}/visibility`,
-      PUBLISH,
-    );
-
-    expect(refused.status).toBe(403);
-    expect(await refused.json()).toEqual({
-      error: API_ERRORS.consentRequired,
-    });
-    expect(await listedIds()).toEqual([B_DECK]);
-
-    expect((await call(USER_A, "POST", "/api/consent", AGREE_ALL)).status).toBe(
-      200,
-    );
-    expect(
-      (await call(USER_A, "PATCH", `/api/decks/${A_DECK}/visibility`, PUBLISH))
-        .status,
-    ).toBe(200);
-    expect((await listedIds()).sort()).toEqual([A_DECK, B_DECK].sort());
-  });
-
-  it("동의 전에도 공개를 거두거나 보관함을 동기화하는 일은 막지 않는다", async () => {
-    expect(
-      (
-        await call(USER_A, "PATCH", `/api/decks/${A_DECK}/visibility`, {
-          visibility: "private",
-        })
-      ).status,
-    ).toBe(200);
+  it("동의 전에도 보관함을 동기화하는 일은 막지 않는다", async () => {
     expect(
       (
         await call(
@@ -224,30 +179,6 @@ describe("가입 동의 전에 막는 일", () => {
         )
       ).status,
     ).toBe(200);
-  });
-
-  it("동의 전에는 공유 라이브러리 곡을 가져오거나 신고하지 못한다", async () => {
-    const report = {
-      targetType: "deck",
-      targetId: B_DECK,
-      reason: "copyright",
-    };
-
-    for (const res of [
-      await call(USER_A, "POST", `/api/decks/${B_DECK}/fork`),
-      await call(USER_A, "POST", "/api/reports", report),
-    ]) {
-      expect(res.status).toBe(403);
-      expect(await res.json()).toEqual({ error: API_ERRORS.consentRequired });
-    }
-
-    await call(USER_A, "POST", "/api/consent", AGREE_ALL);
-    expect(
-      (await call(USER_A, "POST", `/api/decks/${B_DECK}/fork`)).status,
-    ).toBe(200);
-    expect((await call(USER_A, "POST", "/api/reports", report)).status).toBe(
-      201,
-    );
   });
 
   it("동의 전에는 링크 공유를 켜지 못하고, 끄는 일은 막지 않는다", async () => {

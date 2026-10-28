@@ -212,7 +212,6 @@ describe("songLibraryStore", () => {
       vi.setSystemTime(new Date("2026-09-25T00:00:00.000Z"));
       const forked = upsertLibraryDeck(
         libraryDeck("c000000000000000000f3", {
-          origin: "fork",
           forkedFrom: "c000000000000000000f0",
           forkedFromAuthorName: "원작자",
           createdAt: "2026-09-25T00:02:00.000Z",
@@ -252,7 +251,6 @@ describe("songLibraryStore", () => {
     function fork(): Deck {
       return upsertLibraryDeck(
         libraryDeck("c000000000000000000f4", {
-          origin: "fork",
           forkedFrom: "c000000000000000000f0",
           forkedFromAuthorName: "원작자",
           createdAt: FORKED_AT,
@@ -333,9 +331,7 @@ describe("songLibraryStore", () => {
       slides: [{ id: "s_1", order: 0, lines: ["가사 한 줄"] }],
       backgroundId: null,
       style: DEFAULT_DECK_STYLE,
-      visibility: "private",
       forkedFrom: null,
-      forkCount: 0,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     });
@@ -367,12 +363,11 @@ describe("songLibraryStore", () => {
       setDeckSyncEnabled(true);
     });
 
-    it("새 곡은 직접 만든 곡으로 저장되고 서버 push가 예약된다", async () => {
+    it("새 곡은 저장되고 서버 push가 예약된다", async () => {
       const saved = saveSongToLibrary({
         title: "소원",
         lyricsRaw: "삶의 작은 일에도",
       });
-      expect(saved.origin).toBe("user");
 
       await flushDeckSync();
       expect(push).toHaveBeenCalledTimes(1);
@@ -405,13 +400,13 @@ describe("songLibraryStore", () => {
       applyServerDeckFields({
         ...saved,
         title: "늦게 도착한 옛 제목",
-        visibility: "public",
-        forkCount: 5,
+        forkedFrom: "c000000000000000000f0",
+        forkedFromAuthorName: "원작자",
       });
       expect(getLibraryDeck(saved.id)).toMatchObject({
         title: "로컬 제목",
-        visibility: "public",
-        forkCount: 5,
+        forkedFrom: "c000000000000000000f0",
+        forkedFromAuthorName: "원작자",
       });
     });
 
@@ -423,7 +418,7 @@ describe("songLibraryStore", () => {
       const newer = {
         ...saved,
         title: "다른 기기에서 고친 제목",
-        forkCount: 2,
+        forkedFromAuthorName: "원작자",
         updatedAt: new Date(Date.parse(saved.updatedAt) + 60_000).toISOString(),
       };
 
@@ -438,7 +433,7 @@ describe("songLibraryStore", () => {
       const saved = saveSongToLibrary({ title: "제목", lyricsRaw: "가사" });
       const clamped = {
         ...saved,
-        visibility: "public" as const,
+        forkedFromAuthorName: "원작자",
         createdAt: "2026-09-25T00:05:00.000Z",
         updatedAt: "2026-09-25T00:05:00.000Z",
       };
@@ -486,7 +481,8 @@ describe("songLibraryStore", () => {
       push.mockImplementationOnce(
         (deck: Deck) =>
           new Promise<Deck>((resolve) => {
-            resolvePush = () => resolve({ ...deck, forkCount: 1 });
+            resolvePush = () =>
+              resolve({ ...deck, forkedFromAuthorName: "원작자" });
           }),
       );
       setServerDeckListener(applyServerDeckFields);
@@ -538,7 +534,6 @@ describe("songLibraryStore", () => {
 
     it("지우기를 보내기 전에 다시 넣은 곡은 서버에서 지우지 않는다", async () => {
       const fork = libraryDeck("c000000000000000000f1", {
-        origin: "fork",
         forkedFrom: "c000000000000000000f0",
         forkedFromAuthorName: "원작자",
       });
@@ -603,7 +598,6 @@ describe("songLibraryStore", () => {
 
     it("서버에서 지우기를 기다리는 곡을 다시 넣으면 삭제 기록에서 뺀다", () => {
       const fork = libraryDeck("c000000000000000000f2", {
-        origin: "fork",
         forkedFrom: "c000000000000000000f0",
       });
       rememberDeckDelete(SEED_USER_ID, fork.id);
@@ -650,7 +644,7 @@ describe("songLibraryStore", () => {
       await applyServerLibraryDecks([
         { ...unchanged },
         { ...newer, title: "서버에서 고친 곡", updatedAt: LATER },
-        { ...forked, forkCount: 3 },
+        { ...forked, forkedFromAuthorName: "새 원작자" },
         created,
       ]);
 
@@ -790,7 +784,6 @@ describe("songLibraryStore", () => {
 
     it("이 탭이 다시 넣어 저장하는 중인 곡은 다른 탭의 지움 알림으로 빼지 않는다", async () => {
       const fork = libraryDeck("c000000000000000000f1", {
-        origin: "fork",
         forkedFrom: "c000000000000000000f0",
         forkedFromAuthorName: "원작자",
       });
@@ -979,7 +972,6 @@ describe("songLibraryStore", () => {
 
     describe("이 탭이 지운 곡을 다른 탭이 다시 가져옴", () => {
       const fork = libraryDeck("c000000000000000000f3", {
-        origin: "fork",
         forkedFrom: "c000000000000000000f0",
         forkedFromAuthorName: "원작자",
       });
@@ -1081,7 +1073,6 @@ describe("songLibraryStore", () => {
 
     it("다른 탭에서 지운 곡의 저장본이 다시 생기면 지운 곡으로 기억하지 않고 보관함에 싣는다", async () => {
       const fork = libraryDeck("c000000000000000000f2", {
-        origin: "fork",
         forkedFrom: "c000000000000000000f0",
         forkedFromAuthorName: "원작자",
       });

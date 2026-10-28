@@ -11,7 +11,6 @@ import {
   type PresentationDocument,
 } from "#shared";
 import type { DeckDoc, PresentationDoc } from "../collections";
-import { withDeckIndex } from "../deckIndex";
 import {
   parseStyle,
   toSharedDeck,
@@ -41,13 +40,8 @@ function makeSharedDeck(overrides: Partial<SharedDeck> = {}): SharedDeck {
     ],
     backgroundId: "mJIToShuKOc3FsbZIihi6",
     style: { ...DEFAULT_DECK_STYLE, overlayOpacity: 75 },
-    visibility: "private",
     forkedFrom: null,
-    forkCount: 0,
-    origin: "user",
     forkedFromAuthorName: null,
-    publishedAt: null,
-    takedownAt: null,
     createdAt: "2026-09-20T00:00:00.000Z",
     updatedAt: "2026-09-21T00:00:00.000Z",
     ...overrides,
@@ -78,17 +72,13 @@ function makeDocument(): PresentationDocument {
 function asRow(
   row: Pick<DeckDoc, "id" | "userId"> & Partial<DeckDoc>,
 ): DeckDoc {
-  return withDeckIndex({
+  return {
     presentationId: null,
     itemId: null,
     position: null,
     backgroundId: null,
     forkedFrom: null,
     forkedFromAuthorName: null,
-    visibility: "private",
-    publishedAt: null,
-    takedownAt: null,
-    forkCount: 0,
     artist: "",
     title: "",
     lyricsRaw: "",
@@ -97,7 +87,7 @@ function asRow(
     createdAt: new Date(0),
     updatedAt: new Date(0),
     ...row,
-  });
+  };
 }
 
 /** 공유 Deck DTO를 저장된 행으로 만든다 (보관함 곡이면 소속·자리 없음). */
@@ -111,10 +101,6 @@ function toRow(deck: SharedDeck): DeckDoc {
     position: deck.presentationId ? 0 : null,
     forkedFrom: deck.forkedFrom ?? null,
     forkedFromAuthorName: deck.forkedFromAuthorName ?? null,
-    visibility: deck.visibility,
-    publishedAt: deck.publishedAt ? new Date(deck.publishedAt) : null,
-    takedownAt: deck.takedownAt ? new Date(deck.takedownAt) : null,
-    forkCount: deck.forkCount,
   });
 }
 
@@ -183,33 +169,38 @@ describe("문서 ↔ DTO 매퍼", () => {
       expect(toSharedDeck(row).style).toEqual(DEFAULT_DECK_STYLE);
     });
 
-    it("공유 필드를 왕복한다", () => {
+    it("가져온 곡 정보를 왕복한다", () => {
       const original = makeSharedDeck({
         scope: "library",
         presentationId: null,
-        visibility: "private",
-        forkCount: 7,
-        origin: "fork",
         forkedFrom: "c00000000000000000009",
         forkedFromAuthorName: "김찬양",
-        publishedAt: "2026-09-22T00:00:00.000Z",
-        takedownAt: "2026-09-23T00:00:00.000Z",
       });
       expect(toSharedDeck(toRow(original))).toEqual(original);
     });
 
-    it("scope와 origin은 저장하지 않고 소속·원작 표시에서 정한다", () => {
+    it("scope는 저장하지 않고 소속에서 정한다", () => {
       const library = toSharedDeck(
         toRow(makeSharedDeck({ scope: "library", presentationId: null })),
       );
       expect(library.scope).toBe("library");
-      expect(library.origin).toBe("user");
 
-      const copy = toSharedDeck(
-        toRow(makeSharedDeck({ forkedFromAuthorName: "김찬양" })),
-      );
+      const copy = toSharedDeck(toRow(makeSharedDeck()));
       expect(copy.scope).toBe("presentation");
-      expect(copy.origin).toBe("fork");
+    });
+
+    it("옛 판이 남긴 공유 라이브러리 필드는 응답에 싣지 않는다", () => {
+      const deck = toSharedDeck({
+        ...toRow(makeSharedDeck()),
+        visibility: "public",
+        forkCount: 7,
+        publishedAt: new Date("2026-09-22T00:00:00.000Z"),
+        takedownAt: null,
+        listed: true,
+        searchGrams: ["은혜"],
+      } as DeckDoc);
+
+      expect(deck).toEqual(makeSharedDeck());
     });
 
     it("스키마에 맞지 않는 슬라이드 항목은 걸러 낸다", () => {
@@ -239,7 +230,7 @@ describe("문서 ↔ DTO 매퍼", () => {
       expect(DeckSchema.safeParse(deck).success).toBe(true);
     });
 
-    it("한도를 넘는 제목·아티스트·원작자와 음수 가져간 횟수도 스키마에 맞게 읽는다", () => {
+    it("한도를 넘는 제목·아티스트·원작자도 스키마에 맞게 읽는다", () => {
       const deck = toSharedDeck(
         asRow({
           id: DECK_ID,
@@ -247,7 +238,6 @@ describe("문서 ↔ DTO 매퍼", () => {
           title: "가".repeat(153),
           artist: "나".repeat(150),
           forkedFromAuthorName: "x".repeat(150),
-          forkCount: -1,
         }),
       );
 
@@ -255,21 +245,9 @@ describe("문서 ↔ DTO 매퍼", () => {
       expect(deck.title).toHaveLength(100);
       expect(deck.artist).toHaveLength(100);
       expect(deck.forkedFromAuthorName).toHaveLength(100);
-      expect(deck.forkCount).toBe(0);
     });
 
-    it("가져간 횟수가 없거나 숫자가 아니면 0으로 읽는다", () => {
-      for (const forkCount of [undefined, NaN, "3"]) {
-        const deck = toSharedDeck({
-          ...asRow({ id: DECK_ID, userId: USER_ID, title: "은혜로다" }),
-          forkCount: forkCount as number,
-        });
-        expect(deck.forkCount).toBe(0);
-        expect(DeckSchema.safeParse(deck).success).toBe(true);
-      }
-    });
-
-    it("문자열이 아닌 원작자 이름은 기본 이름으로 읽고 가져온 곡으로 둔다", () => {
+    it("문자열이 아닌 원작자 이름은 기본 이름으로 읽는다", () => {
       const deck = toSharedDeck({
         ...asRow({ id: DECK_ID, userId: USER_ID, title: "은혜로다" }),
         forkedFromAuthorName: 12345 as unknown as string,
@@ -277,7 +255,6 @@ describe("문서 ↔ DTO 매퍼", () => {
 
       expect(deck).toMatchObject({
         forkedFromAuthorName: FALLBACK_USER_NAME.default,
-        origin: "fork",
       });
       expect(DeckSchema.safeParse(deck).success).toBe(true);
     });
@@ -402,24 +379,14 @@ describe("문서 ↔ DTO 매퍼", () => {
       });
     });
 
-    it("세트 복제본은 공개 상태를 본문에서 받지 않는다", () => {
+    it("세트 복제본은 담아 온 곡과 원작 표시를 본문 그대로 둔다", () => {
       const doc = makeDocument();
       doc.items[0].deck = makeSharedDeck({
-        visibility: "public",
-        forkCount: 999,
-        publishedAt: "2026-09-22T00:00:00.000Z",
         forkedFrom: "c00000000000000000009",
         forkedFromAuthorName: "김찬양",
       });
 
       const { decks } = fromPresentationChanges(toPresentationChanges(doc));
-      expect(decks[0]).toMatchObject({
-        visibility: "private",
-        forkCount: 0,
-        publishedAt: null,
-        listed: false,
-        searchGrams: [],
-      });
       expect(decks[0].forkedFrom).toBe("c00000000000000000009");
       expect(decks[0].forkedFromAuthorName).toBe("김찬양");
     });

@@ -19,10 +19,8 @@ describe("createSongDeck", () => {
     expect(deck.artist).toBe("손경민");
     expect(deck.userId).toBe(USER_ID);
     expect(deck.scope).toBe("library");
-    expect(deck.origin).toBe("user");
     expect(deck.presentationId).toBeNull();
     expect(deck.backgroundId).toBeNull();
-    expect(deck.visibility).toBe("private");
     expect(deck.style).toEqual(DEFAULT_DECK_STYLE);
     expect(deck.createdAt).toBe(deck.updatedAt);
   });

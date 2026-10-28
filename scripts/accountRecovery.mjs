@@ -37,11 +37,9 @@ const USER_ID = /^[\w-]{21}$/;
 
 const REFUSALS = {
   not_found: "사용자를 찾을 수 없어요",
-  official: "공식 라이브러리 계정은 바꿀 수 없어요",
   has_password: "이미 이메일·비밀번호 로그인이 있는 사용자예요",
   invalid_email: "이메일 주소가 올바르지 않아요",
   same_user: "옛 계정과 새 계정이 같아요",
-  banned: "제한된 계정은 옮길 수 없어요. 계정 제한을 먼저 확인해 주세요",
 };
 
 const COUNT_LABELS = {
@@ -51,9 +49,6 @@ const COUNT_LABELS = {
   libraryDecks: "보관함 곡",
   memberships: "링크로 들어간 다른 사람의 프레젠테이션",
   tombstones: "영구 삭제 기록",
-  reports: "낸 신고",
-  reportTargets: "이 계정의 곡을 신고한 기록",
-  moderationEvents: "게시 중단·계정 제한 기록",
 };
 
 function refusal(result) {

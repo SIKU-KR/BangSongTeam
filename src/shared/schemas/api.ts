@@ -6,37 +6,6 @@ import {
   PresentationSchema,
   PresentationItemSchema,
 } from "./presentation";
-import { PublicDeckSummarySchema } from "./library";
-
-/** 공유 라이브러리 검색어 길이 상한. 이전 서버의 `max(50)`처럼 UTF-16 코드 단위로 센다 */
-export const MAX_SEARCH_QUERY_LENGTH = 50;
-
-/**
- * 검색어의 앞뒤 공백을 떼고 앞 `MAX_SEARCH_QUERY_LENGTH`자만 남긴다.
- *
- * 가사 몇 줄을 붙여 넣은 검색어를 거절하면 곡 선택 창이 연결 실패로 보여 준다. 그래서 서버는
- * 거절하지 않고 자르고, 클라이언트도 보내기 전에 잘라 50자를 넘으면 400으로 답하던 이전 서버와
- * 섞여 배포되는 동안에도 검색이 된다. 이모지 같은 서로게이트 쌍은 반쪽으로 자르지 않는다.
- * 반쪽만 남으면 `encodeURIComponent`가 예외를 던진다.
- */
-export function clampSearchQuery(query: string): string {
-  let clamped = "";
-  for (const char of query.trim()) {
-    if (clamped.length + char.length > MAX_SEARCH_QUERY_LENGTH) break;
-    clamped += char;
-  }
-  return clamped.trimEnd();
-}
-
-export const SearchCatalogQuerySchema = z.object({
-  q: z.string().transform(clampSearchQuery).default(""),
-  limit: z.coerce.number().int().min(1).max(50).default(20),
-});
-
-export const SearchCatalogResponseSchema = z.object({
-  decks: z.array(PublicDeckSummarySchema),
-});
-export type SearchCatalogResponse = z.infer<typeof SearchCatalogResponseSchema>;
 
 /**
  * 완전히 하이드레이션된 프레젠테이션 문서.

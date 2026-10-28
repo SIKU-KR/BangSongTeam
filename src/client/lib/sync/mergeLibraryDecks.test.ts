@@ -67,31 +67,20 @@ describe("mergeLibraryDecks", () => {
         deck(A, {
           title: "로컬에서 고침",
           updatedAt: "2026-09-23T00:00:00.000Z",
-          visibility: "private",
-          forkCount: 0,
-          origin: "user",
         }),
       ],
       [
         deck(A, {
           title: "서버 제목",
-          visibility: "public",
-          forkCount: 4,
-          origin: "fork",
           forkedFrom: B,
           forkedFromAuthorName: "원작자",
-          publishedAt: "2026-09-22T00:00:00.000Z",
         }),
       ],
     );
     expect(decks[0]).toMatchObject({
       title: "로컬에서 고침",
-      visibility: "public",
-      forkCount: 4,
-      origin: "fork",
       forkedFrom: B,
       forkedFromAuthorName: "원작자",
-      publishedAt: "2026-09-22T00:00:00.000Z",
     });
     expect(needsPush).toEqual([A]);
   });
@@ -210,13 +199,16 @@ describe("mergeLibraryDecks", () => {
           localOnly,
           deck("c0000000000000000000c", { title: "옛 로컬" }),
         ],
-        [deck(A, { title: "서버 제목", forkCount: 3 }), serverNewer],
+        [
+          deck(A, { title: "서버 제목", forkedFromAuthorName: "원작자" }),
+          serverNewer,
+        ],
         { mode: "refresh", knownBeforePull: new Set([A, B]) },
       );
 
       expect(decks.find((d) => d.id === A)).toMatchObject({
         title: "로컬에서 고침",
-        forkCount: 3,
+        forkedFromAuthorName: "원작자",
       });
       expect(decks.find((d) => d.id === B)).toBe(localOnly);
       expect(decks.find((d) => d.id === serverNewer.id)).toBe(serverNewer);
@@ -240,10 +232,9 @@ describe("hasSameDeckContent", () => {
   it("시각과 서버가 정하는 필드만 다르면 같은 내용으로 본다", () => {
     expect(
       hasSameDeckContent(
-        deck(A, { forkCount: 0 }),
+        deck(A, { forkedFromAuthorName: null }),
         deck(A, {
-          forkCount: 3,
-          visibility: "public",
+          forkedFromAuthorName: "원작자",
           createdAt: "2026-09-21T00:00:00.000Z",
           updatedAt: "2026-09-22T00:00:00.000Z",
         }),
@@ -272,6 +263,19 @@ describe("hasSameDeckContent", () => {
     expect(hasSameDeckContent(base, deck(A, { backgroundId: B }))).toBe(false);
   });
 
+  it("옛 기기에 남은 공유 필드는 내용으로 보지 않는다", () => {
+    const legacy = {
+      ...deck(A),
+      visibility: "public",
+      forkCount: 3,
+      origin: "fork",
+      publishedAt: "2026-09-22T00:00:00.000Z",
+      takedownAt: null,
+    } as unknown as Deck;
+
+    expect(hasSameDeckContent(legacy, deck(A))).toBe(true);
+  });
+
   it("목록에 없는 필드도 견준다", () => {
     const withExtra = { ...deck(A), tempo: 72 } as Deck;
 
@@ -292,23 +296,26 @@ describe("hasSameServerFields", () => {
   it("서버가 정하는 필드가 같으면 내용이 달라도 같다고 본다", () => {
     expect(
       hasSameServerFields(
-        deck(A, { title: "로컬", forkCount: 2 }),
-        deck(A, { title: "서버", forkCount: 2 }),
+        deck(A, { title: "로컬", forkedFrom: B }),
+        deck(A, { title: "서버", forkedFrom: B }),
       ),
     ).toBe(true);
   });
 
-  it("가져간 횟수가 다르면 다르다고 본다", () => {
+  it("원본 곡이 다르면 다르다고 본다", () => {
     expect(
-      hasSameServerFields(deck(A, { forkCount: 0 }), deck(A, { forkCount: 1 })),
+      hasSameServerFields(
+        deck(A, { forkedFrom: null }),
+        deck(A, { forkedFrom: B }),
+      ),
     ).toBe(false);
   });
 
   it("값이 없는 필드와 null은 같게 본다", () => {
     expect(
       hasSameServerFields(
-        deck(A, { publishedAt: undefined, forkedFrom: undefined }),
-        deck(A, { publishedAt: null, forkedFrom: null }),
+        deck(A, { forkedFromAuthorName: undefined, forkedFrom: undefined }),
+        deck(A, { forkedFromAuthorName: null, forkedFrom: null }),
       ),
     ).toBe(true);
   });

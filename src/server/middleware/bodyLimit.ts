@@ -11,7 +11,7 @@ import type { AppEnv } from "../types";
  */
 export const AUTH_BODY_MAX_BYTES = 64 * 1024;
 
-/** 폴더·공개 범위·공유 설정·동의·신고 본문 상한(바이트). 실제 본문은 1 KB 남짓이다 */
+/** 폴더·공유 설정·동의 본문 상한(바이트). 실제 본문은 1 KB 남짓이다 */
 export const SMALL_BODY_MAX_BYTES = 64 * 1024;
 
 /**

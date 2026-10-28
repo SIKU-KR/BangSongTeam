@@ -44,13 +44,6 @@ Thumbs.db
 .claude/worktrees/
 .claude/settings.local.json
 
-# Lyrics raw text files & temporary extractions
-data/extracted/
-data/cleaned/hymns/
-data/cleaned/worship/
-data/cleaned/selected/
-data/seed_*.sql
-
 
 # Next.js build outputs
 next-env.d.ts

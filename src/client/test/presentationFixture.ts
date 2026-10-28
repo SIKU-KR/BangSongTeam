@@ -163,9 +163,7 @@ function buildMockDeck(def: SongMockInput): Deck {
     slides,
     backgroundId: null,
     style: DEFAULT_DECK_STYLE,
-    visibility: "private" as const,
     forkedFrom: null,
-    forkCount: 0,
     createdAt: CREATED_AT,
     updatedAt: CREATED_AT,
   };

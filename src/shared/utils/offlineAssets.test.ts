@@ -60,8 +60,6 @@ function makeDeck(index: number, overrides: Partial<Deck> = {}): Deck {
     slides: [{ id: `s${index}`, order: 0, lines: ["가사"] }],
     backgroundId: BACKGROUNDS[0].id,
     style: DEFAULT_DECK_STYLE,
-    visibility: "private",
-    forkCount: 0,
     createdAt: NOW,
     updatedAt: NOW,
     ...overrides,

@@ -7,7 +7,7 @@
  * (FTS 가상 테이블 때문에 `wrangler d1 export`는 쓰지 않는다):
  *      mkdir -p .data/d1-export
  *      for t in user session account verification folders presentations decks \
- *               presentation_members drive_tombstones backgrounds background_keywords reports; do
+ *               presentation_members drive_tombstones backgrounds background_keywords; do
  *        pnpm dlx wrangler d1 execute bangsongteam-db-v2 --remote --json \
  *          --command "SELECT * FROM \"$t\"" > .data/d1-export/$t.json
  *      done
@@ -16,7 +16,7 @@
  *
  * 문서 id는 D1 행 id 그대로라 대상이 비어 있는 동안에는 여러 번 돌려도 같은 결과가 된다. 옮기는
  * 동안 기존 서비스에서 생긴 쓰기는 따라오지 않으므로, 운영 이전은 쓰기를 멈춘 상태에서 한 번에 한다.
- * 도메인을 옮겨 새 서비스에 사용자가 생긴 뒤에 다시 돌리면 그 뒤의 쓰기와 게시 중단을 D1의 옛 값으로
+ * 도메인을 옮겨 새 서비스에 사용자가 생긴 뒤에 다시 돌리면 그 뒤의 쓰기를 D1의 옛 값으로
  * 덮어쓰므로, 대상에 사용자가 이미 있으면 쓰지 않고 멈춘다. 롤백한 뒤 다시 옮기거나 멈춘 이전을 이어
  * 갈 때만 `--overwrite-existing`을 붙인다.
  */

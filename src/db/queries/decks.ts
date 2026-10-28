@@ -1,4 +1,4 @@
-import { FieldValue, type Transaction } from "@google-cloud/firestore";
+import type { Transaction } from "@google-cloud/firestore";
 import {
   clampToClock,
   isOutdatedWrite,
@@ -10,13 +10,10 @@ import {
   backgroundsCol,
   decksCol,
   driveTombstonesCol,
-  reportsCol,
   type DeckDoc,
 } from "../collections";
-import { withDeckIndex } from "../deckIndex";
 import { prepareTombstones, readTombstone } from "./cascade";
-import { parseSlides, toDeckContent, toSharedDeck } from "./mappers";
-import { findTakenDownSource, recordModerationEvent } from "./takedowns";
+import { toDeckContent, toSharedDeck } from "./mappers";
 
 /** 최근 수정순 (같으면 id순) */
 export function byUpdatedAtDesc(a: DeckDoc, b: DeckDoc): number {
@@ -84,7 +81,7 @@ export async function existingBackgroundIds(
   );
 }
 
-/** 새 보관함 곡의 기본 필드 (비공개, 가져온 곡 아님) */
+/** 새 보관함 곡의 기본 필드 (가져온 곡 아님) */
 export function libraryDeckDefaults(
   id: string,
   userId: string,
@@ -97,10 +94,6 @@ export function libraryDeckDefaults(
   | "position"
   | "forkedFrom"
   | "forkedFromAuthorName"
-  | "visibility"
-  | "publishedAt"
-  | "takedownAt"
-  | "forkCount"
 > {
   return {
     id,
@@ -110,62 +103,35 @@ export function libraryDeckDefaults(
     position: null,
     forkedFrom: null,
     forkedFromAuthorName: null,
-    visibility: "private",
-    publishedAt: null,
-    takedownAt: null,
-    forkCount: 0,
   };
-}
-
-function inheritsSourceTakedown(fork: DeckDoc): boolean {
-  return fork.presentationId === null && !fork.listed && !fork.takedownAt;
-}
-
-async function takedownToPassOn(
-  tx: Transaction,
-  db: Db,
-  deck: DeckDoc,
-  dependents: readonly DeckDoc[],
-): Promise<{ sourceDeckId: string; takedownAt: Date } | null> {
-  if (!dependents.some(inheritsSourceTakedown)) return null;
-  const source = deck.takedownAt
-    ? deck
-    : await findTakenDownSource(tx, db, deck);
-  return source?.takedownAt
-    ? { sourceDeckId: source.id, takedownAt: source.takedownAt }
-    : null;
 }
 
 export type UpsertDeckResult =
   | { status: "saved"; deck: SharedDeck }
   | { status: "forbidden" }
-  | { status: "deleted" }
-  | { status: "empty" };
+  | { status: "deleted" };
 
 /**
  * 보관함 곡 업서트. 클라이언트가 보낸 곡 내용만 쓴다.
  *
- * 공개 상태·가져온 곡 정보·가져간 횟수는 공개 설정·가져오기 API가 정하는 값이라 이 경로로는
- * 바뀌지 않는다. 남의 곡이거나 프레젠테이션 사본이면 `forbidden`이다.
+ * 가져온 곡 정보(`forkedFrom`·`forkedFromAuthorName`)는 처음 만든 값을 지키고 이 경로로는 바뀌지
+ * 않는다. 남의 곡이거나 프레젠테이션 사본이면 `forbidden`이다.
  *
  * 본문의 `userId`가 세션 사용자가 아니어도 아무것도 쓰지 않고 `forbidden`이다. 아직 A라고 믿는
  * 탭이나 A가 남긴 대기열이 보낸 곡을 지금 쿠키의 주인인 B의 보관함에 만들면 안 된다.
  *
  * 내가 지운 곡(삭제 기록이 있는 id)은 문서가 다시 생겨 있어도 쓰지 않고 `deleted`다. 삭제가
  * 이긴다. 그 곡을 아직 가진 다른 기기와 캐시된 옛 앱은 부팅할 때 서버에 없는 곡을 모두 다시
- * 올리는데, 받아 주면 지운 곡이 원작 표시 없이 비공개로 되살아나 모든 기기로 퍼진다. 남이 지운
- * id에 곡을 새로 만드는 저장은 `forbidden`이다. id는 다시 쓰이지 않으므로(가져오기는 새 id를
- * 만든다) 정상 저장이 아니고, 받아 주면 그 곡을 지울 때 기록을 남기지 못한다.
+ * 올리는데, 받아 주면 지운 곡이 원작 표시 없이 되살아나 모든 기기로 퍼진다. 남이 지운 id에 곡을
+ * 새로 만드는 저장은 `forbidden`이다. id는 다시 쓰이지 않으므로 정상 저장이 아니고, 받아 주면 그
+ * 곡을 지울 때 기록을 남기지 못한다.
  *
  * 시각:
- * - 수정 시각은 서버 시계 + 5분까지로 줄인다(`clampToClock`). 공유 라이브러리는 가져간 횟수가 같으면
- *   수정 시각순이라, 미래 시각을 보내 곡을 맨 위에 박아 두지 못하게 한다.
+ * - 수정 시각은 서버 시계 + 5분까지로 줄인다(`clampToClock`). 미래 시각으로 저장된 곡은 다른 기기의
+ *   새 수정을 모두 옛 수정으로 보고 받지 않는다(`isOutdatedWrite`).
  * - 만든 시각은 처음 저장한 값을 지키고, 처음 저장할 때도 줄인다.
  * - 저장된 곡이 들어온 것보다 늦게 고친 것이면 쓰지 않고 저장된 곡을 돌려준다(`isOutdatedWrite`).
  *   오프라인 대기열이 늦게 올린 옛 수정이 다른 기기의 새 수정을 덮지 않게 한다. 시각이 같으면 쓴다.
- *
- * 공개 중인 곡을 슬라이드 없이 저장하면 `empty`다. 공개 설정(`setDeckVisibility`)이 빈 곡의 공개를
- * 막는데, 이 경로로 비우면 빈 카드가 공유 라이브러리에 남는다.
  */
 export async function upsertDeck(
   db: Db,
@@ -201,15 +167,8 @@ export async function upsertDeck(
       createdAt: clampToClock(deck.createdAt, nowMs),
       updatedAt,
     });
-    if (
-      existing?.visibility === "public" &&
-      parseSlides(content.slides).length === 0
-    ) {
-      return { status: "empty" };
-    }
-
     const known = await existingBackgroundIds(tx, db, [content.backgroundId]);
-    const saved = withDeckIndex({
+    const saved: DeckDoc = {
       ...(existing ?? libraryDeckDefaults(deck.id, userId)),
       ...content,
       createdAt: existing?.createdAt ?? content.createdAt,
@@ -217,7 +176,7 @@ export async function upsertDeck(
         content.backgroundId && known.has(content.backgroundId)
           ? content.backgroundId
           : null,
-    });
+    };
     tx.set(ref, saved);
     return { status: "saved", deck: toSharedDeck(saved) };
   });
@@ -225,17 +184,11 @@ export async function upsertDeck(
 
 /**
  * 본인 소유 보관함 곡 삭제. 지운 id는 삭제 기록(`deckTombstoneDocId`)으로 남겨, 같은 id로 오는
- * 저장과 공개 설정을 거절하게 한다(`upsertDeck`, `setDeckVisibility`).
+ * 저장을 거절하게 한다(`upsertDeck`).
  *
  * 외래키가 하던 정리를 같은 트랜잭션에서 한다. 이 곡을 가리키던 곡(가져간 곡·담은 사본)의
- * `forkedFrom`과 신고의 `deckId`는 비우고, 이 곡이 가져온 원본의 가져간 횟수는 줄인다.
- *
- * 이 곡이나 거슬러 올라간 원본이 게시 중단돼 있으면, 이 곡에서 가져가 아직 공개하지 않은 보관함 곡은
- * 그 게시 중단 시각을 이어받고 운영 기록(`cause: "fork"`)을 남긴다. 그 곡들은 원본이 게시 중단돼
- * 공개하지 못하는데(`findTakenDownSource`), `forkedFrom`만 비우면 이 곡을 지우는 것만으로 다시 공개할
- * 수 있게 풀린다. 이미 공개 중인 곡은 운영자가 따로 정하므로 건드리지 않는다. 이어받는 곡도 바뀌는
- * 필드만 고친다. 가져간 곡은 가사·슬라이드를 통째로 담고 있어, 문서째 다시 쓰면 가져간 곡이 많을 때
- * 커밋이 Firestore 한도(10 MiB)를 넘어 이 곡을 지우지 못한다.
+ * `forkedFrom`은 비운다. 바뀌는 필드만 고친다. 담은 사본은 가사·슬라이드를 통째로 담고 있어, 문서째
+ * 다시 쓰면 사본이 많을 때 커밋이 Firestore 한도(10 MiB)를 넘어 이 곡을 지우지 못한다.
  *
  * 멱등이다. 서버에 없는 id도 기록하고 `true`다. 그래서 클라이언트가 시간 초과로 포기한 저장이
  * 삭제보다 늦게 커밋되거나, 다른 탭이 아직 올리지 않은 곡을 올려도 되살아나지 않는다. 기록은
@@ -251,7 +204,6 @@ export async function deleteDeckScoped(
   db: Db,
   deckId: string,
   userId: string,
-  now: Date = new Date(),
 ): Promise<boolean> {
   return db.runTransaction(async (tx) => {
     const ref = decksCol(db).doc(deckId);
@@ -269,55 +221,14 @@ export async function deleteDeckScoped(
     }
     if (deck.userId !== userId || deck.presentationId !== null) return false;
 
-    const [source, dependents, reports, tombstone] = await Promise.all([
-      deck.forkedFrom
-        ? tx.get(decksCol(db).doc(deck.forkedFrom))
-        : Promise.resolve(null),
+    const [dependents, tombstone] = await Promise.all([
       tx.get(decksCol(db).where("forkedFrom", "==", deckId)),
-      tx.get(reportsCol(db).where("deckId", "==", deckId)),
       record ? Promise.resolve(null) : prepareRecord(),
     ]);
-    const inherited = await takedownToPassOn(
-      tx,
-      db,
-      deck,
-      dependents.docs.map((dependent) => dependent.data()),
-    );
 
     tx.delete(ref);
-    if (source?.exists) {
-      tx.update(source.ref, { forkCount: FieldValue.increment(-1) });
-    }
     for (const dependent of dependents.docs) {
-      const fork = dependent.data();
-      if (!inherited || !inheritsSourceTakedown(fork)) {
-        tx.update(dependent.ref, { forkedFrom: null });
-        continue;
-      }
-      const next = withDeckIndex({
-        ...fork,
-        forkedFrom: null,
-        takedownAt: inherited.takedownAt,
-      });
-      tx.update(dependent.ref, {
-        forkedFrom: next.forkedFrom,
-        takedownAt: next.takedownAt,
-        listed: next.listed,
-        searchGrams: next.searchGrams,
-      });
-      recordModerationEvent(tx, db, {
-        action: "takedown",
-        cause: "fork",
-        sourceDeckId: inherited.sourceDeckId,
-        note: null,
-        userId: fork.userId,
-        deckId: fork.id,
-        title: fork.title,
-        at: now,
-      });
-    }
-    for (const report of reports.docs) {
-      tx.update(report.ref, { deckId: null });
+      tx.update(dependent.ref, { forkedFrom: null });
     }
     tombstone?.write();
     return true;

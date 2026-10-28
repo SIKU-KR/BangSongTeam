@@ -6,15 +6,6 @@
 
 import { parseFlags } from "./targets.mjs";
 
-const FLAG_TYPES = {
-  target: "string",
-  note: "string",
-  limit: "string",
-  force: "boolean",
-  republish: "boolean",
-  "with-forks": "boolean",
-};
-
 const SHARE_URL = /\/s\/([\w-]+)/;
 
 const ID_SHAPE = /^[\w-]{21}$/;
@@ -24,19 +15,6 @@ const EDGE_NOISE = /^[\s\p{Cf}]+|[\s\p{Cf}]+$/gu;
 const trimArg = (arg) => arg.replace(EDGE_NOISE, "");
 
 const isOption = (arg) => arg.startsWith("--") && !ID_SHAPE.test(arg);
-
-const noteOf = (flags) => (typeof flags.note === "string" ? flags.note : "");
-
-const eventNoteOf = (flags) => noteOf(flags).trim() || null;
-
-async function splitKnownUsers(db, ops, ids) {
-  const unknown = await ops.findUnknownUserIds(db, ids);
-  const known = [...new Set(ids)].filter((id) => !unknown.includes(id));
-  return { known, unknown };
-}
-
-const unknownUsersMessage = (unknown) =>
-  `사용자를 찾을 수 없어 건너뛰었어요: ${unknown.join(", ")}. id를 확인해 주세요.`;
 
 async function resolvePresentationId(db, ops, target) {
   const shared = SHARE_URL.exec(target);
@@ -48,239 +26,7 @@ async function resolvePresentationId(db, ops, target) {
 }
 
 const COMMANDS = {
-  list: {
-    ids: "none",
-    flags: ["limit"],
-    async run({ flags }, { db, ops, out }) {
-      const limit = flags.limit === undefined ? undefined : Number(flags.limit);
-      const [total, reports] = await Promise.all([
-        ops.countPendingReports(db),
-        ops.listPendingReports(db, { limit }),
-      ]);
-      if (total === 0) {
-        out.log("처리 대기 신고가 없어요.");
-        return;
-      }
-      out.log(
-        reports.length < total
-          ? `처리 대기 신고 ${total}건 중 오래된 ${reports.length}건이에요. 더 보려면 --limit 값을 늘려 주세요.`
-          : `처리 대기 신고 ${total}건이에요.`,
-      );
-      out.table(reports);
-    },
-  },
-  descendants: {
-    ids: "one",
-    async run({ ids: [deckId] }, { db, ops, out }) {
-      out.table(await ops.listDescendants(db, deckId));
-    },
-  },
-  "user-decks": {
-    ids: "one",
-    async run({ ids: [userId] }, { db, ops, out }) {
-      const decks = await ops.listUserDecks(db, userId);
-      out.log(`${userId}의 보관함 곡 ${decks.length}개예요.`);
-      out.table(decks);
-    },
-  },
-  takedown: {
-    ids: "many",
-    flags: ["note", "with-forks"],
-    async run({ ids, flags }, { db, ops, out }) {
-      const now = new Date();
-      const eventNote = eventNoteOf(flags);
-      const { takenDown, notLibrary } = await ops.takedownDecks(
-        db,
-        ids,
-        now,
-        eventNote,
-      );
-      const forks = [];
-      if (flags["with-forks"] === true) {
-        for (const deckId of takenDown) {
-          forks.push(...(await ops.takedownForks(db, deckId, now, eventNote)));
-        }
-      }
-      const closed = await ops.resolveReportsForDecks(
-        db,
-        [...takenDown, ...forks],
-        noteOf(flags),
-      );
-      if (takenDown.length > 0) {
-        out.log(
-          `곡 ${takenDown.length}개의 게시를 중단하고 신고 ${closed}건을 처리 완료로 닫았어요.` +
-            (flags["with-forks"] === true
-              ? ` 가져간 곡 ${forks.length}개도 게시를 중단했어요.`
-              : ""),
-        );
-      }
-      if (notLibrary.length > 0) {
-        throw new Error(
-          `보관함 곡이 아니라 건너뛰었어요: ${notLibrary.join(", ")}`,
-        );
-      }
-    },
-  },
-  "takedown-user": {
-    ids: "many",
-    flags: ["note"],
-    async run({ ids, flags }, { db, ops, out }) {
-      const now = new Date();
-      const { known, unknown } = await splitKnownUsers(db, ops, ids);
-      const official = [];
-      for (const userId of known) {
-        const result = await ops.takedownUserDecks(
-          db,
-          userId,
-          now,
-          eventNoteOf(flags),
-        );
-        if (result.status === "official") {
-          official.push(userId);
-          continue;
-        }
-        const closed = await ops.resolveReportsForDecks(
-          db,
-          result.libraryDeckIds,
-          noteOf(flags),
-        );
-        out.log(
-          `${userId}: 곡 ${result.deckIds.length}개의 게시를 중단하고 신고 ${closed}건을 처리 완료로 닫았어요.`,
-        );
-      }
-      const problems = [];
-      if (official.length > 0) {
-        problems.push(
-          `공식 라이브러리 계정의 곡은 한꺼번에 게시 중단할 수 없어 건너뛰었어요: ${official.join(", ")}. 곡마다 takedown <곡 id>로 중단해 주세요.`,
-        );
-      }
-      if (unknown.length > 0) problems.push(unknownUsersMessage(unknown));
-      if (problems.length > 0) throw new Error(problems.join("\n"));
-    },
-  },
-  "revoke-sessions": {
-    ids: "many",
-    async run({ ids }, { db, ops, out }) {
-      const { known, unknown } = await splitKnownUsers(db, ops, ids);
-      for (const userId of known) {
-        const count = await ops.revokeSessions(db, userId);
-        out.log(
-          `${userId}: 세션 ${count}개를 지웠어요. 계정은 막지 않아 바로 다시 로그인할 수 있고, 로그인해 있던 기기도 최대 5분 더 쓸 수 있어요. 계정을 정리하는 중이면 5분 뒤 takedown-user를 한 번 더 실행해 주세요.`,
-        );
-      }
-      if (unknown.length > 0) throw new Error(unknownUsersMessage(unknown));
-    },
-  },
-  ban: {
-    ids: "one",
-    flags: ["note"],
-    async run({ ids: [userId], flags }, { db, ops, out }) {
-      const result = await ops.banUser(
-        db,
-        userId,
-        new Date(),
-        eventNoteOf(flags),
-      );
-      if (result.status === "not_found") {
-        throw new Error(`사용자가 없어요: ${userId}`);
-      }
-      if (result.status === "official") {
-        throw new Error(`공식 라이브러리 계정은 제한할 수 없어요: ${userId}`);
-      }
-      const closed = await ops.resolveReportsForDecks(
-        db,
-        result.takenDownDeckIds,
-        noteOf(flags),
-      );
-      out.log(
-        `계정을 제한했어요. 공개 중이던 곡 ${result.takenDownDeckIds.length}개를 게시 중단하고 신고 ${closed}건을 닫았어요. 로그인 세션 ${result.revokedSessions}개를 지웠어요. 로그인한 기기는 최대 5분 더 쓸 수 있어요.`,
-      );
-      if (result.takenDownDeckIds.length > 0) {
-        out.table(result.takenDownDeckIds.map((deckId) => ({ deckId })));
-      }
-    },
-  },
-  unban: {
-    ids: "one",
-    flags: ["note"],
-    async run({ ids: [userId], flags }, { db, ops, out }) {
-      if (!(await ops.unbanUser(db, userId, new Date(), eventNoteOf(flags)))) {
-        throw new Error(`사용자가 없어요: ${userId}`);
-      }
-      out.log(
-        "계정 제한을 풀었어요. 게시 중단한 곡은 restore로 하나씩 풀어 주세요.",
-      );
-    },
-  },
-  restore: {
-    ids: "one",
-    flags: ["republish", "note"],
-    async run({ ids: [deckId], flags }, { db, ops, out }) {
-      const restored = await ops.restoreDeck(db, deckId, {
-        republish: flags.republish === true,
-        note: eventNoteOf(flags),
-      });
-      if (restored === null) {
-        throw new Error(`보관함 곡이 아니에요: ${deckId}`);
-      }
-      const [blockedBy, descendants] = await Promise.all([
-        ops.findBlockingSource(db, deckId),
-        ops.listDescendants(db, deckId),
-      ]);
-      const stillTakenDown = descendants.filter((deck) => deck.takenDown);
-      out.log(
-        restored.listed
-          ? "게시 중단을 풀었어요. 곡이 공유 라이브러리에 다시 보여요."
-          : "게시 중단을 풀었어요. 곡은 비공개로 남아요.",
-      );
-      if (blockedBy) {
-        out.warn(
-          `원곡 ${blockedBy}이(가) 아직 게시 중단돼 있어 소유자는 이 곡을 공개할 수 없어요.`,
-        );
-      }
-      if (stillTakenDown.length > 0) {
-        out.log(
-          `가져간 곡 ${stillTakenDown.length}개는 아직 게시 중단돼 있어요. descendants ${deckId}로 확인하고 restore로 하나씩 풀어 주세요.`,
-        );
-      }
-    },
-  },
-  resolve: {
-    ids: "one",
-    flags: ["note", "force"],
-    async run({ ids: [reportId], flags }, { db, ops, out }) {
-      await ops.resolveReport(db, reportId, noteOf(flags), {
-        force: flags.force === true,
-      });
-      out.log("신고를 처리 완료로 닫았어요.");
-    },
-  },
-  reject: {
-    ids: "one",
-    flags: ["note", "force"],
-    async run({ ids: [reportId], flags }, { db, ops, out }) {
-      await ops.rejectReport(db, reportId, noteOf(flags), {
-        force: flags.force === true,
-      });
-      out.log("신고를 기각했어요.");
-    },
-  },
-  "reject-by-reporter": {
-    ids: "one",
-    flags: ["note"],
-    async run({ ids: [reporterId], flags }, { db, ops, out }) {
-      const closed = await ops.rejectReportsByReporter(
-        db,
-        reporterId,
-        noteOf(flags),
-      );
-      out.log(
-        `신고자 ${reporterId}의 처리 대기 신고 ${closed}건을 기각했어요.`,
-      );
-    },
-  },
   "disable-link": {
-    ids: "many",
     async run({ ids }, { db, ops, out }) {
       const missing = [];
       const failed = [];
@@ -325,22 +71,13 @@ const COMMANDS = {
   },
 };
 
-function checkFlags(command, allowed, flags) {
+function checkFlags(command, flags) {
   for (const [name, value] of Object.entries(flags)) {
-    if (name !== "target" && !allowed.includes(name)) {
+    if (name !== "target") {
       throw new Error(`${command}에는 --${name} 옵션을 쓸 수 없어요`);
     }
-    if (FLAG_TYPES[name] === "boolean" && value !== true) {
-      throw new Error(`--${name}에는 값을 붙이지 않아요`);
-    }
-    if (FLAG_TYPES[name] === "string" && typeof value !== "string") {
+    if (typeof value !== "string") {
       throw new Error(`--${name}=<값> 형식으로 써 주세요`);
-    }
-  }
-  if (flags.limit !== undefined) {
-    const limit = Number(flags.limit);
-    if (!(Number.isInteger(limit) && limit > 0)) {
-      throw new Error(`--limit은 1 이상의 정수여야 해요: ${flags.limit}`);
     }
   }
 }
@@ -367,17 +104,10 @@ export function parseModerationArgs(argv) {
       `알 수 없는 명령이에요${command === undefined ? "" : `: ${command}`}. 명령: ${Object.keys(COMMANDS).join(" | ")}`,
     );
   }
-  const spec = COMMANDS[command];
-  if (spec.ids === "none" && ids.length > 0) {
-    throw new Error(`${command}에는 id를 붙이지 않아요`);
-  }
-  if (spec.ids !== "none" && ids.length === 0) {
+  if (ids.length === 0) {
     throw new Error(`${command}에는 id가 필요해요`);
   }
-  if (spec.ids === "one" && ids.length > 1) {
-    throw new Error(`${command}는 id를 하나만 받아요`);
-  }
-  checkFlags(command, spec.flags ?? [], flags);
+  checkFlags(command, flags);
   return { command, ids, flags };
 }
 

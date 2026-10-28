@@ -10,8 +10,6 @@ import {
   foldersCol,
   presentationMembersCol,
   presentationsCol,
-  userQuotaDocId,
-  userQuotasCol,
   usersCol,
   memberDocId,
   type BackgroundDoc,
@@ -20,8 +18,6 @@ import {
   type PresentationDoc,
   type UserDoc,
 } from "../collections";
-import { withDeckIndex } from "../deckIndex";
-import { quotaDay, type UserQuotaAction } from "../queries/limits";
 
 const EPOCH = new Date(0);
 
@@ -98,7 +94,6 @@ export function userDoc(row: Pick<UserDoc, "id"> & Partial<UserDoc>): UserDoc {
     emailVerified: false,
     image: null,
     termsAgreedAt: null,
-    bannedAt: null,
     createdAt: EPOCH,
     updatedAt: EPOCH,
     ...row,
@@ -121,36 +116,14 @@ export async function seedAccount(
     .set({ id, accountId: id, providerId, userId, password: null });
 }
 
-/** `now`가 든 날(한국 시간)에 하루 한도를 `counts`만큼 이미 쓴 사용자 (`queries/limits.ts`) */
-export async function seedUserQuota(
-  db: Db,
-  userId: string,
-  now: Date,
-  counts: Partial<Record<UserQuotaAction, number>>,
-): Promise<void> {
-  const day = quotaDay(now);
-  await userQuotasCol(db)
-    .doc(userQuotaDocId(userId, day))
-    .set({
-      userId,
-      day,
-      publish: 0,
-      fork: 0,
-      report: 0,
-      ...counts,
-      expiresAt: now,
-    });
-}
-
 /**
- * 곡 문서. 빈 곡 내용과 시각 0을 채우고 공개 범위·검색 색인을 붙인다.
- * 프레젠테이션 사본은 `presentationId`·`itemId`·`position`을 함께 넘긴다.
+ * 곡 문서. 빈 곡 내용과 시각 0을 채운다. 프레젠테이션 사본은 `presentationId`·`itemId`·
+ * `position`을 함께 넘긴다.
  */
 export function deckDoc(
-  row: Pick<DeckDoc, "id" | "userId"> &
-    Partial<Omit<DeckDoc, "listed" | "searchGrams">>,
+  row: Pick<DeckDoc, "id" | "userId"> & Partial<DeckDoc>,
 ): DeckDoc {
-  return withDeckIndex({
+  return {
     presentationId: null,
     itemId: null,
     position: null,
@@ -162,14 +135,10 @@ export function deckDoc(
     backgroundId: null,
     forkedFrom: null,
     forkedFromAuthorName: null,
-    visibility: "private",
-    publishedAt: null,
-    takedownAt: null,
-    forkCount: 0,
     createdAt: EPOCH,
     updatedAt: EPOCH,
     ...row,
-  });
+  };
 }
 
 /** 프레젠테이션 머리 문서 */

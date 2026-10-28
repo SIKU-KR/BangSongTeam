@@ -134,8 +134,8 @@ export function withEditStamp(
 }
 
 /**
- * 덱을 이 프레젠테이션 전용 복제본으로 만든다 (Clone-on-Add). 공유 라이브러리
- * 덱은 원본 id를 `forkedFrom`에 남기고, 복제본은 언제나 비공개다.
+ * 덱을 이 프레젠테이션 전용 복제본으로 만든다 (Clone-on-Add). 보관함 곡은 원본 id를
+ * `forkedFrom`에 남기고, 사본을 다시 복제하면 그 사본의 원본을 이어받는다.
  */
 export function forkDeckIntoPresentation(
   deck: Deck,
@@ -150,9 +150,6 @@ export function forkDeckIntoPresentation(
     scope: "presentation",
     presentationId,
     forkedFrom: deck.scope === "library" ? deck.id : (deck.forkedFrom ?? null),
-    visibility: "private",
-    forkCount: 0,
-    publishedAt: null,
     createdAt: now,
     updatedAt: now,
   };

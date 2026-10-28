@@ -15,18 +15,26 @@ interface LibraryMergeOptions {
 }
 
 /**
- * 동기화 PUT은 이 값을 바꾸지 못한다. 공개 전환·가져오기·게시 중단은 서버에서만
- * 일어나므로, 로컬 사본이 더 최신이어도 이 값만큼은 서버 것이 진실이다.
+ * 동기화 PUT은 이 값을 바꾸지 못한다. 가져온 곡 정보는 서버가 처음 저장할 때 정하고, 원본을
+ * 지우면 서버에서만 비워지므로, 로컬 사본이 더 최신이어도 이 값만큼은 서버 것이 진실이다.
  */
 const SERVER_OWNED_DECK_KEYS = [
+  "forkedFrom",
+  "forkedFromAuthorName",
+] as const satisfies ReadonlyArray<keyof Deck>;
+
+/**
+ * 공유 라이브러리를 걷어내기 전 판이 저장한 곡의 서버 필드. 지금 `Deck`에는 없지만 캐시된 옛 판의
+ * 탭이 쓴 IndexedDB 저장본에는 남아 있을 수 있다. 내용 비교에서 빼지 않으면 같은 곡이 이 키 때문에
+ * 다른 내용으로 보여 동기화가 같은 곡을 계속 다시 올린다.
+ */
+const LEGACY_SERVER_DECK_KEYS = [
   "visibility",
   "forkCount",
   "origin",
-  "forkedFrom",
-  "forkedFromAuthorName",
   "publishedAt",
   "takedownAt",
-] as const satisfies ReadonlyArray<keyof Deck>;
+] as const;
 
 /** 서버가 확정한 공유 필드를 입히되 내용은 로컬 그대로 둔다 */
 export function withServerFields(local: Deck, server: Deck): Deck {
@@ -40,8 +48,8 @@ export function withServerFields(local: Deck, server: Deck): Deck {
 /**
  * 서버가 정하는 공유 필드가 모두 같은지 (값이 없는 필드는 null로 본다).
  *
- * 이 필드는 서버에서 `updatedAt`을 바꾸지 않고 바뀐다(공개 전환·가져가기·게시 중단). 그래서
- * 부팅 병합은 `updatedAt`이 같아도 이 필드가 다르면 저장본을 새로 써야 한다.
+ * 이 필드는 서버에서 `updatedAt`을 바꾸지 않고 바뀐다(원본을 지우면 `forkedFrom`이 비워진다).
+ * 그래서 부팅 병합은 `updatedAt`이 같아도 이 필드가 다르면 저장본을 새로 써야 한다.
  */
 export function hasSameServerFields(a: Deck, b: Deck): boolean {
   return SERVER_OWNED_DECK_KEYS.every(
@@ -51,6 +59,7 @@ export function hasSameServerFields(a: Deck, b: Deck): boolean {
 
 const NON_CONTENT_DECK_KEYS: ReadonlySet<string> = new Set([
   ...SERVER_OWNED_DECK_KEYS,
+  ...LEGACY_SERVER_DECK_KEYS,
   "createdAt",
   "updatedAt",
 ]);

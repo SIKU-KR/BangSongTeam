@@ -1,7 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import type { Db } from "../client";
 import { decksCol, driveTombstonesCol } from "../collections";
-import { withDeckIndex } from "../deckIndex";
 import {
   backgroundDoc,
   createTestDb,
@@ -20,8 +19,6 @@ import {
   type UpsertDeckResult,
 } from "./decks";
 import { getDriveTombstones } from "./folders";
-import { setDeckVisibility } from "./sharing";
-import { takedownDeck } from "../ops/moderation";
 import {
   DEFAULT_DECK_STYLE,
   DeckSchema,
@@ -91,9 +88,7 @@ describe("덱 쓰기 헬퍼 (보관함 동기화)", () => {
       slides: [{ id: "s1", order: 0, lines: ["시작됐네"] }],
       backgroundId: null,
       style: { ...DEFAULT_DECK_STYLE, fontSizeVw: 5.5 },
-      visibility: "private",
       forkedFrom: null,
-      forkCount: 0,
       createdAt: "2026-09-20T00:00:00.000Z",
       updatedAt: "2026-09-21T00:00:00.000Z",
       ...overrides,
@@ -267,31 +262,7 @@ describe("덱 쓰기 헬퍼 (보관함 동기화)", () => {
     expect((await readDeck(DECK_ID)).title).toBe("고친 곡");
   });
 
-  it("공개 중인 곡을 슬라이드 없이 저장하면 empty로 거절하고 공개·슬라이드를 지킨다", async () => {
-    await upsertDeck(db, ownerId, makeDeck(ownerId));
-    expect(
-      (await setDeckVisibility(db, ownerId, DECK_ID, "public")).status,
-    ).toBe("ok");
-
-    expect(
-      await upsertDeck(
-        db,
-        ownerId,
-        makeDeck(ownerId, {
-          slides: [],
-          updatedAt: "2026-09-22T00:00:00.000Z",
-        }),
-      ),
-    ).toEqual({ status: "empty" });
-
-    expect((await decksCol(db).doc(DECK_ID).get()).data()).toMatchObject({
-      visibility: "public",
-      listed: true,
-    });
-    expect((await readDeck(DECK_ID)).slides).toHaveLength(1);
-  });
-
-  it("비공개 곡은 슬라이드 없이도 저장한다", async () => {
+  it("슬라이드 없는 곡도 저장한다", async () => {
     await upsertDeck(db, ownerId, makeDeck(ownerId));
 
     expect(
@@ -374,112 +345,70 @@ describe("덱 쓰기 헬퍼 (보관함 동기화)", () => {
     const saved = await upsertDeck(db, ownerId, makeDeck(ownerId));
     expect(saved).toMatchObject({
       status: "saved",
-      deck: { id: DECK_ID, userId: ownerId, origin: "user" },
+      deck: { id: DECK_ID, userId: ownerId, forkedFrom: null },
     });
   });
 
-  describe("서버 소유 공유 필드", () => {
-    it("새 덱은 클라이언트가 무엇을 보내든 비공개·0회·직접 만든 곡으로 저장된다", async () => {
+  describe("서버 소유 필드", () => {
+    it("새 덱은 클라이언트가 무엇을 보내든 가져온 곡 정보 없이 저장된다", async () => {
       const saved = await upsertDeck(
         db,
         ownerId,
         makeDeck(ownerId, {
-          visibility: "public",
-          forkCount: 999,
-          origin: "fork",
           forkedFrom: "c00000000000000000099",
           forkedFromAuthorName: "사칭",
-          publishedAt: "2026-09-22T00:00:00.000Z",
         }),
       );
       expect(saved).toMatchObject({
         status: "saved",
-        deck: {
-          visibility: "private",
-          forkCount: 0,
-          origin: "user",
-          forkedFrom: null,
-          forkedFromAuthorName: null,
-          publishedAt: null,
-          takedownAt: null,
-        },
+        deck: { forkedFrom: null, forkedFromAuthorName: null },
       });
     });
 
-    it("기존 덱을 갱신해도 서버 값이 유지된다", async () => {
+    it("기존 덱을 갱신해도 가져온 곡 정보와 옛 판이 남긴 공유 필드는 그대로 둔다", async () => {
       await seedDocs(db, {
         decks: [deckDoc({ id: "c00000000000000000099", userId: strangerId })],
       });
       await upsertDeck(db, ownerId, makeDeck(ownerId));
-      const publishedAt = new Date("2026-09-22T00:00:00.000Z");
+      const legacy = {
+        visibility: "public",
+        publishedAt: new Date("2026-09-22T00:00:00.000Z"),
+        takedownAt: null,
+        forkCount: 3,
+        listed: true,
+        searchGrams: ["은혜"],
+      };
       const stored = (await decksCol(db).doc(DECK_ID).get()).data()!;
       await decksCol(db)
         .doc(DECK_ID)
-        .set(
-          withDeckIndex({
-            ...stored,
-            visibility: "public",
-            forkedFrom: "c00000000000000000099",
-            forkedFromAuthorName: "원작자",
-            publishedAt,
-          }),
-        );
-
-      const saved = await upsertDeck(
-        db,
-        ownerId,
-        makeDeck(ownerId, {
-          title: "제목만 바꿈",
-          visibility: "private",
-          forkCount: 999,
-          origin: "user",
-          forkedFrom: null,
-          publishedAt: null,
-        }),
-      );
-      expect(saved).toMatchObject({
-        status: "saved",
-        deck: {
-          title: "제목만 바꿈",
-          visibility: "public",
-          forkCount: 0,
-          origin: "fork",
+        .set({
+          ...stored,
+          ...legacy,
           forkedFrom: "c00000000000000000099",
           forkedFromAuthorName: "원작자",
-          publishedAt: publishedAt.toISOString(),
-        },
-      });
-    });
-
-    it("게시 중단한 곡은 옛 탭이 공개·중단 없음으로 보낸 저장에도 게시 중단을 지킨다", async () => {
-      await upsertDeck(db, ownerId, makeDeck(ownerId));
-      await takedownDeck(db, DECK_ID, new Date("2026-09-23T00:00:00.000Z"));
+        });
 
       const saved = await upsertDeck(
         db,
         ownerId,
         makeDeck(ownerId, {
           title: "제목만 바꿈",
-          visibility: "public",
-          takedownAt: null,
+          forkedFrom: null,
+          forkedFromAuthorName: null,
         }),
       );
-
       expect(saved).toMatchObject({
         status: "saved",
         deck: {
           title: "제목만 바꿈",
-          visibility: "private",
-          takedownAt: "2026-09-23T00:00:00.000Z",
+          forkedFrom: "c00000000000000000099",
+          forkedFromAuthorName: "원작자",
         },
       });
       expect((await decksCol(db).doc(DECK_ID).get()).data()).toMatchObject({
-        listed: false,
-        searchGrams: [],
+        title: "제목만 바꿈",
+        ...legacy,
       });
-      expect(
-        (await setDeckVisibility(db, ownerId, DECK_ID, "public")).status,
-      ).toBe("taken_down");
     });
 
     it("보관함 경로로 세트 복제본을 만들거나 고칠 수 없다", async () => {
@@ -598,7 +527,7 @@ describe("덱 쓰기 헬퍼 (보관함 동기화)", () => {
       expect(await getDeletedDeckIds(db, strangerId)).toEqual([]);
     });
 
-    it("남이 남긴 기록은 내가 가진 곡의 저장·공개·삭제를 막지 않고 그대로 남아, 지운 뒤 다시 올리면 forbidden이다", async () => {
+    it("남이 남긴 기록은 내가 가진 곡의 저장·삭제를 막지 않고 그대로 남아, 지운 뒤 다시 올리면 forbidden이다", async () => {
       const strangerRecord = {
         itemId: DECK_ID,
         userId: strangerId,
@@ -610,9 +539,6 @@ describe("덱 쓰기 헬퍼 (보관함 동기화)", () => {
       expect(
         await upsertDeck(db, ownerId, makeDeck(ownerId, { title: "수정" })),
       ).toMatchObject({ status: "saved", deck: { title: "수정" } });
-      expect(
-        (await setDeckVisibility(db, ownerId, DECK_ID, "public")).status,
-      ).toBe("ok");
       expect(await deleteDeckScoped(db, DECK_ID, ownerId)).toBe(true);
 
       expect((await decksCol(db).doc(DECK_ID).get()).exists).toBe(false);
@@ -689,12 +615,7 @@ describe("곡 삭제가 하던 외래키 정리", () => {
       users: [userDoc({ id: owner }), userDoc({ id: fan })],
       presentations: [presentationDoc({ id: "p1", userId: fan })],
       decks: [
-        deckDoc({
-          id: "src",
-          userId: owner,
-          visibility: "public",
-          forkCount: 1,
-        }),
+        deckDoc({ id: "src", userId: owner }),
         deckDoc({
           id: "fork",
           userId: fan,
@@ -713,9 +634,12 @@ describe("곡 삭제가 하던 외래키 정리", () => {
     });
   });
 
-  it("가져온 곡을 지우면 원본의 가져간 횟수가 준다", async () => {
+  it("가져온 곡을 지워도 원본은 그대로 두고 삭제 기록을 남긴다", async () => {
+    const source = (await decksCol(db).doc("src").get()).data();
+
     expect(await deleteDeckScoped(db, "fork", fan)).toBe(true);
-    expect((await decksCol(db).doc("src").get()).data()?.forkCount).toBe(0);
+
+    expect((await decksCol(db).doc("src").get()).data()).toEqual(source);
     expect(await getDeletedDeckIds(db, fan)).toEqual(["fork"]);
   });
 

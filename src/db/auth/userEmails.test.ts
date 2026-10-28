@@ -1,6 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { betterAuth } from "better-auth/minimal";
-import { OFFICIAL_LIBRARY_USER_ID } from "#shared";
 import type { Db } from "../client";
 import { COLLECTIONS } from "../collections";
 import { clearDb, createTestDb, seedDocs, userDoc } from "../test/fixtures";
@@ -197,23 +196,6 @@ describe("releaseAbandonedSignUp", () => {
     );
     expect(await usersWithEmail("bot@example.com")).toBe(1);
     expect(await usersWithEmail("agreed@example.com")).toBe(1);
-  });
-
-  it("공식 라이브러리 계정은 인증·약관 동의 표시가 없어도 지우지 않는다", async () => {
-    await seedDocs(db, {
-      users: [
-        userDoc({
-          id: OFFICIAL_LIBRARY_USER_ID,
-          email: "library@example.com",
-          createdAt: LONG_AGO,
-        }),
-      ],
-    });
-
-    expect(await releaseAbandonedSignUp(db, "library@example.com", NOW)).toBe(
-      "none",
-    );
-    expect(await usersWithEmail("library@example.com")).toBe(1);
   });
 
   it("같은 이메일의 사용자가 둘이면 어느 쪽도 지우지 않는다", async () => {

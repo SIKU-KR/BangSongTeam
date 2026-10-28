@@ -62,8 +62,8 @@ const VISIBLE_CHARACTER =
  * `USER_NAME_MAX_LENGTH`자로 줄이며, 문자열이 아니거나 보이는 글자가 남지 않으면 기본 이름을
  * 쓴다.
  *
- * 이 이름은 다른 사용자에게 가는 응답(공유 라이브러리 카드, 가져온 곡의 원작 표시, 공유받은
- * 프레젠테이션의 소유자)에 그대로 실린다. Better Auth의 옛 계정이나 이름 검사가 없던 경로로
+ * 이 이름은 다른 사용자에게 가는 응답(가져온 곡의 원작 표시, 공유받은 프레젠테이션의 소유자)에
+ * 그대로 실린다. Better Auth의 옛 계정이나 이름 검사가 없던 경로로
  * 저장된 이름이 숫자·객체·긴 문자열이어도, 받는 쪽의 엄격한 스키마가 응답 전체를 버리지 않게
  * 한다. 던지지 않는다.
  *
@@ -95,7 +95,7 @@ export interface DeckText {
  *
  * 시드·D1에서 옮긴 데이터에는 100자를 넘는 메들리 제목이 있고, 원작자 이름은 검사 없이 저장된
  * 사용자 이름을 베낀 값이다. 그대로 내보내면 이전 클라이언트까지 포함한 받는 쪽의 엄격한
- * 스키마가 가져오기 응답·프레젠테이션 문서 전체를 거절한다. 비거나 문자열이 아닌 제목은
+ * 스키마가 보관함 목록·프레젠테이션 문서 전체를 거절한다. 비거나 문자열이 아닌 제목은
  * '(제목 없음)', 문자열이 아닌 아티스트는 빈 문자열, 문자열이 아닌 원작자 이름은 기본 이름이다.
  */
 export function fitDeckText(deck: {
@@ -120,19 +120,6 @@ export function fitDeckText(deck: {
           ? clampText(author, MAX_FORKED_FROM_AUTHOR_NAME_LENGTH)
           : FALLBACK_USER_NAME.default,
   };
-}
-
-/**
- * 0 이상의 안전한 정수만 그대로 두고 나머지(음수·소수·NaN·없는 값)는 0으로 읽는다.
- *
- * 가져간 횟수(`forkCount`)는 곡을 지울 때 원본 횟수를 1 줄이는데(`deleteDeckScoped`), 옮겨 온
- * 데이터처럼 처음 값이 맞지 않던 곡은 0 아래로 내려갈 수 있다. 받는 쪽 스키마는
- * `nonnegative()` 정수만 받는다.
- */
-export function toNonNegativeInt(value: unknown): number {
-  return Number.isSafeInteger(value) && (value as number) > 0
-    ? (value as number)
-    : 0;
 }
 
 type UnknownRecord = Record<string, unknown>;

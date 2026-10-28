@@ -1,10 +1,5 @@
 import { describe, it, expect } from "vitest";
-import {
-  DeckOriginSchema,
-  DeckSchema,
-  DeckScopeSchema,
-  DeckVisibilitySchema,
-} from "./deck";
+import { DeckSchema, DeckScopeSchema } from "./deck";
 
 describe("DeckSchema", () => {
   it("validates DeckScopeSchema options", () => {
@@ -13,11 +8,6 @@ describe("DeckSchema", () => {
     expect(() => DeckScopeSchema.parse("other")).toThrow();
   });
 
-  it("validates DeckVisibilitySchema options", () => {
-    expect(DeckVisibilitySchema.parse("private")).toBe("private");
-    expect(DeckVisibilitySchema.parse("public")).toBe("public");
-    expect(() => DeckVisibilitySchema.parse("other")).toThrow();
-  });
   const sampleDeck = {
     id: "a0eebc9996bb9bd380a11",
     userId: "b0eebc9996bb9bd380a22",
@@ -39,44 +29,40 @@ describe("DeckSchema", () => {
   it("parses a minimal valid deck with defaults applied", () => {
     const parsed = DeckSchema.parse(sampleDeck);
     expect(parsed.scope).toBe("library");
-    expect(parsed.visibility).toBe("private");
-    expect(parsed.forkCount).toBe(0);
     expect(parsed.style.fontFamily).toBe("Pretendard");
     expect(parsed.slides[0].id).toMatch(/^s_/);
   });
 
-  it("parses old payloads without sharing fields", () => {
-    const parsed = DeckSchema.parse(sampleDeck);
-    expect(parsed.origin).toBeUndefined();
-    expect(parsed.publishedAt).toBeUndefined();
-  });
-
-  it("accepts sharing fields", () => {
+  it("keeps the source author snapshot", () => {
     const parsed = DeckSchema.parse({
       ...sampleDeck,
-      origin: "fork",
       forkedFromAuthorName: "김찬양",
+    });
+    expect(parsed.forkedFromAuthorName).toBe("김찬양");
+  });
+
+  it("drops the retired public-library fields that old saved decks still carry", () => {
+    const parsed = DeckSchema.parse({
+      ...sampleDeck,
+      visibility: "public",
+      forkCount: 3,
+      origin: "catalog",
       publishedAt: "2026-09-23T00:00:00.000Z",
       takedownAt: null,
-    });
-    expect(parsed.origin).toBe("fork");
-    expect(parsed.forkedFromAuthorName).toBe("김찬양");
-    expect(DeckOriginSchema.options).toEqual(["user", "fork"]);
-    expect(() =>
-      DeckSchema.parse({ ...sampleDeck, origin: "crawl" }),
-    ).toThrow();
-  });
-
-  it("reads legacy lyric-library decks as user decks", () => {
-    const parsed = DeckSchema.parse({
-      ...sampleDeck,
-      origin: "catalog",
       catalogId: "d00000000000000000001",
       contributeToCatalog: true,
     });
-    expect(parsed.origin).toBe("user");
-    expect(parsed).not.toHaveProperty("catalogId");
-    expect(parsed).not.toHaveProperty("contributeToCatalog");
+    for (const key of [
+      "visibility",
+      "forkCount",
+      "origin",
+      "publishedAt",
+      "takedownAt",
+      "catalogId",
+      "contributeToCatalog",
+    ]) {
+      expect(parsed).not.toHaveProperty(key);
+    }
   });
 
   it("allows presentation scope and presentationId", () => {

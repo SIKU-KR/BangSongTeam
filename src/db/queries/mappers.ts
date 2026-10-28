@@ -7,7 +7,6 @@ import {
   MAX_FIRESTORE_TIME,
   MAX_PRESENTATION_TITLE_LENGTH,
   StoredSlideSchema,
-  toNonNegativeInt,
   UNTITLED_SONG,
   type Deck as SharedDeck,
   type DeckStyle,
@@ -18,7 +17,6 @@ import {
   type Folder as SharedFolder,
 } from "#shared";
 import type { DeckDoc, FolderDoc, PresentationDoc } from "../collections";
-import { withDeckIndex } from "../deckIndex";
 
 /**
  * Firestore 문서와 `#shared` DTO 사이의 변환을 한 곳에 모은다.
@@ -114,11 +112,9 @@ function toDate(iso: string): Date {
 /**
  * 곡 문서 → 공유 Deck DTO.
  *
- * `scope`는 `presentation_id`가 있는지로, `origin`은 원작 표시 스냅샷
- * (`forked_from_author_name`)이 있는지로 정한다. 둘 다 저장하지 않는 파생값이다.
+ * `scope`는 `presentationId`가 있는지로 정한다. 저장하지 않는 파생값이다.
  *
- * 제목·아티스트·원작자 이름과 가져간 횟수는 `DeckSchema` 한도에 맞춰 읽는다(`fitDeckText`,
- * `toNonNegativeInt`). 시드·옮긴 데이터에 한도를 넘는 값이 있어도 이 DTO를 엄격하게 검사하는
+ * 제목·아티스트·원작자 이름은 `DeckSchema` 한도에 맞춰 읽는다(`fitDeckText`). 시드·옮긴 데이터에 한도를 넘는 값이 있어도 이 DTO를 엄격하게 검사하는
  * 클라이언트가 곡이나 그 곡을 담은 프레젠테이션 전체를 버리지 않게 하기 위해서다. 한도 안의
  * 값은 그대로다.
  */
@@ -135,20 +131,15 @@ export function toSharedDeck(row: DeckDoc): SharedDeck {
     slides: parseSlides(row.slides),
     backgroundId: row.backgroundId ?? null,
     style: parseStyle(row.style),
-    visibility: row.visibility,
     forkedFrom: row.forkedFrom ?? null,
-    forkCount: toNonNegativeInt(row.forkCount),
-    origin: text.forkedFromAuthorName ? "fork" : "user",
     forkedFromAuthorName: text.forkedFromAuthorName,
-    publishedAt: toIsoOrNull(row.publishedAt),
-    takedownAt: toIsoOrNull(row.takedownAt),
     createdAt: toIso(row.createdAt),
     updatedAt: toIso(row.updatedAt),
   };
 }
 
 /**
- * 공유 Deck DTO의 곡 내용 → 곡 문서 필드. id·소유자·소속·공개 상태·가져온 곡 정보는
+ * 공유 Deck DTO의 곡 내용 → 곡 문서 필드. id·소유자·소속·가져온 곡 정보는
  * 넣지 않는다. 그 값은 호출자가 서버 기준으로 정해 덧붙인다.
  */
 export function toDeckContent(
@@ -249,7 +240,7 @@ export interface DecomposedDocument {
  *
  * 사본의 소유자·소속·자리는 문서 헤더와 항목 기준으로 덮어쓴다. 본문이 보내온 값을
  * 그대로 믿으면 남의 계정으로 문서를 심거나, 보관함 곡을 사본으로 둔갑시킬 수 있다.
- * 사본은 공유 대상이 아니라 언제나 비공개다. `forkedFrom`
+ * `forkedFrom`
  * (담아 온 보관함 곡)과 `forkedFromAuthorName`(원작 표시)은 편집기가 쓰는 값이라
  * 그대로 둔다.
  */
@@ -283,7 +274,7 @@ export function fromPresentationChanges(
       const slot = slotByDeck.get(deck.id);
       if (!slot) return [];
       return [
-        withDeckIndex({
+        {
           id: deck.id,
           ...toDeckContent(deck),
           userId: changes.userId,
@@ -292,11 +283,7 @@ export function fromPresentationChanges(
           position: slot.position,
           forkedFrom: deck.forkedFrom ?? null,
           forkedFromAuthorName: deck.forkedFromAuthorName ?? null,
-          visibility: "private" as const,
-          publishedAt: null,
-          takedownAt: null,
-          forkCount: 0,
-        }),
+        },
       ];
     }),
   };

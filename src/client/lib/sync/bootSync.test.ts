@@ -209,8 +209,7 @@ function serverDeck(overrides: Partial<Deck> = {}): Deck {
     slides: [],
     backgroundId: null,
     style: DEFAULT_DECK_STYLE,
-    visibility: "public",
-    forkCount: 2,
+    forkedFromAuthorName: "원작자",
     createdAt: "2026-09-20T00:00:00.000Z",
     updatedAt: "2026-09-21T00:00:00.000Z",
     ...overrides,
@@ -259,7 +258,7 @@ describe("runBootSync — library decks", () => {
     });
     await runBootSync();
     expect(getUserSongs().map((d) => d.title)).toEqual(["다른 PC에서 만든 곡"]);
-    expect(getUserSongs()[0].forkCount).toBe(2);
+    expect(getUserSongs()[0].forkedFromAuthorName).toBe("원작자");
   });
 
   it("uploads local-only decks on first sign-in", async () => {

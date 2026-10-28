@@ -7,13 +7,7 @@ import type {
 } from "@google-cloud/firestore";
 import { MAX_CLOCK_SKEW_MS } from "#shared";
 import type { Db } from "../client";
-import {
-  decksCol,
-  foldersCol,
-  presentationsCol,
-  type DeckDoc,
-} from "../collections";
-import { withDeckIndex } from "../deckIndex";
+import { decksCol, foldersCol, presentationsCol } from "../collections";
 
 /** 시각을 줄이는 컬렉션 */
 export type ClampedCollection = "decks" | "folders" | "presentations";
@@ -75,20 +69,6 @@ async function idsLaterThan(
   }
 }
 
-async function clampDeck(
-  tx: Transaction,
-  ref: DocumentReference<DeckDoc>,
-  now: Date,
-  limit: Date,
-): Promise<boolean> {
-  const deck = (await tx.get(ref)).data();
-  const changes = deck && clampedTimes(deck, now, limit);
-  if (!deck || !changes) return false;
-  const { listed, searchGrams } = withDeckIndex({ ...deck, ...changes });
-  tx.update(ref, { ...changes, listed, searchGrams });
-  return true;
-}
-
 async function clampTimes<T extends Stamped>(
   tx: Transaction,
   ref: DocumentReference<T>,
@@ -111,7 +91,7 @@ async function clampOne(
 ): Promise<boolean> {
   return db.runTransaction((tx) => {
     if (collection === "decks") {
-      return clampDeck(tx, decksCol(db).doc(id), now, limit);
+      return clampTimes(tx, decksCol(db).doc(id), now, limit);
     }
     if (collection === "folders") {
       return clampTimes(tx, foldersCol(db).doc(id), now, limit);
@@ -124,17 +104,16 @@ async function clampOne(
  * 수정 시각·만든 시각이 서버 시계 + 5분(`MAX_CLOCK_SKEW_MS`)보다 늦게 저장된 곡·폴더·프레젠테이션을
  * 찾고, `apply`면 그 시각을 지금으로 줄인다. `scripts/clampFutureTimestamps.mjs`가 쓴다.
  *
- * 서버가 기기 시각을 줄이기(`clampToClock`) 전에 빠른 시계나 꾸민 요청이 남긴 값이다. 공유
- * 라이브러리는 가져간 횟수가 같으면 수정 시각순이라 그런 곡이 맨 위에 박혀 있다. 새 저장은 이미
- * 줄이므로 정확성에는 필요 없고, 그렇게 박힌 문서를 한 번 바로잡을 때만 쓴다.
+ * 서버가 기기 시각을 줄이기(`clampToClock`) 전에 빠른 시계나 꾸민 요청이 남긴 값이다. 그런 문서는
+ * 다른 기기의 새 수정을 옛 수정으로 보고 받지 않는다. 새 저장은 이미 줄이므로, 그렇게 남은 문서를
+ * 한 번 바로잡을 때만 쓴다.
  *
  * - 단일 필드 범위 조회(자동 색인)로 찾으므로 복합 색인이 필요 없다. 미리보기는 아무것도 쓰지
  *   않는다.
  * - 문서마다 트랜잭션 하나에서 다시 읽고 줄인다. 그사이 앱이 새로 저장한 문서는 다시 확인해
  *   건너뛰고, 다시 실행해도 줄일 것이 남은 문서만 쓴다.
  * - 만든 시각은 고친 수정 시각보다 늦지 않게 줄인다.
- * - 곡은 줄인 문서를 `withDeckIndex`에 통과시키고 바뀌는 필드만 고친다. 가사가 든 문서를 통째로
- *   다시 쓰지 않는다.
+ * - 바뀌는 필드만 고친다. 가사가 든 곡 문서를 통째로 다시 쓰지 않는다.
  * - 프레젠테이션의 수정 시각은 문서 판이다. 판을 낮추면 미래 판을 기준으로 저장하던 기기는
  *   412를 받고 서버 판을 받아 맞춘다.
  *

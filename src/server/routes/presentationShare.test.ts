@@ -53,9 +53,7 @@ function makeDoc(
           slides: [{ id: "s1", order: 0, lines: ["시작됐네"] }],
           backgroundId: null,
           style: DEFAULT_DECK_STYLE,
-          visibility: "private",
           forkedFrom: null,
-          forkCount: 0,
           createdAt: "2026-09-20T00:00:00.000Z",
           updatedAt: "2026-09-21T00:00:00.000Z",
         },
@@ -345,9 +343,7 @@ describe("세트 링크 공유 라우트", () => {
 
   it("공유받은 사람에게는 사본이 담아 온 소유자의 보관함 곡 id를 주지 않는다", async () => {
     await seedDocs(env.DB, {
-      decks: [
-        deckDoc({ id: LIBRARY_DECK_ID, userId: OWNER, visibility: "private" }),
-      ],
+      decks: [deckDoc({ id: LIBRARY_DECK_ID, userId: OWNER })],
     });
     const plain = makeDoc();
     await as(

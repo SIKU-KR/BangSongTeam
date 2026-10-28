@@ -8,7 +8,7 @@ import {
   type Deck,
   type ShareSettings,
 } from "#shared";
-import { decksCol, presentationMembersCol } from "#db";
+import { presentationMembersCol } from "#db";
 import { clearDb, seedDocs, userDoc } from "../../db/test/fixtures";
 import { createApp } from "../index";
 import type { SessionReader } from "./auth";
@@ -16,7 +16,6 @@ import type { SessionReader } from "./auth";
 const A = "aaaaaaaa00000000000o1";
 const B = "bbbbbbbb00000000000o2";
 const A_DECK = "c000000000000000000o1";
-const B_DECK = "c000000000000000000o2";
 const A_SET = "1000000000000000000o1";
 
 let currentUser = A;
@@ -67,10 +66,9 @@ function libraryDeck(id: string, userId: string): Deck {
   });
 }
 
-async function forksOf(userId: string): Promise<number> {
-  const snapshot = await decksCol(env.DB)
-    .where("userId", "==", userId)
-    .where("forkedFrom", "==", B_DECK)
+async function membersOfASet(): Promise<number> {
+  const snapshot = await presentationMembersCol(env.DB)
+    .where("presentationId", "==", A_SET)
     .get();
   return snapshot.size;
 }
@@ -109,50 +107,27 @@ describe("다른 출처에서 보낸 쓰기 요청", () => {
         userDoc({ id: B, name: "B", termsAgreedAt: agreedAt }),
       ],
     });
-    expect(
-      (
-        await call(
-          B,
-          "PUT",
-          `/api/decks/${B_DECK}`,
-          SAME_ORIGIN,
-          libraryDeck(B_DECK, B),
-        )
-      ).status,
-    ).toBe(200);
-    expect(
-      (
-        await call(B, "PATCH", `/api/decks/${B_DECK}/visibility`, SAME_ORIGIN, {
-          visibility: "public",
-          acceptedCopyrightNotice: true,
-        })
-      ).status,
-    ).toBe(200);
-  });
-
-  it("같은 사이트의 다른 하위 도메인이 보낸 폼 POST로는 가져오지 않는다", async () => {
-    const res = await call(A, "POST", `/api/decks/${B_DECK}/fork`, FORGED);
-
-    expect(res.status).toBe(403);
-    expect(await res.json()).toEqual({ error: API_ERRORS.idMismatch });
-    expect(await forksOf(A)).toBe(0);
   });
 
   it("출처 헤더가 하나도 없는 본문 없는 POST도 막는다", async () => {
-    const res = await call(A, "POST", `/api/decks/${B_DECK}/fork`, {});
+    const token = await shareASet();
+
+    const res = await call(B, "POST", `/api/share/${token}/join`, {});
 
     expect(res.status).toBe(403);
-    expect(await forksOf(A)).toBe(0);
+    expect(await membersOfASet()).toBe(0);
   });
 
   it.each([
     ["Sec-Fetch-Site가 same-origin", SAME_ORIGIN],
     ["Origin이 앱 주소(BETTER_AUTH_URL)", { origin: "http://localhost:5173" }],
   ])("%s면 받는다", async (_, headers) => {
-    const res = await call(A, "POST", `/api/decks/${B_DECK}/fork`, headers);
+    const token = await shareASet();
+
+    const res = await call(B, "POST", `/api/share/${token}/join`, headers);
 
     expect(res.status).toBe(200);
-    expect(await forksOf(A)).toBe(1);
+    expect(await membersOfASet()).toBe(1);
   });
 
   it("폼으로 흉내 낼 수 없는 JSON 요청은 출처 헤더 없이도 받는다", async () => {
@@ -178,6 +153,7 @@ describe("다른 출처에서 보낸 쓰기 요청", () => {
     );
 
     expect(res.status).toBe(403);
+    expect(await res.json()).toEqual({ error: API_ERRORS.idMismatch });
     const settings = (await (
       await call(A, "GET", `/api/presentations/${A_SET}/share`, SAME_ORIGIN)
     ).json()) as ShareSettings;
@@ -190,9 +166,6 @@ describe("다른 출처에서 보낸 쓰기 요청", () => {
     const res = await call(B, "POST", `/api/share/${token}/join`, FORGED);
 
     expect(res.status).toBe(403);
-    const members = await presentationMembersCol(env.DB)
-      .where("presentationId", "==", A_SET)
-      .get();
-    expect(members.empty).toBe(true);
+    expect(await membersOfASet()).toBe(0);
   });
 });

@@ -103,9 +103,7 @@ describe("presentationStore (In-memory reactive presentation)", () => {
       ],
       backgroundId: null,
       style: DEFAULT_DECK_STYLE,
-      visibility: "private",
       forkedFrom: null,
-      forkCount: 0,
       createdAt: "2026-09-20T00:00:00.000Z",
       updatedAt: "2026-09-20T00:00:00.000Z",
     });
@@ -185,9 +183,7 @@ describe("presentationStore (In-memory reactive presentation)", () => {
       ],
       backgroundId: TEST_SERVICE_BACKGROUNDS[2].id,
       style: DEFAULT_DECK_STYLE,
-      visibility: "private",
       forkedFrom: null,
-      forkCount: 0,
       createdAt: "2026-09-20T00:00:00.000Z",
       updatedAt: "2026-09-20T00:00:00.000Z",
     });
@@ -788,27 +784,20 @@ describe("문서별 Undo/Redo 격리", () => {
         id: "9000000000000000000aa",
         userId: SEED_USER_ID,
         scope: "library",
-        title: "공개된 보관함 곡",
+        title: "보관함 곡",
         lyricsRaw: "가사",
         slides: [{ id: "s1", order: 0, lines: ["가사"] }],
         backgroundId: TEST_SERVICE_BACKGROUNDS[0].id,
         style: DEFAULT_DECK_STYLE,
-        visibility: "public",
-        forkCount: 42,
-        origin: "fork",
         forkedFrom: "9000000000000000000bb",
         forkedFromAuthorName: "원작자",
-        publishedAt: "2026-09-22T00:00:00.000Z",
         createdAt: "2026-09-20T00:00:00.000Z",
         updatedAt: "2026-09-20T00:00:00.000Z",
       });
 
-    it("세트 복제본은 비공개이고 복제해 온 보관함 덱을 가리킨다", () => {
+    it("세트 복제본은 복제해 온 보관함 덱을 가리킨다", () => {
       const item = addDeckToPresentation(libraryDeck());
       expect(item.deck).toMatchObject({
-        visibility: "private",
-        forkCount: 0,
-        publishedAt: null,
         forkedFrom: "9000000000000000000aa",
         forkedFromAuthorName: "원작자",
       });
