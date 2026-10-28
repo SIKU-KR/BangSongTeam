@@ -1,6 +1,12 @@
 import React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import type { DndContextProps, DragStartEvent } from "@dnd-kit/core";
 import type { PresentationItem } from "#shared";
 import { DEFAULT_DECK_STYLE } from "#shared";
@@ -164,6 +170,12 @@ function tap(target: Element, heldMs: number): void {
   fireEvent.click(target);
 }
 
+function longPress(target: Element): void {
+  touchDown(target);
+  elapse(600);
+  touchUp(target);
+}
+
 function mouseDrag(target: Element, travel: number): void {
   fireEvent.mouseDown(target, { button: 0, clientX: 40, clientY: 40 });
   fireEvent.mouseMove(target, { clientX: 40, clientY: 40 + travel });
@@ -178,6 +190,7 @@ describe("SlideThumbnailPane 터치 끌기", () => {
   });
 
   afterEach(() => {
+    vi.restoreAllMocks();
     if (!vi.isFakeTimers()) return;
     act(() => {
       vi.runOnlyPendingTimers();
@@ -241,17 +254,118 @@ describe("SlideThumbnailPane 터치 끌기", () => {
     expect(dnd.started).toEqual([HEADER_DRAG_ID]);
   });
 
-  it("움직이지 않고 꾹 누르면 끌기 없이 길게 누르기 메뉴만 열고, 뗀 뒤에도 메뉴가 남는다", () => {
-    renderPane();
+  it("우클릭 이벤트 없이 슬라이드를 꾹 누르면 끌기 없이 그 슬라이드의 메뉴를 열고 그 슬라이드를 고른다", () => {
+    const props = renderPane();
     vi.useFakeTimers();
-    const thumb = screen.getByTestId(THUMB);
 
-    touchDown(thumb);
-    elapse(600);
-    touchUp(thumb);
+    longPress(screen.getByTestId(THUMB));
 
-    expect(menu()).toBeInTheDocument();
+    expect(menu()).toHaveTextContent(EDITOR_COPY.thumbnails.cut);
+    expect(screen.getAllByRole("menuitem")).toHaveLength(6);
+    expect(props.onClickSlide).toHaveBeenCalledExactlyOnceWith(0, 1, {
+      shift: false,
+      mod: false,
+    });
     expect(dnd.started).toEqual([]);
+  });
+
+  it("이미 선택한 슬라이드를 꾹 누르면 선택을 그대로 두고 메뉴를 연다", () => {
+    const props = renderPane({ selectedIds: ["s-0-1"], activeSlideIndex: 1 });
+    vi.useFakeTimers();
+
+    longPress(screen.getByTestId(THUMB));
+
+    expect(menu()).toHaveTextContent(EDITOR_COPY.thumbnails.cut);
+    expect(props.onClickSlide).not.toHaveBeenCalled();
+  });
+
+  it("우클릭 이벤트 없이 곡 머리글을 꾹 누르면 그 곡의 메뉴를 연다", () => {
+    const props = renderPane();
+    vi.useFakeTimers();
+
+    longPress(screen.getByTestId(HEADER));
+
+    expect(menu()).toHaveTextContent(EDITOR_COPY.song.removeFromSet);
+    expect(menu()).not.toHaveTextContent(EDITOR_COPY.thumbnails.cut);
+    fireEvent.click(
+      screen.getByRole("menuitem", { name: EDITOR_COPY.song.moveUp }),
+    );
+    expect(props.onReorderSong).toHaveBeenCalledWith(1, 0);
+  });
+
+  it("우클릭 이벤트 없이 틈을 꾹 누르면 그 자리에 삽입 커서를 두고 붙여넣기·새 슬라이드 메뉴를 연다", () => {
+    const props = renderPane({ canPaste: true });
+    vi.useFakeTimers();
+
+    longPress(screen.getByTestId("slide-gap-0-3"));
+
+    expect(props.onSetInsertion).toHaveBeenCalledWith({
+      songIndex: 0,
+      index: 3,
+    });
+    expect(screen.getAllByRole("menuitem")).toHaveLength(2);
+    expect(menu()).toHaveTextContent(EDITOR_COPY.thumbnails.paste);
+  });
+
+  it("목록의 빈 곳을 꾹 누르면 맨 끝 자리에 삽입 커서를 두고 메뉴를 연다", () => {
+    const props = renderPane();
+    vi.useFakeTimers();
+
+    longPress(screen.getByTestId("slide-pane-list"));
+
+    expect(props.onSetInsertion).toHaveBeenCalledWith({
+      songIndex: 2,
+      index: 2,
+    });
+    expect(screen.getAllByRole("menuitem")).toHaveLength(2);
+  });
+
+  it("앞서 연 메뉴가 아니라 지금 누른 곳의 메뉴를 연다", async () => {
+    renderPane();
+    fireEvent.contextMenu(screen.getByTestId(THUMB));
+    await screen.findByTestId("slide-pane-menu");
+    fireEvent.keyDown(screen.getByTestId("slide-pane-menu"), {
+      key: "Escape",
+    });
+    await waitFor(() => expect(menu()).not.toBeInTheDocument());
+    vi.useFakeTimers();
+
+    longPress(screen.getByTestId(HEADER));
+
+    expect(menu()).toHaveTextContent(EDITOR_COPY.song.removeFromSet);
+    expect(menu()).not.toHaveTextContent(EDITOR_COPY.thumbnails.cut);
+  });
+
+  it("곡 ⋯ 메뉴의 항목을 꾹 눌러도 슬라이드 메뉴가 겹쳐 열리지 않는다", () => {
+    renderPane();
+    fireEvent.click(screen.getByTestId("song-section-menu-btn-0"));
+    const item = screen.getByRole("menuitem", {
+      name: EDITOR_COPY.song.editInfo,
+    });
+    vi.useFakeTimers();
+
+    longPress(item);
+
+    expect(menu()).not.toBeInTheDocument();
+  });
+
+  it("보기 전용이면 슬라이드든 곡 머리글이든 꾹 눌러도 메뉴가 열리지 않는다", () => {
+    renderPane({ readOnly: true });
+    vi.useFakeTimers();
+
+    longPress(screen.getByTestId(THUMB));
+    longPress(screen.getByTestId(HEADER));
+
+    expect(menu()).not.toBeInTheDocument();
+  });
+
+  it("곡이 없으면 빈 곳을 꾹 눌러도 메뉴가 열리지 않는다", () => {
+    renderPane({ items: [] });
+    vi.useFakeTimers();
+
+    longPress(screen.getByTestId("slide-pane-list"));
+
+    expect(menu()).not.toBeInTheDocument();
   });
 
   it("꾹 눌러 브라우저가 우클릭 이벤트를 보내면 그 슬라이드의 메뉴를 열고 그 슬라이드를 고른다", () => {
@@ -271,6 +385,25 @@ describe("SlideThumbnailPane 터치 끌기", () => {
       mod: false,
     });
     expect(dnd.started).toEqual([]);
+  });
+
+  it("우클릭 이벤트와 길게 누르기 타이머가 둘 다 메뉴를 열어도 열린 메뉴에서 창으로 포커스를 다시 옮기지 않는다", () => {
+    renderPane();
+    vi.useFakeTimers();
+    const thumb = screen.getByTestId(THUMB);
+    const pane = screen.getByTestId("slide-pane-list");
+    const focus = vi.spyOn(HTMLElement.prototype, "focus");
+
+    touchDown(thumb);
+    elapse(450);
+    fireEvent.contextMenu(thumb);
+    elapse(100);
+    touchUp(thumb);
+
+    expect(menu()).toBeInTheDocument();
+    expect(focus.mock.contexts.filter((element) => element === pane)).toEqual([
+      pane,
+    ]);
   });
 
   it("메뉴가 열린 뒤 손가락을 움직이면 메뉴를 닫고 그 슬라이드의 끌기를 시작한다", () => {
@@ -389,6 +522,19 @@ describe("SlideThumbnailPane 마우스 끌기", () => {
 
     expect(menu()).toHaveTextContent(EDITOR_COPY.thumbnails.cut);
     expect(dnd.started).toEqual([]);
+  });
+
+  it("끄는 중에 우클릭해도 메뉴를 열지 않는다", () => {
+    renderPane();
+    const thumb = screen.getByTestId(THUMB);
+
+    fireEvent.mouseDown(thumb, { button: 0, clientX: 40, clientY: 40 });
+    fireEvent.mouseMove(thumb, { clientX: 40, clientY: 60 });
+    expect(dnd.started).toEqual([THUMB_DRAG_ID]);
+    fireEvent.contextMenu(screen.getByTestId(HEADER));
+    fireEvent.mouseUp(thumb);
+
+    expect(menu()).not.toBeInTheDocument();
   });
 
   it("보기 전용이면 마우스로도 끌지 않는다", () => {

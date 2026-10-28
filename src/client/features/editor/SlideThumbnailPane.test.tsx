@@ -1,6 +1,7 @@
 import React from "react";
 import { describe, it, expect, vi } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { compile } from "tailwindcss";
 import type { PresentationItem } from "#shared";
 import { DEFAULT_DECK_STYLE } from "#shared";
 import {
@@ -42,6 +43,13 @@ function TestPane(props: PaneProps): React.JSX.Element {
     props.items[props.activeSongIndex]?.id,
   );
   return <SlideThumbnailPane {...props} collapsedSongs={collapsedSongs} />;
+}
+
+async function opacityCss(element: HTMLElement): Promise<string> {
+  const compiler = await compile("@tailwind utilities;");
+  return compiler.build(
+    element.className.split(/\s+/).filter((name) => name.includes("opacity")),
+  );
 }
 
 function renderPane(overrides: Partial<PaneProps> = {}) {
@@ -319,6 +327,18 @@ describe("SlideThumbnailPane (PPT식 썸네일 창)", () => {
     expect(
       screen.getByRole("menuitem", { name: EDITOR_COPY.song.moveDown }),
     ).toHaveAttribute("aria-disabled", "true");
+  });
+
+  it("구역 ⋯ 버튼은 hover가 되는 기기에서는 마우스를 올릴 때, hover가 없는 터치 기기에서는 늘 보인다", async () => {
+    renderPane();
+
+    const css = await opacityCss(screen.getByTestId("song-section-menu-btn-0"));
+
+    expect(css).toMatch(/\.opacity-0 \{\s*opacity: 0%/);
+    expect(css).toMatch(
+      /@media \(hover: hover\) \{[^}]*group-hover[^}]*\{\s*opacity: 100%/,
+    );
+    expect(css).toMatch(/@media \(hover: ?none\) \{[^}]*\{\s*opacity: 100%/);
   });
 
   it("구역 메뉴 항목은 곡 동작을 호출하고 메뉴를 닫는다", () => {
