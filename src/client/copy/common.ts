@@ -20,7 +20,6 @@ export const COMMON_COPY = {
   newPresentation: "새 프레젠테이션",
   myDrive: "내 드라이브",
   trash: "휴지통",
-  forkCount: (count: number) => `${count}회 가져감`,
 } as const;
 
 export const ERROR_COPY = {

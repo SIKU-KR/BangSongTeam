@@ -1,40 +1,33 @@
 import React from "react";
 import { cn } from "cn";
 import { Badge } from "#components/ui/badge";
-import type { PickerEntry } from "./pickerEntries";
+import type { Deck } from "#shared";
 import { EDITOR_COPY } from "#copy/editor";
-import { COMMON_COPY } from "#copy/common";
 
 /**
  * 곡 선택 창 목록의 한 줄. 줄 안에 다른 버튼이 없어 행 전체를 버튼 역할로 두고,
  * Enter·Space는 행 자체에 포커스가 있을 때만 고른다.
  */
 export function SongPickerEntryRow({
-  entry,
+  deck,
   isSelected,
   onSelect,
 }: {
-  entry: PickerEntry;
+  deck: Deck;
   isSelected: boolean;
   onSelect: () => void;
 }): React.JSX.Element {
-  const id = entry.kind === "mine" ? entry.deck.id : entry.summary.id;
-  const title = entry.kind === "mine" ? entry.deck.title : entry.summary.title;
-  const artist =
-    entry.kind === "mine" ? entry.deck.artist : entry.summary.artist;
   const snippet =
-    entry.kind === "mine"
-      ? entry.deck.slides[0]?.lines.filter(Boolean).join(" ") ||
-        entry.deck.lyricsRaw.split("\n").filter(Boolean)[0] ||
-        ""
-      : entry.summary.firstSlidePreview.join(" ");
+    deck.slides[0]?.lines.filter(Boolean).join(" ") ||
+    deck.lyricsRaw.split("\n").filter(Boolean)[0] ||
+    "";
 
   return (
     <div
       role="button"
       tabIndex={0}
       aria-pressed={isSelected}
-      data-testid={`song-item-${id}`}
+      data-testid={`song-item-${deck.id}`}
       onClick={onSelect}
       onKeyDown={(event) => {
         if (event.target !== event.currentTarget) return;
@@ -50,36 +43,19 @@ export function SongPickerEntryRow({
       )}
     >
       <div className="flex items-center justify-between gap-2">
-        <span className="truncate text-xs font-bold">{title}</span>
+        <span className="truncate text-xs font-bold">{deck.title}</span>
         <div className="flex shrink-0 items-center gap-1">
-          {entry.kind === "mine" && (
-            <Badge variant="secondary">{EDITOR_COPY.song.myLibrary}</Badge>
-          )}
-          {entry.kind === "shared" && entry.summary.official && (
-            <Badge variant="secondary">{EDITOR_COPY.song.official}</Badge>
-          )}
-          {entry.kind === "shared" && (
-            <Badge variant="outline">
-              {entry.ownedCopy
-                ? EDITOR_COPY.picker.inLibrary
-                : COMMON_COPY.share}
-            </Badge>
-          )}
+          <Badge variant="secondary">{EDITOR_COPY.song.myLibrary}</Badge>
           <span className="font-mono text-xs text-muted-foreground">
-            {entry.kind === "mine"
-              ? EDITOR_COPY.picker.slideCount(entry.deck.slides.length)
-              : COMMON_COPY.forkCount(entry.summary.forkCount)}
+            {EDITOR_COPY.picker.slideCount(deck.slides.length)}
           </span>
         </div>
       </div>
 
-      <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
+      <div className="text-xs text-muted-foreground">
         <span className="truncate">
-          {artist || EDITOR_COPY.song.unknownArtist}
+          {deck.artist || EDITOR_COPY.song.unknownArtist}
         </span>
-        {entry.kind === "shared" && (
-          <span className="shrink-0 truncate">{entry.summary.authorName}</span>
-        )}
       </div>
 
       {snippet && (

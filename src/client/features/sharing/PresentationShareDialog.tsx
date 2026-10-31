@@ -204,7 +204,7 @@ export function PresentationShareDialog({
         {isOnline ? (
           error && <FieldError>{describeShareError(error)}</FieldError>
         ) : (
-          <FieldDescription>{SHARING_COPY.library.onlineOnly}</FieldDescription>
+          <FieldDescription>{SHARING_COPY.link.onlineOnly}</FieldDescription>
         )}
 
         <DialogFooter>
@@ -231,7 +231,7 @@ export function PresentationShareDialog({
             <AlertDialogDescription>
               {isOnline
                 ? SHARING_COPY.link.resetDescription
-                : SHARING_COPY.library.onlineOnly}
+                : SHARING_COPY.link.onlineOnly}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
