@@ -93,7 +93,7 @@ export const AUTH_COPY = {
   dev: {
     title: "개발용 계정",
     signInAs: (name: string) => `${name} 계정으로 로그인`,
-    consentPending: "약관 동의 전",
+    consentPendingSuffix: " · 약관 동의 전",
   },
   consent: {
     title: `${APP_NAME} 이용 동의`,

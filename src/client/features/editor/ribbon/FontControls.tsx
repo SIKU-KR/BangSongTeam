@@ -44,7 +44,8 @@ export function FontControls({
         }
         icon={
           <span className="text-sm leading-none font-bold">
-            A<sup className="text-xs">+</sup>
+            {EDITOR_COPY.ribbon.fontSizeGlyph}
+            <sup className="text-xs">+</sup>
           </span>
         }
       />
@@ -58,7 +59,8 @@ export function FontControls({
         }
         icon={
           <span className="text-xs leading-none font-bold">
-            A<sup className="text-xs">−</sup>
+            {EDITOR_COPY.ribbon.fontSizeGlyph}
+            <sup className="text-xs">−</sup>
           </span>
         }
       />
@@ -100,7 +102,7 @@ export function FontControls({
         panelClassName="w-32 p-1"
         icon={
           <span className="text-sm leading-none font-bold text-shadow-sm">
-            S
+            {EDITOR_COPY.ribbon.textShadowGlyph}
           </span>
         }
       >

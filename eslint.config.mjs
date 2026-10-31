@@ -167,15 +167,35 @@ const WORKER_APP_SYNTAX = [
 ];
 
 const HANGUL = /[가-힣]/;
+const LETTER = /[A-Za-z가-힣]/;
 const COPY_IN_COPY_MODULES =
   "사용자에게 보이는 문구는 src/client/copy/*(클라이언트)나 src/shared/copy/*(서버·검증)에 두고 가져다 쓰세요. 같은 문장이 이미 있으면 그 키를 재사용합니다.";
 
+/** 값이 화면에 보이거나 스크린 리더가 읽는 JSX 속성 */
+const USER_FACING_ATTRIBUTES = new Set([
+  "aria-label",
+  "aria-description",
+  "aria-roledescription",
+  "aria-valuetext",
+  "aria-placeholder",
+  "alt",
+  "title",
+  "placeholder",
+  "label",
+]);
+
+const isJsxChild = (node) =>
+  node.parent?.type === "JSXExpressionContainer" &&
+  (node.parent.parent?.type === "JSXElement" ||
+    node.parent.parent?.type === "JSXFragment");
+
 /**
- * 한국어 문자열·JSX 텍스트를 copy 모듈 밖에서 쓰지 못하게 한다. 같은 문장이
- * 여러 파일에 흩어지면 한쪽만 고쳐져 어긋난다. `no-restricted-syntax`는 파일별로
- * 덮어써져 UI_SYNTAX 블록과 겹치므로 별도 규칙으로 둔다.
+ * 한국어 문자열을 copy 모듈 밖에서 쓰지 못하게 한다. JSX 텍스트와 화면에 보이는 속성 값은
+ * 영어도 막는다(`Esc`, `aria-label="Close"`). 같은 문장이 여러 파일에 흩어지면 한쪽만 고쳐져
+ * 어긋나고, 문구를 한곳에서 고칠 수 없다. `no-restricted-syntax`는 파일별로 덮어써져
+ * UI_SYNTAX 블록과 겹치므로 별도 규칙으로 둔다.
  */
-const copyPlugin = {
+export const copyPlugin = {
   rules: {
     "no-inline-copy": {
       meta: { type: "suggestion", schema: [] },
@@ -184,15 +204,27 @@ const copyPlugin = {
           context.report({ node, message: COPY_IN_COPY_MODULES });
         return {
           Literal(node) {
-            if (typeof node.value === "string" && HANGUL.test(node.value)) {
-              report(node);
-            }
+            if (typeof node.value !== "string") return;
+            if (HANGUL.test(node.value)) report(node);
+            else if (isJsxChild(node) && LETTER.test(node.value)) report(node);
           },
           TemplateElement(node) {
             if (HANGUL.test(node.value.raw)) report(node);
           },
           JSXText(node) {
-            if (HANGUL.test(node.value)) report(node);
+            if (LETTER.test(node.value)) report(node);
+          },
+          JSXAttribute(node) {
+            if (
+              node.name.type === "JSXIdentifier" &&
+              USER_FACING_ATTRIBUTES.has(node.name.name) &&
+              node.value?.type === "Literal" &&
+              typeof node.value.value === "string" &&
+              LETTER.test(node.value.value) &&
+              !HANGUL.test(node.value.value)
+            ) {
+              report(node.value);
+            }
           },
         };
       },
@@ -200,15 +232,13 @@ const copyPlugin = {
   },
 };
 
-/** 문구가 아닌 데이터(글꼴 이름, 샘플 가사, 분위기 태그 값, 개발용 시드)와 조문 본문 */
+/** 문구가 아닌 데이터(글꼴 이름, 샘플 가사, 분위기 태그 값, 개발용 시드) */
 const COPY_EXEMPT_FILES = [
   "src/shared/constants/noonnuFontCatalog.ts",
   "src/shared/constants/noonnuFonts.ts",
   "src/shared/constants/backgrounds.ts",
   "src/shared/constants/devUsers.ts",
   "src/db/seed/devSeed.ts",
-  "src/client/routes/TermsRoute.tsx",
-  "src/client/routes/PrivacyRoute.tsx",
 ];
 
 /**
@@ -303,7 +333,6 @@ export default tseslint.config(
       "src/**/copy/**",
       "**/*.test.{ts,tsx}",
       "src/**/test/**",
-      "src/client/components/ui/**",
       ...COPY_EXEMPT_FILES,
     ],
     plugins: { copy: copyPlugin },

@@ -10,6 +10,7 @@ import {
   type Presentation,
 } from "#shared";
 import { COMMON_COPY } from "#copy/common";
+import { DRIVE_COPY } from "#copy/drive";
 
 /**
  * 드라이브 화면의 파생 데이터 (순수 함수).
@@ -78,8 +79,12 @@ export function parseItemKey(key: string): DriveItemRef {
 /** 목록의 날짜 칸 ("2026. 9. 24.") */
 export function formatDate(iso: string): string {
   const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return "-";
-  return `${date.getFullYear()}. ${date.getMonth() + 1}. ${date.getDate()}.`;
+  if (Number.isNaN(date.getTime())) return DRIVE_COPY.noDate;
+  return DRIVE_COPY.date(
+    date.getFullYear(),
+    date.getMonth() + 1,
+    date.getDate(),
+  );
 }
 
 /** 프레젠테이션이 실제로 놓인 폴더 (사라진 폴더를 가리키면 루트) */

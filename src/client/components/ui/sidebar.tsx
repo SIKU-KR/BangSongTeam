@@ -24,6 +24,7 @@ import {
   TooltipTrigger,
 } from "#components/ui/tooltip"
 import { PanelLeftIcon } from "lucide-react"
+import { COMMON_COPY } from "#copy/common"
 
 const SIDEBAR_COOKIE_NAME = "sidebar_state"
 const SIDEBAR_COOKIE_MAX_AGE = 60 * 60 * 24 * 7
@@ -196,8 +197,8 @@ function Sidebar({
           side={side}
         >
           <SheetHeader className="sr-only">
-            <SheetTitle>사이드바</SheetTitle>
-            <SheetDescription>모바일 사이드바예요.</SheetDescription>
+            <SheetTitle>{COMMON_COPY.sidebar}</SheetTitle>
+            <SheetDescription>{COMMON_COPY.sidebarDescription}</SheetDescription>
           </SheetHeader>
           <div className="flex h-full w-full flex-col">{children}</div>
         </SheetContent>
@@ -272,7 +273,7 @@ function SidebarTrigger({
       {...props}
     >
       <PanelLeftIcon />
-      <span className="sr-only">사이드바 열고 닫기</span>
+      <span className="sr-only">{COMMON_COPY.toggleSidebar}</span>
     </Button>
   )
 }
@@ -284,10 +285,10 @@ function SidebarRail({ className, ...props }: React.ComponentProps<"button">) {
     <button
       data-sidebar="rail"
       data-slot="sidebar-rail"
-      aria-label="사이드바 열고 닫기"
+      aria-label={COMMON_COPY.toggleSidebar}
       tabIndex={-1}
       onClick={toggleSidebar}
-      title="사이드바 열고 닫기"
+      title={COMMON_COPY.toggleSidebar}
       className={cn(
         "absolute inset-y-0 z-20 hidden w-4 transition-all ease-linear group-data-[side=left]:-right-4 group-data-[side=right]:left-0 after:absolute after:inset-y-0 after:start-1/2 after:w-[2px] hover:after:bg-sidebar-border sm:flex ltr:-translate-x-1/2 rtl:-translate-x-1/2",
         "in-data-[side=left]:cursor-w-resize in-data-[side=right]:cursor-e-resize",

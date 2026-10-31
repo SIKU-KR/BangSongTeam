@@ -1,135 +1,18 @@
 "use client";
 
 import React from "react";
-import {
-  LegalDocument,
-  LegalList,
-  LegalSection,
-} from "#components/layout/LegalDocument";
-import {
-  LEGAL_COPY,
-  LEGAL_EFFECTIVE_DATE,
-  OPERATOR_BRAND,
-  OPERATOR_EMAIL,
-  OPERATOR_NAME,
-} from "#copy/auth";
-import { APP_NAME } from "#shared";
+import { LegalBody, LegalDocument } from "#components/layout/LegalDocument";
+import { LEGAL_COPY, LEGAL_EFFECTIVE_DATE } from "#copy/auth";
+import { TERMS_DOCUMENT } from "#copy/legal";
 
-/**
- * 이용약관.
- *
- * 이용 조건과 함께, 프레젠테이션 링크로 보여 주는 내용에 대해 권리자가 요청하면 공유를
- * 중단하는 절차(저작권법 제103조)를 정한다.
- */
+/** 이용약관. 본문은 `TERMS_DOCUMENT`에 있다. */
 export function TermsRoute(): React.JSX.Element {
   return (
     <LegalDocument
       title={LEGAL_COPY.terms}
       effectiveDate={LEGAL_EFFECTIVE_DATE}
     >
-      <LegalSection title="제1조 (목적)">
-        <p>
-          이 약관은 {OPERATOR_BRAND}(운영자 {OPERATOR_NAME}, 이하
-          &lsquo;운영자&rsquo;)가 제공하는 {APP_NAME}(이하
-          &lsquo;서비스&rsquo;)의 이용 조건과 절차, 운영자와 이용자의
-          권리·의무를 정합니다.
-        </p>
-      </LegalSection>
-
-      <LegalSection title="제2조 (서비스 내용)">
-        <p>
-          서비스는 예배용 찬양 가사 슬라이드를 만들고, 프레젠테이션으로 묶어
-          송출하고, 링크로 다른 이용자와 나누는 기능을 무료로 제공합니다.
-        </p>
-      </LegalSection>
-
-      <LegalSection title="제3조 (계정)">
-        <LegalList>
-          <li>
-            카카오·네이버·Google 계정으로 로그인하거나 이메일로 계정을 만든 뒤,
-            이 약관과 개인정보 처리방침에 동의하면 가입됩니다.
-          </li>
-          <li>만 14세 이상만 가입할 수 있습니다.</li>
-          <li>
-            교회 공용 PC 등에서는 사용 후 로그아웃하시기 바랍니다. 계정 관리
-            소홀로 생긴 문제는 이용자에게 책임이 있습니다.
-          </li>
-          <li>
-            이용자는 언제든지 운영자에게 이메일로 회원 탈퇴를 요청할 수
-            있습니다.
-          </li>
-        </LegalList>
-      </LegalSection>
-
-      <LegalSection title="제4조 (게시물과 저작권)">
-        <LegalList>
-          <li>
-            이용자가 입력한 가사와 곡 정보의 저작권은 원저작자에게 있습니다.
-            이용자는 소속 교회의 저작권 라이선스(예: CCLI) 등 정당한 권한 범위
-            안에서 서비스를 이용해야 합니다.
-          </li>
-          <li>
-            가사를 외부 사이트에서 불러오는 경우에도 가사의 저작권은 권리자에게
-            있으며, 이를 이용하는 책임은 이용자에게 있습니다.
-          </li>
-          <li>
-            프레젠테이션 링크로 공유한 내용이 다른 사람의 권리를 침해해 생긴
-            책임은 그 링크를 공유한 이용자에게 있습니다.
-          </li>
-        </LegalList>
-      </LegalSection>
-
-      <LegalSection title="제5조 (권리 침해 신고와 게시 중단)">
-        <p>
-          자신의 저작권 등 권리가 침해되었다고 생각하는 사람은 이메일(
-          <a href={`mailto:${OPERATOR_EMAIL}`}>{OPERATOR_EMAIL}</a>)로 게시
-          중단을 요청할 수 있습니다. 운영자는 요청을 받으면 지체 없이 해당
-          내용을 보여 주는 프레젠테이션 공유 링크를 비활성화합니다.
-        </p>
-      </LegalSection>
-
-      <LegalSection title="제6조 (금지 행위와 이용 제한)">
-        <p>이용자는 다음 행위를 해서는 안 됩니다.</p>
-        <LegalList>
-          <li>다른 사람의 저작권 등 권리를 침해하는 내용 공유</li>
-          <li>음란하거나 폭력적인 내용, 다른 사람을 비방하는 내용 공유</li>
-          <li>다른 사람의 계정을 쓰거나 서비스 운영을 방해하는 행위</li>
-        </LegalList>
-        <p>
-          운영자는 이를 위반한 내용의 공유 링크를 비활성화하거나 계정 이용을
-          제한할 수 있습니다.
-        </p>
-      </LegalSection>
-
-      <LegalSection title="제7조 (서비스 변경과 중단)">
-        <p>
-          서비스는 개인이 무료로 운영합니다. 운영자는 기능을 바꾸거나 서비스를
-          중단할 수 있고, 중단할 때는 30일 전에 서비스 화면에 알립니다. 중요한
-          곡과 프레젠테이션은 이용자가 따로 보관해 두기를 권합니다.
-        </p>
-      </LegalSection>
-
-      <LegalSection title="제8조 (책임 제한)">
-        <p>
-          운영자는 무료로 제공하는 서비스의 이용과 관련해 이용자에게 생긴 손해에
-          대해, 운영자의 고의 또는 중대한 과실이 없는 한 책임을 지지 않습니다.
-        </p>
-      </LegalSection>
-
-      <LegalSection title="제9조 (약관 변경)">
-        <p>
-          약관을 바꾸면 시행 7일 전부터 서비스 화면에 알립니다. 이용자에게
-          불리한 변경은 30일 전부터 알립니다. 바뀐 약관에 동의하지 않으면 회원
-          탈퇴를 요청할 수 있습니다.
-        </p>
-      </LegalSection>
-
-      <LegalSection title="제10조 (준거법과 관할)">
-        <p>
-          이 약관은 대한민국 법에 따르며, 분쟁은 「민사소송법」에 따른 관할
-          법원에서 해결합니다.
-        </p>
-      </LegalSection>
+      <LegalBody document={TERMS_DOCUMENT} />
     </LegalDocument>
   );
 }

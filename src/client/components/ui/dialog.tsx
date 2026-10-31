@@ -4,6 +4,7 @@ import { cn } from "cn"
 
 import { Button } from "#components/ui/button"
 import { XIcon } from "lucide-react"
+import { COMMON_COPY } from "#copy/common"
 
 function Dialog({ ...props }: DialogPrimitive.Root.Props) {
   return <DialogPrimitive.Root data-slot="dialog" {...props} />
@@ -70,7 +71,7 @@ function DialogContent({
           >
             <XIcon
             />
-            <span className="sr-only">닫기</span>
+            <span className="sr-only">{COMMON_COPY.close}</span>
           </DialogPrimitive.Close>
         )}
       </DialogPrimitive.Popup>
@@ -108,7 +109,7 @@ function DialogFooter({
       {children}
       {showCloseButton && (
         <DialogPrimitive.Close render={<Button variant="outline" />}>
-          닫기
+          {COMMON_COPY.close}
         </DialogPrimitive.Close>
       )}
     </div>

@@ -144,8 +144,7 @@ export const EDITOR_COPY = {
     importing: "불러오는 중…",
     pick: "불러올 곡을 골라 주세요",
     empty: "찾은 곡이 없어요. 제목을 확인하거나 가사를 직접 붙여 넣어 주세요.",
-    candidate: (title: string, artist: string) =>
-      artist ? `${title} · ${artist}` : title,
+    candidate: COMMON_COPY.titleWithArtist,
     source: "가사 출처: gasazip.com",
   },
   picker: {
@@ -207,6 +206,8 @@ export const EDITOR_COPY = {
     showMore: (remaining: number) => `더 보기 (${remaining}개 남음)`,
     searchResults: (count: number) => `검색 결과 (${count}개)`,
     fontSize: "글자 크기",
+    fontSizeGlyph: "A",
+    textShadowGlyph: "S",
     fontSizeTooltip: "글자 크기 (pt)",
     fontSizeList: "글자 크기 목록",
     fontSizeUp: "글자 크기 키우기",
@@ -310,6 +311,6 @@ export const SHORTCUT_GUIDE = {
     { keys: "Backspace", action: "입력 중인 마지막 숫자 지우기" },
     { keys: "B / .", action: "블랙아웃 켜기/끄기" },
     { keys: "H", action: "가사 숨기기 (배경 유지)" },
-    { keys: "Esc", action: PRESENTATION_COPY.exit },
+    { keys: PRESENTATION_COPY.exitKey, action: PRESENTATION_COPY.exit },
   ],
 } as const;

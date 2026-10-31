@@ -314,7 +314,7 @@ function ProjectionSession({
           className="text-white/80 hover:bg-white/10 hover:text-white"
         >
           {PRESENTATION_COPY.exit}
-          <Kbd>Esc</Kbd>
+          <Kbd>{PRESENTATION_COPY.exitKey}</Kbd>
         </Button>
       </div>
     </div>
