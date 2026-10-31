@@ -2,13 +2,13 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-A web slide tool for church worship teams: song decks and sets, fullscreen projection over looping video backgrounds, and a public deck library. Next.js (App Router) with a Hono API under `/api`, running as one Cloud Run container on Firestore and Cloud Storage (`docs/deploy-gcp.md`).
+A web slide tool for church worship teams: song decks and sets, fullscreen projection over looping video backgrounds. Next.js (App Router) with a Hono API under `/api`, running as one Cloud Run container on Firestore and Cloud Storage (`docs/deploy-gcp.md`).
 
 ## Workflow
 
 ```bash
 pnpm emulators       # Firestore emulator on :8080 (needs Java 21); keeps data in .data/firestore between runs. Leave it running
-pnpm db:seed:local   # creates .env.local if missing, reseeds dev accounts, the public library, presentations and image backgrounds (.data/media)
+pnpm db:seed:local   # creates .env.local if missing, reseeds dev accounts, presentations and image backgrounds (.data/media)
 pnpm dev             # http://localhost:5173. Sign in with a dev account on the login screen; fill in an OAuth client in .env.local only to test social login
 pnpm build && pnpm start   # production build with the service worker, against the emulator (offline testing)
 
@@ -45,7 +45,7 @@ pnpm test src/db/queries/decks.test.ts     # one file; add `-t "<name>"` for one
 
 - Comments, TSDoc and UI copy are written in Korean. UI copy lives in `src/client/copy/*` (`#copy/*`); server errors, Zod messages and the app name live in `src/shared/copy/*`. Reuse an existing key for the same sentence instead of adding a new one.
 - UI copy follows Toss UX writing: sentences in 해요체 (`~해요`, `~했어요`, `~할까요?`, `~해 주세요`), active and positive; buttons and labels stay noun phrases (`저장`, `사본 만들기`). One or two sentences, no repeating what the title says, no developer terms, and failures say what to do next. `src/client/copy/tone.test.ts` rejects 합니다체; register new copy modules there. The legal pages stay formal.
-- Terms: 프레젠테이션 (not 세트/문서), 곡 (not 찬양곡), 보관함, 공유 라이브러리, 송출.
+- Terms: 프레젠테이션 (not 세트/문서), 곡 (not 찬양곡), 보관함, 송출.
 - No inline comments inside functions, JSX or tests: no restated logic, step numbers, TODOs, commented-out code, or milestone and spec tags (`M5`, `PRD 4.7`, `Task 4.5`). The only exception is a workaround for a third-party or platform constraint, with a reference.
 - Write TSDoc only on exports, and explain why: business rules, side effects, security scoping, invariants. Skip `@param` and `@returns` when they only repeat the types.
 
@@ -60,8 +60,7 @@ pnpm test src/db/queries/decks.test.ts     # one file; add `-t "<name>"` for one
 ### Database (Firestore)
 
 - Collections, document types and typed accessors live in `src/db/collections.ts`; queries in `src/db/queries/`, operator tasks in `src/db/ops/` (run through `scripts/*.mjs`). Store empty values as `null`, never omit the field: `where(field, "==", null)` doesn't match a missing field.
-- Firestore has no foreign keys, CHECK constraints or triggers. A write that used to rely on them does the work itself in the same transaction: deleting a presentation deletes its copies and members (`queries/cascade.ts`), deleting a song clears `forkedFrom`/report `deckId` pointing at it, forking bumps `forkCount`, unknown `backgroundId`s are saved as `null`. Read everything first, then write (a transaction can't read after writing).
-- Every song write passes the final document through `withDeckIndex` (`src/db/deckIndex.ts`). It sets `listed`, the single definition of public scope that every public-library query filters on, and `searchGrams`, the bigram index the library search narrows candidates with.
+- Firestore has no foreign keys, CHECK constraints or triggers. A write that used to rely on them does the work itself in the same transaction: deleting a presentation deletes its copies and members (`queries/cascade.ts`), deleting a song clears `forkedFrom` pointing at it, unknown `backgroundId`s are saved as `null`. Read everything first, then write (a transaction can't read after writing).
 - Queries that order or range over more than one field need a composite index in `firestore.indexes.json` (the emulator doesn't check). Prefer equality filters plus sorting in memory for per-user lists so they need no index.
 - There is no row-level security. Every private query or mutation filters by the session's user id. `firestore.rules` denies all browser access; only the server (service account) reads and writes.
 

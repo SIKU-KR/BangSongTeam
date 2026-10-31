@@ -52,7 +52,7 @@ export function PrivacyRoute(): React.JSX.Element {
           </li>
           <li>
             이용자가 서비스에서 직접 만든 정보: 곡(가사·슬라이드), 프레젠테이션,
-            폴더, 신고 내용
+            폴더
           </li>
           <li>이용 동의 기록: 약관·개인정보 수집·이용에 동의한 시각</li>
         </LegalList>
@@ -62,17 +62,16 @@ export function PrivacyRoute(): React.JSX.Element {
         <LegalList>
           <li>회원 식별과 로그인 유지</li>
           <li>만든 곡과 프레젠테이션을 계정에 저장하고 여러 기기에서 동기화</li>
-          <li>공유 라이브러리와 프레젠테이션 링크 공유 기능 제공</li>
-          <li>신고 처리와 부정 이용 방지</li>
+          <li>프레젠테이션 링크 공유 기능 제공</li>
+          <li>부정 이용 방지</li>
         </LegalList>
       </LegalSection>
 
       <LegalSection title="3. 다른 이용자에게 공개되는 정보">
         <p>
-          곡을 공유 라이브러리에 공개하거나 프레젠테이션 링크를 공유하면
-          이용자의 이름 또는 닉네임이 작성자로 함께 표시됩니다. Google 로그인은
-          Google 계정에 등록된 이름이, 이메일 가입은 가입할 때 입력한 이름이
-          쓰입니다.
+          프레젠테이션 링크를 공유하면 이용자의 이름 또는 닉네임이 작성자로 함께
+          표시됩니다. Google 로그인은 Google 계정에 등록된 이름이, 이메일 가입은
+          가입할 때 입력한 이름이 쓰입니다.
         </p>
       </LegalSection>
 
@@ -81,10 +80,6 @@ export function PrivacyRoute(): React.JSX.Element {
           <li>
             회원 탈퇴를 요청할 때까지 보유하고, 요청을 받으면 지체 없이
             파기합니다.
-          </li>
-          <li>
-            공유 라이브러리에서 다른 이용자가 이미 가져간 곡의 사본은 그
-            이용자의 보관함에 남습니다.
           </li>
           <li>
             전자적 파일은 복구할 수 없는 방법으로 삭제합니다. 이용자의 기기에

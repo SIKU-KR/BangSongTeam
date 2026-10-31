@@ -42,8 +42,7 @@ gcloud firestore backups schedules list --database='(default)'
 ```
 
 Firestore 규칙(`firestore.rules`)은 브라우저 접근을 모두 막는다. 서버는 서비스 계정 자격이라
-규칙을 거치지 않는다. 검색에 쓰는 복합 색인은 `firestore.indexes.json`에 있고 CI가 배포한다.
-처음 배포하면 색인이 만들어지는 몇 분 동안 공유 라이브러리 검색이 실패할 수 있다.
+규칙을 거치지 않는다. 복합 색인은 `firestore.indexes.json`에 있고 CI가 배포한다.
 
 ## 2. 미디어 버킷과 이미지 저장소
 
@@ -306,13 +305,13 @@ gcloud firestore databases restore --source-backup=<백업 이름> --destination
 프레젠테이션이면 그 id, 보관함 곡이면 `deckTombstoneDocId(곡 id)`이고, 기록의 `userId`가 그 사용자일 때만
 지운다. 그다음 폴더는 부모부터 `upsertFolder`, 프레젠테이션은 곡 사본을 모두 담아
 `savePresentationChanges`, 보관함 곡은 `upsertDeck`으로 쓰고, 결과가 `saved`가 아니면 멈춘다. 문서를
-그대로 복사하면 곡 색인(`withDeckIndex`)과 부모 폴더 보정이 빠진다. 다 쓰면
+그대로 복사하면 부모 폴더 보정이 빠진다. 다 쓰면
 `gcloud firestore databases delete --database=restore-1`로 복구본을 지운다.
 
 ## 11. 알림
 
 `infra/monitoring`에 로그 기반 지표(`metrics/`)와 알림 정책(`policies/`)이 있다. 서버 5xx, 컨테이너
-오류·메모리, 클라이언트가 보낸 `server_error` 보고, 새 신고(`report_created`), 프록시 비밀값 불일치
+오류·메모리, 클라이언트가 보낸 `server_error` 보고, 프록시 비밀값 불일치
 (`proxy_secret_mismatch`), 도메인 가동 확인(`/api/health`)을 이메일로 알리고, 월 예산 알림이 없으면
 만든다. 처음 한 번 실행하고, 지표·정책 정의를 바꾸면 다시 실행한다. 지표와 정책은 정의대로 고치고 가동
 확인과 예산은 없을 때만 만들어서, 여러 번 실행해도 같은 결과다.
