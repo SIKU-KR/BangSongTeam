@@ -302,7 +302,10 @@ export function DriveListRow({
       {...dnd.listeners}
       role="option"
       aria-selected={handlers.selected}
-      aria-label={`${isFolder ? DRIVE_COPY.kind.folder : DRIVE_COPY.kind.file} ${item.name}`}
+      aria-label={DRIVE_COPY.itemLabel(
+        isFolder ? DRIVE_COPY.kind.folder : DRIVE_COPY.kind.file,
+        item.name,
+      )}
       tabIndex={handlers.tabStop ? 0 : -1}
       data-testid={isFolder ? "folder-row" : "presentation-row"}
       data-item-key={item.key}
@@ -422,7 +425,7 @@ export function TrashFolderRow({
           {COMMON_COPY.trash}
         </span>
       </div>
-      <span className={COLUMNS.date}>-</span>
+      <span className={COLUMNS.date}>{DRIVE_COPY.noDate}</span>
       <div className={COLUMNS.actions}>
         <RowIconButton
           testId="trash-folder-open-btn"

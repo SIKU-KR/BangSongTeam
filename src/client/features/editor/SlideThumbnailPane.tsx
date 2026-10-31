@@ -735,7 +735,7 @@ function SongHeader({
     id: `song-header:${itemId}`,
     data,
   });
-  const fullTitle = artist ? `${title} · ${artist}` : title;
+  const fullTitle = COMMON_COPY.titleWithArtist(title, artist);
 
   return (
     <div

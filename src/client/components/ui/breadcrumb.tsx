@@ -3,11 +3,12 @@ import { mergeProps } from "@base-ui/react/merge-props"
 import { useRender } from "@base-ui/react/use-render"
 import { cn } from "cn"
 import { ChevronRightIcon, MoreHorizontalIcon } from "lucide-react"
+import { COMMON_COPY } from "#copy/common"
 
 function Breadcrumb({ className, ...props }: React.ComponentProps<"nav">) {
   return (
     <nav
-      aria-label="breadcrumb"
+      aria-label={COMMON_COPY.breadcrumb}
       data-slot="breadcrumb"
       className={cn(className)}
       {...props}
@@ -108,7 +109,7 @@ function BreadcrumbEllipsis({
     >
       <MoreHorizontalIcon
       />
-      <span className="sr-only">더보기</span>
+      <span className="sr-only">{COMMON_COPY.more}</span>
     </span>
   )
 }

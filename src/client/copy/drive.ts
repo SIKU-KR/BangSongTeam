@@ -3,6 +3,10 @@ import { COMMON_COPY } from "./common";
 
 export const DRIVE_COPY = {
   kind: { folder: "폴더", file: "프레젠테이션" },
+  itemLabel: (kind: string, name: string) => `${kind} ${name}`,
+  date: (year: number, month: number, day: number) =>
+    `${year}. ${month}. ${day}.`,
+  noDate: "-",
   newItem: "새로 만들기",
   create: "만들기",
   open: "열기",

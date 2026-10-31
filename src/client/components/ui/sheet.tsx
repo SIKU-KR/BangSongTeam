@@ -6,6 +6,7 @@ import { cn } from "cn"
 
 import { Button } from "#components/ui/button"
 import { XIcon } from "lucide-react"
+import { COMMON_COPY } from "#copy/common"
 
 function Sheet({ ...props }: SheetPrimitive.Root.Props) {
   return <SheetPrimitive.Root data-slot="sheet" {...props} />
@@ -72,7 +73,7 @@ function SheetContent({
           >
             <XIcon
             />
-            <span className="sr-only">닫기</span>
+            <span className="sr-only">{COMMON_COPY.close}</span>
           </SheetPrimitive.Close>
         )}
       </SheetPrimitive.Popup>

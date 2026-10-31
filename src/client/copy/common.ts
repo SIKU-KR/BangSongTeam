@@ -20,6 +20,13 @@ export const COMMON_COPY = {
   newPresentation: "새 프레젠테이션",
   myDrive: "내 드라이브",
   trash: "휴지통",
+  more: "더보기",
+  breadcrumb: "경로",
+  sidebar: "사이드바",
+  sidebarDescription: "모바일 사이드바예요.",
+  toggleSidebar: "사이드바 열고 닫기",
+  titleWithArtist: (title: string, artist?: string | null) =>
+    artist ? `${title} · ${artist}` : title,
 } as const;
 
 export const ERROR_COPY = {

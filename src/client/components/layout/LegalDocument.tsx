@@ -2,6 +2,7 @@ import React from "react";
 import Link from "next/link";
 import { Button } from "#components/ui/button";
 import { LEGAL_COPY } from "#copy/auth";
+import type { LegalDocumentData, LegalText } from "#copy/legal";
 import { APP_NAME } from "#shared";
 
 /** 이용약관·개인정보 처리방침처럼 로그인 없이도 여는 긴 글 화면의 틀 */
@@ -60,4 +61,47 @@ export function LegalList({
   children: React.ReactNode;
 }): React.JSX.Element {
   return <ul className="list-disc space-y-1 pl-5">{children}</ul>;
+}
+
+function LegalTextNode({ text }: { text: LegalText }): React.JSX.Element {
+  if (typeof text === "string") return <>{text}</>;
+  return (
+    <>
+      {text.before}
+      <a href={text.link.href}>{text.link.label}</a>
+      {text.after}
+    </>
+  );
+}
+
+/** 약관·처리방침 데이터(`#copy/legal`)를 소개 문단과 조항 순서대로 그린다 */
+export function LegalBody({
+  document,
+}: {
+  document: LegalDocumentData;
+}): React.JSX.Element {
+  return (
+    <>
+      {document.intro ? <p>{document.intro}</p> : null}
+      {document.sections.map((section) => (
+        <LegalSection key={section.title} title={section.title}>
+          {section.blocks.map((block, index) =>
+            typeof block === "object" && "list" in block ? (
+              <LegalList key={index}>
+                {block.list.map((item, itemIndex) => (
+                  <li key={itemIndex}>
+                    <LegalTextNode text={item} />
+                  </li>
+                ))}
+              </LegalList>
+            ) : (
+              <p key={index}>
+                <LegalTextNode text={block} />
+              </p>
+            ),
+          )}
+        </LegalSection>
+      ))}
+    </>
+  );
 }

@@ -180,7 +180,7 @@ export function LoginRoute({
                     }
                   >
                     {AUTH_COPY.dev.signInAs(dev.name)}
-                    {!dev.termsAgreed && ` · ${AUTH_COPY.dev.consentPending}`}
+                    {!dev.termsAgreed && AUTH_COPY.dev.consentPendingSuffix}
                   </Button>
                 ))}
               </div>
