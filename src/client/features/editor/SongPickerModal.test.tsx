@@ -435,6 +435,92 @@ describe("SongPickerModal", () => {
     });
   });
 
+  describe("목록 화면에서 가사 불러오기", () => {
+    const lyricsCalls = (): string[] =>
+      api.calls
+        .filter((call) => call.path.startsWith("/api/lyrics/"))
+        .map((call) => call.path);
+
+    function typeQuery(value: string) {
+      fireEvent.change(screen.getByTestId("song-picker-search-input"), {
+        target: { value },
+      });
+    }
+
+    it("검색어가 비면 버튼이 막혀 있고, 검색어를 적는 동안에는 서버를 부르지 않는다", () => {
+      renderPicker();
+      const button = screen.getByTestId("song-picker-browse-import-btn");
+
+      expect(button).toBeDisabled();
+      typeQuery("은혜 위에 은혜");
+
+      expect(button).toBeEnabled();
+      expect(lyricsCalls()).toEqual([]);
+    });
+
+    it("검색어로 후보를 찾고, 고르면 가사를 채운 새 곡 폼에서 저장해 추가한다", async () => {
+      renderPicker();
+      typeQuery("은혜 위에 은혜");
+      fireEvent.click(screen.getByTestId("song-picker-browse-import-btn"));
+
+      fireEvent.click(
+        await screen.findByRole("button", { name: "은혜 위에 은혜 · 해준" }),
+      );
+
+      await waitFor(() =>
+        expect(
+          screen.getByTestId("song-picker-create-lyrics-input"),
+        ).toHaveValue("어두워진 나의 눈\n바라 볼 수 없네\n은혜 위에 은혜"),
+      );
+      expect(screen.getByTestId("song-picker-create-title-input")).toHaveValue(
+        "은혜 위에 은혜",
+      );
+      expect(screen.getByTestId("song-picker-create-artist-input")).toHaveValue(
+        "해준",
+      );
+      const search = api.calls.find((c) => c.path === "/api/lyrics/search");
+      expect(new URLSearchParams(search?.search).get("title")).toBe(
+        "은혜 위에 은혜",
+      );
+
+      fireEvent.click(screen.getByTestId("song-picker-create-submit-btn"));
+
+      await waitFor(() => expect(onSelectSongMock).toHaveBeenCalledTimes(1));
+      expect(onSelectSongMock.mock.calls[0][0]).toMatchObject({
+        title: "은혜 위에 은혜",
+        artist: "해준",
+      });
+    });
+
+    it("보관함에 맞는 곡이 없으면 빈 상태에서도 불러올 수 있다", async () => {
+      seedMySong();
+      renderPicker();
+      typeQuery("없는 노래");
+      fireEvent.click(screen.getByTestId("song-picker-empty-import-btn"));
+
+      expect(
+        await screen.findByTestId("song-picker-lyrics-import-empty"),
+      ).toHaveTextContent(EDITOR_COPY.lyricsImport.empty);
+    });
+
+    it("새 가사 입력으로 바로 가면 불러온 가사 없이 빈 폼을 연다", async () => {
+      renderPicker();
+      typeQuery("은혜 위에 은혜");
+      fireEvent.click(screen.getByTestId("song-picker-browse-import-btn"));
+      fireEvent.click(
+        await screen.findByRole("button", { name: "은혜 위에 은혜 · 해준" }),
+      );
+      await screen.findByTestId("song-picker-create-lyrics-input");
+
+      fireEvent.click(screen.getByTestId("song-picker-switch-create-btn"));
+      fireEvent.click(screen.getByTestId("song-picker-switch-create-btn"));
+
+      expect(screen.getByTestId("song-picker-create-lyrics-input")).toHaveValue(
+        "",
+      );
+    });
+  });
+
   describe("initialMode", () => {
     it("create로 열면 목록 대신 가사 직접 입력 폼을 바로 보여 준다", () => {
       seedMySong();

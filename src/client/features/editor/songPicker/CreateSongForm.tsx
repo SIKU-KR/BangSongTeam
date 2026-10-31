@@ -22,6 +22,8 @@ export interface CreateSongValues {
 
 interface CreateSongFormProps {
   initialTitle?: string;
+  initialArtist?: string;
+  initialLyrics?: string;
   onCancel: () => void;
   onSubmit: (values: CreateSongValues) => void;
 }
@@ -29,19 +31,25 @@ interface CreateSongFormProps {
 /**
  * 새 곡 가사 직접 입력 폼.
  *
- * 제목·아티스트·가사 칸은 곡 한도까지만 받는다. 검색어로 채운 제목도 한도로 줄여서 시작한다.
+ * 제목·아티스트·가사 칸은 곡 한도까지만 받는다. 검색어나 불러온 가사로 채운 초깃값도 한도로 줄여서 시작한다.
  * 브라우저는 한도를 넘게 붙여 넣은 가사를 말없이 잘라 내므로, 가사가 한도에 이르면 안내를 띄운다.
  */
 export function CreateSongForm({
   initialTitle = "",
+  initialArtist = "",
+  initialLyrics = "",
   onCancel,
   onSubmit,
 }: CreateSongFormProps): React.JSX.Element {
   const [title, setTitle] = useState(() =>
     clampText(initialTitle, MAX_DECK_TITLE_LENGTH),
   );
-  const [artist, setArtist] = useState("");
-  const [lyrics, setLyrics] = useState("");
+  const [artist, setArtist] = useState(() =>
+    clampText(initialArtist, MAX_DECK_ARTIST_LENGTH),
+  );
+  const [lyrics, setLyrics] = useState(() =>
+    clampText(initialLyrics, MAX_LYRICS_LENGTH),
+  );
 
   const previewSlides = useMemo(
     () => (lyrics.trim() ? splitLyricsIntoSlides(lyrics) : []),

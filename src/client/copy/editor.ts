@@ -156,6 +156,7 @@ export const EDITOR_COPY = {
     searchPlaceholder: "곡 제목, 아티스트, 가사로 검색",
     showList: "목록 보기",
     createNew: (query: string) => `${query ? `‘${query}’ ` : ""}새 곡으로 등록`,
+    importLyrics: (query: string) => `‘${query}’ 가사 불러오기`,
     selectSong: "곡을 선택해 주세요.",
     editLibraryTitle: "보관함 곡 정보 수정",
     editNotice: "프레젠테이션에 이미 넣은 곡은 바뀌지 않아요.",
