@@ -10,7 +10,7 @@ import {
   clampText,
   splitLyricsIntoSlides,
 } from "#shared";
-import { ExternalSearchLinks } from "../ExternalSearchLinks";
+import { LyricsImport } from "./LyricsImport";
 import { EDITOR_COPY } from "#copy/editor";
 import { COMMON_COPY } from "#copy/common";
 
@@ -91,11 +91,18 @@ export function CreateSongForm({
         </Field>
       </div>
 
-      {title.trim() && (
-        <div className="pt-1">
-          <ExternalSearchLinks title={title} />
-        </div>
-      )}
+      <div className="pt-1">
+        <LyricsImport
+          title={title}
+          artist={artist}
+          onImport={(imported) => {
+            setLyrics(imported.lyrics);
+            if (!artist.trim()) {
+              setArtist(clampText(imported.artist, MAX_DECK_ARTIST_LENGTH));
+            }
+          }}
+        />
+      </div>
 
       <Field className="min-h-56 flex-1">
         <FieldLabel htmlFor={`${fieldId}-lyrics`}>

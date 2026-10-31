@@ -6,6 +6,7 @@ export * from "./presentation";
 export * from "./folder";
 export * from "./media";
 export * from "./library";
+export * from "./lyrics";
 export * from "./api";
 export * from "./presentationShare";
 export * from "./projection";

@@ -139,13 +139,15 @@ export const EDITOR_COPY = {
     noSongs: EMPTY_SONGS,
     addSongHint: "아래에서 곡을 추가해 보세요.",
   },
-  externalSearch: {
-    label: "가사 검색:",
-    melon: "멜론",
-    bugs: "벅스",
-    find: (site: string) => `${site}에서 찾기`,
-    search: (site: string, query: string) => `${site}에서 ‘${query}’ 검색`,
-    needTitle: "곡 제목을 먼저 입력해 주세요",
+  lyricsImport: {
+    button: "가사 불러오기",
+    searching: "찾는 중…",
+    importing: "불러오는 중…",
+    pick: "불러올 곡을 골라 주세요",
+    empty: "찾은 곡이 없어요. 제목을 확인하거나 가사를 직접 붙여 넣어 주세요.",
+    candidate: (title: string, artist: string) =>
+      artist ? `${title} · ${artist}` : title,
+    source: "가사 출처: gasazip.com",
   },
   picker: {
     filters: { all: COMMON_COPY.all, mine: "내 곡", shared: "공유 곡" },

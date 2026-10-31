@@ -3,7 +3,6 @@ import { CheckIcon } from "lucide-react";
 import { Badge } from "#components/ui/badge";
 import { Button } from "#components/ui/button";
 import type { Deck, PublicDeckSummary } from "#shared";
-import { ExternalSearchLinks } from "../ExternalSearchLinks";
 import { LyricsViewer } from "./LyricsViewer";
 import { LibraryShareControls } from "../../sharing/LibraryShareControls";
 import { usePublicDeck } from "../../../lib/api/catalogQueries";
@@ -120,7 +119,6 @@ function PreviewHeader({
         </div>
         <p className="mt-0.5 text-xs text-muted-foreground">{meta}</p>
       </div>
-      <ExternalSearchLinks title={title} />
     </div>
   );
 }

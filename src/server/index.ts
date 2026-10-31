@@ -18,6 +18,7 @@ import { createFoldersRoute } from "./routes/folders";
 import { createDecksRoute } from "./routes/decks";
 import { createCatalogRoute } from "./routes/catalog";
 import { createReportsRoute } from "./routes/reports";
+import { createLyricsRoute } from "./routes/lyrics";
 import { createShareRoute } from "./routes/share";
 import { createBackgroundsRoute } from "./routes/backgrounds";
 import { createMediaRoute } from "./routes/media";
@@ -71,6 +72,7 @@ export function createApp(deps: AppDeps = {}) {
     .route("/api/decks", createDecksRoute(deps))
     .route("/api/catalog", createCatalogRoute(deps))
     .route("/api/reports", createReportsRoute(deps))
+    .route("/api/lyrics", createLyricsRoute(deps))
     .route("/api/share", createShareRoute(deps))
     .route("/api/backgrounds", createBackgroundsRoute())
     .route("/api/media", createMediaRoute());
