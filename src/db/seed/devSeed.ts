@@ -1,12 +1,7 @@
-import { FieldValue } from "@google-cloud/firestore";
 import {
   cycleItem,
   DEFAULT_DECK_STYLE,
   DEV_USERS,
-  MAX_DECK_ARTIST_LENGTH,
-  MAX_DECK_TITLE_LENGTH,
-  OFFICIAL_LIBRARY_NAME,
-  OFFICIAL_LIBRARY_USER_ID,
   splitLyricsIntoSlides,
   type Deck,
   type DeckStyle,
@@ -18,29 +13,80 @@ import {
   backgroundsCol,
   COLLECTIONS,
   chunkIds,
-  decksCol,
   signUpQuotasCol,
   usersCol,
-  type DeckDoc,
 } from "../collections";
-import { withDeckIndex } from "../deckIndex";
 import {
   joinByToken,
-  libraryDeckDefaults,
-  setDeckVisibility,
   setLinkAccess,
-  toDeckContent,
   upsertDeck,
   upsertFolder,
   upsertPresentationDocument,
 } from "../queries";
 
-/** `data/cleaned/*.json`의 곡 한 개 */
+/** 개발용 곡 한 개 */
 export interface SeedSong {
   title: string;
-  artist?: string | null;
+  artist: string;
   lyrics: string;
 }
+
+/**
+ * 시드 계정의 보관함 곡. 화면을 확인하려고 이 저장소에서 지어 쓴 짧은 가사라, 실제 찬양곡의
+ * 가사를 담지 않는다. 앞의 `OWNER_SONG_COUNT`곡은 `DEV_USERS[0]`, 나머지는 `DEV_USERS[1]`의 곡이다.
+ */
+export const SEED_SONGS: readonly SeedSong[] = [
+  {
+    title: "새벽을 여는 노래",
+    artist: "개발용 찬양팀",
+    lyrics:
+      "어둠이 걷히는 이 아침에\n작은 목소리로 노래해요\n\n고요한 마음에 빛이 들어\n오늘도 걸어갈 힘을 얻어요\n\n새벽을 여는 노래\n함께 부르며 일어나요",
+  },
+  {
+    title: "들꽃처럼",
+    artist: "개발용 찬양팀",
+    lyrics:
+      "길가에 핀 작은 들꽃처럼\n바람에 흔들려도 웃어요\n\n돌보시는 손길 안에서\n한 송이 꽃으로 피어나요",
+  },
+  {
+    title: "함께 걷는 길",
+    artist: "시드 밴드",
+    lyrics:
+      "멀고 먼 길이라도 괜찮아요\n손을 잡고 함께 걸어요\n\n지친 어깨 서로 기대며\n한 걸음씩 나아가요\n\n함께 걷는 이 길 위에\n노래가 끊이지 않아요",
+  },
+  {
+    title: "고요한 저녁",
+    artist: "",
+    lyrics:
+      "해가 지는 언덕 위에서\n오늘을 돌아보아요\n\n감사한 일 하나 둘 세며\n고요히 쉼을 얻어요",
+  },
+  {
+    title: "작은 등불",
+    artist: "시드 밴드",
+    lyrics:
+      "작은 등불 하나 켜 들고\n어두운 골목을 비춰요\n\n나눌수록 밝아지는 빛\n이웃의 창가에 닿아요",
+  },
+  {
+    title: "샘물 같은 은혜",
+    artist: "개발용 찬양팀",
+    lyrics:
+      "메마른 땅에 샘이 솟듯\n내 마음에 기쁨이 넘쳐요\n\n날마다 새로운 아침\n감사의 노래 드려요",
+  },
+  {
+    title: "주일 아침",
+    artist: "연습용",
+    lyrics:
+      "종소리 울리는 주일 아침\n모두 모여 노래해요\n\n어린아이부터 어른까지\n한 목소리로 높여요",
+  },
+  {
+    title: "바다 건너",
+    artist: "연습용",
+    lyrics:
+      "바다 건너 먼 곳까지\n이 노래가 퍼져 가요\n\n파도 위에 실린 소망\n모든 이에게 닿아요",
+  },
+];
+
+const OWNER_SONG_COUNT = 6;
 
 /**
  * `data/backgrounds/dev/`의 이미지 배경 한 장. 미디어 객체(`key`)는 호출자가 먼저 올린다.
@@ -55,7 +101,6 @@ export interface SeedBackground {
 }
 
 export interface DevSeedInput {
-  songs: readonly SeedSong[];
   backgrounds: readonly SeedBackground[];
 }
 
@@ -67,18 +112,9 @@ export interface DevSeedSummary {
   shareToken: string | null;
 }
 
-/**
- * 공유 라이브러리 곡을 올린 계정. `scripts/seedSelected.mjs`가 운영 Firestore에 쓰는 봇 계정과
- * 같은 id라 로컬 라이브러리가 운영과 같은 작성자로 보이고 공식 곡으로 표시된다.
- */
-export const SEED_LIBRARY_USER = {
-  id: OFFICIAL_LIBRARY_USER_ID,
-  name: OFFICIAL_LIBRARY_NAME,
-  email: "library@worship.local",
-} as const;
-
 const [OWNER, MEMBER] = DEV_USERS;
-const SEED_USER_IDS = [SEED_LIBRARY_USER.id, ...DEV_USERS.map((u) => u.id)];
+const RETIRED_LIBRARY_USER_ID = "bot-seed-official-lib";
+const SEED_USER_IDS = [RETIRED_LIBRARY_USER_ID, ...DEV_USERS.map((u) => u.id)];
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 /**
@@ -111,25 +147,25 @@ function serviceTitle(serviceDate: string, suffix: string): string {
   return `${month}월 ${day}일 ${suffix}`;
 }
 
-function toLibraryDeck(song: SeedSong, index: number, now: Date): Deck {
+function toLibraryDeck(
+  song: SeedSong,
+  id: string,
+  userId: string,
+  now: Date,
+): Deck {
   return {
-    id: seedId("lib", index),
-    userId: SEED_LIBRARY_USER.id,
+    id,
+    userId,
     scope: "library",
     presentationId: null,
-    title: song.title.trim().slice(0, MAX_DECK_TITLE_LENGTH) || "제목 없음",
-    artist: (song.artist ?? "").trim().slice(0, MAX_DECK_ARTIST_LENGTH),
-    lyricsRaw: song.lyrics.trim(),
+    title: song.title,
+    artist: song.artist,
+    lyricsRaw: song.lyrics,
     slides: splitLyricsIntoSlides(song.lyrics),
     backgroundId: null,
     style: { ...DEFAULT_DECK_STYLE },
-    visibility: "public",
     forkedFrom: null,
-    forkCount: 0,
-    origin: "user",
     forkedFromAuthorName: null,
-    publishedAt: iso(now, 30),
-    takedownAt: null,
     createdAt: iso(now, 30),
     updatedAt: iso(now, 30),
   };
@@ -145,15 +181,11 @@ async function resetSeedUsers(db: Db): Promise<void> {
     COLLECTIONS.driveTombstones,
     COLLECTIONS.sessions,
     COLLECTIONS.accounts,
-    COLLECTIONS.userQuotas,
   ];
   const snapshots = await Promise.all(
-    chunkIds(SEED_USER_IDS).flatMap((ids) => [
-      ...owned.map((name) =>
-        db.collection(name).where("userId", "in", ids).get(),
-      ),
-      db.collection(COLLECTIONS.reports).where("reporterId", "in", ids).get(),
-    ]),
+    chunkIds(SEED_USER_IDS).flatMap((ids) =>
+      owned.map((name) => db.collection(name).where("userId", "in", ids).get()),
+    ),
   );
   await runBulk(db, (writer) => [
     ...snapshots.flatMap((snapshot) =>
@@ -197,69 +229,23 @@ async function upsertBackgrounds(
 }
 
 async function insertUsers(db: Db, now: Date): Promise<void> {
-  const users = [
-    {
-      ...SEED_LIBRARY_USER,
-      termsAgreedAt: now,
-    },
-    ...DEV_USERS.map((dev) => ({
-      id: dev.id,
-      name: dev.name,
-      email: dev.email,
-      termsAgreedAt: dev.termsAgreed ? now : null,
-    })),
-  ];
+  const users = DEV_USERS.map((dev) => ({
+    id: dev.id,
+    name: dev.name,
+    email: dev.email,
+    termsAgreedAt: dev.termsAgreed ? now : null,
+  }));
   await runBulk(db, (writer) =>
     users.map((user) =>
       writer.set(usersCol(db).doc(user.id), {
         ...user,
         emailVerified: true,
         image: null,
-        bannedAt: null,
         createdAt: now,
         updatedAt: now,
       }),
     ),
   );
-}
-
-function toLibraryDoc(deck: Deck): DeckDoc {
-  return withDeckIndex({
-    ...libraryDeckDefaults(deck.id, deck.userId),
-    ...toDeckContent(deck),
-    visibility: deck.visibility,
-    publishedAt: deck.publishedAt ? new Date(deck.publishedAt) : null,
-  });
-}
-
-async function insertLibrary(db: Db, library: Deck[]): Promise<void> {
-  await runBulk(db, (writer) =>
-    library.map((deck) =>
-      writer.set(decksCol(db).doc(deck.id), toLibraryDoc(deck)),
-    ),
-  );
-}
-
-/** 고정 id로 가져온 곡을 만들고 원본의 가져간 횟수를 올린다 (`forkPublicDeck`과 같은 결과) */
-async function insertFork(
-  db: Db,
-  userId: string,
-  source: Deck,
-  authorName: string,
-  n: number,
-): Promise<void> {
-  const fork = withDeckIndex({
-    ...libraryDeckDefaults(seedId("fork", n), userId),
-    ...toDeckContent(source),
-    forkedFrom: source.id,
-    forkedFromAuthorName: authorName,
-  });
-  const batch = db.batch();
-  batch.set(decksCol(db).doc(fork.id), fork);
-  batch.update(decksCol(db).doc(source.id), {
-    forkCount: FieldValue.increment(1),
-  });
-  await batch.commit();
 }
 
 const OWNER_STYLES: DeckStyle[] = [
@@ -294,13 +280,14 @@ const OWNER_STYLES: DeckStyle[] = [
 ];
 
 /**
- * 로컬 Firestore(에뮬레이터)에 개발용 데이터를 만든다. 시드 계정(`SEED_LIBRARY_USER`, `DEV_USERS`)만
- * 지우고 다시 만들며, OAuth로 로그인해 생긴 다른 계정의 데이터는 건드리지 않는다.
+ * 로컬 Firestore(에뮬레이터)에 개발용 데이터를 만든다. 시드 계정(`DEV_USERS`)만 지우고 다시
+ * 만들며, OAuth로 로그인해 생긴 다른 계정의 데이터는 건드리지 않는다. 예전 시드가 만든 공유
+ * 라이브러리 계정과 그 곡도 함께 지운다.
  *
  * 곡·폴더·세트는 앱의 저장 쿼리(`upsertDeck`, `upsertFolder`,
  * `upsertPresentationDocument` …)로 넣어 편집기에서 만든 데이터와 같은 모양이 되게 한다.
- * id는 모두 `seedId`로 고정한다. 가져온 곡은 `forkPublicDeck`이 새 id를 만들어서
- * 직접 넣는다.
+ * id는 모두 `seedId`로 고정한다. 보관함 곡은 `SEED_SONGS`로 만들고, 프레젠테이션의 곡은 그
+ * 계정의 보관함 곡을 담은 사본이다.
  *
  * 배경은 repo에 든 가벼운 이미지(`SeedBackground`)만 등록하고 곡에 입힌다. 운영 배경
  * 영상은 수 GB라 로컬 미디어 저장소에 올리지 않는다.
@@ -310,57 +297,31 @@ const OWNER_STYLES: DeckStyle[] = [
  */
 export async function seedDevData(
   db: Db,
-  { songs, backgrounds: seedBackgrounds }: DevSeedInput,
+  { backgrounds: seedBackgrounds }: DevSeedInput,
   now: Date = new Date(),
 ): Promise<DevSeedSummary> {
-  if (songs.length === 0) throw new Error("시드할 곡이 없습니다");
-
   await Promise.all([resetSeedUsers(db), clearSignUpQuotas(db)]);
   await insertUsers(db, now);
-
-  const library = songs.map((song, index) => toLibraryDeck(song, index, now));
-  await insertLibrary(db, library);
 
   const backgroundIds = await upsertBackgrounds(db, seedBackgrounds, now);
   const backgroundAt = (n: number): string | null =>
     cycleItem(backgroundIds, n) ?? null;
-  const libraryAt = (n: number): Deck =>
-    library[(n * 97) % library.length] as Deck;
 
-  for (let n = 0; n < 6; n++) {
-    await upsertDeck(db, OWNER.id, {
-      ...libraryAt(n),
-      id: seedId("deck", n),
-      userId: OWNER.id,
-      backgroundId: backgroundAt(n),
-      style: OWNER_STYLES[n % OWNER_STYLES.length] as DeckStyle,
-      visibility: "private",
-      publishedAt: null,
-      createdAt: iso(now, 20 - n),
-      updatedAt: iso(now, 10 - n),
-    });
-  }
-  const published = await setDeckVisibility(
-    db,
-    OWNER.id,
-    seedId("deck", 0),
-    "public",
+  const ownerLibrary = SEED_SONGS.slice(0, OWNER_SONG_COUNT).map((song, n) => ({
+    ...toLibraryDeck(song, seedId("deck", n), OWNER.id, now),
+    backgroundId: backgroundAt(n),
+    style: OWNER_STYLES[n % OWNER_STYLES.length] as DeckStyle,
+    createdAt: iso(now, 20 - n),
+    updatedAt: iso(now, 10 - n),
+  }));
+  const memberLibrary = SEED_SONGS.slice(OWNER_SONG_COUNT).map((song, n) =>
+    toLibraryDeck(song, seedId("deck", 100 + n), MEMBER.id, now),
   );
-  await insertFork(db, OWNER.id, libraryAt(10), SEED_LIBRARY_USER.name, 0);
-  await insertFork(db, OWNER.id, libraryAt(11), SEED_LIBRARY_USER.name, 1);
-  if (published.status === "ok") {
-    await insertFork(db, MEMBER.id, published.deck, OWNER.name, 2);
+  for (const deck of [...ownerLibrary, ...memberLibrary]) {
+    await upsertDeck(db, deck.userId, deck);
   }
-
-  for (let n = 0; n < 2; n++) {
-    await upsertDeck(db, MEMBER.id, {
-      ...libraryAt(20 + n),
-      id: seedId("deck", 100 + n),
-      userId: MEMBER.id,
-      visibility: "private",
-      publishedAt: null,
-    });
-  }
+  const libraryOf = (userId: string): Deck[] =>
+    userId === OWNER.id ? ownerLibrary : memberLibrary;
 
   const folderSpecs: Array<{
     n: number;
@@ -418,7 +379,7 @@ export async function seedDevData(
       title: "청년부 금요기도회",
       serviceDate: sunday(now, 0),
       folder: 2,
-      songs: [7, 8, 9],
+      songs: [5, 0, 3],
     },
     {
       n: 3,
@@ -426,7 +387,7 @@ export async function seedDevData(
       title: "성탄 전야 찬양제",
       serviceDate: sunday(now, 8),
       folder: null,
-      songs: Array.from({ length: 12 }, (_, i) => 30 + i),
+      songs: Array.from({ length: 12 }, (_, i) => i),
     },
     {
       n: 4,
@@ -442,7 +403,7 @@ export async function seedDevData(
       title: serviceTitle(sunday(now, -1), "주일예배"),
       serviceDate: sunday(now, -1),
       folder: null,
-      songs: [12, 13],
+      songs: [1, 4],
       trashed: true,
     },
     {
@@ -451,7 +412,7 @@ export async function seedDevData(
       title: "찬양팀 연습",
       serviceDate: sunday(now, 0),
       folder: null,
-      songs: [14, 15],
+      songs: [0, 1],
     },
   ];
   for (const spec of presentationSpecs) {
@@ -466,7 +427,8 @@ export async function seedDevData(
       createdAt: iso(now, 14 - spec.n),
       updatedAt: iso(now, 7 - spec.n),
       items: spec.songs.map((song, order) => {
-        const source = libraryAt(song);
+        const library = libraryOf(spec.owner);
+        const source = library[song % library.length] as Deck;
         const seq = itemSeq++;
         return {
           id: seedId("item", seq),
@@ -480,9 +442,7 @@ export async function seedDevData(
             scope: "presentation",
             presentationId,
             backgroundId: backgroundAt(seq),
-            visibility: "private",
             forkedFrom: source.id,
-            publishedAt: null,
           },
         };
       }),
@@ -494,7 +454,7 @@ export async function seedDevData(
   if (share?.token) await joinByToken(db, share.token, MEMBER.id);
 
   return {
-    libraryDecks: library.length,
+    libraryDecks: ownerLibrary.length + memberLibrary.length,
     backgrounds: backgroundIds.length,
     folders: folderSpecs.length,
     presentations: presentationSpecs.length,

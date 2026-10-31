@@ -52,9 +52,7 @@ function makeDeck(userId: string, overrides: Partial<Deck> = {}): Deck {
     slides: [{ id: "s1", order: 0, lines: ["시작됐네"] }],
     backgroundId: null,
     style: { ...DEFAULT_DECK_STYLE, overlayOpacity: 65 },
-    visibility: "private",
     forkedFrom: null,
-    forkCount: 0,
     createdAt: "2026-09-20T00:00:00.000Z",
     updatedAt: "2026-09-21T00:00:00.000Z",
     ...overrides,
@@ -333,40 +331,56 @@ describe("동기화 라우트 교차 사용자 격리", () => {
     expect(aList.decks[0].title).toBe("은혜로다");
   });
 
-  it("세트 복제본은 공개로 보내도 비공개로 저장되고 검색 인덱스에 들어가지 않는다", async () => {
-    const doc = makeDoc(USER_A);
-    doc.items[0].deck = makeDeck(USER_A, {
+  it("옛 클라이언트가 곡에 실어 보낸 공유 라이브러리 필드는 저장하지 않는다", async () => {
+    const legacy = {
       visibility: "public",
       forkCount: 999,
+      origin: "fork",
       publishedAt: "2026-09-22T00:00:00.000Z",
-    });
+      takedownAt: null,
+    };
+    const doc = makeDoc(USER_A);
+    doc.items[0].deck = { ...makeDeck(USER_A), ...legacy } as Deck;
     expect(
       (await app.request(`/api/presentations/${DOC_ID}`, json(doc), env))
         .status,
     ).toBe(200);
+    const libraryDeck = {
+      ...makeDeck(USER_A, {
+        id: LIB_DECK_ID,
+        scope: "library",
+        presentationId: null,
+      }),
+      ...legacy,
+    } as Deck;
+    expect(
+      (await app.request(`/api/decks/${LIB_DECK_ID}`, json(libraryDeck), env))
+        .status,
+    ).toBe(200);
 
-    const row = (await decksCol(env.DB).doc(DECK_ID).get()).data();
-    expect(row).toMatchObject({
-      visibility: "private",
-      forkCount: 0,
-      publishedAt: null,
-      listed: false,
-      searchGrams: [],
-    });
+    for (const id of [DECK_ID, LIB_DECK_ID]) {
+      const row = (await decksCol(env.DB).doc(id).get()).data();
+      for (const key of [...Object.keys(legacy), "listed", "searchGrams"]) {
+        expect(row, id).not.toHaveProperty(key);
+      }
+    }
   });
 
-  it("보관함 PUT으로는 공개·가져간 횟수를 바꿀 수 없다", async () => {
+  it("보관함 PUT으로는 가져온 곡 정보를 정하지 못한다", async () => {
     const libraryDeck = makeDeck(USER_A, {
       id: LIB_DECK_ID,
       scope: "library",
       presentationId: null,
-      visibility: "public",
-      forkCount: 999,
+      forkedFrom: DECK_ID,
+      forkedFromAuthorName: "다른 사람",
     });
     await app.request(`/api/decks/${LIB_DECK_ID}`, json(libraryDeck), env);
 
     const row = (await decksCol(env.DB).doc(LIB_DECK_ID).get()).data();
-    expect(row).toMatchObject({ visibility: "private", forkCount: 0 });
+    expect(row).toMatchObject({
+      forkedFrom: null,
+      forkedFromAuthorName: null,
+    });
   });
 
   it("본문의 userId가 세션 사용자와 다르면 403으로 거절하고 어느 계정에도 만들지 않는다", async () => {
@@ -461,19 +475,6 @@ describe("동기화 라우트 교차 사용자 격리", () => {
       const again = await putDeck(libraryDeck());
       expect(again.status).toBe(410);
       expect(await again.json()).toEqual({ error: API_ERRORS.deck.deleted });
-
-      for (const visibility of [
-        { visibility: "public", acceptedCopyrightNotice: true },
-        { visibility: "private" },
-      ]) {
-        const res = await app.request(
-          `/api/decks/${LIB_DECK_ID}/visibility`,
-          patchJson(visibility),
-          env,
-        );
-        expect(res.status).toBe(410);
-        expect(await res.json()).toEqual({ error: API_ERRORS.deck.deleted });
-      }
 
       expect(await listDecks()).toEqual({
         decks: [],
@@ -614,29 +615,6 @@ describe("동기화 라우트 교차 사용자 격리", () => {
       expect(await late.json()).toEqual(stored);
       expect(stored.deck.title).toBe("새 제목");
     });
-
-    it("공개 중인 곡을 슬라이드 없이 PUT하면 400이고 공개 곡은 그대로다", async () => {
-      await seedDocs(env.DB, {
-        users: [userDoc({ id: USER_A, name: "A", termsAgreedAt: new Date() })],
-      });
-      expect((await putDeck(libraryDeck())).status).toBe(200);
-      const publish = await app.request(
-        `/api/decks/${LIB_DECK_ID}/visibility`,
-        patchJson({ visibility: "public", acceptedCopyrightNotice: true }),
-        env,
-      );
-      expect(publish.status).toBe(200);
-
-      const res = await putDeck(
-        libraryDeck({ slides: [], updatedAt: "2026-09-22T00:00:00.000Z" }),
-      );
-
-      expect(res.status).toBe(400);
-      expect(await res.json()).toEqual({ error: API_ERRORS.deck.noSlides });
-      const row = (await decksCol(env.DB).doc(LIB_DECK_ID).get()).data();
-      expect(row).toMatchObject({ visibility: "public", listed: true });
-      expect(JSON.parse(row?.slides ?? "[]")).toHaveLength(1);
-    });
   });
 
   describe("2-기기 왕복", () => {
@@ -684,9 +662,7 @@ describe("동기화 라우트 교차 사용자 격리", () => {
                 overlayOpacity: 40 + index * 5,
                 fontSizeVw: 4 + index * 0.2,
               },
-              visibility: "private",
               forkedFrom: null,
-              forkCount: 0,
               createdAt: "2026-09-20T00:00:00.000Z",
               updatedAt: "2026-09-21T00:00:00.000Z",
             },

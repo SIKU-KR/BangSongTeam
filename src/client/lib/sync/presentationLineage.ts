@@ -11,6 +11,12 @@ const HEADER_EXCLUDED = new Set([
   "access",
 ]);
 const ITEM_EXCLUDED = new Set(["presentationId", "deckId", "order"]);
+/**
+ * 곡 지문에서 빼는 필드. `visibility`·`forkCount`·`origin`·`publishedAt`·`takedownAt`은 공유
+ * 라이브러리를 걷어내기 전 판의 필드라 지금 `Deck`에는 없지만, 캐시된 옛 판이 쓴 저장본과 계보에는
+ * 남아 있다. 그대로 두어야 옛 저장본과 지금 문서의 지문이 같게 나와 같은 판을 다른 판으로 보지
+ * 않는다.
+ */
 const DECK_EXCLUDED = new Set([
   "userId",
   "scope",

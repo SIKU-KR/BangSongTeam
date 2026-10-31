@@ -15,7 +15,7 @@
  * 데이터까지 지우기 위해서다. 로컬 에뮬레이터는 기다리지 않는다. 끝나면 남은 데이터를 다시 세고,
  * 남았으면 1로 끝난다. 중간에 멈춰도 같은 명령을 다시 실행하면 이어서 지운다.
  *
- * 다른 사용자가 가져간 곡은 그 사람의 것이라 남기고 원본 연결만 끊는다. 게시 중단 운영 기록은 남긴다.
+ * 다른 사용자가 가져간 곡은 그 사람의 것이라 남기고 원본 연결만 끊는다.
  * `--target=remote`는 세기만 하더라도 주인에게 먼저 확인받는다.
  */
 
@@ -44,8 +44,6 @@ const LABELS = {
   folders: "폴더",
   memberships: "링크로 들어간 다른 사람의 프레젠테이션",
   tombstones: "영구 삭제 기록",
-  reports: "낸 신고 (신고 내용은 남기고 신고자만 비움)",
-  quotas: "하루 한도 기록",
   forksByOthers: "다른 사용자가 가져간 곡 (남기고 연결만 끊음)",
 };
 
@@ -72,14 +70,10 @@ async function main() {
   applyTarget(target);
   await assertEmulatorUp();
 
-  const [{ getFirestore }, ops, shared] = await Promise.all([
+  const [{ getFirestore }, ops] = await Promise.all([
     importSource("src/db/client.ts"),
     importSource("src/db/ops/deleteUser.ts"),
-    importSource("src/shared/index.ts"),
   ]);
-  if (userId === shared.OFFICIAL_LIBRARY_USER_ID) {
-    throw new Error("공식 라이브러리 계정은 지울 수 없어요");
-  }
   const db = getFirestore();
   console.log(`대상: ${describeTarget(target)}`);
   console.log(

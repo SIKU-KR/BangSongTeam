@@ -1,14 +1,11 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { OFFICIAL_LIBRARY_NAME, OFFICIAL_LIBRARY_USER_ID } from "#shared";
 import type { Db } from "../client";
 import {
   COLLECTIONS,
   decksCol,
   driveTombstonesCol,
   memberDocId,
-  moderationEventsCol,
   presentationMembersCol,
-  reportsCol,
   usersCol,
 } from "../collections";
 import { getMyLibraryDecks } from "../queries/decks";
@@ -24,7 +21,6 @@ import {
   spawnScript,
   userDoc,
 } from "../test/fixtures";
-import { takedownDeck } from "./moderation";
 import { countSocialOnlyUsers, reassignUserData } from "./accountRecovery";
 
 const KAKAO_USER = "000000000000000kakao1";
@@ -32,7 +28,6 @@ const NAVER_USER = "000000000000000naver1";
 const GOOGLE_USER = "00000000000000google1";
 const EMAIL_USER = "000000000000000email1";
 const SYNTHETIC_DOMAIN = "users.noreply.example";
-const NOW = new Date("2026-10-27T00:00:00.000Z");
 
 describe("카카오·네이버로만 들어오는 사용자 세기", () => {
   it("이메일 종류마다 나눠 센다", async () => {
@@ -99,10 +94,7 @@ describe("다른 계정으로 데이터 옮기기", () => {
           id: DECK,
           userId: A,
           title: "옮길 곡",
-          visibility: "public",
-          publishedAt: new Date(1),
           slides: SLIDES,
-          forkCount: 1,
         }),
         deckDoc({ id: FORK, userId: O, forkedFrom: DECK, slides: SLIDES }),
         ...[0, 1].map((position) =>
@@ -134,36 +126,6 @@ describe("다른 계정으로 데이터 옮기기", () => {
     await driveTombstonesCol(db)
       .doc("gone")
       .set({ itemId: "gone", userId: A, kind: "presentation" });
-    const report = {
-      reason: "lyrics_error",
-      details: null,
-      status: "pending",
-      resolvedAt: null,
-      resolutionNote: null,
-      createdAt: new Date(2),
-    } as const;
-    await Promise.all([
-      reportsCol(db)
-        .doc("r1")
-        .set({
-          ...report,
-          id: "r1",
-          reporterId: A,
-          deckId: FORK,
-          targetUserId: O,
-          targetTitle: "song",
-        }),
-      reportsCol(db)
-        .doc("r2")
-        .set({
-          ...report,
-          id: "r2",
-          reporterId: O,
-          deckId: DECK,
-          targetUserId: A,
-          targetTitle: "옮길 곡",
-        }),
-    ]);
   });
 
   it("미리보기는 옮길 데이터 수만 세고 아무것도 옮기지 않는다", async () => {
@@ -176,9 +138,6 @@ describe("다른 계정으로 데이터 옮기기", () => {
         libraryDecks: 1,
         memberships: 1,
         tombstones: 1,
-        reports: 1,
-        reportTargets: 1,
-        moderationEvents: 0,
       },
     });
     expect(await getMyLibraryDecks(db, B)).toEqual([]);
@@ -205,7 +164,7 @@ describe("다른 계정으로 데이터 옮기기", () => {
     expect((await member(O)).exists).toBe(true);
   });
 
-  it("폴더·프레젠테이션과 사본·보관함 곡을 새 계정으로 옮기고 색인과 가져간 횟수는 그대로 둔다", async () => {
+  it("폴더·프레젠테이션과 사본·보관함 곡을 새 계정으로 옮기고 곡의 다른 필드는 그대로 둔다", async () => {
     const before = (await decksCol(db).doc(DECK).get()).data();
 
     const result = await reassignUserData(db, {
@@ -229,10 +188,10 @@ describe("다른 계정으로 데이터 옮기기", () => {
     expect((await decksCol(db).doc(FORK).get()).data()?.forkedFrom).toBe(DECK);
   });
 
-  it("링크로 들어간 프레젠테이션·영구 삭제 기록·낸 신고와 받은 신고도 새 계정으로 옮긴다", async () => {
+  it("링크로 들어간 프레젠테이션·영구 삭제 기록도 새 계정으로 옮긴다", async () => {
     expect(
       await reassignUserData(db, { fromUserId: A, toUserId: B, apply: true }),
-    ).toMatchObject({ counts: { reports: 1, reportTargets: 1 } });
+    ).toMatchObject({ counts: { memberships: 1, tombstones: 1 } });
 
     const member = (id: string) => presentationMembersCol(db).doc(id).get();
     expect((await member(memberDocId(SHARED, A))).exists).toBe(false);
@@ -244,24 +203,11 @@ describe("다른 계정으로 데이터 옮기기", () => {
     expect(
       (await driveTombstonesCol(db).doc("gone").get()).data()?.userId,
     ).toBe(B);
-    expect((await reportsCol(db).doc("r1").get()).data()?.reporterId).toBe(B);
-    expect((await reportsCol(db).doc("r2").get()).data()).toMatchObject({
-      reporterId: O,
-      targetUserId: B,
-      deckId: DECK,
-    });
   });
 
-  it("옮긴 곡의 게시 중단 기록도 새 계정으로 옮기고, 다시 실행하면 옮길 것이 없다", async () => {
-    await takedownDeck(db, DECK, NOW);
-
+  it("다시 실행하면 옮길 것이 없다", async () => {
     await reassignUserData(db, { fromUserId: A, toUserId: B, apply: true });
 
-    expect(
-      (await moderationEventsCol(db).get()).docs.map(
-        (doc) => doc.data().userId,
-      ),
-    ).toEqual([B]);
     expect(
       await reassignUserData(db, { fromUserId: A, toUserId: B, apply: true }),
     ).toEqual({
@@ -273,29 +219,15 @@ describe("다른 계정으로 데이터 옮기기", () => {
         libraryDecks: 0,
         memberships: 0,
         tombstones: 0,
-        reports: 0,
-        reportTargets: 0,
-        moderationEvents: 0,
       },
     });
   });
 
-  it("없거나 같은 계정, 공식 계정, 제한된 계정은 옮기지 않는다", async () => {
-    await seedDocs(db, {
-      users: [
-        userDoc({ id: OFFICIAL_LIBRARY_USER_ID, name: OFFICIAL_LIBRARY_NAME }),
-        userDoc({ id: O, name: "다른 사람", bannedAt: NOW }),
-      ],
-    });
-
+  it("없거나 같은 계정은 옮기지 않는다", async () => {
     for (const [fromUserId, toUserId, status] of [
       ["000000000000000nobody", B, "not_found"],
       [A, "000000000000000nobody", "not_found"],
       [A, A, "same_user"],
-      [OFFICIAL_LIBRARY_USER_ID, B, "official"],
-      [A, OFFICIAL_LIBRARY_USER_ID, "official"],
-      [O, B, "banned"],
-      [A, O, "banned"],
     ] as const) {
       expect(
         await reassignUserData(db, { fromUserId, toUserId, apply: true }),

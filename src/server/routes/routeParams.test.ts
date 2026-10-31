@@ -106,10 +106,6 @@ afterEach(() => {
 
 describe("경로 id·공유 토큰 검사", () => {
   it.each([
-    ["GET", `/api/catalog/decks/${SLASHED}`, API_ERRORS.deck.notPublished],
-    ["GET", `/api/catalog/decks/${RESERVED}`, API_ERRORS.deck.notPublished],
-    ["POST", `/api/decks/${SLASHED}/fork`, API_ERRORS.deck.notPublished],
-    ["POST", `/api/decks/${RESERVED}/fork`, API_ERRORS.deck.notPublished],
     ["DELETE", `/api/decks/${SLASHED}`, API_ERRORS.deck.notAccessible],
     ["DELETE", `/api/decks/${RESERVED}`, API_ERRORS.deck.notAccessible],
     [
@@ -151,14 +147,14 @@ describe("경로 id·공유 토큰 검사", () => {
     },
   );
 
-  it.each([
-    ["PATCH", `/api/decks/${RESERVED}/visibility`, { visibility: "private" }],
-    ["PUT", `/api/presentations/${SLASHED}/share`, { access: "view" }],
-  ])("%s %s도 본문이 맞아도 404다", async (method, path, body) => {
-    const res = await send(method, path, body);
+  it.each([["PUT", `/api/presentations/${SLASHED}/share`, { access: "view" }]])(
+    "%s %s도 본문이 맞아도 404다",
+    async (method, path, body) => {
+      const res = await send(method, path, body);
 
-    expect(res.status).toBe(404);
-  });
+      expect(res.status).toBe(404);
+    },
+  );
 
   it.each([
     ["/api/decks", libraryDeck({ id: RESERVED })],
@@ -205,19 +201,6 @@ describe("본문 id 검사", () => {
     return ((await res.json()) as { presentation: PresentationDocument })
       .presentation;
   }
-
-  it("신고할 곡 id가 Firestore 예약 id면 없는 곡의 404다", async () => {
-    const res = await send("POST", "/api/reports", {
-      targetType: "deck",
-      targetId: RESERVED,
-      reason: "copyright",
-    });
-
-    expect(res.status).toBe(404);
-    expect(await res.json()).toEqual({
-      error: API_ERRORS.report.targetNotFound,
-    });
-  });
 
   it("보관함 곡의 배경 id가 Firestore 예약 id면 배경 없이 저장한다", async () => {
     const res = await send(

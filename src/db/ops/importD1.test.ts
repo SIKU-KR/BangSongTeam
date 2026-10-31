@@ -8,7 +8,6 @@ import { toSharedDeck } from "../queries/mappers";
 import { getDriveTombstones } from "../queries/folders";
 import { getPresentationDocumentsByUserId } from "../queries/presentations";
 import { getSharedPresentationDocuments } from "../queries/presentationSharing";
-import { searchPublicDecks } from "../queries/search";
 import { createTestDb } from "../test/fixtures";
 import {
   assertImportTargetEmpty,
@@ -16,7 +15,6 @@ import {
   writeImportedDocs,
   type D1Export,
 } from "./importD1";
-import { takedownDeck } from "./moderation";
 
 const OWNER = "aaaaaaaa0000000000001";
 const VIEWER = "bbbbbbbb0000000000002";
@@ -172,10 +170,16 @@ describe("D1 내보내기 옮기기", () => {
 
   it("옮긴 데이터를 앱 쿼리가 그대로 읽는다", async () => {
     const [library] = await getMyLibraryDecks(db, OWNER);
-    expect(library).toMatchObject({ id: "d1", forkCount: 2, listed: true });
-
-    const [card] = await searchPublicDecks(db, "은혜");
-    expect(card).toMatchObject({ id: "d1", authorName: "인도자" });
+    expect(library).toMatchObject({ id: "d1", title: "은혜로다" });
+    for (const legacy of [
+      "visibility",
+      "publishedAt",
+      "takedownAt",
+      "takenDownAt",
+      "forkCount",
+    ]) {
+      expect(library).not.toHaveProperty(legacy);
+    }
 
     const [doc] = await getPresentationDocumentsByUserId(db, OWNER);
     expect(doc).toMatchObject({ id: "p1", folderId: "f1" });
@@ -222,13 +226,14 @@ describe("D1 내보내기 옮기기", () => {
       title: "가".repeat(100),
       artist: "나".repeat(100),
       forkedFromAuthorName: "x".repeat(100),
-      forkCount: 0,
     });
   });
 
   describe("이미 쓰고 있는 대상", () => {
-    const listedD1 = async (): Promise<boolean | undefined> =>
-      (await decksCol(db).doc("d1").get()).data()?.listed;
+    const titleOfD1 = async (): Promise<string | undefined> =>
+      (await decksCol(db).doc("d1").get()).data()?.title;
+    const retitleD1 = () =>
+      decksCol(db).doc("d1").update({ title: "옮긴 뒤 고친 제목" });
 
     it("사용자가 있는 대상은 비어 있지 않다고 멈춘다", async () => {
       await expect(assertImportTargetEmpty(db)).rejects.toThrow(
@@ -242,23 +247,22 @@ describe("D1 내보내기 옮기기", () => {
       ).resolves.toBeUndefined();
     });
 
-    it("다시 옮기면 옮긴 뒤의 게시 중단을 되돌리므로 기본으로는 쓰지 않는다", async () => {
-      await takedownDeck(db, "d1");
-      expect(await listedD1()).toBe(false);
+    it("다시 옮기면 옮긴 뒤의 수정을 되돌리므로 기본으로는 쓰지 않는다", async () => {
+      await retitleD1();
 
       await expect(
         writeImportedDocs(db, convertD1Export(EXPORT)),
       ).rejects.toThrow(OPS_ERRORS.importTargetNotEmpty);
-      expect(await listedD1()).toBe(false);
+      expect(await titleOfD1()).toBe("옮긴 뒤 고친 제목");
     });
 
     it("overwriteExisting을 주면 롤백 뒤 다시 옮길 때처럼 덮어쓴다", async () => {
-      await takedownDeck(db, "d1");
+      await retitleD1();
 
       await writeImportedDocs(db, convertD1Export(EXPORT), {
         overwriteExisting: true,
       });
-      expect(await listedD1()).toBe(true);
+      expect(await titleOfD1()).toBe("은혜로다");
     });
   });
 });

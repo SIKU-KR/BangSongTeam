@@ -147,7 +147,7 @@ describe("Cloudflare Worker 프록시", () => {
   });
 
   it.each([
-    ["GET", "/api/catalog/search?q=x"],
+    ["GET", "/api/lyrics/search?title=x"],
     ["GET", "/api/backgrounds?page=2"],
     ["POST", "/api/media/loops/a.mp4?r=1"],
   ])("%s %s는 캐시하지 않고 쿼리도 그대로 둔다", async (method, target) => {

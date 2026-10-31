@@ -43,9 +43,7 @@ function makeDeck(title: string): Deck {
     ],
     backgroundId: null,
     style: DEFAULT_DECK_STYLE,
-    visibility: "private",
     forkedFrom: null,
-    forkCount: 0,
     createdAt: now,
     updatedAt: now,
   };

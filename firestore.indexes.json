@@ -1,25 +1,5 @@
 {
-  "indexes": [
-    {
-      "collectionGroup": "decks",
-      "queryScope": "COLLECTION",
-      "fields": [
-        { "fieldPath": "listed", "order": "ASCENDING" },
-        { "fieldPath": "forkCount", "order": "DESCENDING" },
-        { "fieldPath": "updatedAt", "order": "DESCENDING" }
-      ]
-    },
-    {
-      "collectionGroup": "decks",
-      "queryScope": "COLLECTION",
-      "fields": [
-        { "fieldPath": "listed", "order": "ASCENDING" },
-        { "fieldPath": "searchGrams", "arrayConfig": "CONTAINS" },
-        { "fieldPath": "forkCount", "order": "DESCENDING" },
-        { "fieldPath": "updatedAt", "order": "DESCENDING" }
-      ]
-    }
-  ],
+  "indexes": [],
   "fieldOverrides": [
     {
       "collectionGroup": "decks",
@@ -44,12 +24,6 @@
         { "order": "ASCENDING", "queryScope": "COLLECTION" },
         { "order": "DESCENDING", "queryScope": "COLLECTION" }
       ]
-    },
-    {
-      "collectionGroup": "userQuotas",
-      "fieldPath": "expiresAt",
-      "ttl": true,
-      "indexes": []
     },
     {
       "collectionGroup": "signUpQuotas",

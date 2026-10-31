@@ -1,7 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import type { Db } from "../client";
 import { decksCol, foldersCol, presentationsCol } from "../collections";
-import { withDeckIndex } from "../deckIndex";
 import {
   createTestDb,
   deckDoc,
@@ -36,7 +35,6 @@ describe("clampFutureTimestamps", () => {
           id: "pinned",
           userId: OWNER,
           title: "미래에 박힌 곡",
-          visibility: "public",
           slides: JSON.stringify([{ id: "s", order: 0, lines: ["가사"] }]),
           createdAt: PAST,
           updatedAt: FAR_FUTURE,
@@ -92,7 +90,7 @@ describe("clampFutureTimestamps", () => {
     expect((await presentation("p-future"))?.updatedAt).toEqual(FAR_FUTURE);
   });
 
-  it("apply면 미래 시각을 지금으로 줄이고 곡의 공개 범위·검색 색인은 그대로 맞춘다", async () => {
+  it("apply면 미래 시각을 지금으로 줄이고 곡의 다른 필드는 그대로 둔다", async () => {
     const before = await deck("pinned");
 
     const clamped = await clampFutureTimestamps(db, { apply: true, now: NOW });
@@ -100,10 +98,6 @@ describe("clampFutureTimestamps", () => {
     expect([...clamped.decks].sort()).toEqual(["born-later", "pinned"]);
     const pinned = await deck("pinned");
     expect(pinned).toEqual({ ...before, updatedAt: NOW });
-    expect(pinned?.listed).toBe(true);
-    expect(pinned && withDeckIndex(pinned).searchGrams).toEqual(
-      pinned?.searchGrams,
-    );
     expect(await folder("f-future")).toMatchObject({
       createdAt: NOW,
       updatedAt: NOW,

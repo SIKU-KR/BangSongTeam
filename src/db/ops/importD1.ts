@@ -1,8 +1,7 @@
 import type { DocumentData } from "@google-cloud/firestore";
 import { OPS_ERRORS } from "#shared";
 import { runBulk, type Db } from "../client";
-import { COLLECTIONS, memberDocId, type DeckDoc } from "../collections";
-import { withDeckIndex } from "../deckIndex";
+import { COLLECTIONS, memberDocId } from "../collections";
 
 /** 옮겨 올 D1 테이블 (`wrangler d1 execute --json`으로 테이블마다 뽑은 행) */
 export const D1_TABLES = [
@@ -17,7 +16,6 @@ export const D1_TABLES = [
   "drive_tombstones",
   "backgrounds",
   "background_keywords",
-  "reports",
 ] as const;
 
 export type D1TableName = (typeof D1_TABLES)[number];
@@ -48,18 +46,22 @@ const TIME_COLUMNS = new Set([
   "access_token_expires_at",
   "refresh_token_expires_at",
   "terms_agreed_at",
-  "published_at",
-  "taken_down_at",
   "trashed_at",
-  "resolved_at",
 ]);
 
 const BOOLEAN_COLUMNS = new Set(["email_verified"]);
 
 const RENAMED_COLUMNS: Record<string, string> = {
   r2_key: "mediaKey",
-  taken_down_at: "takedownAt",
 };
+
+/** 걷어낸 공유 라이브러리의 곡 열. 옮기지 않는다 */
+const DROPPED_DECK_COLUMNS = new Set([
+  "visibility",
+  "published_at",
+  "taken_down_at",
+  "fork_count",
+]);
 
 function camel(column: string): string {
   return (
@@ -98,13 +100,12 @@ const COLLECTION_OF: Partial<Record<D1TableName, string>> = {
   verification: COLLECTIONS.verifications,
   folders: COLLECTIONS.folders,
   presentations: COLLECTIONS.presentations,
-  reports: COLLECTIONS.reports,
 };
 
 /**
  * D1 내보내기를 Firestore 문서 목록으로 바꾼다.
  *
- * - 곡은 공개 범위·검색 색인(`withDeckIndex`)을 붙인다. FTS 테이블은 옮기지 않는다.
+ * - 곡의 공유 라이브러리 열(`DROPPED_DECK_COLUMNS`)과 신고, FTS 테이블은 옮기지 않는다.
  * - 배경 키워드 행은 배경 문서의 `keywords` 배열로 모은다.
  * - 멤버·영구 삭제 기록은 앱이 찾는 문서 id(`memberDocId`, 항목 id)로 쓴다.
  */
@@ -122,15 +123,15 @@ export function convertD1Export(tables: D1Export): ImportedDoc[] {
   }
 
   for (const row of tables.decks ?? []) {
-    const data = convertRow("decks", row) as Omit<
-      DeckDoc,
-      "listed" | "searchGrams"
-    >;
-    docs.push({
-      collection: COLLECTIONS.decks,
-      id: data.id,
-      data: withDeckIndex(data),
-    });
+    const data = convertRow(
+      "decks",
+      Object.fromEntries(
+        Object.entries(row).filter(
+          ([column]) => !DROPPED_DECK_COLUMNS.has(column),
+        ),
+      ),
+    );
+    docs.push({ collection: COLLECTIONS.decks, id: String(data.id), data });
   }
 
   for (const row of tables.presentation_members ?? []) {
@@ -170,8 +171,7 @@ export function convertD1Export(tables: D1Export): ImportedDoc[] {
 
 /**
  * 대상 Firestore에 사용자가 하나도 없는지 확인한다. 이전 뒤에는 사용자가 새 서비스에서 데이터를
- * 쓰므로, 이미 사용자가 있으면 다시 옮기는 일이 그 뒤의 쓰기와 게시 중단을 D1의 옛 값으로
- * 덮어쓴다.
+ * 쓰므로, 이미 사용자가 있으면 다시 옮기는 일이 그 뒤의 쓰기를 D1의 옛 값으로 덮어쓴다.
  */
 export async function assertImportTargetEmpty(db: Db): Promise<void> {
   const existing = await db.collection(COLLECTIONS.users).limit(1).get();

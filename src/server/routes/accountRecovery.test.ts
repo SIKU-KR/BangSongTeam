@@ -1,5 +1,4 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { OFFICIAL_LIBRARY_USER_ID } from "#shared";
 import { userEmailDocId, userEmailsCol, usersCol } from "#db";
 import { addPasswordLogin } from "../../db/ops/accountRecovery";
 import {
@@ -145,11 +144,5 @@ describe("이메일·비밀번호 로그인 더하기", () => {
         email: EMAIL,
       }),
     ).toEqual({ status: "not_found" });
-    expect(
-      await addPasswordLogin(db, {
-        userId: OFFICIAL_LIBRARY_USER_ID,
-        email: EMAIL,
-      }),
-    ).toEqual({ status: "official" });
   });
 });

@@ -79,7 +79,7 @@ describe("보관함 push 큐", () => {
     localStorage.clear();
     __resetDeckSyncForTests();
     resetSyncStatus();
-    push = vi.fn(async (d: Deck) => ({ ...d, forkCount: 3 }));
+    push = vi.fn(async (d: Deck) => ({ ...d, forkedFromAuthorName: "원작자" }));
     remove = vi.fn(async () => {});
     __setDeckTransportForTests({ push, remove });
     setDeckSyncEnabled(true);
@@ -110,7 +110,7 @@ describe("보관함 push 큐", () => {
     setServerDeckListener((d) => received.push(d));
     scheduleDeckPush(deck());
     await flushDeckSync();
-    expect(received[0].forkCount).toBe(3);
+    expect(received[0].forkedFromAuthorName).toBe("원작자");
   });
 
   it("a delete replaces a pending push", async () => {
@@ -205,7 +205,7 @@ describe("보관함 push 큐", () => {
     scheduleDeckPush(deck("예약본"));
     setDeckSyncEnabled(false);
     const saved = await pushDeckNow(deck("즉시"));
-    expect(saved.forkCount).toBe(3);
+    expect(saved.forkedFromAuthorName).toBe("원작자");
     expect(push).toHaveBeenCalledTimes(1);
     expect(push.mock.calls[0][0].title).toBe("즉시");
   });
@@ -304,7 +304,10 @@ describe("보관함 push 큐", () => {
     await vi.advanceTimersByTimeAsync(2000);
     expect(push).toHaveBeenCalledTimes(2);
 
-    push.mockImplementation(async (d: Deck) => ({ ...d, forkCount: 3 }));
+    push.mockImplementation(async (d: Deck) => ({
+      ...d,
+      forkedFromAuthorName: "원작자",
+    }));
     await vi.advanceTimersByTimeAsync(2000);
     expect(push).toHaveBeenCalledTimes(4);
     expect(getSyncSnapshot().status).toBe("synced");
@@ -642,7 +645,10 @@ describe("보관함 push 큐", () => {
     expect(push.mock.calls.length).toBeGreaterThanOrEqual(15);
     expect(getSyncSnapshot().status).toBe("offline");
 
-    push.mockImplementation(async (d: Deck) => ({ ...d, forkCount: 3 }));
+    push.mockImplementation(async (d: Deck) => ({
+      ...d,
+      forkedFromAuthorName: "원작자",
+    }));
     await vi.advanceTimersByTimeAsync(60_000);
     expect(getSyncSnapshot().status).toBe("synced");
 
@@ -904,7 +910,7 @@ describe("보관함 push 큐", () => {
       await vi.waitFor(() => expect(push).toHaveBeenCalledTimes(1));
 
       scheduleDeckDelete(A, USER);
-      pending.resolve({ ...deck(), forkCount: 3 });
+      pending.resolve({ ...deck(), forkedFromAuthorName: "원작자" });
       await flushing;
       await flushDeckSync();
 

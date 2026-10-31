@@ -58,11 +58,11 @@ describe("contentFingerprint", () => {
           createdAt: LATER,
           updatedAt: LATER,
           forkedFrom: "c00000000000000000001",
+          forkedFromAuthorName: "원작자",
           forkCount: 3,
           visibility: "public",
           origin: "fork",
-          forkedFromAuthorName: "원작자",
-        }),
+        } as Partial<Deck>),
       ),
     ).toBe(fingerprint);
   });

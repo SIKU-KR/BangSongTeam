@@ -1,11 +1,6 @@
 import type { DocumentReference, Query } from "@google-cloud/firestore";
 import { z } from "zod";
-import {
-  createId,
-  ID_PATTERN,
-  isReservedDocumentId,
-  OFFICIAL_LIBRARY_USER_ID,
-} from "#shared";
+import { createId, ID_PATTERN, isReservedDocumentId } from "#shared";
 import { runBulk, type Db } from "../client";
 import {
   chunkIds,
@@ -19,8 +14,6 @@ import {
   userEmailsCol,
   usersCol,
 } from "../collections";
-import { withDeckIndex } from "../deckIndex";
-import { isBannedUser } from "../queries/limits";
 
 const SOCIAL_ONLY_PROVIDERS = new Set(["kakao", "naver"]);
 
@@ -117,7 +110,7 @@ export type AddPasswordLoginResult =
       /** 바꾸기 전 이메일. 카카오·네이버가 주지 않아 만든 주소일 수 있다 */
       previousEmail: string | null;
     }
-  | { status: "not_found" | "official" | "has_password" | "invalid_email" }
+  | { status: "not_found" | "has_password" | "invalid_email" }
   | { status: "not_social_only"; providers: string[] }
   | { status: "email_taken"; heldBy: string };
 
@@ -150,7 +143,6 @@ export async function addPasswordLogin(
   options: AddPasswordLoginOptions,
 ): Promise<AddPasswordLoginResult> {
   const { userId } = options;
-  if (userId === OFFICIAL_LIBRARY_USER_ID) return { status: "official" };
   const email = options.email.trim().toLowerCase();
   if (!EmailSchema.safeParse(email).success) return { status: "invalid_email" };
   if (!isUserId(userId)) return { status: "not_found" };
@@ -235,16 +227,11 @@ export interface ReassignCounts {
   /** 링크로 들어간 다른 사람의 프레젠테이션 */
   memberships: number;
   tombstones: number;
-  /** 옛 계정이 낸 신고 */
-  reports: number;
-  /** 옛 계정의 곡을 신고한 기록 */
-  reportTargets: number;
-  moderationEvents: number;
 }
 
 export type ReassignResult =
   | { status: "ready" | "moved"; counts: ReassignCounts }
-  | { status: "not_found" | "same_user" | "official" | "banned" };
+  | { status: "not_found" | "same_user" };
 
 async function count(query: Query): Promise<number> {
   return (await query.count().get()).data().count;
@@ -258,9 +245,6 @@ async function countMovable(db: Db, from: string): Promise<ReassignCounts> {
     libraryDecks,
     memberships,
     tombstones,
-    reports,
-    reportTargets,
-    moderationEvents,
   ] = await Promise.all([
     count(db.collection(COLLECTIONS.sessions).where("userId", "==", from)),
     count(foldersCol(db).where("userId", "==", from)),
@@ -274,11 +258,6 @@ async function countMovable(db: Db, from: string): Promise<ReassignCounts> {
     count(
       db.collection(COLLECTIONS.driveTombstones).where("userId", "==", from),
     ),
-    count(db.collection(COLLECTIONS.reports).where("reporterId", "==", from)),
-    count(db.collection(COLLECTIONS.reports).where("targetUserId", "==", from)),
-    count(
-      db.collection(COLLECTIONS.moderationEvents).where("userId", "==", from),
-    ),
   ]);
   return {
     sessions,
@@ -287,9 +266,6 @@ async function countMovable(db: Db, from: string): Promise<ReassignCounts> {
     libraryDecks,
     memberships,
     tombstones,
-    reports,
-    reportTargets,
-    moderationEvents,
   };
 }
 
@@ -340,12 +316,7 @@ async function movePresentations(
       for (const copy of copies.docs) {
         const deck = copy.data();
         if (deck.userId !== from) continue;
-        const next = withDeckIndex({ ...deck, userId: to });
-        tx.update(copy.ref, {
-          userId: next.userId,
-          listed: next.listed,
-          searchGrams: next.searchGrams,
-        });
+        tx.update(copy.ref, { userId: to });
       }
       if (toMember.exists) tx.delete(toMemberRef);
       return 1;
@@ -364,19 +335,11 @@ async function moveDecks(db: Db, from: string, to: string): Promise<number> {
       .slice(i, i + DECK_CHUNK_SIZE)
       .map((id) => decksCol(db).doc(id));
     moved += await db.runTransaction(async (tx) => {
-      const decks = (await tx.getAll(...refs)).flatMap((snapshot) => {
-        const deck = snapshot.data();
-        return deck?.userId === from ? [{ ref: snapshot.ref, deck }] : [];
-      });
-      for (const { ref, deck } of decks) {
-        const next = withDeckIndex({ ...deck, userId: to });
-        tx.update(ref, {
-          userId: next.userId,
-          listed: next.listed,
-          searchGrams: next.searchGrams,
-        });
-      }
-      return decks.length;
+      const owned = (await tx.getAll(...refs)).filter(
+        (snapshot) => snapshot.data()?.userId === from,
+      );
+      for (const { ref } of owned) tx.update(ref, { userId: to });
+      return owned.length;
     });
   }
   return moved;
@@ -421,13 +384,10 @@ async function moveMemberships(
  * - 옛 계정의 로그인 세션을 먼저 끊는다. 이미 로그인한 기기는 세션 쿠키 캐시(5분) 동안 옛 계정에
  *   계속 쓸 수 있으니, 그런 기기가 있으면 5분 뒤 다시 실행해 그사이 생긴 것까지 옮긴다.
  * - 폴더, 프레젠테이션(사본 곡과 한 트랜잭션), 보관함 곡, 링크로 들어간 다른 사람의 프레젠테이션
- *   멤버 기록, 영구 삭제 기록, 신고(낸 사람·곡 주인), 운영 기록의 사용자 id를 바꾼다. 문서 id는
- *   그대로라 가져온 원본(`forkedFrom`)과 가져간 횟수(`forkCount`), 공유 링크는 그대로이고, 곡은
- *   `withDeckIndex`를 거쳐 바뀌는 필드만 쓴다.
+ *   멤버 기록, 영구 삭제 기록의 사용자 id를 바꾼다. 문서 id는 그대로라 가져온 원본(`forkedFrom`)과
+ *   공유 링크는 그대로이고, 곡은 바뀌는 필드만 쓴다.
  * - 묶음마다 다시 읽어 아직 옛 계정의 문서만 쓰므로, 중간에 멈춰도 다시 실행하면 이어서 옮긴다.
  * - 옛 계정 자체(로그인 수단·사용자 문서)는 남긴다. 다 옮긴 뒤 `scripts/deleteUser.mjs`로 지운다.
- * - 공식 라이브러리 계정과 제한된 계정(`bannedAt`)은 옮기지 않는다. 제한된 계정의 데이터를 새
- *   계정으로 옮기면 제한을 피하게 된다.
  */
 export async function reassignUserData(
   db: Db,
@@ -438,12 +398,6 @@ export async function reassignUserData(
   }: { fromUserId: string; toUserId: string; apply?: boolean },
 ): Promise<ReassignResult> {
   if (fromUserId === toUserId) return { status: "same_user" };
-  if (
-    fromUserId === OFFICIAL_LIBRARY_USER_ID ||
-    toUserId === OFFICIAL_LIBRARY_USER_ID
-  ) {
-    return { status: "official" };
-  }
   if (!isUserId(fromUserId) || !isUserId(toUserId)) {
     return { status: "not_found" };
   }
@@ -453,9 +407,6 @@ export async function reassignUserData(
     ),
   );
   if (!fromUser || !toUser) return { status: "not_found" };
-  if (isBannedUser(fromUser) || isBannedUser(toUser)) {
-    return { status: "banned" };
-  }
   if (!apply) {
     return { status: "ready", counts: await countMovable(db, fromUserId) };
   }
@@ -479,9 +430,6 @@ export async function reassignUserData(
       libraryDecks,
       memberships,
       tombstones: await move(COLLECTIONS.driveTombstones, "userId"),
-      reports: await move(COLLECTIONS.reports, "reporterId"),
-      reportTargets: await move(COLLECTIONS.reports, "targetUserId"),
-      moderationEvents: await move(COLLECTIONS.moderationEvents, "userId"),
     },
   };
 }

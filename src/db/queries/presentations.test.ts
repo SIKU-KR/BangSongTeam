@@ -66,9 +66,7 @@ function makeDoc(
           slides: [{ id: "s1", order: 0, lines: ["시작됐네"] }],
           backgroundId: null,
           style: { ...DEFAULT_DECK_STYLE, overlayOpacity: 70 },
-          visibility: "private",
           forkedFrom: null,
-          forkCount: 0,
           createdAt: "2026-09-20T00:00:00.000Z",
           updatedAt: "2026-09-21T00:00:00.000Z",
         },
@@ -131,7 +129,6 @@ describe("프레젠테이션 쿼리", () => {
             userId: userAId,
             title: "Song 1: 꽃들도",
             lyricsRaw: "이곳에 생명샘 솟아나",
-            visibility: "public",
           }),
         ],
       });

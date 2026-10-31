@@ -1,13 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import {
-  FALLBACK_USER_NAME,
-  OFFICIAL_LIBRARY_NAME,
-  OFFICIAL_LIBRARY_USER_ID,
-} from "#shared";
+import { FALLBACK_USER_NAME } from "#shared";
 import type { Db } from "../client";
 import { COLLECTIONS, decksCol, usersCol } from "../collections";
-import { withDeckIndex } from "../deckIndex";
-import { searchPublicDecks } from "../queries/search";
 import {
   createTestDb,
   deckDoc,
@@ -20,6 +14,7 @@ import { folderCounts, textLimits } from "./dataAudit";
 const A = "00000000000000000000a";
 const B = "00000000000000000000b";
 const C = "00000000000000000000c";
+const D = "00000000000000000000d";
 const MEDLEY = "c00000000000000000001";
 const LONG_ARTIST = "c00000000000000000002";
 const BAD_AUTHOR = "c00000000000000000003";
@@ -38,16 +33,15 @@ describe("데이터 점검", () => {
     db = createTestDb();
     await seedDocs(db, {
       users: [
-        userDoc({ id: OFFICIAL_LIBRARY_USER_ID, name: OFFICIAL_LIBRARY_NAME }),
+        userDoc({ id: D, name: "메들리 인도자" }),
         userDoc({ id: A, name: "가".repeat(60) }),
         userDoc({ id: C, name: "보통 이름" }),
       ],
       decks: [
         deckDoc({
           id: MEDLEY,
-          userId: OFFICIAL_LIBRARY_USER_ID,
+          userId: D,
           title: MEDLEY_TITLE,
-          visibility: "public",
           slides: SLIDES,
         }),
         deckDoc({ id: LONG_ARTIST, userId: A, artist: "나".repeat(120) }),
@@ -79,7 +73,7 @@ describe("데이터 점검", () => {
       expect(await userName(B)).toBe(42);
     });
 
-    it("apply면 곡 글을 앱이 보여 주는 값으로 줄이고 공개 범위·검색 색인을 함께 맞춘다", async () => {
+    it("apply면 곡 글을 앱이 보여 주는 값으로 줄이고 다른 필드는 그대로 둔다", async () => {
       const before = await deck(MEDLEY);
 
       const fixed = await textLimits(db, { apply: true });
@@ -89,13 +83,7 @@ describe("데이터 점검", () => {
       );
       const medley = await deck(MEDLEY);
       expect(medley?.title).toHaveLength(100);
-      expect(medley).toEqual(
-        withDeckIndex({ ...before!, title: MEDLEY_TITLE.slice(0, 100) }),
-      );
-      expect(medley?.listed).toBe(true);
-      expect(
-        (await searchPublicDecks(db, "메들리")).map((row) => row.id),
-      ).toEqual([MEDLEY]);
+      expect(medley).toEqual({ ...before, title: MEDLEY_TITLE.slice(0, 100) });
       expect((await deck(LONG_ARTIST))?.artist).toBe("나".repeat(100));
       expect((await deck(BAD_AUTHOR))?.forkedFromAuthorName).toBe(
         FALLBACK_USER_NAME.default,
@@ -110,9 +98,7 @@ describe("데이터 점검", () => {
       expect(await userName(A)).toBe("가".repeat(50));
       expect(await userName(B)).toBe(FALLBACK_USER_NAME.default);
       expect(await userName(C)).toBe("보통 이름");
-      expect(await userName(OFFICIAL_LIBRARY_USER_ID)).toBe(
-        OFFICIAL_LIBRARY_NAME,
-      );
+      expect(await userName(D)).toBe("메들리 인도자");
       expect(await deck(NORMAL)).toEqual(normal);
       expect(await textLimits(db, { apply: true })).toEqual({
         decks: [],

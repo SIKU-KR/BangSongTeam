@@ -1,9 +1,5 @@
 import type { Query } from "@google-cloud/firestore";
-import {
-  ID_PATTERN,
-  isReservedDocumentId,
-  OFFICIAL_LIBRARY_USER_ID,
-} from "#shared";
+import { ID_PATTERN, isReservedDocumentId } from "#shared";
 import { runBulk, type Db } from "../client";
 import {
   chunkIds,
@@ -13,8 +9,6 @@ import {
   foldersCol,
   presentationMembersCol,
   presentationsCol,
-  reportsCol,
-  userQuotasCol,
   usersCol,
 } from "../collections";
 import { prepareDeletionPass, runDeletionPasses } from "../queries/cascade";
@@ -40,9 +34,6 @@ export interface UserDataCounts {
   /** 다른 사람의 프레젠테이션에 링크로 들어간 기록 */
   memberships: number;
   tombstones: number;
-  /** 그 사람이 낸 신고 */
-  reports: number;
-  quotas: number;
   forksByOthers: number;
 }
 
@@ -53,13 +44,16 @@ export interface AccountIdentity {
   createdAt: Date;
 }
 
-export type RevokeUserAccessResult =
-  | { status: "revoked"; sessions: number; accounts: number; user: boolean }
-  | { status: "official" };
+export interface RevokeUserAccessResult {
+  sessions: number;
+  accounts: number;
+  user: boolean;
+}
 
-export type DeleteUserDataResult =
-  | { status: "deleted"; before: UserDataCounts; remaining: UserDataCounts }
-  | { status: "official" };
+export interface DeleteUserDataResult {
+  before: UserDataCounts;
+  remaining: UserDataCounts;
+}
 
 function isUserId(userId: string): boolean {
   return ID_PATTERN.test(userId) && !isReservedDocumentId(userId);
@@ -124,8 +118,6 @@ export async function countUserData(
     folders,
     memberships,
     tombstones,
-    reports,
-    quotas,
     forksByOthers,
   ] = await Promise.all([
     isUserId(userId)
@@ -143,8 +135,6 @@ export async function countUserData(
     count(foldersCol(db).where("userId", "==", userId)),
     count(presentationMembersCol(db).where("userId", "==", userId)),
     count(driveTombstonesCol(db).where("userId", "==", userId)),
-    count(reportsCol(db).where("reporterId", "==", userId)),
-    count(userQuotasCol(db).where("userId", "==", userId)),
     countForksByOthers(db, userId),
   ]);
   return {
@@ -158,8 +148,6 @@ export async function countUserData(
     folders,
     memberships,
     tombstones,
-    reports,
-    quotas,
     forksByOthers,
   };
 }
@@ -167,7 +155,7 @@ export async function countUserData(
 async function deleteSignIn(
   db: Db,
   userId: string,
-): Promise<{ sessions: number; accounts: number; user: boolean }> {
+): Promise<RevokeUserAccessResult> {
   const [sessions, accounts, reservations, user] = await Promise.all([
     byUser(db, COLLECTIONS.sessions, userId).select().get(),
     byUser(db, COLLECTIONS.accounts, userId).select().get(),
@@ -197,15 +185,12 @@ async function deleteSignIn(
  * 확인하지 않아 계속 쓸 수 있다. 외래키가 없어 Firestore는 지운 사용자 id로 오는 쓰기도 받으므로,
  * 그동안 그 기기가 저장하거나 부팅 동기화로 다시 올린 데이터는 캐시가 끝난 뒤 `deleteUserData`가
  * 지운다. 같은 소셜 계정이나 이메일로 다시 로그인하면 새 사용자가 된다.
- *
- * 공식 라이브러리 계정은 공유 라이브러리의 공식 곡을 모두 가진 계정이라 지우지 않는다.
  */
 export async function revokeUserAccess(
   db: Db,
   userId: string,
 ): Promise<RevokeUserAccessResult> {
-  if (userId === OFFICIAL_LIBRARY_USER_ID) return { status: "official" };
-  return { status: "revoked", ...(await deleteSignIn(db, userId)) };
+  return deleteSignIn(db, userId);
 }
 
 async function deletePresentationsAndFolders(
@@ -228,14 +213,14 @@ async function deletePresentationsAndFolders(
   });
 }
 
-async function deleteDecksOf(db: Db, userId: string, now: Date): Promise<void> {
+async function deleteDecksOf(db: Db, userId: string): Promise<void> {
   const decks = await decksCol(db)
     .where("userId", "==", userId)
     .select("presentationId")
     .get();
   for (const doc of decks.docs) {
     if (doc.get("presentationId") === null) {
-      await deleteDeckScoped(db, doc.id, userId, now);
+      await deleteDeckScoped(db, doc.id, userId);
       continue;
     }
     await db.runTransaction(async (tx) => {
@@ -257,16 +242,11 @@ async function deleteDecksOf(db: Db, userId: string, now: Date): Promise<void> {
  *
  * - 프레젠테이션은 사본 곡·공유 멤버와 함께, 폴더와 함께 차례로 나눠 지운다(`runDeletionPasses`).
  *   휴지통에 있는지는 보지 않는다.
- * - 보관함 곡은 곡 삭제(`deleteDeckScoped`)를 거쳐, 가져온 원본의 가져간 횟수를 줄이고 이 곡을
- *   가리키던 다른 사용자의 곡·사본과 신고의 연결을 끊는다. 게시 중단된 곡을 가져간 비공개 곡은
- *   게시 중단을 이어받는다. 다른 사용자가 가져간 곡은 지우지 않는다.
+ * - 보관함 곡은 곡 삭제(`deleteDeckScoped`)를 거쳐, 이 곡을 가리키던 다른 사용자의 곡·사본의
+ *   연결을 끊는다. 다른 사용자가 가져간 곡과 담은 사본은 지우지 않는다.
  * - 그래도 남은 사본(이미 없는 프레젠테이션을 가리키던 곡)과 다른 사람의 프레젠테이션 멤버 기록,
- *   영구 삭제 기록(이 작업이 남긴 것 포함), 하루 한도 기록을 지우고, 그 사람이 낸 신고는 신고
- *   내용만 남기고 신고자를 비운다.
+ *   영구 삭제 기록(이 작업이 남긴 것 포함)을 지운다.
  * - 마지막에 로그인 수단과 사용자 문서를 다시 지운다(`revokeUserAccess`와 같다).
- *
- * 운영 기록(`moderationEvents`)과 신고에 남긴 곡 주인·제목(`targetUserId`·`targetTitle`)은 지우지
- * 않는다. 게시 중단과 신고 처리 이력이라, 계정을 지운 뒤에는 그 id가 누구와도 이어지지 않는다.
  *
  * 같음 조건만 써서 복합 색인이 필요 없고 저장 모양도 바꾸지 않는다. 중간에 멈추면 다시 실행해 이어서
  * 지운다. 지우기 전과 뒤의 데이터 수를 돌려주며, 뒤의 수는 모두 0이어야 한다.
@@ -274,31 +254,22 @@ async function deleteDecksOf(db: Db, userId: string, now: Date): Promise<void> {
 export async function deleteUserData(
   db: Db,
   userId: string,
-  now: Date = new Date(),
 ): Promise<DeleteUserDataResult> {
-  if (userId === OFFICIAL_LIBRARY_USER_ID) return { status: "official" };
   const before = await countUserData(db, userId);
 
   await deletePresentationsAndFolders(db, userId);
-  await deleteDecksOf(db, userId, now);
+  await deleteDecksOf(db, userId);
 
-  const [memberships, tombstones, quotas, reports] = await Promise.all([
+  const [memberships, tombstones] = await Promise.all([
     presentationMembersCol(db).where("userId", "==", userId).select().get(),
     driveTombstonesCol(db).where("userId", "==", userId).select().get(),
-    userQuotasCol(db).where("userId", "==", userId).select().get(),
-    reportsCol(db).where("reporterId", "==", userId).select().get(),
   ]);
-  await runBulk(db, (writer) => [
-    ...[...memberships.docs, ...tombstones.docs, ...quotas.docs].map((doc) =>
+  await runBulk(db, (writer) =>
+    [...memberships.docs, ...tombstones.docs].map((doc) =>
       writer.delete(doc.ref),
     ),
-    ...reports.docs.map((doc) => writer.update(doc.ref, { reporterId: null })),
-  ]);
+  );
   await deleteSignIn(db, userId);
 
-  return {
-    status: "deleted",
-    before,
-    remaining: await countUserData(db, userId),
-  };
+  return { before, remaining: await countUserData(db, userId) };
 }

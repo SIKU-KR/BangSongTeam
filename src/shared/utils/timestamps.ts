@@ -14,7 +14,7 @@ export const MAX_FIRESTORE_TIME = Date.parse("9999-12-31T23:59:59.999Z");
  * 기기가 보낸 시각을 서버 시계(`nowMs`) + 5분까지로 줄인다.
  *
  * 빠른 시계나 꾸민 요청이 미래 시각을 남기면 시각으로 판을 고르는 병합과 서버의 옛 쓰기 거르기에서
- * 그 판이 줄곧 이기고, 공유 라이브러리에서는 가져간 횟수가 같은 곡 가운데 맨 위에 머문다.
+ * 그 판이 줄곧 이긴다.
  */
 export function clampToClock(iso: string, nowMs: number): string {
   const limit = nowMs + MAX_CLOCK_SKEW_MS;

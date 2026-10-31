@@ -56,7 +56,6 @@ function song(overrides: Partial<Deck> = {}): Deck {
     slides: [{ id: "s1", order: 0, lines: ["시작됐네"] }],
     backgroundId: null,
     style: DEFAULT_DECK_STYLE,
-    visibility: "private",
     createdAt: "2026-09-20T00:00:00.000Z",
     updatedAt: "2026-09-21T00:00:00.000Z",
     ...overrides,

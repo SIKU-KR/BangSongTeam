@@ -9,7 +9,6 @@ import {
   fitDeckText,
   fitPresentationToLimits,
   toDisplayName,
-  toNonNegativeInt,
   toWellFormedText,
 } from "./fitToLimits";
 
@@ -203,16 +202,6 @@ describe("fitDeckText", () => {
       artist: "예수전도단",
       forkedFromAuthorName: "김찬양",
     });
-  });
-});
-
-describe("toNonNegativeInt", () => {
-  it("0 이상의 안전한 정수만 그대로 두고 나머지는 0으로 읽는다", () => {
-    for (const value of [NaN, -1, 2.5, "3", undefined, null, 2 ** 53]) {
-      expect(toNonNegativeInt(value)).toBe(0);
-    }
-    expect(toNonNegativeInt(4)).toBe(4);
-    expect(toNonNegativeInt(0)).toBe(0);
   });
 });
 

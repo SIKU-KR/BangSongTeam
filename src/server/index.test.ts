@@ -288,11 +288,6 @@ describe("API 앱 통합 테스트 (Firestore 에뮬레이터)", () => {
 
     it.each([
       ["PUT", `/api/decks/${LIBRARY_DECK_ID}`, DECK_BODY_MAX_BYTES],
-      [
-        "PATCH",
-        `/api/decks/${LIBRARY_DECK_ID}/visibility`,
-        SMALL_BODY_MAX_BYTES,
-      ],
       ["PUT", `/api/folders/${FOLDER_ID}`, SMALL_BODY_MAX_BYTES],
       ["DELETE", `/api/folders/${FOLDER_ID}`, FOLDER_DELETE_BODY_MAX_BYTES],
       [
@@ -310,7 +305,6 @@ describe("API 앱 통합 테스트 (Firestore 에뮬레이터)", () => {
         `/api/presentations/${PRESENTATION_ID}/share`,
         SMALL_BODY_MAX_BYTES,
       ],
-      ["POST", "/api/reports", SMALL_BODY_MAX_BYTES],
       ["POST", "/api/consent", SMALL_BODY_MAX_BYTES],
     ])(
       "%s %s는 상한(%i바이트)을 넘는 본문을 해석하지 않고 413으로 끊는다",

@@ -352,7 +352,7 @@ describe("ShareJoinRoute (/s/:token)", () => {
 
     it.each([
       [401, API_ERRORS.loginRequired],
-      [403, API_ERRORS.accountRestricted],
+      [403, API_ERRORS.consentRequired],
     ])(
       "서버가 거절하면(%i) 저장된 사본이 있어도 열지 않고 다시 시도도 두지 않는다",
       async (status, error) => {

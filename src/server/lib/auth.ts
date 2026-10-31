@@ -81,16 +81,6 @@ const RATE_LIMIT_RULES = {
   "/sign-in/social": { window: 10, max: 20 },
 };
 
-const USER_ADDITIONAL_FIELDS = {
-  bannedAt: {
-    type: "date",
-    required: false,
-    defaultValue: null,
-    input: false,
-    returned: false,
-  },
-} as const;
-
 /** 소셜 프로필에서 만들어 내는 로컬 사용자 속성 */
 interface MappedSocialUser {
   name: string;
@@ -311,7 +301,6 @@ function buildAuth(env: Bindings) {
       maxPasswordLength: PASSWORD_MAX_LENGTH,
       password: { hash: hashPassword, verify: verifyPassword },
     },
-    user: { additionalFields: USER_ADDITIONAL_FIELDS },
     account: { accountLinking: ACCOUNT_LINKING },
     socialProviders,
     disabledPaths: ["/update-user"],
@@ -376,9 +365,8 @@ type AuthInstance = ReturnType<typeof buildAuth>;
  *   가로채 로그인이 조용히 깨진다.
  * - rate limit은 `NODE_ENV=production`에서만 기본으로 켜지므로 개발·테스트에서도 같게
  *   명시적으로 켠다. 저장소가 인스턴스 메모리라 부분 방어다.
- * - 사용자 이름은 저장하기 전에 `toAccountName`으로 다듬는다(50자, 보이는 글자가 없거나
- *   공식 라이브러리 이름이면 기본 이름). 이 이름은 다른 사용자의 곡(원작 표시)·공유 라이브러리
- *   카드·공유받은 프레젠테이션에 복사되는데, Better Auth는 가입 이름의 길이도, `update-user`
+ * - 사용자 이름은 저장하기 전에 `toAccountName`으로 다듬는다(50자, 보이는 글자가 없으면
+ *   기본 이름). 이 이름은 공유받은 프레젠테이션과 그 안의 곡(원작 표시)에 복사되는데, Better Auth는 가입 이름의 길이도, `update-user`
  *   본문의 타입도 검사하지 않는다. 거절하지 않고 다듬어서 긴 소셜 프로필 이름으로도 로그인이
  *   막히지 않는다. 앱이 부르지 않는 `/update-user`는 막는다(404).
  * - 이메일 가입 요청은 먼저 그 이메일의 반쯤 끝난 가입(비밀번호 계정 저장이 실패해 남은 사용자)을
@@ -392,8 +380,6 @@ type AuthInstance = ReturnType<typeof buildAuth>;
  *   이메일 조회와 어댑터의 이메일 예약).
  * - 이메일 가입은 사용자를 만들기 직전에 IP당 하루 한도를 센다(`limitEmailSignUps`). 메모리에만
  *   있는 위의 빈도 제한과 달리 Firestore에 남아 인스턴스가 여럿이어도 지켜진다.
- * - 계정 제한 시각(`UserDoc.bannedAt`)은 새 사용자에게 `null`로 저장하고, 가입·수정 요청 본문으로는
- *   정하지 못하며(`input: false`), 세션 응답에도 싣지 않는다. 제한은 운영자 작업(`banUser`)만 건다.
  */
 export function getAuth(env: Bindings): AuthInstance {
   return buildAuth(env);

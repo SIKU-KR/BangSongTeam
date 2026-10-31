@@ -176,10 +176,6 @@ describe("응답 보안 헤더", () => {
 
 describe("Firestore 설정", () => {
   const indexes = JSON.parse(read("firestore.indexes.json")) as {
-    indexes: {
-      collectionGroup: string;
-      fields: { fieldPath: string; order?: string; arrayConfig?: string }[];
-    }[];
     fieldOverrides: {
       collectionGroup: string;
       fieldPath: string;
@@ -202,39 +198,19 @@ describe("Firestore 설정", () => {
     ]);
   });
 
-  it.each(["userQuotas", "signUpQuotas"])(
-    "지난 날의 하루 한도 문서(%s)는 TTL 정책이 지우고 만료 시각은 색인하지 않는다",
-    (collectionGroup) => {
-      const expiresAt = indexes.fieldOverrides.find(
-        (field) =>
-          field.collectionGroup === collectionGroup &&
-          field.fieldPath === "expiresAt",
-      );
+  it("지난 날의 이메일 가입 한도 문서는 TTL 정책이 지우고 만료 시각은 색인하지 않는다", () => {
+    const expiresAt = indexes.fieldOverrides.find(
+      (field) =>
+        field.collectionGroup === "signUpQuotas" &&
+        field.fieldPath === "expiresAt",
+    );
 
-      expect(expiresAt).toEqual({
-        collectionGroup,
-        fieldPath: "expiresAt",
-        ttl: true,
-        indexes: [],
-      });
-    },
-  );
-
-  it("공유 라이브러리 정렬·검색 쿼리에 맞는 복합 색인이 있다", () => {
-    const fieldsOf = (paths: string[]) =>
-      indexes.indexes.find(
-        (index) =>
-          index.collectionGroup === "decks" &&
-          index.fields.map((field) => field.fieldPath).join() === paths.join(),
-      );
-    expect(fieldsOf(["listed", "forkCount", "updatedAt"])?.fields).toEqual([
-      { fieldPath: "listed", order: "ASCENDING" },
-      { fieldPath: "forkCount", order: "DESCENDING" },
-      { fieldPath: "updatedAt", order: "DESCENDING" },
-    ]);
-    expect(
-      fieldsOf(["listed", "searchGrams", "forkCount", "updatedAt"])?.fields[1],
-    ).toEqual({ fieldPath: "searchGrams", arrayConfig: "CONTAINS" });
+    expect(expiresAt).toEqual({
+      collectionGroup: "signUpQuotas",
+      fieldPath: "expiresAt",
+      ttl: true,
+      indexes: [],
+    });
   });
 
   it("브라우저 SDK의 직접 읽기·쓰기를 모두 막는다", () => {

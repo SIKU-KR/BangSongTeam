@@ -6,7 +6,6 @@ import {
 import { fitDeckText, toDisplayName } from "#shared";
 import type { Db } from "../client";
 import { COLLECTIONS, decksCol, usersCol } from "../collections";
-import { withDeckIndex } from "../deckIndex";
 
 const PAGE_SIZE = 300;
 
@@ -48,14 +47,7 @@ async function fitStoredDeck(db: Db, id: string): Promise<boolean> {
     const ref = decksCol(db).doc(id);
     const deck = (await tx.get(ref)).data();
     if (!deck || !deckTextDiffers(deck)) return false;
-    const next = withDeckIndex({ ...deck, ...fitDeckText(deck) });
-    tx.update(ref, {
-      title: next.title,
-      artist: next.artist,
-      forkedFromAuthorName: next.forkedFromAuthorName,
-      listed: next.listed,
-      searchGrams: next.searchGrams,
-    });
+    tx.update(ref, fitDeckText(deck));
     return true;
   });
 }
@@ -89,9 +81,9 @@ export interface TextLimitsResult {
  * 운영 데이터에 한도를 넘는 글이 얼마나 남았는지 세고 저장본도 맞춰 둔다.
  *
  * 곡·사용자 컬렉션 전체를 문서 id순으로 나눠 읽되 글 필드만 받아, 가사·슬라이드처럼 큰 필드는 읽지
- * 않는다. 문서마다 트랜잭션 하나에서 다시 읽고 고치며, 곡은 고친 문서를 `withDeckIndex`에 통과시키고
- * 바뀌는 필드만 쓴다. 수정 시각은 그대로 둔다. 사용자가 고친 것이 아니고, 공유 라이브러리의 동률
- * 정렬이 그 값을 쓴다. 다시 실행해도 고칠 것이 남은 문서만 쓴다.
+ * 않는다. 문서마다 트랜잭션 하나에서 다시 읽고 고치며, 곡은 바뀌는 필드만 쓴다. 수정 시각은 그대로
+ * 둔다. 사용자가 고친 것이 아니고, 바꾸면 기기의 동기화가 다른 기기의 수정으로 본다. 다시 실행해도
+ * 고칠 것이 남은 문서만 쓴다.
  */
 export async function textLimits(
   db: Db,

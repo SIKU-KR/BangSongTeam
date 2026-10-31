@@ -1,5 +1,4 @@
 import type { DocumentData, DocumentReference } from "@google-cloud/firestore";
-import { OFFICIAL_LIBRARY_USER_ID } from "#shared";
 import type { Db } from "../client";
 import {
   COLLECTIONS,
@@ -99,10 +98,6 @@ function unfinishedSignUpAge(
  * 만든 지 그보다 덜 된 사용자는 비밀번호를 저장하는 중일 수 있어 지우지 않고 `inProgress`를
  * 돌려준다. 막 실패한 가입을 바로 다시 할 때도 여기에 걸린다(`SIGN_UP_IN_PROGRESS`).
  *
- * 공식 라이브러리 계정(`OFFICIAL_LIBRARY_USER_ID`)은 연결된 계정 없이 시드로 만들고 이메일도
- * 저장소에 드러나 있다. 지금은 시드가 인증·약관 동의를 채워 두지만, 지워지면 공식 곡이 모두
- * 공유 라이브러리에서 사라지므로 따로 빼 둔다.
- *
  * 마지막 확인과 지우기는 한 트랜잭션에서 하고, 이메일 예약은 아직 그 사용자를 가리킬 때만
  * 지운다. 같은 이메일로 둘이 동시에 가입하면, 먼저 치운 쪽이 새 사용자와 예약을 만든 뒤에 늦은
  * 쪽이 지우기를 마칠 수 있다. 미리 읽어 둔 대로 지우면 그 새 예약까지 지워, 그 이메일로 사용자가
@@ -119,7 +114,6 @@ export async function releaseAbandonedSignUp(
     .get();
   const [candidate] = users.docs;
   if (users.size !== 1 || !candidate) return "none";
-  if (candidate.id === OFFICIAL_LIBRARY_USER_ID) return "none";
   const age = unfinishedSignUpAge(candidate.data(), now);
   if (!age) return "none";
 

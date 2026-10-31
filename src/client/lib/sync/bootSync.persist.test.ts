@@ -360,19 +360,22 @@ describe("runBootSync — 병합 결과 저장", () => {
     });
   });
 
-  it("서버와 같은 곡은 다시 쓰지 않고, 같은 시각이어도 가져간 횟수가 바뀐 곡은 쓴다", async () => {
+  it("서버와 같은 곡은 다시 쓰지 않고, 같은 시각이어도 원작자 표시가 바뀐 곡은 쓴다", async () => {
     await seedSongsIntoStorage([song(SONG_A), song(SONG_B)]);
     await hydrateSongLibrary();
     vi.mocked(saveSong).mockClear();
     presentationSync.pullDecks.mockResolvedValue({
-      decks: [song(SONG_A), song(SONG_B, { forkCount: 4 })],
+      decks: [
+        song(SONG_A),
+        song(SONG_B, { forkedFromAuthorName: "새 원작자" }),
+      ],
       deletedIds: [],
     });
 
     await runBootSync();
 
     expect(writtenIds(saveSong)).toEqual([SONG_B]);
-    expect((await storedSong(SONG_B))?.forkCount).toBe(4);
+    expect((await storedSong(SONG_B))?.forkedFromAuthorName).toBe("새 원작자");
   });
 
   it("저장본을 읽지 못하면 부팅 병합이 서버 사본으로 덮지 않는다", async () => {

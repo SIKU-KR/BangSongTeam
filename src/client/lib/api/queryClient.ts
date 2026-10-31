@@ -2,7 +2,7 @@ import { MutationCache, QueryClient } from "@tanstack/react-query";
 import { isConsentRequiredError, refreshConsentStatus } from "./consentQueries";
 
 /**
- * 서버 캐시(공유 라이브러리 검색·상세) 전용 QueryClient.
+ * 서버 캐시(가사 검색·공유 링크·동의 상태·로그인 설정) 전용 QueryClient.
  *
  * - `networkMode: 'online'` — 오프라인이면 요청을 보내지 않고 멈춘다. 예배당에서
  *   네트워크가 끊겨도 헛된 재시도 루프가 돌지 않는다

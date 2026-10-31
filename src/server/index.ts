@@ -16,8 +16,6 @@ import { createConsentRoute } from "./routes/consent";
 import { createPresentationsRoute } from "./routes/presentations";
 import { createFoldersRoute } from "./routes/folders";
 import { createDecksRoute } from "./routes/decks";
-import { createCatalogRoute } from "./routes/catalog";
-import { createReportsRoute } from "./routes/reports";
 import { createLyricsRoute } from "./routes/lyrics";
 import { createShareRoute } from "./routes/share";
 import { createBackgroundsRoute } from "./routes/backgrounds";
@@ -34,7 +32,7 @@ import { createMediaRoute } from "./routes/media";
  *
  * `onError`·`notFound`와 라우트·검사 미들웨어가 만드는 오류 응답은 `{ error }`에 한국어 문장을
  * 담고, 클라이언트가 그 문장을 그대로 보여 준다. Better Auth가 답하는 `/api/auth/*`는
- * `{ code, message }`이고, 공유 라이브러리 검색어 검사 실패는 zValidator 기본 모양이다.
+ * `{ code, message }`이고, 가사 검색어 검사 실패는 zValidator 기본 모양이다.
  * Hono가 4xx로 던진 예외(깨진 JSON 400 등)는 상태를 그대로 살려 서버 오류로 남기지 않는다.
  * 그 밖의 예외는 저장소 일시 장애면 503, 아니면 500이다. 503의 `Retry-After`는
  * `retryAfterOnUnavailable`이 단다.
@@ -70,8 +68,6 @@ export function createApp(deps: AppDeps = {}) {
     .route("/api/presentations", createPresentationsRoute(deps))
     .route("/api/folders", createFoldersRoute(deps))
     .route("/api/decks", createDecksRoute(deps))
-    .route("/api/catalog", createCatalogRoute(deps))
-    .route("/api/reports", createReportsRoute(deps))
     .route("/api/lyrics", createLyricsRoute(deps))
     .route("/api/share", createShareRoute(deps))
     .route("/api/backgrounds", createBackgroundsRoute())
