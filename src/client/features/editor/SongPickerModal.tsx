@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { ArrowLeftIcon, PlusIcon } from "lucide-react";
+import { ArrowLeftIcon, DownloadIcon, PlusIcon } from "lucide-react";
 import { Badge } from "#components/ui/badge";
 import { Button } from "#components/ui/button";
 import {
@@ -22,6 +22,11 @@ import {
   CreateSongForm,
   type CreateSongValues,
 } from "./songPicker/CreateSongForm";
+import {
+  LyricsImportResults,
+  useLyricsImport,
+  type ImportedLyrics,
+} from "./songPicker/LyricsImport";
 import { MyDeckPreview } from "./songPicker/SongPickerPreview";
 import { SongPickerEntryRow } from "./songPicker/SongPickerEntryRow";
 import {
@@ -40,9 +45,12 @@ interface SongPickerModalProps {
 
 export type SongPickerMode = "browse" | "create";
 
+type PickerView = SongPickerMode | "import";
+
 /**
  * 곡 선택 모달. 내 보관함 곡만 검색어로 로컬에서 걸러 보여 주고, 새 가사를 입력하면
- * 보관함에 저장한 뒤 바로 프레젠테이션에 넣는다.
+ * 보관함에 저장한 뒤 바로 프레젠테이션에 넣는다. 검색어로 gasazip 가사를 불러오면
+ * 그 가사를 채운 새 곡 폼으로 넘어가 확인한 뒤 저장한다.
  */
 export function SongPickerModal({
   isOpen,
@@ -53,18 +61,27 @@ export function SongPickerModal({
   const mySongs = useUserSongs();
 
   const [searchQuery, setSearchQuery] = useState("");
-  const [mode, setMode] = useState<SongPickerMode>("browse");
+  const [mode, setMode] = useState<PickerView>("browse");
+  const [createDraft, setCreateDraft] = useState<ImportedLyrics | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [libraryDialog, setLibraryDialog] =
     useState<LibrarySongDialogRequest | null>(null);
+
+  const lyricsImport = useLyricsImport((imported) => {
+    setCreateDraft(imported);
+    setMode("create");
+  });
+  const { reset: resetLyricsImport } = lyricsImport;
 
   useEffect(() => {
     if (isOpen) {
       setSearchQuery("");
       setMode(initialMode);
       setSelectedId(null);
+      setCreateDraft(null);
+      resetLyricsImport();
     }
-  }, [isOpen, initialMode]);
+  }, [isOpen, initialMode, resetLyricsImport]);
 
   const entries = useMemo<Deck[]>(() => {
     const q = searchQuery.trim();
@@ -73,9 +90,20 @@ export function SongPickerModal({
 
   const selected = entries.find((deck) => deck.id === selectedId) ?? entries[0];
 
-  const emptyMessage = searchQuery.trim()
+  const query = searchQuery.trim();
+  const emptyMessage = query
     ? EDITOR_COPY.picker.noMatch
     : EDITOR_COPY.picker.noSongs;
+
+  const startCreate = (): void => {
+    setCreateDraft(null);
+    setMode("create");
+  };
+
+  const importLyrics = (): void => {
+    lyricsImport.find({ title: query, artist: "" });
+    setMode("import");
+  };
 
   const addDeck = (deck: Deck): void => {
     onSelectSong(deck);
@@ -134,10 +162,22 @@ export function SongPickerModal({
               <div className="flex items-center justify-end gap-1.5">
                 <Button
                   size="xs"
+                  variant="outline"
+                  data-testid="song-picker-browse-import-btn"
+                  disabled={!query || lyricsImport.isSearching}
+                  onClick={importLyrics}
+                >
+                  <DownloadIcon />
+                  {lyricsImport.isSearching
+                    ? EDITOR_COPY.lyricsImport.searching
+                    : EDITOR_COPY.lyricsImport.button}
+                </Button>
+                <Button
+                  size="xs"
                   variant={mode === "browse" ? "outline" : "secondary"}
                   data-testid="song-picker-switch-create-btn"
                   onClick={() =>
-                    setMode(mode === "browse" ? "create" : "browse")
+                    mode === "browse" ? startCreate() : setMode("browse")
                   }
                 >
                   {mode !== "browse" ? (
@@ -162,11 +202,19 @@ export function SongPickerModal({
                     <EmptyDescription>{emptyMessage}</EmptyDescription>
                   </EmptyHeader>
                   <EmptyContent>
-                    <Button
-                      variant="link"
-                      size="xs"
-                      onClick={() => setMode("create")}
-                    >
+                    {query && (
+                      <Button
+                        variant="link"
+                        size="xs"
+                        data-testid="song-picker-empty-import-btn"
+                        disabled={lyricsImport.isSearching}
+                        onClick={importLyrics}
+                      >
+                        <DownloadIcon />
+                        {EDITOR_COPY.picker.importLyrics(query)}
+                      </Button>
+                    )}
+                    <Button variant="link" size="xs" onClick={startCreate}>
                       <PlusIcon />
                       {EDITOR_COPY.picker.createNew(searchQuery)}
                     </Button>
@@ -191,10 +239,35 @@ export function SongPickerModal({
           <div className="flex min-w-0 flex-1 flex-col bg-muted/40">
             {mode === "create" ? (
               <CreateSongForm
-                initialTitle={searchQuery.trim()}
+                initialTitle={createDraft?.title || query}
+                initialArtist={createDraft?.artist}
+                initialLyrics={createDraft?.lyrics}
                 onCancel={() => setMode("browse")}
                 onSubmit={handleCreateSubmit}
               />
+            ) : mode === "import" ? (
+              <div
+                data-testid="song-picker-import-panel"
+                className="flex flex-1 flex-col gap-3 overflow-y-auto p-6 text-xs"
+              >
+                <div className="border-b pb-3">
+                  <h3 className="text-sm font-bold">
+                    {EDITOR_COPY.lyricsImport.button}
+                  </h3>
+                  <p className="mt-0.5 text-muted-foreground">
+                    {EDITOR_COPY.lyricsImport.source}
+                  </p>
+                </div>
+                {lyricsImport.isSearching && (
+                  <p role="status" className="text-muted-foreground">
+                    {EDITOR_COPY.lyricsImport.searching}
+                  </p>
+                )}
+                <LyricsImportResults
+                  controller={lyricsImport}
+                  listClassName="max-h-none"
+                />
+              </div>
             ) : !selected ? (
               <div className="flex flex-1 items-center justify-center text-xs text-muted-foreground">
                 {EDITOR_COPY.picker.selectSong}
